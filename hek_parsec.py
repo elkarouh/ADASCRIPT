@@ -131,8 +131,7 @@ class Cut(Exception):
     """Raised by fail/cut to abort parsing with an error message."""
 
     def __init__(self, token_stream: Tokenizer):
-        message = f"Failed at {token_stream.get_farthest_token()}"
-        super().__init__(message)
+        super().__init__(token_stream.format_error())
 
 
 class ParserMeta(type):
@@ -289,9 +288,11 @@ def negative_lookahead(p):
     return NegativeLookahead
 
 
-def filt(predicate, p):
-    """Filter parser: succeeds only if inner parser p matches AND predicate(node) is true."""
+def filt(predicate, p, name=None):
+    """Filter parser: succeeds only if inner parser p matches AND predicate(node) is true.
 
+    If name is provided, records it as an expected token on failure (for error reporting).
+    """
     class Filter(Parser):
         @apply_parsing_context
         def parse(cls, token_stream):
@@ -300,6 +301,8 @@ def filt(predicate, p):
                 # Create a new AST node instead of mutating the inner parser's result
                 return cls(m[0].nodes), m[1]
             else:
+                if name:
+                    token_stream.set_failed_token(name)
                 return False
 
     return Filter
@@ -463,13 +466,13 @@ def expect_type_node(ty):
     
     Used for RichNL and other enriched token types that carry additional data.
     """
-    parser = filt(lambda tok: tok.type == ty, shift)
+    parser = filt(lambda tok: tok.type == ty, shift, name=tkn.tok_name.get(ty, str(ty)))
     return parser
 
 
 def expect_node(ty, val):
     """Match token by type and value, preserving the full TokenInfo as node."""
-    return filt(lambda tok: tok.type == ty and tok.string == val, shift)
+    return filt(lambda tok: tok.type == ty and tok.string == val, shift, name=repr(val))
 
 
 def expect_nl_or_richnl():
@@ -477,7 +480,7 @@ def expect_nl_or_richnl():
     
     RichNL.type == tkn.NL, so this matches both.
     """
-    parser = filt(lambda tok: tok.type == tkn.NL, shift)
+    parser = filt(lambda tok: tok.type == tkn.NL, shift, name='NL')
     return parser
 
 
@@ -485,7 +488,7 @@ def literal(mylit: str) -> type[Parser]:
     """Match a NAME token with the exact string value (e.g. a keyword)."""
     parser = fmap(
         lambda tok: tok.string,
-        filt(lambda tok: tok.type == tkn.NAME and tok.string == mylit, shift),
+        filt(lambda tok: tok.type == tkn.NAME and tok.string == mylit, shift, name=repr(mylit)),
     )
     parser.__name__ = f"Literal_{mylit}"
     return parser
@@ -494,7 +497,7 @@ def literal(mylit: str) -> type[Parser]:
 def expect_re(regex):
     """Match a token whose string matches the given regex."""
     parser = fmap(
-        lambda tok: tok.string, filt(lambda tok: re.match(regex, tok.string), shift)
+        lambda tok: tok.string, filt(lambda tok: re.match(regex, tok.string), shift, name='NUMBER' if 'eE' in regex else 'STRING' if regex[0] == '(' else f'/{regex}/')
     )
     return parser
 
