@@ -14,7 +14,7 @@ Usage:
 import sys
 sys.path.insert(0, "..")
 
-from hek_parsec import method
+from hek_parsec import method, ParserState
 from hek_py3_parser import *  # noqa: F403 — need all parser rule names
 from hek_py3_parser import (
     _ind, _richnl_lines, _block_inline_header_comment, _extract_clauses,
@@ -572,6 +572,8 @@ def to_nim(self):
                     default = f" = {val_node.to_nim()}"
     if not annotation:
         annotation = ": auto"
+    nim_type = annotation[2:] if annotation.startswith(": ") else annotation[1:]
+    ParserState.symbol_table.add(name, nim_type, "param")
     return f"{name}{annotation}{default}"
 
 
@@ -704,8 +706,10 @@ def to_nim(self, indent=0):
         elif tname == "return_annotation":
             ret_ann = node.to_nim()
 
+    ParserState.symbol_table.push_scope(name or "<func>")
     hc = _block_inline_header_comment(block_node) if block_node else ""
     body = block_node.to_nim(indent + 1) if block_node else ""
+    ParserState.symbol_table.pop_scope()
     return f"{decos}{_ind(indent)}proc {name}({params}){ret_ann} ={hc}\n{body}"
 
 
@@ -744,8 +748,10 @@ def to_nim(self, indent=0):
         elif tname == "return_annotation":
             ret_ann = node.to_nim()
 
+    ParserState.symbol_table.push_scope(name or "<async_func>")
     hc = _block_inline_header_comment(block_node) if block_node else ""
     body = block_node.to_nim(indent + 1) if block_node else ""
+    ParserState.symbol_table.pop_scope()
     return f"{decos}{_ind(indent)}proc {name}({params}){ret_ann} {{.async.}} ={hc}\n{body}"
 
 
@@ -778,6 +784,7 @@ def to_nim(self, indent=0):
         elif tname == "block":
             block_node = node
 
+    ParserState.symbol_table.push_scope(name or "<class>")
     hc = _block_inline_header_comment(block_node) if block_node else ""
     body = block_node.to_nim(indent + 1) if block_node else ""
     # Nim: type Foo = object of Bar
@@ -786,6 +793,7 @@ def to_nim(self, indent=0):
         # Extract base class from "(Bar)" or "(Bar, Baz)"
         inner = bases[1:-1] if bases.startswith("(") else bases
         parent = f" of {inner.split(',')[0].strip()}"
+    ParserState.symbol_table.pop_scope()
     return f"{decos}{_ind(indent)}type {name} = object{parent}\n{body}"
 
 

@@ -17,13 +17,75 @@ import sys
 sys.path.insert(0, "..")
 
 from hek_parsec import method
-from hek_py3_expr import *  # noqa: F403 — need all parser rule names
+from hek_py3_expr import *
+from hek_nim_declarations import _is_nim_ordinal  # noqa: F403 — need all parser rule names
 from hek_py3_expr import (
     PREC_WALRUS, PREC_CONDITIONAL, PREC_OR, PREC_AND, PREC_NOT,
     PREC_CMP, PREC_BOR, PREC_BXOR, PREC_BAND, PREC_SHIFT,
     PREC_ARITH, PREC_TERM, PREC_UNARY, PREC_POWER, PREC_ATOM,
     _COMP_OPS, _get_bracket_start, parse_expr,
 )
+
+###############################################################################
+# Type inference helpers
+###############################################################################
+
+def _infer_literal_nim_type(node):
+    """Try to infer the Nim type of a literal expression node.
+
+    Returns the Nim type string or None if unknown.
+    Walks through wrapper nodes (atom, expression, etc.) to find the leaf.
+    """
+    # Unwrap single-child wrapper nodes
+    while hasattr(node, 'nodes') and len(node.nodes) == 1:
+        node = node.nodes[0]
+
+    # Fmap node holding a string literal value
+    if type(node).__name__ == 'Fmap':
+        val = node.nodes[0] if hasattr(node, 'nodes') and node.nodes else None
+        if isinstance(val, str):
+            if val in ('True', 'False'):
+                return 'bool'
+            if val == 'None':
+                return 'void'
+            # Check if it looks like a number
+            try:
+                int(val)
+                return 'int'
+            except ValueError:
+                pass
+            try:
+                float(val)
+                return 'float'
+            except ValueError:
+                pass
+            # Quoted string
+            if len(val) >= 2 and val[0] in ("'"  , '"'):
+                return 'string'
+        return None
+
+    # If node is a string directly (from Fmap extraction)
+    if isinstance(node, str):
+        if node in ('True', 'False'):
+            return 'bool'
+        if node == 'None':
+            return 'void'
+        try:
+            int(node)
+            return 'int'
+        except ValueError:
+            pass
+        try:
+            float(node)
+            return 'float'
+        except ValueError:
+            pass
+        if len(node) >= 2 and node[0] in ("'" , '"'):
+            return 'string'
+        return None
+
+    return None
+
 
 ###############################################################################
 # to_nim() methods
@@ -246,6 +308,11 @@ def to_nim(self, prec=None):
     # If inner is a setcomp, collect() handles it — no {} wrapper
     if type(inner_node).__name__ == "setcomp":
         return inner_node.to_nim()
+    # Infer element type from first element
+    first_elem = inner_node.nodes[0] if hasattr(inner_node, "nodes") and inner_node.nodes else inner_node
+    elem_type = _infer_literal_nim_type(first_elem)
+    if elem_type and _is_nim_ordinal(elem_type):
+        return "{" + inner_node.to_nim() + "}"
     return "{" + inner_node.to_nim() + "}.toHashSet"
 
 
@@ -910,7 +977,8 @@ nim_tests = [
     ("[1, 2, 3]", "@[1, 2, 3]"),
     ("{}", "newTable()"),
     ("{1: 2, 3: 4}", "{1: 2, 3: 4}.toTable"),
-    ("{1, 2, 3}", "{1, 2, 3}.toHashSet"),
+    ("{1, 2, 3}", "{1, 2, 3}"),
+    ('{"a", "b"}', '{"a", "b"}.toHashSet'),
     ("()", "()"),
     # --- Calls, subscripts, attributes (same syntax) ---
     ("f(x)", "f(x)"),

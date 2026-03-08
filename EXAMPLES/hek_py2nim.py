@@ -111,8 +111,10 @@ def translate(code):
     if not code.strip():
         return code
 
+    from hek_parsec import ParserState
     stmts, leading, trailing = parse_module(code)
 
+    ParserState.symbol_table.push_scope("module")
     output = []
 
     def emit_richnl(richnl):
@@ -147,6 +149,8 @@ def translate(code):
     # Emit trailing comments
     for richnl in trailing:
         emit_richnl(richnl)
+
+    ParserState.symbol_table.pop_scope()
 
     result = chr(10).join(output)
     if not result.endswith(chr(10)):

@@ -30,6 +30,18 @@ _PY_TO_NIM = {
     "None": "void",
 }
 
+# Nim ordinal types — eligible for built-in set[T]
+_NIM_ORDINALS = {
+    "int", "int8", "int16", "int32", "int64",
+    "uint", "uint8", "uint16", "uint32", "uint64",
+    "char", "bool", "byte", "enum",
+}
+
+
+def _is_nim_ordinal(nim_type):
+    """Return True if nim_type is an ordinal type (eligible for set[T])."""
+    return nim_type in _NIM_ORDINALS
+
 
 @method(primitive_type)
 def to_nim(self, prec=None):
@@ -64,7 +76,10 @@ def to_nim(self, prec=None):
 
 @method(set_type)
 def to_nim(self, prec=None):
-    return f"HashSet[{self.nodes[0].to_nim()}]"
+    elem = self.nodes[0].to_nim()
+    if _is_nim_ordinal(elem):
+        return f"set[{elem}]"
+    return f"HashSet[{elem}]"
 
 
 @method(callable_type)
@@ -171,7 +186,7 @@ nim_tests = [
     ("{str}int", "Table[string, int]"),
     ("{int}str", "Table[int, string]"),
     # --- Set ---
-    ("{}int", "HashSet[int]"),
+    ("{}int", "set[int]"),
     ("{}str", "HashSet[string]"),
     # --- Optional ---
     ("?int", "Option[int]"),
