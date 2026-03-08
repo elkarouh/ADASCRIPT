@@ -13,11 +13,12 @@ Usage:
 import sys
 sys.path.insert(0, "..")
 
-from hek_parsec import method
+from hek_parsec import method, ParserState
 from hek_py3_stmt import *  # noqa: F403 — need all parser rule names
 from hek_py3_stmt import parse_stmt
 import hek_nim_expr  # noqa: F401 — registers expr to_nim() methods
-import hek_nim_declarations  # noqa: F401 — registers decl to_nim() methods
+import hek_nim_declarations  # noqa: F401
+from hek_nim_expr import _infer_literal_nim_type
 
 ###############################################################################
 # to_nim() methods
@@ -70,12 +71,19 @@ def to_nim(self):
     Python: a = b = 1  ->  Nim: var a = 1 (chained not supported, just use =)
     """
     parts = [self.nodes[0].to_nim()]
+    rhs_node = None
     for node in self.nodes[1:]:
         if not hasattr(node, "nodes") or not node.nodes:
             continue
         for seq in node.nodes:
             if hasattr(seq, "nodes") and len(seq.nodes) >= 2:
-                parts.append(seq.nodes[1].to_nim())
+                rhs_node = seq.nodes[1]
+                parts.append(rhs_node.to_nim())
+    # Record type in symbol table
+    name = self.nodes[0].to_py() if hasattr(self.nodes[0], "to_py") else None
+    if name and rhs_node and ParserState.symbol_table.depth() > 0:
+        inferred = _infer_literal_nim_type(rhs_node)
+        ParserState.symbol_table.add(name, inferred, "var")
     return "var " + " = ".join(parts)
 
 
@@ -107,6 +115,9 @@ def to_nim(self):
     """
     name = self.nodes[0].to_nim()
     annotation = self.nodes[2].to_nim()
+    # Record type in symbol table
+    if ParserState.symbol_table.depth() > 0:
+        ParserState.symbol_table.add(name, annotation, "var")
     result = f"var {name}: {annotation}"
     for node in self.nodes[3:]:
         if not hasattr(node, "nodes") or not node.nodes:
