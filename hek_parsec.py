@@ -219,6 +219,10 @@ class Parser(metaclass=ParserMeta):
         if G.DEBUG:
             print(self.__class__.__name__, "Constructor->", self.nodes)
 
+    def to_nim(self, prec=None):
+        """Default to_nim() fallback: delegates to to_py() for expression nodes."""
+        return self.to_py(prec)
+
 
 def forward(parser_name: str) -> type[Parser]:
     """Create a lazy forward reference for recursive grammars."""
