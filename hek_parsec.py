@@ -74,6 +74,48 @@ def method(KLASS: type) -> Callable:
 
 
 ##################################################################################################
+class SymbolTable:
+    """A stack-based symbol table for tracking variable names and types across scopes.
+
+    Each scope is a dict mapping names to {"type": type_str, "kind": kind_str}.
+    kind is one of: "var", "param", "func", "class".
+    """
+
+    def __init__(self):
+        self.stack = []  # list of {"name": scope_name, "symbols": {name: {type, kind}}}
+
+    def push_scope(self, name="<unknown>"):
+        """Push a new scope onto the stack."""
+        self.stack.append({"name": name, "symbols": {}})
+
+    def pop_scope(self):
+        """Pop and return the current scope."""
+        if self.stack:
+            return self.stack.pop()
+        return None
+
+    def add(self, name, type_info=None, kind="var"):
+        """Add a symbol to the current scope."""
+        if self.stack:
+            self.stack[-1]["symbols"][name] = {"type": type_info, "kind": kind}
+
+    def lookup(self, name):
+        """Look up a symbol from innermost scope outward. Returns dict or None."""
+        for scope in reversed(self.stack):
+            if name in scope["symbols"]:
+                return scope["symbols"][name]
+        return None
+
+    def current_scope(self):
+        """Return the current (innermost) scope dict, or None."""
+        return self.stack[-1] if self.stack else None
+
+    def depth(self):
+        """Return the number of scopes on the stack."""
+        return len(self.stack)
+
+
+##################################################################################################
 class ParserState:
     """Global parser configuration state.
 
@@ -84,11 +126,13 @@ class ParserState:
 
     DEBUG = False
     memos: dict = {}
+    symbol_table = SymbolTable()
 
     @classmethod
     def reset(cls):
         """Clear memoization state between parses."""
         cls.memos.clear()
+        cls.symbol_table = SymbolTable()
 
 
 G = ParserState  # backward compat alias
@@ -1013,5 +1057,65 @@ if __name__ == "__main__":
     m_fail = (~COMMA).parse(Input(", x"))
     assert not m_fail, "negative lookahead: should have failed on comma"
     print("negative lookahead (fail case): correctly rejected comma")
+
+    # --- SymbolTable tests ---
+    print()
+    print("--- SymbolTable tests ---")
+
+    st = SymbolTable()
+    assert st.depth() == 0, "empty stack depth"
+    assert st.lookup("x") is None, "lookup on empty stack"
+    assert st.pop_scope() is None, "pop empty stack"
+
+    # Push module scope, add symbols
+    st.push_scope("module")
+    assert st.depth() == 1
+    st.add("x", "int", "var")
+    st.add("main", None, "func")
+    assert st.lookup("x") == {"type": "int", "kind": "var"}
+    assert st.lookup("main") == {"type": None, "kind": "func"}
+    assert st.lookup("y") is None
+    print("  push_scope / add / lookup: ok")
+
+    # Push function scope, shadow x
+    st.push_scope("main")
+    assert st.depth() == 2
+    st.add("x", "str", "param")
+    st.add("y", "float", "var")
+    assert st.lookup("x") == {"type": "str", "kind": "param"}, "inner x shadows outer"
+    assert st.lookup("y") == {"type": "float", "kind": "var"}
+    assert st.lookup("main") == {"type": None, "kind": "func"}, "outer func visible"
+    print("  nested scope / shadowing: ok")
+
+    # Pop function scope
+    scope = st.pop_scope()
+    assert scope["name"] == "main"
+    assert "x" in scope["symbols"] and "y" in scope["symbols"]
+    assert st.depth() == 1
+    assert st.lookup("x") == {"type": "int", "kind": "var"}, "x restored after pop"
+    assert st.lookup("y") is None, "y gone after pop"
+    print("  pop_scope / restore: ok")
+
+    # current_scope
+    assert st.current_scope()["name"] == "module"
+    st.pop_scope()
+    assert st.current_scope() is None
+    print("  current_scope: ok")
+
+    # add with no scope is a no-op
+    st.add("z", "int")
+    assert st.lookup("z") is None
+    print("  add with no scope: ok")
+
+    # ParserState integration
+    ParserState.reset()
+    assert ParserState.symbol_table.depth() == 0
+    ParserState.symbol_table.push_scope("test")
+    ParserState.symbol_table.add("a", "bool")
+    assert ParserState.symbol_table.lookup("a")["type"] == "bool"
+    ParserState.reset()
+    assert ParserState.symbol_table.depth() == 0
+    assert ParserState.symbol_table.lookup("a") is None
+    print("  ParserState integration: ok")
 
     print("\nAll tests passed.")
