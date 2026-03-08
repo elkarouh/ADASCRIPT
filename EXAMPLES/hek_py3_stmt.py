@@ -47,6 +47,8 @@ from hek_parsec import (
     ParserState,
     expect,
     expect_type,
+    expect_type_node,
+    expect_nl_or_richnl,
     filt,
     fmap,
     fw,
@@ -63,7 +65,8 @@ from hek_py_declarations import type_annotation
 # Tokens not in hek_parsec
 ###############################################################################
 
-NEWLINE = expect_type(tkn.NEWLINE)
+NEWLINE = expect_type_node(tkn.NEWLINE)  # preserve RichNL so inline comments travel with stmt
+NL = expect_nl_or_richnl()  # Returns RichNL or NL token node
 
 ###############################################################################
 # Operator helpers (augmented assignment operators — all visible)
@@ -179,7 +182,9 @@ import_stmt = ikw("import") + import_as + (COMMA + import_as)[:]
 # --- from ... import ---
 import_name = IDENTIFIER + (ikw("as") + IDENTIFIER)[:]
 import_star = SSTAR
-import_names = import_name + (COMMA + import_name)[:] | import_star
+# Parenthesized imports: (name, name) for multi-line imports
+import_names_paren = LPAREN + NL[:] + import_name + (NL[:] + COMMA + NL[:] + import_name)[:] + COMMA[:] + NL[:] + RPAREN
+import_names = import_names_paren | import_name + (COMMA + import_name)[:] | import_star
 
 # from_stmt variants (explicit to avoid dotted_name greedily consuming 'import'):
 #   from ..pkg import x     -> from_rel_name: dots + dotted_name + import + names
@@ -191,7 +196,9 @@ from_abs = ikw("from") + dotted_name + ikw("import") + import_names
 from_stmt = from_rel_name | from_rel_bare | from_abs
 
 # --- type alias (3.12+) ---
-type_stmt = ikw("type") + IDENTIFIER + V_EQUAL + type_annotation
+# type_alias_params: [T] or [T, U] etc. (generic type parameters)
+type_alias_params = LBRACKET + IDENTIFIER + (COMMA + IDENTIFIER)[:] + RBRACKET
+type_stmt = ikw("type") + IDENTIFIER + type_alias_params[:] + V_EQUAL + expression
 
 # --- simple_stmt: choice of all statement types ---
 # Ordering matters: try more specific forms before general expression.
@@ -214,6 +221,7 @@ simple_stmt = (
     | import_stmt
     | from_stmt
     | type_stmt
+    | yield_expr
     | expressions
 )
 
@@ -501,6 +509,23 @@ def to_py(self):
     return "*"
 
 
+@method(import_names_paren)
+def to_py(self):
+    """import_names_paren with NL support."""
+    def _find_import_names(node):
+        names = []
+        if node is None:
+            return names
+        if type(node).__name__ == 'import_name':
+            names.append(node.to_py())
+        elif hasattr(node, 'nodes') and node.nodes:
+            for child in node.nodes:
+                names.extend(_find_import_names(child))
+        return names
+    
+    parts = _find_import_names(self)
+    return ', '.join(parts)
+
 @method(import_names)
 def to_py(self):
     """import_names: import_name (',' import_name)* | '*'"""
@@ -563,6 +588,9 @@ def _import_names_to_py(node):
     """
     if not hasattr(node, "nodes"):
         return str(node)
+    # Check for parenthesized import (node itself is import_names_paren)
+    if type(node).__name__ == "import_names_paren":
+        return node.to_py()
     # Check for star import
     first = node.nodes[0]
     if first == "*" or (
@@ -701,14 +729,40 @@ def to_py(self):
 
 
 # --- type alias ---
+@method(type_alias_params)
+def to_py(self):
+    """type_alias_params: '[' IDENTIFIER (',' IDENTIFIER)* ']'"""
+    parts = [self.nodes[0].to_py()]
+    for node in self.nodes[1:]:
+        if not hasattr(node, 'nodes') or not node.nodes:
+            continue
+        for seq in node.nodes:
+            if hasattr(seq, 'nodes') and len(seq.nodes) >= 1:
+                parts.append(seq.nodes[0].to_py())
+    return f"[{', '.join(parts)}]"
+
 @method(type_stmt)
 def to_py(self):
-    """type_stmt: 'type' IDENTIFIER '=' expression"""
-    # nodes: [IDENTIFIER, V_EQUAL, expression] — 'type' is ikw (ignored)
-    # But V_EQUAL is visible, so nodes = [name, V_EQUAL, expr]
+    """type_stmt: 'type' IDENTIFIER type_alias_params? '=' expression"""
+    # nodes: [IDENTIFIER, type_alias_params (optional), V_EQUAL, expression]
     name = self.nodes[0].to_py()
-    value = self.nodes[2].to_py()
-    return f"type {name} = {value}"
+    # Check for type_alias_params
+    params = ""
+    eq_idx = 1
+    for i, node in enumerate(self.nodes[1:], 1):
+        if type(node).__name__ == 'type_alias_params':
+            params = node.to_py()
+            eq_idx = i + 1
+            break
+        elif hasattr(node, 'nodes') and node.nodes:
+            # Check if first child is type_alias_params
+            first = node.nodes[0] if hasattr(node, 'nodes') else node
+            if type(first).__name__ == 'type_alias_params':
+                params = first.to_py()
+                eq_idx = i + 1
+                break
+    value = self.nodes[eq_idx + 1].to_py()  # V_EQUAL is at eq_idx, expression at eq_idx+1
+    return f"type {name}{params} = {value}"
 
 
 # --- simple_stmt ---
@@ -726,14 +780,32 @@ def to_py(self):
 @method(stmt_line)
 def to_py(self):
     """stmt_line: simple_stmt (';' simple_stmt)* ';'? NEWLINE"""
+    from hek_tokenize import RichNL
+
     parts = [self.nodes[0].to_py()]
+    newline_node = None
+
     for node in self.nodes[1:]:
-        if not hasattr(node, "nodes") or not node.nodes:
-            continue
-        for seq in node.nodes:
-            if hasattr(seq, "nodes") and len(seq.nodes) >= 1:
-                parts.append(seq.nodes[0].to_py())
-    return "; ".join(parts)
+        # Check if this node wraps a RichNL (NEWLINE token preserved as node)
+        if hasattr(node, 'nodes') and node.nodes:
+            inner = node.nodes[0] if len(node.nodes) == 1 else None
+            if inner is not None and isinstance(inner, RichNL):
+                newline_node = inner
+                continue
+            # Otherwise it's a Several_Times of semicolon-separated stmts
+            for seq in node.nodes:
+                if hasattr(seq, "nodes") and len(seq.nodes) >= 1:
+                    parts.append(seq.nodes[0].to_py())
+        elif isinstance(node, RichNL):
+            newline_node = node
+
+    result = "; ".join(parts)
+    # Append inline comment if present in the NEWLINE RichNL
+    if newline_node is not None and hasattr(newline_node, 'comments') and newline_node.comments:
+        for kind, text, ind in newline_node.comments:
+            if kind == 'comment':
+                result += '  ' + text
+    return result
 
 
 ###############################################################################
