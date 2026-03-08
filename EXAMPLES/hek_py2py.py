@@ -180,6 +180,8 @@ def parse_module(code):
 
         result = statement.parse(stream)
         if not result:
+            import sys
+            print(stream.format_error(), file=sys.stderr)
             break
 
         node = result[0]

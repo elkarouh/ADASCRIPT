@@ -143,6 +143,7 @@ class Tokenizer:
         self.memos = {}  # per-stream memoization cache
         self._buffer = []  # Buffer for lookahead
         self.multiline_brackets = {}  # (line,col) -> original source for multi-line bracket groups
+        self.farthest_pos = 0  # high-water mark for error reporting
         self._eager_tokenize()  # pre-load all tokens, strip NLs inside brackets
 
     def _eager_tokenize(self):
@@ -238,6 +239,8 @@ class Tokenizer:
             token = self.tokens[self.pos][0]
             if token is not None:
                 self.pos += 1
+                if self.pos > self.farthest_pos:
+                    self.farthest_pos = self.pos
                 return token
         return None
 
@@ -257,7 +260,32 @@ class Tokenizer:
 
     ############## ERROR HANDLING #########################
     def get_farthest_token(self):
-        return self.tokens[-1]
+        """Return (token, expected_list) at the farthest position reached."""
+        idx = min(self.farthest_pos, len(self.tokens) - 1)
+        return self.tokens[idx]
+
+    def format_error(self):
+        """Format a user-friendly error message from the farthest failure point.
+
+        Scans tokens near the farthest position to find the one with the most
+        expected-token annotations, giving the most informative error message.
+        """
+        # Find the token with the richest expected-token info near farthest_pos
+        best_idx = min(self.farthest_pos, len(self.tokens) - 1)
+        best_expected = self.tokens[best_idx][1]
+        # Search backwards from farthest_pos for the token with most expected info
+        for i in range(best_idx, max(best_idx - 3, -1), -1):
+            if i < len(self.tokens) and len(self.tokens[i][1]) > len(best_expected):
+                best_idx = i
+                best_expected = self.tokens[i][1]
+        tok = self.tokens[best_idx][0]
+        line, col = tok.start if hasattr(tok, 'start') else (0, 0)
+        got = repr(tok.string) if hasattr(tok, 'string') and tok.string else tok.__class__.__name__
+        msg = f"Parse error at line {line}, col {col}: got {got}"
+        if best_expected:
+            unique = sorted(set(best_expected))
+            msg += f", expected one of: {', '.join(unique)}"
+        return msg
 
     def set_failed_token(self, expected_token_as_string):
         # the current token is at position (self.pos-1)
