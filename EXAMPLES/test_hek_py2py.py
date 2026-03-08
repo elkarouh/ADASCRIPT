@@ -539,8 +539,238 @@ def read_chunks(path):
 )
 
 ###############################################################################
-# Summary
+# ADASCRIPT syntax tests
+# Input uses left-to-right ADASCRIPT type notation; expected output is the
+# equivalent standard Python annotation syntax produced by to_py().
 ###############################################################################
+
+test(
+    "adascript: variable annotations",
+    """\
+x: int = 42
+name: str = 'hello'
+scores: []int = [10, 20, 30]
+lookup: {str}int = {}
+flag: ?bool = None
+coords: (float, float) = (1.0, 2.0)
+""",
+    """\
+x: int = 42
+name: str = 'hello'
+scores: list[int] = [10, 20, 30]
+lookup: dict[str, int] = {}
+flag: bool | None = None
+coords: tuple[float, float] = (1.0, 2.0)
+""",
+)
+
+test(
+    "adascript: simple functions",
+    """\
+def greet(name: str) -> str:
+    return 'Hello, ' + name
+
+def total(values: []int) -> int:
+    result: int = 0
+    for v in values:
+        result = result + v
+    return result
+
+def find(items: []str, target: str) -> ?int:
+    for i in range(len(items)):
+        if items[i] == target:
+            return i
+    return None
+""",
+    """\
+def greet(name: str) -> str:
+    return 'Hello, ' + name
+
+def total(values: list[int]) -> int:
+    result: int = 0
+    for v in values:
+        result = result + v
+    return result
+
+def find(items: list[str], target: str) -> int | None:
+    for i in range(len(items)):
+        if items[i] == target:
+            return i
+    return None
+""",
+)
+
+test(
+    "adascript: dict and set functions",
+    """\
+def count_words(text: str) -> {str}int:
+    counts: {str}int = {}
+    for word in text.split():
+        counts[word] = counts.get(word, 0) + 1
+    return counts
+
+def unique(items: []str) -> []str:
+    seen: {str}int = {}
+    result: []str = []
+    for item in items:
+        if item not in seen:
+            seen[item] = 1
+            result.append(item)
+    return result
+""",
+    """\
+def count_words(text: str) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for word in text.split():
+        counts[word] = counts.get(word, 0) + 1
+    return counts
+
+def unique(items: list[str]) -> list[str]:
+    seen: dict[str, int] = {}
+    result: list[str] = []
+    for item in items:
+        if item not in seen:
+            seen[item] = 1
+            result.append(item)
+    return result
+""",
+)
+
+test(
+    "adascript: optional and union types",
+    """\
+def safe_divide(a: int, b: int) -> ?float:
+    if b == 0:
+        return None
+    return a / b
+
+def stringify(value: int | str | float) -> str:
+    return str(value)
+
+def first(items: []int) -> ?int:
+    if items:
+        return items[0]
+    return None
+""",
+    """\
+def safe_divide(a: int, b: int) -> float | None:
+    if b == 0:
+        return None
+    return a / b
+
+def stringify(value: int | str | float) -> str:
+    return str(value)
+
+def first(items: list[int]) -> int | None:
+    if items:
+        return items[0]
+    return None
+""",
+)
+
+test(
+    "adascript: callable parameters",
+    """\
+def apply(f: [(int,)]int, values: []int) -> []int:
+    result: []int = []
+    for v in values:
+        result.append(f(v))
+    return result
+
+def compose(f: [(int,)]int, g: [(int,)]int) -> [(int,)]int:
+    def combined(x: int) -> int:
+        return f(g(x))
+    return combined
+""",
+    """\
+def apply(f: Callable[[int], int], values: list[int]) -> list[int]:
+    result: list[int] = []
+    for v in values:
+        result.append(f(v))
+    return result
+
+def compose(f: Callable[[int], int], g: Callable[[int], int]) -> Callable[[int], int]:
+    def combined(x: int) -> int:
+        return f(g(x))
+    return combined
+""",
+)
+
+test(
+    "adascript: nested containers",
+    """\
+def invert(mapping: {str}int) -> {int}str:
+    result: {int}str = {}
+    for k in mapping:
+        result[mapping[k]] = k
+    return result
+""",
+    """\
+def invert(mapping: dict[str, int]) -> dict[int, str]:
+    result: dict[int, str] = {}
+    for k in mapping:
+        result[mapping[k]] = k
+    return result
+""",
+)
+
+test(
+    "adascript: class with annotated methods",
+    """\
+class Counter:
+    def __init__(self, start: int) -> None:
+        self.count = start
+
+    def increment(self, by: int) -> None:
+        self.count = self.count + by
+
+    def value(self) -> int:
+        return self.count
+
+    def reset(self) -> None:
+        self.count = 0
+""",
+)
+
+test(
+    "adascript: tuple return values and multi-arg callable",
+    """\
+def minmax(values: []int) -> (int, int):
+    lo: int = values[0]
+    hi: int = values[0]
+    for v in values:
+        if v < lo:
+            lo = v
+        if v > hi:
+            hi = v
+    return (lo, hi)
+
+def zip_with(f: [(int, int)]int, xs: []int, ys: []int) -> []int:
+    result: []int = []
+    for i in range(len(xs)):
+        result.append(f(xs[i], ys[i]))
+    return result
+""",
+    """\
+def minmax(values: list[int]) -> tuple[int, int]:
+    lo: int = values[0]
+    hi: int = values[0]
+    for v in values:
+        if v < lo:
+            lo = v
+        if v > hi:
+            hi = v
+    return (lo, hi)
+
+def zip_with(f: Callable[[int, int], int], xs: list[int], ys: list[int]) -> list[int]:
+    result: list[int] = []
+    for i in range(len(xs)):
+        result.append(f(xs[i], ys[i]))
+    return result
+""",
+)
+
+
 
 print(f"\n{'='*60}")
 print(f"Results: {_passed} passed, {_failed} failed, {_errors} errors")

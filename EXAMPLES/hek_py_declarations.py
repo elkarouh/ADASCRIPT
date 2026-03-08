@@ -181,8 +181,20 @@ type_name = fw("type_name")
 _PRIMITIVES = {"int", "str", "float", "bool", "bytes", "None"}
 primitive_type = filt(lambda s: s in _PRIMITIVES, IDENTIFIER)
 
-# --- User-defined type name (any identifier that is NOT a primitive) ---
-type_name = filt(lambda s: s not in _PRIMITIVES, IDENTIFIER)
+# --- User-defined type name: any non-primitive identifier, including subscripts
+# e.g. MyClass, List[int], Optional[str], Dict[str, int]
+# We use the full Python primary expression so subscript trailers are consumed.
+from hek_py3_expr import primary as _primary
+type_name = filt(
+    lambda node: (
+        # Accept primary expressions that start with a non-primitive identifier
+        hasattr(node, 'nodes') and node.nodes
+        and hasattr(node.nodes[0], 'nodes') and node.nodes[0].nodes
+        and isinstance(node.nodes[0].nodes[0], str)
+        and node.nodes[0].nodes[0] not in _PRIMITIVES
+    ),
+    _primary
+)
 
 # --- Tuple types ---
 # (int, str, float)  -> tuple[int, str, float]

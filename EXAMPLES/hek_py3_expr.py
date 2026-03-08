@@ -33,6 +33,7 @@ import sys
 sys.path.insert(0, "..")
 
 import tokenize as tkn
+import token as _tok_mod
 
 from hek_parsec import (
     COLON,
@@ -160,6 +161,7 @@ K_FALSE = literal("False")
 expression = fw("expression")
 expressions = fw("expressions")
 named_expression = fw("named_expression")
+walrus = fw("walrus")
 disjunction = fw("disjunction")
 conjunction = fw("conjunction")
 inversion = fw("inversion")
@@ -192,6 +194,7 @@ setcomp = fw("setcomp")
 genexpr = fw("genexpr")
 for_if_clauses = fw("for_if_clauses")
 for_if_clause = fw("for_if_clause")
+fstring = fw("fstring")
 
 ###############################################################################
 # Helper: left-associative binary operator to_py
@@ -268,9 +271,31 @@ def binop_to_py(self, prec=None, my_prec=None):
 # Grammar rules (bottom-up, highest precedence first)
 ###############################################################################
 
+# --- f-string: FSTRING_START FSTRING_MIDDLE? ('{' expression '}' FSTRING_MIDDLE?)* FSTRING_END ---
+# Python 3.12+ tokenises f"hello {name}" as:
+#   FSTRING_START f"  FSTRING_MIDDLE hello   OP {  NAME name  OP }  FSTRING_END "
+# We collect the raw token strings and reassemble them verbatim.
+_FSTRING_START  = fmap(lambda tok: tok.string, filt(lambda tok: tok.type == _tok_mod.FSTRING_START,  shift))
+_FSTRING_MIDDLE = fmap(lambda tok: tok.string, filt(lambda tok: tok.type == _tok_mod.FSTRING_MIDDLE, shift))
+_FSTRING_END    = fmap(lambda tok: tok.string, filt(lambda tok: tok.type == _tok_mod.FSTRING_END,    shift))
+_FSTRING_LBRACE = fmap(lambda tok: tok.string, filt(lambda tok: tok.type == tkn.OP and tok.string == "{", shift))
+_FSTRING_RBRACE = fmap(lambda tok: tok.string, filt(lambda tok: tok.type == tkn.OP and tok.string == "}", shift))
+_FSTRING_BANG   = fmap(lambda tok: tok.string, filt(lambda tok: tok.type == tkn.OP and tok.string == "!", shift))
+_FSTRING_CONV   = fmap(lambda tok: tok.string, filt(lambda tok: tok.type == tkn.NAME and tok.string in ("r", "s", "a"), shift))
+_FSTRING_COLON  = fmap(lambda tok: tok.string, filt(lambda tok: tok.type == tkn.OP and tok.string == ":", shift))
+# Optional conversion: !r / !s / !a
+_fstring_conversion = _FSTRING_BANG + _FSTRING_CONV
+# Optional format spec: : FSTRING_MIDDLE (the spec itself is a FSTRING_MIDDLE token)
+_fstring_format_spec = _FSTRING_COLON + _FSTRING_MIDDLE[:]
+# One interpolation: { expression [!r] [: spec] }
+_fstring_interp = _FSTRING_LBRACE + expression + _fstring_conversion[:] + _fstring_format_spec[:] + _FSTRING_RBRACE
+# Interp + middle chunk (middle is optional after each interpolation)
+_fstring_chunk  = _fstring_interp + _FSTRING_MIDDLE[:]
+fstring = _FSTRING_START + _FSTRING_MIDDLE[:] + _fstring_chunk[:] + _FSTRING_END
+
 # --- atom ---
 ellipsis_lit = V_ELLIPSIS
-paren_group = LPAREN + (yield_expr | expressions | named_expression) + RPAREN
+paren_group = LPAREN + (yield_expr | walrus | expressions) + RPAREN
 empty_paren = LPAREN + RPAREN
 list_display = LBRACKET + (listcomp | star_expressions) + RBRACKET
 empty_list = LBRACKET + RBRACKET
@@ -293,6 +318,7 @@ atom = (
     | K_FALSE
     | IDENTIFIER
     | NUMBER
+    | fstring
     | str_concat
     | STRING
 )
@@ -350,7 +376,14 @@ walrus = IDENTIFIER + V_COLONEQUAL + expression
 named_expression = walrus | expression
 
 # --- lambda ---
-lambda_params = IDENTIFIER + (COMMA + IDENTIFIER)[:]
+# lambda_param: IDENTIFIER ['=' expression]
+lambda_param = IDENTIFIER + (iop("=") + expression)[:]
+# lambda_star: '*' IDENTIFIER  — *args
+lambda_star = SSTAR + IDENTIFIER
+# lambda_dstar: '**' IDENTIFIER  — **kwargs
+lambda_dstar = iop("**") + IDENTIFIER
+lambda_params_entry = lambda_dstar | lambda_star | lambda_param
+lambda_params = lambda_params_entry + (COMMA + lambda_params_entry)[:]
 lambda_expr = I_LAMBDA + lambda_params[:] + COLON + expression
 
 # --- expression: conditional | lambda | disjunction ---
@@ -399,7 +432,10 @@ slices = slice_expr + (COMMA + slice_expr)[:] + COMMA[:]
 kwarg = IDENTIFIER + iop("=") + expression
 star_arg = SSTAR + expression
 dstar_arg = iop("**") + expression
-arg = kwarg | dstar_arg | star_arg | expression
+# genexpr_arg: a lone genexpr as sole argument e.g. sum(x for x in xs).
+# Must come before 'expression' since genexpr starts with an expression.
+genexpr_arg = genexpr
+arg = kwarg | dstar_arg | star_arg | genexpr_arg | expression
 arguments = arg + (COMMA + arg)[:] + COMMA[:]
 
 # --- comprehension targets (restricted: no 'in'/'not in' comparisons) ---
@@ -437,6 +473,31 @@ def to_py(self, prec=None):
 def to_py(self, prec=None):
     """STRING: a string literal token."""
     return self.node
+
+
+@method(fstring)
+def to_py(self, prec=None):
+    """fstring: FSTRING_START FSTRING_MIDDLE? ('{' expr '}' FSTRING_MIDDLE?)* FSTRING_END
+
+    Reassemble by collecting the raw token strings from all nodes.
+    FSTRING_START/MIDDLE/END nodes are Fmap nodes (str); expression nodes have to_py().
+    OP nodes for { and } are Fmap nodes (str).
+    """
+    parts = []
+    def _collect(node):
+        tname = type(node).__name__
+        if tname == "Fmap":
+            parts.append(node.node)
+        elif tname in ("Several_Times", "Sequence_Parser"):
+            for child in node.nodes:
+                _collect(child)
+        elif hasattr(node, "to_py"):
+            parts.append(node.to_py())
+        elif hasattr(node, "node"):
+            parts.append(node.node)
+    for node in self.nodes:
+        _collect(node)
+    return "".join(parts)
 
 
 @method(IDENTIFIER)
@@ -527,7 +588,7 @@ def to_py(self, prec=None):
 
 @method(paren_group)
 def to_py(self, prec=None):
-    """paren_group: '(' (yield_expr | expressions | named_expression) ')'
+    """paren_group: '(' (yield_expr | walrus | expressions) ')'
     Explicit parens from source — always preserved."""
     return f"({self.nodes[0].to_py()})"
 
@@ -803,13 +864,14 @@ def to_py(self, prec=None):
     if last_comp_idx == 1:
         base = self.nodes[0].to_py(operand_prec)
     else:
-
+        # Reconstruct the base expression. Pass None as my_prec to avoid
+        # incorrect wrapping - the inner binop_to_py will handle precedence.
         class _Mock:
             pass
 
         mock = _Mock()
         mock.nodes = self.nodes[:last_comp_idx]
-        base = binop_to_py(mock, operand_prec, PREC_CMP)
+        base = binop_to_py(mock, None, None)
 
     # Chain comparison operators (no nesting): a < b < c -> a < b < c
     chain = base
@@ -856,8 +918,8 @@ def to_py(self, prec=None):
 # --- walrus / named_expression ---
 @method(walrus)
 def to_py(self, prec=None):
-    """walrus: IDENTIFIER ':=' expression"""
-    result = f"{self.nodes[0].to_py()} := {self.nodes[1].to_py()}"
+    """walrus: IDENTIFIER ':=' expression — nodes: [IDENTIFIER, V_COLONEQUAL, expression]"""
+    result = f"{self.nodes[0].to_py()} := {self.nodes[2].to_py()}"
     if prec is not None and PREC_WALRUS < prec:
         return f"({result})"
     return result
@@ -880,13 +942,45 @@ def to_py(self, prec=None):
 
 
 # --- lambda ---
+@method(lambda_param)
+def to_py(self, prec=None):
+    """lambda_param: IDENTIFIER ['=' expression]"""
+    name = self.nodes[0].to_py()
+    if len(self.nodes) > 1 and hasattr(self.nodes[1], "nodes") and self.nodes[1].nodes:
+        # Optional part matched: Several_Times containing one Sequence_Parser (iop("=") + expression)
+        seq = self.nodes[1].nodes[0]
+        # iop("=") is ignored, so seq.nodes[0] is the expression
+        default = seq.nodes[0].to_py()
+        return f"{name}={default}"
+    return name
+
+
+@method(lambda_star)
+def to_py(self, prec=None):
+    """lambda_star: '*' IDENTIFIER — nodes: [SSTAR('*'), IDENTIFIER]"""
+    return f"*{self.nodes[1].to_py()}"
+
+
+@method(lambda_dstar)
+def to_py(self, prec=None):
+    """lambda_dstar: '**' IDENTIFIER"""
+    return f"**{self.nodes[0].to_py()}"
+
+
+@method(lambda_params_entry)
+def to_py(self, prec=None):
+    """lambda_params_entry: lambda_dstar | lambda_star | lambda_param"""
+    return self.nodes[0].to_py()
+
+
 @method(lambda_params)
 def to_py(self, prec=None):
-    """lambda_params: IDENTIFIER (',' IDENTIFIER)*"""
+    """lambda_params: lambda_params_entry (',' lambda_params_entry)*"""
     parts = [self.nodes[0].to_py()]
     if len(self.nodes) > 1 and hasattr(self.nodes[1], "nodes"):
         for seq in self.nodes[1].nodes:
-            parts.append(seq.nodes[0].to_py())
+            if hasattr(seq, "nodes") and seq.nodes:
+                parts.append(seq.nodes[0].to_py())
     return ", ".join(parts)
 
 
@@ -943,17 +1037,17 @@ def to_py(self, prec=None):
 @method(yield_from)
 def to_py(self, prec=None):
     """yield_from: 'yield' 'from' expression"""
-    return f"(yield from {self.nodes[0].to_py()})"
+    return f"yield from {self.nodes[0].to_py()}"
 
 
 @method(yield_val)
 def to_py(self, prec=None):
     """yield_val: 'yield' star_expressions?"""
     if self.nodes and hasattr(self.nodes[0], "nodes") and self.nodes[0].nodes:
-        return f"(yield {self.nodes[0].nodes[0].to_py()})"
+        return f"yield {self.nodes[0].nodes[0].to_py()}"
     elif self.nodes:
-        return f"(yield {self.nodes[0].to_py()})"
-    return "(yield)"
+        return f"yield {self.nodes[0].to_py()}"
+    return "yield"
 
 
 @method(yield_expr)
@@ -1119,12 +1213,16 @@ def to_py(self, prec=None):
     tgt = self.nodes[0].to_py()
     iterable = self.nodes[1].to_py()
     result = f"for {tgt} in {iterable}"
-    for node in self.nodes[2:]:
-        if hasattr(node, "nodes") and node.nodes:
-            for f in node.nodes:
-                result += f" if {f.to_py()}"
-        elif hasattr(node, "to_py"):
-            result += f" if {node.to_py()}"
+    # nodes[2] is Several_Times of Sequence_Parser(I_IF + disjunction).
+    # I_IF is ignored so each Sequence_Parser has exactly one node: the disjunction.
+    if len(self.nodes) > 2:
+        st = self.nodes[2]
+        if hasattr(st, "nodes"):
+            for seq in st.nodes:
+                if hasattr(seq, "nodes") and seq.nodes:
+                    result += f" if {seq.nodes[0].to_py()}"
+                elif hasattr(seq, "to_py"):
+                    result += f" if {seq.to_py()}"
     return result
 
 
