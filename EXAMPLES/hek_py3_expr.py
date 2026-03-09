@@ -29,8 +29,10 @@ Usage:
     print(ast.to_py())  # (1 + (2 * 3))
 """
 
-import sys
-sys.path.insert(0, "..")
+import sys, os
+_dir = os.path.dirname(__file__)
+sys.path.insert(0, os.path.join(_dir, ".."))
+sys.path.insert(0, os.path.join(_dir, "..", "GRAMMAR"))
 
 from py3expr import *
 from hek_parsec import method

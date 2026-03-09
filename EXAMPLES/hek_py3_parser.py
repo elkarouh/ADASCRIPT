@@ -5,8 +5,10 @@ Grammar definitions are in py3parser.py. This module adds to_py() rendering
 methods to the grammar node classes.
 """
 
-import sys
-sys.path.insert(0, "..")
+import sys, os
+_dir = os.path.dirname(__file__)
+sys.path.insert(0, os.path.join(_dir, ".."))
+sys.path.insert(0, os.path.join(_dir, "..", "GRAMMAR"))
 
 from py3parser import *  # noqa: F403 — grammar definitions
 from hek_tokenize import RichNL

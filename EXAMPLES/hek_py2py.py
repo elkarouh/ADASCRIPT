@@ -92,9 +92,11 @@ Usage:
     echo "x = 1" | python3 hek_py2py.py  # translate from stdin
 """
 
-import sys
+import sys, os
 
-sys.path.insert(0, "..")
+_dir = os.path.dirname(__file__)
+sys.path.insert(0, os.path.join(_dir, ".."))
+sys.path.insert(0, os.path.join(_dir, "..", "GRAMMAR"))
 
 import sys
 import token as token_mod
