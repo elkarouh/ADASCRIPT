@@ -543,104 +543,98 @@ def to_nim(self):
 ###############################################################################
 
 if __name__ == "__main__":
+    print()
     print("=" * 60)
     print("Python -> Nim Statement Translation Tests")
     print("=" * 60)
 
-# Nim translation tests
-# ==================================================================
-print()
-print("=" * 60)
-print("Python -> Nim Statement Translation Tests")
-print("=" * 60)
+    nim_tests = [
+        # --- Assignment ---
+        ("x = 1", "var x = 1"),
+        ("a = b = 1", "var a = b = 1"),
+        ("a, b = 1, 2", "var a, b = 1, 2"),
+        # --- Augmented assignment (same in Nim) ---
+        ("x += 1", "x += 1"),
+        ("x -= 1", "x -= 1"),
+        ("x *= 2", "x *= 2"),
+        ("x /= 2", "x /= 2"),
+        # --- Augmented assignment (expanded in Nim) ---
+        ("x //= 2", "x = x div 2"),
+        ("x %= 3", "x = x mod 3"),
+        ("x **= 2", "x = x ^ 2"),
+        ("x @= m", "x = x @ m"),
+        ("x <<= 1", "x = x shl 1"),
+        ("x >>= 1", "x = x shr 1"),
+        ("x &= mask", "x = x and mask"),
+        ("x |= flag", "x = x or flag"),
+        ("x ^= bits", "x = x xor bits"),
+        # --- Annotated assignment ---
+        ("x: int", "var x: int"),
+        ("x: int = 1", "var x: int = 1"),
+        ("x: str = 'hello'", "var x: string = 'hello'"),
+        # --- return ---
+        ("return", "return"),
+        ("return x", "return x"),
+        ("return x, y", "return x, y"),
+        # --- pass -> discard ---
+        ("pass", "discard"),
+        # --- break / continue (same) ---
+        ("break", "break"),
+        ("continue", "continue"),
+        # --- del -> reset() ---
+        ("del x", "reset(x)"),
+        # --- assert (same) ---
+        ("assert x", "assert x"),
+        ("assert x, 'msg'", "assert x, 'msg'"),
+        # --- raise ---
+        ("raise", "raise"),
+        ("raise ValueError", "raise ValueError"),
+        ("raise ValueError from exc", "raise ValueError"),  # no 'from' in Nim
+        # --- global / nonlocal -> comments ---
+        ("global x", "# global x"),
+        ("global x, y", "# global x, y"),
+        ("nonlocal x", "# nonlocal x"),
+        ("nonlocal a, b, c", "# nonlocal a, b, c"),
+        # --- import (dotted names use / in Nim) ---
+        ("import os", "import os"),
+        ("import os.path", "import os/path"),
+        ("import os as o", "import os as o"),
+        ("import os, sys", "import os, sys"),
+        # --- from import ---
+        ("from os import path", "from os import path"),
+        ("from os import path as p", "from os import path as p"),
+        ("from os import path, getcwd", "from os import path, getcwd"),
+        ("from os import *", "from os import *"),
+        # --- type alias ---
+        ("type Vector = list", "type Vector = list"),
+        # --- expression statement (delegates to expr to_nim) ---
+        ("f(x)", "f(x)"),
+        ("1 + 2", "1 + 2"),
+    ]
 
-nim_tests = [
-    # --- Assignment ---
-    ("x = 1", "var x = 1"),
-    ("a = b = 1", "var a = b = 1"),
-    ("a, b = 1, 2", "var a, b = 1, 2"),
-    # --- Augmented assignment (same in Nim) ---
-    ("x += 1", "x += 1"),
-    ("x -= 1", "x -= 1"),
-    ("x *= 2", "x *= 2"),
-    ("x /= 2", "x /= 2"),
-    # --- Augmented assignment (expanded in Nim) ---
-    ("x //= 2", "x = x div 2"),
-    ("x %= 3", "x = x mod 3"),
-    ("x **= 2", "x = x ^ 2"),
-    ("x @= m", "x = x @ m"),
-    ("x <<= 1", "x = x shl 1"),
-    ("x >>= 1", "x = x shr 1"),
-    ("x &= mask", "x = x and mask"),
-    ("x |= flag", "x = x or flag"),
-    ("x ^= bits", "x = x xor bits"),
-    # --- Annotated assignment ---
-    ("x: int", "var x: int"),
-    ("x: int = 1", "var x: int = 1"),
-    ("x: str = 'hello'", "var x: string = 'hello'"),
-    # --- return ---
-    ("return", "return"),
-    ("return x", "return x"),
-    ("return x, y", "return x, y"),
-    # --- pass -> discard ---
-    ("pass", "discard"),
-    # --- break / continue (same) ---
-    ("break", "break"),
-    ("continue", "continue"),
-    # --- del -> reset() ---
-    ("del x", "reset(x)"),
-    # --- assert (same) ---
-    ("assert x", "assert x"),
-    ("assert x, 'msg'", "assert x, 'msg'"),
-    # --- raise ---
-    ("raise", "raise"),
-    ("raise ValueError", "raise ValueError"),
-    ("raise ValueError from exc", "raise ValueError"),  # no 'from' in Nim
-    # --- global / nonlocal -> comments ---
-    ("global x", "# global x"),
-    ("global x, y", "# global x, y"),
-    ("nonlocal x", "# nonlocal x"),
-    ("nonlocal a, b, c", "# nonlocal a, b, c"),
-    # --- import (dotted names use / in Nim) ---
-    ("import os", "import os"),
-    ("import os.path", "import os/path"),
-    ("import os as o", "import os as o"),
-    ("import os, sys", "import os, sys"),
-    # --- from import ---
-    ("from os import path", "from os import path"),
-    ("from os import path as p", "from os import path as p"),
-    ("from os import path, getcwd", "from os import path, getcwd"),
-    ("from os import *", "from os import *"),
-    # --- type alias ---
-    ("type Vector = list", "type Vector = list"),
-    # --- expression statement (delegates to expr to_nim) ---
-    ("f(x)", "f(x)"),
-    ("1 + 2", "1 + 2"),
-]
-
-nim_passed = nim_failed = 0
-for code, expected in nim_tests:
-    try:
-        result = parse_stmt(code)
-        if result:
-            output = result.to_nim()
-            if output == expected:
-                print(f"  PASS: {code!r} -> {output!r}")
-                nim_passed += 1
+    nim_passed = nim_failed = 0
+    for code, expected in nim_tests:
+        try:
+            result = parse_stmt(code)
+            if result:
+                output = result.to_nim()
+                if output == expected:
+                    print(f"  PASS: {code!r} -> {output!r}")
+                    nim_passed += 1
+                else:
+                    print(f"  MISMATCH: {code!r}")
+                    print(f"    expected: {expected!r}")
+                    print(f"    got:      {output!r}")
+                    nim_failed += 1
             else:
-                print(f"  MISMATCH: {code!r}")
-                print(f"    expected: {expected!r}")
-                print(f"    got:      {output!r}")
+                print(f"  FAIL: {code!r} -> parse returned None")
                 nim_failed += 1
-        else:
-            print(f"  FAIL: {code!r} -> parse returned None")
+        except Exception as e:
+            print(f"  ERROR: {code!r} -> {e}")
+            import traceback
+            traceback.print_exc()
             nim_failed += 1
-    except Exception as e:
-        print(f"  ERROR: {code!r} -> {e}")
-        import traceback
-        traceback.print_exc()
-        nim_failed += 1
 
-print("=" * 60)
-print(f"Results: {nim_passed} passed, {nim_failed} failed")
-print()
+    print("=" * 60)
+    print(f"Results: {nim_passed} passed, {nim_failed} failed")
+    print()
