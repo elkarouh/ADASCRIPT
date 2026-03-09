@@ -5,8 +5,8 @@ Parses Python source code using the hek_parsec combinator framework
 and translates it to Nim via to_nim() methods on each AST node.
 
 Usage:
-    python3 hek_py2nim.py [file.py]       # translate a file
-    echo "x = 1" | python3 hek_py2nim.py  # translate from stdin
+    python3 py2nim.py [file.py]       # translate a file
+    echo "x = 1" | python3 py2nim.py  # translate from stdin
 """
 
 import sys, os

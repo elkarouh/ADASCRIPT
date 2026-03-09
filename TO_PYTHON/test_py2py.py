@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Comprehensive test suite for hek_py2py.py
+"""Comprehensive test suite for py2py.py
 
 Run with:
-    # Copy this file into the same directory as hek_py2py.py, then:
-    python3 test_hek_py2py.py
+    # Copy this file into the same directory as py2py.py, then:
+    python3 test_py2py.py
 
 Each test is labelled PASS, FAIL, or ERROR. FAIL and ERROR entries include
 a short bug description so the root cause is immediately obvious.
@@ -16,7 +16,7 @@ import os
 # Allow running from any directory that contains the hek_* files.
 sys.path.insert(0, os.path.dirname(__file__))
 
-from hek_py2py import translate
+from py2py import translate
 
 ###############################################################################
 # Test runner

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Python 3.14 Compound Statement Parser — to_py() methods.
 
-Grammar definitions are in py3parser.py. This module adds to_py() rendering
+Grammar definitions are in p3_compound_stmt.py. This module adds to_py() rendering
 methods to the grammar node classes.
 """
 
@@ -10,7 +10,7 @@ _dir = os.path.dirname(__file__)
 sys.path.insert(0, os.path.join(_dir, ".."))
 sys.path.insert(0, os.path.join(_dir, "..", "GRAMMAR"))
 
-from py3parser import *  # noqa: F403 — grammar definitions
+from p3_compound_stmt import *  # noqa: F403 — grammar definitions
 from hek_tokenize import RichNL
 from hek_parsec import method
 import hek_py3_stmt  # noqa: F401 — registers stmt to_py() methods
