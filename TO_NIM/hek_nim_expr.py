@@ -17,17 +17,19 @@ import sys, os
 _dir = os.path.dirname(__file__)
 sys.path.insert(0, os.path.join(_dir, ".."))
 sys.path.insert(0, os.path.join(_dir, "..", "GRAMMAR"))
-sys.path.insert(0, os.path.join(_dir, "..", "TO_PYTHON"))
+# (no TO_PYTHON dependency needed)
 
 from hek_parsec import method
-from hek_py3_expr import *
+from py3expr import *
 from hek_nim_declarations import _is_nim_ordinal  # noqa: F403 — need all parser rule names
-from hek_py3_expr import (
+from py3expr import (
     PREC_WALRUS, PREC_CONDITIONAL, PREC_OR, PREC_AND, PREC_NOT,
     PREC_CMP, PREC_BOR, PREC_BXOR, PREC_BAND, PREC_SHIFT,
     PREC_ARITH, PREC_TERM, PREC_UNARY, PREC_POWER, PREC_ATOM,
-    _COMP_OPS, _get_bracket_start, parse_expr,
+    parse_expr,
 )
+
+_COMP_OPS = {"==", "!=", "<", ">", "<=", ">=", "in", "is", "not in", "is not"}
 
 ###############################################################################
 # Type inference helpers
@@ -116,6 +118,13 @@ _PY_OP_TO_NIM = {
 }
 
 
+def _op_string(node):
+    """Extract operator string from a simple or compound operator node."""
+    if isinstance(node.node, str):
+        return node.node
+    return node.to_nim()
+
+
 def binop_to_nim(self, prec=None, my_prec=None):
     """Generic to_nim for left-associative binary operators.
     Parallel to binop_to_py but calls to_nim() recursively and translates operators."""
@@ -149,7 +158,7 @@ def binop_to_nim(self, prec=None, my_prec=None):
     st = self.nodes[last_st_idx]
     for seq in st.nodes:
         if hasattr(seq, "nodes") and len(seq.nodes) >= 2:
-            py_op = seq.nodes[0].to_py()
+            py_op = _op_string(seq.nodes[0])
             nim_op = _PY_OP_TO_NIM.get(py_op, py_op)
             right = seq.nodes[1].to_nim(right_prec)
             result = f"{result} {nim_op} {right}"
@@ -489,8 +498,8 @@ def to_nim(self, prec=None):
             if (
                 hasattr(first_seq, "nodes")
                 and len(first_seq.nodes) >= 2
-                and hasattr(first_seq.nodes[0], "to_py")
-                and first_seq.nodes[0].to_py() in _COMP_OPS
+                and hasattr(first_seq.nodes[0], "node")
+                and _op_string(first_seq.nodes[0]) in _COMP_OPS
             ):
                 last_comp_idx = i
                 break
@@ -512,7 +521,7 @@ def to_nim(self, prec=None):
     st = self.nodes[last_comp_idx]
     for seq in st.nodes:
         if hasattr(seq, "nodes") and len(seq.nodes) >= 2:
-            py_op = seq.nodes[0].to_py()
+            py_op = _op_string(seq.nodes[0])
             nim_op = _PY_OP_TO_NIM.get(py_op, py_op)
             right = seq.nodes[1].to_nim(operand_prec)
             chain += f" {nim_op} {right}"

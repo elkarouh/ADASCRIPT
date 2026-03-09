@@ -15,14 +15,12 @@ import sys, os
 _dir = os.path.dirname(__file__)
 sys.path.insert(0, os.path.join(_dir, ".."))
 sys.path.insert(0, os.path.join(_dir, "..", "GRAMMAR"))
-sys.path.insert(0, os.path.join(_dir, "..", "TO_PYTHON"))
+
 
 from hek_parsec import method, ParserState
-from hek_py3_parser import *  # noqa: F403 — need all parser rule names
-from hek_py3_parser import (
-    _ind, _richnl_lines, _block_inline_header_comment, _extract_clauses,
-    _case_from_seq, parse_compound, parse_module,
-)
+from py3compound_stmt import *  # noqa: F403 — grammar definitions
+from hek_helpers import _ind, _richnl_lines, _block_inline_header_comment
+from py3compound_stmt import parse_compound, parse_module
 from hek_tokenize import RichNL
 import hek_nim_expr  # noqa: F401 — registers expr to_nim()
 import hek_nim_stmt  # noqa: F401 — registers stmt to_nim()

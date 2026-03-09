@@ -14,11 +14,11 @@ import sys, os
 _dir = os.path.dirname(__file__)
 sys.path.insert(0, os.path.join(_dir, ".."))
 sys.path.insert(0, os.path.join(_dir, "..", "GRAMMAR"))
-sys.path.insert(0, os.path.join(_dir, "..", "TO_PYTHON"))
+# (no TO_PYTHON dependency needed)
 
 from hek_parsec import method, ParserState
-from hek_py_declarations import *  # noqa: F403 — need all parser rule names
-from hek_py_declarations import parse_type
+from py_declarations import *  # noqa: F403 — need all parser rule names
+from py_declarations import parse_type
 
 ###############################################################################
 # to_nim() methods
@@ -59,7 +59,8 @@ def to_nim(self, prec=None):
 @method(type_name)
 def to_nim(self, prec=None):
     # User-defined types pass through unchanged
-    return self.to_py()
+    # type_name wraps a primary expression node
+    return self.nodes[0].to_nim()
 
 
 @method(seq_type)
@@ -163,6 +164,7 @@ def to_nim(self, prec=None):
 ###############################################################################
 
 if __name__ == "__main__":
+    import hek_nim_expr  # noqa: F401 — registers expr to_nim() for expression fallback
     print()
     print("=" * 60)
     print("ADASCRIPT -> Nim Type Translation Tests")

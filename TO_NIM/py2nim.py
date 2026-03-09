@@ -14,11 +14,11 @@ import sys, os
 _dir = os.path.dirname(__file__)
 sys.path.insert(0, os.path.join(_dir, ".."))
 sys.path.insert(0, os.path.join(_dir, "..", "GRAMMAR"))
-sys.path.insert(0, os.path.join(_dir, "..", "TO_PYTHON"))
+
 
 import token as token_mod
 
-from hek_py3_parser import *  # fw() resolves names in calling module's globals
+from py3compound_stmt import *  # fw() resolves names in calling module's globals
 from hek_tokenize import Tokenizer, RichNL, set_current_tokenizer
 
 # Import Nim translation modules to register to_nim() methods
