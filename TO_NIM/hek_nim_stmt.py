@@ -14,11 +14,11 @@ import sys, os
 _dir = os.path.dirname(__file__)
 sys.path.insert(0, os.path.join(_dir, ".."))
 sys.path.insert(0, os.path.join(_dir, "..", "GRAMMAR"))
-sys.path.insert(0, os.path.join(_dir, "..", "TO_PYTHON"))
+# (no TO_PYTHON dependency needed)
 
 from hek_parsec import method, ParserState
-from hek_py3_stmt import *  # noqa: F403 — need all parser rule names
-from hek_py3_stmt import parse_stmt
+from py3stmt import *  # noqa: F403 — need all parser rule names
+from py3stmt import parse_stmt
 import hek_nim_expr  # noqa: F401 — registers expr to_nim() methods
 import hek_nim_declarations  # noqa: F401
 from hek_nim_expr import _infer_literal_nim_type
@@ -49,7 +49,7 @@ _AUGOP_TO_NIM = {
 # --- visible tokens ---
 @method(augop)
 def to_nim(self):
-    return self.nodes[0].to_py()  # raw op string, translated at aug_assign level
+    return self.nodes[0].nodes[0]  # raw op string, translated at aug_assign level
 
 
 @method(V_EQUAL)
@@ -83,7 +83,7 @@ def to_nim(self):
                 rhs_node = seq.nodes[1]
                 parts.append(rhs_node.to_nim())
     # Record type in symbol table
-    name = self.nodes[0].to_py() if hasattr(self.nodes[0], "to_py") else None
+    name = self.nodes[0].to_nim() if hasattr(self.nodes[0], "to_nim") else None
     if name and rhs_node and ParserState.symbol_table.depth() > 0:
         inferred = _infer_literal_nim_type(rhs_node)
         ParserState.symbol_table.add(name, inferred, "var")
@@ -101,7 +101,7 @@ def to_nim(self):
     py_op = (
         op_node.nodes[0]
         if isinstance(op_node.nodes[0], str)
-        else op_node.nodes[0].to_py()
+        else op_node.nodes[0].nodes[0]
     )
     value = self.nodes[2].to_nim()
     nim_op, expand = _AUGOP_TO_NIM.get(py_op, (py_op, False))
