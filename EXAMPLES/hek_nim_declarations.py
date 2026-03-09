@@ -150,85 +150,79 @@ def to_nim(self, prec=None):
 ###############################################################################
 
 if __name__ == "__main__":
+    print()
     print("=" * 60)
     print("ADASCRIPT -> Nim Type Translation Tests")
     print("=" * 60)
 
+    nim_tests = [
+        # --- Primitives ---
+        ("int", "int"),
+        ("str", "string"),
+        ("float", "float"),
+        ("bool", "bool"),
+        ("bytes", "seq[byte]"),
+        ("None", "void"),
+        # --- User-defined types ---
+        ("MyClass", "MyClass"),
+        ("SomeType", "SomeType"),
+        # --- Sequence ---
+        ("[]int", "seq[int]"),
+        ("[]str", "seq[string]"),
+        ("[][]int", "seq[seq[int]]"),
+        # --- Fixed array ---
+        ("[5]int", "array[5, int]"),
+        ("[3]str", "array[3, string]"),
+        # --- Nested containers ---
+        ("[3][]int", "array[3, seq[int]]"),
+        ("[][5]int", "seq[array[5, int]]"),
+        # --- Dict ---
+        ("{str}int", "Table[string, int]"),
+        ("{int}str", "Table[int, string]"),
+        # --- Set ---
+        ("{}int", "set[int]"),
+        ("{}str", "HashSet[string]"),
+        # --- Optional ---
+        ("?int", "Option[int]"),
+        ("?str", "Option[string]"),
+        ("?[]int", "Option[seq[int]]"),
+        ("[]?int", "seq[Option[int]]"),
+        # --- Tuple ---
+        ("(int, str)", "(int, string)"),
+        ("(int, str, float)", "(int, string, float)"),
+        ("(int,)", "(int,)"),
+        # --- Union ---
+        ("int | str", "int | string"),
+        ("int | str | float", "int | string | float"),
+        ("?int | str", "Option[int] | string"),
+        # --- Callable ---
+        ("[(int, str)]bool", "proc(a0: int, a1: string): bool"),
+        ("[(int,)]int", "proc(a0: int): int"),
+    ]
 
-# --- Nim translation tests ---
-print()
-print("=" * 60)
-print("ADASCRIPT -> Nim Type Translation Tests")
-print("=" * 60)
-
-nim_tests = [
-    # --- Primitives ---
-    ("int", "int"),
-    ("str", "string"),
-    ("float", "float"),
-    ("bool", "bool"),
-    ("bytes", "seq[byte]"),
-    ("None", "void"),
-    # --- User-defined types ---
-    ("MyClass", "MyClass"),
-    ("SomeType", "SomeType"),
-    # --- Sequence ---
-    ("[]int", "seq[int]"),
-    ("[]str", "seq[string]"),
-    ("[][]int", "seq[seq[int]]"),
-    # --- Fixed array ---
-    ("[5]int", "array[5, int]"),
-    ("[3]str", "array[3, string]"),
-    # --- Nested containers ---
-    ("[3][]int", "array[3, seq[int]]"),
-    ("[][5]int", "seq[array[5, int]]"),
-    # --- Dict ---
-    ("{str}int", "Table[string, int]"),
-    ("{int}str", "Table[int, string]"),
-    # --- Set ---
-    ("{}int", "set[int]"),
-    ("{}str", "HashSet[string]"),
-    # --- Optional ---
-    ("?int", "Option[int]"),
-    ("?str", "Option[string]"),
-    ("?[]int", "Option[seq[int]]"),
-    ("[]?int", "seq[Option[int]]"),
-    # --- Tuple ---
-    ("(int, str)", "(int, string)"),
-    ("(int, str, float)", "(int, string, float)"),
-    ("(int,)", "(int,)"),
-    # --- Union ---
-    ("int | str", "int | string"),
-    ("int | str | float", "int | string | float"),
-    ("?int | str", "Option[int] | string"),
-    # --- Callable ---
-    ("[(int, str)]bool", "proc(a0: int, a1: string): bool"),
-    ("[(int,)]int", "proc(a0: int): int"),
-]
-
-passed = failed = 0
-for code, expected in nim_tests:
-    try:
-        ast = parse_type(code)
-        if ast is None:
-            print(f"  FAIL: {code!r} -> parse returned None")
-            failed += 1
-        else:
-            output = ast.to_nim()
-            if output == expected:
-                print(f"  PASS: {code!r} -> {output!r}")
-                passed += 1
-            else:
-                print(f"  MISMATCH: {code!r}")
-                print(f"    expected: {expected!r}")
-                print(f"    got:      {output!r}")
+    passed = failed = 0
+    for code, expected in nim_tests:
+        try:
+            ast = parse_type(code)
+            if ast is None:
+                print(f"  FAIL: {code!r} -> parse returned None")
                 failed += 1
-    except Exception as e:
-        print(f"  ERROR: {code!r} -> {e}")
-        import traceback
-        traceback.print_exc()
-        failed += 1
+            else:
+                output = ast.to_nim()
+                if output == expected:
+                    print(f"  PASS: {code!r} -> {output!r}")
+                    passed += 1
+                else:
+                    print(f"  MISMATCH: {code!r}")
+                    print(f"    expected: {expected!r}")
+                    print(f"    got:      {output!r}")
+                    failed += 1
+        except Exception as e:
+            print(f"  ERROR: {code!r} -> {e}")
+            import traceback
+            traceback.print_exc()
+            failed += 1
 
-print("=" * 60)
-print(f"Results: {passed} passed, {failed} failed")
-print()
+    print("=" * 60)
+    print(f"Results: {passed} passed, {failed} failed")
+    print()

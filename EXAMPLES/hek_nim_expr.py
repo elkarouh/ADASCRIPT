@@ -912,122 +912,116 @@ def to_nim(self, prec=None):
 ###############################################################################
 
 if __name__ == "__main__":
+    print()
     print("=" * 60)
     print("Python -> Nim Expression Translation Tests")
     print("=" * 60)
 
-# Nim translation tests
-# ==================================================================
-print()
-print("=" * 60)
-print("Python -> Nim Expression Translation Tests")
-print("=" * 60)
+    nim_tests = [
+        # --- Literals ---
+        ("42", "42"),
+        ("3.14", "3.14"),
+        ('"hello"', '"hello"'),
+        ("None", "nil"),
+        ("True", "true"),
+        ("False", "false"),
+        ("...", "..."),
+        # --- Arithmetic (same operators) ---
+        ("1 + 2", "1 + 2"),
+        ("1 + 2 * 3", "1 + 2 * 3"),
+        ("(1 + 2) * 3", "(1 + 2) * 3"),
+        ("10 / 3", "10 / 3"),
+        # --- Operators that differ ---
+        ("10 // 3", "10 div 3"),
+        ("10 % 3", "10 mod 3"),
+        ("x ** 2", "x ^ 2"),
+        ("a @ b", "a @ b"),
+        # --- Bitwise -> Nim keywords ---
+        ("x << 2", "x shl 2"),
+        ("x >> 1", "x shr 1"),
+        ("x & y", "x and y"),
+        ("x | y", "x or y"),
+        ("x ^ y", "x xor y"),
+        ("~x", "not x"),
+        # --- Boolean (same in Nim) ---
+        ("x and y", "x and y"),
+        ("x or y", "x or y"),
+        ("not x", "not x"),
+        # --- Comparison ---
+        ("x < y", "x < y"),
+        ("x == y", "x == y"),
+        ("x != y", "x != y"),
+        ("x <= y", "x <= y"),
+        ("x >= y", "x >= y"),
+        # --- Comparison operators that differ ---
+        ("x not in y", "x notin y"),
+        ("x is not y", "x isnot y"),
+        ("x in y", "x in y"),
+        ("x is y", "x is y"),
+        # --- Unary ---
+        ("-x", "-x"),
+        ("+x", "+x"),
+        # --- Conditional (Python ternary -> Nim if expr) ---
+        ("a if b else c", "(if b: a else: c)"),
+        # --- Lambda -> proc ---
+        ("lambda x: x + 1", "proc(x: auto): auto = x + 1"),
+        ("lambda x, y: x + y", "proc(x: auto, y: auto): auto = x + y"),
+        # --- Containers ---
+        ("[]", "@[]"),
+        ("[1, 2, 3]", "@[1, 2, 3]"),
+        ("{}", "newTable()"),
+        ("{1: 2, 3: 4}", "{1: 2, 3: 4}.toTable"),
+        ("{1, 2, 3}", "{1, 2, 3}"),
+        ('{"a", "b"}', '{"a", "b"}.toHashSet'),
+        ("()", "()"),
+        # --- Calls, subscripts, attributes (same syntax) ---
+        ("f(x)", "f(x)"),
+        ("f(x, y)", "f(x, y)"),
+        ("a[i]", "a[i]"),
+        ("obj.attr", "obj.attr"),
+        ("f(x).y", "f(x).y"),
+        # --- Keyword args: = stays but with spaces in Nim ---
+        ("f(x=1)", "f(x = 1)"),
+        # --- String concat -> & ---
+        ('"a" "b"', '"a" & "b"'),
+        # --- Slices ---
+        ("a[1:3]", "a[1..<3]"),
+        # --- Await (same) ---
+        ("await f()", "await f()"),
+        # --- Comprehensions -> collect ---
+        ("[x for x in xs]", "collect(for x in xs: x)"),
+        ("{x for x in xs}", "collect(initHashSet, for x in xs: x)"),
+        # --- Yield (same) ---
+        # --- Power precedence ---
+        ("2 ** 3 ** 2", "2 ^ 3 ^ 2"),
+        # --- Mixed precedence with Nim translations ---
+        ("a + b * c // d", "a + b * c div d"),
+        ("x << 1 | y >> 2", "x shl 1 or y shr 2"),
+    ]
 
-nim_tests = [
-    # --- Literals ---
-    ("42", "42"),
-    ("3.14", "3.14"),
-    ('"hello"', '"hello"'),
-    ("None", "nil"),
-    ("True", "true"),
-    ("False", "false"),
-    ("...", "..."),
-    # --- Arithmetic (same operators) ---
-    ("1 + 2", "1 + 2"),
-    ("1 + 2 * 3", "1 + 2 * 3"),
-    ("(1 + 2) * 3", "(1 + 2) * 3"),
-    ("10 / 3", "10 / 3"),
-    # --- Operators that differ ---
-    ("10 // 3", "10 div 3"),
-    ("10 % 3", "10 mod 3"),
-    ("x ** 2", "x ^ 2"),
-    ("a @ b", "a @ b"),
-    # --- Bitwise -> Nim keywords ---
-    ("x << 2", "x shl 2"),
-    ("x >> 1", "x shr 1"),
-    ("x & y", "x and y"),
-    ("x | y", "x or y"),
-    ("x ^ y", "x xor y"),
-    ("~x", "not x"),
-    # --- Boolean (same in Nim) ---
-    ("x and y", "x and y"),
-    ("x or y", "x or y"),
-    ("not x", "not x"),
-    # --- Comparison ---
-    ("x < y", "x < y"),
-    ("x == y", "x == y"),
-    ("x != y", "x != y"),
-    ("x <= y", "x <= y"),
-    ("x >= y", "x >= y"),
-    # --- Comparison operators that differ ---
-    ("x not in y", "x notin y"),
-    ("x is not y", "x isnot y"),
-    ("x in y", "x in y"),
-    ("x is y", "x is y"),
-    # --- Unary ---
-    ("-x", "-x"),
-    ("+x", "+x"),
-    # --- Conditional (Python ternary -> Nim if expr) ---
-    ("a if b else c", "(if b: a else: c)"),
-    # --- Lambda -> proc ---
-    ("lambda x: x + 1", "proc(x: auto): auto = x + 1"),
-    ("lambda x, y: x + y", "proc(x: auto, y: auto): auto = x + y"),
-    # --- Containers ---
-    ("[]", "@[]"),
-    ("[1, 2, 3]", "@[1, 2, 3]"),
-    ("{}", "newTable()"),
-    ("{1: 2, 3: 4}", "{1: 2, 3: 4}.toTable"),
-    ("{1, 2, 3}", "{1, 2, 3}"),
-    ('{"a", "b"}', '{"a", "b"}.toHashSet'),
-    ("()", "()"),
-    # --- Calls, subscripts, attributes (same syntax) ---
-    ("f(x)", "f(x)"),
-    ("f(x, y)", "f(x, y)"),
-    ("a[i]", "a[i]"),
-    ("obj.attr", "obj.attr"),
-    ("f(x).y", "f(x).y"),
-    # --- Keyword args: = stays but with spaces in Nim ---
-    ("f(x=1)", "f(x = 1)"),
-    # --- String concat -> & ---
-    ('"a" "b"', '"a" & "b"'),
-    # --- Slices ---
-    ("a[1:3]", "a[1..<3]"),
-    # --- Await (same) ---
-    ("await f()", "await f()"),
-    # --- Comprehensions -> collect ---
-    ("[x for x in xs]", "collect(for x in xs: x)"),
-    ("{x for x in xs}", "collect(initHashSet, for x in xs: x)"),
-    # --- Yield (same) ---
-    # --- Power precedence ---
-    ("2 ** 3 ** 2", "2 ^ 3 ^ 2"),
-    # --- Mixed precedence with Nim translations ---
-    ("a + b * c // d", "a + b * c div d"),
-    ("x << 1 | y >> 2", "x shl 1 or y shr 2"),
-]
-
-nim_passed = nim_failed = 0
-for code, expected in nim_tests:
-    try:
-        result = parse_expr(code)
-        if result:
-            output = result.to_nim()
-            if output == expected:
-                print(f"  PASS: {code!r} -> {output!r}")
-                nim_passed += 1
+    nim_passed = nim_failed = 0
+    for code, expected in nim_tests:
+        try:
+            result = parse_expr(code)
+            if result:
+                output = result.to_nim()
+                if output == expected:
+                    print(f"  PASS: {code!r} -> {output!r}")
+                    nim_passed += 1
+                else:
+                    print(f"  MISMATCH: {code!r}")
+                    print(f"    expected: {expected!r}")
+                    print(f"    got:      {output!r}")
+                    nim_failed += 1
             else:
-                print(f"  MISMATCH: {code!r}")
-                print(f"    expected: {expected!r}")
-                print(f"    got:      {output!r}")
+                print(f"  FAIL: {code!r} -> parse returned None")
                 nim_failed += 1
-        else:
-            print(f"  FAIL: {code!r} -> parse returned None")
+        except Exception as e:
+            print(f"  ERROR: {code!r} -> {e}")
+            import traceback
+            traceback.print_exc()
             nim_failed += 1
-    except Exception as e:
-        print(f"  ERROR: {code!r} -> {e}")
-        import traceback
-        traceback.print_exc()
-        nim_failed += 1
 
-print("=" * 60)
-print(f"Results: {nim_passed} passed, {nim_failed} failed")
-print()
+    print("=" * 60)
+    print(f"Results: {nim_passed} passed, {nim_failed} failed")
+    print()
