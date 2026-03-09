@@ -14,6 +14,7 @@ import sys, os
 _dir = os.path.dirname(__file__)
 sys.path.insert(0, os.path.join(_dir, ".."))
 sys.path.insert(0, os.path.join(_dir, "..", "GRAMMAR"))
+sys.path.insert(0, os.path.join(_dir, "..", "TO_PYTHON"))
 
 from hek_parsec import method, ParserState
 from hek_py3_stmt import *  # noqa: F403 — need all parser rule names
