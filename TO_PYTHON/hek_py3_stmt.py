@@ -542,7 +542,7 @@ def to_py(self):
 # --- type alias ---
 @method(enum_def)
 def to_py(self):
-    """enum_def: 'enum' IDENTIFIER (',' IDENTIFIER)* ','\?"""
+    """enum_def: 'enum' IDENTIFIER (',' IDENTIFIER)* ','?"""
     parts = [self.nodes[0].to_py()]
     for node in self.nodes[1:]:
         if not hasattr(node, 'nodes') or not node.nodes:
@@ -567,10 +567,8 @@ def to_py(self):
 
 @method(type_stmt)
 def to_py(self):
-    """type_stmt: 'type' IDENTIFIER type_alias_params? '=' expression"""
-    # nodes: [IDENTIFIER, type_alias_params (optional), V_EQUAL, expression]
+    """type_stmt: 'type' IDENTIFIER type_alias_params? '=' (enum_def | expression)"""
     name = self.nodes[0].to_py()
-    # Check for type_alias_params
     params = ""
     eq_idx = 1
     for i, node in enumerate(self.nodes[1:], 1):
@@ -579,14 +577,22 @@ def to_py(self):
             eq_idx = i + 1
             break
         elif hasattr(node, 'nodes') and node.nodes:
-            # Check if first child is type_alias_params
             first = node.nodes[0] if hasattr(node, 'nodes') else node
             if type(first).__name__ == 'type_alias_params':
                 params = first.to_py()
                 eq_idx = i + 1
                 break
-    value = self.nodes[eq_idx + 1].to_py()  # V_EQUAL is at eq_idx, expression at eq_idx+1
+    rhs = self.nodes[eq_idx + 1]
+    if type(rhs).__name__ == 'enum_def':
+        members = rhs.to_py()
+        member_names = [m.strip() for m in members[len("enum "):].split(",")]
+        lines = [f"class {name}(Enum):"]
+        for m in member_names:
+            lines.append(f"    {m} = auto()")
+        return "\n".join(lines)
+    value = rhs.to_py()
     return f"type {name}{params} = {value}"
+
 
 
 # --- simple_stmt ---
@@ -704,7 +710,7 @@ if __name__ == "__main__":
         ("from os import *", "from os import *"),
         # --- type alias ---
         ("type Vector = list", "type Vector = list"),
-        ("type Color = enum RED, BLUE, YELLOW", "type Color = enum RED, BLUE, YELLOW"),
+        ("type Color = enum RED, BLUE, YELLOW", "class Color(Enum):\n    RED = auto()\n    BLUE = auto()\n    YELLOW = auto()"),
         # --- expression statement ---
         ("f(x)", "f(x)"),
         ("x", "x"),

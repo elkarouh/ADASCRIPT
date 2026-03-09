@@ -514,7 +514,10 @@ def to_nim(self):
                 params = first.to_nim()
                 eq_idx = i + 1
                 break
-    value = self.nodes[eq_idx + 1].to_nim()
+    rhs = self.nodes[eq_idx + 1]
+    if type(rhs).__name__ == "enum_def":
+        ParserState.symbol_table.add(name, "enum", "type")
+    value = rhs.to_nim()
     return f"type {name}{params} = {value}"
 
 

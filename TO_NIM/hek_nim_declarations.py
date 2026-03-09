@@ -16,7 +16,7 @@ sys.path.insert(0, os.path.join(_dir, ".."))
 sys.path.insert(0, os.path.join(_dir, "..", "GRAMMAR"))
 sys.path.insert(0, os.path.join(_dir, "..", "TO_PYTHON"))
 
-from hek_parsec import method
+from hek_parsec import method, ParserState
 from hek_py_declarations import *  # noqa: F403 — need all parser rule names
 from hek_py_declarations import parse_type
 
@@ -43,7 +43,11 @@ _NIM_ORDINALS = {
 
 def _is_nim_ordinal(nim_type):
     """Return True if nim_type is an ordinal type (eligible for set[T])."""
-    return nim_type in _NIM_ORDINALS
+    if nim_type in _NIM_ORDINALS:
+        return True
+    # Check symbol table for user-defined enum types
+    info = ParserState.symbol_table.lookup(nim_type)
+    return info is not None and info.get("type") == "enum"
 
 
 @method(primitive_type)
