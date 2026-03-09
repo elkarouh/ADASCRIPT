@@ -74,6 +74,12 @@ def to_nim(self, prec=None):
     return f"array[{size}, {elem}]"
 
 
+@method(openarray_type)
+def to_nim(self, prec=None):
+    elem = self.nodes[1].to_nim()
+    return f"openArray[{elem}]"
+
+
 @method(dict_type)
 def to_nim(self, prec=None):
     key = self.nodes[0].to_nim()
@@ -179,6 +185,7 @@ if __name__ == "__main__":
         ("[][]int", "seq[seq[int]]"),
         # --- Fixed array ---
         ("[5]int", "array[5, int]"),
+        ("[*]int", "openArray[int]"),
         ("[3]str", "array[3, string]"),
         # --- Nested containers ---
         ("[3][]int", "array[3, seq[int]]"),

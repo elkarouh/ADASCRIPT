@@ -169,6 +169,11 @@ def to_py(self, prec=None):
     return f"tuple[{self.nodes[1].to_py()}, ...]"
 
 
+@method(openarray_type)
+def to_py(self, prec=None):
+    return f"Sequence[{self.nodes[1].to_py()}]"
+
+
 @method(dict_type)
 def to_py(self, prec=None):
     key = self.nodes[0].to_py()
@@ -271,6 +276,7 @@ if __name__ == "__main__":
         ("[][]int", "list[list[int]]"),
         # --- Fixed array ---
         ("[5]int", "tuple[int, ...]"),
+        ("[*]int", "Sequence[int]"),
         ("[3]str", "tuple[str, ...]"),
         # --- Nested containers ---
         ("[3][]int", "tuple[list[int], ...]"),
