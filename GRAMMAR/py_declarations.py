@@ -150,6 +150,7 @@ from hek_parsec import (
     LPAREN,
     RBRACE,
     RBRACKET,
+    SSTAR,
     RPAREN,
     VBAR,
     Input,
@@ -179,6 +180,7 @@ optional_type = fw("optional_type")
 basic_type = fw("basic_type")
 seq_type = fw("seq_type")
 array_type = fw("array_type")
+openarray_type = fw("openarray_type")
 dict_type = fw("dict_type")
 set_type = fw("set_type")
 callable_type = fw("callable_type")
@@ -231,6 +233,9 @@ seq_type = LBRACKET + RBRACKET + type_annotation
 # [5]int            -> tuple[int, ...]
 array_type = LBRACKET + INTEGER + RBRACKET + type_annotation
 
+# [*]int            -> Sequence[int]  (unconstrained/open array)
+openarray_type = LBRACKET + SSTAR + RBRACKET + type_annotation
+
 # {str}int          -> dict[str, int]
 dict_type = LBRACE + type_annotation + RBRACE + type_annotation
 
@@ -246,6 +251,7 @@ callable_type = LBRACKET + tuple_type + RBRACKET + type_annotation
 basic_type = (
     seq_type
     | callable_type
+    | openarray_type
     | array_type
     | dict_type
     | set_type
