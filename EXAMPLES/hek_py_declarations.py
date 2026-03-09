@@ -136,8 +136,10 @@ Usage
     ann_assign = IDENTIFIER + COLON + type_annotation
 """
 
-import sys
-sys.path.insert(0, "..")
+import sys, os
+_dir = os.path.dirname(__file__)
+sys.path.insert(0, os.path.join(_dir, ".."))
+sys.path.insert(0, os.path.join(_dir, "..", "GRAMMAR"))
 
 from py_declarations import *
 import hek_py3_expr  # noqa: F401 — registers expr to_py() methods

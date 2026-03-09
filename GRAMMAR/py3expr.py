@@ -29,8 +29,8 @@ Usage:
     print(ast.to_py())  # (1 + (2 * 3))
 """
 
-import sys
-sys.path.insert(0, "..")
+import sys, os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import tokenize as tkn
 import token as _tok_mod

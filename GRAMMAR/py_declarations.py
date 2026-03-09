@@ -136,8 +136,8 @@ Usage
     ann_assign = IDENTIFIER + COLON + type_annotation
 """
 
-import sys
-sys.path.insert(0, "..")
+import sys, os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import tokenize as tkn
 

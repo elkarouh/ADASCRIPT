@@ -21,6 +21,10 @@ Usage:
     print(ast.to_py())  # x = 1
 """
 
+import sys, os
+_dir = os.path.dirname(__file__)
+sys.path.insert(0, os.path.join(_dir, ".."))
+sys.path.insert(0, os.path.join(_dir, "..", "GRAMMAR"))
 
 from py3stmt import *
 from hek_py3_expr import _get_bracket_start

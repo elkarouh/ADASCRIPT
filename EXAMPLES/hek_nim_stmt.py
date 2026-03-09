@@ -10,8 +10,10 @@ Usage:
     print(ast.to_nim())  # var x = 1
 """
 
-import sys
-sys.path.insert(0, "..")
+import sys, os
+_dir = os.path.dirname(__file__)
+sys.path.insert(0, os.path.join(_dir, ".."))
+sys.path.insert(0, os.path.join(_dir, "..", "GRAMMAR"))
 
 from hek_parsec import method, ParserState
 from hek_py3_stmt import *  # noqa: F403 — need all parser rule names
