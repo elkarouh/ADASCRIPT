@@ -87,7 +87,10 @@ def to_nim(self):
     if name and rhs_node and ParserState.symbol_table.depth() > 0:
         inferred = _infer_literal_nim_type(rhs_node)
         ParserState.symbol_table.add(name, inferred, "var")
-    return "var " + " = ".join(parts)
+    # Skip var for dotted assignments (field mutation) and indexed assignments
+    lhs = parts[0]
+    prefix = "" if "." in lhs or "[" in lhs else "var "
+    return prefix + " = ".join(parts)
 
 
 # --- augmented assignment ---
@@ -128,6 +131,9 @@ def to_nim(self):
         for seq in node.nodes:
             if hasattr(seq, "nodes") and len(seq.nodes) >= 2:
                 value = seq.nodes[1].to_nim()
+                # For array types, strip @ prefix from list literals
+                if annotation.startswith("array[") and value.startswith("@["):
+                    value = value[1:]
                 result += f" = {value}"
     return result
 
@@ -150,6 +156,9 @@ def to_nim(self):
         for seq in node.nodes:
             if hasattr(seq, "nodes") and len(seq.nodes) >= 2:
                 value = seq.nodes[1].to_nim()
+                # For array types, strip @ prefix from list literals
+                if annotation.startswith("array[") and value.startswith("@["):
+                    value = value[1:]
                 result += f" = {value}"
     return result
 

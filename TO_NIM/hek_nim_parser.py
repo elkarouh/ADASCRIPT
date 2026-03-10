@@ -22,11 +22,25 @@ from py3compound_stmt import *  # noqa: F403 — grammar definitions
 from hek_helpers import _ind, _richnl_lines, _block_inline_header_comment
 from py3compound_stmt import parse_compound, parse_module
 from hek_tokenize import RichNL
+import re
 import hek_nim_expr  # noqa: F401 — registers expr to_nim()
 import hek_nim_stmt  # noqa: F401 — registers stmt to_nim()
 import hek_nim_declarations  # noqa: F401 — registers decl to_nim()
 
 ###############################################################################
+# Class method registry for base pragma detection
+_class_methods = {}   # class_name -> set of method names
+_class_parents = {}   # class_name -> parent_name or None
+
+def _is_new_method(class_name, method_name):
+    """Return True if method_name is not defined in any ancestor of class_name."""
+    parent = _class_parents.get(class_name)
+    while parent:
+        if method_name in _class_methods.get(parent, set()):
+            return False
+        parent = _class_parents.get(parent)
+    return True
+
 # to_nim() methods for compound statements
 ###############################################################################
 
@@ -39,9 +53,12 @@ def to_nim(self, indent=0):
 
 # --- block ---
 @method(block)
-def to_nim(self, indent=0):
-    """Emit body lines calling to_nim() recursively."""
+def to_nim(self, indent=0, is_virtual=False, class_name=None, parent_name=None):
+    """Emit body lines. For virtual classes, generates proper Nim structure."""
     lines = []
+    fields = []
+    methods = []
+    
     for node in self.nodes:
         tname = type(node).__name__
         if tname in ("Fmap", "Filter"):
@@ -59,10 +76,32 @@ def to_nim(self, indent=0):
                         elif stmt_node is None:
                             stmt_node = child
                     if stmt_node is not None and hasattr(stmt_node, "to_nim"):
-                        try:
-                            lines.append(stmt_node.to_nim(indent))
-                        except TypeError:
-                            lines.append(_ind(indent) + stmt_node.to_nim())
+                        if is_virtual:
+                            stmt_node_type = type(stmt_node).__name__
+                            if stmt_node_type == "func_def":
+                                methods.append(stmt_node)
+                            elif stmt_node_type == "stmt_line":
+                                found_field = False
+                                for child in stmt_node.nodes:
+                                    if type(child).__name__ == "decl_ann_assign_stmt":
+                                        fields.append(stmt_node)
+                                        found_field = True
+                                        break
+                                if not found_field:
+                                    try:
+                                        lines.append(stmt_node.to_nim(indent))
+                                    except TypeError:
+                                        lines.append(_ind(indent) + stmt_node.to_nim())
+                            else:
+                                try:
+                                    lines.append(stmt_node.to_nim(indent))
+                                except TypeError:
+                                    lines.append(_ind(indent) + stmt_node.to_nim())
+                        else:
+                            try:
+                                lines.append(stmt_node.to_nim(indent))
+                            except TypeError:
+                                lines.append(_ind(indent) + stmt_node.to_nim())
                     if nl_several is not None:
                         for nl_node in nl_several.nodes:
                             trivia = _richnl_lines(nl_node)
@@ -80,6 +119,77 @@ def to_nim(self, indent=0):
                 lines.append(node.to_nim(indent))
             except TypeError:
                 lines.append(_ind(indent) + node.to_nim())
+    
+    if class_name:  # Process all classes with fields/methods
+        result_lines = []
+        # Emit fields (inside object body): strip var/let/const keyword
+        for field in fields:
+            line = field.to_nim(indent)
+            stripped = line.lstrip()
+            for kw in ("var ", "let ", "const "):
+                if stripped.startswith(kw):
+                    line = line[:len(line) - len(stripped)] + stripped[len(kw):]
+                    break
+            result_lines.append(line)
+        
+        # Emit a blank line after fields for readability
+        if fields:
+            result_lines.append("")
+        
+        inits = []
+        other_methods = []
+        for method in methods:
+            method_type = type(method).__name__
+            func_node = None
+            if method_type == "func_def":
+                func_node = method
+            elif method_type == "stmt_line":
+                for child in method.nodes:
+                    if type(child).__name__ == "func_def":
+                        func_node = child
+                        break
+            if func_node:
+                for node in func_node.nodes:
+                    if type(node).__name__ == "IDENTIFIER":
+                        method_name = str(node.nodes[0])
+                        if method_name == "__init__":
+                            inits.append(func_node)
+                        else:
+                            other_methods.append((func_node, method_name))
+                        break
+        
+        # Register all method names for this class
+        if class_name:
+            _class_methods[class_name] = set()
+            for _, mname in other_methods:
+                _class_methods[class_name].add(mname)
+            _class_parents[class_name] = parent_name if parent_name else None
+
+        # Check if this is a virtual class
+        is_virtual_class = getattr(self, '_is_virtual', False)
+
+        # Use base_indent for procs/methods (top level), not the indented value
+        base_indent = getattr(self, '_base_indent', indent)
+        
+        for func_node in inits:
+            # Generate init/new procs at top level (same indent as type definition)
+            init_lines, new_lines = _generate_init_new(func_node, base_indent, class_name, parent_name, is_virtual_class)
+            result_lines.extend(init_lines)
+            result_lines.extend(new_lines)
+        
+        for func_node, method_name in other_methods:
+            # Generate methods at top level (same indent as type definition)
+            method_lines = _generate_method_decl(func_node, base_indent, class_name, parent_name, is_virtual_class)
+            result_lines.extend(method_lines)
+        
+        # If no fields or methods, emit discard for empty body
+        if not result_lines:
+            result_lines.append(_ind(indent) + "discard")
+        return "\n".join(result_lines)
+    
+    # For non-class blocks, if empty emit discard
+    if not lines:
+        return _ind(indent) + "discard"
     return "\n".join(lines)
 
 
@@ -759,23 +869,36 @@ def to_nim(self, indent=0):
 # --- Class definition ---
 @method(class_def)
 def to_nim(self, indent=0):
-    """class Foo(Bar): -> type Foo = object of Bar"""
+    """class Foo(Bar): -> type Foo = ref object of Bar (if @virtual)"""
     decos = ""
     name = ""
     bases = ""
     block_node = None
+    is_virtual = False
 
     for node in self.nodes:
         tname = type(node).__name__
         if tname == "decorators":
-            decos = node.to_nim(indent) + "\n"
+            decos_str = node.to_nim(indent)
+            if "@virtual" in decos_str:
+                is_virtual = True
+            else:
+                decos = decos_str + "\n"
         elif tname == "Several_Times":
             for seq in node.nodes:
                 stname = type(seq).__name__
                 if stname == "decorator":
-                    decos += seq.to_nim(indent) + "\n"
+                    deco_str = seq.to_nim(indent)
+                    if "@virtual" in deco_str:
+                        is_virtual = True
+                    else:
+                        decos += deco_str + "\n"
                 elif stname == "decorators":
-                    decos = seq.to_nim(indent) + "\n"
+                    decos_str = seq.to_nim(indent)
+                    if "@virtual" in decos_str:
+                        is_virtual = True
+                    else:
+                        decos = decos_str + "\n"
                 elif stname == "class_args":
                     bases = seq.to_nim()
         elif tname == "class_args":
@@ -785,17 +908,27 @@ def to_nim(self, indent=0):
         elif tname == "block":
             block_node = node
 
-    ParserState.symbol_table.push_scope(name or "<class>")
-    hc = _block_inline_header_comment(block_node) if block_node else ""
-    body = block_node.to_nim(indent + 1) if block_node else ""
-    # Nim: type Foo = object of Bar
-    parent = ""
+    parent_name = ""
     if bases and bases not in ("()", ""):
-        # Extract base class from "(Bar)" or "(Bar, Baz)"
         inner = bases[1:-1] if bases.startswith("(") else bases
-        parent = f" of {inner.split(',')[0].strip()}"
+        parent_name = inner.split(',')[0].strip()
+
+    ParserState.symbol_table.push_scope(name or "<class>")
+    if block_node:
+        block_node._is_virtual = is_virtual
+        block_node._class_name = name
+        block_node._parent_name = parent_name
+        block_node._base_indent = indent  # Store original indent for procs/methods
+    # Always use is_virtual=True for block processing to get init/new procs
+    # The 'ref' keyword is controlled separately
+    body = block_node.to_nim(indent + 1, is_virtual=True, class_name=name, parent_name=parent_name) if block_node else ""
+    
+    parent = f" of {parent_name}" if parent_name else " of RootObj"
+    # Always use ref for classes with methods, only plain object for simple classes
+    # For now, keep ref only for @virtual
+    ref_keyword = "ref " if is_virtual else ""
     ParserState.symbol_table.pop_scope()
-    return f"{decos}{_ind(indent)}type {name} = object{parent}\n{body}"
+    return f"{decos}{_ind(indent)}type {name} = {ref_keyword}object{parent}\n{body}"
 
 
 @method(class_args)
@@ -977,7 +1110,7 @@ if __name__ == "__main__":
         # --- class -> type object ---
         (
             "class Foo:\n    pass\n",
-            "type Foo = object\n    discard",
+            "type Foo = object of RootObj\n    discard",
         ),
         (
             "class Foo(Bar):\n    pass\n",
@@ -1042,3 +1175,203 @@ if __name__ == "__main__":
 
     print("=" * 60)
     print(f"Results: {passed} passed, {failed} failed")
+
+
+def _generate_init_new(func_node, indent, class_name, parent_name, is_virtual=True):
+    """Generate init proc and new constructor for a class __init__ method."""
+    init_lines = []
+    new_lines = []
+    
+    block_node = None
+    param_list_node = None
+    
+    for node in func_node.nodes:
+        tname = type(node).__name__
+        if tname == "block":
+            block_node = node
+        elif tname == "Several_Times":
+            for st in node.nodes:
+                if type(st).__name__ == "param_list":
+                    param_list_node = st
+                    break
+    
+    param_strs = []
+    param_names = []
+    if param_list_node:
+        for p in param_list_node.nodes:
+            ptype_name = type(p).__name__
+            param_nodes = []
+            if ptype_name == "param_plain":
+                param_nodes.append(p)
+            elif ptype_name == "Several_Times":
+                # Several_Times can contain multiple Sequence_Parser children
+                for st_child in p.nodes:
+                    if type(st_child).__name__ == "Sequence_Parser":
+                        for sp_child in st_child.nodes:
+                            if type(sp_child).__name__ == "param_plain":
+                                param_nodes.append(sp_child)
+            for param_node in param_nodes:
+                pname = str(param_node.nodes[0].nodes[0])
+                if pname == "self":
+                    continue
+                ptype = "auto"
+                for pn in param_node.nodes[1:]:
+                    if type(pn).__name__ == "Several_Times" and pn.nodes:
+                        for seq in pn.nodes:
+                            if hasattr(seq, "nodes") and len(seq.nodes) >= 2:
+                                if str(seq.nodes[0].nodes[0]) == ":":
+                                    ptype = seq.nodes[1].to_nim()
+                param_strs.append(f"{pname}: {ptype}")
+                param_names.append(pname)
+    
+    params_str = ", ".join(param_strs)
+    
+    init_name = f"init{class_name}"
+    self_type = class_name if is_virtual else f"var {class_name}"
+    init_sig = f"{_ind(indent)}proc {init_name}(self: {self_type}{', ' + params_str if params_str else ''}) ="
+    
+    init_body = []
+    if block_node:
+        init_body = _extract_block_body(block_node, indent + 1, is_init_body=True)
+        # Handle super().__init__() calls - replace with initParent(self, ...)
+        for i, line in enumerate(init_body):
+            if "super().__init__" in line:
+                # Replace super().__init__(args) with initParent(self, args)
+                match = re.search(r'super\(\).__init__\((.*)\)', line)
+                if match:
+                    args = match.group(1)
+                    line = line.replace(f"super().__init__({args})", f"init{parent_name}(self, {args})")
+                init_body[i] = line
+    
+    init_lines.append(init_sig)
+    init_lines.extend(init_body)
+    
+    new_name = f"new{class_name}"
+    new_sig = f"{_ind(indent)}proc {new_name}*({params_str}): {class_name} ="
+    new_body = []
+    if is_virtual:
+        new_body.append(f"{_ind(indent + 1)}new(result)")
+    if param_names:
+        new_body.append(f"{_ind(indent + 1)}{init_name}(result, {', '.join(param_names)})")
+    else:
+        new_body.append(f"{_ind(indent + 1)}{init_name}(result)")
+    
+    new_lines.append(new_sig)
+    new_lines.extend(new_body)
+    
+    return init_lines, new_lines
+
+
+def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual=False):
+    """Generate method declaration. Uses 'method' for virtual, 'proc' for non-virtual."""
+    lines = []
+    
+    name = ""
+    params = []
+    ret_ann = ""
+    block_node = None
+    
+    for node in func_node.nodes:
+        tname = type(node).__name__
+        if tname == "IDENTIFIER":
+            name = str(node.nodes[0])
+        elif tname == "Several_Times":
+            for st in node.nodes:
+                st_name = type(st).__name__
+                if st_name == "param_list":
+                    for p in st.nodes:
+                        ptype_name = type(p).__name__
+                        param_nodes = []
+                        if ptype_name == "param_plain":
+                            param_nodes.append(p)
+                        elif ptype_name == "Several_Times":
+                            for st_child in p.nodes:
+                                if type(st_child).__name__ == "Sequence_Parser":
+                                    for sp_child in st_child.nodes:
+                                        if type(sp_child).__name__ == "param_plain":
+                                            param_nodes.append(sp_child)
+                        for param_node in param_nodes:
+                            pname = str(param_node.nodes[0].nodes[0])
+                            ptype = "auto"
+                            for pn in param_node.nodes[1:]:
+                                if type(pn).__name__ == "Several_Times" and pn.nodes:
+                                    for seq in pn.nodes:
+                                        if hasattr(seq, "nodes") and len(seq.nodes) >= 2:
+                                            if str(seq.nodes[0].nodes[0]) == ":":
+                                                ptype = seq.nodes[1].to_nim()
+                            if pname == "self":
+                                params.append(f"self: {class_name}")
+                            else:
+                                params.append(f"{pname}: {ptype}")
+                elif st_name == "return_annotation":
+                    ret_ann = st.to_nim()
+        elif tname == "return_annotation":
+            ret_ann = node.to_nim()
+        elif tname == "block":
+            block_node = node
+    
+    params_str = ", ".join(params)
+    if is_virtual:
+        pragma = " {.base.}" if _is_new_method(class_name, name) else ""
+        keyword = "method"
+    else:
+        pragma = ""
+        keyword = "proc"
+    
+    method_sig = f"{_ind(indent)}{keyword} {name}({params_str}){ret_ann}{pragma} ="
+    lines.append(method_sig)
+    
+    if block_node:
+        # Traverse block structure to find actual statements
+        method_body = _extract_block_body(block_node, indent + 1)
+        lines.extend(method_body)
+    
+    return lines
+
+
+def _extract_block_body(block_node, indent, is_init_body=False):
+    """Extract body statements from a block node."""
+    result_lines = []
+    for node in block_node.nodes:
+        tname = type(node).__name__
+        if tname in ("Fmap", "Filter"):
+            continue
+        if tname == "Several_Times":
+            for seq in node.nodes:
+                if type(seq).__name__ == "Sequence_Parser":
+                    for child in seq.nodes:
+                        if hasattr(child, "to_nim"):
+                            try:
+                                line = child.to_nim(indent)
+                                # In init bodies, 'var self.x = y' should be 'self.x = y'
+                                if is_init_body and line.strip().startswith("var self."):
+                                    line = line.replace("var self.", "self.")
+                                result_lines.append(line)
+                            except TypeError:
+                                line = _ind(indent) + child.to_nim()
+                                if is_init_body and line.strip().startswith("var self."):
+                                    line = line.replace("var self.", "self.")
+                                result_lines.append(line)
+                elif hasattr(seq, "to_nim"):
+                    try:
+                        line = seq.to_nim(indent)
+                        if is_init_body and line.strip().startswith("var self."):
+                            line = line.replace("var self.", "self.")
+                        result_lines.append(line)
+                    except TypeError:
+                        line = _ind(indent) + seq.to_nim()
+                        if is_init_body and line.strip().startswith("var self."):
+                            line = line.replace("var self.", "self.")
+                        result_lines.append(line)
+        elif hasattr(node, "to_nim"):
+            try:
+                line = node.to_nim(indent)
+                if is_init_body and line.strip().startswith("var self."):
+                    line = line.replace("var self.", "self.")
+                result_lines.append(line)
+            except TypeError:
+                line = _ind(indent) + node.to_nim()
+                if is_init_body and line.strip().startswith("var self."):
+                    line = line.replace("var self.", "self.")
+                result_lines.append(line)
+    return result_lines

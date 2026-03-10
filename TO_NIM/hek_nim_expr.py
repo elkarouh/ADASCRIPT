@@ -179,6 +179,12 @@ def to_nim(self, prec=None):
     return self.node
 
 
+
+_PY_IDENT_TO_NIM = {
+    "print": "echo",
+    "str": "string",
+}
+
 @method(IDENTIFIER)
 def to_nim(self, prec=None):
     return self.node
@@ -361,6 +367,8 @@ def to_nim(self, prec=None):
 @method(primary)
 def to_nim(self, prec=None):
     result = self.nodes[0].to_nim()
+    # Map Python builtin names to Nim equivalents
+    result = _PY_IDENT_TO_NIM.get(result, result)
     if len(self.nodes) > 1 and hasattr(self.nodes[1], "nodes") and self.nodes[1].nodes:
         for tr in self.nodes[1].nodes:
             result += tr.to_nim()

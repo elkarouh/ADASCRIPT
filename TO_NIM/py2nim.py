@@ -272,7 +272,7 @@ def run_tests():
         ),
         (
             "class Foo:\n    pass\n",
-            "type Foo = object\n    discard\n",
+            "type Foo = object of RootObj\n    discard\n",
         ),
         (
             "class Foo(Bar):\n    pass\n",
@@ -301,7 +301,7 @@ def run_tests():
         ),
         (
             "def f():\n    pass\nclass Foo:\n    pass\n",
-            "proc f() =\n    discard\ntype Foo = object\n    discard\n",
+            "proc f() =\n    discard\ntype Foo = object of RootObj\n    discard\n",
         ),
         # --- nested ---
         (
@@ -314,7 +314,7 @@ def run_tests():
         ),
         (
             "class Foo:\n    def bar(self):\n        pass\n",
-            "type Foo = object\n    proc bar(self: auto) =\n        discard\n",
+            "type Foo = object of RootObj\nproc bar(self: Foo) =\n    discard\n",
         ),
         # --- expressions in statements ---
         (
@@ -328,6 +328,15 @@ def run_tests():
         (
             "x = [1, 2, 3]\n",
             "var x = @[1, 2, 3]\n",
+        ),
+        # --- array vs seq literal ---
+        (
+            "var a: []int = [1, 2, 3]\n",
+            "var a: seq[int] = @[1, 2, 3]\n",
+        ),
+        (
+            "var a: [3]int = [1, 2, 3]\n",
+            "var a: array[3, int] = [1, 2, 3]\n",
         ),
         (
             "x = {1: 2}\n",

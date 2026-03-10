@@ -720,7 +720,10 @@ def to_py(self):
 @method(decorator)
 def to_py(self, indent=0):
     """decorator: '@' expression NEWLINE"""
-    return f"{_ind(indent)}@{self.nodes[0].to_py()}"
+    decorator=self.nodes[0].to_py()
+    if decorator == 'virtual':
+        return ''
+    return f"{_ind(indent)}@{decorator}"
 
 
 @method(decorators)
@@ -791,11 +794,12 @@ def to_py(self, indent=0):
     # Implicit return: if last statement is a bare expression, add return
     last_stmt = _block_last_stmt(block_node)
     if ret_ann and last_stmt and type(last_stmt.nodes[0]).__name__ == "expressions":
+        body = body.rstrip("\n")
         lines = body.rsplit("\n", 1)
         last = lines[-1]
         stripped = last.lstrip()
         lines[-1] = last[:len(last)-len(stripped)] + "return " + stripped
-        body = "\n".join(lines)
+        body = "\n".join(lines) + "\n"
     return f"{decos}{_ind(indent)}def {name}({params}){ret_ann}:{hc}\n{body}"
 
 
@@ -844,11 +848,12 @@ def to_py(self, indent=0):
     # Implicit return: if last statement is a bare expression, add return
     last_stmt = _block_last_stmt(block_node)
     if ret_ann and last_stmt and type(last_stmt.nodes[0]).__name__ == "expressions":
+        body = body.rstrip("\n")
         lines = body.rsplit("\n", 1)
         last = lines[-1]
         stripped = last.lstrip()
         lines[-1] = last[:len(last)-len(stripped)] + "return " + stripped
-        body = "\n".join(lines)
+        body = "\n".join(lines) + "\n"
     return f"{decos}{_ind(indent)}async def {name}({params}){ret_ann}:{hc}\n{body}"
 
 
