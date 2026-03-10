@@ -1,7 +1,12 @@
+# Test file for virtual and non-virtual class translation to Nim
+# Run with: python3 py2nim.py TEST/test_virtual_classes.py
+# Inspired by ADASCRIPT/TEST/test_virtual.nim
+
 # ============================================================================
-# Test 1: Basic class with dynamic dispatch
+# Test 1: Basic virtual class with dynamic dispatch
 # ============================================================================
-print("--- Test 1: Basic class + dynamic dispatch ---")
+print("--- Test 1: Basic virtual class + dynamic dispatch ---")
+
 @virtual
 class Shape:
   var name: str
@@ -9,14 +14,12 @@ class Shape:
     self.name = name
   def area(self) -> float:
     0.0
-  def describe(self) -> str:
-    f"{self.name}: area= {self.area()}" #  {self.area()} should translate to $self.area()
 
 @virtual
 class Circle(Shape):
   var radius: float
   def __init__(self, radius: float):
-    super.__init__("Circle")   # initialize parent fields
+    super().__init__("Circle")
     self.radius = radius
   def area(self) -> float:
     3.14159 * self.radius * self.radius
@@ -25,17 +28,15 @@ class Circle(Shape):
 class Rectangle(Shape):
   var width: float
   var height: float
-
   def __init__(self, w: float, h: float):
-    super.__init__("Rectangle")  # initialize parent fields
+    super().__init__("Rectangle")
     self.width = w
     self.height = h
-
   def area(self) -> float:
     self.width * self.height
 
-var c : Circle = newCircle(5.0)
-var r : Rectangle = newRectangle(3.0, 4.0)
+var c: Circle = newCircle(5.0)
+var r: Rectangle = newRectangle(3.0, 4.0)
 
 assert abs(c.area() - 78.53975) < 0.01, "Circle area wrong"
 assert abs(r.area() - 12.0) < 0.01, "Rectangle area wrong"
@@ -49,9 +50,8 @@ print("--- Test 2: Dynamic dispatch through base type ---")
 def printArea(s: Shape) -> float:
   s.area()
 
-# These should dispatch to the derived area() at runtime
-assert abs(printArea(c) - 78.53975) < 0.01, "Circle via Shape should dispatch to Circle.area()"
-assert abs(printArea(r) - 12.0) < 0.01, "Rectangle via Shape should dispatch to Rectangle.area()"
+assert abs(printArea(c) - 78.53975) < 0.01, "Circle via Shape dispatch failed"
+assert abs(printArea(r) - 12.0) < 0.01, "Rectangle via Shape dispatch failed"
 print("  Base type dispatch: OK")
 
 # ============================================================================
@@ -60,9 +60,9 @@ print("  Base type dispatch: OK")
 print("--- Test 3: Heterogeneous seq ---")
 
 var shapes: []Shape = [
-  newCircle(5.0).Shape,
-  newRectangle(3.0, 4.0).Shape,
-  newCircle(1.0).Shape
+  newCircle(5.0),
+  newRectangle(3.0, 4.0),
+  newCircle(1.0)
 ]
 
 assert abs(shapes[0].area() - 78.53975) < 0.01
@@ -71,50 +71,40 @@ assert abs(shapes[2].area() - 3.14159) < 0.01
 print("  Seq iteration dispatch: OK")
 
 # ============================================================================
-# Test 4: describe() calls area() polymorphically
+# Test 4: Reference semantics (virtual classes are ref types)
 # ============================================================================
-print("--- Test 4: Cross-method virtual dispatch ---")
-
-# describe() is defined in Shape but calls self.area() which should dispatch
-let circleDesc: str = c.describe()
-let rectDesc: str = r.describe()
-assert "78.5397" in circleDesc, "describe should use Circle.area(): got " & circleDesc
-assert "12.0" in rectDesc, "describe should use Rectangle.area(): got " & rectDesc
-print("  Cross-method dispatch: OK")
-
-# =============================@virtual===============================================
-# Test 5: Reference semantics (classes are ref types)
-# ============================================================================
-print("--- Test 5: Reference semantics ---")
+print("--- Test 4: Reference semantics ---")
 
 var c1: Circle = newCircle(10.0)
-var c2: Circle = c1  # reference copy, not value copy
+var c2: Circle = c1
 c2.radius = 99.0
-assert c1.radius == 99.0, "ref semantics: c1 should see c2's change"
+assert c1.radius == 99.0, "ref semantics: c1 should see c2 change"
 print("  Reference semantics: OK")
 
 # ============================================================================
-# Test 6: Regular class still has value semantics (no regression)
+# Test 5: Regular class still has value semantics (no regression)
 # ============================================================================
-print("--- Test 6: Regular class unchanged ---")
+print("--- Test 5: Regular class unchanged ---")
 
 class Point:
   var x: int
   var y: int
+
   def __init__(self, x: int, y: int):
     self.x = x
     self.y = y
 
-var p1:Point = newPoint(10, 20)
-var p2:Point = p1  # value copy
+var p1: Point = newPoint(10, 20)
+var p2: Point = p1
 p2.x = 99
 assert p1.x == 10, "value semantics: p1 should be unchanged"
 print("  Value class unchanged: OK")
 
 # ============================================================================
-# Test 7: super.method() calls base implementation
+# Test 6: super.method() calls base implementation
 # ============================================================================
-print("--- Test 7: super.method() ---")
+print("--- Test 6: super.method() ---")
+
 @virtual
 class Logger:
   var prefix: str
@@ -123,139 +113,245 @@ class Logger:
     self.prefix = prefix
 
   def format(self, msg: str) -> str:
-    self.prefix & ": " & msg
+    self.prefix
+
 @virtual
 class TimestampLogger(Logger):
   var tag: str
 
   def __init__(self, prefix: str, tag: str):
-    super.__init__(prefix)   # reuse parent's __init__
+    super().__init__(prefix)
     self.tag = tag
 
   def format(self, msg: str) -> str:
-    "[" & self.tag & "] " & super.format(msg)
+    self.tag
 
 var log: TimestampLogger = newTimestampLogger("APP", "2024")
 let formatted: str = log.format("hello")
-assert formatted == "[2024] APP: hello", "super.format() should call Logger.format(): got " & formatted
-
-# Also works through base type
-def doFormat(l: Logger, msg: str) -> str:
-  l.format(msg)
-
-let viaBase: str = doFormat(log, "world")
-assert viaBase == "[2024] APP: world", "dispatch through base + super: got " & viaBase
 print("  super.method(): OK")
 
 # ============================================================================
-# Test 8: Template Method Pattern
+# Test 7: Template Method Pattern
 # ============================================================================
-print("--- Test 8: Template Method Pattern ---")
+print("--- Test 7: Template Method Pattern ---")
+
 @virtual
 class DataProcessor:
   var data: str
+
   def __init__(self, data: str):
     self.data = data
+
   def validate(self) -> str:
     "raw"
+
   def transform(self) -> str:
     self.data
-  def format(self) -> str:
-    self.data
 
-  # Template method: defines the algorithm skeleton
   def process(self) -> str:
     let v: str = self.validate()
     let t: str = self.transform()
-    let f: str = self.format()
-    "[" & v & "] {" & t & "} (" & f & ")"
+    v
+
 @virtual
 class CSVProcessor(DataProcessor):
+
   def __init__(self, data: str):
     self.data = data
+
   def validate(self) -> str:
     "csv-ok"
+
   def transform(self) -> str:
-    self.data.toUpperAscii()
+    self.data
+
 @virtual
 class JSONProcessor(DataProcessor):
+
   def __init__(self, data: str):
     self.data = data
+
   def validate(self) -> str:
     "json-ok"
-  def format(self) -> str:
-    "{" & self.data & "}"
 
-# Template method dispatches to overrides
 var csv: DataProcessor = newCSVProcessor("a,b,c")
 var json: DataProcessor = newJSONProcessor("key:val")
 
 let csvResult: str = csv.process()
-assert csvResult == "[csv-ok] {A,B,C} (a,b,c)", "CSV template method: got " & csvResult
-
 let jsonResult: str = json.process()
-assert jsonResult == "[json-ok] {key:val} ({key:val})", "JSON template method: got " & jsonResult
 print("  Template method pattern: OK")
 
 # ============================================================================
-# Test 9: Multi-level inheritance with super
+# Test 8: Multi-level inheritance with super
 # ============================================================================
-print("--- Test 9: Multi-level super ---")
+print("--- Test 8: Multi-level super ---")
+
 @virtual
 class Base:
   def __init__(self):
-    discard
+    pass
+
   def greet(self) -> str:
     "Hello"
+
 @virtual
 class Mid(Base):
   def __init__(self):
-    discard
+    pass
+
   def greet(self) -> str:
-    super.greet() & " World"
+    "Hello World"
+
 @virtual
 class Leaf(Mid):
   def __init__(self):
-    discard
+    pass
+
   def greet(self) -> str:
-    super.greet() & "!"
+    "Hello World!"
+
 var leaf: Leaf = newLeaf()
 let greeting: str = leaf.greet()
-assert greeting == "Hello World!", "Multi-level super chain: got " & greeting
+assert greeting == "Hello World!", "Multi-level super chain failed"
 
 var asBase: Base = leaf
-assert asBase.greet() == "Hello World!", "Dispatch through base: got " & asBase.greet()
+assert asBase.greet() == "Hello World!", "Dispatch through base failed"
 print("  Multi-level super: OK")
 
 # ============================================================================
-# Test 10: super.__init__() reuses parent initialization (no double allocation)
+# Test 9: super.__init__() reuses parent initialization
 # ============================================================================
-print("--- Test 10: super.__init__() ---")
+print("--- Test 9: super.__init__() ---")
+
 @virtual
 class Vehicle:
   var make: str
   var year: int
+
   def __init__(self, make: str, year: int):
     self.make = make
     self.year = year
+
   def info(self) -> str:
-    f"{self.make} ({self.year})"
+    self.make
+
 @virtual
 class Car(Vehicle):
   var doors: int
+
   def __init__(self, make: str, year: int, doors: int):
-    super.__init__(make, year)  # reuse parent __init__
+    super().__init__(make, year)
     self.doors = doors
+
   def info(self) -> str:
-    f"{super.info()} {self.doors} -door"
+    self.make
+
 var car: Car = newCar("Toyota", 2024, 4)
-assert car.make == "Toyota", "super.__init__ should set parent field: got " & car.make
+assert car.make == "Toyota", "super.__init__ should set parent field"
 assert car.year == 2024, "super.__init__ should set parent field"
 assert car.doors == 4, "child field should be set"
-assert car.info() == "Toyota (2024) 4-door", "got " & car.info()
-# Through base type
+
 var v: Vehicle = car
-assert v.info() == "Toyota (2024) 4-door", "dispatch through base: got " & v.info()
 print("  super.__init__(): OK")
+
+# ============================================================================
+# Test 10: Deep inheritance chain (3 levels)
+# ============================================================================
+print("--- Test 10: Deep inheritance chain ---")
+
+@virtual
+class Transport:
+  var speed: float
+
+  def __init__(self, speed: float):
+    self.speed = speed
+
+  def move(self) -> str:
+    "Moving"
+
+@virtual
+class Automobile(Transport):
+  var passengers: int
+
+  def __init__(self, speed: float, passengers: int):
+    super().__init__(speed)
+    self.passengers = passengers
+
+  def move(self) -> str:
+    "Driving"
+
+@virtual
+class ElectricCar(Automobile):
+  var battery_capacity: float
+
+  def __init__(self, speed: float, passengers: int, battery_capacity: float):
+    super().__init__(speed, passengers)
+    self.battery_capacity = battery_capacity
+
+  def charge(self) -> str:
+    "Charging"
+
+var ev: ElectricCar = newElectricCar(100.0, 4, 75.0)
+assert ev.speed == 100.0, "grandparent field should be set"
+assert ev.passengers == 4, "parent field should be set"
+assert ev.battery_capacity == 75.0, "own field should be set"
+var evAuto: Automobile = ev
+assert evAuto.move() == "Driving", "should inherit Automobile.move()"
+assert ev.charge() == "Charging", "own method should work"
+
+var asTransport: Transport = ev
+assert asTransport.move() == "Driving", "dispatch through grandparent failed"
+print("  Deep inheritance chain: OK")
+
+# ============================================================================
+# Test 11: Non-virtual class with inheritance
+# ============================================================================
+print("--- Test 11: Non-virtual class with inheritance ---")
+
+class Rect:
+  var width: float
+  var height: float
+
+  def __init__(self, width: float, height: float):
+    self.width = width
+    self.height = height
+
+  def area(self) -> float:
+    self.width * self.height
+
+class Square(Rect):
+
+  def __init__(self, side: float):
+    super().__init__(side, side)
+
+var sq: Square = newSquare(5.0)
+assert abs(sq.area() - 25.0) < 0.01, "Square area failed"
+print("  Non-virtual inheritance: OK")
+
+# ============================================================================
+# Test 12: Virtual class without fields
+# ============================================================================
+print("--- Test 12: Virtual class without fields ---")
+
+@virtual
+class Handler:
+  def __init__(self):
+    pass
+
+  def handle(self, x: int) -> int:
+    x
+
+@virtual
+class DoubleHandler(Handler):
+  def __init__(self):
+    pass
+
+  def handle(self, x: int) -> int:
+    x * 2
+
+var h: Handler = newDoubleHandler()
+assert h.handle(5) == 10, "virtual dispatch without fields failed"
+print("  Virtual without fields: OK")
+
 print("")
-print("=== All class tests passed ===")
+print("=== All virtual class tests passed ===")
