@@ -199,11 +199,11 @@ def run_tests():
         ),
         (
             "import os\n",
-            "import os\n",
+            'let os = pyImport("os")\n',
         ),
         (
             "from os import path\n",
-            "from os import path\n",
+            'let path = pyImport("os").path\n',
         ),
         (
             "pass\n",
@@ -293,7 +293,7 @@ def run_tests():
         # --- mixed programs ---
         (
             "import os\ndef main():\n    return os\n",
-            "import os\nproc main() =\n    return os\n",
+            'let os = pyImport("os")\nproc main() =\n    return os\n',
         ),
         (
             "x = 1\nif x:\n    y = 2\n",
