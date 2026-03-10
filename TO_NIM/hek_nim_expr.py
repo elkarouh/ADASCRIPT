@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.join(_dir, ".."))
 sys.path.insert(0, os.path.join(_dir, "..", "GRAMMAR"))
 # (no TO_PYTHON dependency needed)
 
-from hek_parsec import method
+from hek_parsec import method, ParserState
 from py3expr import *
 from hek_nim_declarations import _is_nim_ordinal  # noqa: F403 — need all parser rule names
 from py3expr import (
@@ -369,6 +369,14 @@ def to_nim(self, prec=None):
     result = self.nodes[0].to_nim()
     # Map Python builtin names to Nim equivalents
     result = _PY_IDENT_TO_NIM.get(result, result)
+    # If this is a call to a known class name, add 'new' prefix for Nim constructor
+    has_call = (len(self.nodes) > 1 and hasattr(self.nodes[1], "nodes")
+                and self.nodes[1].nodes
+                and type(self.nodes[1].nodes[0]).__name__ == "call_trailer")
+    if has_call:
+        sym = ParserState.symbol_table.lookup(result)
+        if sym and sym.get("kind") == "class":
+            result = "new" + result
     if len(self.nodes) > 1 and hasattr(self.nodes[1], "nodes") and self.nodes[1].nodes:
         for tr in self.nodes[1].nodes:
             result += tr.to_nim()

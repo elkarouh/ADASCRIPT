@@ -274,7 +274,7 @@ def to_nim(self):
         for seq in node.nodes:
             if hasattr(seq, "nodes") and len(seq.nodes) >= 2:
                 parts.append(seq.nodes[1].to_nim())
-    return "/".join(parts)
+    return ".".join(parts)
 
 
 @method(import_as)
@@ -296,10 +296,9 @@ def to_nim(self):
                 parts.append(seq.nodes[1].to_nim())
             elif len(seq.nodes) >= 1:
                 alias = seq.nodes[0].to_nim()
-    name = "/".join(parts)
-    if alias:
-        return f"{name} as {alias}"
-    return name
+    module = ".".join(parts)
+    local = alias if alias else parts[-1]
+    return f'let {local} = pyImport("{module}")'  
 
 
 @method(import_stmt)
@@ -311,7 +310,7 @@ def to_nim(self):
         for seq in node.nodes:
             if hasattr(seq, "nodes") and len(seq.nodes) >= 1:
                 parts.append(seq.nodes[0].to_nim())
-    return "import " + ", ".join(parts)
+    return chr(10).join(parts)
 
 
 # --- from ... import ---
@@ -435,14 +434,26 @@ def to_nim(self):
         else:
             remaining.append(node)
     source = remaining[0].to_nim() if remaining else ""
-    names = (
+    module = dots + source
+    names_str = (
         _import_names_to_nim(remaining[-1])
         if len(remaining) > 1
         else remaining[0].to_nim()
         if remaining
         else ""
     )
-    return f"from {dots}{source} import {names}"
+    if names_str == "*":
+        return f"from {module} import *"
+    raw = names_str.strip("()")
+    items = [n.strip() for n in raw.split(",")]
+    lines = []
+    for item in items:
+        if " as " in item:
+            orig, alias = item.split(" as ", 1)
+            lines.append(f'let {alias.strip()} = pyImport("{module}").{orig.strip()}')
+        else:
+            lines.append(f'let {item} = pyImport("{module}").{item}')
+    return chr(10).join(lines)
 
 
 @method(from_rel_bare)
@@ -458,8 +469,20 @@ def to_nim(self):
                     names_node = sub
         elif names_node is None:
             names_node = node
-    names = _import_names_to_nim(names_node) if names_node else ""
-    return f"from {dots} import {names}"
+    names_str = _import_names_to_nim(names_node) if names_node else ""
+    module = dots
+    if names_str == "*":
+        return f"from {module} import *"
+    raw = names_str.strip("()")
+    items = [n.strip() for n in raw.split(",")]
+    lines = []
+    for item in items:
+        if " as " in item:
+            orig, alias = item.split(" as ", 1)
+            lines.append(f'let {alias.strip()} = pyImport("{module}").{orig.strip()}')
+        else:
+            lines.append(f'let {item} = pyImport("{module}").{item}')
+    return chr(10).join(lines)
 
 
 @method(from_abs)
@@ -480,7 +503,7 @@ def to_nim(self):
                     names_start = i + 1
                     continue
         break
-    source = "/".join(source_parts)
+    module = ".".join(source_parts)
     if names_start < len(self.nodes):
         names_node = self.nodes[names_start]
         if names_start + 1 < len(self.nodes):
@@ -488,12 +511,28 @@ def to_nim(self):
                 pass
             mock = _Mock()
             mock.nodes = self.nodes[names_start:]
-            names = _import_names_to_nim(mock)
+            names_str = _import_names_to_nim(mock)
         else:
-            names = _import_names_to_nim(names_node)
+            names_str = _import_names_to_nim(names_node)
     else:
-        names = ""
-    return f"from {source} import {names}"
+        names_str = ""
+    # Handle star import
+    if names_str == "*":
+        return f"from {module} import *"
+    # Split names and generate one let per name
+    # names_str may be "X", "X, Y", "(X, Y)", or "X as A"
+    raw = names_str.strip("()")
+    items = [n.strip() for n in raw.split(",")]
+    lines = []
+    for item in items:
+        if " as " in item:
+            orig, alias = item.split(" as ", 1)
+            orig = orig.strip()
+            alias = alias.strip()
+            lines.append(f'let {alias} = pyImport("{module}").{orig}')
+        else:
+            lines.append(f'let {item} = pyImport("{module}").{item}')
+    return chr(10).join(lines)
 
 
 @method(from_stmt)
@@ -649,14 +688,14 @@ if __name__ == "__main__":
         ("nonlocal x", "# nonlocal x"),
         ("nonlocal a, b, c", "# nonlocal a, b, c"),
         # --- import (dotted names use / in Nim) ---
-        ("import os", "import os"),
-        ("import os.path", "import os/path"),
-        ("import os as o", "import os as o"),
-        ("import os, sys", "import os, sys"),
+        ("import os", 'let os = pyImport("os")'),
+        ("import os.path", 'let path = pyImport("os.path")'),
+        ("import os as o", 'let o = pyImport("os")'),
+        ("import os, sys", 'let os = pyImport("os")' + chr(10) + 'let sys = pyImport("sys")'),
         # --- from import ---
-        ("from os import path", "from os import path"),
-        ("from os import path as p", "from os import path as p"),
-        ("from os import path, getcwd", "from os import path, getcwd"),
+        ("from os import path", 'let path = pyImport("os").path'),
+        ("from os import path as p", 'let p = pyImport("os").path'),
+        ("from os import path, getcwd", 'let path = pyImport("os").path' + chr(10) + 'let getcwd = pyImport("os").getcwd'),
         ("from os import *", "from os import *"),
         # --- type alias ---
         ("type Vector = list", "type Vector = list"),

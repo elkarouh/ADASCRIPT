@@ -913,6 +913,9 @@ def to_nim(self, indent=0):
         inner = bases[1:-1] if bases.startswith("(") else bases
         parent_name = inner.split(',')[0].strip()
 
+    # Register class name in symbol table so constructor calls can be detected
+    if name:
+        ParserState.symbol_table.add(name, name, "class")
     ParserState.symbol_table.push_scope(name or "<class>")
     if block_node:
         block_node._is_virtual = is_virtual

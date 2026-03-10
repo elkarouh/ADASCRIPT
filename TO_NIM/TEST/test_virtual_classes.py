@@ -35,8 +35,8 @@ class Rectangle(Shape):
   def area(self) -> float:
     self.width * self.height
 
-var c: Circle = newCircle(5.0)
-var r: Rectangle = newRectangle(3.0, 4.0)
+var c: Circle = Circle(5.0)
+var r: Rectangle = Rectangle(3.0, 4.0)
 
 assert abs(c.area() - 78.53975) < 0.01, "Circle area wrong"
 assert abs(r.area() - 12.0) < 0.01, "Rectangle area wrong"
@@ -60,9 +60,9 @@ print("  Base type dispatch: OK")
 print("--- Test 3: Heterogeneous seq ---")
 
 var shapes: []Shape = [
-  newCircle(5.0),
-  newRectangle(3.0, 4.0),
-  newCircle(1.0)
+  Circle(5.0),
+  Rectangle(3.0, 4.0),
+  Circle(1.0)
 ]
 
 assert abs(shapes[0].area() - 78.53975) < 0.01
@@ -75,7 +75,7 @@ print("  Seq iteration dispatch: OK")
 # ============================================================================
 print("--- Test 4: Reference semantics ---")
 
-var c1: Circle = newCircle(10.0)
+var c1: Circle = Circle(10.0)
 var c2: Circle = c1
 c2.radius = 99.0
 assert c1.radius == 99.0, "ref semantics: c1 should see c2 change"
@@ -94,7 +94,7 @@ class Point:
     self.x = x
     self.y = y
 
-var p1: Point = newPoint(10, 20)
+var p1: Point = Point(10, 20)
 var p2: Point = p1
 p2.x = 99
 assert p1.x == 10, "value semantics: p1 should be unchanged"
@@ -126,7 +126,7 @@ class TimestampLogger(Logger):
   def format(self, msg: str) -> str:
     self.tag
 
-var log: TimestampLogger = newTimestampLogger("APP", "2024")
+var log: TimestampLogger = TimestampLogger("APP", "2024")
 let formatted: str = log.format("hello")
 print("  super.method(): OK")
 
@@ -174,8 +174,8 @@ class JSONProcessor(DataProcessor):
   def validate(self) -> str:
     "json-ok"
 
-var csv: DataProcessor = newCSVProcessor("a,b,c")
-var json: DataProcessor = newJSONProcessor("key:val")
+var csv: DataProcessor = CSVProcessor("a,b,c")
+var json: DataProcessor = JSONProcessor("key:val")
 
 let csvResult: str = csv.process()
 let jsonResult: str = json.process()
@@ -210,7 +210,7 @@ class Leaf(Mid):
   def greet(self) -> str:
     "Hello World!"
 
-var leaf: Leaf = newLeaf()
+var leaf: Leaf = Leaf()
 let greeting: str = leaf.greet()
 assert greeting == "Hello World!", "Multi-level super chain failed"
 
@@ -246,7 +246,7 @@ class Car(Vehicle):
   def info(self) -> str:
     self.make
 
-var car: Car = newCar("Toyota", 2024, 4)
+var car: Car = Car("Toyota", 2024, 4)
 assert car.make == "Toyota", "super.__init__ should set parent field"
 assert car.year == 2024, "super.__init__ should set parent field"
 assert car.doors == 4, "child field should be set"
@@ -291,7 +291,7 @@ class ElectricCar(Automobile):
   def charge(self) -> str:
     "Charging"
 
-var ev: ElectricCar = newElectricCar(100.0, 4, 75.0)
+var ev: ElectricCar = ElectricCar(100.0, 4, 75.0)
 assert ev.speed == 100.0, "grandparent field should be set"
 assert ev.passengers == 4, "parent field should be set"
 assert ev.battery_capacity == 75.0, "own field should be set"
@@ -324,7 +324,7 @@ class Square(Rect):
   def __init__(self, side: float):
     super().__init__(side, side)
 
-var sq: Square = newSquare(5.0)
+var sq: Square = Square(5.0)
 assert abs(sq.area() - 25.0) < 0.01, "Square area failed"
 print("  Non-virtual inheritance: OK")
 
@@ -349,7 +349,7 @@ class DoubleHandler(Handler):
   def handle(self, x: int) -> int:
     x * 2
 
-var h: Handler = newDoubleHandler()
+var h: Handler = DoubleHandler()
 assert h.handle(5) == 10, "virtual dispatch without fields failed"
 print("  Virtual without fields: OK")
 
