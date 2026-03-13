@@ -139,7 +139,7 @@ Usage
 import sys, os
 _dir = os.path.dirname(__file__)
 sys.path.insert(0, os.path.join(_dir, ".."))
-sys.path.insert(0, os.path.join(_dir, "..", "GRAMMAR"))
+sys.path.insert(0, os.path.join(_dir, "..", "HPYTHON_GRAMMAR"))
 
 from py_declarations import *
 import hek_py3_expr  # noqa: F401 — registers expr to_py() methods
@@ -156,7 +156,7 @@ def to_py(self, prec=None):
 
 @method(type_name)
 def to_py(self, prec=None):
-    return self.nodes[0]  # raw string from IDENTIFIER
+    return self.nodes[0].to_py()  # delegate to primary expression node
 
 
 @method(seq_type)

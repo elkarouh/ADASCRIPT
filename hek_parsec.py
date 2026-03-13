@@ -770,7 +770,7 @@ __all__ = [
 ########################################################################################################################
 ##########################################
 if __name__ == "__main__":
-    # THE GRAMMAR
+    # THE HPYTHON_GRAMMAR
     keyvalue = IDENTIFIER + EQUAL + NUMBER + SEMICOLON
     keyvalues = keyvalue[1:]
 

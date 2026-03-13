@@ -14,7 +14,7 @@ Usage:
 import sys, os
 _dir = os.path.dirname(__file__)
 sys.path.insert(0, os.path.join(_dir, ".."))
-sys.path.insert(0, os.path.join(_dir, "..", "GRAMMAR"))
+sys.path.insert(0, os.path.join(_dir, "..", "HPYTHON_GRAMMAR"))
 
 
 from hek_parsec import method, ParserState
@@ -221,6 +221,12 @@ def to_nim(self, indent=0):
 @method(if_stmt)
 def to_nim(self, indent=0):
     cond = self.nodes[0].to_nim()
+    # Detect if __name__ == "__main__": -> when isMainModule:
+    cond_stripped = cond.replace(" ", "")
+    if cond_stripped in ('__name__=="__main__"', "__name__=='__main__'"):
+        hc = _block_inline_header_comment(self.nodes[1])
+        body = self.nodes[1].to_nim(indent + 1)
+        return f"{_ind(indent)}when isMainModule:{hc}\n{body}"
     hc = _block_inline_header_comment(self.nodes[1])
     body = self.nodes[1].to_nim(indent + 1)
     result = f"{_ind(indent)}if {cond}:{hc}\n{body}"
@@ -404,7 +410,7 @@ def to_nim(self):
 
 @method(with_stmt)
 def to_nim(self, indent=0):
-    # Nim has no 'with' — keep Python syntax as best-effort
+    # Translate with open(file, mode) as var -> Nim open()/defer:close()
     items = [self.nodes[0].to_nim()]
     block_node = None
     for node in self.nodes[1:]:
@@ -424,6 +430,36 @@ def to_nim(self, indent=0):
             body = block_node.to_nim(indent + 1)
         except TypeError:
             body = _ind(indent + 1) + block_node.to_nim()
+    # Detect open(filename, mode) as varname pattern
+    import re as _re
+    full_item = ", ".join(items)
+    m = _re.match(r'open\((.+?)\)\s+as\s+(\w+)', full_item)
+    if m:
+        args_str, var_name = m.group(1), m.group(2)
+        mode_map = {'"r"': "fmRead", "'r'": "fmRead",
+                    '"w"': "fmWrite", "'w'": "fmWrite",
+                    '"a"': "fmAppend", "'a'": "fmAppend"}
+        args = [a.strip() for a in args_str.split(",")]
+        filename = args[0]
+        nim_mode = "fmRead"
+        if len(args) > 1:
+            raw_mode = args[1].strip()
+            # Skip encoding and other kwargs
+            if "=" not in raw_mode:
+                nim_mode = mode_map.get(raw_mode, raw_mode)
+        # Emit as: block with let/defer/body all at same indent level
+        ind1 = _ind(indent + 1)
+        result = f"{_ind(indent)}block:{hc}\n"
+        result += f"{ind1}let {var_name} = open({filename}, {nim_mode})\n"
+        result += f"{ind1}defer: {var_name}.close()\n"
+        # Body goes at indent+1 (same level as let/defer, not nested under defer)
+        if block_node:
+            try:
+                body = block_node.to_nim(indent + 1)
+            except TypeError:
+                body = ind1 + block_node.to_nim()
+        result += body
+        return result
     return f"{_ind(indent)}with {', '.join(items)}:{hc}\n{body}"
 
 

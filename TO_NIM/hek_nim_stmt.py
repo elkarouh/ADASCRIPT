@@ -13,7 +13,7 @@ Usage:
 import sys, os
 _dir = os.path.dirname(__file__)
 sys.path.insert(0, os.path.join(_dir, ".."))
-sys.path.insert(0, os.path.join(_dir, "..", "GRAMMAR"))
+sys.path.insert(0, os.path.join(_dir, "..", "HPYTHON_GRAMMAR"))
 # (no TO_PYTHON dependency needed)
 
 from hek_parsec import method, ParserState
@@ -43,6 +43,17 @@ _AUGOP_TO_NIM = {
     "&=": ("and", True),
     "|=": ("or", True),
     "^=": ("xor", True),
+}
+
+# Python stdlib module -> Nim import mapping
+_PY_MODULE_TO_NIM = {
+    "sys": "os",           # sys.argv -> paramStr(), sys.exit -> quit()
+    "os": "os",
+    "os.path": "os",
+    "math": "math",
+    "json": "json",
+    "re": "re",
+    "typing": None,        # typing imports are erased
 }
 
 
@@ -87,9 +98,15 @@ def to_nim(self):
     if name and rhs_node and ParserState.symbol_table.depth() > 0:
         inferred = _infer_literal_nim_type(rhs_node)
         ParserState.symbol_table.add(name, inferred, "var")
-    # Skip var for dotted assignments (field mutation) and indexed assignments
+    # Skip var for dotted assignments (field mutation), indexed assignments,
+    # and variables already declared in the current scope
     lhs = parts[0]
-    prefix = "" if "." in lhs or "[" in lhs else "var "
+    if "." in lhs or "[" in lhs:
+        prefix = ""
+    elif ParserState.symbol_table.lookup(lhs):
+        prefix = ""
+    else:
+        prefix = "var "
     return prefix + " = ".join(parts)
 
 
@@ -298,6 +315,10 @@ def to_nim(self):
                 alias = seq.nodes[0].to_nim()
     module = ".".join(parts)
     local = alias if alias else parts[-1]
+    # Map known Python stdlib modules to Nim imports
+    nim_module = _PY_MODULE_TO_NIM.get(module)
+    if nim_module is not None:
+        return f"import {nim_module}"
     return f'let {local} = pyImport("{module}")'  
 
 
@@ -310,7 +331,16 @@ def to_nim(self):
         for seq in node.nodes:
             if hasattr(seq, "nodes") and len(seq.nodes) >= 1:
                 parts.append(seq.nodes[0].to_nim())
-    return chr(10).join(parts)
+    # Deduplicate identical import lines
+    seen = set()
+    unique = []
+    for p in parts:
+        if p not in seen:
+            seen.add(p)
+            unique.append(p)
+    # Filter out None/erased imports (e.g., typing)
+    unique = [p for p in unique if p is not None]
+    return chr(10).join(unique)
 
 
 # --- from ... import ---
@@ -688,10 +718,10 @@ if __name__ == "__main__":
         ("nonlocal x", "# nonlocal x"),
         ("nonlocal a, b, c", "# nonlocal a, b, c"),
         # --- import (dotted names use / in Nim) ---
-        ("import os", 'let os = pyImport("os")'),
-        ("import os.path", 'let path = pyImport("os.path")'),
-        ("import os as o", 'let o = pyImport("os")'),
-        ("import os, sys", 'let os = pyImport("os")' + chr(10) + 'let sys = pyImport("sys")'),
+        ("import os", "import os"),
+        ("import os.path", "import os"),
+        ("import os as o", "import os"),
+        ("import os, sys", "import os"),
         # --- from import ---
         ("from os import path", 'let path = pyImport("os").path'),
         ("from os import path as p", 'let p = pyImport("os").path'),

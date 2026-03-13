@@ -13,7 +13,7 @@ import sys, os
 
 _dir = os.path.dirname(__file__)
 sys.path.insert(0, os.path.join(_dir, ".."))
-sys.path.insert(0, os.path.join(_dir, "..", "GRAMMAR"))
+sys.path.insert(0, os.path.join(_dir, "..", "HPYTHON_GRAMMAR"))
 
 
 import token as token_mod
@@ -153,6 +153,18 @@ def translate(code):
         emit_richnl(richnl)
 
     ParserState.symbol_table.pop_scope()
+
+    # Deduplicate import lines (e.g., import sys + import os both -> import os)
+    seen_imports = set()
+    deduped = []
+    for line in output:
+        stripped = line.strip()
+        if stripped.startswith("import "):
+            if stripped in seen_imports:
+                continue
+            seen_imports.add(stripped)
+        deduped.append(line)
+    output = deduped
 
     result = chr(10).join(output)
     if not result.endswith(chr(10)):

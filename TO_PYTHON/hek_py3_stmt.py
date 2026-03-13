@@ -24,7 +24,7 @@ Usage:
 import sys, os
 _dir = os.path.dirname(__file__)
 sys.path.insert(0, os.path.join(_dir, ".."))
-sys.path.insert(0, os.path.join(_dir, "..", "GRAMMAR"))
+sys.path.insert(0, os.path.join(_dir, "..", "HPYTHON_GRAMMAR"))
 
 from py3stmt import *
 from hek_py3_expr import _get_bracket_start
