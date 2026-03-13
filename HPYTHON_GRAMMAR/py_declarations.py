@@ -205,11 +205,12 @@ primitive_type = filt(lambda s: s in _PRIMITIVES, IDENTIFIER)
 from py3expr import primary as _primary
 type_name = filt(
     lambda node: (
-        # Accept primary expressions that start with a non-primitive identifier
+        # Accept primary expressions that start with a non-primitive identifier.
+        # filt() passes m[0].node (first child of _primary result),
+        # which is a Filter with .nodes[0] being the identifier string.
         hasattr(node, 'nodes') and node.nodes
-        and hasattr(node.nodes[0], 'nodes') and node.nodes[0].nodes
-        and isinstance(node.nodes[0].nodes[0], str)
-        and node.nodes[0].nodes[0] not in _PRIMITIVES
+        and isinstance(node.nodes[0], str)
+        and node.nodes[0] not in _PRIMITIVES
     ),
     _primary
 )
@@ -271,8 +272,6 @@ union_type = maybe_optional + (VBAR + maybe_optional)[1:]
 type_annotation = union_type | maybe_optional | expression
 
 ###############################################################################
-
-
 def parse_type(source_code):
     """Parse a type annotation string."""
     inp = Input(source_code)
@@ -280,5 +279,3 @@ def parse_type(source_code):
     if result is None:
         return None
     return result[0]
-
-

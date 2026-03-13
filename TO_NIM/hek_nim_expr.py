@@ -16,7 +16,7 @@ Usage:
 import sys, os
 _dir = os.path.dirname(__file__)
 sys.path.insert(0, os.path.join(_dir, ".."))
-sys.path.insert(0, os.path.join(_dir, "..", "GRAMMAR"))
+sys.path.insert(0, os.path.join(_dir, "..", "HPYTHON_GRAMMAR"))
 # (no TO_PYTHON dependency needed)
 
 from hek_parsec import method, ParserState
@@ -183,6 +183,13 @@ def to_nim(self, prec=None):
 _PY_IDENT_TO_NIM = {
     "print": "echo",
     "str": "string",
+    "len": "len",
+    "int": "int",
+    "float": "float",
+    "bool": "bool",
+    "abs": "abs",
+    "min": "min",
+    "max": "max",
 }
 
 @method(IDENTIFIER)
@@ -308,7 +315,7 @@ def to_nim(self, prec=None):
 
 @method(empty_dict)
 def to_nim(self, prec=None):
-    return "newTable()"
+    return "initTable()"
 
 
 @method(dict_display)
@@ -359,6 +366,10 @@ _PY_METHOD_TO_NIM = {
     "seq": {"append": "add"},
     "set": {"add": "incl", "remove": "excl"},
     "HashSet": {"add": "incl", "remove": "excl"},
+    "string": {"lower": "toLowerAscii", "upper": "toUpperAscii",
+               "strip": "strip", "split": "split", "join": "join",
+               "startswith": "startsWith", "endswith": "endsWith",
+               "replace": "replace", "find": "find"},
 }
 
 @method(attr_trailer)
@@ -371,6 +382,17 @@ def to_nim(self, prec=None):
     return self.nodes[0].to_nim()
 
 
+# Universal method mappings that apply regardless of receiver type
+_PY_UNIVERSAL_METHOD_TO_NIM = {
+    "append": "add",
+    "extend": "add",
+    "lower": "toLowerAscii",
+    "upper": "toUpperAscii",
+    "strip": "strip",
+    "startswith": "startsWith",
+    "endswith": "endsWith",
+}
+
 def _translate_method(obj_name, method_name):
     """Translate a Python method name based on the object's type from the symbol table."""
     sym = ParserState.symbol_table.lookup(obj_name)
@@ -379,22 +401,82 @@ def _translate_method(obj_name, method_name):
         for prefix, mappings in _PY_METHOD_TO_NIM.items():
             if type_str.startswith(prefix):
                 return mappings.get(method_name, method_name)
-    return method_name
+    # Fall back to universal mappings
+    return _PY_UNIVERSAL_METHOD_TO_NIM.get(method_name, method_name)
+
+
+def _extract_call_arg(call_node):
+    """Extract the argument string from a call_trailer node."""
+    if len(call_node.nodes) > 1 and hasattr(call_node.nodes[1], "nodes") and call_node.nodes[1].nodes:
+        return call_node.nodes[1].nodes[0].to_nim()
+    elif len(call_node.nodes) > 1 and hasattr(call_node.nodes[1], "to_nim"):
+        return call_node.nodes[1].to_nim()
+    return ""
+
+
+def _extract_call_args(call_node):
+    """Extract all argument strings from a call_trailer node as a list."""
+    full = _extract_call_arg(call_node)
+    if not full:
+        return []
+    # Split on top-level commas (not inside brackets/parens)
+    args = []
+    depth = 0
+    current = []
+    for ch in full:
+        if ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+        elif ch == "," and depth == 0:
+            args.append("".join(current).strip())
+            current = []
+            continue
+        current.append(ch)
+    if current:
+        args.append("".join(current).strip())
+    return args
 
 
 @method(primary)
 def to_nim(self, prec=None):
     result = self.nodes[0].to_nim()
     # Map Python builtin names to Nim equivalents
+    raw_name = result
     result = _PY_IDENT_TO_NIM.get(result, result)
     # If this is a call to a known class name, add 'new' prefix for Nim constructor
     has_call = (len(self.nodes) > 1 and hasattr(self.nodes[1], "nodes")
                 and self.nodes[1].nodes
                 and type(self.nodes[1].nodes[0]).__name__ == "call_trailer")
     if has_call:
-        sym = ParserState.symbol_table.lookup(result)
+        # str(x) -> $x, list(x) -> @x
+        if raw_name == "str":
+            call_node = self.nodes[1].nodes[0]
+            arg = _extract_call_arg(call_node)
+            return "$" + arg
+        if raw_name == "list":
+            call_node = self.nodes[1].nodes[0]
+            arg = _extract_call_arg(call_node)
+            if arg:
+                return "@" + arg
+            return "@[]"
+        if raw_name == "range":
+            call_node = self.nodes[1].nodes[0]
+            args = _extract_call_args(call_node)
+            if len(args) == 1:
+                return f"0 ..< {args[0]}"
+            elif len(args) == 2:
+                return f"{args[0]} ..< {args[1]}"
+            elif len(args) == 3:
+                return f"countup({args[0]}, {args[1]} - 1, {args[2]})"
+            return "0 ..< 0"
+        if raw_name == "int":
+            call_node = self.nodes[1].nodes[0]
+            arg = _extract_call_arg(call_node)
+            return f"parseInt({arg})"
+        sym = ParserState.symbol_table.lookup(raw_name)
         if sym and sym.get("kind") == "class":
-            result = "new" + result
+            result = "new" + raw_name
     base_name = result  # save for type-aware method lookup
     if len(self.nodes) > 1 and hasattr(self.nodes[1], "nodes") and self.nodes[1].nodes:
         for tr in self.nodes[1].nodes:
@@ -404,7 +486,39 @@ def to_nim(self, prec=None):
                 result += "." + method_name
             else:
                 result += tr.to_nim()
+    # Post-process: translate known Python stdlib patterns to Nim
+    result = _translate_stdlib_patterns(result)
     return result
+
+
+# Python stdlib dotted-access patterns -> Nim equivalents
+_STDLIB_PATTERNS = [
+    # Order matters: longer patterns first
+    ("os.path.exists", "fileExists"),
+    ("sys.exit", "quit"),
+    ("sys.argv", "commandLineParams()"),
+]
+
+def _translate_stdlib_patterns(expr):
+    for py_pattern, nim_equiv in _STDLIB_PATTERNS:
+        if expr == py_pattern:
+            return nim_equiv
+        if expr.startswith(py_pattern + "("):
+            return nim_equiv + expr[len(py_pattern):]
+        # sys.argv[N] -> paramStr(N)
+        if expr.startswith(py_pattern + "[") and py_pattern == "sys.argv":
+            idx = expr[len("sys.argv["):-1]
+            return f"paramStr({idx})"
+    # len(sys.argv) -> paramCount()
+    if "len(sys.argv)" in expr:
+        expr = expr.replace("len(sys.argv)", "paramCount()")
+    if "len(commandLineParams())" in expr:
+        expr = expr.replace("len(commandLineParams())", "paramCount()")
+    # f.readlines() -> f.readAll().splitLines()
+    if expr.endswith(".readlines()"):
+        obj = expr[:-len(".readlines()")]
+        return f"{obj}.readAll().splitLines()"
+    return expr
 
 
 # --- await ---
