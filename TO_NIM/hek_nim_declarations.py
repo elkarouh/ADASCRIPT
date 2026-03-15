@@ -81,8 +81,16 @@ def to_nim(self, prec=None):
     return f"openArray[{elem}]"
 
 
+@method(enum_array_type)
+def to_nim(self, prec=None):
+    idx = self.nodes[0].to_nim()
+    elem = self.nodes[1].to_nim()
+    return f"array[{idx}, {elem}]"
+
+
 @method(dict_type)
 def to_nim(self, prec=None):
+    ParserState.nim_imports.add("tables")
     key = self.nodes[0].to_nim()
     val = self.nodes[1].to_nim()
     return f"Table[{key}, {val}]"
@@ -143,7 +151,13 @@ def _tuple_elements_nim(tup):
 
 @method(optional_type)
 def to_nim(self, prec=None):
-    return f"Option[{self.nodes[0].to_nim()}]"
+    inner = self.nodes[0].to_nim()
+    # For ref object types (classes), the type is already nullable — no Option needed
+    sym = ParserState.symbol_table.lookup(inner)
+    if sym and sym.get("kind") == "class":
+        return inner
+    ParserState.nim_imports.add("options")
+    return f"Option[{inner}]"
 
 
 @method(union_type)

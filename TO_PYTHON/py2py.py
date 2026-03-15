@@ -253,6 +253,20 @@ def translate(code):
     for richnl in trailing:
         emit_richnl(richnl)
 
+    # Insert auto-collected imports at the top (after leading comments)
+    from hek_parsec import ParserState
+    if ParserState.nim_imports:
+        # Find the first non-comment, non-blank line
+        insert_pos = 0
+        for i, line in enumerate(output):
+            stripped = line.strip()
+            if stripped and not stripped.startswith("#"):
+                insert_pos = i
+                break
+        for imp in sorted(ParserState.nim_imports):
+            output.insert(insert_pos, imp)
+            insert_pos += 1
+
     result = chr(10).join(output)
     if not result.endswith(chr(10)):
         result += chr(10)

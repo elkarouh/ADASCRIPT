@@ -93,11 +93,6 @@ def to_nim(self):
             if hasattr(seq, "nodes") and len(seq.nodes) >= 2:
                 rhs_node = seq.nodes[1]
                 parts.append(rhs_node.to_nim())
-    # Record type in symbol table
-    name = self.nodes[0].to_nim() if hasattr(self.nodes[0], "to_nim") else None
-    if name and rhs_node and ParserState.symbol_table.depth() > 0:
-        inferred = _infer_literal_nim_type(rhs_node)
-        ParserState.symbol_table.add(name, inferred, "var")
     # Skip var for dotted assignments (field mutation), indexed assignments,
     # and variables already declared in the current scope
     lhs = parts[0]
@@ -107,6 +102,11 @@ def to_nim(self):
         prefix = ""
     else:
         prefix = "var "
+    # Record type in symbol table (after checking for re-declaration)
+    name = self.nodes[0].to_nim() if hasattr(self.nodes[0], "to_nim") else None
+    if name and rhs_node and ParserState.symbol_table.depth() > 0:
+        inferred = _infer_literal_nim_type(rhs_node)
+        ParserState.symbol_table.add(name, inferred, "var")
     return prefix + " = ".join(parts)
 
 
@@ -151,6 +151,12 @@ def to_nim(self):
                 # For array types, strip @ prefix from list literals
                 if annotation.startswith("array[") and value.startswith("@["):
                     value = value[1:]
+                # initTable() needs explicit type params
+                if value == "initTable()" and "Table[" in annotation:
+                    import re as _re2
+                    _m = _re2.search(r"Table\[(.+)\]", annotation)
+                    if _m:
+                        value = f"initTable[{_m.group(1)}]()"
                 result += f" = {value}"
     return result
 
@@ -176,13 +182,30 @@ def to_nim(self):
                 # For array types, strip @ prefix from list literals
                 if annotation.startswith("array[") and value.startswith("@["):
                     value = value[1:]
+                # initTable() needs explicit type params
+                if value == "initTable()" and "Table[" in annotation:
+                    import re as _re2
+                    _m = _re2.search(r"Table\[(.+)\]", annotation)
+                    if _m:
+                        value = f"initTable[{_m.group(1)}]()"
                 result += f" = {value}"
     return result
 
 # --- return ---
 @method(return_val)
 def to_nim(self):
-    return f"return {self.nodes[0].to_nim()}"
+    val = self.nodes[0].to_nim()
+    ret_type = getattr(ParserState, "_current_return_type", "")
+    if ret_type and "Option[" in ret_type:
+        import re as _re
+        m = _re.search(r"Option\[(.+?)\]", ret_type)
+        if m:
+            inner_type = m.group(1)
+            if val == "nil":
+                return f"return none({inner_type})"
+            else:
+                return f"return some({val})"
+    return f"return {val}"
 
 
 @method(return_bare)

@@ -8,83 +8,85 @@
 # Transpile to Python:  python3 TO_PYTHON/py2py.py BENCHMARK/phonecode.hpy
 # Transpile to Nim:     python3 TO_NIM/py2nim.py BENCHMARK/phonecode.hpy
 
+import options, strformat, strutils, sugar, tables
 import os
 
 # ---------------------------------------------------------------------------
 # Character-to-digit mapping
 # ---------------------------------------------------------------------------
+type Digit_T = enum D0, D1, D2, D3, D4, D5, D6, D7, D8, D9
+type Result_T = seq[seq[string]]
 
-proc _build_char_to_digit(): Table[string, int] =
-    var mapping: Table[string, int] = newTable()
+proc build_char_to_digit(): Table[char, Digit_T] =
+    var mapping: Table[char, Digit_T] = initTable[char, Digit_T]()
 
-    proc m(chars: string, digit: int) =
+    proc m(chars: string, digit: Digit_T) =
         for c in chars:
             mapping[c.toLowerAscii()] = digit
             mapping[c.toUpperAscii()] = digit
 
-    m("e", 0)
-    m("jnq", 1)
-    m("rwx", 2)
-    m("dsy", 3)
-    m("ft", 4)
-    m("am", 5)
-    m("civ", 6)
-    m("bku", 7)
-    m("lop", 8)
-    m("ghz", 9)
+    m("e", Digit_T(0))
+    m("jnq", Digit_T(1))
+    m("rwx", Digit_T(2))
+    m("dsy", Digit_T(3))
+    m("ft", Digit_T(4))
+    m("am", Digit_T(5))
+    m("civ", Digit_T(6))
+    m("bku", Digit_T(7))
+    m("lop", Digit_T(8))
+    m("ghz", Digit_T(9))
 
     for d in "0123456789":
-        mapping[d] = int(d)
+        mapping[d] = Digit_T(ord(d) - ord('0'))
 
     return mapping
 
-var CHAR_TO_DIGIT: Table[string, int] = _build_char_to_digit()
+var CHAR_TO_DIGIT: Table[char, Digit_T] = build_char_to_digit()
 
 # ---------------------------------------------------------------------------
 # Trie
 # ---------------------------------------------------------------------------
 
-type TrieNode = object of RootObj
-    children: seq[Option[TrieNode]]
+type TrieNode = ref object of RootObj
+    children: array[Digit_T, TrieNode]
     words: seq[string]
 
-proc initTrieNode(self: var TrieNode) =
-    self.children = @[nil, nil, nil, nil, nil, nil, nil, nil, nil, nil]
-    self.words = @[]
-
+proc initTrieNode(self: TrieNode) =
+    discard
 proc newTrieNode*(): TrieNode =
+    new(result)
     initTrieNode(result)
-proc add_word(self: TrieNode, word: string, digits: seq[int]): void =
+proc add_word(self: TrieNode, word: string, digits: seq[Digit_T]): void =
     var node: TrieNode = self
-    for idx in digits:
-        if node.children[idx] is nil:
-            node.children[idx] = newTrieNode()
-        node = node.children[idx]
+    for digit in digits:
+        if node.children[digit] == nil:
+            node.children[digit] = newTrieNode()
+        node = node.children[digit]
     node.words.add(word)
 
-proc find_exact_word(self: TrieNode, digits: seq[int]): Option[string] =
+proc find_exact_word(self: TrieNode, digits: seq[Digit_T]): Option[string] =
     var node: TrieNode = self
-    for idx in digits:
-        if node.children[idx] is nil:
-            return nil
-        node = node.children[idx]
-    if node.words:
-        return node.words[0]
-    return nil
+    for digit in digits:
+        if node.children[digit] == nil:
+            return none(string)
+        node = node.children[digit]
+    if len(node.words) > 0:
+        return some(node.words[0])
+    return none(string)
 
-proc words_at(self: TrieNode, digits: seq[int]): seq[string] =
+proc words_at(self: TrieNode, digits: seq[Digit_T]): seq[string] =
     var node: TrieNode = self
-    for idx in digits:
-        if node.children[idx] is nil:
+    for digit in digits:
+        if node.children[digit] == nil:
             return @[]
-        node = node.children[idx]
+        node = node.children[digit]
     return node.words
 
 proc load_dictionary(self: TrieNode, filename: string, verbose: bool): void =
     var word_count: int = 0
 
-    proc word_to_digits(word: string): seq[int] =
-        var result: seq[int] = @[]
+    proc word_to_digits(word: string): seq[Digit_T] =
+        var result: seq[Digit_T] = @[]
         for c in word.toLowerAscii():
             if c notin CHAR_TO_DIGIT:
                 return @[]
@@ -94,51 +96,50 @@ proc load_dictionary(self: TrieNode, filename: string, verbose: bool): void =
     block:
         let f = open(filename, fmRead)
         defer: f.close()
-        for line in f:
+        for line in f.lines:
             let word: string = line.strip()
-            if not word:
+            if word.len == 0:
                 continue
-            let digits: seq[int] = word_to_digits(word)
-            if digits and len(digits) == len(word):
+            let digits: seq[Digit_T] = word_to_digits(word)
+            if len(digits) > 0 and len(digits) == len(word):
                 self.add_word(word, digits)
                 word_count += 1
 
     if verbose:
         echo(fmt"Loaded {word_count} words from {filename}")
 
-proc find_encodings(self: TrieNode, digits: seq[int], pos: int, current: seq[string], results: seq[seq[string]]): void =
+proc find_encodings(self: TrieNode, digits: seq[Digit_T], pos: int, current: seq[string], results: var seq[seq[string]]): void =
     if pos == len(digits):
-        results.add(@current)
+        results.add(current)
         return
-
-        # Option 1: use the bare digit at this position
-    self.find_encodings(digits, pos + 1, current + @[$digits[pos]], results)
+        # use the bare digit at this position
+    self.find_encodings(digits, pos + 1, current & @[$digits[pos]], results)
 
     var node: TrieNode = self
-    for i in range(pos, len(digits)):
-        let idx: int = digits[i]
-        if node.children[idx] is nil:
+    for i in pos ..< len(digits):
+        let digit: Digit_T = digits[i]
+        if node.children[digit] == nil:
             break
-        node = node.children[idx]
+        node = node.children[digit]
         for word in node.words:
-            self.find_encodings(digits, i + 1, current + @[word], results)
+            self.find_encodings(digits, i + 1, current & @[word], results)
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-proc clean_number(num: string): seq[int] =
-    return collect(for c in num if c in CHAR_TO_DIGIT: CHAR_TO_DIGIT[c])
+proc clean_number(num: string): seq[Digit_T] =
+    return collect(for c in num: (if c in CHAR_TO_DIGIT: CHAR_TO_DIGIT[c]))
 
 proc format_solution(original_num: string, solution: seq[string]): string =
-    return fmt"{original_num}: {' '.join(solution)}"
+    return fmt"{original_num}: {solution.join($' ')}"
 
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
 proc main() =
-    if paramCount() < 3:
+    if (paramCount() + 1) < 3:
         echo("Usage: phonecode <dictionary_file> <phone_numbers_file>")
         echo("Example: phonecode words.txt phones.txt")
         quit(1)
@@ -157,9 +158,9 @@ proc main() =
     trie.load_dictionary(dict_file, true)
 
     # Quick sanity-check
-    let test_digits: seq[int] = @[3, 5]
+    let test_digits: seq[Digit_T] = @[Digit_T(3), Digit_T(5)]
     let exact_match: Option[string] = trie.find_exact_word(test_digits)
-    if exact_match isnot nil:
+    if exact_match.isSome:
         echo(fmt"Exact match for digits 3,5: {exact_match}")
     else:
         echo("No exact match for digits 3,5")
@@ -173,17 +174,17 @@ proc main() =
         defer: f.close()
         var all_lines: seq[string] = f.readAll().splitLines()
 
-    for line in all_lines:
-        let original: string = line.strip()
-        if not original:
-            continue
-        let digits: seq[int] = clean_number(original)
-        if not digits:
-            continue
-        var results: seq[seq[string]] = @[]
-        trie.find_encodings(digits, 0, @[], results)
-        for sol in results:
-            echo(format_solution(original, sol))
+        for line in all_lines:
+            let original: string = line.strip()
+            if original.len == 0:
+                continue
+            let digits: seq[Digit_T] = clean_number(original)
+            if digits.len == 0:
+                continue
+            var results: seq[seq[string]] = @[]
+            trie.find_encodings(digits, 0, @[], results)
+            for sol in results:
+                echo(format_solution(original, sol))
 
 when isMainModule:
     main()

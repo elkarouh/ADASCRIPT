@@ -166,6 +166,18 @@ def translate(code):
         deduped.append(line)
     output = deduped
 
+    # Insert collected Nim imports at the top (after any leading comments)
+    if ParserState.nim_imports:
+        import_line = "import " + ", ".join(sorted(ParserState.nim_imports))
+        # Find the first non-comment, non-blank line
+        insert_pos = 0
+        for i, line in enumerate(output):
+            stripped = line.strip()
+            if stripped and not stripped.startswith("#"):
+                insert_pos = i
+                break
+        output.insert(insert_pos, import_line)
+
     result = chr(10).join(output)
     if not result.endswith(chr(10)):
         result += chr(10)
@@ -211,7 +223,7 @@ def run_tests():
         ),
         (
             "import os\n",
-            'let os = pyImport("os")\n',
+            'import os\n',
         ),
         (
             "from os import path\n",
@@ -284,11 +296,11 @@ def run_tests():
         ),
         (
             "class Foo:\n    pass\n",
-            "type Foo = object of RootObj\n    discard\n",
+            "type Foo = object of RootObj\nproc newFoo*(): Foo =\n    new(result)\n",
         ),
         (
             "class Foo(Bar):\n    pass\n",
-            "type Foo = object of Bar\n    discard\n",
+            "type Foo = object of Bar\nproc newFoo*(): Foo =\n    new(result)\n",
         ),
         (
             "@dec\ndef f():\n    pass\n",
@@ -305,7 +317,7 @@ def run_tests():
         # --- mixed programs ---
         (
             "import os\ndef main():\n    return os\n",
-            'let os = pyImport("os")\nproc main() =\n    return os\n',
+            'import os\nproc main() =\n    return os\n',
         ),
         (
             "x = 1\nif x:\n    y = 2\n",
@@ -313,7 +325,7 @@ def run_tests():
         ),
         (
             "def f():\n    pass\nclass Foo:\n    pass\n",
-            "proc f() =\n    discard\ntype Foo = object of RootObj\n    discard\n",
+            "proc f() =\n    discard\ntype Foo = object of RootObj\nproc newFoo*(): Foo =\n    new(result)\n",
         ),
         # --- nested ---
         (
@@ -326,7 +338,7 @@ def run_tests():
         ),
         (
             "class Foo:\n    def bar(self):\n        pass\n",
-            "type Foo = object of RootObj\nproc bar(self: Foo) =\n    discard\n",
+            "type Foo = object of RootObj\nproc newFoo*(): Foo =\n    new(result)\nproc bar(self: Foo) =\n    discard\n",
         ),
         # --- expressions in statements ---
         (
@@ -352,7 +364,7 @@ def run_tests():
         ),
         (
             "x = {1: 2}\n",
-            "var x = {1: 2}.toTable\n",
+            "import tables\nvar x = {1: 2}.toTable\n",
         ),
         (
             "x = None\n",

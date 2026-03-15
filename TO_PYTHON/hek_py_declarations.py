@@ -151,7 +151,10 @@ from hek_parsec import method
 
 @method(primitive_type)
 def to_py(self, prec=None):
-    return self.nodes[0]  # raw string from literal()
+    name = self.nodes[0]
+    if name == "char":
+        return "str"
+    return name
 
 
 @method(type_name)
@@ -172,6 +175,13 @@ def to_py(self, prec=None):
 @method(openarray_type)
 def to_py(self, prec=None):
     return f"Sequence[{self.nodes[1].to_py()}]"
+
+
+@method(enum_array_type)
+def to_py(self, prec=None):
+    idx = self.nodes[0].to_py()
+    elem = self.nodes[1].to_py()
+    return f"dict[{idx}, {elem}]"
 
 
 @method(dict_type)
