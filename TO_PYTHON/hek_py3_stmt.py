@@ -601,7 +601,8 @@ def to_py(self):
                 params = first.to_py()
                 eq_idx = i + 1
                 break
-    rhs = self.nodes[eq_idx + 1]
+    # RHS is the last node — works whether V_EQUAL is present ('=') or absent ('is')
+    rhs = self.nodes[-1]
     if type(rhs).__name__ == 'enum_def':
         members = rhs.to_py()
         member_names = [m.strip() for m in members[len("enum "):].split(",")]

@@ -636,7 +636,8 @@ def to_nim(self):
                 params = first.to_nim()
                 eq_idx = i + 1
                 break
-    rhs = self.nodes[eq_idx + 1]
+    # RHS is the last node — works whether V_EQUAL is present ('=') or absent ('is')
+    rhs = self.nodes[-1]
     if type(rhs).__name__ == "enum_def":
         ParserState.symbol_table.add(name, "enum", "type")
     value = rhs.to_nim()
