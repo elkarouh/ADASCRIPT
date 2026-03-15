@@ -962,30 +962,24 @@ def to_nim(self, indent=0):
     name = ""
     bases = ""
     block_node = None
-    is_virtual = False
 
     for node in self.nodes:
         tname = type(node).__name__
         if tname == "decorators":
             decos_str = node.to_nim(indent)
-            if "@virtual" in decos_str:
-                is_virtual = True
-            else:
+            # Strip @virtual — ref/method is now inferred from inheritance
+            if "@virtual" not in decos_str:
                 decos = decos_str + "\n"
         elif tname == "Several_Times":
             for seq in node.nodes:
                 stname = type(seq).__name__
                 if stname == "decorator":
                     deco_str = seq.to_nim(indent)
-                    if "@virtual" in deco_str:
-                        is_virtual = True
-                    else:
+                    if "@virtual" not in deco_str:
                         decos += deco_str + "\n"
                 elif stname == "decorators":
                     decos_str = seq.to_nim(indent)
-                    if "@virtual" in decos_str:
-                        is_virtual = True
-                    else:
+                    if "@virtual" not in decos_str:
                         decos = decos_str + "\n"
                 elif stname == "class_args":
                     bases = seq.to_nim()
@@ -996,6 +990,9 @@ def to_nim(self, indent=0):
         elif tname == "block":
             block_node = node
 
+    # Infer virtual from class hierarchy (pre-scanned in translate())
+    is_virtual = name in getattr(ParserState, "_ref_classes", set())
+
     parent_name = ""
     if bases and bases not in ("()", ""):
         inner = bases[1:-1] if bases.startswith("(") else bases
@@ -1005,6 +1002,36 @@ def to_nim(self, indent=0):
     if name:
         ParserState.symbol_table.add(name, name, "class")
     ParserState.symbol_table.push_scope(name or "<class>")
+    # Pre-check for self-referencing fields (e.g., children: [Digit_T]TrieNode)
+    if block_node and name and not is_virtual:
+        def _has_self_ref(node, cls_name):
+            """Check if any IDENTIFIER in the node matches the class name."""
+            tname = type(node).__name__
+            if tname == "IDENTIFIER":
+                val = getattr(node, "node", None)
+                if not isinstance(val, str) and hasattr(node, "nodes") and node.nodes:
+                    val = str(node.nodes[0])
+                if val == cls_name:
+                    return True
+            if hasattr(node, "nodes"):
+                for child in node.nodes:
+                    if _has_self_ref(child, cls_name):
+                        return True
+            return False
+        def _find_field_decls(node):
+            """Recursively find ann_assign_stmt / decl_ann_assign_stmt nodes."""
+            tn = type(node).__name__
+            if tn in ("ann_assign_stmt", "decl_ann_assign_stmt"):
+                return [node]
+            result = []
+            if hasattr(node, "nodes"):
+                for child in node.nodes:
+                    result.extend(_find_field_decls(child))
+            return result
+        for decl in _find_field_decls(block_node):
+            if _has_self_ref(decl, name):
+                is_virtual = True
+                break
     if block_node:
         block_node._is_virtual = is_virtual
         block_node._class_name = name
@@ -1015,10 +1042,10 @@ def to_nim(self, indent=0):
     body = block_node.to_nim(indent + 1, is_virtual=True, class_name=name, parent_name=parent_name) if block_node else ""
     
     parent = f" of {parent_name}" if parent_name else " of RootObj"
-    # Always use ref for classes with methods, only plain object for simple classes
-    # For now, keep ref only for @virtual
-    # Check only field declarations for self-reference (not proc signatures)
-    field_lines = [l for l in body.split("\n") if l.strip() and not l.strip().startswith("proc ") and not l.strip().startswith("method ")]
+    # Check field declarations for self-reference (e.g., children: array[X, TrieNode])
+    # Only match lines that look like field decls: "    name: type"
+    import re as _re
+    field_lines = [l for l in body.split("\n") if l.strip() and _re.match(r"\s+\w+:", l) and not l.strip().startswith("proc ") and not l.strip().startswith("method ")]
     fields_text = "\n".join(field_lines)
     needs_ref = is_virtual or (name and name in fields_text)
     ref_keyword = "ref " if needs_ref else ""
@@ -1316,9 +1343,13 @@ def _generate_init_new(func_node, indent, class_name, parent_name, is_virtual=Tr
     params_str = ", ".join(param_strs)
     
     init_name = f"init{class_name}"
-    # ref objects don't need var — use class name directly
-    self_type = class_name
-    init_sig = f"{_ind(indent)}proc {init_name}(self: {self_type}{', ' + params_str if params_str else ''}) ="
+    # ref types: self: ClassName; value types: self: var ClassName
+    is_ref = is_virtual
+    if is_ref:
+        self_param = f"self: {class_name}"
+    else:
+        self_param = f"self: var {class_name}"
+    init_sig = f"{_ind(indent)}proc {init_name}({self_param}{', ' + params_str if params_str else ''}) ="
     
     init_body = []
     if block_node:
@@ -1347,8 +1378,8 @@ def _generate_init_new(func_node, indent, class_name, parent_name, is_virtual=Tr
     new_name = f"new{class_name}"
     new_sig = f"{_ind(indent)}proc {new_name}*({params_str}): {class_name} ="
     new_body = []
-    # Always emit new(result) — classes are ref objects in Nim
-    new_body.append(f"{_ind(indent + 1)}new(result)")
+    if is_ref:
+        new_body.append(f"{_ind(indent + 1)}new(result)")
     if param_names:
         new_body.append(f"{_ind(indent + 1)}{init_name}(result, {', '.join(param_names)})")
     else:

@@ -51,11 +51,18 @@ type TrieNode = ref object of RootObj
     children: array[Digit_T, TrieNode]
     words: seq[string]
 
-proc initTrieNode(self: TrieNode) =
-    discard
-proc newTrieNode*(): TrieNode =
+proc add_word(self: TrieNode, word: string, digits: seq[Digit_T]): void
+proc find_exact_word(self: TrieNode, digits: seq[Digit_T]): Option[string]
+proc words_at(self: TrieNode, digits: seq[Digit_T]): seq[string]
+proc load_dictionary(self: TrieNode, filename: string, verbose: bool): void
+proc find_encodings(self: TrieNode, digits: seq[Digit_T], pos: int, current: seq[string], results: var seq[seq[string]]): void
+proc initTrieNode(self: TrieNode, filename: string = "", verbose: bool = false) =
+    if filename.len > 0:
+        self.load_dictionary(filename, true)
+
+proc newTrieNode*(filename: string = "", verbose: bool = false): TrieNode =
     new(result)
-    initTrieNode(result)
+    initTrieNode(result, filename, verbose)
 proc add_word(self: TrieNode, word: string, digits: seq[Digit_T]): void =
     var node: TrieNode = self
     for digit in digits:
@@ -154,8 +161,7 @@ proc main() =
         echo(fmt"Error: Phone numbers file not found: {phone_file}")
         quit(1)
 
-    var trie: TrieNode = newTrieNode()
-    trie.load_dictionary(dict_file, true)
+    var trie: TrieNode = newTrieNode(dict_file, true)
 
     # Quick sanity-check
     let test_digits: seq[Digit_T] = @[Digit_T(3), Digit_T(5)]
