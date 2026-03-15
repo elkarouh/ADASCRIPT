@@ -31,6 +31,18 @@ from py3expr import (
 
 _COMP_OPS = {"==", "!=", "<", ">", "<=", ">=", "in", "is", "not in", "is not", "isnot", "notin"}
 
+def _nim_truthiness(expr):
+    """Convert Python truthiness expression to explicit Nim boolean.
+    Strings/seqs have no implicit bool conversion in Nim."""
+    sym = ParserState.symbol_table.lookup(expr)
+    if sym:
+        t = (sym.get("type") or "")
+        if any(t.startswith(p) for p in ("string", "seq[", "str")):
+            return f"{expr}.len > 0"
+    return expr
+
+
+
 ###############################################################################
 # Type inference helpers
 ###############################################################################
@@ -736,11 +748,10 @@ def to_nim(self, prec=None):
 def to_nim(self, prec=None):
     operand = self.nodes[0].to_nim(PREC_NOT)
     # Check if operand is a string/seq variable — Nim has no truthiness for these
-    sym = ParserState.symbol_table.lookup(operand)
-    if sym:
-        t = (sym.get("type") or "")
-        if t.startswith("string") or t.startswith("seq[") or t.startswith("str"):
-            return f"{operand}.len == 0"
+    truthy = _nim_truthiness(operand)
+    if truthy != operand:
+        # _nim_truthiness returned "x.len > 0", negate to "x.len == 0"
+        return truthy.replace(".len > 0", ".len == 0")
     result = f"not {operand}"
     if prec is not None and PREC_NOT < prec:
         return f"({result})"

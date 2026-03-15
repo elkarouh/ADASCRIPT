@@ -51,9 +51,11 @@ class TrieNode:
     var children: [Digit_T]TrieNode
     var words: []str
 
-    def __init__(self):
+    def __init__(self, filename: str = "", verbose: bool = False):
         self.children = {d: None for d in Digit_T}
         self.words = []
+        if filename:
+            self.load_dictionary (filename, True)
 
     def add_word(self, word: str, digits: []Digit_T) -> None:
         var node: TrieNode = self
@@ -151,8 +153,7 @@ def main():
         print(f"Error: Phone numbers file not found: {phone_file}")
         sys.exit(1)
 
-    var trie: TrieNode = TrieNode()
-    trie.load_dictionary(dict_file, True)
+    var trie: TrieNode = TrieNode(dict_file, True)
 
     # Quick sanity-check
     let test_digits: []Digit_T = [Digit_T(3), Digit_T(5)]
