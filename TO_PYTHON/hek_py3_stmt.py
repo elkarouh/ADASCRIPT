@@ -29,7 +29,7 @@ sys.path.insert(0, os.path.join(_dir, "..", "HPYTHON_GRAMMAR"))
 from py3stmt import *
 from hek_py3_expr import _get_bracket_start
 import hek_py_declarations  # noqa: F401 — registers decl to_py() methods
-from hek_parsec import method
+from hek_parsec import method, ParserState
 
 # to_py() methods
 ###############################################################################
@@ -605,9 +605,10 @@ def to_py(self):
     if type(rhs).__name__ == 'enum_def':
         members = rhs.to_py()
         member_names = [m.strip() for m in members[len("enum "):].split(",")]
+        ParserState.nim_imports.add("from enum import Enum")
         lines = [f"class {name}(Enum):"]
-        for m in member_names:
-            lines.append(f"    {m} = auto()")
+        for i, m in enumerate(member_names):
+            lines.append(f"    {m} = {i}")
         return "\n".join(lines)
     value = rhs.to_py()
     return f"type {name}{params} = {value}"

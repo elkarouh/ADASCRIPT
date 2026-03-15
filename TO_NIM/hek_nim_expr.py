@@ -29,7 +29,7 @@ from py3expr import (
     parse_expr,
 )
 
-_COMP_OPS = {"==", "!=", "<", ">", "<=", ">=", "in", "is", "not in", "is not"}
+_COMP_OPS = {"==", "!=", "<", ">", "<=", ">=", "in", "is", "not in", "is not", "isnot", "notin"}
 
 ###############################################################################
 # Type inference helpers
@@ -161,6 +161,9 @@ def binop_to_nim(self, prec=None, my_prec=None):
             py_op = _op_string(seq.nodes[0])
             nim_op = _PY_OP_TO_NIM.get(py_op, py_op)
             right = seq.nodes[1].to_nim(right_prec)
+            # seq concatenation: + -> & when operand is a seq literal
+            if nim_op == "+" and (right.startswith("@[") or result.startswith("@[")):
+                nim_op = "&"
             result = f"{result} {nim_op} {right}"
 
     if prec is not None and my_prec is not None and my_prec < prec:
@@ -253,6 +256,7 @@ def to_nim(self, prec=None):
 @method(fstring)
 def to_nim(self, prec=None):
     """f-string -> Nim fmt string: replace f-string prefix with fmt"""
+    ParserState.nim_imports.add("strformat")
     parts = []
     def _collect(node):
         tname = type(node).__name__
@@ -315,6 +319,7 @@ def to_nim(self, prec=None):
 
 @method(empty_dict)
 def to_nim(self, prec=None):
+    ParserState.nim_imports.add("tables")
     return "initTable()"
 
 
@@ -324,6 +329,7 @@ def to_nim(self, prec=None):
     # If inner is a dictcomp, collect() handles it — no {} wrapper
     if type(inner_node).__name__ == "dictcomp":
         return inner_node.to_nim()
+    ParserState.nim_imports.add("tables")
     return "{" + inner_node.to_nim() + "}.toTable"
 
 
@@ -382,6 +388,8 @@ def to_nim(self, prec=None):
     return self.nodes[0].to_nim()
 
 
+_STRUTILS_METHODS = {"toLowerAscii", "toUpperAscii", "strip", "startsWith", "endsWith", "splitLines", "parseInt", "split", "join", "replace", "find"}
+
 # Universal method mappings that apply regardless of receiver type
 _PY_UNIVERSAL_METHOD_TO_NIM = {
     "append": "add",
@@ -402,7 +410,10 @@ def _translate_method(obj_name, method_name):
             if type_str.startswith(prefix):
                 return mappings.get(method_name, method_name)
     # Fall back to universal mappings
-    return _PY_UNIVERSAL_METHOD_TO_NIM.get(method_name, method_name)
+    nim_method = _PY_UNIVERSAL_METHOD_TO_NIM.get(method_name, method_name)
+    if nim_method in _STRUTILS_METHODS:
+        ParserState.nim_imports.add("strutils")
+    return nim_method
 
 
 def _extract_call_arg(call_node):
@@ -458,6 +469,11 @@ def to_nim(self, prec=None):
             call_node = self.nodes[1].nodes[0]
             arg = _extract_call_arg(call_node)
             if arg:
+                # list(x) — if x is already a seq, just return it (Nim copies on assign)
+                # If x is not a seq (e.g. a range), use @x to convert
+                sym = ParserState.symbol_table.lookup(arg)
+                if sym and (sym.get("type") or "").startswith("seq["):
+                    return arg
                 return "@" + arg
             return "@[]"
         if raw_name == "range":
@@ -473,6 +489,7 @@ def to_nim(self, prec=None):
         if raw_name == "int":
             call_node = self.nodes[1].nodes[0]
             arg = _extract_call_arg(call_node)
+            ParserState.nim_imports.add("strutils")
             return f"parseInt({arg})"
         sym = ParserState.symbol_table.lookup(raw_name)
         if sym and sym.get("kind") == "class":
@@ -500,6 +517,8 @@ _STDLIB_PATTERNS = [
 ]
 
 def _translate_stdlib_patterns(expr):
+    if "fileExists" in expr or "paramStr" in expr or "paramCount" in expr:
+        ParserState.nim_imports.add("os")
     for py_pattern, nim_equiv in _STDLIB_PATTERNS:
         if expr == py_pattern:
             return nim_equiv
@@ -509,14 +528,28 @@ def _translate_stdlib_patterns(expr):
         if expr.startswith(py_pattern + "[") and py_pattern == "sys.argv":
             idx = expr[len("sys.argv["):-1]
             return f"paramStr({idx})"
-    # len(sys.argv) -> paramCount()
+    # len(sys.argv) -> paramCount() + 1 (Python includes program name)
     if "len(sys.argv)" in expr:
-        expr = expr.replace("len(sys.argv)", "paramCount()")
+        expr = expr.replace("len(sys.argv)", "(paramCount() + 1)")
     if "len(commandLineParams())" in expr:
-        expr = expr.replace("len(commandLineParams())", "paramCount()")
+        expr = expr.replace("len(commandLineParams())", "(paramCount() + 1)")
+    # 'sep'.join(x) -> x.join("sep") — Python join has receiver/arg swapped vs Nim
+    import re as _re
+    m = _re.match(r"^(.+)\.join\((.+)\)$", expr)
+    if m:
+        sep, arg = m.group(1), m.group(2)
+        ParserState.nim_imports.add("strutils")
+        # Nim join needs string sep — use $'c' for single-char (safe inside fmt)
+        if len(sep) == 3 and sep[0] == "'" and sep[-1] == "'":
+            sep = "$" + sep
+        elif len(sep) == 3 and sep[0] == '"' and sep[-1] == '"':
+            sep = "$'" + sep[1] + "'"
+        return f"{arg}.join({sep})"
+
     # f.readlines() -> f.readAll().splitLines()
     if expr.endswith(".readlines()"):
         obj = expr[:-len(".readlines()")]
+        ParserState.nim_imports.add("strutils")
         return f"{obj}.readAll().splitLines()"
     return expr
 
@@ -678,6 +711,20 @@ def to_nim(self, prec=None):
             py_op = _op_string(seq.nodes[0])
             nim_op = _PY_OP_TO_NIM.get(py_op, py_op)
             right = seq.nodes[1].to_nim(operand_prec)
+            # Option-aware: x is not None -> x.isSome, x is None -> x.isNone
+            if right == "nil" and nim_op in ("isnot", "is"):
+                sym = ParserState.symbol_table.lookup(chain)
+                is_option = sym and "Option[" in (sym.get("type") or "")
+                if is_option:
+                    ParserState.nim_imports.add("options")
+                    if nim_op == "isnot":
+                        chain = f"{chain}.isSome"
+                    else:
+                        chain = f"{chain}.isNone"
+                    continue
+            # For nil checks on ref types, use == / != instead of is / isnot
+            if right == "nil" and nim_op in ("is", "isnot"):
+                nim_op = "==" if nim_op == "is" else "!="
             chain += f" {nim_op} {right}"
     if prec is not None and PREC_CMP < prec:
         return f"({chain})"
@@ -687,7 +734,14 @@ def to_nim(self, prec=None):
 # --- inversion ---
 @method(not_prefix)
 def to_nim(self, prec=None):
-    result = f"not {self.nodes[0].to_nim(PREC_NOT)}"
+    operand = self.nodes[0].to_nim(PREC_NOT)
+    # Check if operand is a string/seq variable — Nim has no truthiness for these
+    sym = ParserState.symbol_table.lookup(operand)
+    if sym:
+        t = (sym.get("type") or "")
+        if t.startswith("string") or t.startswith("seq[") or t.startswith("str"):
+            return f"{operand}.len == 0"
+    result = f"not {operand}"
     if prec is not None and PREC_NOT < prec:
         return f"({result})"
     return result
@@ -1010,16 +1064,29 @@ def to_nim(self, prec=None):
 @method(listcomp)
 def to_nim(self, prec=None):
     # [expr for x in xs] -> collect(for x in xs: expr)
+    # [expr for x in xs if cond] -> collect(for x in xs: (if cond: expr))
+    ParserState.nim_imports.add("sugar")
     expr = self.nodes[0].to_nim()
     clauses = self.nodes[1].to_nim()
+    # Handle filtered comprehensions: nest the if inside the for
+    import re as _re
+    m = _re.match(r"(for .+ in .+?) if (.+)$", clauses)
+    if m:
+        for_part, cond = m.group(1), m.group(2)
+        return f"collect({for_part}: (if {cond}: {expr}))"
     return f"collect({clauses}: {expr})"
 
 
 @method(genexpr)
 def to_nim(self, prec=None):
-    # (expr for x in xs) -> iterator: for x in xs: yield expr
+    # (expr for x in xs) -> collect(for x in xs: expr)
     expr = self.nodes[0].to_nim()
     clauses = self.nodes[1].to_nim()
+    import re as _re
+    m = _re.match(r"(for .+ in .+?) if (.+)$", clauses)
+    if m:
+        for_part, cond = m.group(1), m.group(2)
+        return f"collect({for_part}: (if {cond}: {expr}))"
     return f"collect({clauses}: {expr})"
 
 
@@ -1029,6 +1096,8 @@ def to_nim(self, prec=None):
     key = self.nodes[0].to_nim()
     val = self.nodes[1].to_nim()
     clauses = self.nodes[2].to_nim()
+    ParserState.nim_imports.add("sugar")
+    ParserState.nim_imports.add("tables")
     return f"collect(initTable, {clauses}: {{{key}: {val}}})"
 
 
@@ -1135,7 +1204,7 @@ if __name__ == "__main__":
         # --- Containers ---
         ("[]", "@[]"),
         ("[1, 2, 3]", "@[1, 2, 3]"),
-        ("{}", "newTable()"),
+        ("{}", "initTable()"),
         ("{1: 2, 3: 4}", "{1: 2, 3: 4}.toTable"),
         ("{1, 2, 3}", "{1, 2, 3}"),
         ('{"a", "b"}', '{"a", "b"}.toHashSet'),

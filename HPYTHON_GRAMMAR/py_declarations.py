@@ -181,6 +181,7 @@ basic_type = fw("basic_type")
 seq_type = fw("seq_type")
 array_type = fw("array_type")
 openarray_type = fw("openarray_type")
+enum_array_type = fw("enum_array_type")
 dict_type = fw("dict_type")
 set_type = fw("set_type")
 callable_type = fw("callable_type")
@@ -196,7 +197,7 @@ type_name = fw("type_name")
 ###############################################################################
 
 # --- Primitives: int, str, float, bool, bytes, None ---
-_PRIMITIVES = {"int", "str", "float", "bool", "bytes", "None"}
+_PRIMITIVES = {"int", "str", "float", "bool", "bytes", "char", "None"}
 primitive_type = filt(lambda s: s in _PRIMITIVES, IDENTIFIER)
 
 # --- User-defined type name: any non-primitive identifier, including subscripts
@@ -237,6 +238,9 @@ array_type = LBRACKET + INTEGER + RBRACKET + type_annotation
 # [*]int            -> Sequence[int]  (unconstrained/open array)
 openarray_type = LBRACKET + SSTAR + RBRACKET + type_annotation
 
+# [EnumType]int      -> array[EnumType, int]  (enum-indexed array)
+enum_array_type = LBRACKET + type_name + RBRACKET + type_annotation
+
 # {str}int          -> dict[str, int]
 dict_type = LBRACE + type_annotation + RBRACE + type_annotation
 
@@ -254,6 +258,7 @@ basic_type = (
     | callable_type
     | openarray_type
     | array_type
+    | enum_array_type
     | dict_type
     | set_type
     | tuple_type

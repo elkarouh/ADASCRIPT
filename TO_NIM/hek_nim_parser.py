@@ -122,7 +122,7 @@ def to_nim(self, indent=0, is_virtual=False, class_name=None, parent_name=None):
     
     if class_name:  # Process all classes with fields/methods
         result_lines = []
-        # Emit fields (inside object body): strip var/let/const keyword
+        # Emit fields (inside object body): strip var/let/const keyword and defaults
         for field in fields:
             line = field.to_nim(indent)
             stripped = line.lstrip()
@@ -130,6 +130,9 @@ def to_nim(self, indent=0, is_virtual=False, class_name=None, parent_name=None):
                 if stripped.startswith(kw):
                     line = line[:len(line) - len(stripped)] + stripped[len(kw):]
                     break
+            # Strip default value: Nim object fields don't support inline defaults
+            import re as _re
+            line = _re.sub(r' = .+$', '', line)
             result_lines.append(line)
         
         # Emit a blank line after fields for readability
@@ -177,6 +180,12 @@ def to_nim(self, indent=0, is_virtual=False, class_name=None, parent_name=None):
             result_lines.extend(init_lines)
             result_lines.extend(new_lines)
         
+
+        # If no __init__ but class needs a constructor, generate a default newClassName
+        if not inits and class_name:
+            new_name = f"new{class_name}"
+            result_lines.append(f"{_ind(base_indent)}proc {new_name}*(): {class_name} =")
+            result_lines.append(f"{_ind(base_indent + 1)}new(result)")
         for func_node, method_name in other_methods:
             # Generate methods at top level (same indent as type definition)
             method_lines = _generate_method_decl(func_node, base_indent, class_name, parent_name, is_virtual_class)
@@ -273,6 +282,10 @@ def to_nim(self):
 def to_nim(self, indent=0):
     target = self.nodes[0].to_nim()
     iterable = self.nodes[1].to_nim()
+    # File iteration: for line in f -> for line in f.lines
+    sym = ParserState.symbol_table.lookup(iterable)
+    if sym and sym.get("type") == "File":
+        iterable = f"{iterable}.lines"
     hc = _block_inline_header_comment(self.nodes[2])
     body = self.nodes[2].to_nim(indent + 1)
     result = f"{_ind(indent)}for {target} in {iterable}:{hc}\n{body}"
@@ -447,12 +460,14 @@ def to_nim(self, indent=0):
             # Skip encoding and other kwargs
             if "=" not in raw_mode:
                 nim_mode = mode_map.get(raw_mode, raw_mode)
-        # Emit as: block with let/defer/body all at same indent level
+        # Register the file variable in the symbol table
+        ParserState.symbol_table.add(var_name, "File", "let")
+        # Emit block: to create a new scope (mirroring Python's with statement)
+        ind = _ind(indent)
         ind1 = _ind(indent + 1)
-        result = f"{_ind(indent)}block:{hc}\n"
+        result = f"{ind}block:{hc}\n"
         result += f"{ind1}let {var_name} = open({filename}, {nim_mode})\n"
         result += f"{ind1}defer: {var_name}.close()\n"
-        # Body goes at indent+1 (same level as let/defer, not nested under defer)
         if block_node:
             try:
                 body = block_node.to_nim(indent + 1)
@@ -501,7 +516,11 @@ def to_nim(self):
     n = self.nodes[0]
     if hasattr(n, "to_nim"):
         return n.to_nim()
-    return str(n)
+    name = str(n)
+    # Nim disallows leading underscores — strip single leading _
+    if name.startswith("_") and not name.startswith("__"):
+        name = name[1:]
+    return name
 
 
 @method(pattern_capture)
@@ -509,7 +528,11 @@ def to_nim(self):
     n = self.nodes[0]
     if hasattr(n, "to_nim"):
         return n.to_nim()
-    return str(n)
+    name = str(n)
+    # Nim disallows leading underscores — strip single leading _
+    if name.startswith("_") and not name.startswith("__"):
+        name = name[1:]
+    return name
 
 
 @method(pattern_wildcard)
@@ -607,6 +630,7 @@ def to_nim(self):
             for seq in child.nodes:
                 if hasattr(seq, "nodes"):
                     _extract_pair(seq.nodes)
+    ParserState.nim_imports.add("tables")
     return "{" + ", ".join(pairs) + "}.toTable"
 
 
@@ -853,10 +877,28 @@ def to_nim(self, indent=0):
         elif tname == "return_annotation":
             ret_ann = node.to_nim()
 
+    # Store return type so return_stmt can use it for Option wrapping
+    ParserState._current_return_type = ret_ann  # e.g. ': Option[string]'
     ParserState.symbol_table.push_scope(name or "<func>")
     hc = _block_inline_header_comment(block_node) if block_node else ""
     body = block_node.to_nim(indent + 1) if block_node else ""
     ParserState.symbol_table.pop_scope()
+    ParserState._current_return_type = ""
+    # Add var to params that are mutated in body (assigned to or .add called)
+    if params and body:
+        import re as _re
+        new_params = []
+        for p in params.split(", "):
+            pname = p.split(":")[0].strip()
+            if pname and pname != "self" and _re.search(
+                rf"\b{_re.escape(pname)}\b\s*(\.add\(|\[.*\]\s*=|=(?!=))", body
+            ):
+                if not p.startswith("var ") and ": " in p:
+                    # Nim syntax: param: var T
+                    parts = p.split(": ", 1)
+                    p = parts[0] + ": var " + parts[1]
+            new_params.append(p)
+        params = ", ".join(new_params)
     return f"{decos}{_ind(indent)}proc {name}({params}){ret_ann} ={hc}\n{body}"
 
 
@@ -965,7 +1007,11 @@ def to_nim(self, indent=0):
     parent = f" of {parent_name}" if parent_name else " of RootObj"
     # Always use ref for classes with methods, only plain object for simple classes
     # For now, keep ref only for @virtual
-    ref_keyword = "ref " if is_virtual else ""
+    # Check only field declarations for self-reference (not proc signatures)
+    field_lines = [l for l in body.split("\n") if l.strip() and not l.strip().startswith("proc ") and not l.strip().startswith("method ")]
+    fields_text = "\n".join(field_lines)
+    needs_ref = is_virtual or (name and name in fields_text)
+    ref_keyword = "ref " if needs_ref else ""
     ParserState.symbol_table.pop_scope()
     return f"{decos}{_ind(indent)}type {name} = {ref_keyword}object{parent}\n{body}"
 
@@ -1149,11 +1195,11 @@ if __name__ == "__main__":
         # --- class -> type object ---
         (
             "class Foo:\n    pass\n",
-            "type Foo = object of RootObj\n    discard",
+            "type Foo = object of RootObj\nproc newFoo*(): Foo =\n    new(result)",
         ),
         (
             "class Foo(Bar):\n    pass\n",
-            "type Foo = object of Bar\n    discard",
+            "type Foo = object of Bar\nproc newFoo*(): Foo =\n    new(result)",
         ),
         # --- async def -> proc {.async.} ---
         (
@@ -1266,7 +1312,8 @@ def _generate_init_new(func_node, indent, class_name, parent_name, is_virtual=Tr
     params_str = ", ".join(param_strs)
     
     init_name = f"init{class_name}"
-    self_type = class_name if is_virtual else f"var {class_name}"
+    # ref objects don't need var — use class name directly
+    self_type = class_name
     init_sig = f"{_ind(indent)}proc {init_name}(self: {self_type}{', ' + params_str if params_str else ''}) ="
     
     init_body = []
@@ -1288,8 +1335,8 @@ def _generate_init_new(func_node, indent, class_name, parent_name, is_virtual=Tr
     new_name = f"new{class_name}"
     new_sig = f"{_ind(indent)}proc {new_name}*({params_str}): {class_name} ="
     new_body = []
-    if is_virtual:
-        new_body.append(f"{_ind(indent + 1)}new(result)")
+    # Always emit new(result) — classes are ref objects in Nim
+    new_body.append(f"{_ind(indent + 1)}new(result)")
     if param_names:
         new_body.append(f"{_ind(indent + 1)}{init_name}(result, {', '.join(param_names)})")
     else:
@@ -1349,6 +1396,39 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
         elif tname == "block":
             block_node = node
     
+    # Store return type so return_stmt can use it for Option wrapping
+    ParserState._current_return_type = ret_ann  # e.g. ': Option[string]'
+    # Push scope and register params for body translation
+    ParserState.symbol_table.push_scope(name or "<method>")
+    for p in params:
+        parts = p.split(":")
+        if len(parts) >= 2:
+            pn = parts[0].strip()
+            pt = ":".join(parts[1:]).strip()
+            ParserState.symbol_table.add(pn, pt, "param")
+
+    # Extract body first so we can detect mutations
+    body_lines = []
+    if block_node:
+        body_lines = _extract_block_body(block_node, indent + 1)
+
+    # Add var to params that are mutated in body
+    body_text = "\n".join(body_lines)
+    if params and body_text:
+        import re as _re
+        new_params = []
+        for p in params:
+            pname = p.split(":")[0].strip()
+            if pname and pname != "self" and _re.search(
+                rf"\b{_re.escape(pname)}\b\s*(\.add\(|\[.*\]\s*=|=(?!=))", body_text
+            ):
+                if not p.startswith("var ") and ": " in p:
+                    # Nim syntax: param: var T
+                    parts = p.split(": ", 1)
+                    p = parts[0] + ": var " + parts[1]
+            new_params.append(p)
+        params = new_params
+
     params_str = ", ".join(params)
     if is_virtual:
         pragma = " {.base.}" if _is_new_method(class_name, name) else ""
@@ -1356,21 +1436,31 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
     else:
         pragma = ""
         keyword = "proc"
-    
+
     method_sig = f"{_ind(indent)}{keyword} {name}({params_str}){ret_ann}{pragma} ="
     lines.append(method_sig)
-    
-    if block_node:
-        # Traverse block structure to find actual statements
-        method_body = _extract_block_body(block_node, indent + 1)
-        lines.extend(method_body)
-    
+    lines.extend(body_lines)
+
+    ParserState.symbol_table.pop_scope()
+    ParserState._current_return_type = ""
     return lines
 
 
 def _extract_block_body(block_node, indent, is_init_body=False):
     """Extract body statements from a block node."""
     result_lines = []
+
+    def _emit(line):
+        # In init bodies, strip var from self.x assignments
+        if is_init_body and line.strip().startswith("var self."):
+            line = line.replace("var self.", "self.")
+        # Skip redundant init lines (arrays/tables/seqs auto-init in Nim ref objects)
+        if is_init_body:
+            s = line.strip()
+            if s.startswith("self.") and ("= initTable()" in s or "= collect(initTable" in s or s.endswith("= @[]")):
+                return
+        result_lines.append(line)
+
     for node in block_node.nodes:
         tname = type(node).__name__
         if tname in ("Fmap", "Filter"):
@@ -1381,36 +1471,20 @@ def _extract_block_body(block_node, indent, is_init_body=False):
                     for child in seq.nodes:
                         if hasattr(child, "to_nim"):
                             try:
-                                line = child.to_nim(indent)
-                                # In init bodies, 'var self.x = y' should be 'self.x = y'
-                                if is_init_body and line.strip().startswith("var self."):
-                                    line = line.replace("var self.", "self.")
-                                result_lines.append(line)
+                                _emit(child.to_nim(indent))
                             except TypeError:
-                                line = _ind(indent) + child.to_nim()
-                                if is_init_body and line.strip().startswith("var self."):
-                                    line = line.replace("var self.", "self.")
-                                result_lines.append(line)
+                                _emit(_ind(indent) + child.to_nim())
                 elif hasattr(seq, "to_nim"):
                     try:
-                        line = seq.to_nim(indent)
-                        if is_init_body and line.strip().startswith("var self."):
-                            line = line.replace("var self.", "self.")
-                        result_lines.append(line)
+                        _emit(seq.to_nim(indent))
                     except TypeError:
-                        line = _ind(indent) + seq.to_nim()
-                        if is_init_body and line.strip().startswith("var self."):
-                            line = line.replace("var self.", "self.")
-                        result_lines.append(line)
+                        _emit(_ind(indent) + seq.to_nim())
         elif hasattr(node, "to_nim"):
             try:
-                line = node.to_nim(indent)
-                if is_init_body and line.strip().startswith("var self."):
-                    line = line.replace("var self.", "self.")
-                result_lines.append(line)
+                _emit(node.to_nim(indent))
             except TypeError:
-                line = _ind(indent) + node.to_nim()
-                if is_init_body and line.strip().startswith("var self."):
-                    line = line.replace("var self.", "self.")
-                result_lines.append(line)
+                _emit(_ind(indent) + node.to_nim())
+    # If init body is empty after skipping, add discard
+    if is_init_body and all(not l.strip() for l in result_lines):
+        result_lines = [_ind(indent) + "discard"]
     return result_lines

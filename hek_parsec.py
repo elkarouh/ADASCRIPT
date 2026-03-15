@@ -127,12 +127,14 @@ class ParserState:
     DEBUG = False
     memos: dict = {}
     symbol_table = SymbolTable()
+    nim_imports: set = set()
 
     @classmethod
     def reset(cls):
         """Clear memoization state between parses."""
         cls.memos.clear()
         cls.symbol_table = SymbolTable()
+        cls.nim_imports = set()
 
 
 G = ParserState  # backward compat alias

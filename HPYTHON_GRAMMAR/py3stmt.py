@@ -213,7 +213,7 @@ from_stmt = from_rel_name | from_rel_bare | from_abs
 type_alias_params = LBRACKET + IDENTIFIER + (COMMA + IDENTIFIER)[:] + RBRACKET
 # enum_def: enum IDENT, IDENT, ...
 enum_def = ikw("enum") + IDENTIFIER + (COMMA + IDENTIFIER)[:] + COMMA[:]
-type_stmt = ikw("type") + IDENTIFIER + type_alias_params[:] + V_EQUAL + (enum_def | expression)
+type_stmt = ikw("type") + IDENTIFIER + type_alias_params[:] + V_EQUAL + (enum_def | type_annotation)
 
 # --- simple_stmt: choice of all statement types ---
 # Ordering matters: try more specific forms before general expression.

@@ -8,17 +8,30 @@
 # Transpile to Python:  python3 TO_PYTHON/py2py.py BENCHMARK/phonecode.hpy
 # Transpile to Nim:     python3 TO_NIM/py2nim.py BENCHMARK/phonecode.hpy
 
+from enum import Enum
 import sys
 import os
 
 # ---------------------------------------------------------------------------
 # Character-to-digit mapping
 # ---------------------------------------------------------------------------
+class Digit_T(Enum):
+    D0 = 0
+    D1 = 1
+    D2 = 2
+    D3 = 3
+    D4 = 4
+    D5 = 5
+    D6 = 6
+    D7 = 7
+    D8 = 8
+    D9 = 9
+type Result_T = list[list[str]]
 
-def _build_char_to_digit() -> dict[str, int]:
-    mapping: dict[str, int] = {}
+def _build_char_to_digit() -> dict[str, Digit_T]:
+    mapping: dict[str, Digit_T] = {}
 
-    def m(chars: str, digit: int):
+    def m(chars: str, digit: Digit_T):
         for c in chars:
             mapping[c.lower()] = digit
             mapping[c.upper()] = digit
@@ -35,55 +48,54 @@ def _build_char_to_digit() -> dict[str, int]:
     m("ghz", 9)
 
     for d in "0123456789":
-        mapping[d] = int(d)
+        mapping[d] = Digit_T(ord(d) - ord('0'))
 
     return mapping
 
-CHAR_TO_DIGIT: dict[str, int] = _build_char_to_digit()
+CHAR_TO_DIGIT: dict[str, Digit_T] = _build_char_to_digit()
 
 # ---------------------------------------------------------------------------
 # Trie
 # ---------------------------------------------------------------------------
 
 class TrieNode:
-    children: list[TrieNode | None]
+    children: dict[Digit_T, TrieNode]
     words: list[str]
 
     def __init__(self):
-        self.children = [None, None, None, None, None, None, None, None, None, None]
         self.words = []
 
-    def add_word(self, word: str, digits: list[int]) -> None:
+    def add_word(self, word: str, digits: list[Digit_T]) -> None:
         node: TrieNode = self
-        for idx in digits:
-            if node.children[idx] is None:
-                node.children[idx] = TrieNode()
-            node = node.children[idx]
+        for digit in digits:
+            if node.children[digit] is None:
+                node.children[digit] = TrieNode()
+            node = node.children[digit]
         return node.words.append(word)
 
-    def find_exact_word(self, digits: list[int]) -> str | None:
+    def find_exact_word(self, digits: list[Digit_T]) -> str | None:
         node: TrieNode = self
-        for idx in digits:
-            if node.children[idx] is None:
+        for digit in digits:
+            if node.children[digit] is None:
                 return None
-            node = node.children[idx]
+            node = node.children[digit]
         if node.words:
             return node.words[0]
         return None
 
-    def words_at(self, digits: list[int]) -> list[str]:
+    def words_at(self, digits: list[Digit_T]) -> list[str]:
         node: TrieNode = self
-        for idx in digits:
-            if node.children[idx] is None:
+        for digit in digits:
+            if node.children[digit] is None:
                 return []
-            node = node.children[idx]
+            node = node.children[digit]
         return node.words
 
     def load_dictionary(self, filename: str, verbose: bool) -> None:
         word_count: int = 0
 
-        def word_to_digits(word: str) -> list[int]:
-            result: list[int] = []
+        def word_to_digits(word: str) -> list[Digit_T]:
+            result: list[Digit_T] = []
             for c in word.lower():
                 if c not in CHAR_TO_DIGIT:
                     return []
@@ -95,7 +107,7 @@ class TrieNode:
                 word: str = line.strip()
                 if not word:
                     continue
-                digits: list[int] = word_to_digits(word)
+                digits: list[Digit_T] = word_to_digits(word)
                 if digits and len(digits) == len(word):
                     self.add_word(word, digits)
                     word_count += 1
@@ -103,7 +115,7 @@ class TrieNode:
         if verbose:
             print(f"Loaded {word_count} words from {filename}")
 
-    def find_encodings(self, digits: list[int], pos: int, current: list[str], results: list[list[str]]) -> None:
+    def find_encodings(self, digits: list[Digit_T], pos: int, current: list[str], results: list[list[str]]) -> None:
         if pos == len(digits):
             results.append(list(current))
             return
@@ -114,10 +126,10 @@ class TrieNode:
         # Option 2: match one or more words starting at pos
         node: TrieNode = self
         for i in range(pos, len(digits)):
-            idx: int = digits[i]
-            if node.children[idx] is None:
+            digit: Digit_T = digits[i]
+            if node.children[digit] is None:
                 break
-            node = node.children[idx]
+            node = node.children[digit]
             for word in node.words:
                 self.find_encodings(digits, i + 1, current + [word], results)
 
@@ -125,7 +137,7 @@ class TrieNode:
 # Helpers
 # ---------------------------------------------------------------------------
 
-def clean_number(num: str) -> list[int]:
+def clean_number(num: str) -> list[Digit_T]:
     return [CHAR_TO_DIGIT[c] for c in num if c in CHAR_TO_DIGIT]
 
 def format_solution(original_num: str, solution: list[str]) -> str:
@@ -155,7 +167,7 @@ def main():
     trie.load_dictionary(dict_file, True)
 
     # Quick sanity-check
-    test_digits: list[int] = [3, 5]
+    test_digits: list[Digit_T] = [Digit_T(3), Digit_T(5)]
     exact_match: str | None = trie.find_exact_word(test_digits)
     if exact_match is not None:
         print(f"Exact match for digits 3,5: {exact_match}")
@@ -173,7 +185,7 @@ def main():
         original: str = line.strip()
         if not original:
             continue
-        digits: list[int] = clean_number(original)
+        digits: list[Digit_T] = clean_number(original)
         if not digits:
             continue
         results: list[list[str]] = []
