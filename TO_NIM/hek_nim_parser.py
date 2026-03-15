@@ -174,6 +174,16 @@ def to_nim(self, indent=0, is_virtual=False, class_name=None, parent_name=None):
         # Use base_indent for procs/methods (top level), not the indented value
         base_indent = getattr(self, '_base_indent', indent)
         
+        # Emit forward declarations for methods so __init__ can call them
+        if inits and other_methods:
+            for func_node_m, mname in other_methods:
+                fwd = _generate_method_decl(func_node_m, base_indent, class_name, parent_name, is_virtual_class)
+                if fwd:
+                    sig = fwd[0].rstrip()
+                    if sig.endswith(" ="):
+                        sig = sig[:-2]
+                    result_lines.append(sig)
+
         for func_node in inits:
             # Generate init/new procs at top level (same indent as type definition)
             init_lines, new_lines = _generate_init_new(func_node, base_indent, class_name, parent_name, is_virtual_class)
@@ -229,7 +239,7 @@ def to_nim(self, indent=0):
 
 @method(if_stmt)
 def to_nim(self, indent=0):
-    cond = self.nodes[0].to_nim()
+    cond = hek_nim_expr._nim_truthiness(self.nodes[0].to_nim())
     # Detect if __name__ == "__main__": -> when isMainModule:
     cond_stripped = cond.replace(" ", "")
     if cond_stripped in ('__name__=="__main__"', "__name__=='__main__'"):
@@ -258,7 +268,7 @@ def to_nim(self, indent=0):
 # --- while ---
 @method(while_stmt)
 def to_nim(self, indent=0):
-    cond = self.nodes[0].to_nim()
+    cond = hek_nim_expr._nim_truthiness(self.nodes[0].to_nim())
     hc = _block_inline_header_comment(self.nodes[1])
     body = self.nodes[1].to_nim(indent + 1)
     result = f"{_ind(indent)}while {cond}:{hc}\n{body}"
@@ -1299,14 +1309,8 @@ def _generate_init_new(func_node, indent, class_name, parent_name, is_virtual=Tr
                 pname = str(param_node.nodes[0].nodes[0])
                 if pname == "self":
                     continue
-                ptype = "auto"
-                for pn in param_node.nodes[1:]:
-                    if type(pn).__name__ == "Several_Times" and pn.nodes:
-                        for seq in pn.nodes:
-                            if hasattr(seq, "nodes") and len(seq.nodes) >= 2:
-                                if str(seq.nodes[0].nodes[0]) == ":":
-                                    ptype = seq.nodes[1].to_nim()
-                param_strs.append(f"{pname}: {ptype}")
+                # Use param_plain.to_nim() to get name: type = default
+                param_strs.append(param_node.to_nim())
                 param_names.append(pname)
     
     params_str = ", ".join(param_strs)
@@ -1318,7 +1322,15 @@ def _generate_init_new(func_node, indent, class_name, parent_name, is_virtual=Tr
     
     init_body = []
     if block_node:
+        ParserState.symbol_table.push_scope(f"init{class_name}")
+        for ps in param_strs:
+            parts = ps.split(":")
+            if len(parts) >= 2:
+                pn = parts[0].strip()
+                pt = parts[1].strip().split("=")[0].strip()
+                ParserState.symbol_table.add(pn, pt, "param")
         init_body = _extract_block_body(block_node, indent + 1, is_init_body=True)
+        ParserState.symbol_table.pop_scope()
         # Handle super().__init__() calls - replace with initParent(self, ...)
         for i, line in enumerate(init_body):
             if "super().__init__" in line:
