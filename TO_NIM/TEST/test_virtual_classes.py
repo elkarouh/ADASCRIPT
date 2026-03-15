@@ -7,7 +7,6 @@
 # ============================================================================
 print("--- Test 1: Basic virtual class + dynamic dispatch ---")
 
-@virtual
 class Shape:
   var name: str
   def __init__(self, name: str):
@@ -15,7 +14,6 @@ class Shape:
   def area(self) -> float:
     0.0
 
-@virtual
 class Circle(Shape):
   var radius: float
   def __init__(self, radius: float):
@@ -24,7 +22,6 @@ class Circle(Shape):
   def area(self) -> float:
     3.14159 * self.radius * self.radius
 
-@virtual
 class Rectangle(Shape):
   var width: float
   var height: float
@@ -105,7 +102,6 @@ print("  Value class unchanged: OK")
 # ============================================================================
 print("--- Test 6: super.method() ---")
 
-@virtual
 class Logger:
   var prefix: str
 
@@ -115,7 +111,6 @@ class Logger:
   def format(self, msg: str) -> str:
     self.prefix
 
-@virtual
 class TimestampLogger(Logger):
   var tag: str
 
@@ -135,7 +130,6 @@ print("  super.method(): OK")
 # ============================================================================
 print("--- Test 7: Template Method Pattern ---")
 
-@virtual
 class DataProcessor:
   var data: str
 
@@ -153,7 +147,6 @@ class DataProcessor:
     let t: str = self.transform()
     v
 
-@virtual
 class CSVProcessor(DataProcessor):
 
   def __init__(self, data: str):
@@ -165,7 +158,6 @@ class CSVProcessor(DataProcessor):
   def transform(self) -> str:
     self.data
 
-@virtual
 class JSONProcessor(DataProcessor):
 
   def __init__(self, data: str):
@@ -186,7 +178,6 @@ print("  Template method pattern: OK")
 # ============================================================================
 print("--- Test 8: Multi-level super ---")
 
-@virtual
 class Base:
   def __init__(self):
     pass
@@ -194,7 +185,6 @@ class Base:
   def greet(self) -> str:
     "Hello"
 
-@virtual
 class Mid(Base):
   def __init__(self):
     pass
@@ -202,7 +192,6 @@ class Mid(Base):
   def greet(self) -> str:
     "Hello World"
 
-@virtual
 class Leaf(Mid):
   def __init__(self):
     pass
@@ -223,7 +212,6 @@ print("  Multi-level super: OK")
 # ============================================================================
 print("--- Test 9: super.__init__() ---")
 
-@virtual
 class Vehicle:
   var make: str
   var year: int
@@ -235,7 +223,6 @@ class Vehicle:
   def info(self) -> str:
     self.make
 
-@virtual
 class Car(Vehicle):
   var doors: int
 
@@ -259,7 +246,6 @@ print("  super.__init__(): OK")
 # ============================================================================
 print("--- Test 10: Deep inheritance chain ---")
 
-@virtual
 class Transport:
   var speed: float
 
@@ -269,7 +255,6 @@ class Transport:
   def move(self) -> str:
     "Moving"
 
-@virtual
 class Automobile(Transport):
   var passengers: int
 
@@ -280,7 +265,6 @@ class Automobile(Transport):
   def move(self) -> str:
     "Driving"
 
-@virtual
 class ElectricCar(Automobile):
   var battery_capacity: float
 
@@ -333,7 +317,6 @@ print("  Non-virtual inheritance: OK")
 # ============================================================================
 print("--- Test 12: Virtual class without fields ---")
 
-@virtual
 class Handler:
   def __init__(self):
     pass
@@ -341,7 +324,6 @@ class Handler:
   def handle(self, x: int) -> int:
     x
 
-@virtual
 class DoubleHandler(Handler):
   def __init__(self):
     pass

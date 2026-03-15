@@ -108,6 +108,67 @@ def parse_module(code):
     return stmts, leading, []
 
 
+def _find_first_identifier(node):
+    """Find the first IDENTIFIER leaf in an AST subtree."""
+    if type(node).__name__ == "IDENTIFIER":
+        return node.node if hasattr(node, "node") and isinstance(node.node, str) else str(node.nodes[0])
+    if hasattr(node, "nodes"):
+        for child in node.nodes:
+            result = _find_first_identifier(child)
+            if result:
+                return result
+    return None
+
+
+def _walk_class_defs(node, hierarchy):
+    """Recursively walk AST to find class definitions and their parents."""
+    tname = type(node).__name__
+    if tname == "class_def":
+        cls_name = None
+        parent = None
+        for child in node.nodes:
+            cname = type(child).__name__
+            if cname == "IDENTIFIER":
+                cls_name = child.node if hasattr(child, "node") and isinstance(child.node, str) else str(child.nodes[0])
+            elif cname == "class_args":
+                parent = _find_first_identifier(child)
+                if parent in (None, "object"):
+                    parent = None
+            elif cname == "Several_Times":
+                for seq in child.nodes:
+                    if type(seq).__name__ == "class_args":
+                        parent = _find_first_identifier(seq)
+                        if parent in (None, "object"):
+                            parent = None
+        if cls_name:
+            hierarchy[cls_name] = parent
+    # Recurse into child nodes
+    if hasattr(node, "nodes"):
+        for child in node.nodes:
+            if hasattr(child, "nodes"):
+                _walk_class_defs(child, hierarchy)
+
+
+def _prescan_classes(stmts):
+    """Pre-scan parsed statements to find class inheritance relationships.
+    Returns a set of class names that need ref object (involved in inheritance)."""
+    hierarchy = {}  # class_name -> parent_name or None
+    for stmt in stmts:
+        _walk_class_defs(stmt, hierarchy)
+    # Any class involved in inheritance needs ref
+    ref_classes = set()
+    for cls, parent in hierarchy.items():
+        if parent:
+            ref_classes.add(cls)
+            ref_classes.add(parent)
+            # Walk up the chain to mark all ancestors
+            p = hierarchy.get(parent)
+            while p:
+                ref_classes.add(p)
+                p = hierarchy.get(p)
+    return ref_classes
+
+
 def translate(code):
     """Parse Python source and translate to Nim via to_nim()."""
     if not code.strip():
@@ -115,6 +176,9 @@ def translate(code):
 
     from hek_parsec import ParserState
     stmts, leading, trailing = parse_module(code)
+
+    # Pre-scan: identify classes that need ref object (involved in inheritance)
+    ParserState._ref_classes = _prescan_classes(stmts)
 
     ParserState.symbol_table.push_scope("module")
     output = []
@@ -300,7 +364,7 @@ def run_tests():
         ),
         (
             "class Foo(Bar):\n    pass\n",
-            "type Foo = object of Bar\nproc newFoo*(): Foo =\n    new(result)\n",
+            "type Foo = ref object of Bar\nproc newFoo*(): Foo =\n    new(result)\n",
         ),
         (
             "@dec\ndef f():\n    pass\n",
