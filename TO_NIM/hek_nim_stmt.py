@@ -607,6 +607,38 @@ def to_nim(self):
     return "enum " + ", ".join(parts)
 
 
+@method(subrange_def)
+def to_nim(self):
+    """subrange_def: INTEGER '..' ['<'] INTEGER -> Nim range[lo..hi] or range[lo..<hi]"""
+    lo = self.nodes[0].node
+    hi = self.nodes[-1].node
+    # Check if exclusive (..<) — look for '<' in Several_Times node from (vop("<"))[:]
+    is_exclusive = False
+    for n in self.nodes[1:-1]:
+        tname = type(n).__name__
+        if tname == "Several_Times" and hasattr(n, "nodes") and n.nodes:
+            is_exclusive = True
+            break
+    op = "..<" if is_exclusive else ".."
+    return f"range[{lo}{op}{hi}]"
+
+
+@method(nimport_stmt)
+def to_nim(self):
+    """nimport_stmt: 'nimport' dotted_name (',' dotted_name)* -> Nim import"""
+    parts = [self.nodes[0].to_nim()]
+    for node in self.nodes[1:]:
+        if not hasattr(node, 'nodes') or not node.nodes:
+            continue
+        for seq in node.nodes:
+            if hasattr(seq, 'nodes'):
+                for child in seq.nodes:
+                    cname = type(child).__name__
+                    if cname == "dotted_name":
+                        parts.append(child.to_nim())
+    return "import " + ", ".join(parts)
+
+
 @method(type_alias_params)
 def to_nim(self):
     parts = [self.nodes[0].to_nim()]

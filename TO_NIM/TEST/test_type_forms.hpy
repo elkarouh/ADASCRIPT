@@ -1,0 +1,15 @@
+nimport strutils, sequtils
+import os
+
+type Color is enum RED, GREEN, BLUE
+
+type Point is tuple:
+    x: int
+    y: int
+
+type Person is record:
+    name: str
+    age: int
+
+type SmallInt is 0 .. 255
+type Index is 0 ..< 10
