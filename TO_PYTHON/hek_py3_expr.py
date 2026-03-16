@@ -376,6 +376,27 @@ def to_py(self, prec=None):
     return self.nodes[0].to_py(prec)
 
 
+# --- range expression (.., ..<) ---
+@method(range_incl_op)
+def to_py(self, prec=None):
+    return ".."
+
+@method(range_excl_op)
+def to_py(self, prec=None):
+    return "..<"
+
+@method(range_expr)
+def to_py(self, prec=None):
+    # In Python output, keep as-is (HPython syntax)
+    result = self.nodes[0].to_py(prec)
+    for node in self.nodes[1:]:
+        if not hasattr(node, 'nodes') or not node.nodes:
+            continue
+        for seq in node.nodes:
+            result += seq.to_py(prec)
+    return result
+
+
 # --- power ---
 @method(power_rhs)
 def to_py(self, prec=None):

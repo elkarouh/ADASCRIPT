@@ -578,6 +578,31 @@ def to_nim(self, prec=None):
     return self.nodes[0].to_nim(prec)
 
 
+# --- range expression (.., ..<) ---
+@method(range_incl_op)
+def to_nim(self, prec=None):
+    return ".."
+
+@method(range_excl_op)
+def to_nim(self, prec=None):
+    return "..<"
+
+@method(range_expr)
+def to_nim(self, prec=None):
+    # range_expr: bitor_expr (('..' | '..<') bitor_expr)*
+    result = self.nodes[0].to_nim(prec)
+    for node in self.nodes[1:]:
+        if not hasattr(node, 'nodes') or not node.nodes:
+            continue
+        for seq in node.nodes:
+            tname = type(seq).__name__
+            if tname in ("range_incl_op", "range_excl_op", "Sequence_Parser"):
+                result += " " + seq.to_nim(prec) + " "
+            else:
+                result += seq.to_nim(prec)
+    return result
+
+
 # --- power ---
 @method(power_rhs)
 def to_nim(self, prec=None):
