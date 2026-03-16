@@ -272,12 +272,27 @@ def translate(code):
         result += chr(10)
     return result
 def main():
-    if len(sys.argv) > 1:
-        with open(sys.argv[1]) as f:
+    import subprocess
+    compile_and_run = "-c" in sys.argv
+    args = [a for a in sys.argv[1:] if a != "-c"]
+    if args:
+        source_file = args[0]
+        with open(source_file) as f:
             code = f.read()
     else:
         code = sys.stdin.read()
-    print(translate(code), end="")
+    output = translate(code)
+    if compile_and_run and args:
+        # Write .py file and run
+        base = os.path.splitext(source_file)[0]
+        py_file = base + "_gen.py"
+        with open(py_file, "w") as f:
+            f.write(output)
+        print(f"Wrote {py_file}")
+        result = subprocess.run([sys.executable, py_file])
+        sys.exit(result.returncode)
+    else:
+        print(output, end="")
 
 
 ###############################################################################
@@ -455,7 +470,7 @@ def run_tests():
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
+    if any(a for a in sys.argv[1:] if not a.startswith("-")):
         main()
     else:
         run_tests()
