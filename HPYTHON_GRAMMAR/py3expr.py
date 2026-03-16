@@ -127,6 +127,7 @@ V_AMPER = vop("&")
 V_LSHIFT = vop("<<")
 V_RSHIFT = vop(">>")
 V_LT = vop("<")
+V_DOT = vop(".")
 V_GT = vop(">")
 V_EQ = vop("==")
 V_NE = vop("!=")
@@ -173,6 +174,7 @@ conjunction = fw("conjunction")
 inversion = fw("inversion")
 comparison = fw("comparison")
 bitor_expr = fw("bitor_expr")
+range_expr = fw("range_expr")
 bitxor_expr = fw("bitxor_expr")
 bitand_expr = fw("bitand_expr")
 shift_expr = fw("shift_expr")
@@ -289,13 +291,18 @@ bitand_expr = shift_expr + (V_AMPER + shift_expr)[:]
 bitxor_expr = bitand_expr + (V_CARET + bitand_expr)[:]
 bitor_expr = bitxor_expr + (V_PIPE + bitxor_expr)[:]
 
+# --- range expression: expr '..' expr  or  expr '..<' expr ---
+range_excl_op = V_DOT + V_DOT + V_LT   # ..<
+range_incl_op = V_DOT + V_DOT           # ..
+range_expr = bitor_expr + ((range_excl_op | range_incl_op) + bitor_expr)[:]
+
 # --- comparison operators ---
 not_in_op = K_NOT + K_IN
 is_not_op = K_IS + K_NOT
 comp_op = V_EQ | V_NE | V_LE | V_LT | V_GE | V_GT | not_in_op | is_not_op | K_IN | K_IS
 
 # --- comparison ---
-comparison = bitor_expr + (comp_op + bitor_expr)[:]
+comparison = range_expr + (comp_op + range_expr)[:]
 
 # --- inversion: 'not' inversion | comparison ---
 not_prefix = ikw("not") + inversion
