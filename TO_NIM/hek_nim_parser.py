@@ -909,6 +909,11 @@ def to_nim(self, indent=0):
                     p = parts[0] + ": var " + parts[1]
             new_params.append(p)
         params = ", ".join(new_params)
+    # If no return annotation but body has return statements, infer ': auto'
+    if not ret_ann and body:
+        import re as _re
+        if _re.search(r'\breturn\b\s+\S', body):
+            ret_ann = ": auto"
     return f"{decos}{_ind(indent)}proc {name}({params}){ret_ann} ={hc}\n{body}"
 
 
