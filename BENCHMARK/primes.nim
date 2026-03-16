@@ -1,4 +1,4 @@
-import strformat, strutils
+import nimpy, strformat, strutils
 let time = pyImport("time")
 
 var N = 1000000

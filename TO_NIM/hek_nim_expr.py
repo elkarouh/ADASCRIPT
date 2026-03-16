@@ -612,7 +612,12 @@ def to_nim(self, prec=None):
         if fname == "power_rhs":
             exponents = [seq.nodes[1].to_nim(PREC_POWER) for seq in node.nodes]
             for exp in reversed(exponents):
-                result = f"{result} ^ {exp}"
+                # Use pow() for float exponents, ^ for int
+                if '.' in exp or exp == '0.5':
+                    ParserState.nim_imports.add("math")
+                    result = f"pow(float({result}), {exp})"
+                else:
+                    result = f"{result} ^ {exp}"
         elif fname in ("call_trailer", "index_trailer", "slice_trailer", "attr_trailer", "trailer"):
             for tr in node.nodes:
                 result += tr.to_nim()
