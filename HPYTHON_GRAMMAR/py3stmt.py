@@ -32,6 +32,7 @@ from hek_parsec import (
     DOT,
     EQUAL,
     IDENTIFIER,
+    INTEGER,
     LBRACE,
     LBRACKET,
     LPAREN,
@@ -118,7 +119,12 @@ nonlocal_stmt = fw("nonlocal_stmt")
 import_stmt = fw("import_stmt")
 from_stmt = fw("from_stmt")
 type_stmt = fw("type_stmt")
+nimport_stmt = fw("nimport_stmt")
 enum_def = fw("enum_def")
+subrange_def = fw("subrange_def")
+tuple_def = fw("tuple_def")
+record_def = fw("record_def")
+type_block_stmt = fw("type_block_stmt")
 simple_stmt = fw("simple_stmt")
 stmt_line = fw("stmt_line")
 
@@ -208,12 +214,18 @@ from_rel_bare = ikw("from") + V_DOT[1:] + ikw("import") + import_names
 from_abs = ikw("from") + dotted_name + ikw("import") + import_names
 from_stmt = from_rel_name | from_rel_bare | from_abs
 
+# nimport: Nim-only import (stripped in Python output, becomes "import" in Nim)
+nimport_stmt = ikw("nimport") + dotted_name + (COMMA + dotted_name)[:]
+
 # --- type alias (3.12+) / enum ---
 # type_alias_params: [T] or [T, U] etc. (generic type parameters)
 type_alias_params = LBRACKET + IDENTIFIER + (COMMA + IDENTIFIER)[:] + RBRACKET
 # enum_def: enum IDENT, IDENT, ...
 enum_def = ikw("enum") + IDENTIFIER + (COMMA + IDENTIFIER)[:] + COMMA[:]
-type_stmt = ikw("type") + IDENTIFIER + type_alias_params[:] + (V_EQUAL | ikw("is")) + (enum_def | type_annotation)
+# subrange_def: INT '..' INT  or  INT '..<' INT  (requires spaces around ..)
+subrange_def = INTEGER + V_DOT + V_DOT + (vop("<"))[:] + INTEGER
+# type_stmt for simple (inline) forms only; block forms (tuple/record) are in py3compound_stmt
+type_stmt = ikw("type") + IDENTIFIER + type_alias_params[:] + (V_EQUAL | ikw("is")) + (enum_def | subrange_def | type_annotation)
 
 # --- simple_stmt: choice of all statement types ---
 # Ordering matters: try more specific forms before general expression.
@@ -234,6 +246,7 @@ simple_stmt = (
     | raise_stmt
     | global_stmt
     | nonlocal_stmt
+    | nimport_stmt
     | import_stmt
     | from_stmt
     | type_stmt

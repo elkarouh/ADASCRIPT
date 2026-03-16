@@ -857,6 +857,79 @@ def to_py(self, indent=0):
     return f"{decos}{_ind(indent)}async def {name}({params}){ret_ann}:{hc}\n{body}"
 
 
+
+# --- Type block forms (tuple, record) ---
+
+def _extract_py_fields(block_node, indent=1):
+    """Extract field declarations from a block as Python lines."""
+    lines = []
+    for node in block_node.nodes:
+        tname = type(node).__name__
+        if tname in ("Fmap", "Filter"):
+            continue
+        if tname == "Several_Times":
+            for seq in node.nodes:
+                if type(seq).__name__ == "Sequence_Parser" and hasattr(seq, "nodes"):
+                    for child in seq.nodes:
+                        if child is None:
+                            continue
+                        if hasattr(child, "to_py"):
+                            cname = type(child).__name__
+                            if cname == "stmt_line":
+                                try:
+                                    line = child.to_py(indent)
+                                except TypeError:
+                                    line = _ind(indent) + child.to_py()
+                                stripped = line.lstrip()
+                                # Strip var/let/const keywords
+                                for kw in ("var ", "let ", "const "):
+                                    if stripped.startswith(kw):
+                                        line = line[:len(line) - len(stripped)] + stripped[len(kw):]
+                                        break
+                                if line.strip():
+                                    lines.append(line)
+    return lines
+
+
+@method(type_block_stmt)
+def to_py(self, indent=0):
+    """type_block_stmt: 'type' IDENTIFIER (=|is) (tuple_def|record_def)"""
+    name = self.nodes[0].to_py()
+    params = ""
+    rhs = self.nodes[-1]
+    for node in self.nodes[1:-1]:
+        if type(node).__name__ == "type_alias_params":
+            params = node.to_py()
+            break
+    # rhs is a Sequence_Parser containing [Literal_keyword, block]
+    # Find the keyword and block within rhs
+    keyword = ""
+    block_node = None
+    if hasattr(rhs, "nodes"):
+        for child in rhs.nodes:
+            cname = type(child).__name__
+            if cname.startswith("Literal_"):
+                keyword = getattr(child, "node", "")
+            elif cname == "block":
+                block_node = child
+    if not block_node:
+        block_node = rhs  # fallback
+    fields = _extract_py_fields(block_node)
+    if keyword == "tuple":
+        ParserState.nim_imports.add("from typing import NamedTuple")
+        lines = [f"{_ind(indent)}class {name}{params}(NamedTuple):"]
+        for f in fields:
+            lines.append(f)
+        return "\n".join(lines)
+    elif keyword == "record":
+        ParserState.nim_imports.add("from dataclasses import dataclass")
+        lines = [f"{_ind(indent)}@dataclass", f"{_ind(indent)}class {name}{params}:"]
+        for f in fields:
+            lines.append(f)
+        return "\n".join(lines)
+    return f"{_ind(indent)}type {name}{params} = {rhs.to_py()}"
+
+
 # --- Class definition ---
 @method(class_def)
 def to_py(self, indent=0):

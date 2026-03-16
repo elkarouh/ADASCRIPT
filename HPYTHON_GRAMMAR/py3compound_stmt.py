@@ -25,6 +25,7 @@ from hek_parsec import (
     DOUBLESTAR,
     EQUAL,
     IDENTIFIER,
+    INTEGER,
     LPAREN,
     RPAREN,
     SEMICOLON,
@@ -307,6 +308,14 @@ async_func_def = (
     + block
 )
 
+# --- Type block forms (tuple, record) ---
+# tuple_def: tuple with named fields -> Nim tuple, Python NamedTuple
+tuple_def = literal("tuple") + COLON + block
+# record_def: record with named fields -> Nim object, Python dataclass
+record_def = literal("record") + COLON + block
+# type_block_stmt: type NAME (=|is) (tuple|record): block
+type_block_stmt = ikw("type") + IDENTIFIER + type_alias_params[:] + (V_EQUAL | ikw("is")) + (tuple_def | record_def)
+
 # --- Class definition ---
 # class_args uses the same argument grammar as call_trailer so that
 # keyword arguments like metaclass=Meta are correctly parsed.
@@ -338,6 +347,7 @@ compound_stmt = (
     | match_stmt
     | async_func_def
     | func_def
+    | type_block_stmt
     | class_def
     | async_for_stmt
     | async_with_stmt

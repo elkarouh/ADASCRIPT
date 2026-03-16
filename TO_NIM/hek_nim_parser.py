@@ -1053,6 +1053,69 @@ def to_nim(self, indent=0):
     return f"{decos}{_ind(indent)}type {name} = {ref_keyword}object{parent}\n{body}"
 
 
+# --- Type block forms (tuple, record) ---
+
+def _extract_fields_from_block(block_node, indent):
+    """Extract field declarations from a block, returning indented Nim field lines.
+    Strips var/let/const keywords and default values (same as class field extraction)."""
+    import re as _re
+    lines = []
+    for node in block_node.nodes:
+        tname = type(node).__name__
+        if tname in ("Fmap", "Filter"):
+            continue
+        if tname == "Several_Times":
+            for seq in node.nodes:
+                if type(seq).__name__ == "Sequence_Parser" and hasattr(seq, "nodes"):
+                    for child in seq.nodes:
+                        if child is None:
+                            continue
+                        if hasattr(child, "to_nim"):
+                            cname = type(child).__name__
+                            if cname == "stmt_line":
+                                try:
+                                    line = child.to_nim(indent)
+                                except TypeError:
+                                    line = _ind(indent) + child.to_nim()
+                                stripped = line.lstrip()
+                                for kw in ("var ", "let ", "const "):
+                                    if stripped.startswith(kw):
+                                        line = line[:len(line) - len(stripped)] + stripped[len(kw):]
+                                        break
+                                # Strip default value
+                                line = _re.sub(r' = .+$', '', line)
+                                if line.strip():
+                                    lines.append(line)
+    return lines
+
+
+@method(type_block_stmt)
+def to_nim(self, indent=0):
+    """type_block_stmt: 'type' IDENTIFIER type_alias_params? (=|is) (tuple_def|record_def)"""
+    name = self.nodes[0].to_nim()
+    params = ""
+    rhs = self.nodes[-1]
+    for node in self.nodes[1:-1]:
+        if type(node).__name__ == "type_alias_params":
+            params = node.to_nim()
+            break
+    # rhs is Sequence_Parser containing [Literal_keyword, block]
+    keyword = ""
+    block_node = None
+    if hasattr(rhs, "nodes"):
+        for child in rhs.nodes:
+            cname = type(child).__name__
+            if cname.startswith("Literal_"):
+                keyword = getattr(child, "node", "")
+            elif cname == "block":
+                block_node = child
+    if not block_node:
+        block_node = rhs
+    fields = _extract_fields_from_block(block_node, indent + 1)
+    nim_kind = "tuple" if keyword == "tuple" else "object"
+    return f"{_ind(indent)}type {name}{params} = {nim_kind}\n" + "\n".join(fields)
+
+
 @method(class_args)
 def to_nim(self):
     st = self.nodes[0]

@@ -572,6 +572,39 @@ def to_py(self):
     return "enum " + ", ".join(parts)
 
 
+@method(nimport_stmt)
+def to_py(self):
+    """nimport_stmt: Nim-only import, stripped in Python output"""
+    parts = [self.nodes[0].to_py()]
+    for node in self.nodes[1:]:
+        if not hasattr(node, 'nodes') or not node.nodes:
+            continue
+        for seq in node.nodes:
+            if hasattr(seq, 'nodes'):
+                for child in seq.nodes:
+                    cname = type(child).__name__
+                    if cname == "dotted_name":
+                        parts.append(child.to_py())
+    return "# nimport " + ", ".join(parts)
+
+
+@method(subrange_def)
+def to_py(self):
+    """subrange_def: INTEGER '..' ['<'] INTEGER -> Python range()"""
+    lo = self.nodes[0].node
+    hi = self.nodes[-1].node
+    # Check if exclusive (..<)
+    is_exclusive = False
+    for n in self.nodes[1:-1]:
+        if type(n).__name__ == "Several_Times" and hasattr(n, "nodes") and n.nodes:
+            is_exclusive = True
+            break
+    if is_exclusive:
+        return f"range({lo}, {hi})"
+    else:
+        return f"range({lo}, {hi} + 1)"
+
+
 @method(type_alias_params)
 def to_py(self):
     """type_alias_params: '[' IDENTIFIER (',' IDENTIFIER)* ']'"""
@@ -603,7 +636,10 @@ def to_py(self):
                 break
     # RHS is the last node — works whether V_EQUAL is present ('=') or absent ('is')
     rhs = self.nodes[-1]
-    if type(rhs).__name__ == 'enum_def':
+    rhs_type = type(rhs).__name__
+    if rhs_type == 'subrange_def':
+        return f"{name} = {rhs.to_py()}"
+    if rhs_type == 'enum_def':
         members = rhs.to_py()
         member_names = [m.strip() for m in members[len("enum "):].split(",")]
         ParserState.nim_imports.add("from enum import Enum")
