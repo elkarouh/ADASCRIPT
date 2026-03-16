@@ -306,7 +306,7 @@ def run_tests():
         ),
         (
             "from os import path\n",
-            'let path = pyImport("os").path\n',
+            'import nimpy\nlet path = pyImport("os").path\n',
         ),
         (
             "pass\n",
