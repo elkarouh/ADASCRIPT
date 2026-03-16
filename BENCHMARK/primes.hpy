@@ -2,7 +2,7 @@ import time
 
 N = 1000000
 
-def is_prime(n: int):
+def is_prime(n: int) -> bool:
     result = True
     for k in range(2, int(n**0.5) + 1):
         if n % k == 0:

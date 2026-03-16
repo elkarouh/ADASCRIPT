@@ -367,7 +367,7 @@ def run_tests():
         ),
         (
             "def f(a, b=1):\n    return a\n",
-            "proc f(a: auto, b: auto = 1) =\n    return a\n",
+            "proc f(a: auto, b: auto = 1): auto =\n    return a\n",
         ),
         (
             "def f(a: int) -> str:\n    pass\n",
@@ -396,7 +396,7 @@ def run_tests():
         # --- mixed programs ---
         (
             "import os\ndef main():\n    return os\n",
-            'import os\nproc main() =\n    return os\n',
+            'import os\nproc main(): auto =\n    return os\n',
         ),
         (
             "x = 1\nif x:\n    y = 2\n",
@@ -413,7 +413,7 @@ def run_tests():
         ),
         (
             "def f():\n    for x in xs:\n        if x:\n            return x\n",
-            "proc f() =\n    for x in xs:\n        if x:\n            return x\n",
+            "proc f(): auto =\n    for x in xs:\n        if x:\n            return x\n",
         ),
         (
             "class Foo:\n    def bar(self):\n        pass\n",
