@@ -342,6 +342,7 @@ def to_nim(self):
     nim_module = _PY_MODULE_TO_NIM.get(module)
     if nim_module is not None:
         return f"import {nim_module}"
+    ParserState.nim_imports.add("nimpy")
     return f'let {local} = pyImport("{module}")'  
 
 
@@ -503,8 +504,10 @@ def to_nim(self):
     for item in items:
         if " as " in item:
             orig, alias = item.split(" as ", 1)
+            ParserState.nim_imports.add("nimpy")
             lines.append(f'let {alias.strip()} = pyImport("{module}").{orig.strip()}')
         else:
+            ParserState.nim_imports.add("nimpy")
             lines.append(f'let {item} = pyImport("{module}").{item}')
     return chr(10).join(lines)
 
@@ -532,8 +535,10 @@ def to_nim(self):
     for item in items:
         if " as " in item:
             orig, alias = item.split(" as ", 1)
+            ParserState.nim_imports.add("nimpy")
             lines.append(f'let {alias.strip()} = pyImport("{module}").{orig.strip()}')
         else:
+            ParserState.nim_imports.add("nimpy")
             lines.append(f'let {item} = pyImport("{module}").{item}')
     return chr(10).join(lines)
 
@@ -582,8 +587,10 @@ def to_nim(self):
             orig, alias = item.split(" as ", 1)
             orig = orig.strip()
             alias = alias.strip()
+            ParserState.nim_imports.add("nimpy")
             lines.append(f'let {alias} = pyImport("{module}").{orig}')
         else:
+            ParserState.nim_imports.add("nimpy")
             lines.append(f'let {item} = pyImport("{module}").{item}')
     return chr(10).join(lines)
 
