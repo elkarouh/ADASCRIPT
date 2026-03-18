@@ -401,7 +401,7 @@ def to_py(self, indent=0):
     return f"{_ind(indent)}with (\n{ind1}{items_str},\n{_ind(indent)}):{hc}\n{body}"
 
 
-# --- match / case ---
+# --- case / when ---
 @method(pattern_literal)
 def to_py(self):
     """pattern_literal: NUMBER | STRING | 'None' | 'True' | 'False'"""
@@ -429,6 +429,18 @@ def to_py(self, prec=None):
 def to_py(self):
     """pattern_wildcard: '_'"""
     return "_"
+
+
+@method(pattern_others)
+def to_py(self):
+    return "_"
+
+
+@method(pattern_range)
+def to_py(self):
+    lo = self.nodes[0].to_py()
+    hi = self.nodes[1].to_py()
+    return f"{lo} .. {hi}"
 
 
 @method(pattern_group)
@@ -568,7 +580,7 @@ def to_py(self):
     return f" if {self.nodes[0].to_py()}"
 
 
-@method(case_clause)
+@method(when_clause)
 def to_py(self, indent=0):
     """case_clause: 'case' pattern ('if' guard)? ':' block"""
     pat = self.nodes[0].to_py()
@@ -591,7 +603,7 @@ def to_py(self, indent=0):
     return f"{_ind(indent)}case {pat}{guard}:{hc}\n{body}"
 
 
-@method(match_stmt)
+@method(case_stmt)
 def to_py(self, indent=0):
     """match_stmt: 'match' expression ':' NEWLINE INDENT (case_clause)+ DEDENT"""
     subject = self.nodes[0].to_py()
@@ -601,12 +613,12 @@ def to_py(self, indent=0):
     # due to case_clause being flattened.
     for node in self.nodes[1:]:
         tname = type(node).__name__
-        if tname == "case_clause":
+        if tname == "when_clause":
             result += "\n" + node.to_py(indent + 1)
         elif tname == "Several_Times":
             for seq in node.nodes:
                 stname = type(seq).__name__
-                if stname == "case_clause":
+                if stname == "when_clause":
                     result += "\n" + seq.to_py(indent + 1)
                 elif stname == "Sequence_Parser" and hasattr(seq, "nodes"):
                     result += "\n" + _case_from_seq(seq, indent + 1)
@@ -1285,54 +1297,62 @@ if __name__ == "__main__":
             "try:\n    pass\nexcept* ValueError:\n    pass\n",
             "try:\n    pass\nexcept* ValueError:\n    pass",
         ),
-        # --- match / case ---
+        # --- case / when ---
         (
-            "match x:\n    case 1:\n        pass\n",
+            "case x:\n    when 1:\n        pass\n",
             "match x:\n    case 1:\n        pass",
         ),
         (
-            "match x:\n    case _:\n        pass\n",
+            "case x:\n    when _:\n        pass\n",
             "match x:\n    case _:\n        pass",
         ),
         (
-            "match x:\n    case 1:\n        a = 1\n    case 2:\n        b = 2\n",
+            "case x:\n    when 1:\n        a = 1\n    when 2:\n        b = 2\n",
             "match x:\n    case 1:\n        a = 1\n    case 2:\n        b = 2",
         ),
         (
-            "match x:\n    case y if y > 0:\n        pass\n",
+            "case x:\n    when y if y > 0:\n        pass\n",
             "match x:\n    case y if y > 0:\n        pass",
         ),
         (
-            "match x:\n    case 1 | 2:\n        pass\n",
+            "case x:\n    when 1 | 2:\n        pass\n",
             "match x:\n    case 1 | 2:\n        pass",
         ),
         (
-            'match x:\n    case "hello":\n        pass\n',
+            'case x:\n    when "hello":\n        pass\n',
             'match x:\n    case "hello":\n        pass',
         ),
         (
-            "match x:\n    case [1, 2]:\n        pass\n",
+            "case x:\n    when [1, 2]:\n        pass\n",
             "match x:\n    case [1, 2]:\n        pass",
         ),
         (
-            "match x:\n    case Status.OK:\n        pass\n",
+            "case x:\n    when Status.OK:\n        pass\n",
             "match x:\n    case Status.OK:\n        pass",
         ),
         (
-            "match x:\n    case Point(1, 2):\n        pass\n",
+            "case x:\n    when Point(1, 2):\n        pass\n",
             "match x:\n    case Point(1, 2):\n        pass",
         ),
         (
-            "match x:\n    case y as z:\n        pass\n",
+            "case x:\n    when y as z:\n        pass\n",
             "match x:\n    case y as z:\n        pass",
         ),
         (
-            'match x:\n    case {"a": 1}:\n        pass\n',
+            'case x:\n    when {"a": 1}:\n        pass\n',
             'match x:\n    case {"a": 1}:\n        pass',
         ),
         (
-            'match x:\n    case {"a": 1, "b": 2}:\n        pass\n',
+            'case x:\n    when {"a": 1, "b": 2}:\n        pass\n',
             'match x:\n    case {"a": 1, "b": 2}:\n        pass',
+        ),
+        (
+            "case x:\n    when others:\n        pass\n",
+            "match x:\n    case _:\n        pass",
+        ),
+        (
+            "case x:\n    when 1 .. 5:\n        pass\n",
+            "match x:\n    case 1 .. 5:\n        pass",
         ),
     ]
 

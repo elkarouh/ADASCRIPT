@@ -580,6 +580,18 @@ def to_nim(self):
     return "_"
 
 
+@method(pattern_others)
+def to_nim(self):
+    return "others"
+
+
+@method(pattern_range)
+def to_nim(self):
+    lo = self.nodes[0].to_nim()
+    hi = self.nodes[1].to_nim()
+    return f"{lo} .. {hi}"
+
+
 @method(pattern_group)
 def to_nim(self):
     return f"({self.nodes[0].to_nim()})"
@@ -696,7 +708,7 @@ def to_nim(self):
     return f" if {self.nodes[0].to_nim()}"
 
 
-@method(case_clause)
+@method(when_clause)
 def to_nim(self, indent=0):
     pat = self.nodes[0].to_nim()
     guard = ""
@@ -715,22 +727,23 @@ def to_nim(self, indent=0):
             body = block_node.to_nim(indent + 1)
         except TypeError:
             body = _ind(indent + 1) + block_node.to_nim()
-    return f"{_ind(indent)}of {pat}{guard}:{hc}\n{body}"
+    prefix = "else" if pat == "others" else f"of {pat}"
+    return f"{_ind(indent)}{prefix}{guard}:{hc}\n{body}"
 
 
-@method(match_stmt)
+@method(case_stmt)
 def to_nim(self, indent=0):
     """match -> Nim case statement"""
     subject = self.nodes[0].to_nim()
     result = f"{_ind(indent)}case {subject}:"
     for node in self.nodes[1:]:
         tname = type(node).__name__
-        if tname == "case_clause":
+        if tname == "when_clause":
             result += "\n" + node.to_nim(indent + 1)
         elif tname == "Several_Times":
             for seq in node.nodes:
                 stname = type(seq).__name__
-                if stname == "case_clause":
+                if stname == "when_clause":
                     result += "\n" + seq.to_nim(indent + 1)
                 elif stname == "Sequence_Parser" and hasattr(seq, "nodes"):
                     result += "\n" + _case_from_seq_nim(seq, indent + 1)
@@ -755,7 +768,8 @@ def _case_from_seq_nim(seq, indent):
             pat = child.to_nim()
     hc = _block_inline_header_comment(block_node) if block_node else ""
     body = block_node.to_nim(indent + 1) if block_node else ""
-    return f"{_ind(indent)}of {pat}{guard}:{hc}\n{body}"
+    prefix = "else" if pat == "others" else f"of {pat}"
+    return f"{_ind(indent)}{prefix}{guard}:{hc}\n{body}"
 
 
 # --- Function parameters ---
@@ -1531,8 +1545,16 @@ if __name__ == "__main__":
             "case x:\n    of _:\n        discard",
         ),
         (
-            "match x:\n    case 1 | 2:\n        pass\n",
+            "case x:\n    when 1 | 2:\n        pass\n",
             "case x:\n    of 1, 2:\n        discard",
+        ),
+        (
+            "case x:\n    when others:\n        pass\n",
+            "case x:\n    else:\n        discard",
+        ),
+        (
+            "case x:\n    when 1 .. 5:\n        pass\n",
+            "case x:\n    of 1 .. 5:\n        discard",
         ),
         # --- nested ---
         (

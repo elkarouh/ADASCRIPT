@@ -92,8 +92,8 @@ except_bare = fw("except_bare")
 finally_clause = fw("finally_clause")
 with_stmt = fw("with_stmt")
 with_item = fw("with_item")
-match_stmt = fw("match_stmt")
-case_clause = fw("case_clause")
+case_stmt = fw("case_stmt")
+when_clause = fw("when_clause")
 pattern = fw("pattern")
 
 # Function definition
@@ -210,6 +210,8 @@ with_stmt = ikw("with") + with_item + (COMMA + with_item)[:] + COLON + block
 pattern_literal = NUMBER | STRING | literal("None") | literal("True") | literal("False")
 pattern_capture = IDENTIFIER
 pattern_wildcard = literal("_")
+pattern_others = literal("others")
+pattern_range = expression + V_DOT + V_DOT + expression
 pattern_group = LPAREN + pattern + RPAREN
 pattern_sequence = LBRACKET + pattern + (COMMA + pattern)[:] + COMMA[:] + RBRACKET
 pattern_value = (
@@ -239,6 +241,8 @@ base_pattern = (
     | pattern_sequence
     | pattern_value
     | pattern_class
+    | pattern_others
+    | pattern_range
     | pattern_capture
 )
 
@@ -252,16 +256,16 @@ pattern_as = base_pattern + ikw("as") + IDENTIFIER
 pattern = pattern_or | pattern_as | base_pattern
 
 case_guard = ikw("if") + named_expression
-case_clause = ikw("case") + pattern + case_guard[:] + COLON + block
+when_clause = ikw("when") + pattern + case_guard[:] + COLON + block
 
-match_stmt = (
-    ikw("match")
+case_stmt = (
+    ikw("case")
     + expression
     + COLON
     + NEWLINE
     + INDENT
     + NL[:]
-    + (case_clause + NL[:])[1:]
+    + (when_clause + NL[:])[1:]
     + DEDENT
 )
 
@@ -344,7 +348,7 @@ compound_stmt = (
     | try_stmt
     | with_stmt_paren
     | with_stmt
-    | match_stmt
+    | case_stmt
     | async_func_def
     | func_def
     | type_block_stmt
