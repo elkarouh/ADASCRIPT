@@ -588,7 +588,7 @@ def to_nim(self):
 @method(pattern_range)
 def to_nim(self):
     lo = self.nodes[0].to_nim()
-    hi = self.nodes[1].to_nim()
+    hi = self.nodes[-1].to_nim()
     return f"{lo} .. {hi}"
 
 
@@ -1310,27 +1310,59 @@ def _extract_fields_from_block(block_node, indent):
     return lines
 
 
+def _extract_variant_fields_nim(stmt_nodes, indent):
+    """Extract field declarations from variant_when stmt_line nodes."""
+    import re as _re
+    lines = []
+    for seq in stmt_nodes:
+        if type(seq).__name__ == "Sequence_Parser" and hasattr(seq, "nodes"):
+            for child in seq.nodes:
+                if child is None:
+                    continue
+                cname = type(child).__name__
+                if cname in ("ann_assign_stmt", "stmt_line", "Sequence_Parser"):
+                    try:
+                        line = child.to_nim(indent)
+                    except TypeError:
+                        line = _ind(indent) + child.to_nim()
+                    stripped = line.lstrip()
+                    for kw in ("var ", "let ", "const "):
+                        if stripped.startswith(kw):
+                            line = line[:len(line) - len(stripped)] + stripped[len(kw):]
+                            break
+                    line = _re.sub(r" = .+$", "", line)
+                    if line.strip():
+                        lines.append(line)
+    return lines
+
+
 @method(type_block_stmt)
 def to_nim(self, indent=0):
-    """type_block_stmt: 'type' IDENTIFIER type_alias_params? (=|is) (tuple_def|record_def)"""
+    """type_block_stmt: 'type' IDENTIFIER discrim_param? type_alias_params? (=|is) (tuple_def|discrim_record_def|record_def)"""
     name = self.nodes[0].to_nim()
     params = ""
+    discrim_name = None
+    discrim_type = None
     rhs = self.nodes[-1]
     for node in self.nodes[1:-1]:
         ntype = type(node).__name__
         if ntype == "type_alias_params":
             params = node.to_nim()
-            break
-        if ntype == "Several_Times" and hasattr(node, "nodes"):
+        elif ntype == "Several_Times" and hasattr(node, "nodes"):
             for child in node.nodes:
-                if type(child).__name__ == "type_alias_params":
+                cn = type(child).__name__
+                if cn == "type_alias_params":
                     params = child.to_nim()
-                    break
-            if params:
-                break
-    # rhs is Sequence_Parser containing [Literal_keyword, block]
+                elif cn == "Sequence_Parser" and hasattr(child, "nodes"):
+                    # discrim_param: (Name : Type) -> [IDENTIFIER, Fmap(:), type_name]
+                    idents = [c for c in child.nodes if type(c).__name__ in ("IDENTIFIER", "type_name", "Filter")]
+                    if len(idents) >= 2:
+                        discrim_name = idents[0].to_nim()
+                        discrim_type = idents[1].to_nim()
+    # rhs is Sequence_Parser containing [Literal_keyword, ...]
     keyword = ""
     block_node = None
+    variant_case_node = None
     if hasattr(rhs, "nodes"):
         for child in rhs.nodes:
             cname = type(child).__name__
@@ -1338,11 +1370,47 @@ def to_nim(self, indent=0):
                 keyword = getattr(child, "node", "")
             elif cname == "block":
                 block_node = child
+            elif cname == "Sequence_Parser":
+                # variant_case: [IDENTIFIER(discrim), NL, INDENT, Several_Times(whens), DEDENT]
+                has_ident = any(type(c).__name__ == "IDENTIFIER" for c in child.nodes)
+                has_st = any(type(c).__name__ == "Several_Times" for c in child.nodes)
+                if has_ident and has_st:
+                    variant_case_node = child
+    if variant_case_node and discrim_name:
+        # Discriminated record -> Nim object with case
+        result = f"{_ind(indent)}type {name}{params} = object\n"
+        result += f"{_ind(indent + 1)}case {discrim_name}: {discrim_type}\n"
+        whens_node = None
+        for child in variant_case_node.nodes:
+            if type(child).__name__ == "Several_Times":
+                whens_node = child
+                break
+        if whens_node:
+            for when_node in whens_node.nodes:
+                # when_node: [IDENTIFIER(pattern), NL, INDENT, Several_Times(fields), DEDENT]
+                pat = None
+                fields_node = None
+                for child in when_node.nodes:
+                    cn = type(child).__name__
+                    if cn == "IDENTIFIER" and pat is None:
+                        pat = child.to_nim()
+                    elif cn == "Several_Times":
+                        fields_node = child
+                if pat and fields_node:
+                    if pat == "others":
+                        result += f"{_ind(indent + 1)}else:\n"
+                    else:
+                        result += f"{_ind(indent + 1)}of {pat}:\n"
+                    fields = _extract_variant_fields_nim(fields_node.nodes, indent + 2)
+                    for fld in fields:
+                        result += fld + "\n"
+        return result.rstrip("\n")
     if not block_node:
         block_node = rhs
     fields = _extract_fields_from_block(block_node, indent + 1)
     nim_kind = "tuple" if keyword == "tuple" else "object"
     return f"{_ind(indent)}type {name}{params} = {nim_kind}\n" + "\n".join(fields)
+
 
 
 @method(class_args)
@@ -1537,11 +1605,11 @@ if __name__ == "__main__":
         ),
         # --- match -> case ---
         (
-            "match x:\n    case 1:\n        pass\n",
+            "case x:\n    when 1:\n        pass\n",
             "case x:\n    of 1:\n        discard",
         ),
         (
-            "match x:\n    case _:\n        pass\n",
+            "case x:\n    when _:\n        pass\n",
             "case x:\n    of _:\n        discard",
         ),
         (
@@ -1555,6 +1623,11 @@ if __name__ == "__main__":
         (
             "case x:\n    when 1 .. 5:\n        pass\n",
             "case x:\n    of 1 .. 5:\n        discard",
+        ),
+        # --- discriminated records ---
+        (
+            "type Shape (Kind : Shape_Kind) is record:\n    case Kind is\n        when Circle:\n            Radius : float\n        when Rectangle:\n            Width : float\n            Height : float\n",
+            "type Shape = object\n    case Kind: Shape_Kind\n    of Circle:\n        Radius: float\n    of Rectangle:\n        Width: float\n        Height: float",
         ),
         # --- nested ---
         (

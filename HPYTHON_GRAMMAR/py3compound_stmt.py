@@ -95,6 +95,10 @@ with_item = fw("with_item")
 case_stmt = fw("case_stmt")
 when_clause = fw("when_clause")
 pattern = fw("pattern")
+variant_when = fw("variant_when")
+variant_case = fw("variant_case")
+discrim_param = fw("discrim_param")
+discrim_record_def = fw("discrim_record_def")
 
 # Function definition
 func_def = fw("func_def")
@@ -211,7 +215,7 @@ pattern_literal = NUMBER | STRING | literal("None") | literal("True") | literal(
 pattern_capture = IDENTIFIER
 pattern_wildcard = literal("_")
 pattern_others = literal("others")
-pattern_range = expression + V_DOT + V_DOT + expression
+pattern_range = (NUMBER | IDENTIFIER) + V_DOT + V_DOT + (NUMBER | IDENTIFIER)
 pattern_group = LPAREN + pattern + RPAREN
 pattern_sequence = LBRACKET + pattern + (COMMA + pattern)[:] + COMMA[:] + RBRACKET
 pattern_value = (
@@ -234,7 +238,8 @@ pattern_class = IDENTIFIER + LPAREN + (pattern_class_arg + (COMMA + pattern_clas
 # wildcard before capture (both are IDENTIFIER, but _ is special)
 # mapping before sequence (both use brackets but { vs [)
 base_pattern = (
-    pattern_literal
+    pattern_range
+    | pattern_literal
     | pattern_wildcard
     | pattern_group
     | pattern_mapping
@@ -242,7 +247,6 @@ base_pattern = (
     | pattern_value
     | pattern_class
     | pattern_others
-    | pattern_range
     | pattern_capture
 )
 
@@ -317,8 +321,21 @@ async_func_def = (
 tuple_def = literal("tuple") + COLON + block
 # record_def: record with named fields -> Nim object, Python dataclass
 record_def = literal("record") + COLON + block
-# type_block_stmt: type NAME (=|is) (tuple|record): block
-type_block_stmt = ikw("type") + IDENTIFIER + type_alias_params[:] + (V_EQUAL | ikw("is")) + (tuple_def | record_def)
+# --- Discriminated (variant) records ---
+# Discriminant parameter: (Kind : Shape_Kind)
+discrim_param = LPAREN + IDENTIFIER + V_COLON + type_annotation + RPAREN
+
+# Variant branch: when Circle: INDENT fields DEDENT
+variant_when = ikw("when") + pattern + COLON + NEWLINE + INDENT + NL[:] + (stmt_line + NL[:])[1:] + DEDENT
+
+# Variant case block: case Kind is INDENT when-clauses DEDENT
+variant_case = ikw("case") + IDENTIFIER + ikw("is") + NEWLINE + INDENT + NL[:] + (variant_when + NL[:])[1:] + DEDENT
+
+# Discriminated record: record: INDENT variant_case DEDENT
+discrim_record_def = literal("record") + COLON + NEWLINE + INDENT + NL[:] + variant_case + NL[:] + DEDENT
+
+# type_block_stmt: type NAME [(discrim)]? (=|is) (tuple|discrim_record|record): block
+type_block_stmt = ikw("type") + IDENTIFIER + discrim_param[:] + type_alias_params[:] + (V_EQUAL | ikw("is")) + (tuple_def | discrim_record_def | record_def)
 
 # --- Class definition ---
 # class_args uses the same argument grammar as call_trailer so that
