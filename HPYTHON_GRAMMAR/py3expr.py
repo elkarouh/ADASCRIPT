@@ -231,6 +231,9 @@ fstring = _FSTRING_START + _FSTRING_MIDDLE[:] + _fstring_chunk[:] + _FSTRING_END
 
 # --- atom ---
 ellipsis_lit = V_ELLIPSIS
+# Named tuple literal: (name:value, name:value, ...) — Nim-style
+named_tuple_field = IDENTIFIER + V_COLON + expression
+named_tuple_lit = LPAREN_NODE + named_tuple_field + (COMMA + named_tuple_field)[1:] + COMMA[:] + RPAREN
 paren_group = LPAREN_NODE + (yield_expr | walrus | expressions) + RPAREN
 empty_paren = LPAREN + RPAREN
 list_display = LBRACKET_NODE + (listcomp | star_expressions) + RBRACKET
@@ -242,6 +245,7 @@ str_concat = STRING + STRING[1:]
 
 atom = (
     empty_paren
+    | named_tuple_lit
     | paren_group
     | empty_list
     | list_display
@@ -301,8 +305,15 @@ not_in_op = K_NOT + K_IN
 is_not_op = K_IS + K_NOT
 comp_op = V_EQ | V_NE | V_LE | V_LT | V_GE | V_GT | not_in_op | is_not_op | K_IN | K_IS
 
+# --- 'in' with range: x in 1 .. n  or  x in 1 ..< n ---
+# Must be tried before plain comp_op so 'in' eagerly grabs the range bounds.
+in_range_excl = fw("in_range_excl")
+in_range_incl = fw("in_range_incl")
+in_range_excl = K_IN + bitor_expr + range_excl_op + bitor_expr   # in lo ..< hi
+in_range_incl = K_IN + bitor_expr + range_incl_op + bitor_expr   # in lo .. hi
+
 # --- comparison ---
-comparison = range_expr + (comp_op + range_expr)[:]
+comparison = range_expr + (in_range_excl | in_range_incl | comp_op + range_expr)[:]
 
 # --- inversion: 'not' inversion | comparison ---
 not_prefix = ikw("not") + inversion

@@ -128,6 +128,7 @@ class ParserState:
     memos: dict = {}
     symbol_table = SymbolTable()
     nim_imports: set = set()
+    tick_types: dict = {}  # {TypeName: {First: val, Last: val, members: [...]}}
 
     @classmethod
     def reset(cls):
@@ -135,6 +136,7 @@ class ParserState:
         cls.memos.clear()
         cls.symbol_table = SymbolTable()
         cls.nim_imports = set()
+        cls.tick_types = {}
 
 
 G = ParserState  # backward compat alias

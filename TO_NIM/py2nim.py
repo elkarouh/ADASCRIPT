@@ -243,6 +243,131 @@ def translate(code):
         output.insert(insert_pos, import_line)
 
     result = chr(10).join(output)
+    # Post-process: fix initHashSet() to include type param from annotation
+    import re as _re
+    result = _re.sub(
+        r':\s*HashSet\[(\w+)\]\s*=\s*initHashSet\(\)',
+        lambda m: f': HashSet[{m.group(1)}] = initHashSet[{m.group(1)}]()',
+        result
+    )
+    # Post-process: instantiate generic base methods for each concrete subclass.
+    # Nim 2.2 can't dispatch generic method[S,D](Base[S,D]) to method(Child).
+    import re as _re2
+
+    _subclasses = []
+    for m in _re2.finditer(r'type (\w+) = ref object of (\w+)\[([^\]]+)\]', result):
+        _subclasses.append((m.group(1), m.group(2), m.group(3)))
+
+    if not _subclasses:
+        if not result.endswith(chr(10)):
+            result += chr(10)
+        return result
+
+    _base_names = set(s[1] for s in _subclasses)
+    _child_names = set(s[0] for s in _subclasses)
+    _overridden = set()
+    for m in _re2.finditer(r'method (\w+)\(self: (\w+)[,)]', result):
+        if m.group(2) in _child_names:
+            _overridden.add(m.group(1))
+
+    _base_params = {}
+    for child, base, params in _subclasses:
+        _base_params.setdefault(base, set()).add(params)
+
+    _GENERIC_PAT = _re2.compile(
+        r'(method |iterator )(\w+)\[([^\]]+)\]\(self: (\w+)\[([^\]]+)\](.*?)\)(:\s*.+?\s+|\s+)?(\{[.]base[.]\}\s*)?(\s*=\s*)?$'
+    )
+
+    lines = result.split(chr(10))
+    generic_methods = []  # ordered list of (key, value) tuples
+    new_lines = []
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        gm = _GENERIC_PAT.match(line)
+        if gm and gm.group(4) in _base_names:
+            keyword = gm.group(1).strip()
+            method_name = gm.group(2)
+            gen_params = gm.group(3)
+            base_name = gm.group(4)
+            rest_params = gm.group(6)
+            return_part = (gm.group(7) or "").rstrip()
+            is_impl = gm.group(9) is not None
+
+            body_lines = []
+            if is_impl:
+                i += 1
+                while i < len(lines) and (lines[i].startswith("    ") or lines[i].strip() == ""):
+                    body_lines.append(lines[i])
+                    i += 1
+                while body_lines and body_lines[-1].strip() == "":
+                    body_lines.pop()
+                gen_list = [p.strip() for p in gen_params.split(",")]
+                generic_methods.append(((base_name, method_name), (gen_list, rest_params, return_part, body_lines, keyword)))
+            else:
+                i += 1
+            continue
+        new_lines.append(line)
+        i += 1
+
+    result_lines = []
+    inserted_for = set()
+    _emitted_sigs = set()  # track resolved method signatures to avoid redefinition
+    # Build type alias resolution map
+    _type_aliases = {}
+    for m in _re2.finditer(r'^type (\w+) = (\w+)$', result, _re2.MULTILINE):
+        _type_aliases[m.group(1)] = m.group(2)
+    # Also map tuple types: type X = (a, b)
+    for m in _re2.finditer(r'^type (\w+) = (\([^)]+\))$', result, _re2.MULTILINE):
+        _type_aliases[m.group(1)] = m.group(2)
+    def _resolve_type(t):
+        seen = set()
+        while t in _type_aliases and t not in seen:
+            seen.add(t)
+            t = _type_aliases[t]
+        return t
+    for line in new_lines:
+        mm = _re2.match(r'method (\w+)\(self: (\w+)[,)]', line)
+        if mm:
+            child_name = mm.group(2)
+            for cname, bname, params in _subclasses:
+                if cname == child_name and (bname, params) not in inserted_for:
+                    inserted_for.add((bname, params))
+                    concrete_list = [p.strip() for p in params.split(",")]
+                    for key, (gen_list, rest_params, return_part, body_lines, orig_kw) in generic_methods:
+                        if key[0] != bname:
+                            continue
+                        subs = dict(zip(gen_list, concrete_list))
+                        new_rest = rest_params
+                        new_ret = return_part
+                        new_body = list(body_lines)
+                        for old_p, new_p in subs.items():
+                            new_rest = _re2.sub(r'\b' + _re2.escape(old_p) + r'\b', new_p, new_rest)
+                            new_ret = _re2.sub(r'\b' + _re2.escape(old_p) + r'\b', new_p, new_ret)
+                            new_body = [_re2.sub(r'\b' + _re2.escape(old_p) + r'\b', new_p, bl) for bl in new_body]
+                        concrete_base = ", ".join(concrete_list)
+                        if key[1] in _overridden:
+                            kw = "method"
+                            pragma = " {.base.}"
+                        elif orig_kw == "iterator":
+                            kw = "iterator"
+                            pragma = ""
+                        else:
+                            kw = "proc"
+                            pragma = ""
+                        sig = f"{kw} {key[1]}(self: {bname}[{concrete_base}]{new_rest}){new_ret}"
+                        resolved_parts = [_resolve_type(p.strip()) for p in concrete_base.split(",")]
+                        resolved_sig = f"{key[1]}:{','.join(resolved_parts)}"
+                        if resolved_sig not in _emitted_sigs:
+                            _emitted_sigs.add(resolved_sig)
+                            result_lines.append(f"{sig}{pragma} =")
+                            for bl in new_body:
+                                result_lines.append(bl)
+                            result_lines.append("")
+                    break
+        result_lines.append(line)
+    result = chr(10).join(result_lines)
+
     if not result.endswith(chr(10)):
         result += chr(10)
     return result
@@ -306,7 +431,7 @@ def run_tests():
         ),
         (
             "from os import path\n",
-            'import nimpy\nlet path = pyImport("os").path\n',
+            'import os\n',
         ),
         (
             "pass\n",

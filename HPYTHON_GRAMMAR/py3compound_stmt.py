@@ -320,7 +320,7 @@ type_block_stmt = ikw("type") + IDENTIFIER + type_alias_params[:] + (V_EQUAL | i
 # class_args uses the same argument grammar as call_trailer so that
 # keyword arguments like metaclass=Meta are correctly parsed.
 class_args = LPAREN + arguments[:] + RPAREN
-class_def = decorators[:] + ikw("class") + IDENTIFIER + class_args[:] + COLON + block
+class_def = decorators[:] + ikw("class") + IDENTIFIER + type_alias_params[:] + class_args[:] + COLON + block
 
 # --- Async variants ---
 async_for_stmt = (

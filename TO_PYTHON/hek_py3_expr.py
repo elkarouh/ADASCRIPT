@@ -35,7 +35,7 @@ sys.path.insert(0, os.path.join(_dir, ".."))
 sys.path.insert(0, os.path.join(_dir, "..", "HPYTHON_GRAMMAR"))
 
 from py3expr import *
-from hek_parsec import method
+from hek_parsec import method, ParserState
 
 
 
@@ -169,7 +169,20 @@ def to_py(self, prec=None):
 @method(IDENTIFIER)
 def to_py(self, prec=None):
     """IDENTIFIER: a name token (filtered by str.isidentifier)."""
-    return self.node
+    name = self.node
+    # Resolve tick attributes: Type__tick__First -> first value of subrange/enum
+    if "__tick__" in name:
+        type_name, _, attr = name.partition("__tick__")
+        info = ParserState.tick_types.get(type_name)
+        if info and attr in info:
+            val = info[attr]
+            return str(val)
+        # Enum next/prev: Type'Next -> Type(Type.value + 1)
+        if attr == "Next":
+            return f"{type_name}({type_name}.value + 1)"
+        elif attr == "Prev":
+            return f"{type_name}({type_name}.value - 1)"
+    return name
 
 
 @method(K_NONE)
@@ -246,6 +259,26 @@ def to_py(self, prec=None):
 
 
 # --- atom containers ---
+
+# Registry: frozenset of field names -> type name, for named tuple constructor emission
+_named_tuple_registry = {}  # {frozenset(field_names): type_name}
+
+def _register_named_tuple(type_name, field_names):
+    """Register a NamedTuple type so named_tuple_lit can emit constructors."""
+    _named_tuple_registry[frozenset(field_names)] = type_name
+
+def _lookup_named_tuple(field_names):
+    """Look up a NamedTuple type by its field names."""
+    return _named_tuple_registry.get(frozenset(field_names))
+
+def _has_named_tuple(node):
+    """Check if node tree contains named_tuple_field nodes needing transformation."""
+    if type(node).__name__ == "named_tuple_field":
+        return True
+    if hasattr(node, "nodes"):
+        return any(_has_named_tuple(c) for c in node.nodes)
+    return False
+
 @method(empty_paren)
 def to_py(self, prec=None):
     """empty_paren: '(' ')'"""
@@ -259,7 +292,7 @@ def to_py(self, prec=None):
     from hek_tokenize import get_multiline_brackets
     pos = _get_bracket_start(self.nodes[0])
     ml = get_multiline_brackets()
-    if pos and pos in ml:
+    if pos and pos in ml and not _has_named_tuple(self):
         return ml[pos]
     return f"({self.nodes[1].to_py()})"
 
@@ -276,7 +309,7 @@ def to_py(self, prec=None):
     from hek_tokenize import get_multiline_brackets
     pos = _get_bracket_start(self.nodes[0])
     ml = get_multiline_brackets()
-    if pos and pos in ml:
+    if pos and pos in ml and not _has_named_tuple(self):
         return ml[pos]
     return f"[{self.nodes[1].to_py()}]"
 
@@ -294,7 +327,8 @@ def to_py(self, prec=None):
     pos = _get_bracket_start(self.nodes[0])
     ml = get_multiline_brackets()
     if pos and pos in ml:
-        return ml[pos]
+        if not _has_named_tuple(self):
+            return ml[pos]
     return "{" + self.nodes[1].to_py() + "}"
 
 
@@ -304,7 +338,7 @@ def to_py(self, prec=None):
     from hek_tokenize import get_multiline_brackets
     pos = _get_bracket_start(self.nodes[0])
     ml = get_multiline_brackets()
-    if pos and pos in ml:
+    if pos and pos in ml and not _has_named_tuple(self):
         return ml[pos]
     return "{" + self.nodes[1].to_py() + "}"
 
@@ -325,7 +359,7 @@ def to_py(self, prec=None):
     from hek_tokenize import get_multiline_brackets
     pos = _get_bracket_start(self.nodes[0])
     ml = get_multiline_brackets()
-    if pos and pos in ml:
+    if pos and pos in ml and not _has_named_tuple(self):
         return ml[pos]
     if len(self.nodes) > 1 and hasattr(self.nodes[1], "nodes") and self.nodes[1].nodes:
         return "(" + self.nodes[1].nodes[0].to_py() + ")"
@@ -343,6 +377,15 @@ def to_py(self, prec=None):
 @method(attr_trailer)
 def to_py(self, prec=None):
     """attr_trailer: '.' IDENTIFIER"""
+    attr_name = self.nodes[0].node if hasattr(self.nodes[0], 'node') else str(self.nodes[0])
+    # Handle tick attributes on expressions: .field'Next / .field'Prev
+    if "__tick__" in attr_name:
+        base, _, tick_attr = attr_name.partition("__tick__")
+        if tick_attr in ("Next", "Prev"):
+            # Store tick info for primary.to_py() to wrap the expression
+            self._tick_base = base
+            self._tick_attr = tick_attr
+            return "." + base  # just emit .field, primary will wrap
     return "." + self.nodes[0].to_py()
 
 
@@ -360,6 +403,10 @@ def to_py(self, prec=None):
     if len(self.nodes) > 1 and hasattr(self.nodes[1], "nodes") and self.nodes[1].nodes:
         for tr in self.nodes[1].nodes:
             result += tr.to_py()
+            # Handle tick attributes: wrap expr.field with type(expr.field)(expr.field.value +/- 1)
+            if hasattr(tr, '_tick_attr'):
+                op = "+" if tr._tick_attr == "Next" else "-"
+                result = f"type({result})({result}.value {op} 1)"
     return result
 
 
@@ -387,14 +434,29 @@ def to_py(self, prec=None):
 
 @method(range_expr)
 def to_py(self, prec=None):
-    # In Python output, keep as-is (HPython syntax)
-    result = self.nodes[0].to_py(prec)
-    for node in self.nodes[1:]:
-        if not hasattr(node, 'nodes') or not node.nodes:
-            continue
-        for seq in node.nodes:
-            result += seq.to_py(prec)
-    return result
+    # lo .. hi  -> range(lo, hi + 1)  (inclusive)
+    # lo ..< hi -> range(lo, hi)      (exclusive)
+    lo = self.nodes[0].to_py(prec)
+    # Check if there's a range operator (Several_Times node with content)
+    if len(self.nodes) < 2:
+        return lo
+    st = self.nodes[1]
+    if not hasattr(st, 'nodes') or not st.nodes:
+        return lo
+    # st.nodes[0] is a Sequence_Parser: [range_op, bitor_expr]
+    seq = st.nodes[0]
+    if not hasattr(seq, 'nodes') or len(seq.nodes) < 2:
+        return lo
+    range_op_node = seq.nodes[0]
+    hi = seq.nodes[1].to_py(prec)
+    # Detect exclusive (..<) vs inclusive (..)
+    is_exclusive = (hasattr(range_op_node, 'nodes')
+        and any(hasattr(n, 'node') and str(n.node) == '<'
+                for n in range_op_node.nodes))
+    if is_exclusive:
+        return f"range({lo}, {hi})"
+    else:
+        return f"range({lo}, {hi} + 1)"
 
 
 # --- power ---
@@ -568,6 +630,22 @@ def to_py(self, prec=None):
                 break
 
     if last_comp_idx is None:
+        # Check if this is a range expression (2 .. n or 2 ..< n)
+        # that was flattened into comparison from range_expr
+        for node in self.nodes:
+            if (type(node).__name__ == "Several_Times"
+                    and hasattr(node, "nodes") and node.nodes):
+                seq = node.nodes[0]
+                if hasattr(seq, "nodes") and len(seq.nodes) >= 2:
+                    op_node = seq.nodes[0]
+                    op_name = type(op_node).__name__
+                    if op_name in ("range_incl_op", "range_excl_op"):
+                        lo = self.nodes[0].to_py(prec)
+                        hi = seq.nodes[1].to_py(prec)
+                        if op_name == "range_excl_op":
+                            return f"range({lo}, {hi})"
+                        else:
+                            return f"range({lo}, {hi} + 1)"
         # No comparison ops — delegate to binop_to_py for inner reconstruction
         return binop_to_py(self, prec, PREC_CMP)
 
@@ -591,6 +669,17 @@ def to_py(self, prec=None):
     for seq in st.nodes:
         if hasattr(seq, "nodes") and len(seq.nodes) >= 2:
             op = seq.nodes[0].to_py()
+            # Handle 'in lo .. hi' / 'in lo ..< hi' -> 'lo <= x <= hi' / 'lo <= x < hi'
+            if op == "in" and len(seq.nodes) >= 4:
+                lo = seq.nodes[1].to_py(operand_prec)
+                range_op_node = seq.nodes[2]
+                hi = seq.nodes[3].to_py(operand_prec)
+                is_exclusive = (hasattr(range_op_node, 'nodes')
+                    and any(hasattr(n, 'node') and str(n.node) == '<'
+                            for n in range_op_node.nodes))
+                hi_op = "<" if is_exclusive else "<="
+                chain = f"{lo} <= {chain} {hi_op} {hi}"
+                continue
             right = seq.nodes[1].to_py(operand_prec)
             chain += f" {op} {right}"
     if prec is not None and PREC_CMP < prec:
@@ -1145,3 +1234,43 @@ if __name__ == "__main__":
     print(f"Results: {passed} passed, {failed} failed")
 
     # ==================================================================
+
+
+@method(named_tuple_field)
+def to_py(self, prec=None):
+    # In Python, named tuple fields become positional: just emit the value
+    val = self.nodes[2].to_py()
+    return val
+
+@method(named_tuple_lit)
+def to_py(self, prec=None):
+    # Collect field names and values
+    def _extract_field(node):
+        """Extract (name, value) from a named_tuple_field node."""
+        name = str(node.nodes[0].nodes[0]) if hasattr(node.nodes[0], 'nodes') else str(node.nodes[0])
+        val = node.nodes[2].to_py()
+        return name, val
+    first_name, first_val = _extract_field(self.nodes[1])
+    field_names = [first_name]
+    field_vals = [first_val]
+    rest = self.nodes[2]  # Several_Times
+    if hasattr(rest, 'nodes'):
+        for seq in rest.nodes:
+            if hasattr(seq, 'nodes'):
+                for child in seq.nodes:
+                    if type(child).__name__ == "named_tuple_field":
+                        n, v = _extract_field(child)
+                        field_names.append(n)
+                        field_vals.append(v)
+            elif type(seq).__name__ == "named_tuple_field":
+                n, v = _extract_field(seq)
+                field_names.append(n)
+                field_vals.append(v)
+    # Look up if these fields match a known NamedTuple type
+    type_name = _lookup_named_tuple(field_names)
+    if type_name:
+        # Emit as NamedTuple constructor: TypeName(field=val, ...)
+        args = ", ".join(f"{n}={v}" for n, v in zip(field_names, field_vals))
+        return f"{type_name}({args})"
+    # Fallback: plain tuple with just the values
+    return "(" + ", ".join(field_vals) + ")"

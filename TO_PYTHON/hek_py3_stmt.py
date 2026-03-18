@@ -30,6 +30,7 @@ from py3stmt import *
 from hek_py3_expr import _get_bracket_start
 import hek_py_declarations  # noqa: F401 — registers decl to_py() methods
 from hek_parsec import method, ParserState
+from hek_helpers import _ind
 
 # to_py() methods
 ###############################################################################
@@ -133,6 +134,14 @@ def to_py(self):
     return result
 
 # --- return ---
+@method(decl_tuple_unpack)
+def to_py(self):
+    """decl_tuple_unpack: let/var/const (x, y) = expr -> Python (x, y) = expr"""
+    # Strip the declaration keyword in Python
+    targets = self.nodes[1].to_py()  # paren_group
+    value = self.nodes[3].to_py()  # expression (nodes[2] is V_EQUAL)
+    return f"{targets} = {value}"
+
 @method(return_val)
 def to_py(self):
     """return_val: 'return' expressions"""
@@ -561,14 +570,14 @@ def to_py(self):
 # --- type alias ---
 @method(enum_def)
 def to_py(self):
-    """enum_def: 'enum' IDENTIFIER (',' IDENTIFIER)* ','?"""
-    parts = [self.nodes[0].to_py()]
+    """enum_def: 'enum' enum_member (',' enum_member)* ','?"""
+    parts = [str(self.nodes[0].node)]
     for node in self.nodes[1:]:
         if not hasattr(node, 'nodes') or not node.nodes:
             continue
         for seq in node.nodes:
             if hasattr(seq, 'nodes') and len(seq.nodes) >= 1:
-                parts.append(seq.nodes[0].to_py())
+                parts.append(str(seq.nodes[0].node))
     return "enum " + ", ".join(parts)
 
 
@@ -591,8 +600,8 @@ def to_py(self):
 @method(subrange_def)
 def to_py(self):
     """subrange_def: INTEGER '..' ['<'] INTEGER -> Python range()"""
-    lo = self.nodes[0].node
-    hi = self.nodes[-1].node
+    lo = str(self.nodes[0].node)
+    hi = str(self.nodes[-1].node)
     # Check if exclusive (..<)
     is_exclusive = False
     for n in self.nodes[1:-1]:
@@ -603,6 +612,13 @@ def to_py(self):
         return f"range({lo}, {hi})"
     else:
         return f"range({lo}, {hi} + 1)"
+
+
+
+@method(constrained_subrange_def)
+def to_py(self):
+    """constrained_subrange_def: IDENTIFIER subrange_def -> Python range()"""
+    return self.nodes[1].to_py()
 
 
 @method(type_alias_params)
@@ -637,18 +653,36 @@ def to_py(self):
     # RHS is the last node — works whether V_EQUAL is present ('=') or absent ('is')
     rhs = self.nodes[-1]
     rhs_type = type(rhs).__name__
+    if rhs_type == 'constrained_subrange_def':
+        sr = rhs.nodes[1]  # the subrange_def inside
+        lo = str(sr.nodes[0].node)
+        hi = str(sr.nodes[-1].node)
+        ParserState.tick_types[name] = {"First": lo, "Last": hi}
+        return f"{name} = {rhs.to_py()}"
     if rhs_type == 'subrange_def':
+        # Register First/Last for tick attributes (Name'First, Name'Last)
+        lo = rhs.nodes[0].node
+        hi = rhs.nodes[-1].node
+        ParserState.tick_types[name] = {"First": lo, "Last": hi}
         return f"{name} = {rhs.to_py()}"
     if rhs_type == 'enum_def':
         members = rhs.to_py()
         member_names = [m.strip() for m in members[len("enum "):].split(",")]
         ParserState.nim_imports.add("from enum import Enum")
+        ParserState.tick_types[name] = {"First": member_names[0], "Last": member_names[-1], "members": member_names}
         lines = [f"class {name}(Enum):"]
+        py_members = []
         for i, m in enumerate(member_names):
-            lines.append(f"    {m} = {i}")
+            py_m = f"_{m}" if m.isdigit() else m
+            lines.append(f"{_ind(1)}{py_m} = {i}")
+            py_members.append((m, py_m))
+        # Unpack enum members as bare names (Nim uses bare names)
+        for orig, py_m in py_members:
+            if not orig.isdigit():
+                lines.append(f"{py_m} = {name}.{py_m}")
         return "\n".join(lines)
     value = rhs.to_py()
-    return f"type {name}{params} = {value}"
+    return f"{name} = {value}"
 
 
 

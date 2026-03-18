@@ -135,7 +135,19 @@ class Tokenizer:
     3. Plain NL (blank lines) -> RichNL with is_blank=True (type=NL)
     """
 
+    # Tick-attribute pattern: Name'Attr  ->  Name__tick__Attr
+    # Must be applied before Python tokenization since ' is a string delimiter.
+    import re as _re
+    _TICK_RE = _re.compile(r"(\b[A-Za-z_]\w*)'([A-Za-z_]\w*)")
+
+    @staticmethod
+    def _preprocess_tick_attributes(s):
+        """Replace Ada-style tick attributes (e.g. Type'First) with
+        Type__tick__First so that Python's tokenizer can handle them."""
+        return Tokenizer._TICK_RE.sub(r'\1__tick__\2', s)
+
     def __init__(self, s):
+        s = self._preprocess_tick_attributes(s)
         self.tokengen = tokenize_string(s)
         self.source_lines = s.splitlines(True)  # keep line endings for span extraction
         self.tokens = []  # a list of 2-tuples (token, list_of_expected_but_failed_tokens)
