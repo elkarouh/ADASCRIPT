@@ -456,6 +456,55 @@ def example7():
     for solution in op7.shortest_path('oradea', 'bucharest'):
         print(solution)
 
+
+# ---------------------------------------------------------------------------
+# HMM demo
+# ---------------------------------------------------------------------------
+def demo_hmm():
+    """Run the HMM Viterbi demo and return the most probable sequence."""
+    from math import log
+    # Inline minimal HMM to avoid dependency on __main__ block
+    class _HMM(Optimizer):
+        def __init__(self):
+            super().__init__(offset=1)
+            self.hidden_states = ('Healthy', 'Fever')
+            self.start_p  = {'Healthy': 0.6, 'Fever': 0.4}
+            self.trans_p  = {
+                'Healthy': {'Healthy': 0.7, 'Fever': 0.3},
+                'Fever':   {'Healthy': 0.4, 'Fever': 0.6},
+            }
+            self.emit_p   = {
+                'Healthy': {'normal': 0.5, 'cold': 0.4, 'dizzy': 0.1},
+                'Fever':   {'normal': 0.1, 'cold': 0.3, 'dizzy': 0.6},
+            }
+        def get_state(self, past_decisions):
+            if not past_decisions:
+                return 0, None
+            return len(past_decisions), past_decisions[-1]
+        def get_next_decisions(self, current_state):
+            stage, hidden = current_state
+            if stage == len(self.obs):
+                return []
+            o = self.obs[stage]
+            if stage == 0:
+                return [(y, self.start_p[y] * self.emit_p[y][o]) for y in self.hidden_states]
+            return [(y, self.trans_p[hidden][y] * self.emit_p[y][o]) for y in self.hidden_states]
+        def cost_operator(self, acc, p):
+            return acc + log(self.offset / p)
+        def get_probability(self, seq):
+            prob = self.start_p[seq[0]] * self.emit_p[seq[0]][self.obs[0]]
+            for prev, curr, o in zip(seq, seq[1:], self.obs[1:]):
+                prob *= self.trans_p[prev][curr] * self.emit_p[curr][o]
+            return prob
+
+    hmm = _HMM()
+    obs = ('normal', 'cold', 'dizzy')
+    hmm.obs = obs
+    first = next(hmm.shortest_path((0, None), (len(obs), ANY)))
+    return hmm.get_probability(first[1]), first[1]
+
+demo_hmm()
+
 if __name__=="__main__":
     example1()
     example2()
@@ -464,3 +513,4 @@ if __name__=="__main__":
     example5()
     example6()
     example7()
+    demo_hmm()
