@@ -938,6 +938,112 @@ def to_nim(self, indent=0):
                     p = parts[0] + ": var " + parts[1]
             new_params.append(p)
         params = ", ".join(new_params)
+    # Hoist: if the function body contains methods (from nested classes),
+    # extract them (and the types/object decls they depend on) to top level,
+    # since Nim forbids nested methods.  Keep executable code in the proc.
+    # Type names are mangled with a per-function suffix to avoid collisions.
+    if block_node and body:
+        import re as _re_h
+        body_lines = body.split("\n")
+
+        # --- Pass 1: collect local type names defined in this body ---
+        local_types = []
+        for line in body_lines:
+            stripped = line.lstrip()
+            if stripped.startswith("type ") and not stripped.startswith("type("):
+                tm = _re_h.match(r"type\s+(\w+)", stripped)
+                if tm:
+                    local_types.append(tm.group(1))
+
+        # --- Derive suffix from function name (example3 -> _3, myFunc -> _myFunc) ---
+        suffix = ""
+        if local_types and name:
+            m_num = _re_h.match(r"example(\d+)$", name)
+            if m_num:
+                suffix = "_" + m_num.group(1)
+            else:
+                suffix = "_" + name
+
+        # --- Build mangling map: only rename types that conflict with top-level ---
+        if not hasattr(ParserState, '_hoisted_type_names'):
+            ParserState._hoisted_type_names = set()
+        mangle_map = {}  # old_name -> new_name
+        for tname in local_types:
+            if suffix and tname in ParserState._hoisted_type_names:
+                mangle_map[tname] = tname + suffix
+            ParserState._hoisted_type_names.add(tname if tname not in mangle_map else mangle_map[tname])
+
+        def _mangle_line(line):
+            """Apply type name mangling to a line."""
+            if not mangle_map:
+                return line
+            for old_name, new_name in mangle_map.items():
+                line = _re_h.sub(r'\b' + old_name + r'\b', new_name, line)
+            return line
+
+        # --- Pass 2: separate hoisted vs kept, applying mangling ---
+        hoisted = []
+        kept = []
+        in_method = False
+        method_indent = 0
+        in_type = False
+        type_base_indent = 0
+        for line in body_lines:
+            stripped = line.lstrip()
+            cur_indent = len(line) - len(stripped)
+            # Detect start of a method (indented one level inside proc)
+            if stripped.startswith("method "):
+                in_method = True
+                method_indent = cur_indent
+                hoisted.append(_mangle_line(line[method_indent:]))
+                continue
+            # Continuation of a method body (deeper indent)
+            if in_method:
+                if stripped == "" or cur_indent > method_indent:
+                    hoisted.append(_mangle_line(line[method_indent:] if len(line) >= method_indent else line))
+                    continue
+                else:
+                    in_method = False
+            # Detect type/object declarations
+            if stripped.startswith("type ") and not stripped.startswith("type("):
+                in_type = True
+                type_base_indent = cur_indent
+                dedented_line = line[type_base_indent:] if cur_indent > 0 else line
+                hoisted.append(_mangle_line(dedented_line))
+                continue
+            # Continuation of a multi-line type
+            if in_type:
+                if stripped == "" or cur_indent > type_base_indent:
+                    hoisted.append(_mangle_line(line[type_base_indent:] if len(line) >= type_base_indent else line))
+                    continue
+                else:
+                    in_type = False
+            # Hoist const declarations and ALL_CAPS var declarations
+            if stripped.startswith("const ") or stripped.startswith("let "):
+                dedented_line = line[cur_indent:] if cur_indent > 0 else line
+                hoisted.append(_mangle_line(dedented_line))
+                continue
+            if stripped.startswith("var "):
+                var_m = _re_h.match(r"var\s+([A-Z][A-Z_0-9]*)\s*:", stripped)
+                if var_m:
+                    dedented_line = line[cur_indent:] if cur_indent > 0 else line
+                    hoisted.append(_mangle_line(dedented_line))
+                    continue
+            # Hoist proc/func declarations (constructors, helpers)
+            if stripped.startswith("proc ") or stripped.startswith("func "):
+                in_method = True
+                method_indent = cur_indent
+                hoisted.append(_mangle_line(line[method_indent:]))
+                continue
+            kept.append(_mangle_line(line))
+        if hoisted:
+            hoisted_block = "\n".join(hoisted) + "\n"
+            body = "\n".join(kept)
+            # If no return annotation but body has return stmts, infer auto
+            if not ret_ann and body:
+                if _re_h.search(r'\breturn\b\s+\S', body):
+                    ret_ann = ": auto"
+            return f"{hoisted_block}{decos}{_ind(indent)}proc {name}({params}){ret_ann} ={hc}\n{body}"
     # If no return annotation but body has return statements, infer ': auto'
     if not ret_ann and body:
         import re as _re

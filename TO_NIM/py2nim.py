@@ -243,6 +243,19 @@ def translate(code):
         output.insert(insert_pos, import_line)
 
     result = chr(10).join(output)
+    # Deduplicate top-level type declarations (hoisted types may duplicate originals)
+    seen_types = set()
+    deduped_lines = []
+    for line in result.split(chr(10)):
+        import re as _re_td
+        m = _re_td.match(r'^type\s+(\w+)', line)
+        if m:
+            tname = m.group(1)
+            if tname in seen_types:
+                continue
+            seen_types.add(tname)
+        deduped_lines.append(line)
+    result = chr(10).join(deduped_lines)
     # Post-process: fix initHashSet() to include type param from annotation
     import re as _re
     result = _re.sub(
