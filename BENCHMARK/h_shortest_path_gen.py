@@ -508,8 +508,25 @@ def demo_hmm():
     hmm = _HMM()
     obs = ('normal', 'cold', 'dizzy')
     hmm.obs = obs
-    first = next(hmm.shortest_path((0, None), (len(obs), ANY)))
-    return hmm.get_probability(first[1]), first[1]
+    print("##################################################")
+    print("HIDDEN MARKOV MODEL")
+    print("##################################################")
+    print("Observations:", obs)
+    print("Most probable hidden-state sequences (best first):")
+    for solution in hmm.shortest_path((0, None), (len(obs), ANY)):
+        seq = solution[1]
+        prob = hmm.get_probability(seq)
+        print("  seq=" + repr(seq) + "  prob=" + str(prob))
+    print("Predicting next state/observation:")
+    best = None
+    for solution in hmm.shortest_path((0, None), (len(obs), ANY)):
+        best = solution[1]
+        break
+    last_state = best[-1]
+    for next_obs in ('normal', 'cold', 'dizzy'):
+        for next_state in hmm.hidden_states:
+            prob = hmm.trans_p[last_state][next_state] * hmm.emit_p[next_state][next_obs]
+            print("  next_obs=" + repr(next_obs) + ", next_state=" + repr(next_state) + ", prob=" + str(prob))
 
 demo_hmm()
 
