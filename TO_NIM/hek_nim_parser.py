@@ -938,10 +938,27 @@ def to_nim(self, indent=0):
                     p = parts[0] + ": var " + parts[1]
             new_params.append(p)
         params = ", ".join(new_params)
-    # Hoist: if the function body contains methods (from nested classes),
-    # extract them (and the types/object decls they depend on) to top level,
-    # since Nim forbids nested methods.  Keep executable code in the proc.
-    # Type names are mangled with a per-function suffix to avoid collisions.
+    # -- Method hoisting ------------------------------------------------
+    # Nim forbids `method` declarations inside procs.  When an HPython
+    # function body contains class definitions (which emit Nim methods),
+    # we hoist types, methods, procs, consts, and ALL_CAPS vars to the
+    # module's top level, leaving only executable code inside the proc.
+    #
+    # This is transparent when classes live at the module level (the
+    # normal case) -- no hoisting or renaming occurs.
+    #
+    # Name mangling:
+    #   When *multiple* functions define types with the **same** name
+    #   (e.g. two functions both define `State_T`), the second and
+    #   subsequent definitions are mangled with a suffix derived from
+    #   the enclosing function name (example3 -> _3) so that each set
+    #   of hoisted declarations gets unique top-level names.  Mangling
+    #   is applied consistently to hoisted types, methods, procs, and
+    #   the executable code that stays inside the proc.
+    #
+    #   Mangling is **only** triggered when a name collision is detected,
+    #   so single-use type names are never renamed.
+    # ----------------------------------------------------------------
     if block_node and body:
         import re as _re_h
         body_lines = body.split("\n")

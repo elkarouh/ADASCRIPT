@@ -243,7 +243,11 @@ def translate(code):
         output.insert(insert_pos, import_line)
 
     result = chr(10).join(output)
-    # Deduplicate top-level type declarations (hoisted types may duplicate originals)
+    # Deduplicate top-level type declarations.
+    # When a type defined at module level (e.g. `type Cost_T = float`) is also
+    # defined inside a function and hoisted, the first definition wins and the
+    # duplicate is silently removed.  This only applies to identical names at
+    # column 0; mangled names (State_T_2, etc.) are never duplicates.
     seen_types = set()
     deduped_lines = []
     for line in result.split(chr(10)):
