@@ -31,12 +31,13 @@ _PY_TO_NIM = {
     "bool": "bool",
     "bytes": "seq[byte]",
     "None": "void",
+    "list": "seq",
 }
 
 # Nim ordinal types — eligible for built-in set[T]
 _NIM_ORDINALS = {
-    "int", "int8", "int16", "int32", "int64",
-    "uint", "uint8", "uint16", "uint32", "uint64",
+    "int8", "int16",
+    "uint8", "uint16",
     "char", "bool", "byte", "enum",
 }
 
@@ -58,9 +59,23 @@ def to_nim(self, prec=None):
 
 @method(type_name)
 def to_nim(self, prec=None):
-    # User-defined types pass through unchanged
-    # type_name wraps a primary expression node
-    return self.nodes[0].to_nim()
+    # Check if the underlying identifier has a known Nim mapping
+    node = self.nodes[0]
+    if hasattr(node, 'nodes') and node.nodes and isinstance(node.nodes[0], str):
+        mapped = _PY_TO_NIM.get(node.nodes[0])
+        if mapped:
+            return mapped
+    result = node.to_nim()
+    # Append any trailing nodes (e.g. generic params [T] from subscript trailers)
+    for extra in self.nodes[1:]:
+        # Several_Times nodes don't have a useful to_nim(); iterate their children
+        if hasattr(extra, 'nodes'):
+            for child in extra.nodes:
+                if hasattr(child, 'to_nim'):
+                    result += child.to_nim()
+        elif hasattr(extra, 'to_nim'):
+            result += extra.to_nim()
+    return result
 
 
 @method(seq_type)
@@ -101,6 +116,7 @@ def to_nim(self, prec=None):
     elem = self.nodes[0].to_nim()
     if _is_nim_ordinal(elem):
         return f"set[{elem}]"
+    ParserState.nim_imports.add("sets")
     return f"HashSet[{elem}]"
 
 

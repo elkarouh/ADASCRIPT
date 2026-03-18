@@ -37,7 +37,7 @@ def _nim_truthiness(expr):
     sym = ParserState.symbol_table.lookup(expr)
     if sym:
         t = (sym.get("type") or "")
-        if any(t.startswith(p) for p in ("string", "seq[", "str")):
+        if any(t.startswith(p) for p in ("string", "seq[", "str", "PriorityQueue", "FifoQueue", "LifoQueue", "HashSet", "Table", "Deque")):
             return f"{expr}.len > 0"
     return expr
 
@@ -191,13 +191,27 @@ def to_nim(self, prec=None):
 
 @method(STRING)
 def to_nim(self, prec=None):
-    return self.node
+    s = self.node
+    # Convert triple-quoted strings to Nim ## comments
+    triple_dq = chr(34)*3
+    triple_sq = chr(39)*3
+    if s.startswith(triple_dq) or s.startswith(triple_sq):
+        inner = s[3:-3]
+        comment_lines = ["## " + line for line in inner.strip().splitlines()]
+        return chr(10).join(comment_lines)
+    # Nim uses double quotes for strings; single quotes are char literals
+    if s.startswith(chr(39)) and s.endswith(chr(39)) and len(s) > 2:
+        inner = s[1:-1]
+        inner = inner.replace(chr(34), chr(92) + chr(34))
+        return chr(34) + inner + chr(34)
+    return s
 
 
 
 _PY_IDENT_TO_NIM = {
     "print": "echo",
     "str": "string",
+    "list": "seq",
     "len": "len",
     "int": "int",
     "float": "float",
@@ -209,7 +223,22 @@ _PY_IDENT_TO_NIM = {
 
 @method(IDENTIFIER)
 def to_nim(self, prec=None):
-    return self.node
+    name = self.node
+    # Resolve tick attributes: Type__tick__Attr -> Nim equivalent
+    if "__tick__" in name:
+        type_name, _, attr = name.partition("__tick__")
+        info = ParserState.tick_types.get(type_name)
+        if info:
+            if attr == "First":
+                return str(info["First"])
+            elif attr == "Last":
+                return str(info["Last"])
+        # Ada tick attributes for enum operations
+        if attr == "Next":
+            return type_name + ".succ"
+        elif attr == "Prev":
+            return type_name + ".pred"
+    return _PY_IDENT_TO_NIM.get(name, name)
 
 
 @method(K_NONE)
@@ -376,7 +405,13 @@ def to_nim(self, prec=None):
 
 @method(slice_trailer)
 def to_nim(self, prec=None):
-    return "[" + self.nodes[0].to_nim() + "]"
+    inner = self.nodes[0].to_nim()
+    # Convert negative indexing: [-1] -> [^1], [-2] -> [^2], etc.
+    import re as _re
+    m = _re.match(r'^-(\d+)$', inner.strip())
+    if m:
+        return "[^" + m.group(1) + "]"
+    return "[" + inner + "]"
 
 
 # Type-aware method renaming: {nim_type_prefix: {py_method: nim_method}}
@@ -384,6 +419,7 @@ _PY_METHOD_TO_NIM = {
     "seq": {"append": "add"},
     "set": {"add": "incl", "remove": "excl"},
     "HashSet": {"add": "incl", "remove": "excl"},
+    "Table": {"items": "pairs"},
     "string": {"lower": "toLowerAscii", "upper": "toUpperAscii",
                "strip": "strip", "split": "split", "join": "join",
                "startswith": "startsWith", "endswith": "endsWith",
@@ -392,7 +428,15 @@ _PY_METHOD_TO_NIM = {
 
 @method(attr_trailer)
 def to_nim(self, prec=None):
-    return "." + self.nodes[0].to_nim()
+    attr_name = self.nodes[0].to_nim()
+    # Handle tick attributes on expressions: .field'Next -> .field.succ, .field'Prev -> .field.pred
+    if "__tick__" in attr_name:
+        base, _, tick_attr = attr_name.partition("__tick__")
+        if tick_attr == "Next":
+            return "." + base + ".succ"
+        elif tick_attr == "Prev":
+            return "." + base + ".pred"
+    return "." + attr_name
 
 
 @method(trailer)
@@ -411,6 +455,7 @@ _PY_UNIVERSAL_METHOD_TO_NIM = {
     "strip": "strip",
     "startswith": "startsWith",
     "endswith": "endsWith",
+    "get": "getOrDefault",
 }
 
 def _translate_method(obj_name, method_name):
@@ -488,6 +533,12 @@ def to_nim(self, prec=None):
                     return arg
                 return "@" + arg
             return "@[]"
+        if raw_name == "set":
+            call_node = self.nodes[1].nodes[0]
+            arg = _extract_call_arg(call_node)
+            if arg:
+                return f"{arg}.toHashSet()"
+            return "initHashSet()"
         if raw_name == "range":
             call_node = self.nodes[1].nodes[0]
             args = _extract_call_args(call_node)
@@ -502,14 +553,46 @@ def to_nim(self, prec=None):
             call_node = self.nodes[1].nodes[0]
             arg = _extract_call_arg(call_node)
             return f"int({arg})"
-        sym = ParserState.symbol_table.lookup(raw_name)
-        if sym and sym.get("kind") == "class":
-            result = "new" + raw_name
+        # Map stdlib queue constructors to their Nim init functions
+        _STDLIB_CTORS = {"PriorityQueue": ("initPriorityQueue", "newPriorityQueueWith"),
+                         "FifoQueue": ("initFifoQueue", "newFifoQueueWith"),
+                         "LifoQueue": ("initLifoQueue", "newLifoQueueWith")}
+        # Only map to constructor if first trailer is a call_trailer (parentheses),
+        # not a slice_trailer (brackets — used for type annotations like PriorityQueue[T])
+        _first_trailer = self.nodes[1].nodes[0] if len(self.nodes) > 1 and hasattr(self.nodes[1], 'nodes') and self.nodes[1].nodes else None
+        _is_call = _first_trailer is not None and type(_first_trailer).__name__ == "call_trailer"
+        if raw_name in _STDLIB_CTORS and _is_call:
+            # Check if constructor has arguments
+            _ctor_no_args, _ctor_with_args = _STDLIB_CTORS[raw_name]
+            call_node = _first_trailer
+
+            has_args = call_node is not None and hasattr(call_node, 'nodes') and call_node.nodes
+            # Check if args produce non-empty output (Filter nodes exist even for empty "()")
+            if has_args:
+                try:
+                    args_str = call_node.to_nim()
+                    has_args = args_str and args_str != "()"
+                except Exception:
+                    has_args = False
+            result = _ctor_with_args if has_args else _ctor_no_args
+        else:
+            sym = ParserState.symbol_table.lookup(raw_name)
+            if sym and sym.get("kind") == "class":
+                result = "new" + raw_name
     base_name = result  # save for type-aware method lookup
     if len(self.nodes) > 1 and hasattr(self.nodes[1], "nodes") and self.nodes[1].nodes:
         for tr in self.nodes[1].nodes:
             if type(tr).__name__ == "attr_trailer":
                 method_name = tr.nodes[0].to_nim()
+                # Handle Ada tick attributes: field'Next -> field.succ, field'Prev -> field.pred
+                if "__tick__" in method_name:
+                    base_attr, _, tick_attr = method_name.partition("__tick__")
+                    if tick_attr == "Next":
+                        result += "." + base_attr + ".succ"
+                        continue
+                    elif tick_attr == "Prev":
+                        result += "." + base_attr + ".pred"
+                        continue
                 method_name = _translate_method(base_name, method_name)
                 result += "." + method_name
             else:
@@ -752,6 +835,18 @@ def to_nim(self, prec=None):
     for seq in st.nodes:
         if hasattr(seq, "nodes") and len(seq.nodes) >= 2:
             py_op = _op_string(seq.nodes[0])
+            # Handle 'in lo .. hi' / 'in lo ..< hi' (in_range_incl / in_range_excl)
+            if py_op == "in" and len(seq.nodes) >= 4:
+                lo = seq.nodes[1].to_nim(operand_prec)
+                range_op_node = seq.nodes[2]
+                hi = seq.nodes[3].to_nim(operand_prec)
+                # Detect exclusive (..<) vs inclusive (..)
+                is_exclusive = (hasattr(range_op_node, 'nodes')
+                    and any(hasattr(n, 'node') and str(n.node) == '<'
+                            for n in range_op_node.nodes))
+                op = "..<" if is_exclusive else ".."
+                chain += f" in {lo}{op}{hi}"
+                continue
             nim_op = _PY_OP_TO_NIM.get(py_op, py_op)
             right = seq.nodes[1].to_nim(operand_prec)
             # Option-aware: x is not None -> x.isSome, x is None -> x.isNone
@@ -926,9 +1021,16 @@ def to_nim(self, prec=None):
 @method(yield_val)
 def to_nim(self, prec=None):
     if self.nodes and hasattr(self.nodes[0], "nodes") and self.nodes[0].nodes:
-        return f"yield {self.nodes[0].nodes[0].to_nim()}"
+        val = self.nodes[0].nodes[0].to_nim()
+        # If yield value contains commas (tuple), wrap in parens for Nim
+        if "," in val and not val.startswith("("):
+            val = f"({val})"
+        return f"yield {val}"
     elif self.nodes:
-        return f"yield {self.nodes[0].to_nim()}"
+        val = self.nodes[0].to_nim()
+        if "," in val and not val.startswith("("):
+            val = f"({val})"
+        return f"yield {val}"
     return "yield"
 
 
@@ -1077,6 +1179,9 @@ def to_nim(self, prec=None):
 @method(for_if_clause)
 def to_nim(self, prec=None):
     tgt = self.nodes[0].to_nim()
+    # Nim interprets 'for a, b in seq' as index/value; wrap in parens for tuple unpacking
+    if "," in tgt and not tgt.startswith("("):
+        tgt = f"({tgt})"
     iterable = self.nodes[1].to_nim()
     result = f"for {tgt} in {iterable}"
     if len(self.nodes) > 2:
@@ -1302,3 +1407,29 @@ if __name__ == "__main__":
     print("=" * 60)
     print(f"Results: {nim_passed} passed, {nim_failed} failed")
     print()
+
+
+@method(named_tuple_field)
+def to_nim(self, prec=None):
+    name = self.nodes[0].to_nim()
+    # nodes[1] is V_COLON, nodes[2] is expression
+    val = self.nodes[2].to_nim()
+    return f"{name}: {val}"
+
+@method(named_tuple_lit)
+def to_nim(self, prec=None):
+    # nodes[0]=LPAREN_NODE, nodes[1]=first field, nodes[2]=Several_Times of rest
+    first = self.nodes[1].to_nim()
+    fields = [first]
+    rest = self.nodes[2]  # Several_Times
+    if hasattr(rest, 'nodes'):
+        for seq in rest.nodes:
+            # Each seq is a Sequence_Parser with nodes: [named_tuple_field]
+            # (COMMA was ignored)
+            if hasattr(seq, 'nodes'):
+                for child in seq.nodes:
+                    if type(child).__name__ == "named_tuple_field":
+                        fields.append(child.to_nim())
+            elif type(seq).__name__ == "named_tuple_field":
+                fields.append(seq.to_nim())
+    return "(" + ", ".join(fields) + ")"

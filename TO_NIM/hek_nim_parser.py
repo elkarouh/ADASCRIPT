@@ -32,13 +32,19 @@ import hek_nim_declarations  # noqa: F401 — registers decl to_nim()
 _class_methods = {}   # class_name -> set of method names
 _class_parents = {}   # class_name -> parent_name or None
 
+def _strip_generic(name):
+    """Strip generic params: 'Optimizer[S, D]' -> 'Optimizer'"""
+    idx = name.find("[")
+    return name[:idx] if idx >= 0 else name
+
 def _is_new_method(class_name, method_name):
     """Return True if method_name is not defined in any ancestor of class_name."""
     parent = _class_parents.get(class_name)
     while parent:
-        if method_name in _class_methods.get(parent, set()):
+        base_parent = _strip_generic(parent)
+        if method_name in _class_methods.get(base_parent, set()):
             return False
-        parent = _class_parents.get(parent)
+        parent = _class_parents.get(base_parent)
     return True
 
 # to_nim() methods for compound statements
@@ -53,7 +59,7 @@ def to_nim(self, indent=0):
 
 # --- block ---
 @method(block)
-def to_nim(self, indent=0, is_virtual=False, class_name=None, parent_name=None):
+def to_nim(self, indent=0, is_virtual=False, class_name=None, parent_name=None, type_params=""):
     """Emit body lines. For virtual classes, generates proper Nim structure."""
     lines = []
     fields = []
@@ -122,6 +128,7 @@ def to_nim(self, indent=0, is_virtual=False, class_name=None, parent_name=None):
     
     if class_name:  # Process all classes with fields/methods
         result_lines = []
+        field_defaults = []  # list of (field_name, default_expr) for constructor init
         # Emit fields (inside object body): strip var/let/const keyword and defaults
         for field in fields:
             line = field.to_nim(indent)
@@ -130,8 +137,12 @@ def to_nim(self, indent=0, is_virtual=False, class_name=None, parent_name=None):
                 if stripped.startswith(kw):
                     line = line[:len(line) - len(stripped)] + stripped[len(kw):]
                     break
-            # Strip default value: Nim object fields don't support inline defaults
+            # Capture default value before stripping
             import re as _re
+            default_match = _re.search(r'^\s*(\w+)\s*:.+?\s*=\s*(.+)$', line.strip())
+            if default_match:
+                field_defaults.append((default_match.group(1), default_match.group(2)))
+            # Strip default value: Nim object fields don't support inline defaults
             line = _re.sub(r' = .+$', '', line)
             result_lines.append(line)
         
@@ -173,20 +184,24 @@ def to_nim(self, indent=0, is_virtual=False, class_name=None, parent_name=None):
 
         # Use base_indent for procs/methods (top level), not the indented value
         base_indent = getattr(self, '_base_indent', indent)
+        class_type = class_name + type_params if class_name else None
         
         # Emit forward declarations for methods so __init__ can call them
         if inits and other_methods:
             for func_node_m, mname in other_methods:
-                fwd = _generate_method_decl(func_node_m, base_indent, class_name, parent_name, is_virtual_class)
+                fwd = _generate_method_decl(func_node_m, base_indent, class_name, parent_name, is_virtual_class, type_params)
                 if fwd:
                     sig = fwd[0].rstrip()
                     if sig.endswith(" ="):
                         sig = sig[:-2]
+                    # Skip forward declarations for iterators (Nim doesn't support them)
+                    if sig.lstrip().startswith("iterator "):
+                        continue
                     result_lines.append(sig)
 
         for func_node in inits:
             # Generate init/new procs at top level (same indent as type definition)
-            init_lines, new_lines = _generate_init_new(func_node, base_indent, class_name, parent_name, is_virtual_class)
+            init_lines, new_lines = _generate_init_new(func_node, base_indent, class_name, parent_name, is_virtual_class, type_params, field_defaults=field_defaults)
             result_lines.extend(init_lines)
             result_lines.extend(new_lines)
         
@@ -194,11 +209,15 @@ def to_nim(self, indent=0, is_virtual=False, class_name=None, parent_name=None):
         # If no __init__ but class needs a constructor, generate a default newClassName
         if not inits and class_name:
             new_name = f"new{class_name}"
-            result_lines.append(f"{_ind(base_indent)}proc {new_name}*(): {class_name} =")
+            export = "*" if base_indent == 0 else ""
+            result_lines.append(f"{_ind(base_indent)}proc {new_name}{export}{type_params}(): {class_type} =")
             result_lines.append(f"{_ind(base_indent + 1)}new(result)")
+            # Initialize fields with default values
+            for fname, fdefault in field_defaults:
+                result_lines.append(f"{_ind(base_indent + 1)}result.{fname} = {fdefault}")
         for func_node, method_name in other_methods:
             # Generate methods at top level (same indent as type definition)
-            method_lines = _generate_method_decl(func_node, base_indent, class_name, parent_name, is_virtual_class)
+            method_lines = _generate_method_decl(func_node, base_indent, class_name, parent_name, is_virtual_class, type_params)
             result_lines.extend(method_lines)
         
         # If no fields or methods, emit discard for empty body
@@ -296,6 +315,9 @@ def to_nim(self, indent=0):
     sym = ParserState.symbol_table.lookup(iterable)
     if sym and sym.get("type") == "File":
         iterable = f"{iterable}.lines"
+    # Nim tuple unpacking in for: for x, y in seq -> for (x, y) in seq
+    if "," in target and not target.startswith("("):
+        target = f"({target})"
     hc = _block_inline_header_comment(self.nodes[2])
     body = self.nodes[2].to_nim(indent + 1)
     result = f"{_ind(indent)}for {target} in {iterable}:{hc}\n{body}"
@@ -534,11 +556,18 @@ def to_nim(self):
 
 
 @method(pattern_capture)
-def to_nim(self):
+def to_nim(self, prec=None):
     n = self.nodes[0]
     if hasattr(n, "to_nim"):
-        return n.to_nim()
-    name = str(n)
+        name = n.to_nim()
+    else:
+        name = str(n)
+    # Resolve tick attributes: Type__tick__First -> first value of subrange/enum
+    if "__tick__" in name:
+        type_name, _, attr = name.partition("__tick__")
+        info = ParserState.tick_types.get(type_name)
+        if info and attr in info:
+            return str(info[attr])
     # Nim disallows leading underscores — strip single leading _
     if name.startswith("_") and not name.startswith("__"):
         name = name[1:]
@@ -900,8 +929,8 @@ def to_nim(self, indent=0):
         new_params = []
         for p in params.split(", "):
             pname = p.split(":")[0].strip()
-            if pname and pname != "self" and _re.search(
-                rf"\b{_re.escape(pname)}\b\s*(\.add\(|\[.*\]\s*=|=(?!=))", body
+            if pname and pname != "self" and " = " not in p and _re.search(
+                rf"(?<![=(,.])\b{_re.escape(pname)}\b\s*(\.add\(|\[.*\]\s*=|[+\-*/]=|=(?!=))", body
             ):
                 if not p.startswith("var ") and ": " in p:
                     # Nim syntax: param: var T
@@ -966,6 +995,7 @@ def to_nim(self, indent=0):
     decos = ""
     name = ""
     bases = ""
+    type_params = ""
     block_node = None
 
     for node in self.nodes:
@@ -986,8 +1016,12 @@ def to_nim(self, indent=0):
                     decos_str = seq.to_nim(indent)
                     if "@virtual" not in decos_str:
                         decos = decos_str + "\n"
+                elif stname == "type_alias_params":
+                    type_params = seq.to_nim()
                 elif stname == "class_args":
                     bases = seq.to_nim()
+        elif tname == "type_alias_params":
+            type_params = node.to_nim()
         elif tname == "class_args":
             bases = node.to_nim()
         elif tname == "IDENTIFIER":
@@ -1001,7 +1035,25 @@ def to_nim(self, indent=0):
     parent_name = ""
     if bases and bases not in ("()", ""):
         inner = bases[1:-1] if bases.startswith("(") else bases
-        parent_name = inner.split(',')[0].strip()
+        # Split on comma but respect bracket nesting (e.g. Optimizer[S, D])
+        depth = 0
+        for i, ch in enumerate(inner):
+            if ch in "[(": depth += 1
+            elif ch in "])": depth -= 1
+            elif ch == "," and depth == 0:
+                inner = inner[:i]
+                break
+        parent_name = inner.strip()
+
+    # Warn if a tuple type is used directly as a generic parameter
+    if bases and "[(" in bases and ")]" in bases:
+        import re as _re
+        _m = _re.search(r'(\w+)\[\(', bases)
+        _parent = _m.group(1) if _m else "Base"
+        print(f"WARNING: class {name}({_parent}[(...)]): tuple used as generic parameter.\n"
+              f"  Use a type alias instead:  type MyTuple is (int, int)\n"
+              f"  Then:  class {name}({_parent}[MyTuple]):", file=sys.stderr)
+
 
     # Register class name in symbol table so constructor calls can be detected
     if name:
@@ -1044,7 +1096,7 @@ def to_nim(self, indent=0):
         block_node._base_indent = indent  # Store original indent for procs/methods
     # Always use is_virtual=True for block processing to get init/new procs
     # The 'ref' keyword is controlled separately
-    body = block_node.to_nim(indent + 1, is_virtual=True, class_name=name, parent_name=parent_name) if block_node else ""
+    body = block_node.to_nim(indent + 1, is_virtual=True, class_name=name, parent_name=parent_name, type_params=type_params) if block_node else ""
     
     parent = f" of {parent_name}" if parent_name else " of RootObj"
     # Check field declarations for self-reference (e.g., children: array[X, TrieNode])
@@ -1055,7 +1107,7 @@ def to_nim(self, indent=0):
     needs_ref = is_virtual or (name and name in fields_text)
     ref_keyword = "ref " if needs_ref else ""
     ParserState.symbol_table.pop_scope()
-    return f"{decos}{_ind(indent)}type {name} = {ref_keyword}object{parent}\n{body}"
+    return f"{decos}{_ind(indent)}type {name}{type_params} = {ref_keyword}object{parent}\n{body}"
 
 
 # --- Type block forms (tuple, record) ---
@@ -1101,9 +1153,17 @@ def to_nim(self, indent=0):
     params = ""
     rhs = self.nodes[-1]
     for node in self.nodes[1:-1]:
-        if type(node).__name__ == "type_alias_params":
+        ntype = type(node).__name__
+        if ntype == "type_alias_params":
             params = node.to_nim()
             break
+        if ntype == "Several_Times" and hasattr(node, "nodes"):
+            for child in node.nodes:
+                if type(child).__name__ == "type_alias_params":
+                    params = child.to_nim()
+                    break
+            if params:
+                break
     # rhs is Sequence_Parser containing [Literal_keyword, block]
     keyword = ""
     block_node = None
@@ -1367,8 +1427,9 @@ if __name__ == "__main__":
     print(f"Results: {passed} passed, {failed} failed")
 
 
-def _generate_init_new(func_node, indent, class_name, parent_name, is_virtual=True):
+def _generate_init_new(func_node, indent, class_name, parent_name, is_virtual=True, type_params="", field_defaults=None):
     """Generate init proc and new constructor for a class __init__ method."""
+    class_type = class_name + type_params
     init_lines = []
     new_lines = []
     
@@ -1414,10 +1475,10 @@ def _generate_init_new(func_node, indent, class_name, parent_name, is_virtual=Tr
     # ref types: self: ClassName; value types: self: var ClassName
     is_ref = is_virtual
     if is_ref:
-        self_param = f"self: {class_name}"
+        self_param = f"self: {class_type}"
     else:
-        self_param = f"self: var {class_name}"
-    init_sig = f"{_ind(indent)}proc {init_name}({self_param}{', ' + params_str if params_str else ''}) ="
+        self_param = f"self: var {class_type}"
+    init_sig = f"{_ind(indent)}proc {init_name}{type_params}({self_param}{', ' + params_str if params_str else ''}) ="
     
     init_body = []
     if block_node:
@@ -1441,10 +1502,15 @@ def _generate_init_new(func_node, indent, class_name, parent_name, is_virtual=Tr
                 init_body[i] = line
     
     init_lines.append(init_sig)
+    # Initialize fields with default values before user's init body
+    if field_defaults:
+        for fname, fdefault in field_defaults:
+            init_lines.append(f"{_ind(indent + 1)}self.{fname} = {fdefault}")
     init_lines.extend(init_body)
     
     new_name = f"new{class_name}"
-    new_sig = f"{_ind(indent)}proc {new_name}*({params_str}): {class_name} ="
+    export = "*" if indent == 0 else ""
+    new_sig = f"{_ind(indent)}proc {new_name}{export}{type_params}({params_str}): {class_type} ="
     new_body = []
     if is_ref:
         new_body.append(f"{_ind(indent + 1)}new(result)")
@@ -1459,7 +1525,7 @@ def _generate_init_new(func_node, indent, class_name, parent_name, is_virtual=Tr
     return init_lines, new_lines
 
 
-def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual=False):
+def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual=False, type_params=""):
     """Generate method declaration. Uses 'method' for virtual, 'proc' for non-virtual."""
     lines = []
     
@@ -1490,16 +1556,20 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
                         for param_node in param_nodes:
                             pname = str(param_node.nodes[0].nodes[0])
                             ptype = "auto"
+                            pdefault = ""
                             for pn in param_node.nodes[1:]:
                                 if type(pn).__name__ == "Several_Times" and pn.nodes:
                                     for seq in pn.nodes:
                                         if hasattr(seq, "nodes") and len(seq.nodes) >= 2:
-                                            if str(seq.nodes[0].nodes[0]) == ":":
+                                            op_str = str(seq.nodes[0].nodes[0]) if hasattr(seq.nodes[0], "nodes") and seq.nodes[0].nodes else ""
+                                            if op_str == ":":
                                                 ptype = seq.nodes[1].to_nim()
+                                            elif op_str == "=":
+                                                pdefault = f" = {seq.nodes[1].to_nim()}"
                             if pname == "self":
-                                params.append(f"self: {class_name}")
+                                params.append(f"self: {class_name}{type_params}")
                             else:
-                                params.append(f"{pname}: {ptype}")
+                                params.append(f"{pname}: {ptype}{pdefault}")
                 elif st_name == "return_annotation":
                     ret_ann = st.to_nim()
         elif tname == "return_annotation":
@@ -1530,8 +1600,8 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
         new_params = []
         for p in params:
             pname = p.split(":")[0].strip()
-            if pname and pname != "self" and _re.search(
-                rf"\b{_re.escape(pname)}\b\s*(\.add\(|\[.*\]\s*=|=(?!=))", body_text
+            if pname and pname != "self" and " = " not in p and _re.search(
+                rf"(?<![=(,.])\b{_re.escape(pname)}\b\s*(\.add\(|\[.*\]\s*=|[+\-*/]=|=(?!=))", body_text
             ):
                 if not p.startswith("var ") and ": " in p:
                     # Nim syntax: param: var T
@@ -1541,14 +1611,22 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
         params = new_params
 
     params_str = ", ".join(params)
-    if is_virtual:
+    # Detect if body contains yield -> use iterator instead of proc/method
+    has_yield = any("yield " in line or line.strip() == "yield" for line in body_lines)
+    if has_yield:
+        pragma = ""
+        keyword = "iterator"
+        if not ret_ann:
+            ret_ann = ": auto"
+    elif is_virtual:
         pragma = " {.base.}" if _is_new_method(class_name, name) else ""
         keyword = "method"
     else:
         pragma = ""
         keyword = "proc"
 
-    method_sig = f"{_ind(indent)}{keyword} {name}({params_str}){ret_ann}{pragma} ="
+    generic_params = type_params if type_params else ""
+    method_sig = f"{_ind(indent)}{keyword} {name}{generic_params}({params_str}){ret_ann}{pragma} ="
     lines.append(method_sig)
     lines.extend(body_lines)
 

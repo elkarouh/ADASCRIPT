@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.join(_dir, "..", "HPYTHON_GRAMMAR"))
 
 from py3compound_stmt import *  # noqa: F403 — grammar definitions
 from hek_tokenize import RichNL
-from hek_parsec import method
+from hek_parsec import method, ParserState
 from hek_helpers import INDENT_STR, _ind, _richnl_lines, _block_inline_header_comment, _block_last_stmt
 import hek_py3_stmt  # noqa: F401 — registers stmt to_py() methods
 
@@ -58,7 +58,11 @@ def to_py(self, indent=0):
                         try:
                             lines.append(stmt_node.to_py(indent))
                         except TypeError:
-                            lines.append(_ind(indent) + stmt_node.to_py())
+                            raw = stmt_node.to_py()
+                            if '\n' in raw:
+                                lines.extend(_ind(indent) + ln for ln in raw.split('\n'))
+                            else:
+                                lines.append(_ind(indent) + raw)
                     # Emit trailing NLs (blank lines / comments) after the statement
                     if nl_several is not None:
                         for nl_node in nl_several.nodes:
@@ -407,11 +411,18 @@ def to_py(self):
 
 
 @method(pattern_capture)
-def to_py(self):
+def to_py(self, prec=None):
     """pattern_capture: IDENTIFIER"""
-    return (
+    name = (
         self.nodes[0].to_py() if hasattr(self.nodes[0], "to_py") else str(self.nodes[0])
     )
+    # Resolve tick attributes: Type__tick__First -> first value of subrange/enum
+    if "__tick__" in name:
+        type_name, _, attr = name.partition("__tick__")
+        info = ParserState.tick_types.get(type_name)
+        if info and attr in info:
+            return str(info[attr])
+    return name
 
 
 @method(pattern_wildcard)
@@ -792,13 +803,19 @@ def to_py(self, indent=0):
     hc = _block_inline_header_comment(block_node) if block_node else ""
     body = block_node.to_py(indent + 1) if block_node else ""
     # Implicit return: if last statement is a bare expression, add return
+    # Skip for -> None functions (they don't return a value)
     last_stmt = _block_last_stmt(block_node)
-    if ret_ann and last_stmt and type(last_stmt.nodes[0]).__name__ == "expressions":
+    is_none_return = ret_ann.strip().endswith("None")
+    if ret_ann and not is_none_return and last_stmt and type(last_stmt.nodes[0]).__name__ == "expressions":
         body = body.rstrip("\n")
-        lines = body.rsplit("\n", 1)
-        last = lines[-1]
-        stripped = last.lstrip()
-        lines[-1] = last[:len(last)-len(stripped)] + "return " + stripped
+        # Find the last non-comment, non-blank line to prepend return
+        lines = body.split("\n")
+        for i in range(len(lines) - 1, -1, -1):
+            stripped = lines[i].lstrip()
+            if stripped and not stripped.startswith("#"):
+                indent_str = lines[i][:len(lines[i])-len(stripped)]
+                lines[i] = indent_str + "return " + stripped
+                break
         body = "\n".join(lines) + "\n"
     return f"{decos}{_ind(indent)}def {name}({params}){ret_ann}:{hc}\n{body}"
 
@@ -846,13 +863,19 @@ def to_py(self, indent=0):
     hc = _block_inline_header_comment(block_node) if block_node else ""
     body = block_node.to_py(indent + 1) if block_node else ""
     # Implicit return: if last statement is a bare expression, add return
+    # Skip for -> None functions (they don't return a value)
     last_stmt = _block_last_stmt(block_node)
-    if ret_ann and last_stmt and type(last_stmt.nodes[0]).__name__ == "expressions":
+    is_none_return = ret_ann.strip().endswith("None")
+    if ret_ann and not is_none_return and last_stmt and type(last_stmt.nodes[0]).__name__ == "expressions":
         body = body.rstrip("\n")
-        lines = body.rsplit("\n", 1)
-        last = lines[-1]
-        stripped = last.lstrip()
-        lines[-1] = last[:len(last)-len(stripped)] + "return " + stripped
+        # Find the last non-comment, non-blank line to prepend return
+        lines = body.split("\n")
+        for i in range(len(lines) - 1, -1, -1):
+            stripped = lines[i].lstrip()
+            if stripped and not stripped.startswith("#"):
+                indent_str = lines[i][:len(lines[i])-len(stripped)]
+                lines[i] = indent_str + "return " + stripped
+                break
         body = "\n".join(lines) + "\n"
     return f"{decos}{_ind(indent)}async def {name}({params}){ret_ann}:{hc}\n{body}"
 
@@ -914,12 +937,21 @@ def to_py(self, indent=0):
                 block_node = child
     if not block_node:
         block_node = rhs  # fallback
-    fields = _extract_py_fields(block_node)
+    fields = _extract_py_fields(block_node, indent=indent+1)
     if keyword == "tuple":
         ParserState.nim_imports.add("from typing import NamedTuple")
         lines = [f"{_ind(indent)}class {name}{params}(NamedTuple):"]
+        # Register field names for named_tuple_lit constructor emission
+        import re as _re
+        field_names = []
         for f in fields:
             lines.append(f)
+            m = _re.match(r'\s+(\w+)\s*:', f)
+            if m:
+                field_names.append(m.group(1))
+        if field_names:
+            from hek_py3_expr import _register_named_tuple
+            _register_named_tuple(name, field_names)
         return "\n".join(lines)
     elif keyword == "record":
         ParserState.nim_imports.add("from dataclasses import dataclass")
@@ -937,6 +969,7 @@ def to_py(self, indent=0):
     decos = ""
     name = ""
     bases = ""
+    type_params = ""
     block_node = None
 
     for node in self.nodes:
@@ -950,8 +983,12 @@ def to_py(self, indent=0):
                     decos += seq.to_py(indent) + "\n"
                 elif stname == "decorators":
                     decos = seq.to_py(indent) + "\n"
+                elif stname == "type_alias_params":
+                    type_params = seq.to_py()
                 elif stname == "class_args":
                     bases = seq.to_py()
+        elif tname == "type_alias_params":
+            type_params = node.to_py()
         elif tname == "class_args":
             bases = node.to_py()
         elif tname == "IDENTIFIER":
@@ -959,9 +996,19 @@ def to_py(self, indent=0):
         elif tname == "block":
             block_node = node
 
+    # Warn if a tuple type is used directly as a generic parameter
+    if bases and "[(" in bases and ")]" in bases:
+        import re as _re
+        _m = _re.search(r'(\w+)\[\(', bases)
+        _parent = _m.group(1) if _m else "Base"
+        print(f"WARNING: class {name}({_parent}[(...)]): tuple used as generic parameter "
+              f"will fail at runtime.\n"
+              f"  Use a type alias instead:  type MyTuple is (int, int)\n"
+              f"  Then:  class {name}({_parent}[MyTuple]):", file=sys.stderr)
+
     hc = _block_inline_header_comment(block_node) if block_node else ""
     body = block_node.to_py(indent + 1) if block_node else ""
-    return f"{decos}{_ind(indent)}class {name}{bases}:{hc}\n{body}"
+    return f"{decos}{_ind(indent)}class {name}{type_params}{bases}:{hc}\n{body}"
 
 
 @method(class_args)

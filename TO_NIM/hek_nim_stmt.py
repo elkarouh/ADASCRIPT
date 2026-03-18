@@ -55,6 +55,7 @@ _PY_MODULE_TO_NIM = {
     "re": "re",
     "time": "times",       # time.perf_counter -> cpuTime()
     "typing": None,        # typing imports are erased
+    "stdlib": "stdlib",    # local stdlib module
 }
 
 
@@ -193,6 +194,14 @@ def to_nim(self):
     return result
 
 # --- return ---
+@method(decl_tuple_unpack)
+def to_nim(self):
+    """decl_tuple_unpack: let/var/const (x, y) = expr -> Nim let/var (x, y) = expr"""
+    kw = str(self.nodes[0].node)  # var/let/const
+    targets = self.nodes[1].to_nim()  # paren_group
+    value = self.nodes[3].to_nim()  # expression (nodes[2] is V_EQUAL)
+    return f"{kw} {targets} = {value}"
+
 @method(return_val)
 def to_nim(self):
     val = self.nodes[0].to_nim()
@@ -206,6 +215,9 @@ def to_nim(self):
                 return f"return none({inner_type})"
             else:
                 return f"return some({val})"
+    # If return value contains commas (tuple), wrap in parens for Nim
+    if "," in val and not val.startswith("("):
+        val = f"({val})"
     return f"return {val}"
 
 
@@ -265,9 +277,27 @@ def to_nim(self):
     return f"raise {self.nodes[0].to_nim()}"
 
 
+_PY_EXCEPTIONS = {
+    "NotImplementedError": "CatchableError",
+    "ValueError": "ValueError",
+    "RuntimeError": "CatchableError",
+    "TypeError": "CatchableError",
+    "IndexError": "IndexDefect",
+    "KeyError": "KeyError",
+    "Exception": "CatchableError",
+}
+
 @method(raise_exc)
 def to_nim(self):
-    return f"raise {self.nodes[0].to_nim()}"
+    import re as _re
+    val = self.nodes[0].to_nim()
+    # Translate Python exception constructors: raise XError("msg") -> raise newException(NimError, "msg")
+    m = _re.match(r"(\w+)\((.*)\)$", val)
+    if m and m.group(1) in _PY_EXCEPTIONS:
+        nim_exc = _PY_EXCEPTIONS[m.group(1)]
+        args = m.group(2)
+        return f"raise newException({nim_exc}, {args})"
+    return f"raise {val}"
 
 
 @method(raise_bare)
@@ -578,6 +608,10 @@ def to_nim(self):
     # Handle star import
     if names_str == "*":
         return f"from {module} import *"
+    # Check if module has a known Nim equivalent
+    nim_module = _PY_MODULE_TO_NIM.get(module)
+    if nim_module is not None:
+        return f"import {nim_module}"
     # Split names and generate one let per name
     # names_str may be "X", "X, Y", "(X, Y)", or "X as A"
     raw = names_str.strip("()")
@@ -604,22 +638,24 @@ def to_nim(self):
 # --- type alias ---
 @method(enum_def)
 def to_nim(self):
-    """enum_def: 'enum' IDENTIFIER (',') IDENTIFIER)*"""
-    parts = [self.nodes[0].to_nim()]
+    """enum_def: 'enum' enum_member (',' enum_member)*"""
+    raw = str(self.nodes[0].node)
+    parts = [f"v{raw}" if raw.isdigit() else raw]
     for node in self.nodes[1:]:
         if not hasattr(node, 'nodes') or not node.nodes:
             continue
         for seq in node.nodes:
             if hasattr(seq, 'nodes') and len(seq.nodes) >= 1:
-                parts.append(seq.nodes[0].to_nim())
+                m = str(seq.nodes[0].node)
+                parts.append(f"v{m}" if m.isdigit() else m)
     return "enum " + ", ".join(parts)
 
 
 @method(subrange_def)
 def to_nim(self):
     """subrange_def: INTEGER '..' ['<'] INTEGER -> Nim range[lo..hi] or range[lo..<hi]"""
-    lo = self.nodes[0].node
-    hi = self.nodes[-1].node
+    lo = str(self.nodes[0].node)
+    hi = str(self.nodes[-1].node)
     # Check if exclusive (..<) — look for '<' in Several_Times node from (vop("<"))[:]
     is_exclusive = False
     for n in self.nodes[1:-1]:
@@ -629,6 +665,13 @@ def to_nim(self):
             break
     op = "..<" if is_exclusive else ".."
     return f"range[{lo}{op}{hi}]"
+
+
+
+@method(constrained_subrange_def)
+def to_nim(self):
+    """constrained_subrange_def: IDENTIFIER subrange_def -> Nim range[lo..hi]"""
+    return self.nodes[1].to_nim()
 
 
 @method(nimport_stmt)
@@ -678,8 +721,30 @@ def to_nim(self):
                 break
     # RHS is the last node — works whether V_EQUAL is present ('=') or absent ('is')
     rhs = self.nodes[-1]
-    if type(rhs).__name__ == "enum_def":
+    rhs_type = type(rhs).__name__
+    if rhs_type == "enum_def":
         ParserState.symbol_table.add(name, "enum", "type")
+        # Register First/Last for tick attributes
+        # Extract members: first node is first member, rest are in Several_Times groups
+        raw0 = str(rhs.nodes[0].node)
+        members = [f"v{raw0}" if raw0.isdigit() else raw0]
+        for node in rhs.nodes[1:]:
+            if hasattr(node, "nodes") and node.nodes:
+                for seq in node.nodes:
+                    if hasattr(seq, "nodes") and len(seq.nodes) >= 1:
+                        m = str(seq.nodes[0].node)
+                        members.append(f"v{m}" if m.isdigit() else m)
+        if members:
+            ParserState.tick_types[name] = {"First": members[0], "Last": members[-1], "members": members}
+    elif rhs_type == "subrange_def":
+        lo = str(rhs.nodes[0].node)
+        hi = str(rhs.nodes[-1].node)
+        ParserState.tick_types[name] = {"First": lo, "Last": hi}
+    elif rhs_type == "constrained_subrange_def":
+        sr = rhs.nodes[1]  # the subrange_def inside
+        lo = str(sr.nodes[0].node)
+        hi = str(sr.nodes[-1].node)
+        ParserState.tick_types[name] = {"First": lo, "Last": hi}
     value = rhs.to_nim()
     return f"type {name}{params} = {value}"
 
@@ -787,9 +852,9 @@ if __name__ == "__main__":
         ("import os as o", "import os"),
         ("import os, sys", "import os"),
         # --- from import ---
-        ("from os import path", 'let path = pyImport("os").path'),
-        ("from os import path as p", 'let p = pyImport("os").path'),
-        ("from os import path, getcwd", 'let path = pyImport("os").path' + chr(10) + 'let getcwd = pyImport("os").getcwd'),
+        ("from os import path", 'import os'),
+        ("from os import path as p", 'import os'),
+        ("from os import path, getcwd", 'import os'),
         ("from os import *", "from os import *"),
         # --- type alias ---
         ("type Vector = list", "type Vector = list"),

@@ -107,6 +107,7 @@ aug_assign_stmt = fw("aug_assign_stmt")
 ann_assign_stmt = fw("ann_assign_stmt")
 decl_keyword = fw("decl_keyword")
 decl_ann_assign_stmt = fw("decl_ann_assign_stmt")
+decl_tuple_unpack = fw("decl_tuple_unpack")
 return_stmt = fw("return_stmt")
 pass_stmt = fw("pass_stmt")
 break_stmt = fw("break_stmt")
@@ -164,6 +165,8 @@ ann_assign_stmt = IDENTIFIER + V_COLON + type_annotation + (V_EQUAL + expression
 # decl_ann_assign: ("var"|"let"|"const") IDENTIFIER ':' type_annotation ['=' expression]
 decl_keyword = literal("var") | literal("let") | literal("const")
 decl_ann_assign_stmt = decl_keyword + IDENTIFIER + V_COLON + type_annotation + (V_EQUAL + expression)[:]
+# decl_tuple_unpack: let (x, y) = expr
+decl_tuple_unpack = decl_keyword + paren_group + V_EQUAL + _expressions
 
 # --- return ---
 return_val = ikw("return") + _expressions
@@ -221,11 +224,19 @@ nimport_stmt = ikw("nimport") + dotted_name + (COMMA + dotted_name)[:]
 # type_alias_params: [T] or [T, U] etc. (generic type parameters)
 type_alias_params = LBRACKET + IDENTIFIER + (COMMA + IDENTIFIER)[:] + RBRACKET
 # enum_def: enum IDENT, IDENT, ...
-enum_def = ikw("enum") + IDENTIFIER + (COMMA + IDENTIFIER)[:] + COMMA[:]
+enum_member = IDENTIFIER | INTEGER
+enum_def = ikw("enum") + enum_member + (COMMA + enum_member)[:] + COMMA[:]
 # subrange_def: INT '..' INT  or  INT '..<' INT  (requires spaces around ..)
-subrange_def = INTEGER + V_DOT + V_DOT + (vop("<"))[:] + INTEGER
+subrange_bound = INTEGER | IDENTIFIER
+subrange_def = subrange_bound + V_DOT + V_DOT + (vop("<"))[:] + subrange_bound
+# constrained_subrange_def: base_type lo .. hi  (e.g. int 0 .. CAPITAL)
+constrained_subrange_def = fw("constrained_subrange_def")
+constrained_subrange_def = IDENTIFIER + subrange_def
+# Allow subrange_def as a type_annotation (e.g. in tuple fields: stage: 1 .. 5)
+# Insert before the expression fallback (last element in type_annotation.parsers)
+type_annotation.parsers.insert(0, subrange_def)
 # type_stmt for simple (inline) forms only; block forms (tuple/record) are in py3compound_stmt
-type_stmt = ikw("type") + IDENTIFIER + type_alias_params[:] + (V_EQUAL | ikw("is")) + (enum_def | subrange_def | type_annotation)
+type_stmt = ikw("type") + IDENTIFIER + type_alias_params[:] + (V_EQUAL | ikw("is")) + (enum_def | constrained_subrange_def | subrange_def | type_annotation)
 
 # --- simple_stmt: choice of all statement types ---
 # Ordering matters: try more specific forms before general expression.
@@ -233,7 +244,8 @@ type_stmt = ikw("type") + IDENTIFIER + type_alias_params[:] + (V_EQUAL | ikw("is
 # ann_assign before assign (starts with IDENTIFIER + ':').
 # expressions is the fallback (expression statement).
 simple_stmt = (
-    decl_ann_assign_stmt
+    decl_tuple_unpack
+    | decl_ann_assign_stmt
     | ann_assign_stmt
     | aug_assign_stmt
     | assign_stmt
