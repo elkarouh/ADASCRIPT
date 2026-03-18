@@ -385,7 +385,7 @@ def run_tests():
             "async def f():\n    pass\n",
         ),
         (
-            "match x:\n    case 1:\n        pass\n",
+            "case x:\n    when 1:\n        pass\n",
             "match x:\n    case 1:\n        pass\n",
         ),
         # --- mixed programs ---

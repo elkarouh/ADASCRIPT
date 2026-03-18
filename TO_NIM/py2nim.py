@@ -532,7 +532,7 @@ def run_tests():
             "proc f() {.async.} =\n    discard\n",
         ),
         (
-            "match x:\n    case 1:\n        pass\n",
+            "case x:\n    when 1:\n        pass\n",
             "case x:\n    of 1:\n        discard\n",
         ),
         # --- mixed programs ---
