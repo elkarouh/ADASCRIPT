@@ -175,286 +175,300 @@ class Optimizer[S, D]:
 
 # ===========================================================================
 # EXAMPLES / TESTS
-# ===========================================================================
-# -----------------------------------------------------------------------
-# Example 1 -- simple weighted graph (Dijkstra / longest path)
-# -----------------------------------------------------------------------
-State_T1 = str
-Cost_T1 = float
-Decision_T1 = State_T1  # the decision is which state we will choose
-class MyOptimizer(Optimizer[State_T1, Decision_T1]):
-    G: dict[State_T1, list[tuple[Decision_T1, Cost_T1]]] = {
-            's': [('u', 10.0), ('x', 5.0)],
-            'u': [('v', 1.0), ('x', 2.0)],
-            'v': [('y', 4.0)],
-            'x': [('u', 3.0), ('v', 9.0), ('y', 2.0)],
-            'y': [('s', 7.0), ('v', 6.0)],
-        }
+def example1():  # ===========================================================================
+    # -----------------------------------------------------------------------
+    # Example 1 -- simple weighted graph (Dijkstra / longest path)
+    # -----------------------------------------------------------------------
+    State_T = str
+    Cost_T = float
+    Decision_T = State_T  # the decision is which state we will choose
+    class MyOptimizer(Optimizer[State_T, Decision_T]):
+        G: dict[State_T, list[tuple[Decision_T, Cost_T]]] = {
+                    's': [('u', 10.0), ('x', 5.0)],
+                    'u': [('v', 1.0), ('x', 2.0)],
+                    'v': [('y', 4.0)],
+                    'x': [('u', 3.0), ('v', 9.0), ('y', 2.0)],
+                    'y': [('s', 7.0), ('v', 6.0)],
+                }
 
-    def get_state(self, past_decisions: list[Decision_T1]) -> State_T1:
-        return past_decisions[-1]
+        def get_state(self, past_decisions: list[Decision_T]) -> State_T:
+            return past_decisions[-1]
 
-    def get_next_decisions(self, curr_state: State_T1) -> list[tuple[Decision_T1, Cost_T]]:
-        return self.G.get(curr_state, [])
+        def get_next_decisions(self, curr_state: State_T) -> list[tuple[Decision_T, Cost_T]]:
+            return self.G.get(curr_state, [])
 
-op: MyOptimizer = MyOptimizer()
-solution: tuple[Cost_T1, list[Decision_T1]] = op.longest_path('s', 'v', max_path_length=4)
-print("Longest path s->v:", solution)
+    op: MyOptimizer = MyOptimizer()
+    solution: tuple[Cost_T, list[Decision_T]] = op.longest_path('s', 'v', max_path_length=4)
+    print("Longest path s->v:", solution)
 
-# -----------------------------------------------------------------------
-# Example 2 -- DP tutorial graph
-# -----------------------------------------------------------------------
-State_T2 = str
-Cost_T2 = float
-Decision_T2 = State_T2
-class MyOptimizer2(Optimizer[State_T2, Decision_T2]):
-    G: dict[State_T2, list[tuple[Decision_T2, Cost_T2]]] = {
-            'a': [('b', 2.0), ('c', 4.0), ('d', 3.0)],
-            'b': [('e', 7.0), ('f', 4.0), ('g', 6.0)],
-            'c': [('e', 3.0), ('f', 2.0), ('g', 4.0)],
-            'd': [('e', 4.0), ('f', 1.0), ('g', 5.0)],
-            'e': [('h', 1.0), ('i', 4.0)],
-            'f': [('h', 6.0), ('i', 3.0)],
-            'g': [('h', 3.0), ('i', 3.0)],
-            'h': [('j', 3.0)],
-            'i': [('j', 4.0)],
-        }
+def example2():
+    # -----------------------------------------------------------------------
+    # Example 2 -- DP tutorial graph
+    # -----------------------------------------------------------------------
+    State_T = str
+    Cost_T = float
+    Decision_T = State_T
+    class MyOptimizer2(Optimizer[State_T, Decision_T]):
+        G: dict[State_T, list[tuple[Decision_T, Cost_T]]] = {
+                    'a': [('b', 2.0), ('c', 4.0), ('d', 3.0)],
+                    'b': [('e', 7.0), ('f', 4.0), ('g', 6.0)],
+                    'c': [('e', 3.0), ('f', 2.0), ('g', 4.0)],
+                    'd': [('e', 4.0), ('f', 1.0), ('g', 5.0)],
+                    'e': [('h', 1.0), ('i', 4.0)],
+                    'f': [('h', 6.0), ('i', 3.0)],
+                    'g': [('h', 3.0), ('i', 3.0)],
+                    'h': [('j', 3.0)],
+                    'i': [('j', 4.0)],
+                }
 
-    def get_state(self, past_decisions: list[Decision_T2]) -> State_T2:
-        return past_decisions[-1]
+        def get_state(self, past_decisions: list[Decision_T]) -> State_T:
+            return past_decisions[-1]
 
-    def get_next_decisions(self, curr_state: State_T2) -> list[tuple[Decision_T2, Cost_T]]:
-        return self.G.get(curr_state, [])
+        def get_next_decisions(self, curr_state: State_T) -> list[tuple[Decision_T, Cost_T]]:
+            return self.G.get(curr_state, [])
 
-print('======= SHORTEST a->j =======')
-op2: MyOptimizer2 = MyOptimizer2()
-for solution in op2.shortest_path('a', 'j'):
-    print(solution)
-print('======= LONGEST  a->j =======')
-print(op2.longest_path('a', 'j'))
+    print('======= SHORTEST a->j =======')
+    op2: MyOptimizer2 = MyOptimizer2()
+    for solution in op2.shortest_path('a', 'j'):
+        print(solution)
+    print('======= LONGEST  a->j =======')
+    print(op2.longest_path('a', 'j'))
 
+def example3():
+    # -----------------------------------------------------------------------
+    # Example 3 -- Rod Cutting
+    # You are given a rod of size n >0, it can be cut into any number of pieces k (k ≤ n).
+    # Price for each piece of size i is represented as p(i) and maximum revenue from a rod of size i is r(i)
+    # (could be split into multiple pieces). Find r(n) for the rod of size n.
+    # -----------------------------------------------------------------------
+    ROD_SIZE: int = 5
 
-# -----------------------------------------------------------------------
-# Example 3 -- Rod Cutting
-# You are given a rod of size n >0, it can be cut into any number of pieces k (k ≤ n).
-# Price for each piece of size i is represented as p(i) and maximum revenue from a rod of size i is r(i)
-# (could be split into multiple pieces). Find r(n) for the rod of size n.
-# -----------------------------------------------------------------------
-ROD_SIZE: int = 5
+    State_T = tuple[int, int]
+    Revenue_T = float
+    Decision_T = int  # decision os what length we cut
 
-State_T3 = tuple[int, int]
-Revenue_T3 = float
-Decision_T3 = int  # decision os what length we cut
+    class RodCutting(Optimizer[State_T, Decision_T]):
+        prices: list[tuple[Decision_T, Revenue_T]] = [(1, 1.0), (2, 5.0), (3, 8.0), (4, 9.0), (5, 10.0), (6, 17.0), (7, 17.0), (8, 20.0), (9, 24.0), (10, 30.0)]
 
-class RodCutting(Optimizer[State_T3, Decision_T3]):
-    prices: list[tuple[Decision_T3, Revenue_T3]] = [(1, 1.0), (2, 5.0), (3, 8.0), (4, 9.0), (5, 10.0), (6, 17.0), (7, 17.0), (8, 20.0), (9, 24.0), (10, 30.0)]
+        def get_state(self, past_decisions: list[Decision_T]) -> State_T:
+            stage: int = len(past_decisions)
+            remaining_size: int = ROD_SIZE - sum(d for d in past_decisions)
+            if remaining_size <= 0:
+                return (-1, 0)
+            return (stage, remaining_size)
 
-    def get_state(self, past_decisions: list[Decision_T3]) -> State_T3:
-        stage: int = len(past_decisions)
-        remaining_size: int = ROD_SIZE - sum(d for d in past_decisions)
-        if remaining_size <= 0:
-            return (-1, 0)
-        return (stage, remaining_size)
+        def get_next_decisions(self, current_state: State_T) -> list[tuple[Decision_T, Cost_T]]:
+            (stage, remaining_size) = current_state
+            return [(size, rev) for size, rev in self.prices if size <= remaining_size]
 
-    def get_next_decisions(self, current_state: State_T3) -> list[tuple[Decision_T3, Cost_T]]:
-        (stage, remaining_size) = current_state
-        return [(size, rev) for size, rev in self.prices if size <= remaining_size]
+    print('======= ROD CUTTING =======')
+    op3: RodCutting = RodCutting()
+    print(op3.longest_path((0, ROD_SIZE), (-1, 0)))
 
-print('======= ROD CUTTING =======')
-op3: RodCutting = RodCutting()
-print(op3.longest_path((0, ROD_SIZE), (-1, 0)))
+def example4():
+    # -----------------------------------------------------------------------
+    # Example 4 -- Capital Budgeting
+    # -----------------------------------------------------------------------
+    CAPITAL: int = 5
+    Cost_T = float
+    Stage_T = int
+    class State_T(NamedTuple):
+        stage: Stage_T
+        budget: Cost_T
+    Decision_T = str  # decision is which project for the plant
+    Revenue_T = float
+    class Choice_T(NamedTuple):
+        cost: Cost_T
+        revenue: Revenue_T
+    class CapitalBudgeting(Optimizer[State_T, Decision_T]):
+        _choices: dict[Stage_T, dict[Decision_T, Choice_T]] = {1: {'plant1-p1': Choice_T(cost=0.0, revenue=0.0), 'plant1-p2': Choice_T(cost=1.0, revenue=5.0), 'plant1-p3': Choice_T(cost=2.0, revenue=6.0)}, 2: {'plant2-p1': Choice_T(cost=0.0, revenue=0.0), 'plant2-p2': Choice_T(cost=2.0, revenue=8.0), 'plant2-p3': Choice_T(cost=3.0, revenue=9.0), 'plant2-p4': Choice_T(cost=4.0, revenue=12.0)}, 3: {'plant3-p1': Choice_T(cost=0.0, revenue=0.0), 'plant3-p2': Choice_T(cost=1.0, revenue=4.0)}}
 
-# -----------------------------------------------------------------------
-# Example 4 -- Capital Budgeting
-# -----------------------------------------------------------------------
-CAPITAL: int = 5
-Cost_T4 = float
-Stage_T4 = int
-class State_T4(NamedTuple):
-    stage: Stage_T4
-    budget: Cost_T4
-Decision_T4 = str  # decision is which project for the plant
-Revenue_T4 = float
-class Choice_T4(NamedTuple):
-    cost: Cost_T4
-    revenue: Revenue_T4
-class CapitalBudgeting(Optimizer[State_T4, Decision_T4]):
-    _choices: dict[Stage_T4, dict[Decision_T4, Choice_T4]] = {1: {'plant1-p1': Choice_T4(cost=0.0, revenue=0.0), 'plant1-p2': Choice_T4(cost=1.0, revenue=5.0), 'plant1-p3': Choice_T4(cost=2.0, revenue=6.0)}, 2: {'plant2-p1': Choice_T4(cost=0.0, revenue=0.0), 'plant2-p2': Choice_T4(cost=2.0, revenue=8.0), 'plant2-p3': Choice_T4(cost=3.0, revenue=9.0), 'plant2-p4': Choice_T4(cost=4.0, revenue=12.0)}, 3: {'plant3-p1': Choice_T4(cost=0.0, revenue=0.0), 'plant3-p2': Choice_T4(cost=1.0, revenue=4.0)}}
+        def get_state(self, past_decisions: list[Decision_T]) -> State_T:
+            stage: int = len(past_decisions)
+            spent: float = 0.0
+            for d in past_decisions:
+                for choices in self._choices.values():
+                    if d in choices:
+                        spent += choices[d][0]
+            return stage, float(CAPITAL) - spent
 
-    def get_state(self, past_decisions: list[Decision_T4]) -> State_T4:
-        stage: int = len(past_decisions)
-        spent: float = 0.0
-        for d in past_decisions:
-            for choices in self._choices.values():
-                if d in choices:
-                    spent += choices[d][0]
-        return stage, float(CAPITAL) - spent
+        def get_next_decisions(self, current_state: State_T) -> list[tuple[Decision_T, Cost_T]]:
+            (stage, budget) = current_state
+            if stage not in self._choices:
+                return []
+            choices: dict[Decision_T, Choice_T] = self._choices[stage]
+            return [(name, choice.revenue) for name, choice in choices.items() if choice.cost <= budget]
 
-    def get_next_decisions(self, current_state: State_T4) -> list[tuple[Decision_T4, Cost_T]]:
-        (stage, budget) = current_state
-        if stage not in self._choices:
-            return []
-        choices: dict[Decision_T4, Choice_T4] = self._choices[stage]
-        return [(name, choice.revenue) for name, choice in choices.items() if choice.cost <= budget]
+    print('======= CAPITAL BUDGETING =======')
+    op4: CapitalBudgeting = CapitalBudgeting()
+    print(op4.longest_path(State_T(stage=1, budget=float(CAPITAL)), State_T(stage=3, budget=0.0)))
 
-print('======= CAPITAL BUDGETING =======')
-op4: CapitalBudgeting = CapitalBudgeting()
-print(op4.longest_path(State_T4(stage=1, budget=float(CAPITAL)), State_T4(stage=3, budget=0.0)))
+def example5():
+    # -----------------------------------------------------------------------
+    # Example 5 -- Knapsack
+    # -----------------------------------------------------------------------
+    MAX_WEIGHT: int = 5
+    class Stage_T(Enum):
+        STAGE1 = 0
+        STAGE2 = 1
+        STAGE3 = 2
+        END = 3
+    STAGE1 = Stage_T.STAGE1
+    STAGE2 = Stage_T.STAGE2
+    STAGE3 = Stage_T.STAGE3
+    END = Stage_T.END
+    class State_T(NamedTuple):
+        stage: Stage_T
+        remaining: int
+    class Decision_T(NamedTuple):
+        stage: Stage_T
+        quantity: int  # the quantity of items to choose
+    class Choice_T5(NamedTuple):
+        weight: int
+        benefit: int
+    class Knapsack(Optimizer[State_T, Decision_T]):
+        items: dict[Stage_T, Choice_T5] = {STAGE1: Choice_T5(weight=2, benefit=65), STAGE2: Choice_T5(weight=3, benefit=80), STAGE3: Choice_T5(weight=1, benefit=30)}
 
-# -----------------------------------------------------------------------
-# Example 5 -- Knapsack
-# -----------------------------------------------------------------------
-MAX_WEIGHT: int = 5
-class Stage_T5(Enum):
-    STAGE1 = 0
-    STAGE2 = 1
-    STAGE3 = 2
-    END = 3
-STAGE1 = Stage_T5.STAGE1
-STAGE2 = Stage_T5.STAGE2
-STAGE3 = Stage_T5.STAGE3
-END = Stage_T5.END
-class State_T5(NamedTuple):
-    stage: Stage_T5
-    remaining: int
-class Decision_T5(NamedTuple):
-    stage: Stage_T5
-    quantity: int  # the quantity of items to choose
-class Choice_T5(NamedTuple):
-    weight: int
-    benefit: int
-class Knapsack(Optimizer[State_T5, Decision_T5]):
-    items: dict[Stage_T5, Choice_T5] = {STAGE1: Choice_T5(weight=2, benefit=65), STAGE2: Choice_T5(weight=3, benefit=80), STAGE3: Choice_T5(weight=1, benefit=30)}
+        def get_state(self, past_decisions: list[Decision_T]) -> State_T:
+            stage: Stage_T = type(past_decisions[-1].stage)(past_decisions[-1].stage.value + 1)
+            remaining: int = MAX_WEIGHT
+            for decision in past_decisions:
+                prev_stage: Stage_T = decision.stage
+                qty: int = decision.quantity
+                remaining -= qty * self.items[prev_stage].weight
+            return stage, remaining
 
-    def get_state(self, past_decisions: list[Decision_T5]) -> State_T5:
-        stage: Stage_T5 = type(past_decisions[-1].stage)(past_decisions[-1].stage.value + 1)
-        remaining: int = MAX_WEIGHT
-        for decision in past_decisions:
-            prev_stage: Stage_T5 = decision.stage
-            qty: int = decision.quantity
-            remaining -= qty * self.items[prev_stage].weight
-        return stage, remaining
+        def get_next_decisions(self, current_state: State_T) -> list[tuple[Decision_T, Cost_T]]:
+            (stage, remaining) = current_state
+            if stage == END:
+                return []
+            (weight, benefit) = self.items[stage]
+            decisions: list[tuple[Decision_T, Cost_T]] = []
+            qty: int = 0
+            while qty * weight <= remaining:
+                decisions.append((Decision_T(stage=stage, quantity=qty), float(benefit * qty)))
+                qty += 1
+            return decisions
 
-    def get_next_decisions(self, current_state: State_T5) -> list[tuple[Decision_T5, Cost_T]]:
-        (stage, remaining) = current_state
-        if stage == END:
-            return []
-        (weight, benefit) = self.items[stage]
-        decisions: list[tuple[Decision_T5, Cost_T]] = []
-        qty: int = 0
-        while qty * weight <= remaining:
-            decisions.append((Decision_T5(stage=stage, quantity=qty), float(benefit * qty)))
-            qty += 1
-        return decisions
+    print('======= KNAPSACK =======')
+    op5: Knapsack = Knapsack()
+    print(op5.longest_path(State_T(stage=STAGE1, remaining=MAX_WEIGHT), State_T(stage=END, remaining=0)))
 
-print('======= KNAPSACK =======')
-op5: Knapsack = Knapsack()
-print(op5.longest_path(State_T5(stage=STAGE1, remaining=MAX_WEIGHT), State_T5(stage=END, remaining=0)))
+def example6():
+    # -----------------------------------------------------------------------
+    # Example 6 -- Equipment Replacement
+    # -----------------------------------------------------------------------
+    class Decision_T(Enum):
+        BUY = 0
+        SELL = 1
+        KEEP = 2
+        TRADE = 3
+    BUY = Decision_T.BUY
+    SELL = Decision_T.SELL
+    KEEP = Decision_T.KEEP
+    TRADE = Decision_T.TRADE
+    Cost_T = float
+    IRRELEVANT: int = -1
+    State_T = tuple[int, int]
 
-# -----------------------------------------------------------------------
-# Example 6 -- Equipment Replacement
-# -----------------------------------------------------------------------
-class Decision_T6(Enum):
-    BUY = 0
-    SELL = 1
-    KEEP = 2
-    TRADE = 3
-BUY = Decision_T6.BUY
-SELL = Decision_T6.SELL
-KEEP = Decision_T6.KEEP
-TRADE = Decision_T6.TRADE
-Cost_T6 = float
-IRRELEVANT: int = -1
-State_T6 = tuple[int, int]
+    class EquipmentReplacement(Optimizer[State_T, Decision_T]):
+        maintenance_cost: dict[int, Cost_T] = {0: 60.0, 1: 80.0, 2: 120.0}
+        market_value: dict[int, Cost_T] = {0: 1000.0, 1: 800.0, 2: 600.0, 3: 500.0}
 
-class EquipmentReplacement(Optimizer[State_T6, Decision_T6]):
-    maintenance_cost: dict[int, Cost_T6] = {0: 60.0, 1: 80.0, 2: 120.0}
-    market_value: dict[int, Cost_T6] = {0: 1000.0, 1: 800.0, 2: 600.0, 3: 500.0}
+        def __init__(self, offset: float = 0.0):
+            super().__init__(offset)
 
-    def __init__(self, offset: float = 0.0):
-        super().__init__(offset)
+        def get_state(self, past_decisions: list[Decision_T]) -> State_T:
+            year: int = len(past_decisions)
+            if year == 6:
+                return (6, IRRELEVANT)
+            age: int = 0
+            for decision in past_decisions:
+                if decision == KEEP:
+                    age = age + 1
+                else:
+                    age = 1
+            return (year, age)
 
-    def get_state(self, past_decisions: list[Decision_T6]) -> State_T6:
-        year: int = len(past_decisions)
-        if year == 6:
-            return (6, IRRELEVANT)
-        age: int = 0
-        for decision in past_decisions:
-            if decision == KEEP:
-                age = age + 1
-            else:
-                age = 1
-        return (year, age)
+        def get_next_decisions(self, current_state: State_T) -> list[tuple[Decision_T, Cost_T]]:
+            (year, age) = current_state
+            if age == IRRELEVANT:
+                return []
+            if year == 0:
+                return [(BUY, self.maintenance_cost[0] + 1000.0)]
+            if year == 5:
+                return [(SELL, -self.market_value[age])]
+            if age == 3:
+                return [(TRADE, -self.market_value[age] + 1000.0 + self.maintenance_cost[0])]
+            return [
+                            (KEEP, self.maintenance_cost[age]),
+                            (TRADE, -self.market_value[age] + 1000.0 + self.maintenance_cost[0]),
+                        ]
 
-    def get_next_decisions(self, current_state: State_T6) -> list[tuple[Decision_T6, Cost_T]]:
-        (year, age) = current_state
-        if age == IRRELEVANT:
-            return []
-        if year == 0:
-            return [(BUY, self.maintenance_cost[0] + 1000.0)]
-        if year == 5:
-            return [(SELL, -self.market_value[age])]
-        if age == 3:
-            return [(TRADE, -self.market_value[age] + 1000.0 + self.maintenance_cost[0])]
-        return [
-                    (KEEP, self.maintenance_cost[age]),
-                    (TRADE, -self.market_value[age] + 1000.0 + self.maintenance_cost[0]),
-                ]
+    print('======= EQUIPMENT REPLACEMENT =======')
+    op6: EquipmentReplacement = EquipmentReplacement(offset=10000.0)
+    start_state: State_T = (0, 0)
+    end_state: State_T = (6, IRRELEVANT)
+    for solution in op6.shortest_path(start_state, end_state):
+        print(solution)
 
-print('======= EQUIPMENT REPLACEMENT =======')
-op6: EquipmentReplacement = EquipmentReplacement(offset=10000.0)
-start_state: State_T6 = (0, 0)
-end_state: State_T6 = (6, IRRELEVANT)
-for solution in op6.shortest_path(start_state, end_state):
-    print(solution)
+def example7():
+    # -----------------------------------------------------------------------
+    # Example 7 -- Romania map (A* with heuristic)
+    # -----------------------------------------------------------------------
+    State_T = str
+    Distance_T = float
+    Decision_T = str
+    class BookMap(Optimizer[State_T, Decision_T]):
+        G: dict[State_T, list[tuple[Decision_T, Distance_T]]] = {
+                    'arad':      [('sibiu', 140.0), ('timisoara', 118.0), ('zerind', 75.0)],
+                    'bucharest': [('giurgiu', 90.0), ('urzineci', 85.0), ('fagaras', 211.0), ('pitesti', 101.0)],
+                    'craiova':   [('rimnicu', 146.0), ('pitesti', 138.0), ('drobeta', 120.0)],
+                    'drobeta':   [('craiova', 120.0), ('mehadia', 75.0)],
+                    'eforie':    [('hirsova', 86.0)],
+                    'fagaras':   [('sibiu', 99.0), ('bucharest', 211.0)],
+                    'giurgiu':   [('bucharest', 90.0)],
+                    'hirsova':   [('eforie', 86.0), ('urzineci', 98.0)],
+                    'lasi':      [('neamt', 87.0), ('vaslui', 92.0)],
+                    'lugoj':     [('mehadia', 70.0), ('timisoara', 111.0)],
+                    'mehadia':   [('drobeta', 75.0), ('lugoj', 70.0)],
+                    'neamt':     [('lasi', 87.0)],
+                    'oradea':    [('zerind', 71.0), ('sibiu', 151.0)],
+                    'pitesti':   [('bucharest', 101.0), ('rimnicu', 97.0), ('craiova', 138.0)],
+                    'rimnicu':   [('pitesti', 97.0), ('sibiu', 80.0), ('craiova', 146.0)],
+                    'sibiu':     [('rimnicu', 80.0), ('arad', 140.0), ('oradea', 151.0), ('fagaras', 99.0)],
+                    'timisoara': [('lugoj', 111.0), ('arad', 118.0)],
+                    'urzineci':  [('bucharest', 85.0), ('vaslui', 142.0), ('hirsova', 98.0)],
+                    'vaslui':    [('urzineci', 142.0), ('lasi', 92.0)],
+                    'zerind':    [('arad', 75.0), ('oradea', 71.0)],
+                }
+        _heuristic: dict[State_T, Distance_T] = {
+                    'arad': 366.0, 'bucharest': 0.0, 'craiova': 160.0, 'drobeta': 242.0,
+                    'eforie': 161.0, 'fagaras': 176.0, 'giurgiu': 77.0, 'hirsova': 151.0,
+                    'lasi': 226.0, 'lugoj': 244.0, 'mehadia': 241.0, 'neamt': 234.0,
+                    'oradea': 380.0, 'pitesti': 100.0, 'rimnicu': 193.0, 'sibiu': 253.0,
+                    'timisoara': 329.0, 'urzineci': 80.0, 'vaslui': 199.0, 'zerind': 374.0,
+                }
 
-# -----------------------------------------------------------------------
-# Example 7 -- Romania map (A* with heuristic)
-# -----------------------------------------------------------------------
-State_T7 = str
-Distance_T7 = float
-Decision_T7 = str
-class BookMap(Optimizer[State_T7, Decision_T7]):
-    G: dict[State_T7, list[tuple[Decision_T7, Distance_T7]]] = {
-            'arad':      [('sibiu', 140.0), ('timisoara', 118.0), ('zerind', 75.0)],
-            'bucharest': [('giurgiu', 90.0), ('urzineci', 85.0), ('fagaras', 211.0), ('pitesti', 101.0)],
-            'craiova':   [('rimnicu', 146.0), ('pitesti', 138.0), ('drobeta', 120.0)],
-            'drobeta':   [('craiova', 120.0), ('mehadia', 75.0)],
-            'eforie':    [('hirsova', 86.0)],
-            'fagaras':   [('sibiu', 99.0), ('bucharest', 211.0)],
-            'giurgiu':   [('bucharest', 90.0)],
-            'hirsova':   [('eforie', 86.0), ('urzineci', 98.0)],
-            'lasi':      [('neamt', 87.0), ('vaslui', 92.0)],
-            'lugoj':     [('mehadia', 70.0), ('timisoara', 111.0)],
-            'mehadia':   [('drobeta', 75.0), ('lugoj', 70.0)],
-            'neamt':     [('lasi', 87.0)],
-            'oradea':    [('zerind', 71.0), ('sibiu', 151.0)],
-            'pitesti':   [('bucharest', 101.0), ('rimnicu', 97.0), ('craiova', 138.0)],
-            'rimnicu':   [('pitesti', 97.0), ('sibiu', 80.0), ('craiova', 146.0)],
-            'sibiu':     [('rimnicu', 80.0), ('arad', 140.0), ('oradea', 151.0), ('fagaras', 99.0)],
-            'timisoara': [('lugoj', 111.0), ('arad', 118.0)],
-            'urzineci':  [('bucharest', 85.0), ('vaslui', 142.0), ('hirsova', 98.0)],
-            'vaslui':    [('urzineci', 142.0), ('lasi', 92.0)],
-            'zerind':    [('arad', 75.0), ('oradea', 71.0)],
-        }
-    _heuristic: dict[State_T7, Distance_T7] = {
-            'arad': 366.0, 'bucharest': 0.0, 'craiova': 160.0, 'drobeta': 242.0,
-            'eforie': 161.0, 'fagaras': 176.0, 'giurgiu': 77.0, 'hirsova': 151.0,
-            'lasi': 226.0, 'lugoj': 244.0, 'mehadia': 241.0, 'neamt': 234.0,
-            'oradea': 380.0, 'pitesti': 100.0, 'rimnicu': 193.0, 'sibiu': 253.0,
-            'timisoara': 329.0, 'urzineci': 80.0, 'vaslui': 199.0, 'zerind': 374.0,
-        }
+        def get_state(self, past_decisions: list[State_T]) -> State_T:
+            return past_decisions[-1]
 
-    def get_state(self, past_decisions: list[State_T7]) -> State_T7:
-        return past_decisions[-1]
+        def get_next_decisions(self, current_state: State_T) -> list[tuple[Decision_T, Cost_T]]:
+            return self.G.get(current_state, [])
 
-    def get_next_decisions(self, current_state: State_T7) -> list[tuple[Decision_T7, Cost_T]]:
-        return self.G.get(current_state, [])
+        def get_heuristic_cost(self, city: State_T) -> float:
+            return self._heuristic.get(city, 0)
 
-    def get_heuristic_cost(self, city: State_T7) -> float:
-        return self._heuristic.get(city, 0)
+    op7: BookMap = BookMap()
+    print('======= ROMANIA MAP: oradea -> bucharest =======')
+    for solution in op7.shortest_path('oradea', 'bucharest'):
+        print(solution)
 
-op7: BookMap = BookMap()
-print('======= ROMANIA MAP: oradea -> bucharest =======')
-for solution in op7.shortest_path('oradea', 'bucharest'):
-    print(solution)
+if __name__ == "__main__":
+    example1()
+    example2()
+    example3()
+    example4()
+    example5()
+    example6()
+    example7()
