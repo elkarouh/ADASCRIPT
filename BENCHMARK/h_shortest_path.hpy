@@ -14,18 +14,18 @@ nimport stdlib
 # ---------------------------------------------------------------------------
 # Core Optimizer
 # ---------------------------------------------------------------------------
-type Cost_T is float
-type Fringe_Element_T[S, D] is tuple:
-    hcost: float
-    new_cost: float
+
+type Fringe_Element_T[S, D, C] is tuple:
+    hcost: C
+    new_cost: C
     new_path: []D
     next_state: S
 
-class Optimizer[S, D]:
+class Optimizer[S, D, C]:
     """
     Generic shortest-path / dynamic-programming optimiser.
-
-    Subclass and override:
+    First define the state S, the decision D and the cost of the decision C.
+    Then, subclass and override:
       - get_state(past_decisions)       -> current state
       - get_next_decisions(state)       -> list of (decision, cost) pairs
       - get_heuristic_cost(state)       -> admissible heuristic (default 0)
@@ -45,21 +45,21 @@ class Optimizer[S, D]:
     def get_state(self, past_decisions: []D) -> S:
         raise NotImplementedError("Override get_state()")
 
-    def get_next_decisions(self, current_state: S) -> [](D, Cost_T):
+    def get_next_decisions(self, current_state: S) -> [](D, C):
         raise NotImplementedError("Override get_next_decisions()")
 
     def get_heuristic_cost(self, current_state: S) -> float:
         return 0.0
 
-    def cost_operator(self, accumulated: Cost_T, step_cost: Cost_T) -> Cost_T:
-        actual_cost: Cost_T = step_cost + self.offset
+    def cost_operator(self, accumulated:C , step_cost:C ) -> C:
+        actual_cost:C  = step_cost + self.offset
         assert actual_cost >= 0
         return accumulated + actual_cost
 
-    def hcost_operator(self, past_cost: Cost_T, current_state: S) -> Cost_T:
+    def hcost_operator(self, past_cost:C, current_state: S) -> C:
         return past_cost + self.get_heuristic_cost(current_state)
 
-    def real_cost(self, cost: Cost_T) -> Cost_T:
+    def real_cost(self, cost:C) -> C:
         return cost - self.offset * float(len(self.decision_path))
 
     def is_end_state(self, state: S) -> bool:
@@ -72,7 +72,7 @@ class Optimizer[S, D]:
     def shortest_path(self, start_state: S, end_state: S, allsolutions: bool = True):
         self.start_state = start_state
         empty_path: []D = []
-        fringe: PriorityQueue[Fringe_Element_T[S, D]] = PriorityQueue((0.0, 0.0, empty_path, start_state))
+        fringe: PriorityQueue[Fringe_Element_T[S, D, C]] = PriorityQueue((0.0, 0.0, empty_path, start_state))
         visited: {}S = set()
 
         while fringe:
@@ -174,15 +174,20 @@ class Optimizer[S, D]:
 
 # ===========================================================================
 # EXAMPLES / TESTS
-def example1():# ===========================================================================
+# ===========================================================================
+def example1():
     # -----------------------------------------------------------------------
     # Example 1 -- simple weighted graph (Dijkstra / longest path)
     # -----------------------------------------------------------------------
     type State_T is str
     type Cost_T is float
     type Decision_T is State_T  # the decision is which state we will choose
-    class MyOptimizer(Optimizer[State_T, Decision_T]):
-        var G: {State_T}[](Decision_T, Cost_T) = {
+    type Choice_T is tuple:
+        decision: Decision_T
+        cost: Cost_T
+    class MyOptimizer(Optimizer[State_T, Decision_T, Cost_T]):
+        # for each state, a list of choices
+        var G: {State_T}[]Choice_T = {
             's': [('u', 10.0), ('x', 5.0)],
             'u': [('v', 1.0), ('x', 2.0)],
             'v': [('y', 4.0)],
@@ -207,8 +212,10 @@ def example2():
     type State_T is str
     type Cost_T is float
     type Decision_T is State_T
-    class MyOptimizer2(Optimizer[State_T, Decision_T]):
-        var G: {State_T}[](Decision_T, Cost_T) = {
+    type Choice_T is (Decision_T, Cost_T)
+
+    class MyOptimizer2(Optimizer[State_T, Decision_T, Cost_T]):
+        var G: {State_T}[]Choice_T = {
             'a': [('b', 2.0), ('c', 4.0), ('d', 3.0)],
             'b': [('e', 7.0), ('f', 4.0), ('g', 6.0)],
             'c': [('e', 3.0), ('f', 2.0), ('g', 4.0)],
@@ -242,12 +249,18 @@ def example3():
     # -----------------------------------------------------------------------
     ROD_SIZE: int = 5
 
-    type State_T is (int, int)
+    type State_T is tuple:
+      stage:int
+      remaining_size: int
     type Revenue_T is float
-    type Decision_T is int # decision os what length we cut
+    type Cost_T is float
+    type Decision_T is int # decision of what length we cut
+    type Choice_T is tuple:
+      size:int # the decision
+      revenue:float # the cost of the decision
 
-    class RodCutting(Optimizer[State_T, Decision_T]):
-      var prices: [](Decision_T, Revenue_T) = [(1, 1.0), (2, 5.0), (3, 8.0), (4, 9.0), (5, 10.0), (6, 17.0), (7, 17.0), (8, 20.0), (9, 24.0), (10, 30.0)]
+    class RodCutting(Optimizer[State_T, Decision_T, Cost_T]):
+      var choices: []Choice_T = [(1, 1.0), (2, 5.0), (3, 8.0), (4, 9.0), (5, 10.0), (6, 17.0), (7, 17.0), (8, 20.0), (9, 24.0), (10, 30.0)]
 
       def get_state(self, past_decisions: []Decision_T) -> State_T:
           stage: int = len(past_decisions)
@@ -258,7 +271,7 @@ def example3():
 
       def get_next_decisions(self, current_state: State_T) -> [](Decision_T, Cost_T):
           let (stage, remaining_size) = current_state
-          return [(size, rev) for size, rev in self.prices if size <= remaining_size]
+          return [(size, rev) for size, rev in self.choices if size <= remaining_size]
 
     print('======= ROD CUTTING =======')
     op3: RodCutting = RodCutting()
@@ -276,12 +289,13 @@ def example4():
       budget: Cost_T
     type Decision_T is str # decision is which project for the plant
     type Revenue_T is float
-    type Choice_T is tuple:
-        cost: Cost_T
-        revenue: Revenue_T
+    type Keuze_T is tuple:
+      cost: Cost_T
+      revenue: Revenue_T
+    type Choice_T is {Decision_T}Keuze_T
 
-    class CapitalBudgeting(Optimizer[State_T, Decision_T]):
-        var _choices: [Stage_T]{Decision_T}Choice_T = [
+    class CapitalBudgeting(Optimizer[State_T, Decision_T, Cost_T]):
+        var _choices: [Stage_T]Choice_T = [
             STAGE1: {'plant1-p1': (cost:0.0, revenue:0.0), 'plant1-p2': (cost:1.0, revenue:5.0), 'plant1-p3': (cost:2.0, revenue:6.0)},
             STAGE2: {'plant2-p1': (cost:0.0, revenue:0.0), 'plant2-p2': (cost:2.0, revenue:8.0), 'plant2-p3': (cost:3.0, revenue:9.0), 'plant2-p4': (cost:4.0, revenue:12.0)},
             STAGE3: {'plant3-p1': (cost:0.0, revenue:0.0), 'plant3-p2': (cost:1.0, revenue:4.0)},
@@ -292,17 +306,17 @@ def example4():
             spent: float = 0.0
             for d in past_decisions:
                 for s in [STAGE1, STAGE2, STAGE3]:
-                    choices: {Decision_T}Choice_T = self._choices[s]
+                    choices: Choice_T = self._choices[s]
                     if d in choices:
-                        spent += choices[d][0]
+                        spent += choices[d].cost
             return stage, float(CAPITAL) - spent
 
         def get_next_decisions(self, current_state: State_T) -> [](Decision_T, Cost_T):
             let (stage, budget) = current_state
             if stage == END:
                 return []
-            choices: {Decision_T}Choice_T = self._choices[stage]
-            return [(name, choice.revenue) for name, choice in choices.items() if choice.cost <= budget]
+            choices: Choice_T = self._choices[stage]
+            return [(name, choice.revenue) for name, choice in choices.items() if choice.cost <= budget] # bug, replaced items by pairs
 
     print('======= CAPITAL BUDGETING =======')
     op4: CapitalBudgeting = CapitalBudgeting()
@@ -313,6 +327,7 @@ def example5():
     # Example 5 -- Knapsack
     # -----------------------------------------------------------------------
     const MAX_WEIGHT: int = 5
+    type Cost_T is float
     type Stage_T is enum STAGE1, STAGE2, STAGE3, END
     type State_T is tuple:
       stage: Stage_T
@@ -320,11 +335,11 @@ def example5():
     type Decision_T is tuple:
       stage: Stage_T
       quantity: int # the quantity of items to choose
-    type Choice_T5 is tuple:
+    type Choice_T is tuple:
       weight : int
       benefit: int
-    class Knapsack(Optimizer[State_T, Decision_T]):
-        var items: [Stage_T]Choice_T5 = [
+    class Knapsack(Optimizer[State_T, Decision_T, Cost_T]):
+        var items: [Stage_T]Choice_T = [
           STAGE1: (weight:2, benefit:65),
           STAGE2: (weight:3, benefit:80),
           STAGE3: (weight:1, benefit:30)
@@ -362,11 +377,15 @@ def example6():
     type Decision_T is enum BUY, SELL, KEEP, TRADE
     type Cost_T is float
     const IRRELEVANT: int = -1
-    type State_T is (int, int)
+    const MAX_AGE: int = 3
+    type Age_T is int
+    type State_T is tuple: # the state is what you need to take into account when making decisions
+        year: int
+        age: int
 
-    class EquipmentReplacement(Optimizer[State_T, Decision_T]):
-        var maintenance_cost: {int}Cost_T = {0: 60.0, 1: 80.0, 2: 120.0}
-        var market_value: {int}Cost_T = {0: 1000.0, 1: 800.0, 2: 600.0, 3: 500.0}
+    class EquipmentReplacement(Optimizer[State_T, Decision_T, Cost_T]):
+        var maintenance_cost: {Age_T}Cost_T = {0: 60.0, 1: 80.0, 2: 120.0}
+        var market_value: {Age_T}Cost_T = {0: 1000.0, 1: 800.0, 2: 600.0, 3: 500.0}
 
         def __init__(self, offset: float = 0.0):
             super().__init__(offset)
@@ -385,17 +404,18 @@ def example6():
 
         def get_next_decisions(self, current_state: State_T) -> [](Decision_T, Cost_T):
             let (year, age) = current_state
-            if age == IRRELEVANT:
+            if year == 6:
                 return []
             if year == 0:
-                return [(BUY, self.maintenance_cost[0] + 1000.0)]
+                new_age=0
+                return [(BUY, self.maintenance_cost[new_age] + self.market_value[new_age])]
             if year == 5:
                 return [(SELL, -self.market_value[age])]
             if age == 3:
-                return [(TRADE, -self.market_value[age] + 1000.0 + self.maintenance_cost[0])]
+                return [(TRADE, -self.market_value[age] + self.market_value[0] + self.maintenance_cost[0])]
             return [
                 (KEEP, self.maintenance_cost[age]),
-                (TRADE, -self.market_value[age] + 1000.0 + self.maintenance_cost[0]),
+                (TRADE, -self.market_value[age] + self.market_value[0] + self.maintenance_cost[0]),
             ]
 
     print('======= EQUIPMENT REPLACEMENT =======')
@@ -412,7 +432,7 @@ def example7():
     type State_T is str
     type Distance_T is float
     type Decision_T is str
-    class BookMap(Optimizer[State_T, Decision_T]):
+    class BookMap(Optimizer[State_T, Decision_T, Distance_T]):
         var G: {State_T}[](Decision_T, Distance_T) = {
             'arad':      [('sibiu', 140.0), ('timisoara', 118.0), ('zerind', 75.0)],
             'bucharest': [('giurgiu', 90.0), ('urzineci', 85.0), ('fagaras', 211.0), ('pitesti', 101.0)],
@@ -446,7 +466,7 @@ def example7():
         def get_state(self, past_decisions: []State_T) -> State_T:
             return past_decisions[-1]
 
-        def get_next_decisions(self, current_state: State_T) -> [](Decision_T, Cost_T):
+        def get_next_decisions(self, current_state: State_T) -> [](Decision_T, Distance_T):
             return self.G.get(current_state, [])
 
         def get_heuristic_cost(self, city: State_T) -> float:
@@ -470,7 +490,7 @@ def example8():
     type State_T is tuple:
       stage: int
       hidden_state: Hidden_State_T
-    class HMM(Optimizer[State_T, Hidden_State_T]):
+    class HMM(Optimizer[State_T, Hidden_State_T, Prob_T]):
         var hidden_states : []Hidden_State_T
         var start_p : [Hidden_State_T]Prob_T
         var trans_p : [Hidden_State_T][Hidden_State_T]Prob_T

@@ -202,11 +202,6 @@ def to_nim(self, prec=None):
     # Nim uses double quotes for strings; single quotes are char literals
     if s.startswith(chr(39)) and s.endswith(chr(39)) and len(s) > 2:
         inner = s[1:-1]
-        # Single character -> Nim char literal (keep single quotes)
-        if len(inner) == 1:
-            return s
-        if len(inner) == 2 and inner[0] == chr(92):
-            return s  # escaped char like '\n'
         inner = inner.replace(chr(34), chr(92) + chr(34))
         return chr(34) + inner + chr(34)
     return s
@@ -519,6 +514,13 @@ def _translate_method(obj_name, method_name):
         for prefix, mappings in _PY_METHOD_TO_NIM.items():
             if type_str.startswith(prefix):
                 return mappings.get(method_name, method_name)
+        # Resolve type aliases: if type_str is a user type, look up its definition
+        alias = ParserState.symbol_table.lookup(type_str)
+        if alias:
+            resolved = alias.get("type", "") or ""
+            for prefix, mappings in _PY_METHOD_TO_NIM.items():
+                if resolved.startswith(prefix):
+                    return mappings.get(method_name, method_name)
     # Fall back to universal mappings
     nim_method = _PY_UNIVERSAL_METHOD_TO_NIM.get(method_name, method_name)
     if nim_method in _STRUTILS_METHODS:
@@ -602,6 +604,13 @@ def to_nim(self, prec=None):
             elif len(args) == 3:
                 return f"countup({args[0]}, {args[1]} - 1, {args[2]})"
             return "0 ..< 0"
+        if raw_name == "ord":
+            call_node = self.nodes[1].nodes[0]
+            arg = _extract_call_arg(call_node)
+            # Convert string arg to char literal: ord("0") -> ord('0')
+            if len(arg) == 3 and arg[0] == chr(34) and arg[2] == chr(34):
+                arg = chr(39) + arg[1] + chr(39)
+            return f"ord({arg})"
         if raw_name == "int":
             call_node = self.nodes[1].nodes[0]
             arg = _extract_call_arg(call_node)

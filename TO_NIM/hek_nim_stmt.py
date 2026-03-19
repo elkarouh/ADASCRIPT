@@ -759,6 +759,9 @@ def to_nim(self):
         hi = str(sr.nodes[-1].node)
         ParserState.tick_types[name] = {"First": lo, "Last": hi}
     value = rhs.to_nim()
+    # Record type alias so method translation can resolve it
+    if rhs_type not in ("enum_def", "subrange_def", "constrained_subrange_def"):
+        ParserState.symbol_table.add(name, value, "type")
     return f"type {name}{params} = {value}"
 
 
