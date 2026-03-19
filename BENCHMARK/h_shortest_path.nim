@@ -12,58 +12,62 @@ import math
 # ---------------------------------------------------------------------------
 # Core Optimizer
 # ---------------------------------------------------------------------------
-type Cost_T = float
-type Fringe_Element_T[S, D] = tuple
-    hcost: float
-    new_cost: float
+
+type Fringe_Element_T[S, D, C] = tuple
+    hcost: C
+    new_cost: C
     new_path: seq[D]
     next_state: S
-type Optimizer[S, D] = ref object of RootObj
+type Optimizer[S, D, C] = ref object of RootObj
     offset: float
     decision_path: seq[D]
     start_state: S
 
-proc initOptimizer[S, D](self: Optimizer[S, D], offset: float = 0.0) =
+proc initOptimizer[S, D, C](self: Optimizer[S, D, C], offset: float = 0.0) =
     self.offset = offset
 
-proc newOptimizer*[S, D](offset: float = 0.0): Optimizer[S, D] =
+proc newOptimizer*[S, D, C](offset: float = 0.0): Optimizer[S, D, C] =
     new(result)
     initOptimizer(result, offset)
 type State_T = string
+type Cost_T = float
 type Decision_T = State_T
-type MyOptimizer = ref object of Optimizer[State_T, Decision_T]
-    G: Table[State_T, seq[(Decision_T, Cost_T)]]
+type Choice_T = tuple
+    decision: Decision_T
+    cost: Cost_T
+type MyOptimizer = ref object of Optimizer[State_T, Decision_T, Cost_T]
+    G: Table[State_T, seq[Choice_T]]
 
 proc newMyOptimizer(): MyOptimizer =
     new(result)
     result.G = {"s": @[("u", 10.0), ("x", 5.0)], "u": @[("v", 1.0), ("x", 2.0)], "v": @[("y", 4.0)], "x": @[("u", 3.0), ("v", 9.0), ("y", 2.0)], "y": @[("s", 7.0), ("v", 6.0)]}.toTable
-method get_state(self: Optimizer[State_T, Decision_T], past_decisions: seq[Decision_T]): State_T {.base.} =
+method get_state(self: Optimizer[State_T, Decision_T, Cost_T], past_decisions: seq[Decision_T]): State_T {.base.} =
     raise newException(CatchableError, "Override get_state()")
 
-method get_next_decisions(self: Optimizer[State_T, Decision_T], current_state: State_T): seq[(Decision_T, Cost_T)] {.base.} =
+method get_next_decisions(self: Optimizer[State_T, Decision_T, Cost_T], current_state: State_T): seq[(Decision_T, Cost_T)] {.base.} =
     raise newException(CatchableError, "Override get_next_decisions()")
 
-method get_heuristic_cost(self: Optimizer[State_T, Decision_T], current_state: State_T): float {.base.} =
+method get_heuristic_cost(self: Optimizer[State_T, Decision_T, Cost_T], current_state: State_T): float {.base.} =
     return 0.0
 
-method cost_operator(self: Optimizer[State_T, Decision_T], accumulated: Cost_T, step_cost: Cost_T): Cost_T {.base.} =
+method cost_operator(self: Optimizer[State_T, Decision_T, Cost_T], accumulated: Cost_T, step_cost: Cost_T): Cost_T {.base.} =
     var actual_cost: Cost_T = step_cost + self.offset
     assert actual_cost >= 0
     return accumulated + actual_cost
 
-proc hcost_operator(self: Optimizer[State_T, Decision_T], past_cost: Cost_T, current_state: State_T): Cost_T =
+proc hcost_operator(self: Optimizer[State_T, Decision_T, Cost_T], past_cost: Cost_T, current_state: State_T): Cost_T =
     return past_cost + self.get_heuristic_cost(current_state)
 
-proc real_cost(self: Optimizer[State_T, Decision_T], cost: Cost_T): Cost_T =
+proc real_cost(self: Optimizer[State_T, Decision_T, Cost_T], cost: Cost_T): Cost_T =
     return cost - self.offset * float(len(self.decision_path))
 
-method is_end_state(self: Optimizer[State_T, Decision_T], state: State_T): bool {.base.} =
+method is_end_state(self: Optimizer[State_T, Decision_T, Cost_T], state: State_T): bool {.base.} =
     return false
 
-iterator shortest_path(self: Optimizer[State_T, Decision_T], start_state: State_T, end_state: State_T, allsolutions: bool = true): auto =
+iterator shortest_path(self: Optimizer[State_T, Decision_T, Cost_T], start_state: State_T, end_state: State_T, allsolutions: bool = true): auto =
     self.start_state = start_state
     var empty_path: seq[Decision_T] = @[]
-    var fringe: PriorityQueue[Fringe_Element_T[State_T, Decision_T]] = newPriorityQueueWith((0.0, 0.0, empty_path, start_state))
+    var fringe: PriorityQueue[Fringe_Element_T[State_T, Decision_T, Cost_T]] = newPriorityQueueWith((0.0, 0.0, empty_path, start_state))
     var visited: HashSet[State_T] = initHashSet[State_T]()
 
     while fringe.len > 0:
@@ -95,10 +99,10 @@ iterator shortest_path(self: Optimizer[State_T, Decision_T], start_state: State_
     # Generic traversal (BFS / DFS / best-first)
     # ------------------------------------------------------------------
 
-proc visit_state(self: Optimizer[State_T, Decision_T], state: var State_T): void =
+proc visit_state(self: Optimizer[State_T, Decision_T, Cost_T], state: var State_T): void =
     echo("state =", state)
 
-proc longest_path_min(self: Optimizer[State_T, Decision_T], end_state: State_T, excluded_lengths: seq[int] = @[], offset: float = 1000.0): (float, seq[Decision_T]) =
+proc longest_path_min(self: Optimizer[State_T, Decision_T, Cost_T], end_state: State_T, excluded_lengths: seq[int] = @[], offset: float = 1000.0): (float, seq[Decision_T]) =
     var excluded: HashSet[int] = excluded_lengths.toHashSet()
     var empty_path: seq[Decision_T] = @[]
     var fringe = newPriorityQueueWith((0.0, empty_path, self.start_state))
@@ -136,7 +140,8 @@ proc longest_path_min(self: Optimizer[State_T, Decision_T], end_state: State_T, 
 
     return solution
 
-proc longest_path(self: Optimizer[State_T, Decision_T], start_state: State_T, end_state: State_T, max_path_length: int = 1000, offset: float = 1000.0): (float, seq[Decision_T]) =
+proc longest_path(self: Optimizer[State_T, Decision_T, Cost_T], start_state: State_T, end_state: State_T, max_path_length: int = 1000, offset: float = 1000.0): (float, seq[Decision_T]) =
+    var offset = offset
     self.start_state = start_state
     let (revenue, path) = self.longest_path_min(end_state, offset = offset)
     if len(path) == 0:
@@ -165,7 +170,7 @@ method get_state(self: MyOptimizer, past_decisions: seq[Decision_T]): State_T =
 method get_next_decisions(self: MyOptimizer, curr_state: State_T): seq[(Decision_T, Cost_T)] =
     return (self.G.getOrDefault(curr_state, @[]))
 
-proc example1() =  # ===========================================================================
+proc example1() =
     # -----------------------------------------------------------------------
     # Example 1 -- simple weighted graph (Dijkstra / longest path)
     # -----------------------------------------------------------------------
@@ -176,8 +181,10 @@ proc example1() =  # ===========================================================
 type State_T_2 = string
 type Cost_T_2 = float
 type Decision_T_2 = State_T_2
-type MyOptimizer2 = ref object of Optimizer[State_T_2, Decision_T_2]
-    G: Table[State_T_2, seq[(Decision_T_2, Cost_T_2)]]
+type Choice_T_2 = (Decision_T_2, Cost_T_2)
+
+type MyOptimizer2 = ref object of Optimizer[State_T_2, Decision_T_2, Cost_T_2]
+    G: Table[State_T_2, seq[Choice_T_2]]
 
 proc newMyOptimizer2(): MyOptimizer2 =
     new(result)
@@ -200,43 +207,48 @@ proc example2() =
     echo(op2.longest_path("a", "j"))
 
 var ROD_SIZE: int = 5
-type State_T_3 = (int, int)
+type State_T_3 = tuple
+    stage: int
+    remaining_size: int
 type Revenue_T = float
+type Cost_T_3 = float
 type Decision_T_3 = int
-
-type RodCutting = ref object of Optimizer[State_T_3, Decision_T_3]
-    prices: seq[(Decision_T_3, Revenue_T)]
+type Choice_T_3 = tuple
+    size: int
+    revenue: float
+type RodCutting = ref object of Optimizer[State_T_3, Decision_T_3, Cost_T_3]
+    choices: seq[Choice_T_3]
 
 proc newRodCutting(): RodCutting =
     new(result)
-    result.prices = @[(1, 1.0), (2, 5.0), (3, 8.0), (4, 9.0), (5, 10.0), (6, 17.0), (7, 17.0), (8, 20.0), (9, 24.0), (10, 30.0)]
-method get_state(self: Optimizer[State_T_3, Decision_T_3], past_decisions: seq[Decision_T_3]): State_T_3 {.base.} =
+    result.choices = @[(1, 1.0), (2, 5.0), (3, 8.0), (4, 9.0), (5, 10.0), (6, 17.0), (7, 17.0), (8, 20.0), (9, 24.0), (10, 30.0)]
+method get_state(self: Optimizer[State_T_3, Decision_T_3, Cost_T_3], past_decisions: seq[Decision_T_3]): State_T_3 {.base.} =
     raise newException(CatchableError, "Override get_state()")
 
-method get_next_decisions(self: Optimizer[State_T_3, Decision_T_3], current_state: State_T_3): seq[(Decision_T_3, Cost_T)] {.base.} =
+method get_next_decisions(self: Optimizer[State_T_3, Decision_T_3, Cost_T_3], current_state: State_T_3): seq[(Decision_T_3, Cost_T_3)] {.base.} =
     raise newException(CatchableError, "Override get_next_decisions()")
 
-method get_heuristic_cost(self: Optimizer[State_T_3, Decision_T_3], current_state: State_T_3): float {.base.} =
+method get_heuristic_cost(self: Optimizer[State_T_3, Decision_T_3, Cost_T_3], current_state: State_T_3): float {.base.} =
     return 0.0
 
-method cost_operator(self: Optimizer[State_T_3, Decision_T_3], accumulated: Cost_T, step_cost: Cost_T): Cost_T {.base.} =
-    var actual_cost: Cost_T = step_cost + self.offset
+method cost_operator(self: Optimizer[State_T_3, Decision_T_3, Cost_T_3], accumulated: Cost_T_3, step_cost: Cost_T_3): Cost_T_3 {.base.} =
+    var actual_cost: Cost_T_3 = step_cost + self.offset
     assert actual_cost >= 0
     return accumulated + actual_cost
 
-proc hcost_operator(self: Optimizer[State_T_3, Decision_T_3], past_cost: Cost_T, current_state: State_T_3): Cost_T =
+proc hcost_operator(self: Optimizer[State_T_3, Decision_T_3, Cost_T_3], past_cost: Cost_T_3, current_state: State_T_3): Cost_T_3 =
     return past_cost + self.get_heuristic_cost(current_state)
 
-proc real_cost(self: Optimizer[State_T_3, Decision_T_3], cost: Cost_T): Cost_T =
+proc real_cost(self: Optimizer[State_T_3, Decision_T_3, Cost_T_3], cost: Cost_T_3): Cost_T_3 =
     return cost - self.offset * float(len(self.decision_path))
 
-method is_end_state(self: Optimizer[State_T_3, Decision_T_3], state: State_T_3): bool {.base.} =
+method is_end_state(self: Optimizer[State_T_3, Decision_T_3, Cost_T_3], state: State_T_3): bool {.base.} =
     return false
 
-iterator shortest_path(self: Optimizer[State_T_3, Decision_T_3], start_state: State_T_3, end_state: State_T_3, allsolutions: bool = true): auto =
+iterator shortest_path(self: Optimizer[State_T_3, Decision_T_3, Cost_T_3], start_state: State_T_3, end_state: State_T_3, allsolutions: bool = true): auto =
     self.start_state = start_state
     var empty_path: seq[Decision_T_3] = @[]
-    var fringe: PriorityQueue[Fringe_Element_T[State_T_3, Decision_T_3]] = newPriorityQueueWith((0.0, 0.0, empty_path, start_state))
+    var fringe: PriorityQueue[Fringe_Element_T[State_T_3, Decision_T_3, Cost_T_3]] = newPriorityQueueWith((0.0, 0.0, empty_path, start_state))
     var visited: HashSet[State_T_3] = initHashSet[State_T_3]()
 
     while fringe.len > 0:
@@ -268,10 +280,10 @@ iterator shortest_path(self: Optimizer[State_T_3, Decision_T_3], start_state: St
     # Generic traversal (BFS / DFS / best-first)
     # ------------------------------------------------------------------
 
-proc visit_state(self: Optimizer[State_T_3, Decision_T_3], state: var State_T_3): void =
+proc visit_state(self: Optimizer[State_T_3, Decision_T_3, Cost_T_3], state: var State_T_3): void =
     echo("state =", state)
 
-proc longest_path_min(self: Optimizer[State_T_3, Decision_T_3], end_state: State_T_3, excluded_lengths: seq[int] = @[], offset: float = 1000.0): (float, seq[Decision_T_3]) =
+proc longest_path_min(self: Optimizer[State_T_3, Decision_T_3, Cost_T_3], end_state: State_T_3, excluded_lengths: seq[int] = @[], offset: float = 1000.0): (float, seq[Decision_T_3]) =
     var excluded: HashSet[int] = excluded_lengths.toHashSet()
     var empty_path: seq[Decision_T_3] = @[]
     var fringe = newPriorityQueueWith((0.0, empty_path, self.start_state))
@@ -309,7 +321,8 @@ proc longest_path_min(self: Optimizer[State_T_3, Decision_T_3], end_state: State
 
     return solution
 
-proc longest_path(self: Optimizer[State_T_3, Decision_T_3], start_state: State_T_3, end_state: State_T_3, max_path_length: int = 1000, offset: float = 1000.0): (float, seq[Decision_T_3]) =
+proc longest_path(self: Optimizer[State_T_3, Decision_T_3, Cost_T_3], start_state: State_T_3, end_state: State_T_3, max_path_length: int = 1000, offset: float = 1000.0): (float, seq[Decision_T_3]) =
+    var offset = offset
     self.start_state = start_state
     let (revenue, path) = self.longest_path_min(end_state, offset = offset)
     if len(path) == 0:
@@ -339,9 +352,9 @@ method get_state(self: RodCutting, past_decisions: seq[Decision_T_3]): State_T_3
         return (-1, 0)
     return (stage, remaining_size)
 
-method get_next_decisions(self: RodCutting, current_state: State_T_3): seq[(Decision_T_3, Cost_T)] =
+method get_next_decisions(self: RodCutting, current_state: State_T_3): seq[(Decision_T_3, Cost_T_3)] =
     let (stage, remaining_size) = current_state
-    return (collect(for (size, rev) in self.prices: (if size <= remaining_size: (size, rev))))
+    return (collect(for (size, rev) in self.choices: (if size <= remaining_size: (size, rev))))
 
 proc example3() =
     # -----------------------------------------------------------------------
@@ -363,42 +376,44 @@ type State_T_4 = tuple
     budget: Cost_T_4
 type Decision_T_4 = string
 type Revenue_T_4 = float
-type Choice_T = tuple
+type Keuze_T = tuple
     cost: Cost_T_4
     revenue: Revenue_T_4
-type CapitalBudgeting = ref object of Optimizer[State_T_4, Decision_T_4]
-    choices: array[Stage_T, Table[Decision_T_4, Choice_T]]
+type Choice_T_4 = Table[Decision_T_4, Keuze_T]
+
+type CapitalBudgeting = ref object of Optimizer[State_T_4, Decision_T_4, Cost_T_4]
+    choices: array[Stage_T, Choice_T_4]
 
 proc newCapitalBudgeting(): CapitalBudgeting =
     new(result)
     result.choices = [{"plant1-p1": (cost: 0.0, revenue: 0.0), "plant1-p2": (cost: 1.0, revenue: 5.0), "plant1-p3": (cost: 2.0, revenue: 6.0)}.toTable, {"plant2-p1": (cost: 0.0, revenue: 0.0), "plant2-p2": (cost: 2.0, revenue: 8.0), "plant2-p3": (cost: 3.0, revenue: 9.0), "plant2-p4": (cost: 4.0, revenue: 12.0)}.toTable, {"plant3-p1": (cost: 0.0, revenue: 0.0), "plant3-p2": (cost: 1.0, revenue: 4.0)}.toTable, default(typeof({"plant1-p1": (cost: 0.0, revenue: 0.0), "plant1-p2": (cost: 1.0, revenue: 5.0), "plant1-p3": (cost: 2.0, revenue: 6.0)}.toTable))]
-method get_state(self: Optimizer[State_T_4, Decision_T_4], past_decisions: seq[Decision_T_4]): State_T_4 {.base.} =
+method get_state(self: Optimizer[State_T_4, Decision_T_4, Cost_T_4], past_decisions: seq[Decision_T_4]): State_T_4 {.base.} =
     raise newException(CatchableError, "Override get_state()")
 
-method get_next_decisions(self: Optimizer[State_T_4, Decision_T_4], current_state: State_T_4): seq[(Decision_T_4, Cost_T)] {.base.} =
+method get_next_decisions(self: Optimizer[State_T_4, Decision_T_4, Cost_T_4], current_state: State_T_4): seq[(Decision_T_4, Cost_T_4)] {.base.} =
     raise newException(CatchableError, "Override get_next_decisions()")
 
-method get_heuristic_cost(self: Optimizer[State_T_4, Decision_T_4], current_state: State_T_4): float {.base.} =
+method get_heuristic_cost(self: Optimizer[State_T_4, Decision_T_4, Cost_T_4], current_state: State_T_4): float {.base.} =
     return 0.0
 
-method cost_operator(self: Optimizer[State_T_4, Decision_T_4], accumulated: Cost_T, step_cost: Cost_T): Cost_T {.base.} =
-    var actual_cost: Cost_T = step_cost + self.offset
+method cost_operator(self: Optimizer[State_T_4, Decision_T_4, Cost_T_4], accumulated: Cost_T_4, step_cost: Cost_T_4): Cost_T_4 {.base.} =
+    var actual_cost: Cost_T_4 = step_cost + self.offset
     assert actual_cost >= 0
     return accumulated + actual_cost
 
-proc hcost_operator(self: Optimizer[State_T_4, Decision_T_4], past_cost: Cost_T, current_state: State_T_4): Cost_T =
+proc hcost_operator(self: Optimizer[State_T_4, Decision_T_4, Cost_T_4], past_cost: Cost_T_4, current_state: State_T_4): Cost_T_4 =
     return past_cost + self.get_heuristic_cost(current_state)
 
-proc real_cost(self: Optimizer[State_T_4, Decision_T_4], cost: Cost_T): Cost_T =
+proc real_cost(self: Optimizer[State_T_4, Decision_T_4, Cost_T_4], cost: Cost_T_4): Cost_T_4 =
     return cost - self.offset * float(len(self.decision_path))
 
-method is_end_state(self: Optimizer[State_T_4, Decision_T_4], state: State_T_4): bool {.base.} =
+method is_end_state(self: Optimizer[State_T_4, Decision_T_4, Cost_T_4], state: State_T_4): bool {.base.} =
     return false
 
-iterator shortest_path(self: Optimizer[State_T_4, Decision_T_4], start_state: State_T_4, end_state: State_T_4, allsolutions: bool = true): auto =
+iterator shortest_path(self: Optimizer[State_T_4, Decision_T_4, Cost_T_4], start_state: State_T_4, end_state: State_T_4, allsolutions: bool = true): auto =
     self.start_state = start_state
     var empty_path: seq[Decision_T_4] = @[]
-    var fringe: PriorityQueue[Fringe_Element_T[State_T_4, Decision_T_4]] = newPriorityQueueWith((0.0, 0.0, empty_path, start_state))
+    var fringe: PriorityQueue[Fringe_Element_T[State_T_4, Decision_T_4, Cost_T_4]] = newPriorityQueueWith((0.0, 0.0, empty_path, start_state))
     var visited: HashSet[State_T_4] = initHashSet[State_T_4]()
 
     while fringe.len > 0:
@@ -430,10 +445,10 @@ iterator shortest_path(self: Optimizer[State_T_4, Decision_T_4], start_state: St
     # Generic traversal (BFS / DFS / best-first)
     # ------------------------------------------------------------------
 
-proc visit_state(self: Optimizer[State_T_4, Decision_T_4], state: var State_T_4): void =
+proc visit_state(self: Optimizer[State_T_4, Decision_T_4, Cost_T_4], state: var State_T_4): void =
     echo("state =", state)
 
-proc longest_path_min(self: Optimizer[State_T_4, Decision_T_4], end_state: State_T_4, excluded_lengths: seq[int] = @[], offset: float = 1000.0): (float, seq[Decision_T_4]) =
+proc longest_path_min(self: Optimizer[State_T_4, Decision_T_4, Cost_T_4], end_state: State_T_4, excluded_lengths: seq[int] = @[], offset: float = 1000.0): (float, seq[Decision_T_4]) =
     var excluded: HashSet[int] = excluded_lengths.toHashSet()
     var empty_path: seq[Decision_T_4] = @[]
     var fringe = newPriorityQueueWith((0.0, empty_path, self.start_state))
@@ -471,7 +486,8 @@ proc longest_path_min(self: Optimizer[State_T_4, Decision_T_4], end_state: State
 
     return solution
 
-proc longest_path(self: Optimizer[State_T_4, Decision_T_4], start_state: State_T_4, end_state: State_T_4, max_path_length: int = 1000, offset: float = 1000.0): (float, seq[Decision_T_4]) =
+proc longest_path(self: Optimizer[State_T_4, Decision_T_4, Cost_T_4], start_state: State_T_4, end_state: State_T_4, max_path_length: int = 1000, offset: float = 1000.0): (float, seq[Decision_T_4]) =
+    var offset = offset
     self.start_state = start_state
     let (revenue, path) = self.longest_path_min(end_state, offset = offset)
     if len(path) == 0:
@@ -499,16 +515,16 @@ method get_state(self: CapitalBudgeting, past_decisions: seq[Decision_T_4]): Sta
     var spent: float = 0.0
     for d in past_decisions:
         for s in @[STAGE1, STAGE2, STAGE3]:
-            var choices: Table[Decision_T_4, Choice_T] = self.choices[s]
+            var choices: Choice_T_4 = self.choices[s]
             if d in choices:
-                spent += choices[d][0]
+                spent += choices[d].cost
     return (stage, float(CAPITAL) - spent)
 
 method get_next_decisions(self: CapitalBudgeting, current_state: State_T_4): seq[(Decision_T_4, Cost_T_4)] =
     let (stage, budget) = current_state
     if stage == END:
         return @[]
-    var choices: Table[Decision_T_4, Choice_T] = self.choices[stage]
+    var choices: Choice_T_4 = self.choices[stage]
     return (collect(for (name, choice) in choices.pairs(): (if choice.cost <= budget: (name, choice.revenue))))
 
 proc example4() =
@@ -520,6 +536,7 @@ proc example4() =
     echo(op4.longest_path((stage: STAGE1, budget: float(CAPITAL)), (stage: END, budget: 0.0)))
 
 const MAX_WEIGHT: int = 5
+type Cost_T_5 = float
 type Stage_T_5 = enum STAGE1_5, STAGE2_5, STAGE3_5, END_5
 type State_T_5 = tuple
     stage: Stage_T_5
@@ -527,42 +544,42 @@ type State_T_5 = tuple
 type Decision_T_5 = tuple
     stage: Stage_T_5
     quantity: int
-type Choice_T5 = tuple
+type Choice_T_5 = tuple
     weight: int
     benefit: int
-type Knapsack = ref object of Optimizer[State_T_5, Decision_T_5]
-    items: array[Stage_T_5, Choice_T5]
+type Knapsack = ref object of Optimizer[State_T_5, Decision_T_5, Cost_T_5]
+    items: array[Stage_T_5, Choice_T_5]
 
 proc newKnapsack(): Knapsack =
     new(result)
     result.items = [(weight: 2, benefit: 65), (weight: 3, benefit: 80), (weight: 1, benefit: 30), default(typeof((weight: 2, benefit: 65)))]
-method get_state(self: Optimizer[State_T_5, Decision_T_5], past_decisions: seq[Decision_T_5]): State_T_5 {.base.} =
+method get_state(self: Optimizer[State_T_5, Decision_T_5, Cost_T_5], past_decisions: seq[Decision_T_5]): State_T_5 {.base.} =
     raise newException(CatchableError, "Override get_state()")
 
-method get_next_decisions(self: Optimizer[State_T_5, Decision_T_5], current_state: State_T_5): seq[(Decision_T_5, Cost_T)] {.base.} =
+method get_next_decisions(self: Optimizer[State_T_5, Decision_T_5, Cost_T_5], current_state: State_T_5): seq[(Decision_T_5, Cost_T_5)] {.base.} =
     raise newException(CatchableError, "Override get_next_decisions()")
 
-method get_heuristic_cost(self: Optimizer[State_T_5, Decision_T_5], current_state: State_T_5): float {.base.} =
+method get_heuristic_cost(self: Optimizer[State_T_5, Decision_T_5, Cost_T_5], current_state: State_T_5): float {.base.} =
     return 0.0
 
-method cost_operator(self: Optimizer[State_T_5, Decision_T_5], accumulated: Cost_T, step_cost: Cost_T): Cost_T {.base.} =
-    var actual_cost: Cost_T = step_cost + self.offset
+method cost_operator(self: Optimizer[State_T_5, Decision_T_5, Cost_T_5], accumulated: Cost_T_5, step_cost: Cost_T_5): Cost_T_5 {.base.} =
+    var actual_cost: Cost_T_5 = step_cost + self.offset
     assert actual_cost >= 0
     return accumulated + actual_cost
 
-proc hcost_operator(self: Optimizer[State_T_5, Decision_T_5], past_cost: Cost_T, current_state: State_T_5): Cost_T =
+proc hcost_operator(self: Optimizer[State_T_5, Decision_T_5, Cost_T_5], past_cost: Cost_T_5, current_state: State_T_5): Cost_T_5 =
     return past_cost + self.get_heuristic_cost(current_state)
 
-proc real_cost(self: Optimizer[State_T_5, Decision_T_5], cost: Cost_T): Cost_T =
+proc real_cost(self: Optimizer[State_T_5, Decision_T_5, Cost_T_5], cost: Cost_T_5): Cost_T_5 =
     return cost - self.offset * float(len(self.decision_path))
 
-method is_end_state(self: Optimizer[State_T_5, Decision_T_5], state: State_T_5): bool {.base.} =
+method is_end_state(self: Optimizer[State_T_5, Decision_T_5, Cost_T_5], state: State_T_5): bool {.base.} =
     return false
 
-iterator shortest_path(self: Optimizer[State_T_5, Decision_T_5], start_state: State_T_5, end_state: State_T_5, allsolutions: bool = true): auto =
+iterator shortest_path(self: Optimizer[State_T_5, Decision_T_5, Cost_T_5], start_state: State_T_5, end_state: State_T_5, allsolutions: bool = true): auto =
     self.start_state = start_state
     var empty_path: seq[Decision_T_5] = @[]
-    var fringe: PriorityQueue[Fringe_Element_T[State_T_5, Decision_T_5]] = newPriorityQueueWith((0.0, 0.0, empty_path, start_state))
+    var fringe: PriorityQueue[Fringe_Element_T[State_T_5, Decision_T_5, Cost_T_5]] = newPriorityQueueWith((0.0, 0.0, empty_path, start_state))
     var visited: HashSet[State_T_5] = initHashSet[State_T_5]()
 
     while fringe.len > 0:
@@ -594,10 +611,10 @@ iterator shortest_path(self: Optimizer[State_T_5, Decision_T_5], start_state: St
     # Generic traversal (BFS / DFS / best-first)
     # ------------------------------------------------------------------
 
-proc visit_state(self: Optimizer[State_T_5, Decision_T_5], state: var State_T_5): void =
+proc visit_state(self: Optimizer[State_T_5, Decision_T_5, Cost_T_5], state: var State_T_5): void =
     echo("state =", state)
 
-proc longest_path_min(self: Optimizer[State_T_5, Decision_T_5], end_state: State_T_5, excluded_lengths: seq[int] = @[], offset: float = 1000.0): (float, seq[Decision_T_5]) =
+proc longest_path_min(self: Optimizer[State_T_5, Decision_T_5, Cost_T_5], end_state: State_T_5, excluded_lengths: seq[int] = @[], offset: float = 1000.0): (float, seq[Decision_T_5]) =
     var excluded: HashSet[int] = excluded_lengths.toHashSet()
     var empty_path: seq[Decision_T_5] = @[]
     var fringe = newPriorityQueueWith((0.0, empty_path, self.start_state))
@@ -635,7 +652,8 @@ proc longest_path_min(self: Optimizer[State_T_5, Decision_T_5], end_state: State
 
     return solution
 
-proc longest_path(self: Optimizer[State_T_5, Decision_T_5], start_state: State_T_5, end_state: State_T_5, max_path_length: int = 1000, offset: float = 1000.0): (float, seq[Decision_T_5]) =
+proc longest_path(self: Optimizer[State_T_5, Decision_T_5, Cost_T_5], start_state: State_T_5, end_state: State_T_5, max_path_length: int = 1000, offset: float = 1000.0): (float, seq[Decision_T_5]) =
+    var offset = offset
     self.start_state = start_state
     let (revenue, path) = self.longest_path_min(end_state, offset = offset)
     if len(path) == 0:
@@ -667,12 +685,12 @@ method get_state(self: Knapsack, past_decisions: seq[Decision_T_5]): State_T_5 =
         remaining -= qty * self.items[prev_stage].weight
     return (stage, remaining)
 
-method get_next_decisions(self: Knapsack, current_state: State_T_5): seq[(Decision_T_5, Cost_T)] =
+method get_next_decisions(self: Knapsack, current_state: State_T_5): seq[(Decision_T_5, Cost_T_5)] =
     let (stage, remaining) = current_state
     if stage == END_5:
         return @[]
     let (weight, benefit) = self.items[stage]
-    var decisions: seq[(Decision_T_5, Cost_T)] = @[]
+    var decisions: seq[(Decision_T_5, Cost_T_5)] = @[]
     var qty: int = 0
     while qty * weight <= remaining:
         decisions.add(((stage: stage, quantity: qty), float(benefit * qty)))
@@ -690,39 +708,42 @@ proc example5() =
 type Decision_T_6 = enum BUY, SELL, KEEP, TRADE
 type Cost_T_6 = float
 const IRRELEVANT: int = -1
-type State_T_6 = (int, int)
+const MAX_AGE: int = 3
+type Age_T = int
+type State_T_6 = tuple
+    year: int
+    age: int
+type EquipmentReplacement = ref object of Optimizer[State_T_6, Decision_T_6, Cost_T_6]
+    maintenance_cost: Table[Age_T, Cost_T_6]
+    market_value: Table[Age_T, Cost_T_6]
 
-type EquipmentReplacement = ref object of Optimizer[State_T_6, Decision_T_6]
-    maintenance_cost: Table[int, Cost_T_6]
-    market_value: Table[int, Cost_T_6]
-
-method get_state(self: Optimizer[State_T_6, Decision_T_6], past_decisions: seq[Decision_T_6]): State_T_6 {.base.} =
+method get_state(self: Optimizer[State_T_6, Decision_T_6, Cost_T_6], past_decisions: seq[Decision_T_6]): State_T_6 {.base.} =
     raise newException(CatchableError, "Override get_state()")
 
-method get_next_decisions(self: Optimizer[State_T_6, Decision_T_6], current_state: State_T_6): seq[(Decision_T_6, Cost_T)] {.base.} =
+method get_next_decisions(self: Optimizer[State_T_6, Decision_T_6, Cost_T_6], current_state: State_T_6): seq[(Decision_T_6, Cost_T_6)] {.base.} =
     raise newException(CatchableError, "Override get_next_decisions()")
 
-method get_heuristic_cost(self: Optimizer[State_T_6, Decision_T_6], current_state: State_T_6): float {.base.} =
+method get_heuristic_cost(self: Optimizer[State_T_6, Decision_T_6, Cost_T_6], current_state: State_T_6): float {.base.} =
     return 0.0
 
-method cost_operator(self: Optimizer[State_T_6, Decision_T_6], accumulated: Cost_T, step_cost: Cost_T): Cost_T {.base.} =
-    var actual_cost: Cost_T = step_cost + self.offset
+method cost_operator(self: Optimizer[State_T_6, Decision_T_6, Cost_T_6], accumulated: Cost_T_6, step_cost: Cost_T_6): Cost_T_6 {.base.} =
+    var actual_cost: Cost_T_6 = step_cost + self.offset
     assert actual_cost >= 0
     return accumulated + actual_cost
 
-proc hcost_operator(self: Optimizer[State_T_6, Decision_T_6], past_cost: Cost_T, current_state: State_T_6): Cost_T =
+proc hcost_operator(self: Optimizer[State_T_6, Decision_T_6, Cost_T_6], past_cost: Cost_T_6, current_state: State_T_6): Cost_T_6 =
     return past_cost + self.get_heuristic_cost(current_state)
 
-proc real_cost(self: Optimizer[State_T_6, Decision_T_6], cost: Cost_T): Cost_T =
+proc real_cost(self: Optimizer[State_T_6, Decision_T_6, Cost_T_6], cost: Cost_T_6): Cost_T_6 =
     return cost - self.offset * float(len(self.decision_path))
 
-method is_end_state(self: Optimizer[State_T_6, Decision_T_6], state: State_T_6): bool {.base.} =
+method is_end_state(self: Optimizer[State_T_6, Decision_T_6, Cost_T_6], state: State_T_6): bool {.base.} =
     return false
 
-iterator shortest_path(self: Optimizer[State_T_6, Decision_T_6], start_state: State_T_6, end_state: State_T_6, allsolutions: bool = true): auto =
+iterator shortest_path(self: Optimizer[State_T_6, Decision_T_6, Cost_T_6], start_state: State_T_6, end_state: State_T_6, allsolutions: bool = true): auto =
     self.start_state = start_state
     var empty_path: seq[Decision_T_6] = @[]
-    var fringe: PriorityQueue[Fringe_Element_T[State_T_6, Decision_T_6]] = newPriorityQueueWith((0.0, 0.0, empty_path, start_state))
+    var fringe: PriorityQueue[Fringe_Element_T[State_T_6, Decision_T_6, Cost_T_6]] = newPriorityQueueWith((0.0, 0.0, empty_path, start_state))
     var visited: HashSet[State_T_6] = initHashSet[State_T_6]()
 
     while fringe.len > 0:
@@ -754,10 +775,10 @@ iterator shortest_path(self: Optimizer[State_T_6, Decision_T_6], start_state: St
     # Generic traversal (BFS / DFS / best-first)
     # ------------------------------------------------------------------
 
-proc visit_state(self: Optimizer[State_T_6, Decision_T_6], state: var State_T_6): void =
+proc visit_state(self: Optimizer[State_T_6, Decision_T_6, Cost_T_6], state: var State_T_6): void =
     echo("state =", state)
 
-proc longest_path_min(self: Optimizer[State_T_6, Decision_T_6], end_state: State_T_6, excluded_lengths: seq[int] = @[], offset: float = 1000.0): (float, seq[Decision_T_6]) =
+proc longest_path_min(self: Optimizer[State_T_6, Decision_T_6, Cost_T_6], end_state: State_T_6, excluded_lengths: seq[int] = @[], offset: float = 1000.0): (float, seq[Decision_T_6]) =
     var excluded: HashSet[int] = excluded_lengths.toHashSet()
     var empty_path: seq[Decision_T_6] = @[]
     var fringe = newPriorityQueueWith((0.0, empty_path, self.start_state))
@@ -795,7 +816,8 @@ proc longest_path_min(self: Optimizer[State_T_6, Decision_T_6], end_state: State
 
     return solution
 
-proc longest_path(self: Optimizer[State_T_6, Decision_T_6], start_state: State_T_6, end_state: State_T_6, max_path_length: int = 1000, offset: float = 1000.0): (float, seq[Decision_T_6]) =
+proc longest_path(self: Optimizer[State_T_6, Decision_T_6, Cost_T_6], start_state: State_T_6, end_state: State_T_6, max_path_length: int = 1000, offset: float = 1000.0): (float, seq[Decision_T_6]) =
+    var offset = offset
     self.start_state = start_state
     let (revenue, path) = self.longest_path_min(end_state, offset = offset)
     if len(path) == 0:
@@ -823,7 +845,7 @@ method get_next_decisions(self: EquipmentReplacement, current_state: State_T_6):
 proc initEquipmentReplacement(self: EquipmentReplacement, offset: float = 0.0) =
     self.maintenance_cost = {0: 60.0, 1: 80.0, 2: 120.0}.toTable
     self.market_value = {0: 1000.0, 1: 800.0, 2: 600.0, 3: 500.0}.toTable
-    initOptimizer[State_T_6, Decision_T_6](self, offset)
+    initOptimizer[State_T_6, Decision_T_6, Cost_T_6](self, offset)
 
 proc newEquipmentReplacement(offset: float = 0.0): EquipmentReplacement =
     new(result)
@@ -842,15 +864,16 @@ method get_state(self: EquipmentReplacement, past_decisions: seq[Decision_T_6]):
 
 method get_next_decisions(self: EquipmentReplacement, current_state: State_T_6): seq[(Decision_T_6, Cost_T_6)] =
     let (year, age) = current_state
-    if age == IRRELEVANT:
+    if year == 6:
         return @[]
     if year == 0:
-        return (@[(BUY, self.maintenance_cost[0] + 1000.0)])
+        var new_age = 0
+        return (@[(BUY, self.maintenance_cost[new_age] + self.market_value[new_age])])
     if year == 5:
         return (@[(SELL, -self.market_value[age])])
     if age == 3:
-        return (@[(TRADE, -self.market_value[age] + 1000.0 + self.maintenance_cost[0])])
-    return (@[(KEEP, self.maintenance_cost[age]), (TRADE, -self.market_value[age] + 1000.0 + self.maintenance_cost[0])])
+        return (@[(TRADE, -self.market_value[age] + self.market_value[0] + self.maintenance_cost[0])])
+    return (@[(KEEP, self.maintenance_cost[age]), (TRADE, -self.market_value[age] + self.market_value[0] + self.maintenance_cost[0])])
 
 proc example6() =
     # -----------------------------------------------------------------------
@@ -866,7 +889,7 @@ proc example6() =
 type State_T_7 = string
 type Distance_T = float
 type Decision_T_7 = string
-type BookMap = ref object of Optimizer[State_T_7, Decision_T_7]
+type BookMap = ref object of Optimizer[State_T_7, Decision_T_7, Distance_T]
     G: Table[State_T_7, seq[(Decision_T_7, Distance_T)]]
     heuristic: Table[State_T_7, Distance_T]
 
@@ -877,7 +900,7 @@ proc newBookMap(): BookMap =
 method get_state(self: BookMap, past_decisions: seq[State_T_7]): State_T_7 =
     return past_decisions[^1]
 
-method get_next_decisions(self: BookMap, current_state: State_T_7): seq[(Decision_T_7, Cost_T)] =
+method get_next_decisions(self: BookMap, current_state: State_T_7): seq[(Decision_T_7, Distance_T)] =
     return (self.G.getOrDefault(current_state, @[]))
 
 method get_heuristic_cost(self: BookMap, city: State_T_7): float =
@@ -902,40 +925,40 @@ type Prob_T = float
 type State_T_8 = tuple
     stage: int
     hidden_state: Hidden_State_T
-type HMM = ref object of Optimizer[State_T_8, Hidden_State_T]
+type HMM = ref object of Optimizer[State_T_8, Hidden_State_T, Prob_T]
     hidden_states: seq[Hidden_State_T]
     start_p: array[Hidden_State_T, Prob_T]
     trans_p: array[Hidden_State_T, array[Hidden_State_T, Prob_T]]
     emit_p: array[Hidden_State_T, array[Symptom_T, Prob_T]]
     obs: seq[Symptom_T]
 
-method get_state(self: Optimizer[State_T_8, Hidden_State_T], past_decisions: seq[Hidden_State_T]): State_T_8 {.base.} =
+method get_state(self: Optimizer[State_T_8, Hidden_State_T, Prob_T], past_decisions: seq[Hidden_State_T]): State_T_8 {.base.} =
     raise newException(CatchableError, "Override get_state()")
 
-method get_next_decisions(self: Optimizer[State_T_8, Hidden_State_T], current_state: State_T_8): seq[(Hidden_State_T, Cost_T)] {.base.} =
+method get_next_decisions(self: Optimizer[State_T_8, Hidden_State_T, Prob_T], current_state: State_T_8): seq[(Hidden_State_T, Prob_T)] {.base.} =
     raise newException(CatchableError, "Override get_next_decisions()")
 
-method get_heuristic_cost(self: Optimizer[State_T_8, Hidden_State_T], current_state: State_T_8): float {.base.} =
+method get_heuristic_cost(self: Optimizer[State_T_8, Hidden_State_T, Prob_T], current_state: State_T_8): float {.base.} =
     return 0.0
 
-method cost_operator(self: Optimizer[State_T_8, Hidden_State_T], accumulated: Cost_T, step_cost: Cost_T): Cost_T {.base.} =
-    var actual_cost: Cost_T = step_cost + self.offset
+method cost_operator(self: Optimizer[State_T_8, Hidden_State_T, Prob_T], accumulated: Prob_T, step_cost: Prob_T): Prob_T {.base.} =
+    var actual_cost: Prob_T = step_cost + self.offset
     assert actual_cost >= 0
     return accumulated + actual_cost
 
-proc hcost_operator(self: Optimizer[State_T_8, Hidden_State_T], past_cost: Cost_T, current_state: State_T_8): Cost_T =
+proc hcost_operator(self: Optimizer[State_T_8, Hidden_State_T, Prob_T], past_cost: Prob_T, current_state: State_T_8): Prob_T =
     return past_cost + self.get_heuristic_cost(current_state)
 
-proc real_cost(self: Optimizer[State_T_8, Hidden_State_T], cost: Cost_T): Cost_T =
+proc real_cost(self: Optimizer[State_T_8, Hidden_State_T, Prob_T], cost: Prob_T): Prob_T =
     return cost - self.offset * float(len(self.decision_path))
 
-method is_end_state(self: Optimizer[State_T_8, Hidden_State_T], state: State_T_8): bool {.base.} =
+method is_end_state(self: Optimizer[State_T_8, Hidden_State_T, Prob_T], state: State_T_8): bool {.base.} =
     return false
 
-iterator shortest_path(self: Optimizer[State_T_8, Hidden_State_T], start_state: State_T_8, end_state: State_T_8, allsolutions: bool = true): auto =
+iterator shortest_path(self: Optimizer[State_T_8, Hidden_State_T, Prob_T], start_state: State_T_8, end_state: State_T_8, allsolutions: bool = true): auto =
     self.start_state = start_state
     var empty_path: seq[Hidden_State_T] = @[]
-    var fringe: PriorityQueue[Fringe_Element_T[State_T_8, Hidden_State_T]] = newPriorityQueueWith((0.0, 0.0, empty_path, start_state))
+    var fringe: PriorityQueue[Fringe_Element_T[State_T_8, Hidden_State_T, Prob_T]] = newPriorityQueueWith((0.0, 0.0, empty_path, start_state))
     var visited: HashSet[State_T_8] = initHashSet[State_T_8]()
 
     while fringe.len > 0:
@@ -967,10 +990,10 @@ iterator shortest_path(self: Optimizer[State_T_8, Hidden_State_T], start_state: 
     # Generic traversal (BFS / DFS / best-first)
     # ------------------------------------------------------------------
 
-proc visit_state(self: Optimizer[State_T_8, Hidden_State_T], state: var State_T_8): void =
+proc visit_state(self: Optimizer[State_T_8, Hidden_State_T, Prob_T], state: var State_T_8): void =
     echo("state =", state)
 
-proc longest_path_min(self: Optimizer[State_T_8, Hidden_State_T], end_state: State_T_8, excluded_lengths: seq[int] = @[], offset: float = 1000.0): (float, seq[Hidden_State_T]) =
+proc longest_path_min(self: Optimizer[State_T_8, Hidden_State_T, Prob_T], end_state: State_T_8, excluded_lengths: seq[int] = @[], offset: float = 1000.0): (float, seq[Hidden_State_T]) =
     var excluded: HashSet[int] = excluded_lengths.toHashSet()
     var empty_path: seq[Hidden_State_T] = @[]
     var fringe = newPriorityQueueWith((0.0, empty_path, self.start_state))
@@ -1008,7 +1031,8 @@ proc longest_path_min(self: Optimizer[State_T_8, Hidden_State_T], end_state: Sta
 
     return solution
 
-proc longest_path(self: Optimizer[State_T_8, Hidden_State_T], start_state: State_T_8, end_state: State_T_8, max_path_length: int = 1000, offset: float = 1000.0): (float, seq[Hidden_State_T]) =
+proc longest_path(self: Optimizer[State_T_8, Hidden_State_T, Prob_T], start_state: State_T_8, end_state: State_T_8, max_path_length: int = 1000, offset: float = 1000.0): (float, seq[Hidden_State_T]) =
+    var offset = offset
     self.start_state = start_state
     let (revenue, path) = self.longest_path_min(end_state, offset = offset)
     if len(path) == 0:
@@ -1037,7 +1061,7 @@ method cost_operator(self: HMM, accumulated_cost: Cost_T, step_prob: Prob_T): Co
 method get_probability(self: HMM, seq: seq[Hidden_State_T]): Prob_T {.base.}
 method is_end_state(self: HMM, state: State_T_8): bool
 proc initHMM(self: HMM, obs: seq[Symptom_T]) =
-    initOptimizer[State_T_8, Hidden_State_T](self, offset = 1.0)
+    initOptimizer[State_T_8, Hidden_State_T, Prob_T](self, offset = 1.0)
     self.obs = obs
     self.hidden_states = @[HEALTHY, FEVER]
     self.start_p = [0.6, 0.4, default(typeof(0.6))]
