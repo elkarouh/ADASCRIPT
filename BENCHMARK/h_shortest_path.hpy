@@ -115,7 +115,7 @@ class Optimizer[S, D, C]:
         excluded: {}int = set(excluded_lengths)
         empty_path: []D = []
         fringe = PriorityQueue((0.0, empty_path, self.start_state))
-        visited: {S}float = {}
+        visited: {S}float = {:}
         solution: (float,[]D) = (0.0, [])
 
         while fringe:

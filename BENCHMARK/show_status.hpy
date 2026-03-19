@@ -1,0 +1,109 @@
+# test_timing - Monitor test execution with timing information
+import time, os
+
+completedTests: {}str  ## All completed tests (persistent)
+intervalTests: {}str   ## Tests since last 5-min summary
+
+def getTestStatusLines() -> []str:
+  "Run show_tests_status and return output as lines."
+  shellLines: show_tests_status -raw
+
+def parseRunningTest(lines: []str) -> str:
+  "Extract the currently running test name from status lines."
+  result : str = ""
+  for i, line in enumerate(lines):
+    if line.strip() == "RUNNING:":
+      if i + 1 < len(lines):
+        test : str = lines[i + 1].strip()
+        while test.startswith("-"):
+          test = test[1:]
+        while test.endswith("-"):
+          test = test[0:-1]
+        test = test.strip()
+        if len(test) > 0:
+          result = test
+      break
+  result
+
+def parseCompletedTests(lines: []str) -> []str:
+  "Extract all completed test names from status lines."
+  result : []str = []
+  let prefix : str = "SUCCESS:"
+  for line in lines:
+    let pos : int = line.find(prefix)
+    if pos >= 0:
+      let rest : str = line[pos + len(prefix):].strip()
+      let parts : []str = rest.split()
+      if len(parts) > 0:
+        result.add(parts[0])
+  result
+
+def parseStatusSummary(lines: []str) -> []str:
+  "Extract the status summary lines (last 5 lines)."
+  let startIdx : int = max(0, len(lines) - 5)
+  lines[startIdx:]
+
+def formatTime() -> str:
+  "Return current time as HH:MM:SS string."
+  time.strftime("%H:%M:%S")
+
+# Main program
+print "Current directory: ", os.getcwd()
+print "=== Initial Test Status (", formatTime(), ") ==="
+let initialLines : []str = getTestStatusLines()
+print "Output lines: ", len(initialLines)
+for line in initialLines:
+  print line
+
+# Capture already completed tests at startup
+for test in parseCompletedTests(initialLines):
+  completedTests.add(test)
+
+print "Initial tests: ", len(completedTests)
+
+while True:
+  time.sleep(60) # one minute polling interval
+  let lines : []str = getTestStatusLines()
+  let currentMinute : int = int(time.strftime("%M"))
+
+  # Track newly completed tests
+  for test in parseCompletedTests(lines):
+    if not completedTests.contains(test):
+      completedTests.add(test)
+      intervalTests.add(test)
+
+  case currentMinute % 5:
+    when 0:
+      let displayLines : []str = getTestStatusLines()
+      let displayRunning : str = parseRunningTest(displayLines)
+      print ""
+      print "=== ", formatTime(), " - Test Timing Summary ==="
+      print ""
+
+      if len(intervalTests) > 0:
+        for test in intervalTests:
+          print "< 1 min: ", test
+        intervalTests = {}
+      else:
+        print "(no new tests completed yet)"
+
+      print ""
+      print "--- Currently Running ---"
+      if len(displayRunning) > 0:
+        print displayRunning
+      else:
+        print "(no test running)"
+
+      print ""
+      print "--- Current Status ---"
+      for line in parseStatusSummary(displayLines):
+        print line
+      print ""
+
+    when others:
+      pass
+
+  var nextUpdate : int = (5 - (currentMinute % 5)) % 5
+  if nextUpdate == 0:
+    nextUpdate = 5
+  print "[", formatTime(), "] Monitoring... Next timing update in ", nextUpdate, " minute(s)"
