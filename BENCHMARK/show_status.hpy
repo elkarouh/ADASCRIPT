@@ -68,9 +68,8 @@ while True:
 
   # Track newly completed tests
   for test in parseCompletedTests(lines):
-    if test not in completedTests:
-      completedTests.add(test)
-      intervalTests.add(test)
+    completedTests.add(test)
+    intervalTests.add(test)
 
   case currentMinute % 5:
     when 0:
