@@ -10,7 +10,7 @@ def getTestStatusLines() -> []str:
 
 def parseRunningTest(lines: []str) -> str:
   "Extract the currently running test name from status lines."
-  result = ""
+  result : str = ""
   for i, line in enumerate(lines):
     if line.strip() == "RUNNING:":
       if i + 1 < len(lines):
@@ -71,36 +71,34 @@ while True:
     completedTests.add(test)
     intervalTests.add(test)
 
-  case currentMinute % 5:
-    when 0:
-      let displayLines : []str = getTestStatusLines()
-      let displayRunning : str = parseRunningTest(displayLines)
-      print ""
-      print "=== ", formatTime(), " - Test Timing Summary ==="
-      print ""
+  if currentMinute % 5 == 0:
+    let displayLines : []str = getTestStatusLines()
+    let displayRunning : str = parseRunningTest(displayLines)
+    print ""
+    print "=== ", formatTime(), " - Test Timing Summary ==="
+    print ""
 
-      if len(intervalTests) > 0:
-        for test in intervalTests:
-          print "< 1 min: ", test
-        intervalTests = {}
-      else:
-        print "(no new tests completed yet)"
+    if len(intervalTests) > 0:
+      for test in intervalTests:
+        print "< 1 min: ", test
+      intervalTests = {}
+    else:
+      print "(no new tests completed yet)"
 
-      print ""
-      print "--- Currently Running ---"
-      if len(displayRunning) > 0:
-        print displayRunning
-      else:
-        print "(no test running)"
+    print ""
+    print "--- Currently Running ---"
+    if len(displayRunning) > 0:
+      print displayRunning
+    else:
+      print "(no test running)"
 
-      print ""
-      print "--- Current Status ---"
-      for line in parseStatusSummary(displayLines):
-        print line
-      print ""
+    print ""
+    print "--- Current Status ---"
+    for line in parseStatusSummary(displayLines):
+      print line
+    print ""
 
-    when others:
-      pass
+
 
   var nextUpdate : int = (5 - (currentMinute % 5)) % 5
   if nextUpdate == 0:
