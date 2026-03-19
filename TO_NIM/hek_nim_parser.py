@@ -1643,7 +1643,16 @@ def to_nim(self, indent=0):
         parts = [_ind(indent) + self.nodes[0].to_nim()]
 
     result = "; ".join(p.strip() for p in parts if p.strip())
-    result = _ind(indent) + result
+    # Convert bare string literals (docstrings) to Nim doc comments
+    non_empty = [p for p in parts if p.strip()]
+    if len(non_empty) == 1:
+        r = result.strip()
+        if r and len(r) >= 2 and r[0] == r[-1] and r[0] in ('"', "'"):
+            result = _ind(indent) + '## ' + r[1:-1]
+        else:
+            result = _ind(indent) + result
+    else:
+        result = _ind(indent) + result
 
     if newline_node is not None and hasattr(newline_node, 'comments') and newline_node.comments:
         for kind, text, ind in newline_node.comments:

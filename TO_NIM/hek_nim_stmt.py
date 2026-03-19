@@ -861,6 +861,11 @@ def to_nim(self):
             newline_node = node
 
     result = "; ".join(parts)
+    # Convert bare string literals (docstrings) to Nim doc comments
+    if len(parts) == 1:
+        r = parts[0]
+        if r and len(r) >= 2 and r[0] == r[-1] and r[0] in ('"', "'"):
+            result = '## ' + r[1:-1]
     if newline_node is not None and hasattr(newline_node, "comments") and newline_node.comments:
         for kind, text, ind in newline_node.comments:
             if kind == "comment":
