@@ -443,6 +443,43 @@ def run_tests():
             "# header\n\nimport os\n\n# func comment\ndef f():\n    pass\n",
             "# header\n\nimport os\n\n# func comment\ndef f():\n    pass\n",
         ),
+        # --- bashisms ---
+        (
+            "$0\n",
+            "import sys\nsys.argv[0]\n",
+        ),
+        (
+            "$1\n",
+            "import sys\nsys.argv[1]\n",
+        ),
+        (
+            "$2\n",
+            "import sys\nsys.argv[2]\n",
+        ),
+        (
+            "$@\n",
+            "import sys\nsys.argv[1:]\n",
+        ),
+        (
+            "$#\n",
+            "import sys\nlen(sys.argv) - 1\n",
+        ),
+        (
+            "$HOME\n",
+            "import os\nos.environ.get('HOME', '')\n",
+        ),
+        (
+            "name = $1\n",
+            "import sys\nname = sys.argv[1]\n",
+        ),
+        (
+            "if $# < 2:\n    pass\n",
+            "import sys\nif len(sys.argv) - 1 < 2:\n    pass\n",
+        ),
+        (
+            "for arg in $@:\n    pass\n",
+            "import sys\nfor arg in sys.argv[1:]:\n    pass\n",
+        ),
     ]
 
     passed = failed = 0

@@ -412,7 +412,13 @@ def to_py(self):
 
 @method(pattern_capture)
 def to_py(self, prec=None):
-    """pattern_capture: IDENTIFIER"""
+    """pattern_capture: IDENTIFIER
+
+    Handles all IDENTIFIER uses (plain names, tick attributes, bash placeholders).
+    pattern_capture = IDENTIFIER in the grammar, so this method is the last writer
+    on the shared class and must include every resolution that IDENTIFIER.to_py
+    needs — tick attributes, bashisms, and normal name pass-through.
+    """
     name = (
         self.nodes[0].to_py() if hasattr(self.nodes[0], "to_py") else str(self.nodes[0])
     )
@@ -422,6 +428,10 @@ def to_py(self, prec=None):
         info = ParserState.tick_types.get(type_name)
         if info and attr in info:
             return str(info[attr])
+    # Resolve bashisms: __bash_*__ placeholders -> Python equivalents
+    if name.startswith("__bash_") and name.endswith("__"):
+        from hek_py3_expr import _bash_to_py
+        return _bash_to_py(name)
     return name
 
 

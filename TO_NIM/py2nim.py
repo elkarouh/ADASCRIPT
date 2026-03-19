@@ -637,6 +637,43 @@ def run_tests():
             "# comment 1\n# comment 2\nx = 1\n",
             "# comment 1\n# comment 2\nvar x = 1\n",
         ),
+        # --- bashisms ---
+        (
+            "$0\n",
+            "import os\ngetAppFilename()\n",
+        ),
+        (
+            "$1\n",
+            "import os\nparamStr(1)\n",
+        ),
+        (
+            "$2\n",
+            "import os\nparamStr(2)\n",
+        ),
+        (
+            "$@\n",
+            "import os\ncommandLineParams()\n",
+        ),
+        (
+            "$#\n",
+            "import os\nparamCount()\n",
+        ),
+        (
+            "$HOME\n",
+            "import os\ngetEnv(\"HOME\")\n",
+        ),
+        (
+            "name = $1\n",
+            "import os\nvar name = paramStr(1)\n",
+        ),
+        (
+            "if $# < 2:\n    pass\n",
+            "import os\nif paramCount() < 2:\n    discard\n",
+        ),
+        (
+            "for arg in $@:\n    pass\n",
+            "import os\nfor arg in commandLineParams():\n    discard\n",
+        ),
     ]
 
     passed = failed = 0
