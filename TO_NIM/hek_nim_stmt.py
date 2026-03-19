@@ -109,6 +109,9 @@ def to_nim(self):
     if name and rhs_node and ParserState.symbol_table.depth() > 0:
         inferred = _infer_literal_nim_type(rhs_node)
         ParserState.symbol_table.add(name, inferred, "var")
+    if prefix == "var " and len(parts) == 2 and parts[1] in ("@[]", "@{}", "initTable()"):
+        import sys as _sys
+        print(f"Error: '{lhs} = {parts[1]}' needs a type annotation (e.g. '{lhs}: Type = {parts[1]}')", file=_sys.stderr)
     return prefix + " = ".join(parts)
 
 
@@ -223,6 +226,8 @@ def to_nim(self):
                 return f"return none({inner_type})"
             else:
                 return f"return some({val})"
+    if val == "nil" and ret_type and "seq[" in ret_type:
+        return "return @[]"
     # If return value contains commas (tuple), wrap in parens for Nim
     if "," in val and not val.startswith("("):
         val = f"({val})"
