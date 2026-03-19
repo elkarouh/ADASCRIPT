@@ -50,6 +50,48 @@ def _is_new_method(class_name, method_name):
 # to_nim() methods for compound statements
 ###############################################################################
 
+###############################################################################
+# Bashism resolution — Nim equivalents
+###############################################################################
+
+_BASH_NIM = {
+    "__bash_arg0__": "getAppFilename()",
+    "__bash_arg1__": "paramStr(1)",
+    "__bash_arg2__": "paramStr(2)",
+    "__bash_arg3__": "paramStr(3)",
+    "__bash_arg4__": "paramStr(4)",
+    "__bash_arg5__": "paramStr(5)",
+    "__bash_arg6__": "paramStr(6)",
+    "__bash_arg7__": "paramStr(7)",
+    "__bash_arg8__": "paramStr(8)",
+    "__bash_arg9__": "paramStr(9)",
+    "__bash_args__": "commandLineParams()",
+    "__bash_argc__": "paramCount()",
+}
+
+
+def _bash_to_nim(placeholder):
+    """Translate a __bash_*__ placeholder to its Nim equivalent.
+
+    Dispatch table:
+      $0        -> getAppFilename()      (requires os)
+      $1 .. $9  -> paramStr(N)           (requires os)
+      $@        -> commandLineParams()   (requires os)
+      $#        -> paramCount()          (requires os)
+      $NAME     -> getEnv("NAME")        (requires os)
+
+    All forms add ``os`` to ParserState.nim_imports so that the translate()
+    driver inserts ``import os`` at the top of the output.
+    """
+    if placeholder in _BASH_NIM:
+        ParserState.nim_imports.add("os")
+        return _BASH_NIM[placeholder]
+    if placeholder.startswith("__bash_env_") and placeholder.endswith("__"):
+        env_name = placeholder[len("__bash_env_"):-2]
+        ParserState.nim_imports.add("os")
+        return f'getEnv("{env_name}")'
+    return placeholder  # unknown placeholder — pass through unchanged
+
 
 @method(NL)
 def to_nim(self, indent=0):
@@ -577,19 +619,31 @@ def to_nim(self):
 
 @method(pattern_capture)
 def to_nim(self, prec=None):
-    """pattern_capture: IDENTIFIER in pattern (capture variable) -> Nim: name binding"""
+    """pattern_capture: IDENTIFIER in pattern (capture variable) -> Nim: name binding
+
+    Also handles all plain IDENTIFIER uses (expressions, assignments, etc.)
+    because pattern_capture = IDENTIFIER in the grammar — this method is the
+    last writer on the shared class.  It therefore covers:
+      - Tick attributes  (Type__tick__Attr)
+      - Bash placeholders (__bash_*__)
+      - Normal identifier pass-through
+    """
     n = self.nodes[0]
     if hasattr(n, "to_nim"):
         name = n.to_nim()
     else:
         name = str(n)
-    # Resolve tick attributes: Type__tick__First -> first value of subrange/enum
+    # Resolve tick attributes
     if "__tick__" in name:
         type_name, _, attr = name.partition("__tick__")
         info = ParserState.tick_types.get(type_name)
         if info and attr in info:
             return str(info[attr])
-    # Nim disallows leading underscores — strip single leading _
+    # Resolve bashisms: __bash_*__ placeholders -> Nim equivalents
+    if name.startswith("__bash_") and name.endswith("__"):
+        return _bash_to_nim(name)
+    # Nim disallows a single leading underscore — strip it.
+    # But leave double-underscore names (dunder) intact.
     if name.startswith("_") and not name.startswith("__"):
         name = name[1:]
     return name

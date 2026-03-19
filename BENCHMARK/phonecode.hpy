@@ -138,13 +138,13 @@ def format_solution(original_num: str, solution: []str) -> str:
 # ---------------------------------------------------------------------------
 
 def main():
-    if len(sys.argv) < 3:
+    if $# < 2:
         print("Usage: phonecode <dictionary_file> <phone_numbers_file>")
         print("Example: phonecode words.txt phones.txt")
         quit(1)
 
-    let dict_file: str = str(sys.argv[1])
-    let phone_file: str = str(sys.argv[2])
+    let dict_file: str = $1
+    let phone_file: str = $2
 
     if not os.path.exists(dict_file):
         print(f"Error: Dictionary file not found: {dict_file}")

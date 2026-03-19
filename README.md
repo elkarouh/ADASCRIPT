@@ -36,6 +36,7 @@ source.hpy
 - [Nim-Only Imports](#nim-only-imports)
 - [Print Statement](#print-statement)
 - [Shell Statements](#shell-statements)
+- [Bash Variables](#bash-variables)
 - [Architecture](#architecture)
 - [Known Limitations](#known-limitations)
 
@@ -671,6 +672,63 @@ def build(target: str) -> str:
 The required imports (`subprocess`, `types`, `osproc`, `strformat`) are
 inserted automatically at the top of the output — you never write them by
 hand.
+
+---
+
+## Bash Variables
+
+HPython supports bash-style special variables for scripts that work with
+command-line arguments and environment variables. The `$` sigil is
+preprocessed by the tokenizer before parsing, so these forms work anywhere
+an expression is valid.
+
+### Argument variables
+
+```python
+print $0        # script name
+print $1        # first argument
+print $2        # second argument
+print $@        # all arguments (as a list)
+print $#        # number of arguments
+```
+
+### Environment variables
+
+Use `$NAME` with an all-caps identifier to read an environment variable:
+
+```python
+home = $HOME
+path = $PATH
+editor = $EDITOR
+```
+
+### In expressions
+
+Bash variables compose naturally with the rest of the language:
+
+```python
+if $# < 2:
+    print f"Usage: {$0} <input> <output>"
+
+for arg in $@:
+    print arg
+
+outdir = $HOME + "/output"
+```
+
+### Translation reference
+
+| HPython | Python 3 | Nim |
+|---------|----------|-----|
+| `$0` | `sys.argv[0]` | `getAppFilename()` |
+| `$1` | `sys.argv[1]` | `paramStr(1)` |
+| `$2` … `$9` | `sys.argv[2]` … `sys.argv[9]` | `paramStr(2)` … `paramStr(9)` |
+| `$@` | `sys.argv[1:]` | `commandLineParams()` |
+| `$#` | `len(sys.argv) - 1` | `paramCount()` |
+| `$NAME` | `os.environ.get('NAME', '')` | `getEnv("NAME")` |
+
+All required imports (`sys`, `os`) are inserted automatically. In Nim, all
+forms require `os` and it is added to the import list for you.
 
 ---
 

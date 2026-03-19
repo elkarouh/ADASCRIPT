@@ -152,6 +152,48 @@ class Tokenizer:
     _RANGE_LEFT_RE  = _re.compile(r'(\d)(\.\.<?)')   # '0..'  -> '0 ..'
     _RANGE_RIGHT_RE = _re.compile(r'(\.\.<?)(\d)')   # '..10' -> '.. 10'
 
+    # Bashism patterns: rewrite bash-style argument/environment variables to
+    # safe identifier placeholders before Python's tokenizer sees them.
+    #
+    #   $#        -> __bash_argc__   (must come before $<digit> to beat '#' comment)
+    #   $@        -> __bash_args__
+    #   $0        -> __bash_arg0__
+    #   $1..$9    -> __bash_arg1__ .. __bash_arg9__
+    #   $NAME     -> __bash_env_NAME__   (uppercase env var name)
+    #
+    # '$#' is the most dangerous: Python lexes '#' as a comment start, eating
+    # everything after '$' to end-of-line.  The regex replaces the whole '$#'
+    # before the tokenizer gets a chance to see it.
+    _BASH_ARGC_RE = _re.compile(r'\$#')
+    _BASH_ARGS_RE = _re.compile(r'\$@')
+    _BASH_ARG_RE  = _re.compile(r'\$([0-9])')
+    _BASH_ENV_RE  = _re.compile(r'\$([A-Z_][A-Z0-9_]*)')
+
+    @staticmethod
+    def _preprocess_bashisms(s):
+        """Replace bash-style special variables with safe identifier placeholders.
+
+        The substitutions are reversed in to_py() / to_nim() on the IDENTIFIER
+        nodes that carry these placeholder strings.
+
+        Mapping::
+
+            $#        -> __bash_argc__
+            $@        -> __bash_args__
+            $0        -> __bash_arg0__
+            $1 .. $9  -> __bash_arg1__ .. __bash_arg9__
+            $NAME     -> __bash_env_NAME__   (all-caps env var names)
+
+        The order of substitutions matters: ``$#`` must be replaced first
+        because Python's tokenizer would otherwise consume ``#`` and
+        everything following it as a comment.
+        """
+        s = Tokenizer._BASH_ARGC_RE.sub('__bash_argc__', s)
+        s = Tokenizer._BASH_ARGS_RE.sub('__bash_args__', s)
+        s = Tokenizer._BASH_ARG_RE.sub(r'__bash_arg\1__', s)
+        s = Tokenizer._BASH_ENV_RE.sub(r'__bash_env_\1__', s)
+        return s
+
     @staticmethod
     def _preprocess_range_operators(s):
         """Insert spaces around '..' and '..<' when a digit is directly adjacent.
@@ -179,6 +221,7 @@ class Tokenizer:
     def __init__(self, s):
         s = self._preprocess_tick_attributes(s)
         s = self._preprocess_range_operators(s)
+        s = self._preprocess_bashisms(s)
         self.tokengen = tokenize_string(s)
         self.source_lines = s.splitlines(True)  # keep line endings for span extraction
         self.tokens = []  # a list of 2-tuples (token, list_of_expected_but_failed_tokens)
