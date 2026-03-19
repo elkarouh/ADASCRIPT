@@ -938,21 +938,28 @@ def to_nim(self, indent=0):
     body = block_node.to_nim(indent + 1) if block_node else ""
     ParserState.symbol_table.pop_scope()
     ParserState._current_return_type = ""
+    _shadow_vars = []
     # Add var to params that are mutated in body (assigned to or .add called)
     if params and body:
         import re as _re
         new_params = []
         for p in params.split(", "):
             pname = p.split(":")[0].strip()
-            if pname and pname != "self" and " = " not in p and _re.search(
+            if pname and pname != "self" and _re.search(
                 rf"(?<![=(,.])\b{_re.escape(pname)}\b\s*(\.add\(|\[.*\]\s*=|[+\-*/]=|=(?!=))", body
             ):
-                if not p.startswith("var ") and ": " in p:
+                if " = " in p:
+                    _shadow_vars.append(pname)
+                elif not p.startswith("var ") and ": " in p:
                     # Nim syntax: param: var T
                     parts = p.split(": ", 1)
                     p = parts[0] + ": var " + parts[1]
             new_params.append(p)
         params = ", ".join(new_params)
+        if _shadow_vars:
+            _sv_indent = " " * (4 * (indent + 1))
+            _sv_lines = "\n".join(f"{_sv_indent}var {sv} = {sv}" for sv in _shadow_vars)
+            body = _sv_lines + "\n" + body
     # -- Method hoisting ------------------------------------------------
     # Nim forbids `method` declarations inside procs.  When an HPython
     # function body contains class definitions (which emit Nim methods),
@@ -1851,20 +1858,28 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
 
     # Add var to params that are mutated in body
     body_text = "\n".join(body_lines)
+    _shadow_vars = []
     if params and body_text:
         import re as _re
         new_params = []
         for p in params:
             pname = p.split(":")[0].strip()
-            if pname and pname != "self" and " = " not in p and _re.search(
+            if pname and pname != "self" and _re.search(
                 rf"(?<![=(,.])\b{_re.escape(pname)}\b\s*(\.add\(|\[.*\]\s*=|[+\-*/]=|=(?!=))", body_text
             ):
-                if not p.startswith("var ") and ": " in p:
+                if " = " in p:
+                    _shadow_vars.append(pname)
+                elif not p.startswith("var ") and ": " in p:
                     # Nim syntax: param: var T
                     parts = p.split(": ", 1)
                     p = parts[0] + ": var " + parts[1]
             new_params.append(p)
         params = new_params
+        if _shadow_vars:
+            _sv_indent = " " * (4 * (indent + 1))
+            for sv in _shadow_vars:
+                body_lines.insert(0, f"{_sv_indent}var {sv} = {sv}")
+            body_text = "\n".join(body_lines)
 
     params_str = ", ".join(params)
     # Detect if body contains yield -> use iterator instead of proc/method
