@@ -672,7 +672,19 @@ def _translate_method(obj_name, method_name):
             for prefix, mappings in _PY_METHOD_TO_NIM.items():
                 if resolved.startswith(prefix):
                     return mappings.get(method_name, method_name)
-    # Fall back to universal mappings
+        # For PyObject / pyImport module vars, don't apply universal mappings
+        if type_str.startswith("_py_module:") or type_str.startswith("_nim_module:"):
+            return method_name
+    # Fall back to universal mappings, but skip get->getOrDefault for unknown types
+    # (it would wrongly translate requests.get(), dict.get() on untyped vars, etc.)
+    if method_name == "get":
+        # Only map get->getOrDefault if object is known to be a Table
+        if sym:
+            t = sym.get("type", "") or ""
+            if t.startswith("Table[") or t.startswith("{"):
+                nim_method = "getOrDefault"
+                return nim_method
+        return method_name  # leave .get() unchanged for unknown types
     nim_method = _PY_UNIVERSAL_METHOD_TO_NIM.get(method_name, method_name)
     if nim_method in _STRUTILS_METHODS:
         ParserState.nim_imports.add("strutils")
@@ -828,19 +840,121 @@ def to_nim(self, prec=None):
 
 # Python stdlib dotted-access patterns -> Nim equivalents
 # These translate Python stdlib calls to native Nim equivalents.
-# The required Nim module is auto-imported when a pattern matches.
-# Only patterns that MUST be native Nim (e.g. need native types for arithmetic)
-# belong here. Everything else goes through pyImport() via nimpy.
+# Only patterns that MUST be native Nim belong here.
 _STDLIB_PATTERNS = [
     # (python_pattern, nim_equivalent, nim_import_needed)
-    ("os.path.exists", "fileExists", "os"),
-    ("os.getcwd", "getCurrentDir", "os"),
-    ("time.perf_counter", "cpuTime", "times"),
-    ("time.time", "epochTime", "times"),
-    ("time.sleep", "sleep", "os"),
+    ("os.path.exists",    "fileExists",      "os"),
+    ("os.path.isfile",    "fileExists",      "os"),
+    ("os.path.isdir",     "dirExists",       "os"),
+    ("os.path.join",      "joinPath",        "os"),
+    ("os.path.basename",  "lastPathPart",    "os"),
+    ("os.path.dirname",   "parentDir",       "os"),
+    ("os.path.abspath",   "absolutePath",    "os"),
+    ("os.path.splitext",  "splitFile",       "os"),
+    ("os.getcwd",         "getCurrentDir",   "os"),
+    ("os.chdir",          "setCurrentDir",   "os"),
+    ("os.listdir",        "toSeq(walkDir",   "os"),  # wraps arg
+    ("os.makedirs",       "createDir",       "os"),
+    ("os.mkdir",          "createDir",       "os"),
+    ("os.remove",         "removeFile",      "os"),
+    ("os.unlink",         "removeFile",      "os"),
+    ("os.rmdir",          "removeDir",       "os"),
+    ("os.rename",         "moveFile",        "os"),
+    ("os.getenv",         "getEnv",          "os"),
+    ("time.perf_counter", "cpuTime",         "times"),
+    ("time.monotonic",    "cpuTime",         "times"),
+    ("time.time",         "epochTime",       "times"),
+    ("time.sleep",        "sleep",           "os"),
+    ("sys.exit",          "quit",            None),
+    ("sys.stderr.write",  "stderr.writeLine", "std/syncio"),
+    ("sys.stdout.write",  "stdout.write",    "std/syncio"),
 ]
 
+# Module-qualified function call translation using _PY_MODULE_FUNC_TO_NIM.
+# Imports hek_nim_stmt lazily to avoid circular imports.
+def _translate_module_call(module_local, func_name, args_str):
+    """Translate module.func(args) -> Nim equivalent, or None if not mappable.
+
+    Uses the symbol table to look up whether `module_local` is a registered
+    native module (_nim_module:X or _sys_native), then looks up the function
+    in _PY_MODULE_FUNC_TO_NIM.
+
+    Returns the translated Nim string, or None if no mapping exists.
+    """
+    sym = ParserState.symbol_table.lookup(module_local)
+    if not sym:
+        return None
+    sym_type = sym.get("type", "") or ""
+
+    # Determine the Python module name
+    if sym_type == "_sys_native":
+        py_module = "sys"
+    elif sym_type.startswith("_nim_module:"):
+        py_module = sym_type[len("_nim_module:"):]
+    else:
+        return None  # pyImport module or unknown — don't translate
+
+    # Look up in function table (import lazily to avoid circular dep)
+    try:
+        from hek_nim_stmt import _PY_MODULE_FUNC_TO_NIM, _PY_MODULE_TO_NIM
+    except ImportError:
+        return None
+
+    func_map = _PY_MODULE_FUNC_TO_NIM.get(py_module, {})
+    template = func_map.get(func_name)
+    if template is None:
+        return None
+
+    # Add required Nim import
+    nim_mod = _PY_MODULE_TO_NIM.get(py_module)
+    if nim_mod and nim_mod not in ("_sys_native",):
+        ParserState.nim_imports.add(nim_mod)
+
+    # Parse args_str into individual positional args (simple split on ', ')
+    # Good enough for most stdlib calls; complex nested args fall back to pyImport.
+    import re as _re
+    # Strip surrounding parentheses
+    inner = args_str.strip()
+    if inner.startswith("(") and inner.endswith(")"):
+        inner = inner[1:-1].strip()
+
+    # Split on top-level commas
+    args = []
+    depth = 0
+    cur = []
+    for ch in inner:
+        if ch in "([{":
+            depth += 1
+            cur.append(ch)
+        elif ch in ")]}":
+            depth -= 1
+            cur.append(ch)
+        elif ch == "," and depth == 0:
+            args.append("".join(cur).strip())
+            cur = []
+        else:
+            cur.append(ch)
+    if cur:
+        args.append("".join(cur).strip())
+    args = [a for a in args if a]
+
+    # Substitute {arg0}, {arg1}, …, {args} in template
+    result = template
+    result = result.replace("{args}", ", ".join(args))
+    for i, a in enumerate(args):
+        result = result.replace(f"{{arg{i}}}", a)
+    return result
+
+
 def _translate_stdlib_patterns(expr):
+    """Post-process a fully-emitted expression string.
+
+    Applies pattern-based and module-call-based translations to convert
+    Python stdlib calls to their native Nim equivalents.
+    """
+    import re as _re
+
+    # --- 1. Pattern table (exact or prefix match) ---
     for py_pattern, nim_equiv, nim_import in _STDLIB_PATTERNS:
         if expr == py_pattern:
             if nim_import:
@@ -855,24 +969,47 @@ def _translate_stdlib_patterns(expr):
                 ParserState.nim_imports.add(nim_import)
             return nim_equiv + expr[len(py_pattern):]
 
-    # 'sep'.join(x) -> x.join("sep") — Python join has receiver/arg swapped vs Nim
-    import re as _re
+    # --- 2. Module-qualified call: local.func(args) ---
+    call_m = _re.match(r"^([A-Za-z_]\w*)\.([A-Za-z_]\w*)(\(.*\))$", expr, _re.DOTALL)
+    if call_m:
+        module_local, func_name, args_str = call_m.group(1), call_m.group(2), call_m.group(3)
+        translated = _translate_module_call(module_local, func_name, args_str)
+        if translated is not None:
+            return translated
+
+    # --- 3. sys attribute access (no call) ---
+    sys_attr_m = _re.match(r"^([A-Za-z_]\w*)\.(argv|version|platform|modules|path)(.*)$", expr)
+    if sys_attr_m:
+        local, attr, rest = sys_attr_m.group(1), sys_attr_m.group(2), sys_attr_m.group(3)
+        sym = ParserState.symbol_table.lookup(local)
+        if sym and sym.get("type") == "_sys_native":
+            _SYS_ATTR = {
+                "argv":     "commandLineParams()",
+                "version":  "NimVersion",
+                "platform": "hostOS",
+                "path":     "getEnv(\"PATH\").split(PathSep)",
+            }
+            if attr in _SYS_ATTR:
+                ParserState.nim_imports.add("os")
+                return _SYS_ATTR[attr] + rest
+
+    # --- 4. 'sep'.join(x) -> x.join("sep") ---
     m = _re.match(r"^(.+)\.join\((.+)\)$", expr)
     if m:
         sep, arg = m.group(1), m.group(2)
         ParserState.nim_imports.add("strutils")
-        # Nim join needs string sep — use $'c' for single-char (safe inside fmt)
         if len(sep) == 3 and sep[0] == "'" and sep[-1] == "'":
             sep = "$" + sep
         elif len(sep) == 3 and sep[0] == '"' and sep[-1] == '"':
             sep = "$'" + sep[1] + "'"
         return f"{arg}.join({sep})"
 
-    # f.readlines() -> f.readAll().splitLines()
+    # --- 5. f.readlines() -> f.readAll().splitLines() ---
     if expr.endswith(".readlines()"):
         obj = expr[:-len(".readlines()")]
         ParserState.nim_imports.add("strutils")
         return f"{obj}.readAll().splitLines()"
+
     return expr
 
 

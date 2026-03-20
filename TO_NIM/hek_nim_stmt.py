@@ -45,12 +45,149 @@ _AUGOP_TO_NIM = {
     "^=": ("xor", True),
 }
 
-# Python stdlib module -> Nim import mapping
+# Python stdlib module -> Nim import mapping.
+# None means the import is erased (e.g. typing).
+# A string is the Nim module to import via ParserState.nim_imports.
+# "nimpy" means: use pyImport() via nimpy (no native Nim equivalent).
 _PY_MODULE_TO_NIM = {
-    "os": "os",
-    "os.path": "os",
-    "typing": None,        # typing imports are erased
-    "stdlib": "stdlib",    # local stdlib module
+    # OS / filesystem
+    "os":           "os",
+    "os.path":      "os",
+    "sys":          "_sys_native",   # handled specially — see import_as.to_nim
+    "pathlib":      "os",
+
+    # Math / numerics
+    "math":         "math",
+    "cmath":        "complex",
+    "random":       "random",
+    "statistics":   None,            # no direct Nim equivalent — use nimpy
+    "decimal":      None,
+
+    # String utilities
+    "string":       "strutils",
+    "re":           "re",
+    "fnmatch":      "os",
+    "textwrap":     "strutils",
+    "unicodedata":  "unicode",
+    "difflib":      None,
+
+    # Data structures
+    "collections":  None,            # complex mapping — use nimpy
+    "itertools":    "sequtils",
+    "functools":    None,
+    "heapq":        "heapqueue",
+    "bisect":       "algorithm",
+
+    # Serialization
+    "json":         "std/json",
+    "csv":          None,
+    "pickle":       None,
+
+    # I/O
+    "io":           None,
+    "struct":       None,
+
+    # Time / date
+    "time":         "times",
+    "datetime":     "times",
+    "calendar":     "times",
+
+    # Concurrency
+    "threading":    None,
+    "asyncio":      "asyncdispatch",
+    "concurrent.futures": None,
+
+    # Type erasure
+    "typing":       None,
+    "types":        None,
+    "abc":          None,
+    "copy":         None,
+    "dataclasses":  None,
+    "enum":         None,
+
+    # Local stub
+    "stdlib":       "stdlib",
+}
+
+# Per-module function call translations: module_name -> {py_func: nim_expr_template}.
+# Templates use {args} for the full argument list and {arg0}, {arg1}, … for individual args.
+_PY_MODULE_FUNC_TO_NIM = {
+    "math": {
+        "sqrt":   "sqrt({arg0})",
+        "floor":  "floor({arg0})",
+        "ceil":   "ceil({arg0})",
+        "fabs":   "abs({arg0})",
+        "exp":    "exp({arg0})",
+        "log":    "ln({arg0})",
+        "log2":   "log2({arg0})",
+        "log10":  "log10({arg0})",
+        "sin":    "sin({arg0})",
+        "cos":    "cos({arg0})",
+        "tan":    "tan({arg0})",
+        "asin":   "arcsin({arg0})",
+        "acos":   "arccos({arg0})",
+        "atan":   "arctan({arg0})",
+        "atan2":  "arctan2({arg0}, {arg1})",
+        "pow":    "pow({arg0}, {arg1})",
+        "fmod":   "{arg0} mod {arg1}",
+        "gcd":    "gcd({arg0}, {arg1})",
+        "isnan":  "isNaN({arg0})",
+        "isinf":  "isInf({arg0})",
+        "trunc":  "trunc({arg0})",
+        "radians": "degToRad({arg0})",
+        "degrees": "radToDeg({arg0})",
+    },
+    "random": {
+        "random":    "rand(1.0)",
+        "randint":   "rand({arg0}..{arg1})",
+        "choice":    "sample({arg0})",
+        "shuffle":   "shuffle({arg0})",
+        "seed":      "randomize({arg0})",
+        "uniform":   "rand({arg0}..{arg1})",
+        "randrange": "rand({arg0}..<{arg1})",
+    },
+    "time": {
+        "time":      "epochTime()",
+        "sleep":     "sleep(int({arg0} * 1000))",
+        "perf_counter": "cpuTime()",
+        "monotonic": "cpuTime()",
+    },
+    "re": {
+        "sub":      "replace({arg2}, re({arg0}), {arg1})",
+        "match":    "{arg1}.match(re({arg0}))",
+        "search":   "{arg1}.find(re({arg0}))",
+        "findall":  "{arg1}.findAll(re({arg0}))",
+        "compile":  "re({arg0})",
+        "split":    "{arg1}.split(re({arg0}))",
+    },
+    "os": {
+        "getcwd":    "getCurrentDir()",
+        "chdir":     "setCurrentDir({arg0})",
+        "listdir":   "toSeq(walkDir({arg0}))",
+        "makedirs":  "createDir({arg0})",
+        "mkdir":     "createDir({arg0})",
+        "remove":    "removeFile({arg0})",
+        "unlink":    "removeFile({arg0})",
+        "rmdir":     "removeDir({arg0})",
+        "rename":    "moveFile({arg0}, {arg1})",
+        "getenv":    "getEnv({arg0})",
+        "environ":   "os.environment()",
+    },
+    "sys": {
+        "exit":      "quit({arg0})",
+        "getrecursionlimit": "1000000",
+    },
+    "itertools": {
+        "chain":    "concat({args})",
+        "product":  "product({args})",
+        "zip_longest": "zip({args})",
+    },
+    "json": {
+        "loads":    "parseJson({arg0})",
+        "dumps":    "${arg0}",
+        "load":     "parseJson({arg0}.readAll())",
+        "dump":     "{arg1}.write(${arg0})",
+    },
 }
 
 
@@ -450,11 +587,20 @@ def to_nim(self):
     local = alias if alias else parts[-1]
     # Map known Python stdlib modules to Nim imports
     nim_module = _PY_MODULE_TO_NIM.get(module)
+    if nim_module == "_sys_native":
+        # sys is handled natively — no import needed, register the local name
+        # so the expression layer can translate sys.exit(), sys.argv, etc.
+        ParserState.symbol_table.add(local, "_sys_native", "let")
+        return None
     if nim_module is not None:
-        ParserState.nim_imports.add(nim_module)
+        if nim_module:
+            ParserState.nim_imports.add(nim_module)
+        # Register local alias so expression layer knows it's a mapped module
+        ParserState.symbol_table.add(local, f"_nim_module:{module}", "let")
         return None  # handled via nim_imports
     ParserState.nim_imports.add("nimpy")
-    return f'let {local} = pyImport("{module}")'  
+    ParserState.symbol_table.add(local, f"_py_module:{module}", "let")
+    return f'let {local} = pyImport("{module}")'
 
 
 @method(import_stmt)
