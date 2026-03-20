@@ -612,11 +612,11 @@ def run_tests():
         ),
         (
             "$1\n",
-            "import os\nparamStr(1)\n",
+            "import os\n(if paramCount() >= 1: paramStr(1) else: \"\")\n",
         ),
         (
             "$2\n",
-            "import os\nparamStr(2)\n",
+            "import os\n(if paramCount() >= 2: paramStr(2) else: \"\")\n",
         ),
         (
             "$@\n",
@@ -632,7 +632,7 @@ def run_tests():
         ),
         (
             "name = $1\n",
-            "import os\nvar name = paramStr(1)\n",
+            "import os\nvar name = (if paramCount() >= 1: paramStr(1) else: \"\")\n",
         ),
         (
             "if $# < 2:\n    pass\n",

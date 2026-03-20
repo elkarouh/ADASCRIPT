@@ -389,7 +389,12 @@ shell_opts = LPAREN + shell_opt + (COMMA + shell_opt)[:] + RPAREN
 shell_kw = literal("shellLines") | literal("shell")
 
 # Optional assignment target: let/var/const name =
-shell_target = decl_keyword + IDENTIFIER + V_EQUAL
+# Optional assignment target: let/var/const name =
+#   scalar form:  let result =
+#   tuple  form:  let (out, err, code) =
+shell_target_scalar = decl_keyword + IDENTIFIER + V_EQUAL
+shell_target_tuple  = decl_keyword + paren_group + V_EQUAL
+shell_target        = shell_target_tuple | shell_target_scalar
 
 # Full shell statement: [target =] keyword [(opts)]: body...
 shell_stmt = shell_target[:] + shell_kw + shell_opts[:] + COLON + shell_body_token[1:] + ignore(NEWLINE)

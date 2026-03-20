@@ -1244,16 +1244,43 @@ def _extract_shell_body(body_st):
     return cmd, needs_fstring
 
 
+def _collect_identifiers_from_paren(node):
+    """Walk a paren_group AST node and collect all IDENTIFIER leaf values.
+
+    After @method(IDENTIFIER) renames classes, IDENTIFIER nodes have
+    type().__name__ == 'IDENTIFIER' and .node is a str.
+    We collect every plain-string .node that is a valid identifier.
+    """
+    names = []
+
+    def _walk(n):
+        if n is None:
+            return
+        val = getattr(n, "node", None)
+        if isinstance(val, str) and val.isidentifier() and val not in ("(", ")", ","):
+            names.append(val)
+        if hasattr(n, "nodes"):
+            for child in n.nodes:
+                _walk(child)
+
+    _walk(node)
+    return names
+
+
 def _parse_shell_stmt(node):
     """Decompose a shell_stmt AST node into its logical parts.
 
-    Returns (target_kw, target_name, kw, opts, cmd, needs_fstring) where:
-      target_kw   -- 'let' | 'var' | 'const' | None
-      target_name -- str | None
-      kw          -- 'shell' | 'shellLines'
-      opts        -- dict {str: str}
-      cmd         -- reconstructed command string
+    Returns (target_kw, target_name, target_tuple, kw, opts, cmd, needs_fstring) where:
+      target_kw    -- 'let' | 'var' | 'const' | None
+      target_name  -- str | None     (scalar form: let result = shell: ...)
+      target_tuple -- [str] | None   (tuple  form: let (a,b,c) = shell: ...)
+      kw           -- 'shell' | 'shellLines'
+      opts         -- dict {str: str}
+      cmd          -- reconstructed command string
       needs_fstring -- bool (True when {var} interpolation tokens present)
+
+    Exactly one of target_name / target_tuple is non-None when a target is
+    present; both are None for a bare shell statement.
     """
     nodes = node.nodes
 
@@ -1268,7 +1295,7 @@ def _parse_shell_stmt(node):
             break
 
     # Optional assignment target sits before the keyword
-    target_kw = target_name = None
+    target_kw = target_name = target_tuple = None
     if kw_idx > 0:
         target_st = nodes[0]
         if hasattr(target_st, "nodes") and target_st.nodes:
@@ -1276,13 +1303,23 @@ def _parse_shell_stmt(node):
             if hasattr(seq, "nodes"):
                 for n in seq.nodes:
                     val = getattr(n, "node", None)
+                    ntype = type(n).__name__
                     if not isinstance(val, str):
+                        # Could be a paren_group node (tuple target)
+                        if ntype in ("paren_group", "Sequence_Parser") or (
+                            hasattr(n, "nodes") and any(
+                                isinstance(getattr(c, "node", None), str) and
+                                getattr(c, "node", "").isidentifier()
+                                for c in getattr(n, "nodes", [])
+                            )
+                        ):
+                            names = _collect_identifiers_from_paren(n)
+                            if names:
+                                target_tuple = names
                         continue
                     if val in ("let", "var", "const"):
                         target_kw = val
                     elif val.isidentifier() and val not in ("let", "var", "const", "="):
-                        # IDENTIFIER node: @method(IDENTIFIER) renames its class to "IDENTIFIER",
-                        # so match by value rather than class name to stay rename-safe.
                         target_name = val
 
     # Remaining nodes after the keyword: possibly [opts_st, body_st] or [body_st]
@@ -1291,17 +1328,15 @@ def _parse_shell_stmt(node):
     for n in nodes[kw_idx + 1 :]:
         if type(n).__name__ != "Several_Times" or not n.nodes:
             continue
-        # Body Several_Times: children are Filter nodes wrapping TokenInfo objects
         first = n.nodes[0]
         tok = getattr(first, "node", None)
         if hasattr(tok, "string") and not isinstance(tok, str):
             body_st = n
             break
-        # Otherwise it's the opts Several_Times
         opts = _extract_shell_opts(n)
 
     cmd, needs_fstring = _extract_shell_body(body_st) if body_st else ("", False)
-    return target_kw, target_name, kw, opts, cmd, needs_fstring
+    return target_kw, target_name, target_tuple, kw, opts, cmd, needs_fstring
 
 
 @method(shell_stmt)
@@ -1324,20 +1359,27 @@ def to_py(self, indent=0):
 
     Variable interpolation: {name} in cmd body -> f\\\"\\\"\\\"...{name}...\\\"\\\"\\\"
     Options: cwd=\"/tmp\" -> cwd=\"/tmp\"; timeout=5000 -> timeout=5.0 (ms -> s)
+
+    Tuple destructuring:
+      # let (out, err, code) = shell: cmd
+      _r = _subprocess.run(\"\"\"cmd\"\"\", shell=True, capture_output=True, text=True)
+      out, err, code = _r.stdout, _r.stderr, _r.returncode
     """
     ind = _ind(indent)
-    target_kw, target_name, kw, opts, cmd, needs_fstring = _parse_shell_stmt(self)
+    target_kw, target_name, target_tuple, kw, opts, cmd, needs_fstring = _parse_shell_stmt(self)
+
+    has_target = bool(target_name or target_tuple)
 
     # Mark that shell imports are needed; py2py.translate() inserts them at top
     ParserState.nim_imports.add("import subprocess as _subprocess")
-    if target_name:
+    if has_target and not target_tuple:
         ParserState.nim_imports.add("import types as _types")
 
     q = '"""'
     cmd_str = f"f{q}{cmd}{q}" if needs_fstring else f"{q}{cmd}{q}"
 
     run_kwargs = ["shell=True"]
-    if target_name:
+    if has_target:
         run_kwargs += ["capture_output=True", "text=True"]
     if "cwd" in opts:
         run_kwargs.append(f"cwd={opts['cwd']}")
@@ -1351,7 +1393,15 @@ def to_py(self, indent=0):
     kwargs_str = ", ".join(run_kwargs)
     lines = []
 
-    if target_name:
+    if target_tuple:
+        # let (out, err, code) = shell: cmd
+        # Positional slots: 0→stdout, 1→stderr, 2→returncode
+        slots = ["_r.stdout", "_r.stderr", "_r.returncode"]
+        lhs = ", ".join(target_tuple)
+        rhs = ", ".join(slots[:len(target_tuple)])
+        lines.append(f"{ind}_r = _subprocess.run({cmd_str}, {kwargs_str})")
+        lines.append(f"{ind}{lhs} = {rhs}")
+    elif target_name:
         lines.append(f"{ind}_r = _subprocess.run({cmd_str}, {kwargs_str})")
         if kw == "shellLines":
             lines.append(f"{ind}{target_name} = _r.stdout.splitlines()")
