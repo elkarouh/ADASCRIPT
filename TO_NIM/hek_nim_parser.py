@@ -1668,7 +1668,9 @@ def to_nim(self, indent=0):
             lines.append(
                 f"{ind}{nim_kw} {target_name} = (output: execResult[0], code: execResult[1])"
             )
-            # Named tuple — truthiness on .output field will be handled when accessed
+            # Register as shell_result so _nim_truthiness can resolve
+            # field access like result.output -> result.output.len > 0
+            ParserState.symbol_table.add(target_name, "shell_result", nim_kw)
     else:
         lines.append(f"{ind}discard execCmd({cmd_str}){timeout_comment}")
 
