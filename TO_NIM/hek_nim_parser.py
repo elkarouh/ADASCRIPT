@@ -1643,6 +1643,9 @@ def to_nim(self, indent=0):
     nim_kw = "let" if target_kw in (None, "let", "const") else "var"
     lines = []
 
+    # execCmdEx slot types: 0→string (stdout), 1→int (exitCode), 2→string (stderr compat)
+    _SLOT_TYPES = ["string", "int", "string"]
+
     if target_tuple:
         # let (out, err, code) = shell: cmd
         slots = ["execResult[0]", "execResult[1]", '""']
@@ -1650,14 +1653,22 @@ def to_nim(self, indent=0):
         rhs = ", ".join(slots[:len(target_tuple)])
         lines.append(f"{ind}let execResult = execCmdEx({cmd_str}){timeout_comment}")
         lines.append(f"{ind}{nim_kw} ({lhs}) = ({rhs})")
+        # Register each bound name in the symbol table so that truthiness
+        # checks (if view:) and type-aware method dispatch work correctly.
+        for i, var_name in enumerate(target_tuple):
+            if var_name != "_":
+                slot_type = _SLOT_TYPES[i] if i < len(_SLOT_TYPES) else "string"
+                ParserState.symbol_table.add(var_name, slot_type, nim_kw)
     elif target_name:
         lines.append(f"{ind}let execResult = execCmdEx({cmd_str}){timeout_comment}")
         if kw == "shellLines":
             lines.append(f"{ind}{nim_kw} {target_name} = execResult[0].splitLines()")
+            ParserState.symbol_table.add(target_name, "seq[string]", nim_kw)
         else:
             lines.append(
                 f"{ind}{nim_kw} {target_name} = (output: execResult[0], code: execResult[1])"
             )
+            # Named tuple — truthiness on .output field will be handled when accessed
     else:
         lines.append(f"{ind}discard execCmd({cmd_str}){timeout_comment}")
 
