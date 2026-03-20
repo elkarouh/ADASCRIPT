@@ -31,15 +31,108 @@ from py3expr import (
 
 _COMP_OPS = {"==", "!=", "<", ">", "<=", ">=", "in", "is", "not in", "is not", "isnot", "notin"}
 
+def _nim_expr_type(expr):
+    """Infer the Nim type of an already-emitted expression string.
+
+    Walks the expression left-to-right using the symbol table and structural
+    rules, returning a Nim type string or None if unknown.
+
+    Handles:
+      name              -> symbol table lookup
+      name[i]           -> element type of seq[T] / string
+      name.field        -> field type from known shapes (shell_result, etc.)
+      name.method()     -> return type of known string/seq methods
+      chained:  name[i].strip()  name.output.strip()  etc.
+
+    Returns None rather than guessing wrong, so callers fall back safely.
+    """
+    import re as _re
+
+    _SHELL_RESULT_FIELDS = {
+        "output": "string",
+        "stdout": "string",
+        "stderr": "string",
+        "code":   "int",
+    }
+    _STRING_METHODS_RETURN_STRING = {
+        "strip", "lstrip", "rstrip", "upper", "lower", "title",
+        "replace", "join", "format", "removePrefix", "removeSuffix",
+    }
+
+    def _seq_elem(t):
+        m = _re.match(r"seq\[(.+)\]$", t)
+        if m:
+            return m.group(1)
+        if t == "string":
+            return "string"
+        return None
+
+    def _resolve(s):
+        s = s.strip()
+        if s.startswith("(") and s.endswith(")"):
+            s = s[1:-1].strip()
+
+        # method call: base.method(args)
+        call_m = _re.match(r"^(.+?)\.([A-Za-z_]\w*)\(.*\)$", s)
+        if call_m:
+            base_type = _resolve(call_m.group(1))
+            method = call_m.group(2)
+            if base_type == "string" and method in _STRING_METHODS_RETURN_STRING:
+                return "string"
+            if base_type and base_type.startswith("seq[") and method == "join":
+                return "string"
+            return None
+
+        # field access: base.field  (simple identifier on both sides)
+        dot_m = _re.match(r"^([A-Za-z_]\w*)\.([A-Za-z_]\w*)$", s)
+        if dot_m:
+            base_name, field = dot_m.group(1), dot_m.group(2)
+            sym = ParserState.symbol_table.lookup(base_name)
+            if sym:
+                bt = sym.get("type") or ""
+                if bt == "shell_result":
+                    return _SHELL_RESULT_FIELDS.get(field)
+                if bt.startswith("seq[") and field == "len":
+                    return "int"
+                if bt == "string" and field == "len":
+                    return "int"
+            return None
+
+        # subscript: base[index]
+        sub_m = _re.match(r"^(.+)\[[^\[\]]+\]$", s)
+        if sub_m:
+            base_type = _resolve(sub_m.group(1))
+            if base_type:
+                return _seq_elem(base_type)
+            return None
+
+        # plain identifier
+        if _re.match(r"^[A-Za-z_]\w*$", s):
+            sym = ParserState.symbol_table.lookup(s)
+            if sym:
+                return sym.get("type")
+            return None
+
+        return None
+
+    return _resolve(expr)
+
+
 def _nim_truthiness(expr):
-    """Convert Python truthiness expression to explicit Nim boolean.
-    Strings/seqs have no implicit bool conversion in Nim."""
-    sym = ParserState.symbol_table.lookup(expr)
-    if sym:
-        t = (sym.get("type") or "")
-        if any(t.startswith(p) for p in ("string", "seq[", "str", "PriorityQueue", "FifoQueue", "LifoQueue", "HashSet", "Table", "Deque")):
-            return f"{expr}.len > 0"
+    """Convert a Nim expression to an explicit boolean if needed.
+
+    In Nim, strings and seqs have no implicit bool conversion.
+    Uses _nim_expr_type to resolve the type of arbitrary expressions
+    (names, subscripts, field access, method calls, chains).
+    Returns the expression unchanged for unknown or non-string types.
+    """
+    _STRING_LIKE = ("string", "seq[", "str", "PriorityQueue", "FifoQueue",
+                    "LifoQueue", "HashSet", "Table", "Deque")
+    t = _nim_expr_type(expr)
+    if t and any(t.startswith(p) for p in _STRING_LIKE):
+        return f"{expr}.len > 0"
     return expr
+
 
 
 
