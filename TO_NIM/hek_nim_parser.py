@@ -1617,7 +1617,7 @@ def to_nim(self, indent=0):
     from hek_py3_parser import _parse_shell_stmt
 
     ind = _ind(indent)
-    target_kw, target_name, kw, opts, cmd, needs_fstring = _parse_shell_stmt(self)
+    target_kw, target_name, target_tuple, kw, opts, cmd, needs_fstring = _parse_shell_stmt(self)
 
     ParserState.nim_imports.add("osproc")
 
@@ -1640,14 +1640,17 @@ def to_nim(self, indent=0):
 
     lines = []
 
-    if target_kw == "let" or target_kw is None and target_name:
-        nim_kw = "let"
-    elif target_kw in ("var",):
-        nim_kw = "var"
-    else:
-        nim_kw = "let"
+    nim_kw = "let" if target_kw in (None, "let", "const") else "var"
+    lines = []
 
-    if target_name:
+    if target_tuple:
+        # let (out, err, code) = shell: cmd
+        slots = ["execResult[0]", "execResult[1]", '""']
+        lhs = ", ".join(target_tuple)
+        rhs = ", ".join(slots[:len(target_tuple)])
+        lines.append(f"{ind}let execResult = execCmdEx({cmd_str}){timeout_comment}")
+        lines.append(f"{ind}{nim_kw} ({lhs}) = ({rhs})")
+    elif target_name:
         lines.append(f"{ind}let execResult = execCmdEx({cmd_str}){timeout_comment}")
         if kw == "shellLines":
             lines.append(f"{ind}{nim_kw} {target_name} = execResult[0].splitLines()")
