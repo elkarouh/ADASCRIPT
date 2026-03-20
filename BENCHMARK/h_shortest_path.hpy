@@ -1,3 +1,4 @@
+#!/usr/bin/env py2nim
 """
 Shortest-path / dynamic-programming optimiser framework.
 

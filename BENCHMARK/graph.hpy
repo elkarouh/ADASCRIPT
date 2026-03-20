@@ -1,3 +1,4 @@
+#!/usr/bin/env py2nim
 #https://www.python.org/doc/essays/graphs/
 type Node_T is str
 type Graph_T is {Node_T}[]Node_T
