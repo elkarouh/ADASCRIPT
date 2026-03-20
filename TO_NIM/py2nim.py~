@@ -412,6 +412,38 @@ def translate(code):
     return result
 
 
+def main(args=None):
+    import subprocess
+    if args is None:
+        import argparse
+        parser = argparse.ArgumentParser()
+        parser.add_argument("file", nargs="?")
+        parser.add_argument("rest", nargs="*")
+        parser.add_argument("-c", action="store_true")
+        args = parser.parse_args()
+    if args.file:
+        with open(args.file) as f:
+            code = f.read()
+    else:
+        code = sys.stdin.read()
+    output = translate(code)
+    if args.c and args.file:
+        base = os.path.splitext(args.file)[0]
+        nim_file = base + ".nim"
+        with open(nim_file, "w") as f:
+            f.write(output)
+        print(f"Wrote {nim_file}")
+        result = subprocess.run(["nim", "c", "-r", nim_file] + (args.rest or []))
+        sys.exit(result.returncode)
+    else:
+        print(output, end="")
+
+
+###############################################################################
+# Tests
+###############################################################################
+
+
 def run_tests():
     print("=" * 60)
     print("Python 3.14 -> Nim Translator Tests")
@@ -671,223 +703,15 @@ def run_tests():
     return failed
 
 
-def main(argv=None):
-    """Entry point with nim-style argument parsing.
-
-    Mirrors the nim compiler's own CLI so muscle memory transfers directly::
-
-        nim  c        [-r] [nim-flags] file.nim  [-- prog-args]
-        py2nim  c     [-r] [nim-flags] file.hpy  [-- prog-args]
-
-    Subcommands (anything that nim accepts: c, cpp, js, check, doc, …) are
-    passed straight through to the nim compiler.  All unrecognised flags (those
-    starting with ``-``) are also forwarded to nim unchanged.
-
-    Modes
-    -----
-    py2nim                          read stdin, print Nim to stdout
-    py2nim -t file.hpy              transpile → write file.nim, stop (no compile)
-    py2nim file.hpy                 shebang default: compile + run (= c -r)
-    py2nim c file.hpy               transpile → write .nim → nim c .nim
-    py2nim c -r file.hpy            transpile → write .nim → nim c -r .nim
-    py2nim c -r file.hpy -- a b     same, pass a b as program arguments
-    py2nim --test                   run built-in self-tests
-
-    Shebang usage
-    -------------
-    Because the Linux kernel only passes a single token after ``/usr/bin/env``
-    in a shebang line, ``#!/usr/bin/env py2nim c -r`` is illegal.  Use::
-
-        #!/usr/bin/env py2nim
-
-    When py2nim is invoked with a ``.hpy`` file and no subcommand it defaults
-    to ``c -r``, so the three-tier up-to-date check and direct binary execution
-    all work transparently.
-
-    Up-to-date check (three tiers, like make)
-    -----------------------------------------
-    When a binary-producing subcommand (c, cpp, …) is given, py2nim runs
-    three mtime comparisons before doing any work:
-
-    1. **.nim older than .hpy** → re-transpile, then continue to tier 2.
-    2. **executable older than .nim** → skip transpilation, re-compile.
-    3. **both up to date** → skip everything; with ``-r`` just exec the
-       existing binary directly without invoking nim at all.
-
-    Non-binary subcommands (check, doc, …) stop after tier 1 and always
-    invoke nim (they produce no persistent executable to compare).
-    """
-    import subprocess
-
-    if argv is None:
-        argv = sys.argv[1:]
-
-    # ------------------------------------------------------------------ #
-    # 1.  Intercept --test before any other parsing                       #
-    # ------------------------------------------------------------------ #
-    if "--test" in argv:
-        sys.exit(run_tests())
-
-    # ------------------------------------------------------------------ #
-    # 2.  nim-style manual argument parsing                               #
-    #                                                                     #
-    #   py2nim [subcommand] [flags...] [file.hpy] [-- prog-args...]      #
-    #                                                                     #
-    #   We don't use argparse here because argparse doesn't handle        #
-    #   nim-style --flag:value pairs (the colon is unusual) and we want  #
-    #   to forward unknown flags verbatim without error.                  #
-    # ------------------------------------------------------------------ #
-    NIM_COMMANDS = {
-        "c", "cc", "cpp", "objc", "js", "e",
-        "check", "doc", "doc2", "rst2html", "rst2tex",
-        "jsondoc", "ctags", "buildindex", "genDepend",
-        "dump", "secret", "nop",
-    }
-
-    subcommand = None   # nim subcommand (c, cpp, js, …) if given
-    run = False         # -r / --run
-    transpile_only = False  # -t / --transpile: write/print .nim, stop there
-    hpy_file = None     # the .hpy source file
-    nim_flags = []      # flags forwarded verbatim to nim
-    prog_args = []      # program arguments (after --)
-
-    i = 0
-    after_dashdash = False
-
-    while i < len(argv):
-        arg = argv[i]
-
-        if after_dashdash:
-            prog_args.append(arg)
-
-        elif arg == "--":
-            after_dashdash = True
-
-        elif i == 0 and arg in NIM_COMMANDS:
-            subcommand = arg
-
-        elif arg in ("-r", "--run"):
-            run = True
-
-        elif arg in ("-t", "--transpile"):
-            transpile_only = True
-
-        elif arg.startswith("-"):
-            # Unknown flag — forward to nim unchanged (handles -d:, -o:,
-            # --verbosity:, --gc:, --opt:, etc.)
-            nim_flags.append(arg)
-
-        elif hpy_file is None:
-            hpy_file = arg
-
-        else:
-            # Extra positional after the file: treat as program args
-            prog_args.append(arg)
-
-        i += 1
-
-    # ------------------------------------------------------------------ #
-    # 2b. Shebang default: no subcommand + .hpy file → c -r              #
-    #                                                                     #
-    #   The Linux kernel only passes a single token after /usr/bin/env   #
-    #   in a shebang line, so '#!/usr/bin/env py2nim c -r' is illegal.  #
-    #   Instead, write '#!/usr/bin/env py2nim' and rely on this default: #
-    #   when py2nim is called with a .hpy file but no subcommand (and    #
-    #   -t was not given), it behaves exactly as if 'c -r' had been      #
-    #   specified.                                                        #
-    #                                                                     #
-    #   To transpile only (print .nim to stdout), use -t / --transpile.  #
-    # ------------------------------------------------------------------ #
-    if hpy_file and subcommand is None and not transpile_only and hpy_file.endswith(".hpy"):
-        subcommand = "c"
-        run = True
-
-    # ------------------------------------------------------------------ #
-    # 3.  Read source                                                     #
-    # ------------------------------------------------------------------ #
-    if hpy_file:
-        with open(hpy_file) as f:
-            code = f.read()
-    else:
-        code = sys.stdin.read()
-
-    # ------------------------------------------------------------------ #
-    # 4.  Three-tier up-to-date check then build/run                     #
-    #                                                                     #
-    #   tier 1 — transpile:  .nim older than .hpy  (or .nim missing)    #
-    #   tier 2 — compile:    exe  older than .nim  (or exe  missing)     #
-    #   tier 3 — run:        nothing to do, just exec the existing exe   #
-    #                                                                     #
-    #   Compilation-only subcommands (check, doc, …) have no executable, #
-    #   so the exe check is skipped for them.                             #
-    # ------------------------------------------------------------------ #
-    if hpy_file and subcommand:
-        base      = os.path.splitext(hpy_file)[0]
-        nim_file  = base + ".nim"
-        exe_file  = base  # nim places the exe next to the source by default
-
-        hpy_mtime = os.path.getmtime(hpy_file)
-        nim_mtime = os.path.getmtime(nim_file) if os.path.exists(nim_file) else 0
-        exe_mtime = os.path.getmtime(exe_file) if os.path.exists(exe_file) else 0
-
-        # --- tier 1: transpile? ---
-        need_transpile = nim_mtime < hpy_mtime
-        if need_transpile:
-            nim_output = translate(code)
-            with open(nim_file, "w") as f:
-                f.write(nim_output)
-            # Refresh mtime after write so tier-2 comparison is accurate
-            nim_mtime = os.path.getmtime(nim_file)
-            print(f"Wrote {nim_file}", file=sys.stderr)
-        else:
-            print(f"Up to date: {nim_file}", file=sys.stderr)
-
-        # --- tier 2: compile? ---
-        # Only meaningful for binary-producing subcommands.
-        # If -r is not set and the exe is already up to date, skip nim entirely.
-        BINARY_COMMANDS = {"c", "cc", "cpp", "objc"}
-        produces_binary = subcommand in BINARY_COMMANDS
-
-        if produces_binary and not run:
-            # compile-only mode: skip if exe is newer than .nim
-            need_compile = exe_mtime < nim_mtime
-            if not need_compile:
-                print(f"Up to date: {exe_file}", file=sys.stderr)
-                sys.exit(0)
-
-        if produces_binary and run:
-            # run mode: skip compilation entirely if exe is newer than .nim
-            need_compile = exe_mtime < nim_mtime
-            if not need_compile:
-                print(f"Up to date: {exe_file}", file=sys.stderr)
-                cmd = [exe_file] + prog_args
-                result = subprocess.run(cmd)
-                sys.exit(result.returncode)
-
-        # --- tier 3: invoke nim ---
-        cmd = ["nim", subcommand] + nim_flags
-        if run:
-            cmd.append("-r")
-        cmd.append(nim_file)
-        if prog_args:
-            cmd += prog_args
-
-        result = subprocess.run(cmd)
-        sys.exit(result.returncode)
-
-    else:
-        # No subcommand (or -t/--transpile explicitly given):
-        # transpile and either write .nim or print to stdout.
-        nim_output = translate(code)
-        if hpy_file and transpile_only:
-            # -t with a file: write the .nim alongside the source
-            nim_file = os.path.splitext(hpy_file)[0] + ".nim"
-            with open(nim_file, "w") as f:
-                f.write(nim_output)
-            print(f"Wrote {nim_file}", file=sys.stderr)
-        else:
-            print(nim_output, end="")
-
-
 if __name__ == "__main__":
-    main()
+    import argparse
+    parser = argparse.ArgumentParser(description="Translate HPython (.hpy) to Nim")
+    parser.add_argument("file", nargs="?", help="source file to translate (reads stdin if omitted)")
+    parser.add_argument("rest", nargs="*", help="arguments passed to the compiled program")
+    parser.add_argument("-c", action="store_true", help="compile and run the generated Nim file")
+    parser.add_argument("--test", action="store_true", help="run built-in tests")
+    args = parser.parse_args()
+    if args.test:
+        sys.exit(run_tests())
+    else:
+        main(args)

@@ -1,3 +1,4 @@
+#!/usr/bin/env py2nim
 import time
 
 N = 1000000
