@@ -34,6 +34,7 @@ source.hpy
 - [Functions](#functions)
 - [Classes and Inheritance](#classes-and-inheritance)
 - [Nim-Only Imports](#nim-only-imports)
+- [Python Interoperability](#python-interoperability)
 - [Print Statement](#print-statement)
 - [Shell Statements](#shell-statements)
 - [Bash Variables](#bash-variables)
@@ -545,9 +546,176 @@ equivalent:
 nimport strutils, sequtils, algorithm
 ```
 
-Regular `import` statements are translated automatically: known stdlib modules
-(`os`, `math`, `json`, `re`, `time`) are mapped to their Nim counterparts;
-others are wrapped with `pyImport(...)` via the `nimpy` bridge.
+---
+
+## Python Interoperability
+
+HPython knows whether each Python `import` statement has a direct Nim
+equivalent or needs the [nimpy](https://github.com/yglukhov/nimpy) bridge.
+You write ordinary Python imports; the transpiler decides how to map them.
+
+### Natively mapped stdlib modules
+
+These modules translate directly to their Nim counterparts with no runtime
+overhead and no nimpy dependency:
+
+| Python import | Nim module | Notes |
+|---|---|---|
+| `import os` | `import os` | `os.path.*` → Nim path procs |
+| `import math` | `import math` | All standard functions mapped |
+| `import time` | `import times` | |
+| `import re` | `import re` | |
+| `import random` | `import random` | |
+| `import json` | `import std/json` | |
+| `import itertools` | `import sequtils` | |
+| `import asyncio` | `import asyncdispatch` | |
+
+### Function call translation
+
+When a module is natively mapped, its function calls are rewritten to the
+Nim equivalent automatically:
+
+```python
+import math
+import time
+import re
+import random
+
+x = math.sqrt(4.0)
+y = math.sin(3.14)
+t = time.time()
+time.sleep(0.5)
+result = re.sub(r'\s+', ' ', text)
+n = random.randint(1, 100)
+```
+
+**Nim output:**
+
+```nim
+import math, os, re, random, times
+
+var x = sqrt(4.0)
+var y = sin(3.14)
+var t = epochTime()
+sleep(500)
+var result = replace(text, re("\\s+"), " ")
+var n = rand(1..100)
+```
+
+### `os` and `sys` utilities
+
+```python
+import os
+import sys
+
+if os.path.exists('/tmp/data'):
+    p = os.path.join('/tmp', 'data', 'out.txt')
+    os.makedirs('/tmp/data')
+
+sys.exit(1)
+```
+
+**Nim output:**
+
+```nim
+import os
+
+if fileExists("/tmp/data"):
+    var p = joinPath("/tmp", "data", "out.txt")
+    createDir("/tmp/data")
+
+quit(1)
+```
+
+`sys.exit(n)` is translated directly to `quit(n)` — no nimpy required.
+
+### Non-native Python libraries (nimpy bridge)
+
+Libraries with no Nim equivalent (third-party packages, `requests`, `pandas`,
+`scipy`, etc.) are imported via the
+[nimpy](https://github.com/yglukhov/nimpy) bridge automatically:
+
+```python
+import requests
+import pandas as pd
+from datetime import datetime
+
+r = requests.get('https://example.com')
+df = pd.read_csv('data.csv')
+```
+
+**Nim output:**
+
+```nim
+import nimpy
+
+let requests = pyImport("requests")
+let pd = pyImport("pandas")
+
+var r = requests.get("https://example.com")
+var df = pd.read_csv("data.csv")
+```
+
+You call Python methods exactly as you would in Python. The nimpy bridge
+handles type marshalling automatically for most Nim ↔ Python type pairs
+(`int`, `float`, `string`, `seq`, `Table`, tuples).
+
+To convert a `PyObject` return value to a concrete Nim type, call `.to(T)`:
+
+```python
+import requests
+
+r = requests.get('https://api.example.com/count')
+count: int = r.json()['total'].to(int)
+```
+
+**Nim output:**
+
+```nim
+import nimpy
+
+let requests = pyImport("requests")
+proc len(o: PyObject): int = pyBuiltinsModule().len(o).to(int)
+
+var r = requests.get("https://api.example.com/count")
+var count: int = r.json()["total"].to(int)
+```
+
+### Calling Python callables from Nim
+
+When a Python function returns a callable object (e.g. a fitted model,
+a compiled regex, a scipy interpolator), use `callObject()`:
+
+```python
+import scipy.interpolate as interp
+
+f = interp.interp1d(x_points, y_points, 'linear')
+val = callObject(f, 1.5).to(float)
+```
+
+**Nim output:**
+
+```nim
+import nimpy
+
+let interp = pyImport("scipy.interpolate")
+proc len(o: PyObject): int = pyBuiltinsModule().len(o).to(int)
+
+var f = interp.interp1d(x_points, y_points, "linear")
+var val = callObject(f, 1.5).to(float)
+```
+
+### `len()` helper
+
+When nimpy is active and `len()` is called on a `PyObject`, the transpiler
+emits a thin helper proc automatically:
+
+```nim
+proc len(o: PyObject): int = pyBuiltinsModule().len(o).to(int)
+```
+
+This is only emitted when `len(` actually appears in the output — pure
+native-module programs never get it.
 
 ---
 

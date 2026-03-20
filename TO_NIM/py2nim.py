@@ -241,21 +241,34 @@ def translate(code):
                 insert_pos = i
                 break
         output.insert(insert_pos, import_line)
-        # When nimpy is used, emit a len() helper for PyObject
+        # When nimpy is used, emit a len() helper for PyObject — but only
+        # if the output actually calls len() somewhere (as a function, not method)
+        # and has pyImport'd modules that could return PyObject values.
         if "nimpy" in ParserState.nim_imports:
-            helper = 'proc len(o: PyObject): int = pyBuiltinsModule().len(o).to(int)'
-            # Insert right after the pyImport lines (find last pyImport line)
-            helper_pos = len(output)
-            for j in range(len(output) - 1, -1, -1):
-                if 'pyImport(' in output[j]:
-                    helper_pos = j + 1
-                    break
-            output.insert(helper_pos, helper)
+            has_py_imports = any('pyImport(' in line for line in output)
+            needs_len_helper = has_py_imports and any(
+                'len(' in line and 'proc len' not in line
+                for line in output
+            )
+            if needs_len_helper:
+                helper = 'proc len(o: PyObject): int = pyBuiltinsModule().len(o).to(int)'
+                # Insert right after the pyImport lines (find last pyImport line)
+                helper_pos = len(output)
+                for j in range(len(output) - 1, -1, -1):
+                    if 'pyImport(' in output[j]:
+                        helper_pos = j + 1
+                        break
+                output.insert(helper_pos, helper)
             # If sys was imported via pyImport, initialize sys.argv from Nim args
             has_sys_import = any('pyImport("sys")' in line for line in output)
             if has_sys_import:
+                helper_pos = len(output)
+                for j in range(len(output) - 1, -1, -1):
+                    if 'pyImport(' in output[j] or 'proc len(' in output[j]:
+                        helper_pos = j + 1
+                        break
                 argv_init = 'discard pyBuiltinsModule().setattr(sys, "argv", @[getAppFilename()] & commandLineParams())'
-                output.insert(helper_pos + 1, argv_init)
+                output.insert(helper_pos, argv_init)
                 ParserState.nim_imports.add("std/cmdline")
                 ParserState.nim_imports.add("os")
                 # Re-generate the import line with the new module
