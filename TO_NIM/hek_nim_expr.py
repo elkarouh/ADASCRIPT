@@ -736,6 +736,14 @@ def to_nim(self, prec=None):
                 and self.nodes[1].nodes
                 and type(self.nodes[1].nodes[0]).__name__ == "call_trailer")
     if has_call:
+        # PyObject callable: f(args) where f is a PyObject -> callObject(f, args)
+        if raw_name not in _PY_IDENT_TO_NIM:  # skip builtins like str, list, etc.
+            sym = ParserState.symbol_table.lookup(raw_name)
+            if sym and sym.get("type") == "PyObject":
+                call_node = self.nodes[1].nodes[0]
+                args = _extract_call_args(call_node)
+                all_args = ", ".join([raw_name] + args)
+                return f"callObject({all_args})"
         # str(x) -> $x, list(x) -> @x
         if raw_name == "str":
             call_node = self.nodes[1].nodes[0]

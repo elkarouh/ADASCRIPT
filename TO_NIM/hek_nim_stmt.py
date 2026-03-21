@@ -249,6 +249,19 @@ def to_nim(self):
         inferred = _infer_literal_nim_type(rhs_node)
         if inferred is not None:
             ParserState.symbol_table.add(name, inferred, "var")
+        else:
+            # If RHS is a call/subscript on a PyObject variable, the result
+            # is also a PyObject (until proven otherwise by a type annotation).
+            rhs_str = parts[-1] if len(parts) >= 2 else ""
+            import re as _re_py
+            base_m = _re_py.match(r"^([A-Za-z_]\w*)\b", rhs_str)
+            if base_m:
+                base = base_m.group(1)
+                base_sym = ParserState.symbol_table.lookup(base)
+                if base_sym:
+                    bt = base_sym.get("type", "") or ""
+                    if bt.startswith("_py_module:") or bt == "PyObject":
+                        ParserState.symbol_table.add(name, "PyObject", "var")
     if prefix == "var " and len(parts) == 2 and parts[1] in ("@[]", "@{}", "initTable()"):
         import sys as _sys
         print(f"Error: '{lhs} = {parts[1]}' needs a type annotation (e.g. '{lhs}: Type = {parts[1]}')", file=_sys.stderr)
@@ -340,6 +353,31 @@ def to_nim(self):
                     else:
                         ParserState.nim_imports.add("sets")
                         # bare fallback — no type params available
+                # PyObject coercion: if annotation is a primitive Nim type
+                # and we're in a nimpy context, append .to(T) so the compiler
+                # can convert PyObject -> Nim type without an explicit cast.
+                _COERCIBLE = {"int", "float", "string", "bool", "int64",
+                               "int32", "uint", "uint32", "uint64", "float32",
+                               "float64"}
+                if (value
+                        and annotation in _COERCIBLE
+                        and "nimpy" in ParserState.nim_imports
+                        and not value.endswith(f".to({annotation})")
+                        and not value.lstrip("-").replace(".", "").isdigit()
+                        and value not in ("true", "false", "nil", '""', "''")
+                        and not value.startswith('"')
+                        and not value.startswith("'")
+                        and not value.startswith("@[")):
+                    # Only wrap if the value looks like it came from a PyObject
+                    # (contains a subscript, call, or a dot-chain from a pyImport var)
+                    import re as _re_co
+                    looks_py = bool(
+                        _re_co.search(r'\w\[', value)          # subscript
+                        or _re_co.search(r'\w\(', value)       # call
+                        or "." in value                        # method chain
+                    )
+                    if looks_py:
+                        value = f"{value}.to({annotation})"
                 if value:
                     result += f" = {value}"
     return result
@@ -387,6 +425,31 @@ def to_nim(self):
                     else:
                         ParserState.nim_imports.add("sets")
                         # bare fallback — no type params available
+                # PyObject coercion: if annotation is a primitive Nim type
+                # and we're in a nimpy context, append .to(T) so the compiler
+                # can convert PyObject -> Nim type without an explicit cast.
+                _COERCIBLE = {"int", "float", "string", "bool", "int64",
+                               "int32", "uint", "uint32", "uint64", "float32",
+                               "float64"}
+                if (value
+                        and annotation in _COERCIBLE
+                        and "nimpy" in ParserState.nim_imports
+                        and not value.endswith(f".to({annotation})")
+                        and not value.lstrip("-").replace(".", "").isdigit()
+                        and value not in ("true", "false", "nil", '""', "''")
+                        and not value.startswith('"')
+                        and not value.startswith("'")
+                        and not value.startswith("@[")):
+                    # Only wrap if the value looks like it came from a PyObject
+                    # (contains a subscript, call, or a dot-chain from a pyImport var)
+                    import re as _re_co
+                    looks_py = bool(
+                        _re_co.search(r'\w\[', value)          # subscript
+                        or _re_co.search(r'\w\(', value)       # call
+                        or "." in value                        # method chain
+                    )
+                    if looks_py:
+                        value = f"{value}.to({annotation})"
                 if value:
                     result += f" = {value}"
     return result
