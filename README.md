@@ -660,13 +660,16 @@ You call Python methods exactly as you would in Python. The nimpy bridge
 handles type marshalling automatically for most Nim ↔ Python type pairs
 (`int`, `float`, `string`, `seq`, `Table`, tuples).
 
-To convert a `PyObject` return value to a concrete Nim type, call `.to(T)`:
+To convert a `PyObject` return value to a concrete Nim type, annotate the
+variable with the target type and the transpiler injects `.to(T)` automatically:
 
 ```python
 import requests
 
 r = requests.get('https://api.example.com/count')
-count: int = r.json()['total'].to(int)
+count: int = r.json()['total']
+score: float = r.json()['score']
+name: str = r.json()['name']
 ```
 
 **Nim output:**
@@ -679,18 +682,28 @@ proc len(o: PyObject): int = pyBuiltinsModule().len(o).to(int)
 
 var r = requests.get("https://api.example.com/count")
 var count: int = r.json()["total"].to(int)
+var score: float = r.json()["score"].to(float)
+var name: string = r.json()["name"].to(string)
 ```
+
+The `.to(T)` call is inserted whenever the annotation is a primitive type
+(`int`, `float`, `string`, `bool`, etc.) and the right-hand side looks like
+it came from a `PyObject` — a subscript `[...]`, a method call `(...)`,
+`callObject(...)`, or any dot-chain from a `pyImport`'d variable. You can
+write `.to(T)` explicitly if you prefer — the transpiler will not double-wrap it.
 
 ### Calling Python callables from Nim
 
 When a Python function returns a callable object (e.g. a fitted model,
-a compiled regex, a scipy interpolator), use `callObject()`:
+a compiled regex, a scipy interpolator), just call it like a normal function.
+The transpiler detects that the variable holds a `PyObject` and emits
+`callObject()` automatically:
 
 ```python
 import scipy.interpolate as interp
 
 f = interp.interp1d(x_points, y_points, 'linear')
-val = callObject(f, 1.5).to(float)
+val: float = f(1.5)
 ```
 
 **Nim output:**
@@ -699,11 +712,14 @@ val = callObject(f, 1.5).to(float)
 import nimpy
 
 let interp = pyImport("scipy.interpolate")
-proc len(o: PyObject): int = pyBuiltinsModule().len(o).to(int)
 
 var f = interp.interp1d(x_points, y_points, "linear")
-var val = callObject(f, 1.5).to(float)
+var val: float = callObject(f, 1.5).to(float)
 ```
+
+Both the `callObject()` wrapping and the `.to(float)` conversion are inferred
+from context — `f` is tracked as a `PyObject` because it was assigned from a
+`pyImport`'d call, and `float` comes from the `val: float` annotation.
 
 ### `len()` helper
 
