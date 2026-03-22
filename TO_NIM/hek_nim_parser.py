@@ -63,7 +63,7 @@ _DUNDER_TO_NIM = {
     # Item access
     "__getitem__":   "`[]`",
     "__setitem__":   "`[]=`",
-    "__contains__":  "`in`",
+    "__contains__":  "contains",
     # String / repr
     "__str__":       "`$`",
     "__repr__":      "`$`",
@@ -245,8 +245,10 @@ def to_nim(self, indent=0, is_virtual=False, class_name=None, parent_name=None, 
                 lines.append(_ind(indent) + node.to_nim())
 
     if class_name:  # Process all classes with fields/methods
+        ParserState._current_class_name = class_name
         result_lines = []
         field_defaults = []  # list of (field_name, default_expr) for constructor init
+        import re as _re
         # Emit fields (inside object body): strip var/let/const keyword and defaults
         for field in fields:
             line = field.to_nim(indent)
@@ -256,10 +258,17 @@ def to_nim(self, indent=0, is_virtual=False, class_name=None, parent_name=None, 
                     line = line[:len(line) - len(stripped)] + stripped[len(kw):]
                     break
             # Capture default value before stripping
-            import re as _re
             default_match = _re.search(r'^\s*(\w+)\s*:.+?\s*=\s*(.+)$', line.strip())
             if default_match:
                 field_defaults.append((default_match.group(1), default_match.group(2)))
+            # Register field type in class_field_types for Option-aware attr lookup
+            field_type_match = _re.search(r'^\s*(\w+)\s*:\s*(.+?)(?:\s*=.*)?$', line.strip())
+            if field_type_match and class_name:
+                fname = field_type_match.group(1)
+                ftype = field_type_match.group(2).strip()
+                if class_name not in ParserState.class_field_types:
+                    ParserState.class_field_types[class_name] = {}
+                ParserState.class_field_types[class_name][fname] = ftype
             # Strip default value: Nim object fields don't support inline defaults
             line = _re.sub(r' = .+$', '', line)
             result_lines.append(line)
@@ -342,6 +351,7 @@ def to_nim(self, indent=0, is_virtual=False, class_name=None, parent_name=None, 
         # If no fields or methods, emit discard for empty body
         if not result_lines:
             result_lines.append(_ind(indent) + "discard")
+        ParserState._current_class_name = None
         return "\n".join(result_lines)
 
     # For non-class blocks, if empty emit discard
@@ -963,6 +973,13 @@ def to_nim(self):
     if not annotation:
         annotation = ": auto"
     nim_type = annotation[2:] if annotation.startswith(": ") else annotation[1:]
+    # Option[T] param with None default: nil -> none(T)
+    if default == " = nil" and "Option[" in nim_type:
+        import re as _re
+        m = _re.search(r"Option\[(.+)\]", nim_type)
+        if m:
+            default = f" = none({m.group(1)})"
+            ParserState.nim_imports.add("options")
     ParserState.symbol_table.add(name, nim_type, "param")
     return f"{name}{annotation}{default}"
 
@@ -1607,6 +1624,25 @@ def to_nim(self, indent=0):
         block_node = rhs
     fields = _extract_fields_from_block(block_node, indent + 1)
     nim_kind = "tuple" if keyword == "tuple" else "object"
+    # Register type kind and field order for tuple constructor translation
+    ParserState.symbol_table.add(name, nim_kind, "type")
+    if nim_kind == "tuple":
+        import re as _re
+        field_names = []
+        field_types_list = []
+        for fline in fields:
+            fm = _re.match(r'\s*(\w+)\s*:\s*(.+)', fline)
+            if fm:
+                field_names.append(fm.group(1))
+                field_types_list.append(fm.group(2).strip())
+        if name not in ParserState.class_field_types:
+            ParserState.class_field_types[name] = {}
+        for fn, ft in zip(field_names, field_types_list):
+            ParserState.class_field_types[name][fn] = ft
+        # Store ordered field names for positional constructor translation
+        if not hasattr(ParserState, 'tuple_field_order'):
+            ParserState.tuple_field_order = {}
+        ParserState.tuple_field_order[name] = field_names
     return f"{_ind(indent)}type {name}{params} = {nim_kind}\n" + "\n".join(fields)
 
 
@@ -1804,6 +1840,9 @@ def to_nim(self, indent=0):
         parts = [_ind(indent) + self.nodes[0].to_nim()]
 
     result = "; ".join(p.strip() for p in parts if p.strip())
+    # Bare print (no args) -> echo "" (empty line)
+    if result == "echo":
+        result = 'echo ""'
     # Convert bare string literals (docstrings) to Nim doc comments
     non_empty = [p for p in parts if p.strip()]
     if len(non_empty) == 1:
@@ -2032,6 +2071,15 @@ def _generate_init_new(func_node, indent, class_name, parent_name, is_virtual=Tr
                 param_names.append(pname)
 
     params_str = ", ".join(param_strs)
+
+    # Register parameter types for call-site Option[T] coercion
+    new_name_key = f"new{class_name}"
+    param_types_list = []
+    for ps in param_strs:
+        import re as _re2
+        m2 = _re2.match(r'\w+\s*:\s*(.+?)(?:\s*=.*)?$', ps.strip())
+        param_types_list.append(m2.group(1).strip() if m2 else "")
+    ParserState.proc_param_types[new_name_key] = param_types_list
 
     init_name = f"init{class_name}"
     # ref types: self: ClassName; value types: self: var ClassName

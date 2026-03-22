@@ -266,9 +266,18 @@ def binop_to_nim(self, prec=None, my_prec=None):
             py_op = _op_string(seq.nodes[0])
             nim_op = _PY_OP_TO_NIM.get(py_op, py_op)
             right = seq.nodes[1].to_nim(right_prec)
-            # seq concatenation: + -> & when operand is a seq literal
-            if nim_op == "+" and (right.startswith("@[") or result.startswith("@[")):
-                nim_op = "&"
+            # seq concatenation: + -> & when operand is a seq literal or seq-typed var
+            if nim_op == "+":
+                left_is_seq = result.startswith("@[")
+                right_is_seq = right.startswith("@[")
+                if not (left_is_seq or right_is_seq):
+                    # Check symbol table for seq-typed variables
+                    lsym = ParserState.symbol_table.lookup(result)
+                    rsym = ParserState.symbol_table.lookup(right)
+                    left_is_seq = lsym and (lsym.get("type") or "").startswith("seq[")
+                    right_is_seq = rsym and (rsym.get("type") or "").startswith("seq[")
+                if left_is_seq or right_is_seq:
+                    nim_op = "&"
             # string repetition: "x" * n -> repeat("x", n)
             if nim_op == "*":
                 left_is_str  = result.startswith('"') or result.startswith("'")
@@ -748,6 +757,27 @@ def to_nim(self, prec=None):
                 and self.nodes[1].nodes
                 and type(self.nodes[1].nodes[0]).__name__ == "call_trailer")
     if has_call:
+        # Tuple type constructor: TupleType(a, b) -> (field1: T(a), field2: b)
+        # Use explicit field types to coerce subclass refs to base class
+        if raw_name not in _PY_IDENT_TO_NIM:
+            tuple_fields = getattr(ParserState, 'tuple_field_order', {}).get(raw_name)
+            if tuple_fields:
+                call_node = self.nodes[1].nodes[0]
+                args = _extract_call_args(call_node)
+                if len(args) == len(tuple_fields):
+                    ftype_map = ParserState.class_field_types.get(raw_name, {})
+                    pairs_parts = []
+                    for fn, av in zip(tuple_fields, args):
+                        ftype = ftype_map.get(fn, "")
+                        # If field type is a ref object class, cast to that type for proper subtype coercion
+                        sym = ParserState.symbol_table.lookup(ftype)
+                        if ftype and sym and sym.get("kind") == "class":
+                            pairs_parts.append(f"{fn}: {ftype}({av})")
+                        else:
+                            pairs_parts.append(f"{fn}: {av}")
+                    pairs = ", ".join(pairs_parts)
+                    rest = "".join(tr.to_nim() for tr in self.nodes[1].nodes[1:])
+                    return f"({pairs}){rest}"
         # PyObject callable: f(args) where f is a PyObject -> callObject(f, args)
         if raw_name not in _PY_IDENT_TO_NIM:  # skip builtins like str, list, etc.
             sym = ParserState.symbol_table.lookup(raw_name)
@@ -837,7 +867,8 @@ def to_nim(self, prec=None):
                 result = "new" + raw_name
     base_name = result  # save for type-aware method lookup
     if len(self.nodes) > 1 and hasattr(self.nodes[1], "nodes") and self.nodes[1].nodes:
-        for tr in self.nodes[1].nodes:
+        trailer_list = list(self.nodes[1].nodes)
+        for i, tr in enumerate(trailer_list):
             if type(tr).__name__ == "attr_trailer":
                 method_name = tr.nodes[0].to_nim()
                 # Handle Ada tick attributes: field'Next -> field.succ, field'Prev -> field.pred
@@ -850,11 +881,21 @@ def to_nim(self, prec=None):
                         result += "." + base_attr + ".pred"
                         continue
                 method_name = _translate_method(base_name, method_name)
-                result += "." + method_name
+                # Option-typed field called as proc: insert .get() before call trailer
+                next_tr = trailer_list[i + 1] if i + 1 < len(trailer_list) else None
+                if (next_tr is not None
+                        and type(next_tr).__name__ == "call_trailer"
+                        and _expr_is_option(result + "." + method_name)):
+                    result += "." + method_name + ".get()"
+                    ParserState.nim_imports.add("options")
+                else:
+                    result += "." + method_name
             else:
                 result += tr.to_nim()
     # Post-process: translate known Python stdlib patterns to Nim
     result = _translate_stdlib_patterns(result)
+    # Option[T] call-site coercion: wrap non-Option args in some() where param expects Option
+    result = _wrap_option_args(result)
     return result
 
 
@@ -964,6 +1005,55 @@ def _translate_module_call(module_local, func_name, args_str):
     for i, a in enumerate(args):
         result = result.replace(f"{{arg{i}}}", a)
     return result
+
+
+def _wrap_option_args(expr):
+    """Wrap call arguments in some() where the proc parameter expects Option[T].
+
+    Only applies to procs registered in ParserState.proc_param_types.
+    Example: newRegion(both) -> newRegion(some(both))
+    """
+    import re as _re
+    m = _re.match(r"^([A-Za-z_]\w*)\((.+)\)$", expr, _re.DOTALL)
+    if not m:
+        return expr
+    proc_name = m.group(1)
+    args_str = m.group(2)
+    param_types = ParserState.proc_param_types.get(proc_name)
+    if not param_types:
+        return expr
+    # Split args on top-level commas
+    args = []
+    depth = 0
+    cur = []
+    for ch in args_str:
+        if ch in "([{":
+            depth += 1
+            cur.append(ch)
+        elif ch in ")]}":
+            depth -= 1
+            cur.append(ch)
+        elif ch == "," and depth == 0:
+            args.append("".join(cur).strip())
+            cur = []
+        else:
+            cur.append(ch)
+    if cur:
+        args.append("".join(cur).strip())
+    if len(args) != len(param_types):
+        return expr
+    new_args = []
+    changed = False
+    for arg, ptype in zip(args, param_types):
+        if "Option[" in ptype and not arg.startswith("some(") and not arg.startswith("none(") and arg != "nil":
+            ParserState.nim_imports.add("options")
+            new_args.append(f"some({arg})")
+            changed = True
+        else:
+            new_args.append(arg)
+    if not changed:
+        return expr
+    return f"{proc_name}({', '.join(new_args)})"
 
 
 def _translate_stdlib_patterns(expr):
@@ -1238,6 +1328,37 @@ def to_nim(self, prec=None):
     return binop_to_nim(self, prec, PREC_BOR)
 
 
+def _expr_is_option(expr_str):
+    """Return True if expr_str refers to an Option[...]-typed variable or attribute.
+
+    Handles:
+    - Plain names: look up in symbol table
+    - Attribute access like "self.predicate": look up field in class_field_types
+      for the current class (tracked by ParserState._current_class_name)
+    """
+    import re as _re
+    # Plain name lookup
+    sym = ParserState.symbol_table.lookup(expr_str)
+    if sym and "Option[" in (sym.get("type") or ""):
+        return True
+    # Attribute access: obj.field
+    m = _re.match(r"(\w+)\.(\w+)$", expr_str)
+    if m:
+        field_name = m.group(2)
+        class_name = getattr(ParserState, "_current_class_name", None)
+        if class_name:
+            fields = ParserState.class_field_types.get(class_name, {})
+            ftype = fields.get(field_name)
+            if ftype and "Option[" in ftype:
+                return True
+        # Also search all classes for this field name
+        for cname, fmap in ParserState.class_field_types.items():
+            ftype = fmap.get(field_name)
+            if ftype and "Option[" in ftype:
+                return True
+    return False
+
+
 # --- comparison ---
 @method(comparison)
 def to_nim(self, prec=None):
@@ -1292,13 +1413,12 @@ def to_nim(self, prec=None):
                 continue
             nim_op = _PY_OP_TO_NIM.get(py_op, py_op)
             right = seq.nodes[1].to_nim(operand_prec)
-            # Option-aware: x is not None -> x.isSome, x is None -> x.isNone
-            if right == "nil" and nim_op in ("isnot", "is"):
-                sym = ParserState.symbol_table.lookup(chain)
-                is_option = sym and "Option[" in (sym.get("type") or "")
+            # Option-aware: x is/== None -> x.isNone, x is not/!= None -> x.isSome
+            if right == "nil" and nim_op in ("isnot", "is", "==", "!="):
+                is_option = _expr_is_option(chain)
                 if is_option:
                     ParserState.nim_imports.add("options")
-                    if nim_op == "isnot":
+                    if nim_op in ("isnot", "!="):
                         chain = f"{chain}.isSome"
                     else:
                         chain = f"{chain}.isNone"
@@ -1684,68 +1804,84 @@ def to_nim(self, prec=None):
 
 @method(for_if_clauses)
 def to_nim(self, prec=None):
-    """for_if_clauses: for_if_clause+ -> Nim: nested for/if clauses"""
+    """for_if_clauses: for_if_clause+ -> Nim: nested for/if clauses (single clause)"""
+    parts = _for_if_clauses_parts(self)
+    return " ".join(parts)
+
+
+def _for_if_clauses_parts(node):
+    """Return list of individual for_if_clause strings from a for_if_clauses node."""
     parts = []
-    for n in self.nodes:
+    for n in node.nodes:
         if hasattr(n, "to_nim"):
             parts.append(n.to_nim())
         elif hasattr(n, "nodes"):
             for nn in n.nodes:
                 if hasattr(nn, "to_nim"):
                     parts.append(nn.to_nim())
-    return " ".join(parts)
+    return parts
+
+
+def _build_nested_collect(clause_parts, expr):
+    """Build a properly nested collect() expression for multiple for-clauses.
+
+    Single clause:   collect(for x in xs: expr)
+    Multiple:        collect(for ship in ships: (for zone in zones_for_ship(ship): zone))
+    """
+    import re as _re
+    # Build from the innermost clause outward
+    result = expr
+    for i, clause in enumerate(reversed(clause_parts)):
+        m = _re.match(r"(for .+ in .+?) if (.+)$", clause)
+        is_innermost = (i == 0)
+        if m:
+            for_part, cond = m.group(1), m.group(2)
+            inner = result if is_innermost else f"({result})"
+            result = f"{for_part}: (if {cond}: {inner})"
+        else:
+            inner = result if is_innermost else f"({result})"
+            result = f"{clause}: {inner}"
+    return f"collect({result})"
 
 
 @method(listcomp)
 def to_nim(self, prec=None):
-    """listcomp: named_expression for_if_clauses -> Nim: collect(iter.filterIt(cond).mapIt(expr))"""
-    # [expr for x in xs] -> collect(for x in xs: expr)
-    # [expr for x in xs if cond] -> collect(for x in xs: (if cond: expr))
+    """listcomp: named_expression for_if_clauses -> Nim: collect(...) with proper nesting"""
     ParserState.nim_imports.add("sugar")
     expr = self.nodes[0].to_nim()
-    clauses = self.nodes[1].to_nim()
-    # Handle filtered comprehensions: nest the if inside the for
-    import re as _re
-    m = _re.match(r"(for .+ in .+?) if (.+)$", clauses)
-    if m:
-        for_part, cond = m.group(1), m.group(2)
-        return f"collect({for_part}: (if {cond}: {expr}))"
-    return f"collect({clauses}: {expr})"
+    clause_parts = _for_if_clauses_parts(self.nodes[1])
+    return _build_nested_collect(clause_parts, expr)
 
 
 @method(genexpr)
 def to_nim(self, prec=None):
-    """genexpr: named_expression for_if_clauses -> Nim: iterator expression"""
-    # (expr for x in xs) -> collect(for x in xs: expr)
+    """genexpr: named_expression for_if_clauses -> Nim: collect(...) with proper nesting"""
+    ParserState.nim_imports.add("sugar")
     expr = self.nodes[0].to_nim()
-    clauses = self.nodes[1].to_nim()
-    import re as _re
-    m = _re.match(r"(for .+ in .+?) if (.+)$", clauses)
-    if m:
-        for_part, cond = m.group(1), m.group(2)
-        return f"collect({for_part}: (if {cond}: {expr}))"
-    return f"collect({clauses}: {expr})"
+    clause_parts = _for_if_clauses_parts(self.nodes[1])
+    return _build_nested_collect(clause_parts, expr)
 
 
 @method(dictcomp)
 def to_nim(self, prec=None):
     """dictcomp: expression ':' expression for_if_clauses -> Nim: toTable comprehension"""
-    # {k: v for ...} -> collect(initTable, for ...: {k: v})
     key = self.nodes[0].to_nim()
     val = self.nodes[1].to_nim()
-    clauses = self.nodes[2].to_nim()
+    clause_parts = _for_if_clauses_parts(self.nodes[2])
     ParserState.nim_imports.add("sugar")
     ParserState.nim_imports.add("tables")
-    return f"collect(initTable, {clauses}: {{{key}: {val}}})"
+    inner = _build_nested_collect(clause_parts, f"{{{key}: {val}}}")
+    # dictcomp uses collect(initTable, ...)
+    return inner.replace("collect(", "collect(initTable, ", 1)
 
 
 @method(setcomp)
 def to_nim(self, prec=None):
     """setcomp: expression for_if_clauses -> Nim: toHashSet comprehension"""
-    # {expr for x in xs} -> collect(initHashSet, for x in xs: expr)
     expr = self.nodes[0].to_nim()
-    clauses = self.nodes[1].to_nim()
-    return f"collect(initHashSet, {clauses}: {expr})"
+    clause_parts = _for_if_clauses_parts(self.nodes[1])
+    inner = _build_nested_collect(clause_parts, expr)
+    return inner.replace("collect(", "collect(initHashSet, ", 1)
 
 
 # --- dict/set makers ---

@@ -1095,6 +1095,9 @@ def to_nim(self):
             newline_node = node
 
     result = "; ".join(parts)
+    # Bare print (no args) -> echo "" (empty line)
+    if result == "echo":
+        result = 'echo ""'
     # Convert bare string literals (docstrings) to Nim doc comments
     if len(parts) == 1:
         r = parts[0]
