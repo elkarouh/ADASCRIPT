@@ -269,6 +269,18 @@ def binop_to_nim(self, prec=None, my_prec=None):
             # seq concatenation: + -> & when operand is a seq literal
             if nim_op == "+" and (right.startswith("@[") or result.startswith("@[")):
                 nim_op = "&"
+            # string repetition: "x" * n -> repeat("x", n)
+            if nim_op == "*":
+                left_is_str  = result.startswith('"') or result.startswith("'")
+                right_is_str = right.startswith('"') or right.startswith("'")
+                if left_is_str:
+                    ParserState.nim_imports.add("strutils")
+                    result = f"repeat({result}, {right})"
+                    continue
+                if right_is_str:
+                    ParserState.nim_imports.add("strutils")
+                    result = f"repeat({right}, {result})"
+                    continue
             result = f"{result} {nim_op} {right}"
 
     if prec is not None and my_prec is not None and my_prec < prec:
@@ -1047,18 +1059,60 @@ def to_nim(self, prec=None):
 
 @method(range_expr)
 def to_nim(self, prec=None):
-    """range_expr: bitor_expr (('..' | '..<') bitor_expr)? -> Nim: lo .. hi or lo ..< hi"""
-    # range_expr: bitor_expr (('..' | '..<') bitor_expr)*
+    """range_expr: bitor_expr (('..' | '..<') bitor_expr)? -> Nim: lo .. hi or lo ..< hi
+
+    Due to the '+' combinator flattening, the bitor_expr's own Several_Times
+    nodes (containing arithmetic operators like *, /, +, etc.) end up as direct
+    children of range_expr alongside the range operator Several_Times.  We must
+    distinguish them:
+
+    - Sequence_Parser whose first child is range_incl_op / range_excl_op
+      → emit as range: "lo .. hi" or "lo ..< hi"
+    - Sequence_Parser whose first child is an arithmetic operator
+      → emit as binary op: "left op right"
+    - range_incl_op / range_excl_op node directly
+      → emit the operator text
+    """
     result = self.nodes[0].to_nim(prec)
     for node in self.nodes[1:]:
         if not hasattr(node, 'nodes') or not node.nodes:
             continue
         for seq in node.nodes:
             tname = type(seq).__name__
-            if tname in ("range_incl_op", "range_excl_op", "Sequence_Parser"):
-                result += " " + seq.to_nim(prec) + " "
+            if tname in ("range_incl_op", "range_excl_op"):
+                # Bare range operator node — append its text
+                result += " " + seq.to_nim(prec)
+            elif tname == "Sequence_Parser" and hasattr(seq, 'nodes') and seq.nodes:
+                first = seq.nodes[0]
+                first_tname = type(first).__name__
+                if first_tname in ("range_incl_op", "range_excl_op"):
+                    # Range pair: (range_op, right_bitor_expr)
+                    right = seq.nodes[1].to_nim(prec) if len(seq.nodes) > 1 else ""
+                    result += " " + first.to_nim(prec) + " " + right
+                else:
+                    # Arithmetic pair from the flattened bitor_expr: (op, right)
+                    # Emit as "op right" appended to the accumulator
+                    op_str = getattr(first, 'node', None)
+                    if op_str is None and hasattr(first, 'nodes') and first.nodes:
+                        op_str = getattr(first.nodes[0], 'node', str(first.nodes[0]))
+                    nim_op = _PY_OP_TO_NIM.get(str(op_str), str(op_str)) if op_str else ""
+                    right = seq.nodes[1].to_nim(prec) if len(seq.nodes) > 1 else ""
+                    # seq concat: + -> & when operand is seq literal
+                    if nim_op == "+" and (right.startswith("@[") or result.startswith("@[")):
+                        nim_op = "&"
+                    # string repeat: "x" * n -> repeat("x", n)
+                    if nim_op == "*":
+                        if result.startswith('"') or result.startswith("'"):
+                            ParserState.nim_imports.add("strutils")
+                            result = f"repeat({result}, {right})"
+                            continue
+                        if right.startswith('"') or right.startswith("'"):
+                            ParserState.nim_imports.add("strutils")
+                            result = f"repeat({right}, {result})"
+                            continue
+                    result += f" {nim_op} {right}"
             else:
-                result += seq.to_nim(prec)
+                result += seq.to_nim(prec) if hasattr(seq, 'to_nim') else ""
     return result
 
 

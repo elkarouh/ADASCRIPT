@@ -32,6 +32,80 @@ import hek_nim_declarations  # noqa: F401 — registers decl to_nim()
 _class_methods = {}   # class_name -> set of method names
 _class_parents = {}   # class_name -> parent_name or None
 
+# Python dunder method -> Nim operator/proc name
+# Operators that Nim spells with backtick-quoted names.
+_DUNDER_TO_NIM = {
+    # Binary arithmetic
+    "__add__":       "`+`",
+    "__sub__":       "`-`",
+    "__mul__":       "`*`",
+    "__matmul__":    "`@`",
+    "__truediv__":   "`/`",
+    "__floordiv__":  "`div`",
+    "__mod__":       "`mod`",
+    "__pow__":       "`^`",
+    "__lshift__":    "`shl`",
+    "__rshift__":    "`shr`",
+    "__and__":       "`and`",
+    "__or__":        "`or`",
+    "__xor__":       "`xor`",
+    # Unary
+    "__neg__":       "`-`",
+    "__pos__":       "`+`",
+    "__invert__":    "`not`",
+    # Comparison
+    "__eq__":        "`==`",
+    "__ne__":        "`!=`",
+    "__lt__":        "`<`",
+    "__le__":        "`<=`",
+    "__gt__":        "`>`",
+    "__ge__":        "`>=`",
+    # Item access
+    "__getitem__":   "`[]`",
+    "__setitem__":   "`[]=`",
+    "__contains__":  "`in`",
+    # String / repr
+    "__str__":       "`$`",
+    "__repr__":      "`$`",
+    # Standard Nim procs (no backticks needed)
+    "__len__":       "len",
+    "__hash__":      "hash",
+    "__bool__":      "bool",
+    "__abs__":       "abs",
+    "__int__":       "int",
+    "__float__":     "float",
+    "__iter__":      None,   # becomes iterator items (special-cased)
+    "__next__":      None,   # iterator protocol — skip
+    "__enter__":     None,   # context manager — skip
+    "__exit__":      None,   # context manager — skip
+    "__del__":       None,   # destructor — skip
+    "__init__":      None,   # handled separately as initX / newX
+    "__new__":       None,   # handled separately
+}
+
+_SKIP_DUNDERS = {k for k, v in _DUNDER_TO_NIM.items() if v is None}
+
+
+def _nim_proc_name(py_name):
+    """Translate a Python dunder/magic method name to its Nim proc name.
+
+    Returns (nim_name, keyword) where keyword is 'proc', 'iterator', or None
+    (None means skip this method entirely).
+
+    Examples:
+      __add__    -> ('`+`', 'proc')
+      __iter__   -> ('items', 'iterator')
+      __init__   -> (None, None)    -- handled elsewhere
+    """
+    if py_name in _SKIP_DUNDERS:
+        if py_name == "__iter__":
+            return "items", "iterator"
+        return None, None
+    nim_name = _DUNDER_TO_NIM.get(py_name)
+    if nim_name is not None:
+        return nim_name, "proc"
+    return py_name, "proc"   # non-dunder — unchanged
+
 def _strip_generic(name):
     """Strip generic params: 'Optimizer[S, D]' -> 'Optimizer'"""
     idx = name.find("[")
@@ -1226,7 +1300,12 @@ def to_nim(self, indent=0):
         import re as _re
         if _re.search(r'\breturn\b\s+\S', body):
             ret_ann = ": auto"
-    return f"{decos}{_ind(indent)}proc {name}({params}){ret_ann} ={hc}\n{body}"
+    # Translate dunder method names to Nim operator procs
+    nim_name, nim_keyword = _nim_proc_name(name)
+    if nim_name is None:
+        return ""  # skip (e.g. __init__ handled via class_def)
+    keyword = nim_keyword or "proc"
+    return f"{decos}{_ind(indent)}{keyword} {nim_name}({params}){ret_ann} ={hc}\n{body}"
 
 
 @method(async_func_def)
@@ -2117,7 +2196,16 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
         keyword = "proc"
 
     generic_params = type_params if type_params else ""
-    method_sig = f"{_ind(indent)}{keyword} {name}{generic_params}({params_str}){ret_ann}{pragma} ="
+    # Translate dunder names to Nim operator procs
+    nim_name, nim_kw = _nim_proc_name(name)
+    if nim_name is None:
+        ParserState.symbol_table.pop_scope()
+        ParserState._current_return_type = ""
+        return []  # skip (e.g. __init__)
+    if nim_kw == "iterator":
+        keyword = "iterator"
+        pragma = ""
+    method_sig = f"{_ind(indent)}{keyword} {nim_name}{generic_params}({params_str}){ret_ann}{pragma} ="
     lines.append(method_sig)
     lines.extend(body_lines)
 
