@@ -1,0 +1,364 @@
+#!/usr/bin/env py2nim
+"""
+Geometric Region Server (Geo-Server) — HPython Implementation
+============================================================
+Based on: "Haskell vs. Ada vs. C++ vs. Awk vs. ..."
+          Hudak & Jones, Yale University, October 1994
+          Research Report YALEU/DCS/RR-1049
+
+BACKGROUND
+----------
+In 1993, ARPA and the Naval Surface Warfare Center ran a prototyping
+experiment to compare Haskell, Ada, C++, Awk and others on a real
+military problem: a Geometric Region Server, one component of the AEGIS
+Weapons System.
+
+PROBLEM DESCRIPTION
+-------------------
+The geo-server receives time-stamped maps of a 2D Cartesian battlespace
+and must determine which geometric zones each tracked object occupies.
+
+Zones:
+  1. ENGAGEABILITY ZONE  — annulus (ring) around a ship
+  2. WEAPON DOCTRINE     — pie-shaped sector in the weapon facing direction
+  3. SLAVE DOCTRINE      — circle around a carrier; nearby ships are slaved to it
+  4. TIGHT ZONES         — fixed polygonal areas (commercial corridors, etc.)
+
+IMPLEMENTATION APPROACH
+-----------------------
+Region is a first-class class.  Complex regions are composed from simpler
+ones using Python native operators:
+
+    annulus = ~Circle(center, inner) & Circle(center, outer)
+
+Membership is tested with the natural `in` keyword.
+"""
+
+import math
+
+# ---------------------------------------------------------------------------
+# Core Types
+# ---------------------------------------------------------------------------
+
+type Point is tuple:
+    x: float
+    y: float
+
+
+class Region:
+    """
+    A region is defined by a predicate (Point -> Bool).
+    Concrete subclasses override __contains__ directly.
+    Composed regions hold a lambda built by __and__, __or__, __invert__.
+    """
+    var _predicate: ?[(Point,)]bool
+
+    def __init__(self, predicate: ?[(Point,)]bool = None) -> None:
+        self._predicate = predicate
+
+    def __contains__(self, point: Point) -> bool:
+        if self._predicate is None:
+            raise NotImplementedError("Region subclass must implement __contains__")
+        return self._predicate(point)
+
+    # -----------------------------------------------------------------------
+    # Region algebra — operators build composed regions via closures
+    # -----------------------------------------------------------------------
+
+    def __and__(self, other: Region) -> Region:
+        def both(p: Point) -> bool:
+            return p in self and p in other
+        return Region(both)
+
+    def __or__(self, other: Region) -> Region:
+        def either(p: Point) -> bool:
+            return p in self or p in other
+        return Region(either)
+
+    def __invert__(self) -> Region:
+        def outside(p: Point) -> bool:
+            return p not in self
+        return Region(outside)
+
+
+# ---------------------------------------------------------------------------
+# Primitive Region subclasses
+# ---------------------------------------------------------------------------
+
+class Circle(Region):
+    """Filled circle: all points within `radius` of `center`."""
+    var center: Point
+    var r_sq:   float
+
+    def __init__(self, center: Point, radius: float) -> None:
+        self.center = center
+        self.r_sq   = radius ** 2
+
+    def __contains__(self, point: Point) -> bool:
+        return (point.x - self.center.x) ** 2 + \
+               (point.y - self.center.y) ** 2 <= self.r_sq
+
+
+class Sector(Region):
+    """
+    Pie-shaped region centred on `center`.
+    heading_deg    : direction clockwise from North (0 = up)
+    half_angle_deg : half the opening angle
+    radius         : maximum range
+    """
+    var center:         Point
+    var heading_deg:    float
+    var half_angle_deg: float
+    var r_sq:           float
+
+    def __init__(self, center: Point, heading_deg: float,
+                 half_angle_deg: float, radius: float) -> None:
+        self.center         = center
+        self.heading_deg    = heading_deg
+        self.half_angle_deg = half_angle_deg
+        self.r_sq           = radius ** 2
+
+    def __contains__(self, point: Point) -> bool:
+        let dx: float = point.x - self.center.x
+        let dy: float = point.y - self.center.y
+        if dx * dx + dy * dy > self.r_sq:
+            return False
+        let angle: float = math.degrees(math.atan2(dx, dy)) % 360
+        var diff: float = abs(angle - self.heading_deg) % 360
+        if diff > 180:
+            diff = 360 - diff
+        return diff <= self.half_angle_deg
+
+
+class Polygon(Region):
+    """Arbitrary polygon, membership tested by ray-casting."""
+    var vertices: []Point
+
+    def __init__(self, vertices: []Point) -> None:
+        self.vertices = vertices
+
+    def __contains__(self, point: Point) -> bool:
+        let x: float = point.x
+        let y: float = point.y
+        let verts: []Point = self.vertices
+        let n: int = len(verts)
+        var inside: bool = False
+        var j: int = n - 1
+        for i in 0..<n:
+            let xi: float = verts[i].x
+            let yi: float = verts[i].y
+            let xj: float = verts[j].x
+            let yj: float = verts[j].y
+            if ((yi > y) != (yj > y)) and \
+               (x < (xj - xi) * (y - yi) / (yj - yi) + xi):
+                inside = not inside
+            j = i
+        return inside
+
+
+# ---------------------------------------------------------------------------
+# Compound Region constructor
+# ---------------------------------------------------------------------------
+
+def Annulus(center: Point, inner_radius: float, outer_radius: float) -> Region:
+    """Ring region: outside inner circle AND inside outer circle."""
+    return ~Circle(center, inner_radius) & Circle(center, outer_radius)
+
+
+# ---------------------------------------------------------------------------
+# Domain Model
+# ---------------------------------------------------------------------------
+
+type AircraftKind is enum FRIENDLY, HOSTILE
+
+
+type Ship is tuple:
+    name:               str
+    position:           Point
+    inner_radius:       float   # engageability zone inner edge
+    outer_radius:       float   # engageability zone outer edge
+    weapon_heading:     float   # weapon doctrine facing direction (degrees from N)
+    weapon_half_angle:  float
+    weapon_range:       float
+    slave_radius:       float   # slave doctrine radius (0 if not a carrier)
+
+
+type Aircraft is tuple:
+    name:     str
+    position: Point
+    kind:     AircraftKind
+
+
+type NamedZone is tuple:
+    name:   str
+    region: Region
+
+
+type TimeStep is tuple:
+    time:     float
+    aircraft: []Aircraft
+
+
+# ---------------------------------------------------------------------------
+# Zone Definitions
+# ---------------------------------------------------------------------------
+
+def zones_for_ship(ship: Ship) -> []NamedZone:
+    """Pre-build all zones associated with a ship."""
+    var zones: []NamedZone = [
+        NamedZone(f"{ship.name} engageability zone",
+                  Annulus(ship.position, ship.inner_radius, ship.outer_radius)),
+        NamedZone(f"{ship.name} weapon doctrine",
+                  Sector(ship.position, ship.weapon_heading,
+                         ship.weapon_half_angle, ship.weapon_range)),
+    ]
+    if ship.slave_radius > 0:
+        zones.append(NamedZone(
+            f"{ship.name} slave doctrine",
+            Circle(ship.position, ship.slave_radius),
+        ))
+    return zones
+
+
+# ---------------------------------------------------------------------------
+# Geo-Server Core Logic
+# ---------------------------------------------------------------------------
+
+def run_geo_server(zones: []NamedZone, time_steps: []TimeStep) -> None:
+    """Process a temporal sequence of maps and print situational assessments."""
+    for step in time_steps:
+        print f"Time {step.time}:"
+        for ac in step.aircraft:
+            let label: str = "commercial aircraft" if ac.kind == FRIENDLY else "hostile craft"
+            print f"{label}: ({ac.position.x},{ac.position.y})"
+            # This is the heart of the geo-server: check a point against every region.
+            for zone in zones:
+                if ac.position in zone.region:
+                    print f"  -- {zone.name}"
+        print
+
+
+# ---------------------------------------------------------------------------
+# Sample Scenario  (derived from Figure 2 and the sample output in the paper)
+# ---------------------------------------------------------------------------
+
+def build_scenario():
+    """
+    Construct a scenario that mirrors Figure 2 of the paper:
+      - One Aegis ship with an engageability zone (annulus) and weapon doctrine (sector)
+      - One carrier with a slave doctrine circle
+      - Two tight zones (polygons)
+    """
+    let aegis: Ship = Ship(
+        "Aegis",
+        Point(150.0, 100.0),
+        30.0,    # inner_radius
+        120.0,   # outer_radius
+        315.0,   # weapon_heading  (NW-facing wedge)
+        45.0,    # weapon_half_angle
+        200.0,   # weapon_range
+        0.0,     # slave_radius (not a carrier)
+    )
+
+    let carrier: Ship = Ship(
+        "carrier",
+        Point(230.0, 80.0),
+        10.0,    # inner_radius
+        60.0,    # outer_radius
+        0.0,     # weapon_heading
+        30.0,    # weapon_half_angle
+        80.0,    # weapon_range
+        90.0,    # slave_radius (carrier has a slave doctrine circle)
+    )
+
+    let ships: []Ship = [aegis, carrier]
+
+    # Build all ship zones once — reused across every time step
+    let ship_zones: []NamedZone = [zone for ship in ships
+                                       for zone in zones_for_ship(ship)]
+
+    # Tight zones: fixed polygonal areas (e.g. commercial flight corridors)
+    let tight_zones: []NamedZone = [
+        NamedZone("tight zone (Alpha)", Polygon([
+            Point(0.0,  0.0),  Point(80.0,  0.0),
+            Point(80.0, 60.0), Point(0.0,  60.0),
+        ])),
+        NamedZone("tight zone (Beta)", Polygon([
+            Point(100.0, 120.0), Point(220.0, 120.0),
+            Point(220.0, 200.0), Point(100.0, 200.0),
+        ])),
+    ]
+
+    let all_zones: []NamedZone = ship_zones + tight_zones
+
+    # Five time-steps, positions evolve over time as objects move
+    let time_steps: []TimeStep = [
+        TimeStep(0.0, [
+            Aircraft("CA-1", Point(38.0,  25.0),  AircraftKind.FRIENDLY),
+            Aircraft("HC-1", Point(258.0, 183.0), AircraftKind.HOSTILE),
+        ]),
+        TimeStep(20.0, [
+            Aircraft("CA-1", Point(58.0,  30.0),  AircraftKind.FRIENDLY),
+            Aircraft("HC-1", Point(239.0, 164.0), AircraftKind.HOSTILE),
+        ]),
+        TimeStep(40.0, [
+            Aircraft("CA-1", Point(100.0, 43.0),  AircraftKind.FRIENDLY),
+            Aircraft("HC-1", Point(210.0, 136.0), AircraftKind.HOSTILE),
+        ]),
+        TimeStep(60.0, [
+            Aircraft("CA-1", Point(159.0, 36.0),  AircraftKind.FRIENDLY),
+            Aircraft("HC-1", Point(148.0, 73.0),  AircraftKind.HOSTILE),
+        ]),
+        TimeStep(80.0, [
+            Aircraft("CA-1", Point(198.0, 27.0),  AircraftKind.FRIENDLY),
+            Aircraft("HC-1", Point(110.0, 37.0),  AircraftKind.HOSTILE),
+        ]),
+    ]
+
+    return ships, all_zones, time_steps
+
+
+# ---------------------------------------------------------------------------
+# Entry Point
+# ---------------------------------------------------------------------------
+
+def main() -> None:
+    print "=" * 60
+    print "  Geometric Region Server  HPython Prototype"
+    print "  (Based on Hudak & Jones, Yale, 1994)"
+    print "=" * 60
+    print ""
+
+    let (ships, all_zones, time_steps) = build_scenario()
+
+    print "Ships:"
+    for s in ships:
+        print f"  {s.name} at ({s.position.x}, {s.position.y})"
+    print ""
+    print "Zones:"
+    for zone in all_zones:
+        print f"  {zone.name}"
+    print ""
+    print "-" * 60
+    print ""
+
+    run_geo_server(all_zones, time_steps)
+
+    print "-" * 60
+    print "Region composition demo:"
+    print ""
+
+    let aegis: Ship = ships[0]
+    let engage: Region = Annulus(aegis.position, aegis.inner_radius, aegis.outer_radius)
+    let weapons: Region = Sector(aegis.position, aegis.weapon_heading,
+                         aegis.weapon_half_angle, aegis.weapon_range)
+    let combined: Region = engage | weapons
+
+    let test_point: Point = Point(80.0, 80.0)
+    print f"  Point ({test_point.x}, {test_point.y}):"
+    print f"    in engageability zone : {test_point in engage}"
+    print f"    in weapon doctrine    : {test_point in weapons}"
+    print f"    in either zone (union): {test_point in combined}"
+
+if __name__ == "__main__":
+    main()
