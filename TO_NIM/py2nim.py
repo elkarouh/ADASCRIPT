@@ -879,9 +879,10 @@ def main(argv=None):
             # First token may be a subcommand (c, cpp, …); remaining are flags
             if directive_tokens:
                 first = directive_tokens[0]
-                if first in NIM_COMMANDS and subcommand is None:
-                    subcommand = first
-                    directive_tokens = directive_tokens[1:]
+                if first in NIM_COMMANDS:
+                    if subcommand is None:
+                        subcommand = first
+                    directive_tokens = directive_tokens[1:]  # always consume it
                 # Prepend so explicit CLI flags override the directive
                 nim_flags = directive_tokens + nim_flags
 
