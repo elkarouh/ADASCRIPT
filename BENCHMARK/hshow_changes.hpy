@@ -54,10 +54,14 @@ const RE_DELETED: object = re.compile(r"^\s+deleted\s+(\S+)",      re.IGNORECASE
 const RE_MERGED:  object = re.compile(r"<-\s+Merged from branch:\s+(\S+)")
 
 
+const RE_QUOTED: object = re.compile("\"([^\"]+)\"")
+
 def _extract_filepath_from_ediff(diff_cmd: str) -> str:
     """Pull the first filename argument (old versioned path) from an ediff-files call."""
-    let parts: []str = re.findall("\"([^\"]+)\"", diff_cmd)
-    parts[0] if parts else ""
+    var m: []str = [""]
+    if RE_QUOTED.search(diff_cmd, m) >= 0:
+        return m[0]
+    return ""
 
 
 def parse_changes_report(path: str) -> {str}[]FileChange:
@@ -206,6 +210,9 @@ if __name__ == "__main__":
         elif not arg.startswith("-"):
             baseline = arg
         i += 1
+
+    if not baseline:
+        _usage()
 
     let report:            str              = locate_report(baseline)
     let committer_changes: {str}[]FileChange = parse_changes_report(report)
