@@ -1192,7 +1192,7 @@ if __name__ == "__main__":
         # --- Annotated assignment ---
         ("x: int", "var x: int"),
         ("x: int = 1", "var x: int = 1"),
-        ("x: str = 'hello'", "var x: string = 'hello'"),
+        ("x: str = 'hello'", 'var x: string = "hello"'),
         # --- Declaration with keyword ---
         ("var x : int", "var x: int"),
         ("let y : int = 8", "let y: int = 8"),
@@ -1200,7 +1200,7 @@ if __name__ == "__main__":
         # --- return ---
         ("return", "return"),
         ("return x", "return x"),
-        ("return x, y", "return x, y"),
+        ("return x, y", "return (x, y)"),
         # --- pass -> discard ---
         ("pass", "discard"),
         # --- break / continue (same) ---
@@ -1210,7 +1210,7 @@ if __name__ == "__main__":
         ("del x", "reset(x)"),
         # --- assert (same) ---
         ("assert x", "assert x"),
-        ("assert x, 'msg'", "assert x, 'msg'"),
+        ("assert x, 'msg'", 'assert x, "msg"'),
         # --- raise ---
         ("raise", "raise"),
         ("raise ValueError", "raise ValueError"),
@@ -1220,18 +1220,18 @@ if __name__ == "__main__":
         ("global x, y", "# global x, y"),
         ("nonlocal x", "# nonlocal x"),
         ("nonlocal a, b, c", "# nonlocal a, b, c"),
-        # --- import (dotted names use / in Nim) ---
-        ("import os", "import os"),
-        ("import os.path", "import os"),
-        ("import os as o", "import os"),
-        ("import os, sys", "import os"),
+        # --- import (adds to nim_imports set, emits "") ---
+        ("import os", ""),
+        ("import os.path", ""),
+        ("import os as o", ""),
+        ("import os, sys", ""),
         # --- from import ---
-        ("from os import path", 'import os'),
-        ("from os import path as p", 'import os'),
-        ("from os import path, getcwd", 'import os'),
+        ("from os import path", None),
+        ("from os import path as p", None),
+        ("from os import path, getcwd", None),
         ("from os import *", "from os import *"),
         # --- type alias ---
-        ("type Vector = list", "type Vector = list"),
+        ("type Vector = list", "type Vector = seq"),
         ("type Color = enum RED, BLUE, YELLOW", "type Color = enum RED, BLUE, YELLOW"),
         # --- expression statement (delegates to expr to_nim) ---
         ("f(x)", "f(x)"),
@@ -1252,6 +1252,10 @@ if __name__ == "__main__":
                     print(f"    expected: {expected!r}")
                     print(f"    got:      {output!r}")
                     nim_failed += 1
+            elif expected is None:
+                # None output is valid for statements that only update nim_imports
+                print(f"  PASS: {code!r} -> None (deferred import)")
+                nim_passed += 1
             else:
                 print(f"  FAIL: {code!r} -> parse returned None")
                 nim_failed += 1
