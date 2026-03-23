@@ -467,6 +467,38 @@ def to_nim(self, prec=None):
         result = "fmt" + result[1:]
     elif result.startswith(("F\"", "F\'")):
         result = "fmt" + result[1:]
+    # Fix \xNN escapes in literal portions of fmt strings — Nim's fmt macro
+    # does not process \xNN hex escapes, so we replace them with \e (for \x1b)
+    # or embed the literal character for other values.
+    import re as _re_fstr
+    def _fix_hex_escapes(s):
+        # Only replace in literal portions (outside {} interpolations)
+        out = []
+        depth = 0
+        i = 0
+        while i < len(s):
+            if s[i] == '{' and i + 1 < len(s) and s[i+1] != '{':
+                depth += 1
+                out.append(s[i])
+            elif s[i] == '}' and depth > 0:
+                depth -= 1
+                out.append(s[i])
+            elif depth == 0 and s[i] == '\\' and i + 3 < len(s) and s[i+1] == 'x':
+                hex_str = s[i+2:i+4]
+                if all(c in '0123456789abcdefABCDEF' for c in hex_str):
+                    ch = chr(int(hex_str, 16))
+                    out.append(ch)
+                    i += 4
+                    continue
+                else:
+                    out.append(s[i])
+            else:
+                out.append(s[i])
+            i += 1
+        return ''.join(out)
+    # Apply only to the string content (between outer quotes)
+    if result.startswith('fmt"') and result.endswith('"'):
+        result = 'fmt"' + _fix_hex_escapes(result[4:-1]) + '"'
     return result
 
 
