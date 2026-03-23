@@ -919,16 +919,16 @@ def main(argv=None):
         elif arg in ("-t", "--transpile"):
             transpile_only = True
 
-        elif arg.startswith("-"):
-            # Unknown flag — forward to nim unchanged (handles -d:, -o:,
-            # --verbosity:, --gc:, --opt:, etc.)
+        elif hpy_file is None and arg.startswith("-"):
+            # Unknown flag before the .hpy file — forward to nim unchanged
+            # (handles -d:, -o:, --verbosity:, --gc:, --opt:, etc.)
             nim_flags.append(arg)
 
         elif hpy_file is None:
             hpy_file = arg
 
         else:
-            # Extra positional after the file: treat as program args
+            # Any arg (flag or positional) after the .hpy file goes to the program
             prog_args.append(arg)
 
         i += 1
