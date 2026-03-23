@@ -155,6 +155,9 @@ def print_changes(committer_changes: {str}[]FileChange) -> None:
 # Entry point
 # ---------------------------------------------------------------------------
 
+const _REPORT_DIR: str = "/cm/ot/TACT/baseline_reports"
+const _REPORT_PREFIX: str = "TACT.TACT_CONFIG."
+
 def locate_report(baseline: str = "") -> str:
     var bl: str = baseline
     if not bl:
@@ -163,7 +166,10 @@ def locate_report(baseline: str = "") -> str:
         print("ERROR: pass a changes_report file as argument, "
               "or set $CONTEXT_CM_BASELINE.")
         sys.exit(1)
-    f"/cm/ot/TACT/baseline_reports/TACT.TACT_CONFIG.{bl}.changes_report"
+    # Strip prefix if already included (e.g. CONTEXT_CM_BASELINE contains full stem)
+    if bl.startswith(_REPORT_PREFIX):
+        bl = bl[len(_REPORT_PREFIX):]
+    f"{_REPORT_DIR}/{_REPORT_PREFIX}{bl}.changes_report"
 
 
 def list_all_changes(report_path: str) -> None:
