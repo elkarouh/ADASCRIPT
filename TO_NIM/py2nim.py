@@ -707,12 +707,26 @@ def main(argv=None):
     Modes
     -----
     py2nim                          read stdin, print Nim to stdout
-    py2nim -t file.hpy              transpile → write file.nim, stop (no compile)
+    py2nim -t file.hpy              transpile → write .nim to cache, stop
     py2nim file.hpy                 shebang default: compile + run (= c -r)
-    py2nim c file.hpy               transpile → write .nim → nim c .nim
-    py2nim c -r file.hpy            transpile → write .nim → nim c -r .nim
+    py2nim c file.hpy               transpile → compile (artifacts in cache)
+    py2nim c -r file.hpy            transpile → compile → run
     py2nim c -r file.hpy -- a b     same, pass a b as program arguments
     py2nim --test                   run built-in self-tests
+
+    Cache layout
+    ------------
+    All generated artifacts go to ``~/.cache/hparsec/`` so source directories
+    stay clean.  Each script gets its own subdirectory keyed by a SHA-1 hash
+    of its absolute path (inspired by nimbang / rdmd)::
+
+        ~/.cache/hparsec/cache-<HASH>/script.nim     ← transpiled source
+        ~/.cache/hparsec/cache-<HASH>/.script        ← compiled binary
+        ~/.cache/hparsec/cache-<HASH>/nimcache/      ← nim object cache
+
+    Subsequent runs are fast: if neither the source nor the compiled binary
+    have changed, py2nim skips all transpilation and compilation and directly
+    execs the cached binary.
 
     Shebang usage
     -------------
@@ -833,7 +847,33 @@ def main(argv=None):
         code = sys.stdin.read()
 
     # ------------------------------------------------------------------ #
-    # 4.  Three-tier up-to-date check then build/run                     #
+    # 4.  Resolve cache paths (nimbang-style)                            #
+    #                                                                     #
+    #   All generated artifacts go to ~/.cache/hparsec/ so the source   #
+    #   directory stays clean.  A hash of the absolute .hpy path gives  #
+    #   each script its own isolated subdirectory, just like nimbang.   #
+    #                                                                     #
+    #   Layout inside the cache:                                          #
+    #     ~/.cache/hparsec/<HASH>/script.nim    ← transpiled source     #
+    #     ~/.cache/hparsec/<HASH>/.script       ← compiled binary       #
+    #     ~/.cache/hparsec/<HASH>/nimcache/     ← nim object cache      #
+    # ------------------------------------------------------------------ #
+    def _cache_paths(hpy_path):
+        """Return (cache_dir, nim_file, exe_file, nimcache_dir) for *hpy_path*."""
+        import hashlib
+        abs_path = os.path.realpath(hpy_path)
+        digest   = hashlib.sha1(abs_path.encode()).hexdigest()[:16].upper()
+        base_dir = os.path.join(os.path.expanduser("~"), ".cache", "hparsec")
+        cache_dir = os.path.join(base_dir, "cache-" + digest)
+        stem     = os.path.splitext(os.path.basename(hpy_path))[0]
+        ext      = ".exe" if sys.platform == "win32" else ""
+        nim_file  = os.path.join(cache_dir, stem + ".nim")
+        exe_file  = os.path.join(cache_dir, "." + stem + ext)
+        nimcache  = os.path.join(cache_dir, "nimcache")
+        return cache_dir, nim_file, exe_file, nimcache
+
+    # ------------------------------------------------------------------ #
+    # 5.  Three-tier up-to-date check then build/run                     #
     #                                                                     #
     #   tier 1 — transpile:  .nim older than .hpy  (or .nim missing)    #
     #   tier 2 — compile:    exe  older than .nim  (or exe  missing)     #
@@ -843,9 +883,8 @@ def main(argv=None):
     #   so the exe check is skipped for them.                             #
     # ------------------------------------------------------------------ #
     if hpy_file and subcommand:
-        base      = os.path.splitext(hpy_file)[0]
-        nim_file  = base + ".nim"
-        exe_file  = base  # nim places the exe next to the source by default
+        cache_dir, nim_file, exe_file, nimcache_dir = _cache_paths(hpy_file)
+        os.makedirs(cache_dir, exist_ok=True)
 
         hpy_mtime = os.path.getmtime(hpy_file)
         nim_mtime = os.path.getmtime(nim_file) if os.path.exists(nim_file) else 0
@@ -859,9 +898,9 @@ def main(argv=None):
                 f.write(nim_output)
             # Refresh mtime after write so tier-2 comparison is accurate
             nim_mtime = os.path.getmtime(nim_file)
-            print(f"Wrote {nim_file}", file=sys.stderr)
+            print(f"# transpiled → {nim_file}", file=sys.stderr)
         else:
-            print(f"Up to date: {nim_file}", file=sys.stderr)
+            print(f"# up to date: {nim_file}", file=sys.stderr)
 
         # --- tier 2: compile? ---
         # Only meaningful for binary-producing subcommands.
@@ -873,27 +912,36 @@ def main(argv=None):
             # compile-only mode: skip if exe is newer than .nim
             need_compile = exe_mtime < nim_mtime
             if not need_compile:
-                print(f"Up to date: {exe_file}", file=sys.stderr)
+                print(f"# up to date: {exe_file}", file=sys.stderr)
                 sys.exit(0)
 
         if produces_binary and run:
             # run mode: skip compilation entirely if exe is newer than .nim
             need_compile = exe_mtime < nim_mtime
             if not need_compile:
-                print(f"Up to date: {exe_file}", file=sys.stderr)
+                print(f"# up to date: {exe_file}", file=sys.stderr)
                 cmd = [exe_file] + prog_args
                 result = subprocess.run(cmd)
                 sys.exit(result.returncode)
 
         # --- tier 3: invoke nim ---
         cmd = ["nim", subcommand] + nim_flags
-        if run:
+        cmd += [f"--nimcache:{nimcache_dir}", f"--out:{exe_file}"]
+        if run and not prog_args:
+            # Let nim handle -r directly (no separate exec needed)
             cmd.append("-r")
         cmd.append(nim_file)
-        if prog_args:
-            cmd += prog_args
 
+        print(f"# nim {' '.join(cmd[1:])}", file=sys.stderr)
         result = subprocess.run(cmd)
+        if result.returncode != 0:
+            sys.exit(result.returncode)
+
+        # After successful compile, exec the binary with prog_args (or if -r
+        # was requested with prog_args, which nim can't forward via --out).
+        if produces_binary and (prog_args or run):
+            exec_cmd = [exe_file] + prog_args
+            result = subprocess.run(exec_cmd)
         sys.exit(result.returncode)
 
     else:
@@ -901,11 +949,12 @@ def main(argv=None):
         # transpile and either write .nim or print to stdout.
         nim_output = translate(code)
         if hpy_file and transpile_only:
-            # -t with a file: write the .nim alongside the source
-            nim_file = os.path.splitext(hpy_file)[0] + ".nim"
+            # -t with a file: write the .nim into the cache directory
+            cache_dir, nim_file, _exe, _nc = _cache_paths(hpy_file)
+            os.makedirs(cache_dir, exist_ok=True)
             with open(nim_file, "w") as f:
                 f.write(nim_output)
-            print(f"Wrote {nim_file}", file=sys.stderr)
+            print(f"# transpiled → {nim_file}", file=sys.stderr)
         else:
             print(nim_output, end="")
 
