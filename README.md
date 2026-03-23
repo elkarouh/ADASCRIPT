@@ -156,12 +156,29 @@ skip transpilation if `.nim` is newer than `.hpy`; skip compilation if the
 binary is newer than `.nim`; execute the existing binary directly if
 everything is current.
 
+**Clean source directories** — all generated artifacts (`.nim` file,
+compiled binary, nimcache) are stored in `~/.cache/hparsec/cache-<HASH>/`,
+keyed by the absolute path of the `.hpy` file. Source directories stay
+uncluttered and the cache survives reboots (inspired by
+[nimbang](https://github.com/jabbalaci/nimbang)).
+
 **Shebang support** — add `#!/usr/bin/env py2nim` as the first line of an
 `.hpy` file and make it executable. The file compiles and runs directly
 without arguments to the transpiler.
 
+**Per-file compiler options** — add a `#py2nim-args` directive as the
+second line to set per-file nim options (inspired by nimbang's
+`#nimbang-args`). The first token may be a nim subcommand; remaining tokens
+are forwarded to the nim compiler. Command-line flags always override the
+directive.
+
+```python
+#!/usr/bin/env py2nim
+#py2nim-args c -d:release
+```
+
 **Forwarding flags to Nim** — any flag not recognised by `py2nim` (e.g.
-`-d:release`, `--opt:speed`, `-o:binary`) is passed straight to `nim`.
+`-d:release`, `--opt:speed`) is passed straight to `nim`.
 
 ```bash
 python3 TO_NIM/py2nim.py c -d:release source.hpy   # optimised build
