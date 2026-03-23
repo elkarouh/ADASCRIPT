@@ -171,6 +171,9 @@ def Annulus(center: Point, inner_radius: float, outer_radius: float) -> Region:
 
 type AircraftKind is enum FRIENDLY, HOSTILE
 
+type NamedZone is tuple:
+    name:   str
+    region: Region
 
 type Ship is record:
     name:               str
@@ -181,17 +184,27 @@ type Ship is record:
     weapon_half_angle:  float
     weapon_range:       float
     slave_radius:       float   # slave doctrine radius (0 if not a carrier)
+def get_zones_for_ship(self: Ship) -> []NamedZone:
+    """Pre-build all zones associated with a ship."""
+    var zones: []NamedZone = [
+        NamedZone(f"{self.name} engageability zone",
+                  Annulus(self.position, self.inner_radius, self.outer_radius)),
+        NamedZone(f"{self.name} weapon doctrine",
+                  Sector(self.position, self.weapon_heading,
+                          self.weapon_half_angle, self.weapon_range)),
+    ]
+    if self.slave_radius > 0:
+        zones.append(NamedZone(
+            f"{self.name} slave doctrine",
+            Circle(self.position, self.slave_radius),
+        ))
+    return zones
 
 
 type Aircraft is tuple:
     name:     str
     position: Point
     kind:     AircraftKind
-
-
-type NamedZone is tuple:
-    name:   str
-    region: Region
 
 
 type TimeStep is tuple:
@@ -203,21 +216,6 @@ type TimeStep is tuple:
 # Zone Definitions
 # ---------------------------------------------------------------------------
 
-def zones_for_ship(self: Ship) -> []NamedZone:
-    """Pre-build all zones associated with a ship."""
-    var zones: []NamedZone = [
-        NamedZone(f"{self.name} engageability zone",
-                  Annulus(self.position, self.inner_radius, self.outer_radius)),
-        NamedZone(f"{self.name} weapon doctrine",
-                  Sector(self.position, self.weapon_heading,
-                         self.weapon_half_angle, self.weapon_range)),
-    ]
-    if self.slave_radius > 0:
-        zones.append(NamedZone(
-            f"{self.name} slave doctrine",
-            Circle(self.position, self.slave_radius),
-        ))
-    return zones
 
 
 # ---------------------------------------------------------------------------
@@ -275,7 +273,7 @@ def build_scenario():
 
     # Build all ship zones once — reused across every time step
     let ship_zones: []NamedZone = [zone for ship in ships
-                                       for zone in ship.zones_for_ship()]
+                                       for zone in ship.get_zones_for_ship()]
 
     # Tight zones: fixed polygonal areas (e.g. commercial flight corridors)
     let tight_zones: []NamedZone = [
