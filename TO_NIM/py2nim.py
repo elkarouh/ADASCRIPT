@@ -739,6 +739,19 @@ def main(argv=None):
     to ``c -r``, so the three-tier up-to-date check and direct binary execution
     all work transparently.
 
+    Per-file compiler options (#py2nim-args)
+    ----------------------------------------
+    Add a ``#py2nim-args`` directive as the **second line** of the file to set
+    per-file nim compiler options (inspired by nimbang)::
+
+        #!/usr/bin/env py2nim
+        #py2nim-args c -d:release
+
+    The directive is split on whitespace.  If the first token is a nim
+    subcommand (``c``, ``cpp``, …) it sets the default subcommand for that
+    file; remaining tokens are forwarded to the nim compiler.  Flags given
+    explicitly on the command line always override the directive.
+
     Up-to-date check (three tiers, like make)
     -----------------------------------------
     When a binary-producing subcommand (c, cpp, …) is given, py2nim runs
@@ -845,6 +858,32 @@ def main(argv=None):
             code = f.read()
     else:
         code = sys.stdin.read()
+
+    # ------------------------------------------------------------------ #
+    # 3b. Parse optional #py2nim-args directive (nimbang-style)          #
+    #                                                                     #
+    #   If the second non-empty line of the .hpy file starts with        #
+    #   "#py2nim-args", the rest of that line is split into tokens and   #
+    #   prepended to nim_flags (explicit CLI flags still take priority). #
+    #                                                                     #
+    #   Example:                                                          #
+    #     #!/usr/bin/env py2nim                                           #
+    #     #py2nim-args c -d:release                                       #
+    # ------------------------------------------------------------------ #
+    _PY2NIM_ARGS_PREFIX = "#py2nim-args "
+    if hpy_file:
+        lines = code.splitlines()
+        # Skip the shebang (line 0), look at line 1
+        if len(lines) > 1 and lines[1].startswith(_PY2NIM_ARGS_PREFIX):
+            directive_tokens = lines[1][len(_PY2NIM_ARGS_PREFIX):].split()
+            # First token may be a subcommand (c, cpp, …); remaining are flags
+            if directive_tokens:
+                first = directive_tokens[0]
+                if first in NIM_COMMANDS and subcommand is None:
+                    subcommand = first
+                    directive_tokens = directive_tokens[1:]
+                # Prepend so explicit CLI flags override the directive
+                nim_flags = directive_tokens + nim_flags
 
     # ------------------------------------------------------------------ #
     # 4.  Resolve cache paths (nimbang-style)                            #
