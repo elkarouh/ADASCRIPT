@@ -1318,6 +1318,20 @@ def _translate_stdlib_patterns(expr):
         ParserState.nim_imports.add("strutils")
         return f"{obj}.splitWhitespace()"
 
+    # --- 5c. x.isdigit() -> x.allCharsInSet({'0'..'9'}) ---
+    # Python str.isdigit() checks all chars are digits; Nim has no direct equivalent
+    if expr.endswith(".isdigit()"):
+        obj = expr[:-len(".isdigit()")]
+        ParserState.nim_imports.add("strutils")
+        return f"({obj}).len > 0 and ({obj}).allCharsInSet({{'0'..'9'}})"
+
+    # --- 5d. x.get(key, default) -> x.getOrDefault(key, default) ---
+    _get_m = _re.match(r'^(.+)\.get\((.+)\)$', expr)
+    if _get_m:
+        obj, args = _get_m.group(1), _get_m.group(2)
+        ParserState.nim_imports.add("tables")
+        return f"{obj}.getOrDefault({args})"
+
     # --- 6. sorted(X.items()) / sorted(X.pairs()) -> toSeq(X.pairs).sortedByIt(it[0]) ---
     _sorted_m = _re.match(r'^sorted\((.+)\.(items|pairs)\(\)\)$', expr)
     if _sorted_m:
