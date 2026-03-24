@@ -172,7 +172,7 @@ class Tokenizer:
     # Bash file-test operators: '-e FILE', '-f FILE', etc.
     # Must be preceded by whitespace or start-of-line, and followed by a space,
     # so we never confuse with subtraction or negative numbers.
-    _BASH_FILE_TEST_RE = _re.compile(r'(?<![.\w])-([efdLrwxscbpS])(?=\s)')
+    _BASH_FILE_TEST_RE = _re.compile(r'(?:^|(?<=\s)|(?<=\())-([efdLrwxscbpS])(?=\s)')
     # Bash file-comparison operators: FILE1 -nt FILE2 / FILE1 -ot FILE2
     # Only match '-nt' and '-ot' surrounded by whitespace.
     _BASH_FILE_NT_RE = _re.compile(r'(?<=\s)-nt(?=\s)')

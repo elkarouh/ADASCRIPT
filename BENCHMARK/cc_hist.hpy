@@ -1,0 +1,116 @@
+#! /usr/bin/env py2nim
+nimport sequtils, algorithm
+
+const DIFFTOOL: str = "kompare"
+
+def get_cfmu_parent(child: str) -> str:
+    if "@@" in child:
+        let parts: []str = child.split("@@/main/")
+        let remote_file: str = parts[0]
+        let version_number: int = parts[1].parseInt()
+        if version_number == 0:
+            return ""
+        return f"{remote_file}@@/main/{version_number - 1}"
+    else:
+        let real_lines = shellLines: realpath {child}
+        let remote_file: str = real_lines[0].strip()
+        let remote_dir: str = f"{remote_file}@@/main"
+        let ls_lines = shellLines: ls {remote_dir}
+        let versions: []str = [v for v in ls_lines if v.strip().isdigit()]
+        if len(versions) == 0:
+            return ""
+        let highest: int = max([v.parseInt() for v in versions])
+        return f"{remote_dir}/{highest}"
+
+if __name__ == "__main__":
+    var step: int = -1
+    var lowest_version_number: int = 1
+
+    if $# < 1:
+        print(f"USAGE: {$0} [-f <start_version_number>] file_pattern search_term")
+        quit(1)
+
+    var filepattern: str = $1
+    var search_term: str = "."
+
+    if $1 == "-f":
+        step = 1
+        lowest_version_number = $2.parseInt()
+        filepattern = $3
+        if $# >= 4:
+            search_term = $4
+    else:
+        if $# >= 2:
+            search_term = $2
+
+    let context_lines = shellLines: command -v tactdev
+    if len(context_lines) == 0:
+        print("YOU NEED TO BE IN A CONTEXT to run this script. I'll do it for you ...")
+        shell: source $(which Ccontext) -b TACT.TACT_CONFIG.LATEST -e G!31.OP.L7
+
+    let fzf_lines = shellLines: lolcate --db TACT_CLOSURE {filepattern}
+    let remote_file: str = fzf_lines[0].strip()
+    let remote_dir: str = f"{remote_file}@@/main"
+    print(f"REMOTE FILE={remote_file}")
+    print(f"REMOTE_DIR={remote_dir}")
+    print(f"COMMAND:  Cfind_string_in_version {remote_dir} {search_term}")
+
+    var version2user: {str}str = {:}
+
+    let cfmu_lines = shellLines: Cfind_string_in_version {remote_dir} {search_term}
+    for raw_line in cfmu_lines:
+        let line: str = raw_line.strip()
+        if "@@/main/" not in line:
+            continue
+        print(line)
+        let fields: []str = line.split("/")
+        let n: int = len(fields)
+        if n >= 5:
+            let user: str = fields[n - 4]
+            let month: str = fields[n - 3]
+            let day: str = fields[n - 2]
+            let num: str = fields[n - 1].split("@@")[0].strip()
+            version2user[num] = f"{user}-{month}-{day}"
+
+    let parent_path: str = get_cfmu_parent(remote_file)
+    let parent_parts: []str = parent_path.split("/")
+    var highest_version_number: int = parent_parts[len(parent_parts) - 1].parseInt()
+    highest_version_number += 1
+    shell: ln -fs {remote_file} /tmp/{highest_version_number}-LATEST
+
+    var version_range: []int = toSeq(lowest_version_number .. highest_version_number)
+    if step == -1:
+        version_range = reversed(version_range)
+
+    var prev_version_number: int = 0
+    for version_number in version_range:
+        if prev_version_number == 0:
+            prev_version_number = version_number
+            continue
+
+        let prev_user: str = version2user.get(str(prev_version_number), "LATEST")
+        let child_file: str = f"{remote_dir}/{prev_version_number}"
+        var local_child_file: str = remote_file
+        if prev_version_number != highest_version_number:
+            local_child_file = f"/tmp/{prev_version_number}-{prev_user}"
+            shell: ln -fs {child_file} {local_child_file}
+
+        let cur_user: str = version2user.get(str(version_number), "LATEST")
+        let parent_file: str = f"{remote_dir}/{version_number}"
+        var local_parent_file: str = remote_file
+        if version_number != highest_version_number:
+            local_parent_file = f"/tmp/{version_number}-{cur_user}"
+            shell: ln -fs {parent_file} {local_parent_file}
+
+        let (_, cmp_code) = shell: cmp --silent {local_parent_file} {local_child_file}
+        if cmp_code != 0:
+            print(f"DIFF using {DIFFTOOL} {local_parent_file} {local_child_file}")
+            if step == 1:
+                shell: {DIFFTOOL} {local_child_file} {local_parent_file}
+            else:
+                shell: {DIFFTOOL} {local_parent_file} {local_child_file}
+            let (_, zenity_code) = shell: zenity --question --text "Do you want to continue?"
+            if zenity_code != 0:
+                break
+
+        prev_version_number = version_number

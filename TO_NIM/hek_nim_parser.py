@@ -1775,12 +1775,12 @@ def to_nim(self, indent=0):
     if "timeout" in opts:
         timeout_comment = f"  # timeout: {opts['timeout']}ms (execCmdEx has no timeout)"
 
+    q = '"""'
     if needs_fstring:
         ParserState.nim_imports.add("strformat")
-        q = '"""'
         cmd_str = f"fmt{q}{cmd}{q}"
     else:
-        cmd_str = f'"{cmd}"'
+        cmd_str = f"{q}{cmd}{q}"
     # Replace __bash_env_NAME__ placeholders with getEnv("NAME") concatenation
     import re as _re_env
     def _subst_env(s):
@@ -1798,28 +1798,35 @@ def to_nim(self, indent=0):
     # execCmdEx slot types: 0→string (stdout), 1→int (exitCode), 2→string (stderr compat)
     _SLOT_TYPES = ["string", "int", "string"]
 
+    # Use a unique temp name to avoid redefinition errors when multiple shell
+    # statements appear in the same scope.
+    _exec_count = getattr(ParserState, "_exec_result_count", 0)
+    ParserState._exec_result_count = _exec_count + 1
+    exec_tmp = f"execResult{_exec_count}"
+
     if target_tuple:
         # let (out, code) = shell: cmd        — 2-element
         # let (out, code, _) = shell: cmd     — 3-element (3rd slot is "" for compat)
-        slots = ["execResult[0]", "execResult[1]", '""']
-        lhs = ", ".join(target_tuple)
-        rhs = ", ".join(slots[:len(target_tuple)])
-        lines.append(f"{ind}let execResult = execCmdEx({cmd_str}){timeout_comment}")
-        lines.append(f"{ind}{nim_kw} ({lhs}) = ({rhs})")
-        # Register each bound name in the symbol table so that truthiness
-        # checks (if view:) and type-aware method dispatch work correctly.
-        for i, var_name in enumerate(target_tuple):
-            if var_name != "_":
+        slots = [f"{exec_tmp}[0]", f"{exec_tmp}[1]", '""']
+        # Emit the temp only if at least one non-_ slot needs it
+        named = [(i, v) for i, v in enumerate(target_tuple) if v != "_"]
+        if named:
+            lines.append(f"{ind}let {exec_tmp} = execCmdEx({cmd_str}){timeout_comment}")
+            for i, var_name in named:
                 slot_type = _SLOT_TYPES[i] if i < len(_SLOT_TYPES) else "string"
+                lines.append(f"{ind}{nim_kw} {var_name} = {slots[i]}")
                 ParserState.symbol_table.add(var_name, slot_type, nim_kw)
+        else:
+            lines.append(f"{ind}discard execCmdEx({cmd_str}){timeout_comment}")
     elif target_name:
-        lines.append(f"{ind}let execResult = execCmdEx({cmd_str}){timeout_comment}")
         if kw == "shellLines":
-            lines.append(f"{ind}{nim_kw} {target_name} = execResult[0].splitLines()")
+            # Inline directly — no temp needed
+            lines.append(f"{ind}{nim_kw} {target_name} = execCmdEx({cmd_str}){timeout_comment}[0].splitLines()")
             ParserState.symbol_table.add(target_name, "seq[string]", nim_kw)
         else:
+            lines.append(f"{ind}let {exec_tmp} = execCmdEx({cmd_str}){timeout_comment}")
             lines.append(
-                f"{ind}{nim_kw} {target_name} = (output: execResult[0], code: execResult[1])"
+                f"{ind}{nim_kw} {target_name} = (output: {exec_tmp}[0], code: {exec_tmp}[1])"
             )
             # Register as shell_result so _nim_truthiness can resolve
             # field access like result.output -> result.output.len > 0
