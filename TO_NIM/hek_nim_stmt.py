@@ -380,6 +380,10 @@ def to_nim(self):
                     else:
                         ParserState.nim_imports.add("sets")
                         # bare fallback — no type params available
+                # seq[T] = lo .. hi  ->  seq[T] = toSeq(lo .. hi)
+                if annotation.startswith("seq[") and ".." in value and not value.startswith("toSeq("):
+                    ParserState.nim_imports.add("sequtils")
+                    value = f"toSeq({value})"
                 # PyObject coercion: if annotation is a primitive Nim type
                 # and we're in a nimpy context, append .to(T) so the compiler
                 # can convert PyObject -> Nim type without an explicit cast.
@@ -459,6 +463,10 @@ def to_nim(self):
                     else:
                         ParserState.nim_imports.add("sets")
                         # bare fallback — no type params available
+                # seq[T] = lo .. hi  ->  seq[T] = toSeq(lo .. hi)
+                if annotation.startswith("seq[") and ".." in value and not value.startswith("toSeq("):
+                    ParserState.nim_imports.add("sequtils")
+                    value = f"toSeq({value})"
                 # PyObject coercion: if annotation is a primitive Nim type
                 # and we're in a nimpy context, append .to(T) so the compiler
                 # can convert PyObject -> Nim type without an explicit cast.
