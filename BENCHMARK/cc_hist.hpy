@@ -77,7 +77,7 @@ if __name__ == "__main__":
     highest_version_number += 1
     shell: ln -fs {remote_file} /tmp/{highest_version_number}-LATEST
 
-    var version_range: []int = toSeq(lowest_version_number .. highest_version_number)
+    var version_range: []int = lowest_version_number .. highest_version_number
     if step == -1:
         version_range = reversed(version_range)
 
