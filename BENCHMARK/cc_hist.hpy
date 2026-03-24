@@ -34,7 +34,7 @@ if __name__ == "__main__":
 
     if $1 == "-f":
         step = 1
-        lowest_version_number = $2.parseInt()
+        lowest_version_number = int($2)
         filepattern = $3
         if $# >= 4:
             search_term = $4
