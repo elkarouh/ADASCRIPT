@@ -880,13 +880,29 @@ def to_nim(self, prec=None):
         if raw_name in _NIM_CALL_IMPORTS:
             ParserState.nim_imports.add(_NIM_CALL_IMPORTS[raw_name])
 
-        # Enum constructor: State(s) -> parseEnum[State](s)
+        # Enum constructor: State(s) -> parseEnum[State](s) for string arg,
+        #                              State(i) -> State(i) for int/ordinal arg
         if raw_name not in _PY_IDENT_TO_NIM:
             _sym = ParserState.symbol_table.lookup(raw_name)
             if _sym and _sym.get("type") == "enum":
                 call_node = self.nodes[1].nodes[0]
                 args = _extract_call_args(call_node)
                 rest = "".join(tr.to_nim() for tr in self.nodes[1].nodes[1:])
+                # Detect int/ordinal argument: numeric literal, len(...), or int-typed var
+                _is_int_arg = False
+                if len(args) == 1:
+                    _a = args[0].strip()
+                    import re as _re_enum
+                    if _re_enum.match(r'^\d+$', _a):
+                        _is_int_arg = True
+                    elif _a.startswith("len(") or _a.startswith("ord("):
+                        _is_int_arg = True
+                    else:
+                        _asym = ParserState.symbol_table.lookup(_a)
+                        if _asym and _asym.get("type") in ("int", "int64", "uint", "uint64"):
+                            _is_int_arg = True
+                if _is_int_arg:
+                    return f"{raw_name}({', '.join(args)}){rest}"
                 ParserState.nim_imports.add("strutils")
                 return f"parseEnum[{raw_name}]({', '.join(args)}){rest}"
 
@@ -1349,8 +1365,10 @@ def _translate_stdlib_patterns(expr):
     _get_m = _re.match(r'^(.+)\.get\((.+)\)$', expr)
     if _get_m:
         obj, args = _get_m.group(1), _get_m.group(2)
-        ParserState.nim_imports.add("tables")
-        return f"{obj}.getOrDefault({args})"
+        # Exclude false matches like "obj.get()(extra_call)" where args starts with ")"
+        if not args.startswith(")"):
+            ParserState.nim_imports.add("tables")
+            return f"{obj}.getOrDefault({args})"
 
     # --- 6. sorted(X.items()) / sorted(X.pairs()) -> toSeq(X.pairs).sortedByIt(it[0]) ---
     _sorted_m = _re.match(r'^sorted\((.+)\.(items|pairs)\(\)\)$', expr)

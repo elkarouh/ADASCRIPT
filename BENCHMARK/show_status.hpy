@@ -1,6 +1,7 @@
 #!/usr/bin/env py2nim
 # test_timing - Monitor test execution with timing information
-import time, os
+import os
+nimport times
 
 completedTests: {}str  ## All completed tests (persistent)
 intervalTests: {}str   ## Tests since last 5-min summary
@@ -46,7 +47,7 @@ def parseStatusSummary(lines: []str) -> []str:
 
 def formatTime() -> str:
   "Return current time as HH:MM:SS string."
-  str(time.strftime("%H:%M:%S"))
+  now().format("HH:mm:ss")
 
 # Main program
 print "Current directory: ", os.getcwd()
@@ -63,9 +64,9 @@ for test in parseCompletedTests(initialLines):
 print "Initial tests: ", len(completedTests)
 
 while True:
-  time.sleep(60) # one minute polling interval
+  sleep(60000) # one minute polling interval
   let lines : []str = getTestStatusLines()
-  let currentMinute : int = parseInt(str(time.strftime("%M")))
+  let currentMinute : int = parseInt(now().format("mm"))
 
   # Track newly completed tests
   for test in parseCompletedTests(lines):
