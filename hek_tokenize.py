@@ -199,10 +199,16 @@ class Tokenizer:
             -nt      -> __bash_nt__
             -ot      -> __bash_ot__
         """
-        s = Tokenizer._BASH_FILE_TEST_RE.sub(r'__bash_test_\1__', s)
-        s = Tokenizer._BASH_FILE_NT_RE.sub('__bash_nt__', s)
-        s = Tokenizer._BASH_FILE_OT_RE.sub('__bash_ot__', s)
-        return s
+        import re as _re2
+        # Split into alternating non-string / string-literal segments and only
+        # apply substitutions outside string literals.
+        _STR_RE = _re2.compile(r'("""[\s\S]*?"""|\'\'\'[\s\S]*?\'\'\'|"(?:[^"\\]|\\.)*"|\'(?:[^\'\\]|\\.)*\')')
+        parts = _STR_RE.split(s)
+        for i in range(0, len(parts), 2):  # even indices are outside strings
+            parts[i] = Tokenizer._BASH_FILE_TEST_RE.sub(r'__bash_test_\1__', parts[i])
+            parts[i] = Tokenizer._BASH_FILE_NT_RE.sub('__bash_nt__', parts[i])
+            parts[i] = Tokenizer._BASH_FILE_OT_RE.sub('__bash_ot__', parts[i])
+        return ''.join(parts)
 
     @staticmethod
     def _preprocess_bashisms(s):
