@@ -47,7 +47,7 @@ _DUNDER_TO_NIM = {
     "__lshift__":    "`shl`",
     "__rshift__":    "`shr`",
     "__and__":       "`and`",
-    "__or__":        "`or`",
+    "__or__":        "`|`",
     "__xor__":       "`xor`",
     # Unary
     "__neg__":       "`-`",
@@ -1775,14 +1775,21 @@ def to_nim(self, indent=0):
     if "timeout" in opts:
         timeout_comment = f"  # timeout: {opts['timeout']}ms (execCmdEx has no timeout)"
 
-    q = '"""'
+    import re as _re_env
+    has_env_vars = bool(_re_env.search(r'__bash_env_\w+__', cmd))
+
     if needs_fstring:
+        q = '"""'
         ParserState.nim_imports.add("strformat")
         cmd_str = f"fmt{q}{cmd}{q}"
+    elif has_env_vars:
+        # Use regular quotes so & getEnv(...) concatenation works
+        q = '"'
+        cmd_str = f"{q}{cmd}{q}"
     else:
+        q = '"""'
         cmd_str = f"{q}{cmd}{q}"
     # Replace __bash_env_NAME__ placeholders with getEnv("NAME") concatenation
-    import re as _re_env
     def _subst_env(s):
         ParserState.nim_imports.add("os")
         return '" & getEnv("' + s.group(1) + '") & "'

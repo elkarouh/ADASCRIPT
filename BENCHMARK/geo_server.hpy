@@ -240,7 +240,7 @@ def run_geo_server(zones: []NamedZone, time_steps: []TimeStep) -> None:
 # Sample Scenario  (derived from Figure 2 and the sample output in the paper)
 # ---------------------------------------------------------------------------
 
-def build_scenario():
+def build_scenario() -> ([]Ship, []NamedZone, []TimeStep):
     """
     Construct a scenario that mirrors Figure 2 of the paper:
       - One Aegis ship with an engageability zone (annulus) and weapon doctrine (sector)
@@ -320,7 +320,7 @@ def build_scenario():
 # Entry Point
 # ---------------------------------------------------------------------------
 
-def main() -> None:
+def main():
     print "=" * 60
     print "  Geometric Region Server  HPython Prototype"
     print "  (Based on Hudak & Jones, Yale, 1994)"

@@ -561,7 +561,6 @@ def example8():
             prob: float = hmm.trans_p[last_state][next_state] * hmm.emit_p[next_state][next_obs]
             print("  next_obs=", next_obs, ", next_state=", next_state, ", prob=", round(prob, 6))
 
-example8()
 
 if __name__=="__main__":
     example1()
