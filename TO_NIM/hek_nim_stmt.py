@@ -234,6 +234,10 @@ def to_nim(self):
     # Skip var for dotted assignments (field mutation), indexed assignments,
     # and variables already declared in the current scope
     lhs = parts[0]
+    # Implicit tuple destructuring: a, b = expr -> let (a, b) = expr
+    if "," in lhs and not lhs.startswith("(") and len(parts) == 2:
+        targets = ", ".join(t.strip() for t in lhs.split(","))
+        return f"let ({targets}) = {parts[1]}"
     if "." in lhs or "[" in lhs:
         prefix = ""
     elif ParserState.symbol_table.lookup(lhs):
