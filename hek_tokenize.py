@@ -200,9 +200,9 @@ class Tokenizer:
             -ot      -> __bash_ot__
         """
         import re as _re2
-        # Split into alternating non-string / string-literal segments and only
-        # apply substitutions outside string literals.
-        _STR_RE = _re2.compile(r'("""[\s\S]*?"""|\'\'\'[\s\S]*?\'\'\'|"(?:[^"\\]|\\.)*"|\'(?:[^\'\\]|\\.)*\')')
+        # Split into alternating non-string / string-literal+comment segments and only
+        # apply substitutions outside strings and comments.
+        _STR_RE = _re2.compile(r'("""[\s\S]*?"""|\'\'\'[\s\S]*?\'\'\'|"(?:[^"\\]|\\.)*"|\'(?:[^\'\\]|\\.)*\'|#[^\n]*)')
         parts = _STR_RE.split(s)
         for i in range(0, len(parts), 2):  # even indices are outside strings
             parts[i] = Tokenizer._BASH_FILE_TEST_RE.sub(r'__bash_test_\1__', parts[i])
@@ -259,7 +259,8 @@ class Tokenizer:
         Type__tick__First so that Python's tokenizer can handle them.
         Only applies outside string literals."""
         import re as _re2
-        _STR_RE = _re2.compile(r'("""[\s\S]*?"""|\'\'\'[\s\S]*?\'\'\'|"(?:[^"\\]|\\.)*"|\'(?:[^\'\\]|\\.)*\')')
+        # Split on string literals AND line comments — only substitute in code segments
+        _STR_RE = _re2.compile(r'("""[\s\S]*?"""|\'\'\'[\s\S]*?\'\'\'|"(?:[^"\\]|\\.)*"|\'(?:[^\'\\]|\\.)*\'|#[^\n]*)')
         parts = _STR_RE.split(s)
         for i in range(0, len(parts), 2):
             parts[i] = Tokenizer._TICK_RE.sub(r'\1__tick__\2', parts[i])

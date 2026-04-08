@@ -705,6 +705,12 @@ def to_nim(self, prec=None):
     # Infer element type from first element
     first_elem = inner_node.nodes[0] if hasattr(inner_node, "nodes") and inner_node.nodes else inner_node
     elem_type = _infer_literal_nim_type(first_elem)
+    # Also check symbol table for variable types (e.g. enum variables)
+    if not elem_type:
+        _first_nim = first_elem.to_nim() if hasattr(first_elem, "to_nim") else ""
+        _sym = ParserState.symbol_table.lookup(_first_nim)
+        if _sym:
+            elem_type = _sym.get("type") or ""
     if elem_type and _is_nim_ordinal(elem_type):
         return "{" + inner_node.to_nim() + "}"
     return "[" + inner_node.to_nim() + "].toHashSet"
