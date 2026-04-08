@@ -1,0 +1,38 @@
+#!/usr/bin/env py2nim
+
+nimport random
+
+randomize()
+
+type Door is enum Door1, Door2, Door3
+
+def randomDoor() -> Door: 
+  rand(Door)
+
+let trials : int = 100_000
+var stayWins : int =0
+var switchWins : int = 0
+
+for _ in 1..trials:
+  let carLocation : Door = randomDoor()
+  let candidateFirstChoice : Door = randomDoor()
+  var hostChoice : Door
+  for door in Door:
+    if door in {candidateFirstChoice, carLocation}:
+      continue
+    hostChoice = door
+  if candidateFirstChoice == carLocation: # we don't switch
+    stayWins += 1
+  else: # we switch
+    for door in Door:
+      if door in {candidateFirstChoice, hostChoice}:
+        continue
+      if door == carLocation:
+        switchWins += 1
+      break
+
+print "Trials: ", trials
+print ""
+print f"Stay:   {stayWins} wins (, {stayWins * 100 / trials} %)"
+print f"Switch: {switchWins} wins (, {switchWins * 100 / trials} %)"
+
