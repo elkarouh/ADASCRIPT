@@ -47,8 +47,8 @@ if __name__ == "__main__":
         print("YOU NEED TO BE IN A CONTEXT to run this script. I'll do it for you ...")
         shell: source $(which Ccontext) -b TACT.TACT_CONFIG.LATEST -e G!31.OP.L7
 
-    let fzf_lines = shellLines: lolcate --db TACT_CLOSURE {filepattern}
-    let remote_file: str = fzf_lines[0].strip()
+    let (fzf_out, _) = shell: lolcate --db TACT_CLOSURE {filepattern} | fzf
+    let remote_file: str = fzf_out.strip()
     let remote_dir: str = f"{remote_file}@@/main"
     print(f"REMOTE FILE={remote_file}")
     print(f"REMOTE_DIR={remote_dir}")
@@ -62,16 +62,25 @@ if __name__ == "__main__":
         if "@@/main/" not in line:
             continue
         print(line)
-        let fields: []str = line.split("/")
-        let n: int = len(fields)
-        if n >= 5:
-            let user: str = fields[n - 4]
-            let month: str = fields[n - 3]
-            let day: str = fields[n - 2]
-            let num: str = fields[n - 1].split("@@")[0].strip()
-            version2user[num] = f"{user}-{month}-{day}"
+        # Line format: "label user  id  month day year /path/to/file@@/main/num"
+        # Split on "/" : fields[0] has the pre-path tokens, fields[-1] has the version num
+        let slash_fields: []str = line.split("/")
+        let n: int = len(slash_fields)
+        if n >= 2:
+            let pre_path: []str = slash_fields[0].split()
+            let num: str = slash_fields[n - 1].strip()
+            # pre_path: [label, user, id, month, day, year]
+            if len(pre_path) >= 5 and num.isdigit():
+                let user: str = pre_path[1]
+                let month: str = pre_path[3]
+                let day: str = pre_path[4]
+                let year: str = pre_path[len(pre_path) - 1]
+                version2user[num] = f"{user}-{month}-{day}-{year}"
 
     let parent_path: str = get_cfmu_parent(remote_file)
+    if len(parent_path) == 0:
+        print(f"ERROR: could not determine parent version for {remote_file}")
+        quit(1)
     let parent_parts: []str = parent_path.split("/")
     var highest_version_number: int = parent_parts[len(parent_parts) - 1].parseInt()
     highest_version_number += 1
