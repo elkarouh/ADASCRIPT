@@ -10,12 +10,12 @@ if $# > 0:
 while True:
     let cwd: str = os.getcwd()
     let listing = shellLines: find {cwd} -maxdepth 1 -mindepth 1 -printf '%P\n' | sort
-    var entries: str = "\033[1;35m/\033[0m\t/\n\033[1;35m..\033[0m\t..\n"
+    var entries: str = "\x1b[1;35m/\x1b[0m\t/\n\x1b[1;35m..\x1b[0m\t..\n"
     for item in listing:
         if len(item) == 0:
             continue
         if -d (f"{cwd}/{item}"):
-            entries += f"\033[1;34m{item}/\033[0m\t{item}\n"
+            entries += f"\x1b[1;34m{item}/\x1b[0m\t{item}\n"
         else:
             entries += f"{item}\t{item}\n"
 
