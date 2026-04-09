@@ -20,5 +20,5 @@ def count_primes(n: int) -> int:
     return count
 
 start = time.perf_counter()
-print(f"Number of primes: {count_primes(N)}")
-print(f"time elapsed: {time.perf_counter() - start}/s")
+print f"Number of primes: {count_primes(N)}"
+print f"time elapsed: {time.perf_counter() - start}/s"
