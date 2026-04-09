@@ -1098,6 +1098,15 @@ def main(argv=None):
         if result.returncode != 0:
             sys.exit(result.returncode)
 
+        # Create/update symlink next to the .ady source pointing at the binary.
+        if produces_binary:
+            stem = os.path.splitext(os.path.basename(ady_file))[0]
+            ext  = ".exe" if sys.platform == "win32" else ""
+            link = os.path.join(os.path.dirname(os.path.abspath(ady_file)), stem + ext)
+            if os.path.islink(link) or os.path.exists(link):
+                os.remove(link)
+            os.symlink(exe_file, link)
+
         # After successful compile, exec the binary with prog_args (or if -r
         # was requested with prog_args, which nim can't forward via --out).
         if produces_binary and (prog_args or run):

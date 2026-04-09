@@ -168,7 +168,7 @@ uncluttered and the cache survives reboots (inspired by
 `.ady` file and make it executable. The file compiles and runs directly
 without arguments to the transpiler.
 
-**Per-file compiler options** — add a `#py2nim-args` directive as the
+**Per-file compiler options** — add an `#ady2nim-args` directive as the
 second line to set per-file nim options (inspired by nimbang's
 `#nimbang-args`). The first token may be a nim subcommand; remaining tokens
 are forwarded to the nim compiler. Command-line flags always override the
@@ -176,8 +176,13 @@ directive.
 
 ```python
 #!/usr/bin/env py2nim
-#py2nim-args c -d:release
+#ady2nim-args c -d:release
 ```
+
+**Symlink next to source** — after a successful compile, `py2nim` creates a
+symlink in the same directory as the `.ady` file pointing to the cached
+binary. Running `./script` from the source directory works without any path
+gymnastics.
 
 **Forwarding flags to Nim** — any flag not recognised by `py2nim` (e.g.
 `-d:release`, `--opt:speed`) is passed straight to `nim`.
@@ -350,9 +355,14 @@ var result: []int          # Nim: seq[int]; Python: list[int]
 Tuple unpacking:
 
 ```python
-let (x, y) = point
-var (a, b) = (1, 2)
+let (x, y) = point          # explicit let destructuring
+var (a, b) = (1, 2)         # explicit var destructuring
+a, b = some_func()          # implicit: let (a, b) = some_func()
 ```
+
+When the left-hand side is a bare comma-separated list and the variables are
+not yet declared, the assignment is treated as an implicit `let` tuple
+destructuring.
 
 ---
 
@@ -425,6 +435,7 @@ type Stage_T is enum A, B, C
 
 Stage_T'First    # first member  → A
 Stage_T'Last     # last member   → C
+Stage_T'Range    # full set      → {Stage_T.low..Stage_T.high} (Nim ordinal set)
 current'Next     # successor     → type(current)(current.value + 1)
 current'Prev     # predecessor   → type(current)(current.value - 1)
 ```
@@ -434,6 +445,13 @@ Particularly useful for iterating over an enum's full range:
 ```python
 for s in Stage_T'First .. Stage_T'Last:
     ...
+```
+
+`T'Range` produces a Nim ordinal set containing all members of the enum —
+useful for set arithmetic:
+
+```python
+let available: {}Door = Door'Range - {picked, car}
 ```
 
 ---
