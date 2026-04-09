@@ -2,21 +2,27 @@
 import os
 
 let editor: str = os.getenv("EDITOR", "nano")
+let tmpfile: str = "/tmp/fsel_entries"
 
 if $# > 0:
     os.chdir($1)
 
 while True:
-    let listing = shellLines: find . -maxdepth 1 -mindepth 1 -printf '%P\n' | sort
+    let cwd: str = os.getcwd()
+    let listing = shellLines: find {cwd} -maxdepth 1 -mindepth 1 -printf '%P\n' | sort
     var entries: str = "\033[1;35m/\033[0m\t/\n\033[1;35m..\033[0m\t..\n"
     for item in listing:
-        if -d item:
+        if len(item) == 0:
+            continue
+        if -d (f"{cwd}/{item}"):
             entries += f"\033[1;34m{item}/\033[0m\t{item}\n"
         else:
             entries += f"{item}\t{item}\n"
 
-    let prompt: str = os.getcwd() + " > "
-    let (selection, sel_code) = shell: printf {entries} | fzf --ansi --delimiter=$'\t' --with-nth=1 --height 40% --reverse --prompt={prompt} --expect=enter,right,left
+    writeFile(tmpfile, entries)
+    let prompt: str = cwd + " > "
+    let (selection, sel_code) = shell: fzf --ansi --delimiter=$'\t' --with-nth=1 --height 40% --reverse --prompt={prompt} --expect=enter,right,left < {tmpfile}
+
     if sel_code != 0 or len(selection) == 0:
         quit(0)
 
@@ -27,7 +33,7 @@ while True:
         key = "enter"
 
     let fields: []str = row.split("\t", 1)
-    let sel: str = fields[len(fields) - 1]
+    let sel: str = fields[len(fields) - 1].strip()
 
     if key == "left":
         os.chdir("..")
@@ -37,14 +43,14 @@ while True:
         os.chdir("/")
     elif sel == "..":
         os.chdir("..")
-    elif -d sel:
+    elif -d (f"{cwd}/{sel}"):
         os.chdir(sel)
-    elif key == "right" and -x sel:
+    elif key == "right" and -x (f"{cwd}/{sel}"):
         if "/" in sel:
             shell: {sel}
         else:
-            shell: ./{sel}
+            shell: {cwd}/{sel}
         quit(0)
     else:
-        shell: {editor} {sel}
+        shell: {editor} {cwd}/{sel}
         quit(0)
