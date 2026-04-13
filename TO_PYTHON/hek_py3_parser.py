@@ -429,6 +429,18 @@ def to_py(self, prec=None):
         info = ParserState.tick_types.get(type_name)
         if info and attr in info:
             return str(info[attr])
+        if attr == "Choice":
+            return f"random.choice(list({type_name}))"
+        elif attr == "Range":
+            return f"list({type_name})"
+        elif attr == "Next":
+            return type_name + ".__class__((" + type_name + ".value + 1))"
+        elif attr == "Prev":
+            return type_name + ".__class__((" + type_name + ".value - 1))"
+        elif attr == "len" or attr == "Length":
+            return f"len({type_name})"
+        elif attr == "Size":
+            return f"len({type_name})"
     # Resolve bashisms: __bash_*__ placeholders -> Python equivalents
     if name.startswith("__bash_") and name.endswith("__"):
         return _bash_to_py(name)

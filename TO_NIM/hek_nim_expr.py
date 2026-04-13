@@ -77,8 +77,9 @@ def _nim_expr_type(expr):
         if s.startswith("(") and s.endswith(")"):
             s = s[1:-1].strip()
 
-        # method call: base.method(args)
-        call_m = _re.match(r"^(.+?)\.([A-Za-z_]\w*)\(.*\)$", s)
+        # method call: base.method(args) — skip if expression contains top-level binary ops
+        _has_outer_op = bool(_re.search(r'\s+(==|!=|and|or|not)\s+', s))
+        call_m = _re.match(r"^(\S+?)\.([A-Za-z_]\w*)\(.*\)$", s) if not _has_outer_op else None
         if call_m:
             base_type = _resolve(call_m.group(1))
             method = call_m.group(2)
@@ -137,6 +138,18 @@ def _nim_truthiness(expr):
     (names, subscripts, field access, method calls, chains).
     Returns the expression unchanged for unknown or non-string types.
     """
+    import re as _re_truth
+    # find(re(...)) returns int (position or -1); convert to bool with >= 0
+    if _re_truth.search(r'\.find\(re\(', expr):
+        return f"{expr} >= 0"
+    # getOrDefault on a Table[K, string] returns string — check truthiness
+    # Only convert when we can verify the table maps to string values
+    _god_m = _re_truth.search(r'^(\w+)\.getOrDefault\(', expr)
+    if _god_m:
+        _tbl_sym = ParserState.symbol_table.lookup(_god_m.group(1))
+        _tbl_type = (_tbl_sym.get("type") or "") if _tbl_sym else ""
+        if _tbl_type.endswith(", string]"):  # Table[K, string]
+            return f"{expr}.len > 0"
     _STRING_LIKE = ("string", "seq[", "str", "PriorityQueue", "FifoQueue",
                     "LifoQueue", "HashSet", "Table", "Deque")
     t = _nim_expr_type(expr)
@@ -356,6 +369,10 @@ def binop_to_nim(self, prec=None, my_prec=None):
             # | stays as | when operands are non-integer (e.g. string | Style pipe)
             if nim_op == "or" and py_op == "|" and _is_pipe_not_bitor([result, right]):
                 nim_op = "|"
+            # boolean and/or: coerce seq/string operands to bool (Nim has no implicit truthiness)
+            if nim_op in ("and", "or"):
+                result = _nim_truthiness(result)
+                right  = _nim_truthiness(right)
             result = f"{result} {nim_op} {right}"
 
     if prec is not None and my_prec is not None and my_prec < prec:
@@ -416,32 +433,6 @@ _PY_IDENT_TO_NIM = {
     "max": "max",
 }
 
-@method(IDENTIFIER)
-def to_nim(self, prec=None):
-    """IDENTIFIER: name token -> Nim: mapped via _PY_IDENT_TO_NIM; tick attributes (Type__tick__X) resolved"""
-    name = self.node
-    # Resolve tick attributes: Type__tick__Attr -> Nim equivalent
-    if "__tick__" in name:
-        type_name, _, attr = name.partition("__tick__")
-        info = ParserState.tick_types.get(type_name)
-        if info:
-            if attr == "First":
-                return str(info["First"])
-            elif attr == "Last":
-                return str(info["Last"])
-        # Ada tick attributes for enum operations
-        if attr == "Next":
-            return type_name + ".succ"
-        elif attr == "Prev":
-            return type_name + ".pred"
-        # General value tick attributes
-        elif attr == "len" or attr == "Length":
-            return type_name + ".len"
-        elif attr == "Size":
-            return type_name + ".sizeof"
-        # Unknown tick attribute — emit as method call
-        return type_name + "." + attr
-    return _PY_IDENT_TO_NIM.get(name, name)
 
 
 @method(K_NONE)
@@ -561,7 +552,14 @@ def to_nim(self, prec=None):
         return ''.join(out)
     # Apply only to the string content (between outer quotes)
     if result.startswith('fmt"') and result.endswith('"'):
-        result = 'fmt"' + _fix_hex_escapes(result[4:-1]) + '"'
+        inner = result[4:-1]
+        inner = _fix_hex_escapes(inner)
+        # Nim's fmt"" macro doesn't handle \" — switch to triple-quoted fmt"""..."""
+        if '\\"' in inner:
+            inner = inner.replace('\\"', '"')
+            result = 'fmt"""' + inner + '"""'
+        else:
+            result = 'fmt"' + inner + '"'
     return result
 
 
@@ -809,8 +807,8 @@ def _translate_method(obj_name, method_name):
             _tbl_m = _re_tm.match(r'^Table\[.+,\s*(.+)\]$', base_type)
             if _seq_m:
                 elem_type = _seq_m.group(1)
-                # Treat as seq for method dispatch
-                sym = {"type": f"seq[{elem_type}]"}
+                # Subscript of seq[T] returns element type T
+                sym = {"type": elem_type}
             elif _tbl_m:
                 val_type = _tbl_m.group(1)
                 sym = {"type": val_type}
@@ -822,14 +820,18 @@ def _translate_method(obj_name, method_name):
         type_str = sym.get("type", "") or ""
         for prefix, mappings in _PY_METHOD_TO_NIM.items():
             if type_str.startswith(prefix):
-                return mappings.get(method_name, method_name)
+                if method_name in mappings:
+                    return mappings[method_name]
+                break  # type matched but method not in mapping — fall through to universal
         # Resolve type aliases: if type_str is a user type, look up its definition
         alias = ParserState.symbol_table.lookup(type_str)
         if alias:
             resolved = alias.get("type", "") or ""
             for prefix, mappings in _PY_METHOD_TO_NIM.items():
                 if resolved.startswith(prefix):
-                    return mappings.get(method_name, method_name)
+                    if method_name in mappings:
+                        return mappings[method_name]
+                    break
         # For PyObject / pyImport module vars, don't apply universal mappings
         if type_str.startswith("_py_module:") or type_str.startswith("_nim_module:"):
             return method_name
@@ -970,6 +972,17 @@ def to_nim(self, prec=None):
                 args = _extract_call_args(call_node)
                 all_args = ", ".join([raw_name] + args)
                 return f"callObject({all_args})"
+        # (expr)'Choice -> rand(lo..hi), etc.
+        if raw_name.startswith("__paren_tick_") and raw_name.endswith("__"):
+            tick_attr = raw_name[len("__paren_tick_"):-2]
+            call_node = self.nodes[1].nodes[0]
+            inner = _extract_call_arg(call_node)
+            if tick_attr == "Choice":
+                ParserState.nim_imports.add("random")
+                if "randomize()" not in ParserState.nim_init_stmts:
+                    ParserState.nim_init_stmts.append("randomize()")
+                return f"rand({inner})"
+            raise SyntaxError(f"'{tick_attr} is not supported on a parenthesised expression")
         # str(x) -> $x, list(x) -> @x
         if raw_name == "str":
             call_node = self.nodes[1].nodes[0]
@@ -1006,6 +1019,12 @@ def to_nim(self, prec=None):
             call_node = self.nodes[1].nodes[0]
             arg = _extract_call_arg(call_node)
             return f"{arg}.pairs"
+        if raw_name == "input":
+            call_node = self.nodes[1].nodes[0]
+            prompt = _extract_call_arg(call_node) if call_node and hasattr(call_node, 'nodes') and call_node.nodes else ""
+            if prompt:
+                return f"(stdout.write({prompt}); stdin.readLine())"
+            return "stdin.readLine()"
         if raw_name == "ord":
             call_node = self.nodes[1].nodes[0]
             arg = _extract_call_arg(call_node)
@@ -1017,11 +1036,22 @@ def to_nim(self, prec=None):
             call_node = self.nodes[1].nodes[0]
             arg = _extract_call_arg(call_node)
             _sym = ParserState.symbol_table.lookup(arg)
+            # Check subscript type: base[idx] where base is array[N, string] or seq[string]
+            import re as _re_sub
+            _base_sym = None
+            _sub_m = _re_sub.match(r'^(\w+)\[', arg)
+            if _sub_m:
+                _base_sym = ParserState.symbol_table.lookup(_sub_m.group(1))
             _is_str = (
                 "__bash_arg" in arg          # $1, $2, etc. (pre-substitution)
                 or "paramStr" in arg         # $1, $2, etc. (post-substitution)
                 or arg.startswith('"')       # string literal
+                or arg.startswith("getEnv(") # os.environ.get() -> string
                 or (_sym and _sym.get("type") in ("string", "seq[string]"))
+                or (_base_sym and (
+                    _base_sym.get("type", "").endswith(", string]")  # array[N, string]
+                    or _base_sym.get("type", "") in ("seq[string]", "string")  # seq[string] elem
+                ))
             )
             if _is_str:
                 ParserState.nim_imports.add("strutils")
@@ -1071,6 +1101,7 @@ def to_nim(self, prec=None):
             if type(tr).__name__ == "attr_trailer":
                 method_name = tr.nodes[0].to_nim()
                 # Handle Ada tick attributes: field'Next -> field.succ, field'Prev -> field.pred
+                # Type'Choice -> rand(Type)
                 if "__tick__" in method_name:
                     base_attr, _, tick_attr = method_name.partition("__tick__")
                     if tick_attr == "Next":
@@ -1078,6 +1109,12 @@ def to_nim(self, prec=None):
                         continue
                     elif tick_attr == "Prev":
                         result += "." + base_attr + ".pred"
+                        continue
+                    elif tick_attr == "Choice":
+                        ParserState.nim_imports.add("random")
+                        if "randomize()" not in ParserState.nim_init_stmts:
+                            ParserState.nim_init_stmts.append("randomize()")
+                        result = f"rand({result})"
                         continue
                 method_name = _translate_method(base_name, method_name)
                 next_tr = trailer_list[i + 1] if i + 1 < len(trailer_list) else None
@@ -1097,14 +1134,30 @@ def to_nim(self, prec=None):
                             skip_next = True
                             continue
                 # rstrip/lstrip -> strip(chars={...}, leading/trailing=false)
-                if method_name in ("rstrip", "lstrip") and next_tr is not None and type(next_tr).__name__ == "call_trailer":
+                if method_name in ("strip", "rstrip", "lstrip") and next_tr is not None and type(next_tr).__name__ == "call_trailer":
                     raw_arg = _extract_call_arg(next_tr)
-                    side = "leading=false" if method_name == "rstrip" else "trailing=false"
+                    if method_name == "rstrip":
+                        side = ", leading=false"
+                    elif method_name == "lstrip":
+                        side = ", trailing=false"
+                    else:
+                        side = ""
                     if raw_arg:
                         char_arg = raw_arg.strip('"').strip("'")
-                        result += f".strip(chars={{'{char_arg}'}}, {side})"
+                        def _nim_char(c):
+                            if c == "'":
+                                return "'\\''"
+                            elif c == "\\":
+                                return "'\\\\'"
+                            return f"'{c}'"
+                        if len(char_arg) == 1:
+                            result += f".strip(chars={{{_nim_char(char_arg)}}}{side})"
+                        else:
+                            # Multi-char strip: build set literal
+                            char_set = ", ".join(_nim_char(c) for c in char_arg)
+                            result += f".strip(chars={{{char_set}}}{side})"
                     else:
-                        result += f".strip({side})"
+                        result += f".strip({side.lstrip(', ')})" if side else ".strip()"
                     ParserState.nim_imports.add("strutils")
                     skip_next = True  # consume the call_trailer
                     continue
@@ -1170,6 +1223,9 @@ _STDLIB_PATTERNS = [
     ("os.path.basename",  "lastPathPart",    "os"),
     ("os.path.dirname",   "parentDir",       "os"),
     ("os.path.abspath",   "absolutePath",    "os"),
+    ("os.path.realpath",  "expandFilename",  "os"),
+    ("os.path.getsize",   "getFileSize",     "os"),
+    ("os.path.islink",    "symlinkExists",   "os"),
     ("os.path.splitext",  "splitFile",       "os"),
     ("os.getcwd",         "getCurrentDir",   "os"),
     ("os.chdir",          "setCurrentDir",   "os"),
@@ -1182,6 +1238,8 @@ _STDLIB_PATTERNS = [
     ("os.rename",         "moveFile",        "os"),
     ("os.getenv",         "getEnv",          "os"),
     ("os.environ.get",    "getEnv",          "os"),
+    ("os.getpid",         "getCurrentProcessId", "os"),
+    ("os.symlink",        "createSymlink",   "os"),
     ("time.perf_counter", "cpuTime",         "times"),
     ("time.monotonic",    "cpuTime",         "times"),
     ("time.time",         "epochTime",       "times"),
@@ -1832,8 +1890,12 @@ def to_nim(self, prec=None):
     # Check if operand is a string/seq variable — Nim has no truthiness for these
     truthy = _nim_truthiness(operand)
     if truthy != operand:
-        # _nim_truthiness returned "x.len > 0", negate to "x.len == 0"
-        return truthy.replace(".len > 0", ".len == 0")
+        # _nim_truthiness returned "x.len > 0" or "x.find(re(...)) >= 0" — negate each
+        if truthy.endswith(".len > 0"):
+            return truthy.replace(".len > 0", ".len == 0")
+        if truthy.endswith(">= 0"):
+            return truthy[:-4] + "< 0"
+        return f"not ({truthy})"
     result = f"not {operand}"
     if prec is not None and PREC_NOT < prec:
         return f"({result})"
@@ -1847,9 +1909,18 @@ def to_nim(self, prec=None):
 
 
 # --- conjunction / disjunction ---
+def _coerce_bool_operand(node):
+    """Emit a conjunction/disjunction operand, applying _nim_truthiness if it's a simple name."""
+    raw = node.to_nim()
+    # Only coerce simple identifiers (no spaces, no operators) to avoid mangling complex exprs
+    if " " not in raw and raw.isidentifier():
+        return _nim_truthiness(raw)
+    return raw
+
+
 @method(conjunction)
 def to_nim(self, prec=None):
-    """conjunction: inversion ('and' inversion)* -> Nim: 'and' unchanged"""
+    """conjunction: inversion ('and' inversion)* -> Nim: 'and'; simple seq/string operands coerced to bool"""
     return binop_to_nim(self, prec, PREC_AND)
 
 

@@ -167,12 +167,17 @@ def _prescan_classes(stmts):
     return ref_classes
 
 
-def translate(code):
-    """Parse Python source and translate to Nim via to_nim()."""
+def translate(code, export_symbols=False):
+    """Parse Python source and translate to Nim via to_nim().
+
+    When export_symbols=True, all top-level declarations get the Nim export
+    marker '*', making them visible to importers (library mode).
+    """
     if not code.strip():
         return code
 
     from hek_parsec import ParserState
+    ParserState.export_symbols = export_symbols
     stmts, leading, trailing = parse_module(code)
 
     # Pre-scan: identify classes that need ref object (involved in inheritance)
@@ -247,10 +252,19 @@ def translate(code):
                 insert_pos = i
                 break
         output.insert(insert_pos, import_line)
+        extra_offset = 1
         if ParserState.nim_pragmas:
             pragma_lines = [f"{{.{p}.}}" for p in sorted(ParserState.nim_pragmas)]
             for j, pl in enumerate(pragma_lines):
-                output.insert(insert_pos + 1 + j, pl)
+                output.insert(insert_pos + extra_offset + j, pl)
+            extra_offset += len(pragma_lines)
+        if ParserState.nim_init_stmts:
+            # Deduplicate while preserving order, skip stmts already present in output
+            seen = set(output)
+            for j, stmt in enumerate(dict.fromkeys(ParserState.nim_init_stmts)):
+                if stmt not in seen:
+                    output.insert(insert_pos + extra_offset + j, stmt)
+                    seen.add(stmt)
         # When nimpy is used, emit a len() helper for PyObject — but only
         # if the output actually calls len() somewhere (as a function, not method)
         # and has pyImport'd modules that could return PyObject values.
@@ -1007,10 +1021,12 @@ def main(argv=None):
         base_dir = os.path.join(os.path.expanduser("~"), ".cache", "hparsec")
         cache_dir = os.path.join(base_dir, "cache-" + digest)
         stem     = os.path.splitext(os.path.basename(ady_path))[0]
+        # Nim module names must be valid identifiers — replace dots with underscores
+        stem     = stem.replace(".", "_")
         ext      = ".exe" if sys.platform == "win32" else ""
         nim_file  = os.path.join(cache_dir, stem + ".nim")
         exe_file  = os.path.join(cache_dir, "." + stem + ext)
-        nimcache  = os.path.join(cache_dir, "nimcache")
+        nimcache  = os.path.join(base_dir, "nimcache-" + digest)
         return cache_dir, nim_file, exe_file, nimcache
 
     # ------------------------------------------------------------------ #
@@ -1066,6 +1082,63 @@ def main(argv=None):
         else:
             print(f"# up to date: {nim_file}", file=sys.stderr)
 
+        # Auto-transpile nimport'd .ady dependencies into the same cache dir.
+        # For each `nimport <name>` in the source, if <name>.ady exists next to
+        # the source file, transpile it into cache_dir so Nim can find it.
+        import re as _re_nimport
+        _ady_dir = os.path.dirname(os.path.abspath(ady_file))
+        for _dep_name in _re_nimport.findall(r'^\s*nimport\s+(\w[\w.]*)', code, _re_nimport.MULTILINE):
+            _dep_ady = os.path.join(_ady_dir, _dep_name + ".ady")
+            if not os.path.exists(_dep_ady):
+                continue
+            _dep_nim = os.path.join(cache_dir, _dep_name + ".nim")
+            _dep_mtime = os.path.getmtime(_dep_ady)
+            _dep_nim_mtime = os.path.getmtime(_dep_nim) if os.path.exists(_dep_nim) else 0
+            # Also check root-level .py files (e.g. hek_tokenize.py lives outside TO_NIM/)
+            _root_dir = os.path.dirname(_dir)
+            _root_transpiler_mtime = max(
+                (os.path.getmtime(os.path.join(_root_dir, f))
+                 for f in os.listdir(_root_dir)
+                 if f.endswith(".py") and os.path.isfile(os.path.join(_root_dir, f))),
+                default=0
+            )
+            _eff_transpiler_mtime = max(transpiler_mtime, _root_transpiler_mtime)
+            if _dep_nim_mtime < max(_dep_mtime, _eff_transpiler_mtime):
+                with open(_dep_ady) as _f:
+                    _dep_code = _f.read()
+                try:
+                    from hek_parsec import ParserState as _ParserState
+                    _ParserState.reset()
+                    _dep_nim_output = translate(_dep_code, export_symbols=True)
+                except SyntaxError as _e:
+                    print(f"# ERROR transpiling dependency {_dep_ady}: {_e}", file=sys.stderr)
+                    sys.exit(1)
+                # Export all top-level declarations so importers can access them.
+                # Nim requires '*' suffix on identifiers to make them public.
+                import re as _re_export
+                def _export_toplevel(src):
+                    lines = src.split('\n')
+                    out = []
+                    for line in lines:
+                        # Match top-level let/var/const/proc/func declarations
+                        m = _re_export.match(
+                            r'^((?:let|var|const|proc|func|iterator|template|macro)\s+)(\w+)(\b[^*])',
+                            line)
+                        if m:
+                            line = m.group(1) + m.group(2) + '*' + m.group(3) + line[m.end():]
+                        out.append(line)
+                    return '\n'.join(out)
+                _dep_nim_output = _export_toplevel(_dep_nim_output)
+                with open(_dep_nim, "w") as _f:
+                    _f.write(_dep_nim_output)
+                # Wipe nimcache so stale .c/.o for the dependency are regenerated
+                import shutil as _shutil2
+                if os.path.isdir(nimcache_dir):
+                    _shutil2.rmtree(nimcache_dir)
+                print(f"# transpiled dependency → {_dep_nim}", file=sys.stderr)
+            else:
+                print(f"# up to date dependency: {_dep_nim}", file=sys.stderr)
+
         # --- tier 2: compile? ---
         # Only meaningful for binary-producing subcommands.
         # If -r is not set and the exe is already up to date, skip nim entirely.
@@ -1100,7 +1173,8 @@ def main(argv=None):
 
         # --- tier 3: invoke nim ---
         cmd = ["nim", subcommand] + nim_flags
-        cmd += [f"--nimcache:{nimcache_dir}", f"--out:{exe_file}"]
+        cmd += [f"--nimcache:{nimcache_dir}", f"--out:{exe_file}",
+                f"--path:{cache_dir}"]
         if run and not prog_args:
             # Let nim handle -r directly (no separate exec needed)
             cmd.append("-r")

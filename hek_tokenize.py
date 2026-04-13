@@ -139,6 +139,9 @@ class Tokenizer:
     # Must be applied before Python tokenization since ' is a string delimiter.
     import re as _re
     _TICK_RE = _re.compile(r"(\b[A-Za-z_]\w*)'([A-Za-z_]\w*)")
+    # Paren-tick pattern: (expr)'Attr  ->  __paren_tick_Attr__(expr)
+    # Handles tick attributes on parenthesised expressions e.g. (1..n)'Choice
+    _PAREN_TICK_RE = _re.compile(r"\(([^()]*)\)'([A-Za-z_]\w*)")
 
     # Range-operator patterns: the issue is that Python's tokenizer greedily
     # merges a digit adjacent to '.' into a float literal, so:
@@ -158,7 +161,7 @@ class Tokenizer:
     #   $#        -> __bash_argc__   (must come before $<digit> to beat '#' comment)
     #   $@        -> __bash_args__
     #   $0        -> __bash_arg0__
-    #   $1..$9    -> __bash_arg1__ .. __bash_arg9__
+    #   $1..$N    -> __bash_arg1__ .. __bash_argN__  (multi-digit supported)
     #   $NAME     -> __bash_env_NAME__   (uppercase env var name)
     #
     # '$#' is the most dangerous: Python lexes '#' as a comment start, eating
@@ -166,7 +169,7 @@ class Tokenizer:
     # before the tokenizer gets a chance to see it.
     _BASH_ARGC_RE = _re.compile(r'\$#')
     _BASH_ARGS_RE = _re.compile(r'\$@')
-    _BASH_ARG_RE  = _re.compile(r'\$([0-9])')
+    _BASH_ARG_RE  = _re.compile(r'\$([0-9]+)')
     _BASH_ENV_RE  = _re.compile(r'\$([A-Z_][A-Z0-9_]*)')
 
     # Bash file-test operators: '-e FILE', '-f FILE', etc.
@@ -273,6 +276,8 @@ class Tokenizer:
             return m.group(1) + '__tick__' + m.group(2)
         parts = _DQ_CMT_RE.split(s)
         for i in range(0, len(parts), 2):
+            parts[i] = Tokenizer._PAREN_TICK_RE.sub(
+                lambda m: f"__paren_tick_{m.group(2)}__({m.group(1)})", parts[i])
             parts[i] = Tokenizer._TICK_RE.sub(_tick_sub, parts[i])
         return ''.join(parts)
 
