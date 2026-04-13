@@ -129,6 +129,8 @@ class ParserState:
     symbol_table = SymbolTable()
     nim_imports: set = set()
     nim_pragmas: set = set()       # top-level {.experimental: ...} pragmas
+    nim_init_stmts: list = []      # top-level init statements emitted after imports (e.g. randomize())
+    export_symbols: bool = False   # when True, emit * on all top-level declarations (library mode)
     tick_types: dict = {}  # {TypeName: {First: val, Last: val, members: [...]}}
     class_field_types: dict = {}   # {ClassName: {field_name: nim_type}}
     proc_param_types: dict = {}    # {proc_name: [nim_type, ...]} positional param types
@@ -142,6 +144,8 @@ class ParserState:
         cls.symbol_table = SymbolTable()
         cls.nim_imports = set()
         cls.nim_pragmas = set()
+        cls.nim_init_stmts = []
+        cls.export_symbols = False
         cls.tick_types = {}
         cls.class_field_types = {}
         cls.proc_param_types = {}

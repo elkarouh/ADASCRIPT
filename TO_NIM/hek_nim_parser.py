@@ -159,7 +159,7 @@ def _bash_to_nim(placeholder):
 
     Dispatch table:
       $0        -> getAppFilename()                          (requires os)
-      $1 .. $9  -> (if paramCount() >= N: paramStr(N) else: "")
+      $1 .. $N  -> (if paramCount() >= N: paramStr(N) else: "")  (multi-digit)
                    Guards against IndexDefect when the script is called
                    with fewer arguments than expected, matching bash
                    semantics where unset positional params expand to "".
@@ -752,6 +752,14 @@ def to_nim(self, prec=None):
         info = ParserState.tick_types.get(type_name)
         if info and attr in info:
             return str(info[attr])
+        # Check for set variable — only 'Choice and 'Size are valid on sets
+        _sym = ParserState.symbol_table.lookup(type_name)
+        _sym_type = _sym.get("type", "") if _sym else ""
+        _is_set = _sym_type.startswith("HashSet") or _sym_type.startswith("set[")
+        if _is_set and attr not in ("Choice", "Size", "len", "Length"):
+            raise SyntaxError(
+                f"'{attr} is not valid on a set; only 'Choice and 'Size are supported for sets"
+            )
         # Ada tick attributes for enum operations
         if attr == "Range":
             # T'Range as set literal -> {T.low..T.high}
@@ -760,6 +768,18 @@ def to_nim(self, prec=None):
             return type_name + ".succ"
         elif attr == "Prev":
             return type_name + ".pred"
+        elif attr == "Choice":
+            ParserState.nim_imports.add("random")
+            if "randomize()" not in ParserState.nim_init_stmts:
+                ParserState.nim_init_stmts.append("randomize()")
+            if _is_set:
+                if _sym_type.startswith("HashSet"):
+                    ParserState.nim_imports.add("sequtils")
+                    return f"{type_name}.toSeq[rand({type_name}.len - 1)]"
+                else:
+                    # set[T] (ordinal set) — use sample()
+                    return f"sample({type_name})"
+            return f"rand({type_name})"
         # General value tick attributes
         elif attr == "len" or attr == "Length":
             return type_name + ".len"
@@ -1182,7 +1202,7 @@ def to_nim(self, indent=0):
         for p in params.split(", "):
             pname = p.split(":")[0].strip()
             if pname and pname != "self" and _re.search(
-                rf"(?<![=(,.])\b{_re.escape(pname)}\b\s*(\.add\(|\[.*\]\s*=|[+\-*/]=|=(?!=))", body
+                rf"(?<![=(,.])\b{_re.escape(pname)}\b\s*(\.add\(|\[.*\]\s*=(?!=)|[+\-*/]=|=(?!=))", body
             ):
                 if " = " in p:
                     _shadow_vars.append(pname)
@@ -1357,7 +1377,8 @@ def to_nim(self, indent=0):
     if nim_name is None:
         return ""  # skip (e.g. __init__ handled via class_def)
     keyword = nim_keyword or "proc"
-    return f"{decos}{_ind(indent)}{keyword} {nim_name}({params}){ret_ann} ={hc}\n{body}"
+    _exp = "*" if getattr(ParserState, 'export_symbols', False) and indent == 0 else ""
+    return f"{decos}{_ind(indent)}{keyword} {nim_name}{_exp}({params}){ret_ann} ={hc}\n{body}"
 
 
 @method(async_func_def)
@@ -1520,8 +1541,9 @@ def to_nim(self, indent=0):
     fields_text = "\n".join(field_lines)
     needs_ref = is_virtual or (name and name in fields_text)
     ref_keyword = "ref " if needs_ref else ""
+    _exp = "*" if getattr(ParserState, 'export_symbols', False) and indent == 0 else ""
     ParserState.symbol_table.pop_scope()
-    return f"{decos}{_ind(indent)}type {name}{type_params} = {ref_keyword}object{parent}\n{body}"
+    return f"{decos}{_ind(indent)}type {name}{_exp}{type_params} = {ref_keyword}object{parent}\n{body}"
 
 
 # --- Type block forms (tuple, record) ---
@@ -1626,9 +1648,10 @@ def to_nim(self, indent=0):
                 has_st = any(type(c).__name__ == "Several_Times" for c in child.nodes)
                 if has_ident and has_st:
                     variant_case_node = child
+    _exp = "*" if getattr(ParserState, 'export_symbols', False) and indent == 0 else ""
     if variant_case_node and discrim_name:
         # Discriminated record -> Nim object with case
-        result = f"{_ind(indent)}type {name}{params} = object\n"
+        result = f"{_ind(indent)}type {name}{_exp}{params} = object\n"
         result += f"{_ind(indent + 1)}case {discrim_name}: {discrim_type}\n"
         whens_node = None
         for child in variant_case_node.nodes:
@@ -1683,7 +1706,7 @@ def to_nim(self, indent=0):
         if not hasattr(ParserState, 'object_field_order'):
             ParserState.object_field_order = {}
         ParserState.object_field_order[name] = field_names
-    return f"{_ind(indent)}type {name}{params} = {nim_kind}\n" + "\n".join(fields)
+    return f"{_ind(indent)}type {name}{_exp}{params} = {nim_kind}\n" + "\n".join(fields)
 
 
 
@@ -2126,7 +2149,7 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
         for p in params:
             pname = p.split(":")[0].strip()
             if pname and pname != "self" and _re.search(
-                rf"(?<![=(,.])\b{_re.escape(pname)}\b\s*(\.add\(|\[.*\]\s*=|[+\-*/]=|=(?!=))", body_text
+                rf"(?<![=(,.])\b{_re.escape(pname)}\b\s*(\.add\(|\[.*\]\s*=(?!=)|[+\-*/]=|=(?!=))", body_text
             ):
                 if " = " in p:
                     _shadow_vars.append(pname)
