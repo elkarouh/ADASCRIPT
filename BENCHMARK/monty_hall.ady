@@ -3,27 +3,28 @@
 type Door_T is enum Door1, Door2, Door3
 type Choice_T is enum Switch, DontSwitch
 
-let trials : int = 100_000
-var stayWins : int =0
-var switchWins : int = 0
+def monty_hall_simulation(trials=100_000):
+  var stayWins : int =0
+  var switchWins : int = 0
 
-for _ in 1..trials:
-  let carLocation : Door_T = Door_T'Choice
-  let candidateFirstChoice : Door_T = Door_T'Choice
-  let availableDoors : {}Door_T = Door_T'Range - {candidateFirstChoice, carLocation}
-  let hostChoice : Door_T = availableDoors'Choice
-  let switchOptions : {}Door_T = Door_T'Range - {candidateFirstChoice, hostChoice}
-  #
-  for choice in Choice_T:
-    case choice:
-      when DontSwitch:
-        if candidateFirstChoice == carLocation:
-          stayWins += 1
-      when Switch:
-        let candidateSecondChoice : Door_T = switchOptions'Choice
-        if candidateSecondChoice == carLocation:
-            switchWins += 1
+  for _ in 1..trials:
+    let carLocation : Door_T = Door_T'Choice
+    let candidateFirstChoice : Door_T = Door_T'Choice
+    let availableDoors : {}Door_T = Door_T'Range - {candidateFirstChoice, carLocation}
+    let hostChoice : Door_T = availableDoors'Choice
+    let switchOptions : {}Door_T = Door_T'Range - {candidateFirstChoice, hostChoice}
+    for choice in Choice_T:
+      case choice:
+        when DontSwitch:
+          if candidateFirstChoice == carLocation:
+            stayWins += 1
+        when Switch:
+          let candidateSecondChoice : Door_T = switchOptions'Choice
+          if candidateSecondChoice == carLocation:
+              switchWins += 1
 
-print "Trials: ", trials
-print f"Stay:   {stayWins} wins ({stayWins * 100 / trials} %)"
-print f"Switch: {switchWins} wins ({switchWins * 100 / trials} %)"
+  print "Trials: ", trials
+  print f"Stay:   {stayWins} wins ({stayWins * 100 / trials} %)"
+  print f"Switch: {switchWins} wins ({switchWins * 100 / trials} %)"
+
+monty_hall_simulation()

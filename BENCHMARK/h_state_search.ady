@@ -1,0 +1,199 @@
+#!/usr/bin/env py2nim
+#ady2nim-args c --cc:clang --clang.exe:zigcc --clang.linkerexe:zigcc
+"""
+State Space Search
+------------------
+
+Generic state-space search framework.
+No dependency on h_shortest_path.
+"""
+
+from stdlib import FifoQueue, LifoQueue, PriorityQueue
+
+nimport stdlib
+
+
+# ============================================================
+# TYPE DEFINITIONS
+# ============================================================
+
+# A single search step recorded in a solution path.
+type Step_T[S, A] is tuple:
+    from_state: S
+    action: A
+    next_state: S
+
+# Fringe element for BFS / DFS (FifoQueue / LifoQueue).
+type QFringe_T[S, A] is tuple:
+    depth: int
+    path: []Step_T[S, A]
+    state: S
+
+# Fringe element for priority-based search (A*, best-first).
+type PQFringe_T[S, A] is tuple:
+    priority: float
+    counter: int
+    depth: int
+    path: []Step_T[S, A]
+    state: S
+
+
+# ============================================================
+# STATE SEARCH BASE CLASS
+# ============================================================
+
+@virtual
+class StateSearcher[S, A]:
+    """
+    Generic state-space searcher.
+
+    Subclass and override:
+        get_next_states(state)  -> list of Step_T triples (from, action, to)
+        is_goal(state)          -> True when the goal is reached
+        heuristic(state)        -> estimated moves remaining (default 0)
+
+    Then call one of:
+        search(initial)              — BFS (fewest moves, guaranteed optimal)
+        search_dfs(initial, limit)   — DFS with optional depth limit
+        search_best_first(initial)   — greedy best-first (heuristic only)
+        search_astar(initial)        — A* (moves so far + heuristic)
+        search_all(initial)          — iterator yielding every solution (BFS order)
+
+    Every method returns a list of Step_T triples, or [] if no solution.
+    """
+
+    # ------------------------------------------------------------------
+    # Methods to override
+    # ------------------------------------------------------------------
+
+    def get_next_states(self, current_state: S) -> []Step_T[S, A]:
+        raise NotImplementedError("Override get_next_states()")
+
+    def is_goal(self, state: S) -> bool:
+        raise NotImplementedError("Override is_goal()")
+
+    def heuristic(self, state: S) -> float:
+        return 0.0
+
+    # ------------------------------------------------------------------
+    # Public search strategies
+    # ------------------------------------------------------------------
+
+    def search(self, initial: S) -> []Step_T[S, A]:
+        """BFS — always returns the shortest solution (fewest moves)."""
+        empty_path: []Step_T[S, A] = []
+        fringe: FifoQueue[QFringe_T[S, A]] = FifoQueue((0, empty_path, initial))
+        visited: {}S = set()
+
+        while fringe:
+            let (depth, path, state) = fringe.pop()
+            if state in visited:
+                continue
+            visited.add(state)
+            if self.is_goal(state):
+                return path
+            for from_state, action, next_state in self.get_next_states(state):
+                if next_state not in visited:
+                    step: Step_T[S, A] = (from_state, action, next_state)
+                    fringe.push((depth + 1, path + [step], next_state))
+
+        return []
+
+    def search_dfs(self, initial: S, limit: int = -1) -> []Step_T[S, A]:
+        """DFS — optionally bounded by depth limit. Not guaranteed optimal.
+        limit < 0 means unlimited."""
+        empty_path: []Step_T[S, A] = []
+        fringe: LifoQueue[QFringe_T[S, A]] = LifoQueue((0, empty_path, initial))
+        visited: {}S = set()
+
+        while fringe:
+            let (depth, path, state) = fringe.pop()
+            if state in visited:
+                continue
+            visited.add(state)
+            if self.is_goal(state):
+                return path
+            if limit >= 0 and depth >= limit:
+                continue
+            for from_state, action, next_state in self.get_next_states(state):
+                if next_state not in visited:
+                    step: Step_T[S, A] = (from_state, action, next_state)
+                    fringe.push((depth + 1, path + [step], next_state))
+
+        return []
+
+    def search_best_first(self, initial: S) -> []Step_T[S, A]:
+        """Greedy best-first — expands lowest heuristic node. Fast, not optimal."""
+        return self._search_pq(initial, use_heuristic=True, use_cost=False)
+
+    def search_astar(self, initial: S) -> []Step_T[S, A]:
+        """A* — optimal when heuristic is admissible."""
+        return self._search_pq(initial, use_heuristic=True, use_cost=True)
+
+    def search_all(self, initial: S):
+        """Yield every solution in BFS order (shortest first). Break to stop early."""
+        empty_path: []Step_T[S, A] = []
+        fringe: FifoQueue[QFringe_T[S, A]] = FifoQueue((0, empty_path, initial))
+        visited: {}S = set()
+
+        while fringe:
+            let (depth, path, state) = fringe.pop()
+            if state in visited:
+                continue
+            visited.add(state)
+            if self.is_goal(state):
+                yield path
+            for from_state, action, next_state in self.get_next_states(state):
+                if next_state not in visited:
+                    step: Step_T[S, A] = (from_state, action, next_state)
+                    fringe.push((depth + 1, path + [step], next_state))
+
+    # ------------------------------------------------------------------
+    # Display
+    # ------------------------------------------------------------------
+
+    def print_solution(self, solution: []Step_T[S, A], start: S) -> None:
+        if not solution:
+            print("No solution")
+            return
+        for prev, action, next_state in solution:
+            print(f"{prev} --{action}--> {next_state}")
+        n: int = len(solution)
+        print(f"({n} moves)")
+
+
+# ============================================================
+# Internal: priority-queue engine (A* and best-first)
+# ============================================================
+# Defined outside the class so the transpiler emits 'proc' rather than
+# 'method', avoiding Nim 2.x's generic-method restriction.
+# Nim's UFCS lets callers write self._search_pq(...) unchanged.
+
+def _search_pq(self: StateSearcher[S, A], initial: S, use_heuristic: bool, use_cost: bool) -> []Step_T[S, A]:
+    """
+    Shared priority-queue engine for A* and greedy best-first.
+    use_heuristic=True  -> include heuristic(state) in priority
+    use_cost=True       -> include depth (g-cost) in priority
+    """
+    counter: int = 0
+    empty_path: []Step_T[S, A] = []
+    fringe: PriorityQueue[PQFringe_T[S, A]] = PriorityQueue((0.0, 0, 0, empty_path, initial))
+    visited: {}S = set()
+
+    while fringe:
+        let (_, _, depth, path, state) = fringe.pop()
+        if state in visited:
+            continue
+        visited.add(state)
+        if self.is_goal(state):
+            return path
+        for from_state, action, next_state in self.get_next_states(state):
+            if next_state not in visited:
+                h: float = self.heuristic(next_state) if use_heuristic else 0.0
+                g: float = float(depth + 1) if use_cost else 0.0
+                priority: float = g + h
+                counter = counter + 1
+                step: Step_T[S, A] = (from_state, action, next_state)
+                fringe.push((priority, counter, depth + 1, path + [step], next_state))
+
+    return []

@@ -398,7 +398,7 @@ def to_nim(self, prec=None):
     triple_sq = chr(39)*3
     if s.startswith(triple_dq) or s.startswith(triple_sq):
         inner = s[3:-3]
-        comment_lines = ["## " + line for line in inner.strip().splitlines()]
+        comment_lines = ["## " + line.strip() for line in inner.strip().splitlines()]
         return chr(10).join(comment_lines)
     # Unwrap single- or double-quoted string and check for a bash placeholder
     if (s.startswith(chr(34)) and s.endswith(chr(34)) and len(s) > 2) or \

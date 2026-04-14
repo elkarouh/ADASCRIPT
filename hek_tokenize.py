@@ -332,16 +332,21 @@ class Tokenizer:
         depth = 0
         filtered = []
         for tok, meta in self.tokens:
-            if hasattr(tok, 'string'):
-                if tok.string in ('(', '[', '{'):
+            if hasattr(tok, 'string') and not isinstance(tok, RichNL):
+                # Skip FSTRING_MIDDLE tokens: their string content is literal text
+                # (e.g. '(' in f"({x})"), not actual bracket tokens.
+                import token as _tok_mod
+                _is_fstring_middle = hasattr(tok, 'type') and tok.type == _tok_mod.FSTRING_MIDDLE
+                if not _is_fstring_middle and tok.string in ('(', '[', '{'):
                     depth += 1
                     bracket_stack.append((tok, False))
-                elif tok.string in (')', ']', '}'):
+                elif not _is_fstring_middle and tok.string in (')', ']', '}'):
                     depth = max(0, depth - 1)
                     if bracket_stack:
                         open_tok, had_nl = bracket_stack.pop()
                         if had_nl:
-                            self.multiline_brackets[open_tok.start] =                                 self._extract_source_span(open_tok, tok)
+                            self.multiline_brackets[open_tok.start] = \
+                                self._extract_source_span(open_tok, tok)
             if depth > 0 and isinstance(tok, RichNL):
                 if bracket_stack:
                     bracket_stack[-1] = (bracket_stack[-1][0], True)

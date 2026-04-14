@@ -177,8 +177,8 @@ def translate(code, export_symbols=False):
         return code
 
     from hek_parsec import ParserState
-    ParserState.export_symbols = export_symbols
-    stmts, leading, trailing = parse_module(code)
+    stmts, leading, trailing = parse_module(code)  # reset() is called inside
+    ParserState.export_symbols = export_symbols     # set after reset so it isn't cleared
 
     # Pre-scan: identify classes that need ref object (involved in inheritance)
     ParserState._ref_classes = _prescan_classes(stmts)
