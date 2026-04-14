@@ -35,8 +35,9 @@ def example1():
             return self.G.get(curr_state, [])
 
     op: MyOptimizer = MyOptimizer()
-    solution: (Cost_T, []Decision_T) = op.longest_path('s', 'v', max_path_length=4)
-    print("Longest path s->v:", solution)
+    for solution in op.longest_path('s', 'v', max_path_length=4):
+        print("Longest path s->v:", solution)
+        break
 
 def example2():
     # -----------------------------------------------------------------------
@@ -71,7 +72,9 @@ def example2():
     for solution in op2.shortest_path('a', 'j'):
         print(solution)
     print('======= LONGEST  a->j =======')
-    print(op2.longest_path('a', 'j'))
+    for solution in op2.longest_path('a', 'j'):
+        print(solution)
+        break
 
 def example3():
     # -----------------------------------------------------------------------
@@ -108,7 +111,9 @@ def example3():
 
     print('======= ROD CUTTING =======')
     op3: RodCutting = RodCutting()
-    print(op3.longest_path((0, ROD_SIZE), (-1, 0)))
+    for solution in op3.longest_path((0, ROD_SIZE), (-1, 0)):
+        print(solution)
+        break
 
 def example4():
     # -----------------------------------------------------------------------
@@ -153,7 +158,9 @@ def example4():
 
     print('======= CAPITAL BUDGETING =======')
     op4: CapitalBudgeting = CapitalBudgeting()
-    print(op4.longest_path((stage:STAGE1, budget:float(CAPITAL)), (stage:END, budget:0.0)))
+    for solution in op4.longest_path((stage:STAGE1, budget:float(CAPITAL)), (stage:END, budget:0.0)):
+        print(solution)
+        break
 
 def example5():
     # -----------------------------------------------------------------------
@@ -201,7 +208,9 @@ def example5():
 
     print('======= KNAPSACK =======')
     op5: Knapsack = Knapsack()
-    print(op5.longest_path((stage:Stage_T'First, remaining:MAX_WEIGHT), (stage:Stage_T'Last, remaining:0)))
+    for solution in op5.longest_path((stage:Stage_T'First, remaining:MAX_WEIGHT), (stage:Stage_T'Last, remaining:0)):
+        print(solution)
+        break
 
 def example6():
     # -----------------------------------------------------------------------

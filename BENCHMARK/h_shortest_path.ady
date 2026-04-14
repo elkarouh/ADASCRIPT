@@ -107,21 +107,17 @@ class Optimizer[S, D, C]:
     def visit_state(self, state: S) -> None:
         print("state =", state)
 
-    @proc
-    def longest_path(self, start_state: S, end_state: S, max_path_length: int = 1000) -> (float, []D):
+    def longest_path(self, start_state: S, end_state: S, max_path_length: int = 1000):
         """
-        Find the path from start_state to end_state with the highest total revenue
-        (sum of step revenues returned by get_next_decisions).
-        Uses a max-revenue-first search with per-path cycle prevention:
-        path_states tracks the set of states on the current path so that no state
-        is visited twice (simple-path guarantee).
+        Yield every simple path from start_state to end_state in decreasing order
+        of total revenue (sum of step revenues from get_next_decisions).
+        Per-path cycle prevention: no state appears twice on the same path.
         max_path_length caps expansion to bound search on large graphs.
-        Returns (revenue, path), or (0.0, []) if no path exists.
+        Because max-revenue search cannot prune lazily (unlike Dijkstra), the
+        full search completes before any results are yielded.
         """
         self.start_state = start_state
-        best_revenue: float = 0.0
-        best_path: []D = []
-        found: bool = False
+        solutions: [](float, []D) = []
 
         empty_path: []D = []
         # Fringe: (-revenue, path_length, path, state, path_states)
@@ -134,10 +130,7 @@ class Optimizer[S, D, C]:
             revenue: float = -neg_rev
 
             if current_state == end_state and path_length > 0:
-                if not found or revenue > best_revenue:
-                    best_revenue = revenue
-                    best_path = path
-                    found = True
+                solutions.append((revenue, path))
 
             if path_length < max_path_length:
                 for new_decision, step_rev in self.get_next_decisions(current_state):
@@ -149,4 +142,5 @@ class Optimizer[S, D, C]:
                     new_len: int = path_length + 1
                     fringe.push((-new_rev, new_len, new_path, next_state, path_states + [next_state]))
 
-        return (best_revenue, best_path)
+        for rev, path in solutions:
+            yield rev, path
