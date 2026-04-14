@@ -1,0 +1,298 @@
+#!/usr/bin/env py2nim
+#ady2nim-args c --cc:clang --clang.exe:zigcc --clang.linkerexe:zigcc
+"""Tests for h_state_search.StateSearcher."""
+
+nimport h_state_search
+
+
+# ===========================================================================
+# WATER-JUG PROBLEM
+# ===========================================================================
+"""
+You have two jugs:
+  • Big jug  : capacity 5 litres
+  • Small jug: capacity 3 litres
+
+Neither jug has any measurement markings.
+You have an unlimited water supply (tap) and a drain.
+
+Legal moves
+~~~~~~~~~~~
+  1. Fill big    — fill the 5-litre jug to the top from the tap
+  2. Fill small  — fill the 3-litre jug to the top from the tap
+  3. Empty big   — pour all water in the big jug down the drain
+  4. Empty small — pour all water in the small jug down the drain
+  5. Pour big→small — pour from big into small until small is full or big is empty
+  6. Pour small→big — pour from small into big until big is full or small is empty
+
+Goal: have exactly 4 litres in the big jug.
+
+State: (big, small)  where  0 ≤ big ≤ 5,  0 ≤ small ≤ 3.
+
+Solution (BFS — fewest moves):
+  (0,0) →fill big→ (5,0) →pour big→small→ (2,3) →empty small→ (2,0)
+       →pour big→small→ (0,2) →fill big→ (5,2) →pour big→small→ (4,3) ✓
+"""
+
+def demo_waterjug():
+    type State_T is (int, int)
+    type Action_T is str
+
+    class WaterJug(StateSearcher[State_T, Action_T]):
+        var B: int = 5
+        var S: int = 3
+        var T: int = 4
+        def __init__(self, cap_big: int = 5, cap_small: int = 3, target: int = 4):
+            self.B = cap_big
+            self.S = cap_small
+            self.T = target
+
+        def get_next_states(self, current_state: State_T) -> []Step_T[State_T, Action_T]:
+            let (b, s) = current_state
+            B: int = self.B
+            S: int = self.S
+            p_bs: int = min(b, S - s)
+            p_sb: int = min(s, B - b)
+            candidates: [](Action_T, State_T) = [
+                ("fill big",        (B, s)),
+                ("fill small",      (b, S)),
+                ("empty big",       (0, s)),
+                ("empty small",     (b, 0)),
+                ("pour big->small", (b - p_bs, s + p_bs)),
+                ("pour small->big", (b + p_sb, s - p_sb)),
+            ]
+            return [(current_state, name, ns)
+                    for name, ns in candidates
+                    if ns != current_state]
+
+        def is_goal(self, state: State_T) -> bool:
+            let (b, _) = state
+            return b == self.T
+
+    print("=" * 60)
+    print("WATER-JUG PROBLEM  (5-litre big, 3-litre small, target 4 L)")
+    print("=" * 60)
+
+    jug: WaterJug = WaterJug(cap_big=5, cap_small=3, target=4)
+    initial: State_T = (0, 0)
+
+    print("\n[BFS — shortest solution]")
+    sol_bfs: []Step_T[State_T, Action_T] = jug.search(initial)
+    jug.print_solution(sol_bfs, initial)
+
+    print("\n[A* — optimal solution]")
+    sol_astar: []Step_T[State_T, Action_T] = jug.search_astar(initial)
+    jug.print_solution(sol_astar, initial)
+
+    print("\n[All solutions — first 3 in BFS order]")
+    i: int = 0
+    for sol in jug.search_all(initial):
+        print("")
+        print(f"  Solution #{i + 1}  ({len(sol)} moves):")
+        jug.print_solution(sol, initial)
+        i += 1
+        if i >= 3:
+            break
+
+
+# ===========================================================================
+# MISSIONARIES AND CANNIBALS
+# ===========================================================================
+
+def demo_missionaries():
+    # State: (missionaries_left, cannibals_left, boat_side)
+    # boat_side: 0 = boat on left, 1 = boat on right
+    # Goal: (0, 0, 1) — everyone safely on the right
+    type State_T is (int, int, int)
+    type Action_T is str
+
+    class MissionariesCannibals(StateSearcher[State_T, Action_T]):
+
+        def _safe(self, M: int, C: int) -> bool:
+            M_right: int = 3 - M
+            C_right: int = 3 - C
+            if M > 0 and C > M:
+                return False
+            if M_right > 0 and C_right > M_right:
+                return False
+            return True
+
+        def get_next_states(self, state: State_T) -> []Step_T[State_T, Action_T]:
+            let (M, C, boat) = state
+            direction: int = -1 if boat == 0 else 1
+            result: []Step_T[State_T, Action_T] = []
+            for m, c in [(2, 0), (0, 2), (1, 1), (1, 0), (0, 1)]:
+                newM: int = M + direction * m
+                newC: int = C + direction * c
+                if 0 <= newM and newM <= 3 and 0 <= newC and newC <= 3:
+                    if self._safe(newM, newC):
+                        result.append((state, f"{m}M {c}C cross", (newM, newC, 1 - boat)))
+            return result
+
+        def is_goal(self, state: State_T) -> bool:
+            return state == (0, 0, 1)
+
+    print("\n=== MISSIONARIES AND CANNIBALS ===")
+    puzzle: MissionariesCannibals = MissionariesCannibals()
+    initial: State_T = (3, 3, 0)
+    sol: []Step_T[State_T, Action_T] = puzzle.search(initial)
+    puzzle.print_solution(sol, initial)
+
+
+# ===========================================================================
+# WOLF GOAT CABBAGE
+# ===========================================================================
+
+def demo_wolf_goat():
+    # State: (farmer, wolf, goat, cabbage) — each 0=left, 1=right bank
+    type State_T is (int, int, int, int)
+    type Action_T is str
+
+    class WolfGoatCabbage(StateSearcher[State_T, Action_T]):
+
+        def _safe(self, state: State_T) -> bool:
+            let (f, w, g, c) = state
+            if w == g and f != w:
+                return False
+            if g == c and f != g:
+                return False
+            return True
+
+        def get_next_states(self, state: State_T) -> []Step_T[State_T, Action_T]:
+            let (f, w, g, c) = state
+            other: int = 1 - f
+            result: []Step_T[State_T, Action_T] = []
+            candidates: [](Action_T, State_T) = [("farmer", (other, w, g, c))]
+            if f == w:
+                candidates.append(("take wolf",    (other, other, g, c)))
+            if f == g:
+                candidates.append(("take goat",    (other, w, other, c)))
+            if f == c:
+                candidates.append(("take cabbage", (other, w, g, other)))
+            for name, ns in candidates:
+                if self._safe(ns):
+                    result.append((state, name, ns))
+            return result
+
+        def is_goal(self, state: State_T) -> bool:
+            return state == (1, 1, 1, 1)
+
+    print("\n=== WOLF GOAT CABBAGE ===")
+    puzzle: WolfGoatCabbage = WolfGoatCabbage()
+    initial: State_T = (0, 0, 0, 0)
+    sol: []Step_T[State_T, Action_T] = puzzle.search(initial)
+    puzzle.print_solution(sol, initial)
+
+
+# ===========================================================================
+# TOWER OF HANOI
+# ===========================================================================
+
+def demo_hanoi():
+    # State: (rod_of_disk0, rod_of_disk1, rod_of_disk2)
+    # disk0 = smallest, disk2 = largest; rods numbered 0, 1, 2
+    # Initial: all disks on rod 0 → (0, 0, 0)
+    # Goal:    all disks on rod 2 → (2, 2, 2)
+    type State_T is (int, int, int)
+    type Action_T is str
+
+    class TowerOfHanoi(StateSearcher[State_T, Action_T]):
+
+        def get_next_states(self, state: State_T) -> []Step_T[State_T, Action_T]:
+            let (r0, r1, r2) = state
+            rods: []int = [r0, r1, r2]
+            result: []Step_T[State_T, Action_T] = []
+            for disk in range(3):
+                cur: int = rods[disk]
+                # disk is on top if no smaller disk shares its rod
+                on_top: bool = True
+                for s in range(disk):
+                    if rods[s] == cur:
+                        on_top = False
+                        break
+                if not on_top:
+                    continue
+                for tgt in range(3):
+                    if tgt == cur:
+                        continue
+                    # can place if no smaller disk is on the target rod
+                    can_place: bool = True
+                    for s in range(disk):
+                        if rods[s] == tgt:
+                            can_place = False
+                            break
+                    if can_place:
+                        new_rods: []int = [rods[0], rods[1], rods[2]]
+                        new_rods[disk] = tgt
+                        next_state: State_T = (new_rods[0], new_rods[1], new_rods[2])
+                        result.append((state, f"{cur}->{tgt}", next_state))
+            return result
+
+        def is_goal(self, state: State_T) -> bool:
+            return state == (2, 2, 2)
+
+    print("\n=== TOWER OF HANOI (3 disks) ===")
+    hanoi: TowerOfHanoi = TowerOfHanoi()
+    initial: State_T = (0, 0, 0)
+    sol: []Step_T[State_T, Action_T] = hanoi.search(initial)
+    hanoi.print_solution(sol, initial)
+
+
+# ===========================================================================
+# EIGHT PUZZLE
+# ===========================================================================
+
+def demo_eight_puzzle():
+    # State: 9-character string, row-major; '0' = blank tile
+    # e.g. "123456780" is the goal; "123406758" has blank at centre
+    type State_T is str
+    type Action_T is str
+
+    GOAL: State_T = "123456780"
+
+    class EightPuzzle(StateSearcher[State_T, Action_T]):
+
+        def get_next_states(self, state: State_T) -> []Step_T[State_T, Action_T]:
+            blank: int = 0
+            for k in range(9):
+                if state[k:k+1] == "0":
+                    blank = k
+                    break
+            r: int = blank // 3
+            c: int = blank % 3
+            targets: [](int, Action_T) = []
+            if r > 0:
+                targets.append((blank - 3, "up"))
+            if r < 2:
+                targets.append((blank + 3, "down"))
+            if c > 0:
+                targets.append((blank - 1, "left"))
+            if c < 2:
+                targets.append((blank + 1, "right"))
+            result: []Step_T[State_T, Action_T] = []
+            for target, action in targets:
+                chars: []str = []
+                for k in range(9):
+                    chars.append(state[k:k+1])
+                chars[blank] = state[target:target+1]
+                chars[target] = "0"
+                next_state: State_T = "".join(chars)
+                result.append((state, action, next_state))
+            return result
+
+        def is_goal(self, state: State_T) -> bool:
+            return state == GOAL
+
+    print("\n=== EIGHT PUZZLE ===")
+    puzzle: EightPuzzle = EightPuzzle()
+    initial: State_T = "123406758"
+    sol: []Step_T[State_T, Action_T] = puzzle.search(initial)
+    puzzle.print_solution(sol, initial)
+
+
+if __name__ == "__main__":
+    demo_waterjug()
+    demo_missionaries()
+    demo_wolf_goat()
+    demo_hanoi()
+    demo_eight_puzzle()
