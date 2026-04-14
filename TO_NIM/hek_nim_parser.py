@@ -131,12 +131,19 @@ def _strip_generic(name):
     return name[:idx] if idx >= 0 else name
 
 def _is_new_method(class_name, method_name):
-    """Return True if method_name is not defined in any ancestor of class_name."""
+    """Return True if method_name is not defined in any ancestor of class_name.
+    Conservatively returns False if any ancestor's method set is unknown (e.g.
+    the dependency was loaded from cache and never re-translated in this session),
+    so that override methods never get {.base.} accidentally.
+    """
     parent = _class_parents.get(class_name)
     while parent:
         base_parent = _strip_generic(parent)
-        if method_name in _class_methods.get(base_parent, set()):
-            return False
+        parent_methods = _class_methods.get(base_parent)  # None when unknown
+        if parent_methods is None:
+            return False  # unknown ancestor → conservatively assume override
+        if method_name in parent_methods:
+            return False  # found in ancestor → override
         parent = _class_parents.get(base_parent)
     return True
 
@@ -290,6 +297,9 @@ def to_nim(self, indent=0, is_virtual=False, class_name=None, parent_name=None, 
                 ParserState.class_field_types[class_name][fname] = ftype
             # Strip default value: Nim object fields don't support inline defaults
             line = _re.sub(r' = .+$', '', line)
+            # Export field with * so subclasses in other modules can access it
+            if getattr(ParserState, 'export_symbols', False):
+                line = _re.sub(r'^(\s*\w+):', r'\1*:', line, count=1)
             result_lines.append(line)
 
         # Emit a blank line after fields for readability
@@ -1378,7 +1388,14 @@ def to_nim(self, indent=0):
         return ""  # skip (e.g. __init__ handled via class_def)
     keyword = nim_keyword or "proc"
     _exp = "*" if getattr(ParserState, 'export_symbols', False) and indent == 0 else ""
-    return f"{decos}{_ind(indent)}{keyword} {nim_name}{_exp}({params}){ret_ann} ={hc}\n{body}"
+    # Infer generic type params from parameter/return type annotations.
+    # Single uppercase-letter identifiers (S, D, C, T, K, V …) are type
+    # variables by Adascript convention; collect them and add [S, D, C] to
+    # the proc signature so Nim accepts the generic proc.
+    import re as _re_gp
+    _gp_candidates = set(_re_gp.findall(r'\b([A-Z])\b', params + " " + ret_ann))
+    _generic_params = "[" + ", ".join(sorted(_gp_candidates)) + "]" if _gp_candidates else ""
+    return f"{decos}{_ind(indent)}{keyword} {nim_name}{_exp}{_generic_params}({params}){ret_ann} ={hc}\n{body}"
 
 
 @method(async_func_def)
@@ -1433,13 +1450,16 @@ def to_nim(self, indent=0):
     type_params = ""
     block_node = None
 
+    has_virtual_deco = False
     for node in self.nodes:
         tname = type(node).__name__
         if tname == "decorators":
             decos_str = node.to_nim(indent)
-            # Strip @virtual — ref/method is now inferred from inheritance
+            # Strip @virtual — it controls ref/object, not a real Nim decorator
             if "@virtual" not in decos_str:
                 decos = decos_str + "\n"
+            else:
+                has_virtual_deco = True
         elif tname == "Several_Times":
             for seq in node.nodes:
                 stname = type(seq).__name__
@@ -1447,10 +1467,14 @@ def to_nim(self, indent=0):
                     deco_str = seq.to_nim(indent)
                     if "@virtual" not in deco_str:
                         decos += deco_str + "\n"
+                    else:
+                        has_virtual_deco = True
                 elif stname == "decorators":
                     decos_str = seq.to_nim(indent)
                     if "@virtual" not in decos_str:
                         decos = decos_str + "\n"
+                    else:
+                        has_virtual_deco = True
                 elif stname == "type_alias_params":
                     type_params = seq.to_nim()
                 elif stname == "class_args":
@@ -1464,8 +1488,8 @@ def to_nim(self, indent=0):
         elif tname == "block":
             block_node = node
 
-    # Infer virtual from class hierarchy (pre-scanned in translate())
-    is_virtual = name in getattr(ParserState, "_ref_classes", set())
+    # Infer virtual from class hierarchy or explicit @virtual decorator
+    is_virtual = has_virtual_deco or name in getattr(ParserState, "_ref_classes", set())
 
     parent_name = ""
     if bases and bases not in ("()", ""):
@@ -1550,7 +1574,8 @@ def to_nim(self, indent=0):
 
 def _extract_fields_from_block(block_node, indent):
     """Extract field declarations from a block, returning indented Nim field lines.
-    Strips var/let/const keywords and default values (same as class field extraction)."""
+    Strips var/let/const keywords and default values (same as class field extraction).
+    Also strips export markers (*) from field names: tuple fields cannot be exported."""
     import re as _re
     lines = []
     for node in block_node.nodes:
@@ -1577,6 +1602,8 @@ def _extract_fields_from_block(block_node, indent):
                                         break
                                 # Strip default value
                                 line = _re.sub(r' = .+$', '', line)
+                                # Strip export marker from field name (tuple fields can't be exported)
+                                line = _re.sub(r'^(\s*\w+)\*:', r'\1:', line)
                                 if line.strip():
                                     lines.append(line)
     return lines
@@ -1944,6 +1971,15 @@ def to_nim(self, indent=0):
     else:
         result = _ind(indent) + result
 
+    # Multiline results (e.g. ## docstrings from STRING.to_nim()) have the
+    # indent prefix only on the first line.  Re-apply it to every subsequent
+    # non-empty line so the generated Nim is properly indented.
+    if '\n' in result:
+        _lines = result.split('\n')
+        _fixed = [_lines[0]]
+        for _l in _lines[1:]:
+            _fixed.append(_ind(indent) + _l.lstrip() if _l.strip() else '')
+        result = '\n'.join(_fixed)
     if newline_node is not None and hasattr(newline_node, 'comments') and newline_node.comments:
         for kind, text, ind in newline_node.comments:
             if kind == 'comment':

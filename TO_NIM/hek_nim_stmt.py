@@ -377,12 +377,13 @@ def to_nim(self):
     # Record type in symbol table
     ParserState.symbol_table.add(name, annotation, "var")
     # Nim's implicit result variable: skip var and type inside typed procs
+    _exp = "*" if getattr(ParserState, 'export_symbols', False) and ParserState.symbol_table.depth() == 1 else ""
     if name == "result" and getattr(ParserState, '_current_return_type', ''):
         kw = ""
         result = f"{name}"  # just 'result', no type annotation needed
     else:
         kw = "var "
-        result = f"{kw}{name}: {annotation}"
+        result = f"{kw}{name}{_exp}: {annotation}"
     for node in self.nodes[3:]:
         if not hasattr(node, "nodes") or not node.nodes:
             continue
@@ -461,7 +462,8 @@ def to_nim(self):
     name = self.nodes[1].to_nim()
     annotation = self.nodes[3].to_nim()
     ParserState.symbol_table.add(name, annotation, keyword)
-    result = f"{keyword} {name}: {annotation}"
+    _exp = "*" if getattr(ParserState, 'export_symbols', False) and ParserState.symbol_table.depth() == 1 else ""
+    result = f"{keyword} {name}{_exp}: {annotation}"
     for node in self.nodes[4:]:
         if not hasattr(node, "nodes") or not node.nodes:
             continue
@@ -1139,7 +1141,8 @@ def to_nim(self):
     # Record type alias so method translation can resolve it
     if rhs_type not in ("enum_def", "subrange_def", "constrained_subrange_def"):
         ParserState.symbol_table.add(name, value, "type")
-    return f"type {name}{params} = {value}"
+    _exp = "*" if getattr(ParserState, 'export_symbols', False) and ParserState.symbol_table.depth() == 1 else ""
+    return f"type {name}{_exp}{params} = {value}"
 
 
 # --- simple_stmt ---
