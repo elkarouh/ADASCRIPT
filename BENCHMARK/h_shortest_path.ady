@@ -106,54 +106,46 @@ class Optimizer[S, D, C]:
     def visit_state(self, state: S) -> None:
         print("state =", state)
 
+    @proc
+    def longest_path(self, start_state: S, end_state: S, max_path_length: int = 1000) -> (float, []D):
+        """
+        Find the path from start_state to end_state with the highest total revenue
+        (sum of step revenues returned by get_next_decisions).
+        Uses a max-revenue-first search with per-path cycle prevention:
+        path_states tracks the set of states on the current path so that no state
+        is visited twice (simple-path guarantee).
+        max_path_length caps expansion to bound search on large graphs.
+        Returns (revenue, path), or (0.0, []) if no path exists.
+        """
+        self.start_state = start_state
+        best_revenue: float = 0.0
+        best_path: []D = []
+        found: bool = False
 
-# ---------------------------------------------------------------------------
-# Longest-path (standalone proc so Nim does not generate a generic method)
-# ---------------------------------------------------------------------------
-# Defined outside Optimizer so the transpiler emits 'proc' rather than
-# 'method'.  Nim's UFCS still lets callers write op.longest_path(...).
-# Calls to self.get_next_decisions / self.get_state are 'method' calls and
-# dispatch dynamically to the concrete subclass at runtime.
+        empty_path: []D = []
+        # Fringe: (-revenue, path_length, path, state, path_states)
+        # Negating revenue turns the min-heap into a max-revenue-first search.
+        # path_states tracks states on the current path to prevent cycles.
+        fringe = PriorityQueue((0.0, 0, empty_path, start_state, [start_state]))
 
-def longest_path(self: Optimizer[S, D, C], start_state: S, end_state: S, max_path_length: int = 1000) -> (float, []D):
-    """
-    Find the path from start_state to end_state with the highest total revenue
-    (sum of step revenues returned by get_next_decisions).
-    Uses a max-revenue-first search with per-path cycle prevention:
-    path_states tracks the set of states on the current path so that no state
-    is visited twice (simple-path guarantee).
-    max_path_length caps expansion to bound search on large graphs.
-    Returns (revenue, path), or (0.0, []) if no path exists.
-    """
-    self.start_state = start_state
-    best_revenue: float = 0.0
-    best_path: []D = []
-    found: bool = False
+        while fringe:
+            let (neg_rev, path_length, path, current_state, path_states) = fringe.pop()
+            revenue: float = -neg_rev
 
-    empty_path: []D = []
-    # Fringe: (-revenue, path_length, path, state, path_states)
-    # Negating revenue turns the min-heap into a max-revenue-first search.
-    # path_states tracks states on the current path to prevent cycles.
-    fringe = PriorityQueue((0.0, 0, empty_path, start_state, [start_state]))
+            if current_state == end_state and path_length > 0:
+                if not found or revenue > best_revenue:
+                    best_revenue = revenue
+                    best_path = path
+                    found = True
 
-    while fringe:
-        let (neg_rev, path_length, path, current_state, path_states) = fringe.pop()
-        revenue: float = -neg_rev
+            if path_length < max_path_length:
+                for new_decision, step_rev in self.get_next_decisions(current_state):
+                    new_path: []D = path + [new_decision]
+                    next_state: S = self.get_state(new_path)
+                    if next_state in path_states:
+                        continue  # prevent cycles: skip states already on this path
+                    new_rev: float = revenue + step_rev
+                    new_len: int = path_length + 1
+                    fringe.push((-new_rev, new_len, new_path, next_state, path_states + [next_state]))
 
-        if current_state == end_state and path_length > 0:
-            if not found or revenue > best_revenue:
-                best_revenue = revenue
-                best_path = path
-                found = True
-
-        if path_length < max_path_length:
-            for new_decision, step_rev in self.get_next_decisions(current_state):
-                new_path: []D = path + [new_decision]
-                next_state: S = self.get_state(new_path)
-                if next_state in path_states:
-                    continue  # prevent cycles: skip states already on this path
-                new_rev: float = revenue + step_rev
-                new_len: int = path_length + 1
-                fringe.push((-new_rev, new_len, new_path, next_state, path_states + [next_state]))
-
-    return (best_revenue, best_path)
+        return (best_revenue, best_path)

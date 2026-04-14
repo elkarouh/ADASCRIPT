@@ -147,6 +147,38 @@ def _is_new_method(class_name, method_name):
         parent = _class_parents.get(base_parent)
     return True
 
+
+def _any_subclass_overrides(base_class, method_name):
+    """Return True if any known subclass of base_class defines method_name.
+
+    Uses the whole-file pre-scan stored in ParserState._all_class_methods
+    (populated before translation begins) so that subclasses defined later in
+    the file are already visible when the base-class methods are emitted.
+    """
+    all_methods = getattr(ParserState, "_all_class_methods", None)
+    if all_methods is None:
+        return True  # no pre-scan data → conservative: keep as method
+    # Build the set of all subclasses (direct and transitive) of base_class.
+    # _class_parents is populated incrementally during translation, but
+    # _all_class_methods covers the whole file so we can derive subclass
+    # relationships from it via the pre-scan hierarchy stored alongside.
+    # Fallback: check every class whose *name* suggests it extends base_class.
+    # We walk all_methods keys and check _class_parents for parentage.
+    all_parents = getattr(ParserState, "_all_class_parents", None)
+    if all_parents is None:
+        return True
+    # Collect all subclasses (BFS)
+    subclasses = set()
+    frontier = {base_class}
+    while frontier:
+        nxt = set()
+        for cls, par in all_parents.items():
+            if par and _strip_generic(par) in frontier and cls not in subclasses:
+                subclasses.add(cls)
+                nxt.add(cls)
+        frontier = nxt
+    return any(method_name in all_methods.get(sc, set()) for sc in subclasses)
+
 # to_nim() methods for compound statements
 ###############################################################################
 
@@ -2100,17 +2132,50 @@ def _generate_init_new(func_node, indent, class_name, parent_name, is_virtual=Tr
 
 
 def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual=False, type_params=""):
-    """Generate method declaration. Uses 'method' for virtual, 'proc' for non-virtual."""
+    """Generate method declaration. Uses 'method' for virtual, 'proc' for non-virtual.
+    A @proc decorator on the method forces 'proc' emission and is stripped from output,
+    making it transparent to the user (no explicit self-type, no out-of-class placement).
+    """
     lines = []
 
     name = ""
     params = []
     ret_ann = ""
     block_node = None
+    force_proc = False   # set when @proc decorator is present
+    extra_decos = []     # non-@proc decorators to keep
+
+    # Pre-scan for @proc decorator before the main node loop.
+    # func_def grammar: decorators[:] + ikw("def") + IDENTIFIER + ... + block
+    # The optional decorators group is wrapped in Several_Times, which in turn
+    # may contain a `decorators` node or individual `decorator` nodes.
+    def _extract_deco_names(node):
+        """Recursively yield (node, text) for all decorator nodes found."""
+        tname = type(node).__name__
+        if tname == "decorator":
+            if hasattr(node, "to_nim"):
+                try:
+                    txt = node.to_nim(indent).strip()
+                except TypeError:
+                    txt = node.to_nim().strip()
+                yield node, txt
+        elif tname in ("decorators", "Several_Times", "Sequence_Parser"):
+            if hasattr(node, "nodes"):
+                for child in node.nodes:
+                    yield from _extract_deco_names(child)
+
+    for node in func_node.nodes:
+        for deco_node, deco_text in _extract_deco_names(node):
+            if deco_text == "@proc":
+                force_proc = True
+            else:
+                extra_decos.append(deco_text)
 
     for node in func_node.nodes:
         tname = type(node).__name__
-        if tname == "IDENTIFIER":
+        if tname == "decorators":
+            pass  # already handled above
+        elif tname == "IDENTIFIER":
             name = str(node.nodes[0])
         elif tname == "Several_Times":
             for st in node.nodes:
@@ -2209,6 +2274,11 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
         keyword = "iterator"
         if not ret_ann:
             ret_ann = ": auto"
+    elif force_proc:
+        # @proc decorator: user explicitly opts out of virtual dispatch for this
+        # method.  Emit as a plain proc — no {.base.} pragma needed.
+        pragma = ""
+        keyword = "proc"
     elif is_virtual:
         pragma = " {.base.}" if _is_new_method(class_name, name) else ""
         keyword = "method"
@@ -2232,7 +2302,8 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
     # __call__ requires the callOperator experimental feature
     if name == "__call__":
         ParserState.nim_pragmas.add('experimental: "callOperator"')
-    method_sig = f"{_ind(indent)}{keyword} {nim_name}{generic_params}({params_str}){ret_ann}{pragma} ="
+    deco_prefix = ("\n".join(extra_decos) + "\n") if extra_decos else ""
+    method_sig = f"{deco_prefix}{_ind(indent)}{keyword} {nim_name}{generic_params}({params_str}){ret_ann}{pragma} ="
     lines.append(method_sig)
     lines.extend(body_lines)
 
