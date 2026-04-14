@@ -2249,11 +2249,15 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
     _shadow_vars = []
     if params and body_text:
         import re as _re
+        # Strip comment lines so docstrings don't trigger false mutation detection
+        _body_no_comments = "\n".join(
+            line for line in body_lines if not line.lstrip().startswith("#")
+        )
         new_params = []
         for p in params:
             pname = p.split(":")[0].strip()
             if pname and pname != "self" and _re.search(
-                rf"(?<![=(,.])\b{_re.escape(pname)}\b\s*(\.add\(|\[.*\]\s*=(?!=)|[+\-*/]=|=(?!=))", body_text
+                rf"(?<![=(,.])\b{_re.escape(pname)}\b\s*(\.add\(|\[.*\]\s*=(?!=)|[+\-*/]=|=(?!=))", _body_no_comments
             ):
                 if " = " in p:
                     _shadow_vars.append(pname)
@@ -2306,7 +2310,8 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
     if name == "__call__":
         ParserState.nim_pragmas.add('experimental: "callOperator"')
     deco_prefix = ("\n".join(extra_decos) + "\n") if extra_decos else ""
-    method_sig = f"{deco_prefix}{_ind(indent)}{keyword} {nim_name}{generic_params}({params_str}){ret_ann}{pragma} ="
+    _exp = "*" if getattr(ParserState, 'export_symbols', False) and indent == 0 else ""
+    method_sig = f"{deco_prefix}{_ind(indent)}{keyword} {nim_name}{_exp}{generic_params}({params_str}){ret_ann}{pragma} ="
     lines.append(method_sig)
     lines.extend(body_lines)
 
