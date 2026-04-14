@@ -147,24 +147,88 @@ def _walk_class_defs(node, hierarchy):
                 _walk_class_defs(child, hierarchy)
 
 
+def _collect_func_names_in_block(block_node):
+    """Return a set of def names directly inside a class block node."""
+    names = set()
+    if not hasattr(block_node, "nodes"):
+        return names
+    for child in block_node.nodes:
+        tname = type(child).__name__
+        if tname == "func_def":
+            # func_def: 'def' IDENTIFIER ...
+            name = _find_first_identifier(child)
+            if name:
+                names.add(name)
+        elif tname in ("compound_stmt", "decorated_def", "stmt_line",
+                       "statement", "simple_stmt"):
+            # Unwrap wrapper nodes
+            inner = _collect_func_names_in_block(child)
+            names.update(inner)
+        elif hasattr(child, "nodes"):
+            # Several_Times, Sequence_Parser wrappers inside the block
+            inner = _collect_func_names_in_block(child)
+            names.update(inner)
+    return names
+
+
 def _prescan_classes(stmts):
     """Pre-scan parsed statements to find class inheritance relationships.
-    Returns a set of class names that need ref object (involved in inheritance)."""
-    hierarchy = {}  # class_name -> parent_name or None
+    Returns (ref_classes, all_class_methods) where:
+      ref_classes        — set of class names that need ref object
+      all_class_methods  — dict class_name -> set of method names defined in it
+    """
+    hierarchy = {}          # class_name -> parent_name or None
+    all_methods = {}        # class_name -> set of method names
+
+    def _walk(node):
+        tname = type(node).__name__
+        if tname == "class_def":
+            cls_name = None
+            parent = None
+            block_node = None
+            for child in node.nodes:
+                cname = type(child).__name__
+                if cname == "IDENTIFIER":
+                    cls_name = (child.node if hasattr(child, "node") and
+                                isinstance(child.node, str)
+                                else str(child.nodes[0]))
+                elif cname == "class_args":
+                    parent = _find_first_identifier(child)
+                    if parent in (None, "object"):
+                        parent = None
+                elif cname == "Several_Times":
+                    for seq in child.nodes:
+                        if type(seq).__name__ == "class_args":
+                            parent = _find_first_identifier(seq)
+                            if parent in (None, "object"):
+                                parent = None
+                elif cname == "block":
+                    block_node = child
+            if cls_name:
+                hierarchy[cls_name] = parent
+                all_methods[cls_name] = (
+                    _collect_func_names_in_block(block_node)
+                    if block_node else set()
+                )
+        if hasattr(node, "nodes"):
+            for child in node.nodes:
+                if hasattr(child, "nodes"):
+                    _walk(child)
+
     for stmt in stmts:
-        _walk_class_defs(stmt, hierarchy)
+        _walk(stmt)
+
     # Any class involved in inheritance needs ref
     ref_classes = set()
     for cls, parent in hierarchy.items():
         if parent:
             ref_classes.add(cls)
             ref_classes.add(parent)
-            # Walk up the chain to mark all ancestors
             p = hierarchy.get(parent)
             while p:
                 ref_classes.add(p)
                 p = hierarchy.get(p)
-    return ref_classes
+    return ref_classes, all_methods, hierarchy
 
 
 def translate(code, export_symbols=False):
@@ -181,7 +245,10 @@ def translate(code, export_symbols=False):
     ParserState.export_symbols = export_symbols     # set after reset so it isn't cleared
 
     # Pre-scan: identify classes that need ref object (involved in inheritance)
-    ParserState._ref_classes = _prescan_classes(stmts)
+    # and collect all method names per class for generic-method disambiguation.
+    (ParserState._ref_classes,
+     ParserState._all_class_methods,
+     ParserState._all_class_parents) = _prescan_classes(stmts)
 
     ParserState.symbol_table.push_scope("module")
     output = []
