@@ -106,65 +106,62 @@ class Optimizer[S, D, C]:
         print("state =", state)
 
     # ------------------------------------------------------------------
-    # Longest-path helpers
+    # Longest-path
     # ------------------------------------------------------------------
 
-    def longest_path_min(self, end_state: S, excluded_lengths: []int = [], offset: float = 1000.0) -> (float,[]D):
-        excluded: {}int = set(excluded_lengths)
+    def longest_path(self, start_state: S, end_state: S, max_path_length: int = 1000) -> (float, []D):
+        """
+        Find the path from start_state to end_state with the highest
+        total revenue (sum of step revenues from get_next_decisions).
+
+        Uses a max-revenue-first search with (state, path_length) pruning:
+        prune only when the same (state, depth) was already reached with
+        equal or better revenue.  This correctly handles cyclic graphs while
+        still pruning dominated sub-paths.  max_path_length caps expansion
+        to prevent infinite loops on cyclic graphs.
+
+        Returns (revenue, path), or (0.0, []) if no path exists.
+        """
+        self.start_state = start_state
+        best_revenue: float = 0.0
+        best_path: []D = []
+        found: bool = False
+
         empty_path: []D = []
-        fringe = PriorityQueue((0.0, empty_path, self.start_state))
-        visited: {S}float = {:}
-        solution: (float,[]D) = (0.0, [])
+        # Fringe: (-revenue, path_length, path, state)
+        # Negating revenue turns the min-heap into a max-revenue-first search.
+        fringe = PriorityQueue((0.0, 0, empty_path, start_state))
+
+        # visited[(state, path_length)] -> best revenue seen at that (state, depth).
+        # Prune any arrival that cannot improve on the recorded revenue.
+        visited: {(S, int)}float = {:}
 
         while fringe:
-            let (cost, path, current_state) = fringe.pop()
-            real_revenue: float = float(len(path)) * offset - cost
-            if current_state in visited and real_revenue <= visited[current_state]:
+            let (neg_rev, path_length, path, current_state) = fringe.pop()
+            revenue: float = -neg_rev
+
+            key: (S, int) = (current_state, path_length)
+            if key in visited and visited[key] >= revenue:
                 continue
-            visited[current_state] = real_revenue
+            visited[key] = revenue
 
-            if current_state == end_state:
-                return real_revenue, path
+            if current_state == end_state and path_length > 0:
+                if not found or revenue > best_revenue:
+                    best_revenue = revenue
+                    best_path = path
+                    found = True
 
-            for new_decision, revenue in self.get_next_decisions(current_state):
-                new_path: []D = path + [new_decision]
-                next_state: S = self.get_state(new_path)
-                cost_step: float = -revenue + offset
-                assert cost_step > 0
-                new_cost: float = cost + cost_step
-                new_real: float = float(len(new_path)) * offset - new_cost
+            if path_length < max_path_length:
+                for new_decision, step_rev in self.get_next_decisions(current_state):
+                    new_path: []D = path + [new_decision]
+                    next_state: S = self.get_state(new_path)
+                    new_rev: float = revenue + step_rev
+                    new_len: int = path_length + 1
+                    new_key: (S, int) = (next_state, new_len)
+                    if new_key not in visited or visited[new_key] < new_rev:
+                        fringe.push((-new_rev, new_len, new_path, next_state))
 
-                penalty: float = 0.0
-                if len(new_path) in excluded and next_state == end_state:
-                    penalty = 100000.0
-
-                if next_state not in visited or new_real > visited[next_state]:
-                    fringe.push((new_cost + penalty, new_path, next_state))
-
-        return solution
-
-    def longest_path(self, start_state: S, end_state: S, max_path_length: int = 1000, offset: float = 1000.0) -> (float,[]D):
-        self.start_state = start_state
-        let (revenue, path) = self.longest_path_min(end_state, offset=offset)
-        if len(path) == 0:
-            return (0.0, path)
-
-        excluded: []int = [len(path)]
-        best_revenue: float = revenue
-        best_path: []D = path
-
-        while True:
-            let (new_revenue, new_path) = self.longest_path_min(end_state, excluded_lengths=excluded, offset=offset)
-            if len(new_path) == 0 or len(new_path) <= len(best_path):
-                break
-            if len(new_path) > max_path_length:
-                break
-            excluded.append(len(new_path))
-            if new_revenue > best_revenue:
-                best_revenue = new_revenue
-                best_path = new_path
-
-        return best_revenue, best_path
+        return (best_revenue, best_path)
 
 # ===========================================================================
 # EXAMPLES / TESTS
