@@ -123,6 +123,9 @@ def _nim_proc_name(py_name):
     nim_name = _DUNDER_TO_NIM.get(py_name)
     if nim_name is not None:
         return nim_name, "proc"
+    # Nim disallows leading single underscore — strip it (mirrors IDENTIFIER.to_nim())
+    if py_name != "_" and py_name.startswith("_") and not py_name.startswith("__"):
+        py_name = py_name[1:]
     return py_name, "proc"   # non-dunder — unchanged
 
 def _strip_generic(name):

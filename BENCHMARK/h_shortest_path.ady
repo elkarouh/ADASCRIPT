@@ -103,6 +103,7 @@ class Optimizer[S, D, C]:
     # Generic traversal (BFS / DFS / best-first)
     # ------------------------------------------------------------------
 
+    @proc
     def visit_state(self, state: S) -> None:
         print("state =", state)
 

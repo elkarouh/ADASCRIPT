@@ -122,10 +122,12 @@ class StateSearcher[S, A]:
 
         return []
 
+    @proc
     def search_best_first(self, initial: S) -> []Step_T[S, A]:
         """Greedy best-first — expands lowest heuristic node. Fast, not optimal."""
         return self._search_pq(initial, use_heuristic=True, use_cost=False)
 
+    @proc
     def search_astar(self, initial: S) -> []Step_T[S, A]:
         """A* — optimal when heuristic is admissible."""
         return self._search_pq(initial, use_heuristic=True, use_cost=True)
@@ -152,6 +154,7 @@ class StateSearcher[S, A]:
     # Display
     # ------------------------------------------------------------------
 
+    @proc
     def print_solution(self, solution: []Step_T[S, A], start: S) -> None:
         if not solution:
             print("No solution")
@@ -161,39 +164,32 @@ class StateSearcher[S, A]:
         n: int = len(solution)
         print(f"({n} moves)")
 
+    @proc
+    def _search_pq(self, initial: S, use_heuristic: bool, use_cost: bool) -> []Step_T[S, A]:
+        """
+        Shared priority-queue engine for A* and greedy best-first.
+        use_heuristic=True  -> include heuristic(state) in priority
+        use_cost=True       -> include depth (g-cost) in priority
+        """
+        counter: int = 0
+        empty_path: []Step_T[S, A] = []
+        fringe: PriorityQueue[PQFringe_T[S, A]] = PriorityQueue((0.0, 0, 0, empty_path, initial))
+        visited: {}S = set()
 
-# ============================================================
-# Internal: priority-queue engine (A* and best-first)
-# ============================================================
-# Defined outside the class so the transpiler emits 'proc' rather than
-# 'method', avoiding Nim 2.x's generic-method restriction.
-# Nim's UFCS lets callers write self._search_pq(...) unchanged.
+        while fringe:
+            let (_, _, depth, path, state) = fringe.pop()
+            if state in visited:
+                continue
+            visited.add(state)
+            if self.is_goal(state):
+                return path
+            for from_state, action, next_state in self.get_next_states(state):
+                if next_state not in visited:
+                    h: float = self.heuristic(next_state) if use_heuristic else 0.0
+                    g: float = float(depth + 1) if use_cost else 0.0
+                    priority: float = g + h
+                    counter = counter + 1
+                    step: Step_T[S, A] = (from_state, action, next_state)
+                    fringe.push((priority, counter, depth + 1, path + [step], next_state))
 
-def _search_pq(self: StateSearcher[S, A], initial: S, use_heuristic: bool, use_cost: bool) -> []Step_T[S, A]:
-    """
-    Shared priority-queue engine for A* and greedy best-first.
-    use_heuristic=True  -> include heuristic(state) in priority
-    use_cost=True       -> include depth (g-cost) in priority
-    """
-    counter: int = 0
-    empty_path: []Step_T[S, A] = []
-    fringe: PriorityQueue[PQFringe_T[S, A]] = PriorityQueue((0.0, 0, 0, empty_path, initial))
-    visited: {}S = set()
-
-    while fringe:
-        let (_, _, depth, path, state) = fringe.pop()
-        if state in visited:
-            continue
-        visited.add(state)
-        if self.is_goal(state):
-            return path
-        for from_state, action, next_state in self.get_next_states(state):
-            if next_state not in visited:
-                h: float = self.heuristic(next_state) if use_heuristic else 0.0
-                g: float = float(depth + 1) if use_cost else 0.0
-                priority: float = g + h
-                counter = counter + 1
-                step: Step_T[S, A] = (from_state, action, next_state)
-                fringe.push((priority, counter, depth + 1, path + [step], next_state))
-
-    return []
+        return []
