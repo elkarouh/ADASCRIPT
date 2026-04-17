@@ -9,42 +9,81 @@ Usage:
 """
 import re
 
+
 type Severity_T is enum INFO, WARN, ERROR, OTHER
-class AwkProcessor:
+
+
+# ============================================================
+# GENERIC AWK ENGINE
+# ============================================================
+
+@virtual
+class AwkBase:
+    """
+    Generic stdin line processor.
+
+    Subclass and override:
+        process_record()   — called once per line after read_record()
+        begin()            — called before the main loop  (default: no-op)
+        finish()           — called after the main loop   (default: no-op)
+    """
     var FS        : str
     var OFS       : str
     var line      : str
-    var Fields    : []str # fields in the current line
+    var Fields    : []str
     var NR        : int = 0
-    var NF        : int = 0 
+    var NF        : int = 0
     var total_len : int = 0
     var total_nf  : int = 0
-    var counts    : [Severity_T]int = [INFO : 0, WARN : 0, ERROR : 0, OTHER: 0]
 
     def __init__(self, fs: str = " ", ofs: str = " "):
-        self.FS        = fs
-        self.OFS       = ofs
-
-    def classify(self, line: str) -> Severity_T:
-        if re.search(r"(?i)error", line):
-            return ERROR
-        if re.search(r"(?i)warn", line):
-            return WARN
-        if re.search(r"(?i)info|debug", line):
-            return INFO
-        return OTHER
+        self.FS  = fs
+        self.OFS = ofs
 
     def read_record(self, raw: str):
-        self.line = raw.rstrip()
-        self.Fields = self.line.split() if self.FS == " " else self.line.split(self.FS)
-        self.NR += 1
-        self.NF = self.Fields'Length
+        self.line   = raw.rstrip()
+        self.Fields = (self.line.split() if self.FS == " " else self.line.split(self.FS))
+        self.NR        += 1
+        self.NF         = self.Fields'Length
         self.total_len += self.line'Length
         self.total_nf  += self.NF
 
-    def process_record(self, raw: str):
-        self.read_record(raw)
-        let sev: Severity_T = self.classify(self.line)
+    def process_record(self):
+        raise NotImplementedError("Override process_record()")
+
+    def begin(self):
+        pass
+
+    def finish(self):
+        pass
+
+    def run(self):
+        self.begin()
+        for raw in stdin.lines:
+            self.read_record(raw)
+            self.process_record()
+        self.finish()
+
+
+# ============================================================
+# CONCRETE SEVERITY CLASSIFIER
+# ============================================================
+
+class AwkProcessor(AwkBase):
+    var counts : [Severity_T]int = [INFO : 0, WARN : 0, ERROR : 0, OTHER: 0]
+
+    def classify(self) -> Severity_T:
+        if re.search(r"(?i)error", self.line):
+            return ERROR
+        if re.search(r"(?i)warn", self.line):
+            return WARN
+        if re.search(r"(?i)info|debug", self.line):
+            return INFO
+        return OTHER
+
+    def process_record(self):
+        let sev: Severity_T = self.classify()
+        self.counts[sev] += 1
         case sev:
             when ERROR:
                 print f"!! {self.NR:>3}: {self.line}"
@@ -60,13 +99,6 @@ class AwkProcessor:
             when others:
                 let joined: str = self.OFS.join(self.Fields)
                 print f"   {self.NR:>3}: {joined}"
-        self.counts[sev] += 1
-
-    def run(self):
-        self.begin()
-        for raw in stdin.lines:
-            self.process_record(raw)
-        self.finish()
 
     def begin(self):
         print "--- awk report ---"

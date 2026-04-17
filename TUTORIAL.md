@@ -616,6 +616,61 @@ class TrieNode:
         node.words.append(word)
 ```
 
+### Inline field defaults
+
+Field declarations can carry default values. The transpiler injects them into
+the generated constructor, so `__init__` only needs to set fields whose values
+differ per instance:
+
+```python
+class AwkProcessor(AwkBase):
+    var NR        : int = 0
+    var NF        : int = 0
+    var total_len : int = 0
+    var counts    : [Severity_T]int = [INFO: 0, WARN: 0, ERROR: 0, OTHER: 0]
+
+    def __init__(self, fs: str = " ", ofs: str = " "):
+        self.FS  = fs   # only the caller-supplied fields need explicit init
+        self.OFS = ofs
+```
+
+### Mutable self in non-virtual classes
+
+For plain (non-`@virtual`) classes, the transpiler automatically detects
+whether a method mutates `self` — via field assignment (`+=`, `=`), `.add()`,
+indexed assignment, or any `self.method()` call — and emits
+`self: var ClassName` in the generated Nim. No decorator or annotation needed:
+
+```python
+class Counter:
+    var count: int = 0
+
+    def increment(self):
+        self.count += 1   # → proc increment(self: var Counter) in Nim
+```
+
+### Forwarding constructors
+
+When a subclass has no `__init__`, the transpiler automatically generates a
+forwarding constructor that mirrors the parent's parameters and delegates to
+the parent's initialiser:
+
+```python
+@virtual
+class AwkBase:
+    var FS: str
+    var OFS: str
+
+    def __init__(self, fs: str = " ", ofs: str = " "):
+        self.FS  = fs
+        self.OFS = ofs
+
+class AwkProcessor(AwkBase):
+    var counts: [Severity_T]int = [INFO: 0, WARN: 0, ERROR: 0, OTHER: 0]
+    # No __init__ needed — AwkProcessor(fs, ofs) is generated automatically,
+    # calling initAwkBase(result, fs, ofs) and initialising counts.
+```
+
 ### Inheritance and `super()`
 
 ```python
@@ -632,9 +687,11 @@ class EquipmentReplacement(Optimizer[State_T, Decision_T, Cost_T]):
 
 ### `@virtual` — enabling cross-module subclassing
 
-The `@virtual` decorator on a class makes Nim generate `ref object of RootObj`
-instead of a plain `object`. This is required when subclasses live in a
-different module (file) than their base class:
+The `@virtual` decorator makes Nim generate `ref object of RootObj` instead of
+a plain `object`. It is **only required** when subclasses live in a different
+file (module) from their base class — for dynamic dispatch across module
+boundaries. Within a single file, plain classes handle mutable `self`
+automatically (see above).
 
 ```python
 @virtual
@@ -1163,7 +1220,9 @@ def example7():   # Romania map, A* with heuristic
 | Enum-indexed array literal        | `[KEY: value, ...]`                      |
 | Pattern matching                  | `case x: when P: ... when others: ...`  |
 | Generator functions               | `def f(): ... yield value`               |
-| Virtual (inheritable) class       | `@virtual class C: ...`                  |
+| Field with inline default         | `var x: int = 0` inside class body       |
+| Mutable self (auto-detected)      | any `self.field =` / `self.method()`     |
+| Cross-module inheritable class    | `@virtual class C: ...`                  |
 | Generic class                     | `class C[S, D, C]: ...`                  |
 | Nim-only import                   | `nimport module`                         |
 | Shell command capture             | `let r = shell: cmd`                     |

@@ -607,6 +607,62 @@ class TrieNode:
     var words: []str
 ```
 
+Field declarations can carry inline defaults. The transpiler injects them into
+the generated constructor automatically, so `__init__` only needs to set
+fields that differ per instance:
+
+```python
+class AwkProcessor(AwkBase):
+    var NR        : int = 0
+    var NF        : int = 0
+    var total_len : int = 0
+    var counts    : [Severity_T]int = [INFO : 0, WARN : 0, ERROR : 0, OTHER: 0]
+
+    def __init__(self, fs: str = " ", ofs: str = " "):
+        self.FS  = fs   # only non-defaulted fields need setting
+        self.OFS = ofs
+```
+
+### Mutable self in non-virtual classes
+
+For plain (non-`@virtual`) classes, the transpiler automatically detects
+whether a method mutates `self` (field assignment, `+=`, `.add()`, or any
+`self.method()` call) and emits `self: var ClassName` in the generated Nim.
+No annotation is needed:
+
+```python
+class Counter:
+    var count: int = 0
+
+    def increment(self):
+        self.count += 1   # transpiler emits: proc increment(self: var Counter)
+```
+
+`@virtual` is only needed when subclasses live in a **different file** (module)
+from their base class — it makes Nim use `ref object` for dynamic dispatch
+across module boundaries.
+
+### Forwarding constructors
+
+When a subclass has no `__init__`, the transpiler generates a forwarding
+constructor that mirrors the parent's parameters and calls the parent's
+initialiser automatically:
+
+```python
+@virtual
+class AwkBase:
+    var FS: str
+    var OFS: str
+
+    def __init__(self, fs: str = " ", ofs: str = " "):
+        self.FS  = fs
+        self.OFS = ofs
+
+class AwkProcessor(AwkBase):
+    var counts: [Severity_T]int = [INFO: 0, WARN: 0, ERROR: 0, OTHER: 0]
+    # no __init__ needed — AwkProcessor(fs, ofs) is generated automatically
+```
+
 ---
 
 ## Nim-Only Imports
@@ -1068,6 +1124,41 @@ class Optimizer[S, D, C]:
         while fringe:
             ...
             yield self.real_cost(cost), path
+```
+
+### `awk_example.ady` / `awk_OO.ady` — awk-style line processor
+
+A stdin line processor that classifies lines as ERROR/WARN/INFO/OTHER via
+regex, prints severity-prefixed output, and prints a summary (record count,
+average line length, average field count, per-severity counts).
+
+`awk_example.ady` is the procedural version. `awk_OO.ady` is the class-based
+version, demonstrating field defaults, auto-`var self`, and inheritance:
+
+```python
+@virtual
+class AwkBase:
+    var FS: str
+    var NR: int = 0
+    var NF: int = 0
+
+    def read_record(self, raw: str): ...   # parse line into self.line / self.Fields
+    def process_record(self): raise NotImplementedError(...)
+    def begin(self): pass
+    def finish(self): pass
+    def run(self):
+        self.begin()
+        for raw in stdin.lines:
+            self.read_record(raw)
+            self.process_record()
+        self.finish()
+
+class AwkProcessor(AwkBase):   # no __init__ needed
+    var counts: [Severity_T]int = [INFO: 0, WARN: 0, ERROR: 0, OTHER: 0]
+
+    def process_record(self): ...
+    def begin(self): print "--- awk report ---"
+    def finish(self): ...  # print summary
 ```
 
 ### `show_status.ady` — Shell integration demo
