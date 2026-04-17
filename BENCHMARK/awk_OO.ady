@@ -9,15 +9,14 @@ Usage:
 """
 import re
 
-
 type Severity_T is enum INFO, WARN, ERROR, OTHER
-
-
 class AwkProcessor:
     var FS        : str
     var OFS       : str
+    var line      : str
+    var Fields    : []str # fields in the current line
     var NR        : int = 0
-    var NF        : int = 0
+    var NF        : int = 0 
     var total_len : int = 0
     var total_nf  : int = 0
     var counts    : [Severity_T]int = [INFO : 0, WARN : 0, ERROR : 0, OTHER: 0]
@@ -35,46 +34,45 @@ class AwkProcessor:
             return INFO
         return OTHER
 
-    def split_fields(self, line: str) -> []str:
-        return (line.split() if self.FS == " " else line.split(self.FS))
-
-    def process(self, raw: str):
-        let line: str = raw.rstrip()
+    def read_record(self, raw: str):
+        self.line = raw.rstrip()
+        self.Fields = self.line.split() if self.FS == " " else self.line.split(self.FS)
         self.NR += 1
-        let Fields: []str = self.split_fields(line)
-        self.NF        = Fields'Length
-        self.total_len += line'Length
+        self.NF = self.Fields'Length
+        self.total_len += self.line'Length
         self.total_nf  += self.NF
 
-        let sev: Severity_T = self.classify(line)
-        self.counts[sev] += 1
-
+    def process_record(self, raw: str):
+        self.read_record(raw)
+        let sev: Severity_T = self.classify(self.line)
         case sev:
             when ERROR:
-                print f"!! {self.NR:>3}: {line}"
+                print f"!! {self.NR:>3}: {self.line}"
             when WARN:
-                print f" ! {self.NR:>3}: {line}"
+                print f" ! {self.NR:>3}: {self.line}"
             when INFO:
                 if self.NF >= 1:
-                    let first: str = Fields[0]
-                    let last:  str = Fields[self.NF - 1]
+                    let first: str = self.Fields[0]
+                    let last:  str = self.Fields[self.NF - 1]
                     print f"[info] NR={self.NR} NF={self.NF} first={first}{self.OFS}last={last}"
                 else:
                     print f"[info] NR={self.NR} (empty)"
             when others:
-                let joined: str = self.OFS.join(Fields)
+                let joined: str = self.OFS.join(self.Fields)
                 print f"   {self.NR:>3}: {joined}"
+        self.counts[sev] += 1
 
     def run(self):
+        self.begin()
+        for raw in stdin.lines:
+            self.process_record(raw)
+        self.finish()
+
+    def begin(self):
         print "--- awk report ---"
         print f"FS = {repr(self.FS)}"
 
-        for raw in stdin.lines:
-            self.process(raw)
-
-        self.print_summary()
-
-    def print_summary(self):
+    def finish(self):
         print ""
         print "--- summary ---"
         print f"records : {self.NR}"
