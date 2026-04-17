@@ -1109,7 +1109,7 @@ class TrieNode:
     ...
 ```
 
-### `h_shortest_path.ady` — Generic optimiser framework
+### `shortest_path.ady` — Generic optimiser framework
 
 A 450-line framework demonstrating: generic classes `[S, D, C]`, nested
 type declarations, `yield` (generator methods), discriminated tuples,

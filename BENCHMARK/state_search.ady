@@ -5,7 +5,7 @@ State Space Search
 ------------------
 
 Generic state-space search framework.
-No dependency on h_shortest_path.
+No dependency on shortest_path.
 """
 
 from stdlib import FifoQueue, LifoQueue, PriorityQueue
