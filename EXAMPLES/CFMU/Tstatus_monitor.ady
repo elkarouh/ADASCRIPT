@@ -39,7 +39,7 @@ class ShowBuilds(AwkBase):
     var newhost      : bool  = False
     var current_time : float = 0.0
 
-    def begin(self):
+    def start(self):
         self.current_time = time.time()
 
     def process_record(self):
