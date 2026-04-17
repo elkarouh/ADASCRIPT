@@ -891,12 +891,43 @@ dependencies between Adascript files:
 ```python
 nimport strutils, sequtils, algorithm
 nimport stdlib                      # PriorityQueue, FifoQueue, ANY shims
+nimport awk                         # AwkBase — bundled record-processor stdlib
 nimport h_shortest_path             # another .ady file compiled as a library
 ```
 
 When `nimport`-ing another `.ady` file, `py2nim` automatically transpiles
 that dependency (if not already cached and up to date) and places both `.nim`
 files in the same cache directory, wiring up `--path` for the Nim compiler.
+
+### Bundled Adascript standard libraries
+
+`.ady` files shipped in `TO_NIM/` are automatically installed into the build
+cache at compile time, so they can be used via `nimport` from **any directory**
+without a local copy next to your source file:
+
+| `nimport`      | Provides                                              |
+|----------------|-------------------------------------------------------|
+| `nimport stdlib` | `PriorityQueue`, `FifoQueue`, `LifoQueue`, `ANY`    |
+| `nimport awk`  | `AwkBase` — subclass and override `process_record()`, `begin()`, `finish()` |
+
+Example — a custom awk processor in any directory:
+
+```python
+#!/usr/bin/env py2nim
+nimport awk
+
+class WordCounter(AwkBase):
+    var word_count: int = 0
+
+    def process_record(self):
+        self.word_count += self.NF
+
+    def finish(self):
+        print f"total words: {self.word_count}"
+
+var wc: WordCounter = WordCounter()
+wc.run()
+```
 
 ### Splitting a library from its tests
 
