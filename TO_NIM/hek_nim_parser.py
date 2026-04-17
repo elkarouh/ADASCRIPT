@@ -398,16 +398,33 @@ def to_nim(self, indent=0, is_virtual=False, class_name=None, parent_name=None, 
             result_lines.extend(new_lines)
 
 
-        # If no __init__ but class needs a constructor, generate a default newClassName
+        # If no __init__ but class needs a constructor, generate a default newClassName.
+        # If the class has a parent with a known constructor, forward its parameters.
         if not inits and class_name:
             new_name = f"new{class_name}"
             export = "*" if base_indent == 0 else ""
-            result_lines.append(f"{_ind(base_indent)}proc {new_name}{export}{type_params}(): {class_type} =")
-            new_body = "new(result)" if is_virtual_class else f"result = {class_type}()"
-            result_lines.append(f"{_ind(base_indent + 1)}{new_body}")
-            # Initialize fields with default values
-            for fname, fdefault in field_defaults:
-                result_lines.append(f"{_ind(base_indent + 1)}result.{fname} = {fdefault}")
+            parent_param_types = (
+                getattr(ParserState, "proc_param_types", {}).get(f"new{parent_name}", [])
+                if parent_name else []
+            )
+            parent_param_strs = (
+                getattr(ParserState, "proc_param_types_full", {}).get(f"new{parent_name}", [])
+                if parent_name else []
+            )
+            if parent_param_strs:
+                # Forward constructor: mirror parent params and call initParent(result, ...)
+                fwd_params = ", ".join(parent_param_strs)
+                fwd_args = ", ".join(p.split(":")[0].strip().split(" = ")[0] for p in parent_param_strs)
+                result_lines.append(f"{_ind(base_indent)}proc {new_name}{export}{type_params}({fwd_params}): {class_type} =")
+                result_lines.append(f"{_ind(base_indent + 1)}new(result)" if is_virtual_class else f"{_ind(base_indent + 1)}result = {class_type}()")
+                result_lines.append(f"{_ind(base_indent + 1)}init{parent_name}(result, {fwd_args})")
+                for fname, fdefault in field_defaults:
+                    result_lines.append(f"{_ind(base_indent + 1)}result.{fname} = {fdefault}")
+            else:
+                result_lines.append(f"{_ind(base_indent)}proc {new_name}{export}{type_params}(): {class_type} =")
+                result_lines.append(f"{_ind(base_indent + 1)}new(result)" if is_virtual_class else f"{_ind(base_indent + 1)}result = {class_type}()")
+                for fname, fdefault in field_defaults:
+                    result_lines.append(f"{_ind(base_indent + 1)}result.{fname} = {fdefault}")
         for func_node, method_name in other_methods:
             # Generate methods at top level (same indent as type definition)
             method_lines = _generate_method_decl(func_node, base_indent, class_name, parent_name, is_virtual_class, type_params)
@@ -2079,6 +2096,10 @@ def _generate_init_new(func_node, indent, class_name, parent_name, is_virtual=Tr
         m2 = _re2.match(r'\w+\s*:\s*(.+?)(?:\s*=.*)?$', ps.strip())
         param_types_list.append(m2.group(1).strip() if m2 else "")
     ParserState.proc_param_types[new_name_key] = param_types_list
+    # Store full param strings (name: type = default) for forwarding constructors
+    if not hasattr(ParserState, "proc_param_types_full"):
+        ParserState.proc_param_types_full = {}
+    ParserState.proc_param_types_full[new_name_key] = list(param_strs)
 
     init_name = f"init{class_name}"
     # ref types: self: ClassName; value types: self: var ClassName
