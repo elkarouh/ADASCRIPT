@@ -892,7 +892,7 @@ dependencies between Adascript files:
 nimport strutils, sequtils, algorithm
 nimport stdlib                      # PriorityQueue, FifoQueue, ANY shims
 nimport awk                         # AwkBase — bundled record-processor stdlib
-nimport h_shortest_path             # another .ady file compiled as a library
+nimport shortest_path             # another .ady file compiled as a library
 ```
 
 When `nimport`-ing another `.ady` file, `py2nim` automatically transpiles
@@ -931,7 +931,7 @@ wc.run()
 
 ### Splitting a library from its tests
 
-**h_shortest_path.ady** (the library, decorated with `@virtual`):
+**shortest_path.ady** (the library, decorated with `@virtual`):
 
 ```python
 #!/usr/bin/env py2nim
@@ -945,14 +945,14 @@ class Optimizer[S, D, C]:
     ...
 ```
 
-**test_h_shortest_path.ady** (the test file):
+**test_shortest_path.ady** (the test file):
 
 ```python
 #!/usr/bin/env py2nim
 #ady2nim-args c --cc:clang --clang.exe:zigcc --clang.linkerexe:zigcc
 
 nimport stdlib
-nimport h_shortest_path      # triggers auto-transpilation of h_shortest_path.ady
+nimport shortest_path      # triggers auto-transpilation of shortest_path.ady
 
 class MyOptimizer(Optimizer[str, str, float]):
     ...
@@ -1167,14 +1167,14 @@ def main():
 
 ---
 
-### h_shortest_path.ady — Generic framework
+### shortest_path.ady — Generic framework
 
 A 160-line generic optimiser that becomes 10+ complete algorithm examples
-in `test_h_shortest_path.ady`. The key architectural pattern is **generic
+in `test_shortest_path.ady`. The key architectural pattern is **generic
 class + `nimport` + subclassing**:
 
 ```python
-# h_shortest_path.ady — library
+# shortest_path.ady — library
 @virtual
 class Optimizer[S, D, C]:
     var offset:        float
@@ -1196,8 +1196,8 @@ def longest_path(self: Optimizer[S, D, C], start_state: S, end_state: S,
 ```
 
 ```python
-# test_h_shortest_path.ady — consumer
-nimport h_shortest_path
+# test_shortest_path.ady — consumer
+nimport shortest_path
 
 def example7():   # Romania map, A* with heuristic
     type State_T    is str

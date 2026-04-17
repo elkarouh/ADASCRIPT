@@ -1,11 +1,11 @@
 #!/usr/bin/env py2nim
 #ady2nim-args c --cc:clang --clang.exe:zigcc --clang.linkerexe:zigcc
-"""Examples and tests for h_shortest_path.Optimizer."""
+"""Examples and tests for shortest_path.Optimizer."""
 
 from math import log
 
 nimport stdlib
-nimport h_shortest_path
+nimport shortest_path
 
 
 def example1():
