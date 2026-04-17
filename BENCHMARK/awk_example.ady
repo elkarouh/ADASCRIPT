@@ -3,9 +3,9 @@
 awk-style line processor.
 
 Usage:
-    ./test_awk_enum < FILE                   # FS = whitespace
-    cat FILE | ./test_awk_enum ,              # FS = comma
-    cat FILE | ./test_awk_enum '\t'           # FS = tab
+    ./awk_example < FILE                   # FS = whitespace
+    cat FILE | ./awk_example ,             # FS = comma
+    cat FILE | ./awk_example '\t'          # FS = tab
 """
 import re
 
@@ -18,6 +18,7 @@ var OFS       : str = " "
 var NR        : int = 0
 var NF        : int = 0
 var total_len : int = 0
+var total_nf  : int = 0
 var counts    : [Severity_T]int = [INFO : 0, WARN : 0, ERROR : 0, OTHER: 0]
 
 if $# > 0:
@@ -34,22 +35,13 @@ def classify(line: str) -> Severity_T:
     return OTHER
 
 
-def fields(line: str, fs: str) -> []str:
-    if fs == " ":
-        return line.split()
-    return line.split(fs)
-
-
-print "--- awk report ---"
-print f"FS = {repr(FS)}"
-
-
-for raw in stdin.lines:
+def process(raw: str):
     let line: str = raw.rstrip()
     NR += 1
-    let Fields: []str = fields(line, FS)
+    let Fields: []str = (line.split() if FS == " " else line.split(FS))
     NF = Fields'Length
     total_len += line'Length
+    total_nf  += NF
 
     let sev: Severity_T = classify(line)
     counts[sev] += 1
@@ -63,7 +55,7 @@ for raw in stdin.lines:
             if NF >= 1:
                 let first: str = Fields[0]
                 let last:  str = Fields[NF - 1]
-                print f"[info] NR={NR} NF={NF} first={first} last={last}"
+                print f"[info] NR={NR} NF={NF} first={first}{OFS}last={last}"
             else:
                 print f"[info] NR={NR} (empty)"
         when others:
@@ -71,13 +63,23 @@ for raw in stdin.lines:
             print f"   {NR:>3}: {joined}"
 
 
-print ""
-print "--- summary ---"
-print f"records : {NR}"
-if NR > 0:
-    let avg: float = total_len / NR
-    print f"avg len : {avg:.2f}"
+def main():
+    print "--- awk report ---"
+    print f"FS = {repr(FS)}"
 
-for s in Severity_T:
-    print f"  {s:<6} {counts[s]}"
+    for raw in stdin.lines:
+        process(raw)
 
+    print ""
+    print "--- summary ---"
+    print f"records : {NR}"
+    if NR > 0:
+        let avg_len: float = total_len / NR
+        let avg_nf:  float = total_nf  / NR
+        print f"avg len : {avg_len:.2f}"
+        print f"avg NF  : {avg_nf:.2f}"
+    for s in Severity_T:
+        print f"  {s:<6} {counts[s]}"
+
+
+main()

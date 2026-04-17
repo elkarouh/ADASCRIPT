@@ -1,0 +1,102 @@
+#!/usr/bin/env py2nim
+"""
+awk-style line processor — class-based version.
+
+Usage:
+    ./awk_OO < FILE                   # FS = whitespace
+    cat FILE | ./awk_OO ,             # FS = comma
+    cat FILE | ./awk_OO '\t'          # FS = tab
+"""
+import re
+
+
+type Severity_T is enum INFO, WARN, ERROR, OTHER
+
+
+@virtual
+class AwkProcessor:
+    var FS        : str
+    var OFS       : str
+    var NR        : int
+    var NF        : int
+    var total_len : int
+    var total_nf  : int
+    var counts    : [Severity_T]int
+
+    def __init__(self, fs: str = " ", ofs: str = " "):
+        self.FS        = fs
+        self.OFS       = ofs
+        self.NR        = 0
+        self.NF        = 0
+        self.total_len = 0
+        self.total_nf  = 0
+        self.counts    = [INFO : 0, WARN : 0, ERROR : 0, OTHER: 0]
+
+    def classify(self, line: str) -> Severity_T:
+        if re.search(r"(?i)error", line):
+            return ERROR
+        if re.search(r"(?i)warn", line):
+            return WARN
+        if re.search(r"(?i)info|debug", line):
+            return INFO
+        return OTHER
+
+    def split_fields(self, line: str) -> []str:
+        return (line.split() if self.FS == " " else line.split(self.FS))
+
+    def process(self, raw: str):
+        let line: str = raw.rstrip()
+        self.NR += 1
+        let Fields: []str = self.split_fields(line)
+        self.NF        = Fields'Length
+        self.total_len += line'Length
+        self.total_nf  += self.NF
+
+        let sev: Severity_T = self.classify(line)
+        self.counts[sev] += 1
+
+        case sev:
+            when ERROR:
+                print f"!! {self.NR:>3}: {line}"
+            when WARN:
+                print f" ! {self.NR:>3}: {line}"
+            when INFO:
+                if self.NF >= 1:
+                    let first: str = Fields[0]
+                    let last:  str = Fields[self.NF - 1]
+                    print f"[info] NR={self.NR} NF={self.NF} first={first}{self.OFS}last={last}"
+                else:
+                    print f"[info] NR={self.NR} (empty)"
+            when others:
+                let joined: str = self.OFS.join(Fields)
+                print f"   {self.NR:>3}: {joined}"
+
+    def run(self):
+        print "--- awk report ---"
+        print f"FS = {repr(self.FS)}"
+
+        for raw in stdin.lines:
+            self.process(raw)
+
+        self.print_summary()
+
+    def print_summary(self):
+        print ""
+        print "--- summary ---"
+        print f"records : {self.NR}"
+        if self.NR > 0:
+            let avg_len: float = self.total_len / self.NR
+            let avg_nf:  float = self.total_nf  / self.NR
+            print f"avg len : {avg_len:.2f}"
+            print f"avg NF  : {avg_nf:.2f}"
+        for s in Severity_T:
+            print f"  {s:<6} {self.counts[s]}"
+
+
+def main():
+    let fs: str = ($1 if $# > 0 else " ")
+    var processor: AwkProcessor = AwkProcessor(fs)
+    processor.run()
+
+
+main()
