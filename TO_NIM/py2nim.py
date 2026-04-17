@@ -1120,7 +1120,8 @@ def main(argv=None):
 
         # Install stdlib.nim into the cache dir so `import stdlib` works.
         import shutil as _shutil
-        _stdlib_src = os.path.join(_dir, "stdlib.nim")
+        _stdlib_dir = os.path.join(_dir, "STDLIB")
+        _stdlib_src = os.path.join(_stdlib_dir, "stdlib.nim")
         _stdlib_dst = os.path.join(cache_dir, "stdlib.nim")
         if os.path.exists(_stdlib_src):
             if not os.path.exists(_stdlib_dst) or \
@@ -1129,10 +1130,10 @@ def main(argv=None):
 
         # Install bundled .ady standard libraries into the cache dir so
         # `nimport <lib>` works from any directory without a local copy.
-        for _lib_ady in os.listdir(_dir):
+        for _lib_ady in os.listdir(_stdlib_dir):
             if not _lib_ady.endswith(".ady"):
                 continue
-            _lib_src = os.path.join(_dir, _lib_ady)
+            _lib_src = os.path.join(_stdlib_dir, _lib_ady)
             _lib_dst = os.path.join(cache_dir, _lib_ady)
             if not os.path.exists(_lib_dst) or \
                os.path.getmtime(_lib_src) > os.path.getmtime(_lib_dst):
