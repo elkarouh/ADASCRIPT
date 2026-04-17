@@ -45,7 +45,7 @@ class AwkProcessor(AwkBase):
                 print f"   {self.NR:>3}: {joined}"
         self.counts[sev] += 1
 
-    def begin(self):
+    def start(self):
         print "--- awk report ---"
         print f"FS = {repr(self.FS)}"
 
