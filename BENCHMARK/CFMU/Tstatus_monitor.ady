@@ -65,12 +65,12 @@ class ShowBuilds(AwkBase):
         # --- main record action ---
 
         if self.NF >= 1:
-            if F[0] == "Showing" and self.NF >= 12:
+            if F[1] == "Showing" and self.NF >= 12:
                 let idx: int           = self.count
-                let log_file: str      = F[10]
-                let file_mod: float    = float(F[11])
-                self.day[idx]  = F[8]
-                self.hour[idx] = F[9]
+                let log_file: str      = F[11]
+                let file_mod: float    = float(F[12])
+                self.day[idx]  = F[9]
+                self.hour[idx] = F[10]
                 if self.valgrind:
                     self.details[idx] = self.valgrind_tool
                     self.valgrind = False
@@ -90,32 +90,32 @@ class ShowBuilds(AwkBase):
                 if re.search(r"/cm/nasdata", log_file) or re.search(r"/auto/home", log_file):
                     self.test_mode[idx] = "TACTDEV"
 
-            elif F[0] == "User:" and self.NF >= 2:
+            elif F[1] == "User:" and self.NF >= 2:
                 self.count += 1
-                self.user[self.count] = F[1]
+                self.user[self.count] = F[2]
 
-            elif F[0] == "Host:" and self.NF >= 2:
-                self.host[self.count]      = F[1]
+            elif F[1] == "Host:" and self.NF >= 2:
+                self.host[self.count]      = F[2]
                 self.newhost               = True
                 self.test_mode[self.count] = "REGRESS"
 
-            elif re.search(r"TACT\.TACT_CONFIG|IFPS\.FPL_CONFIG", F[0]):
+            elif re.search(r"TACT\.TACT_CONFIG|IFPS\.FPL_CONFIG", F[1]):
                 if not self.newhost:
                     self.user[self.count + 1] = self.user[self.count]
                     self.host[self.count + 1] = self.host[self.count]
                     self.count += 1
                     self.test_mode[self.count] = "REGRESS"
                 let idx: int = self.count
-                self.build[idx]   = F[0]
-                self.version[idx] = (F[1] if self.NF >= 2 else "")
-                self.host_load15_scheduling[idx] = (F[2] if self.NF >= 3 else "")
-                if self.NF < 4 or F[3] == "":
+                self.build[idx]   = F[1]
+                self.version[idx] = (F[2] if self.NF >= 2 else "")
+                self.host_load15_scheduling[idx] = (F[3] if self.NF >= 3 else "")
+                if self.NF < 4 or F[4] == "":
                     self.vnc[idx]  = ""
                     self.team[idx] = "?"
                 else:
-                    self.vnc[idx] = f"(vncviewer \"{F[3]}\")"
+                    self.vnc[idx] = f"(vncviewer \"{F[4]}\")"
                     if self.user[idx] == "cmadm":
-                        if re.search(r"^" + self.host[idx] + r"(:|$)", F[3]):
+                        if re.search(r"^" + self.host[idx] + r"(:|$)", F[4]):
                             self.team[idx] = "NeOS"
                         else:
                             self.team[idx] = "CFMUTEST"
@@ -123,12 +123,12 @@ class ShowBuilds(AwkBase):
                         self.team[idx] = self.user[idx]
                 self.newhost = False
 
-        if self.NF >= 4 and F[3] == "replay_day:":
+        if self.NF >= 4 and F[4] == "replay_day:":
             self.test_mode[self.count] = "REPLAY"
 
         if re.search(r"General result:", line) and self.NF >= 6:
-            self.nr_failed[self.count]  = F[2]
-            self.nr_success[self.count] = F[5]
+            self.nr_failed[self.count]  = F[3]
+            self.nr_success[self.count] = F[6]
 
     def finish(self):
         var max_build  : int = 0
