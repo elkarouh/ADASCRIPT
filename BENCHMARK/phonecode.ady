@@ -139,19 +139,16 @@ def format_solution(original_num: str, solution: []str) -> str:
 # ---------------------------------------------------------------------------
 
 def main():
-    if $# < 2:
-        print("Usage: phonecode <dictionary_file> <phone_numbers_file>")
-        print("Example: phonecode words.txt phones.txt")
-        quit(1)
-
-    let dict_file: str = $1
-    let phone_file: str = $2
+    let dict_file: str  = ($1 if $# >= 1 else "test_words.txt")
+    let phone_file: str = ($2 if $# >= 2 else "test_phones.txt")
 
     if not -f dict_file:
         print(f"Error: Dictionary file not found: {dict_file}")
+        print("Usage: phonecode [dictionary_file] [phone_numbers_file]")
         quit(1)
     if not -f phone_file:
         print(f"Error: Phone numbers file not found: {phone_file}")
+        print("Usage: phonecode [dictionary_file] [phone_numbers_file]")
         quit(1)
 
     var trie: TrieNode = TrieNode(dict_file, True)
