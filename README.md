@@ -1213,7 +1213,9 @@ hparsec/
 │   ├── hek_nim_stmt.py         to_nim() for simple statements
 │   ├── hek_nim_parser.py       to_nim() for compound statements + type decls
 │   ├── hek_nim_declarations.py to_nim() for type annotations
-│   └── py2nim.py               Entry point: parse + emit Nim
+│   ├── py2nim.py               Entry point: parse + emit Nim
+│   ├── stdlib.nim              Nim shim for Python builtins (PriorityQueue, etc.)
+│   └── awk.ady                 Bundled Adascript stdlib: AwkBase record processor
 │
 └── BENCHMARK/                  End-to-end example programs
     ├── *.ady                   Adascript source
@@ -1265,7 +1267,15 @@ an alternative syntax (so Adascript remains a true superset) is on the
 
 **Nim stdlib coverage** — generated Nim code relies on a local `stdlib.nim`
 shim for some Python builtins (`PriorityQueue`, `FifoQueue`, `ANY`). See
-`BENCHMARK/stdlib.nim`.
+`TO_NIM/stdlib.nim`.
+
+**Bundled Adascript libraries** — `.ady` files in `TO_NIM/` are automatically
+installed into the build cache so they can be used via `nimport` from any
+directory without a local copy:
+
+| `nimport` name | Provides              |
+|----------------|-----------------------|
+| `nimport awk`  | `AwkBase` — generic stdin record-processor base class |
 
 **Global parser state** — `ParserState` is a class-level singleton. Call
 `ParserState.reset()` between independent parse runs in the same process;

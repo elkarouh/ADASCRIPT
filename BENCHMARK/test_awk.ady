@@ -9,7 +9,7 @@ Usage:
 """
 import re
 
-nimport awk_base
+nimport awk
 
 type Severity_T is enum INFO, WARN, ERROR, OTHER
 

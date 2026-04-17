@@ -1127,6 +1127,17 @@ def main(argv=None):
                os.path.getmtime(_stdlib_src) > os.path.getmtime(_stdlib_dst):
                 _shutil.copy2(_stdlib_src, _stdlib_dst)
 
+        # Install bundled .ady standard libraries into the cache dir so
+        # `nimport <lib>` works from any directory without a local copy.
+        for _lib_ady in os.listdir(_dir):
+            if not _lib_ady.endswith(".ady"):
+                continue
+            _lib_src = os.path.join(_dir, _lib_ady)
+            _lib_dst = os.path.join(cache_dir, _lib_ady)
+            if not os.path.exists(_lib_dst) or \
+               os.path.getmtime(_lib_src) > os.path.getmtime(_lib_dst):
+                _shutil.copy2(_lib_src, _lib_dst)
+
         ady_mtime = os.path.getmtime(ady_file)
         nim_mtime = os.path.getmtime(nim_file) if os.path.exists(nim_file) else 0
         exe_mtime = os.path.getmtime(exe_file) if os.path.exists(exe_file) else 0
@@ -1148,7 +1159,9 @@ def main(argv=None):
         import re as _re_prepass
         _ady_dir_pre = os.path.dirname(os.path.abspath(ady_file))
         for _dep_name_pre in _re_prepass.findall(r'^\s*nimport\s+(\w[\w.]*)', code, _re_prepass.MULTILINE):
-            _dep_ady_pre = os.path.join(_ady_dir_pre, _dep_name_pre + ".ady")
+            _dep_ady_pre = (os.path.join(_ady_dir_pre, _dep_name_pre + ".ady")
+                            if os.path.exists(os.path.join(_ady_dir_pre, _dep_name_pre + ".ady"))
+                            else os.path.join(cache_dir, _dep_name_pre + ".ady"))
             if not os.path.exists(_dep_ady_pre):
                 continue
             with open(_dep_ady_pre) as _f:
@@ -1183,7 +1196,9 @@ def main(argv=None):
         import re as _re_nimport
         _ady_dir = os.path.dirname(os.path.abspath(ady_file))
         for _dep_name in _re_nimport.findall(r'^\s*nimport\s+(\w[\w.]*)', code, _re_nimport.MULTILINE):
-            _dep_ady = os.path.join(_ady_dir, _dep_name + ".ady")
+            _dep_ady = (os.path.join(_ady_dir, _dep_name + ".ady")
+                        if os.path.exists(os.path.join(_ady_dir, _dep_name + ".ady"))
+                        else os.path.join(cache_dir, _dep_name + ".ady"))
             if not os.path.exists(_dep_ady):
                 continue
             _dep_nim = os.path.join(cache_dir, _dep_name + ".nim")
