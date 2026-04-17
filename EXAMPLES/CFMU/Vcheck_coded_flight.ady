@@ -46,7 +46,7 @@ class HistogramExtractor(AwkBase):
         elif self.in_hist:
             if self.total > 0:
                 let mb: str = str(self.max_bucket).ljust(7)
-                let av: int = int(self.weighted / float(self.total))
+                let av: int = int(self.weighted / float(self.total) + 0.5)
                 print f"  max_bucket={mb}  avg={av}  (n={self.total})"
             self.in_hist = False
             self.prev    = 0
@@ -62,7 +62,8 @@ def resolve_log(label: str) -> str:
     let cm_env_id: str = os.environ.get("CM_ENV_ID", "")
     let op_id:     str = cm_env_id.replace("IP", "OP")
     let pattern:   str = f"/cm/ot/TACT/test_reports/Treplay_{op_id}_{label}_*performance*log"
-    let logs = shellLines: ls -tr {pattern} 2>/dev/null
+    var logs = shellLines: ls -tr {pattern} 2>/dev/null
+    logs = [x for x in logs if x != ""]
     if len(logs) == 0:
         return ""
     if re.search(r"^[A-Z]", label):
