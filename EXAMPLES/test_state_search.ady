@@ -156,7 +156,7 @@ def demo_missionaries():
                             continue
                         if self.is_safe(M_left - m, C_left - c):
                             next_boat: Boat_Side_T = right if boat == left else left
-                            result.append((state, f"{m}M {c}C cross", (M_left - m, C_left - c, next_boat)))                        
+                            result.append((state, f"{m}M {c}C cross", (number_missionaries_left: Missionary_Count_T(M_left - m), number_cannibals_left: Cannibal_Count_T(C_left - c), boat_location: next_boat)))
                     when right:
                         if M_left + m > Missionary_Count_T'Last:
                             continue
@@ -164,7 +164,7 @@ def demo_missionaries():
                             continue
                         if self.is_safe(M_left + m, C_left + c):
                             next_boat: Boat_Side_T = right if boat == left else left
-                            result.append((state, f"{m}M {c}C cross", (M_left + m, C_left + c, next_boat)))      
+                            result.append((state, f"{m}M {c}C cross", (number_missionaries_left: Missionary_Count_T(M_left + m), number_cannibals_left: Cannibal_Count_T(C_left + c), boat_location: next_boat)))      
             return result
 
         def is_goal(self, state: State_T) -> bool:
