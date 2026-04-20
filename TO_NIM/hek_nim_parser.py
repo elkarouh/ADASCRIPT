@@ -1631,11 +1631,13 @@ def to_nim(self, indent=0):
 # --- Type block forms (tuple, record) ---
 
 def _extract_fields_from_block(block_node, indent):
-    """Extract field declarations from a block, returning indented Nim field lines.
-    Strips var/let/const keywords and default values (same as class field extraction).
+    """Extract field declarations from a block, returning (field_lines, field_defaults).
+    field_lines: indented Nim field declarations with defaults and var/let/const stripped.
+    field_defaults: list of (field_name, default_expr) for fields that have defaults.
     Also strips export markers (*) from field names: tuple fields cannot be exported."""
     import re as _re
     lines = []
+    defaults = []
     for node in block_node.nodes:
         tname = type(node).__name__
         if tname in ("Fmap", "Filter"):
@@ -1658,13 +1660,17 @@ def _extract_fields_from_block(block_node, indent):
                                     if stripped.startswith(kw):
                                         line = line[:len(line) - len(stripped)] + stripped[len(kw):]
                                         break
+                                # Capture default value before stripping
+                                dm = _re.search(r'^(\s*\w+)\s*:.+? = (.+)$', line)
+                                if dm:
+                                    defaults.append((dm.group(1).strip(), dm.group(2).strip()))
                                 # Strip default value
                                 line = _re.sub(r' = .+$', '', line)
                                 # Strip export marker from field name (tuple fields can't be exported)
                                 line = _re.sub(r'^(\s*\w+)\*:', r'\1:', line)
                                 if line.strip():
                                     lines.append(line)
-    return lines
+    return lines, defaults
 
 
 def _extract_variant_fields_nim(stmt_nodes, indent):
@@ -1765,7 +1771,7 @@ def to_nim(self, indent=0):
         return result.rstrip("\n")
     if not block_node:
         block_node = rhs
-    fields = _extract_fields_from_block(block_node, indent + 1)
+    fields, field_defaults = _extract_fields_from_block(block_node, indent + 1)
     nim_kind = "tuple" if keyword == "tuple" else "object"
     # Register type kind and field order for constructor translation
     ParserState.symbol_table.add(name, nim_kind, "type")
@@ -1791,7 +1797,20 @@ def to_nim(self, indent=0):
         if not hasattr(ParserState, 'object_field_order'):
             ParserState.object_field_order = {}
         ParserState.object_field_order[name] = field_names
-    return f"{_ind(indent)}type {name}{_exp}{params} = {nim_kind}\n" + "\n".join(fields)
+    result = f"{_ind(indent)}type {name}{_exp}{params} = {nim_kind}\n" + "\n".join(fields)
+    # Emit an init proc for record (object) types that have field defaults,
+    # since Nim object fields don't support inline default values.
+    if nim_kind == "object" and field_defaults:
+        ind1 = _ind(indent + 1)
+        init_body = "\n".join(f"{ind1}result.{fn} = {fv}" for fn, fv in field_defaults)
+        result += f"\nproc init{name}{_exp}(): {name} =\n{init_body}"
+        # Rewrite bare `var res: TypeName` declarations to use the init proc.
+        # This is done via nim_init_stmts so it applies globally after translation.
+        ParserState.nim_init_stmts.append(f"# init{name} generated for record defaults")
+        if not hasattr(ParserState, 'record_default_types'):
+            ParserState.record_default_types = set()
+        ParserState.record_default_types.add(name)
+    return result
 
 
 

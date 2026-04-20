@@ -66,13 +66,17 @@ def process_args(args: []str) -> Command_Line_Arguments_T:
                             when "--verbose":
                                 res.verbose = True
                                 state=expecting_option_or_argument
-                            when others: # these options expect an argument
+                            when "--count" | "--output": # these options expect an argument
                                 current_option=arg
                                 state = processing_option
+                            when others: 
+                                print "Unknown option: -", arg
+                                quit(1)                                
             when cmdShortOption:
                 case state:
                     when expecting_argument:
-                        res.free_args.append(arg)                  
+                        res.free_args.append(arg)
+                        state=expecting_option_or_argument
                     when others:
                         case arg:
                             when "-h":
@@ -80,9 +84,12 @@ def process_args(args: []str) -> Command_Line_Arguments_T:
                             when "-v":
                                 res.verbose = True
                                 state=expecting_option_or_argument
-                            when others: # these options expect an argument
+                            when "-n" | "-o": # these options expect an argument
                                 current_option=arg
                                 state = processing_option
+                            when others: 
+                                print "Unknown option: -", arg
+                                quit(1)    
             when cmdEnd:
                 state = expecting_argument
                 break
