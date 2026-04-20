@@ -1133,6 +1133,10 @@ def to_nim(self):
                         members.append(f"v{m}" if m.isdigit() else m)
         if members:
             ParserState.tick_types[name] = {"First": members[0], "Last": members[-1], "members": members}
+            # Register each member in the symbol table so set literals like
+            # {member1, member2} can infer the ordinal element type.
+            for m in members:
+                ParserState.symbol_table.add(m, name, "let")
     elif rhs_type == "subrange_def":
         lo = str(rhs.nodes[0].node)
         hi = str(rhs.nodes[-1].node)

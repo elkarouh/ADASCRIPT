@@ -1,14 +1,14 @@
 #!/usr/bin/env py2nim
 
-type Kind_T is enum cmdArgument, cmdShortOption, cmdLongOption, cmdEnd
+type Kind_T is enum cmdArgument, cmdOption, cmdEnd
 
-def determine_kind(arg: str) -> Kind_T:
+def get_kind(arg: str) -> Kind_T:
     if arg == "--":
         return cmdEnd
     elif arg.startswith("--"):
-        return cmdLongOption
+        return cmdOption
     elif arg.startswith("-") and len(arg) > 1:
-        return cmdShortOption
+        return cmdOption
     else:
         return cmdArgument
 
@@ -32,10 +32,8 @@ def process_args(args: []str) -> Command_Line_Arguments_T:
     var state : State_T = expecting_option_or_argument
     var current_option: str = ""
     var res : Command_Line_Arguments_T
-    while i < len(args):
-        let arg: str = args[i]
-        let kind: Kind_T = determine_kind(arg)
-        case kind:
+    for arg in args:
+        case get_kind(arg):
             when cmdArgument:
                 case state:
                     when expecting_argument | expecting_option_or_argument:
@@ -54,42 +52,22 @@ def process_args(args: []str) -> Command_Line_Arguments_T:
                             when others:
                                 print "Unknown option: -", current_option
                                 quit(1)
-            when cmdLongOption:
-                case state:
-                    when expecting_argument:
-                        res.free_args.append(arg)
+            when cmdOption:
+                if state not in {expecting_option, expecting_option_or_argument}:
+                    print "I didn't expect an option here"
+                    usage(1)
+                case arg:
+                    when "--help" | "-h":
+                        usage(0)
+                    when "--verbose" | "-v":
+                        res.verbose = True
                         state=expecting_option_or_argument
-                    when others:
-                        case arg:
-                            when "--help":
-                                usage(0)
-                            when "--verbose":
-                                res.verbose = True
-                                state=expecting_option_or_argument
-                            when "--count" | "--output": # these options expect an argument
-                                current_option=arg
-                                state = processing_option
-                            when others: 
-                                print "Unknown option: -", arg
-                                quit(1)                                
-            when cmdShortOption:
-                case state:
-                    when expecting_argument:
-                        res.free_args.append(arg)
-                        state=expecting_option_or_argument
-                    when others:
-                        case arg:
-                            when "-h":
-                                usage(0)
-                            when "-v":
-                                res.verbose = True
-                                state=expecting_option_or_argument
-                            when "-n" | "-o": # these options expect an argument
-                                current_option=arg
-                                state = processing_option
-                            when others: 
-                                print "Unknown option: -", arg
-                                quit(1)    
+                    when "-n" | "-o" | "--count" | "--output": # these options expect an argument
+                        current_option=arg
+                        state = processing_option                        
+                    when others: 
+                        print "Unknown option: -", arg
+                        quit(1)                                
             when cmdEnd:
                 state = expecting_argument
                 break
