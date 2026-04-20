@@ -417,8 +417,24 @@ def to_nim(self, prec=None):
         inner = s[1:-1]
         inner = inner.replace(chr(34), chr(92) + chr(34))
         s = chr(34) + inner + chr(34)
-    # Replace embedded __bash_env_NAME__ placeholders with literal $NAME text
+    # Replace embedded __bash_*__ positional/special arg placeholders with
+    # fmt-string interpolations so they resolve at runtime.
     import re as _re_str
+    if "__bash_" in s:
+        def _subst_bash(m):
+            from hek_nim_parser import _bash_to_nim
+            return "{" + _bash_to_nim(m.group(0)) + "}"
+        # Only the inner content (strip outer quotes, patch, re-wrap as fmt"")
+        quote = s[0]
+        inner = s[1:-1]
+        new_inner = _re_str.sub(r'__bash_\w+__', _subst_bash, inner)
+        if new_inner != inner:
+            # Switch to double-quoted fmt string (Nim requires double quotes for fmt)
+            new_inner = new_inner.replace('"', '\\"') if quote == "'" else new_inner
+            s = 'fmt"' + new_inner + '"'
+            ParserState.nim_imports.add("strformat")
+    # Replace embedded __bash_env_NAME__ placeholders with literal $NAME text
+    # (only reached if not already converted above — env vars in non-fmt context)
     if "__bash_env_" in s:
         s = _re_str.sub(r'__bash_env_(\w+)__', r'$\1', s)
     return s

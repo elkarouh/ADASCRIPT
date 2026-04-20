@@ -4,8 +4,8 @@ type Door_T is enum Door1, Door2, Door3
 type Choice_T is enum Switch, DontSwitch
 
 def monty_hall_simulation(trials=100_000):
-  var stayWins : int =0
-  var switchWins : int = 0
+  var stayWins : Natural =0
+  var switchWins : Natural = 0
 
   for _ in 1..trials:
     let carLocation : Door_T = Door_T'Choice

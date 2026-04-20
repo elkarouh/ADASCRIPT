@@ -141,29 +141,33 @@ def demo_missionaries():
             return True
 
         def get_next_states(self, state: State_T) -> []Step_T[State_T, Action_T]:
-            let (M_left, C_left, boat) = state
-            let next_boat: Boat_Side_T = right if boat == left else left
+            let (M_left, C_left, boat_location) = state
+            let next_boat_location: Boat_Side_T = right if boat_location == left else left
             result: []Step_T[State_T, Action_T] = []
-            for m in Missionary_Count_T'Range:
-              for c in Cannibal_Count_T'Range:
+            for m in Missionary_Count_T'Range: # number of missionaries to put on the boat
+              for c in Cannibal_Count_T'Range: # number of cannibals to put on the boat
                 if m + c < 1: # boat must carry at leat 1 person
                     continue
                 if m + c > 2: # boat carries at most 2 people
                     continue
                 var next_state: State_T
-                case boat:
+                case boat_location:
                     when left:
                         if m > M_left:
                             continue
                         if c > C_left:
                             continue
-                        next_state = (number_missionaries_left: M_left - m, number_cannibals_left: C_left - c, boat_location: next_boat)
+                        next_state = (number_missionaries_left: M_left - m, 
+                                      number_cannibals_left: C_left - c, 
+                                      boat_location: next_boat_location)
                     when right:
                         if M_left + m > Missionary_Count_T'Last:
                             continue
                         if C_left + c > Cannibal_Count_T'Last:
                             continue
-                        next_state = (number_missionaries_left: M_left + m, number_cannibals_left: C_left + c, boat_location: next_boat)
+                        next_state = (number_missionaries_left: M_left + m, 
+                                      number_cannibals_left: C_left + c, 
+                                      boat_location: next_boat_location)
                 if self.is_safe(next_state):
                     result.append((state, f"{m}M {c}C cross", next_state))      
             return result

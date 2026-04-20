@@ -1,13 +1,10 @@
 #!/usr/bin/env py2nim
+
 #https://www.python.org/doc/essays/graphs/
-type Node_T is str
+
+type Node_T is enum A, B, C, D, E, F
 type Graph_T is {Node_T}[]Node_T
-graph: Graph_T = {'A': ['B', 'C'],
-         'B': ['C', 'D'],
-         'C': ['D'],
-         'D': ['C'],
-         'E': ['F'],
-         'F': ['C']}
+graph: Graph_T = {A: [B, C], B: [C, D], C: [D], D: [C], E: [F],F: [C]}
 
 def find_path(graph: Graph_T, start_node: Node_T, end_node: Node_T, path:[]Node_T=[]) -> []Node_T:
     path = path + [start_node]
@@ -22,8 +19,8 @@ def find_path(graph: Graph_T, start_node: Node_T, end_node: Node_T, path:[]Node_
               return newpath
     return None
 
-assert find_path(graph, 'A', 'D') ==  ['A', 'B', 'C', 'D']
-print(find_path(graph, 'A', 'D'))
+assert find_path(graph, A, D) ==  [A, B, C, D]
+print find_path(graph, A, D)
 
 def find_all_paths(graph: Graph_T, start_node: Node_T, end_node: Node_T, path:[]Node_T=[]) -> [][]Node_T:
     path = path + [start_node]
@@ -38,8 +35,8 @@ def find_all_paths(graph: Graph_T, start_node: Node_T, end_node: Node_T, path:[]
             for newpath in newpaths:
                 paths.append(newpath)
     return paths
-assert find_all_paths(graph, 'A', 'D') == [['A', 'B', 'C', 'D'], ['A', 'B', 'D'], ['A', 'C', 'D']]
-print(find_all_paths(graph, 'A', 'D'))
+assert find_all_paths(graph, A, D) == [[A, B, C, D], [A, B, D], [A, C, D]]
+print find_all_paths(graph, A, D)
 
 def find_shortest_path(graph: Graph_T, start_node: Node_T, end_node: Node_T, path:[]Node_T=[]) -> []Node_T:
     path = path + [start_node]
@@ -55,5 +52,5 @@ def find_shortest_path(graph: Graph_T, start_node: Node_T, end_node: Node_T, pat
                 if not shortest or len(newpath) < len(shortest):
                     shortest = newpath
     return shortest
-print (find_shortest_path(graph, 'A', 'D'))
-assert find_shortest_path(graph, 'A', 'D') == ['A', 'B', 'D']
+print find_shortest_path(graph, A, D)
+assert find_shortest_path(graph, A, D) == [A, B, D]
