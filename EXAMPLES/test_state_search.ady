@@ -120,56 +120,62 @@ def demo_missionaries():
     # State: (missionaries_left, cannibals_left, boat_side)
     # Goal: (0, 0, right) — everyone safely on the right
     type Boat_Side_T is enum left, right
-    type Direction_T is enum left2right, right2left
-    type State_T is (Natural, Natural, Boat_Side_T)
+    type Missionary_Count_T is 0..3
+    type Cannibal_Count_T is 0..3
+    type State_T is tuple:
+        number_missionaries_left : Missionary_Count_T
+        number_cannibals_left : Cannibal_Count_T
+        boat_location : Boat_Side_T
     type Action_T is str
 
     class MissionariesCannibals(StateSearcher[State_T, Action_T]):
 
-        def is_safe(self, M: Natural, C: Natural) -> bool:
-            M_right: Natural = 3 - M
-            C_right: Natural = 3 - C
-            if M > 0 and C > M:
+        def is_safe(self, M_left: Missionary_Count_T, C_left: Cannibal_Count_T) -> bool:
+            M_right: Missionary_Count_T = Missionary_Count_T'Last - M_left
+            C_right: Cannibal_Count_T = Cannibal_Count_T'Last - C_left
+            if M_left > 0 and C_left > M_left:
                 return False
             if M_right > 0 and C_right > M_right:
                 return False
             return True
 
         def get_next_states(self, state: State_T) -> []Step_T[State_T, Action_T]:
-            let (M, C, boat) = state
-            direction: Direction_T = right2left if boat == left else left2right
+            let (M_left, C_left, boat) = state
             result: []Step_T[State_T, Action_T] = []
-            for m, c in [(2, 0), (0, 2), (1, 1), (1, 0), (0, 1)]:
-                var newM : Natural = M
-                var newC : Natural = C
-                case direction:
-                    when left2right:
-                        newM += m
-                        if newM > 3:
+            for m in Missionary_Count_T'Range:
+              for c in Cannibal_Count_T'Range:
+                if m + c < 1: # boat must carry at leat 1 person
+                    continue
+                if m + c > 2: # boat carries at most 2 people
+                    continue
+                case boat:
+                    when left:
+                        if m > M_left:
                             continue
-                        newC += c
-                        if newC > 3:
+                        if c > C_left:
                             continue
-                    when right2left:
-                        if m > newM:
+                        if self.is_safe(M_left - m, C_left - c):
+                            next_boat: Boat_Side_T = right if boat == left else left
+                            result.append((state, f"{m}M {c}C cross", (M_left - m, C_left - c, next_boat)))                        
+                    when right:
+                        if M_left + m > Missionary_Count_T'Last:
                             continue
-                        newM -= m
-                        if c > newC:
-                            continue                        
-                        newC -= c
-                if self.is_safe(newM, newC):
-                    next_boat: Boat_Side_T = right if boat == left else left
-                    result.append((state, f"{m}M {c}C cross", (newM, newC, next_boat)))
+                        if C_left + c > Cannibal_Count_T'Last:
+                            continue
+                        if self.is_safe(M_left + m, C_left + c):
+                            next_boat: Boat_Side_T = right if boat == left else left
+                            result.append((state, f"{m}M {c}C cross", (M_left + m, C_left + c, next_boat)))      
             return result
 
         def is_goal(self, state: State_T) -> bool:
-            #return state == (0, 0, right)
-            let (M, C, boat) = state
-            return M == 0 and C == 0 and boat == right
+            state.number_missionaries_left == 0 and state.number_cannibals_left == 0 and state.boat_location == right
 
     print("\n=== MISSIONARIES AND CANNIBALS ===")
     puzzle: MissionariesCannibals = MissionariesCannibals()
-    initial: State_T = (3, 3, left)
+    initial: State_T = (
+                        number_missionaries_left: 3, 
+                        number_cannibals_left:3, 
+                        boat_location: left)
     sol: []Step_T[State_T, Action_T] = puzzle.search(initial)
     puzzle.print_solution(sol, initial)
 
