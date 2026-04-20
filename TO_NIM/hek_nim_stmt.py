@@ -529,6 +529,11 @@ def to_nim(self):
                         ParserState.nim_imports.add("options")
                 if value:
                     result += f" = {value}"
+    # For record types with defaults and no explicit initializer, call init proc
+    if "=" not in result:
+        _rdt = getattr(ParserState, 'record_default_types', set())
+        if annotation in _rdt:
+            result += f" = init{annotation}()"
     # Downgrade `const` to `let` when the value is a runtime expression
     # (e.g. re(...) calls PCRE at runtime and cannot be a compile-time const).
     if keyword == "const" and result.startswith("const "):
