@@ -148,23 +148,23 @@ def demo_missionaries():
                     continue
                 if m + c > 2: # boat carries at most 2 people
                     continue
+                next_boat: Boat_Side_T = right if boat == left else left
+                var next_state: State_T
                 case boat:
                     when left:
                         if m > M_left:
                             continue
                         if c > C_left:
                             continue
-                        if self.is_safe(M_left - m, C_left - c):
-                            next_boat: Boat_Side_T = right if boat == left else left
-                            result.append((state, f"{m}M {c}C cross", (number_missionaries_left: Missionary_Count_T(M_left - m), number_cannibals_left: Cannibal_Count_T(C_left - c), boat_location: next_boat)))
+                        next_state = (number_missionaries_left: Missionary_Count_T(M_left - m), number_cannibals_left: Cannibal_Count_T(C_left - c), boat_location: next_boat)
                     when right:
                         if M_left + m > Missionary_Count_T'Last:
                             continue
                         if C_left + c > Cannibal_Count_T'Last:
                             continue
-                        if self.is_safe(M_left + m, C_left + c):
-                            next_boat: Boat_Side_T = right if boat == left else left
-                            result.append((state, f"{m}M {c}C cross", (number_missionaries_left: Missionary_Count_T(M_left + m), number_cannibals_left: Cannibal_Count_T(C_left + c), boat_location: next_boat)))      
+                        next_state = (number_missionaries_left: Missionary_Count_T(M_left + m), number_cannibals_left: Cannibal_Count_T(C_left + c), boat_location: next_boat)
+                if self.is_safe(next_state.number_missionaries_left, next_state.number_cannibals_left):
+                    result.append((state, f"{m}M {c}C cross", next_state))      
             return result
 
         def is_goal(self, state: State_T) -> bool:
