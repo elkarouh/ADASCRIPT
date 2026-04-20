@@ -1,0 +1,102 @@
+#!/usr/bin/env py2nim
+
+type Kind_T is enum cmdArgument, cmdShortOption, cmdLongOption, cmdEnd
+
+def determine_kind(arg: str) -> Kind_T:
+    if arg == "--":
+        return cmdEnd
+    elif arg.startswith("--"):
+        return cmdLongOption
+    elif arg.startswith("-") and len(arg) > 1:
+        return cmdShortOption
+    else:
+        return cmdArgument
+
+def usage(code: Natural):
+    print "Usage: $0 [options] <input>"
+    print "  -o, --output=FILE    Output file (default: output.txt)"
+    print "  -v, --verbose        Enable verbose mode"
+    print "  -n, --count=N        Repeat count (default: 1)"
+    quit(code)
+
+type Command_Line_Arguments_T is record:
+    inputFile : str = ""
+    outputFile : str = "output.txt"
+    verbose   : bool = False
+    count     : Natural = 1
+    free_args : []str
+
+def process_args(args: []str) -> Command_Line_Arguments_T:
+    type State_T is enum expecting_option, processing_option, expecting_argument, expecting_option_or_argument
+    var i: Natural = 0
+    var state : State_T = expecting_option_or_argument
+    var current_option: str = ""
+    var res : Command_Line_Arguments_T
+    while i < len(args):
+        let arg: str = args[i]
+        let kind: Kind_T = determine_kind(arg)
+        case kind:
+            when cmdArgument:
+                case state:
+                    when expecting_argument | expecting_option_or_argument:
+                        res.free_args.append(arg)
+                    when expecting_option:
+                        print "Expected option or nothing"
+                        quit(1)
+                    when processing_option:
+                        case current_option:
+                            when "-o" | "--output":
+                                res.outputFile = arg
+                                state = expecting_option_or_argument
+                            when "-n" | "--count":
+                                res.count = Natural(int(arg))
+                                state = expecting_option_or_argument
+                            when others:
+                                print "Unknown option: -", current_option
+                                quit(1)
+            when cmdLongOption:
+                case state:
+                    when expecting_argument:
+                        res.free_args.append(arg)
+                        state=expecting_option_or_argument
+                    when others:
+                        case arg:
+                            when "--help":
+                                usage(0)
+                            when "--verbose":
+                                res.verbose = True
+                                state=expecting_option_or_argument
+                            when others: # these options expect an argument
+                                current_option=arg
+                                state = processing_option
+            when cmdShortOption:
+                case state:
+                    when expecting_argument:
+                        res.free_args.append(arg)                  
+                    when others:
+                        case arg:
+                            when "-h":
+                                usage(0)
+                            when "-v":
+                                res.verbose = True
+                                state=expecting_option_or_argument
+                            when others: # these options expect an argument
+                                current_option=arg
+                                state = processing_option
+            when cmdEnd:
+                state = expecting_argument
+                break
+        i += 1
+    if len(res.free_args) > 0:
+        res.inputFile = res.free_args[0]
+    else:
+        print "Error: Input file required"
+        usage(1)
+    return res
+
+let cmd_Args : Command_Line_Arguments_T = process_args($@)
+
+print "Input: ", cmd_Args.inputFile
+print "Output: ", cmd_Args.outputFile
+print "Verbose: ", cmd_Args.verbose
+print "Count: ", cmd_Args.count

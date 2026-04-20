@@ -3,15 +3,15 @@ import time
 
 N = 1000000
 
-def is_prime(n: int) -> bool:
+def is_prime(n: Positive) -> bool:
     flag = True
-    for k in 2..int(n**0.5):
+    for k in 2..Positive(n**0.5):
         if n % k == 0:
             flag = False
             break
     return flag
 
-def count_primes(n: int) -> int:
+def count_primes(n: Positive) -> Positive:
     count = 0
     for k in 2..<n:
         if is_prime(k):

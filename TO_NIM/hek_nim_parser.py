@@ -1270,7 +1270,7 @@ def to_nim(self, indent=0):
         for p in params.split(", "):
             pname = p.split(":")[0].strip()
             if pname and pname != "self" and _re.search(
-                rf"(?<![=(,.])\b{_re.escape(pname)}\b\s*(\.add\(|\[.*\]\s*=(?!=)|[+\-*/]=|=(?!=))", body
+                rf"(?<![=(,.])\b{_re.escape(pname)}\b\s*(\.add\(|\.\w+\s*=(?!=)|\[.*\]\s*=(?!=)|[+\-*/]=|=(?!=))", body
             ):
                 if " = " in p:
                     _shadow_vars.append(pname)

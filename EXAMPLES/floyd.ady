@@ -1,7 +1,7 @@
 #!/usr/bin/env py2nim
 
-def floyd(n : int, k : int) -> {}int:
-    s : {}int
+def floyd(n : Positive, k : Positive) -> {}Positive:
+    s : {}Positive
     for i in n-k+1..n:
         t = (1..i)'Choice
         if t in s:
@@ -10,5 +10,5 @@ def floyd(n : int, k : int) -> {}int:
             s.add(t)
     return s
 
-let sample : {}int = floyd(100, 10)
+let sample : {}Positive = floyd(100, 10)
 print "10 distinct numbers from 1..100: ", sample

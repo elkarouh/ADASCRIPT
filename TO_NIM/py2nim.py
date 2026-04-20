@@ -1144,13 +1144,15 @@ def main(argv=None):
         exe_mtime = os.path.getmtime(exe_file) if os.path.exists(exe_file) else 0
 
         # Transpiler source files: if any are newer than the .nim, retranspile.
+        # Include root-level .py files (e.g. hek_tokenize.py) alongside TO_NIM/.
+        _root_dir_main = os.path.dirname(_dir)
         transpiler_mtime = max(
             os.path.getmtime(p)
-            for p in [
-                os.path.join(_dir, f)
-                for f in os.listdir(_dir)
-                if f.endswith(".py")
-            ]
+            for p in (
+                [os.path.join(_dir, f) for f in os.listdir(_dir) if f.endswith(".py")] +
+                [os.path.join(_root_dir_main, f) for f in os.listdir(_root_dir_main)
+                 if f.endswith(".py") and os.path.isfile(os.path.join(_root_dir_main, f))]
+            )
         )
 
         # Pre-pass: parse nimport'd .ady dependencies to collect constructor
@@ -1257,10 +1259,14 @@ def main(argv=None):
         produces_binary = subcommand in BINARY_COMMANDS
 
         # If we re-transpiled, always recompile regardless of exe mtime.
-        # Also recompile if any dependency .nim is newer than the exe.
+        # Also recompile if any *user* .nim (not stdlib support files) is newer than the exe.
+        # Exclude stdlib.nim and awk.nim (bundled support files) to avoid spurious rebuilds
+        # caused by their copy2-preserved mtimes being newer than a fresh exe.
+        _BUNDLED_NIMS = {"stdlib.nim", "awk.nim"}
         _dep_nim_max_mtime = max(
             (os.path.getmtime(os.path.join(cache_dir, f))
-             for f in os.listdir(cache_dir) if f.endswith(".nim")),
+             for f in os.listdir(cache_dir)
+             if f.endswith(".nim") and f not in _BUNDLED_NIMS),
             default=0)
         need_compile = need_transpile or (exe_mtime < max(nim_mtime, _dep_nim_max_mtime))
 
@@ -1291,9 +1297,6 @@ def main(argv=None):
         cmd = ["nim", subcommand] + nim_flags
         cmd += [f"--nimcache:{nimcache_dir}", f"--out:{exe_file}",
                 f"--path:{cache_dir}"]
-        if run and not prog_args:
-            # Let nim handle -r directly (no separate exec needed)
-            cmd.append("-r")
         cmd.append(nim_file)
 
         print(f"# nim {' '.join(cmd[1:])}", file=sys.stderr)
@@ -1304,9 +1307,10 @@ def main(argv=None):
         # Create/update symlink next to the .ady source pointing at the binary.
         _make_symlink()
 
-        # After successful compile, exec the binary with prog_args (or if -r
-        # was requested with prog_args, which nim can't forward via --out).
-        if produces_binary and (prog_args or run):
+        # After a successful compile, run the binary with prog_args if requested.
+        # Never pass -r to nim: we always exec the binary ourselves so that
+        # prog_args are forwarded correctly and the binary is never run twice.
+        if produces_binary and run:
             exec_cmd = [exe_file] + prog_args
             result = subprocess.run(exec_cmd)
         sys.exit(result.returncode)

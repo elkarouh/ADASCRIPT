@@ -15,15 +15,14 @@ type Severity_T is enum INFO, WARN, ERROR, OTHER
 
 var FS        : str = " "
 var OFS       : str = " "
-var NR        : int = 0
-var NF        : int = 0
-var total_len : int = 0
-var total_nf  : int = 0
-var counts    : [Severity_T]int = [INFO : 0, WARN : 0, ERROR : 0, OTHER: 0]
+var NR        : Natural = 0
+var NF        : Natural = 0
+var total_len : Natural = 0
+var total_nf  : Natural = 0
+var counts    : [Severity_T]Natural = [INFO : 0, WARN : 0, ERROR : 0, OTHER: 0]
 
 if $# > 0:
     FS = $1
-
 
 def classify(line: str) -> Severity_T:
     if re.search(r"(?i)error", line):
@@ -53,13 +52,13 @@ def process(raw: str):
             print f" ! {NR:>3}: {line}"
         when INFO:
             if NF >= 1:
-                let first: str = Fields[1]
-                let last:  str = Fields[NF]
+                let first: str = Fields[0]
+                let last:  str = Fields[NF-1]
                 print f"[info] NR={NR} NF={NF} first={first}{OFS}last={last}"
             else:
                 print f"[info] NR={NR} (empty)"
         when others:
-            let joined: str = OFS.join(Fields[1:])
+            let joined: str = OFS.join(Fields)
             print f"   {NR:>3}: {joined}"
 
 
