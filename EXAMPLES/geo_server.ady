@@ -139,9 +139,9 @@ class Polygon(Region):
     def __contains__(self, point: Point) -> bool:
         let (x, y) = point
         let verts: []Point = self.vertices
-        let n: int = len(verts)
+        let n: Positive = len(verts)
         var inside: bool = False
-        var j: int = n - 1
+        var j: Natural = n - 1
         for i in 0..<n:
             xi, yi = verts[i]
             xj, yj = verts[j]

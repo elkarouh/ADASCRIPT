@@ -187,19 +187,21 @@ if __name__ == "__main__":
     var raw_mode: bool = False
 
     var args: []str = $@
-    var i: int = 0
+    var i: Natural = 0
     while i < args'len:
         let arg: str = args[i]
-        if arg in ("-u", "--user"):
-            i += 1
-            if i < len(args):
-                user_filter = args[i]
-        elif arg in ("-r", "--raw"):
-            raw_mode = True
-        elif arg in ("-h", "--help"):
-            _usage()
-        elif not arg.startswith("-"):
-            baseline = arg
+        case arg:
+            when "-u" | "--user":
+                i += 1
+                if i < args'len:
+                    user_filter = args[i]
+            when "-r" | "--raw":
+                raw_mode = True
+            when "-h" | "--help":
+                _usage()
+            when others:
+                if not arg.startswith("-"):
+                    baseline = arg
         i += 1
 
     let report:            str              = locate_report(baseline)

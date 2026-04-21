@@ -4,6 +4,8 @@ Adascript is a statically-typed superset of Python 3 inspired by Ada and Nim.
 It transpiles to both **Python 3** and **Nim**, letting you write concise,
 type-safe code in a familiar syntax and target either ecosystem without
 changing the source.
+This is a programming language that I’ve been developing for about 10 years. More recently, I’ve used Codex as an assistant for parts of the documentation work, refactoring, and some of the more difficult feature implementations, so the project does include some AI-assisted code and writing. That said, the overall design, review, and ongoing maintenance of the project are handled by me.
+
 
 Every valid Python 3 file is also valid Adascript. The extra features are purely
 additive: left-to-right type annotations, Ada-style enums and variant records,
@@ -48,8 +50,6 @@ source.ady
 ## Quick Example
 
 ```python
-nimport sequtils
-
 type Stage_T is enum STAGE1, STAGE2, STAGE3
 
 type Choice_T is tuple:

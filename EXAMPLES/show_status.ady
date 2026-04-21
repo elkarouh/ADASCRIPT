@@ -32,7 +32,7 @@ def parseCompletedTests(lines: []str) -> []str:
   result : []str = []
   let prefix : str = "SUCCESS:"
   for line in lines:
-    let pos : int = line.find(prefix)
+    let pos : Natural = line.find(prefix)
     if pos >= 0:
       let rest : str = line[pos + len(prefix):].strip()
       let parts : []str = rest.split()
@@ -42,7 +42,7 @@ def parseCompletedTests(lines: []str) -> []str:
 
 def parseStatusSummary(lines: []str) -> []str:
   "Extract the status summary lines (last 5 lines)."
-  let startIdx : int = max(0, len(lines) - 5)
+  let startIdx : Natural = max(0, len(lines) - 5)
   lines[startIdx:]
 
 def formatTime() -> str:
@@ -66,7 +66,7 @@ print "Initial tests: ", len(completedTests)
 while True:
   sleep(60000) # one minute polling interval
   let lines : []str = getTestStatusLines()
-  let currentMinute : int = parseInt(now().format("mm"))
+  let currentMinute : Natural = parseInt(now().format("mm"))
 
   # Track newly completed tests
   for test in parseCompletedTests(lines):
@@ -102,7 +102,7 @@ while True:
 
 
 
-  var nextUpdate : int = (5 - (currentMinute % 5)) % 5
+  var nextUpdate : Natural = (5 - (currentMinute % 5)) % 5
   if nextUpdate == 0:
     nextUpdate = 5
   print "[", formatTime(), "] Monitoring... Next timing update in ", nextUpdate, " minute(s)"

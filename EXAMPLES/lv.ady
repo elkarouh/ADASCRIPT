@@ -8,7 +8,7 @@ const suffix: str = "m"
 class Style:
     var on: str
     var off: str
-    def __init__(self, code: int):
+    def __init__(self, code: Natural):
         self.on = f"{prefix}{code}{suffix}"
         self.off = f"{prefix}0{suffix}"
     def __call__(self, *args: str) -> str:
@@ -40,7 +40,7 @@ let bg_cyan: Style = Style(46)
 let bg_white: Style = Style(47)
 let bg_default: Style = Style(49)
 
-def align(length: int, s: str) -> str:
+def align(length: Positive, s: str) -> str:
     return s.alignLeft(length)
 
 def colored_viewname(view_name: str) -> str:

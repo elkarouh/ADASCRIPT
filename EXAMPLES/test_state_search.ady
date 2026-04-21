@@ -337,7 +337,7 @@ def demo_eight_puzzle():
             result: []Step_T[State_T, Action_T] = []
             for target, action in targets:
                 chars: []str = []
-                for k in range(9):
+                for k in 0..8:
                     chars.append(state[k:k+1])
                 chars[blank] = state[target:target+1]
                 chars[target] = "0"

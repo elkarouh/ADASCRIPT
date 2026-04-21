@@ -2,7 +2,7 @@
 # https://github.com/vroby65/fsel/tree/main ported to adascript
 import os
 
-let editor: str = os.getenv("EDITOR", "nano")
+let editor: str = $EDITOR if $EDITOR else "nano"
 let tmpfile: str = "/tmp/fsel_entries"
 const TAB: str = "\t"
 const NL: str = "\n"

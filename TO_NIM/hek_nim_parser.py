@@ -384,7 +384,9 @@ def to_nim(self, indent=0, is_virtual=False, class_name=None, parent_name=None, 
         base_indent = getattr(self, '_base_indent', indent)
         class_type = class_name + type_params if class_name else None
 
+        _generic_ctx = bool(type_params or (parent_name and "[" in parent_name))
         # Emit forward declarations for methods so __init__ can call them
+        fwd_lines = []
         if inits and other_methods:
             for func_node_m, mname in other_methods:
                 fwd = _generate_method_decl(func_node_m, base_indent, class_name, parent_name, is_virtual_class, type_params)
@@ -395,7 +397,14 @@ def to_nim(self, indent=0, is_virtual=False, class_name=None, parent_name=None, 
                     # Skip forward declarations for iterators (Nim doesn't support them)
                     if sig.lstrip().startswith("iterator "):
                         continue
-                    result_lines.append(sig)
+                    fwd_lines.append(sig)
+        if fwd_lines and _generic_ctx:
+            ind0 = _ind(base_indent)
+            result_lines.append(f"{ind0}{{.push warning[Deprecated]: off.}}")
+            result_lines.extend(fwd_lines)
+            result_lines.append(f"{ind0}{{.pop.}}")
+        else:
+            result_lines.extend(fwd_lines)
 
         for func_node in inits:
             # Generate init/new procs at top level (same indent as type definition)
@@ -431,10 +440,18 @@ def to_nim(self, indent=0, is_virtual=False, class_name=None, parent_name=None, 
                 result_lines.append(f"{_ind(base_indent + 1)}new(result)" if is_virtual_class else f"{_ind(base_indent + 1)}result = {class_type}()")
                 for fname, fdefault in field_defaults:
                     result_lines.append(f"{_ind(base_indent + 1)}result.{fname} = {fdefault}")
+        method_decl_lines = []
         for func_node, method_name in other_methods:
             # Generate methods at top level (same indent as type definition)
             method_lines = _generate_method_decl(func_node, base_indent, class_name, parent_name, is_virtual_class, type_params)
-            result_lines.extend(method_lines)
+            method_decl_lines.extend(method_lines)
+        if method_decl_lines and _generic_ctx:
+            ind0 = _ind(base_indent)
+            result_lines.append(f"{ind0}{{.push warning[Deprecated]: off.}}")
+            result_lines.extend(method_decl_lines)
+            result_lines.append(f"{ind0}{{.pop.}}")
+        else:
+            result_lines.extend(method_decl_lines)
 
         # If no fields or methods, emit discard for empty body
         if not result_lines:
