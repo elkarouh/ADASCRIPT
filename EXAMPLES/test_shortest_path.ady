@@ -83,11 +83,11 @@ def example3():
     # Price for each piece of size i is represented as p(i) and maximum revenue from a rod of size i is r(i)
     # (could be split into multiple pieces). Find r(n) for the rod of size n.
     # -----------------------------------------------------------------------
-    ROD_SIZE: Positive = 5
+    ROD_SIZE: Natural = 5
 
     type State_T is tuple:
-      stage: int
-      remaining_size: int
+      stage: Natural
+      remaining_size: Natural
     type Revenue_T is float
     type Cost_T is float
     type Decision_T is Positive # decision of what length we cut
@@ -98,11 +98,14 @@ def example3():
     class RodCutting(Optimizer[State_T, Decision_T, Cost_T]):
       var choices: []Choice_T = [(1, 1.0), (2, 5.0), (3, 8.0), (4, 9.0), (5, 10.0), (6, 17.0), (7, 17.0), (8, 20.0), (9, 24.0), (10, 30.0)]
 
+      def is_end_state(self, current_state: State_T) -> bool:
+          let (stage, remaining_size) = current_state
+          return remaining_size == 0
+
       def get_state(self, past_decisions: []Decision_T) -> State_T:
-          stage: int = len(past_decisions)
-          remaining_size: int = ROD_SIZE - sum(int(d) for d in past_decisions)
-          if remaining_size <= 0:
-              return (-1, 0)
+          stage: Natural = len(past_decisions)
+          used: Natural = sum(int(d) for d in past_decisions)
+          remaining_size: Natural = ROD_SIZE - used if used < ROD_SIZE else 0
           return (stage, remaining_size)
 
       def get_next_decisions(self, current_state: State_T) -> [](Decision_T, Cost_T):
@@ -111,7 +114,9 @@ def example3():
 
     print('======= ROD CUTTING =======')
     op3: RodCutting = RodCutting()
-    for solution in op3.longest_path((0, ROD_SIZE), (-1, 0)):
+    start_state: State_T = (0, ROD_SIZE)
+    end_state:   State_T = (0, 0)
+    for solution in op3.longest_path(start_state, end_state):
         print(solution)
         break
 
