@@ -216,6 +216,7 @@ pattern_capture = IDENTIFIER
 pattern_wildcard = literal("_")
 pattern_others = literal("others")
 pattern_range = (NUMBER | IDENTIFIER) + V_DOT + V_DOT + (NUMBER | IDENTIFIER)
+pattern_tuple = LPAREN + pattern + (COMMA + pattern)[1:] + RPAREN
 pattern_group = LPAREN + pattern + RPAREN
 pattern_sequence = LBRACKET + pattern + (COMMA + pattern)[:] + COMMA[:] + RBRACKET
 pattern_value = (
@@ -241,6 +242,7 @@ base_pattern = (
     pattern_range
     | pattern_literal
     | pattern_wildcard
+    | pattern_tuple
     | pattern_group
     | pattern_mapping
     | pattern_sequence
