@@ -112,6 +112,11 @@ def _nim_expr_type(expr):
                 return _seq_elem(base_type)
             return None
 
+        # known string-returning stdlib calls
+        _STRING_CALLS = ("getEnv(", "paramStr(", "getAppFilename(")
+        if any(s.startswith(f) for f in _STRING_CALLS):
+            return "string"
+
         # plain identifier
         if _re.match(r"^[A-Za-z_]\w*$", s):
             sym = ParserState.symbol_table.lookup(s)
@@ -429,9 +434,26 @@ def to_nim(self, prec=None):
         inner = s[1:-1]
         new_inner = _re_str.sub(r'__bash_\w+__', _subst_bash, inner)
         if new_inner != inner:
-            # Switch to double-quoted fmt string (Nim requires double quotes for fmt)
-            new_inner = new_inner.replace('"', '\\"') if quote == "'" else new_inner
-            s = 'fmt"' + new_inner + '"'
+            # Build the result as string concatenation with & to avoid embedding
+            # function calls with double-quote arguments inside fmt"..." — Nim's
+            # fmt macro cannot handle getEnv("X") inside {}, even with escaping.
+            import re as _re_fmtesc
+            # Split new_inner into alternating literal and {expr} segments
+            parts = _re_fmtesc.split(r'(\{[^}]+\})', new_inner)
+            # Escape pre-existing double quotes in literal segments if source was single-quoted
+            nim_parts = []
+            for part in parts:
+                if part.startswith('{') and part.endswith('}'):
+                    # interpolation: emit as bare Nim expression
+                    nim_parts.append(part[1:-1])
+                else:
+                    lit = part.replace('"', '\\"') if quote == "'" else part
+                    if lit:
+                        nim_parts.append(f'"{lit}"')
+            s = ' & '.join(nim_parts) if nim_parts else '""'
+            # Wrap in parens if multiple parts so it works as an expression
+            if ' & ' in s:
+                s = '(' + s + ')'
             ParserState.nim_imports.add("strformat")
     # Replace embedded __bash_env_NAME__ placeholders with literal $NAME text
     # (only reached if not already converted above — env vars in non-fmt context)
