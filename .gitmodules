@@ -1,0 +1,3 @@
+[submodule "HPARSEC"]
+	path = HPARSEC
+	url = https://github.com/elkarouh/hparsec.git
