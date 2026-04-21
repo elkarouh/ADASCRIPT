@@ -516,18 +516,28 @@ Use `_` as a wildcard that matches anything. The `others` catch-all works as
 usual.
 
 ```python
-let (year, age) = current_state
-case (year, age):
-    when (6, _):          # year == 6, age irrelevant
-        []
-    when (0, _):          # year == 0
-        [(BUY, buy_cost)]
-    when (5, _):          # year == 5
-        [(SELL, sell_price)]
-    when (_, 3):          # age == 3
-        [(TRADE, trade_cost)]
-    when others:
-        [(KEEP, keep_cost), (TRADE, trade_cost)]
+# from test_shortest_path.ady, example 6 (Equipment Replacement)
+type Decision_T is enum BUY, SELL, KEEP, TRADE
+type Cost_T is float
+var maintenance_cost: {int}Cost_T = {0: 60.0, 1: 80.0, 2: 120.0}
+var market_value: {int}Cost_T = {0: 1000.0, 1: 800.0, 2: 600.0, 3: 500.0}
+
+def get_next_decisions(current_state: State_T) -> [](Decision_T, Cost_T):
+    let (year, age) = current_state
+    case (year, age):
+        when (6, _):
+            []
+        when (0, _):
+            [(BUY, maintenance_cost[0] + market_value[0])]
+        when (5, _):
+            [(SELL, -market_value[age])]
+        when (_, 3):
+            [(TRADE, -market_value[age] + market_value[0] + maintenance_cost[0])]
+        when others:
+            [
+                (KEEP, maintenance_cost[age]),
+                (TRADE, -market_value[age] + market_value[0] + maintenance_cost[0]),
+            ]
 ```
 
 Because Nim's `case` only accepts ordinal/string selectors (not tuples), the
@@ -535,16 +545,18 @@ transpiler desugars this to an `if/elif/else` chain:
 
 ```nim
 # Generated Nim
-if year == 6:
-    @[]
-elif year == 0:
-    @[(BUY, buy_cost)]
-elif year == 5:
-    @[(SELL, sell_price)]
-elif age == 3:
-    @[(TRADE, trade_cost)]
-else:
-    @[(KEEP, keep_cost), (TRADE, trade_cost)]
+proc get_next_decisions(current_state: State_T): seq[(Decision_T, Cost_T)] =
+    let (year, age) = current_state
+    if year == 6:
+        @[]
+    elif year == 0:
+        @[(BUY, maintenance_cost[0] + market_value[0])]
+    elif year == 5:
+        @[(SELL, -market_value[age])]
+    elif age == 3:
+        @[(TRADE, -market_value[age] + market_value[0] + maintenance_cost[0])]
+    else:
+        @[(KEEP, maintenance_cost[age]), (TRADE, -market_value[age] + market_value[0] + maintenance_cost[0])]
 ```
 
 Wildcard `_` elements are omitted from the generated condition (they add no
