@@ -23,6 +23,7 @@ from py3stmt import parse_stmt
 import hek_nim_expr  # noqa: F401 — registers expr to_nim() methods
 import hek_nim_declarations  # noqa: F401
 from hek_nim_expr import _infer_literal_nim_type
+from hek_helpers import _ind
 
 ###############################################################################
 # to_nim() methods
@@ -217,6 +218,23 @@ def to_nim(self):
     return "."
 
 
+def _float_range_assert(varname, type_name):
+    """Return a Nim assert statement for a float range type variable.
+
+    Looks up the range bounds in ParserState.tick_types[type_name].
+    Returns None if the type is not a float range type.
+    """
+    info = getattr(ParserState, 'tick_types', {}).get(type_name)
+    if not info or not info.get('is_float_range'):
+        return None
+    lo = info['First']
+    hi = info['Last']
+    return (
+        f'assert {varname} >= {lo} and {varname} <= {hi}, '
+        f'"{type_name} value " & ${varname} & " out of range [{lo}, {hi}]"'
+    )
+
+
 # --- assignment ---
 @method(assign_stmt)
 def to_nim(self):
@@ -308,7 +326,16 @@ def to_nim(self):
                     if _m:
                         parts[1] = f"some({rhs})"
                         ParserState.nim_imports.add("options")
-    return prefix + " = ".join(parts)
+    stmt = prefix + " = ".join(parts)
+    # Float range constraint: append assert after assignment
+    if len(parts) == 2 and not "," in lhs:
+        sym = ParserState.symbol_table.lookup(lhs)
+        if sym:
+            stype = sym.get("type") or ""
+            _fra = _float_range_assert(lhs, stype)
+            if _fra:
+                stmt = stmt + "\n" + _fra
+    return stmt
 
 
 # --- augmented assignment ---
@@ -326,15 +353,24 @@ def to_nim(self):
     )
     value = self.nodes[2].to_nim()
     nim_op, expand = _AUGOP_TO_NIM.get(py_op, (py_op, False))
-    if expand:
-        return f"{target} = {target} {nim_op} {value}"
     # String += -> &= in Nim
     if nim_op == "+=" and not expand:
         sym = ParserState.symbol_table.lookup(target)
         ttype = (sym.get("type") or "") if sym else ""
         if ttype in ("string", "str") or value.startswith('"') or value.startswith('fmt"'):
             nim_op = "&="
-    return f"{target} {nim_op} {value}"
+    if expand:
+        stmt = f"{target} = {target} {nim_op} {value}"
+    else:
+        stmt = f"{target} {nim_op} {value}"
+    # Float range constraint: append assert after augmented assignment
+    sym = ParserState.symbol_table.lookup(target)
+    if sym:
+        stype = sym.get("type") or ""
+        _fra = _float_range_assert(target, stype)
+        if _fra:
+            stmt = stmt + "\n" + _fra
+    return stmt
 
 
 def _coerce_scalar_value(value, annotation):
@@ -574,6 +610,11 @@ def to_nim(self):
                         ParserState.nim_imports.add("options")
                 if value:
                     result += f" = {value}"
+    # Float range constraint: if annotation is a float range type and there's
+    # a value, append an assert checking the assigned value is in range.
+    _fra = _float_range_assert(name, annotation)
+    if _fra and " = " in result:
+        result = result + "\n" + _fra
     return result
 
 
@@ -671,6 +712,10 @@ def to_nim(self):
         _RUNTIME_PREFIXES = ("re(", "re.compile(")
         if any(_val_part.startswith(p) for p in _RUNTIME_PREFIXES):
             result = "let" + result[5:]
+    # Float range constraint: append assert if annotation is a float range type
+    _fra = _float_range_assert(name, annotation)
+    if _fra and " = " in result:
+        result = result + "\n" + _fra
     return result
 
 # --- return ---
@@ -1195,6 +1240,14 @@ def to_nim(self):
     return self.nodes[1].to_nim()
 
 
+@method(float_range_def)
+def to_nim(self):
+    """float_range_def: 'float' 'range' NUMBER '..' NUMBER -> lo..hi as strings"""
+    lo = str(self.nodes[2].node)  # nodes[0]=float, nodes[1]=range, nodes[2]=NUMBER
+    hi = str(self.nodes[5].node)  # nodes[3]='.', nodes[4]='.', nodes[5]=NUMBER
+    return f"{lo}..{hi}"  # sentinel used by type_stmt to generate distinct float + constructor
+
+
 @method(nimport_stmt)
 def to_nim(self):
     """nimport_stmt: 'nimport' dotted_name (',' dotted_name)* -> Nim import"""
@@ -1229,7 +1282,7 @@ def to_nim(self):
 
 
 @method(type_stmt)
-def to_nim(self):
+def to_nim(self, indent=0):
     """type_stmt: 'type' IDENTIFIER type_alias_params? '=' expression"""
     name = self.nodes[0].to_nim()
     params = ""
@@ -1275,12 +1328,19 @@ def to_nim(self):
         lo = str(sr.nodes[0].node)
         hi = str(sr.nodes[-1].node)
         ParserState.tick_types[name] = {"First": lo, "Last": hi}
+    elif rhs_type == "float_range_def":
+        lo = str(rhs.nodes[2].node)
+        hi = str(rhs.nodes[5].node)
+        ParserState.tick_types[name] = {"First": lo, "Last": hi, "is_float_range": True}
+        ParserState.symbol_table.add(name, "float", "type")
+        _exp = "*" if getattr(ParserState, 'export_symbols', False) and ParserState.symbol_table.depth() == 1 else ""
+        return f"{_ind(indent)}type {name}{_exp}{params} = float"
     value = rhs.to_nim()
     # Record type alias so method translation can resolve it
     if rhs_type not in ("enum_def",):
         ParserState.symbol_table.add(name, value, "type")
     _exp = "*" if getattr(ParserState, 'export_symbols', False) and ParserState.symbol_table.depth() == 1 else ""
-    return f"type {name}{_exp}{params} = {value}"
+    return f"{_ind(indent)}type {name}{_exp}{params} = {value}"
 
 
 # --- simple_stmt ---
