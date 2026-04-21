@@ -32,7 +32,7 @@ def parseCompletedTests(lines: []str) -> []str:
   result : []str = []
   let prefix : str = "SUCCESS:"
   for line in lines:
-    let pos : Natural = line.find(prefix)
+    let pos : int = line.find(prefix)
     if pos >= 0:
       let rest : str = line[pos + len(prefix):].strip()
       let parts : []str = rest.split()
