@@ -13,11 +13,11 @@ def example1():
     # Example 1 -- simple weighted graph (Dijkstra / longest path)
     # -----------------------------------------------------------------------
     type State_T is enum s,u,x,v,y
-    type Weight_T is 0..100
+    type Cost_T is 0..100
     type Decision_T is State_T  # the decision is which state we will choose
     type Choice_T is tuple:
         decision: Decision_T
-        cost: Weight_T
+        cost: Cost_T
     # for each state, a list of choices        
     var G: {State_T}[]Choice_T = {
         s: [(u, 10), (x, 5)],
@@ -26,10 +26,10 @@ def example1():
         x: [(u, 3), (v, 9), (y, 2)],
         y: [(s, 7), (v, 6)],
     }        
-    class MyOptimizer(Optimizer[State_T, Decision_T, Weight_T]):
+    class MyOptimizer(Optimizer[State_T, Decision_T, Cost_T]):
         def get_state(self, past_decisions: []Decision_T) -> State_T:
             past_decisions[-1]
-        def get_next_decisions(self, curr_state: State_T) -> [](Decision_T, Weight_T):
+        def get_next_decisions(self, curr_state: State_T) -> [](Decision_T, Cost_T):
             G.get(curr_state, [])
 
     op: MyOptimizer = MyOptimizer()
@@ -482,7 +482,7 @@ def example10():
                         for h in self.hidden_states]
             [(h, self.trans_p[curr_hidden_state][h] * self.emit_p[h][o])
                     for h in self.hidden_states]
-        def cost_operator(self, accumulated_cost: Cost_T, step_prob: Prob_T) -> Cost_T:
+        def cost_operator(self, accumulated_cost: Prob_T, step_prob: Prob_T) -> Prob_T:
             accumulated_cost + log(self.offset / step_prob)
         def get_probability(self, seq: []Hidden_State_T) -> Prob_T:
             prob: Prob_T = self.start_p[seq[0]] * self.emit_p[seq[0]][self.obs[0]]
