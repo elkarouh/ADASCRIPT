@@ -235,11 +235,24 @@ class Tokenizer:
         because Python's tokenizer would otherwise consume ``#`` and
         everything following it as a comment.
         """
-        s = Tokenizer._BASH_ARGC_RE.sub('__bash_argc__', s)
-        s = Tokenizer._BASH_ARGS_RE.sub('__bash_args__', s)
-        s = Tokenizer._BASH_ARG_RE.sub(r'__bash_arg\1__', s)
-        s = Tokenizer._BASH_ENV_RE.sub(r'__bash_env_\1__', s)
-        return s
+        import re as _re_bash
+        # Only substitute outside string literals so that "$VAR" inside a
+        # quoted string is left as literal text rather than expanded.
+        string_re = _re_bash.compile(
+            r'("""[\s\S]*?"""|\'\'\'[\s\S]*?\'\'\'|"(?:[^"\\]|\\.)*"|\'(?:[^\'\\]|\\.)*\')'
+        )
+        parts = string_re.split(s)
+        out = []
+        for i, part in enumerate(parts):
+            if i % 2 == 1:  # inside a string literal — leave unchanged
+                out.append(part)
+            else:
+                part = Tokenizer._BASH_ARGC_RE.sub('__bash_argc__', part)
+                part = Tokenizer._BASH_ARGS_RE.sub('__bash_args__', part)
+                part = Tokenizer._BASH_ARG_RE.sub(r'__bash_arg\1__', part)
+                part = Tokenizer._BASH_ENV_RE.sub(r'__bash_env_\1__', part)
+                out.append(part)
+        return ''.join(out)
 
     @staticmethod
     def _preprocess_range_operators(s):
