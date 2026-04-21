@@ -52,18 +52,18 @@ class Optimizer[S, D, C]:
         raise NotImplementedError("Override get_next_decisions()")
 
     def get_heuristic_cost(self, current_state: S) -> float:
-        return 0.0
+        0.0
 
     def cost_operator(self, accumulated:C , step_cost:C ) -> C:
         actual_cost:C  = step_cost + self.offset
         assert actual_cost >= 0
-        return accumulated + actual_cost
+        accumulated + actual_cost
 
     def hcost_operator(self, past_cost:C, current_state: S) -> C:
-        return past_cost + self.get_heuristic_cost(current_state)
+        past_cost + self.get_heuristic_cost(current_state)
 
     def real_cost(self, cost:C) -> C:
-        return cost - self.offset * float(len(self.decision_path))
+        cost - self.offset * float(len(self.decision_path))
 
     def is_end_state(self, state: S) -> bool:
         raise NotImplementedError("Override is_end_state()")
