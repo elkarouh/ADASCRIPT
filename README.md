@@ -4,6 +4,10 @@ Adascript is a statically-typed superset of Python 3 inspired by Ada and Nim.
 It transpiles to both **Python 3** and **Nim**, letting you write concise,
 type-safe code in a familiar syntax and target either ecosystem without
 changing the source.
+I've been searching for the perfect programming language for years and my conclusion thus far is that it's missing.
+I've spent years searching for a programming language that has it all: expressive types, a large ecosystem, good performance, and good devx.
+Every language I've tried makes me choose. So here I wanted to share my view of the current language landscape, where they fall short, and what I think they can do to have it all and become S-Tier.
+
 This is a programming language that I’ve been developing for about 10 years. More recently, I’ve used Codex as an assistant for parts of the documentation work, refactoring, and some of the more difficult feature implementations, so the project does include some AI-assisted code and writing. That said, the overall design, review, and ongoing maintenance of the project are handled by me.
 
 
