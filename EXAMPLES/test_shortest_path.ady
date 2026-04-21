@@ -321,22 +321,21 @@ def example7():
         vaslui:    [(urzineci, 142.0), (lasi, 92.0)],
         zerind:    [(arad, 75.0), (oradea, 71.0)],
     }
+    var HEURISTICS: {State_T}Distance_T = {
+        arad: 366.0, bucharest: 0.0, craiova: 160.0, drobeta: 242.0,
+        eforie: 161.0, fagaras: 176.0, giurgiu: 77.0, hirsova: 151.0,
+        lasi: 226.0, lugoj: 244.0, mehadia: 241.0, neamt: 234.0,
+        oradea: 380.0, pitesti: 100.0, rimnicu: 193.0, sibiu: 253.0,
+        timisoara: 329.0, urzineci: 80.0, vaslui: 199.0, zerind: 374.0,
+    }
+
     class BookMap(Minimizer[State_T, Decision_T, Distance_T]):
-        var _heuristic: {State_T}Distance_T = {
-            arad: 366.0, bucharest: 0.0, craiova: 160.0, drobeta: 242.0,
-            eforie: 161.0, fagaras: 176.0, giurgiu: 77.0, hirsova: 151.0,
-            lasi: 226.0, lugoj: 244.0, mehadia: 241.0, neamt: 234.0,
-            oradea: 380.0, pitesti: 100.0, rimnicu: 193.0, sibiu: 253.0,
-            timisoara: 329.0, urzineci: 80.0, vaslui: 199.0, zerind: 374.0,
-        }
         def get_state(self, past_decisions: []State_T) -> State_T:
             past_decisions[-1]
-
         def get_next_decisions(self, current_state: State_T) -> [](Decision_T, Distance_T):
             G.get(current_state, [])
-
         def get_heuristic_cost(self, city: State_T) -> float:
-            self._heuristic.get(city, 0)
+            HEURISTICS.get(city, 0)
 
     op7: BookMap = BookMap()
     print("======= ROMANIA MAP: oradea -> bucharest =======")
@@ -430,12 +429,13 @@ def example9():
 
         def get_next_decisions(self, current_state: State_T) -> [](Decision_T, Cost_T):
             let (r1, r2) = current_state
-            if r1 == "" and r2 == "":
-                return []
-            if r1 == "":
-                return [((c1:"=", c2:r2[0:1]), 6.0)]
-            if r2 == "":
-                return [((c1:r1[0:1], c2:"="), 6.0)]
+            case (r1,r2):
+                when ("", ""):
+                    return []
+                when ("", _):
+                    return [((c1:"=", c2:r2[0:1]), 6.0)]
+                when (_, ""):
+                    return [((c1:r1[0:1], c2:"="), 6.0)]
             ch1: str = r1[0:1]
             ch2: str = r2[0:1]
             cost: Cost_T = 0.0 if ch1 == ch2 else 2.0
