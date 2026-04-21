@@ -112,7 +112,7 @@ def example3():
 
       def get_state(self, past_decisions: []Decision_T) -> State_T:
           stage: Natural = len(past_decisions)
-          used: Natural = sum(int(d) for d in past_decisions)
+          used: Natural = sum(past_decisions)
           remaining_size: Natural = max(ROD_SIZE - used, 0)
           return (stage, remaining_size)
 
@@ -131,7 +131,7 @@ def example4():
     # -----------------------------------------------------------------------
     # Example 4 -- Capital Budgeting
     # -----------------------------------------------------------------------
-    const CAPITAL: int = 5
+    const CAPITAL: Natural = 5
     type Cost_T is float
     type Stage_T is enum STAGE1, STAGE2, STAGE3, END
     type State_T is tuple:
@@ -181,15 +181,15 @@ def example5():
     # -----------------------------------------------------------------------
     # Example 5 -- Knapsack
     # -----------------------------------------------------------------------
-    const MAX_WEIGHT: int = 5
+    const MAX_WEIGHT: Natural = 5
     type Cost_T is float
     type Stage_T is enum STAGE1, STAGE2, STAGE3, END
     type State_T is tuple:
       stage: Stage_T
-      remaining: int
+      remaining: Natural
     type Decision_T is tuple:
       stage: Stage_T
-      quantity: int # the quantity of items to choose
+      quantity: Natural # the quantity of items to choose
     type Choice_T is tuple:
       weight : int
       benefit: int
@@ -205,10 +205,10 @@ def example5():
 
         def get_state(self, past_decisions: []Decision_T) -> State_T:
             stage: Stage_T = past_decisions[-1].stage'Next
-            remaining: int = MAX_WEIGHT
+            remaining: Natural = MAX_WEIGHT
             for decision in past_decisions:
               prev_stage: Stage_T = decision.stage
-              qty: int = decision.quantity
+              qty: Natural = decision.quantity
               remaining -= qty * self.items[prev_stage].weight
             return stage, remaining
 
@@ -218,7 +218,7 @@ def example5():
                 return []
             let (weight, benefit) = self.items[stage]
             decisions: [](Decision_T, Cost_T) = []
-            qty: int = 0
+            qty: Natural = 0
             while qty * weight <= remaining:
                 decisions.append(((stage:stage,quantity:qty), float(benefit * qty)))
                 qty += 1
@@ -240,7 +240,7 @@ def example6():
     const MAX_AGE: int = 3
     type Age_T is int
     type State_T is tuple: # the state is what you need to take into account when making decisions
-        year: int
+        year: Natural
         age: int
 
     class EquipmentReplacement(Optimizer[State_T, Decision_T, Cost_T]):
@@ -254,7 +254,7 @@ def example6():
             return state.year == 6
 
         def get_state(self, past_decisions: []Decision_T) -> State_T:
-            year: int = len(past_decisions)
+            year: Natural = len(past_decisions)
             if year == 6:
                 return (6, IRRELEVANT)
             age: int = 0
@@ -283,7 +283,8 @@ def example6():
 
     print('======= EQUIPMENT REPLACEMENT =======')
     op6: EquipmentReplacement = EquipmentReplacement(offset=10000.0)
-    for solution in op6.shortest_path((0, 0)):
+    start_state: State_T = (0, 0)
+    for solution in op6.shortest_path(start_state):
         print(solution)
 
 def example7():
@@ -350,18 +351,18 @@ def example8():
     # -----------------------------------------------------------------------
     type Seg_T is []int
     type State_T is tuple:
-        nr_segs: int
-        last_idx: int
+        nr_segs: Natural
+        last_idx: Natural
     type Decision_T is Seg_T
     type Cost_T is float
 
     class LeastSquareSegmenter(Optimizer[State_T, Decision_T, Cost_T]):
         var series: []int = [10, 20, 34, 50, 60, 70, 80]
 
-        def SSD(self, lo: int, hi: int) -> float:
+        def SSD(self, lo: Natural, hi: Natural) -> float:
             """Sum of squared deviations for series[lo:hi]."""
             sub: []int = self.series[lo:hi]
-            n: int = hi - lo
+            n: Natural = hi - lo
             if n == 0:
                 return 0.0
             sum_v: float = 0.0
@@ -375,8 +376,8 @@ def example8():
             return state.nr_segs == 0
 
         def get_state(self, past_decisions: []Decision_T) -> State_T:
-            nr_segs: int = self.start_state.nr_segs - len(past_decisions)
-            last_idx: int = 0
+            nr_segs: Natural = self.start_state.nr_segs - len(past_decisions)
+            last_idx: Natural = 0
             for d in past_decisions:
                 last_idx += len(d)
             return (nr_segs:nr_segs, last_idx:last_idx)
@@ -385,7 +386,7 @@ def example8():
             let (nr_segs, j) = current_state
             if nr_segs == 0:
                 return []
-            n: int = len(self.series)
+            n: Natural = len(self.series)
             if nr_segs == 1:
                 return [(self.series[j:], self.SSD(j, n))]
             return [(self.series[j:i], self.SSD(j, i))
@@ -393,7 +394,8 @@ def example8():
 
     print('======= LEAST-SQUARE SEGMENTATION (2 segments) =======')
     op8: LeastSquareSegmenter = LeastSquareSegmenter()
-    for sol in op8.shortest_path((nr_segs:2, last_idx:0)):
+    start_state: State_T = (nr_segs:2, last_idx:0)
+    for sol in op8.shortest_path(start_state):
         print(sol)
 
 
@@ -417,8 +419,8 @@ def example9():
         def get_state(self, past_decisions: []Decision_T) -> State_T:
             s1: str = self.start_state.r1
             s2: str = self.start_state.r2
-            len1: int = 0
-            len2: int = 0
+            len1: Natural = 0
+            len2: Natural = 0
             for d in past_decisions:
                 if d.c1 != "=":
                     len1 += 1
@@ -460,7 +462,7 @@ def example10():
     type Symptom_T is enum NORMAL, COLD, DIZZY
     type Prob_T is float
     type State_T is tuple:
-      stage: int
+      stage: Natural
       hidden_state: Hidden_State_T
     class HMM(Optimizer[State_T, Hidden_State_T, Prob_T]):
         var hidden_states : []Hidden_State_T
@@ -516,13 +518,14 @@ def example10():
     print("##################################################")
     print("Observations:", obs)
     print("Most probable hidden-state sequences (best first):")
-    for solution in hmm.shortest_path((stage:0, hidden_state:NONE)):
+    start_state: State_T = (stage:0, hidden_state:NONE)
+    for solution in hmm.shortest_path(start_state):
         seq = solution[1]
         prob = hmm.get_probability(seq)
         print("  seq=", seq, " prob=", round(prob, 6))
     print("Predicting next state/observation:")
     best: []Hidden_State_T = []
-    for solution in hmm.shortest_path((stage:0, hidden_state:NONE)):
+    for solution in hmm.shortest_path(start_state):
         best = solution[1]
         break
     last_state = best[-1]
