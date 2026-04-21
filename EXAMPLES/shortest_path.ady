@@ -66,13 +66,13 @@ class Optimizer[S, D, C]:
         return cost - self.offset * float(len(self.decision_path))
 
     def is_end_state(self, state: S) -> bool:
-        return False
+        raise NotImplementedError("Override is_end_state()")
 
     # ------------------------------------------------------------------
     # Shortest-path (A* / Dijkstra)
     # ------------------------------------------------------------------
 
-    def shortest_path(self, start_state: S, end_state: S, allsolutions: bool = True):
+    def shortest_path(self, start_state: S, allsolutions: bool = True):
         self.start_state = start_state
         empty_path: []D = []
         fringe: PriorityQueue[Fringe_Element_T[S, D, C]] = PriorityQueue((0.0, 0.0, empty_path, start_state))
@@ -86,7 +86,7 @@ class Optimizer[S, D, C]:
             self.decision_path = path
             visited.add(current_state)
 
-            if current_state == end_state or self.is_end_state(current_state):
+            if self.is_end_state(current_state):
                 yield self.real_cost(cost), path
                 if not allsolutions:
                     break
@@ -107,7 +107,7 @@ class Optimizer[S, D, C]:
     def visit_state(self, state: S) -> None:
         print("state =", state)
 
-    def longest_path(self, start_state: S, end_state: S, max_path_length: int = 1000):
+    def longest_path(self, start_state: S, max_path_length: int = 1000):
         """
         Yield every simple path from start_state to end_state in decreasing order
         of total revenue (sum of step revenues from get_next_decisions).
@@ -129,7 +129,7 @@ class Optimizer[S, D, C]:
             let (neg_rev, path_length, path, current_state, path_states) = fringe.pop()
             revenue: float = -neg_rev
 
-            if (current_state == end_state or self.is_end_state(current_state)) and path_length > 0:
+            if self.is_end_state(current_state) and path_length > 0:
                 solutions.append((revenue, path))
 
             if path_length < max_path_length:
