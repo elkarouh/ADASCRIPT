@@ -460,7 +460,7 @@ def example10():
     from math import log
     type Hidden_State_T is enum HEALTHY, FEVER, NONE
     type Symptom_T is enum NORMAL, COLD, DIZZY
-    type Prob_T is float
+    type Prob_T is float range 0..1
     type State_T is tuple:
       stage: Natural
       hidden_state: Hidden_State_T
