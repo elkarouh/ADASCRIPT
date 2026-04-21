@@ -115,7 +115,7 @@ class SymbolTable:
         return len(self.stack)
 
     def resolve_type(self, name):
-        """Return the Nim type string for a symbol name, following type aliases.
+        """Return the type string for a symbol name, following type aliases.
 
         For a variable/param, returns its declared type.
         For a type alias (kind='type'), follows the chain transitively.
@@ -142,30 +142,43 @@ class ParserState:
     Attributes:
         DEBUG: When True, print parser construction and matching details.
         memos: Memoization cache (currently unused, reserved for packrat parsing).
+
+    Backend-specific fields (Nim backend):
+        nim_imports, nim_pragmas, nim_init_stmts, tick_types,
+        class_field_types, proc_param_types, proc_param_types_full,
+        tuple_field_order, object_field_order
+    These are declared here for convenience but are owned by the Nim backend.
+
+    Backend-specific fields (Python backend):
+        nim_imports  (reused for Python import lines — historical naming)
+        tick_types
     """
 
     DEBUG = False
     memos: dict = {}
     symbol_table = SymbolTable()
-    nim_imports: set = set()
-    nim_pragmas: set = set()       # top-level {.experimental: ...} pragmas
-    nim_init_stmts: list = []      # top-level init statements emitted after imports (e.g. randomize())
     export_symbols: bool = False   # when True, emit * on all top-level declarations (library mode)
-    tick_types: dict = {}  # {TypeName: {First: val, Last: val, members: [...]}}
-    class_field_types: dict = {}   # {ClassName: {field_name: nim_type}}
-    proc_param_types: dict = {}    # {proc_name: [nim_type, ...]} positional param types
-    tuple_field_order: dict = {}   # {TupleName: [field, ...]} for positional tuple constructors
-    object_field_order: dict = {}  # {ObjectName: [field, ...]} for positional object constructors
+
+    # Nim-backend fields
+    nim_imports: set = set()
+    nim_pragmas: set = set()
+    nim_init_stmts: list = []
+    tick_types: dict = {}
+    class_field_types: dict = {}
+    proc_param_types: dict = {}
+    proc_param_types_full: dict = {}
+    tuple_field_order: dict = {}
+    object_field_order: dict = {}
 
     @classmethod
     def reset(cls):
         """Clear memoization state between parses."""
         cls.memos.clear()
         cls.symbol_table = SymbolTable()
+        cls.export_symbols = False
         cls.nim_imports = set()
         cls.nim_pragmas = set()
         cls.nim_init_stmts = []
-        cls.export_symbols = False
         cls.tick_types = {}
         cls.class_field_types = {}
         cls.proc_param_types = {}
@@ -303,10 +316,13 @@ class Parser(metaclass=ParserMeta):
             print(self.__class__.__name__, "Constructor->", self.nodes)
 
     def to_nim(self, prec=None):
-        """Default to_nim() fallback: delegates to to_py() for expression nodes."""
+        """Fallback used by the Nim backend: delegates to to_py() when no to_nim() override exists."""
         if not hasattr(self, 'to_py'):
             return ''
-        return self.to_py(prec)
+        try:
+            return self.to_py(prec)
+        except TypeError:
+            return self.to_py()
 
 
 def forward(parser_name: str) -> type[Parser]:

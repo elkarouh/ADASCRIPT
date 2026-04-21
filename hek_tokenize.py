@@ -236,22 +236,62 @@ class Tokenizer:
         everything following it as a comment.
         """
         import re as _re_bash
-        # Only substitute outside string literals so that "$VAR" inside a
-        # quoted string is left as literal text rather than expanded.
+
+        def _substitute(text):
+            text = Tokenizer._BASH_ARGC_RE.sub('__bash_argc__', text)
+            text = Tokenizer._BASH_ARGS_RE.sub('__bash_args__', text)
+            text = Tokenizer._BASH_ARG_RE.sub(r'__bash_arg\1__', text)
+            text = Tokenizer._BASH_ENV_RE.sub(r'__bash_env_\1__', text)
+            return text
+
+        def _process_fstring(fstr):
+            # Substitute inside {expr} placeholders but leave bare text alone.
+            out = []
+            depth = 0
+            i = 0
+            # skip opening quote(s): f" or f' or f""" or f'''
+            if fstr.startswith(('f"""', "f'''")):
+                prefix, i = fstr[:4], 4
+            else:
+                prefix, i = fstr[:2], 2
+            out.append(prefix)
+            while i < len(fstr):
+                c = fstr[i]
+                if c == '{' and i + 1 < len(fstr) and fstr[i + 1] == '{':
+                    out.append('{{'); i += 2; continue
+                if c == '}' and i + 1 < len(fstr) and fstr[i + 1] == '}':
+                    out.append('}}'); i += 2; continue
+                if c == '{':
+                    depth += 1
+                    out.append(c); i += 1; continue
+                if c == '}' and depth > 0:
+                    depth -= 1
+                    out.append(c); i += 1; continue
+                if depth > 0:
+                    # inside a placeholder expression — collect and substitute
+                    j = i
+                    while i < len(fstr) and not (fstr[i] in '{}'):
+                        i += 1
+                    out.append(_substitute(fstr[j:i]))
+                else:
+                    out.append(c); i += 1
+            return ''.join(out)
+
+        # Split on string literals (f-strings and plain strings).
         string_re = _re_bash.compile(
-            r'("""[\s\S]*?"""|\'\'\'[\s\S]*?\'\'\'|"(?:[^"\\]|\\.)*"|\'(?:[^\'\\]|\\.)*\')'
+            r'(f"""[\s\S]*?"""|f\'\'\'[\s\S]*?\'\'\'|f"(?:[^"\\]|\\.)*"|f\'(?:[^\'\\]|\\.)*\'|'
+            r'"""[\s\S]*?"""|\'\'\'[\s\S]*?\'\'\'|"(?:[^"\\]|\\.)*"|\'(?:[^\'\\]|\\.)*\')'
         )
         parts = string_re.split(s)
         out = []
         for i, part in enumerate(parts):
-            if i % 2 == 1:  # inside a string literal — leave unchanged
-                out.append(part)
+            if i % 2 == 1:  # inside a string literal
+                if part.startswith('f'):
+                    out.append(_process_fstring(part))
+                else:
+                    out.append(part)  # plain string — leave $ unchanged
             else:
-                part = Tokenizer._BASH_ARGC_RE.sub('__bash_argc__', part)
-                part = Tokenizer._BASH_ARGS_RE.sub('__bash_args__', part)
-                part = Tokenizer._BASH_ARG_RE.sub(r'__bash_arg\1__', part)
-                part = Tokenizer._BASH_ENV_RE.sub(r'__bash_env_\1__', part)
-                out.append(part)
+                out.append(_substitute(part))
         return ''.join(out)
 
     @staticmethod
