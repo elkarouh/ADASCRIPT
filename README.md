@@ -413,18 +413,23 @@ case value:
         print("something else")
 ```
 
-Guards:
+Tuple patterns with wildcards (desugars to `if/elif` in Nim):
 
 ```python
-case point:
-    when Point(x, y) if x == y:
-        print("on the diagonal")
-    when Point(x, y):
-        print(f"off diagonal: {x}, {y}")
+let (year, age) = current_state
+case (year, age):
+    when (6, _):
+        []
+    when (0, _):
+        [(BUY, maintenance_cost[0] + market_value[0])]
+    when (_, 3):
+        [(TRADE, -market_value[age] + market_value[0] + maintenance_cost[0])]
+    when others:
+        [(KEEP, maintenance_cost[age])]
 ```
 
 **Python output:** standard `match/case` statement.
-**Nim output:** `case/of` statement.
+**Nim output:** `if/elif/else` chain (Nim does not support tuple case selectors).
 
 ---
 
