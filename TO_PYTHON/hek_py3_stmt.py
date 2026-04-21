@@ -622,6 +622,14 @@ def to_py(self):
     return self.nodes[1].to_py()
 
 
+@method(float_range_def)
+def to_py(self):
+    """float_range_def: 'float' 'range' NUMBER '..' NUMBER -> float (Python has no float subrange)"""
+    lo = str(self.nodes[2].node)
+    hi = str(self.nodes[5].node)
+    return f"float  # range {lo} .. {hi}"
+
+
 @method(type_alias_params)
 def to_py(self):
     """type_alias_params: '[' IDENTIFIER (',' IDENTIFIER)* ']'"""
@@ -654,6 +662,11 @@ def to_py(self):
     # RHS is the last node — works whether V_EQUAL is present ('=') or absent ('is')
     rhs = self.nodes[-1]
     rhs_type = type(rhs).__name__
+    if rhs_type == 'float_range_def':
+        lo = str(rhs.nodes[2].node)
+        hi = str(rhs.nodes[5].node)
+        ParserState.tick_types[name] = {"First": lo, "Last": hi, "is_float_range": True}
+        return f"{name} = float  # range {lo} .. {hi}"
     if rhs_type == 'constrained_subrange_def':
         sr = rhs.nodes[1]  # the subrange_def inside
         lo = str(sr.nodes[0].node)
