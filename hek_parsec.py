@@ -142,15 +142,33 @@ class ParserState:
     Attributes:
         DEBUG: When True, print parser construction and matching details.
         memos: Memoization cache (currently unused, reserved for packrat parsing).
-        backend_state: dict for backend-specific data (e.g. imports, pragmas).
-                       Populated and reset by the active backend, not by this module.
+
+    Backend-specific fields (Nim backend):
+        nim_imports, nim_pragmas, nim_init_stmts, tick_types,
+        class_field_types, proc_param_types, proc_param_types_full,
+        tuple_field_order, object_field_order
+    These are declared here for convenience but are owned by the Nim backend.
+
+    Backend-specific fields (Python backend):
+        nim_imports  (reused for Python import lines — historical naming)
+        tick_types
     """
 
     DEBUG = False
     memos: dict = {}
     symbol_table = SymbolTable()
     export_symbols: bool = False   # when True, emit * on all top-level declarations (library mode)
-    backend_state: dict = {}       # backend-specific data; managed by the backend
+
+    # Nim-backend fields
+    nim_imports: set = set()
+    nim_pragmas: set = set()
+    nim_init_stmts: list = []
+    tick_types: dict = {}
+    class_field_types: dict = {}
+    proc_param_types: dict = {}
+    proc_param_types_full: dict = {}
+    tuple_field_order: dict = {}
+    object_field_order: dict = {}
 
     @classmethod
     def reset(cls):
@@ -158,7 +176,15 @@ class ParserState:
         cls.memos.clear()
         cls.symbol_table = SymbolTable()
         cls.export_symbols = False
-        cls.backend_state = {}
+        cls.nim_imports = set()
+        cls.nim_pragmas = set()
+        cls.nim_init_stmts = []
+        cls.tick_types = {}
+        cls.class_field_types = {}
+        cls.proc_param_types = {}
+        cls.proc_param_types_full = {}
+        cls.tuple_field_order = {}
+        cls.object_field_order = {}
 
 
 G = ParserState  # backward compat alias
