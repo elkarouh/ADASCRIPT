@@ -247,11 +247,14 @@ constrained_subrange_def = IDENTIFIER + subrange_def
 # float_range_def: float range LO .. HI  (e.g. float range 0.0 .. 100.0)
 float_range_def = fw("float_range_def")
 float_range_def = literal("float") + literal("range") + NUMBER + V_DOT + V_DOT + NUMBER
+# int_range_def: int range LO .. HI  (synonym for constrained_subrange_def)
+int_range_def = fw("int_range_def")
+int_range_def = literal("int") + literal("range") + subrange_def
 # Allow subrange_def as a type_annotation (e.g. in tuple fields: stage: 1 .. 5)
 # Insert before the expression fallback (last element in type_annotation.parsers)
 type_annotation.parsers.insert(0, subrange_def)
 # type_stmt for simple (inline) forms only; block forms (tuple/record) are in py3compound_stmt
-type_stmt = ikw("type") + IDENTIFIER + type_alias_params[:] + (V_EQUAL | ikw("is")) + (enum_def | float_range_def | constrained_subrange_def | subrange_def | type_annotation)
+type_stmt = ikw("type") + IDENTIFIER + type_alias_params[:] + (V_EQUAL | ikw("is")) + (enum_def | float_range_def | int_range_def | constrained_subrange_def | subrange_def | type_annotation)
 
 # --- simple_stmt: choice of all statement types ---
 # Ordering matters: try more specific forms before general expression.

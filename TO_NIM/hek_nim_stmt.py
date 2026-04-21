@@ -1245,7 +1245,13 @@ def to_nim(self):
     """float_range_def: 'float' 'range' NUMBER '..' NUMBER -> lo..hi as strings"""
     lo = str(self.nodes[2].node)  # nodes[0]=float, nodes[1]=range, nodes[2]=NUMBER
     hi = str(self.nodes[5].node)  # nodes[3]='.', nodes[4]='.', nodes[5]=NUMBER
-    return f"{lo}..{hi}"  # sentinel used by type_stmt to generate distinct float + constructor
+    return f"{lo}..{hi}"  # sentinel used by type_stmt to generate float type alias
+
+
+@method(int_range_def)
+def to_nim(self):
+    """int_range_def: 'int' 'range' subrange_def -> delegates to subrange_def"""
+    return self.nodes[2].to_nim()  # nodes[0]=int, nodes[1]=range, nodes[2]=subrange_def
 
 
 @method(nimport_stmt)
@@ -1325,6 +1331,11 @@ def to_nim(self, indent=0):
         ParserState.tick_types[name] = {"First": lo, "Last": hi}
     elif rhs_type == "constrained_subrange_def":
         sr = rhs.nodes[1]  # the subrange_def inside
+        lo = str(sr.nodes[0].node)
+        hi = str(sr.nodes[-1].node)
+        ParserState.tick_types[name] = {"First": lo, "Last": hi}
+    elif rhs_type == "int_range_def":
+        sr = rhs.nodes[2]  # the subrange_def inside (nodes[0]=int, nodes[1]=range)
         lo = str(sr.nodes[0].node)
         hi = str(sr.nodes[-1].node)
         ParserState.tick_types[name] = {"First": lo, "Last": hi}
