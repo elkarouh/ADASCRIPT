@@ -878,6 +878,15 @@ def to_nim(self, prec=None):
             return type_name + ".len"
         elif attr == "Size":
             return type_name + ".sizeof"
+        # seq/array variable: 'First -> .low, 'Last -> .high
+        _sym2 = ParserState.symbol_table.lookup(type_name)
+        _sym2_type = (_sym2.get("type", "") or "") if _sym2 else ""
+        _is_seq = _sym2_type.startswith("seq[") or _sym2_type.startswith("array[") or _sym2_type.startswith("[]")
+        if _is_seq:
+            if attr == "First":
+                return type_name + ".low"
+            elif attr == "Last":
+                return type_name + ".high"
         # Unknown tick attribute — emit as method call
         return type_name + "." + attr
     # Resolve bashisms: __bash_*__ placeholders -> Nim equivalents
