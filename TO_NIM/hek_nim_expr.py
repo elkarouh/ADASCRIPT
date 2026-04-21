@@ -16,6 +16,7 @@ Usage:
 import sys, os
 _dir = os.path.dirname(__file__)
 sys.path.insert(0, os.path.join(_dir, ".."))
+sys.path.insert(0, os.path.join(_dir, "..", "HPARSEC"))
 sys.path.insert(0, os.path.join(_dir, "..", "ADASCRIPT_GRAMMAR"))
 # (no TO_PYTHON dependency needed)
 
@@ -2608,3 +2609,4 @@ def to_nim(self, prec=None):
             elif type(seq).__name__ == "named_tuple_field":
                 fields.append(seq.to_nim())
     return "(" + ", ".join(fields) + ")"
+

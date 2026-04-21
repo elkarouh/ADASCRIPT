@@ -96,6 +96,7 @@ import sys, os
 
 _dir = os.path.dirname(os.path.realpath(__file__))
 sys.path.insert(0, os.path.join(_dir, ".."))
+sys.path.insert(0, os.path.join(_dir, "..", "HPARSEC"))
 sys.path.insert(0, os.path.join(_dir, "..", "ADASCRIPT_GRAMMAR"))
 
 import sys
@@ -529,3 +530,4 @@ if __name__ == "__main__":
         sys.exit(run_tests())
     else:
         main(args)
+
