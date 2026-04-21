@@ -319,9 +319,16 @@ def to_nim(self, indent=0, is_virtual=False, class_name=None, parent_name=None, 
                     line = line[:len(line) - len(stripped)] + stripped[len(kw):]
                     break
             # Capture default value before stripping
-            default_match = _re.search(r'^\s*(\w+)\s*:.+?\s*=\s*(.+)$', line.strip())
+            default_match = _re.search(r'^\s*(\w+)\s*:(.+?)\s*=\s*(.+)$', line.strip(), _re.DOTALL)
             if default_match:
-                field_defaults.append((default_match.group(1), default_match.group(2)))
+                _fann = default_match.group(2).strip()
+                _fval = default_match.group(3).strip()
+                try:
+                    from hek_nim_stmt import _coerce_table_seq_values
+                    _fval = _coerce_table_seq_values(_fval, _fann)
+                except Exception:
+                    pass
+                field_defaults.append((default_match.group(1), _fval))
             # Register field type in class_field_types for Option-aware attr lookup
             field_type_match = _re.search(r'^\s*(\w+)\s*:\s*(.+?)(?:\s*=.*)?$', line.strip())
             if field_type_match and class_name:
@@ -903,6 +910,24 @@ def to_nim(self):
     return f"{lo} .. {hi}"
 
 
+@method(pattern_tuple)
+def to_nim(self):
+    """pattern_tuple: '(' pattern (',' pattern)+ ')' -> Nim: '(p1, p2, ...)'"""
+    parts = []
+    for n in self.nodes:
+        tname = type(n).__name__
+        if tname == "Several_Times":
+            # each repetition is Sequence_Parser([COMMA, pattern])
+            for seq in n.nodes:
+                if hasattr(seq, "nodes"):
+                    for child in seq.nodes:
+                        if hasattr(child, "to_nim") and type(child).__name__ not in ("Filter", "Fmap"):
+                            parts.append(child.to_nim())
+        elif hasattr(n, "to_nim") and tname not in ("Filter", "Fmap"):
+            parts.append(n.to_nim())
+    return "(" + ", ".join(parts) + ")"
+
+
 @method(pattern_group)
 def to_nim(self):
     """pattern_group: '(' pattern ')' -> Nim: '(pattern)'"""
@@ -1055,10 +1080,86 @@ def to_nim(self, indent=0):
     return f"{_ind(indent)}{prefix}{guard}:{hc}\n{body}"
 
 
+def _collect_when_clauses(nodes):
+    """Collect all when_clause nodes from a case_stmt's node list."""
+    clauses = []
+    for node in nodes:
+        tname = type(node).__name__
+        if tname == "when_clause":
+            clauses.append(node)
+        elif tname == "Several_Times":
+            for seq in node.nodes:
+                stname = type(seq).__name__
+                if stname == "when_clause":
+                    clauses.append(seq)
+                elif stname == "Sequence_Parser" and hasattr(seq, "nodes"):
+                    # unwrap: find when_clause inside the sequence
+                    for child in seq.nodes:
+                        if type(child).__name__ == "when_clause":
+                            clauses.append(child)
+    return clauses
+
+
+def _tuple_pattern_to_cond(pat_nim, subject_parts):
+    """Convert a tuple pattern like (6, _) to a Nim condition over subject_parts."""
+    import re as _re
+    # Strip outer parens
+    inner = pat_nim.strip()
+    if inner.startswith("(") and inner.endswith(")"):
+        inner = inner[1:-1]
+    parts = [p.strip() for p in inner.split(",")]
+    conds = []
+    for i, (p, s) in enumerate(zip(parts, subject_parts)):
+        if p == "_":
+            continue
+        conds.append(f"{s} == {p}")
+    return " and ".join(conds) if conds else "true"
+
+
 @method(case_stmt)
 def to_nim(self, indent=0):
-    """match -> Nim case statement"""
+    """match -> Nim case statement; desugars tuple patterns to if/elif."""
+    import re as _re
     subject = self.nodes[0].to_nim()
+
+    # Detect tuple subject: (a, b, ...) — desugar to if/elif
+    _tm = _re.match(r'^\((.+)\)$', subject.strip())
+    if _tm:
+        subject_parts = [p.strip() for p in _tm.group(1).split(",")]
+        # Collect (pattern_nim, block_node) pairs from Several_Times > Sequence_Parser > [pattern, block]
+        branches = []
+        for node in self.nodes[1:]:
+            if type(node).__name__ == "Several_Times":
+                for seq in node.nodes:
+                    if type(seq).__name__ == "Sequence_Parser" and hasattr(seq, "nodes"):
+                        pat_node = None
+                        blk_node = None
+                        for child in seq.nodes:
+                            cname = type(child).__name__
+                            if cname == "block":
+                                blk_node = child
+                            elif cname not in ("Filter", "Fmap", "Several_Times") and hasattr(child, "to_nim"):
+                                pat_node = child
+                        if pat_node is not None:
+                            branches.append((pat_node.to_nim(), blk_node))
+        result = ""
+        keyword = "if"
+        for pat, block_node in branches:
+            body = ""
+            if block_node:
+                try:
+                    body = block_node.to_nim(indent + 1)
+                except TypeError:
+                    body = _ind(indent + 1) + block_node.to_nim()
+            hc = _block_inline_header_comment(block_node) if block_node else ""
+            if pat == "others":
+                result += f"\n{_ind(indent)}else:{hc}\n{body}"
+            else:
+                cond = _tuple_pattern_to_cond(pat, subject_parts)
+                result += f"\n{_ind(indent)}{keyword} {cond}:{hc}\n{body}"
+                keyword = "elif"
+        return result.lstrip("\n")
+
     result = f"{_ind(indent)}case {subject}:"
     for node in self.nodes[1:]:
         tname = type(node).__name__
@@ -1678,9 +1779,16 @@ def _extract_fields_from_block(block_node, indent):
                                         line = line[:len(line) - len(stripped)] + stripped[len(kw):]
                                         break
                                 # Capture default value before stripping
-                                dm = _re.search(r'^(\s*\w+)\s*:.+? = (.+)$', line)
+                                dm = _re.search(r'^(\s*\w+)\s*:(.+?) = (.+)$', line)
                                 if dm:
-                                    defaults.append((dm.group(1).strip(), dm.group(2).strip()))
+                                    _fann = dm.group(2).strip()
+                                    _fval = dm.group(3).strip()
+                                    try:
+                                        from hek_nim_stmt import _coerce_table_seq_values
+                                        _fval = _coerce_table_seq_values(_fval, _fann)
+                                    except Exception:
+                                        pass
+                                    defaults.append((dm.group(1).strip(), _fval))
                                 # Strip default value
                                 line = _re.sub(r' = .+$', '', line)
                                 # Strip export marker from field name (tuple fields can't be exported)

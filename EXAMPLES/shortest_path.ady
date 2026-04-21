@@ -14,7 +14,7 @@ nimport stdlib
 
 
 # ---------------------------------------------------------------------------
-# Core Optimizer
+# Minimizer -- find the path of minimum cost (Dijkstra / A*)
 # ---------------------------------------------------------------------------
 
 type Fringe_Element_T[S, D, C] is tuple:
@@ -24,15 +24,16 @@ type Fringe_Element_T[S, D, C] is tuple:
     next_state: S
 
 @virtual
-class Optimizer[S, D, C]:
+class Minimizer[S, D, C]:
     """
-    Generic shortest-path / dynamic-programming optimiser.
-    First define the state S, the decision D and the cost of the decision C.
-    Then, subclass and override:
+    Generic shortest-path / dynamic-programming minimiser.
+    Define the state S, the decision D, and the cost type C.
+    Override:
       - get_state(past_decisions)       -> current state
       - get_next_decisions(state)       -> list of (decision, cost) pairs
       - get_heuristic_cost(state)       -> admissible heuristic (default 0)
       - cost_operator(accumulated, new) -> how costs combine (default: addition)
+      - is_end_state(state)             -> True when goal is reached
     """
     var offset: float
     var decision_path: []D
@@ -40,10 +41,6 @@ class Optimizer[S, D, C]:
     def __init__(self, offset: float = 0.0):
         self.offset = offset
         self.decision_path = []
-
-    # ------------------------------------------------------------------
-    # Methods to override
-    # ------------------------------------------------------------------
 
     def get_state(self, past_decisions: []D) -> S:
         raise NotImplementedError("Override get_state()")
@@ -54,28 +51,24 @@ class Optimizer[S, D, C]:
     def get_heuristic_cost(self, current_state: S) -> float:
         0.0
 
-    def cost_operator(self, accumulated:C , step_cost:C ) -> C:
-        actual_cost:C  = step_cost + C(self.offset)
+    def cost_operator(self, accumulated: C, step_cost: C) -> C:
+        actual_cost: C = step_cost + C(self.offset)
         assert actual_cost >= 0
         accumulated + actual_cost
 
-    def hcost_operator(self, past_cost:C, current_state: S) -> C:
+    def hcost_operator(self, past_cost: C, current_state: S) -> C:
         past_cost + C(self.get_heuristic_cost(current_state))
 
-    def real_cost(self, cost:C) -> C:
+    def real_cost(self, cost: C) -> C:
         cost - C(self.offset) * C(len(self.decision_path))
 
     def is_end_state(self, state: S) -> bool:
         raise NotImplementedError("Override is_end_state()")
 
-    # ------------------------------------------------------------------
-    # Shortest-path (A* / Dijkstra)
-    # ------------------------------------------------------------------
-
     def shortest_path(self, start_state: S, allsolutions: bool = True, end_state: auto = ANY):
         self.start_state = start_state
         empty_path: []D = []
-        fringe: PriorityQueue[Fringe_Element_T[S, D, C]] = PriorityQueue((0.0, 0.0, empty_path, start_state))
+        fringe: PriorityQueue[Fringe_Element_T[S, D, C]] = PriorityQueue((C(0), C(0), empty_path, start_state))
         visited: {}S = set()
 
         while fringe:
@@ -96,17 +89,38 @@ class Optimizer[S, D, C]:
                 new_path: []D = path + [new_decision]
                 next_state: S = self.get_state(new_path)
                 if next_state not in visited:
-                    new_cost: float = self.cost_operator(cost, step_cost)
-                    hcost: float = self.hcost_operator(new_cost, next_state)
+                    new_cost: C = self.cost_operator(cost, step_cost)
+                    hcost: C = self.hcost_operator(new_cost, next_state)
                     fringe.push((hcost, new_cost, new_path, next_state))
 
-    # ------------------------------------------------------------------
-    # Generic traversal (BFS / DFS / best-first)
-    # ------------------------------------------------------------------
 
-    @proc
-    def visit_state(self, state: S) -> None:
-        print("state =", state)
+# ---------------------------------------------------------------------------
+# Maximizer -- find the path of maximum revenue
+# ---------------------------------------------------------------------------
+
+@virtual
+class Maximizer[S, D, R]:
+    """
+    Generic longest-path / dynamic-programming maximiser.
+    Define the state S, the decision D, and the revenue type R.
+    Override:
+      - get_state(past_decisions)    -> current state
+      - get_next_decisions(state)    -> list of (decision, revenue) pairs
+      - is_end_state(state)          -> True when goal is reached
+    """
+    var decision_path: []D
+    var start_state: S
+    def __init__(self):
+        self.decision_path = []
+
+    def get_state(self, past_decisions: []D) -> S:
+        raise NotImplementedError("Override get_state()")
+
+    def get_next_decisions(self, current_state: S) -> [](D, R):
+        raise NotImplementedError("Override get_next_decisions()")
+
+    def is_end_state(self, state: S) -> bool:
+        raise NotImplementedError("Override is_end_state()")
 
     def longest_path(self, start_state: S, max_path_length: int = 1000, end_state: auto = ANY):
         """
@@ -121,9 +135,6 @@ class Optimizer[S, D, C]:
         solutions: [](float, []D) = []
 
         empty_path: []D = []
-        # Fringe: (-revenue, path_length, path, state, path_states)
-        # Negating revenue turns the min-heap into a max-revenue-first search.
-        # path_states tracks states on the current path to prevent cycles.
         fringe = PriorityQueue((0.0, 0, empty_path, start_state, [start_state]))
 
         while fringe:
@@ -139,7 +150,7 @@ class Optimizer[S, D, C]:
                     new_path: []D = path + [new_decision]
                     next_state: S = self.get_state(new_path)
                     if next_state in path_states:
-                        continue  # prevent cycles: skip states already on this path
+                        continue
                     new_rev: float = revenue + float(step_rev)
                     new_len: int = path_length + 1
                     fringe.push((-new_rev, new_len, new_path, next_state, path_states + [next_state]))

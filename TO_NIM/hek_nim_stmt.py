@@ -336,42 +336,124 @@ def to_nim(self):
     return f"{target} {nim_op} {value}"
 
 
-def _coerce_table_seq_values(value, annotation):
-    """When annotation is Table[K, seq[T]] and T has range-subtype fields,
-    cast integer literals in tuple elements to their declared range types."""
-    import re as _re_csv
-    if not value.endswith(".toTable"):
-        return value
-    _m = _re_csv.match(r"^Table\[.+?,\s*(seq\[(.+)\])\]$", annotation)
-    if not _m:
-        return value
-    _elem_type = _m.group(2)
-    _cft = getattr(ParserState, 'class_field_types', {})
-    _fields = _cft.get(_elem_type, {})  # {field_name: field_type_str}
-    if not _fields:
-        return value
+def _coerce_scalar_value(value, annotation):
+    """If annotation is a range subtype or enum and value is an int literal or
+    int-valued expression, wrap with AnnotationType(value)."""
+    import re as _re_sc
     _RANGE_SUBTYPES = ("Positive", "Natural", "range[")
-    # Build list of (field_index, cast_type) for range-subtype fields
-    _field_items = list(_fields.items())  # [(name, type), ...]
-    _casts = {}  # {index: type_name}
-    for idx, (fn, ft) in enumerate(_field_items):
-        resolved = ParserState.symbol_table.resolve_type(ft)
-        if any(resolved.startswith(r) for r in _RANGE_SUBTYPES):
-            _casts[idx] = ft
-    if not _casts:
+    resolved = ParserState.symbol_table.resolve_type(annotation)
+    is_range = any(resolved.startswith(r) for r in _RANGE_SUBTYPES)
+    is_enum = resolved == 'enum' or (
+        ParserState.symbol_table.lookup(annotation) or {}
+    ).get('type', '').startswith('enum')
+    if not (is_range or is_enum):
         return value
-    # For each tuple literal (a, b, c, ...) in the value, cast fields at _casts indices
-    def _cast_tuple(m):
-        inner = m.group(1)
-        parts = [p.strip() for p in inner.split(",")]
-        result_parts = []
-        for i, part in enumerate(parts):
-            if i in _casts and _re_csv.match(r'^\d+$', part):
-                result_parts.append(f"{_casts[i]}({part})")
-            else:
-                result_parts.append(part)
-        return "(" + ", ".join(result_parts) + ")"
-    return _re_csv.sub(r"\(([^()]+)\)", _cast_tuple, value)
+    # Already cast: T(...)
+    if value.startswith(annotation + "("):
+        return value
+    # Integer literal
+    if _re_sc.match(r'^\d+$', value):
+        return f"{annotation}({value})"
+    # Int-valued calls: len(...), sum(...), int(...), ord(...)
+    if _re_sc.match(r'^(len|sum|int|ord)\s*\(', value):
+        return f"{annotation}({value})"
+    return value
+
+
+def _coerce_tuple_literals(value, elem_type):
+    """Given a Nim expression string and a tuple element type name, wrap integer
+    literals in range-subtype fields with explicit casts.  Handles both
+    positional anonymous tuples and named-field tuples (field: value syntax)."""
+    import re as _re_ctl
+    _RANGE_SUBTYPES = ("Positive", "Natural", "range[")
+    _cft = getattr(ParserState, 'class_field_types', {})
+    _fields = _cft.get(elem_type, {})  # {field_name: field_type_str} for named tuples
+
+    if _fields:
+        # Named tuple — cast by field name: replace `fieldname: <int>` patterns
+        def _cast_named_field(m):
+            fname, fval = m.group(1), m.group(2)
+            ft = _fields.get(fname)
+            if ft:
+                resolved = ParserState.symbol_table.resolve_type(ft)
+                if any(resolved.startswith(r) for r in _RANGE_SUBTYPES):
+                    return f"{fname}: {ft}({fval})"
+            return m.group(0)
+        return _re_ctl.sub(r'\b(\w+):\s*(\d+)\b', _cast_named_field, value)
+    else:
+        # Anonymous tuple alias — cast by position
+        _sym = ParserState.symbol_table.lookup(elem_type)
+        if not (_sym and _sym.get('kind') == 'type'):
+            return value
+        _alias = _sym.get('type', '') or ''
+        _am = _re_ctl.match(r'^\((.+)\)$', _alias.strip())
+        if not _am:
+            return value
+        _parts = [p.strip() for p in _am.group(1).split(',')]
+        _casts = {}
+        for idx, ft in enumerate(_parts):
+            resolved = ParserState.symbol_table.resolve_type(ft)
+            if any(resolved.startswith(r) for r in _RANGE_SUBTYPES):
+                _casts[idx] = ft
+        if not _casts:
+            return value
+        def _cast_positional(m):
+            inner = m.group(1)
+            parts = [p.strip() for p in inner.split(",")]
+            result_parts = []
+            for i, part in enumerate(parts):
+                if i in _casts and _re_ctl.match(r'^\d+$', part):
+                    result_parts.append(f"{_casts[i]}({part})")
+                else:
+                    result_parts.append(part)
+            return "(" + ", ".join(result_parts) + ")"
+        return _re_ctl.sub(r"\(([^()]+)\)", _cast_positional, value)
+
+
+def _coerce_table_seq_values(value, annotation):
+    """Cast integer literals in tuple elements to range subtypes.
+    Handles Table[K, seq[T]], Table[K, T], array[E, T], and type aliases thereof."""
+    import re as _re_csv
+    if ".toTable" not in value:
+        return value
+
+    def _resolve_annotation(ann):
+        """Resolve type alias one level if needed; return the annotation string."""
+        sym = ParserState.symbol_table.lookup(ann.strip())
+        if sym and sym.get('kind') == 'type':
+            return sym.get('type', ann) or ann
+        return ann
+
+    # Resolve top-level annotation if it's a plain name (e.g. Choice_T -> Table[...])
+    _ann = annotation.strip()
+    if _re_csv.match(r'^\w+$', _ann):
+        _ann = _resolve_annotation(_ann)
+
+    # If annotation is array[E, V], recurse on V
+    _am = _re_csv.match(r'^array\[.+?,\s*(.+)\]$', _ann)
+    if _am:
+        _inner_ann = _am.group(1).strip()
+        # Resolve the inner type alias too
+        if _re_csv.match(r'^\w+$', _inner_ann):
+            _inner_ann = _resolve_annotation(_inner_ann)
+        # Apply coercion to each .toTable segment
+        import re as _re2
+        def _coerce_segment(m):
+            return _coerce_table_seq_values(m.group(0), _inner_ann)
+        return _re2.sub(r'\{[^{}]*\}\.toTable', _coerce_segment, value)
+
+    # Find Table[K, V] and extract V
+    _tm = _re_csv.match(r'^Table\[.+?,\s*(seq\[(\w+)\]|(\w+))\]$', _ann)
+    if not _tm:
+        return value
+    _elem_type = _tm.group(2) or _tm.group(3)
+    if value.endswith(".toTable"):
+        return _coerce_tuple_literals(value, _elem_type)
+    else:
+        import re as _re2
+        def _coerce_segment(m):
+            return _coerce_tuple_literals(m.group(0), _elem_type)
+        return _re2.sub(r'\{[^{}]*\}\.toTable', _coerce_segment, value)
 
 
 def _specialize_init_table(value, annotation):
@@ -435,6 +517,8 @@ def to_nim(self):
                 value = _specialize_init_table(value, annotation)
                 # Table[K, seq[T]] with range fields: wrap seq values for coercion
                 value = _coerce_table_seq_values(value, annotation)
+                # Range/enum scalar: wrap int literals and int-valued calls
+                value = _coerce_scalar_value(value, annotation)
                 # array types: {} is unnecessary — arrays are zero-initialized
                 if value == "initTable()" and annotation.startswith("array["):
                     value = ""
@@ -517,6 +601,8 @@ def to_nim(self):
                 value = _specialize_init_table(value, annotation)
                 # Table[K, seq[T]] with range fields: wrap seq values for coercion
                 value = _coerce_table_seq_values(value, annotation)
+                # Range/enum scalar: wrap int literals and int-valued calls
+                value = _coerce_scalar_value(value, annotation)
                 # array types: {} is unnecessary — arrays are zero-initialized
                 if value == "initTable()" and annotation.startswith("array["):
                     value = ""

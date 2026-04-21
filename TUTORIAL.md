@@ -522,6 +522,50 @@ case point:
 **Python output:** standard `match/case` statement  
 **Nim output:** `case/of` statement
 
+**Tuple patterns (multi-dimensional dispatch):**
+
+When the subject is a tuple, each `when` clause lists one value per element.
+Use `_` as a wildcard that matches anything. The `others` catch-all works as
+usual.
+
+```python
+let (year, age) = current_state
+case (year, age):
+    when (6, _):          # year == 6, age irrelevant
+        []
+    when (0, _):          # year == 0
+        [(BUY, buy_cost)]
+    when (5, _):          # year == 5
+        [(SELL, sell_price)]
+    when (_, 3):          # age == 3
+        [(TRADE, trade_cost)]
+    when others:
+        [(KEEP, keep_cost), (TRADE, trade_cost)]
+```
+
+Because Nim's `case` only accepts ordinal/string selectors (not tuples), the
+transpiler desugars this to an `if/elif/else` chain:
+
+```nim
+# Generated Nim
+if year == 6:
+    @[]
+elif year == 0:
+    @[(BUY, buy_cost)]
+elif year == 5:
+    @[(SELL, sell_price)]
+elif age == 3:
+    @[(TRADE, trade_cost)]
+else:
+    @[(KEEP, keep_cost), (TRADE, trade_cost)]
+```
+
+Wildcard `_` elements are omitted from the generated condition (they add no
+constraint). A `when (4, 8):` clause generates `elif year == 4 and age == 8:`.
+
+**Python output:** `match/case` with tuple pattern  
+**Nim output:** `if/elif/else` chain (desugared)
+
 ---
 
 ## 12. Functions
@@ -684,6 +728,40 @@ class EquipmentReplacement(Optimizer[State_T, Decision_T, Cost_T]):
         let (year, age) = current_state
         ...
 ```
+
+### Variables shared between methods and outer scope
+
+When a class is defined inside a function, Nim requires that type declarations
+and method bodies be hoisted to global scope. Local variables of the enclosing
+function are **not** visible inside hoisted methods.
+
+To share a variable between the enclosing function and the class methods,
+declare it with an **ALL_CAPS** name. The transpiler recognises ALL_CAPS
+`var`/`let`/`const` declarations as globals and hoists them alongside the
+methods:
+
+```python
+def example():
+    type Stage_T is enum STAGE1, STAGE2, STAGE3, END
+    type Choice_T is tuple:
+        weight: int
+        benefit: int
+
+    var ITEMS: [Stage_T]Choice_T = [   # ALL_CAPS → hoisted to global scope
+        STAGE1: (weight:2, benefit:65),
+        STAGE2: (weight:3, benefit:80),
+        STAGE3: (weight:1, benefit:30),
+    ]
+
+    class Knapsack(Optimizer[State_T, Decision_T, Cost_T]):
+        def get_next_decisions(self, state: State_T) -> [](Decision_T, Cost_T):
+            let (weight, benefit) = ITEMS[state.stage]  # accessible here
+            ...
+```
+
+Lowercase `var` declarations stay inside the enclosing proc and are **not**
+visible to hoisted methods. Use ALL_CAPS for any variable that methods need
+to read.
 
 ### `@virtual` — enabling cross-module subclassing
 
