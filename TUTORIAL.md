@@ -345,6 +345,12 @@ type Index     is 0 ..< 10     # values 0–9
 type Positive  is 1 .. 1000
 ```
 
+The explicit `int range` form is a synonym for the bare subrange and generates identical output:
+
+```python
+type Age is int range 0..100   # same as: type Age is 0..100
+```
+
 **Python output:** `int` (a type alias)  
 **Nim output:** a native Nim range type with compile-time bounds checking
 

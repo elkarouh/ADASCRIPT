@@ -630,6 +630,12 @@ def to_py(self):
     return f"float  # range {lo} .. {hi}"
 
 
+@method(int_range_def)
+def to_py(self):
+    """int_range_def: 'int' 'range' subrange_def -> delegates to subrange_def"""
+    return self.nodes[2].to_py()  # nodes[0]=int, nodes[1]=range, nodes[2]=subrange_def
+
+
 @method(type_alias_params)
 def to_py(self):
     """type_alias_params: '[' IDENTIFIER (',' IDENTIFIER)* ']'"""
@@ -667,6 +673,12 @@ def to_py(self):
         hi = str(rhs.nodes[5].node)
         ParserState.tick_types[name] = {"First": lo, "Last": hi, "is_float_range": True}
         return f"{name} = float  # range {lo} .. {hi}"
+    if rhs_type == 'int_range_def':
+        sr = rhs.nodes[2]  # the subrange_def inside (nodes[0]=int, nodes[1]=range)
+        lo = str(sr.nodes[0].node)
+        hi = str(sr.nodes[-1].node)
+        ParserState.tick_types[name] = {"First": lo, "Last": hi}
+        return f"{name} = {rhs.to_py()}"
     if rhs_type == 'constrained_subrange_def':
         sr = rhs.nodes[1]  # the subrange_def inside
         lo = str(sr.nodes[0].node)

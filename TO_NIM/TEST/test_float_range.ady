@@ -1,10 +1,13 @@
-# Test file for float range types (Ada-style constraint checking)
-# type T is float range lo .. hi
-# Every assignment to a T variable asserts lo <= value <= hi at runtime.
+# Test file for float/int range types
+# type T is float range lo .. hi  -- runtime assert on every assignment
+# type T is int range lo .. hi    -- synonym for type T is lo .. hi (Nim range[])
 # Run with: python3 TO_NIM/py2nim.py TO_NIM/TEST/test_float_range.ady
 
 type Temperature is float range 0.0 .. 100.0
 type Probability  is float range 0.0 .. 1.0
+
+type Age      is int range 0..100
+type SmallInt is 0..255
 
 # ============================================================================
 # Test 1: Declaration with initial value
@@ -67,4 +70,27 @@ assert Temperature'First == 0.0
 assert Temperature'Last  == 100.0
 print("  Tick attributes: OK")
 
-print("All float range tests passed.")
+# ============================================================================
+# Test 6: int range — equivalent to bare subrange
+# ============================================================================
+print("--- Test 6: int range (synonym for bare subrange) ---")
+
+def test_int_range() -> Age:
+    var a: Age = 25
+    a = 42
+    return a
+
+assert test_int_range() == 42
+
+def test_smallint() -> SmallInt:
+    var s: SmallInt = 0
+    s = 200
+    return s
+
+assert test_smallint() == 200
+
+assert Age'First == 0
+assert Age'Last  == 100
+print("  int range: OK")
+
+print("All range tests passed.")
