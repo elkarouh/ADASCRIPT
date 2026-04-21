@@ -11,6 +11,9 @@ type AnyType* = object
 
 func `==`*(a: AnyType; b: auto): bool = true
 func `==`*(a: auto; b: AnyType): bool = true
+func `==`*(a: AnyType; b: AnyType): bool = true
+func isANY*(a: AnyType): bool = true
+func isANY*(a: auto): bool = false
 func hash*(a: AnyType): int = hash("ANY")
 func `$`*(a: AnyType): string = "ANY"
 
