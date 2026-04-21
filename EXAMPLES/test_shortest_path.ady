@@ -105,7 +105,7 @@ def example3():
       def get_state(self, past_decisions: []Decision_T) -> State_T:
           stage: Natural = len(past_decisions)
           used: Natural = sum(int(d) for d in past_decisions)
-          remaining_size: Natural = ROD_SIZE - used if used < ROD_SIZE else 0
+          remaining_size: Natural = max(ROD_SIZE - used, 0)
           return (stage, remaining_size)
 
       def get_next_decisions(self, current_state: State_T) -> [](Decision_T, Cost_T):
