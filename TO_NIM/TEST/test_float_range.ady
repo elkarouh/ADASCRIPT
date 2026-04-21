@@ -1,0 +1,70 @@
+# Test file for float range types (Ada-style constraint checking)
+# type T is float range lo .. hi
+# Every assignment to a T variable asserts lo <= value <= hi at runtime.
+# Run with: python3 TO_NIM/py2nim.py TO_NIM/TEST/test_float_range.ady
+
+type Temperature is float range 0.0 .. 100.0
+type Probability  is float range 0.0 .. 1.0
+
+# ============================================================================
+# Test 1: Declaration with initial value
+# ============================================================================
+print("--- Test 1: Declaration with initial value ---")
+
+def test_decl() -> Temperature:
+    var t: Temperature = 36.6
+    return t
+
+assert test_decl() == 36.6
+print("  Declaration with initial value: OK")
+
+# ============================================================================
+# Test 2: Augmented assignment
+# ============================================================================
+print("--- Test 2: Augmented assignment ---")
+
+def test_augassign() -> Temperature:
+    var t: Temperature = 36.0
+    t += 1.5
+    return t
+
+assert test_augassign() == 37.5
+print("  Augmented assignment: OK")
+
+# ============================================================================
+# Test 3: Plain assignment after declaration
+# ============================================================================
+print("--- Test 3: Plain assignment ---")
+
+def test_assign() -> Temperature:
+    var t: Temperature = 36.0
+    t = 98.5
+    return t
+
+assert test_assign() == 98.5
+print("  Plain assignment: OK")
+
+# ============================================================================
+# Test 4: Probability range (0.0 .. 1.0)
+# ============================================================================
+print("--- Test 4: Probability range ---")
+
+def test_prob() -> Probability:
+    var p: Probability = 0.0
+    p = 0.5
+    p += 0.25
+    return p
+
+assert test_prob() == 0.75
+print("  Probability range: OK")
+
+# ============================================================================
+# Test 5: Tick attributes
+# ============================================================================
+print("--- Test 5: Tick attributes ---")
+
+assert Temperature'First == 0.0
+assert Temperature'Last  == 100.0
+print("  Tick attributes: OK")
+
+print("All float range tests passed.")

@@ -348,6 +348,41 @@ type Positive  is 1 .. 1000
 **Python output:** `int` (a type alias)  
 **Nim output:** a native Nim range type with compile-time bounds checking
 
+### Float subranges
+
+For floating-point ranges use `float range lo .. hi`:
+
+```python
+type Temperature is float range 0.0 .. 100.0
+type Probability  is float range 0.0 .. 1.0
+
+def measure() -> Temperature:
+    var t: Temperature = 36.6
+    t += 1.0
+    t = 98.5
+    return t
+```
+
+**Nim output:**
+
+```nim
+type Temperature = float
+type Probability  = float
+
+proc measure(): Temperature =
+    var t: Temperature = 36.6
+    assert t >= 0.0 and t <= 100.0, "Temperature value " & $t & " out of range [0.0, 100.0]"
+    t += 1.0
+    assert t >= 0.0 and t <= 100.0, "Temperature value " & $t & " out of range [0.0, 100.0]"
+    t = 98.5
+    assert t >= 0.0 and t <= 100.0, "Temperature value " & $t & " out of range [0.0, 100.0]"
+    return t
+```
+
+The range constraint is stored in the symbol table and checked after **every assignment** to a variable of that type — matching Ada's constraint model. The type is a plain `float` alias (not `distinct`), so all arithmetic operators work without casts.
+
+`Temperature'First` and `Temperature'Last` give the bounds.
+
 ---
 
 ## 9. Tick Attributes
