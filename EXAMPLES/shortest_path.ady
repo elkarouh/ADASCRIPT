@@ -55,15 +55,15 @@ class Optimizer[S, D, C]:
         0.0
 
     def cost_operator(self, accumulated:C , step_cost:C ) -> C:
-        actual_cost:C  = step_cost + self.offset
+        actual_cost:C  = step_cost + C(self.offset)
         assert actual_cost >= 0
         accumulated + actual_cost
 
     def hcost_operator(self, past_cost:C, current_state: S) -> C:
-        past_cost + self.get_heuristic_cost(current_state)
+        past_cost + C(self.get_heuristic_cost(current_state))
 
     def real_cost(self, cost:C) -> C:
-        cost - self.offset * float(len(self.decision_path))
+        cost - C(self.offset) * C(len(self.decision_path))
 
     def is_end_state(self, state: S) -> bool:
         raise NotImplementedError("Override is_end_state()")
@@ -140,7 +140,7 @@ class Optimizer[S, D, C]:
                     next_state: S = self.get_state(new_path)
                     if next_state in path_states:
                         continue  # prevent cycles: skip states already on this path
-                    new_rev: float = revenue + step_rev
+                    new_rev: float = revenue + float(step_rev)
                     new_len: int = path_length + 1
                     fringe.push((-new_rev, new_len, new_path, next_state, path_states + [next_state]))
 

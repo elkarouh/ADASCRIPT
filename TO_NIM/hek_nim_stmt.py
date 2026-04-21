@@ -336,6 +336,44 @@ def to_nim(self):
     return f"{target} {nim_op} {value}"
 
 
+def _coerce_table_seq_values(value, annotation):
+    """When annotation is Table[K, seq[T]] and T has range-subtype fields,
+    cast integer literals in tuple elements to their declared range types."""
+    import re as _re_csv
+    if not value.endswith(".toTable"):
+        return value
+    _m = _re_csv.match(r"^Table\[.+?,\s*(seq\[(.+)\])\]$", annotation)
+    if not _m:
+        return value
+    _elem_type = _m.group(2)
+    _cft = getattr(ParserState, 'class_field_types', {})
+    _fields = _cft.get(_elem_type, {})  # {field_name: field_type_str}
+    if not _fields:
+        return value
+    _RANGE_SUBTYPES = ("Positive", "Natural", "range[")
+    # Build list of (field_index, cast_type) for range-subtype fields
+    _field_items = list(_fields.items())  # [(name, type), ...]
+    _casts = {}  # {index: type_name}
+    for idx, (fn, ft) in enumerate(_field_items):
+        resolved = ParserState.symbol_table.resolve_type(ft)
+        if any(resolved.startswith(r) for r in _RANGE_SUBTYPES):
+            _casts[idx] = ft
+    if not _casts:
+        return value
+    # For each tuple literal (a, b, c, ...) in the value, cast fields at _casts indices
+    def _cast_tuple(m):
+        inner = m.group(1)
+        parts = [p.strip() for p in inner.split(",")]
+        result_parts = []
+        for i, part in enumerate(parts):
+            if i in _casts and _re_csv.match(r'^\d+$', part):
+                result_parts.append(f"{_casts[i]}({part})")
+            else:
+                result_parts.append(part)
+        return "(" + ", ".join(result_parts) + ")"
+    return _re_csv.sub(r"\(([^()]+)\)", _cast_tuple, value)
+
+
 def _specialize_init_table(value, annotation):
     """Replace bare initTable() in value with typed initTable[K,V]() using annotation context.
 
@@ -395,6 +433,8 @@ def to_nim(self):
                     value = value[1:]
                 # initTable() needs explicit type params (handles nested too)
                 value = _specialize_init_table(value, annotation)
+                # Table[K, seq[T]] with range fields: wrap seq values for coercion
+                value = _coerce_table_seq_values(value, annotation)
                 # array types: {} is unnecessary — arrays are zero-initialized
                 if value == "initTable()" and annotation.startswith("array["):
                     value = ""
@@ -475,6 +515,8 @@ def to_nim(self):
                     value = value[1:]
                 # initTable() needs explicit type params (handles nested too)
                 value = _specialize_init_table(value, annotation)
+                # Table[K, seq[T]] with range fields: wrap seq values for coercion
+                value = _coerce_table_seq_values(value, annotation)
                 # array types: {} is unnecessary — arrays are zero-initialized
                 if value == "initTable()" and annotation.startswith("array["):
                     value = ""
