@@ -1445,11 +1445,24 @@ def to_nim(self, indent=0):
             else:
                 suffix = "_" + name
 
-        # --- Build mangling map: only rename types that conflict with top-level ---
+        # --- Build mangling map: only rename types/vars that conflict with top-level ---
         if not hasattr(ParserState, '_hoisted_type_names'):
             ParserState._hoisted_type_names = set()
         if not hasattr(ParserState, '_hoisted_enum_members'):
             ParserState._hoisted_enum_members = set()
+        if not hasattr(ParserState, '_hoisted_var_names'):
+            ParserState._hoisted_var_names = set()
+
+        # Collect ALL_CAPS var/let/const names defined in this body
+        local_vars = []
+        for line in body_lines:
+            stripped = line.lstrip()
+            for kw in ("var ", "let ", "const "):
+                if stripped.startswith(kw):
+                    vm = _re_h.match(r'(?:var|let|const)\s+([A-Z][A-Z_0-9]*)\s*:', stripped)
+                    if vm:
+                        local_vars.append(vm.group(1))
+                    break
         # Collect enum members for each local type
         local_enum_members = {}  # type_name -> [member1, member2, ...]
         for line in body_lines:
@@ -1476,6 +1489,14 @@ def to_nim(self, indent=0):
                     for member in local_enum_members[tname]:
                         ParserState._hoisted_enum_members.add(member)
             ParserState._hoisted_type_names.add(tname if tname not in mangle_map else mangle_map[tname])
+
+        # Mangle ALL_CAPS vars that collide with already-hoisted names
+        for vname in local_vars:
+            if suffix and vname in ParserState._hoisted_var_names:
+                mangle_map[vname] = vname + suffix
+                ParserState._hoisted_var_names.add(vname + suffix)
+            else:
+                ParserState._hoisted_var_names.add(vname)
 
         def _mangle_line(line):
             """Apply type name mangling to a line."""
