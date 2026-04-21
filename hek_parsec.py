@@ -315,6 +315,15 @@ class Parser(metaclass=ParserMeta):
         if G.DEBUG:
             print(self.__class__.__name__, "Constructor->", self.nodes)
 
+    def to_nim(self, prec=None):
+        """Fallback used by the Nim backend: delegates to to_py() when no to_nim() override exists."""
+        if not hasattr(self, 'to_py'):
+            return ''
+        try:
+            return self.to_py(prec)
+        except TypeError:
+            return self.to_py()
+
 
 def forward(parser_name: str) -> type[Parser]:
     """Create a lazy forward reference for recursive grammars."""
