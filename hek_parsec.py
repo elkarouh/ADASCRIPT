@@ -142,49 +142,22 @@ class ParserState:
     Attributes:
         DEBUG: When True, print parser construction and matching details.
         memos: Memoization cache (currently unused, reserved for packrat parsing).
+        symbol_table: SymbolTable instance for the current parse.
 
-    Backend-specific fields (Nim backend):
-        nim_imports, nim_pragmas, nim_init_stmts, tick_types,
-        class_field_types, proc_param_types, proc_param_types_full,
-        tuple_field_order, object_field_order
-    These are declared here for convenience but are owned by the Nim backend.
-
-    Backend-specific fields (Python backend):
-        nim_imports  (reused for Python import lines — historical naming)
-        tick_types
+    Backend-specific state (imports, type maps, pragmas, etc.) is managed by
+    each backend, not here.  Backends call reset() then initialise their own
+    fields.
     """
 
     DEBUG = False
     memos: dict = {}
     symbol_table = SymbolTable()
-    export_symbols: bool = False   # when True, emit * on all top-level declarations (library mode)
-
-    # Nim-backend fields
-    nim_imports: set = set()
-    nim_pragmas: set = set()
-    nim_init_stmts: list = []
-    tick_types: dict = {}
-    class_field_types: dict = {}
-    proc_param_types: dict = {}
-    proc_param_types_full: dict = {}
-    tuple_field_order: dict = {}
-    object_field_order: dict = {}
 
     @classmethod
     def reset(cls):
-        """Clear memoization state between parses."""
+        """Clear core parser state between parses."""
         cls.memos.clear()
         cls.symbol_table = SymbolTable()
-        cls.export_symbols = False
-        cls.nim_imports = set()
-        cls.nim_pragmas = set()
-        cls.nim_init_stmts = []
-        cls.tick_types = {}
-        cls.class_field_types = {}
-        cls.proc_param_types = {}
-        cls.proc_param_types_full = {}
-        cls.tuple_field_order = {}
-        cls.object_field_order = {}
 
 
 G = ParserState  # backward compat alias
@@ -314,16 +287,6 @@ class Parser(metaclass=ParserMeta):
             self.nodes = [nodes]
         if G.DEBUG:
             print(self.__class__.__name__, "Constructor->", self.nodes)
-
-    def to_nim(self, prec=None):
-        """Fallback used by the Nim backend: delegates to to_py() when no to_nim() override exists."""
-        if not hasattr(self, 'to_py'):
-            return ''
-        try:
-            return self.to_py(prec)
-        except TypeError:
-            return self.to_py()
-
 
 def forward(parser_name: str) -> type[Parser]:
     """Create a lazy forward reference for recursive grammars."""
