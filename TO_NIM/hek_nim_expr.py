@@ -1103,6 +1103,29 @@ def to_nim(self, prec=None):
                 _parse_fn = {"int": "parseInt", "float": "parseFloat", "bool": "parseBool"}[raw_name]
                 return f"{arg}.{_parse_fn}()"
             return f"{raw_name}({arg})"
+        if raw_name == "sum":
+            call_node = self.nodes[1].nodes[0]
+            arg = _extract_call_arg(call_node)
+            rest = "".join(tr.to_nim() for tr in self.nodes[1].nodes[1:])
+            # sum(seq[Positive/Natural/range]) fails in Nim because result can't init to 0.
+            # Detect range subtypes and emit foldl to avoid the issue.
+            _sym = ParserState.symbol_table.lookup(arg)
+            _elem_type = ""
+            if _sym:
+                _t = _sym.get("type", "")
+                import re as _re_sum
+                _m = _re_sum.match(r'^seq\[(.+)\]$', _t)
+                if _m:
+                    _elem_type = _m.group(1)
+                    # Resolve type alias via symbol table (e.g. Decision_T -> Positive)
+                    _tsym = ParserState.symbol_table.lookup(_elem_type)
+                    if _tsym and _tsym.get("kind") == "type":
+                        _elem_type = _tsym.get("type", _elem_type)
+            _RANGE_SUBTYPES = ("Positive", "Natural", "range[")
+            if _elem_type and any(_elem_type.startswith(r) for r in _RANGE_SUBTYPES):
+                ParserState.nim_imports.add("sequtils")
+                return f"sum({arg}.mapIt(int(it))){rest}"
+            return f"sum({arg}){rest}"
         if raw_name == "log":
             call_node = self.nodes[1].nodes[0]
             args = _extract_call_args(call_node)

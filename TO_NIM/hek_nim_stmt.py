@@ -1148,7 +1148,7 @@ def to_nim(self):
         ParserState.tick_types[name] = {"First": lo, "Last": hi}
     value = rhs.to_nim()
     # Record type alias so method translation can resolve it
-    if rhs_type not in ("enum_def", "subrange_def", "constrained_subrange_def"):
+    if rhs_type not in ("enum_def",):
         ParserState.symbol_table.add(name, value, "type")
     _exp = "*" if getattr(ParserState, 'export_symbols', False) and ParserState.symbol_table.depth() == 1 else ""
     return f"type {name}{_exp}{params} = {value}"
