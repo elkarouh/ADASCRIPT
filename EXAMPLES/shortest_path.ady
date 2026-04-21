@@ -72,7 +72,7 @@ class Optimizer[S, D, C]:
     # Shortest-path (A* / Dijkstra)
     # ------------------------------------------------------------------
 
-    def shortest_path(self, start_state: S, allsolutions: bool = True):
+    def shortest_path(self, start_state: S, allsolutions: bool = True, end_state: AnyType = ANY):
         self.start_state = start_state
         empty_path: []D = []
         fringe: PriorityQueue[Fringe_Element_T[S, D, C]] = PriorityQueue((0.0, 0.0, empty_path, start_state))
@@ -86,7 +86,8 @@ class Optimizer[S, D, C]:
             self.decision_path = path
             visited.add(current_state)
 
-            if self.is_end_state(current_state):
+            reached: bool = current_state == end_state if not isANY(end_state) else self.is_end_state(current_state)
+            if reached:
                 yield self.real_cost(cost), path
                 if not allsolutions:
                     break
@@ -107,7 +108,7 @@ class Optimizer[S, D, C]:
     def visit_state(self, state: S) -> None:
         print("state =", state)
 
-    def longest_path(self, start_state: S, max_path_length: int = 1000):
+    def longest_path(self, start_state: S, max_path_length: int = 1000, end_state: AnyType = ANY):
         """
         Yield every simple path from start_state to end_state in decreasing order
         of total revenue (sum of step revenues from get_next_decisions).
@@ -129,7 +130,8 @@ class Optimizer[S, D, C]:
             let (neg_rev, path_length, path, current_state, path_states) = fringe.pop()
             revenue: float = -neg_rev
 
-            if self.is_end_state(current_state) and path_length > 0:
+            reached: bool = current_state == end_state if not isANY(end_state) else self.is_end_state(current_state)
+            if reached and path_length > 0:
                 solutions.append((revenue, path))
 
             if path_length < max_path_length:
