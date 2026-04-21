@@ -295,51 +295,52 @@ def example7():
     # -----------------------------------------------------------------------
     # Example 7 -- Romania map (A* with heuristic)
     # -----------------------------------------------------------------------
-    type State_T is str
+    type State_T is enum arad, bucharest, craiova, drobeta, eforie, fagaras, giurgiu, hirsova, lasi,\
+     lugoj, mehadia, neamt, oradea, pitesti, rimnicu, sibiu, timisoara, urzineci, vaslui, zerind
     type Distance_T is float
-    type Decision_T is str
+    type Decision_T is State_T
+    var G: {State_T}[](Decision_T, Distance_T) = {
+        arad:      [(sibiu, 140.0), (timisoara, 118.0), (zerind, 75.0)],
+        bucharest: [(giurgiu, 90.0), (urzineci, 85.0), (fagaras, 211.0), (pitesti, 101.0)],
+        craiova:   [(rimnicu, 146.0), (pitesti, 138.0), (drobeta, 120.0)],
+        drobeta:   [(craiova, 120.0), (mehadia, 75.0)],
+        eforie:    [(hirsova, 86.0)],
+        fagaras:   [(sibiu, 99.0), (bucharest, 211.0)],
+        giurgiu:   [(bucharest, 90.0)],
+        hirsova:   [(eforie, 86.0), (urzineci, 98.0)],
+        lasi:      [(neamt, 87.0), (vaslui, 92.0)],
+        lugoj:     [(mehadia, 70.0), (timisoara, 111.0)],
+        mehadia:   [(drobeta, 75.0), (lugoj, 70.0)],
+        neamt:     [(lasi, 87.0)],
+        oradea:    [(zerind, 71.0), (sibiu, 151.0)],
+        pitesti:   [(bucharest, 101.0), (rimnicu, 97.0), (craiova, 138.0)],
+        rimnicu:   [(pitesti, 97.0), (sibiu, 80.0), (craiova, 146.0)],
+        sibiu:     [(rimnicu, 80.0), (arad, 140.0), (oradea, 151.0), (fagaras, 99.0)],
+        timisoara: [(lugoj, 111.0), (arad, 118.0)],
+        urzineci:  [(bucharest, 85.0), (vaslui, 142.0), (hirsova, 98.0)],
+        vaslui:    [(urzineci, 142.0), (lasi, 92.0)],
+        zerind:    [(arad, 75.0), (oradea, 71.0)],
+    }
     class BookMap(Minimizer[State_T, Decision_T, Distance_T]):
-        var G: {State_T}[](Decision_T, Distance_T) = {
-            'arad':      [('sibiu', 140.0), ('timisoara', 118.0), ('zerind', 75.0)],
-            'bucharest': [('giurgiu', 90.0), ('urzineci', 85.0), ('fagaras', 211.0), ('pitesti', 101.0)],
-            'craiova':   [('rimnicu', 146.0), ('pitesti', 138.0), ('drobeta', 120.0)],
-            'drobeta':   [('craiova', 120.0), ('mehadia', 75.0)],
-            'eforie':    [('hirsova', 86.0)],
-            'fagaras':   [('sibiu', 99.0), ('bucharest', 211.0)],
-            'giurgiu':   [('bucharest', 90.0)],
-            'hirsova':   [('eforie', 86.0), ('urzineci', 98.0)],
-            'lasi':      [('neamt', 87.0), ('vaslui', 92.0)],
-            'lugoj':     [('mehadia', 70.0), ('timisoara', 111.0)],
-            'mehadia':   [('drobeta', 75.0), ('lugoj', 70.0)],
-            'neamt':     [('lasi', 87.0)],
-            'oradea':    [('zerind', 71.0), ('sibiu', 151.0)],
-            'pitesti':   [('bucharest', 101.0), ('rimnicu', 97.0), ('craiova', 138.0)],
-            'rimnicu':   [('pitesti', 97.0), ('sibiu', 80.0), ('craiova', 146.0)],
-            'sibiu':     [('rimnicu', 80.0), ('arad', 140.0), ('oradea', 151.0), ('fagaras', 99.0)],
-            'timisoara': [('lugoj', 111.0), ('arad', 118.0)],
-            'urzineci':  [('bucharest', 85.0), ('vaslui', 142.0), ('hirsova', 98.0)],
-            'vaslui':    [('urzineci', 142.0), ('lasi', 92.0)],
-            'zerind':    [('arad', 75.0), ('oradea', 71.0)],
-        }
         var _heuristic: {State_T}Distance_T = {
-            'arad': 366.0, 'bucharest': 0.0, 'craiova': 160.0, 'drobeta': 242.0,
-            'eforie': 161.0, 'fagaras': 176.0, 'giurgiu': 77.0, 'hirsova': 151.0,
-            'lasi': 226.0, 'lugoj': 244.0, 'mehadia': 241.0, 'neamt': 234.0,
-            'oradea': 380.0, 'pitesti': 100.0, 'rimnicu': 193.0, 'sibiu': 253.0,
-            'timisoara': 329.0, 'urzineci': 80.0, 'vaslui': 199.0, 'zerind': 374.0,
+            arad: 366.0, bucharest: 0.0, craiova: 160.0, drobeta: 242.0,
+            eforie: 161.0, fagaras: 176.0, giurgiu: 77.0, hirsova: 151.0,
+            lasi: 226.0, lugoj: 244.0, mehadia: 241.0, neamt: 234.0,
+            oradea: 380.0, pitesti: 100.0, rimnicu: 193.0, sibiu: 253.0,
+            timisoara: 329.0, urzineci: 80.0, vaslui: 199.0, zerind: 374.0,
         }
         def get_state(self, past_decisions: []State_T) -> State_T:
             past_decisions[-1]
 
         def get_next_decisions(self, current_state: State_T) -> [](Decision_T, Distance_T):
-            self.G.get(current_state, [])
+            G.get(current_state, [])
 
         def get_heuristic_cost(self, city: State_T) -> float:
             self._heuristic.get(city, 0)
 
     op7: BookMap = BookMap()
-    print('======= ROMANIA MAP: oradea -> bucharest =======')
-    for solution in op7.shortest_path(start_state='oradea', end_state='bucharest'):
+    print("======= ROMANIA MAP: oradea -> bucharest =======")
+    for solution in op7.shortest_path(start_state=oradea, end_state=bucharest):
         print(solution)
 
 
