@@ -27,10 +27,6 @@ def example1():
             'x': [('u', 3.0), ('v', 9.0), ('y', 2.0)],
             'y': [('s', 7.0), ('v', 6.0)],
         }
-        var goal: State_T = 'v'
-
-        def is_end_state(self, state: State_T) -> bool:
-            state == self.goal
 
         def get_state(self, past_decisions: []Decision_T) -> State_T:
             past_decisions[-1]
@@ -39,7 +35,7 @@ def example1():
             self.G.get(curr_state, [])
 
     op: MyOptimizer = MyOptimizer()
-    for solution in op.longest_path('s', max_path_length=4):
+    for solution in op.longest_path('s', max_path_length=4, end_state='v'):
         print("Longest path s->v:", solution)
         break
 
@@ -47,27 +43,23 @@ def example2():
     # -----------------------------------------------------------------------
     # Example 2 -- DP tutorial graph
     # -----------------------------------------------------------------------
-    type State_T is str
+    type State_T is enum a,b,c,d,e,f,g,h,i,j
     type Cost_T is float
     type Decision_T is State_T
     type Choice_T is (Decision_T, Cost_T)
 
     class MyOptimizer2(Optimizer[State_T, Decision_T, Cost_T]):
         var G: {State_T}[]Choice_T = {
-            'a': [('b', 2.0), ('c', 4.0), ('d', 3.0)],
-            'b': [('e', 7.0), ('f', 4.0), ('g', 6.0)],
-            'c': [('e', 3.0), ('f', 2.0), ('g', 4.0)],
-            'd': [('e', 4.0), ('f', 1.0), ('g', 5.0)],
-            'e': [('h', 1.0), ('i', 4.0)],
-            'f': [('h', 6.0), ('i', 3.0)],
-            'g': [('h', 3.0), ('i', 3.0)],
-            'h': [('j', 3.0)],
-            'i': [('j', 4.0)],
+            a: [(b, 2.0), (c, 4.0), (d, 3.0)],
+            b: [(e, 7.0), (f, 4.0), (g, 6.0)],
+            c: [(e, 3.0), (f, 2.0), (g, 4.0)],
+            d: [(e, 4.0), (f, 1.0), (g, 5.0)],
+            e: [(h, 1.0), (i, 4.0)],
+            f: [(h, 6.0), (i, 3.0)],
+            g: [(h, 3.0), (i, 3.0)],
+            h: [(j, 3.0)],
+            i: [(j, 4.0)],
         }
-        var goal: State_T = 'j'
-
-        def is_end_state(self, state: State_T) -> bool:
-            state == self.goal
 
         def get_state(self, past_decisions: []Decision_T) -> State_T:
             past_decisions[-1]
@@ -77,10 +69,10 @@ def example2():
 
     print('======= SHORTEST a->j =======')
     op2: MyOptimizer2 = MyOptimizer2()
-    for solution in op2.shortest_path('a'):
+    for solution in op2.shortest_path(a, end_state=j):
         print(solution)
     print('======= LONGEST  a->j =======')
-    for solution in op2.longest_path('a'):
+    for solution in op2.longest_path(a, end_state=j):
         print(solution)
         break
 
@@ -324,11 +316,6 @@ def example7():
             'oradea': 380.0, 'pitesti': 100.0, 'rimnicu': 193.0, 'sibiu': 253.0,
             'timisoara': 329.0, 'urzineci': 80.0, 'vaslui': 199.0, 'zerind': 374.0,
         }
-        var goal: State_T = 'bucharest'
-
-        def is_end_state(self, state: State_T) -> bool:
-            state == self.goal
-
         def get_state(self, past_decisions: []State_T) -> State_T:
             past_decisions[-1]
 
@@ -340,7 +327,7 @@ def example7():
 
     op7: BookMap = BookMap()
     print('======= ROMANIA MAP: oradea -> bucharest =======')
-    for solution in op7.shortest_path('oradea'):
+    for solution in op7.shortest_path('oradea', end_state='bucharest'):
         print(solution)
 
 
