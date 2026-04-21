@@ -35,7 +35,7 @@ def example1():
             self.G.get(curr_state, [])
 
     op: MyOptimizer = MyOptimizer()
-    for solution in op.longest_path('s', max_path_length=4, end_state='v'):
+    for solution in op.longest_path(start_state='s', max_path_length=4, end_state='v'):
         print("Longest path s->v:", solution)
         break
 
@@ -69,10 +69,10 @@ def example2():
 
     print('======= SHORTEST a->j =======')
     op2: MyOptimizer2 = MyOptimizer2()
-    for solution in op2.shortest_path(a, end_state=j):
+    for solution in op2.shortest_path(start_state=a, end_state=j):
         print(solution)
     print('======= LONGEST  a->j =======')
-    for solution in op2.longest_path(a, end_state=j):
+    for solution in op2.longest_path(start_state=a, end_state=j):
         print(solution)
         break
 
@@ -327,7 +327,7 @@ def example7():
 
     op7: BookMap = BookMap()
     print('======= ROMANIA MAP: oradea -> bucharest =======')
-    for solution in op7.shortest_path('oradea', end_state='bucharest'):
+    for solution in op7.shortest_path(start_state='oradea', end_state='bucharest'):
         print(solution)
 
 
