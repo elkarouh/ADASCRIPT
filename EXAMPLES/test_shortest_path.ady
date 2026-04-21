@@ -501,7 +501,7 @@ def example10():
             accumulated_cost + log(self.offset / step_prob)
         def get_probability(self, seq: []Hidden_State_T) -> Prob_T:
             prob: Prob_T = self.start_p[seq[0]] * self.emit_p[seq[0]][self.obs[0]]
-            for i in range(1, len(seq)):
+            for i in 1..seq'Last:
                 prev: Hidden_State_T = seq[i-1]
                 curr: Hidden_State_T = seq[i]
                 o: Symptom_T = self.obs[i]
