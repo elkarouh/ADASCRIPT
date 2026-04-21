@@ -509,19 +509,6 @@ for choice in Choice_T:
                 switchWins += 1
 ```
 
-**Structural patterns with guards:**
-
-```python
-case point:
-    when Point(x, y) if x == y:
-        print("on the diagonal")
-    when Point(x, y):
-        print(f"off diagonal: {x}, {y}")
-```
-
-**Python output:** standard `match/case` statement  
-**Nim output:** `case/of` statement
-
 **Tuple patterns (multi-dimensional dispatch):**
 
 When the subject is a tuple, each `when` clause lists one value per element.
