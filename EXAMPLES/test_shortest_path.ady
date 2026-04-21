@@ -83,24 +83,24 @@ def example3():
     # Price for each piece of size i is represented as p(i) and maximum revenue from a rod of size i is r(i)
     # (could be split into multiple pieces). Find r(n) for the rod of size n.
     # -----------------------------------------------------------------------
-    ROD_SIZE: int = 5
+    ROD_SIZE: Positive = 5
 
     type State_T is tuple:
-      stage:int
+      stage: int
       remaining_size: int
     type Revenue_T is float
     type Cost_T is float
-    type Decision_T is int # decision of what length we cut
+    type Decision_T is Positive # decision of what length we cut
     type Choice_T is tuple:
-      size:int # the decision
-      revenue:float # the cost of the decision
+      size : Positive # the decision
+      revenue : float # the cost of the decision
 
     class RodCutting(Optimizer[State_T, Decision_T, Cost_T]):
       var choices: []Choice_T = [(1, 1.0), (2, 5.0), (3, 8.0), (4, 9.0), (5, 10.0), (6, 17.0), (7, 17.0), (8, 20.0), (9, 24.0), (10, 30.0)]
 
       def get_state(self, past_decisions: []Decision_T) -> State_T:
           stage: int = len(past_decisions)
-          remaining_size: int = ROD_SIZE - sum(d for d in past_decisions)
+          remaining_size: int = ROD_SIZE - sum(int(d) for d in past_decisions)
           if remaining_size <= 0:
               return (-1, 0)
           return (stage, remaining_size)
