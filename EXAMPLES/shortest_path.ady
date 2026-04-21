@@ -129,7 +129,7 @@ class Optimizer[S, D, C]:
             let (neg_rev, path_length, path, current_state, path_states) = fringe.pop()
             revenue: float = -neg_rev
 
-            if current_state == end_state and path_length > 0:
+            if (current_state == end_state or self.is_end_state(current_state)) and path_length > 0:
                 solutions.append((revenue, path))
 
             if path_length < max_path_length:
