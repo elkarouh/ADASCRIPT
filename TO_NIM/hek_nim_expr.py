@@ -1112,15 +1112,10 @@ def to_nim(self, prec=None):
             _sym = ParserState.symbol_table.lookup(arg)
             _elem_type = ""
             if _sym:
-                _t = _sym.get("type", "")
                 import re as _re_sum
-                _m = _re_sum.match(r'^seq\[(.+)\]$', _t)
+                _m = _re_sum.match(r'^seq\[(.+)\]$', _sym.get("type", ""))
                 if _m:
-                    _elem_type = _m.group(1)
-                    # Resolve type alias via symbol table (e.g. Decision_T -> Positive)
-                    _tsym = ParserState.symbol_table.lookup(_elem_type)
-                    if _tsym and _tsym.get("kind") == "type":
-                        _elem_type = _tsym.get("type", _elem_type)
+                    _elem_type = ParserState.symbol_table.resolve_type(_m.group(1))
             _RANGE_SUBTYPES = ("Positive", "Natural", "range[")
             if _elem_type and any(_elem_type.startswith(r) for r in _RANGE_SUBTYPES):
                 ParserState.nim_imports.add("sequtils")

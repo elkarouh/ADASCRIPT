@@ -114,6 +114,26 @@ class SymbolTable:
         """Return the number of scopes on the stack."""
         return len(self.stack)
 
+    def resolve_type(self, name):
+        """Return the Nim type string for a symbol name, following type aliases.
+
+        For a variable/param, returns its declared type.
+        For a type alias (kind='type'), follows the chain transitively.
+        Returns the name itself if not found.
+        """
+        seen = set()
+        current = name
+        while current and current not in seen:
+            sym = self.lookup(current)
+            if sym is None:
+                break
+            seen.add(current)
+            if sym.get("kind") == "type":
+                current = sym.get("type", current)
+            else:
+                return sym.get("type", current)
+        return current
+
 
 ##################################################################################################
 class ParserState:
