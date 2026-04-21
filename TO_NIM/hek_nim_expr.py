@@ -148,6 +148,7 @@ def _nim_truthiness(expr):
     # Only apply when the whole expression is a single find(re(...)) call, not a compound bool expr.
     _has_top_bool = bool(_re_truth.search(r'\b(and|or)\b', expr))
     _already_bool = bool(_re_truth.search(r'\s*(>=|<=|==|!=|>|<)\s*\d', expr))
+    _is_comparison = bool(_re_truth.search(r'\s*(>=|<=|==|!=)\s*', expr))
     if _re_truth.search(r'\.find\(re\(', expr) and not _has_top_bool and not _already_bool:
         return f"{expr} >= 0"
     # getOrDefault on a Table[K, string] returns string — check truthiness
@@ -158,6 +159,8 @@ def _nim_truthiness(expr):
         _tbl_type = (_tbl_sym.get("type") or "") if _tbl_sym else ""
         if _tbl_type.endswith(", string]"):  # Table[K, string]
             return f"{expr}.len > 0"
+    if _is_comparison:
+        return expr
     _STRING_LIKE = ("string", "seq[", "str", "PriorityQueue", "FifoQueue",
                     "LifoQueue", "HashSet", "Table", "Deque")
     t = _nim_expr_type(expr)
