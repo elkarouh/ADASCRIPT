@@ -27,6 +27,10 @@ def example1():
             'x': [('u', 3.0), ('v', 9.0), ('y', 2.0)],
             'y': [('s', 7.0), ('v', 6.0)],
         }
+        var goal: State_T = 'v'
+
+        def is_end_state(self, state: State_T) -> bool:
+            return state == self.goal
 
         def get_state(self, past_decisions: []Decision_T) -> State_T:
             return past_decisions[-1]
@@ -35,7 +39,7 @@ def example1():
             return self.G.get(curr_state, [])
 
     op: MyOptimizer = MyOptimizer()
-    for solution in op.longest_path('s', 'v', max_path_length=4):
+    for solution in op.longest_path('s', max_path_length=4):
         print("Longest path s->v:", solution)
         break
 
@@ -60,6 +64,10 @@ def example2():
             'h': [('j', 3.0)],
             'i': [('j', 4.0)],
         }
+        var goal: State_T = 'j'
+
+        def is_end_state(self, state: State_T) -> bool:
+            return state == self.goal
 
         def get_state(self, past_decisions: []Decision_T) -> State_T:
             return past_decisions[-1]
@@ -69,10 +77,10 @@ def example2():
 
     print('======= SHORTEST a->j =======')
     op2: MyOptimizer2 = MyOptimizer2()
-    for solution in op2.shortest_path('a', 'j'):
+    for solution in op2.shortest_path('a'):
         print(solution)
     print('======= LONGEST  a->j =======')
-    for solution in op2.longest_path('a', 'j'):
+    for solution in op2.longest_path('a'):
         print(solution)
         break
 
@@ -115,8 +123,7 @@ def example3():
     print('======= ROD CUTTING =======')
     op3: RodCutting = RodCutting()
     start_state: State_T = (0, ROD_SIZE)
-    end_state:   State_T = (0, 0)
-    for solution in op3.longest_path(start_state, end_state):
+    for solution in op3.longest_path(start_state):
         print(solution)
         break
 
@@ -144,6 +151,9 @@ def example4():
             STAGE3: {'plant3-p1': (cost:0.0, revenue:0.0), 'plant3-p2': (cost:1.0, revenue:4.0)},
         ]
 
+        def is_end_state(self, state: State_T) -> bool:
+            return state.stage == END
+
         def get_state(self, past_decisions: []Decision_T) -> State_T:
             stage: Stage_T = Stage_T(len(past_decisions))
             spent: float = 0.0
@@ -163,7 +173,7 @@ def example4():
 
     print('======= CAPITAL BUDGETING =======')
     op4: CapitalBudgeting = CapitalBudgeting()
-    for solution in op4.longest_path((stage:STAGE1, budget:float(CAPITAL)), (stage:END, budget:0.0)):
+    for solution in op4.longest_path((stage:STAGE1, budget:float(CAPITAL))):
         print(solution)
         break
 
@@ -190,6 +200,9 @@ def example5():
           STAGE3: (weight:1, benefit:30)
         ]
 
+        def is_end_state(self, state: State_T) -> bool:
+            return state.stage == END
+
         def get_state(self, past_decisions: []Decision_T) -> State_T:
             stage: Stage_T = past_decisions[-1].stage'Next
             remaining: int = MAX_WEIGHT
@@ -213,7 +226,7 @@ def example5():
 
     print('======= KNAPSACK =======')
     op5: Knapsack = Knapsack()
-    for solution in op5.longest_path((stage:Stage_T'First, remaining:MAX_WEIGHT), (stage:Stage_T'Last, remaining:0)):
+    for solution in op5.longest_path((stage:Stage_T'First, remaining:MAX_WEIGHT)):
         print(solution)
         break
 
@@ -236,6 +249,9 @@ def example6():
 
         def __init__(self, offset: float = 0.0):
             super().__init__(offset)
+
+        def is_end_state(self, state: State_T) -> bool:
+            return state.year == 6
 
         def get_state(self, past_decisions: []Decision_T) -> State_T:
             year: int = len(past_decisions)
@@ -267,9 +283,7 @@ def example6():
 
     print('======= EQUIPMENT REPLACEMENT =======')
     op6: EquipmentReplacement = EquipmentReplacement(offset=10000.0)
-    start_state: State_T = (0, 0)
-    end_state: State_T = (6, IRRELEVANT)
-    for solution in op6.shortest_path(start_state, end_state):
+    for solution in op6.shortest_path((0, 0)):
         print(solution)
 
 def example7():
@@ -309,6 +323,10 @@ def example7():
             'oradea': 380.0, 'pitesti': 100.0, 'rimnicu': 193.0, 'sibiu': 253.0,
             'timisoara': 329.0, 'urzineci': 80.0, 'vaslui': 199.0, 'zerind': 374.0,
         }
+        var goal: State_T = 'bucharest'
+
+        def is_end_state(self, state: State_T) -> bool:
+            return state == self.goal
 
         def get_state(self, past_decisions: []State_T) -> State_T:
             return past_decisions[-1]
@@ -321,7 +339,7 @@ def example7():
 
     op7: BookMap = BookMap()
     print('======= ROMANIA MAP: oradea -> bucharest =======')
-    for solution in op7.shortest_path('oradea', 'bucharest'):
+    for solution in op7.shortest_path('oradea'):
         print(solution)
 
 
@@ -353,15 +371,15 @@ def example8():
                 sum_sq += float(x * x)
             return sum_sq - (sum_v * sum_v) / float(n)
 
+        def is_end_state(self, state: State_T) -> bool:
+            return state.nr_segs == 0
+
         def get_state(self, past_decisions: []Decision_T) -> State_T:
             nr_segs: int = self.start_state.nr_segs - len(past_decisions)
             last_idx: int = 0
             for d in past_decisions:
                 last_idx += len(d)
             return (nr_segs:nr_segs, last_idx:last_idx)
-
-        def is_end_state(self, state: State_T) -> bool:
-            return state.nr_segs == 0
 
         def get_next_decisions(self, current_state: State_T) -> [](Decision_T, Cost_T):
             let (nr_segs, j) = current_state
@@ -375,7 +393,7 @@ def example8():
 
     print('======= LEAST-SQUARE SEGMENTATION (2 segments) =======')
     op8: LeastSquareSegmenter = LeastSquareSegmenter()
-    for sol in op8.shortest_path((nr_segs:2, last_idx:0), (nr_segs:0, last_idx:0)):
+    for sol in op8.shortest_path((nr_segs:2, last_idx:0)):
         print(sol)
 
 
@@ -393,6 +411,9 @@ def example9():
     type Cost_T is float
 
     class BestAlignment(Optimizer[State_T, Decision_T, Cost_T]):
+        def is_end_state(self, state: State_T) -> bool:
+            return state.r1 == "" and state.r2 == ""
+
         def get_state(self, past_decisions: []Decision_T) -> State_T:
             s1: str = self.start_state.r1
             s2: str = self.start_state.r2
@@ -426,7 +447,7 @@ def example9():
     str2: str = "GGATCGA"
     op9: BestAlignment = BestAlignment()
     print("======= BEST ALIGNMENT =======")
-    for solution in op9.shortest_path((r1:str1, r2:str2), (r1:"", r2:"")):
+    for solution in op9.shortest_path((r1:str1, r2:str2)):
         print(solution)
 
 
@@ -495,13 +516,13 @@ def example10():
     print("##################################################")
     print("Observations:", obs)
     print("Most probable hidden-state sequences (best first):")
-    for solution in hmm.shortest_path((stage:0, hidden_state:NONE), (stage:len(obs), hidden_state:NONE)):
+    for solution in hmm.shortest_path((stage:0, hidden_state:NONE)):
         seq = solution[1]
         prob = hmm.get_probability(seq)
         print("  seq=", seq, " prob=", round(prob, 6))
     print("Predicting next state/observation:")
     best: []Hidden_State_T = []
-    for solution in hmm.shortest_path((stage:0, hidden_state:NONE), (stage:len(obs), hidden_state:NONE)):
+    for solution in hmm.shortest_path((stage:0, hidden_state:NONE)):
         best = solution[1]
         break
     last_state = best[-1]
