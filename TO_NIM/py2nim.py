@@ -316,6 +316,10 @@ def translate(code, export_symbols=False):
     while output and output[0] == '':
         output.pop(0)
 
+    # Replace the .ady shebang with a Nim-appropriate one
+    if output and output[0].startswith("#!"):
+        output[0] = "#!/usr/bin/env -S nim r"
+
     # Insert collected Nim imports at the top (after any leading comments)
     if ParserState.nim_imports:
         import_line = "import " + ", ".join(sorted(ParserState.nim_imports))
