@@ -138,6 +138,7 @@ Usage
 
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "HPARSEC"))
 
 import tokenize as tkn
 
@@ -285,3 +286,4 @@ def parse_type(source_code):
     if result is None:
         return None
     return result[0]
+

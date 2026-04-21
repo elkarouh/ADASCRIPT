@@ -13,6 +13,7 @@ Usage:
 import sys, os
 _dir = os.path.dirname(__file__)
 sys.path.insert(0, os.path.join(_dir, ".."))
+sys.path.insert(0, os.path.join(_dir, "..", "HPARSEC"))
 sys.path.insert(0, os.path.join(_dir, "..", "ADASCRIPT_GRAMMAR"))
 # (no TO_PYTHON dependency needed)
 
@@ -287,3 +288,4 @@ if __name__ == "__main__":
     print("=" * 60)
     print(f"Results: {passed} passed, {failed} failed")
     print()
+

@@ -32,6 +32,7 @@ Usage:
 import sys, os
 _dir = os.path.dirname(__file__)
 sys.path.insert(0, os.path.join(_dir, ".."))
+sys.path.insert(0, os.path.join(_dir, "..", "HPARSEC"))
 sys.path.insert(0, os.path.join(_dir, "..", "ADASCRIPT_GRAMMAR"))
 
 from py3expr import *
@@ -1400,3 +1401,4 @@ def to_py(self, prec=None):
         return f"{type_name}({args})"
     # Fallback: plain tuple with just the values
     return "(" + ", ".join(field_vals) + ")"
+
