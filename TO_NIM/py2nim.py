@@ -40,10 +40,45 @@ def Input(code):
 _nimport_param_types_full: dict = {}
 
 
+def _nim_reset():
+    """Initialise all Nim-backend fields on ParserState.
+
+    Called after ParserState.reset() so backend state is set up fresh for
+    each translation unit.  Kept here (not in hek_parsec) so the core
+    parser library stays backend-agnostic.
+    """
+    from hek_parsec import ParserState
+    ParserState.export_symbols = False
+    ParserState.nim_imports = set()
+    ParserState.nim_pragmas = set()
+    ParserState.nim_init_stmts = []
+    ParserState.tick_types = {}
+    ParserState.class_field_types = {}
+    ParserState.proc_param_types = {}
+    ParserState.proc_param_types_full = {}
+    ParserState.tuple_field_order = {}
+    ParserState.object_field_order = {}
+
+    # Install to_nim() fallback on the base Parser class so any node that
+    # has no explicit to_nim() override delegates to to_py().
+    from hek_parsec import Parser
+    if not hasattr(Parser, '_nim_fallback_installed'):
+        def _to_nim_fallback(self, prec=None):
+            if not hasattr(self, 'to_py'):
+                return ''
+            try:
+                return self.to_py(prec)
+            except TypeError:
+                return self.to_py()
+        Parser.to_nim = _to_nim_fallback
+        Parser._nim_fallback_installed = True
+
+
 def parse_module(code):
     """Parse a full module. Comments are embedded in the parse tree via RichNL."""
     from hek_parsec import ParserState
     ParserState.reset()
+    _nim_reset()
     ParserState.proc_param_types_full.update(_nimport_param_types_full)
     stream = Input(code)
     stmts = []

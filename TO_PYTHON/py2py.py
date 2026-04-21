@@ -118,10 +118,18 @@ def Input(code):
     return gen
 
 
+def _py_reset():
+    """Initialise Python-backend fields on ParserState."""
+    from hek_parsec import ParserState
+    ParserState.nim_imports = set()   # stores Python import lines (historical naming)
+    ParserState.tick_types = {}
+
+
 def parse_module(code):
     """Parse a full module. Comments are embedded in the parse tree via RichNL."""
     from hek_parsec import ParserState
     ParserState.reset()
+    _py_reset()
     stream = Input(code)
     stmts = []
     leading = []
