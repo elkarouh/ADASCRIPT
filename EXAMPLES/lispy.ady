@@ -92,54 +92,60 @@ def v_builtin(name: str) -> Val:
 # --------------------------------------------------------
 
 def is_true(v: Val) -> bool:
-    if v.kind == VBool:
-        return v.flag
-    if v.kind == VNil:
-        return False
-    return True
+    case v.kind:
+        when VBool:
+            return v.flag
+        when VNil:
+            return False
+        when others:
+            return True
 
 def val_eq(a: Val, b: Val) -> bool:
     if a.kind != b.kind:
         return False
-    if a.kind == VNum:
-        return a.num == b.num
-    if a.kind == VSym:
-        return a.sym == b.sym
-    if a.kind == VBool:
-        return a.flag == b.flag
-    if a.kind == VNil:
-        return True
-    if a.kind == VList:
-        if len(a.items) != len(b.items):
-            return False
-        for i in 0..len(a.items)-1:
-            if not val_eq(a.items[i], b.items[i]):
+    case a.kind:
+        when VNum:
+            return a.num == b.num
+        when VSym:
+            return a.sym == b.sym
+        when VBool:
+            return a.flag == b.flag
+        when VNil:
+            return True
+        when VList:
+            if len(a.items) != len(b.items):
                 return False
-        return True
-    return False
+            for i in 0..len(a.items)-1:
+                if not val_eq(a.items[i], b.items[i]):
+                    return False
+            return True
+        when others:
+            return False
 
 def val_to_str(v: Val) -> str:
-    if v.kind == VNum:
-        var s: str = str(v.num)
-        if s.endswith(".0"):
-            s = s[0..len(s)-3]
-        return s
-    if v.kind == VSym:
-          return v.sym
-    if v.kind == VBool:
-         return "#t" if v.flag else "#f"
-    if v.kind == VNil:
-          return "()"
-    if v.kind == VBuiltin:
-        return "#<builtin:" & v.sym & ">"
-    if v.kind == VLambda:
-        return "#<lambda>"
-    if v.kind == VList:
-        var parts: []str = []
-        for item in v.items:
-            parts.append(val_to_str(item))
-        return "(" & " ".join(parts) & ")"
-    return "#<unknown>"
+    case v.kind:
+        when VNum:
+            var s: str = str(v.num)
+            if s.endswith(".0"):
+                s = s[0..len(s)-3]
+            return s
+        when VSym:
+            return v.sym
+        when VBool:
+            return "#t" if v.flag else "#f"
+        when VNil:
+            return "()"
+        when VBuiltin:
+            return "#<builtin:" & v.sym & ">"
+        when VLambda:
+            return "#<lambda>"
+        when VList:
+            var parts: []str = []
+            for item in v.items:
+                parts.append(val_to_str(item))
+            return "(" & " ".join(parts) & ")"
+        when others:
+            return "#<unknown>"
 
 # ============================================================
 # Environment
