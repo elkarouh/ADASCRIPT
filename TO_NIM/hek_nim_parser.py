@@ -106,6 +106,13 @@ _REVERSED_DUNDERS = {
 }
 
 
+def _nim_ident(name):
+    """Escape a user identifier that happens to be a Nim keyword."""
+    from hek_nim_expr import _NIM_KEYWORDS
+    if name in _NIM_KEYWORDS:
+        return f"`{name}`"
+    return name
+
 def _nim_proc_name(py_name):
     """Translate a Python dunder/magic method name to its Nim proc name.
 
@@ -542,6 +549,82 @@ def to_nim(self, indent=0):
     return result
 
 
+# --- try/except/finally ---
+@method(try_stmt)
+def to_nim(self, indent=0):
+    # Delegate to whichever sub-form was matched
+    return self.nodes[0].to_nim(indent)
+
+@method(try_except)
+def to_nim(self, indent=0):
+    """try/except -> Nim: try/except"""
+    import re as _re
+    ind = _ind(indent)
+    ind1 = _ind(indent + 1)
+    # nodes: [block, (except_clause|except_bare)+, else_clause?, finally_clause?]
+    body_node = self.nodes[0]
+    body = body_node.to_nim(indent + 1)
+    result = f"{ind}try:\n{body}"
+    for node in self.nodes[1:]:
+        ntype = type(node).__name__
+        if ntype == "Several_Times":
+            for child in node.nodes:
+                result += _emit_except_clause(child, indent)
+        elif ntype in ("except_clause", "except_bare", "Sequence_Parser"):
+            result += _emit_except_clause(node, indent)
+        elif ntype == "else_clause":
+            pass  # Nim has no try/else
+        elif ntype == "finally_clause":
+            fc_block = node.nodes[-1] if hasattr(node, "nodes") else None
+            if fc_block:
+                result += f"{ind}finally:\n{fc_block.to_nim(indent + 1)}"
+    return result
+
+def _emit_except_clause(node, indent):
+    ind = _ind(indent)
+    ind1 = _ind(indent + 1)
+    ntype = type(node).__name__
+    if ntype == "except_bare":
+        # except: block
+        block = node.nodes[-1]
+        return f"{ind}except:\n{block.to_nim(indent + 1)}"
+    # except_clause: except ExcType [as name]: block
+    nodes = node.nodes if hasattr(node, "nodes") else []
+    # Find exception type expression and optional 'as name' and block
+    exc_type = ""
+    exc_name = ""
+    block_node = None
+    i = 0
+    while i < len(nodes):
+        nname = type(nodes[i]).__name__
+        if nname == "block":
+            block_node = nodes[i]
+        elif nname == "IDENTIFIER" and exc_name == "" and exc_type != "":
+            exc_name = nodes[i].to_nim()
+        elif nname not in ("Literal_keyword", "Filter", "Fmap", "NL", "INDENT", "DEDENT"):
+            if exc_type == "":
+                exc_type = nodes[i].to_nim() if hasattr(nodes[i], "to_nim") else ""
+        i += 1
+    if not block_node and nodes:
+        block_node = nodes[-1]
+    body = block_node.to_nim(indent + 1) if block_node else f"{ind1}discard"
+    if exc_name:
+        return f"{ind}except {exc_type} as {exc_name}:\n{body}"
+    elif exc_type:
+        return f"{ind}except {exc_type}:\n{body}"
+    else:
+        return f"{ind}except:\n{body}"
+
+@method(try_finally)
+def to_nim(self, indent=0):
+    ind = _ind(indent)
+    body = self.nodes[0].to_nim(indent + 1)
+    finally_block = self.nodes[-1]
+    if hasattr(finally_block, "nodes"):
+        finally_block = finally_block.nodes[-1]
+    return f"{ind}try:\n{body}{ind}finally:\n{finally_block.to_nim(indent + 1)}"
+
+
 # --- for ---
 @method(for_target)
 def to_nim(self):
@@ -889,6 +972,8 @@ def to_nim(self, prec=None):
                 ParserState.nim_init_stmts.append("randomize()")
             return f"(block: shuffle({type_name}); {type_name})"
         # General value tick attributes
+        elif attr == "Image":
+            return f"${type_name}"
         elif attr == "len" or attr == "Length":
             return type_name + ".len"
         elif attr == "Size":
@@ -1613,7 +1698,7 @@ def to_nim(self, indent=0):
         if hoisted:
             hoisted_block = "\n".join(hoisted) + "\n"
             body = "\n".join(kept)
-            return f"{hoisted_block}{decos}{_ind(indent)}proc {name}({params}){ret_ann} ={hc}\n{body}"
+            return f"{hoisted_block}{decos}{_ind(indent)}proc {_nim_ident(name)}({params}){ret_ann} ={hc}\n{body}"
     # Translate dunder method names to Nim operator procs
     nim_name, nim_keyword = _nim_proc_name(name)
     if nim_name is None:
@@ -1627,6 +1712,9 @@ def to_nim(self, indent=0):
     import re as _re_gp
     _gp_candidates = set(_re_gp.findall(r'\b([A-Z])\b', params + " " + ret_ann))
     _generic_params = "[" + ", ".join(sorted(_gp_candidates)) + "]" if _gp_candidates else ""
+    # Escape Nim keywords that aren't already backtick-wrapped (dunders get their own escaping)
+    if not nim_name.startswith("`"):
+        nim_name = _nim_ident(nim_name)
     return f"{decos}{_ind(indent)}{keyword} {nim_name}{_exp}{_generic_params}({params}){ret_ann} ={hc}\n{body}"
 
 
@@ -1669,7 +1757,7 @@ def to_nim(self, indent=0):
     hc = _block_inline_header_comment(block_node) if block_node else ""
     body = block_node.to_nim(indent + 1) if block_node else ""
     ParserState.symbol_table.pop_scope()
-    return f"{decos}{_ind(indent)}proc {name}({params}){ret_ann} {{.async.}} ={hc}\n{body}"
+    return f"{decos}{_ind(indent)}proc {_nim_ident(name)}({params}){ret_ann} {{.async.}} ={hc}\n{body}"
 
 
 # --- Class definition ---
@@ -1978,7 +2066,11 @@ def to_nim(self, indent=0):
         if not hasattr(ParserState, 'object_field_order'):
             ParserState.object_field_order = {}
         ParserState.object_field_order[name] = field_names
-    result = f"{_ind(indent)}type {name}{_exp}{params} = {nim_kind}\n" + "\n".join(fields)
+    # Detect self-referential record fields -> emit ref object so Nim can handle recursive types
+    fields_text = "\n".join(fields)
+    is_self_ref = nim_kind == "object" and name and name in fields_text
+    ref_keyword = "ref " if is_self_ref else ""
+    result = f"{_ind(indent)}type {name}{_exp}{params} = {ref_keyword}{nim_kind}\n" + "\n".join(fields)
     # Emit an init proc for record (object) types that have field defaults,
     # since Nim object fields don't support inline default values.
     if nim_kind == "object" and field_defaults:

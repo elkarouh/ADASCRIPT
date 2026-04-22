@@ -30,6 +30,25 @@ from py3expr import (
     parse_expr,
 )
 
+# Nim keywords that are valid Python identifiers and need backtick-escaping when used as user identifiers
+_NIM_KEYWORDS = {
+    "nil", "addr", "and", "as", "asm", "bind", "block", "break", "case", "cast",
+    "concept", "const", "continue", "converter", "defer", "discard", "distinct",
+    "div", "do", "elif", "else", "end", "enum", "except", "export", "finally",
+    "for", "from", "func", "if", "import", "in", "include", "interface", "is",
+    "isnot", "iterator", "let", "macro", "method", "mixin", "mod", "not", "notin",
+    "object", "of", "or", "out", "proc", "ptr", "raise", "ref", "result", "return",
+    "shl", "shr", "static", "template", "try", "tuple", "type", "using", "var",
+    "when", "while", "xor", "yield",
+}
+
+@method(IDENTIFIER)
+def to_nim(self, prec=None):
+    name = self.node
+    if name in _NIM_KEYWORDS:
+        return f"`{name}`"
+    return name
+
 _COMP_OPS = {"==", "!=", "<", ">", "<=", ">=", "in", "is", "not in", "is not", "isnot", "notin",
              "__bash_nt__", "__bash_ot__"}
 
@@ -852,9 +871,15 @@ def to_nim(self, prec=None):
     return "." + attr_name
 
 
+@method(tick_trailer)
+def to_nim(self, prec=None):
+    """tick_trailer: TICK IDENTIFIER -> attribute name; emission handled in primary"""
+    return self.nodes[0].to_nim() if hasattr(self.nodes[0], 'to_nim') else self.nodes[0]
+
+
 @method(trailer)
 def to_nim(self, prec=None):
-    """trailer: call_trailer | slice_trailer | attr_trailer"""
+    """trailer: call_trailer | slice_trailer | attr_trailer | tick_trailer"""
     return self.nodes[0].to_nim()
 
 
@@ -962,6 +987,54 @@ def _extract_call_args(call_node):
     return args
 
 
+def _emit_tick_attr(base, field, attr):
+    """Emit Nim code for base[.field]'attr.
+
+    base  - already-emitted Nim expression string
+    field - field name if tick was on a dotted field (e.g. 'num' for self.num'Image), else ""
+    attr  - the tick attribute name (e.g. 'Image', 'Next', 'Choice')
+    """
+    expr = base + ("." + field if field else "")
+    if attr == "Image":
+        return f"$({expr})"
+    if attr == "Next":
+        return expr + ".succ"
+    if attr == "Prev":
+        return expr + ".pred"
+    if attr in ("First", "Low"):
+        return expr + ".low"
+    if attr in ("Last", "High"):
+        return expr + ".high"
+    if attr == "Range":
+        info = getattr(ParserState, 'tick_types', {}).get(expr)
+        if info and "members" in info:
+            return f"{{{expr}.low..{expr}.high}}"
+        return f"{expr}.low..{expr}.high"
+    if attr == "Choice":
+        ParserState.nim_imports.add("random")
+        if "randomize()" not in ParserState.nim_init_stmts:
+            ParserState.nim_init_stmts.append("randomize()")
+        _sym = ParserState.symbol_table.lookup(expr)
+        _typ = (_sym.get("type", "") or "") if _sym else ""
+        if _typ.startswith("HashSet"):
+            ParserState.nim_imports.add("sequtils")
+            return f"{expr}.toSeq[rand({expr}.len - 1)]"
+        if _typ.startswith("set["):
+            return f"sample({expr})"
+        return f"rand({expr})"
+    if attr == "Shuffle":
+        ParserState.nim_imports.add("random")
+        if "randomize()" not in ParserState.nim_init_stmts:
+            ParserState.nim_init_stmts.append("randomize()")
+        return f"(block: shuffle({expr}); {expr})"
+    if attr in ("len", "Length"):
+        return expr + ".len"
+    if attr == "Size":
+        return expr + ".sizeof"
+    # Unknown tick attr — emit as method call
+    return expr + "." + attr
+
+
 @method(primary)
 def to_nim(self, prec=None):
     """primary: atom trailer* -> Nim: base.trailer1.trailer2..."""
@@ -1021,7 +1094,19 @@ def to_nim(self, prec=None):
                 import re as _re_ctor
                 # If args are keyword-style (name = value), convert to colon style directly
                 if args and all(_re_ctor.match(r'^\w+ = ', a) for a in args):
-                    pairs_parts = [_re_ctor.sub(r'^(\w+) = ', r'\1: ', a, count=1) for a in args]
+                    ftype_map = ParserState.class_field_types.get(raw_name, {})
+                    pairs_parts = []
+                    for a in args:
+                        m_kw = _re_ctor.match(r'^(\w+) = (.+)$', a, _re_ctor.DOTALL)
+                        if m_kw:
+                            fn, fv = m_kw.group(1), m_kw.group(2)
+                            ftype = ftype_map.get(fn, "")
+                            # Fix bare initTable() when field type is known
+                            if fv == "initTable()" and ftype.startswith("Table["):
+                                fv = f"initTable[{ftype[6:-1]}]()"
+                            pairs_parts.append(f"{fn}: {fv}")
+                        else:
+                            pairs_parts.append(_re_ctor.sub(r'^(\w+) = ', r'\1: ', a, count=1))
                     pairs = ", ".join(pairs_parts)
                     rest = "".join(tr.to_nim() for tr in self.nodes[1].nodes[1:])
                     if obj_fields:
@@ -1060,6 +1145,8 @@ def to_nim(self, prec=None):
             tick_attr = raw_name[len("__paren_tick_"):-2]
             call_node = self.nodes[1].nodes[0]
             inner = _extract_call_arg(call_node)
+            if tick_attr == "Image":
+                return f"$({inner})"
             if tick_attr == "Choice":
                 ParserState.nim_imports.add("random")
                 if "randomize()" not in ParserState.nim_init_stmts:
@@ -1199,30 +1286,18 @@ def to_nim(self, prec=None):
             if skip_next:
                 skip_next = False
                 continue
+            if type(tr).__name__ == "tick_trailer":
+                tick_attr = tr.nodes[0].to_nim() if hasattr(tr.nodes[0], 'to_nim') else tr.nodes[0]
+                result = _emit_tick_attr(result, "", tick_attr)
+                continue
             if type(tr).__name__ == "attr_trailer":
                 method_name = tr.nodes[0].to_nim()
                 # Handle Ada tick attributes: field'Next -> field.succ, field'Prev -> field.pred
                 # Type'Choice -> rand(Type)
                 if "__tick__" in method_name:
                     base_attr, _, tick_attr = method_name.partition("__tick__")
-                    if tick_attr == "Next":
-                        result += "." + base_attr + ".succ"
-                        continue
-                    elif tick_attr == "Prev":
-                        result += "." + base_attr + ".pred"
-                        continue
-                    elif tick_attr == "Choice":
-                        ParserState.nim_imports.add("random")
-                        if "randomize()" not in ParserState.nim_init_stmts:
-                            ParserState.nim_init_stmts.append("randomize()")
-                        result = f"rand({result})"
-                        continue
-                    elif tick_attr == "Shuffle":
-                        ParserState.nim_imports.add("random")
-                        if "randomize()" not in ParserState.nim_init_stmts:
-                            ParserState.nim_init_stmts.append("randomize()")
-                        result = f"(block: shuffle({result}); {result})"
-                        continue
+                    result = _emit_tick_attr(result, base_attr, tick_attr)
+                    continue
                 method_name = _translate_method(base_name, method_name)
                 next_tr = trailer_list[i + 1] if i + 1 < len(trailer_list) else None
                 # sorted(key=lambda v: v.field) -> sortedByIt(it.field)
