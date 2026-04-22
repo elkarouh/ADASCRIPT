@@ -16,6 +16,9 @@ additive: left-to-right type annotations, Ada-style enums and variant records,
 tick attributes, range expressions, `case/when` pattern matching, and
 first-class shell command integration.
 
+# Elucubrations
+Pascal has set base minimum for systems programming languages. In Pascal it is possible to declare enumerated type and use it wherever ordinal type is accepted. Index an array and for loop. Ada has inherited this base minimum and enhanced by records with discriminants. In Rust I can see nothing but mess. Rust enumeration type can be used as neither array index nor for loop. Also, Rust for some unknown reason tangled records with discriminats and custom enumeration types in a way that cannot be untangled. Yeah, record with discriminant is a popular use of enumeration type, but everything becomes stupid if they come in inseparatable pack. Rust does not deliver base minimum. Wirth's minimum.
+
 ```
 source.ady
     │
@@ -683,6 +686,32 @@ Python equivalent:
 ```python
 nimport strutils, sequtils, algorithm, stdlib
 ```
+
+---
+
+## Raw Nim Injection
+
+A comment of the form `# nimraw: <code>` is passed through verbatim to the
+Nim output and stripped from Python output. This is mainly useful for Nim
+**forward declarations** when two functions are mutually recursive and
+AdaScript has no forward-declaration syntax:
+
+```python
+# nimraw: proc scheme_eval(x: Val, eid: int): Val   # forward decl
+def scheme_apply(proc_val: Val, args: []Val) -> Val:
+    ...
+    return scheme_eval(...)   # calls the forward-declared proc
+
+def scheme_eval(x: Val, eid: int) -> Val:
+    ...
+    return scheme_apply(...)
+```
+
+The transpiler replaces each `# nimraw:` line with the raw code that follows
+the prefix, leaving Python output unaffected (Python ignores the comment).
+
+Use `# nimraw:` sparingly — it bypasses the type system and produces Nim-only
+output. For most Nim-specific needs, prefer `nimport` or `#ady2nim-args`.
 
 ---
 

@@ -53,6 +53,30 @@ With the shebang line and `chmod +x`, you can execute the file directly:
 ./hello.ady        # compiles (cached) and runs
 ```
 
+### Nim-specific directives
+
+Three comment-based directives control Nim-specific behaviour and are ignored
+by the Python transpiler:
+
+| Directive | Purpose |
+|-----------|---------|
+| `#ady2nim-args c -d:release` | Per-file Nim compiler flags (second line only) |
+| `nimport strutils, sequtils` | Import a Nim module without a Python equivalent |
+| `# nimraw: <code>` | Emit a raw Nim line verbatim (e.g. forward declarations) |
+
+`# nimraw:` is mainly useful for **forward declarations** of mutually
+recursive functions, which AdaScript does not otherwise support:
+
+```python
+# nimraw: proc b(x: int): int   # forward declaration
+def a(x: int) -> int:
+    return b(x - 1)             # calls b before b is defined
+
+def b(x: int) -> int:
+    if x <= 0: return 0
+    return a(x - 1)
+```
+
 ### The simplest program
 
 ```python
