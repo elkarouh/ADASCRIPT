@@ -13,15 +13,16 @@ const MAX_OPEN      : Natural = 50
 const TRIALS        : Natural = 1000
 
 type Prisoner_T is int range 1..NUM_PRISONERS
+type Box_T      is int range 1..NUM_PRISONERS
 
-def make_boxes() -> [Prisoner_T]Prisoner_T:
+def make_boxes() -> [Prisoner_T]Box_T:
     """Return identity array boxes[i] = i, to be shuffled."""
-    var boxes: [Prisoner_T]Prisoner_T
+    var boxes: [Prisoner_T]Box_T
     for i in Prisoner_T'First..Prisoner_T'Last:
-        boxes[i] = Prisoner_T(i)
+        boxes[i] = Box_T(i)
     return boxes
 
-def simulate_once(boxes: [Prisoner_T]Prisoner_T) -> bool:
+def simulate_once(boxes: [Prisoner_T]Box_T) -> bool:
     """Return True if all prisoners find their number."""
     for prisoner in Prisoner_T'First..Prisoner_T'Last:
         var box_open    : Prisoner_T = Prisoner_T(prisoner)
@@ -31,7 +32,7 @@ def simulate_once(boxes: [Prisoner_T]Prisoner_T) -> bool:
             if boxes[box_open] == prisoner:
                 found = true
                 break
-            box_open = boxes[box_open]
+            box_open = Prisoner_T(boxes[box_open])
             boxes_opened += 1
         if not found:
             return false
@@ -41,7 +42,7 @@ var successes: Natural = 0
 var failures : Natural = 0
 
 for _ in 1..TRIALS:
-    var boxes: [Prisoner_T]Prisoner_T = make_boxes()
+    var boxes: [Prisoner_T]Box_T = make_boxes()
     boxes'Shuffle
     if simulate_once(boxes):
         successes += 1
