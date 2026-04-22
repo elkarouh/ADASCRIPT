@@ -114,14 +114,14 @@ def val_to_str(v: Val_T) -> str:
         when VNil:
             return "()"
         when VBuiltin:
-            return "#<builtin:" & v.sym & ">"
+            return "#<builtin:" + v.sym + ">"
         when VLambda:
             return "#<lambda>"
         when VList:
             var parts: []str = []
             for item in v.items:
                 parts.append(val_to_str(item))
-            return "(" & " ".join(parts) & ")"
+            return "(" + " ".join(parts) + ")"
         when others:
             return "#<unknown>"
 
@@ -154,7 +154,7 @@ def env_find(eid: int, name: str) -> int:
 def env_get(eid: int, name: str) -> Val_T:
     var found: int = env_find(eid, name)
     if found == NO_PARENT:
-        print("Error: unbound variable: " & name)
+        print("Error: unbound variable: " + name)
         quit(1)
     env_bindings[found][name]
 
@@ -164,7 +164,7 @@ def env_def(eid: int, name: str, val: Val_T) -> None:
 def env_set(eid: int, name: str, val: Val_T) -> None:
     var found: int = env_find(eid, name)
     if found == NO_PARENT:
-        print("Error: unbound variable in set!: " & name)
+        print("Error: unbound variable in set!: " + name)
         quit(1)
     env_bindings[found][name] = val
 
@@ -420,7 +420,7 @@ def apply_builtin(name: str, args: []Val_T) -> Val_T:
                 s &= a.sym
             return v_sym(s)
         when others:
-            print("Error: unknown builtin: " & name)
+            print("Error: unknown builtin: " + name)
             quit(1)
     v_nil()
 
@@ -466,7 +466,7 @@ def scheme_apply(proc_val: Val_T, args: []Val_T) -> Val_T:
         var parms_copy: []str = proc_val.parms
         bind_parms(call_env, parms_copy, args)
         return scheme_eval(load_expr(proc_val.body_id), call_env)
-    print("Error: not a procedure: " & val_to_str(proc_val))
+    print("Error: not a procedure: " + val_to_str(proc_val))
     quit(1)
     return v_nil()
 
