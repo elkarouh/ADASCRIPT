@@ -183,9 +183,9 @@ def tokenize(s: str) -> []str:
             when ';':
                 break
             when '(' | ')' | '\'' | '`' | ',':
-                buf &= " " & c & " "
+                buf += " " + c + " "
             when others:
-                buf &= c
+                buf += c
     var tokens: []str = []
     for tok in buf.split():
         if len(tok) > 0:

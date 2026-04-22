@@ -364,6 +364,9 @@ def binop_to_nim(self, prec=None, my_prec=None):
                     right_is_seq = rtype.startswith("seq[")
                     left_is_str = ltype in ("string", "str")
                     right_is_str = rtype in ("string", "str")
+                    if not (left_is_str or right_is_str):
+                        left_is_str  = ltype == "char" and rtype in ("string", "str")
+                        right_is_str = rtype == "char" and ltype in ("string", "str")
                 if left_is_seq or right_is_seq or left_is_str or right_is_str:
                     nim_op = "&"
             # string repetition: "x" * n -> repeat("x", n)
