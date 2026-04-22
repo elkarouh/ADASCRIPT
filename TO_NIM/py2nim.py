@@ -356,6 +356,20 @@ def translate(code, export_symbols=False):
     if output and output[0].startswith("#!"):
         output[0] = "#!/usr/bin/env -S nim r"
 
+    # Expand #nimraw: directives: lines of the form '# nimraw: <code>'
+    # are replaced with the raw Nim code (useful for forward declarations etc.)
+    _NIMRAW_PREFIX = "# nimraw:"
+    def _expand_nimraw(block):
+        result = []
+        for ln in block.split('\n'):
+            stripped = ln.strip()
+            if stripped.startswith(_NIMRAW_PREFIX):
+                result.append(stripped[len(_NIMRAW_PREFIX):].lstrip())
+            else:
+                result.append(ln)
+        return '\n'.join(result)
+    output = [_expand_nimraw(block) for block in output]
+
     # Insert collected Nim imports at the top (after any leading comments)
     if ParserState.nim_imports:
         import_line = "import " + ", ".join(sorted(ParserState.nim_imports))
