@@ -523,31 +523,53 @@ def scheme_eval(x: Val, eid: int) -> Val:
     if head.kind == VSym:
         let op: str = head.sym
 
-        if op == "quote":
-            return x.items[1]
+        case op:
+            when "quote":
+                return x.items[1]
 
-        if op == "quasiquote":
-            return expand_qq(x.items[1], eid)
+            when "quasiquote":
+                return expand_qq(x.items[1], eid)
 
-        if op == "if":
-            let cond_val: Val = scheme_eval(x.items[1], eid)
-            if is_true(cond_val):
-                return scheme_eval(x.items[2], eid)
-            elif len(x.items) > 3:
-                return scheme_eval(x.items[3], eid)
-            else:
+            when "if":
+                let cond_val: Val = scheme_eval(x.items[1], eid)
+                if is_true(cond_val):
+                    return scheme_eval(x.items[2], eid)
+                elif len(x.items) > 3:
+                    return scheme_eval(x.items[3], eid)
+                else:
+                    return v_nil()
+
+            when "define":
+                if x.items[1].kind == VSym:
+                    let val: Val = scheme_eval(x.items[2], eid)
+                    env_def(eid, x.items[1].sym, val)
+                elif x.items[1].kind == VList:
+                    # (define (f p...) body...) shorthand
+                    let fn_name: str = x.items[1].items[0].sym
+                    var parms: []str = []
+                    for i in 1..len(x.items[1].items)-1:
+                        parms.append(x.items[1].items[i].sym)
+                    var body: Val
+                    if len(x.items) == 3:
+                        body = x.items[2]
+                    else:
+                        var begin_items: []Val = [v_sym("begin")]
+                        for i in 2..len(x.items)-1:
+                            begin_items.append(x.items[i])
+                        body = v_list(begin_items)
+                    env_def(eid, fn_name, v_lambda(parms, body, eid))
                 return v_nil()
 
-        if op == "define":
-            if x.items[1].kind == VSym:
+            when "set!":
                 let val: Val = scheme_eval(x.items[2], eid)
-                env_def(eid, x.items[1].sym, val)
-            elif x.items[1].kind == VList:
-                # (define (f p...) body...) shorthand
-                let fn_name: str = x.items[1].items[0].sym
+                env_set(eid, x.items[1].sym, val)
+                return v_nil()
+
+            when "lambda":
                 var parms: []str = []
-                for i in 1..len(x.items[1].items)-1:
-                    parms.append(x.items[1].items[i].sym)
+                if x.items[1].kind == VList:
+                    for p in x.items[1].items:
+                        parms.append(p.sym)
                 var body: Val
                 if len(x.items) == 3:
                     body = x.items[2]
@@ -556,138 +578,117 @@ def scheme_eval(x: Val, eid: int) -> Val:
                     for i in 2..len(x.items)-1:
                         begin_items.append(x.items[i])
                     body = v_list(begin_items)
-                env_def(eid, fn_name, v_lambda(parms, body, eid))
-            return v_nil()
+                return v_lambda(parms, body, eid)
 
-        if op == "set!":
-            let val: Val = scheme_eval(x.items[2], eid)
-            env_set(eid, x.items[1].sym, val)
-            return v_nil()
+            when "begin":
+                var result: Val = v_nil()
+                for i in 1..len(x.items)-1:
+                    result = scheme_eval(x.items[i], eid)
+                return result
 
-        if op == "lambda":
-            var parms: []str = []
-            if x.items[1].kind == VList:
-                for p in x.items[1].items:
-                    parms.append(p.sym)
-            var body: Val
-            if len(x.items) == 3:
-                body = x.items[2]
-            else:
-                var begin_items: []Val = [v_sym("begin")]
-                for i in 2..len(x.items)-1:
-                    begin_items.append(x.items[i])
-                body = v_list(begin_items)
-            return v_lambda(parms, body, eid)
+            when "and":
+                if len(x.items) == 1:
+                    return v_bool(True)
+                var v: Val = v_bool(True)
+                for i in 1..len(x.items)-1:
+                    v = scheme_eval(x.items[i], eid)
+                    if not is_true(v):
+                        return v_bool(False)
+                return v
 
-        if op == "begin":
-            var result: Val = v_nil()
-            for i in 1..len(x.items)-1:
-                result = scheme_eval(x.items[i], eid)
-            return result
-
-        if op == "and":
-            if len(x.items) == 1:
-                return v_bool(True)
-            var v: Val = v_bool(True)
-            for i in 1..len(x.items)-1:
-                v = scheme_eval(x.items[i], eid)
-                if not is_true(v):
+            when "or":
+                if len(x.items) == 1:
                     return v_bool(False)
-            return v
-
-        if op == "or":
-            if len(x.items) == 1:
+                for i in 1..len(x.items)-1:
+                    var v: Val = scheme_eval(x.items[i], eid)
+                    if is_true(v):
+                        return v
                 return v_bool(False)
-            for i in 1..len(x.items)-1:
-                var v: Val = scheme_eval(x.items[i], eid)
-                if is_true(v):
-                    return v
-            return v_bool(False)
 
-        if op == "cond":
-            for i in 1..len(x.items)-1:
-                let clause: Val = x.items[i]
-                let test_val: Val = scheme_eval(clause.items[0], eid)
-                if is_true(test_val):
-                    if len(clause.items) == 1:
-                        return test_val
+            when "cond":
+                for i in 1..len(x.items)-1:
+                    let clause: Val = x.items[i]
+                    let test_val: Val = scheme_eval(clause.items[0], eid)
+                    if is_true(test_val):
+                        if len(clause.items) == 1:
+                            return test_val
+                        var result: Val = v_nil()
+                        for j in 1..len(clause.items)-1:
+                            result = scheme_eval(clause.items[j], eid)
+                        return result
+                return v_nil()
+
+            when "let":
+                var let_env: int = new_env(eid)
+                for binding in x.items[1].items:
+                    let bname: str = binding.items[0].sym
+                    let bval: Val  = scheme_eval(binding.items[1], eid)
+                    env_def(let_env, bname, bval)
+                var result: Val = v_nil()
+                for i in 2..len(x.items)-1:
+                    result = scheme_eval(x.items[i], let_env)
+                return result
+
+            when "let*":
+                var cur_env: int = eid
+                for binding in x.items[1].items:
+                    var next_env: int = new_env(cur_env)
+                    let bname: str = binding.items[0].sym
+                    let bval: Val  = scheme_eval(binding.items[1], cur_env)
+                    env_def(next_env, bname, bval)
+                    cur_env = next_env
+                var result: Val = v_nil()
+                for i in 2..len(x.items)-1:
+                    result = scheme_eval(x.items[i], cur_env)
+                return result
+
+            when "letrec":
+                var rec_env: int = new_env(eid)
+                for binding in x.items[1].items:
+                    env_def(rec_env, binding.items[0].sym, v_nil())
+                for binding in x.items[1].items:
+                    let bval: Val = scheme_eval(binding.items[1], rec_env)
+                    env_def(rec_env, binding.items[0].sym, bval)
+                var result: Val = v_nil()
+                for i in 2..len(x.items)-1:
+                    result = scheme_eval(x.items[i], rec_env)
+                return result
+
+            when "when":
+                if is_true(scheme_eval(x.items[1], eid)):
                     var result: Val = v_nil()
-                    for j in 1..len(clause.items)-1:
-                        result = scheme_eval(clause.items[j], eid)
+                    for i in 2..len(x.items)-1:
+                        result = scheme_eval(x.items[i], eid)
                     return result
-            return v_nil()
+                return v_nil()
 
-        if op == "let":
-            var let_env: int = new_env(eid)
-            for binding in x.items[1].items:
-                let bname: str = binding.items[0].sym
-                let bval: Val  = scheme_eval(binding.items[1], eid)
-                env_def(let_env, bname, bval)
-            var result: Val = v_nil()
-            for i in 2..len(x.items)-1:
-                result = scheme_eval(x.items[i], let_env)
-            return result
+            when "unless":
+                if not is_true(scheme_eval(x.items[1], eid)):
+                    var result: Val = v_nil()
+                    for i in 2..len(x.items)-1:
+                        result = scheme_eval(x.items[i], eid)
+                    return result
+                return v_nil()
 
-        if op == "let*":
-            var cur_env: int = eid
-            for binding in x.items[1].items:
-                var next_env: int = new_env(cur_env)
-                let bname: str = binding.items[0].sym
-                let bval: Val  = scheme_eval(binding.items[1], cur_env)
-                env_def(next_env, bname, bval)
-                cur_env = next_env
-            var result: Val = v_nil()
-            for i in 2..len(x.items)-1:
-                result = scheme_eval(x.items[i], cur_env)
-            return result
+            when "apply":
+                let pv: Val  = scheme_eval(x.items[1], eid)
+                let lst: Val = scheme_eval(x.items[2], eid)
+                return scheme_apply(pv, lst.items)
 
-        if op == "letrec":
-            var rec_env: int = new_env(eid)
-            for binding in x.items[1].items:
-                env_def(rec_env, binding.items[0].sym, v_nil())
-            for binding in x.items[1].items:
-                let bval: Val = scheme_eval(binding.items[1], rec_env)
-                env_def(rec_env, binding.items[0].sym, bval)
-            var result: Val = v_nil()
-            for i in 2..len(x.items)-1:
-                result = scheme_eval(x.items[i], rec_env)
-            return result
+            when "map":
+                let pv: Val  = scheme_eval(x.items[1], eid)
+                let lst: Val = scheme_eval(x.items[2], eid)
+                var vals_3: []Val = []
+                for item in lst.items:
+                    vals_3.append(scheme_apply(pv, [item]))
+                return v_list(vals_3)
 
-        if op == "when":
-            if is_true(scheme_eval(x.items[1], eid)):
-                var result: Val = v_nil()
-                for i in 2..len(x.items)-1:
-                    result = scheme_eval(x.items[i], eid)
-                return result
-            return v_nil()
-
-        if op == "unless":
-            if not is_true(scheme_eval(x.items[1], eid)):
-                var result: Val = v_nil()
-                for i in 2..len(x.items)-1:
-                    result = scheme_eval(x.items[i], eid)
-                return result
-            return v_nil()
-
-        if op == "apply":
-            let pv: Val      = scheme_eval(x.items[1], eid)
-            let lst: Val     = scheme_eval(x.items[2], eid)
-            return scheme_apply(pv, lst.items)
-
-        if op == "map":
-            let pv: Val  = scheme_eval(x.items[1], eid)
-            let lst: Val = scheme_eval(x.items[2], eid)
-            var vals_3: []Val = []
-            for item in lst.items:
-                vals_3.append(scheme_apply(pv, [item]))
-            return v_list(vals_3)
-
-        if op == "for-each":
-            let pv: Val  = scheme_eval(x.items[1], eid)
-            let lst: Val = scheme_eval(x.items[2], eid)
-            for item in lst.items:
-                var ignored: Val = scheme_apply(pv, [item])
-            return v_nil()
+            when "for-each":
+                let pv: Val  = scheme_eval(x.items[1], eid)
+                let lst: Val = scheme_eval(x.items[2], eid)
+                for item in lst.items:
+                    var ignored: Val = scheme_apply(pv, [item])
+                return v_nil()
 
     # Procedure call
     let pv: Val = scheme_eval(head, eid)
