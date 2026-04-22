@@ -26,14 +26,12 @@ def simulate_once(boxes: [Prisoner_T]Box_T) -> bool:
     """Return True if all prisoners find their number."""
     for prisoner in Prisoner_T'Range:
         var box_open    : Box_T = prisoner 
-        var boxes_opened: Natural = 0
         var found       : bool = False
-        while boxes_opened < MAX_OPEN:
+        for boxes_opened in 1..MAX_OPEN:
             if boxes[box_open] == prisoner:
                 found = True
                 break
             box_open = boxes[box_open]
-            boxes_opened += 1
         if not found:
             return False
     return True
