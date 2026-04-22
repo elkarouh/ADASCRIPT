@@ -125,6 +125,7 @@ nimport_stmt = fw("nimport_stmt")
 print_stmt = fw("print_stmt")
 enum_def = fw("enum_def")
 subrange_def = fw("subrange_def")
+subrange_array_type = fw("subrange_array_type")
 tuple_def = fw("tuple_def")
 record_def = fw("record_def")
 discrim_param = fw("discrim_param")
@@ -250,9 +251,15 @@ float_range_def = literal("float") + literal("range") + NUMBER + V_DOT + V_DOT +
 # int_range_def: int range LO .. HI  (synonym for constrained_subrange_def)
 int_range_def = fw("int_range_def")
 int_range_def = literal("int") + literal("range") + subrange_def
+# [lo..hi]T  ->  array[lo..hi, T]  (subrange-indexed array)
+subrange_array_type = LBRACKET + subrange_def + RBRACKET + type_annotation
 # Allow subrange_def as a type_annotation (e.g. in tuple fields: stage: 1 .. 5)
 # Insert before the expression fallback (last element in type_annotation.parsers)
 type_annotation.parsers.insert(0, subrange_def)
+# Allow [lo..hi]T as a type_annotation; insert before enum_array_type (position 2:
+# after seq_type and callable_type, both of which also start with '[')
+from py_declarations import basic_type as _basic_type
+_basic_type.parsers.insert(2, subrange_array_type)
 # type_stmt for simple (inline) forms only; block forms (tuple/record) are in py3compound_stmt
 type_stmt = ikw("type") + IDENTIFIER + type_alias_params[:] + (V_EQUAL | ikw("is")) + (enum_def | float_range_def | int_range_def | constrained_subrange_def | subrange_def | type_annotation)
 

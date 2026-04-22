@@ -20,6 +20,7 @@ sys.path.insert(0, os.path.join(_dir, "..", "ADASCRIPT_GRAMMAR"))
 from hek_parsec import method, ParserState
 from py_declarations import *  # noqa: F403 — need all parser rule names
 from py_declarations import parse_type
+from py3stmt import subrange_array_type  # noqa: F401 — defined after py_declarations
 
 ###############################################################################
 # to_nim() methods
@@ -108,6 +109,14 @@ def to_nim(self, prec=None):
     """enum_array_type: '[' IDENTIFIER ']' type_annotation (enum-indexed array) -> Nim: array[EnumType, T]"""
     idx = self.nodes[0].to_nim()
     elem = self.nodes[1].to_nim()
+    return f"array[{idx}, {elem}]"
+
+
+@method(subrange_array_type)
+def to_nim(self, prec=None):
+    """subrange_array_type: '[' subrange_def ']' type_annotation -> Nim: array[lo..hi, T]"""
+    idx = self.nodes[0].to_nim()   # subrange_def -> "lo..hi"
+    elem = self.nodes[1].to_nim()  # type_annotation
     return f"array[{idx}, {elem}]"
 
 
