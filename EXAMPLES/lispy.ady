@@ -45,47 +45,25 @@ def load_expr(id: int) -> Val_T:
 # --------------------------------------------------------
 
 def v_num(n: float) -> Val_T:
-    var v: Val_T
-    v.kind = VNum
-    v.num = n
-    return v
+    return Val_T(kind=VNum, num=n)
 
 def v_sym(s: str) -> Val_T:
-    var v: Val_T
-    v.kind = VSym
-    v.sym = s
-    return v
+    return Val_T(kind=VSym, sym=s)
 
 def v_bool(b: bool) -> Val_T:
-    var v: Val_T
-    v.kind = VBool
-    v.flag = b
-    return v
+    return Val_T(kind=VBool, flag=b)
 
 def v_nil() -> Val_T:
-    var v: Val_T
-    v.kind = VNil
-    return v
+    return Val_T(kind=VNil)
 
 def v_list(xs: []Val_T) -> Val_T:
-    var v: Val_T
-    v.kind = VList
-    v.items = xs
-    return v
+    return Val_T(kind=VList, items=xs)
 
 def v_lambda(parms: []str, body: Val_T, env_id: int) -> Val_T:
-    var v: Val_T
-    v.kind = VLambda
-    v.parms = parms
-    v.body_id = store_expr(body)
-    v.env_id = env_id
-    return v
+    return Val_T(kind=VLambda, parms=parms, body_id=store_expr(body), env_id=env_id)
 
 def v_builtin(name: str) -> Val_T:
-    var v: Val_T
-    v.kind = VBuiltin
-    v.sym = name
-    return v
+    return Val_T(kind=VBuiltin, sym=name)
 
 # --------------------------------------------------------
 # Helpers
