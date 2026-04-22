@@ -9,7 +9,7 @@ or everyone dies. The loop strategy succeeds ~31% of the time.
 """
 
 const NUM_PRISONERS : Natural = 100
-const NUM_BOXES : Natural = 100
+const NUM_BOXES     : Natural = 100
 const MAX_OPEN      : Natural = 50
 const TRIALS        : Natural = 1000
 

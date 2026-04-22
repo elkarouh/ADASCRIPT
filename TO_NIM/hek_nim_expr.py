@@ -380,6 +380,19 @@ def binop_to_nim(self, prec=None, my_prec=None):
                         _rs = f"'{_rs[1]}'"
                     result = f"repeat({_rs}, {result})"
                     continue
+            # Ada-style string concat: & -> & (not bitwise and) when operands are strings
+            if nim_op == "and" and py_op == "&":
+                def _looks_like_str(s):
+                    if s.startswith('"') or s.startswith('fmt"') or s.startswith('$'):
+                        return True
+                    if ' & ' in s:
+                        return True
+                    sym = ParserState.symbol_table.lookup(s)
+                    if sym and (sym.get("type") or "") in ("string", "str"):
+                        return True
+                    return False
+                if _looks_like_str(result) or _looks_like_str(right):
+                    nim_op = "&"
             # | stays as | when operands are non-integer (e.g. string | Style pipe)
             if nim_op == "or" and py_op == "|" and _is_pipe_not_bitor([result, right]):
                 nim_op = "|"

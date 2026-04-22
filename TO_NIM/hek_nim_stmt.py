@@ -359,6 +359,13 @@ def to_nim(self):
         ttype = (sym.get("type") or "") if sym else ""
         if ttype in ("string", "str") or value.startswith('"') or value.startswith('fmt"'):
             nim_op = "&="
+    # Ada-style &= -> string concat &= (not bitwise and=) when target is string
+    if nim_op == "and" and expand and py_op == "&=":
+        sym = ParserState.symbol_table.lookup(target)
+        ttype = (sym.get("type") or "") if sym else ""
+        if ttype in ("string", "str") or value.startswith('"') or value.startswith('fmt"'):
+            expand = False
+            nim_op = "&="
     if expand:
         stmt = f"{target} = {target} {nim_op} {value}"
     else:
@@ -743,6 +750,16 @@ def to_nim(self):
                 return f"return some({val})"
     if val == "nil" and ret_type and "seq[" in ret_type:
         return "return @[]"
+    if val == "initTable()" and ret_type:
+        import re as _re2
+        _tm = _re2.search(r"Table\[([^,\]]+),\s*([^\]]+)\]", ret_type)
+        if _tm:
+            val = f"initTable[{_tm.group(1)}, {_tm.group(2)}]()"
+    if val == "initHashSet()" and ret_type:
+        import re as _re3
+        _hm = _re3.search(r"HashSet\[([^\]]+)\]", ret_type)
+        if _hm:
+            val = f"initHashSet[{_hm.group(1)}]()"
     # If return value contains commas (tuple), wrap in parens for Nim
     if "," in val and not val.startswith("("):
         val = f"({val})"
@@ -1229,8 +1246,13 @@ def to_nim(self):
         if tname == "Several_Times" and hasattr(n, "nodes") and n.nodes:
             is_exclusive = True
             break
-    op = "..<" if is_exclusive else ".."
-    return f"range[{lo}{op}{hi}]"
+    if is_exclusive:
+        # Nim range[] doesn't support ..<; convert to inclusive by subtracting 1
+        try:
+            hi = str(int(hi) - 1)
+        except ValueError:
+            hi = f"({hi}) - 1"
+    return f"range[{lo}..{hi}]"
 
 
 
