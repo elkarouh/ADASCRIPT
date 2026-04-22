@@ -269,6 +269,14 @@ def _op_string(node):
 _INT_TYPES = {"int", "int8", "int16", "int32", "int64", "uint", "uint8",
               "uint16", "uint32", "uint64", "bool"}
 
+def _str_to_char_lit(s):
+    """Convert a Nim string literal to a char literal if it holds exactly one char."""
+    if len(s) >= 3 and s[0] == '"' and s[-1] == '"':
+        inner = s[1:-1]
+        if len(inner) == 1 or (len(inner) == 2 and inner[0] == '\\'):
+            return f"'{inner}'"
+    return s
+
 def _nim_type_of(expr_str):
     """Best-effort type lookup for a Nim expression string."""
     sym = ParserState.symbol_table.lookup(expr_str)
@@ -397,15 +405,11 @@ def binop_to_nim(self, prec=None, my_prec=None):
             def _is_char_type(s):
                 sym = ParserState.symbol_table.lookup(s)
                 return sym and (sym.get("type") or "") == "char"
-            def _to_char_lit(s):
-                if len(s) == 3 and s[0] == '"' and s[2] == '"':
-                    return f"'{s[1]}'"
-                return s
             if nim_op in ("<", ">", "<=", ">=", "==", "!="):
                 if _is_char_type(result):
-                    right = _to_char_lit(right)
+                    right = _str_to_char_lit(right)
                 elif _is_char_type(right):
-                    result = _to_char_lit(result)
+                    result = _str_to_char_lit(result)
             # | stays as | when operands are non-integer (e.g. string | Style pipe)
             if nim_op == "or" and py_op == "|" and _is_pipe_not_bitor([result, right]):
                 nim_op = "|"
@@ -1939,10 +1943,8 @@ def to_nim(self, prec=None):
         def _is_char(s):
             sym = ParserState.symbol_table.lookup(s)
             return sym and (sym.get("type") or "") == "char"
-        def _as_char_lit(s):
-            return f"'{s[1]}'" if len(s) == 3 and s[0] == '"' and s[2] == '"' else s
         if any(_is_char(o) for o in operands):
-            operands = [_as_char_lit(o) for o in operands]
+            operands = [_str_to_char_lit(o) for o in operands]
         parts = [f"{operands[i]} {ops[i]} {operands[i+1]}" for i in range(len(ops))]
         result = " and ".join(parts)
         if prec is not None and PREC_CMP < prec:
@@ -1979,13 +1981,11 @@ def to_nim(self, prec=None):
             def _is_char(s):
                 sym = ParserState.symbol_table.lookup(s)
                 return sym and (sym.get("type") or "") == "char"
-            def _as_char_lit(s):
-                return f"'{s[1]}'" if len(s) == 3 and s[0] == '"' and s[2] == '"' else s
             if nim_op in ("<", ">", "<=", ">=", "==", "!="):
                 if _is_char(chain):
-                    right = _as_char_lit(right)
+                    right = _str_to_char_lit(right)
                 elif _is_char(right):
-                    chain = _as_char_lit(chain)
+                    chain = _str_to_char_lit(chain)
             # | stays as | when operands are non-integer (e.g. string | Style pipe)
             if nim_op == "or" and py_op == "|" and _is_pipe_not_bitor([chain, right]):
                 nim_op = "|"

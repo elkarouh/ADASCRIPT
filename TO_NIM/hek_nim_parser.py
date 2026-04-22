@@ -575,6 +575,13 @@ def to_nim(self, indent=0):
     # Nim tuple unpacking in for: for x, y in seq -> for (x, y) in seq
     if "," in target and not target.startswith("("):
         target = f"({target})"
+    # Register loop variable type for string iteration (yields char)
+    _iterable_sym = ParserState.symbol_table.lookup(iterable)
+    _iterable_type = (_iterable_sym.get("type") or "") if _iterable_sym else ""
+    if not _iterable_type:
+        _iterable_type = _nim_expr_type(iterable) or ""
+    if _iterable_type in ("str", "string") and "," not in target:
+        ParserState.symbol_table.add(target.strip("()\n "), "char", "let")
     hc = _block_inline_header_comment(self.nodes[2])
     body = self.nodes[2].to_nim(indent + 1)
     result = f"{_ind(indent)}for {target} in {iterable}:{hc}\n{body}"
