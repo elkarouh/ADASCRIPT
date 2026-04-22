@@ -274,21 +274,23 @@ def parse(program: str) -> Val_T:
 
 def apply_arith(op: str, args: []Val_T) -> Val_T:
     if len(args) == 0:
-        if op == "+":
-            return v_num(0.0)
-        if op == "*":
-            return v_num(1.0)
+        case op:
+            when "+":
+                return v_num(0.0)
+            when "*":
+                return v_num(1.0)
     var acc: float = args[0].num
     for i in 1..len(args)-1:
         var x: float = args[i].num
-        if op == "+":
-            acc += x
-        elif op == "-":
-            acc -= x
-        elif op == "*":
-            acc *= x
-        elif op == "/":
-            acc /= x
+        case op:
+            when "+":
+                acc += x
+            when "-":
+                acc -= x
+            when "*":
+                acc *= x
+            when "/":
+                acc /= x
     v_num(acc)
 
 def apply_builtin(name: str, args: []Val_T) -> Val_T:
