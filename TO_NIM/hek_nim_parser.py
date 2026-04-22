@@ -877,7 +877,7 @@ def to_nim(self, prec=None):
             ParserState.nim_imports.add("random")
             if "randomize()" not in ParserState.nim_init_stmts:
                 ParserState.nim_init_stmts.append("randomize()")
-            return f"shuffle({type_name})"
+            return f"(block: shuffle({type_name}); {type_name})"
         # General value tick attributes
         elif attr == "len" or attr == "Length":
             return type_name + ".len"
