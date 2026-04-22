@@ -35,35 +35,35 @@ var expr_store: []Val_T = []
 def store_expr(v: Val_T) -> int:
     var id: int = len(expr_store)
     expr_store.append(v)
-    return id
+    id
 
 def load_expr(id: int) -> Val_T:
-    return expr_store[id]
+    expr_store[id]
 
 # --------------------------------------------------------
 # Constructors
 # --------------------------------------------------------
 
 def v_num(n: float) -> Val_T:
-    return Val_T(kind=VNum, num=n)
+    Val_T(kind=VNum, num=n)
 
 def v_sym(s: str) -> Val_T:
-    return Val_T(kind=VSym, sym=s)
+    Val_T(kind=VSym, sym=s)
 
 def v_bool(b: bool) -> Val_T:
-    return Val_T(kind=VBool, flag=b)
+    Val_T(kind=VBool, flag=b)
 
 def v_nil() -> Val_T:
-    return Val_T(kind=VNil)
+    Val_T(kind=VNil)
 
 def v_list(xs: []Val_T) -> Val_T:
-    return Val_T(kind=VList, items=xs)
+    Val_T(kind=VList, items=xs)
 
 def v_lambda(parms: []str, body: Val_T, env_id: int) -> Val_T:
-    return Val_T(kind=VLambda, parms=parms, body_id=store_expr(body), env_id=env_id)
+    Val_T(kind=VLambda, parms=parms, body_id=store_expr(body), env_id=env_id)
 
 def v_builtin(name: str) -> Val_T:
-    return Val_T(kind=VBuiltin, sym=name)
+    Val_T(kind=VBuiltin, sym=name)
 
 # --------------------------------------------------------
 # Helpers
@@ -141,7 +141,7 @@ def new_env(outer_id: int) -> int:
     var new_bindings: {str}Val_T = {:}
     env_bindings.append(new_bindings)
     env_outer.append(outer_id)
-    return id
+    id
 
 def env_find(eid: int, name: str) -> int:
     if name in env_bindings[eid]:
@@ -149,14 +149,14 @@ def env_find(eid: int, name: str) -> int:
     var outer: int = env_outer[eid]
     if outer == NO_PARENT:
         return NO_PARENT
-    return env_find(outer, name)
+    env_find(outer, name)
 
 def env_get(eid: int, name: str) -> Val_T:
     var found: int = env_find(eid, name)
     if found == NO_PARENT:
         print("Error: unbound variable: " & name)
         quit(1)
-    return env_bindings[found][name]
+    env_bindings[found][name]
 
 def env_def(eid: int, name: str, val: Val_T) -> None:
     env_bindings[eid][name] = val
@@ -192,7 +192,7 @@ def tokenize(s: str) -> []str:
     for tok in buf.split():
         if len(tok) > 0:
             tokens.append(tok)
-    return tokens
+    tokens
 
 def parse_atom(token: str) -> Val_T:
     if token == "#t" or token == "true":
@@ -232,7 +232,7 @@ def parse_atom(token: str) -> Val_T:
             break
     if is_float and dots == 1:
         return v_num(float(token))
-    return v_sym(token)
+    v_sym(token)
 
 def read_from(tokens: []str, pos: int) -> (Val_T, int):
     if pos >= len(tokens):
@@ -269,7 +269,7 @@ def read_from(tokens: []str, pos: int) -> (Val_T, int):
 def parse(program: str) -> Val_T:
     let tokens: []str = tokenize(program)
     let pair: (Val_T, int) = read_from(tokens, 0)
-    return pair[0]
+    pair[0]
 
 # ============================================================
 # Built-in procedures
@@ -292,7 +292,7 @@ def apply_arith(op: str, args: []Val_T) -> Val_T:
             acc *= x
         elif op == "/":
             acc /= x
-    return v_num(acc)
+    v_num(acc)
 
 def apply_builtin(name: str, args: []Val_T) -> Val_T:
     case name:
@@ -425,7 +425,7 @@ def apply_builtin(name: str, args: []Val_T) -> Val_T:
         when others:
             print("Error: unknown builtin: " & name)
             quit(1)
-    return v_nil()
+    v_nil()
 
 # ============================================================
 # Standard environment
@@ -451,7 +451,7 @@ def make_global_env() -> int:
     env_def(gid, "#f",   v_bool(False))
     env_def(gid, "else", v_bool(True))
     env_def(gid, "pi",   v_num(math.Pi))
-    return gid
+    gid
 
 # ============================================================
 # Evaluator
@@ -486,7 +486,7 @@ def expand_qq(x: Val_T, eid: int) -> Val_T:
             vals_2.append(scheme_eval(item.items[1], eid))
         else:
             vals_2.append(expand_qq(item, eid))
-    return v_list(vals_2)
+    v_list(vals_2)
 
 def scheme_eval(x: Val_T, eid: int) -> Val_T:
     """Evaluate expression x in environment eid."""
@@ -679,7 +679,7 @@ def scheme_eval(x: Val_T, eid: int) -> Val_T:
     var args: []Val_T = []
     for i in 1..len(x.items)-1:
         args.append(scheme_eval(x.items[i], eid))
-    return scheme_apply(pv, args)
+    scheme_apply(pv, args)
 
 # ============================================================
 # REPL / runner
@@ -692,10 +692,10 @@ def run(program: str) -> str:
     let v: Val_T = scheme_eval(parse(program), global_env)
     if v.kind == VNil:
         return ""
-    return val_to_str(v)
+    val_to_str(v)
 
 def schemestr(v: Val_T) -> str:
-    return val_to_str(v)
+    val_to_str(v)
 
 # ============================================================
 # Self-tests
