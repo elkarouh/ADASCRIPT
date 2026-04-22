@@ -224,6 +224,8 @@ def to_py(self, prec=None):
             return f"{type_name}({type_name}.value + 1)"
         elif attr == "Prev":
             return f"{type_name}({type_name}.value - 1)"
+        elif attr == "Shuffle":
+            return f"__import__('random').shuffle({type_name})"
     return name
 
 

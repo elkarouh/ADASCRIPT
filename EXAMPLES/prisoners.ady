@@ -1,0 +1,44 @@
+#!/usr/bin/env py2nim
+"""100 Prisoners Problem simulation.
+
+Each prisoner is assigned a number 0..99. The warden places slips numbered
+0..99 in 100 boxes, randomly shuffled. Each prisoner may open at most 50
+boxes. They start at the box matching their own number and follow the chain
+(next box = number found in current box). All 100 must find their own number
+or everyone dies. The loop strategy succeeds ~31% of the time.
+"""
+
+const NUM_PRISONERS : Natural = 100
+const MAX_OPEN      : Natural = 50
+const TRIALS        : Natural = 1000
+
+def simulate_once(boxes: []int) -> bool:
+    """Return True if all prisoners find their number."""
+    for prisoner in range(NUM_PRISONERS):
+        var box_open    : int = prisoner
+        var boxes_opened: Natural = 0
+        var found       : bool = false
+        while boxes_opened < MAX_OPEN:
+            if boxes[box_open] == prisoner:
+                found = true
+                break
+            box_open = boxes[box_open]
+            boxes_opened += 1
+        if not found:
+            return false
+    return true
+
+var successes: Natural = 0
+var failures : Natural = 0
+
+for _ in 1..TRIALS:
+    var boxes: []int = [i for i in range(NUM_PRISONERS)]
+    boxes'Shuffle
+    if simulate_once(boxes):
+        successes += 1
+    else:
+        failures += 1
+
+print "Trials:   ", TRIALS
+print "Successes:", successes
+print "Failures: ", failures

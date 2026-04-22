@@ -873,6 +873,11 @@ def to_nim(self, prec=None):
                     # set[T] (ordinal set) — use sample()
                     return f"sample({type_name})"
             return f"rand({type_name})"
+        elif attr == "Shuffle":
+            ParserState.nim_imports.add("random")
+            if "randomize()" not in ParserState.nim_init_stmts:
+                ParserState.nim_init_stmts.append("randomize()")
+            return f"shuffle({type_name})"
         # General value tick attributes
         elif attr == "len" or attr == "Length":
             return type_name + ".len"
