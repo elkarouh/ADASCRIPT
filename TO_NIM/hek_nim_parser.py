@@ -1185,18 +1185,28 @@ def to_nim(self, indent=0):
                 keyword = "elif"
         return result.lstrip("\n")
 
+    from hek_nim_expr import _str_to_char_lit
+    _subj_sym = ParserState.symbol_table.lookup(subject)
+    _subj_is_char = _subj_sym and (_subj_sym.get("type") or "") == "char"
+    def _fix_when(clause_nim):
+        if not _subj_is_char:
+            return clause_nim
+        import re as _re_wc
+        def _coerce(m):
+            return _str_to_char_lit(m.group(0))
+        return _re_wc.sub(r'"[^"]*"', _coerce, clause_nim)
     result = f"{_ind(indent)}case {subject}:"
     for node in self.nodes[1:]:
         tname = type(node).__name__
         if tname == "when_clause":
-            result += "\n" + node.to_nim(indent + 1)
+            result += "\n" + _fix_when(node.to_nim(indent + 1))
         elif tname == "Several_Times":
             for seq in node.nodes:
                 stname = type(seq).__name__
                 if stname == "when_clause":
-                    result += "\n" + seq.to_nim(indent + 1)
+                    result += "\n" + _fix_when(seq.to_nim(indent + 1))
                 elif stname == "Sequence_Parser" and hasattr(seq, "nodes"):
-                    result += "\n" + _case_from_seq_nim(seq, indent + 1)
+                    result += "\n" + _fix_when(_case_from_seq_nim(seq, indent + 1))
     return result
 
 
