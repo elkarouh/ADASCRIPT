@@ -1,0 +1,217 @@
+#!/usr/bin/env py2nim
+"""Norvig's Sudoku solver in AdaScript.
+
+Constraint propagation + recursive DFS with MRV (minimum remaining values).
+Reference: https://norvig.com/sudoku.html
+"""
+
+# ============================================================
+# Grid structure
+# ============================================================
+
+const DIGITS : str = "123456789"
+const ROWS   : str = "ABCDEFGHI"
+const COLS   : str = "123456789"
+
+def cross(xs: str, ys: str) -> []str:
+    """Cartesian product of characters: cross("AB", "12") -> ["A1","A2","B1","B2"]"""
+    var result: []str = []
+    for a in xs:
+        var sa: str = str(a)
+        for b in ys:
+            result.append(sa & str(b))
+    return result
+
+var squares: []str = cross(ROWS, COLS)
+
+var unitlist: [][]str = []
+for c in COLS:
+    unitlist.append(cross(ROWS, str(c)))
+for r in ROWS:
+    unitlist.append(cross(str(r), COLS))
+for rb in ["ABC", "DEF", "GHI"]:
+    for cb in ["123", "456", "789"]:
+        unitlist.append(cross(rb, cb))
+
+var units: {str}[][]str = {:}
+for s in squares:
+    var u: [][]str = []
+    for unit in unitlist:
+        if s in unit:
+            u.append(unit)
+    units[s] = u
+
+var peers: {str}{}str = {:}
+for s in squares:
+    var p: {}str = set()
+    for unit in units[s]:
+        for s2 in unit:
+            if s2 != s:
+                p.add(s2)
+    peers[s] = p
+
+# ============================================================
+# Constraint propagation
+# ============================================================
+
+def eliminate(values: {str}str, s: str, d: str) -> {str}str:
+    """Eliminate d from values[s]; propagate. Return False (empty dict) if contradiction."""
+    if d not in values[s]:
+        return values
+    values[s] = values[s].replace(d, "")
+
+    # Contradiction: removed last digit
+    if len(values[s]) == 0:
+        return {:}
+
+    # Naked single: only one value left — eliminate it from peers
+    if len(values[s]) == 1:
+        d2: str = values[s]
+        for s2 in peers[s]:
+            values = eliminate(values, s2, d2)
+            if not values:
+                return {:}
+
+    # Hidden single: check each unit — if only one place for d, assign it there
+    for unit in units[s]:
+        var dplaces: []str = []
+        for sq in unit:
+            if d in values[sq]:
+                dplaces.append(sq)
+        if len(dplaces) == 0:
+            return {:}
+        elif len(dplaces) == 1:
+            # assign inline: eliminate all digits except d from dplaces[0]
+            var sp: str = dplaces[0]
+            var other: str = values[sp].replace(d, "")
+            for d3 in other:
+                values = eliminate(values, sp, str(d3))
+                if not values:
+                    return {:}
+
+    return values
+
+def assign(values: {str}str, s: str, d: str) -> {str}str:
+    """Assign d to s by eliminating all other digits. Return False on contradiction."""
+    var other_digits: str = values[s].replace(d, "")
+    for d2 in other_digits:
+        values = eliminate(values, s, str(d2))
+        if not values:
+            return {:}
+    return values
+
+# ============================================================
+# Parse / display
+# ============================================================
+
+def parse_grid(grid: str) -> {str}str:
+    """Parse a grid string; return dict of {square: digits} or {:} on contradiction."""
+    var values: {str}str = {:}
+    for s in squares:
+        values[s] = DIGITS
+    var chars: []str = []
+    for c in grid:
+        var cs: str = str(c)
+        if cs in DIGITS or cs == "0" or cs == ".":
+            chars.append(cs)
+    for i in 0..len(chars)-1:
+        s: str = squares[i]
+        c: str = chars[i]
+        if c in DIGITS:
+            values = assign(values, s, c)
+            if not values:
+                return {:}
+    return values
+
+def display(values: {str}str) -> None:
+    """Print the board in a 9x9 grid."""
+    var width: int = 1
+    for s in squares:
+        if len(values[s]) + 1 > width:
+            width = len(values[s]) + 1
+    var line: str = ""
+    for i in 1..3:
+        line &= "-" * (width * 3)
+        if i < 3:
+            line &= "+"
+    for r in ROWS:
+        var row_str: str = ""
+        for c in COLS:
+            s: str = str(r) & str(c)
+            var cell: str = values[s]
+            while len(cell) < width:
+                cell &= " "
+            row_str &= cell
+            if c in "36":
+                row_str &= "|"
+        print row_str
+        if r in "CF":
+            print line
+    print ""
+
+# ============================================================
+# DFS search with MRV heuristic
+# ============================================================
+
+def search(values: {str}str) -> {str}str:
+    """DFS with MRV: pick the unfilled square with fewest possibilities."""
+    if not values:
+        return {:}
+
+    # Solved: all squares have exactly one digit
+    var all_solved: bool = True
+    for s in squares:
+        if len(values[s]) != 1:
+            all_solved = False
+            break
+    if all_solved:
+        return values
+
+    # MRV: choose the unfilled square with fewest remaining digits
+    var min_len: int = 10
+    var chosen: str = ""
+    for s in squares:
+        var n: int = len(values[s])
+        if n > 1 and n < min_len:
+            min_len = n
+            chosen = s
+
+    # Try each candidate digit
+    for d in values[chosen]:
+        var attempt: {str}str = {:}
+        for s in squares:
+            attempt[s] = values[s]
+        attempt = assign(attempt, chosen, str(d))
+        var result: {str}str = search(attempt)
+        if result:
+            return result
+
+    return {:}
+
+# ============================================================
+# Solve
+# ============================================================
+
+def solve(grid: str) -> {str}str:
+    return search(parse_grid(grid))
+
+# ============================================================
+# Main: solve a few puzzles
+# ============================================================
+
+var easy: str = "..3.2.6..9..3.5..1..18.64....81.29..7.......8..67.82....26.95..8..2.3..9..5.1.3.."
+var hard: str = "4.....8.5.3..........7......2.....6.....8.4......1.......6.3.7.5..2.....1.4......"
+
+print "Easy:"
+var sol_easy: {str}str = solve(easy)
+if sol_easy:
+    display(sol_easy)
+else:
+    print "No solution"
+
+print "Hard:"
+var sol_hard: {str}str = solve(hard)
+if sol_hard:
+    display(sol_hard)
+else:
+    print "No solution"
