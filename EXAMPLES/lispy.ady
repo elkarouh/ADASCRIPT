@@ -311,138 +311,136 @@ def apply_arith(op: str, args: []Val) -> Val:
     return v_num(acc)
 
 def apply_builtin(name: str, args: []Val) -> Val:
-    if name == "+":
-        return apply_arith("+", args)
-    if name == "-":
-        return apply_arith("-", args)
-    if name == "*":
-        return apply_arith("*", args)
-    if name == "/":
-        return apply_arith("/", args)
-    if name == "<":
-        return v_bool(args[0].num <  args[1].num)
-    if name == ">":
-        return v_bool(args[0].num >  args[1].num)
-    if name == "<=":
-        return v_bool(args[0].num <= args[1].num)
-    if name == ">=":
-        return v_bool(args[0].num >= args[1].num)
-    if name == "=":
-        return v_bool(args[0].num == args[1].num)
-    if name == "abs":
-         return v_num(math.fabs(args[0].num))
-    if name == "max":
-         return v_num(max(args[0].num, args[1].num))
-    if name == "min":
-         return v_num(min(args[0].num, args[1].num))
-    if name == "round":
-        return v_num(math.round(args[0].num))
-    if name == "floor":
-        return v_num(math.floor(args[0].num))
-    if name == "ceil":
-        return v_num(math.ceil(args[0].num))
-    if name == "sqrt":
-        return v_num(math.sqrt(args[0].num))
-    if name == "expt":
-        return v_num(math.pow(args[0].num, args[1].num))
-    if name == "sin":
-         return v_num(math.sin(args[0].num))
-    if name == "cos":
-         return v_num(math.cos(args[0].num))
-    if name == "not":
-         return v_bool(not is_true(args[0]))
-    if name == "eq?":
-          return v_bool(val_eq(args[0], args[1]))
-    if name == "equal?":
-        return v_bool(val_eq(args[0], args[1]))
-    if name == "null?":
-        return v_bool(args[0].kind == VNil or (args[0].kind == VList and len(args[0].items) == 0))
-    if name == "list?":
+    case name:
+        when "+":
+            return apply_arith("+", args)
+        when "-":
+            return apply_arith("-", args)
+        when "*":
+            return apply_arith("*", args)
+        when "/":
+            return apply_arith("/", args)
+        when "<":
+            return v_bool(args[0].num < args[1].num)
+        when ">":
+            return v_bool(args[0].num > args[1].num)
+        when "<=":
+            return v_bool(args[0].num <= args[1].num)
+        when ">=":
+            return v_bool(args[0].num >= args[1].num)
+        when "=":
+            return v_bool(args[0].num == args[1].num)
+        when "abs":
+            return v_num(math.fabs(args[0].num))
+        when "max":
+            return v_num(max(args[0].num, args[1].num))
+        when "min":
+            return v_num(min(args[0].num, args[1].num))
+        when "round":
+            return v_num(math.round(args[0].num))
+        when "floor":
+            return v_num(math.floor(args[0].num))
+        when "ceil":
+            return v_num(math.ceil(args[0].num))
+        when "sqrt":
+            return v_num(math.sqrt(args[0].num))
+        when "expt":
+            return v_num(math.pow(args[0].num, args[1].num))
+        when "sin":
+            return v_num(math.sin(args[0].num))
+        when "cos":
+            return v_num(math.cos(args[0].num))
+        when "not":
+            return v_bool(not is_true(args[0]))
+        when "eq?" | "equal?":
+            return v_bool(val_eq(args[0], args[1]))
+        when "null?":
+            return v_bool(args[0].kind == VNil or (args[0].kind == VList and len(args[0].items) == 0))
+        when "list?":
             return v_bool(args[0].kind == VList)
-    if name == "number?":
-          return v_bool(args[0].kind == VNum)
-    if name == "symbol?":
-          return v_bool(args[0].kind == VSym)
-    if name == "procedure?":
-        return v_bool(args[0].kind == VLambda or args[0].kind == VBuiltin)
-    if name == "pair?":
+        when "number?":
+            return v_bool(args[0].kind == VNum)
+        when "symbol?" | "string?":
+            return v_bool(args[0].kind == VSym)
+        when "procedure?":
+            return v_bool(args[0].kind == VLambda or args[0].kind == VBuiltin)
+        when "pair?":
             return v_bool(args[0].kind == VList and len(args[0].items) > 0)
-    if name == "boolean?":
-         return v_bool(args[0].kind == VBool)
-    if name == "car":
-        if args[0].kind == VList and len(args[0].items) > 0:
-            return args[0].items[0]
-        print("Error: car of non-pair")
-        quit(1)
-    if name == "cdr":
-        if args[0].kind == VList and len(args[0].items) > 0:
-            var rest: []Val = args[0].items[1..len(args[0].items)-1]
-            return v_list(rest)
-        print("Error: cdr of non-pair")
-        quit(1)
-    if name == "cons":
-        if args[1].kind == VList:
-            var new_items: []Val = [args[0]]
-            for x in args[1].items:
-                new_items.append(x)
-            return v_list(new_items)
-        return v_list([args[0], args[1]])
-    if name == "list":
-         return v_list(args)
-    if name == "length":
-        if args[0].kind == VList:
-            return v_num(float(len(args[0].items)))
-        return v_num(0.0)
-    if name == "append":
-        var vals_1: []Val = []
-        for a in args:
-            if a.kind == VList:
-                for x in a.items:
-                    vals_1.append(x)
-        return v_list(vals_1)
-    if name == "reverse":
-        var rev: []Val = []
-        for i in 0..len(args[0].items)-1:
-            rev.append(args[0].items[len(args[0].items)-1-i])
-        return v_list(rev)
-    if name == "display":
-        print(val_to_str(args[0]))
-        return v_nil()
-    if name == "newline":
-        print("")
-        return v_nil()
-    if name == "even?":
-        var inum: int = int(args[0].num)
-        var is_even: bool = (inum mod 2 == 0)
-        return v_bool(is_even)
-    if name == "odd?":
-        var inum: int = int(args[0].num)
-        var is_odd: bool = (inum mod 2 != 0)
-        return v_bool(is_odd)
-    if name == "zero?":
-        return v_bool(args[0].num == 0.0)
-    if name == "positive?":
-        return v_bool(args[0].num > 0.0)
-    if name == "negative?":
-        return v_bool(args[0].num < 0.0)
-    if name == "number->string":
-        return v_sym(val_to_str(args[0]))
-    if name == "string->number":
-        var parsed: Val = parse_atom(args[0].sym)
-        if parsed.kind == VNum:
-            return parsed
-        return v_bool(False)
-    if name == "string?":
-             return v_bool(args[0].kind == VSym)
-    if name == "string-length":
-        return v_num(float(len(args[0].sym)))
-    if name == "string-append":
-        var s: str = ""
-        for a in args:
-            s &= a.sym
-        return v_sym(s)
-    print("Error: unknown builtin: " & name)
-    quit(1)
+        when "boolean?":
+            return v_bool(args[0].kind == VBool)
+        when "car":
+            if args[0].kind == VList and len(args[0].items) > 0:
+                return args[0].items[0]
+            print("Error: car of non-pair")
+            quit(1)
+        when "cdr":
+            if args[0].kind == VList and len(args[0].items) > 0:
+                var rest: []Val = args[0].items[1..len(args[0].items)-1]
+                return v_list(rest)
+            print("Error: cdr of non-pair")
+            quit(1)
+        when "cons":
+            if args[1].kind == VList:
+                var new_items: []Val = [args[0]]
+                for x in args[1].items:
+                    new_items.append(x)
+                return v_list(new_items)
+            return v_list([args[0], args[1]])
+        when "list":
+            return v_list(args)
+        when "length":
+            if args[0].kind == VList:
+                return v_num(float(len(args[0].items)))
+            return v_num(0.0)
+        when "append":
+            var vals_1: []Val = []
+            for a in args:
+                if a.kind == VList:
+                    for x in a.items:
+                        vals_1.append(x)
+            return v_list(vals_1)
+        when "reverse":
+            var rev: []Val = []
+            for i in 0..len(args[0].items)-1:
+                rev.append(args[0].items[len(args[0].items)-1-i])
+            return v_list(rev)
+        when "display":
+            print(val_to_str(args[0]))
+            return v_nil()
+        when "newline":
+            print("")
+            return v_nil()
+        when "even?":
+            var inum: int = int(args[0].num)
+            var is_even: bool = (inum mod 2 == 0)
+            return v_bool(is_even)
+        when "odd?":
+            var inum: int = int(args[0].num)
+            var is_odd: bool = (inum mod 2 != 0)
+            return v_bool(is_odd)
+        when "zero?":
+            return v_bool(args[0].num == 0.0)
+        when "positive?":
+            return v_bool(args[0].num > 0.0)
+        when "negative?":
+            return v_bool(args[0].num < 0.0)
+        when "number->string":
+            return v_sym(val_to_str(args[0]))
+        when "string->number":
+            var parsed: Val = parse_atom(args[0].sym)
+            if parsed.kind == VNum:
+                return parsed
+            return v_bool(False)
+        when "string-length":
+            return v_num(float(len(args[0].sym)))
+        when "string-append":
+            var s: str = ""
+            for a in args:
+                s &= a.sym
+            return v_sym(s)
+        when others:
+            print("Error: unknown builtin: " & name)
+            quit(1)
     return v_nil()
 
 # ============================================================
