@@ -1236,16 +1236,10 @@ def to_nim(self):
 
 @method(subrange_def)
 def to_nim(self):
-    """subrange_def: INTEGER '..' ['<'] INTEGER -> Nim range[lo..hi] or range[lo..<hi]"""
+    """subrange_def: INTEGER ('..' | '..<') INTEGER -> Nim range[lo..hi] or range[lo..<hi]"""
     lo = str(self.nodes[0].node)
-    hi = str(self.nodes[-1].node)
-    # Check if exclusive (..<) — look for '<' in Several_Times node from (vop("<"))[:]
-    is_exclusive = False
-    for n in self.nodes[1:-1]:
-        tname = type(n).__name__
-        if tname == "Several_Times" and hasattr(n, "nodes") and n.nodes:
-            is_exclusive = True
-            break
+    hi = str(self.nodes[2].node)
+    is_exclusive = getattr(self.nodes[1], 'node', None) == "..<"
     if is_exclusive:
         # Nim range[] doesn't support ..<; convert to inclusive by subtracting 1
         try:
@@ -1264,9 +1258,9 @@ def to_nim(self):
 
 @method(float_range_def)
 def to_nim(self):
-    """float_range_def: 'float' 'range' NUMBER '..' NUMBER -> lo..hi as strings"""
+    """float_range_def: 'float' 'range' NUMBER ('..'|'..<') NUMBER -> lo..hi as strings"""
     lo = str(self.nodes[2].node)  # nodes[0]=float, nodes[1]=range, nodes[2]=NUMBER
-    hi = str(self.nodes[5].node)  # nodes[3]='.', nodes[4]='.', nodes[5]=NUMBER
+    hi = str(self.nodes[4].node)  # nodes[3]=RANGE_OP, nodes[4]=NUMBER
     return f"{lo}..{hi}"  # sentinel used by type_stmt to generate float type alias
 
 

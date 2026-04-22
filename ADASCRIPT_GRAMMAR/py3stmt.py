@@ -44,6 +44,8 @@ from hek_parsec import (
     SEMICOLON,
     SSTAR,
     STRING,
+    RANGE_OP,
+    RANGE_EXCL_OP,
     Input,
     Parser,
     ParserState,
@@ -239,15 +241,15 @@ type_alias_params = LBRACKET + IDENTIFIER + (COMMA + IDENTIFIER)[:] + RBRACKET
 # enum_def: enum IDENT, IDENT, ...
 enum_member = IDENTIFIER | INTEGER
 enum_def = ikw("enum") + enum_member + (COMMA + enum_member)[:] + COMMA[:]
-# subrange_def: INT '..' INT  or  INT '..<' INT  (requires spaces around ..)
+# subrange_def: INT '..' INT  or  INT '..<' INT
 subrange_bound = INTEGER | IDENTIFIER
-subrange_def = subrange_bound + V_DOT + V_DOT + (vop("<"))[:] + subrange_bound
+subrange_def = subrange_bound + (RANGE_EXCL_OP | RANGE_OP) + subrange_bound
 # constrained_subrange_def: base_type lo .. hi  (e.g. int 0 .. CAPITAL)
 constrained_subrange_def = fw("constrained_subrange_def")
 constrained_subrange_def = IDENTIFIER + subrange_def
 # float_range_def: float range LO .. HI  (e.g. float range 0.0 .. 100.0)
 float_range_def = fw("float_range_def")
-float_range_def = literal("float") + literal("range") + NUMBER + V_DOT + V_DOT + NUMBER
+float_range_def = literal("float") + literal("range") + NUMBER + (RANGE_EXCL_OP | RANGE_OP) + NUMBER
 # int_range_def: int range LO .. HI  (synonym for constrained_subrange_def)
 int_range_def = fw("int_range_def")
 int_range_def = literal("int") + literal("range") + subrange_def
