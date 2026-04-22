@@ -1343,21 +1343,21 @@ def to_nim(self, indent=0):
                 ParserState.symbol_table.add(m, name, "let")
     elif rhs_type == "subrange_def":
         lo = str(rhs.nodes[0].node)
-        hi = str(rhs.nodes[-1].node)
+        hi = str(rhs.nodes[2].node)  # [lo, range_op, hi]
         ParserState.tick_types[name] = {"First": lo, "Last": hi}
     elif rhs_type == "constrained_subrange_def":
         sr = rhs.nodes[1]  # the subrange_def inside
         lo = str(sr.nodes[0].node)
-        hi = str(sr.nodes[-1].node)
+        hi = str(sr.nodes[2].node)   # [lo, range_op, hi]
         ParserState.tick_types[name] = {"First": lo, "Last": hi}
     elif rhs_type == "int_range_def":
         sr = rhs.nodes[2]  # the subrange_def inside (nodes[0]=int, nodes[1]=range)
         lo = str(sr.nodes[0].node)
-        hi = str(sr.nodes[-1].node)
+        hi = str(sr.nodes[2].node)   # [lo, range_op, hi]
         ParserState.tick_types[name] = {"First": lo, "Last": hi}
     elif rhs_type == "float_range_def":
         lo = str(rhs.nodes[2].node)
-        hi = str(rhs.nodes[5].node)
+        hi = str(rhs.nodes[4].node)  # [float, range, lo, range_op, hi]
         ParserState.tick_types[name] = {"First": lo, "Last": hi, "is_float_range": True}
         ParserState.symbol_table.add(name, "float", "type")
         _exp = "*" if getattr(ParserState, 'export_symbols', False) and ParserState.symbol_table.depth() == 1 else ""

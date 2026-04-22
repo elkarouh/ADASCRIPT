@@ -665,25 +665,25 @@ def to_py(self):
     rhs_type = type(rhs).__name__
     if rhs_type == 'float_range_def':
         lo = str(rhs.nodes[2].node)
-        hi = str(rhs.nodes[5].node)
+        hi = str(rhs.nodes[4].node)  # [float, range, lo, range_op, hi]
         ParserState.tick_types[name] = {"First": lo, "Last": hi, "is_float_range": True}
         return f"{name} = float  # range {lo} .. {hi}"
     if rhs_type == 'int_range_def':
         sr = rhs.nodes[2]  # the subrange_def inside (nodes[0]=int, nodes[1]=range)
         lo = str(sr.nodes[0].node)
-        hi = str(sr.nodes[-1].node)
+        hi = str(sr.nodes[2].node)   # [lo, range_op, hi]
         ParserState.tick_types[name] = {"First": lo, "Last": hi}
         return f"{name} = {rhs.to_py()}"
     if rhs_type == 'constrained_subrange_def':
         sr = rhs.nodes[1]  # the subrange_def inside
         lo = str(sr.nodes[0].node)
-        hi = str(sr.nodes[-1].node)
+        hi = str(sr.nodes[2].node)   # [lo, range_op, hi]
         ParserState.tick_types[name] = {"First": lo, "Last": hi}
         return f"{name} = {rhs.to_py()}"
     if rhs_type == 'subrange_def':
         # Register First/Last for tick attributes (Name'First, Name'Last)
         lo = rhs.nodes[0].node
-        hi = rhs.nodes[-1].node
+        hi = rhs.nodes[2].node  # [lo, range_op, hi]
         ParserState.tick_types[name] = {"First": lo, "Last": hi}
         return f"{name} = {rhs.to_py()}"
     if rhs_type == 'enum_def':
