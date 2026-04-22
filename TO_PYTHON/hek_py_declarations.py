@@ -145,6 +145,7 @@ sys.path.insert(0, os.path.join(_dir, "..", "ADASCRIPT_GRAMMAR"))
 from py_declarations import *
 import hek_py3_expr  # noqa: F401 — registers expr to_py() methods
 from hek_parsec import method
+from py3stmt import subrange_array_type  # noqa: F401 — defined after py_declarations
 
 # to_py() methods
 ###############################################################################
@@ -189,6 +190,13 @@ def to_py(self, prec=None):
     idx = self.nodes[0].to_py()
     elem = self.nodes[1].to_py()
     return f"dict[{idx}, {elem}]"
+
+
+@method(subrange_array_type)
+def to_py(self, prec=None):
+    """subrange_array_type: '[' subrange_def ']' type_annotation -> Python: list[T]"""
+    elem = self.nodes[1].to_py()
+    return f"list[{elem}]"
 
 
 @method(dict_type)
