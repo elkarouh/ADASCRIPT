@@ -206,30 +206,27 @@ def parse_atom(token: str) -> Val_T:
                 if not ('0' <= d <= '9'):
                     return False
             return True
+    def is_float() -> bool:
+        var sf: int = 0
+        var dots: int = 0
+        if len(token) > 0 and (token[0] in "-+"):
+            sf = 1
+        for i in sf..<len(token):
+            var d: char = token[i]
+            if d == '.':
+                dots += 1
+                if dots > 1:
+                    return False
+            elif not ('0' <= d <= '9'):
+                return False
+        return dots == 1
     if token == "#t" or token == "true":
         return v_bool(True)
     if token == "#f" or token == "false":
         return v_bool(False)
-    # Try integer
     if is_int():
         return v_num(float(int(token)))
-    # Try float
-    var is_float: bool = True
-    var sf: int = 0
-    var dots: int = 0
-    if len(token) > 0 and (token[0] in "-+"):
-        sf = 1
-    for i in sf..len(token)-1:
-        var d: char = token[i]
-        if d == '.':
-            dots += 1
-            if dots > 1:
-                is_float = False
-                break
-        elif not ('0' <= d <= '9'):
-            is_float = False
-            break
-    if is_float and dots == 1:
+    if is_float():
         return v_num(float(token))
     v_sym(token)
 
