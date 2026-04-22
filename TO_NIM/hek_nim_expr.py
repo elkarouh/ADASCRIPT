@@ -50,7 +50,7 @@ def to_nim(self, prec=None):
     return name
 
 _COMP_OPS = {"==", "!=", "<", ">", "<=", ">=", "in", "is", "not in", "is not", "isnot", "notin",
-             "__bash_nt__", "__bash_ot__"}
+             "-nt", "-ot"}
 
 def _nim_expr_type(expr):
     """Infer the Nim type of an already-emitted expression string.
@@ -1700,18 +1700,17 @@ _BASH_FILE_TEST_NIM = {
 
 @method(file_test)
 def to_nim(self, prec=None):
-    """file_test: __bash_test_X__ primary -> Nim os file-test call.
+    """file_test: BASH_TEST IDENTIFIER primary -> Nim os file-test call.
 
     -e/-f  -> fileExists(path)
     -d     -> dirExists(path)
     -L     -> symlinkExists(path)
     -r/-w/-x -> fpUserRead/Write/Exec in getFilePermissions(path)
     -s     -> getFileSize(path) > 0
-    -nt/-ot handled in comparison via bash_nt_op / bash_ot_op
+    -nt/-ot handled in comparison via BASH_CMP
     """
-    op_name = self.nodes[0].node   # e.g. '__bash_test_e__'
-    flag = op_name[len("__bash_test_"):-2]  # e.g. 'e'
-    path = self.nodes[1].to_nim()
+    flag = self.nodes[1].node   # IDENTIFIER node: 'e', 'f', 'd', etc.
+    path = self.nodes[2].to_nim()
     ParserState.nim_imports.add("os")
     if flag in ("e", "f"):
         return f"fileExists({path})"
@@ -1732,16 +1731,36 @@ def to_nim(self, prec=None):
         return f"(true) # TODO: -{flag} {path} not supported in Nim"
 
 
-@method(bash_nt_op)
+@method(BASH_CMP)
 def to_nim(self, prec=None):
-    """bash_nt_op: __bash_nt__ -> emitted as part of comparison to_nim"""
-    return "__bash_nt__"
+    """BASH_CMP: '-nt' or '-ot' token -> forwarded to comparison handler"""
+    return self.node  # already the string "-nt" or "-ot"
 
 
-@method(bash_ot_op)
+# --- dollar variables: $0, $1..N, $#, $@, $NAME ---
+@method(dollar_var)
 def to_nim(self, prec=None):
-    """bash_ot_op: __bash_ot__ -> emitted as part of comparison to_nim"""
-    return "__bash_ot__"
+    """dollar_var: DOLLAR IDENTIFIER -> Nim os/param equivalent.
+
+      $0    -> getAppFilename()
+      $1..N -> (if paramCount() >= N: paramStr(N) else: "")
+      $#    -> paramCount()
+      $@    -> commandLineParams()
+      $NAME -> getEnv("NAME")
+    """
+    raw = self.nodes[0].node  # TokenInfo or string
+    name = raw.string if hasattr(raw, 'string') else str(raw)
+    ParserState.nim_imports.add("os")
+    if name == "0":
+        return "getAppFilename()"
+    if name == "#":
+        return "paramCount()"
+    if name == "@":
+        return "commandLineParams()"
+    if name.isdigit():
+        n = int(name)
+        return f'(if paramCount() >= {n}: paramStr({n}) else: "")'
+    return f'getEnv("{name}")'
 
 
 # --- range expression (.., ..<) ---
@@ -2047,10 +2066,10 @@ def to_nim(self, prec=None):
                 chain += f" in {lo}{op}{hi}"
                 continue
             # Bash file-comparison: f1 -nt f2 / f1 -ot f2
-            if py_op in ("__bash_nt__", "__bash_ot__"):
+            if py_op in ("-nt", "-ot"):
                 right = seq.nodes[1].to_nim(operand_prec)
                 ParserState.nim_imports.add("times")
-                cmp_op = ">" if py_op == "__bash_nt__" else "<"
+                cmp_op = ">" if py_op == "-nt" else "<"
                 chain = (f"(getLastModificationTime({chain})"
                          f" {cmp_op} getLastModificationTime({right}))")
                 continue

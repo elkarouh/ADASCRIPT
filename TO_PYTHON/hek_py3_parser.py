@@ -442,9 +442,6 @@ def to_py(self, prec=None):
             return f"len({type_name})"
         elif attr == "Size":
             return f"len({type_name})"
-    # Resolve bashisms: __bash_*__ placeholders -> Python equivalents
-    if name.startswith("__bash_") and name.endswith("__"):
-        return _bash_to_py(name)
     return name
 
 

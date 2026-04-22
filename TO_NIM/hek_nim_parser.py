@@ -989,9 +989,6 @@ def to_nim(self, prec=None):
                 return type_name + ".high"
         # Unknown tick attribute — emit as method call
         return type_name + "." + attr
-    # Resolve bashisms: __bash_*__ placeholders -> Nim equivalents
-    if name.startswith("__bash_") and name.endswith("__"):
-        return _bash_to_nim(name)
     # '_' alone is the discard identifier in Nim — keep it.
     # Other single-leading-underscore names: strip the underscore.
     # But leave double-underscore names (dunder) intact.
