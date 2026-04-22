@@ -209,7 +209,7 @@ def parse_atom(token: str) -> Val_T:
     else:
         for i in si..<len(token):
             var d: char = token[i]
-            if d < '0' or d > '9':
+            if not ('0' <= d <= '9'):
                 is_int = False
                 break
     if is_int:
