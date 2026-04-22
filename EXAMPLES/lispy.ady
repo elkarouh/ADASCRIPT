@@ -179,15 +179,14 @@ def bind_parms(eid: int, parms: []str, args: []Val_T) -> None:
 def tokenize(s: str) -> []str:
     var buf: str = ""
     for c in s:
-        var cs: str = str(c)
-        if cs == ";":
+        if c == ';':
             break
-        elif cs == "(" or cs == ")":
-            buf &= " " & cs & " "
-        elif cs == "'" or cs == "`" or cs == ",":
-            buf &= " " & cs & " "
+        elif c == '(' or c == ')':
+            buf &= " " & c & " "
+        elif c == '\'' or c == '`' or c == ',':
+            buf &= " " & c & " "
         else:
-            buf &= cs
+            buf &= c
     var tokens: []str = []
     for tok in buf.split():
         if len(tok) > 0:
@@ -196,7 +195,6 @@ def tokenize(s: str) -> []str:
 
 def parse_atom(token: str) -> Val_T:
     def is_int() -> bool:
-        var is_int: bool = True
         var si: int = 0
         if len(token) > 0 and (token[0] in "-+"):
             si = 1
