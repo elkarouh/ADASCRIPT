@@ -50,6 +50,7 @@ from hek_parsec import (
     RPAREN,
     SSTAR,
     STRING,
+    TICK,
     Input,
     Parser,
     ParserState,
@@ -273,8 +274,9 @@ atom = (
 call_trailer = LPAREN_NODE + arguments[:] + RPAREN
 slice_trailer = LBRACKET + slices + RBRACKET
 attr_trailer = DOT + IDENTIFIER
+tick_trailer = TICK + IDENTIFIER
 
-trailer = call_trailer | slice_trailer | attr_trailer
+trailer = call_trailer | slice_trailer | attr_trailer | tick_trailer
 
 # --- primary: atom followed by zero or more trailers ---
 primary = atom + trailer[:]
