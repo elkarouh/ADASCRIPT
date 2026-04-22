@@ -16,73 +16,73 @@ import math
 # A Lisp value is one of: number, symbol, bool, nil, list, lambda, builtin.
 # We encode all variants in a single record and use a kind tag.
 
-type Val_Kind is enum VNum, VSym, VBool, VNil, VList, VLambda, VBuiltin
+type Val_Kind_T is enum VNum, VSym, VBool, VNil, VList, VLambda, VBuiltin
 
-type Val is record:
-    kind:    Val_Kind
+type Val_T is record:
+    kind:    Val_Kind_T
     num:     float        # VNum
     sym:     str          # VSym | VBuiltin name
     flag:    bool         # VBool
-    items:   []Val        # VList
+    items:   []Val_T        # VList
     parms:   []str        # VLambda parameter names
     body_id: int          # VLambda: index into expr_store
     env_id:  int          # VLambda: closure env id
 
 # Expression store: lambdas store their body by index to avoid
 # recursive Val-contains-Val issues at the type level.
-var expr_store: []Val = []
+var expr_store: []Val_T = []
 
-def store_expr(v: Val) -> int:
+def store_expr(v: Val_T) -> int:
     var id: int = len(expr_store)
     expr_store.append(v)
     return id
 
-def load_expr(id: int) -> Val:
+def load_expr(id: int) -> Val_T:
     return expr_store[id]
 
 # --------------------------------------------------------
 # Constructors
 # --------------------------------------------------------
 
-def v_num(n: float) -> Val:
-    var v: Val
+def v_num(n: float) -> Val_T:
+    var v: Val_T
     v.kind = VNum
     v.num = n
     return v
 
-def v_sym(s: str) -> Val:
-    var v: Val
+def v_sym(s: str) -> Val_T:
+    var v: Val_T
     v.kind = VSym
     v.sym = s
     return v
 
-def v_bool(b: bool) -> Val:
-    var v: Val
+def v_bool(b: bool) -> Val_T:
+    var v: Val_T
     v.kind = VBool
     v.flag = b
     return v
 
-def v_nil() -> Val:
-    var v: Val
+def v_nil() -> Val_T:
+    var v: Val_T
     v.kind = VNil
     return v
 
-def v_list(xs: []Val) -> Val:
-    var v: Val
+def v_list(xs: []Val_T) -> Val_T:
+    var v: Val_T
     v.kind = VList
     v.items = xs
     return v
 
-def v_lambda(parms: []str, body: Val, env_id: int) -> Val:
-    var v: Val
+def v_lambda(parms: []str, body: Val_T, env_id: int) -> Val_T:
+    var v: Val_T
     v.kind = VLambda
     v.parms = parms
     v.body_id = store_expr(body)
     v.env_id = env_id
     return v
 
-def v_builtin(name: str) -> Val:
-    var v: Val
+def v_builtin(name: str) -> Val_T:
+    var v: Val_T
     v.kind = VBuiltin
     v.sym = name
     return v
@@ -91,7 +91,7 @@ def v_builtin(name: str) -> Val:
 # Helpers
 # --------------------------------------------------------
 
-def is_true(v: Val) -> bool:
+def is_true(v: Val_T) -> bool:
     case v.kind:
         when VBool:
             return v.flag
@@ -100,7 +100,7 @@ def is_true(v: Val) -> bool:
         when others:
             return True
 
-def val_eq(a: Val, b: Val) -> bool:
+def val_eq(a: Val_T, b: Val_T) -> bool:
     if a.kind != b.kind:
         return False
     case a.kind:
@@ -122,7 +122,7 @@ def val_eq(a: Val, b: Val) -> bool:
         when others:
             return False
 
-def val_to_str(v: Val) -> str:
+def val_to_str(v: Val_T) -> str:
     case v.kind:
         when VNum:
             var s: str = str(v.num)
@@ -153,14 +153,14 @@ def val_to_str(v: Val) -> str:
 # Environments are kept in parallel global tables to avoid
 # having Val reference Env and Env reference Val recursively.
 
-var env_bindings: []{str}Val = []
+var env_bindings: []{str}Val_T = []
 var env_outer:    []int       = []
 
 const NO_PARENT: int = -1
 
 def new_env(outer_id: int) -> int:
     var id: int = len(env_bindings)
-    var new_bindings: {str}Val = {:}
+    var new_bindings: {str}Val_T = {:}
     env_bindings.append(new_bindings)
     env_outer.append(outer_id)
     return id
@@ -173,24 +173,24 @@ def env_find(eid: int, name: str) -> int:
         return NO_PARENT
     return env_find(outer, name)
 
-def env_get(eid: int, name: str) -> Val:
+def env_get(eid: int, name: str) -> Val_T:
     var found: int = env_find(eid, name)
     if found == NO_PARENT:
         print("Error: unbound variable: " & name)
         quit(1)
     return env_bindings[found][name]
 
-def env_def(eid: int, name: str, val: Val) -> None:
+def env_def(eid: int, name: str, val: Val_T) -> None:
     env_bindings[eid][name] = val
 
-def env_set(eid: int, name: str, val: Val) -> None:
+def env_set(eid: int, name: str, val: Val_T) -> None:
     var found: int = env_find(eid, name)
     if found == NO_PARENT:
         print("Error: unbound variable in set!: " & name)
         quit(1)
     env_bindings[found][name] = val
 
-def bind_parms(eid: int, parms: []str, args: []Val) -> None:
+def bind_parms(eid: int, parms: []str, args: []Val_T) -> None:
     for i in 0..len(parms)-1:
         env_bindings[eid][parms[i]] = args[i]
 
@@ -216,7 +216,7 @@ def tokenize(s: str) -> []str:
             tokens.append(tok)
     return tokens
 
-def parse_atom(token: str) -> Val:
+def parse_atom(token: str) -> Val_T:
     if token == "#t" or token == "true":
         return v_bool(True)
     if token == "#f" or token == "false":
@@ -256,16 +256,16 @@ def parse_atom(token: str) -> Val:
         return v_num(float(token))
     return v_sym(token)
 
-def read_from(tokens: []str, pos: int) -> (Val, int):
+def read_from(tokens: []str, pos: int) -> (Val_T, int):
     if pos >= len(tokens):
         print("Error: unexpected EOF")
         quit(1)
     var tok: str = tokens[pos]
     if tok == "(":
-        var items: []Val = []
+        var items: []Val_T = []
         var p: int = pos + 1
         while p < len(tokens) and tokens[p] != ")":
-            let pair: (Val, int) = read_from(tokens, p)
+            let pair: (Val_T, int) = read_from(tokens, p)
             items.append(pair[0])
             p = pair[1]
         if p >= len(tokens):
@@ -278,8 +278,8 @@ def read_from(tokens: []str, pos: int) -> (Val, int):
             wrapper = "quasiquote"
         if tok == ",":
             wrapper = "unquote"
-        let pair: (Val, int) = read_from(tokens, pos + 1)
-        var wrapped: []Val = [v_sym(wrapper), pair[0]]
+        let pair: (Val_T, int) = read_from(tokens, pos + 1)
+        var wrapped: []Val_T = [v_sym(wrapper), pair[0]]
         return (v_list(wrapped), pair[1])
     elif tok == ")":
         print("Error: unexpected )")
@@ -288,16 +288,16 @@ def read_from(tokens: []str, pos: int) -> (Val, int):
     else:
         return (parse_atom(tok), pos + 1)
 
-def parse(program: str) -> Val:
+def parse(program: str) -> Val_T:
     let tokens: []str = tokenize(program)
-    let pair: (Val, int) = read_from(tokens, 0)
+    let pair: (Val_T, int) = read_from(tokens, 0)
     return pair[0]
 
 # ============================================================
 # Built-in procedures
 # ============================================================
 
-def apply_arith(op: str, args: []Val) -> Val:
+def apply_arith(op: str, args: []Val_T) -> Val_T:
     if len(args) == 0:
         if op == "+":
             return v_num(0.0)
@@ -316,7 +316,7 @@ def apply_arith(op: str, args: []Val) -> Val:
             acc /= x
     return v_num(acc)
 
-def apply_builtin(name: str, args: []Val) -> Val:
+def apply_builtin(name: str, args: []Val_T) -> Val_T:
     case name:
         when "+":
             return apply_arith("+", args)
@@ -381,13 +381,13 @@ def apply_builtin(name: str, args: []Val) -> Val:
             quit(1)
         when "cdr":
             if args[0].kind == VList and len(args[0].items) > 0:
-                var rest: []Val = args[0].items[1..len(args[0].items)-1]
+                var rest: []Val_T = args[0].items[1..len(args[0].items)-1]
                 return v_list(rest)
             print("Error: cdr of non-pair")
             quit(1)
         when "cons":
             if args[1].kind == VList:
-                var new_items: []Val = [args[0]]
+                var new_items: []Val_T = [args[0]]
                 for x in args[1].items:
                     new_items.append(x)
                 return v_list(new_items)
@@ -399,14 +399,14 @@ def apply_builtin(name: str, args: []Val) -> Val:
                 return v_num(float(len(args[0].items)))
             return v_num(0.0)
         when "append":
-            var vals_1: []Val = []
+            var vals_1: []Val_T = []
             for a in args:
                 if a.kind == VList:
                     for x in a.items:
                         vals_1.append(x)
             return v_list(vals_1)
         when "reverse":
-            var rev: []Val = []
+            var rev: []Val_T = []
             for i in 0..len(args[0].items)-1:
                 rev.append(args[0].items[len(args[0].items)-1-i])
             return v_list(rev)
@@ -433,7 +433,7 @@ def apply_builtin(name: str, args: []Val) -> Val:
         when "number->string":
             return v_sym(val_to_str(args[0]))
         when "string->number":
-            var parsed: Val = parse_atom(args[0].sym)
+            var parsed: Val_T = parse_atom(args[0].sym)
             if parsed.kind == VNum:
                 return parsed
             return v_bool(False)
@@ -479,8 +479,8 @@ def make_global_env() -> int:
 # Evaluator
 # ============================================================
 
-# nimraw: proc scheme_eval(x: Val, eid: int): Val
-def scheme_apply(proc_val: Val, args: []Val) -> Val:
+# nimraw: proc scheme_eval(x: Val_T, eid: int): Val_T
+def scheme_apply(proc_val: Val_T, args: []Val_T) -> Val_T:
     if proc_val.kind == VBuiltin:
         return apply_builtin(proc_val.sym, args)
     if proc_val.kind == VLambda:
@@ -495,14 +495,14 @@ def scheme_apply(proc_val: Val, args: []Val) -> Val:
     quit(1)
     return v_nil()
 
-# nimraw: proc expand_qq(x: Val, eid: int): Val
-def expand_qq(x: Val, eid: int) -> Val:
+# nimraw: proc expand_qq(x: Val_T, eid: int): Val_T
+def expand_qq(x: Val_T, eid: int) -> Val_T:
     """Expand quasiquote: recurse, expanding unquote."""
     if x.kind != VList:
         return x
     if len(x.items) == 2 and x.items[0].kind == VSym and x.items[0].sym == "unquote":
         return scheme_eval(x.items[1], eid)
-    var vals_2: []Val = []
+    var vals_2: []Val_T = []
     for item in x.items:
         if item.kind == VList and len(item.items) == 2 and item.items[0].kind == VSym and item.items[0].sym == "unquote":
             vals_2.append(scheme_eval(item.items[1], eid))
@@ -510,7 +510,7 @@ def expand_qq(x: Val, eid: int) -> Val:
             vals_2.append(expand_qq(item, eid))
     return v_list(vals_2)
 
-def scheme_eval(x: Val, eid: int) -> Val:
+def scheme_eval(x: Val_T, eid: int) -> Val_T:
     """Evaluate expression x in environment eid."""
     # Symbol lookup
     if x.kind == VSym:
@@ -524,7 +524,7 @@ def scheme_eval(x: Val, eid: int) -> Val:
     if len(x.items) == 0:
         return v_nil()
 
-    let head: Val = x.items[0]
+    let head: Val_T = x.items[0]
 
     if head.kind == VSym:
         let op: str = head.sym
@@ -537,7 +537,7 @@ def scheme_eval(x: Val, eid: int) -> Val:
                 return expand_qq(x.items[1], eid)
 
             when "if":
-                let cond_val: Val = scheme_eval(x.items[1], eid)
+                let cond_val: Val_T = scheme_eval(x.items[1], eid)
                 if is_true(cond_val):
                     return scheme_eval(x.items[2], eid)
                 elif len(x.items) > 3:
@@ -547,7 +547,7 @@ def scheme_eval(x: Val, eid: int) -> Val:
 
             when "define":
                 if x.items[1].kind == VSym:
-                    let val: Val = scheme_eval(x.items[2], eid)
+                    let val: Val_T = scheme_eval(x.items[2], eid)
                     env_def(eid, x.items[1].sym, val)
                 elif x.items[1].kind == VList:
                     # (define (f p...) body...) shorthand
@@ -555,11 +555,11 @@ def scheme_eval(x: Val, eid: int) -> Val:
                     var parms: []str = []
                     for i in 1..len(x.items[1].items)-1:
                         parms.append(x.items[1].items[i].sym)
-                    var body: Val
+                    var body: Val_T
                     if len(x.items) == 3:
                         body = x.items[2]
                     else:
-                        var begin_items: []Val = [v_sym("begin")]
+                        var begin_items: []Val_T = [v_sym("begin")]
                         for i in 2..len(x.items)-1:
                             begin_items.append(x.items[i])
                         body = v_list(begin_items)
@@ -567,7 +567,7 @@ def scheme_eval(x: Val, eid: int) -> Val:
                 return v_nil()
 
             when "set!":
-                let val: Val = scheme_eval(x.items[2], eid)
+                let val: Val_T = scheme_eval(x.items[2], eid)
                 env_set(eid, x.items[1].sym, val)
                 return v_nil()
 
@@ -576,18 +576,18 @@ def scheme_eval(x: Val, eid: int) -> Val:
                 if x.items[1].kind == VList:
                     for p in x.items[1].items:
                         parms.append(p.sym)
-                var body: Val
+                var body: Val_T
                 if len(x.items) == 3:
                     body = x.items[2]
                 else:
-                    var begin_items: []Val = [v_sym("begin")]
+                    var begin_items: []Val_T = [v_sym("begin")]
                     for i in 2..len(x.items)-1:
                         begin_items.append(x.items[i])
                     body = v_list(begin_items)
                 return v_lambda(parms, body, eid)
 
             when "begin":
-                var result: Val = v_nil()
+                var result: Val_T = v_nil()
                 for i in 1..len(x.items)-1:
                     result = scheme_eval(x.items[i], eid)
                 return result
@@ -595,7 +595,7 @@ def scheme_eval(x: Val, eid: int) -> Val:
             when "and":
                 if len(x.items) == 1:
                     return v_bool(True)
-                var v: Val = v_bool(True)
+                var v: Val_T = v_bool(True)
                 for i in 1..len(x.items)-1:
                     v = scheme_eval(x.items[i], eid)
                     if not is_true(v):
@@ -606,19 +606,19 @@ def scheme_eval(x: Val, eid: int) -> Val:
                 if len(x.items) == 1:
                     return v_bool(False)
                 for i in 1..len(x.items)-1:
-                    var v: Val = scheme_eval(x.items[i], eid)
+                    var v: Val_T = scheme_eval(x.items[i], eid)
                     if is_true(v):
                         return v
                 return v_bool(False)
 
             when "cond":
                 for i in 1..len(x.items)-1:
-                    let clause: Val = x.items[i]
-                    let test_val: Val = scheme_eval(clause.items[0], eid)
+                    let clause: Val_T = x.items[i]
+                    let test_val: Val_T = scheme_eval(clause.items[0], eid)
                     if is_true(test_val):
                         if len(clause.items) == 1:
                             return test_val
-                        var result: Val = v_nil()
+                        var result: Val_T = v_nil()
                         for j in 1..len(clause.items)-1:
                             result = scheme_eval(clause.items[j], eid)
                         return result
@@ -628,9 +628,9 @@ def scheme_eval(x: Val, eid: int) -> Val:
                 var let_env: int = new_env(eid)
                 for binding in x.items[1].items:
                     let bname: str = binding.items[0].sym
-                    let bval: Val  = scheme_eval(binding.items[1], eid)
+                    let bval: Val_T  = scheme_eval(binding.items[1], eid)
                     env_def(let_env, bname, bval)
-                var result: Val = v_nil()
+                var result: Val_T = v_nil()
                 for i in 2..len(x.items)-1:
                     result = scheme_eval(x.items[i], let_env)
                 return result
@@ -640,10 +640,10 @@ def scheme_eval(x: Val, eid: int) -> Val:
                 for binding in x.items[1].items:
                     var next_env: int = new_env(cur_env)
                     let bname: str = binding.items[0].sym
-                    let bval: Val  = scheme_eval(binding.items[1], cur_env)
+                    let bval: Val_T  = scheme_eval(binding.items[1], cur_env)
                     env_def(next_env, bname, bval)
                     cur_env = next_env
-                var result: Val = v_nil()
+                var result: Val_T = v_nil()
                 for i in 2..len(x.items)-1:
                     result = scheme_eval(x.items[i], cur_env)
                 return result
@@ -653,16 +653,16 @@ def scheme_eval(x: Val, eid: int) -> Val:
                 for binding in x.items[1].items:
                     env_def(rec_env, binding.items[0].sym, v_nil())
                 for binding in x.items[1].items:
-                    let bval: Val = scheme_eval(binding.items[1], rec_env)
+                    let bval: Val_T = scheme_eval(binding.items[1], rec_env)
                     env_def(rec_env, binding.items[0].sym, bval)
-                var result: Val = v_nil()
+                var result: Val_T = v_nil()
                 for i in 2..len(x.items)-1:
                     result = scheme_eval(x.items[i], rec_env)
                 return result
 
             when "when":
                 if is_true(scheme_eval(x.items[1], eid)):
-                    var result: Val = v_nil()
+                    var result: Val_T = v_nil()
                     for i in 2..len(x.items)-1:
                         result = scheme_eval(x.items[i], eid)
                     return result
@@ -670,35 +670,35 @@ def scheme_eval(x: Val, eid: int) -> Val:
 
             when "unless":
                 if not is_true(scheme_eval(x.items[1], eid)):
-                    var result: Val = v_nil()
+                    var result: Val_T = v_nil()
                     for i in 2..len(x.items)-1:
                         result = scheme_eval(x.items[i], eid)
                     return result
                 return v_nil()
 
             when "apply":
-                let pv: Val  = scheme_eval(x.items[1], eid)
-                let lst: Val = scheme_eval(x.items[2], eid)
+                let pv: Val_T  = scheme_eval(x.items[1], eid)
+                let lst: Val_T = scheme_eval(x.items[2], eid)
                 return scheme_apply(pv, lst.items)
 
             when "map":
-                let pv: Val  = scheme_eval(x.items[1], eid)
-                let lst: Val = scheme_eval(x.items[2], eid)
-                var vals_3: []Val = []
+                let pv: Val_T  = scheme_eval(x.items[1], eid)
+                let lst: Val_T = scheme_eval(x.items[2], eid)
+                var vals_3: []Val_T = []
                 for item in lst.items:
                     vals_3.append(scheme_apply(pv, [item]))
                 return v_list(vals_3)
 
             when "for-each":
-                let pv: Val  = scheme_eval(x.items[1], eid)
-                let lst: Val = scheme_eval(x.items[2], eid)
+                let pv: Val_T  = scheme_eval(x.items[1], eid)
+                let lst: Val_T = scheme_eval(x.items[2], eid)
                 for item in lst.items:
-                    var ignored: Val = scheme_apply(pv, [item])
+                    var ignored: Val_T = scheme_apply(pv, [item])
                 return v_nil()
 
     # Procedure call
-    let pv: Val = scheme_eval(head, eid)
-    var args: []Val = []
+    let pv: Val_T = scheme_eval(head, eid)
+    var args: []Val_T = []
     for i in 1..len(x.items)-1:
         args.append(scheme_eval(x.items[i], eid))
     return scheme_apply(pv, args)
@@ -711,12 +711,12 @@ var global_env: int = make_global_env()
 
 def run(program: str) -> str:
     """Evaluate program string; return string representation of result."""
-    let v: Val = scheme_eval(parse(program), global_env)
+    let v: Val_T = scheme_eval(parse(program), global_env)
     if v.kind == VNil:
         return ""
     return val_to_str(v)
 
-def schemestr(v: Val) -> str:
+def schemestr(v: Val_T) -> str:
     return val_to_str(v)
 
 # ============================================================
