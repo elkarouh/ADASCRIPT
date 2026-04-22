@@ -196,7 +196,7 @@ def tokenize(s: str) -> []str:
 def parse_atom(token: str) -> Val_T:
     def is_int() -> bool:
         var si: int = 0
-        if len(token) > 0 and (token[0] in "-+"):
+        if len(token) > 0 and token[0] in "-+":
             si = 1
         if len(token) <= si:
             return False
@@ -209,7 +209,7 @@ def parse_atom(token: str) -> Val_T:
     def is_float() -> bool:
         var sf: int = 0
         var dots: int = 0
-        if len(token) > 0 and (token[0] in "-+"):
+        if len(token) > 0 and token[0] in "-+":
             sf = 1
         for i in sf..<len(token):
             var d: char = token[i]
