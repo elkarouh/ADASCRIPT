@@ -202,7 +202,7 @@ def parse_atom(token: str) -> Val_T:
     # Try integer
     var is_int: bool = True
     var si: int = 0
-    if len(token) > 0 and (str(token[0]) in "-+"):
+    if len(token) > 0 and (token[0] in "-+"):
         si = 1
     if len(token) <= si:
         is_int = False
@@ -218,7 +218,7 @@ def parse_atom(token: str) -> Val_T:
     var is_float: bool = True
     var sf: int = 0
     var dots: int = 0
-    if len(token) > 0 and (str(token[0]) in "-+"):
+    if len(token) > 0 and (token[0] in "-+"):
         sf = 1
     for i in sf..len(token)-1:
         var d: char = token[i]
