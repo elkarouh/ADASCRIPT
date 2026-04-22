@@ -341,7 +341,8 @@ def binop_to_nim(self, prec=None, my_prec=None):
                                or " & " in result)  # already a string concat chain
                 right_is_str = (right.startswith('"') or right.startswith('fmt"')
                                 or right.startswith('r"')
-                                or right.endswith('.join("")') or right.endswith(".join(\"\")"))
+                                or right.endswith('.join("")') or right.endswith(".join(\"\")")
+                                or '.join(' in right)
 
                 # field access on typed object (e.g. self.off where off: string)
                 if not left_is_str and "." in result:
