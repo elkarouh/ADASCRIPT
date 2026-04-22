@@ -393,6 +393,19 @@ def binop_to_nim(self, prec=None, my_prec=None):
                     return False
                 if _looks_like_str(result) or _looks_like_str(right):
                     nim_op = "&"
+            # char comparisons: coerce single-char string literals to char literals
+            def _is_char_type(s):
+                sym = ParserState.symbol_table.lookup(s)
+                return sym and (sym.get("type") or "") == "char"
+            def _to_char_lit(s):
+                if len(s) == 3 and s[0] == '"' and s[2] == '"':
+                    return f"'{s[1]}'"
+                return s
+            if nim_op in ("<", ">", "<=", ">=", "==", "!="):
+                if _is_char_type(result):
+                    right = _to_char_lit(right)
+                elif _is_char_type(right):
+                    result = _to_char_lit(result)
             # | stays as | when operands are non-integer (e.g. string | Style pipe)
             if nim_op == "or" and py_op == "|" and _is_pipe_not_bitor([result, right]):
                 nim_op = "|"
@@ -1955,6 +1968,17 @@ def to_nim(self, prec=None):
                 continue
             nim_op = _PY_OP_TO_NIM.get(py_op, py_op)
             right = seq.nodes[1].to_nim(operand_prec)
+            # char comparisons: coerce single-char string literals to char literals
+            def _is_char(s):
+                sym = ParserState.symbol_table.lookup(s)
+                return sym and (sym.get("type") or "") == "char"
+            def _as_char_lit(s):
+                return f"'{s[1]}'" if len(s) == 3 and s[0] == '"' and s[2] == '"' else s
+            if nim_op in ("<", ">", "<=", ">=", "==", "!="):
+                if _is_char(chain):
+                    right = _as_char_lit(right)
+                elif _is_char(right):
+                    chain = _as_char_lit(chain)
             # | stays as | when operands are non-integer (e.g. string | Style pipe)
             if nim_op == "or" and py_op == "|" and _is_pipe_not_bitor([chain, right]):
                 nim_op = "|"
