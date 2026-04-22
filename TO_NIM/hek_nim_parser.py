@@ -855,8 +855,11 @@ def to_nim(self, prec=None):
             )
         # Ada tick attributes for enum operations
         if attr == "Range":
-            # T'Range as set literal -> {T.low..T.high}
-            return f"{{{type_name}.low..{type_name}.high}}"
+            # Enum: T'Range as set literal {T.low..T.high} (for set arithmetic)
+            # Range type: T'Range as plain range T.low..T.high (for iteration)
+            if info and "members" in info:
+                return f"{{{type_name}.low..{type_name}.high}}"
+            return f"{type_name}.low..{type_name}.high"
         if attr == "Next":
             return type_name + ".succ"
         elif attr == "Prev":
