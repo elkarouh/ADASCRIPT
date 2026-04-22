@@ -364,11 +364,142 @@ def translate(code, export_symbols=False):
         for ln in block.split('\n'):
             stripped = ln.strip()
             if stripped.startswith(_NIMRAW_PREFIX):
-                result.append(stripped[len(_NIMRAW_PREFIX):].lstrip())
+                raw = stripped[len(_NIMRAW_PREFIX):]
+                # Strip exactly one leading space (separator after 'nimraw:'), preserve remaining indentation
+                result.append(raw[1:] if raw.startswith(' ') else raw)
             else:
                 result.append(ln)
         return '\n'.join(result)
     output = [_expand_nimraw(block) for block in output]
+
+    # Merge consecutive 'type X = object/ref object' blocks into a single 'type' block.
+    # Nim requires mutually-recursive types to be declared in one 'type' block.
+    # Strategy: scan output lines; when two or more consecutive type declarations appear
+    # (separated only by blank lines), merge them.
+    import re as _re_type_merge
+    _TYPE_HEADER = _re_type_merge.compile(r'^type (\w+)(\*)?(\[.*?\])? = (ref )?object')
+    def _merge_type_blocks(lines):
+        result = []
+        i = 0
+        while i < len(lines):
+            m = _TYPE_HEADER.match(lines[i])
+            if not m:
+                result.append(lines[i])
+                i += 1
+                continue
+            # Collect this type block (header + indented body lines)
+            blocks = []  # list of (header_without_type, body_lines)
+            while i < len(lines):
+                m2 = _TYPE_HEADER.match(lines[i])
+                if not m2:
+                    # Check if only blank lines between type blocks
+                    if lines[i].strip() == '':
+                        # Peek ahead: is next non-blank a type decl?
+                        j = i + 1
+                        while j < len(lines) and lines[j].strip() == '':
+                            j += 1
+                        if j < len(lines) and _TYPE_HEADER.match(lines[j]):
+                            i = j  # skip blanks, continue merging
+                            continue
+                    break
+                # Consume header + body
+                hdr = lines[i][len('type '):]  # e.g. "Foo = ref object"
+                body = []
+                i += 1
+                while i < len(lines) and (lines[i].startswith('  ') or lines[i].startswith('\t')):
+                    body.append(lines[i])
+                    i += 1
+                blocks.append((hdr, body))
+            if len(blocks) <= 1:
+                for hdr, body in blocks:
+                    result.append('type ' + hdr)
+                    result.extend(body)
+            else:
+                result.append('type')
+                for hdr, body in blocks:
+                    result.append('  ' + hdr)
+                    for bl in body:
+                        result.append('  ' + bl)
+        return result
+    output = _merge_type_blocks('\n'.join(output).split('\n'))
+
+    # Auto-insert forward declarations for mutually-recursive procs.
+    # Pass 1: scan all lines, record every proc definition and its signature.
+    # Pass 2: for each proc body, collect which other procs it calls.
+    # Pass 3: detect cycles; for each cycle, insert a {.forward.} decl before
+    #         the first proc in the cycle (i.e. the one that calls a not-yet-defined proc).
+    import re as _re_fwd
+    _PROC_HDR = _re_fwd.compile(r'^proc (\w+)\*?(\[.*?\])?\(([^)]*)\)\s*:\s*(.+?)\s*=\s*$')
+    _CALL_RE  = _re_fwd.compile(r'\b(\w+)\s*\(')
+
+    # Flatten output to lines for scanning
+    flat = '\n'.join(output).split('\n')
+
+    # Collect proc definitions: name -> (line_index, signature_string)
+    proc_defs = {}   # name -> (line_idx, full_sig)   e.g. "proc foo(x: int): bool"
+    proc_order = []  # names in definition order
+    i = 0
+    while i < len(flat):
+        m = _PROC_HDR.match(flat[i])
+        if m and flat[i].endswith('='):
+            pname = m.group(1)
+            sig = flat[i][:-1].rstrip()   # strip trailing '='
+            if pname not in proc_defs:
+                proc_defs[pname] = (i, sig)
+                proc_order.append(pname)
+        i += 1
+
+    # Collect call graph: proc -> set of procs it calls (only known procs)
+    # For each proc, scan its body (indented lines after the header)
+    call_graph = {name: set() for name in proc_defs}
+    for name, (line_idx, _sig) in proc_defs.items():
+        j = line_idx + 1
+        while j < len(flat) and (flat[j].startswith(' ') or flat[j].startswith('\t') or flat[j] == ''):
+            for cm in _CALL_RE.finditer(flat[j]):
+                callee = cm.group(1)
+                if callee in proc_defs and callee != name:
+                    call_graph[name].add(callee)
+            j += 1
+
+    # Find procs that need a forward decl: any proc B that is called by some proc A
+    # defined earlier (A's line < B's line).  Nim requires B to be declared before A's body.
+    # We insert a {.forward.} stub for B immediately before B's definition so that the
+    # stub appears before every caller.  That is sufficient: Nim only needs the stub to
+    # precede the first call site, but inserting it before the definition is always safe
+    # and avoids having to find the earliest caller.
+    fwd_needed = set()  # proc names that need a {.forward.} decl
+    for name in proc_order:
+        a_line = proc_defs[name][0]
+        for callee in call_graph[name]:
+            b_line = proc_defs[callee][0]
+            if b_line > a_line:
+                # A (earlier) calls B (later) — B needs a forward decl
+                fwd_needed.add(callee)
+
+    if fwd_needed:
+        # For each proc needing a forward decl, find the line index of the earliest
+        # caller (a proc defined before it that calls it).  Insert the stub there.
+        # fwd_insert[line_idx] = list of forward-decl strings to insert before that line.
+        fwd_insert = {}
+        for callee in fwd_needed:
+            callee_line = proc_defs[callee][0]
+            earliest = callee_line  # default: before own definition
+            for caller in proc_order:
+                caller_line = proc_defs[caller][0]
+                if caller_line < callee_line and callee in call_graph[caller]:
+                    if caller_line < earliest:
+                        earliest = caller_line
+            sig = proc_defs[callee][1]   # bare signature, no '=' — Nim 2.x forward decl
+            fwd_insert.setdefault(earliest, []).append(sig)
+
+        new_lines = []
+        for idx, ln in enumerate(flat):
+            if idx in fwd_insert:
+                new_lines.extend(fwd_insert[idx])
+            new_lines.append(ln)
+        output = new_lines
+    else:
+        output = flat
 
     # Insert collected Nim imports at the top (after any leading comments)
     if ParserState.nim_imports:
