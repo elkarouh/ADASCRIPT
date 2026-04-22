@@ -492,10 +492,10 @@ def to_py(self, prec=None):
 # --- bash file-test operators ---
 @method(file_test)
 def to_py(self, prec=None):
-    """file_test: __bash_test_X__ primary -> Python os.path.* / os.access call."""
+    """file_test: BASH_TEST IDENTIFIER primary -> Python os.path.* / os.access call."""
     from hek_parsec import ParserState
-    flag = self.nodes[0].node[len("__bash_test_"):-2]
-    path = self.nodes[1].to_py()
+    flag = self.nodes[1].node   # IDENTIFIER node: 'e', 'f', 'd', etc.
+    path = self.nodes[2].to_py()
     ParserState.nim_imports.add("import os")
     if flag == "e":
         return f"os.path.exists({path})"
@@ -528,14 +528,34 @@ def to_py(self, prec=None):
     return f"os.path.exists({path})"  # fallback
 
 
-@method(bash_nt_op)
+@method(BASH_CMP)
 def to_py(self, prec=None):
-    return "__bash_nt__"
+    """BASH_CMP: '-nt' or '-ot' token -> forwarded to comparison handler"""
+    return self.node  # already the string "-nt" or "-ot"
 
 
-@method(bash_ot_op)
+# --- dollar variables: $0, $1..N, $#, $@, $NAME ---
+@method(dollar_var)
 def to_py(self, prec=None):
-    return "__bash_ot__"
+    """dollar_var: DOLLAR DOLLAR_SUFFIX -> Python sys.argv / os.environ equivalent."""
+    from hek_parsec import ParserState
+    raw = self.nodes[0].node  # TokenInfo or string
+    name = raw.string if hasattr(raw, 'string') else str(raw)
+    if name == "0":
+        ParserState.nim_imports.add("import sys")
+        return "sys.argv[0]"
+    if name == "#":
+        ParserState.nim_imports.add("import sys")
+        return "(len(sys.argv) - 1)"
+    if name == "@":
+        ParserState.nim_imports.add("import sys")
+        return "sys.argv[1:]"
+    if name.isdigit():
+        n = int(name)
+        ParserState.nim_imports.add("import sys")
+        return f"sys.argv[{n}]"
+    ParserState.nim_imports.add("import os")
+    return f"os.environ.get('{name}', '')"
 
 
 # --- range expression (.., ..<) ---
@@ -723,7 +743,7 @@ def to_py(self, prec=None):
 
 
 _COMP_OPS = {"==", "!=", "<", ">", "<=", ">=", "in", "is", "not in", "is not",
-             "__bash_nt__", "__bash_ot__"}
+             "-nt", "-ot"}
 
 
 @method(comparison)
@@ -800,11 +820,11 @@ def to_py(self, prec=None):
                 chain = f"{lo} <= {chain} {hi_op} {hi}"
                 continue
             # Bash file-comparison: f1 -nt f2 / f1 -ot f2
-            if op in ("__bash_nt__", "__bash_ot__"):
+            if op in ("-nt", "-ot"):
                 right = seq.nodes[1].to_py(operand_prec)
                 from hek_parsec import ParserState
                 ParserState.nim_imports.add("import os")
-                cmp_op = ">" if op == "__bash_nt__" else "<"
+                cmp_op = ">" if op == "-nt" else "<"
                 chain = f"(os.path.getmtime({chain}) {cmp_op} os.path.getmtime({right}))"
                 continue
             right = seq.nodes[1].to_py(operand_prec)

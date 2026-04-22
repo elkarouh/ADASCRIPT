@@ -51,6 +51,9 @@ from hek_parsec import (
     SSTAR,
     STRING,
     TICK,
+    DOLLAR,
+    BASH_TEST,
+    BASH_CMP,
     Input,
     Parser,
     ParserState,
@@ -232,6 +235,14 @@ _fstring_interp = _FSTRING_LBRACE + expression + _fstring_conversion[:] + _fstri
 _fstring_chunk  = _fstring_interp + _FSTRING_MIDDLE[:]
 fstring = _FSTRING_START + _FSTRING_MIDDLE[:] + _fstring_chunk[:] + _FSTRING_END
 
+# --- dollar variables: $#, $@, $0, $N, $NAME ---
+# After DOLLAR the tokenizer emits: NAME for @/#/letters, NUMBER for digits
+_DOLLAR_SUFFIX = filt(
+    lambda tok: tok.type in (tkn.NAME, tkn.NUMBER),
+    shift, name="dollar_suffix",
+)
+dollar_var = DOLLAR + _DOLLAR_SUFFIX
+
 # --- atom ---
 ellipsis_lit = V_ELLIPSIS
 # Named tuple literal: (name:value, name:value, ...) — Nim-style
@@ -263,6 +274,7 @@ atom = (
     | K_NONE
     | K_TRUE
     | K_FALSE
+    | dollar_var
     | IDENTIFIER
     | NUMBER
     | fstring
@@ -309,23 +321,12 @@ range_incl_op = V_DOT + V_DOT           # ..
 range_expr = bitor_expr + ((range_excl_op | range_incl_op) + bitor_expr)[:]
 
 # --- bash file-test unary operators: -e FILE, -f FILE, etc. ---
-# The tokenizer rewrites '-e FILE' -> '__bash_test_e__ FILE' so the parser
-# sees a plain IDENTIFIER followed by a primary expression.
-# IDENTIFIER returns a plain string, so filt tests the string directly.
-_bash_test_op = filt(
-    lambda name: name.startswith("__bash_test_") and name.endswith("__"),
-    IDENTIFIER
-)
-file_test = _bash_test_op + primary
+file_test = BASH_TEST + IDENTIFIER + primary
 
 # --- comparison operators ---
 not_in_op = K_NOT + K_IN
 is_not_op = K_IS + K_NOT
-# Bash file-comparison operators: FILE1 -nt FILE2 / FILE1 -ot FILE2
-# The tokenizer rewrites '-nt' -> '__bash_nt__' and '-ot' -> '__bash_ot__'.
-bash_nt_op = filt(lambda name: name == "__bash_nt__", IDENTIFIER)
-bash_ot_op = filt(lambda name: name == "__bash_ot__", IDENTIFIER)
-comp_op = V_EQ | V_NE | V_LE | V_LT | V_GE | V_GT | not_in_op | is_not_op | K_IN | K_IS | bash_nt_op | bash_ot_op
+comp_op = V_EQ | V_NE | V_LE | V_LT | V_GE | V_GT | not_in_op | is_not_op | K_IN | K_IS | BASH_CMP
 
 # --- 'in' with range: x in 1 .. n  or  x in 1 ..< n ---
 # Must be tried before plain comp_op so 'in' eagerly grabs the range bounds.
