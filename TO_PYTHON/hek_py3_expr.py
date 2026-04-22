@@ -588,9 +588,7 @@ def to_py(self, prec=None):
     range_op_node = seq.nodes[0]
     hi = seq.nodes[1].to_py(prec)
     # Detect exclusive (..<) vs inclusive (..)
-    is_exclusive = (hasattr(range_op_node, 'nodes')
-        and any(hasattr(n, 'node') and str(n.node) == '<'
-                for n in range_op_node.nodes))
+    is_exclusive = getattr(range_op_node, 'node', None) == "..<"
     if is_exclusive:
         return f"range({lo}, {hi})"
     else:
@@ -777,11 +775,11 @@ def to_py(self, prec=None):
                 seq = node.nodes[0]
                 if hasattr(seq, "nodes") and len(seq.nodes) >= 2:
                     op_node = seq.nodes[0]
-                    op_name = type(op_node).__name__
-                    if op_name in ("range_incl_op", "range_excl_op"):
+                    op_val = getattr(op_node, 'node', None)
+                    if op_val in ("..", "..<"):
                         lo = self.nodes[0].to_py(prec)
                         hi = seq.nodes[1].to_py(prec)
-                        if op_name == "range_excl_op":
+                        if op_val == "..<":
                             return f"range({lo}, {hi})"
                         else:
                             return f"range({lo}, {hi} + 1)"
