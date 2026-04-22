@@ -600,15 +600,10 @@ def to_py(self):
 
 @method(subrange_def)
 def to_py(self):
-    """subrange_def: INTEGER '..' ['<'] INTEGER -> Python range()"""
+    """subrange_def: INTEGER ('..' | '..<') INTEGER -> Python range()"""
     lo = str(self.nodes[0].node)
-    hi = str(self.nodes[-1].node)
-    # Check if exclusive (..<)
-    is_exclusive = False
-    for n in self.nodes[1:-1]:
-        if type(n).__name__ == "Several_Times" and hasattr(n, "nodes") and n.nodes:
-            is_exclusive = True
-            break
+    hi = str(self.nodes[2].node)
+    is_exclusive = getattr(self.nodes[1], 'node', None) == "..<"
     if is_exclusive:
         return f"range({lo}, {hi})"
     else:
@@ -624,9 +619,9 @@ def to_py(self):
 
 @method(float_range_def)
 def to_py(self):
-    """float_range_def: 'float' 'range' NUMBER '..' NUMBER -> float (Python has no float subrange)"""
+    """float_range_def: 'float' 'range' NUMBER ('..'|'..<') NUMBER -> float (Python has no float subrange)"""
     lo = str(self.nodes[2].node)
-    hi = str(self.nodes[5].node)
+    hi = str(self.nodes[4].node)
     return f"float  # range {lo} .. {hi}"
 
 
