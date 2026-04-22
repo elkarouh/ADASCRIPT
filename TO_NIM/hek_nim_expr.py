@@ -1936,6 +1936,13 @@ def to_nim(self, prec=None):
     if len(pairs) > 1:
         operands = [base] + [seq.nodes[1].to_nim(operand_prec) for seq in pairs]
         ops = [_PY_OP_TO_NIM.get(_op_string(seq.nodes[0]), _op_string(seq.nodes[0])) for seq in pairs]
+        def _is_char(s):
+            sym = ParserState.symbol_table.lookup(s)
+            return sym and (sym.get("type") or "") == "char"
+        def _as_char_lit(s):
+            return f"'{s[1]}'" if len(s) == 3 and s[0] == '"' and s[2] == '"' else s
+        if any(_is_char(o) for o in operands):
+            operands = [_as_char_lit(o) for o in operands]
         parts = [f"{operands[i]} {ops[i]} {operands[i+1]}" for i in range(len(ops))]
         result = " and ".join(parts)
         if prec is not None and PREC_CMP < prec:
