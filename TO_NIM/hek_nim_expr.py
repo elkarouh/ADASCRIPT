@@ -1790,19 +1790,20 @@ def to_nim(self, prec=None):
     - range_incl_op / range_excl_op node directly
       → emit the operator text
     """
+    def _is_range_op(node):
+        return getattr(node, 'node', None) in ("..", "..<")
+
     result = self.nodes[0].to_nim(prec)
     for node in self.nodes[1:]:
         if not hasattr(node, 'nodes') or not node.nodes:
             continue
         for seq in node.nodes:
-            tname = type(seq).__name__
-            if tname in ("range_incl_op", "range_excl_op"):
+            if _is_range_op(seq):
                 # Bare range operator node — append its text
                 result += " " + seq.to_nim(prec)
-            elif tname == "Sequence_Parser" and hasattr(seq, 'nodes') and seq.nodes:
+            elif type(seq).__name__ == "Sequence_Parser" and hasattr(seq, 'nodes') and seq.nodes:
                 first = seq.nodes[0]
-                first_tname = type(first).__name__
-                if first_tname in ("range_incl_op", "range_excl_op"):
+                if _is_range_op(first):
                     # Range pair: (range_op, right_bitor_expr)
                     right = seq.nodes[1].to_nim(prec) if len(seq.nodes) > 1 else ""
                     result += " " + first.to_nim(prec) + " " + right
@@ -2059,10 +2060,9 @@ def to_nim(self, prec=None):
                 range_op_node = seq.nodes[2]
                 hi = seq.nodes[3].to_nim(operand_prec)
                 # Detect exclusive (..<) vs inclusive (..)
-                is_exclusive = (hasattr(range_op_node, 'nodes')
-                    and any(hasattr(n, 'node') and str(n.node) == '<'
-                            for n in range_op_node.nodes))
-                op = "..<" if is_exclusive else ".."
+                op = getattr(range_op_node, 'node', None)
+                if op not in ("..", "..<"):
+                    op = ".."
                 chain += f" in {lo}{op}{hi}"
                 continue
             # Bash file-comparison: f1 -nt f2 / f1 -ot f2

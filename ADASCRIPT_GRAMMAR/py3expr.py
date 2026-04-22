@@ -54,6 +54,8 @@ from hek_parsec import (
     DOLLAR,
     BASH_TEST,
     BASH_CMP,
+    RANGE_OP,
+    RANGE_EXCL_OP,
     Input,
     Parser,
     ParserState,
@@ -316,8 +318,8 @@ bitxor_expr = bitand_expr + (V_CARET + bitand_expr)[:]
 bitor_expr = bitxor_expr + (V_PIPE + bitxor_expr)[:]
 
 # --- range expression: expr '..' expr  or  expr '..<' expr ---
-range_excl_op = V_DOT + V_DOT + V_LT   # ..<
-range_incl_op = V_DOT + V_DOT           # ..
+range_excl_op = RANGE_EXCL_OP   # ..<
+range_incl_op = RANGE_OP        # ..
 range_expr = bitor_expr + ((range_excl_op | range_incl_op) + bitor_expr)[:]
 
 # --- bash file-test unary operators: -e FILE, -f FILE, etc. ---
