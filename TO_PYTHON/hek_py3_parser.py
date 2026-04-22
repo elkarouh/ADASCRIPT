@@ -1238,12 +1238,21 @@ def _extract_shell_body(body_st):
     if not tokens:
         return "", False
 
+    from hek_tokenize import DOLLAR_TOKEN as _DOLLAR_TOKEN, \
+        BASH_TEST_TOKEN as _BASH_TEST_TOKEN
     parts = []
     for i, tok in enumerate(tokens):
         if i > 0:
             prev = tokens[i - 1]
-            gap = tok.start[1] - prev.end[1]
-            parts.append(" " * max(gap, 1) if gap >= 1 else "")
+            # Synthetic tokens inserted by the preprocessor carry artificial
+            # column offsets (the sentinel had a space before the name token).
+            # Never insert a gap after DOLLAR_TOKEN ($USER -> $USER not $ USER)
+            # or after BASH_TEST_TOKEN (-e path -> -e path not - e path).
+            if prev.type in (_DOLLAR_TOKEN, _BASH_TEST_TOKEN):
+                pass  # no gap — glue directly to previous token
+            else:
+                gap = tok.start[1] - prev.end[1]
+                parts.append(" " * max(gap, 1) if gap >= 1 else "")
         parts.append(tok.string)
 
     cmd = "".join(parts)
