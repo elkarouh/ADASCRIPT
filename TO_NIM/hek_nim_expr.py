@@ -1903,8 +1903,20 @@ def to_nim(self, prec=None):
         mock.nodes = self.nodes[:last_comp_idx]
         base = binop_to_nim(mock, None, None)
 
-    chain = base
+    # Chained comparison: a < b < c -> a < b and b < c
+    # Collect all (op, operand) pairs to check if chaining is needed
     st = self.nodes[last_comp_idx]
+    pairs = [seq for seq in st.nodes if hasattr(seq, "nodes") and len(seq.nodes) >= 2]
+    if len(pairs) > 1:
+        operands = [base] + [seq.nodes[1].to_nim(operand_prec) for seq in pairs]
+        ops = [_PY_OP_TO_NIM.get(_op_string(seq.nodes[0]), _op_string(seq.nodes[0])) for seq in pairs]
+        parts = [f"{operands[i]} {ops[i]} {operands[i+1]}" for i in range(len(ops))]
+        result = " and ".join(parts)
+        if prec is not None and PREC_CMP < prec:
+            return f"({result})"
+        return result
+
+    chain = base
     for seq in st.nodes:
         if hasattr(seq, "nodes") and len(seq.nodes) >= 2:
             py_op = _op_string(seq.nodes[0])

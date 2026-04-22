@@ -1,0 +1,25 @@
+# Test chained comparisons: a < b < c -> a < b and b < c
+# Run with: python3 TO_NIM/py2nim.py TO_NIM/TEST/test_chained_comparison.ady
+
+x: int = 5
+assert 1 < x < 10
+assert not (6 < x < 10)
+assert 1 <= x <= 5
+assert not (1 <= x <= 4)
+
+y: int = 3
+assert 1 < y < x < 10
+assert not (1 < y < x < 4)
+
+def in_range(v: int, lo: int, hi: int) -> bool:
+    lo <= v <= hi
+
+assert in_range(5, 1, 10)
+assert not in_range(0, 1, 10)
+assert not in_range(11, 1, 10)
+
+f: float = 0.5
+assert 0.0 < f < 1.0
+assert not (0.6 < f < 1.0)
+
+print("chained comparison: OK")
