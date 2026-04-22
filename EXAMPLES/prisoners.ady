@@ -20,7 +20,7 @@ def make_boxes() -> [Prisoner_T]Box_T:
     var boxes: [Prisoner_T]Box_T
     for i in Prisoner_T'First..Prisoner_T'Last:
         boxes[i] = Box_T(i)
-    return boxes
+    boxes'Shuffle
 
 def simulate_once(boxes: [Prisoner_T]Box_T) -> bool:
     """Return True if all prisoners find their number."""
@@ -43,7 +43,6 @@ var failures : Natural = 0
 
 for _ in 1..TRIALS:
     var boxes: [Prisoner_T]Box_T = make_boxes()
-    boxes'Shuffle
     if simulate_once(boxes):
         successes += 1
     else:

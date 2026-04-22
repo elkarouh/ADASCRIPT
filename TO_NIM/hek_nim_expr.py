@@ -1187,7 +1187,7 @@ def to_nim(self, prec=None):
                         ParserState.nim_imports.add("random")
                         if "randomize()" not in ParserState.nim_init_stmts:
                             ParserState.nim_init_stmts.append("randomize()")
-                        result = f"shuffle({result})"
+                        result = f"(block: shuffle({result}); {result})"
                         continue
                 method_name = _translate_method(base_name, method_name)
                 next_tr = trailer_list[i + 1] if i + 1 < len(trailer_list) else None
