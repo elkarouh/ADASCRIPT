@@ -228,7 +228,7 @@ def parse_atom(token: str) -> Val_T:
     if token == "#f" or token == "false":
         return v_bool(False)
     if is_int():
-        return v_num(float(int(token)))
+        return v_num(float(token))
     if is_float():
         return v_num(float(token))
     v_sym(token)
