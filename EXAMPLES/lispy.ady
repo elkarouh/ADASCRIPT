@@ -195,24 +195,25 @@ def tokenize(s: str) -> []str:
     tokens
 
 def parse_atom(token: str) -> Val_T:
+    def is_int() -> bool:
+        var is_int: bool = True
+        var si: int = 0
+        if len(token) > 0 and (token[0] in "-+"):
+            si = 1
+        if len(token) <= si:
+            return False
+        else:
+            for i in si..<len(token):
+                var d: char = token[i]
+                if not ('0' <= d <= '9'):
+                    return False
+            return True
     if token == "#t" or token == "true":
         return v_bool(True)
     if token == "#f" or token == "false":
         return v_bool(False)
     # Try integer
-    var is_int: bool = True
-    var si: int = 0
-    if len(token) > 0 and (token[0] in "-+"):
-        si = 1
-    if len(token) <= si:
-        is_int = False
-    else:
-        for i in si..<len(token):
-            var d: char = token[i]
-            if not ('0' <= d <= '9'):
-                is_int = False
-                break
-    if is_int:
+    if is_int():
         return v_num(float(int(token)))
     # Try float
     var is_float: bool = True
@@ -227,7 +228,7 @@ def parse_atom(token: str) -> Val_T:
             if dots > 1:
                 is_float = False
                 break
-        elif d < '0' or d > '9':
+        elif not ('0' <= d <= '9'):
             is_float = False
             break
     if is_float and dots == 1:
