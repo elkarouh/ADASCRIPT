@@ -1,0 +1,761 @@
+#!/usr/bin/env py2nim
+"""Norvig's lis.py — a Scheme interpreter — in AdaScript.
+
+Supports: numbers, symbols, booleans, if, define, set!, lambda, quote,
+begin, and, or, cond, let, quasiquote, apply, map, and all standard
+arithmetic/comparison procedures.
+
+Reference: https://norvig.com/lispy.html
+"""
+
+import math
+
+# ============================================================
+# Value representation
+# ============================================================
+# A Lisp value is one of: number, symbol, bool, nil, list, lambda, builtin.
+# We encode all variants in a single record and use a kind tag.
+
+type Val_Kind is enum VNum, VSym, VBool, VNil, VList, VLambda, VBuiltin
+
+type Val is record:
+    kind:    Val_Kind
+    num:     float        # VNum
+    sym:     str          # VSym | VBuiltin name
+    flag:    bool         # VBool
+    items:   []Val        # VList
+    parms:   []str        # VLambda parameter names
+    body_id: int          # VLambda: index into expr_store
+    env_id:  int          # VLambda: closure env id
+
+# Expression store: lambdas store their body by index to avoid
+# recursive Val-contains-Val issues at the type level.
+var expr_store: []Val = []
+
+def store_expr(v: Val) -> int:
+    var id: int = len(expr_store)
+    expr_store.append(v)
+    return id
+
+def load_expr(id: int) -> Val:
+    return expr_store[id]
+
+# --------------------------------------------------------
+# Constructors
+# --------------------------------------------------------
+
+def v_num(n: float) -> Val:
+    var v: Val
+    v.kind = VNum
+    v.num = n
+    return v
+
+def v_sym(s: str) -> Val:
+    var v: Val
+    v.kind = VSym
+    v.sym = s
+    return v
+
+def v_bool(b: bool) -> Val:
+    var v: Val
+    v.kind = VBool
+    v.flag = b
+    return v
+
+def v_nil() -> Val:
+    var v: Val
+    v.kind = VNil
+    return v
+
+def v_list(xs: []Val) -> Val:
+    var v: Val
+    v.kind = VList
+    v.items = xs
+    return v
+
+def v_lambda(parms: []str, body: Val, env_id: int) -> Val:
+    var v: Val
+    v.kind = VLambda
+    v.parms = parms
+    v.body_id = store_expr(body)
+    v.env_id = env_id
+    return v
+
+def v_builtin(name: str) -> Val:
+    var v: Val
+    v.kind = VBuiltin
+    v.sym = name
+    return v
+
+# --------------------------------------------------------
+# Helpers
+# --------------------------------------------------------
+
+def is_true(v: Val) -> bool:
+    if v.kind == VBool:
+        return v.flag
+    if v.kind == VNil:
+        return False
+    return True
+
+def val_eq(a: Val, b: Val) -> bool:
+    if a.kind != b.kind:
+        return False
+    if a.kind == VNum:
+        return a.num == b.num
+    if a.kind == VSym:
+        return a.sym == b.sym
+    if a.kind == VBool:
+        return a.flag == b.flag
+    if a.kind == VNil:
+        return True
+    if a.kind == VList:
+        if len(a.items) != len(b.items):
+            return False
+        for i in 0..len(a.items)-1:
+            if not val_eq(a.items[i], b.items[i]):
+                return False
+        return True
+    return False
+
+def val_to_str(v: Val) -> str:
+    if v.kind == VNum:
+        var s: str = str(v.num)
+        if s.endswith(".0"):
+            s = s[0..len(s)-3]
+        return s
+    if v.kind == VSym:
+          return v.sym
+    if v.kind == VBool:
+         return "#t" if v.flag else "#f"
+    if v.kind == VNil:
+          return "()"
+    if v.kind == VBuiltin:
+        return "#<builtin:" & v.sym & ">"
+    if v.kind == VLambda:
+        return "#<lambda>"
+    if v.kind == VList:
+        var parts: []str = []
+        for item in v.items:
+            parts.append(val_to_str(item))
+        return "(" & " ".join(parts) & ")"
+    return "#<unknown>"
+
+# ============================================================
+# Environment
+# ============================================================
+# Environments are kept in parallel global tables to avoid
+# having Val reference Env and Env reference Val recursively.
+
+var env_bindings: []{str}Val = []
+var env_outer:    []int       = []
+
+const NO_PARENT: int = -1
+
+def new_env(outer_id: int) -> int:
+    var id: int = len(env_bindings)
+    var new_bindings: {str}Val = {:}
+    env_bindings.append(new_bindings)
+    env_outer.append(outer_id)
+    return id
+
+def env_find(eid: int, name: str) -> int:
+    if name in env_bindings[eid]:
+        return eid
+    var outer: int = env_outer[eid]
+    if outer == NO_PARENT:
+        return NO_PARENT
+    return env_find(outer, name)
+
+def env_get(eid: int, name: str) -> Val:
+    var found: int = env_find(eid, name)
+    if found == NO_PARENT:
+        print("Error: unbound variable: " & name)
+        quit(1)
+    return env_bindings[found][name]
+
+def env_def(eid: int, name: str, val: Val) -> None:
+    env_bindings[eid][name] = val
+
+def env_set(eid: int, name: str, val: Val) -> None:
+    var found: int = env_find(eid, name)
+    if found == NO_PARENT:
+        print("Error: unbound variable in set!: " & name)
+        quit(1)
+    env_bindings[found][name] = val
+
+def bind_parms(eid: int, parms: []str, args: []Val) -> None:
+    for i in 0..len(parms)-1:
+        env_bindings[eid][parms[i]] = args[i]
+
+# ============================================================
+# Tokenizer / Parser
+# ============================================================
+
+def tokenize(s: str) -> []str:
+    var buf: str = ""
+    for c in s:
+        var cs: str = str(c)
+        if cs == ";":
+            break
+        elif cs == "(" or cs == ")":
+            buf &= " " & cs & " "
+        elif cs == "'" or cs == "`" or cs == ",":
+            buf &= " " & cs & " "
+        else:
+            buf &= cs
+    var tokens: []str = []
+    for tok in buf.split():
+        if len(tok) > 0:
+            tokens.append(tok)
+    return tokens
+
+def parse_atom(token: str) -> Val:
+    if token == "#t" or token == "true":
+        return v_bool(True)
+    if token == "#f" or token == "false":
+        return v_bool(False)
+    # Try integer
+    var is_int: bool = True
+    var si: int = 0
+    if len(token) > 0 and (str(token[0]) == "-" or str(token[0]) == "+"):
+        si = 1
+    if len(token) <= si:
+        is_int = False
+    else:
+        for i in si..len(token)-1:
+            var d: str = str(token[i])
+            if d < "0" or d > "9":
+                is_int = False
+                break
+    if is_int:
+        return v_num(float(int(token)))
+    # Try float
+    var is_float: bool = True
+    var sf: int = 0
+    var dots: int = 0
+    if len(token) > 0 and (str(token[0]) == "-" or str(token[0]) == "+"):
+        sf = 1
+    for i in sf..len(token)-1:
+        var d: str = str(token[i])
+        if d == ".":
+            dots += 1
+            if dots > 1:
+                is_float = False
+                break
+        elif d < "0" or d > "9":
+            is_float = False
+            break
+    if is_float and dots == 1:
+        return v_num(float(token))
+    return v_sym(token)
+
+def read_from(tokens: []str, pos: int) -> (Val, int):
+    if pos >= len(tokens):
+        print("Error: unexpected EOF")
+        quit(1)
+    var tok: str = tokens[pos]
+    if tok == "(":
+        var items: []Val = []
+        var p: int = pos + 1
+        while p < len(tokens) and tokens[p] != ")":
+            let pair: (Val, int) = read_from(tokens, p)
+            items.append(pair[0])
+            p = pair[1]
+        if p >= len(tokens):
+            print("Error: missing )")
+            quit(1)
+        return (v_list(items), p + 1)
+    elif tok == "'" or tok == "`" or tok == ",":
+        var wrapper: str = "quote"
+        if tok == "`":
+            wrapper = "quasiquote"
+        if tok == ",":
+            wrapper = "unquote"
+        let pair: (Val, int) = read_from(tokens, pos + 1)
+        var wrapped: []Val = [v_sym(wrapper), pair[0]]
+        return (v_list(wrapped), pair[1])
+    elif tok == ")":
+        print("Error: unexpected )")
+        quit(1)
+        return (v_nil(), pos)
+    else:
+        return (parse_atom(tok), pos + 1)
+
+def parse(program: str) -> Val:
+    let tokens: []str = tokenize(program)
+    let pair: (Val, int) = read_from(tokens, 0)
+    return pair[0]
+
+# ============================================================
+# Built-in procedures
+# ============================================================
+
+def apply_arith(op: str, args: []Val) -> Val:
+    if len(args) == 0:
+        if op == "+":
+            return v_num(0.0)
+        if op == "*":
+            return v_num(1.0)
+    var acc: float = args[0].num
+    for i in 1..len(args)-1:
+        var x: float = args[i].num
+        if op == "+":
+            acc += x
+        elif op == "-":
+            acc -= x
+        elif op == "*":
+            acc *= x
+        elif op == "/":
+            acc /= x
+    return v_num(acc)
+
+def apply_builtin(name: str, args: []Val) -> Val:
+    if name == "+":
+        return apply_arith("+", args)
+    if name == "-":
+        return apply_arith("-", args)
+    if name == "*":
+        return apply_arith("*", args)
+    if name == "/":
+        return apply_arith("/", args)
+    if name == "<":
+        return v_bool(args[0].num <  args[1].num)
+    if name == ">":
+        return v_bool(args[0].num >  args[1].num)
+    if name == "<=":
+        return v_bool(args[0].num <= args[1].num)
+    if name == ">=":
+        return v_bool(args[0].num >= args[1].num)
+    if name == "=":
+        return v_bool(args[0].num == args[1].num)
+    if name == "abs":
+         return v_num(math.fabs(args[0].num))
+    if name == "max":
+         return v_num(max(args[0].num, args[1].num))
+    if name == "min":
+         return v_num(min(args[0].num, args[1].num))
+    if name == "round":
+        return v_num(math.round(args[0].num))
+    if name == "floor":
+        return v_num(math.floor(args[0].num))
+    if name == "ceil":
+        return v_num(math.ceil(args[0].num))
+    if name == "sqrt":
+        return v_num(math.sqrt(args[0].num))
+    if name == "expt":
+        return v_num(math.pow(args[0].num, args[1].num))
+    if name == "sin":
+         return v_num(math.sin(args[0].num))
+    if name == "cos":
+         return v_num(math.cos(args[0].num))
+    if name == "not":
+         return v_bool(not is_true(args[0]))
+    if name == "eq?":
+          return v_bool(val_eq(args[0], args[1]))
+    if name == "equal?":
+        return v_bool(val_eq(args[0], args[1]))
+    if name == "null?":
+        return v_bool(args[0].kind == VNil or (args[0].kind == VList and len(args[0].items) == 0))
+    if name == "list?":
+            return v_bool(args[0].kind == VList)
+    if name == "number?":
+          return v_bool(args[0].kind == VNum)
+    if name == "symbol?":
+          return v_bool(args[0].kind == VSym)
+    if name == "procedure?":
+        return v_bool(args[0].kind == VLambda or args[0].kind == VBuiltin)
+    if name == "pair?":
+            return v_bool(args[0].kind == VList and len(args[0].items) > 0)
+    if name == "boolean?":
+         return v_bool(args[0].kind == VBool)
+    if name == "car":
+        if args[0].kind == VList and len(args[0].items) > 0:
+            return args[0].items[0]
+        print("Error: car of non-pair")
+        quit(1)
+    if name == "cdr":
+        if args[0].kind == VList and len(args[0].items) > 0:
+            var rest: []Val = args[0].items[1..len(args[0].items)-1]
+            return v_list(rest)
+        print("Error: cdr of non-pair")
+        quit(1)
+    if name == "cons":
+        if args[1].kind == VList:
+            var new_items: []Val = [args[0]]
+            for x in args[1].items:
+                new_items.append(x)
+            return v_list(new_items)
+        return v_list([args[0], args[1]])
+    if name == "list":
+         return v_list(args)
+    if name == "length":
+        if args[0].kind == VList:
+            return v_num(float(len(args[0].items)))
+        return v_num(0.0)
+    if name == "append":
+        var vals_1: []Val = []
+        for a in args:
+            if a.kind == VList:
+                for x in a.items:
+                    vals_1.append(x)
+        return v_list(vals_1)
+    if name == "reverse":
+        var rev: []Val = []
+        for i in 0..len(args[0].items)-1:
+            rev.append(args[0].items[len(args[0].items)-1-i])
+        return v_list(rev)
+    if name == "display":
+        print(val_to_str(args[0]))
+        return v_nil()
+    if name == "newline":
+        print("")
+        return v_nil()
+    if name == "even?":
+        var inum: int = int(args[0].num)
+        var is_even: bool = (inum mod 2 == 0)
+        return v_bool(is_even)
+    if name == "odd?":
+        var inum: int = int(args[0].num)
+        var is_odd: bool = (inum mod 2 != 0)
+        return v_bool(is_odd)
+    if name == "zero?":
+        return v_bool(args[0].num == 0.0)
+    if name == "positive?":
+        return v_bool(args[0].num > 0.0)
+    if name == "negative?":
+        return v_bool(args[0].num < 0.0)
+    if name == "number->string":
+        return v_sym(val_to_str(args[0]))
+    if name == "string->number":
+        var parsed: Val = parse_atom(args[0].sym)
+        if parsed.kind == VNum:
+            return parsed
+        return v_bool(False)
+    if name == "string?":
+             return v_bool(args[0].kind == VSym)
+    if name == "string-length":
+        return v_num(float(len(args[0].sym)))
+    if name == "string-append":
+        var s: str = ""
+        for a in args:
+            s &= a.sym
+        return v_sym(s)
+    print("Error: unknown builtin: " & name)
+    quit(1)
+    return v_nil()
+
+# ============================================================
+# Standard environment
+# ============================================================
+
+def make_global_env() -> int:
+    var gid: int = new_env(NO_PARENT)
+    var builtins: []str = [
+        "+", "-", "*", "/", "<", ">", "<=", ">=", "=",
+        "abs", "max", "min", "round", "floor", "ceil", "sqrt", "expt",
+        "sin", "cos",
+        "not", "eq?", "equal?", "null?", "list?", "number?", "symbol?",
+        "procedure?", "pair?", "boolean?",
+        "car", "cdr", "cons", "list", "length", "append", "reverse",
+        "display", "newline",
+        "even?", "odd?", "zero?", "positive?", "negative?",
+        "number->string", "string->number",
+        "string?", "string-length", "string-append",
+    ]
+    for b in builtins:
+        env_def(gid, b, v_builtin(b))
+    env_def(gid, "#t",   v_bool(True))
+    env_def(gid, "#f",   v_bool(False))
+    env_def(gid, "else", v_bool(True))
+    env_def(gid, "pi",   v_num(math.Pi))
+    return gid
+
+# ============================================================
+# Evaluator
+# ============================================================
+
+# nimraw: proc scheme_eval(x: Val, eid: int): Val
+def scheme_apply(proc_val: Val, args: []Val) -> Val:
+    if proc_val.kind == VBuiltin:
+        return apply_builtin(proc_val.sym, args)
+    if proc_val.kind == VLambda:
+        if len(args) != len(proc_val.parms):
+            print("Error: wrong number of arguments")
+            quit(1)
+        var call_env: int = new_env(proc_val.env_id)
+        var parms_copy: []str = proc_val.parms
+        bind_parms(call_env, parms_copy, args)
+        return scheme_eval(load_expr(proc_val.body_id), call_env)
+    print("Error: not a procedure: " & val_to_str(proc_val))
+    quit(1)
+    return v_nil()
+
+# nimraw: proc expand_qq(x: Val, eid: int): Val
+def expand_qq(x: Val, eid: int) -> Val:
+    """Expand quasiquote: recurse, expanding unquote."""
+    if x.kind != VList:
+        return x
+    if len(x.items) == 2 and x.items[0].kind == VSym and x.items[0].sym == "unquote":
+        return scheme_eval(x.items[1], eid)
+    var vals_2: []Val = []
+    for item in x.items:
+        if item.kind == VList and len(item.items) == 2 and item.items[0].kind == VSym and item.items[0].sym == "unquote":
+            vals_2.append(scheme_eval(item.items[1], eid))
+        else:
+            vals_2.append(expand_qq(item, eid))
+    return v_list(vals_2)
+
+def scheme_eval(x: Val, eid: int) -> Val:
+    """Evaluate expression x in environment eid."""
+    # Symbol lookup
+    if x.kind == VSym:
+        return env_get(eid, x.sym)
+
+    # Self-evaluating: number, bool, nil, lambda, builtin
+    if x.kind != VList:
+        return x
+
+    # Empty list -> nil
+    if len(x.items) == 0:
+        return v_nil()
+
+    let head: Val = x.items[0]
+
+    if head.kind == VSym:
+        let op: str = head.sym
+
+        if op == "quote":
+            return x.items[1]
+
+        if op == "quasiquote":
+            return expand_qq(x.items[1], eid)
+
+        if op == "if":
+            let cond_val: Val = scheme_eval(x.items[1], eid)
+            if is_true(cond_val):
+                return scheme_eval(x.items[2], eid)
+            elif len(x.items) > 3:
+                return scheme_eval(x.items[3], eid)
+            else:
+                return v_nil()
+
+        if op == "define":
+            if x.items[1].kind == VSym:
+                let val: Val = scheme_eval(x.items[2], eid)
+                env_def(eid, x.items[1].sym, val)
+            elif x.items[1].kind == VList:
+                # (define (f p...) body...) shorthand
+                let fn_name: str = x.items[1].items[0].sym
+                var parms: []str = []
+                for i in 1..len(x.items[1].items)-1:
+                    parms.append(x.items[1].items[i].sym)
+                var body: Val
+                if len(x.items) == 3:
+                    body = x.items[2]
+                else:
+                    var begin_items: []Val = [v_sym("begin")]
+                    for i in 2..len(x.items)-1:
+                        begin_items.append(x.items[i])
+                    body = v_list(begin_items)
+                env_def(eid, fn_name, v_lambda(parms, body, eid))
+            return v_nil()
+
+        if op == "set!":
+            let val: Val = scheme_eval(x.items[2], eid)
+            env_set(eid, x.items[1].sym, val)
+            return v_nil()
+
+        if op == "lambda":
+            var parms: []str = []
+            if x.items[1].kind == VList:
+                for p in x.items[1].items:
+                    parms.append(p.sym)
+            var body: Val
+            if len(x.items) == 3:
+                body = x.items[2]
+            else:
+                var begin_items: []Val = [v_sym("begin")]
+                for i in 2..len(x.items)-1:
+                    begin_items.append(x.items[i])
+                body = v_list(begin_items)
+            return v_lambda(parms, body, eid)
+
+        if op == "begin":
+            var result: Val = v_nil()
+            for i in 1..len(x.items)-1:
+                result = scheme_eval(x.items[i], eid)
+            return result
+
+        if op == "and":
+            if len(x.items) == 1:
+                return v_bool(True)
+            var v: Val = v_bool(True)
+            for i in 1..len(x.items)-1:
+                v = scheme_eval(x.items[i], eid)
+                if not is_true(v):
+                    return v_bool(False)
+            return v
+
+        if op == "or":
+            if len(x.items) == 1:
+                return v_bool(False)
+            for i in 1..len(x.items)-1:
+                var v: Val = scheme_eval(x.items[i], eid)
+                if is_true(v):
+                    return v
+            return v_bool(False)
+
+        if op == "cond":
+            for i in 1..len(x.items)-1:
+                let clause: Val = x.items[i]
+                let test_val: Val = scheme_eval(clause.items[0], eid)
+                if is_true(test_val):
+                    if len(clause.items) == 1:
+                        return test_val
+                    var result: Val = v_nil()
+                    for j in 1..len(clause.items)-1:
+                        result = scheme_eval(clause.items[j], eid)
+                    return result
+            return v_nil()
+
+        if op == "let":
+            var let_env: int = new_env(eid)
+            for binding in x.items[1].items:
+                let bname: str = binding.items[0].sym
+                let bval: Val  = scheme_eval(binding.items[1], eid)
+                env_def(let_env, bname, bval)
+            var result: Val = v_nil()
+            for i in 2..len(x.items)-1:
+                result = scheme_eval(x.items[i], let_env)
+            return result
+
+        if op == "let*":
+            var cur_env: int = eid
+            for binding in x.items[1].items:
+                var next_env: int = new_env(cur_env)
+                let bname: str = binding.items[0].sym
+                let bval: Val  = scheme_eval(binding.items[1], cur_env)
+                env_def(next_env, bname, bval)
+                cur_env = next_env
+            var result: Val = v_nil()
+            for i in 2..len(x.items)-1:
+                result = scheme_eval(x.items[i], cur_env)
+            return result
+
+        if op == "letrec":
+            var rec_env: int = new_env(eid)
+            for binding in x.items[1].items:
+                env_def(rec_env, binding.items[0].sym, v_nil())
+            for binding in x.items[1].items:
+                let bval: Val = scheme_eval(binding.items[1], rec_env)
+                env_def(rec_env, binding.items[0].sym, bval)
+            var result: Val = v_nil()
+            for i in 2..len(x.items)-1:
+                result = scheme_eval(x.items[i], rec_env)
+            return result
+
+        if op == "when":
+            if is_true(scheme_eval(x.items[1], eid)):
+                var result: Val = v_nil()
+                for i in 2..len(x.items)-1:
+                    result = scheme_eval(x.items[i], eid)
+                return result
+            return v_nil()
+
+        if op == "unless":
+            if not is_true(scheme_eval(x.items[1], eid)):
+                var result: Val = v_nil()
+                for i in 2..len(x.items)-1:
+                    result = scheme_eval(x.items[i], eid)
+                return result
+            return v_nil()
+
+        if op == "apply":
+            let pv: Val      = scheme_eval(x.items[1], eid)
+            let lst: Val     = scheme_eval(x.items[2], eid)
+            return scheme_apply(pv, lst.items)
+
+        if op == "map":
+            let pv: Val  = scheme_eval(x.items[1], eid)
+            let lst: Val = scheme_eval(x.items[2], eid)
+            var vals_3: []Val = []
+            for item in lst.items:
+                vals_3.append(scheme_apply(pv, [item]))
+            return v_list(vals_3)
+
+        if op == "for-each":
+            let pv: Val  = scheme_eval(x.items[1], eid)
+            let lst: Val = scheme_eval(x.items[2], eid)
+            for item in lst.items:
+                var ignored: Val = scheme_apply(pv, [item])
+            return v_nil()
+
+    # Procedure call
+    let pv: Val = scheme_eval(head, eid)
+    var args: []Val = []
+    for i in 1..len(x.items)-1:
+        args.append(scheme_eval(x.items[i], eid))
+    return scheme_apply(pv, args)
+
+# ============================================================
+# REPL / runner
+# ============================================================
+
+var global_env: int = make_global_env()
+
+def run(program: str) -> str:
+    """Evaluate program string; return string representation of result."""
+    let v: Val = scheme_eval(parse(program), global_env)
+    if v.kind == VNil:
+        return ""
+    return val_to_str(v)
+
+def schemestr(v: Val) -> str:
+    return val_to_str(v)
+
+# ============================================================
+# Self-tests
+# ============================================================
+
+assert run("(+ 1 2)") == "3"
+assert run("(* 3 4)") == "12"
+assert run("(if #t 1 2)") == "1"
+assert run("(if #f 1 2)") == "2"
+assert run("(car (list 1 2 3))") == "1"
+assert run("(cdr (list 1 2 3))") == "(2 3)"
+assert run("(null? (list))") == "#t"
+assert run("(null? (list 1))") == "#f"
+var _r1: str = run("(define (square x) (* x x))")
+assert run("(square 5)") == "25"
+var _r2: str = run("(define (fact n) (if (= n 0) 1 (* n (fact (- n 1)))))")
+assert run("(fact 10)") == "3628800"
+var _r3: str = run("(define (fib n) (if (< n 2) n (+ (fib (- n 1)) (fib (- n 2)))))")
+assert run("(fib 10)") == "55"
+assert run("(map (lambda (x) (* x x)) (list 1 2 3 4 5))") == "(1 4 9 16 25)"
+assert run("(let ((x 3) (y 4)) (+ (* x x) (* y y)))") == "25"
+assert run("(and 1 2 3)") == "3"
+assert run("(or #f #f 42)") == "42"
+
+print "lispy: all tests passed"
+
+# Demo
+print ""
+print "--- Demo ---"
+var demos: []str = [
+    "(define (fact n) (if (= n 0) 1 (* n (fact (- n 1)))))",
+    "(fact 10)",
+    "(define (fib n) (if (< n 2) n (+ (fib (- n 1)) (fib (- n 2)))))",
+    "(fib 10)",
+    "(map (lambda (x) (* x x)) (list 1 2 3 4 5))",
+    "(let ((x 3) (y 4)) (+ (* x x) (* y y)))",
+    "(define (range-list n) (if (= n 0) (list) (append (range-list (- n 1)) (list (- n 1)))))",
+    "(range-list 5)",
+]
+for prog in demos:
+    var result: str = run(prog)
+    if result:
+        print f"{prog}  =>  {result}"
+    else:
+        print prog
+
