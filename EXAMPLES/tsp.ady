@@ -46,9 +46,9 @@ def permutations(items: Tour_T) -> []Tour_T:
     while i < n:
         if c[i] < i:
             if i % 2 == 0:
-                swap(a[0], a[i])
+                a[0], a[i] = a[i], a[0]
             else:
-                swap(a[c[i]], a[i])
+                a[c[i]], a[i] = a[i], a[c[i]]
             result.append(a)
             c[i] = c[i] + 1
             i = 0

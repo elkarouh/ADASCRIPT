@@ -253,10 +253,31 @@ def to_nim(self):
     # Skip var for dotted assignments (field mutation), indexed assignments,
     # and variables already declared in the current scope
     lhs = parts[0]
-    # Implicit tuple destructuring: a, b = expr -> let (a, b) = expr
+    # Tuple assignment to existing lvalues: a[i], a[j] = a[j], a[i]
+    # If every target is a subscript or already-declared name (not a new decl),
+    # emit swap() for the two-element swap pattern or temp-var expansion otherwise.
     if "," in lhs and not lhs.startswith("(") and len(parts) == 2:
-        targets = ", ".join(t.strip() for t in lhs.split(","))
-        return f"let ({targets}) = {parts[1]}"
+        import re as _re_ta
+        targets = [t.strip() for t in lhs.split(",")]
+        rhs_parts = [r.strip() for r in parts[1].split(",")]
+        _is_lvalue = lambda s: ("[" in s or "." in s or
+                                bool(ParserState.symbol_table.lookup(s.strip())))
+        all_lvalues = all(_is_lvalue(t) for t in targets)
+        if all_lvalues:
+            # Two-target swap: a[i], a[j] = a[j], a[i]  ->  swap(a[i], a[j])
+            if (len(targets) == 2 and len(rhs_parts) == 2
+                    and targets[0] == rhs_parts[1] and targets[1] == rhs_parts[0]):
+                return f"swap({targets[0]}, {targets[1]})"
+            # General case: use temps to avoid aliasing
+            lines = []
+            for k, r in enumerate(rhs_parts):
+                lines.append(f"let _t{k} = {r}")
+            for k, t in enumerate(targets):
+                lines.append(f"{t} = _t{k}")
+            return "\n".join(lines)
+        # All targets are new names — declare with let
+        tgt_str = ", ".join(targets)
+        return f"let ({tgt_str}) = {parts[1]}"
     if "." in lhs or "[" in lhs:
         prefix = ""
     elif ParserState.symbol_table.lookup(lhs):
