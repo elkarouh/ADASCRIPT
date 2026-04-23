@@ -1329,16 +1329,20 @@ def main(argv=None):
         exe_mtime = os.path.getmtime(exe_file) if os.path.exists(exe_file) else 0
 
         # Transpiler source files: if any are newer than the .nim, retranspile.
-        # Include root-level .py files (e.g. hek_tokenize.py) alongside TO_NIM/.
+        # Include TO_NIM/, ADASCRIPT_GRAMMAR/, and HPARSEC/ .py files.
         _root_dir_main = os.path.dirname(_dir)
-        transpiler_mtime = max(
-            os.path.getmtime(p)
-            for p in (
-                [os.path.join(_dir, f) for f in os.listdir(_dir) if f.endswith(".py")] +
-                [os.path.join(_root_dir_main, f) for f in os.listdir(_root_dir_main)
-                 if f.endswith(".py") and os.path.isfile(os.path.join(_root_dir_main, f))]
-            )
+        _transpiler_py_files = (
+            [os.path.join(_dir, f) for f in os.listdir(_dir) if f.endswith(".py")] +
+            [os.path.join(_root_dir_main, f) for f in os.listdir(_root_dir_main)
+             if f.endswith(".py") and os.path.isfile(os.path.join(_root_dir_main, f))]
         )
+        for _extra_dir in ("HPARSEC", "ADASCRIPT_GRAMMAR"):
+            _ed = os.path.join(_root_dir_main, _extra_dir)
+            if os.path.isdir(_ed):
+                _transpiler_py_files += [
+                    os.path.join(_ed, f) for f in os.listdir(_ed) if f.endswith(".py")
+                ]
+        transpiler_mtime = max(os.path.getmtime(p) for p in _transpiler_py_files)
 
         # Pre-pass: parse nimport'd .ady dependencies to collect constructor
         # signatures (proc_param_types_full) so the main file can generate

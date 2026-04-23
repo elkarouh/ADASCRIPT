@@ -429,6 +429,11 @@ before parsing, so Python's lexer is never confused by the apostrophe.
 | `expr'Next`        | Successor of `expr`                |
 | `expr'Prev`        | Predecessor of `expr`              |
 | `expr'Choice`      | Random element from expr or range  |
+| `expr'Image`       | String representation of `expr`    |
+
+> **Limitation:** tick attributes are only supported on bare identifiers and
+> type names. They do not work on field accesses (`self.num'Image`) or
+> subscripts (`args[0]'Image`). Use `str()` in those cases instead.
 
 ### Iterating over an enum's full range
 
@@ -629,6 +634,97 @@ constraint). A `when (4, 8):` clause generates `elif year == 4 and age == 8:`.
 
 **Python output:** `match/case` with tuple pattern  
 **Nim output:** `if/elif/else` chain (desugared)
+
+---
+
+**Structural patterns (discriminated union matching):**
+
+When matching against record types with a `kind` discriminant, use
+`TypeName(field=value, ...)` patterns. Uppercase field values are treated as
+enum/constant comparisons; lowercase names become `let` bindings.
+
+```python
+type Val_Kind_T is enum VNum, VSym, VList
+type Val_T is record:
+    kind: Val_Kind_T
+    num:  float
+    sym:  str
+    items: []Val_T
+
+def describe(x: Val_T) -> str:
+    case x:
+        when Val_T(kind=VSym, sym="if"):   # field equality check
+            return "keyword: if"
+        when Val_T(kind=VSym, sym=name):   # field capture binding
+            return "symbol: " + name
+        when Val_T(kind=VNum, num=n):
+            return "number"
+        when others:
+            return "other"
+```
+
+Generated Nim:
+
+```nim
+if x.kind == VSym and x.sym == "if":
+    return "keyword: if"
+elif x.kind == VSym:
+    let name = x.sym
+    return "symbol: " & name
+elif x.kind == VNum:
+    let n = x.num
+    return "number"
+else:
+    return "other"
+```
+
+**Sequence patterns** match lists by length and element structure. Use `*name`
+to capture the tail:
+
+```python
+def eval_expr(x: Val_T) -> str:
+    case x.items:
+        when [Val_T(kind=VSym, sym="if"), test, consequence, alternative]:
+            return "if-expr"
+        when [Val_T(kind=VSym, sym="define"), Val_T(kind=VSym, sym=name), expr]:
+            return "define: " + name
+        when [Val_T(kind=VSym, sym=op), *args]:
+            return "call: " + op
+        when others:
+            return "other"
+```
+
+Generated Nim:
+
+```nim
+if len(x.items) == 4 and x.items[0].kind == VSym and x.items[0].sym == "if":
+    let test = x.items[1]
+    let consequence = x.items[2]
+    let alternative = x.items[3]
+    return "if-expr"
+elif len(x.items) == 3 and x.items[0].kind == VSym and x.items[0].sym == "define" and x.items[1].kind == VSym:
+    let name = x.items[1].sym
+    let expr = x.items[2]
+    return "define: " & name
+elif len(x.items) >= 1 and x.items[0].kind == VSym:
+    let op = x.items[0].sym
+    let args = x.items[1..x.items.high]
+    return "call: " & op
+else:
+    return "other"
+```
+
+Rules:
+- `TypeName(field=Value)` — uppercase `Value` → equality check (`x.field == Value`)
+- `TypeName(field=name)` — lowercase `name` → let binding (`let name = x.field`)
+- `[p0, p1, ..., pN]` — fixed-length sequence match (`len(x) == N+1`)
+- `[p0, *rest]` — variable-length match (`len(x) >= 1`, `rest = x[1..]`)
+- `_` or `others` → catch-all (no condition, no binding)
+
+See `lispy.ady` for a complete example using all these forms.
+
+**Python output:** `match/case` with class and sequence patterns  
+**Nim output:** `if/elif/else` chain with field checks and `let` bindings
 
 ---
 
