@@ -3122,6 +3122,31 @@ if __name__ == "__main__":
             "case x:\n    when 1 .. 5:\n        pass\n",
             "case x:\n    of 1 .. 5:\n        discard",
         ),
+        # --- structural pattern matching ---
+        (
+            "case x:\n    when Foo(kind=Bar, val=v):\n        pass\n",
+            "if x.kind == Bar:\n    let v = x.val\n    discard",
+        ),
+        (
+            "case x:\n    when Foo(kind=Bar, sym=\"hi\"):\n        pass\n    when others:\n        pass\n",
+            "if x.kind == Bar and x.sym == \"hi\":\n    discard\nelse:\n    discard",
+        ),
+        (
+            "case x:\n    when Foo(kind=Bar, sym=name):\n        return name\n    when others:\n        return \"\"\n",
+            "if x.kind == Bar:\n    let name = x.sym\n    return name\nelse:\n    return \"\"",
+        ),
+        (
+            "case items:\n    when [Foo(kind=A, sym=\"x\"), b, c]:\n        pass\n    when others:\n        pass\n",
+            "if len(items) == 3 and items[0].kind == A and items[0].sym == \"x\":\n    let b = items[1]\n    let c = items[2]\n    discard\nelse:\n    discard",
+        ),
+        (
+            "case items:\n    when [head, *rest]:\n        pass\n    when others:\n        pass\n",
+            "if len(items) >= 1:\n    let head = items[0]\n    let rest = items[1..items.high]\n    discard\nelse:\n    discard",
+        ),
+        (
+            "case items:\n    when [Foo(kind=A, sym=op), *args]:\n        pass\n    when others:\n        pass\n",
+            "if len(items) >= 1 and items[0].kind == A:\n    let op = items[0].sym\n    let args = items[1..items.high]\n    discard\nelse:\n    discard",
+        ),
         # --- discriminated records ---
         (
             "type Shape (Kind : Shape_Kind) is record:\n    case Kind is\n        when Circle:\n            Radius : float\n        when Rectangle:\n            Width : float\n            Height : float\n",
