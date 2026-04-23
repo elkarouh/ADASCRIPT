@@ -1707,6 +1707,16 @@ def _translate_stdlib_patterns(expr):
     if _counter_m:
         return f"initCounter({_counter_m.group(2)})"
 
+    # --- 10. len(<pyobj>) -> flag that the proc len(o: PyObject) helper is needed ---
+    _len_m = _re.match(r'^len\(([A-Za-z_]\w*).*\)$', expr)
+    if _len_m:
+        _arg_base = _len_m.group(1)
+        _sym = ParserState.symbol_table.lookup(_arg_base)
+        if _sym:
+            _t = _sym.get("type", "") or ""
+            if _t.startswith("_py_module:") or _t == "PyObject":
+                ParserState.nimpy_len_needed = True
+
     return expr
 
 
