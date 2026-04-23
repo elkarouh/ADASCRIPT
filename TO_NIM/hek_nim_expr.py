@@ -1248,6 +1248,11 @@ def to_nim(self, prec=None):
             call_node = self.nodes[1].nodes[0]
             arg = _extract_call_arg(call_node)
             rest = "".join(tr.to_nim() for tr in self.nodes[1].nodes[1:])
+            # sum(genexpr) or sum(x.values()) — collect into seq then sum
+            if arg.startswith("collect(") or arg.endswith(".values()"):
+                ParserState.nim_imports.add("sequtils")
+                ParserState.nim_imports.add("math")
+                return f"toSeq({arg}).sum(){rest}"
             # sum(seq[Positive/Natural/range]) fails in Nim because result can't init to 0.
             # Detect range subtypes and emit foldl to avoid the issue.
             _sym = ParserState.symbol_table.lookup(arg)

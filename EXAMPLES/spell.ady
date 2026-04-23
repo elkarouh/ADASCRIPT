@@ -29,13 +29,7 @@ def build_model(filename: str) -> {str}int:
 let corpus_file: str = ($1 if $# >= 1 else "big.txt")
 let WORDS: {str}int = build_model(corpus_file)
 
-def total_words() -> int:
-    var n: int = 0
-    for k in WORDS:
-        n += WORDS[k]
-    return n
-
-let N: int = total_words()
+let N: int = sum(WORDS[k] for k in WORDS)
 
 # ============================================================
 # Core algorithm
