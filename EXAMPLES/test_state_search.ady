@@ -210,7 +210,7 @@ def demo_wolf_goat():
         def get_next_states(self, state: State_T) -> []Step_T[State_T, Action_T]:
             let (f, w, g, c) = state
             let o: Side_T = (right if f == left else left)
-            candidates: [](Action_T, State_T) = [("farmer", (farmer: o, wolf: w, goat: g, cabbage: c))]
+            candidates: [](Action_T, State_T) = [("farmer returns alone", (farmer: o, wolf: w, goat: g, cabbage: c))]
             if f == w:
                 candidates.append(("take wolf",    (farmer: o, wolf: o, goat: g, cabbage: c)))
             if f == g:

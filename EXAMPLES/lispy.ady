@@ -15,14 +15,15 @@ import math
 
 type Val_Kind_T is enum VNum, VSym, VStr, VBool, VNil, VList, VLambda, VBuiltin
 type Val_T is record:
-    kind:  Val_Kind_T
-    num:   float
-    sym:   str
-    flag:  bool
-    items: []Val_T
-    parms: []str
-    body:  Val_T
-    env:   Env_T
+    kind:      Val_Kind_T
+    num:       float
+    sym:       str
+    flag:      bool
+    items:     []Val_T
+    parms:     []str
+    rest_parm: str       # non-empty -> variadic: extra args bound here
+    body:      Val_T
+    env:       Env_T
 
 type Env_T is record:
     bindings: {str}Val_T
@@ -138,10 +139,17 @@ def tokenize(s: str) -> []str:
             break
         elif c == ' ' or c == '\t' or c == '\n' or c == '\r':
             i += 1
-        elif c == '(' or c == ')' or c == '\'' or c == '`' or c == ',':
+        elif c == '(' or c == ')' or c == '\'' or c == '`':
             var cs: str = "" & c
             tokens.append(cs)
             i += 1
+        elif c == ',':
+            if i + 1 < len(s) and ord(s[i+1]) == 64:
+                tokens.append(",@")
+                i += 2
+            else:
+                tokens.append(",")
+                i += 1
         elif ord(c) == 34:
             var j: int = i + 1
             while j < len(s) and ord(s[j]) != 34:
@@ -165,6 +173,8 @@ def parse_atom(token: str) -> Val_T:
         return Val_T(kind=VBool, flag=False)
     if token.startswith("\""):
         return Val_T(kind=VStr, sym=token[1..len(token)-2])
+    if token == ".":
+        return Val_T(kind=VSym, sym=".")
     try:
         return Val_T(kind=VNum, num=float(token))
     except ValueError:
@@ -188,12 +198,14 @@ def read_from(tokens: []str, pos: int) -> (Val_T, int):
                 print("Error: missing )")
                 quit(1)
             return (Val_T(kind=VList, items=items), p + 1)
-        when "'" | "`" | ",":
+        when "'" | "`" | "," | ",@":
             var wrapper: str = "quote"
             if tok == "`":
                 wrapper = "quasiquote"
-            if tok == ",":
+            elif tok == ",":
                 wrapper = "unquote"
+            elif tok == ",@":
+                wrapper = "unquote-splicing"
             let pair: (Val_T, int) = read_from(tokens, pos + 1)
             return (Val_T(kind=VList, items=[Val_T(kind=VSym, sym=wrapper), pair[0]]), pair[1])
         when ")":
@@ -518,15 +530,29 @@ def make_global_env() -> Env_T:
 # Evaluator
 # ============================================================
 
+def bind_args(e: Env_T, parms: []str, rest_parm: str, args: []Val_T) -> None:
+    if len(rest_parm) > 0:
+        if len(args) < len(parms):
+            print(f"Error: expected at least {len(parms)} args, got {len(args)}")
+            quit(1)
+        for i in 0..len(parms)-1:
+            e.bindings[parms[i]] = args[i]
+        var rest_items: []Val_T = []
+        for i in len(parms)..len(args)-1:
+            rest_items.append(args[i])
+        env_def(e, rest_parm, Val_T(kind=VList, items=rest_items))
+    else:
+        if len(args) != len(parms):
+            print(f"Error: expected {len(parms)} args, got {len(args)}")
+            quit(1)
+        bind_parms(e, parms, args)
+
 def scheme_apply(proc_val: Val_T, args: []Val_T) -> Val_T:
     if proc_val.kind == VBuiltin:
         return apply_builtin(proc_val.sym, args)
     if proc_val.kind == VLambda:
-        if len(args) != len(proc_val.parms):
-            print("Error: wrong number of arguments")
-            quit(1)
         var call_env: Env_T = new_env(proc_val.env)
-        bind_parms(call_env, proc_val.parms, args)
+        bind_args(call_env, proc_val.parms, proc_val.rest_parm, args)
         return scheme_eval(proc_val.body, call_env)
     print(f"Error: not a procedure: {proc_val}")
     quit(1)
@@ -539,149 +565,248 @@ def expand_qq(x: Val_T, e: Env_T) -> Val_T:
         return scheme_eval(x.items[1], e)
     var result: []Val_T = []
     for item in x.items:
-        if item.kind == VList and len(item.items) == 2 and item.items[0].kind == VSym and item.items[0].sym == "unquote":
-            result.append(scheme_eval(item.items[1], e))
+        if item.kind == VList and len(item.items) == 2 and item.items[0].kind == VSym:
+            if item.items[0].sym == "unquote":
+                result.append(scheme_eval(item.items[1], e))
+            elif item.items[0].sym == "unquote-splicing":
+                let spliced: Val_T = scheme_eval(item.items[1], e)
+                for sv in spliced.items:
+                    result.append(sv)
+            else:
+                result.append(expand_qq(item, e))
         else:
             result.append(expand_qq(item, e))
     Val_T(kind=VList, items=result)
 
-def scheme_eval(x: Val_T, e: Env_T) -> Val_T:
-    if x.kind == VSym:
-        return env_get(e, x.sym)
-    if x.kind != VList:
-        return x
-    if len(x.items) == 0:
-        return Val_T(kind=VNil)
-    let items: []Val_T = x.items
+def parse_lambda_params(param_list: []Val_T) -> ([]str, str):
+    # Returns (fixed_parms, rest_parm). Handles (a b . rest) dot-notation.
+    var parms: []str = []
+    var rest_parm: str = ""
+    var i: int = 0
+    while i < len(param_list):
+        if param_list[i].sym == ".":
+            if i + 1 < len(param_list):
+                rest_parm = param_list[i+1].sym
+            break
+        parms.append(param_list[i].sym)
+        i += 1
+    return (parms, rest_parm)
 
-    case items:
-        when [Val_T(kind=VSym, sym="quote"), quoted]:
-            return quoted
-        when [Val_T(kind=VSym, sym="quasiquote"), form]:
-            return expand_qq(form, e)
-        when [Val_T(kind=VSym, sym="if"), test, consequence, alternative]:
-            if scheme_eval(test, e).is_true():
-                return scheme_eval(consequence, e)
-            else:
-                return scheme_eval(alternative, e)
-        when [Val_T(kind=VSym, sym="if"), test, consequence]:
-            if scheme_eval(test, e).is_true():
-                return scheme_eval(consequence, e)
+def scheme_eval(x_in: Val_T, e_in: Env_T) -> Val_T:
+    # TCO trampoline: tail positions assign x/e and continue the loop.
+    var x: Val_T = x_in
+    var e: Env_T = e_in
+    while True:
+        if x.kind == VSym:
+            return env_get(e, x.sym)
+        if x.kind != VList:
+            return x
+        if len(x.items) == 0:
             return Val_T(kind=VNil)
-        when [Val_T(kind=VSym, sym="define"), Val_T(kind=VSym, sym=var_name), expr]:
-            env_def(e, var_name, scheme_eval(expr, e))
-            return Val_T(kind=VNil)
-        when [Val_T(kind=VSym, sym="define"), Val_T(kind=VList, items=sig), *body]:
-            let fn_name: str = sig[0].sym
-            var parms: []str = []
-            for i in 1..len(sig)-1:
-                parms.append(sig[i].sym)
-            let fn_body: Val_T = body[0] if len(body) == 1 else Val_T(kind=VList, items=[Val_T(kind=VSym, sym="begin")] + body)
-            env_def(e, fn_name, Val_T(kind=VLambda, parms=parms, body=fn_body, env=e))
-            return Val_T(kind=VNil)
-        when [Val_T(kind=VSym, sym="set!"), Val_T(kind=VSym, sym=var_name), expr]:
-            env_set(e, var_name, scheme_eval(expr, e))
-            return Val_T(kind=VNil)
-        when [Val_T(kind=VSym, sym="lambda"), Val_T(kind=VList, items=param_list), *body]:
-            var parms: []str = []
-            for p in param_list:
-                parms.append(p.sym)
-            let lam_body: Val_T = body[0] if len(body) == 1 else Val_T(kind=VList, items=[Val_T(kind=VSym, sym="begin")] + body)
-            return Val_T(kind=VLambda, parms=parms, body=lam_body, env=e)
-        when [Val_T(kind=VSym, sym="begin"), *stmts]:
-            var result: Val_T = Val_T(kind=VNil)
-            for stmt in stmts:
-                result = scheme_eval(stmt, e)
-            return result
-        when [Val_T(kind=VSym, sym="and"), *operands]:
-            if len(operands) == 0:
-                return Val_T(kind=VBool, flag=True)
-            var v: Val_T = Val_T(kind=VBool, flag=True)
-            for operand in operands:
-                v = scheme_eval(operand, e)
-                if not v.is_true():
+        let items: []Val_T = x.items
+
+        case items:
+            when [Val_T(kind=VSym, sym="quote"), quoted]:
+                return quoted
+            when [Val_T(kind=VSym, sym="quasiquote"), form]:
+                return expand_qq(form, e)
+            when [Val_T(kind=VSym, sym="if"), test, consequence, alternative]:
+                if scheme_eval(test, e).is_true():
+                    x = consequence
+                else:
+                    x = alternative
+            when [Val_T(kind=VSym, sym="if"), test, consequence]:
+                if scheme_eval(test, e).is_true():
+                    x = consequence
+                else:
+                    return Val_T(kind=VNil)
+            when [Val_T(kind=VSym, sym="define"), Val_T(kind=VSym, sym=var_name), expr]:
+                env_def(e, var_name, scheme_eval(expr, e))
+                return Val_T(kind=VNil)
+            when [Val_T(kind=VSym, sym="define"), Val_T(kind=VList, items=sig), *body]:
+                let fn_name: str = sig[0].sym
+                let (parms, rest_parm) = parse_lambda_params(sig[1..len(sig)-1])
+                let fn_body: Val_T = body[0] if len(body) == 1 else Val_T(kind=VList, items=[Val_T(kind=VSym, sym="begin")] + body)
+                env_def(e, fn_name, Val_T(kind=VLambda, parms=parms, rest_parm=rest_parm, body=fn_body, env=e))
+                return Val_T(kind=VNil)
+            when [Val_T(kind=VSym, sym="set!"), Val_T(kind=VSym, sym=var_name), expr]:
+                env_set(e, var_name, scheme_eval(expr, e))
+                return Val_T(kind=VNil)
+            when [Val_T(kind=VSym, sym="lambda"), Val_T(kind=VList, items=param_list), *body]:
+                let (parms, rest_parm) = parse_lambda_params(param_list)
+                let lam_body: Val_T = body[0] if len(body) == 1 else Val_T(kind=VList, items=[Val_T(kind=VSym, sym="begin")] + body)
+                return Val_T(kind=VLambda, parms=parms, rest_parm=rest_parm, body=lam_body, env=e)
+            when [Val_T(kind=VSym, sym="lambda"), Val_T(kind=VSym, sym=rest_name), *body]:
+                # (lambda args body) — rest_name gets all args as a list
+                let lam_body: Val_T = body[0] if len(body) == 1 else Val_T(kind=VList, items=[Val_T(kind=VSym, sym="begin")] + body)
+                return Val_T(kind=VLambda, parms=[], rest_parm=rest_name, body=lam_body, env=e)
+            when [Val_T(kind=VSym, sym="begin"), *stmts]:
+                if len(stmts) == 0:
+                    return Val_T(kind=VNil)
+                for i in 0..len(stmts)-2:
+                    var ignored: Val_T = scheme_eval(stmts[i], e)
+                x = stmts[len(stmts)-1]
+            when [Val_T(kind=VSym, sym="and"), *operands]:
+                if len(operands) == 0:
+                    return Val_T(kind=VBool, flag=True)
+                for i in 0..len(operands)-2:
+                    let v: Val_T = scheme_eval(operands[i], e)
+                    if not v.is_true():
+                        return Val_T(kind=VBool, flag=False)
+                x = operands[len(operands)-1]
+            when [Val_T(kind=VSym, sym="or"), *operands]:
+                for i in 0..len(operands)-2:
+                    let v: Val_T = scheme_eval(operands[i], e)
+                    if v.is_true():
+                        return v
+                if len(operands) > 0:
+                    x = operands[len(operands)-1]
+                else:
                     return Val_T(kind=VBool, flag=False)
-            return v
-        when [Val_T(kind=VSym, sym="or"), *operands]:
-            for operand in operands:
-                var v: Val_T = scheme_eval(operand, e)
-                if v.is_true():
-                    return v
-            return Val_T(kind=VBool, flag=False)
-        when [Val_T(kind=VSym, sym="cond"), *clauses]:
-            for clause in clauses:
-                let test_val: Val_T = scheme_eval(clause.items[0], e)
-                if test_val.is_true():
-                    if len(clause.items) == 1:
-                        return test_val
-                    var result: Val_T = Val_T(kind=VNil)
-                    for j in 1..len(clause.items)-1:
-                        result = scheme_eval(clause.items[j], e)
-                    return result
-            return Val_T(kind=VNil)
-        when [Val_T(kind=VSym, sym="let"), Val_T(kind=VList, items=bind_list), *body]:
-            var let_env: Env_T = new_env(e)
-            for bnd in bind_list:
-                env_def(let_env, bnd.items[0].sym, scheme_eval(bnd.items[1], e))
-            var result: Val_T = Val_T(kind=VNil)
-            for stmt in body:
-                result = scheme_eval(stmt, let_env)
-            return result
-        when [Val_T(kind=VSym, sym="let*"), Val_T(kind=VList, items=bind_list), *body]:
-            var cur_env: Env_T = e
-            for bnd in bind_list:
-                var next_env: Env_T = new_env(cur_env)
-                env_def(next_env, bnd.items[0].sym, scheme_eval(bnd.items[1], cur_env))
-                cur_env = next_env
-            var result: Val_T = Val_T(kind=VNil)
-            for stmt in body:
-                result = scheme_eval(stmt, cur_env)
-            return result
-        when [Val_T(kind=VSym, sym="letrec"), Val_T(kind=VList, items=bind_list), *body]:
-            var rec_env: Env_T = new_env(e)
-            for bnd in bind_list:
-                env_def(rec_env, bnd.items[0].sym, Val_T(kind=VNil))
-            for bnd in bind_list:
-                env_def(rec_env, bnd.items[0].sym, scheme_eval(bnd.items[1], rec_env))
-            var result: Val_T = Val_T(kind=VNil)
-            for stmt in body:
-                result = scheme_eval(stmt, rec_env)
-            return result
-        when [Val_T(kind=VSym, sym="when"), test, *stmts]:
-            if scheme_eval(test, e).is_true():
-                var result: Val_T = Val_T(kind=VNil)
-                for stmt in stmts:
-                    result = scheme_eval(stmt, e)
-                return result
-            return Val_T(kind=VNil)
-        when [Val_T(kind=VSym, sym="unless"), test, *stmts]:
-            if not scheme_eval(test, e).is_true():
-                var result: Val_T = Val_T(kind=VNil)
-                for stmt in stmts:
-                    result = scheme_eval(stmt, e)
-                return result
-            return Val_T(kind=VNil)
-        when [Val_T(kind=VSym, sym="apply"), proc_expr, args_expr]:
-            return scheme_apply(scheme_eval(proc_expr, e), scheme_eval(args_expr, e).items)
-        when [Val_T(kind=VSym, sym="map"), proc_expr, list_expr]:
-            let pv: Val_T = scheme_eval(proc_expr, e)
-            let lst: Val_T = scheme_eval(list_expr, e)
-            var result: []Val_T = []
-            for item in lst.items:
-                result.append(scheme_apply(pv, [item]))
-            return Val_T(kind=VList, items=result)
-        when [Val_T(kind=VSym, sym="for-each"), proc_expr, list_expr]:
-            let pv: Val_T = scheme_eval(proc_expr, e)
-            let lst: Val_T = scheme_eval(list_expr, e)
-            for item in lst.items:
-                var ignored: Val_T = scheme_apply(pv, [item])
-            return Val_T(kind=VNil)
-        when [head, *tail]:
-            let pv: Val_T = scheme_eval(head, e)
-            var args: []Val_T = []
-            for arg in tail:
-                args.append(scheme_eval(arg, e))
-            return scheme_apply(pv, args)
+            when [Val_T(kind=VSym, sym="cond"), *clauses]:
+                var found: bool = False
+                for clause in clauses:
+                    let test_val: Val_T = scheme_eval(clause.items[0], e)
+                    if test_val.is_true():
+                        if len(clause.items) == 1:
+                            return test_val
+                        for j in 1..len(clause.items)-2:
+                            var ignored: Val_T = scheme_eval(clause.items[j], e)
+                        x = clause.items[len(clause.items)-1]
+                        found = True
+                        break
+                if not found:
+                    return Val_T(kind=VNil)
+            when [Val_T(kind=VSym, sym="let"), Val_T(kind=VSym, sym=loop_name), Val_T(kind=VList, items=bind_list), *body]:
+                # named let: (let loop ((x init) ...) body)
+                var parms: []str = []
+                var inits: []Val_T = []
+                for bnd in bind_list:
+                    parms.append(bnd.items[0].sym)
+                    inits.append(scheme_eval(bnd.items[1], e))
+                let lam_body: Val_T = body[0] if len(body) == 1 else Val_T(kind=VList, items=[Val_T(kind=VSym, sym="begin")] + body)
+                var loop_env: Env_T = new_env(e)
+                let loop_fn: Val_T = Val_T(kind=VLambda, parms=parms, rest_parm="", body=lam_body, env=loop_env)
+                env_def(loop_env, loop_name, loop_fn)
+                var call_env: Env_T = new_env(loop_env)
+                bind_parms(call_env, parms, inits)
+                e = call_env
+                x = lam_body
+            when [Val_T(kind=VSym, sym="let"), Val_T(kind=VList, items=bind_list), *body]:
+                var let_env: Env_T = new_env(e)
+                for bnd in bind_list:
+                    env_def(let_env, bnd.items[0].sym, scheme_eval(bnd.items[1], e))
+                for i in 0..len(body)-2:
+                    var ignored: Val_T = scheme_eval(body[i], let_env)
+                e = let_env
+                x = body[len(body)-1]
+            when [Val_T(kind=VSym, sym="let*"), Val_T(kind=VList, items=bind_list), *body]:
+                var cur_env: Env_T = e
+                for bnd in bind_list:
+                    var next_env: Env_T = new_env(cur_env)
+                    env_def(next_env, bnd.items[0].sym, scheme_eval(bnd.items[1], cur_env))
+                    cur_env = next_env
+                for i in 0..len(body)-2:
+                    var ignored: Val_T = scheme_eval(body[i], cur_env)
+                e = cur_env
+                x = body[len(body)-1]
+            when [Val_T(kind=VSym, sym="letrec"), Val_T(kind=VList, items=bind_list), *body]:
+                var rec_env: Env_T = new_env(e)
+                for bnd in bind_list:
+                    env_def(rec_env, bnd.items[0].sym, Val_T(kind=VNil))
+                for bnd in bind_list:
+                    env_def(rec_env, bnd.items[0].sym, scheme_eval(bnd.items[1], rec_env))
+                for i in 0..len(body)-2:
+                    var ignored: Val_T = scheme_eval(body[i], rec_env)
+                e = rec_env
+                x = body[len(body)-1]
+            when [Val_T(kind=VSym, sym="when"), test, *stmts]:
+                if scheme_eval(test, e).is_true():
+                    for i in 0..len(stmts)-2:
+                        var ignored: Val_T = scheme_eval(stmts[i], e)
+                    x = stmts[len(stmts)-1]
+                else:
+                    return Val_T(kind=VNil)
+            when [Val_T(kind=VSym, sym="unless"), test, *stmts]:
+                if not scheme_eval(test, e).is_true():
+                    for i in 0..len(stmts)-2:
+                        var ignored: Val_T = scheme_eval(stmts[i], e)
+                    x = stmts[len(stmts)-1]
+                else:
+                    return Val_T(kind=VNil)
+            when [Val_T(kind=VSym, sym="do"), Val_T(kind=VList, items=var_specs), Val_T(kind=VList, items=term_clause), *do_body]:
+                # (do ((var init step) ...) (test result...) body...)
+                var do_env: Env_T = new_env(e)
+                var do_vars: []str = []
+                var do_steps: []Val_T = []
+                for spec in var_specs:
+                    let vname: str = spec.items[0].sym
+                    let init_val: Val_T = scheme_eval(spec.items[1], e)
+                    env_def(do_env, vname, init_val)
+                    do_vars.append(vname)
+                    if len(spec.items) > 2:
+                        do_steps.append(spec.items[2])
+                    else:
+                        do_steps.append(spec.items[0])
+                while True:
+                    let test_expr: Val_T = term_clause[0]
+                    if scheme_eval(test_expr, do_env).is_true():
+                        if len(term_clause) == 1:
+                            return Val_T(kind=VNil)
+                        for j in 1..len(term_clause)-2:
+                            var ignored: Val_T = scheme_eval(term_clause[j], do_env)
+                        x = term_clause[len(term_clause)-1]
+                        e = do_env
+                        break
+                    for stmt in do_body:
+                        var ignored: Val_T = scheme_eval(stmt, do_env)
+                    var new_vals: []Val_T = []
+                    for step in do_steps:
+                        new_vals.append(scheme_eval(step, do_env))
+                    for i in 0..len(do_vars)-1:
+                        env_def(do_env, do_vars[i], new_vals[i])
+                if e == do_env:
+                    pass
+            when [Val_T(kind=VSym, sym="apply"), proc_expr, args_expr]:
+                let pv: Val_T = scheme_eval(proc_expr, e)
+                let arg_list: Val_T = scheme_eval(args_expr, e)
+                if pv.kind == VBuiltin:
+                    return apply_builtin(pv.sym, arg_list.items)
+                if pv.kind == VLambda:
+                    var call_env: Env_T = new_env(pv.env)
+                    bind_args(call_env, pv.parms, pv.rest_parm, arg_list.items)
+                    e = call_env
+                    x = pv.body
+                else:
+                    return scheme_apply(pv, arg_list.items)
+            when [Val_T(kind=VSym, sym="map"), proc_expr, list_expr]:
+                let pv: Val_T = scheme_eval(proc_expr, e)
+                let lst: Val_T = scheme_eval(list_expr, e)
+                var result: []Val_T = []
+                for item in lst.items:
+                    result.append(scheme_apply(pv, [item]))
+                return Val_T(kind=VList, items=result)
+            when [Val_T(kind=VSym, sym="for-each"), proc_expr, list_expr]:
+                let pv: Val_T = scheme_eval(proc_expr, e)
+                let lst: Val_T = scheme_eval(list_expr, e)
+                for item in lst.items:
+                    var ignored: Val_T = scheme_apply(pv, [item])
+                return Val_T(kind=VNil)
+            when [head, *tail]:
+                let pv: Val_T = scheme_eval(head, e)
+                var args: []Val_T = []
+                for arg in tail:
+                    args.append(scheme_eval(arg, e))
+                if pv.kind == VBuiltin:
+                    return apply_builtin(pv.sym, args)
+                if pv.kind == VLambda:
+                    var call_env: Env_T = new_env(pv.env)
+                    bind_args(call_env, pv.parms, pv.rest_parm, args)
+                    e = call_env
+                    x = pv.body
+                else:
+                    return scheme_apply(pv, args)
+        # TCO: loop continues with new x, e
     return Val_T(kind=VNil)
 
 # ============================================================
@@ -749,15 +874,38 @@ else:
     assert run("(list-tail (list 1 2 3 4) 2)") == "(3 4)"
     assert run("(member 2 (list 1 2 3))") == "(2 3)"
     assert run("(assoc 2 (list (list 1 10) (list 2 20)))") == "(2 20)"
+    # TCO: tail-recursive factorial should not stack-overflow
+    # TCO
+    # TCO
+    var _r4: str = run("(define (fact-iter n acc) (if (= n 0) acc (fact-iter (- n 1) (* n acc))))")
+    assert run("(fact-iter 10 1)") == "3628800"
+    assert run("(fact-iter 1000 1)") != ""
+    # named let
+    assert run("(let loop ((i 0) (acc 0)) (if (= i 5) acc (loop (+ i 1) (+ acc i))))") == "10"
+    # variadic lambda: (lambda args body)
+    var _r5: str = run("(define my-list (lambda args args))")
+    assert run("(my-list 1 2 3)") == "(1 2 3)"
+    # variadic lambda: (define (f . rest) body)
+    var _r5b: str = run("(define (sum-list . args) (if (null? args) 0 (+ (car args) (apply sum-list (cdr args)))))")
+    assert run("(sum-list)") == "0"
+    assert run("(sum-list 1)") == "1"
+    assert run("(sum-list 1 2 3 4)") == "10"
+    # unquote-splicing
+    assert run("(let ((xs (list 2 3))) `(1 ,@xs 4))") == "(1 2 3 4)"
+    # do loop
+    assert run("(do ((i 0 (+ i 1)) (s 0 (+ s i))) ((= i 5) s))") == "10"
 
-    print "lispy: all tests passed"    
+    print "lispy: all tests passed"
     print "lispy REPL — :q to quit"
     while True:
-        var line: str = input("lispy> ")
-        if line == ":q":
+        try:
+            var line: str = input("lispy> ")
+            if line == ":q":
+                break
+            if len(line) == 0:
+                continue
+            var result: str = run(line)
+            if result:
+                print result
+        except EOFError:
             break
-        if len(line) == 0:
-            continue
-        var result: str = run(line)
-        if result:
-            print result
