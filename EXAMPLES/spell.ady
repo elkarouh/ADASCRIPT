@@ -6,7 +6,7 @@ Usage:  spell.ady big.txt                  # load corpus, enter REPL
 """
 
 import re
-from stdlib import Counter, count, total
+from stdlib import Counter_T, initCounter, total
 
 nimport stdlib
 
@@ -19,7 +19,7 @@ def words(text: str) -> []str:
     re.findall(r"[a-z]+", text.lower())
 
 let corpus_file: str = ($1 if $# >= 1 else "big.txt")
-let WORDS: Counter[str] = count(words(readFile(corpus_file)))
+let WORDS: Counter_T[str] = initCounter(words(readFile(corpus_file)))
 let N: Natural = WORDS.total()
 
 # ============================================================
