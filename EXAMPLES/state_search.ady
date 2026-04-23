@@ -18,7 +18,7 @@ nimport stdlib
 # ============================================================
 
 # A single search step recorded in a solution path.
-type Step_T[S, A] is tuple:
+type Step_T[S, A] is record:
     from_state: S
     action: A
     next_state: S
@@ -92,10 +92,9 @@ class StateSearcher[S, A]:
             visited.add(state)
             if self.is_goal(state):
                 return path
-            for from_state, action, next_state in self.get_next_states(state):
-                if next_state not in visited:
-                    step: Step_T[S, A] = (from_state, action, next_state)
-                    fringe.push((depth + 1, path + [step], next_state))
+            for step in self.get_next_states(state):
+                if step.next_state not in visited:
+                    fringe.push((depth + 1, path + [step], step.next_state))
 
         return []
 
@@ -115,10 +114,9 @@ class StateSearcher[S, A]:
                 return path
             if limit >= 0 and depth >= limit:
                 continue
-            for from_state, action, next_state in self.get_next_states(state):
-                if next_state not in visited:
-                    step: Step_T[S, A] = (from_state, action, next_state)
-                    fringe.push((depth + 1, path + [step], next_state))
+            for step in self.get_next_states(state):
+                if step.next_state not in visited:
+                    fringe.push((depth + 1, path + [step], step.next_state))
 
         return []
 
@@ -145,10 +143,9 @@ class StateSearcher[S, A]:
             visited.add(state)
             if self.is_goal(state):
                 yield path
-            for from_state, action, next_state in self.get_next_states(state):
-                if next_state not in visited:
-                    step: Step_T[S, A] = (from_state, action, next_state)
-                    fringe.push((depth + 1, path + [step], next_state))
+            for step in self.get_next_states(state):
+                if step.next_state not in visited:
+                    fringe.push((depth + 1, path + [step], step.next_state))
 
     # ------------------------------------------------------------------
     # Display
@@ -156,13 +153,15 @@ class StateSearcher[S, A]:
 
     @proc
     def print_solution(self, solution: []Step_T[S, A], start: S) -> None:
-        if not solution:
-            print("No solution")
-            return
-        for prev, action, next_state in solution:
-            print(f"{prev} --{action}--> {next_state}")
-        n: int = len(solution)
-        print(f"({n} moves)")
+        case solution:
+            when []:
+                print("No solution")
+            when [*steps]:
+                for step in steps:
+                    case step:
+                        when Step_T(from_state=prev, action=act, next_state=nxt):
+                            print(f"{prev} --{act}--> {nxt}")
+                print(f"({len(steps)} moves)")
 
     @proc
     def _search_pq(self, initial: S, use_heuristic: bool, use_cost: bool) -> []Step_T[S, A]:
@@ -183,13 +182,12 @@ class StateSearcher[S, A]:
             visited.add(state)
             if self.is_goal(state):
                 return path
-            for from_state, action, next_state in self.get_next_states(state):
-                if next_state not in visited:
-                    h: float = self.heuristic(next_state) if use_heuristic else 0.0
+            for step in self.get_next_states(state):
+                if step.next_state not in visited:
+                    h: float = self.heuristic(step.next_state) if use_heuristic else 0.0
                     g: float = float(depth + 1) if use_cost else 0.0
                     priority: float = g + h
                     counter = counter + 1
-                    step: Step_T[S, A] = (from_state, action, next_state)
-                    fringe.push((priority, counter, depth + 1, path + [step], next_state))
+                    fringe.push((priority, counter, depth + 1, path + [step], step.next_state))
 
         return []
