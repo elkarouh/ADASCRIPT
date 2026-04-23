@@ -64,12 +64,12 @@ def edits1(word: str) -> []str:
         if len(R) > 0:
             result.append(L + R[1:])                        # delete
             if len(R) > 1:
-                result.append(L + R[1] & R[0] & R[2:])     # transpose
+                result.append(L + R[1] + R[0] + R[2:])     # transpose
             for c in letters:
-                result.append(L + c & R[1:])                # replace
+                result.append(L + c + R[1:])                # replace
         # insert
         for c in letters:
-            result.append(L + c & R)
+            result.append(L + c + R)
     return result
 
 def edits2(word: str) -> []str:
