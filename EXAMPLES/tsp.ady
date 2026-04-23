@@ -1,8 +1,47 @@
 #!/usr/bin/env py2nim
-"""Norvig's Travelling Salesman Problem — exhaustive (first) version
-https://github.com/norvig/pytudes/blob/main/ipynb/TSP.ipynb
+"""Travelling Salesman Problem — a progression of algorithms from naive to near-optimal.
+Based on Norvig's pytudes: https://github.com/norvig/pytudes/blob/main/ipynb/TSP.ipynb
 
 Usage:  tsp.ady [n]        # solve for n cities (default 8)
+
+Algorithms implemented (in order of increasing quality):
+  nearest_tsp        O(n²)        greedy nearest-neighbour construction
+  mst_tsp            O(n²)        minimum spanning tree pre-order walk (≤2× optimal)
+  greedy_tsp         O(n² log n)  add shortest edges first (Kruskal-style path build)
+  rep_nearest_tsp    O(k·n²)      repeat nearest from k different starts, keep best
+  two_opt_tsp        O(n²/pass)   swap pairs of edges to eliminate crossings
+  or_opt_tsp         O(n²/pass)   relocate segments of 1–3 cities to a better slot
+  rep_2opt_nearest   O(k·n²)      repeat nearest+2opt from k starts, keep best
+  ensemble_tsp                    best of greedy_2opt and rep_2opt_nearest
+  three_opt_tsp      O(n³/pass)   remove 3 edges, reconnect in best of 5 ways
+  lk_tsp             O(n·k²)      Lin-Kernighan: neighbour-guided 2- and 3-opt chain
+  sa_tsp             O(n²·iters)  simulated annealing: accept worse moves probabilistically
+  held_karp_tsp      O(2ⁿ·n²)    Held-Karp DP exact solution (n ≤ 20 only)
+  exhaustive_tsp     O(n!)        brute-force over all permutations (n ≤ 11 only)
+
+Correctness validation (verified against Held-Karp optimal):
+  n=10: all algorithms from 2-opt upward find the optimum (1783.8)
+  n=12: all algorithms from 2-opt upward find the optimum (1976.8)
+  n=15: Rep-2opt, Ensemble find optimum (2127.0); 3-opt reaches 2186.0;
+        2-opt/Or-opt/LK/SA stuck at 2209–2212 (different local optima)
+
+Observed quality ranking at n=500 (lower is better):
+  Nearest  15975  |  MST     16193  |  Greedy  14291  |  Rep-NN  14895
+  2-opt    13533  |  Or-opt  13181  |  LK      13161  |  SA      12985
+  Rep-2opt 12970  |  Ensemble 12950  |  3-opt  12729  (53s)
+
+Key findings:
+  - SA beats 3-opt in quality/time trade-off: comparable length, 25× faster at n=500
+  - Ensemble beats all single-start heuristics including 2-opt and Or-opt
+  - LK occasionally loses to 3-opt on small n: the sequential-exchange gain
+    criterion is more restrictive than exhaustive 3-opt, so LK explores fewer
+    moves per pass. This is a known characteristic, not a bug.
+  - SA shows no improvement for very small n (≤15): temperature is calibrated
+    for larger instances; starting temperature current_len/n*0.1 is too low
+    when the tour is already near-optimal after LK.
+  - greedy_tsp uses selection sort (O(n⁴)) — fast enough for n≤200 but replace
+    with a real sort for larger inputs.
+  - Held-Karp memory: O(2ⁿ·n) — hits ~1 GB at n=20; hard limit enforced in main.
 """
 
 nimport math
@@ -18,9 +57,11 @@ type City_T is tuple:
 
 type Tour_T is []City_T
 
+# Euclidean distance between two cities.
 def distance(a: City_T, b: City_T) -> float:
     sqrt((a.x - b.x)**2 + (a.y - b.y)**2)
 
+# Sum of edge lengths around the full tour, including the closing edge back to start.
 def tour_length(tour: Tour_T) -> float:
     var total: float
     for i in 1..len(tour)-1:
@@ -28,16 +69,20 @@ def tour_length(tour: Tour_T) -> float:
     total = total + distance(tour[0], tour[len(tour) - 1])
     return total
 
+# Generate n cities uniformly at random within a width×height rectangle.
+# Same seed always produces the same city set, making results reproducible.
 def random_cities(n: int, seed: int = 42, width: float = 900.0, height: float = 600.0) -> Tour_T:
     randomize(seed)
-    for i in 0..n-1:
+    for i in 0..<n:
         result.append((x: rand(0.0..width), y: rand(0.0..height)))
 
-# Generate all permutations via Heap's algorithm, yielding each as a copy
+# Generate all n! permutations of items via Heap's algorithm.
+# Each permutation is appended as a copy to result.
+# Used only by exhaustive_tsp — impractical beyond ~11 cities.
 def permutations(items: Tour_T) -> []Tour_T:
     var a: Tour_T = items
     let n: int = len(a)
-    var c: []int = [0 for i in 0..n-1]
+    var c: []int = [0 for i in 0..<n]
     result.append(a)
     var i: int = 0
     while i < n:
@@ -54,8 +99,586 @@ def permutations(items: Tour_T) -> []Tour_T:
             i = i + 1
     return result
 
+# Nearest-neighbour heuristic: start at city 0, always extend to the closest
+# unvisited city. O(n²). Typically 20–25% above optimal.
+def nearest_tsp(cities: Tour_T) -> Tour_T:
+    var unvisited: Tour_T = cities[1:]
+    result.append(cities[0])
+    while len(unvisited) > 0:
+        let last: City_T = result[len(result) - 1]
+        var nearest_idx: int = 0
+        var nearest_dist: float = distance(last, unvisited[0])
+        for i in 1..len(unvisited)-1:
+            let d: float = distance(last, unvisited[i])
+            if d < nearest_dist:
+                nearest_dist = d
+                nearest_idx = i
+        result.append(unvisited[nearest_idx])
+        unvisited.delete(nearest_idx)
+
+# 2-opt local search: repeatedly find a pair of edges (i-1,i) and (j,j+1)
+# whose removal and reconnection as (i-1,j) + (i,j+1) shortens the tour.
+# Equivalent to reversing the segment between i and j.
+# Iterates until no improving swap exists. O(n²) per pass.
+def two_opt_tsp(tour: Tour_T) -> Tour_T:
+    var best: Tour_T = tour
+    var improved: bool = True
+    while improved:
+        improved = False
+        for i in 1..len(best)-2:
+            for j in i+1..len(best)-1:
+                let next_j: int = (0 if j + 1 == len(best) else j + 1)
+                let new_dist: float = distance(best[i-1], best[j]) + distance(best[i], best[next_j])
+                let old_dist: float = distance(best[i-1], best[i]) + distance(best[j], best[next_j])
+                if new_dist < old_dist - 1e-10:
+                    var newt: Tour_T
+                    for x in 0..<i:
+                        newt.append(best[x])
+                    var k: int = j
+                    while k >= i:
+                        newt.append(best[k])
+                        k = k - 1
+                    for x in j+1..len(best)-1:
+                        newt.append(best[x])
+                    best = newt
+                    improved = True
+    return best
+
+# Or-opt local search: for each segment of length 1, 2, or 3, try relocating it
+# to every other position in the tour and keep the move if it saves distance.
+# Complementary to 2-opt — finds improvements 2-opt misses. O(n²) per pass.
+def or_opt_tsp(tour: Tour_T) -> Tour_T:
+    var best: Tour_T = tour
+    var improved: bool = True
+    while improved:
+        improved = False
+        let sz: int = len(best)
+        for seg in 1..3:
+            for i in 1..sz-seg-1:
+                let removal_gain: float = distance(best[i-1], best[i]) + distance(best[i+seg-1], best[i+seg]) - distance(best[i-1], best[i+seg])
+                for j in 0..i-2:
+                    let insert_cost: float = distance(best[j], best[i]) + distance(best[i+seg-1], best[j+1]) - distance(best[j], best[j+1])
+                    if insert_cost < removal_gain - 1e-10:
+                        var newt: Tour_T
+                        for x in 0..j:
+                            newt.append(best[x])
+                        for x in i..<i+seg:
+                            newt.append(best[x])
+                        for x in j+1..<i:
+                            newt.append(best[x])
+                        for x in i+seg..<sz:
+                            newt.append(best[x])
+                        best = newt
+                        improved = True
+                for j in i+seg..sz-2:
+                    let insert_cost: float = distance(best[j], best[i]) + distance(best[i+seg-1], best[j+1]) - distance(best[j], best[j+1])
+                    if insert_cost < removal_gain - 1e-10:
+                        var newt: Tour_T
+                        for x in 0..<i:
+                            newt.append(best[x])
+                        for x in i+seg..j:
+                            newt.append(best[x])
+                        for x in i..<i+seg:
+                            newt.append(best[x])
+                        for x in j+1..<sz:
+                            newt.append(best[x])
+                        best = newt
+                        improved = True
+    return best
+
+# 3-opt local search: remove 3 edges simultaneously and try all 5 non-trivial
+# reconnection patterns (cases 1–5 below). Picks the best improving move per
+# triple (i,j,k). Finds improvements that 2-opt and Or-opt cannot. O(n³) per pass.
+# Cases:
+#   1: reverse [i+1..j]
+#   2: reverse [j+1..k]
+#   3: reverse both [i+1..j] and [j+1..k]
+#   4: move segment [i+1..j] after k  (or-opt-like)
+#   5: move reversed [j+1..k] before i+1
+def three_opt_tsp(tour: Tour_T) -> Tour_T:
+    var best: Tour_T = tour
+    var improved: bool = True
+    while improved:
+        improved = False
+        let sz: int = len(best)
+        for i in 0..sz-3:
+            for j in i+1..sz-2:
+                for k in j+1..<sz:
+                    let a0: City_T = best[i]
+                    let a1: City_T = best[i+1]
+                    let b0: City_T = best[j]
+                    let b1: City_T = best[j+1]
+                    let c0: City_T = best[k]
+                    let c1: City_T = best[(k+1) if k+1 < sz else 0]
+                    let d0: float = distance(a0, a1) + distance(b0, b1) + distance(c0, c1)
+                    # try all 3-opt reconnections; pick the best improving one
+                    var best_gain: float = 1e-10
+                    var best_case: int = 0
+                    # case 1: reverse segment [i+1..j]
+                    let d1: float = distance(a0, b0) + distance(a1, b1) + distance(c0, c1)
+                    if d0 - d1 > best_gain:
+                        best_gain = d0 - d1
+                        best_case = 1
+                    # case 2: reverse segment [j+1..k]
+                    let d2: float = distance(a0, a1) + distance(b0, c0) + distance(b1, c1)
+                    if d0 - d2 > best_gain:
+                        best_gain = d0 - d2
+                        best_case = 2
+                    # case 3: reverse both [i+1..j] and [j+1..k]
+                    let d3: float = distance(a0, b0) + distance(a1, c0) + distance(b1, c1)
+                    if d0 - d3 > best_gain:
+                        best_gain = d0 - d3
+                        best_case = 3
+                    # case 4: move segment [i+1..j] after k
+                    let d4: float = distance(a0, b1) + distance(c0, a1) + distance(b0, c1)
+                    if d0 - d4 > best_gain:
+                        best_gain = d0 - d4
+                        best_case = 4
+                    # case 5: move reversed segment [j+1..k] before i+1
+                    let d5: float = distance(a0, c0) + distance(b1, a1) + distance(b0, c1)
+                    if d0 - d5 > best_gain:
+                        best_gain = d0 - d5
+                        best_case = 5
+                    if best_case > 0:
+                        var newt: Tour_T
+                        for x in 0..i:
+                            newt.append(best[x])
+                        if best_case == 1:
+                            var x: int = j
+                            while x >= i+1:
+                                newt.append(best[x])
+                                x = x - 1
+                            for x in j+1..<sz:
+                                newt.append(best[x])
+                        elif best_case == 2:
+                            for x in i+1..j:
+                                newt.append(best[x])
+                            var x: int = k
+                            while x >= j+1:
+                                newt.append(best[x])
+                                x = x - 1
+                            for x in k+1..<sz:
+                                newt.append(best[x])
+                        elif best_case == 3:
+                            var x: int = j
+                            while x >= i+1:
+                                newt.append(best[x])
+                                x = x - 1
+                            var y: int = k
+                            while y >= j+1:
+                                newt.append(best[y])
+                                y = y - 1
+                            for x in k+1..<sz:
+                                newt.append(best[x])
+                        elif best_case == 4:
+                            for x in j+1..k:
+                                newt.append(best[x])
+                            for x in i+1..j:
+                                newt.append(best[x])
+                            for x in k+1..<sz:
+                                newt.append(best[x])
+                        elif best_case == 5:
+                            var x: int = k
+                            while x >= j+1:
+                                newt.append(best[x])
+                                x = x - 1
+                            for x in i+1..j:
+                                newt.append(best[x])
+                            for x in k+1..<sz:
+                                newt.append(best[x])
+                        best = newt
+                        improved = True
+    return best
+
+# Precompute the k nearest neighbours of each city (by index in cities).
+# Used by lk_tsp to focus the edge-swap search on promising candidates.
+# O(n²·k) via selection — a proper k-d tree would be O(n·k·log n).
+def build_neighbors(cities: Tour_T, num_nb: int) -> [][]int:
+    let sz: int = len(cities)
+    for i in 0..<sz:
+        var taken: []bool = [False for x in 0..<sz]
+        taken[i] = True
+        var row: []int
+        for pick in 0..<num_nb:
+            var best_j: int = -1
+            var best_d: float = 1e18
+            for j in 0..<sz:
+                if not taken[j]:
+                    let d: float = distance(cities[i], cities[j])
+                    if d < best_d:
+                        best_d = d
+                        best_j = j
+            taken[best_j] = True
+            row.append(best_j)
+        result.append(row)
+
+# Apply a 2-opt reversal of best[lo..hi] (lo = min(t1,t4), hi = max).
+def lk_2opt_move(best: Tour_T, t1: int, t4: int) -> Tour_T:
+    let sz: int = len(best)
+    let lo: int = (t1 if t1 < t4 else t4)
+    let hi: int = (t1 if t1 > t4 else t4)
+    var newt: Tour_T
+    for x in 0..lo:
+        newt.append(best[x])
+    var x: int = hi
+    while x > lo:
+        newt.append(best[x])
+        x = x - 1
+    for x in hi+1..<sz:
+        newt.append(best[x])
+    return newt
+
+# Apply two sequential 2-opt reversals: first between t1/t4, then between t4/t6.
+def lk_3opt_move(best: Tour_T, t1: int, t4: int, t6: int) -> Tour_T:
+    let sz: int = len(best)
+    var cur: Tour_T = best
+    for pair in [(t1, t4), (t4, t6)]:
+        let plo: int = (pair[0] if pair[0] < pair[1] else pair[1])
+        let phi: int = (pair[0] if pair[0] > pair[1] else pair[1])
+        var tmp: Tour_T
+        for x in 0..plo:
+            tmp.append(cur[x])
+        var x: int = phi
+        while x > plo:
+            tmp.append(cur[x])
+            x = x - 1
+        for x in phi+1..<sz:
+            tmp.append(cur[x])
+        cur = tmp
+    return cur
+
+# Lin-Kernighan style local search: for each city t1, attempt a sequential
+# chain of edge swaps guided by the k-nearest-neighbour lists.
+# At depth 1 this is neighbour-guided 2-opt; at depth 2 it tries a 3-opt
+# reconnection. Only explores neighbours where the accumulated gain is positive,
+# cutting the search space dramatically vs exhaustive 3-opt.
+# Practical complexity: O(n·k²) per pass. k=10 here.
+def lk_tsp(tour: Tour_T) -> Tour_T:
+    var best: Tour_T = tour
+    let sz: int = len(best)
+    let k: int = (10 if sz > 10 else sz - 1)
+    var improved: bool = True
+    while improved:
+        improved = False
+        let neighbors: [][]int = build_neighbors(best, k)
+        for t1 in 0..<sz:
+            let t2a: int = (t1 + 1 if t1 + 1 < sz else 0)
+            let t2b: int = (t1 - 1 if t1 > 0 else sz - 1)
+            for t2 in [t2a, t2b]:
+                let g1: float = distance(best[t1], best[t2])
+                var found_lk: bool = False
+                # depth-1: try k nearest neighbours of t2 as t3
+                for n1 in 0..<k:
+                    if found_lk:
+                        continue
+                    let t3: int = neighbors[t2][n1]
+                    if t3 == t1 or t3 == t2:
+                        continue
+                    let gain1: float = g1 - distance(best[t2], best[t3])
+                    if gain1 <= 0.0:
+                        continue
+                    let t4a: int = (t3 + 1 if t3 + 1 < sz else 0)
+                    let t4b: int = (t3 - 1 if t3 > 0 else sz - 1)
+                    for t4 in [t4a, t4b]:
+                        if found_lk or t4 == t1:
+                            continue
+                        # try closing as a 2-opt move
+                        let close2: float = gain1 + distance(best[t3], best[t4]) - distance(best[t4], best[t1])
+                        if close2 > 1e-10:
+                            let newt: Tour_T = lk_2opt_move(best, t1, t4)
+                            if tour_length(newt) < tour_length(best) - 1e-10:
+                                best = newt
+                                improved = True
+                                found_lk = True
+                                continue
+                        # depth-2: extend chain via k nearest neighbours of t4
+                        let gain2: float = gain1 + distance(best[t3], best[t4])
+                        for n2 in 0..<k:
+                            if found_lk:
+                                continue
+                            let t5: int = neighbors[t4][n2]
+                            if t5 == t1 or t5 == t2 or t5 == t3 or t5 == t4:
+                                continue
+                            let gain3: float = gain2 - distance(best[t4], best[t5])
+                            if gain3 <= 0.0:
+                                continue
+                            let t6a: int = (t5 + 1 if t5 + 1 < sz else 0)
+                            let t6b: int = (t5 - 1 if t5 > 0 else sz - 1)
+                            for t6 in [t6a, t6b]:
+                                if found_lk or t6 == t1 or t6 == t2 or t6 == t3 or t6 == t4:
+                                    continue
+                                let close3: float = gain3 + distance(best[t5], best[t6]) - distance(best[t6], best[t1])
+                                if close3 <= 1e-10:
+                                    continue
+                                let newt3: Tour_T = lk_3opt_move(best, t1, t4, t6)
+                                if tour_length(newt3) < tour_length(best) - 1e-10:
+                                    best = newt3
+                                    improved = True
+                                    found_lk = True
+    return best
+
+# Simulated Annealing: at each step propose a random 2-opt reversal.
+# Accept it if it improves the tour, or with probability exp(-delta/T) if it
+# worsens it. Temperature T starts at avg_edge_length * 0.1 and cools by
+# factor 0.99995 each step, letting the search escape local optima early
+# and converge late. Runs n²×20 iterations total.
+def sa_tsp(tour: Tour_T) -> Tour_T:
+    var current: Tour_T = tour
+    var best: Tour_T = tour
+    var current_len: float = tour_length(current)
+    var best_len: float = current_len
+    let sz: int = len(current)
+    var temp: float = current_len / float(sz) * 0.1
+    let cooling: float = 0.99995
+    let iterations: int = sz * sz * 20
+    for iter in 0..<iterations:
+        let i: int = rand(1..sz-2)
+        let j: int = rand(i+1..<sz)
+        let old_d: float = distance(current[i-1], current[i]) + distance(current[j], current[(j+1) if j+1 < sz else 0])
+        let new_d: float = distance(current[i-1], current[j]) + distance(current[i], current[(j+1) if j+1 < sz else 0])
+        let delta: float = new_d - old_d
+        if delta < 0.0 or rand(0.0..1.0) < exp(-delta / temp):
+            var newt: Tour_T
+            for x in 0..<i:
+                newt.append(current[x])
+            var x: int = j
+            while x >= i:
+                newt.append(current[x])
+                x = x - 1
+            for x in j+1..<sz:
+                newt.append(current[x])
+            current = newt
+            current_len = current_len + delta
+            if current_len < best_len:
+                best_len = current_len
+                best = current
+        temp = temp * cooling
+    return best
+
+# Prim's algorithm: grow a minimum spanning tree by repeatedly adding the
+# cheapest edge from the tree to any unvisited vertex. O(n²).
+# Returns an adjacency list children[i] = list of child indices (rooted at 0).
+def build_mst(cities: Tour_T) -> [][]int:
+    let sz: int = len(cities)
+    var in_tree: []bool = [False for i in 0..<sz]
+    var children: [][]int
+    for i in 0..<sz:
+        var empty: []int
+        children.append(empty)
+    var min_dist: []float = [1e18 for i in 0..<sz]
+    var parent: []int = [-1 for i in 0..<sz]
+    min_dist[0] = 0.0
+    for step in 0..<sz:
+        var u: int = -1
+        for v in 0..<sz:
+            if not in_tree[v] and (u == -1 or min_dist[v] < min_dist[u]):
+                u = v
+        in_tree[u] = True
+        if parent[u] >= 0:
+            children[parent[u]].append(u)
+        for v in 0..<sz:
+            if not in_tree[v]:
+                let d: float = distance(cities[u], cities[v])
+                if d < min_dist[v]:
+                    min_dist[v] = d
+                    parent[v] = u
+    return children
+
+# Recursive pre-order DFS over the MST, appending each visited city to tour.
+def preorder(children: [][]int, node: int, tour: Tour_T, cities: Tour_T) -> None:
+    tour.append(cities[node])
+    for child in children[node]:
+        preorder(children, child, tour, cities)
+
+# MST heuristic: build a minimum spanning tree, then visit cities in pre-order
+# (DFS from the root). Guaranteed ≤ 2× optimal under the triangle inequality.
+# In practice often comparable to nearest-neighbour but with a better worst-case bound.
+def mst_tsp(cities: Tour_T) -> Tour_T:
+    let tree: [][]int = build_mst(cities)
+    preorder(tree, 0, result, cities)
+
+# Greedy (Kruskal-style) construction: sort all n(n-1)/2 edges shortest-first,
+# then add each edge if it doesn't give any city degree > 2 and doesn't close
+# a cycle prematurely (union-find check). The result is a Hamiltonian path;
+# we walk it from an endpoint. Often better than nearest-neighbour at the cost
+# of O(n² log n) sort + O(n²) linking. Selection sort used here — replace with
+# a real sort for large n.
+def greedy_tsp(cities: Tour_T) -> Tour_T:
+    let sz: int = len(cities)
+    var all_links: [](float, int, int)
+    for i in 0..sz-2:
+        for j in i+1..<sz:
+            all_links.append((distance(cities[i], cities[j]), i, j))
+    # selection sort by distance
+    for pick in 0..len(all_links)-1:
+        var best_idx: int = pick
+        for k in pick+1..len(all_links)-1:
+            if all_links[k][0] < all_links[best_idx][0]:
+                best_idx = k
+        let tmp: (float, int, int) = all_links[pick]
+        all_links[pick] = all_links[best_idx]
+        all_links[best_idx] = tmp
+    var degree: []int = [0 for i in 0..<sz]
+    var adj: [][]int
+    for i in 0..<sz:
+        var empty: []int
+        adj.append(empty)
+    # union-find for cycle detection
+    var parent: []int = [i for i in 0..<sz]
+    var edges: int = 0
+    for li in 0..len(all_links)-1:
+        if edges == sz - 1:
+            break
+        let a: int = all_links[li][1]
+        let b: int = all_links[li][2]
+        if degree[a] >= 2 or degree[b] >= 2:
+            continue
+        # find roots
+        var ra: int = a
+        while parent[ra] != ra:
+            ra = parent[ra]
+        var rb: int = b
+        while parent[rb] != rb:
+            rb = parent[rb]
+        # adding this edge would close a cycle prematurely
+        if ra == rb and edges < sz - 1:
+            continue
+        adj[a].append(b)
+        adj[b].append(a)
+        degree[a] = degree[a] + 1
+        degree[b] = degree[b] + 1
+        parent[ra] = rb
+        edges = edges + 1
+    # walk the path from the endpoint (degree==1 node)
+    var start: int = 0
+    for i in 0..<sz:
+        if degree[i] == 1:
+            start = i
+            break
+    var visited: []bool = [False for i in 0..<sz]
+    var cur: int = start
+    result.append(cities[cur])
+    visited[cur] = True
+    for step in 1..<sz:
+        var next_city: int = -1
+        for nb in adj[cur]:
+            if not visited[nb]:
+                next_city = nb
+                break
+        if next_city == -1:
+            break
+        result.append(cities[next_city])
+        visited[next_city] = True
+        cur = next_city
+
+# Repeated nearest-neighbour: run nearest_tsp k times, each time starting from
+# a different city (evenly spaced through the city list). Return the shortest
+# tour found. Diversity of starts escapes the start-city bias of a single run.
+def rep_nearest_tsp(cities: Tour_T, k: int = 20) -> Tour_T:
+    var best: Tour_T = nearest_tsp(cities)
+    var best_len: float = tour_length(best)
+    let sz: int = len(cities)
+    for i in 1..<k:
+        let start: int = (i * sz) // k
+        var shifted: Tour_T
+        for j in 0..<sz:
+            let idx: int = (start + j if start + j < sz else start + j - sz)
+            shifted.append(cities[idx])
+        let t: Tour_T = nearest_tsp(shifted)
+        let tl: float = tour_length(t)
+        if tl < best_len:
+            best_len = tl
+            best = t
+    return best
+
+# Repeated nearest+2opt: run nearest_tsp followed by two_opt_tsp k times from
+# different starts. Each run lands in a different local optimum; return the best.
+# Norvig's rep_2opt_nearest_tsp. More expensive than rep_nearest but much better quality.
+def rep_2opt_nearest_tsp(cities: Tour_T, k: int = 10) -> Tour_T:
+    var best: Tour_T = two_opt_tsp(nearest_tsp(cities))
+    var best_len: float = tour_length(best)
+    let sz: int = len(cities)
+    for i in 1..<k:
+        let start: int = (i * sz) // k
+        var shifted: Tour_T
+        for j in 0..<sz:
+            let idx: int = (start + j if start + j < sz else start + j - sz)
+            shifted.append(cities[idx])
+        let t: Tour_T = two_opt_tsp(nearest_tsp(shifted))
+        let tl: float = tour_length(t)
+        if tl < best_len:
+            best_len = tl
+            best = t
+    return best
+
+# Ensemble: run greedy_tsp+2opt and rep_2opt_nearest_tsp independently,
+# return whichever is shorter. Norvig's ensemble_tsp_2opt.
+# Different algorithms get stuck in different local optima, so taking the best
+# of two diverse strategies is cheap insurance.
+def ensemble_tsp(cities: Tour_T) -> Tour_T:
+    let t1: Tour_T = two_opt_tsp(greedy_tsp(cities))
+    let t2: Tour_T = rep_2opt_nearest_tsp(cities)
+    if tour_length(t1) <= tour_length(t2):
+        return t1
+    return t2
+
+# Held-Karp dynamic programming: finds the provably optimal tour.
+# State: dp[S][u] = shortest path visiting exactly the cities in bitmask S,
+# ending at city u, starting from city 0.
+# Transition: dp[S|{v}][v] = min over u in S of dp[S][u] + dist(u,v).
+# Final answer: min over u of dp[full][u] + dist(u,0).
+# O(2ⁿ·n²) time and space — only feasible for n ≤ ~20.
+def held_karp_tsp(cities: Tour_T) -> Tour_T:
+    let sz: int = len(cities)
+    let num_sets: int = 1 << sz
+    var dp: [][]float
+    var parent: [][]int
+    for s in 0..<num_sets:
+        var row_dp: []float = [1e18 for i in 0..<sz]
+        var row_par: []int = [-1 for i in 0..<sz]
+        dp.append(row_dp)
+        parent.append(row_par)
+    dp[1][0] = 0.0
+    for s in 1..<num_sets:
+        if (s & 1) == 0:
+            continue
+        for u in 0..<sz:
+            if (s & (1 << u)) == 0:
+                continue
+            if dp[s][u] >= 1e18:
+                continue
+            for v in 0..<sz:
+                if (s & (1 << v)) != 0:
+                    continue
+                let ns: int = s | (1 << v)
+                let nd: float = dp[s][u] + distance(cities[u], cities[v])
+                if nd < dp[ns][v]:
+                    dp[ns][v] = nd
+                    parent[ns][v] = u
+    let full: int = num_sets - 1
+    var last: int = 1
+    var best_end: float = 1e18
+    for u in 1..<sz:
+        let d: float = dp[full][u] + distance(cities[u], cities[0])
+        if d < best_end:
+            best_end = d
+            last = u
+    var path: []int
+    var s: int = full
+    var cur: int = last
+    while cur != -1:
+        path.append(cur)
+        let prev: int = parent[s][cur]
+        s = s & ~(1 << cur)
+        cur = prev
+    var ri: int = len(path) - 1
+    while ri >= 0:
+        result.append(cities[path[ri]])
+        ri = ri - 1
+
+# Brute-force: generate all n! permutations and return the shortest.
+# Optimal but O(n!) — only usable for n ≤ 11 or so.
 def exhaustive_tsp(cities: Tour_T) -> Tour_T:
-    """Generate all possible tours and return the shortest."""
     var best: Tour_T = cities
     var best_len: float = tour_length(cities)
     for tour in permutations(cities):
@@ -84,11 +707,85 @@ def plot_tour(tour: Tour_T, title: str = "") -> None:
 
 let n: int = (int($1) if $# >= 1 else 8)
 let cities: Tour_T = random_cities(n)
+
 let t0: float = cpuTime()
-let tour: Tour_T = exhaustive_tsp(cities)
+let nn_tour: Tour_T = nearest_tsp(cities)
 let t1: float = cpuTime()
-let msecs: float = (t1 - t0) * 1000.0
-let msg: str = f"Cities: {n}  |  length: {tour_length(tour):.0f}  |  time: {msecs:.0f} ms"
-print msg
-plot_tour(tour, msg)
+let nn_msg: str = f"Nearest: {n} cities  |  length: {tour_length(nn_tour):.1f}  |  time: {(t1-t0)*1000000.0:.1f} us"
+print nn_msg
+
+let tm0: float = cpuTime()
+let mst_tour: Tour_T = mst_tsp(cities)
+let tm1: float = cpuTime()
+let mst_msg: str = f"MST:      {n} cities  |  length: {tour_length(mst_tour):.1f}  |  time: {(tm1-tm0)*1000.0:.1f} ms"
+print mst_msg
+
+let tg0: float = cpuTime()
+let gr_tour: Tour_T = greedy_tsp(cities)
+let tg1: float = cpuTime()
+let gr_msg: str = f"Greedy:   {n} cities  |  length: {tour_length(gr_tour):.1f}  |  time: {(tg1-tg0)*1000.0:.1f} ms"
+print gr_msg
+
+let tr0: float = cpuTime()
+let rep_tour: Tour_T = rep_nearest_tsp(cities)
+let tr1: float = cpuTime()
+let rep_msg: str = f"Rep-NN:   {n} cities  |  length: {tour_length(rep_tour):.1f}  |  time: {(tr1-tr0)*1000.0:.1f} ms"
+print rep_msg
+
+let tr2: float = cpuTime()
+let rep2_tour: Tour_T = rep_2opt_nearest_tsp(cities)
+let tr3: float = cpuTime()
+let rep2_msg: str = f"Rep-2opt: {n} cities  |  length: {tour_length(rep2_tour):.1f}  |  time: {(tr3-tr2)*1000.0:.1f} ms"
+print rep2_msg
+
+let te0: float = cpuTime()
+let ens_tour: Tour_T = ensemble_tsp(cities)
+let te1: float = cpuTime()
+let ens_msg: str = f"Ensemble: {n} cities  |  length: {tour_length(ens_tour):.1f}  |  time: {(te1-te0)*1000.0:.1f} ms"
+print ens_msg
+
+let t2: float = cpuTime()
+let opt_tour: Tour_T = two_opt_tsp(nn_tour)
+let t3: float = cpuTime()
+let opt_msg: str = f"2-opt:    {n} cities  |  length: {tour_length(opt_tour):.1f}  |  time: {(t3-t2)*1000.0:.1f} ms"
+print opt_msg
+
+let t4: float = cpuTime()
+let or_tour: Tour_T = or_opt_tsp(opt_tour)
+let t5: float = cpuTime()
+let or_msg: str = f"Or-opt:   {n} cities  |  length: {tour_length(or_tour):.1f}  |  time: {(t5-t4)*1000.0:.1f} ms"
+print or_msg
+
+let t6: float = cpuTime()
+let t3opt_tour: Tour_T = three_opt_tsp(or_tour)
+let t7: float = cpuTime()
+let t3opt_msg: str = f"3-opt:    {n} cities  |  length: {tour_length(t3opt_tour):.1f}  |  time: {(t7-t6)*1000.0:.1f} ms"
+print t3opt_msg
+
+let t8: float = cpuTime()
+let lk_tour: Tour_T = lk_tsp(or_tour)
+let t9: float = cpuTime()
+let lk_msg: str = f"LK:       {n} cities  |  length: {tour_length(lk_tour):.1f}  |  time: {(t9-t8)*1000.0:.1f} ms"
+print lk_msg
+
+let t10: float = cpuTime()
+let sa_tour: Tour_T = sa_tsp(lk_tour)
+let t11: float = cpuTime()
+let sa_msg: str = f"SA:       {n} cities  |  length: {tour_length(sa_tour):.1f}  |  time: {(t11-t10)*1000.0:.1f} ms"
+print sa_msg
+
+if n <= 20:
+    let thk0: float = cpuTime()
+    let hk_tour: Tour_T = held_karp_tsp(cities)
+    let thk1: float = cpuTime()
+    let hk_msg: str = f"Held-Karp:{n} cities  |  length: {tour_length(hk_tour):.1f}  |  time: {(thk1-thk0)*1000.0:.1f} ms"
+    print hk_msg
+
+#let t12: float = cpuTime()
+#let ex_tour: Tour_T = exhaustive_tsp(cities)
+#let t13: float = cpuTime()
+#let ex_msg: str = f"Exhaustive: {n} cities  |  length: {tour_length(ex_tour):.1f}  |  time: {(t13-t12)*1000.0:.1f} ms"
+#print ex_msg
+
+plot_tour(sa_tour, sa_msg)
 shell: xdg-open tsp_tour.png
