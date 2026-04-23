@@ -42,7 +42,7 @@ let N: int = total_words()
 # ============================================================
 
 def P(word: str) -> Prob_T:
-    0 if word not in WORDS else float(WORDS[word]) / float(N)
+    0 if word not in WORDS else float(WORDS[word])/float(N)
 
 def known(ws: []str) -> {}str:
     return {w for w in ws if w in WORDS}
@@ -61,16 +61,13 @@ def edits1(word: str) -> []str:
         for c in letters:
             result.append(L + c + R[1:])                # replace
             result.append(L + c + R)                    # insert
-    for c in letters:                                   # insert at end
+    # insert at end
+    for c in letters:                                   
         result.append(word + c)
     return result
 
 def edits2(word: str) -> []str:
-    var result: []str = []
-    for e1 in edits1(word):
-        for e2 in edits1(e1):
-            result.append(e2)
-    return result
+    return [e2 for e1 in edits1(word) for e2 in edits1(e1)]
 
 def candidates(word: str) -> {}str:
     let k0: {}str = known([word])
