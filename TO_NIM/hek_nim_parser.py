@@ -1866,26 +1866,66 @@ def to_nim(self, indent=0):
             _sv_indent = " " * (4 * (indent + 1))
             _sv_lines = "\n".join(f"{_sv_indent}var {sv} = {sv}" for sv in _shadow_vars)
             body = _sv_lines + "\n" + body
-    # -- Method hoisting ------------------------------------------------
-    # Nim forbids `method` declarations inside procs.  When an Adascript
-    # function body contains class definitions (which emit Nim methods),
-    # we hoist types, methods, procs, consts, and ALL_CAPS vars to the
-    # module's top level, leaving only executable code inside the proc.
+    # -- Method / declaration hoisting ----------------------------------
     #
-    # This is transparent when classes live at the module level (the
-    # normal case) -- no hoisting or renaming occurs.
+    # PROBLEM
+    # -------
+    # Nim forbids `type`, `method`, `proc`, and module-level `const`/`var`
+    # declarations inside a proc body.  AdaScript allows class definitions
+    # and associated declarations anywhere, including inside `def` bodies.
+    # When those constructs are transpiled they produce Nim declarations
+    # that must live at module scope.
     #
-    # Name mangling:
-    #   When *multiple* functions define types with the **same** name
-    #   (e.g. two functions both define `State_T`), the second and
-    #   subsequent definitions are mangled with a suffix derived from
-    #   the enclosing function name (example3 -> _3) so that each set
-    #   of hoisted declarations gets unique top-level names.  Mangling
-    #   is applied consistently to hoisted types, methods, procs, and
-    #   the executable code that stays inside the proc.
+    # WHAT GETS HOISTED (Pass 2 below)
+    # ---------------------------------
+    #   type  X = ...          always hoisted (any type alias or object)
+    #   method / proc / func   hoisted if it has a `self` or `base` param,
+    #                          or if its name starts with `init`/`new`;
+    #                          plain closures are kept in-place so they
+    #                          can close over local variables.
+    #   const X: ...           always hoisted
+    #   let/var  XX_CAPS: ...  hoisted when the name matches [A-Z][A-Z_0-9]{1,}
+    #                          (two or more uppercase chars) — genuine module-
+    #                          level constants like N, WORDS.
+    #                          Single-letter vars (L, R, …) are NOT hoisted
+    #                          so they stay local to the proc where they live.
+    #   import  X              dropped (already collected into nim_imports)
     #
-    #   Mangling is **only** triggered when a name collision is detected,
-    #   so single-use type names are never renamed.
+    # WHAT STAYS IN THE PROC BODY
+    # ----------------------------
+    # Everything else: assignments, loops, conditionals, plain nested procs,
+    # and single-letter / mixed-case variable declarations.
+    #
+    # TRANSPARENCY
+    # ------------
+    # When classes and types are defined at the module level (the normal
+    # case) this pass finds nothing to hoist and returns the body unchanged.
+    # The overhead is one linear scan of the emitted body lines.
+    #
+    # NAME MANGLING
+    # -------------
+    # If two different `def` bodies both define a type with the *same* name
+    # (e.g. both define `State_T`), hoisting would produce a duplicate
+    # top-level definition.  To avoid this, the second and later occurrences
+    # are mangled with a suffix derived from the enclosing function name:
+    #
+    #   def example3(...):          =>  type State_T_3 = ...
+    #       type State_T = ...
+    #
+    #   def myFunc(...):            =>  type State_T_myFunc = ...
+    #       type State_T = ...
+    #
+    # Mangling is applied consistently to the type name, its enum members,
+    # any ALL_CAPS vars that shadow it, and all references inside the kept
+    # proc body so the code remains self-consistent.
+    #
+    # Mangling is triggered **only** on collision — single-use type names
+    # are never renamed.
+    #
+    # IMPLEMENTATION: two-pass over the emitted body string
+    #   Pass 1 — collect local type names + ALL_CAPS vars, build mangle_map
+    #   Pass 2 — walk lines, route each to `hoisted` or `kept`, apply mangling
+    # The final output is:  hoisted_block  +  proc header  +  kept body
     # ----------------------------------------------------------------
     if block_node and body:
         import re as _re_h
@@ -1971,50 +2011,60 @@ def to_nim(self, indent=0):
             return line
 
         # --- Pass 2: separate hoisted vs kept, applying mangling ---
-        hoisted = []
-        kept = []
-        in_method = False
+        hoisted = []  # lines that go above the proc definition
+        kept = []     # lines that stay inside the proc body
+        in_method = False     # currently accumulating a multi-line method/proc
         method_indent = 0
-        in_type = False
+        in_type = False       # currently accumulating a multi-line type block
         type_base_indent = 0
         for line in body_lines:
             stripped = line.lstrip()
             cur_indent = len(line) - len(stripped)
-            # Detect start of a method (indented one level inside proc)
+
+            # `method` keyword: always a Nim method dispatch declaration —
+            # must live at top level; dedent and hoist the whole body.
             if stripped.startswith("method "):
                 in_method = True
                 method_indent = cur_indent
                 hoisted.append(_mangle_line(line[method_indent:]))
                 continue
-            # Continuation of a method body (deeper indent)
+            # Continuation of a method/proc body being hoisted (deeper indent or blank).
             if in_method:
                 if stripped == "" or cur_indent > method_indent:
                     hoisted.append(_mangle_line(line[method_indent:] if len(line) >= method_indent else line))
                     continue
                 else:
-                    in_method = False
-            # Detect type/object declarations
+                    in_method = False  # back to outer indent — method body ended
+
+            # `type` declaration: Nim type aliases and object definitions must
+            # be at module scope; hoist the entire (possibly multi-line) block.
             if stripped.startswith("type ") and not stripped.startswith("type("):
                 in_type = True
                 type_base_indent = cur_indent
                 dedented_line = line[type_base_indent:] if cur_indent > 0 else line
                 hoisted.append(_mangle_line(dedented_line))
                 continue
-            # Continuation of a multi-line type
+            # Continuation of a multi-line type block.
             if in_type:
                 if stripped == "" or cur_indent > type_base_indent:
                     hoisted.append(_mangle_line(line[type_base_indent:] if len(line) >= type_base_indent else line))
                     continue
                 else:
-                    in_type = False
-            # Drop import statements (already handled at top level by nim_imports)
+                    in_type = False  # outdented — type block ended
+
+            # `import` statements were already collected into nim_imports; drop them.
             if stripped.startswith("import "):
                 continue
-            # Hoist const declarations and ALL_CAPS let/var declarations
+
+            # `const` declarations are module-level in Nim — always hoist.
             if stripped.startswith("const "):
                 dedented_line = line[cur_indent:] if cur_indent > 0 else line
                 hoisted.append(_mangle_line(dedented_line))
                 continue
+
+            # ALL_CAPS `let`/`var` (≥2 uppercase chars) are module-level constants
+            # by convention — hoist them.  Single-letter names (L, R, N, …) are
+            # intentionally excluded: they are local loop/scratch variables.
             if stripped.startswith("let "):
                 let_m = _re_h.match(r"let\s+([A-Z][A-Z_0-9]{1,})\s*:", stripped)
                 if let_m:
@@ -2027,9 +2077,11 @@ def to_nim(self, indent=0):
                     dedented_line = line[cur_indent:] if cur_indent > 0 else line
                     hoisted.append(_mangle_line(dedented_line))
                     continue
-            # Hoist proc/func declarations that are methods (have self/base param)
-            # or constructors (init/new prefixed).  Keep nested procs that
-            # are plain closures — they need enclosing scope variables.
+
+            # `proc`/`func` with a `self`/`base` parameter are OOP dispatch procs
+            # and must be at top level.  Constructors (init*/new*) are similarly
+            # hoisted.  Plain nested procs (closures) stay in place — they may
+            # close over local variables.
             if stripped.startswith("proc ") or stripped.startswith("func "):
                 _is_method = "(self" in stripped or "(base" in stripped
                 _is_ctor = _re_h.match(r'(?:proc|func)\s+(init|new)', stripped)
@@ -2038,6 +2090,8 @@ def to_nim(self, indent=0):
                     method_indent = cur_indent
                     hoisted.append(_mangle_line(line[method_indent:]))
                     continue
+
+            # Everything else stays in the proc body.
             kept.append(_mangle_line(line))
         if hoisted:
             hoisted_block = "\n".join(hoisted) + "\n"
