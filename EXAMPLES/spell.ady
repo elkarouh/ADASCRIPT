@@ -6,7 +6,7 @@ Usage:  spell.ady big.txt                  # load corpus, enter REPL
 """
 
 import re
-from stdlib import Counter_T, initCounter, total
+from stdlib import Counter_T, initCounter
 
 nimport stdlib
 
