@@ -1700,6 +1700,13 @@ def _translate_stdlib_patterns(expr):
         ParserState.nim_imports.add("sequtils")
         return f"toSeq({iterable}).foldl(if {key_fn}(b) {cmp_op} {key_fn}(a): b else: a)"
 
+    # --- 9. Counter_T(expr) -> initCounter(expr) ---
+    # Nim does not allow a type and a callable to share the same name, so we
+    # rewrite Counter_T(...) constructor calls to initCounter(...) here.
+    _counter_m = _re.match(r'^Counter_T(\[.+?\])?\((.+)\)$', expr, _re.DOTALL)
+    if _counter_m:
+        return f"initCounter({_counter_m.group(2)})"
+
     return expr
 
 
