@@ -30,14 +30,11 @@ def tour_length(tour: Tour_T) -> float:
 
 def random_cities(n: int, seed: int = 42, width: float = 900.0, height: float = 600.0) -> Tour_T:
     random.seed(seed)
-    var result: Tour_T
     for i in 0..n-1:
         result.add((x: random.uniform(0.0, width), y: random.uniform(0.0, height)))
-    return result
 
 # Generate all permutations via Heap's algorithm, yielding each as a copy
 def permutations(items: Tour_T) -> []Tour_T:
-    var result: []Tour_T
     var a: Tour_T = items
     let n: int = len(a)
     var c: []int = [0 for i in 0..n-1]
