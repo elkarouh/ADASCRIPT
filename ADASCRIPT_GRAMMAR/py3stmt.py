@@ -124,6 +124,8 @@ import_stmt = fw("import_stmt")
 from_stmt = fw("from_stmt")
 type_stmt = fw("type_stmt")
 nimport_stmt = fw("nimport_stmt")
+from_nim_abs = fw("from_nim_abs")
+from_pyimport = fw("from_pyimport")
 pyimport_stmt = fw("pyimport_stmt")
 print_stmt = fw("print_stmt")
 enum_def = fw("enum_def")
@@ -230,6 +232,12 @@ from_stmt = from_rel_name | from_rel_bare | from_abs
 # nimport: Nim-only import (stripped in Python output, becomes "import" in Nim)
 nimport_stmt = ikw("nimport") + dotted_name + (COMMA + dotted_name)[:]
 
+# from X nimport Y / from X nimport *  — Python-style selective Nim import
+from_nim_abs = ikw("from") + dotted_name + ikw("nimport") + import_names
+
+# from X pyimport Y  — selective Python package import via nimpy
+from_pyimport = ikw("from") + dotted_name + ikw("pyimport") + import_names
+
 # pyimport: Python-only import via nimpy (becomes pyImport() in Nim)
 pyimport_stmt = ikw("pyimport") + import_as + (COMMA + import_as)[:]
 
@@ -290,6 +298,8 @@ simple_stmt = (
     | global_stmt
     | nonlocal_stmt
     | nimport_stmt
+    | from_nim_abs
+    | from_pyimport
     | pyimport_stmt
     | import_stmt
     | from_stmt

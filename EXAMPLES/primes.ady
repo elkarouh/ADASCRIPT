@@ -1,24 +1,27 @@
 #!/usr/bin/env py2nim
-nimport time
+
+#nimport time
+pyimport time
 
 N = 1000000
 
 def is_prime(n: Positive) -> bool:
-    flag = True
-    for k in 2..Positive(n**0.5):
+    result = True
+    limit : Positive = Positive(n**0.5)
+    for k in 2..limit:
         if n % k == 0:
-            flag = False
+            result = False
             break
-    return flag
 
 def count_primes(n: Positive) -> Positive:
-    count = 0
-    for k in 2..<n:
+    result = 1 # we known 2 is a prime
+    for k in 3..<n:
         if is_prime(k):
-            count += 1
+            result += 1
 
-    return count
-
-start = cpuTime()
+#start = time.cpuTime()  # the nim version
+start = time.perf_counter() # the python version
 print f"Number of primes: {count_primes(N)}"
-print f"time elapsed: {cpuTime() - start}/s"
+#finish = time.cpuTime()  # the nim version
+finish = time.perf_counter() # the python version
+print f"time elapsed: {finish - start}/s"

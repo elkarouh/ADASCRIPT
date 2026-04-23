@@ -81,17 +81,9 @@ _PY_MODULE_TO_NIM = _NIMPORT_NAME_MAP
 
 # Per-module function call translations: module_name -> {py_func: nim_expr_template}.
 # Templates use {args} for the full argument list and {arg0}, {arg1}, … for individual args.
-# re translations kept until a clean AdaScript re API is designed
-_PY_MODULE_FUNC_TO_NIM = {
-    "re": {
-        "sub":      "replace({arg2}, re({arg0}), {arg1})",
-        "match":    "{arg1}.match(re({arg0}))",
-        "search":   "{arg1}.find(re({arg0}))",
-        "findall":  "{arg1}.findAll(re({arg0}))",
-        "compile":  "re({arg0})",
-        "split":    "{arg1}.split(re({arg0}))",
-    },
-}
+# All module function translations removed — users write native AdaScript calls.
+# 're' is handled via nimpy (Python API), not translated.
+_PY_MODULE_FUNC_TO_NIM = {}
 
 
 # --- visible tokens ---
@@ -511,8 +503,12 @@ def to_nim(self):
                 _COERCIBLE = {"int", "float", "string", "bool", "int64",
                                "int32", "uint", "uint32", "uint64", "float32",
                                "float64"}
+                _is_coercible_type = (
+                    annotation in _COERCIBLE
+                    or annotation.startswith("seq[")
+                )
                 if (value
-                        and annotation in _COERCIBLE
+                        and _is_coercible_type
                         and "nimpy" in ParserState.nim_imports
                         and not value.endswith(f".to({annotation})")
                         and not value.lstrip("-").replace(".", "").isdigit()
@@ -523,30 +519,18 @@ def to_nim(self):
                         and not value.startswith('fmt"')
                         and not value.startswith("fmt'")
                         and "if " not in value[:20]):
-                    # Only wrap if the value looks like it came from a PyObject
-                    # (contains a subscript, call, or a dot-chain from a pyImport var)
+                    # Only wrap with .to(T) if the value originates from a PyObject.
+                    # Check the leading identifier: if it's a pyImport module or PyObject var,
+                    # or if the value is a dotted call on one, coerce. Otherwise skip.
                     import re as _re_co
-                    _NIM_BUILTINS = {
-                        "len", "low", "high", "ord", "chr", "int", "float",
-                        "bool", "string", "abs", "min", "max", "pred", "succ",
-                        "toSeq", "parseInt", "parseFloat", "cpuTime", "rand",
-                        "randomize", "sqrt", "pow", "floor", "ceil", "round",
-                        "paramStr", "paramCount", "getEnv", "fmt", "echo",
-                    }
-                    _call_m = _re_co.match(r'^([A-Za-z_]\w*)\(', value)
-                    _caller = _call_m.group(1) if _call_m else None
-                    _is_nim_builtin_call = bool(_caller and (
-                        _caller in _NIM_BUILTINS
-                        or _caller in getattr(ParserState, "nim_proc_names", set())
-                    ))
-                    # Strip numeric literals before checking for dots (e.g. 1000.0)
-                    _value_no_nums = _re_co.sub(r'\b\d+\.\d+\b', '', value)
-                    looks_py = (not _is_nim_builtin_call) and bool(
-                        _re_co.search(r'\w\[', value)          # subscript
-                        or _re_co.search(r'\w\(', value)       # call
-                        or "." in _value_no_nums               # method chain (not float literal)
+                    _lead_m = _re_co.match(r'^[\(\s]*([A-Za-z_]\w*)', value)
+                    _lead = _lead_m.group(1) if _lead_m else None
+                    _lead_sym = ParserState.symbol_table.lookup(_lead) if _lead else None
+                    _lead_type = (_lead_sym.get("type") or "") if _lead_sym else ""
+                    _is_pyobj_base = bool(
+                        _lead_type.startswith("_py_module:") or _lead_type == "PyObject"
                     )
-                    if looks_py:
+                    if _is_pyobj_base:
                         value = f"{value}.to({annotation})"
                 # Option[T] = None -> none(T)
                 if value == "nil" and annotation.startswith("Option["):
@@ -618,8 +602,12 @@ def to_nim(self):
                 _COERCIBLE = {"int", "float", "string", "bool", "int64",
                                "int32", "uint", "uint32", "uint64", "float32",
                                "float64"}
+                _is_coercible_type = (
+                    annotation in _COERCIBLE
+                    or annotation.startswith("seq[")
+                )
                 if (value
-                        and annotation in _COERCIBLE
+                        and _is_coercible_type
                         and "nimpy" in ParserState.nim_imports
                         and not value.endswith(f".to({annotation})")
                         and not value.lstrip("-").replace(".", "").isdigit()
@@ -630,30 +618,18 @@ def to_nim(self):
                         and not value.startswith('fmt"')
                         and not value.startswith("fmt'")
                         and "if " not in value[:20]):
-                    # Only wrap if the value looks like it came from a PyObject
-                    # (contains a subscript, call, or a dot-chain from a pyImport var)
+                    # Only wrap with .to(T) if the value originates from a PyObject.
+                    # Check the leading identifier: if it's a pyImport module or PyObject var,
+                    # or if the value is a dotted call on one, coerce. Otherwise skip.
                     import re as _re_co
-                    _NIM_BUILTINS = {
-                        "len", "low", "high", "ord", "chr", "int", "float",
-                        "bool", "string", "abs", "min", "max", "pred", "succ",
-                        "toSeq", "parseInt", "parseFloat", "cpuTime", "rand",
-                        "randomize", "sqrt", "pow", "floor", "ceil", "round",
-                        "paramStr", "paramCount", "getEnv", "fmt", "echo",
-                    }
-                    _call_m = _re_co.match(r'^([A-Za-z_]\w*)\(', value)
-                    _caller = _call_m.group(1) if _call_m else None
-                    _is_nim_builtin_call = bool(_caller and (
-                        _caller in _NIM_BUILTINS
-                        or _caller in getattr(ParserState, "nim_proc_names", set())
-                    ))
-                    # Strip numeric literals before checking for dots (e.g. 1000.0)
-                    _value_no_nums = _re_co.sub(r'\b\d+\.\d+\b', '', value)
-                    looks_py = (not _is_nim_builtin_call) and bool(
-                        _re_co.search(r'\w\[', value)          # subscript
-                        or _re_co.search(r'\w\(', value)       # call
-                        or "." in _value_no_nums               # method chain (not float literal)
+                    _lead_m = _re_co.match(r'^[\(\s]*([A-Za-z_]\w*)', value)
+                    _lead = _lead_m.group(1) if _lead_m else None
+                    _lead_sym = ParserState.symbol_table.lookup(_lead) if _lead else None
+                    _lead_type = (_lead_sym.get("type") or "") if _lead_sym else ""
+                    _is_pyobj_base = bool(
+                        _lead_type.startswith("_py_module:") or _lead_type == "PyObject"
                     )
-                    if looks_py:
+                    if _is_pyobj_base:
                         value = f"{value}.to({annotation})"
                 # Option[T] = None -> none(T)
                 if value == "nil" and annotation.startswith("Option["):
@@ -915,17 +891,25 @@ def _extract_module_alias(ia):
     # First identifier
     parts = [ia.nodes[0].to_nim() if hasattr(ia.nodes[0], "to_nim") else str(ia.nodes[0])]
     alias = None
-    # nodes[1]: Several_Times of (V_DOT + IDENTIFIER) — dot-separated name parts
+    # nodes[1]: Several_Times — may contain (V_DOT + IDENTIFIER) parts and/or (IDENTIFIER) alias.
+    # A sequence starting with '.' is a dotted-name part; one without is the 'as alias'.
     if len(ia.nodes) >= 2:
         dot_repeat = ia.nodes[1]
         if hasattr(dot_repeat, "nodes"):
             for seq in dot_repeat.nodes:
-                if hasattr(seq, "nodes"):
-                    for child in seq.nodes:
+                if not hasattr(seq, "nodes") or not seq.nodes:
+                    continue
+                first_child = seq.nodes[0]
+                first_val = (first_child.to_nim() if hasattr(first_child, "to_nim") else str(first_child))
+                if first_val == ".":
+                    # dotted name part: skip the dot, take the identifier
+                    for child in seq.nodes[1:]:
                         v = child.to_nim() if hasattr(child, "to_nim") else str(child)
-                        if v != ".":
-                            parts.append(v)
-    # nodes[2]: Several_Times of (IDENTIFIER) — the alias after 'as'
+                        parts.append(v)
+                else:
+                    # alias (from 'as IDENTIFIER', ikw stripped the 'as')
+                    alias = first_val
+    # nodes[2]: Several_Times of (IDENTIFIER) — alias when dotted name was present
     if len(ia.nodes) >= 3:
         as_repeat = ia.nodes[2]
         if hasattr(as_repeat, "nodes") and as_repeat.nodes:
@@ -1307,6 +1291,40 @@ def to_nim(self):
     return self.nodes[2].to_nim()  # nodes[0]=int, nodes[1]=range, nodes[2]=subrange_def
 
 
+@method(from_nim_abs)
+def to_nim(self):
+    """from_nim_abs: 'from' dotted_name 'nimport' import_names -> Nim: import module"""
+    module = self.nodes[0].to_nim()
+    nim_mod = _NIMPORT_NAME_MAP.get(module, module)
+    ParserState.nim_imports.add(nim_mod)
+    # Selective names (from X nimport Y) or star (from X nimport *) both just add the import.
+    # Individual names become directly accessible after `import nim_mod`.
+    return None
+
+
+@method(from_pyimport)
+def to_nim(self):
+    """from_pyimport: 'from' dotted_name 'pyimport' import_names -> let X = pyImport("mod").X"""
+    module = self.nodes[0].to_nim()
+    names_node = self.nodes[1] if len(self.nodes) > 1 else None
+    names_str = _import_names_to_nim(names_node) if names_node else ""
+    if names_str == "*":
+        return _emit_pyimport(module)
+    raw = names_str.strip("()")
+    items = [n.strip() for n in raw.split(",") if n.strip()]
+    lines = []
+    for item in items:
+        if " as " in item:
+            orig, alias = item.split(" as ", 1)
+            orig, alias = orig.strip(), alias.strip()
+        else:
+            orig = alias = item
+        ParserState.nim_imports.add("nimpy")
+        ParserState.symbol_table.add(alias, "PyObject", "let")
+        lines.append(f'let {alias} = pyImport("{module}").{orig}')
+    return "\n".join(lines) if lines else None
+
+
 @method(nimport_stmt)
 def to_nim(self):
     """nimport_stmt: 'nimport' dotted_name (',' dotted_name)* -> Nim import"""
@@ -1320,9 +1338,18 @@ def to_nim(self):
                     cname = type(child).__name__
                     if cname == "dotted_name":
                         parts.append(child.to_nim())
+    lines = []
     for part in parts:
-        ParserState.nim_imports.add(_NIMPORT_NAME_MAP.get(part, part))
-    return None
+        if part == "re":
+            # 're' uses the Python API via nimpy — register as a py_module
+            # so re.search/findall/compile etc. pass through as PyObject calls
+            lines.append(_emit_pyimport("re"))
+        else:
+            nim_mod = _NIMPORT_NAME_MAP.get(part, part)
+            ParserState.nim_imports.add(nim_mod)
+            # Register `part` as a nim_module alias so `part.func(args)` -> `func(args)`
+            ParserState.symbol_table.add(part, f"_nim_module:{part}", "let")
+    return chr(10).join(lines) if lines else None
 
 
 @method(type_alias_params)
@@ -1447,7 +1474,11 @@ def to_nim(self):
     result = "; ".join(parts)
     # PyObject method call used as a statement must be discarded in Nim.
     # Detect: single expression that is a dotted call on a known _py_module symbol.
-    if len(parts) == 1 and "nimpy" in ParserState.nim_imports:
+    # Skip discard when inside a function that returns a non-void type — the
+    # expression may be the implicit return value.
+    _ret = getattr(ParserState, '_current_return_type', '')
+    _in_returning_func = bool(_ret and _ret not in (': void', ': None', ': unit'))
+    if len(parts) == 1 and "nimpy" in ParserState.nim_imports and not _in_returning_func:
         import re as _re_pyc
         _pyc_m = _re_pyc.match(r'^([A-Za-z_]\w*)\.', result)
         if _pyc_m:

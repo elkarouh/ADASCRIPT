@@ -47,10 +47,10 @@ type FileChange is record:
 # ---------------------------------------------------------------------------
 # Parsing
 # ---------------------------------------------------------------------------
-const RE_CHANGED: object = re.compile(r"^\s+changed\s+.*#emacs:", re.IGNORECASE)
-const RE_ADDED:   object = re.compile(r"^\s+added\s+(\S+)",        re.IGNORECASE)
-const RE_DELETED: object = re.compile(r"^\s+deleted\s+(\S+)",      re.IGNORECASE)
-const RE_MERGED:  object = re.compile(r"<-\s+Merged from branch:\s+(\S+)")
+const RE_CHANGED: PyObject = re.compile(r"^\s+changed\s+.*#emacs:", re.IGNORECASE)
+const RE_ADDED:   PyObject = re.compile(r"^\s+added\s+(\S+)",        re.IGNORECASE)
+const RE_DELETED: PyObject = re.compile(r"^\s+deleted\s+(\S+)",      re.IGNORECASE)
+const RE_MERGED:  PyObject = re.compile(r"<-\s+Merged from branch:\s+(\S+)")
 
 
 def _extract_filepath_from_ediff(diff_cmd: str) -> str:
@@ -81,27 +81,27 @@ def parse_changes_report(path: str) -> {str}[]FileChange:
                 change_detected  = True
                 continue
 
-            var ma: []str = [""]
-            if RE_ADDED.match(line, ma):
-                current_filepath = ma[0]
+            let ma: PyObject = RE_ADDED.match(line)
+            if ma:
+                current_filepath = ma.group(1).to(str)
                 current_diff_cmd = ""
                 current_kind     = "ADDED"
                 change_detected  = True
                 continue
 
-            var md: []str = [""]
-            if RE_DELETED.match(line, md):
-                current_filepath = md[0]
+            let md: PyObject = RE_DELETED.match(line)
+            if md:
+                current_filepath = md.group(1).to(str)
                 current_diff_cmd = ""
                 current_kind     = "DELETED"
                 change_detected  = True
                 continue
 
             if "<- Merged from branch:" in stripped and change_detected:
-                var mm: []str = [""]
-                if RE_MERGED.search(line, mm) < 0:
+                let mm: PyObject = RE_MERGED.search(line)
+                if not mm:
                     continue
-                let view:        str   = mm[0]
+                let view:        str   = mm.group(1).to(str)
                 let after_main:  str   = view.split("/main/", 1)[-1]
                 let branch_part: str   = after_main.split("/")[0]
                 let tokens:      []str = branch_part.split(".")
