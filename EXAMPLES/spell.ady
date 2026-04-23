@@ -15,20 +15,16 @@ type Prob_T is float range 0..1
 # ============================================================
 
 def words(text: str) -> []str:
-    return re.findall(r"[a-z]+", text.lower())
+    re.findall(r"[a-z]+", text.lower())
 
-def build_model(filename: str) -> {str}int:
-    var model: {str}int
+def build_model(filename: str) -> {str}Natural:
+    var model: {str}Natural
     for w in words(readFile(filename)):
-        if w in model:
-            model[w] += 1
-        else:
-            model[w] = 1
+        model[w] = model.get(w, 0) + 1
     return model
 
 let corpus_file: str = ($1 if $# >= 1 else "big.txt")
-let WORDS: {str}int = build_model(corpus_file)
-
+let WORDS: {str}Natural = build_model(corpus_file)
 let N: int = sum(WORDS[k] for k in WORDS)
 
 # ============================================================
@@ -39,7 +35,7 @@ def P(word: str) -> Prob_T:
     0 if word not in WORDS else float(WORDS[word])/float(N)
 
 def known(ws: []str) -> {}str:
-    return {w for w in ws if w in WORDS}
+    {w for w in ws if w in WORDS}
 
 def edits1(word: str) -> []str:
     let letters: str = "abcdefghijklmnopqrstuvwxyz"
@@ -61,7 +57,7 @@ def edits1(word: str) -> []str:
     return result
 
 def edits2(word: str) -> []str:
-    return [e2 for e1 in edits1(word) for e2 in edits1(e1)]
+    [e2 for e1 in edits1(word) for e2 in edits1(e1)]
 
 def candidates(word: str) -> {}str:
     let k0: {}str = known([word])
@@ -76,7 +72,7 @@ def candidates(word: str) -> {}str:
     return {word}
 
 def correction(word: str) -> str:
-    return max(candidates(word), key=P)
+    max(candidates(word), key=P)
 
 # ============================================================
 # Main
