@@ -29,7 +29,7 @@ let N: Natural = WORDS.total()
 def P(word: str) -> Prob_T:
     0 if word not in WORDS else WORDS[word]/N # the integer division is promoted to float division !!!
 
-def known(variations: {}str) -> {}str:
+def known_variations(variations: {}str) -> {}str:
     {variation for variation in variations if variation in WORDS}
 
 def edits1(word: str) -> {}str:
@@ -55,13 +55,13 @@ def edits2(word: str) -> {}str:
     {e2 for e1 in edits1(word) for e2 in edits1(e1)}
 
 def candidates(word: str) -> {}str:
-    let k0: {}str = known({word})
+    let k0: {}str = known_variations({word})
     if len(k0) > 0:
         return k0
-    let k1: {}str = known(edits1(word))
+    let k1: {}str = known_variations(edits1(word))
     if len(k1) > 0:
         return k1
-    let k2: {}str = known(edits2(word))
+    let k2: {}str = known_variations(edits2(word))
     if len(k2) > 0:
         return k2
     return {word}

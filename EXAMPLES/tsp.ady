@@ -1,0 +1,101 @@
+#!/usr/bin/env py2nim
+"""Norvig's Travelling Salesman Problem — exhaustive (first) version
+https://github.com/norvig/pytudes/blob/main/ipynb/TSP.ipynb
+
+Usage:  tsp.ady [n]        # solve for n cities (default 8)
+"""
+
+import math
+import random
+import time
+import matplotlib.pyplot as plt
+
+type City_T is tuple:
+    x: float
+    y: float
+
+type Tour_T is []City_T
+
+def distance(a: City_T, b: City_T) -> float:
+    math.sqrt((a.x - b.x)**2 + (a.y - b.y)**2)
+
+def tour_length(tour: Tour_T) -> float:
+    var total: float
+    for i in 1..len(tour)-1:
+        total = total + distance(tour[i], tour[i - 1])
+    total = total + distance(tour[0], tour[len(tour) - 1])
+    return total
+
+def random_cities(n: int, seed: int = 42, width: float = 900.0, height: float = 600.0) -> Tour_T:
+    random.seed(seed)
+    var result: Tour_T
+    for i in 0..n-1:
+        result.add((x: random.uniform(0.0, width), y: random.uniform(0.0, height)))
+    return result
+
+# Generate all permutations via Heap's algorithm, yielding each as a copy
+def permutations(items: Tour_T) -> []Tour_T:
+    var result: []Tour_T
+    var a: Tour_T = items
+    let n: int = len(a)
+    var c: []int
+    for i in 0..n-1:
+        c.add(0)
+    result.add(a)
+    var i: int = 0
+    while i < n:
+        if c[i] < i:
+            if i % 2 == 0:
+                let tmp: City_T = a[0]
+                a[0] = a[i]
+                a[i] = tmp
+            else:
+                let tmp: City_T = a[c[i]]
+                a[c[i]] = a[i]
+                a[i] = tmp
+            result.add(a)
+            c[i] = c[i] + 1
+            i = 0
+        else:
+            c[i] = 0
+            i = i + 1
+    return result
+
+def exhaustive_tsp(cities: Tour_T) -> Tour_T:
+    """Generate all possible tours and return the shortest."""
+    var best: Tour_T = cities
+    var best_len: float = tour_length(cities)
+    for tour in permutations(cities):
+        let l: float = tour_length(tour)
+        if l < best_len:
+            best_len = l
+            best = tour
+    return best
+
+def plot_tour(tour: Tour_T, title: str = "") -> None:
+    var xs: []float
+    var ys: []float
+    for city in tour:
+        xs.add(city.x)
+        ys.add(city.y)
+    xs.add(tour[0].x)
+    ys.add(tour[0].y)
+    plt.figure()
+    plt.plot(xs, ys, "bo-")
+    plt.plot([tour[0].x], [tour[0].y], "rD")
+    plt.axis("off")
+    if len(title) > 0:
+        plt.title(title)
+    plt.tight_layout()
+    plt.savefig("tsp_tour.png", dpi=150)
+    plt.show()
+
+let n: int = (int($1) if $# >= 1 else 8)
+let cities: Tour_T = random_cities(n)
+let t0: float = time.perf_counter()
+let tour: Tour_T = exhaustive_tsp(cities)
+let t1: float = time.perf_counter()
+let msecs: float = (t1 - t0) * 1000.0
+let msg: str = f"Cities: {n}  |  length: {tour_length(tour):.0f}  |  time: {msecs:.0f} ms"
+print msg
+plot_tour(tour, msg)
