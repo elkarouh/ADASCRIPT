@@ -1503,6 +1503,10 @@ def main(argv=None):
                         cmd.append(f"-d:nimpyTestLibPython={_libpath}")
             except Exception:
                 pass
+            # mold linker rejects R_X86_64_32S relocations from nim's posix/osproc
+            # when linking against libpython.so (a shared library).  Compile all
+            # C objects as position-independent so mold accepts them.
+            cmd.append("--passC:-fPIC")
         cmd.append(nim_file)
 
         print(f"# nim {' '.join(cmd[1:])}", file=sys.stderr)

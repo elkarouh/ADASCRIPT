@@ -978,9 +978,107 @@ def to_nim(self):
         # Register local alias so expression layer knows it's a mapped module
         ParserState.symbol_table.add(local, f"_nim_module:{module}", "let")
         return None  # handled via nim_imports
+    # Unknown module in a plain 'import' — not a mapped stdlib module and not
+    # an explicit 'pyimport'.  Raise a clear error so the user knows to use
+    # 'pyimport' for Python packages.
+    import sys as _sys_imp
+    print(f"Warning: '{module}' is not a known AdaScript stdlib module. Use 'pyimport {module}' to import Python packages.", file=_sys_imp.stderr)
     ParserState.nim_imports.add("nimpy")
     ParserState.symbol_table.add(local, f"_py_module:{module}", "let")
     return f'let {local} = pyImport("{module}")'
+
+
+def _emit_pyimport(module, alias=None):
+    """Emit a single pyImport() line and register the local symbol."""
+    local = alias if alias else module.split(".")[-1]
+    ParserState.nim_imports.add("nimpy")
+    ParserState.symbol_table.add(local, f"_py_module:{module}", "let")
+    return f'let {local} = pyImport("{module}")'
+
+
+def _extract_module_alias(ia):
+    """Extract (module_str, alias_str|None) from a single import_as parse node.
+
+    import_as = dotted_name + (ikw("as") + IDENTIFIER)[:]
+    dotted_name = IDENTIFIER + (V_DOT + IDENTIFIER)[:]
+
+    Since '+' flattens Sequences, the import_as node has exactly 3 children:
+      nodes[0] = IDENTIFIER   (first part of dotted name)
+      nodes[1] = Several_Times(V_DOT + IDENTIFIER)  (remaining dotted parts)
+      nodes[2] = Several_Times(IDENTIFIER)  (the alias after 'as', if present)
+    """
+    if not hasattr(ia, "nodes") or len(ia.nodes) < 1:
+        return None, None
+    # First identifier
+    parts = [ia.nodes[0].to_nim() if hasattr(ia.nodes[0], "to_nim") else str(ia.nodes[0])]
+    alias = None
+    # nodes[1]: Several_Times of (V_DOT + IDENTIFIER) — dot-separated name parts
+    if len(ia.nodes) >= 2:
+        dot_repeat = ia.nodes[1]
+        if hasattr(dot_repeat, "nodes"):
+            for seq in dot_repeat.nodes:
+                if hasattr(seq, "nodes"):
+                    for child in seq.nodes:
+                        v = child.to_nim() if hasattr(child, "to_nim") else str(child)
+                        if v != ".":
+                            parts.append(v)
+    # nodes[2]: Several_Times of (IDENTIFIER) — the alias after 'as'
+    if len(ia.nodes) >= 3:
+        as_repeat = ia.nodes[2]
+        if hasattr(as_repeat, "nodes") and as_repeat.nodes:
+            seq = as_repeat.nodes[0]
+            if hasattr(seq, "nodes") and seq.nodes:
+                alias = seq.nodes[0].to_nim() if hasattr(seq.nodes[0], "to_nim") else str(seq.nodes[0])
+    return ".".join(parts), alias
+
+
+def _collect_import_as_nodes(self):
+    """Walk the import_as children of a pyimport_stmt node, yielding (module, alias) pairs.
+
+    pyimport_stmt = ikw("pyimport") + import_as + (COMMA + import_as)[:]
+    ikw() is invisible, so the outer Sequence_Parser has one child node.
+
+    For a single import (e.g. 'pyimport matplotlib.pyplot as plt'):
+      self -> Sequence_Parser([import_as_node])
+      import_as_node -> Sequence_Parser([IDENTIFIER, Several_Times(DOT+IDENT), Several_Times(IDENT)])
+
+    For multiple imports (e.g. 'pyimport os, sys'):
+      self -> Sequence_Parser([Sequence_Parser([ia1, Several_Times([COMMA, ia2, ...])])])
+    """
+    results = []
+
+    def _is_import_as(node):
+        """Heuristic: an import_as node has 2-3 children where nodes[0] is an IDENTIFIER."""
+        if not hasattr(node, "nodes") or len(node.nodes) < 1:
+            return False
+        first = node.nodes[0]
+        if not hasattr(first, "nodes") or len(first.nodes) != 1:
+            return False
+        return isinstance(first.nodes[0], str)
+
+    def _collect_from(node):
+        """Recursively collect import_as entries from a node tree."""
+        if _is_import_as(node):
+            module, alias = _extract_module_alias(node)
+            if module:
+                results.append((module, alias))
+        elif hasattr(node, "nodes"):
+            for child in node.nodes:
+                _collect_from(child)
+
+    _collect_from(self)
+    return results
+
+
+@method(pyimport_stmt)
+def to_nim(self):
+    """pyimport_stmt: 'pyimport' import_as (',' import_as)* -> Nim: pyImport() for each"""
+    lines = []
+    for module, alias in _collect_import_as_nodes(self):
+        if module:
+            lines.append(_emit_pyimport(module, alias))
+    unique = list(dict.fromkeys(lines))
+    return chr(10).join(unique)
 
 
 @method(import_stmt)
