@@ -189,8 +189,12 @@ def demo_missionaries():
 # ===========================================================================
 
 def demo_wolf_goat():
-    # State: (farmer, wolf, goat, cabbage) — each 0=left, 1=right bank
-    type State_T is (Natural, Natural, Natural, Natural)
+    type Side_T is enum left, right
+    type State_T is tuple:
+        farmer:  Side_T
+        wolf:    Side_T
+        goat:    Side_T
+        cabbage: Side_T
     type Action_T is str
 
     class WolfGoatCabbage(StateSearcher[State_T, Action_T]):
@@ -205,27 +209,28 @@ def demo_wolf_goat():
 
         def get_next_states(self, state: State_T) -> []Step_T[State_T, Action_T]:
             let (f, w, g, c) = state
-            other: Natural = 1 - f
-            result: []Step_T[State_T, Action_T] = []
-            candidates: [](Action_T, State_T) = [("farmer", (other, w, g, c))]
+            let o: Side_T = (right if f == left else left)
+            candidates: [](Action_T, State_T) = [("farmer", (farmer: o, wolf: w, goat: g, cabbage: c))]
             if f == w:
-                candidates.append(("take wolf",    (other, other, g, c)))
+                candidates.append(("take wolf",    (farmer: o, wolf: o, goat: g, cabbage: c)))
             if f == g:
-                candidates.append(("take goat",    (other, w, other, c)))
+                candidates.append(("take goat",    (farmer: o, wolf: w, goat: o, cabbage: c)))
             if f == c:
-                candidates.append(("take cabbage", (other, w, g, other)))
-            for name, ns in candidates:
-                if self.is_safe(ns):
-                    result.append((from_state: state, action: name, next_state: ns))
-            return result
+                candidates.append(("take cabbage", (farmer: o, wolf: w, goat: g, cabbage: o)))
+            return [(from_state: state, action: name, next_state: ns)
+                    for name, ns in candidates if self.is_safe(ns)]
 
         def is_goal(self, state: State_T) -> bool:
             let (f, w, g, c) = state
-            return f == 1 and w == 1 and g == 1 and c == 1
+            case (f, w, g, c):
+                when (right, right, right, right):
+                    return True
+                when others:
+                    return False
 
     print("\n=== WOLF GOAT CABBAGE ===")
     puzzle: WolfGoatCabbage = WolfGoatCabbage()
-    initial: State_T = (0, 0, 0, 0)
+    initial: State_T = (farmer: left, wolf: left, goat: left, cabbage: left)
     sol: []Step_T[State_T, Action_T] = puzzle.search(initial)
     puzzle.print_solution(sol, initial)
 
