@@ -3147,6 +3147,15 @@ if __name__ == "__main__":
             "case items:\n    when [Foo(kind=A, sym=op), *args]:\n        pass\n    when others:\n        pass\n",
             "if len(items) >= 1 and items[0].kind == A:\n    let op = items[0].sym\n    let args = items[1..items.high]\n    discard\nelse:\n    discard",
         ),
+        # --- structural patterns with guards ---
+        (
+            "case items:\n    when [Val_T(kind=VSym, sym=op), *args] if len(args) > 0:\n        pass\n    when others:\n        pass\n",
+            "if len(items) >= 1 and items[0].kind == VSym and len(args) > 0:\n    let op = items[0].sym\n    let args = items[1..items.high]\n    discard\nelse:\n    discard",
+        ),
+        (
+            "case x:\n    when Foo(kind=Bar, val=v) if v > 0:\n        pass\n    when others:\n        pass\n",
+            "if x.kind == Bar and v > 0:\n    let v = x.val\n    discard\nelse:\n    discard",
+        ),
         # --- discriminated records ---
         (
             "type Shape (Kind : Shape_Kind) is record:\n    case Kind is\n        when Circle:\n            Radius : float\n        when Rectangle:\n            Width : float\n            Height : float\n",
