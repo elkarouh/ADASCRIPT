@@ -7,7 +7,7 @@ Usage:
     cat FILE | ./awk_example ,             # FS = comma
     cat FILE | ./awk_example '\t'          # FS = tab
 """
-import re
+nimport re
 
 
 type Severity_T is enum INFO, WARN, ERROR, OTHER

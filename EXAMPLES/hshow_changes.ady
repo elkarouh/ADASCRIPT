@@ -10,8 +10,7 @@ Usage:
     hshow_changes          # uses $CONTEXT_CM_BASELINE to locate the file
 """
 
-import re
-import sys
+nimport re
 
 
 # ---------------------------------------------------------------------------
@@ -162,7 +161,7 @@ def locate_report(baseline: str = "") -> str:
     if not bl:
         print("ERROR: pass a changes_report file as argument, "
               "or set $CONTEXT_CM_BASELINE.")
-        sys.exit(1)
+        quit(1)
     let prefix: str = "TACT.TACT_CONFIG."
     if bl.startswith(prefix):
         bl = bl[len(prefix):]
@@ -178,7 +177,7 @@ def _usage() -> None:
     print("Usage: hshow_changes <BASELINE> [-u USER] [-r]")
     print("  -u USER  show only changes for this committer")
     print("  -r       with -u: print only file paths, one per line")
-    sys.exit(1)
+    quit(1)
 
 
 if __name__ == "__main__":
@@ -212,7 +211,7 @@ if __name__ == "__main__":
         let filtered: {str}[]FileChange = {k: v for k, v in committer_changes.items() if k.lower() == user}
         if not filtered:
             print(f"No changes found for user '{user_filter}'.")
-            sys.exit(0)
+            quit(0)
         if raw_mode:
             for changes in filtered.values():
                 for chg in changes:

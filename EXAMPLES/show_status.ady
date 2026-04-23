@@ -1,6 +1,6 @@
 #!/usr/bin/env py2nim
 # test_timing - Monitor test execution with timing information
-import os
+nimport os
 nimport times
 
 completedTests: {}str  ## All completed tests (persistent)

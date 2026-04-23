@@ -51,65 +51,33 @@ _AUGOP_TO_NIM = {
 # None means the import is erased (e.g. typing).
 # A string is the Nim module to import via ParserState.nim_imports.
 # "nimpy" means: use pyImport() via nimpy (no native Nim equivalent).
-_PY_MODULE_TO_NIM = {
-    # OS / filesystem
-    "os":           "os",
-    "os.path":      "os",
-    "sys":          "_sys_native",   # handled specially — see import_as.to_nim
-    "pathlib":      "os",
-
-    # Math / numerics
-    "math":         "math",
-    "cmath":        "complex",
-    "random":       "random",
-    "statistics":   None,            # no direct Nim equivalent — use nimpy
-    "decimal":      None,
-
-    # String utilities
-    "string":       "strutils",
-    "re":           "re",
-    "fnmatch":      "os",
-    "textwrap":     "strutils",
-    "unicodedata":  "unicode",
-    "difflib":      None,
-
-    # Data structures
-    "collections":  None,            # complex mapping — use nimpy
-    "itertools":    "sequtils",
-    "functools":    None,
-    "heapq":        "heapqueue",
-    "bisect":       "algorithm",
-
-    # Serialization
-    "json":         "std/json",
-    "csv":          None,
-    "pickle":       None,
-
-    # I/O
-    "io":           None,
-    "struct":       None,
-
-    # Time / date
-    "time":         "times",
-    "datetime":     "times",
-    "calendar":     "times",
-
-    # Concurrency
-    "threading":    None,
-    "asyncio":      "asyncdispatch",
-    "concurrent.futures": None,
-
-    # Type erasure
-    "typing":       None,
-    "types":        None,
-    "abc":          None,
-    "copy":         None,
-    "dataclasses":  None,
-    "enum":         None,
-
-    # Local stub
-    "stdlib":       "stdlib",
+# Maps nimport names that differ from their Nim module name.
+# Only entries where the AdaScript name != the Nim import name are needed.
+# Maps nimport names that differ from their Nim module name, plus known
+# AdaScript stdlib modules that 'from X import Y' should resolve natively.
+# Only entries where the AdaScript name != the Nim import name are needed
+# for nimport; the full set is needed for from_abs.to_nim().
+_NIMPORT_NAME_MAP = {
+    "time":     "times",
+    "datetime": "times",
+    "calendar": "times",
+    "string":   "strutils",
+    "cmath":    "complex",
+    "fnmatch":  "os",
+    "textwrap": "strutils",
+    "unicode":  "unicode",
+    "itertools":"sequtils",
+    "heapq":    "heapqueue",
+    "bisect":   "algorithm",
+    "json":     "std/json",
+    "asyncio":  "asyncdispatch",
+    # AdaScript stdlib — 'from stdlib import X' resolves natively
+    "stdlib":   "stdlib",
+    "math":     "math",
 }
+
+# Alias used by from_abs.to_nim() to check known resolvable modules
+_PY_MODULE_TO_NIM = _NIMPORT_NAME_MAP
 
 # Per-module function call translations: module_name -> {py_func: nim_expr_template}.
 # Templates use {args} for the full argument list and {arg0}, {arg1}, … for individual args.
@@ -966,47 +934,28 @@ def to_nim(self):
 
 @method(import_as)
 def to_nim(self):
-    """import_as: dotted_name ('.' IDENTIFIER)* ('as' IDENTIFIER)? -> Nim: 'import nim_module' or 'let x = pyImport("mod")'"""
+    """import_as: used only inside import_stmt (plain 'import X').
+    Plain 'import' is reserved for 'from stdlib import X' style.
+    All other imports must use 'nimport' (Nim modules) or 'pyimport' (Python packages).
+    """
     parts = [self.nodes[0].to_nim()]
-    alias = None
     for node in self.nodes[1:]:
         if not hasattr(node, "nodes") or not node.nodes:
             continue
         for seq in node.nodes:
             if not hasattr(seq, "nodes"):
                 continue
-            if (
-                len(seq.nodes) >= 2
-                and hasattr(seq.nodes[0], "nodes")
-                and seq.nodes[0].nodes
-                and seq.nodes[0].nodes[0] == "."
-            ):
+            if (len(seq.nodes) >= 2
+                    and hasattr(seq.nodes[0], "nodes")
+                    and seq.nodes[0].nodes
+                    and seq.nodes[0].nodes[0] == "."):
                 parts.append(seq.nodes[1].to_nim())
-            elif len(seq.nodes) >= 1:
-                alias = seq.nodes[0].to_nim()
     module = ".".join(parts)
-    local = alias if alias else parts[-1]
-    # Map known Python stdlib modules to Nim imports
-    nim_module = _PY_MODULE_TO_NIM.get(module)
-    if nim_module == "_sys_native":
-        # sys is handled natively — no import needed, register the local name
-        # so the expression layer can translate sys.exit(), sys.argv, etc.
-        ParserState.symbol_table.add(local, "_sys_native", "let")
-        return None
-    if nim_module is not None:
-        if nim_module:
-            ParserState.nim_imports.add(nim_module)
-        # Register local alias so expression layer knows it's a mapped module
-        ParserState.symbol_table.add(local, f"_nim_module:{module}", "let")
-        return None  # handled via nim_imports
-    # Unknown module in a plain 'import' — not a mapped stdlib module and not
-    # an explicit 'pyimport'.  Raise a clear error so the user knows to use
-    # 'pyimport' for Python packages.
     import sys as _sys_imp
-    print(f"Warning: '{module}' is not a known AdaScript stdlib module. Use 'pyimport {module}' to import Python packages.", file=_sys_imp.stderr)
-    ParserState.nim_imports.add("nimpy")
-    ParserState.symbol_table.add(local, f"_py_module:{module}", "let")
-    return f'let {local} = pyImport("{module}")'
+    print(f"Error: 'import {module}' is not allowed. "
+          f"Use 'nimport {module}' for Nim/stdlib modules or "
+          f"'pyimport {module}' for Python packages.", file=_sys_imp.stderr)
+    return None
 
 
 def _emit_pyimport(module, alias=None):
@@ -1438,10 +1387,8 @@ def to_nim(self):
                     cname = type(child).__name__
                     if cname == "dotted_name":
                         parts.append(child.to_nim())
-    # Add to nim_imports so the consolidated import line at the top handles
-    # deduplication (avoids duplicate imports when `from X import Y` also pulls X).
     for part in parts:
-        ParserState.nim_imports.add(part)
+        ParserState.nim_imports.add(_NIMPORT_NAME_MAP.get(part, part))
     return None
 
 

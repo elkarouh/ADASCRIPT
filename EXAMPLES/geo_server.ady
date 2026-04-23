@@ -34,7 +34,7 @@ ones using Python native operators:
 Membership is tested with the natural `in` keyword.
 """
 
-import math
+nimport math
 
 # ---------------------------------------------------------------------------
 # Core Types

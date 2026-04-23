@@ -2,7 +2,7 @@
 #ady2nim-args c --cc:clang --clang.exe:zigcc --clang.linkerexe:zigcc
 """Examples and tests for shortest_path.Optimizer."""
 
-from math import log
+nimport math
 
 nimport stdlib
 nimport shortest_path  # provides Minimizer and Maximizer

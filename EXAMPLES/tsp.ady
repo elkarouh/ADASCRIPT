@@ -5,9 +5,9 @@ https://github.com/norvig/pytudes/blob/main/ipynb/TSP.ipynb
 Usage:  tsp.ady [n]        # solve for n cities (default 8)
 """
 
-import math
-import random
-import time
+nimport math
+nimport random
+nimport time
 pyimport matplotlib
 matplotlib.use("Agg")
 pyimport matplotlib.pyplot as plt
@@ -31,7 +31,7 @@ def tour_length(tour: Tour_T) -> float:
 def random_cities(n: int, seed: int = 42, width: float = 900.0, height: float = 600.0) -> Tour_T:
     random.seed(seed)
     for i in 0..n-1:
-        result.add((x: random.uniform(0.0, width), y: random.uniform(0.0, height)))
+        result.append((x: random.uniform(0.0, width), y: random.uniform(0.0, height)))
 
 # Generate all permutations via Heap's algorithm, yielding each as a copy
 def permutations(items: Tour_T) -> []Tour_T:
