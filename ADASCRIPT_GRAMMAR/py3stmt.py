@@ -124,6 +124,7 @@ import_stmt = fw("import_stmt")
 from_stmt = fw("from_stmt")
 type_stmt = fw("type_stmt")
 nimport_stmt = fw("nimport_stmt")
+pyimport_stmt = fw("pyimport_stmt")
 print_stmt = fw("print_stmt")
 enum_def = fw("enum_def")
 subrange_def = fw("subrange_def")
@@ -229,6 +230,9 @@ from_stmt = from_rel_name | from_rel_bare | from_abs
 # nimport: Nim-only import (stripped in Python output, becomes "import" in Nim)
 nimport_stmt = ikw("nimport") + dotted_name + (COMMA + dotted_name)[:]
 
+# pyimport: Python-only import via nimpy (becomes pyImport() in Nim)
+pyimport_stmt = ikw("pyimport") + import_as + (COMMA + import_as)[:]
+
 # --- print statement (Python 2 / Adascript style) ---
 # print expr [, expr ...]  with no parentheses.
 # ~LPAREN ensures print(...) is NOT captured here — it falls through to the
@@ -286,6 +290,7 @@ simple_stmt = (
     | global_stmt
     | nonlocal_stmt
     | nimport_stmt
+    | pyimport_stmt
     | import_stmt
     | from_stmt
     | type_stmt
