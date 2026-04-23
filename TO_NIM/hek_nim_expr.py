@@ -171,6 +171,21 @@ def _nim_truthiness(expr):
     _is_comparison = bool(_re_truth.search(r'\s*(>=|<=|==|!=)\s*', expr))
     if _re_truth.search(r'\.find\(re\(', expr) and not _has_top_bool and not _already_bool:
         return f"{expr} >= 0"
+    # PyObject value used as bool — wrap with .to(bool)
+    # Covers: bare PyObject variable, method call on py_module, or method call on PyObject var.
+    if "nimpy" in ParserState.nim_imports and not _has_top_bool and not _already_bool and not _is_comparison:
+        # bare identifier
+        if _re_truth.match(r'^[A-Za-z_]\w*$', expr):
+            _sym = ParserState.symbol_table.lookup(expr)
+            if _sym and _sym.get("type") == "PyObject":
+                return f"{expr}.to(bool)"
+        # method call: base.method(...)
+        _pyobj_m = _re_truth.match(r'^([A-Za-z_]\w*)\.([A-Za-z_]\w*)\(', expr)
+        if _pyobj_m:
+            _base = _pyobj_m.group(1)
+            _sym = ParserState.symbol_table.lookup(_base)
+            if _sym and (_sym.get("type", "").startswith("_py_module:") or _sym.get("type") == "PyObject"):
+                return f"{expr}.to(bool)"
     # getOrDefault on a Table[K, string] returns string — check truthiness
     # Only convert when we can verify the table maps to string values
     _god_m = _re_truth.search(r'^(\w+)\.getOrDefault\(', expr)
@@ -1392,7 +1407,8 @@ def to_nim(self, prec=None):
             _rgx_var, _, _str_arg = _hit.group(1), _hit.group(2), _hit.group(3)
             _sym = ParserState.symbol_table.lookup(_rgx_var)
             _typ = (_sym.get("type") or "") if _sym else ""
-            if _typ == "auto" or _typ == "Regex" or _rgx_var.startswith("RE_") or _rgx_var.startswith("re_"):
+            if (_typ != "PyObject" and not _typ.startswith("_py_module:")) and (
+                    _typ == "auto" or _typ == "Regex" or _rgx_var.startswith("RE_") or _rgx_var.startswith("re_")):
                 # Only flip if single argument (no top-level comma)
                 _depth = 0
                 _has_comma = False
@@ -1491,6 +1507,13 @@ def _translate_module_call(module_local, func_name, args_str):
     func_map = _PY_MODULE_FUNC_TO_NIM.get(py_module, {})
     template = func_map.get(func_name)
     if template is None:
+        # No explicit mapping — for nim_module vars, just drop the module prefix.
+        # After `import times`, `cpuTime()` is directly available; no qualification needed.
+        if sym_type.startswith("_nim_module:"):
+            nim_mod2 = _PY_MODULE_TO_NIM.get(py_module, py_module)
+            if nim_mod2 and nim_mod2 not in ("_sys_native",):
+                ParserState.nim_imports.add(nim_mod2)
+            return f"{func_name}{args_str}"
         return None
 
     # Add required Nim import

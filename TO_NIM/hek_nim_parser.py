@@ -1823,6 +1823,27 @@ def to_nim(self, indent=0):
         _blines = body.rstrip().splitlines()
         if _blines and _blines[-1].strip() == "result":
             body = chr(10).join(_blines[:-1]) + chr(10)
+    # Coerce implicit return: if last body line is a PyObject call and ret type needs coercion
+    if ret_ann and body and "nimpy" in ParserState.nim_imports:
+        import re as _re_iret
+        _nim_type = ret_ann.lstrip(": ").strip()
+        _COERCIBLE = {"int", "float", "string", "bool", "int64", "int32",
+                      "uint", "uint32", "uint64", "float32", "float64"}
+        _coercible = _nim_type in _COERCIBLE or _nim_type.startswith("seq[")
+        if _coercible:
+            _blines2 = body.rstrip().splitlines()
+            if _blines2:
+                _last = _blines2[-1]
+                _last_stripped = _last.lstrip()
+                # Check if last line is a dotted call on a _py_module var (no assignment)
+                _call_m = _re_iret.match(r'^([A-Za-z_]\w*)\.', _last_stripped)
+                if _call_m and not _re_iret.match(r'^(var|let|const|result)\b', _last_stripped):
+                    _root = _call_m.group(1)
+                    _sym = ParserState.symbol_table.lookup(_root)
+                    if _sym and str(_sym.get("type", "")).startswith("_py_module:"):
+                        _indent_prefix = _last[:len(_last) - len(_last_stripped)]
+                        _blines2[-1] = f"{_indent_prefix}{_last_stripped}.to({_nim_type})"
+                        body = chr(10).join(_blines2) + chr(10)
     _shadow_vars = []
     # Add var to params that are mutated in body (assigned to or .add called)
     if params and body:
@@ -1995,13 +2016,13 @@ def to_nim(self, indent=0):
                 hoisted.append(_mangle_line(dedented_line))
                 continue
             if stripped.startswith("let "):
-                let_m = _re_h.match(r"let\s+([A-Z][A-Z_0-9]*)\s*:", stripped)
+                let_m = _re_h.match(r"let\s+([A-Z][A-Z_0-9]{1,})\s*:", stripped)
                 if let_m:
                     dedented_line = line[cur_indent:] if cur_indent > 0 else line
                     hoisted.append(_mangle_line(dedented_line))
                     continue
             if stripped.startswith("var "):
-                var_m = _re_h.match(r"var\s+([A-Z][A-Z_0-9]*)\s*:", stripped)
+                var_m = _re_h.match(r"var\s+([A-Z][A-Z_0-9]{1,})\s*:", stripped)
                 if var_m:
                     dedented_line = line[cur_indent:] if cur_indent > 0 else line
                     hoisted.append(_mangle_line(dedented_line))
@@ -2634,7 +2655,10 @@ def to_nim(self, indent=0):
     result = "; ".join(p.strip() for p in parts if p.strip())
     # PyObject method call as statement: wrap with discard so Nim doesn't
     # complain about an unused expression from nimpy callMethodAux.
-    if "nimpy" in ParserState.nim_imports and len([p for p in parts if p.strip()]) == 1:
+    # Skip when inside a returning function — the expression may be the implicit return value.
+    _ret_pyc = getattr(ParserState, '_current_return_type', '')
+    _in_returning = bool(_ret_pyc and _ret_pyc not in (': void', ': None', ': unit'))
+    if "nimpy" in ParserState.nim_imports and len([p for p in parts if p.strip()]) == 1 and not _in_returning:
         import re as _re_pyc
         _pyc_m = _re_pyc.match(r'^([A-Za-z_]\w*)\.', result.strip())
         if _pyc_m:
