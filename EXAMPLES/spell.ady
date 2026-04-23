@@ -40,8 +40,8 @@ def known(ws: []str) -> {}str:
 def edits1(word: str) -> []str:
     let letters: str = "abcdefghijklmnopqrstuvwxyz"
     var result: []str
-    var L: str = ""
-    var R: str = ""
+    var L: str
+    var R: str
     for i in word'Range:
         L = word[:i]
         R = word[i:]
