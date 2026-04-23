@@ -79,9 +79,7 @@ def candidates(word: str) -> {}str:
     let k2: {}str = known(edits2(word))
     if len(k2) > 0:
         return k2
-    var fallback: {}str = set()
-    fallback.add(word)
-    return fallback
+    return {word}
 
 def correction(word: str) -> str:
     return max(candidates(word), key=P)
