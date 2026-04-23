@@ -434,6 +434,25 @@ case (year, age):
 **Python output:** standard `match/case` statement.
 **Nim output:** `if/elif/else` chain (Nim does not support tuple case selectors).
 
+**Subject must be a structural expression, not a plain variable.**
+The tuple/structural desugar path triggers only when the `case` subject is
+written as a compound expression (`(x, y)`, `x.field`). A plain variable
+holding a tuple falls through to Nim's native `case`, which rejects runtime
+values and causes a compile error. Write:
+
+```python
+let (f, w, g, c) = state
+case (f, w, g, c):       # ✓ tuple expression as subject
+    when (right, right, right, right): ...
+```
+
+not:
+
+```python
+case state:              # ✗ plain variable — emits Nim `case`, fails at compile
+    when (right, right, right, right): ...
+```
+
 ---
 
 ## Tick Attributes

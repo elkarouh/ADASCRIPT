@@ -719,12 +719,43 @@ Rules:
 - `TypeName(field=name)` — lowercase `name` → let binding (`let name = x.field`)
 - `[p0, p1, ..., pN]` — fixed-length sequence match (`len(x) == N+1`)
 - `[p0, *rest]` — variable-length match (`len(x) >= 1`, `rest = x[1..]`)
+- `[]` — empty sequence match (`len(x) == 0`)
 - `_` or `others` → catch-all (no condition, no binding)
 
 See `lispy.ady` for a complete example using all these forms.
 
 **Python output:** `match/case` with class and sequence patterns  
 **Nim output:** `if/elif/else` chain with field checks and `let` bindings
+
+**Limitation — subject must be a structural expression:**
+
+The tuple and structural desugar paths activate only when the `case` subject
+is written as a compound expression. A plain variable falls through to Nim's
+native `case`, which only accepts ordinal/string selectors and will fail to
+compile for tuple or record subjects.
+
+```python
+# ✓ Correct: unpack first, then use the tuple expression as subject
+let (f, w, g, c) = state
+case (f, w, g, c):
+    when (right, right, right, right):
+        return True
+    when others:
+        return False
+
+# ✓ Correct: field access as subject
+case x.kind:
+    when VSym: ...
+    when VNum: ...
+
+# ✗ Wrong: plain variable holding a tuple — emits Nim `case state:`,
+#   which Nim rejects because tuples are not ordinal selectors
+case state:
+    when (right, right, right, right): ...
+```
+
+This is a transpiler limitation, not a language design choice. The workaround
+is always to destructure the compound value with `let` first.
 
 ---
 
