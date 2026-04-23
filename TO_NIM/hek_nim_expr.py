@@ -487,7 +487,7 @@ def to_nim(self, prec=None):
             tok = m.group(1)
             ParserState.nim_imports.add("os")
             ParserState.nim_imports.add("strformat")
-            if tok == "0":   return "{getAppFilename()}"
+            if tok == "0":   return "{getAppFilename().extractFilename()}"
             if tok == "#":   return "{paramCount()}"
             if tok == "@":   return "{commandLineParams().join(\" \")}"
             n = int(tok)
@@ -1768,7 +1768,7 @@ def to_nim(self, prec=None):
     name = raw.string if hasattr(raw, 'string') else str(raw)
     ParserState.nim_imports.add("os")
     if name == "0":
-        return "getAppFilename()"
+        return "getAppFilename().extractFilename()"
     if name == "#":
         return "paramCount()"
     if name == "@":
