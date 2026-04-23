@@ -40,22 +40,16 @@ def permutations(items: Tour_T) -> []Tour_T:
     var result: []Tour_T
     var a: Tour_T = items
     let n: int = len(a)
-    var c: []int
-    for i in 0..n-1:
-        c.add(0)
-    result.add(a)
+    var c: []int = [0 for i in 0..n-1]
+    result.append(a)
     var i: int = 0
     while i < n:
         if c[i] < i:
             if i % 2 == 0:
-                let tmp: City_T = a[0]
-                a[0] = a[i]
-                a[i] = tmp
+                swap(a[0], a[i])
             else:
-                let tmp: City_T = a[c[i]]
-                a[c[i]] = a[i]
-                a[i] = tmp
-            result.add(a)
+                swap(a[c[i]], a[i])
+            result.append(a)
             c[i] = c[i] + 1
             i = 0
         else:
