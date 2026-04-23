@@ -63,14 +63,14 @@ def edits1(word: str) -> []str:
         R = word[i..<len(word)]
         # delete
         if len(R) > 0:
-            result.append(L + R[1..<len(R)])
+            result.append(L + R[1:])
         # transpose
         if len(R) > 1:
-            result.append(L + R[1] & R[0] & R[2..<len(R)])
+            result.append(L + R[1] & R[0] & R[2:])
         # replace
         if len(R) > 0:
             for c in letters:
-                result.append(L + c & R[1..<len(R)])
+                result.append(L + c & R[1:])
         # insert
         for c in letters:
             result.append(L + c & R)
