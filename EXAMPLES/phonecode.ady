@@ -88,7 +88,7 @@ class TrieNode:
         var word_count: int = 0
 
         def word_to_digits(word: str) -> []Digit_T:
-            var digits: []Digit_T = []
+            var digits: []Digit_T
             for c in word.lower():
                 if c not in CHAR_TO_DIGIT:
                     return []
@@ -175,7 +175,7 @@ def main():
             let digits: []Digit_T = clean_number(original)
             if not digits:
                 continue
-            var results: [][]str = []
+            var results: [][]str
             trie.find_encodings(digits, 0, [], results)
             for sol in results:
                 print(format_solution(original, sol))

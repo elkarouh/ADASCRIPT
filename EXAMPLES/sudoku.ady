@@ -15,7 +15,7 @@ const COLS   : str = "123456789"
 
 def cross(xs: str, ys: str) -> []str:
     """Cartesian product of characters: cross("AB", "12") -> ["A1","A2","B1","B2"]"""
-    var result: []str = []
+    var result: []str
     for a in xs:
         var sa: str = str(a)
         for b in ys:
@@ -24,7 +24,7 @@ def cross(xs: str, ys: str) -> []str:
 
 var squares: []str = cross(ROWS, COLS)
 
-var unitlist: [][]str = []
+var unitlist: [][]str
 for c in COLS:
     unitlist.append(cross(ROWS, str(c)))
 for r in ROWS:
@@ -35,7 +35,7 @@ for rb in ["ABC", "DEF", "GHI"]:
 
 var units: {str}[][]str = {:}
 for s in squares:
-    var u: [][]str = []
+    var u: [][]str
     for unit in unitlist:
         if s in unit:
             u.append(unit)
@@ -43,7 +43,7 @@ for s in squares:
 
 var peers: {str}{}str = {:}
 for s in squares:
-    var p: {}str = set()
+    var p: {}str
     for unit in units[s]:
         for s2 in unit:
             if s2 != s:
@@ -74,7 +74,7 @@ def eliminate(values: {str}str, s: str, d: str) -> {str}str:
 
     # Hidden single: check each unit — if only one place for d, assign it there
     for unit in units[s]:
-        var dplaces: []str = []
+        var dplaces: []str
         for sq in unit:
             if d in values[sq]:
                 dplaces.append(sq)
@@ -109,7 +109,7 @@ def parse_grid(grid: str) -> {str}str:
     var values: {str}str = {:}
     for s in squares:
         values[s] = DIGITS
-    var chars: []str = []
+    var chars: []str
     for c in grid:
         var cs: str = str(c)
         if cs in DIGITS or cs == "0" or cs == ".":

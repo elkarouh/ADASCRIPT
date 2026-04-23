@@ -106,7 +106,7 @@ if __name__ == "__main__":
     print("View".alignLeft(31) + "Based On".alignLeft(30) + "ENV_ID".alignLeft(15) + "State".alignLeft(11) + "COMMENT")
     print("-" * 100)
 
-    var view_lines: []Cls_View_Line = []
+    var view_lines: []Cls_View_Line
 
     for line in lines[min(3, len(lines)):]:
         let fields: []str = line.split()
