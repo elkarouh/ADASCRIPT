@@ -19,6 +19,6 @@ def count_primes(n: Positive) -> Positive:
 
     return count
 
-start = time.perf_counter()
+start = cpuTime()
 print f"Number of primes: {count_primes(N)}"
-print f"time elapsed: {time.perf_counter() - start}/s"
+print f"time elapsed: {cpuTime() - start}/s"
