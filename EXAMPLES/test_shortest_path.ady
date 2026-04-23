@@ -107,7 +107,7 @@ def example3():
       stage: Natural
       remaining_size: Natural
     type Revenue_T is 0..100
-    type Decision_T is Positive # decision of what length we cut
+    type Decision_T is int # decision of what length we cut (always > 0, enforced by logic)
     type Choice_T is (Decision_T, Revenue_T)
 
     class RodCutting(Maximizer[State_T, Decision_T, Revenue_T]):
