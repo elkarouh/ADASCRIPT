@@ -60,6 +60,7 @@ def _nim_reset():
     ParserState.tuple_field_order = {}
     ParserState.object_field_order = {}
     ParserState.nim_proc_names = set()  # names of locally-defined procs/funcs
+    ParserState.nimpy_len_needed = False  # set when len() is called on a PyObject
 
     # Install to_nim() fallback on the base Parser class so any node that
     # has no explicit to_nim() override delegates to to_py().
@@ -530,12 +531,7 @@ def translate(code, export_symbols=False):
         # if the output actually calls len() somewhere (as a function, not method)
         # and has pyImport'd modules that could return PyObject values.
         if "nimpy" in ParserState.nim_imports:
-            has_py_imports = any('pyImport(' in line for line in output)
-            needs_len_helper = has_py_imports and any(
-                'len(' in line and 'proc len' not in line
-                for line in output
-            )
-            if needs_len_helper:
+            if getattr(ParserState, 'nimpy_len_needed', False):
                 helper = 'proc len(o: PyObject): int = pyBuiltinsModule().len(o).to(int)'
                 # Insert right after the pyImport lines (find last pyImport line)
                 helper_pos = len(output)
