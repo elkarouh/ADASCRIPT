@@ -1187,6 +1187,284 @@ def to_nim(self, indent=0):
     return f"{_ind(indent)}{prefix}{guard}:{hc}\n{body}"
 
 
+def _is_structural_pattern(pat_node):
+    """Return True if this pattern node requires structural (if/elif) desugaring.
+
+    Structural patterns are: pattern_class, pattern_sequence, pattern_as
+    wrapping a structural pattern, or pattern_or of structural patterns.
+    Simple literals, captures, wildcards, enum values, and `others` are NOT structural.
+    """
+    tname = type(pat_node).__name__
+    if tname in ("pattern_class", "pattern_sequence"):
+        return True
+    if tname == "pattern_as":
+        # `Pat as name` — structural if the inner pattern is structural
+        return _is_structural_pattern(pat_node.nodes[0])
+    if tname == "pattern":
+        return _is_structural_pattern(pat_node.nodes[0])
+    if tname == "base_pattern":
+        return _is_structural_pattern(pat_node.nodes[0])
+    return False
+
+
+def _pat_node_of(when_node):
+    """Extract the pattern node from a when_clause node."""
+    return when_node.nodes[0]
+
+
+def _block_node_of(when_node):
+    """Extract the block node from a when_clause node."""
+    for n in when_node.nodes[1:]:
+        if type(n).__name__ == "block":
+            return n
+        if type(n).__name__ == "Several_Times":
+            # guard is here; skip
+            continue
+        if hasattr(n, "to_nim") and type(n).__name__ not in ("case_guard", "Several_Times", "Filter", "Fmap"):
+            return n
+    # fallback: last node with to_nim that isn't a guard
+    for n in reversed(when_node.nodes):
+        tname = type(n).__name__
+        if tname not in ("case_guard", "Several_Times", "Filter", "Fmap") and hasattr(n, "to_nim"):
+            return n
+    return None
+
+
+def _keyword_pattern_parts(kw_node):
+    """Return (field_name_str, sub_pat_node) from a keyword_pattern node."""
+    field = kw_node.nodes[0].to_nim()
+    sub = kw_node.nodes[1] if len(kw_node.nodes) > 1 else None
+    return field, sub
+
+
+def _collect_class_args(pattern_class_node):
+    """Return list of (field_name, sub_pat_node) from a pattern_class node.
+
+    Walks the actual AST shape:
+      pattern_class > Several_Times > Sequence_Parser(kw_pat, Several_Times([Seq(kw_pat)...]))
+    """
+    args = []
+
+    def _walk(node):
+        tname = type(node).__name__
+        if tname == "keyword_pattern":
+            f, p = _keyword_pattern_parts(node)
+            args.append((f, p))
+        elif tname in ("Sequence_Parser", "Several_Times", "pattern_class_arg") and hasattr(node, "nodes"):
+            for child in node.nodes:
+                _walk(child)
+
+    for node in pattern_class_node.nodes[1:]:
+        _walk(node)
+    return args
+
+
+def _collect_sequence_elements(pattern_seq_node):
+    """Return list of (is_star, sub_pat_node) from a pattern_sequence node."""
+    elements = []
+    all_pats = []
+    # First element
+    if pattern_seq_node.nodes:
+        first = pattern_seq_node.nodes[0]
+        if type(first).__name__ not in ("Filter", "Fmap"):
+            all_pats.append(first)
+    for node in pattern_seq_node.nodes[1:]:
+        if type(node).__name__ == "Several_Times":
+            for seq in node.nodes:
+                if hasattr(seq, "nodes"):
+                    for child in seq.nodes:
+                        cname = type(child).__name__
+                        if cname not in ("Filter", "Fmap") and hasattr(child, "to_nim"):
+                            all_pats.append(child)
+                elif hasattr(seq, "to_nim") and type(seq).__name__ not in ("Filter", "Fmap"):
+                    all_pats.append(seq)
+    for p in all_pats:
+        # star pattern: pattern_capture whose name string starts with '*'
+        # In the grammar a star element may be a pattern_capture with a leading *
+        # or wrapped; check the nim text
+        nim_text = p.to_nim() if hasattr(p, "to_nim") else str(p)
+        if nim_text.startswith("*"):
+            elements.append((True, p, nim_text[1:]))
+        else:
+            elements.append((False, p, nim_text))
+    return elements  # list of (is_star, node, nim_text)
+
+
+def _is_literal_nim(nim_text):
+    """True if nim_text is a value (literal, enum, constant) not a capture name.
+
+    Capture names are lowercase-starting identifiers. Uppercase-starting names
+    are enum values or constants (e.g. VSym, VNum) and should be equality-checked.
+    Dotted names (e.g. Status.OK) are also values.
+    """
+    import re as _re
+    t = nim_text.strip()
+    if t in ("true", "false", "nil"):
+        return True
+    if t.startswith('"') or t.startswith("'"):
+        return True
+    if _re.match(r'^-?\d', t):
+        return True
+    # Uppercase-starting identifier or dotted name → enum/constant value
+    if _re.match(r'^[A-Z_]\w*(\.\w+)*$', t):
+        return True
+    return False
+
+
+def _structural_conds_and_bindings(pat_node, subj, indent):
+    """Recursively compute (conditions, let_lines) for a structural pattern.
+
+    subj      -- Nim expression string for the value being matched
+    Returns (conds: list[str], lets: list[str])
+    """
+    tname = type(pat_node).__name__
+
+    # Unwrap pattern / base_pattern wrappers
+    if tname in ("pattern", "base_pattern"):
+        return _structural_conds_and_bindings(pat_node.nodes[0], subj, indent)
+
+    # `Pat as name` — match Pat then bind subj to name
+    if tname == "pattern_as":
+        inner_pat = pat_node.nodes[0]
+        capture_name = pat_node.nodes[1].to_nim() if len(pat_node.nodes) > 1 else None
+        # nodes[1] might be wrapped
+        for n in pat_node.nodes[1:]:
+            cname = type(n).__name__
+            if cname not in ("Filter", "Fmap") and hasattr(n, "to_nim"):
+                capture_name = n.to_nim()
+                break
+        conds, lets = _structural_conds_and_bindings(inner_pat, subj, indent)
+        if capture_name and capture_name != "_":
+            lets = [f"{_ind(indent)}let {capture_name} = {subj}"] + lets
+        return conds, lets
+
+    # `TypeName(field=pat, ...)` — record/class pattern
+    if tname == "pattern_class":
+        type_name = pat_node.nodes[0].to_nim()
+        args = _collect_class_args(pat_node)
+        conds = []
+        lets = []
+        if args:
+            for field_name, sub_pat in args:
+                if field_name is None:
+                    # positional — skip for now (no field name to access)
+                    continue
+                sub_nim = sub_pat.to_nim() if hasattr(sub_pat, "to_nim") else str(sub_pat)
+                field_expr = f"{subj}.{field_name}"
+                if _is_literal_nim(sub_nim) or sub_nim in ("true", "false"):
+                    conds.append(f"{field_expr} == {sub_nim}")
+                elif sub_nim == "_":
+                    pass  # wildcard — no condition, no binding
+                else:
+                    # capture name
+                    lets.append(f"{_ind(indent)}let {sub_nim} = {field_expr}")
+        return conds, lets
+
+    # `[p0, p1, ..., *rest]` — sequence pattern
+    if tname == "pattern_sequence":
+        elements = _collect_sequence_elements(pat_node)
+        star_idx = next((i for i, (is_star, _, _) in enumerate(elements) if is_star), None)
+        fixed = [e for e in elements if not e[0]]
+        n_fixed = len(fixed)
+
+        conds = []
+        lets = []
+        if star_idx is None:
+            conds.append(f"len({subj}) == {n_fixed}")
+        else:
+            conds.append(f"len({subj}) >= {n_fixed}")
+
+        idx = 0
+        for is_star, node, nim_text in elements:
+            if is_star:
+                # bind rest: name = subj[idx..]
+                if nim_text and nim_text != "_":
+                    lets.append(f"{_ind(indent)}let {nim_text} = {subj}[{idx}..{subj}.high]")
+            else:
+                elem_subj = f"{subj}[{idx}]"
+                if _is_structural_pattern(node):
+                    sub_conds, sub_lets = _structural_conds_and_bindings(node, elem_subj, indent)
+                    conds.extend(sub_conds)
+                    lets.extend(sub_lets)
+                elif nim_text == "_" or nim_text == "others":
+                    pass
+                elif _is_literal_nim(nim_text):
+                    conds.append(f"{elem_subj} == {nim_text}")
+                else:
+                    # capture name
+                    lets.append(f"{_ind(indent)}let {nim_text} = {elem_subj}")
+                idx += 1
+
+        return conds, lets
+
+    # Wildcard / others / plain capture at top level
+    nim_text = pat_node.to_nim() if hasattr(pat_node, "to_nim") else str(pat_node)
+    if nim_text in ("_", "others"):
+        return [], []
+    if _is_literal_nim(nim_text):
+        return [f"{subj} == {nim_text}"], []
+    # plain capture name
+    return [], [f"{_ind(indent)}let {nim_text} = {subj}"]
+
+
+def _extract_branches(case_node):
+    """Yield (pat_node, block_node, guard_node_or_None) for each branch in a case_stmt.
+
+    Handles both:
+      - when_clause wrappers (older path)
+      - bare Sequence_Parser(pat_node, ..., block_node) in Several_Times (common path)
+    """
+    for node in case_node.nodes[1:]:
+        tname = type(node).__name__
+        if tname == "when_clause":
+            pat = node.nodes[0]
+            blk = _block_node_of(node)
+            guard = None
+            for n in node.nodes[1:]:
+                if type(n).__name__ == "case_guard":
+                    guard = n
+            yield pat, blk, guard
+        elif tname == "Several_Times":
+            for seq in node.nodes:
+                stname = type(seq).__name__
+                if stname == "when_clause":
+                    pat = seq.nodes[0]
+                    blk = _block_node_of(seq)
+                    guard = None
+                    for n in seq.nodes[1:]:
+                        if type(n).__name__ == "case_guard":
+                            guard = n
+                    yield pat, blk, guard
+                elif stname == "Sequence_Parser" and hasattr(seq, "nodes"):
+                    pat_node = None
+                    blk_node = None
+                    guard_node = None
+                    for child in seq.nodes:
+                        cname = type(child).__name__
+                        if cname == "block":
+                            blk_node = child
+                        elif cname == "case_guard":
+                            guard_node = child
+                        elif cname == "Several_Times":
+                            # may contain a case_guard
+                            for inner in child.nodes:
+                                if type(inner).__name__ == "case_guard":
+                                    guard_node = inner
+                        elif cname not in ("Filter", "Fmap") and hasattr(child, "to_nim"):
+                            if pat_node is None:
+                                pat_node = child
+                    if pat_node is not None:
+                        yield pat_node, blk_node, guard_node
+
+
+def _case_has_structural_patterns(case_node):
+    """Return True if any branch in this case_stmt uses a structural pattern."""
+    for pat, _blk, _guard in _extract_branches(case_node):
+        if _is_structural_pattern(pat):
+            return True
+    return False
+
+
 def _collect_when_clauses(nodes):
     """Collect all when_clause nodes from a case_stmt's node list."""
     clauses = []
@@ -1265,6 +1543,35 @@ def to_nim(self, indent=0):
                 cond = _tuple_pattern_to_cond(pat, subject_parts)
                 result += f"\n{_ind(indent)}{keyword} {cond}:{hc}\n{body}"
                 keyword = "elif"
+        return result.lstrip("\n")
+
+    # Structural pattern matching: desugar to if/elif chain
+    if _case_has_structural_patterns(self):
+        result = ""
+        keyword = "if"
+        for pat_node, block_node, guard_node in _extract_branches(self):
+            hc = _block_inline_header_comment(block_node) if block_node else ""
+            body = ""
+            if block_node:
+                try:
+                    body = block_node.to_nim(indent + 1)
+                except TypeError:
+                    body = _ind(indent + 1) + block_node.to_nim()
+
+            pat_nim = pat_node.to_nim() if hasattr(pat_node, "to_nim") else str(pat_node)
+            # others / wildcard → else branch
+            if pat_nim in ("others", "_"):
+                result += f"\n{_ind(indent)}else:{hc}\n{body}"
+                continue
+
+            conds, lets = _structural_conds_and_bindings(pat_node, subject, indent + 1)
+            if guard_node is not None:
+                conds.append(guard_node.nodes[0].to_nim())
+            cond_str = " and ".join(conds) if conds else "true"
+            let_block = "\n".join(lets)
+            full_body = (let_block + "\n" + body) if let_block else body
+            result += f"\n{_ind(indent)}{keyword} {cond_str}:{hc}\n{full_body}"
+            keyword = "elif"
         return result.lstrip("\n")
 
     from hek_nim_expr import _str_to_char_lit
