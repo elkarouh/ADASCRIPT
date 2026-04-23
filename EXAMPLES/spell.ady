@@ -42,9 +42,7 @@ let N: int = total_words()
 # ============================================================
 
 def P(word: str) -> Prob_T:
-    if word in WORDS:
-        return float(WORDS[word]) / float(N)
-    return 0.0
+    0 if word not in WORDS else float(WORDS[word]) / float(N)
 
 def known(ws: []str) -> {}str:
     return {w for w in ws if w in WORDS}
