@@ -6,6 +6,9 @@ Usage:  spell.ady big.txt                  # load corpus, enter REPL
 """
 
 import re
+from stdlib import Counter, total
+
+nimport stdlib
 
 type Prob_T is float range 0..1
 # ============================================================
@@ -15,15 +18,9 @@ type Prob_T is float range 0..1
 def words(text: str) -> []str:
     re.findall(r"[a-z]+", text.lower())
 
-def build_model(filename: str) -> {str}Natural:
-    var model: {str}Natural
-    for w in words(readFile(filename)):
-        model[w] = model.get(w, 0) + 1
-    return model
-
 let corpus_file: str = ($1 if $# >= 1 else "big.txt")
-let WORDS: {str}Natural = build_model(corpus_file)
-let N: Natural = sum(WORDS[k] for k in WORDS)
+let WORDS: Counter[str] = count(words(readFile(corpus_file)))
+let N: Natural = WORDS.total()
 
 # ============================================================
 # Core algorithm

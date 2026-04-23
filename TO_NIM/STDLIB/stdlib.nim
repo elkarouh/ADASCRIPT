@@ -1,8 +1,29 @@
 ## stdlib.nim -- Nim support types for HPython transpiled code
-## Provides: AnyType/ANY sentinel, FifoQueue, LifoQueue, PriorityQueue
+## Provides: AnyType/ANY sentinel, FifoQueue, LifoQueue, PriorityQueue, Counter
 
 import std/deques
 import hashes
+import tables
+
+# ---------------------------------------------------------------------------
+# Counter[K] — frequency map, like Python's collections.Counter
+# ---------------------------------------------------------------------------
+type Counter*[K] = Table[K, Natural]
+
+proc count*[K](items: openArray[K]): Counter[K] =
+  for item in items:
+    result[item] = result.getOrDefault(item, 0) + 1
+
+proc count*[K](items: seq[K]): Counter[K] =
+  for item in items:
+    result[item] = result.getOrDefault(item, 0) + 1
+
+proc total*[K](c: Counter[K]): Natural =
+  for v in c.values: result += v
+
+proc contains*[K](c: Counter[K]; key: K): bool = tables.hasKey(c, key)
+proc `[]`*[K](c: Counter[K]; key: K): Natural = tables.getOrDefault(c, key, 0)
+proc len*[K](c: Counter[K]): int = tables.len(c)
 
 # ---------------------------------------------------------------------------
 # ANY sentinel -- matches every value via ==
