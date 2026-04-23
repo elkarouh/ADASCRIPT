@@ -1488,6 +1488,9 @@ def main(argv=None):
         # library directory and shared library name so the compiled binary uses
         # the same Python installation that matplotlib (and other pyImport'd
         # modules) is installed into.
+        # mold linker rejects R_X86_64_32S relocations — compile all C objects
+        # as position-independent so mold accepts them.
+        cmd.append("--passC:-fPIC")
         if "nimpy" in (getattr(ParserState, "nim_imports", None) or set()):
             try:
                 import sysconfig as _sc
@@ -1499,10 +1502,6 @@ def main(argv=None):
                         cmd.append(f"-d:nimpyTestLibPython={_libpath}")
             except Exception:
                 pass
-            # mold linker rejects R_X86_64_32S relocations from nim's posix/osproc
-            # when linking against libpython.so (a shared library).  Compile all
-            # C objects as position-independent so mold accepts them.
-            cmd.append("--passC:-fPIC")
         cmd.append(nim_file)
 
         print(f"# nim {' '.join(cmd[1:])}", file=sys.stderr)
