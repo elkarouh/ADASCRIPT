@@ -58,16 +58,17 @@ def edits1(word: str) -> []str:
     var result: []str = []
     var L: str = ""
     var R: str = ""
-    for i in 0..len(word):
+    for i in 0..<len(word):
         L = word[0:i]
         R = word[i:]
-        if len(R) > 0:
-            result.append(L + R[1:])                        # delete
-            if len(R) > 1:
-                result.append(L + R[1] + R[0] + R[2:])     # transpose
-            for c in letters:
-                result.append(L + c + R[1:])                # replace
-        # insert
+        result.append(L + R[1:])                        # delete
+        if len(R) > 1:
+            result.append(L + R[1] + R[0] + R[2:])     # transpose
+        for c in letters:
+            result.append(L + c + R[1:])                # replace
+    for i in 0..len(word):                              # insert
+        L = word[0:i]
+        R = word[i:]
         for c in letters:
             result.append(L + c + R)
     return result
