@@ -59,6 +59,7 @@ def _nim_reset():
     ParserState.proc_param_types_full = {}
     ParserState.tuple_field_order = {}
     ParserState.object_field_order = {}
+    ParserState.nim_proc_names = set()  # names of locally-defined procs/funcs
 
     # Install to_nim() fallback on the base Parser class so any node that
     # has no explicit to_nim() override delegates to to_py().
@@ -1486,6 +1487,22 @@ def main(argv=None):
         cmd = ["nim", subcommand] + nim_flags
         cmd += [f"--nimcache:{nimcache_dir}", f"--out:{exe_file}",
                 f"--path:{cache_dir}"]
+        # When nimpy is used, tell it which libpython to load by passing the
+        # path via -d:nimpyTestLibPython.  We ask the current python3 for its
+        # library directory and shared library name so the compiled binary uses
+        # the same Python installation that matplotlib (and other pyImport'd
+        # modules) is installed into.
+        if "nimpy" in (getattr(ParserState, "nim_imports", None) or set()):
+            try:
+                import sysconfig as _sc
+                _libdir = _sc.get_config_var("LIBDIR") or ""
+                _ldlib  = _sc.get_config_var("LDLIBRARY") or ""
+                if _libdir and _ldlib:
+                    _libpath = os.path.join(_libdir, _ldlib)
+                    if os.path.exists(_libpath):
+                        cmd.append(f"-d:nimpyTestLibPython={_libpath}")
+            except Exception:
+                pass
         cmd.append(nim_file)
 
         print(f"# nim {' '.join(cmd[1:])}", file=sys.stderr)

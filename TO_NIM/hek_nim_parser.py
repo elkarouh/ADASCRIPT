@@ -2022,6 +2022,8 @@ def to_nim(self, indent=0):
             hoisted_block = "\n".join(hoisted) + "\n"
             body = "\n".join(kept)
             return f"{hoisted_block}{decos}{_ind(indent)}proc {_nim_ident(name)}({params}){ret_ann} ={hc}\n{body}"
+    # Register this proc name so nimpy coercion won't wrap its return values
+    getattr(ParserState, 'nim_proc_names', set()).add(name)
     # Translate dunder method names to Nim operator procs
     nim_name, nim_keyword = _nim_proc_name(name)
     if nim_name is None:
@@ -2630,6 +2632,16 @@ def to_nim(self, indent=0):
         parts = [_ind(indent) + self.nodes[0].to_nim()]
 
     result = "; ".join(p.strip() for p in parts if p.strip())
+    # PyObject method call as statement: wrap with discard so Nim doesn't
+    # complain about an unused expression from nimpy callMethodAux.
+    if "nimpy" in ParserState.nim_imports and len([p for p in parts if p.strip()]) == 1:
+        import re as _re_pyc
+        _pyc_m = _re_pyc.match(r'^([A-Za-z_]\w*)\.', result.strip())
+        if _pyc_m:
+            _root = _pyc_m.group(1)
+            _sym = ParserState.symbol_table.lookup(_root)
+            if _sym and str(_sym.get("type", "")).startswith("_py_module:"):
+                result = f"discard {result}"
     # Bare print (no args) -> echo "" (empty line)
     if result == "echo":
         result = 'echo ""'

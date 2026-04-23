@@ -597,14 +597,32 @@ def to_nim(self):
                         and value not in ("true", "false", "nil", '""', "''")
                         and not value.startswith('"')
                         and not value.startswith("'")
-                        and not value.startswith("@[")):
+                        and not value.startswith("@[")
+                        and not value.startswith('fmt"')
+                        and not value.startswith("fmt'")
+                        and "if " not in value[:20]):
                     # Only wrap if the value looks like it came from a PyObject
                     # (contains a subscript, call, or a dot-chain from a pyImport var)
                     import re as _re_co
-                    looks_py = bool(
+                    _NIM_BUILTINS = {
+                        "len", "low", "high", "ord", "chr", "int", "float",
+                        "bool", "string", "abs", "min", "max", "pred", "succ",
+                        "toSeq", "parseInt", "parseFloat", "cpuTime", "rand",
+                        "randomize", "sqrt", "pow", "floor", "ceil", "round",
+                        "paramStr", "paramCount", "getEnv", "fmt", "echo",
+                    }
+                    _call_m = _re_co.match(r'^([A-Za-z_]\w*)\(', value)
+                    _caller = _call_m.group(1) if _call_m else None
+                    _is_nim_builtin_call = bool(_caller and (
+                        _caller in _NIM_BUILTINS
+                        or _caller in getattr(ParserState, "nim_proc_names", set())
+                    ))
+                    # Strip numeric literals before checking for dots (e.g. 1000.0)
+                    _value_no_nums = _re_co.sub(r'\b\d+\.\d+\b', '', value)
+                    looks_py = (not _is_nim_builtin_call) and bool(
                         _re_co.search(r'\w\[', value)          # subscript
                         or _re_co.search(r'\w\(', value)       # call
-                        or "." in value                        # method chain
+                        or "." in _value_no_nums               # method chain (not float literal)
                     )
                     if looks_py:
                         value = f"{value}.to({annotation})"
@@ -686,14 +704,32 @@ def to_nim(self):
                         and value not in ("true", "false", "nil", '""', "''")
                         and not value.startswith('"')
                         and not value.startswith("'")
-                        and not value.startswith("@[")):
+                        and not value.startswith("@[")
+                        and not value.startswith('fmt"')
+                        and not value.startswith("fmt'")
+                        and "if " not in value[:20]):
                     # Only wrap if the value looks like it came from a PyObject
                     # (contains a subscript, call, or a dot-chain from a pyImport var)
                     import re as _re_co
-                    looks_py = bool(
+                    _NIM_BUILTINS = {
+                        "len", "low", "high", "ord", "chr", "int", "float",
+                        "bool", "string", "abs", "min", "max", "pred", "succ",
+                        "toSeq", "parseInt", "parseFloat", "cpuTime", "rand",
+                        "randomize", "sqrt", "pow", "floor", "ceil", "round",
+                        "paramStr", "paramCount", "getEnv", "fmt", "echo",
+                    }
+                    _call_m = _re_co.match(r'^([A-Za-z_]\w*)\(', value)
+                    _caller = _call_m.group(1) if _call_m else None
+                    _is_nim_builtin_call = bool(_caller and (
+                        _caller in _NIM_BUILTINS
+                        or _caller in getattr(ParserState, "nim_proc_names", set())
+                    ))
+                    # Strip numeric literals before checking for dots (e.g. 1000.0)
+                    _value_no_nums = _re_co.sub(r'\b\d+\.\d+\b', '', value)
+                    looks_py = (not _is_nim_builtin_call) and bool(
                         _re_co.search(r'\w\[', value)          # subscript
                         or _re_co.search(r'\w\(', value)       # call
-                        or "." in value                        # method chain
+                        or "." in _value_no_nums               # method chain (not float literal)
                     )
                     if looks_py:
                         value = f"{value}.to({annotation})"
@@ -1410,6 +1446,16 @@ def to_nim(self):
             newline_node = node
 
     result = "; ".join(parts)
+    # PyObject method call used as a statement must be discarded in Nim.
+    # Detect: single expression that is a dotted call on a known _py_module symbol.
+    if len(parts) == 1 and "nimpy" in ParserState.nim_imports:
+        import re as _re_pyc
+        _pyc_m = _re_pyc.match(r'^([A-Za-z_]\w*)\.', result)
+        if _pyc_m:
+            _root = _pyc_m.group(1)
+            _sym = ParserState.symbol_table.lookup(_root)
+            if _sym and str(_sym.get("type", "")).startswith("_py_module:"):
+                result = f"discard {result}"
     # Bare print (no args) -> echo "" (empty line)
     if result == "echo":
         result = 'echo ""'
