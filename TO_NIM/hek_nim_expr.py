@@ -2604,11 +2604,13 @@ def to_nim(self, prec=None):
 
 @method(setcomp)
 def to_nim(self, prec=None):
-    """setcomp: expression for_if_clauses -> Nim: toHashSet comprehension"""
+    """setcomp: expression for_if_clauses -> Nim: collect into seq then toHashSet"""
+    ParserState.nim_imports.add("sugar")
+    ParserState.nim_imports.add("sets")
     expr = self.nodes[0].to_nim()
     clause_parts = _for_if_clauses_parts(self.nodes[1])
     inner = _build_nested_collect(clause_parts, expr)
-    return inner.replace("collect(", "collect(initHashSet, ", 1)
+    return f"toHashSet({inner})"
 
 
 # --- dict/set makers ---

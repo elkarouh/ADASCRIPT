@@ -47,11 +47,7 @@ def P(word: str) -> Prob_T:
     return 0.0
 
 def known(ws: []str) -> {}str:
-    var result: {}str = set()
-    for w in ws:
-        if w in WORDS:
-            result.add(w)
-    return result
+    return {w for w in ws if w in WORDS}
 
 def edits1(word: str) -> []str:
     let letters: str = "abcdefghijklmnopqrstuvwxyz"
