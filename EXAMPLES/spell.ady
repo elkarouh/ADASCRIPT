@@ -1,0 +1,128 @@
+#!/usr/bin/env py2nim
+"""Norvig's spelling corrector — https://norvig.com/spell-correct.html
+
+Usage:  spell.ady big.txt                  # load corpus, enter REPL
+        spell.ady big.txt speling          # correct a single word
+"""
+
+import re
+import sys
+nimport strutils
+
+# ============================================================
+# Corpus
+# ============================================================
+
+def words(text: str) -> []str:
+    return re.findall(r"[a-z]+", text.lower())
+
+def build_model(filename: str) -> {str}int:
+    var model: {str}int = {:}
+    for w in words(readFile(filename)):
+        if w in model:
+            model[w] += 1
+        else:
+            model[w] = 1
+    return model
+
+let corpus_file: str = ($1 if $# >= 1 else "big.txt")
+let WORDS: {str}int = build_model(corpus_file)
+
+def total_words() -> int:
+    var n: int = 0
+    for k in WORDS:
+        n += WORDS[k]
+    return n
+
+let N: int = total_words()
+
+# ============================================================
+# Core algorithm
+# ============================================================
+
+def P(word: str) -> float:
+    if word in WORDS:
+        return float(WORDS[word]) / float(N)
+    return 0.0
+
+def known(ws: []str) -> {}str:
+    var result: {}str = set()
+    for w in ws:
+        if w in WORDS:
+            result.add(w)
+    return result
+
+def edits1(word: str) -> []str:
+    let letters: str = "abcdefghijklmnopqrstuvwxyz"
+    var result: []str = []
+    var L: str = ""
+    var R: str = ""
+    for i in 0..len(word):
+        L = word[0..i-1]
+        R = word[i..len(word)-1]
+        # delete
+        if len(R) > 0:
+            result.append(L + R[1..len(R)-1])
+        # transpose
+        if len(R) > 1:
+            result.append(L + R[1] & R[0] & R[2..len(R)-1])
+        # replace
+        if len(R) > 0:
+            for c in letters:
+                result.append(L + c & R[1..len(R)-1])
+        # insert
+        for c in letters:
+            result.append(L + c & R)
+    return result
+
+def edits2(word: str) -> []str:
+    var result: []str = []
+    for e1 in edits1(word):
+        for e2 in edits1(e1):
+            result.append(e2)
+    return result
+
+def candidates(word: str) -> {}str:
+    let k0: {}str = known([word])
+    if len(k0) > 0:
+        return k0
+    let k1: {}str = known(edits1(word))
+    if len(k1) > 0:
+        return k1
+    let k2: {}str = known(edits2(word))
+    if len(k2) > 0:
+        return k2
+    var fallback: {}str = set()
+    fallback.add(word)
+    return fallback
+
+def correction(word: str) -> str:
+    let cands: {}str = candidates(word)
+    var best: str = ""
+    var best_p: float = -1.0
+    for w in cands:
+        let p: float = P(w)
+        if p > best_p:
+            best_p = p
+            best = w
+    return best
+
+# ============================================================
+# Main
+# ============================================================
+
+if $# >= 2:
+    print correction($2)
+elif $# >= 1:
+    print f"Loaded {len(WORDS)} words ({N} total) from {corpus_file}"
+    while True:
+        try:
+            var word: str = input("spell> ").strip().lower()
+            if word == ":q" or word == "":
+                break
+            print correction(word)
+        except EOFError:
+            break
+else:
+    print "Usage: spell.ady big.txt [word]"
+    quit(1)
