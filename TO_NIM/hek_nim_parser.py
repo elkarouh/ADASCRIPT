@@ -1041,9 +1041,24 @@ def to_nim(self):
     return f"({self.nodes[0].to_nim()})"
 
 
+@method(pattern_star)
+def to_nim(self):
+    """pattern_star: '*' capture_or_wildcard -> desugared as rest-binding in sequence"""
+    # nodes[0] is Fmap('*'), nodes[1] is the capture/wildcard
+    name_node = self.nodes[1] if len(self.nodes) > 1 else self.nodes[0]
+    inner = name_node.to_nim() if hasattr(name_node, "to_nim") else str(name_node)
+    return f"*{inner}"
+
+
+@method(pattern_seq_item)
+def to_nim(self):
+    """pattern_seq_item: pattern_star | pattern"""
+    return self.nodes[0].to_nim()
+
+
 @method(pattern_sequence)
 def to_nim(self):
-    """pattern_sequence: '[' pattern (',' pattern)* ']' -> Nim: '@[p1, p2, ...]'"""
+    """pattern_sequence: '[' pattern_seq_item (',' pattern_seq_item)* ']' -> '@[p1, p2, ...]'"""
     parts = [self.nodes[0].to_nim()]
     for node in self.nodes[1:]:
         if type(node).__name__ == "Several_Times" and node.nodes:
@@ -1197,12 +1212,7 @@ def _is_structural_pattern(pat_node):
     tname = type(pat_node).__name__
     if tname in ("pattern_class", "pattern_sequence"):
         return True
-    if tname == "pattern_as":
-        # `Pat as name` — structural if the inner pattern is structural
-        return _is_structural_pattern(pat_node.nodes[0])
-    if tname == "pattern":
-        return _is_structural_pattern(pat_node.nodes[0])
-    if tname == "base_pattern":
+    if tname in ("pattern_as", "pattern", "base_pattern", "pattern_seq_item"):
         return _is_structural_pattern(pat_node.nodes[0])
     return False
 
