@@ -18,7 +18,7 @@ def words(text: str) -> []str:
     return re.findall(r"[a-z]+", text.lower())
 
 def build_model(filename: str) -> {str}int:
-    var model: {str}int = {:}
+    var model: {str}int
     for w in words(readFile(filename)):
         if w in model:
             model[w] += 1
