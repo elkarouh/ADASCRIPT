@@ -19,7 +19,7 @@ type City_T is tuple:
 type Tour_T is []City_T
 
 def distance(a: City_T, b: City_T) -> float:
-    math.sqrt((a.x - b.x)**2 + (a.y - b.y)**2)
+    sqrt((a.x - b.x)**2 + (a.y - b.y)**2)
 
 def tour_length(tour: Tour_T) -> float:
     var total: float
@@ -29,9 +29,9 @@ def tour_length(tour: Tour_T) -> float:
     return total
 
 def random_cities(n: int, seed: int = 42, width: float = 900.0, height: float = 600.0) -> Tour_T:
-    random.seed(seed)
+    randomize(seed)
     for i in 0..n-1:
-        result.append((x: random.uniform(0.0, width), y: random.uniform(0.0, height)))
+        result.append((x: rand(0.0..width), y: rand(0.0..height)))
 
 # Generate all permutations via Heap's algorithm, yielding each as a copy
 def permutations(items: Tour_T) -> []Tour_T:
@@ -84,9 +84,9 @@ def plot_tour(tour: Tour_T, title: str = "") -> None:
 
 let n: int = (int($1) if $# >= 1 else 8)
 let cities: Tour_T = random_cities(n)
-let t0: float = time.perf_counter()
+let t0: float = cpuTime()
 let tour: Tour_T = exhaustive_tsp(cities)
-let t1: float = time.perf_counter()
+let t1: float = cpuTime()
 let msecs: float = (t1 - t0) * 1000.0
 let msg: str = f"Cities: {n}  |  length: {tour_length(tour):.0f}  |  time: {msecs:.0f} ms"
 print msg

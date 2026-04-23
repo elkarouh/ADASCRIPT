@@ -11,10 +11,10 @@ const BOLD_BLUE: str = "\x1b[1;34m"
 const RESET: str = "\x1b[0m"
 
 if $# > 0:
-    os.chdir($1)
+    setCurrentDir($1)
 
 while True:
-    let cwd: str = os.getcwd()
+    let cwd: str = getCurrentDir()
     let listing = shellLines: find {cwd} -maxdepth 1 -mindepth 1 -printf '%P\n' | sort
     var entries: str = BOLD_MAGENTA + "/" + RESET + TAB + "/" + NL + BOLD_MAGENTA + ".." + RESET + TAB + ".." + NL
     for item in listing:
@@ -42,15 +42,15 @@ while True:
     let sel: str = fields[len(fields) - 1].strip()
 
     if key == "left":
-        os.chdir("..")
+        setCurrentDir("..")
         continue
 
     if sel == "/":
-        os.chdir("/")
+        setCurrentDir("/")
     elif sel == "..":
-        os.chdir("..")
+        setCurrentDir("..")
     elif -d (f"{cwd}/{sel}"):
-        os.chdir(sel)
+        setCurrentDir(sel)
     elif key == "right" and -x (f"{cwd}/{sel}"):
         if "/" in sel:
             shell: {sel}

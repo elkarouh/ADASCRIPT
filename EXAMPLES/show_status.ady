@@ -50,7 +50,7 @@ def formatTime() -> str:
   now().format("HH:mm:ss")
 
 # Main program
-print "Current directory: ", os.getcwd()
+print "Current directory: ", getCurrentDir()
 print "=== Initial Test Status (", formatTime(), ") ==="
 let initialLines : []str = getTestStatusLines()
 print "Output lines: ", len(initialLines)

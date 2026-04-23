@@ -81,47 +81,8 @@ _PY_MODULE_TO_NIM = _NIMPORT_NAME_MAP
 
 # Per-module function call translations: module_name -> {py_func: nim_expr_template}.
 # Templates use {args} for the full argument list and {arg0}, {arg1}, … for individual args.
+# re translations kept until a clean AdaScript re API is designed
 _PY_MODULE_FUNC_TO_NIM = {
-    "math": {
-        "sqrt":   "sqrt({arg0})",
-        "floor":  "floor({arg0})",
-        "ceil":   "ceil({arg0})",
-        "fabs":   "abs({arg0})",
-        "exp":    "exp({arg0})",
-        "log":    "ln({arg0})",
-        "log2":   "log2({arg0})",
-        "log10":  "log10({arg0})",
-        "sin":    "sin({arg0})",
-        "cos":    "cos({arg0})",
-        "tan":    "tan({arg0})",
-        "asin":   "arcsin({arg0})",
-        "acos":   "arccos({arg0})",
-        "atan":   "arctan({arg0})",
-        "atan2":  "arctan2({arg0}, {arg1})",
-        "pow":    "pow({arg0}, {arg1})",
-        "fmod":   "{arg0} mod {arg1}",
-        "gcd":    "gcd({arg0}, {arg1})",
-        "isnan":  "isNaN({arg0})",
-        "isinf":  "isInf({arg0})",
-        "trunc":  "trunc({arg0})",
-        "radians": "degToRad({arg0})",
-        "degrees": "radToDeg({arg0})",
-    },
-    "random": {
-        "random":    "rand(1.0)",
-        "randint":   "rand({arg0}..{arg1})",
-        "choice":    "sample({arg0})",
-        "shuffle":   "shuffle({arg0})",
-        "seed":      "randomize({arg0})",
-        "uniform":   "rand({arg0}..{arg1})",
-        "randrange": "rand({arg0}..<{arg1})",
-    },
-    "time": {
-        "time":      "epochTime()",
-        "sleep":     "sleep(int({arg0} * 1000))",
-        "perf_counter": "cpuTime()",
-        "monotonic": "cpuTime()",
-    },
     "re": {
         "sub":      "replace({arg2}, re({arg0}), {arg1})",
         "match":    "{arg1}.match(re({arg0}))",
@@ -129,34 +90,6 @@ _PY_MODULE_FUNC_TO_NIM = {
         "findall":  "{arg1}.findAll(re({arg0}))",
         "compile":  "re({arg0})",
         "split":    "{arg1}.split(re({arg0}))",
-    },
-    "os": {
-        "getcwd":    "getCurrentDir()",
-        "chdir":     "setCurrentDir({arg0})",
-        "listdir":   "toSeq(walkDir({arg0}))",
-        "makedirs":  "createDir({arg0})",
-        "mkdir":     "createDir({arg0})",
-        "remove":    "removeFile({arg0})",
-        "unlink":    "removeFile({arg0})",
-        "rmdir":     "removeDir({arg0})",
-        "rename":    "moveFile({arg0}, {arg1})",
-        "getenv":    "getEnv({arg0})",
-        "environ":   "os.environment()",
-    },
-    "sys": {
-        "exit":      "quit({arg0})",
-        "getrecursionlimit": "1000000",
-    },
-    "itertools": {
-        "chain":    "concat({args})",
-        "product":  "product({args})",
-        "zip_longest": "zip({args})",
-    },
-    "json": {
-        "loads":    "parseJson({arg0})",
-        "dumps":    "${arg0}",
-        "load":     "parseJson({arg0}.readAll())",
-        "dump":     "{arg1}.write(${arg0})",
     },
 }
 

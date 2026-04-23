@@ -122,7 +122,7 @@ class Sector(Region):
         let dy: float = pt.y - self.center.y
         if dx * dx + dy * dy > self.r_sq:
             return False
-        let angle: float = math.degrees(math.atan2(dx, dy)) % 360
+        let angle: float = radToDeg(arctan2(dx, dy)) % 360
         var diff: float = abs(angle - self.heading_deg) % 360
         if diff > 180:
             diff = 360 - diff
