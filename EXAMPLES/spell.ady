@@ -9,6 +9,7 @@ import re
 import sys
 nimport strutils
 
+type Prob_T is float range 0..1
 # ============================================================
 # Corpus
 # ============================================================
@@ -40,7 +41,7 @@ let N: int = total_words()
 # Core algorithm
 # ============================================================
 
-def P(word: str) -> float:
+def P(word: str) -> Prob_T:
     if word in WORDS:
         return float(WORDS[word]) / float(N)
     return 0.0
@@ -58,18 +59,18 @@ def edits1(word: str) -> []str:
     var L: str = ""
     var R: str = ""
     for i in 0..len(word):
-        L = word[0..i-1]
-        R = word[i..len(word)-1]
+        L = word[0..<i]
+        R = word[i..<len(word)]
         # delete
         if len(R) > 0:
-            result.append(L + R[1..len(R)-1])
+            result.append(L + R[1..<len(R)])
         # transpose
         if len(R) > 1:
-            result.append(L + R[1] & R[0] & R[2..len(R)-1])
+            result.append(L + R[1] & R[0] & R[2..<len(R)])
         # replace
         if len(R) > 0:
             for c in letters:
-                result.append(L + c & R[1..len(R)-1])
+                result.append(L + c & R[1..<len(R)])
         # insert
         for c in letters:
             result.append(L + c & R)
@@ -99,9 +100,9 @@ def candidates(word: str) -> {}str:
 def correction(word: str) -> str:
     let cands: {}str = candidates(word)
     var best: str = ""
-    var best_p: float = -1.0
+    var best_p: Prob_T = 0
     for w in cands:
-        let p: float = P(w)
+        let p: Prob_T = P(w)
         if p > best_p:
             best_p = p
             best = w
