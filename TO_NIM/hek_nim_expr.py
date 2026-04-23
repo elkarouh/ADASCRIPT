@@ -479,9 +479,25 @@ def to_nim(self, prec=None):
         inner = s[1:-1]
         inner = inner.replace(chr(34), chr(92) + chr(34))
         s = chr(34) + inner + chr(34)
+    # Replace bare $0/$#/$N/$@ shell vars inside string literals with Nim calls.
+    import re as _re_str
+    _dollar_re = _re_str.compile(r'\$([0-9]+|#|@)')
+    if _dollar_re.search(s):
+        def _dollar_repl(m):
+            tok = m.group(1)
+            ParserState.nim_imports.add("os")
+            ParserState.nim_imports.add("strformat")
+            if tok == "0":   return "{getAppFilename()}"
+            if tok == "#":   return "{paramCount()}"
+            if tok == "@":   return "{commandLineParams().join(\" \")}"
+            n = int(tok)
+            return "{" + f'(if paramCount() >= {n}: paramStr({n}) else: "")' + "}"
+        inner = s[1:-1]
+        new_inner = _dollar_re.sub(_dollar_repl, inner)
+        if new_inner != inner:
+            s = 'fmt"' + new_inner + '"'
     # Replace embedded __bash_*__ positional/special arg placeholders with
     # fmt-string interpolations so they resolve at runtime.
-    import re as _re_str
     if "__bash_" in s:
         def _subst_bash(m):
             from hek_nim_parser import _bash_to_nim
