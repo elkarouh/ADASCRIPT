@@ -1068,6 +1068,11 @@ def to_nim(self):
     return f"@[{', '.join(parts)}]"
 
 
+@method(pattern_empty_seq)
+def to_nim(self):
+    return "@[]"
+
+
 @method(pattern_or)
 def to_nim(self):
     """pattern_or: pattern ('|' pattern)+ -> Nim: 'p1, p2, ...' (Nim of-branch alternatives)"""
@@ -1210,7 +1215,7 @@ def _is_structural_pattern(pat_node):
     Simple literals, captures, wildcards, enum values, and `others` are NOT structural.
     """
     tname = type(pat_node).__name__
-    if tname in ("pattern_class", "pattern_sequence"):
+    if tname in ("pattern_class", "pattern_sequence", "pattern_empty_seq"):
         return True
     if tname in ("pattern_as", "pattern", "base_pattern", "pattern_seq_item"):
         return _is_structural_pattern(pat_node.nodes[0])
@@ -1369,6 +1374,10 @@ def _structural_conds_and_bindings(pat_node, subj, indent):
                     # capture name
                     lets.append(f"{_ind(indent)}let {sub_nim} = {field_expr}")
         return conds, lets
+
+    # `[]` — empty sequence pattern
+    if tname == "pattern_empty_seq":
+        return [f"len({subj}) == 0"], []
 
     # `[p0, p1, ..., *rest]` — sequence pattern
     if tname == "pattern_sequence":
@@ -3146,6 +3155,11 @@ if __name__ == "__main__":
         (
             "case items:\n    when [Foo(kind=A, sym=op), *args]:\n        pass\n    when others:\n        pass\n",
             "if len(items) >= 1 and items[0].kind == A:\n    let op = items[0].sym\n    let args = items[1..items.high]\n    discard\nelse:\n    discard",
+        ),
+        # --- empty sequence pattern ---
+        (
+            "case xs:\n    when []:\n        pass\n    when [*rest]:\n        pass\n",
+            "if len(xs) == 0:\n    discard\nelif len(xs) >= 0:\n    let rest = xs[0..xs.high]\n    discard",
         ),
         # --- structural patterns with guards ---
         (

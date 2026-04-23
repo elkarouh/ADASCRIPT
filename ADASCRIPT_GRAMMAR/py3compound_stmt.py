@@ -222,6 +222,7 @@ pattern_group = LPAREN + pattern + RPAREN
 pattern_star = vop("*") + (pattern_capture | pattern_wildcard)
 pattern_seq_item = pattern_star | pattern
 pattern_sequence = LBRACKET + pattern_seq_item + (COMMA + pattern_seq_item)[:] + COMMA[:] + RBRACKET
+pattern_empty_seq = LBRACKET + RBRACKET
 pattern_value = (
     IDENTIFIER + (vop(".") + IDENTIFIER)[1:]
 )  # qualified name like Status.OK
@@ -248,6 +249,7 @@ base_pattern = (
     | pattern_tuple
     | pattern_group
     | pattern_mapping
+    | pattern_empty_seq
     | pattern_sequence
     | pattern_value
     | pattern_class

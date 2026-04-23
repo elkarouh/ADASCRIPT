@@ -66,7 +66,7 @@ def demo_waterjug():
                 ("pour big->small", (b - p_bs, s + p_bs)),
                 ("pour small->big", (b + p_sb, s - p_sb)),
             ]
-            return [Step_T(from_state=current_state, action=name, next_state=ns)
+            return [(from_state: current_state, action: name, next_state: ns)
                     for name, ns in candidates
                     if ns != current_state]
 
@@ -169,7 +169,7 @@ def demo_missionaries():
                                       number_cannibals_left: C_left + c, 
                                       boat_location: next_boat_location)
                 if self.is_safe(next_state):
-                    result.append(Step_T(from_state=state, action=f"{m}M {c}C cross", next_state=next_state))      
+                    result.append((from_state: state, action: f"{m}M {c}C cross", next_state: next_state))      
             return result
 
         def is_goal(self, state: State_T) -> bool:
@@ -216,7 +216,7 @@ def demo_wolf_goat():
                 candidates.append(("take cabbage", (other, w, g, other)))
             for name, ns in candidates:
                 if self.is_safe(ns):
-                    result.append(Step_T(from_state=state, action=name, next_state=ns))
+                    result.append((from_state: state, action: name, next_state: ns))
             return result
 
         def is_goal(self, state: State_T) -> bool:
@@ -271,7 +271,7 @@ def demo_hanoi():
                         new_rods: []Natural = [rods[0], rods[1], rods[2]]
                         new_rods[disk] = tgt
                         next_state: State_T = (new_rods[0], new_rods[1], new_rods[2])
-                        result.append(Step_T(from_state=state, action=f"{cur}->{tgt}", next_state=next_state))
+                        result.append((from_state: state, action: f"{cur}->{tgt}", next_state: next_state))
             return result
 
         def is_goal(self, state: State_T) -> bool:
@@ -342,7 +342,7 @@ def demo_eight_puzzle():
                 chars[blank] = state[target:target+1]
                 chars[target] = "0"
                 next_state: State_T = "".join(chars)
-                result.append(Step_T(from_state=state, action=action, next_state=next_state))
+                result.append((from_state: state, action: action, next_state: next_state))
             return result
 
         def is_goal(self, state: State_T) -> bool:

@@ -485,6 +485,11 @@ def to_py(self):
     return self.nodes[0].to_py()
 
 
+@method(pattern_empty_seq)
+def to_py(self):
+    return "[]"
+
+
 @method(pattern_sequence)
 def to_py(self):
     """pattern_sequence: '[' pattern_seq_item (',' pattern_seq_item)* ','? ']'"""
