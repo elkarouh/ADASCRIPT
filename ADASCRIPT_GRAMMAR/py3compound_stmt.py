@@ -219,7 +219,9 @@ pattern_others = literal("others")
 pattern_range = (NUMBER | IDENTIFIER) + V_DOT + V_DOT + (NUMBER | IDENTIFIER)
 pattern_tuple = LPAREN + pattern + (COMMA + pattern)[1:] + RPAREN
 pattern_group = LPAREN + pattern + RPAREN
-pattern_sequence = LBRACKET + pattern + (COMMA + pattern)[:] + COMMA[:] + RBRACKET
+pattern_star = vop("*") + (pattern_capture | pattern_wildcard)
+pattern_seq_item = pattern_star | pattern
+pattern_sequence = LBRACKET + pattern_seq_item + (COMMA + pattern_seq_item)[:] + COMMA[:] + RBRACKET
 pattern_value = (
     IDENTIFIER + (vop(".") + IDENTIFIER)[1:]
 )  # qualified name like Status.OK

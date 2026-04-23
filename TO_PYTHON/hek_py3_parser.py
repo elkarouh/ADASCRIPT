@@ -471,9 +471,23 @@ def to_py(self):
     return f"({self.nodes[0].to_py()})"
 
 
+@method(pattern_star)
+def to_py(self):
+    """pattern_star: '*' (capture | wildcard) -> Python: '*name' or '*_'"""
+    name_node = self.nodes[1] if len(self.nodes) > 1 else self.nodes[0]
+    inner = name_node.to_py() if hasattr(name_node, "to_py") else str(name_node)
+    return f"*{inner}"
+
+
+@method(pattern_seq_item)
+def to_py(self):
+    """pattern_seq_item: pattern_star | pattern"""
+    return self.nodes[0].to_py()
+
+
 @method(pattern_sequence)
 def to_py(self):
-    """pattern_sequence: '[' pattern (',' pattern)* ','? ']'"""
+    """pattern_sequence: '[' pattern_seq_item (',' pattern_seq_item)* ','? ']'"""
     parts = [self.nodes[0].to_py()]
     for node in self.nodes[1:]:
         if type(node).__name__ == "Several_Times" and node.nodes:
