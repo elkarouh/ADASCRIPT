@@ -84,7 +84,7 @@ def __str__(self: Val_T) -> str:
         when VLambda:
             return "#<lambda>"
         when VList:
-            var parts: []str = []
+            var parts: []str
             for item in self.items:
                 parts.append(item'Image)
             return "(" + " ".join(parts) + ")"
@@ -131,7 +131,7 @@ def bind_parms(e: Env_T, parms: []str, args: []Val_T) -> None:
 # ============================================================
 
 def tokenize(s: str) -> []str:
-    var tokens: []str = []
+    var tokens: []str
     var i: int = 0
     while i < len(s):
         var c: char = s[i]
@@ -188,7 +188,7 @@ def read_from(tokens: []str, pos: int) -> (Val_T, int):
     var tok: str = tokens[pos]
     case tok:
         when "(":
-            var items: []Val_T = []
+            var items: []Val_T
             var p: int = pos + 1
             while p < len(tokens) and tokens[p] != ")":
                 let pair: (Val_T, int) = read_from(tokens, p)
@@ -387,14 +387,14 @@ def apply_builtin(name: str, args: []Val_T) -> Val_T:
                 return Val_T(kind=VNum, num=float(len(args[0].items)))
             return Val_T(kind=VNum, num=0.0)
         when "append":
-            var result: []Val_T = []
+            var result: []Val_T
             for a in args:
                 if a.kind == VList:
                     for x in a.items:
                         result.append(x)
             return Val_T(kind=VList, items=result)
         when "reverse":
-            var rev: []Val_T = []
+            var rev: []Val_T
             for i in 0..len(args[0].items)-1:
                 rev.append(args[0].items[len(args[0].items)-1-i])
             return Val_T(kind=VList, items=rev)
@@ -455,7 +455,7 @@ def apply_builtin(name: str, args: []Val_T) -> Val_T:
         when "string-downcase":
             return Val_T(kind=VStr, sym=args[0].sym.toLower())
         when "string->list":
-            var items: []Val_T = []
+            var items: []Val_T
             for c in args[0].sym:
                 items.append(Val_T(kind=VStr, sym=c'Image))
             return Val_T(kind=VList, items=items)
@@ -482,7 +482,7 @@ def apply_builtin(name: str, args: []Val_T) -> Val_T:
                     return Val_T(kind=VList, items=args[1].items[i..len(args[1].items)-1])
             return Val_T(kind=VBool, flag=False)
         when "filter":
-            var result: []Val_T = []
+            var result: []Val_T
             for item in args[1].items:
                 if scheme_apply(args[0], [item]).is_true():
                     result.append(item)
@@ -537,7 +537,7 @@ def bind_args(e: Env_T, parms: []str, rest_parm: str, args: []Val_T) -> None:
             quit(1)
         for i in 0..len(parms)-1:
             e.bindings[parms[i]] = args[i]
-        var rest_items: []Val_T = []
+        var rest_items: []Val_T
         for i in len(parms)..len(args)-1:
             rest_items.append(args[i])
         env_def(e, rest_parm, Val_T(kind=VList, items=rest_items))
@@ -563,7 +563,7 @@ def expand_qq(x: Val_T, e: Env_T) -> Val_T:
         return x
     if len(x.items) == 2 and x.items[0].kind == VSym and x.items[0].sym == "unquote":
         return scheme_eval(x.items[1], e)
-    var result: []Val_T = []
+    var result: []Val_T
     for item in x.items:
         if item.kind == VList and len(item.items) == 2 and item.items[0].kind == VSym:
             if item.items[0].sym == "unquote":
@@ -580,7 +580,7 @@ def expand_qq(x: Val_T, e: Env_T) -> Val_T:
 
 def parse_lambda_params(param_list: []Val_T) -> ([]str, str):
     # Returns (fixed_parms, rest_parm). Handles (a b . rest) dot-notation.
-    var parms: []str = []
+    var parms: []str
     var rest_parm: str = ""
     var i: int = 0
     while i < len(param_list):
@@ -679,8 +679,8 @@ def scheme_eval(x_in: Val_T, e_in: Env_T) -> Val_T:
                     return Val_T(kind=VNil)
             when [Val_T(kind=VSym, sym="let"), Val_T(kind=VSym, sym=loop_name), Val_T(kind=VList, items=bind_list), *body]:
                 # named let: (let loop ((x init) ...) body)
-                var parms: []str = []
-                var inits: []Val_T = []
+                var parms: []str
+                var inits: []Val_T
                 for bnd in bind_list:
                     parms.append(bnd.items[0].sym)
                     inits.append(scheme_eval(bnd.items[1], e))
@@ -737,8 +737,8 @@ def scheme_eval(x_in: Val_T, e_in: Env_T) -> Val_T:
             when [Val_T(kind=VSym, sym="do"), Val_T(kind=VList, items=var_specs), Val_T(kind=VList, items=term_clause), *do_body]:
                 # (do ((var init step) ...) (test result...) body...)
                 var do_env: Env_T = new_env(e)
-                var do_vars: []str = []
-                var do_steps: []Val_T = []
+                var do_vars: []str
+                var do_steps: []Val_T
                 for spec in var_specs:
                     let vname: str = spec.items[0].sym
                     let init_val: Val_T = scheme_eval(spec.items[1], e)
@@ -760,7 +760,7 @@ def scheme_eval(x_in: Val_T, e_in: Env_T) -> Val_T:
                         break
                     for stmt in do_body:
                         var ignored: Val_T = scheme_eval(stmt, do_env)
-                    var new_vals: []Val_T = []
+                    var new_vals: []Val_T
                     for step in do_steps:
                         new_vals.append(scheme_eval(step, do_env))
                     for i in 0..len(do_vars)-1:
@@ -782,7 +782,7 @@ def scheme_eval(x_in: Val_T, e_in: Env_T) -> Val_T:
             when [Val_T(kind=VSym, sym="map"), proc_expr, list_expr]:
                 let pv: Val_T = scheme_eval(proc_expr, e)
                 let lst: Val_T = scheme_eval(list_expr, e)
-                var result: []Val_T = []
+                var result: []Val_T
                 for item in lst.items:
                     result.append(scheme_apply(pv, [item]))
                 return Val_T(kind=VList, items=result)
@@ -794,7 +794,7 @@ def scheme_eval(x_in: Val_T, e_in: Env_T) -> Val_T:
                 return Val_T(kind=VNil)
             when [head, *tail]:
                 let pv: Val_T = scheme_eval(head, e)
-                var args: []Val_T = []
+                var args: []Val_T
                 for arg in tail:
                     args.append(scheme_eval(arg, e))
                 if pv.kind == VBuiltin:
