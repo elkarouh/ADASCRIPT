@@ -66,11 +66,9 @@ def edits1(word: str) -> []str:
             result.append(L + R[1] + R[0] + R[2:])     # transpose
         for c in letters:
             result.append(L + c + R[1:])                # replace
-    for i in 0..len(word):                              # insert
-        L = word[0:i]
-        R = word[i:]
-        for c in letters:
-            result.append(L + c + R)
+            result.append(L + c + R)                    # insert
+    for c in letters:                                   # insert at end
+        result.append(word + c)
     return result
 
 def edits2(word: str) -> []str:
