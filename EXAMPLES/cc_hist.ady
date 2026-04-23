@@ -65,16 +65,11 @@ if __name__ == "__main__":
         # Line format: "label user  id  month day year /path/to/file@@/main/num"
         # Split on "/" : fields[0] has the pre-path tokens, fields[-1] has the version num
         let slash_fields: []str = line.split("/")
-        let n: int = len(slash_fields)
-        if n >= 2:
-            let pre_path: []str = slash_fields[0].split()
-            let num: str = slash_fields[n - 1].strip()
-            # pre_path: [label, user, id, month, day, year]
-            if len(pre_path) >= 5 and num.isdigit():
-                let user: str = pre_path[1]
-                let month: str = pre_path[3]
-                let day: str = pre_path[4]
-                let year: str = pre_path[len(pre_path) - 1]
+        let num: str = slash_fields[len(slash_fields) - 1].strip()
+        # pre_path: [label, user, id, month, day, *rest, year]
+        case slash_fields[0].split():
+            when [label, user, id, month, day, *rest] if num.isdigit():
+                let year: str = rest[len(rest) - 1] if len(rest) > 0 else day
                 version2user[num] = f"{user}-{month}-{day}-{year}"
 
     let parent_path: str = get_cfmu_parent(remote_file)
