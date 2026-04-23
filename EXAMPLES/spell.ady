@@ -59,8 +59,8 @@ def edits1(word: str) -> []str:
     var L: str = ""
     var R: str = ""
     for i in 0..len(word):
-        L = word[0..<i]
-        R = word[i..<len(word)]
+        L = word[0:i]
+        R = word[i:]
         if len(R) > 0:
             result.append(L + R[1:])                        # delete
             if len(R) > 1:
