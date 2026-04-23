@@ -25,14 +25,14 @@ def build_model(filename: str) -> {str}Natural:
 
 let corpus_file: str = ($1 if $# >= 1 else "big.txt")
 let WORDS: {str}Natural = build_model(corpus_file)
-let N: int = sum(WORDS[k] for k in WORDS)
+let N: Natural = sum(WORDS[k] for k in WORDS)
 
 # ============================================================
 # Core algorithm
 # ============================================================
 
 def P(word: str) -> Prob_T:
-    0 if word not in WORDS else WORDS[word]/N
+    0 if word not in WORDS else WORDS[word]/N # the integer division is promoted to float division !!!
 
 def known(ws: []str) -> {}str:
     {w for w in ws if w in WORDS}
