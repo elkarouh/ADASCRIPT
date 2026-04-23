@@ -1,5 +1,5 @@
 #!/usr/bin/env py2nim
-import time
+nimport time
 
 N = 1000000
 

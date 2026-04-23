@@ -5,7 +5,7 @@ Usage:  spell.ady big.txt                  # load corpus, enter REPL
         spell.ady big.txt speling          # correct a single word
 """
 
-import re
+nimport re
 from stdlib import Counter_T
 
 nimport stdlib

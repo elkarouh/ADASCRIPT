@@ -9,8 +9,7 @@
 # Transpile to Python:  python3 TO_PYTHON/py2py.py EXAMPLES/phonecode.hpy
 # Transpile to Nim:     python3 TO_NIM/py2nim.py EXAMPLES/phonecode.hpy
 
-import sys
-import os
+nimport os
 
 # ---------------------------------------------------------------------------
 # Character-to-digit mapping

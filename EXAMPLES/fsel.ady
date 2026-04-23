@@ -1,6 +1,6 @@
 #!/usr/bin/env py2nim
 # https://github.com/vroby65/fsel/tree/main ported to adascript
-import os
+nimport os
 
 let editor: str = $EDITOR if $EDITOR else "nano"
 let tmpfile: str = "/tmp/fsel_entries"
