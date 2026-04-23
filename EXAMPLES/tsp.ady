@@ -8,6 +8,8 @@ Usage:  tsp.ady [n]        # solve for n cities (default 8)
 import math
 import random
 import time
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 type City_T is tuple:
@@ -88,7 +90,6 @@ def plot_tour(tour: Tour_T, title: str = "") -> None:
         plt.title(title)
     plt.tight_layout()
     plt.savefig("tsp_tour.png", dpi=150)
-    plt.show()
 
 let n: int = (int($1) if $# >= 1 else 8)
 let cities: Tour_T = random_cities(n)
@@ -99,3 +100,4 @@ let msecs: float = (t1 - t0) * 1000.0
 let msg: str = f"Cities: {n}  |  length: {tour_length(tour):.0f}  |  time: {msecs:.0f} ms"
 print msg
 plot_tour(tour, msg)
+let open_result = shell: xdg-open tsp_tour.png
