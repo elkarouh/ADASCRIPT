@@ -32,7 +32,7 @@ let N: int = sum(WORDS[k] for k in WORDS)
 # ============================================================
 
 def P(word: str) -> Prob_T:
-    0 if word not in WORDS else float(WORDS[word])/float(N)
+    0 if word not in WORDS else WORDS[word]/N
 
 def known(ws: []str) -> {}str:
     {w for w in ws if w in WORDS}
