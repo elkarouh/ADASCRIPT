@@ -7,7 +7,6 @@ Usage:  spell.ady big.txt                  # load corpus, enter REPL
 
 import re
 import sys
-nimport strutils
 
 type Prob_T is float range 0..1
 # ============================================================

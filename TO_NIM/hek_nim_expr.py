@@ -945,7 +945,10 @@ def _translate_method(obj_name, method_name):
         for prefix, mappings in _PY_METHOD_TO_NIM.items():
             if type_str.startswith(prefix):
                 if method_name in mappings:
-                    return mappings[method_name]
+                    nim_method = mappings[method_name]
+                    if nim_method in _STRUTILS_METHODS:
+                        ParserState.nim_imports.add("strutils")
+                    return nim_method
                 break  # type matched but method not in mapping — fall through to universal
         # Resolve type aliases: if type_str is a user type, look up its definition
         alias = ParserState.symbol_table.lookup(type_str)
@@ -954,7 +957,10 @@ def _translate_method(obj_name, method_name):
             for prefix, mappings in _PY_METHOD_TO_NIM.items():
                 if resolved.startswith(prefix):
                     if method_name in mappings:
-                        return mappings[method_name]
+                        nim_method = mappings[method_name]
+                        if nim_method in _STRUTILS_METHODS:
+                            ParserState.nim_imports.add("strutils")
+                        return nim_method
                     break
         # For PyObject / pyImport module vars, don't apply universal mappings
         if type_str.startswith("_py_module:") or type_str.startswith("_nim_module:"):
