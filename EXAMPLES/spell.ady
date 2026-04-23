@@ -58,8 +58,8 @@ def edits1(word: str) -> []str:
     var result: []str = []
     var L: str = ""
     var R: str = ""
-    for i in 0..<len(word):
-        L = word[0:i]
+    for i in word'Range:
+        L = word[:i]
         R = word[i:]
         result.append(L + R[1:])                        # delete
         if len(R) > 1:
@@ -93,15 +93,7 @@ def candidates(word: str) -> {}str:
     return fallback
 
 def correction(word: str) -> str:
-    let cands: {}str = candidates(word)
-    var best: str = ""
-    var best_p: Prob_T = 0
-    for w in cands:
-        let p: Prob_T = P(w)
-        if p > best_p:
-            best_p = p
-            best = w
-    return best
+    return max(candidates(word), key=P)
 
 # ============================================================
 # Main

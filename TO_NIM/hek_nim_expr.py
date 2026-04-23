@@ -1681,6 +1681,14 @@ def _translate_stdlib_patterns(expr):
         ParserState.nim_imports.add("algorithm")
         return f"{_sorted_plain.group(1)}.sorted"
 
+    # --- 8. max(X, key=f) / min(X, key=f) -> foldl ---
+    _maxmin_key = _re.match(r'^(max|min)\((.+),\s*key\s*=\s*(.+)\)$', expr)
+    if _maxmin_key:
+        fn, iterable, key_fn = _maxmin_key.group(1), _maxmin_key.group(2), _maxmin_key.group(3).strip()
+        cmp_op = ">" if fn == "max" else "<"
+        ParserState.nim_imports.add("sequtils")
+        return f"toSeq({iterable}).foldl(if {key_fn}(b) {cmp_op} {key_fn}(a): b else: a)"
+
     return expr
 
 
