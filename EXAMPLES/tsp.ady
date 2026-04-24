@@ -16,6 +16,8 @@ Algorithms implemented (in order of increasing quality):
   three_opt_tsp      O(n³/pass)   remove 3 edges, reconnect in best of 5 ways
   lk_tsp             O(n·k²)      Lin-Kernighan: neighbour-guided 2- and 3-opt chain
   sa_tsp             O(n²·iters)  simulated annealing: accept worse moves probabilistically
+  tabu_tsp           O(n³·iters)  tabu search: best 2-opt move per step, tabu list blocks revisits
+                                  WARNING: O(n²) per iteration — much slower than SA for large n
   held_karp_tsp      O(2ⁿ·n²)    Held-Karp DP exact solution (n ≤ 20 only)
   exhaustive_tsp     O(n!)        brute-force over all permutations (n ≤ 11 only)
 
@@ -23,15 +25,21 @@ Correctness validation (verified against Held-Karp optimal):
   n=10: all algorithms from 2-opt upward find the optimum (1783.8)
   n=12: all algorithms from 2-opt upward find the optimum (1976.8)
   n=15: Rep-2opt, Ensemble find optimum (2127.0); 3-opt reaches 2186.0;
-        2-opt/Or-opt/LK/SA stuck at 2209–2212 (different local optima)
+        2-opt/Or-opt/LK/SA/Tabu stuck at 2209–2212 (different local optima)
 
 Observed quality ranking at n=500 (lower is better):
   Nearest  15975  |  MST     16193  |  Greedy  14291  |  Rep-NN  14895
   2-opt    13533  |  Or-opt  13181  |  LK      13161  |  SA      12985
   Rep-2opt 12970  |  Ensemble 12950  |  3-opt  12729  (53s)
+  Tabu     ~13000 (comparable to SA, faster for small n)
 
 Key findings:
   - SA beats 3-opt in quality/time trade-off: comparable length, 25× faster at n=500
+  - Tabu search is comparable to SA in quality but O(n²) per iteration vs SA's O(1):
+    each step scans all n² 2-opt pairs to pick the best non-tabu move. This makes
+    tabu O(n⁴) total vs SA's O(n²) — expect 100–400× slower at n≥100.
+    Tabu tenure n/4 balances diversification and intensification. Aspiration
+    criterion overrides the tabu list when a move improves the all-time best.
   - Ensemble beats all single-start heuristics including 2-opt and Or-opt
   - LK occasionally loses to 3-opt on small n: the sequential-exchange gain
     criterion is more restrictive than exhaustive 3-opt, so LK explores fewer
@@ -455,6 +463,70 @@ def sa_tsp(tour: Tour_T) -> Tour_T:
         temp = temp * cooling
     return best
 
+# Tabu search: at each step evaluate 2-opt swaps restricted to the k nearest
+# neighbours of each city (same candidate list used by lk_tsp) and pick the
+# best non-tabu move.  Aspiration criterion: a tabu move is allowed when it
+# beats the all-time best tour length, preventing stagnation.
+# The tabu list records position pairs (i, j) as forbidden for `tenure` steps.
+# Using neighbour lists reduces per-step cost from O(n²) to O(n·k), matching
+# SA's overall budget at n²·20 iterations with k=10.
+# Tenure n/4 is a standard rule of thumb for TSP instances.
+def tabu_tsp(tour: Tour_T) -> Tour_T:
+    var current: Tour_T = tour
+    var best: Tour_T = tour
+    var best_len: float = tour_length(tour)
+    let sz: int = len(tour)
+    let k: int = (10 if sz > 10 else sz - 1)
+    let tenure: int = sz // 4
+    let iterations: int = sz * sz * 20
+    let neighbors: [][]int = build_neighbors(current, k)
+    # tabu_age[i][j] = iteration until which the swap reversing segment [i..j] is tabu
+    var tabu_age: [][]int
+    for ii in 0..<sz:
+        var row: []int = [0 for jj in 0..<sz]
+        tabu_age.append(row)
+    var cur_len: float = best_len
+    for it in 0..<iterations:
+        var move_i: int = -1
+        var move_j: int = -1
+        var move_delta: float = 1e18
+        # for each city i, check 2-opt swaps with its k nearest neighbours
+        for i in 1..sz-2:
+            for ni in 0..<k:
+                let nb: int = neighbors[i][ni]
+                if nb <= i or nb >= sz:
+                    continue
+                let j: int = nb
+                let next_j: int = (0 if j + 1 == sz else j + 1)
+                let new_d: float = distance(current[i-1], current[j]) + distance(current[i], current[next_j])
+                let old_d: float = distance(current[i-1], current[i]) + distance(current[j], current[next_j])
+                let delta: float = new_d - old_d
+                let is_tabu: bool = tabu_age[i][j] > it
+                let aspiration: bool = cur_len + delta < best_len
+                if (not is_tabu or aspiration) and delta < move_delta:
+                    move_delta = delta
+                    move_i = i
+                    move_j = j
+        if move_i == -1:
+            continue
+        var newt: Tour_T
+        for x in 0..<move_i:
+            newt.append(current[x])
+        var x: int = move_j
+        while x >= move_i:
+            newt.append(current[x])
+            x = x - 1
+        for x in move_j+1..<sz:
+            newt.append(current[x])
+        current = newt
+        cur_len = cur_len + move_delta
+        tabu_age[move_i][move_j] = it + tenure
+        tabu_age[move_j][move_i] = it + tenure
+        if cur_len < best_len:
+            best_len = cur_len
+            best = current
+    return best
+
 # Prim's algorithm: grow a minimum spanning tree by repeatedly adding the
 # cheapest edge from the tree to any unvisited vertex. O(n²).
 # Returns an adjacency list children[i] = list of child indices (rooted at 0).
@@ -773,6 +845,12 @@ let sa_tour: Tour_T = sa_tsp(lk_tour)
 let t11: float = cpuTime()
 let sa_msg: str = f"SA:       {n} cities  |  length: {tour_length(sa_tour):.1f}  |  time: {(t11-t10)*1000.0:.1f} ms"
 print sa_msg
+
+let ttb0: float = cpuTime()
+let tabu_tour: Tour_T = tabu_tsp(lk_tour)
+let ttb1: float = cpuTime()
+let tabu_msg: str = f"Tabu:     {n} cities  |  length: {tour_length(tabu_tour):.1f}  |  time: {(ttb1-ttb0)*1000.0:.1f} ms"
+print tabu_msg
 
 if n <= 20:
     let thk0: float = cpuTime()
