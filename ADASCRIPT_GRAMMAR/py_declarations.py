@@ -119,6 +119,60 @@ Nim code generation is in ``hek_nim_declarations.py`` (``to_nim()`` methods)::
     Tuples:      (int, str) -> (int, string)
     Callables:   [(int, str)]bool -> proc(a0: int, a1: string): bool
 
+Initialisation via comprehension
+================================
+
+Sequences, fixed-size arrays, dicts, and sets can all be initialised from
+a comprehension on the right-hand side of an annotated assignment. The
+transpiler reads the target type annotation and shapes the generated code
+accordingly — you never have to write an explicit fill loop.
+
+Sequences (``[]T``)
+-------------------
+The comprehension becomes a direct Nim ``collect()``::
+
+    var squares: []int = [i*i for i in 0..<10]
+    # Nim: var squares: seq[int] = collect(for i in 0 ..< 10: i * i)
+
+Fixed-size arrays (``[N]T``)
+----------------------------
+The array dimension can be an INTEGER literal OR a compile-time ``const``
+identifier. The ``const`` itself may be any expression Nim can fold at
+compile time — an integer literal, arithmetic on other ``const``s, etc.
+Nim resolves the size during its own compilation pass::
+
+    const N_LESSONS: int = 22                # literal
+    const SIZE_A:    int = 2 + 2 + 2 + 1     # arithmetic
+    const SIZE_B:    int = SIZE_A + 7 + 8    # composes with other consts
+    type State_T is [N_LESSONS]int
+    type Matrix_T is [SIZE_B][SIZE_B]float
+
+Because Nim's ``collect`` always produces a ``seq``, the transpiler wraps
+a comprehension assigned into an array-typed destination in a ``block:``
+that copies the collected seq into a fixed-size array — so the assignment
+just works without any extra syntax::
+
+    # Constant fill — every cell set to -1
+    var INITIAL_STATE: State_T = [-1 for i in 0..<N_LESSONS]
+
+    # Element expression may depend on the loop variable
+    var PATTERN: State_T = [(-1 if i%2 != 0 else 10) for i in 0..<N_LESSONS]
+
+Note: conditional positions need explicit booleans — ``i%2 != 0`` rather
+than bare ``i%2``.
+
+Dictionaries (``{K}V``)
+-----------------------
+Dict comprehensions translate into ``collect(initTable, ...)``::
+
+    var sq_lookup: {int}int = {i: i*i for i in 1..<10}
+
+Sets (``{}T``)
+--------------
+Set comprehensions translate into ``toHashSet(collect(...))``::
+
+    var evens: {}int = {i for i in 0..<20 if i%2 == 0}
+
 Usage
 =====
 ::
