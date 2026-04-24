@@ -498,6 +498,50 @@ def _unwrap_array_values_in_table(value, annotation):
     return _re_av.sub(r'\{[^{}]*\}\.toTable', _fix_segment, value)
 
 
+def _wrap_seq_for_queue(value, annotation):
+    """If annotation is one of the stdlib queue types (FifoQueue, LifoQueue,
+    PriorityQueue) and the RHS is a single-element seq literal (``@[x]``),
+    rewrite it into the matching ``newXxxQueueWith(x)`` constructor call.
+
+    This lets users write the same syntax they'd use for a plain seq::
+
+        queue : PriorityQueue[Neighbour_T] = [(0.0, start)]
+
+    which would otherwise fail — ``@[T]`` is a ``seq[T]`` and Nim doesn't
+    implicitly convert it to the queue wrapper. Only single-element
+    literals are handled, because that's what maps onto the ``newXxxWith``
+    constructors in stdlib.nim. For empty or multi-element seeds the user
+    still falls back to an explicit constructor + ``push`` calls.
+    """
+    import re as _re_q
+    _ann = annotation.strip()
+    _sym = ParserState.symbol_table.lookup(_ann) if _re_q.match(r'^\w+$', _ann) else None
+    if _sym and _sym.get('kind') == 'type':
+        _ann = _sym.get('type', _ann) or _ann
+    _qm = _re_q.match(r'^(FifoQueue|LifoQueue|PriorityQueue)\[', _ann)
+    if not _qm:
+        return value
+    # Match exactly `@[<single element>]` — reject multi-element literals
+    # because the `newXxxQueueWith` constructors take a single seed value.
+    _lm = _re_q.match(r'^@\[(.+)\]$', value)
+    if not _lm:
+        return value
+    _item = _lm.group(1)
+    # A top-level comma means this is a multi-element seq literal (not a
+    # single tuple, which is parenthesised).  Bail out in that case.
+    depth = 0
+    for ch in _item:
+        if ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+        elif ch == ',' and depth == 0:
+            return value
+    _ctor = "new" + _qm.group(1) + "With"
+    ParserState.nim_imports.add("stdlib")
+    return f"{_ctor}({_item})"
+
+
 def _wrap_comprehension_for_array(value, annotation):
     """If annotation is `array[N, T]` (or an alias thereof) and value is a
     list/set/dict comprehension that transpiled to `collect(...)`, wrap it in
@@ -605,6 +649,9 @@ def to_nim(self):
                 # For array types with a comprehension RHS, wrap the collect()
                 # into a block: that copies the collected seq into the array.
                 value = _wrap_comprehension_for_array(value, annotation)
+                # FifoQueue/LifoQueue/PriorityQueue seeded from a single-
+                # element list literal: `[x]` -> `newXxxQueueWith(x)`
+                value = _wrap_seq_for_queue(value, annotation)
                 # initTable() needs explicit type params (handles nested too)
                 value = _specialize_init_table(value, annotation)
                 # Table[K, seq[T]] with range fields: wrap seq values for coercion
@@ -709,6 +756,9 @@ def to_nim(self):
                 # For array types with a comprehension RHS, wrap the collect()
                 # into a block: that copies the collected seq into the array.
                 value = _wrap_comprehension_for_array(value, annotation)
+                # FifoQueue/LifoQueue/PriorityQueue seeded from a single-
+                # element list literal: `[x]` -> `newXxxQueueWith(x)`
+                value = _wrap_seq_for_queue(value, annotation)
                 # initTable() needs explicit type params (handles nested too)
                 value = _specialize_init_table(value, annotation)
                 # Table[K, seq[T]] with range fields: wrap seq values for coercion
