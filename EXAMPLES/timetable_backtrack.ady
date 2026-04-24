@@ -59,18 +59,15 @@ type ClassSubject_T is tuple:
     cls: CLASS_T
     subj: SUBJECT_T
 
-# Per-class, per-subject period counts, indexed directly by SUBJECT_T.
-# Using an enum-indexed array (Nim: array[SUBJECT_T, int]) means a literal
-# is written in enum-declaration order and `req[subj]` is an O(1) lookup
-# with no dispatch. Adding or renaming a SUBJECT_T variant propagates here
-# automatically — no named fields to keep in sync.
-type SubjectCounts_T is [SUBJECT_T]Natural
-
-# Promoted to `const` so we can derive N_LESSONS from it at compile time.
-const requirements: {CLASS_T}SubjectCounts_T = {
-    Year9A:  [2, 2, 2, 1],   # Math, English, Science, History
-    Year9B:  [2, 2, 1, 2],
-    Year10A: [3, 2, 2, 1],
+# Per-class, per-subject period counts. Each value is a SUBJECT_T-indexed
+# array of Natural, so `requirements[cls][subj]` is an O(1) enum-index
+# lookup. Array literals are written in enum-declaration order, and the
+# whole table is a `const` so we can sum it at compile time to derive
+# N_LESSONS below.
+const requirements: {CLASS_T}[SUBJECT_T]Natural = {
+    Year9A:  [Math: 2, English: 2, Science: 2, History: 1],
+    Year9B:  [Math: 2, English: 2, Science: 1, History: 2],
+    Year10A: [Math: 3, English: 2, Science: 2, History: 1],
 }
 
 type TeacherSubject_T is tuple:
@@ -88,10 +85,12 @@ let room_capacity: {ROOM_T}Natural  = {R1: 35, R2: 30, R3: 25}
 let class_size:    {CLASS_T}Natural = {Year9A: 28, Year9B: 25, Year10A: 22}
 
 
+
 # ============================================================
 # BUILD LESSON TOKENS AND CANDIDATE LISTS
 # ============================================================
-
+# this is the heart of the problem.
+# for each Lesson_T, we try to assign a Value_T
 type Lesson_T is tuple:
     cls: CLASS_T
     subj: SUBJECT_T
@@ -101,7 +100,7 @@ type Value_T is tuple:
     teacher: TEACHER_T
     room: ROOM_T
     period: Period_T
-
+#####################################################################
 # All (class, subject) combinations for classes in `requirements` that have
 # at least one period of that subject. Drives every downstream iteration
 # and keeps the (cls, subj) ordering deterministic. Iterating CLASS_T /
@@ -140,7 +139,6 @@ var all_candidates: {ClassSubject_T}[]Value_T = {
 var lesson_cs:    []ClassSubject_T = [(cls: l.cls, subj: l.subj) for l in lessons]
 var lesson_cands: [][]Value_T      = [all_candidates[cs] for cs in lesson_cs]
 
-
 # ============================================================
 # STATE REPRESENTATION
 # ============================================================
@@ -162,11 +160,11 @@ var lesson_cands: [][]Value_T      = [all_candidates[cs] for cs in lesson_cs]
 #
 # Action_T: human-readable description of the placement (for display only).
 
-# N_LESSONS derived from requirements at compile time. `requirements` is a
-# const (per-class SubjectCounts_T tuples), and Nim's `const` context can
-# fold arbitrary pure expressions — including iterating the Table and
-# summing tuple fields. No magic numbers, no dependency rot: change the
-# requirements table and N_LESSONS follows.
+# N_LESSONS derived from requirements at compile time. `requirements` is
+# a const (per-class SUBJECT_T-indexed arrays), and Nim's const context
+# folds arbitrary pure expressions — including iterating the Table and
+# summing the array elements. No magic numbers, no dependency rot: change
+# the requirements table and N_LESSONS follows.
 #
 # Making N_LESSONS a compile-time constant unlocks a fixed-size
 # array[N_LESSONS, int] State_T, stack-allocated and hashed as raw bytes.
