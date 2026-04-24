@@ -17,7 +17,7 @@ def example1():
     type Decision_T is State_T  # the decision is which state we will choose
     type Choice_T is (Decision_T, Revenue_T)
     # for each state, a list of choices
-    var G: {State_T}[]Choice_T = {
+    var GR: {State_T}[]Choice_T = {
         s: [(u, 10), (x, 5)],
         u: [(v, 1), (x, 2)],
         v: [(y, 4)],
@@ -28,7 +28,7 @@ def example1():
         def get_state(self, past_decisions: []Decision_T) -> State_T:
             past_decisions[-1]
         def get_next_decisions(self, curr_state: State_T) -> []Choice_T:
-            G.get(curr_state, [])
+            GR.get(curr_state, [])
 
     op: MyOptimizer = MyOptimizer()
     for solution in op.longest_path(start_state=s, end_state=v, max_path_length=4):
@@ -299,7 +299,7 @@ def example7():
      lugoj, mehadia, neamt, oradea, pitesti, rimnicu, sibiu, timisoara, urzineci, vaslui, zerind
     type Distance_T is float
     type Decision_T is State_T
-    var G: {State_T}[](Decision_T, Distance_T) = {
+    var GR: {State_T}[](Decision_T, Distance_T) = {
         arad:      [(sibiu, 140.0), (timisoara, 118.0), (zerind, 75.0)],
         bucharest: [(giurgiu, 90.0), (urzineci, 85.0), (fagaras, 211.0), (pitesti, 101.0)],
         craiova:   [(rimnicu, 146.0), (pitesti, 138.0), (drobeta, 120.0)],
@@ -333,7 +333,7 @@ def example7():
         def get_state(self, past_decisions: []State_T) -> State_T:
             past_decisions[-1]
         def get_next_decisions(self, current_state: State_T) -> [](Decision_T, Distance_T):
-            G.get(current_state, [])
+            GR.get(current_state, [])
         def get_heuristic_cost(self, city: State_T) -> float:
             HEURISTICS.get(city, 0)
 
