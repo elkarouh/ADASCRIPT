@@ -405,6 +405,22 @@ def _coerce_table_seq_values(value, annotation):
     if not _tm:
         return value
     _elem_type = _tm.group(2) or _tm.group(3)
+
+    # Scalar V that is a range subtype: cast bare-int dict values explicitly
+    # (Nim rejects implicit int -> Natural coercion in a typed Table literal).
+    _RANGE_SUBTYPES = ("Positive", "Natural", "range[")
+    _resolved = ParserState.symbol_table.resolve_type(_elem_type)
+    if any(_resolved.startswith(r) for r in _RANGE_SUBTYPES):
+        def _cast_scalar_segment(m):
+            seg = m.group(0)
+            # Wrap each `: <digits>` in `: <Type>(<digits>)`.
+            return _re_csv.sub(
+                r':\s*(\d+)\b',
+                lambda mm: f": {_elem_type}({mm.group(1)})",
+                seg,
+            )
+        return _re_csv.sub(r'\{[^{}]*\}\.toTable', _cast_scalar_segment, value)
+
     if value.endswith(".toTable"):
         return _coerce_tuple_literals(value, _elem_type)
     else:
@@ -412,6 +428,121 @@ def _coerce_table_seq_values(value, annotation):
         def _coerce_segment(m):
             return _coerce_tuple_literals(m.group(0), _elem_type)
         return _re2.sub(r'\{[^{}]*\}\.toTable', _coerce_segment, value)
+
+
+def _unwrap_array_values_in_table(value, annotation):
+    """For `Table[K, array[E, T]]` (or a type alias resolving to one) fix up
+    each value literal:
+
+      * Strip the ``@`` from ``@[...]`` (seq literal -> array literal).
+      * If T is a range subtype (Natural, Positive, range[...]) cast bare
+        integer elements with the subtype name so Nim's type-checker is
+        happy: ``[2, 3]`` -> ``[Natural(2), Natural(3)]``.
+
+    AdaScript's list literal always transpiles to a seq literal ``@[...]``
+    regardless of the target type, and integer literals default to ``int``.
+    This helper does the minimal textual surgery to make them compatible
+    with a fixed-size array[E, RangeT] element type."""
+    import re as _re_av
+    if ".toTable" not in value:
+        return value
+
+    def _resolve_annotation(ann):
+        sym = ParserState.symbol_table.lookup(ann.strip())
+        if sym and sym.get('kind') == 'type':
+            return sym.get('type', ann) or ann
+        return ann
+
+    _ann = annotation.strip()
+    if _re_av.match(r'^\w+$', _ann):
+        _ann = _resolve_annotation(_ann)
+
+    # Need Table[K, array[...]] — resolve V if it's a type alias.
+    _tm = _re_av.match(r'^Table\[.+?,\s*(.+)\]$', _ann)
+    if not _tm:
+        return value
+    _vt = _tm.group(1).strip()
+    if _re_av.match(r'^\w+$', _vt):
+        _vt = _resolve_annotation(_vt)
+    if not _vt.startswith("array["):
+        return value
+
+    # Extract the element type from array[E, T]
+    _em = _re_av.match(r'^array\[.+?,\s*(.+)\]$', _vt)
+    _elem_type = _em.group(1).strip() if _em else None
+    _RANGE_SUBTYPES = ("Positive", "Natural", "range[")
+    _cast_name = None
+    if _elem_type:
+        resolved = ParserState.symbol_table.resolve_type(_elem_type)
+        if any(resolved.startswith(r) for r in _RANGE_SUBTYPES):
+            _cast_name = _elem_type
+
+    # Inside each {...}.toTable segment: strip @ and (optionally) cast ints.
+    def _fix_segment(m):
+        seg = m.group(0).replace(": @[", ": [")
+        if _cast_name:
+            # Cast bare integer literals inside array literals.
+            # Match a `[...]` that follows a `: ` (ensures we're in a value slot).
+            def _cast_arr(mm):
+                inner = mm.group(1)
+                parts = [p.strip() for p in inner.split(",")]
+                casted = []
+                for p in parts:
+                    if _re_av.match(r'^\d+$', p):
+                        casted.append(f"{_cast_name}({p})")
+                    else:
+                        casted.append(p)
+                return ": [" + ", ".join(casted) + "]"
+            seg = _re_av.sub(r': \[([^\[\]]+)\]', _cast_arr, seg)
+        return seg
+    return _re_av.sub(r'\{[^{}]*\}\.toTable', _fix_segment, value)
+
+
+def _wrap_comprehension_for_array(value, annotation):
+    """If annotation is `array[N, T]` (or an alias thereof) and value is a
+    list/set/dict comprehension that transpiled to `collect(...)`, wrap it in
+    a Nim `block:` that copies the collected seq into a fixed-size array.
+
+    Nim's sugar.collect always produces seq[T], and seq[T] is not assignable
+    to array[N, T]. Rather than push users into a pre-declared var + loop,
+    we emit:
+
+        block:
+          let _adasq = collect(...)
+          var _adaarr: array[N, T]
+          for _adai in 0 ..< N: _adaarr[_adai] = _adasq[_adai]
+          _adaarr
+
+    so that `var a: State_T = [x for x in xs]` just works when
+    `State_T = array[N, T]`.
+    """
+    import re as _re_arr
+    # Resolve annotation through one level of type alias (matches other helpers)
+    _ann = annotation
+    _ann_sym = ParserState.symbol_table.lookup(_ann)
+    if _ann_sym and _ann_sym.get("kind") == "type":
+        _ann = _ann_sym.get("type", _ann) or _ann
+    if not _ann.startswith("array["):
+        return value
+    # Match array[<size>, <elem type>]. <size> may be an identifier (compile-
+    # time const) or a literal integer; either works as an array dimension.
+    _m = _re_arr.match(r"array\[([^,]+),\s*(.+)\]$", _ann)
+    if not _m:
+        return value
+    _size = _m.group(1).strip()
+    # Value must be a fresh `collect(...)` expression (not something like
+    # `foo(collect(...))` — the wrapper would change semantics).
+    if not value.startswith("collect("):
+        return value
+    # Wrap the comprehension. Names are prefixed `ada` (no leading underscore
+    # — Nim rejects identifiers starting with `_`).
+    return (
+        "(block:\n"
+        f"    let adasq = {value}\n"
+        f"    var adaarr: {_ann}\n"
+        f"    for adai in 0 ..< {_size}: adaarr[adai] = adasq[adai]\n"
+        "    adaarr)"
+    )
 
 
 def _specialize_init_table(value, annotation):
@@ -471,10 +602,15 @@ def to_nim(self):
                 # For array types, strip @ prefix from list literals
                 if annotation.startswith("array[") and value.startswith("@["):
                     value = value[1:]
+                # For array types with a comprehension RHS, wrap the collect()
+                # into a block: that copies the collected seq into the array.
+                value = _wrap_comprehension_for_array(value, annotation)
                 # initTable() needs explicit type params (handles nested too)
                 value = _specialize_init_table(value, annotation)
                 # Table[K, seq[T]] with range fields: wrap seq values for coercion
                 value = _coerce_table_seq_values(value, annotation)
+                # Table[K, array[...]]: each @[...] value needs to become [...]
+                value = _unwrap_array_values_in_table(value, annotation)
                 # Range/enum scalar: wrap int literals and int-valued calls
                 value = _coerce_scalar_value(value, annotation)
                 # array types: {} is unnecessary — arrays are zero-initialized
@@ -570,10 +706,15 @@ def to_nim(self):
                 # For array types, strip @ prefix from list literals
                 if annotation.startswith("array[") and value.startswith("@["):
                     value = value[1:]
+                # For array types with a comprehension RHS, wrap the collect()
+                # into a block: that copies the collected seq into the array.
+                value = _wrap_comprehension_for_array(value, annotation)
                 # initTable() needs explicit type params (handles nested too)
                 value = _specialize_init_table(value, annotation)
                 # Table[K, seq[T]] with range fields: wrap seq values for coercion
                 value = _coerce_table_seq_values(value, annotation)
+                # Table[K, array[...]]: each @[...] value needs to become [...]
+                value = _unwrap_array_values_in_table(value, annotation)
                 # Range/enum scalar: wrap int literals and int-valued calls
                 value = _coerce_scalar_value(value, annotation)
                 # array types: {} is unnecessary — arrays are zero-initialized
