@@ -1,5 +1,5 @@
 #!/usr/bin/env py2nim
-nimport stdlib
+from stdlib nimport PriorityQueue
 type Node_T is enum A, B, C, D
 type Distance_T is float
 type Graph_T is {Node_T}{Node_T}Distance_T
@@ -9,14 +9,10 @@ type Neighbour_T is tuple:
     neighbor: Node_T
 
 def dijkstra(graph : Graph_T, start: Node_T) -> {Node_T}Distance_T:
-    distances: {Node_T}Distance_T = {node: MAX_DIST for node in graph if node != start}
-    distances[start] = 0
-
-    visited : {}Node_T= {}
-    queue : PriorityQueue[Neighbour_T]
-    queue.push((0.0, start))
+    distances: {Node_T}Distance_T = {node: (0.0 if node==start else MAX_DIST) for node in graph}
+    visited : {}Node_T
+    queue : PriorityQueue[Neighbour_T] = [(0.0, start)]
     while queue:
-        #queue = queue.sorted(key=lambda x: x.distance)
         current_dist, node = queue.pop()
         if node in visited:
             continue
@@ -27,7 +23,6 @@ def dijkstra(graph : Graph_T, start: Node_T) -> {Node_T}Distance_T:
                 distances[neighbor] = new_dist
                 queue.push((new_dist, neighbor))
     return distances
-
 
 graph : Graph_T = {A:{B:1.0, C:4.0}, B: {C:2.0, D:5.0}, C: {D:1.0}, D: {:}}
 print dijkstra(graph, A)
