@@ -60,12 +60,10 @@ type ClassSubject_T is tuple:
     cls: CLASS_T
     subj: SUBJECT_T
 
-type SubjectCounts_T is [SUBJECT_T]Natural
-
-const requirements: {CLASS_T}SubjectCounts_T = {
-    Year9A:  [2, 2, 2, 1],   # Math, English, Science, History
-    Year9B:  [2, 2, 1, 2],
-    Year10A: [3, 2, 2, 1],
+const requirements: {CLASS_T}[SUBJECT_T]Natural = {
+    Year9A:  [Math: 2, English: 2, Science: 2, History: 1],
+    Year9B:  [Math: 2, English: 2, Science: 1, History: 2],
+    Year10A: [Math: 3, English: 2, Science: 2, History: 1],
 }
 
 type TeacherSubject_T is tuple:
@@ -86,7 +84,8 @@ let class_size:    {CLASS_T}Natural = {Year9A: 28, Year9B: 25, Year10A: 22}
 # ============================================================
 # LESSONS AND CANDIDATE LISTS
 # ============================================================
-
+# this is the heart of the problem.
+# for each Lesson_T, we try to assign a Value_T
 type Lesson_T is tuple:
     cls: CLASS_T
     subj: SUBJECT_T
@@ -96,7 +95,7 @@ type Value_T is tuple:
     teacher: TEACHER_T
     room: ROOM_T
     period: Period_T
-
+#####################################################################
 var cs_keys: []ClassSubject_T = [
     (cls: c, subj: s)
     for c in CLASS_T if c in requirements
