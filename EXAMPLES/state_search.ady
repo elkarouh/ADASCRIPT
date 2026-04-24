@@ -23,18 +23,31 @@ type Step_T[S, A] is tuple:
     action: A
     next_state: S
 
+# Back-link table for path reconstruction.
+# We use two parallel arrays instead of a tuple-of-pair to sidestep having
+# to construct a Step_T[S, A] for the root (which has no incoming step).
+# Convention:
+#   parents[0] == -1        — marks the root
+#   parents[i] (i>0)        — index of the parent node
+#   steps[i]   (i>0)        — the Step_T that led from parents[i] to node i
+#   steps[0] is never read  — it exists only to keep indices aligned
+
 # Fringe element for BFS / DFS (FifoQueue / LifoQueue).
+# `node_idx` is an index into a side `nodes` array — carrying the full path
+# around in every fringe entry (the old `path: []Step_T` design) makes every
+# push O(depth), which dominates the runtime of dense search trees.
 type QFringe_T[S, A] is tuple:
     depth: int
-    path: []Step_T[S, A]
+    node_idx: int
     state: S
 
 # Fringe element for priority-based search (A*, best-first).
+# Same back-link trick as QFringe_T — `node_idx` replaces the full `path`.
 type PQFringe_T[S, A] is tuple:
     priority: float
     counter: int
     depth: int
-    path: []Step_T[S, A]
+    node_idx: int
     state: S
 
 
@@ -79,44 +92,82 @@ class StateSearcher[S, A]:
     # Public search strategies
     # ------------------------------------------------------------------
 
+    def _reconstruct(self, parents: []int, steps: []Step_T[S, A], goal_idx: int) -> []Step_T[S, A]:
+        """Walk parent pointers from `goal_idx` back to the root and reverse.
+        Used by every search strategy to rebuild the solution path without
+        storing it redundantly in every fringe entry."""
+        var collected: []Step_T[S, A] = []
+        var i: int = goal_idx
+        while parents[i] >= 0:
+            collected.append(steps[i])
+            i = parents[i]
+        # collected is goal-to-root; reverse into natural order
+        var path: []Step_T[S, A] = []
+        var j: int = len(collected) - 1
+        while j >= 0:
+            path.append(collected[j])
+            j = j - 1
+        return path
+
     def search(self, initial: S) -> []Step_T[S, A]:
         """BFS — always returns the shortest solution (fewest moves)."""
-        empty_path: []Step_T[S, A] = []
-        fringe: FifoQueue[QFringe_T[S, A]] = FifoQueue((0, empty_path, initial))
+        # Back-link storage: parents and steps grow in lock-step.
+        # Index 0 is the root — steps[0] is allocated on first push and never read.
+        var parents: []int = []
+        var steps: []Step_T[S, A] = []
+        parents.append(-1)
+        var root_placeholder_pushed: bool = False
+        fringe: FifoQueue[QFringe_T[S, A]] = FifoQueue((0, 0, initial))
         visited: {}S = set()
 
         while fringe:
-            let (depth, path, state) = fringe.pop()
+            let (depth, node_idx, state) = fringe.pop()
             if state in visited:
                 continue
             visited.add(state)
             if self.is_goal(state):
-                return path
+                return self._reconstruct(parents, steps, node_idx)
             for step in self.get_next_states(state):
                 if step.next_state not in visited:
-                    fringe.push((depth + 1, path + [step], step.next_state))
+                    if not root_placeholder_pushed:
+                        # Seed steps[0] with the first real step — it will
+                        # never be returned because parents[0] == -1.
+                        steps.append(step)
+                        root_placeholder_pushed = True
+                    parents.append(node_idx)
+                    steps.append(step)
+                    # Fringe carries only an index — no path copy per push.
+                    fringe.push((depth + 1, len(parents) - 1, step.next_state))
 
         return []
 
     def search_dfs(self, initial: S, limit: int = -1) -> []Step_T[S, A]:
         """DFS — optionally bounded by depth limit. Not guaranteed optimal.
         limit < 0 means unlimited."""
-        empty_path: []Step_T[S, A] = []
-        fringe: LifoQueue[QFringe_T[S, A]] = LifoQueue((0, empty_path, initial))
+        var parents: []int = []
+        var steps: []Step_T[S, A] = []
+        parents.append(-1)
+        var root_placeholder_pushed: bool = False
+        fringe: LifoQueue[QFringe_T[S, A]] = LifoQueue((0, 0, initial))
         visited: {}S = set()
 
         while fringe:
-            let (depth, path, state) = fringe.pop()
+            let (depth, node_idx, state) = fringe.pop()
             if state in visited:
                 continue
             visited.add(state)
             if self.is_goal(state):
-                return path
+                return self._reconstruct(parents, steps, node_idx)
             if limit >= 0 and depth >= limit:
                 continue
             for step in self.get_next_states(state):
                 if step.next_state not in visited:
-                    fringe.push((depth + 1, path + [step], step.next_state))
+                    if not root_placeholder_pushed:
+                        steps.append(step)
+                        root_placeholder_pushed = True
+                    parents.append(node_idx)
+                    steps.append(step)
+                    fringe.push((depth + 1, len(parents) - 1, step.next_state))
 
         return []
 
@@ -132,20 +183,28 @@ class StateSearcher[S, A]:
 
     def search_all(self, initial: S):
         """Yield every solution in BFS order (shortest first). Break to stop early."""
-        empty_path: []Step_T[S, A] = []
-        fringe: FifoQueue[QFringe_T[S, A]] = FifoQueue((0, empty_path, initial))
+        var parents: []int = []
+        var steps: []Step_T[S, A] = []
+        parents.append(-1)
+        var root_placeholder_pushed: bool = False
+        fringe: FifoQueue[QFringe_T[S, A]] = FifoQueue((0, 0, initial))
         visited: {}S = set()
 
         while fringe:
-            let (depth, path, state) = fringe.pop()
+            let (depth, node_idx, state) = fringe.pop()
             if state in visited:
                 continue
             visited.add(state)
             if self.is_goal(state):
-                yield path
+                yield self._reconstruct(parents, steps, node_idx)
             for step in self.get_next_states(state):
                 if step.next_state not in visited:
-                    fringe.push((depth + 1, path + [step], step.next_state))
+                    if not root_placeholder_pushed:
+                        steps.append(step)
+                        root_placeholder_pushed = True
+                    parents.append(node_idx)
+                    steps.append(step)
+                    fringe.push((depth + 1, len(parents) - 1, step.next_state))
 
     # ------------------------------------------------------------------
     # Display
@@ -169,23 +228,31 @@ class StateSearcher[S, A]:
         use_cost=True       -> include depth (g-cost) in priority
         """
         counter: int = 0
-        empty_path: []Step_T[S, A] = []
-        fringe: PriorityQueue[PQFringe_T[S, A]] = PriorityQueue((0.0, 0, 0, empty_path, initial))
+        var parents: []int = []
+        var steps: []Step_T[S, A] = []
+        parents.append(-1)
+        var root_placeholder_pushed: bool = False
+        fringe: PriorityQueue[PQFringe_T[S, A]] = PriorityQueue((0.0, 0, 0, 0, initial))
         visited: {}S = set()
 
         while fringe:
-            let (_, _, depth, path, state) = fringe.pop()
+            let (_, _, depth, node_idx, state) = fringe.pop()
             if state in visited:
                 continue
             visited.add(state)
             if self.is_goal(state):
-                return path
+                return self._reconstruct(parents, steps, node_idx)
             for step in self.get_next_states(state):
                 if step.next_state not in visited:
                     h: float = self.heuristic(step.next_state) if use_heuristic else 0.0
                     g: float = float(depth + 1) if use_cost else 0.0
                     priority: float = g + h
                     counter = counter + 1
-                    fringe.push((priority, counter, depth + 1, path + [step], step.next_state))
+                    if not root_placeholder_pushed:
+                        steps.append(step)
+                        root_placeholder_pushed = True
+                    parents.append(node_idx)
+                    steps.append(step)
+                    fringe.push((priority, counter, depth + 1, len(parents) - 1, step.next_state))
 
         return []
