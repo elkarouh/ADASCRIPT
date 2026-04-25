@@ -39,67 +39,80 @@ nimport time
 
 
 # ============================================================
-# DATA (same structure as the backtracking version)
+# INPUT DATA  (regenerate with: python3 timetable_load.py timetable_sa.ady)
 # ============================================================
 
 type DAYS is enum Monday, Tuesday, Wednesday, Thursday, Friday
-type SLOTS is 1..4
+
+const MAX_SLOTS: int = 8
+
+# ---- INPUT DATA BEGIN ----
+
+var CLASSES:  []str = ["Year7A", "Year7B", "Year8A", "Year8B", "Year9A", "Year9B"]
+var SUBJECTS: []str = ["Math", "English", "Science", "History", "Geography", "French", "PE", "Art"]
+var TEACHERS: []str = ["Adams", "Brown", "Clarke", "Davies", "Evans", "Foster", "Green", "Harris", "Ito", "Jones"]
+var ROOMS:    []str = ["R01", "R02", "R03", "R04", "Lab1", "Lab2", "Gym", "ArtRm"]
+
+# requirements[class][subject] = number of periods per week
+var requirements: {str}{str}int = {
+    "Year7A": {"Math": 4, "English": 4, "Science": 3, "History": 2, "Geography": 2, "French": 2, "PE": 2, "Art": 1},
+    "Year7B": {"Math": 4, "English": 4, "Science": 3, "History": 2, "Geography": 2, "French": 2, "PE": 2, "Art": 1},
+    "Year8A": {"Math": 4, "English": 4, "Science": 3, "History": 2, "Geography": 2, "French": 2, "PE": 2, "Art": 1},
+    "Year8B": {"Math": 4, "English": 4, "Science": 3, "History": 2, "Geography": 2, "French": 2, "PE": 2, "Art": 1},
+    "Year9A": {"Math": 4, "English": 4, "Science": 3, "History": 2, "Geography": 2, "French": 2, "PE": 2, "Art": 1},
+    "Year9B": {"Math": 4, "English": 4, "Science": 3, "History": 2, "Geography": 2, "French": 2, "PE": 2, "Art": 1},
+}
+
+# can_teach[teacher] = list of subjects they can teach
+var can_teach: {str}[]str = {
+    "Adams":  ["Math", "Science"],
+    "Brown":  ["English", "History"],
+    "Clarke": ["Math", "French"],
+    "Davies": ["Science", "Geography"],
+    "Evans":  ["English", "Art"],
+    "Foster": ["History", "Geography"],
+    "Green":  ["Math", "Science"],
+    "Harris": ["PE"],
+    "Ito":    ["French", "Art"],
+    "Jones":  ["English", "PE"],
+}
+
+var room_capacity: {str}int = {"R01": 32, "R02": 32, "R03": 32, "R04": 32, "Lab1": 30, "Lab2": 30, "Gym": 60, "ArtRm": 28}
+var class_size:    {str}int = {"Year7A": 30, "Year7B": 28, "Year8A": 30, "Year8B": 27, "Year9A": 29, "Year9B": 26}
+
+# ---- INPUT DATA END ----
+
+
+# ============================================================
+# DERIVED STRUCTURES
+# ============================================================
 
 type Period_T is tuple:
-    day: DAYS
-    slot: SLOTS
-
-var PERIODS: []Period_T = [(day: d, slot: s) for d in DAYS for s in SLOTS'Range]
-
-type CLASS_T   is enum Year9A, Year9B, Year10A
-type SUBJECT_T is enum Math, English, Science, History
-type TEACHER_T is enum Alice, Bob, Carol, Dan
-type ROOM_T    is enum R1, R2, R3
+    day:  DAYS
+    slot: int
 
 type ClassSubject_T is tuple:
-    cls: CLASS_T
-    subj: SUBJECT_T
+    cls:  str
+    subj: str
 
-const requirements: {CLASS_T}[SUBJECT_T]Natural = {
-    Year9A:  [Math: 2, English: 2, Science: 2, History: 1],
-    Year9B:  [Math: 2, English: 2, Science: 1, History: 2],
-    Year10A: [Math: 3, English: 2, Science: 2, History: 1],
-}
-
-type TeacherSubject_T is tuple:
-    teacher: TEACHER_T
-    subj: SUBJECT_T
-
-let can_teach: {}TeacherSubject_T = {
-    (teacher: Alice, subj: Math),   (teacher: Alice, subj: Science),
-    (teacher: Bob,   subj: English),(teacher: Bob,   subj: History),
-    (teacher: Carol, subj: Math),   (teacher: Carol, subj: English),
-    (teacher: Dan,   subj: Science),(teacher: Dan,   subj: History),
-}
-
-let room_capacity: {ROOM_T}Natural  = {R1: 35, R2: 30, R3: 25}
-let class_size:    {CLASS_T}Natural = {Year9A: 28, Year9B: 25, Year10A: 22}
-
-
-# ============================================================
-# LESSONS AND CANDIDATE LISTS
-# ============================================================
-# this is the heart of the problem.
-# for each Lesson_T, we try to assign a Value_T
 type Lesson_T is tuple:
-    cls: CLASS_T
-    subj: SUBJECT_T
-    occ: int
+    cls:  str
+    subj: str
+    occ:  int
 
 type Value_T is tuple:
-    teacher: TEACHER_T
-    room: ROOM_T
-    period: Period_T
-#####################################################################
+    teacher: str
+    room:    str
+    period:  Period_T
+
+var PERIODS: []Period_T = [
+    (day: d, slot: s) for d in DAYS for s in 1..MAX_SLOTS
+]
+
 var cs_keys: []ClassSubject_T = [
     (cls: c, subj: s)
-    for c in CLASS_T if c in requirements
-    for s in SUBJECT_T if requirements[c][s] > 0
+    for c in CLASSES if c in requirements
+    for s in SUBJECTS if s in requirements[c] and requirements[c][s] > 0
 ]
 
 var lessons: []Lesson_T = [
@@ -111,9 +124,10 @@ var lessons: []Lesson_T = [
 var all_candidates: {ClassSubject_T}[]Value_T = {
     cs: [
         (teacher: t, room: r, period: p)
-        for t in TEACHER_T
-        for r in ROOM_T
-        for p in PERIODS if (teacher: t, subj: cs.subj) in can_teach and room_capacity[r] >= class_size[cs.cls]
+        for t in TEACHERS
+        for r in ROOMS
+        for p in PERIODS
+        if t in can_teach and cs.subj in can_teach[t] and room_capacity[r] >= class_size[cs.cls]
     ]
     for cs in cs_keys
 }
@@ -121,31 +135,20 @@ var all_candidates: {ClassSubject_T}[]Value_T = {
 var lesson_cs:    []ClassSubject_T = [(cls: l.cls, subj: l.subj) for l in lessons]
 var lesson_cands: [][]Value_T      = [all_candidates[cs] for cs in lesson_cs]
 
+let N_LESSONS: int = len(lessons)
+
 
 # ============================================================
 # STATE, ENERGY, MOVES
 # ============================================================
 
-# N_LESSONS at compile time, derived from requirements.
-const N_LESSONS: Natural = sum([
-    requirements[c][s]
-    for c in CLASS_T
-    for s in SUBJECT_T
-])
-
 # state[k] is always a valid candidate index into lesson_cands[k] — no
-# -1 sentinel, unlike the backtracking version. SA works on a complete
-# assignment from the first step and chips away at violations. Because
-# every cell is always non-negative, the element type is `Natural`; a
-# bounds-check would catch any bug that tried to store a negative index.
-type State_T is [N_LESSONS]Natural
+# -1 sentinel, unlike the backtracking version.
+type State_T is []int
 
 
-# energy(state) counts how many (i, j) lesson pairs share a period and
-# also clash on teacher, class, or room. Each such pair contributes 1.
-# A valid schedule has energy 0.
-def energy(state: State_T) -> Natural:
-    var score: Natural = 0
+def energy(state: State_T) -> int:
+    var score: int = 0
     for i in 0..<N_LESSONS - 1:
         let vi: Value_T = lesson_cands[i][state[i]]
         for j in i + 1..<N_LESSONS:
@@ -163,9 +166,6 @@ def energy(state: State_T) -> Natural:
     return score
 
 
-# delta_energy(state, li, new_idx) returns the change in energy that
-# would result from setting state[li] = new_idx.  Computed in O(N)
-# instead of O(N²) by only looking at pairs involving `li`.
 def delta_energy(state: State_T, li: int, new_idx: int) -> int:
     let old_v: Value_T = lesson_cands[li][state[li]]
     let new_v: Value_T = lesson_cands[li][new_idx]
@@ -174,7 +174,6 @@ def delta_energy(state: State_T, li: int, new_idx: int) -> int:
         if k == li:
             continue
         let other: Value_T = lesson_cands[k][state[k]]
-        # Count clashes contributed by (li, k) under OLD value
         if old_v.period == other.period:
             if old_v.teacher == other.teacher:
                 dE = dE - 1
@@ -182,7 +181,6 @@ def delta_energy(state: State_T, li: int, new_idx: int) -> int:
                 dE = dE - 1
             elif old_v.room == other.room:
                 dE = dE - 1
-        # Count clashes contributed by (li, k) under NEW value
         if new_v.period == other.period:
             if new_v.teacher == other.teacher:
                 dE = dE + 1
@@ -197,29 +195,23 @@ def delta_energy(state: State_T, li: int, new_idx: int) -> int:
 # SIMULATED ANNEALING
 # ============================================================
 
-def solve_sa(max_steps: int, seed: int = 42) -> (State_T, Natural, int):
+def solve_sa(max_steps: int, seed: int = 42) -> (State_T, int, int):
     """Returns (final_state, final_energy, steps_taken).
     Energy 0 means a valid schedule.
     """
     randomize(seed)
-    # Random initial assignment — pick any candidate for each lesson.
-    var state: State_T
-    for k in 0..<N_LESSONS:
-        state[k] = rand(0..len(lesson_cands[k]) - 1)
+    var state: State_T = [rand(0..len(lesson_cands[k]) - 1) for k in 0..<N_LESSONS]
     var cur_E: int = energy(state)
     var best_state: State_T = state
     var best_E: int = cur_E
 
-    # Temperature schedule — T0 ≈ typical single-move energy scale,
-    # alpha chosen so we cool over roughly max_steps iterations.
     var T: float = 2.0
     let alpha: float = 0.9999
 
     for step in 0..<max_steps:
         if cur_E == 0:
-            return (state, Natural(cur_E), step)
+            return (state, cur_E, step)
 
-        # Propose: change one random lesson to a random alternative value.
         let li: int = rand(0..N_LESSONS - 1)
         let n_cands: int = len(lesson_cands[li])
         if n_cands < 2:
@@ -227,13 +219,11 @@ def solve_sa(max_steps: int, seed: int = 42) -> (State_T, Natural, int):
             continue
         var new_idx: int = rand(0..n_cands - 1)
         if new_idx == state[li]:
-            # shift by 1 to guarantee a different value, wrapping at n_cands
             new_idx = new_idx + 1
             if new_idx >= n_cands:
                 new_idx = 0
 
         let dE: int = delta_energy(state, li, new_idx)
-        # Accept improving moves always; worsening moves with exp(-dE/T).
         if dE <= 0 or rand(0.0..1.0) < exp(-float(dE) / T):
             state[li] = new_idx
             cur_E = cur_E + dE
@@ -242,7 +232,7 @@ def solve_sa(max_steps: int, seed: int = 42) -> (State_T, Natural, int):
                 best_state = state
         T = T * alpha
 
-    return (best_state, Natural(best_E), max_steps)
+    return (best_state, best_E, max_steps)
 
 
 # ============================================================
@@ -267,27 +257,25 @@ else:
 # DISPLAY
 # ============================================================
 
-def entry_for(c: CLASS_T, d: DAYS, sl: SLOTS, state: State_T) -> str:
+def entry_for(c: str, d: DAYS, sl: int, state: State_T) -> str:
     for k in 0..<N_LESSONS:
         if lessons[k].cls != c:
             continue
         let v: Value_T = lesson_cands[k][state[k]]
         if v.period.day == d and v.period.slot == sl:
-            let subj_name: str    = lessons[k].subj'Image
-            let teacher_name: str = v.teacher'Image
-            return f"{subj_name[0:3]}({teacher_name[0:1]})"
+            return f"{lessons[k].subj[0:3]}({v.teacher[0:1]})"
     return "--"
 
-for c in CLASS_T:
+for c in CLASSES:
     print("")
     print("=" * 54)
     print(f"  Timetable for class {c}")
     print("=" * 54)
     var header: str = " " * 8
     for d in DAYS:
-        header = header + f"{d:>10}"
+        header = header + f"{d'Image:>10}"
     print(header)
-    for sl in SLOTS'Range:
+    for sl in 1..MAX_SLOTS:
         var row: str = f"Slot {sl}  "
         for d in DAYS:
             row = row + f"{entry_for(c, d, sl, final_state):>10}"
@@ -306,21 +294,19 @@ let h_cls: str = "Class"
 let h_sub: str = "Subject"
 let h_req: str = "Required"
 let h_sch: str = "Scheduled"
-print(f"{h_cls:<6} {h_sub:<10} {h_req:>8} {h_sch:>9}")
-print("-" * 36)
+print(f"{h_cls:<8} {h_sub:<10} {h_req:>8} {h_sch:>9}")
+print("-" * 38)
 var all_ok: bool = True
 for cs in cs_keys:
-    let req: Natural = requirements[cs.cls][cs.subj]
-    var scheduled: Natural = 0
+    let req: int = requirements[cs.cls][cs.subj]
+    var scheduled: int = 0
     for k in 0..<N_LESSONS:
         if lessons[k].cls == cs.cls and lessons[k].subj == cs.subj:
             scheduled = scheduled + 1
     let ok: str = ("OK" if scheduled == req else "FAIL")
     if scheduled != req:
         all_ok = False
-    let cls_str:  str = cs.cls'Image
-    let subj_str: str = cs.subj'Image
-    print(f"{cls_str:<6} {subj_str:<10} {req:>8} {scheduled:>8}  {ok}")
+    print(f"{cs.cls:<8} {cs.subj:<10} {req:>8} {scheduled:>8}  {ok}")
 
 print("")
 if final_E > 0:
