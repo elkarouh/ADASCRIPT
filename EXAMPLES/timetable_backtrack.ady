@@ -7,16 +7,9 @@ School Timetabling — Backtracking CSP via state_search.StateSearcher
 Port of timetable_backtrack.py using the generic state-space search
 framework in state_search.ady.
 
-The state is a fixed-size array[N_LESSONS, int]. state[k] is:
+The state is a seq[int] of length N_LESSONS. state[k] is:
     -1      — lesson k not yet assigned
-    idx ≥ 0 — chose candidate index `idx` from all_candidates[(cls,subj)]
-
-An array (not a seq) avoids heap indirection and gives us a bitwise-hashable
-value for the `visited` set. The initial state is built via an AdaScript
-list comprehension `[-1 for i in 0..<N_LESSONS]` — the transpiler wraps
-comprehensions assigned into array types in a `block:` that copies the
-collected seq into the array, so there is no explicit fill loop in the
-source code.
+    idx ≥ 0 — chose candidate index `idx` from lesson_cands[k]
 
 Using DFS with the is_consistent filter inside get_next_states means
 every state ever enqueued is already a valid partial assignment —
@@ -31,165 +24,129 @@ reference's runtime profile.
 """
 
 nimport state_search
-
 nimport time
 
 
 # ============================================================
-# DATA  (identical to the Python version)
+# INPUT DATA  (regenerate with: python3 timetable_load.py timetable_backtrack.ady)
 # ============================================================
 
 type DAYS is enum Monday, Tuesday, Wednesday, Thursday, Friday
-type SLOTS is 1..4
+
+const MAX_SLOTS: int = 8
+
+# ---- INPUT DATA BEGIN ----
+
+var CLASSES:  []str = ["Year7A", "Year7B", "Year8A", "Year8B", "Year9A", "Year9B"]
+var SUBJECTS: []str = ["Math", "English", "Science", "History", "Geography", "French", "PE", "Art"]
+var TEACHERS: []str = ["Adams", "Brown", "Clarke", "Davies", "Evans", "Foster", "Green", "Harris", "Ito", "Jones"]
+var ROOMS:    []str = ["R01", "R02", "R03", "R04", "Lab1", "Lab2", "Gym", "ArtRm"]
+
+# requirements[class][subject] = number of periods per week
+var requirements: {str}{str}int = {
+    "Year7A": {"Math": 4, "English": 4, "Science": 3, "History": 2, "Geography": 2, "French": 2, "PE": 2, "Art": 1},
+    "Year7B": {"Math": 4, "English": 4, "Science": 3, "History": 2, "Geography": 2, "French": 2, "PE": 2, "Art": 1},
+    "Year8A": {"Math": 4, "English": 4, "Science": 3, "History": 2, "Geography": 2, "French": 2, "PE": 2, "Art": 1},
+    "Year8B": {"Math": 4, "English": 4, "Science": 3, "History": 2, "Geography": 2, "French": 2, "PE": 2, "Art": 1},
+    "Year9A": {"Math": 4, "English": 4, "Science": 3, "History": 2, "Geography": 2, "French": 2, "PE": 2, "Art": 1},
+    "Year9B": {"Math": 4, "English": 4, "Science": 3, "History": 2, "Geography": 2, "French": 2, "PE": 2, "Art": 1},
+}
+
+# can_teach[teacher] = list of subjects they can teach
+var can_teach: {str}[]str = {
+    "Adams":  ["Math", "Science"],
+    "Brown":  ["English", "History"],
+    "Clarke": ["Math", "French"],
+    "Davies": ["Science", "Geography"],
+    "Evans":  ["English", "Art"],
+    "Foster": ["History", "Geography"],
+    "Green":  ["Math", "Science"],
+    "Harris": ["PE"],
+    "Ito":    ["French", "Art"],
+    "Jones":  ["English", "PE"],
+}
+
+var room_capacity: {str}int = {"R01": 32, "R02": 32, "R03": 32, "R04": 32, "Lab1": 30, "Lab2": 30, "Gym": 60, "ArtRm": 28}
+var class_size:    {str}int = {"Year7A": 30, "Year7B": 28, "Year8A": 30, "Year8B": 27, "Year9A": 29, "Year9B": 26}
+
+# ---- INPUT DATA END ----
+
+
+# ============================================================
+# DERIVED STRUCTURES
+# ============================================================
 
 type Period_T is tuple:
-    day: DAYS
-    slot: SLOTS
-
-var PERIODS: []Period_T = [(day: d, slot: s) for d in DAYS for s in SLOTS'Range]
-
-# Enum domains — Ada-style strong typing.
-# Class names must start with a letter (Nim enum identifier rule), hence Year9A etc.
-type CLASS_T   is enum Year9A, Year9B, Year10A
-type SUBJECT_T is enum Math, English, Science, History
-type TEACHER_T is enum Alice, Bob, Carol, Dan
-type ROOM_T    is enum R1, R2, R3
+    day:  DAYS
+    slot: int
 
 type ClassSubject_T is tuple:
-    cls: CLASS_T
-    subj: SUBJECT_T
+    cls:  str
+    subj: str
 
-# Per-class, per-subject period counts. Each value is a SUBJECT_T-indexed
-# array of Natural, so `requirements[cls][subj]` is an O(1) enum-index
-# lookup. Array literals are written in enum-declaration order, and the
-# whole table is a `const` so we can sum it at compile time to derive
-# N_LESSONS below.
-const requirements: {CLASS_T}[SUBJECT_T]Natural = {
-    Year9A:  [Math: 2, English: 2, Science: 2, History: 1],
-    Year9B:  [Math: 2, English: 2, Science: 1, History: 2],
-    Year10A: [Math: 3, English: 2, Science: 2, History: 1],
-}
-
-type TeacherSubject_T is tuple:
-    teacher: TEACHER_T
-    subj: SUBJECT_T
-
-let can_teach: {}TeacherSubject_T = {
-    (teacher: Alice, subj: Math),   (teacher: Alice, subj: Science),
-    (teacher: Bob,   subj: English),(teacher: Bob,   subj: History),
-    (teacher: Carol, subj: Math),   (teacher: Carol, subj: English),
-    (teacher: Dan,   subj: Science),(teacher: Dan,   subj: History),
-}
-
-let room_capacity: {ROOM_T}Natural  = {R1: 35, R2: 30, R3: 25}
-let class_size:    {CLASS_T}Natural = {Year9A: 28, Year9B: 25, Year10A: 22}
-
-
-
-# ============================================================
-# BUILD LESSON TOKENS AND CANDIDATE LISTS
-# ============================================================
-# this is the heart of the problem.
-# for each Lesson_T, we try to assign a Value_T
 type Lesson_T is tuple:
-    cls: CLASS_T
-    subj: SUBJECT_T
-    occ: int
+    cls:  str
+    subj: str
+    occ:  int
 
 type Value_T is tuple:
-    teacher: TEACHER_T
-    room: ROOM_T
-    period: Period_T
-#####################################################################
-# All (class, subject) combinations for classes in `requirements` that have
-# at least one period of that subject. Drives every downstream iteration
-# and keeps the (cls, subj) ordering deterministic. Iterating CLASS_T /
-# SUBJECT_T enumerates the enum values in declaration order.
-var cs_keys: []ClassSubject_T = [
-    (cls: c, subj: s)
-    for c in CLASS_T
-    for s in SUBJECT_T if requirements[c][s] > 0
+    teacher: str
+    room:    str
+    period:  Period_T
+
+var PERIODS: []Period_T = [
+    (day: d, slot: s) for d in DAYS for s in 1..MAX_SLOTS
 ]
 
-# Build lesson list in deterministic (class, subject) order.
+
+var cs_keys: []ClassSubject_T = [
+    (cls: c, subj: s)
+    for c in CLASSES if c in requirements
+    for s in SUBJECTS if s in requirements[c] and requirements[c][s] > 0
+]
+
 var lessons: []Lesson_T = [
     (cls: cs.cls, subj: cs.subj, occ: occ)
     for cs in cs_keys
     for occ in 0..<requirements[cs.cls][cs.subj]
 ]
 
-# candidates for each (class, subject) — shared across occurrences.
-# Because every field of Value_T is an enum (or an enum-valued Period_T),
-# equality comparisons are single-instruction integer compares — exactly
-# the CSP speed trick that the earlier "int-encoded hot path" achieved
-# manually. The enum-typed tuples are the encoding.
 var all_candidates: {ClassSubject_T}[]Value_T = {
     cs: [
         (teacher: t, room: r, period: p)
-        for t in TEACHER_T
-        for r in ROOM_T
-        for p in PERIODS if (teacher: t, subj: cs.subj) in can_teach and room_capacity[r] >= class_size[cs.cls]
+        for t in TEACHERS
+        for r in ROOMS
+        for p in PERIODS
+        if t in can_teach and cs.subj in can_teach[t] and room_capacity[r] >= class_size[cs.cls]
     ]
     for cs in cs_keys
 }
 
-# Per-lesson candidate lists indexed by lesson number (int) avoid any
-# Table lookup on the hot path. We also keep a parallel list of
-# (cls, subj) keys for the coverage check and display.
 var lesson_cs:    []ClassSubject_T = [(cls: l.cls, subj: l.subj) for l in lessons]
 var lesson_cands: [][]Value_T      = [all_candidates[cs] for cs in lesson_cs]
+
+let N_LESSONS: int = len(lessons)
+
 
 # ============================================================
 # STATE REPRESENTATION
 # ============================================================
 #
-# State_T : a fixed-size array[N_LESSONS, int]. state[k] is:
+# State_T : seq[int] of length N_LESSONS. state[k] is:
 #     -1      — lesson k not yet assigned
-#     idx ≥ 0 — chose candidate index `idx` from all_candidates[(cls,subj)]
-#
-# The array variant (vs seq) avoids heap indirection on every state copy
-# and lets the `visited` set hash the raw bytes. INITIAL_STATE is built
-# from a list comprehension; the transpiler recognises that the target
-# annotation is `array[N, T]` and materialises the seq-returning collect()
-# through a fixed-size array, so the source stays one line.
-#
-# An earlier string-encoded version (2-char base-65 cells per lesson) ran
-# ~40× slower than the Python reference because every consistency check
-# allocated a fresh slice and ran a linear scan over the alphabet to decode
-# the index. Switching to []int closed most of that gap.
+#     idx ≥ 0 — chose candidate index `idx` from lesson_cands[k]
 #
 # Action_T: human-readable description of the placement (for display only).
 
-# N_LESSONS derived from requirements at compile time. `requirements` is
-# a const (per-class SUBJECT_T-indexed arrays), and Nim's const context
-# folds arbitrary pure expressions — including iterating the Table and
-# summing the array elements. No magic numbers, no dependency rot: change
-# the requirements table and N_LESSONS follows.
-#
-# Making N_LESSONS a compile-time constant unlocks a fixed-size
-# array[N_LESSONS, int] State_T, stack-allocated and hashed as raw bytes.
-const N_LESSONS: Natural = sum([
-    requirements[c][s]
-    for c in CLASS_T
-    for s in SUBJECT_T
-])
-
-type State_T is [N_LESSONS]int
+type State_T  is []int
 type Action_T is str
 
-# Initial state: all N_LESSONS cells set to -1 (unassigned).
 var INITIAL_STATE: State_T = [-1 for i in 0..<N_LESSONS]
 
 
 def is_consistent(state: State_T, li: int, value: Value_T) -> bool:
-    """Would placing `value` at lesson `li` conflict with an earlier placement?
-
-    Every field compared here is an enum (or an int-slot SLOTS). Enum equality
-    in Nim is a single-instruction integer compare — exactly what we want on
-    the hot path. The Ada-style enum typing replaces what used to be a manual
-    string-to-int projection (ValueId_T + index_of + lesson_cls_id).
-    """
-    let my_cls: CLASS_T = lessons[li].cls
+    """Would placing `value` at lesson `li` conflict with an earlier placement?"""
+    let my_cls: str = lessons[li].cls
     for k in 0..<N_LESSONS:
         if k == li:
             continue
@@ -199,7 +156,6 @@ def is_consistent(state: State_T, li: int, value: Value_T) -> bool:
         let other: Value_T = lesson_cands[k][other_idx]
         if value.period != other.period:
             continue
-        # Period clash — teacher OR class OR room conflict is enough.
         if value.teacher == other.teacher:
             return False
         if my_cls == lessons[k].cls:
@@ -222,10 +178,9 @@ class TimetableCSP(StateSearcher[State_T, Action_T]):
     path (no backtracks), matching the Python reference.
     """
 
-    def count_options(self, state: State_T, li: int) -> Natural:
-        """How many of the pre-computed candidates for lesson `li` still fit."""
+    def count_options(self, state: State_T, li: int) -> int:
         let cands: []Value_T = lesson_cands[li]
-        var total: Natural = 0
+        var total: int = 0
         for v in cands:
             if is_consistent(state, li, v):
                 total = total + 1
@@ -233,35 +188,26 @@ class TimetableCSP(StateSearcher[State_T, Action_T]):
 
     def pick_lesson(self, state: State_T) -> int:
         """MCV: index of the unassigned lesson with the fewest viable candidates.
-        Returns -1 when every lesson is already placed (hence int, not Natural)."""
+        Returns -1 when every lesson is already placed."""
         var best_li: int = -1
-        var best_n: Natural = 0
+        var best_n:  int = 0
         for k in 0..<N_LESSONS:
-            # only consider unassigned slots (state[k] < 0)
             if state[k] >= 0:
                 continue
-            let n: Natural = self.count_options(state, k)
-            # 0 options here means this branch is already dead — return
-            # immediately so the parent triggers a backtrack.
+            let n: int = self.count_options(state, k)
             if n == 0:
                 return k
             if best_li < 0 or n < best_n:
                 best_li = k
-                best_n = n
+                best_n  = n
         return best_li
 
     def get_next_states(self, state: State_T) -> []Step_T[State_T, Action_T]:
         result: []Step_T[State_T, Action_T] = []
-        # Pick the most-constrained unassigned lesson (MCV heuristic).
         let li: int = self.pick_lesson(state)
         if li < 0:
             return result
-        let lesson: Lesson_T = lessons[li]
         let cands: []Value_T = lesson_cands[li]
-        # Emit one successor per candidate that survives is_consistent.
-        # We iterate in REVERSE order because search_dfs uses a LIFO fringe:
-        # popping returns the last-pushed state, so reversing here makes the
-        # DFS try candidates in natural order (matching the Python version).
         var cur_idx: int = len(cands) - 1
         while cur_idx >= 0:
             let idx: int = cur_idx
@@ -269,20 +215,13 @@ class TimetableCSP(StateSearcher[State_T, Action_T]):
             let v: Value_T = cands[idx]
             if not is_consistent(state, li, v):
                 continue
-            # Build successor by copying the state array and writing at position li.
             var ns: State_T = state
             ns[li] = idx
-            # Action string is for human-readable path tracing only — we don't
-            # need it in the backtracking hot path. Keeping it empty avoids a
-            # per-candidate fmt + five enum-to-string `$` conversions. The
-            # actual schedule is rebuilt from `final_state` in the display
-            # section below.
             let action: Action_T = ""
             result.append((from_state: state, action: action, next_state: ns))
         return result
 
     def is_goal(self, state: State_T) -> bool:
-        # Goal: every cell has been assigned (state[k] >= 0 for all k).
         for k in 0..<N_LESSONS:
             if state[k] < 0:
                 return False
@@ -313,7 +252,7 @@ print(f"Solved in {elapsed*1000.0:.1f} ms with {len(solution)} placements")
 # DISPLAY
 # ============================================================
 
-def entry_for(c: CLASS_T, d: DAYS, sl: SLOTS, state: State_T) -> str:
+def entry_for(c: str, d: DAYS, sl: int, state: State_T) -> str:
     for k in 0..<N_LESSONS:
         let idx: int = state[k]
         if idx < 0:
@@ -322,22 +261,19 @@ def entry_for(c: CLASS_T, d: DAYS, sl: SLOTS, state: State_T) -> str:
             continue
         let v: Value_T = lesson_cands[k][idx]
         if v.period.day == d and v.period.slot == sl:
-            # 'Image is the Ada-style enum-to-string attribute (e.g. Math -> "Math").
-            let subj_name: str    = lessons[k].subj'Image
-            let teacher_name: str = v.teacher'Image
-            return f"{subj_name[0:3]}({teacher_name[0:1]})"
+            return f"{lessons[k].subj[0:3]}({v.teacher[0:1]})"
     return "--"
 
-for c in CLASS_T:
+for c in CLASSES:
     print("")
     print("=" * 54)
     print(f"  Timetable for class {c}")
     print("=" * 54)
     var header: str = " " * 8
     for d in DAYS:
-        header = header + f"{d:>10}"
+        header = header + f"{d'Image:>10}"
     print(header)
-    for sl in SLOTS'Range:
+    for sl in 1..MAX_SLOTS:
         var row: str = f"Slot {sl}  "
         for d in DAYS:
             row = row + f"{entry_for(c, d, sl, final_state):>10}"
@@ -356,12 +292,12 @@ let h_cls: str = "Class"
 let h_sub: str = "Subject"
 let h_req: str = "Required"
 let h_sch: str = "Scheduled"
-print(f"{h_cls:<6} {h_sub:<10} {h_req:>8} {h_sch:>9}")
-print("-" * 36)
+print(f"{h_cls:<8} {h_sub:<10} {h_req:>8} {h_sch:>9}")
+print("-" * 38)
 var all_ok: bool = True
 for cs in cs_keys:
-    let req: Natural = requirements[cs.cls][cs.subj]
-    var scheduled: Natural = 0
+    let req: int = requirements[cs.cls][cs.subj]
+    var scheduled: int = 0
     for k in 0..<N_LESSONS:
         if final_state[k] < 0:
             continue
@@ -370,9 +306,7 @@ for cs in cs_keys:
     let ok: str = ("OK" if scheduled == req else "FAIL")
     if scheduled != req:
         all_ok = False
-    let cls_str:  str = cs.cls'Image
-    let subj_str: str = cs.subj'Image
-    print(f"{cls_str:<6} {subj_str:<10} {req:>8} {scheduled:>8}  {ok}")
+    print(f"{cs.cls:<8} {cs.subj:<10} {req:>8} {scheduled:>8}  {ok}")
 
 print("")
 if all_ok:
