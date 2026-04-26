@@ -136,6 +136,41 @@ function slotToTimeEnd(slot) {
   return `${String(h).padStart(2,"0")}:00:00`;
 }
 
+function computeSoftScore(schedule, softConstraints) {
+  const w = softConstraints || {};
+  const wHole   = w.weight_class_holes       || 1;
+  const wFirst  = w.weight_avoid_first_slot  || 2;
+  const wLast   = w.weight_avoid_last_slot   || 1;
+  const wSpread = w.weight_teacher_spread    || 1;
+
+  // Index by class+day and teacher+day
+  const classDay = {};   // (class,day) -> sorted slots
+  const teachDay = {};   // (teacher,day) -> slots
+  for (const e of schedule) {
+    const ck = `${e.class}\0${e.day}`;
+    (classDay[ck] = classDay[ck] || []).push(e.slot);
+    const tk = `${e.teacher}\0${e.day}`;
+    (teachDay[tk] = teachDay[tk] || []).push(e.slot);
+  }
+
+  let holes = 0, first = 0, last = 0, spread = 0;
+  for (const slots of Object.values(classDay)) {
+    slots.sort((a,b)=>a-b);
+    const mn = slots[0], mx = slots[slots.length-1];
+    if (mn === 1) first++;
+    if (mx === MAX_SLOTS) last++;
+    holes += (mx - mn + 1) - slots.length;
+  }
+  for (const slots of Object.values(teachDay)) {
+    if (slots.length <= 1) continue;
+    slots.sort((a,b)=>a-b);
+    spread += (slots[slots.length-1] - slots[0] + 1) - slots.length;
+  }
+
+  const total = holes*wHole + first*wFirst + last*wLast + spread*wSpread;
+  return { total, class_holes: holes, avoid_first_slot: first, avoid_last_slot: last, teacher_spread: spread };
+}
+
 // Map day name → a fixed Monday in a reference week (2024-01-01 is Monday)
 const DAY_DATE = {
   Monday:"2024-01-01", Tuesday:"2024-01-02", Wednesday:"2024-01-03",
@@ -464,10 +499,19 @@ function App() {
   async function solve() {
     setPage("solving");
     try {
+      const payload = buildPayload();
       const r = await (await fetch(`${API}/solve`, {
         method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify(buildPayload()),
+        body: JSON.stringify(payload),
       })).json();
+      if (r.ok) {
+        // Check for unresolved hard violations the solver couldn't fix
+        const vr = await (await fetch(`${API}/validate`, {
+          method:"POST", headers:{"Content-Type":"application/json"},
+          body: JSON.stringify({ schedule: r.schedule, original: [], data: payload }),
+        })).json();
+        r.hard_violations = vr.ok ? [] : vr.violations;
+      }
       setResult(r);
       setSchedule(r.ok ? r.schedule : []);
       setPage(r.ok ? "result" : "editor");
@@ -480,20 +524,35 @@ function App() {
   }
 
   // ── drag-drop override ────────────────────────────────────────────────────
-  function handleEventDrop(origEntry, newDay, newSlot, newRes, viewMode, revert) {
-    setSchedule(prev => {
-      const idx = prev.findIndex(e =>
-        e.class === origEntry.class && e.subject === origEntry.subject &&
-        e.occ === origEntry.occ);
-      if (idx < 0) { revert(); return prev; }
-      const updated = [...prev];
-      const entry   = { ...updated[idx], day: newDay, slot: newSlot };
-      if (viewMode === "By Class")   entry.class   = newRes || entry.class;
-      if (viewMode === "By Teacher") entry.teacher = newRes || entry.teacher;
-      if (viewMode === "By Room")    entry.room    = newRes || entry.room;
-      updated[idx] = entry;
-      return updated;
-    });
+  async function handleEventDrop(origEntry, newDay, newSlot, newRes, viewMode, revert) {
+    const idx = schedule.findIndex(e =>
+      e.class === origEntry.class && e.subject === origEntry.subject &&
+      e.occ === origEntry.occ);
+    if (idx < 0) { revert(); return; }
+
+    const updated = [...schedule];
+    const entry   = { ...updated[idx], day: newDay, slot: newSlot };
+    if (viewMode === "By Class")   entry.class   = newRes || entry.class;
+    if (viewMode === "By Teacher") entry.teacher = newRes || entry.teacher;
+    if (viewMode === "By Room")    entry.room    = newRes || entry.room;
+    updated[idx] = entry;
+
+    try {
+      const r = await fetch(`${API}/validate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ schedule: updated, original: schedule, data: buildPayload() }),
+      });
+      const resp = await r.json();
+      if (resp.ok) {
+        setSchedule(updated);
+      } else {
+        revert();
+        alert("Move violates hard constraints:\n" + resp.violations.join("\n"));
+      }
+    } catch (e) {
+      revert();
+    }
   }
 
   // ── solving spinner ───────────────────────────────────────────────────────
@@ -511,16 +570,19 @@ function App() {
 
   // ── result page ───────────────────────────────────────────────────────────
   if (page === "result" && result?.ok) {
-    const pen = result.stats.soft_penalty || 0;
-    const sd  = result.stats.soft_details || {};
+    const softScore = computeSoftScore(schedule, softConstraints);
+    const pen       = softScore.total;
+    const sd        = softScore;
+    const hardViols = result.hard_violations || [];
     return (
       <div>
         <div className="page-header">
           <div>
             <div className="page-title">School Timetable</div>
             <div className="page-sub">
-              {`SOLVED IN ${result.stats.elapsed_ms} MS · ${result.stats.calls} CALLS · ${result.stats.backtracks} BACKTRACKS`}
-              {pen > 0 && ` · SOFT PENALTY ${pen}`}
+              {`SOLVED IN ${result.stats.elapsed_ms} MS`}
+              {hardViols.length > 0 ? ` · ✗ ${hardViols.length} HARD VIOLATION${hardViols.length>1?"S":""}` :
+               pen > 0 ? ` · ⚠ SOFT PENALTY ${pen}` : ` · ✓ ALL CONSTRAINTS SATISFIED`}
             </div>
           </div>
           <div className="header-btns">
@@ -531,6 +593,15 @@ function App() {
         </div>
 
         <div className="result-body">
+          {hardViols.length > 0 && (
+            <div className="soft-warn" style={{background:"#fee2e2",borderColor:"#fca5a5",color:"#991b1b"}}>
+              ✗ {hardViols.length} hard constraint{hardViols.length>1?"s":""} could not be satisfied —{" "}
+              <details style={{display:"inline"}}>
+                <summary style={{display:"inline",cursor:"pointer"}}>show details</summary>
+                <ul style={{margin:"4px 0 0 16px",padding:0}}>{hardViols.map((v,i)=><li key={i}>{v}</li>)}</ul>
+              </details>
+            </div>
+          )}
           {pen > 0 && (
             <div className="soft-warn">
               ⚠ Soft score: {pen} —{" "}

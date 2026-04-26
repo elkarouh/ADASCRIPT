@@ -7,9 +7,10 @@ API:
   POST /save              <- {"name": "X", "data": {...}}  -> {"ok": true}
   POST /delete            <- {"name": "X"}                 -> {"ok": true}
   POST /solve             <- problem dict                  -> {"ok": true, "schedule": [...], ...}
+  POST /validate          <- {"schedule": [...], "data": problem dict} -> {"ok": true} or {"ok": false, "violations": [...]}
 """
 
-import json, time, os, threading, webbrowser, argparse
+import json, time, os, threading, webbrowser, argparse, subprocess, tempfile
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 from timetable_db import DB, DB_PATH
@@ -23,187 +24,120 @@ PORT = _args.port
 db   = DB(_args.db)
 
 # ---------------------------------------------------------------------------
-# Solver
+# Solver — delegates to the compiled timetable_sa binary
 # ---------------------------------------------------------------------------
 
 DAYS      = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
 MAX_SLOTS = 8
 
+_HERE = os.path.dirname(os.path.abspath(__file__))
+SA_BINARY = os.path.join(_HERE, "timetable_sa.ady")
 
-def soft_penalty(assignment, weights, max_slots):
-    """Score soft constraint violations across 4 dimensions.
-    Returns (total, holes, first_slot, last_slot, teacher_spread).
+
+def _all_hard_violations(schedule, data):
+    """Return sorted list of all hard violation strings."""
+    hard       = data.get("hard_constraints", {})
+    max_consec = int(hard.get("max_consecutive_same_subj", 2))
+    max_day    = int(hard.get("max_teacher_periods_day", 4))
+
+    by_period   = {}
+    teacher_day = {}
+    for e in schedule:
+        by_period.setdefault((e["day"], e["slot"]), []).append(e)
+        teacher_day.setdefault((e["teacher"], e["day"]), []).append(e["slot"])
+
+    viols = set()
+
+    for (day, slot), entries in by_period.items():
+        for i in range(len(entries)):
+            for j in range(i + 1, len(entries)):
+                a, b = entries[i], entries[j]
+                if a["teacher"] == b["teacher"]:
+                    viols.add(f"Teacher {a['teacher']} double-booked {day} slot {slot}")
+                if a["class"] == b["class"]:
+                    viols.add(f"Class {a['class']} double-booked {day} slot {slot}")
+                if a["room"] == b["room"]:
+                    viols.add(f"Room {a['room']} double-booked {day} slot {slot}")
+
+    for (teacher, day), slots in teacher_day.items():
+        if len(slots) > max_day:
+            viols.add(f"Teacher {teacher} has {len(slots)} periods on {day} (max {max_day})")
+
+    class_day_subj = {}
+    for e in schedule:
+        class_day_subj[(e["class"], e["day"], e["slot"])] = e["subject"]
+    for c in {e["class"] for e in schedule}:
+        for d in {e["day"] for e in schedule}:
+            run, prev = 0, None
+            for sl in range(1, MAX_SLOTS + 1):
+                subj = class_day_subj.get((c, d, sl))
+                if subj and subj == prev:
+                    run += 1
+                    if run > max_consec:
+                        viols.add(f"Class {c} has >{max_consec} consecutive {subj} on {d}")
+                        break
+                else:
+                    run = 1 if subj else 0
+                prev = subj
+
+    return sorted(viols)
+
+
+def validate(payload):
+    """Check a modified schedule against hard constraints.
+    payload: {"schedule": [...], "original": [...], "data": {problem dict}}
+    - If original is empty: returns all hard violations (used after solve).
+    - Otherwise: returns only violations newly introduced vs original (used for drag-drop).
+    Returns {"ok": true} or {"ok": false, "violations": [...]}
     """
-    w_holes  = weights.get("weight_class_holes", 1)
-    w_first  = weights.get("weight_avoid_first_slot", 2)
-    w_last   = weights.get("weight_avoid_last_slot", 1)
-    w_spread = weights.get("weight_teacher_spread", 1)
+    schedule = payload["schedule"]
+    original = payload.get("original", [])
+    data     = payload.get("data", {})
 
-    # Index by class/teacher and day
-    class_day_slots   = {}   # (class, day) -> set of slot numbers
-    teacher_day_slots = {}   # (teacher, day) -> set of slot numbers
+    new_viols = set(_all_hard_violations(schedule, data))
 
-    for (_c, _s, _occ), (t, _r, (d, sl)) in assignment.items():
-        class_day_slots.setdefault((_c, d), set()).add(sl)
-        teacher_day_slots.setdefault((t, d), set()).add(sl)
+    if not original:
+        introduced = sorted(new_viols)
+    else:
+        orig_viols = set(_all_hard_violations(original, data))
+        introduced = sorted(new_viols - orig_viols)
 
-    holes = first_slot = last_slot = spread = 0
-
-    for (_c, _d), slot_set in class_day_slots.items():
-        mn, mx = min(slot_set), max(slot_set)
-        holes      += (mx - mn + 1) - len(slot_set)   # gaps between first and last lesson
-        first_slot += 1 if 1 in slot_set else 0
-        last_slot  += 1 if max_slots in slot_set else 0
-
-    for (_t, _d), slot_set in teacher_day_slots.items():
-        if len(slot_set) > 1:
-            spread += (max(slot_set) - min(slot_set) + 1) - len(slot_set)
-
-    total = w_holes * holes + w_first * first_slot + w_last * last_slot + w_spread * spread
-    return total, holes, first_slot, last_slot, spread
+    if introduced:
+        return {"ok": False, "violations": introduced}
+    return {"ok": True}
 
 
 def solve(data):
-    days    = DAYS
     slots   = list(range(1, MAX_SLOTS + 1))
-    periods = [(d, s) for d in days for s in slots]
+    classes = [c["name"] for c in data["classes"]]
 
-    classes  = [c["name"] for c in data["classes"]]
-    rooms    = [r["name"] for r in data["rooms"]]
-    teachers = data["teachers"]
+    # Write the problem to a temp DB, run the SA binary, return its JSON.
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+        tmp_db = f.name
+    try:
+        tmp_store = DB(tmp_db)
+        tmp_store.save("_solve", data)
 
-    class_size    = {c["name"]: c["size"]     for c in data["classes"]}
-    room_capacity = {r["name"]: r["capacity"] for r in data["rooms"]}
-    room_type     = {r["name"]: r.get("room_type", "standard") for r in data["rooms"]}
-    can_teach     = {t: set(ss) for t, ss in data["can_teach"].items()}
-    requirements  = {c: {s: int(v) for s, v in sv.items() if int(v) > 0}
-                     for c, sv in data["requirements"].items()}
+        result = subprocess.run(
+            [SA_BINARY, "--db", tmp_db, "--problem", "_solve", "--json"],
+            stdout=subprocess.PIPE, stderr=None,
+            text=True, timeout=120
+        )
+        if not result.stdout.strip():
+            return {"ok": False, "error": "SA binary produced no output"}
 
-    subj_room_type = data.get("subject_room_type", {})
-    unavailable    = {(u["teacher"], u["day"], u["slot"])
-                      for u in data.get("teacher_unavailability", [])}
-
-    hard = data.get("hard_constraints", {})
-    max_consec = int(hard.get("max_consecutive_same_subj", 2))
-    max_day    = int(hard.get("max_teacher_periods_day", 4))
-    soft_weights = data.get("soft_constraints", {})
-
-    lessons = []
-    for c in classes:
-        for s, cnt in sorted(requirements.get(c, {}).items()):
-            for occ in range(cnt):
-                lessons.append((c, s, occ))
-
-    if not lessons:
-        return {"ok": False, "error": "No lessons to schedule."}
-
-    def candidates(c, s):
-        req_type = subj_room_type.get(s)
-        return [
-            (t, r, p)
-            for t in teachers for r in rooms for p in periods
-            if s in can_teach.get(t, set())
-            and room_capacity.get(r, 0) >= class_size.get(c, 0)
-            and (req_type is None or room_type.get(r, "standard") == req_type)
-            and (t, p[0], p[1]) not in unavailable
-        ]
-
-    all_candidates = {}
-    for c in classes:
-        for s in requirements.get(c, {}):
-            cands = candidates(c, s)
-            if not cands:
-                hint = ""
-                req_type = subj_room_type.get(s)
-                if req_type:
-                    hint = f" (no {req_type} room available with sufficient capacity)"
-                return {"ok": False,
-                        "error": f"No valid candidate for {c}/{s}{hint} — "
-                                 "check teacher assignments and room capacities."}
-            all_candidates[(c, s)] = cands
-
-    def consec_run(assignment, c, s, d, sl):
-        """How many slots immediately before sl on day d have class c doing subject s."""
-        run = 0
-        for prev in range(sl - 1, 0, -1):
-            if any(c2 == c and s2 == s and d2 == d and sl2 == prev
-                   for (c2, s2, _), (_, _, (d2, sl2)) in assignment.items()):
-                run += 1
-            else:
-                break
-        return run
-
-    def is_consistent(assignment, lesson, value):
-        c, s, _ = lesson
-        t, r, p = value
-        d, sl = p
-        teacher_day_count = 0
-        for (c2, _, _), (t2, r2, p2) in assignment.items():
-            if p == p2 and (t == t2 or c == c2 or r == r2):
-                return False
-            if t2 == t and p2[0] == d:
-                teacher_day_count += 1
-        # Hard: teacher daily load
-        if teacher_day_count >= max_day:
-            return False
-        # Hard: no more than max_consec consecutive same subject for a class
-        if consec_run(assignment, c, s, d, sl) >= max_consec:
-            return False
-        return True
-
-    def count_options(assignment, lesson):
-        c, s, _ = lesson
-        return sum(1 for v in all_candidates[(c, s)]
-                   if is_consistent(assignment, lesson, v))
-
-    stats = {"calls": 0, "backtracks": 0}
-
-    def backtrack(assignment, remaining):
-        stats["calls"] += 1
-        if not remaining:
-            return True
-        lesson = min(remaining, key=lambda l: count_options(assignment, l))
-        remaining.remove(lesson)
-        c, s, _ = lesson
-        for value in all_candidates[(c, s)]:
-            if is_consistent(assignment, lesson, value):
-                assignment[lesson] = value
-                if backtrack(assignment, remaining):
-                    return True
-                del assignment[lesson]
-                stats["backtracks"] += 1
-        remaining.append(lesson)
-        return False
-
-    assignment = {}
-    t0 = time.perf_counter()
-    solved = backtrack(assignment, list(lessons))
-    elapsed = time.perf_counter() - t0
-
-    if not solved:
-        return {"ok": False,
-                "error": "No solution found. Try relaxing constraints "
-                         "(more rooms, teachers, or periods)."}
-
-    total_pen, holes, first_sl, last_sl, t_spread = soft_penalty(
-        assignment, soft_weights, MAX_SLOTS)
-
-    schedule = [{"class": c, "subject": s, "occ": occ,
-                 "teacher": t, "room": r, "day": d, "slot": sl}
-                for (c, s, occ), (t, r, (d, sl)) in assignment.items()]
-
-    return {"ok": True, "schedule": schedule,
-            "stats": {"calls": stats["calls"],
-                      "backtracks": stats["backtracks"],
-                      "elapsed_ms": round(elapsed * 1000, 1),
-                      "soft_penalty": total_pen,
-                      "soft_details": {
-                          "class_holes":       holes,
-                          "avoid_first_slot":  first_sl,
-                          "avoid_last_slot":   last_sl,
-                          "teacher_spread":    t_spread,
-                      }},
-            "days": days, "slots": slots, "classes": classes}
+        resp = json.loads(result.stdout.strip())
+        if resp.get("ok"):
+            resp["days"]    = DAYS
+            resp["slots"]   = slots
+            resp["classes"] = classes
+        return resp
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "error": "Solver timed out after 120 seconds"}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+    finally:
+        os.unlink(tmp_db)
 
 # ---------------------------------------------------------------------------
 # HTTP handler
@@ -211,7 +145,7 @@ def solve(data):
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
-        pass
+        print(f"  {self.command} {self.path} — {args[1]}")
 
     def _send_json(self, obj):
         payload = json.dumps(obj).encode()
@@ -269,6 +203,8 @@ class Handler(BaseHTTPRequestHandler):
                 name = data.get("name", "").strip()
                 db.delete(name)
                 result = {"ok": True}
+            elif path == "/validate":
+                result = validate(data)
             else:
                 result = solve(data)
         except Exception as e:

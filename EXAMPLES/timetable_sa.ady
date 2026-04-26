@@ -44,6 +44,7 @@ def usage(code: Natural):
     print("  -h, --help         Show this help message and exit")
     print("  --db PATH          SQLite database file to read problem from")
     print("  --problem NAME     Problem name in the database (default: DEFAULT)")
+    print("  --json             Output result as JSON instead of human-readable text")
     print("")
     print("Solves a school timetabling problem via simulated annealing.")
     print("Without --db, uses data embedded in the source.")
@@ -51,6 +52,7 @@ def usage(code: Natural):
 
 var db_path:      str = ""
 var problem_name: str = "DEFAULT"
+var json_output:  bool = False
 
 var _take_db:  bool = False
 var _take_prob: bool = False
@@ -58,6 +60,8 @@ for arg in $@:
     case arg:
         when "--help" | "-h":
             usage(0)
+        when "--json":
+            json_output = True
         when "--db":
             _take_db = True
         when "--problem":
@@ -75,7 +79,8 @@ for arg in $@:
 # INPUT DATA  (regenerate with: python3 timetable_load.py --problem NAME [--db PATH] timetable_sa.ady)
 # ============================================================
 
-type DAYS is enum Monday, Tuesday, Wednesday, Thursday, Friday
+type DAYS      is enum Monday, Tuesday, Wednesday, Thursday, Friday
+type ROOM_TYPE is enum standard, lab, gym, art
 
 const MAX_SLOTS: int = 8
 
@@ -113,11 +118,11 @@ var can_teach: {str}[]str = {
 var room_capacity: {str}int = {"R01": 32, "R02": 32, "R03": 32, "R04": 32, "Lab1": 30, "Lab2": 30, "Gym": 60, "ArtRm": 32}
 var class_size:    {str}int = {"Year7A": 30, "Year7B": 28, "Year8A": 30, "Year8B": 27, "Year9A": 29, "Year9B": 26}
 
-# room_type[room] = room type (standard / lab / gym / art / other)
-var room_type: {str}str = {"R01": "standard", "R02": "standard", "R03": "standard", "R04": "standard", "Lab1": "lab", "Lab2": "lab", "Gym": "gym", "ArtRm": "art"}
+# room_type[room] = room type
+var room_type: {str}ROOM_TYPE = {"R01": standard, "R02": standard, "R03": standard, "R04": standard, "Lab1": lab, "Lab2": lab, "Gym": gym, "ArtRm": art}
 
 # subject_room_type[subject] = required room type (omit for any room)
-var subject_room_type: {str}str = {"Science": "lab", "PE": "gym", "Art": "art"}
+var subject_room_type: {str}ROOM_TYPE = {"Science": lab, "PE": gym, "Art": art}
 
 # teacher_unavail = list of (teacher, day, slot) forbidden triples
 var teacher_unavail: [](str, DAYS, int) = []
@@ -167,11 +172,11 @@ if db_path != "":
 
     room_type = {:}
     for row in conn.rows("SELECT name, room_type FROM rooms WHERE problem=? ORDER BY rowid", [p]):
-        room_type[row[0]] = row[1]
+        room_type[row[0]] = ROOM_TYPE(row[1])
 
     subject_room_type = {:}
     for row in conn.rows("SELECT subject, room_type FROM subject_room_type WHERE problem=?", [p]):
-        subject_room_type[row[0]] = row[1]
+        subject_room_type[row[0]] = ROOM_TYPE(row[1])
 
     teacher_unavail = []
     for row in conn.rows("SELECT teacher, day, slot FROM teacher_unavailability WHERE problem=?", [p]):
@@ -188,7 +193,8 @@ if db_path != "":
         W_TEACHER_SPREAD   = int(row[3])
 
     conn.close()
-    print(f"Loaded problem '{p}' from {db_path}")
+    if not json_output:
+        print(f"Loaded problem '{p}' from {db_path}")
 
 
 # ============================================================
@@ -256,6 +262,33 @@ var lesson_cands: [][]Value_T      = [all_candidates[cs] for cs in lesson_cs]
 
 let N_LESSONS: int = len(lessons)
 
+# Index: lessons_of_class[class] = list of lesson indices for that class
+var lessons_of_class: {str}[]int = {:}
+for ki in 0..<N_LESSONS:
+    let c: str = lessons[ki].cls
+    if c not in lessons_of_class:
+        lessons_of_class[c] = []
+    lessons_of_class[c].append(ki)
+
+# Index: lessons_by_teacher_cand[lesson_idx][cand_idx] = teacher name
+# For teacher_day_soft we need to know which lessons *can* be taught by a teacher.
+# Since teacher is fixed per candidate, we precompute for each teacher which
+# (lesson, cand_idx) pairs have that teacher — but that's complex.
+# Simpler: build lessons_of_teacher based on who can teach each lesson.
+var lessons_of_teacher: {str}[]int = {:}
+for ki in 0..<N_LESSONS:
+    for cand in lesson_cands[ki]:
+        let t: str = cand.teacher
+        if t not in lessons_of_teacher:
+            lessons_of_teacher[t] = []
+        # avoid duplicates
+        var found_t: bool = False
+        for existing in lessons_of_teacher[t]:
+            if existing == ki:
+                found_t = True
+        if not found_t:
+            lessons_of_teacher[t].append(ki)
+
 
 # ============================================================
 # STATE, ENERGY, MOVES
@@ -266,85 +299,126 @@ let N_LESSONS: int = len(lessons)
 type State_T is []int
 
 
-def soft_score(state: State_T) -> int:
-    """Soft penalty: holes in class days, early/late starts, teacher spread.
-    Consecutive same-subject uses weight 1000 so SA treats it as hard.
-    """
-    var pen: int = 0
-
-    # Hard-like: consecutive same-subject (weight 1000)
-    for c in CLASSES:
-        for d in DAYS:
-            for sl in 2..MAX_SLOTS:
-                var subj_cur:  str = ""
-                var subj_prev: str = ""
-                for k in 0..<N_LESSONS:
-                    if lessons[k].cls != c:
-                        continue
-                    let v: Value_T = lesson_cands[k][state[k]]
-                    if v.period.day == d and v.period.slot == sl:
-                        subj_cur = lessons[k].subj
-                    if v.period.day == d and v.period.slot == sl - 1:
-                        subj_prev = lessons[k].subj
-                if subj_cur != "" and subj_cur == subj_prev:
-                    pen = pen + 1000
-
-    # Hard-like: teacher daily load (weight 1000)
-    for t in TEACHERS:
-        for d in DAYS:
-            var count: int = 0
-            for k in 0..<N_LESSONS:
-                let v: Value_T = lesson_cands[k][state[k]]
-                if v.teacher == t and v.period.day == d:
-                    count = count + 1
-            if count > MAX_TEACHER_PERIODS_DAY:
-                pen = pen + 1000 * (count - MAX_TEACHER_PERIODS_DAY)
-
-    # Soft: class free-period holes, early/late starts
-    for c in CLASSES:
-        for d in DAYS:
-            var first_sl: int = MAX_SLOTS + 1
-            var last_sl:  int = 0
-            var count:    int = 0
-            for k in 0..<N_LESSONS:
-                if lessons[k].cls != c:
-                    continue
-                let v: Value_T = lesson_cands[k][state[k]]
-                if v.period.day == d:
-                    count = count + 1
-                    if v.period.slot < first_sl:
-                        first_sl = v.period.slot
-                    if v.period.slot > last_sl:
-                        last_sl = v.period.slot
-            if count > 0:
-                pen = pen + W_CLASS_HOLES * ((last_sl - first_sl + 1) - count)
-                if first_sl == 1:
-                    pen = pen + W_AVOID_FIRST_SLOT
-                if last_sl == MAX_SLOTS:
-                    pen = pen + W_AVOID_LAST_SLOT
-
-    # Soft: teacher lesson spread (span - count per teacher/day)
-    for t in TEACHERS:
-        for d in DAYS:
-            var first_sl: int = MAX_SLOTS + 1
-            var last_sl:  int = 0
-            var count:    int = 0
-            for k in 0..<N_LESSONS:
-                let v: Value_T = lesson_cands[k][state[k]]
-                if v.teacher == t and v.period.day == d:
-                    count = count + 1
-                    if v.period.slot < first_sl:
-                        first_sl = v.period.slot
-                    if v.period.slot > last_sl:
-                        last_sl = v.period.slot
-            if count > 1:
-                pen = pen + W_TEACHER_SPREAD * ((last_sl - first_sl + 1) - count)
-
+def class_day_soft(state: State_T, c: str, d: DAYS) -> int:
+    """Soft cost for one (class, day) pair: holes + early/late penalties."""
+    var first_sl: int = MAX_SLOTS + 1
+    var last_sl:  int = 0
+    var count:    int = 0
+    for k in lessons_of_class[c]:
+        let v: Value_T = lesson_cands[k][state[k]]
+        if v.period.day == d:
+            count = count + 1
+            if v.period.slot < first_sl:
+                first_sl = v.period.slot
+            if v.period.slot > last_sl:
+                last_sl = v.period.slot
+    if count == 0:
+        return 0
+    var pen: int = W_CLASS_HOLES * ((last_sl - first_sl + 1) - count)
+    if first_sl == 1:
+        pen = pen + W_AVOID_FIRST_SLOT
+    if last_sl == MAX_SLOTS:
+        pen = pen + W_AVOID_LAST_SLOT
     return pen
 
 
+def teacher_day_soft(state: State_T, t: str, d: DAYS) -> int:
+    """Soft cost for one (teacher, day) pair: spread."""
+    var first_sl: int = MAX_SLOTS + 1
+    var last_sl:  int = 0
+    var count:    int = 0
+    for k in lessons_of_teacher[t]:
+        let v: Value_T = lesson_cands[k][state[k]]
+        if v.teacher == t and v.period.day == d:
+            count = count + 1
+            if v.period.slot < first_sl:
+                first_sl = v.period.slot
+            if v.period.slot > last_sl:
+                last_sl = v.period.slot
+    if count <= 1:
+        return 0
+    return W_TEACHER_SPREAD * ((last_sl - first_sl + 1) - count)
+
+
+def class_day_consec(state: State_T, c: str, d: DAYS) -> int:
+    """Consecutive same-subject penalty for one (class, day) pair."""
+    var pen: int = 0
+    for sl in 2..MAX_SLOTS:
+        var subj_cur:  str = ""
+        var subj_prev: str = ""
+        for k in lessons_of_class[c]:
+            let v: Value_T = lesson_cands[k][state[k]]
+            if v.period.day == d:
+                if v.period.slot == sl:
+                    subj_cur = lessons[k].subj
+                elif v.period.slot == sl - 1:
+                    subj_prev = lessons[k].subj
+        if subj_cur != "" and subj_cur == subj_prev:
+            pen = pen + 1000
+    return pen
+
+
+def soft_score(state: State_T) -> int:
+    """Full soft score — O(N²). Used only for initial score; delta_soft is used in the loop."""
+    var pen: int = 0
+    for c in CLASSES:
+        for d in DAYS:
+            pen = pen + class_day_consec(state, c, d)
+            pen = pen + class_day_soft(state, c, d)
+    for t in TEACHERS:
+        for d in DAYS:
+            pen = pen + teacher_day_soft(state, t, d)
+    return pen
+
+
+def delta_soft(state: State_T, li: int, new_idx: int) -> int:
+    """O(N) incremental soft delta when lesson li moves to new_idx.
+    Only the (class, day_old), (class, day_new), (teacher, day_old),
+    (teacher, day_new) pairs are affected.
+    """
+    let old_v: Value_T = lesson_cands[li][state[li]]
+    let new_v: Value_T = lesson_cands[li][new_idx]
+    let c: str  = lessons[li].cls
+    let t: str  = old_v.teacher
+    let t2: str = new_v.teacher
+    let d_old: DAYS = old_v.period.day
+    let d_new: DAYS = new_v.period.day
+
+    # Subtract old contributions, add new ones
+    var before: int = class_day_consec(state, c, d_old) + class_day_soft(state, c, d_old)
+    var after_s: int = 0
+    if d_new != d_old:
+        before = before + class_day_consec(state, c, d_new) + class_day_soft(state, c, d_new)
+
+    before = before + teacher_day_soft(state, t, d_old)
+    if t2 != t or d_new != d_old:
+        before = before + teacher_day_soft(state, t2, d_new)
+
+    # Temporarily apply the move
+    var tmp: State_T = state
+    tmp[li] = new_idx
+
+    after_s = class_day_consec(tmp, c, d_old) + class_day_soft(tmp, c, d_old)
+    if d_new != d_old:
+        after_s = after_s + class_day_consec(tmp, c, d_new) + class_day_soft(tmp, c, d_new)
+
+    after_s = after_s + teacher_day_soft(tmp, t, d_old)
+    if t2 != t or d_new != d_old:
+        after_s = after_s + teacher_day_soft(tmp, t2, d_new)
+
+    return after_s - before
+
+
+def teacher_day_count(state: State_T, t: str, d: DAYS) -> int:
+    var n: int = 0
+    for k in lessons_of_teacher[t]:
+        if lesson_cands[k][state[k]].teacher == t and lesson_cands[k][state[k]].period.day == d:
+            n = n + 1
+    return n
+
+
 def hard_count(state: State_T) -> int:
-    """Number of hard constraint violations."""
+    """Number of hard constraint violations (clashes + teacher daily load)."""
     var n: int = 0
     for i in 0..<N_LESSONS - 1:
         let vi: Value_T = lesson_cands[i][state[i]]
@@ -360,6 +434,12 @@ def hard_count(state: State_T) -> int:
                 continue
             if vi.room == vj.room:
                 n = n + 1
+    # teacher daily load
+    for t in lessons_of_teacher:
+        for d in DAYS:
+            let cnt: int = teacher_day_count(state, t, d)
+            if cnt > MAX_TEACHER_PERIODS_DAY:
+                n = n + cnt - MAX_TEACHER_PERIODS_DAY
     return n
 
 
@@ -385,6 +465,22 @@ def delta_hard(state: State_T, li: int, new_idx: int) -> int:
                 d = d + 1
             elif new_v.room == other.room:
                 d = d + 1
+    # teacher daily load delta for the moved lesson's teacher
+    if old_v.teacher == new_v.teacher:
+        if old_v.period.day != new_v.period.day:
+            let old_cnt: int = teacher_day_count(state, old_v.teacher, old_v.period.day)
+            let new_cnt: int = teacher_day_count(state, new_v.teacher, new_v.period.day)
+            if old_cnt > MAX_TEACHER_PERIODS_DAY:
+                d = d - 1
+            if new_cnt >= MAX_TEACHER_PERIODS_DAY:
+                d = d + 1
+    else:
+        let old_cnt: int = teacher_day_count(state, old_v.teacher, old_v.period.day)
+        let new_cnt: int = teacher_day_count(state, new_v.teacher, new_v.period.day)
+        if old_cnt > MAX_TEACHER_PERIODS_DAY:
+            d = d - 1
+        if new_cnt >= MAX_TEACHER_PERIODS_DAY:
+            d = d + 1
     return d
 
 
@@ -401,7 +497,7 @@ def delta_hard(state: State_T, li: int, new_idx: int) -> int:
 # ============================================================
 
 def solve_sa(max_steps: int, seed: int = 42) -> (State_T, int, int):
-    """Phase 1: minimise hard violations. Returns when hard_count == 0."""
+    """Phase 1: minimise hard violations only (pure hard energy for speed)."""
     randomize(seed)
     var state: State_T = [rand(0..len(lesson_cands[k]) - 1) for k in 0..<N_LESSONS]
     var cur_hard: int = hard_count(state)
@@ -464,15 +560,15 @@ def optimise_soft(state: State_T, max_steps: int) -> State_T:
             T = T * alpha
             continue
 
-        var tmp: State_T = cur_state
-        tmp[li] = new_idx
-        let dS: int = soft_score(tmp) - cur_soft
+        let dS: int = delta_soft(cur_state, li, new_idx)
         if dS <= 0 or rand(0.0..1.0) < exp(-float(dS) / T):
             cur_state[li] = new_idx
             cur_soft = cur_soft + dS
             if cur_soft < best_soft:
                 best_soft = cur_soft
                 best_state = cur_state
+                if best_soft == 0:
+                    return best_state
         T = T * alpha
 
     return best_state
@@ -482,86 +578,35 @@ def optimise_soft(state: State_T, max_steps: int) -> State_T:
 # SOLVE
 # ============================================================
 
-print("Solving timetable via simulated annealing ...")
-print("")
+if not json_output:
+    print("Solving timetable via simulated annealing ...")
+    print("")
 
 let t0: float = cpuTime()
 let (phase1_state, hard_violations, steps1) = solve_sa(max_steps = 200000)
 var final_state: State_T = phase1_state
 if hard_violations == 0:
-    print(f"Phase 1: valid schedule in {steps1} steps — optimising soft constraints ...")
-    final_state = optimise_soft(phase1_state, max_steps = 500000)
+    let soft0: int = soft_score(phase1_state)
+    if soft0 == 0:
+        if not json_output:
+            print(f"Phase 1: valid schedule in {steps1} steps — done.")
+    else:
+        if not json_output:
+            print(f"Phase 1: valid schedule in {steps1} steps — optimising soft constraints ...")
+        final_state = optimise_soft(phase1_state, max_steps = 500000)
 let elapsed: float = cpuTime() - t0
 
-if hard_violations == 0:
-    print(f"Solved in {elapsed*1000.0:.1f} ms")
-else:
-    print(f"Gave up in {elapsed*1000.0:.1f} ms ({hard_violations} hard violations remain)")
-    print("Try a higher max_steps or different seed.")
+if not json_output:
+    if hard_violations == 0:
+        print(f"Solved in {elapsed*1000.0:.1f} ms")
+    else:
+        print(f"Gave up in {elapsed*1000.0:.1f} ms ({hard_violations} hard violations remain)")
+        print("Try a higher max_steps or different seed.")
 
 
 # ============================================================
-# DISPLAY
+# SOFT SCORE COMPUTATION (shared by both output modes)
 # ============================================================
-
-def entry_for(c: str, d: DAYS, sl: int, state: State_T) -> str:
-    for k in 0..<N_LESSONS:
-        if lessons[k].cls != c:
-            continue
-        let v: Value_T = lesson_cands[k][state[k]]
-        if v.period.day == d and v.period.slot == sl:
-            return f"{lessons[k].subj}({v.teacher})"
-    return "--"
-
-for c in CLASSES:
-    print("")
-    print("=" * 54)
-    print(f"  Timetable for class {c}")
-    print("=" * 54)
-    var header: str = " " * 8
-    for d in DAYS:
-        header = header + f"{d'Image:>10}"
-    print(header)
-    for sl in 1..MAX_SLOTS:
-        var row: str = f"Slot {sl}  "
-        for d in DAYS:
-            row = row + f"{entry_for(c, d, sl, final_state):>10}"
-        print(row)
-
-
-# ============================================================
-# COVERAGE CHECK
-# ============================================================
-
-print("")
-print("=" * 54)
-print("  Coverage check")
-print("=" * 54)
-let h_cls: str = "Class"
-let h_sub: str = "Subject"
-let h_req: str = "Required"
-let h_sch: str = "Scheduled"
-print(f"{h_cls:<8} {h_sub:<10} {h_req:>8} {h_sch:>9}")
-print("-" * 38)
-var all_ok: bool = True
-for cs in cs_keys:
-    let req: int = requirements[cs.cls][cs.subj]
-    var scheduled: int = 0
-    for k in 0..<N_LESSONS:
-        if lessons[k].cls == cs.cls and lessons[k].subj == cs.subj:
-            scheduled = scheduled + 1
-    let ok: str = ("OK" if scheduled == req else "FAIL")
-    if scheduled != req:
-        all_ok = False
-    print(f"{cs.cls:<8} {cs.subj:<10} {req:>8} {scheduled:>8}  {ok}")
-
-print("")
-if hard_violations > 0:
-    print(f"Schedule has {hard_violations} unresolved hard constraint violations")
-elif all_ok:
-    print("All hard constraints satisfied")
-else:
-    print("Some hard constraints violated")
 
 var holes:      int = 0
 var first_hits: int = 0
@@ -607,19 +652,100 @@ for t in TEACHERS:
             t_spread = t_spread + (last_sl - first_sl + 1) - count
 
 let soft_total: int = W_CLASS_HOLES * holes + W_AVOID_FIRST_SLOT * first_hits + W_AVOID_LAST_SLOT * last_hits + W_TEACHER_SPREAD * t_spread
-print("")
-print("=" * 54)
-print("  Soft constraint score")
-print("=" * 54)
-if soft_total == 0:
-    print("All soft constraints satisfied")
+
+
+# ============================================================
+# OUTPUT
+# ============================================================
+
+if json_output:
+    if hard_violations > 0:
+        print("{\"ok\":false,\"error\":\"No valid schedule found — " + hard_violations'Image + " hard violations remain\"}")
+    else:
+        var jlines: []str = []
+        for k in 0..<N_LESSONS:
+            let v: Value_T = lesson_cands[k][final_state[k]]
+            let c: str   = lessons[k].cls
+            let s: str   = lessons[k].subj
+            let occ: int = lessons[k].occ
+            let t: str   = v.teacher
+            let r: str   = v.room
+            let d: str   = v.period.day'Image
+            let sl: int  = v.period.slot
+            jlines.append("{\"class\":\"" + c + "\",\"subject\":\"" + s + "\",\"occ\":" + occ'Image + ",\"teacher\":\"" + t + "\",\"room\":\"" + r + "\",\"day\":\"" + d + "\",\"slot\":" + sl'Image + "}")
+        let schedule_json: str = "[" + join(jlines, ",") + "]"
+        let elapsed_ms: float  = elapsed * 1000.0
+        print("{\"ok\":true,\"schedule\":" + schedule_json + ",\"stats\":{\"elapsed_ms\":" + elapsed_ms'Image + ",\"soft_penalty\":" + soft_total'Image + ",\"soft_details\":{\"class_holes\":" + holes'Image + ",\"avoid_first_slot\":" + first_hits'Image + ",\"avoid_last_slot\":" + last_hits'Image + ",\"teacher_spread\":" + t_spread'Image + "}}}")
 else:
-    print(f"Soft score: {soft_total}")
-    if holes > 0:
-        print(f"  - Class holes:       {holes} (weight {W_CLASS_HOLES})")
-    if first_hits > 0:
-        print(f"  - Early starts:      {first_hits} (weight {W_AVOID_FIRST_SLOT})")
-    if last_hits > 0:
-        print(f"  - Late finishes:     {last_hits} (weight {W_AVOID_LAST_SLOT})")
-    if t_spread > 0:
-        print(f"  - Teacher spread:    {t_spread} (weight {W_TEACHER_SPREAD})")
+    # ── Human-readable display ──────────────────────────────
+
+    def entry_for(c: str, d: DAYS, sl: int, state: State_T) -> str:
+        for k in 0..<N_LESSONS:
+            if lessons[k].cls != c:
+                continue
+            let v: Value_T = lesson_cands[k][state[k]]
+            if v.period.day == d and v.period.slot == sl:
+                return f"{lessons[k].subj}({v.teacher})"
+        return "--"
+
+    for c in CLASSES:
+        print("")
+        print("=" * 54)
+        print(f"  Timetable for class {c}")
+        print("=" * 54)
+        var header: str = " " * 8
+        for d in DAYS:
+            header = header + f"{d'Image:>10}"
+        print(header)
+        for sl in 1..MAX_SLOTS:
+            var row: str = f"Slot {sl}  "
+            for d in DAYS:
+                row = row + f"{entry_for(c, d, sl, final_state):>10}"
+            print(row)
+
+    print("")
+    print("=" * 54)
+    print("  Coverage check")
+    print("=" * 54)
+    let h_cls: str = "Class"
+    let h_sub: str = "Subject"
+    let h_req: str = "Required"
+    let h_sch: str = "Scheduled"
+    print(f"{h_cls:<8} {h_sub:<10} {h_req:>8} {h_sch:>9}")
+    print("-" * 38)
+    var all_ok: bool = True
+    for cs in cs_keys:
+        let req: int = requirements[cs.cls][cs.subj]
+        var scheduled: int = 0
+        for k in 0..<N_LESSONS:
+            if lessons[k].cls == cs.cls and lessons[k].subj == cs.subj:
+                scheduled = scheduled + 1
+        let ok: str = ("OK" if scheduled == req else "FAIL")
+        if scheduled != req:
+            all_ok = False
+        print(f"{cs.cls:<8} {cs.subj:<10} {req:>8} {scheduled:>8}  {ok}")
+
+    print("")
+    if hard_violations > 0:
+        print(f"Schedule has {hard_violations} unresolved hard constraint violations")
+    elif all_ok:
+        print("All hard constraints satisfied")
+    else:
+        print("Some hard constraints violated")
+
+    print("")
+    print("=" * 54)
+    print("  Soft constraint score")
+    print("=" * 54)
+    if soft_total == 0:
+        print("All soft constraints satisfied")
+    else:
+        print(f"Soft score: {soft_total}")
+        if holes > 0:
+            print(f"  - Class holes:       {holes} (weight {W_CLASS_HOLES})")
+        if first_hits > 0:
+            print(f"  - Early starts:      {first_hits} (weight {W_AVOID_FIRST_SLOT})")
+        if last_hits > 0:
+            print(f"  - Late finishes:     {last_hits} (weight {W_AVOID_LAST_SLOT})")
+        if t_spread > 0:
+            print(f"  - Teacher spread:    {t_spread} (weight {W_TEACHER_SPREAD})")
