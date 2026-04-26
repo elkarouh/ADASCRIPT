@@ -110,8 +110,20 @@ var can_teach: {str}[]str = {
     "Jones":  ["English", "PE"],
 }
 
-var room_capacity: {str}int = {"R01": 32, "R02": 32, "R03": 32, "R04": 32, "Lab1": 30, "Lab2": 30, "Gym": 60, "ArtRm": 28}
+var room_capacity: {str}int = {"R01": 32, "R02": 32, "R03": 32, "R04": 32, "Lab1": 30, "Lab2": 30, "Gym": 60, "ArtRm": 32}
 var class_size:    {str}int = {"Year7A": 30, "Year7B": 28, "Year8A": 30, "Year8B": 27, "Year9A": 29, "Year9B": 26}
+
+# room_type[room] = room type (standard / lab / gym / art / other)
+var room_type: {str}str = {"R01": "standard", "R02": "standard", "R03": "standard", "R04": "standard", "Lab1": "lab", "Lab2": "lab", "Gym": "gym", "ArtRm": "art"}
+
+# subject_room_type[subject] = required room type (omit for any room)
+var subject_room_type: {str}str = {"Science": "lab", "PE": "gym", "Art": "art"}
+
+# teacher_unavail = list of (teacher, day, slot) forbidden triples
+var teacher_unavail: [](str, DAYS, int) = []
+
+var MAX_CONSEC_SAME_SUBJ:    int = 2
+var MAX_TEACHER_PERIODS_DAY: int = 4
 
 # ---- INPUT DATA END ----
 
@@ -146,6 +158,22 @@ if db_path != "":
             can_teach[row[0]] = []
         can_teach[row[0]].append(row[1])
 
+    room_type = {:}
+    for row in conn.rows("SELECT name, room_type FROM rooms WHERE problem=? ORDER BY rowid", [p]):
+        room_type[row[0]] = row[1]
+
+    subject_room_type = {:}
+    for row in conn.rows("SELECT subject, room_type FROM subject_room_type WHERE problem=?", [p]):
+        subject_room_type[row[0]] = row[1]
+
+    teacher_unavail = []
+    for row in conn.rows("SELECT teacher, day, slot FROM teacher_unavailability WHERE problem=?", [p]):
+        teacher_unavail.append((row[0], DAYS(row[1]), int(row[2])))
+
+    for row in conn.rows("SELECT max_consecutive_same_subj, max_teacher_periods_day FROM soft_constraints WHERE problem=?", [p]):
+        MAX_CONSEC_SAME_SUBJ    = int(row[0])
+        MAX_TEACHER_PERIODS_DAY = int(row[1])
+
     conn.close()
     print(f"Loaded problem '{p}' from {db_path}")
 
@@ -176,6 +204,13 @@ var PERIODS: []Period_T = [
     (day: d, slot: s) for d in DAYS for s in 1..MAX_SLOTS
 ]
 
+def is_unavailable(t: str, d: DAYS, s: int) -> bool:
+    for ut, ud, us in teacher_unavail:
+        if ut == t and ud == d and us == s:
+            return True
+    return False
+
+
 var cs_keys: []ClassSubject_T = [
     (cls: c, subj: s)
     for c in CLASSES if c in requirements
@@ -194,7 +229,11 @@ var all_candidates: {ClassSubject_T}[]Value_T = {
         for t in TEACHERS
         for r in ROOMS
         for p in PERIODS
-        if t in can_teach and cs.subj in can_teach[t] and room_capacity[r] >= class_size[cs.cls]
+        if t in can_teach and cs.subj in can_teach[t]
+           and room_capacity[r] >= class_size[cs.cls]
+           and (cs.subj not in subject_room_type
+                or room_type[r] == subject_room_type[cs.subj])
+           and not is_unavailable(t, p.day, p.slot)
     ]
     for cs in cs_keys
 }
@@ -214,6 +253,39 @@ let N_LESSONS: int = len(lessons)
 type State_T is []int
 
 
+def soft_score(state: State_T) -> int:
+    """Soft constraint penalty: consecutive same-subject + teacher daily load."""
+    var pen: int = 0
+
+    for c in CLASSES:
+        for d in DAYS:
+            for sl in 2..MAX_SLOTS:
+                var subj_cur:  str = ""
+                var subj_prev: str = ""
+                for k in 0..<N_LESSONS:
+                    if lessons[k].cls != c:
+                        continue
+                    let v: Value_T = lesson_cands[k][state[k]]
+                    if v.period.day == d and v.period.slot == sl:
+                        subj_cur = lessons[k].subj
+                    if v.period.day == d and v.period.slot == sl - 1:
+                        subj_prev = lessons[k].subj
+                if subj_cur != "" and subj_cur == subj_prev:
+                    pen = pen + 1
+
+    for t in TEACHERS:
+        for d in DAYS:
+            var count: int = 0
+            for k in 0..<N_LESSONS:
+                let v: Value_T = lesson_cands[k][state[k]]
+                if v.teacher == t and v.period.day == d:
+                    count = count + 1
+            if count > MAX_TEACHER_PERIODS_DAY:
+                pen = pen + (count - MAX_TEACHER_PERIODS_DAY)
+
+    return pen
+
+
 def energy(state: State_T) -> int:
     var score: int = 0
     for i in 0..<N_LESSONS - 1:
@@ -230,6 +302,8 @@ def energy(state: State_T) -> int:
                 continue
             if vi.room == vj.room:
                 score = score + 1
+    # Soft constraints contribute to energy so SA can optimise them
+    score = score + soft_score(state)
     return score
 
 
@@ -290,7 +364,11 @@ def solve_sa(max_steps: int, seed: int = 42) -> (State_T, int, int):
             if new_idx >= n_cands:
                 new_idx = 0
 
-        let dE: int = delta_energy(state, li, new_idx)
+        let old_soft: int = soft_score(state)
+        var tmp_state: State_T = state
+        tmp_state[li] = new_idx
+        let new_soft: int = soft_score(tmp_state)
+        let dE: int = delta_energy(state, li, new_idx) + new_soft - old_soft
         if dE <= 0 or rand(0.0..1.0) < exp(-float(dE) / T):
             state[li] = new_idx
             cur_E = cur_E + dE
@@ -377,8 +455,18 @@ for cs in cs_keys:
 
 print("")
 if final_E > 0:
-    print(f"Schedule has {final_E} unresolved constraint violations")
+    print(f"Schedule has {final_E} unresolved hard constraint violations")
 elif all_ok:
-    print("All constraints satisfied")
+    print("All hard constraints satisfied")
 else:
-    print("Some constraints violated")
+    print("Some hard constraints violated")
+
+let soft_pen: int = soft_score(final_state)
+print("")
+print("=" * 54)
+print("  Soft constraint score")
+print("=" * 54)
+if soft_pen == 0:
+    print("All soft constraints satisfied")
+else:
+    print(f"Soft penalty: {soft_pen} violation(s)")

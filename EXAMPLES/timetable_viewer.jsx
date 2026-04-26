@@ -7,10 +7,11 @@
 <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar-scheduler@6.1.20/index.global.min.js"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: 'DM Mono', monospace; background: #f0f4f8; color: #1a1a1a; }
-input, select, button { font-family: inherit; }
+input, select, button, textarea { font-family: inherit; }
 
 /* ── shared header ── */
 .page-header { background: #1e293b; padding: 20px 36px; display: flex;
@@ -35,7 +36,7 @@ input, select, button { font-family: inherit; }
 .btn-ghost:hover { color: #e2e8f0; border-color: #475569; }
 
 /* ── editor page ── */
-.editor-body { padding: 32px 36px; display: flex; flex-direction: column; gap: 32px; }
+.editor-body { padding: 32px 36px; display: flex; flex-direction: column; gap: 24px; }
 
 .editor-toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .editor-toolbar input  { background: #1e293b; border: 1px solid #334155; border-radius: 5px;
@@ -47,8 +48,9 @@ input, select, button { font-family: inherit; }
 .status-msg  { font-size: 11px; color: #22c55e; }
 .status-msg.err { color: #f87171; }
 
-.editor-cols { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px; }
-.editor-cols-wide { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.editor-cols { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 20px; }
+.editor-cols-wide { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.editor-cols-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
 .card        { background: #fff; border-radius: 10px; padding: 20px 24px;
                box-shadow: 0 1px 3px rgba(0,0,0,.07), 0 2px 8px rgba(0,0,0,.04); }
 .card-title  { font-size: 10px; color: #94a3b8; text-transform: uppercase;
@@ -61,12 +63,13 @@ input, select, button { font-family: inherit; }
 .tag button  { background: none; border: none; cursor: pointer; color: #94a3b8;
                font-size: 14px; line-height: 1; padding: 0 2px; }
 .tag button:hover { color: #ef4444; }
-.add-row     { display: flex; gap: 6px; }
-.add-row input { flex: 1; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px;
-                 padding: 5px 8px; font-size: 11px; color: #1e293b; }
-.add-row input:focus { outline: none; border-color: #3b82f6; }
+.add-row     { display: flex; gap: 6px; align-items: center; }
+.add-row input, .add-row select {
+               flex: 1; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px;
+               padding: 5px 8px; font-size: 11px; color: #1e293b; }
+.add-row input:focus, .add-row select:focus { outline: none; border-color: #3b82f6; }
 .add-row button { background: #3b82f6; color: #fff; border: none; border-radius: 4px;
-                  padding: 5px 12px; cursor: pointer; font-size: 12px; }
+                  padding: 5px 12px; cursor: pointer; font-size: 12px; flex-shrink: 0; }
 .add-row button:hover { background: #2563eb; }
 .placeholder { color: #94a3b8; font-size: 11px; font-style: italic; }
 .info-line   { font-size: 11px; color: #94a3b8; }
@@ -80,193 +83,181 @@ table.grid td.row-hd { color: #64748b; text-align: left; padding-left: 8px; font
 table.grid td input[type=number]   { width: 38px; text-align: center; background: #f8fafc;
   border: 1px solid #e2e8f0; border-radius: 3px; padding: 3px; font-size: 11px; color: #1e293b; }
 table.grid td input[type=checkbox] { width: 14px; height: 14px; cursor: pointer; accent-color: #3b82f6; }
+table.grid td.blocked { background: #fee2e2; }
+table.grid td.blocked input[type=checkbox] { accent-color: #ef4444; }
 
 /* ── result page ── */
-.result-body { padding: 28px 36px; }
+.result-body { padding: 20px 36px; }
 .tabs        { display: flex; gap: 6px; flex-wrap: wrap; }
 .tab         { padding: 6px 14px; font-size: 12px; border: none; border-radius: 4px;
                cursor: pointer; transition: all .15s; letter-spacing: .02em; }
 .tab.active  { background: #1e293b; color: #fff; font-weight: 700; }
 .tab.inactive{ background: #f1f5f9; color: #475569; }
-.stats-grid  { display: grid; gap: 10px; margin-bottom: 24px; }
-.stat-card   { border-radius: 6px; padding: 12px 14px; }
-.stat-num    { font-size: 22px; font-weight: 700; line-height: 1; }
-.stat-lbl    { font-size: 10px; opacity: .7; margin-top: 4px; text-transform: uppercase;
-               letter-spacing: .05em; }
-.tt-wrap     { background: #fff; border-radius: 10px; overflow: hidden;
-               box-shadow: 0 1px 3px rgba(0,0,0,.08), 0 4px 16px rgba(0,0,0,.04); }
-table.tt     { border-collapse: collapse; width: 100%; table-layout: fixed; }
-table.tt th  { padding: 10px 12px; font-size: 13px; font-weight: 700; text-align: left;
-               border-bottom: 2px solid #e2e8f0; background: #f8fafc;
-               font-family: 'Playfair Display', serif; color: #1e293b; letter-spacing: .02em; }
-table.tt th.period-col { width: 72px; font-family: 'DM Mono', monospace; font-size: 11px;
-                          font-weight: 500; color: #64748b; }
-table.tt td.period-cell { padding: 0 12px; font-size: 11px; font-weight: 600; color: #94a3b8;
-                           background: #f8fafc; border-right: 2px solid #e2e8f0;
-                           vertical-align: middle; height: 68px; }
-table.tt td.lesson-cell { padding: 0; height: 68px; border: 1px solid #e2e8f0;
-                           vertical-align: top; cursor: pointer; }
-table.tt td.empty-cell  { padding: 0; height: 68px; border: 1px solid #e2e8f0; }
-.cell-inner  { height: 100%; padding: 8px 10px; transition: background .15s; display: flex;
-               flex-direction: column; justify-content: center; gap: 3px; }
-.cell-subj   { font-family: 'Playfair Display', serif; font-size: 12px; font-weight: 700;
-               letter-spacing: .01em; }
-.cell-info   { font-size: 10px; opacity: .8; }
-.legend      { display: flex; gap: 16px; margin-top: 14px; flex-wrap: wrap; }
-.legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #64748b; }
-.legend-dot  { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
-.hint        { margin-top: 10px; font-size: 10px; color: #94a3b8; letter-spacing: .03em; }
-.error-box   { background: #fdf0ef; border: 1px solid #f0b9b5; color: #c0392b;
-               border-radius: 6px; padding: 12px 16px; font-size: 13px; }
+
+.soft-warn   { background: #fefce8; border: 1px solid #fde047; border-radius: 6px;
+               padding: 10px 16px; font-size: 11px; color: #713f12; margin-bottom: 16px; }
+
+.fc-toolbar-title { font-family: 'Playfair Display', serif !important; font-size: 16px !important; }
+.fc { font-family: 'DM Mono', monospace !important; font-size: 11px !important; }
+.fc .fc-col-header-cell { background: #f8fafc; }
+.fc .fc-timegrid-slot-label { font-size: 10px; color: #64748b; }
+.fc-event { border-radius: 4px !important; font-size: 10px !important; cursor: pointer; }
+.fc-event-main { padding: 2px 4px !important; }
+
 .solving-msg { display: flex; align-items: center; justify-content: center;
                min-height: 40vh; color: #64748b; font-size: 14px; letter-spacing: .04em; }
+.error-box   { background: #fdf0ef; border: 1px solid #f0b9b5; color: #c0392b;
+               border-radius: 6px; padding: 12px 16px; font-size: 13px; }
+
+@media print {
+  .page-header, .editor-body, .result-toolbar, .fc-toolbar { display: none !important; }
+  .result-body { padding: 0; }
+}
 </style>
 </head>
 <body>
 <div id="root"></div>
 <script type="text/babel">
-const { useState, useEffect } = React;
+const { useState, useEffect, useRef, useCallback } = React;
 
 const API       = "http://localhost:8765";
 const DAYS      = ["Monday","Tuesday","Wednesday","Thursday","Friday"];
 const MAX_SLOTS = 8;
+const ROOM_TYPES = ["standard","lab","gym","art","other"];
+
+// Period 1 = 08:00, period N = 08:00 + (N-1) hours
+const SLOT_START = 8; // 08:00
+function slotToTime(slot) {
+  const h = SLOT_START + slot - 1;
+  return `${String(h).padStart(2,"0")}:00:00`;
+}
+function slotToTimeEnd(slot) {
+  const h = SLOT_START + slot;
+  return `${String(h).padStart(2,"0")}:00:00`;
+}
+
+// Map day name → a fixed Monday in a reference week (2024-01-01 is Monday)
+const DAY_DATE = {
+  Monday:"2024-01-01", Tuesday:"2024-01-02", Wednesday:"2024-01-03",
+  Thursday:"2024-01-04", Friday:"2024-01-05"
+};
 
 const PALETTE = [
-  { bg:"#dbeafe", border:"#3b82f6", text:"#1e3a8a", dot:"#3b82f6" },
-  { bg:"#dcfce7", border:"#22c55e", text:"#14532d", dot:"#22c55e" },
-  { bg:"#fef9c3", border:"#eab308", text:"#713f12", dot:"#eab308" },
-  { bg:"#fce7f3", border:"#ec4899", text:"#831843", dot:"#ec4899" },
-  { bg:"#ede9fe", border:"#8b5cf6", text:"#3b0764", dot:"#8b5cf6" },
-  { bg:"#ffedd5", border:"#f97316", text:"#7c2d12", dot:"#f97316" },
-  { bg:"#cffafe", border:"#06b6d4", text:"#164e63", dot:"#06b6d4" },
-  { bg:"#fae8ff", border:"#d946ef", text:"#701a75", dot:"#d946ef" },
+  "#3b82f6","#22c55e","#eab308","#ec4899","#8b5cf6",
+  "#f97316","#06b6d4","#d946ef","#ef4444","#10b981",
+  "#f59e0b","#6366f1","#84cc16","#0ea5e9","#e11d48",
 ];
-const EMPTY_COLOR = { bg:"#f8fafc", border:"#e2e8f0", text:"#94a3b8" };
-
 function subjColor(subjects, name) {
   const i = subjects.indexOf(name);
-  return i >= 0 ? PALETTE[i % PALETTE.length] : EMPTY_COLOR;
+  return i >= 0 ? PALETTE[i % PALETTE.length] : "#94a3b8";
+}
+function hexToRgba(hex, alpha) {
+  const r = parseInt(hex.slice(1,3),16);
+  const g = parseInt(hex.slice(3,5),16);
+  const b = parseInt(hex.slice(5,7),16);
+  return `rgba(${r},${g},${b},${alpha})`;
 }
 
 // ---------------------------------------------------------------------------
-// Result page components
+// FullCalendar result view
 // ---------------------------------------------------------------------------
-function Cell({ lesson, isSelected, onClick, subjects }) {
-  const c = lesson ? subjColor(subjects, lesson.subject) : EMPTY_COLOR;
-  return lesson ? (
-    <td className="lesson-cell" onClick={onClick}>
-      <div className="cell-inner" style={{
-        background: isSelected ? c.border : c.bg,
-        borderLeft: `3px solid ${c.border}`,
-      }}>
-        <div className="cell-subj" style={{color: isSelected ? "#fff" : c.text}}>
-          {lesson.subject}
-        </div>
-        <div className="cell-info" style={{color: isSelected ? "rgba(255,255,255,.85)" : c.text}}>
-          {lesson.teacher} · {lesson.room}
-        </div>
-      </div>
-    </td>
-  ) : (
-    <td className="empty-cell">
-      <div className="cell-inner" style={{background: EMPTY_COLOR.bg,
-            borderLeft:"3px solid transparent", opacity:.35, alignItems:"center"}}>
-        <span style={{fontSize:11,color:"#cbd5e1"}}>—</span>
-      </div>
-    </td>
-  );
-}
+function TimetableCalendar({ schedule, subjects, viewMode, onEventDrop }) {
+  const calRef = useRef(null);
+  const calObj = useRef(null);
 
-function TimetableGrid({ schedule, days, slots, filterKey, filterVal, subjects }) {
-  const [selected, setSelected] = useState(null);
-  function getLesson(day, slot) {
-    return schedule.find(e =>
-      e.day === day && e.slot === slot &&
-      (filterKey === "class" ? e.class : filterKey === "teacher" ? e.teacher : e.room) === filterVal
-    ) || null;
-  }
-  return (
-    <div>
-      <div className="tt-wrap">
-        <table className="tt" style={{tableLayout:"fixed"}}>
-          <thead><tr>
-            <th className="period-col">PERIOD</th>
-            {days.map(d => <th key={d} style={{minWidth:100}}>{d}</th>)}
-          </tr></thead>
-          <tbody>
-            {slots.map(sl => (
-              <tr key={sl}>
-                <td className="period-cell">P{sl}</td>
-                {days.map(d => {
-                  const lesson = getLesson(d, sl);
-                  const key = `${d}-${sl}`;
-                  return (
-                    <Cell key={d} lesson={lesson} subjects={subjects}
-                          isSelected={selected === key}
-                          onClick={() => setSelected(selected === key ? null : key)} />
-                  );
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <div className="legend">
-        {subjects.map(s => {
-          const c = subjColor(subjects, s);
-          return (
-            <div className="legend-item" key={s}>
-              <div className="legend-dot" style={{background: c.dot}} />
-              {s}
-            </div>
-          );
-        })}
-      </div>
-      <div className="hint">Click any cell to highlight it.</div>
-    </div>
-  );
-}
+  // Build resources and events from schedule + viewMode
+  const { resources, events } = useCallback(() => {
+    const resourceSet = new Set();
+    schedule.forEach(e => {
+      const key = viewMode === "By Class" ? e.class
+                : viewMode === "By Teacher" ? e.teacher : e.room;
+      resourceSet.add(key);
+    });
+    const resources = [...resourceSet].sort().map(r => ({ id: r, title: r }));
 
-function StatsBar({ schedule, filterKey, filterVal, subjects }) {
-  const filtered = schedule.filter(e =>
-    (filterKey === "class" ? e.class : filterKey === "teacher" ? e.teacher : e.room) === filterVal
-  );
-  const counts = Object.fromEntries(subjects.map(s => [s, 0]));
-  filtered.forEach(e => { if (counts[e.subject] !== undefined) counts[e.subject]++; });
-  const cols = Math.min(subjects.length, 4);
-  return (
-    <div className="stats-grid" style={{gridTemplateColumns:`repeat(${cols},1fr)`, marginBottom:24}}>
-      {subjects.map(s => {
-        const c = subjColor(subjects, s);
-        return (
-          <div className="stat-card" key={s}
-               style={{background: c.bg, borderLeft: `3px solid ${c.border}`}}>
-            <div className="stat-num" style={{color: c.text}}>{counts[s]}</div>
-            <div className="stat-lbl" style={{color: c.text}}>{s}</div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
+    const events = schedule.map((e, idx) => {
+      const resKey = viewMode === "By Class" ? e.class
+                   : viewMode === "By Teacher" ? e.teacher : e.room;
+      const color  = subjColor(subjects, e.subject);
+      return {
+        id:         String(idx),
+        resourceId: resKey,
+        title:      e.subject,
+        start:      `${DAY_DATE[e.day]}T${slotToTime(e.slot)}`,
+        end:        `${DAY_DATE[e.day]}T${slotToTimeEnd(e.slot)}`,
+        backgroundColor: hexToRgba(color, 0.15),
+        borderColor:     color,
+        textColor:       color,
+        extendedProps:   { ...e },
+      };
+    });
+    return { resources, events };
+  }, [schedule, subjects, viewMode])();
 
-function TabBar({ label, options, active, onChange }) {
-  return (
-    <div>
-      <div style={{fontSize:10,color:"#94a3b8",textTransform:"uppercase",
-                   letterSpacing:".08em",marginBottom:8}}>{label}</div>
-      <div className="tabs">
-        {options.map(o => (
-          <button key={o} className={`tab ${active===o?"active":"inactive"}`}
-                  onClick={() => onChange(o)}>{o}</button>
-        ))}
-      </div>
-    </div>
-  );
+  useEffect(() => {
+    if (!calRef.current) return;
+    if (calObj.current) { calObj.current.destroy(); calObj.current = null; }
+
+    calObj.current = new FullCalendar.Calendar(calRef.current, {
+      schedulerLicenseKey: "GPL-My-Project-Is-Open-Source",
+      initialView:    "resourceTimeGridWeek",
+      initialDate:    "2024-01-01",
+      headerToolbar:  false,
+      weekends:       false,
+      allDaySlot:     false,
+      slotMinTime:    slotToTime(1),
+      slotMaxTime:    slotToTimeEnd(MAX_SLOTS),
+      slotDuration:   "01:00:00",
+      slotLabelInterval: "01:00:00",
+      height:         "auto",
+      editable:       true,
+      eventResourceEditable: true,
+      resources,
+      events,
+      slotLabelContent(arg) {
+        const hour = arg.date.getHours();
+        const slot = hour - SLOT_START + 1;
+        return { html: `<span style="font-size:10px;color:#64748b">P${slot}</span>` };
+      },
+      dayHeaderContent(arg) {
+        const days = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+        return { html: `<span style="font-size:11px;font-weight:600">${days[arg.date.getDay()]}</span>` };
+      },
+      eventContent(arg) {
+        const p = arg.event.extendedProps;
+        const lines = viewMode === "By Class"
+          ? [arg.event.title, p.teacher, p.room]
+          : viewMode === "By Teacher"
+          ? [arg.event.title, p.class, p.room]
+          : [arg.event.title, p.class, p.teacher];
+        return {
+          html: `<div style="padding:3px 5px;line-height:1.4">
+            <div style="font-weight:700;font-size:10px">${lines[0]}</div>
+            <div style="font-size:9px;opacity:.8">${lines[1]}</div>
+            <div style="font-size:9px;opacity:.7">${lines[2]}</div>
+          </div>`
+        };
+      },
+      eventDrop(info) {
+        const p      = info.event.extendedProps;
+        const newDay = DAYS[info.event.start.getDay() - 1];
+        const newSlot = info.event.start.getHours() - SLOT_START + 1;
+        const newRes  = info.event.getResources()[0]?.id;
+        if (!newDay || newSlot < 1 || newSlot > MAX_SLOTS) { info.revert(); return; }
+        if (onEventDrop) onEventDrop(p, newDay, newSlot, newRes, viewMode, info.revert);
+      },
+    });
+    calObj.current.render();
+
+    return () => { if (calObj.current) { calObj.current.destroy(); calObj.current = null; } };
+  }, [resources, events, viewMode]);
+
+  return <div ref={calRef} style={{background:"#fff",borderRadius:10,padding:16,
+           boxShadow:"0 1px 3px rgba(0,0,0,.08), 0 4px 16px rgba(0,0,0,.04)"}} />;
 }
 
 // ---------------------------------------------------------------------------
-// Editor page components
+// Editor components
 // ---------------------------------------------------------------------------
 function TagList({ items, label, onRemove }) {
   if (!items.length) return <span className="placeholder">None yet.</span>;
@@ -285,21 +276,45 @@ function TagList({ items, label, onRemove }) {
   );
 }
 
-function AddRow({ placeholders, types, onAdd }) {
-  const [vals, setVals] = useState(placeholders.map(() => ""));
+function AddRow({ placeholders, types, options, onAdd }) {
+  const [vals, setVals] = useState(placeholders.map((_, i) =>
+    options?.[i] ? options[i][0] : ""));
   function commit() {
-    if (!vals[0].trim()) return;
+    if (!vals[0].trim && vals[0] === "") return;
+    if (typeof vals[0] === "string" && !vals[0].trim()) return;
     onAdd(vals);
-    setVals(placeholders.map(() => ""));
+    setVals(placeholders.map((_, i) => options?.[i] ? options[i][0] : ""));
   }
   return (
     <div className="add-row">
-      {placeholders.map((ph, i) => (
-        <input key={i} type={types?.[i]||"text"} placeholder={ph} value={vals[i]}
-               onChange={e => setVals(v => v.map((x,j) => j===i ? e.target.value : x))}
-               onKeyDown={e => e.key==="Enter" && commit()} />
-      ))}
+      {placeholders.map((ph, i) =>
+        options?.[i] ? (
+          <select key={i} value={vals[i]}
+                  onChange={e => setVals(v => v.map((x,j) => j===i ? e.target.value : x))}>
+            {options[i].map(o => <option key={o} value={o}>{o}</option>)}
+          </select>
+        ) : (
+          <input key={i} type={types?.[i]||"text"} placeholder={ph} value={vals[i]}
+                 onChange={e => setVals(v => v.map((x,j) => j===i ? e.target.value : x))}
+                 onKeyDown={e => e.key==="Enter" && commit()} />
+        )
+      )}
       <button onClick={commit}>+</button>
+    </div>
+  );
+}
+
+function TabBar({ label, options, active, onChange }) {
+  return (
+    <div>
+      {label && <div style={{fontSize:10,color:"#94a3b8",textTransform:"uppercase",
+                   letterSpacing:".08em",marginBottom:8}}>{label}</div>}
+      <div className="tabs">
+        {options.map(o => (
+          <button key={o} className={`tab ${active===o?"active":"inactive"}`}
+                  onClick={() => onChange(o)}>{o}</button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -308,7 +323,7 @@ function AddRow({ placeholders, types, onAdd }) {
 // App
 // ---------------------------------------------------------------------------
 function App() {
-  const [page,         setPage]         = useState("editor"); // "editor" | "solving" | "result"
+  const [page,         setPage]         = useState("editor");
   const [classes,      setClasses]      = useState([]);
   const [subjects,     setSubjects]     = useState([]);
   const [teachers,     setTeachers]     = useState([]);
@@ -316,22 +331,21 @@ function App() {
   const [requirements, setRequirements] = useState({});
   const [canTeach,     setCanTeach]     = useState({});
 
-  const [probName,   setProbName]   = useState("");
-  const [savedNames, setSavedNames] = useState([]);
-  const [statusMsg,  setStatusMsg]  = useState(null);
-  const [result,     setResult]     = useState(null);
-  const [viewMode,   setViewMode]   = useState("By Class");
-  const [selection,  setSelection]  = useState(null);
+  // New constraint state
+  const [subjectRoomType,   setSubjectRoomType]   = useState({});  // {subj: type}
+  const [teacherUnavail,    setTeacherUnavail]     = useState({});  // {teacher: {day: {slot: bool}}}
+  const [softConstraints,   setSoftConstraints]    = useState({
+    max_consecutive_same_subj: 2, max_teacher_periods_day: 4 });
+
+  const [probName,    setProbName]    = useState("");
+  const [savedNames,  setSavedNames]  = useState([]);
+  const [statusMsg,   setStatusMsg]   = useState(null);
+  const [result,      setResult]      = useState(null);
+  const [schedule,    setSchedule]    = useState([]);  // mutable after drag-drop
+  const [viewMode,    setViewMode]    = useState("By Class");
+  const [unavailTeacher, setUnavailTeacher] = useState(null);
 
   useEffect(() => { refreshList().then(() => loadProblem("DEFAULT")); }, []);
-
-  useEffect(() => {
-    if (!result?.ok) return;
-    const opts = viewMode === "By Class" ? result.classes
-               : viewMode === "By Teacher" ? [...new Set(result.schedule.map(e=>e.teacher))].sort()
-               : [...new Set(result.schedule.map(e=>e.room))].sort();
-    setSelection(opts[0] || null);
-  }, [viewMode, result]);
 
   async function refreshList() {
     try { setSavedNames((await (await fetch(`${API}/list`)).json()).names || []); } catch(_) {}
@@ -339,12 +353,22 @@ function App() {
 
   function buildPayload() {
     return {
-      classes, subjects, teachers, rooms,
+      classes, subjects, teachers,
+      rooms: rooms.map(r => ({ ...r, room_type: r.room_type || "standard" })),
       days: DAYS, slots: MAX_SLOTS,
       requirements,
       can_teach: Object.fromEntries(
         teachers.map(t => [t, subjects.filter(s => (canTeach[t]||{})[s])])
       ),
+      subject_room_type: subjectRoomType,
+      teacher_unavailability: Object.entries(teacherUnavail).flatMap(
+        ([teacher, days]) => Object.entries(days).flatMap(
+          ([day, slots]) => Object.entries(slots)
+            .filter(([_, blocked]) => blocked)
+            .map(([slot]) => ({ teacher, day, slot: parseInt(slot) }))
+        )
+      ),
+      soft_constraints: softConstraints,
     };
   }
 
@@ -353,9 +377,10 @@ function App() {
     try {
       const d = await (await fetch(`${API}/save`, {
         method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({name:probName.trim(), data:buildPayload()}),
+        body: JSON.stringify({ name: probName.trim(), data: buildPayload() }),
       })).json();
-      setStatusMsg(d.ok ? {text:`Saved "${probName.trim()}"`,ok:true} : {text:`Save failed: ${d.error}`,ok:false});
+      setStatusMsg(d.ok ? {text:`Saved "${probName.trim()}"`,ok:true}
+                        : {text:`Save failed: ${d.error}`,ok:false});
       if (d.ok) refreshList();
     } catch(e) { setStatusMsg({text:`Save failed: ${e.message}`,ok:false}); }
   }
@@ -373,7 +398,18 @@ function App() {
       for (const [t,ss] of Object.entries(p.can_teach||{}))
         ct[t] = Object.fromEntries((ss||[]).map(s=>[s,true]));
       setCanTeach(ct);
-      setProbName(name); setResult(null); setStatusMsg(null); setPage("editor");
+      setSubjectRoomType(p.subject_room_type||{});
+      // Deserialise flat unavailability list → nested {teacher:{day:{slot:bool}}}
+      const ua = {};
+      for (const { teacher, day, slot } of (p.teacher_unavailability||[])) {
+        if (!ua[teacher]) ua[teacher] = {};
+        if (!ua[teacher][day]) ua[teacher][day] = {};
+        ua[teacher][day][slot] = true;
+      }
+      setTeacherUnavail(ua);
+      setSoftConstraints(p.soft_constraints || { max_consecutive_same_subj:2, max_teacher_periods_day:4 });
+      setProbName(name); setResult(null); setSchedule([]); setStatusMsg(null); setPage("editor");
+      setUnavailTeacher((p.teachers||[])[0] || null);
     } catch(e) { setStatusMsg({text:"Load failed: "+e.message,ok:false}); }
   }
 
@@ -381,7 +417,8 @@ function App() {
     if (!confirm("Clear current problem and start fresh?")) return;
     setClasses([]); setSubjects([]); setTeachers([]); setRooms([]);
     setRequirements({}); setCanTeach({});
-    setProbName(""); setResult(null); setStatusMsg(null);
+    setSubjectRoomType({}); setTeacherUnavail({}); setSoftConstraints({ max_consecutive_same_subj:2, max_teacher_periods_day:4 });
+    setProbName(""); setResult(null); setSchedule([]); setStatusMsg(null);
   }
 
   async function deleteProblem() {
@@ -392,30 +429,41 @@ function App() {
         method:"POST", headers:{"Content-Type":"application/json"},
         body: JSON.stringify({name: probName}),
       })).json();
-      setStatusMsg(d.ok ? {text:`Deleted "${probName}"`,ok:true} : {text:`Delete failed: ${d.error}`,ok:false});
+      setStatusMsg(d.ok ? {text:`Deleted "${probName}"`,ok:true}
+                        : {text:`Delete failed: ${d.error}`,ok:false});
       if (d.ok) { refreshList(); setProbName(""); }
     } catch(e) { setStatusMsg({text:`Delete failed: ${e.message}`,ok:false}); }
   }
 
-  const addClass     = ([n,s]) => { if(!n||classes.find(c=>c.name===n))return; setClasses(p=>[...p,{name:n,size:parseInt(s)||25}]); setRequirements(p=>({...p,[n]:p[n]||{}})); };
-  const removeClass  = n       => { setClasses(p=>p.filter(c=>c.name!==n)); setRequirements(p=>{const x={...p};delete x[n];return x;}); };
-  const addSubject   = ([n])   => { if(!n||subjects.includes(n))return; setSubjects(p=>[...p,n]); };
-  const removeSubject= n       => { setSubjects(p=>p.filter(s=>s!==n)); setRequirements(p=>Object.fromEntries(Object.entries(p).map(([c,sv])=>{const x={...sv};delete x[n];return[c,x];}))); setCanTeach(p=>Object.fromEntries(Object.entries(p).map(([t,sv])=>{const x={...sv};delete x[n];return[t,x];}))); };
-  const addTeacher   = ([n])   => { if(!n||teachers.includes(n))return; setTeachers(p=>[...p,n]); setCanTeach(p=>({...p,[n]:{}})); };
-  const removeTeacher= n       => { setTeachers(p=>p.filter(t=>t!==n)); setCanTeach(p=>{const x={...p};delete x[n];return x;}); };
-  const addRoom      = ([n,c]) => { if(!n||rooms.find(r=>r.name===n))return; setRooms(p=>[...p,{name:n,capacity:parseInt(c)||30}]); };
-  const removeRoom   = n       => setRooms(p=>p.filter(r=>r.name!==n));
-  const setReq       = (c,s,v)=> setRequirements(p=>({...p,[c]:{...(p[c]||{}),[s]:parseInt(v)||0}}));
-  const setTeach     = (t,s,v)=> setCanTeach(p=>({...p,[t]:{...(p[t]||{}),[s]:v}}));
+  // ── entity CRUD ───────────────────────────────────────────────────────────
+  const addClass     = ([n,s])    => { if(!n||classes.find(c=>c.name===n))return; setClasses(p=>[...p,{name:n,size:parseInt(s)||25}]); setRequirements(p=>({...p,[n]:p[n]||{}})); };
+  const removeClass  = n          => { setClasses(p=>p.filter(c=>c.name!==n)); setRequirements(p=>{const x={...p};delete x[n];return x;}); };
+  const addSubject   = ([n])      => { if(!n||subjects.includes(n))return; setSubjects(p=>[...p,n]); };
+  const removeSubject= n          => {
+    setSubjects(p=>p.filter(s=>s!==n));
+    setRequirements(p=>Object.fromEntries(Object.entries(p).map(([c,sv])=>{const x={...sv};delete x[n];return[c,x];})));
+    setCanTeach(p=>Object.fromEntries(Object.entries(p).map(([t,sv])=>{const x={...sv};delete x[n];return[t,x];})));
+    setSubjectRoomType(p=>{const x={...p};delete x[n];return x;});
+  };
+  const addTeacher   = ([n])      => { if(!n||teachers.includes(n))return; setTeachers(p=>[...p,n]); setCanTeach(p=>({...p,[n]:{}})); setUnavailTeacher(t=>t||n); };
+  const removeTeacher= n          => { setTeachers(p=>p.filter(t=>t!==n)); setCanTeach(p=>{const x={...p};delete x[n];return x;}); setTeacherUnavail(p=>{const x={...p};delete x[n];return x;}); };
+  const addRoom      = ([n,c,rt]) => { if(!n||rooms.find(r=>r.name===n))return; setRooms(p=>[...p,{name:n,capacity:parseInt(c)||30,room_type:rt||"standard"}]); };
+  const removeRoom   = n          => setRooms(p=>p.filter(r=>r.name!==n));
+  const setReq       = (c,s,v)   => setRequirements(p=>({...p,[c]:{...(p[c]||{}),[s]:parseInt(v)||0}}));
+  const setTeach     = (t,s,v)   => setCanTeach(p=>({...p,[t]:{...(p[t]||{}),[s]:v}}));
+  const setUnavail   = (t,d,sl,v)=> setTeacherUnavail(p=>({...p,[t]:{...(p[t]||{}),[d]:{...((p[t]||{})[d]||{}),[sl]:v}}}));
+  const setSRT       = (s,v)     => setSubjectRoomType(p=> v==="any" ? (({[s]:_,...r})=>r)(p) : {...p,[s]:v});
 
+  // ── solve ─────────────────────────────────────────────────────────────────
   async function solve() {
     setPage("solving");
     try {
-      const r = await (await fetch(`${API}/solve`,{
+      const r = await (await fetch(`${API}/solve`, {
         method:"POST", headers:{"Content-Type":"application/json"},
-        body:JSON.stringify(buildPayload()),
+        body: JSON.stringify(buildPayload()),
       })).json();
       setResult(r);
+      setSchedule(r.ok ? r.schedule : []);
       setPage(r.ok ? "result" : "editor");
       if (!r.ok) setStatusMsg({text: r.error, ok: false});
     } catch(e) {
@@ -425,17 +473,24 @@ function App() {
     }
   }
 
-  // result view state
-  const viewOptions = ["By Class","By Teacher","By Room"];
-  let filterKey = "class", filterOptions = [];
-  if (result?.ok) {
-    if (viewMode==="By Class")   { filterKey="class";   filterOptions=result.classes; }
-    if (viewMode==="By Teacher") { filterKey="teacher"; filterOptions=[...new Set(result.schedule.map(e=>e.teacher))].sort(); }
-    if (viewMode==="By Room")    { filterKey="room";    filterOptions=[...new Set(result.schedule.map(e=>e.room))].sort(); }
+  // ── drag-drop override ────────────────────────────────────────────────────
+  function handleEventDrop(origEntry, newDay, newSlot, newRes, viewMode, revert) {
+    setSchedule(prev => {
+      const idx = prev.findIndex(e =>
+        e.class === origEntry.class && e.subject === origEntry.subject &&
+        e.occ === origEntry.occ);
+      if (idx < 0) { revert(); return prev; }
+      const updated = [...prev];
+      const entry   = { ...updated[idx], day: newDay, slot: newSlot };
+      if (viewMode === "By Class")   entry.class   = newRes || entry.class;
+      if (viewMode === "By Teacher") entry.teacher = newRes || entry.teacher;
+      if (viewMode === "By Room")    entry.room    = newRes || entry.room;
+      updated[idx] = entry;
+      return updated;
+    });
   }
-  const safeSelection = filterOptions.includes(selection) ? selection : filterOptions[0];
 
-  // ── solving spinner ──────────────────────────────────────────────────────
+  // ── solving spinner ───────────────────────────────────────────────────────
   if (page === "solving") return (
     <div>
       <div className="page-header">
@@ -448,38 +503,53 @@ function App() {
     </div>
   );
 
-  // ── result page ──────────────────────────────────────────────────────────
-  if (page === "result") return (
-    <div>
-      <div className="page-header">
-        <div>
-          <div className="page-title">School Timetable</div>
-          <div className="page-sub">
-            {`SOLVED IN ${result.stats.elapsed_ms} MS · ${result.stats.calls} CALLS · ${result.stats.backtracks} BACKTRACKS`}
+  // ── result page ───────────────────────────────────────────────────────────
+  if (page === "result" && result?.ok) {
+    const pen = result.stats.soft_penalty || 0;
+    const sd  = result.stats.soft_details || {};
+    return (
+      <div>
+        <div className="page-header">
+          <div>
+            <div className="page-title">School Timetable</div>
+            <div className="page-sub">
+              {`SOLVED IN ${result.stats.elapsed_ms} MS · ${result.stats.calls} CALLS · ${result.stats.backtracks} BACKTRACKS`}
+              {pen > 0 && ` · SOFT PENALTY ${pen}`}
+            </div>
+          </div>
+          <div className="header-btns">
+            <button className="btn btn-ghost" onClick={() => window.print()}>Print</button>
+            <button className="btn btn-ghost" onClick={() => setPage("editor")}>← Edit</button>
+            <button className="btn btn-primary" onClick={solve}>Re-solve</button>
           </div>
         </div>
-        <div className="header-btns">
-          <button className="btn btn-ghost" onClick={() => setPage("editor")}>← Edit</button>
-          <button className="btn btn-primary" onClick={solve}>Re-solve</button>
+
+        <div className="result-body">
+          {pen > 0 && (
+            <div className="soft-warn">
+              ⚠ Soft constraints: {pen} violation{pen>1?"s":""} —{" "}
+              {sd.consecutive_violations} consecutive same-subject,{" "}
+              {sd.daily_load_violations} teacher daily-load exceeded
+            </div>
+          )}
+          <div className="result-toolbar" style={{display:"flex",gap:24,marginBottom:16,alignItems:"flex-end",flexWrap:"wrap"}}>
+            <TabBar label="View by" options={["By Class","By Teacher","By Room"]}
+                    active={viewMode} onChange={setViewMode} />
+          </div>
+          <TimetableCalendar
+            schedule={schedule}
+            subjects={subjects}
+            viewMode={viewMode}
+            onEventDrop={handleEventDrop}
+          />
         </div>
       </div>
+    );
+  }
 
-      <div className="result-body">
-        <div style={{display:"flex",gap:32,marginBottom:28,flexWrap:"wrap",alignItems:"flex-end"}}>
-          <TabBar label="View by" options={viewOptions} active={viewMode}
-                  onChange={m => setViewMode(m)} />
-          <TabBar label={viewMode==="By Class"?"Class":viewMode==="By Teacher"?"Teacher":"Room"}
-                  options={filterOptions} active={safeSelection} onChange={setSelection} />
-        </div>
-        <StatsBar schedule={result.schedule} filterKey={filterKey}
-                  filterVal={safeSelection} subjects={subjects} />
-        <TimetableGrid schedule={result.schedule} days={result.days} slots={result.slots}
-                       filterKey={filterKey} filterVal={safeSelection} subjects={subjects} />
-      </div>
-    </div>
-  );
+  // ── editor page ───────────────────────────────────────────────────────────
+  const activeUnavailTeacher = unavailTeacher || teachers[0] || null;
 
-  // ── editor page ──────────────────────────────────────────────────────────
   return (
     <div>
       <div className="page-header">
@@ -495,15 +565,14 @@ function App() {
 
       <div className="editor-body">
 
-        {/* Toolbar: problem save/load */}
+        {/* Toolbar */}
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
           <div className="editor-toolbar">
             <input value={probName} onChange={e=>setProbName(e.target.value)}
                    placeholder="Problem name" maxLength={64}
                    onKeyDown={e=>e.key==="Enter"&&saveProblem()} />
             <button className="btn btn-dark" onClick={saveProblem}>Save</button>
-            <button className="btn btn-danger"
-                    onClick={deleteProblem}
+            <button className="btn btn-danger" onClick={deleteProblem}
                     disabled={!probName||probName==="DEFAULT"}>Delete</button>
             <select value="" onChange={e=>loadProblem(e.target.value)}>
               <option value="">— load saved problem —</option>
@@ -515,7 +584,7 @@ function App() {
         </div>
 
         {/* Row 1: Classes · Subjects · Teachers · Rooms */}
-        <div className="editor-cols" style={{gridTemplateColumns:"1fr 1fr 1fr 1fr"}}>
+        <div className="editor-cols">
           <div className="card">
             <div className="card-title">Classes</div>
             <TagList items={classes} label={c=>`${c.name} (${c.size})`} onRemove={removeClass} />
@@ -533,8 +602,9 @@ function App() {
           </div>
           <div className="card">
             <div className="card-title">Rooms</div>
-            <TagList items={rooms} label={r=>`${r.name} (${r.capacity})`} onRemove={removeRoom} />
-            <AddRow placeholders={["Room","Cap"]} types={["text","number"]} onAdd={addRoom} />
+            <TagList items={rooms} label={r=>`${r.name} (${r.capacity}, ${r.room_type||"standard"})`} onRemove={removeRoom} />
+            <AddRow placeholders={["Room","Cap",""]} types={["text","number",null]}
+                    options={[null,null,ROOM_TYPES]} onAdd={addRoom} />
           </div>
         </div>
 
@@ -546,8 +616,7 @@ function App() {
               <div style={{overflowX:"auto"}}>
                 <table className="grid">
                   <thead><tr>
-                    <th></th>
-                    {subjects.map(s=><th key={s}>{s}</th>)}
+                    <th></th>{subjects.map(s=><th key={s}>{s}</th>)}
                   </tr></thead>
                   <tbody>
                     {classes.map(cl=>(
@@ -574,8 +643,7 @@ function App() {
               <div style={{overflowX:"auto"}}>
                 <table className="grid">
                   <thead><tr>
-                    <th></th>
-                    {subjects.map(s=><th key={s}>{s}</th>)}
+                    <th></th>{subjects.map(s=><th key={s}>{s}</th>)}
                   </tr></thead>
                   <tbody>
                     {teachers.map(t=>(
@@ -597,9 +665,113 @@ function App() {
           </div>
         </div>
 
-        {/* Schedule info */}
-        <div className="info-line">
-          Schedule: Monday – Friday · {MAX_SLOTS} periods per day
+        {/* Row 3: Subject room type · Soft constraints */}
+        <div className="editor-cols-3">
+          <div className="card">
+            <div className="card-title">Subject room type requirement</div>
+            {subjects.length ? (
+              <div style={{overflowX:"auto"}}>
+                <table className="grid">
+                  <thead><tr><th style={{textAlign:"left"}}>Subject</th><th>Required room type</th></tr></thead>
+                  <tbody>
+                    {subjects.map(s=>(
+                      <tr key={s}>
+                        <td className="row-hd">{s}</td>
+                        <td>
+                          <select value={subjectRoomType[s]||"any"}
+                                  onChange={e=>setSRT(s,e.target.value)}
+                                  style={{fontSize:11,background:"#f8fafc",border:"1px solid #e2e8f0",
+                                          borderRadius:3,padding:"2px 4px"}}>
+                            <option value="any">any</option>
+                            {ROOM_TYPES.map(rt=><option key={rt} value={rt}>{rt}</option>)}
+                          </select>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : <span className="placeholder">Add subjects first.</span>}
+          </div>
+
+          <div className="card">
+            <div className="card-title">Soft constraints</div>
+            <div style={{display:"flex",flexDirection:"column",gap:14}}>
+              <div>
+                <div style={{fontSize:11,color:"#64748b",marginBottom:4}}>
+                  Max consecutive same subject per class
+                </div>
+                <input type="number" min={1} max={8}
+                       value={softConstraints.max_consecutive_same_subj}
+                       onChange={e=>setSoftConstraints(p=>({...p,max_consecutive_same_subj:parseInt(e.target.value)||2}))}
+                       style={{width:60,background:"#f8fafc",border:"1px solid #e2e8f0",
+                               borderRadius:4,padding:"4px 8px",fontSize:12}} />
+              </div>
+              <div>
+                <div style={{fontSize:11,color:"#64748b",marginBottom:4}}>
+                  Max periods per day per teacher
+                </div>
+                <input type="number" min={1} max={8}
+                       value={softConstraints.max_teacher_periods_day}
+                       onChange={e=>setSoftConstraints(p=>({...p,max_teacher_periods_day:parseInt(e.target.value)||4}))}
+                       style={{width:60,background:"#f8fafc",border:"1px solid #e2e8f0",
+                               borderRadius:4,padding:"4px 8px",fontSize:12}} />
+              </div>
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="card-title">Schedule info</div>
+            <div style={{fontSize:11,color:"#64748b",lineHeight:1.8}}>
+              <div>Days: Monday – Friday</div>
+              <div>Periods: {MAX_SLOTS} per day</div>
+              <div>Total slots: {5 * MAX_SLOTS}</div>
+              {subjects.length > 0 && classes.length > 0 && (() => {
+                const total = classes.reduce((acc,cl)=>
+                  acc + subjects.reduce((a,s)=>a+(requirements[cl.name]?.[s]||0),0),0);
+                return <div>Lessons to schedule: {total}</div>;
+              })()}
+            </div>
+          </div>
+        </div>
+
+        {/* Row 4: Teacher unavailability */}
+        <div className="card">
+          <div className="card-title">Teacher unavailability — block day/period combinations</div>
+          {teachers.length ? (
+            <div>
+              <div style={{marginBottom:12}}>
+                <TabBar options={teachers} active={activeUnavailTeacher}
+                        onChange={setUnavailTeacher} />
+              </div>
+              {activeUnavailTeacher && (
+                <div style={{overflowX:"auto"}}>
+                  <table className="grid">
+                    <thead><tr>
+                      <th>Period</th>
+                      {DAYS.map(d=><th key={d}>{d.slice(0,3)}</th>)}
+                    </tr></thead>
+                    <tbody>
+                      {Array.from({length:MAX_SLOTS},(_,i)=>i+1).map(sl=>(
+                        <tr key={sl}>
+                          <td className="row-hd">P{sl}</td>
+                          {DAYS.map(d=>{
+                            const blocked = !!((teacherUnavail[activeUnavailTeacher]||{})[d]||{})[sl];
+                            return (
+                              <td key={d} className={blocked?"blocked":""}>
+                                <input type="checkbox" checked={blocked}
+                                       onChange={e=>setUnavail(activeUnavailTeacher,d,sl,e.target.checked)} />
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          ) : <span className="placeholder">Add teachers first.</span>}
         </div>
 
       </div>
