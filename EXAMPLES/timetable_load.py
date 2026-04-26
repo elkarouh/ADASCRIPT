@@ -22,6 +22,8 @@ from timetable_db import DB, DEFAULT_NAME
 BEGIN_MARKER = "# ---- INPUT DATA BEGIN ----"
 END_MARKER   = "# ---- INPUT DATA END ----"
 
+DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+
 
 def generate_block(data):
     classes  = [c["name"] for c in data["classes"]]
@@ -48,6 +50,26 @@ def generate_block(data):
     rc_items = ", ".join(f'"{r["name"]}": {r["capacity"]}' for r in data["rooms"])
     cs_items = ", ".join(f'"{c["name"]}": {c["size"]}' for c in data["classes"])
 
+    # room_type per room
+    rt_items = ", ".join(f'"{r["name"]}": "{r.get("room_type","standard")}"'
+                         for r in data["rooms"])
+
+    # subject_room_type (may be empty)
+    srt = data.get("subject_room_type", {})
+    srt_items = ", ".join(f'"{s}": "{t}"' for s, t in srt.items())
+
+    # teacher_unavailability as list of (teacher, day, slot) tuples
+    unavail = data.get("teacher_unavailability", [])
+    ua_items = []
+    for u in unavail:
+        day = u["day"]   # e.g. "Monday" — matches DAYS enum value names
+        ua_items.append(f'("{u["teacher"]}", {day}, {u["slot"]})')
+    ua_block = "[" + ", ".join(ua_items) + "]"
+
+    soft = data.get("soft_constraints", {})
+    max_consec = int(soft.get("max_consecutive_same_subj", 2))
+    max_day    = int(soft.get("max_teacher_periods_day", 4))
+
     lines = [
         BEGIN_MARKER,
         "",
@@ -64,6 +86,18 @@ def generate_block(data):
         "",
         f"var room_capacity: {{str}}int = {{{rc_items}}}",
         f"var class_size:    {{str}}int = {{{cs_items}}}",
+        "",
+        "# room_type[room] = room type (standard / lab / gym / art / other)",
+        f"var room_type: {{str}}str = {{{rt_items}}}",
+        "",
+        "# subject_room_type[subject] = required room type (omit for any room)",
+        f"var subject_room_type: {{str}}str = {{{srt_items}}}",
+        "",
+        "# teacher_unavail = list of (teacher, day, slot) forbidden triples",
+        f"var teacher_unavail: [](str, DAYS, int) = {ua_block}",
+        "",
+        f"const MAX_CONSEC_SAME_SUBJ: int = {max_consec}",
+        f"const MAX_TEACHER_PERIODS_DAY: int = {max_day}",
         "",
         END_MARKER,
     ]
