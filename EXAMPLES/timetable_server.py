@@ -31,36 +31,16 @@ MAX_SLOTS = 8
 
 
 def soft_penalty(assignment, max_consec, max_day):
-    """Score soft constraint violations. 0 = perfect."""
-    consec_violations = 0
-    daily_violations  = 0
-
-    # Consecutive same-subject per class per day
-    class_day_slots = {}
-    for (c, _s, _occ), (_t, _r, (d, sl)) in assignment.items():
-        class_day_slots.setdefault(c, {}).setdefault(d, {})[sl] = _s
-
-    for _c, day_map in class_day_slots.items():
-        for _d, slot_map in day_map.items():
-            run = 1
-            for sl in sorted(slot_map)[1:]:
-                prev = sl - 1
-                if prev in slot_map and slot_map[sl] == slot_map[prev]:
-                    run += 1
-                    if run > max_consec:
-                        consec_violations += 1
-                else:
-                    run = 1
-
-    # Teacher daily load
+    """Score soft constraint violations. Consecutive same-subject is now a hard
+    constraint (enforced during search), so only teacher daily load is counted."""
+    daily_violations = 0
     teacher_day_count = {}
     for (_c, _s, _occ), (t, _r, (d, _sl)) in assignment.items():
         teacher_day_count[(t, d)] = teacher_day_count.get((t, d), 0) + 1
     for count in teacher_day_count.values():
         if count > max_day:
             daily_violations += count - max_day
-
-    return consec_violations + daily_violations, consec_violations, daily_violations
+    return daily_violations, 0, daily_violations
 
 
 def solve(data):
@@ -121,12 +101,27 @@ def solve(data):
                                  "check teacher assignments and room capacities."}
             all_candidates[(c, s)] = cands
 
+    def consec_run(assignment, c, s, d, sl):
+        """How many slots immediately before sl on day d have class c doing subject s."""
+        run = 0
+        for prev in range(sl - 1, 0, -1):
+            if any(c2 == c and s2 == s and d2 == d and sl2 == prev
+                   for (c2, s2, _), (_, _, (d2, sl2)) in assignment.items()):
+                run += 1
+            else:
+                break
+        return run
+
     def is_consistent(assignment, lesson, value):
-        c, _, _ = lesson
+        c, s, _ = lesson
         t, r, p = value
+        d, sl = p
         for (c2, _, _), (t2, r2, p2) in assignment.items():
             if p == p2 and (t == t2 or c == c2 or r == r2):
                 return False
+        # Hard: no more than max_consec consecutive periods of same subject for a class
+        if consec_run(assignment, c, s, d, sl) >= max_consec:
+            return False
         return True
 
     def count_options(assignment, lesson):
@@ -136,6 +131,13 @@ def solve(data):
 
     stats = {"calls": 0, "backtracks": 0}
 
+    def teacher_day_load(assignment, t, d):
+        return sum(1 for (t2, _r, (d2, _sl)) in assignment.values() if t2 == t and d2 == d)
+
+    def soft_cost(assignment, c, s, t, d, sl):
+        load = teacher_day_load(assignment, t, d)
+        return max(0, load + 1 - max_day)
+
     def backtrack(assignment, remaining):
         stats["calls"] += 1
         if not remaining:
@@ -143,13 +145,15 @@ def solve(data):
         lesson = min(remaining, key=lambda l: count_options(assignment, l))
         remaining.remove(lesson)
         c, s, _ = lesson
-        for value in all_candidates[(c, s)]:
-            if is_consistent(assignment, lesson, value):
-                assignment[lesson] = value
-                if backtrack(assignment, remaining):
-                    return True
-                del assignment[lesson]
-                stats["backtracks"] += 1
+        consistent = [(v, soft_cost(assignment, c, s, v[0], v[1][0], v[1][1]))
+                      for v in all_candidates[(c, s)]
+                      if is_consistent(assignment, lesson, v)]
+        for value, _ in sorted(consistent, key=lambda x: x[1]):
+            assignment[lesson] = value
+            if backtrack(assignment, remaining):
+                return True
+            del assignment[lesson]
+            stats["backtracks"] += 1
         remaining.append(lesson)
         return False
 
