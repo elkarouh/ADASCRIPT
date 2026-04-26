@@ -159,101 +159,99 @@ function hexToRgba(hex, alpha) {
 }
 
 // ---------------------------------------------------------------------------
-// FullCalendar result view
+// FullCalendar result view — one resource at a time, days as columns
 // ---------------------------------------------------------------------------
-function TimetableCalendar({ schedule, subjects, viewMode, onEventDrop }) {
+function TimetableCalendar({ schedule, subjects, viewMode, selection, onEventDrop }) {
   const calRef = useRef(null);
   const calObj = useRef(null);
 
-  // Build resources and events from schedule + viewMode
-  const { resources, events } = useCallback(() => {
-    const resourceSet = new Set();
-    schedule.forEach(e => {
-      const key = viewMode === "By Class" ? e.class
-                : viewMode === "By Teacher" ? e.teacher : e.room;
-      resourceSet.add(key);
-    });
-    const resources = [...resourceSet].sort().map(r => ({ id: r, title: r }));
+  const filterKey = viewMode === "By Class" ? "class"
+                  : viewMode === "By Teacher" ? "teacher" : "room";
 
-    const events = schedule.map((e, idx) => {
-      const resKey = viewMode === "By Class" ? e.class
-                   : viewMode === "By Teacher" ? e.teacher : e.room;
-      const color  = subjColor(subjects, e.subject);
+  const events = schedule
+    .filter(e => e[filterKey] === selection)
+    .map((e, idx) => {
+      const color = subjColor(subjects, e.subject);
+      const lines = viewMode === "By Class"   ? [e.subject, e.teacher, e.room]
+                  : viewMode === "By Teacher" ? [e.subject, e.class,   e.room]
+                  :                             [e.subject, e.class,   e.teacher];
       return {
-        id:         String(idx),
-        resourceId: resKey,
-        title:      e.subject,
-        start:      `${DAY_DATE[e.day]}T${slotToTime(e.slot)}`,
-        end:        `${DAY_DATE[e.day]}T${slotToTimeEnd(e.slot)}`,
-        backgroundColor: hexToRgba(color, 0.15),
+        id:              String(idx),
+        title:           e.subject,
+        start:           `${DAY_DATE[e.day]}T${slotToTime(e.slot)}`,
+        end:             `${DAY_DATE[e.day]}T${slotToTimeEnd(e.slot)}`,
+        backgroundColor: hexToRgba(color, 0.18),
         borderColor:     color,
         textColor:       color,
-        extendedProps:   { ...e },
+        extendedProps:   { ...e, _lines: lines },
       };
     });
-    return { resources, events };
-  }, [schedule, subjects, viewMode])();
 
   useEffect(() => {
     if (!calRef.current) return;
     if (calObj.current) { calObj.current.destroy(); calObj.current = null; }
 
     calObj.current = new FullCalendar.Calendar(calRef.current, {
-      schedulerLicenseKey: "GPL-My-Project-Is-Open-Source",
-      initialView:    "resourceTimeGridWeek",
-      initialDate:    "2024-01-01",
-      headerToolbar:  false,
-      weekends:       false,
-      allDaySlot:     false,
-      slotMinTime:    slotToTime(1),
-      slotMaxTime:    slotToTimeEnd(MAX_SLOTS),
-      slotDuration:   "01:00:00",
+      initialView:       "timeGridWeek",
+      initialDate:       "2024-01-01",
+      headerToolbar:     false,
+      weekends:          false,
+      allDaySlot:        false,
+      slotMinTime:       slotToTime(1),
+      slotMaxTime:       slotToTimeEnd(MAX_SLOTS),
+      slotDuration:      "01:00:00",
       slotLabelInterval: "01:00:00",
-      height:         "auto",
-      editable:       true,
-      eventResourceEditable: true,
-      resources,
+      expandRows:        true,
+      height:            MAX_SLOTS * 72 + 44,
+      editable:          true,
       events,
       slotLabelContent(arg) {
-        const hour = arg.date.getHours();
-        const slot = hour - SLOT_START + 1;
-        return { html: `<span style="font-size:10px;color:#64748b">P${slot}</span>` };
+        const slot = arg.date.getHours() - SLOT_START + 1;
+        return { html: `<span style="font-size:11px;color:#64748b;font-weight:600">P${slot}</span>` };
       },
       dayHeaderContent(arg) {
-        const days = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
-        return { html: `<span style="font-size:11px;font-weight:600">${days[arg.date.getDay()]}</span>` };
+        return { html: `<span style="font-size:13px;font-weight:700;font-family:'Playfair Display',serif">${
+          DAYS[arg.date.getDay() - 1]}</span>` };
       },
       eventContent(arg) {
-        const p = arg.event.extendedProps;
-        const lines = viewMode === "By Class"
-          ? [arg.event.title, p.teacher, p.room]
-          : viewMode === "By Teacher"
-          ? [arg.event.title, p.class, p.room]
-          : [arg.event.title, p.class, p.teacher];
+        const lines = arg.event.extendedProps._lines;
         return {
-          html: `<div style="padding:3px 5px;line-height:1.4">
-            <div style="font-weight:700;font-size:10px">${lines[0]}</div>
-            <div style="font-size:9px;opacity:.8">${lines[1]}</div>
-            <div style="font-size:9px;opacity:.7">${lines[2]}</div>
+          html: `<div style="padding:6px 8px;line-height:1.5;height:100%">
+            <div style="font-family:'Playfair Display',serif;font-weight:700;font-size:13px">${lines[0]}</div>
+            <div style="font-size:11px;opacity:.85">${lines[1]}</div>
+            <div style="font-size:10px;opacity:.65">${lines[2]}</div>
           </div>`
         };
       },
       eventDrop(info) {
-        const p      = info.event.extendedProps;
-        const newDay = DAYS[info.event.start.getDay() - 1];
+        const p       = info.event.extendedProps;
+        const newDay  = DAYS[info.event.start.getDay() - 1];
         const newSlot = info.event.start.getHours() - SLOT_START + 1;
-        const newRes  = info.event.getResources()[0]?.id;
         if (!newDay || newSlot < 1 || newSlot > MAX_SLOTS) { info.revert(); return; }
-        if (onEventDrop) onEventDrop(p, newDay, newSlot, newRes, viewMode, info.revert);
+        if (onEventDrop) onEventDrop(p, newDay, newSlot, selection, viewMode, info.revert);
       },
     });
     calObj.current.render();
-
     return () => { if (calObj.current) { calObj.current.destroy(); calObj.current = null; } };
-  }, [resources, events, viewMode]);
+  }, [events, selection, viewMode]);
 
-  return <div ref={calRef} style={{background:"#fff",borderRadius:10,padding:16,
-           boxShadow:"0 1px 3px rgba(0,0,0,.08), 0 4px 16px rgba(0,0,0,.04)"}} />;
+  return (
+    <div style={{background:"#fff", borderRadius:10, padding:"16px 20px",
+                 boxShadow:"0 1px 3px rgba(0,0,0,.08), 0 4px 16px rgba(0,0,0,.04)"}}>
+      <div ref={calRef} />
+      <div style={{display:"flex",gap:16,marginTop:14,flexWrap:"wrap"}}>
+        {subjects.map(s => {
+          const c = subjColor(subjects, s);
+          return (
+            <div key={s} style={{display:"flex",alignItems:"center",gap:6,fontSize:11,color:"#64748b"}}>
+              <div style={{width:10,height:10,borderRadius:"50%",background:c,flexShrink:0}} />
+              {s}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -343,6 +341,7 @@ function App() {
   const [result,      setResult]      = useState(null);
   const [schedule,    setSchedule]    = useState([]);  // mutable after drag-drop
   const [viewMode,    setViewMode]    = useState("By Class");
+  const [selection,   setSelection]   = useState(null);
   const [unavailTeacher, setUnavailTeacher] = useState(null);
 
   useEffect(() => { refreshList().then(() => loadProblem("DEFAULT")); }, []);
@@ -532,16 +531,31 @@ function App() {
               {sd.daily_load_violations} teacher daily-load exceeded
             </div>
           )}
-          <div className="result-toolbar" style={{display:"flex",gap:24,marginBottom:16,alignItems:"flex-end",flexWrap:"wrap"}}>
-            <TabBar label="View by" options={["By Class","By Teacher","By Room"]}
-                    active={viewMode} onChange={setViewMode} />
-          </div>
-          <TimetableCalendar
-            schedule={schedule}
-            subjects={subjects}
-            viewMode={viewMode}
-            onEventDrop={handleEventDrop}
-          />
+          {(() => {
+            const filterKey = viewMode === "By Class" ? "class"
+                            : viewMode === "By Teacher" ? "teacher" : "room";
+            const options = [...new Set(schedule.map(e => e[filterKey]))].sort();
+            const safeSelection = options.includes(selection) ? selection : (options[0] || null);
+            return (
+              <>
+                <div className="result-toolbar" style={{display:"flex",gap:24,marginBottom:16,alignItems:"flex-end",flexWrap:"wrap"}}>
+                  <TabBar label="View by" options={["By Class","By Teacher","By Room"]}
+                          active={viewMode} onChange={v => { setViewMode(v); setSelection(null); }} />
+                  {options.length > 0 && (
+                    <TabBar label={viewMode.replace("By ","")} options={options}
+                            active={safeSelection} onChange={setSelection} />
+                  )}
+                </div>
+                <TimetableCalendar
+                  schedule={schedule}
+                  subjects={subjects}
+                  viewMode={viewMode}
+                  selection={safeSelection}
+                  onEventDrop={handleEventDrop}
+                />
+              </>
+            );
+          })()}
         </div>
       </div>
     );
