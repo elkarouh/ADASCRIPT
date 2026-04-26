@@ -254,9 +254,14 @@ type State_T is []int
 
 
 def soft_score(state: State_T) -> int:
-    """Soft constraint penalty: consecutive same-subject + teacher daily load."""
+    """Soft constraint penalty.
+    Consecutive same-subject violations use a large weight (1000) so SA treats
+    them as effectively hard — the solution will never accept such moves.
+    Teacher daily load excess is a true soft constraint (weight 1).
+    """
     var pen: int = 0
 
+    # Consecutive same-subject (hard-like: weight 1000 per excess period)
     for c in CLASSES:
         for d in DAYS:
             for sl in 2..MAX_SLOTS:
@@ -271,8 +276,9 @@ def soft_score(state: State_T) -> int:
                     if v.period.day == d and v.period.slot == sl - 1:
                         subj_prev = lessons[k].subj
                 if subj_cur != "" and subj_cur == subj_prev:
-                    pen = pen + 1
+                    pen = pen + 1000
 
+    # Teacher daily load (soft: weight 1 per excess period)
     for t in TEACHERS:
         for d in DAYS:
             var count: int = 0
@@ -461,12 +467,17 @@ elif all_ok:
 else:
     print("Some hard constraints violated")
 
-let soft_pen: int = soft_score(final_state)
+let raw_pen: int = soft_score(final_state)
+let consec_viol: int = raw_pen / 1000
+let daily_viol:  int = raw_pen mod 1000
 print("")
 print("=" * 54)
 print("  Soft constraint score")
 print("=" * 54)
-if soft_pen == 0:
+if raw_pen == 0:
     print("All soft constraints satisfied")
 else:
-    print(f"Soft penalty: {soft_pen} violation(s)")
+    if consec_viol > 0:
+        print(f"  - Consecutive same-subject violations: {consec_viol} (hard)")
+    if daily_viol > 0:
+        print(f"  - Teacher daily load exceeded: {daily_viol} (soft)")

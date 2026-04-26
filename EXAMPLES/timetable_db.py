@@ -65,14 +65,18 @@ DEFAULT_DATA = {
         "Year9A": {"Math":4,"English":4,"Science":3,"History":2,"Geography":2,"French":2,"PE":2,"Art":1},
         "Year9B": {"Math":4,"English":4,"Science":3,"History":2,"Geography":2,"French":2,"PE":2,"Art":1},
     },
+    # Each subject shared by 2+ teachers so no one exceeds 4 periods/day.
+    # Math(24/wk): Adams+Clarke -> ~12 each = 2.4/day
+    # English(24/wk): Brown+Evans+Jones -> ~8 each = 1.6/day
+    # Science(18/wk): Davies+Green -> ~9 each = 1.8/day
     "can_teach": {
-        "Adams":  ["Math", "Science"],
+        "Adams":  ["Math"],
         "Brown":  ["English", "History"],
         "Clarke": ["Math", "French"],
         "Davies": ["Science", "Geography"],
         "Evans":  ["English", "Art"],
         "Foster": ["History", "Geography"],
-        "Green":  ["Math", "Science"],
+        "Green":  ["Science"],
         "Harris": ["PE"],
         "Ito":    ["French", "Art"],
         "Jones":  ["English", "PE"],

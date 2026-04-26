@@ -252,6 +252,7 @@ var INITIAL_STATE: State_T = [-1 for i in 0..<N_LESSONS]
 def is_consistent(state: State_T, li: int, value: Value_T) -> bool:
     """Would placing `value` at lesson `li` conflict with an earlier placement?"""
     let my_cls: str = lessons[li].cls
+    let my_subj: str = lessons[li].subj
     for k in 0..<N_LESSONS:
         if k == li:
             continue
@@ -259,14 +260,31 @@ def is_consistent(state: State_T, li: int, value: Value_T) -> bool:
         if other_idx < 0:
             continue
         let other: Value_T = lesson_cands[k][other_idx]
-        if value.period != other.period:
-            continue
-        if value.teacher == other.teacher:
-            return False
-        if my_cls == lessons[k].cls:
-            return False
-        if value.room == other.room:
-            return False
+        if value.period == other.period:
+            if value.teacher == other.teacher:
+                return False
+            if my_cls == lessons[k].cls:
+                return False
+            if value.room == other.room:
+                return False
+    # Hard: no run of more than MAX_CONSEC_SAME_SUBJ consecutive same-subject
+    let d: DAYS = value.period.day
+    let sl: int = value.period.slot
+    var run: int = 0
+    for prev in (sl - 1)..1:
+        let found: bool = False
+        for k in 0..<N_LESSONS:
+            if lessons[k].cls == my_cls and lessons[k].subj == my_subj and state[k] >= 0:
+                let ov: Value_T = lesson_cands[k][state[k]]
+                if ov.period.day == d and ov.period.slot == prev:
+                    found = True
+                    break
+        if found:
+            run = run + 1
+        else:
+            break
+    if run >= MAX_CONSEC_SAME_SUBJ:
+        return False
     return True
 
 
@@ -424,28 +442,9 @@ else:
 # SOFT CONSTRAINT SCORE
 # ============================================================
 
-def soft_penalty(state: State_T) -> (int, int, int):
-    """Returns (total, consecutive_violations, daily_load_violations)."""
-    var consec: int = 0
-    var daily:  int = 0
-
-    for c in CLASSES:
-        for d in DAYS:
-            for sl in 2..MAX_SLOTS:
-                var subj_cur:  str = ""
-                var subj_prev: str = ""
-                for k in 0..<N_LESSONS:
-                    let idx: int = state[k]
-                    if idx < 0 or lessons[k].cls != c:
-                        continue
-                    let v: Value_T = lesson_cands[k][idx]
-                    if v.period.day == d and v.period.slot == sl:
-                        subj_cur = lessons[k].subj
-                    if v.period.day == d and v.period.slot == sl - 1:
-                        subj_prev = lessons[k].subj
-                if subj_cur != "" and subj_cur == subj_prev:
-                    consec = consec + 1
-
+def soft_penalty(state: State_T) -> int:
+    """Returns teacher daily load violation count (consecutive is a hard constraint)."""
+    var daily: int = 0
     for t in TEACHERS:
         for d in DAYS:
             var count: int = 0
@@ -458,19 +457,15 @@ def soft_penalty(state: State_T) -> (int, int, int):
                     count = count + 1
             if count > MAX_TEACHER_PERIODS_DAY:
                 daily = daily + (count - MAX_TEACHER_PERIODS_DAY)
+    return daily
 
-    return (consec + daily, consec, daily)
-
-let (total_pen, consec_viol, daily_viol) = soft_penalty(final_state)
+let daily_viol: int = soft_penalty(final_state)
 print("")
 print("=" * 54)
 print("  Soft constraint score")
 print("=" * 54)
-if total_pen == 0:
+if daily_viol == 0:
     print("All soft constraints satisfied")
 else:
-    print(f"Soft penalty: {total_pen} violation(s)")
-    if consec_viol > 0:
-        print(f"  - Consecutive same-subject: {consec_viol}")
-    if daily_viol > 0:
-        print(f"  - Teacher daily load exceeded: {daily_viol}")
+    print(f"Soft penalty: {daily_viol} violation(s)")
+    print(f"  - Teacher daily load exceeded: {daily_viol}")
