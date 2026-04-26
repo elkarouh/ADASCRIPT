@@ -468,7 +468,7 @@ else:
     print("Some hard constraints violated")
 
 let raw_pen: int = soft_score(final_state)
-let consec_viol: int = raw_pen / 1000
+let consec_viol: int = raw_pen // 1000
 let daily_viol:  int = raw_pen % 1000
 print("")
 print("=" * 54)
