@@ -272,7 +272,7 @@ def is_consistent(state: State_T, li: int, value: Value_T) -> bool:
     let sl: int = value.period.slot
     var run: int = 0
     for prev in (sl - 1)..1:
-        let found: bool = False
+        var found: bool = False
         for k in 0..<N_LESSONS:
             if lessons[k].cls == my_cls and lessons[k].subj == my_subj and state[k] >= 0:
                 let ov: Value_T = lesson_cands[k][state[k]]
