@@ -343,9 +343,9 @@ def soft_score(state: State_T) -> int:
     return pen
 
 
-def energy(state: State_T) -> int:
-    """Hard constraint violations only. 0 = valid schedule."""
-    var score: int = 0
+def hard_count(state: State_T) -> int:
+    """Number of hard constraint violations."""
+    var n: int = 0
     for i in 0..<N_LESSONS - 1:
         let vi: Value_T = lesson_cands[i][state[i]]
         for j in i + 1..<N_LESSONS:
@@ -353,59 +353,67 @@ def energy(state: State_T) -> int:
             if vi.period != vj.period:
                 continue
             if vi.teacher == vj.teacher:
-                score = score + 1
+                n = n + 1
                 continue
             if lessons[i].cls == lessons[j].cls:
-                score = score + 1
+                n = n + 1
                 continue
             if vi.room == vj.room:
-                score = score + 1
-    return score
+                n = n + 1
+    return n
 
 
-def delta_energy(state: State_T, li: int, new_idx: int) -> int:
+def delta_hard(state: State_T, li: int, new_idx: int) -> int:
     let old_v: Value_T = lesson_cands[li][state[li]]
     let new_v: Value_T = lesson_cands[li][new_idx]
-    var dE: int = 0
+    var d: int = 0
     for k in 0..<N_LESSONS:
         if k == li:
             continue
         let other: Value_T = lesson_cands[k][state[k]]
         if old_v.period == other.period:
             if old_v.teacher == other.teacher:
-                dE = dE - 1
+                d = d - 1
             elif lessons[li].cls == lessons[k].cls:
-                dE = dE - 1
+                d = d - 1
             elif old_v.room == other.room:
-                dE = dE - 1
+                d = d - 1
         if new_v.period == other.period:
             if new_v.teacher == other.teacher:
-                dE = dE + 1
+                d = d + 1
             elif lessons[li].cls == lessons[k].cls:
-                dE = dE + 1
+                d = d + 1
             elif new_v.room == other.room:
-                dE = dE + 1
-    return dE
+                d = d + 1
+    return d
 
 
 # ============================================================
-# SIMULATED ANNEALING
+# SIMULATED ANNEALING — two-phase
+#
+# Phase 1: minimise hard violations (T starts high, accepts bad moves
+#          to escape local minima). Stops when hard_count == 0.
+# Phase 2: minimise soft score while hard_count stays 0
+#          (T starts low — soft costs are O(1–10), not O(1000)).
+# This two-phase design is the standard approach when hard and soft
+# costs differ by orders of magnitude: a single temperature schedule
+# cannot be right for both scales simultaneously.
 # ============================================================
 
 def solve_sa(max_steps: int, seed: int = 42) -> (State_T, int, int):
-    """Phase 1: minimise hard constraint violations. Returns when energy=0."""
+    """Phase 1: minimise hard violations. Returns when hard_count == 0."""
     randomize(seed)
     var state: State_T = [rand(0..len(lesson_cands[k]) - 1) for k in 0..<N_LESSONS]
-    var cur_E: int = energy(state)
+    var cur_hard: int = hard_count(state)
     var best_state: State_T = state
-    var best_E: int = cur_E
+    var best_hard: int = cur_hard
 
     var T: float = 2.0
     let alpha: float = 0.9999
 
     for step in 0..<max_steps:
-        if cur_E == 0:
-            return (state, cur_E, step)
+        if cur_hard == 0:
+            return (state, 0, step)
 
         let li: int = rand(0..N_LESSONS - 1)
         let n_cands: int = len(lesson_cands[li])
@@ -418,20 +426,20 @@ def solve_sa(max_steps: int, seed: int = 42) -> (State_T, int, int):
             if new_idx >= n_cands:
                 new_idx = 0
 
-        let dE: int = delta_energy(state, li, new_idx)
-        if dE <= 0 or rand(0.0..1.0) < exp(-float(dE) / T):
+        let dH: int = delta_hard(state, li, new_idx)
+        if dH <= 0 or rand(0.0..1.0) < exp(-float(dH) / T):
             state[li] = new_idx
-            cur_E = cur_E + dE
-            if cur_E < best_E:
-                best_E = cur_E
+            cur_hard = cur_hard + dH
+            if cur_hard < best_hard:
+                best_hard = cur_hard
                 best_state = state
         T = T * alpha
 
-    return (best_state, best_E, max_steps)
+    return (best_state, best_hard, max_steps)
 
 
-def optimise_soft(state: State_T, max_steps: int) -> (State_T, int):
-    """Phase 2: minimise soft score while keeping hard constraints at 0."""
+def optimise_soft(state: State_T, max_steps: int) -> State_T:
+    """Phase 2: minimise soft score, rejecting any move that adds hard violations."""
     var cur_state: State_T = state
     var cur_soft: int = soft_score(cur_state)
     var best_state: State_T = cur_state
@@ -452,24 +460,22 @@ def optimise_soft(state: State_T, max_steps: int) -> (State_T, int):
             if new_idx >= n_cands:
                 new_idx = 0
 
-        # Reject moves that introduce hard violations
-        if delta_energy(cur_state, li, new_idx) > 0:
+        if delta_hard(cur_state, li, new_idx) > 0:
             T = T * alpha
             continue
 
         var tmp: State_T = cur_state
         tmp[li] = new_idx
-        let new_soft: int = soft_score(tmp)
-        let dS: int = new_soft - cur_soft
+        let dS: int = soft_score(tmp) - cur_soft
         if dS <= 0 or rand(0.0..1.0) < exp(-float(dS) / T):
             cur_state[li] = new_idx
-            cur_soft = new_soft
+            cur_soft = cur_soft + dS
             if cur_soft < best_soft:
                 best_soft = cur_soft
                 best_state = cur_state
         T = T * alpha
 
-    return (best_state, best_soft)
+    return best_state
 
 
 # ============================================================
@@ -480,19 +486,18 @@ print("Solving timetable via simulated annealing ...")
 print("")
 
 let t0: float = cpuTime()
-let (hard_state, final_E, steps) = solve_sa(max_steps = 200000)
-var final_state: State_T = hard_state
-if final_E == 0:
-    print(f"Phase 1: valid schedule in {steps} steps — optimising soft constraints ...")
-    let (soft_state, best_soft) = optimise_soft(hard_state, max_steps = 500000)
-    final_state = soft_state
+let (phase1_state, hard_violations, steps1) = solve_sa(max_steps = 200000)
+var final_state: State_T = phase1_state
+if hard_violations == 0:
+    print(f"Phase 1: valid schedule in {steps1} steps — optimising soft constraints ...")
+    final_state = optimise_soft(phase1_state, max_steps = 500000)
 let elapsed: float = cpuTime() - t0
 
-if final_E == 0:
-    print(f"Solved in {elapsed*1000.0:.1f} ms after {steps} SA steps (energy=0)")
+if hard_violations == 0:
+    print(f"Solved in {elapsed*1000.0:.1f} ms")
 else:
-    print(f"Gave up in {elapsed*1000.0:.1f} ms after {steps} steps (energy={final_E})")
-    print("No valid schedule found; try a higher max_steps or different seed.")
+    print(f"Gave up in {elapsed*1000.0:.1f} ms ({hard_violations} hard violations remain)")
+    print("Try a higher max_steps or different seed.")
 
 
 # ============================================================
@@ -551,8 +556,8 @@ for cs in cs_keys:
     print(f"{cs.cls:<8} {cs.subj:<10} {req:>8} {scheduled:>8}  {ok}")
 
 print("")
-if final_E > 0:
-    print(f"Schedule has {final_E} unresolved hard constraint violations")
+if hard_violations > 0:
+    print(f"Schedule has {hard_violations} unresolved hard constraint violations")
 elif all_ok:
     print("All hard constraints satisfied")
 else:
