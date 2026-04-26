@@ -90,10 +90,17 @@ DEFAULT_DATA = {
     },
     # Hard constraint: blocked (teacher, day, slot) triples.
     "teacher_unavailability": [],
-    # Soft constraints — violations are scored but do not prevent a solution.
+    # Hard constraints (enforced during search — no valid solution violates these).
+    "hard_constraints": {
+        "max_consecutive_same_subj": 2,   # max run of same subject in a row for a class
+        "max_teacher_periods_day":   4,   # max periods a teacher teaches per day
+    },
+    # Soft constraints — scored after solving; lower is better.
     "soft_constraints": {
-        "max_consecutive_same_subj": 2,
-        "max_teacher_periods_day":   4,
+        "weight_class_holes":        1,   # free periods between lessons in a class day
+        "weight_avoid_first_slot":   2,   # lessons scheduled in slot 1
+        "weight_avoid_last_slot":    1,   # lessons scheduled in last slot
+        "weight_teacher_spread":     1,   # gaps in teacher's day (first–last span minus count)
     },
 }
 
@@ -150,16 +157,21 @@ CREATE TABLE IF NOT EXISTS teacher_unavailability (
     slot    INTEGER NOT NULL,
     PRIMARY KEY (problem, teacher, day, slot)
 );
-CREATE TABLE IF NOT EXISTS soft_constraints (
+CREATE TABLE IF NOT EXISTS hard_constraints (
     problem                    TEXT    NOT NULL PRIMARY KEY
                                REFERENCES problems(name) ON DELETE CASCADE,
     max_consecutive_same_subj  INTEGER NOT NULL DEFAULT 2,
     max_teacher_periods_day    INTEGER NOT NULL DEFAULT 4
 );
+CREATE TABLE IF NOT EXISTS soft_constraints (
+    problem                    TEXT    NOT NULL PRIMARY KEY
+                               REFERENCES problems(name) ON DELETE CASCADE,
+    weight_class_holes         INTEGER NOT NULL DEFAULT 1,
+    weight_avoid_first_slot    INTEGER NOT NULL DEFAULT 2,
+    weight_avoid_last_slot     INTEGER NOT NULL DEFAULT 1,
+    weight_teacher_spread      INTEGER NOT NULL DEFAULT 1
+);
 """
-
-# Migration: add room_type column to existing rooms tables that predate it.
-_MIGRATION_SQL = "ALTER TABLE rooms ADD COLUMN room_type TEXT NOT NULL DEFAULT 'standard'"
 
 
 class DB:
@@ -168,20 +180,9 @@ class DB:
         self.conn = sqlite3.connect(path, check_same_thread=False)
         self.conn.execute("PRAGMA foreign_keys = ON")
         self.conn.executescript(DDL)
-        self._migrate()
         self.conn.commit()
         if DEFAULT_NAME not in self.list():
             self.save(DEFAULT_NAME, DEFAULT_DATA)
-
-    def _migrate(self):
-        ver = self.conn.execute("PRAGMA user_version").fetchone()[0]
-        if ver < 1:
-            try:
-                self.conn.execute(_MIGRATION_SQL)
-            except sqlite3.OperationalError:
-                pass  # column already exists
-            self.conn.execute("PRAGMA user_version = 1")
-            self.conn.commit()
 
     def list(self):
         cur = self.conn.execute("SELECT name FROM problems ORDER BY name")
@@ -223,12 +224,23 @@ class DB:
                 "SELECT teacher, day, slot FROM teacher_unavailability WHERE problem=?", (name,))
         ]
 
-        soft_row = self.conn.execute(
+        hard_row = self.conn.execute(
             "SELECT max_consecutive_same_subj, max_teacher_periods_day "
+            "FROM hard_constraints WHERE problem=?", (name,)).fetchone()
+        hard_constraints = {
+            "max_consecutive_same_subj": hard_row[0] if hard_row else 2,
+            "max_teacher_periods_day":   hard_row[1] if hard_row else 4,
+        }
+
+        soft_row = self.conn.execute(
+            "SELECT weight_class_holes, weight_avoid_first_slot, "
+            "weight_avoid_last_slot, weight_teacher_spread "
             "FROM soft_constraints WHERE problem=?", (name,)).fetchone()
         soft_constraints = {
-            "max_consecutive_same_subj": soft_row[0] if soft_row else 2,
-            "max_teacher_periods_day":   soft_row[1] if soft_row else 4,
+            "weight_class_holes":      soft_row[0] if soft_row else 1,
+            "weight_avoid_first_slot": soft_row[1] if soft_row else 2,
+            "weight_avoid_last_slot":  soft_row[2] if soft_row else 1,
+            "weight_teacher_spread":   soft_row[3] if soft_row else 1,
         }
 
         return {
@@ -237,6 +249,7 @@ class DB:
             "requirements": requirements, "can_teach": can_teach,
             "subject_room_type": subject_room_type,
             "teacher_unavailability": teacher_unavailability,
+            "hard_constraints": hard_constraints,
             "soft_constraints": soft_constraints,
         }
 
@@ -275,13 +288,22 @@ class DB:
             self.conn.executemany(
                 "INSERT INTO teacher_unavailability(problem,teacher,day,slot) VALUES (?,?,?,?)",
                 [(name, u["teacher"], u["day"], u["slot"]) for u in unavail])
-            soft = data.get("soft_constraints", {})
+            hard = data.get("hard_constraints", {})
             self.conn.execute(
-                "INSERT INTO soft_constraints(problem,max_consecutive_same_subj,max_teacher_periods_day)"
+                "INSERT INTO hard_constraints(problem,max_consecutive_same_subj,max_teacher_periods_day)"
                 " VALUES (?,?,?)",
                 (name,
-                 int(soft.get("max_consecutive_same_subj", 2)),
-                 int(soft.get("max_teacher_periods_day", 4))))
+                 int(hard.get("max_consecutive_same_subj", 2)),
+                 int(hard.get("max_teacher_periods_day", 4))))
+            soft = data.get("soft_constraints", {})
+            self.conn.execute(
+                "INSERT INTO soft_constraints(problem,weight_class_holes,weight_avoid_first_slot,"
+                "weight_avoid_last_slot,weight_teacher_spread) VALUES (?,?,?,?,?)",
+                (name,
+                 int(soft.get("weight_class_holes", 1)),
+                 int(soft.get("weight_avoid_first_slot", 2)),
+                 int(soft.get("weight_avoid_last_slot", 1)),
+                 int(soft.get("weight_teacher_spread", 1))))
 
     def delete(self, name):
         if name == DEFAULT_NAME:

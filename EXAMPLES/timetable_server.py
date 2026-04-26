@@ -30,17 +30,37 @@ DAYS      = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
 MAX_SLOTS = 8
 
 
-def soft_penalty(assignment, max_consec, max_day):
-    """Score soft constraint violations. Consecutive same-subject is now a hard
-    constraint (enforced during search), so only teacher daily load is counted."""
-    daily_violations = 0
-    teacher_day_count = {}
-    for (_c, _s, _occ), (t, _r, (d, _sl)) in assignment.items():
-        teacher_day_count[(t, d)] = teacher_day_count.get((t, d), 0) + 1
-    for count in teacher_day_count.values():
-        if count > max_day:
-            daily_violations += count - max_day
-    return daily_violations, 0, daily_violations
+def soft_penalty(assignment, weights, max_slots):
+    """Score soft constraint violations across 4 dimensions.
+    Returns (total, holes, first_slot, last_slot, teacher_spread).
+    """
+    w_holes  = weights.get("weight_class_holes", 1)
+    w_first  = weights.get("weight_avoid_first_slot", 2)
+    w_last   = weights.get("weight_avoid_last_slot", 1)
+    w_spread = weights.get("weight_teacher_spread", 1)
+
+    # Index by class/teacher and day
+    class_day_slots   = {}   # (class, day) -> set of slot numbers
+    teacher_day_slots = {}   # (teacher, day) -> set of slot numbers
+
+    for (_c, _s, _occ), (t, _r, (d, sl)) in assignment.items():
+        class_day_slots.setdefault((_c, d), set()).add(sl)
+        teacher_day_slots.setdefault((t, d), set()).add(sl)
+
+    holes = first_slot = last_slot = spread = 0
+
+    for (_c, _d), slot_set in class_day_slots.items():
+        mn, mx = min(slot_set), max(slot_set)
+        holes      += (mx - mn + 1) - len(slot_set)   # gaps between first and last lesson
+        first_slot += 1 if 1 in slot_set else 0
+        last_slot  += 1 if max_slots in slot_set else 0
+
+    for (_t, _d), slot_set in teacher_day_slots.items():
+        if len(slot_set) > 1:
+            spread += (max(slot_set) - min(slot_set) + 1) - len(slot_set)
+
+    total = w_holes * holes + w_first * first_slot + w_last * last_slot + w_spread * spread
+    return total, holes, first_slot, last_slot, spread
 
 
 def solve(data):
@@ -63,9 +83,10 @@ def solve(data):
     unavailable    = {(u["teacher"], u["day"], u["slot"])
                       for u in data.get("teacher_unavailability", [])}
 
-    soft = data.get("soft_constraints", {})
-    max_consec = int(soft.get("max_consecutive_same_subj", 2))
-    max_day    = int(soft.get("max_teacher_periods_day", 4))
+    hard = data.get("hard_constraints", {})
+    max_consec = int(hard.get("max_consecutive_same_subj", 2))
+    max_day    = int(hard.get("max_teacher_periods_day", 4))
+    soft_weights = data.get("soft_constraints", {})
 
     lessons = []
     for c in classes:
@@ -116,10 +137,16 @@ def solve(data):
         c, s, _ = lesson
         t, r, p = value
         d, sl = p
+        teacher_day_count = 0
         for (c2, _, _), (t2, r2, p2) in assignment.items():
             if p == p2 and (t == t2 or c == c2 or r == r2):
                 return False
-        # Hard: no more than max_consec consecutive periods of same subject for a class
+            if t2 == t and p2[0] == d:
+                teacher_day_count += 1
+        # Hard: teacher daily load
+        if teacher_day_count >= max_day:
+            return False
+        # Hard: no more than max_consec consecutive same subject for a class
         if consec_run(assignment, c, s, d, sl) >= max_consec:
             return False
         return True
@@ -131,13 +158,6 @@ def solve(data):
 
     stats = {"calls": 0, "backtracks": 0}
 
-    def teacher_day_load(assignment, t, d):
-        return sum(1 for (t2, _r, (d2, _sl)) in assignment.values() if t2 == t and d2 == d)
-
-    def soft_cost(assignment, c, s, t, d, sl):
-        load = teacher_day_load(assignment, t, d)
-        return max(0, load + 1 - max_day)
-
     def backtrack(assignment, remaining):
         stats["calls"] += 1
         if not remaining:
@@ -145,15 +165,13 @@ def solve(data):
         lesson = min(remaining, key=lambda l: count_options(assignment, l))
         remaining.remove(lesson)
         c, s, _ = lesson
-        consistent = [(v, soft_cost(assignment, c, s, v[0], v[1][0], v[1][1]))
-                      for v in all_candidates[(c, s)]
-                      if is_consistent(assignment, lesson, v)]
-        for value, _ in sorted(consistent, key=lambda x: x[1]):
-            assignment[lesson] = value
-            if backtrack(assignment, remaining):
-                return True
-            del assignment[lesson]
-            stats["backtracks"] += 1
+        for value in all_candidates[(c, s)]:
+            if is_consistent(assignment, lesson, value):
+                assignment[lesson] = value
+                if backtrack(assignment, remaining):
+                    return True
+                del assignment[lesson]
+                stats["backtracks"] += 1
         remaining.append(lesson)
         return False
 
@@ -167,7 +185,8 @@ def solve(data):
                 "error": "No solution found. Try relaxing constraints "
                          "(more rooms, teachers, or periods)."}
 
-    total_pen, consec_viol, daily_viol = soft_penalty(assignment, max_consec, max_day)
+    total_pen, holes, first_sl, last_sl, t_spread = soft_penalty(
+        assignment, soft_weights, MAX_SLOTS)
 
     schedule = [{"class": c, "subject": s, "occ": occ,
                  "teacher": t, "room": r, "day": d, "slot": sl}
@@ -179,8 +198,10 @@ def solve(data):
                       "elapsed_ms": round(elapsed * 1000, 1),
                       "soft_penalty": total_pen,
                       "soft_details": {
-                          "consecutive_violations": consec_viol,
-                          "daily_load_violations":  daily_viol,
+                          "class_holes":       holes,
+                          "avoid_first_slot":  first_sl,
+                          "avoid_last_slot":   last_sl,
+                          "teacher_spread":    t_spread,
                       }},
             "days": days, "slots": slots, "classes": classes}
 

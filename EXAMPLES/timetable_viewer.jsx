@@ -332,8 +332,11 @@ function App() {
   // New constraint state
   const [subjectRoomType,   setSubjectRoomType]   = useState({});  // {subj: type}
   const [teacherUnavail,    setTeacherUnavail]     = useState({});  // {teacher: {day: {slot: bool}}}
-  const [softConstraints,   setSoftConstraints]    = useState({
+  const [hardConstraints,   setHardConstraints]    = useState({
     max_consecutive_same_subj: 2, max_teacher_periods_day: 4 });
+  const [softConstraints,   setSoftConstraints]    = useState({
+    weight_class_holes: 1, weight_avoid_first_slot: 2,
+    weight_avoid_last_slot: 1, weight_teacher_spread: 1 });
 
   const [probName,    setProbName]    = useState("");
   const [savedNames,  setSavedNames]  = useState([]);
@@ -367,6 +370,7 @@ function App() {
             .map(([slot]) => ({ teacher, day, slot: parseInt(slot) }))
         )
       ),
+      hard_constraints: hardConstraints,
       soft_constraints: softConstraints,
     };
   }
@@ -406,7 +410,8 @@ function App() {
         ua[teacher][day][slot] = true;
       }
       setTeacherUnavail(ua);
-      setSoftConstraints(p.soft_constraints || { max_consecutive_same_subj:2, max_teacher_periods_day:4 });
+      setHardConstraints(p.hard_constraints || { max_consecutive_same_subj:2, max_teacher_periods_day:4 });
+      setSoftConstraints(p.soft_constraints || { weight_class_holes:1, weight_avoid_first_slot:2, weight_avoid_last_slot:1, weight_teacher_spread:1 });
       setProbName(name); setResult(null); setSchedule([]); setStatusMsg(null); setPage("editor");
       setUnavailTeacher((p.teachers||[])[0] || null);
     } catch(e) { setStatusMsg({text:"Load failed: "+e.message,ok:false}); }
@@ -416,7 +421,9 @@ function App() {
     if (!confirm("Clear current problem and start fresh?")) return;
     setClasses([]); setSubjects([]); setTeachers([]); setRooms([]);
     setRequirements({}); setCanTeach({});
-    setSubjectRoomType({}); setTeacherUnavail({}); setSoftConstraints({ max_consecutive_same_subj:2, max_teacher_periods_day:4 });
+    setSubjectRoomType({}); setTeacherUnavail({});
+    setHardConstraints({ max_consecutive_same_subj:2, max_teacher_periods_day:4 });
+    setSoftConstraints({ weight_class_holes:1, weight_avoid_first_slot:2, weight_avoid_last_slot:1, weight_teacher_spread:1 });
     setProbName(""); setResult(null); setSchedule([]); setStatusMsg(null);
   }
 
@@ -526,9 +533,13 @@ function App() {
         <div className="result-body">
           {pen > 0 && (
             <div className="soft-warn">
-              ⚠ Soft constraints: {pen} violation{pen>1?"s":""} —{" "}
-              {sd.consecutive_violations} consecutive same-subject,{" "}
-              {sd.daily_load_violations} teacher daily-load exceeded
+              ⚠ Soft score: {pen} —{" "}
+              {[
+                sd.class_holes      && `${sd.class_holes} class holes`,
+                sd.avoid_first_slot && `${sd.avoid_first_slot} early starts`,
+                sd.avoid_last_slot  && `${sd.avoid_last_slot} late finishes`,
+                sd.teacher_spread   && `${sd.teacher_spread} teacher spread`,
+              ].filter(Boolean).join(", ")}
             </div>
           )}
           {(() => {
@@ -709,28 +720,42 @@ function App() {
           </div>
 
           <div className="card">
-            <div className="card-title">Soft constraints</div>
+            <div className="card-title">Hard constraints</div>
             <div style={{display:"flex",flexDirection:"column",gap:14}}>
-              <div>
-                <div style={{fontSize:11,color:"#64748b",marginBottom:4}}>
-                  Max consecutive same subject per class
+              {[
+                ["Max consecutive same subject", "max_consecutive_same_subj", 2],
+                ["Max periods per day per teacher", "max_teacher_periods_day", 4],
+              ].map(([label, key, def]) => (
+                <div key={key}>
+                  <div style={{fontSize:11,color:"#64748b",marginBottom:4}}>{label}</div>
+                  <input type="number" min={1} max={8}
+                         value={hardConstraints[key] ?? def}
+                         onChange={e=>setHardConstraints(p=>({...p,[key]:parseInt(e.target.value)||def}))}
+                         style={{width:60,background:"#f8fafc",border:"1px solid #e2e8f0",
+                                 borderRadius:4,padding:"4px 8px",fontSize:12}} />
                 </div>
-                <input type="number" min={1} max={8}
-                       value={softConstraints.max_consecutive_same_subj}
-                       onChange={e=>setSoftConstraints(p=>({...p,max_consecutive_same_subj:parseInt(e.target.value)||2}))}
-                       style={{width:60,background:"#f8fafc",border:"1px solid #e2e8f0",
-                               borderRadius:4,padding:"4px 8px",fontSize:12}} />
-              </div>
-              <div>
-                <div style={{fontSize:11,color:"#64748b",marginBottom:4}}>
-                  Max periods per day per teacher
+              ))}
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="card-title">Soft constraints (weights)</div>
+            <div style={{display:"flex",flexDirection:"column",gap:14}}>
+              {[
+                ["Class free-period holes", "weight_class_holes", 1],
+                ["Avoid slot 1 (early start)", "weight_avoid_first_slot", 2],
+                ["Avoid last slot (late finish)", "weight_avoid_last_slot", 1],
+                ["Teacher lesson spread", "weight_teacher_spread", 1],
+              ].map(([label, key, def]) => (
+                <div key={key}>
+                  <div style={{fontSize:11,color:"#64748b",marginBottom:4}}>{label}</div>
+                  <input type="number" min={0} max={10}
+                         value={softConstraints[key] ?? def}
+                         onChange={e=>setSoftConstraints(p=>({...p,[key]:parseInt(e.target.value)??def}))}
+                         style={{width:60,background:"#f8fafc",border:"1px solid #e2e8f0",
+                                 borderRadius:4,padding:"4px 8px",fontSize:12}} />
                 </div>
-                <input type="number" min={1} max={8}
-                       value={softConstraints.max_teacher_periods_day}
-                       onChange={e=>setSoftConstraints(p=>({...p,max_teacher_periods_day:parseInt(e.target.value)||4}))}
-                       style={{width:60,background:"#f8fafc",border:"1px solid #e2e8f0",
-                               borderRadius:4,padding:"4px 8px",fontSize:12}} />
-              </div>
+              ))}
             </div>
           </div>
 
