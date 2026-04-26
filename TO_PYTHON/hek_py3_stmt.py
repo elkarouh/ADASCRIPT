@@ -122,8 +122,11 @@ def to_py(self):
 def to_py(self):
     """decl_ann_assign_stmt: decl_keyword IDENTIFIER ':' type_annotation ('=' expression)?"""
     # nodes[0] is decl_keyword (dropped), nodes[1] is name, nodes[2] is V_COLON, nodes[3] is type
+    from hek_parsec import ParserState
     name = self.nodes[1].to_py()
     annotation = self.nodes[3].to_py()
+    keyword = self.nodes[0].nodes[0] if hasattr(self.nodes[0], "nodes") else ""
+    ParserState.symbol_table.add(name, annotation, keyword or "var")
     result = f"{name}: {annotation}"
     for node in self.nodes[4:]:
         if not hasattr(node, "nodes") or not node.nodes:

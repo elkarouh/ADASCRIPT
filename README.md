@@ -228,6 +228,29 @@ var grid:     [][]float    = [[1.0, 2.0], [3.0, 4.0]]
 var callback: [(int,)]bool = my_predicate
 ```
 
+### Open arrays `[*]T`
+
+`[*]T` maps to Nim's `openArray[T]`: a read-only view that the caller can
+satisfy with either a `[]T` (seq) or a `[N]T` (fixed array). Use it for
+function parameters that only read their argument — Nim handles the
+unification automatically:
+
+```python
+def total(xs: [*]float) -> float:
+    var s: float = 0.0
+    for x in xs:
+        s = s + x
+    return s
+
+var a: []float  = [1.0, 2.0, 3.0]
+var b: [3]float = [1.0, 2.0, 3.0]
+print(total(a))   # seq — ok
+print(total(b))   # fixed array — ok
+```
+
+`[*]T` is only valid in **parameter and return annotations** — not in
+variable declarations.
+
 ### Empty collection literals
 
 Adascript uses distinct syntax for empty dicts and empty sets, resolving

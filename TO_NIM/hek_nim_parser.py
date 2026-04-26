@@ -511,6 +511,7 @@ def to_nim(self, indent=0):
 @method(if_stmt)
 def to_nim(self, indent=0):
     """if_stmt: 'if' expression ':' block elif_clause* else_clause? -> Nim: 'if cond:'; 'if __name__ == "__main__"' -> 'when isMainModule:'"""
+    import re as _re_if
     cond = hek_nim_expr._nim_truthiness(self.nodes[0].to_nim())
     # Detect if __name__ == "__main__": -> when isMainModule:
     cond_stripped = cond.replace(" ", "")
@@ -519,7 +520,15 @@ def to_nim(self, indent=0):
         body = self.nodes[1].to_nim(indent + 1)
         return f"{_ind(indent)}when isMainModule:{hc}\n{body}"
     hc = _block_inline_header_comment(self.nodes[1])
+    # Detect x.isSome guard — auto-unwrap x in the if body
+    _unwrap_var = None
+    _m_some = _re_if.match(r'^(\w+)\.isSome$', cond.strip())
+    if _m_some:
+        _unwrap_var = _m_some.group(1)
+        getattr(ParserState, '_option_unwrap_vars', set()).add(_unwrap_var)
     body = self.nodes[1].to_nim(indent + 1)
+    if _unwrap_var:
+        getattr(ParserState, '_option_unwrap_vars', set()).discard(_unwrap_var)
     result = f"{_ind(indent)}if {cond}:{hc}\n{body}"
     for node in self.nodes[2:]:
         if not hasattr(node, "nodes") or not node.nodes:
@@ -658,13 +667,18 @@ def to_nim(self, indent=0):
     # Nim tuple unpacking in for: for x, y in seq -> for (x, y) in seq
     if "," in target and not target.startswith("("):
         target = f"({target})"
-    # Register loop variable type for string iteration (yields char)
+    # Register loop variable type from iterable's element type
     _iterable_sym = ParserState.symbol_table.lookup(iterable)
     _iterable_type = (_iterable_sym.get("type") or "") if _iterable_sym else ""
     if not _iterable_type:
         _iterable_type = _nim_expr_type(iterable) or ""
     if _iterable_type in ("str", "string") and "," not in target:
         ParserState.symbol_table.add(target.strip("()\n "), "char", "let")
+    elif "," not in target:
+        import re as _re_for
+        _em = _re_for.match(r'^seq\[(.+)\]$', _iterable_type)
+        if _em:
+            ParserState.symbol_table.add(target.strip("()\n "), _em.group(1), "let")
     hc = _block_inline_header_comment(self.nodes[2])
     body = self.nodes[2].to_nim(indent + 1)
     result = f"{_ind(indent)}for {target} in {iterable}:{hc}\n{body}"
@@ -1812,7 +1826,16 @@ def to_nim(self, indent=0):
             ret_ann = node.to_nim()
 
     # Store return type so return_stmt can use it for Option wrapping
-    ParserState._current_return_type = ret_ann  # e.g. ': Option[string]'
+    ParserState._current_return_type = ret_ann  # e.g. ': seq[seq[string]]'
+    # Record method return type for type inference (e.g. conn.rows() -> seq[seq[string]])
+    if ret_ann and name:
+        _cls_ctx = getattr(ParserState, "_current_class_name", None)
+        if not hasattr(ParserState, "proc_return_types"):
+            ParserState.proc_return_types = {}
+        _ret_type = ret_ann.lstrip(": ").strip()
+        if _cls_ctx:
+            ParserState.proc_return_types[f"{_cls_ctx}.{name}"] = _ret_type
+        ParserState.proc_return_types[name] = _ret_type
     ParserState.symbol_table.push_scope(name or "<func>")
     hc = _block_inline_header_comment(block_node) if block_node else ""
     body = block_node.to_nim(indent + 1) if block_node else ""
@@ -2234,9 +2257,14 @@ def to_nim(self, indent=0):
               f"  Then:  class {name}({_parent}[MyTuple]):", file=sys.stderr)
 
 
-    # Register class name in symbol table so constructor calls can be detected
+    # Register class name in symbol table so constructor calls can be detected.
+    # Also add to the persistent class_names set so the pre-pass can export it
+    # to importers (the symbol table stack is popped by end of parsing).
     if name:
         ParserState.symbol_table.add(name, name, "class")
+        if not hasattr(ParserState, "class_names"):
+            ParserState.class_names = set()
+        ParserState.class_names.add(name)
     ParserState.symbol_table.push_scope(name or "<class>")
     # Pre-check for self-referencing fields (e.g., children: [Digit_T]TrieNode)
     if block_node and name and not is_virtual:
@@ -2959,7 +2987,14 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
             block_node = node
 
     # Store return type so return_stmt can use it for Option wrapping
-    ParserState._current_return_type = ret_ann  # e.g. ': Option[string]'
+    ParserState._current_return_type = ret_ann  # e.g. ': seq[seq[string]]'
+    # Record method return type for type inference (e.g. conn.rows() -> seq[seq[string]])
+    if ret_ann and name:
+        if not hasattr(ParserState, "proc_return_types"):
+            ParserState.proc_return_types = {}
+        _ret_type = ret_ann.lstrip(": ").strip()
+        ParserState.proc_return_types[f"{class_name}.{name}"] = _ret_type
+        ParserState.proc_return_types[name] = _ret_type
     # Push scope and register params for body translation
     ParserState.symbol_table.push_scope(name or "<method>")
     for p in params:

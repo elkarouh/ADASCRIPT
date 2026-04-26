@@ -346,6 +346,39 @@ var transition: [Hidden_State_T][Hidden_State_T]float = [
 **Python output:** nested dict  
 **Nim output:** `array[Hidden_State_T, array[Hidden_State_T, float]]`
 
+### Open arrays `[*]T`
+
+`[*]T` is Nim's `openArray[T]`: a read-only view that accepts both `[]T`
+(seq) and `[N]T` (fixed-size array) at the call site without copying. Use it
+for function parameters that only iterate or index into the argument:
+
+```python
+def sum_values(xs: [*]int) -> int:
+    var total: int = 0
+    for x in xs:
+        total = total + x
+    return total
+
+var a: []int  = [1, 2, 3]
+var b: [3]int = [1, 2, 3]
+print(sum_values(a))   # seq argument — ok
+print(sum_values(b))   # fixed array argument — ok
+```
+
+**Nim output:**
+
+```nim
+proc sum_values(xs: openArray[int]): int =
+    var total: int = 0
+    for x in xs:
+        total = total + x
+    return total
+```
+
+`[*]T` is valid **only in parameter and return annotations** — not in
+variable declarations. Callers never need to do anything special: Nim passes
+both seq and array to an `openArray` parameter automatically.
+
 ### Optional values `?T`
 
 ```python
@@ -1505,6 +1538,8 @@ def example7():   # Romania map, A* with heuristic
 | Variant record                    | `type S (Kind: K) is record: case ...`  |
 | Subrange type                     | `type T is lo .. hi`                     |
 | List type annotation              | `[]T`                                    |
+| Fixed-size array annotation       | `[N]T`                                   |
+| Open array annotation (param only)| `[*]T`                                   |
 | Dict type annotation              | `{K}V`                                   |
 | Set type annotation               | `{}T`                                    |
 | Enum-indexed array annotation     | `[E]T`                                   |

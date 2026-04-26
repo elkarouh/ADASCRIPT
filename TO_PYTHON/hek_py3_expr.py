@@ -465,14 +465,30 @@ def to_py(self, prec=None):
 @method(primary)
 def to_py(self, prec=None):
     """primary: atom trailer*"""
+    from hek_parsec import ParserState
     result = self.nodes[0].to_py()
     if len(self.nodes) > 1 and hasattr(self.nodes[1], "nodes") and self.nodes[1].nodes:
-        for tr in self.nodes[1].nodes:
-            result += tr.to_py()
+        trailers = self.nodes[1].nodes
+        i = 0
+        while i < len(trailers):
+            tr = trailers[i]
+            tr_str = tr.to_py()
+            # .get() on an Optional-typed variable is a no-op in Python (value is already unwrapped)
+            # Parsed as two trailers: attr_trailer(".get") + call_trailer("()")
+            if (tr_str == ".get"
+                    and i + 1 < len(trailers)
+                    and trailers[i + 1].to_py() == "()"):
+                _sym = ParserState.symbol_table.lookup(result)
+                _sym_type = (_sym.get("type", "") if isinstance(_sym, dict) else "") if _sym else ""
+                if "Option[" in _sym_type or "| None" in _sym_type:
+                    i += 2  # skip both .get and ()
+                    continue
+            result += tr_str
             # Handle tick attributes: wrap expr.field with type(expr.field)(expr.field.value +/- 1)
             if hasattr(tr, '_tick_attr'):
                 op = "+" if tr._tick_attr == "Next" else "-"
                 result = f"type({result})({result}.value {op} 1)"
+            i += 1
     return result
 
 

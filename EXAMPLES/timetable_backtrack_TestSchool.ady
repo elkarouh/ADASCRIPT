@@ -25,118 +25,38 @@ reference's runtime profile.
 
 nimport state_search
 nimport time
-nimport db
-
-
-def usage(code: Natural):
-    print("Usage: ./timetable_backtrack [options]")
-    print("  -h, --help         Show this help message and exit")
-    print("  --db PATH          SQLite database file to read problem from")
-    print("  --problem NAME     Problem name in the database (default: DEFAULT)")
-    print("")
-    print("Solves a school timetabling CSP via DFS backtracking with MCV heuristic.")
-    print("Without --db, uses data embedded in the source.")
-    quit(code)
-
-var db_path:      str = ""
-var problem_name: str = "DEFAULT"
-
-var _take_db:   bool = False
-var _take_prob: bool = False
-for arg in $@:
-    case arg:
-        when "--help" | "-h":
-            usage(0)
-        when "--db":
-            _take_db = True
-        when "--problem":
-            _take_prob = True
-        when others:
-            if _take_db:
-                db_path = arg
-                _take_db = False
-            elif _take_prob:
-                problem_name = arg
-                _take_prob = False
 
 
 # ============================================================
-# INPUT DATA  (regenerate with: python3 timetable_load.py --problem NAME [--db PATH] timetable_backtrack.ady)
+# INPUT DATA  (regenerate with: python3 timetable_load.py timetable_backtrack.ady)
 # ============================================================
 
 type DAYS is enum Monday, Tuesday, Wednesday, Thursday, Friday
 
-const MAX_SLOTS: int = 8
+const MAX_SLOTS: int = 4
 
 # ---- INPUT DATA BEGIN ----
 
-var CLASSES:  []str = ["Year7A", "Year7B", "Year8A", "Year8B", "Year9A", "Year9B"]
-var SUBJECTS: []str = ["Math", "English", "Science", "History", "Geography", "French", "PE", "Art"]
-var TEACHERS: []str = ["Adams", "Brown", "Clarke", "Davies", "Evans", "Foster", "Green", "Harris", "Ito", "Jones"]
-var ROOMS:    []str = ["R01", "R02", "R03", "R04", "Lab1", "Lab2", "Gym", "ArtRm"]
+var CLASSES:  []str = ["A1"]
+var SUBJECTS: []str = ["Math", "English"]
+var TEACHERS: []str = ["Alice", "Bob"]
+var ROOMS:    []str = ["R1"]
 
 # requirements[class][subject] = number of periods per week
 var requirements: {str}{str}int = {
-    "Year7A": {"Math": 4, "English": 4, "Science": 3, "History": 2, "Geography": 2, "French": 2, "PE": 2, "Art": 1},
-    "Year7B": {"Math": 4, "English": 4, "Science": 3, "History": 2, "Geography": 2, "French": 2, "PE": 2, "Art": 1},
-    "Year8A": {"Math": 4, "English": 4, "Science": 3, "History": 2, "Geography": 2, "French": 2, "PE": 2, "Art": 1},
-    "Year8B": {"Math": 4, "English": 4, "Science": 3, "History": 2, "Geography": 2, "French": 2, "PE": 2, "Art": 1},
-    "Year9A": {"Math": 4, "English": 4, "Science": 3, "History": 2, "Geography": 2, "French": 2, "PE": 2, "Art": 1},
-    "Year9B": {"Math": 4, "English": 4, "Science": 3, "History": 2, "Geography": 2, "French": 2, "PE": 2, "Art": 1},
+    "A1": {"Math": 2, "English": 2}
 }
 
 # can_teach[teacher] = list of subjects they can teach
 var can_teach: {str}[]str = {
-    "Adams":  ["Math", "Science"],
-    "Brown":  ["English", "History"],
-    "Clarke": ["Math", "French"],
-    "Davies": ["Science", "Geography"],
-    "Evans":  ["English", "Art"],
-    "Foster": ["History", "Geography"],
-    "Green":  ["Math", "Science"],
-    "Harris": ["PE"],
-    "Ito":    ["French", "Art"],
-    "Jones":  ["English", "PE"],
+    "Alice": ["Math"],
+    "Bob": ["English"]
 }
 
-var room_capacity: {str}int = {"R01": 32, "R02": 32, "R03": 32, "R04": 32, "Lab1": 30, "Lab2": 30, "Gym": 60, "ArtRm": 28}
-var class_size:    {str}int = {"Year7A": 30, "Year7B": 28, "Year8A": 30, "Year8B": 27, "Year9A": 29, "Year9B": 26}
+var room_capacity: {str}int = {"R1": 25}
+var class_size:    {str}int = {"A1": 20}
 
 # ---- INPUT DATA END ----
-
-# ── DB override ─────────────────────────────────────────────────────────────
-if db_path != "":
-    var conn: DB_T = DB_T(db_path)
-    let p: str = problem_name
-
-    CLASSES  = [row[0] for row in conn.rows("SELECT name FROM classes  WHERE problem=? ORDER BY rowid", [p])]
-    SUBJECTS = [row[0] for row in conn.rows("SELECT name FROM subjects WHERE problem=? ORDER BY rowid", [p])]
-    TEACHERS = [row[0] for row in conn.rows("SELECT name FROM teachers WHERE problem=? ORDER BY rowid", [p])]
-
-    ROOMS         = []
-    room_capacity = {:}
-    for row in conn.rows("SELECT name, capacity FROM rooms WHERE problem=? ORDER BY rowid", [p]):
-        ROOMS.append(row[0])
-        room_capacity[row[0]] = int(row[1])
-
-    class_size = {:}
-    for row in conn.rows("SELECT name, size FROM classes WHERE problem=? ORDER BY rowid", [p]):
-        class_size[row[0]] = int(row[1])
-
-    requirements = {:}
-    for row in conn.rows("SELECT class, subject, periods FROM requirements WHERE problem=?", [p]):
-        if row[0] not in requirements:
-            requirements[row[0]] = {:}
-        requirements[row[0]][row[1]] = int(row[2])
-
-    can_teach = {:}
-    for row in conn.rows("SELECT teacher, subject FROM can_teach WHERE problem=?", [p]):
-        if row[0] not in can_teach:
-            can_teach[row[0]] = []
-        can_teach[row[0]].append(row[1])
-
-    conn.close()
-    print(f"Loaded problem '{p}' from {db_path}")
 
 
 # ============================================================
@@ -328,7 +248,7 @@ def entry_for(c: str, d: DAYS, sl: int, state: State_T) -> str:
             continue
         let v: Value_T = lesson_cands[k][idx]
         if v.period.day == d and v.period.slot == sl:
-            return f"{lessons[k].subj}({v.teacher})"
+            return f"{lessons[k].subj[0:3]}({v.teacher[0:1]})"
     return "--"
 
 for c in CLASSES:
@@ -338,7 +258,7 @@ for c in CLASSES:
     print("=" * 54)
     var header: str = " " * 8
     for d in DAYS:
-        header = header + f"{d'Image:>10}"
+        header = header + f"{d'Image[0:3]:>10}"
     print(header)
     for sl in 1..MAX_SLOTS:
         var row: str = f"Slot {sl}  "
