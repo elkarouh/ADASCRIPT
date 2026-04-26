@@ -35,6 +35,18 @@ Fixed-size arrays
     [5]int                          tuple[int, ...]
     [3][]int                        tuple[list[int], ...]
 
+Open arrays (read-only, accepts seq or array)
+---------------------------------------------
+    [*]<type>                       Sequence[<type>]
+
+    [*]int                          Sequence[int]
+    [*]float                        Sequence[float]
+
+    Use [*]T for function parameters that only read (iterate or index into)
+    their argument and must accept both []T (seq) and [N]T (fixed array)
+    at the call site.  Not valid as a variable type — only in parameter
+    and return annotations.
+
 Dictionaries
 ------------
     {<key_type>}<value_type>        dict[<key_type>, <value_type>]
@@ -87,11 +99,13 @@ Grammar
     union_type           = maybe_optional ('|' maybe_optional)+
     maybe_optional       = optional_type | basic_type
     optional_type        = '?' basic_type
-    basic_type           = seq_type | callable_type | array_type
+    basic_type           = seq_type | callable_type | openarray_type
+                         | array_type | enum_array_type
                          | dict_type | set_type | tuple_type
                          | primitive_type | type_name
     seq_type             = '[]' type_annotation
     array_type           = '[' INTEGER ']' type_annotation
+    openarray_type       = '[*]' type_annotation
     dict_type            = '{' type_annotation '}' type_annotation
     set_type             = '{}' type_annotation
     callable_type        = '[' tuple_type ']' type_annotation
@@ -110,14 +124,15 @@ Nim Translation
 
 Nim code generation is in ``hek_nim_declarations.py`` (``to_nim()`` methods)::
 
-    Primitives:  str -> string, bytes -> seq[byte], None -> void
-    Sequences:   []int -> seq[int]
-    Arrays:      [5]int -> array[5, int]
-    Dicts:       {str}int -> Table[string, int]
-    Sets:        {}int -> HashSet[int]
-    Optionals:   ?int -> Option[int]
-    Tuples:      (int, str) -> (int, string)
-    Callables:   [(int, str)]bool -> proc(a0: int, a1: string): bool
+    Primitives:   str -> string, bytes -> seq[byte], None -> void
+    Sequences:    []int -> seq[int]
+    Arrays:       [5]int -> array[5, int]
+    Open arrays:  [*]int -> openArray[int]
+    Dicts:        {str}int -> Table[string, int]
+    Sets:         {}int -> HashSet[int]
+    Optionals:    ?int -> Option[int]
+    Tuples:       (int, str) -> (int, string)
+    Callables:    [(int, str)]bool -> proc(a0: int, a1: string): bool
 
 Initialisation via comprehension
 ================================
@@ -172,6 +187,53 @@ Sets (``{}T``)
 Set comprehensions translate into ``toHashSet(collect(...))``::
 
     var evens: {}int = {i for i in 0..<20 if i%2 == 0}
+
+Open arrays (``[*]T``) — parameter annotation only
+---------------------------------------------------
+``[*]T`` is Nim's ``openArray[T]``: a read-only view that accepts both
+``seq[T]`` (``[]T``) and ``array[N, T]`` (``[N]T``) at the call site.
+It may **only** appear in function parameter annotations, not in variable
+declarations. Useful when a function only iterates or indexes into its
+argument and you want the caller to pass either kind without copying::
+
+    def sum_values(xs: [*]int) -> int:
+        var total: int = 0
+        for x in xs:
+            total = total + x
+        return total
+
+    # caller can pass a seq:
+    var a: []int = [1, 2, 3, 4]
+    print(sum_values(a))
+
+    # or a fixed-size array:
+    var b: [4]int = [1, 2, 3, 4]
+    print(sum_values(b))
+
+Candidates in the examples (functions whose array/seq parameters are
+read-only and could be widened to ``[*]T``):
+
+* ``timetable_backtrack.ady``:
+    ``is_consistent(state: State_T, ...)``  — state only indexed
+    ``count_options(self, state: State_T, ...)``  — state only indexed
+
+* ``timetable_sa.ady``:
+    ``energy(state: State_T)``  — state only indexed
+    ``delta_energy(state: State_T, ...)``  — state only indexed
+    ``entry_for(..., state: State_T)``  — state only indexed
+
+* ``state_search.ady``:
+    ``_reconstruct(self, parents: []int, steps: []Step_T[S,A], ...)``
+    ``print_solution(self, solution: []Step_T[S,A], ...)``
+
+* ``tsp.ady``:
+    ``tour_length(tour: Tour_T)``
+    ``preorder(children: [][]int, ..., tour: Tour_T, cities: Tour_T)``
+
+Note: ``State_T`` is a type alias for ``[N_LESSONS]int`` in the timetable
+files — passing it as ``[*]int`` would work, but since the type alias is
+already consistent, the main benefit is for utility functions that should
+accept both ``[]int`` and ``[N]int`` interchangeably.
 
 Usage
 =====

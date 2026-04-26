@@ -107,6 +107,16 @@ def _nim_expr_type(expr):
                 return "string"
             if base_type and base_type.startswith("seq[") and method == "join":
                 return "string"
+            # Look up method return type from proc_return_types (populated during pre-pass)
+            _prt = getattr(ParserState, "proc_return_types", {})
+            # Try "ClassName.method" first, then bare "method"
+            import re as _re_bt
+            _cls_m = _re_bt.match(r'^([A-Za-z_]\w*)$', base_type or "")
+            _cls_name = _cls_m.group(1) if _cls_m else None
+            if _cls_name and f"{_cls_name}.{method}" in _prt:
+                return _prt[f"{_cls_name}.{method}"]
+            if method in _prt:
+                return _prt[method]
             return None
 
         # field access: base.field  (simple identifier on both sides)
@@ -981,9 +991,12 @@ def _translate_method(obj_name, method_name):
         if type_str.startswith("_py_module:") or type_str.startswith("_nim_module:"):
             return method_name
     # Fall back to universal mappings.
-    # .get(key, default) is exclusively a dict/Table pattern in Adascript code —
-    # always map it. (nimpy module vars are already handled above via early return.)
+    # .get() on an Option[T] variable → Nim get() (unwrap); otherwise getOrDefault.
     if method_name == "get":
+        _sym2 = ParserState.symbol_table.lookup(obj_name)
+        _sym2_type = (_sym2.get("type", "") if isinstance(_sym2, dict) else "") if _sym2 else ""
+        if "Option[" in _sym2_type:
+            return "get"
         return "getOrDefault"
     nim_method = _PY_UNIVERSAL_METHOD_TO_NIM.get(method_name, method_name)
     if nim_method in _STRUTILS_METHODS:
@@ -1079,6 +1092,14 @@ def to_nim(self, prec=None):
     # Map Python builtin names to Nim equivalents
     raw_name = result
     result = _PY_IDENT_TO_NIM.get(result, result)
+    # Auto-unwrap Option vars proven non-None by an enclosing if x.isSome guard.
+    # Only applies when used as a bare name (no trailers that already dereference it).
+    _unwrap_vars = getattr(ParserState, '_option_unwrap_vars', set())
+    _has_trailers = (len(self.nodes) > 1 and hasattr(self.nodes[1], "nodes")
+                     and self.nodes[1].nodes)
+    if raw_name in _unwrap_vars and not _has_trailers:
+        ParserState.nim_imports.add("options")
+        return f"{result}.get()"
     # If this is a call to a known class name, add 'new' prefix for Nim constructor
     has_call = (len(self.nodes) > 1 and hasattr(self.nodes[1], "nodes")
                 and self.nodes[1].nodes
@@ -1249,6 +1270,14 @@ def to_nim(self, prec=None):
             _sub_m = _re_sub.match(r'^(\w+)\[', arg)
             if _sub_m:
                 _base_sym = ParserState.symbol_table.lookup(_sub_m.group(1))
+            # For double-subscript base[i][j]: resolve the inner base first
+            _base_sym2 = None
+            _sub_m2 = _re_sub.match(r'^(\w+)\[[^\]]+\]\[', arg)
+            if _sub_m2:
+                _inner = ParserState.symbol_table.lookup(_sub_m2.group(1))
+                # seq[seq[string]][i][j] -> string
+                if _inner and _inner.get("type") in ("seq[seq[string]]",):
+                    _base_sym2 = {"type": "seq[string]"}
             _is_str = (
                 "__bash_arg" in arg          # $1, $2, etc. (pre-substitution)
                 or "paramStr" in arg         # $1, $2, etc. (post-substitution)
@@ -1257,10 +1286,29 @@ def to_nim(self, prec=None):
                 or (_sym and _sym.get("type") in ("string", "seq[string]"))
                 or (_base_sym and (
                     _base_sym.get("type", "").endswith(", string]")  # array[N, string]
-                    or _base_sym.get("type", "") in ("seq[string]", "string")  # seq[string] elem
+                    or _base_sym.get("type", "") in ("seq[string]", "string", "seq[seq[string]]")
                 ))
+                or _base_sym2 is not None    # row[i][j] where row is seq[seq[string]]
             )
-            if _is_str:
+            _NUMERIC_TYPES = {"int", "int8", "int16", "int32", "int64",
+                              "uint", "uint8", "uint16", "uint32", "uint64",
+                              "float", "float32", "float64", "char",
+                              "Natural", "Positive"}
+            _sym_type = (_sym.get("type") or "") if _sym else ""
+            # Check if arg is a known non-string numeric type (range subtype, enum, etc.)
+            # to avoid emitting parseInt for e.g. float(step_rev: Revenue_T).
+            _type_sym = ParserState.symbol_table.lookup(_sym_type) if _sym_type else None
+            _type_sym_type = (_type_sym.get("type") or "") if _type_sym else ""
+            _is_numeric = (
+                _sym_type in {"int","int8","int16","int32","int64",
+                              "uint","uint8","uint16","uint32","uint64",
+                              "float","float32","float64","char","Natural","Positive"}
+                or _sym_type.startswith("range[")
+                or _type_sym_type == "enum"
+                or _type_sym_type.startswith("range[")
+                or arg.lstrip("-").replace(".", "", 1).isdigit()
+            )
+            if _is_str and not _is_numeric:
                 ParserState.nim_imports.add("strutils")
                 _parse_fn = {"int": "parseInt", "float": "parseFloat", "bool": "parseBool"}[raw_name]
                 return f"{arg}.{_parse_fn}()"
@@ -1393,6 +1441,45 @@ def to_nim(self, prec=None):
                     ParserState.nim_imports.add("options")
                 else:
                     result += "." + method_name
+            elif type(tr).__name__ == "slice_trailer":
+                # String slicing: s[lo:hi] -> substr(s, lo, hi-1)
+                # seq/array slicing: a[lo:hi] -> a[lo..<hi]  (default)
+                is_str = False
+                sym = ParserState.symbol_table.lookup(result.strip("()")
+                             .split(".")[0].split("[")[0])
+                if sym:
+                    t = sym.get("type") or ""
+                    is_str = (t == "string" or t == "str")
+                if not is_str:
+                    # also treat string literals and f-string results as strings
+                    is_str = result.startswith('"') or result.startswith("f\"")
+                inner = tr.nodes[0]  # the slice node inside []
+                inner_name = type(inner).__name__
+                if is_str and inner_name in ("slice_2", "slice_1_stop", "slice_1_start", "slice_bare"):
+                    if inner_name == "slice_2":
+                        lo = inner.nodes[0].to_nim()
+                        hi = inner.nodes[2].to_nim()
+                        # hi-1 for exclusive upper bound
+                        if hi.lstrip("-").isdigit():
+                            hi_incl = str(int(hi) - 1)
+                        else:
+                            hi_incl = f"({hi}) - 1"
+                        result = f"substr({result}, {lo}, {hi_incl})"
+                    elif inner_name == "slice_1_stop":
+                        hi = inner.nodes[1].to_nim()
+                        if hi.lstrip("-").isdigit():
+                            hi_incl = str(int(hi) - 1)
+                        else:
+                            hi_incl = f"({hi}) - 1"
+                        result = f"substr({result}, 0, {hi_incl})"
+                    elif inner_name == "slice_1_start":
+                        lo = inner.nodes[0].to_nim()
+                        result = f"substr({result}, {lo})"
+                    else:  # slice_bare [:]
+                        result = f"substr({result}, 0)"
+                    ParserState.nim_imports.add("strutils")
+                else:
+                    result += tr.to_nim()
             else:
                 result += tr.to_nim()
     # Post-process: translate known Python stdlib patterns to Nim

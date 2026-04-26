@@ -1,0 +1,79 @@
+#!/usr/bin/env py2nim
+"""
+Open-array parameters: [*]T
+============================
+
+Demonstrates the [*]T (openArray[T] in Nim) parameter annotation.
+
+A function declared with [*]T accepts both:
+  - []T     (seq[T]       — dynamic, heap-allocated)
+  - [N]T    (array[N, T]  — fixed-size, stack-allocated)
+
+without copying or converting.  The caller passes either kind
+transparently; the function body treats it as a read-only indexed
+sequence.  [*]T is only valid in parameter and return annotations —
+not in variable declarations.
+"""
+
+# ── basic statistics ──────────────────────────────────────────────
+
+def sum_f(xs: [*]float) -> float:
+    var s: float = 0.0
+    for x in xs:
+        s = s + x
+    return s
+
+def mean(xs: [*]float) -> float:
+    return sum_f(xs) / float(len(xs))
+
+def min_val(xs: [*]float) -> float:
+    var m: float = xs[0]
+    for i in 1..<len(xs):
+        if xs[i] < m:
+            m = xs[i]
+    return m
+
+def max_val(xs: [*]float) -> float:
+    var m: float = xs[0]
+    for i in 1..<len(xs):
+        if xs[i] > m:
+            m = xs[i]
+    return m
+
+def dot(a: [*]float, b: [*]float) -> float:
+    """Dot product — both arguments may be seq or fixed array, independently."""
+    var s: float = 0.0
+    for i in 0..<len(a):
+        s = s + a[i] * b[i]
+    return s
+
+
+# ── call with a seq ([]float) ─────────────────────────────────────
+
+var readings: []float = [3.1, 1.4, 2.7, 0.9, 4.2, 1.6]
+
+print(f"seq  readings : {readings}")
+print(f"  sum  = {sum_f(readings):.2f}")
+print(f"  mean = {mean(readings):.2f}")
+print(f"  min  = {min_val(readings):.2f}")
+print(f"  max  = {max_val(readings):.2f}")
+print("")
+
+
+# ── call with a fixed array ([6]float) ───────────────────────────
+
+const N: int = 6
+var baseline: [N]float = [3.0, 1.0, 2.0, 1.0, 4.0, 1.0]
+
+print(f"array baseline: {baseline}")
+print(f"  sum  = {sum_f(baseline):.2f}")
+print(f"  mean = {mean(baseline):.2f}")
+print(f"  min  = {min_val(baseline):.2f}")
+print(f"  max  = {max_val(baseline):.2f}")
+print("")
+
+
+# ── mix seq and fixed array in one call (dot product) ────────────
+
+print(f"dot(readings, baseline) = {dot(readings, baseline):.2f}")
+print(f"dot(baseline, readings) = {dot(baseline, readings):.2f}")

@@ -1,0 +1,52 @@
+#!/usr/bin/env py2nim
+"""
+db — thin SQLite wrapper for AdaScript programs.
+
+Usage:
+    nimport db
+
+    var conn: DB_T = DB_T("myfile.db")
+
+    conn.exec("CREATE TABLE IF NOT EXISTS t (id INT, name TEXT)")
+    conn.exec("INSERT INTO t VALUES (?, ?)", ["1", "hello"])
+
+    for row in conn.rows("SELECT id, name FROM t"):
+        let id:   int = int(row[0])
+        let name: str = row[1]
+        print(f"{id}: {name}")
+
+    let count: str = conn.value("SELECT COUNT(*) FROM t")
+    conn.close()
+
+API
+---
+    DB_T(path)                         open a database at `path` (":memory:" for in-memory)
+    conn.close()
+    conn.exec(sql, params=[])          run INSERT / UPDATE / DELETE / DDL
+    conn.rows(sql, params=[])  -> [][]str   all result rows (fully buffered)
+    conn.value(sql, params=[]) -> str        first column of first row, "" if none
+
+All values in result rows are str; convert with int() or float() as needed.
+params is a []str; use str() to convert numbers before passing.
+"""
+
+nimport db_sqlite
+
+
+class DB_T:
+    var conn: DbConn
+
+    def __init__(self, path: str):
+        self.conn = open(path, "", "", "")
+
+    def close(self):
+        self.conn.close()
+
+    def exec(self, query: str, params: []str = []):
+        self.conn.exec(sql(query), params)
+
+    def rows(self, query: str, params: []str = []) -> [][]str:
+        return self.conn.getAllRows(sql(query), params)
+
+    def value(self, query: str, params: []str = []) -> str:
+        return self.conn.getValue(sql(query), params)

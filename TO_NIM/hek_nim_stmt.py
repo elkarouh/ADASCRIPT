@@ -74,6 +74,8 @@ _NIMPORT_NAME_MAP = {
     # AdaScript stdlib — 'from stdlib import X' resolves natively
     "stdlib":   "stdlib",
     "math":     "math",
+    # SQLite: db_sqlite is the package module name inside db_connector
+    "db_sqlite": "db_connector/db_sqlite",
 }
 
 # Alias used by from_abs.to_nim() to check known resolvable modules
@@ -205,21 +207,51 @@ def to_nim(self):
     if prefix == "var " and len(parts) == 2 and parts[1] in ("@[]", "@{}", "initTable()"):
         import sys as _sys
         print(f"Error: '{lhs} = {parts[1]}' needs a type annotation (e.g. '{lhs}: Type = {parts[1]}')", file=_sys.stderr)
-    # When re-assigning initHashSet()/initTable() to an existing variable, add type param
+    if prefix == "var " and len(parts) == 2 and rhs_node:
+        import re as _re_cast
+        _rhs_raw = parts[1]
+        _cast_m = _re_cast.match(r'^(parseInt|parseFloat|parseBool|int|float|bool)\(', _rhs_raw)
+        if _cast_m:
+            _cast_fn = _cast_m.group(1)
+            _src_fn = {"parseInt": "int", "parseFloat": "float", "parseBool": "bool"}.get(_cast_fn, _cast_fn)
+            _inner = _rhs_raw[len(_cast_fn)+1:-1]
+            raise SyntaxError(
+                f"'{lhs} = {_src_fn}({_inner})' — use a type annotation instead:\n"
+                f"  var {lhs}: {_src_fn} = {_inner}"
+            )
+    # When re-assigning initHashSet()/initTable() to an existing variable, add type param.
+    # Also catch the Python trap: `x = {}` where x is a dict — {} is an empty set in
+    # AdaScript; use {:} for an empty dict.
     if len(parts) == 2 and parts[1] == "initHashSet()":
         sym = ParserState.symbol_table.lookup(lhs)
         if sym:
             stype = sym.get("type") or ""
             import re as _re_hs
+            if _re_hs.match(r"Table\[", stype):
+                raise SyntaxError(
+                    f"'{lhs} = {{}}' assigns an empty set to a dict variable.\n"
+                    f"  Use '{lhs} = {{:}}' for an empty dict."
+                )
             m = _re_hs.match(r"HashSet\[(\w+)\]", stype)
             if m:
                 parts[1] = f"initHashSet[{m.group(1)}]()"
     if len(parts) == 2 and parts[1] == "initTable()":
+        import re as _re_tb
+        # Direct variable: requirements = {:}
         sym = ParserState.symbol_table.lookup(lhs)
+        # Subscript variable: requirements[k] = {:} -> look up base and use value type
+        if not sym:
+            _base_m = _re_tb.match(r'^(\w+)\[', lhs)
+            if _base_m:
+                _base_sym = ParserState.symbol_table.lookup(_base_m.group(1))
+                if _base_sym:
+                    _btype = _base_sym.get("type") or ""
+                    _vm = _re_tb.match(r"Table\[[^,]+,\s*(.+)\]$", _btype)
+                    if _vm:
+                        sym = {"type": _vm.group(1).strip()}
         if sym:
             stype = sym.get("type") or ""
-            import re as _re_tb
-            m = _re_tb.match(r"Table\[([^,]+),\s*([^\]]+)\]", stype)
+            m = _re_tb.match(r"Table\[([^,]+),\s*(.+)\]$", stype)
             if m:
                 parts[1] = f"initTable[{m.group(1)}, {m.group(2)}]()"
     # Option[T] assignment: if LHS is known Option[T] and RHS is not some()/none()/nil,
@@ -642,7 +674,9 @@ def to_nim(self):
             continue
         for seq in node.nodes:
             if hasattr(seq, "nodes") and len(seq.nodes) >= 2:
+                ParserState._current_lhs_type = annotation
                 value = seq.nodes[1].to_nim()
+                ParserState._current_lhs_type = ""
                 # For array types, strip @ prefix from list literals
                 if annotation.startswith("array[") and value.startswith("@["):
                     value = value[1:]
@@ -749,7 +783,9 @@ def to_nim(self):
             continue
         for seq in node.nodes:
             if hasattr(seq, "nodes") and len(seq.nodes) >= 2:
+                ParserState._current_lhs_type = annotation
                 value = seq.nodes[1].to_nim()
+                ParserState._current_lhs_type = ""
                 # For array types, strip @ prefix from list literals
                 if annotation.startswith("array[") and value.startswith("@["):
                     value = value[1:]
@@ -866,18 +902,25 @@ def to_nim(self):
     ret_type = getattr(ParserState, "_current_return_type", "")
     if ret_type and "Option[" in ret_type:
         import re as _re
-        m = _re.search(r"Option\[(.+?)\]", ret_type)
+        m = _re.search(r"Option\[(.+)\]", ret_type)
         if m:
             inner_type = m.group(1)
             if val == "nil":
                 return f"return none({inner_type})"
+            elif val.startswith("some(") or val.startswith("none("):
+                return f"return {val}"
             else:
+                # Don't double-wrap if the value is already Option-typed
+                _sym = ParserState.symbol_table.lookup(val)
+                _sym_type = (_sym.get("type", "") if isinstance(_sym, dict) else "") if _sym else ""
+                if _sym_type.startswith("Option["):
+                    return f"return {val}"
                 return f"return some({val})"
     if val == "nil" and ret_type and "seq[" in ret_type:
         return "return @[]"
     if val == "initTable()" and ret_type:
         import re as _re2
-        _tm = _re2.search(r"Table\[([^,\]]+),\s*([^\]]+)\]", ret_type)
+        _tm = _re2.search(r"Table\[([^,]+),\s*(.+)\]$", ret_type)
         if _tm:
             val = f"initTable[{_tm.group(1)}, {_tm.group(2)}]()"
     if val == "initHashSet()" and ret_type:
@@ -1629,9 +1672,21 @@ def to_nim(self):
     """print_stmt: 'print' star_expressions -> Nim: echo star_expressions
 
     Adascript bare print statement. In Nim output, 'print x' becomes 'echo x'.
+    Option-typed bare arguments are automatically unwrapped with .get().
     Multiple comma-separated arguments are passed directly to echo.
     """
-    return f"echo({self.nodes[0].to_nim()})"
+    arg = self.nodes[0].to_nim()
+    # Auto-unwrap a bare Option-typed variable (no trailers, just a name)
+    import re as _re_print
+    _bare_name = _re_print.match(r'^(\w+)$', arg.strip())
+    if _bare_name:
+        _vname = _bare_name.group(1)
+        _sym = ParserState.symbol_table.lookup(_vname)
+        _sym_type = (_sym.get("type", "") if isinstance(_sym, dict) else "") if _sym else ""
+        if _sym_type.startswith("Option["):
+            ParserState.nim_imports.add("options")
+            arg = f"{_vname}.get()"
+    return f"echo({arg})"
 
 
 # --- simple_stmt ---

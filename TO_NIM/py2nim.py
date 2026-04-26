@@ -40,6 +40,13 @@ def Input(code):
 # subclasses of cross-file base classes.
 _nimport_param_types_full: dict = {}
 
+# Class names collected from nimport'd .ady dependencies so that
+# ClassName(args) calls are rewritten to newClassName(args) in importers.
+_nimport_class_names: set = set()
+
+# Method/proc return types collected from nimport'd .ady dependencies.
+_nimport_proc_return_types: dict = {}
+
 
 def _nim_reset():
     """Initialise all Nim-backend fields on ParserState.
@@ -60,7 +67,11 @@ def _nim_reset():
     ParserState.tuple_field_order = {}
     ParserState.object_field_order = {}
     ParserState.nim_proc_names = set()  # names of locally-defined procs/funcs
+    ParserState.class_names = set()     # all class names defined in this translation unit
+    ParserState._current_lhs_type = ""  # annotation of current assignment LHS (set by stmt handlers)
+    ParserState.proc_return_types = {}  # method/proc name -> return type string
     ParserState.nimpy_len_needed = False  # set when len() is called on a PyObject
+    ParserState._option_unwrap_vars = set()  # Option vars proven non-None by enclosing if-guard
 
     # Install to_nim() fallback on the base Parser class so any node that
     # has no explicit to_nim() override delegates to to_py().
@@ -83,6 +94,11 @@ def parse_module(code):
     ParserState.reset()
     _nim_reset()
     ParserState.proc_param_types_full.update(_nimport_param_types_full)
+    ParserState.proc_return_types.update(_nimport_proc_return_types)
+    # Register class names from nimport'd deps so ClassName(args) → newClassName(args)
+    for _cls in _nimport_class_names:
+        if not ParserState.symbol_table.lookup(_cls):
+            ParserState.symbol_table.add(_cls, _cls, "class")
     stream = Input(code)
     stmts = []
     leading = []
@@ -1360,6 +1376,12 @@ def main(argv=None):
                 _PS_pre.reset()
                 translate(_dep_code_pre, export_symbols=True)
                 _nimport_param_types_full.update(_PS_pre.proc_param_types_full)
+                # Collect class names so ClassName(args) → newClassName(args) in importers.
+                # ParserState.class_names is populated during parsing alongside
+                # symbol_table.add(..., "class") and survives scope teardown.
+                _nimport_class_names.update(getattr(_PS_pre, "class_names", set()))
+                # Collect method return types so _nim_expr_type can resolve e.g. conn.rows()
+                _nimport_proc_return_types.update(getattr(_PS_pre, "proc_return_types", {}))
             except Exception:
                 pass  # errors will surface properly during the full dep transpile
 
@@ -1446,9 +1468,9 @@ def main(argv=None):
 
         # If we re-transpiled, always recompile regardless of exe mtime.
         # Also recompile if any *user* .nim (not stdlib support files) is newer than the exe.
-        # Exclude stdlib.nim and awk.nim (bundled support files) to avoid spurious rebuilds
+        # Exclude stdlib.nim, awk.nim, db.nim (bundled support files) to avoid spurious rebuilds
         # caused by their copy2-preserved mtimes being newer than a fresh exe.
-        _BUNDLED_NIMS = {"stdlib.nim", "awk.nim"}
+        _BUNDLED_NIMS = {"stdlib.nim", "awk.nim", "db.nim"}
         _dep_nim_max_mtime = max(
             (os.path.getmtime(os.path.join(cache_dir, f))
              for f in os.listdir(cache_dir)

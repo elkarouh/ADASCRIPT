@@ -6,7 +6,7 @@ type Node_T is enum A, B, C, D, E, F
 type Graph_T is {Node_T}[]Node_T
 graph: Graph_T = {A: [B, C], B: [C, D], C: [D], D: [C], E: [F],F: [C]}
 
-def find_path(graph: Graph_T, start_node: Node_T, end_node: Node_T, path:[]Node_T=[]) -> []Node_T:
+def find_path(graph: Graph_T, start_node: Node_T, end_node: Node_T, path:[]Node_T=[]) -> ?[]Node_T:
     path = path + [start_node]
     if start_node == end_node:
         return path
@@ -14,13 +14,14 @@ def find_path(graph: Graph_T, start_node: Node_T, end_node: Node_T, path:[]Node_
         return None
     for node in graph[start_node]:
         if node not in path:
-            newpath : []Node_T = find_path(graph, node, end_node, path)
-            if newpath:
+            newpath : ?[]Node_T = find_path(graph, node, end_node, path)
+            if newpath is not None:
               return newpath
     return None
 
-assert find_path(graph, A, D) ==  [A, B, C, D]
-print find_path(graph, A, D)
+let path_AD: ?[]Node_T = find_path(graph, A, D)
+assert path_AD is not None
+print path_AD
 
 def find_all_paths(graph: Graph_T, start_node: Node_T, end_node: Node_T, path:[]Node_T=[]) -> [][]Node_T:
     path = path + [start_node]

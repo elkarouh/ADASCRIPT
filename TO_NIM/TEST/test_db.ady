@@ -1,0 +1,35 @@
+# Test the db stdlib shim: open an in-memory SQLite database,
+# insert rows, query them back, and verify values.
+# Run with: python3 TO_NIM/py2nim.py TO_NIM/TEST/test_db.ady
+
+nimport db
+
+var conn: DB_T = DB_T(":memory:")
+
+conn.exec("CREATE TABLE items (id INT, name TEXT, score REAL)")
+conn.exec("INSERT INTO items VALUES (?, ?, ?)", ["1", "alpha", "9.5"])
+conn.exec("INSERT INTO items VALUES (?, ?, ?)", ["2", "beta",  "7.0"])
+conn.exec("INSERT INTO items VALUES (?, ?, ?)", ["3", "gamma", "8.25"])
+
+let all_rows: [][]str = conn.rows("SELECT id, name, score FROM items ORDER BY id")
+assert len(all_rows) == 3
+assert all_rows[0][1] == "alpha"
+assert all_rows[1][1] == "beta"
+assert all_rows[2][1] == "gamma"
+print("  Basic insert/select: OK")
+
+let count: str = conn.value("SELECT COUNT(*) FROM items")
+assert count == "3"
+print("  COUNT query: OK")
+
+let filtered: [][]str = conn.rows(
+    "SELECT name FROM items WHERE score > ?", ["8.0"])
+assert len(filtered) == 2
+print("  Parameterised WHERE: OK")
+
+let single: str = conn.value("SELECT name FROM items WHERE id = ?", ["2"])
+assert single == "beta"
+print("  value() single lookup: OK")
+
+conn.close()
+print("All db tests passed.")

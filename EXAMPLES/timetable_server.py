@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Timetable solver backend.
-Usage:  python3 timetable_server.py
+Usage:  python3 timetable_server.py [--db PATH] [--port N]
 API:
   GET  /list              -> {"names": [...]}
   GET  /load?name=X       -> {"ok": true, "data": {...}}
@@ -9,13 +9,18 @@ API:
   POST /solve             <- problem dict                  -> {"ok": true, "schedule": [...], ...}
 """
 
-import json, time, os, threading, webbrowser
+import json, time, os, threading, webbrowser, argparse
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
-from timetable_db import DB
+from timetable_db import DB, DB_PATH
 
-PORT = 8765
-db   = DB()
+ap = argparse.ArgumentParser(add_help=False)
+ap.add_argument("--db",   default=DB_PATH)
+ap.add_argument("--port", type=int, default=8765)
+_args, _ = ap.parse_known_args()
+
+PORT = _args.port
+db   = DB(_args.db)
 
 # ---------------------------------------------------------------------------
 # Solver
@@ -201,7 +206,8 @@ if __name__ == "__main__":
     server = HTTPServer(("localhost", PORT), Handler)
     url = f"http://localhost:{PORT}"
     print(f"Timetable solver running at {url}")
-    print(f"Database: {db.path}  (problems: {db.list()})")
+    print(f"Database: {db.path}")
+    print(f"Problems: {db.list()}")
     print("Press Ctrl-C to stop.")
     threading.Timer(0.5, lambda: webbrowser.open(url)).start()
     try:

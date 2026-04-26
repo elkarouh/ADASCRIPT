@@ -1,0 +1,51 @@
+# Test string slicing: s[lo:hi] -> substr(s, lo, hi-1)
+# Regression test: slicing str fields of tuples was incorrectly emitted as
+# array indexing s[lo..<hi] instead of substr(s, lo, hi-1).
+# Run with: python3 TO_NIM/py2nim.py TO_NIM/TEST/test_string_slice.ady
+
+# ── basic variable slicing ──────────────────────────────────────────────────
+
+var s: str = "Hello, World!"
+
+assert s[0:5] == "Hello"
+assert s[7:12] == "World"
+assert s[0:1] == "H"
+assert s[:5] == "Hello"
+assert s[7:] == "World!"
+print("  Basic variable slicing: OK")
+
+# ── slice in expression ─────────────────────────────────────────────────────
+
+var greeting: str = "Monday"
+assert greeting[0:3] == "Mon"
+print("  Slice in expression: OK")
+
+# ── slice on tuple field (the original bug) ─────────────────────────────────
+
+type Item_T is tuple:
+    name:  str
+    label: str
+
+var item: Item_T = (name: "Science", label: "Alice")
+assert item.name[0:3]  == "Sci"
+assert item.label[0:1] == "A"
+print("  Tuple field slicing: OK")
+
+# ── slice in f-string (common use case) ─────────────────────────────────────
+
+var subj: str  = "History"
+var teacher: str = "Brown"
+let cell: str = f"{subj[0:3]}({teacher[0:1]})"
+assert cell == "His(B)"
+print("  Slice in f-string: OK")
+
+# ── function return value ────────────────────────────────────────────────────
+
+def abbrev(s: str, n: int) -> str:
+    return s[0:n]
+
+assert abbrev("Geography", 3) == "Geo"
+assert abbrev("French", 2)    == "Fr"
+print("  Slice in function: OK")
+
+print("All string slice tests passed.")
