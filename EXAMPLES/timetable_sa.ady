@@ -393,9 +393,7 @@ def delta_energy(state: State_T, li: int, new_idx: int) -> int:
 # ============================================================
 
 def solve_sa(max_steps: int, seed: int = 42) -> (State_T, int, int):
-    """Returns (final_state, final_energy, steps_taken).
-    Energy 0 means a valid schedule.
-    """
+    """Phase 1: minimise hard constraint violations. Returns when energy=0."""
     randomize(seed)
     var state: State_T = [rand(0..len(lesson_cands[k]) - 1) for k in 0..<N_LESSONS]
     var cur_E: int = energy(state)
@@ -432,6 +430,48 @@ def solve_sa(max_steps: int, seed: int = 42) -> (State_T, int, int):
     return (best_state, best_E, max_steps)
 
 
+def optimise_soft(state: State_T, max_steps: int) -> (State_T, int):
+    """Phase 2: minimise soft score while keeping hard constraints at 0."""
+    var cur_state: State_T = state
+    var cur_soft: int = soft_score(cur_state)
+    var best_state: State_T = cur_state
+    var best_soft: int = cur_soft
+
+    var T: float = 5.0
+    let alpha: float = 0.9999
+
+    for step in 0..<max_steps:
+        let li: int = rand(0..N_LESSONS - 1)
+        let n_cands: int = len(lesson_cands[li])
+        if n_cands < 2:
+            T = T * alpha
+            continue
+        var new_idx: int = rand(0..n_cands - 1)
+        if new_idx == cur_state[li]:
+            new_idx = new_idx + 1
+            if new_idx >= n_cands:
+                new_idx = 0
+
+        # Reject moves that introduce hard violations
+        if delta_energy(cur_state, li, new_idx) > 0:
+            T = T * alpha
+            continue
+
+        var tmp: State_T = cur_state
+        tmp[li] = new_idx
+        let new_soft: int = soft_score(tmp)
+        let dS: int = new_soft - cur_soft
+        if dS <= 0 or rand(0.0..1.0) < exp(-float(dS) / T):
+            cur_state[li] = new_idx
+            cur_soft = new_soft
+            if cur_soft < best_soft:
+                best_soft = cur_soft
+                best_state = cur_state
+        T = T * alpha
+
+    return (best_state, best_soft)
+
+
 # ============================================================
 # SOLVE
 # ============================================================
@@ -440,7 +480,12 @@ print("Solving timetable via simulated annealing ...")
 print("")
 
 let t0: float = cpuTime()
-let (final_state, final_E, steps) = solve_sa(max_steps = 200000)
+let (hard_state, final_E, steps) = solve_sa(max_steps = 200000)
+var final_state: State_T = hard_state
+if final_E == 0:
+    print(f"Phase 1: valid schedule in {steps} steps — optimising soft constraints ...")
+    let (soft_state, best_soft) = optimise_soft(hard_state, max_steps = 500000)
+    final_state = soft_state
 let elapsed: float = cpuTime() - t0
 
 if final_E == 0:
