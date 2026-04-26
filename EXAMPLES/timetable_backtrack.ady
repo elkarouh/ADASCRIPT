@@ -111,8 +111,15 @@ var subject_room_type: {str}str = {"Science": "lab", "PE": "gym", "Art": "art"}
 # teacher_unavail = list of (teacher, day, slot) forbidden triples
 var teacher_unavail: [](str, DAYS, int) = []
 
+# Hard constraints
 var MAX_CONSEC_SAME_SUBJ:    int = 2
 var MAX_TEACHER_PERIODS_DAY: int = 4
+
+# Soft constraint weights
+var W_CLASS_HOLES:       int = 1
+var W_AVOID_FIRST_SLOT:  int = 2
+var W_AVOID_LAST_SLOT:   int = 1
+var W_TEACHER_SPREAD:    int = 1
 
 # ---- INPUT DATA END ----
 
@@ -159,9 +166,15 @@ if db_path != "":
     for row in conn.rows("SELECT teacher, day, slot FROM teacher_unavailability WHERE problem=?", [p]):
         teacher_unavail.append((row[0], DAYS(row[1]), int(row[2])))
 
-    for row in conn.rows("SELECT max_consecutive_same_subj, max_teacher_periods_day FROM soft_constraints WHERE problem=?", [p]):
+    for row in conn.rows("SELECT max_consecutive_same_subj, max_teacher_periods_day FROM hard_constraints WHERE problem=?", [p]):
         MAX_CONSEC_SAME_SUBJ    = int(row[0])
         MAX_TEACHER_PERIODS_DAY = int(row[1])
+
+    for row in conn.rows("SELECT weight_class_holes, weight_avoid_first_slot, weight_avoid_last_slot, weight_teacher_spread FROM soft_constraints WHERE problem=?", [p]):
+        W_CLASS_HOLES      = int(row[0])
+        W_AVOID_FIRST_SLOT = int(row[1])
+        W_AVOID_LAST_SLOT  = int(row[2])
+        W_TEACHER_SPREAD   = int(row[3])
 
     conn.close()
     print(f"Loaded problem '{p}' from {db_path}")
@@ -442,30 +455,67 @@ else:
 # SOFT CONSTRAINT SCORE
 # ============================================================
 
-def soft_penalty(state: State_T) -> int:
-    """Returns teacher daily load violation count (consecutive is a hard constraint)."""
-    var daily: int = 0
-    for t in TEACHERS:
-        for d in DAYS:
-            var count: int = 0
-            for k in 0..<N_LESSONS:
-                let idx: int = state[k]
-                if idx < 0:
-                    continue
-                let v: Value_T = lesson_cands[k][idx]
-                if v.teacher == t and v.period.day == d:
-                    count = count + 1
-            if count > MAX_TEACHER_PERIODS_DAY:
-                daily = daily + (count - MAX_TEACHER_PERIODS_DAY)
-    return daily
+var holes:      int = 0
+var first_hits: int = 0
+var last_hits:  int = 0
+var t_spread:   int = 0
 
-let daily_viol: int = soft_penalty(final_state)
+for c in CLASSES:
+    for d in DAYS:
+        var first_sl: int = MAX_SLOTS + 1
+        var last_sl:  int = 0
+        var count:    int = 0
+        for k in 0..<N_LESSONS:
+            let idx: int = final_state[k]
+            if idx < 0 or lessons[k].cls != c:
+                continue
+            let v: Value_T = lesson_cands[k][idx]
+            if v.period.day == d:
+                count = count + 1
+                if v.period.slot < first_sl:
+                    first_sl = v.period.slot
+                if v.period.slot > last_sl:
+                    last_sl = v.period.slot
+        if count > 0:
+            holes = holes + (last_sl - first_sl + 1) - count
+            if first_sl == 1:
+                first_hits = first_hits + 1
+            if last_sl == MAX_SLOTS:
+                last_hits = last_hits + 1
+
+for t in TEACHERS:
+    for d in DAYS:
+        var first_sl: int = MAX_SLOTS + 1
+        var last_sl:  int = 0
+        var count:    int = 0
+        for k in 0..<N_LESSONS:
+            let idx: int = final_state[k]
+            if idx < 0:
+                continue
+            let v: Value_T = lesson_cands[k][idx]
+            if v.teacher == t and v.period.day == d:
+                count = count + 1
+                if v.period.slot < first_sl:
+                    first_sl = v.period.slot
+                if v.period.slot > last_sl:
+                    last_sl = v.period.slot
+        if count > 1:
+            t_spread = t_spread + (last_sl - first_sl + 1) - count
+
+let soft_total: int = W_CLASS_HOLES * holes + W_AVOID_FIRST_SLOT * first_hits + W_AVOID_LAST_SLOT * last_hits + W_TEACHER_SPREAD * t_spread
 print("")
 print("=" * 54)
 print("  Soft constraint score")
 print("=" * 54)
-if daily_viol == 0:
+if soft_total == 0:
     print("All soft constraints satisfied")
 else:
-    print(f"Soft penalty: {daily_viol} violation(s)")
-    print(f"  - Teacher daily load exceeded: {daily_viol}")
+    print(f"Soft score: {soft_total}")
+    if holes > 0:
+        print(f"  - Class holes:       {holes} (weight {W_CLASS_HOLES})")
+    if first_hits > 0:
+        print(f"  - Early starts:      {first_hits} (weight {W_AVOID_FIRST_SLOT})")
+    if last_hits > 0:
+        print(f"  - Late finishes:     {last_hits} (weight {W_AVOID_LAST_SLOT})")
+    if t_spread > 0:
+        print(f"  - Teacher spread:    {t_spread} (weight {W_TEACHER_SPREAD})")
