@@ -136,13 +136,16 @@ function slotToTimeEnd(slot) {
   return `${String(h).padStart(2,"0")}:00:00`;
 }
 
-function computeSoftScore(schedule, softConstraints) {
+function computeSoftScore(schedule, softConstraints, heavySubjects) {
   const w = softConstraints || {};
   const wHole    = w.weight_class_holes          || 1;
   const wFirst   = w.weight_avoid_first_slot     || 2;
   const wLast    = w.weight_avoid_last_slot      || 1;
   const wSpread  = w.weight_teacher_spread       || 1;
   const wSubjSpr = w.weight_subject_daily_spread || 2;
+  const wHeavy   = w.weight_heavy_morning        || 3;
+  const mThresh  = w.morning_threshold           || 4;
+  const heavySet = new Set(heavySubjects || []);
 
   const classDay  = {};   // (class,day)    -> [slots]
   const teachDay  = {};   // (teacher,day)  -> [slots]
@@ -158,7 +161,7 @@ function computeSoftScore(schedule, softConstraints) {
     classSubj[sk].count++;
   }
 
-  let holes = 0, first = 0, last = 0, spread = 0, subjSpread = 0;
+  let holes = 0, first = 0, last = 0, spread = 0, subjSpread = 0, heavyMorning = 0;
   for (const slots of Object.values(classDay)) {
     slots.sort((a,b)=>a-b);
     const mn = slots[0], mx = slots[slots.length-1];
@@ -174,10 +177,13 @@ function computeSoftScore(schedule, softConstraints) {
   for (const { days, count } of Object.values(classSubj)) {
     subjSpread += count - days.size;
   }
+  for (const e of schedule) {
+    if (heavySet.has(e.subject) && e.slot > mThresh) heavyMorning++;
+  }
 
-  const total = holes*wHole + first*wFirst + last*wLast + spread*wSpread + subjSpread*wSubjSpr;
+  const total = holes*wHole + first*wFirst + last*wLast + spread*wSpread + subjSpread*wSubjSpr + heavyMorning*wHeavy;
   return { total, class_holes: holes, avoid_first_slot: first, avoid_last_slot: last,
-           teacher_spread: spread, subject_daily_spread: subjSpread };
+           teacher_spread: spread, subject_daily_spread: subjSpread, heavy_morning: heavyMorning };
 }
 
 // Map day name → a fixed Monday in a reference week (2024-01-01 is Monday)
@@ -380,7 +386,9 @@ function App() {
     max_consecutive_same_subj: 2, max_teacher_periods_day: 4 });
   const [softConstraints,   setSoftConstraints]    = useState({
     weight_class_holes: 1, weight_avoid_first_slot: 2,
-    weight_avoid_last_slot: 1, weight_teacher_spread: 1, weight_subject_daily_spread: 2 });
+    weight_avoid_last_slot: 1, weight_teacher_spread: 1, weight_subject_daily_spread: 2,
+    weight_heavy_morning: 3, morning_threshold: 4 });
+  const [heavySubjects,   setHeavySubjects]     = useState([]);  // []str
 
   const [probName,    setProbName]    = useState("");
   const [savedNames,  setSavedNames]  = useState([]);
@@ -416,6 +424,7 @@ function App() {
       ),
       hard_constraints: hardConstraints,
       soft_constraints: softConstraints,
+      heavy_subjects: heavySubjects,
     };
   }
 
@@ -455,7 +464,8 @@ function App() {
       }
       setTeacherUnavail(ua);
       setHardConstraints(p.hard_constraints || { max_consecutive_same_subj:2, max_teacher_periods_day:4 });
-      setSoftConstraints(p.soft_constraints || { weight_class_holes:1, weight_avoid_first_slot:2, weight_avoid_last_slot:1, weight_teacher_spread:1, weight_subject_daily_spread:2 });
+      setSoftConstraints(p.soft_constraints || { weight_class_holes:1, weight_avoid_first_slot:2, weight_avoid_last_slot:1, weight_teacher_spread:1, weight_subject_daily_spread:2, weight_heavy_morning:3, morning_threshold:4 });
+      setHeavySubjects(p.heavy_subjects || []);
       setProbName(name); setResult(null); setSchedule([]); setStatusMsg(null); setPage("editor");
       setUnavailTeacher((p.teachers||[])[0] || null);
     } catch(e) { setStatusMsg({text:"Load failed: "+e.message,ok:false}); }
@@ -467,7 +477,8 @@ function App() {
     setRequirements({}); setCanTeach({});
     setSubjectRoomType({}); setTeacherUnavail({});
     setHardConstraints({ max_consecutive_same_subj:2, max_teacher_periods_day:4 });
-    setSoftConstraints({ weight_class_holes:1, weight_avoid_first_slot:2, weight_avoid_last_slot:1, weight_teacher_spread:1 });
+    setSoftConstraints({ weight_class_holes:1, weight_avoid_first_slot:2, weight_avoid_last_slot:1, weight_teacher_spread:1, weight_subject_daily_spread:2, weight_heavy_morning:3, morning_threshold:4 });
+    setHeavySubjects([]);
     setProbName(""); setResult(null); setSchedule([]); setStatusMsg(null);
   }
 
@@ -494,6 +505,7 @@ function App() {
     setRequirements(p=>Object.fromEntries(Object.entries(p).map(([c,sv])=>{const x={...sv};delete x[n];return[c,x];})));
     setCanTeach(p=>Object.fromEntries(Object.entries(p).map(([t,sv])=>{const x={...sv};delete x[n];return[t,x];})));
     setSubjectRoomType(p=>{const x={...p};delete x[n];return x;});
+    setHeavySubjects(p=>p.filter(s=>s!==n));
   };
   const addTeacher   = ([n])      => { if(!n||teachers.includes(n))return; setTeachers(p=>[...p,n]); setCanTeach(p=>({...p,[n]:{}})); setUnavailTeacher(t=>t||n); };
   const removeTeacher= n          => { setTeachers(p=>p.filter(t=>t!==n)); setCanTeach(p=>{const x={...p};delete x[n];return x;}); setTeacherUnavail(p=>{const x={...p};delete x[n];return x;}); };
@@ -579,7 +591,7 @@ function App() {
 
   // ── result page ───────────────────────────────────────────────────────────
   if (page === "result" && result?.ok) {
-    const softScore = computeSoftScore(schedule, softConstraints);
+    const softScore = computeSoftScore(schedule, softConstraints, heavySubjects);
     const pen       = softScore.total;
     const sd        = softScore;
     const hardViols = result.hard_violations || [];
@@ -620,6 +632,7 @@ function App() {
                 sd.avoid_last_slot  && `${sd.avoid_last_slot} late finishes`,
                 sd.teacher_spread         && `${sd.teacher_spread} teacher idle gaps`,
                 sd.subject_daily_spread   && `${sd.subject_daily_spread} subject clustering`,
+                sd.heavy_morning          && `${sd.heavy_morning} heavy subjects in afternoon`,
               ].filter(Boolean).join(", ")}
             </div>
           )}
@@ -700,6 +713,19 @@ function App() {
             <div className="card-title">Subjects</div>
             <TagList items={subjects} label={s=>s} onRemove={removeSubject} />
             <AddRow placeholders={["Subject"]} onAdd={addSubject} />
+            {subjects.length > 0 && (
+              <div style={{marginTop:8}}>
+                <div style={{fontSize:11,color:"#64748b",marginBottom:4}}>Heavy (prefer morning)</div>
+                {subjects.map(s => (
+                  <label key={s} style={{display:"flex",alignItems:"center",gap:6,fontSize:13,marginBottom:2,cursor:"pointer"}}>
+                    <input type="checkbox"
+                      checked={heavySubjects.includes(s)}
+                      onChange={e => setHeavySubjects(p => e.target.checked ? [...p,s] : p.filter(x=>x!==s))} />
+                    {s}
+                  </label>
+                ))}
+              </div>
+            )}
           </div>
           <div className="card">
             <div className="card-title">Teachers</div>
@@ -828,6 +854,7 @@ function App() {
                 ["Avoid last slot (late finish)", "weight_avoid_last_slot", 1],
                 ["Teacher idle gaps (free periods between lessons)", "weight_teacher_spread", 1],
                 ["Subject clustering (same subject on same day)", "weight_subject_daily_spread", 2],
+                ["Heavy subjects in afternoon (see Subjects panel)", "weight_heavy_morning", 3],
               ].map(([label, key, def]) => (
                 <div key={key}>
                   <div style={{fontSize:11,color:"#64748b",marginBottom:4}}>{label}</div>
@@ -838,6 +865,14 @@ function App() {
                                  borderRadius:4,padding:"4px 8px",fontSize:12}} />
                 </div>
               ))}
+            </div>
+            <div style={{marginTop:8}}>
+              <div style={{fontSize:11,color:"#64748b",marginBottom:4}}>Morning threshold (slots 1–N are morning)</div>
+              <input type="number" min={1} max={MAX_SLOTS-1}
+                     value={softConstraints.morning_threshold ?? 4}
+                     onChange={e=>setSoftConstraints(p=>({...p,morning_threshold:parseInt(e.target.value)||4}))}
+                     style={{width:60,background:"#f8fafc",border:"1px solid #e2e8f0",
+                             borderRadius:4,padding:"4px 8px",fontSize:12}} />
             </div>
           </div>
 

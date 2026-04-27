@@ -102,7 +102,10 @@ DEFAULT_DATA = {
         "weight_avoid_last_slot":      1,   # lessons scheduled in last slot
         "weight_teacher_spread":       1,   # gaps in teacher's day (first–last span minus count)
         "weight_subject_daily_spread": 2,   # lessons of same subject clustered on same day
+        "weight_heavy_morning":        3,   # heavy subject scheduled after morning_threshold
+        "morning_threshold":           4,   # slots > this are considered afternoon
     },
+    "heavy_subjects": [],                   # list of subject names marked as heavy
 }
 
 DDL = """
@@ -171,7 +174,14 @@ CREATE TABLE IF NOT EXISTS soft_constraints (
     weight_avoid_first_slot      INTEGER NOT NULL DEFAULT 2,
     weight_avoid_last_slot       INTEGER NOT NULL DEFAULT 1,
     weight_teacher_spread        INTEGER NOT NULL DEFAULT 1,
-    weight_subject_daily_spread  INTEGER NOT NULL DEFAULT 2
+    weight_subject_daily_spread  INTEGER NOT NULL DEFAULT 2,
+    weight_heavy_morning         INTEGER NOT NULL DEFAULT 3,
+    morning_threshold            INTEGER NOT NULL DEFAULT 4
+);
+CREATE TABLE IF NOT EXISTS heavy_subjects (
+    problem  TEXT NOT NULL REFERENCES problems(name) ON DELETE CASCADE,
+    subject  TEXT NOT NULL,
+    PRIMARY KEY (problem, subject)
 );
 """
 
@@ -236,7 +246,8 @@ class DB:
 
         soft_row = self.conn.execute(
             "SELECT weight_class_holes, weight_avoid_first_slot, "
-            "weight_avoid_last_slot, weight_teacher_spread, weight_subject_daily_spread "
+            "weight_avoid_last_slot, weight_teacher_spread, weight_subject_daily_spread, "
+            "weight_heavy_morning, morning_threshold "
             "FROM soft_constraints WHERE problem=?", (name,)).fetchone()
         soft_constraints = {
             "weight_class_holes":          soft_row[0] if soft_row else 1,
@@ -244,7 +255,12 @@ class DB:
             "weight_avoid_last_slot":      soft_row[2] if soft_row else 1,
             "weight_teacher_spread":       soft_row[3] if soft_row else 1,
             "weight_subject_daily_spread": soft_row[4] if soft_row else 2,
+            "weight_heavy_morning":        soft_row[5] if soft_row else 3,
+            "morning_threshold":           soft_row[6] if soft_row else 4,
         }
+
+        heavy_subjects = [r[0] for r in self.conn.execute(
+            "SELECT subject FROM heavy_subjects WHERE problem=?", (name,)).fetchall()]
 
         return {
             "classes": classes, "subjects": subjects,
@@ -254,6 +270,7 @@ class DB:
             "teacher_unavailability": teacher_unavailability,
             "hard_constraints": hard_constraints,
             "soft_constraints": soft_constraints,
+            "heavy_subjects": heavy_subjects,
         }
 
     def save(self, name, data):
@@ -301,13 +318,19 @@ class DB:
             soft = data.get("soft_constraints", {})
             self.conn.execute(
                 "INSERT INTO soft_constraints(problem,weight_class_holes,weight_avoid_first_slot,"
-                "weight_avoid_last_slot,weight_teacher_spread,weight_subject_daily_spread) VALUES (?,?,?,?,?,?)",
+                "weight_avoid_last_slot,weight_teacher_spread,weight_subject_daily_spread,"
+                "weight_heavy_morning,morning_threshold) VALUES (?,?,?,?,?,?,?,?)",
                 (name,
                  int(soft.get("weight_class_holes", 1)),
                  int(soft.get("weight_avoid_first_slot", 2)),
                  int(soft.get("weight_avoid_last_slot", 1)),
                  int(soft.get("weight_teacher_spread", 1)),
-                 int(soft.get("weight_subject_daily_spread", 2))))
+                 int(soft.get("weight_subject_daily_spread", 2)),
+                 int(soft.get("weight_heavy_morning", 3)),
+                 int(soft.get("morning_threshold", 4))))
+            for s in data.get("heavy_subjects", []):
+                self.conn.execute(
+                    "INSERT OR IGNORE INTO heavy_subjects(problem,subject) VALUES (?,?)", (name, s))
 
     def delete(self, name):
         if name == DEFAULT_NAME:
