@@ -7,7 +7,7 @@
 <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/fullcalendar-scheduler@6.1.20/index.global.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.20/index.global.min.js"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: 'DM Mono', monospace; background: #f0f4f8; color: #1a1a1a; }
@@ -609,7 +609,7 @@ function App() {
                 sd.class_holes      && `${sd.class_holes} class holes`,
                 sd.avoid_first_slot && `${sd.avoid_first_slot} early starts`,
                 sd.avoid_last_slot  && `${sd.avoid_last_slot} late finishes`,
-                sd.teacher_spread   && `${sd.teacher_spread} teacher spread`,
+                sd.teacher_spread   && `${sd.teacher_spread} teacher idle gaps`,
               ].filter(Boolean).join(", ")}
             </div>
           )}
@@ -816,7 +816,7 @@ function App() {
                 ["Class free-period holes", "weight_class_holes", 1],
                 ["Avoid slot 1 (early start)", "weight_avoid_first_slot", 2],
                 ["Avoid last slot (late finish)", "weight_avoid_last_slot", 1],
-                ["Teacher lesson spread", "weight_teacher_spread", 1],
+                ["Teacher idle gaps (free periods between lessons)", "weight_teacher_spread", 1],
               ].map(([label, key, def]) => (
                 <div key={key}>
                   <div style={{fontSize:11,color:"#64748b",marginBottom:4}}>{label}</div>
