@@ -1,60 +1,37 @@
 #!/usr/bin/env py2nim
 #ady2nim-args c --cc:clang --clang.exe:zigcc --clang.linkerexe:zigcc -d:release
 """
-School Timetabling — Simulated Annealing
-========================================
+School Timetabling — Simulated Annealing CLI
+=============================================
+Thin wrapper around timetable_engine.  Handles arg parsing and output only.
 
-Alternative to timetable_backtrack.ady. Same data, different approach:
-instead of DFS + backtracking + MCV, we start with a random assignment,
-evaluate its constraint violations as an energy score, and accept
-neighbouring assignments with a temperature-dependent probability.
-
-Why try SA here?
-  * Surprisingly fast on this instance: ~0.3 ms (seed=42, 2117 moves),
-    versus ~1.6 ms for timetable_backtrack.ady. The MCV backtracker
-    pays for per-expansion candidate re-scoring; SA's inner loop is
-    just a single O(N) delta_energy evaluation per step.
-  * SA scales differently: for much larger timetables where the MCV
-    tree explodes, SA keeps finding "good enough" schedules in bounded
-    time, at the cost of losing the guarantee of optimality/completeness.
-  * Useful side-by-side reference showing the same constraints expressed
-    as a cost function instead of a consistency predicate.
-
-Algorithm outline
------------------
-  state     : for each lesson, its chosen (teacher, room, period) triple
-              (every cell is always assigned — no -1 sentinel)
-  energy    : number of pair-wise constraint violations in the state
-              (teacher clash + class clash + room clash, all per-period)
-  move      : pick one lesson at random; replace its value with a random
-              valid candidate from its pre-computed candidate list
-  accept    : always if dE < 0, else with probability exp(-dE/T)
-  cooling   : geometric — T = T0 * alpha^step
-  stop      : energy == 0 (valid schedule found) or step budget exhausted
+Usage:
+  ./timetable_sa.ady [--db PATH] [--problem NAME] [--json]
+  ./timetable_sa.ady --stdin            # read JSON problem from stdin, write JSON to stdout
 """
 
-nimport math
-nimport random
-nimport time
+nimport timetable_engine
 nimport db
+nimport json
+nimport strutils
+nimport os
 
 
 def usage(code: Natural):
     print("Usage: ./timetable_sa [options]")
     print("  -h, --help         Show this help message and exit")
-    print("  --db PATH          SQLite database file to read problem from")
+    print("  --db PATH          SQLite database file")
     print("  --problem NAME     Problem name in the database (default: DEFAULT)")
-    print("  --json             Output result as JSON instead of human-readable text")
-    print("")
-    print("Solves a school timetabling problem via simulated annealing.")
-    print("Without --db, uses data embedded in the source.")
+    print("  --json             Output result as JSON")
+    print("  --stdin            Read JSON problem from stdin, write JSON to stdout")
     quit(code)
 
-var db_path:      str = ""
-var problem_name: str = "DEFAULT"
+var db_path:      str  = ""
+var problem_name: str  = "DEFAULT"
 var json_output:  bool = False
+var stdin_mode:   bool = False
 
-var _take_db:  bool = False
+var _take_db:   bool = False
 var _take_prob: bool = False
 for arg in $@:
     case arg:
@@ -62,6 +39,8 @@ for arg in $@:
             usage(0)
         when "--json":
             json_output = True
+        when "--stdin":
+            stdin_mode = True
         when "--db":
             _take_db = True
         when "--problem":
@@ -74,810 +53,50 @@ for arg in $@:
                 problem_name = arg
                 _take_prob = False
 
-
-# ============================================================
-# INPUT DATA  (regenerate with: python3 timetable_load.py --problem NAME [--db PATH] timetable_sa.ady)
-# ============================================================
-
-type DAYS      is enum Monday, Tuesday, Wednesday, Thursday, Friday
-type ROOM_TYPE is enum standard, lab, gym, art
-
-const MAX_SLOTS: int = 8
-
-# ---- INPUT DATA BEGIN ----
-
-var CLASSES:  []str = ["Year7A", "Year7B", "Year8A", "Year8B", "Year9A", "Year9B"]
-var SUBJECTS: []str = ["Math", "English", "Science", "History", "Geography", "French", "PE", "Art"]
-var TEACHERS: []str = ["Adams", "Brown", "Clarke", "Davies", "Evans", "Foster", "Green", "Harris", "Ito", "Jones"]
-var ROOMS:    []str = ["R01", "R02", "R03", "R04", "Lab1", "Lab2", "Gym", "ArtRm"]
-
-# requirements[class][subject] = number of periods per week
-var requirements: {str}{str}int = {
-    "Year7A": {"Math": 4, "English": 4, "Science": 3, "History": 2, "Geography": 2, "French": 2, "PE": 2, "Art": 1},
-    "Year7B": {"Math": 4, "English": 4, "Science": 3, "History": 2, "Geography": 2, "French": 2, "PE": 2, "Art": 1},
-    "Year8A": {"Math": 4, "English": 4, "Science": 3, "History": 2, "Geography": 2, "French": 2, "PE": 2, "Art": 1},
-    "Year8B": {"Math": 4, "English": 4, "Science": 3, "History": 2, "Geography": 2, "French": 2, "PE": 2, "Art": 1},
-    "Year9A": {"Math": 4, "English": 4, "Science": 3, "History": 2, "Geography": 2, "French": 2, "PE": 2, "Art": 1},
-    "Year9B": {"Math": 4, "English": 4, "Science": 3, "History": 2, "Geography": 2, "French": 2, "PE": 2, "Art": 1},
-}
-
-# can_teach[teacher] = list of subjects they can teach
-var can_teach: {str}[]str = {
-    "Adams":  ["Math", "Science"],
-    "Brown":  ["English", "History"],
-    "Clarke": ["Math", "French"],
-    "Davies": ["Science", "Geography"],
-    "Evans":  ["English", "Art"],
-    "Foster": ["History", "Geography"],
-    "Green":  ["Math", "Science"],
-    "Harris": ["PE"],
-    "Ito":    ["French", "Art"],
-    "Jones":  ["English", "PE"],
-}
-
-var room_capacity: {str}int = {"R01": 32, "R02": 32, "R03": 32, "R04": 32, "Lab1": 30, "Lab2": 30, "Gym": 60, "ArtRm": 32}
-var class_size:    {str}int = {"Year7A": 30, "Year7B": 28, "Year8A": 30, "Year8B": 27, "Year9A": 29, "Year9B": 26}
-
-# room_type[room] = room type
-var room_type: {str}ROOM_TYPE = {"R01": standard, "R02": standard, "R03": standard, "R04": standard, "Lab1": lab, "Lab2": lab, "Gym": gym, "ArtRm": art}
-
-# subject_room_type[subject] = required room type (omit for any room)
-var subject_room_type: {str}ROOM_TYPE = {"Science": lab, "PE": gym, "Art": art}
-
-# teacher_unavail = list of (teacher, day, slot) forbidden triples
-var teacher_unavail: [](str, DAYS, int) = []
-
-# Hard constraints
-var MAX_CONSEC_SAME_SUBJ:    int = 2
-var MAX_TEACHER_PERIODS_DAY: int = 4
-
-# Soft constraint weights
-var W_CLASS_HOLES:          int = 1
-var W_AVOID_FIRST_SLOT:     int = 2
-var W_AVOID_LAST_SLOT:      int = 1
-var W_TEACHER_SPREAD:       int = 1
-var W_SUBJECT_DAILY_SPREAD: int = 2
-var W_HEAVY_MORNING:        int = 3
-var MORNING_THRESHOLD:      int = 4   # slots > this are "afternoon"
-var W_TEACHER_SLOT_PREF:    int = 2
-
-var heavy_subjects: {str}bool = {"Math": True, "Science": True}
-var teacher_pref_slots: {str}{int}bool = {:}   # teacher -> set of preferred slots (empty = no pref)
-
-# ---- INPUT DATA END ----
-
-# ── DB override ─────────────────────────────────────────────────────────────
-if db_path != "":
-    var conn: DB_T = DB_T(db_path)
-    let p: str = problem_name
-
-    CLASSES  = [row[0] for row in conn.rows("SELECT name FROM classes  WHERE problem=? ORDER BY rowid", [p])]
-    SUBJECTS = [row[0] for row in conn.rows("SELECT name FROM subjects WHERE problem=? ORDER BY rowid", [p])]
-    TEACHERS = [row[0] for row in conn.rows("SELECT name FROM teachers WHERE problem=? ORDER BY rowid", [p])]
-
-    ROOMS         = []
-    room_capacity = {:}
-    for row in conn.rows("SELECT name, capacity FROM rooms WHERE problem=? ORDER BY rowid", [p]):
-        ROOMS.append(row[0])
-        room_capacity[row[0]] = int(row[1])
-
-    class_size = {:}
-    for row in conn.rows("SELECT name, size FROM classes WHERE problem=? ORDER BY rowid", [p]):
-        class_size[row[0]] = int(row[1])
-
-    requirements = {:}
-    for row in conn.rows("SELECT class, subject, periods FROM requirements WHERE problem=?", [p]):
-        if row[0] not in requirements:
-            requirements[row[0]] = {:}
-        requirements[row[0]][row[1]] = int(row[2])
-
-    can_teach = {:}
-    for row in conn.rows("SELECT teacher, subject FROM can_teach WHERE problem=?", [p]):
-        if row[0] not in can_teach:
-            can_teach[row[0]] = []
-        can_teach[row[0]].append(row[1])
-
-    room_type = {:}
-    for row in conn.rows("SELECT name, room_type FROM rooms WHERE problem=? ORDER BY rowid", [p]):
-        room_type[row[0]] = ROOM_TYPE(row[1])
-
-    subject_room_type = {:}
-    for row in conn.rows("SELECT subject, room_type FROM subject_room_type WHERE problem=?", [p]):
-        subject_room_type[row[0]] = ROOM_TYPE(row[1])
-
-    teacher_unavail = []
-    teacher_pref_slots = {:}
-    for row in conn.rows("SELECT teacher, day, slot, pref FROM teacher_slot_pref WHERE problem=?", [p]):
-        let tsp_t: str = row[0]
-        let tsp_d: DAYS = DAYS(row[1])
-        let tsp_sl: int = int(row[2])
-        let tsp_pref: str = row[3]
-        if tsp_pref == "avoid":
-            teacher_unavail.append((tsp_t, tsp_d, tsp_sl))
-        elif tsp_pref == "prefer":
-            if tsp_t not in teacher_pref_slots:
-                teacher_pref_slots[tsp_t] = {:}
-            teacher_pref_slots[tsp_t][tsp_sl] = True
-
-    for row in conn.rows("SELECT max_consecutive_same_subj, max_teacher_periods_day FROM hard_constraints WHERE problem=?", [p]):
-        MAX_CONSEC_SAME_SUBJ    = int(row[0])
-        MAX_TEACHER_PERIODS_DAY = int(row[1])
-
-    for row in conn.rows("SELECT weight_class_holes, weight_avoid_first_slot, weight_avoid_last_slot, weight_teacher_spread, weight_subject_daily_spread, weight_heavy_morning, morning_threshold, weight_teacher_slot_pref FROM soft_constraints WHERE problem=?", [p]):
-        W_CLASS_HOLES          = int(row[0])
-        W_AVOID_FIRST_SLOT     = int(row[1])
-        W_AVOID_LAST_SLOT      = int(row[2])
-        W_TEACHER_SPREAD       = int(row[3])
-        W_SUBJECT_DAILY_SPREAD = int(row[4])
-        W_HEAVY_MORNING        = int(row[5])
-        MORNING_THRESHOLD      = int(row[6])
-        W_TEACHER_SLOT_PREF    = int(row[7])
-
-    heavy_subjects = {:}
-    for row in conn.rows("SELECT subject FROM heavy_subjects WHERE problem=?", [p]):
-        heavy_subjects[row[0]] = True
-
-    conn.close()
-    if not json_output:
-        print(f"Loaded problem '{p}' from {db_path}")
-
-
-# ============================================================
-# DERIVED STRUCTURES
-# ============================================================
-
-type Period_T is tuple:
-    day:  DAYS
-    slot: int
-
-type ClassSubject_T is tuple:
-    cls:  str
-    subj: str
-
-type Lesson_T is tuple:
-    cls:  str
-    subj: str
-    occ:  int
-
-type Value_T is tuple:
-    teacher: str
-    room:    str
-    period:  Period_T
-
-var PERIODS: []Period_T = [
-    (day: d, slot: s) for d in DAYS for s in 1..MAX_SLOTS
-]
-
-def is_unavailable(t: str, d: DAYS, s: int) -> bool:
-    for ut, ud, us in teacher_unavail:
-        if ut == t and ud == d and us == s:
-            return True
-    return False
-
-
-var cs_keys: []ClassSubject_T = [
-    (cls: c, subj: s)
-    for c in CLASSES if c in requirements
-    for s in SUBJECTS if s in requirements[c] and requirements[c][s] > 0
-]
-
-var lessons: []Lesson_T = [
-    (cls: cs.cls, subj: cs.subj, occ: occ)
-    for cs in cs_keys
-    for occ in 0..<requirements[cs.cls][cs.subj]
-]
-
-var all_candidates: {ClassSubject_T}[]Value_T = {
-    cs: [
-        (teacher: t, room: r, period: p)
-        for t in TEACHERS
-        for r in ROOMS
-        for p in PERIODS
-        if t in can_teach and cs.subj in can_teach[t]
-           and room_capacity[r] >= class_size[cs.cls]
-           and (cs.subj not in subject_room_type
-                or room_type[r] == subject_room_type[cs.subj])
-           and not is_unavailable(t, p.day, p.slot)
-    ]
-    for cs in cs_keys
-}
-
-var lesson_cs:    []ClassSubject_T = [(cls: l.cls, subj: l.subj) for l in lessons]
-var lesson_cands: [][]Value_T      = [all_candidates[cs] for cs in lesson_cs]
-
-let N_LESSONS: int = len(lessons)
-
-# Index: lessons_of_class[class] = list of lesson indices for that class
-var lessons_of_class: {str}[]int = {:}
-for ki in 0..<N_LESSONS:
-    let c: str = lessons[ki].cls
-    if c not in lessons_of_class:
-        lessons_of_class[c] = []
-    lessons_of_class[c].append(ki)
-
-# Index: lessons_of_class_subj[(class,subject)] = list of lesson indices
-var lessons_of_class_subj: {str}[]int = {:}
-for ki in 0..<N_LESSONS:
-    let key: str = lessons[ki].cls + "\x00" + lessons[ki].subj
-    if key not in lessons_of_class_subj:
-        lessons_of_class_subj[key] = []
-    lessons_of_class_subj[key].append(ki)
-
-# Index: lessons_by_teacher_cand[lesson_idx][cand_idx] = teacher name
-# For teacher_day_soft we need to know which lessons *can* be taught by a teacher.
-# Since teacher is fixed per candidate, we precompute for each teacher which
-# (lesson, cand_idx) pairs have that teacher — but that's complex.
-# Simpler: build lessons_of_teacher based on who can teach each lesson.
-var lessons_of_teacher: {str}[]int = {:}
-for ki in 0..<N_LESSONS:
-    for cand in lesson_cands[ki]:
-        let t: str = cand.teacher
-        if t not in lessons_of_teacher:
-            lessons_of_teacher[t] = []
-        # avoid duplicates
-        var found_t: bool = False
-        for existing in lessons_of_teacher[t]:
-            if existing == ki:
-                found_t = True
-        if not found_t:
-            lessons_of_teacher[t].append(ki)
-
-
-# ============================================================
-# STATE, ENERGY, MOVES
-# ============================================================
-
-# state[k] is always a valid candidate index into lesson_cands[k] — no
-# -1 sentinel, unlike the backtracking version.
-type State_T is []int
-
-
-def class_day_soft(state: State_T, c: str, d: DAYS) -> int:
-    """Soft cost for one (class, day) pair: holes + early/late penalties."""
-    var first_sl: int = MAX_SLOTS + 1
-    var last_sl:  int = 0
-    var count:    int = 0
-    for k in lessons_of_class[c]:
-        let v: Value_T = lesson_cands[k][state[k]]
-        if v.period.day == d:
-            count = count + 1
-            if v.period.slot < first_sl:
-                first_sl = v.period.slot
-            if v.period.slot > last_sl:
-                last_sl = v.period.slot
-    if count == 0:
-        return 0
-    var pen: int = W_CLASS_HOLES * ((last_sl - first_sl + 1) - count)
-    if first_sl == 1:
-        pen = pen + W_AVOID_FIRST_SLOT
-    if last_sl == MAX_SLOTS:
-        pen = pen + W_AVOID_LAST_SLOT
-    return pen
-
-
-def teacher_day_soft(state: State_T, t: str, d: DAYS) -> int:
-    """Soft cost for one (teacher, day) pair: spread."""
-    var first_sl: int = MAX_SLOTS + 1
-    var last_sl:  int = 0
-    var count:    int = 0
-    for k in lessons_of_teacher[t]:
-        let v: Value_T = lesson_cands[k][state[k]]
-        if v.teacher == t and v.period.day == d:
-            count = count + 1
-            if v.period.slot < first_sl:
-                first_sl = v.period.slot
-            if v.period.slot > last_sl:
-                last_sl = v.period.slot
-    if count <= 1:
-        return 0
-    return W_TEACHER_SPREAD * ((last_sl - first_sl + 1) - count)
-
-
-def class_day_consec(state: State_T, c: str, d: DAYS) -> int:
-    """Consecutive same-subject penalty for one (class, day) pair."""
-    var pen: int = 0
-    for sl in 2..MAX_SLOTS:
-        var subj_cur:  str = ""
-        var subj_prev: str = ""
-        for k in lessons_of_class[c]:
-            let v: Value_T = lesson_cands[k][state[k]]
-            if v.period.day == d:
-                if v.period.slot == sl:
-                    subj_cur = lessons[k].subj
-                elif v.period.slot == sl - 1:
-                    subj_prev = lessons[k].subj
-        if subj_cur != "" and subj_cur == subj_prev:
-            pen = pen + 1000
-    return pen
-
-
-def teacher_slot_pref_penalty(state: State_T) -> int:
-    """Penalty for lessons scheduled outside a teacher's preferred slots."""
-    var pen: int = 0
-    for k in 0..<N_LESSONS:
-        let v: Value_T = lesson_cands[k][state[k]]
-        let t: str = v.teacher
-        if t in teacher_pref_slots and len(teacher_pref_slots[t]) > 0:
-            if v.period.slot not in teacher_pref_slots[t]:
-                pen = pen + W_TEACHER_SLOT_PREF
-    return pen
-
-
-def heavy_morning_penalty(state: State_T) -> int:
-    """Penalty for heavy subjects scheduled after MORNING_THRESHOLD."""
-    var pen: int = 0
-    for k in 0..<N_LESSONS:
-        let s: str = lessons[k].subj
-        if s in heavy_subjects:
-            let sl: int = lesson_cands[k][state[k]].period.slot
-            if sl > MORNING_THRESHOLD:
-                pen = pen + W_HEAVY_MORNING
-    return pen
-
-
-def class_subj_spread(state: State_T, c: str, s: str) -> int:
-    """Penalty when lessons of (class, subject) are clustered on few days.
-    = total_lessons - distinct_days_used  (0 when perfectly spread)."""
-    let key: str = c + "\x00" + s
-    if key not in lessons_of_class_subj:
-        return 0
-    var days_used: {str}bool = {:}
-    for k in lessons_of_class_subj[key]:
-        let d: str = lesson_cands[k][state[k]].period.day'Image
-        days_used[d] = True
-    let total: int = len(lessons_of_class_subj[key])
-    return W_SUBJECT_DAILY_SPREAD * (total - len(days_used))
-
-
-def soft_score(state: State_T) -> int:
-    """Full soft score — O(N²). Used only for initial score; delta_soft is used in the loop."""
-    var pen: int = 0
-    for c in CLASSES:
-        for d in DAYS:
-            pen = pen + class_day_consec(state, c, d)
-            pen = pen + class_day_soft(state, c, d)
-        for s in SUBJECTS:
-            pen = pen + class_subj_spread(state, c, s)
-    for t in TEACHERS:
-        for d in DAYS:
-            pen = pen + teacher_day_soft(state, t, d)
-    pen = pen + heavy_morning_penalty(state)
-    pen = pen + teacher_slot_pref_penalty(state)
-    return pen
-
-
-def delta_soft(state: State_T, li: int, new_idx: int) -> int:
-    """O(N) incremental soft delta when lesson li moves to new_idx.
-    Only the (class, day_old), (class, day_new), (teacher, day_old),
-    (teacher, day_new) pairs are affected.
-    """
-    let old_v: Value_T = lesson_cands[li][state[li]]
-    let new_v: Value_T = lesson_cands[li][new_idx]
-    let c: str  = lessons[li].cls
-    let t: str  = old_v.teacher
-    let t2: str = new_v.teacher
-    let d_old: DAYS = old_v.period.day
-    let d_new: DAYS = new_v.period.day
-
-    let s: str = lessons[li].subj
-
-    # Subtract old contributions, add new ones
-    var before: int = class_day_consec(state, c, d_old) + class_day_soft(state, c, d_old)
-    var after_s: int = 0
-    if d_new != d_old:
-        before = before + class_day_consec(state, c, d_new) + class_day_soft(state, c, d_new)
-
-    before = before + teacher_day_soft(state, t, d_old)
-    if t2 != t or d_new != d_old:
-        before = before + teacher_day_soft(state, t2, d_new)
-
-    before = before + class_subj_spread(state, c, s)
-
-    # Temporarily apply the move
-    var tmp: State_T = state
-    tmp[li] = new_idx
-
-    after_s = class_day_consec(tmp, c, d_old) + class_day_soft(tmp, c, d_old)
-    if d_new != d_old:
-        after_s = after_s + class_day_consec(tmp, c, d_new) + class_day_soft(tmp, c, d_new)
-
-    after_s = after_s + teacher_day_soft(tmp, t, d_old)
-    if t2 != t or d_new != d_old:
-        after_s = after_s + teacher_day_soft(tmp, t2, d_new)
-
-    after_s = after_s + class_subj_spread(tmp, c, s)
-
-    # heavy morning: only the moved lesson's subject/slot changes
-    if s in heavy_subjects:
-        if old_v.period.slot > MORNING_THRESHOLD:
-            before = before + W_HEAVY_MORNING
-        if new_v.period.slot > MORNING_THRESHOLD:
-            after_s = after_s + W_HEAVY_MORNING
-
-    # teacher slot preference: teacher may change (new candidate), slot always changes
-    let old_t: str = old_v.teacher
-    let new_t: str = new_v.teacher
-    if old_t in teacher_pref_slots and len(teacher_pref_slots[old_t]) > 0:
-        if old_v.period.slot not in teacher_pref_slots[old_t]:
-            before = before + W_TEACHER_SLOT_PREF
-    if new_t in teacher_pref_slots and len(teacher_pref_slots[new_t]) > 0:
-        if new_v.period.slot not in teacher_pref_slots[new_t]:
-            after_s = after_s + W_TEACHER_SLOT_PREF
-
-    return after_s - before
-
-
-def teacher_day_count(state: State_T, t: str, d: DAYS) -> int:
-    var n: int = 0
-    for k in lessons_of_teacher[t]:
-        if lesson_cands[k][state[k]].teacher == t and lesson_cands[k][state[k]].period.day == d:
-            n = n + 1
-    return n
-
-
-def hard_count(state: State_T) -> int:
-    """Number of hard constraint violations (clashes + teacher daily load)."""
-    var n: int = 0
-    for i in 0..<N_LESSONS - 1:
-        let vi: Value_T = lesson_cands[i][state[i]]
-        for j in i + 1..<N_LESSONS:
-            let vj: Value_T = lesson_cands[j][state[j]]
-            if vi.period != vj.period:
-                continue
-            if vi.teacher == vj.teacher:
-                n = n + 1
-                continue
-            if lessons[i].cls == lessons[j].cls:
-                n = n + 1
-                continue
-            if vi.room == vj.room:
-                n = n + 1
-    # teacher daily load
-    for t in lessons_of_teacher:
-        for d in DAYS:
-            let cnt: int = teacher_day_count(state, t, d)
-            if cnt > MAX_TEACHER_PERIODS_DAY:
-                n = n + cnt - MAX_TEACHER_PERIODS_DAY
-    return n
-
-
-def delta_hard(state: State_T, li: int, new_idx: int) -> int:
-    let old_v: Value_T = lesson_cands[li][state[li]]
-    let new_v: Value_T = lesson_cands[li][new_idx]
-    var d: int = 0
-    for k in 0..<N_LESSONS:
-        if k == li:
-            continue
-        let other: Value_T = lesson_cands[k][state[k]]
-        if old_v.period == other.period:
-            if old_v.teacher == other.teacher:
-                d = d - 1
-            elif lessons[li].cls == lessons[k].cls:
-                d = d - 1
-            elif old_v.room == other.room:
-                d = d - 1
-        if new_v.period == other.period:
-            if new_v.teacher == other.teacher:
-                d = d + 1
-            elif lessons[li].cls == lessons[k].cls:
-                d = d + 1
-            elif new_v.room == other.room:
-                d = d + 1
-    # teacher daily load delta for the moved lesson's teacher
-    if old_v.teacher == new_v.teacher:
-        if old_v.period.day != new_v.period.day:
-            let old_cnt: int = teacher_day_count(state, old_v.teacher, old_v.period.day)
-            let new_cnt: int = teacher_day_count(state, new_v.teacher, new_v.period.day)
-            if old_cnt > MAX_TEACHER_PERIODS_DAY:
-                d = d - 1
-            if new_cnt >= MAX_TEACHER_PERIODS_DAY:
-                d = d + 1
-    else:
-        let old_cnt: int = teacher_day_count(state, old_v.teacher, old_v.period.day)
-        let new_cnt: int = teacher_day_count(state, new_v.teacher, new_v.period.day)
-        if old_cnt > MAX_TEACHER_PERIODS_DAY:
-            d = d - 1
-        if new_cnt >= MAX_TEACHER_PERIODS_DAY:
-            d = d + 1
-    return d
-
-
-# ============================================================
-# SIMULATED ANNEALING — two-phase
-#
-# Phase 1: minimise hard violations (T starts high, accepts bad moves
-#          to escape local minima). Stops when hard_count == 0.
-# Phase 2: minimise soft score while hard_count stays 0
-#          (T starts low — soft costs are O(1–10), not O(1000)).
-# This two-phase design is the standard approach when hard and soft
-# costs differ by orders of magnitude: a single temperature schedule
-# cannot be right for both scales simultaneously.
-# ============================================================
-
-def solve_sa(max_steps: int, seed: int = 42) -> (State_T, int, int):
-    """Phase 1: minimise hard violations only (pure hard energy for speed)."""
-    randomize(seed)
-    var state: State_T = [rand(0..len(lesson_cands[k]) - 1) for k in 0..<N_LESSONS]
-    var cur_hard: int = hard_count(state)
-    var best_state: State_T = state
-    var best_hard: int = cur_hard
-
-    var T: float = 2.0
-    let alpha: float = 0.9999
-
-    for step in 0..<max_steps:
-        if cur_hard == 0:
-            return (state, 0, step)
-
-        let li: int = rand(0..N_LESSONS - 1)
-        let n_cands: int = len(lesson_cands[li])
-        if n_cands < 2:
-            T = T * alpha
-            continue
-        var new_idx: int = rand(0..n_cands - 1)
-        if new_idx == state[li]:
-            new_idx = new_idx + 1
-            if new_idx >= n_cands:
-                new_idx = 0
-
-        let dH: int = delta_hard(state, li, new_idx)
-        if dH <= 0 or rand(0.0..1.0) < exp(-float(dH) / T):
-            state[li] = new_idx
-            cur_hard = cur_hard + dH
-            if cur_hard < best_hard:
-                best_hard = cur_hard
-                best_state = state
-        T = T * alpha
-
-    return (best_state, best_hard, max_steps)
-
-
-def optimise_soft(state: State_T, max_steps: int) -> State_T:
-    """Phase 2: minimise soft score, rejecting any move that adds hard violations."""
-    var cur_state: State_T = state
-    var cur_soft: int = soft_score(cur_state)
-    var best_state: State_T = cur_state
-    var best_soft: int = cur_soft
-
-    var T: float = 5.0
-    let alpha: float = 0.9999
-
-    for step in 0..<max_steps:
-        let li: int = rand(0..N_LESSONS - 1)
-        let n_cands: int = len(lesson_cands[li])
-        if n_cands < 2:
-            T = T * alpha
-            continue
-        var new_idx: int = rand(0..n_cands - 1)
-        if new_idx == cur_state[li]:
-            new_idx = new_idx + 1
-            if new_idx >= n_cands:
-                new_idx = 0
-
-        if delta_hard(cur_state, li, new_idx) > 0:
-            T = T * alpha
-            continue
-
-        let dS: int = delta_soft(cur_state, li, new_idx)
-        if dS <= 0 or rand(0.0..1.0) < exp(-float(dS) / T):
-            cur_state[li] = new_idx
-            cur_soft = cur_soft + dS
-            if cur_soft < best_soft:
-                best_soft = cur_soft
-                best_state = cur_state
-                if best_soft == 0:
-                    return best_state
-        T = T * alpha
-
-    return best_state
-
-
-# ============================================================
-# SOLVE
-# ============================================================
+# ── stdin mode: read JSON problem, solve, print JSON result ──────────────────
+if stdin_mode:
+    var input_lines: []str = []
+    var line: str = ""
+    while not endOfFile(stdin):
+        line = readLine(stdin)
+        input_lines.append(line)
+    let input_json: str = join(input_lines, "\n")
+    let data: JsonNode = parseJson(input_json)
+    print(solve_to_json(data))
+    quit(0)
+
+# ── DB mode ───────────────────────────────────────────────────────────────────
+if db_path == "":
+    print("Error: --db PATH required (or use --stdin)")
+    usage(1)
+
+var conn: DB_T = DB_T(db_path)
+db_init(conn)
+var p: str = problem_name
+var loaded: str = db_load(conn, p)
+conn.close()
+
+let data: JsonNode = parseJson(loaded)
+if "error" in data:
+    print("{\"ok\":false,\"error\":\"" + data["error"].getStr() + "\"}")
+    quit(1)
 
 if not json_output:
+    print(f"Loaded problem '{p}' from {db_path}")
     print("Solving timetable via simulated annealing ...")
     print("")
 
-let t0: float = cpuTime()
-let (phase1_state, hard_violations, steps1) = solve_sa(max_steps = 200000)
-var final_state: State_T = phase1_state
-if hard_violations == 0:
-    let soft0: int = soft_score(phase1_state)
-    if soft0 == 0:
-        if not json_output:
-            print(f"Phase 1: valid schedule in {steps1} steps — done.")
-    else:
-        if not json_output:
-            print(f"Phase 1: valid schedule in {steps1} steps — optimising soft constraints ...")
-        final_state = optimise_soft(phase1_state, max_steps = 500000)
-let elapsed: float = cpuTime() - t0
-
-if not json_output:
-    if hard_violations == 0:
-        print(f"Solved in {elapsed*1000.0:.1f} ms")
-    else:
-        print(f"Gave up in {elapsed*1000.0:.1f} ms ({hard_violations} hard violations remain)")
-        print("Try a higher max_steps or different seed.")
-
-
-# ============================================================
-# SOFT SCORE COMPUTATION (shared by both output modes)
-# ============================================================
-
-var holes:      int = 0
-var first_hits: int = 0
-var last_hits:  int = 0
-var t_spread:   int = 0
-
-for c in CLASSES:
-    for d in DAYS:
-        var first_sl: int = MAX_SLOTS + 1
-        var last_sl:  int = 0
-        var count:    int = 0
-        for k in 0..<N_LESSONS:
-            if lessons[k].cls != c:
-                continue
-            let v: Value_T = lesson_cands[k][final_state[k]]
-            if v.period.day == d:
-                count = count + 1
-                if v.period.slot < first_sl:
-                    first_sl = v.period.slot
-                if v.period.slot > last_sl:
-                    last_sl = v.period.slot
-        if count > 0:
-            holes = holes + (last_sl - first_sl + 1) - count
-            if first_sl == 1:
-                first_hits = first_hits + 1
-            if last_sl == MAX_SLOTS:
-                last_hits = last_hits + 1
-
-for t in TEACHERS:
-    for d in DAYS:
-        var first_sl: int = MAX_SLOTS + 1
-        var last_sl:  int = 0
-        var count:    int = 0
-        for k in 0..<N_LESSONS:
-            let v: Value_T = lesson_cands[k][final_state[k]]
-            if v.teacher == t and v.period.day == d:
-                count = count + 1
-                if v.period.slot < first_sl:
-                    first_sl = v.period.slot
-                if v.period.slot > last_sl:
-                    last_sl = v.period.slot
-        if count > 1:
-            t_spread = t_spread + (last_sl - first_sl + 1) - count
-
-var teacher_pref_hits: int = 0
-for k in 0..<N_LESSONS:
-    let v: Value_T = lesson_cands[k][final_state[k]]
-    let t: str = v.teacher
-    if t in teacher_pref_slots and len(teacher_pref_slots[t]) > 0:
-        if v.period.slot not in teacher_pref_slots[t]:
-            teacher_pref_hits = teacher_pref_hits + 1
-
-var heavy_morning: int = 0
-for k in 0..<N_LESSONS:
-    let s: str = lessons[k].subj
-    if s in heavy_subjects:
-        if lesson_cands[k][final_state[k]].period.slot > MORNING_THRESHOLD:
-            heavy_morning = heavy_morning + 1
-
-var subj_spread: int = 0
-for c in CLASSES:
-    for s in SUBJECTS:
-        let key: str = c + "\x00" + s
-        if key not in lessons_of_class_subj:
-            continue
-        var days_used: {str}bool = {:}
-        for k in lessons_of_class_subj[key]:
-            let v: Value_T = lesson_cands[k][final_state[k]]
-            days_used[v.period.day'Image] = True
-        let total: int = len(lessons_of_class_subj[key])
-        subj_spread = subj_spread + (total - len(days_used))
-
-let soft_total: int = W_CLASS_HOLES * holes + W_AVOID_FIRST_SLOT * first_hits + W_AVOID_LAST_SLOT * last_hits + W_TEACHER_SPREAD * t_spread + W_SUBJECT_DAILY_SPREAD * subj_spread + W_HEAVY_MORNING * heavy_morning + W_TEACHER_SLOT_PREF * teacher_pref_hits
-
-
-# ============================================================
-# OUTPUT
-# ============================================================
+let result_json: str = solve_to_json(data)
 
 if json_output:
-    if hard_violations > 0:
-        print("{\"ok\":false,\"error\":\"No valid schedule found — " + hard_violations'Image + " hard violations remain\"}")
-    else:
-        var jlines: []str = []
-        for k in 0..<N_LESSONS:
-            let v: Value_T = lesson_cands[k][final_state[k]]
-            let c: str   = lessons[k].cls
-            let s: str   = lessons[k].subj
-            let occ: int = lessons[k].occ
-            let t: str   = v.teacher
-            let r: str   = v.room
-            let d: str   = v.period.day'Image
-            let sl: int  = v.period.slot
-            jlines.append("{\"class\":\"" + c + "\",\"subject\":\"" + s + "\",\"occ\":" + occ'Image + ",\"teacher\":\"" + t + "\",\"room\":\"" + r + "\",\"day\":\"" + d + "\",\"slot\":" + sl'Image + "}")
-        let schedule_json: str = "[" + join(jlines, ",") + "]"
-        let elapsed_ms: float  = elapsed * 1000.0
-        print("{\"ok\":true,\"schedule\":" + schedule_json + ",\"stats\":{\"elapsed_ms\":" + elapsed_ms'Image + ",\"soft_penalty\":" + soft_total'Image + ",\"soft_details\":{\"class_holes\":" + holes'Image + ",\"avoid_first_slot\":" + first_hits'Image + ",\"avoid_last_slot\":" + last_hits'Image + ",\"teacher_spread\":" + t_spread'Image + ",\"subject_daily_spread\":" + subj_spread'Image + ",\"heavy_morning\":" + heavy_morning'Image + ",\"teacher_slot_pref\":" + teacher_pref_hits'Image + "}}}")
+    print(result_json)
 else:
-    # ── Human-readable display ──────────────────────────────
+    let result: JsonNode = parseJson(result_json)
+    if not result["ok"].getBool():
+        var errmsg: str = "unknown error"
+        if "error" in result:
+            errmsg = result["error"].getStr()
+        print("Error: " + errmsg)
+        quit(1)
 
-    def entry_for(c: str, d: DAYS, sl: int, state: State_T) -> str:
-        for k in 0..<N_LESSONS:
-            if lessons[k].cls != c:
-                continue
-            let v: Value_T = lesson_cands[k][state[k]]
-            if v.period.day == d and v.period.slot == sl:
-                return f"{lessons[k].subj}({v.teacher})"
-        return "--"
-
-    for c in CLASSES:
-        print("")
-        print("=" * 54)
-        print(f"  Timetable for class {c}")
-        print("=" * 54)
-        var header: str = " " * 8
-        for d in DAYS:
-            header = header + f"{d'Image:>10}"
-        print(header)
-        for sl in 1..MAX_SLOTS:
-            var row: str = f"Slot {sl}  "
-            for d in DAYS:
-                row = row + f"{entry_for(c, d, sl, final_state):>10}"
-            print(row)
-
-    print("")
-    print("=" * 54)
-    print("  Coverage check")
-    print("=" * 54)
-    let h_cls: str = "Class"
-    let h_sub: str = "Subject"
-    let h_req: str = "Required"
-    let h_sch: str = "Scheduled"
-    print(f"{h_cls:<8} {h_sub:<10} {h_req:>8} {h_sch:>9}")
-    print("-" * 38)
-    var all_ok: bool = True
-    for cs in cs_keys:
-        let req: int = requirements[cs.cls][cs.subj]
-        var scheduled: int = 0
-        for k in 0..<N_LESSONS:
-            if lessons[k].cls == cs.cls and lessons[k].subj == cs.subj:
-                scheduled = scheduled + 1
-        let ok: str = ("OK" if scheduled == req else "FAIL")
-        if scheduled != req:
-            all_ok = False
-        print(f"{cs.cls:<8} {cs.subj:<10} {req:>8} {scheduled:>8}  {ok}")
-
-    print("")
-    if hard_violations > 0:
-        print(f"Schedule has {hard_violations} unresolved hard constraint violations")
-    elif all_ok:
-        print("All hard constraints satisfied")
-    else:
-        print("Some hard constraints violated")
-
-    print("")
-    print("=" * 54)
-    print("  Soft constraint score")
-    print("=" * 54)
-    if soft_total == 0:
-        print("All soft constraints satisfied")
-    else:
-        print(f"Soft score: {soft_total}")
-        if holes > 0:
-            print(f"  - Class holes:       {holes} (weight {W_CLASS_HOLES})")
-        if first_hits > 0:
-            print(f"  - Early starts:      {first_hits} (weight {W_AVOID_FIRST_SLOT})")
-        if last_hits > 0:
-            print(f"  - Late finishes:     {last_hits} (weight {W_AVOID_LAST_SLOT})")
-        if t_spread > 0:
-            print(f"  - Teacher spread:    {t_spread} (weight {W_TEACHER_SPREAD})")
-        if subj_spread > 0:
-            print(f"  - Subject clustering:{subj_spread} (weight {W_SUBJECT_DAILY_SPREAD})")
-        if heavy_morning > 0:
-            print(f"  - Heavy after noon:  {heavy_morning} (weight {W_HEAVY_MORNING})")
-        if teacher_pref_hits > 0:
-            print(f"  - Teacher slot pref: {teacher_pref_hits} (weight {W_TEACHER_SLOT_PREF})")
+    print_timetable(data, result_json)

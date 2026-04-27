@@ -1693,7 +1693,16 @@ def to_nim(self):
 @method(simple_stmt)
 def to_nim(self):
     """simple_stmt: assign_stmt | aug_assign_stmt | ann_assign_stmt | decl_* | return_stmt | del_stmt | assert_stmt | raise_stmt | pass_stmt | break_stmt | continue_stmt | import_stmt | from_stmt | type_alias_stmt | expr_stmt"""
-    return self.nodes[0].to_nim()
+    child = self.nodes[0]
+    # Top-level 'await expr()' outside an async def must use waitFor in Nim
+    if isinstance(child, await_expr) or (
+        hasattr(child, "nodes") and len(child.nodes) == 1
+        and isinstance(child.nodes[0], await_expr)
+    ):
+        from hek_nim_expr import await_expr as _ae
+        inner = child if isinstance(child, _ae) else child.nodes[0]
+        return f"waitFor {inner.nodes[0].to_nim()}"
+    return child.to_nim()
 
 
 # --- stmt_line ---
@@ -1702,7 +1711,11 @@ def to_nim(self):
     """stmt_line: simple_stmt NL -> Nim: simple statement line"""
     from hek_tokenize import RichNL
 
-    parts = [self.nodes[0].to_nim()]
+    _first = self.nodes[0].to_nim()
+    # Top-level 'await expr' must be 'waitFor expr' in Nim
+    if _first.startswith("await "):
+        _first = "waitFor " + _first[len("await "):]
+    parts = [_first]
     newline_node = None
 
     for node in self.nodes[1:]:

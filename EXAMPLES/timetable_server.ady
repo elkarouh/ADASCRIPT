@@ -1,0 +1,213 @@
+#!/usr/bin/env py2nim
+#ady2nim-args c --cc:clang --clang.exe:zigcc --clang.linkerexe:zigcc -d:release
+"""
+Timetable HTTP Server — AdaScript
+==================================
+Full replacement for timetable_server.py.  Uses Nim's asynchttpserver.
+
+Usage:  ./timetable_server.ady [--db PATH] [--port N]
+
+API (same as before):
+  GET  /               -> serves timetable_viewer.jsx (the HTML app)
+  GET  /list           -> {"names": [...]}
+  GET  /load?name=X    -> {"ok": true, "data": {...}}
+  POST /save           <- {"name": "X", "data": {...}}  -> {"ok": true}
+  POST /delete         <- {"name": "X"}                 -> {"ok": true}
+  POST /solve          <- problem dict                  -> {"ok": true, "schedule": [...], ...}
+  POST /validate       <- {"schedule":[...], "original":[...], "data":{...}} -> {"ok":true}
+"""
+
+nimport timetable_engine
+nimport db
+nimport asynchttpserver
+nimport asyncdispatch
+nimport json
+nimport strutils
+nimport os
+nimport uri
+
+
+# ── arg parsing ──────────────────────────────────────────────────────────────
+
+var db_path:  str = "/tmp/timetable.db"
+var port_num: int = 8765
+
+var _take_db:   bool = False
+var _take_port: bool = False
+for arg in $@:
+    case arg:
+        when "--db":
+            _take_db = True
+        when "--port":
+            _take_port = True
+        when others:
+            if _take_db:
+                db_path = arg
+                _take_db = False
+            elif _take_port:
+                port_num = parseInt(arg)
+                _take_port = False
+
+# ── DB init ───────────────────────────────────────────────────────────────────
+
+var conn: DB_T = DB_T(db_path)
+db_init(conn)
+
+# Seed DEFAULT problem if missing
+let existing: []str = db_list(conn)
+var has_default: bool = False
+for n in existing:
+    if n == "DEFAULT":
+        has_default = True
+if not has_default:
+    var default_name: str = "DEFAULT"
+    let default_data: str = (
+        "{\"classes\":[{\"name\":\"Year7A\",\"size\":30},{\"name\":\"Year7B\",\"size\":28},{\"name\":\"Year8A\",\"size\":30},{\"name\":\"Year8B\",\"size\":27},{\"name\":\"Year9A\",\"size\":29},{\"name\":\"Year9B\",\"size\":26}]," &
+        "\"subjects\":[\"Math\",\"English\",\"Science\",\"History\",\"Geography\",\"French\",\"PE\",\"Art\"]," &
+        "\"teachers\":[\"Adams\",\"Brown\",\"Clarke\",\"Davies\",\"Evans\",\"Foster\",\"Green\",\"Harris\",\"Ito\",\"Jones\"]," &
+        "\"rooms\":[{\"name\":\"R01\",\"capacity\":32,\"room_type\":\"standard\"},{\"name\":\"R02\",\"capacity\":32,\"room_type\":\"standard\"},{\"name\":\"R03\",\"capacity\":32,\"room_type\":\"standard\"},{\"name\":\"R04\",\"capacity\":32,\"room_type\":\"standard\"},{\"name\":\"Lab1\",\"capacity\":30,\"room_type\":\"lab\"},{\"name\":\"Lab2\",\"capacity\":30,\"room_type\":\"lab\"},{\"name\":\"Gym\",\"capacity\":60,\"room_type\":\"gym\"},{\"name\":\"ArtRm\",\"capacity\":32,\"room_type\":\"art\"}]," &
+        "\"requirements\":{\"Year7A\":{\"Math\":4,\"English\":4,\"Science\":3,\"History\":2,\"Geography\":2,\"French\":2,\"PE\":2,\"Art\":1},\"Year7B\":{\"Math\":4,\"English\":4,\"Science\":3,\"History\":2,\"Geography\":2,\"French\":2,\"PE\":2,\"Art\":1},\"Year8A\":{\"Math\":4,\"English\":4,\"Science\":3,\"History\":2,\"Geography\":2,\"French\":2,\"PE\":2,\"Art\":1},\"Year8B\":{\"Math\":4,\"English\":4,\"Science\":3,\"History\":2,\"Geography\":2,\"French\":2,\"PE\":2,\"Art\":1},\"Year9A\":{\"Math\":4,\"English\":4,\"Science\":3,\"History\":2,\"Geography\":2,\"French\":2,\"PE\":2,\"Art\":1},\"Year9B\":{\"Math\":4,\"English\":4,\"Science\":3,\"History\":2,\"Geography\":2,\"French\":2,\"PE\":2,\"Art\":1}}," &
+        "\"can_teach\":{\"Adams\":[\"Math\"],\"Brown\":[\"English\",\"History\"],\"Clarke\":[\"Math\",\"French\"],\"Davies\":[\"Science\",\"Geography\"],\"Evans\":[\"English\",\"Art\"],\"Foster\":[\"History\",\"Geography\"],\"Green\":[\"Science\"],\"Harris\":[\"PE\"],\"Ito\":[\"French\",\"Art\"],\"Jones\":[\"English\",\"PE\"]}," &
+        "\"subject_room_type\":{\"Science\":\"lab\",\"PE\":\"gym\",\"Art\":\"art\"}," &
+        "\"teacher_slot_pref\":[]," &
+        "\"hard_constraints\":{\"max_consecutive_same_subj\":2,\"max_teacher_periods_day\":4}," &
+        "\"soft_constraints\":{\"weight_class_holes\":1,\"weight_avoid_first_slot\":2,\"weight_avoid_last_slot\":1,\"weight_teacher_spread\":1,\"weight_subject_daily_spread\":2,\"weight_heavy_morning\":3,\"morning_threshold\":4,\"weight_teacher_slot_pref\":2}," &
+        "\"heavy_subjects\":[]}"
+    )
+    db_save(conn, default_name, parseJson(default_data))
+
+# ── viewer HTML path ──────────────────────────────────────────────────────────
+
+let viewer_path: str = joinPath(getAppDir(), "timetable_viewer.jsx")
+
+# ── helpers ───────────────────────────────────────────────────────────────────
+
+def json_resp(body: str) -> (string, HttpHeaders):
+    let headers: HttpHeaders = newHttpHeaders([
+        ("Content-Type", "application/json"),
+        ("Access-Control-Allow-Origin", "*"),
+        ("Access-Control-Allow-Methods", "GET, POST, OPTIONS"),
+        ("Access-Control-Allow-Headers", "Content-Type"),
+    ])
+    return (body, headers)
+
+def ok_json(msg: str = "") -> str:
+    if msg == "":
+        return "{\"ok\":true}"
+    return "{\"ok\":true,\"message\":\"" + msg + "\"}"
+
+def err_json(msg: str) -> str:
+    let safe: str = msg.replace("\"", "'")
+    return "{\"ok\":false,\"error\":\"" + safe + "\"}"
+
+
+# ── request handler ───────────────────────────────────────────────────────────
+
+async def handler(req: Request):
+    let meth: string = req.reqMethod'Image
+    let raw_path: string = req.url.path
+    let path_part: string = raw_path.split("?")[0]
+
+    if meth == "OPTIONS":
+        let (_, hdrs) = json_resp("")
+        await req.respond(Http204, "", hdrs)
+        return
+
+    # GET /
+    if meth == "GET" and path_part == "/":
+        try:
+            let html: string = readFile(viewer_path)
+            let hdrs: HttpHeaders = newHttpHeaders([
+                ("Content-Type", "text/html; charset=utf-8"),
+            ])
+            await req.respond(Http200, html, hdrs)
+        except:
+            await req.respond(Http404, "Viewer not found")
+        return
+
+    # GET /list
+    if meth == "GET" and path_part == "/list":
+        let names: []str = db_list(conn)
+        var nj: []str = []
+        for n in names:
+            nj.append("\"" + n + "\"")
+        let (body, hdrs) = json_resp("{\"names\":[" + join(nj, ",") + "]}")
+        await req.respond(Http200, body, hdrs)
+        return
+
+    # GET /load?name=X
+    if meth == "GET" and path_part == "/load":
+        let qs: string = req.url.query
+        var name: str = ""
+        for part in qs.split("&"):
+            if part.startsWith("name="):
+                name = decodeUrl(part[5:])
+        if name == "":
+            let (body, hdrs) = json_resp(err_json("name parameter required"))
+            await req.respond(Http400, body, hdrs)
+            return
+        var loaded: str = db_load(conn, name)
+        let node: JsonNode = parseJson(loaded)
+        var resp_body: str
+        if "error" in node:
+            resp_body = err_json(node["error"].getStr())
+        else:
+            resp_body = "{\"ok\":true,\"data\":" + loaded + "}"
+        let (body, hdrs) = json_resp(resp_body)
+        await req.respond(Http200, body, hdrs)
+        return
+
+    # POST endpoints
+    if meth == "POST":
+        let body_str: string = req.body
+        var resp_body: str
+        try:
+            let payload: JsonNode = parseJson(body_str)
+
+            if path_part == "/save":
+                var name: str = payload["name"].getStr("")
+                if name == "":
+                    resp_body = err_json("name is required")
+                else:
+                    db_save(conn, name, payload["data"])
+                    resp_body = ok_json()
+
+            elif path_part == "/delete":
+                var name: str = payload["name"].getStr("")
+                if name == "DEFAULT":
+                    resp_body = err_json("Cannot delete DEFAULT")
+                elif name == "":
+                    resp_body = err_json("name is required")
+                else:
+                    db_delete(conn, name)
+                    resp_body = ok_json()
+
+            elif path_part == "/solve":
+                resp_body = solve_to_json(payload)
+
+            elif path_part == "/validate":
+                resp_body = validate_to_json(payload)
+
+            else:
+                resp_body = err_json("Unknown endpoint: " + path_part)
+
+        except:
+            resp_body = err_json("Bad request: " & getCurrentExceptionMsg())
+
+        let (out_body, hdrs) = json_resp(resp_body)
+        await req.respond(Http200, out_body, hdrs)
+        return
+
+    await req.respond(Http404, "Not found")
+
+
+# ── start server ──────────────────────────────────────────────────────────────
+
+print(f"Timetable server running at http://localhost:{port_num}")
+print(f"Database: {db_path}")
+let prob_list: []str = db_list(conn)
+print("Problems: " + join(prob_list, ", "))
+print("Press Ctrl-C to stop.")
+
+var server: AsyncHttpServer = newAsyncHttpServer()
+server.serve(Port(port_num), handler).waitFor()

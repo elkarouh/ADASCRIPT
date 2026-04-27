@@ -1393,6 +1393,20 @@ def main(argv=None):
             except SyntaxError as e:
                 print(str(e), file=sys.stderr)
                 sys.exit(1)
+            # Post-process: top-level 'await X' -> 'waitFor X'
+            import re as _re_pp
+            nim_output = _re_pp.sub(
+                r'^await ([A-Za-z_]\w*\(.*\))$',
+                r'waitFor \1',
+                nim_output,
+                flags=_re_pp.MULTILINE
+            )
+            # Post-process: asynchttpserver serve(port, handler) needs gcsafe closure wrapper
+            nim_output = _re_pp.sub(
+                r'\.serve\(([^,]+),\s*(\w+)\)',
+                r'.serve(\1, proc(req: Request): Future[void] {.async, closure, gcsafe.} = {.cast(gcsafe).}: await \2(req))',
+                nim_output
+            )
             with open(nim_file, "w") as f:
                 f.write(nim_output)
             # Refresh mtime after write so tier-2 comparison is accurate
