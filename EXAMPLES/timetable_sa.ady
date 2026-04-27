@@ -186,8 +186,18 @@ if db_path != "":
         subject_room_type[row[0]] = ROOM_TYPE(row[1])
 
     teacher_unavail = []
-    for row in conn.rows("SELECT teacher, day, slot FROM teacher_unavailability WHERE problem=?", [p]):
-        teacher_unavail.append((row[0], DAYS(row[1]), int(row[2])))
+    teacher_pref_slots = {:}
+    for row in conn.rows("SELECT teacher, day, slot, pref FROM teacher_slot_pref WHERE problem=?", [p]):
+        let tsp_t: str = row[0]
+        let tsp_d: DAYS = DAYS(row[1])
+        let tsp_sl: int = int(row[2])
+        let tsp_pref: str = row[3]
+        if tsp_pref == "avoid":
+            teacher_unavail.append((tsp_t, tsp_d, tsp_sl))
+        elif tsp_pref == "prefer":
+            if tsp_t not in teacher_pref_slots:
+                teacher_pref_slots[tsp_t] = {:}
+            teacher_pref_slots[tsp_t][tsp_sl] = True
 
     for row in conn.rows("SELECT max_consecutive_same_subj, max_teacher_periods_day FROM hard_constraints WHERE problem=?", [p]):
         MAX_CONSEC_SAME_SUBJ    = int(row[0])
@@ -206,14 +216,6 @@ if db_path != "":
     heavy_subjects = {:}
     for row in conn.rows("SELECT subject FROM heavy_subjects WHERE problem=?", [p]):
         heavy_subjects[row[0]] = True
-
-    teacher_pref_slots = {:}
-    for row in conn.rows("SELECT teacher, slot FROM teacher_preferred_slots WHERE problem=?", [p]):
-        let t: str = row[0]
-        let sl: int = int(row[1])
-        if t not in teacher_pref_slots:
-            teacher_pref_slots[t] = {:}
-        teacher_pref_slots[t][sl] = True
 
     conn.close()
     if not json_output:

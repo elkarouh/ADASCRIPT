@@ -118,10 +118,6 @@ table.grid td.blocked input[type=checkbox] { accent-color: #ef4444; }
 <body>
 <div id="root"></div>
 <script>
-window.onerror = (msg, src, line, col, err) => {
-  document.getElementById("root").innerHTML =
-    `<pre style="color:red;padding:20px">JS ERROR line ${line}: ${msg}\n${err&&err.stack||""}</pre>`;
-};
 </script>
 <script type="text/babel">
 const { useState, useEffect, useRef, useCallback } = React;
@@ -391,7 +387,7 @@ function App() {
 
   // New constraint state
   const [subjectRoomType,   setSubjectRoomType]   = useState({});  // {subj: type}
-  const [teacherUnavail,    setTeacherUnavail]     = useState({});  // {teacher: {day: {slot: bool}}}
+  const [teacherSlotPref,   setTeacherSlotPref]    = useState({});  // {teacher: {day: {slot: 'avoid'|'prefer'|null}}}
   const [hardConstraints,   setHardConstraints]    = useState({
     max_consecutive_same_subj: 2, max_teacher_periods_day: 4 });
   const [softConstraints,   setSoftConstraints]    = useState({
@@ -399,7 +395,6 @@ function App() {
     weight_avoid_last_slot: 1, weight_teacher_spread: 1, weight_subject_daily_spread: 2,
     weight_heavy_morning: 3, morning_threshold: 4, weight_teacher_slot_pref: 2 });
   const [heavySubjects,      setHeavySubjects]      = useState([]);   // []str
-  const [teacherPrefSlots,   setTeacherPrefSlots]   = useState({});   // {teacher: {slot: bool}}
 
   const [probName,    setProbName]    = useState("");
   const [savedNames,  setSavedNames]  = useState([]);
@@ -426,23 +421,16 @@ function App() {
         teachers.map(t => [t, subjects.filter(s => (canTeach[t]||{})[s])])
       ),
       subject_room_type: subjectRoomType,
-      teacher_unavailability: Object.entries(teacherUnavail).flatMap(
+      teacher_slot_pref: Object.entries(teacherSlotPref).flatMap(
         ([teacher, days]) => Object.entries(days).flatMap(
           ([day, slots]) => Object.entries(slots)
-            .filter(([_, blocked]) => blocked)
-            .map(([slot]) => ({ teacher, day, slot: parseInt(slot) }))
+            .filter(([_, pref]) => pref === "avoid" || pref === "prefer")
+            .map(([slot, pref]) => ({ teacher, day, slot: parseInt(slot), pref }))
         )
       ),
       hard_constraints: hardConstraints,
       soft_constraints: softConstraints,
       heavy_subjects: heavySubjects,
-      teacher_preferred_slots: Object.fromEntries(
-        Object.entries(teacherPrefSlots).reduce((acc, [t, slotMap]) => {
-          const slots = Object.keys(slotMap).filter(sl => slotMap[sl]).map(sl => parseInt(sl));
-          if (slots.length > 0) acc.push([t, slots]);
-          return acc;
-        }, [])
-      ),
     };
   }
 
@@ -473,21 +461,17 @@ function App() {
         ct[t] = Object.fromEntries((ss||[]).map(s=>[s,true]));
       setCanTeach(ct);
       setSubjectRoomType(p.subject_room_type||{});
-      // Deserialise flat unavailability list → nested {teacher:{day:{slot:bool}}}
-      const ua = {};
-      for (const { teacher, day, slot } of (p.teacher_unavailability||[])) {
-        if (!ua[teacher]) ua[teacher] = {};
-        if (!ua[teacher][day]) ua[teacher][day] = {};
-        ua[teacher][day][slot] = true;
+      // Deserialise flat teacher_slot_pref list → nested {teacher:{day:{slot:'avoid'|'prefer'}}}
+      const tsp = {};
+      for (const { teacher, day, slot, pref } of (p.teacher_slot_pref||[])) {
+        if (!tsp[teacher]) tsp[teacher] = {};
+        if (!tsp[teacher][day]) tsp[teacher][day] = {};
+        tsp[teacher][day][slot] = pref;
       }
-      setTeacherUnavail(ua);
+      setTeacherSlotPref(tsp);
       setHardConstraints(p.hard_constraints || { max_consecutive_same_subj:2, max_teacher_periods_day:4 });
       setSoftConstraints(p.soft_constraints || { weight_class_holes:1, weight_avoid_first_slot:2, weight_avoid_last_slot:1, weight_teacher_spread:1, weight_subject_daily_spread:2, weight_heavy_morning:3, morning_threshold:4, weight_teacher_slot_pref:2 });
       setHeavySubjects(p.heavy_subjects || []);
-      const tps = {};
-      for (const [t, slots] of Object.entries(p.teacher_preferred_slots || {}))
-        tps[t] = Object.fromEntries((slots||[]).map(sl=>[sl,true]));
-      setTeacherPrefSlots(tps);
       setProbName(name); setResult(null); setSchedule([]); setStatusMsg(null); setPage("editor");
       setUnavailTeacher((p.teachers||[])[0] || null);
     } catch(e) { setStatusMsg({text:"Load failed: "+e.message,ok:false}); }
@@ -497,11 +481,10 @@ function App() {
     if (!confirm("Clear current problem and start fresh?")) return;
     setClasses([]); setSubjects([]); setTeachers([]); setRooms([]);
     setRequirements({}); setCanTeach({});
-    setSubjectRoomType({}); setTeacherUnavail({});
+    setSubjectRoomType({}); setTeacherSlotPref({});
     setHardConstraints({ max_consecutive_same_subj:2, max_teacher_periods_day:4 });
     setSoftConstraints({ weight_class_holes:1, weight_avoid_first_slot:2, weight_avoid_last_slot:1, weight_teacher_spread:1, weight_subject_daily_spread:2, weight_heavy_morning:3, morning_threshold:4, weight_teacher_slot_pref:2 });
     setHeavySubjects([]);
-    setTeacherPrefSlots({});
     setProbName(""); setResult(null); setSchedule([]); setStatusMsg(null);
   }
 
@@ -531,12 +514,12 @@ function App() {
     setHeavySubjects(p=>p.filter(s=>s!==n));
   };
   const addTeacher   = ([n])      => { if(!n||teachers.includes(n))return; setTeachers(p=>[...p,n]); setCanTeach(p=>({...p,[n]:{}})); setUnavailTeacher(t=>t||n); };
-  const removeTeacher= n          => { setTeachers(p=>p.filter(t=>t!==n)); setCanTeach(p=>{const x={...p};delete x[n];return x;}); setTeacherUnavail(p=>{const x={...p};delete x[n];return x;}); setTeacherPrefSlots(p=>{const x={...p};delete x[n];return x;}); };
+  const removeTeacher= n          => { setTeachers(p=>p.filter(t=>t!==n)); setCanTeach(p=>{const x={...p};delete x[n];return x;}); setTeacherSlotPref(p=>{const x={...p};delete x[n];return x;}); };
   const addRoom      = ([n,c,rt]) => { if(!n||rooms.find(r=>r.name===n))return; setRooms(p=>[...p,{name:n,capacity:parseInt(c)||30,room_type:rt||"standard"}]); };
   const removeRoom   = n          => setRooms(p=>p.filter(r=>r.name!==n));
   const setReq       = (c,s,v)   => setRequirements(p=>({...p,[c]:{...(p[c]||{}),[s]:parseInt(v)||0}}));
   const setTeach     = (t,s,v)   => setCanTeach(p=>({...p,[t]:{...(p[t]||{}),[s]:v}}));
-  const setUnavail   = (t,d,sl,v)=> setTeacherUnavail(p=>({...p,[t]:{...(p[t]||{}),[d]:{...((p[t]||{})[d]||{}),[sl]:v}}}));
+  const setSlotPref  = (t,d,sl,v)=> setTeacherSlotPref(p=>({...p,[t]:{...(p[t]||{}),[d]:{...((p[t]||{})[d]||{}),[sl]:v}}}));
   const setSRT       = (s,v)     => setSubjectRoomType(p=> v==="any" ? (({[s]:_,...r})=>r)(p) : {...p,[s]:v});
 
   // ── solve ─────────────────────────────────────────────────────────────────
@@ -614,7 +597,12 @@ function App() {
 
   // ── result page ───────────────────────────────────────────────────────────
   if (page === "result" && result?.ok) {
-    const softScore = computeSoftScore(schedule, softConstraints, heavySubjects, teacherPrefSlots);
+    const prefSlots = {};
+    for (const [t, days] of Object.entries(teacherSlotPref))
+      for (const [d, slots] of Object.entries(days))
+        for (const [sl, pref] of Object.entries(slots))
+          if (pref === "prefer") { if (!prefSlots[t]) prefSlots[t] = {}; prefSlots[t][sl] = true; }
+    const softScore = computeSoftScore(schedule, softConstraints, heavySubjects, prefSlots);
     const pen       = softScore.total;
     const sd        = softScore;
     const hardViols = result.hard_violations || [];
@@ -916,14 +904,25 @@ function App() {
           </div>
         </div>
 
-        {/* Row 4: Teacher unavailability */}
+        {/* Row 4: Teacher slot preferences — neutral / avoid (hard) / prefer (soft) */}
         <div className="card">
-          <div className="card-title">Teacher unavailability — block day/period combinations</div>
+          <div className="card-title">Teacher slot preferences — neutral · avoid (hard block) · prefer (soft)</div>
           {teachers.length ? (
             <div>
-              <div style={{marginBottom:12}}>
+              <div style={{marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:8}}>
                 <TabBar options={teachers} active={activeUnavailTeacher}
                         onChange={setUnavailTeacher} />
+                <div style={{display:"flex",gap:12,fontSize:11,color:"#64748b",alignItems:"center"}}>
+                  <span style={{display:"inline-flex",alignItems:"center",gap:4}}>
+                    <span style={{display:"inline-block",width:14,height:14,borderRadius:2,background:"#fff",border:"1px solid #e2e8f0"}} /> Neutral
+                  </span>
+                  <span style={{display:"inline-flex",alignItems:"center",gap:4}}>
+                    <span style={{display:"inline-block",width:14,height:14,borderRadius:2,background:"#fee2e2",border:"1px solid #fca5a5"}} /> Avoid (hard)
+                  </span>
+                  <span style={{display:"inline-flex",alignItems:"center",gap:4}}>
+                    <span style={{display:"inline-block",width:14,height:14,borderRadius:2,background:"#dbeafe",border:"1px solid #93c5fd"}} /> Prefer (soft)
+                  </span>
+                </div>
               </div>
               {activeUnavailTeacher && (
                 <div style={{overflowX:"auto"}}>
@@ -937,11 +936,18 @@ function App() {
                         <tr key={sl}>
                           <td className="row-hd">P{sl}</td>
                           {DAYS.map(d=>{
-                            const blocked = !!((teacherUnavail[activeUnavailTeacher]||{})[d]||{})[sl];
+                            const val = ((teacherSlotPref[activeUnavailTeacher]||{})[d]||{})[sl] || null;
+                            const bg = val === "avoid" ? "#fee2e2" : val === "prefer" ? "#dbeafe" : "";
                             return (
-                              <td key={d} className={blocked?"blocked":""}>
-                                <input type="checkbox" checked={blocked}
-                                       onChange={e=>setUnavail(activeUnavailTeacher,d,sl,e.target.checked)} />
+                              <td key={d} style={bg ? {background:bg} : {}}>
+                                <select value={val || ""}
+                                        onChange={e => setSlotPref(activeUnavailTeacher, d, sl, e.target.value || null)}
+                                        style={{fontSize:10,background:"transparent",border:"none",
+                                                cursor:"pointer",width:"100%",textAlign:"center"}}>
+                                  <option value="">—</option>
+                                  <option value="avoid">✗</option>
+                                  <option value="prefer">★</option>
+                                </select>
                               </td>
                             );
                           })}
@@ -951,38 +957,6 @@ function App() {
                   </table>
                 </div>
               )}
-            </div>
-          ) : <span className="placeholder">Add teachers first.</span>}
-        {/* Row 5: Teacher preferred slots */}
-        <div className="card">
-          <div className="card-title">Teacher preferred slots — check slots the teacher prefers to teach in</div>
-          {teachers.length ? (
-            <div>
-              <div style={{marginBottom:12}}>
-                <TabBar options={teachers} active={activeUnavailTeacher}
-                        onChange={setUnavailTeacher} />
-              </div>
-              {activeUnavailTeacher && (
-                <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
-                  {Array.from({length:MAX_SLOTS},(_,i)=>i+1).map(sl => {
-                    const preferred = !!((teacherPrefSlots[activeUnavailTeacher]||{})[sl]);
-                    return (
-                      <label key={sl} style={{display:"flex",alignItems:"center",gap:4,fontSize:13,
-                        padding:"4px 10px",borderRadius:4,cursor:"pointer",
-                        background: preferred ? "#dbeafe" : "#f8fafc",
-                        border: `1px solid ${preferred ? "#93c5fd" : "#e2e8f0"}`}}>
-                        <input type="checkbox" checked={preferred}
-                               onChange={e => setTeacherPrefSlots(p => ({
-                                 ...p,
-                                 [activeUnavailTeacher]: { ...(p[activeUnavailTeacher]||{}), [sl]: e.target.checked }
-                               }))} />
-                        P{sl}
-                      </label>
-                    );
-                  })}
-                </div>
-              )}
-              <div style={{fontSize:11,color:"#94a3b8",marginTop:8}}>Leave all unchecked = no preference</div>
             </div>
           ) : <span className="placeholder">Add teachers first.</span>}
         </div>
