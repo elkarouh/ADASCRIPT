@@ -1,20 +1,20 @@
 #!/usr/bin/env py2nim
 #ady2nim-args c --cc:clang --clang.exe:zigcc --clang.linkerexe:zigcc -d:release
 """
-timetable_engine -- shared SA solver + DB + validation logic.
+timetable_engine -- shared data model, DB helpers, cost functions, validation.
 
-Imported by timetable_sa.ady (CLI) and timetable_server.ady (HTTP server).
+Imported by timetable_sa.ady, timetable_backtrack.ady, timetable_server.ady.
 No main block -- pure library.
 """
 
-nimport math
-nimport random
-nimport time
 nimport db
 nimport json
+nimport math
+nimport random
 nimport strutils
 nimport sequtils
 nimport os
+nimport time
 
 
 # ============================================================
@@ -25,6 +25,9 @@ type DAYS      is enum Monday, Tuesday, Wednesday, Thursday, Friday
 type ROOM_TYPE is enum standard, lab, gym, art
 
 const MAX_SLOTS: int = 8
+
+def get_cpu_secs() -> float:
+    return cpuTime()
 
 const DDL: str = (
     "CREATE TABLE IF NOT EXISTS problems (name TEXT PRIMARY KEY);" &
@@ -407,8 +410,6 @@ type Value_T is tuple:
     room:    str
     period:  Period_T
 
-type State_T is []int
-
 type SAContext_T is record:
     prob:                  SAProblem_T
     PERIODS:               []Period_T
@@ -496,7 +497,7 @@ def build_context(prob: SAProblem_T) -> SAContext_T:
 # SOFT COST FUNCTIONS
 # ============================================================
 
-def class_day_soft(ctx: SAContext_T, state: State_T, c: str, d: DAYS) -> int:
+def class_day_soft(ctx: SAContext_T, state: []int, c: str, d: DAYS) -> int:
     var first_sl: int = MAX_SLOTS + 1
     var last_sl:  int = 0
     var count:    int = 0
@@ -518,7 +519,7 @@ def class_day_soft(ctx: SAContext_T, state: State_T, c: str, d: DAYS) -> int:
     return pen
 
 
-def teacher_day_soft(ctx: SAContext_T, state: State_T, t: str, d: DAYS) -> int:
+def teacher_day_soft(ctx: SAContext_T, state: []int, t: str, d: DAYS) -> int:
     var first_sl: int = MAX_SLOTS + 1
     var last_sl:  int = 0
     var count:    int = 0
@@ -535,7 +536,7 @@ def teacher_day_soft(ctx: SAContext_T, state: State_T, t: str, d: DAYS) -> int:
     return ctx.prob.W_TEACHER_SPREAD * ((last_sl - first_sl + 1) - count)
 
 
-def class_day_consec(ctx: SAContext_T, state: State_T, c: str, d: DAYS) -> int:
+def class_day_consec(ctx: SAContext_T, state: []int, c: str, d: DAYS) -> int:
     var pen: int = 0
     for sl in 2..MAX_SLOTS:
         var subj_cur:  str = ""
@@ -552,7 +553,7 @@ def class_day_consec(ctx: SAContext_T, state: State_T, c: str, d: DAYS) -> int:
     return pen
 
 
-def class_subj_spread(ctx: SAContext_T, state: State_T, c: str, s: str) -> int:
+def class_subj_spread(ctx: SAContext_T, state: []int, c: str, s: str) -> int:
     let key: str = c + "\x00" + s
     if key not in ctx.lessons_of_class_subj:
         return 0
@@ -564,7 +565,7 @@ def class_subj_spread(ctx: SAContext_T, state: State_T, c: str, s: str) -> int:
     return ctx.prob.W_SUBJECT_SPREAD * (total - len(days_used))
 
 
-def heavy_morning_penalty(ctx: SAContext_T, state: State_T) -> int:
+def heavy_morning_penalty(ctx: SAContext_T, state: []int) -> int:
     var pen: int = 0
     for k in 0..<ctx.N_LESSONS:
         let hs: str = ctx.lessons[k].subj
@@ -574,7 +575,7 @@ def heavy_morning_penalty(ctx: SAContext_T, state: State_T) -> int:
     return pen
 
 
-def teacher_slot_pref_penalty(ctx: SAContext_T, state: State_T) -> int:
+def teacher_slot_pref_penalty(ctx: SAContext_T, state: []int) -> int:
     var pen: int = 0
     for k in 0..<ctx.N_LESSONS:
         let v: Value_T = ctx.lesson_cands[k][state[k]]
@@ -585,7 +586,7 @@ def teacher_slot_pref_penalty(ctx: SAContext_T, state: State_T) -> int:
     return pen
 
 
-def soft_score(ctx: SAContext_T, state: State_T) -> int:
+def soft_score(ctx: SAContext_T, state: []int) -> int:
     var pen: int = 0
     for c in ctx.prob.CLASSES:
         for d in DAYS:
@@ -601,7 +602,7 @@ def soft_score(ctx: SAContext_T, state: State_T) -> int:
     return pen
 
 
-def delta_soft(ctx: SAContext_T, state: State_T, li: int, new_idx: int) -> int:
+def delta_soft(ctx: SAContext_T, state: []int, li: int, new_idx: int) -> int:
     let old_v: Value_T = ctx.lesson_cands[li][state[li]]
     let new_v: Value_T = ctx.lesson_cands[li][new_idx]
     let c:     str  = ctx.lessons[li].cls
@@ -619,7 +620,7 @@ def delta_soft(ctx: SAContext_T, state: State_T, li: int, new_idx: int) -> int:
         before = before + teacher_day_soft(ctx, state, t2, d_new)
     before = before + class_subj_spread(ctx, state, c, s)
 
-    var tmp: State_T = state
+    var tmp: []int = state
     tmp[li] = new_idx
 
     var after_s: int = class_day_consec(ctx, tmp, c, d_old) + class_day_soft(ctx, tmp, c, d_old)
@@ -652,7 +653,7 @@ def delta_soft(ctx: SAContext_T, state: State_T, li: int, new_idx: int) -> int:
 # HARD COST FUNCTIONS
 # ============================================================
 
-def teacher_day_count(ctx: SAContext_T, state: State_T, t: str, d: DAYS) -> int:
+def teacher_day_count(ctx: SAContext_T, state: []int, t: str, d: DAYS) -> int:
     var n: int = 0
     for k in ctx.lessons_of_teacher[t]:
         if ctx.lesson_cands[k][state[k]].teacher == t and ctx.lesson_cands[k][state[k]].period.day == d:
@@ -660,7 +661,7 @@ def teacher_day_count(ctx: SAContext_T, state: State_T, t: str, d: DAYS) -> int:
     return n
 
 
-def hard_count(ctx: SAContext_T, state: State_T) -> int:
+def hard_count(ctx: SAContext_T, state: []int) -> int:
     var n: int = 0
     for i in 0..<ctx.N_LESSONS - 1:
         let vi: Value_T = ctx.lesson_cands[i][state[i]]
@@ -684,7 +685,7 @@ def hard_count(ctx: SAContext_T, state: State_T) -> int:
     return n
 
 
-def delta_hard(ctx: SAContext_T, state: State_T, li: int, new_idx: int) -> int:
+def delta_hard(ctx: SAContext_T, state: []int, li: int, new_idx: int) -> int:
     let old_v: Value_T = ctx.lesson_cands[li][state[li]]
     let new_v: Value_T = ctx.lesson_cands[li][new_idx]
     var dh: int = 0
@@ -725,46 +726,14 @@ def delta_hard(ctx: SAContext_T, state: State_T, li: int, new_idx: int) -> int:
 
 
 # ============================================================
-# SIMULATED ANNEALING
+# SA PHASE 2 — soft optimisation from a feasible state
 # ============================================================
 
-def sa_phase1(ctx: SAContext_T, max_steps: int, seed: int = 42) -> (State_T, int, int):
-    randomize(seed)
-    var state: State_T = [rand(0..len(ctx.lesson_cands[k]) - 1) for k in 0..<ctx.N_LESSONS]
-    var cur_hard: int = hard_count(ctx, state)
-    var best_state: State_T = state
-    var best_hard: int = cur_hard
-    var T: float = 2.0
-    let alpha: float = 0.9999
-    for step in 0..<max_steps:
-        if cur_hard == 0:
-            return (state, 0, step)
-        let li: int = rand(0..ctx.N_LESSONS - 1)
-        let n_cands: int = len(ctx.lesson_cands[li])
-        if n_cands < 2:
-            T = T * alpha
-            continue
-        var new_idx: int = rand(0..n_cands - 1)
-        if new_idx == state[li]:
-            new_idx = new_idx + 1
-            if new_idx >= n_cands:
-                new_idx = 0
-        let dH: int = delta_hard(ctx, state, li, new_idx)
-        if dH <= 0 or rand(0.0..1.0) < exp(-float(dH) / T):
-            state[li] = new_idx
-            cur_hard = cur_hard + dH
-            if cur_hard < best_hard:
-                best_hard = cur_hard
-                best_state = state
-        T = T * alpha
-    return (best_state, best_hard, max_steps)
-
-
-def sa_phase2(ctx: SAContext_T, state: State_T, max_steps: int) -> State_T:
-    var cur_state: State_T = state
-    var cur_soft: int = soft_score(ctx, cur_state)
-    var best_state: State_T = cur_state
-    var best_soft: int = cur_soft
+def sa_phase2(ctx: SAContext_T, state: []int, max_steps: int) -> []int:
+    var cur_state: []int = state
+    var cur_soft:  int   = soft_score(ctx, cur_state)
+    var best_state: []int = cur_state
+    var best_soft:  int   = cur_soft
     var T: float = 5.0
     let alpha: float = 0.9999
     for step in 0..<max_steps:
@@ -786,122 +755,12 @@ def sa_phase2(ctx: SAContext_T, state: State_T, max_steps: int) -> State_T:
             cur_state[li] = new_idx
             cur_soft = cur_soft + dS
             if cur_soft < best_soft:
-                best_soft = cur_soft
+                best_soft  = cur_soft
                 best_state = cur_state
                 if best_soft == 0:
                     return best_state
         T = T * alpha
     return best_state
-
-
-# ============================================================
-# SOLVE -> JSON string
-# ============================================================
-
-def solve_to_json(data: JsonNode) -> str:
-    let prob: SAProblem_T = load_problem_from_json(data)
-    let ctx: SAContext_T  = build_context(prob)
-
-    let t0: float = cpuTime()
-    let (phase1_state, hard_violations, steps1) = sa_phase1(ctx, max_steps = 200000)
-    var final_state: State_T = phase1_state
-
-    if hard_violations == 0:
-        let soft0: int = soft_score(ctx, phase1_state)
-        if soft0 > 0:
-            final_state = sa_phase2(ctx, phase1_state, max_steps = 500000)
-
-    let elapsed: float = cpuTime() - t0
-
-    if hard_violations > 0:
-        return "{\"ok\":false,\"error\":\"No valid schedule found - " + hard_violations'Image + " hard violations remain\"}"
-
-    var holes:      int = 0
-    var first_hits: int = 0
-    var last_hits:  int = 0
-    var t_spread:   int = 0
-    for c in prob.CLASSES:
-        for d in DAYS:
-            var fsl: int = MAX_SLOTS + 1
-            var lsl: int = 0
-            var cnt: int = 0
-            for k in 0..<ctx.N_LESSONS:
-                if ctx.lessons[k].cls != c:
-                    continue
-                let v: Value_T = ctx.lesson_cands[k][final_state[k]]
-                if v.period.day == d:
-                    cnt = cnt + 1
-                    if v.period.slot < fsl:
-                        fsl = v.period.slot
-                    if v.period.slot > lsl:
-                        lsl = v.period.slot
-            if cnt > 0:
-                holes = holes + (lsl - fsl + 1) - cnt
-                if fsl == 1:
-                    first_hits = first_hits + 1
-                if lsl == MAX_SLOTS:
-                    last_hits = last_hits + 1
-
-    for t in prob.TEACHERS:
-        for d in DAYS:
-            var fsl: int = MAX_SLOTS + 1
-            var lsl: int = 0
-            var cnt: int = 0
-            for k in 0..<ctx.N_LESSONS:
-                let v: Value_T = ctx.lesson_cands[k][final_state[k]]
-                if v.teacher == t and v.period.day == d:
-                    cnt = cnt + 1
-                    if v.period.slot < fsl:
-                        fsl = v.period.slot
-                    if v.period.slot > lsl:
-                        lsl = v.period.slot
-            if cnt > 1:
-                t_spread = t_spread + (lsl - fsl + 1) - cnt
-
-    var teacher_pref_hits: int = 0
-    for k in 0..<ctx.N_LESSONS:
-        let v: Value_T = ctx.lesson_cands[k][final_state[k]]
-        let tp: str = v.teacher
-        if tp in prob.teacher_pref_slots and len(prob.teacher_pref_slots[tp]) > 0:
-            if v.period.slot not in prob.teacher_pref_slots[tp]:
-                teacher_pref_hits = teacher_pref_hits + 1
-
-    var heavy_morning: int = 0
-    for k in 0..<ctx.N_LESSONS:
-        let hs: str = ctx.lessons[k].subj
-        if hs in prob.heavy_subjects:
-            if ctx.lesson_cands[k][final_state[k]].period.slot > prob.MORNING_THRESHOLD:
-                heavy_morning = heavy_morning + 1
-
-    var subj_spread: int = 0
-    for c in prob.CLASSES:
-        for s in prob.SUBJECTS:
-            let key: str = c + "\x00" + s
-            if key not in ctx.lessons_of_class_subj:
-                continue
-            var days_used: {str}bool
-            for k in ctx.lessons_of_class_subj[key]:
-                days_used[ctx.lesson_cands[k][final_state[k]].period.day'Image] = True
-            subj_spread = subj_spread + (len(ctx.lessons_of_class_subj[key]) - len(days_used))
-
-    let soft_total: int = prob.W_CLASS_HOLES * holes + prob.W_AVOID_FIRST_SLOT * first_hits + prob.W_AVOID_LAST_SLOT * last_hits + prob.W_TEACHER_SPREAD * t_spread + prob.W_SUBJECT_SPREAD * subj_spread + prob.W_HEAVY_MORNING * heavy_morning + prob.W_TEACHER_SLOT_PREF * teacher_pref_hits
-
-    var jlines: []str = []
-    for k in 0..<ctx.N_LESSONS:
-        let v: Value_T = ctx.lesson_cands[k][final_state[k]]
-        let ec: str  = ctx.lessons[k].cls
-        let es: str  = ctx.lessons[k].subj
-        let eo: int  = ctx.lessons[k].occ
-        let et: str  = v.teacher
-        let er: str  = v.room
-        let ed: str  = v.period.day'Image
-        let esl: int = v.period.slot
-        jlines.append("{\"class\":\"" + ec + "\",\"subject\":\"" + es + "\",\"occ\":" + eo'Image + ",\"teacher\":\"" + et + "\",\"room\":\"" + er + "\",\"day\":\"" + ed + "\",\"slot\":" + esl'Image + "}")
-
-    let schedule_json: str = "[" + join(jlines, ",") + "]"
-    let elapsed_ms: float  = elapsed * 1000.0
-    let hard_total: int    = hard_count(ctx, final_state)
-    return "{\"ok\":true,\"schedule\":" + schedule_json + ",\"stats\":{\"elapsed_ms\":" + elapsed_ms'Image + ",\"hard_penalty\":" + hard_total'Image + ",\"soft_penalty\":" + soft_total'Image + ",\"soft_details\":{\"class_holes\":" + holes'Image + ",\"avoid_first_slot\":" + first_hits'Image + ",\"avoid_last_slot\":" + last_hits'Image + ",\"teacher_spread\":" + t_spread'Image + ",\"subject_daily_spread\":" + subj_spread'Image + ",\"heavy_morning\":" + heavy_morning'Image + ",\"teacher_slot_pref\":" + teacher_pref_hits'Image + "}}}"
 
 
 # ============================================================

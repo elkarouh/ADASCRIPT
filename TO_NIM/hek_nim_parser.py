@@ -2320,7 +2320,7 @@ def to_nim(self, indent=0):
 
 # --- Type block forms (tuple, record) ---
 
-def _extract_fields_from_block(block_node, indent):
+def _extract_fields_from_block(block_node, indent, export_fields=False):
     """Extract field declarations from a block, returning (field_lines, field_defaults).
     field_lines: indented Nim field declarations with defaults and var/let/const stripped.
     field_defaults: list of (field_name, default_expr) for fields that have defaults.
@@ -2363,8 +2363,13 @@ def _extract_fields_from_block(block_node, indent):
                                     defaults.append((dm.group(1).strip(), _fval))
                                 # Strip default value
                                 line = _re.sub(r' = .+$', '', line)
-                                # Strip export marker from field name (tuple fields can't be exported)
-                                line = _re.sub(r'^(\s*\w+)\*:', r'\1:', line)
+                                # Add or strip export marker from field name
+                                if export_fields:
+                                    # ensure * is present
+                                    line = _re.sub(r'^(\s*\w+)\*?:', r'\1*:', line)
+                                else:
+                                    # strip * (tuple fields can't be exported)
+                                    line = _re.sub(r'^(\s*\w+)\*:', r'\1:', line)
                                 if line.strip():
                                     lines.append(line)
     return lines, defaults
@@ -2468,7 +2473,8 @@ def to_nim(self, indent=0):
         return result.rstrip("\n")
     if not block_node:
         block_node = rhs
-    fields, field_defaults = _extract_fields_from_block(block_node, indent + 1)
+    _do_export_fields = getattr(ParserState, 'export_symbols', False) and keyword != "tuple"
+    fields, field_defaults = _extract_fields_from_block(block_node, indent + 1, export_fields=_do_export_fields)
     nim_kind = "tuple" if keyword == "tuple" else "object"
     # Register type kind and field order for constructor translation
     ParserState.symbol_table.add(name, nim_kind, "type")
@@ -3051,7 +3057,12 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
     # Detect if body contains yield -> use iterator instead of proc/method
     has_yield = any("yield " in line or line.strip() == "yield" for line in body_lines)
     if has_yield:
-        pragma = ""
+        # Closure iterator needed when the iterator calls itself recursively
+        is_recursive = any(
+            f"{name}(" in line or f"for " in line and f" in {name}(" in line
+            for line in body_lines
+        )
+        pragma = " {.closure.}" if is_recursive else ""
         keyword = "iterator"
         if not ret_ann:
             ret_ann = ": auto"

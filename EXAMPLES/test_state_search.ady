@@ -111,6 +111,16 @@ def demo_waterjug():
         if i >= 3:
             break
 
+    print("\n[All solutions — first 3 in DFS order]")
+    i = 0
+    for sol in jug.search_dfs_all(initial):
+        print("")
+        print(f"  Solution #{i + 1}  ({len(sol)} moves):")
+        jug.print_solution(sol, initial)
+        i += 1
+        if i >= 3:
+            break
+
 
 # ===========================================================================
 # MISSIONARIES AND CANNIBALS
@@ -233,6 +243,14 @@ def demo_wolf_goat():
     initial: State_T = (farmer: left, wolf: left, goat: left, cabbage: left)
     sol: []Step_T[State_T, Action_T] = puzzle.search(initial)
     puzzle.print_solution(sol, initial)
+
+    print("\n[All solutions via search_dfs_all]")
+    var n: Natural = 0
+    for s in puzzle.search_dfs_all(initial):
+        n += 1
+        print(f"  Solution #{n}  ({len(s)} moves)")
+        puzzle.print_solution(s, initial)
+    print(f"Total: {n} solution(s)")
 
 
 # ===========================================================================
