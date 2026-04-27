@@ -25,8 +25,8 @@ def example1():
         y: [(s, 7), (v, 6)],
     }
     class MyOptimizer(Maximizer[State_T, Decision_T, Revenue_T]):
-        def get_state(self, past_decisions: []Decision_T) -> State_T:
-            past_decisions[-1]
+        def get_next_state(self, current_state: State_T, decision: Decision_T) -> State_T:
+            decision
         def get_next_decisions(self, curr_state: State_T) -> []Choice_T:
             GR.get(curr_state, [])
 
@@ -59,8 +59,8 @@ def example2():
             i: [(j, 4)],
         }
 
-        def get_state(self, past_decisions: []Decision_T) -> State_T:
-            past_decisions[-1]
+        def get_next_state(self, current_state: State_T, decision: Decision_T) -> State_T:
+            decision
 
         def get_next_decisions(self, curr_state: State_T) -> []CostChoice_T:
             self.G.get(curr_state, [])
@@ -78,8 +78,8 @@ def example2():
             i: [(j, 4)],
         }
 
-        def get_state(self, past_decisions: []Decision_T) -> State_T:
-            past_decisions[-1]
+        def get_next_state(self, current_state: State_T, decision: Decision_T) -> State_T:
+            decision
 
         def get_next_decisions(self, curr_state: State_T) -> []RevChoice_T:
             self.G.get(curr_state, [])
@@ -117,11 +117,9 @@ def example3():
           let (stage, remaining_size) = current_state
           remaining_size == 0
 
-      def get_state(self, past_decisions: []Decision_T) -> State_T:
-          stage: Natural = len(past_decisions)
-          used: Natural = sum(past_decisions)
-          remaining_size: Natural = max(ROD_SIZE - used, 0)
-          (stage, remaining_size)
+      def get_next_state(self, current_state: State_T, decision: Decision_T) -> State_T:
+          let (stage, remaining_size) = current_state
+          (stage + 1, remaining_size - decision)
 
       def get_next_decisions(self, current_state: State_T) -> []Choice_T:
           let (stage, remaining_size) = current_state
@@ -159,15 +157,10 @@ def example4():
         def is_end_state(self, state: State_T) -> bool:
             state.stage == END
 
-        def get_state(self, past_decisions: []Decision_T) -> State_T:
-            stage: Stage_T = len(past_decisions)
-            spent: Cost_T = 0
-            for d in past_decisions:
-                for stage in [STAGE1, STAGE2, STAGE3]:
-                    choices: Choice_T = CHOICES[stage]
-                    if d in choices:
-                        spent += choices[d].cost
-            (stage, Cost_T(CAPITAL) - spent)
+        def get_next_state(self, current_state: State_T, decision: Decision_T) -> State_T:
+            let (stage, budget) = current_state
+            let cost: Cost_T = CHOICES[stage][decision].cost
+            (stage'Next, Cost_T(int(budget) - int(cost)))
 
         def get_next_decisions(self, current_state: State_T) -> [](Decision_T, Revenue_T):
             let (stage, budget) = current_state
@@ -208,12 +201,10 @@ def example5():
         def is_end_state(self, state: State_T) -> bool:
             state.stage == END
 
-        def get_state(self, past_decisions: []Decision_T) -> State_T:
-            stage: Stage_T = past_decisions[-1].stage'Next
-            remaining: Natural = MAX_WEIGHT
-            for prev_stage,qty in past_decisions:
-                remaining -= qty * ITEMS[prev_stage].weight
-            (stage, remaining)
+        def get_next_state(self, current_state: State_T, decision: Decision_T) -> State_T:
+            let (stage, remaining) = current_state
+            let used: Natural = decision.quantity * ITEMS[decision.stage].weight
+            (decision.stage'Next, remaining - used)
 
         def get_next_decisions(self, current_state: State_T) -> [](Decision_T, Revenue_T):
             let (stage, remaining) = current_state
@@ -256,17 +247,15 @@ def example6():
         def is_end_state(self, state: State_T) -> bool:
             state.year == 6
 
-        def get_state(self, past_decisions: []Decision_T) -> State_T:
-            year: Natural = len(past_decisions)
-            if year == 6:
+        def get_next_state(self, current_state: State_T, decision: Decision_T) -> State_T:
+            let (year, age) = current_state
+            let new_year: Natural = year + 1
+            if new_year == 6:
                 return (6, IRRELEVANT)
-            age: int = 0
-            for decision in past_decisions:
-                if decision == KEEP:
-                    age = age + 1
-                else:
-                    age = 1
-            (year, age)
+            var new_age: int = 1
+            if decision == KEEP:
+                new_age = age + 1
+            (new_year, new_age)
 
         def get_next_decisions(self, current_state: State_T) -> [](Decision_T, Cost_T):
             let (year, age) = current_state
@@ -330,8 +319,8 @@ def example7():
     }
 
     class BookMap(Minimizer[State_T, Decision_T, Distance_T]):
-        def get_state(self, past_decisions: []State_T) -> State_T:
-            past_decisions[-1]
+        def get_next_state(self, current_state: State_T, decision: Decision_T) -> State_T:
+            decision
         def get_next_decisions(self, current_state: State_T) -> [](Decision_T, Distance_T):
             GR.get(current_state, [])
         def get_heuristic_cost(self, city: State_T) -> float:
@@ -374,12 +363,9 @@ def example8():
         def is_end_state(self, state: State_T) -> bool:
             state.nr_segs == 0
 
-        def get_state(self, past_decisions: []Decision_T) -> State_T:
-            nr_segs: Natural = self.start_state.nr_segs - len(past_decisions)
-            last_idx: Natural = 0
-            for d in past_decisions:
-                last_idx += len(d)
-            (nr_segs:nr_segs, last_idx:last_idx)
+        def get_next_state(self, current_state: State_T, decision: Decision_T) -> State_T:
+            let (nr_segs, last_idx) = current_state
+            (nr_segs:nr_segs - 1, last_idx:last_idx + len(decision))
 
         def get_next_decisions(self, current_state: State_T) -> [](Decision_T, Cost_T):
             let (nr_segs, j) = current_state
@@ -415,17 +401,15 @@ def example9():
         def is_end_state(self, state: State_T) -> bool:
             state.r1 == "" and state.r2 == ""
 
-        def get_state(self, past_decisions: []Decision_T) -> State_T:
-            s1: str = self.start_state.r1
-            s2: str = self.start_state.r2
-            len1: Natural = 0
-            len2: Natural = 0
-            for d in past_decisions:
-                if d.c1 != "=":
-                    len1 += 1
-                if d.c2 != "=":
-                    len2 += 1
-            (r1:s1[len1:len(s1)], r2:s2[len2:len(s2)])
+        def get_next_state(self, current_state: State_T, decision: Decision_T) -> State_T:
+            let (r1, r2) = current_state
+            var new_r1: str = r1
+            var new_r2: str = r2
+            if decision.c1 != "=":
+                new_r1 = r1[1:len(r1)]
+            if decision.c2 != "=":
+                new_r2 = r2[1:len(r2)]
+            (r1:new_r1, r2:new_r2)
 
         def get_next_decisions(self, current_state: State_T) -> [](Decision_T, Cost_T):
             let (r1, r2) = current_state
@@ -483,10 +467,8 @@ def example10():
                 HEALTHY: [NORMAL: 0.5, COLD: 0.4, DIZZY: 0.1],
                 FEVER:   [NORMAL: 0.1, COLD: 0.3, DIZZY: 0.6],
             ]
-        def get_state(self, past_decisions: []Hidden_State_T) -> State_T:
-            if not past_decisions:
-                return (stage:0, hidden_state: NONE)
-            (stage:len(past_decisions), hidden_state:past_decisions[-1])
+        def get_next_state(self, current_state: State_T, decision: Hidden_State_T) -> State_T:
+            (stage:current_state.stage + 1, hidden_state:decision)
         def get_next_decisions(self, curr_state: State_T) -> [](Hidden_State_T, Prob_T):
             let (stage, curr_hidden_state) = curr_state
             if stage == len(self.obs):

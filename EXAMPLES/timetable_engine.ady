@@ -27,7 +27,7 @@ type ROOM_TYPE is enum standard, lab, gym, art
 const MAX_SLOTS: int = 8
 
 def get_cpu_secs() -> float:
-    return cpuTime()
+    cpuTime()
 
 const DDL: str = (
     "CREATE TABLE IF NOT EXISTS problems (name TEXT PRIMARY KEY);" &
