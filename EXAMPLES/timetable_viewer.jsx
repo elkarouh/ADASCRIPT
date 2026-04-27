@@ -431,9 +431,11 @@ function App() {
       soft_constraints: softConstraints,
       heavy_subjects: heavySubjects,
       teacher_preferred_slots: Object.fromEntries(
-        Object.entries(teacherPrefSlots).map(([t, slotMap]) =>
-          [t, Object.entries(slotMap).filter(([,v])=>v).map(([sl])=>parseInt(sl))]
-        ).filter(([,slots])=>slots.length>0)
+        Object.entries(teacherPrefSlots).reduce((acc, [t, slotMap]) => {
+          const slots = Object.keys(slotMap).filter(sl => slotMap[sl]).map(sl => parseInt(sl));
+          if (slots.length > 0) acc.push([t, slots]);
+          return acc;
+        }, [])
       ),
     };
   }
