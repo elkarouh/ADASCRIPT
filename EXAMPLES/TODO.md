@@ -18,20 +18,20 @@ User marks subjects as "heavy" in the editor.
 - Weight: `weight_heavy_subject_morning`
 - UI: tag subjects as heavy/light; add morning_threshold slider
 
-## 3. No back-to-back heavy subjects per class
+## ~~3. No back-to-back heavy subjects per class~~ SKIPPED (max_consecutive already handles this)
 Penalise two consecutive slots of different heavy subjects for the same class.
 (Two Math in a row is already covered by max_consecutive_same_subj hard constraint.)
 Example: Math slot 3 then Science slot 4 for Year7A → penalty.
 - SA: per (class, day), scan consecutive slot pairs
 - Weight: `weight_no_consecutive_heavy`
 
-## 4. Balanced day per class
+## ~~4. Balanced day per class~~ SKIPPED (covered by subject daily spread)
 Penalise a class having more than K lessons on a single day (soft, not hard).
 Encourages even spread across the week.
 - SA: per (class, day), if count > daily_balance_threshold → excess²
 - Weight: `weight_class_daily_balance`
 
-## 5. Teacher preferred slots
+## ~~5. Teacher preferred slots~~ ✓ DONE
 Each teacher can mark preferred/avoided slots (morning vs afternoon).
 Penalise lessons outside preferred window.
 - UI: per-teacher slot preference grid (similar to unavailability grid)
