@@ -404,6 +404,7 @@ function App() {
   const [viewMode,    setViewMode]    = useState("By Class");
   const [selection,   setSelection]   = useState(null);
   const [unavailTeacher, setUnavailTeacher] = useState(null);
+  const [editorTab,      setEditorTab]      = useState("Classes");
 
   useEffect(() => { refreshList().then(() => loadProblem("DEFAULT")); }, []);
 
@@ -679,6 +680,7 @@ function App() {
   }
 
   // ── editor page ───────────────────────────────────────────────────────────
+  const EDITOR_TABS = ["Classes","Subjects","Teachers","Rooms","Requirements","Constraints"];
   const activeUnavailTeacher = unavailTeacher || teachers[0] || null;
 
   return (
@@ -714,252 +716,306 @@ function App() {
           {statusMsg && <div className={`status-msg${statusMsg.ok?"":" err"}`}>{statusMsg.text}</div>}
         </div>
 
-        {/* Row 1: Classes · Subjects · Teachers · Rooms */}
-        <div className="editor-cols">
+        {/* Editor tab bar */}
+        <div style={{borderBottom:"2px solid #e2e8f0",paddingBottom:0,marginBottom:0}}>
+          <div style={{display:"flex",gap:2}}>
+            {EDITOR_TABS.map(t => (
+              <button key={t} onClick={()=>setEditorTab(t)}
+                style={{padding:"8px 20px",fontSize:12,border:"none",borderRadius:"6px 6px 0 0",
+                        cursor:"pointer",letterSpacing:".02em",fontFamily:"inherit",
+                        background: editorTab===t ? "#fff" : "transparent",
+                        color: editorTab===t ? "#1e293b" : "#64748b",
+                        fontWeight: editorTab===t ? 700 : 400,
+                        borderBottom: editorTab===t ? "2px solid #3b82f6" : "2px solid transparent",
+                        marginBottom:"-2px"}}>
+                {t}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* ── Tab: Classes ── */}
+        {editorTab === "Classes" && (
           <div className="card">
             <div className="card-title">Classes</div>
             <TagList items={classes} label={c=>`${c.name} (${c.size})`} onRemove={removeClass} />
             <AddRow placeholders={["Name","Size"]} types={["text","number"]} onAdd={addClass} />
-          </div>
-          <div className="card">
-            <div className="card-title">Subjects</div>
-            <TagList items={subjects} label={s=>s} onRemove={removeSubject} />
-            <AddRow placeholders={["Subject"]} onAdd={addSubject} />
-            {subjects.length > 0 && (
-              <div style={{marginTop:8}}>
-                <div style={{fontSize:11,color:"#64748b",marginBottom:4}}>Heavy (prefer morning)</div>
-                {subjects.map(s => (
-                  <label key={s} style={{display:"flex",alignItems:"center",gap:6,fontSize:13,marginBottom:2,cursor:"pointer"}}>
-                    <input type="checkbox"
-                      checked={heavySubjects.includes(s)}
-                      onChange={e => setHeavySubjects(p => e.target.checked ? [...p,s] : p.filter(x=>x!==s))} />
-                    {s}
-                  </label>
-                ))}
+            {classes.length > 0 && (
+              <div style={{marginTop:12,fontSize:11,color:"#94a3b8"}}>
+                {classes.length} class{classes.length!==1?"es":""} · total {classes.reduce((a,c)=>a+c.size,0)} students
               </div>
             )}
           </div>
-          <div className="card">
-            <div className="card-title">Teachers</div>
-            <TagList items={teachers} label={t=>t} onRemove={removeTeacher} />
-            <AddRow placeholders={["Teacher"]} onAdd={addTeacher} />
-          </div>
-          <div className="card">
-            <div className="card-title">Rooms</div>
-            <TagList items={rooms} label={r=>`${r.name} (${r.capacity}, ${r.room_type||"standard"})`} onRemove={removeRoom} />
-            <AddRow placeholders={["Room","Cap",""]} types={["text","number",null]}
-                    options={[null,null,ROOM_TYPES]} onAdd={addRoom} />
-          </div>
-        </div>
+        )}
 
-        {/* Row 2: Requirements · Can-teach */}
-        <div className="editor-cols-wide">
-          <div className="card">
-            <div className="card-title">Lessons per class per subject (periods/week)</div>
-            {classes.length && subjects.length ? (
-              <div style={{overflowX:"auto"}}>
-                <table className="grid">
-                  <thead><tr>
-                    <th></th>{subjects.map(s=><th key={s}>{s}</th>)}
-                  </tr></thead>
-                  <tbody>
-                    {classes.map(cl=>(
-                      <tr key={cl.name}>
-                        <td className="row-hd">{cl.name}</td>
-                        {subjects.map(s=>(
-                          <td key={s}>
-                            <input type="number" min={0} max={MAX_SLOTS}
-                                   value={(requirements[cl.name]||{})[s]||0}
-                                   onChange={e=>setReq(cl.name,s,e.target.value)} />
-                          </td>
+        {/* ── Tab: Subjects ── */}
+        {editorTab === "Subjects" && (
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20}}>
+            <div className="card">
+              <div className="card-title">Subjects</div>
+              <TagList items={subjects} label={s=>s} onRemove={removeSubject} />
+              <AddRow placeholders={["Subject"]} onAdd={addSubject} />
+            </div>
+            <div className="card">
+              <div className="card-title">Heavy subjects (prefer morning)</div>
+              {subjects.length ? subjects.map(s => (
+                <label key={s} style={{display:"flex",alignItems:"center",gap:8,fontSize:13,
+                                       marginBottom:6,cursor:"pointer"}}>
+                  <input type="checkbox"
+                    checked={heavySubjects.includes(s)}
+                    onChange={e => setHeavySubjects(p => e.target.checked ? [...p,s] : p.filter(x=>x!==s))} />
+                  {s}
+                </label>
+              )) : <span className="placeholder">Add subjects first.</span>}
+            </div>
+          </div>
+        )}
+
+        {/* ── Tab: Teachers ── */}
+        {editorTab === "Teachers" && (
+          <div style={{display:"flex",flexDirection:"column",gap:20}}>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 2fr",gap:20}}>
+              <div className="card">
+                <div className="card-title">Teachers</div>
+                <TagList items={teachers} label={t=>t} onRemove={removeTeacher} />
+                <AddRow placeholders={["Teacher"]} onAdd={addTeacher} />
+              </div>
+              <div className="card">
+                <div className="card-title">Subject qualifications</div>
+                {teachers.length && subjects.length ? (
+                  <div style={{overflowX:"auto"}}>
+                    <table className="grid">
+                      <thead><tr>
+                        <th></th>{subjects.map(s=><th key={s}>{s}</th>)}
+                      </tr></thead>
+                      <tbody>
+                        {teachers.map(t=>(
+                          <tr key={t}>
+                            <td className="row-hd">{t}</td>
+                            {subjects.map(s=>(
+                              <td key={s}>
+                                <input type="checkbox"
+                                       checked={!!((canTeach[t]||{})[s])}
+                                       onChange={e=>setTeach(t,s,e.target.checked)} />
+                              </td>
+                            ))}
+                          </tr>
                         ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                      </tbody>
+                    </table>
+                  </div>
+                ) : <span className="placeholder">Add teachers and subjects first.</span>}
               </div>
-            ) : <span className="placeholder">Add classes and subjects first.</span>}
-          </div>
-
-          <div className="card">
-            <div className="card-title">Teacher — subject qualification</div>
-            {teachers.length && subjects.length ? (
-              <div style={{overflowX:"auto"}}>
-                <table className="grid">
-                  <thead><tr>
-                    <th></th>{subjects.map(s=><th key={s}>{s}</th>)}
-                  </tr></thead>
-                  <tbody>
-                    {teachers.map(t=>(
-                      <tr key={t}>
-                        <td className="row-hd">{t}</td>
-                        {subjects.map(s=>(
-                          <td key={s}>
-                            <input type="checkbox"
-                                   checked={!!((canTeach[t]||{})[s])}
-                                   onChange={e=>setTeach(t,s,e.target.checked)} />
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : <span className="placeholder">Add teachers and subjects first.</span>}
-          </div>
-        </div>
-
-        {/* Row 3: Subject room type · Soft constraints */}
-        <div className="editor-cols-3">
-          <div className="card">
-            <div className="card-title">Subject room type requirement</div>
-            {subjects.length ? (
-              <div style={{overflowX:"auto"}}>
-                <table className="grid">
-                  <thead><tr><th style={{textAlign:"left"}}>Subject</th><th>Required room type</th></tr></thead>
-                  <tbody>
-                    {subjects.map(s=>(
-                      <tr key={s}>
-                        <td className="row-hd">{s}</td>
-                        <td>
-                          <select value={subjectRoomType[s]||"any"}
-                                  onChange={e=>setSRT(s,e.target.value)}
-                                  style={{fontSize:11,background:"#f8fafc",border:"1px solid #e2e8f0",
-                                          borderRadius:3,padding:"2px 4px"}}>
-                            <option value="any">any</option>
-                            {ROOM_TYPES.map(rt=><option key={rt} value={rt}>{rt}</option>)}
-                          </select>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : <span className="placeholder">Add subjects first.</span>}
-          </div>
-
-          <div className="card">
-            <div className="card-title">Hard constraints</div>
-            <div style={{display:"flex",flexDirection:"column",gap:14}}>
-              {[
-                ["Max consecutive same subject", "max_consecutive_same_subj", 2],
-                ["Max periods per day per teacher", "max_teacher_periods_day", 4],
-              ].map(([label, key, def]) => (
-                <div key={key}>
-                  <div style={{fontSize:11,color:"#64748b",marginBottom:4}}>{label}</div>
-                  <input type="number" min={1} max={8}
-                         value={hardConstraints[key] ?? def}
-                         onChange={e=>setHardConstraints(p=>({...p,[key]:parseInt(e.target.value)||def}))}
-                         style={{width:60,background:"#f8fafc",border:"1px solid #e2e8f0",
-                                 borderRadius:4,padding:"4px 8px",fontSize:12}} />
+            </div>
+            <div className="card">
+              <div className="card-title">Slot preferences — neutral · avoid (hard block) · prefer (soft)</div>
+              {teachers.length ? (
+                <div>
+                  <div style={{marginBottom:12,display:"flex",justifyContent:"space-between",
+                               alignItems:"flex-start",flexWrap:"wrap",gap:8}}>
+                    <TabBar options={teachers} active={activeUnavailTeacher}
+                            onChange={setUnavailTeacher} />
+                    <div style={{display:"flex",gap:12,fontSize:11,color:"#64748b",alignItems:"center"}}>
+                      <span style={{display:"inline-flex",alignItems:"center",gap:4}}>
+                        <span style={{display:"inline-block",width:14,height:14,borderRadius:2,
+                                      background:"#fff",border:"1px solid #e2e8f0"}} /> Neutral
+                      </span>
+                      <span style={{display:"inline-flex",alignItems:"center",gap:4}}>
+                        <span style={{display:"inline-block",width:14,height:14,borderRadius:2,
+                                      background:"#fee2e2",border:"1px solid #fca5a5"}} /> Avoid (hard)
+                      </span>
+                      <span style={{display:"inline-flex",alignItems:"center",gap:4}}>
+                        <span style={{display:"inline-block",width:14,height:14,borderRadius:2,
+                                      background:"#dbeafe",border:"1px solid #93c5fd"}} /> Prefer (soft)
+                      </span>
+                    </div>
+                  </div>
+                  {activeUnavailTeacher && (
+                    <div style={{overflowX:"auto"}}>
+                      <table className="grid">
+                        <thead><tr>
+                          <th>Period</th>
+                          {DAYS.map(d=><th key={d}>{d.slice(0,3)}</th>)}
+                        </tr></thead>
+                        <tbody>
+                          {Array.from({length:MAX_SLOTS},(_,i)=>i+1).map(sl=>(
+                            <tr key={sl}>
+                              <td className="row-hd">P{sl}</td>
+                              {DAYS.map(d=>{
+                                const val = ((teacherSlotPref[activeUnavailTeacher]||{})[d]||{})[sl] || null;
+                                const bg = val==="avoid" ? "#fee2e2" : val==="prefer" ? "#dbeafe" : "";
+                                return (
+                                  <td key={d} style={bg ? {background:bg} : {}}>
+                                    <select value={val || ""}
+                                            onChange={e=>setSlotPref(activeUnavailTeacher,d,sl,e.target.value||null)}
+                                            style={{fontSize:10,background:"transparent",border:"none",
+                                                    cursor:"pointer",width:"100%",textAlign:"center"}}>
+                                      <option value="">—</option>
+                                      <option value="avoid">✗</option>
+                                      <option value="prefer">★</option>
+                                    </select>
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
-              ))}
+              ) : <span className="placeholder">Add teachers first.</span>}
             </div>
           </div>
+        )}
 
-          <div className="card">
-            <div className="card-title">Soft constraints (weights)</div>
-            <div style={{display:"flex",flexDirection:"column",gap:14}}>
-              {[
-                ["Class free-period holes", "weight_class_holes", 1],
-                ["Avoid slot 1 (early start)", "weight_avoid_first_slot", 2],
-                ["Avoid last slot (late finish)", "weight_avoid_last_slot", 1],
-                ["Teacher idle gaps (free periods between lessons)", "weight_teacher_spread", 1],
-                ["Subject clustering (same subject on same day)", "weight_subject_daily_spread", 2],
-                ["Heavy subjects in afternoon (see Subjects panel)", "weight_heavy_morning", 3],
-                ["Lessons outside teacher preferred slots", "weight_teacher_slot_pref", 2],
-              ].map(([label, key, def]) => (
-                <div key={key}>
-                  <div style={{fontSize:11,color:"#64748b",marginBottom:4}}>{label}</div>
-                  <input type="number" min={0} max={10}
-                         value={softConstraints[key] ?? def}
-                         onChange={e=>setSoftConstraints(p=>({...p,[key]:parseInt(e.target.value)??def}))}
-                         style={{width:60,background:"#f8fafc",border:"1px solid #e2e8f0",
-                                 borderRadius:4,padding:"4px 8px",fontSize:12}} />
-                </div>
-              ))}
+        {/* ── Tab: Rooms ── */}
+        {editorTab === "Rooms" && (
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20}}>
+            <div className="card">
+              <div className="card-title">Rooms</div>
+              <TagList items={rooms} label={r=>`${r.name} (${r.capacity}, ${r.room_type||"standard"})`} onRemove={removeRoom} />
+              <AddRow placeholders={["Room","Cap",""]} types={["text","number",null]}
+                      options={[null,null,ROOM_TYPES]} onAdd={addRoom} />
             </div>
-            <div style={{marginTop:8}}>
-              <div style={{fontSize:11,color:"#64748b",marginBottom:4}}>Morning threshold (slots 1–N are morning)</div>
-              <input type="number" min={1} max={MAX_SLOTS-1}
-                     value={softConstraints.morning_threshold ?? 4}
-                     onChange={e=>setSoftConstraints(p=>({...p,morning_threshold:parseInt(e.target.value)||4}))}
-                     style={{width:60,background:"#f8fafc",border:"1px solid #e2e8f0",
-                             borderRadius:4,padding:"4px 8px",fontSize:12}} />
-            </div>
-          </div>
-
-          <div className="card">
-            <div className="card-title">Schedule info</div>
-            <div style={{fontSize:11,color:"#64748b",lineHeight:1.8}}>
-              <div>Days: Monday – Friday</div>
-              <div>Periods: {MAX_SLOTS} per day</div>
-              <div>Total slots: {5 * MAX_SLOTS}</div>
-              {subjects.length > 0 && classes.length > 0 && (() => {
-                const total = classes.reduce((acc,cl)=>
-                  acc + subjects.reduce((a,s)=>a+(requirements[cl.name]?.[s]||0),0),0);
-                return <div>Lessons to schedule: {total}</div>;
-              })()}
-            </div>
-          </div>
-        </div>
-
-        {/* Row 4: Teacher slot preferences — neutral / avoid (hard) / prefer (soft) */}
-        <div className="card">
-          <div className="card-title">Teacher slot preferences — neutral · avoid (hard block) · prefer (soft)</div>
-          {teachers.length ? (
-            <div>
-              <div style={{marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:8}}>
-                <TabBar options={teachers} active={activeUnavailTeacher}
-                        onChange={setUnavailTeacher} />
-                <div style={{display:"flex",gap:12,fontSize:11,color:"#64748b",alignItems:"center"}}>
-                  <span style={{display:"inline-flex",alignItems:"center",gap:4}}>
-                    <span style={{display:"inline-block",width:14,height:14,borderRadius:2,background:"#fff",border:"1px solid #e2e8f0"}} /> Neutral
-                  </span>
-                  <span style={{display:"inline-flex",alignItems:"center",gap:4}}>
-                    <span style={{display:"inline-block",width:14,height:14,borderRadius:2,background:"#fee2e2",border:"1px solid #fca5a5"}} /> Avoid (hard)
-                  </span>
-                  <span style={{display:"inline-flex",alignItems:"center",gap:4}}>
-                    <span style={{display:"inline-block",width:14,height:14,borderRadius:2,background:"#dbeafe",border:"1px solid #93c5fd"}} /> Prefer (soft)
-                  </span>
-                </div>
-              </div>
-              {activeUnavailTeacher && (
+            <div className="card">
+              <div className="card-title">Subject room type requirement</div>
+              {subjects.length ? (
                 <div style={{overflowX:"auto"}}>
                   <table className="grid">
                     <thead><tr>
-                      <th>Period</th>
-                      {DAYS.map(d=><th key={d}>{d.slice(0,3)}</th>)}
+                      <th style={{textAlign:"left"}}>Subject</th>
+                      <th>Required room type</th>
                     </tr></thead>
                     <tbody>
-                      {Array.from({length:MAX_SLOTS},(_,i)=>i+1).map(sl=>(
-                        <tr key={sl}>
-                          <td className="row-hd">P{sl}</td>
-                          {DAYS.map(d=>{
-                            const val = ((teacherSlotPref[activeUnavailTeacher]||{})[d]||{})[sl] || null;
-                            const bg = val === "avoid" ? "#fee2e2" : val === "prefer" ? "#dbeafe" : "";
-                            return (
-                              <td key={d} style={bg ? {background:bg} : {}}>
-                                <select value={val || ""}
-                                        onChange={e => setSlotPref(activeUnavailTeacher, d, sl, e.target.value || null)}
-                                        style={{fontSize:10,background:"transparent",border:"none",
-                                                cursor:"pointer",width:"100%",textAlign:"center"}}>
-                                  <option value="">—</option>
-                                  <option value="avoid">✗</option>
-                                  <option value="prefer">★</option>
-                                </select>
-                              </td>
-                            );
-                          })}
+                      {subjects.map(s=>(
+                        <tr key={s}>
+                          <td className="row-hd">{s}</td>
+                          <td>
+                            <select value={subjectRoomType[s]||"any"}
+                                    onChange={e=>setSRT(s,e.target.value)}
+                                    style={{fontSize:11,background:"#f8fafc",border:"1px solid #e2e8f0",
+                                            borderRadius:3,padding:"2px 4px"}}>
+                              <option value="any">any</option>
+                              {ROOM_TYPES.map(rt=><option key={rt} value={rt}>{rt}</option>)}
+                            </select>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
-              )}
+              ) : <span className="placeholder">Add subjects first.</span>}
             </div>
-          ) : <span className="placeholder">Add teachers first.</span>}
-        </div>
+          </div>
+        )}
+
+        {/* ── Tab: Requirements ── */}
+        {editorTab === "Requirements" && (
+          <div style={{display:"flex",flexDirection:"column",gap:20}}>
+            <div className="card">
+              <div className="card-title">Lessons per class per subject (periods / week)</div>
+              {classes.length && subjects.length ? (
+                <div style={{overflowX:"auto"}}>
+                  <table className="grid">
+                    <thead><tr>
+                      <th></th>{subjects.map(s=><th key={s}>{s}</th>)}
+                    </tr></thead>
+                    <tbody>
+                      {classes.map(cl=>(
+                        <tr key={cl.name}>
+                          <td className="row-hd">{cl.name}</td>
+                          {subjects.map(s=>(
+                            <td key={s}>
+                              <input type="number" min={0} max={MAX_SLOTS}
+                                     value={(requirements[cl.name]||{})[s]||0}
+                                     onChange={e=>setReq(cl.name,s,e.target.value)} />
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : <span className="placeholder">Add classes and subjects first.</span>}
+            </div>
+            <div className="card">
+              <div className="card-title">Schedule info</div>
+              <div style={{fontSize:11,color:"#64748b",lineHeight:1.8}}>
+                <div>Days: Monday – Friday</div>
+                <div>Periods: {MAX_SLOTS} per day</div>
+                <div>Total slots: {5 * MAX_SLOTS}</div>
+                {subjects.length > 0 && classes.length > 0 && (() => {
+                  const total = classes.reduce((acc,cl)=>
+                    acc + subjects.reduce((a,s)=>a+(requirements[cl.name]?.[s]||0),0),0);
+                  const capacity = 5 * MAX_SLOTS;
+                  return <>
+                    <div>Lessons to schedule: {total}</div>
+                    <div style={{color: total > capacity ? "#ef4444" : "#22c55e"}}>
+                      Utilisation: {Math.round(total/capacity*100)}%
+                      {total > capacity ? " ⚠ over capacity" : ""}
+                    </div>
+                  </>;
+                })()}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Tab: Constraints ── */}
+        {editorTab === "Constraints" && (
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20}}>
+            <div className="card">
+              <div className="card-title">Hard constraints</div>
+              <div style={{display:"flex",flexDirection:"column",gap:14}}>
+                {[
+                  ["Max consecutive same subject", "max_consecutive_same_subj", 2],
+                  ["Max periods per day per teacher", "max_teacher_periods_day", 4],
+                ].map(([label, key, def]) => (
+                  <div key={key}>
+                    <div style={{fontSize:11,color:"#64748b",marginBottom:4}}>{label}</div>
+                    <input type="number" min={1} max={8}
+                           value={hardConstraints[key] ?? def}
+                           onChange={e=>setHardConstraints(p=>({...p,[key]:parseInt(e.target.value)||def}))}
+                           style={{width:60,background:"#f8fafc",border:"1px solid #e2e8f0",
+                                   borderRadius:4,padding:"4px 8px",fontSize:12}} />
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="card">
+              <div className="card-title">Soft constraints (weights)</div>
+              <div style={{display:"flex",flexDirection:"column",gap:14}}>
+                {[
+                  ["Class free-period holes", "weight_class_holes", 1],
+                  ["Avoid slot 1 (early start)", "weight_avoid_first_slot", 2],
+                  ["Avoid last slot (late finish)", "weight_avoid_last_slot", 1],
+                  ["Teacher idle gaps", "weight_teacher_spread", 1],
+                  ["Subject clustering (same subject on same day)", "weight_subject_daily_spread", 2],
+                  ["Heavy subjects in afternoon", "weight_heavy_morning", 3],
+                  ["Lessons outside teacher preferred slots", "weight_teacher_slot_pref", 2],
+                ].map(([label, key, def]) => (
+                  <div key={key}>
+                    <div style={{fontSize:11,color:"#64748b",marginBottom:4}}>{label}</div>
+                    <input type="number" min={0} max={10}
+                           value={softConstraints[key] ?? def}
+                           onChange={e=>setSoftConstraints(p=>({...p,[key]:parseInt(e.target.value)??def}))}
+                           style={{width:60,background:"#f8fafc",border:"1px solid #e2e8f0",
+                                   borderRadius:4,padding:"4px 8px",fontSize:12}} />
+                  </div>
+                ))}
+                <div>
+                  <div style={{fontSize:11,color:"#64748b",marginBottom:4}}>Morning threshold (slots 1–N are morning)</div>
+                  <input type="number" min={1} max={MAX_SLOTS-1}
+                         value={softConstraints.morning_threshold ?? 4}
+                         onChange={e=>setSoftConstraints(p=>({...p,morning_threshold:parseInt(e.target.value)||4}))}
+                         style={{width:60,background:"#f8fafc",border:"1px solid #e2e8f0",
+                                 borderRadius:4,padding:"4px 8px",fontSize:12}} />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
       </div>
     </div>
