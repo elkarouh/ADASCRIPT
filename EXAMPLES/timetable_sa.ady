@@ -132,10 +132,11 @@ var MAX_CONSEC_SAME_SUBJ:    int = 2
 var MAX_TEACHER_PERIODS_DAY: int = 4
 
 # Soft constraint weights
-var W_CLASS_HOLES:       int = 1
-var W_AVOID_FIRST_SLOT:  int = 2
-var W_AVOID_LAST_SLOT:   int = 1
-var W_TEACHER_SPREAD:    int = 1
+var W_CLASS_HOLES:          int = 1
+var W_AVOID_FIRST_SLOT:     int = 2
+var W_AVOID_LAST_SLOT:      int = 1
+var W_TEACHER_SPREAD:       int = 1
+var W_SUBJECT_DAILY_SPREAD: int = 2
 
 # ---- INPUT DATA END ----
 
@@ -186,11 +187,12 @@ if db_path != "":
         MAX_CONSEC_SAME_SUBJ    = int(row[0])
         MAX_TEACHER_PERIODS_DAY = int(row[1])
 
-    for row in conn.rows("SELECT weight_class_holes, weight_avoid_first_slot, weight_avoid_last_slot, weight_teacher_spread FROM soft_constraints WHERE problem=?", [p]):
-        W_CLASS_HOLES      = int(row[0])
-        W_AVOID_FIRST_SLOT = int(row[1])
-        W_AVOID_LAST_SLOT  = int(row[2])
-        W_TEACHER_SPREAD   = int(row[3])
+    for row in conn.rows("SELECT weight_class_holes, weight_avoid_first_slot, weight_avoid_last_slot, weight_teacher_spread, weight_subject_daily_spread FROM soft_constraints WHERE problem=?", [p]):
+        W_CLASS_HOLES          = int(row[0])
+        W_AVOID_FIRST_SLOT     = int(row[1])
+        W_AVOID_LAST_SLOT      = int(row[2])
+        W_TEACHER_SPREAD       = int(row[3])
+        W_SUBJECT_DAILY_SPREAD = int(row[4])
 
     conn.close()
     if not json_output:
@@ -269,6 +271,14 @@ for ki in 0..<N_LESSONS:
     if c not in lessons_of_class:
         lessons_of_class[c] = []
     lessons_of_class[c].append(ki)
+
+# Index: lessons_of_class_subj[(class,subject)] = list of lesson indices
+var lessons_of_class_subj: {str}[]int = {:}
+for ki in 0..<N_LESSONS:
+    let key: str = lessons[ki].cls + "\x00" + lessons[ki].subj
+    if key not in lessons_of_class_subj:
+        lessons_of_class_subj[key] = []
+    lessons_of_class_subj[key].append(ki)
 
 # Index: lessons_by_teacher_cand[lesson_idx][cand_idx] = teacher name
 # For teacher_day_soft we need to know which lessons *can* be taught by a teacher.
@@ -358,6 +368,20 @@ def class_day_consec(state: State_T, c: str, d: DAYS) -> int:
     return pen
 
 
+def class_subj_spread(state: State_T, c: str, s: str) -> int:
+    """Penalty when lessons of (class, subject) are clustered on few days.
+    = total_lessons - distinct_days_used  (0 when perfectly spread)."""
+    let key: str = c + "\x00" + s
+    if key not in lessons_of_class_subj:
+        return 0
+    var days_used: {str}bool = {:}
+    for k in lessons_of_class_subj[key]:
+        let d: str = lesson_cands[k][state[k]].period.day'Image
+        days_used[d] = True
+    let total: int = len(lessons_of_class_subj[key])
+    return W_SUBJECT_DAILY_SPREAD * (total - len(days_used))
+
+
 def soft_score(state: State_T) -> int:
     """Full soft score — O(N²). Used only for initial score; delta_soft is used in the loop."""
     var pen: int = 0
@@ -365,6 +389,8 @@ def soft_score(state: State_T) -> int:
         for d in DAYS:
             pen = pen + class_day_consec(state, c, d)
             pen = pen + class_day_soft(state, c, d)
+        for s in SUBJECTS:
+            pen = pen + class_subj_spread(state, c, s)
     for t in TEACHERS:
         for d in DAYS:
             pen = pen + teacher_day_soft(state, t, d)
@@ -384,6 +410,8 @@ def delta_soft(state: State_T, li: int, new_idx: int) -> int:
     let d_old: DAYS = old_v.period.day
     let d_new: DAYS = new_v.period.day
 
+    let s: str = lessons[li].subj
+
     # Subtract old contributions, add new ones
     var before: int = class_day_consec(state, c, d_old) + class_day_soft(state, c, d_old)
     var after_s: int = 0
@@ -393,6 +421,8 @@ def delta_soft(state: State_T, li: int, new_idx: int) -> int:
     before = before + teacher_day_soft(state, t, d_old)
     if t2 != t or d_new != d_old:
         before = before + teacher_day_soft(state, t2, d_new)
+
+    before = before + class_subj_spread(state, c, s)
 
     # Temporarily apply the move
     var tmp: State_T = state
@@ -405,6 +435,8 @@ def delta_soft(state: State_T, li: int, new_idx: int) -> int:
     after_s = after_s + teacher_day_soft(tmp, t, d_old)
     if t2 != t or d_new != d_old:
         after_s = after_s + teacher_day_soft(tmp, t2, d_new)
+
+    after_s = after_s + class_subj_spread(tmp, c, s)
 
     return after_s - before
 
@@ -651,7 +683,20 @@ for t in TEACHERS:
         if count > 1:
             t_spread = t_spread + (last_sl - first_sl + 1) - count
 
-let soft_total: int = W_CLASS_HOLES * holes + W_AVOID_FIRST_SLOT * first_hits + W_AVOID_LAST_SLOT * last_hits + W_TEACHER_SPREAD * t_spread
+var subj_spread: int = 0
+for c in CLASSES:
+    for s in SUBJECTS:
+        let key: str = c + "\x00" + s
+        if key not in lessons_of_class_subj:
+            continue
+        var days_used: {str}bool = {:}
+        for k in lessons_of_class_subj[key]:
+            let v: Value_T = lesson_cands[k][final_state[k]]
+            days_used[v.period.day'Image] = True
+        let total: int = len(lessons_of_class_subj[key])
+        subj_spread = subj_spread + (total - len(days_used))
+
+let soft_total: int = W_CLASS_HOLES * holes + W_AVOID_FIRST_SLOT * first_hits + W_AVOID_LAST_SLOT * last_hits + W_TEACHER_SPREAD * t_spread + W_SUBJECT_DAILY_SPREAD * subj_spread
 
 
 # ============================================================
@@ -675,7 +720,7 @@ if json_output:
             jlines.append("{\"class\":\"" + c + "\",\"subject\":\"" + s + "\",\"occ\":" + occ'Image + ",\"teacher\":\"" + t + "\",\"room\":\"" + r + "\",\"day\":\"" + d + "\",\"slot\":" + sl'Image + "}")
         let schedule_json: str = "[" + join(jlines, ",") + "]"
         let elapsed_ms: float  = elapsed * 1000.0
-        print("{\"ok\":true,\"schedule\":" + schedule_json + ",\"stats\":{\"elapsed_ms\":" + elapsed_ms'Image + ",\"soft_penalty\":" + soft_total'Image + ",\"soft_details\":{\"class_holes\":" + holes'Image + ",\"avoid_first_slot\":" + first_hits'Image + ",\"avoid_last_slot\":" + last_hits'Image + ",\"teacher_spread\":" + t_spread'Image + "}}}")
+        print("{\"ok\":true,\"schedule\":" + schedule_json + ",\"stats\":{\"elapsed_ms\":" + elapsed_ms'Image + ",\"soft_penalty\":" + soft_total'Image + ",\"soft_details\":{\"class_holes\":" + holes'Image + ",\"avoid_first_slot\":" + first_hits'Image + ",\"avoid_last_slot\":" + last_hits'Image + ",\"teacher_spread\":" + t_spread'Image + ",\"subject_daily_spread\":" + subj_spread'Image + "}}}")
 else:
     # ── Human-readable display ──────────────────────────────
 
@@ -749,3 +794,5 @@ else:
             print(f"  - Late finishes:     {last_hits} (weight {W_AVOID_LAST_SLOT})")
         if t_spread > 0:
             print(f"  - Teacher spread:    {t_spread} (weight {W_TEACHER_SPREAD})")
+        if subj_spread > 0:
+            print(f"  - Subject clustering:{subj_spread} (weight {W_SUBJECT_DAILY_SPREAD})")
