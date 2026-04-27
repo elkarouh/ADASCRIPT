@@ -900,7 +900,8 @@ def solve_to_json(data: JsonNode) -> str:
 
     let schedule_json: str = "[" + join(jlines, ",") + "]"
     let elapsed_ms: float  = elapsed * 1000.0
-    return "{\"ok\":true,\"schedule\":" + schedule_json + ",\"stats\":{\"elapsed_ms\":" + elapsed_ms'Image + ",\"soft_penalty\":" + soft_total'Image + ",\"soft_details\":{\"class_holes\":" + holes'Image + ",\"avoid_first_slot\":" + first_hits'Image + ",\"avoid_last_slot\":" + last_hits'Image + ",\"teacher_spread\":" + t_spread'Image + ",\"subject_daily_spread\":" + subj_spread'Image + ",\"heavy_morning\":" + heavy_morning'Image + ",\"teacher_slot_pref\":" + teacher_pref_hits'Image + "}}}"
+    let hard_total: int    = hard_count(ctx, final_state)
+    return "{\"ok\":true,\"schedule\":" + schedule_json + ",\"stats\":{\"elapsed_ms\":" + elapsed_ms'Image + ",\"hard_penalty\":" + hard_total'Image + ",\"soft_penalty\":" + soft_total'Image + ",\"soft_details\":{\"class_holes\":" + holes'Image + ",\"avoid_first_slot\":" + first_hits'Image + ",\"avoid_last_slot\":" + last_hits'Image + ",\"teacher_spread\":" + t_spread'Image + ",\"subject_daily_spread\":" + subj_spread'Image + ",\"heavy_morning\":" + heavy_morning'Image + ",\"teacher_slot_pref\":" + teacher_pref_hits'Image + "}}}"
 
 
 # ============================================================
@@ -1052,9 +1053,19 @@ def print_timetable(data: JsonNode, result_json: str):
 
     print("")
     print("=" * 54)
-    print("  Soft constraint score")
+    print("  Hard constraints")
     print("=" * 54)
     let stats: JsonNode = result["stats"]
+    let hard_total: int = stats["hard_penalty"].getInt()
+    if hard_total == 0:
+        print("All hard constraints satisfied")
+    else:
+        print(f"HARD VIOLATIONS: {hard_total}")
+
+    print("")
+    print("=" * 54)
+    print("  Soft constraint score")
+    print("=" * 54)
     let soft_total: int = stats["soft_penalty"].getInt()
     if soft_total == 0:
         print("All soft constraints satisfied")
