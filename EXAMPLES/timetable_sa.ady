@@ -137,6 +137,10 @@ var W_AVOID_FIRST_SLOT:     int = 2
 var W_AVOID_LAST_SLOT:      int = 1
 var W_TEACHER_SPREAD:       int = 1
 var W_SUBJECT_DAILY_SPREAD: int = 2
+var W_HEAVY_MORNING:        int = 3
+var MORNING_THRESHOLD:      int = 4   # slots > this are "afternoon"
+
+var heavy_subjects: {str}bool = {"Math": True, "Science": True}
 
 # ---- INPUT DATA END ----
 
@@ -187,12 +191,18 @@ if db_path != "":
         MAX_CONSEC_SAME_SUBJ    = int(row[0])
         MAX_TEACHER_PERIODS_DAY = int(row[1])
 
-    for row in conn.rows("SELECT weight_class_holes, weight_avoid_first_slot, weight_avoid_last_slot, weight_teacher_spread, weight_subject_daily_spread FROM soft_constraints WHERE problem=?", [p]):
+    for row in conn.rows("SELECT weight_class_holes, weight_avoid_first_slot, weight_avoid_last_slot, weight_teacher_spread, weight_subject_daily_spread, weight_heavy_morning, morning_threshold FROM soft_constraints WHERE problem=?", [p]):
         W_CLASS_HOLES          = int(row[0])
         W_AVOID_FIRST_SLOT     = int(row[1])
         W_AVOID_LAST_SLOT      = int(row[2])
         W_TEACHER_SPREAD       = int(row[3])
         W_SUBJECT_DAILY_SPREAD = int(row[4])
+        W_HEAVY_MORNING        = int(row[5])
+        MORNING_THRESHOLD      = int(row[6])
+
+    heavy_subjects = {:}
+    for row in conn.rows("SELECT subject FROM heavy_subjects WHERE problem=?", [p]):
+        heavy_subjects[row[0]] = True
 
     conn.close()
     if not json_output:
@@ -368,6 +378,18 @@ def class_day_consec(state: State_T, c: str, d: DAYS) -> int:
     return pen
 
 
+def heavy_morning_penalty(state: State_T) -> int:
+    """Penalty for heavy subjects scheduled after MORNING_THRESHOLD."""
+    var pen: int = 0
+    for k in 0..<N_LESSONS:
+        let s: str = lessons[k].subj
+        if s in heavy_subjects:
+            let sl: int = lesson_cands[k][state[k]].period.slot
+            if sl > MORNING_THRESHOLD:
+                pen = pen + W_HEAVY_MORNING
+    return pen
+
+
 def class_subj_spread(state: State_T, c: str, s: str) -> int:
     """Penalty when lessons of (class, subject) are clustered on few days.
     = total_lessons - distinct_days_used  (0 when perfectly spread)."""
@@ -394,6 +416,7 @@ def soft_score(state: State_T) -> int:
     for t in TEACHERS:
         for d in DAYS:
             pen = pen + teacher_day_soft(state, t, d)
+    pen = pen + heavy_morning_penalty(state)
     return pen
 
 
@@ -437,6 +460,13 @@ def delta_soft(state: State_T, li: int, new_idx: int) -> int:
         after_s = after_s + teacher_day_soft(tmp, t2, d_new)
 
     after_s = after_s + class_subj_spread(tmp, c, s)
+
+    # heavy morning: only the moved lesson's subject/slot changes
+    if s in heavy_subjects:
+        if old_v.period.slot > MORNING_THRESHOLD:
+            before = before + W_HEAVY_MORNING
+        if new_v.period.slot > MORNING_THRESHOLD:
+            after_s = after_s + W_HEAVY_MORNING
 
     return after_s - before
 
@@ -683,6 +713,13 @@ for t in TEACHERS:
         if count > 1:
             t_spread = t_spread + (last_sl - first_sl + 1) - count
 
+var heavy_morning: int = 0
+for k in 0..<N_LESSONS:
+    let s: str = lessons[k].subj
+    if s in heavy_subjects:
+        if lesson_cands[k][final_state[k]].period.slot > MORNING_THRESHOLD:
+            heavy_morning = heavy_morning + 1
+
 var subj_spread: int = 0
 for c in CLASSES:
     for s in SUBJECTS:
@@ -696,7 +733,7 @@ for c in CLASSES:
         let total: int = len(lessons_of_class_subj[key])
         subj_spread = subj_spread + (total - len(days_used))
 
-let soft_total: int = W_CLASS_HOLES * holes + W_AVOID_FIRST_SLOT * first_hits + W_AVOID_LAST_SLOT * last_hits + W_TEACHER_SPREAD * t_spread + W_SUBJECT_DAILY_SPREAD * subj_spread
+let soft_total: int = W_CLASS_HOLES * holes + W_AVOID_FIRST_SLOT * first_hits + W_AVOID_LAST_SLOT * last_hits + W_TEACHER_SPREAD * t_spread + W_SUBJECT_DAILY_SPREAD * subj_spread + W_HEAVY_MORNING * heavy_morning
 
 
 # ============================================================
@@ -720,7 +757,7 @@ if json_output:
             jlines.append("{\"class\":\"" + c + "\",\"subject\":\"" + s + "\",\"occ\":" + occ'Image + ",\"teacher\":\"" + t + "\",\"room\":\"" + r + "\",\"day\":\"" + d + "\",\"slot\":" + sl'Image + "}")
         let schedule_json: str = "[" + join(jlines, ",") + "]"
         let elapsed_ms: float  = elapsed * 1000.0
-        print("{\"ok\":true,\"schedule\":" + schedule_json + ",\"stats\":{\"elapsed_ms\":" + elapsed_ms'Image + ",\"soft_penalty\":" + soft_total'Image + ",\"soft_details\":{\"class_holes\":" + holes'Image + ",\"avoid_first_slot\":" + first_hits'Image + ",\"avoid_last_slot\":" + last_hits'Image + ",\"teacher_spread\":" + t_spread'Image + ",\"subject_daily_spread\":" + subj_spread'Image + "}}}")
+        print("{\"ok\":true,\"schedule\":" + schedule_json + ",\"stats\":{\"elapsed_ms\":" + elapsed_ms'Image + ",\"soft_penalty\":" + soft_total'Image + ",\"soft_details\":{\"class_holes\":" + holes'Image + ",\"avoid_first_slot\":" + first_hits'Image + ",\"avoid_last_slot\":" + last_hits'Image + ",\"teacher_spread\":" + t_spread'Image + ",\"subject_daily_spread\":" + subj_spread'Image + ",\"heavy_morning\":" + heavy_morning'Image + "}}}")
 else:
     # ── Human-readable display ──────────────────────────────
 
@@ -796,3 +833,5 @@ else:
             print(f"  - Teacher spread:    {t_spread} (weight {W_TEACHER_SPREAD})")
         if subj_spread > 0:
             print(f"  - Subject clustering:{subj_spread} (weight {W_SUBJECT_DAILY_SPREAD})")
+        if heavy_morning > 0:
+            print(f"  - Heavy after noon:  {heavy_morning} (weight {W_HEAVY_MORNING})")
