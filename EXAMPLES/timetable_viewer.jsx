@@ -136,7 +136,7 @@ function slotToTimeEnd(slot) {
   return `${String(h).padStart(2,"0")}:00:00`;
 }
 
-function computeSoftScore(schedule, softConstraints, heavySubjects) {
+function computeSoftScore(schedule, softConstraints, heavySubjects, teacherPrefSlots) {
   const w = softConstraints || {};
   const wHole    = w.weight_class_holes          || 1;
   const wFirst   = w.weight_avoid_first_slot     || 2;
@@ -145,6 +145,7 @@ function computeSoftScore(schedule, softConstraints, heavySubjects) {
   const wSubjSpr = w.weight_subject_daily_spread || 2;
   const wHeavy   = w.weight_heavy_morning        || 3;
   const mThresh  = w.morning_threshold           || 4;
+  const wTPref   = w.weight_teacher_slot_pref    || 2;
   const heavySet = new Set(heavySubjects || []);
 
   const classDay  = {};   // (class,day)    -> [slots]
@@ -161,7 +162,7 @@ function computeSoftScore(schedule, softConstraints, heavySubjects) {
     classSubj[sk].count++;
   }
 
-  let holes = 0, first = 0, last = 0, spread = 0, subjSpread = 0, heavyMorning = 0;
+  let holes = 0, first = 0, last = 0, spread = 0, subjSpread = 0, heavyMorning = 0, tPrefHits = 0;
   for (const slots of Object.values(classDay)) {
     slots.sort((a,b)=>a-b);
     const mn = slots[0], mx = slots[slots.length-1];
@@ -179,11 +180,14 @@ function computeSoftScore(schedule, softConstraints, heavySubjects) {
   }
   for (const e of schedule) {
     if (heavySet.has(e.subject) && e.slot > mThresh) heavyMorning++;
+    const prefSlots = teacherPrefSlots && teacherPrefSlots[e.teacher];
+    if (prefSlots && Object.keys(prefSlots).length > 0 && !prefSlots[e.slot]) tPrefHits++;
   }
 
-  const total = holes*wHole + first*wFirst + last*wLast + spread*wSpread + subjSpread*wSubjSpr + heavyMorning*wHeavy;
+  const total = holes*wHole + first*wFirst + last*wLast + spread*wSpread + subjSpread*wSubjSpr + heavyMorning*wHeavy + tPrefHits*wTPref;
   return { total, class_holes: holes, avoid_first_slot: first, avoid_last_slot: last,
-           teacher_spread: spread, subject_daily_spread: subjSpread, heavy_morning: heavyMorning };
+           teacher_spread: spread, subject_daily_spread: subjSpread, heavy_morning: heavyMorning,
+           teacher_slot_pref: tPrefHits };
 }
 
 // Map day name → a fixed Monday in a reference week (2024-01-01 is Monday)
@@ -387,8 +391,9 @@ function App() {
   const [softConstraints,   setSoftConstraints]    = useState({
     weight_class_holes: 1, weight_avoid_first_slot: 2,
     weight_avoid_last_slot: 1, weight_teacher_spread: 1, weight_subject_daily_spread: 2,
-    weight_heavy_morning: 3, morning_threshold: 4 });
-  const [heavySubjects,   setHeavySubjects]     = useState([]);  // []str
+    weight_heavy_morning: 3, morning_threshold: 4, weight_teacher_slot_pref: 2 });
+  const [heavySubjects,      setHeavySubjects]      = useState([]);   // []str
+  const [teacherPrefSlots,   setTeacherPrefSlots]   = useState({});   // {teacher: {slot: bool}}
 
   const [probName,    setProbName]    = useState("");
   const [savedNames,  setSavedNames]  = useState([]);
@@ -425,6 +430,11 @@ function App() {
       hard_constraints: hardConstraints,
       soft_constraints: softConstraints,
       heavy_subjects: heavySubjects,
+      teacher_preferred_slots: Object.fromEntries(
+        Object.entries(teacherPrefSlots).map(([t, slotMap]) =>
+          [t, Object.entries(slotMap).filter(([,v])=>v).map(([sl])=>parseInt(sl))]
+        ).filter(([,slots])=>slots.length>0)
+      ),
     };
   }
 
@@ -464,8 +474,12 @@ function App() {
       }
       setTeacherUnavail(ua);
       setHardConstraints(p.hard_constraints || { max_consecutive_same_subj:2, max_teacher_periods_day:4 });
-      setSoftConstraints(p.soft_constraints || { weight_class_holes:1, weight_avoid_first_slot:2, weight_avoid_last_slot:1, weight_teacher_spread:1, weight_subject_daily_spread:2, weight_heavy_morning:3, morning_threshold:4 });
+      setSoftConstraints(p.soft_constraints || { weight_class_holes:1, weight_avoid_first_slot:2, weight_avoid_last_slot:1, weight_teacher_spread:1, weight_subject_daily_spread:2, weight_heavy_morning:3, morning_threshold:4, weight_teacher_slot_pref:2 });
       setHeavySubjects(p.heavy_subjects || []);
+      const tps = {};
+      for (const [t, slots] of Object.entries(p.teacher_preferred_slots || {}))
+        tps[t] = Object.fromEntries((slots||[]).map(sl=>[sl,true]));
+      setTeacherPrefSlots(tps);
       setProbName(name); setResult(null); setSchedule([]); setStatusMsg(null); setPage("editor");
       setUnavailTeacher((p.teachers||[])[0] || null);
     } catch(e) { setStatusMsg({text:"Load failed: "+e.message,ok:false}); }
@@ -477,8 +491,9 @@ function App() {
     setRequirements({}); setCanTeach({});
     setSubjectRoomType({}); setTeacherUnavail({});
     setHardConstraints({ max_consecutive_same_subj:2, max_teacher_periods_day:4 });
-    setSoftConstraints({ weight_class_holes:1, weight_avoid_first_slot:2, weight_avoid_last_slot:1, weight_teacher_spread:1, weight_subject_daily_spread:2, weight_heavy_morning:3, morning_threshold:4 });
+    setSoftConstraints({ weight_class_holes:1, weight_avoid_first_slot:2, weight_avoid_last_slot:1, weight_teacher_spread:1, weight_subject_daily_spread:2, weight_heavy_morning:3, morning_threshold:4, weight_teacher_slot_pref:2 });
     setHeavySubjects([]);
+    setTeacherPrefSlots({});
     setProbName(""); setResult(null); setSchedule([]); setStatusMsg(null);
   }
 
@@ -508,7 +523,7 @@ function App() {
     setHeavySubjects(p=>p.filter(s=>s!==n));
   };
   const addTeacher   = ([n])      => { if(!n||teachers.includes(n))return; setTeachers(p=>[...p,n]); setCanTeach(p=>({...p,[n]:{}})); setUnavailTeacher(t=>t||n); };
-  const removeTeacher= n          => { setTeachers(p=>p.filter(t=>t!==n)); setCanTeach(p=>{const x={...p};delete x[n];return x;}); setTeacherUnavail(p=>{const x={...p};delete x[n];return x;}); };
+  const removeTeacher= n          => { setTeachers(p=>p.filter(t=>t!==n)); setCanTeach(p=>{const x={...p};delete x[n];return x;}); setTeacherUnavail(p=>{const x={...p};delete x[n];return x;}); setTeacherPrefSlots(p=>{const x={...p};delete x[n];return x;}); };
   const addRoom      = ([n,c,rt]) => { if(!n||rooms.find(r=>r.name===n))return; setRooms(p=>[...p,{name:n,capacity:parseInt(c)||30,room_type:rt||"standard"}]); };
   const removeRoom   = n          => setRooms(p=>p.filter(r=>r.name!==n));
   const setReq       = (c,s,v)   => setRequirements(p=>({...p,[c]:{...(p[c]||{}),[s]:parseInt(v)||0}}));
@@ -591,7 +606,7 @@ function App() {
 
   // ── result page ───────────────────────────────────────────────────────────
   if (page === "result" && result?.ok) {
-    const softScore = computeSoftScore(schedule, softConstraints, heavySubjects);
+    const softScore = computeSoftScore(schedule, softConstraints, heavySubjects, teacherPrefSlots);
     const pen       = softScore.total;
     const sd        = softScore;
     const hardViols = result.hard_violations || [];
@@ -633,6 +648,7 @@ function App() {
                 sd.teacher_spread         && `${sd.teacher_spread} teacher idle gaps`,
                 sd.subject_daily_spread   && `${sd.subject_daily_spread} subject clustering`,
                 sd.heavy_morning          && `${sd.heavy_morning} heavy subjects in afternoon`,
+                sd.teacher_slot_pref      && `${sd.teacher_slot_pref} lessons outside preferred slots`,
               ].filter(Boolean).join(", ")}
             </div>
           )}
@@ -855,6 +871,7 @@ function App() {
                 ["Teacher idle gaps (free periods between lessons)", "weight_teacher_spread", 1],
                 ["Subject clustering (same subject on same day)", "weight_subject_daily_spread", 2],
                 ["Heavy subjects in afternoon (see Subjects panel)", "weight_heavy_morning", 3],
+                ["Lessons outside teacher preferred slots", "weight_teacher_slot_pref", 2],
               ].map(([label, key, def]) => (
                 <div key={key}>
                   <div style={{fontSize:11,color:"#64748b",marginBottom:4}}>{label}</div>
@@ -926,6 +943,38 @@ function App() {
                   </table>
                 </div>
               )}
+            </div>
+          ) : <span className="placeholder">Add teachers first.</span>}
+        {/* Row 5: Teacher preferred slots */}
+        <div className="card">
+          <div className="card-title">Teacher preferred slots — check slots the teacher prefers to teach in</div>
+          {teachers.length ? (
+            <div>
+              <div style={{marginBottom:12}}>
+                <TabBar options={teachers} active={activeUnavailTeacher}
+                        onChange={setUnavailTeacher} />
+              </div>
+              {activeUnavailTeacher && (
+                <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+                  {Array.from({length:MAX_SLOTS},(_,i)=>i+1).map(sl => {
+                    const preferred = !!((teacherPrefSlots[activeUnavailTeacher]||{})[sl]);
+                    return (
+                      <label key={sl} style={{display:"flex",alignItems:"center",gap:4,fontSize:13,
+                        padding:"4px 10px",borderRadius:4,cursor:"pointer",
+                        background: preferred ? "#dbeafe" : "#f8fafc",
+                        border: `1px solid ${preferred ? "#93c5fd" : "#e2e8f0"}`}}>
+                        <input type="checkbox" checked={preferred}
+                               onChange={e => setTeacherPrefSlots(p => ({
+                                 ...p,
+                                 [activeUnavailTeacher]: { ...(p[activeUnavailTeacher]||{}), [sl]: e.target.checked }
+                               }))} />
+                        P{sl}
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+              <div style={{fontSize:11,color:"#94a3b8",marginTop:8}}>Leave all unchecked = no preference</div>
             </div>
           ) : <span className="placeholder">Add teachers first.</span>}
         </div>

@@ -139,8 +139,10 @@ var W_TEACHER_SPREAD:       int = 1
 var W_SUBJECT_DAILY_SPREAD: int = 2
 var W_HEAVY_MORNING:        int = 3
 var MORNING_THRESHOLD:      int = 4   # slots > this are "afternoon"
+var W_TEACHER_SLOT_PREF:    int = 2
 
 var heavy_subjects: {str}bool = {"Math": True, "Science": True}
+var teacher_pref_slots: {str}{int}bool = {:}   # teacher -> set of preferred slots (empty = no pref)
 
 # ---- INPUT DATA END ----
 
@@ -191,7 +193,7 @@ if db_path != "":
         MAX_CONSEC_SAME_SUBJ    = int(row[0])
         MAX_TEACHER_PERIODS_DAY = int(row[1])
 
-    for row in conn.rows("SELECT weight_class_holes, weight_avoid_first_slot, weight_avoid_last_slot, weight_teacher_spread, weight_subject_daily_spread, weight_heavy_morning, morning_threshold FROM soft_constraints WHERE problem=?", [p]):
+    for row in conn.rows("SELECT weight_class_holes, weight_avoid_first_slot, weight_avoid_last_slot, weight_teacher_spread, weight_subject_daily_spread, weight_heavy_morning, morning_threshold, weight_teacher_slot_pref FROM soft_constraints WHERE problem=?", [p]):
         W_CLASS_HOLES          = int(row[0])
         W_AVOID_FIRST_SLOT     = int(row[1])
         W_AVOID_LAST_SLOT      = int(row[2])
@@ -199,10 +201,19 @@ if db_path != "":
         W_SUBJECT_DAILY_SPREAD = int(row[4])
         W_HEAVY_MORNING        = int(row[5])
         MORNING_THRESHOLD      = int(row[6])
+        W_TEACHER_SLOT_PREF    = int(row[7])
 
     heavy_subjects = {:}
     for row in conn.rows("SELECT subject FROM heavy_subjects WHERE problem=?", [p]):
         heavy_subjects[row[0]] = True
+
+    teacher_pref_slots = {:}
+    for row in conn.rows("SELECT teacher, slot FROM teacher_preferred_slots WHERE problem=?", [p]):
+        let t: str = row[0]
+        let sl: int = int(row[1])
+        if t not in teacher_pref_slots:
+            teacher_pref_slots[t] = {:}
+        teacher_pref_slots[t][sl] = True
 
     conn.close()
     if not json_output:
@@ -378,6 +389,18 @@ def class_day_consec(state: State_T, c: str, d: DAYS) -> int:
     return pen
 
 
+def teacher_slot_pref_penalty(state: State_T) -> int:
+    """Penalty for lessons scheduled outside a teacher's preferred slots."""
+    var pen: int = 0
+    for k in 0..<N_LESSONS:
+        let v: Value_T = lesson_cands[k][state[k]]
+        let t: str = v.teacher
+        if t in teacher_pref_slots and len(teacher_pref_slots[t]) > 0:
+            if v.period.slot not in teacher_pref_slots[t]:
+                pen = pen + W_TEACHER_SLOT_PREF
+    return pen
+
+
 def heavy_morning_penalty(state: State_T) -> int:
     """Penalty for heavy subjects scheduled after MORNING_THRESHOLD."""
     var pen: int = 0
@@ -417,6 +440,7 @@ def soft_score(state: State_T) -> int:
         for d in DAYS:
             pen = pen + teacher_day_soft(state, t, d)
     pen = pen + heavy_morning_penalty(state)
+    pen = pen + teacher_slot_pref_penalty(state)
     return pen
 
 
@@ -467,6 +491,16 @@ def delta_soft(state: State_T, li: int, new_idx: int) -> int:
             before = before + W_HEAVY_MORNING
         if new_v.period.slot > MORNING_THRESHOLD:
             after_s = after_s + W_HEAVY_MORNING
+
+    # teacher slot preference: teacher may change (new candidate), slot always changes
+    let old_t: str = old_v.teacher
+    let new_t: str = new_v.teacher
+    if old_t in teacher_pref_slots and len(teacher_pref_slots[old_t]) > 0:
+        if old_v.period.slot not in teacher_pref_slots[old_t]:
+            before = before + W_TEACHER_SLOT_PREF
+    if new_t in teacher_pref_slots and len(teacher_pref_slots[new_t]) > 0:
+        if new_v.period.slot not in teacher_pref_slots[new_t]:
+            after_s = after_s + W_TEACHER_SLOT_PREF
 
     return after_s - before
 
@@ -713,6 +747,14 @@ for t in TEACHERS:
         if count > 1:
             t_spread = t_spread + (last_sl - first_sl + 1) - count
 
+var teacher_pref_hits: int = 0
+for k in 0..<N_LESSONS:
+    let v: Value_T = lesson_cands[k][final_state[k]]
+    let t: str = v.teacher
+    if t in teacher_pref_slots and len(teacher_pref_slots[t]) > 0:
+        if v.period.slot not in teacher_pref_slots[t]:
+            teacher_pref_hits = teacher_pref_hits + 1
+
 var heavy_morning: int = 0
 for k in 0..<N_LESSONS:
     let s: str = lessons[k].subj
@@ -733,7 +775,7 @@ for c in CLASSES:
         let total: int = len(lessons_of_class_subj[key])
         subj_spread = subj_spread + (total - len(days_used))
 
-let soft_total: int = W_CLASS_HOLES * holes + W_AVOID_FIRST_SLOT * first_hits + W_AVOID_LAST_SLOT * last_hits + W_TEACHER_SPREAD * t_spread + W_SUBJECT_DAILY_SPREAD * subj_spread + W_HEAVY_MORNING * heavy_morning
+let soft_total: int = W_CLASS_HOLES * holes + W_AVOID_FIRST_SLOT * first_hits + W_AVOID_LAST_SLOT * last_hits + W_TEACHER_SPREAD * t_spread + W_SUBJECT_DAILY_SPREAD * subj_spread + W_HEAVY_MORNING * heavy_morning + W_TEACHER_SLOT_PREF * teacher_pref_hits
 
 
 # ============================================================
@@ -757,7 +799,7 @@ if json_output:
             jlines.append("{\"class\":\"" + c + "\",\"subject\":\"" + s + "\",\"occ\":" + occ'Image + ",\"teacher\":\"" + t + "\",\"room\":\"" + r + "\",\"day\":\"" + d + "\",\"slot\":" + sl'Image + "}")
         let schedule_json: str = "[" + join(jlines, ",") + "]"
         let elapsed_ms: float  = elapsed * 1000.0
-        print("{\"ok\":true,\"schedule\":" + schedule_json + ",\"stats\":{\"elapsed_ms\":" + elapsed_ms'Image + ",\"soft_penalty\":" + soft_total'Image + ",\"soft_details\":{\"class_holes\":" + holes'Image + ",\"avoid_first_slot\":" + first_hits'Image + ",\"avoid_last_slot\":" + last_hits'Image + ",\"teacher_spread\":" + t_spread'Image + ",\"subject_daily_spread\":" + subj_spread'Image + ",\"heavy_morning\":" + heavy_morning'Image + "}}}")
+        print("{\"ok\":true,\"schedule\":" + schedule_json + ",\"stats\":{\"elapsed_ms\":" + elapsed_ms'Image + ",\"soft_penalty\":" + soft_total'Image + ",\"soft_details\":{\"class_holes\":" + holes'Image + ",\"avoid_first_slot\":" + first_hits'Image + ",\"avoid_last_slot\":" + last_hits'Image + ",\"teacher_spread\":" + t_spread'Image + ",\"subject_daily_spread\":" + subj_spread'Image + ",\"heavy_morning\":" + heavy_morning'Image + ",\"teacher_slot_pref\":" + teacher_pref_hits'Image + "}}}")
 else:
     # ── Human-readable display ──────────────────────────────
 
@@ -835,3 +877,5 @@ else:
             print(f"  - Subject clustering:{subj_spread} (weight {W_SUBJECT_DAILY_SPREAD})")
         if heavy_morning > 0:
             print(f"  - Heavy after noon:  {heavy_morning} (weight {W_HEAVY_MORNING})")
+        if teacher_pref_hits > 0:
+            print(f"  - Teacher slot pref: {teacher_pref_hits} (weight {W_TEACHER_SLOT_PREF})")
