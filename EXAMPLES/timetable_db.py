@@ -104,8 +104,10 @@ DEFAULT_DATA = {
         "weight_subject_daily_spread": 2,   # lessons of same subject clustered on same day
         "weight_heavy_morning":        3,   # heavy subject scheduled after morning_threshold
         "morning_threshold":           4,   # slots > this are considered afternoon
+        "weight_teacher_slot_pref":    2,   # lesson outside teacher's preferred slots
     },
     "heavy_subjects": [],                   # list of subject names marked as heavy
+    "teacher_preferred_slots": {},          # {teacher: [slot, ...]}
 }
 
 DDL = """
@@ -176,12 +178,19 @@ CREATE TABLE IF NOT EXISTS soft_constraints (
     weight_teacher_spread        INTEGER NOT NULL DEFAULT 1,
     weight_subject_daily_spread  INTEGER NOT NULL DEFAULT 2,
     weight_heavy_morning         INTEGER NOT NULL DEFAULT 3,
-    morning_threshold            INTEGER NOT NULL DEFAULT 4
+    morning_threshold            INTEGER NOT NULL DEFAULT 4,
+    weight_teacher_slot_pref     INTEGER NOT NULL DEFAULT 2
 );
 CREATE TABLE IF NOT EXISTS heavy_subjects (
     problem  TEXT NOT NULL REFERENCES problems(name) ON DELETE CASCADE,
     subject  TEXT NOT NULL,
     PRIMARY KEY (problem, subject)
+);
+CREATE TABLE IF NOT EXISTS teacher_preferred_slots (
+    problem  TEXT NOT NULL REFERENCES problems(name) ON DELETE CASCADE,
+    teacher  TEXT NOT NULL,
+    slot     INTEGER NOT NULL,
+    PRIMARY KEY (problem, teacher, slot)
 );
 """
 
@@ -257,10 +266,17 @@ class DB:
             "weight_subject_daily_spread": soft_row[4] if soft_row else 2,
             "weight_heavy_morning":        soft_row[5] if soft_row else 3,
             "morning_threshold":           soft_row[6] if soft_row else 4,
+            "weight_teacher_slot_pref":    soft_row[7] if soft_row else 2,
         }
 
         heavy_subjects = [r[0] for r in self.conn.execute(
             "SELECT subject FROM heavy_subjects WHERE problem=?", (name,)).fetchall()]
+
+        teacher_pref_rows = self.conn.execute(
+            "SELECT teacher, slot FROM teacher_preferred_slots WHERE problem=?", (name,)).fetchall()
+        teacher_preferred_slots = {}
+        for t, sl in teacher_pref_rows:
+            teacher_preferred_slots.setdefault(t, []).append(sl)
 
         return {
             "classes": classes, "subjects": subjects,
@@ -271,6 +287,7 @@ class DB:
             "hard_constraints": hard_constraints,
             "soft_constraints": soft_constraints,
             "heavy_subjects": heavy_subjects,
+            "teacher_preferred_slots": teacher_preferred_slots,
         }
 
     def save(self, name, data):
@@ -319,7 +336,7 @@ class DB:
             self.conn.execute(
                 "INSERT INTO soft_constraints(problem,weight_class_holes,weight_avoid_first_slot,"
                 "weight_avoid_last_slot,weight_teacher_spread,weight_subject_daily_spread,"
-                "weight_heavy_morning,morning_threshold) VALUES (?,?,?,?,?,?,?,?)",
+                "weight_heavy_morning,morning_threshold,weight_teacher_slot_pref) VALUES (?,?,?,?,?,?,?,?,?)",
                 (name,
                  int(soft.get("weight_class_holes", 1)),
                  int(soft.get("weight_avoid_first_slot", 2)),
@@ -327,10 +344,16 @@ class DB:
                  int(soft.get("weight_teacher_spread", 1)),
                  int(soft.get("weight_subject_daily_spread", 2)),
                  int(soft.get("weight_heavy_morning", 3)),
-                 int(soft.get("morning_threshold", 4))))
+                 int(soft.get("morning_threshold", 4)),
+                 int(soft.get("weight_teacher_slot_pref", 2))))
             for s in data.get("heavy_subjects", []):
                 self.conn.execute(
                     "INSERT OR IGNORE INTO heavy_subjects(problem,subject) VALUES (?,?)", (name, s))
+            for t, slots in data.get("teacher_preferred_slots", {}).items():
+                for sl in slots:
+                    self.conn.execute(
+                        "INSERT OR IGNORE INTO teacher_preferred_slots(problem,teacher,slot) VALUES (?,?,?)",
+                        (name, t, int(sl)))
 
     def delete(self, name):
         if name == DEFAULT_NAME:
