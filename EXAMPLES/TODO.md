@@ -5,13 +5,13 @@ the server's `computeSoftScore` equivalent, and the viewer's `computeSoftScore` 
 
 ---
 
-## 1. Even weekly distribution (avoid subject clustering)
+## ~~1. Even weekly distribution (avoid subject clustering)~~ ✓ DONE
 Penalise a class having the same subject on consecutive days.
 Example: Math on Mon+Tue+Wed is worse than Mon+Wed+Fri.
 - SA: per (class, subject), count runs of consecutive days that have a lesson
 - Weight: `weight_subject_daily_spread`
 
-## 2. Hard subjects in the morning
+## ~~2. Hard subjects in the morning~~ ✓ DONE
 Penalise Math/Science lessons in slots > N (configurable threshold, default 4).
 User marks subjects as "heavy" in the editor.
 - SA: per lesson, if subject is heavy and slot > morning_threshold → +1
