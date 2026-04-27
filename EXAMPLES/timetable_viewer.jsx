@@ -138,22 +138,27 @@ function slotToTimeEnd(slot) {
 
 function computeSoftScore(schedule, softConstraints) {
   const w = softConstraints || {};
-  const wHole   = w.weight_class_holes       || 1;
-  const wFirst  = w.weight_avoid_first_slot  || 2;
-  const wLast   = w.weight_avoid_last_slot   || 1;
-  const wSpread = w.weight_teacher_spread    || 1;
+  const wHole    = w.weight_class_holes          || 1;
+  const wFirst   = w.weight_avoid_first_slot     || 2;
+  const wLast    = w.weight_avoid_last_slot      || 1;
+  const wSpread  = w.weight_teacher_spread       || 1;
+  const wSubjSpr = w.weight_subject_daily_spread || 2;
 
-  // Index by class+day and teacher+day
-  const classDay = {};   // (class,day) -> sorted slots
-  const teachDay = {};   // (teacher,day) -> slots
+  const classDay  = {};   // (class,day)    -> [slots]
+  const teachDay  = {};   // (teacher,day)  -> [slots]
+  const classSubj = {};   // (class,subject)-> Set of days
   for (const e of schedule) {
     const ck = `${e.class}\0${e.day}`;
     (classDay[ck] = classDay[ck] || []).push(e.slot);
     const tk = `${e.teacher}\0${e.day}`;
     (teachDay[tk] = teachDay[tk] || []).push(e.slot);
+    const sk = `${e.class}\0${e.subject}`;
+    if (!classSubj[sk]) classSubj[sk] = { days: new Set(), count: 0 };
+    classSubj[sk].days.add(e.day);
+    classSubj[sk].count++;
   }
 
-  let holes = 0, first = 0, last = 0, spread = 0;
+  let holes = 0, first = 0, last = 0, spread = 0, subjSpread = 0;
   for (const slots of Object.values(classDay)) {
     slots.sort((a,b)=>a-b);
     const mn = slots[0], mx = slots[slots.length-1];
@@ -166,9 +171,13 @@ function computeSoftScore(schedule, softConstraints) {
     slots.sort((a,b)=>a-b);
     spread += (slots[slots.length-1] - slots[0] + 1) - slots.length;
   }
+  for (const { days, count } of Object.values(classSubj)) {
+    subjSpread += count - days.size;
+  }
 
-  const total = holes*wHole + first*wFirst + last*wLast + spread*wSpread;
-  return { total, class_holes: holes, avoid_first_slot: first, avoid_last_slot: last, teacher_spread: spread };
+  const total = holes*wHole + first*wFirst + last*wLast + spread*wSpread + subjSpread*wSubjSpr;
+  return { total, class_holes: holes, avoid_first_slot: first, avoid_last_slot: last,
+           teacher_spread: spread, subject_daily_spread: subjSpread };
 }
 
 // Map day name → a fixed Monday in a reference week (2024-01-01 is Monday)
@@ -371,7 +380,7 @@ function App() {
     max_consecutive_same_subj: 2, max_teacher_periods_day: 4 });
   const [softConstraints,   setSoftConstraints]    = useState({
     weight_class_holes: 1, weight_avoid_first_slot: 2,
-    weight_avoid_last_slot: 1, weight_teacher_spread: 1 });
+    weight_avoid_last_slot: 1, weight_teacher_spread: 1, weight_subject_daily_spread: 2 });
 
   const [probName,    setProbName]    = useState("");
   const [savedNames,  setSavedNames]  = useState([]);
@@ -446,7 +455,7 @@ function App() {
       }
       setTeacherUnavail(ua);
       setHardConstraints(p.hard_constraints || { max_consecutive_same_subj:2, max_teacher_periods_day:4 });
-      setSoftConstraints(p.soft_constraints || { weight_class_holes:1, weight_avoid_first_slot:2, weight_avoid_last_slot:1, weight_teacher_spread:1 });
+      setSoftConstraints(p.soft_constraints || { weight_class_holes:1, weight_avoid_first_slot:2, weight_avoid_last_slot:1, weight_teacher_spread:1, weight_subject_daily_spread:2 });
       setProbName(name); setResult(null); setSchedule([]); setStatusMsg(null); setPage("editor");
       setUnavailTeacher((p.teachers||[])[0] || null);
     } catch(e) { setStatusMsg({text:"Load failed: "+e.message,ok:false}); }
@@ -609,7 +618,8 @@ function App() {
                 sd.class_holes      && `${sd.class_holes} class holes`,
                 sd.avoid_first_slot && `${sd.avoid_first_slot} early starts`,
                 sd.avoid_last_slot  && `${sd.avoid_last_slot} late finishes`,
-                sd.teacher_spread   && `${sd.teacher_spread} teacher idle gaps`,
+                sd.teacher_spread         && `${sd.teacher_spread} teacher idle gaps`,
+                sd.subject_daily_spread   && `${sd.subject_daily_spread} subject clustering`,
               ].filter(Boolean).join(", ")}
             </div>
           )}
@@ -817,6 +827,7 @@ function App() {
                 ["Avoid slot 1 (early start)", "weight_avoid_first_slot", 2],
                 ["Avoid last slot (late finish)", "weight_avoid_last_slot", 1],
                 ["Teacher idle gaps (free periods between lessons)", "weight_teacher_spread", 1],
+                ["Subject clustering (same subject on same day)", "weight_subject_daily_spread", 2],
               ].map(([label, key, def]) => (
                 <div key={key}>
                   <div style={{fontSize:11,color:"#64748b",marginBottom:4}}>{label}</div>

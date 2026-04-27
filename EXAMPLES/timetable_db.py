@@ -97,10 +97,11 @@ DEFAULT_DATA = {
     },
     # Soft constraints — scored after solving; lower is better.
     "soft_constraints": {
-        "weight_class_holes":        1,   # free periods between lessons in a class day
-        "weight_avoid_first_slot":   2,   # lessons scheduled in slot 1
-        "weight_avoid_last_slot":    1,   # lessons scheduled in last slot
-        "weight_teacher_spread":     1,   # gaps in teacher's day (first–last span minus count)
+        "weight_class_holes":          1,   # free periods between lessons in a class day
+        "weight_avoid_first_slot":     2,   # lessons scheduled in slot 1
+        "weight_avoid_last_slot":      1,   # lessons scheduled in last slot
+        "weight_teacher_spread":       1,   # gaps in teacher's day (first–last span minus count)
+        "weight_subject_daily_spread": 2,   # lessons of same subject clustered on same day
     },
 }
 
@@ -166,10 +167,11 @@ CREATE TABLE IF NOT EXISTS hard_constraints (
 CREATE TABLE IF NOT EXISTS soft_constraints (
     problem                    TEXT    NOT NULL PRIMARY KEY
                                REFERENCES problems(name) ON DELETE CASCADE,
-    weight_class_holes         INTEGER NOT NULL DEFAULT 1,
-    weight_avoid_first_slot    INTEGER NOT NULL DEFAULT 2,
-    weight_avoid_last_slot     INTEGER NOT NULL DEFAULT 1,
-    weight_teacher_spread      INTEGER NOT NULL DEFAULT 1
+    weight_class_holes           INTEGER NOT NULL DEFAULT 1,
+    weight_avoid_first_slot      INTEGER NOT NULL DEFAULT 2,
+    weight_avoid_last_slot       INTEGER NOT NULL DEFAULT 1,
+    weight_teacher_spread        INTEGER NOT NULL DEFAULT 1,
+    weight_subject_daily_spread  INTEGER NOT NULL DEFAULT 2
 );
 """
 
@@ -234,13 +236,14 @@ class DB:
 
         soft_row = self.conn.execute(
             "SELECT weight_class_holes, weight_avoid_first_slot, "
-            "weight_avoid_last_slot, weight_teacher_spread "
+            "weight_avoid_last_slot, weight_teacher_spread, weight_subject_daily_spread "
             "FROM soft_constraints WHERE problem=?", (name,)).fetchone()
         soft_constraints = {
-            "weight_class_holes":      soft_row[0] if soft_row else 1,
-            "weight_avoid_first_slot": soft_row[1] if soft_row else 2,
-            "weight_avoid_last_slot":  soft_row[2] if soft_row else 1,
-            "weight_teacher_spread":   soft_row[3] if soft_row else 1,
+            "weight_class_holes":          soft_row[0] if soft_row else 1,
+            "weight_avoid_first_slot":     soft_row[1] if soft_row else 2,
+            "weight_avoid_last_slot":      soft_row[2] if soft_row else 1,
+            "weight_teacher_spread":       soft_row[3] if soft_row else 1,
+            "weight_subject_daily_spread": soft_row[4] if soft_row else 2,
         }
 
         return {
@@ -298,12 +301,13 @@ class DB:
             soft = data.get("soft_constraints", {})
             self.conn.execute(
                 "INSERT INTO soft_constraints(problem,weight_class_holes,weight_avoid_first_slot,"
-                "weight_avoid_last_slot,weight_teacher_spread) VALUES (?,?,?,?,?)",
+                "weight_avoid_last_slot,weight_teacher_spread,weight_subject_daily_spread) VALUES (?,?,?,?,?,?)",
                 (name,
                  int(soft.get("weight_class_holes", 1)),
                  int(soft.get("weight_avoid_first_slot", 2)),
                  int(soft.get("weight_avoid_last_slot", 1)),
-                 int(soft.get("weight_teacher_spread", 1))))
+                 int(soft.get("weight_teacher_spread", 1)),
+                 int(soft.get("weight_subject_daily_spread", 2))))
 
     def delete(self, name):
         if name == DEFAULT_NAME:
