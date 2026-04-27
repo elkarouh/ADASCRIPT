@@ -3,7 +3,7 @@
 """
 School Timetabling — Simulated Annealing CLI
 =============================================
-Thin wrapper around timetable_engine.  Handles arg parsing and output only.
+SA solver + thin CLI wrapper.  Data model and DB helpers live in timetable_engine.
 
 Usage:
   ./timetable_sa.ady                     # solve built-in DEFAULT problem
@@ -16,6 +16,11 @@ nimport db
 nimport json
 nimport strutils
 nimport os
+nimport math
+nimport random
+
+type State_T  is []int
+type Action_T is str
 
 
 def usage(code: Natural):
@@ -28,6 +33,150 @@ def usage(code: Natural):
     print("  (no args)          Solve the built-in default school problem")
     quit(code)
 
+
+# ============================================================
+# SIMULATED ANNEALING
+# ============================================================
+
+def sa_phase1(ctx: SAContext_T, max_steps: int, seed: int = 42) -> (State_T, int, int):
+    randomize(seed)
+    var state: State_T = [rand(0..len(ctx.lesson_cands[k]) - 1) for k in 0..<ctx.N_LESSONS]
+    var cur_hard: int = hard_count(ctx, state)
+    var best_state: State_T = state
+    var best_hard: int = cur_hard
+    var T: float = 2.0
+    let alpha: float = 0.9999
+    for step in 0..<max_steps:
+        if cur_hard == 0:
+            return (state, 0, step)
+        let li: int = rand(0..ctx.N_LESSONS - 1)
+        let n_cands: int = len(ctx.lesson_cands[li])
+        if n_cands < 2:
+            T = T * alpha
+            continue
+        var new_idx: int = rand(0..n_cands - 1)
+        if new_idx == state[li]:
+            new_idx = new_idx + 1
+            if new_idx >= n_cands:
+                new_idx = 0
+        let dH: int = delta_hard(ctx, state, li, new_idx)
+        if dH <= 0 or rand(0.0..1.0) < exp(-float(dH) / T):
+            state[li] = new_idx
+            cur_hard = cur_hard + dH
+            if cur_hard < best_hard:
+                best_hard = cur_hard
+                best_state = state
+        T = T * alpha
+    return (best_state, best_hard, max_steps)
+
+
+def solve_to_json(data: JsonNode) -> str:
+    let prob: SAProblem_T = load_problem_from_json(data)
+    let ctx: SAContext_T  = build_context(prob)
+
+    let t0: float = get_cpu_secs()
+    let (phase1_state, hard_violations, steps1) = sa_phase1(ctx, max_steps = 200000)
+    var final_state: State_T = phase1_state
+
+    if hard_violations == 0:
+        let soft0: int = soft_score(ctx, phase1_state)
+        if soft0 > 0:
+            final_state = sa_phase2(ctx, phase1_state, max_steps = 500000)
+
+    let elapsed: float = get_cpu_secs() - t0
+
+    if hard_violations > 0:
+        return "{\"ok\":false,\"error\":\"No valid schedule found - " + hard_violations'Image + " hard violations remain\"}"
+
+    var holes:      int = 0
+    var first_hits: int = 0
+    var last_hits:  int = 0
+    var t_spread:   int = 0
+    for c in prob.CLASSES:
+        for d in DAYS:
+            var fsl: int = MAX_SLOTS + 1
+            var lsl: int = 0
+            var cnt: int = 0
+            for k in 0..<ctx.N_LESSONS:
+                if ctx.lessons[k].cls != c:
+                    continue
+                let v: Value_T = ctx.lesson_cands[k][final_state[k]]
+                if v.period.day == d:
+                    cnt = cnt + 1
+                    if v.period.slot < fsl:
+                        fsl = v.period.slot
+                    if v.period.slot > lsl:
+                        lsl = v.period.slot
+            if cnt > 0:
+                holes = holes + (lsl - fsl + 1) - cnt
+                if fsl == 1:
+                    first_hits = first_hits + 1
+                if lsl == MAX_SLOTS:
+                    last_hits = last_hits + 1
+
+    for t in prob.TEACHERS:
+        for d in DAYS:
+            var fsl: int = MAX_SLOTS + 1
+            var lsl: int = 0
+            var cnt: int = 0
+            for k in 0..<ctx.N_LESSONS:
+                let v: Value_T = ctx.lesson_cands[k][final_state[k]]
+                if v.teacher == t and v.period.day == d:
+                    cnt = cnt + 1
+                    if v.period.slot < fsl:
+                        fsl = v.period.slot
+                    if v.period.slot > lsl:
+                        lsl = v.period.slot
+            if cnt > 1:
+                t_spread = t_spread + (lsl - fsl + 1) - cnt
+
+    var teacher_pref_hits: int = 0
+    for k in 0..<ctx.N_LESSONS:
+        let v: Value_T = ctx.lesson_cands[k][final_state[k]]
+        let tp: str = v.teacher
+        if tp in prob.teacher_pref_slots and len(prob.teacher_pref_slots[tp]) > 0:
+            if v.period.slot not in prob.teacher_pref_slots[tp]:
+                teacher_pref_hits = teacher_pref_hits + 1
+
+    var heavy_morning: int = 0
+    for k in 0..<ctx.N_LESSONS:
+        let hs: str = ctx.lessons[k].subj
+        if hs in prob.heavy_subjects:
+            if ctx.lesson_cands[k][final_state[k]].period.slot > prob.MORNING_THRESHOLD:
+                heavy_morning = heavy_morning + 1
+
+    var subj_spread: int = 0
+    for c in prob.CLASSES:
+        for s in prob.SUBJECTS:
+            let key: str = c + "\x00" + s
+            if key not in ctx.lessons_of_class_subj:
+                continue
+            var days_used: {str}bool
+            for k in ctx.lessons_of_class_subj[key]:
+                days_used[ctx.lesson_cands[k][final_state[k]].period.day'Image] = True
+            subj_spread = subj_spread + (len(ctx.lessons_of_class_subj[key]) - len(days_used))
+
+    let soft_total: int = prob.W_CLASS_HOLES * holes + prob.W_AVOID_FIRST_SLOT * first_hits + prob.W_AVOID_LAST_SLOT * last_hits + prob.W_TEACHER_SPREAD * t_spread + prob.W_SUBJECT_SPREAD * subj_spread + prob.W_HEAVY_MORNING * heavy_morning + prob.W_TEACHER_SLOT_PREF * teacher_pref_hits
+
+    var jlines: []str = []
+    for k in 0..<ctx.N_LESSONS:
+        let v: Value_T = ctx.lesson_cands[k][final_state[k]]
+        let ec: str  = ctx.lessons[k].cls
+        let es: str  = ctx.lessons[k].subj
+        let eo: int  = ctx.lessons[k].occ
+        let et: str  = v.teacher
+        let er: str  = v.room
+        let ed: str  = v.period.day'Image
+        let esl: int = v.period.slot
+        jlines.append("{\"class\":\"" + ec + "\",\"subject\":\"" + es + "\",\"occ\":" + eo'Image + ",\"teacher\":\"" + et + "\",\"room\":\"" + er + "\",\"day\":\"" + ed + "\",\"slot\":" + esl'Image + "}")
+
+    let schedule_json: str = "[" + join(jlines, ",") + "]"
+    let elapsed_ms: float  = elapsed * 1000.0
+    let hard_total: int    = hard_count(ctx, final_state)
+    return "{\"ok\":true,\"schedule\":" + schedule_json + ",\"stats\":{\"elapsed_ms\":" + elapsed_ms'Image + ",\"hard_penalty\":" + hard_total'Image + ",\"soft_penalty\":" + soft_total'Image + ",\"soft_details\":{\"class_holes\":" + holes'Image + ",\"avoid_first_slot\":" + first_hits'Image + ",\"avoid_last_slot\":" + last_hits'Image + ",\"teacher_spread\":" + t_spread'Image + ",\"subject_daily_spread\":" + subj_spread'Image + ",\"heavy_morning\":" + heavy_morning'Image + ",\"teacher_slot_pref\":" + teacher_pref_hits'Image + "}}}"
+
+
+# ── arg parsing ───────────────────────────────────────────────────────────────
 var db_path:      str  = ""
 var problem_name: str  = "DEFAULT"
 var json_output:  bool = False

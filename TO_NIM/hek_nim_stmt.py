@@ -662,7 +662,7 @@ def to_nim(self):
     # Record type in symbol table
     ParserState.symbol_table.add(name, annotation, "var")
     # Nim's implicit result variable: skip var and type inside typed procs
-    _exp = "*" if getattr(ParserState, 'export_symbols', False) and ParserState.symbol_table.depth() == 1 else ""
+    _exp = ""
     if name == "result" and getattr(ParserState, '_current_return_type', ''):
         kw = ""
         result = f"{name}"  # just 'result', no type annotation needed
@@ -776,7 +776,7 @@ def to_nim(self):
     name = self.nodes[1].to_nim()
     annotation = self.nodes[3].to_nim()
     ParserState.symbol_table.add(name, annotation, keyword)
-    _exp = "*" if getattr(ParserState, 'export_symbols', False) and ParserState.symbol_table.depth() == 1 else ""
+    _exp = "*" if getattr(ParserState, 'export_symbols', False) and keyword == "const" and ParserState.symbol_table.depth() <= 2 else ""
     result = f"{keyword} {name}{_exp}: {annotation}"
     for node in self.nodes[4:]:
         if not hasattr(node, "nodes") or not node.nodes:
@@ -1656,13 +1656,13 @@ def to_nim(self, indent=0):
         hi = str(rhs.nodes[4].node)  # [float, range, lo, range_op, hi]
         ParserState.tick_types[name] = {"First": lo, "Last": hi, "is_float_range": True}
         ParserState.symbol_table.add(name, "float", "type")
-        _exp = "*" if getattr(ParserState, 'export_symbols', False) and ParserState.symbol_table.depth() == 1 else ""
+        _exp = "*" if getattr(ParserState, 'export_symbols', False) and ParserState.symbol_table.depth() <= 2 else ""
         return f"{_ind(indent)}type {name}{_exp}{params} = float"
     value = rhs.to_nim()
     # Record type alias so method translation can resolve it
     if rhs_type not in ("enum_def",):
         ParserState.symbol_table.add(name, value, "type")
-    _exp = "*" if getattr(ParserState, 'export_symbols', False) and ParserState.symbol_table.depth() == 1 else ""
+    _exp = "*" if getattr(ParserState, 'export_symbols', False) and ParserState.symbol_table.depth() <= 2 else ""
     return f"{_ind(indent)}type {name}{_exp}{params} = {value}"
 
 

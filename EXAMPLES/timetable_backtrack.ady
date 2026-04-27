@@ -23,10 +23,17 @@ on the first DFS path (22 placements, 0 backtracks), matching the Python
 reference's runtime profile.
 """
 
+nimport timetable_engine
 nimport state_search
-nimport time
 nimport db
-nimport algorithm, sequtils
+nimport json
+nimport math
+nimport random
+nimport strutils
+nimport algorithm, sequtils, tables
+
+type State_T  is []int
+type Action_T is str
 
 
 def usage(code: Natural):
@@ -65,300 +72,113 @@ for arg in $@:
                 _take_prob = False
 
 
-# ============================================================
-# INPUT DATA  (regenerate with: python3 timetable_load.py --problem NAME [--db PATH] timetable_backtrack.ady)
-# ============================================================
+# ── load problem ──────────────────────────────────────────────────────────────
 
-type DAYS      is enum Monday, Tuesday, Wednesday, Thursday, Friday
-type ROOM_TYPE is enum standard, lab, gym, art
+var data: JsonNode
 
-const MAX_SLOTS: int = 8
-
-# ---- INPUT DATA BEGIN ----
-
-var CLASSES:  []str = ["Year7A", "Year7B", "Year8A", "Year8B", "Year9A", "Year9B"]
-var SUBJECTS: []str = ["Math", "English", "Science", "History", "Geography", "French", "PE", "Art"]
-var TEACHERS: []str = ["Adams", "Brown", "Clarke", "Davies", "Evans", "Foster", "Green", "Harris", "Ito", "Jones"]
-var ROOMS:    []str = ["R01", "R02", "R03", "R04", "Lab1", "Lab2", "Gym", "ArtRm"]
-
-# requirements[class][subject] = number of periods per week
-var requirements: {str}{str}int = {
-    "Year7A": {"Math": 4, "English": 4, "Science": 3, "History": 2, "Geography": 2, "French": 2, "PE": 2, "Art": 1},
-    "Year7B": {"Math": 4, "English": 4, "Science": 3, "History": 2, "Geography": 2, "French": 2, "PE": 2, "Art": 1},
-    "Year8A": {"Math": 4, "English": 4, "Science": 3, "History": 2, "Geography": 2, "French": 2, "PE": 2, "Art": 1},
-    "Year8B": {"Math": 4, "English": 4, "Science": 3, "History": 2, "Geography": 2, "French": 2, "PE": 2, "Art": 1},
-    "Year9A": {"Math": 4, "English": 4, "Science": 3, "History": 2, "Geography": 2, "French": 2, "PE": 2, "Art": 1},
-    "Year9B": {"Math": 4, "English": 4, "Science": 3, "History": 2, "Geography": 2, "French": 2, "PE": 2, "Art": 1},
-}
-
-# can_teach[teacher] = list of subjects they can teach
-var can_teach: {str}[]str = {
-    "Adams":  ["Math", "Science"],
-    "Brown":  ["English", "History"],
-    "Clarke": ["Math", "French"],
-    "Davies": ["Science", "Geography"],
-    "Evans":  ["English", "Art"],
-    "Foster": ["History", "Geography"],
-    "Green":  ["Math", "Science"],
-    "Harris": ["PE"],
-    "Ito":    ["French", "Art"],
-    "Jones":  ["English", "PE"],
-}
-
-var room_capacity: {str}int = {"R01": 32, "R02": 32, "R03": 32, "R04": 32, "Lab1": 30, "Lab2": 30, "Gym": 60, "ArtRm": 32}
-var class_size:    {str}int = {"Year7A": 30, "Year7B": 28, "Year8A": 30, "Year8B": 27, "Year9A": 29, "Year9B": 26}
-
-# room_type[room] = room type
-var room_type: {str}ROOM_TYPE = {"R01": standard, "R02": standard, "R03": standard, "R04": standard, "Lab1": lab, "Lab2": lab, "Gym": gym, "ArtRm": art}
-
-# subject_room_type[subject] = required room type (omit for any room)
-var subject_room_type: {str}ROOM_TYPE = {"Science": lab, "PE": gym, "Art": art}
-
-# teacher_unavail = list of (teacher, day, slot) forbidden triples
-var teacher_unavail: [](str, DAYS, int) = []
-
-# Hard constraints
-var MAX_CONSEC_SAME_SUBJ:    int = 2
-var MAX_TEACHER_PERIODS_DAY: int = 4
-
-# Soft constraint weights
-var W_CLASS_HOLES:       int = 1
-var W_AVOID_FIRST_SLOT:  int = 2
-var W_AVOID_LAST_SLOT:   int = 1
-var W_TEACHER_SPREAD:    int = 1
-
-# ---- INPUT DATA END ----
-
-# ── DB override ─────────────────────────────────────────────────────────────
-if db_path != "":
+if db_path == "":
+    if not json_output:
+        print("Solving built-in default problem ...")
+        print("")
+    data = parseJson(DEFAULT_PROBLEM)
+else:
     var conn: DB_T = DB_T(db_path)
-    let p: str = problem_name
-
-    CLASSES  = [row[0] for row in conn.rows("SELECT name FROM classes  WHERE problem=? ORDER BY rowid", [p])]
-    SUBJECTS = [row[0] for row in conn.rows("SELECT name FROM subjects WHERE problem=? ORDER BY rowid", [p])]
-    TEACHERS = [row[0] for row in conn.rows("SELECT name FROM teachers WHERE problem=? ORDER BY rowid", [p])]
-
-    ROOMS         = []
-    room_capacity = {:}
-    for row in conn.rows("SELECT name, capacity FROM rooms WHERE problem=? ORDER BY rowid", [p]):
-        ROOMS.append(row[0])
-        room_capacity[row[0]] = int(row[1])
-
-    class_size = {:}
-    for row in conn.rows("SELECT name, size FROM classes WHERE problem=? ORDER BY rowid", [p]):
-        class_size[row[0]] = int(row[1])
-
-    requirements = {:}
-    for row in conn.rows("SELECT class, subject, periods FROM requirements WHERE problem=?", [p]):
-        if row[0] not in requirements:
-            requirements[row[0]] = {:}
-        requirements[row[0]][row[1]] = int(row[2])
-
-    can_teach = {:}
-    for row in conn.rows("SELECT teacher, subject FROM can_teach WHERE problem=?", [p]):
-        if row[0] not in can_teach:
-            can_teach[row[0]] = []
-        can_teach[row[0]].append(row[1])
-
-    room_type = {:}
-    for row in conn.rows("SELECT name, room_type FROM rooms WHERE problem=? ORDER BY rowid", [p]):
-        room_type[row[0]] = ROOM_TYPE(row[1])
-
-    subject_room_type = {:}
-    for row in conn.rows("SELECT subject, room_type FROM subject_room_type WHERE problem=?", [p]):
-        subject_room_type[row[0]] = ROOM_TYPE(row[1])
-
-    teacher_unavail = []
-    for row in conn.rows("SELECT teacher, day, slot FROM teacher_unavailability WHERE problem=?", [p]):
-        teacher_unavail.append((row[0], DAYS(row[1]), int(row[2])))
-
-    for row in conn.rows("SELECT max_consecutive_same_subj, max_teacher_periods_day FROM hard_constraints WHERE problem=?", [p]):
-        MAX_CONSEC_SAME_SUBJ    = int(row[0])
-        MAX_TEACHER_PERIODS_DAY = int(row[1])
-
-    for row in conn.rows("SELECT weight_class_holes, weight_avoid_first_slot, weight_avoid_last_slot, weight_teacher_spread FROM soft_constraints WHERE problem=?", [p]):
-        W_CLASS_HOLES      = int(row[0])
-        W_AVOID_FIRST_SLOT = int(row[1])
-        W_AVOID_LAST_SLOT  = int(row[2])
-        W_TEACHER_SPREAD   = int(row[3])
-
+    db_init(conn)
+    var p: str = problem_name
+    var loaded: str = db_load(conn, p)
     conn.close()
+    data = parseJson(loaded)
+    if "error" in data:
+        print("{\"ok\":false,\"error\":\"" + data["error"].getStr() + "\"}")
+        quit(1)
     if not json_output:
         print(f"Loaded problem '{p}' from {db_path}")
 
+let prob: SAProblem_T = load_problem_from_json(data)
+let ctx: SAContext_T  = build_context(prob)
 
-# ============================================================
-# DERIVED STRUCTURES
-# ============================================================
-
-type Period_T is tuple:
-    day:  DAYS
-    slot: int
-
-type ClassSubject_T is tuple:
-    cls:  str
-    subj: str
-
-type Lesson_T is tuple:
-    cls:  str
-    subj: str
-    occ:  int
-
-type Value_T is tuple:
-    teacher: str
-    room:    str
-    period:  Period_T
-
-var PERIODS: []Period_T = [
-    (day: d, slot: s) for d in DAYS for s in 1..MAX_SLOTS
-]
-
-def is_unavailable(t: str, d: DAYS, s: int) -> bool:
-    for ut, ud, us in teacher_unavail:
-        if ut == t and ud == d and us == s:
-            return True
-    return False
-
-
-var cs_keys: []ClassSubject_T = [
-    (cls: c, subj: s)
-    for c in CLASSES if c in requirements
-    for s in SUBJECTS if s in requirements[c] and requirements[c][s] > 0
-]
-
-var lessons: []Lesson_T = [
-    (cls: cs.cls, subj: cs.subj, occ: occ)
-    for cs in cs_keys
-    for occ in 0..<requirements[cs.cls][cs.subj]
-]
-
-var all_candidates: {ClassSubject_T}[]Value_T = {
-    cs: [
-        (teacher: t, room: r, period: p)
-        for t in TEACHERS
-        for r in ROOMS
-        for p in PERIODS
-        if t in can_teach and cs.subj in can_teach[t]
-           and room_capacity[r] >= class_size[cs.cls]
-           and (cs.subj not in subject_room_type
-                or room_type[r] == subject_room_type[cs.subj])
-           and not is_unavailable(t, p.day, p.slot)
-    ]
-    for cs in cs_keys
-}
-
-var lesson_cs:    []ClassSubject_T = [(cls: l.cls, subj: l.subj) for l in lessons]
-var lesson_cands: [][]Value_T      = [all_candidates[cs] for cs in lesson_cs]
-
-let N_LESSONS: int = len(lessons)
-
-# Index structures for fast is_consistent lookups
-var lessons_of_class: {str}[]int = {:}
-for ki in 0..<N_LESSONS:
-    let c: str = lessons[ki].cls
-    if c not in lessons_of_class:
-        lessons_of_class[c] = []
-    lessons_of_class[c].append(ki)
-
-# lessons_of_class_subj[class][subj] = lesson indices with that class+subject
-var lessons_of_class_subj: {str}{str}[]int = {:}
-for ki in 0..<N_LESSONS:
-    let c: str = lessons[ki].cls
-    let s: str = lessons[ki].subj
-    if c not in lessons_of_class_subj:
-        lessons_of_class_subj[c] = {:}
-    if s not in lessons_of_class_subj[c]:
-        lessons_of_class_subj[c][s] = []
-    lessons_of_class_subj[c][s].append(ki)
+# Static MCV order: sort lesson indices by candidate count ascending
+var lesson_order: []int = [k for k in 0..<ctx.N_LESSONS].sortedByIt(len(ctx.lesson_cands[it]))
 
 
 # ============================================================
-# STATE REPRESENTATION
+# CONSTRAINT CHECKING
 # ============================================================
-#
-# State_T : seq[int] of length N_LESSONS. state[k] is:
-#     -1      — lesson k not yet assigned
-#     idx ≥ 0 — chose candidate index `idx` from lesson_cands[k]
-#
-# Action_T: human-readable description of the placement (for display only).
-
-type State_T  is []int
-type Action_T is str
-
-var INITIAL_STATE: State_T = [-1 for i in 0..<N_LESSONS]
-
 
 def is_consistent(state: State_T, li: int, value: Value_T) -> bool:
-    """Would placing `value` at lesson `li` conflict with an earlier placement?"""
-    let my_cls: str = lessons[li].cls
-    let my_subj: str = lessons[li].subj
-    # Check same-period clashes: only scan lessons of same class (class clash)
-    # plus a full scan for teacher/room clashes
-    for k in 0..<N_LESSONS:
+    let my_cls:  str = ctx.lessons[li].cls
+    let my_subj: str = ctx.lessons[li].subj
+    for k in 0..<ctx.N_LESSONS:
         if k == li:
             continue
         let other_idx: int = state[k]
         if other_idx < 0:
             continue
-        let other: Value_T = lesson_cands[k][other_idx]
+        let other: Value_T = ctx.lesson_cands[k][other_idx]
         if value.period == other.period:
             if value.teacher == other.teacher:
                 return False
-            if my_cls == lessons[k].cls:
+            if my_cls == ctx.lessons[k].cls:
                 return False
             if value.room == other.room:
                 return False
-    let d: DAYS = value.period.day
-    let sl: int = value.period.slot
-    # Hard: teacher daily load
-    var teacher_day_count: int = 0
-    for k in 0..<N_LESSONS:
+    let d:  DAYS = value.period.day
+    let sl: int  = value.period.slot
+    var teacher_day_cnt: int = 0
+    for k in 0..<ctx.N_LESSONS:
         if state[k] >= 0:
-            let ov: Value_T = lesson_cands[k][state[k]]
+            let ov: Value_T = ctx.lesson_cands[k][state[k]]
             if ov.teacher == value.teacher and ov.period.day == d:
-                teacher_day_count = teacher_day_count + 1
-    if teacher_day_count >= MAX_TEACHER_PERIODS_DAY:
+                teacher_day_cnt = teacher_day_cnt + 1
+    if teacher_day_cnt >= prob.MAX_TEACHER_PERIODS:
         return False
-    # Hard: no run of more than MAX_CONSEC_SAME_SUBJ consecutive same-subject
-    var run: int = 0
-    for prev in (sl - 1)..1:
+    let cs_key: str = my_cls + "\x00" + my_subj
+    var run_back: int = 0
+    for prev in countdown(sl - 1, 1):
         var found: bool = False
-        for k in lessons_of_class_subj[my_cls][my_subj]:
-            if state[k] >= 0:
-                let ov: Value_T = lesson_cands[k][state[k]]
-                if ov.period.day == d and ov.period.slot == prev:
-                    found = True
-                    break
+        if cs_key in ctx.lessons_of_class_subj:
+            for k in ctx.lessons_of_class_subj[cs_key]:
+                if state[k] >= 0:
+                    let ov: Value_T = ctx.lesson_cands[k][state[k]]
+                    if ov.period.day == d and ov.period.slot == prev:
+                        found = True
+                        break
         if found:
-            run = run + 1
+            run_back = run_back + 1
         else:
             break
-    if run >= MAX_CONSEC_SAME_SUBJ:
+    var run_fwd: int = 0
+    for nxt in (sl + 1)..MAX_SLOTS:
+        var found: bool = False
+        if cs_key in ctx.lessons_of_class_subj:
+            for k in ctx.lessons_of_class_subj[cs_key]:
+                if state[k] >= 0:
+                    let ov: Value_T = ctx.lesson_cands[k][state[k]]
+                    if ov.period.day == d and ov.period.slot == nxt:
+                        found = True
+                        break
+        if found:
+            run_fwd = run_fwd + 1
+        else:
+            break
+    if run_back + 1 + run_fwd > prob.MAX_CONSEC_SAME_SUBJ:
         return False
     return True
 
 
-# Static MCV order: sort lesson indices by candidate count ascending
-var lesson_order: []int = [k for k in 0..<N_LESSONS].sortedByIt(len(lesson_cands[it]))
-
-
 def placement_soft_cost(state: State_T, li: int, v: Value_T) -> int:
-    """Marginal soft cost of placing lesson li at value v in partial state.
-    Counts holes, early/late starts, and teacher spread contributed by this slot."""
-    let c: str  = lessons[li].cls
-    let t: str  = v.teacher
-    let d: DAYS = v.period.day
-    let sl: int = v.period.slot
+    let c:  str  = ctx.lessons[li].cls
+    let t:  str  = v.teacher
+    let d:  DAYS = v.period.day
+    let sl: int  = v.period.slot
 
-    # Gather already-placed slots for this (class, day)
     var cls_slots: []int = []
-    for k in lessons_of_class[c]:
+    for k in ctx.lessons_of_class[c]:
         if state[k] >= 0:
-            let ov: Value_T = lesson_cands[k][state[k]]
+            let ov: Value_T = ctx.lesson_cands[k][state[k]]
             if ov.period.day == d:
                 cls_slots.append(ov.period.slot)
 
-    # Class soft cost before and after adding sl
     var pen: int = 0
     if len(cls_slots) > 0:
         var first_sl: int = sl
@@ -370,22 +190,21 @@ def placement_soft_cost(state: State_T, li: int, v: Value_T) -> int:
                 last_sl = s
         let span_after:  int = last_sl - first_sl + 1
         let count_after: int = len(cls_slots) + 1
-        pen = pen + W_CLASS_HOLES * (span_after - count_after)
+        pen = pen + prob.W_CLASS_HOLES * (span_after - count_after)
         if first_sl == 1:
-            pen = pen + W_AVOID_FIRST_SLOT
+            pen = pen + prob.W_AVOID_FIRST_SLOT
         if last_sl == MAX_SLOTS:
-            pen = pen + W_AVOID_LAST_SLOT
+            pen = pen + prob.W_AVOID_LAST_SLOT
     else:
         if sl == 1:
-            pen = pen + W_AVOID_FIRST_SLOT
+            pen = pen + prob.W_AVOID_FIRST_SLOT
         if sl == MAX_SLOTS:
-            pen = pen + W_AVOID_LAST_SLOT
+            pen = pen + prob.W_AVOID_LAST_SLOT
 
-    # Teacher spread: gather placed slots for this (teacher, day)
     var tch_slots: []int = []
-    for k in 0..<N_LESSONS:
+    for k in 0..<ctx.N_LESSONS:
         if state[k] >= 0:
-            let ov: Value_T = lesson_cands[k][state[k]]
+            let ov: Value_T = ctx.lesson_cands[k][state[k]]
             if ov.teacher == t and ov.period.day == d:
                 tch_slots.append(ov.period.slot)
     if len(tch_slots) > 0:
@@ -398,7 +217,7 @@ def placement_soft_cost(state: State_T, li: int, v: Value_T) -> int:
                 last_t = s
         let span_t:  int = last_t - first_t + 1
         let count_t: int = len(tch_slots) + 1
-        pen = pen + W_TEACHER_SPREAD * (span_t - count_t)
+        pen = pen + prob.W_TEACHER_SPREAD * (span_t - count_t)
 
     return pen
 
@@ -411,14 +230,10 @@ class TimetableCSP(StateSearcher[State_T, Action_T]):
     """
     DFS over partial assignments with the Most-Constrained-Variable (MCV)
     heuristic. Variables are ordered statically by initial candidate count
-    (fewest first) — this avoids re-counting live options at every node
-    (which would be O(N×C×N) per node) while still capturing the fail-first
-    intuition: tightly-constrained lessons are attempted before easy ones.
+    (fewest first).
     """
 
     def pick_lesson(self, state: State_T) -> int:
-        """Static MCV order: next unassigned lesson in precomputed order.
-        Returns -1 when every lesson is already placed."""
         for k in lesson_order:
             if state[k] < 0:
                 return k
@@ -428,16 +243,12 @@ class TimetableCSP(StateSearcher[State_T, Action_T]):
         let li: int = self.pick_lesson(state)
         if li < 0:
             return []
-        let cands: []Value_T = lesson_cands[li]
-        # Collect consistent (soft_cost, cand_idx) pairs, sort best-first.
-        # DFS takes result[0] first, so lowest soft cost is explored first.
+        let cands: []Value_T = ctx.lesson_cands[li]
         var scored: [](int, int) = []
         for idx in 0..<len(cands):
             let v: Value_T = cands[idx]
             if is_consistent(state, li, v):
                 scored.append((placement_soft_cost(state, li, v), idx))
-        # DFS uses a LIFO stack — last pushed = first explored.
-        # Sort worst-first so the best candidate ends up on top.
         let sorted_scored: [](int, int) = scored.sortedByIt(-it[0])
         var result: []Step_T[State_T, Action_T] = []
         for pair in sorted_scored:
@@ -447,7 +258,7 @@ class TimetableCSP(StateSearcher[State_T, Action_T]):
         return result
 
     def is_goal(self, state: State_T) -> bool:
-        for k in 0..<N_LESSONS:
+        for k in 0..<ctx.N_LESSONS:
             if state[k] < 0:
                 return False
         return True
@@ -457,79 +268,50 @@ class TimetableCSP(StateSearcher[State_T, Action_T]):
 # SOLVE
 # ============================================================
 
+const SOFT_THRESHOLD:  int = 50
+const MAX_BT_ATTEMPTS: int = 10
+const SA2_STEPS:       int = 500000
+
 if not json_output:
-    print("Solving timetable via state_search DFS (backtracking CSP) ...")
+    print("Solving timetable via backtrack + SA soft optimisation ...")
     print("")
 
+var INITIAL_STATE: State_T = [-1 for i in 0..<ctx.N_LESSONS]
 let solver: TimetableCSP = TimetableCSP()
-let t0: float = cpuTime()
-let solution: []Step_T[State_T, Action_T] = solver.search_dfs(INITIAL_STATE)
-let elapsed: float = cpuTime() - t0
+let t0: float = get_cpu_secs()
 
-if len(solution) == 0:
+var final_state: State_T = INITIAL_STATE
+var best_soft:   int      = high(int)
+var attempts:    int      = 0
+var found_any:   bool     = False
+
+for solution in solver.search_dfs_all(INITIAL_STATE):
+    if len(solution) == 0:
+        break
+    attempts = attempts + 1
+    let cand: State_T = solution[len(solution) - 1].next_state
+    let sa_state: State_T = sa_phase2(ctx, cand, SA2_STEPS)
+    let sc: int = soft_score(ctx, sa_state)
+    if not found_any or sc < best_soft:
+        best_soft   = sc
+        final_state = sa_state
+        found_any   = True
+    if not json_output:
+        print(f"  attempt {attempts}: soft={sc} (best={best_soft})")
+    if sc <= SOFT_THRESHOLD or attempts >= MAX_BT_ATTEMPTS:
+        break
+
+let elapsed: float = get_cpu_secs() - t0
+
+if not found_any:
     if json_output:
         print("{\"ok\":false,\"error\":\"No solution found\"}")
     else:
         print("No solution found")
     quit(1)
 
-let final_state: State_T = solution[len(solution) - 1].next_state
 if not json_output:
-    print(f"Solved in {elapsed*1000.0:.1f} ms with {len(solution)} placements")
-
-
-# ============================================================
-# SOFT SCORE COMPUTATION (shared by both output modes)
-# ============================================================
-
-var holes:      int = 0
-var first_hits: int = 0
-var last_hits:  int = 0
-var t_spread:   int = 0
-
-for c in CLASSES:
-    for d in DAYS:
-        var first_sl: int = MAX_SLOTS + 1
-        var last_sl:  int = 0
-        var count:    int = 0
-        for k in 0..<N_LESSONS:
-            let idx: int = final_state[k]
-            if idx < 0 or lessons[k].cls != c:
-                continue
-            let v: Value_T = lesson_cands[k][idx]
-            if v.period.day == d:
-                count = count + 1
-                if v.period.slot < first_sl:
-                    first_sl = v.period.slot
-                if v.period.slot > last_sl:
-                    last_sl = v.period.slot
-        if count > 0:
-            holes = holes + (last_sl - first_sl + 1) - count
-            if first_sl == 1:
-                first_hits = first_hits + 1
-            if last_sl == MAX_SLOTS:
-                last_hits = last_hits + 1
-
-for t in TEACHERS:
-    for d in DAYS:
-        var first_sl: int = MAX_SLOTS + 1
-        var last_sl:  int = 0
-        var count:    int = 0
-        for k in 0..<N_LESSONS:
-            let idx: int = final_state[k]
-            if idx < 0:
-                continue
-            let v: Value_T = lesson_cands[k][idx]
-            if v.teacher == t and v.period.day == d:
-                count = count + 1
-                if v.period.slot < first_sl:
-                    first_sl = v.period.slot
-                if v.period.slot > last_sl:
-                    last_sl = v.period.slot
-        if count > 1:
-            t_spread = t_spread + (last_sl - first_sl + 1) - count
-
-let soft_total: int = W_CLASS_HOLES * holes + W_AVOID_FIRST_SLOT * first_hits + W_AVOID_LAST_SLOT * last_hits + W_TEACHER_SPREAD * t_spread
+    print(f"Done in {elapsed*1000.0:.1f} ms, {attempts} attempt(s), soft={best_soft}")
 
 
 # ============================================================
@@ -538,93 +320,111 @@ let soft_total: int = W_CLASS_HOLES * holes + W_AVOID_FIRST_SLOT * first_hits + 
 
 if json_output:
     var jlines: []str = []
-    for k in 0..<N_LESSONS:
+    for k in 0..<ctx.N_LESSONS:
         let idx: int = final_state[k]
         if idx < 0:
             continue
-        let v: Value_T = lesson_cands[k][idx]
-        let c: str   = lessons[k].cls
-        let s: str   = lessons[k].subj
-        let occ: int = lessons[k].occ
-        let t: str   = v.teacher
-        let r: str   = v.room
-        let d: str   = v.period.day'Image
-        let sl: int  = v.period.slot
+        let v: Value_T = ctx.lesson_cands[k][idx]
+        let c:   str = ctx.lessons[k].cls
+        let s:   str = ctx.lessons[k].subj
+        let occ: int = ctx.lessons[k].occ
+        let t:   str = v.teacher
+        let r:   str = v.room
+        let d:   str = v.period.day'Image
+        let sl:  int = v.period.slot
         jlines.append("{\"class\":\"" + c + "\",\"subject\":\"" + s + "\",\"occ\":" + occ'Image + ",\"teacher\":\"" + t + "\",\"room\":\"" + r + "\",\"day\":\"" + d + "\",\"slot\":" + sl'Image + "}")
     let schedule_json: str = "[" + join(jlines, ",") + "]"
     let elapsed_ms: float  = elapsed * 1000.0
-    print("{\"ok\":true,\"schedule\":" + schedule_json + ",\"stats\":{\"elapsed_ms\":" + elapsed_ms'Image + ",\"soft_penalty\":" + soft_total'Image + ",\"soft_details\":{\"class_holes\":" + holes'Image + ",\"avoid_first_slot\":" + first_hits'Image + ",\"avoid_last_slot\":" + last_hits'Image + ",\"teacher_spread\":" + t_spread'Image + "}}}")
-else:
-    def entry_for(c: str, d: DAYS, sl: int, state: State_T) -> str:
-        for k in 0..<N_LESSONS:
-            let idx: int = state[k]
-            if idx < 0:
-                continue
-            if lessons[k].cls != c:
-                continue
-            let v: Value_T = lesson_cands[k][idx]
-            if v.period.day == d and v.period.slot == sl:
-                return f"{lessons[k].subj}({v.teacher})"
-        return "--"
 
-    for c in CLASSES:
-        print("")
-        print("=" * 54)
-        print(f"  Timetable for class {c}")
-        print("=" * 54)
-        var header: str = " " * 8
+    # Compute soft score for JSON output
+    var holes:      int = 0
+    var first_hits: int = 0
+    var last_hits:  int = 0
+    var t_spread:   int = 0
+    for c in prob.CLASSES:
         for d in DAYS:
-            header = header + f"{d'Image:>10}"
-        print(header)
-        for sl in 1..MAX_SLOTS:
-            var row: str = f"Slot {sl}  "
-            for d in DAYS:
-                row = row + f"{entry_for(c, d, sl, final_state):>10}"
-            print(row)
+            var fsl: int = MAX_SLOTS + 1
+            var lsl: int = 0
+            var cnt: int = 0
+            for k in 0..<ctx.N_LESSONS:
+                let idx: int = final_state[k]
+                if idx < 0 or ctx.lessons[k].cls != c:
+                    continue
+                let v: Value_T = ctx.lesson_cands[k][idx]
+                if v.period.day == d:
+                    cnt = cnt + 1
+                    if v.period.slot < fsl:
+                        fsl = v.period.slot
+                    if v.period.slot > lsl:
+                        lsl = v.period.slot
+            if cnt > 0:
+                holes = holes + (lsl - fsl + 1) - cnt
+                if fsl == 1:
+                    first_hits = first_hits + 1
+                if lsl == MAX_SLOTS:
+                    last_hits = last_hits + 1
+    for t in prob.TEACHERS:
+        for d in DAYS:
+            var fsl: int = MAX_SLOTS + 1
+            var lsl: int = 0
+            var cnt: int = 0
+            for k in 0..<ctx.N_LESSONS:
+                let idx: int = final_state[k]
+                if idx < 0:
+                    continue
+                let v: Value_T = ctx.lesson_cands[k][idx]
+                if v.teacher == t and v.period.day == d:
+                    cnt = cnt + 1
+                    if v.period.slot < fsl:
+                        fsl = v.period.slot
+                    if v.period.slot > lsl:
+                        lsl = v.period.slot
+            if cnt > 1:
+                t_spread = t_spread + (lsl - fsl + 1) - cnt
+    var teacher_pref_hits: int = 0
+    for k in 0..<ctx.N_LESSONS:
+        let idx: int = final_state[k]
+        if idx < 0:
+            continue
+        let v: Value_T = ctx.lesson_cands[k][idx]
+        let tp: str = v.teacher
+        if tp in prob.teacher_pref_slots and len(prob.teacher_pref_slots[tp]) > 0:
+            if v.period.slot not in prob.teacher_pref_slots[tp]:
+                teacher_pref_hits = teacher_pref_hits + 1
 
-    print("")
-    print("=" * 54)
-    print("  Coverage check")
-    print("=" * 54)
-    let h_cls: str = "Class"
-    let h_sub: str = "Subject"
-    let h_req: str = "Required"
-    let h_sch: str = "Scheduled"
-    print(f"{h_cls:<8} {h_sub:<10} {h_req:>8} {h_sch:>9}")
-    print("-" * 38)
-    var all_ok: bool = True
-    for cs in cs_keys:
-        let req: int = requirements[cs.cls][cs.subj]
-        var scheduled: int = 0
-        for k in 0..<N_LESSONS:
-            if final_state[k] < 0:
+    var heavy_morning: int = 0
+    for k in 0..<ctx.N_LESSONS:
+        let idx: int = final_state[k]
+        if idx < 0:
+            continue
+        let hs: str = ctx.lessons[k].subj
+        if hs in prob.heavy_subjects:
+            if ctx.lesson_cands[k][idx].period.slot > prob.MORNING_THRESHOLD:
+                heavy_morning = heavy_morning + 1
+
+    var subj_spread: int = 0
+    for c in prob.CLASSES:
+        for s in prob.SUBJECTS:
+            let key: str = c + "\x00" + s
+            if key not in ctx.lessons_of_class_subj:
                 continue
-            if lessons[k].cls == cs.cls and lessons[k].subj == cs.subj:
-                scheduled = scheduled + 1
-        let ok: str = ("OK" if scheduled == req else "FAIL")
-        if scheduled != req:
-            all_ok = False
-        print(f"{cs.cls:<8} {cs.subj:<10} {req:>8} {scheduled:>8}  {ok}")
+            var days_used: {str}bool
+            for k in ctx.lessons_of_class_subj[key]:
+                let idx: int = final_state[k]
+                if idx >= 0:
+                    days_used[ctx.lesson_cands[k][idx].period.day'Image] = True
+            subj_spread = subj_spread + (len(ctx.lessons_of_class_subj[key]) - len(days_used))
 
-    print("")
-    if all_ok:
-        print("All hard constraints satisfied")
-    else:
-        print("Some hard constraints violated")
+    let soft_total: int = prob.W_CLASS_HOLES * holes + prob.W_AVOID_FIRST_SLOT * first_hits + prob.W_AVOID_LAST_SLOT * last_hits + prob.W_TEACHER_SPREAD * t_spread + prob.W_SUBJECT_SPREAD * subj_spread + prob.W_HEAVY_MORNING * heavy_morning + prob.W_TEACHER_SLOT_PREF * teacher_pref_hits
 
-    print("")
-    print("=" * 54)
-    print("  Soft constraint score")
-    print("=" * 54)
-    if soft_total == 0:
-        print("All soft constraints satisfied")
-    else:
-        print(f"Soft score: {soft_total}")
-        if holes > 0:
-            print(f"  - Class holes:       {holes} (weight {W_CLASS_HOLES})")
-        if first_hits > 0:
-            print(f"  - Early starts:      {first_hits} (weight {W_AVOID_FIRST_SLOT})")
-        if last_hits > 0:
-            print(f"  - Late finishes:     {last_hits} (weight {W_AVOID_LAST_SLOT})")
-        if t_spread > 0:
-            print(f"  - Teacher spread:    {t_spread} (weight {W_TEACHER_SPREAD})")
+    print("{\"ok\":true,\"schedule\":" + schedule_json + ",\"stats\":{\"elapsed_ms\":" + elapsed_ms'Image + ",\"hard_penalty\":0,\"soft_penalty\":" + soft_total'Image + ",\"soft_details\":{\"class_holes\":" + holes'Image + ",\"avoid_first_slot\":" + first_hits'Image + ",\"avoid_last_slot\":" + last_hits'Image + ",\"teacher_spread\":" + t_spread'Image + ",\"subject_daily_spread\":" + subj_spread'Image + ",\"heavy_morning\":" + heavy_morning'Image + ",\"teacher_slot_pref\":" + teacher_pref_hits'Image + "}}}")
+else:
+    var rj_lines: []str = []
+    for k in 0..<ctx.N_LESSONS:
+        let ridx: int = final_state[k]
+        if ridx >= 0:
+            let rv: Value_T = ctx.lesson_cands[k][ridx]
+            rj_lines.append("{\"class\":\"" + ctx.lessons[k].cls + "\",\"subject\":\"" + ctx.lessons[k].subj + "\",\"occ\":" + ctx.lessons[k].occ'Image + ",\"teacher\":\"" + rv.teacher + "\",\"room\":\"" + rv.room + "\",\"day\":\"" + rv.period.day'Image + "\",\"slot\":" + rv.period.slot'Image + "}")
+    let soft_v: int = soft_score(ctx, final_state)
+    let result_json: str = "{\"ok\":true,\"schedule\":[" + join(rj_lines, ",") + "],\"stats\":{\"elapsed_ms\":" + (elapsed*1000.0)'Image + ",\"hard_penalty\":0,\"soft_penalty\":" + soft_v'Image + ",\"soft_details\":{\"class_holes\":0,\"avoid_first_slot\":0,\"avoid_last_slot\":0,\"teacher_spread\":0,\"subject_daily_spread\":0,\"heavy_morning\":0,\"teacher_slot_pref\":0}}}"
+    print_timetable(data, result_json)

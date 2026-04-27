@@ -118,7 +118,7 @@ class StateSearcher[S, A]:
         parents.append(-1)
         var root_placeholder_pushed: bool = False
         fringe: FifoQueue[QFringe_T[S, A]] = FifoQueue((0, 0, initial))
-        visited: {}S = set()
+        visited: {}S = {}
 
         while fringe:
             let (depth, node_idx, state) = fringe.pop()
@@ -149,7 +149,7 @@ class StateSearcher[S, A]:
         parents.append(-1)
         var root_placeholder_pushed: bool = False
         fringe: LifoQueue[QFringe_T[S, A]] = LifoQueue((0, 0, initial))
-        visited: {}S = set()
+        visited: {}S = {}
 
         while fringe:
             let (depth, node_idx, state) = fringe.pop()
@@ -181,6 +181,22 @@ class StateSearcher[S, A]:
         """A* — optimal when heuristic is admissible."""
         return self._search_pq(initial, use_heuristic=True, use_cost=True)
 
+    def search_dfs_all(self, initial: S, path: []Step_T[S, A] = [], on_path: {}S = {}):
+        """Yield every solution path in DFS order using path-local cycle
+        detection via recursion.  Finds ALL distinct solution paths even
+        when two paths share intermediate states."""
+        if initial in on_path:
+            return
+        var new_on_path: {}S = on_path
+        new_on_path.add(initial)
+        if self.is_goal(initial):
+            yield path
+        for step in self.get_next_states(initial):
+            var new_path: []Step_T[S, A] = path
+            new_path.append(step)
+            for sol in self.search_dfs_all(step.next_state, new_path, new_on_path):
+                yield sol
+
     def search_all(self, initial: S):
         """Yield every solution in BFS order (shortest first). Break to stop early."""
         var parents: []int = []
@@ -188,7 +204,7 @@ class StateSearcher[S, A]:
         parents.append(-1)
         var root_placeholder_pushed: bool = False
         fringe: FifoQueue[QFringe_T[S, A]] = FifoQueue((0, 0, initial))
-        visited: {}S = set()
+        visited: {}S = {}
 
         while fringe:
             let (depth, node_idx, state) = fringe.pop()
@@ -233,7 +249,7 @@ class StateSearcher[S, A]:
         parents.append(-1)
         var root_placeholder_pushed: bool = False
         fringe: PriorityQueue[PQFringe_T[S, A]] = PriorityQueue((0.0, 0, 0, 0, initial))
-        visited: {}S = set()
+        visited: {}S = {}
 
         while fringe:
             let (_, _, depth, node_idx, state) = fringe.pop()

@@ -18,6 +18,7 @@ API (same as before):
 """
 
 nimport timetable_engine
+nimport timetable_sa
 nimport db
 nimport asynchttpserver
 nimport asyncdispatch
