@@ -40,6 +40,12 @@ def _all_hard_violations(schedule, data):
     max_consec = int(hard.get("max_consecutive_same_subj", 2))
     max_day    = int(hard.get("max_teacher_periods_day", 4))
 
+    # Build avoid set from unified teacher_slot_pref table
+    avoid_set = set()
+    for u in data.get("teacher_slot_pref", []):
+        if u.get("pref") == "avoid":
+            avoid_set.add((u["teacher"], u["day"], u["slot"]))
+
     by_period   = {}
     teacher_day = {}
     for e in schedule:
@@ -62,6 +68,10 @@ def _all_hard_violations(schedule, data):
     for (teacher, day), slots in teacher_day.items():
         if len(slots) > max_day:
             viols.add(f"Teacher {teacher} has {len(slots)} periods on {day} (max {max_day})")
+
+    for e in schedule:
+        if (e["teacher"], e["day"], e["slot"]) in avoid_set:
+            viols.add(f"Teacher {e['teacher']} unavailable {e['day']} slot {e['slot']}")
 
     class_day_subj = {}
     for e in schedule:

@@ -88,8 +88,8 @@ DEFAULT_DATA = {
         "PE":      "gym",
         "Art":     "art",
     },
-    # Hard constraint: blocked (teacher, day, slot) triples.
-    "teacher_unavailability": [],
+    # teacher_slot_pref: list of {teacher, day, slot, pref} where pref is 'avoid' or 'prefer'
+    "teacher_slot_pref": [],
     # Hard constraints (enforced during search — no valid solution violates these).
     "hard_constraints": {
         "max_consecutive_same_subj": 2,   # max run of same subject in a row for a class
@@ -107,7 +107,6 @@ DEFAULT_DATA = {
         "weight_teacher_slot_pref":    2,   # lesson outside teacher's preferred slots
     },
     "heavy_subjects": [],                   # list of subject names marked as heavy
-    "teacher_preferred_slots": {},          # {teacher: [slot, ...]}
 }
 
 DDL = """
@@ -156,11 +155,12 @@ CREATE TABLE IF NOT EXISTS subject_room_type (
     room_type TEXT NOT NULL DEFAULT 'standard',
     PRIMARY KEY (problem, subject)
 );
-CREATE TABLE IF NOT EXISTS teacher_unavailability (
+CREATE TABLE IF NOT EXISTS teacher_slot_pref (
     problem TEXT    NOT NULL REFERENCES problems(name) ON DELETE CASCADE,
     teacher TEXT    NOT NULL,
     day     TEXT    NOT NULL,
     slot    INTEGER NOT NULL,
+    pref    TEXT    NOT NULL DEFAULT 'avoid',
     PRIMARY KEY (problem, teacher, day, slot)
 );
 CREATE TABLE IF NOT EXISTS hard_constraints (
@@ -185,12 +185,6 @@ CREATE TABLE IF NOT EXISTS heavy_subjects (
     problem  TEXT NOT NULL REFERENCES problems(name) ON DELETE CASCADE,
     subject  TEXT NOT NULL,
     PRIMARY KEY (problem, subject)
-);
-CREATE TABLE IF NOT EXISTS teacher_preferred_slots (
-    problem  TEXT NOT NULL REFERENCES problems(name) ON DELETE CASCADE,
-    teacher  TEXT NOT NULL,
-    slot     INTEGER NOT NULL,
-    PRIMARY KEY (problem, teacher, slot)
 );
 """
 
@@ -239,10 +233,10 @@ class DB:
         subject_room_type = {r[0]: r[1] for r in self.conn.execute(
             "SELECT subject, room_type FROM subject_room_type WHERE problem=?", (name,))}
 
-        teacher_unavailability = [
-            {"teacher": r[0], "day": r[1], "slot": r[2]}
+        teacher_slot_pref = [
+            {"teacher": r[0], "day": r[1], "slot": r[2], "pref": r[3]}
             for r in self.conn.execute(
-                "SELECT teacher, day, slot FROM teacher_unavailability WHERE problem=?", (name,))
+                "SELECT teacher, day, slot, pref FROM teacher_slot_pref WHERE problem=?", (name,))
         ]
 
         hard_row = self.conn.execute(
@@ -256,7 +250,7 @@ class DB:
         soft_row = self.conn.execute(
             "SELECT weight_class_holes, weight_avoid_first_slot, "
             "weight_avoid_last_slot, weight_teacher_spread, weight_subject_daily_spread, "
-            "weight_heavy_morning, morning_threshold "
+            "weight_heavy_morning, morning_threshold, weight_teacher_slot_pref "
             "FROM soft_constraints WHERE problem=?", (name,)).fetchone()
         soft_constraints = {
             "weight_class_holes":          soft_row[0] if soft_row else 1,
@@ -272,22 +266,15 @@ class DB:
         heavy_subjects = [r[0] for r in self.conn.execute(
             "SELECT subject FROM heavy_subjects WHERE problem=?", (name,)).fetchall()]
 
-        teacher_pref_rows = self.conn.execute(
-            "SELECT teacher, slot FROM teacher_preferred_slots WHERE problem=?", (name,)).fetchall()
-        teacher_preferred_slots = {}
-        for t, sl in teacher_pref_rows:
-            teacher_preferred_slots.setdefault(t, []).append(sl)
-
         return {
             "classes": classes, "subjects": subjects,
             "teachers": teachers, "rooms": rooms,
             "requirements": requirements, "can_teach": can_teach,
             "subject_room_type": subject_room_type,
-            "teacher_unavailability": teacher_unavailability,
+            "teacher_slot_pref": teacher_slot_pref,
             "hard_constraints": hard_constraints,
             "soft_constraints": soft_constraints,
             "heavy_subjects": heavy_subjects,
-            "teacher_preferred_slots": teacher_preferred_slots,
         }
 
     def save(self, name, data):
@@ -321,10 +308,10 @@ class DB:
             self.conn.executemany(
                 "INSERT INTO subject_room_type(problem,subject,room_type) VALUES (?,?,?)",
                 [(name, subj, rtype) for subj, rtype in srt.items()])
-            unavail = data.get("teacher_unavailability", [])
+            tsp = data.get("teacher_slot_pref", [])
             self.conn.executemany(
-                "INSERT INTO teacher_unavailability(problem,teacher,day,slot) VALUES (?,?,?,?)",
-                [(name, u["teacher"], u["day"], u["slot"]) for u in unavail])
+                "INSERT INTO teacher_slot_pref(problem,teacher,day,slot,pref) VALUES (?,?,?,?,?)",
+                [(name, u["teacher"], u["day"], u["slot"], u["pref"]) for u in tsp])
             hard = data.get("hard_constraints", {})
             self.conn.execute(
                 "INSERT INTO hard_constraints(problem,max_consecutive_same_subj,max_teacher_periods_day)"
@@ -349,11 +336,6 @@ class DB:
             for s in data.get("heavy_subjects", []):
                 self.conn.execute(
                     "INSERT OR IGNORE INTO heavy_subjects(problem,subject) VALUES (?,?)", (name, s))
-            for t, slots in data.get("teacher_preferred_slots", {}).items():
-                for sl in slots:
-                    self.conn.execute(
-                        "INSERT OR IGNORE INTO teacher_preferred_slots(problem,teacher,slot) VALUES (?,?,?)",
-                        (name, t, int(sl)))
 
     def delete(self, name):
         if name == DEFAULT_NAME:
