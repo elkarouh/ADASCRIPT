@@ -6,8 +6,9 @@ School Timetabling — Simulated Annealing CLI
 Thin wrapper around timetable_engine.  Handles arg parsing and output only.
 
 Usage:
+  ./timetable_sa.ady                     # solve built-in DEFAULT problem
   ./timetable_sa.ady [--db PATH] [--problem NAME] [--json]
-  ./timetable_sa.ady --stdin            # read JSON problem from stdin, write JSON to stdout
+  ./timetable_sa.ady --stdin             # read JSON problem from stdin, write JSON to stdout
 """
 
 nimport timetable_engine
@@ -24,6 +25,7 @@ def usage(code: Natural):
     print("  --problem NAME     Problem name in the database (default: DEFAULT)")
     print("  --json             Output result as JSON")
     print("  --stdin            Read JSON problem from stdin, write JSON to stdout")
+    print("  (no args)          Solve the built-in default school problem")
     quit(code)
 
 var db_path:      str  = ""
@@ -53,7 +55,7 @@ for arg in $@:
                 problem_name = arg
                 _take_prob = False
 
-# ── stdin mode: read JSON problem, solve, print JSON result ──────────────────
+# ── stdin mode ────────────────────────────────────────────────────────────────
 if stdin_mode:
     var input_lines: []str = []
     var line: str = ""
@@ -65,26 +67,28 @@ if stdin_mode:
     print(solve_to_json(data))
     quit(0)
 
-# ── DB mode ───────────────────────────────────────────────────────────────────
+# ── load problem ──────────────────────────────────────────────────────────────
+var data: JsonNode
+
 if db_path == "":
-    print("Error: --db PATH required (or use --stdin)")
-    usage(1)
-
-var conn: DB_T = DB_T(db_path)
-db_init(conn)
-var p: str = problem_name
-var loaded: str = db_load(conn, p)
-conn.close()
-
-let data: JsonNode = parseJson(loaded)
-if "error" in data:
-    print("{\"ok\":false,\"error\":\"" + data["error"].getStr() + "\"}")
-    quit(1)
-
-if not json_output:
-    print(f"Loaded problem '{p}' from {db_path}")
-    print("Solving timetable via simulated annealing ...")
-    print("")
+    if not json_output:
+        print("Solving built-in default problem ...")
+        print("")
+    data = parseJson(DEFAULT_PROBLEM)
+else:
+    var conn: DB_T = DB_T(db_path)
+    db_init(conn)
+    var p: str = problem_name
+    var loaded: str = db_load(conn, p)
+    conn.close()
+    data = parseJson(loaded)
+    if "error" in data:
+        print("{\"ok\":false,\"error\":\"" + data["error"].getStr() + "\"}")
+        quit(1)
+    if not json_output:
+        print(f"Loaded problem '{p}' from {db_path}")
+        print("Solving timetable via simulated annealing ...")
+        print("")
 
 let result_json: str = solve_to_json(data)
 
