@@ -17,11 +17,23 @@ nimport stdlib
 # Minimizer -- find the path of minimum cost (Dijkstra / A*)
 # ---------------------------------------------------------------------------
 
-type Fringe_Element_T[S, D, C] is tuple:
-    hcost: C
-    new_cost: C
-    new_path: []D
+# Back-link fringe: carries (hcost, cost, node_idx, next_state).
+# The full path is NOT stored per-entry — it is reconstructed at the goal
+# by walking parent pointers, reducing push cost from O(depth) to O(1).
+type Fringe_Element_T[S, C] is tuple:
+    hcost:      C
+    new_cost:   C
+    node_idx:   int
     next_state: S
+
+# Back-link fringe for Maximizer (longest path).
+# Also carries path_states for per-path cycle prevention.
+type MaxFringe_T[S, D, R] is tuple:
+    neg_rev:      float
+    path_length:  int
+    node_idx:     int
+    current_state: S
+    path_states:  []S
 
 @virtual
 class Minimizer[S, D, C]:
@@ -29,11 +41,11 @@ class Minimizer[S, D, C]:
     Generic shortest-path / dynamic-programming minimiser.
     Define the state S, the decision D, and the cost type C.
     Override:
-      - get_state(past_decisions)       -> current state
-      - get_next_decisions(state)       -> list of (decision, cost) pairs
-      - get_heuristic_cost(state)       -> admissible heuristic (default 0)
-      - cost_operator(accumulated, new) -> how costs combine (default: addition)
-      - is_end_state(state)             -> True when goal is reached
+      - get_next_state(state, decision)   -> next state (replaces get_state)
+      - get_next_decisions(state)         -> list of (decision, cost) pairs
+      - get_heuristic_cost(state)         -> admissible heuristic (default 0)
+      - cost_operator(accumulated, new)   -> how costs combine (default: addition)
+      - is_end_state(state)               -> True when goal is reached
     """
     var offset: float
     var decision_path: []D
@@ -42,8 +54,8 @@ class Minimizer[S, D, C]:
         self.offset = offset
         self.decision_path = []
 
-    def get_state(self, past_decisions: []D) -> S:
-        raise NotImplementedError("Override get_state()")
+    def get_next_state(self, current_state: S, decision: D) -> S:
+        raise NotImplementedError("Override get_next_state()")
 
     def get_next_decisions(self, current_state: S) -> [](D, C):
         raise NotImplementedError("Override get_next_decisions()")
@@ -65,33 +77,51 @@ class Minimizer[S, D, C]:
     def is_end_state(self, state: S) -> bool:
         raise NotImplementedError("Override is_end_state()")
 
+    def _reconstruct(self, parents: []int, decisions: []D, goal_idx: int) -> []D:
+        var collected: []D = []
+        var i: int = goal_idx
+        while parents[i] >= 0:
+            collected.append(decisions[i])
+            i = parents[i]
+        var path: []D = []
+        var j: int = len(collected) - 1
+        while j >= 0:
+            path.append(collected[j])
+            j = j - 1
+        return path
+
     def shortest_path(self, start_state: S, allsolutions: bool = True, end_state: auto = ANY):
         self.start_state = start_state
-        empty_path: []D = []
-        fringe: PriorityQueue[Fringe_Element_T[S, D, C]] = PriorityQueue((C(0), C(0), empty_path, start_state))
-        visited: {}S = set()
+        var parents:   []int = [-1]
+        var decisions: []D   = []
+        var placeholder_pushed: bool = False
+        fringe: PriorityQueue[Fringe_Element_T[S, C]] = PriorityQueue((C(0), C(0), 0, start_state))
+        visited: {}S = {}
 
         while fringe:
-            let (_, cost, path, current_state) = fringe.pop()
+            let (_, cost, node_idx, current_state) = fringe.pop()
             if not allsolutions and current_state in visited:
                 continue
-
-            self.decision_path = path
             visited.add(current_state)
 
             reached: bool = current_state == end_state if not isANY(end_state) else self.is_end_state(current_state)
             if reached:
-                yield self.real_cost(cost), path
+                self.decision_path = self._reconstruct(parents, decisions, node_idx)
+                yield self.real_cost(cost), self.decision_path
                 if not allsolutions:
                     break
 
             for new_decision, step_cost in self.get_next_decisions(current_state):
-                new_path: []D = path + [new_decision]
-                next_state: S = self.get_state(new_path)
+                next_state: S = self.get_next_state(current_state, new_decision)
                 if next_state not in visited:
                     new_cost: C = self.cost_operator(cost, step_cost)
                     hcost: C = self.hcost_operator(new_cost, next_state)
-                    fringe.push((hcost, new_cost, new_path, next_state))
+                    if not placeholder_pushed:
+                        decisions.append(new_decision)
+                        placeholder_pushed = True
+                    parents.append(node_idx)
+                    decisions.append(new_decision)
+                    fringe.push((hcost, new_cost, len(parents) - 1, next_state))
 
 
 # ---------------------------------------------------------------------------
@@ -104,23 +134,36 @@ class Maximizer[S, D, R]:
     Generic longest-path / dynamic-programming maximiser.
     Define the state S, the decision D, and the revenue type R.
     Override:
-      - get_state(past_decisions)    -> current state
-      - get_next_decisions(state)    -> list of (decision, revenue) pairs
-      - is_end_state(state)          -> True when goal is reached
+      - get_next_state(state, decision)  -> next state (replaces get_state)
+      - get_next_decisions(state)        -> list of (decision, revenue) pairs
+      - is_end_state(state)              -> True when goal is reached
     """
     var decision_path: []D
     var start_state: S
     def __init__(self):
         self.decision_path = []
 
-    def get_state(self, past_decisions: []D) -> S:
-        raise NotImplementedError("Override get_state()")
+    def get_next_state(self, current_state: S, decision: D) -> S:
+        raise NotImplementedError("Override get_next_state()")
 
     def get_next_decisions(self, current_state: S) -> [](D, R):
         raise NotImplementedError("Override get_next_decisions()")
 
     def is_end_state(self, state: S) -> bool:
         raise NotImplementedError("Override is_end_state()")
+
+    def _reconstruct(self, parents: []int, decisions: []D, goal_idx: int) -> []D:
+        var collected: []D = []
+        var i: int = goal_idx
+        while parents[i] >= 0:
+            collected.append(decisions[i])
+            i = parents[i]
+        var path: []D = []
+        var j: int = len(collected) - 1
+        while j >= 0:
+            path.append(collected[j])
+            j = j - 1
+        return path
 
     def longest_path(self, start_state: S, max_path_length: int = 1000, end_state: auto = ANY):
         """
@@ -132,28 +175,35 @@ class Maximizer[S, D, R]:
         full search completes before any results are yielded.
         """
         self.start_state = start_state
+        var parents:   []int    = [-1]
+        var decisions: []D      = []
+        var placeholder_pushed: bool = False
         solutions: [](float, []D) = []
 
-        empty_path: []D = []
-        fringe = PriorityQueue((0.0, 0, empty_path, start_state, [start_state]))
+        fringe: PriorityQueue[MaxFringe_T[S, D, R]] = PriorityQueue((0.0, 0, 0, start_state, [start_state]))
 
         while fringe:
-            let (neg_rev, path_length, path, current_state, path_states) = fringe.pop()
+            let (neg_rev, path_length, node_idx, current_state, path_states) = fringe.pop()
             revenue: float = -neg_rev
 
             reached: bool = current_state == end_state if not isANY(end_state) else self.is_end_state(current_state)
             if reached and path_length > 0:
+                let path: []D = self._reconstruct(parents, decisions, node_idx)
                 solutions.append((revenue, path))
 
             if path_length < max_path_length:
                 for new_decision, step_rev in self.get_next_decisions(current_state):
-                    new_path: []D = path + [new_decision]
-                    next_state: S = self.get_state(new_path)
+                    next_state: S = self.get_next_state(current_state, new_decision)
                     if next_state in path_states:
                         continue
                     new_rev: float = revenue + float(step_rev)
                     new_len: int = path_length + 1
-                    fringe.push((-new_rev, new_len, new_path, next_state, path_states + [next_state]))
+                    if not placeholder_pushed:
+                        decisions.append(new_decision)
+                        placeholder_pushed = True
+                    parents.append(node_idx)
+                    decisions.append(new_decision)
+                    fringe.push((-new_rev, new_len, len(parents) - 1, next_state, path_states + [next_state]))
 
         for rev, path in solutions:
             yield rev, path

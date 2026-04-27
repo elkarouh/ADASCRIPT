@@ -82,11 +82,10 @@ def solve_to_json(data: JsonNode) -> str:
         let soft0: int = soft_score(ctx, phase1_state)
         if soft0 > 0:
             final_state = sa_phase2(ctx, phase1_state, max_steps = 500000)
-
-    let elapsed: float = get_cpu_secs() - t0
-
-    if hard_violations > 0:
+    else:
         return "{\"ok\":false,\"error\":\"No valid schedule found - " + hard_violations'Image + " hard violations remain\"}"
+        
+    let elapsed: float = get_cpu_secs() - t0
 
     var holes:      int = 0
     var first_hits: int = 0
