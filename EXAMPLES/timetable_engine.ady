@@ -79,6 +79,20 @@ const DDL: str = (
     " PRIMARY KEY (problem, teacher, day, slot))"
 )
 
+const DEFAULT_PROBLEM: str = (
+    "{\"classes\":[{\"name\":\"Year7A\",\"size\":30},{\"name\":\"Year7B\",\"size\":28},{\"name\":\"Year8A\",\"size\":30},{\"name\":\"Year8B\",\"size\":27},{\"name\":\"Year9A\",\"size\":29},{\"name\":\"Year9B\",\"size\":26}]," &
+    "\"subjects\":[\"Math\",\"English\",\"Science\",\"History\",\"Geography\",\"French\",\"PE\",\"Art\"]," &
+    "\"teachers\":[\"Adams\",\"Brown\",\"Clarke\",\"Davies\",\"Evans\",\"Foster\",\"Green\",\"Harris\",\"Ito\",\"Jones\"]," &
+    "\"rooms\":[{\"name\":\"R01\",\"capacity\":32,\"room_type\":\"standard\"},{\"name\":\"R02\",\"capacity\":32,\"room_type\":\"standard\"},{\"name\":\"R03\",\"capacity\":32,\"room_type\":\"standard\"},{\"name\":\"R04\",\"capacity\":32,\"room_type\":\"standard\"},{\"name\":\"Lab1\",\"capacity\":30,\"room_type\":\"lab\"},{\"name\":\"Lab2\",\"capacity\":30,\"room_type\":\"lab\"},{\"name\":\"Gym\",\"capacity\":60,\"room_type\":\"gym\"},{\"name\":\"ArtRm\",\"capacity\":32,\"room_type\":\"art\"}]," &
+    "\"requirements\":{\"Year7A\":{\"Math\":4,\"English\":4,\"Science\":3,\"History\":2,\"Geography\":2,\"French\":2,\"PE\":2,\"Art\":1},\"Year7B\":{\"Math\":4,\"English\":4,\"Science\":3,\"History\":2,\"Geography\":2,\"French\":2,\"PE\":2,\"Art\":1},\"Year8A\":{\"Math\":4,\"English\":4,\"Science\":3,\"History\":2,\"Geography\":2,\"French\":2,\"PE\":2,\"Art\":1},\"Year8B\":{\"Math\":4,\"English\":4,\"Science\":3,\"History\":2,\"Geography\":2,\"French\":2,\"PE\":2,\"Art\":1},\"Year9A\":{\"Math\":4,\"English\":4,\"Science\":3,\"History\":2,\"Geography\":2,\"French\":2,\"PE\":2,\"Art\":1},\"Year9B\":{\"Math\":4,\"English\":4,\"Science\":3,\"History\":2,\"Geography\":2,\"French\":2,\"PE\":2,\"Art\":1}}," &
+    "\"can_teach\":{\"Adams\":[\"Math\"],\"Brown\":[\"English\",\"History\"],\"Clarke\":[\"Math\",\"French\"],\"Davies\":[\"Science\",\"Geography\"],\"Evans\":[\"English\",\"Art\"],\"Foster\":[\"History\",\"Geography\"],\"Green\":[\"Science\"],\"Harris\":[\"PE\"],\"Ito\":[\"French\",\"Art\"],\"Jones\":[\"English\",\"PE\"]}," &
+    "\"subject_room_type\":{\"Science\":\"lab\",\"PE\":\"gym\",\"Art\":\"art\"}," &
+    "\"teacher_slot_pref\":[]," &
+    "\"hard_constraints\":{\"max_consecutive_same_subj\":2,\"max_teacher_periods_day\":4}," &
+    "\"soft_constraints\":{\"weight_class_holes\":1,\"weight_avoid_first_slot\":2,\"weight_avoid_last_slot\":1,\"weight_teacher_spread\":1,\"weight_subject_daily_spread\":2,\"weight_heavy_morning\":3,\"morning_threshold\":4,\"weight_teacher_slot_pref\":2}," &
+    "\"heavy_subjects\":[]}"
+)
+
 # ============================================================
 # DB helpers
 # ============================================================
