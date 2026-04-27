@@ -117,6 +117,12 @@ table.grid td.blocked input[type=checkbox] { accent-color: #ef4444; }
 </head>
 <body>
 <div id="root"></div>
+<script>
+window.onerror = (msg, src, line, col, err) => {
+  document.getElementById("root").innerHTML =
+    `<pre style="color:red;padding:20px">JS ERROR line ${line}: ${msg}\n${err&&err.stack||""}</pre>`;
+};
+</script>
 <script type="text/babel">
 const { useState, useEffect, useRef, useCallback } = React;
 
