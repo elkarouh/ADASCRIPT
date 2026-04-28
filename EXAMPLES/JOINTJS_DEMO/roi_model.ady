@@ -1,8 +1,10 @@
 #!/usr/bin/env py2nim
+#ady2nim-args js
 """
 ROI model: price data, financial calculations, and graph topology.
-No rendering concerns — no JointJS, no colors, no markup.
 """
+
+nimport js/jsffi
 
 # ==============================================================================
 # Price data
@@ -31,12 +33,13 @@ const PRICES: [2013..2023]PriceRow = [
 
 def getPriceFor(year: int, name: str) -> float:
     let row: PriceRow = PRICES[year]
-    if name == "gold":
-        return row.gold
-    elif name == "bitcoin":
-        return row.bitcoin
-    else:
-        return row.sp500
+    case name:
+        when "gold":
+            return row.gold
+        when "bitcoin":
+            return row.bitcoin
+        when others:
+            return row.sp500
 
 def calcProductValue(funds: float, pct: float, year: int, name: str) -> float:
     let buyPrice:  float = getPriceFor(year, name)
@@ -76,18 +79,66 @@ def calculateAll(funds: float, year: int, pcts: []float, names: []str) -> Portfo
 
 type NodeKind is enum nkInvestment, nkProduct, nkPerf, nkOverall
 
-type NodeSpec is tuple:
-    kind:  NodeKind
-    name:  str    # logical identifier; "" for singleton nodes (investment, overall)
-    label: str    # display label; "" for nodes with no label
+@virtual
+class NodeSpec:
+    var kind:         NodeKind
+    var name:         str        # logical identifier; "" for singleton nodes (investment, overall)
+    var label:        str        # display label; "" for nodes with no label
+    var visual_params: JsObject
 
-const NODES: []NodeSpec = [
-    (kind: nkInvestment, name: "",        label: ""),
-    (kind: nkProduct,    name: "gold",    label: "Gold"),
-    (kind: nkProduct,    name: "bitcoin", label: "Bitcoin"),
-    (kind: nkProduct,    name: "sp500",   label: "S&amp;P 500"),
-    (kind: nkPerf,       name: "gold",    label: "Gold"),
-    (kind: nkPerf,       name: "bitcoin", label: "Bitcoin"),
-    (kind: nkPerf,       name: "sp500",   label: "S&amp;P 500"),
-    (kind: nkOverall,    name: "",        label: ""),
+    def __init__(self, kind: NodeKind, name: str, label: str):
+        self.kind         = kind
+        self.name         = name
+        self.label        = label
+        self.visual_params = jsNull
+
+    def node_id(self) -> str:
+        self.kind'Image & "_" & self.name
+
+    def set_visual_params(self, params: JsObject):
+        self.visual_params = params
+
+    def __str__(self) -> JsObject:
+        self.visual_params
+
+var NODE_INVESTMENT: NodeSpec = NodeSpec(nkInvestment, "",        "")
+var NODE_GOLD:       NodeSpec = NodeSpec(nkProduct,    "gold",    "Gold")
+var NODE_BITCOIN:    NodeSpec = NodeSpec(nkProduct,    "bitcoin", "Bitcoin")
+var NODE_SP500:      NodeSpec = NodeSpec(nkProduct,    "sp500",   "S&amp;P 500")
+var NODE_GOLD_PERF:  NodeSpec = NodeSpec(nkPerf,       "gold",    "Gold")
+var NODE_BTC_PERF:   NodeSpec = NodeSpec(nkPerf,       "bitcoin", "Bitcoin")
+var NODE_SP500_PERF: NodeSpec = NodeSpec(nkPerf,       "sp500",   "S&amp;P 500")
+var NODE_OVERALL:    NodeSpec = NodeSpec(nkOverall,    "",        "")
+
+var NODES: []NodeSpec = [
+    NODE_INVESTMENT,
+    NODE_GOLD,    NODE_BITCOIN,    NODE_SP500,
+    NODE_GOLD_PERF, NODE_BTC_PERF, NODE_SP500_PERF,
+    NODE_OVERALL,
+]
+
+@virtual
+class LinkSpec:
+    var src:          NodeSpec
+    var tgt:          NodeSpec
+    var visual_params: JsObject
+
+    def __init__(self, src: NodeSpec, tgt: NodeSpec):
+        self.src          = src
+        self.tgt          = tgt
+        self.visual_params = jsNull
+
+    def set_visual_params(self, params: JsObject):
+        self.visual_params = params
+
+    def __str__(self) -> JsObject:
+        self.visual_params
+
+var LINKS: []LinkSpec = [
+    LinkSpec(NODE_INVESTMENT, NODE_GOLD),
+    LinkSpec(NODE_INVESTMENT, NODE_BITCOIN),
+    LinkSpec(NODE_INVESTMENT, NODE_SP500),
+    LinkSpec(NODE_GOLD,       NODE_GOLD_PERF),
+    LinkSpec(NODE_BITCOIN,    NODE_BTC_PERF),
+    LinkSpec(NODE_SP500,      NODE_SP500_PERF),
 ]
