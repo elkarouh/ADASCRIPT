@@ -290,32 +290,38 @@ let performance: OverallPerf = OverallPerf()
 
 # ---- Links ----
 
-def mkLink(src: JsObject, sa: JsObject, tgt: JsObject,
-           ta: JsObject, color: cstring) -> JsObject:
-    jsnew shapes["standard"]["DoubleLink"]({
-        "source": {"id": src["id"], "anchor": sa},
-        "target": {"id": tgt["id"], "anchor": ta},
-        "z": 2,
-        "attrs": {
-            "line": {"stroke": color,
-                     "targetMarker": {"d": "M 10 -2 10 -10 -3 0 10 10 10 2", "stroke-width": 2}},
-            "outline": {"strokeWidth": 8}
-        }
-    })
+class LinkElem(JsElem):
+    def __init__(self, src: JsElem, sa: JsObject, tgt: JsElem,
+                 ta: JsObject, color: cstring):
+        self.elem = jsnew shapes["standard"]["DoubleLink"]({
+            "source": {"id": src.elem["id"], "anchor": sa},
+            "target": {"id": tgt.elem["id"], "anchor": ta},
+            "z": 2,
+            "attrs": {
+                "line": {"stroke": color,
+                         "targetMarker": {"d": "M 10 -2 10 -10 -3 0 10 10 10 2", "stroke-width": 2}},
+                "outline": {"strokeWidth": 8}
+            }
+        })
 
-let link1: JsObject = mkLink(investment, {"name": "top",    "args": {"dy":  1}}, gold,    {"name": "left", "args": {"dx": -5}}, MAIN)
-let link2: JsObject = mkLink(investment, {"name": "right",  "args": {"dx": -1}}, bitcoin, {"name": "left", "args": {"dx": -5}}, MAIN)
-let link3: JsObject = mkLink(investment, {"name": "bottom", "args": {"dy": -1}}, sp500,   {"name": "left", "args": {"dx": -5}}, MAIN)
-let link4: JsObject = mkLink(gold,    {"name": "right", "args": {"dx": -1}}, goldPerf,  {"name": "left", "args": {"dx": -5}}, GOLD)
-let link5: JsObject = mkLink(bitcoin, {"name": "right", "args": {"dx": -1}}, btcPerf,   {"name": "left", "args": {"dx": -5}}, BTC)
-let link6: JsObject = mkLink(sp500,   {"name": "right", "args": {"dx": -1}}, sp500Perf, {"name": "left", "args": {"dx": -5}}, SP)
+let link1: LinkElem = LinkElem(investment, {"name": "top",    "args": {"dy":  1}}, gold,    {"name": "left", "args": {"dx": -5}}, MAIN)
+let link2: LinkElem = LinkElem(investment, {"name": "right",  "args": {"dx": -1}}, bitcoin, {"name": "left", "args": {"dx": -5}}, MAIN)
+let link3: LinkElem = LinkElem(investment, {"name": "bottom", "args": {"dy": -1}}, sp500,   {"name": "left", "args": {"dx": -5}}, MAIN)
+let link4: LinkElem = LinkElem(gold,    {"name": "right", "args": {"dx": -1}}, goldPerf,  {"name": "left", "args": {"dx": -5}}, GOLD)
+let link5: LinkElem = LinkElem(bitcoin, {"name": "right", "args": {"dx": -1}}, btcPerf,   {"name": "left", "args": {"dx": -5}}, BTC)
+let link6: LinkElem = LinkElem(sp500,   {"name": "right", "args": {"dx": -1}}, sp500Perf, {"name": "left", "args": {"dx": -5}}, SP)
 
 # ---- Populate graph ----
 
-let cells: JsObject = [investment, gold, bitcoin, sp500,
+def resetCells(g: JsObject, elems: seq[JsElem]):
+    var jsElems: seq[JsObject] = []
+    for e in elems:
+        jsElems.add(e.elem)
+    g.resetCells(jsElems.toJs)
+
+resetCells(graph, [investment, gold, bitcoin, sp500,
     performance, goldPerf, btcPerf, sp500Perf,
-    link1, link2, link3, link4, link5, link6].toJs
-graph.resetCells(cells)
+    link1, link2, link3, link4, link5, link6])
 performance.embed(goldPerf)
 performance.embed(btcPerf)
 performance.embed(sp500Perf)
