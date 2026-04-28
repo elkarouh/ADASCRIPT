@@ -6,6 +6,7 @@ Compile:  py2nim roi_glue.ady   (or: make)
 """
 
 nimport js/jsffi
+nimport jointjs
 nimport roi_model
 
 # ==============================================================================
@@ -171,17 +172,6 @@ def makeMarkup(kind: MarkupKind) -> JsObject:
             util.svg([MARKUP_OVERALL])
 
 # ==============================================================================
-# Shared attr helpers
-# ==============================================================================
-
-def bodyAttr(fill: cstring) -> JsObject:
-    {"rx": 10, "ry": 10, "width": "calc(w)", "height": "calc(h)",
-     "stroke": "#333333", "fill": fill, "strokeWidth": 2}
-
-def foAttr() -> JsObject:
-    {"width": "calc(w)", "height": "calc(h)"}
-
-# ==============================================================================
 # Element base class
 # ==============================================================================
 # Wraps a JointJS JsObject. The transpiler auto-emits a converter so any
@@ -213,6 +203,12 @@ class JsElem:
 
     def id(self) -> JsObject:
         self.elem["id"]
+
+def resetCells(g: JsObject, elems: []JsElem):
+    var jsElems: []JsObject = []
+    for e in elems:
+        jsElems.add(e.elem)
+    g.resetCells(jsElems.toJs)
 
 # ==============================================================================
 # Node classes
@@ -278,12 +274,6 @@ class LinkElem(JsElem):
 # Build graph from model specs
 # ==============================================================================
 
-def resetCells(g: JsObject, elems: seq[JsElem]):
-    var jsElems: seq[JsObject] = []
-    for e in elems:
-        jsElems.add(e.elem)
-    g.resetCells(jsElems.toJs)
-
 # Instantiate nodes — positions and tab indices are layout/UI concerns, kept here
 var investment: InvestmentNode = InvestmentNode(100, 280)
 var goldPerf:   PerfNode       = PerfNode(NODES[4], 600, 200,  6)
@@ -301,9 +291,7 @@ var link4: LinkElem = LinkElem(gold,    {"name": "right", "args": {"dx": -1}}, g
 var link5: LinkElem = LinkElem(bitcoin, {"name": "right", "args": {"dx": -1}}, btcPerf,   {"name": "left", "args": {"dx": -5}}, BTC)
 var link6: LinkElem = LinkElem(sp500,   {"name": "right", "args": {"dx": -1}}, sp500Perf, {"name": "left", "args": {"dx": -5}}, SP)
 
-resetCells(graph, [investment, gold, bitcoin, sp500,
-    performance, goldPerf, btcPerf, sp500Perf,
-    link1, link2, link3, link4, link5, link6])
+resetCells(graph, [investment, gold, bitcoin, sp500, performance, goldPerf, btcPerf, sp500Perf, link1, link2, link3, link4, link5, link6])
 
 performance.embed(goldPerf)
 performance.embed(btcPerf)
@@ -320,17 +308,18 @@ def fmt(v: float) -> cstring:
 def calculate():
     let funds: float = investment.attr("funds/props/value").to(float)
     let year:  int   = investment.attr("year/props/value").to(int)
-    let specs: seq[Product] = [gold, bitcoin, sp500]
-    var total: float = 0.0
-    for spec in specs:
-        let pct: float = spec.attr("percentage/props/value").to(float)
-        let val: float = calcProductValue(funds, pct, year, spec.name)
-        let roi: float = calcROI(funds, pct, val)
-        spec.perf.attr("value/props/value", fmt(val))
-        spec.perf.attr("roi/props/value",   fmt(roi))
-        total += val
-    performance.attr("value/props/value", fmt(total))
-    performance.attr("roi/props/value",   fmt(calcROI(funds, 100.0, total)))
+    let products: []Product = [gold, bitcoin, sp500]
+    var pcts: []float = []
+    var names: []str = []
+    for p in products:
+        pcts.add(p.attr("percentage/props/value").to(float))
+        names.add(p.name)
+    let result: PortfolioCalc = calculateAll(funds, year, pcts, names)
+    for i in 0..len(products)-1:
+        products[i].perf.attr("value/props/value", fmt(result.products[i].value))
+        products[i].perf.attr("roi/props/value",   fmt(result.products[i].roi))
+    performance.attr("value/props/value", fmt(result.totalValue))
+    performance.attr("roi/props/value",   fmt(result.totalROI))
 
 # ==============================================================================
 # Reactivity  (rebalance percentages across the other products)
@@ -339,7 +328,7 @@ def calculate():
 def onChangeAttrs(cell: JsObject, attrs: JsObject, opts: JsObject):
     if not opts["calc"].to(bool):
         return
-    let products: seq[Product] = [gold, bitcoin, sp500]
+    let products: []Product = [gold, bitcoin, sp500]
     var idx: int = -1
     for i in 0..len(products)-1:
         if products[i].id() == cell["id"]:

@@ -1,0 +1,13 @@
+#!/usr/bin/env py2nim
+"""
+jointjs — shared helpers for JointJS applications.
+"""
+
+nimport js/jsffi
+
+def bodyAttr(fill: cstring) -> JsObject:
+    {"rx": 10, "ry": 10, "width": "calc(w)", "height": "calc(h)",
+     "stroke": "#333333", "fill": fill, "strokeWidth": 2}
+
+def foAttr() -> JsObject:
+    {"width": "calc(w)", "height": "calc(h)"}
