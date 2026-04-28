@@ -97,9 +97,11 @@ document.getElementById("paper-container").appendChild(paper["el"])
 
 # ---- Markup helpers ----
 
-def makeMarkup(kind: cstring) -> JsObject:
+type MarkupKind is enum mkInvestment, mkProduct, mkPerf, mkOverall
+
+def makeMarkup(kind: MarkupKind) -> JsObject:
     case kind:
-        when "investment":
+        when mkInvestment:
             util.svg([
                 cstring("<rect @selector=\"body\" />") &
                 "<foreignObject @selector=\"foreignObject\" overflow=\"hidden\">" &
@@ -125,7 +127,7 @@ def makeMarkup(kind: cstring) -> JsObject:
                   "</div>" &
                 "</foreignObject>"
             ])
-        when "product":
+        when mkProduct:
             util.svg([
                 cstring("<rect @selector=\"body\" />") &
                 "<foreignObject @selector=\"foreignObject\" overflow=\"hidden\">" &
@@ -141,7 +143,7 @@ def makeMarkup(kind: cstring) -> JsObject:
                   "</div>" &
                 "</foreignObject>"
             ])
-        when "perf":
+        when mkPerf:
             util.svg([
                 cstring("<rect @selector=\"body\" />") &
                 "<foreignObject @selector=\"foreignObject\" overflow=\"hidden\">" &
@@ -212,14 +214,14 @@ let investment: JsObject = mkElem("Investment",
     {"body": bodyAttr(MAIN), "foreignObject": foAttr(),
      "funds": {"props": {"value": 100}, "tabindex": 1},
      "year":  {"props": {"value": 2018}, "tabindex": 2}},
-    makeMarkup("investment"))
+    makeMarkup(mkInvestment))
 
 let gold: JsObject = mkElem("Product",
     {"x": 300, "y": 100}, {"width": 140, "height": 120}, 3,
     {"body": bodyAttr(GOLD), "foreignObject": foAttr(),
      "label": {"html": "Gold"},
      "percentage": {"props": {"value": 25}, "tabindex": 3}},
-    makeMarkup("product"))
+    makeMarkup(mkProduct))
 gold.set("name", "gold")
 
 let bitcoin: JsObject = mkElem("Product",
@@ -227,7 +229,7 @@ let bitcoin: JsObject = mkElem("Product",
     {"body": bodyAttr(BTC), "foreignObject": foAttr(),
      "label": {"html": "Bitcoin"},
      "percentage": {"props": {"value": 25}, "tabindex": 4}},
-    makeMarkup("product"))
+    makeMarkup(mkProduct))
 bitcoin.set("name", "bitcoin")
 
 let sp500: JsObject = mkElem("Product",
@@ -235,7 +237,7 @@ let sp500: JsObject = mkElem("Product",
     {"body": bodyAttr(SP), "foreignObject": foAttr(),
      "label": {"html": "S&amp;P 500"},
      "percentage": {"props": {"value": 50}, "tabindex": 5}},
-    makeMarkup("product"))
+    makeMarkup(mkProduct))
 sp500.set("name", "sp500")
 
 def mkPerf(lbl: cstring, x: int, y: int, ti1: int, ti2: int) -> JsObject:
@@ -244,7 +246,7 @@ def mkPerf(lbl: cstring, x: int, y: int, ti1: int, ti2: int) -> JsObject:
         {"body": bodyAttr(MAIN), "foreignObject": foAttr(),
          "label": {"html": lbl},
          "value": {"tabindex": ti1}, "roi": {"tabindex": ti2}},
-        makeMarkup("perf"))
+        makeMarkup(mkPerf))
 
 let goldPerf:  JsObject = mkPerf("Gold",        600, 200, 6,  7)
 let btcPerf:   JsObject = mkPerf("Bitcoin",     600, 320, 8,  9)
@@ -254,7 +256,7 @@ let performance: JsObject = mkElem("OverallPerformance",
     {"x": 500, "y": 300}, jsUndefined, -1,
     {"body": bodyAttr(SEC), "foreignObject": foAttr(),
      "value": {"tabindex": 12}, "roi": {"tabindex": 13}},
-    makeMarkup("overall"))
+    makeMarkup(mkOverall))
 
 # ---- Links ----
 
