@@ -244,9 +244,9 @@ class InvestmentNode(JsElem):
             makeMarkup(mkInvestment))
 
 class Product(JsElem):
-    var name: string
+    var name: str
 
-    def __init__(self, nm: string, lbl: cstring, color: cstring,
+    def __init__(self, nm: str, lbl: cstring, color: cstring,
                  x: int, y: int, z: int, ti: int):
         self.name = nm
         super().__init__("Product",
