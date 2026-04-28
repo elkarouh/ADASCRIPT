@@ -249,16 +249,8 @@ def anchorArgs(anchor: str) -> JsObject:
         when others:
             {"dx": -1}
 
-var allElems: []JsElem = [investment, gold, bitcoin, sp500, performance, goldPerf, btcPerf, sp500Perf]
-for lnk in LINKS:
-    let src:   JsElem  = lnk.src.getJsObject().to(JsElem)
-    let tgt:   JsElem  = lnk.tgt.getJsObject().to(JsElem)
-    let srcA:  str     = str(lnk.visual_params["srcAnchor"].to(cstring))
-    let tgtA:  str     = str(lnk.visual_params["tgtAnchor"].to(cstring))
-    let sa:    JsObject = {"name": srcA.toJs, "args": anchorArgs(srcA)}
-    let ta:    JsObject = {"name": tgtA.toJs, "args": anchorArgs(tgtA)}
-    let color: cstring = lnk.visual_params["color"].to(cstring)
-    allElems.add(jsElemOf(jsnew shapes["standard"]["DoubleLink"]({
+def newDoubleLink(src: JsElem, sa: JsObject, tgt: JsElem, ta: JsObject, color: cstring) -> JsElem:
+    jsElemOf(jsnew shapes["standard"]["DoubleLink"]({
         "source": {"id": src.elem["id"], "anchor": sa},
         "target": {"id": tgt.elem["id"], "anchor": ta},
         "z": 2,
@@ -268,7 +260,18 @@ for lnk in LINKS:
                                          "stroke-width": 2}},
             "outline": {"strokeWidth": 8}
         }
-    })))
+    }))
+
+var allElems: []JsElem = [investment, gold, bitcoin, sp500, performance, goldPerf, btcPerf, sp500Perf]
+for lnk in LINKS:
+    let src:   JsElem   = lnk.src.getJsObject().to(JsElem)
+    let tgt:   JsElem   = lnk.tgt.getJsObject().to(JsElem)
+    let srcA:  str      = str(lnk.visual_params["srcAnchor"].to(cstring))
+    let tgtA:  str      = str(lnk.visual_params["tgtAnchor"].to(cstring))
+    let sa:    JsObject = {"name": srcA.toJs, "args": anchorArgs(srcA)}
+    let ta:    JsObject = {"name": tgtA.toJs, "args": anchorArgs(tgtA)}
+    let color: cstring  = lnk.visual_params["color"].to(cstring)
+    allElems.add(newDoubleLink(src, sa, tgt, ta, color))
 
 resetCells(graph, allElems)
 
@@ -284,18 +287,22 @@ performance.fitEmbeds({"padding": {"horizontal": 30, "top": 50, "bottom": 130}})
 def fmt(v: float) -> cstring:
     v.toJs.toLocaleString("en", {"minimumFractionDigits": 2, "maximumFractionDigits": 2}).to(cstring)
 
-def calculate():
+let PRODUCT_NODES: []NodeSpec = [NODE_GOLD, NODE_BITCOIN, NODE_SP500]
+
+def calculate() -> PortfolioCalc:
     let funds: float = investment.attr("funds/props/value").to(float)
     let year:  int   = investment.attr("year/props/value").to(int)
-    let pnodes: []NodeSpec = [NODE_GOLD, NODE_BITCOIN, NODE_SP500]
     var pcts:  []float = []
     var names: []str   = []
-    for p in pnodes:
+    for p in PRODUCT_NODES:
         pcts.add(p.getJsObject().to(JsElem).attr("percentage/props/value").to(float))
         names.add(p.name)
-    let result: PortfolioCalc = calculateAll(funds, year, pcts, names)
-    for i in 0..len(pnodes)-1:
-        let perf: JsElem = pnodes[i].visual_params["perf"].to(JsElem)
+    return calculateAll(funds, year, pcts, names)
+
+def updateUI():
+    let result: PortfolioCalc = calculate()
+    for i in 0..len(PRODUCT_NODES)-1:
+        let perf: JsElem = PRODUCT_NODES[i].visual_params["perf"].to(JsElem)
         perf.attr("value/props/value", fmt(result.products[i].value))
         perf.attr("roi/props/value",   fmt(result.products[i].roi))
     performance.attr("value/props/value", fmt(result.totalValue))
@@ -308,23 +315,22 @@ def calculate():
 def onChangeAttrs(cell: JsObject, attrs: JsObject, opts: JsObject):
     if not opts["calc"].to(bool):
         return
-    let pnodes: []NodeSpec = [NODE_GOLD, NODE_BITCOIN, NODE_SP500]
     var idx: int = -1
-    for i in 0..len(pnodes)-1:
-        if pnodes[i].getJsObject().to(JsElem).id() == cell["id"]:
+    for i in 0..<len(PRODUCT_NODES):
+        if PRODUCT_NODES[i].getJsObject().to(JsElem).id() == cell["id"]:
             idx = i
     if idx >= 0:
         var diff: float = opts["previousValue"].to(float) - opts["propertyValue"].to(float)
-        for i in 0..len(pnodes)-1:
+        for i in 0..len(PRODUCT_NODES)-1:
             if i != idx:
-                let p:   JsElem = pnodes[i].getJsObject().to(JsElem)
+                let p:   JsElem = PRODUCT_NODES[i].getJsObject().to(JsElem)
                 let pct: float  = p.attr("percentage/props/value").to(float) + diff
                 p.attr("percentage/props/value", max(pct, 0.0).toJs)
                 if pct < 0.0:
                     diff = pct
                 else:
                     diff = 0.0
-    calculate()
+    updateUI()
 
 graph.on("change:attrs", onChangeAttrs)
 
@@ -338,6 +344,6 @@ def fit():
         "maxScale": 1, "verticalAlign": "middle", "horizontalAlign": "middle"
     })
 
-calculate()
+updateUI()
 fit()
 window.addEventListener("resize", fit)
