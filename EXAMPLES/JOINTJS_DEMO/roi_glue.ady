@@ -7,7 +7,9 @@ Compile:  py2nim roi_glue.ady   (or: make)
 
 nimport js/jsffi
 
-# ---- ROI data ----
+# ==============================================================================
+# ROI data
+# ==============================================================================
 
 type PriceRow is tuple:
     gold:    float
@@ -51,7 +53,9 @@ def calcROI(funds: float, pct: float, value: float) -> float:
     else:
         (value - cost) / cost * 100.0
 
-# ---- JointJS globals ----
+# ==============================================================================
+# JointJS globals
+# ==============================================================================
 
 jsvar joint:    JsObject
 jsvar window:   JsObject
@@ -63,131 +67,107 @@ let shapes: JsObject = joint["shapes"]
 
 let graph: JsObject = jsnew dia["Graph"]({"cellNamespace": shapes})
 
-# ---- Input change handler ----
+# ==============================================================================
+# Markup templates
+# ==============================================================================
 
-jsvar jsThis as "this": JsObject
+const MARKUP_INVESTMENT: cstring = (
+    "<rect @selector=\"body\" />" &
+    "<foreignObject @selector=\"foreignObject\" overflow=\"hidden\">" &
+      "<div @selector=\"content\" class=\"jj-form\" xmlns=\"http://www.w3.org/1999/xhtml\">" &
+        "<h2>Investment</h2>" &
+        "<div class=\"jj-field-vertical\">" &
+          "<label>How much did you invest?" &
+            "<input @selector=\"funds\" class=\"jj-input\" type=\"number\"/>" &
+          "</label>" &
+        "</div>" &
+        "<div class=\"jj-field-vertical\">" &
+          "<label>What year it was?" &
+            "<select @selector=\"year\" class=\"jj-input\">" &
+              "<option value=\"2013\">2013</option><option value=\"2014\">2014</option>" &
+              "<option value=\"2015\">2015</option><option value=\"2016\">2016</option>" &
+              "<option value=\"2017\">2017</option><option value=\"2018\">2018</option>" &
+              "<option value=\"2019\">2019</option><option value=\"2020\">2020</option>" &
+              "<option value=\"2021\">2021</option><option value=\"2022\">2022</option>" &
+              "<option value=\"2023\">2023</option>" &
+            "</select>" &
+          "</label>" &
+        "</div>" &
+      "</div>" &
+    "</foreignObject>")
 
-def onInputChange(evt: JsObject):
-    let input: JsObject = evt["target"]
-    if not input["validity"]["valid"].to(bool):
-        return
-    let path: cstring = input.getAttribute("joint-selector").to(cstring) & "/props/value"
-    let prev: JsObject = jsThis["model"].attr(path)
-    jsThis["model"].attr(path, input["value"], {"previousValue": prev, "calc": true})
+const MARKUP_PRODUCT: cstring = (
+    "<rect @selector=\"body\" />" &
+    "<foreignObject @selector=\"foreignObject\" overflow=\"hidden\">" &
+      "<div @selector=\"content\" class=\"jj-form\" xmlns=\"http://www.w3.org/1999/xhtml\">" &
+        "<div class=\"jj-field-vertical\">" &
+          "<label>What % did you invest in <strong @selector=\"label\"></strong>?" &
+            "<span class=\"jj-input-container\">" &
+              "<input @selector=\"percentage\" class=\"jj-input\" type=\"number\" min=\"0\" max=\"100\" step=\"1\"/>" &
+              "<span class=\"jj-input-unit\">%</span>" &
+            "</span>" &
+          "</label>" &
+        "</div>" &
+      "</div>" &
+    "</foreignObject>")
 
-# ---- Paper ----
+const MARKUP_PERF: cstring = (
+    "<rect @selector=\"body\" />" &
+    "<foreignObject @selector=\"foreignObject\" overflow=\"hidden\">" &
+      "<div @selector=\"content\" class=\"jj-form\" xmlns=\"http://www.w3.org/1999/xhtml\">" &
+        "<fieldset>" &
+          "<legend><strong @selector=\"label\"></strong></legend>" &
+          "<div class=\"jj-field-horizontal\">" &
+            "<label><span>Value</span>" &
+              "<input @selector=\"value\" class=\"jj-input\" type=\"text\" readonly=\"true\"/>" &
+            "</label>" &
+          "</div>" &
+          "<div class=\"jj-field-horizontal\">" &
+            "<label><span>ROI</span>" &
+              "<input @selector=\"roi\" class=\"jj-input\" type=\"text\" readonly=\"true\"/>" &
+            "</label>" &
+          "</div>" &
+        "</fieldset>" &
+      "</div>" &
+    "</foreignObject>")
 
-let paper: JsObject = jsnew dia["Paper"]({
-    "width":  "100%",
-    "height": "100%",
-    "model":  graph,
-    "cellViewNamespace": shapes,
-    "defaultConnector":       {"name": "curve"},
-    "defaultConnectionPoint": {"name": "anchor"},
-    "background": {"color": "#f6f4f4"},
-    "preventDefaultViewAction": false,
-    "interactive": {"stopDelegation": false},
-    "elementView": dia["ElementView"].extend({
-        "events": {"change input,select": "onInputChange"},
-        "onInputChange": onInputChange
-    })
-})
-
-document.getElementById("paper-container").appendChild(paper["el"])
-
-# ---- Markup helpers ----
+const MARKUP_OVERALL: cstring = (
+    "<rect @selector=\"body\" />" &
+    "<foreignObject @selector=\"foreignObject\" overflow=\"hidden\">" &
+      "<div @selector=\"content\" class=\"jj-form\" style=\"justify-content:space-between\" xmlns=\"http://www.w3.org/1999/xhtml\">" &
+        "<p>This is your portfolio now in <strong>2023</strong>.</p>" &
+        "<fieldset>" &
+          "<legend style=\"margin-bottom:10px\">Your overall performance of investment is:</legend>" &
+          "<div class=\"jj-field-horizontal\">" &
+            "<label><span>Value</span>" &
+              "<input @selector=\"value\" class=\"jj-input\" type=\"text\" readonly=\"true\"/>" &
+            "</label>" &
+          "</div>" &
+          "<div class=\"jj-field-horizontal\">" &
+            "<label><span>ROI</span>" &
+              "<input @selector=\"roi\" class=\"jj-input\" type=\"text\" readonly=\"true\"/>" &
+            "</label>" &
+          "</div>" &
+        "</fieldset>" &
+      "</div>" &
+    "</foreignObject>")
 
 type MarkupKind is enum mkInvestment, mkProduct, mkPerf, mkOverall
 
 def makeMarkup(kind: MarkupKind) -> JsObject:
     case kind:
         when mkInvestment:
-            util.svg([
-                cstring("<rect @selector=\"body\" />") &
-                "<foreignObject @selector=\"foreignObject\" overflow=\"hidden\">" &
-                  "<div @selector=\"content\" class=\"jj-form\" xmlns=\"http://www.w3.org/1999/xhtml\">" &
-                    "<h2>Investment</h2>" &
-                    "<div class=\"jj-field-vertical\">" &
-                      "<label>How much did you invest?" &
-                        "<input @selector=\"funds\" class=\"jj-input\" type=\"number\"/>" &
-                      "</label>" &
-                    "</div>" &
-                    "<div class=\"jj-field-vertical\">" &
-                      "<label>What year it was?" &
-                        "<select @selector=\"year\" class=\"jj-input\">" &
-                          "<option value=\"2013\">2013</option><option value=\"2014\">2014</option>" &
-                          "<option value=\"2015\">2015</option><option value=\"2016\">2016</option>" &
-                          "<option value=\"2017\">2017</option><option value=\"2018\">2018</option>" &
-                          "<option value=\"2019\">2019</option><option value=\"2020\">2020</option>" &
-                          "<option value=\"2021\">2021</option><option value=\"2022\">2022</option>" &
-                          "<option value=\"2023\">2023</option>" &
-                        "</select>" &
-                      "</label>" &
-                    "</div>" &
-                  "</div>" &
-                "</foreignObject>"
-            ])
+            util.svg([MARKUP_INVESTMENT])
         when mkProduct:
-            util.svg([
-                cstring("<rect @selector=\"body\" />") &
-                "<foreignObject @selector=\"foreignObject\" overflow=\"hidden\">" &
-                  "<div @selector=\"content\" class=\"jj-form\" xmlns=\"http://www.w3.org/1999/xhtml\">" &
-                    "<div class=\"jj-field-vertical\">" &
-                      "<label>What % did you invest in <strong @selector=\"label\"></strong>?" &
-                        "<span class=\"jj-input-container\">" &
-                          "<input @selector=\"percentage\" class=\"jj-input\" type=\"number\" min=\"0\" max=\"100\" step=\"1\"/>" &
-                          "<span class=\"jj-input-unit\">%</span>" &
-                        "</span>" &
-                      "</label>" &
-                    "</div>" &
-                  "</div>" &
-                "</foreignObject>"
-            ])
+            util.svg([MARKUP_PRODUCT])
         when mkPerf:
-            util.svg([
-                cstring("<rect @selector=\"body\" />") &
-                "<foreignObject @selector=\"foreignObject\" overflow=\"hidden\">" &
-                  "<div @selector=\"content\" class=\"jj-form\" xmlns=\"http://www.w3.org/1999/xhtml\">" &
-                    "<fieldset>" &
-                      "<legend><strong @selector=\"label\"></strong></legend>" &
-                      "<div class=\"jj-field-horizontal\">" &
-                        "<label><span>Value</span>" &
-                          "<input @selector=\"value\" class=\"jj-input\" type=\"text\" readonly=\"true\"/>" &
-                        "</label>" &
-                      "</div>" &
-                      "<div class=\"jj-field-horizontal\">" &
-                        "<label><span>ROI</span>" &
-                          "<input @selector=\"roi\" class=\"jj-input\" type=\"text\" readonly=\"true\"/>" &
-                        "</label>" &
-                      "</div>" &
-                    "</fieldset>" &
-                  "</div>" &
-                "</foreignObject>"
-            ])
+            util.svg([MARKUP_PERF])
         when others:
-            util.svg([
-                cstring("<rect @selector=\"body\" />") &
-                "<foreignObject @selector=\"foreignObject\" overflow=\"hidden\">" &
-                  "<div @selector=\"content\" class=\"jj-form\" style=\"justify-content:space-between\" xmlns=\"http://www.w3.org/1999/xhtml\">" &
-                    "<p>This is your portfolio now in <strong>2023</strong>.</p>" &
-                    "<fieldset>" &
-                      "<legend style=\"margin-bottom:10px\">Your overall performance of investment is:</legend>" &
-                      "<div class=\"jj-field-horizontal\">" &
-                        "<label><span>Value</span>" &
-                          "<input @selector=\"value\" class=\"jj-input\" type=\"text\" readonly=\"true\"/>" &
-                        "</label>" &
-                      "</div>" &
-                      "<div class=\"jj-field-horizontal\">" &
-                        "<label><span>ROI</span>" &
-                          "<input @selector=\"roi\" class=\"jj-input\" type=\"text\" readonly=\"true\"/>" &
-                        "</label>" &
-                      "</div>" &
-                    "</fieldset>" &
-                  "</div>" &
-                "</foreignObject>"
-            ])
+            util.svg([MARKUP_OVERALL])
 
-# ---- Colours ----
+# ==============================================================================
+# Colours and shared attr helpers
+# ==============================================================================
 
 const MAIN: cstring = "#D4D9D7"
 const SEC:  cstring = "#EAECEA"
@@ -202,17 +182,20 @@ def bodyAttr(fill: cstring) -> JsObject:
 def foAttr() -> JsObject:
     {"width": "calc(w)", "height": "calc(h)"}
 
-# ---- JsElem base class ----
-# Wraps a JointJS JsObject element. A converter (auto-emitted by the transpiler)
-# makes any JsElem subclass accepted wherever JsObject is expected.
+# ==============================================================================
+# Element base class
+# ==============================================================================
+# Wraps a JointJS JsObject. The transpiler auto-emits a converter so any
+# JsElem subclass is accepted wherever JsObject is expected.
 
 class JsElem:
     var elem: JsObject
 
     def __init__(self, elemType: cstring, pos: JsObject, size: JsObject,
                  z: int, attrs: JsObject, markup: JsObject):
-        self.elem = jsnew dia["Element"]({"type": elemType, "position": pos, "size": size,
-                                          "z": z, "attrs": attrs, "markup": markup})
+        self.elem = jsnew dia["Element"]({"type": elemType, "position": pos,
+                                          "size": size, "z": z,
+                                          "attrs": attrs, "markup": markup})
 
     def attr(self, path: cstring) -> JsObject:
         self.elem.attr(path)
@@ -232,7 +215,9 @@ class JsElem:
     def id(self) -> JsObject:
         self.elem["id"]
 
-# ---- Node classes ----
+# ==============================================================================
+# Node classes
+# ==============================================================================
 
 class InvestmentNode(JsElem):
     def __init__(self):
@@ -243,20 +228,6 @@ class InvestmentNode(JsElem):
              "year":  {"props": {"value": 2018}, "tabindex": 2}},
             makeMarkup(mkInvestment))
 
-class Product(JsElem):
-    var name: str
-
-    def __init__(self, nm: str, lbl: cstring, color: cstring,
-                 x: int, y: int, z: int, ti: int):
-        self.name = nm
-        super().__init__("Product",
-            {"x": x, "y": y}, {"width": 140, "height": 120}, z,
-            {"body": bodyAttr(color), "foreignObject": foAttr(),
-             "label": {"html": lbl},
-             "percentage": {"props": {"value": 25}, "tabindex": ti}},
-            makeMarkup(mkProduct))
-        self.elem.set("name", nm.toJs)
-
 class PerfNode(JsElem):
     def __init__(self, lbl: cstring, x: int, y: int, ti1: int, ti2: int):
         super().__init__("ProductPerformance",
@@ -266,6 +237,22 @@ class PerfNode(JsElem):
              "value": {"tabindex": ti1}, "roi": {"tabindex": ti2}},
             makeMarkup(mkPerf))
 
+class Product(JsElem):
+    var name: str
+    var perf: PerfNode
+
+    def __init__(self, nm: str, lbl: cstring, color: cstring,
+                 x: int, y: int, z: int, ti: int, perfNode: PerfNode):
+        self.name = nm
+        self.perf = perfNode
+        super().__init__("Product",
+            {"x": x, "y": y}, {"width": 140, "height": 120}, z,
+            {"body": bodyAttr(color), "foreignObject": foAttr(),
+             "label": {"html": lbl},
+             "percentage": {"props": {"value": 25}, "tabindex": ti}},
+            makeMarkup(mkProduct))
+        self.elem.set("name", nm.toJs)
+
 class OverallPerf(JsElem):
     def __init__(self):
         super().__init__("OverallPerformance",
@@ -273,22 +260,6 @@ class OverallPerf(JsElem):
             {"body": bodyAttr(SEC), "foreignObject": foAttr(),
              "value": {"tabindex": 12}, "roi": {"tabindex": 13}},
             makeMarkup(mkOverall))
-
-# ---- Nodes ----
-
-let investment: InvestmentNode = InvestmentNode()
-
-let gold:    Product = Product("gold",    "Gold",        GOLD, 300, 100, 3, 3)
-let bitcoin: Product = Product("bitcoin", "Bitcoin",     BTC,  300, 330, 5, 4)
-let sp500:   Product = Product("sp500",   "S&amp;P 500", SP,   300, 560, 7, 5)
-
-let goldPerf:  PerfNode = PerfNode("Gold",        600, 200, 6,  7)
-let btcPerf:   PerfNode = PerfNode("Bitcoin",     600, 320, 8,  9)
-let sp500Perf: PerfNode = PerfNode("S&amp;P 500", 600, 440, 10, 11)
-
-let performance: OverallPerf = OverallPerf()
-
-# ---- Links ----
 
 class LinkElem(JsElem):
     def __init__(self, src: JsElem, sa: JsObject, tgt: JsElem,
@@ -298,20 +269,48 @@ class LinkElem(JsElem):
             "target": {"id": tgt.elem["id"], "anchor": ta},
             "z": 2,
             "attrs": {
-                "line": {"stroke": color,
-                         "targetMarker": {"d": "M 10 -2 10 -10 -3 0 10 10 10 2", "stroke-width": 2}},
+                "line":    {"stroke": color,
+                            "targetMarker": {"d": "M 10 -2 10 -10 -3 0 10 10 10 2",
+                                             "stroke-width": 2}},
                 "outline": {"strokeWidth": 8}
             }
         })
 
-let link1: LinkElem = LinkElem(investment, {"name": "top",    "args": {"dy":  1}}, gold,    {"name": "left", "args": {"dx": -5}}, MAIN)
-let link2: LinkElem = LinkElem(investment, {"name": "right",  "args": {"dx": -1}}, bitcoin, {"name": "left", "args": {"dx": -5}}, MAIN)
-let link3: LinkElem = LinkElem(investment, {"name": "bottom", "args": {"dy": -1}}, sp500,   {"name": "left", "args": {"dx": -5}}, MAIN)
-let link4: LinkElem = LinkElem(gold,    {"name": "right", "args": {"dx": -1}}, goldPerf,  {"name": "left", "args": {"dx": -5}}, GOLD)
-let link5: LinkElem = LinkElem(bitcoin, {"name": "right", "args": {"dx": -1}}, btcPerf,   {"name": "left", "args": {"dx": -5}}, BTC)
-let link6: LinkElem = LinkElem(sp500,   {"name": "right", "args": {"dx": -1}}, sp500Perf, {"name": "left", "args": {"dx": -5}}, SP)
+# ==============================================================================
+# Graph nodes
+# ==============================================================================
 
-# ---- Populate graph ----
+let investment: InvestmentNode = InvestmentNode()
+
+let goldPerf:  PerfNode = PerfNode("Gold",        600, 200,  6,  7)
+let btcPerf:   PerfNode = PerfNode("Bitcoin",     600, 320,  8,  9)
+let sp500Perf: PerfNode = PerfNode("S&amp;P 500", 600, 440, 10, 11)
+
+let gold:    Product = Product("gold",    "Gold",        GOLD, 300, 100, 3, 3, goldPerf)
+let bitcoin: Product = Product("bitcoin", "Bitcoin",     BTC,  300, 330, 5, 4, btcPerf)
+let sp500:   Product = Product("sp500",   "S&amp;P 500", SP,   300, 560, 7, 5, sp500Perf)
+
+let performance: OverallPerf = OverallPerf()
+
+# ==============================================================================
+# Graph links
+# ==============================================================================
+
+let ancLeft:  JsObject = {"name": "left",   "args": {"dx": -5}}
+let ancRight: JsObject = {"name": "right",  "args": {"dx": -1}}
+let ancTop:   JsObject = {"name": "top",    "args": {"dy":  1}}
+let ancBottom:JsObject = {"name": "bottom", "args": {"dy": -1}}
+
+let link1: LinkElem = LinkElem(investment, ancTop,    gold,    ancLeft, MAIN)
+let link2: LinkElem = LinkElem(investment, ancRight,  bitcoin, ancLeft, MAIN)
+let link3: LinkElem = LinkElem(investment, ancBottom, sp500,   ancLeft, MAIN)
+let link4: LinkElem = LinkElem(gold,    ancRight, goldPerf,  ancLeft, GOLD)
+let link5: LinkElem = LinkElem(bitcoin, ancRight, btcPerf,   ancLeft, BTC)
+let link6: LinkElem = LinkElem(sp500,   ancRight, sp500Perf, ancLeft, SP)
+
+# ==============================================================================
+# Populate graph
+# ==============================================================================
 
 def resetCells(g: JsObject, elems: seq[JsElem]):
     var jsElems: seq[JsObject] = []
@@ -322,12 +321,47 @@ def resetCells(g: JsObject, elems: seq[JsElem]):
 resetCells(graph, [investment, gold, bitcoin, sp500,
     performance, goldPerf, btcPerf, sp500Perf,
     link1, link2, link3, link4, link5, link6])
+
 performance.embed(goldPerf)
 performance.embed(btcPerf)
 performance.embed(sp500Perf)
 performance.fitEmbeds({"padding": {"horizontal": 30, "top": 50, "bottom": 130}})
 
-# ---- Calculation ----
+# ==============================================================================
+# Input change handler
+# ==============================================================================
+
+jsvar jsThis as "this": JsObject
+
+def onInputChange(evt: JsObject):
+    let input: JsObject = evt["target"]
+    if not input["validity"]["valid"].to(bool):
+        return
+    let path: cstring = input.getAttribute("joint-selector").to(cstring) & "/props/value"
+    let prev: JsObject = jsThis["model"].attr(path)
+    jsThis["model"].attr(path, input["value"], {"previousValue": prev, "calc": true})
+
+let paper: JsObject = jsnew dia["Paper"]({
+    "width":  "100%",
+    "height": "100%",
+    "model":  graph,
+    "cellViewNamespace": shapes,
+    "defaultConnector":       {"name": "curve"},
+    "defaultConnectionPoint": {"name": "anchor"},
+    "background": {"color": "#f6f4f4"},
+    "preventDefaultViewAction": false,
+    "interactive": {"stopDelegation": false},
+    "elementView": dia["ElementView"].extend({
+        "events": {"change input,select": "onInputChange"},
+        "onInputChange": onInputChange
+    })
+})
+
+document.getElementById("paper-container").appendChild(paper["el"])
+
+# ==============================================================================
+# Calculation
+# ==============================================================================
 
 def fmt(v: float) -> cstring:
     v.toJs.toLocaleString("en", {"minimumFractionDigits": 2, "maximumFractionDigits": 2}).to(cstring)
@@ -335,25 +369,21 @@ def fmt(v: float) -> cstring:
 def calculate():
     let funds: float = investment.attr("funds/props/value").to(float)
     let year:  int   = investment.attr("year/props/value").to(int)
-
     let specs: seq[Product] = [gold, bitcoin, sp500]
     var total: float = 0.0
     for spec in specs:
-        let pct:  float = spec.attr("percentage/props/value").to(float)
-        let val:  float = calcProductValue(funds, pct, year, spec.name)
-        let roi:  float = calcROI(funds, pct, val)
-        var perf: PerfNode = sp500Perf
-        if spec.name == "gold":
-            perf = goldPerf
-        elif spec.name == "bitcoin":
-            perf = btcPerf
-        perf.attr("value/props/value", fmt(val))
-        perf.attr("roi/props/value",   fmt(roi))
+        let pct: float = spec.attr("percentage/props/value").to(float)
+        let val: float = calcProductValue(funds, pct, year, spec.name)
+        let roi: float = calcROI(funds, pct, val)
+        spec.perf.attr("value/props/value", fmt(val))
+        spec.perf.attr("roi/props/value",   fmt(roi))
         total += val
     performance.attr("value/props/value", fmt(total))
     performance.attr("roi/props/value",   fmt(calcROI(funds, 100.0, total)))
 
-# ---- Reactivity ----
+# ==============================================================================
+# Reactivity  (rebalance percentages across the other products)
+# ==============================================================================
 
 def onChangeAttrs(cell: JsObject, attrs: JsObject, opts: JsObject):
     if not opts["calc"].to(bool):
@@ -378,7 +408,9 @@ def onChangeAttrs(cell: JsObject, attrs: JsObject, opts: JsObject):
 
 graph.on("change:attrs", onChangeAttrs)
 
-# ---- Fit + resize ----
+# ==============================================================================
+# Fit + resize
+# ==============================================================================
 
 def fit():
     paper.transformToFitContent({
