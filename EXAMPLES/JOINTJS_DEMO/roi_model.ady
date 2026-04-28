@@ -57,21 +57,17 @@ def calcROI(funds: float, pct: float, value: float) -> float:
 type NodeKind is enum nkInvestment, nkProduct, nkPerf, nkOverall
 
 type NodeSpec is tuple:
-    kind:    NodeKind
-    name:    str       # logical name; "" for singleton nodes
-    label:   str       # display label
-    x:       int
-    y:       int
-    z:       int
-    tabIdx:  int       # first tab index (perf nodes use tabIdx and tabIdx+1)
+    kind:  NodeKind
+    name:  str    # logical identifier; "" for singleton nodes (investment, overall)
+    label: str    # display label; "" for nodes with no label
 
 const NODES: seq[NodeSpec] = [
-    (kind: nkInvestment, name: "",        label: "",            x: 100, y: 280, z: 1,  tabIdx: 1),
-    (kind: nkProduct,    name: "gold",    label: "Gold",        x: 300, y: 100, z: 3,  tabIdx: 3),
-    (kind: nkProduct,    name: "bitcoin", label: "Bitcoin",     x: 300, y: 330, z: 5,  tabIdx: 4),
-    (kind: nkProduct,    name: "sp500",   label: "S&amp;P 500", x: 300, y: 560, z: 7,  tabIdx: 5),
-    (kind: nkPerf,       name: "gold",    label: "Gold",        x: 600, y: 200, z: 0,  tabIdx: 6),
-    (kind: nkPerf,       name: "bitcoin", label: "Bitcoin",     x: 600, y: 320, z: 0,  tabIdx: 8),
-    (kind: nkPerf,       name: "sp500",   label: "S&amp;P 500", x: 600, y: 440, z: 0,  tabIdx: 10),
-    (kind: nkOverall,    name: "",        label: "",            x: 500, y: 300, z: -1, tabIdx: 12),
+    (kind: nkInvestment, name: "",        label: ""),
+    (kind: nkProduct,    name: "gold",    label: "Gold"),
+    (kind: nkProduct,    name: "bitcoin", label: "Bitcoin"),
+    (kind: nkProduct,    name: "sp500",   label: "S&amp;P 500"),
+    (kind: nkPerf,       name: "gold",    label: "Gold"),
+    (kind: nkPerf,       name: "bitcoin", label: "Bitcoin"),
+    (kind: nkPerf,       name: "sp500",   label: "S&amp;P 500"),
+    (kind: nkOverall,    name: "",        label: ""),
 ]
