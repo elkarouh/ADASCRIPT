@@ -140,35 +140,6 @@ const MARKUP_OVERALL: cstring = (
       "</div>" &
     "</foreignObject>")
 
-# ==============================================================================
-# Node classes
-# ==============================================================================
-
-class PerfNode(JsElem):
-    def __init__(self, spec: NodeSpec, x: int, y: int, ti: int):
-        super().__init__("ProductPerformance",
-            {"x": x, "y": y}, {"width": 200, "height": 100}, 0,
-            {"body": bodyAttr(spec.visual_params["color"].to(cstring)), "foreignObject": foAttr(),
-             "label": {"html": spec.label.toJs},
-             "value": {"tabindex": ti}, "roi": {"tabindex": ti + 1}},
-            util.svg([MARKUP_PERF]))
-
-class Product(JsElem):
-    var name: str
-    var perf: PerfNode
-
-    def __init__(self, spec: NodeSpec, x: int, y: int, z: int, ti: int, perfNode: PerfNode):
-        self.name = spec.name
-        self.perf = perfNode
-        super().__init__("Product",
-            {"x": x, "y": y}, {"width": 140, "height": 120}, z,
-            {"body": bodyAttr(spec.visual_params["color"].to(cstring)), "foreignObject": foAttr(),
-             "label": {"html": spec.label.toJs},
-             "percentage": {"props": {"value": 25}, "tabindex": ti}},
-            util.svg([MARKUP_PRODUCT]))
-        self.elem.set("name", spec.name.toJs)
-
-
 class LinkElem(JsElem):
     def __init__(self, src: JsElem, sa: JsObject, tgt: JsElem,
                  ta: JsObject, color: cstring):
@@ -194,42 +165,73 @@ NODE_INVESTMENT.set_visual_params({"color": "#D4D9D7",
                "funds": {"props": {"value": 100}, "tabindex": 1},
                "year":  {"props": {"value": 2018}, "tabindex": 2}},
     "markup": util.svg([MARKUP_INVESTMENT])})
-NODE_GOLD.set_visual_params(      {"color": "#F7E3AE"})
-NODE_BITCOIN.set_visual_params(   {"color": "#9C9EC8"})
-NODE_SP500.set_visual_params(     {"color": "#FFCCD6"})
-NODE_GOLD_PERF.set_visual_params( {"color": "#D4D9D7"})
-NODE_BTC_PERF.set_visual_params(  {"color": "#D4D9D7"})
-NODE_SP500_PERF.set_visual_params({"color": "#D4D9D7"})
+NODE_GOLD.set_visual_params(      {"color": "#F7E3AE",
+    "attrs":  {"body": bodyAttr("#F7E3AE"), "foreignObject": foAttr(),
+               "label": {"html": NODE_GOLD.label.toJs},
+               "percentage": {"props": {"value": 25}, "tabindex": 3}},
+    "markup": util.svg([MARKUP_PRODUCT])})
+NODE_BITCOIN.set_visual_params(   {"color": "#9C9EC8",
+    "attrs":  {"body": bodyAttr("#9C9EC8"), "foreignObject": foAttr(),
+               "label": {"html": NODE_BITCOIN.label.toJs},
+               "percentage": {"props": {"value": 25}, "tabindex": 4}},
+    "markup": util.svg([MARKUP_PRODUCT])})
+NODE_SP500.set_visual_params(     {"color": "#FFCCD6",
+    "attrs":  {"body": bodyAttr("#FFCCD6"), "foreignObject": foAttr(),
+               "label": {"html": NODE_SP500.label.toJs},
+               "percentage": {"props": {"value": 25}, "tabindex": 5}},
+    "markup": util.svg([MARKUP_PRODUCT])})
+NODE_GOLD_PERF.set_visual_params( {"color": "#D4D9D7",
+    "attrs":  {"body": bodyAttr("#D4D9D7"), "foreignObject": foAttr(),
+               "label": {"html": NODE_GOLD_PERF.label.toJs},
+               "value": {"tabindex": 6}, "roi": {"tabindex": 7}},
+    "markup": util.svg([MARKUP_PERF])})
+NODE_BTC_PERF.set_visual_params(  {"color": "#D4D9D7",
+    "attrs":  {"body": bodyAttr("#D4D9D7"), "foreignObject": foAttr(),
+               "label": {"html": NODE_BTC_PERF.label.toJs},
+               "value": {"tabindex": 8}, "roi": {"tabindex": 9}},
+    "markup": util.svg([MARKUP_PERF])})
+NODE_SP500_PERF.set_visual_params({"color": "#D4D9D7",
+    "attrs":  {"body": bodyAttr("#D4D9D7"), "foreignObject": foAttr(),
+               "label": {"html": NODE_SP500_PERF.label.toJs},
+               "value": {"tabindex": 10}, "roi": {"tabindex": 11}},
+    "markup": util.svg([MARKUP_PERF])})
 NODE_OVERALL.set_visual_params(   {"color": "#EAECEA",
     "attrs":  {"body": bodyAttr("#EAECEA"), "foreignObject": foAttr(),
                "value": {"tabindex": 12}, "roi": {"tabindex": 13}},
     "markup": util.svg([MARKUP_OVERALL])})
 
-# Build color map from node_id -> color for link param setup
-var colorMap: {str}str = {:}
-for n in [NODE_INVESTMENT, NODE_GOLD, NODE_BITCOIN, NODE_SP500,
-          NODE_GOLD_PERF, NODE_BTC_PERF, NODE_SP500_PERF, NODE_OVERALL]:
-    colorMap[n.node_id()] = str(n.visual_params["color"].to(cstring))
-
 # Set visual params on each link (color and anchors are rendering concerns)
 for i in 0..len(LINKS)-1:
-    let c: str = colorMap[LINKS[i].src.node_id()]
+    let c: str = str(LINKS[i].src.visual_params["color"].to(cstring))
     LINKS[i].set_visual_params({"color": c, "srcAnchor": "right", "tgtAnchor": "left"})
-LINKS[0].set_visual_params({"color": colorMap[NODE_INVESTMENT.node_id()], "srcAnchor": "top",    "tgtAnchor": "left"})
-LINKS[1].set_visual_params({"color": colorMap[NODE_INVESTMENT.node_id()], "srcAnchor": "right",  "tgtAnchor": "left"})
-LINKS[2].set_visual_params({"color": colorMap[NODE_INVESTMENT.node_id()], "srcAnchor": "bottom", "tgtAnchor": "left"})
+let investColor: str = str(NODE_INVESTMENT.visual_params["color"].to(cstring))
+LINKS[0].set_visual_params({"color": investColor, "srcAnchor": "top",    "tgtAnchor": "left"})
+LINKS[1].set_visual_params({"color": investColor, "srcAnchor": "right",  "tgtAnchor": "left"})
+LINKS[2].set_visual_params({"color": investColor, "srcAnchor": "bottom", "tgtAnchor": "left"})
 
 # Instantiate nodes — positions and tab indices are layout/UI concerns, kept here
 var investment: JsElem = JsElem("Investment",
     {"x": 100, "y": 280}, {"width": 140, "height": 225}, 1,
     NODE_INVESTMENT.visual_params["attrs"],
     NODE_INVESTMENT.visual_params["markup"])
-var goldPerf:   PerfNode       = PerfNode(NODE_GOLD_PERF,  600, 200,  6)
-var btcPerf:    PerfNode       = PerfNode(NODE_BTC_PERF,   600, 320,  8)
-var sp500Perf:  PerfNode       = PerfNode(NODE_SP500_PERF, 600, 440, 10)
-var gold:       Product        = Product(NODE_GOLD,    300, 100, 3, 3, goldPerf)
-var bitcoin:    Product        = Product(NODE_BITCOIN, 300, 330, 5, 4, btcPerf)
-var sp500:      Product        = Product(NODE_SP500,   300, 560, 7, 5, sp500Perf)
+var goldPerf:  JsElem = JsElem("ProductPerformance",
+    {"x": 600, "y": 200}, {"width": 200, "height": 100}, 0,
+    NODE_GOLD_PERF.visual_params["attrs"],  NODE_GOLD_PERF.visual_params["markup"])
+var btcPerf:   JsElem = JsElem("ProductPerformance",
+    {"x": 600, "y": 320}, {"width": 200, "height": 100}, 0,
+    NODE_BTC_PERF.visual_params["attrs"],   NODE_BTC_PERF.visual_params["markup"])
+var sp500Perf: JsElem = JsElem("ProductPerformance",
+    {"x": 600, "y": 440}, {"width": 200, "height": 100}, 0,
+    NODE_SP500_PERF.visual_params["attrs"], NODE_SP500_PERF.visual_params["markup"])
+var gold:    JsElem = JsElem("Product",
+    {"x": 300, "y": 100}, {"width": 140, "height": 120}, 3,
+    NODE_GOLD.visual_params["attrs"],    NODE_GOLD.visual_params["markup"])
+var bitcoin: JsElem = JsElem("Product",
+    {"x": 300, "y": 330}, {"width": 140, "height": 120}, 5,
+    NODE_BITCOIN.visual_params["attrs"], NODE_BITCOIN.visual_params["markup"])
+var sp500:   JsElem = JsElem("Product",
+    {"x": 300, "y": 560}, {"width": 140, "height": 120}, 7,
+    NODE_SP500.visual_params["attrs"],   NODE_SP500.visual_params["markup"])
 var performance: JsElem = JsElem("OverallPerformance",
     {"x": 500, "y": 300}, jsUndefined, -1,
     NODE_OVERALL.visual_params["attrs"],
@@ -244,6 +246,11 @@ NODE_GOLD_PERF.visual_params["elem"]  = goldPerf.toJs
 NODE_BTC_PERF.visual_params["elem"]   = btcPerf.toJs
 NODE_SP500_PERF.visual_params["elem"] = sp500Perf.toJs
 NODE_OVERALL.visual_params["elem"]    = performance.toJs
+
+# Store name and perf link in product nodes
+NODE_GOLD.visual_params["perf"]    = goldPerf.toJs
+NODE_BITCOIN.visual_params["perf"] = btcPerf.toJs
+NODE_SP500.visual_params["perf"]   = sp500Perf.toJs
 
 def anchorArgs(anchor: str) -> JsObject:
     case anchor:
@@ -284,16 +291,17 @@ def fmt(v: float) -> cstring:
 def calculate():
     let funds: float = investment.attr("funds/props/value").to(float)
     let year:  int   = investment.attr("year/props/value").to(int)
-    let products: []Product = [gold, bitcoin, sp500]
-    var pcts: []float = []
-    var names: []str = []
-    for p in products:
-        pcts.add(p.attr("percentage/props/value").to(float))
+    let pnodes: []NodeSpec = [NODE_GOLD, NODE_BITCOIN, NODE_SP500]
+    var pcts:  []float = []
+    var names: []str   = []
+    for p in pnodes:
+        pcts.add(p.visual_params["elem"].to(JsElem).attr("percentage/props/value").to(float))
         names.add(p.name)
     let result: PortfolioCalc = calculateAll(funds, year, pcts, names)
-    for i in 0..len(products)-1:
-        products[i].perf.attr("value/props/value", fmt(result.products[i].value))
-        products[i].perf.attr("roi/props/value",   fmt(result.products[i].roi))
+    for i in 0..len(pnodes)-1:
+        let perf: JsElem = pnodes[i].visual_params["perf"].to(JsElem)
+        perf.attr("value/props/value", fmt(result.products[i].value))
+        perf.attr("roi/props/value",   fmt(result.products[i].roi))
     performance.attr("value/props/value", fmt(result.totalValue))
     performance.attr("roi/props/value",   fmt(result.totalROI))
 
@@ -304,17 +312,17 @@ def calculate():
 def onChangeAttrs(cell: JsObject, attrs: JsObject, opts: JsObject):
     if not opts["calc"].to(bool):
         return
-    let products: []Product = [gold, bitcoin, sp500]
+    let pnodes: []NodeSpec = [NODE_GOLD, NODE_BITCOIN, NODE_SP500]
     var idx: int = -1
-    for i in 0..len(products)-1:
-        if products[i].id() == cell["id"]:
+    for i in 0..len(pnodes)-1:
+        if pnodes[i].visual_params["elem"].to(JsElem).id() == cell["id"]:
             idx = i
     if idx >= 0:
         var diff: float = opts["previousValue"].to(float) - opts["propertyValue"].to(float)
-        for i in 0..len(products)-1:
+        for i in 0..len(pnodes)-1:
             if i != idx:
-                let p:   Product = products[i]
-                let pct: float   = p.attr("percentage/props/value").to(float) + diff
+                let p:   JsElem = pnodes[i].visual_params["elem"].to(JsElem)
+                let pct: float  = p.attr("percentage/props/value").to(float) + diff
                 p.attr("percentage/props/value", max(pct, 0.0).toJs)
                 if pct < 0.0:
                     diff = pct
