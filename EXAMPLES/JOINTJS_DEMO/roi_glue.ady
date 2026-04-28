@@ -68,6 +68,38 @@ let shapes: JsObject = joint["shapes"]
 let graph: JsObject = jsnew dia["Graph"]({"cellNamespace": shapes})
 
 # ==============================================================================
+# Input change handler + Paper  (must exist before cells are added to the graph)
+# ==============================================================================
+
+jsvar jsThis as "this": JsObject
+
+def onInputChange(evt: JsObject):
+    let input: JsObject = evt["target"]
+    if not input["validity"]["valid"].to(bool):
+        return
+    let path: cstring = input.getAttribute("joint-selector").to(cstring) & "/props/value"
+    let prev: JsObject = jsThis["model"].attr(path)
+    jsThis["model"].attr(path, input["value"], {"previousValue": prev, "calc": true})
+
+let paper: JsObject = jsnew dia["Paper"]({
+    "width":  "100%",
+    "height": "100%",
+    "model":  graph,
+    "cellViewNamespace": shapes,
+    "defaultConnector":       {"name": "curve"},
+    "defaultConnectionPoint": {"name": "anchor"},
+    "background": {"color": "#f6f4f4"},
+    "preventDefaultViewAction": false,
+    "interactive": {"stopDelegation": false},
+    "elementView": dia["ElementView"].extend({
+        "events": {"change input,select": "onInputChange"},
+        "onInputChange": onInputChange
+    })
+})
+
+document.getElementById("paper-container").appendChild(paper["el"])
+
+# ==============================================================================
 # Markup templates
 # ==============================================================================
 
@@ -321,38 +353,6 @@ performance.embed(goldPerf)
 performance.embed(btcPerf)
 performance.embed(sp500Perf)
 performance.fitEmbeds({"padding": {"horizontal": 30, "top": 50, "bottom": 130}})
-
-# ==============================================================================
-# Input change handler
-# ==============================================================================
-
-jsvar jsThis as "this": JsObject
-
-def onInputChange(evt: JsObject):
-    let input: JsObject = evt["target"]
-    if not input["validity"]["valid"].to(bool):
-        return
-    let path: cstring = input.getAttribute("joint-selector").to(cstring) & "/props/value"
-    let prev: JsObject = jsThis["model"].attr(path)
-    jsThis["model"].attr(path, input["value"], {"previousValue": prev, "calc": true})
-
-let paper: JsObject = jsnew dia["Paper"]({
-    "width":  "100%",
-    "height": "100%",
-    "model":  graph,
-    "cellViewNamespace": shapes,
-    "defaultConnector":       {"name": "curve"},
-    "defaultConnectionPoint": {"name": "anchor"},
-    "background": {"color": "#f6f4f4"},
-    "preventDefaultViewAction": false,
-    "interactive": {"stopDelegation": false},
-    "elementView": dia["ElementView"].extend({
-        "events": {"change input,select": "onInputChange"},
-        "onInputChange": onInputChange
-    })
-})
-
-document.getElementById("paper-container").appendChild(paper["el"])
 
 # ==============================================================================
 # Calculation
