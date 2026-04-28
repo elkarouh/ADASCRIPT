@@ -50,6 +50,26 @@ def calcROI(funds: float, pct: float, value: float) -> float:
     else:
         (value - cost) / cost * 100.0
 
+type ProductCalc is tuple:
+    name:  str
+    value: float
+    roi:   float
+
+type PortfolioCalc is tuple:
+    products:   []ProductCalc
+    totalValue: float
+    totalROI:   float
+
+def calculateAll(funds: float, year: int, pcts: []float, names: []str) -> PortfolioCalc:
+    var results: []ProductCalc = []
+    var total: float = 0.0
+    for i in 0..len(names)-1:
+        let val: float = calcProductValue(funds, pcts[i], year, names[i])
+        let roi: float = calcROI(funds, pcts[i], val)
+        results.add((name: names[i], value: val, roi: roi))
+        total += val
+    (products: results, totalValue: total, totalROI: calcROI(funds, 100.0, total))
+
 # ==============================================================================
 # Graph topology
 # ==============================================================================
@@ -61,7 +81,7 @@ type NodeSpec is tuple:
     name:  str    # logical identifier; "" for singleton nodes (investment, overall)
     label: str    # display label; "" for nodes with no label
 
-const NODES: seq[NodeSpec] = [
+const NODES: []NodeSpec = [
     (kind: nkInvestment, name: "",        label: ""),
     (kind: nkProduct,    name: "gold",    label: "Gold"),
     (kind: nkProduct,    name: "bitcoin", label: "Bitcoin"),

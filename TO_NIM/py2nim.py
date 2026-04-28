@@ -1393,11 +1393,13 @@ def main(argv=None):
             except Exception:
                 pass  # errors will surface properly during the full dep transpile
 
+        # Set JS_BACKEND before any transpilation (main file or deps).
+        import hek_nim_expr as _hne
+        _hne.JS_BACKEND = (subcommand == "js")
+
         # --- tier 1: transpile? ---
         need_transpile = nim_mtime < max(ady_mtime, transpiler_mtime)
         if need_transpile:
-            import hek_nim_expr as _hne
-            _hne.JS_BACKEND = (subcommand == "js")
             try:
                 nim_output = translate(code)
             except SyntaxError as e:
@@ -1454,6 +1456,12 @@ def main(argv=None):
                 try:
                     from hek_parsec import ParserState as _ParserState
                     _ParserState.reset()
+                    # Clear any per-file state from hek_nim_expr so each dep
+                    # gets its own fresh set of helpers (e.g. jsConstruct).
+                    import hek_nim_expr as _hne_dep
+                    for _attr in ('_jsnew_helper_added',):
+                        if hasattr(_hne_dep.ParserState, _attr):
+                            delattr(_hne_dep.ParserState, _attr)
                     _dep_nim_output = translate(_dep_code, export_symbols=True)
                 except SyntaxError as _e:
                     print(f"# ERROR transpiling dependency {_dep_ady}: {_e}", file=sys.stderr)
