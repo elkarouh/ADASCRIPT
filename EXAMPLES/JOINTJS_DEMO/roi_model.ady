@@ -93,10 +93,13 @@ class NodeSpec:
         self.visual_params = jsNull
 
     def node_id(self) -> str:
-        self.kind'Image & "_" & self.name
+        self.kind'Image + "_" + self.name
 
     def set_visual_params(self, params: JsObject):
         self.visual_params = params
+
+    def getJsObject(self) -> JsObject:
+        self.visual_params["elem"]
 
     def __str__(self) -> JsObject:
         self.visual_params
@@ -110,13 +113,8 @@ var NODE_BTC_PERF:   NodeSpec = NodeSpec(nkPerf,       "bitcoin", "Bitcoin")
 var NODE_SP500_PERF: NodeSpec = NodeSpec(nkPerf,       "sp500",   "S&amp;P 500")
 var NODE_OVERALL:    NodeSpec = NodeSpec(nkOverall,    "",        "")
 
-var NODES: []NodeSpec = [
-    NODE_INVESTMENT,
-    NODE_GOLD,    NODE_BITCOIN,    NODE_SP500,
-    NODE_GOLD_PERF, NODE_BTC_PERF, NODE_SP500_PERF,
-    NODE_OVERALL,
-]
-
+var NODES: []NodeSpec = [ NODE_INVESTMENT, NODE_GOLD, NODE_BITCOIN, NODE_SP500,
+                          NODE_GOLD_PERF, NODE_BTC_PERF, NODE_SP500_PERF, NODE_OVERALL ]
 @virtual
 class LinkSpec:
     var src:          NodeSpec

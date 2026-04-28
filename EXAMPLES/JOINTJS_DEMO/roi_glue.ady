@@ -185,14 +185,15 @@ NODE_OVERALL.set_visual_params(   {"color": "#EAECEA",
                "value": {"tabindex": 12}, "roi": {"tabindex": 13}},
     "markup": util.svg([MARKUP_OVERALL])})
 
-# Set visual params on each link (color and anchors are rendering concerns)
-for i in 0..len(LINKS)-1:
-    let c: str = str(LINKS[i].src.visual_params["color"].to(cstring))
-    LINKS[i].set_visual_params({"color": c, "srcAnchor": "right", "tgtAnchor": "left"})
 let investColor: str = str(NODE_INVESTMENT.visual_params["color"].to(cstring))
 LINKS[0].set_visual_params({"color": investColor, "srcAnchor": "top",    "tgtAnchor": "left"})
 LINKS[1].set_visual_params({"color": investColor, "srcAnchor": "right",  "tgtAnchor": "left"})
 LINKS[2].set_visual_params({"color": investColor, "srcAnchor": "bottom", "tgtAnchor": "left"})
+
+# Set visual params on each link (color and anchors are rendering concerns)
+for i in 3..<len(LINKS):
+    let c: str = str(LINKS[i].src.visual_params["color"].to(cstring))
+    LINKS[i].set_visual_params({"color": c, "srcAnchor": "right", "tgtAnchor": "left"})
 
 # Instantiate nodes — positions and tab indices are layout/UI concerns, kept here
 var investment: JsElem = JsElem("Investment",
@@ -240,18 +241,18 @@ NODE_SP500.visual_params["perf"]   = sp500Perf.toJs
 def anchorArgs(anchor: str) -> JsObject:
     case anchor:
         when "left":
-            return {"dx": -5}
+            {"dx": -5}
         when "top":
-            return {"dy": 1}
+            {"dy": 1}
         when "bottom":
-            return {"dy": -1}
+            {"dy": -1}
         when others:
-            return {"dx": -1}
+            {"dx": -1}
 
 var allElems: []JsElem = [investment, gold, bitcoin, sp500, performance, goldPerf, btcPerf, sp500Perf]
 for lnk in LINKS:
-    let src:   JsElem  = lnk.src.visual_params["elem"].to(JsElem)
-    let tgt:   JsElem  = lnk.tgt.visual_params["elem"].to(JsElem)
+    let src:   JsElem  = lnk.src.getJsObject().to(JsElem)
+    let tgt:   JsElem  = lnk.tgt.getJsObject().to(JsElem)
     let srcA:  str     = str(lnk.visual_params["srcAnchor"].to(cstring))
     let tgtA:  str     = str(lnk.visual_params["tgtAnchor"].to(cstring))
     let sa:    JsObject = {"name": srcA.toJs, "args": anchorArgs(srcA)}
@@ -290,7 +291,7 @@ def calculate():
     var pcts:  []float = []
     var names: []str   = []
     for p in pnodes:
-        pcts.add(p.visual_params["elem"].to(JsElem).attr("percentage/props/value").to(float))
+        pcts.add(p.getJsObject().to(JsElem).attr("percentage/props/value").to(float))
         names.add(p.name)
     let result: PortfolioCalc = calculateAll(funds, year, pcts, names)
     for i in 0..len(pnodes)-1:
@@ -310,13 +311,13 @@ def onChangeAttrs(cell: JsObject, attrs: JsObject, opts: JsObject):
     let pnodes: []NodeSpec = [NODE_GOLD, NODE_BITCOIN, NODE_SP500]
     var idx: int = -1
     for i in 0..len(pnodes)-1:
-        if pnodes[i].visual_params["elem"].to(JsElem).id() == cell["id"]:
+        if pnodes[i].getJsObject().to(JsElem).id() == cell["id"]:
             idx = i
     if idx >= 0:
         var diff: float = opts["previousValue"].to(float) - opts["propertyValue"].to(float)
         for i in 0..len(pnodes)-1:
             if i != idx:
-                let p:   JsElem = pnodes[i].visual_params["elem"].to(JsElem)
+                let p:   JsElem = pnodes[i].getJsObject().to(JsElem)
                 let pct: float  = p.attr("percentage/props/value").to(float) + diff
                 p.attr("percentage/props/value", max(pct, 0.0).toJs)
                 if pct < 0.0:
