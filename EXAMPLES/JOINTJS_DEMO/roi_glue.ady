@@ -144,15 +144,6 @@ const MARKUP_OVERALL: cstring = (
 # Node classes
 # ==============================================================================
 
-class InvestmentNode(JsElem):
-    def __init__(self, x: int, y: int, color: cstring):
-        super().__init__("Investment",
-            {"x": x, "y": y}, {"width": 140, "height": 225}, 1,
-            {"body": bodyAttr(color), "foreignObject": foAttr(),
-             "funds": {"props": {"value": 100}, "tabindex": 1},
-             "year":  {"props": {"value": 2018}, "tabindex": 2}},
-            util.svg([MARKUP_INVESTMENT]))
-
 class PerfNode(JsElem):
     def __init__(self, spec: NodeSpec, x: int, y: int, ti: int):
         super().__init__("ProductPerformance",
@@ -177,13 +168,6 @@ class Product(JsElem):
             util.svg([MARKUP_PRODUCT]))
         self.elem.set("name", spec.name.toJs)
 
-class OverallPerf(JsElem):
-    def __init__(self, x: int, y: int, color: cstring):
-        super().__init__("OverallPerformance",
-            {"x": x, "y": y}, jsUndefined, -1,
-            {"body": bodyAttr(color), "foreignObject": foAttr(),
-             "value": {"tabindex": 12}, "roi": {"tabindex": 13}},
-            util.svg([MARKUP_OVERALL]))
 
 class LinkElem(JsElem):
     def __init__(self, src: JsElem, sa: JsObject, tgt: JsElem,
@@ -205,14 +189,21 @@ class LinkElem(JsElem):
 # ==============================================================================
 
 # Set visual params on each node
-NODE_INVESTMENT.set_visual_params({"color": "#D4D9D7"})
+NODE_INVESTMENT.set_visual_params({"color": "#D4D9D7",
+    "attrs":  {"body": bodyAttr("#D4D9D7"), "foreignObject": foAttr(),
+               "funds": {"props": {"value": 100}, "tabindex": 1},
+               "year":  {"props": {"value": 2018}, "tabindex": 2}},
+    "markup": util.svg([MARKUP_INVESTMENT])})
 NODE_GOLD.set_visual_params(      {"color": "#F7E3AE"})
 NODE_BITCOIN.set_visual_params(   {"color": "#9C9EC8"})
 NODE_SP500.set_visual_params(     {"color": "#FFCCD6"})
 NODE_GOLD_PERF.set_visual_params( {"color": "#D4D9D7"})
 NODE_BTC_PERF.set_visual_params(  {"color": "#D4D9D7"})
 NODE_SP500_PERF.set_visual_params({"color": "#D4D9D7"})
-NODE_OVERALL.set_visual_params(   {"color": "#EAECEA"})
+NODE_OVERALL.set_visual_params(   {"color": "#EAECEA",
+    "attrs":  {"body": bodyAttr("#EAECEA"), "foreignObject": foAttr(),
+               "value": {"tabindex": 12}, "roi": {"tabindex": 13}},
+    "markup": util.svg([MARKUP_OVERALL])})
 
 # Build color map from node_id -> color for link param setup
 var colorMap: {str}str = {:}
@@ -229,14 +220,20 @@ LINKS[1].set_visual_params({"color": colorMap[NODE_INVESTMENT.node_id()], "srcAn
 LINKS[2].set_visual_params({"color": colorMap[NODE_INVESTMENT.node_id()], "srcAnchor": "bottom", "tgtAnchor": "left"})
 
 # Instantiate nodes — positions and tab indices are layout/UI concerns, kept here
-var investment: InvestmentNode = InvestmentNode(100, 280, NODE_INVESTMENT.visual_params["color"].to(cstring))
+var investment: JsElem = JsElem("Investment",
+    {"x": 100, "y": 280}, {"width": 140, "height": 225}, 1,
+    NODE_INVESTMENT.visual_params["attrs"],
+    NODE_INVESTMENT.visual_params["markup"])
 var goldPerf:   PerfNode       = PerfNode(NODE_GOLD_PERF,  600, 200,  6)
 var btcPerf:    PerfNode       = PerfNode(NODE_BTC_PERF,   600, 320,  8)
 var sp500Perf:  PerfNode       = PerfNode(NODE_SP500_PERF, 600, 440, 10)
 var gold:       Product        = Product(NODE_GOLD,    300, 100, 3, 3, goldPerf)
 var bitcoin:    Product        = Product(NODE_BITCOIN, 300, 330, 5, 4, btcPerf)
 var sp500:      Product        = Product(NODE_SP500,   300, 560, 7, 5, sp500Perf)
-var performance: OverallPerf   = OverallPerf(500, 300, NODE_OVERALL.visual_params["color"].to(cstring))
+var performance: JsElem = JsElem("OverallPerformance",
+    {"x": 500, "y": 300}, jsUndefined, -1,
+    NODE_OVERALL.visual_params["attrs"],
+    NODE_OVERALL.visual_params["markup"])
 
 # Store each JsElem in its node's visual_params
 NODE_INVESTMENT.visual_params["elem"] = investment.toJs
