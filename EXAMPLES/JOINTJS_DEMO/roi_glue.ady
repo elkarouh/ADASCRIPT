@@ -296,17 +296,12 @@ let performance: OverallPerf = OverallPerf()
 # Graph links
 # ==============================================================================
 
-let ancLeft:  JsObject = {"name": "left",   "args": {"dx": -5}}
-let ancRight: JsObject = {"name": "right",  "args": {"dx": -1}}
-let ancTop:   JsObject = {"name": "top",    "args": {"dy":  1}}
-let ancBottom:JsObject = {"name": "bottom", "args": {"dy": -1}}
-
-let link1: LinkElem = LinkElem(investment, ancTop,    gold,    ancLeft, MAIN)
-let link2: LinkElem = LinkElem(investment, ancRight,  bitcoin, ancLeft, MAIN)
-let link3: LinkElem = LinkElem(investment, ancBottom, sp500,   ancLeft, MAIN)
-let link4: LinkElem = LinkElem(gold,    ancRight, goldPerf,  ancLeft, GOLD)
-let link5: LinkElem = LinkElem(bitcoin, ancRight, btcPerf,   ancLeft, BTC)
-let link6: LinkElem = LinkElem(sp500,   ancRight, sp500Perf, ancLeft, SP)
+let link1: LinkElem = LinkElem(investment, {"name": "top",    "args": {"dy":  1}}, gold,    {"name": "left", "args": {"dx": -5}}, MAIN)
+let link2: LinkElem = LinkElem(investment, {"name": "right",  "args": {"dx": -1}}, bitcoin, {"name": "left", "args": {"dx": -5}}, MAIN)
+let link3: LinkElem = LinkElem(investment, {"name": "bottom", "args": {"dy": -1}}, sp500,   {"name": "left", "args": {"dx": -5}}, MAIN)
+let link4: LinkElem = LinkElem(gold,    {"name": "right", "args": {"dx": -1}}, goldPerf,  {"name": "left", "args": {"dx": -5}}, GOLD)
+let link5: LinkElem = LinkElem(bitcoin, {"name": "right", "args": {"dx": -1}}, btcPerf,   {"name": "left", "args": {"dx": -5}}, BTC)
+let link6: LinkElem = LinkElem(sp500,   {"name": "right", "args": {"dx": -1}}, sp500Perf, {"name": "left", "args": {"dx": -5}}, SP)
 
 # ==============================================================================
 # Populate graph
