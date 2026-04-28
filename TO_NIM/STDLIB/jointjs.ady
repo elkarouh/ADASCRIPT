@@ -43,6 +43,12 @@ class JsElem:
     def id(self) -> JsObject:
         self.elem["id"]
 
+def jsElemOf(obj: JsObject) -> JsElem:
+    var e: JsElem
+    new(e)
+    e.elem = obj
+    return e
+
 def resetCells(g: JsObject, elems: []JsElem):
     var jsElems: []JsObject = []
     for e in elems:
