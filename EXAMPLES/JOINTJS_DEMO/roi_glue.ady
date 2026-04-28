@@ -98,90 +98,92 @@ document.getElementById("paper-container").appendChild(paper["el"])
 # ---- Markup helpers ----
 
 def makeMarkup(kind: cstring) -> JsObject:
-    if kind == "investment":
-        return util.svg([
-            cstring("<rect @selector=\"body\" />") &
-            "<foreignObject @selector=\"foreignObject\" overflow=\"hidden\">" &
-              "<div @selector=\"content\" class=\"jj-form\" xmlns=\"http://www.w3.org/1999/xhtml\">" &
-                "<h2>Investment</h2>" &
-                "<div class=\"jj-field-vertical\">" &
-                  "<label>How much did you invest?" &
-                    "<input @selector=\"funds\" class=\"jj-input\" type=\"number\"/>" &
-                  "</label>" &
-                "</div>" &
-                "<div class=\"jj-field-vertical\">" &
-                  "<label>What year it was?" &
-                    "<select @selector=\"year\" class=\"jj-input\">" &
-                      "<option value=\"2013\">2013</option><option value=\"2014\">2014</option>" &
-                      "<option value=\"2015\">2015</option><option value=\"2016\">2016</option>" &
-                      "<option value=\"2017\">2017</option><option value=\"2018\">2018</option>" &
-                      "<option value=\"2019\">2019</option><option value=\"2020\">2020</option>" &
-                      "<option value=\"2021\">2021</option><option value=\"2022\">2022</option>" &
-                      "<option value=\"2023\">2023</option>" &
-                    "</select>" &
-                  "</label>" &
-                "</div>" &
-              "</div>" &
-            "</foreignObject>"
-        ])
-    if kind == "product":
-        return util.svg([
-            cstring("<rect @selector=\"body\" />") &
-            "<foreignObject @selector=\"foreignObject\" overflow=\"hidden\">" &
-              "<div @selector=\"content\" class=\"jj-form\" xmlns=\"http://www.w3.org/1999/xhtml\">" &
-                "<div class=\"jj-field-vertical\">" &
-                  "<label>What % did you invest in <strong @selector=\"label\"></strong>?" &
-                    "<span class=\"jj-input-container\">" &
-                      "<input @selector=\"percentage\" class=\"jj-input\" type=\"number\" min=\"0\" max=\"100\" step=\"1\"/>" &
-                      "<span class=\"jj-input-unit\">%</span>" &
-                    "</span>" &
-                  "</label>" &
-                "</div>" &
-              "</div>" &
-            "</foreignObject>"
-        ])
-    if kind == "perf":
-        return util.svg([
-            cstring("<rect @selector=\"body\" />") &
-            "<foreignObject @selector=\"foreignObject\" overflow=\"hidden\">" &
-              "<div @selector=\"content\" class=\"jj-form\" xmlns=\"http://www.w3.org/1999/xhtml\">" &
-                "<fieldset>" &
-                  "<legend><strong @selector=\"label\"></strong></legend>" &
-                  "<div class=\"jj-field-horizontal\">" &
-                    "<label><span>Value</span>" &
-                      "<input @selector=\"value\" class=\"jj-input\" type=\"text\" readonly=\"true\"/>" &
-                    "</label>" &
+    case kind:
+        when "investment":
+            util.svg([
+                cstring("<rect @selector=\"body\" />") &
+                "<foreignObject @selector=\"foreignObject\" overflow=\"hidden\">" &
+                  "<div @selector=\"content\" class=\"jj-form\" xmlns=\"http://www.w3.org/1999/xhtml\">" &
+                    "<h2>Investment</h2>" &
+                    "<div class=\"jj-field-vertical\">" &
+                      "<label>How much did you invest?" &
+                        "<input @selector=\"funds\" class=\"jj-input\" type=\"number\"/>" &
+                      "</label>" &
+                    "</div>" &
+                    "<div class=\"jj-field-vertical\">" &
+                      "<label>What year it was?" &
+                        "<select @selector=\"year\" class=\"jj-input\">" &
+                          "<option value=\"2013\">2013</option><option value=\"2014\">2014</option>" &
+                          "<option value=\"2015\">2015</option><option value=\"2016\">2016</option>" &
+                          "<option value=\"2017\">2017</option><option value=\"2018\">2018</option>" &
+                          "<option value=\"2019\">2019</option><option value=\"2020\">2020</option>" &
+                          "<option value=\"2021\">2021</option><option value=\"2022\">2022</option>" &
+                          "<option value=\"2023\">2023</option>" &
+                        "</select>" &
+                      "</label>" &
+                    "</div>" &
                   "</div>" &
-                  "<div class=\"jj-field-horizontal\">" &
-                    "<label><span>ROI</span>" &
-                      "<input @selector=\"roi\" class=\"jj-input\" type=\"text\" readonly=\"true\"/>" &
-                    "</label>" &
+                "</foreignObject>"
+            ])
+        when "product":
+            util.svg([
+                cstring("<rect @selector=\"body\" />") &
+                "<foreignObject @selector=\"foreignObject\" overflow=\"hidden\">" &
+                  "<div @selector=\"content\" class=\"jj-form\" xmlns=\"http://www.w3.org/1999/xhtml\">" &
+                    "<div class=\"jj-field-vertical\">" &
+                      "<label>What % did you invest in <strong @selector=\"label\"></strong>?" &
+                        "<span class=\"jj-input-container\">" &
+                          "<input @selector=\"percentage\" class=\"jj-input\" type=\"number\" min=\"0\" max=\"100\" step=\"1\"/>" &
+                          "<span class=\"jj-input-unit\">%</span>" &
+                        "</span>" &
+                      "</label>" &
+                    "</div>" &
                   "</div>" &
-                "</fieldset>" &
-              "</div>" &
-            "</foreignObject>"
-        ])
-    return util.svg([
-        cstring("<rect @selector=\"body\" />") &
-        "<foreignObject @selector=\"foreignObject\" overflow=\"hidden\">" &
-          "<div @selector=\"content\" class=\"jj-form\" style=\"justify-content:space-between\" xmlns=\"http://www.w3.org/1999/xhtml\">" &
-            "<p>This is your portfolio now in <strong>2023</strong>.</p>" &
-            "<fieldset>" &
-              "<legend style=\"margin-bottom:10px\">Your overall performance of investment is:</legend>" &
-              "<div class=\"jj-field-horizontal\">" &
-                "<label><span>Value</span>" &
-                  "<input @selector=\"value\" class=\"jj-input\" type=\"text\" readonly=\"true\"/>" &
-                "</label>" &
-              "</div>" &
-              "<div class=\"jj-field-horizontal\">" &
-                "<label><span>ROI</span>" &
-                  "<input @selector=\"roi\" class=\"jj-input\" type=\"text\" readonly=\"true\"/>" &
-                "</label>" &
-              "</div>" &
-            "</fieldset>" &
-          "</div>" &
-        "</foreignObject>"
-    ])
+                "</foreignObject>"
+            ])
+        when "perf":
+            util.svg([
+                cstring("<rect @selector=\"body\" />") &
+                "<foreignObject @selector=\"foreignObject\" overflow=\"hidden\">" &
+                  "<div @selector=\"content\" class=\"jj-form\" xmlns=\"http://www.w3.org/1999/xhtml\">" &
+                    "<fieldset>" &
+                      "<legend><strong @selector=\"label\"></strong></legend>" &
+                      "<div class=\"jj-field-horizontal\">" &
+                        "<label><span>Value</span>" &
+                          "<input @selector=\"value\" class=\"jj-input\" type=\"text\" readonly=\"true\"/>" &
+                        "</label>" &
+                      "</div>" &
+                      "<div class=\"jj-field-horizontal\">" &
+                        "<label><span>ROI</span>" &
+                          "<input @selector=\"roi\" class=\"jj-input\" type=\"text\" readonly=\"true\"/>" &
+                        "</label>" &
+                      "</div>" &
+                    "</fieldset>" &
+                  "</div>" &
+                "</foreignObject>"
+            ])
+        when others:
+            util.svg([
+                cstring("<rect @selector=\"body\" />") &
+                "<foreignObject @selector=\"foreignObject\" overflow=\"hidden\">" &
+                  "<div @selector=\"content\" class=\"jj-form\" style=\"justify-content:space-between\" xmlns=\"http://www.w3.org/1999/xhtml\">" &
+                    "<p>This is your portfolio now in <strong>2023</strong>.</p>" &
+                    "<fieldset>" &
+                      "<legend style=\"margin-bottom:10px\">Your overall performance of investment is:</legend>" &
+                      "<div class=\"jj-field-horizontal\">" &
+                        "<label><span>Value</span>" &
+                          "<input @selector=\"value\" class=\"jj-input\" type=\"text\" readonly=\"true\"/>" &
+                        "</label>" &
+                      "</div>" &
+                      "<div class=\"jj-field-horizontal\">" &
+                        "<label><span>ROI</span>" &
+                          "<input @selector=\"roi\" class=\"jj-input\" type=\"text\" readonly=\"true\"/>" &
+                        "</label>" &
+                      "</div>" &
+                    "</fieldset>" &
+                  "</div>" &
+                "</foreignObject>"
+            ])
 
 # ---- Colours ----
 
