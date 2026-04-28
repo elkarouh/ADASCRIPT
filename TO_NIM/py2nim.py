@@ -1363,7 +1363,7 @@ def main(argv=None):
         # Signatures are stored in a module-level dict that survives reset().
         import re as _re_prepass
         _ady_dir_pre = os.path.dirname(os.path.abspath(ady_file))
-        for _dep_name_pre in _re_prepass.findall(r'^\s*nimport\s+(\w[\w.]*)', code, _re_prepass.MULTILINE):
+        for _dep_name_pre in _re_prepass.findall(r'^\s*nimport\s+(\w[\w./]*)', code, _re_prepass.MULTILINE):
             _dep_ady_pre = (os.path.join(_ady_dir_pre, _dep_name_pre + ".ady")
                             if os.path.exists(os.path.join(_ady_dir_pre, _dep_name_pre + ".ady"))
                             else os.path.join(cache_dir, _dep_name_pre + ".ady"))
@@ -1420,7 +1420,7 @@ def main(argv=None):
         # the source file, transpile it into cache_dir so Nim can find it.
         import re as _re_nimport
         _ady_dir = os.path.dirname(os.path.abspath(ady_file))
-        for _dep_name in _re_nimport.findall(r'^\s*nimport\s+(\w[\w.]*)', code, _re_nimport.MULTILINE):
+        for _dep_name in _re_nimport.findall(r'^\s*nimport\s+(\w[\w./]*)', code, _re_nimport.MULTILINE):
             _dep_ady = (os.path.join(_ady_dir, _dep_name + ".ady")
                         if os.path.exists(os.path.join(_ady_dir, _dep_name + ".ady"))
                         else os.path.join(cache_dir, _dep_name + ".ady"))
