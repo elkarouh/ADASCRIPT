@@ -307,7 +307,8 @@ power = await_primary + power_rhs[:]
 unary_plus = iop("+") + factor
 unary_minus = iop("-") + factor
 unary_tilde = iop("~") + factor
-factor = unary_plus | unary_minus | unary_tilde | power
+jsnew_expr = ikw("jsnew") + power   # jsnew Cls(args) -> jsNew(Cls(args))
+factor = unary_plus | unary_minus | unary_tilde | jsnew_expr | power
 
 # --- term through bitor: left-associative binary ops ---
 term = factor + ((V_STAR | V_SLASH | V_DSLASH | V_PERCENT | V_AT) + factor)[:]

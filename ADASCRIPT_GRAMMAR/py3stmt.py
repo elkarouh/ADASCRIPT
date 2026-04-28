@@ -235,6 +235,12 @@ from_stmt = from_rel_name | from_rel_bare | from_abs
 # nimport: Nim-only import (stripped in Python output, becomes "import" in Nim)
 nimport_stmt = ikw("nimport") + dotted_name + (COMMA + dotted_name)[:]
 
+# jsvar: declare a JS global variable (JS backend only)
+#   jsvar window: JsObject           ->  var window {.importc, nodecl.}: JsObject
+#   jsvar jsThis as "this": JsObject ->  var jsThis {.importc: "this", nodecl.}: JsObject
+jsvar_as_clause = ikw("as") + STRING
+jsvar_stmt = ikw("jsvar") + IDENTIFIER + jsvar_as_clause[:] + COLON + type_annotation
+
 # from X nimport Y / from X nimport *  — Python-style selective Nim import
 from_nim_abs = ikw("from") + dotted_name + ikw("nimport") + import_names
 
@@ -301,6 +307,7 @@ simple_stmt = (
     | global_stmt
     | nonlocal_stmt
     | nimport_stmt
+    | jsvar_stmt
     | from_nim_abs
     | from_pyimport
     | pyimport_stmt

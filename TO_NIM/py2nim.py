@@ -60,6 +60,7 @@ def _nim_reset():
     ParserState.nim_imports = set()
     ParserState.nim_pragmas = set()
     ParserState.nim_init_stmts = []
+    ParserState.nim_top_decls = []   # helper proc/type declarations inserted after imports
     ParserState.tick_types = {}
     ParserState.class_field_types = {}
     ParserState.proc_param_types = {}
@@ -536,6 +537,13 @@ def translate(code, export_symbols=False):
             for j, pl in enumerate(pragma_lines):
                 output.insert(insert_pos + extra_offset + j, pl)
             extra_offset += len(pragma_lines)
+        if getattr(ParserState, 'nim_top_decls', []):
+            seen = set(output)
+            for j, decl in enumerate(dict.fromkeys(ParserState.nim_top_decls)):
+                if decl not in seen:
+                    output.insert(insert_pos + extra_offset + j, decl)
+                    seen.add(decl)
+            extra_offset += len(ParserState.nim_top_decls)
         if ParserState.nim_init_stmts:
             # Deduplicate while preserving order, skip stmts already present in output
             seen = set(output)
@@ -1388,6 +1396,8 @@ def main(argv=None):
         # --- tier 1: transpile? ---
         need_transpile = nim_mtime < max(ady_mtime, transpiler_mtime)
         if need_transpile:
+            import hek_nim_expr as _hne
+            _hne.JS_BACKEND = (subcommand == "js")
             try:
                 nim_output = translate(code)
             except SyntaxError as e:
@@ -1478,7 +1488,8 @@ def main(argv=None):
         # Only meaningful for binary-producing subcommands.
         # If -r is not set and the exe is already up to date, skip nim entirely.
         BINARY_COMMANDS = {"c", "cc", "cpp", "objc"}
-        produces_binary = subcommand in BINARY_COMMANDS
+        JS_COMMANDS = {"js"}
+        produces_binary = subcommand in BINARY_COMMANDS or subcommand in JS_COMMANDS
 
         # If we re-transpiled, always recompile regardless of exe mtime.
         # Also recompile if any *user* .nim (not stdlib support files) is newer than the exe.
@@ -1495,7 +1506,12 @@ def main(argv=None):
         def _make_symlink():
             if produces_binary and ady_file:
                 stem = os.path.splitext(os.path.basename(ady_file))[0]
-                ext  = ".exe" if sys.platform == "win32" else ""
+                if subcommand in JS_COMMANDS:
+                    ext = ".js"
+                elif sys.platform == "win32":
+                    ext = ".exe"
+                else:
+                    ext = ""
                 link = os.path.join(os.path.dirname(os.path.abspath(ady_file)), stem + ext)
                 if os.path.islink(link) or os.path.exists(link):
                     os.remove(link)
