@@ -140,21 +140,6 @@ const MARKUP_OVERALL: cstring = (
       "</div>" &
     "</foreignObject>")
 
-class LinkElem(JsElem):
-    def __init__(self, src: JsElem, sa: JsObject, tgt: JsElem,
-                 ta: JsObject, color: cstring):
-        self.elem = jsnew shapes["standard"]["DoubleLink"]({
-            "source": {"id": src.elem["id"], "anchor": sa},
-            "target": {"id": tgt.elem["id"], "anchor": ta},
-            "z": 2,
-            "attrs": {
-                "line":    {"stroke": color,
-                            "targetMarker": {"d": "M 10 -2 10 -10 -3 0 10 10 10 2",
-                                             "stroke-width": 2}},
-                "outline": {"strokeWidth": 8}
-            }
-        })
-
 # ==============================================================================
 # Build graph from model specs
 # ==============================================================================
@@ -265,14 +250,24 @@ def anchorArgs(anchor: str) -> JsObject:
 
 var allElems: []JsElem = [investment, gold, bitcoin, sp500, performance, goldPerf, btcPerf, sp500Perf]
 for lnk in LINKS:
-    let src: JsElem    = lnk.src.visual_params["elem"].to(JsElem)
-    let tgt: JsElem    = lnk.tgt.visual_params["elem"].to(JsElem)
-    let srcA: str      = str(lnk.visual_params["srcAnchor"].to(cstring))
-    let tgtA: str      = str(lnk.visual_params["tgtAnchor"].to(cstring))
-    let sa: JsObject   = {"name": srcA.toJs, "args": anchorArgs(srcA)}
-    let ta: JsObject   = {"name": tgtA.toJs, "args": anchorArgs(tgtA)}
+    let src:   JsElem  = lnk.src.visual_params["elem"].to(JsElem)
+    let tgt:   JsElem  = lnk.tgt.visual_params["elem"].to(JsElem)
+    let srcA:  str     = str(lnk.visual_params["srcAnchor"].to(cstring))
+    let tgtA:  str     = str(lnk.visual_params["tgtAnchor"].to(cstring))
+    let sa:    JsObject = {"name": srcA.toJs, "args": anchorArgs(srcA)}
+    let ta:    JsObject = {"name": tgtA.toJs, "args": anchorArgs(tgtA)}
     let color: cstring = lnk.visual_params["color"].to(cstring)
-    allElems.add(LinkElem(src, sa, tgt, ta, color))
+    allElems.add(jsElemOf(jsnew shapes["standard"]["DoubleLink"]({
+        "source": {"id": src.elem["id"], "anchor": sa},
+        "target": {"id": tgt.elem["id"], "anchor": ta},
+        "z": 2,
+        "attrs": {
+            "line":    {"stroke": color,
+                        "targetMarker": {"d": "M 10 -2 10 -10 -3 0 10 10 10 2",
+                                         "stroke-width": 2}},
+            "outline": {"strokeWidth": 8}
+        }
+    })))
 
 resetCells(graph, allElems)
 
