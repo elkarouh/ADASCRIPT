@@ -172,45 +172,6 @@ def makeMarkup(kind: MarkupKind) -> JsObject:
             util.svg([MARKUP_OVERALL])
 
 # ==============================================================================
-# Element base class
-# ==============================================================================
-# Wraps a JointJS JsObject. The transpiler auto-emits a converter so any
-# JsElem subclass is accepted wherever JsObject is expected.
-
-class JsElem:
-    var elem: JsObject
-
-    def __init__(self, elemType: cstring, pos: JsObject, size: JsObject,
-                 z: int, attrs: JsObject, markup: JsObject):
-        self.elem = jsnew dia["Element"]({"type": elemType, "position": pos,
-                                          "size": size, "z": z,
-                                          "attrs": attrs, "markup": markup})
-
-    def attr(self, path: cstring) -> JsObject:
-        self.elem.attr(path)
-
-    def attr(self, path: cstring, val: JsObject):
-        self.elem.attr(path, val)
-
-    def set(self, key: cstring, val: JsObject):
-        self.elem.set(key, val)
-
-    def embed(self, child: JsElem):
-        self.elem.embed(child.elem)
-
-    def fitEmbeds(self, opts: JsObject):
-        self.elem.fitEmbeds(opts)
-
-    def id(self) -> JsObject:
-        self.elem["id"]
-
-def resetCells(g: JsObject, elems: []JsElem):
-    var jsElems: []JsObject = []
-    for e in elems:
-        jsElems.add(e.elem)
-    g.resetCells(jsElems.toJs)
-
-# ==============================================================================
 # Node classes
 # ==============================================================================
 

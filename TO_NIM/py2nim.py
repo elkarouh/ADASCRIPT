@@ -47,6 +47,10 @@ _nimport_class_names: set = set()
 # Method/proc return types collected from nimport'd .ady dependencies.
 _nimport_proc_return_types: dict = {}
 
+# ref/virtual class names collected from nimport'd .ady dependencies so that
+# subclasses in the importing file are also emitted as ref object.
+_nimport_ref_classes: set = set()
+
 
 def _nim_reset():
     """Initialise all Nim-backend fields on ParserState.
@@ -242,6 +246,7 @@ def _prescan_classes(stmts):
     """
     hierarchy = {}          # class_name -> parent_name or None
     all_methods = {}        # class_name -> set of method names
+    virtual_classes = set() # classes explicitly decorated with @virtual
 
     def _walk(node):
         tname = type(node).__name__
@@ -249,22 +254,32 @@ def _prescan_classes(stmts):
             cls_name = None
             parent = None
             block_node = None
+            has_virtual = False
             for child in node.nodes:
                 cname = type(child).__name__
                 if cname == "IDENTIFIER":
                     cls_name = (child.node if hasattr(child, "node") and
                                 isinstance(child.node, str)
                                 else str(child.nodes[0]))
+                elif cname == "decorators":
+                    deco_str = child.to_nim(0)
+                    if "@virtual" in deco_str:
+                        has_virtual = True
                 elif cname == "class_args":
                     parent = _find_first_identifier(child)
                     if parent in (None, "object"):
                         parent = None
                 elif cname == "Several_Times":
                     for seq in child.nodes:
-                        if type(seq).__name__ == "class_args":
+                        sname = type(seq).__name__
+                        if sname == "class_args":
                             parent = _find_first_identifier(seq)
                             if parent in (None, "object"):
                                 parent = None
+                        elif sname in ("decorator", "decorators"):
+                            deco_str = seq.to_nim(0)
+                            if "@virtual" in deco_str:
+                                has_virtual = True
                 elif cname == "block":
                     block_node = child
             if cls_name:
@@ -273,6 +288,8 @@ def _prescan_classes(stmts):
                     _collect_func_names_in_block(block_node)
                     if block_node else set()
                 )
+                if has_virtual:
+                    virtual_classes.add(cls_name)
         if hasattr(node, "nodes"):
             for child in node.nodes:
                 if hasattr(child, "nodes"):
@@ -282,7 +299,7 @@ def _prescan_classes(stmts):
         _walk(stmt)
 
     # Any class involved in inheritance needs ref
-    ref_classes = set()
+    ref_classes = set(virtual_classes)
     for cls, parent in hierarchy.items():
         if parent:
             ref_classes.add(cls)
@@ -312,6 +329,9 @@ def translate(code, export_symbols=False):
     (ParserState._ref_classes,
      ParserState._all_class_methods,
      ParserState._all_class_parents) = _prescan_classes(stmts)
+    # Merge ref classes from nimport'd deps so subclasses of cross-file base
+    # classes are also emitted as ref object.
+    ParserState._ref_classes.update(_nimport_ref_classes)
 
     ParserState.symbol_table.push_scope("module")
     output = []
@@ -1390,6 +1410,9 @@ def main(argv=None):
                 _nimport_class_names.update(getattr(_PS_pre, "class_names", set()))
                 # Collect method return types so _nim_expr_type can resolve e.g. conn.rows()
                 _nimport_proc_return_types.update(getattr(_PS_pre, "proc_return_types", {}))
+                # Collect ref/virtual class names so subclasses in the importer
+                # are also emitted as ref object of BaseClass.
+                _nimport_ref_classes.update(getattr(_PS_pre, "_ref_classes", set()))
             except Exception:
                 pass  # errors will surface properly during the full dep transpile
 
