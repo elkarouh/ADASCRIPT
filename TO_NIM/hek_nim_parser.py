@@ -2341,7 +2341,12 @@ def to_nim(self, indent=0):
     ref_keyword = "ref " if needs_ref else ""
     _exp = "*" if getattr(ParserState, 'export_symbols', False) and indent == 0 else ""
     ParserState.symbol_table.pop_scope()
-    return f"{decos}{_ind(indent)}type {name}{_exp}{type_params} = {ref_keyword}object{parent}\n{body}"
+    result = f"{decos}{_ind(indent)}type {name}{_exp}{type_params} = {ref_keyword}object{parent}\n{body}"
+    # Auto-emit a converter so any JsElem subclass is accepted where JsObject is expected.
+    # Appended inline (not nim_top_decls) so it follows the type definition.
+    if name == "JsElem" and hek_nim_expr.JS_BACKEND:
+        result += "\nconverter toJsObject*(e: JsElem): JsObject = e.elem\n"
+    return result
 
 
 # --- Type block forms (tuple, record) ---
