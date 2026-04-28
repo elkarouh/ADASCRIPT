@@ -202,61 +202,91 @@ def bodyAttr(fill: cstring) -> JsObject:
 def foAttr() -> JsObject:
     {"width": "calc(w)", "height": "calc(h)"}
 
-def mkElem(elemType: cstring, pos: JsObject, size: JsObject,
-           z: int, attrs: JsObject, markup: JsObject) -> JsObject:
-    jsnew dia["Element"]({"type": elemType, "position": pos, "size": size,
-                          "z": z, "attrs": attrs, "markup": markup})
+# ---- JsElem base class ----
+# Wraps a JointJS JsObject element. A converter (auto-emitted by the transpiler)
+# makes any JsElem subclass accepted wherever JsObject is expected.
+
+class JsElem:
+    var elem: JsObject
+
+    def __init__(self, elemType: cstring, pos: JsObject, size: JsObject,
+                 z: int, attrs: JsObject, markup: JsObject):
+        self.elem = jsnew dia["Element"]({"type": elemType, "position": pos, "size": size,
+                                          "z": z, "attrs": attrs, "markup": markup})
+
+    def attr(self, path: cstring) -> JsObject:
+        self.elem.attr(path)
+
+    def attr(self, path: cstring, val: JsObject):
+        self.elem.attr(path, val)
+
+    def set(self, key: cstring, val: JsObject):
+        self.elem.set(key, val)
+
+    def embed(self, child: JsElem):
+        self.elem.embed(child.elem)
+
+    def fitEmbeds(self, opts: JsObject):
+        self.elem.fitEmbeds(opts)
+
+    def id(self) -> JsObject:
+        self.elem["id"]
+
+# ---- Node classes ----
+
+class InvestmentNode(JsElem):
+    def __init__(self):
+        super().__init__("Investment",
+            {"x": 100, "y": 280}, {"width": 140, "height": 225}, 1,
+            {"body": bodyAttr(MAIN), "foreignObject": foAttr(),
+             "funds": {"props": {"value": 100}, "tabindex": 1},
+             "year":  {"props": {"value": 2018}, "tabindex": 2}},
+            makeMarkup(mkInvestment))
+
+class Product(JsElem):
+    var name: string
+
+    def __init__(self, nm: string, lbl: cstring, color: cstring,
+                 x: int, y: int, z: int, ti: int):
+        self.name = nm
+        super().__init__("Product",
+            {"x": x, "y": y}, {"width": 140, "height": 120}, z,
+            {"body": bodyAttr(color), "foreignObject": foAttr(),
+             "label": {"html": lbl},
+             "percentage": {"props": {"value": 25}, "tabindex": ti}},
+            makeMarkup(mkProduct))
+        self.elem.set("name", nm.toJs)
+
+class PerfNode(JsElem):
+    def __init__(self, lbl: cstring, x: int, y: int, ti1: int, ti2: int):
+        super().__init__("ProductPerformance",
+            {"x": x, "y": y}, {"width": 200, "height": 100}, 0,
+            {"body": bodyAttr(MAIN), "foreignObject": foAttr(),
+             "label": {"html": lbl},
+             "value": {"tabindex": ti1}, "roi": {"tabindex": ti2}},
+            makeMarkup(mkPerf))
+
+class OverallPerf(JsElem):
+    def __init__(self):
+        super().__init__("OverallPerformance",
+            {"x": 500, "y": 300}, jsUndefined, -1,
+            {"body": bodyAttr(SEC), "foreignObject": foAttr(),
+             "value": {"tabindex": 12}, "roi": {"tabindex": 13}},
+            makeMarkup(mkOverall))
 
 # ---- Nodes ----
 
-let investment: JsObject = mkElem("Investment",
-    {"x": 100, "y": 280}, {"width": 140, "height": 225}, 1,
-    {"body": bodyAttr(MAIN), "foreignObject": foAttr(),
-     "funds": {"props": {"value": 100}, "tabindex": 1},
-     "year":  {"props": {"value": 2018}, "tabindex": 2}},
-    makeMarkup(mkInvestment))
+let investment: InvestmentNode = InvestmentNode()
 
-let gold: JsObject = mkElem("Product",
-    {"x": 300, "y": 100}, {"width": 140, "height": 120}, 3,
-    {"body": bodyAttr(GOLD), "foreignObject": foAttr(),
-     "label": {"html": "Gold"},
-     "percentage": {"props": {"value": 25}, "tabindex": 3}},
-    makeMarkup(mkProduct))
-gold.set("name", "gold")
+let gold:    Product = Product("gold",    "Gold",        GOLD, 300, 100, 3, 3)
+let bitcoin: Product = Product("bitcoin", "Bitcoin",     BTC,  300, 330, 5, 4)
+let sp500:   Product = Product("sp500",   "S&amp;P 500", SP,   300, 560, 7, 5)
 
-let bitcoin: JsObject = mkElem("Product",
-    {"x": 300, "y": 330}, {"width": 140, "height": 120}, 5,
-    {"body": bodyAttr(BTC), "foreignObject": foAttr(),
-     "label": {"html": "Bitcoin"},
-     "percentage": {"props": {"value": 25}, "tabindex": 4}},
-    makeMarkup(mkProduct))
-bitcoin.set("name", "bitcoin")
+let goldPerf:  PerfNode = PerfNode("Gold",        600, 200, 6,  7)
+let btcPerf:   PerfNode = PerfNode("Bitcoin",     600, 320, 8,  9)
+let sp500Perf: PerfNode = PerfNode("S&amp;P 500", 600, 440, 10, 11)
 
-let sp500: JsObject = mkElem("Product",
-    {"x": 300, "y": 560}, {"width": 140, "height": 120}, 7,
-    {"body": bodyAttr(SP), "foreignObject": foAttr(),
-     "label": {"html": "S&amp;P 500"},
-     "percentage": {"props": {"value": 50}, "tabindex": 5}},
-    makeMarkup(mkProduct))
-sp500.set("name", "sp500")
-
-def mkPerf(lbl: cstring, x: int, y: int, ti1: int, ti2: int) -> JsObject:
-    mkElem("ProductPerformance",
-        {"x": x, "y": y}, {"width": 200, "height": 100}, 0,
-        {"body": bodyAttr(MAIN), "foreignObject": foAttr(),
-         "label": {"html": lbl},
-         "value": {"tabindex": ti1}, "roi": {"tabindex": ti2}},
-        makeMarkup(mkPerf))
-
-let goldPerf:  JsObject = mkPerf("Gold",        600, 200, 6,  7)
-let btcPerf:   JsObject = mkPerf("Bitcoin",     600, 320, 8,  9)
-let sp500Perf: JsObject = mkPerf("S&amp;P 500", 600, 440, 10, 11)
-
-let performance: JsObject = mkElem("OverallPerformance",
-    {"x": 500, "y": 300}, jsUndefined, -1,
-    {"body": bodyAttr(SEC), "foreignObject": foAttr(),
-     "value": {"tabindex": 12}, "roi": {"tabindex": 13}},
-    makeMarkup(mkOverall))
+let performance: OverallPerf = OverallPerf()
 
 # ---- Links ----
 
@@ -300,20 +330,17 @@ def calculate():
     let funds: float = investment.attr("funds/props/value").to(float)
     let year:  int   = investment.attr("year/props/value").to(int)
 
-    let specs: seq[JsObject] = [
-        {"node": gold,    "perf": goldPerf,  "name": "gold"},
-        {"node": bitcoin, "perf": btcPerf,   "name": "bitcoin"},
-        {"node": sp500,   "perf": sp500Perf, "name": "sp500"},
-    ]
+    let specs: seq[Product] = [gold, bitcoin, sp500]
     var total: float = 0.0
     for spec in specs:
-        let node: JsObject = spec["node"]
-        let perf: JsObject = spec["perf"]
-        let namecs: cstring = spec["name"].to(cstring)
-        let name: string    = namecs'Image
-        let pct:  float     = node.attr("percentage/props/value").to(float)
-        let val:  float     = calcProductValue(funds, pct, year, name)
-        let roi:  float     = calcROI(funds, pct, val)
+        let pct:  float = spec.attr("percentage/props/value").to(float)
+        let val:  float = calcProductValue(funds, pct, year, spec.name)
+        let roi:  float = calcROI(funds, pct, val)
+        var perf: PerfNode = sp500Perf
+        if spec.name == "gold":
+            perf = goldPerf
+        elif spec.name == "bitcoin":
+            perf = btcPerf
         perf.attr("value/props/value", fmt(val))
         perf.attr("roi/props/value",   fmt(roi))
         total += val
@@ -322,21 +349,20 @@ def calculate():
 
 # ---- Reactivity ----
 
-let products: seq[JsObject] = [gold, bitcoin, sp500]
-
 def onChangeAttrs(cell: JsObject, attrs: JsObject, opts: JsObject):
     if not opts["calc"].to(bool):
         return
+    let products: seq[Product] = [gold, bitcoin, sp500]
     var idx: int = -1
     for i in 0..len(products)-1:
-        if products[i]["id"] == cell["id"]:
+        if products[i].id() == cell["id"]:
             idx = i
     if idx >= 0:
         var diff: float = opts["previousValue"].to(float) - opts["propertyValue"].to(float)
         for i in 0..len(products)-1:
             if i != idx:
-                let p:   JsObject = products[i]
-                let pct: float    = p.attr("percentage/props/value").to(float) + diff
+                let p:   Product = products[i]
+                let pct: float   = p.attr("percentage/props/value").to(float) + diff
                 p.attr("percentage/props/value", max(pct, 0.0).toJs)
                 if pct < 0.0:
                     diff = pct
