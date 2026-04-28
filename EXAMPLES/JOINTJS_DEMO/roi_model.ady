@@ -1,0 +1,77 @@
+#!/usr/bin/env py2nim
+"""
+ROI model: price data, financial calculations, and graph topology.
+No rendering concerns — no JointJS, no colors, no markup.
+"""
+
+# ==============================================================================
+# Price data
+# ==============================================================================
+
+type PriceRow is tuple:
+    gold:    float
+    bitcoin: float
+    sp500:   float
+
+const CURRENT_YEAR: int = 2023
+
+const PRICES: [2013..2023]PriceRow = [
+    2013: (gold: 1685.50, bitcoin:    13.51, sp500: 1480.40),
+    2014: (gold: 1219.75, bitcoin:   771.40, sp500: 1822.36),
+    2015: (gold: 1184.25, bitcoin:   314.25, sp500: 2028.18),
+    2016: (gold: 1060.20, bitcoin:   434.33, sp500: 1918.60),
+    2017: (gold: 1162.00, bitcoin:   998.33, sp500: 2275.12),
+    2018: (gold: 1312.80, bitcoin: 13657.20, sp500: 2789.80),
+    2019: (gold: 1287.20, bitcoin:  3800.00, sp500: 2607.39),
+    2020: (gold: 1520.55, bitcoin:  7197.92, sp500: 3278.20),
+    2021: (gold: 1947.60, bitcoin: 29624.63, sp500: 3793.75),
+    2022: (gold: 1800.10, bitcoin: 47434.29, sp500: 4573.82),
+    2023: (gold: 1824.16, bitcoin: 16610.44, sp500: 3960.66),
+]
+
+def getPriceFor(year: int, name: str) -> float:
+    let row: PriceRow = PRICES[year]
+    if name == "gold":
+        return row.gold
+    elif name == "bitcoin":
+        return row.bitcoin
+    else:
+        return row.sp500
+
+def calcProductValue(funds: float, pct: float, year: int, name: str) -> float:
+    let buyPrice:  float = getPriceFor(year, name)
+    let sellPrice: float = getPriceFor(CURRENT_YEAR, name)
+    funds * pct / 100.0 * (sellPrice / buyPrice)
+
+def calcROI(funds: float, pct: float, value: float) -> float:
+    let cost: float = funds * pct / 100.0
+    if cost == 0.0:
+        0.0
+    else:
+        (value - cost) / cost * 100.0
+
+# ==============================================================================
+# Graph topology
+# ==============================================================================
+
+type NodeKind is enum nkInvestment, nkProduct, nkPerf, nkOverall
+
+type NodeSpec is tuple:
+    kind:    NodeKind
+    name:    str       # logical name; "" for singleton nodes
+    label:   str       # display label
+    x:       int
+    y:       int
+    z:       int
+    tabIdx:  int       # first tab index (perf nodes use tabIdx and tabIdx+1)
+
+const NODES: seq[NodeSpec] = [
+    (kind: nkInvestment, name: "",        label: "",            x: 100, y: 280, z: 1,  tabIdx: 1),
+    (kind: nkProduct,    name: "gold",    label: "Gold",        x: 300, y: 100, z: 3,  tabIdx: 3),
+    (kind: nkProduct,    name: "bitcoin", label: "Bitcoin",     x: 300, y: 330, z: 5,  tabIdx: 4),
+    (kind: nkProduct,    name: "sp500",   label: "S&amp;P 500", x: 300, y: 560, z: 7,  tabIdx: 5),
+    (kind: nkPerf,       name: "gold",    label: "Gold",        x: 600, y: 200, z: 0,  tabIdx: 6),
+    (kind: nkPerf,       name: "bitcoin", label: "Bitcoin",     x: 600, y: 320, z: 0,  tabIdx: 8),
+    (kind: nkPerf,       name: "sp500",   label: "S&amp;P 500", x: 600, y: 440, z: 0,  tabIdx: 10),
+    (kind: nkOverall,    name: "",        label: "",            x: 500, y: 300, z: -1, tabIdx: 12),
+]
