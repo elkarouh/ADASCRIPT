@@ -1594,6 +1594,31 @@ def to_nim(self):
     return chr(10).join(lines) if lines else None
 
 
+@method(jsvar_stmt)
+def to_nim(self):
+    """jsvar name [as "jsName"]: Type -> var name {.importc[: "jsName"], nodecl.}: Type"""
+    name = self.nodes[0].to_nim()
+    # Check for optional 'as "jsName"' clause
+    alias = None
+    typ_node = self.nodes[1]
+    if hasattr(self.nodes[1], 'nodes') and self.nodes[1].nodes:
+        # Several_Times wrapping jsvar_as_clause
+        for seq in self.nodes[1].nodes:
+            if hasattr(seq, 'nodes'):
+                for child in seq.nodes:
+                    cname = type(child).__name__
+                    if cname == "jsvar_as_clause" and hasattr(child, 'nodes'):
+                        alias = child.nodes[0].to_nim().strip('"\'')
+                    elif cname == "STRING":
+                        alias = child.to_nim().strip('"\'')
+        # type_annotation is the last node
+        typ_node = self.nodes[2] if len(self.nodes) > 2 else self.nodes[1]
+    typ = typ_node.to_nim()
+    if alias:
+        return f'var {name} {{.importc: "{alias}", nodecl.}}: {typ}'
+    return f"var {name} {{.importc, nodecl.}}: {typ}"
+
+
 @method(type_alias_params)
 def to_nim(self):
     """type_alias_params: '[' IDENTIFIER (',' IDENTIFIER)* ']' (generic type parameters) -> Nim: [T, U, ...]"""

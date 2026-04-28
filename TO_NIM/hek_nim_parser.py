@@ -1789,6 +1789,27 @@ def to_nim(self):
     return f": {self.nodes[1].to_nim()}"
 
 
+def _parse_func_decorators(decos_str, indent):
+    """Extract @export and @used from a decorator string; return (cleaned_decos, export_marker, used_pragma).
+
+    @export  -> proc name*(...) — adds '*' export marker (JS backend: always; native: only at module scope)
+    @used    -> proc name(...) {.used.} — suppresses unused-proc warning
+    """
+    export_marker = False
+    used_pragma = False
+    kept = []
+    for line in decos_str.splitlines():
+        stripped = line.strip()
+        if stripped in ("@export",):
+            export_marker = True
+        elif stripped in ("@used",):
+            used_pragma = True
+        else:
+            kept.append(line)
+    cleaned = "\n".join(kept)
+    return cleaned, export_marker, used_pragma
+
+
 # --- Function definition ---
 @method(func_def)
 def to_nim(self, indent=0):
@@ -2127,7 +2148,12 @@ def to_nim(self, indent=0):
     if nim_name is None:
         return ""  # skip (e.g. __init__ handled via class_def)
     keyword = nim_keyword or "proc"
-    _exp = "*" if getattr(ParserState, 'export_symbols', False) and indent == 0 else ""
+    # Strip @export / @used decorators and record their effect
+    decos, _deco_export, _deco_used = _parse_func_decorators(decos, indent)
+    if decos and not decos.endswith("\n"):
+        decos += "\n"
+    _exp = "*" if (_deco_export or (getattr(ParserState, 'export_symbols', False) and indent == 0)) else ""
+    _pragmas = " {.used.}" if _deco_used else ""
     # Infer generic type params from parameter/return type annotations.
     # Single uppercase-letter identifiers (S, D, C, T, K, V …) are type
     # variables by Adascript convention; collect them and add [S, D, C] to
@@ -2138,7 +2164,7 @@ def to_nim(self, indent=0):
     # Escape Nim keywords that aren't already backtick-wrapped (dunders get their own escaping)
     if not nim_name.startswith("`"):
         nim_name = _nim_ident(nim_name)
-    return f"{decos}{_ind(indent)}{keyword} {nim_name}{_exp}{_generic_params}({params}){ret_ann} ={hc}\n{body}"
+    return f"{decos}{_ind(indent)}{keyword} {nim_name}{_exp}{_generic_params}({params}){ret_ann}{_pragmas} ={hc}\n{body}"
 
 
 @method(async_func_def)

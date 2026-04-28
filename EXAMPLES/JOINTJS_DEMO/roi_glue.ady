@@ -1,0 +1,355 @@
+#!/usr/bin/env py2nim
+#ady2nim-args js
+"""
+JointJS Return-on-Investment demo.
+Compile:  py2nim roi_glue.ady   (or: make)
+"""
+
+nimport js/jsffi
+
+# ---- ROI data ----
+
+type PriceRow is tuple:
+    gold:    float
+    bitcoin: float
+    sp500:   float
+
+const CURRENT_YEAR: int = 2023
+
+const PRICES: [2013..2023]PriceRow = [
+    2013: (gold: 1685.50, bitcoin:    13.51, sp500: 1480.40),
+    2014: (gold: 1219.75, bitcoin:   771.40, sp500: 1822.36),
+    2015: (gold: 1184.25, bitcoin:   314.25, sp500: 2028.18),
+    2016: (gold: 1060.20, bitcoin:   434.33, sp500: 1918.60),
+    2017: (gold: 1162.00, bitcoin:   998.33, sp500: 2275.12),
+    2018: (gold: 1312.80, bitcoin: 13657.20, sp500: 2789.80),
+    2019: (gold: 1287.20, bitcoin:  3800.00, sp500: 2607.39),
+    2020: (gold: 1520.55, bitcoin:  7197.92, sp500: 3278.20),
+    2021: (gold: 1947.60, bitcoin: 29624.63, sp500: 3793.75),
+    2022: (gold: 1800.10, bitcoin: 47434.29, sp500: 4573.82),
+    2023: (gold: 1824.16, bitcoin: 16610.44, sp500: 3960.66),
+]
+
+def getPriceFor(year: int, name: str) -> float:
+    let row: PriceRow = PRICES[year]
+    if name == "gold":
+        return row.gold
+    elif name == "bitcoin":
+        return row.bitcoin
+    else:
+        return row.sp500
+
+def calcProductValue(funds: float, pct: float, year: int, name: str) -> float:
+    let buyPrice:  float = getPriceFor(year, name)
+    let sellPrice: float = getPriceFor(CURRENT_YEAR, name)
+    funds * pct / 100.0 * (sellPrice / buyPrice)
+
+def calcROI(funds: float, pct: float, value: float) -> float:
+    let cost: float = funds * pct / 100.0
+    if cost == 0.0:
+        0.0
+    else:
+        (value - cost) / cost * 100.0
+
+# ---- JointJS globals ----
+
+jsvar joint:    JsObject
+jsvar window:   JsObject
+jsvar document: JsObject
+
+let dia:    JsObject = joint["dia"]
+let util:   JsObject = joint["util"]
+let shapes: JsObject = joint["shapes"]
+
+let graph: JsObject = jsnew dia["Graph"]({"cellNamespace": shapes})
+
+# ---- Input change handler ----
+
+jsvar jsThis as "this": JsObject
+
+def onInputChange(evt: JsObject):
+    let input: JsObject = evt["target"]
+    if not input["validity"]["valid"].to(bool):
+        return
+    let path: cstring = input.getAttribute("joint-selector").to(cstring) & "/props/value"
+    let prev: JsObject = jsThis["model"].attr(path)
+    jsThis["model"].attr(path, input["value"], {"previousValue": prev, "calc": true})
+
+# ---- Paper ----
+
+let paper: JsObject = jsnew dia["Paper"]({
+    "width":  "100%",
+    "height": "100%",
+    "model":  graph,
+    "cellViewNamespace": shapes,
+    "defaultConnector":       {"name": "curve"},
+    "defaultConnectionPoint": {"name": "anchor"},
+    "background": {"color": "#f6f4f4"},
+    "preventDefaultViewAction": false,
+    "interactive": {"stopDelegation": false},
+    "elementView": dia["ElementView"].extend({
+        "events": {"change input,select": "onInputChange"},
+        "onInputChange": onInputChange
+    })
+})
+
+document.getElementById("paper-container").appendChild(paper["el"])
+
+# ---- Markup helpers ----
+
+def makeMarkup(kind: cstring) -> JsObject:
+    if kind == "investment":
+        return util.svg([
+            cstring("<rect @selector=\"body\" />") &
+            "<foreignObject @selector=\"foreignObject\" overflow=\"hidden\">" &
+              "<div @selector=\"content\" class=\"jj-form\" xmlns=\"http://www.w3.org/1999/xhtml\">" &
+                "<h2>Investment</h2>" &
+                "<div class=\"jj-field-vertical\">" &
+                  "<label>How much did you invest?" &
+                    "<input @selector=\"funds\" class=\"jj-input\" type=\"number\"/>" &
+                  "</label>" &
+                "</div>" &
+                "<div class=\"jj-field-vertical\">" &
+                  "<label>What year it was?" &
+                    "<select @selector=\"year\" class=\"jj-input\">" &
+                      "<option value=\"2013\">2013</option><option value=\"2014\">2014</option>" &
+                      "<option value=\"2015\">2015</option><option value=\"2016\">2016</option>" &
+                      "<option value=\"2017\">2017</option><option value=\"2018\">2018</option>" &
+                      "<option value=\"2019\">2019</option><option value=\"2020\">2020</option>" &
+                      "<option value=\"2021\">2021</option><option value=\"2022\">2022</option>" &
+                      "<option value=\"2023\">2023</option>" &
+                    "</select>" &
+                  "</label>" &
+                "</div>" &
+              "</div>" &
+            "</foreignObject>"
+        ])
+    if kind == "product":
+        return util.svg([
+            cstring("<rect @selector=\"body\" />") &
+            "<foreignObject @selector=\"foreignObject\" overflow=\"hidden\">" &
+              "<div @selector=\"content\" class=\"jj-form\" xmlns=\"http://www.w3.org/1999/xhtml\">" &
+                "<div class=\"jj-field-vertical\">" &
+                  "<label>What % did you invest in <strong @selector=\"label\"></strong>?" &
+                    "<span class=\"jj-input-container\">" &
+                      "<input @selector=\"percentage\" class=\"jj-input\" type=\"number\" min=\"0\" max=\"100\" step=\"1\"/>" &
+                      "<span class=\"jj-input-unit\">%</span>" &
+                    "</span>" &
+                  "</label>" &
+                "</div>" &
+              "</div>" &
+            "</foreignObject>"
+        ])
+    if kind == "perf":
+        return util.svg([
+            cstring("<rect @selector=\"body\" />") &
+            "<foreignObject @selector=\"foreignObject\" overflow=\"hidden\">" &
+              "<div @selector=\"content\" class=\"jj-form\" xmlns=\"http://www.w3.org/1999/xhtml\">" &
+                "<fieldset>" &
+                  "<legend><strong @selector=\"label\"></strong></legend>" &
+                  "<div class=\"jj-field-horizontal\">" &
+                    "<label><span>Value</span>" &
+                      "<input @selector=\"value\" class=\"jj-input\" type=\"text\" readonly=\"true\"/>" &
+                    "</label>" &
+                  "</div>" &
+                  "<div class=\"jj-field-horizontal\">" &
+                    "<label><span>ROI</span>" &
+                      "<input @selector=\"roi\" class=\"jj-input\" type=\"text\" readonly=\"true\"/>" &
+                    "</label>" &
+                  "</div>" &
+                "</fieldset>" &
+              "</div>" &
+            "</foreignObject>"
+        ])
+    return util.svg([
+        cstring("<rect @selector=\"body\" />") &
+        "<foreignObject @selector=\"foreignObject\" overflow=\"hidden\">" &
+          "<div @selector=\"content\" class=\"jj-form\" style=\"justify-content:space-between\" xmlns=\"http://www.w3.org/1999/xhtml\">" &
+            "<p>This is your portfolio now in <strong>2023</strong>.</p>" &
+            "<fieldset>" &
+              "<legend style=\"margin-bottom:10px\">Your overall performance of investment is:</legend>" &
+              "<div class=\"jj-field-horizontal\">" &
+                "<label><span>Value</span>" &
+                  "<input @selector=\"value\" class=\"jj-input\" type=\"text\" readonly=\"true\"/>" &
+                "</label>" &
+              "</div>" &
+              "<div class=\"jj-field-horizontal\">" &
+                "<label><span>ROI</span>" &
+                  "<input @selector=\"roi\" class=\"jj-input\" type=\"text\" readonly=\"true\"/>" &
+                "</label>" &
+              "</div>" &
+            "</fieldset>" &
+          "</div>" &
+        "</foreignObject>"
+    ])
+
+# ---- Colours ----
+
+const MAIN: cstring = "#D4D9D7"
+const SEC:  cstring = "#EAECEA"
+const BTC:  cstring = "#9C9EC8"
+const GOLD: cstring = "#F7E3AE"
+const SP:   cstring = "#FFCCD6"
+
+def bodyAttr(fill: cstring) -> JsObject:
+    {"rx": 10, "ry": 10, "width": "calc(w)", "height": "calc(h)",
+     "stroke": "#333333", "fill": fill, "strokeWidth": 2}
+
+def foAttr() -> JsObject:
+    {"width": "calc(w)", "height": "calc(h)"}
+
+def mkElem(elemType: cstring, pos: JsObject, size: JsObject,
+           z: int, attrs: JsObject, markup: JsObject) -> JsObject:
+    jsnew dia["Element"]({"type": elemType, "position": pos, "size": size,
+                          "z": z, "attrs": attrs, "markup": markup})
+
+# ---- Nodes ----
+
+let investment: JsObject = mkElem("Investment",
+    {"x": 100, "y": 280}, {"width": 140, "height": 225}, 1,
+    {"body": bodyAttr(MAIN), "foreignObject": foAttr(),
+     "funds": {"props": {"value": 100}, "tabindex": 1},
+     "year":  {"props": {"value": 2018}, "tabindex": 2}},
+    makeMarkup("investment"))
+
+let gold: JsObject = mkElem("Product",
+    {"x": 300, "y": 100}, {"width": 140, "height": 120}, 3,
+    {"body": bodyAttr(GOLD), "foreignObject": foAttr(),
+     "label": {"html": "Gold"},
+     "percentage": {"props": {"value": 25}, "tabindex": 3}},
+    makeMarkup("product"))
+gold.set("name", "gold")
+
+let bitcoin: JsObject = mkElem("Product",
+    {"x": 300, "y": 330}, {"width": 140, "height": 120}, 5,
+    {"body": bodyAttr(BTC), "foreignObject": foAttr(),
+     "label": {"html": "Bitcoin"},
+     "percentage": {"props": {"value": 25}, "tabindex": 4}},
+    makeMarkup("product"))
+bitcoin.set("name", "bitcoin")
+
+let sp500: JsObject = mkElem("Product",
+    {"x": 300, "y": 560}, {"width": 140, "height": 120}, 7,
+    {"body": bodyAttr(SP), "foreignObject": foAttr(),
+     "label": {"html": "S&amp;P 500"},
+     "percentage": {"props": {"value": 50}, "tabindex": 5}},
+    makeMarkup("product"))
+sp500.set("name", "sp500")
+
+def mkPerf(lbl: cstring, x: int, y: int, ti1: int, ti2: int) -> JsObject:
+    mkElem("ProductPerformance",
+        {"x": x, "y": y}, {"width": 200, "height": 100}, 0,
+        {"body": bodyAttr(MAIN), "foreignObject": foAttr(),
+         "label": {"html": lbl},
+         "value": {"tabindex": ti1}, "roi": {"tabindex": ti2}},
+        makeMarkup("perf"))
+
+let goldPerf:  JsObject = mkPerf("Gold",        600, 200, 6,  7)
+let btcPerf:   JsObject = mkPerf("Bitcoin",     600, 320, 8,  9)
+let sp500Perf: JsObject = mkPerf("S&amp;P 500", 600, 440, 10, 11)
+
+let performance: JsObject = mkElem("OverallPerformance",
+    {"x": 500, "y": 300}, jsUndefined, -1,
+    {"body": bodyAttr(SEC), "foreignObject": foAttr(),
+     "value": {"tabindex": 12}, "roi": {"tabindex": 13}},
+    makeMarkup("overall"))
+
+# ---- Links ----
+
+def mkLink(src: JsObject, sa: JsObject, tgt: JsObject,
+           ta: JsObject, color: cstring) -> JsObject:
+    jsnew shapes["standard"]["DoubleLink"]({
+        "source": {"id": src["id"], "anchor": sa},
+        "target": {"id": tgt["id"], "anchor": ta},
+        "z": 2,
+        "attrs": {
+            "line": {"stroke": color,
+                     "targetMarker": {"d": "M 10 -2 10 -10 -3 0 10 10 10 2", "stroke-width": 2}},
+            "outline": {"strokeWidth": 8}
+        }
+    })
+
+let link1: JsObject = mkLink(investment, {"name": "top",    "args": {"dy":  1}}, gold,    {"name": "left", "args": {"dx": -5}}, MAIN)
+let link2: JsObject = mkLink(investment, {"name": "right",  "args": {"dx": -1}}, bitcoin, {"name": "left", "args": {"dx": -5}}, MAIN)
+let link3: JsObject = mkLink(investment, {"name": "bottom", "args": {"dy": -1}}, sp500,   {"name": "left", "args": {"dx": -5}}, MAIN)
+let link4: JsObject = mkLink(gold,    {"name": "right", "args": {"dx": -1}}, goldPerf,  {"name": "left", "args": {"dx": -5}}, GOLD)
+let link5: JsObject = mkLink(bitcoin, {"name": "right", "args": {"dx": -1}}, btcPerf,   {"name": "left", "args": {"dx": -5}}, BTC)
+let link6: JsObject = mkLink(sp500,   {"name": "right", "args": {"dx": -1}}, sp500Perf, {"name": "left", "args": {"dx": -5}}, SP)
+
+# ---- Populate graph ----
+
+let cells: JsObject = [investment, gold, bitcoin, sp500,
+    performance, goldPerf, btcPerf, sp500Perf,
+    link1, link2, link3, link4, link5, link6].toJs
+graph.resetCells(cells)
+performance.embed(goldPerf)
+performance.embed(btcPerf)
+performance.embed(sp500Perf)
+performance.fitEmbeds({"padding": {"horizontal": 30, "top": 50, "bottom": 130}})
+
+# ---- Calculation ----
+
+def fmt(v: float) -> cstring:
+    v.toJs.toLocaleString("en", {"minimumFractionDigits": 2, "maximumFractionDigits": 2}).to(cstring)
+
+def calculate():
+    let funds: float = investment.attr("funds/props/value").to(float)
+    let year:  int   = investment.attr("year/props/value").to(int)
+
+    let specs: seq[JsObject] = [
+        {"node": gold,    "perf": goldPerf,  "name": "gold"},
+        {"node": bitcoin, "perf": btcPerf,   "name": "bitcoin"},
+        {"node": sp500,   "perf": sp500Perf, "name": "sp500"},
+    ]
+    var total: float = 0.0
+    for spec in specs:
+        let node: JsObject = spec["node"]
+        let perf: JsObject = spec["perf"]
+        let namecs: cstring = spec["name"].to(cstring)
+        let name: string    = namecs'Image
+        let pct:  float     = node.attr("percentage/props/value").to(float)
+        let val:  float     = calcProductValue(funds, pct, year, name)
+        let roi:  float     = calcROI(funds, pct, val)
+        perf.attr("value/props/value", fmt(val))
+        perf.attr("roi/props/value",   fmt(roi))
+        total += val
+    performance.attr("value/props/value", fmt(total))
+    performance.attr("roi/props/value",   fmt(calcROI(funds, 100.0, total)))
+
+# ---- Reactivity ----
+
+let products: seq[JsObject] = [gold, bitcoin, sp500]
+
+def onChangeAttrs(cell: JsObject, attrs: JsObject, opts: JsObject):
+    if not opts["calc"].to(bool):
+        return
+    var idx: int = -1
+    for i in 0..len(products)-1:
+        if products[i]["id"] == cell["id"]:
+            idx = i
+    if idx >= 0:
+        var diff: float = opts["previousValue"].to(float) - opts["propertyValue"].to(float)
+        for i in 0..len(products)-1:
+            if i != idx:
+                let p:   JsObject = products[i]
+                let pct: float    = p.attr("percentage/props/value").to(float) + diff
+                p.attr("percentage/props/value", max(pct, 0.0).toJs)
+                if pct < 0.0:
+                    diff = pct
+                else:
+                    diff = 0.0
+    calculate()
+
+graph.on("change:attrs", onChangeAttrs)
+
+# ---- Fit + resize ----
+
+def fit():
+    paper.transformToFitContent({
+        "useModelGeometry": true, "padding": 10,
+        "maxScale": 1, "verticalAlign": "middle", "horizontalAlign": "middle"
+    })
+
+calculate()
+fit()
+window.addEventListener("resize", fit)

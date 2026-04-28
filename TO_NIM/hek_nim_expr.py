@@ -22,6 +22,10 @@ sys.path.insert(0, os.path.join(_dir, "..", "ADASCRIPT_GRAMMAR"))
 
 from hek_parsec import method, ParserState
 from py3expr import *
+
+# Set to True by py2nim before translating a file compiled with `nim js`.
+# Guards JS-only code-generation paths so the native backend is unaffected.
+JS_BACKEND = False
 from hek_nim_declarations import _is_nim_ordinal  # noqa: F403 — need all parser rule names
 from py3expr import (
     PREC_WALRUS, PREC_CONDITIONAL, PREC_OR, PREC_AND, PREC_NOT,
@@ -779,10 +783,12 @@ def to_nim(self, prec=None):
 
 @method(dict_display)
 def to_nim(self, prec=None):
-    """dict_display: '{' (dictcomp | dictmaker) '}' -> Nim: '{k: v}.toTable'"""
+    """dict_display: '{' (dictcomp | dictmaker) '}' -> JS: js{k: v}; native: '{k: v}.toTable'"""
     inner_node = self.nodes[1]
     if type(inner_node).__name__ == "dictcomp":
         return inner_node.to_nim()
+    if JS_BACKEND:
+        return "js{" + inner_node.to_nim() + "}"
     ParserState.nim_imports.add("tables")
     return "{" + inner_node.to_nim() + "}.toTable"
 
@@ -987,8 +993,10 @@ def _translate_method(obj_name, method_name):
                             ParserState.nim_imports.add("strutils")
                         return nim_method
                     break
-        # For PyObject / pyImport module vars, don't apply universal mappings
+        # For PyObject / pyImport module vars, and JsObject, don't apply universal mappings
         if type_str.startswith("_py_module:") or type_str.startswith("_nim_module:"):
+            return method_name
+        if type_str in ("JsObject", "JsAssoc") or type_str.startswith("JsAssoc["):
             return method_name
     # Fall back to universal mappings.
     # .get() on an Option[T] variable → Nim get() (unwrap); otherwise getOrDefault.
@@ -1052,8 +1060,14 @@ def _emit_tick_attr(base, field, attr):
     if attr == "Prev":
         return expr + ".pred"
     if attr in ("First", "Low"):
+        _info = getattr(ParserState, 'tick_types', {}).get(expr)
+        if _info and _info.get('is_float_range'):
+            return str(_info["First"])
         return expr + ".low"
     if attr in ("Last", "High"):
+        _info = getattr(ParserState, 'tick_types', {}).get(expr)
+        if _info and _info.get('is_float_range'):
+            return str(_info["Last"])
         return expr + ".high"
     if attr == "Range":
         info = getattr(ParserState, 'tick_types', {}).get(expr)
@@ -2075,9 +2089,60 @@ def to_nim(self, prec=None):
     return result
 
 
+@method(jsnew_expr)
+def to_nim(self, prec=None):
+    """jsnew_expr: 'jsnew' Cls(args) -> (new Cls(args)) via importjs helper (JS backend only)
+
+    Splits Cls(args) into (cls_expr, args_expr) and emits:
+      proc _jsConstruct(cls: JsObject, arg: JsObject): JsObject {.importjs: "(new (#)(#))".}
+      _jsConstruct(cls_expr, args_expr)
+
+    The helper proc is emitted once via nim_pragmas.
+    """
+    # Register the helper proc (emitted once at module top via nim_top_decls)
+    _HELPER = 'proc jsConstruct(cls: JsObject, arg: JsObject): JsObject {.importjs: "(new (#)(#))", discardable.}'
+    if not hasattr(ParserState, '_jsnew_helper_added'):
+        if not hasattr(ParserState, 'nim_top_decls'):
+            ParserState.nim_top_decls = []
+        ParserState.nim_top_decls.append(_HELPER)
+        ParserState._jsnew_helper_added = True
+    # power -> primary -> atom + Several_Times(trailers...)
+    # Split off the last call_trailer to get (cls_expr, args_expr)
+    power_node = self.nodes[0]
+    # Unwrap power -> primary
+    prim = power_node.nodes[0] if (hasattr(power_node, 'nodes') and power_node.nodes) else power_node
+    if type(prim).__name__ in ('await_primary', 'await_expr'):
+        prim = prim.nodes[0] if prim.nodes else prim
+    if type(prim).__name__ == 'primary' and len(prim.nodes) >= 2:
+        atom_node = prim.nodes[0]
+        trailers_node = prim.nodes[1]  # Several_Times of trailers
+        if hasattr(trailers_node, 'nodes') and trailers_node.nodes:
+            last = trailers_node.nodes[-1]
+            # last is a trailer or call_trailer directly in the Several_Times
+            tname = type(last).__name__
+            call_t = None
+            if tname == 'call_trailer':
+                call_t = last
+            elif tname == 'trailer' and last.nodes and type(last.nodes[0]).__name__ == 'call_trailer':
+                call_t = last.nodes[0]
+            if call_t is not None:
+                # Build cls expr: atom + all trailers except the last call
+                cls_parts = [atom_node.to_nim()]
+                for t in trailers_node.nodes[:-1]:
+                    tnode = t.nodes[0] if (type(t).__name__ == 'trailer' and t.nodes) else t
+                    cls_parts.append(tnode.to_nim())
+                cls_expr = "".join(cls_parts)
+                args_expr = call_t.to_nim()  # "(arg1, arg2, ...)"
+                # Strip outer parens to get the bare arg — avoids js(js{...}) double-wrap
+                inner_args = args_expr[1:-1] if args_expr.startswith("(") and args_expr.endswith(")") else args_expr
+                return f"jsConstruct({cls_expr}, {inner_args})"
+    # Fallback
+    return f"jsNew({power_node.to_nim()})"
+
+
 @method(factor)
 def to_nim(self, prec=None):
-    """factor: unary_plus | unary_minus | unary_tilde | power"""
+    """factor: unary_plus | unary_minus | unary_tilde | jsnew_expr | power"""
     return self.nodes[0].to_nim(prec)
 
 
@@ -2752,16 +2817,39 @@ def to_nim(self, prec=None):
 
 
 # --- dict/set makers ---
+
+_EXPR_WRAPPERS = frozenset({"disjunction", "conjunction", "inversion", "comparison",
+                            "bor", "bxor", "band", "shift_expr", "sum", "term",
+                            "factor", "power", "primary", "atom"})
+
+def _is_str_literal(node):
+    """Return True if node is a bare string literal (possibly wrapped in expression nodes)."""
+    nm = type(node).__name__
+    if nm in ("STRING", "str_concat"):
+        return True
+    if nm in _EXPR_WRAPPERS and hasattr(node, "nodes") and len(node.nodes) == 1:
+        return _is_str_literal(node.nodes[0])
+    return False
+
+
+def _js_val(node):
+    """In JS backend, wrap string literal values with cstring() so they become JS strings."""
+    nim = node.to_nim()
+    if JS_BACKEND and _is_str_literal(node):
+        return f"cstring({nim})"
+    return nim
+
+
 @method(kvpair)
 def to_nim(self, prec=None):
     """kvpair: expression ':' expression -> Nim: 'key: value' pair"""
-    return f"{self.nodes[0].to_nim()}: {self.nodes[2].to_nim()}"
+    return f"{self.nodes[0].to_nim()}: {_js_val(self.nodes[2])}"
 
 
 @method(dictmaker)
 def to_nim(self, prec=None):
     """dictmaker: kvpair (',' kvpair)* ','? -> Nim: key-value pairs for toTable"""
-    first_pair = f"{self.nodes[0].to_nim()}: {self.nodes[2].to_nim()}"
+    first_pair = f"{self.nodes[0].to_nim()}: {_js_val(self.nodes[2])}"
     parts = [first_pair]
     for node in self.nodes[3:]:
         if not hasattr(node, "nodes") or not node.nodes:
