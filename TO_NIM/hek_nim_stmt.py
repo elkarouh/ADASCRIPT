@@ -113,6 +113,12 @@ def to_nim(self):
     return "."
 
 
+@method(V_SLASH)
+def to_nim(self):
+    """V_SLASH: visible '/' token in module paths (e.g. nimport js/jsffi) -> '/'"""
+    return "/"
+
+
 def _float_range_assert(varname, type_name):
     """Return a Nim assert statement for a float range type variable.
 
@@ -1064,15 +1070,17 @@ def to_nim(self):
 # --- import ---
 @method(dotted_name)
 def to_nim(self):
-    """dotted_name: IDENTIFIER ('.' IDENTIFIER)* -> Nim: joined with '.'"""
-    parts = [self.nodes[0].to_nim()]
+    """dotted_name: IDENTIFIER ('.' | '/' IDENTIFIER)* -> Nim: joined with '.' or '/'"""
+    result = self.nodes[0].to_nim()
     for node in self.nodes[1:]:
         if not hasattr(node, "nodes") or not node.nodes:
             continue
         for seq in node.nodes:
             if hasattr(seq, "nodes") and len(seq.nodes) >= 2:
-                parts.append(seq.nodes[1].to_nim())
-    return ".".join(parts)
+                sep = seq.nodes[0].to_nim() if hasattr(seq.nodes[0], "to_nim") else str(seq.nodes[0])
+                ident = seq.nodes[1].to_nim()
+                result += sep + ident
+    return result
 
 
 @method(import_as)

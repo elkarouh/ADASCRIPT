@@ -101,6 +101,9 @@ V_COLON = vop(":")
 # Visible '.' for dotted names (DOT from hek_parsec is ignored)
 V_DOT = vop(".")
 
+# Visible '/' for slash-separated module paths (e.g. nimport js/jsffi)
+V_SLASH = vop("/")
+
 ###############################################################################
 # Forward declarations
 ###############################################################################
@@ -209,7 +212,7 @@ global_stmt = ikw("global") + IDENTIFIER + (COMMA + IDENTIFIER)[:]
 nonlocal_stmt = ikw("nonlocal") + IDENTIFIER + (COMMA + IDENTIFIER)[:]
 
 # --- import ---
-dotted_name = IDENTIFIER + (V_DOT + IDENTIFIER)[:]
+dotted_name = IDENTIFIER + ((V_DOT | V_SLASH) + IDENTIFIER)[:]
 import_as = dotted_name + (ikw("as") + IDENTIFIER)[:]
 import_stmt = ikw("import") + import_as + (COMMA + import_as)[:]
 
