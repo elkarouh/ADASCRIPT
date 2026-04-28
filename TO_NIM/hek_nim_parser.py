@@ -2513,7 +2513,7 @@ def to_nim(self, indent=0):
     field_names = []
     field_types_list = []
     for fline in fields:
-        fm = _re.match(r'\s*(\w+)\s*:\s*(.+)', fline)
+        fm = _re.match(r'\s*(\w+)\*?\s*:\s*(.+)', fline)
         if fm:
             field_names.append(fm.group(1))
             field_types_list.append(fm.group(2).strip())

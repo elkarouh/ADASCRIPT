@@ -56,24 +56,6 @@ let paper: JsObject = jsnew dia["Paper"]({
 document.getElementById("paper-container").appendChild(paper["el"])
 
 # ==============================================================================
-# Colours
-# ==============================================================================
-
-const MAIN: cstring = "#D4D9D7"
-const SEC:  cstring = "#EAECEA"
-const BTC:  cstring = "#9C9EC8"
-const GOLD: cstring = "#F7E3AE"
-const SP:   cstring = "#FFCCD6"
-
-def productColor(name: str) -> cstring:
-    if name == "gold":
-        return GOLD
-    elif name == "bitcoin":
-        return BTC
-    else:
-        return SP
-
-# ==============================================================================
 # Markup templates
 # ==============================================================================
 
@@ -163,10 +145,10 @@ const MARKUP_OVERALL: cstring = (
 # ==============================================================================
 
 class InvestmentNode(JsElem):
-    def __init__(self, x: int, y: int):
+    def __init__(self, x: int, y: int, color: cstring):
         super().__init__("Investment",
             {"x": x, "y": y}, {"width": 140, "height": 225}, 1,
-            {"body": bodyAttr(MAIN), "foreignObject": foAttr(),
+            {"body": bodyAttr(color), "foreignObject": foAttr(),
              "funds": {"props": {"value": 100}, "tabindex": 1},
              "year":  {"props": {"value": 2018}, "tabindex": 2}},
             util.svg([MARKUP_INVESTMENT]))
@@ -175,7 +157,7 @@ class PerfNode(JsElem):
     def __init__(self, spec: NodeSpec, x: int, y: int, ti: int):
         super().__init__("ProductPerformance",
             {"x": x, "y": y}, {"width": 200, "height": 100}, 0,
-            {"body": bodyAttr(MAIN), "foreignObject": foAttr(),
+            {"body": bodyAttr(spec.visual_params["color"].to(cstring)), "foreignObject": foAttr(),
              "label": {"html": spec.label.toJs},
              "value": {"tabindex": ti}, "roi": {"tabindex": ti + 1}},
             util.svg([MARKUP_PERF]))
@@ -189,17 +171,17 @@ class Product(JsElem):
         self.perf = perfNode
         super().__init__("Product",
             {"x": x, "y": y}, {"width": 140, "height": 120}, z,
-            {"body": bodyAttr(productColor(spec.name)), "foreignObject": foAttr(),
+            {"body": bodyAttr(spec.visual_params["color"].to(cstring)), "foreignObject": foAttr(),
              "label": {"html": spec.label.toJs},
              "percentage": {"props": {"value": 25}, "tabindex": ti}},
             util.svg([MARKUP_PRODUCT]))
         self.elem.set("name", spec.name.toJs)
 
 class OverallPerf(JsElem):
-    def __init__(self, x: int, y: int):
+    def __init__(self, x: int, y: int, color: cstring):
         super().__init__("OverallPerformance",
             {"x": x, "y": y}, jsUndefined, -1,
-            {"body": bodyAttr(SEC), "foreignObject": foAttr(),
+            {"body": bodyAttr(color), "foreignObject": foAttr(),
              "value": {"tabindex": 12}, "roi": {"tabindex": 13}},
             util.svg([MARKUP_OVERALL]))
 
@@ -222,24 +204,73 @@ class LinkElem(JsElem):
 # Build graph from model specs
 # ==============================================================================
 
+# Set visual params on each node
+NODE_INVESTMENT.set_visual_params({"color": "#D4D9D7"})
+NODE_GOLD.set_visual_params(      {"color": "#F7E3AE"})
+NODE_BITCOIN.set_visual_params(   {"color": "#9C9EC8"})
+NODE_SP500.set_visual_params(     {"color": "#FFCCD6"})
+NODE_GOLD_PERF.set_visual_params( {"color": "#D4D9D7"})
+NODE_BTC_PERF.set_visual_params(  {"color": "#D4D9D7"})
+NODE_SP500_PERF.set_visual_params({"color": "#D4D9D7"})
+NODE_OVERALL.set_visual_params(   {"color": "#EAECEA"})
+
+# Build color map from node_id -> color for link param setup
+var colorMap: {str}str = {:}
+for n in [NODE_INVESTMENT, NODE_GOLD, NODE_BITCOIN, NODE_SP500,
+          NODE_GOLD_PERF, NODE_BTC_PERF, NODE_SP500_PERF, NODE_OVERALL]:
+    colorMap[n.node_id()] = str(n.visual_params["color"].to(cstring))
+
+# Set visual params on each link (color and anchors are rendering concerns)
+for i in 0..len(LINKS)-1:
+    let c: str = colorMap[LINKS[i].src.node_id()]
+    LINKS[i].set_visual_params({"color": c, "srcAnchor": "right", "tgtAnchor": "left"})
+LINKS[0].set_visual_params({"color": colorMap[NODE_INVESTMENT.node_id()], "srcAnchor": "top",    "tgtAnchor": "left"})
+LINKS[1].set_visual_params({"color": colorMap[NODE_INVESTMENT.node_id()], "srcAnchor": "right",  "tgtAnchor": "left"})
+LINKS[2].set_visual_params({"color": colorMap[NODE_INVESTMENT.node_id()], "srcAnchor": "bottom", "tgtAnchor": "left"})
+
 # Instantiate nodes — positions and tab indices are layout/UI concerns, kept here
-var investment: InvestmentNode = InvestmentNode(100, 280)
-var goldPerf:   PerfNode       = PerfNode(NODES[4], 600, 200,  6)
-var btcPerf:    PerfNode       = PerfNode(NODES[5], 600, 320,  8)
-var sp500Perf:  PerfNode       = PerfNode(NODES[6], 600, 440, 10)
-var gold:       Product        = Product(NODES[1], 300, 100, 3, 3, goldPerf)
-var bitcoin:    Product        = Product(NODES[2], 300, 330, 5, 4, btcPerf)
-var sp500:      Product        = Product(NODES[3], 300, 560, 7, 5, sp500Perf)
-var performance: OverallPerf   = OverallPerf(500, 300)
+var investment: InvestmentNode = InvestmentNode(100, 280, NODE_INVESTMENT.visual_params["color"].to(cstring))
+var goldPerf:   PerfNode       = PerfNode(NODE_GOLD_PERF,  600, 200,  6)
+var btcPerf:    PerfNode       = PerfNode(NODE_BTC_PERF,   600, 320,  8)
+var sp500Perf:  PerfNode       = PerfNode(NODE_SP500_PERF, 600, 440, 10)
+var gold:       Product        = Product(NODE_GOLD,    300, 100, 3, 3, goldPerf)
+var bitcoin:    Product        = Product(NODE_BITCOIN, 300, 330, 5, 4, btcPerf)
+var sp500:      Product        = Product(NODE_SP500,   300, 560, 7, 5, sp500Perf)
+var performance: OverallPerf   = OverallPerf(500, 300, NODE_OVERALL.visual_params["color"].to(cstring))
 
-var link1: LinkElem = LinkElem(investment, {"name": "top",    "args": {"dy":  1}}, gold,    {"name": "left", "args": {"dx": -5}}, MAIN)
-var link2: LinkElem = LinkElem(investment, {"name": "right",  "args": {"dx": -1}}, bitcoin, {"name": "left", "args": {"dx": -5}}, MAIN)
-var link3: LinkElem = LinkElem(investment, {"name": "bottom", "args": {"dy": -1}}, sp500,   {"name": "left", "args": {"dx": -5}}, MAIN)
-var link4: LinkElem = LinkElem(gold,    {"name": "right", "args": {"dx": -1}}, goldPerf,  {"name": "left", "args": {"dx": -5}}, GOLD)
-var link5: LinkElem = LinkElem(bitcoin, {"name": "right", "args": {"dx": -1}}, btcPerf,   {"name": "left", "args": {"dx": -5}}, BTC)
-var link6: LinkElem = LinkElem(sp500,   {"name": "right", "args": {"dx": -1}}, sp500Perf, {"name": "left", "args": {"dx": -5}}, SP)
+# Store each JsElem in its node's visual_params
+NODE_INVESTMENT.visual_params["elem"] = investment.toJs
+NODE_GOLD.visual_params["elem"]       = gold.toJs
+NODE_BITCOIN.visual_params["elem"]    = bitcoin.toJs
+NODE_SP500.visual_params["elem"]      = sp500.toJs
+NODE_GOLD_PERF.visual_params["elem"]  = goldPerf.toJs
+NODE_BTC_PERF.visual_params["elem"]   = btcPerf.toJs
+NODE_SP500_PERF.visual_params["elem"] = sp500Perf.toJs
+NODE_OVERALL.visual_params["elem"]    = performance.toJs
 
-resetCells(graph, [investment, gold, bitcoin, sp500, performance, goldPerf, btcPerf, sp500Perf, link1, link2, link3, link4, link5, link6])
+def anchorArgs(anchor: str) -> JsObject:
+    case anchor:
+        when "left":
+            return {"dx": -5}
+        when "top":
+            return {"dy": 1}
+        when "bottom":
+            return {"dy": -1}
+        when others:
+            return {"dx": -1}
+
+var allElems: []JsElem = [investment, gold, bitcoin, sp500, performance, goldPerf, btcPerf, sp500Perf]
+for lnk in LINKS:
+    let src: JsElem    = lnk.src.visual_params["elem"].to(JsElem)
+    let tgt: JsElem    = lnk.tgt.visual_params["elem"].to(JsElem)
+    let srcA: str      = str(lnk.visual_params["srcAnchor"].to(cstring))
+    let tgtA: str      = str(lnk.visual_params["tgtAnchor"].to(cstring))
+    let sa: JsObject   = {"name": srcA.toJs, "args": anchorArgs(srcA)}
+    let ta: JsObject   = {"name": tgtA.toJs, "args": anchorArgs(tgtA)}
+    let color: cstring = lnk.visual_params["color"].to(cstring)
+    allElems.add(LinkElem(src, sa, tgt, ta, color))
+
+resetCells(graph, allElems)
 
 performance.embed(goldPerf)
 performance.embed(btcPerf)
