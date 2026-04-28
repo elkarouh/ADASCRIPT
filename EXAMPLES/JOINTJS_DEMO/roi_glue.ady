@@ -219,44 +219,44 @@ class JsElem:
 # ==============================================================================
 
 class InvestmentNode(JsElem):
-    def __init__(self, spec: NodeSpec):
+    def __init__(self, x: int, y: int):
         super().__init__("Investment",
-            {"x": spec.x, "y": spec.y}, {"width": 140, "height": 225}, spec.z,
+            {"x": x, "y": y}, {"width": 140, "height": 225}, 1,
             {"body": bodyAttr(MAIN), "foreignObject": foAttr(),
-             "funds": {"props": {"value": 100}, "tabindex": spec.tabIdx},
-             "year":  {"props": {"value": 2018}, "tabindex": spec.tabIdx + 1}},
+             "funds": {"props": {"value": 100}, "tabindex": 1},
+             "year":  {"props": {"value": 2018}, "tabindex": 2}},
             makeMarkup(mkInvestment))
 
 class PerfNode(JsElem):
-    def __init__(self, spec: NodeSpec):
+    def __init__(self, spec: NodeSpec, x: int, y: int, ti: int):
         super().__init__("ProductPerformance",
-            {"x": spec.x, "y": spec.y}, {"width": 200, "height": 100}, spec.z,
+            {"x": x, "y": y}, {"width": 200, "height": 100}, 0,
             {"body": bodyAttr(MAIN), "foreignObject": foAttr(),
              "label": {"html": spec.label.toJs},
-             "value": {"tabindex": spec.tabIdx}, "roi": {"tabindex": spec.tabIdx + 1}},
+             "value": {"tabindex": ti}, "roi": {"tabindex": ti + 1}},
             makeMarkup(mkPerf))
 
 class Product(JsElem):
     var name: str
     var perf: PerfNode
 
-    def __init__(self, spec: NodeSpec, perfNode: PerfNode):
+    def __init__(self, spec: NodeSpec, x: int, y: int, z: int, ti: int, perfNode: PerfNode):
         self.name = spec.name
         self.perf = perfNode
         super().__init__("Product",
-            {"x": spec.x, "y": spec.y}, {"width": 140, "height": 120}, spec.z,
+            {"x": x, "y": y}, {"width": 140, "height": 120}, z,
             {"body": bodyAttr(productColor(spec.name)), "foreignObject": foAttr(),
              "label": {"html": spec.label.toJs},
-             "percentage": {"props": {"value": 25}, "tabindex": spec.tabIdx}},
+             "percentage": {"props": {"value": 25}, "tabindex": ti}},
             makeMarkup(mkProduct))
         self.elem.set("name", spec.name.toJs)
 
 class OverallPerf(JsElem):
-    def __init__(self, spec: NodeSpec):
+    def __init__(self, x: int, y: int):
         super().__init__("OverallPerformance",
-            {"x": spec.x, "y": spec.y}, jsUndefined, spec.z,
+            {"x": x, "y": y}, jsUndefined, -1,
             {"body": bodyAttr(SEC), "foreignObject": foAttr(),
-             "value": {"tabindex": spec.tabIdx}, "roi": {"tabindex": spec.tabIdx + 1}},
+             "value": {"tabindex": 12}, "roi": {"tabindex": 13}},
             makeMarkup(mkOverall))
 
 class LinkElem(JsElem):
@@ -284,15 +284,15 @@ def resetCells(g: JsObject, elems: seq[JsElem]):
         jsElems.add(e.elem)
     g.resetCells(jsElems.toJs)
 
-# Instantiate nodes from specs
-var investment: InvestmentNode = InvestmentNode(NODES[0])
-var goldPerf:   PerfNode       = PerfNode(NODES[4])
-var btcPerf:    PerfNode       = PerfNode(NODES[5])
-var sp500Perf:  PerfNode       = PerfNode(NODES[6])
-var gold:       Product        = Product(NODES[1], goldPerf)
-var bitcoin:    Product        = Product(NODES[2], btcPerf)
-var sp500:      Product        = Product(NODES[3], sp500Perf)
-var performance: OverallPerf   = OverallPerf(NODES[7])
+# Instantiate nodes — positions and tab indices are layout/UI concerns, kept here
+var investment: InvestmentNode = InvestmentNode(100, 280)
+var goldPerf:   PerfNode       = PerfNode(NODES[4], 600, 200,  6)
+var btcPerf:    PerfNode       = PerfNode(NODES[5], 600, 320,  8)
+var sp500Perf:  PerfNode       = PerfNode(NODES[6], 600, 440, 10)
+var gold:       Product        = Product(NODES[1], 300, 100, 3, 3, goldPerf)
+var bitcoin:    Product        = Product(NODES[2], 300, 330, 5, 4, btcPerf)
+var sp500:      Product        = Product(NODES[3], 300, 560, 7, 5, sp500Perf)
+var performance: OverallPerf   = OverallPerf(500, 300)
 
 var link1: LinkElem = LinkElem(investment, {"name": "top",    "args": {"dy":  1}}, gold,    {"name": "left", "args": {"dx": -5}}, MAIN)
 var link2: LinkElem = LinkElem(investment, {"name": "right",  "args": {"dx": -1}}, bitcoin, {"name": "left", "args": {"dx": -5}}, MAIN)
