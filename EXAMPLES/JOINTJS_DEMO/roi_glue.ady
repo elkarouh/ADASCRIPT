@@ -158,19 +158,6 @@ const MARKUP_OVERALL: cstring = (
       "</div>" &
     "</foreignObject>")
 
-type MarkupKind is enum mkInvestment, mkProduct, mkPerf, mkOverall
-
-def makeMarkup(kind: MarkupKind) -> JsObject:
-    case kind:
-        when mkInvestment:
-            util.svg([MARKUP_INVESTMENT])
-        when mkProduct:
-            util.svg([MARKUP_PRODUCT])
-        when mkPerf:
-            util.svg([MARKUP_PERF])
-        when others:
-            util.svg([MARKUP_OVERALL])
-
 # ==============================================================================
 # Node classes
 # ==============================================================================
@@ -182,7 +169,7 @@ class InvestmentNode(JsElem):
             {"body": bodyAttr(MAIN), "foreignObject": foAttr(),
              "funds": {"props": {"value": 100}, "tabindex": 1},
              "year":  {"props": {"value": 2018}, "tabindex": 2}},
-            makeMarkup(mkInvestment))
+            util.svg([MARKUP_INVESTMENT]))
 
 class PerfNode(JsElem):
     def __init__(self, spec: NodeSpec, x: int, y: int, ti: int):
@@ -191,7 +178,7 @@ class PerfNode(JsElem):
             {"body": bodyAttr(MAIN), "foreignObject": foAttr(),
              "label": {"html": spec.label.toJs},
              "value": {"tabindex": ti}, "roi": {"tabindex": ti + 1}},
-            makeMarkup(mkPerf))
+            util.svg([MARKUP_PERF]))
 
 class Product(JsElem):
     var name: str
@@ -205,7 +192,7 @@ class Product(JsElem):
             {"body": bodyAttr(productColor(spec.name)), "foreignObject": foAttr(),
              "label": {"html": spec.label.toJs},
              "percentage": {"props": {"value": 25}, "tabindex": ti}},
-            makeMarkup(mkProduct))
+            util.svg([MARKUP_PRODUCT]))
         self.elem.set("name", spec.name.toJs)
 
 class OverallPerf(JsElem):
@@ -214,7 +201,7 @@ class OverallPerf(JsElem):
             {"x": x, "y": y}, jsUndefined, -1,
             {"body": bodyAttr(SEC), "foreignObject": foAttr(),
              "value": {"tabindex": 12}, "roi": {"tabindex": 13}},
-            makeMarkup(mkOverall))
+            util.svg([MARKUP_OVERALL]))
 
 class LinkElem(JsElem):
     def __init__(self, src: JsElem, sa: JsObject, tgt: JsElem,
