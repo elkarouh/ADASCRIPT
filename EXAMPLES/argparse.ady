@@ -36,8 +36,7 @@ def process_args(args: []str) -> Command_Line_Arguments_T:
         case get_kind(arg):
             when cmdArgument:
                 case state:
-                    when expecting_argument | expecting_option_or_argument:
-                        res.free_args.append(arg)
+                    when expecting_argument | expecting_option_or_argument: res.free_args.append(arg)
                     when expecting_option:
                         print "Expected option or nothing"
                         quit(1)
@@ -57,20 +56,17 @@ def process_args(args: []str) -> Command_Line_Arguments_T:
                     print "I didn't expect an option here"
                     usage(1)
                 case arg:
-                    when "--help" | "-h":
-                        usage(0)
+                    when "--help" | "-h": usage(0)
                     when "--verbose" | "-v":
                         res.verbose = True
                         state=expecting_option_or_argument
                     when "-n" | "-o" | "--count" | "--output": # these options expect an argument
                         current_option=arg
-                        state = processing_option                        
-                    when others: 
+                        state = processing_option
+                    when others:
                         print "Unknown option: -", arg
-                        quit(1)                                
-            when cmdEnd:
-                state = expecting_argument
-                break
+                        quit(1)
+            when cmdEnd: state = expecting_argument; break
         i += 1
     if len(res.free_args) > 0:
         res.inputFile = res.free_args[0]

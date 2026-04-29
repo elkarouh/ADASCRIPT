@@ -46,10 +46,8 @@ def process(raw: str):
     counts[sev] += 1
 
     case sev:
-        when ERROR:
-            print f"!! {NR:>3}: {line}"
-        when WARN:
-            print f" ! {NR:>3}: {line}"
+        when ERROR: print f"!! {NR:>3}: {line}"
+        when WARN:  print f" ! {NR:>3}: {line}"
         when INFO:
             if NF >= 1:
                 let first: str = Fields[0]
