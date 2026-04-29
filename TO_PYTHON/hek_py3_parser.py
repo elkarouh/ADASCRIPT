@@ -98,30 +98,42 @@ def to_py(self, indent=0):
         return _ind(indent) + inner.to_py()
 
 
+# Suite (block | stmt_line) helper: block.to_py accepts indent, stmt_line.to_py
+# does not — fall back to indent-prefixed plain emission.
+def _suite_to_py(node, indent):
+    try:
+        return node.to_py(indent)
+    except TypeError:
+        raw = node.to_py()
+        if "\n" in raw:
+            return "\n".join(_ind(indent) + ln for ln in raw.split("\n"))
+        return _ind(indent) + raw
+
+
 # --- if / elif / else ---
 @method(elif_clause)
 def to_py(self, indent=0):
-    """elif_clause: 'elif' named_expression ':' block"""
+    """elif_clause: 'elif' named_expression ':' suite"""
     cond = self.nodes[0].to_py()
     hc = _block_inline_header_comment(self.nodes[1])
-    body = self.nodes[1].to_py(indent + 1)
+    body = _suite_to_py(self.nodes[1], indent + 1)
     return f"{_ind(indent)}elif {cond}:{hc}\n{body}"
 
 
 @method(else_clause)
 def to_py(self, indent=0):
-    """else_clause: 'else' ':' block"""
+    """else_clause: 'else' ':' suite"""
     hc = _block_inline_header_comment(self.nodes[0])
-    body = self.nodes[0].to_py(indent + 1)
+    body = _suite_to_py(self.nodes[0], indent + 1)
     return f"{_ind(indent)}else:{hc}\n{body}"
 
 
 @method(if_stmt)
 def to_py(self, indent=0):
-    """if_stmt: 'if' named_expression ':' block ('elif' ...)* ('else' ...)?"""
+    """if_stmt: 'if' named_expression ':' suite ('elif' ...)* ('else' ...)?"""
     cond = self.nodes[0].to_py()
     hc = _block_inline_header_comment(self.nodes[1])
-    body = self.nodes[1].to_py(indent + 1)
+    body = _suite_to_py(self.nodes[1], indent + 1)
     result = f"{_ind(indent)}if {cond}:{hc}\n{body}"
     # Process remaining nodes (elif/else clauses from Several_Times)
     for node in self.nodes[2:]:
@@ -143,10 +155,10 @@ def to_py(self, indent=0):
 # --- while ---
 @method(while_stmt)
 def to_py(self, indent=0):
-    """while_stmt: 'while' named_expression ':' block ('else' ':' block)?"""
+    """while_stmt: 'while' named_expression ':' suite ('else' ':' block)?"""
     cond = self.nodes[0].to_py()
     hc = _block_inline_header_comment(self.nodes[1])
-    body = self.nodes[1].to_py(indent + 1)
+    body = _suite_to_py(self.nodes[1], indent + 1)
     result = f"{_ind(indent)}while {cond}:{hc}\n{body}"
     for node in self.nodes[2:]:
         if not hasattr(node, "nodes") or not node.nodes:
@@ -635,12 +647,7 @@ def to_py(self, indent=0):
         elif hasattr(node, "to_py"):
             block_node = node
     hc = _block_inline_header_comment(block_node) if block_node else ""
-    body = ""
-    if block_node:
-        try:
-            body = block_node.to_py(indent + 1)
-        except TypeError:
-            body = _ind(indent + 1) + block_node.to_py()
+    body = _suite_to_py(block_node, indent + 1) if block_node else ""
     return f"{_ind(indent)}case {pat}{guard}:{hc}\n{body}"
 
 
@@ -667,13 +674,14 @@ def to_py(self, indent=0):
 
 
 def _case_from_seq(seq, indent):
-    """Reconstruct a case clause from a flattened Sequence_Parser [pattern, guard?, block]."""
+    """Reconstruct a case clause from a flattened Sequence_Parser [pattern, guard?, body]."""
     pat = ""
     guard = ""
     block_node = None
+    pat_seen = False
     for child in seq.nodes:
         tname = type(child).__name__
-        if tname == "block":
+        if tname in ("block", "stmt_line"):
             block_node = child
         elif tname == "Several_Times":
             for inner in child.nodes:
@@ -681,10 +689,11 @@ def _case_from_seq(seq, indent):
                     guard = inner.to_py()
         elif tname == "case_guard":
             guard = child.to_py()
-        else:
+        elif not pat_seen:
             pat = child.to_py()
+            pat_seen = True
     hc = _block_inline_header_comment(block_node) if block_node else ""
-    body = block_node.to_py(indent + 1) if block_node else ""
+    body = _suite_to_py(block_node, indent + 1) if block_node else ""
     return f"{_ind(indent)}case {pat}{guard}:{hc}\n{body}"
 
 

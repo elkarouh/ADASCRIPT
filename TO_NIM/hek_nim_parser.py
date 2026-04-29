@@ -1242,9 +1242,9 @@ def _pat_node_of(when_node):
 
 
 def _block_node_of(when_node):
-    """Extract the block node from a when_clause node."""
+    """Extract the block (or stmt_line) body node from a when_clause node."""
     for n in when_node.nodes[1:]:
-        if type(n).__name__ == "block":
+        if type(n).__name__ in ("block", "stmt_line"):
             return n
         if type(n).__name__ == "Several_Times":
             # guard is here; skip
@@ -1474,7 +1474,7 @@ def _extract_branches(case_node):
                     guard_node = None
                     for child in seq.nodes:
                         cname = type(child).__name__
-                        if cname == "block":
+                        if cname in ("block", "stmt_line"):
                             blk_node = child
                         elif cname == "case_guard":
                             guard_node = child
@@ -1554,10 +1554,11 @@ def to_nim(self, indent=0):
                         blk_node = None
                         for child in seq.nodes:
                             cname = type(child).__name__
-                            if cname == "block":
+                            if cname in ("block", "stmt_line"):
                                 blk_node = child
                             elif cname not in ("Filter", "Fmap", "Several_Times") and hasattr(child, "to_nim"):
-                                pat_node = child
+                                if pat_node is None:
+                                    pat_node = child
                         if pat_node is not None:
                             branches.append((pat_node.to_nim(), blk_node))
         result = ""
@@ -1636,9 +1637,10 @@ def _case_from_seq_nim(seq, indent):
     pat = ""
     guard = ""
     block_node = None
+    pat_seen = False
     for child in seq.nodes:
         tname = type(child).__name__
-        if tname == "block":
+        if tname in ("block", "stmt_line"):
             block_node = child
         elif tname == "Several_Times":
             for inner in child.nodes:
@@ -1646,8 +1648,9 @@ def _case_from_seq_nim(seq, indent):
                     guard = inner.to_nim()
         elif tname == "case_guard":
             guard = child.to_nim()
-        else:
+        elif not pat_seen:
             pat = child.to_nim()
+            pat_seen = True
     hc = _block_inline_header_comment(block_node) if block_node else ""
     body = block_node.to_nim(indent + 1) if block_node else ""
     prefix = "else" if pat == "others" else f"of {pat}"
