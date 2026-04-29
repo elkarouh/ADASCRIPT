@@ -142,20 +142,24 @@ block = NEWLINE + NL[:] + INDENT + NL[:] + (statement + NL[:])[1:] + DEDENT
 # statement: compound or simple (stmt_line includes NEWLINE)
 statement = compound_stmt | stmt_line
 
+# Body of if/elif/else/while/when_clause: either an indented block, or
+# a single simple statement on the same line as the colon (Python-style).
+suite = block | stmt_line
+
 # --- if / elif / else ---
-elif_clause = ikw("elif") + named_expression + COLON + block
-else_clause = ikw("else") + COLON + block
+elif_clause = ikw("elif") + named_expression + COLON + suite
+else_clause = ikw("else") + COLON + suite
 if_stmt = (
     ikw("if")
     + named_expression
     + COLON
-    + block
+    + suite
     + (NL[:] + elif_clause)[:]
     + (NL[:] + else_clause)[:]
 )
 
 # --- while ---
-while_stmt = ikw("while") + named_expression + COLON + block + (NL[:] + else_clause)[:]
+while_stmt = ikw("while") + named_expression + COLON + suite + (NL[:] + else_clause)[:]
 
 # --- for ---
 # For targets: identifiers (possibly tuple-unpacked), NOT full expressions
@@ -267,7 +271,7 @@ pattern_as = base_pattern + ikw("as") + IDENTIFIER
 pattern = pattern_or | pattern_as | base_pattern
 
 case_guard = ikw("if") + named_expression
-when_clause = ikw("when") + pattern + case_guard[:] + COLON + block
+when_clause = ikw("when") + pattern + case_guard[:] + COLON + suite
 
 case_stmt = (
     ikw("case")

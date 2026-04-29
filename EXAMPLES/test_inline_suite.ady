@@ -1,0 +1,31 @@
+#!/usr/bin/env py2nim
+"""
+test_inline_suite — exercise inline form of if/elif/else/while.
+"""
+
+# inline if / elif / else
+let x: int = 7
+if x < 5: print("x<5")
+elif x < 10: print("5<=x<10")
+else: print("x>=10")
+
+# inline while
+var n: int = 3
+while n > 0: n -= 1
+print("n=", n)
+
+# block forms still work
+if x > 0:
+    print("positive")
+else:
+    print("zero or negative")
+
+# case with inline when clauses
+let y: int = 2
+case y:
+    when 1: print("one")
+    when 2: print("two")
+    when 3: print("three")
+    when others: print("other")
+
+print("done")
