@@ -1,0 +1,24 @@
+#!/usr/bin/env py2nim
+"""
+test_shell_block — exercise the shell: block form with expect/send.
+"""
+
+print("=== inline form ===")
+shell: echo from inline form
+
+print("=== pure block (commands joined with &&) ===")
+shell:
+    echo hello
+    echo world
+
+print("=== interactive block (expect/send) ===")
+print("(silent automation — successful expect/send means matches found)")
+shell:
+    bc -q
+    send("2 + 2\n")
+    expect("4")
+    send("10 * 5\n")
+    expect("50")
+    send("quit\n")
+
+print("done — all expects matched, bc was driven successfully")

@@ -1357,7 +1357,7 @@ def main(argv=None):
         # Install bundled .ady standard libraries into the cache dir so
         # `nimport <lib>` works from any directory without a local copy.
         for _lib_ady in os.listdir(_stdlib_dir):
-            if not _lib_ady.endswith(".ady"):
+            if not (_lib_ady.endswith(".ady") or _lib_ady.endswith(".nim")):
                 continue
             _lib_src = os.path.join(_stdlib_dir, _lib_ady)
             _lib_dst = os.path.join(cache_dir, _lib_ady)

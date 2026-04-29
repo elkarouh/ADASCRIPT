@@ -1305,17 +1305,119 @@ def _collect_identifiers_from_paren(node):
     return names
 
 
+def _flatten_block_lines(seq_node):
+    """Walk a shell_block Sequence_Parser and return a list of token-lists,
+    one per source line.  Returns None if this is not a block form.
+
+    The block AST shape is:
+      Sequence_Parser(
+        Filter(NEWLINE),
+        Fmap(NL*),
+        Several_Times(
+          Sequence_Parser(Several_Times(tok, tok, ...)),  # line 1
+          Sequence_Parser(Several_Times(tok, tok, ...)),  # line 2
+          ...
+        ),
+        Fmap(DEDENT))
+    """
+    if type(seq_node).__name__ != "Sequence_Parser":
+        return None
+    # First child should be a NEWLINE filter (token with empty string and type=NEWLINE).
+    if not seq_node.nodes:
+        return None
+    first = seq_node.nodes[0]
+    first_val = getattr(first, "node", None)
+    if not (hasattr(first_val, "string") and getattr(first_val, "type", -1) == _tknmod.NEWLINE):
+        return None
+    # Find the Several_Times that holds the lines
+    lines_st = None
+    for n in seq_node.nodes:
+        if type(n).__name__ == "Several_Times":
+            lines_st = n
+            break
+    if lines_st is None:
+        return []
+    out = []
+    for line_node in lines_st.nodes:
+        toks = []
+        # line_node is a Sequence_Parser wrapping Several_Times of tokens
+        def _gather(nd):
+            val = getattr(nd, "node", None)
+            if hasattr(val, "string") and not isinstance(val, str):
+                if getattr(val, "type", -1) not in (_tknmod.NEWLINE, _tknmod.NL,
+                                                    _tknmod.INDENT, _tknmod.DEDENT,
+                                                    _tknmod.ENDMARKER, 0):
+                    toks.append(val)
+            for c in getattr(nd, "nodes", []) or []:
+                _gather(c)
+        _gather(line_node)
+        if toks:
+            out.append(toks)
+    return out
+
+
+def _tokens_to_string(tokens):
+    """Reconstruct a string from a list of tokens, preserving spacing."""
+    if not tokens:
+        return "", False
+    from hek_tokenize import DOLLAR_TOKEN as _DOLLAR_TOKEN, \
+        BASH_TEST_TOKEN as _BASH_TEST_TOKEN
+    parts = []
+    for i, tok in enumerate(tokens):
+        if i > 0:
+            prev = tokens[i - 1]
+            if prev.type in (_DOLLAR_TOKEN, _BASH_TEST_TOKEN):
+                pass
+            else:
+                # Same-line gap from columns; cross-line, just one space
+                if tok.start[0] == prev.end[0]:
+                    gap = tok.start[1] - prev.end[1]
+                    parts.append(" " * max(gap, 1) if gap >= 1 else "")
+                else:
+                    parts.append(" ")
+        parts.append(tok.string)
+    cmd = "".join(parts)
+    needs_fstring = any(
+        tok.type == _tknmod.OP and tok.string in ("{", "}")
+        for tok in tokens
+    )
+    return cmd, needs_fstring
+
+
+def _classify_line(tokens):
+    """Classify a block-form line as ('expect', arg_str), ('send', arg_str), or ('cmd', cmd_str).
+    The arg_str is the raw inner text between the parens (typically a string literal).
+    """
+    if not tokens:
+        return ("cmd", "", False)
+    first = tokens[0]
+    if (first.type == _tknmod.NAME and first.string in ("expect", "send")
+        and len(tokens) >= 3
+        and tokens[1].type == _tknmod.OP and tokens[1].string == "("
+        and tokens[-1].type == _tknmod.OP and tokens[-1].string == ")"):
+        inner, needs_fstring = _tokens_to_string(tokens[2:-1])
+        return (first.string, inner.strip(), needs_fstring)
+    cmd, needs_fstring = _tokens_to_string(tokens)
+    return ("cmd", cmd, needs_fstring)
+
+
+import tokenize as _tknmod
+
+
 def _parse_shell_stmt(node):
     """Decompose a shell_stmt AST node into its logical parts.
 
-    Returns (target_kw, target_name, target_tuple, kw, opts, cmd, needs_fstring) where:
+    Returns (target_kw, target_name, target_tuple, kw, opts, cmd, needs_fstring, block_lines) where:
       target_kw    -- 'let' | 'var' | 'const' | None
       target_name  -- str | None     (scalar form: let result = shell: ...)
       target_tuple -- [str] | None   (tuple  form: let (a,b,c) = shell: ...)
       kw           -- 'shell' | 'shellLines'
       opts         -- dict {str: str}
-      cmd          -- reconstructed command string
+      cmd          -- reconstructed command string (inline form; '' for block form)
       needs_fstring -- bool (True when {var} interpolation tokens present)
+      block_lines  -- None for inline form;
+                      list of (kind, text, needs_fstring) tuples for block form
+                      where kind ∈ {'cmd','expect','send'}
 
     Exactly one of target_name / target_tuple is non-None when a target is
     present; both are None for a bare shell statement.
@@ -1360,21 +1462,48 @@ def _parse_shell_stmt(node):
                     elif val.isidentifier() and val not in ("let", "var", "const", "="):
                         target_name = val
 
-    # Remaining nodes after the keyword: possibly [opts_st, body_st] or [body_st]
+    # Remaining nodes after the keyword: opts (Several_Times of shell_opt) and
+    # body (either inline Several_Times of tokens, or a Sequence_Parser wrapping
+    # the (block | inline) alternation).
     opts = {}
     body_st = None
-    for n in nodes[kw_idx + 1 :]:
-        if type(n).__name__ != "Several_Times" or not n.nodes:
-            continue
+    block_seq = None
+
+    def _scan_for_body(n):
+        nonlocal body_st, block_seq, opts
+        ntype = type(n).__name__
+        if ntype == "Sequence_Parser":
+            # Indented block?
+            if _flatten_block_lines(n) is not None:
+                block_seq = n
+                return True
+            # Otherwise descend — this wraps the (block|inline) alternation
+            for c in n.nodes or []:
+                if _scan_for_body(c):
+                    return True
+            return False
+        if ntype != "Several_Times" or not n.nodes:
+            return False
         first = n.nodes[0]
         tok = getattr(first, "node", None)
         if hasattr(tok, "string") and not isinstance(tok, str):
             body_st = n
-            break
+            return True
+        # Otherwise it's an opts node
         opts = _extract_shell_opts(n)
+        return False
+
+    for n in nodes[kw_idx + 1 :]:
+        if _scan_for_body(n):
+            break
+
+    if block_seq is not None:
+        line_toks = _flatten_block_lines(block_seq)
+        block_lines = [_classify_line(tl) for tl in line_toks]
+        return target_kw, target_name, target_tuple, kw, opts, "", False, block_lines
 
     cmd, needs_fstring = _extract_shell_body(body_st) if body_st else ("", False)
-    return target_kw, target_name, target_tuple, kw, opts, cmd, needs_fstring
+    return target_kw, target_name, target_tuple, kw, opts, cmd, needs_fstring, None
 
 
 @method(shell_stmt)
@@ -1404,7 +1533,13 @@ def to_py(self, indent=0):
       out, err, code = _r.stdout, _r.stderr, _r.returncode
     """
     ind = _ind(indent)
-    target_kw, target_name, target_tuple, kw, opts, cmd, needs_fstring = _parse_shell_stmt(self)
+    target_kw, target_name, target_tuple, kw, opts, cmd, needs_fstring, block_lines = _parse_shell_stmt(self)
+
+    # Block form in Python backend: join cmd lines with " && ", ignore expect/send for now
+    if block_lines is not None:
+        cmd_parts = [t for (k, t, _f) in block_lines if k == "cmd"]
+        cmd = " && ".join(cmd_parts)
+        needs_fstring = any(f for (k, _t, f) in block_lines if k == "cmd")
 
     has_target = bool(target_name or target_tuple)
 

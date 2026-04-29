@@ -381,7 +381,9 @@ import tokenize as _tkn_sh
 
 # Any token that is not a line-ending: NEWLINE, NL, or ENDMARKER.
 # filt(pred, shift) is the idiomatic pattern used throughout this codebase.
-_SHELL_STOP = frozenset({_tkn_sh.NEWLINE, _tkn_sh.NL, _tkn_sh.ENDMARKER, 0})
+# INDENT/DEDENT are also excluded so block-line repetition stops cleanly at DEDENT.
+_SHELL_STOP = frozenset({_tkn_sh.NEWLINE, _tkn_sh.NL, _tkn_sh.ENDMARKER,
+                         _tkn_sh.INDENT, _tkn_sh.DEDENT, 0})
 shell_body_token = filt(
     lambda tok: getattr(tok, "type", 0) not in _SHELL_STOP,
     shift,
@@ -403,8 +405,22 @@ shell_target_scalar = decl_keyword + IDENTIFIER + V_EQUAL
 shell_target_tuple  = decl_keyword + paren_group + V_EQUAL
 shell_target        = shell_target_tuple | shell_target_scalar
 
-# Full shell statement: [target =] keyword [(opts)]: body...
-shell_stmt = shell_target[:] + shell_kw + shell_opts[:] + COLON + shell_body_token[1:] + ignore(NEWLINE)
+# A single line within a shell block: tokens up to NEWLINE
+shell_block_line = shell_body_token[1:] + ignore(NEWLINE)
+
+# Indented shell block: NEWLINE INDENT line+ DEDENT
+# Same shape as `block` (used by while/if/for) but with shell lines instead of statements.
+shell_block = NEWLINE + NL[:] + INDENT + NL[:] + (shell_block_line + NL[:])[1:] + DEDENT
+
+# Inline body: tokens on the same line as `shell:` (the original form).
+shell_inline_body = shell_body_token[1:] + ignore(NEWLINE)
+
+# Full shell statement: [target =] keyword [(opts)]: (block | inline-tokens)
+# Block form first so it wins when a NEWLINE follows the colon.
+shell_stmt = (
+    shell_target[:] + shell_kw + shell_opts[:] + COLON
+    + (shell_block | shell_inline_body)
+)
 
 # --- compound_stmt: choice of all compound statement types ---
 compound_stmt = (
