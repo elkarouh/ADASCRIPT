@@ -1392,9 +1392,12 @@ def main(argv=None):
         import re as _re_prepass
         _ady_dir_pre = os.path.dirname(os.path.abspath(ady_file))
         for _dep_name_pre in _re_prepass.findall(r'^\s*nimport\s+(\w[\w./]*)', code, _re_prepass.MULTILINE):
-            _dep_ady_pre = (os.path.join(_ady_dir_pre, _dep_name_pre + ".ady")
-                            if os.path.exists(os.path.join(_ady_dir_pre, _dep_name_pre + ".ady"))
-                            else os.path.join(cache_dir, _dep_name_pre + ".ady"))
+            _candidates_pre = [
+                os.path.join(_ady_dir_pre, _dep_name_pre + ".ady"),
+                os.path.join(os.path.dirname(_ady_dir_pre), _dep_name_pre + ".ady"),
+                os.path.join(cache_dir, _dep_name_pre + ".ady"),
+            ]
+            _dep_ady_pre = next((p for p in _candidates_pre if os.path.exists(p)), _candidates_pre[-1])
             if not os.path.exists(_dep_ady_pre):
                 continue
             with open(_dep_ady_pre) as _f:
@@ -1456,9 +1459,12 @@ def main(argv=None):
         import re as _re_nimport
         _ady_dir = os.path.dirname(os.path.abspath(ady_file))
         for _dep_name in _re_nimport.findall(r'^\s*nimport\s+(\w[\w./]*)', code, _re_nimport.MULTILINE):
-            _dep_ady = (os.path.join(_ady_dir, _dep_name + ".ady")
-                        if os.path.exists(os.path.join(_ady_dir, _dep_name + ".ady"))
-                        else os.path.join(cache_dir, _dep_name + ".ady"))
+            _candidates = [
+                os.path.join(_ady_dir, _dep_name + ".ady"),
+                os.path.join(os.path.dirname(_ady_dir), _dep_name + ".ady"),
+                os.path.join(cache_dir, _dep_name + ".ady"),
+            ]
+            _dep_ady = next((p for p in _candidates if os.path.exists(p)), _candidates[-1])
             if not os.path.exists(_dep_ady):
                 continue
             _dep_nim = os.path.join(cache_dir, _dep_name + ".nim")
