@@ -1,0 +1,21 @@
+#!/usr/bin/env py2nim
+"""
+test_expect — drive bc via PTY using the expect stdlib.
+"""
+
+nimport expect
+
+var s: Spawn = spawn("bc")
+s.expect("\\$|>|bc")   # wait for bc to start (it may print a version line or just prompt)
+
+s.send("2 + 2\n")
+s.expect("4")
+print("2 + 2 = " & s.match)
+
+s.send("10 * 5\n")
+s.expect("50")
+print("10 * 5 = " & s.match)
+
+s.send("quit\n")
+s.close()
+print("done")

@@ -2637,7 +2637,55 @@ def to_nim(self, indent=0):
     from hek_py3_parser import _parse_shell_stmt
 
     ind = _ind(indent)
-    target_kw, target_name, target_tuple, kw, opts, cmd, needs_fstring = _parse_shell_stmt(self)
+    target_kw, target_name, target_tuple, kw, opts, cmd, needs_fstring, block_lines = _parse_shell_stmt(self)
+
+    # Block form: handle interactive (expect/send) cases specially via expect.nim
+    if block_lines is not None:
+        has_interactive = any(k in ("expect", "send") for (k, _t, _f) in block_lines)
+        if has_interactive:
+            # Generate Spawn-based code from TO_NIM/STDLIB/expect.nim
+            ParserState.nim_imports.add("expect")
+            # Find the spawn command: first 'cmd' line in the block
+            spawn_cmd = None
+            for (k, t, f) in block_lines:
+                if k == "cmd":
+                    spawn_cmd = t
+                    break
+            if spawn_cmd is None:
+                return f"{ind}# shell: block has no command to spawn"
+
+            # Use unique temp name for the Spawn handle
+            _spawn_count = getattr(ParserState, "_spawn_count", 0)
+            ParserState._spawn_count = _spawn_count + 1
+            sp = f"shellSpawn{_spawn_count}"
+
+            def _quote(s):
+                # If raw string contains a quote or backslash, use triple-quoted
+                if '"""' in s:
+                    return '"' + s.replace('\\', '\\\\').replace('"', '\\"') + '"'
+                return f'"""{s}"""'
+
+            ilines = [f"{ind}var {sp} = expect.spawn({_quote(spawn_cmd)})"]
+            seen_spawn = False
+            for (k, t, _f) in block_lines:
+                if k == "cmd":
+                    if not seen_spawn:
+                        seen_spawn = True
+                        continue
+                    # Subsequent commands inside an interactive block: send as input
+                    ilines.append(f"{ind}{sp}.send({_quote(t + chr(10))})")
+                elif k == "expect":
+                    # t is already the inner argument expression (typically a quoted string)
+                    ilines.append(f"{ind}{sp}.expect({t})")
+                elif k == "send":
+                    ilines.append(f"{ind}{sp}.send({t})")
+            ilines.append(f"{ind}{sp}.close()")
+            return "\n".join(ilines)
+        else:
+            # Pure command block: join with " && " and fall through to normal handling
+            cmd_parts = [t for (k, t, _f) in block_lines if k == "cmd"]
+            cmd = " && ".join(cmd_parts)
+            needs_fstring = any(f for (k, _t, f) in block_lines if k == "cmd")
 
     ParserState.nim_imports.add("osproc")
 
