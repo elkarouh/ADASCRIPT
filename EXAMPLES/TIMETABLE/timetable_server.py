@@ -31,7 +31,7 @@ DAYS      = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
 MAX_SLOTS = 8
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
-SA_BINARY = os.path.join(_HERE, "timetable_sa.ady")
+SA_BINARY = os.path.join(os.path.dirname(_HERE), "timetable_sa.ady")
 
 
 def _all_hard_violations(schedule, data):
