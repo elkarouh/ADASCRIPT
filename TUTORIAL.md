@@ -558,6 +558,15 @@ else:
     print("negative")
 ```
 
+Each branch also accepts a single statement on the same line as the colon
+(Python-style inline suite). Useful for short, terminal branches:
+
+```python
+if x < 5: print("x<5")
+elif x < 10: print("5<=x<10")
+else: print("x>=10")
+```
+
 ### for loops
 
 ```python
@@ -578,6 +587,13 @@ while queue:
     item = queue.pop()
 ```
 
+`while` also supports the inline form:
+
+```python
+var n: int = 3
+while n > 0: n -= 1
+```
+
 ### case / when
 
 Ada/Nim-inspired pattern matching. Replaces Python 3.10+ `match/case`
@@ -596,6 +612,27 @@ case code:
     when others:
         print("unknown")
 ```
+
+`when` clauses also support the inline form when the body is a single
+statement — handy for compact dispatch tables:
+
+```python
+# from EXAMPLES/argparse.ady
+case arg:
+    when "--help" | "-h": usage(0)
+    when "--verbose" | "-v":
+        res.verbose = True
+        state = expecting_option_or_argument
+    when "-n" | "-o" | "--count" | "--output":
+        current_option = arg
+        state = processing_option
+    when others:
+        print "Unknown option:", arg
+        quit(1)
+```
+
+Inline and indented branches can be mixed freely — only the simple
+single-statement branches need to be inlined.
 
 **Enum patterns:**
 
@@ -1113,6 +1150,55 @@ shell: rm -rf /tmp/build
 shell: git add {filename}
 ```
 
+### Block form — multi-line and interactive (expect/send)
+
+`shell:` followed by an indented block accepts multiple lines. There are two
+flavors of block:
+
+**Pure block** — a sequence of commands joined into a single shell pipeline
+with `&&`:
+
+```python
+shell:
+    echo hello
+    echo world
+```
+
+This runs `echo hello && echo world`.
+
+**Interactive block** — when the block contains `send(...)` or `expect(...)`
+calls, the first line is treated as the command to spawn under a PTY, and
+subsequent `send`/`expect` calls drive it. The transpiler emits calls to the
+bundled `expect` standard library (PTY backed by `forkpty + select + re`,
+linked against `-lutil`):
+
+```python
+# from EXAMPLES/test_shell_block.ady
+shell:
+    bc -q
+    send("2 + 2\n")
+    expect("4")
+    send("10 * 5\n")
+    expect("50")
+    send("quit\n")
+```
+
+For finer control (capturing matches, multiple spawns, explicit lifetimes),
+use the `expect` library directly via `nimport expect`:
+
+```python
+# from EXAMPLES/test_expect.ady
+nimport expect
+
+var s: Spawn = spawn("bc")
+s.expect("\\$|>|bc")     # wait for prompt
+s.send("2 + 2\n")
+s.expect("4")
+print("result = " & s.match)
+s.send("quit\n")
+s.close()
+```
+
 ### Translation summary
 
 | Adascript                    | Python 3                                   | Nim                              |
@@ -1554,6 +1640,7 @@ def example7():   # Romania map, A* with heuristic
 | Named tuple literal               | `(field: value, ...)`                    |
 | Enum-indexed array literal        | `[KEY: value, ...]`                      |
 | Pattern matching                  | `case x: when P: ... when others: ...`  |
+| Inline suite (single-stmt body)   | `if x>0: f()`, `while c: g()`, `when P: h()` |
 | Generator functions               | `def f(): ... yield value`               |
 | Field with inline default         | `var x: int = 0` inside class body       |
 | Mutable self (auto-detected)      | any `self.field =` / `self.method()`     |
@@ -1563,6 +1650,8 @@ def example7():   # Romania map, A* with heuristic
 | Shell command capture             | `let r = shell: cmd`                     |
 | Shell lines capture               | `let ls = shellLines: cmd`               |
 | Discard shell output              | `shell: cmd`                             |
+| Shell block (commands joined)     | `shell:` then indented `cmd1` / `cmd2`   |
+| Shell block (PTY expect/send)     | `shell:` then `cmd` / `send(...)` / `expect(...)` |
 | Command-line argument             | `$1`, `$@`, `$#`                         |
 | Environment variable              | `$HOME`, `$PATH`                         |
 | File-test operator                | `-e path`, `-f path`, `-d path`          |
