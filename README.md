@@ -439,6 +439,27 @@ case value:
         print("something else")
 ```
 
+`when`, like `if` / `elif` / `else` and `while`, also accepts an inline
+single-statement body on the same line as the colon:
+
+```python
+case arg:
+    when "--help" | "-h": usage(0)
+    when "--verbose":     res.verbose = True
+    when others:          print "unknown:", arg
+```
+
+Inline and indented branches can be mixed in the same `case`. The same
+inline form works for `if` / `elif` / `else` / `while`:
+
+```python
+if x < 5: print("x<5")
+elif x < 10: print("5<=x<10")
+else: print("x>=10")
+
+while n > 0: n -= 1
+```
+
 Tuple patterns with wildcards (desugars to `if/elif` in Nim):
 
 ```python
@@ -966,6 +987,48 @@ let result = shell(cwd = "/tmp", timeout = 3000): ls -la
 
 ```python
 shell: rm -rf /tmp/build
+```
+
+### Block form — multi-line and interactive (expect/send)
+
+`shell:` followed by an indented block accepts multiple lines:
+
+```python
+# Pure block: commands joined into a single pipeline with " && "
+shell:
+    echo hello
+    echo world
+```
+
+When a block contains `send(...)` / `expect(...)` calls, the first line is
+the command spawned under a PTY and the remaining calls drive it. The
+transpiler emits calls to the bundled `expect` standard library
+(`forkpty + select + re`, links against `-lutil`):
+
+```python
+# from EXAMPLES/test_shell_block.ady
+shell:
+    bc -q
+    send("2 + 2\n")
+    expect("4")
+    send("10 * 5\n")
+    expect("50")
+    send("quit\n")
+```
+
+For finer control (capturing matches, multiple spawns, explicit lifetimes),
+use the `expect` library directly:
+
+```python
+nimport expect
+
+var s: Spawn = spawn("bc")
+s.expect("\\$|>|bc")
+s.send("2 + 2\n")
+s.expect("4")
+print("result = " & s.match)
+s.send("quit\n")
+s.close()
 ```
 
 ### Translation reference
