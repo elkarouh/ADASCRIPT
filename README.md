@@ -126,15 +126,23 @@ for s in Stage_T.STAGE1 .. Stage_T.STAGE3:
 
 ## Installation
 
-No package install is required. Clone the repo and run the transpiler scripts
-directly with Python 3.10+:
+Clone the repo and run the transpiler scripts directly with Python 3.10+:
 
 ```bash
-git clone https://github.com/elkarouh/hparsec
-cd hparsec
+git clone --recurse-submodules https://github.com/elkarouh/ADASCRIPT
 ```
 
-Dependencies: none beyond the Python standard library.
+### Python dependencies
+
+None beyond the Python standard library.
+
+### Nim dependencies
+
+| Package | Install | Required for |
+|---------|---------|--------------|
+| `nimpy` | `nimble install nimpy` | Any `.ady` file that uses `pyimport` to call Python libraries from Nim |
+
+Standard library Nim modules (`std/deques`, `tables`, `hashes`, `math`, `re`, `posix`, …) are bundled with Nim and need no separate install.
 
 ---
 
