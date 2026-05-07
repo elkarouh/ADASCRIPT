@@ -3,6 +3,7 @@
 
 # Build artifacts
 NIM_VERSION/
+*.exe
 
 # Obsolete/deprecated code
 OBSOLETE/
