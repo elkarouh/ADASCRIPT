@@ -141,6 +141,7 @@ None beyond the Python standard library.
 | Package | Install | Required for |
 |---------|---------|--------------|
 | `nimpy` | `nimble install nimpy` | Any `.ady` file that uses `pyimport` to call Python libraries from Nim |
+| `db_connector` | `nimble install db_connector` | Any `.ady` file that uses `nimport db` (SQLite support; removed from Nim 2.x stdlib) |
 
 Standard library Nim modules (`std/deques`, `tables`, `hashes`, `math`, `re`, `posix`, …) are bundled with Nim and need no separate install.
 
