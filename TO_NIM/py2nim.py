@@ -1552,7 +1552,11 @@ def main(argv=None):
                 link = os.path.join(os.path.dirname(os.path.abspath(ady_file)), stem + ext)
                 if os.path.islink(link) or os.path.exists(link):
                     os.remove(link)
-                os.symlink(exe_file, link)
+                if sys.platform == "win32":
+                    import shutil
+                    shutil.copy2(exe_file, link)
+                else:
+                    os.symlink(exe_file, link)
 
         if produces_binary and not run:
             if not need_compile:
