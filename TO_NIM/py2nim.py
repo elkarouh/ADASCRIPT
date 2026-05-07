@@ -1270,7 +1270,7 @@ def main(argv=None):
     # 3.  Read source                                                     #
     # ------------------------------------------------------------------ #
     if ady_file:
-        with open(ady_file) as f:
+        with open(ady_file, encoding="utf-8") as f:
             code = f.read()
     else:
         code = sys.stdin.read()
@@ -1400,7 +1400,7 @@ def main(argv=None):
             _dep_ady_pre = next((p for p in _candidates_pre if os.path.exists(p)), _candidates_pre[-1])
             if not os.path.exists(_dep_ady_pre):
                 continue
-            with open(_dep_ady_pre) as _f:
+            with open(_dep_ady_pre, encoding="utf-8") as _f:
                 _dep_code_pre = _f.read()
             try:
                 from hek_parsec import ParserState as _PS_pre
@@ -1445,7 +1445,7 @@ def main(argv=None):
                 r'.serve(\1, proc(req: Request): Future[void] {.async, closure, gcsafe.} = {.cast(gcsafe).}: await \2(req))',
                 nim_output
             )
-            with open(nim_file, "w") as f:
+            with open(nim_file, "w", encoding="utf-8") as f:
                 f.write(nim_output)
             # Refresh mtime after write so tier-2 comparison is accurate
             nim_mtime = os.path.getmtime(nim_file)
@@ -1480,7 +1480,7 @@ def main(argv=None):
             )
             _eff_transpiler_mtime = max(transpiler_mtime, _root_transpiler_mtime)
             if _dep_nim_mtime < max(_dep_mtime, _eff_transpiler_mtime):
-                with open(_dep_ady) as _f:
+                with open(_dep_ady, encoding="utf-8") as _f:
                     _dep_code = _f.read()
                 try:
                     from hek_parsec import ParserState as _ParserState
@@ -1511,7 +1511,7 @@ def main(argv=None):
                         out.append(line)
                     return '\n'.join(out)
                 _dep_nim_output = _export_toplevel(_dep_nim_output)
-                with open(_dep_nim, "w") as _f:
+                with open(_dep_nim, "w", encoding="utf-8") as _f:
                     _f.write(_dep_nim_output)
                 # Wipe nimcache so stale .c/.o for the dependency are regenerated
                 import shutil as _shutil2
@@ -1625,7 +1625,7 @@ def main(argv=None):
             # -t with a file: write the .nim into the cache directory
             cache_dir, nim_file, _exe, _nc = _cache_paths(ady_file)
             os.makedirs(cache_dir, exist_ok=True)
-            with open(nim_file, "w") as f:
+            with open(nim_file, "w", encoding="utf-8") as f:
                 f.write(nim_output)
             print(f"# transpiled → {nim_file}", file=sys.stderr)
         else:
