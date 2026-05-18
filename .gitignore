@@ -32,5 +32,6 @@ BENCHMARK/*.nim
 BENCHMARK/IGNORE/
 files.zip
 BENCHMARK/primes
+EXAMPLES/primes
 BENCHMARK/show_status
 sublime-claude/

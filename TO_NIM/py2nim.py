@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 """Python 3.14 to Nim source-to-source translator using parser combinators.
 
 Parses Python source code using the hek_parsec combinator framework
