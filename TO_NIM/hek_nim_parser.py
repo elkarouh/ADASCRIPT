@@ -848,7 +848,7 @@ def to_nim(self, indent=0):
     # Detect open(filename, mode) as varname pattern
     import re as _re
     full_item = ", ".join(items)
-    m = _re.match(r'open\((.+?)\)\s+as\s+(\w+)', full_item)
+    m = _re.match(r'open\((.+?)\)\s+as\s+`?(\w+)`?', full_item)
     if m:
         args_str, var_name = m.group(1), m.group(2)
         mode_map = {'"r"': "fmRead", "'r'": "fmRead",
@@ -864,12 +864,14 @@ def to_nim(self, indent=0):
                 nim_mode = mode_map.get(raw_mode, raw_mode)
         # Register the file variable in the symbol table
         ParserState.symbol_table.add(var_name, "File", "let")
+        # Sanitize var_name: backtick-escape Nim reserved keywords (e.g. 'out')
+        safe_var = f"`{var_name}`" if var_name in hek_nim_expr._NIM_KEYWORDS else var_name
         # Emit block: to create a new scope (mirroring Python's with statement)
         ind = _ind(indent)
         ind1 = _ind(indent + 1)
         result = f"{ind}block:{hc}\n"
-        result += f"{ind1}let {var_name} = open({filename}, {nim_mode})\n"
-        result += f"{ind1}defer: {var_name}.close()\n"
+        result += f"{ind1}let {safe_var} = open({filename}, {nim_mode})\n"
+        result += f"{ind1}defer: {safe_var}.close()\n"
         if block_node:
             try:
                 body = block_node.to_nim(indent + 1)
@@ -1008,6 +1010,9 @@ def to_nim(self, prec=None):
     # But leave double-underscore names (dunder) intact.
     if name != "_" and name.startswith("_") and not name.startswith("__"):
         name = name[1:]
+    # Backtick-escape Nim reserved keywords so they can be used as identifiers.
+    if name in hek_nim_expr._NIM_KEYWORDS:
+        return f"`{name}`"
     return name
 
 
@@ -2756,7 +2761,8 @@ def to_nim(self, indent=0):
         if kw == "shellLines":
             # Inline directly — no temp needed
             ParserState.nim_imports.add("strutils")
-            lines.append(f"{ind}{nim_kw} {target_name} = execCmdEx({cmd_str}){timeout_comment}[0].splitLines()")
+            ParserState.nim_imports.add("sequtils")
+            lines.append(f"{ind}{nim_kw} {target_name} = execCmdEx({cmd_str}){timeout_comment}[0].splitLines().filterIt(it.len > 0)")
             ParserState.symbol_table.add(target_name, "seq[string]", nim_kw)
         else:
             lines.append(f"{ind}let {exec_tmp} = execCmdEx({cmd_str}){timeout_comment}")
@@ -2768,7 +2774,8 @@ def to_nim(self, indent=0):
             ParserState.symbol_table.add(target_name, "shell_result", nim_kw)
     elif kw == "shellLines":
         ParserState.nim_imports.add("strutils")
-        lines.append(f"{ind}return execCmdEx({cmd_str}){timeout_comment}[0].splitLines()")
+        ParserState.nim_imports.add("sequtils")
+        lines.append(f"{ind}return execCmdEx({cmd_str}){timeout_comment}[0].splitLines().filterIt(it.len > 0)")
     else:
         lines.append(f"{ind}discard execCmd({cmd_str}){timeout_comment}")
 

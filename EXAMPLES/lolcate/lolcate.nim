@@ -19,12 +19,14 @@
 ## add-dir    <name> <dir>  Add a directory to the scan list
 ## add-ignore <name> <pat>  Add an ignore pattern
 
-import algorithm, os, osproc, re, sequtils, strformat, strutils, times
+
+
 
 # ---------------------------------------------------------------------------
 # Types
 # ---------------------------------------------------------------------------
 
+import algorithm, os, osproc, re, sequtils, strformat, strutils, times
 type Config = object
     dirs: seq[string]
     ignores: seq[string]
@@ -109,10 +111,10 @@ proc save_config(name: string, cfg: Config) =
 # ---------------------------------------------------------------------------
 
 proc find_files(root_dir: string): seq[string] =
-    execCmdEx(fmt"find {root_dir} -type f")[0].splitLines().filterIt(it.len > 0)
+    return execCmdEx(fmt"""find {root_dir} -type f""")[0].splitLines().filterIt(it.len > 0)
 
 proc list_dir(dir: string): seq[string] =
-    execCmdEx(fmt"ls -1 {dir}")[0].splitLines().filterIt(it.len > 0)
+    return execCmdEx(fmt"""ls -1 {dir}""")[0].splitLines().filterIt(it.len > 0)
 
 # ---------------------------------------------------------------------------
 # Index helpers
@@ -151,9 +153,9 @@ proc cmd_create(name: string) =
         return
     createDir(ddir)
     save_config(name, default_config())
+    let home_dir: string = getEnv("HOME")
     echo(fmt"Created database '{name}'")
     echo(fmt"  Config : {config_path(name)}")
-    let home_dir = getEnv("HOME")
     echo(fmt"  Default scan dir: {home_dir}")
     echo(fmt"  Add more dirs:  lolcate.ady add-dir {name} <path>")
     echo(fmt"  Build index:    lolcate.ady update {name}")
@@ -173,10 +175,10 @@ proc cmd_update(name: string) =
                 all_paths.add(fpath)
     let count: int = len(all_paths)
     block:
-        let fout = open(ipath, fmWrite)
-        defer: fout.close()
+        let `out` = open(ipath, fmWrite)
+        defer: `out`.close()
         for fpath in all_paths:
-            fout.write(fpath & "\n")
+            `out`.write(fpath & "\n")
     let elapsed: float = epochTime() - t0
     echo(fmt"Indexed {count} files in {elapsed:.2f}s")
     echo(fmt"  Index : {ipath}")
@@ -252,7 +254,8 @@ proc cmd_add_dir(name: string, new_dir: string) =
         quit(1)
     var expanded: string = new_dir
     if new_dir.startsWith("~"):
-        expanded = getEnv("HOME") & new_dir[1..^1]
+        let home_env: string = getEnv("HOME")
+        expanded = home_env & new_dir[1..^1]
     let abs_expanded: string = absolutePath(expanded)
     var cfg: Config = load_config(name)
     if abs_expanded in cfg.dirs:

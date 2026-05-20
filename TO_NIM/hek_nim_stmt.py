@@ -70,6 +70,7 @@ _NIMPORT_NAME_MAP = {
     "heapq":    "heapqueue",
     "bisect":   "algorithm",
     "json":     "std/json",
+    "re":       "re",
     "asyncio":  "asyncdispatch",
     # AdaScript stdlib — 'from stdlib import X' resolves natively
     "stdlib":   "stdlib",
@@ -83,9 +84,21 @@ _PY_MODULE_TO_NIM = _NIMPORT_NAME_MAP
 
 # Per-module function call translations: module_name -> {py_func: nim_expr_template}.
 # Templates use {args} for the full argument list and {arg0}, {arg1}, … for individual args.
-# All module function translations removed — users write native AdaScript calls.
-# 're' is handled via nimpy (Python API), not translated.
-_PY_MODULE_FUNC_TO_NIM = {}
+# {arg0} is the first argument, {arg1} is the second, etc.
+_PY_MODULE_FUNC_TO_NIM = {
+    "re": {
+        # re.search(pattern, string) -> contains(string, re(pattern))
+        "search":  "contains({arg1}, re({arg0}))",
+        # re.match(pattern, string) -> contains(string, re(pattern))
+        "match":   "contains({arg1}, re({arg0}))",
+        # re.findall(pattern, string) -> findAll(string, re(pattern))
+        "findall": "findAll({arg1}, re({arg0}))",
+        # re.sub(pattern, repl, string) -> string.replace(re(pattern), repl)
+        "sub":     "{arg2}.replace(re({arg0}), {arg1})",
+        # re.compile(pattern) -> re(pattern)
+        "compile": "re({arg0})",
+    },
+}
 
 
 # --- visible tokens ---
@@ -1582,15 +1595,10 @@ def to_nim(self):
                         parts.append(child.to_nim())
     lines = []
     for part in parts:
-        if part == "re":
-            # 're' uses the Python API via nimpy — register as a py_module
-            # so re.search/findall/compile etc. pass through as PyObject calls
-            lines.append(_emit_pyimport("re"))
-        else:
-            nim_mod = _NIMPORT_NAME_MAP.get(part, part)
-            ParserState.nim_imports.add(nim_mod)
-            # Register `part` as a nim_module alias so `part.func(args)` -> `func(args)`
-            ParserState.symbol_table.add(part, f"_nim_module:{part}", "let")
+        nim_mod = _NIMPORT_NAME_MAP.get(part, part)
+        ParserState.nim_imports.add(nim_mod)
+        # Register `part` as a nim_module alias so `part.func(args)` -> `func(args)`
+        ParserState.symbol_table.add(part, f"_nim_module:{part}", "let")
     return chr(10).join(lines) if lines else None
 
 
