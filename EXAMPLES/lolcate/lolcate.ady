@@ -152,9 +152,10 @@ def cmd_create(name: str):
         return
     os.makedirs(ddir)
     save_config(name, default_config())
+    let home_dir: str = $HOME
     print(f"Created database '{name}'")
     print(f"  Config : {config_path(name)}")
-    print(f"  Default scan dir: {$HOME}")
+    print(f"  Default scan dir: {home_dir}")
     print(f"  Add more dirs:  lolcate.ady add-dir {name} <path>")
     print(f"  Build index:    lolcate.ady update {name}")
 
@@ -209,7 +210,7 @@ def cmd_ls():
             let ipath: str = os.path.join(epath, "db.txt")
             if -f ipath:
                 let n: int  = count_lines(ipath)
-                let sz: int = os.path.getsize(ipath)
+                let sz: int = int(os.path.getsize(ipath))
                 print(f"  {entry:<20}  {n:>8} files   ({sz} bytes)")
             else:
                 print(f"  {entry:<20}  (not indexed yet)")
@@ -234,7 +235,7 @@ def cmd_info(name: str):
     print(f"Symlinks : {sym_str}")
     if -f ipath:
         let n: int  = count_lines(ipath)
-        let sz: int = os.path.getsize(ipath)
+        let sz: int = int(os.path.getsize(ipath))
         print(f"Index    : {ipath}")
         print(f"Files    : {n}")
         print(f"Size     : {sz} bytes")
@@ -248,7 +249,8 @@ def cmd_add_dir(name: str, new_dir: str):
         quit(1)
     var expanded: str = new_dir
     if new_dir.startswith("~"):
-        expanded = $HOME + new_dir[1:]
+        let home_env: str = $HOME
+        expanded = home_env + new_dir[1:]
     let abs_expanded: str = os.path.abspath(expanded)
     var cfg: Config = load_config(name)
     if abs_expanded in cfg.dirs:
