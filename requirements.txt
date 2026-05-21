@@ -7,14 +7,21 @@
 #   [sys]    System packages — install with your OS package manager
 #
 # Runtime baseline (not listed below):
-#   Nim  >= 2.0   (install via choosenim: https://github.com/dom96/choosenim)
-#   Python >= 3.12 (required by py2nim transpiler)
+#   Nim  >= 2.2.10  (install via choosenim: https://github.com/dom96/choosenim)
+#   Zig  >= 0.14.0  (required by state_search.ady and others using --cc:clang --clang.exe:zigcc)
+#   Python >= 3.12  (required by py2nim transpiler)
 #
 # Quick setup:
 #   curl -fsSL https://nim-lang.org/choosenim/init.sh | sh  # installs Nim 2.x
+#   # Then pin to the tested version:
+#   choosenim 2.2.10
+#   # Install Zig (no apt package; download from https://ziglang.org/download/):
+#   curl -fsSL https://ziglang.org/download/0.14.0/zig-linux-x86_64-0.14.0.tar.xz | tar -xJ -C /opt
+#   ln -sf /opt/zig-linux-x86_64-0.14.0/zig /usr/local/bin/zig
+#   printf '#!/bin/sh\nexec zig cc "$@"\n' > /usr/local/bin/zigcc && chmod +x /usr/local/bin/zigcc
 #   nimble install nimpy db_connector
 #   pip install matplotlib
-#   apt install fd-find ripgrep bc sqlite3   # adjust for your distro
+#   apt install fd-find ripgrep bc sqlite3 libpcre3   # adjust for your distro
 
 
 # -----------------------------------------------------------------------
@@ -69,3 +76,14 @@ bc
 # Debian/Ubuntu: apt install sqlite3
 # macOS:         brew install sqlite
 sqlite3
+
+# libpcre3  — PCRE regex runtime; required by test_expect.ady at runtime
+# Debian/Ubuntu: apt install libpcre3
+# macOS:         included in system libs (no separate install needed)
+libpcre3
+
+# zig / zigcc  — Zig C compiler frontend; required at compile time by:
+#   state_search.ady and any .ady with: #ady2nim-args c --cc:clang --clang.exe:zigcc
+# Download from: https://ziglang.org/download/  (no OS package available)
+# Tested version: 0.14.0
+zig >= 0.14.0
