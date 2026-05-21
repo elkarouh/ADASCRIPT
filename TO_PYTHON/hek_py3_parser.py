@@ -454,6 +454,13 @@ def to_py(self, prec=None):
             return f"len({type_name})"
         elif attr == "Size":
             return f"len({type_name})"
+    # Qualify known enum members: bare names are capture patterns in Python
+    # match/case, but dotted names are value patterns. e.g. cmdArgument ->
+    # Kind_T.cmdArgument so 'case Kind_T.cmdArgument:' matches by value.
+    for enum_type, info in ParserState.tick_types.items():
+        members = info.get("members")
+        if members and name in members:
+            return f"{enum_type}.{name}"
     return name
 
 

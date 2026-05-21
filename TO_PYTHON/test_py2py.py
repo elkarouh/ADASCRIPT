@@ -772,6 +772,68 @@ def zip_with(f: Callable[[int, int], int], xs: list[int], ys: list[int]) -> list
 
 
 
+test(
+    "pattern matching: enum values auto-qualified in case/when",
+    """\
+type Color is enum Red, Green, Blue
+
+def describe(c: Color) -> str:
+    case c:
+        when Red:
+            return "red"
+        when Green | Blue:
+            return "cool"
+        when others:
+            return "unknown"
+""",
+    """\
+from enum import Enum
+class Color(Enum):
+    Red = 0
+    Green = 1
+    Blue = 2
+Red = Color.Red
+Green = Color.Green
+Blue = Color.Blue
+
+def describe(c: Color) -> str:
+    match c:
+        case Color.Red:
+            return "red"
+        case Color.Green | Color.Blue:
+            return "cool"
+        case _:
+            return "unknown"
+""",
+)
+
+test(
+    "pattern matching: enum values auto-qualified in match/case",
+    """\
+type Status is enum Ok, Err
+
+match result:
+    case Ok:
+        print("ok")
+    case Err:
+        print("err")
+""",
+    """\
+from enum import Enum
+class Status(Enum):
+    Ok = 0
+    Err = 1
+Ok = Status.Ok
+Err = Status.Err
+
+match result:
+    case Status.Ok:
+        print("ok")
+    case Status.Err:
+        print("err")
+""",
+)
+
 print(f"\n{'='*60}")
 print(f"Results: {_passed} passed, {_failed} failed, {_errors} errors")
 print(f"  (FAIL/ERROR includes both known bugs and any regressions)")
