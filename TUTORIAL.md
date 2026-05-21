@@ -594,10 +594,18 @@ var n: int = 3
 while n > 0: n -= 1
 ```
 
-### case / when
+### case / when  and  match / case
 
-Ada/Nim-inspired pattern matching. Replaces Python 3.10+ `match/case`
-(also accepted by the parser).
+Adascript supports two pattern-matching syntaxes:
+
+| Syntax | Style | Best for |
+|---|---|---|
+| `case x: / when pat:` | Ada/Nim | Enum dispatch, ranges, structural patterns |
+| `match x: / case pat:` | Python 3.10+ | Guards on arbitrary expressions, Python-idiomatic code |
+
+Both syntaxes produce identical Python output (`match/case`). The Nim output
+differs only when patterns require desugaring (structural, guards, tuple
+subjects). For a full reference see `PATTERN_MATCHING.md`.
 
 **Literal and range patterns:**
 
@@ -826,6 +834,53 @@ case state:
 
 This is a transpiler limitation, not a language design choice. The workaround
 is always to destructure the compound value with `let` first.
+
+---
+
+**`match / case` with guards:**
+
+Use `match/case` when branches need `if` guards on arbitrary expressions.
+Guards are not available on `case/when` branches.
+
+```python
+def classify(arg: str) -> str:
+    match arg:
+        case "--":
+            return "end-of-options"
+        case _ if arg.startswith("--"):
+            return "long option"
+        case _ if arg.startswith("-") and len(arg) > 1:
+            return "short option"
+        case _:
+            return "argument"
+```
+
+Nim output (guards force if/elif desugaring):
+
+```nim
+if arg == "--":
+    return "end-of-options"
+elif arg.startsWith("--"):
+    return "long option"
+elif arg.startsWith("-") and len(arg) > 1:
+    return "short option"
+else:
+    return "argument"
+```
+
+**Enum auto-qualification:**
+
+Write enum members bare in patterns — the transpiler qualifies them
+automatically in Python output so they act as value patterns, not captures:
+
+```python
+type Color = enum Red, Green, Blue
+
+case pixel:
+    when Red:   r += 1    # → Python: case Color.Red:
+    when Green: g += 1
+    when Blue:  b += 1
+```
 
 ---
 
