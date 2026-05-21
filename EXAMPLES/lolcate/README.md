@@ -13,7 +13,17 @@ lolcate maintains named **databases**, each stored under `~/.local/share/lolcate
     └── db.txt       ← flat newline-delimited list of indexed paths
 ```
 
-**Updating** (`update`) walks the configured directories using the system `find` command and writes every non-ignored path to `db.txt`. **Querying** (`query`) reads that flat list and applies a case-insensitive regex — no filesystem access needed.
+**Updating** (`update`) walks the configured directories using [`fd`](https://github.com/sharkdp/fd) (`--no-ignore --hidden`) and writes every non-ignored path to `db.txt`. **Querying** (`query`) runs [`rg`](https://github.com/BurntSushi/ripgrep) case-insensitively against that flat list — no filesystem traversal needed.
+
+## Dependencies
+
+| Tool | Purpose |
+|------|---------|
+| [`fd`](https://github.com/sharkdp/fd) | Fast recursive file finder, used during `update` |
+| [`rg`](https://github.com/BurntSushi/ripgrep) (ripgrep) | Fast regex search, used during `query` |
+
+Install on Debian/Ubuntu: `apt install fd-find ripgrep`  
+Install on macOS: `brew install fd ripgrep`
 
 ## Running
 
@@ -100,8 +110,8 @@ Lines starting with `#` and blank lines are ignored. Each section header (`dirs:
 
 | Feature | Usage in this file |
 |---------|--------------------|
-| `nimport` | `nimport os, re, strutils, times` — imports Nim stdlib modules |
-| `shellLines:` | Captures `find` / `ls` output as a `seq[string]` |
+| `nimport` | `nimport os, strutils, times` — imports Nim stdlib modules |
+| `shellLines:` | Captures `fd` / `rg` / `ls` output as a `seq[string]` |
 | `$HOME` | Environment variable expansion → `getEnv("HOME")` |
 | `-f`, `-d` | File/directory existence tests (`if -f path:`, `if -d dir:`) |
 | `case/when` | String dispatch on CLI commands |
