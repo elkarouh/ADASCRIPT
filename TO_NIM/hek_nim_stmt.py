@@ -192,14 +192,15 @@ def to_nim(self):
         # All targets are new names — declare with let
         tgt_str = ", ".join(targets)
         return f"let ({tgt_str}) = {parts[1]}"
+    lhs_bare = lhs[1:-1] if lhs.startswith("`") and lhs.endswith("`") else lhs
     if "." in lhs or "[" in lhs:
         prefix = ""
-    elif ParserState.symbol_table.lookup(lhs):
+    elif ParserState.symbol_table.lookup(lhs) or ParserState.symbol_table.lookup(lhs_bare):
         prefix = ""
     else:
         prefix = "var "
     # Nim's implicit 'result' variable: no var needed inside typed procs
-    if lhs == "result" and getattr(ParserState, '_current_return_type', ''):
+    if lhs_bare == "result" and getattr(ParserState, '_current_return_type', ''):
         prefix = ""
     # Record type in symbol table (after checking for re-declaration)
     name = self.nodes[0].to_nim() if hasattr(self.nodes[0], "to_nim") else None
@@ -682,7 +683,8 @@ def to_nim(self):
     ParserState.symbol_table.add(name, annotation, "var")
     # Nim's implicit result variable: skip var and type inside typed procs
     _exp = ""
-    if name == "result" and getattr(ParserState, '_current_return_type', ''):
+    name_bare = name[1:-1] if name.startswith("`") and name.endswith("`") else name
+    if name_bare == "result" and getattr(ParserState, '_current_return_type', ''):
         kw = ""
         result = f"{name}"  # just 'result', no type annotation needed
     else:
