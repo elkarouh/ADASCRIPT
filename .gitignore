@@ -5,6 +5,7 @@
 NIM_VERSION/
 *.exe
 *.png
+EXAMPLES/**/*.nim
 
 # Obsolete/deprecated code
 OBSOLETE/
