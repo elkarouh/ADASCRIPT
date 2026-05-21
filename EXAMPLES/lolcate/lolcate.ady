@@ -21,7 +21,7 @@ Commands:
   add-ignore <name> <pat>  Add an ignore pattern
 """
 
-nimport os, re, strutils, times
+nimport os, strutils, times
 
 # ---------------------------------------------------------------------------
 # Types
@@ -111,8 +111,11 @@ def save_config(name: str, cfg: Config):
 # Shell helpers  (shellLines: must be at function-body level, not in nested blocks)
 # ---------------------------------------------------------------------------
 
-def find_files(root_dir: str) -> []str:
-    shellLines: find {root_dir} -type f
+def find_files(root_dir: str, extra_flags: str) -> []str:
+    shellLines: fd {extra_flags} --type f --no-ignore --hidden . {root_dir}
+
+def search_index(pattern: str, ipath: str) -> []str:
+    shellLines: rg --ignore-case {pattern} {ipath}
 
 def list_dir(dir: str) -> []str:
     shellLines: ls -1 {dir}
@@ -164,11 +167,12 @@ def cmd_update(name: str):
     let ipath: str  = index_path(name)
     var all_paths: []str = []
     var t0: float   = time.time()
+    let fd_flags: str = "-L" if cfg.follow_symlinks else ""
     for root_dir in cfg.dirs:
         if not -d root_dir:
             print(f"Warning: {root_dir} not found — skipping.")
             continue
-        let paths: []str = find_files(root_dir)
+        let paths: []str = find_files(root_dir, fd_flags)
         for fpath in paths:
             if not path_should_skip(fpath, cfg.ignores):
                 all_paths.append(fpath)
@@ -185,14 +189,10 @@ def cmd_query(pattern: str, name: str):
     if not -f ipath:
         print(f"Index for '{name}' not built. Run: lolcate.ady update {name}")
         quit(1)
-    var hits: int = 0
-    with open(ipath) as f:
-        for line in f:
-            let path: str = line.strip()
-            if re.search("(?i)" + pattern, path):
-                print(path)
-                hits += 1
-    if hits == 0:
+    let hits: []str = search_index(pattern, ipath)
+    for path in hits:
+        print(path)
+    if len(hits) == 0:
         print(f"(no matches for '{pattern}' in database '{name}')")
 
 def cmd_ls():
