@@ -1,0 +1,71 @@
+# requirements.txt — dependencies for running ADASCRIPT EXAMPLES
+# ==============================================================
+#
+# Three categories of dependency:
+#   [nim]    Nim packages  — install with: nimble install <package>
+#   [pip]    Python packages — install with: pip install <package>
+#   [sys]    System packages — install with your OS package manager
+#
+# Runtime baseline (not listed below):
+#   Nim  >= 2.0   (install via choosenim: https://github.com/dom96/choosenim)
+#   Python >= 3.12 (required by py2nim transpiler)
+#
+# Quick setup:
+#   curl -fsSL https://nim-lang.org/choosenim/init.sh | sh  # installs Nim 2.x
+#   nimble install nimpy db_connector
+#   pip install matplotlib
+#   apt install fd-find ripgrep bc sqlite3   # adjust for your distro
+
+
+# -----------------------------------------------------------------------
+# [nim] Nim packages
+# -----------------------------------------------------------------------
+
+# nimpy — Python/C interop; required by files that use 'pyimport':
+#   primes.ady     (pyimport time)
+#   awk_example.ady, test_awk.ady  (nimport re  →  via nimpy)
+#   tsp.ady        (pyimport matplotlib)
+nimpy >= 0.3.1
+
+# db_connector — SQLite bindings for Nim 2.x; required by:
+#   timetable_engine.ady, timetable_backtrack.ady, timetable_sa.ady
+db_connector
+
+
+# -----------------------------------------------------------------------
+# [pip] Python packages
+# -----------------------------------------------------------------------
+
+# matplotlib — plotting library; required at runtime by:
+#   tsp.ady  (pyimport matplotlib.pyplot as plt)
+matplotlib
+
+
+# -----------------------------------------------------------------------
+# [sys] System / external tools
+# -----------------------------------------------------------------------
+
+# fd  (fd-find)  — fast file finder; required by:
+#   lolcate/lolcate.ady  (shellLines: fd ...)
+# Debian/Ubuntu: apt install fd-find
+# macOS:         brew install fd
+fd-find
+
+# rg  (ripgrep)  — fast line searcher; required by:
+#   lolcate/lolcate.ady  (shellLines: rg ...)
+# Debian/Ubuntu: apt install ripgrep
+# macOS:         brew install ripgrep
+ripgrep
+
+# bc  — arbitrary-precision calculator; required by:
+#   test_expect.ady     (drives bc via PTY)
+#   test_shell_block.ady (drives bc via expect/send)
+# Debian/Ubuntu: apt install bc
+# macOS:         brew install bc
+bc
+
+# sqlite3  — SQLite CLI; required for populating the timetable database
+#   timetable_backtrack.ady, timetable_sa.ady  (use --db flag)
+# Debian/Ubuntu: apt install sqlite3
+# macOS:         brew install sqlite
+sqlite3
