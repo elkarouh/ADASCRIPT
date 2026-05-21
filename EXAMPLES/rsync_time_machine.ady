@@ -1,0 +1,672 @@
+#!/usr/bin/env py2nim
+#ady2nim-args c -d:release
+"""rsync-time-machine.ady: Time Machine-style backups using rsync.
+Adascript translation of rsync-time-machine.py by basnijholt (Apache-2.0).
+"""
+
+pyimport os
+pyimport sys
+pyimport time
+pyimport signal
+nimport strutils, osproc, posix, times
+
+# ---------------------------------------------------------------------------
+# Global state
+# ---------------------------------------------------------------------------
+
+var APPNAME: str = "rsync-time-machine.py"
+var VERBOSE: bool = False
+
+# ---------------------------------------------------------------------------
+# Types
+# ---------------------------------------------------------------------------
+
+type SSH is tuple:
+    src_folder_prefix: str
+    dest_folder_prefix: str
+    cmd:               str
+    src_folder:        str
+    dest_folder:       str
+    port:              str
+    id_rsa:            ?str
+
+type CmdResult is tuple:
+    stdout:     str
+    stderr:     str
+    returncode: int
+
+type LogLevel_T is enum INFO, WARNING, ERROR
+type Color_T    is enum green, magenta, yellow, red, orange
+
+# ---------------------------------------------------------------------------
+# ANSI styling
+# ---------------------------------------------------------------------------
+
+var ANSI: [Color_T]str = [
+    green:   "\x1b[92m",
+    magenta: "\x1b[95m",
+    yellow:  "\x1b[93m",
+    red:     "\x1b[91m",
+    orange:  "\x1b[33m",
+]
+
+def style(text: str, color: ?Color_T = None, bold: bool = False) -> str:
+    let color_code: str = ANSI[color] if color is not None else ""
+    let bold_code:  str = "\x1b[1m" if bold else ""
+    return bold_code + color_code + text + "\x1b[0m"
+
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+
+def log(message: str, level: LogLevel_T = INFO) -> None:
+    let prefix: str = style(APPNAME, bold=True)
+    case level:
+        when WARNING:
+            print f"{prefix}: [WARNING] {style(message, orange)}"
+        when ERROR:
+            print f"{prefix}: [ERROR] {style(message, red, bold=True)}"
+        when INFO:
+            print f"{prefix}: {message}"
+
+def log_cmd(message: str, level: LogLevel_T = INFO, ssh: ?SSH = None) -> None:
+    if ssh is not None:
+        log(f"{ssh.cmd} '{message}'", level)
+    else:
+        log(message, level)
+
+# ---------------------------------------------------------------------------
+# Shell helpers — Adascript shell: integration
+# ---------------------------------------------------------------------------
+
+def run_cmd(cmd: str, ssh: ?SSH = None) -> CmdResult:
+    let full_cmd: str = f"{ssh.cmd} '{cmd}'" if ssh is not None else cmd
+    if VERBOSE:
+        let target: str = "remote" if ssh is not None else "local"
+        log(f"Running {target} command: {style(full_cmd, green, bold=True)}", INFO)
+    let r = shell: {full_cmd}
+    if VERBOSE and r.code != 0:
+        log(f"Command exit code: {style(str(r.code), red, bold=True)}", ERROR)
+    return (stdout: r.output, stderr: r.stderr, returncode: r.code)
+
+def find_cmd(path: str, ssh: ?SSH = None, maxdepth: ?int = None) -> str:
+    var cmd: str = f"find '{path}'"
+    if maxdepth is not None:
+        cmd = cmd + f" -maxdepth {maxdepth}"
+    return run_cmd(cmd, ssh).stdout
+
+def get_absolute_path(path: str, ssh: ?SSH = None) -> str:
+    return run_cmd(f"cd '{path}' && pwd", ssh).stdout
+
+def mkdir_p(path: str, ssh: ?SSH = None) -> None:
+    run_cmd(f"mkdir -p -- '{path}'", ssh)
+
+def rm_file(path: str, ssh: ?SSH = None) -> None:
+    run_cmd(f"rm -f -- '{path}'", ssh)
+
+def rm_dir(path: str, ssh: ?SSH = None) -> None:
+    run_cmd(f"rm -rf -- '{path}'", ssh)
+
+def ln_s(src: str, dest: str, ssh: ?SSH = None) -> None:
+    run_cmd(f"ln -s -- '{src}' '{dest}'", ssh)
+
+def test_file_exists(path: str, ssh: ?SSH = None) -> bool:
+    return run_cmd(f"test -e '{path}'", ssh).returncode == 0
+
+def get_filesystem_type(path: str, ssh: ?SSH = None) -> str:
+    let lines: []str = run_cmd(f"df -T '{path}'", ssh).stdout.split("\n")
+    if len(lines) > 1:
+        return lines[1].split()[1]
+    return ""
+
+# ---------------------------------------------------------------------------
+# SSH helpers
+# ---------------------------------------------------------------------------
+
+def dest_is_ssh(ssh: ?SSH) -> ?SSH:
+    if ssh is not None and ssh.dest_folder_prefix != "":
+        return ssh
+    return None
+
+def parse_ssh_pattern(folder: str, allow_host_only: bool = False) -> ?{str}str:
+    pyimport re
+    let pattern: str = r"^(?:(?P<user>[a-z0-9\._\-]+)@)?(?P<host>[A-Za-z0-9.\-]+):(?P<path>.+)$"
+    let m: ?re.Match = re.match(pattern, folder)
+    if m is not None:
+        let result: {str}str = m.groupdict()
+        if not allow_host_only and result.get("user") is None:
+            return None
+        return result
+    return None
+
+def parse_ssh(
+    src_folder: str,
+    dest_folder: str,
+    ssh_port: str,
+    id_rsa: ?str,
+    allow_host_only: bool,
+) -> ?SSH:
+    let ssh_src:  ?{str}str = parse_ssh_pattern(src_folder,  allow_host_only=allow_host_only)
+    let ssh_dest: ?{str}str = parse_ssh_pattern(dest_folder, allow_host_only=allow_host_only)
+
+    if ssh_src is None and ssh_dest is None:
+        return None
+
+    let ssh: {str}str = ssh_src if ssh_src is not None else ssh_dest
+    let ssh_user: str = ssh.get("user", "")
+    let ssh_host: str = ssh["host"]
+    let auth: str     = f"{ssh_user}@{ssh_host}" if ssh_user else ssh_host
+    let id_rsa_opt: str = f"-i {id_rsa} " if id_rsa is not None else ""
+    let ssh_cmd: str  = f"ssh -p {ssh_port} {id_rsa_opt}{auth}"
+
+    let src_prefix:  str = f"{auth}:" if ssh_src  is not None else ""
+    let dest_prefix: str = f"{auth}:" if ssh_dest is not None else ""
+    let real_src:    str = ssh_src["path"]  if ssh_src  is not None else src_folder
+    let real_dest:   str = ssh_dest["path"] if ssh_dest is not None else dest_folder
+
+    return (
+        src_folder_prefix:  src_prefix,
+        dest_folder_prefix: dest_prefix,
+        cmd:                ssh_cmd,
+        src_folder:         real_src,
+        dest_folder:        real_dest,
+        port:               ssh_port,
+        id_rsa:             id_rsa,
+    )
+
+# ---------------------------------------------------------------------------
+# Date helpers
+# ---------------------------------------------------------------------------
+
+def parse_date_to_epoch(date_str: str) -> int:
+    let fmt: str = "%Y-%m-%d-%H%M%S"
+    let dt: time.struct_time = time.strptime(date_str, fmt)
+    return int(time.mktime(dt))
+
+def now_str() -> str:
+    pyimport datetime
+    let _now: datetime.datetime = datetime.datetime.now()
+    return _now.strftime("%Y-%m-%d-%H%M%S")
+
+# ---------------------------------------------------------------------------
+# Backup marker
+# ---------------------------------------------------------------------------
+
+def backup_marker_path(folder: str) -> str:
+    return os.path.join(folder, "backup.marker")
+
+def find_backup_marker(folder: str, ssh: ?SSH = None) -> ?str:
+    let marker: str = backup_marker_path(folder)
+    let output: str = find_cmd(marker, dest_is_ssh(ssh))
+    if output:
+        return marker
+    return None
+
+# ---------------------------------------------------------------------------
+# Backup enumeration
+# ---------------------------------------------------------------------------
+
+def find_backups(dest_folder: str, ssh: ?SSH = None) -> []str:
+    let cmd: str = f"find '{dest_folder}/' -maxdepth 1 -type d -name '????-??-??-??????' -prune | sort -r"
+    return run_cmd(cmd, dest_is_ssh(ssh)).stdout.splitlines()
+
+# ---------------------------------------------------------------------------
+# Backup expiration
+# ---------------------------------------------------------------------------
+
+def expire_backup(backup_path: str, ssh: ?SSH) -> None:
+    let parent_dir: str = os.path.dirname(backup_path)
+    if find_backup_marker(parent_dir, ssh) is None:
+        log(f"{backup_path} is not on a backup destination - aborting.", ERROR)
+        sys.exit(1)
+    log(f"Expiring {backup_path}", INFO)
+    rm_dir(backup_path, ssh)
+
+def expire_backups(
+    dest_folder:         str,
+    expiration_strategy: str,
+    backup_to_keep:      str,
+    ssh:                 ?SSH,
+) -> None:
+    pyimport datetime
+    let _now: datetime.datetime = datetime.datetime.now()
+    let current_timestamp: int = int(_now.timestamp())
+    var last_kept_timestamp: int = 9999999999
+    let backups: []str = find_backups(dest_folder, ssh)
+    let oldest_backup_to_keep: ?str = sorted(backups)[0] if backups else None
+
+    for backup_dir in sorted(backups):
+        let backup_date: str = os.path.basename(backup_dir)
+        let backup_timestamp: int = parse_date_to_epoch(backup_date)
+
+        if backup_dir == backup_to_keep:
+            break
+
+        if backup_dir == oldest_backup_to_keep:
+            last_kept_timestamp = backup_timestamp
+            continue
+
+        for strategy_token in sorted(expiration_strategy.split(), reverse=True):
+            let t: []int = list(map(int, strategy_token.split(":")))
+            let cut_off_timestamp: int = current_timestamp - t[0] * 86400
+            let cut_off_interval_days: int = t[1]
+
+            if backup_timestamp <= cut_off_timestamp:
+                if cut_off_interval_days == 0:
+                    expire_backup(backup_dir, ssh)
+                    break
+
+                let last_kept_days: int = last_kept_timestamp // 86400
+                let backup_days: int = backup_timestamp // 86400
+                let interval_days: int = backup_days - last_kept_days
+
+                if interval_days < cut_off_interval_days:
+                    expire_backup(backup_dir, ssh)
+                    break
+
+                last_kept_timestamp = backup_timestamp
+                break
+
+# ---------------------------------------------------------------------------
+# Destination checks
+# ---------------------------------------------------------------------------
+
+def check_dest_is_backup_folder(dest_folder: str, ssh: ?SSH) -> None:
+    if find_backup_marker(dest_folder, ssh) is None:
+        let marker: str = backup_marker_path(dest_folder)
+        log(style(
+            "Safety check failed - the destination does not appear to be a backup folder or drive (marker file not found).",
+            yellow,
+        ), INFO)
+        log(style(
+            "If it is indeed a backup folder, you may add the marker file by running the following command:",
+            yellow,
+        ), INFO)
+        log_cmd(
+            style(f'mkdir -p -- "{dest_folder}" ; touch "{marker}"', green, bold=True),
+            INFO,
+            ssh,
+        )
+        sys.exit(1)
+
+# ---------------------------------------------------------------------------
+# rsync helpers
+# ---------------------------------------------------------------------------
+
+def get_link_dest_option(previous_dest: ?str, ssh: ?SSH) -> str:
+    if previous_dest is None:
+        log("No previous backup - creating new one.", INFO)
+        return ""
+    let abs_prev: str = get_absolute_path(previous_dest, ssh)
+    let full_prev: str = f"{ssh.dest_folder_prefix}{abs_prev}" if ssh is not None else abs_prev
+    log(style(
+        f"Previous backup found - doing incremental backup from {style(full_prev, bold=True)}",
+        yellow,
+    ), INFO)
+    return f"--link-dest='{abs_prev}'"
+
+def get_rsync_flags(
+    src_folder:        str,
+    dest_folder:       str,
+    rsync_set_flags:   ?str,
+    rsync_append_flags: ?str,
+    ssh:               ?SSH,
+) -> []str:
+    var rsync_flags: []str = [
+        "-D",
+        "--numeric-ids",
+        "--links",
+        "--hard-links",
+        "--one-file-system",
+        "--itemize-changes",
+        "--times",
+        "--recursive",
+        "--perms",
+        "--owner",
+        "--group",
+        "--stats",
+        "--human-readable",
+    ]
+    if rsync_set_flags is not None:
+        rsync_flags = rsync_set_flags.split()
+    if rsync_append_flags is not None:
+        rsync_flags = rsync_flags + rsync_append_flags.split()
+
+    if (get_filesystem_type(src_folder, ssh).lower() == "fat" or
+        get_filesystem_type(dest_folder, dest_is_ssh(ssh)).lower() == "fat"):
+        log("File-system is a version of FAT.", INFO)
+        log("Using the --modify-window rsync parameter with value 2.", INFO)
+        rsync_flags.append("--modify-window=2")
+
+    if ssh is not None:
+        rsync_flags.append("--compress")
+    return rsync_flags
+
+# ---------------------------------------------------------------------------
+# PID / lock helpers
+# ---------------------------------------------------------------------------
+
+def exit_if_pid_running(running_pid: str, ssh: ?SSH = None) -> None:
+    var cmd: str = ""
+    if sys.platform == "cygwin":
+        cmd = f"procps -wwfo cmd -p {running_pid} --no-headers | grep '{APPNAME}'"
+        let result: CmdResult = run_cmd(cmd, ssh)
+        if result.returncode == 0:
+            log(f"Previous backup task is still active - aborting (command: {result.stdout}).", ERROR)
+            sys.exit(1)
+    else:
+        let ps_flags: str = "-axp" if sys.platform.startswith("netbsd") else "-p"
+        cmd = f"ps {ps_flags} {running_pid} -o 'command' | grep '{APPNAME}'"
+        if run_cmd(cmd).stdout:
+            log("Previous backup task is still active - aborting.", ERROR)
+            sys.exit(1)
+
+def handle_still_running_or_failed_or_interrupted_backup(
+    inprogress_file: str,
+    mypid:           int,
+    dest:            str,
+    dest_folder:     str,
+    previous_dest:   ?str,
+    ssh:             ?SSH,
+) -> None:
+    if not find_cmd(inprogress_file, ssh):
+        return
+
+    let running_pid: str = run_cmd(f"cat {inprogress_file}", ssh).stdout
+    exit_if_pid_running(running_pid, ssh)
+
+    if previous_dest is not None:
+        let prefix: str = ssh.dest_folder_prefix if ssh is not None else ""
+        log(f"{prefix}{inprogress_file} already exists - the previous backup failed or was interrupted. Backup will resume from there.", INFO)
+        run_cmd(f"mv -- {previous_dest} {dest}", ssh)
+
+    run_cmd(f"echo {mypid} > {inprogress_file}", ssh)
+
+# ---------------------------------------------------------------------------
+# Space / error handling
+# ---------------------------------------------------------------------------
+
+def deal_with_no_space_left(
+    log_file:    str,
+    dest_folder: str,
+    ssh:         ?SSH,
+    auto_expire: bool,
+) -> bool:
+    pyimport re
+    let log_data: str = open(log_file, encoding="utf-8", errors="surrogateescape").read()
+    let no_space: bool = bool(re.search(
+        r"No space left on device \(28\)|Result too large \(34\)",
+        log_data,
+    ))
+    if not no_space:
+        return False
+
+    if not auto_expire:
+        log("No space left on device, and automatic purging of old backups is disabled.", ERROR)
+        sys.exit(1)
+
+    log("No space left on device - removing oldest backup and resuming.", WARNING)
+    let backups: []str = find_backups(dest_folder, ssh)
+    if len(backups) <= 1:
+        log("No space left on device, and no old backup to delete.", ERROR)
+        sys.exit(1)
+
+    expire_backup(sorted(backups)[-1], ssh)
+    return True
+
+def check_rsync_errors(log_file: str, auto_delete_log: bool) -> None:
+    let log_data: str = open(log_file, encoding="utf-8", errors="surrogateescape").read()
+    if "rsync error:" in log_data:
+        log(f"Rsync reported an error. Run this command for more details: grep -E 'rsync:|rsync error:' '{log_file}'", ERROR)
+    elif "rsync:" in log_data:
+        log(f"Rsync reported a warning. Run this command for more details: grep -E 'rsync:|rsync error:' '{log_file}'", WARNING)
+    else:
+        log(style("Backup completed without errors.", magenta), INFO)
+        if auto_delete_log:
+            os.remove(log_file)
+
+# ---------------------------------------------------------------------------
+# SSH input validation
+# ---------------------------------------------------------------------------
+
+def handle_ssh(
+    src_folder:    str,
+    dest_folder:   str,
+    ssh_port:      str,
+    id_rsa:        ?str,
+    exclusion_file: str,
+    allow_host_only: bool,
+) -> (str, str, ?SSH):
+    var ssh: ?SSH = parse_ssh(
+        src_folder, dest_folder,
+        ssh_port=ssh_port, id_rsa=id_rsa,
+        allow_host_only=allow_host_only,
+    )
+    if ssh is not None:
+        if ssh.dest_folder:
+            dest_folder = ssh.dest_folder
+        if ssh.src_folder:
+            src_folder = ssh.src_folder
+
+    dest_folder = dest_folder.rstrip("/") if dest_folder != "/" else dest_folder
+    src_folder  = src_folder.rstrip("/")  if src_folder  != "/" else src_folder
+
+    if not src_folder or not dest_folder:
+        log("Source and destination folder cannot be empty.", ERROR)
+        sys.exit(1)
+
+    if ("'" in src_folder or "'" in dest_folder or
+        (bool(exclusion_file) and "'" in exclusion_file)):
+        log("Source and destination directories may not contain single quote characters.", ERROR)
+        sys.exit(1)
+
+    return (src_folder, dest_folder, ssh)
+
+# ---------------------------------------------------------------------------
+# Core backup logic
+# ---------------------------------------------------------------------------
+
+def start_backup(
+    src_folder:        str,
+    dest:              str,
+    exclusion_file:    str,
+    inprogress_file:   str,
+    link_dest_option:  str,
+    rsync_flags:       []str,
+    log_dir:           str,
+    mypid:             int,
+    ssh:               ?SSH,
+    now:               str,
+) -> str:
+    let log_file: str = os.path.join(log_dir, f"{now}.log")
+
+    var src:  str = src_folder
+    var dst:  str = dest
+    if ssh is not None:
+        src = f"{ssh.src_folder_prefix}{src_folder}"
+        dst = f"{ssh.dest_folder_prefix}{dest}"
+
+    log(style("Starting backup...", yellow), INFO)
+    log(f"From: {style(src, bold=True)}/", INFO)
+    log(f"To:   {style(dst, bold=True)}/", INFO)
+
+    var cmd: str = "rsync"
+    if ssh is not None:
+        let id_rsa_opt: str = f"-i {ssh.id_rsa} " if ssh.id_rsa is not None else ""
+        cmd = f"{cmd} -e 'ssh -p {ssh.port} {id_rsa_opt}-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'"
+
+    let flags_str: str = " ".join(rsync_flags)
+    cmd = f"{cmd} {flags_str}"
+    cmd = f"{cmd} --log-file '{log_file}'"
+    if exclusion_file:
+        cmd = f"{cmd} --exclude-from '{exclusion_file}'"
+    cmd = f"{cmd} {link_dest_option}"
+    cmd = f"{cmd} -- '{src}/' '{dst}/'"
+
+    log(style("Running command:", bold=True), INFO)
+    log(style(cmd, green), INFO)
+
+    run_cmd(f"echo {mypid} > {inprogress_file}", ssh)
+    run_cmd(cmd)
+    return log_file
+
+def backup(
+    src_folder:         str,
+    dest_folder:        str,
+    exclusion_file:     str,
+    log_dir:            str,
+    auto_delete_log:    bool,
+    expiration_strategy: str,
+    auto_expire:        bool,
+    port:               str,
+    id_rsa:             ?str,
+    rsync_set_flags:    ?str,
+    rsync_append_flags: ?str,
+    rsync_get_flags:    bool,
+    allow_host_only:    bool,
+    dry_run:            bool,
+) -> None:
+    var src:  str
+    var dest_f: str
+    var ssh:  ?SSH
+    (src, dest_f, ssh) = handle_ssh(
+        src_folder, dest_folder,
+        ssh_port=port, id_rsa=id_rsa,
+        exclusion_file=exclusion_file,
+        allow_host_only=allow_host_only,
+    )
+
+    if not test_file_exists(src, ssh):
+        log(f"Source folder '{src}' does not exist - aborting.", ERROR)
+        sys.exit(1)
+
+    check_dest_is_backup_folder(dest_f, dest_is_ssh(ssh))
+
+    let now:  str = now_str()
+    let dest: str = os.path.join(dest_f, now)
+    let sorted_backups: []str = sorted(find_backups(dest_f, ssh), reverse=True)
+    var previous_dest: ?str = sorted_backups[0] if sorted_backups else None
+    let inprogress_file: str = os.path.join(dest_f, "backup.inprogress")
+    let mypid: int = os.getpid()
+
+    if not os.path.exists(log_dir):
+        log(f"Creating log folder in '{log_dir}'...", INFO)
+        os.makedirs(log_dir)
+
+    handle_still_running_or_failed_or_interrupted_backup(
+        inprogress_file, mypid, dest, dest_f, previous_dest, ssh,
+    )
+
+    var rsync_flags: []str = get_rsync_flags(src, dest_f, rsync_set_flags, rsync_append_flags, ssh)
+
+    if "-n" in rsync_flags or "--dry-run" in rsync_flags:
+        dry_run = True
+        log(f"Dry-run detected in rsync flags - setting {style('--dry-run', green)}.", INFO)
+    elif dry_run:
+        rsync_flags.append("--dry-run")
+
+    if dry_run:
+        log(f"Dry-run mode enabled: {style('no changes will be persisted', orange)}.", INFO)
+
+    if rsync_get_flags:
+        log(f"Rsync flags:\n{style(' '.join(rsync_flags), yellow, bold=True)}", INFO)
+        sys.exit(0)
+
+    var log_file: str = ""
+    for _ in 0 ..< 100:
+        let link_dest: str = get_link_dest_option(previous_dest, ssh)
+
+        if not find_cmd(dest, ssh, maxdepth=0):
+            let full_dest: str = style(f"{ssh.cmd if ssh is not None else ''}{dest}", bold=True)
+            log(f"Creating destination {full_dest}", INFO)
+            mkdir_p(dest, ssh)
+
+        expire_backups(dest_f, expiration_strategy, previous_dest or dest, ssh)
+
+        log_file = start_backup(
+            src, dest, exclusion_file, inprogress_file,
+            link_dest, rsync_flags, log_dir, mypid, ssh, now,
+        )
+
+        let retry: bool = deal_with_no_space_left(log_file, dest_f, ssh=ssh, auto_expire=auto_expire)
+        if not retry:
+            break
+
+    check_rsync_errors(log_file, auto_delete_log)
+
+    if dry_run:
+        rm_dir(dest, ssh)
+        rm_file(inprogress_file, ssh)
+        log("Dry run complete - no backup was saved.", INFO)
+        return
+
+    rm_file(os.path.join(dest_f, "latest"), dest_is_ssh(ssh))
+    ln_s(os.path.basename(dest), os.path.join(dest_f, "latest"), dest_is_ssh(ssh))
+    rm_file(inprogress_file, ssh)
+
+# ---------------------------------------------------------------------------
+# Argument parsing and entry point
+# ---------------------------------------------------------------------------
+
+def main() -> None:
+    pyimport argparse
+
+    let parser: argparse.ArgumentParser = argparse.ArgumentParser(
+        description="A script for creating and managing time-stamped backups using rsync.",
+    )
+    parser.add_argument("-p", "--port", default="22", help="SSH port.")
+    parser.add_argument("-i", "--id_rsa", default=None, help="Specify the private ssh key to use.")
+    parser.add_argument("--rsync-get-flags", action="store_true",
+        help="Display the default rsync flags that are used for backup.")
+    parser.add_argument("--rsync-set-flags",    default=None, help="Set the rsync flags.")
+    parser.add_argument("--rsync-append-flags", default=None, help="Append rsync flags.")
+    parser.add_argument("--log-dir", default="$HOME/.rsync-time-backup",
+        help="Set the log file directory. Default: $HOME/.rsync-time-backup")
+    parser.add_argument("--strategy", default="1:1 30:7 365:30",
+        help='Set the expiration strategy. Default: "1:1 30:7 365:30"')
+    parser.add_argument("--no-auto-expire",  action="store_true",
+        help="Disable automatically deleting backups when out of space.")
+    parser.add_argument("--allow-host-only", action="store_true",
+        help="Allow HOST-only pattern (without USER@) for SSH connections.")
+    parser.add_argument("--dry-run",         action="store_true",
+        help="Simulate the backup process without making any persistent changes.")
+    parser.add_argument("src_folder",  help="Source folder. Format: [USER@HOST:]SOURCE")
+    parser.add_argument("dest_folder", help="Destination folder. Format: [USER@HOST:]DESTINATION")
+    parser.add_argument("exclusion_file", nargs="?", default=None,
+        help="Path to the file containing exclude patterns.")
+    parser.add_argument("--exclude-from", dest="exclude_from", default=None,
+        help="Path to the file containing exclude patterns (alternative to positional arg).")
+    parser.add_argument("-v", "--verbose", action="store_true",
+        help="Enable verbose output.")
+
+    let args: argparse.Namespace = parser.parse_args()
+
+    if args.exclusion_file and args.exclude_from:
+        parser.error("Both positional `exclusion_file` and `--exclude-from` were provided. Please use only one.")
+    if args.exclude_from:
+        args.exclusion_file = args.exclude_from
+
+    let log_dir_default: str = "$HOME/.rsync-time-backup"
+    let auto_delete_log: bool = (args.log_dir == log_dir_default)
+
+    VERBOSE = args.verbose
+    signal.signal(signal.SIGINT, lambda n, f: (log("SIGINT caught."), sys.exit(1)), INFO)
+
+    backup(
+        src_folder=args.src_folder,
+        dest_folder=args.dest_folder,
+        exclusion_file=args.exclusion_file or "",
+        log_dir=os.path.expandvars(os.path.expanduser(args.log_dir)),
+        auto_delete_log=auto_delete_log,
+        expiration_strategy=args.strategy,
+        auto_expire=not args.no_auto_expire,
+        port=args.port,
+        id_rsa=args.id_rsa,
+        rsync_set_flags=args.rsync_set_flags,
+        rsync_append_flags=args.rsync_append_flags,
+        rsync_get_flags=args.rsync_get_flags,
+        allow_host_only=args.allow_host_only,
+        dry_run=args.dry_run,
+    )
+
+main()
