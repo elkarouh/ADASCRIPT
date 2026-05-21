@@ -1,5 +1,5 @@
 #!/usr/bin/env py2nim
-#ady2nim-args c --cc:clang --clang.exe:zigcc --clang.linkerexe:zigcc
+#ady2nim-args c
 """Tests for state_search.StateSearcher."""
 
 nimport state_search
