@@ -3,14 +3,15 @@
 type Kind_T is enum cmdArgument, cmdOption, cmdEnd
 
 def get_kind(arg: str) -> Kind_T:
-    if arg == "--":
-        return cmdEnd
-    elif arg.startswith("--"):
-        return cmdOption
-    elif arg.startswith("-") and len(arg) > 1:
-        return cmdOption
-    else:
-        return cmdArgument
+    match arg:
+        case "--":
+            return cmdEnd
+        case _ if arg.startswith("--"):
+            return cmdOption
+        case _ if arg.startswith("-") and len(arg) > 1:
+            return cmdOption
+        case _:
+            return cmdArgument
 
 def usage(code: Natural):
     print "Usage: $0 [options] <input>"

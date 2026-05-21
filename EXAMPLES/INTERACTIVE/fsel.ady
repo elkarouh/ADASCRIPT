@@ -45,18 +45,17 @@ while True:
         setCurrentDir("..")
         continue
 
-    if sel == "/":
-        setCurrentDir("/")
-    elif sel == "..":
-        setCurrentDir("..")
-    elif -d (f"{cwd}/{sel}"):
-        setCurrentDir(sel)
-    elif key == "right" and -x (f"{cwd}/{sel}"):
-        if "/" in sel:
-            shell: {sel}
-        else:
-            shell: {cwd}/{sel}
-        quit(0)
-    else:
-        shell: {editor} {cwd}/{sel}
-        quit(0)
+    match sel:
+        case "/" | "..":
+            setCurrentDir(sel)
+        case _ if -d (f"{cwd}/{sel}"):
+            setCurrentDir(sel)
+        case _ if key == "right" and -x (f"{cwd}/{sel}"):
+            if "/" in sel:
+                shell: {sel}
+            else:
+                shell: {cwd}/{sel}
+            quit(0)
+        case _:
+            shell: {editor} {cwd}/{sel}
+            quit(0)
