@@ -79,18 +79,19 @@ def load_config(name: str) -> Config:
             var stripped: str = line.strip()
             if stripped == "" or stripped.startswith("#"):
                 continue
-            if stripped == "dirs:":
-                section = "dirs"
-            elif stripped == "ignores:":
-                section = "ignores"
-            elif stripped == "follow_symlinks:":
-                section = "follow_symlinks"
-            elif section == "dirs":
-                dirs.append(stripped)
-            elif section == "ignores":
-                ignores.append(stripped)
-            elif section == "follow_symlinks":
-                follow_symlinks = (stripped == "true")
+            match stripped:
+                case "dirs:":
+                    section = "dirs"
+                case "ignores:":
+                    section = "ignores"
+                case "follow_symlinks:":
+                    section = "follow_symlinks"
+                case _ if section == "dirs":
+                    dirs.append(stripped)
+                case _ if section == "ignores":
+                    ignores.append(stripped)
+                case _ if section == "follow_symlinks":
+                    follow_symlinks = (stripped == "true")
     let cfg: Config = Config(dirs=dirs, ignores=ignores, follow_symlinks=follow_symlinks)
     return cfg
 

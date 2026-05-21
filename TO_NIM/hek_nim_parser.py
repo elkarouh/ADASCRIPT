@@ -1455,6 +1455,22 @@ def _structural_conds_and_bindings(pat_node, subj, indent):
 
         return conds, lets
 
+    # OR pattern: 'p1 | p2 | ...' — generate (subj == p1) or (subj == p2) or ...
+    if tname == "pattern_or":
+        sub_parts = [pat_node.nodes[0]]
+        for node in pat_node.nodes[1:]:
+            if type(node).__name__ == "Several_Times" and node.nodes:
+                for seq in node.nodes:
+                    if hasattr(seq, "nodes") and len(seq.nodes) >= 2:
+                        sub_parts.append(seq.nodes[1])
+        all_conds = []
+        for sub_pat in sub_parts:
+            sub_conds, _ = _structural_conds_and_bindings(sub_pat, subj, indent)
+            all_conds.extend(sub_conds)
+        if len(all_conds) == 1:
+            return all_conds, []
+        return ["(" + " or ".join(all_conds) + ")"], []
+
     # Wildcard / others / plain capture at top level
     nim_text = pat_node.to_nim() if hasattr(pat_node, "to_nim") else str(pat_node)
     if nim_text in ("_", "others"):
@@ -1808,6 +1824,40 @@ def to_nim(self, indent=0):
             full_body = (let_block + "\n" + body) if let_block else body
             result += f"\n{_ind(indent)}{keyword} {cond_str}:{hc}\n{full_body}"
             keyword = "elif"
+        return result.lstrip("\n")
+
+    # Non-structural patterns with guards: desugar to if/elif
+    # (Nim case/of cannot use guards on else: branches)
+    if any(guard is not None for _, _, guard in _extract_match_branches(self)):
+        result = ""
+        keyword = "if"
+        for pat_node, block_node, guard_node in _extract_match_branches(self):
+            hc = _block_inline_header_comment(block_node) if block_node else ""
+            body = ""
+            if block_node:
+                try:
+                    body = block_node.to_nim(indent + 1)
+                except TypeError:
+                    body = _ind(indent + 1) + block_node.to_nim()
+            pat_nim = pat_node.to_nim() if hasattr(pat_node, "to_nim") else str(pat_node)
+            if pat_nim in ("others", "_"):
+                guard_cond = guard_node.nodes[0].to_nim() if guard_node else None
+                if guard_cond:
+                    result += f"\n{_ind(indent)}{keyword} {guard_cond}:{hc}\n{body}"
+                    keyword = "elif"
+                else:
+                    result += f"\n{_ind(indent)}else:{hc}\n{body}"
+            else:
+                conds, lets = _structural_conds_and_bindings(pat_node, subject, indent + 1)
+                if not conds and _is_literal_nim(pat_nim):
+                    conds = [f"{subject} == {pat_nim}"]
+                if guard_node:
+                    conds.append(guard_node.nodes[0].to_nim())
+                cond_str = " and ".join(conds) if conds else "true"
+                let_block = "\n".join(lets)
+                full_body = (let_block + "\n" + body) if let_block else body
+                result += f"\n{_ind(indent)}{keyword} {cond_str}:{hc}\n{full_body}"
+                keyword = "elif"
         return result.lstrip("\n")
 
     # Simple patterns: emit native Nim case/of
