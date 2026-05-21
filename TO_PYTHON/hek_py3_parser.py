@@ -697,6 +697,45 @@ def _case_from_seq(seq, indent):
     return f"{_ind(indent)}case {pat}{guard}:{hc}\n{body}"
 
 
+# --- Python 3.10+ match/case ---
+
+@method(case_clause)
+def to_py(self, indent=0):
+    """case_clause: 'case' pattern guard? ':' suite — Python match/case branch"""
+    pat = self.nodes[0].to_py()
+    guard = ""
+    block_node = None
+    for node in self.nodes[1:]:
+        if type(node).__name__ == "Several_Times" and node.nodes:
+            for seq in node.nodes:
+                if hasattr(seq, "to_py"):
+                    guard = seq.to_py()
+        elif hasattr(node, "to_py"):
+            block_node = node
+    hc = _block_inline_header_comment(block_node) if block_node else ""
+    body = _suite_to_py(block_node, indent + 1) if block_node else ""
+    return f"{_ind(indent)}case {pat}{guard}:{hc}\n{body}"
+
+
+@method(match_stmt)
+def to_py(self, indent=0):
+    """match_stmt: 'match' expression ':' NEWLINE INDENT case_clause+ DEDENT"""
+    subject = self.nodes[0].to_py()
+    result = f"{_ind(indent)}match {subject}:"
+    for node in self.nodes[1:]:
+        tname = type(node).__name__
+        if tname == "case_clause":
+            result += "\n" + node.to_py(indent + 1)
+        elif tname == "Several_Times":
+            for seq in node.nodes:
+                stname = type(seq).__name__
+                if stname == "case_clause":
+                    result += "\n" + seq.to_py(indent + 1)
+                elif stname == "Sequence_Parser" and hasattr(seq, "nodes"):
+                    result += "\n" + _case_from_seq(seq, indent + 1)
+    return result
+
+
 # --- Function parameters ---
 @method(param_plain)
 def to_py(self):

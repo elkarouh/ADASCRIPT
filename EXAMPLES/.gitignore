@@ -1,0 +1,8 @@
+# py2nim creates a symlink (same name, no extension) next to each compiled .ady file.
+# Ignore everything that isn't a source file, doc, or subdirectory.
+*
+!.gitignore
+!*.ady
+!*.md
+!*.txt
+!*/
