@@ -1,5 +1,5 @@
 #!/usr/bin/env py2nim
-#ady2nim-args c
+#ady2nim-args c --cc:clang --clang.exe:zigcc --clang.linkerexe:zigcc
 """
 Shortest-path / dynamic-programming optimiser framework.
 
