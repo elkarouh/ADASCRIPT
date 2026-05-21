@@ -3022,7 +3022,7 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
 
     for node in func_node.nodes:
         for deco_node, deco_text in _extract_deco_names(node):
-            if deco_text == "@proc":
+            if deco_text in ("@proc", "@`proc`"):
                 force_proc = True
             else:
                 extra_decos.append(deco_text)

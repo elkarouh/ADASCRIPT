@@ -152,8 +152,12 @@ def _nim_expr_type(expr):
             return "string"
 
         # plain identifier
-        if _re.match(r"^[A-Za-z_]\w*$", s):
-            sym = ParserState.symbol_table.lookup(s)
+        # Also handle backtick-escaped identifiers: `result`, `out`, etc.
+        # The symbol table may store the key with or without backticks depending
+        # on whether the declaration site had already escaped the name.
+        s_bare = s[1:-1] if s.startswith("`") and s.endswith("`") else s
+        if _re.match(r"^[A-Za-z_]\w*$", s_bare):
+            sym = ParserState.symbol_table.lookup(s) or ParserState.symbol_table.lookup(s_bare)
             if sym:
                 t = sym.get("type")
                 # Resolve type aliases one level (e.g. Graph_T -> Table[...])
