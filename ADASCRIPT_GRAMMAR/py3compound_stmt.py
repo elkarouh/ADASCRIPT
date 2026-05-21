@@ -95,6 +95,8 @@ with_stmt = fw("with_stmt")
 with_item = fw("with_item")
 case_stmt = fw("case_stmt")
 when_clause = fw("when_clause")
+case_clause = fw("case_clause")
+match_stmt = fw("match_stmt")
 pattern = fw("pattern")
 variant_when = fw("variant_when")
 variant_case = fw("variant_case")
@@ -284,6 +286,21 @@ case_stmt = (
     + DEDENT
 )
 
+# Python 3.10+ match/case syntax (alternative to Adascript case/when)
+# case_clause: branch inside a match block — 'case pattern [if guard]: suite'
+case_clause = ikw("case") + pattern + case_guard[:] + COLON + suite
+
+match_stmt = (
+    ikw("match")
+    + expression
+    + COLON
+    + NEWLINE
+    + INDENT
+    + NL[:]
+    + (case_clause + NL[:])[1:]
+    + DEDENT
+)
+
 # --- Function parameters ---
 # param_plain: name [':' annotation] ['=' default]
 param_plain = IDENTIFIER + (V_COLON + type_annotation)[:] + (V_EQUAL + expression)[:]
@@ -434,6 +451,7 @@ compound_stmt = (
     | try_stmt
     | with_stmt_paren
     | with_stmt
+    | match_stmt
     | case_stmt
     | shell_stmt
     | async_func_def

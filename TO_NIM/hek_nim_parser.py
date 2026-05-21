@@ -1221,6 +1221,31 @@ def to_nim(self, indent=0):
     return f"{_ind(indent)}{prefix}{guard}:{hc}\n{body}"
 
 
+@method(case_clause)
+def to_nim(self, indent=0):
+    """case_clause: Python 'case' pattern guard? ':' suite -> Nim: 'of pattern:' or 'else:'"""
+    pat = self.nodes[0].to_nim()
+    guard = ""
+    block_node = None
+    for node in self.nodes[1:]:
+        if type(node).__name__ == "Several_Times" and node.nodes:
+            for seq in node.nodes:
+                if hasattr(seq, "to_nim"):
+                    guard = seq.to_nim()
+        elif hasattr(node, "to_nim"):
+            block_node = node
+    hc = _block_inline_header_comment(block_node) if block_node else ""
+    body = ""
+    if block_node:
+        try:
+            body = block_node.to_nim(indent + 1)
+        except TypeError:
+            body = _ind(indent + 1) + block_node.to_nim()
+    # Python wildcard '_' and Adascript 'others' both map to Nim else:
+    prefix = "else" if pat in ("others", "_") else f"of {pat}"
+    return f"{_ind(indent)}{prefix}{guard}:{hc}\n{body}"
+
+
 def _is_structural_pattern(pat_node):
     """Return True if this pattern node requires structural (if/elif) desugaring.
 
@@ -1655,6 +1680,161 @@ def _case_from_seq_nim(seq, indent):
     body = block_node.to_nim(indent + 1) if block_node else ""
     prefix = "else" if pat == "others" else f"of {pat}"
     return f"{_ind(indent)}{prefix}{guard}:{hc}\n{body}"
+
+
+# --- Python 3.10+ match/case -> Nim ---
+
+def _extract_match_branches(match_node):
+    """Yield (pat_node, block_node, guard_node) for each branch in a match_stmt."""
+    for node in match_node.nodes[1:]:
+        tname = type(node).__name__
+        if tname == "case_clause":
+            pat = node.nodes[0]
+            blk = _block_node_of(node)
+            guard = None
+            for n in node.nodes[1:]:
+                if type(n).__name__ == "case_guard":
+                    guard = n
+            yield pat, blk, guard
+        elif tname == "Several_Times":
+            for seq in node.nodes:
+                stname = type(seq).__name__
+                if stname == "case_clause":
+                    pat = seq.nodes[0]
+                    blk = _block_node_of(seq)
+                    guard = None
+                    for n in seq.nodes[1:]:
+                        if type(n).__name__ == "case_guard":
+                            guard = n
+                    yield pat, blk, guard
+                elif stname == "Sequence_Parser" and hasattr(seq, "nodes"):
+                    pat_node = None
+                    blk_node = None
+                    guard_node = None
+                    for child in seq.nodes:
+                        cname = type(child).__name__
+                        if cname in ("block", "stmt_line"):
+                            blk_node = child
+                        elif cname == "case_guard":
+                            guard_node = child
+                        elif cname == "Several_Times":
+                            for inner in child.nodes:
+                                if type(inner).__name__ == "case_guard":
+                                    guard_node = inner
+                        elif cname not in ("Filter", "Fmap") and hasattr(child, "to_nim"):
+                            if pat_node is None:
+                                pat_node = child
+                    if pat_node is not None:
+                        yield pat_node, blk_node, guard_node
+
+
+def _match_clause_from_seq_nim(seq, indent):
+    """Reconstruct a Nim case branch from a flattened Sequence_Parser (match_stmt path).
+
+    Like _case_from_seq_nim but also maps '_' wildcard to 'else:'.
+    """
+    pat = ""
+    guard = ""
+    block_node = None
+    pat_seen = False
+    for child in seq.nodes:
+        tname = type(child).__name__
+        if tname in ("block", "stmt_line"):
+            block_node = child
+        elif tname == "Several_Times":
+            for inner in child.nodes:
+                if hasattr(inner, "to_nim"):
+                    guard = inner.to_nim()
+        elif tname == "case_guard":
+            guard = child.to_nim()
+        elif not pat_seen:
+            pat = child.to_nim()
+            pat_seen = True
+    hc = _block_inline_header_comment(block_node) if block_node else ""
+    body = block_node.to_nim(indent + 1) if block_node else ""
+    prefix = "else" if pat in ("others", "_") else f"of {pat}"
+    return f"{_ind(indent)}{prefix}{guard}:{hc}\n{body}"
+
+
+@method(match_stmt)
+def to_nim(self, indent=0):
+    """Python match/case -> Nim case statement; desugars complex patterns to if/elif."""
+    subject = self.nodes[0].to_nim()
+
+    # Detect tuple subject: (a, b, ...) — desugar all branches to if/elif
+    _tm = re.match(r'^\((.+)\)$', subject.strip())
+    if _tm:
+        subject_parts = [p.strip() for p in _tm.group(1).split(",")]
+        branches = [(pat.to_nim(), blk) for pat, blk, _ in _extract_match_branches(self)]
+        result = ""
+        keyword = "if"
+        for pat_nim, block_node in branches:
+            body = ""
+            if block_node:
+                try:
+                    body = block_node.to_nim(indent + 1)
+                except TypeError:
+                    body = _ind(indent + 1) + block_node.to_nim()
+            hc = _block_inline_header_comment(block_node) if block_node else ""
+            if pat_nim in ("others", "_"):
+                result += f"\n{_ind(indent)}else:{hc}\n{body}"
+            else:
+                cond = _tuple_pattern_to_cond(pat_nim, subject_parts)
+                result += f"\n{_ind(indent)}{keyword} {cond}:{hc}\n{body}"
+                keyword = "elif"
+        return result.lstrip("\n")
+
+    # Structural pattern matching: desugar all branches to if/elif chain
+    if any(_is_structural_pattern(pat) for pat, _blk, _guard in _extract_match_branches(self)):
+        result = ""
+        keyword = "if"
+        for pat_node, block_node, guard_node in _extract_match_branches(self):
+            hc = _block_inline_header_comment(block_node) if block_node else ""
+            body = ""
+            if block_node:
+                try:
+                    body = block_node.to_nim(indent + 1)
+                except TypeError:
+                    body = _ind(indent + 1) + block_node.to_nim()
+            pat_nim = pat_node.to_nim() if hasattr(pat_node, "to_nim") else str(pat_node)
+            if pat_nim in ("others", "_"):
+                result += f"\n{_ind(indent)}else:{hc}\n{body}"
+                continue
+            conds, lets = _structural_conds_and_bindings(pat_node, subject, indent + 1)
+            if guard_node is not None:
+                conds.append(guard_node.nodes[0].to_nim())
+            cond_str = " and ".join(conds) if conds else "true"
+            let_block = "\n".join(lets)
+            full_body = (let_block + "\n" + body) if let_block else body
+            result += f"\n{_ind(indent)}{keyword} {cond_str}:{hc}\n{full_body}"
+            keyword = "elif"
+        return result.lstrip("\n")
+
+    # Simple patterns: emit native Nim case/of
+    from hek_nim_expr import _str_to_char_lit
+    _subj_sym = ParserState.symbol_table.lookup(subject)
+    _subj_is_char = _subj_sym and (_subj_sym.get("type") or "") == "char"
+
+    def _fix_clause(clause_nim):
+        if not _subj_is_char:
+            return clause_nim
+        def _coerce(m):
+            return _str_to_char_lit(m.group(0))
+        return re.sub(r'"[^"]*"', _coerce, clause_nim)
+
+    result = f"{_ind(indent)}case {subject}:"
+    for node in self.nodes[1:]:
+        tname = type(node).__name__
+        if tname == "case_clause":
+            result += "\n" + _fix_clause(node.to_nim(indent + 1))
+        elif tname == "Several_Times":
+            for seq in node.nodes:
+                stname = type(seq).__name__
+                if stname == "case_clause":
+                    result += "\n" + _fix_clause(seq.to_nim(indent + 1))
+                elif stname == "Sequence_Parser" and hasattr(seq, "nodes"):
+                    result += "\n" + _fix_clause(_match_clause_from_seq_nim(seq, indent + 1))
+    return result
 
 
 # --- Function parameters ---
