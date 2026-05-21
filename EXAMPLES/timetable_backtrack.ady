@@ -1,5 +1,5 @@
 #!/usr/bin/env py2nim
-#ady2nim-args c --cc:clang --clang.exe:zigcc --clang.linkerexe:zigcc -d:release
+#ady2nim-args c -d:release
 """
 School Timetabling — Backtracking CSP via state_search.StateSearcher
 ====================================================================
