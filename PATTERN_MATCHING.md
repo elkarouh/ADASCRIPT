@@ -302,8 +302,7 @@ match verb:
 ## 6. Value and enum patterns
 
 Write enum members **unqualified** in patterns — the transpiler
-auto-qualifies them for the Python target. Dotted names (`Direction.North`)
-also work and are passed through unchanged.
+auto-qualifies them for the Python target.
 
 ```python
 type Direction = enum North, South, East, West
@@ -892,7 +891,7 @@ match tree:
 | **Wildcard** | `when others:` | `case _:` | `else:` |
 | **Capture** | `when x:` | `case x:` | `of x:` or let-binding |
 | **OR** | `when 1 \| 2:` | `case 1 \| 2:` | `of 1, 2:` |
-| **Enum value** | `when Color.Red:` | `case Color.Red:` | `of Color.Red:` |
+| **Enum value** | `when Red:` | `case Red:` | `of Red:` |
 | **Range** *(Adascript only)* | `when 1..10:` | — | `of 1 .. 10:` |
 | **Sequence fixed** | `when [a, b]:` | `case [a, b]:` | `if len == 2: let...` |
 | **Sequence + rest** | `when [a, *xs]:` | `case [a, *xs]:` | `if len >= 1: let...` |
