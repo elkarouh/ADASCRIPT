@@ -177,9 +177,9 @@ def cmd_update(name: str):
             if not path_should_skip(fpath, cfg.ignores):
                 all_paths.append(fpath)
     let count: int = len(all_paths)
-    with open(ipath, "w") as out:
+    with open(ipath, "w") as outf:
         for fpath in all_paths:
-            out.write(fpath + "\n")
+            outf.write(fpath + "\n")
     let elapsed: float = time.time() - t0
     print(f"Indexed {count} files in {elapsed:.2f}s")
     print(f"  Index : {ipath}")

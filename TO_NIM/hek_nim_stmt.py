@@ -70,7 +70,6 @@ _NIMPORT_NAME_MAP = {
     "heapq":    "heapqueue",
     "bisect":   "algorithm",
     "json":     "std/json",
-    "re":       "re",
     "asyncio":  "asyncdispatch",
     # AdaScript stdlib — 'from stdlib import X' resolves natively
     "stdlib":   "stdlib",
@@ -84,21 +83,9 @@ _PY_MODULE_TO_NIM = _NIMPORT_NAME_MAP
 
 # Per-module function call translations: module_name -> {py_func: nim_expr_template}.
 # Templates use {args} for the full argument list and {arg0}, {arg1}, … for individual args.
-# {arg0} is the first argument, {arg1} is the second, etc.
-_PY_MODULE_FUNC_TO_NIM = {
-    "re": {
-        # re.search(pattern, string) -> contains(string, re(pattern))
-        "search":  "contains({arg1}, re({arg0}))",
-        # re.match(pattern, string) -> contains(string, re(pattern))
-        "match":   "contains({arg1}, re({arg0}))",
-        # re.findall(pattern, string) -> findAll(string, re(pattern))
-        "findall": "findAll({arg1}, re({arg0}))",
-        # re.sub(pattern, repl, string) -> string.replace(re(pattern), repl)
-        "sub":     "{arg2}.replace(re({arg0}), {arg1})",
-        # re.compile(pattern) -> re(pattern)
-        "compile": "re({arg0})",
-    },
-}
+# All module function translations removed — users write native AdaScript calls.
+# 're' is handled via nimpy (Python API), not translated.
+_PY_MODULE_FUNC_TO_NIM = {}
 
 
 # --- visible tokens ---
@@ -192,15 +179,14 @@ def to_nim(self):
         # All targets are new names — declare with let
         tgt_str = ", ".join(targets)
         return f"let ({tgt_str}) = {parts[1]}"
-    lhs_bare = lhs[1:-1] if lhs.startswith("`") and lhs.endswith("`") else lhs
     if "." in lhs or "[" in lhs:
         prefix = ""
-    elif ParserState.symbol_table.lookup(lhs) or ParserState.symbol_table.lookup(lhs_bare):
+    elif ParserState.symbol_table.lookup(lhs):
         prefix = ""
     else:
         prefix = "var "
     # Nim's implicit 'result' variable: no var needed inside typed procs
-    if lhs_bare == "result" and getattr(ParserState, '_current_return_type', ''):
+    if lhs == "result" and getattr(ParserState, '_current_return_type', ''):
         prefix = ""
     # Record type in symbol table (after checking for re-declaration)
     name = self.nodes[0].to_nim() if hasattr(self.nodes[0], "to_nim") else None
@@ -683,8 +669,7 @@ def to_nim(self):
     ParserState.symbol_table.add(name, annotation, "var")
     # Nim's implicit result variable: skip var and type inside typed procs
     _exp = ""
-    name_bare = name[1:-1] if name.startswith("`") and name.endswith("`") else name
-    if name_bare == "result" and getattr(ParserState, '_current_return_type', ''):
+    if name == "result" and getattr(ParserState, '_current_return_type', ''):
         kw = ""
         result = f"{name}"  # just 'result', no type annotation needed
     else:
@@ -1597,10 +1582,15 @@ def to_nim(self):
                         parts.append(child.to_nim())
     lines = []
     for part in parts:
-        nim_mod = _NIMPORT_NAME_MAP.get(part, part)
-        ParserState.nim_imports.add(nim_mod)
-        # Register `part` as a nim_module alias so `part.func(args)` -> `func(args)`
-        ParserState.symbol_table.add(part, f"_nim_module:{part}", "let")
+        if part == "re":
+            # 're' uses the Python API via nimpy — register as a py_module
+            # so re.search/findall/compile etc. pass through as PyObject calls
+            lines.append(_emit_pyimport("re"))
+        else:
+            nim_mod = _NIMPORT_NAME_MAP.get(part, part)
+            ParserState.nim_imports.add(nim_mod)
+            # Register `part` as a nim_module alias so `part.func(args)` -> `func(args)`
+            ParserState.symbol_table.add(part, f"_nim_module:{part}", "let")
     return chr(10).join(lines) if lines else None
 
 
