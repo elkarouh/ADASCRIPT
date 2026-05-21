@@ -243,10 +243,15 @@ elif len(response) == 0:
     echo("empty")
 ```
 
-> **Name convention**: Adascript follows Nim's rule that names beginning
-> with an uppercase letter are constants or enum values (equality-checked),
-> while lowercase names are captures (bound). A name like `RED` in a pattern
-> is an equality check; `red` is a capture.
+> **Name convention in Nim**: Nim's `case/of` treats names beginning with an
+> uppercase letter as enum values (equality-checked) and lowercase names as
+> captures (bound). This distinction is enforced by the Nim compiler.
+>
+> **Python note**: Python's `match/case` treats *all* bare names as capture
+> patterns regardless of capitalisation — only dotted names like `Color.Red`
+> are value patterns. The Adascript transpiler handles this automatically:
+> any bare name in a pattern that is a known enum member is qualified in the
+> Python output (`Red` → `Color.Red`). You never need to qualify manually.
 
 ---
 
@@ -296,24 +301,24 @@ match verb:
 
 ## 6. Value and enum patterns
 
-Dotted names like `Color.RED` or `Status.OK` are **value patterns** —
-they perform an equality check against the named constant. Define the enum
-in the same file with the `type ... = enum` declaration.
+Write enum members **unqualified** in patterns — the transpiler
+auto-qualifies them for the Python target. Dotted names (`Direction.North`)
+also work and are passed through unchanged.
 
 ```python
 type Direction = enum North, South, East, West
 
 def describe(d: Direction) -> str:
     case d:
-        when Direction.North:
+        when North:
             return "heading north"
-        when Direction.South:
+        when South:
             return "heading south"
-        when Direction.East | Direction.West:
+        when East | West:
             return "heading sideways"
 ```
 
-**Python output:**
+**Python output** (enum members auto-qualified to value patterns):
 
 ```python
 class Direction(Enum):
@@ -328,7 +333,7 @@ West = Direction.West
 
 def describe(d: Direction) -> str:
     match d:
-        case Direction.North:
+        case Direction.North:      # bare 'North' qualified automatically
             return "heading north"
         case Direction.South:
             return "heading south"
@@ -343,13 +348,25 @@ type Direction = enum North, South, East, West
 
 proc describe(d: Direction): string =
     case d:
-        of Direction.North:
+        of North:
             return "heading north"
-        of Direction.South:
+        of South:
             return "heading south"
-        of Direction.East, Direction.West:
+        of East, West:
             return "heading sideways"
 ```
+
+### Why qualification matters for Python
+
+Python's `match/case` distinguishes two kinds of name pattern:
+
+| Pattern form | Python semantics |
+|---|---|
+| `case Red:` | **Capture** — always matches, binds `Red` locally (wrong for enums!) |
+| `case Color.Red:` | **Value** — matches only when subject `== Color.Red` |
+
+The transpiler detects enum members and emits the dotted form in Python
+output, so your Adascript source stays clean.
 
 ### Enum exhaustiveness in Nim
 
@@ -361,9 +378,9 @@ free.
 type Color = enum Red, Green, Blue
 
 case pixel:
-    when Color.Red:   r += 1
-    when Color.Green: g += 1
-    when Color.Blue:  b += 1
+    when Red:   r += 1
+    when Green: g += 1
+    when Blue:  b += 1
 ```
 
 No `others` / `_` needed — Nim knows these three cases are complete.
