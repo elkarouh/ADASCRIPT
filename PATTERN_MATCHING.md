@@ -1049,17 +1049,17 @@ type Method = enum GET, POST, PUT, DELETE, PATCH
 
 def route(method: Method, path: []str) -> str:
     match (method, path):
-        case (Method.GET, ["users"]):
+        case (GET, ["users"]):
             return list_users()
-        case (Method.GET, ["users", uid]):
+        case (GET, ["users", uid]):
             return get_user(uid)
-        case (Method.POST, ["users"]):
+        case (POST, ["users"]):
             return create_user()
-        case (Method.PUT, ["users", uid]):
+        case (PUT, ["users", uid]):
             return update_user(uid)
-        case (Method.DELETE, ["users", uid]):
+        case (DELETE, ["users", uid]):
             return delete_user(uid)
-        case (Method.GET, ["health"]):
+        case (GET, ["health"]):
             return "ok"
         case _:
             return "404 Not Found"
@@ -1078,22 +1078,22 @@ type Token = record:
 
 def compile_token(tok: Token) -> []int:
     case tok:
-        when Token(kind=TokenKind.TInt, lexem=s):
+        when Token(kind=TInt, lexem=s):
             return [OP_PUSH_INT, int(s)]
-        when Token(kind=TokenKind.TFloat, lexem=s):
+        when Token(kind=TFloat, lexem=s):
             return [OP_PUSH_FLOAT, encode_float(float(s))]
-        when Token(kind=TokenKind.TIdent, lexem=name):
+        when Token(kind=TIdent, lexem=name):
             idx: int = intern(name)
             return [OP_LOAD, idx]
-        when Token(kind=TokenKind.TOp, lexem="+"):
+        when Token(kind=TOp, lexem="+"):
             return [OP_ADD]
-        when Token(kind=TokenKind.TOp, lexem="-"):
+        when Token(kind=TOp, lexem="-"):
             return [OP_SUB]
-        when Token(kind=TokenKind.TOp, lexem="*"):
+        when Token(kind=TOp, lexem="*"):
             return [OP_MUL]
-        when Token(kind=TokenKind.TOp, lexem="/"):
+        when Token(kind=TOp, lexem="/"):
             return [OP_DIV]
-        when Token(kind=TokenKind.TEOF, lexem=_):
+        when Token(kind=TEOF, lexem=_):
             return [OP_HALT]
         when others:
             raise SyntaxError(f"unexpected token: {tok.lexem}")
@@ -1102,25 +1102,25 @@ def compile_token(tok: Token) -> []int:
 **Nim output (structural → if/elif):**
 
 ```nim
-if tok.kind == TokenKind.TInt:
+if tok.kind == TInt:
     let s = tok.lexem
     return @[OP_PUSH_INT, parseInt(s)]
-elif tok.kind == TokenKind.TFloat:
+elif tok.kind == TFloat:
     let s = tok.lexem
     return @[OP_PUSH_FLOAT, encodeFloat(parseFloat(s))]
-elif tok.kind == TokenKind.TIdent:
+elif tok.kind == TIdent:
     let name = tok.lexem
     var idx: int = intern(name)
     return @[OP_LOAD, idx]
-elif tok.kind == TokenKind.TOp and tok.lexem == "+":
+elif tok.kind == TOp and tok.lexem == "+":
     return @[OP_ADD]
-elif tok.kind == TokenKind.TOp and tok.lexem == "-":
+elif tok.kind == TOp and tok.lexem == "-":
     return @[OP_SUB]
-elif tok.kind == TokenKind.TOp and tok.lexem == "*":
+elif tok.kind == TOp and tok.lexem == "*":
     return @[OP_MUL]
-elif tok.kind == TokenKind.TOp and tok.lexem == "/":
+elif tok.kind == TOp and tok.lexem == "/":
     return @[OP_DIV]
-elif tok.kind == TokenKind.TEOF:
+elif tok.kind == TEOF:
     return @[OP_HALT]
 else:
     raise newException(SyntaxError, fmt"unexpected token: {tok.lexem}")
@@ -1137,12 +1137,12 @@ type Event = enum Start, Pause, Resume, Stop, Reset
 
 def transition(state: State, event: Event) -> State:
     case (state, event):
-        when (State.Idle,    Event.Start):  return State.Running
-        when (State.Running, Event.Pause):  return State.Paused
-        when (State.Running, Event.Stop):   return State.Done
-        when (State.Paused,  Event.Resume): return State.Running
-        when (State.Paused,  Event.Stop):   return State.Done
-        when (State.Done,    Event.Reset):  return State.Idle
+        when (Idle,    Start):  return State.Running
+        when (Running, Pause):  return State.Paused
+        when (Running, Stop):   return State.Done
+        when (Paused,  Resume): return State.Running
+        when (Paused,  Stop):   return State.Done
+        when (Done,    Reset):  return State.Idle
         when others:
             raise ValueError(f"invalid transition: {state} + {event}")
 ```
