@@ -154,9 +154,11 @@ test: compile
 	    $(EXDIR)/$$name >/dev/null 2>&1 && echo OK || { echo FAIL; exit 1; }; \
 	done
 
-	@echo "=== Timetable examples (compile-only — DB not set up) ==="
+	@echo "=== Timetable examples (built-in default problem) ==="
 	@for f in $(TIMETABLE_EXAMPLES); do \
-	    printf '  %-42s' "$$f"; echo SKIP; \
+	    name=$${f%.ady}; \
+	    printf '  %-42s' "$$f"; \
+	    $(EXDIR)/$$name >/dev/null 2>&1 && echo OK || { echo FAIL; exit 1; }; \
 	done
 
 	@echo ""
