@@ -264,6 +264,17 @@ def to_nim(self):
     # wrap RHS in some(...)
     if len(parts) == 2 and prefix == "":
         sym = ParserState.symbol_table.lookup(lhs)
+        # Also handle field access: obj.field where field type is Option[T]
+        if not sym:
+            import re as _re_field
+            _field_m2 = _re_field.match(r'^(\w+)\.(\w+)$', lhs)
+            if _field_m2:
+                _field_name2 = _field_m2.group(2)
+                for _cn2, _fm2 in ParserState.class_field_types.items():
+                    _ft2 = _fm2.get(_field_name2, "")
+                    if _ft2.startswith("Option["):
+                        sym = {"type": _ft2}
+                        break
         if sym:
             stype = sym.get("type") or ""
             if stype.startswith("Option["):
@@ -272,8 +283,13 @@ def to_nim(self):
                 _is_regex_call = bool(
                     __import__("re").search(r'\.(match|find)\(\w+\)', rhs)
                 )
-                if not _is_regex_call and rhs not in ("nil",) and not rhs.startswith("some(") and not rhs.startswith("none("):
-                    import re as _re_opt2
+                # Check if RHS is already Option[T] — don't double-wrap
+                import re as _re_opt2
+                _rhs_sym2 = ParserState.symbol_table.lookup(rhs.strip())
+                _rhs_type2 = (_rhs_sym2.get("type") or "") if _rhs_sym2 else ""
+                _rhs_is_option = (_rhs_type2.startswith("Option[")
+                                  or hek_nim_expr._expr_is_option(rhs))
+                if not _is_regex_call and rhs not in ("nil",) and not rhs.startswith("some(") and not rhs.startswith("none(") and not _rhs_is_option:
                     _m = _re_opt2.search(r"Option\[(.+)\]", stype)
                     if _m:
                         parts[1] = f"some({rhs})"
@@ -1777,6 +1793,23 @@ def to_nim(self):
             _root = _pyc_m.group(1)
             _sym = ParserState.symbol_table.lookup(_root)
             if _sym and str(_sym.get("type", "")).startswith("_py_module:"):
+                result = f"discard {result}"
+    # Method/function call used as a statement with a non-void return type -> discard
+    if len(parts) == 1:
+        import re as _re_disc
+        _proc_rtypes = getattr(ParserState, 'proc_return_types', {})
+        _disc_meth_m = _re_disc.match(r'^.+\.([A-Za-z_]\w*)\(', result)
+        _disc_func_m = _re_disc.match(r'^([A-Za-z_]\w*)\(', result) if not _disc_meth_m else None
+        _disc_name = (_disc_meth_m.group(1) if _disc_meth_m
+                      else (_disc_func_m.group(1) if _disc_func_m else None))
+        # Nim builtins that are always void — never auto-discard based on unqualified name
+        _NIM_VOID_BUILTINS = {"add", "incl", "excl", "del", "delete", "insert",
+                              "setLen", "sort", "shuffle", "reverse", "reset",
+                              "echo", "write", "writeLine", "close", "flush"}
+        if _disc_name and _disc_name in _proc_rtypes and _disc_name not in _NIM_VOID_BUILTINS:
+            _disc_ret = _proc_rtypes[_disc_name]
+            _void_rets = {"", "void", "None", "unit", ": void", ": None", ": unit"}
+            if _disc_ret not in _void_rets and not result.startswith("discard "):
                 result = f"discard {result}"
     # Bare print (no args) -> echo "" (empty line)
     if result == "echo":

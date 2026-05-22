@@ -517,11 +517,24 @@ def translate(code, export_symbols=False):
                 fwd_needed.add(callee)
 
     if fwd_needed:
+        # Build set of proc names that already have a bare forward declaration in the file
+        # (a line matching `proc name(...)` WITHOUT trailing `=`).
+        _FWD_BARE = _re_fwd.compile(r'^proc (\w+)\*?[\[(]')
+        _already_fwd = set()
+        for ln in flat:
+            stripped = ln.strip()
+            if stripped.startswith("proc ") and not stripped.endswith("=") and "=" not in stripped:
+                _m_bare = _FWD_BARE.match(stripped)
+                if _m_bare:
+                    _already_fwd.add(_m_bare.group(1))
+
         # For each proc needing a forward decl, find the line index of the earliest
         # caller (a proc defined before it that calls it).  Insert the stub there.
         # fwd_insert[line_idx] = list of forward-decl strings to insert before that line.
         fwd_insert = {}
         for callee in fwd_needed:
+            if callee in _already_fwd:
+                continue  # already has a forward declaration — don't duplicate it
             callee_line = proc_defs[callee][0]
             earliest = callee_line  # default: before own definition
             for caller in proc_order:

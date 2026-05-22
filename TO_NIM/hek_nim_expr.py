@@ -210,11 +210,38 @@ def _nim_truthiness(expr):
             return f"{expr}.len > 0"
     if _is_comparison:
         return expr
+    # Option[T] truthiness: method/function call whose return type is Option[T] -> .isSome
+    # Only applies to bare calls (no leading 'not', no trailing .isSome, no operators).
+    if (not _has_top_bool and not _is_comparison
+            and ".isSome" not in expr and ".isNone" not in expr
+            and not expr.startswith("not ")):
+        _proc_rtypes = getattr(ParserState, 'proc_return_types', {})
+        _meth_m = _re_truth.match(r'^[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*\.([A-Za-z_]\w*)\(', expr)
+        _func_m = _re_truth.match(r'^([A-Za-z_]\w*)\(', expr) if not _meth_m else None
+        _rname = (_meth_m.group(1) if _meth_m else (_func_m.group(1) if _func_m else None))
+        if _rname and _proc_rtypes.get(_rname, "").startswith("Option["):
+            ParserState.nim_imports.add("options")
+            return f"{expr}.isSome"
     _STRING_LIKE = ("string", "seq[", "str", "PriorityQueue", "FifoQueue",
                     "LifoQueue", "HashSet", "Table", "Deque")
     t = _nim_expr_type(expr)
     if t and any(t.startswith(p) for p in _STRING_LIKE):
         return f"{expr}.len > 0"
+    # ref class (nullable): truthiness is != nil
+    _bare = _re_truth.match(r'^[A-Za-z_]\w*$', expr)
+    if _bare:
+        _sym_rc = ParserState.symbol_table.lookup(expr)
+        if _sym_rc and _sym_rc.get("kind") == "ref_class":
+            return f"{expr} != nil"
+        # Check if the type of this variable is a ref class
+        _sym_type = (_sym_rc.get("type") or "") if _sym_rc else ""
+        _type_sym = ParserState.symbol_table.lookup(_sym_type)
+        if _type_sym and _type_sym.get("kind") == "ref_class":
+            return f"{expr} != nil"
+        # Variable with type 'auto' and kind 'param' — could be a nullable ref
+        # If the symbol has nil default (kind=param, type=auto), use != nil
+        if _sym_rc and _sym_rc.get("type") == "auto" and _sym_rc.get("kind") == "param":
+            return f"{expr} != nil"
     return expr
 
 
@@ -465,6 +492,13 @@ def binop_to_nim(self, prec=None, my_prec=None):
             # | stays as | when operands are non-integer (e.g. string | Style pipe)
             if nim_op == "or" and py_op == "|" and _is_pipe_not_bitor([result, right]):
                 nim_op = "|"
+            # Python `x or default` where x is Option[T] -> Nim `x.get(default)`
+            if nim_op == "or" and _expr_is_option(result):
+                ParserState.nim_imports.add("options")
+                result = f"{result}.get({right})"
+                if prec is not None and my_prec is not None and my_prec < prec:
+                    return f"({result})"
+                return result
             # boolean and/or: coerce seq/string operands to bool (Nim has no implicit truthiness)
             if nim_op in ("and", "or"):
                 result = _nim_truthiness(result)
@@ -496,6 +530,32 @@ def to_nim(self, prec=None):
         inner = s[3:-3]
         comment_lines = ["## " + line.strip() for line in inner.strip().splitlines()]
         return chr(10).join(comment_lines)
+    # Handle raw strings: r'...' and r"..." — Nim only supports r"..." syntax.
+    # r'''...''' and r"""...""" are converted to Nim triple raw strings.
+    for _raw_pfx in ("r", "R"):
+        if not s.startswith(_raw_pfx):
+            continue
+        _rest = s[len(_raw_pfx):]
+        if _rest.startswith(triple_dq):
+            # r"""...""" -> r"""...""" (already valid Nim)
+            pass
+        elif _rest.startswith(triple_sq):
+            # r'''...''' -> convert outer quotes; content may have "
+            _inner = _rest[3:-3]
+            if chr(34)*3 not in _inner:
+                s = _raw_pfx + triple_dq + _inner + triple_dq
+        elif _rest.startswith(chr(34)):
+            # r"..." -> already valid Nim, no change needed
+            pass
+        elif _rest.startswith(chr(39)):
+            # r'...' -> Nim needs r"..." ; if content has " use triple raw
+            _inner = _rest[1:-1]
+            if chr(34) not in _inner:
+                s = _raw_pfx + chr(34) + _inner + chr(34)
+            else:
+                # Content contains " — use triple double-quote raw string
+                s = _raw_pfx + triple_dq + _inner + triple_dq
+        break
     # Unwrap single- or double-quoted string and check for a bash placeholder
     if (s.startswith(chr(34)) and s.endswith(chr(34)) and len(s) > 2) or \
        (s.startswith(chr(39)) and s.endswith(chr(39)) and len(s) > 2):
@@ -661,11 +721,14 @@ def to_nim(self, prec=None):
     for node in self.nodes:
         _collect(node)
     result = "".join(parts)
-    # Replace f" or f' prefix with fmt"
-    if result.startswith(("f\"", "f\'")):
+    # Replace f" or f' prefix with fmt"  (Nim only supports fmt"...", not fmt'...')
+    if result.startswith(("f\"", "F\"")):
         result = "fmt" + result[1:]
-    elif result.startswith(("F\"", "F\'")):
-        result = "fmt" + result[1:]
+    elif result.startswith(("f\'", "F\'")):
+        # Single-quoted f-string: convert to double-quoted fmt, escaping any " in content
+        _inner = result[2:-1]
+        _inner = _inner.replace('"', '\\"')
+        result = 'fmt"' + _inner + '"'
     # Fix \xNN escapes in literal portions of fmt strings — Nim's fmt macro
     # does not process \xNN hex escapes, so we replace them with \e (for \x1b)
     # or embed the literal character for other values.
@@ -967,10 +1030,23 @@ def _translate_method(obj_name, method_name):
             elif _tbl_m:
                 val_type = _tbl_m.group(1)
                 sym = {"type": val_type}
-    # For attribute chains like "self.G", try looking up the last field name
+    # For attribute chains like "self.G" or "lexer.types", try looking up the last field name
     if sym is None and "." in obj_name:
-        field = obj_name.rsplit(".", 1)[-1]
-        sym = ParserState.symbol_table.lookup(field)
+        parts = obj_name.rsplit(".", 1)
+        obj_part, field = parts[0].rsplit(".", 1)[-1] if "." in parts[0] else parts[0], parts[1]
+        # First try: look up object type then check class_field_types
+        obj_sym = ParserState.symbol_table.lookup(obj_part)
+        if obj_sym:
+            obj_type = obj_sym.get("type", "") or ""
+            # Strip leading 'var ' if present
+            import re as _re_tm2
+            obj_type = _re_tm2.sub(r'^var\s+', '', obj_type)
+            field_type = ParserState.class_field_types.get(obj_type, {}).get(field)
+            if field_type:
+                sym = {"type": field_type}
+        # Fallback: look up field name directly in symbol table
+        if sym is None:
+            sym = ParserState.symbol_table.lookup(field)
     if sym:
         type_str = sym.get("type", "") or ""
         for prefix, mappings in _PY_METHOD_TO_NIM.items():
@@ -1114,6 +1190,10 @@ def to_nim(self, prec=None):
     if raw_name in _unwrap_vars and not _has_trailers:
         ParserState.nim_imports.add("options")
         return f"{result}.get()"
+    if raw_name in _unwrap_vars and _has_trailers:
+        # Insert .get() before the trailers: nxt.content -> nxt.get().content
+        ParserState.nim_imports.add("options")
+        result = f"{result}.get()"
     # If this is a call to a known class name, add 'new' prefix for Nim constructor
     has_call = (len(self.nodes) > 1 and hasattr(self.nodes[1], "nodes")
                 and self.nodes[1].nodes
@@ -1192,7 +1272,7 @@ def to_nim(self, prec=None):
                         ftype = ftype_map.get(fn, "")
                         # If field type is a ref object class, cast to that type for proper subtype coercion
                         sym = ParserState.symbol_table.lookup(ftype)
-                        if ftype and sym and sym.get("kind") == "class":
+                        if ftype and sym and sym.get("kind") in ("class", "ref_class"):
                             pairs_parts.append(f"{fn}: {ftype}({av})")
                         else:
                             pairs_parts.append(f"{fn}: {av}")
@@ -1235,10 +1315,14 @@ def to_nim(self, prec=None):
             arg = _extract_call_arg(call_node)
             if arg:
                 # list(x) — if x is already a seq, just return it (Nim copies on assign)
-                # If x is not a seq (e.g. a range), use @x to convert
+                # If x is a method call / iterator expression, use toSeq(...)
                 sym = ParserState.symbol_table.lookup(arg)
                 if sym and (sym.get("type") or "").startswith("seq["):
                     return arg
+                # Use toSeq for iterator-producing expressions (contains dots or parens)
+                if "(" in arg or "." in arg:
+                    ParserState.nim_imports.add("sequtils")
+                    return f"toSeq({arg})"
                 return "@" + arg
             return "@[]"
         if raw_name == "set":
@@ -1292,11 +1376,22 @@ def to_nim(self, prec=None):
                 # seq[seq[string]][i][j] -> string
                 if _inner and _inner.get("type") in ("seq[seq[string]]",):
                     _base_sym2 = {"type": "seq[string]"}
+            # Check if a dotted field access resolves to a string type via class_field_types
+            _field_m = _re_sub.search(r'\.(\w+)$', arg)
+            _field_is_str = False
+            if _field_m:
+                _fname2 = _field_m.group(1)
+                for _cname2, _fmap2 in ParserState.class_field_types.items():
+                    _ftype2 = _fmap2.get(_fname2, "")
+                    if _ftype2 in ("string", "str"):
+                        _field_is_str = True
+                        break
             _is_str = (
                 "__bash_arg" in arg          # $1, $2, etc. (pre-substitution)
                 or "paramStr" in arg         # $1, $2, etc. (post-substitution)
                 or arg.startswith('"')       # string literal
                 or arg.startswith("getEnv(") # os.environ.get() -> string
+                or _field_is_str             # expr.field where field: string
                 or (_sym and _sym.get("type") in ("string", "seq[string]"))
                 or (_base_sym and (
                     _base_sym.get("type", "").endswith(", string]")  # array[N, string]
@@ -1380,7 +1475,7 @@ def to_nim(self, prec=None):
             result = _ctor_with_args if has_args else _ctor_no_args
         else:
             sym = ParserState.symbol_table.lookup(raw_name)
-            if sym and sym.get("kind") == "class":
+            if sym and sym.get("kind") in ("class", "ref_class"):
                 result = "new" + raw_name
     base_name = result  # save for type-aware method lookup
     if len(self.nodes) > 1 and hasattr(self.nodes[1], "nodes") and self.nodes[1].nodes:
@@ -1402,7 +1497,7 @@ def to_nim(self, prec=None):
                     base_attr, _, tick_attr = method_name.partition("__tick__")
                     result = _emit_tick_attr(result, base_attr, tick_attr)
                     continue
-                method_name = _translate_method(base_name, method_name)
+                method_name = _translate_method(result, method_name)
                 next_tr = trailer_list[i + 1] if i + 1 < len(trailer_list) else None
                 # sorted(key=lambda v: v.field) -> sortedByIt(it.field)
                 if method_name == "sorted" and next_tr is not None and type(next_tr).__name__ == "call_trailer":
@@ -1496,6 +1591,10 @@ def to_nim(self, prec=None):
                     result += tr.to_nim()
             else:
                 result += tr.to_nim()
+                # Apply Option[T] arg coercion immediately after each call_trailer
+                # so subsequent trailers (e.g. .content) don't break the regex match
+                if type(tr).__name__ == "call_trailer":
+                    result = _wrap_option_args(result)
     # Post-process: translate known Python stdlib patterns to Nim
     result = _translate_stdlib_patterns(result)
     # Regex method calls: regex.match(s) -> s.match(regex), regex.search(s) -> s.find(regex)
@@ -1663,14 +1762,31 @@ def _wrap_option_args(expr):
 
     Only applies to procs registered in ParserState.proc_param_types.
     Example: newRegion(both) -> newRegion(some(both))
+    Also handles method-call style: obj.method(args) -- skips the self param.
     """
     import re as _re
+    # Try bare function call: func(args)
     m = _re.match(r"^([A-Za-z_]\w*)\((.+)\)$", expr, _re.DOTALL)
+    skip_self = False
+    receiver_prefix = ""
+    if not m:
+        # Try method call: obj.method(args)
+        m = _re.match(r"^(.+)\.([A-Za-z_]\w*)\((.+)\)$", expr, _re.DOTALL)
+        if m:
+            skip_self = True
+            receiver_prefix = m.group(1) + "."
+            # Repack groups: group(1)=method_name, group(2)=args
+            import collections as _col
+            _FakeMatch = _col.namedtuple("_FakeMatch", ["group"])
+            _g1, _g2 = m.group(2), m.group(3)
+            m = _FakeMatch(group=lambda i: (_g1 if i == 1 else _g2))
     if not m:
         return expr
     proc_name = m.group(1)
     args_str = m.group(2)
     param_types = ParserState.proc_param_types.get(proc_name)
+    if param_types and skip_self:
+        param_types = param_types[1:]  # skip self param for method calls
     if not param_types:
         return expr
     # Split args on top-level commas
@@ -1691,20 +1807,40 @@ def _wrap_option_args(expr):
             cur.append(ch)
     if cur:
         args.append("".join(cur).strip())
-    if len(args) != len(param_types):
+    if len(args) > len(param_types):
         return expr
     new_args = []
     changed = False
+    import re as _re_woa
     for arg, ptype in zip(args, param_types):
-        if "Option[" in ptype and not arg.startswith("some(") and not arg.startswith("none(") and arg != "nil":
-            ParserState.nim_imports.add("options")
-            new_args.append(f"some({arg})")
-            changed = True
+        if "Option[" in ptype:
+            if arg == "nil":
+                # None/nil passed to Option[T] param -> none(T)
+                _m_opt = _re_woa.search(r"Option\[(.+)\]", ptype)
+                if _m_opt:
+                    ParserState.nim_imports.add("options")
+                    new_args.append(f"none({_m_opt.group(1)})")
+                    changed = True
+                else:
+                    new_args.append(arg)
+            elif not arg.startswith("some(") and not arg.startswith("none("):
+                # Don't double-wrap if the arg is already an Option[T] type
+                _arg_m = _re_woa.match(r'^([A-Za-z_]\w*)$', arg.strip())
+                _arg_sym = ParserState.symbol_table.lookup(_arg_m.group(1)) if _arg_m else None
+                _arg_type = (_arg_sym.get("type") or "") if _arg_sym else ""
+                if _arg_type.startswith("Option[") or _expr_is_option(arg):
+                    new_args.append(arg)
+                else:
+                    ParserState.nim_imports.add("options")
+                    new_args.append(f"some({arg})")
+                    changed = True
+            else:
+                new_args.append(arg)
         else:
             new_args.append(arg)
     if not changed:
         return expr
-    return f"{proc_name}({', '.join(new_args)})"
+    return f"{receiver_prefix}{proc_name}({', '.join(new_args)})"
 
 
 def _translate_stdlib_patterns(expr):
@@ -1790,7 +1926,12 @@ def _translate_stdlib_patterns(expr):
     if _get_m:
         obj, args = _get_m.group(1), _get_m.group(2)
         # Exclude false matches like "obj.get()(extra_call)" where args starts with ")"
-        if not args.startswith(")"):
+        # Also skip Option[T] objects — their .get() is already the correct Nim Option.get()
+        _obj_stripped = obj.lstrip("(")
+        # If obj contains unbalanced '(' (e.g. it's an argument inside a call),
+        # this is a false match — the .get() belongs to an inner expression.
+        _open = obj.count("(") - obj.count(")")
+        if not args.startswith(")") and _open == 0 and not _expr_is_option(_obj_stripped):
             ParserState.nim_imports.add("tables")
             return f"{obj}.getOrDefault({args})"
 
