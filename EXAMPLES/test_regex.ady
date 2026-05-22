@@ -49,6 +49,16 @@ def normalize_spaces(s: str) -> str:
     s =~ s/\s+/ /g
     s
 
+# --- findall: /g returns []str ---
+def all_words(s: str) -> []str:
+    s =~ /\w+/g
+
+def all_numbers(s: str) -> []str:
+    s =~ /\d+/g
+
+def all_tags(s: str) -> []str:
+    s =~ /<[^>]+>/g
+
 # --- main ---
 let cases: []str = [
     "hello world",
@@ -71,4 +81,11 @@ for c in cases:
     print(f"  first_number:  {first_number(c)!r}")
     print(f"  redacted:      {redact_numbers(c)!r}")
     print(f"  normalized:    {normalize_spaces(c)!r}")
+    print(f"  all_words:     {all_words(c)!r}")
+    print(f"  all_numbers:   {all_numbers(c)!r}")
     print("")
+
+print "--- findall ---"
+let html: str = "<b>bold</b> and <i>italic</i>"
+print(f"input:       {html!r}")
+print(f"all_tags:    {all_tags(html)!r}")
