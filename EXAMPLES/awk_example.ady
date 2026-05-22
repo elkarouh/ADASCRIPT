@@ -7,9 +7,6 @@ Usage:
     cat FILE | ./awk_example ,             # FS = comma
     cat FILE | ./awk_example '\t'          # FS = tab
 """
-nimport re
-
-
 type Severity_T is enum INFO, WARN, ERROR, OTHER
 
 
@@ -25,11 +22,11 @@ if $# > 0:
     FS = $1
 
 def classify(line: str) -> Severity_T:
-    if re.search(r"(?i)error", line):
+    if line =~ /error/i:
         return ERROR
-    if re.search(r"(?i)warn", line):
+    if line =~ /warn/i:
         return WARN
-    if re.search(r"(?i)info|debug", line):
+    if line =~ /info|debug/i:
         return INFO
     return OTHER
 

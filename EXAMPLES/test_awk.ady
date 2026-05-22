@@ -7,8 +7,6 @@ Usage:
     cat FILE | ./awk_OO ,             # FS = comma
     cat FILE | ./awk_OO '\t'          # FS = tab
 """
-nimport re
-
 nimport awk
 
 type Severity_T is enum INFO, WARN, ERROR, OTHER
@@ -17,11 +15,11 @@ class AwkProcessor(AwkBase):
     var counts : [Severity_T]int = [INFO : 0, WARN : 0, ERROR : 0, OTHER: 0]
 
     def classify_record(self) -> Severity_T:
-        if re.search(r"(?i)error", self.line):
+        if self.line =~ /error/i:
             return ERROR
-        if re.search(r"(?i)warn", self.line):
+        if self.line =~ /warn/i:
             return WARN
-        if re.search(r"(?i)info|debug", self.line):
+        if self.line =~ /info|debug/i:
             return INFO
         return OTHER
 
