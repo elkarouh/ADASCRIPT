@@ -56,6 +56,11 @@ from hek_parsec import (
     BASH_CMP,
     RANGE_OP,
     RANGE_EXCL_OP,
+    EQTILDE,
+    NEQTILDE,
+    REGEX_LIT,
+    CAPTURE,
+    NAMED_CAPTURE,
     Input,
     Parser,
     ParserState,
@@ -245,6 +250,13 @@ _DOLLAR_SUFFIX = filt(
 )
 dollar_var = DOLLAR + _DOLLAR_SUFFIX
 
+# --- regex capture references: $+1  $+{name} ---
+capture_var       = CAPTURE        # $+N   positional capture group
+named_capture_var = NAMED_CAPTURE  # $+{name} named capture group
+
+# --- regex literal: /pattern/flags ---
+regex_lit = REGEX_LIT
+
 # --- atom ---
 ellipsis_lit = V_ELLIPSIS
 # Named tuple literal: (name:value, name:value, ...) — Nim-style
@@ -276,7 +288,10 @@ atom = (
     | K_NONE
     | K_TRUE
     | K_FALSE
+    | capture_var
+    | named_capture_var
     | dollar_var
+    | regex_lit
     | IDENTIFIER
     | NUMBER
     | fstring
@@ -329,7 +344,7 @@ file_test = BASH_TEST + IDENTIFIER + primary
 # --- comparison operators ---
 not_in_op = K_NOT + K_IN
 is_not_op = K_IS + K_NOT
-comp_op = V_EQ | V_NE | V_LE | V_LT | V_GE | V_GT | not_in_op | is_not_op | K_IN | K_IS | BASH_CMP
+comp_op = V_EQ | V_NE | V_LE | V_LT | V_GE | V_GT | not_in_op | is_not_op | K_IN | K_IS | BASH_CMP | EQTILDE | NEQTILDE
 
 # --- 'in' with range: x in 1 .. n  or  x in 1 ..< n ---
 # Must be tried before plain comp_op so 'in' eagerly grabs the range bounds.
