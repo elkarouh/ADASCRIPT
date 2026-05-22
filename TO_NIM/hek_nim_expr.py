@@ -2387,8 +2387,9 @@ def to_nim(self, prec=None):
 # --- walrus ---
 @method(walrus)
 def to_nim(self, prec=None):
-    """walrus: IDENTIFIER ':=' expression -> Nim: IDENTIFIER = expression (no walrus in Nim)"""
-    # Nim has no walrus; emit as assignment
+    """walrus: IDENTIFIER ':=' expression -> Nim: assignment (hoisted by if/while handlers)"""
+    # if/while detect walrus via _extract_walrus and hoist `let name = val` before the statement.
+    # When walrus appears outside if/while (rare), emit as plain assignment.
     name = self.nodes[0].to_nim()
     val = self.nodes[2].to_nim()
     result = f"{name} = {val}"
