@@ -1,0 +1,74 @@
+#!/usr/bin/env py2nim
+# test_regex.ady — Perl-style regex features in Adascript
+
+# --- basic match / non-match ---
+def is_integer(s: str) -> bool:
+    s =~ /^\d+$/
+
+def is_not_blank(s: str) -> bool:
+    s !~ /^\s*$/
+
+# --- positional capture groups ---
+def first_word(s: str) -> str:
+    if s =~ /(\w+)/:
+        $+1
+    else:
+        ""
+
+# --- multiple captures ---
+def parse_kv(s: str) -> str:
+    if s =~ /(\w+)\s*=\s*(\w+)/:
+        f"{$+1} -> {$+2}"
+    else:
+        "no match"
+
+# --- named capture groups ---
+def parse_date(s: str) -> str:
+    if s =~ /(?P<year>\d{4})-(?P<month>\d{2})-(?P<day>\d{2})/:
+        f"{$+{day}}/{$+{month}}/{$+{year}}"
+    else:
+        "invalid date"
+
+# --- flags: case-insensitive ---
+def is_yes(s: str) -> bool:
+    s =~ /^yes$/i
+
+# --- whole-match capture ($+0) ---
+def first_number(s: str) -> str:
+    if s =~ /\d+/:
+        $+0
+    else:
+        ""
+
+# --- substitution ---
+def redact_numbers(s: str) -> str:
+    s =~ s/\d+/[N]/g
+    s
+
+def normalize_spaces(s: str) -> str:
+    s =~ s/\s+/ /g
+    s
+
+# --- main ---
+let cases: []str = [
+    "hello world",
+    "42",
+    "key=value",
+    "2024-03-15",
+    "YES",
+    "phone: 555-1234 ext 99",
+    "  too   many   spaces  ",
+]
+
+for c in cases:
+    print(f"input:           {c!r}")
+    print(f"  is_integer:    {is_integer(c)}")
+    print(f"  is_not_blank:  {is_not_blank(c)}")
+    print(f"  first_word:    {first_word(c)!r}")
+    print(f"  parse_kv:      {parse_kv(c)!r}")
+    print(f"  parse_date:    {parse_date(c)!r}")
+    print(f"  is_yes:        {is_yes(c)}")
+    print(f"  first_number:  {first_number(c)!r}")
+    print(f"  redacted:      {redact_numbers(c)!r}")
+    print(f"  normalized:    {normalize_spaces(c)!r}")
+    print("")
