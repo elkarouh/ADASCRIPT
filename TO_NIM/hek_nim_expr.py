@@ -54,7 +54,34 @@ def to_nim(self, prec=None):
     return name
 
 _COMP_OPS = {"==", "!=", "<", ">", "<=", ">=", "in", "is", "not in", "is not", "isnot", "notin",
-             "-nt", "-ot"}
+             "-nt", "-ot", "=~", "!~"}
+
+_NIMATCH_HELPER = """\
+var matches: seq[string]
+var namedCaptures: Table[string, string]
+proc _nimatch(s: string; pattern: Regex): bool =
+  let m = s.find(pattern)
+  if m.isNone:
+    matches = @[]
+    namedCaptures = initTable[string, string]()
+    return false
+  let cap = m.get
+  matches = @[cap.match]
+  for c in cap.captures.toSeq:
+    matches.add(c.get(""))
+  namedCaptures = initTable[string, string]()
+  for k, v in cap.captures.toTable:
+    namedCaptures[k] = v
+  return true\
+"""
+
+def _ensure_nimatch_helper():
+    """Add the _nimatch helper to nim_top_decls the first time =~ or !~ is used."""
+    ParserState.nim_imports.update({"nre", "tables", "sequtils", "options"})
+    decls = getattr(ParserState, 'nim_top_decls', [])
+    if not any("_nimatch" in d for d in decls):
+        decls.append(_NIMATCH_HELPER)
+        ParserState.nim_top_decls = decls
 
 def _nim_expr_type(expr):
     """Infer the Nim type of an already-emitted expression string.
@@ -782,6 +809,34 @@ def to_nim(self, prec=None):
     else:
         parts.append(rep.to_nim())
     return " & ".join(parts)
+
+
+# --- regex literals and capture references ---
+@method(regex_lit)
+def to_nim(self, prec=None):
+    """regex_lit: /pattern/flags -> Nim: re"(?flags)pattern" (nre module)"""
+    ParserState.nim_imports.add("nre")
+    s = self.node          # e.g. "/hello\\d+/i"
+    last_slash = s.rfind("/")
+    pattern = s[1:last_slash]
+    flags = s[last_slash + 1:]
+    if flags:
+        return f're"(?{flags}){pattern}"'
+    return f're"{pattern}"'
+
+
+@method(capture_var)
+def to_nim(self, prec=None):
+    """capture_var: $+N -> matches[N] (whole match at 0, first group at 1)"""
+    num = int(self.node[2:])   # strip "$+"
+    return f"matches[{num}]"
+
+
+@method(named_capture_var)
+def to_nim(self, prec=None):
+    """named_capture_var: $+{name} -> namedCaptures[\"name\"]"""
+    name = self.node[3:-1]     # strip "$+{" and "}"
+    return f'namedCaptures["{name}"]'
 
 
 # --- atom containers ---
@@ -2440,6 +2495,14 @@ def to_nim(self, prec=None):
                 cmp_op = ">" if py_op == "-nt" else "<"
                 chain = (f"(getLastModificationTime({chain})"
                          f" {cmp_op} getLastModificationTime({right}))")
+                continue
+            # Perl match / non-match operators
+            if py_op in ("=~", "!~"):
+                _ensure_nimatch_helper()
+                right = seq.nodes[1].to_nim(operand_prec)
+                chain = f"_nimatch({chain}, {right})"
+                if py_op == "!~":
+                    chain = f"not {chain}"
                 continue
             nim_op = _PY_OP_TO_NIM.get(py_op, py_op)
             right = seq.nodes[1].to_nim(operand_prec)
