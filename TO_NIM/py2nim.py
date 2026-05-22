@@ -77,6 +77,7 @@ def _nim_reset():
     ParserState.proc_return_types = {}  # method/proc name -> return type string
     ParserState.nimpy_len_needed = False  # set when len() is called on a PyObject
     ParserState._option_unwrap_vars = set()  # Option vars proven non-None by enclosing if-guard
+    ParserState.contextmanager_funcs = set()  # names of @contextmanager-decorated functions
 
     # Install to_nim() fallback on the base Parser class so any node that
     # has no explicit to_nim() override delegates to to_py().
