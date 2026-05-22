@@ -508,11 +508,32 @@ def to_nim(self, indent=0):
     return f"{_ind(indent)}else:{hc}\n{body}"
 
 
+def _extract_walrus(node):
+    """If node is a walrus (or named_expression wrapping one), return (name_str, val_str), else None."""
+    n = type(node).__name__
+    if n == "named_expression" and node.nodes:
+        node = node.nodes[0]
+        n = type(node).__name__
+    if n == "walrus":
+        name = node.nodes[0].to_nim()
+        val = node.nodes[2].to_nim()
+        return (name, val)
+    return None
+
+
 @method(if_stmt)
 def to_nim(self, indent=0):
     """if_stmt: 'if' expression ':' block elif_clause* else_clause? -> Nim: 'if cond:'; 'if __name__ == "__main__"' -> 'when isMainModule:'"""
     import re as _re_if
-    cond = hek_nim_expr._nim_truthiness(self.nodes[0].to_nim())
+    # Handle walrus: `if m := expr:` -> hoist `let m = expr`, condition = `not m.isNil`
+    _walrus = _extract_walrus(self.nodes[0])
+    if _walrus:
+        _w_name, _w_val = _walrus
+        _hoist = f"{_ind(indent)}let {_w_name} = {_w_val}\n"
+        cond = f"not {_w_name}.isNil"
+    else:
+        _hoist = ""
+        cond = hek_nim_expr._nim_truthiness(self.nodes[0].to_nim())
     # Detect if __name__ == "__main__": -> when isMainModule:
     cond_stripped = cond.replace(" ", "")
     if cond_stripped in ('__name__=="__main__"', "__name__=='__main__'"):
@@ -529,7 +550,7 @@ def to_nim(self, indent=0):
     body = self.nodes[1].to_nim(indent + 1)
     if _unwrap_var:
         getattr(ParserState, '_option_unwrap_vars', set()).discard(_unwrap_var)
-    result = f"{_ind(indent)}if {cond}:{hc}\n{body}"
+    result = f"{_hoist}{_ind(indent)}if {cond}:{hc}\n{body}"
     for node in self.nodes[2:]:
         if not hasattr(node, "nodes") or not node.nodes:
             continue
@@ -550,10 +571,24 @@ def to_nim(self, indent=0):
 @method(while_stmt)
 def to_nim(self, indent=0):
     """while_stmt: 'while' expression ':' block else_clause? -> Nim: 'while cond:' (else clause dropped)"""
-    cond = hek_nim_expr._nim_truthiness(self.nodes[0].to_nim())
+    _walrus = _extract_walrus(self.nodes[0])
     hc = _block_inline_header_comment(self.nodes[1])
-    body = self.nodes[1].to_nim(indent + 1)
-    result = f"{_ind(indent)}while {cond}:{hc}\n{body}"
+    if _walrus:
+        # `while m := expr:` -> `while true: let m = expr; if m.isNil: break; body`
+        _w_name, _w_val = _walrus
+        body = self.nodes[1].to_nim(indent + 1)
+        ind = _ind(indent)
+        ind1 = _ind(indent + 1)
+        result = (
+            f"{ind}while true:{hc}\n"
+            f"{ind1}let {_w_name} = {_w_val}\n"
+            f"{ind1}if {_w_name}.isNil: break\n"
+            f"{body}"
+        )
+    else:
+        cond = hek_nim_expr._nim_truthiness(self.nodes[0].to_nim())
+        body = self.nodes[1].to_nim(indent + 1)
+        result = f"{_ind(indent)}while {cond}:{hc}\n{body}"
     # Nim has no while/else — skip else clause
     return result
 
