@@ -12,21 +12,21 @@ def parse_c_char(tok: str) -> str:
     """Parse a C char literal like 'a' or '\n' → single character string."""
     inner: str = tok[1:-1]
     if len(inner) == 0:
-        result = "\0"
+        "\0"
     elif not inner.startswith("\\"):
-        result = inner[0:1]
+        inner[0:1]
     elif len(inner) < 2:
-        result = inner[0:1]
+        inner[0:1]
     else:
         c: str = inner[1:2]
         case c:
-            when "n":  result = "\n"
-            when "t":  result = "\t"
-            when "r":  result = "\r"
-            when "0":  result = "\0"
-            when "\\": result = "\\"
-            when "'":  result = "'"
-            when others: result = c
+            when "n":  "\n"
+            when "t":  "\t"
+            when "r":  "\r"
+            when "0":  "\0"
+            when "\\": "\\"
+            when "'":  "'"
+            when others: c
 
 
 def parse_c_str(tok: str) -> str:

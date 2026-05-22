@@ -3225,11 +3225,13 @@ def to_nim(self, indent=0):
     # Bare print (no args) -> echo "" (empty line)
     if result == "echo":
         result = 'echo ""'
-    # Convert bare string literals (docstrings) to Nim doc comments
+    # Convert bare string literals (docstrings) to Nim doc comments.
+    # Skip when in a returning function — the string is an implicit return value.
+    # (Triple-quoted strings are already converted to ## by STRING.to_nim().)
     non_empty = [p for p in parts if p.strip()]
     if len(non_empty) == 1:
         r = result.strip()
-        if r and len(r) >= 2 and r[0] == r[-1] and r[0] in ('"', "'"):
+        if not _in_returning and r and len(r) >= 2 and r[0] == r[-1] and r[0] in ('"', "'"):
             result = _ind(indent) + '## ' + r[1:-1]
         else:
             result = _ind(indent) + result
