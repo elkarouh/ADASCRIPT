@@ -46,6 +46,8 @@ from hek_parsec import (
     STRING,
     RANGE_OP,
     RANGE_EXCL_OP,
+    EQTILDE,
+    SUBST,
     Input,
     Parser,
     ParserState,
@@ -250,6 +252,11 @@ from_pyimport = ikw("from") + dotted_name + ikw("pyimport") + import_names
 # pyimport: Python-only import via nimpy (becomes pyImport() in Nim)
 pyimport_stmt = ikw("pyimport") + import_as + (COMMA + import_as)[:]
 
+# --- Perl substitution: text =~ s/pattern/replacement/flags ---
+# Must be tried before 'expressions' so the parser doesn't try to interpret
+# s/.../ as division. EQTILDE is consumed (ignored) in this rule.
+subst_stmt = primary + ignore(EQTILDE) + SUBST
+
 # --- print statement (Python 2 / Adascript style) ---
 # print expr [, expr ...]  with no parentheses.
 # ~LPAREN ensures print(...) is NOT captured here — it falls through to the
@@ -316,6 +323,7 @@ simple_stmt = (
     | type_stmt
     | yield_expr
     | print_stmt
+    | subst_stmt
     | expressions
 )
 

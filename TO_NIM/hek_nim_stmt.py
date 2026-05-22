@@ -1716,6 +1716,39 @@ def to_nim(self, indent=0):
 
 
 # --- simple_stmt ---
+@method(subst_stmt)
+def to_nim(self):
+    """subst_stmt: primary '=~' s/pat/repl/flags -> Nim: lhs = lhs.replace(re"(?f)pat", "repl")"""
+    import re as _re_s
+    from hek_nim_expr import _ensure_nimatch_helper
+    _ensure_nimatch_helper()
+    lhs = self.nodes[0].to_nim()
+    raw = self.nodes[1].node     # Fmap node; .node = the SUBST string, e.g. "s/\d+/[N]/gi"
+    # Parse s/pat/repl/flags — find the three delimiter positions
+    j = 1                        # skip leading 's'
+    pat_start = j + 1            # skip first '/'
+    j = pat_start
+    while j < len(raw):
+        if raw[j] == '\\': j += 2
+        elif raw[j] == '/': break
+        else: j += 1
+    pat = raw[pat_start:j]
+    repl_start = j + 1           # skip second '/'
+    j = repl_start
+    while j < len(raw):
+        if raw[j] == '\\': j += 2
+        elif raw[j] == '/': break
+        else: j += 1
+    repl = raw[repl_start:j]
+    flags = raw[j + 1:]          # after third '/', strip 'g' (always global in nre)
+    regex_flags = flags.replace('g', '')
+    nim_pat = f're"(?{regex_flags}){pat}"' if regex_flags else f're"{pat}"'
+    # $+N in replacement → $N  (nre replacement backreference syntax)
+    repl = _re_s.sub(r'\$\+(\d+)', r'$\1', repl)
+    repl = _re_s.sub(r'\$\+\{(\w+)\}', r'${\1}', repl)
+    return f'{lhs} = {lhs}.replace({nim_pat}, "{repl}")'
+
+
 @method(print_stmt)
 def to_nim(self):
     """print_stmt: 'print' star_expressions -> Nim: echo star_expressions
