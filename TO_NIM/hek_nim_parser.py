@@ -276,7 +276,7 @@ def to_nim(self, indent=0, is_virtual=False, class_name=None, parent_name=None, 
                             elif stmt_node_type == "stmt_line":
                                 found_field = False
                                 for child in stmt_node.nodes:
-                                    if type(child).__name__ == "decl_ann_assign_stmt":
+                                    if type(child).__name__ in ("decl_ann_assign_stmt", "ann_assign_stmt"):
                                         fields.append(stmt_node)
                                         found_field = True
                                         break
@@ -409,8 +409,8 @@ def to_nim(self, indent=0, is_virtual=False, class_name=None, parent_name=None, 
                     sig = fwd[0].rstrip()
                     if sig.endswith(" ="):
                         sig = sig[:-2]
-                    # Skip forward declarations for iterators (Nim doesn't support them)
-                    if sig.lstrip().startswith("iterator "):
+                    # Skip forward declarations for iterators and templates (Nim doesn't support them)
+                    if sig.lstrip().startswith(("iterator ", "template ")):
                         continue
                     fwd_lines.append(sig)
         if fwd_lines and _generic_ctx:
@@ -477,7 +477,33 @@ def to_nim(self, indent=0, is_virtual=False, class_name=None, parent_name=None, 
     # For non-class blocks, if empty emit discard
     if not lines:
         return _ind(indent) + "discard"
-    return "\n".join(lines)
+    # Post-process: add `discard` for non-void function/method calls used as statements
+    import re as _re_disc_blk
+    _proc_rtypes_blk = getattr(ParserState, 'proc_return_types', {})
+    _void_rets_blk = {'', 'void', 'None', 'unit', ': void', ': None', ': unit'}
+    _disc_lines = []
+    for _ln in lines:
+        _stripped = _ln.lstrip()
+        # Skip lines that contain an assignment (=) at top level — those are not bare calls
+        _has_assign = bool(_re_disc_blk.search(r'(?<![=!<>])=(?!=)', _stripped))
+        if (_stripped and not _has_assign and
+                not _stripped.startswith(('var ', 'let ', 'const ', 'discard ', 'return ',
+                                           'if ', 'while ', 'for ', 'result ', 'echo ',
+                                           '#', 'raise ', 'break', 'continue', 'assert '))):
+            # Check bare function call first (e.g. "emit(x)"), then method call (e.g. "obj.next(x)")
+            _df = _re_disc_blk.match(r'^([A-Za-z_]\w*)\(', _stripped)
+            _dm = _re_disc_blk.match(r'^[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*\.([A-Za-z_]\w*)\(', _stripped) if not _df else None
+            _NIM_VOID_BUILTINS_BLK = {"add", "incl", "excl", "del", "delete", "insert",
+                                       "setLen", "sort", "shuffle", "reverse", "reset",
+                                       "echo", "write", "writeLine", "close", "flush"}
+            _dname = (_df.group(1) if _df else (_dm.group(1) if _dm else None))
+            if _dname and _dname in _proc_rtypes_blk and _dname not in _NIM_VOID_BUILTINS_BLK:
+                _dret = _proc_rtypes_blk[_dname]
+                if _dret not in _void_rets_blk:
+                    _ind_prefix = _ln[:len(_ln) - len(_stripped)]
+                    _ln = f"{_ind_prefix}discard {_stripped}"
+        _disc_lines.append(_ln)
+    return "\n".join(_disc_lines)
 
 
 @method(statement)
@@ -508,11 +534,48 @@ def to_nim(self, indent=0):
     return f"{_ind(indent)}else:{hc}\n{body}"
 
 
+def _extract_walrus(node):
+    """If node is a walrus (or named_expression wrapping one), return (name_str, val_str), else None."""
+    n = type(node).__name__
+    if n == "named_expression" and node.nodes:
+        node = node.nodes[0]
+        n = type(node).__name__
+    if n == "walrus":
+        name = node.nodes[0].to_nim()
+        val = node.nodes[2].to_nim()
+        return (name, val)
+    return None
+
+
+def _register_walrus_type(name, val):
+    """Register walrus variable as PyObject in symbol table if value comes from a py_module call."""
+    import re as _re_wt
+    _m = _re_wt.match(r'^[\(\s]*([A-Za-z_]\w*)', val)
+    _lead = _m.group(1) if _m else None
+    _sym = ParserState.symbol_table.lookup(_lead) if _lead else None
+    _type = (_sym.get("type") or "") if _sym else ""
+    if _type.startswith("_py_module:") or _type == "PyObject":
+        ParserState.symbol_table.add(name, "PyObject", "let")
+
+
 @method(if_stmt)
 def to_nim(self, indent=0):
     """if_stmt: 'if' expression ':' block elif_clause* else_clause? -> Nim: 'if cond:'; 'if __name__ == "__main__"' -> 'when isMainModule:'"""
     import re as _re_if
-    cond = hek_nim_expr._nim_truthiness(self.nodes[0].to_nim())
+    # Handle walrus: `if m := expr:` -> hoist `let m = expr`, condition = `not m.isNil`
+    _walrus = _extract_walrus(self.nodes[0])
+    if _walrus:
+        _w_name, _w_val = _walrus
+        _cur_syms = (ParserState.symbol_table.current_scope() or {}).get("symbols", {})
+        if _w_name in _cur_syms:
+            _hoist = f"{_ind(indent)}{_w_name} = {_w_val}\n"  # reassign existing var
+        else:
+            _hoist = f"{_ind(indent)}var {_w_name} = {_w_val}\n"  # first declaration
+            _register_walrus_type(_w_name, _w_val)
+        cond = f"not {_w_name}.isNil"
+    else:
+        _hoist = ""
+        cond = hek_nim_expr._nim_truthiness(self.nodes[0].to_nim())
     # Detect if __name__ == "__main__": -> when isMainModule:
     cond_stripped = cond.replace(" ", "")
     if cond_stripped in ('__name__=="__main__"', "__name__=='__main__'"):
@@ -529,7 +592,7 @@ def to_nim(self, indent=0):
     body = self.nodes[1].to_nim(indent + 1)
     if _unwrap_var:
         getattr(ParserState, '_option_unwrap_vars', set()).discard(_unwrap_var)
-    result = f"{_ind(indent)}if {cond}:{hc}\n{body}"
+    result = f"{_hoist}{_ind(indent)}if {cond}:{hc}\n{body}"
     for node in self.nodes[2:]:
         if not hasattr(node, "nodes") or not node.nodes:
             continue
@@ -550,10 +613,42 @@ def to_nim(self, indent=0):
 @method(while_stmt)
 def to_nim(self, indent=0):
     """while_stmt: 'while' expression ':' block else_clause? -> Nim: 'while cond:' (else clause dropped)"""
-    cond = hek_nim_expr._nim_truthiness(self.nodes[0].to_nim())
+    _walrus = _extract_walrus(self.nodes[0])
     hc = _block_inline_header_comment(self.nodes[1])
-    body = self.nodes[1].to_nim(indent + 1)
-    result = f"{_ind(indent)}while {cond}:{hc}\n{body}"
+    if _walrus:
+        # `while m := expr:` -> `while true: let m = expr; if m.isNone/isNil: break; body`
+        _w_name, _w_val = _walrus
+        _register_walrus_type(_w_name, _w_val)
+        ind = _ind(indent)
+        ind1 = _ind(indent + 1)
+        # Determine break condition: .isNone for Option[T] return, .isNil for ref types
+        import re as _re_ww
+        _proc_rtypes_ww = getattr(ParserState, 'proc_return_types', {})
+        _ww_meth = _re_ww.match(r'^.+\.([A-Za-z_]\w*)\(', _w_val)
+        _ww_func = _re_ww.match(r'^([A-Za-z_]\w*)\(', _w_val) if not _ww_meth else None
+        _ww_fname = (_ww_meth.group(1) if _ww_meth else (_ww_func.group(1) if _ww_func else None))
+        _ww_ret = _proc_rtypes_ww.get(_ww_fname, "") if _ww_fname else ""
+        _is_option_ret = _ww_ret.startswith("Option[")
+        _break_check = f"{_w_name}.isNone" if _is_option_ret else f"{_w_name}.isNil"
+        if _is_option_ret:
+            ParserState.nim_imports.add("options")
+            # Register walrus var as auto-unwrap so nxt.field -> nxt.get().field in body
+            if not hasattr(ParserState, '_option_unwrap_vars'):
+                ParserState._option_unwrap_vars = set()
+            ParserState._option_unwrap_vars.add(_w_name)
+        body = self.nodes[1].to_nim(indent + 1)
+        if _is_option_ret:
+            ParserState._option_unwrap_vars.discard(_w_name)
+        result = (
+            f"{ind}while true:{hc}\n"
+            f"{ind1}let {_w_name} = {_w_val}\n"
+            f"{ind1}if {_break_check}: break\n"
+            f"{body}"
+        )
+    else:
+        cond = hek_nim_expr._nim_truthiness(self.nodes[0].to_nim())
+        body = self.nodes[1].to_nim(indent + 1)
+        result = f"{_ind(indent)}while {cond}:{hc}\n{body}"
     # Nim has no while/else — skip else clause
     return result
 
@@ -877,6 +972,13 @@ def to_nim(self, indent=0):
                 body = ind1 + block_node.to_nim()
         result += body
         return result
+    # @contextmanager template calls: emit as trailing-block call (no 'with' keyword)
+    import re as _re_wcm
+    _cm_funcs = getattr(ParserState, 'contextmanager_funcs', set())
+    if _cm_funcs and len(items) == 1 and " as " not in items[0]:
+        _wcm_m = _re_wcm.search(r'(?:^|\.)\s*(\w+)\s*\(', items[0])
+        if _wcm_m and _wcm_m.group(1) in _cm_funcs:
+            return f"{_ind(indent)}{items[0]}:{hc}\n{body}"
     return f"{_ind(indent)}with {', '.join(items)}:{hc}\n{body}"
 
 
@@ -2079,6 +2181,13 @@ def to_nim(self, indent=0):
         elif tname == "return_annotation":
             ret_ann = node.to_nim()
 
+    # Detect @contextmanager / @contextlib.contextmanager → Nim template
+    import re as _re_fncm
+    _is_fn_cm = bool(_re_fncm.search(r'@(?:contextlib\.)?contextmanager', decos))
+    if _is_fn_cm:
+        decos = _re_fncm.sub(r'[ \t]*@(?:contextlib\.)?contextmanager[ \t]*\n?', '', decos).strip()
+        decos = (decos + "\n") if decos else ""
+
     # Store return type so return_stmt can use it for Option wrapping
     ParserState._current_return_type = ret_ann  # e.g. ': seq[seq[string]]'
     # Record method return type for type inference (e.g. conn.rows() -> seq[seq[string]])
@@ -2090,6 +2199,30 @@ def to_nim(self, indent=0):
         if _cls_ctx:
             ParserState.proc_return_types[f"{_cls_ctx}.{name}"] = _ret_type
         ParserState.proc_return_types[name] = _ret_type
+    # Register param types for call-site Option[T] some() coercion
+    if name and params:
+        import re as _re_fpt
+        _ptypes = []
+        # Bracket-aware split: don't split on commas inside [], (), {}
+        _depth = 0
+        _cur = ""
+        for _ch in params:
+            if _ch in "([{":
+                _depth += 1
+                _cur += _ch
+            elif _ch in ")]}":
+                _depth -= 1
+                _cur += _ch
+            elif _ch == "," and _depth == 0:
+                _m = _re_fpt.match(r'\s*\w+\s*:\s*(.+?)(?:\s*=.*)?$', _cur.strip())
+                _ptypes.append(_m.group(1).strip() if _m else "")
+                _cur = ""
+            else:
+                _cur += _ch
+        if _cur.strip():
+            _m = _re_fpt.match(r'\s*\w+\s*:\s*(.+?)(?:\s*=.*)?$', _cur.strip())
+            _ptypes.append(_m.group(1).strip() if _m else "")
+        ParserState.proc_param_types[name] = _ptypes
     ParserState.symbol_table.push_scope(name or "<func>")
     hc = _block_inline_header_comment(block_node) if block_node else ""
     body = block_node.to_nim(indent + 1) if block_node else ""
@@ -2122,18 +2255,22 @@ def to_nim(self, indent=0):
                         _blines2[-1] = f"{_indent_prefix}{_last_stripped}.to({_nim_type})"
                         body = chr(10).join(_blines2) + chr(10)
     _shadow_vars = []
-    # Add var to params that are mutated in body (assigned to or .add called)
+    # Add var to params that are mutated in body (assigned to, .add called, or any method call)
     if params and body:
         import re as _re
         new_params = []
         for p in params.split(", "):
             pname = p.split(":")[0].strip()
             if pname and pname != "self" and _re.search(
-                rf"(?<![=(,.])\b{_re.escape(pname)}\b\s*(\.add\(|\.\w+\s*=(?!=)|\[.*\]\s*=(?!=)|[+\-*/]=|=(?!=))", body
+                rf"(?<![=(,.])\b{_re.escape(pname)}\b\s*(\.add\(|\.append\(|\.extend\(|\.pop\(|\.clear\(|\.remove\(|\.sort\(|\.next\(|\.\w+\s*=(?!=)|\[.*\]\s*=(?!=)|[+\-*/]=|=(?!=))", body
             ):
+                # Ref class params don't need 'var' — refs are inherently mutable
+                _ptype_str = (p.split(": ", 1)[1] if ": " in p else "").split("=")[0].strip()
+                _ptype_sym = ParserState.symbol_table.lookup(_ptype_str)
+                _is_ref_param = _ptype_sym and _ptype_sym.get("kind") == "ref_class"
                 if " = " in p:
                     _shadow_vars.append(pname)
-                elif not p.startswith("var ") and ": " in p:
+                elif not p.startswith("var ") and ": " in p and not _is_ref_param:
                     # Nim syntax: param: var T
                     parts = p.split(": ", 1)
                     p = parts[0] + ": var " + parts[1]
@@ -2143,6 +2280,14 @@ def to_nim(self, indent=0):
             _sv_indent = " " * (4 * (indent + 1))
             _sv_lines = "\n".join(f"{_sv_indent}var {sv} = {sv}" for sv in _shadow_vars)
             body = _sv_lines + "\n" + body
+    # @contextmanager: replace bare yield with template body placeholder
+    if _is_fn_cm:
+        body = "\n".join(
+            (ln[:len(ln) - len(ln.lstrip())] + "body") if ln.strip() == "yield" else ln
+            for ln in body.split("\n")
+        )
+        params = (params + ", body: untyped") if params else "body: untyped"
+        ret_ann = ""
     # -- Method / declaration hoisting ----------------------------------
     #
     # PROBLEM
@@ -2373,7 +2518,8 @@ def to_nim(self, indent=0):
         if hoisted:
             hoisted_block = "\n".join(hoisted) + "\n"
             body = "\n".join(kept)
-            return f"{hoisted_block}{decos}{_ind(indent)}proc {_nim_ident(name)}({params}){ret_ann} ={hc}\n{body}"
+            _kw_h = "template" if _is_fn_cm else "proc"
+            return f"{hoisted_block}{decos}{_ind(indent)}{_kw_h} {_nim_ident(name)}({params}){ret_ann} ={hc}\n{body}"
     # Register this proc name so nimpy coercion won't wrap its return values
     getattr(ParserState, 'nim_proc_names', set()).add(name)
     # Translate dunder method names to Nim operator procs
@@ -2381,12 +2527,15 @@ def to_nim(self, indent=0):
     if nim_name is None:
         return ""  # skip (e.g. __init__ handled via class_def)
     keyword = nim_keyword or "proc"
+    if _is_fn_cm:
+        keyword = "template"
+        getattr(ParserState, 'contextmanager_funcs', set()).add(name)
     # Strip @export / @used decorators and record their effect
     decos, _deco_export, _deco_used = _parse_func_decorators(decos, indent)
     if decos and not decos.endswith("\n"):
         decos += "\n"
     _exp = "*" if (_deco_export or (getattr(ParserState, 'export_symbols', False) and indent == 0)) else ""
-    _pragmas = " {.used.}" if _deco_used else ""
+    _pragmas = "" if _is_fn_cm else (" {.used.}" if _deco_used else "")
     # Infer generic type params from parameter/return type annotations.
     # Single uppercase-letter identifiers (S, D, C, T, K, V …) are type
     # variables by Adascript convention; collect them and add [S, D, C] to
@@ -2555,6 +2704,10 @@ def to_nim(self, indent=0):
             if _has_self_ref(decl, name):
                 is_virtual = True
                 break
+    # Pre-register self-referential classes as ref_class BEFORE body processing,
+    # so that ?ClassName fields inside the body emit ClassName (not Option[ClassName]).
+    if is_virtual and name:
+        ParserState.symbol_table.add(name, name, "ref_class")
     if block_node:
         block_node._is_virtual = is_virtual
         block_node._class_name = name
@@ -2574,6 +2727,9 @@ def to_nim(self, indent=0):
     ref_keyword = "ref " if needs_ref else ""
     _exp = "*" if getattr(ParserState, 'export_symbols', False) and indent == 0 else ""
     ParserState.symbol_table.pop_scope()
+    # Update symbol kind: ref_class for ref objects (nullable), class for value objects (need Option)
+    if name and needs_ref:
+        ParserState.symbol_table.add(name, name, "ref_class")
     result = f"{decos}{_ind(indent)}type {name}{_exp}{type_params} = {ref_keyword}object{parent}\n{body}"
     # Auto-emit a converter so any JsElem subclass is accepted where JsObject is expected.
     # Appended inline (not nim_top_decls) so it follows the type definition.
@@ -3243,10 +3399,13 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
                 for child in node.nodes:
                     yield from _extract_deco_names(child)
 
+    is_contextmanager = False
     for node in func_node.nodes:
         for deco_node, deco_text in _extract_deco_names(node):
             if deco_text == "@proc":
                 force_proc = True
+            elif deco_text in ("@contextmanager", "@contextlib.contextmanager"):
+                is_contextmanager = True
             else:
                 extra_decos.append(deco_text)
 
@@ -3296,6 +3455,13 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
                             if pname == "self":
                                 params.append(f"self: {class_name}{type_params}")
                             else:
+                                # Option[T] param with None default: nil -> none(T)
+                                if pdefault == " = nil" and "Option[" in ptype:
+                                    import re as _re_optnone
+                                    _m = _re_optnone.search(r"Option\[(.+)\]", ptype)
+                                    if _m:
+                                        pdefault = f" = none({_m.group(1)})"
+                                        ParserState.nim_imports.add("options")
                                 params.append(f"{pname}: {ptype}{pdefault}")
                 elif st_name == "return_annotation":
                     ret_ann = st.to_nim()
@@ -3337,10 +3503,25 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
             line for line in body_lines if not line.lstrip().startswith("#")
         )
         # For non-virtual classes, promote self to var if body mutates any self.field
-        # or calls any self.method() (which may itself be a mutating proc).
-        if not is_virtual and class_name and _re.search(
-            r"self\.\w+\s*(\.add\(|\[.*\]\s*=(?!=)|[+\-*/]=|=(?!=)|\()", _body_no_comments
-        ):
+        # or calls a method on self that isn't known-read-only.
+        _READONLY_METHODS = {
+            'get', 'getOrDefault', 'isSome', 'isNone', 'len', 'contains',
+            'startsWith', 'endsWith', 'find', 'match', 'parseInt', 'parseFloat',
+            'to', 'sizeof', 'is_ptr', 'is_arr', 'as_non_array', '_mem_ins_size',
+            'mem_ins_size', 'load_ins', 'store_ins', 'clone', '__str__', '__repr__',
+            'peek', 'group', 'strip', 'split', 'join', 'replace', 'upper', 'lower',
+            'format', 'encode', 'decode', 'keys', 'values', 'items',
+        }
+        def _body_has_self_mutation(body_text):
+            # Direct field mutation
+            if _re.search(r"self\.\w+\s*(\.add\(|\.append\(|\.extend\(|\.pop\(|\.clear\(|\.remove\(|\.sort\(|\[.*\]\s*=(?!=)|[+\-*/]=|=(?!=))", body_text):
+                return True
+            # Method call on self that isn't known-read-only
+            for m in _re.finditer(r'self\.(\w+)\s*\(', body_text):
+                if m.group(1) not in _READONLY_METHODS:
+                    return True
+            return False
+        if not is_virtual and class_name and _body_has_self_mutation(_body_no_comments):
             params = [
                 f"self: var {class_name}{type_params}" if p.startswith(f"self: {class_name}") else p
                 for p in params
@@ -3349,7 +3530,7 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
         for p in params:
             pname = p.split(":")[0].strip()
             if pname and pname != "self" and _re.search(
-                rf"(?<![=(,.])\b{_re.escape(pname)}\b\s*(\.add\(|\[.*\]\s*=(?!=)|[+\-*/]=|=(?!=))", _body_no_comments
+                rf"(?<![=(,.])\b{_re.escape(pname)}\b\s*(\.add\(|\.append\(|\.extend\(|\.pop\(|\.clear\(|\.remove\(|\.sort\(|\.next\(|\[.*\]\s*=(?!=)|[+\-*/]=|=(?!=))", _body_no_comments
             ):
                 if " = " in p:
                     _shadow_vars.append(pname)
@@ -3368,7 +3549,22 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
     params_str = ", ".join(params)
     # Detect if body contains yield -> use iterator instead of proc/method
     has_yield = any("yield " in line or line.strip() == "yield" for line in body_lines)
-    if has_yield:
+    if is_contextmanager:
+        # @contextmanager → Nim template: replace bare yield with body placeholder.
+        # body_lines elements may themselves contain embedded newlines (e.g. a
+        # try/finally block is one element), so flatten first.
+        _flat = "\n".join(body_lines).split("\n")
+        body_lines = [
+            (line[:len(line) - len(line.lstrip())] + "body") if line.strip() == "yield" else line
+            for line in _flat
+        ]
+        body_text = "\n".join(body_lines)
+        params_str = (params_str + ", body: untyped") if params_str else "body: untyped"
+        ret_ann = ""
+        pragma = ""
+        keyword = "template"
+        getattr(ParserState, 'contextmanager_funcs', set()).add(name)
+    elif has_yield:
         # Closure iterator needed when the iterator calls itself recursively
         is_recursive = any(
             f"{name}(" in line or f"for " in line and f" in {name}(" in line
@@ -3411,6 +3607,14 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
     method_sig = f"{deco_prefix}{_ind(indent)}{keyword} {nim_name}{_exp}{generic_params}({params_str}){ret_ann}{pragma} ="
     lines.append(method_sig)
     lines.extend(body_lines)
+    # Register param types for call-site Option[T] some() coercion (_wrap_option_args)
+    if nim_name and params:
+        import re as _re_mpt
+        _mptypes = []
+        for _p in params:
+            _pt_m = _re_mpt.match(r'\s*\w+\s*:\s*(?:var\s+)?(.+?)(?:\s*=.*)?$', _p.strip())
+            _mptypes.append(_pt_m.group(1).strip() if _pt_m else "")
+        ParserState.proc_param_types[nim_name] = _mptypes
 
     ParserState.symbol_table.pop_scope()
     ParserState._current_return_type = ""

@@ -192,9 +192,10 @@ def _tuple_elements_nim(tup):
 def to_nim(self, prec=None):
     """optional_type: '?' type_annotation -> Nim: Option[T] (imports options); ref types stay as-is"""
     inner = self.nodes[0].to_nim()
-    # For ref object types (classes), the type is already nullable — no Option needed
+    # For ref object types, the type is already nullable — no Option needed.
+    # Value-type classes (kind="class") need Option[T].
     sym = ParserState.symbol_table.lookup(inner)
-    if sym and sym.get("kind") == "class":
+    if sym and sym.get("kind") == "ref_class":
         return inner
     ParserState.nim_imports.add("options")
     return f"Option[{inner}]"
