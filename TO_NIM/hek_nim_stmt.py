@@ -1814,8 +1814,10 @@ def to_nim(self):
     # Bare print (no args) -> echo "" (empty line)
     if result == "echo":
         result = 'echo ""'
-    # Convert bare string literals (docstrings) to Nim doc comments
-    if len(parts) == 1:
+    # Convert bare string literals (docstrings) to Nim doc comments.
+    # Skip when in a returning function — the string is an implicit return value.
+    # (Triple-quoted strings are already converted to ## by STRING.to_nim().)
+    if len(parts) == 1 and not _in_returning_func:
         r = parts[0]
         if r and len(r) >= 2 and r[0] == r[-1] and r[0] in ('"', "'"):
             result = '## ' + r[1:-1]
