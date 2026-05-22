@@ -5,7 +5,6 @@ Usage:  spell.ady big.txt                  # load corpus, enter REPL
         spell.ady big.txt speling          # correct a single word
 """
 
-nimport re
 from stdlib import Counter_T
 
 nimport stdlib
@@ -16,7 +15,7 @@ type Prob_T is float range 0..1
 # ============================================================
 
 def words(text: str) -> []str:
-    re.findall(r"[a-z]+", text.lower())
+    text.lower() =~ /[a-z]+/g
 
 let corpus_file: str = ($1 if $# >= 1 else "big.txt")
 let WORDS: Counter_T[str] = Counter_T(words(readFile(corpus_file)))

@@ -83,6 +83,18 @@ def _ensure_nimatch_helper():
         decls.append(_NIMATCH_HELPER)
         ParserState.nim_top_decls = decls
 
+def _get_regex_info(node):
+    """Unwrap wrapper nodes to find a regex_lit leaf.
+    Returns (pattern, flags) or None if the node is not a regex literal."""
+    while hasattr(node, 'nodes') and len(node.nodes) == 1:
+        node = node.nodes[0]
+    if type(node).__name__ == 'Fmap':
+        val = node.node if hasattr(node, 'node') else None
+        if isinstance(val, str) and val.startswith('/'):
+            last_slash = val.rfind('/')
+            return val[1:last_slash], val[last_slash + 1:]
+    return None
+
 def _nim_expr_type(expr):
     """Infer the Nim type of an already-emitted expression string.
 
@@ -814,12 +826,13 @@ def to_nim(self, prec=None):
 # --- regex literals and capture references ---
 @method(regex_lit)
 def to_nim(self, prec=None):
-    """regex_lit: /pattern/flags -> Nim: re"(?flags)pattern" (nre module)"""
+    """regex_lit: /pattern/flags -> Nim: re"(?flags)pattern" (nre module)
+    The /g flag controls findAll at the =~ level and is stripped here."""
     ParserState.nim_imports.add("nre")
-    s = self.node          # e.g. "/hello\\d+/i"
+    s = self.node          # e.g. "/hello\\d+/ig"
     last_slash = s.rfind("/")
     pattern = s[1:last_slash]
-    flags = s[last_slash + 1:]
+    flags = s[last_slash + 1:].replace('g', '')
     if flags:
         return f're"(?{flags}){pattern}"'
     return f're"{pattern}"'
@@ -2498,11 +2511,29 @@ def to_nim(self, prec=None):
                 continue
             # Perl match / non-match operators
             if py_op in ("=~", "!~"):
-                _ensure_nimatch_helper()
-                right = seq.nodes[1].to_nim(operand_prec)
-                chain = f"_nimatch({chain}, {right})"
-                if py_op == "!~":
-                    chain = f"not {chain}"
+                rhs_node = seq.nodes[1]
+                _rinfo = _get_regex_info(rhs_node)
+                if _rinfo is not None:
+                    _pat, _flags = _rinfo
+                    _has_g = 'g' in _flags
+                    _nim_flags = _flags.replace('g', '')
+                    ParserState.nim_imports.add("nre")
+                    _nim_pat = f're"(?{_nim_flags}){_pat}"' if _nim_flags else f're"{_pat}"'
+                    if _has_g:
+                        chain = f"{chain}.findAll({_nim_pat})"
+                        if py_op == "!~":
+                            chain = f"{chain}.len == 0"
+                    else:
+                        _ensure_nimatch_helper()
+                        chain = f"_nimatch({chain}, {_nim_pat})"
+                        if py_op == "!~":
+                            chain = f"not {chain}"
+                else:
+                    _ensure_nimatch_helper()
+                    right = rhs_node.to_nim(operand_prec)
+                    chain = f"_nimatch({chain}, {right})"
+                    if py_op == "!~":
+                        chain = f"not {chain}"
                 continue
             nim_op = _PY_OP_TO_NIM.get(py_op, py_op)
             right = seq.nodes[1].to_nim(operand_prec)
