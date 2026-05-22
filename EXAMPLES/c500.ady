@@ -3,7 +3,6 @@
 # Port of https://github.com/vgel/c500 by Theia Vogel
 # Original blog post: https://vgel.me/posts/c500/
 
-import contextlib
 import re
 import sys
 import traceback
@@ -34,7 +33,7 @@ class Emitter:
         if not self.emit_disabled:
             print(" " * self.indent_level + code)
 
-    @contextlib.contextmanager
+    @contextmanager
     def block(self, start: str, end: str):
         self(start)
         self.indent_level += 2
@@ -42,7 +41,7 @@ class Emitter:
         self.indent_level -= 2
         self(end)
 
-    @contextlib.contextmanager
+    @contextmanager
     def no_emit(self):
         self.emit_disabled = True
         try:

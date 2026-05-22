@@ -912,6 +912,13 @@ def to_nim(self, indent=0):
                 body = ind1 + block_node.to_nim()
         result += body
         return result
+    # @contextmanager template calls: emit as trailing-block call (no 'with' keyword)
+    import re as _re_wcm
+    _cm_funcs = getattr(ParserState, 'contextmanager_funcs', set())
+    if _cm_funcs and len(items) == 1 and " as " not in items[0]:
+        _wcm_m = _re_wcm.search(r'(?:^|\.)\s*(\w+)\s*\(', items[0])
+        if _wcm_m and _wcm_m.group(1) in _cm_funcs:
+            return f"{_ind(indent)}{items[0]}:{hc}\n{body}"
     return f"{_ind(indent)}with {', '.join(items)}:{hc}\n{body}"
 
 
@@ -2114,6 +2121,13 @@ def to_nim(self, indent=0):
         elif tname == "return_annotation":
             ret_ann = node.to_nim()
 
+    # Detect @contextmanager / @contextlib.contextmanager → Nim template
+    import re as _re_fncm
+    _is_fn_cm = bool(_re_fncm.search(r'@(?:contextlib\.)?contextmanager', decos))
+    if _is_fn_cm:
+        decos = _re_fncm.sub(r'[ \t]*@(?:contextlib\.)?contextmanager[ \t]*\n?', '', decos).strip()
+        decos = (decos + "\n") if decos else ""
+
     # Store return type so return_stmt can use it for Option wrapping
     ParserState._current_return_type = ret_ann  # e.g. ': seq[seq[string]]'
     # Record method return type for type inference (e.g. conn.rows() -> seq[seq[string]])
@@ -2178,6 +2192,14 @@ def to_nim(self, indent=0):
             _sv_indent = " " * (4 * (indent + 1))
             _sv_lines = "\n".join(f"{_sv_indent}var {sv} = {sv}" for sv in _shadow_vars)
             body = _sv_lines + "\n" + body
+    # @contextmanager: replace bare yield with template body placeholder
+    if _is_fn_cm:
+        body = "\n".join(
+            (ln[:len(ln) - len(ln.lstrip())] + "body") if ln.strip() == "yield" else ln
+            for ln in body.split("\n")
+        )
+        params = (params + ", body: untyped") if params else "body: untyped"
+        ret_ann = ""
     # -- Method / declaration hoisting ----------------------------------
     #
     # PROBLEM
@@ -2408,7 +2430,8 @@ def to_nim(self, indent=0):
         if hoisted:
             hoisted_block = "\n".join(hoisted) + "\n"
             body = "\n".join(kept)
-            return f"{hoisted_block}{decos}{_ind(indent)}proc {_nim_ident(name)}({params}){ret_ann} ={hc}\n{body}"
+            _kw_h = "template" if _is_fn_cm else "proc"
+            return f"{hoisted_block}{decos}{_ind(indent)}{_kw_h} {_nim_ident(name)}({params}){ret_ann} ={hc}\n{body}"
     # Register this proc name so nimpy coercion won't wrap its return values
     getattr(ParserState, 'nim_proc_names', set()).add(name)
     # Translate dunder method names to Nim operator procs
@@ -2416,12 +2439,15 @@ def to_nim(self, indent=0):
     if nim_name is None:
         return ""  # skip (e.g. __init__ handled via class_def)
     keyword = nim_keyword or "proc"
+    if _is_fn_cm:
+        keyword = "template"
+        getattr(ParserState, 'contextmanager_funcs', set()).add(name)
     # Strip @export / @used decorators and record their effect
     decos, _deco_export, _deco_used = _parse_func_decorators(decos, indent)
     if decos and not decos.endswith("\n"):
         decos += "\n"
     _exp = "*" if (_deco_export or (getattr(ParserState, 'export_symbols', False) and indent == 0)) else ""
-    _pragmas = " {.used.}" if _deco_used else ""
+    _pragmas = "" if _is_fn_cm else (" {.used.}" if _deco_used else "")
     # Infer generic type params from parameter/return type annotations.
     # Single uppercase-letter identifiers (S, D, C, T, K, V …) are type
     # variables by Adascript convention; collect them and add [S, D, C] to
@@ -3278,10 +3304,13 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
                 for child in node.nodes:
                     yield from _extract_deco_names(child)
 
+    is_contextmanager = False
     for node in func_node.nodes:
         for deco_node, deco_text in _extract_deco_names(node):
             if deco_text == "@proc":
                 force_proc = True
+            elif deco_text in ("@contextmanager", "@contextlib.contextmanager"):
+                is_contextmanager = True
             else:
                 extra_decos.append(deco_text)
 
@@ -3403,7 +3432,22 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
     params_str = ", ".join(params)
     # Detect if body contains yield -> use iterator instead of proc/method
     has_yield = any("yield " in line or line.strip() == "yield" for line in body_lines)
-    if has_yield:
+    if is_contextmanager:
+        # @contextmanager → Nim template: replace bare yield with body placeholder.
+        # body_lines elements may themselves contain embedded newlines (e.g. a
+        # try/finally block is one element), so flatten first.
+        _flat = "\n".join(body_lines).split("\n")
+        body_lines = [
+            (line[:len(line) - len(line.lstrip())] + "body") if line.strip() == "yield" else line
+            for line in _flat
+        ]
+        body_text = "\n".join(body_lines)
+        params_str = (params_str + ", body: untyped") if params_str else "body: untyped"
+        ret_ann = ""
+        pragma = ""
+        keyword = "template"
+        getattr(ParserState, 'contextmanager_funcs', set()).add(name)
+    elif has_yield:
         # Closure iterator needed when the iterator calls itself recursively
         is_recursive = any(
             f"{name}(" in line or f"for " in line and f" in {name}(" in line

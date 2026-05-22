@@ -835,6 +835,9 @@ def to_py(self, indent=0):
     decorator=self.nodes[0].to_py()
     if decorator == 'virtual':
         return ''
+    if decorator == 'contextmanager':
+        ParserState.nim_imports.add('import contextlib')
+        return f"{_ind(indent)}@contextlib.contextmanager"
     return f"{_ind(indent)}@{decorator}"
 
 
