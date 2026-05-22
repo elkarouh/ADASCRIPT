@@ -18,20 +18,14 @@ def parse_c_char(tok: str) -> str:
     if len(inner) < 2:
         return inner[0:1]
     c: str = inner[1:2]
-    if c == "n":
-        return "\n"
-    elif c == "t":
-        return "\t"
-    elif c == "r":
-        return "\r"
-    elif c == "0":
-        return "\0"
-    elif c == "\\":
-        return "\\"
-    elif c == "'":
-        return "'"
-    else:
-        return c
+    case c:
+        when "n":  return "\n"
+        when "t":  return "\t"
+        when "r":  return "\r"
+        when "0":  return "\0"
+        when "\\": return "\\"
+        when "'":  return "'"
+        when others: return c
 
 
 def parse_c_str(tok: str) -> str:
@@ -45,27 +39,28 @@ def parse_c_str(tok: str) -> str:
             i = i + 1
         else:
             c: str = inner[i+1:i+2]
-            if c == "n":
-                result = result + "\n"
-                i = i + 2
-            elif c == "t":
-                result = result + "\t"
-                i = i + 2
-            elif c == "r":
-                result = result + "\r"
-                i = i + 2
-            elif c == "0":
-                result = result + "\0"
-                i = i + 2
-            elif c == "\\":
-                result = result + "\\"
-                i = i + 2
-            elif c == "\"":
-                result = result + '"'
-                i = i + 2
-            else:
-                result = result + inner[i:i+1]
-                i = i + 1
+            case c:
+                when "n":
+                    result = result + "\n"
+                    i = i + 2
+                when "t":
+                    result = result + "\t"
+                    i = i + 2
+                when "r":
+                    result = result + "\r"
+                    i = i + 2
+                when "0":
+                    result = result + "\0"
+                    i = i + 2
+                when "\\":
+                    result = result + "\\"
+                    i = i + 2
+                when "\"":
+                    result = result + '"'
+                    i = i + 2
+                when others:
+                    result = result + inner[i:i+1]
+                    i = i + 1
     return result
 
 
