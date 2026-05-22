@@ -1815,9 +1815,10 @@ def to_nim(self):
     if result == "echo":
         result = 'echo ""'
     # Convert bare string literals (docstrings) to Nim doc comments.
-    # Skip when in a returning function — the string is an implicit return value.
+    # Skip when the function returns string — the literal is an implicit return value.
     # (Triple-quoted strings are already converted to ## by STRING.to_nim().)
-    if len(parts) == 1 and not _in_returning_func:
+    _returns_string = _ret.lstrip(": ").strip() in ("string", "cstring")
+    if len(parts) == 1 and not _returns_string:
         r = parts[0]
         if r and len(r) >= 2 and r[0] == r[-1] and r[0] in ('"', "'"):
             result = '## ' + r[1:-1]
