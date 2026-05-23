@@ -605,7 +605,7 @@ def classify(line: str) -> Severity_T:
 | `s != /pat/` | `not nimatch(s, re"pat")` | `not _pymatch(s, r'pat')` |
 | `s == /pat/g` | `s.findAll(srx.re(r"pat"))` | `re.findall(r'pat', s)` |
 | `$+0` … `$+N` | `matches[0]` … `matches[N]` | `matches[0]` … `matches[N]` |
-| `namedCaptures["k"]` | `namedCaptures["k"]` | `namedCaptures["k"]` |
+| `$+{k}` | `namedCaptures["k"]` | `namedCaptures["k"]` |
 | `s == s/pat/repl/g` | `s = s.replace(srx.re(r"pat"), "repl")` | `s = re.sub(r'pat', r'repl', s)` |
 | `when /pat/:` in `case` | `elif nimatch(subject, re"pat"):` | `elif _pymatch(subject, r'pat'):` |
 

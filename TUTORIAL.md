@@ -1862,7 +1862,7 @@ the whole block still desugars to `if/elif/else`.
 | `$+0` | `matches[0]` (whole match) | `matches[0]` |
 | `$+N` | `matches[N]` (N-th group) | `matches[N]` |
 | `$+{name}` | `namedCaptures["name"]` | `namedCaptures["name"]` |
-| `namedCaptures["k"]` | `namedCaptures["k"]` | `namedCaptures["k"]` |
+| `$+{k}` | `namedCaptures["k"]` | `namedCaptures["k"]` |
 | `s == s/pat/repl/` | `s = s.replace(srx.re(r"pat"), "repl")` | `s = re.sub(r'pat', r'repl', s)` |
 | `s == s/pat/$+1/` | `s = s.replace(srx.re(r"pat"), "$1")` | `s = re.sub(r'pat', r'\1', s)` |
 | `s == s/pat/repl/g` | same (std/re replace is always global) | same (`re.sub` is always global) |
