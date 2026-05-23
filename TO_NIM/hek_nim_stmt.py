@@ -1740,13 +1740,14 @@ def to_nim(self):
         elif raw[j] == '/': break
         else: j += 1
     repl = raw[repl_start:j]
-    flags = raw[j + 1:]          # after third '/', strip 'g' (always global in nre)
+    flags = raw[j + 1:]          # after third '/', strip 'g' (std/re replace is always global)
     regex_flags = flags.replace('g', '')
-    nim_pat = f're"(?{regex_flags}){pat}"' if regex_flags else f're"{pat}"'
-    # $+N in replacement → $N  (nre replacement backreference syntax)
+    # Use std/re via srx alias (nre.replace has quadratic blowup like findAll)
+    srx_pat = f'srx.re(r"(?{regex_flags}){pat}")' if regex_flags else f'srx.re(r"{pat}")'
+    # $+N in replacement → $N  (std/re replacement backreference syntax)
     repl = _re_s.sub(r'\$\+(\d+)', r'$\1', repl)
     repl = _re_s.sub(r'\$\+\{(\w+)\}', r'${\1}', repl)
-    return f'{lhs} = {lhs}.replace({nim_pat}, "{repl}")'
+    return f'{lhs} = {lhs}.replace({srx_pat}, "{repl}")'
 
 
 @method(print_stmt)

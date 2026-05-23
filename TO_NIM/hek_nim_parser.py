@@ -1783,10 +1783,12 @@ def to_nim(self, indent=0):
                 pat, flags = rinfo
                 has_g = 'g' in flags
                 nim_flags = flags.replace('g', '')
-                nim_pat = f're"(?{nim_flags}){pat}"' if nim_flags else f're"{pat}"'
                 if has_g:
-                    cond = f"{subject}.findAll({nim_pat}).len > 0"
+                    # std/re.findAll (nre.findAll has quadratic blowup)
+                    srx_pat = f'srx.re(r"(?{nim_flags}){pat}")' if nim_flags else f'srx.re(r"{pat}")'
+                    cond = f"{subject}.findAll({srx_pat}).len > 0"
                 else:
+                    nim_pat = f're"(?{nim_flags}){pat}"' if nim_flags else f're"{pat}"'
                     cond = f"nimatch({subject}, {nim_pat})"
             else:
                 cond = f"{subject} == {pat_nim}"

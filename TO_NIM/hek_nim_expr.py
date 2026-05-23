@@ -57,6 +57,7 @@ _COMP_OPS = {"==", "!=", "<", ">", "<=", ">=", "in", "is", "not in", "is not", "
              "-nt", "-ot"}
 
 _NIMATCH_HELPER = """\
+from std/re as srx import findAll, replace
 var matches: seq[string]
 var namedCaptures: Table[string, string]
 proc nimatch(s: string; pattern: Regex): bool =
@@ -2521,14 +2522,16 @@ def to_nim(self, prec=None):
                     _pat, _flags = _rinfo
                     _has_g = 'g' in _flags
                     _nim_flags = _flags.replace('g', '')
-                    ParserState.nim_imports.add("nre")
-                    _nim_pat = f're"(?{_nim_flags}){_pat}"' if _nim_flags else f're"{_pat}"'
                     if _has_g:
-                        chain = f"{chain}.findAll({_nim_pat})"
+                        # std/re.findAll (nre.findAll has quadratic blowup)
+                        _ensure_nimatch_helper()
+                        _srx_pat = f'srx.re(r"(?{_nim_flags}){_pat}")' if _nim_flags else f'srx.re(r"{_pat}")'
+                        chain = f"{chain}.findAll({_srx_pat})"
                         if py_op == "!=":
                             chain = f"{chain}.len == 0"
                     else:
                         _ensure_nimatch_helper()
+                        _nim_pat = f're"(?{_nim_flags}){_pat}"' if _nim_flags else f're"{_pat}"'
                         chain = f"nimatch({chain}, {_nim_pat})"
                         if py_op == "!=":
                             chain = f"not {chain}"
