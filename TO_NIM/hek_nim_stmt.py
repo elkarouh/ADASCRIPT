@@ -1743,7 +1743,8 @@ def to_nim(self):
     flags = raw[j + 1:]          # after third '/', strip 'g' (std/re replace is always global)
     regex_flags = flags.replace('g', '')
     # Use std/re via srx alias (nre.replace has quadratic blowup like findAll)
-    srx_pat = f'srx.re(r"(?{regex_flags}){pat}")' if regex_flags else f'srx.re(r"{pat}")'
+    _esc_pat = pat.replace('"', '""')   # Nim raw-string: embed " as ""
+    srx_pat = f'srx.re(r"(?{regex_flags}){_esc_pat}")' if regex_flags else f'srx.re(r"{_esc_pat}")'
     # $+N in replacement → $N  (std/re replacement backreference syntax)
     repl = _re_s.sub(r'\$\+(\d+)', r'$\1', repl)
     repl = _re_s.sub(r'\$\+\{(\w+)\}', r'${\1}', repl)
