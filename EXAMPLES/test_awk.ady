@@ -15,11 +15,11 @@ class AwkProcessor(AwkBase):
     var counts : [Severity_T]int = [INFO : 0, WARN : 0, ERROR : 0, OTHER: 0]
 
     def classify_record(self) -> Severity_T:
-        if self.line =~ /error/i:
+        if self.line == /error/i:
             return ERROR
-        if self.line =~ /warn/i:
+        if self.line == /warn/i:
             return WARN
-        if self.line =~ /info|debug/i:
+        if self.line == /info|debug/i:
             return INFO
         return OTHER
 

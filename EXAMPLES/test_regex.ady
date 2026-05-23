@@ -3,61 +3,61 @@
 
 # --- basic match / non-match ---
 def is_integer(s: str) -> bool:
-    s =~ /^\d+$/
+    s == /^\d+$/
 
 def is_not_blank(s: str) -> bool:
-    s !~ /^\s*$/
+    s != /^\s*$/
 
 # --- positional capture groups ---
 def first_word(s: str) -> str:
-    if s =~ /(\w+)/:
+    if s == /(\w+)/:
         $+1
     else:
         ""
 
 # --- multiple captures ---
 def parse_kv(s: str) -> str:
-    if s =~ /(\w+)\s*=\s*(\w+)/:
+    if s == /(\w+)\s*=\s*(\w+)/:
         f"{$+1} -> {$+2}"
     else:
         "no match"
 
 # --- named capture groups ---
 def parse_date(s: str) -> str:
-    if s =~ /(?P<year>\d{4})-(?P<month>\d{2})-(?P<day>\d{2})/:
+    if s == /(?P<year>\d{4})-(?P<month>\d{2})-(?P<day>\d{2})/:
         f"{$+{day}}/{$+{month}}/{$+{year}}"
     else:
         "invalid date"
 
 # --- flags: case-insensitive ---
 def is_yes(s: str) -> bool:
-    s =~ /^yes$/i
+    s == /^yes$/i
 
 # --- whole-match capture ($+0) ---
 def first_number(s: str) -> str:
-    if s =~ /\d+/:
+    if s == /\d+/:
         $+0
     else:
         ""
 
 # --- substitution ---
 def redact_numbers(s: str) -> str:
-    s =~ s/\d+/[N]/g
+    s == s/\d+/[N]/g
     s
 
 def normalize_spaces(s: str) -> str:
-    s =~ s/\s+/ /g
+    s == s/\s+/ /g
     s
 
 # --- findall: /g returns []str ---
 def all_words(s: str) -> []str:
-    s =~ /\w+/g
+    s == /\w+/g
 
 def all_numbers(s: str) -> []str:
-    s =~ /\d+/g
+    s == /\d+/g
 
 def all_tags(s: str) -> []str:
-    s =~ /<[^>]+>/g
+    s == /<[^>]+>/g
 
 # --- main ---
 let cases: []str = [

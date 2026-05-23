@@ -22,11 +22,11 @@ if $# > 0:
     FS = $1
 
 def classify(line: str) -> Severity_T:
-    if line =~ /error/i:
+    if line == /error/i:
         return ERROR
-    if line =~ /warn/i:
+    if line == /warn/i:
         return WARN
-    if line =~ /info|debug/i:
+    if line == /info|debug/i:
         return INFO
     return OTHER
 

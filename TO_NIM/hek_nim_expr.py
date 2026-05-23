@@ -54,7 +54,7 @@ def to_nim(self, prec=None):
     return name
 
 _COMP_OPS = {"==", "!=", "<", ">", "<=", ">=", "in", "is", "not in", "is not", "isnot", "notin",
-             "-nt", "-ot", "=~", "!~"}
+             "-nt", "-ot"}
 
 _NIMATCH_HELPER = """\
 var matches: seq[string]
@@ -2509,8 +2509,9 @@ def to_nim(self, prec=None):
                 chain = (f"(getLastModificationTime({chain})"
                          f" {cmp_op} getLastModificationTime({right}))")
                 continue
-            # Perl match / non-match operators
-            if py_op in ("=~", "!~"):
+            nim_op = _PY_OP_TO_NIM.get(py_op, py_op)
+            # == / != with regex RHS: dispatch to _nimatch / findAll
+            if py_op in ("==", "!="):
                 rhs_node = seq.nodes[1]
                 _rinfo = _get_regex_info(rhs_node)
                 if _rinfo is not None:
@@ -2521,21 +2522,14 @@ def to_nim(self, prec=None):
                     _nim_pat = f're"(?{_nim_flags}){_pat}"' if _nim_flags else f're"{_pat}"'
                     if _has_g:
                         chain = f"{chain}.findAll({_nim_pat})"
-                        if py_op == "!~":
+                        if py_op == "!=":
                             chain = f"{chain}.len == 0"
                     else:
                         _ensure_nimatch_helper()
                         chain = f"_nimatch({chain}, {_nim_pat})"
-                        if py_op == "!~":
+                        if py_op == "!=":
                             chain = f"not {chain}"
-                else:
-                    _ensure_nimatch_helper()
-                    right = rhs_node.to_nim(operand_prec)
-                    chain = f"_nimatch({chain}, {right})"
-                    if py_op == "!~":
-                        chain = f"not {chain}"
-                continue
-            nim_op = _PY_OP_TO_NIM.get(py_op, py_op)
+                    continue
             right = seq.nodes[1].to_nim(operand_prec)
             # char comparisons: coerce single-char string literals to char literals
             def _is_char(s):
