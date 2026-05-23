@@ -1,20 +1,30 @@
 # Adascript
 
-Adascript is a statically-typed superset of Python 3 inspired by Ada and Nim.
+Adascript is a statically-typed superset of Python 3 that steals the best
+features from many languages: **Ada** (enums, variant records, tick attributes,
+subranges), **Nim** (compile target, type system, performance), **Perl** and
+**AWK** (first-class regex literals `/pat/flags`, `$+N` captures, `s/pat/repl/`
+substitution), and **Bash** (`$1`, `$#`, `$@`, `-e path`, `shell:` blocks).
 It transpiles to both **Python 3** and **Nim**, letting you write concise,
 type-safe code in a familiar syntax and target either ecosystem without
 changing the source.
-I've been searching for the perfect programming language for years and my conclusion thus far is that it's missing.
-I've spent years searching for a programming language that has it all: expressive types, a large ecosystem, good performance, and good devx.
-Every language I've tried makes me choose. So here I wanted to share my view of the current language landscape, where they fall short, and what I think they can do to have it all and become S-Tier.
 
-This is a programming language that I’ve been developing for about 10 years. More recently, I’ve used Codex as an assistant for parts of the documentation work, refactoring, and some of the more difficult feature implementations, so the project does include some AI-assisted code and writing. That said, the overall design, review, and ongoing maintenance of the project are handled by me.
+I’ve been searching for the perfect programming language for years and my
+conclusion thus far is that it’s missing. Every language I’ve tried makes me
+choose between expressive types, a large ecosystem, good performance, and good
+devx. Adascript is my attempt to have it all by being unapologetically eclectic:
+if a language got something right, we take it.
 
+This is a programming language that I’ve been developing for about 10 years.
+More recently, I’ve used Codex as an assistant for parts of the documentation
+work, refactoring, and some of the more difficult feature implementations, so
+the project does include some AI-assisted code and writing. That said, the
+overall design, review, and ongoing maintenance of the project are handled by me.
 
 Every valid Python 3 file is also valid Adascript. The extra features are purely
 additive: left-to-right type annotations, Ada-style enums and variant records,
-tick attributes, range expressions, `case/when` pattern matching, and
-first-class shell command integration.
+tick attributes, range expressions, `case/when` pattern matching, Perl/AWK-style
+regex literals, and first-class shell command integration.
 
 # Elucubrations
 Pascal has set base minimum for systems programming languages. In Pascal it is possible to declare enumerated type and use it wherever ordinal type is accepted. Index an array and for loop. Ada has inherited this base minimum and enhanced by records with discriminants. In Rust I can see nothing but mess. Rust enumeration type can be used as neither array index nor for loop. Also, Rust for some unknown reason tangled records with discriminats and custom enumeration types in a way that cannot be untangled. Yeah, record with discriminant is a popular use of enumeration type, but everything becomes stupid if they come in inseparatable pack. Rust does not deliver base minimum. Wirth's minimum.
