@@ -1751,6 +1751,54 @@ def to_nim(self, indent=0):
             keyword = "elif"
         return result.lstrip("\n")
 
+    # Regex patterns in when clauses: desugar to if/elif/else
+    def _pat_regex_info(pat_node):
+        """Return (pattern, flags) if pat_node is a regex literal, else None."""
+        node = pat_node
+        while hasattr(node, 'nodes') and len(node.nodes) == 1:
+            node = node.nodes[0]
+        if type(node).__name__ == 'Fmap':
+            val = node.node if hasattr(node, 'node') else None
+            if isinstance(val, str) and val.startswith('/'):
+                last = val.rfind('/')
+                return val[1:last], val[last + 1:]
+        return None
+
+    if any(_pat_regex_info(p) is not None for p, _, _ in _extract_branches(self)):
+        from hek_nim_expr import _ensure_nimatch_helper
+        _ensure_nimatch_helper()
+        result = ""
+        keyword = "if"
+        for pat_node, block_node, guard_node in _extract_branches(self):
+            hc = _block_inline_header_comment(block_node) if block_node else ""
+            body = ""
+            if block_node:
+                try:
+                    body = block_node.to_nim(indent + 1)
+                except TypeError:
+                    body = _ind(indent + 1) + block_node.to_nim()
+            pat_nim = pat_node.to_nim() if hasattr(pat_node, "to_nim") else str(pat_node)
+            if pat_nim in ("others", "_"):
+                result += f"\n{_ind(indent)}else:{hc}\n{body}"
+                continue
+            rinfo = _pat_regex_info(pat_node)
+            if rinfo is not None:
+                pat, flags = rinfo
+                has_g = 'g' in flags
+                nim_flags = flags.replace('g', '')
+                nim_pat = f're"(?{nim_flags}){pat}"' if nim_flags else f're"{pat}"'
+                if has_g:
+                    cond = f"{subject}.findAll({nim_pat}).len > 0"
+                else:
+                    cond = f"_nimatch({subject}, {nim_pat})"
+            else:
+                cond = f"{subject} == {pat_nim}"
+            if guard_node is not None:
+                cond = f"{cond} and {guard_node.nodes[0].to_nim()}"
+            result += f"\n{_ind(indent)}{keyword} {cond}:{hc}\n{body}"
+            keyword = "elif"
+        return result.lstrip("\n")
+
     from hek_nim_expr import _str_to_char_lit
     _subj_sym = ParserState.symbol_table.lookup(subject)
     _subj_is_char = _subj_sym and (_subj_sym.get("type") or "") == "char"
