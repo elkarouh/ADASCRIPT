@@ -393,7 +393,7 @@ def deal_with_no_space_left(
     auto_expire: bool,
 ) -> bool:
     let log_data: str = open(log_file, encoding="utf-8", errors="surrogateescape").read()
-    let no_space: bool = log_data =~ /No space left on device \(28\)|Result too large \(34\)/
+    let no_space: bool = log_data == /No space left on device \(28\)|Result too large \(34\)/
     if not no_space:
         return False
 

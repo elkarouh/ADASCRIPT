@@ -56,8 +56,6 @@ from hek_parsec import (
     BASH_CMP,
     RANGE_OP,
     RANGE_EXCL_OP,
-    EQTILDE,
-    NEQTILDE,
     REGEX_LIT,
     CAPTURE,
     NAMED_CAPTURE,
@@ -344,7 +342,7 @@ file_test = BASH_TEST + IDENTIFIER + primary
 # --- comparison operators ---
 not_in_op = K_NOT + K_IN
 is_not_op = K_IS + K_NOT
-comp_op = V_EQ | V_NE | V_LE | V_LT | V_GE | V_GT | not_in_op | is_not_op | K_IN | K_IS | BASH_CMP | EQTILDE | NEQTILDE
+comp_op = V_EQ | V_NE | V_LE | V_LT | V_GE | V_GT | not_in_op | is_not_op | K_IN | K_IS | BASH_CMP
 
 # --- 'in' with range: x in 1 .. n  or  x in 1 ..< n ---
 # Must be tried before plain comp_op so 'in' eagerly grabs the range bounds.
