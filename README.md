@@ -598,19 +598,19 @@ def classify(line: str) -> Severity_T:
 
 ### Translation reference
 
-| Adascript | Nim (generated) |
-|-----------|-----------------|
-| `s == /pat/` | `nimatch(s, re"pat")` |
-| `s == /pat/i` | `nimatch(s, re"(?i)pat")` |
-| `s != /pat/` | `not nimatch(s, re"pat")` |
-| `s == /pat/g` | `s.findAll(srx.re(r"pat"))` |
-| `$+0` … `$+N` | `matches[0]` … `matches[N]` |
-| `namedCaptures["k"]` | `namedCaptures["k"]` |
-| `s == s/pat/repl/g` | `s = s.replace(srx.re(r"pat"), "repl")` |
-| `when /pat/:` in `case` | `elif nimatch(subject, re"pat"):` |
+| Adascript | Nim (generated) | Python (generated) |
+|-----------|-----------------|-------------------|
+| `s == /pat/` | `nimatch(s, re"pat")` | `_pymatch(s, r'pat')` |
+| `s == /pat/i` | `nimatch(s, re"(?i)pat")` | `_pymatch(s, r'pat', re.IGNORECASE)` |
+| `s != /pat/` | `not nimatch(s, re"pat")` | `not _pymatch(s, r'pat')` |
+| `s == /pat/g` | `s.findAll(srx.re(r"pat"))` | `re.findall(r'pat', s)` |
+| `$+0` … `$+N` | `matches[0]` … `matches[N]` | `matches[0]` … `matches[N]` |
+| `namedCaptures["k"]` | `namedCaptures["k"]` | `namedCaptures["k"]` |
+| `s == s/pat/repl/g` | `s = s.replace(srx.re(r"pat"), "repl")` | `s = re.sub(r'pat', r'repl', s)` |
+| `when /pat/:` in `case` | `elif nimatch(subject, re"pat"):` | `elif _pymatch(subject, r'pat'):` |
 
-`nimatch`, `matches`, and `namedCaptures` are injected automatically into
-the generated Nim file whenever a regex literal is used.
+`nimatch`/`_pymatch`, `matches`, and `namedCaptures` are injected automatically
+into the generated file whenever a regex literal is used.
 
 ---
 
