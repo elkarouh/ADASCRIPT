@@ -658,14 +658,127 @@ def to_py(self, indent=0):
     return f"{_ind(indent)}case {pat}{guard}:{hc}\n{body}"
 
 
+def _block_node_of_py(when_node):
+    """Extract the block (or stmt_line) body node from a when_clause node."""
+    for n in when_node.nodes[1:]:
+        if type(n).__name__ in ("block", "stmt_line"):
+            return n
+        if type(n).__name__ in ("Several_Times", "case_guard", "Filter", "Fmap"):
+            continue
+        if hasattr(n, "to_py"):
+            return n
+    for n in reversed(when_node.nodes):
+        tname = type(n).__name__
+        if tname not in ("case_guard", "Several_Times", "Filter", "Fmap") and hasattr(n, "to_py"):
+            return n
+    return None
+
+
+def _extract_branches_py(case_node):
+    """Yield (pat_node, block_node, guard_node_or_None) for each branch in a case_stmt."""
+    for node in case_node.nodes[1:]:
+        tname = type(node).__name__
+        if tname == "when_clause":
+            pat = node.nodes[0]
+            blk = _block_node_of_py(node)
+            guard = None
+            for n in node.nodes[1:]:
+                if type(n).__name__ == "case_guard":
+                    guard = n
+                elif type(n).__name__ == "Several_Times":
+                    for inner in n.nodes:
+                        if type(inner).__name__ == "case_guard":
+                            guard = inner
+            yield pat, blk, guard
+        elif tname == "Several_Times":
+            for seq in node.nodes:
+                stname = type(seq).__name__
+                if stname == "when_clause":
+                    pat = seq.nodes[0]
+                    blk = _block_node_of_py(seq)
+                    guard = None
+                    for n in seq.nodes[1:]:
+                        if type(n).__name__ == "case_guard":
+                            guard = n
+                        elif type(n).__name__ == "Several_Times":
+                            for inner in n.nodes:
+                                if type(inner).__name__ == "case_guard":
+                                    guard = inner
+                    yield pat, blk, guard
+                elif stname == "Sequence_Parser" and hasattr(seq, "nodes"):
+                    pat_node = None
+                    blk_node = None
+                    guard_node = None
+                    for child in seq.nodes:
+                        cname = type(child).__name__
+                        if cname in ("block", "stmt_line"):
+                            blk_node = child
+                        elif cname == "case_guard":
+                            guard_node = child
+                        elif cname == "Several_Times":
+                            for inner in child.nodes:
+                                if type(inner).__name__ == "case_guard":
+                                    guard_node = inner
+                        elif cname not in ("Filter", "Fmap") and hasattr(child, "to_py"):
+                            if pat_node is None:
+                                pat_node = child
+                    if pat_node is not None:
+                        yield pat_node, blk_node, guard_node
+
+
+def _pat_regex_info_py(pat_node):
+    """Return (pattern, flags) if pat_node is a regex literal, else None."""
+    val = getattr(pat_node, 'node', None)
+    if isinstance(val, str) and val.startswith('/'):
+        last = val.rfind('/')
+        if last > 0:
+            return val[1:last], val[last + 1:]
+    return None
+
+
 @method(case_stmt)
 def to_py(self, indent=0):
-    """match_stmt: 'match' expression ':' NEWLINE INDENT (case_clause)+ DEDENT"""
+    """case_stmt: 'case' expression ':' when_clause+ — Adascript case/when"""
     subject = self.nodes[0].to_py()
+
+    # If any branch uses a regex pattern, desugar to if/elif/else
+    if any(_pat_regex_info_py(p) is not None for p, _, _ in _extract_branches_py(self)):
+        from hek_py3_expr import _ensure_pymatch_helper, _py_re_flags
+        _ensure_pymatch_helper()
+        result = ""
+        keyword = "if"
+        for pat_node, block_node, guard_node in _extract_branches_py(self):
+            hc = _block_inline_header_comment(block_node) if block_node else ""
+            body = _suite_to_py(block_node, indent + 1) if block_node else ""
+            pat_py = pat_node.to_py() if hasattr(pat_node, "to_py") else str(pat_node)
+            if pat_py in ("others", "_"):
+                result += f"\n{_ind(indent)}else:{hc}\n{body}"
+                continue
+            rinfo = _pat_regex_info_py(pat_node)
+            if rinfo is not None:
+                pat, flags = rinfo
+                has_g = 'g' in flags
+                flags_val = _py_re_flags(flags)
+                safe_pat = pat.replace("'", "\\'")
+                if has_g:
+                    if flags_val != "0":
+                        cond = f"_re_mod.findall(r'{safe_pat}', {subject}, {flags_val})"
+                    else:
+                        cond = f"_re_mod.findall(r'{safe_pat}', {subject})"
+                else:
+                    if flags_val != "0":
+                        cond = f"_pymatch({subject}, r'{safe_pat}', {flags_val})"
+                    else:
+                        cond = f"_pymatch({subject}, r'{safe_pat}')"
+            else:
+                cond = f"{subject} == {pat_py}"
+            if guard_node is not None:
+                cond = f"{cond} and {guard_node.nodes[0].to_py()}"
+            result += f"\n{_ind(indent)}{keyword} {cond}:{hc}\n{body}"
+            keyword = "elif"
+        return result.lstrip("\n")
+
     result = f"{_ind(indent)}match {subject}:"
-    # Case clauses are in the Several_Times node.
-    # Each case is a Sequence_Parser [pattern, block] or [pattern, Several_Times(guard), block]
-    # due to case_clause being flattened.
     for node in self.nodes[1:]:
         tname = type(node).__name__
         if tname == "when_clause":

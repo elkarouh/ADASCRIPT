@@ -841,6 +841,23 @@ def to_py(self, prec=None):
                 cmp_op = ">" if op == "-nt" else "<"
                 chain = f"(os.path.getmtime({chain}) {cmp_op} os.path.getmtime({right}))"
                 continue
+            # == / != with regex RHS: dispatch to _pymatch / findall
+            if op in ("==", "!="):
+                rhs_node = seq.nodes[1]
+                _rinfo = _get_regex_info_py(rhs_node)
+                if _rinfo is not None:
+                    _ensure_pymatch_helper()
+                    _pat, _flags = _rinfo
+                    _has_g = 'g' in _flags
+                    _flags_val = _py_re_flags(_flags)
+                    _safe_pat = _pat.replace("'", "\\'")
+                    if _has_g:
+                        _call = f"_re_mod.findall(r'{_safe_pat}', {chain})" if _flags_val == "0" else f"_re_mod.findall(r'{_safe_pat}', {chain}, {_flags_val})"
+                        chain = (_call + ".count('') == 0" if op == "!=" else _call)
+                    else:
+                        _call = f"_pymatch({chain}, r'{_safe_pat}')" if _flags_val == "0" else f"_pymatch({chain}, r'{_safe_pat}', {_flags_val})"
+                        chain = f"not {_call}" if op == "!=" else _call
+                    continue
             right = seq.nodes[1].to_py(operand_prec)
             chain += f" {op} {right}"
     if prec is not None and PREC_CMP < prec:
@@ -1437,4 +1454,82 @@ def to_py(self, prec=None):
         return f"{type_name}({args})"
     # Fallback: plain tuple with just the values
     return "(" + ", ".join(field_vals) + ")"
+
+
+# ---------------------------------------------------------------------------
+# Regex literals and capture variables
+# ---------------------------------------------------------------------------
+
+_PYMATCH_HELPER = """\
+import re as _re_mod
+matches = []
+namedCaptures = {}
+
+def _pymatch(s, pat, flags=0):
+    global matches, namedCaptures
+    m = _re_mod.search(pat, s, flags)
+    if m is None:
+        matches = []
+        namedCaptures = {}
+        return False
+    matches = [m.group(0)] + [g if g is not None else "" for g in m.groups()]
+    namedCaptures = {k: (v if v is not None else "") for k, v in m.groupdict().items()}
+    return True
+"""
+
+def _ensure_pymatch_helper():
+    """Inject the _pymatch helper into py_top_decls the first time regex is used."""
+    decls = getattr(ParserState, 'py_top_decls', [])
+    if not any("_pymatch" in d for d in decls):
+        decls.append(_PYMATCH_HELPER)
+        ParserState.py_top_decls = decls
+
+def _get_regex_info_py(node):
+    """Walk single-child wrapper nodes to find a regex_lit leaf.
+    Returns (pattern, flags) or None."""
+    while node is not None:
+        val = getattr(node, 'node', None)
+        if isinstance(val, str) and val.startswith('/'):
+            last_slash = val.rfind('/')
+            if last_slash > 0:
+                return val[1:last_slash], val[last_slash + 1:]
+        if hasattr(node, 'nodes') and len(node.nodes) == 1:
+            node = node.nodes[0]
+        else:
+            return None
+    return None
+
+def _py_re_flags(flags_str):
+    """Convert regex flag chars to a Python re.FLAGS expression, or '0'."""
+    mapping = {'i': 're.IGNORECASE', 'm': 're.MULTILINE', 's': 're.DOTALL'}
+    parts = [mapping[f] for f in flags_str.replace('g', '') if f in mapping]
+    return " | ".join(parts) if parts else "0"
+
+
+@method(regex_lit)
+def to_py(self, prec=None):
+    """regex_lit: /pattern/flags — standalone (rare); emit as re.compile(r"pat", flags)."""
+    _ensure_pymatch_helper()
+    s = self.node
+    last_slash = s.rfind('/')
+    pat = s[1:last_slash].replace("'", "\\'")
+    flags_str = s[last_slash + 1:]
+    flags_val = _py_re_flags(flags_str)
+    if flags_val != "0":
+        return f"_re_mod.compile(r'{pat}', {flags_val})"
+    return f"_re_mod.compile(r'{pat}')"
+
+
+@method(capture_var)
+def to_py(self, prec=None):
+    """capture_var: $+N -> matches[N]"""
+    num = int(self.node[2:])
+    return f"matches[{num}]"
+
+
+@method(named_capture_var)
+def to_py(self, prec=None):
+    """named_capture_var: $+{name} -> namedCaptures["name"]"""
+    name = self.node[3:-1]   # strip "$+{" and "}"
+    return f'namedCaptures["{name}"]'
 

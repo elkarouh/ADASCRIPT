@@ -711,6 +711,40 @@ def to_py(self):
 
 
 # --- simple_stmt ---
+@method(subst_stmt)
+def to_py(self):
+    """subst_stmt: primary '=' s/pat/repl/flags -> Python: lhs = re.sub(r'pat', 'repl', lhs, flags=...)"""
+    import re as _re_s
+    from hek_py3_expr import _ensure_pymatch_helper, _py_re_flags
+    _ensure_pymatch_helper()
+    lhs = self.nodes[0].to_py()
+    raw = self.nodes[1].node     # e.g. "s/\d+/[N]/gi"
+    j = 2                        # skip leading 's/'
+    pat_start = j
+    while j < len(raw):
+        if raw[j] == '\\': j += 2
+        elif raw[j] == '/': break
+        else: j += 1
+    pat = raw[pat_start:j]
+    repl_start = j + 1
+    j = repl_start
+    while j < len(raw):
+        if raw[j] == '\\': j += 2
+        elif raw[j] == '/': break
+        else: j += 1
+    repl = raw[repl_start:j]
+    flags_str = raw[j + 1:]
+    # $+N → \N and $+{name} → \g<name>  (Python re.sub backreference syntax)
+    repl = _re_s.sub(r'\$\+(\d+)', r'\\\1', repl)
+    repl = _re_s.sub(r'\$\+\{(\w+)\}', r'\\g<\1>', repl)
+    flags_val = _py_re_flags(flags_str)
+    safe_pat = pat.replace("'", "\\'")
+    safe_repl = repl.replace("'", "\\'")
+    if flags_val != "0":
+        return f"{lhs} = _re_mod.sub(r'{safe_pat}', r'{safe_repl}', {lhs}, flags={flags_val})"
+    return f"{lhs} = _re_mod.sub(r'{safe_pat}', r'{safe_repl}', {lhs})"
+
+
 @method(print_stmt)
 def to_py(self):
     """print_stmt: 'print' star_expressions -> Python: print(star_expressions)
