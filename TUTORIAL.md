@@ -1673,8 +1673,8 @@ def example7():   # Romania map, A* with heuristic
 ## 19. Regex Literals
 
 Adascript has first-class regex literal syntax: `/pattern/flags`. No `import re`
-needed — regex support is compiled directly into the generated Nim via the `nre`
-and `std/re` modules, which are injected automatically.
+needed — regex support is injected automatically into the generated code for both
+backends (Nim uses `nre`/`std/re`; Python uses the standard `re` module).
 
 ### 19.1 Match test (`==` / `!=`)
 
@@ -1689,7 +1689,7 @@ if text != /^\s*$/:
 ```
 
 The left operand is a `str`; the transpiler detects the regex RHS and emits a
-`nimatch()` call instead of an equality test.
+match call instead of an equality test.
 
 **Nim output:**
 ```nim
@@ -1697,6 +1697,15 @@ if nimatch(line, re"(?i)error"):
     echo "found error"
 
 if not nimatch(text, re"^\s*$"):
+    process(text)
+```
+
+**Python output:**
+```python
+if _pymatch(line, r'error', re.IGNORECASE):
+    print("found error")
+
+if not _pymatch(text, r'^\s*$'):
     process(text)
 ```
 
@@ -1720,6 +1729,14 @@ if nimatch(src, re"^([a-zA-Z_]\w*)\s*=\s*(.+)$"):
     echo fmt"{name} → {value}"
 ```
 
+**Python output:**
+```python
+if _pymatch(src, r'^([a-zA-Z_]\w*)\s*=\s*(.+)$'):
+    name:  str = matches[1]
+    value: str = matches[2]
+    print(f"{name} → {value}")
+```
+
 ### 19.3 Named capture groups
 
 Use PCRE named groups `(?P<name>...)`. After a match, the `namedCaptures`
@@ -1734,8 +1751,8 @@ if line == /(?P<year>\d{4})-(?P<month>\d{2})-(?P<day>\d{2})/:
 ```
 
 Both `matches` and `namedCaptures` are globals populated by the last
-successful `nimatch()` call. Copy them immediately if you need to call
-another regex before consuming the results.
+successful match call. Copy them immediately if you need to call another
+regex before consuming the results.
 
 ### 19.4 Find all (`/g` flag)
 
@@ -1755,6 +1772,11 @@ matches when using `g`.
 let words:  seq[string] = text.findAll(srx.re(r"\w+"))
 ```
 
+**Python output:**
+```python
+words:  list[str] = re.findall(r'\w+', text)
+```
+
 ### 19.5 Substitution (`s/pat/repl/flags`)
 
 ```python
@@ -1763,8 +1785,19 @@ name == s/[^a-z]//gi      # strip everything that is not a–z
 line == s/\bfoo\b/bar/    # replace first occurrence of whole word "foo"
 ```
 
-Backreferences use `$1`, `$2` in the replacement string. The substitution
-assigns the result back to the left-hand side.
+Backreferences in the replacement use `$+1`, `$+2` (positional) or
+`$+{name}` (named group). The substitution assigns the result back to the
+left-hand side.
+
+**Nim output:**
+```nim
+text = text.replace(srx.re(r"\s+"), " ")
+```
+
+**Python output:**
+```python
+text = re.sub(r'\s+', r' ', text)
+```
 
 ### 19.6 Regex in `case/when`
 
@@ -1793,6 +1826,19 @@ proc classify(line: string): Severity_T =
         return OTHER
 ```
 
+**Python output:**
+```python
+def classify(line: str) -> Severity_T:
+    if _pymatch(line, r'error', re.IGNORECASE):
+        return ERROR
+    elif _pymatch(line, r'warn', re.IGNORECASE):
+        return WARN
+    elif _pymatch(line, r'info|debug', re.IGNORECASE):
+        return INFO
+    else:
+        return OTHER
+```
+
 Mixed patterns (some literal, some regex) in the same `case` are allowed —
 the whole block still desugars to `if/elif/else`.
 
@@ -1807,18 +1853,20 @@ the whole block still desugars to `if/elif/else`.
 
 ### 19.8 Translation reference
 
-| Adascript | Nim (generated) |
-|-----------|-----------------|
-| `s == /pat/` | `nimatch(s, re"pat")` |
-| `s == /pat/i` | `nimatch(s, re"(?i)pat")` |
-| `s != /pat/` | `not nimatch(s, re"pat")` |
-| `s == /pat/g` | `s.findAll(srx.re(r"pat"))` |
-| `$+0` | `matches[0]` (whole match) |
-| `$+N` | `matches[N]` (N-th group) |
-| `namedCaptures["k"]` | `namedCaptures["k"]` |
-| `s == s/pat/repl/` | `s = s.replace(srx.re(r"pat"), "repl")` |
-| `s == s/pat/repl/g` | same (std/re replace is always global) |
-| `when /pat/:` in `case` | `elif nimatch(subject, re"pat"):` |
+| Adascript | Nim (generated) | Python (generated) |
+|-----------|-----------------|-------------------|
+| `s == /pat/` | `nimatch(s, re"pat")` | `_pymatch(s, r'pat')` |
+| `s == /pat/i` | `nimatch(s, re"(?i)pat")` | `_pymatch(s, r'pat', re.IGNORECASE)` |
+| `s != /pat/` | `not nimatch(s, re"pat")` | `not _pymatch(s, r'pat')` |
+| `s == /pat/g` | `s.findAll(srx.re(r"pat"))` | `re.findall(r'pat', s)` |
+| `$+0` | `matches[0]` (whole match) | `matches[0]` |
+| `$+N` | `matches[N]` (N-th group) | `matches[N]` |
+| `$+{name}` | `namedCaptures["name"]` | `namedCaptures["name"]` |
+| `namedCaptures["k"]` | `namedCaptures["k"]` | `namedCaptures["k"]` |
+| `s == s/pat/repl/` | `s = s.replace(srx.re(r"pat"), "repl")` | `s = re.sub(r'pat', r'repl', s)` |
+| `s == s/pat/$+1/` | `s = s.replace(srx.re(r"pat"), "$1")` | `s = re.sub(r'pat', r'\1', s)` |
+| `s == s/pat/repl/g` | same (std/re replace is always global) | same (`re.sub` is always global) |
+| `when /pat/:` in `case` | `elif nimatch(subject, re"pat"):` | `elif _pymatch(subject, r'pat'):` |
 
 ---
 
