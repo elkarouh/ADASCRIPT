@@ -84,15 +84,18 @@ def _ensure_nimatch_helper():
         ParserState.nim_top_decls = decls
 
 def _get_regex_info(node):
-    """Unwrap wrapper nodes to find a regex_lit leaf.
+    """Walk down single-child wrapper nodes to find a regex_lit leaf.
     Returns (pattern, flags) or None if the node is not a regex literal."""
-    while hasattr(node, 'nodes') and len(node.nodes) == 1:
-        node = node.nodes[0]
-    if type(node).__name__ == 'Fmap':
-        val = node.node if hasattr(node, 'node') else None
+    while node is not None:
+        val = getattr(node, 'node', None)
         if isinstance(val, str) and val.startswith('/'):
             last_slash = val.rfind('/')
-            return val[1:last_slash], val[last_slash + 1:]
+            if last_slash > 0:
+                return val[1:last_slash], val[last_slash + 1:]
+        if hasattr(node, 'nodes') and len(node.nodes) == 1:
+            node = node.nodes[0]
+        else:
+            return None
     return None
 
 def _nim_expr_type(expr):
