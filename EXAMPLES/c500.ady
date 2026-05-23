@@ -151,10 +151,20 @@ str_pool: StringPool = StringPool()
 
 
 # ---------------------------------------------------------------------------
-# Token kinds.
-# Literal tokens (keywords and operators): kind == content.
-# Meta tokens: kind is a sentinel string; content holds the actual text.
+# Token kinds — fully enumerated; content holds the actual source text.
 # ---------------------------------------------------------------------------
+
+type TokKind_T is enum \
+    TK_INVALID, TK_EOF, \
+    TK_TYPE, TK_NAME, TK_INTCONST, TK_CHARCONST, TK_STRCONST, \
+    TK_TYPEDEF, TK_IF, TK_ELSE, TK_WHILE, TK_DO, TK_FOR, TK_RETURN, \
+    TK_PLUSPLUS, TK_MINUSMINUS, TK_LSHIFT, TK_RSHIFT, \
+    TK_AND, TK_OR, TK_EQEQ, TK_LE, TK_GE, TK_NE, \
+    TK_LT, TK_GT, TK_LPAREN, TK_RPAREN, \
+    TK_LBRACE, TK_RBRACE, TK_LBRACKET, TK_RBRACKET, \
+    TK_SEMI, TK_EQ, TK_PLUS, TK_MINUS, TK_STAR, TK_SLASH, \
+    TK_PERCENT, TK_AMP, TK_PIPE, TK_CARET, TK_COMMA, TK_BANG, TK_TILDE
+
 
 const LITERAL_TOKENS : []str = (
     "typedef if else while do for return "
@@ -162,17 +172,28 @@ const LITERAL_TOKENS : []str = (
     "< > ( ) { } [ ] ; = + - * / % & | ^ , ! ~"
 ).split()
 
-const TOK_INVALID   : str = "Invalid"
-const TOK_EOF       : str = "Eof"
-const TOK_TYPE      : str = "Type"
-const TOK_NAME      : str = "Name"
-const TOK_INTCONST  : str = "IntConst"
-const TOK_CHARCONST : str = "CharConst"
-const TOK_STRCONST  : str = "StrConst"
+const STR_TO_KIND : {str}TokKind_T = {
+    "typedef": TK_TYPEDEF, "if": TK_IF, "else": TK_ELSE,
+    "while": TK_WHILE,  "do": TK_DO,  "for": TK_FOR, "return": TK_RETURN,
+    "++": TK_PLUSPLUS, "--": TK_MINUSMINUS,
+    "<<": TK_LSHIFT,   ">>": TK_RSHIFT,
+    "&&": TK_AND,      "||": TK_OR,
+    "==": TK_EQEQ,     "<=": TK_LE,  ">=": TK_GE,  "!=": TK_NE,
+    "<":  TK_LT,       ">":  TK_GT,
+    "(":  TK_LPAREN,   ")":  TK_RPAREN,
+    "{":  TK_LBRACE,   "}":  TK_RBRACE,
+    "[":  TK_LBRACKET, "]":  TK_RBRACKET,
+    ";":  TK_SEMI,     "=":  TK_EQ,
+    "+":  TK_PLUS,     "-":  TK_MINUS,
+    "*":  TK_STAR,     "/":  TK_SLASH,
+    "%":  TK_PERCENT,  "&":  TK_AMP,
+    "|":  TK_PIPE,     "^":  TK_CARET,
+    ",":  TK_COMMA,    "!":  TK_BANG,  "~": TK_TILDE,
+}
 
 
 type Token_T is record:
-    kind:    str
+    kind:    TokKind_T
     content: str
     line:    int
 
@@ -224,38 +245,38 @@ class Lexer:
         while self.loc < len(self.src) and self._skip_comment_ws():
             pass
         if self.loc >= len(self.src):
-            return Token_T(kind=TOK_EOF, content="", line=self.line)
+            return Token_T(kind=TK_EOF, content="", line=self.line)
         if self.src[self.loc:] == /^[a-zA-Z_][a-zA-Z0-9_]*/:
             tok: str = $+0
             if tok in LITERAL_TOKENS:
-                return Token_T(kind=tok, content=tok, line=self.line)
-            kind: str = TOK_TYPE if tok in self.types else TOK_NAME
+                return Token_T(kind=STR_TO_KIND[tok], content=tok, line=self.line)
+            kind: TokKind_T = TK_TYPE if tok in self.types else TK_NAME
             return Token_T(kind=kind, content=tok, line=self.line)
         if self.src[self.loc:] == /^[0-9]+/:
             tok: str = $+0
-            return Token_T(kind=TOK_INTCONST, content=tok, line=self.line)
+            return Token_T(kind=TK_INTCONST, content=tok, line=self.line)
         if self.src[self.loc:] == /^'([^'\\]|(\\([\\abfnrtv'"?]|[0-7]{1,3}|x[A-Fa-f0-9]{1,2})))'/:
             tok: str = $+0
-            return Token_T(kind=TOK_CHARCONST, content=tok, line=self.line)
+            return Token_T(kind=TK_CHARCONST, content=tok, line=self.line)
         if self.src[self.loc:] == /^"([^"\\]|(\\([\\abfnrtv'"?]|[0-7]{1,3}|x[A-Fa-f0-9]{1,2})))*?(?<!\\)"/:
             tok: str = $+0
-            return Token_T(kind=TOK_STRCONST, content=tok, line=self.line)
-        for token_kind in LITERAL_TOKENS:
-            if self.src[self.loc:].startswith(token_kind):
-                return Token_T(kind=token_kind, content=token_kind, line=self.line)
-        return Token_T(kind=TOK_INVALID, content=self.src[self.loc:self.loc + 10], line=self.line)
+            return Token_T(kind=TK_STRCONST, content=tok, line=self.line)
+        for token_str in LITERAL_TOKENS:
+            if self.src[self.loc:].startswith(token_str):
+                return Token_T(kind=STR_TO_KIND[token_str], content=token_str, line=self.line)
+        return Token_T(kind=TK_INVALID, content=self.src[self.loc:self.loc + 10], line=self.line)
 
-    def next(self, kind: ?str = None) -> Token_T:
+    def next(self, kind: ?TokKind_T = None) -> Token_T:
         token: Token_T = self.peek()
         if kind is not None:
             if token.kind != kind:
                 msg: str = f"expected {kind}, got {token.content}"
                 die(msg, self.line)
-        if token.kind != TOK_INVALID:
+        if token.kind != TK_INVALID:
             self.loc += len(token.content)
         return token
 
-    def try_next(self, kind: str) -> ?Token_T:
+    def try_next(self, kind: TokKind_T) -> ?Token_T:
         if self.peek().kind == kind:
             return self.next()
         return None
@@ -332,19 +353,19 @@ typedefs: {str}CType_T = {:}
 
 
 def parse_type_and_name(lexer: Lexer, prev_t: ?str = None) -> (CType_T, Token_T):
-    t: str = prev_t or lexer.next(TOK_TYPE).content
+    t: str = prev_t or lexer.next(TK_TYPE).content
     ctype: CType_T
     if t in typedefs:
         base: CType_T = typedefs[t]
         ctype = CType_T(base.typename, base.pointer_level, base.array_size, lexer.line)
     else:
         ctype = CType_T(t, 0, None, lexer.line)
-    while lexer.try_next("*"):
+    while lexer.try_next(TK_STAR):
         ctype.pointer_level += 1
-    varname: Token_T = lexer.next(TOK_NAME)
-    if lexer.try_next("["):
-        ctype.array_size = int(lexer.next(TOK_INTCONST).content)
-        lexer.next("]")
+    varname: Token_T = lexer.next(TK_NAME)
+    if lexer.try_next(TK_LBRACKET):
+        ctype.array_size = int(lexer.next(TK_INTCONST).content)
+        lexer.next(TK_RBRACKET)
     return ctype, varname
 
 
@@ -425,44 +446,41 @@ def mask_to_sizeof(t: CType_T) -> None:
 
 # ---------------------------------------------------------------------------
 # expression(): full C expression parser with manual operator precedence.
-#
-# Inner helpers use case/when to dispatch on token kind without the Python
-# match/case capture-pattern trap (bare names in `match` are always captures).
 # ---------------------------------------------------------------------------
 
 def expression(lexer: Lexer, frame: StackFrame) -> ExprMeta_T:
 
     def value() -> ExprMeta_T:
         case lexer.peek().kind:
-            when "IntConst":
+            when TK_INTCONST:
                 tok: Token_T = lexer.next()
                 emit(f"i32.const {tok.content}")
                 return ExprMeta_T(is_place=False, ctype=CType_T("int"))
-            when "CharConst":
+            when TK_CHARCONST:
                 tok: Token_T = lexer.next()
                 emit(f"i32.const {ord(parse_c_char(tok.content)[0])}")
                 return ExprMeta_T(is_place=False, ctype=CType_T("int"))
-            when "StrConst":
+            when TK_STRCONST:
                 tok: Token_T = lexer.next()
                 var s: str = parse_c_str(tok.content)
-                while nxt := lexer.try_next(TOK_STRCONST):
+                while nxt := lexer.try_next(TK_STRCONST):
                     s = s + parse_c_str(nxt.content)
                 emit(f"i32.const {str_pool.add(s)}")
                 return ExprMeta_T(is_place=False, ctype=CType_T("char", pointer_level=1))
-            when "(":
+            when TK_LPAREN:
                 lexer.next()
                 meta: ExprMeta_T = expression(lexer, frame)
-                lexer.next(")")
+                lexer.next(TK_RPAREN)
                 return meta
             when others:
-                varname: Token_T = lexer.next(TOK_NAME)
-                if lexer.try_next("("):
-                    if lexer.peek().kind != ")":
+                varname: Token_T = lexer.next(TK_NAME)
+                if lexer.try_next(TK_LPAREN):
+                    if lexer.peek().kind != TK_RPAREN:
                         while True:
                             load_result(expression(lexer, frame))
-                            if not lexer.try_next(","):
+                            if not lexer.try_next(TK_COMMA):
                                 break
-                    lexer.next(")")
+                    lexer.next(TK_RPAREN)
                     emit(f"call ${varname.content}")
                     return ExprMeta_T(is_place=False, ctype=CType_T("int"))
                 else:
@@ -474,7 +492,7 @@ def expression(lexer: Lexer, frame: StackFrame) -> ExprMeta_T:
 
     def accessor() -> ExprMeta_T:
         lhs: ExprMeta_T = value()
-        if lexer.try_next("["):
+        if lexer.try_next(TK_LBRACKET):
             lhs = load_result(lhs)
             l_type: CType_T = lhs.ctype
             if not (l_type.is_arr() or l_type.is_ptr()):
@@ -482,7 +500,7 @@ def expression(lexer: Lexer, frame: StackFrame) -> ExprMeta_T:
                 die(msg, lexer.line)
             el_type: CType_T = l_type.as_non_array() if l_type.is_arr() else l_type.less_ptr()
             load_result(expression(lexer, frame))
-            lexer.next("]")
+            lexer.next(TK_RBRACKET)
             emit(f"i32.const {el_type.sizeof()}")
             emit("i32.mul")
             emit("i32.add")
@@ -491,34 +509,34 @@ def expression(lexer: Lexer, frame: StackFrame) -> ExprMeta_T:
 
     def prefix() -> ExprMeta_T:
         case lexer.peek().kind:
-            when "&":
+            when TK_AMP:
                 lexer.next()
                 meta: ExprMeta_T = prefix()
                 if not meta.is_place:
                     die("cannot take reference to value", lexer.line)
                 return ExprMeta_T(is_place=False, ctype=meta.ctype.more_ptr())
-            when "*":
+            when TK_STAR:
                 lexer.next()
                 meta: ExprMeta_T = load_result(prefix())
                 if not meta.ctype.is_ptr():
                     die("cannot dereference non-pointer", lexer.line)
                 return ExprMeta_T(is_place=True, ctype=meta.ctype.less_ptr())
-            when "-":
+            when TK_MINUS:
                 lexer.next()
                 emit("i32.const 0")
                 meta: ExprMeta_T = load_result(prefix())
                 emit("i32.sub")
                 mask_to_sizeof(meta.ctype)
                 return meta
-            when "+":
+            when TK_PLUS:
                 lexer.next()
                 return load_result(prefix())
-            when "!":
+            when TK_BANG:
                 lexer.next()
                 meta: ExprMeta_T = load_result(prefix())
                 emit("i32.eqz")
                 return meta
-            when "~":
+            when TK_TILDE:
                 lexer.next()
                 meta: ExprMeta_T = load_result(prefix())
                 emit("i32.const 0xffffffff")
@@ -530,7 +548,7 @@ def expression(lexer: Lexer, frame: StackFrame) -> ExprMeta_T:
 
     def makeop(
         higher: [(,)]ExprMeta_T,
-        ops:    {str}str,
+        ops:    {TokKind_T}str,
         rtype:  ?CType_T = None,
     ) -> [(,)]ExprMeta_T:
         def op() -> ExprMeta_T:
@@ -546,12 +564,12 @@ def expression(lexer: Lexer, frame: StackFrame) -> ExprMeta_T:
         return op
 
     muldiv: [(,)]ExprMeta_T = makeop(
-        prefix, {"*": "i32.mul", "/": "i32.div_s", "%": "i32.rem_s"}
+        prefix, {TK_STAR: "i32.mul", TK_SLASH: "i32.div_s", TK_PERCENT: "i32.rem_s"}
     )
 
     def plusminus() -> ExprMeta_T:
         lhs: ExprMeta_T = muldiv()
-        if lexer.peek().kind not in ("+", "-"):
+        if lexer.peek().kind not in (TK_PLUS, TK_MINUS):
             return lhs
         lhs = load_result(lhs)
         op_tok: Token_T  = lexer.next()
@@ -572,27 +590,27 @@ def expression(lexer: Lexer, frame: StackFrame) -> ExprMeta_T:
             emit(f"i32.const {rhs.ctype.less_ptr().sizeof()}")
             emit("i32.mul")
             emit("call $__swap_i32")
-        emit("i32.add" if op_tok.kind == "+" else "i32.sub")
-        if op_tok.kind == "-" and lhs_t.is_ptr() and rhs_t.is_ptr():
+        emit("i32.add" if op_tok.kind == TK_PLUS else "i32.sub")
+        if op_tok.kind == TK_MINUS and lhs_t.is_ptr() and rhs_t.is_ptr():
             emit(f"i32.const {rhs.ctype.less_ptr().sizeof()}")
             emit("i32.div_s")
             res_t = CType_T("int")
         mask_to_sizeof(res_t)
         return ExprMeta_T(is_place=False, ctype=res_t)
 
-    shlr:   [(,)]ExprMeta_T = makeop(plusminus, {"<<": "i32.shl", ">>": "i32.shr_s"})
+    shlr:   [(,)]ExprMeta_T = makeop(plusminus, {TK_LSHIFT: "i32.shl", TK_RSHIFT: "i32.shr_s"})
     cmplg:  [(,)]ExprMeta_T = makeop(
-        shlr, {"<": "i32.lt_s", ">": "i32.gt_s", "<=": "i32.le_s", ">=": "i32.ge_s"},
+        shlr, {TK_LT: "i32.lt_s", TK_GT: "i32.gt_s", TK_LE: "i32.le_s", TK_GE: "i32.ge_s"},
         CType_T("int"),
     )
-    cmpe:   [(,)]ExprMeta_T = makeop(cmplg, {"==": "i32.eq", "!=": "i32.ne"}, CType_T("int"))
-    bitand: [(,)]ExprMeta_T = makeop(cmpe,   {"&": "i32.and"})
-    bitor:  [(,)]ExprMeta_T = makeop(bitand, {"|": "i32.or"})
-    bitxor: [(,)]ExprMeta_T = makeop(bitor,  {"^": "i32.xor"})
+    cmpe:   [(,)]ExprMeta_T = makeop(cmplg, {TK_EQEQ: "i32.eq", TK_NE: "i32.ne"}, CType_T("int"))
+    bitand: [(,)]ExprMeta_T = makeop(cmpe,   {TK_AMP: "i32.and"})
+    bitor:  [(,)]ExprMeta_T = makeop(bitand, {TK_PIPE: "i32.or"})
+    bitxor: [(,)]ExprMeta_T = makeop(bitor,  {TK_CARET: "i32.xor"})
 
     def assign() -> ExprMeta_T:
         lhs: ExprMeta_T = bitxor()
-        if lexer.try_next("="):
+        if lexer.try_next(TK_EQ):
             if not lhs.is_place:
                 die("lhs of assignment cannot be value", lexer.line)
             emit("call $__dup_i32")
@@ -607,35 +625,32 @@ def expression(lexer: Lexer, frame: StackFrame) -> ExprMeta_T:
 
 # ---------------------------------------------------------------------------
 # statement(): C statement parser.
-#
-# Uses match/case on the peeked token kind — string literals are constant
-# (value) patterns in Python 3.10+ match/case, so there is no capture trap.
 # ---------------------------------------------------------------------------
 
 def statement(lexer: Lexer, frame: StackFrame) -> None:
 
     def parenthesized_test() -> None:
-        lexer.next("(")
+        lexer.next(TK_LPAREN)
         load_result(expression(lexer, frame))
-        lexer.next(")")
+        lexer.next(TK_RPAREN)
         emit("i32.eqz")
 
     def block_or_stmt() -> None:
-        if lexer.try_next("{"):
-            while not lexer.try_next("}"):
+        if lexer.try_next(TK_LBRACE):
+            while not lexer.try_next(TK_RBRACE):
                 statement(lexer, frame)
         else:
             statement(lexer, frame)
 
-    match lexer.peek().kind:
-        case "return":
+    case lexer.peek().kind:
+        when TK_RETURN:
             lexer.next()
-            if lexer.peek().kind != ";":
+            if lexer.peek().kind != TK_SEMI:
                 load_result(expression(lexer, frame))
-            lexer.next(";")
+            lexer.next(TK_SEMI)
             emit_return(frame)
 
-        case "if":
+        when TK_IF:
             lexer.next()
             # block / block pattern avoids needing a dedicated else-block label:
             # br_if 0 jumps past the then-body into the else; br 1 exits both.
@@ -645,10 +660,10 @@ def statement(lexer: Lexer, frame: StackFrame) -> None:
                     emit("br_if 0 ;; jump to else")
                     block_or_stmt()
                     emit("br 1 ;; exit if")
-                if lexer.try_next("else"):
+                if lexer.try_next(TK_ELSE):
                     block_or_stmt()
 
-        case "while":
+        when TK_WHILE:
             lexer.next()
             with emit.emit_block("block ;; while", "end"):
                 with emit.emit_block("loop", "end"):
@@ -657,40 +672,40 @@ def statement(lexer: Lexer, frame: StackFrame) -> None:
                     block_or_stmt()
                     emit("br 0 ;; repeat loop")
 
-        case "do":
+        when TK_DO:
             lexer.next()
             with emit.emit_block("block ;; do-while", "end"):
                 with emit.emit_block("loop", "end"):
                     block_or_stmt()
-                    lexer.next("while")
+                    lexer.next(TK_WHILE)
                     parenthesized_test()
                     emit("br_if 1 ;; exit loop")
                     emit("br 0 ;; repeat loop")
-                    lexer.next(";")
+                    lexer.next(TK_SEMI)
 
-        case "for":
+        when TK_FOR:
             # The advancement expression (e.g. i++) must be emitted *after* the
             # body even though it appears before.  Trick: save a Lexer clone,
             # skip the expression with no_emit, then re-lex it after the body.
             lexer.next()
-            lexer.next("(")
+            lexer.next(TK_LPAREN)
             with emit.emit_block("block ;; for", "end"):
-                if lexer.peek().kind != ";":
+                if lexer.peek().kind != TK_SEMI:
                     expression(lexer, frame)
                     emit("drop ;; discard for initializer")
-                lexer.next(";")
+                lexer.next(TK_SEMI)
                 with emit.emit_block("loop", "end"):
-                    if lexer.peek().kind != ";":
+                    if lexer.peek().kind != TK_SEMI:
                         load_result(expression(lexer, frame))
                         emit("i32.eqz ;; for test")
                         emit("br_if 1 ;; exit loop")
-                    lexer.next(";")
+                    lexer.next(TK_SEMI)
                     var saved: ?Lexer = None
-                    if lexer.peek().kind != ")":
+                    if lexer.peek().kind != TK_RPAREN:
                         saved = lexer.clone()
                         with emit.no_emit():
                             expression(lexer, frame)
-                    lexer.next(")")
+                    lexer.next(TK_RPAREN)
                     emit(";; for body")
                     block_or_stmt()
                     if saved is not None:
@@ -698,12 +713,12 @@ def statement(lexer: Lexer, frame: StackFrame) -> None:
                         expression(saved, frame)
                     emit("br 0 ;; repeat loop")
 
-        case ";":
+        when TK_SEMI:
             lexer.next()
 
-        case _:
+        when others:
             expression(lexer, frame)
-            lexer.next(";")
+            lexer.next(TK_SEMI)
             emit("drop ;; discard statement expr result")
 
 
@@ -715,23 +730,23 @@ def variable_declaration(lexer: Lexer, frame: StackFrame) -> None:
     prev_typename: str = lexer.peek().content
     ctype, varname = parse_type_and_name(lexer)
     frame.add_var(varname.content, ctype)
-    while lexer.try_next(","):
+    while lexer.try_next(TK_COMMA):
         ctype, varname = parse_type_and_name(lexer, prev_typename)
         frame.add_var(varname.content, ctype)
-    lexer.next(";")
+    lexer.next(TK_SEMI)
 
 
 def global_declaration(global_frame: StackFrame, lexer: Lexer) -> None:
-    if lexer.try_next("typedef"):
+    if lexer.try_next(TK_TYPEDEF):
         td_type, td_name = parse_type_and_name(lexer)
         lexer.types.add(td_name.content)
         typedefs[td_name.content] = td_type
-        lexer.next(";")
+        lexer.next(TK_SEMI)
         return
 
     decl_type, name = parse_type_and_name(lexer)
 
-    if lexer.try_next(";"):
+    if lexer.try_next(TK_SEMI):
         global_frame.add_var(name.content, decl_type, False)
         return
 
@@ -739,14 +754,14 @@ def global_declaration(global_frame: StackFrame, lexer: Lexer) -> None:
         die("function array return / global array initializer not supported")
 
     frame: StackFrame = StackFrame(global_frame)
-    lexer.next("(")
-    while not lexer.try_next(")"):
+    lexer.next(TK_LPAREN)
+    while not lexer.try_next(TK_RPAREN):
         ptype, pname = parse_type_and_name(lexer)
         frame.add_var(pname.content, ptype, is_parameter=True)
-        if lexer.peek().kind != ")":
-            lexer.try_next(",")
-    lexer.next("{")
-    while lexer.peek().kind == TOK_TYPE:
+        if lexer.peek().kind != TK_RPAREN:
+            lexer.try_next(TK_COMMA)
+    lexer.next(TK_LBRACE)
+    while lexer.peek().kind == TK_TYPE:
         variable_declaration(lexer, frame)
 
     with emit.emit_block(f"(func ${name.content}", ")"):
@@ -758,7 +773,10 @@ def global_declaration(global_frame: StackFrame, lexer: Lexer) -> None:
         emit(f"i32.const {frame.frame_offset + frame.frame_size}")
         emit("i32.sub")
         emit("global.set $__stack_pointer")
-        for v in reversed(list(frame.variables.values())):
+        var all_vars: []FrameVar_T = []
+        for v in frame.variables.values():
+            all_vars.append(v)
+        for v in reversed(all_vars):
             if v.is_parameter:
                 _, off = frame.get_var_and_offset(v.name)
                 emit("global.get $__stack_pointer ;; prelude: store parameter")
@@ -766,7 +784,7 @@ def global_declaration(global_frame: StackFrame, lexer: Lexer) -> None:
                 emit("i32.add")
                 emit(f"local.get ${v.name}")
                 emit(v.ctype.store_ins())
-        while not lexer.try_next("}"):
+        while not lexer.try_next(TK_RBRACE):
             statement(lexer, frame)
         emit("unreachable")
 
@@ -786,7 +804,7 @@ def compile_c(src: str) -> None:
 
         global_frame: StackFrame = StackFrame()
         lexer: Lexer = Lexer(src, set(["int", "char", "short", "long", "float", "double"]))
-        while lexer.peek().kind != TOK_EOF:
+        while lexer.peek().kind != TK_EOF:
             global_declaration(global_frame, lexer)
 
         emit('(export "main" (func $main))')

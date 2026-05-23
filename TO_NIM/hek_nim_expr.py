@@ -835,7 +835,7 @@ def to_nim(self, prec=None):
     ParserState.nim_imports.add("nre")
     s = self.node          # e.g. "/hello\\d+/ig"
     last_slash = s.rfind("/")
-    pattern = s[1:last_slash]
+    pattern = s[1:last_slash].replace('"', '""')   # Nim raw-string: embed " as ""
     flags = s[last_slash + 1:].replace('g', '')
     if flags:
         return f're"(?{flags}){pattern}"'
@@ -2522,16 +2522,17 @@ def to_nim(self, prec=None):
                     _pat, _flags = _rinfo
                     _has_g = 'g' in _flags
                     _nim_flags = _flags.replace('g', '')
+                    _esc = _pat.replace('"', '""')   # Nim raw-string: embed " as ""
                     if _has_g:
                         # std/re.findAll (nre.findAll has quadratic blowup)
                         _ensure_nimatch_helper()
-                        _srx_pat = f'srx.re(r"(?{_nim_flags}){_pat}")' if _nim_flags else f'srx.re(r"{_pat}")'
+                        _srx_pat = f'srx.re(r"(?{_nim_flags}){_esc}")' if _nim_flags else f'srx.re(r"{_esc}")'
                         chain = f"{chain}.findAll({_srx_pat})"
                         if py_op == "!=":
                             chain = f"{chain}.len == 0"
                     else:
                         _ensure_nimatch_helper()
-                        _nim_pat = f're"(?{_nim_flags}){_pat}"' if _nim_flags else f're"{_pat}"'
+                        _nim_pat = f're"(?{_nim_flags}){_esc}"' if _nim_flags else f're"{_esc}"'
                         chain = f"nimatch({chain}, {_nim_pat})"
                         if py_op == "!=":
                             chain = f"not {chain}"
