@@ -124,6 +124,7 @@ def _py_reset():
     from hek_parsec import ParserState
     ParserState.nim_imports = set()   # stores Python import lines (historical naming)
     ParserState.tick_types = {}
+    ParserState.py_top_decls = []
 
 
 def parse_module(code):
@@ -275,6 +276,22 @@ def translate(code):
         for imp in sorted(ParserState.nim_imports):
             output.insert(insert_pos, imp)
             insert_pos += 1
+
+    # Inject py_top_decls (e.g. _pymatch helper) right after imports
+    py_top_decls = getattr(ParserState, 'py_top_decls', [])
+    if py_top_decls:
+        insert_pos = 0
+        for i, line in enumerate(output):
+            stripped = line.strip()
+            if stripped and not stripped.startswith(("import ", "from ", "#")):
+                insert_pos = i
+                break
+        for decl in py_top_decls:
+            decl_lines = decl.rstrip('\n').split('\n')
+            for j, dl in enumerate(decl_lines):
+                output.insert(insert_pos + j, dl)
+            output.insert(insert_pos + len(decl_lines), '')
+            insert_pos += len(decl_lines) + 1
 
     result = chr(10).join(output)
     if not result.endswith(chr(10)):
