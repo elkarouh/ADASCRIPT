@@ -59,7 +59,7 @@ _COMP_OPS = {"==", "!=", "<", ">", "<=", ">=", "in", "is", "not in", "is not", "
 _NIMATCH_HELPER = """\
 var matches: seq[string]
 var namedCaptures: Table[string, string]
-proc _nimatch(s: string; pattern: Regex): bool =
+proc nimatch(s: string; pattern: Regex): bool =
   let m = s.find(pattern)
   if m.isNone:
     matches = @[]
@@ -76,10 +76,10 @@ proc _nimatch(s: string; pattern: Regex): bool =
 """
 
 def _ensure_nimatch_helper():
-    """Add the _nimatch helper to nim_top_decls the first time =~ or !~ is used."""
+    """Add the nimatch helper to nim_top_decls the first time =~ or !~ is used."""
     ParserState.nim_imports.update({"nre", "tables", "sequtils", "options"})
     decls = getattr(ParserState, 'nim_top_decls', [])
-    if not any("_nimatch" in d for d in decls):
+    if not any("nimatch" in d for d in decls):
         decls.append(_NIMATCH_HELPER)
         ParserState.nim_top_decls = decls
 
@@ -2513,7 +2513,7 @@ def to_nim(self, prec=None):
                          f" {cmp_op} getLastModificationTime({right}))")
                 continue
             nim_op = _PY_OP_TO_NIM.get(py_op, py_op)
-            # == / != with regex RHS: dispatch to _nimatch / findAll
+            # == / != with regex RHS: dispatch to nimatch / findAll
             if py_op in ("==", "!="):
                 rhs_node = seq.nodes[1]
                 _rinfo = _get_regex_info(rhs_node)
@@ -2529,7 +2529,7 @@ def to_nim(self, prec=None):
                             chain = f"{chain}.len == 0"
                     else:
                         _ensure_nimatch_helper()
-                        chain = f"_nimatch({chain}, {_nim_pat})"
+                        chain = f"nimatch({chain}, {_nim_pat})"
                         if py_op == "!=":
                             chain = f"not {chain}"
                     continue
