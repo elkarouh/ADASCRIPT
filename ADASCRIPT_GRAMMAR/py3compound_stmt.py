@@ -219,6 +219,7 @@ with_stmt = ikw("with") + with_item + (COMMA + with_item)[:] + COLON + block
 # --- match / case patterns ---
 # base_pattern: everything except or-pattern (to avoid left recursion)
 pattern_literal = NUMBER | STRING | literal("None") | literal("True") | literal("False")
+pattern_regex   = REGEX_LIT
 pattern_capture = IDENTIFIER
 pattern_wildcard = literal("_")
 pattern_others = literal("others")
@@ -250,6 +251,7 @@ pattern_class = IDENTIFIER + LPAREN + (pattern_class_arg + (COMMA + pattern_clas
 # mapping before sequence (both use brackets but { vs [)
 base_pattern = (
     pattern_range
+    | pattern_regex
     | pattern_literal
     | pattern_wildcard
     | pattern_tuple

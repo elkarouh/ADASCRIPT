@@ -22,13 +22,11 @@ if $# > 0:
     FS = $1
 
 def classify(line: str) -> Severity_T:
-    if line == /error/i:
-        return ERROR
-    if line == /warn/i:
-        return WARN
-    if line == /info|debug/i:
-        return INFO
-    return OTHER
+    case line:
+        when /error/i:      return ERROR
+        when /warn/i:       return WARN
+        when /info|debug/i: return INFO
+        when others:        return OTHER
 
 
 def process(raw: str):

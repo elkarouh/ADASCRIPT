@@ -15,13 +15,11 @@ class AwkProcessor(AwkBase):
     var counts : [Severity_T]int = [INFO : 0, WARN : 0, ERROR : 0, OTHER: 0]
 
     def classify_record(self) -> Severity_T:
-        if self.line == /error/i:
-            return ERROR
-        if self.line == /warn/i:
-            return WARN
-        if self.line == /info|debug/i:
-            return INFO
-        return OTHER
+        case self.line:
+            when /error/i:      return ERROR
+            when /warn/i:       return WARN
+            when /info|debug/i: return INFO
+            when others:        return OTHER
 
     def process_record(self):
         let F:    []str = self.Fields # F[0..NF-1] = fields; self.line = full record ($0)
