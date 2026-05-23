@@ -38,6 +38,7 @@ source.ady
 - [Variable Declarations](#variable-declarations)
 - [Range Expressions](#range-expressions)
 - [Case / When Statements](#casewhen-statements)
+- [Regex Literals](#regex-literals)
 - [Tick Attributes](#tick-attributes)
 - [Enum Array Literals](#enum-array-literals)
 - [Named Tuple Literals](#named-tuple-literals)
@@ -508,6 +509,101 @@ case state:              # ✗ plain variable — emits Nim `case`, fails at com
 
 ---
 
+## Regex Literals
+
+Adascript has first-class regex literal syntax: `/pattern/flags`. Regexes
+work with `==` / `!=`, `case/when`, and the substitution form `s/pat/repl/`.
+There is no need to `import re`.
+
+### Match test
+
+```python
+if line == /error/i:
+    print "found error"
+
+if text != /^\s*$/:
+    process(text)
+```
+
+### Positional captures
+
+After a successful `== /pat/` match, `$+0` holds the whole match, `$+1` the
+first capture group, `$+2` the second, and so on:
+
+```python
+if src == /^([a-zA-Z_]\w*)\s*=\s*(.+)$/:
+    name:  str = $+1
+    value: str = $+2
+```
+
+### Named captures
+
+Use `(?P<name>...)` groups; after a match the `namedCaptures` dict holds the
+results:
+
+```python
+if line == /(?P<year>\d{4})-(?P<month>\d{2})-(?P<day>\d{2})/:
+    year:  str = namedCaptures["year"]
+    month: str = namedCaptures["month"]
+```
+
+### Find all (`/g`)
+
+Adding the `g` flag returns all non-overlapping matches as `[]str`:
+
+```python
+let words:  []str = text == /\w+/g
+let digits: []str = line == /\d+/g
+```
+
+### Substitution
+
+```python
+text == s/\s+/ /g         # collapse whitespace runs
+name == s/[^a-z]//gi      # strip non-alpha characters
+```
+
+### Regex patterns in `case/when`
+
+Regex literals work directly as `when` patterns; the compiler desugars the
+whole `case` block to an `if/elif/else` chain:
+
+```python
+def classify(line: str) -> Severity_T:
+    case line:
+        when /error/i:      return ERROR
+        when /warn/i:       return WARN
+        when /info|debug/i: return INFO
+        when others:        return OTHER
+```
+
+### Flags
+
+| Flag | Meaning |
+|------|---------|
+| `i`  | Case-insensitive |
+| `g`  | Return all matches as `[]str` |
+| `m`  | Multiline — `^`/`$` match line boundaries |
+| `s`  | Dotall — `.` matches newlines |
+
+### Translation reference
+
+| Adascript | Nim (generated) |
+|-----------|-----------------|
+| `s == /pat/` | `nimatch(s, re"pat")` |
+| `s == /pat/i` | `nimatch(s, re"(?i)pat")` |
+| `s != /pat/` | `not nimatch(s, re"pat")` |
+| `s == /pat/g` | `s.findAll(srx.re(r"pat"))` |
+| `$+0` … `$+N` | `matches[0]` … `matches[N]` |
+| `namedCaptures["k"]` | `namedCaptures["k"]` |
+| `s == s/pat/repl/g` | `s = s.replace(srx.re(r"pat"), "repl")` |
+| `when /pat/:` in `case` | `elif nimatch(subject, re"pat"):` |
+
+`nimatch`, `matches`, and `namedCaptures` are injected automatically into
+the generated Nim file whenever a regex literal is used.
+
+---
+
 ## Tick Attributes
 
 Ada-style `'` attributes provide first-class access to enum and subrange
@@ -803,7 +899,7 @@ overhead:
 | `import os`      | `import os`        | `os.path.*` → Nim path procs     |
 | `import math`    | `import math`      | All standard functions mapped    |
 | `import time`    | `import times`     |                                  |
-| `import re`      | `import re`        |                                  |
+| `import re`      | `import re`        | Superseded by native `/pat/` literals |
 | `import random`  | `import random`    |                                  |
 | `import json`    | `import std/json`  |                                  |
 | `import itertools`| `import sequtils` |                                  |

@@ -32,6 +32,7 @@ source.ady  ──▶  python3 TO_PYTHON/py2py.py source.ady  ──▶  Python 
 16. [Bash Variables and File Tests](#16-bash-variables-and-file-tests)
 17. [Nim-Only Imports](#17-nim-only-imports)
 18. [Real Examples](#18-real-examples)
+19. [Regex Literals](#19-regex-literals)
 
 ---
 
@@ -1666,6 +1667,158 @@ def example7():   # Romania map, A* with heuristic
 
 ---
 
+## 19. Regex Literals
+
+Adascript has first-class regex literal syntax: `/pattern/flags`. No `import re`
+needed — regex support is compiled directly into the generated Nim via the `nre`
+and `std/re` modules, which are injected automatically.
+
+### 19.1 Match test (`==` / `!=`)
+
+Use `==` with a regex on the right-hand side to test whether a string matches:
+
+```python
+if line == /error/i:
+    print "found error"
+
+if text != /^\s*$/:
+    process(text)
+```
+
+The left operand is a `str`; the transpiler detects the regex RHS and emits a
+`nimatch()` call instead of an equality test.
+
+**Nim output:**
+```nim
+if nimatch(line, re"(?i)error"):
+    echo "found error"
+
+if not nimatch(text, re"^\s*$"):
+    process(text)
+```
+
+### 19.2 Positional capture groups
+
+After a successful `== /pat/` match, `$+0` holds the whole match and `$+1`,
+`$+2`, … hold the numbered capture groups:
+
+```python
+if src == /^([a-zA-Z_]\w*)\s*=\s*(.+)$/:
+    name:  str = $+1
+    value: str = $+2
+    print f"{name} → {value}"
+```
+
+**Nim output:**
+```nim
+if nimatch(src, re"^([a-zA-Z_]\w*)\s*=\s*(.+)$"):
+    var name:  string = matches[1]
+    var value: string = matches[2]
+    echo fmt"{name} → {value}"
+```
+
+### 19.3 Named capture groups
+
+Use PCRE named groups `(?P<name>...)`. After a match, the `namedCaptures`
+dict (type `{str}str`) holds the results:
+
+```python
+if line == /(?P<year>\d{4})-(?P<month>\d{2})-(?P<day>\d{2})/:
+    year:  str = namedCaptures["year"]
+    month: str = namedCaptures["month"]
+    day:   str = namedCaptures["day"]
+    print f"{year}/{month}/{day}"
+```
+
+Both `matches` and `namedCaptures` are globals populated by the last
+successful `nimatch()` call. Copy them immediately if you need to call
+another regex before consuming the results.
+
+### 19.4 Find all (`/g` flag)
+
+Adding `g` returns all non-overlapping matches as `[]str` instead of a bool:
+
+```python
+let words:  []str = text  == /\w+/g
+let digits: []str = line  == /\d+/g
+let count:  int   = len(text == /\w+/g)
+```
+
+`!= /pat/g` is not meaningful; use `len(s == /pat/g) == 0` to test for no
+matches when using `g`.
+
+**Nim output** uses `std/re.findAll` (O(n), much faster than `nre.findAll`):
+```nim
+let words:  seq[string] = text.findAll(srx.re(r"\w+"))
+```
+
+### 19.5 Substitution (`s/pat/repl/flags`)
+
+```python
+text == s/\s+/ /g         # collapse whitespace runs to single space
+name == s/[^a-z]//gi      # strip everything that is not a–z
+line == s/\bfoo\b/bar/    # replace first occurrence of whole word "foo"
+```
+
+Backreferences use `$1`, `$2` in the replacement string. The substitution
+assigns the result back to the left-hand side.
+
+### 19.6 Regex in `case/when`
+
+Regex patterns work directly as `when` branches. The entire `case` block
+desugars to an `if/elif/else` chain:
+
+```python
+def classify(line: str) -> Severity_T:
+    case line:
+        when /error/i:      return ERROR
+        when /warn/i:       return WARN
+        when /info|debug/i: return INFO
+        when others:        return OTHER
+```
+
+**Nim output:**
+```nim
+proc classify(line: string): Severity_T =
+    if nimatch(line, re"(?i)error"):
+        return ERROR
+    elif nimatch(line, re"(?i)warn"):
+        return WARN
+    elif nimatch(line, re"(?i)info|debug"):
+        return INFO
+    else:
+        return OTHER
+```
+
+Mixed patterns (some literal, some regex) in the same `case` are allowed —
+the whole block still desugars to `if/elif/else`.
+
+### 19.7 Supported flags
+
+| Flag | Meaning |
+|------|---------|
+| `i`  | Case-insensitive |
+| `g`  | Return all matches as `[]str` (only on `==` RHS) |
+| `m`  | Multiline — `^` / `$` match per-line boundaries |
+| `s`  | Dotall — `.` also matches `\n` |
+
+### 19.8 Translation reference
+
+| Adascript | Nim (generated) |
+|-----------|-----------------|
+| `s == /pat/` | `nimatch(s, re"pat")` |
+| `s == /pat/i` | `nimatch(s, re"(?i)pat")` |
+| `s != /pat/` | `not nimatch(s, re"pat")` |
+| `s == /pat/g` | `s.findAll(srx.re(r"pat"))` |
+| `$+0` | `matches[0]` (whole match) |
+| `$+N` | `matches[N]` (N-th group) |
+| `namedCaptures["k"]` | `namedCaptures["k"]` |
+| `s == s/pat/repl/` | `s = s.replace(srx.re(r"pat"), "repl")` |
+| `s == s/pat/repl/g` | same (std/re replace is always global) |
+| `when /pat/:` in `case` | `elif nimatch(subject, re"pat"):` |
+
+---
+
 ## Summary of Adascript-Only Syntax
 
 | Feature                           | Adascript syntax                         |
@@ -1710,5 +1863,11 @@ def example7():   # Romania map, A* with heuristic
 | Command-line argument             | `$1`, `$@`, `$#`                         |
 | Environment variable              | `$HOME`, `$PATH`                         |
 | File-test operator                | `-e path`, `-f path`, `-d path`          |
+| Regex match test                  | `s == /pat/`, `s != /pat/i`              |
+| Regex positional capture          | `$+0`, `$+1`, `$+2` …                   |
+| Regex named capture               | `namedCaptures["name"]`                  |
+| Regex find-all                    | `s == /pat/g` → `[]str`                  |
+| Regex substitution                | `s == s/pat/repl/g`                      |
+| Regex in case/when                | `when /pat/:`                            |
 | File comparison                   | `a -nt b`, `a -ot b`                     |
 | Python 2-style print              | `print "text"` or `print expr, expr`    |
