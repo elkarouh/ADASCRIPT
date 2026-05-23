@@ -1787,7 +1787,7 @@ def to_nim(self, indent=0):
                 if has_g:
                     cond = f"{subject}.findAll({nim_pat}).len > 0"
                 else:
-                    cond = f"_nimatch({subject}, {nim_pat})"
+                    cond = f"nimatch({subject}, {nim_pat})"
             else:
                 cond = f"{subject} == {pat_nim}"
             if guard_node is not None:
