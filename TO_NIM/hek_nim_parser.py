@@ -1754,13 +1754,10 @@ def to_nim(self, indent=0):
     # Regex patterns in when clauses: desugar to if/elif/else
     def _pat_regex_info(pat_node):
         """Return (pattern, flags) if pat_node is a regex literal, else None."""
-        node = pat_node
-        while hasattr(node, 'nodes') and len(node.nodes) == 1:
-            node = node.nodes[0]
-        if type(node).__name__ == 'Fmap':
-            val = node.node if hasattr(node, 'node') else None
-            if isinstance(val, str) and val.startswith('/'):
-                last = val.rfind('/')
+        val = getattr(pat_node, 'node', None)
+        if isinstance(val, str) and val.startswith('/'):
+            last = val.rfind('/')
+            if last > 0:
                 return val[1:last], val[last + 1:]
         return None
 
