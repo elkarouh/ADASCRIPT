@@ -129,11 +129,8 @@ def dest_is_ssh(ssh: ?SSH) -> ?SSH:
     return None
 
 def parse_ssh_pattern(folder: str, allow_host_only: bool = False) -> ?{str}str:
-    pyimport re
-    let pattern: str = r"^(?:(?P<user>[a-z0-9\._\-]+)@)?(?P<host>[A-Za-z0-9.\-]+):(?P<path>.+)$"
-    let m: ?re.Match = re.match(pattern, folder)
-    if m is not None:
-        let result: {str}str = m.groupdict()
+    if folder == /^(?:(?P<user>[a-z0-9\._\-]+)@)?(?P<host>[A-Za-z0-9.\-]+):(?P<path>.+)$/:
+        let result: {str}str = namedCaptures
         if not allow_host_only and result.get("user") is None:
             return None
         return result
