@@ -40,7 +40,8 @@ STANDALONE := \
     test_inline_suite.ady \
     test_state_search.ady \
     test_shortest_path.ady \
-    primes.ady
+    primes.ady \
+    test_ownership.ady
 
 # -----------------------------------------------------------------------
 # Stdin tests — piped from a sample file
