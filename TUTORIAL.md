@@ -36,6 +36,7 @@ source.ady  ──▶  python3 TO_PYTHON/py2py.py source.ady  ──▶  Python 
 17. [Nim-Only Imports](#17-nim-only-imports)
 18. [Real Examples](#18-real-examples)
 19. [Regex Literals](#19-regex-literals)
+20. [Memory Ownership](#20-memory-ownership)
 
 ---
 
@@ -1870,6 +1871,259 @@ the whole block still desugars to `if/elif/else`.
 
 ---
 
+## 20. Memory Ownership
+
+### Why ownership matters
+
+Every value your program creates has to live somewhere.  Stack memory is freed
+automatically when a function returns — fast, deterministic, zero overhead.
+But if you want a value to outlive the function that created it, it needs
+somewhere else to live: the heap.  Heap memory is flexible but requires
+*someone* to free it eventually.  The three common strategies are:
+
+| Strategy | Who frees | Risk |
+|---|---|---|
+| Manual (`malloc`/`free`, C) | You | Use-after-free, double-free, leaks |
+| Garbage collection (Python) | Runtime (GC) | Pauses, non-deterministic |
+| Ownership (Adascript/Nim ARC) | Compiler at end of owning scope | Deterministic, no GC pauses |
+
+Adascript uses Nim's **Automatic Reference Counting / Ownership (ARC/ORC)**
+as its memory model.  The ownership annotations are optional hints that make
+intent clear and help the compiler elide copies.  The Python backend ignores
+them (the GC handles everything); the Nim backend uses them to guide ARC.
+
+### 20.1 `own` declaration
+
+Use `own` to declare a variable that is the *unique owner* of a heap value.
+It is freed automatically when the variable goes out of scope.
+
+```python
+own buf: Buffer = Buffer(size=4096)
+own name: str = "hello"
+own xs: []int = [1, 2, 3]
+```
+
+Nim output:
+
+```nim
+var buf: Buffer = Buffer(size: 4096)  # ARC tracks the one owner
+var name: string = "hello"
+var xs: seq[int] = @[1, 2, 3]
+```
+
+Python output:
+
+```python
+buf: Buffer = Buffer(size=4096)  # GC tracks references as usual
+name: str = "hello"
+xs: list[int] = [1, 2, 3]
+```
+
+`own x: T` is syntactically identical to `var x: T` from the compiler's
+perspective.  The word `own` is documentation — it signals to readers that
+*this variable is responsible for the value's lifetime*.
+
+### 20.2 `lent` and `own` parameter modes
+
+Two type modifiers express how a function relates to ownership of its
+arguments:
+
+```python
+def read(data: lent Buffer) -> int:   # borrow: caller keeps ownership
+    data.size
+
+def consume(data: own Buffer):        # take ownership: callee is responsible
+    pass
+```
+
+| Adascript | Nim | Python | Meaning |
+|---|---|---|---|
+| `param: lent T` | `param: T` | `param: T` | Read-only borrow; caller still owns the value |
+| `param: own T` | `param: sink T` | `param: T` | Ownership transferred to the callee |
+
+**`lent T`** — the callee promises not to store or transfer the value; it
+simply reads it.  Nim passes by value (ARC may optimise to a pointer); Python
+passes by reference as usual.
+
+**`own T` / `sink T`** — the callee takes responsibility for the value.  In
+Nim this enables the "sink" optimisation: the caller's copy is moved rather
+than copied.  In Python the annotation is stripped; the GC handles cleanup.
+
+```python
+def process(buf: lent Buffer) -> int:
+    buf.size                        # read only; caller's buf is still valid
+
+def store(buf: own Buffer):
+    self.cache = buf                # we keep it; caller's copy is moved
+```
+
+### 20.3 `move()` — explicit ownership transfer
+
+`move(x)` transfers ownership of `x` to the target.  After the call, `x`
+should be considered invalid (it may be in a zeroed/moved-from state).
+
+```python
+own a: Buffer = make_buffer(1024)
+own b: Buffer = move(a)            # a is now invalid; b owns the data
+print(b.size)                      # 1024
+```
+
+Nim output:
+
+```nim
+var a: Buffer = make_buffer(1024)
+var b: Buffer = move(a)            # Nim's built-in move()
+echo(b.size)
+```
+
+Python output (annotation stripped, GC manages references):
+
+```python
+a: Buffer = make_buffer(1024)
+b: Buffer = move(a)               # Python has no built-in move(); same as assign
+```
+
+### 20.4 `drop()` — explicit early release
+
+`drop(x)` destroys `x` immediately, before its natural scope end.  Use this
+to release expensive resources (file handles, network sockets, large buffers)
+as soon as you are done with them.
+
+```python
+own conn: Connection = Database.connect("...")
+result = conn.query("SELECT 1")
+drop(conn)                         # release connection now; don't wait for scope end
+# conn is invalid here
+do_other_stuff()                   # runs without holding the connection
+```
+
+Nim output:
+
+```nim
+var conn: Connection = Database.connect("...")
+let result = conn.query("SELECT 1")
+(block: `=destroy`(conn); `=wasMoved`(conn))  # Nim ARC hook
+do_other_stuff()
+```
+
+Python output (GC handles cleanup — `drop` becomes a no-op comment):
+
+```python
+conn: Connection = Database.connect("...")
+result = conn.query("SELECT 1")
+(block: `=destroy`(conn); `=wasMoved`(conn))   # ignored by Python GC
+do_other_stuff()
+```
+
+### 20.5 `with own` — scoped RAII block
+
+`with own x = expr:` creates a new scope.  `x` is initialised from `expr`
+at entry and destroyed at exit — regardless of whether the body raised an
+exception.  This is the Adascript equivalent of C++'s RAII or Rust's drop
+at end of scope.
+
+```python
+with own conn = Database.connect("localhost"):
+    rows = conn.query("SELECT 1")
+    print(rows)
+# conn is freed here
+```
+
+Nim output:
+
+```nim
+block:
+    var conn = Database.connect("localhost")
+    let rows = conn.query("SELECT 1")
+    echo(rows)
+# conn freed by ARC at end of block
+```
+
+Python output:
+
+```python
+conn = Database.connect("localhost")
+try:
+    rows = conn.query("SELECT 1")
+    print(rows)
+finally:
+    del conn
+```
+
+The `with own` form is preferred over `try/finally` for resources because it
+reads like a declaration ("I own this for the duration of the block") rather
+than a cleanup obligation.
+
+### 20.6 Full example
+
+```python
+type Buffer_T is record:
+    data: []int
+    size: int
+
+def make_buffer(n: int) -> Buffer_T:
+    Buffer_T(data=[], size=n)
+
+def summarise(buf: lent Buffer_T) -> str:
+    f"Buffer({buf.size} slots)"
+
+def main():
+    own buf: Buffer_T = make_buffer(4)
+    print(summarise(buf))           # Buffer(4 slots)
+
+    with own tmp = make_buffer(2):
+        print(summarise(tmp))       # Buffer(2 slots)
+    # tmp freed here
+
+    own buf2: Buffer_T = move(buf)  # buf is now invalid
+    print(summarise(buf2))          # Buffer(4 slots)
+
+    drop(buf2)                      # explicit early release
+    print("done")
+
+main()
+```
+
+Expected output:
+
+```
+Buffer(4 slots)
+Buffer(2 slots)
+Buffer(4 slots)
+done
+```
+
+### 20.7 Translation reference
+
+| Adascript | Nim (ARC) | Python (GC) |
+|---|---|---|
+| `own x: T = expr` | `var x: T = expr` | `x: T = expr` |
+| `param: lent T` | `param: T` | `param: T` |
+| `param: own T` | `param: sink T` | `param: T` |
+| `-> own T` (return) | `-> T` | `-> T` |
+| `move(x)` | `move(x)` | `x` (alias; GC ref) |
+| `drop(x)` | `(block: =destroy(x); =wasMoved(x))` | `del x` |
+| `with own x = e:` | `block: var x = e; body` | `x=e; try: body; finally: del x` |
+
+### 20.8 What the 20% leaves out
+
+The ownership annotations in Adascript cover the common cases.  A few
+advanced scenarios are not yet supported:
+
+- **Cyclic data structures** — ARC cannot collect cycles; use `nimport
+  system` and Nim's `ref` types with the ORC cycle collector directly.
+- **Shared ownership** (`Arc<T>` in Rust, `shared_ptr` in C++) — not in
+  Adascript; if you need this, write Nim directly.
+- **Custom destructors** — Nim's `=destroy` hooks require writing Nim.  The
+  `drop()` built-in calls `=destroy` but you cannot customise what it does
+  from Adascript.
+- **Borrow checker** — Adascript does not enforce borrow rules statically
+  (Nim does not have a borrow checker either).  Misusing `move()` does not
+  produce a compile-time error; the moved-from variable simply becomes a
+  zero/nil value at runtime.
+
+---
+
 ## Summary of Adascript-Only Syntax
 
 | Feature                           | Adascript syntax                         |
@@ -1922,3 +2176,9 @@ the whole block still desugars to `if/elif/else`.
 | Regex in case/when                | `when /pat/:`                            |
 | File comparison                   | `a -nt b`, `a -ot b`                     |
 | Python 2-style print              | `print "text"` or `print expr, expr`    |
+| Owned variable declaration        | `own x: T = expr`                        |
+| Borrow type annotation            | `lent T` (param type)                    |
+| Ownership-transfer type annotation| `own T` (param type)                     |
+| Explicit ownership transfer       | `move(x)`                                |
+| Explicit early release            | `drop(x)`                                |
+| Scoped RAII block                 | `with own x = expr:`                     |

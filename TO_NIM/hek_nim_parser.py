@@ -982,6 +982,39 @@ def to_nim(self, indent=0):
     return f"{_ind(indent)}with {', '.join(items)}:{hc}\n{body}"
 
 
+@method(with_own_stmt)
+def to_nim(self, indent=0):
+    """with own x = expr: block  ->  block:\n  var x = expr\n  body  (ARC auto-destroys x at scope end)
+
+    Node layout (ikw tokens consumed/invisible):
+      nodes[0] = IDENTIFIER  (the name)
+      nodes[1] = V_EQUAL     (visible '=')
+      nodes[2] = expression  (the initialiser)
+      nodes[3] = block       (the body)
+    """
+    ind = _ind(indent)
+    ind1 = _ind(indent + 1)
+    # Walk nodes: IDENTIFIER first, then V_EQUAL (skip), expression, block
+    name_node = None
+    expr_node = None
+    block_node = None
+    for node in self.nodes:
+        tname = type(node).__name__
+        if tname == "IDENTIFIER" and name_node is None:
+            name_node = node
+        elif tname in ("V_EQUAL", "Fmap") and name_node is not None and expr_node is None:
+            continue  # skip the visible '='
+        elif tname == "block":
+            block_node = node
+        elif name_node is not None and expr_node is None and tname not in ("Fmap",):
+            expr_node = node
+    name = name_node.to_nim() if name_node and hasattr(name_node, "to_nim") else str(name_node)
+    expr = expr_node.to_nim() if expr_node and hasattr(expr_node, "to_nim") else ""
+    hc = _block_inline_header_comment(block_node) if block_node else ""
+    body = block_node.to_nim(indent + 1) if block_node else f"{ind1}discard"
+    return f"{ind}block:{hc}\n{ind1}var {name} = {expr}\n{body}"
+
+
 @method(with_stmt_paren)
 def to_nim(self, indent=0):
     """with_stmt_paren: 'with' '(' with_item (',' with_item)* ')' ':' block -> Nim: parenthesised with"""

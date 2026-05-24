@@ -213,6 +213,18 @@ def to_nim(self, prec=None):
     return " | ".join(parts)  # best-effort; Nim uses object variants instead
 
 
+@method(lent_type)
+def to_nim(self, prec=None):
+    """lent T  ->  T  (Nim ARC handles borrows; 'lent' is a no-op at the type level for params)"""
+    inner = self.nodes[0].to_nim()
+    return inner
+
+
+@method(own_param_type)
+def to_nim(self, prec=None):
+    """own T  ->  sink T  (Nim ownership-transfer annotation; callee takes ownership)"""
+    inner = self.nodes[0].to_nim()
+    return f"sink {inner}"
 
 
 ###############################################################################

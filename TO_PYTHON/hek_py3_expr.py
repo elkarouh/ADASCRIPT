@@ -467,6 +467,17 @@ def to_py(self, prec=None):
     """primary: atom trailer*"""
     from hek_parsec import ParserState
     result = self.nodes[0].to_py()
+    # drop(x) -> del x  (Python: GC can't do deterministic drop, del is closest)
+    if result == "drop" and len(self.nodes) > 1:
+        trailers = self.nodes[1].nodes if hasattr(self.nodes[1], "nodes") else []
+        if trailers and trailers[0].to_py().startswith("(") and trailers[0].to_py().endswith(")"):
+            arg = trailers[0].to_py()[1:-1]
+            return f"del {arg}"
+    # move(x) -> x  (Python: assignment already moves under GC)
+    if result == "move" and len(self.nodes) > 1:
+        trailers = self.nodes[1].nodes if hasattr(self.nodes[1], "nodes") else []
+        if trailers and trailers[0].to_py().startswith("(") and trailers[0].to_py().endswith(")"):
+            return trailers[0].to_py()[1:-1]
     if len(self.nodes) > 1 and hasattr(self.nodes[1], "nodes") and self.nodes[1].nodes:
         trailers = self.nodes[1].nodes
         i = 0
