@@ -908,6 +908,27 @@ def to_nim(self):
         result = result + "\n" + _fra
     return result
 
+# --- own declaration ---
+@method(own_stmt)
+def to_nim(self):
+    """own x: T = expr  ->  var x: T = expr  (Nim ARC manages the lifetime)"""
+    name = self.nodes[1].to_nim()
+    annotation = self.nodes[3].to_nim()
+    ParserState.symbol_table.add(name, annotation, "var")
+    result = f"var {name}: {annotation}"
+    for node in self.nodes[4:]:
+        if not hasattr(node, "nodes") or not node.nodes:
+            continue
+        for seq in node.nodes:
+            if hasattr(seq, "nodes") and len(seq.nodes) >= 2:
+                ParserState._current_lhs_type = annotation
+                value = seq.nodes[1].to_nim()
+                ParserState._current_lhs_type = ""
+                if value:
+                    result += f" = {value}"
+    return result
+
+
 # --- return ---
 @method(decl_tuple_unpack)
 def to_nim(self):
