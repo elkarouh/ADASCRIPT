@@ -169,7 +169,7 @@ test: compile
 # -----------------------------------------------------------------------
 clean:
 	@echo "Removing build cache..."
-	@rm -rf /root/.cache/hparsec/
+	@rm -rf $HOME/.cache/hparsec/
 	@echo "Removing binary symlinks from EXAMPLES/..."
 	@for f in $(ALL_COMPILE); do \
 	    name=$${f%.ady}; \
