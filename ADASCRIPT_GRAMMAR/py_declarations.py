@@ -278,7 +278,7 @@ from hek_parsec import (
     literal,
     method,
 )
-from py3expr import expression
+from py3expr import expression, ikw
 
 ###############################################################################
 # Tokens
@@ -308,6 +308,8 @@ singleton_tuple_type = fw("singleton_tuple_type")
 empty_tuple_type = fw("empty_tuple_type")
 primitive_type = fw("primitive_type")
 type_name = fw("type_name")
+lent_type = fw("lent_type")
+own_param_type = fw("own_param_type")
 
 ###############################################################################
 # Grammar rules
@@ -368,11 +370,23 @@ set_type = LBRACE + RBRACE + type_annotation
 # [(int, str)]bool  -> Callable[[int, str], bool]
 callable_type = LBRACKET + tuple_type + RBRACKET + type_annotation
 
+# --- Ownership type modifiers ---
+# lent T  — borrow annotation (caller keeps ownership); maps to Nim's 'lent T'
+# own T   — ownership transfer annotation; maps to Nim's 'sink T'
+# These must appear BEFORE basic_type so they take priority when 'lent'/'own'
+# are used as type prefixes in function parameter or return annotations.
+lent_type = ikw("lent") + type_annotation
+own_param_type = ikw("own") + type_annotation
+
 # --- basic_type: a non-union, non-optional type ---
 # Order matters: try container/callable before primitive/name (both start differently)
 # callable_type before array_type (both start with '[', but callable has '(' after '[')
+# lent_type and own_param_type first so 'lent T' / 'own T' are never confused with
+# the standalone identifiers 'lent' or 'own'.
 basic_type = (
-    seq_type
+    lent_type
+    | own_param_type
+    | seq_type
     | callable_type
     | openarray_type
     | array_type

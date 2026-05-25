@@ -1377,6 +1377,16 @@ def to_nim(self, prec=None):
                     ParserState.nim_init_stmts.append("randomize()")
                 return f"rand({inner})"
             raise SyntaxError(f"'{tick_attr} is not supported on a parenthesised expression")
+        # drop(x) -> (block: =destroy(x); wasMoved(x))  — explicit early release
+        if raw_name == "drop":
+            call_node = self.nodes[1].nodes[0]
+            arg = _extract_call_arg(call_node)
+            return f"(block: `=destroy`({arg}); `=wasMoved`({arg}))"
+        # move(x) -> move(x)  — explicit ownership transfer (Nim ARC built-in)
+        if raw_name == "move":
+            call_node = self.nodes[1].nodes[0]
+            arg = _extract_call_arg(call_node)
+            return f"move({arg})"
         # str(x) -> $x, list(x) -> @x
         if raw_name == "str":
             call_node = self.nodes[1].nodes[0]
