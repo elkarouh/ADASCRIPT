@@ -41,7 +41,9 @@ STANDALONE := \
     test_state_search.ady \
     test_shortest_path.ady \
     primes.ady \
-    test_ownership.ady
+    test_ownership.ady \
+    td_learning/sarsa.ady \
+    td_learning/qlearning.ady
 
 # -----------------------------------------------------------------------
 # Stdin tests — piped from a sample file

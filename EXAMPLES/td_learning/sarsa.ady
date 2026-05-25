@@ -1,0 +1,137 @@
+#!/usr/bin/env py2nim
+"""SARSA (on-policy TD control) on the Windy Gridworld.
+
+Reference: Sutton & Barto — "Reinforcement Learning", Example 6.5
+Grid: 7 rows x 10 cols.  Start: (3,0).  Goal: (3,7).
+Wind pushes the agent upward by 1-2 cells in columns 3-8.
+
+Key insight — SARSA is on-policy:
+  Q(s,a) += alpha * [r + gamma*Q(s', a') - Q(s,a)]
+where a' is the epsilon-greedy action the agent will *actually* take next.
+This makes SARSA conservative: exploration mistakes count against it.
+"""
+nimport random
+
+# ─── environment constants ────────────────────────────────────────
+const ROWS:  int = 7
+const COLS:  int = 10
+const N_S:   int = 70    # ROWS * COLS
+const N_A:   int = 4
+const UP:    int = 0
+const RIGHT: int = 1
+const DOWN:  int = 2
+const LEFT:  int = 3
+const START: int = 30    # row 3, col 0  (3*10+0)
+const GOAL:  int = 37    # row 3, col 7  (3*10+7)
+
+# wind strength (upward push in rows) per column
+let WIND: []int = [0, 0, 0, 1, 1, 1, 2, 2, 1, 0]
+
+# ─── environment step ────────────────────────────────────────────
+def clamp(v: int, lo: int, hi: int) -> int:
+    lo if v < lo else (hi if v > hi else v)
+
+def env_step(state: int, action: int) -> (int, float, bool):
+    """Deterministic step — returns (next_state, reward, done)."""
+    let row: int = state // COLS
+    let col: int = state % COLS
+    var nr: int = row
+    var nc: int = col
+    if action == UP:      nr -= 1
+    elif action == RIGHT: nc += 1
+    elif action == DOWN:  nr += 1
+    elif action == LEFT:  nc -= 1
+    # wind pushes upward based on the original column
+    nr = clamp(nr - WIND[col], 0, ROWS - 1)
+    nc = clamp(nc, 0, COLS - 1)
+    let ns: int = nr * COLS + nc
+    return (ns, -1.0, ns == GOAL)
+
+# ─── Q-table helpers ─────────────────────────────────────────────
+type QTable_T is {int}[]float
+
+def init_qtable() -> QTable_T:
+    var qtable: QTable_T = {:}
+    for s in 0..N_S-1:
+        var row: []float
+        for _ in 0..N_A-1:
+            row.append(0.0)
+        qtable[s] = row
+    return qtable
+
+def argmax_row(row: []float) -> int:
+    var best: int = 0
+    for a in 1..N_A-1:
+        if row[a] > row[best]: best = a
+    return best
+
+# ─── epsilon-greedy action selection ─────────────────────────────
+def choose_action(qtable: lent QTable_T, state: int, epsilon: float) -> int:
+    let base: float = epsilon / float(N_A)
+    var probs: []float
+    for _ in 0..N_A-1:
+        probs.append(base)
+    let qrow: []float = qtable[state]
+    probs[argmax_row(qrow)] += 1.0 - epsilon
+    # weighted random draw from probability distribution
+    let r: float = rand(1.0)
+    var cum: float = 0.0
+    for i in 0..N_A-1:
+        cum += probs[i]
+        if r < cum: return i
+    return N_A - 1
+
+# ─── SARSA algorithm ─────────────────────────────────────────────
+def sarsa(num_episodes: int, alpha: float = 0.5,
+          epsilon: float = 0.1, gamma: float = 1.0) -> QTable_T:
+    randomize()
+    var qtable: QTable_T = init_qtable()
+    var bucket_rew: float = 0.0
+
+    for ep in 0..num_episodes-1:
+        var state:  int = START
+        var action: int = choose_action(qtable, state, epsilon)
+
+        while True:
+            let (ns, rew, done) = env_step(state, action)
+            let na: int = choose_action(qtable, ns, epsilon)
+
+            # on-policy update: bootstrap from the action we will actually take
+            var row: []float = qtable[state]
+            let qns: []float = qtable[ns]
+            let td_err: float = rew + gamma * qns[na] - row[action]
+            row[action] += alpha * td_err
+            qtable[state] = row
+
+            bucket_rew += rew
+            state  = ns
+            action = na
+            if done: break
+
+        if (ep + 1) % 100 == 0:
+            let avg: float = bucket_rew / 100.0
+            let ep1: int = ep + 1
+            print(f"Episode {ep1}/{num_episodes}  avg reward/ep: {avg}")
+            bucket_rew = 0.0
+
+    return qtable
+
+# ─── display learned policy ──────────────────────────────────────
+def print_policy(qtable: lent QTable_T):
+    let arrows: []str = ["^", ">", "v", "<"]   # UP RIGHT DOWN LEFT
+    print("\nLearned greedy policy  (G=goal, S=start):")
+    for r in 0..ROWS-1:
+        var line: str = "  "
+        for c in 0..COLS-1:
+            let s: int = r * COLS + c
+            if s == GOAL:    line &= "G "
+            elif s == START: line &= "S "
+            else:
+                let qrow: []float = qtable[s]
+                line &= arrows[argmax_row(qrow)] & " "
+        print(line)
+    print("  Wind: 0 0 0 1 1 1 2 2 1 0")
+    print("         (columns 3-8 push agent upward)")
+
+let q_sarsa: QTable_T = sarsa(500)
+print_policy(q_sarsa)
