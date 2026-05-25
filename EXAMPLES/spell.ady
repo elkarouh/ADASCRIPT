@@ -55,13 +55,13 @@ def edits2(word: str) -> {}str:
 
 def candidates(word: str) -> {}str:
     let k0: {}str = known_variations({word})
-    if len(k0) > 0:
+    if k0:
         return k0
     let k1: {}str = known_variations(edits1(word))
-    if len(k1) > 0:
+    if k1:
         return k1
     let k2: {}str = known_variations(edits2(word))
-    if len(k2) > 0:
+    if k2:
         return k2
     return {word}
 
