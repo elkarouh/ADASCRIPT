@@ -1,0 +1,147 @@
+#!/usr/bin/env py2nim
+"""Q-Learning (off-policy TD control) on the Cliff Walking problem.
+
+Reference: Sutton & Barto — "Reinforcement Learning", Example 6.6
+Grid: 4 rows x 12 cols.  Start: (3,0).  Goal: (3,11).
+Cliff: row 3, cols 1-10 — stepping there gives reward -100 and ends episode.
+
+Key insight — Q-Learning is off-policy:
+  Q(s,a) += alpha * [r + gamma*max_a' Q(s', a') - Q(s,a)]
+It always bootstraps from the BEST possible next action, not the one taken.
+This learns the optimal (cliff-edge) path, while SARSA would stay a row above.
+"""
+nimport random
+
+# ─── environment constants ────────────────────────────────────────
+const ROWS:  int = 4
+const COLS:  int = 12
+const N_S:   int = 48    # ROWS * COLS
+const N_A:   int = 4
+const UP:    int = 0
+const RIGHT: int = 1
+const DOWN:  int = 2
+const LEFT:  int = 3
+const START: int = 36    # row 3, col 0  (3*12+0)
+const GOAL:  int = 47    # row 3, col 11 (3*12+11)
+
+# ─── environment step ────────────────────────────────────────────
+def is_cliff(state: int) -> bool:
+    let row: int = state // COLS
+    let col: int = state % COLS
+    row == 3 and col >= 1 and col <= 10
+
+def clamp(v: int, lo: int, hi: int) -> int:
+    lo if v < lo else (hi if v > hi else v)
+
+def env_step(state: int, action: int) -> (int, float, bool):
+    """Returns (next_state, reward, done).
+    Falling off the cliff resets to START with reward -100."""
+    let row: int = state // COLS
+    let col: int = state % COLS
+    var nr: int = row
+    var nc: int = col
+    if action == UP:      nr -= 1
+    elif action == RIGHT: nc += 1
+    elif action == DOWN:  nr += 1
+    elif action == LEFT:  nc -= 1
+    nr = clamp(nr, 0, ROWS - 1)
+    nc = clamp(nc, 0, COLS - 1)
+    let ns: int = nr * COLS + nc
+    if is_cliff(ns):
+        return (START, -100.0, True)   # fell off cliff — big penalty, episode ends
+    if ns == GOAL:
+        return (ns, -1.0, True)
+    return (ns, -1.0, False)
+
+# ─── Q-table helpers ─────────────────────────────────────────────
+type QTable_T is {int}[]float
+
+def init_qtable() -> QTable_T:
+    var qtable: QTable_T = {:}
+    for s in 0..N_S-1:
+        var row: []float
+        for _ in 0..N_A-1:
+            row.append(0.0)
+        qtable[s] = row
+    return qtable
+
+def argmax_row(row: []float) -> int:
+    var best: int = 0
+    for a in 1..N_A-1:
+        if row[a] > row[best]: best = a
+    return best
+
+def max_row(row: []float) -> float:
+    var best: float = row[0]
+    for a in 1..N_A-1:
+        if row[a] > best: best = row[a]
+    return best
+
+# ─── epsilon-greedy action selection ─────────────────────────────
+def choose_action(qtable: lent QTable_T, state: int, epsilon: float) -> int:
+    let base: float = epsilon / float(N_A)
+    var probs: []float
+    for _ in 0..N_A-1:
+        probs.append(base)
+    let qrow: []float = qtable[state]
+    probs[argmax_row(qrow)] += 1.0 - epsilon
+    # weighted random draw from probability distribution
+    let r: float = rand(1.0)
+    var cum: float = 0.0
+    for i in 0..N_A-1:
+        cum += probs[i]
+        if r < cum: return i
+    return N_A - 1
+
+# ─── Q-Learning algorithm ─────────────────────────────────────────
+def q_learning(num_episodes: int, alpha: float = 0.5,
+               epsilon: float = 0.1, gamma: float = 1.0) -> QTable_T:
+    randomize()
+    var qtable: QTable_T = init_qtable()
+    var bucket_rew: float = 0.0
+
+    for ep in 0..num_episodes-1:
+        var state: int = START
+
+        while True:
+            let action: int = choose_action(qtable, state, epsilon)
+            let (ns, rew, done) = env_step(state, action)
+
+            # off-policy update: bootstrap from the best possible next action
+            var row: []float = qtable[state]
+            let qns: []float = qtable[ns]
+            let td_err: float = rew + gamma * max_row(qns) - row[action]
+            row[action] += alpha * td_err
+            qtable[state] = row
+
+            bucket_rew += rew
+            state = ns
+            if done: break
+
+        if (ep + 1) % 100 == 0:
+            let avg: float = bucket_rew / 100.0
+            let ep1: int = ep + 1
+            print(f"Episode {ep1}/{num_episodes}  avg reward/ep: {avg}")
+            bucket_rew = 0.0
+
+    return qtable
+
+# ─── display learned policy ──────────────────────────────────────
+def print_policy(qtable: lent QTable_T):
+    let arrows: []str = ["^", ">", "v", "<"]   # UP RIGHT DOWN LEFT
+    print("\nLearned greedy policy  (G=goal, S=start, C=cliff):")
+    for r in 0..ROWS-1:
+        var line: str = "  "
+        for c in 0..COLS-1:
+            let s: int = r * COLS + c
+            if s == GOAL:      line &= "G "
+            elif s == START:   line &= "S "
+            elif is_cliff(s):  line &= "C "
+            else:
+                let qrow: []float = qtable[s]
+                line &= arrows[argmax_row(qrow)] & " "
+        print(line)
+    print("  (Q-Learning learns the cliff-edge path; SARSA stays one row above)")
+
+let q_ql: QTable_T = q_learning(500)
+print_policy(q_ql)
