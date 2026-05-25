@@ -115,6 +115,7 @@ ann_assign_stmt = fw("ann_assign_stmt")
 decl_keyword = fw("decl_keyword")
 decl_ann_assign_stmt = fw("decl_ann_assign_stmt")
 decl_tuple_unpack = fw("decl_tuple_unpack")
+own_stmt = fw("own_stmt")
 return_stmt = fw("return_stmt")
 pass_stmt = fw("pass_stmt")
 break_stmt = fw("break_stmt")
@@ -183,6 +184,10 @@ decl_keyword = literal("var") | literal("let") | literal("const")
 decl_ann_assign_stmt = decl_keyword + IDENTIFIER + V_COLON + type_annotation + (V_EQUAL + expression)[:]
 # decl_tuple_unpack: let (x, y) = expr
 decl_tuple_unpack = decl_keyword + paren_group + V_EQUAL + _expressions
+
+# --- own declaration: own IDENTIFIER ':' type_annotation ['=' expression] ---
+# Unique owner; auto-freed at scope end (Nim ARC; Python GC)
+own_stmt = literal("own") + IDENTIFIER + V_COLON + type_annotation + (V_EQUAL + expression)[:]
 
 # --- return ---
 return_val = ikw("return") + _expressions
@@ -298,7 +303,8 @@ type_stmt = ikw("type") + IDENTIFIER + type_alias_params[:] + (V_EQUAL | ikw("is
 # ann_assign before assign (starts with IDENTIFIER + ':').
 # expressions is the fallback (expression statement).
 simple_stmt = (
-    decl_tuple_unpack
+    own_stmt
+    | decl_tuple_unpack
     | decl_ann_assign_stmt
     | ann_assign_stmt
     | aug_assign_stmt

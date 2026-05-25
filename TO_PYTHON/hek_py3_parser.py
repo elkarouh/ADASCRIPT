@@ -356,6 +356,39 @@ def to_py(self):
     return expr
 
 
+@method(with_own_stmt)
+def to_py(self, indent=0):
+    """with own x = expr: block  ->  x = expr / try: body / finally: del x
+
+    Node layout (ikw tokens invisible):
+      nodes[0] = IDENTIFIER, nodes[1] = V_EQUAL, nodes[2] = expression, nodes[3] = block
+    """
+    name_node = expr_node = block_node = None
+    for node in self.nodes:
+        tname = type(node).__name__
+        if tname == "IDENTIFIER" and name_node is None:
+            name_node = node
+        elif tname == "block":
+            block_node = node
+        elif name_node is not None and expr_node is None and tname not in ("Fmap", "Filter"):
+            val = getattr(node, "node", None)
+            if isinstance(val, str) and val == "=":
+                continue   # skip visible V_EQUAL
+            expr_node = node
+    name = name_node.to_py() if name_node else "_own_var"
+    expr = expr_node.to_py() if expr_node else "None"
+    body = _suite_to_py(block_node, indent + 1) if block_node else f"{_ind(indent + 1)}pass"
+    ind = _ind(indent)
+    ind1 = _ind(indent + 1)
+    return (
+        f"{ind}{name} = {expr}\n"
+        f"{ind}try:\n"
+        f"{body}\n"
+        f"{ind}finally:\n"
+        f"{ind1}del {name}"
+    )
+
+
 @method(with_stmt)
 def to_py(self, indent=0):
     """with_stmt: 'with' with_item (',' with_item)* ':' block"""
@@ -379,6 +412,36 @@ def to_py(self, indent=0):
         except TypeError:
             body = _ind(indent + 1) + block_node.to_py()
     return f"{_ind(indent)}with {', '.join(items)}:{hc}\n{body}"
+
+
+@method(with_own_stmt)
+def to_py(self, indent=0):
+    """with own x = expr: block  ->  x = expr; try: body; finally: del x
+
+    Node layout (ikw tokens consumed/invisible):
+      nodes[0] = IDENTIFIER
+      nodes[1] = V_EQUAL (visible)
+      nodes[2] = expression
+      nodes[3] = block
+    """
+    ind = _ind(indent)
+    ind1 = _ind(indent + 1)
+    name_node = None
+    expr_node = None
+    block_node = None
+    for node in self.nodes:
+        tname = type(node).__name__
+        if tname == "IDENTIFIER" and name_node is None:
+            name_node = node
+        elif tname == "block":
+            block_node = node
+        elif name_node is not None and expr_node is None and tname not in ("Fmap", "V_EQUAL"):
+            expr_node = node
+    name = name_node.to_py() if name_node and hasattr(name_node, "to_py") else str(name_node)
+    expr = expr_node.to_py() if expr_node and hasattr(expr_node, "to_py") else ""
+    hc = _block_inline_header_comment(block_node) if block_node else ""
+    body = block_node.to_py(indent + 1) if block_node else f"{ind1}pass"
+    return f"{ind}{name} = {expr}\n{ind}try:{hc}\n{body}\n{ind}finally:\n{ind1}del {name}"
 
 
 @method(with_stmt_paren)

@@ -137,6 +137,23 @@ def to_py(self):
                 result += f" = {value}"
     return result
 
+# --- own declaration ---
+@method(own_stmt)
+def to_py(self):
+    """own x: T = expr  ->  x: T = expr  (Python GC handles lifecycle; 'own' is stripped)"""
+    name = self.nodes[1].to_py()
+    annotation = self.nodes[3].to_py()
+    result = f"{name}: {annotation}"
+    for node in self.nodes[4:]:
+        if not hasattr(node, "nodes") or not node.nodes:
+            continue
+        for seq in node.nodes:
+            if hasattr(seq, "nodes") and len(seq.nodes) >= 2:
+                value = seq.nodes[1].to_py()
+                result += f" = {value}"
+    return result
+
+
 # --- return ---
 @method(decl_tuple_unpack)
 def to_py(self):

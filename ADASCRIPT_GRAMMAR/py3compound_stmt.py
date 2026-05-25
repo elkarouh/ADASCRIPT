@@ -92,6 +92,7 @@ except_star_clause = fw("except_star_clause")
 except_bare = fw("except_bare")
 finally_clause = fw("finally_clause")
 with_stmt = fw("with_stmt")
+with_own_stmt = fw("with_own_stmt")
 with_item = fw("with_item")
 case_stmt = fw("case_stmt")
 when_clause = fw("when_clause")
@@ -201,6 +202,13 @@ try_stmt = try_except | try_finally
 
 # --- with ---
 with_item = expression + (ikw("as") + star_expression)[:]
+
+# --- with own x = expr: block  — scoped RAII (Rust-style let binding) ---
+# 'own' is a literal keyword (visible) so it does NOT appear in nodes.
+# Node layout: [IDENTIFIER, V_EQUAL(visible), expression, block]
+# ikw("with") and ikw("own") are consumed (invisible).
+with_own_stmt = ikw("with") + ikw("own") + IDENTIFIER + V_EQUAL + expression + COLON + block
+
 # Parenthesised with (Python 3.10+): with (ctx as x, ctx2 as y,): ...
 with_stmt_paren = (
     ikw("with")
@@ -451,6 +459,7 @@ compound_stmt = (
     | while_stmt
     | for_stmt
     | try_stmt
+    | with_own_stmt
     | with_stmt_paren
     | with_stmt
     | match_stmt

@@ -1,0 +1,34 @@
+# test_ownership.ady — ownership syntax smoke test
+
+type Msg_T is record:
+    text: str
+    count: int
+
+def summarise(msg: lent Msg_T) -> str:
+    f"{msg.text} x{msg.count}"
+
+def make_msg(text: str, n: int) -> Msg_T:
+    var m: Msg_T = Msg_T(text=text, count=n)
+    m
+
+def main():
+    # Basic own declaration and lent borrow
+    own a: Msg_T = make_msg("hello", 3)
+    print(summarise(a))           # hello x3
+
+    # Scoped RAII block
+    with own tmp = make_msg("scoped", 1):
+        print(summarise(tmp))     # scoped x1
+    # tmp freed here
+
+    # Explicit ownership transfer
+    own b: Msg_T = move(a)
+    print(summarise(b))           # hello x3
+
+    # Explicit early release
+    own c: Msg_T = make_msg("temp", 5)
+    drop(c)
+
+    print("done")
+
+main()
