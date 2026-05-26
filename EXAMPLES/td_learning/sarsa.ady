@@ -59,9 +59,7 @@ def argmax_row(row: []float) -> int:
 # ─── epsilon-greedy action selection ─────────────────────────────
 def choose_action(qtable: lent QTable_T, state: int, epsilon: float) -> int:
     let base: float = epsilon / float(N_A)
-    var probs: []float
-    for _ in 0..N_A-1:
-        probs.append(base)
+    var probs: []float = [base for _ in 1..N_A]
     let qrow: []float = qtable[state]
     probs[argmax_row(qrow)] += 1.0 - epsilon
     # weighted random draw from probability distribution
