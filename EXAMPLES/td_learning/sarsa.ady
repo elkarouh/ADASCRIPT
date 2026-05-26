@@ -11,6 +11,7 @@ where a' is the epsilon-greedy action the agent will *actually* take next.
 This makes SARSA conservative: exploration mistakes count against it.
 """
 nimport random
+nimport sequtils
 
 # ─── environment constants ────────────────────────────────────────
 const ROWS:  int = 7
@@ -47,21 +48,15 @@ def env_step(state: int, action: int) -> (int, float, bool):
     let ns: int = nr * COLS + nc
     return (ns, -1.0, ns == GOAL)
 
-# ─── Q-table helpers ─────────────────────────────────────────────
+# ─── Q-table ─────────────────────────────────────────────────────
 type QTable_T is {int}[]float
-
-def argmax_row(row: []float) -> int:
-    var best: int = 0
-    for a in 1..N_A-1:
-        if row[a] > row[best]: best = a
-    return best
 
 # ─── epsilon-greedy action selection ─────────────────────────────
 def choose_action(qtable: lent QTable_T, state: int, epsilon: float) -> int:
     let base: float = epsilon / float(N_A)
     var probs: []float = [base for _ in 1..N_A]
     let qrow: []float = qtable[state]
-    probs[argmax_row(qrow)] += 1.0 - epsilon
+    probs[qrow.maxIndex] += 1.0 - epsilon
     # weighted random draw from probability distribution
     let r: float = rand(1.0)
     var cum: float = 0.0
@@ -116,7 +111,7 @@ def print_policy(qtable: lent QTable_T):
             elif s == START: line &= "S "
             else:
                 let qrow: []float = qtable[s]
-                line &= arrows[argmax_row(qrow)] & " "
+                line &= arrows[qrow.maxIndex] & " "
         print(line)
     print("  Wind: 0 0 0 1 1 1 2 2 1 0")
     print("         (columns 3-8 push agent upward)")
