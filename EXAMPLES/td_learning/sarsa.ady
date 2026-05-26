@@ -29,9 +29,6 @@ const GOAL:  Coord_T = (4, 8)
 let WIND: [Col_T]int = [0, 0, 0, 1, 1, 1, 2, 2, 1, 0]
 
 # ─── environment step ────────────────────────────────────────────
-def clamp(v: int, lo: int, hi: int) -> int:
-    lo if v < lo else (hi if v > hi else v)
-
 def env_step(state: Coord_T, action: Action_T) -> (Coord_T, Reward_T, bool):
     """Deterministic step — returns (next_state, reward, done)."""
     var nr: int = state.row
