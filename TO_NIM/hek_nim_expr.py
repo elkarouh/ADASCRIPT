@@ -2968,6 +2968,10 @@ def to_nim(self, prec=None):
     if "," in tgt and not tgt.startswith("("):
         tgt = f"({tgt})"
     iterable = self.nodes[1].to_nim()
+    # Range types have no items() iterator in Nim; expand to low..high
+    _tick = getattr(ParserState, 'tick_types', {}).get(iterable, {})
+    if _tick and 'First' in _tick and 'members' not in _tick and not _tick.get('is_float_range'):
+        iterable = f"{iterable}.low..{iterable}.high"
     
     # Table iteration fix: Nim Tables need .keys or .pairs for iteration
     # If target is a single variable and iterable is a Table, use .keys

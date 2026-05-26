@@ -1735,6 +1735,22 @@ def to_nim(self, indent=0):
         _exp = "*" if getattr(ParserState, 'export_symbols', False) and ParserState.symbol_table.depth() <= 2 else ""
         return f"{_ind(indent)}type {name}{_exp}{params} = float"
     value = rhs.to_nim()
+    # Named tuple: (field: Type, ...) -> tuple[field: Type, ...]
+    import re as _re_nt
+    if value.startswith("(") and value.endswith(")"):
+        _inner = value[1:-1]
+        if _re_nt.search(r'\w+\s*:', _inner):
+            value = f"tuple[{_inner}]"
+            if not hasattr(ParserState, 'class_field_types'):
+                ParserState.class_field_types = {}
+            if name not in ParserState.class_field_types:
+                ParserState.class_field_types[name] = {}
+            for _fm in _re_nt.finditer(r'(\w+)\s*:\s*([^,\]]+)', _inner):
+                ParserState.class_field_types[name][_fm.group(1)] = _fm.group(2).strip()
+            if not hasattr(ParserState, 'tuple_field_order'):
+                ParserState.tuple_field_order = {}
+            ParserState.tuple_field_order[name] = [
+                _fm.group(1) for _fm in _re_nt.finditer(r'(\w+)\s*:', _inner)]
     # Record type alias so method translation can resolve it
     if rhs_type not in ("enum_def",):
         ParserState.symbol_table.add(name, value, "type")
