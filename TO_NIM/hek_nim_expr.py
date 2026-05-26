@@ -962,16 +962,16 @@ def to_nim(self, prec=None):
             enum_members = info["members"]
             break
     if enum_members:
-        # Emit values in enum declaration order, default for missing members
+        # Emit KEY: VALUE pairs so Nim infers array[EnumType, T] in any context
         kv_dict = {k: v for k, v in kv_pairs}
-        vals = []
+        pairs_out = []
         for m in enum_members:
             if m in kv_dict:
-                vals.append(kv_dict[m].to_nim().strip())
+                pairs_out.append(f"{m}: {kv_dict[m].to_nim().strip()}")
             else:
                 sample_val = kv_pairs[0][1].to_nim().strip()
-                vals.append("default(typeof(" + sample_val + "))")
-        return "[" + ", ".join(vals) + "]"
+                pairs_out.append(f"{m}: default(typeof({sample_val}))")
+        return "[" + ", ".join(pairs_out) + "]"
     # Fallback: emit values in order given
     vals = [v.to_nim().strip() for _, v in kv_pairs]
     return "[" + ", ".join(vals) + "]"
@@ -1295,7 +1295,8 @@ def to_nim(self, prec=None):
                     import re as _re_enum
                     if _re_enum.match(r'^\d+$', _a):
                         _is_int_arg = True
-                    elif _a.startswith("len(") or _a.startswith("ord("):
+                    elif (_a.startswith("len(") or _a.startswith("ord(")
+                            or _a.startswith("maxIndex(") or _a.endswith(".maxIndex")):
                         _is_int_arg = True
                     else:
                         _asym = ParserState.symbol_table.lookup(_a)
