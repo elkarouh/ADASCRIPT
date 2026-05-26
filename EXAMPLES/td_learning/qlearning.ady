@@ -1,6 +1,7 @@
 #!/usr/bin/env py2nim
 """Q-Learning (off-policy TD control) on the Cliff Walking problem.
 
+Original Python: https://github.com/dennybritz/reinforcement-learning/blob/master/TD/Q-Learning%20Solution.ipynb
 Reference: Sutton & Barto — "Reinforcement Learning", Example 6.6
 Grid: 4 rows x 12 cols.  Start: (4,1).  Goal: (4,12).
 Cliff: row 4, cols 2-11 — stepping there gives reward -100 and ends episode.
