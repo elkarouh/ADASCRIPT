@@ -57,10 +57,7 @@ def env_step(state: int, action: int) -> (int, float, bool):
 type QTable_T is {int}[]float
 
 def init_qtable() -> QTable_T:
-    var qtable: QTable_T = {:}
-    for s in 0..N_S-1:
-        qtable[s] = [0.0 for _ in 1..N_A]
-    return qtable
+    {s: [0.0 for _ in 1..N_A] for s in 0..N_S-1}
 
 def argmax_row(row: []float) -> int:
     var best: int = 0
