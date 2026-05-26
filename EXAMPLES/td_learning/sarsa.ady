@@ -16,7 +16,6 @@ nimport sequtils
 # ─── environment constants ────────────────────────────────────────
 const ROWS:  int = 7
 const COLS:  int = 10
-const N_S:   int = 70    # ROWS * COLS
 const START: int = 30    # row 3, col 0  (3*10+0)
 const GOAL:  int = 37    # row 3, col 7  (3*10+7)
 
@@ -68,7 +67,7 @@ def choose_action(qtable: lent QTable_T, state: int, epsilon: Prob_T) -> Action_
 def sarsa(num_episodes: int, alpha: Prob_T = 0.5,
           epsilon: Prob_T = 0.1, gamma: Prob_T = 1.0) -> QTable_T:
     randomize()
-    var qtable: QTable_T = {s: [UP: 0.0, RIGHT: 0.0, DOWN: 0.0, LEFT: 0.0] for s in 0..N_S-1}
+    var qtable: QTable_T = {s: [UP: 0.0, RIGHT: 0.0, DOWN: 0.0, LEFT: 0.0] for s in 0..ROWS*COLS-1}
     var bucket_rew: float = 0.0
 
     for ep in 1..num_episodes:
