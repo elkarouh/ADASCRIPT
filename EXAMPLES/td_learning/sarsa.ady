@@ -1,6 +1,7 @@
 #!/usr/bin/env py2nim
 """SARSA (on-policy TD control) on the Windy Gridworld.
 
+Original Python: https://github.com/dennybritz/reinforcement-learning/blob/master/TD/SARSA%20Solution.ipynb
 Reference: Sutton & Barto — "Reinforcement Learning", Example 6.5
 Grid: 7 rows x 10 cols.  Start: (4,1).  Goal: (4,8).
 Wind pushes the agent upward by 1-2 cells in columns 4-9.
