@@ -84,7 +84,8 @@ TIMETABLE_EXAMPLES := \
 COMPILE_ONLY := \
     tsp.ady \
     lv.ady \
-    lolcate/lolcate.ady
+    lolcate/lolcate.ady \
+    dp/jacks.ady
 
 ALL_COMPILE := \
     $(LIBS) \

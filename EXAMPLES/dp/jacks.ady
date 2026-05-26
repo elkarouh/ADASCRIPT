@@ -1,0 +1,133 @@
+#!/usr/bin/env py2nim
+"""Jack's Car Rental — Policy Iteration.
+
+Original Python: https://github.com/dennybritz/reinforcement-learning/blob/master/DP/Jack%27s%20Car%20Rental%20Solution.ipynb
+Reference: Sutton & Barto — "Reinforcement Learning", Example 4.2
+
+Two rental locations, each with Poisson demand and returns.
+State: (cars at loc1, cars at loc2).
+Action: cars moved overnight from loc1 → loc2 (negative = reverse direction).
+
+Policy Iteration:
+  1. Policy Evaluation  — sweep V(s) under current π until convergence
+  2. Policy Improvement — set π(s) = argmax_a Q(s,a)
+  Repeat until policy is stable.
+"""
+nimport math
+
+# ─── domain types ─────────────────────────────────────────────────
+type Cars_T     is 0..20
+type Reward_T   is float
+type Prob_T     is float range 0.0..1.0
+type Discount_T is float range 0.0..1.0
+
+# ─── problem constants ─────────────────────────────────────────────
+const MAX_CARS:      int        = 20
+const MAX_MOVE:      int        = 5
+const RENTAL_REWARD: Reward_T   = 10.0
+const MOVE_COST:     Reward_T   = 2.0
+const DISCOUNT:      Discount_T = 0.9
+const POISSON_UPPER: int        = 11
+
+const REQ_LOC1: int = 3   # mean rental requests  at location 1
+const REQ_LOC2: int = 4   # mean rental requests  at location 2
+const RET_LOC1: int = 3   # mean car returns      at location 1
+const RET_LOC2: int = 2   # mean car returns      at location 2
+
+# ─── Poisson PMF — cached for speed ───────────────────────────────
+var poisson_cache: {(int, int)}float = {:}
+
+def poisson_prob(n: int, lam: int) -> Prob_T:
+    let key: (int, int) = (n, lam)
+    if key not in poisson_cache:
+        poisson_cache[key] = exp(-float(lam)) * pow(float(lam), float(n)) / float(fac(n))
+    return poisson_cache[key]
+
+# ─── DP tables (global — shared by evaluation and improvement) ────
+var value:  [Cars_T][Cars_T]Reward_T   # V(s):  expected discounted return
+var policy: [Cars_T][Cars_T]int        # π(s):  cars moved 1→2 (range -5..5)
+
+# ─── Bellman expectation for one state-action pair ────────────────
+def expected_return(loc1: Cars_T, loc2: Cars_T, action: int) -> Reward_T:
+    """Sum over all request/return combinations of prob * (reward + γ V(s'))."""
+    var returns: Reward_T = -MOVE_COST * float(abs(action))
+
+    # cars available at each location after the overnight transfer
+    let cars1: int = min(int(loc1) - action, MAX_CARS)
+    let cars2: int = min(int(loc2) + action, MAX_CARS)
+
+    for req1 in 0 ..< POISSON_UPPER:
+        for req2 in 0 ..< POISSON_UPPER:
+            let p_req: float = poisson_prob(req1, REQ_LOC1) * poisson_prob(req2, REQ_LOC2)
+            let rented1: int = min(cars1, req1)
+            let rented2: int = min(cars2, req2)
+            let day_reward: Reward_T = float(rented1 + rented2) * RENTAL_REWARD
+            let rem1: int = cars1 - rented1
+            let rem2: int = cars2 - rented2
+
+            for ret1 in 0 ..< POISSON_UPPER:
+                for ret2 in 0 ..< POISSON_UPPER:
+                    let p_ret: float = poisson_prob(ret1, RET_LOC1) * poisson_prob(ret2, RET_LOC2)
+                    let next1: Cars_T = Cars_T(min(rem1 + ret1, MAX_CARS))
+                    let next2: Cars_T = Cars_T(min(rem2 + ret2, MAX_CARS))
+                    returns += p_req * p_ret * (day_reward + DISCOUNT * value[next1][next2])
+
+    return returns
+
+# ─── policy iteration ──────────────────────────────────────────────
+var iterations: int = 0
+
+while True:
+
+    # policy evaluation — sweep until value converges
+    while True:
+        var delta: Reward_T = 0.0
+        for i in Cars_T:
+            for j in Cars_T:
+                let old_v: Reward_T = value[i][j]
+                value[i][j] = expected_return(i, j, policy[i][j])
+                delta = max(delta, abs(old_v - value[i][j]))
+        print f"  Policy Evaluation  delta = {delta:.4f}"
+        if delta < 1e-4: break
+
+    # policy improvement — greedy step from converged value function
+    var policy_stable: bool = True
+    for i in Cars_T:
+        for j in Cars_T:
+            let old_action: int = policy[i][j]
+            var best_action: int = old_action
+            var best_val: Reward_T = -1e18
+            let lo: int = -min(MAX_MOVE, int(j))
+            let hi: int =  min(MAX_MOVE, int(i))
+            for a in lo .. hi:
+                let v: Reward_T = expected_return(i, j, a)
+                if v > best_val:
+                    best_val    = v
+                    best_action = a
+            policy[i][j] = best_action
+            if old_action != best_action:
+                policy_stable = False
+
+    iterations += 1
+    print f"Policy Iteration {iterations} completed"
+    if policy_stable:
+        print "Optimal policy found!"
+        break
+
+# ─── display optimal policy ────────────────────────────────────────
+def print_policy():
+    print "\nOptimal Policy  (row = cars at loc1, col = cars at loc2, value = cars moved 1→2):"
+    var header: str = "    "
+    for j in Cars_T:
+        let jj: int = int(j)
+        header &= f"{jj:3}"
+    print header
+    for i in Cars_T:
+        let ii: int = int(i)
+        var line: str = f"{ii:3}:"
+        for j in Cars_T:
+            let a: int = policy[i][j]
+            line &= f"{a:3}"
+        print line
+
+print_policy()
