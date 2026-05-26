@@ -71,7 +71,7 @@ def choose_action(qtable: lent QTable_T, state: Coord_T, epsilon: Prob_T) -> Act
 def q_learning(num_episodes: int, alpha: Prob_T = 0.5,
                epsilon: Prob_T = 0.1, gamma: Prob_T = 1.0) -> QTable_T:
     randomize()
-    var qtable: QTable_T = {(r, c): [UP: 0.0, RIGHT: 0.0, DOWN: 0.0, LEFT: 0.0] for r in Row_T'First..Row_T'Last for c in Col_T'First..Col_T'Last}
+    var qtable: QTable_T = {(r, c): [UP: 0.0, RIGHT: 0.0, DOWN: 0.0, LEFT: 0.0] for r in Row_T for c in Col_T}
     var bucket_rew: Reward_T = 0.0
 
     for ep in 1..num_episodes:
@@ -103,9 +103,9 @@ def q_learning(num_episodes: int, alpha: Prob_T = 0.5,
 def print_policy(qtable: lent QTable_T):
     let arrows: [Action_T]str = [UP: "^", RIGHT: ">", DOWN: "v", LEFT: "<"]
     print("\nLearned greedy policy  (G=goal, S=start, C=cliff):")
-    for r in Row_T'First..Row_T'Last:
+    for r in Row_T:
         var line: str = "  "
-        for c in Col_T'First..Col_T'Last:
+        for c in Col_T:
             let s: Coord_T = (r, c)
             if s == GOAL:      line &= "G "
             elif s == START:   line &= "S "
