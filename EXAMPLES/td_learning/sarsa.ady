@@ -53,10 +53,7 @@ type QTable_T is {int}[]float
 def init_qtable() -> QTable_T:
     var qtable: QTable_T = {:}
     for s in 0..N_S-1:
-        var row: []float
-        for _ in 0..N_A-1:
-            row.append(0.0)
-        qtable[s] = row
+        qtable[s] = [0.0 for _ in 1..N_A]
     return qtable
 
 def argmax_row(row: []float) -> int:
