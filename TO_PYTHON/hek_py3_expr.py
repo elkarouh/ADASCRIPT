@@ -486,6 +486,10 @@ def to_py(self, prec=None):
             tr_str = tr.to_py()
             # .get() on an Optional-typed variable is a no-op in Python (value is already unwrapped)
             # Parsed as two trailers: attr_trailer(".get") + call_trailer("()")
+            if tr_str == ".maxIndex":
+                result = f"{result}.index(max({result}))"
+                i += 1
+                continue
             if (tr_str == ".get"
                     and i + 1 < len(trailers)
                     and trailers[i + 1].to_py() == "()"):
