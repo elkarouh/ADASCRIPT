@@ -17,13 +17,10 @@ nimport sequtils
 const ROWS:  int = 7
 const COLS:  int = 10
 const N_S:   int = 70    # ROWS * COLS
-const N_A:   int = 4
-const UP:    int = 0
-const RIGHT: int = 1
-const DOWN:  int = 2
-const LEFT:  int = 3
 const START: int = 30    # row 3, col 0  (3*10+0)
 const GOAL:  int = 37    # row 3, col 7  (3*10+7)
+
+type Action_T is enum UP, RIGHT, DOWN, LEFT
 
 # wind strength (upward push in rows) per column
 let WIND: []int = [0, 0, 0, 1, 1, 1, 2, 2, 1, 0]
@@ -32,17 +29,18 @@ let WIND: []int = [0, 0, 0, 1, 1, 1, 2, 2, 1, 0]
 def clamp(v: int, lo: int, hi: int) -> int:
     lo if v < lo else (hi if v > hi else v)
 
-def env_step(state: int, action: int) -> (int, float, bool):
+def env_step(state: int, action: Action_T) -> (int, float, bool):
     """Deterministic step — returns (next_state, reward, done)."""
     let row: int = state // COLS
     let col: int = state % COLS
     var nr: int = row
     var nc: int = col
-    if action == UP:      nr -= 1
-    elif action == RIGHT: nc += 1
-    elif action == DOWN:  nr += 1
-    elif action == LEFT:  nc -= 1
     # wind pushes upward based on the original column
+    case action:
+        when UP:    nr -= 1
+        when RIGHT: nc += 1
+        when DOWN:  nr += 1
+        when LEFT:  nc -= 1
     nr = clamp(nr - WIND[col], 0, ROWS - 1)
     nc = clamp(nc, 0, COLS - 1)
     let ns: int = nr * COLS + nc
@@ -52,39 +50,39 @@ def env_step(state: int, action: int) -> (int, float, bool):
 type QTable_T is {int}[]float
 
 # ─── epsilon-greedy action selection ─────────────────────────────
-def choose_action(qtable: lent QTable_T, state: int, epsilon: float) -> int:
-    let base: float = epsilon / float(N_A)
-    var probs: []float = [base for _ in 1..N_A]
+def choose_action(qtable: lent QTable_T, state: int, epsilon: float) -> Action_T:
+    let base: float = epsilon / 4.0
+    var probs: [Action_T]float = [UP: base, RIGHT: base, DOWN: base, LEFT: base]
     let qrow: []float = qtable[state]
-    probs[qrow.maxIndex] += 1.0 - epsilon
+    probs[Action_T(qrow.maxIndex)] += 1.0 - epsilon
     # weighted random draw from probability distribution
     let r: float = rand(1.0)
     var cum: float = 0.0
-    for i in 0..N_A-1:
-        cum += probs[i]
-        if r < cum: return i
-    return N_A - 1
+    for a in Action_T:
+        cum += probs[a]
+        if r < cum: return a
+    return Action_T'Last
 
 # ─── SARSA algorithm ─────────────────────────────────────────────
 def sarsa(num_episodes: int, alpha: float = 0.5,
           epsilon: float = 0.1, gamma: float = 1.0) -> QTable_T:
     randomize()
-    var qtable: QTable_T = {s: [0.0 for _ in 1..N_A] for s in 0..N_S-1}
+    var qtable: QTable_T = {s: [0.0 for _ in Action_T] for s in 0..N_S-1}
     var bucket_rew: float = 0.0
 
     for ep in 1..num_episodes:
         var state:  int = START
-        var action: int = choose_action(qtable, state, epsilon)
+        var action: Action_T = choose_action(qtable, state, epsilon)
 
         while True:
             let (ns, rew, done) = env_step(state, action)
-            let na: int = choose_action(qtable, ns, epsilon)
+            let na: Action_T = choose_action(qtable, ns, epsilon)
 
             # on-policy update: bootstrap from the action we will actually take
             var row: []float = qtable[state]
             let qns: []float = qtable[ns]
-            let td_err: float = rew + gamma * qns[na] - row[action]
-            row[action] += alpha * td_err
+            let td_err: float = rew + gamma * qns[na.ord] - row[action.ord]
+            row[action.ord] += alpha * td_err
             qtable[state] = row
 
             bucket_rew += rew
@@ -101,7 +99,7 @@ def sarsa(num_episodes: int, alpha: float = 0.5,
 
 # ─── display learned policy ──────────────────────────────────────
 def print_policy(qtable: lent QTable_T):
-    let arrows: []str = ["^", ">", "v", "<"]   # UP RIGHT DOWN LEFT
+    let arrows: [Action_T]str = [UP: "^", RIGHT: ">", DOWN: "v", LEFT: "<"]
     print("\nLearned greedy policy  (G=goal, S=start):")
     for r in 0..ROWS-1:
         var line: str = "  "
@@ -111,7 +109,7 @@ def print_policy(qtable: lent QTable_T):
             elif s == START: line &= "S "
             else:
                 let qrow: []float = qtable[s]
-                line &= arrows[qrow.maxIndex] & " "
+                line &= arrows[Action_T(qrow.maxIndex)] & " "
         print(line)
     print("  Wind: 0 0 0 1 1 1 2 2 1 0")
     print("         (columns 3-8 push agent upward)")
