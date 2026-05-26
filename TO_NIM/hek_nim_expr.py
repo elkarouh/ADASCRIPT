@@ -928,6 +928,9 @@ def to_nim(self, prec=None):
     return "{" + inner_node.to_nim() + "}.toTable"
 
 
+_ekarr_counter = 0
+
+
 @method(enum_array_display)
 def to_nim(self, prec=None):
     """[KEY: val, KEY: val] -> [val1, val2, ...] in enum declaration order."""
@@ -962,7 +965,6 @@ def to_nim(self, prec=None):
             enum_members = info["members"]
             break
     if enum_members:
-        # Emit KEY: VALUE pairs so Nim infers array[EnumType, T] in any context
         kv_dict = {k: v for k, v in kv_pairs}
         pairs_out = []
         for m in enum_members:
@@ -971,7 +973,18 @@ def to_nim(self, prec=None):
             else:
                 sample_val = kv_pairs[0][1].to_nim().strip()
                 pairs_out.append(f"{m}: default(typeof({sample_val}))")
-        return "[" + ", ".join(pairs_out) + "]"
+        lit = "[" + ", ".join(pairs_out) + "]"
+        # In a dict-comprehension value (collect(initTable,...)) Nim 2.x generates
+        # an invalid C cast between array[0..N,T] and array[EnumType,T].  Wrapping
+        # in a typed (let ekarr: array[E, typeof(v)] = lit; ekarr) block forces
+        # the correct index type without hardcoding the element type.
+        if getattr(ParserState, '_in_dictcomp_value', False):
+            first_val_nim = kv_pairs[0][1].to_nim().strip()
+            global _ekarr_counter
+            _ekarr_counter += 1
+            nm = f"ekarr{_ekarr_counter}"
+            return f"(let {nm}: array[{tname}, typeof({first_val_nim})] = {lit}; {nm})"
+        return lit
     # Fallback: emit values in order given
     vals = [v.to_nim().strip() for _, v in kv_pairs]
     return "[" + ", ".join(vals) + "]"
@@ -3044,7 +3057,9 @@ def to_nim(self, prec=None):
 def to_nim(self, prec=None):
     """dictcomp: expression ':' expression for_if_clauses -> Nim: toTable comprehension"""
     key = self.nodes[0].to_nim()
+    ParserState._in_dictcomp_value = True
     val = self.nodes[1].to_nim()
+    ParserState._in_dictcomp_value = False
     clause_parts = _for_if_clauses_parts(self.nodes[2])
     ParserState.nim_imports.add("sugar")
     ParserState.nim_imports.add("tables")

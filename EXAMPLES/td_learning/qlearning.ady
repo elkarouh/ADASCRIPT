@@ -53,13 +53,13 @@ def env_step(state: int, action: Action_T) -> (int, float, bool):
     return (ns, -1.0, False)
 
 # ─── Q-table ─────────────────────────────────────────────────────
-type QTable_T is {int}[]float
+type QTable_T is {int}[Action_T]float
 
 # ─── epsilon-greedy action selection ─────────────────────────────
 def choose_action(qtable: lent QTable_T, state: int, epsilon: float) -> Action_T:
     let base: float = epsilon / 4.0
     var probs: [Action_T]float = [UP: base, RIGHT: base, DOWN: base, LEFT: base]
-    let qrow: []float = qtable[state]
+    let qrow: [Action_T]float = qtable[state]
     probs[Action_T(qrow.maxIndex)] += 1.0 - epsilon
     # weighted random draw from probability distribution
     let r: float = rand(1.0)
@@ -73,7 +73,7 @@ def choose_action(qtable: lent QTable_T, state: int, epsilon: float) -> Action_T
 def q_learning(num_episodes: int, alpha: float = 0.5,
                epsilon: float = 0.1, gamma: float = 1.0) -> QTable_T:
     randomize()
-    var qtable: QTable_T = {s: [0.0 for _ in Action_T] for s in 0..N_S-1}
+    var qtable: QTable_T = {s: [UP: 0.0, RIGHT: 0.0, DOWN: 0.0, LEFT: 0.0] for s in 0..N_S-1}
     var bucket_rew: float = 0.0
 
     for ep in 1..num_episodes:
@@ -84,10 +84,10 @@ def q_learning(num_episodes: int, alpha: float = 0.5,
             let (ns, rew, done) = env_step(state, action)
 
             # off-policy update: bootstrap from the best possible next action
-            var row: []float = qtable[state]
-            let qns: []float = qtable[ns]
-            let td_err: float = rew + gamma * max(qns) - row[action.ord]
-            row[action.ord] += alpha * td_err
+            var row: [Action_T]float = qtable[state]
+            let qns: [Action_T]float = qtable[ns]
+            let td_err: float = rew + gamma * max(qns) - row[action]
+            row[action] += alpha * td_err
             qtable[state] = row
 
             bucket_rew += rew
@@ -113,7 +113,7 @@ def print_policy(qtable: lent QTable_T):
             elif s == START:   line &= "S "
             elif is_cliff(s):  line &= "C "
             else:
-                let qrow: []float = qtable[s]
+                let qrow: [Action_T]float = qtable[s]
                 line &= arrows[Action_T(qrow.maxIndex)] & " "
         print(line)
     print("  (Q-Learning learns the cliff-edge path; SARSA stays one row above)")
