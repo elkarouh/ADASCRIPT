@@ -56,9 +56,6 @@ def env_step(state: int, action: int) -> (int, float, bool):
 # ─── Q-table helpers ─────────────────────────────────────────────
 type QTable_T is {int}[]float
 
-def init_qtable() -> QTable_T:
-    {s: [0.0 for _ in 1..N_A] for s in 0..N_S-1}
-
 def argmax_row(row: []float) -> int:
     var best: int = 0
     for a in 1..N_A-1:
@@ -91,7 +88,7 @@ def choose_action(qtable: lent QTable_T, state: int, epsilon: float) -> int:
 def q_learning(num_episodes: int, alpha: float = 0.5,
                epsilon: float = 0.1, gamma: float = 1.0) -> QTable_T:
     randomize()
-    var qtable: QTable_T = init_qtable()
+    var qtable: QTable_T = {s: [0.0 for _ in 1..N_A] for s in 0..N_S-1}
     var bucket_rew: float = 0.0
 
     for ep in 0..num_episodes-1:
