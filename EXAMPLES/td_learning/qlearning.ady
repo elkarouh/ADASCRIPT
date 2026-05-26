@@ -2,8 +2,8 @@
 """Q-Learning (off-policy TD control) on the Cliff Walking problem.
 
 Reference: Sutton & Barto — "Reinforcement Learning", Example 6.6
-Grid: 4 rows x 12 cols.  Start: (3,0).  Goal: (3,11).
-Cliff: row 3, cols 1-10 — stepping there gives reward -100 and ends episode.
+Grid: 4 rows x 12 cols.  Start: (4,1).  Goal: (4,12).
+Cliff: row 4, cols 2-11 — stepping there gives reward -100 and ends episode.
 
 Key insight — Q-Learning is off-policy:
   Q(s,a) += alpha * [r + gamma*max_a' Q(s', a') - Q(s,a)]
@@ -17,19 +17,19 @@ nimport sequtils
 const ROWS: int = 4
 const COLS: int = 12
 
-type Row_T      is 0..ROWS-1
-type Col_T      is 0..COLS-1
+type Row_T      is 1..ROWS
+type Col_T      is 1..COLS
 type Coord_T    is (row: Row_T, col: Col_T)
 type Action_T   is enum UP, RIGHT, DOWN, LEFT
 type Prob_T     is float range 0..1
 type Reward_T   is float
 
-const START: Coord_T = (3, 0)
-const GOAL:  Coord_T = (3, 11)
+const START: Coord_T = (4, 1)
+const GOAL:  Coord_T = (4, 12)
 
 # ─── environment step ────────────────────────────────────────────
 def is_cliff(state: Coord_T) -> bool:
-    state.row == 3 and 1 <= state.col <= 10
+    state.row == 4 and 2 <= state.col <= 11
 
 def clamp(v: int, lo: int, hi: int) -> int:
     lo if v < lo else (hi if v > hi else v)
@@ -44,8 +44,8 @@ def env_step(state: Coord_T, action: Action_T) -> (Coord_T, Reward_T, bool):
         when RIGHT: nc += 1
         when DOWN:  nr += 1
         when LEFT:  nc -= 1
-    nr = clamp(nr, 0, ROWS - 1)
-    nc = clamp(nc, 0, COLS - 1)
+    nr = clamp(nr, 1, ROWS)
+    nc = clamp(nc, 1, COLS)
     let ns: Coord_T = (nr, nc)
     if is_cliff(ns):
         return (START, -100.0, True)   # fell off cliff — big penalty, episode ends
@@ -74,7 +74,7 @@ def choose_action(qtable: lent QTable_T, state: Coord_T, epsilon: Prob_T) -> Act
 def q_learning(num_episodes: int, alpha: Prob_T = 0.5,
                epsilon: Prob_T = 0.1, gamma: Prob_T = 1.0) -> QTable_T:
     randomize()
-    var qtable: QTable_T = {(r, c): [UP: 0.0, RIGHT: 0.0, DOWN: 0.0, LEFT: 0.0] for r in 0..ROWS-1 for c in 0..COLS-1}
+    var qtable: QTable_T = {(r, c): [UP: 0.0, RIGHT: 0.0, DOWN: 0.0, LEFT: 0.0] for r in 1..ROWS for c in 1..COLS}
     var bucket_rew: Reward_T = 0.0
 
     for ep in 1..num_episodes:
@@ -106,9 +106,9 @@ def q_learning(num_episodes: int, alpha: Prob_T = 0.5,
 def print_policy(qtable: lent QTable_T):
     let arrows: [Action_T]str = [UP: "^", RIGHT: ">", DOWN: "v", LEFT: "<"]
     print("\nLearned greedy policy  (G=goal, S=start, C=cliff):")
-    for r in 0..ROWS-1:
+    for r in 1..ROWS:
         var line: str = "  "
-        for c in 0..COLS-1:
+        for c in 1..COLS:
             let s: Coord_T = (r, c)
             if s == GOAL:      line &= "G "
             elif s == START:   line &= "S "

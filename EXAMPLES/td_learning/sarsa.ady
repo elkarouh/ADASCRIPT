@@ -2,8 +2,8 @@
 """SARSA (on-policy TD control) on the Windy Gridworld.
 
 Reference: Sutton & Barto — "Reinforcement Learning", Example 6.5
-Grid: 7 rows x 10 cols.  Start: (3,0).  Goal: (3,7).
-Wind pushes the agent upward by 1-2 cells in columns 3-8.
+Grid: 7 rows x 10 cols.  Start: (4,1).  Goal: (4,8).
+Wind pushes the agent upward by 1-2 cells in columns 4-9.
 
 Key insight — SARSA is on-policy:
   Q(s,a) += alpha * [r + gamma*Q(s', a') - Q(s,a)]
@@ -17,18 +17,18 @@ nimport sequtils
 const ROWS: int = 7
 const COLS: int = 10
 
-type Row_T      is 0..ROWS-1
-type Col_T      is 0..COLS-1
+type Row_T      is 1..ROWS
+type Col_T      is 1..COLS
 type Coord_T    is (row: Row_T, col: Col_T)
 type Action_T   is enum UP, RIGHT, DOWN, LEFT
 type Prob_T     is float range 0..1
 type Reward_T   is float
 
-const START: Coord_T = (3, 0)
-const GOAL:  Coord_T = (3, 7)
+const START: Coord_T = (4, 1)
+const GOAL:  Coord_T = (4, 8)
 
 # wind strength (upward push in rows) per column
-let WIND: [COLS]Row_T = [0, 0, 0, 1, 1, 1, 2, 2, 1, 0]
+let WIND: [1..COLS]int = [0, 0, 0, 1, 1, 1, 2, 2, 1, 0]
 
 # ─── environment step ────────────────────────────────────────────
 def clamp(v: int, lo: int, hi: int) -> int:
@@ -44,8 +44,8 @@ def env_step(state: Coord_T, action: Action_T) -> (Coord_T, Reward_T, bool):
         when RIGHT: nc += 1
         when DOWN:  nr += 1
         when LEFT:  nc -= 1
-    nr = clamp(nr - WIND[state.col], 0, ROWS - 1)
-    nc = clamp(nc, 0, COLS - 1)
+    nr = clamp(nr - WIND[state.col], 1, ROWS)
+    nc = clamp(nc, 1, COLS)
     let ns: Coord_T = (nr, nc)
     return (ns, -1.0, ns == GOAL)
 
@@ -70,7 +70,7 @@ def choose_action(qtable: lent QTable_T, state: Coord_T, epsilon: Prob_T) -> Act
 def sarsa(num_episodes: int, alpha: Prob_T = 0.5,
           epsilon: Prob_T = 0.1, gamma: Prob_T = 1.0) -> QTable_T:
     randomize()
-    var qtable: QTable_T = {(r, c): [UP: 0.0, RIGHT: 0.0, DOWN: 0.0, LEFT: 0.0] for r in 0..ROWS-1 for c in 0..COLS-1}
+    var qtable: QTable_T = {(r, c): [UP: 0.0, RIGHT: 0.0, DOWN: 0.0, LEFT: 0.0] for r in 1..ROWS for c in 1..COLS}
     var bucket_rew: Reward_T = 0.0
 
     for ep in 1..num_episodes:
@@ -104,9 +104,9 @@ def sarsa(num_episodes: int, alpha: Prob_T = 0.5,
 def print_policy(qtable: lent QTable_T):
     let arrows: [Action_T]str = [UP: "^", RIGHT: ">", DOWN: "v", LEFT: "<"]
     print("\nLearned greedy policy  (G=goal, S=start):")
-    for r in 0..ROWS-1:
+    for r in 1..ROWS:
         var line: str = "  "
-        for c in 0..COLS-1:
+        for c in 1..COLS:
             let s: Coord_T = (r, c)
             if s == GOAL:    line &= "G "
             elif s == START: line &= "S "
@@ -115,7 +115,7 @@ def print_policy(qtable: lent QTable_T):
                 line &= arrows[Action_T(qrow.maxIndex)] & " "
         print(line)
     print("  Wind: 0 0 0 1 1 1 2 2 1 0")
-    print("         (columns 3-8 push agent upward)")
+    print("         (columns 4-9 push agent upward)")
 
 let q_sarsa: QTable_T = sarsa(500)
 print_policy(q_sarsa)

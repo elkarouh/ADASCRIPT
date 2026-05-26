@@ -115,7 +115,10 @@ def to_nim(self, prec=None):
 @method(subrange_array_type)
 def to_nim(self, prec=None):
     """subrange_array_type: '[' subrange_def ']' type_annotation -> Nim: array[lo..hi, T]"""
-    idx = self.nodes[0].to_nim()   # subrange_def -> "lo..hi"
+    idx = self.nodes[0].to_nim()   # subrange_def -> "range[lo..hi]"
+    # Nim array index spec uses lo..hi directly, not range[lo..hi]
+    if idx.startswith("range[") and idx.endswith("]"):
+        idx = idx[6:-1]
     elem = self.nodes[1].to_nim()  # type_annotation
     return f"array[{idx}, {elem}]"
 
