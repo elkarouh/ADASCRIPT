@@ -14,11 +14,8 @@ nimport random
 nimport sequtils
 
 # ─── environment constants ────────────────────────────────────────
-const ROWS: int = 4
-const COLS: int = 12
-
-type Row_T      is 1..ROWS
-type Col_T      is 1..COLS
+type Row_T      is 1..4
+type Col_T      is 1..12
 type Coord_T    is (row: Row_T, col: Col_T)
 type Action_T   is enum UP, RIGHT, DOWN, LEFT
 type Prob_T     is float range 0..1
@@ -29,7 +26,7 @@ const GOAL:  Coord_T = (4, 12)
 
 # ─── environment step ────────────────────────────────────────────
 def is_cliff(state: Coord_T) -> bool:
-    state.row == 4 and 2 <= state.col <= 11
+    state.row == Row_T'Last and 2 <= state.col <= 11
 
 def clamp(v: int, lo: int, hi: int) -> int:
     lo if v < lo else (hi if v > hi else v)
@@ -44,8 +41,8 @@ def env_step(state: Coord_T, action: Action_T) -> (Coord_T, Reward_T, bool):
         when RIGHT: nc += 1
         when DOWN:  nr += 1
         when LEFT:  nc -= 1
-    nr = clamp(nr, 1, ROWS)
-    nc = clamp(nc, 1, COLS)
+    nr = clamp(nr, Row_T'First, Row_T'Last)
+    nc = clamp(nc, Col_T'First, Col_T'Last)
     let ns: Coord_T = (nr, nc)
     if is_cliff(ns):
         return (START, -100.0, True)   # fell off cliff — big penalty, episode ends
@@ -74,7 +71,7 @@ def choose_action(qtable: lent QTable_T, state: Coord_T, epsilon: Prob_T) -> Act
 def q_learning(num_episodes: int, alpha: Prob_T = 0.5,
                epsilon: Prob_T = 0.1, gamma: Prob_T = 1.0) -> QTable_T:
     randomize()
-    var qtable: QTable_T = {(r, c): [UP: 0.0, RIGHT: 0.0, DOWN: 0.0, LEFT: 0.0] for r in 1..ROWS for c in 1..COLS}
+    var qtable: QTable_T = {(r, c): [UP: 0.0, RIGHT: 0.0, DOWN: 0.0, LEFT: 0.0] for r in Row_T'First..Row_T'Last for c in Col_T'First..Col_T'Last}
     var bucket_rew: Reward_T = 0.0
 
     for ep in 1..num_episodes:
@@ -106,9 +103,9 @@ def q_learning(num_episodes: int, alpha: Prob_T = 0.5,
 def print_policy(qtable: lent QTable_T):
     let arrows: [Action_T]str = [UP: "^", RIGHT: ">", DOWN: "v", LEFT: "<"]
     print("\nLearned greedy policy  (G=goal, S=start, C=cliff):")
-    for r in 1..ROWS:
+    for r in Row_T'First..Row_T'Last:
         var line: str = "  "
-        for c in 1..COLS:
+        for c in Col_T'First..Col_T'Last:
             let s: Coord_T = (r, c)
             if s == GOAL:      line &= "G "
             elif s == START:   line &= "S "
