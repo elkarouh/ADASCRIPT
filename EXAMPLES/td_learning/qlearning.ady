@@ -91,7 +91,7 @@ def q_learning(num_episodes: int, alpha: float = 0.5,
     var qtable: QTable_T = {s: [0.0 for _ in 1..N_A] for s in 0..N_S-1}
     var bucket_rew: float = 0.0
 
-    for ep in 0..num_episodes-1:
+    for ep in 1..num_episodes:
         var state: int = START
 
         while True:
@@ -109,10 +109,9 @@ def q_learning(num_episodes: int, alpha: float = 0.5,
             state = ns
             if done: break
 
-        if (ep + 1) % 100 == 0:
+        if ep % 100 == 0:
             let avg: float = bucket_rew / 100.0
-            let ep1: int = ep + 1
-            print(f"Episode {ep1}/{num_episodes}  avg reward/ep: {avg}")
+            print(f"Episode {ep}/{num_episodes}  avg reward/ep: {avg}")
             bucket_rew = 0.0
 
     return qtable
