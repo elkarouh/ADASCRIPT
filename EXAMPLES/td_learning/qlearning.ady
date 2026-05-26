@@ -62,12 +62,6 @@ def argmax_row(row: []float) -> int:
         if row[a] > row[best]: best = a
     return best
 
-def max_row(row: []float) -> float:
-    var best: float = row[0]
-    for a in 1..N_A-1:
-        if row[a] > best: best = row[a]
-    return best
-
 # ─── epsilon-greedy action selection ─────────────────────────────
 def choose_action(qtable: lent QTable_T, state: int, epsilon: float) -> int:
     let base: float = epsilon / float(N_A)
@@ -101,7 +95,7 @@ def q_learning(num_episodes: int, alpha: float = 0.5,
             # off-policy update: bootstrap from the best possible next action
             var row: []float = qtable[state]
             let qns: []float = qtable[ns]
-            let td_err: float = rew + gamma * max_row(qns) - row[action]
+            let td_err: float = rew + gamma * max(qns) - row[action]
             row[action] += alpha * td_err
             qtable[state] = row
 
