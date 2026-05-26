@@ -17,9 +17,10 @@ nimport sequtils
 const ROWS: int = 7
 const COLS: int = 10
 
-type Coord_T  is (row: int, col: int)
-type Action_T is enum UP, RIGHT, DOWN, LEFT
-type Prob_T   is float range 0..1
+type Coord_T    is (row: int, col: int)
+type Action_T   is enum UP, RIGHT, DOWN, LEFT
+type Prob_T     is float range 0..1
+type Reward_T   is float
 
 const START: Coord_T = (3, 0)
 const GOAL:  Coord_T = (3, 7)
@@ -31,7 +32,7 @@ let WIND: [COLS]int = [0, 0, 0, 1, 1, 1, 2, 2, 1, 0]
 def clamp(v: int, lo: int, hi: int) -> int:
     lo if v < lo else (hi if v > hi else v)
 
-def env_step(state: Coord_T, action: Action_T) -> (Coord_T, float, bool):
+def env_step(state: Coord_T, action: Action_T) -> (Coord_T, Reward_T, bool):
     """Deterministic step — returns (next_state, reward, done)."""
     var nr: int = state.row
     var nc: int = state.col
@@ -47,13 +48,13 @@ def env_step(state: Coord_T, action: Action_T) -> (Coord_T, float, bool):
     return (ns, -1.0, ns == GOAL)
 
 # ─── Q-table ─────────────────────────────────────────────────────
-type QTable_T is {Coord_T}[Action_T]float
+type QTable_T is {Coord_T}[Action_T]Reward_T
 
 # ─── epsilon-greedy action selection ─────────────────────────────
 def choose_action(qtable: lent QTable_T, state: Coord_T, epsilon: Prob_T) -> Action_T:
     let base: Prob_T = epsilon / 4.0
     var probs: [Action_T]Prob_T = [UP: base, RIGHT: base, DOWN: base, LEFT: base]
-    let qrow: [Action_T]float = qtable[state]
+    let qrow: [Action_T]Reward_T = qtable[state]
     probs[Action_T(qrow.maxIndex)] += 1.0 - epsilon
     # weighted random draw from probability distribution
     let r: Prob_T = rand(1.0)
@@ -68,7 +69,7 @@ def sarsa(num_episodes: int, alpha: Prob_T = 0.5,
           epsilon: Prob_T = 0.1, gamma: Prob_T = 1.0) -> QTable_T:
     randomize()
     var qtable: QTable_T = {(r, c): [UP: 0.0, RIGHT: 0.0, DOWN: 0.0, LEFT: 0.0] for r in 0..ROWS-1 for c in 0..COLS-1}
-    var bucket_rew: float = 0.0
+    var bucket_rew: Reward_T = 0.0
 
     for ep in 1..num_episodes:
         var state:  Coord_T = START
@@ -79,9 +80,9 @@ def sarsa(num_episodes: int, alpha: Prob_T = 0.5,
             let na: Action_T = choose_action(qtable, ns, epsilon)
 
             # on-policy update: bootstrap from the action we will actually take
-            var row: [Action_T]float = qtable[state]
-            let qns: [Action_T]float = qtable[ns]
-            let td_err: float = rew + gamma * qns[na] - row[action]
+            var row: [Action_T]Reward_T = qtable[state]
+            let qns: [Action_T]Reward_T = qtable[ns]
+            let td_err: Reward_T = rew + gamma * qns[na] - row[action]
             row[action] += alpha * td_err
             qtable[state] = row
 
@@ -91,7 +92,7 @@ def sarsa(num_episodes: int, alpha: Prob_T = 0.5,
             if done: break
 
         if ep % 100 == 0:
-            let avg: float = bucket_rew / 100.0
+            let avg: Reward_T = bucket_rew / 100.0
             print(f"Episode {ep}/{num_episodes}  avg reward/ep: {avg}")
             bucket_rew = 0.0
 
@@ -108,7 +109,7 @@ def print_policy(qtable: lent QTable_T):
             if s == GOAL:    line &= "G "
             elif s == START: line &= "S "
             else:
-                let qrow: [Action_T]float = qtable[s]
+                let qrow: [Action_T]Reward_T = qtable[s]
                 line &= arrows[Action_T(qrow.maxIndex)] & " "
         print(line)
     print("  Wind: 0 0 0 1 1 1 2 2 1 0")
