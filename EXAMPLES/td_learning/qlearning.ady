@@ -94,7 +94,7 @@ def q_learning(num_episodes: int, alpha: Prob_T = 0.5,
 
         if ep % 100 == 0:
             let avg: Reward_T = bucket_rew / 100.0
-            print(f"Episode {ep}/{num_episodes}  avg reward/ep: {avg}")
+            print f"Episode {ep}/{num_episodes}  avg reward/ep: {avg}"
             bucket_rew = 0.0
 
     return qtable
@@ -102,7 +102,7 @@ def q_learning(num_episodes: int, alpha: Prob_T = 0.5,
 # ─── display learned policy ──────────────────────────────────────
 def print_policy(qtable: lent QTable_T):
     let arrows: [Action_T]str = [UP: "^", RIGHT: ">", DOWN: "v", LEFT: "<"]
-    print("\nLearned greedy policy  (G=goal, S=start, C=cliff):")
+    print "\nLearned greedy policy  (G=goal, S=start, C=cliff):"
     for r in Row_T:
         var line: str = "  "
         for c in Col_T:
@@ -113,8 +113,8 @@ def print_policy(qtable: lent QTable_T):
             else:
                 let qrow: [Action_T]Reward_T = qtable[s]
                 line &= arrows[Action_T(qrow.maxIndex)] & " "
-        print(line)
-    print("  (Q-Learning learns the cliff-edge path; SARSA stays one row above)")
+        print line
+    print "  (Q-Learning learns the cliff-edge path; SARSA stays one row above)"
 
 let q_ql: QTable_T = q_learning(500)
 print_policy(q_ql)

@@ -92,7 +92,7 @@ def sarsa(num_episodes: int, alpha: Prob_T = 0.5,
 
         if ep % 100 == 0:
             let avg: Reward_T = bucket_rew / 100.0
-            print(f"Episode {ep}/{num_episodes}  avg reward/ep: {avg}")
+            print f"Episode {ep}/{num_episodes}  avg reward/ep: {avg}"
             bucket_rew = 0.0
 
     return qtable
@@ -100,7 +100,7 @@ def sarsa(num_episodes: int, alpha: Prob_T = 0.5,
 # ─── display learned policy ──────────────────────────────────────
 def print_policy(qtable: lent QTable_T):
     let arrows: [Action_T]str = [UP: "^", RIGHT: ">", DOWN: "v", LEFT: "<"]
-    print("\nLearned greedy policy  (G=goal, S=start):")
+    print "\nLearned greedy policy  (G=goal, S=start):"
     for r in Row_T:
         var line: str = "  "
         for c in Col_T:
@@ -110,9 +110,9 @@ def print_policy(qtable: lent QTable_T):
             else:
                 let qrow: [Action_T]Reward_T = qtable[s]
                 line &= arrows[Action_T(qrow.maxIndex)] & " "
-        print(line)
-    print("  Wind: 0 0 0 1 1 1 2 2 1 0")
-    print("         (columns 4-9 push agent upward)")
+        print line
+    print "  Wind: 0 0 0 1 1 1 2 2 1 0"
+    print "         (columns 4-9 push agent upward)"
 
 let q_sarsa: QTable_T = sarsa(500)
 print_policy(q_sarsa)
