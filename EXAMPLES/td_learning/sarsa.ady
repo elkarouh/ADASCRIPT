@@ -17,8 +17,8 @@ nimport sequtils
 const ROWS: int = 7
 const COLS: int = 10
 
-type Row_T      is int
-type Col_T      is int
+type Row_T      is 0..ROWS-1
+type Col_T      is 0..COLS-1
 type Coord_T    is (row: Row_T, col: Col_T)
 type Action_T   is enum UP, RIGHT, DOWN, LEFT
 type Prob_T     is float range 0..1
@@ -36,8 +36,8 @@ def clamp(v: int, lo: int, hi: int) -> int:
 
 def env_step(state: Coord_T, action: Action_T) -> (Coord_T, Reward_T, bool):
     """Deterministic step — returns (next_state, reward, done)."""
-    var nr: Row_T = state.row
-    var nc: Col_T = state.col
+    var nr: int = state.row
+    var nc: int = state.col
     # wind pushes upward based on the original column
     case action:
         when UP:    nr -= 1

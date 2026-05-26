@@ -1534,14 +1534,20 @@ def to_nim(self):
     return "enum " + ", ".join(parts)
 
 
+def _subrange_bound_str(node):
+    """Return the Nim string for a subrange_bound node (INTEGER, IDENTIFIER, or IDENT±INT)."""
+    if hasattr(node, 'nodes') and len(node.nodes) == 3:
+        return f"{node.nodes[0].node}{node.nodes[1].node}{node.nodes[2].node}"
+    return str(node.node)
+
+
 @method(subrange_def)
 def to_nim(self):
-    """subrange_def: INTEGER ('..' | '..<') INTEGER -> Nim range[lo..hi] or range[lo..<hi]"""
-    lo = str(self.nodes[0].node)
-    hi = str(self.nodes[2].node)
+    """subrange_def: bound ('..' | '..<') bound -> Nim range[lo..hi] or range[lo..<hi]"""
+    lo = _subrange_bound_str(self.nodes[0])
+    hi = _subrange_bound_str(self.nodes[2])
     is_exclusive = getattr(self.nodes[1], 'node', None) == "..<"
     if is_exclusive:
-        # Nim range[] doesn't support ..<; convert to inclusive by subtracting 1
         try:
             hi = str(int(hi) - 1)
         except ValueError:
