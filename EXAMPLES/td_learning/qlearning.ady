@@ -17,7 +17,9 @@ nimport sequtils
 const ROWS: int = 4
 const COLS: int = 12
 
-type Coord_T    is (row: int, col: int)
+type Row_T      is int
+type Col_T      is int
+type Coord_T    is (row: Row_T, col: Col_T)
 type Action_T   is enum UP, RIGHT, DOWN, LEFT
 type Prob_T     is float range 0..1
 type Reward_T   is float
@@ -35,8 +37,8 @@ def clamp(v: int, lo: int, hi: int) -> int:
 def env_step(state: Coord_T, action: Action_T) -> (Coord_T, Reward_T, bool):
     """Returns (next_state, reward, done).
     Falling off the cliff resets to START with reward -100."""
-    var nr: int = state.row
-    var nc: int = state.col
+    var nr: Row_T = state.row
+    var nc: Col_T = state.col
     case action:
         when UP:    nr -= 1
         when RIGHT: nc += 1
