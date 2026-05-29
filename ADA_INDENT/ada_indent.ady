@@ -81,7 +81,6 @@ def paren_delta(line: str) -> int:
     The input must already have comments removed (see strip_code), so only
     string literals need to be skipped here.
     """
-    var depth: int = 0
     var state: Scan_T = CODE
     for c in line:
         case state:
@@ -90,9 +89,9 @@ def paren_delta(line: str) -> int:
                     when '"':
                         state = STRING_LIT
                     when "(":
-                        depth += 1
+                        result += 1
                     when ")":
-                        depth -= 1
+                        result -= 1
                     when others:
                         pass
             when STRING_LIT:
@@ -101,19 +100,17 @@ def paren_delta(line: str) -> int:
                         state = CODE
                     when others:
                         pass
-    return depth
 
 
 def lead_word(code: str) -> str:
     """Lowercased leading identifier of a (comment-stripped) line, or ''."""
     let s: str = code.strip()
-    var w: str = ""
     for ch in s:
         if ch.isalpha() or ch == "_":
-            w += ch
+            result += ch
         else:
             break
-    return w.lower()
+    result = result.lower()
 
 
 def last_word(code: str) -> str:
@@ -122,14 +119,13 @@ def last_word(code: str) -> str:
     if s.endswith(";"):
         s = s[:-1].strip()
     let parts: []str = s.split()
-    if len(parts) == 0:
-        return ""
-    return parts[-1].lower()
+    if len(parts) > 0:
+        result = parts[-1].lower()
 
 
 def spaces(levels: int) -> str:
     """A run of spaces for the given number of indent levels (never negative)."""
-    return " " * (max(0, levels) * INDENT_WIDTH)
+    result = " " * (max(0, levels) * INDENT_WIDTH)
 
 
 # ---------------------------------------------------------------------------
@@ -229,7 +225,7 @@ def reindent(src: str) -> str:
 
         paren_depth = max(0, paren_depth + paren_delta(code))
 
-    return "\n".join(out)
+    result = "\n".join(out)
 
 
 # ---------------------------------------------------------------------------
@@ -359,28 +355,25 @@ def run_tests() -> int:
 
     print(f"{passed} passed, {failed} failed")
     if failed > 0:
-        return 1
-    return 0
+        result = 1
 
 
 def read_file(path: str) -> str:
-    """Read an entire file. Returning from inside the `with` keeps the result
-    in scope on the Nim backend (where a `with` introduces a new block)."""
+    """Read an entire file into the implicit result variable."""
     with open(path) as f:
-        return f.read()
+        result = f.read()
 
 
 def main() -> int:
     if $# < 1:
         print("usage: ada_indent FILE   (or --test)")
-        return 1
-
-    let arg: str = $1
-    if arg == "--test":
-        return run_tests()
-
-    print(reindent(read_file(arg)), end="")
-    return 0
+        result = 1
+    else:
+        let arg: str = $1
+        if arg == "--test":
+            result = run_tests()
+        else:
+            print(reindent(read_file(arg)), end="")
 
 
 if __name__ == "__main__":
