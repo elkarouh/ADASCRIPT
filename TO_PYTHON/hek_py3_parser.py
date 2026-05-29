@@ -1125,6 +1125,9 @@ def to_py(self, indent=0):
             body = body[:_doc_m.end()] + _init + body[_doc_m.end():]
         else:
             body = _init + body
+        # Append implicit return unless the body already ends with a return.
+        if not _re_res.search(r'^\s*return\b', body.rstrip().splitlines()[-1]):
+            body = body.rstrip("\n") + f"\n{_ind(indent + 1)}return result\n"
     return f"{decos}{_ind(indent)}def {name}({params}){ret_ann}:{hc}\n{body}"
 
 

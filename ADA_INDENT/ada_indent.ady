@@ -73,7 +73,6 @@ def strip_code(line: str) -> str:
                 if c == '"':
                     state = CODE
         i += 1
-    result
 
 
 def paren_delta(line: str) -> int:
