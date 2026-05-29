@@ -602,6 +602,26 @@ def to_py(self):
     return "enum " + ", ".join(parts)
 
 
+def _emit_enum_py(name, member_names, indent=0):
+    """Emit a Python Enum class body for a type name and its members.
+
+    Shared by the inline 'type T is enum A, B' form (type_stmt) and the
+    indented 'type T is enum:' block form (type_block_stmt)."""
+    ParserState.nim_imports.add("from enum import Enum")
+    ParserState.tick_types[name] = {"First": member_names[0], "Last": member_names[-1], "members": member_names}
+    lines = [f"{_ind(indent)}class {name}(Enum):"]
+    py_members = []
+    for i, m in enumerate(member_names):
+        py_m = f"_{m}" if m.isdigit() else m
+        lines.append(f"{_ind(indent + 1)}{py_m} = {i}")
+        py_members.append((m, py_m))
+    # Unpack enum members as bare names (Nim uses bare names)
+    for orig, py_m in py_members:
+        if not orig.isdigit():
+            lines.append(f"{_ind(indent)}{py_m} = {name}.{py_m}")
+    return "\n".join(lines)
+
+
 @method(nimport_stmt)
 def to_py(self):
     """nimport_stmt: Nim-only import, stripped in Python output"""
@@ -709,19 +729,7 @@ def to_py(self):
     if rhs_type == 'enum_def':
         members = rhs.to_py()
         member_names = [m.strip() for m in members[len("enum "):].split(",")]
-        ParserState.nim_imports.add("from enum import Enum")
-        ParserState.tick_types[name] = {"First": member_names[0], "Last": member_names[-1], "members": member_names}
-        lines = [f"class {name}(Enum):"]
-        py_members = []
-        for i, m in enumerate(member_names):
-            py_m = f"_{m}" if m.isdigit() else m
-            lines.append(f"{_ind(1)}{py_m} = {i}")
-            py_members.append((m, py_m))
-        # Unpack enum members as bare names (Nim uses bare names)
-        for orig, py_m in py_members:
-            if not orig.isdigit():
-                lines.append(f"{py_m} = {name}.{py_m}")
-        return "\n".join(lines)
+        return _emit_enum_py(name, member_names)
     value = rhs.to_py()
     return f"{name} = {value}"
 

@@ -506,6 +506,16 @@ def run_tests():
             "for arg in $@:\n    pass\n",
             "import sys\nfor arg in sys.argv[1:]:\n    pass\n",
         ),
+        # --- enum declarations ---
+        (
+            "type Color is enum RED, GREEN, BLUE\n",
+            "from enum import Enum\nclass Color(Enum):\n    RED = 0\n    GREEN = 1\n    BLUE = 2\nRED = Color.RED\nGREEN = Color.GREEN\nBLUE = Color.BLUE\n",
+        ),
+        # block-form enum (one member per line) -> same output as inline form
+        (
+            "type Color is enum:\n    RED\n    GREEN\n    BLUE\n",
+            "from enum import Enum\nclass Color(Enum):\n    RED = 0\n    GREEN = 1\n    BLUE = 2\nRED = Color.RED\nGREEN = Color.GREEN\nBLUE = Color.BLUE\n",
+        ),
     ]
 
     passed = failed = 0

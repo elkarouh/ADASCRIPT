@@ -22,6 +22,7 @@
 #   nimble install nimpy db_connector
 #   pip install matplotlib
 #   apt install fd-find ripgrep bc sqlite3 libpcre3   # adjust for your distro
+#   # On Debian/Ubuntu fd-find installs as 'fdfind' — symlink it to 'fd'
 
 
 # -----------------------------------------------------------------------
@@ -56,6 +57,9 @@ matplotlib
 #   lolcate/lolcate.ady  (shellLines: fd ...)
 # Debian/Ubuntu: apt install fd-find
 # macOS:         brew install fd
+# NOTE: on Debian/Ubuntu the binary is installed as 'fdfind', but the
+#       examples invoke it as 'fd'. Add a symlink so the bare name resolves:
+#         ln -s "$(command -v fdfind)" /usr/local/bin/fd
 fd-find
 
 # rg  (ripgrep)  — fast line searcher; required by:
@@ -82,8 +86,13 @@ sqlite3
 # macOS:         included in system libs (no separate install needed)
 libpcre3
 
-# zig / zigcc  — Zig C compiler frontend; required at compile time by:
-#   state_search.ady and any .ady with: #ady2nim-args c --cc:clang --clang.exe:zigcc
+# zig / zigcc  — Zig C compiler frontend; required at compile time by examples
+# that pin the compiler via '#ady2nim-args c --cc:clang --clang.exe:zigcc':
+#   state_search.ady, shortest_path.ady, test_shortest_path.ady,
+#   test_state_search.ady, timetable_engine.ady, timetable_sa.ady,
+#   timetable_backtrack.ady, TIMETABLE/timetable_server.ady
+# 'zigcc' is a thin wrapper around 'zig cc' (a clang frontend); put it on PATH:
+#   printf '#!/bin/sh\nexec zig cc "$@"\n' > /usr/local/bin/zigcc && chmod +x /usr/local/bin/zigcc
 # Download from: https://ziglang.org/download/  (no OS package available)
 # Tested version: 0.14.0
 zig >= 0.14.0

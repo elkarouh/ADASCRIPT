@@ -2906,9 +2906,22 @@ def _extract_variant_fields_nim(stmt_nodes, indent):
     return lines
 
 
+def _enum_block_members_nim(rhs):
+    """Extract member names from an enum_block_def node (block enum form),
+    prefixing bare integer members with 'v' as plain enum_def does."""
+    members = []
+    for child in getattr(rhs, "nodes", []) or []:
+        if type(child).__name__ == "Several_Times":
+            for seq in child.nodes:
+                if getattr(seq, "nodes", None):
+                    m = str(seq.nodes[0].node)
+                    members.append(f"v{m}" if m.isdigit() else m)
+    return members
+
+
 @method(type_block_stmt)
 def to_nim(self, indent=0):
-    """type_block_stmt: 'type' IDENTIFIER discrim_param? type_alias_params? (=|is) (tuple_def|discrim_record_def|record_def)"""
+    """type_block_stmt: 'type' IDENTIFIER discrim_param? type_alias_params? (=|is) (tuple_def|discrim_record_def|record_def|enum_block_def)"""
     name = self.nodes[0].to_nim()
     params = ""
     discrim_name = None
@@ -2947,6 +2960,16 @@ def to_nim(self, indent=0):
                 if has_ident and has_st:
                     variant_case_node = child
     _exp = "*" if getattr(ParserState, 'export_symbols', False) and indent == 0 else ""
+    if keyword == "enum":
+        # Block enum form: 'type T is enum:' with one member per line.
+        members = _enum_block_members_nim(rhs)
+        ParserState.symbol_table.add(name, "enum", "type")
+        if members:
+            ParserState.tick_types[name] = {"First": members[0], "Last": members[-1], "members": members}
+            for m in members:
+                ParserState.symbol_table.add(m, name, "let")
+        body = "enum " + ", ".join(members)
+        return f"{_ind(indent)}type {name}{_exp}{params} = {body}"
     if variant_case_node and discrim_name:
         # Discriminated record -> Nim object with case
         result = f"{_ind(indent)}type {name}{_exp}{params} = object\n"
