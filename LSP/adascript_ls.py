@@ -25,11 +25,12 @@ import io
 import logging
 
 _here = os.path.dirname(os.path.realpath(__file__))
+_root = os.path.dirname(_here)  # one level up: ADASCRIPT/
 for _p in [
-    _here,
-    os.path.join(_here, "HPARSEC"),
-    os.path.join(_here, "ADASCRIPT_GRAMMAR"),
-    os.path.join(_here, "TO_PYTHON"),
+    _root,
+    os.path.join(_root, "HPARSEC"),
+    os.path.join(_root, "ADASCRIPT_GRAMMAR"),
+    os.path.join(_root, "TO_PYTHON"),
 ]:
     if _p not in sys.path:
         sys.path.insert(0, _p)
