@@ -1104,13 +1104,12 @@ def to_py(self, indent=0):
                 lines[i] = indent_str + "return " + stripped
                 break
         body = "\n".join(lines) + "\n"
-    # Implicit result variable (mirrors Nim): if the body uses `result` but
-    # never assigns it with `result = …`, inject a zero-value initialiser
-    # after any leading docstring.
+    # Implicit result variable (mirrors Nim): if the body uses `result`,
+    # inject a zero-value initialiser after any leading docstring, and
+    # append `return result` unless the body already ends with a return.
     import re as _re_res
     if (ret_ann and not is_none_return and
-            _re_res.search(r'\bresult\b', body) and
-            not _re_res.search(r'^\s*result\s*=', body, _re_res.MULTILINE)):
+            _re_res.search(r'\bresult\b', body)):
         _t = ret_ann.strip().lstrip("->").strip()
         _zeros = {"str": '""', "int": "0", "float": "0.0", "bool": "False"}
         _zero = (_zeros.get(_t) or
