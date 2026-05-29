@@ -13,7 +13,15 @@ nimport math
 # Value representation
 # ============================================================
 
-type Val_Kind_T is enum VNum, VSym, VStr, VBool, VNil, VList, VLambda, VBuiltin
+type Val_Kind_T is enum:
+    VNum        # number literal
+    VSym        # symbol / identifier
+    VStr        # string literal
+    VBool       # boolean
+    VNil        # the empty value
+    VList       # cons list
+    VLambda     # user-defined closure
+    VBuiltin    # built-in primitive proc
 type Val_T is record:
     kind:      Val_Kind_T
     num:       float

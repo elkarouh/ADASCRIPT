@@ -1226,9 +1226,23 @@ def _extract_variant_fields_py(stmt_nodes, indent):
     return lines
 
 
+def _enum_block_members(rhs):
+    """Extract member names from an enum_block_def node (block enum form).
+
+    Members live in a Several_Times of per-member Sequence_Parsers; each
+    member's first child carries the identifier/integer string in '.node'."""
+    members = []
+    for child in getattr(rhs, "nodes", []) or []:
+        if type(child).__name__ == "Several_Times":
+            for seq in child.nodes:
+                if getattr(seq, "nodes", None):
+                    members.append(str(seq.nodes[0].node))
+    return members
+
+
 @method(type_block_stmt)
 def to_py(self, indent=0):
-    """type_block_stmt: 'type' IDENTIFIER discrim_param? type_alias_params? (=|is) (tuple_def|discrim_record_def|record_def)"""
+    """type_block_stmt: 'type' IDENTIFIER discrim_param? type_alias_params? (=|is) (tuple_def|discrim_record_def|record_def|enum_block_def)"""
     name = self.nodes[0].to_py()
     params = ""
     discrim_name = None
@@ -1266,6 +1280,10 @@ def to_py(self, indent=0):
                 has_st = any(type(c).__name__ == "Several_Times" for c in child.nodes)
                 if has_ident and has_st:
                     variant_case_node = child
+    if keyword == "enum":
+        # Block enum form: 'type T is enum:' with one member per line.
+        member_names = _enum_block_members(rhs)
+        return hek_py3_stmt._emit_enum_py(name, member_names, indent)
     if variant_case_node and discrim_name:
         # Discriminated record -> Python @dataclass with all fields flattened
         ParserState.nim_imports.add("from dataclasses import dataclass, field")
