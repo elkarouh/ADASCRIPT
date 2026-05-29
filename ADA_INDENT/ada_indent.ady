@@ -120,10 +120,7 @@ def last_word(code: str) -> str:
 
 def spaces(levels: int) -> str:
     """A run of spaces for the given number of indent levels (never negative)."""
-    var n: int = levels
-    if n < 0:
-        n = 0
-    return " " * (n * INDENT_WIDTH)
+    return " " * (max(0, levels) * INDENT_WIDTH)
 
 
 # ---------------------------------------------------------------------------
@@ -154,9 +151,7 @@ def reindent(src: str) -> str:
             continue
 
         # A continuation line inside unclosed parentheses gets one extra level.
-        var cont: int = 0
-        if paren_depth > 0:
-            cont = 1
+        let cont: int = 1 if paren_depth > 0 else 0
 
         let lw: str = lead_word(code_s)
         var disp: int = len(stack)
@@ -196,32 +191,34 @@ def reindent(src: str) -> str:
                 disp = len(stack) - 1
 
             when others:
-                # An ordinary line. Indent at body level, then see whether it opens
-                # a new block based on its final significant token.
+                # An ordinary line. Indent at body level, then see whether it
+                # opens a new block based on its final significant token.
                 disp = len(stack)
                 let last: str = last_word(code_s)
-                if lw == "case" and last == "is":
-                    stack.append(CASE_)
-                elif last == "is":
-                    stack.append(PKG)
-                elif last == "then":
-                    stack.append(IF_)
-                elif last == "loop":
-                    stack.append(LOOP_)
-                elif last == "record" and lw != "null":
-                    stack.append(RECORD_)
-                elif last == "select":
-                    stack.append(SELECT_)
-                elif last == "do":
-                    stack.append(DO_)
-                elif lw == "declare":
-                    stack.append(DECLARE_)
+                case last:
+                    when "is":
+                        # 'case X is' opens a CASE; every other '... is' a PKG.
+                        stack.append(CASE_ if lw == "case" else PKG)
+                    when "then":
+                        stack.append(IF_)
+                    when "loop":
+                        stack.append(LOOP_)
+                    when "record":
+                        # 'null record;' is complete and opens nothing.
+                        if lw != "null":
+                            stack.append(RECORD_)
+                    when "select":
+                        stack.append(SELECT_)
+                    when "do":
+                        stack.append(DO_)
+                    when "declare":
+                        stack.append(DECLARE_)
+                    when others:
+                        pass
 
         out.append(spaces(disp + cont) + emit_text)
 
-        paren_depth += paren_delta(raw2)
-        if paren_depth < 0:
-            paren_depth = 0
+        paren_depth = max(0, paren_depth + paren_delta(raw2))
 
     return "\n".join(out)
 
