@@ -177,6 +177,39 @@ Keeping the grammar simple means a few things are out of scope:
 - Alignment *within* a line (e.g. lining up `:=` or `=>`) is not attempted —
   only leading indentation is changed.
 
+## Behaviour on syntactically incorrect code
+
+The indenter never validates Ada — it only inspects the leading and trailing
+token of each line. It degrades gracefully on most errors:
+
+- **Misspelled or unknown keywords** are treated as ordinary lines; no stack
+  change occurs.
+- **Extra `end`** — every pop is guarded by `if len(stack) > 0`, so an
+  unmatched `end` is silently ignored.
+- **Missing `end`** — the stack stays open; subsequent lines receive deeper
+  indentation for the rest of the file.
+- **Mismatched closers** (e.g. `end loop;` closing an `if`) — the top frame
+  is popped regardless of its kind; the indenter does not check for agreement.
+
+One error can cascade badly: an **unclosed `(`** with no matching `)` leaves
+`paren_depth > 0` permanently and gives every following line an extra indent
+level for the rest of the file.
+
+## Ada 2022 compatibility
+
+Most Ada 2022 code uses the same block-forming keywords as earlier standards
+and indents correctly. Three specific additions are not fully supported:
+
+| Feature | Effect |
+|---|---|
+| `[…]` array / container aggregates | Only `(` / `)` are tracked for continuation depth. A multi-line `[…]` aggregate receives no extra continuation indent. |
+| `parallel do … and do … end do` | The `and do` arm is not a recognised splitter; its body is indented as an ordinary line rather than aligning with the first `do` arm. |
+| `declare` expressions `(declare X := …; begin …)` | `declare` and `begin` as trailing/leading tokens inside an expression can push spurious stack frames. The effect is partially masked when the expression is already inside `()`. |
+
+The most common issue in practice is `[…]` aggregates, since Ada 2022
+encourages that syntax for all composite literals. Fixing it would require
+tracking `[` / `]` depth alongside `(` / `)` in `paren_delta`.
+
 ## Worked example
 
 Input (all flush-left):
