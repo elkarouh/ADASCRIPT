@@ -37,6 +37,11 @@ type Block_T is enum:
     SELECT_      # select ... end select
     DO_          # accept ... do  /  return ... do  (extended return)
 
+# Scanner state for string-literal tracking inside a single line.
+type Scan_T is enum:
+    CODE        # outside any string literal
+    STRING_LIT  # inside a double-quoted string literal
+
 
 # ---------------------------------------------------------------------------
 # Lexical helpers — all work on a single physical line.
@@ -51,22 +56,23 @@ def strip_code(line: str) -> str:
     """
     var result: str = ""
     var i: int = 0
-    var in_str: bool = False
+    var state: Scan_T = CODE
     let n: int = len(line)
     while i < n:
         let c: str = line[i]
-        if in_str:
-            result += c
-            if c == chr(34):
-                in_str = False
-        else:
-            if c == chr(34):
-                in_str = True
+        case state:
+            when CODE:
+                if c == chr(34):
+                    state = STRING_LIT
+                    result += c
+                elif c == "-" and i + 1 < n and line[i + 1] == "-":
+                    break
+                else:
+                    result += c
+            when STRING_LIT:
                 result += c
-            elif c == "-" and i + 1 < n and line[i + 1] == "-":
-                break
-            else:
-                result += c
+                if c == chr(34):
+                    state = CODE
         i += 1
     return result
 
@@ -78,20 +84,23 @@ def paren_delta(line: str) -> int:
     string literals need to be skipped here.
     """
     var depth: int = 0
-    var in_str: bool = False
+    var state: Scan_T = CODE
     for c in line:
-        if c == chr(34):
-            in_str = not in_str
-        elif in_str:
-            continue
-        else:
-            case c:
-                when "(":
-                    depth += 1
-                when ")":
-                    depth -= 1
-                when others:
-                    pass
+        case state:
+            when CODE:
+                if c == chr(34):
+                    state = STRING_LIT
+                else:
+                    case c:
+                        when "(":
+                            depth += 1
+                        when ")":
+                            depth -= 1
+                        when others:
+                            pass
+            when STRING_LIT:
+                if c == chr(34):
+                    state = CODE
     return depth
 
 
