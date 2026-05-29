@@ -1079,6 +1079,16 @@ def run_tests():
             "for arg in $@:\n    pass\n",
             "import os\nfor arg in commandLineParams():\n    discard\n",
         ),
+        # --- enum declarations ---
+        (
+            "type Color is enum RED, GREEN, BLUE\n",
+            "type Color = enum RED, GREEN, BLUE\n",
+        ),
+        # block-form enum (one member per line) -> same output as inline form
+        (
+            "type Color is enum:\n    RED\n    GREEN\n    BLUE\n",
+            "type Color = enum RED, GREEN, BLUE\n",
+        ),
     ]
 
     passed = failed = 0
