@@ -161,60 +161,61 @@ def reindent(src: str) -> str:
         let lw: str = lead_word(code_s)
         var disp: int = len(stack)
 
-        if lw == "end":
-            # Closer: pop any open case/exception alternatives, then the
-            # enclosing construct. Aligns with that construct's header.
-            while len(stack) > 0 and stack[-1] == WHEN_:
-                stack.pop()
-            if len(stack) > 0:
-                stack.pop()
-            disp = len(stack)
-
-        elif lw == "begin":
-            if len(stack) > 0 and (stack[-1] == PKG or stack[-1] == DECLARE_):
-                # Declarative-part 'begin': aligns with its subprogram/declare
-                # header and turns that frame into a statement BLOCK.
-                disp = len(stack) - 1
-                stack[-1] = BLOCK
-            else:
-                # A nested block statement: opens a fresh BLOCK.
+        case lw:
+            when "end":
+                # Closer: pop any open case/exception alternatives, then the
+                # enclosing construct. Aligns with that construct's header.
+                while len(stack) > 0 and stack[-1] == WHEN_:
+                    stack.pop()
+                if len(stack) > 0:
+                    stack.pop()
                 disp = len(stack)
-                stack.append(BLOCK)
 
-        elif lw == "when":
-            # Close the previous alternative (if any), align with the case/
-            # handler body, then open this alternative.
-            if len(stack) > 0 and stack[-1] == WHEN_:
-                stack.pop()
-            disp = len(stack)
-            stack.append(WHEN_)
+            when "begin":
+                if len(stack) > 0 and (stack[-1] == PKG or stack[-1] == DECLARE_):
+                    # Declarative-part 'begin': aligns with its subprogram/declare
+                    # header and turns that frame into a statement BLOCK.
+                    disp = len(stack) - 1
+                    stack[-1] = BLOCK
+                else:
+                    # A nested block statement: opens a fresh BLOCK.
+                    disp = len(stack)
+                    stack.append(BLOCK)
 
-        elif lw == "elsif" or lw == "else" or lw == "exception" or lw == "or" or lw == "private":
-            # Mid-block keywords: align with the opener, body re-indents below
-            # (the enclosing frame stays on the stack, so no push/pop needed).
-            disp = len(stack) - 1
+            when "when":
+                # Close the previous alternative (if any), align with the case/
+                # handler body, then open this alternative.
+                if len(stack) > 0 and stack[-1] == WHEN_:
+                    stack.pop()
+                disp = len(stack)
+                stack.append(WHEN_)
 
-        else:
-            # An ordinary line. Indent at body level, then see whether it opens
-            # a new block based on its final significant token.
-            disp = len(stack)
-            let last: str = last_word(code_s)
-            if lw == "case" and last == "is":
-                stack.append(CASE_)
-            elif last == "is":
-                stack.append(PKG)
-            elif last == "then":
-                stack.append(IF_)
-            elif last == "loop":
-                stack.append(LOOP_)
-            elif last == "record" and lw != "null":
-                stack.append(RECORD_)
-            elif last == "select":
-                stack.append(SELECT_)
-            elif last == "do":
-                stack.append(DO_)
-            elif lw == "declare":
-                stack.append(DECLARE_)
+            when "elsif" | "else" | "exception" | "or" | "private":
+                # Mid-block keywords: align with the opener, body re-indents below
+                # (the enclosing frame stays on the stack, so no push/pop needed).
+                disp = len(stack) - 1
+
+            when others:
+                # An ordinary line. Indent at body level, then see whether it opens
+                # a new block based on its final significant token.
+                disp = len(stack)
+                let last: str = last_word(code_s)
+                if lw == "case" and last == "is":
+                    stack.append(CASE_)
+                elif last == "is":
+                    stack.append(PKG)
+                elif last == "then":
+                    stack.append(IF_)
+                elif last == "loop":
+                    stack.append(LOOP_)
+                elif last == "record" and lw != "null":
+                    stack.append(RECORD_)
+                elif last == "select":
+                    stack.append(SELECT_)
+                elif last == "do":
+                    stack.append(DO_)
+                elif lw == "declare":
+                    stack.append(DECLARE_)
 
         out.append(spaces(disp + cont) + emit_text)
 
