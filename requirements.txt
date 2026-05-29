@@ -48,6 +48,12 @@ db_connector
 #   tsp.ady  (pyimport matplotlib.pyplot as plt)
 matplotlib
 
+# pygls — Python Language Server Protocol framework; required by:
+#   adascript_ls.py  (the Adascript language server)
+# Install: python3.13 -m pip install pygls
+# Tested version: 2.1.1 (with lsprotocol 2025.0.0)
+pygls >= 2.1.1
+
 
 # -----------------------------------------------------------------------
 # [sys] System / external tools
