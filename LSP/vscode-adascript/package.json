@@ -1,0 +1,64 @@
+{
+  "name": "adascript",
+  "displayName": "Adascript",
+  "description": "Language support for Adascript (.ady) — syntax highlighting, diagnostics, hover, and completion via the Adascript language server",
+  "version": "0.1.0",
+  "publisher": "adascript",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": ["Programming Languages", "Linters"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/elkarouh/adascript"
+  },
+  "activationEvents": [],
+  "main": "./extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "adascript",
+        "aliases": ["Adascript", "adascript", "ady"],
+        "extensions": [".ady"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "adascript",
+        "scopeName": "source.adascript",
+        "path": "./syntaxes/adascript.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "title": "Adascript",
+      "properties": {
+        "adascript.python": {
+          "type": "string",
+          "default": "python3.13",
+          "description": "Python interpreter used to run the Adascript language server (must be 3.13+)."
+        },
+        "adascript.serverPath": {
+          "type": "string",
+          "default": "",
+          "description": "Absolute path to adascript_ls.py. Defaults to the bundled server at LSP/adascript_ls.py."
+        },
+        "adascript.trace.server": {
+          "type": "string",
+          "enum": ["off", "messages", "verbose"],
+          "default": "off",
+          "description": "Traces communication between VS Code and the Adascript language server."
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "vscode-languageclient": "^8.1.0"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.75.0"
+  },
+  "scripts": {
+    "install-deps": "npm install"
+  }
+}
