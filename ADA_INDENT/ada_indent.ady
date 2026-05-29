@@ -72,26 +72,26 @@ def strip_code(line: str) -> str:
 
 
 def paren_delta(line: str) -> int:
-    """Net '(' minus ')' on the line, ignoring parens in strings/comments."""
+    """Net '(' minus ')' on the line, ignoring parens inside string literals.
+
+    The input must already have comments removed (see strip_code), so only
+    string literals need to be skipped here.
+    """
     var depth: int = 0
     var in_str: bool = False
-    var i: int = 0
-    let n: int = len(line)
-    while i < n:
-        let c: str = line[i]
-        if in_str:
-            if c == chr(34):
-                in_str = False
+    for c in line:
+        if c == chr(34):
+            in_str = not in_str
+        elif in_str:
+            continue
         else:
-            if c == chr(34):
-                in_str = True
-            elif c == "-" and i + 1 < n and line[i + 1] == "-":
-                break
-            elif c == "(":
-                depth += 1
-            elif c == ")":
-                depth -= 1
-        i += 1
+            case c:
+                when "(":
+                    depth += 1
+                when ")":
+                    depth -= 1
+                when others:
+                    pass
     return depth
 
 
@@ -218,7 +218,7 @@ def reindent(src: str) -> str:
 
         out.append(spaces(disp + cont) + emit_text)
 
-        paren_depth = max(0, paren_depth + paren_delta(raw2))
+        paren_depth = max(0, paren_depth + paren_delta(code))
 
     return "\n".join(out)
 
