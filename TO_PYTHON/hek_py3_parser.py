@@ -1104,6 +1104,27 @@ def to_py(self, indent=0):
                 lines[i] = indent_str + "return " + stripped
                 break
         body = "\n".join(lines) + "\n"
+    # Implicit result variable (mirrors Nim): if the body uses `result` but
+    # never assigns it with `result = …`, inject a zero-value initialiser
+    # after any leading docstring.
+    import re as _re_res
+    if (ret_ann and not is_none_return and
+            _re_res.search(r'\bresult\b', body) and
+            not _re_res.search(r'^\s*result\s*=', body, _re_res.MULTILINE)):
+        _t = ret_ann.strip().lstrip("->").strip()
+        _zeros = {"str": '""', "int": "0", "float": "0.0", "bool": "False"}
+        _zero = (_zeros.get(_t) or
+                 ("[]" if _t.startswith("[") else
+                  "{}" if _t.startswith("{") else "None"))
+        _init = f"{_ind(indent + 1)}result = {_zero}\n"
+        # Insert after a leading docstring (triple-quoted string) if present.
+        _doc_m = _re_res.match(
+            r'((?:\s*"""(?:[^"]|"(?!""))*"""[ \t]*\n))',
+            body, _re_res.DOTALL)
+        if _doc_m:
+            body = body[:_doc_m.end()] + _init + body[_doc_m.end():]
+        else:
+            body = _init + body
     return f"{decos}{_ind(indent)}def {name}({params}){ret_ann}:{hc}\n{body}"
 
 
