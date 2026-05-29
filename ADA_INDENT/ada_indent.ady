@@ -59,7 +59,7 @@ def strip_code(line: str) -> str:
     var state: Scan_T = CODE
     let n: int = len(line)
     while i < n:
-        let c: str = line[i]
+        let c: char = line[i]
         case state:
             when CODE:
                 if c == '"':
