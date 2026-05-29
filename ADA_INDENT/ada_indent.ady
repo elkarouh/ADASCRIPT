@@ -21,6 +21,7 @@
 # ($1, $#, quit) so argument handling is target-agnostic.
 
 const INDENT_WIDTH: int = 3
+const DQUOTE: str = chr(34)
 
 # The indentation-significant constructs. A frame is pushed for each open
 # block; the kind is only consulted where it changes behaviour (PKG/DECLARE
@@ -62,7 +63,7 @@ def strip_code(line: str) -> str:
         let c: str = line[i]
         case state:
             when CODE:
-                if c == chr(34):
+                if c == DQUOTE:
                     state = STRING_LIT
                     result += c
                 elif c == "-" and i + 1 < n and line[i + 1] == "-":
@@ -71,7 +72,7 @@ def strip_code(line: str) -> str:
                     result += c
             when STRING_LIT:
                 result += c
-                if c == chr(34):
+                if c == DQUOTE:
                     state = CODE
         i += 1
     return result
@@ -88,7 +89,7 @@ def paren_delta(line: str) -> int:
     for c in line:
         case state:
             when CODE:
-                if c == chr(34):
+                if c == DQUOTE:
                     state = STRING_LIT
                 else:
                     case c:
@@ -99,7 +100,7 @@ def paren_delta(line: str) -> int:
                         when others:
                             pass
             when STRING_LIT:
-                if c == chr(34):
+                if c == DQUOTE:
                     state = CODE
     return depth
 
