@@ -1,6 +1,17 @@
 #! /usr/bin/env py2nim
 nimport algorithm, sequtils
-type State = enum ACTIVE, OPS_BUG, BUSY, DONE, BLOCKED, ON_HOLD, IDLE, BACKGROUND, INTEGRATED, MERGED, REJECTED
+type State = enum:
+    ACTIVE        # being worked on
+    OPS_BUG       # blocked by an ops/infra bug
+    BUSY          # build/test running
+    DONE          # work finished, awaiting review
+    BLOCKED       # blocked by a dependency
+    ON_HOLD       # paused
+    IDLE          # no activity
+    BACKGROUND    # low-priority background task
+    INTEGRATED    # merged into the integration branch
+    MERGED        # merged to mainline
+    REJECTED      # change rejected
 
 const prefix: str = "\x1b["
 const suffix: str = "m"

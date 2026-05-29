@@ -284,8 +284,27 @@ def example7():
     # -----------------------------------------------------------------------
     # Example 7 -- Romania map (A* with heuristic)
     # -----------------------------------------------------------------------
-    type State_T is enum arad, bucharest, craiova, drobeta, eforie, fagaras, giurgiu, hirsova, lasi,\
-     lugoj, mehadia, neamt, oradea, pitesti, rimnicu, sibiu, timisoara, urzineci, vaslui, zerind
+    type State_T is enum:
+        arad
+        bucharest
+        craiova
+        drobeta
+        eforie
+        fagaras
+        giurgiu
+        hirsova
+        lasi
+        lugoj
+        mehadia
+        neamt
+        oradea
+        pitesti
+        rimnicu
+        sibiu
+        timisoara
+        urzineci
+        vaslui
+        zerind
     type Distance_T is float
     type Decision_T is State_T
     var GR: {State_T}[](Decision_T, Distance_T) = {
