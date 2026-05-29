@@ -39,6 +39,75 @@ line:
 Indent width defaults to **3 spaces** (the GNAT convention), set by
 `INDENT_WIDTH`.
 
+## Formal grammar (EBNF)
+
+This is the indentation-relevant subset of Ada the indenter recognises, in
+EBNF. Each production is annotated with its **stack action** — what the
+indenter pushes (`▶`) or pops (`◀`). Only the keywords shown here affect
+indentation; any other line is an `ordinary_line` and inherits the current
+depth.
+
+```ebnf
+source          ::= { line }
+
+line            ::= opener | closer | splitter | ordinary_line | blank
+
+(* ---- openers: push a frame, body indents one level deeper ---- *)
+
+opener          ::= spec_is | declare_open | if_open | loop_open
+                  | case_open | record_open | select_open | do_open
+                  | when_open
+
+spec_is         ::= ( "package" | "procedure" | "function"
+                    | "task" | "protected" | "type" | … ) … "is"   (* ▶ PKG     *)
+declare_open    ::= [ label ":" ] "declare"                        (* ▶ DECLARE *)
+if_open         ::= "if" … "then"                                  (* ▶ IF      *)
+loop_open       ::= [ label ":" ] [ iteration_scheme ] "loop"      (* ▶ LOOP    *)
+case_open       ::= "case" … "is"                                  (* ▶ CASE    *)
+record_open     ::= "type" … "is" [ "tagged" ] "record"           (* ▶ RECORD  *)
+select_open     ::= "select"                                       (* ▶ SELECT  *)
+do_open         ::= ( "accept" … | "return" … ) "do"              (* ▶ DO      *)
+when_open       ::= "when" choices "=>"                            (* ◀ WHEN? ▶ WHEN *)
+
+(* ---- closer: align with the opener's header ---- *)
+
+closer          ::= "end" [ "if" | "loop" | "case" | "record"
+                          | "select" | name ] ";"                  (* ◀ WHEN* then ◀ 1 *)
+
+(* ---- splitters: align with opener, frame stays open ---- *)
+
+splitter        ::= "elsif" … "then"      (* part of IF; does NOT push a 2nd IF *)
+                  | "else"                (* part of IF or SELECT               *)
+                  | "exception"           (* part of BLOCK                      *)
+                  | "or"                  (* part of SELECT                     *)
+                  | "private"             (* part of package spec              *)
+
+(* ---- begin: context-sensitive ---- *)
+
+begin_line      ::= "begin"
+   (* if top frame is PKG or DECLARE  → splitter, convert that frame to BLOCK *)
+   (* otherwise                       → opener,   ▶ BLOCK (nested block stmt) *)
+
+(* ---- everything else ---- *)
+
+ordinary_line   ::= ? any line whose lead/last tokens match none of the above ?
+blank           ::= ? whitespace only ?  (* emitted verbatim, stack unchanged *)
+```
+
+Notes on the annotations:
+
+- `when_open` first pops a preceding `WHEN` (closing the previous `case`
+  alternative or exception handler) and then pushes its own — that is what lets
+  consecutive `when` lines sit at the same column.
+- `closer` pops **all** trailing `WHEN` frames before popping the one enclosing
+  construct, so `end case;` dedents past both the final `when` and the `case` in
+  a single step.
+- Recognition is purely lexical: the **lead** token and the **last** token of a
+  line (after stripping a `--` comment and a trailing `;`). No expression or
+  type parsing is performed.
+
+The tables below restate the same rules keyword-by-keyword, with examples.
+
 ## The simplified grammar
 
 Keywords are grouped by their effect on indentation. `LAST` is the final token
