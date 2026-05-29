@@ -1,0 +1,380 @@
+#!/usr/bin/env py2py
+# ada_indent.ady — a simplified Ada source re-indenter, written in Adascript.
+#
+# This is NOT a full Ada parser. It implements only the slice of Ada grammar
+# that matters for indentation: the keywords that open, close, or split an
+# indented block. Everything else is treated as an ordinary statement line.
+#
+# The model is a stack machine. Each open construct pushes a frame; the
+# display indent of a line is the stack depth (times the indent width), with
+# small adjustments for keywords that align with their opener rather than the
+# block body (end / elsif / else / when / exception / or / private / begin).
+#
+# See README.md in this directory for the simplified grammar specification.
+#
+# Usage:
+#   python3.13 TO_PYTHON/py2py.py -c ADA_INDENT/ada_indent.ady file.adb   # reindent a file
+#   python3.13 TO_PYTHON/py2py.py -c ADA_INDENT/ada_indent.ady --test     # run self-tests
+#
+# The core logic (reindent + helpers) is pure Adascript and transpiles to
+# both Python and Nim. The CLI uses the bash-style argument primitives
+# ($1, $#, quit) so argument handling is target-agnostic.
+
+const INDENT_WIDTH: int = 3
+
+# The indentation-significant constructs. A frame is pushed for each open
+# block; the kind is only consulted where it changes behaviour (PKG/DECLARE
+# become BLOCK at 'begin'; WHEN frames are popped specially at 'end').
+type Block_T is enum:
+    PKG          # package / subprogram / task / protected / type spec opened by trailing 'is'
+    DECLARE_     # a declare block (block label or bare 'declare')
+    BLOCK        # a begin ... end region (statement part)
+    IF_          # if ... then
+    LOOP_        # [while/for] ... loop
+    CASE_        # case ... is
+    WHEN_        # when ... =>   (case alternative or exception handler)
+    RECORD_      # record  ... end record
+    SELECT_      # select ... end select
+    DO_          # accept ... do  /  return ... do  (extended return)
+
+
+# ---------------------------------------------------------------------------
+# Lexical helpers — all work on a single physical line.
+# ---------------------------------------------------------------------------
+
+def strip_code(line: str) -> str:
+    """Return the line with any '--' comment removed, string literals kept.
+
+    Quote handling is deliberately simple: it tracks double-quoted strings so
+    that a '--' inside a string is not mistaken for a comment. Character
+    literals and doubled-quote escapes are not modelled (rare in practice).
+    """
+    var result: str = ""
+    var i: int = 0
+    var in_str: bool = False
+    let n: int = len(line)
+    while i < n:
+        let c: str = line[i]
+        if in_str:
+            result += c
+            if c == chr(34):
+                in_str = False
+        else:
+            if c == chr(34):
+                in_str = True
+                result += c
+            elif c == "-" and i + 1 < n and line[i + 1] == "-":
+                break
+            else:
+                result += c
+        i += 1
+    return result
+
+
+def paren_delta(line: str) -> int:
+    """Net '(' minus ')' on the line, ignoring parens in strings/comments."""
+    var depth: int = 0
+    var in_str: bool = False
+    var i: int = 0
+    let n: int = len(line)
+    while i < n:
+        let c: str = line[i]
+        if in_str:
+            if c == chr(34):
+                in_str = False
+        else:
+            if c == chr(34):
+                in_str = True
+            elif c == "-" and i + 1 < n and line[i + 1] == "-":
+                break
+            elif c == "(":
+                depth += 1
+            elif c == ")":
+                depth -= 1
+        i += 1
+    return depth
+
+
+def lead_word(code: str) -> str:
+    """Lowercased leading identifier of a (comment-stripped) line, or ''."""
+    let s: str = code.strip()
+    var w: str = ""
+    for ch in s:
+        if ch.isalpha() or ch == "_":
+            w += ch
+        else:
+            break
+    return w.lower()
+
+
+def last_word(code: str) -> str:
+    """Lowercased final token, after dropping a trailing ';'. '' if empty."""
+    var s: str = code.strip()
+    if s.endswith(";"):
+        s = s[:-1].strip()
+    let parts: []str = s.split()
+    if len(parts) == 0:
+        return ""
+    return parts[-1].lower()
+
+
+def spaces(levels: int) -> str:
+    """A run of spaces for the given number of indent levels (never negative)."""
+    var n: int = levels
+    if n < 0:
+        n = 0
+    return " " * (n * INDENT_WIDTH)
+
+
+# ---------------------------------------------------------------------------
+# The indenter proper.
+# ---------------------------------------------------------------------------
+
+def reindent(src: str) -> str:
+    """Re-indent Ada source, returning the reformatted text.
+
+    Blank lines are preserved as-is. Each non-blank line is stripped of its
+    leading whitespace and re-indented according to the block stack. Trailing
+    content (including comments and strings) is left untouched.
+    """
+    let lines: []str = src.split("\n")
+    var stack: []Block_T = []
+    var out: []str = []
+    var paren_depth: int = 0
+
+    for raw in lines:
+        let raw2: str = raw.rstrip()
+        let code: str = strip_code(raw2)
+        let code_s: str = code.strip()
+        let emit_text: str = raw2.strip()
+
+        # Blank line — emit nothing, leave the stack alone.
+        if emit_text == "":
+            out.append("")
+            continue
+
+        # A continuation line inside unclosed parentheses gets one extra level.
+        var cont: int = 0
+        if paren_depth > 0:
+            cont = 1
+
+        let lw: str = lead_word(code_s)
+        var disp: int = len(stack)
+
+        if lw == "end":
+            # Closer: pop any open case/exception alternatives, then the
+            # enclosing construct. Aligns with that construct's header.
+            while len(stack) > 0 and stack[-1] == WHEN_:
+                stack.pop()
+            if len(stack) > 0:
+                stack.pop()
+            disp = len(stack)
+
+        elif lw == "begin":
+            if len(stack) > 0 and (stack[-1] == PKG or stack[-1] == DECLARE_):
+                # Declarative-part 'begin': aligns with its subprogram/declare
+                # header and turns that frame into a statement BLOCK.
+                disp = len(stack) - 1
+                stack[-1] = BLOCK
+            else:
+                # A nested block statement: opens a fresh BLOCK.
+                disp = len(stack)
+                stack.append(BLOCK)
+
+        elif lw == "when":
+            # Close the previous alternative (if any), align with the case/
+            # handler body, then open this alternative.
+            if len(stack) > 0 and stack[-1] == WHEN_:
+                stack.pop()
+            disp = len(stack)
+            stack.append(WHEN_)
+
+        elif lw == "elsif" or lw == "else" or lw == "exception" or lw == "or" or lw == "private":
+            # Mid-block keywords: align with the opener, body re-indents below
+            # (the enclosing frame stays on the stack, so no push/pop needed).
+            disp = len(stack) - 1
+
+        else:
+            # An ordinary line. Indent at body level, then see whether it opens
+            # a new block based on its final significant token.
+            disp = len(stack)
+            let last: str = last_word(code_s)
+            if lw == "case" and last == "is":
+                stack.append(CASE_)
+            elif last == "is":
+                stack.append(PKG)
+            elif last == "then":
+                stack.append(IF_)
+            elif last == "loop":
+                stack.append(LOOP_)
+            elif last == "record" and lw != "null":
+                stack.append(RECORD_)
+            elif last == "select":
+                stack.append(SELECT_)
+            elif last == "do":
+                stack.append(DO_)
+            elif lw == "declare":
+                stack.append(DECLARE_)
+
+        out.append(spaces(disp + cont) + emit_text)
+
+        paren_depth += paren_delta(raw2)
+        if paren_depth < 0:
+            paren_depth = 0
+
+    return "\n".join(out)
+
+
+# ---------------------------------------------------------------------------
+# Self-tests
+# ---------------------------------------------------------------------------
+
+def run_tests() -> int:
+    var passed: int = 0
+    var failed: int = 0
+
+    # Each case: messy input (any indentation) -> canonical output.
+    var cases: [](str, str) = []
+
+    # 1. Subprogram with if/elsif/else, loop, and case.
+    cases.append((
+        "procedure Hello is\n"
+        "X : Integer := 0;\n"
+        "begin\n"
+        "if X = 0 then\n"
+        "Put_Line (\"zero\");\n"
+        "elsif X > 0 then\n"
+        "Put_Line (\"pos\");\n"
+        "else\n"
+        "Put_Line (\"neg\");\n"
+        "end if;\n"
+        "for I in 1 .. 10 loop\n"
+        "X := X + I;\n"
+        "end loop;\n"
+        "case X is\n"
+        "when 0 =>\n"
+        "null;\n"
+        "when others =>\n"
+        "Put_Line (\"other\");\n"
+        "end case;\n"
+        "end Hello;\n",
+
+        "procedure Hello is\n"
+        "   X : Integer := 0;\n"
+        "begin\n"
+        "   if X = 0 then\n"
+        "      Put_Line (\"zero\");\n"
+        "   elsif X > 0 then\n"
+        "      Put_Line (\"pos\");\n"
+        "   else\n"
+        "      Put_Line (\"neg\");\n"
+        "   end if;\n"
+        "   for I in 1 .. 10 loop\n"
+        "      X := X + I;\n"
+        "   end loop;\n"
+        "   case X is\n"
+        "      when 0 =>\n"
+        "         null;\n"
+        "      when others =>\n"
+        "         Put_Line (\"other\");\n"
+        "   end case;\n"
+        "end Hello;\n"))
+
+    # 2. Package spec with a record type and a private part.
+    cases.append((
+        "package Shapes is\n"
+        "type Point is record\n"
+        "X : Float;\n"
+        "Y : Float;\n"
+        "end record;\n"
+        "private\n"
+        "Origin : constant Point := (0.0, 0.0);\n"
+        "end Shapes;\n",
+
+        "package Shapes is\n"
+        "   type Point is record\n"
+        "      X : Float;\n"
+        "      Y : Float;\n"
+        "   end record;\n"
+        "private\n"
+        "   Origin : constant Point := (0.0, 0.0);\n"
+        "end Shapes;\n"))
+
+    # 3. Declare block with an exception handler, plus blank-line preservation.
+    cases.append((
+        "declare\n"
+        "X : Integer;\n"
+        "\n"
+        "begin\n"
+        "X := 1;\n"
+        "exception\n"
+        "when Constraint_Error =>\n"
+        "X := 0;\n"
+        "end;\n",
+
+        "declare\n"
+        "   X : Integer;\n"
+        "\n"
+        "begin\n"
+        "   X := 1;\n"
+        "exception\n"
+        "   when Constraint_Error =>\n"
+        "      X := 0;\n"
+        "end;\n"))
+
+    # 4. Continuation inside an unclosed parenthesis (aggregate / call).
+    cases.append((
+        "procedure P is\n"
+        "begin\n"
+        "Set (A => 1,\n"
+        "B => 2);\n"
+        "end P;\n",
+
+        "procedure P is\n"
+        "begin\n"
+        "   Set (A => 1,\n"
+        "      B => 2);\n"
+        "end P;\n"))
+
+    for pair in cases:
+        let src: str = pair[0]
+        let want: str = pair[1]
+        let got: str = reindent(src)
+        if got == want:
+            passed += 1
+        else:
+            failed += 1
+            print("FAIL:")
+            print("--- expected ---")
+            print(want)
+            print("--- got ---")
+            print(got)
+
+    print(f"{passed} passed, {failed} failed")
+    if failed > 0:
+        return 1
+    return 0
+
+
+def read_file(path: str) -> str:
+    """Read an entire file. Returning from inside the `with` keeps the result
+    in scope on the Nim backend (where a `with` introduces a new block)."""
+    with open(path) as f:
+        return f.read()
+
+
+def main() -> int:
+    if $# < 1:
+        print("usage: ada_indent FILE   (or --test)")
+        return 1
+
+    let arg: str = $1
+    if arg == "--test":
+        return run_tests()
+
+    print(reindent(read_file(arg)), end="")
+    return 0
+
+
+if __name__ == "__main__":
+    quit(main())
