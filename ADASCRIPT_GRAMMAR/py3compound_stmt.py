@@ -332,6 +332,14 @@ async_func_def = (
 tuple_def = literal("tuple") + COLON + block
 # record_def: record with named fields -> Nim object, Python dataclass
 record_def = literal("record") + COLON + block
+# enum_block_def: indented enum with one member per line (allows trailing
+# comments per member). Equivalent to the inline 'enum A, B, C' form.
+#   type Color is enum:
+#       RED      # warm
+#       GREEN
+#       BLUE
+enum_block_member = (IDENTIFIER | INTEGER) + NEWLINE
+enum_block_def = literal("enum") + COLON + NEWLINE + INDENT + NL[:] + (enum_block_member + NL[:])[1:] + DEDENT
 # --- Discriminated (variant) records ---
 # Discriminant parameter: (Kind : Shape_Kind)
 discrim_param = LPAREN + IDENTIFIER + V_COLON + type_annotation + RPAREN
@@ -346,7 +354,7 @@ variant_case = ikw("case") + IDENTIFIER + ikw("is") + NEWLINE + INDENT + NL[:] +
 discrim_record_def = literal("record") + COLON + NEWLINE + INDENT + NL[:] + variant_case + NL[:] + DEDENT
 
 # type_block_stmt: type NAME [(discrim)]? (=|is) (tuple|discrim_record|record): block
-type_block_stmt = ikw("type") + IDENTIFIER + discrim_param[:] + type_alias_params[:] + (V_EQUAL | ikw("is")) + (tuple_def | discrim_record_def | record_def)
+type_block_stmt = ikw("type") + IDENTIFIER + discrim_param[:] + type_alias_params[:] + (V_EQUAL | ikw("is")) + (tuple_def | discrim_record_def | record_def | enum_block_def)
 
 # --- Class definition ---
 # class_args uses the same argument grammar as call_trailer so that
