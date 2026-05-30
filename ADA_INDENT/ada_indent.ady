@@ -366,64 +366,8 @@ def main() -> int:
         if arg == "--test":
             result = run_tests()
         else:
-            var stack: []Block_T = []
-            var paren_depth: int = 0
             with open(arg) as f:
-                for raw in f:
-                    let raw2: str = raw.rstrip()
-                    let code: str = strip_code(raw2)
-                    let code_s: str = code.strip()
-                    let emit_text: str = raw2.strip()
-                    if emit_text == "":
-                        print("")
-                        continue
-                    let cont: int = 1 if paren_depth > 0 else 0
-                    let lw: str = lead_word(code_s)
-                    var disp: int = len(stack)
-                    case lw:
-                        when "end":
-                            while len(stack) > 0 and stack[-1] == WHEN_:
-                                stack.pop()
-                            if len(stack) > 0:
-                                stack.pop()
-                            disp = len(stack)
-                        when "begin":
-                            if len(stack) > 0 and (stack[-1] == PKG or stack[-1] == DECLARE_):
-                                disp = len(stack) - 1
-                                stack[-1] = BLOCK
-                            else:
-                                disp = len(stack)
-                                stack.append(BLOCK)
-                        when "when":
-                            if len(stack) > 0 and stack[-1] == WHEN_:
-                                stack.pop()
-                            disp = len(stack)
-                            stack.append(WHEN_)
-                        when "elsif" | "else" | "exception" | "or" | "private":
-                            disp = len(stack) - 1
-                        when others:
-                            disp = len(stack)
-                            let last: str = last_word(code_s)
-                            case last:
-                                when "is":
-                                    stack.append(CASE_ if lw == "case" else PKG)
-                                when "then":
-                                    stack.append(IF_)
-                                when "loop":
-                                    stack.append(LOOP_)
-                                when "record":
-                                    if lw != "null":
-                                        stack.append(RECORD_)
-                                when "select":
-                                    stack.append(SELECT_)
-                                when "do":
-                                    stack.append(DO_)
-                                when "declare":
-                                    stack.append(DECLARE_)
-                                when others:
-                                    pass
-                    print(spaces(disp + cont) + emit_text)
-                    paren_depth = max(0, paren_depth + paren_delta(code))
+                print(reindent(f.read()))
 
 
 if __name__ == "__main__":
