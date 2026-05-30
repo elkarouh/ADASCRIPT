@@ -513,10 +513,14 @@ def to_py(self, prec=None):
                     i += 2  # skip both .get and ()
                     continue
             result += tr_str
-            # Handle tick attributes: wrap expr.field with type(expr.field)(expr.field.value +/- 1)
+            # Handle tick attributes on expressions
             if hasattr(tr, '_tick_attr'):
                 if tr._tick_attr == "Length":
                     result = f"len({result})"
+                elif tr._tick_attr == "First":
+                    result = "0"
+                elif tr._tick_attr == "Last":
+                    result = f"(len({result}) - 1)"
                 else:
                     op = "+" if tr._tick_attr == "Next" else "-"
                     result = f"type({result})({result}.value {op} 1)"
