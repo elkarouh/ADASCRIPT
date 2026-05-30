@@ -778,6 +778,22 @@ def to_nim(self, indent=0):
         _em = _re_for.match(r'^seq\[(.+)\]$', _iterable_type)
         if _em:
             ParserState.symbol_table.add(target.strip("()\n "), _em.group(1), "let")
+    elif "," in target:
+        # Tuple-destructured loop: register each variable from the iterator's return type.
+        # iterable may be a call like 'pairwise(...)'; look up the callee's return type.
+        import re as _re_tfor
+        _callee_m = _re_tfor.match(r'^(\w+)\(', iterable.strip())
+        if _callee_m:
+            _callee = _callee_m.group(1)
+            _ret = (getattr(ParserState, 'proc_return_types', {}) or {}).get(_callee, "")
+            if _ret:
+                # Strip outer parens: '(char, char)' -> 'char, char'
+                _inner = _ret.strip().lstrip("(").rstrip(")")
+                _elem_types = [t.strip() for t in _inner.split(",")]
+                _var_names = [v.strip().strip("()") for v in target.strip("()").split(",")]
+                for _vn, _vt in zip(_var_names, _elem_types):
+                    if _vn:
+                        ParserState.symbol_table.add(_vn, _vt, "let")
     hc = _block_inline_header_comment(self.nodes[2])
     body = self.nodes[2].to_nim(indent + 1)
     result = f"{_ind(indent)}for {target} in {iterable}:{hc}\n{body}"
@@ -2617,6 +2633,8 @@ def to_nim(self, indent=0):
     if nim_name is None:
         return ""  # skip (e.g. __init__ handled via class_def)
     keyword = nim_keyword or "proc"
+    if "yield " in body:
+        keyword = "iterator"
     if _is_fn_cm:
         keyword = "template"
         getattr(ParserState, 'contextmanager_funcs', set()).add(name)

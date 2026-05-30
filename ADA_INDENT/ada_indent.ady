@@ -47,6 +47,11 @@ type Scan_T is enum:
 # Lexical helpers — all work on a single physical line.
 # ---------------------------------------------------------------------------
 
+def pairwise(s: str) -> (char, char):
+    for i in range(len(s) - 1):
+        yield (s[i], s[i + 1])
+
+
 def strip_code(line: str) -> str:
     """Return the line with any '--' comment removed, string literals kept.
 
@@ -54,25 +59,19 @@ def strip_code(line: str) -> str:
     that a '--' inside a string is not mistaken for a comment. Character
     literals and doubled-quote escapes are not modelled (rare in practice).
     """
-    var i: int = 0
     var state: Scan_T = CODE
-    let n: int = len(line)
-    while i < n:
-        let c: char = line[i]
+    for c, next_c in pairwise(line + " "):
         case state:
             when CODE:
+                if c == '-' and next_c == '-':
+                    break
+                result += c
                 if c == '"':
                     state = STRING_LIT
-                    result += c
-                elif c == "-" and i + 1 < n and line[i + 1] == "-":
-                    break
-                else:
-                    result += c
             when STRING_LIT:
                 result += c
                 if c == '"':
                     state = CODE
-        i += 1
 
 
 def paren_delta(line: str) -> int:
