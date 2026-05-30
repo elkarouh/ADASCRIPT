@@ -3371,14 +3371,15 @@ def to_nim(self, indent=0):
             if _sym and str(_sym.get("type", "")).startswith("_py_module:"):
                 result = f"discard {result}"
     # Nim builtins that return a non-void value — must discard when used as a statement
-    if len([p for p in parts if p.strip()]) == 1 and not result.strip().startswith("discard "):
+    if (len([p for p in parts if p.strip()]) == 1
+            and not result.strip().startswith(("discard ", "let ", "var ", "const "))):
         import re as _re_disc2
         _dm = _re_disc2.match(r'^.+\.([A-Za-z_]\w*)\(', result.strip())
         if _dm and _dm.group(1) in {"pop"}:
-            result = _ind(indent) + "discard " + result.strip()
+            result = "discard " + result.strip()
     # Bare print (no args) -> echo "" (empty line)
     if result.strip() == "echo":
-        result = _ind(indent) + 'echo ""'
+        result = 'echo ""'
     # print(x, end="") -> stdout.write(x)  (echo has no end= parameter)
     import re as _re_echo
     _echo_end_m = _re_echo.match(r'^(\s*)echo\((.+),\s*`?end`?\s*=\s*"([^"]*)"\s*\)$', result, _re_echo.DOTALL)
@@ -3568,7 +3569,7 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
     is_contextmanager = False
     for node in func_node.nodes:
         for deco_node, deco_text in _extract_deco_names(node):
-            if deco_text == "@proc":
+            if deco_text in ("@proc", "@`proc`"):
                 force_proc = True
             elif deco_text in ("@contextmanager", "@contextlib.contextmanager"):
                 is_contextmanager = True
