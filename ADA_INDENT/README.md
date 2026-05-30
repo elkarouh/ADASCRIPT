@@ -10,19 +10,66 @@ and how it drives the indenter.
 
 ## Running
 
-```bash
-# Via the Python target (the tested path):
-python3.13 TO_PYTHON/py2py.py -c ADA_INDENT/ada_indent.ady file.adb     # reindent a file
-python3.13 TO_PYTHON/py2py.py -c ADA_INDENT/ada_indent.ady --test       # run self-tests
+Transpile once, then run the generated Python directly:
 
-# Or transpile once, then run the generated Python directly:
+```bash
 python3.13 TO_PYTHON/py2py.py ADA_INDENT/ada_indent.ady > ada_indent.py
-python3.13 ada_indent.py file.adb
+python3.13 ada_indent.py file.adb          # reindent a file
+python3.13 ada_indent.py --test            # run self-tests
+cat file.adb | python3.13 ada_indent.py   # reindent from stdin
 ```
 
-The core (`reindent` plus the lexical helpers) is pure Adascript and transpiles
-to both Python and Nim. Execution is verified on the **Python target**; the Nim
-CLI wrapper is transpiled but not exercised in CI.
+The core (the `Indenter` class plus the lexical helpers) is pure Adascript and
+transpiles to both Python and Nim. Execution is verified on the **Python
+target**; the Nim CLI wrapper is transpiled but not exercised in CI.
+
+## Emacs integration (format-all)
+
+[`format-all`](https://github.com/lassik/emacs-format-all-the-code) can run
+`ada_indent` as a buffer formatter. The tool reads Ada source on stdin and
+writes re-indented source to stdout, which is exactly the interface
+`format-all` expects.
+
+**Step 1 — install the script.**  Transpile once and put the result on your
+`PATH`:
+
+```bash
+python3.13 TO_PYTHON/py2py.py ADA_INDENT/ada_indent.ady > ~/.local/bin/ada_indent.py
+chmod +x ~/.local/bin/ada_indent.py
+```
+
+Or create a thin shell wrapper so the script is invoked as a plain command:
+
+```bash
+cat > ~/.local/bin/ada-indent << 'EOF'
+#!/bin/sh
+exec python3.13 ~/.local/bin/ada_indent.py "$@"
+EOF
+chmod +x ~/.local/bin/ada-indent
+```
+
+**Step 2 — register the formatter in Emacs.**  Add to your `init.el` (or the
+relevant `use-package` block):
+
+```elisp
+(define-format-all-formatter ada-indent
+  (:executable "ada-indent")
+  (:install "Transpile ADA_INDENT/ada_indent.ady with py2py, then put ada-indent on PATH")
+  (:languages "Ada")
+  (:features)
+  (:format (format-all--buffer-easy executable)))
+
+(add-hook 'ada-mode-hook 'format-all-mode)
+(add-hook 'ada-ts-mode-hook 'format-all-mode)
+```
+
+`format-all--buffer-easy` pipes the buffer through the command and replaces
+the buffer with its stdout, which is the standard pattern for formatters that
+read stdin and write stdout.
+
+**Step 3 — use it.**  Open any `.adb` / `.ads` file and run `M-x
+format-all-buffer`, or enable `format-all-mode` to reformat on save
+automatically.
 
 ## The model: a block stack
 
