@@ -444,7 +444,7 @@ def to_py(self, prec=None):
 def to_py(self, prec=None):
     """attr_trailer: '.' IDENTIFIER"""
     attr_name = self.nodes[0].node if hasattr(self.nodes[0], 'node') else str(self.nodes[0])
-    # Handle tick attributes on expressions: .field'Next / .field'Prev
+    # Handle tick attributes on expressions: .field'Next / .field'Prev / expr'Length
     if "__tick__" in attr_name:
         base, _, tick_attr = attr_name.partition("__tick__")
         if tick_attr in ("Next", "Prev"):
@@ -452,12 +452,26 @@ def to_py(self, prec=None):
             self._tick_base = base
             self._tick_attr = tick_attr
             return "." + base  # just emit .field, primary will wrap
+        if tick_attr in ("len", "Length"):
+            self._tick_attr = "Length"
+            return ""  # primary will wrap with len()
     return "." + self.nodes[0].to_py()
+
+
+@method(tick_trailer)
+def to_py(self, prec=None):
+    """tick_trailer: TICK IDENTIFIER -> stored as _tick_attr for primary to consume"""
+    attr = self.nodes[0].node if hasattr(self.nodes[0], 'node') else str(self.nodes[0])
+    if attr in ("len", "Length"):
+        self._tick_attr = "Length"
+    else:
+        self._tick_attr = attr
+    return ""
 
 
 @method(trailer)
 def to_py(self, prec=None):
-    """trailer: call_trailer | slice_trailer | attr_trailer"""
+    """trailer: call_trailer | slice_trailer | attr_trailer | tick_trailer"""
     return self.nodes[0].to_py()
 
 
@@ -501,8 +515,11 @@ def to_py(self, prec=None):
             result += tr_str
             # Handle tick attributes: wrap expr.field with type(expr.field)(expr.field.value +/- 1)
             if hasattr(tr, '_tick_attr'):
-                op = "+" if tr._tick_attr == "Next" else "-"
-                result = f"type({result})({result}.value {op} 1)"
+                if tr._tick_attr == "Length":
+                    result = f"len({result})"
+                else:
+                    op = "+" if tr._tick_attr == "Next" else "-"
+                    result = f"type({result})({result}.value {op} 1)"
             i += 1
     return result
 

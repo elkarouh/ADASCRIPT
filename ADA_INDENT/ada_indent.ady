@@ -48,7 +48,7 @@ type Scan_T is enum:
 # ---------------------------------------------------------------------------
 
 def pairwise(s: str) -> (char, char):
-    for i in range(len(s) - 1):
+    for i in 0..<s'Length - 1:
         yield (s[i], s[i + 1])
 
 
