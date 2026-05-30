@@ -524,6 +524,9 @@ def to_py(self, prec=None):
         members = info.get("members")
         if members and name in members:
             return f"{enum_type}.{name}"
+    if name == "stdin":
+        ParserState.nim_imports.add("import sys")
+        return "sys.stdin"
     return name
 
 
