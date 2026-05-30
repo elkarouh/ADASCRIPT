@@ -332,15 +332,15 @@ def run_tests() -> int:
 
 
 def main() -> int:
+    var ind: Indenter = Indenter()
     if $# < 1:
-        print "usage: ada_indent FILE   (or --test)"
-        result = 1
+        for line in stdin.lines:
+            print ind.indent_line(line)
     else:
         let arg: str = $1
         if arg == "--test":
             result = run_tests()
         else:
-            var ind: Indenter = Indenter()
             with open(arg) as f:
                 for line in f:
                     print ind.indent_line(line)

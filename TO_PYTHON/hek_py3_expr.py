@@ -226,6 +226,9 @@ def to_py(self, prec=None):
             return f"{type_name}({type_name}.value - 1)"
         elif attr == "Shuffle":
             return f"__import__('random').shuffle({type_name})"
+    if name == "stdin":
+        ParserState.nim_imports.add("import sys")
+        return "sys.stdin"
     return name
 
 
@@ -444,6 +447,9 @@ def to_py(self, prec=None):
 def to_py(self, prec=None):
     """attr_trailer: '.' IDENTIFIER"""
     attr_name = self.nodes[0].node if hasattr(self.nodes[0], 'node') else str(self.nodes[0])
+    # .lines on a file/stdin is a Nim-ism; Python files are directly iterable
+    if attr_name == "lines":
+        return ""
     # Handle tick attributes on expressions: .field'Next / .field'Prev / expr'Length
     if "__tick__" in attr_name:
         base, _, tick_attr = attr_name.partition("__tick__")
