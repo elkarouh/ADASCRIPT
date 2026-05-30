@@ -135,9 +135,9 @@ class Indenter:
     stack: []Block_T = []
     paren_depth: int = 0
 
-    def line(self, raw: str) -> str:
+    def indent_line(self, line: str) -> str:
         """Process one raw line and return it re-indented."""
-        let raw2: str = raw.rstrip()
+        let raw2: str = line.rstrip()
         let code: str = strip_code(raw2)
         let code_s: str = code.strip()
         let emit_text: str = raw2.strip()
@@ -315,7 +315,7 @@ def run_tests() -> int:
         let src: str = pair[0]
         let want: str = pair[1]
         var ind: Indenter = Indenter()
-        let got: str = "\n".join([ind.line(raw) for raw in src.split("\n")])
+        let got: str = "\n".join([ind.indent_line(line) for line in src.split("\n")])
         if got == want:
             passed += 1
         else:
@@ -342,8 +342,8 @@ def main() -> int:
         else:
             var ind: Indenter = Indenter()
             with open(arg) as f:
-                for raw in f:
-                    print(ind.line(raw))
+                for line in f:
+                    print(ind.indent_line(line))
 
 
 if __name__ == "__main__":
