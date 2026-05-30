@@ -1147,6 +1147,11 @@ def to_nim(self, prec=None):
     # But leave double-underscore names (dunder) intact.
     if name != "_" and name.startswith("_") and not name.startswith("__"):
         name = name[1:]
+    # Strip trailing underscores (forbidden in Nim); escape keyword conflicts.
+    name = _nim_safe_ident(name)
+    from hek_nim_expr import _NIM_KEYWORDS
+    if name.lower() in _NIM_KEYWORDS:
+        return f"`{name}`"
     return name
 
 
@@ -2906,6 +2911,23 @@ def _extract_variant_fields_nim(stmt_nodes, indent):
     return lines
 
 
+def _nim_safe_ident(name):
+    """Strip trailing underscores (forbidden in Nim); append 't' if result is a keyword."""
+    if name == "_":
+        return name
+    # Dunder names like __name__ are handled at a higher level (e.g. when isMainModule:).
+    if name.startswith("__") and name.endswith("__"):
+        return name
+    if name.endswith("_"):
+        from hek_nim_expr import _NIM_KEYWORDS
+        stripped = name.rstrip("_")
+        if not stripped:
+            return name
+        if stripped.lower() in _NIM_KEYWORDS:
+            stripped = stripped + "t"
+        return stripped
+    return name
+
 def _enum_block_members_nim(rhs):
     """Extract member names from an enum_block_def node (block enum form),
     prefixing bare integer members with 'v' as plain enum_def does."""
@@ -2915,7 +2937,7 @@ def _enum_block_members_nim(rhs):
             for seq in child.nodes:
                 if getattr(seq, "nodes", None):
                     m = str(seq.nodes[0].node)
-                    members.append(f"v{m}" if m.isdigit() else m)
+                    members.append(f"v{m}" if m.isdigit() else _nim_safe_ident(m))
     return members
 
 
@@ -3330,9 +3352,24 @@ def to_nim(self, indent=0):
             _sym = ParserState.symbol_table.lookup(_root)
             if _sym and str(_sym.get("type", "")).startswith("_py_module:"):
                 result = f"discard {result}"
+    # Nim builtins that return a non-void value — must discard when used as a statement
+    if len([p for p in parts if p.strip()]) == 1 and not result.strip().startswith("discard "):
+        import re as _re_disc2
+        _dm = _re_disc2.match(r'^.+\.([A-Za-z_]\w*)\(', result.strip())
+        if _dm and _dm.group(1) in {"pop"}:
+            result = _ind(indent) + "discard " + result.strip()
     # Bare print (no args) -> echo "" (empty line)
-    if result == "echo":
-        result = 'echo ""'
+    if result.strip() == "echo":
+        result = _ind(indent) + 'echo ""'
+    # print(x, end="") -> stdout.write(x)  (echo has no end= parameter)
+    import re as _re_echo
+    _echo_end_m = _re_echo.match(r'^(\s*)echo\((.+),\s*`?end`?\s*=\s*"([^"]*)"\s*\)$', result, _re_echo.DOTALL)
+    if _echo_end_m:
+        _ind_str, _args, _end_val = _echo_end_m.group(1), _echo_end_m.group(2), _echo_end_m.group(3)
+        if _end_val == "":
+            result = f"{_ind_str}stdout.write({_args})"
+        else:
+            result = f"{_ind_str}stdout.write({_args} & {_end_val!r})"
     # Convert bare string literals (docstrings) to Nim doc comments.
     # Skip when the function returns string — the literal is an implicit return value.
     # (Triple-quoted strings are already converted to ## by STRING.to_nim().)

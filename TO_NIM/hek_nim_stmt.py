@@ -186,7 +186,7 @@ def to_nim(self):
     else:
         prefix = "var "
     # Nim's implicit 'result' variable: no var needed inside typed procs
-    if lhs == "result" and getattr(ParserState, '_current_return_type', ''):
+    if lhs in ("result", "`result`") and getattr(ParserState, '_current_return_type', ''):
         prefix = ""
     # Record type in symbol table (after checking for re-declaration)
     name = self.nodes[0].to_nim() if hasattr(self.nodes[0], "to_nim") else None
@@ -321,8 +321,12 @@ def to_nim(self):
     )
     value = self.nodes[2].to_nim()
     nim_op, expand = _AUGOP_TO_NIM.get(py_op, (py_op, False))
-    # String += -> &= in Nim
+    # String += -> &= in Nim; string += char -> target.add(char)
     if nim_op == "+=" and not expand:
+        rhs_sym = ParserState.symbol_table.lookup(value)
+        rhs_type = (rhs_sym.get("type") or "") if rhs_sym else ""
+        if rhs_type == "char":
+            return f"{target}.add({value})"
         sym = ParserState.symbol_table.lookup(target)
         ttype = (sym.get("type") or "") if sym else ""
         if ttype in ("string", "str") or value.startswith('"') or value.startswith('fmt"'):
@@ -1884,7 +1888,11 @@ def to_nim(self):
         _NIM_VOID_BUILTINS = {"add", "incl", "excl", "del", "delete", "insert",
                               "setLen", "sort", "shuffle", "reverse", "reset",
                               "echo", "write", "writeLine", "close", "flush"}
-        if _disc_name and _disc_name in _proc_rtypes and _disc_name not in _NIM_VOID_BUILTINS:
+        # Nim seq builtins that return a non-void value — always discard when used as stmt
+        _NIM_NONVOID_BUILTINS = {"pop"}
+        if _disc_name and _disc_name in _NIM_NONVOID_BUILTINS and not result.startswith("discard "):
+            result = f"discard {result}"
+        elif _disc_name and _disc_name in _proc_rtypes and _disc_name not in _NIM_VOID_BUILTINS:
             _disc_ret = _proc_rtypes[_disc_name]
             _void_rets = {"", "void", "None", "unit", ": void", ": None", ": unit"}
             if _disc_ret not in _void_rets and not result.startswith("discard "):
