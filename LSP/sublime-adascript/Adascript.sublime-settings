@@ -1,0 +1,12 @@
+{
+    // Adascript uses 3-space indentation (GNAT / Ada convention).
+    "tab_size": 3,
+    "translate_tabs_to_spaces": true,
+
+    // Treat ' as a regular character so tick attributes (Color'First) do not
+    // interfere with Sublime's built-in word selection and bracket matching.
+    "word_separators": "./\\()\"'-:,.;<>~!@#%^&*|+=[]{}`~?",
+
+    "trim_trailing_white_space_on_save": true,
+    "ensure_newline_at_eof_on_save": true
+}

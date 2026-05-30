@@ -1,0 +1,281 @@
+%YAML 1.2
+---
+# Adascript syntax definition for Sublime Text 3 / 4
+# Copy or symlink the containing directory into your Packages folder.
+name: Adascript
+file_extensions:
+  - ady
+scope: source.adascript
+version: 2
+
+contexts:
+
+  main:
+    # Comments must come before strings so `# inside a string` is a comment
+    # only when outside a string context (push-based strings handle that).
+    - include: comment
+
+    # Strings: triple-quoted before single-line to prevent early termination.
+    - include: f-string-triple-double
+    - include: f-string-triple-single
+    - include: string-triple-double
+    - include: string-triple-single
+    - include: f-string-double
+    - include: f-string-single
+    - include: string-double
+    - include: string-single
+
+    # Declarations and definitions
+    - include: type-declaration
+    - include: decorator
+    - include: function-def
+    - include: class-def
+
+    # Adascript-specific constructs
+    - include: tick-attribute
+    - include: bash-variable
+
+    # Keywords and literals
+    - include: storage-keyword
+    - include: keyword-control
+    - include: builtin-constant
+    - include: builtin-function
+    - include: number
+    - include: operator
+
+  # ---------------------------------------------------------------------------
+  # Comments
+  # ---------------------------------------------------------------------------
+
+  comment:
+    - match: '#.*$'
+      scope: comment.line.number-sign.adascript
+
+  # ---------------------------------------------------------------------------
+  # String escape sequences (shared by all string contexts)
+  # ---------------------------------------------------------------------------
+
+  string-escape:
+    - match: "\\\\(x[0-9A-Fa-f]{2}|u[0-9A-Fa-f]{4}|U[0-9A-Fa-f]{8}|[0-7]{1,3}|[\\\\'\"nrtbfav0N])"
+      scope: constant.character.escape.adascript
+
+  # ---------------------------------------------------------------------------
+  # F-string interpolation — embedded expression inside { }
+  # ---------------------------------------------------------------------------
+
+  f-string-interpolation:
+    - match: '\{'
+      scope: punctuation.section.interpolation.begin.adascript
+      push:
+        - meta_scope: meta.interpolation.adascript
+        - match: '\}'
+          scope: punctuation.section.interpolation.end.adascript
+          pop: true
+        - include: main
+
+  # ---------------------------------------------------------------------------
+  # Triple-quoted strings  ("""..."""  and  '''...''')
+  # ---------------------------------------------------------------------------
+
+  string-triple-double:
+    - match: '"""'
+      scope: punctuation.definition.string.begin.adascript
+      push:
+        - meta_scope: string.quoted.triple.double.adascript
+        - match: '"""'
+          scope: punctuation.definition.string.end.adascript
+          pop: true
+        - include: string-escape
+
+  string-triple-single:
+    - match: "'''"
+      scope: punctuation.definition.string.begin.adascript
+      push:
+        - meta_scope: string.quoted.triple.single.adascript
+        - match: "'''"
+          scope: punctuation.definition.string.end.adascript
+          pop: true
+        - include: string-escape
+
+  f-string-triple-double:
+    - match: '[fF]"""'
+      scope: punctuation.definition.string.begin.adascript
+      push:
+        - meta_scope: string.quoted.triple.double.adascript meta.string.interpolated.adascript
+        - match: '"""'
+          scope: punctuation.definition.string.end.adascript
+          pop: true
+        - include: f-string-interpolation
+        - include: string-escape
+
+  f-string-triple-single:
+    - match: "[fF]'''"
+      scope: punctuation.definition.string.begin.adascript
+      push:
+        - meta_scope: string.quoted.triple.single.adascript meta.string.interpolated.adascript
+        - match: "'''"
+          scope: punctuation.definition.string.end.adascript
+          pop: true
+        - include: f-string-interpolation
+        - include: string-escape
+
+  # ---------------------------------------------------------------------------
+  # Single-line strings  ("..."  and  '...')
+  # ---------------------------------------------------------------------------
+
+  string-double:
+    - match: '"'
+      scope: punctuation.definition.string.begin.adascript
+      push:
+        - meta_scope: string.quoted.double.adascript
+        - match: '"'
+          scope: punctuation.definition.string.end.adascript
+          pop: true
+        - match: '$\n?'
+          pop: true
+        - include: string-escape
+
+  # Single-quoted strings use a lookahead to avoid treating tick attributes
+  # (Color'First) as string openers.  The pattern matches  '  only when a
+  # closing  '  exists later on the same line: '(?=[^'\n]+')
+  string-single:
+    - match: "'(?=[^'\\n]+')"
+      scope: punctuation.definition.string.begin.adascript
+      push:
+        - meta_scope: string.quoted.single.adascript
+        - match: "'"
+          scope: punctuation.definition.string.end.adascript
+          pop: true
+        - match: '$\n?'
+          pop: true
+        - include: string-escape
+
+  f-string-double:
+    - match: '[fF]"'
+      scope: punctuation.definition.string.begin.adascript
+      push:
+        - meta_scope: string.quoted.double.adascript meta.string.interpolated.adascript
+        - match: '"'
+          scope: punctuation.definition.string.end.adascript
+          pop: true
+        - match: '$\n?'
+          pop: true
+        - include: f-string-interpolation
+        - include: string-escape
+
+  f-string-single:
+    - match: "[fF]'(?=[^'\\n]+')"
+      scope: punctuation.definition.string.begin.adascript
+      push:
+        - meta_scope: string.quoted.single.adascript meta.string.interpolated.adascript
+        - match: "'"
+          scope: punctuation.definition.string.end.adascript
+          pop: true
+        - match: '$\n?'
+          pop: true
+        - include: f-string-interpolation
+        - include: string-escape
+
+  # ---------------------------------------------------------------------------
+  # Type declarations:  type NAME [params] is|= enum|record|tuple
+  # ---------------------------------------------------------------------------
+
+  type-declaration:
+    - match: '\b(type)\s+(\w+)(?:\s*\[[^\]]*\])?\s+(is|=)\s+(enum|record|tuple)\b'
+      captures:
+        1: storage.type.adascript
+        2: entity.name.type.adascript
+        3: keyword.other.adascript
+        4: storage.type.enum-or-record.adascript
+
+  # ---------------------------------------------------------------------------
+  # Decorators, function and class definitions
+  # ---------------------------------------------------------------------------
+
+  decorator:
+    - match: '^\s*(@)(\w+(?:\.\w+)*)'
+      captures:
+        1: punctuation.definition.decorator.adascript
+        2: entity.name.function.decorator.adascript
+
+  function-def:
+    - match: '\b(def|async\s+def)\s+(\w+)'
+      captures:
+        1: keyword.control.adascript
+        2: entity.name.function.adascript
+
+  class-def:
+    - match: '\b(class)\s+(\w+)'
+      captures:
+        1: keyword.control.adascript
+        2: entity.name.class.adascript
+
+  # ---------------------------------------------------------------------------
+  # Adascript-specific constructs
+  # ---------------------------------------------------------------------------
+
+  # Ada-style tick attributes: Color'First, State'Last, T'Range, s'Length
+  tick-attribute:
+    - match: '\b(\w+)''(\w+)\b'
+      captures:
+        1: variable.other.adascript
+        2: support.function.attribute.adascript
+
+  # Bash-style argument and environment variables: $1, $#, $@, $HOME
+  bash-variable:
+    - match: '\$[0-9#@*]|\$\w+'
+      scope: variable.other.shell.adascript
+
+  # ---------------------------------------------------------------------------
+  # Keywords
+  # ---------------------------------------------------------------------------
+
+  # var / let / const  are storage modifiers (distinct from control keywords)
+  storage-keyword:
+    - match: '\b(var|let|const)\b'
+      scope: storage.modifier.adascript
+
+  keyword-control:
+    - match: '\b(and|as|assert|async|await|break|case|class|continue|def|del|elif|else|enum|except|finally|for|from|global|if|import|in|is|lambda|match|nonlocal|not|or|pass|raise|record|return|try|tuple|type|when|while|with|yield)\b'
+      scope: keyword.control.adascript
+
+  # ---------------------------------------------------------------------------
+  # Constants and built-in functions
+  # ---------------------------------------------------------------------------
+
+  builtin-constant:
+    - match: '\b(True|False|None|NotImplemented|Ellipsis|__debug__)\b'
+      scope: constant.language.adascript
+
+  builtin-function:
+    - match: '\b(abs|all|any|ascii|bin|bool|breakpoint|bytearray|bytes|callable|chr|classmethod|compile|complex|delattr|dict|dir|divmod|enumerate|eval|exec|filter|float|format|frozenset|getattr|globals|hasattr|hash|help|hex|id|input|int|isinstance|issubclass|iter|len|list|locals|map|max|memoryview|min|next|object|oct|open|ord|pow|print|property|range|repr|reversed|round|set|setattr|slice|sorted|staticmethod|str|sum|super|tuple|type|vars|zip)\b(?=\s*\()'
+      scope: support.function.builtin.adascript
+
+  # ---------------------------------------------------------------------------
+  # Numeric literals
+  # ---------------------------------------------------------------------------
+
+  number:
+    - match: '\b0[xX][0-9A-Fa-f_]+\b'
+      scope: constant.numeric.hex.adascript
+    - match: '\b0[oO][0-7_]+\b'
+      scope: constant.numeric.octal.adascript
+    - match: '\b0[bB][01_]+\b'
+      scope: constant.numeric.binary.adascript
+    - match: '\b\d[\d_]*(\.\d[\d_]*)?([eE][+-]?\d[\d_]*)?[jJ]?\b'
+      scope: constant.numeric.adascript
+
+  # ---------------------------------------------------------------------------
+  # Operators
+  # Longest matches first to avoid partial matches (e.g. ** before *, ..< before ..)
+  # ---------------------------------------------------------------------------
+
+  operator:
+    - match: '\*\*=|//=|>>=|<<=|\.\.<|\.\.'
+      scope: keyword.operator.adascript
+    - match: ':=|==|!=|<=|>=|\*\*|//|<<|>>'
+      scope: keyword.operator.adascript
+    - match: '\+=|-=|\*=|/=|%=|&=|\|=|\^='
+      scope: keyword.operator.adascript
+    - match: '[+\-*/%@&|^~<>=]'
+      scope: keyword.operator.adascript
