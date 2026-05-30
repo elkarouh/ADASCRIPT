@@ -36,7 +36,8 @@ from py3expr import (
 
 # Nim keywords that are valid Python identifiers and need backtick-escaping when used as user identifiers
 _NIM_KEYWORDS = {
-    "nil", "addr", "and", "as", "asm", "bind", "block", "break", "case", "cast",
+    # "nil" intentionally excluded: it's a value literal in Nim, not an escaping target.
+    "addr", "and", "as", "asm", "bind", "block", "break", "case", "cast",
     "concept", "const", "continue", "converter", "defer", "discard", "distinct",
     "div", "do", "elif", "else", "end", "enum", "except", "export", "finally",
     "for", "from", "func", "if", "import", "in", "include", "interface", "is",
@@ -199,9 +200,11 @@ def _nim_expr_type(expr):
         if any(s.startswith(f) for f in _STRING_CALLS):
             return "string"
 
-        # plain identifier
-        if _re.match(r"^[A-Za-z_]\w*$", s):
-            sym = ParserState.symbol_table.lookup(s)
+        # plain identifier — try both the raw form and the backtick-stripped form,
+        # since keywords (result, proc, …) are stored with backticks in the symbol table.
+        _s_plain = s[1:-1] if s.startswith("`") and s.endswith("`") else s
+        if _re.match(r"^[A-Za-z_]\w*$", _s_plain):
+            sym = ParserState.symbol_table.lookup(s) or ParserState.symbol_table.lookup(_s_plain)
             if sym:
                 t = sym.get("type")
                 # Resolve type aliases one level (e.g. Graph_T -> Table[...])
