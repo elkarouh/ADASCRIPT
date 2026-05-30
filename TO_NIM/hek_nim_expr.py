@@ -49,7 +49,12 @@ _NIM_KEYWORDS = {
 @method(IDENTIFIER)
 def to_nim(self, prec=None):
     name = self.node
-    if name in _NIM_KEYWORDS:
+    # Nim forbids trailing underscores; strip them and re-check for keyword conflicts.
+    if name.endswith("_"):
+        name = name.rstrip("_")
+        if name.lower() in _NIM_KEYWORDS:
+            name = name + "t"
+    if name.lower() in _NIM_KEYWORDS:
         return f"`{name}`"
     return name
 
@@ -391,7 +396,14 @@ def _str_to_char_lit(s):
     """Convert a Nim string literal to a char literal if it holds exactly one char."""
     if len(s) >= 3 and s[0] == '"' and s[-1] == '"':
         inner = s[1:-1]
-        if len(inner) == 1 or (len(inner) == 2 and inner[0] == '\\'):
+        if len(inner) == 1:
+            return f"'{inner}'"
+        if len(inner) == 2 and inner[0] == '\\':
+            # '\"' is not a valid Nim char escape — double-quote needs no escaping
+            # in char literals; use '"' directly.
+            ch = inner[1]
+            if ch == chr(34):
+                return f"'{ch}'"
             return f"'{inner}'"
     return s
 
@@ -526,7 +538,16 @@ def binop_to_nim(self, prec=None, my_prec=None):
             # char comparisons: coerce single-char string literals to char literals
             def _is_char_type(s):
                 sym = ParserState.symbol_table.lookup(s)
-                return sym and (sym.get("type") or "") == "char"
+                if sym and (sym.get("type") or "") == "char":
+                    return True
+                # subscript of a string variable is always char in Nim
+                import re as _re_ct
+                _m = _re_ct.match(r'^(\w+)\[', s)
+                if _m:
+                    base_sym = ParserState.symbol_table.lookup(_m.group(1))
+                    if base_sym and (base_sym.get("type") or "") in ("string", "str"):
+                        return True
+                return False
             if nim_op in ("<", ">", "<=", ">=", "==", "!="):
                 if _is_char_type(result):
                     right = _str_to_char_lit(right)
@@ -606,7 +627,12 @@ def to_nim(self, prec=None):
         if inner.startswith("__bash_") and inner.endswith("__"):
             from hek_nim_parser import _bash_to_nim
             return _bash_to_nim(inner)
-    # Nim uses double quotes for strings; single quotes are char literals
+    # Nim uses double quotes for strings; single quotes are char literals.
+    # Special case: a single-quoted Python string whose only content is a double-
+    # quote character ('"') becomes the Nim char literal '"' — no escaping needed
+    # in Nim char literals, and escaping it would confuse the regex in _fix_when.
+    if s == chr(39) + chr(34) + chr(39):
+        return chr(39) + chr(34) + chr(39)
     if s.startswith(chr(39)) and s.endswith(chr(39)) and len(s) > 2:
         inner = s[1:-1]
         inner = inner.replace(chr(34), chr(92) + chr(34))
@@ -1078,7 +1104,8 @@ def to_nim(self, prec=None):
     return self.nodes[0].to_nim()
 
 
-_STRUTILS_METHODS = {"toLowerAscii", "toUpperAscii", "strip", "startsWith", "endsWith", "splitLines", "parseInt", "split", "join", "replace", "find", "alignLeft", "alignRight"}
+_STRUTILS_METHODS = {"toLowerAscii", "toUpperAscii", "strip", "startsWith", "endsWith", "splitLines", "parseInt", "split", "join", "replace", "find", "alignLeft", "alignRight",
+                     "isAlphaAscii", "isAlphaNumeric", "isDigit", "isSpaceAscii", "isLowerAscii", "isUpperAscii"}
 
 # Universal method mappings that apply regardless of receiver type
 _PY_UNIVERSAL_METHOD_TO_NIM = {
@@ -1093,6 +1120,12 @@ _PY_UNIVERSAL_METHOD_TO_NIM = {
     "index": "find",
     "ljust": "alignLeft",
     "rjust": "alignRight",
+    "isalpha": "isAlphaAscii",
+    "isalnum": "isAlphaNumeric",
+    "isdigit": "isDigit",
+    "isspace": "isSpaceAscii",
+    "islower": "isLowerAscii",
+    "isupper": "isUpperAscii",
 }
 
 def _translate_method(obj_name, method_name):
@@ -1997,7 +2030,10 @@ def _translate_stdlib_patterns(expr):
             sep = "$'" + sep[1] + "'"
         return f"{arg}.join({sep})"
 
-    # --- 5. f.readlines() -> f.readAll().splitLines() ---
+    # --- 5. f.read() -> f.readAll(); f.readlines() -> f.readAll().splitLines() ---
+    if expr.endswith(".read()"):
+        obj = expr[:-len(".read()")]
+        return f"{obj}.readAll()"
     if expr.endswith(".readlines()"):
         obj = expr[:-len(".readlines()")]
         ParserState.nim_imports.add("strutils")
@@ -2505,7 +2541,15 @@ def to_nim(self, prec=None):
         ops = [_PY_OP_TO_NIM.get(_op_string(seq.nodes[0]), _op_string(seq.nodes[0])) for seq in pairs]
         def _is_char(s):
             sym = ParserState.symbol_table.lookup(s)
-            return sym and (sym.get("type") or "") == "char"
+            if sym and (sym.get("type") or "") == "char":
+                return True
+            import re as _re_ict
+            _mc = _re_ict.match(r'^(\w+)\[', s)
+            if _mc:
+                bsym = ParserState.symbol_table.lookup(_mc.group(1))
+                if bsym and (bsym.get("type") or "") in ("string", "str"):
+                    return True
+            return False
         if any(_is_char(o) for o in operands):
             operands = [_str_to_char_lit(o) for o in operands]
         parts = [f"{operands[i]} {ops[i]} {operands[i+1]}" for i in range(len(ops))]
@@ -2565,7 +2609,15 @@ def to_nim(self, prec=None):
             # char comparisons: coerce single-char string literals to char literals
             def _is_char(s):
                 sym = ParserState.symbol_table.lookup(s)
-                return sym and (sym.get("type") or "") == "char"
+                if sym and (sym.get("type") or "") == "char":
+                    return True
+                import re as _re_ict
+                _mc = _re_ict.match(r'^(\w+)\[', s)
+                if _mc:
+                    bsym = ParserState.symbol_table.lookup(_mc.group(1))
+                    if bsym and (bsym.get("type") or "") in ("string", "str"):
+                        return True
+                return False
             if nim_op in ("<", ">", "<=", ">=", "==", "!="):
                 if _is_char(chain):
                     right = _str_to_char_lit(right)
@@ -2855,9 +2907,9 @@ def to_nim(self, prec=None):
     """slice_2: expression ':' expression -> Nim: a[lo..<hi] or a[lo..^n] for negative index"""
     lo = self.nodes[0].to_nim()
     hi = self.nodes[2].to_nim()
-    # Negative index: a[lo:-n] -> a[lo..^n]
+    # Negative stop: a[lo:-n] -> a[lo..^(n+1)]  (Python exclusive -> Nim inclusive)
     if hi.startswith("-") and hi[1:].isdigit():
-        return f"{lo}..^{hi[1:]}"
+        return f"{lo}..^{int(hi[1:]) + 1}"
     return f"{lo}..<{hi}"
 
 
@@ -2869,8 +2921,12 @@ def to_nim(self, prec=None):
 
 @method(slice_1_stop)
 def to_nim(self, prec=None):
-    """slice_1_stop: ':' expression -> Nim: a[0..<hi]"""
-    return f"0..<{self.nodes[1].to_nim()}"
+    """slice_1_stop: ':' expression -> Nim: a[0..<hi] or a[0..^(n+1)] for negative stop"""
+    hi = self.nodes[1].to_nim()
+    if hi.startswith("-") and hi[1:].isdigit():
+        # Python s[:-n] (exclusive) -> Nim s[0..^(n+1)] (inclusive)
+        return f"0..^{int(hi[1:]) + 1}"
+    return f"0..<{hi}"
 
 
 @method(slice_bare)
