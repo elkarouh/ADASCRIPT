@@ -6,6 +6,7 @@ NIM_VERSION/
 *.exe
 *.png
 EXAMPLES/**/*.nim
+ADA_INDENT/ada_indent
 
 # Obsolete/deprecated code
 OBSOLETE/
