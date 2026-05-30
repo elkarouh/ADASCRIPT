@@ -320,20 +320,20 @@ def run_tests() -> int:
             passed += 1
         else:
             failed += 1
-            print("FAIL:")
-            print("--- expected ---")
-            print(want)
-            print("--- got ---")
-            print(got)
+            print "FAIL:"
+            print "--- expected ---"
+            print want
+            print "--- got ---"
+            print got
 
-    print(f"{passed} passed, {failed} failed")
+    print f"{passed} passed, {failed} failed"
     if failed > 0:
         result = 1
 
 
 def main() -> int:
     if $# < 1:
-        print("usage: ada_indent FILE   (or --test)")
+        print "usage: ada_indent FILE   (or --test)"
         result = 1
     else:
         let arg: str = $1
@@ -343,7 +343,7 @@ def main() -> int:
             var ind: Indenter = Indenter()
             with open(arg) as f:
                 for line in f:
-                    print(ind.indent_line(line))
+                    print ind.indent_line(line)
 
 
 if __name__ == "__main__":
