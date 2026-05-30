@@ -125,7 +125,7 @@ def last_word(code: str) -> str:
 
 def spaces(levels: int) -> str:
     """A run of spaces for the given number of indent levels (never negative)."""
-    return " " * (max(0, levels) * INDENT_WIDTH)
+    " " * (max(0, levels) * INDENT_WIDTH)
 
 
 # ---------------------------------------------------------------------------
