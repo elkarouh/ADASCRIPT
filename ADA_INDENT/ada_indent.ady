@@ -200,16 +200,6 @@ class Indenter:
             self.paren_depth = max(0, self.paren_depth + paren_delta(code))
 
 
-def reindent(src: str) -> str:
-    """Re-indent Ada source, returning the reformatted text."""
-    var ind: Indenter = Indenter()
-    let lines: []str = src.split("\n")
-    var out: []str = []
-    for raw in lines:
-        out.append(ind.line(raw))
-    result = "\n".join(out)
-
-
 # ---------------------------------------------------------------------------
 # Self-tests
 # ---------------------------------------------------------------------------
@@ -324,7 +314,8 @@ def run_tests() -> int:
     for pair in cases:
         let src: str = pair[0]
         let want: str = pair[1]
-        let got: str = reindent(src)
+        var ind: Indenter = Indenter()
+        let got: str = "\n".join([ind.line(raw) for raw in src.split("\n")])
         if got == want:
             passed += 1
         else:
