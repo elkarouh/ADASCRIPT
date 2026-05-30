@@ -143,61 +143,61 @@ class Indenter:
         let emit_text: str = raw2.strip()
 
         if emit_text == "":
-            result = ""
-        else:
-            let cont: int = 1 if self.paren_depth > 0 else 0
-            let lw: str = lead_word(code_s)
-            var disp: int = len(self.stack)
+            return ""
 
-            case lw:
-                when "end":
-                    while len(self.stack) > 0 and self.stack[-1] == WHEN_:
-                        self.stack.pop()
-                    if len(self.stack) > 0:
-                        self.stack.pop()
-                    disp = len(self.stack)
+        let cont: int = 1 if self.paren_depth > 0 else 0
+        let lw: str = lead_word(code_s)
+        var disp: int = len(self.stack)
 
-                when "begin":
-                    if len(self.stack) > 0 and (self.stack[-1] == PKG or self.stack[-1] == DECLARE_):
-                        disp = len(self.stack) - 1
-                        self.stack[-1] = BLOCK
-                    else:
-                        disp = len(self.stack)
-                        self.stack.append(BLOCK)
+        case lw:
+            when "end":
+                while len(self.stack) > 0 and self.stack[-1] == WHEN_:
+                    self.stack.pop()
+                if len(self.stack) > 0:
+                    self.stack.pop()
+                disp = len(self.stack)
 
-                when "when":
-                    if len(self.stack) > 0 and self.stack[-1] == WHEN_:
-                        self.stack.pop()
-                    disp = len(self.stack)
-                    self.stack.append(WHEN_)
-
-                when "elsif" | "else" | "exception" | "or" | "private":
+            when "begin":
+                if len(self.stack) > 0 and (self.stack[-1] == PKG or self.stack[-1] == DECLARE_):
                     disp = len(self.stack) - 1
-
-                when others:
+                    self.stack[-1] = BLOCK
+                else:
                     disp = len(self.stack)
-                    let last: str = last_word(code_s)
-                    case last:
-                        when "is":
-                            self.stack.append(CASE_ if lw == "case" else PKG)
-                        when "then":
-                            self.stack.append(IF_)
-                        when "loop":
-                            self.stack.append(LOOP_)
-                        when "record":
-                            if lw != "null":
-                                self.stack.append(RECORD_)
-                        when "select":
-                            self.stack.append(SELECT_)
-                        when "do":
-                            self.stack.append(DO_)
-                        when "declare":
-                            self.stack.append(DECLARE_)
-                        when others:
-                            pass
+                    self.stack.append(BLOCK)
 
-            result = spaces(disp + cont) + emit_text
-            self.paren_depth = max(0, self.paren_depth + paren_delta(code))
+            when "when":
+                if len(self.stack) > 0 and self.stack[-1] == WHEN_:
+                    self.stack.pop()
+                disp = len(self.stack)
+                self.stack.append(WHEN_)
+
+            when "elsif" | "else" | "exception" | "or" | "private":
+                disp = len(self.stack) - 1
+
+            when others:
+                disp = len(self.stack)
+                let last: str = last_word(code_s)
+                case last:
+                    when "is":
+                        self.stack.append(CASE_ if lw == "case" else PKG)
+                    when "then":
+                        self.stack.append(IF_)
+                    when "loop":
+                        self.stack.append(LOOP_)
+                    when "record":
+                        if lw != "null":
+                            self.stack.append(RECORD_)
+                    when "select":
+                        self.stack.append(SELECT_)
+                    when "do":
+                        self.stack.append(DO_)
+                    when "declare":
+                        self.stack.append(DECLARE_)
+                    when others:
+                        pass
+
+        self.paren_depth = max(0, self.paren_depth + paren_delta(code))
+        spaces(disp + cont) + emit_text
 
 
 # ---------------------------------------------------------------------------
