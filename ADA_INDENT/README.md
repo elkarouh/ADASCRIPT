@@ -71,6 +71,62 @@ read stdin and write stdout.
 format-all-buffer`, or enable `format-all-mode` to reformat on save
 automatically.
 
+### Indent as you type (electric)
+
+`format-all` reformats the *whole buffer* on demand (or on save). For
+indentation that happens **while you type**, wire `ada_indent` up as Emacs'
+`indent-line-function` and let `electric-indent-mode` call it on every newline.
+
+The one thing to know: `ada_indent` is **stateful** — it carries a stack of
+open blocks, so it cannot indent a line in isolation. To indent the current
+line it must see every line above it. The function below therefore pipes the
+buffer *from the top through the current line* into `ada-indent` and reads back
+the indentation of the last emitted line. (Because blank lines are passed
+through at column 0, an empty current line is probed with a neutral token so it
+picks up the enclosing block's indent instead of snapping to the left margin.)
+
+```elisp
+(require 'subr-x)   ; string-blank-p, string-trim-left (built in on Emacs 27+)
+
+(defun ada-indent--column ()
+  "Column `ada-indent' assigns to the current line in its buffer context."
+  (let* ((bol   (line-beginning-position))
+         (eol   (line-end-position))
+         (cur   (buffer-substring-no-properties bol eol))
+         ;; Blank line: probe with a neutral token to get the block-body indent.
+         (probe (if (string-blank-p cur) "x" cur))
+         (input (concat (buffer-substring-no-properties (point-min) bol) probe))
+         (out   (with-temp-buffer
+                  (insert input)
+                  (call-process-region (point-min) (point-max)
+                                       "ada-indent" t t nil)
+                  (buffer-string)))
+         (last  (car (last (split-string out "\n" t)))))
+    (if last (- (length last) (length (string-trim-left last))) 0)))
+
+(defun ada-indent-line ()
+  "Indent the current line with `ada-indent'."
+  (interactive)
+  (indent-line-to (ada-indent--column)))
+
+(add-hook 'ada-mode-hook
+          (lambda ()
+            (setq-local indent-line-function #'ada-indent-line)
+            (electric-indent-local-mode 1)))
+```
+
+Now `RET` indents the new line, `TAB` reindents the current one, and typing a
+dedenting keyword (`end`, `else`, `when`, …) snaps the line left as soon as the
+keyword is recognised.
+
+For *continuous* reformatting as you edit anywhere in the line — not just on
+newline — add [`aggressive-indent-mode`](https://github.com/Malabarba/aggressive-indent-mode)
+(`(add-hook 'ada-mode-hook #'aggressive-indent-mode)`). Be aware of the
+trade-off: each reindent spawns one `ada-indent` process over the buffer prefix,
+so `aggressive-indent` (which reindents whole regions on every change) is fine
+for small files but gets sluggish on large ones. For large files prefer
+electric indent on newline plus `format-all` on save.
+
 ## The model: a block stack
 
 Indentation in Ada is a function of how many blocks are currently open. The
