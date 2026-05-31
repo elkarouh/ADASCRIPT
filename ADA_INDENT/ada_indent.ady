@@ -1,4 +1,5 @@
-#!/usr/bin/env py2py
+#!/usr/bin/env py2nim
+#ady2nim-args c -d:release --opt:speed
 # ada_indent.ady — a simplified Ada source re-indenter, written in Adascript.
 #
 # This is NOT a full Ada parser. It implements only the slice of Ada grammar
