@@ -112,10 +112,7 @@ def lead_word(code: str) -> str:
 
 def last_word(code: str) -> str:
     """Lowercased final token, after dropping a trailing ';'. '' if empty."""
-    var s: str = code.strip()
-    if s.endswith(";"):
-        s = s[:-1].strip()
-    let parts: []str = s.split()
+    let parts: []str = code.strip().rstrip(";").split()
     if len(parts) > 0:
         result = parts[-1].lower()
 
