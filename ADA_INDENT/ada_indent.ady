@@ -14,8 +14,8 @@
 # See README.md in this directory for the simplified grammar specification.
 #
 # Usage:
-#   python3.13 TO_PYTHON/py2py.py -c ADA_INDENT/ada_indent.ady file.adb   # reindent a file
-#   python3.13 TO_PYTHON/py2py.py -c ADA_INDENT/ada_indent.ady --test     # run self-tests
+#   py2nim ADA_INDENT/ada_indent.ady -r -- file.adb   # compile if stale, reindent a file
+#   py2nim ADA_INDENT/ada_indent.ady -r -- --test     # compile if stale, run self-tests
 #
 # The core logic (reindent + helpers) is pure Adascript and transpiles to
 # both Python and Nim. The CLI uses the bash-style argument primitives

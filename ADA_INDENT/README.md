@@ -10,18 +10,27 @@ and how it drives the indenter.
 
 ## Running
 
-Transpile once, then run the generated Python directly:
+Compile once (the shebang already encodes `-d:release --opt:speed`), then run
+the resulting binary directly:
 
 ```bash
-python3.13 TO_PYTHON/py2py.py ADA_INDENT/ada_indent.ady > ada_indent.py
-python3.13 ada_indent.py file.adb          # reindent a file
-python3.13 ada_indent.py --test            # run self-tests
-cat file.adb | python3.13 ada_indent.py   # reindent from stdin
+py2nim ADA_INDENT/ada_indent.ady            # transpile + compile (cached)
+py2nim ADA_INDENT/ada_indent.ady -r -- file.adb   # compile if stale, then run
+py2nim ADA_INDENT/ada_indent.ady -r -- --test     # run self-tests
+cat file.adb | py2nim ADA_INDENT/ada_indent.ady -r  # reindent from stdin
 ```
 
+`py2nim` stores the binary in `~/.cache/hparsec/` and skips recompilation when
+neither the source nor the generated `.nim` have changed.
+
 The core (the `Indenter` class plus the lexical helpers) is pure Adascript and
-transpiles to both Python and Nim. Execution is verified on the **Python
-target**; the Nim CLI wrapper is transpiled but not exercised in CI.
+transpiles to both Python and Nim. Self-tests are also exercised via the Python
+target in CI:
+
+```bash
+python3.13 TO_PYTHON/py2py.py ADA_INDENT/ada_indent.ady > /tmp/ada_indent.py
+python3.13 /tmp/ada_indent.py --test
+```
 
 ## Emacs integration (format-all)
 
@@ -30,22 +39,18 @@ target**; the Nim CLI wrapper is transpiled but not exercised in CI.
 writes re-indented source to stdout, which is exactly the interface
 `format-all` expects.
 
-**Step 1 — install the script.**  Transpile once and put the result on your
-`PATH`:
+**Step 1 — install the binary.**  Compile once and symlink the cached binary
+onto your `PATH`:
 
 ```bash
-python3.13 TO_PYTHON/py2py.py ADA_INDENT/ada_indent.ady > ~/.local/bin/ada_indent.py
-chmod +x ~/.local/bin/ada_indent.py
+py2nim ADA_INDENT/ada_indent.ady          # compile; binary lands in ~/.cache/hparsec/
+ln -s ~/.cache/hparsec/cache-*/ada_indent ~/.local/bin/ada-indent
 ```
 
-Or create a thin shell wrapper so the script is invoked as a plain command:
+Or let `py2nim` install it for you with an explicit output path:
 
 ```bash
-cat > ~/.local/bin/ada-indent << 'EOF'
-#!/bin/sh
-exec python3.13 ~/.local/bin/ada_indent.py "$@"
-EOF
-chmod +x ~/.local/bin/ada-indent
+py2nim c -o:~/.local/bin/ada-indent ADA_INDENT/ada_indent.ady
 ```
 
 **Step 2 — register the formatter in Emacs.**  Add to your `init.el` (or the
@@ -54,7 +59,7 @@ relevant `use-package` block):
 ```elisp
 (define-format-all-formatter ada-indent
   (:executable "ada-indent")
-  (:install "Transpile ADA_INDENT/ada_indent.ady with py2py, then put ada-indent on PATH")
+  (:install "Compile ADA_INDENT/ada_indent.ady with py2nim, then put ada-indent on PATH")
   (:languages "Ada")
   (:features)
   (:format (format-all--buffer-easy executable)))
