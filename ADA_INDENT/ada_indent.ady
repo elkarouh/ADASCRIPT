@@ -279,24 +279,6 @@ class Indenter:
                 self.stack.append(PKG)
                 disp = len(self.stack)
 
-        # Multi-line if/elsif condition: continuation lines are indented one
-        # level deeper than the 'if'/'elsif'. When 'then' finally appears
-        # (as lead word or last word) the IF frame is pushed (for 'if' only —
-        # for 'elsif' the IF frame is already on the stack) and disp snaps
-        # back to the if/elsif level so 'then' aligns with its opener.
-        if self.cond_state > 0:
-            let last: str = last_word(code_s)
-            if last == "then" or lw == "then":
-                disp = self.cond_base
-                if self.cond_state == 1:
-                    self.stack.append(IF_)
-                self.cond_state = 0
-            else:
-                disp = self.cond_base + 1
-            self.in_cont = False
-            self.paren_depth = max(0, self.paren_depth + paren_delta(code))
-            return spaces(disp + cont) + emit_text
-
         # Inside an unclosed parenthesis the line is a continuation of an
         # expression / list, so statement keywords (then/else/elsif/when) are
         # operators here, not statement parts. It is aligned by absolute column
@@ -305,6 +287,9 @@ class Indenter:
         #   '(if'      -> then/else/elsif under the 'if', condition past it;
         #   '(case'    -> when clauses one level in from the 'case', clause
         #                 bodies one level deeper still.
+        # This is checked before the cond_state branch so that lines inside a
+        # parenthesis opened within a multi-line if/elsif condition are aligned
+        # to that parenthesis (the condition tracker records those parens).
         # If the line also closes the parentheses and opens a block (a
         # multi-line parameter list ending in ') is', ') return T is', ') loop',
         # …) the block frame is pushed here, after the line is aligned.
@@ -342,25 +327,56 @@ class Indenter:
             self.paren_depth = max(0, new_depth)
             self._push_parens(emit_text, lead, entry_depth, self.paren_depth)
             # A line that closes back out of all parentheses and ends in a block
-            # opener (e.g. ') is' on a multi-line parameter list) opens that block.
+            # opener opens that block.
             if new_depth <= 0:
-                case plt:
-                    when "is":
-                        self.stack.append(CASE_ if lw == "case" else PKG)
-                    when "then":
+                if self.cond_state > 0 and plt == "then":
+                    # A multi-line if/elsif condition closed its parens and
+                    # reached 'then' on the same line: end it like cond_state.
+                    if self.cond_state == 1:
                         self.stack.append(IF_)
-                    when "loop":
-                        self.stack.append(LOOP_)
-                    when "record":
-                        if lw != "null":
-                            self.stack.append(RECORD_)
-                    when "select":
-                        self.stack.append(SELECT_)
-                    when "do":
-                        self.stack.append(DO_)
-                    when others:
-                        pass
+                    self.cond_state = 0
+                else:
+                    case plt:
+                        when "is":
+                            self.stack.append(CASE_ if lw == "case" else PKG)
+                        when "then":
+                            self.stack.append(IF_)
+                        when "loop":
+                            self.stack.append(LOOP_)
+                        when "record":
+                            if lw != "null":
+                                self.stack.append(RECORD_)
+                        when "select":
+                            self.stack.append(SELECT_)
+                        when "do":
+                            self.stack.append(DO_)
+                        when others:
+                            pass
             return " " * lead + emit_text
+
+        # Multi-line if/elsif condition (outside any parenthesis): continuation
+        # lines are one level deeper than the 'if'/'elsif'. When 'then' appears
+        # the IF frame is pushed (for 'if' only — for 'elsif' it is already on
+        # the stack) and 'then' snaps back to the opener level. Parens opened in
+        # the condition are recorded so the lines inside them are aligned by the
+        # branch above.
+        if self.cond_state > 0:
+            let last: str = last_word(code_s)
+            if last == "then" or lw == "then":
+                disp = self.cond_base
+                if self.cond_state == 1:
+                    self.stack.append(IF_)
+                self.cond_state = 0
+            else:
+                disp = self.cond_base + 1
+            self.in_cont = False
+            # cond_state lines are outside parentheses (inside-paren lines are
+            # handled above), so they use only the if/elsif-relative depth — no
+            # 'cont', which could otherwise leak in from a preceding paren line.
+            let lead_c: int = max(0, disp) * INDENT_WIDTH
+            self.paren_depth = max(0, self.paren_depth + paren_delta(code))
+            self._push_parens(emit_text, lead_c, entry_depth, self.paren_depth)
+            return " " * lead_c + emit_text
 
         case lw:
             when "end":
@@ -725,6 +741,32 @@ def run_tests() -> int:
         "      and (B = C\n"
         "             or else D = E);\n"
         "end F;\n"))
+
+    # 13. Parentheses opened inside a multi-line if-statement condition: the
+    #     lines within them are aligned to the paren (with the operator extra),
+    #     not flattened to the condition level; 'then' still snaps to the 'if'.
+    cases.append((
+        "procedure P is\n"
+        "begin\n"
+        "if A\n"
+        "and then (B\n"
+        "or else (C\n"
+        "and then D))\n"
+        "then\n"
+        "null;\n"
+        "end if;\n"
+        "end P;\n",
+
+        "procedure P is\n"
+        "begin\n"
+        "  if A\n"
+        "    and then (B\n"
+        "                or else (C\n"
+        "                           and then D))\n"
+        "  then\n"
+        "    null;\n"
+        "  end if;\n"
+        "end P;\n"))
 
     for pair in cases:
         let src: str = pair[0]

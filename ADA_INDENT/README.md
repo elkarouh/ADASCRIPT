@@ -276,6 +276,20 @@ if FTFX.The_Flight_Status = Cancelled
   end if;
 ```
 
+If a condition opens a **parenthesis** that spans lines, the lines inside it are
+aligned to that parenthesis (with the operator-extra rule below) rather than
+flattened to the condition level, so nested boolean groups show their depth:
+
+```ada
+if Event_Category (Action_Info.Event) = External_Reset
+    and then Departure.Ready_To_Depart (FTFX.Departure_Info)
+    and then (Ready_Time_Deterioration
+                or else (SAM_Status.Is_Sent (FTFX.SAM_Data)
+                           and then SAM_Status.Get_CTOT (FTFX.SAM_Data)
+                           - Departure.Taxi_Time (FTFX.Departure_Info) < Time.Clock))
+  then
+```
+
 ### Statement continuation
 
 A logical statement or declaration split across several physical lines has its
