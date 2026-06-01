@@ -258,6 +258,24 @@ class Indenter:
         if emit_text == "":
             return ""
 
+        # A comment-only line (text remains, but nothing is left after stripping
+        # the '--' comment) is transparent to the parser: indent it to the
+        # current continuation context but leave ALL state untouched
+        # (in_cont / cond_state / paren_depth / pending_spec / paren_stack), so
+        # the next real line indents exactly as if the comment were not there.
+        # Without this the trailing in_cont update would clear a pending
+        # statement continuation, dropping the line after the comment back to
+        # the base level (and a comment after 'function ... is' would wrongly
+        # resolve the deferred spec).
+        if code_s == "":
+            if self.paren_depth > 0 and len(self.paren_stack) > 0:
+                let ptop: (int, int, int) = self.paren_stack[-1]
+                return " " * ptop[1] + emit_text
+            if self.cond_state > 0:
+                return " " * (max(0, self.cond_base + 1) * INDENT_WIDTH) + emit_text
+            let clvl: int = len(self.stack) + (1 if self.in_cont else 0)
+            return " " * (max(0, clvl) * INDENT_WIDTH) + emit_text
+
         let entry_depth: int = self.paren_depth
         let cont: int = 1 if (self.paren_depth > 0 or self.in_cont) else 0
         let lw: str = lead_word(code_s)
@@ -767,6 +785,32 @@ def run_tests() -> int:
         "    null;\n"
         "  end if;\n"
         "end P;\n"))
+
+    # 14. Comment lines are transparent to the parser: comments interrupting a
+    #     statement continuation must not clear it, so the 'and (...' boolean
+    #     continuation after the comments still gets its continuation + operator
+    #     indent relative to 'return'; comments inside the paren align to the
+    #     open paren's first item.
+    cases.append((
+        "function F return Boolean is\n"
+        "begin\n"
+        "return New_OBT > Old_OBT\n"
+        "-- comment one\n"
+        "-- comment two\n"
+        "and (Departure.Earliest_TTOT = None\n"
+        "-- inner comment\n"
+        "or else New_OBT > X);\n"
+        "end F;\n",
+
+        "function F return Boolean is\n"
+        "begin\n"
+        "  return New_OBT > Old_OBT\n"
+        "    -- comment one\n"
+        "    -- comment two\n"
+        "      and (Departure.Earliest_TTOT = None\n"
+        "           -- inner comment\n"
+        "             or else New_OBT > X);\n"
+        "end F;\n"))
 
     for pair in cases:
         let src: str = pair[0]
