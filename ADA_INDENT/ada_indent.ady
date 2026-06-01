@@ -76,30 +76,36 @@ def strip_code(line: str) -> str:
 
 
 def paren_delta(line: str) -> int:
-    """Net '(' minus ')' on the line, ignoring parens inside string literals.
+    """Net '(' minus ')' on the line, ignoring parens inside string and character
+    literals.
 
-    The input must already have comments removed (see strip_code), so only
-    string literals need to be skipped here.
+    The input must already have comments removed (see strip_code). Double-quoted
+    strings are skipped, and so are character literals: a '(' or ')' written as
+    '(' / ')' must not be counted. A character literal is a quote, any single
+    character, then a closing quote ('x'); a quote followed by a letter is an
+    attribute tick (X'Image) and is left alone.
     """
-    var state: Scan_T = CODE
-    for c in line:
-        case state:
-            when CODE:
-                case c:
-                    when '"':
-                        state = STRING_LIT
-                    when "(":
-                        result += 1
-                    when ")":
-                        result -= 1
-                    when others:
-                        pass
-            when STRING_LIT:
-                case c:
-                    when '"':
-                        state = CODE
-                    when others:
-                        pass
+    var depth: int = 0
+    var i: int = 0
+    let n: int = len(line)
+    while i < n:
+        let c: char = line[i]
+        if c == '"':
+            i += 1
+            while i < n and line[i] != '"':
+                i += 1
+            i += 1                               # skip the closing quote
+        elif c == '\'' and i + 2 < n and line[i + 2] == '\'':
+            i += 3                               # character literal: skip 'x' whole
+        elif c == '(':
+            depth += 1
+            i += 1
+        elif c == ')':
+            depth -= 1
+            i += 1
+        else:
+            i += 1
+    return depth
 
 
 def lead_word(code: str) -> str:
@@ -175,6 +181,28 @@ def starts_with_operator(code_s: str) -> bool:
     return w == "and" or w == "or" or w == "xor" or w == "mod" or w == "rem"
 
 
+def is_term_continuation(code_s: str) -> bool:
+    """True if the line continues a value (sub-)expression across a line break,
+    rather than starting a new term or binding. Such a line nests one level past
+    where its expression began. It qualifies when it opens an argument list with
+    '(' or starts with a value operator: arithmetic / relational / concatenation
+    / range (=, &, +, -, *, /, <, >, .., mod, rem).
+
+    Excluded (these stay at the base continuation level): the boolean connectives
+    'and'/'or'/'xor' (they join terms), the binding operators ':=' and '=>', and
+    the choice separator '|' (handled with the 'when' choice list)."""
+    if code_s == "":
+        return False
+    if code_s.startswith("("):
+        return True
+    if (not starts_with_operator(code_s)
+            or code_s.startswith(":=") or code_s.startswith("=>")
+            or code_s.startswith("|")):
+        return False
+    let w: str = lead_word(code_s)
+    return w != "and" and w != "or" and w != "xor"
+
+
 def scan_parens(text: str, base_depth: int, base_col: int) -> [](int, int, int):
     """Find every '(' opened in a line and how its continuations should align.
 
@@ -185,8 +213,9 @@ def scan_parens(text: str, base_depth: int, base_col: int) -> [](int, int, int):
     for '(case'. For a plain '(' the alignment column is the first non-blank
     character after it (the first item), or one indent level in if the '(' ends
     the line. For '(if'/'(case' the column is the keyword itself, which the
-    caller offsets per the expression's syntax. Parentheses inside string
-    literals are not special-cased, so this is a best-effort scan.
+    caller offsets per the expression's syntax. String and character literals
+    are skipped so a '(' written as '(' (or in "(") is not recorded; otherwise
+    this is a best-effort scan.
     """
     var openers: [](int, int, int) = []
     var depth: int = base_depth
@@ -194,7 +223,14 @@ def scan_parens(text: str, base_depth: int, base_col: int) -> [](int, int, int):
     let n: int = len(text)
     while i < n:
         let ch: char = text[i]
-        if ch == '(':
+        if ch == '"':
+            i += 1
+            while i < n and text[i] != '"':
+                i += 1
+            i += 1                               # skip the closing quote
+        elif ch == '\'' and i + 2 < n and text[i + 2] == '\'':
+            i += 3                               # character literal: skip 'x' whole
+        elif ch == '(':
             depth += 1
             var j: int = i + 1
             while j < n and text[j] == ' ':
@@ -215,9 +251,12 @@ def scan_parens(text: str, base_depth: int, base_col: int) -> [](int, int, int):
                 openers.append((depth, base_col + j, 0))
             else:
                 openers.append((depth, base_col + INDENT_WIDTH, 0))
+            i += 1
         elif ch == ')':
             depth -= 1
-        i += 1
+            i += 1
+        else:
+            i += 1
     return openers
 
 
@@ -237,7 +276,7 @@ class Indenter:
     cond_state: int = 0          # 1 = inside multi-line 'if' condition, 2 = 'elsif'
     cond_base: int = 0           # display depth of the opening if/elsif
     in_cont: bool = False        # previous line was an unterminated statement/declaration
-    was_cont: bool = False       # the previous physical line was itself indented as a continuation
+    value_base: int = 0          # display level where the current statement's value expression starts
     paren_stack: [](int, int, int) = []  # (paren_level, align_col, kind) for every open '('
 
     def _push_parens(self, text: str, base_col: int, base_depth: int, new_depth: int):
@@ -281,11 +320,6 @@ class Indenter:
 
         let entry_depth: int = self.paren_depth
         let cont: int = 1 if (self.paren_depth > 0 or self.in_cont) else 0
-        # Whether the *previous* physical line was a continuation, captured before
-        # we overwrite the flag for the current line. Used to decide whether a
-        # '('-opening continuation nests a second level (see the final emit).
-        let prev_was_cont: bool = self.was_cont
-        self.was_cont = cont > 0
         let lw: str = lead_word(code_s)
         var disp: int = len(self.stack)
 
@@ -410,11 +444,11 @@ class Indenter:
             else:
                 disp = self.cond_base + 1
                 # The 'and'/'or'/'xor' connectives join condition terms and sit
-                # at this base continuation level. A line that instead starts
-                # with another operator (>=, &, +, …) continues the *previous*
-                # term across a line break, so it nests one level deeper.
-                if (starts_with_operator(code_s)
-                        and lw != "and" and lw != "or" and lw != "xor"):
+                # at this base continuation level. A line that instead continues
+                # the previous term across the break — another operator (>=, &,
+                # …) or an argument list opening with '(' — nests one level
+                # deeper.
+                if is_term_continuation(code_s):
                     disp += 1
             self.in_cont = False
             # cond_state lines are outside parentheses (inside-paren lines are
@@ -500,22 +534,29 @@ class Indenter:
         # only flag a general statement continuation when not in that mode.
         self.in_cont = False if self.cond_state > 0 else stmt_incomplete(code_s)
         self.paren_depth = max(0, self.paren_depth + paren_delta(code))
-        # A statement continuation outside any parenthesis takes a plain single
-        # level, regardless of a leading operator. Operator-led extra indent is
-        # applied only *inside* parentheses (see the paren branch above); a
-        # continuation such as ':=' or 'and then' here keeps the one-level indent
-        # so it aligns with any comment lines that document it.
+
+        # Track where the current statement's value expression begins, so that a
+        # term continuation below can nest one level past it. A non-continuation
+        # line is the statement head (the expression starts there); a ':=' that
+        # leads a continuation line moves the start to that line (the value
+        # begins after the ':=').
+        if cont == 0:
+            self.value_base = disp
+        elif code_s.startswith(":="):
+            self.value_base = disp + cont
+
         var lead_n: int = max(0, disp + cont) * INDENT_WIDTH
-        # Exception: a continuation that *opens* with '(' is the argument list /
-        # parenthesised sub-expression of the line it continues, so it nests one
-        # level deeper than that line. The normal +1 'cont' already places it one
-        # level past the statement start, so the extra level is added only when
-        # the line it continues was ITSELF a continuation (e.g. the '(args)' under
-        # a continued '… := F'); for a call name on the statement's first line the
-        # plain +1 is already correct. Applied before _push_parens so the inner
-        # items align to this line's '('.
-        if cont > 0 and prev_was_cont and code_s.startswith("("):
-            lead_n += INDENT_WIDTH
+        # A term continuation (a value operator -, +, &, >=, … or an argument list
+        # opening with '(') continues the value expression, so it sits one level
+        # past where that expression began (value_base). This nests it under the
+        # line it continues — e.g. the '- …' / '(args)' under a continued ':= F' —
+        # while a chain of such continuations all align at the same level rather
+        # than escalating. The boolean connectives and bindings (':=', '=>') are
+        # excluded by is_term_continuation and keep the plain continuation level,
+        # so they align with any comments that document them. Applied before
+        # _push_parens so the inner items align to this line's '('.
+        if cont > 0 and is_term_continuation(code_s):
+            lead_n = max(0, self.value_base + 1) * INDENT_WIDTH
         # A '|' continuation extends a 'when' choice list ('when A | B' split
         # before the '=>'). The WHEN_ frame already provides the indent, so it
         # aligns at the arm-body level (the frame depth) rather than taking the
@@ -1058,6 +1099,70 @@ def run_tests() -> int:
         "      | Action_16 | Action_43 =>\n"
         "      Do_It;\n"
         "  end case;\n"
+        "end P;\n"))
+
+    # 22. General term-continuation nesting (not just in conditions): when the
+    #     ':=' initializer is on its own continuation line, an operator that
+    #     continues the value ('- …') nests one level past the ':=' line.
+    cases.append((
+        "package P is\n"
+        "Delta_X : constant Duration_T\n"
+        ":= Take_Off_Time (Curtains (Normal) (RTFM))\n"
+        "- Take_Off_Time (Flight, FTFM);\n"
+        "end P;\n",
+
+        "package P is\n"
+        "  Delta_X : constant Duration_T\n"
+        "    := Take_Off_Time (Curtains (Normal) (RTFM))\n"
+        "      - Take_Off_Time (Flight, FTFM);\n"
+        "end P;\n"))
+
+    # 23. A '(' argument list opening a continuation inside a multi-line if
+    #     condition nests one level past the 'and then' term it belongs to; its
+    #     arguments then align to that '('.
+    cases.append((
+        "procedure P is\n"
+        "begin\n"
+        "if A\n"
+        "and then Curtain_Index_May_Differ\n"
+        "(Left (Normal) (FTFM),\n"
+        "Right (FTFM),\n"
+        "Skip => True)\n"
+        "then\n"
+        "null;\n"
+        "end if;\n"
+        "end P;\n",
+
+        "procedure P is\n"
+        "begin\n"
+        "  if A\n"
+        "    and then Curtain_Index_May_Differ\n"
+        "      (Left (Normal) (FTFM),\n"
+        "       Right (FTFM),\n"
+        "       Skip => True)\n"
+        "  then\n"
+        "    null;\n"
+        "  end if;\n"
+        "end P;\n"))
+
+    # 24. A ')' (or '(') written as a character literal must not be counted in
+    #     the running parenthesis depth, otherwise the enclosing '(if …)'
+    #     expression looks closed and its 'else' loses the alignment under 'if'.
+    cases.append((
+        "procedure P is\n"
+        "begin\n"
+        "X := (A\n"
+        "& (if C\n"
+        "then B & ')'\n"
+        "else \"\"));\n"
+        "end P;\n",
+
+        "procedure P is\n"
+        "begin\n"
+        "  X := (A\n"
+        "          & (if C\n"
+        "             then B & ')'\n"
+        "             else \"\"));\n"
         "end P;\n"))
 
     for pair in cases:
