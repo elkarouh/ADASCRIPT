@@ -342,11 +342,17 @@ class Indenter:
                 if self.paren_last_lead_depth == self.paren_depth:
                     return " " * self.paren_last_lead + emit_text
                 return " " * ptop[1] + emit_text
-            # Outside parentheses a comment is indented like a NEW instruction at
-            # this point — the current block nesting level — not the continuation
-            # indent of the statement (or if/elsif condition) it interrupts.
+            # Outside parentheses a comment is indented like the line that would
+            # follow it. When that next line is a continuation — the current
+            # statement is unfinished (in_cont) or we are inside a multi-line
+            # if/elsif condition — the comment takes the continuation indent
+            # (aligned with the term/connective the next line would join), one
+            # level past where the value (or condition term) began. Otherwise the
+            # next line is a fresh instruction at the current block level.
             if self.cond_state > 0:
-                return " " * (max(0, self.cond_base) * INDENT_WIDTH) + emit_text
+                return " " * (max(0, self.cond_value_base + 1) * INDENT_WIDTH) + emit_text
+            if self.in_cont:
+                return " " * (max(0, self.value_base + 1) * INDENT_WIDTH) + emit_text
             # After a deferred 'function ... is' header the next instruction is
             # the body — a declaration or expression one level deeper — so a
             # comment documenting it sits at that body level, not at the header's.
@@ -983,11 +989,11 @@ def run_tests() -> int:
         "end P;\n"))
 
     # 14. Comment lines are transparent to the parser: comments interrupting a
-    #     statement continuation must not clear it, so the 'and (...' continuation
-    #     after the comments still gets its continuation indent relative to
-    #     'return'. The comments themselves, being OUTSIDE any paren, are indented
-    #     like a new instruction — at the block level (with 'return') — not at the
-    #     continuation indent. Comments INSIDE the paren follow the paren's lines.
+    #     statement continuation must not clear it. The 'return' line is unfinished
+    #     (in_cont), so the line that would follow each comment is a continuation:
+    #     the comments take the continuation indent, aligned with the 'and (...'
+    #     they precede (one level past where the value began), not the shallower
+    #     block level. Comments INSIDE the paren follow the paren's lines.
     cases.append((
         "function F return Boolean is\n"
         "begin\n"
@@ -1002,8 +1008,8 @@ def run_tests() -> int:
         "function F return Boolean is\n"
         "begin\n"
         "  return New_OBT > Old_OBT\n"
-        "  -- comment one\n"
-        "  -- comment two\n"
+        "    -- comment one\n"
+        "    -- comment two\n"
         "    and (Departure.Earliest_TTOT = None\n"
         "         -- inner comment\n"
         "           or else New_OBT > X);\n"
@@ -1139,9 +1145,9 @@ def run_tests() -> int:
     # 19. Multi-line if condition: 'and then' connectives sit at the base
     #     continuation level, but a line starting with another operator ('>=')
     #     continues the previous term across the break and nests one level
-    #     deeper. A comment between the lines stays transparent and, being
-    #     outside any paren, is indented like a new instruction — at the 'if'
-    #     (block) level — not at the condition-continuation indent.
+    #     deeper. A comment between the lines stays transparent; the line that
+    #     would follow it is a condition continuation, so the comment takes that
+    #     continuation indent — aligned with the '>=' term it precedes.
     cases.append((
         "procedure P is\n"
         "begin\n"
@@ -1158,7 +1164,7 @@ def run_tests() -> int:
         "begin\n"
         "  if A\n"
         "    and then Take_Off_Time (X)\n"
-        "  -- a comment\n"
+        "      -- a comment\n"
         "      >= Take_Off_Time (Y)\n"
         "  then\n"
         "    null;\n"
@@ -1386,10 +1392,10 @@ def run_tests() -> int:
     # 30. A multi-line boolean value expression after a ':='-on-its-own-line:
     #     each 'or else' connective joins a parenthesised operand group and sits
     #     one level past the ':='. The comments interleaved between the groups are
-    #     OUTSIDE any paren (the groups have closed), so they are indented like a
-    #     new instruction — at the declaration's block level — not at the 'or else'
-    #     continuation level. Inside each group the 'and then' lines align to the
-    #     group's open paren.
+    #     OUTSIDE any paren (the groups have closed) but the statement is still
+    #     unfinished, so the line that would follow each comment is a continuation:
+    #     the comments take the 'or else' continuation level they precede. Inside
+    #     each group the 'and then' lines align to the group's open paren.
     cases.append((
         "package P is\n"
         "X : constant Boolean\n"
@@ -1407,11 +1413,11 @@ def run_tests() -> int:
         "  X : constant Boolean\n"
         "    := (A\n"
         "          and then B)\n"
-        "  -- comment one\n"
-        "  -- comment two\n"
+        "      -- comment one\n"
+        "      -- comment two\n"
         "      or else (C\n"
         "                 and then D)\n"
-        "  -- comment three\n"
+        "      -- comment three\n"
         "      or else not E;\n"
         "end P;\n"))
 
