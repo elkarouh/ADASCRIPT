@@ -230,6 +230,7 @@ class Indenter:
     cond_state: int = 0          # 1 = inside multi-line 'if' condition, 2 = 'elsif'
     cond_base: int = 0           # display depth of the opening if/elsif
     in_cont: bool = False        # previous line was an unterminated statement/declaration
+    was_cont: bool = False       # the previous physical line was itself indented as a continuation
     paren_stack: [](int, int, int) = []  # (paren_level, align_col, kind) for every open '('
 
     def _push_parens(self, text: str, base_col: int, base_depth: int, new_depth: int):
@@ -273,6 +274,11 @@ class Indenter:
 
         let entry_depth: int = self.paren_depth
         let cont: int = 1 if (self.paren_depth > 0 or self.in_cont) else 0
+        # Whether the *previous* physical line was a continuation, captured before
+        # we overwrite the flag for the current line. Used to decide whether a
+        # '('-opening continuation nests a second level (see the final emit).
+        let prev_was_cont: bool = self.was_cont
+        self.was_cont = cont > 0
         let lw: str = lead_word(code_s)
         var disp: int = len(self.stack)
 
@@ -487,10 +493,14 @@ class Indenter:
         # so it aligns with any comment lines that document it.
         var lead_n: int = max(0, disp + cont) * INDENT_WIDTH
         # Exception: a continuation that *opens* with '(' is the argument list /
-        # parenthesised sub-expression of the line it continues (e.g. the '(args)'
-        # under a continued '… := F'), so it nests one level deeper. Applied
-        # before _push_parens so the inner items align to this line's '('.
-        if cont > 0 and code_s.startswith("("):
+        # parenthesised sub-expression of the line it continues, so it nests one
+        # level deeper than that line. The normal +1 'cont' already places it one
+        # level past the statement start, so the extra level is added only when
+        # the line it continues was ITSELF a continuation (e.g. the '(args)' under
+        # a continued '… := F'); for a call name on the statement's first line the
+        # plain +1 is already correct. Applied before _push_parens so the inner
+        # items align to this line's '('.
+        if cont > 0 and prev_was_cont and code_s.startswith("("):
             lead_n += INDENT_WIDTH
         self._push_parens(emit_text, lead_n, entry_depth, self.paren_depth)
         " " * lead_n + emit_text
@@ -908,6 +918,25 @@ def run_tests() -> int:
         "    := Get\n"
         "      (Query => Q,\n"
         "       Object => O);\n"
+        "end P;\n"))
+
+    # 17b. A '(' continuation nests only one level past the line it continues.
+    #      When the call name is the statement's FIRST line (not itself a
+    #      continuation), its argument list takes the plain +1 — not the extra
+    #      second level that test 17's ':= Get' chain gets.
+    cases.append((
+        "procedure P is\n"
+        "begin\n"
+        "Foo\n"
+        "(A,\n"
+        "B);\n"
+        "end P;\n",
+
+        "procedure P is\n"
+        "begin\n"
+        "  Foo\n"
+        "    (A,\n"
+        "     B);\n"
         "end P;\n"))
 
     # 18. Block/loop labels end in ':' and are complete prefixes, not statement

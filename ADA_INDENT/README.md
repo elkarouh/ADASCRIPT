@@ -309,14 +309,21 @@ Curtains : constant Alternatives_Profiles_T
 Other : Integer := 0;            -- back at the base level
 ```
 
-One exception nests deeper: a continuation line that **opens with `(`** is the
-argument list (or parenthesised sub-expression) of the line it continues, so it
-takes one further level, and the arguments then align to that `(`:
+A continuation line that **opens with `(`** is the argument list (or
+parenthesised sub-expression) of the line it continues, and is indented one
+level past *that* line; the arguments then align to the `(`. When the call name
+is itself a continuation this means a second level; when the call name is the
+statement's first line the plain continuation `+1` already covers it (so no
+extra is added):
 
 ```ada
+Curtain_Index_May_Differ         -- statement start
+  (Left  => A,                   -- +1: the call's argument list
+   Right => B);                  -- arguments align under the first
+
 Set_Info : constant T
   := Get                         -- +1 level (continuation)
-    (Query  => Q,                -- +2: the '(' opens Get's argument list
+    (Query  => Q,                -- +2: '(' continues an already-continued line
      Object => O);               -- arguments align under the first one
 ```
 
