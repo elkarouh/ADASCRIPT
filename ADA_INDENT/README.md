@@ -276,6 +276,18 @@ if FTFX.The_Flight_Status = Cancelled
   end if;
 ```
 
+The `and` / `or` / `xor` connectives join condition terms and sit at this base
+continuation level. A continuation that instead starts with a **different
+operator** (`>=`, `&`, `+`, …) continues the *previous* term across the break,
+so it nests one level deeper:
+
+```ada
+if A
+    and then Take_Off_Time (X)                      -- +1 (connective)
+      >= Take_Off_Time (Y)                          -- +2 (continues the term)
+  then
+```
+
 If a condition opens a **parenthesis** that spans lines, the lines inside it are
 aligned to that parenthesis (with the operator-extra rule below) rather than
 flattened to the condition level, so nested boolean groups show their depth:
@@ -425,6 +437,16 @@ because the enclosing frame stays on the stack:
   this is the **declarative-part `begin`**: it aligns with the subprogram /
   `declare` header and converts that frame to `BLOCK` (no push).
 - Otherwise it is a **nested block statement**: it pushes a fresh `BLOCK`.
+
+When a `when` choice list is split across lines before its `=>`, the `|`
+continuation aligns at the **arm-body level** — the `WHEN` frame already
+supplies the indent, so the continuation is not pushed a further level:
+
+```ada
+when Action_1 | Action_15
+  | Action_16 | Action_43 =>   -- '|' continuation, at the arm-body level
+  Do_It;                        -- arm body, same level
+```
 
 ### Parenthesis continuation
 
