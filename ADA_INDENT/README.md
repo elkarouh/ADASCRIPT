@@ -396,11 +396,13 @@ in `) is`, `) return T is`, `) loop`, …) is aligned like the other
 continuations *and* opens that block. if-/case-expressions are the same
 mechanism with keyword-aware offsets (see above).
 
-**Inside parentheses**, a continuation line that **starts with an operator**
-(`:=`, `=>`, `&`, `+`, `-`, `*`, `/`, `=`, `<`, `>`, `|`, `..`) takes one extra
-indent level past the aligned items, so the operator stands out from the operand
-it continues. This applies only within parentheses — a bare statement
-continuation (e.g. a `:=` on its own line) keeps the plain one-level indent:
+**Inside parentheses**, a continuation line that **starts with an operator** —
+a symbol (`:=`, `=>`, `&`, `+`, `-`, `*`, `/`, `=`, `<`, `>`, `|`, `..`) or a
+word operator (`and`, `or`, `xor`, `mod`, `rem`, covering `and then` / `or
+else`) — takes one extra indent level past the aligned items, so the operator
+stands out from the operand it continues. This applies only within parentheses —
+a bare statement continuation (e.g. a `:=` or `and` on its own line outside any
+`(`) keeps the plain one-level indent:
 
 ```ada
 First_Time_In_TACT : constant Count_Option.Set.T
