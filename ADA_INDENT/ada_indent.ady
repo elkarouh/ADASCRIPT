@@ -131,6 +131,8 @@ class Indenter:
     stack: []Block_T = []
     paren_depth: int = 0
     pending_spec: bool = False   # a 'function ... is' header whose body kind is not yet known
+    cond_state: int = 0          # 1 = inside multi-line 'if' condition, 2 = 'elsif'
+    cond_base: int = 0           # display depth of the opening if/elsif
 
     def indent_line(self, line: str) -> str:
         """Process one raw line and return it re-indented."""
@@ -159,6 +161,23 @@ class Indenter:
                 self.stack.append(PKG)
                 disp = len(self.stack)
 
+        # Multi-line if/elsif condition: continuation lines are indented one
+        # level deeper than the 'if'/'elsif'. When 'then' finally appears
+        # (as lead word or last word) the IF frame is pushed (for 'if' only —
+        # for 'elsif' the IF frame is already on the stack) and disp snaps
+        # back to the if/elsif level so 'then' aligns with its opener.
+        if self.cond_state > 0:
+            let last: str = last_word(code_s)
+            if last == "then" or lw == "then":
+                disp = self.cond_base
+                if self.cond_state == 1:
+                    self.stack.append(IF_)
+                self.cond_state = 0
+            else:
+                disp = self.cond_base + 1
+            self.paren_depth = max(0, self.paren_depth + paren_delta(code))
+            return spaces(disp + cont) + emit_text
+
         case lw:
             when "end":
                 while len(self.stack) > 0 and self.stack[-1] == WHEN_:
@@ -181,7 +200,14 @@ class Indenter:
                 disp = len(self.stack)
                 self.stack.append(WHEN_)
 
-            when "elsif" | "else" | "exception" | "or" | "private":
+            when "elsif":
+                disp = len(self.stack) - 1
+                let last_e: str = last_word(code_s)
+                if last_e != "then":
+                    self.cond_state = 2
+                    self.cond_base = disp
+
+            when "else" | "exception" | "or" | "private":
                 disp = len(self.stack) - 1
 
             when others:
@@ -212,6 +238,9 @@ class Indenter:
                         self.stack.append(DECLARE_)
                     when others:
                         pass
+                if lw == "if" and last != "then":
+                    self.cond_state = 1
+                    self.cond_base = disp
 
         self.paren_depth = max(0, self.paren_depth + paren_delta(code))
         spaces(disp + cont) + emit_text
@@ -328,7 +357,39 @@ def run_tests() -> int:
         "    B => 2);\n"
         "end P;\n"))
 
-    # 5. Expression function: 'function ... is' followed by a parenthesised
+    # 5. Multi-line if/elsif conditions: continuation lines ('and then …') must
+    #    indent one level relative to the 'if'/'elsif'; 'then' aligns with the
+    #    opener; body and end-if are at the normal depths.
+    cases.append((
+        "procedure P is\n"
+        "begin\n"
+        "if A = 1\n"
+        "and then B = 2\n"
+        "and then C = 3\n"
+        "then\n"
+        "null;\n"
+        "elsif D = 4\n"
+        "and then E = 5\n"
+        "then\n"
+        "null;\n"
+        "end if;\n"
+        "end P;\n",
+
+        "procedure P is\n"
+        "begin\n"
+        "  if A = 1\n"
+        "    and then B = 2\n"
+        "    and then C = 3\n"
+        "  then\n"
+        "    null;\n"
+        "  elsif D = 4\n"
+        "    and then E = 5\n"
+        "  then\n"
+        "    null;\n"
+        "  end if;\n"
+        "end P;\n"))
+
+    # 6. Expression function: 'function ... is' followed by a parenthesised
     #    expression pushes NO block frame, and the declarations after it must
     #    return to the outer level (regression: the spec frame used to linger).
     cases.append((
