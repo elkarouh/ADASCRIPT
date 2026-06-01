@@ -194,6 +194,17 @@ class Indenter:
     in_cont: bool = False        # previous line was an unterminated statement/declaration
     expr_ifs: [](int, int) = []  # stack of (paren_level, if_column) for open if-expressions
 
+    def _push_if_exprs(self, text: str, base_col: int, base_depth: int, new_depth: int):
+        """Record if-expressions opened on this line and drop any now closed."""
+        for opener in scan_if_exprs(text, base_depth, base_col):
+            self.expr_ifs.append(opener)
+        while len(self.expr_ifs) > 0:
+            let top: (int, int) = self.expr_ifs[-1]
+            if top[0] > new_depth:
+                self.expr_ifs.pop()
+            else:
+                break
+
     def indent_line(self, line: str) -> str:
         """Process one raw line and return it re-indented."""
         let raw2: str = line.rstrip()
@@ -347,17 +358,6 @@ class Indenter:
         let lead_n: int = max(0, disp + cont) * INDENT_WIDTH
         self._push_if_exprs(emit_text, lead_n, entry_depth, self.paren_depth)
         " " * lead_n + emit_text
-
-    def _push_if_exprs(self, text: str, base_col: int, base_depth: int, new_depth: int):
-        """Record if-expressions opened on this line and drop any now closed."""
-        for opener in scan_if_exprs(text, base_depth, base_col):
-            self.expr_ifs.append(opener)
-        while len(self.expr_ifs) > 0:
-            let top: (int, int) = self.expr_ifs[-1]
-            if top[0] > new_depth:
-                self.expr_ifs.pop()
-            else:
-                break
 
 
 # ---------------------------------------------------------------------------
