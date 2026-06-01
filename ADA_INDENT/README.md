@@ -144,8 +144,8 @@ line:
    that align with their opener rather than the block body.
 3. The stack is then updated (push / pop) for the lines that follow.
 
-Indent width defaults to **3 spaces** (the GNAT convention), set by
-`INDENT_WIDTH`.
+Indent width defaults to **2 spaces**, set by `INDENT_WIDTH` (change it there
+for the GNAT-conventional 3, or any other width).
 
 ## Formal grammar (EBNF)
 
@@ -162,12 +162,15 @@ line            ::= opener | closer | splitter | ordinary_line | blank
 
 (* ---- openers: push a frame, body indents one level deeper ---- *)
 
-opener          ::= spec_is | declare_open | if_open | loop_open
+opener          ::= spec_is | function_is | declare_open | if_open | loop_open
                   | case_open | record_open | select_open | do_open
                   | when_open
 
-spec_is         ::= ( "package" | "procedure" | "function"
-                    | "task" | "protected" | "type" | … ) … "is"   (* ▶ PKG     *)
+spec_is         ::= ( "package" | "procedure" | "task"
+                    | "protected" | "type" | … ) … "is"            (* ▶ PKG     *)
+function_is     ::= "function" … "is"                              (* deferred: *)
+   (* next line begins with "("  → expression function, indent +1, no push     *)
+   (* otherwise                  → real body, ▶ PKG retroactively              *)
 declare_open    ::= [ label ":" ] "declare"                        (* ▶ DECLARE *)
 if_open         ::= "if" … "then"                                  (* ▶ IF      *)
 loop_open       ::= [ label ":" ] [ iteration_scheme ] "loop"      (* ▶ LOOP    *)
@@ -234,6 +237,23 @@ of the line; `LEAD` is the first.
 | `LAST = do` | `DO` | `accept E do`, `return R : T do` |
 | `LEAD = declare` | `DECLARE` | `declare`, `Blk : declare` |
 | `LEAD = when` | `WHEN` | `when A =>`, `when others =>` |
+
+A `function … is` header is **deferred**, not pushed immediately: a function may
+open a real body *or* be an **expression function** (`function F return T is`
+followed by a parenthesised expression). The decision is made on the next
+non-blank line — if it begins with `(`, the line is an expression body that
+indents one level and pushes **no** frame; otherwise the `PKG` frame is pushed
+retroactively and the body indents normally. This keeps the declarations after
+an expression function from drifting one level to the right:
+
+```ada
+function Image return String is
+  (Compute (A, B'Image));   -- indented one level, no frame opened
+procedure P is              -- back at the outer level
+begin
+  null;
+end P;
+```
 
 ### Closers — pop, and align with the opener's header
 
@@ -340,15 +360,15 @@ Output:
 
 ```ada
 procedure Hello is
-   X : Integer := 0;
+  X : Integer := 0;
 begin
-   if X = 0 then
-      Put_Line ("zero");
-   elsif X > 0 then
-      Put_Line ("pos");
-   else
-      Put_Line ("neg");
-   end if;
+  if X = 0 then
+    Put_Line ("zero");
+  elsif X > 0 then
+    Put_Line ("pos");
+  else
+    Put_Line ("neg");
+  end if;
 end Hello;
 ```
 

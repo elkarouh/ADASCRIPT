@@ -21,7 +21,7 @@
 # both Python and Nim. The CLI uses the bash-style argument primitives
 # ($1, $#, quit) so argument handling is target-agnostic.
 
-const INDENT_WIDTH: int = 3
+const INDENT_WIDTH: int = 2
 
 # The indentation-significant constructs. A frame is pushed for each open
 # block; the kind is only consulted where it changes behaviour (PKG/DECLARE
@@ -130,6 +130,7 @@ def spaces(levels: int) -> str:
 class Indenter:
     stack: []Block_T = []
     paren_depth: int = 0
+    pending_spec: bool = False   # a 'function ... is' header whose body kind is not yet known
 
     def indent_line(self, line: str) -> str:
         """Process one raw line and return it re-indented."""
@@ -144,6 +145,19 @@ class Indenter:
         let cont: int = 1 if self.paren_depth > 0 else 0
         let lw: str = lead_word(code_s)
         var disp: int = len(self.stack)
+
+        # Resolve a deferred 'function ... is' header (set on the previous line).
+        # If the body begins with '(' it is an expression function: indent the
+        # expression one level and push no frame. Otherwise it is a real
+        # subprogram body, so perform the deferred push and fall through.
+        if self.pending_spec:
+            self.pending_spec = False
+            if code_s.startswith("("):
+                self.paren_depth = max(0, self.paren_depth + paren_delta(code))
+                return spaces(len(self.stack) + 1 + cont) + emit_text
+            else:
+                self.stack.append(PKG)
+                disp = len(self.stack)
 
         case lw:
             when "end":
@@ -175,7 +189,14 @@ class Indenter:
                 let last: str = last_word(code_s)
                 case last:
                     when "is":
-                        self.stack.append(CASE_ if lw == "case" else PKG)
+                        # A 'function ... is' header may be a real body or an
+                        # expression function; defer the decision to the next
+                        # line (see pending_spec handling above). Everything
+                        # else ending in 'is' opens a block immediately.
+                        if lw == "function":
+                            self.pending_spec = True
+                        else:
+                            self.stack.append(CASE_ if lw == "case" else PKG)
                     when "then":
                         self.stack.append(IF_)
                     when "loop":
@@ -231,24 +252,24 @@ def run_tests() -> int:
         "end Hello;\n",
 
         "procedure Hello is\n"
-        "   X : Integer := 0;\n"
+        "  X : Integer := 0;\n"
         "begin\n"
-        "   if X = 0 then\n"
-        "      Put_Line (\"zero\");\n"
-        "   elsif X > 0 then\n"
-        "      Put_Line (\"pos\");\n"
-        "   else\n"
-        "      Put_Line (\"neg\");\n"
-        "   end if;\n"
-        "   for I in 1 .. 10 loop\n"
-        "      X := X + I;\n"
-        "   end loop;\n"
-        "   case X is\n"
-        "      when 0 =>\n"
-        "         null;\n"
-        "      when others =>\n"
-        "         Put_Line (\"other\");\n"
-        "   end case;\n"
+        "  if X = 0 then\n"
+        "    Put_Line (\"zero\");\n"
+        "  elsif X > 0 then\n"
+        "    Put_Line (\"pos\");\n"
+        "  else\n"
+        "    Put_Line (\"neg\");\n"
+        "  end if;\n"
+        "  for I in 1 .. 10 loop\n"
+        "    X := X + I;\n"
+        "  end loop;\n"
+        "  case X is\n"
+        "    when 0 =>\n"
+        "      null;\n"
+        "    when others =>\n"
+        "      Put_Line (\"other\");\n"
+        "  end case;\n"
         "end Hello;\n"))
 
     # 2. Package spec with a record type and a private part.
@@ -263,12 +284,12 @@ def run_tests() -> int:
         "end Shapes;\n",
 
         "package Shapes is\n"
-        "   type Point is record\n"
-        "      X : Float;\n"
-        "      Y : Float;\n"
-        "   end record;\n"
+        "  type Point is record\n"
+        "    X : Float;\n"
+        "    Y : Float;\n"
+        "  end record;\n"
         "private\n"
-        "   Origin : constant Point := (0.0, 0.0);\n"
+        "  Origin : constant Point := (0.0, 0.0);\n"
         "end Shapes;\n"))
 
     # 3. Declare block with an exception handler, plus blank-line preservation.
@@ -284,13 +305,13 @@ def run_tests() -> int:
         "end;\n",
 
         "declare\n"
-        "   X : Integer;\n"
+        "  X : Integer;\n"
         "\n"
         "begin\n"
-        "   X := 1;\n"
+        "  X := 1;\n"
         "exception\n"
-        "   when Constraint_Error =>\n"
-        "      X := 0;\n"
+        "  when Constraint_Error =>\n"
+        "    X := 0;\n"
         "end;\n"))
 
     # 4. Continuation inside an unclosed parenthesis (aggregate / call).
@@ -303,8 +324,26 @@ def run_tests() -> int:
 
         "procedure P is\n"
         "begin\n"
-        "   Set (A => 1,\n"
-        "      B => 2);\n"
+        "  Set (A => 1,\n"
+        "    B => 2);\n"
+        "end P;\n"))
+
+    # 5. Expression function: 'function ... is' followed by a parenthesised
+    #    expression pushes NO block frame, and the declarations after it must
+    #    return to the outer level (regression: the spec frame used to linger).
+    cases.append((
+        "function Image return String is\n"
+        "(Compute (A, B'Image));\n"
+        "procedure P is\n"
+        "begin\n"
+        "null;\n"
+        "end P;\n",
+
+        "function Image return String is\n"
+        "  (Compute (A, B'Image));\n"
+        "procedure P is\n"
+        "begin\n"
+        "  null;\n"
         "end P;\n"))
 
     for pair in cases:
