@@ -594,6 +594,12 @@ class Indenter:
         # only flag a general statement continuation when not in that mode.
         self.in_cont = False if self.cond_state > 0 else stmt_incomplete(code_s)
         self.paren_depth = max(0, self.paren_depth + paren_delta(code))
+        # If this statement line opened a parenthesis and the text inside it ends
+        # without a comma, the expression that is the paren's first item is not
+        # finished — its argument list '(' on the next line is a continuation, not
+        # a new list element, so it nests one level deeper. (When no paren is open
+        # the next line resets this flag on entry, so setting it here is benign.)
+        self.paren_cont = self.in_cont and not code_s.endswith(",")
 
         # Track where the current statement's value expression begins, so that a
         # term continuation below can nest one level past it. A non-continuation
@@ -1382,6 +1388,26 @@ def run_tests() -> int:
         "  Any_Concerned : constant Boolean\n"
         "    := (for some Reg of All_Regs (1 .. N) =>\n"
         "          not Reg.Excluded);\n"
+        "end P;\n"))
+
+    # 32. A '(' arg list that continues an expression which is itself the first
+    #     item of an outer '(' opened on the SAME statement line. The outer call's
+    #     argument (G.Image) is unfinished (the line ends without a comma), so its
+    #     own argument list '(' on the next line nests one level past the outer
+    #     paren's item column — not flush with it as a new list element would.
+    cases.append((
+        "procedure P is\n"
+        "begin\n"
+        "Id := F (G.Image\n"
+        "(H (X),\n"
+        "Width => W));\n"
+        "end P;\n",
+
+        "procedure P is\n"
+        "begin\n"
+        "  Id := F (G.Image\n"
+        "             (H (X),\n"
+        "              Width => W));\n"
         "end P;\n"))
 
     for pair in cases:
