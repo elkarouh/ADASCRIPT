@@ -1,5 +1,9 @@
-# IDE and editor directories
-.claude/
+# IDE and editor directories — ignore local Claude state, but track the
+# shared SessionStart hook and project settings so web sessions pick them up.
+.claude/*
+!.claude/settings.json
+!.claude/hooks/
+.claude/settings.local.json
 
 # Build artifacts
 NIM_VERSION/
