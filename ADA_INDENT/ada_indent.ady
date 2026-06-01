@@ -186,14 +186,18 @@ def is_term_continuation(code_s: str) -> bool:
     rather than starting a new term or binding. Such a line nests one level past
     where its expression began. It qualifies when it opens an argument list with
     '(' or starts with a value operator: arithmetic / relational / concatenation
-    / range (=, &, +, -, *, /, <, >, .., mod, rem).
+    / range (=, &, +, -, *, /, <, >, .., mod, rem) or a boolean connective
+    (and / or / and then / or else, including 'and not' / 'or not').
 
-    Excluded (these stay at the base continuation level): the boolean connectives
-    'and'/'or'/'xor' (they join terms), the binding operators ':=' and '=>', and
-    the choice separator '|' (handled with the 'when' choice list).
+    Excluded (these stay at the base continuation level): the binding operators
+    ':=' and '=>', the choice separator '|' (handled with the 'when' choice
+    list), and 'xor'.
 
-    Exception: 'and not' and 'or not' are value operators (bit-clear / boolean
-    negation), not the 'and then' / 'or else' connectives, so they DO nest."""
+    NOTE: inside a multi-line if/elsif condition the boolean connectives are
+    kept at the base level instead — that exception lives in the cond_state
+    branch (its 'lw != and/or' guard), not here, because the rule differs
+    between a free value expression (connectives indent under their operand)
+    and a condition (connectives align under the 'if')."""
     if code_s == "":
         return False
     if code_s.startswith("("):
@@ -204,12 +208,9 @@ def is_term_continuation(code_s: str) -> bool:
         return False
     let w: str = lead_word(code_s)
     if w == "and" or w == "or":
-        let cs: str = code_s.lower()
-        # 'and not' / 'or not' are value operators (bit-clear / boolean negate)
-        if cs.startswith(w + " not"):
-            return True
-        # 'and (' / 'or (' apply the operator directly to a parenthesised subexpression
-        return cs.startswith(w + " (") or cs.startswith(w + "(")
+        # Boolean connectives join successive operands of a value expression;
+        # each continuation sits one level past where the expression began.
+        return True
     return w != "xor"
 
 
@@ -327,7 +328,15 @@ class Indenter:
                 return " " * ptop[1] + emit_text
             if self.cond_state > 0:
                 return " " * (max(0, self.cond_base + 1) * INDENT_WIDTH) + emit_text
-            let clvl: int = len(self.stack) + (1 if self.in_cont else 0)
+            var clvl: int = len(self.stack) + (1 if self.in_cont else 0)
+            # When the comment interrupts a multi-line value expression whose
+            # ':=' sits on its own continuation line, value_base is bumped past
+            # the stack level and the operator/connective lines the comment
+            # documents nest one level past that ':=' (value_base + 1). Align the
+            # comment with them rather than the shallower stack level so it sits
+            # with the term it annotates.
+            if self.in_cont and self.value_base + 1 > clvl:
+                clvl = self.value_base + 1
             return " " * (max(0, clvl) * INDENT_WIDTH) + emit_text
 
         let entry_depth: int = self.paren_depth
@@ -1277,9 +1286,9 @@ def run_tests() -> int:
 
     # 28. 'or else' / 'and then' continuations in a value expression must NOT
     #     trigger the structural 'or'/'else' de-indent (which only applies when
-    #     they stand alone as statement-level keywords).  Here ':=' is its own
-    #     continuation line so 'or else' must stay at the same plain-continuation
-    #     level (4 spaces), not be pushed back to 2.
+    #     they stand alone as statement-level keywords). With ':=' on its own
+    #     continuation line the value expression begins one level past it, so the
+    #     'or else' connective nests there (6 spaces), one level past the ':='.
     cases.append((
         "package P is\n"
         "X : constant Boolean\n"
@@ -1290,7 +1299,7 @@ def run_tests() -> int:
         "package P is\n"
         "  X : constant Boolean\n"
         "    := True\n"
-        "    or else False;\n"
+        "      or else False;\n"
         "end P;\n"))
 
     # 29. 'and (' combines the preceding result with a parenthesised subexpression
@@ -1308,6 +1317,37 @@ def run_tests() -> int:
         "  X : constant Boolean\n"
         "    := (A = B)\n"
         "      and (C = D);\n"
+        "end P;\n"))
+
+    # 30. A multi-line boolean value expression after a ':='-on-its-own-line:
+    #     each 'or else' connective joins a parenthesised operand group and sits
+    #     one level past the ':='. Comments interleaved between the groups
+    #     document the connective that follows, so they align with it (one level
+    #     past ':='), not with the shallower declaration level. Inside each group
+    #     the 'and then' lines align to the group's open paren.
+    cases.append((
+        "package P is\n"
+        "X : constant Boolean\n"
+        ":= (A\n"
+        "and then B)\n"
+        "-- comment one\n"
+        "-- comment two\n"
+        "or else (C\n"
+        "and then D)\n"
+        "-- comment three\n"
+        "or else not E;\n"
+        "end P;\n",
+
+        "package P is\n"
+        "  X : constant Boolean\n"
+        "    := (A\n"
+        "          and then B)\n"
+        "      -- comment one\n"
+        "      -- comment two\n"
+        "      or else (C\n"
+        "                 and then D)\n"
+        "      -- comment three\n"
+        "      or else not E;\n"
         "end P;\n"))
 
     for pair in cases:
