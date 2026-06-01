@@ -298,6 +298,9 @@ class Indenter:
     value_base: int = 0          # display level where the current statement's value expression starts
     paren_stack: [](int, int, int) = []  # (paren_level, align_col, kind) for every open '('
     paren_cont: bool = False    # prev line within plain paren ended without ',' (arg-list continuation)
+    arrow_level: int = 0        # innermost paren level with an active '=>' named-value spill (0 = none)
+    paren_last_lead: int = 0    # lead column of the last code line emitted inside a paren
+    paren_last_lead_depth: int = 0  # paren_depth that paren_last_lead applies to
 
     def _push_parens(self, text: str, base_col: int, base_depth: int, new_depth: int):
         """Record parentheses opened on this line and drop any now closed."""
@@ -332,6 +335,12 @@ class Indenter:
         if code_s == "":
             if self.paren_depth > 0 and len(self.paren_stack) > 0:
                 let ptop: (int, int, int) = self.paren_stack[-1]
+                # Align the comment with the previous code line in this same
+                # paren (so a comment between operator continuations of a spilled
+                # named-association value sits with them), falling back to the
+                # paren's item column when there was no such line yet.
+                if self.paren_last_lead_depth == self.paren_depth:
+                    return " " * self.paren_last_lead + emit_text
                 return " " * ptop[1] + emit_text
             if self.cond_state > 0:
                 return " " * (max(0, self.cond_base + 1) * INDENT_WIDTH) + emit_text
@@ -348,9 +357,10 @@ class Indenter:
 
         let entry_depth: int = self.paren_depth
         # When we are outside all parens, clear the plain-paren continuation flag
-        # so stale state from a previous paren context does not carry over.
+        # and the named-value spill state so stale paren context does not leak.
         if entry_depth == 0:
             self.paren_cont = False
+            self.arrow_level = 0
         let cont: int = 1 if (self.paren_depth > 0 or self.in_cont) else 0
         let lw: str = lead_word(code_s)
         var disp: int = len(self.stack)
@@ -394,9 +404,13 @@ class Indenter:
                 else:
                     break
             var lead: int = max(0, len(self.stack) + cont) * INDENT_WIDTH
+            var entry_top_level: int = 0
+            var entry_top_kind: int = -1
             if len(self.paren_stack) > 0:
                 let top: (int, int, int) = self.paren_stack[-1]
                 let acol: int = top[1]
+                entry_top_level = top[0]
+                entry_top_kind = top[2]
                 if top[2] == 1:
                     if lw == "then" or lw == "else" or lw == "elsif":
                         lead = acol
@@ -432,16 +446,21 @@ class Indenter:
                     if starts_with_operator(code_s) and not code_s.startswith("=>"):
                         lead += INDENT_WIDTH
                 else:
-                    lead = acol
-                    # A plain-paren continuation that starts with an operator
-                    # (=>, &, +, …) takes one extra level past the aligned items.
-                    # A '(' on a continuation line is the argument list of the
-                    # expression on the previous line (which ended without ','),
-                    # so it also nests one level deeper.
+                    # A named association whose value spilled past a trailing
+                    # '=>' (arrow_level marks the paren it happened in) starts its
+                    # value one level past the item column; everything else is a
+                    # plain list item at the item column.
+                    let vbase: int = acol + (INDENT_WIDTH if self.arrow_level == top[0] else 0)
+                    lead = vbase
+                    # A continuation that starts with an operator (&, +, and, or
+                    # else, …) takes one extra level past the value/items. A '(' on
+                    # a continuation line is the argument list of the expression on
+                    # the previous line (which ended without ','), so it also nests
+                    # one level deeper.
                     if starts_with_operator(code_s):
-                        lead = acol + INDENT_WIDTH
+                        lead = vbase + INDENT_WIDTH
                     elif code_s.startswith("(") and self.paren_cont:
-                        lead = acol + INDENT_WIDTH
+                        lead = vbase + INDENT_WIDTH
             let new_depth: int = self.paren_depth + paren_delta(code)
             let plt: str = last_word(code_s)
             self.in_cont = stmt_incomplete(code_s)
@@ -450,6 +469,21 @@ class Indenter:
             # list element) and deserves an extra indent level inside plain parens.
             self.paren_cont = self.in_cont and not code_s.endswith(",")
             self.paren_depth = max(0, new_depth)
+            # Track the named-association arrow spill state:
+            # - A plain-paren line that ends with '=>' (value on next line): arm
+            #   that spill for this paren level so following lines align to value.
+            # - A line that ends with ',' closes the association: clear the spill.
+            # - When the paren itself closes (depth drops): clear.
+            if entry_top_kind == 0:
+                if code_s.endswith("=>"):
+                    self.arrow_level = entry_top_level
+                elif self.arrow_level == entry_top_level and code_s.endswith(","):
+                    self.arrow_level = 0
+            if self.arrow_level > 0 and self.paren_depth < self.arrow_level:
+                self.arrow_level = 0
+            # Record this line's lead for aligning comments that follow it.
+            self.paren_last_lead = lead
+            self.paren_last_lead_depth = entry_depth
             self._push_parens(emit_text, lead, entry_depth, self.paren_depth)
             # A line that closes back out of all parentheses and ends in a block
             # opener opens that block.
@@ -1408,6 +1442,34 @@ def run_tests() -> int:
         "  Id := F (G.Image\n"
         "             (H (X),\n"
         "              Width => W));\n"
+        "end P;\n"))
+
+    # 33. A named association whose value spills past a trailing '=>' into the
+    #     next line: the value nests one level past the item column; operators
+    #     that continue it take one more level; interleaved comments align with
+    #     the operator lines they document; the following association starts a
+    #     new item at the outer column once its comma closes the current one.
+    cases.append((
+        "procedure P is\n"
+        "begin\n"
+        "Call (A => 1,\n"
+        "B =>\n"
+        "X\n"
+        "and Y\n"
+        "-- comment\n"
+        "and Z,\n"
+        "C => 3);\n"
+        "end P;\n",
+
+        "procedure P is\n"
+        "begin\n"
+        "  Call (A => 1,\n"
+        "        B =>\n"
+        "          X\n"
+        "            and Y\n"
+        "            -- comment\n"
+        "            and Z,\n"
+        "        C => 3);\n"
         "end P;\n"))
 
     for pair in cases:
