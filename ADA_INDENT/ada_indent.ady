@@ -282,6 +282,7 @@ class Indenter:
     pending_spec: bool = False   # a 'function ... is' header whose body kind is not yet known
     cond_state: int = 0          # 1 = inside multi-line 'if' condition, 2 = 'elsif'
     cond_base: int = 0           # display depth of the opening if/elsif
+    cond_value_base: int = 0     # display level of the line holding the current condition term
     in_cont: bool = False        # previous line was an unterminated statement/declaration
     value_base: int = 0          # display level where the current statement's value expression starts
     paren_stack: [](int, int, int) = []  # (paren_level, align_col, kind) for every open '('
@@ -462,17 +463,21 @@ class Indenter:
                 if self.cond_state == 1:
                     self.stack.append(IF_)
                 self.cond_state = 0
+            elif is_term_continuation(code_s) and lw != "and" and lw != "or":
+                # A line that continues the previous term across the break (>=,
+                # &, '(', …) nests one level past the line that holds that term
+                # — which may be the opener itself (call name on the 'if'/'elsif'
+                # line) or a preceding 'and then' connective line. 'and not' /
+                # 'or not' are excluded here even though is_term_continuation
+                # returns True for them: inside a condition they are connectives,
+                # not value operators.
+                disp = self.cond_value_base + 1
             else:
+                # The 'and'/'or'/'xor' connectives join condition terms and sit
+                # at the base continuation level. Each starts a fresh term, so a
+                # following term continuation nests one level past this line.
                 disp = self.cond_base + 1
-                # The 'and'/'or'/'xor' connectives — including 'and not' and
-                # 'or not' — join condition terms and sit at this base level.
-                # A line that instead continues the previous term (>=, &, '(',
-                # …) nests one level deeper. 'and not'/'or not' are excluded
-                # here (lw check) even though is_term_continuation returns True
-                # for them: inside a condition they act as connectives, not as
-                # value operators.
-                if is_term_continuation(code_s) and lw != "and" and lw != "or":
-                    disp += 1
+                self.cond_value_base = self.cond_base + 1
             self.in_cont = False
             # cond_state lines are outside parentheses (inside-paren lines are
             # handled above), so they use only the if/elsif-relative depth — no
@@ -510,6 +515,7 @@ class Indenter:
                 if last_e != "then":
                     self.cond_state = 2
                     self.cond_base = disp
+                    self.cond_value_base = disp
 
             when "else" | "exception" | "or" | "private":
                 disp = len(self.stack) - 1
@@ -552,6 +558,7 @@ class Indenter:
                 if lw == "if" and last != "then":
                     self.cond_state = 1
                     self.cond_base = disp
+                    self.cond_value_base = disp
 
         # A multi-line if/elsif condition is tracked by cond_state, not here, so
         # only flag a general statement continuation when not in that mode.
@@ -1163,6 +1170,33 @@ def run_tests() -> int:
         "      (Left (Normal) (FTFM),\n"
         "       Right (FTFM),\n"
         "       Skip => True)\n"
+        "  then\n"
+        "    null;\n"
+        "  end if;\n"
+        "end P;\n"))
+
+    # 23b. The mirror of test 23: when the call name is on the 'elsif'/'if'
+    #      opener line itself (not a separate 'and then' continuation), its
+    #      split '(' argument list nests one level past the opener — not two.
+    #      The 'then' still snaps back to the opener level.
+    cases.append((
+        "procedure P is\n"
+        "begin\n"
+        "if X then\n"
+        "null;\n"
+        "elsif not Traffic_Volume_Profile.Element_Exists\n"
+        "(TV_Profiles.P (FTFM), Env_Regulation_Info.TV_Id (Reg_Info))\n"
+        "then\n"
+        "null;\n"
+        "end if;\n"
+        "end P;\n",
+
+        "procedure P is\n"
+        "begin\n"
+        "  if X then\n"
+        "    null;\n"
+        "  elsif not Traffic_Volume_Profile.Element_Exists\n"
+        "    (TV_Profiles.P (FTFM), Env_Regulation_Info.TV_Id (Reg_Info))\n"
         "  then\n"
         "    null;\n"
         "  end if;\n"
