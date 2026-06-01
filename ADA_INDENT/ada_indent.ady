@@ -317,7 +317,12 @@ class Indenter:
                     if lw == "then" or lw == "else" or lw == "elsif":
                         lead = acol
                     else:
-                        lead = acol + 3
+                        # Condition continuation: one indent level past the 'if'
+                        # (so it sits one level in from the then/else, which
+                        # align with the 'if'). Uses INDENT_WIDTH, not the literal
+                        # width of 'if ', to stay consistent with the case-expr
+                        # arms below and the if-statement condition continuation.
+                        lead = acol + INDENT_WIDTH
                 elif top[2] == 2:
                     if lw == "when":
                         lead = acol + INDENT_WIDTH
@@ -670,7 +675,7 @@ def run_tests() -> int:
         "procedure P is\n"
         "begin\n"
         "  R := (if Cycle_Of (X)\n"
-        "           /= Cycle_Of (Y)\n"
+        "          /= Cycle_Of (Y)\n"
         "        then Empty\n"
         "        else Full);\n"
         "  Next_Statement;\n"
