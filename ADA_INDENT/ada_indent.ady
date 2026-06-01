@@ -118,6 +118,29 @@ def last_word(code: str) -> str:
         result = parts[-1].lower()
 
 
+def stmt_incomplete(code_s: str) -> bool:
+    """True if a (comment-stripped) code line continues onto the next line.
+
+    In Ada nearly every statement and declaration ends with ';'. The only
+    unterminated lines that are nonetheless complete are the structural keyword
+    lines: openers ending in is/then/loop/record/select/do, choice lines ending
+    in '=>', and the lone splitter/opener keywords (begin/declare/else/…). Any
+    other line that does not end in ';' is a logical line split across physical
+    lines, so the next line is a continuation.
+    """
+    if code_s == "" or code_s.endswith(";") or code_s.endswith("=>"):
+        return False
+    let lw: str = lead_word(code_s)
+    if (lw == "begin" or lw == "declare" or lw == "else" or lw == "exception"
+            or lw == "or" or lw == "private" or lw == "select"):
+        return False
+    let lt: str = last_word(code_s)
+    if (lt == "is" or lt == "then" or lt == "loop" or lt == "record"
+            or lt == "select" or lt == "do"):
+        return False
+    result = True
+
+
 def spaces(levels: int) -> str:
     """A run of spaces for the given number of indent levels (never negative)."""
     " " * (max(0, levels) * INDENT_WIDTH)
@@ -133,6 +156,7 @@ class Indenter:
     pending_spec: bool = False   # a 'function ... is' header whose body kind is not yet known
     cond_state: int = 0          # 1 = inside multi-line 'if' condition, 2 = 'elsif'
     cond_base: int = 0           # display depth of the opening if/elsif
+    in_cont: bool = False        # previous line was an unterminated statement/declaration
 
     def indent_line(self, line: str) -> str:
         """Process one raw line and return it re-indented."""
@@ -144,7 +168,7 @@ class Indenter:
         if emit_text == "":
             return ""
 
-        let cont: int = 1 if self.paren_depth > 0 else 0
+        let cont: int = 1 if (self.paren_depth > 0 or self.in_cont) else 0
         let lw: str = lead_word(code_s)
         var disp: int = len(self.stack)
 
@@ -155,6 +179,7 @@ class Indenter:
         if self.pending_spec:
             self.pending_spec = False
             if code_s.startswith("("):
+                self.in_cont = False
                 self.paren_depth = max(0, self.paren_depth + paren_delta(code))
                 return spaces(len(self.stack) + 1 + cont) + emit_text
             else:
@@ -175,6 +200,7 @@ class Indenter:
                 self.cond_state = 0
             else:
                 disp = self.cond_base + 1
+            self.in_cont = False
             self.paren_depth = max(0, self.paren_depth + paren_delta(code))
             return spaces(disp + cont) + emit_text
 
@@ -242,6 +268,9 @@ class Indenter:
                     self.cond_state = 1
                     self.cond_base = disp
 
+        # A multi-line if/elsif condition is tracked by cond_state, not here, so
+        # only flag a general statement continuation when not in that mode.
+        self.in_cont = False if self.cond_state > 0 else stmt_incomplete(code_s)
         self.paren_depth = max(0, self.paren_depth + paren_delta(code))
         spaces(disp + cont) + emit_text
 
@@ -357,7 +386,27 @@ def run_tests() -> int:
         "    B => 2);\n"
         "end P;\n"))
 
-    # 5. Multi-line if/elsif conditions: continuation lines ('and then …') must
+    # 5. Statement/declaration continuation: a line that does not end the
+    #    statement (no ';' and not a structural keyword line) indents its
+    #    continuation one level; the terminating line clears the continuation.
+    cases.append((
+        "package P is\n"
+        "Curtains : constant Alternatives_Profiles_T\n"
+        ":= Whatever_But_Very_Long;\n"
+        "X : Integer := A\n"
+        "+ B\n"
+        "+ C;\n"
+        "end P;\n",
+
+        "package P is\n"
+        "  Curtains : constant Alternatives_Profiles_T\n"
+        "    := Whatever_But_Very_Long;\n"
+        "  X : Integer := A\n"
+        "    + B\n"
+        "    + C;\n"
+        "end P;\n"))
+
+    # 6. Multi-line if/elsif conditions: continuation lines ('and then …') must
     #    indent one level relative to the 'if'/'elsif'; 'then' aligns with the
     #    opener; body and end-if are at the normal depths.
     cases.append((
@@ -389,7 +438,7 @@ def run_tests() -> int:
         "  end if;\n"
         "end P;\n"))
 
-    # 6. Expression function: 'function ... is' followed by a parenthesised
+    # 7. Expression function: 'function ... is' followed by a parenthesised
     #    expression pushes NO block frame, and the declarations after it must
     #    return to the outer level (regression: the spec frame used to linger).
     cases.append((
