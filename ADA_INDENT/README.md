@@ -255,6 +255,27 @@ begin
 end P;
 ```
 
+### Multi-line conditions
+
+When an `if` or `elsif` condition spans more than one line (no closing `then`
+on the opener line), continuation lines are indented one level deeper than the
+`if`/`elsif`. The `then` keyword, whenever it appears (on its own line or as
+the last token of a continuation line), snaps back to align with the opener and
+pushes the `IF` frame as usual:
+
+```ada
+if FTFX.The_Flight_Status = Cancelled
+    and then Action_Info.Event = IFPS_New_Flight   -- +1 level
+    and then Chained_TACT_Id (...) = None          -- +1 level
+  then                                              -- aligns with 'if'
+    Reset;                                          -- +1 from 'then' depth
+  elsif Other_Condition
+    and then Extra_Guard                            -- +1 level
+  then
+    Handle;
+  end if;
+```
+
 ### Closers — pop, and align with the opener's header
 
 `LEAD = end` (covers `end;`, `end if;`, `end loop;`, `end case;`, `end record;`,
@@ -297,8 +318,9 @@ parameter list, or call), continuation lines get **one extra** indent level.
 
 Keeping the grammar simple means a few things are out of scope:
 
-- **Expression continuations** not wrapped in parentheses (e.g. a statement
-  split across lines on a binary operator) are indented as ordinary lines.
+- **Expression continuations** not wrapped in parentheses are indented as
+  ordinary lines — *except* for multi-line `if`/`elsif` conditions, which are
+  handled explicitly (see above).
 - **Character literals** containing a `"` and **doubled-quote escapes**
   (`"a""b"`) are not modelled by the string scanner.
 - **Generic formal parts** (`generic … package …`) are left flat.
