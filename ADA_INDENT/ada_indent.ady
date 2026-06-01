@@ -145,9 +145,10 @@ def stmt_incomplete(code_s: str) -> bool:
 
 
 def starts_with_operator(code_s: str) -> bool:
-    """True if the line begins with a binary/assignment operator token
-    (:=, =>, =, &, +, -, *, /, <, >, |, ..). Such a continuation takes one
-    extra indent level so it stands out from the operand it continues."""
+    """True if the line begins with a binary/assignment operator — either a
+    symbol (:=, =>, =, &, +, -, *, /, <, >, |, ..) or a word operator
+    (and, or, xor, mod, rem, covering 'and then'/'or else'). Such a continuation
+    takes one extra indent level so it stands out from the operand it continues."""
     if code_s == "":
         return False
     let c0: char = code_s[0]
@@ -155,8 +156,11 @@ def starts_with_operator(code_s: str) -> bool:
         return len(code_s) > 1 and code_s[1] == '='   # ':=', not a bare ':'
     if c0 == '.':
         return len(code_s) > 1 and code_s[1] == '.'   # '..' range
-    return (c0 == '=' or c0 == '&' or c0 == '+' or c0 == '-' or c0 == '*'
-            or c0 == '/' or c0 == '<' or c0 == '>' or c0 == '|')
+    if (c0 == '=' or c0 == '&' or c0 == '+' or c0 == '-' or c0 == '*'
+            or c0 == '/' or c0 == '<' or c0 == '>' or c0 == '|'):
+        return True
+    let w: str = lead_word(code_s)
+    return w == "and" or w == "or" or w == "xor" or w == "mod" or w == "rem"
 
 
 def scan_parens(text: str, base_depth: int, base_col: int) -> [](int, int, int):
@@ -686,6 +690,24 @@ def run_tests() -> int:
         "              K2\n"
         "                => V2));\n"
         "end P;\n"))
+
+    # 12. Word boolean operators (and/or/and then/or else) at the start of a
+    #     line inside parentheses also take the extra level; the bare 'and'
+    #     continuation of the return (outside parentheses) does not.
+    cases.append((
+        "function F return Boolean is\n"
+        "begin\n"
+        "return A\n"
+        "and (B = C\n"
+        "or else D = E);\n"
+        "end F;\n",
+
+        "function F return Boolean is\n"
+        "begin\n"
+        "  return A\n"
+        "    and (B = C\n"
+        "           or else D = E);\n"
+        "end F;\n"))
 
     for pair in cases:
         let src: str = pair[0]
