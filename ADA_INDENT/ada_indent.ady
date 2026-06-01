@@ -144,16 +144,18 @@ def stmt_incomplete(code_s: str) -> bool:
     result = True
 
 
-def scan_exprs(text: str, base_depth: int, base_col: int) -> [](int, int, int):
-    """Find conditional-/case-expression openers '(if' and '(case' in a line.
+def scan_parens(text: str, base_depth: int, base_col: int) -> [](int, int, int):
+    """Find every '(' opened in a line and how its continuations should align.
 
-    Returns one tuple (paren_level, column, kind) per opener: paren_level is the
-    parenthesis depth just inside the opening '(', column is the absolute output
-    column of the keyword (base_col is the column at which text[0] renders), and
-    kind is 0 for 'if' or 1 for 'case'. Used to align an if-expression's
-    then/else under its 'if', and a case-expression's when clauses one level in
-    from its 'case'. Parentheses inside string literals are not special-cased
-    (rare in a condition), so this is a best-effort scan over the emitted text.
+    Returns one tuple (paren_level, align_col, kind) per opening parenthesis:
+    paren_level is the depth just inside the '(', align_col is the absolute
+    output column to align continuations to (base_col is the column at which
+    text[0] renders), and kind is 0 for a plain parenthesis, 1 for '(if' and 2
+    for '(case'. For a plain '(' the alignment column is the first non-blank
+    character after it (the first item), or one indent level in if the '(' ends
+    the line. For '(if'/'(case' the column is the keyword itself, which the
+    caller offsets per the expression's syntax. Parentheses inside string
+    literals are not special-cased, so this is a best-effort scan.
     """
     var openers: [](int, int, int) = []
     var depth: int = base_depth
@@ -170,14 +172,18 @@ def scan_exprs(text: str, base_depth: int, base_col: int) -> [](int, int, int):
                     and (text[j] == 'i' or text[j] == 'I')
                     and (text[j + 1] == 'f' or text[j + 1] == 'F')
                     and (j + 2 >= n or not (text[j + 2].isalnum() or text[j + 2] == '_'))):
-                openers.append((depth, base_col + j, 0))
+                openers.append((depth, base_col + j, 1))
             elif (j + 3 < n
                     and (text[j] == 'c' or text[j] == 'C')
                     and (text[j + 1] == 'a' or text[j + 1] == 'A')
                     and (text[j + 2] == 's' or text[j + 2] == 'S')
                     and (text[j + 3] == 'e' or text[j + 3] == 'E')
                     and (j + 4 >= n or not (text[j + 4].isalnum() or text[j + 4] == '_'))):
-                openers.append((depth, base_col + j, 1))
+                openers.append((depth, base_col + j, 2))
+            elif j < n:
+                openers.append((depth, base_col + j, 0))
+            else:
+                openers.append((depth, base_col + INDENT_WIDTH, 0))
         elif ch == ')':
             depth -= 1
         i += 1
@@ -200,16 +206,16 @@ class Indenter:
     cond_state: int = 0          # 1 = inside multi-line 'if' condition, 2 = 'elsif'
     cond_base: int = 0           # display depth of the opening if/elsif
     in_cont: bool = False        # previous line was an unterminated statement/declaration
-    expr_stack: [](int, int, int) = []  # (paren_level, keyword_col, kind) for open if/case expressions
+    paren_stack: [](int, int, int) = []  # (paren_level, align_col, kind) for every open '('
 
-    def _push_exprs(self, text: str, base_col: int, base_depth: int, new_depth: int):
-        """Record if-/case-expressions opened on this line and drop any now closed."""
-        for opener in scan_exprs(text, base_depth, base_col):
-            self.expr_stack.append(opener)
-        while len(self.expr_stack) > 0:
-            let top: (int, int, int) = self.expr_stack[-1]
+    def _push_parens(self, text: str, base_col: int, base_depth: int, new_depth: int):
+        """Record parentheses opened on this line and drop any now closed."""
+        for opener in scan_parens(text, base_depth, base_col):
+            self.paren_stack.append(opener)
+        while len(self.paren_stack) > 0:
+            let top: (int, int, int) = self.paren_stack[-1]
             if top[0] > new_depth:
-                self.expr_stack.pop()
+                self.paren_stack.pop()
             else:
                 break
 
@@ -238,7 +244,7 @@ class Indenter:
                 self.in_cont = False
                 let lead_e: int = max(0, len(self.stack) + 1 + cont) * INDENT_WIDTH
                 self.paren_depth = max(0, self.paren_depth + paren_delta(code))
-                self._push_exprs(emit_text, lead_e, entry_depth, self.paren_depth)
+                self._push_parens(emit_text, lead_e, entry_depth, self.paren_depth)
                 return " " * lead_e + emit_text
             else:
                 self.stack.append(PKG)
@@ -262,49 +268,66 @@ class Indenter:
             self.paren_depth = max(0, self.paren_depth + paren_delta(code))
             return spaces(disp + cont) + emit_text
 
-        # Inside an unclosed parenthesis the line is part of an expression
-        # (e.g. an if-/case-expression), so keywords like then/else/elsif/when
-        # are operators here, not statement parts. Keep them inert and indent
-        # the line as a plain continuation so then/else align with each other.
-        # Exception: a line that closes the parentheses and then opens a block
-        # (a multi-line parameter list ending in ') is', ') return T is',
-        # ') loop', …) must fall through to the normal dispatch so the frame
-        # is pushed.
+        # Inside an unclosed parenthesis the line is a continuation of an
+        # expression / list, so statement keywords (then/else/elsif/when) are
+        # operators here, not statement parts. It is aligned by absolute column
+        # to the innermost open parenthesis:
+        #   plain '('  -> under the first item after the '(';
+        #   '(if'      -> then/else/elsif under the 'if', condition past it;
+        #   '(case'    -> when clauses one level in from the 'case', clause
+        #                 bodies one level deeper still.
+        # If the line also closes the parentheses and opens a block (a
+        # multi-line parameter list ending in ') is', ') return T is', ') loop',
+        # …) the block frame is pushed here, after the line is aligned.
         if self.paren_depth > 0:
-            # Drop any if-/case-expressions whose parentheses have already closed.
-            while len(self.expr_stack) > 0:
-                let stale: (int, int, int) = self.expr_stack[-1]
+            # Drop any parentheses that have already closed.
+            while len(self.paren_stack) > 0:
+                let stale: (int, int, int) = self.paren_stack[-1]
                 if stale[0] > entry_depth:
-                    self.expr_stack.pop()
+                    self.paren_stack.pop()
                 else:
                     break
+            var lead: int = max(0, len(self.stack) + cont) * INDENT_WIDTH
+            if len(self.paren_stack) > 0:
+                let top: (int, int, int) = self.paren_stack[-1]
+                let acol: int = top[1]
+                if top[2] == 1:
+                    if lw == "then" or lw == "else" or lw == "elsif":
+                        lead = acol
+                    else:
+                        lead = acol + 3
+                elif top[2] == 2:
+                    if lw == "when":
+                        lead = acol + INDENT_WIDTH
+                    else:
+                        lead = acol + 2 * INDENT_WIDTH
+                else:
+                    lead = acol
             let new_depth: int = self.paren_depth + paren_delta(code)
             let plt: str = last_word(code_s)
-            let opens_block: bool = (plt == "is" or plt == "then" or plt == "loop"
-                    or plt == "record" or plt == "select" or plt == "do")
-            if not (new_depth <= 0 and opens_block):
-                var lead: int = max(0, len(self.stack) + cont) * INDENT_WIDTH
-                # When inside an if-/case-expression, align to its keyword:
-                #  if-expr  -> then/else/elsif under the 'if', condition past it;
-                #  case-expr -> when clauses one level in from the 'case',
-                #               clause bodies one level deeper still.
-                if len(self.expr_stack) > 0:
-                    let top: (int, int, int) = self.expr_stack[-1]
-                    let kcol: int = top[1]
-                    if top[2] == 0:
-                        if lw == "then" or lw == "else" or lw == "elsif":
-                            lead = kcol
-                        else:
-                            lead = kcol + 3
-                    else:
-                        if lw == "when":
-                            lead = kcol + INDENT_WIDTH
-                        else:
-                            lead = kcol + 2 * INDENT_WIDTH
-                self.in_cont = stmt_incomplete(code_s)
-                self.paren_depth = max(0, new_depth)
-                self._push_exprs(emit_text, lead, entry_depth, self.paren_depth)
-                return " " * lead + emit_text
+            self.in_cont = stmt_incomplete(code_s)
+            self.paren_depth = max(0, new_depth)
+            self._push_parens(emit_text, lead, entry_depth, self.paren_depth)
+            # A line that closes back out of all parentheses and ends in a block
+            # opener (e.g. ') is' on a multi-line parameter list) opens that block.
+            if new_depth <= 0:
+                case plt:
+                    when "is":
+                        self.stack.append(CASE_ if lw == "case" else PKG)
+                    when "then":
+                        self.stack.append(IF_)
+                    when "loop":
+                        self.stack.append(LOOP_)
+                    when "record":
+                        if lw != "null":
+                            self.stack.append(RECORD_)
+                    when "select":
+                        self.stack.append(SELECT_)
+                    when "do":
+                        self.stack.append(DO_)
+                    when others:
+                        pass
+            return " " * lead + emit_text
 
         case lw:
             when "end":
@@ -375,7 +398,7 @@ class Indenter:
         self.in_cont = False if self.cond_state > 0 else stmt_incomplete(code_s)
         self.paren_depth = max(0, self.paren_depth + paren_delta(code))
         let lead_n: int = max(0, disp + cont) * INDENT_WIDTH
-        self._push_exprs(emit_text, lead_n, entry_depth, self.paren_depth)
+        self._push_parens(emit_text, lead_n, entry_depth, self.paren_depth)
         " " * lead_n + emit_text
 
 
@@ -476,7 +499,8 @@ def run_tests() -> int:
         "    X := 0;\n"
         "end;\n"))
 
-    # 4. Continuation inside an unclosed parenthesis (aggregate / call).
+    # 4. Continuation inside an unclosed parenthesis (aggregate / call) aligns
+    #    under the first item after the '('.
     cases.append((
         "procedure P is\n"
         "begin\n"
@@ -487,7 +511,7 @@ def run_tests() -> int:
         "procedure P is\n"
         "begin\n"
         "  Set (A => 1,\n"
-        "    B => 2);\n"
+        "       B => 2);\n"
         "end P;\n"))
 
     # 5. Statement/declaration continuation: a line that does not end the
@@ -584,8 +608,8 @@ def run_tests() -> int:
 
     # 9. Subunit with a multi-line parameter list. The 'separate (Parent)'
     #    clause is a complete line (must NOT make the body indent), the
-    #    parameter continuations indent one level, and the closing ') is'
-    #    still opens the body frame so the declarations indent.
+    #    parameter continuations align under the first parameter, and the
+    #    closing ') is' still opens the body frame so the declarations indent.
     cases.append((
         "separate (Flight.Behaviour)\n"
         "procedure P (A : Integer;\n"
@@ -597,7 +621,7 @@ def run_tests() -> int:
 
         "separate (Flight.Behaviour)\n"
         "procedure P (A : Integer;\n"
-        "  B : Integer) is\n"
+        "             B : Integer) is\n"
         "  X : Integer;\n"
         "begin\n"
         "  null;\n"
