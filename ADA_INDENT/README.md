@@ -349,15 +349,20 @@ Reroutings := (if Cycle_Of (Normal_Flight.IOBT)
 
 A **case-expression** is aligned to its `case` the same way, except the
 `when` clauses are indented one **level** in from the `case` (rather than lined
-up under it), and a clause body that spills onto its own line (`=> …`) indents
-one further level:
+up under it), and a clause body indents one further level. A clause body is
+itself an expression, so a continuation line that starts with an operator
+(`or else`, `and then`, `&`, …) takes one more level past the body — except a
+leading `=>`, which is the result arrow for choices that spilled onto an
+earlier line and stays at the body level:
 
 ```ada
 function F return T is
   (case X is
      when A | B            -- one level in from 'case'
-       => R1,              -- clause body, one level deeper
-     when others => R2);
+       => R1,              -- clause body ('=>' arrow), one level deeper
+     when others =>
+       X                   -- clause body
+         or else Y);       -- operator continuation, one further level
 ```
 
 These keyword offsets are just the if-/case-specific cases of the same

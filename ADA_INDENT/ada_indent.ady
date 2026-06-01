@@ -328,6 +328,15 @@ class Indenter:
                         lead = acol + INDENT_WIDTH
                     else:
                         lead = acol + 2 * INDENT_WIDTH
+                        # An arm body spanning several lines is an expression: a
+                        # continuation line that starts with an operator (or else,
+                        # and then, &, …) takes one extra level past the arm body,
+                        # exactly as inside a plain parenthesis. A leading '=>' is
+                        # excluded — that is the arm's result arrow (its choices
+                        # spilled onto earlier lines), which stays at the arm-body
+                        # level rather than being treated as an operator.
+                        if starts_with_operator(code_s) and not code_s.startswith("=>"):
+                            lead += INDENT_WIDTH
                 else:
                     lead = acol
                     # A plain-paren continuation that starts with an operator
@@ -844,6 +853,32 @@ def run_tests() -> int:
         "begin\n"
         "  null;\n"
         "end G;\n"))
+
+    # 16. Multi-line case-expression arm body. The arm body is an expression:
+    #     its first line sits at the arm-body level (one in from 'when'), and a
+    #     continuation that starts with an operator ('or else') takes one extra
+    #     level. A leading '=>' (the result arrow for choices spilled onto an
+    #     earlier line) stays at the arm-body level, not the operator level.
+    cases.append((
+        "function F return Boolean is\n"
+        "(case S is\n"
+        "when A | B\n"
+        "=> P,\n"
+        "when others =>\n"
+        "X\n"
+        "or else Y\n"
+        "or else (Z\n"
+        "and then W));\n",
+
+        "function F return Boolean is\n"
+        "  (case S is\n"
+        "     when A | B\n"
+        "       => P,\n"
+        "     when others =>\n"
+        "       X\n"
+        "         or else Y\n"
+        "         or else (Z\n"
+        "                    and then W));\n"))
 
     for pair in cases:
         let src: str = pair[0]
