@@ -220,11 +220,12 @@ def scan_parens(text: str, base_depth: int, base_col: int) -> [](int, int, int):
     Returns one tuple (paren_level, align_col, kind) per opening parenthesis:
     paren_level is the depth just inside the '(', align_col is the absolute
     output column to align continuations to (base_col is the column at which
-    text[0] renders), and kind is 0 for a plain parenthesis, 1 for '(if' and 2
-    for '(case'. For a plain '(' the alignment column is the first non-blank
-    character after it (the first item), or one indent level in if the '(' ends
-    the line. For '(if'/'(case' the column is the keyword itself, which the
-    caller offsets per the expression's syntax. String and character literals
+    text[0] renders), and kind is 0 for a plain parenthesis, 1 for '(if', 2
+    for '(case' and 3 for '(for' (a quantified or iterated expression). For a
+    plain '(' the alignment column is the first non-blank character after it
+    (the first item), or one indent level in if the '(' ends the line. For
+    '(if'/'(case'/'(for' the column is the keyword itself, which the caller
+    offsets per the expression's syntax. String and character literals
     are skipped so a '(' written as '(' (or in "(") is not recorded; otherwise
     this is a best-effort scan.
     """
@@ -258,6 +259,12 @@ def scan_parens(text: str, base_depth: int, base_col: int) -> [](int, int, int):
                     and (text[j + 3] == 'e' or text[j + 3] == 'E')
                     and (j + 4 >= n or not (text[j + 4].isalnum() or text[j + 4] == '_'))):
                 openers.append((depth, base_col + j, 2))
+            elif (j + 2 < n
+                    and (text[j] == 'f' or text[j] == 'F')
+                    and (text[j + 1] == 'o' or text[j + 1] == 'O')
+                    and (text[j + 2] == 'r' or text[j + 2] == 'R')
+                    and (j + 3 >= n or not (text[j + 3].isalnum() or text[j + 3] == '_'))):
+                openers.append((depth, base_col + j, 3))
             elif j < n:
                 openers.append((depth, base_col + j, 0))
             else:
@@ -414,6 +421,16 @@ class Indenter:
                         # level rather than being treated as an operator.
                         if starts_with_operator(code_s) and not code_s.startswith("=>"):
                             lead += INDENT_WIDTH
+                elif top[2] == 3:
+                    # '(for some/all … => predicate' (a quantified expression) or
+                    # '(for I in … => value' (an iterated component): the body
+                    # after the iterator sits one level past the 'for', mirroring
+                    # the '(if'/'(case' bodies. A leading operator takes one more
+                    # level; a leading '=>' (the predicate arrow spilled onto its
+                    # own line) stays at the body level.
+                    lead = acol + INDENT_WIDTH
+                    if starts_with_operator(code_s) and not code_s.startswith("=>"):
+                        lead += INDENT_WIDTH
                 else:
                     lead = acol
                     # A plain-paren continuation that starts with an operator
@@ -1348,6 +1365,23 @@ def run_tests() -> int:
         "                 and then D)\n"
         "      -- comment three\n"
         "      or else not E;\n"
+        "end P;\n"))
+
+    # 31. A quantified expression '(for some/all … => predicate)': the predicate
+    #     after '=>' nests one level past the 'for' keyword (like an '(if'/'(case'
+    #     body), not flush with it as a plain-paren first item would. The iterator
+    #     spec's own nested call parens close on the same line and don't affect it.
+    cases.append((
+        "package P is\n"
+        "Any_Concerned : constant Boolean\n"
+        ":= (for some Reg of All_Regs (1 .. N) =>\n"
+        "not Reg.Excluded);\n"
+        "end P;\n",
+
+        "package P is\n"
+        "  Any_Concerned : constant Boolean\n"
+        "    := (for some Reg of All_Regs (1 .. N) =>\n"
+        "          not Reg.Excluded);\n"
         "end P;\n"))
 
     for pair in cases:
