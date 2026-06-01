@@ -301,6 +301,24 @@ class Indenter:
     arrow_level: int = 0        # innermost paren level with an active '=>' named-value spill (0 = none)
     paren_last_lead: int = 0    # lead column of the last code line emitted inside a paren
     paren_last_lead_depth: int = 0  # paren_depth that paren_last_lead applies to
+    pending_comments: []str = []  # boundary comments held until the next code line's indent is known
+
+    def _flush(self, lead: int) -> []str:
+        """Emit any buffered boundary comments at the given lead column and clear
+        the buffer. A comment between statements/declarations is aligned with the
+        instruction that follows it, whose indent is only known once that line is
+        processed; this releases the held comments at that column."""
+        var out: []str = []
+        for c in self.pending_comments:
+            let ctext: str = c
+            out.append(" " * max(0, lead) + ctext)
+        self.pending_comments = []
+        return out
+
+    def flush(self) -> []str:
+        """Release comments still buffered at end of input (no following code
+        line), at the current block level."""
+        return self._flush(max(0, len(self.stack)) * INDENT_WIDTH)
 
     def _push_parens(self, text: str, base_col: int, base_depth: int, new_depth: int):
         """Record parentheses opened on this line and drop any now closed."""
@@ -313,15 +331,19 @@ class Indenter:
             else:
                 break
 
-    def indent_line(self, line: str) -> str:
-        """Process one raw line and return it re-indented."""
+    def indent_line(self, line: str) -> []str:
+        """Process one raw line and return its re-indented output line(s).
+
+        Usually one line, but a code line also releases any boundary comments
+        buffered before it (aligned with this, the following instruction), so it
+        may return several lines; a buffered comment line returns none."""
         let raw2: str = line.rstrip()
         let code: str = strip_code(raw2)
         let code_s: str = code.strip()
         let emit_text: str = raw2.strip()
 
         if emit_text == "":
-            return ""
+            return [""]
 
         # A comment-only line (text remains, but nothing is left after stripping
         # the '--' comment) is transparent to the parser: indent it to the
@@ -340,14 +362,22 @@ class Indenter:
             if self.paren_depth > 0 and len(self.paren_stack) > 0:
                 let ptop: (int, int, int) = self.paren_stack[-1]
                 if self.paren_last_lead_depth == self.paren_depth:
-                    return " " * self.paren_last_lead + emit_text
-                return " " * ptop[1] + emit_text
-            # Outside parentheses a comment is indented like a NEW instruction at
-            # this point — the current block nesting level — not the continuation
-            # indent of the statement (or if/elsif condition) it interrupts.
+                    return [" " * self.paren_last_lead + emit_text]
+                return [" " * ptop[1] + emit_text]
+            # A comment is indented like a NEW instruction at this point. While a
+            # statement (or if/elsif condition) is still being continued, that is
+            # the current block level. Between complete statements/declarations,
+            # though, the next instruction may itself de-indent (e.g. 'begin' /
+            # 'end' after a spec, or a declaration one level in from a deferred
+            # 'function ... is' header) — a level only known once that line is
+            # processed. So at such a boundary the comment is buffered and
+            # released with the following line, aligned to its column.
             if self.cond_state > 0:
-                return " " * (max(0, self.cond_base) * INDENT_WIDTH) + emit_text
-            return " " * (max(0, len(self.stack)) * INDENT_WIDTH) + emit_text
+                return [" " * (max(0, self.cond_base) * INDENT_WIDTH) + emit_text]
+            if self.in_cont:
+                return [" " * (max(0, len(self.stack)) * INDENT_WIDTH) + emit_text]
+            self.pending_comments.append(emit_text)
+            return []
 
         let entry_depth: int = self.paren_depth
         # When we are outside all parens, clear the plain-paren continuation flag
@@ -370,7 +400,9 @@ class Indenter:
                 let lead_e: int = max(0, len(self.stack) + 1 + cont) * INDENT_WIDTH
                 self.paren_depth = max(0, self.paren_depth + paren_delta(code))
                 self._push_parens(emit_text, lead_e, entry_depth, self.paren_depth)
-                return " " * lead_e + emit_text
+                var out_e: []str = self._flush(lead_e)
+                out_e.append(" " * lead_e + emit_text)
+                return out_e
             else:
                 self.stack.append(PKG)
                 disp = len(self.stack)
@@ -511,7 +543,7 @@ class Indenter:
                             self.stack.append(DO_)
                         when others:
                             pass
-            return " " * lead + emit_text
+            return [" " * lead + emit_text]
 
         # Multi-line if/elsif condition (outside any parenthesis): continuation
         # lines are one level deeper than the 'if'/'elsif'. When 'then' appears
@@ -548,7 +580,7 @@ class Indenter:
             let lead_c: int = max(0, disp) * INDENT_WIDTH
             self.paren_depth = max(0, self.paren_depth + paren_delta(code))
             self._push_parens(emit_text, lead_c, entry_depth, self.paren_depth)
-            return " " * lead_c + emit_text
+            return [" " * lead_c + emit_text]
 
         case lw:
             when "end":
@@ -664,7 +696,9 @@ class Indenter:
         if cont > 0 and code_s.startswith("|"):
             lead_n = max(0, disp) * INDENT_WIDTH
         self._push_parens(emit_text, lead_n, entry_depth, self.paren_depth)
-        " " * lead_n + emit_text
+        var out: []str = self._flush(lead_n)
+        out.append(" " * lead_n + emit_text)
+        out
 
 
 # ---------------------------------------------------------------------------
@@ -1499,11 +1533,54 @@ def run_tests() -> int:
         "       );\n"
         "end P;\n"))
 
+    # 35. A comment between complete constructs is indented like the instruction
+    #     that FOLLOWS it (its level is only known once that line is processed, so
+    #     the comment is buffered and released with it). A comment right before
+    #     'begin' (empty declarative part) aligns with 'begin'; comments before a
+    #     declaration align with the declaration — one level in from the deferred
+    #     'function ... is' header.
+    cases.append((
+        "package body Pkg is\n"
+        "procedure P is\n"
+        "-- before begin\n"
+        "begin\n"
+        "null;\n"
+        "end P;\n"
+        "function F return T is\n"
+        "-- doc one\n"
+        "-- doc two\n"
+        "X : T := 0;\n"
+        "begin\n"
+        "null;\n"
+        "end F;\n"
+        "end Pkg;\n",
+
+        "package body Pkg is\n"
+        "  procedure P is\n"
+        "  -- before begin\n"
+        "  begin\n"
+        "    null;\n"
+        "  end P;\n"
+        "  function F return T is\n"
+        "    -- doc one\n"
+        "    -- doc two\n"
+        "    X : T := 0;\n"
+        "  begin\n"
+        "    null;\n"
+        "  end F;\n"
+        "end Pkg;\n"))
+
     for pair in cases:
         let src: str = pair[0]
         let want: str = pair[1]
         var ind: Indenter = Indenter()
-        let got: str = "\n".join([ind.indent_line(line) for line in src.split("\n")])
+        var out_lines: []str = []
+        for line in src.split("\n"):
+            for o in ind.indent_line(line):
+                out_lines.append(o)
+        for o in ind.flush():
+            out_lines.append(o)
+        let got: str = "\n".join(out_lines)
         if got == want:
             passed += 1
         else:
@@ -1523,7 +1600,10 @@ def main() -> int:
     var ind: Indenter = Indenter()
     if $# < 1:
         for line in stdin.lines:
-            print ind.indent_line(line)
+            for o in ind.indent_line(line):
+                print o
+        for o in ind.flush():
+            print o
     else:
         let arg: str = $1
         if arg == "--test":
@@ -1531,7 +1611,10 @@ def main() -> int:
         else:
             with open(arg) as f:
                 for line in f:
-                    print ind.indent_line(line)
+                    for o in ind.indent_line(line):
+                        print o
+            for o in ind.flush():
+                print o
 
 
 if __name__ == "__main__":
