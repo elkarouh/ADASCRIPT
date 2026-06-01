@@ -336,17 +336,25 @@ class Indenter:
             # Inside a parenthesis a comment follows the surrounding lines: align
             # it with the previous code line in this same paren (which, in a list
             # or expression, sits at the same level as the line that follows it).
-            # When no line has been emitted inside this paren yet — the comment
-            # sits right after the line that OPENED it — fall back to the paren's
-            # item column, but add one level when that opening line left its item
-            # unfinished (paren_cont): the next line then continues the item (an
-            # operator/term continuation, one level past the items), so the comment
-            # aligns with it rather than with the shallower item column.
+            # When no line has been emitted at this paren level yet — the comment
+            # sits right after the line that opened the paren, or after an inner
+            # paren just closed back to it — derive the level from the paren kind,
+            # mirroring where the next code line would land:
+            #   '(if'   -> the then/else/elsif column (acol);
+            #   '(case' -> the 'when' level (acol + one);
+            #   '(for'  -> the body level (acol + one);
+            #   plain   -> the item column, plus one level when the opening line
+            #              left its item unfinished (paren_cont) so an operator/
+            #              term continuation — not a new item — follows.
             if self.paren_depth > 0 and len(self.paren_stack) > 0:
                 let ptop: (int, int, int) = self.paren_stack[-1]
                 if self.paren_last_lead_depth == self.paren_depth:
                     return " " * self.paren_last_lead + emit_text
-                let pfall: int = ptop[1] + (INDENT_WIDTH if self.paren_cont else 0)
+                var pfall: int = ptop[1]
+                if ptop[2] == 2 or ptop[2] == 3:
+                    pfall += INDENT_WIDTH
+                elif ptop[2] == 0 and self.paren_cont:
+                    pfall += INDENT_WIDTH
                 return " " * pfall + emit_text
             # Outside parentheses a comment is indented like the line that would
             # follow it. When that next line is a continuation — the current
@@ -1552,6 +1560,34 @@ def run_tests() -> int:
         "    null;\n"
         "  end F;\n"
         "end Pkg;\n"))
+
+    # 37. A comment between the branches of a parenthesised if-expression, sitting
+    #     right after the 'then (...)' aggregate closed back to the '(if' level,
+    #     aligns with the then/else/elsif keywords (the '(if' column) — the level
+    #     of the 'else' that follows — not one level deeper. The fallback derives
+    #     this from the paren kind when no peer line was recorded at this level.
+    cases.append((
+        "package P is\n"
+        "Curtains : constant T\n"
+        ":= (if E\n"
+        "then (A => P,\n"
+        "B => Q)\n"
+        "-- note one\n"
+        "-- note two\n"
+        "else (A => R,\n"
+        "B => S));\n"
+        "end P;\n",
+
+        "package P is\n"
+        "  Curtains : constant T\n"
+        "    := (if E\n"
+        "        then (A => P,\n"
+        "              B => Q)\n"
+        "        -- note one\n"
+        "        -- note two\n"
+        "        else (A => R,\n"
+        "              B => S));\n"
+        "end P;\n"))
 
     for pair in cases:
         let src: str = pair[0]
