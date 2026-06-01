@@ -278,6 +278,7 @@ class Indenter:
     in_cont: bool = False        # previous line was an unterminated statement/declaration
     value_base: int = 0          # display level where the current statement's value expression starts
     paren_stack: [](int, int, int) = []  # (paren_level, align_col, kind) for every open '('
+    paren_cont: bool = False    # prev line within plain paren ended without ',' (arg-list continuation)
 
     def _push_parens(self, text: str, base_col: int, base_depth: int, new_depth: int):
         """Record parentheses opened on this line and drop any now closed."""
@@ -319,6 +320,10 @@ class Indenter:
             return " " * (max(0, clvl) * INDENT_WIDTH) + emit_text
 
         let entry_depth: int = self.paren_depth
+        # When we are outside all parens, clear the plain-paren continuation flag
+        # so stale state from a previous paren context does not carry over.
+        if entry_depth == 0:
+            self.paren_cont = False
         let cont: int = 1 if (self.paren_depth > 0 or self.in_cont) else 0
         let lw: str = lead_word(code_s)
         var disp: int = len(self.stack)
@@ -393,11 +398,20 @@ class Indenter:
                     lead = acol
                     # A plain-paren continuation that starts with an operator
                     # (=>, &, +, …) takes one extra level past the aligned items.
+                    # A '(' on a continuation line is the argument list of the
+                    # expression on the previous line (which ended without ','),
+                    # so it also nests one level deeper.
                     if starts_with_operator(code_s):
+                        lead = acol + INDENT_WIDTH
+                    elif code_s.startswith("(") and self.paren_cont:
                         lead = acol + INDENT_WIDTH
             let new_depth: int = self.paren_depth + paren_delta(code)
             let plt: str = last_word(code_s)
             self.in_cont = stmt_incomplete(code_s)
+            # Track whether this line ended without a comma: if so, a '(' opening
+            # the next line is the argument list of the expression here (not a new
+            # list element) and deserves an extra indent level inside plain parens.
+            self.paren_cont = self.in_cont and not code_s.endswith(",")
             self.paren_depth = max(0, new_depth)
             self._push_parens(emit_text, lead, entry_depth, self.paren_depth)
             # A line that closes back out of all parentheses and ends in a block
@@ -1163,6 +1177,34 @@ def run_tests() -> int:
         "          & (if C\n"
         "             then B & ')'\n"
         "             else \"\"));\n"
+        "end P;\n"))
+
+    # 25. Inside a plain paren, a '(' that continues the preceding expression
+    #     (previous line ended without ',') is the argument list of that
+    #     expression, not a new list element: it nests one extra level past the
+    #     item column. Here the else-branch of an if-expression calls Convert
+    #     whose argument list is split to the next line.
+    cases.append((
+        "procedure P is\n"
+        "Coordination_Fix : constant Def_Location.T :=\n"
+        "(if C\n"
+        "then (Def_Location.GPS, X => Y)\n"
+        "else (Def_Location.ICAO_Aerodrome,\n"
+        "Aerodrome => Def_Aerodrome.Convert\n"
+        "(Env_Location.Value (A))));\n"
+        "begin\n"
+        "null;\n"
+        "end P;\n",
+
+        "procedure P is\n"
+        "  Coordination_Fix : constant Def_Location.T :=\n"
+        "    (if C\n"
+        "     then (Def_Location.GPS, X => Y)\n"
+        "     else (Def_Location.ICAO_Aerodrome,\n"
+        "           Aerodrome => Def_Aerodrome.Convert\n"
+        "             (Env_Location.Value (A))));\n"
+        "begin\n"
+        "  null;\n"
         "end P;\n"))
 
     for pair in cases:
