@@ -299,27 +299,8 @@ class Indenter:
     paren_stack: [](int, int, int) = []  # (paren_level, align_col, kind) for every open '('
     paren_cont: bool = False    # prev line within plain paren ended without ',' (arg-list continuation)
     arrow_level: int = 0        # innermost paren level with an active '=>' named-value spill (0 = none)
-    pending_comments: []str = []  # comments held until the following code line's indent is known
-
-    def _flush(self, lead: int) -> []str:
-        """Emit any buffered boundary comments at the given lead column and clear
-        the buffer. A comment between statements/declarations is aligned with the
-        instruction that follows it, whose indent is only known once that line is
-        processed; this releases the held comments at that column."""
-        var out: []str = []
-        for c in self.pending_comments:
-            let ctext: str = c
-            if ctext == "":
-                out.append("")               # a held blank line stays blank
-            else:
-                out.append(" " * max(0, lead) + ctext)
-        self.pending_comments = []
-        return out
-
-    def flush(self) -> []str:
-        """Release comments still buffered at end of input (no following code
-        line), at the current block level."""
-        return self._flush(max(0, len(self.stack)) * INDENT_WIDTH)
+    paren_last_lead: int = 0    # lead column of the last code line emitted inside a paren
+    paren_last_lead_depth: int = 0  # paren_depth that paren_last_lead applies to
 
     def _push_parens(self, text: str, base_col: int, base_depth: int, new_depth: int):
         """Record parentheses opened on this line and drop any now closed."""
@@ -332,43 +313,41 @@ class Indenter:
             else:
                 break
 
-    def indent_line(self, line: str) -> []str:
-        """Process one raw line and return its re-indented output line(s).
-
-        Usually one line, but a code line also releases any boundary comments
-        buffered before it (aligned with this, the following instruction), so it
-        may return several lines; a buffered comment line returns none."""
+    def indent_line(self, line: str) -> str:
+        """Process one raw line and return it re-indented."""
         let raw2: str = line.rstrip()
         let code: str = strip_code(raw2)
         let code_s: str = code.strip()
         let emit_text: str = raw2.strip()
 
         if emit_text == "":
-            # A blank line within a run of buffered boundary comments belongs to
-            # that block: hold it so it keeps its place relative to the comments
-            # when they are released with the following instruction. With nothing
-            # buffered, emit it immediately.
-            if len(self.pending_comments) > 0:
-                self.pending_comments.append("")
-                return []
-            return [""]
+            return ""
 
         # A comment-only line (text remains, but nothing is left after stripping
-        # the '--' comment) is transparent to the parser: it leaves ALL state
-        # untouched (in_cont / cond_state / paren_depth / pending_spec /
-        # paren_stack), so the next real line indents exactly as if the comment
-        # were not there.
-        #
-        # A comment is aligned with the INSTRUCTION THAT FOLLOWS it — the line it
-        # documents — whether that is the next statement/declaration, a deeper
-        # continuation operator, or a list element inside a parenthesis. That
-        # line's column is only known once it is processed (a following 'begin'/
-        # 'end' or a deferred 'function ... is' body de-indents; a continuation
-        # nests), so the comment is buffered here and released with that line by
-        # _flush at the matching return below.
+        # the '--' comment) is transparent to the parser: indent it to the
+        # current continuation context but leave ALL state untouched
+        # (in_cont / cond_state / paren_depth / pending_spec / paren_stack), so
+        # the next real line indents exactly as if the comment were not there.
+        # Without this the trailing in_cont update would clear a pending
+        # statement continuation, dropping the line after the comment back to
+        # the base level (and a comment after 'function ... is' would wrongly
+        # resolve the deferred spec).
         if code_s == "":
-            self.pending_comments.append(emit_text)
-            return []
+            # Inside a parenthesis a comment follows the surrounding lines: align
+            # it with the previous code line in this same paren (which, in a list
+            # or expression, sits at the same level as the line that follows it),
+            # falling back to the paren's item column when there is none yet.
+            if self.paren_depth > 0 and len(self.paren_stack) > 0:
+                let ptop: (int, int, int) = self.paren_stack[-1]
+                if self.paren_last_lead_depth == self.paren_depth:
+                    return " " * self.paren_last_lead + emit_text
+                return " " * ptop[1] + emit_text
+            # Outside parentheses a comment is indented like a NEW instruction at
+            # this point — the current block nesting level — not the continuation
+            # indent of the statement (or if/elsif condition) it interrupts.
+            if self.cond_state > 0:
+                return " " * (max(0, self.cond_base) * INDENT_WIDTH) + emit_text
+            return " " * (max(0, len(self.stack)) * INDENT_WIDTH) + emit_text
 
         let entry_depth: int = self.paren_depth
         # When we are outside all parens, clear the plain-paren continuation flag
@@ -391,9 +370,7 @@ class Indenter:
                 let lead_e: int = max(0, len(self.stack) + 1 + cont) * INDENT_WIDTH
                 self.paren_depth = max(0, self.paren_depth + paren_delta(code))
                 self._push_parens(emit_text, lead_e, entry_depth, self.paren_depth)
-                var out_e: []str = self._flush(lead_e)
-                out_e.append(" " * lead_e + emit_text)
-                return out_e
+                return " " * lead_e + emit_text
             else:
                 self.stack.append(PKG)
                 disp = len(self.stack)
@@ -504,6 +481,9 @@ class Indenter:
                     self.arrow_level = 0
             if self.arrow_level > 0 and self.paren_depth < self.arrow_level:
                 self.arrow_level = 0
+            # Record this line's lead for aligning comments that follow it.
+            self.paren_last_lead = lead
+            self.paren_last_lead_depth = entry_depth
             self._push_parens(emit_text, lead, entry_depth, self.paren_depth)
             # A line that closes back out of all parentheses and ends in a block
             # opener opens that block.
@@ -531,9 +511,7 @@ class Indenter:
                             self.stack.append(DO_)
                         when others:
                             pass
-            var out_p: []str = self._flush(lead)
-            out_p.append(" " * lead + emit_text)
-            return out_p
+            return " " * lead + emit_text
 
         # Multi-line if/elsif condition (outside any parenthesis): continuation
         # lines are one level deeper than the 'if'/'elsif'. When 'then' appears
@@ -570,9 +548,7 @@ class Indenter:
             let lead_c: int = max(0, disp) * INDENT_WIDTH
             self.paren_depth = max(0, self.paren_depth + paren_delta(code))
             self._push_parens(emit_text, lead_c, entry_depth, self.paren_depth)
-            var out_c: []str = self._flush(lead_c)
-            out_c.append(" " * lead_c + emit_text)
-            return out_c
+            return " " * lead_c + emit_text
 
         case lw:
             when "end":
@@ -688,9 +664,7 @@ class Indenter:
         if cont > 0 and code_s.startswith("|"):
             lead_n = max(0, disp) * INDENT_WIDTH
         self._push_parens(emit_text, lead_n, entry_depth, self.paren_depth)
-        var out: []str = self._flush(lead_n)
-        out.append(" " * lead_n + emit_text)
-        out
+        " " * lead_n + emit_text
 
 
 # ---------------------------------------------------------------------------
@@ -1005,10 +979,11 @@ def run_tests() -> int:
         "end P;\n"))
 
     # 14. Comment lines are transparent to the parser: comments interrupting a
-    #     statement continuation must not clear it. Each comment is aligned with
-    #     the line that FOLLOWS it: the two comments sit with the 'and (...'
-    #     continuation they precede, and the inner comment sits with the 'or else'
-    #     line inside the paren (the operator level, one past the items).
+    #     statement continuation must not clear it, so the 'and (...' continuation
+    #     after the comments still gets its continuation indent relative to
+    #     'return'. The comments themselves, being OUTSIDE any paren, are indented
+    #     like a new instruction — at the block level (with 'return') — not at the
+    #     continuation indent. Comments INSIDE the paren follow the paren's lines.
     cases.append((
         "function F return Boolean is\n"
         "begin\n"
@@ -1023,10 +998,10 @@ def run_tests() -> int:
         "function F return Boolean is\n"
         "begin\n"
         "  return New_OBT > Old_OBT\n"
-        "    -- comment one\n"
-        "    -- comment two\n"
+        "  -- comment one\n"
+        "  -- comment two\n"
         "    and (Departure.Earliest_TTOT = None\n"
-        "           -- inner comment\n"
+        "         -- inner comment\n"
         "           or else New_OBT > X);\n"
         "end F;\n"))
 
@@ -1160,8 +1135,9 @@ def run_tests() -> int:
     # 19. Multi-line if condition: 'and then' connectives sit at the base
     #     continuation level, but a line starting with another operator ('>=')
     #     continues the previous term across the break and nests one level
-    #     deeper. A comment between the lines stays transparent and is aligned
-    #     with the line that FOLLOWS it — here the '>=' term continuation.
+    #     deeper. A comment between the lines stays transparent and, being
+    #     outside any paren, is indented like a new instruction — at the 'if'
+    #     (block) level — not at the condition-continuation indent.
     cases.append((
         "procedure P is\n"
         "begin\n"
@@ -1178,7 +1154,7 @@ def run_tests() -> int:
         "begin\n"
         "  if A\n"
         "    and then Take_Off_Time (X)\n"
-        "      -- a comment\n"
+        "  -- a comment\n"
         "      >= Take_Off_Time (Y)\n"
         "  then\n"
         "    null;\n"
@@ -1406,8 +1382,10 @@ def run_tests() -> int:
     # 30. A multi-line boolean value expression after a ':='-on-its-own-line:
     #     each 'or else' connective joins a parenthesised operand group and sits
     #     one level past the ':='. The comments interleaved between the groups are
-    #     aligned with the line that FOLLOWS them — the 'or else' continuation they
-    #     precede. Inside each group the 'and then' lines align to the open paren.
+    #     OUTSIDE any paren (the groups have closed), so they are indented like a
+    #     new instruction — at the declaration's block level — not at the 'or else'
+    #     continuation level. Inside each group the 'and then' lines align to the
+    #     group's open paren.
     cases.append((
         "package P is\n"
         "X : constant Boolean\n"
@@ -1425,11 +1403,11 @@ def run_tests() -> int:
         "  X : constant Boolean\n"
         "    := (A\n"
         "          and then B)\n"
-        "      -- comment one\n"
-        "      -- comment two\n"
+        "  -- comment one\n"
+        "  -- comment two\n"
         "      or else (C\n"
         "                 and then D)\n"
-        "      -- comment three\n"
+        "  -- comment three\n"
         "      or else not E;\n"
         "end P;\n"))
 
@@ -1498,11 +1476,10 @@ def run_tests() -> int:
         "        C => 3);\n"
         "end P;\n"))
 
-    # 34. A line that closes a parenthesised if-expression with a lone ')' aligns
-    #     the ')' under the opening '(' — one column left of the 'if'/'then'/'else'
-    #     keywords — rather than taking the condition-continuation indent. A
-    #     comment just before it is aligned with the line that FOLLOWS it, i.e.
-    #     that ')'.
+    # 34. A line that closes a parenthesised if-expression with a lone ')' (often
+    #     after a trailing comment) aligns the ')' under the opening '(' — one
+    #     column left of the 'if'/'then'/'else' keywords — rather than taking the
+    #     condition-continuation indent that would push it right of them.
     cases.append((
         "procedure P is\n"
         "begin\n"
@@ -1518,79 +1495,15 @@ def run_tests() -> int:
         "  X := (if C\n"
         "        then A\n"
         "        else B\n"
-        "       -- a trailing note\n"
+        "        -- a trailing note\n"
         "       );\n"
-        "end P;\n"))
-
-    # 35. A comment between complete constructs is indented like the instruction
-    #     that FOLLOWS it (its level is only known once that line is processed, so
-    #     the comment is buffered and released with it). A comment right before
-    #     'begin' (empty declarative part) aligns with 'begin'; comments before a
-    #     declaration align with the declaration — one level in from the deferred
-    #     'function ... is' header.
-    cases.append((
-        "package body Pkg is\n"
-        "procedure P is\n"
-        "-- before begin\n"
-        "begin\n"
-        "null;\n"
-        "end P;\n"
-        "function F return T is\n"
-        "-- doc one\n"
-        "-- doc two\n"
-        "X : T := 0;\n"
-        "begin\n"
-        "null;\n"
-        "end F;\n"
-        "end Pkg;\n",
-
-        "package body Pkg is\n"
-        "  procedure P is\n"
-        "  -- before begin\n"
-        "  begin\n"
-        "    null;\n"
-        "  end P;\n"
-        "  function F return T is\n"
-        "    -- doc one\n"
-        "    -- doc two\n"
-        "    X : T := 0;\n"
-        "  begin\n"
-        "    null;\n"
-        "  end F;\n"
-        "end Pkg;\n"))
-
-    # 36. A blank line that follows a run of boundary comments must keep its place
-    #     when those comments are released with the next instruction: it stays
-    #     below the comments (separating them from the following declaration), not
-    #     hoisted above them next to the line they document.
-    cases.append((
-        "package body P is\n"
-        "Versions : constant T := Compute (Flights);\n"
-        "-- note one\n"
-        "-- note two\n"
-        "\n"
-        "Ignore_Errors : constant L := Normal_Flight.Ignore_Errors;\n"
-        "end P;\n",
-
-        "package body P is\n"
-        "  Versions : constant T := Compute (Flights);\n"
-        "  -- note one\n"
-        "  -- note two\n"
-        "\n"
-        "  Ignore_Errors : constant L := Normal_Flight.Ignore_Errors;\n"
         "end P;\n"))
 
     for pair in cases:
         let src: str = pair[0]
         let want: str = pair[1]
         var ind: Indenter = Indenter()
-        var out_lines: []str = []
-        for line in src.split("\n"):
-            for o in ind.indent_line(line):
-                out_lines.append(o)
-        for o in ind.flush():
-            out_lines.append(o)
-        let got: str = "\n".join(out_lines)
+        let got: str = "\n".join([ind.indent_line(line) for line in src.split("\n")])
         if got == want:
             passed += 1
         else:
@@ -1610,10 +1523,7 @@ def main() -> int:
     var ind: Indenter = Indenter()
     if $# < 1:
         for line in stdin.lines:
-            for o in ind.indent_line(line):
-                print o
-        for o in ind.flush():
-            print o
+            print ind.indent_line(line)
     else:
         let arg: str = $1
         if arg == "--test":
@@ -1621,10 +1531,7 @@ def main() -> int:
         else:
             with open(arg) as f:
                 for line in f:
-                    for o in ind.indent_line(line):
-                        print o
-            for o in ind.flush():
-                print o
+                    print ind.indent_line(line)
 
 
 if __name__ == "__main__":
