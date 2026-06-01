@@ -190,7 +190,10 @@ def is_term_continuation(code_s: str) -> bool:
 
     Excluded (these stay at the base continuation level): the boolean connectives
     'and'/'or'/'xor' (they join terms), the binding operators ':=' and '=>', and
-    the choice separator '|' (handled with the 'when' choice list)."""
+    the choice separator '|' (handled with the 'when' choice list).
+
+    Exception: 'and not' and 'or not' are value operators (bit-clear / boolean
+    negation), not the 'and then' / 'or else' connectives, so they DO nest."""
     if code_s == "":
         return False
     if code_s.startswith("("):
@@ -200,7 +203,11 @@ def is_term_continuation(code_s: str) -> bool:
             or code_s.startswith("|")):
         return False
     let w: str = lead_word(code_s)
-    return w != "and" and w != "or" and w != "xor"
+    if w == "and" or w == "or":
+        # 'and not' / 'or not' are value operators; bare 'and'/'or' and
+        # 'and then'/'or else' are connectives that stay at base continuation.
+        return code_s.lower().startswith(w + " not")
+    return w != "xor"
 
 
 def scan_parens(text: str, base_depth: int, base_col: int) -> [](int, int, int):
@@ -1179,7 +1186,28 @@ def run_tests() -> int:
         "             else \"\"));\n"
         "end P;\n"))
 
-    # 25. Inside a plain paren, a '(' that continues the preceding expression
+    # 25. 'and not' / 'or not' are value operators (bit-clear / boolean negate),
+    #     not connectives like 'and then' / 'or else'. When ':=' is on its own
+    #     continuation line they nest one extra level past ':='; bare 'and' / 'or'
+    #     stay at the plain continuation level.
+    cases.append((
+        "procedure P is\n"
+        "begin\n"
+        "Mask (K)\n"
+        ":= (Mask (K) or Initially_Flagged)\n"
+        "and not Initially_Not_Interesting\n"
+        "and not Clear_Aspects;\n"
+        "end P;\n",
+
+        "procedure P is\n"
+        "begin\n"
+        "  Mask (K)\n"
+        "    := (Mask (K) or Initially_Flagged)\n"
+        "      and not Initially_Not_Interesting\n"
+        "      and not Clear_Aspects;\n"
+        "end P;\n"))
+
+    # 27. Inside a plain paren, a '(' that continues the preceding expression
     #     (previous line ended without ',') is the argument list of that
     #     expression, not a new list element: it nests one extra level past the
     #     item column. Here the else-branch of an if-expression calls Convert
