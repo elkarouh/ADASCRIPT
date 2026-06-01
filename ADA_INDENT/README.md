@@ -293,10 +293,9 @@ Curtains : constant Alternatives_Profiles_T
 Other : Integer := 0;            -- back at the base level
 ```
 
-This is distinct from **parenthesis continuation** (an unclosed `(`): either
-condition raises the indent one level, and they do not stack — a line that is
-both inside parentheses and a statement continuation is still indented just one
-extra level.
+This is distinct from **parenthesis continuation** (an unclosed `(`, see below),
+which aligns by column instead. Parenthesis state takes priority: while inside
+an open `(` the statement-continuation rule does not also apply.
 
 ### Expressions inside parentheses (if-/case-expressions)
 
@@ -332,28 +331,13 @@ function F return T is
      when others => R2);
 ```
 
-This is the one place the indenter does **column** alignment rather than
-whole-level indentation. The remembered column is relative to where the opening
-line actually lands, so the alignment holds at any nesting depth. Nested
-if-/case-expressions are tracked on a small stack keyed by parenthesis depth
-(each entry records the keyword column and whether it is an `if` or `case`) and
-are dropped automatically when their `)` closes. (The `(if`/`(case` scan runs
-over the emitted text, so a keyword appearing inside a string literal in the
-expression could be mis-detected — rare in practice.)
-
-The one exception is a line that **closes** the parentheses and then opens a
-block — a multi-line parameter list ending in `) is`, `) return T is`,
-`) loop`, etc. Such a line falls through to the normal keyword handling so the
-block frame is pushed and the body that follows indents correctly:
-
-```ada
-procedure Perform (A : Integer;
-  B : Integer;          -- parameter continuation, +1 level
-  C : Integer) is       -- closes '(' and opens the body via 'is'
-  X : Integer;          -- body, +1 level
-begin
-  ...
-```
+These keyword offsets are just the if-/case-specific cases of the same
+column-alignment used for every open parenthesis (see **Parenthesis
+continuation** below): each entry on the paren stack records the alignment
+column and whether the `(` is plain, `(if`, or `(case`, and a line aligns to
+the innermost open one. Entries are dropped when their `)` closes. (The
+`(if`/`(case` scan runs over the emitted text, so a keyword appearing inside a
+string literal in the expression could be mis-detected — rare in practice.)
 
 ### Closers — pop, and align with the opener's header
 
@@ -391,18 +375,36 @@ because the enclosing frame stays on the stack:
 ### Parenthesis continuation
 
 While the running parenthesis depth is `> 0` (an unclosed `(` from an aggregate,
-parameter list, or call), continuation lines get **one extra** indent level.
+parameter list, or call), continuation lines are **aligned by column** under the
+first item after the innermost open `(`:
+
+```ada
+procedure Perform (Flights           : in out Flight.Options.T;
+                   Flight_Query_Set  :        Env_Query.Set.T;
+                   Action_Result     :    out Result.T) is   -- ') is' still opens the body
+   X : Integer;
+begin
+```
+
+The alignment column is the position of the first non-blank character after the
+`(` (or one indent level in if the `(` ends the line), measured from where the
+opening line actually lands. Every open parenthesis is tracked on a stack keyed
+by depth, so a line uses the **innermost** one — a nested aggregate aligns under
+its own `(` while the enclosing expression keeps its alignment. A line that
+closes all the parentheses and ends in a block opener (a parameter list ending
+in `) is`, `) return T is`, `) loop`, …) is aligned like the other
+continuations *and* opens that block. if-/case-expressions are the same
+mechanism with keyword-aware offsets (see above).
 
 ## What it deliberately ignores
 
 Keeping the grammar simple means a few things are out of scope:
 
-- **Continuation depth is a single level.** Wrapped statements, multi-line
-  `if`/`elsif` conditions, and parenthesised continuations each add exactly one
-  level; the indenter does not align continuations under a specific column
-  (e.g. under the opening `(` or the `:=`). The exceptions are **if-** and
-  **case-expressions**, which are aligned to their `if`/`case` keyword
-  (see above).
+- **Non-parenthesised continuations are a single level.** A wrapped statement
+  (no enclosing `(`) and a multi-line `if`/`elsif` condition each add exactly
+  one indent level rather than aligning under a specific column such as the
+  `:=`. Continuations **inside** parentheses, by contrast, *are* column-aligned
+  (under the first item, or the `if`/`case` keyword) — see above.
 - **Character literals** containing a `"` and **doubled-quote escapes**
   (`"a""b"`) are not modelled by the string scanner.
 - **Generic formal parts** (`generic … package …`) are left flat.
