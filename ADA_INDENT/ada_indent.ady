@@ -347,7 +347,11 @@ class Indenter:
             # indent of the statement (or if/elsif condition) it interrupts.
             if self.cond_state > 0:
                 return " " * (max(0, self.cond_base) * INDENT_WIDTH) + emit_text
-            return " " * (max(0, len(self.stack)) * INDENT_WIDTH) + emit_text
+            # After a deferred 'function ... is' header the next instruction is
+            # the body — a declaration or expression one level deeper — so a
+            # comment documenting it sits at that body level, not at the header's.
+            let blvl: int = len(self.stack) + (1 if self.pending_spec else 0)
+            return " " * (max(0, blvl) * INDENT_WIDTH) + emit_text
 
         let entry_depth: int = self.paren_depth
         # When we are outside all parens, clear the plain-paren continuation flag
@@ -1498,6 +1502,43 @@ def run_tests() -> int:
         "        -- a trailing note\n"
         "       );\n"
         "end P;\n"))
+
+    # 35. A standalone comment is indented like the hypothetical instruction that
+    #     would occupy its place — the current block level. A comment right before
+    #     'begin' (empty declarative part) sits at the declaration level it could
+    #     have held (one in from the subprogram header), and a comment after a
+    #     deferred 'function ... is' header sits at the body level the following
+    #     declaration takes — one level past the header, not at the header itself.
+    cases.append((
+        "package body Pkg is\n"
+        "procedure P is\n"
+        "-- before begin\n"
+        "begin\n"
+        "null;\n"
+        "end P;\n"
+        "function F return T is\n"
+        "-- doc one\n"
+        "-- doc two\n"
+        "X : T := 0;\n"
+        "begin\n"
+        "null;\n"
+        "end F;\n"
+        "end Pkg;\n",
+
+        "package body Pkg is\n"
+        "  procedure P is\n"
+        "    -- before begin\n"
+        "  begin\n"
+        "    null;\n"
+        "  end P;\n"
+        "  function F return T is\n"
+        "    -- doc one\n"
+        "    -- doc two\n"
+        "    X : T := 0;\n"
+        "  begin\n"
+        "    null;\n"
+        "  end F;\n"
+        "end Pkg;\n"))
 
     for pair in cases:
         let src: str = pair[0]
