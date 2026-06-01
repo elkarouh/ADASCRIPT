@@ -204,9 +204,12 @@ def is_term_continuation(code_s: str) -> bool:
         return False
     let w: str = lead_word(code_s)
     if w == "and" or w == "or":
-        # 'and not' / 'or not' are value operators; bare 'and'/'or' and
-        # 'and then'/'or else' are connectives that stay at base continuation.
-        return code_s.lower().startswith(w + " not")
+        let cs: str = code_s.lower()
+        # 'and not' / 'or not' are value operators (bit-clear / boolean negate)
+        if cs.startswith(w + " not"):
+            return True
+        # 'and (' / 'or (' apply the operator directly to a parenthesised subexpression
+        return cs.startswith(w + " (") or cs.startswith(w + "(")
     return w != "xor"
 
 
@@ -518,7 +521,8 @@ class Indenter:
                     self.cond_value_base = disp
 
             when "else" | "exception" | "or" | "private":
-                disp = len(self.stack) - 1
+                if cont == 0:
+                    disp = len(self.stack) - 1
 
             when others:
                 disp = len(self.stack)
@@ -1269,6 +1273,41 @@ def run_tests() -> int:
         "             (Env_Location.Value (A))));\n"
         "begin\n"
         "  null;\n"
+        "end P;\n"))
+
+    # 28. 'or else' / 'and then' continuations in a value expression must NOT
+    #     trigger the structural 'or'/'else' de-indent (which only applies when
+    #     they stand alone as statement-level keywords).  Here ':=' is its own
+    #     continuation line so 'or else' must stay at the same plain-continuation
+    #     level (4 spaces), not be pushed back to 2.
+    cases.append((
+        "package P is\n"
+        "X : constant Boolean\n"
+        ":= True\n"
+        "or else False;\n"
+        "end P;\n",
+
+        "package P is\n"
+        "  X : constant Boolean\n"
+        "    := True\n"
+        "    or else False;\n"
+        "end P;\n"))
+
+    # 29. 'and (' combines the preceding result with a parenthesised subexpression
+    #     and is a term continuation: when ':=' is on its own continuation line,
+    #     'and (' nests one extra level past ':=' (value_base + 1), just like
+    #     'and not' / 'or not'.
+    cases.append((
+        "package P is\n"
+        "X : constant Boolean\n"
+        ":= (A = B)\n"
+        "and (C = D);\n"
+        "end P;\n",
+
+        "package P is\n"
+        "  X : constant Boolean\n"
+        "    := (A = B)\n"
+        "      and (C = D);\n"
         "end P;\n"))
 
     for pair in cases:
