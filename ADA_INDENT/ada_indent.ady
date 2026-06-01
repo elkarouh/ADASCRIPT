@@ -416,11 +416,7 @@ class Indenter:
         # only flag a general statement continuation when not in that mode.
         self.in_cont = False if self.cond_state > 0 else stmt_incomplete(code_s)
         self.paren_depth = max(0, self.paren_depth + paren_delta(code))
-        var lead_n: int = max(0, disp + cont) * INDENT_WIDTH
-        # A statement continuation that starts with an operator (:=, &, +, …)
-        # takes one extra level past the ordinary continuation indent.
-        if cont > 0 and starts_with_operator(code_s):
-            lead_n += INDENT_WIDTH
+        let lead_n: int = max(0, disp + cont) * INDENT_WIDTH
         self._push_parens(emit_text, lead_n, entry_depth, self.paren_depth)
         " " * lead_n + emit_text
 
@@ -539,8 +535,8 @@ def run_tests() -> int:
 
     # 5. Statement/declaration continuation: a line that does not end the
     #    statement (no ';' and not a structural keyword line) indents its
-    #    continuation one level. A continuation that starts with an operator
-    #    (':=', '+', …) takes one extra level. The terminating ';' clears it.
+    #    continuation one level; the terminating ';' clears it. (Operator-led
+    #    continuations get no extra level outside parentheses — only within.)
     cases.append((
         "package P is\n"
         "Curtains : constant Alternatives_Profiles_T\n"
@@ -552,10 +548,10 @@ def run_tests() -> int:
 
         "package P is\n"
         "  Curtains : constant Alternatives_Profiles_T\n"
-        "      := Whatever_But_Very_Long;\n"
+        "    := Whatever_But_Very_Long;\n"
         "  X : Integer := A\n"
-        "      + B\n"
-        "      + C;\n"
+        "    + B\n"
+        "    + C;\n"
         "end P;\n"))
 
     # 6. Multi-line if/elsif conditions: continuation lines ('and then …') must
@@ -667,9 +663,9 @@ def run_tests() -> int:
         "       => R1,\n"
         "     when others => R2);\n"))
 
-    # 11. Operator-led continuations take an extra level: the ':=' continuation
-    #     of the declaration, and the '=> ...' arms inside the else-aggregate,
-    #     sit one level past the items they continue.
+    # 11. Operator-led continuations take an extra level ONLY within parentheses:
+    #     the '=> ...' arms inside the else-aggregate sit one level past the
+    #     items, while the bare ':=' continuation gets the plain +1 (no extra).
     cases.append((
         "package P is\n"
         "X : T\n"
@@ -683,12 +679,12 @@ def run_tests() -> int:
 
         "package P is\n"
         "  X : T\n"
-        "      := (if A\n"
-        "          then (others => True)\n"
-        "          else (K1\n"
-        "                  => V1,\n"
-        "                K2\n"
-        "                  => V2));\n"
+        "    := (if A\n"
+        "        then (others => True)\n"
+        "        else (K1\n"
+        "                => V1,\n"
+        "              K2\n"
+        "                => V2));\n"
         "end P;\n"))
 
     for pair in cases:

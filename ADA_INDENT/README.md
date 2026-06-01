@@ -396,14 +396,15 @@ in `) is`, `) return T is`, `) loop`, …) is aligned like the other
 continuations *and* opens that block. if-/case-expressions are the same
 mechanism with keyword-aware offsets (see above).
 
-A continuation line that **starts with an operator** (`:=`, `=>`, `&`, `+`,
-`-`, `*`, `/`, `=`, `<`, `>`, `|`, `..`) takes one extra indent level so the
-operator stands out from the operand it continues — whether it is a statement
-continuation or sits inside an aggregate:
+**Inside parentheses**, a continuation line that **starts with an operator**
+(`:=`, `=>`, `&`, `+`, `-`, `*`, `/`, `=`, `<`, `>`, `|`, `..`) takes one extra
+indent level past the aligned items, so the operator stands out from the operand
+it continues. This applies only within parentheses — a bare statement
+continuation (e.g. a `:=` on its own line) keeps the plain one-level indent:
 
 ```ada
 First_Time_In_TACT : constant Count_Option.Set.T
-    := (if Action_Info.Event = External_Create
+    := (if Action_Info.Event = External_Create       -- ':=' is a plain +1 (outside the '(')
         then (others => True)
         else (Count_Option.Normal
                 => Flight_Updates (Count_Option.Normal).Old_Fixed_Info.Status = Not_Existing,
