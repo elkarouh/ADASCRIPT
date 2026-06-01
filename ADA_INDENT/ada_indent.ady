@@ -421,31 +421,38 @@ class Indenter:
             when others:
                 disp = len(self.stack)
                 let last: str = last_word(code_s)
-                case last:
-                    when "is":
-                        # A 'function ... is' header may be a real body or an
-                        # expression function; defer the decision to the next
-                        # line (see pending_spec handling above). Everything
-                        # else ending in 'is' opens a block immediately.
-                        if lw == "function":
-                            self.pending_spec = True
-                        else:
-                            self.stack.append(CASE_ if lw == "case" else PKG)
-                    when "then":
-                        self.stack.append(IF_)
-                    when "loop":
-                        self.stack.append(LOOP_)
-                    when "record":
-                        if lw != "null":
-                            self.stack.append(RECORD_)
-                    when "select":
-                        self.stack.append(SELECT_)
-                    when "do":
-                        self.stack.append(DO_)
-                    when "declare":
-                        self.stack.append(DECLARE_)
-                    when others:
-                        pass
+                # A trailing block keyword opens a block only when it sits at the
+                # top level of the line. If the line ends with a net-open '(' the
+                # keyword is inside that parenthesis — part of an expression such
+                # as ':= (case X is' or ':= (if C then' — so it must NOT push a
+                # block frame (which would shift every following line).
+                let opens_paren: bool = paren_delta(code) > 0
+                if not opens_paren:
+                    case last:
+                        when "is":
+                            # A 'function ... is' header may be a real body or an
+                            # expression function; defer the decision to the next
+                            # line (see pending_spec handling above). Everything
+                            # else ending in 'is' opens a block immediately.
+                            if lw == "function":
+                                self.pending_spec = True
+                            else:
+                                self.stack.append(CASE_ if lw == "case" else PKG)
+                        when "then":
+                            self.stack.append(IF_)
+                        when "loop":
+                            self.stack.append(LOOP_)
+                        when "record":
+                            if lw != "null":
+                                self.stack.append(RECORD_)
+                        when "select":
+                            self.stack.append(SELECT_)
+                        when "do":
+                            self.stack.append(DO_)
+                        when "declare":
+                            self.stack.append(DECLARE_)
+                        when others:
+                            pass
                 if lw == "if" and last != "then":
                     self.cond_state = 1
                     self.cond_base = disp
@@ -800,6 +807,38 @@ def run_tests() -> int:
         "         -- inner comment\n"
         "           or else New_OBT > X);\n"
         "end F;\n"))
+
+    # 15. A declaration whose initializer is a parenthesised '(case X is …' (or
+    #     '(if … )') expression ends in the keyword 'is'/'then', but that keyword
+    #     is INSIDE the open '(' — it must NOT push a block frame. Otherwise the
+    #     declarations that follow (here a nested expression function and another
+    #     constant) would be shifted one level too deep for the rest of the unit.
+    cases.append((
+        "procedure G is\n"
+        "Origin : constant T := (case E is\n"
+        "when A => X,\n"
+        "when others => Y);\n"
+        "function F return T is\n"
+        "(if C\n"
+        "then P\n"
+        "else Q);\n"
+        "Id : constant T := Z;\n"
+        "begin\n"
+        "null;\n"
+        "end G;\n",
+
+        "procedure G is\n"
+        "  Origin : constant T := (case E is\n"
+        "                            when A => X,\n"
+        "                            when others => Y);\n"
+        "  function F return T is\n"
+        "    (if C\n"
+        "     then P\n"
+        "     else Q);\n"
+        "  Id : constant T := Z;\n"
+        "begin\n"
+        "  null;\n"
+        "end G;\n"))
 
     for pair in cases:
         let src: str = pair[0]
