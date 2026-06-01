@@ -335,13 +335,19 @@ class Indenter:
         if code_s == "":
             # Inside a parenthesis a comment follows the surrounding lines: align
             # it with the previous code line in this same paren (which, in a list
-            # or expression, sits at the same level as the line that follows it),
-            # falling back to the paren's item column when there is none yet.
+            # or expression, sits at the same level as the line that follows it).
+            # When no line has been emitted inside this paren yet — the comment
+            # sits right after the line that OPENED it — fall back to the paren's
+            # item column, but add one level when that opening line left its item
+            # unfinished (paren_cont): the next line then continues the item (an
+            # operator/term continuation, one level past the items), so the comment
+            # aligns with it rather than with the shallower item column.
             if self.paren_depth > 0 and len(self.paren_stack) > 0:
                 let ptop: (int, int, int) = self.paren_stack[-1]
                 if self.paren_last_lead_depth == self.paren_depth:
                     return " " * self.paren_last_lead + emit_text
-                return " " * ptop[1] + emit_text
+                let pfall: int = ptop[1] + (INDENT_WIDTH if self.paren_cont else 0)
+                return " " * pfall + emit_text
             # Outside parentheses a comment is indented like the line that would
             # follow it. When that next line is a continuation — the current
             # statement is unfinished (in_cont) or we are inside a multi-line
@@ -993,7 +999,8 @@ def run_tests() -> int:
     #     (in_cont), so the line that would follow each comment is a continuation:
     #     the comments take the continuation indent, aligned with the 'and (...'
     #     they precede (one level past where the value began), not the shallower
-    #     block level. Comments INSIDE the paren follow the paren's lines.
+    #     block level. The comment INSIDE the paren follows the unfinished item
+    #     there, aligning with the 'or else' continuation it precedes.
     cases.append((
         "function F return Boolean is\n"
         "begin\n"
@@ -1011,7 +1018,7 @@ def run_tests() -> int:
         "    -- comment one\n"
         "    -- comment two\n"
         "    and (Departure.Earliest_TTOT = None\n"
-        "         -- inner comment\n"
+        "           -- inner comment\n"
         "           or else New_OBT > X);\n"
         "end F;\n"))
 
