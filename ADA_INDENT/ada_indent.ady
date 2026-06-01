@@ -464,12 +464,14 @@ class Indenter:
                 self.cond_state = 0
             else:
                 disp = self.cond_base + 1
-                # The 'and'/'or'/'xor' connectives join condition terms and sit
-                # at this base continuation level. A line that instead continues
-                # the previous term across the break — another operator (>=, &,
-                # …) or an argument list opening with '(' — nests one level
-                # deeper.
-                if is_term_continuation(code_s):
+                # The 'and'/'or'/'xor' connectives — including 'and not' and
+                # 'or not' — join condition terms and sit at this base level.
+                # A line that instead continues the previous term (>=, &, '(',
+                # …) nests one level deeper. 'and not'/'or not' are excluded
+                # here (lw check) even though is_term_continuation returns True
+                # for them: inside a condition they act as connectives, not as
+                # value operators.
+                if is_term_continuation(code_s) and lw != "and" and lw != "or":
                     disp += 1
             self.in_cont = False
             # cond_state lines are outside parentheses (inside-paren lines are
