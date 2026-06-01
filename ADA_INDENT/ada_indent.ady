@@ -411,7 +411,13 @@ class Indenter:
                 let acol: int = top[1]
                 entry_top_level = top[0]
                 entry_top_kind = top[2]
-                if top[2] == 1:
+                if top[2] != 0 and code_s.startswith(")"):
+                    # A line that begins by closing an '(if'/'(case'/'(for'
+                    # expression aligns the ')' under the opening '(' — one column
+                    # left of the keyword that acol points at — rather than taking
+                    # the body/condition continuation indent.
+                    lead = max(0, acol - 1)
+                elif top[2] == 1:
                     if lw == "then" or lw == "else" or lw == "elsif":
                         lead = acol
                     else:
@@ -1470,6 +1476,29 @@ def run_tests() -> int:
         "            -- comment\n"
         "            and Z,\n"
         "        C => 3);\n"
+        "end P;\n"))
+
+    # 34. A line that closes a parenthesised if-expression with a lone ')' (often
+    #     after a trailing comment) aligns the ')' under the opening '(' — one
+    #     column left of the 'if'/'then'/'else' keywords — rather than taking the
+    #     condition-continuation indent that would push it right of them.
+    cases.append((
+        "procedure P is\n"
+        "begin\n"
+        "X := (if C\n"
+        "then A\n"
+        "else B\n"
+        "-- a trailing note\n"
+        ");\n"
+        "end P;\n",
+
+        "procedure P is\n"
+        "begin\n"
+        "  X := (if C\n"
+        "        then A\n"
+        "        else B\n"
+        "        -- a trailing note\n"
+        "       );\n"
         "end P;\n"))
 
     for pair in cases:
