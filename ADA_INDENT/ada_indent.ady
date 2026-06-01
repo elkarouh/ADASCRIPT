@@ -124,11 +124,16 @@ def stmt_incomplete(code_s: str) -> bool:
     In Ada nearly every statement and declaration ends with ';'. The only
     unterminated lines that are nonetheless complete are the structural keyword
     lines: openers ending in is/then/loop/record/select/do, choice lines ending
-    in '=>', and the lone splitter/opener keywords (begin/declare/else/…). Any
-    other line that does not end in ';' is a logical line split across physical
-    lines, so the next line is a continuation.
+    in '=>', block/loop label lines ending in ':', and the lone splitter/opener
+    keywords (begin/declare/else/…). Any other line that does not end in ';' is a
+    logical line split across physical lines, so the next line is a continuation.
     """
-    if code_s == "" or code_s.endswith(";") or code_s.endswith("=>"):
+    # A trailing ':' marks a block/loop label ('Find_Model :', 'Log_Changes:'),
+    # which is a complete prefix — the labelled construct on the next line stays
+    # at the label's level rather than indenting as a continuation. (':=' ends in
+    # '=', not ':', so an unfinished assignment is unaffected.)
+    if (code_s == "" or code_s.endswith(";") or code_s.endswith("=>")
+            or code_s.endswith(":")):
         return False
     let lw: str = lead_word(code_s)
     # Lone splitter/opener keyword lines and compilation-unit prefixes
@@ -480,7 +485,13 @@ class Indenter:
         # applied only *inside* parentheses (see the paren branch above); a
         # continuation such as ':=' or 'and then' here keeps the one-level indent
         # so it aligns with any comment lines that document it.
-        let lead_n: int = max(0, disp + cont) * INDENT_WIDTH
+        var lead_n: int = max(0, disp + cont) * INDENT_WIDTH
+        # Exception: a continuation that *opens* with '(' is the argument list /
+        # parenthesised sub-expression of the line it continues (e.g. the '(args)'
+        # under a continued '… := F'), so it nests one level deeper. Applied
+        # before _push_parens so the inner items align to this line's '('.
+        if cont > 0 and code_s.startswith("("):
+            lead_n += INDENT_WIDTH
         self._push_parens(emit_text, lead_n, entry_depth, self.paren_depth)
         " " * lead_n + emit_text
 
@@ -879,6 +890,56 @@ def run_tests() -> int:
         "         or else Y\n"
         "         or else (Z\n"
         "                    and then W));\n"))
+
+    # 17. A continuation line that opens with '(' is the argument list of the
+    #     expression it continues, so it nests one level deeper than the bare
+    #     continuation above it (here the '(' under a continued ':= F'); the
+    #     arguments then align to that '('.
+    cases.append((
+        "package P is\n"
+        "Set_Info : constant T\n"
+        ":= Get\n"
+        "(Query => Q,\n"
+        "Object => O);\n"
+        "end P;\n",
+
+        "package P is\n"
+        "  Set_Info : constant T\n"
+        "    := Get\n"
+        "      (Query => Q,\n"
+        "       Object => O);\n"
+        "end P;\n"))
+
+    # 18. Block/loop labels end in ':' and are complete prefixes, not statement
+    #     continuations: the labelled 'declare' / 'for … loop' stays at the
+    #     label's level (a trailing comment on the label is ignored). Without
+    #     this the label would push the following line one level too deep.
+    cases.append((
+        "procedure P is\n"
+        "begin\n"
+        "Log_Changes:\n"
+        "declare\n"
+        "X : Integer;\n"
+        "begin\n"
+        "Find_Model : -- pick the model\n"
+        "for M in reverse T loop\n"
+        "null;\n"
+        "end loop Find_Model;\n"
+        "end Log_Changes;\n"
+        "end P;\n",
+
+        "procedure P is\n"
+        "begin\n"
+        "  Log_Changes:\n"
+        "  declare\n"
+        "    X : Integer;\n"
+        "  begin\n"
+        "    Find_Model : -- pick the model\n"
+        "    for M in reverse T loop\n"
+        "      null;\n"
+        "    end loop Find_Model;\n"
+        "  end Log_Changes;\n"
+        "end P;\n"))
 
     for pair in cases:
         let src: str = pair[0]

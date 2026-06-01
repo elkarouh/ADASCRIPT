@@ -294,9 +294,11 @@ if Event_Category (Action_Info.Event) = External_Reset
 
 A logical statement or declaration split across several physical lines has its
 continuation lines indented one level deeper. A line is treated as **continued**
-when it is non-empty, does not end in `;`, does not end in `=>`, is not a lone
-splitter/opener keyword (`begin`, `declare`, `else`, `exception`, `or`,
-`private`, `select`) or compilation-unit prefix (`separate (Parent)`,
+when it is non-empty, does not end in `;`, does not end in `=>`, does not end in
+`:` (a block/loop label such as `Find_Model :` or `Log_Changes:` is a complete
+prefix, so the labelled construct on the next line stays at the label's level),
+is not a lone splitter/opener keyword (`begin`, `declare`, `else`, `exception`,
+`or`, `private`, `select`) or compilation-unit prefix (`separate (Parent)`,
 `[not] overriding`), and does not end in a block-opening keyword
 (`is`, `then`, `loop`, `record`, `select`, `do`). The continuation persists
 until a line completes the statement (typically by ending in `;`):
@@ -305,6 +307,17 @@ until a line completes the statement (typically by ending in `;`):
 Curtains : constant Alternatives_Profiles_T
   := Whatever_But_Very_Long;     -- +1 level, until the ';'
 Other : Integer := 0;            -- back at the base level
+```
+
+One exception nests deeper: a continuation line that **opens with `(`** is the
+argument list (or parenthesised sub-expression) of the line it continues, so it
+takes one further level, and the arguments then align to that `(`:
+
+```ada
+Set_Info : constant T
+  := Get                         -- +1 level (continuation)
+    (Query  => Q,                -- +2: the '(' opens Get's argument list
+     Object => O);               -- arguments align under the first one
 ```
 
 This is distinct from **parenthesis continuation** (an unclosed `(`, see below),
