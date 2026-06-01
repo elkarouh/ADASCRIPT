@@ -337,12 +337,12 @@ leading `else` would dedent as if it closed an `if` statement.
 For an **if-expression** the indenter additionally aligns to the `if`: the
 column of the `if` token (in the re-indented opening line) is remembered, and
 each continuation line is positioned by absolute column — `then`, `else` and
-`elsif` under the `if`, and the condition continuation under the condition
-(three columns past the `if`, i.e. after `if `):
+`elsif` under the `if`, and the condition continuation one indent level past
+the `if` (i.e. one level in from the `then`/`else`):
 
 ```ada
 Reroutings := (if Cycle_Of (Normal_Flight.IOBT)
-                  /= Cycle_Of (Message.IOBT)      -- under the condition
+                 /= Cycle_Of (Message.IOBT)       -- one level past the 'if'
                then Empty_List                    -- under the 'if'
                else Normal_Flight.Reroutings);    -- under the 'if'
 ```
