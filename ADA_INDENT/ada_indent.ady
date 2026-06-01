@@ -311,7 +311,10 @@ class Indenter:
         var out: []str = []
         for c in self.pending_comments:
             let ctext: str = c
-            out.append(" " * max(0, lead) + ctext)
+            if ctext == "":
+                out.append("")               # a held blank line stays blank
+            else:
+                out.append(" " * max(0, lead) + ctext)
         self.pending_comments = []
         return out
 
@@ -343,6 +346,13 @@ class Indenter:
         let emit_text: str = raw2.strip()
 
         if emit_text == "":
+            # A blank line within a run of buffered boundary comments belongs to
+            # that block: hold it so it keeps its place relative to the comments
+            # when they are released with the following instruction. With nothing
+            # buffered, emit it immediately.
+            if len(self.pending_comments) > 0:
+                self.pending_comments.append("")
+                return []
             return [""]
 
         # A comment-only line (text remains, but nothing is left after stripping
@@ -1569,6 +1579,27 @@ def run_tests() -> int:
         "    null;\n"
         "  end F;\n"
         "end Pkg;\n"))
+
+    # 36. A blank line that follows a run of boundary comments must keep its place
+    #     when those comments are released with the next instruction: it stays
+    #     below the comments (separating them from the following declaration), not
+    #     hoisted above them next to the line they document.
+    cases.append((
+        "package body P is\n"
+        "Versions : constant T := Compute (Flights);\n"
+        "-- note one\n"
+        "-- note two\n"
+        "\n"
+        "Ignore_Errors : constant L := Normal_Flight.Ignore_Errors;\n"
+        "end P;\n",
+
+        "package body P is\n"
+        "  Versions : constant T := Compute (Flights);\n"
+        "  -- note one\n"
+        "  -- note two\n"
+        "\n"
+        "  Ignore_Errors : constant L := Normal_Flight.Ignore_Errors;\n"
+        "end P;\n"))
 
     for pair in cases:
         let src: str = pair[0]
