@@ -277,14 +277,17 @@ if FTFX.The_Flight_Status = Cancelled
 ```
 
 The `and` / `or` / `xor` connectives join condition terms and sit at this base
-continuation level. A continuation that instead starts with a **different
-operator** (`>=`, `&`, `+`, …) continues the *previous* term across the break,
-so it nests one level deeper:
+continuation level. A **term continuation** (a line starting with a different
+operator such as `>=`, `&`, `+`, or opening an argument list with `(`) continues
+the *previous* term across the break, so it nests one level deeper:
 
 ```ada
 if A
     and then Take_Off_Time (X)                      -- +1 (connective)
       >= Take_Off_Time (Y)                          -- +2 (continues the term)
+    and then Curtain_Index_May_Differ               -- +1 (connective)
+      (Left (Normal) (FTFM),                        -- +2: '(' opens the call's args
+       Right (FTFM))                                -- arguments align under the first
   then
 ```
 
@@ -321,22 +324,31 @@ Curtains : constant Alternatives_Profiles_T
 Other : Integer := 0;            -- back at the base level
 ```
 
-A continuation line that **opens with `(`** is the argument list (or
-parenthesised sub-expression) of the line it continues, and is indented one
-level past *that* line; the arguments then align to the `(`. When the call name
-is itself a continuation this means a second level; when the call name is the
-statement's first line the plain continuation `+1` already covers it (so no
-extra is added):
+A **term continuation** — a line that continues a value (sub-)expression across
+a break by starting with a value operator (`-`, `+`, `&`, `>=`, `=`, `..`, `mod`,
+`rem`, …) or by opening an argument list with `(` — nests one level past *where
+that value expression began*. The expression begins on the statement head, or on
+a `:=` line when the initializer is wrapped onto its own line. So a `(args)` or
+`& …` under a continued `:= F` gets a second level, while the same under a
+statement's first line gets just `+1`; a chain of such continuations all align at
+that one level rather than escalating. The binding operators `:=` / `=>` and the
+boolean connectives `and` / `or` / `xor` are **not** term continuations — they
+keep the plain continuation level (so an `and …` aligns with comments that
+document it):
 
 ```ada
-Curtain_Index_May_Differ         -- statement start
+Curtain_Index_May_Differ         -- statement start (expression begins here)
   (Left  => A,                   -- +1: the call's argument list
    Right => B);                  -- arguments align under the first
 
 Set_Info : constant T
-  := Get                         -- +1 level (continuation)
-    (Query  => Q,                -- +2: '(' continues an already-continued line
+  := Get                         -- +1 level (the ':=' line; value begins here)
+    (Query  => Q,                -- +2: '(' continues the value on the ':=' line
      Object => O);               -- arguments align under the first one
+
+Delta_X : constant Duration_T
+  := Take_Off_Time (RTFM)        -- +1 (':=' line)
+    - Take_Off_Time (FTFM);      -- +2: '-' continues the value
 ```
 
 This is distinct from **parenthesis continuation** (an unclosed `(`, see below),
@@ -509,8 +521,10 @@ Keeping the grammar simple means a few things are out of scope:
   one indent level rather than aligning under a specific column such as the
   `:=`. Continuations **inside** parentheses, by contrast, *are* column-aligned
   (under the first item, or the `if`/`case` keyword) — see above.
-- **Character literals** containing a `"` and **doubled-quote escapes**
-  (`"a""b"`) are not modelled by the string scanner.
+- **Parenthesis counting** skips both string literals and character literals,
+  so a `'('` or `')'` does not throw off the depth. The `--` comment scanner,
+  however, only tracks double-quoted strings: a character literal containing a
+  `"` and **doubled-quote escapes** (`"a""b"`) are not modelled there.
 - **Generic formal parts** (`generic … package …`) are left flat.
 - Alignment *within* a line (e.g. lining up `:=` or `=>`) is not attempted —
   only leading indentation is changed.
