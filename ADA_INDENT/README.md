@@ -276,6 +276,27 @@ if FTFX.The_Flight_Status = Cancelled
   end if;
 ```
 
+### Statement continuation
+
+A logical statement or declaration split across several physical lines has its
+continuation lines indented one level deeper. A line is treated as **continued**
+when it is non-empty, does not end in `;`, does not end in `=>`, is not a lone
+splitter/opener keyword (`begin`, `declare`, `else`, `exception`, `or`,
+`private`, `select`), and does not end in a block-opening keyword
+(`is`, `then`, `loop`, `record`, `select`, `do`). The continuation persists
+until a line completes the statement (typically by ending in `;`):
+
+```ada
+Curtains : constant Alternatives_Profiles_T
+  := Whatever_But_Very_Long;     -- +1 level, until the ';'
+Other : Integer := 0;            -- back at the base level
+```
+
+This is distinct from **parenthesis continuation** (an unclosed `(`): either
+condition raises the indent one level, and they do not stack — a line that is
+both inside parentheses and a statement continuation is still indented just one
+extra level.
+
 ### Closers — pop, and align with the opener's header
 
 `LEAD = end` (covers `end;`, `end if;`, `end loop;`, `end case;`, `end record;`,
@@ -318,9 +339,10 @@ parameter list, or call), continuation lines get **one extra** indent level.
 
 Keeping the grammar simple means a few things are out of scope:
 
-- **Expression continuations** not wrapped in parentheses are indented as
-  ordinary lines — *except* for multi-line `if`/`elsif` conditions, which are
-  handled explicitly (see above).
+- **Continuation depth is a single level.** Wrapped statements, multi-line
+  `if`/`elsif` conditions, and parenthesised continuations each add exactly one
+  level; the indenter does not align continuations under a specific column
+  (e.g. under the opening `(` or the `:=`).
 - **Character literals** containing a `"` and **doubled-quote escapes**
   (`"a""b"`) are not modelled by the string scanner.
 - **Generic formal parts** (`generic … package …`) are left flat.
