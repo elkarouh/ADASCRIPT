@@ -300,24 +300,32 @@ extra level.
 
 ### Expressions inside parentheses (if-/case-expressions)
 
-While the running parenthesis depth is `> 0`, every line is treated as a plain
-continuation and **no statement-keyword handling applies**. This matters for
+While the running parenthesis depth is `> 0`, every line is treated as part of
+an expression and **no statement-keyword handling applies**. This matters for
 conditional and case *expressions*, where `then`, `else`, `elsif` and `when`
 are part of the expression, not statement structure — without this rule a
-leading `else` would dedent as if it closed an `if` statement. All the
-continuation lines therefore sit at the same single-level indent:
+leading `else` would dedent as if it closed an `if` statement.
+
+For an **if-expression** the indenter additionally aligns to the `if`: the
+column of the `if` token (in the re-indented opening line) is remembered, and
+each continuation line is positioned by absolute column — `then`, `else` and
+`elsif` under the `if`, and the condition continuation under the condition
+(three columns past the `if`, i.e. after `if `):
 
 ```ada
 Reroutings := (if Cycle_Of (Normal_Flight.IOBT)
-  /= Cycle_Of (Message.IOBT)     -- +1 level
-  then Empty_List                -- +1 level (not a statement 'then')
-  else Normal_Flight.Reroutings); -- +1 level (not dedented)
+                  /= Cycle_Of (Message.IOBT)      -- under the condition
+               then Empty_List                    -- under the 'if'
+               else Normal_Flight.Reroutings);    -- under the 'if'
 ```
 
-Because the indenter is level-based (it normalises leading whitespace to whole
-indent steps), `then`/`else` align *with each other* at the continuation level
-rather than under the column of the `if` token — column alignment within a line
-is out of scope.
+This is the one place the indenter does **column** alignment rather than
+whole-level indentation. The remembered column is relative to where the opening
+line actually lands, so the alignment holds at any nesting depth. Nested
+if-expressions are tracked on a small stack keyed by parenthesis depth and are
+dropped automatically when their `)` closes. (The `(if` scan runs over the
+emitted text, so a `(if` appearing inside a string literal in the condition
+could be mis-detected — rare in practice.)
 
 The one exception is a line that **closes** the parentheses and then opens a
 block — a multi-line parameter list ending in `) is`, `) return T is`,
@@ -378,7 +386,9 @@ Keeping the grammar simple means a few things are out of scope:
 - **Continuation depth is a single level.** Wrapped statements, multi-line
   `if`/`elsif` conditions, and parenthesised continuations each add exactly one
   level; the indenter does not align continuations under a specific column
-  (e.g. under the opening `(` or the `:=`).
+  (e.g. under the opening `(` or the `:=`). The sole exception is the
+  **if-expression**, whose `then`/`else`/`elsif` are column-aligned under the
+  `if` (see above).
 - **Character literals** containing a `"` and **doubled-quote escapes**
   (`"a""b"`) are not modelled by the string scanner.
 - **Generic formal parts** (`generic … package …`) are left flat.
