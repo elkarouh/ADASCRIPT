@@ -136,10 +136,17 @@ def stmt_incomplete(code_s: str) -> bool:
             or code_s.endswith(":")):
         return False
     let lw: str = lead_word(code_s)
-    # Lone splitter/opener keyword lines and compilation-unit prefixes
-    # ('separate (Parent)') are complete despite having no ';'.
-    if (lw == "begin" or lw == "declare" or lw == "else" or lw == "exception"
-            or lw == "or" or lw == "private" or lw == "select" or lw == "separate"):
+    # 'separate (Parent)' is a complete compilation-unit prefix despite content.
+    if lw == "separate":
+        return False
+    # A *bare* splitter/opener keyword line (just the keyword, nothing trailing)
+    # is complete. The 'code_s.lower() == lw' guard matters because the same
+    # words occur inside expressions: e.g. the 'else …)' line closing an
+    # if-EXPRESSION continues the surrounding statement and must NOT be mistaken
+    # for a complete statement-level 'else'.
+    if (code_s.lower() == lw and (lw == "begin" or lw == "declare"
+            or lw == "else" or lw == "exception" or lw == "or"
+            or lw == "private" or lw == "select")):
         return False
     let lt: str = last_word(code_s)
     # Block openers, plus the '[not] overriding' indicator on its own line.
@@ -402,6 +409,13 @@ class Indenter:
                 self.cond_state = 0
             else:
                 disp = self.cond_base + 1
+                # The 'and'/'or'/'xor' connectives join condition terms and sit
+                # at this base continuation level. A line that instead starts
+                # with another operator (>=, &, +, …) continues the *previous*
+                # term across a line break, so it nests one level deeper.
+                if (starts_with_operator(code_s)
+                        and lw != "and" and lw != "or" and lw != "xor"):
+                    disp += 1
             self.in_cont = False
             # cond_state lines are outside parentheses (inside-paren lines are
             # handled above), so they use only the if/elsif-relative depth — no
@@ -502,6 +516,12 @@ class Indenter:
         # items align to this line's '('.
         if cont > 0 and prev_was_cont and code_s.startswith("("):
             lead_n += INDENT_WIDTH
+        # A '|' continuation extends a 'when' choice list ('when A | B' split
+        # before the '=>'). The WHEN_ frame already provides the indent, so it
+        # aligns at the arm-body level (the frame depth) rather than taking the
+        # 'cont' bonus on top, which would push it past the body.
+        if cont > 0 and code_s.startswith("|"):
+            lead_n = max(0, disp) * INDENT_WIDTH
         self._push_parens(emit_text, lead_n, entry_depth, self.paren_depth)
         " " * lead_n + emit_text
 
@@ -968,6 +988,76 @@ def run_tests() -> int:
         "      null;\n"
         "    end loop Find_Model;\n"
         "  end Log_Changes;\n"
+        "end P;\n"))
+
+    # 19. Multi-line if condition: 'and then' connectives sit at the base
+    #     continuation level, but a line starting with another operator ('>=')
+    #     continues the previous term across the break and nests one level
+    #     deeper. Comments between the lines stay transparent.
+    cases.append((
+        "procedure P is\n"
+        "begin\n"
+        "if A\n"
+        "and then Take_Off_Time (X)\n"
+        "-- a comment\n"
+        ">= Take_Off_Time (Y)\n"
+        "then\n"
+        "null;\n"
+        "end if;\n"
+        "end P;\n",
+
+        "procedure P is\n"
+        "begin\n"
+        "  if A\n"
+        "    and then Take_Off_Time (X)\n"
+        "    -- a comment\n"
+        "      >= Take_Off_Time (Y)\n"
+        "  then\n"
+        "    null;\n"
+        "  end if;\n"
+        "end P;\n"))
+
+    # 20. An if-EXPRESSION's 'else …)' line closes the expression and continues
+    #     the surrounding statement (it is not a complete statement-level
+    #     'else'), so the following '& …;' stays at the continuation level
+    #     rather than dropping back to the declaration's base level.
+    cases.append((
+        "package P is\n"
+        "Name : constant String := A\n"
+        "& (if C\n"
+        "then \"0\"\n"
+        "else Trim (X))\n"
+        "& \"_\";\n"
+        "end P;\n",
+
+        "package P is\n"
+        "  Name : constant String := A\n"
+        "    & (if C\n"
+        "       then \"0\"\n"
+        "       else Trim (X))\n"
+        "    & \"_\";\n"
+        "end P;\n"))
+
+    # 21. A 'when' choice list split before its '=>': the '|' continuation
+    #     aligns at the arm-body level (the WHEN_ frame already provides the
+    #     indent), not one level deeper.
+    cases.append((
+        "procedure P is\n"
+        "begin\n"
+        "case X is\n"
+        "when Action_1 | Action_15\n"
+        "| Action_16 | Action_43 =>\n"
+        "Do_It;\n"
+        "end case;\n"
+        "end P;\n",
+
+        "procedure P is\n"
+        "begin\n"
+        "  case X is\n"
+        "    when Action_1 | Action_15\n"
+        "      | Action_16 | Action_43 =>\n"
+        "      Do_It;\n"
+        "  end case;\n"
         "end P;\n"))
 
     for pair in cases:
