@@ -297,6 +297,27 @@ condition raises the indent one level, and they do not stack — a line that is
 both inside parentheses and a statement continuation is still indented just one
 extra level.
 
+### Expressions inside parentheses (if-/case-expressions)
+
+While the running parenthesis depth is `> 0`, every line is treated as a plain
+continuation and **no statement-keyword handling applies**. This matters for
+conditional and case *expressions*, where `then`, `else`, `elsif` and `when`
+are part of the expression, not statement structure — without this rule a
+leading `else` would dedent as if it closed an `if` statement. All the
+continuation lines therefore sit at the same single-level indent:
+
+```ada
+Reroutings := (if Cycle_Of (Normal_Flight.IOBT)
+  /= Cycle_Of (Message.IOBT)     -- +1 level
+  then Empty_List                -- +1 level (not a statement 'then')
+  else Normal_Flight.Reroutings); -- +1 level (not dedented)
+```
+
+Because the indenter is level-based (it normalises leading whitespace to whole
+indent steps), `then`/`else` align *with each other* at the continuation level
+rather than under the column of the `if` token — column alignment within a line
+is out of scope.
+
 ### Closers — pop, and align with the opener's header
 
 `LEAD = end` (covers `end;`, `end if;`, `end loop;`, `end case;`, `end record;`,
