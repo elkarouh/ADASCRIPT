@@ -311,6 +311,21 @@ This is distinct from **parenthesis continuation** (an unclosed `(`, see below),
 which aligns by column instead. Parenthesis state takes priority: while inside
 an open `(` the statement-continuation rule does not also apply.
 
+**Comment-only lines are transparent.** A line whose code is empty once the
+`--` comment is stripped does not alter any parser state — it neither starts,
+extends, nor ends a statement continuation. It is indented to the current
+continuation context and the next real line is positioned exactly as if the
+comment were not there. So comments may freely interrupt a multi-line
+condition, an open parenthesis, or a statement continuation without disturbing
+the surrounding indentation:
+
+```ada
+return New_OBT > Old_OBT
+  -- a comment here does not break the continuation
+  and (Departure.Earliest_TTOT = None     -- still +1 (continuation) + operator level
+       or else New_OBT > X);
+```
+
 ### Expressions inside parentheses (if-/case-expressions)
 
 While the running parenthesis depth is `> 0`, every line is treated as part of
