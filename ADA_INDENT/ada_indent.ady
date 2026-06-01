@@ -204,6 +204,16 @@ class Indenter:
             self.paren_depth = max(0, self.paren_depth + paren_delta(code))
             return spaces(disp + cont) + emit_text
 
+        # Inside an unclosed parenthesis the line is part of an expression
+        # (e.g. an if-/case-expression), so keywords like then/else/elsif/when
+        # are operators here, not statement parts. Keep them inert and indent
+        # the line as a plain continuation so then/else align with each other.
+        if self.paren_depth > 0:
+            disp = len(self.stack)
+            self.in_cont = stmt_incomplete(code_s)
+            self.paren_depth = max(0, self.paren_depth + paren_delta(code))
+            return spaces(disp + cont) + emit_text
+
         case lw:
             when "end":
                 while len(self.stack) > 0 and self.stack[-1] == WHEN_:
@@ -454,6 +464,28 @@ def run_tests() -> int:
         "procedure P is\n"
         "begin\n"
         "  null;\n"
+        "end P;\n"))
+
+    # 8. If-expression inside parentheses: then/else/elsif are expression
+    #    operators here, not statement parts, so they must NOT dedent like a
+    #    statement 'else' — every continuation line sits at the same level.
+    cases.append((
+        "procedure P is\n"
+        "begin\n"
+        "R := (if Cycle_Of (X)\n"
+        "/= Cycle_Of (Y)\n"
+        "then Empty\n"
+        "else Full);\n"
+        "Next_Statement;\n"
+        "end P;\n",
+
+        "procedure P is\n"
+        "begin\n"
+        "  R := (if Cycle_Of (X)\n"
+        "    /= Cycle_Of (Y)\n"
+        "    then Empty\n"
+        "    else Full);\n"
+        "  Next_Statement;\n"
         "end P;\n"))
 
     for pair in cases:
