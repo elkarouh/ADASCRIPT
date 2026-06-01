@@ -396,22 +396,29 @@ in `) is`, `) return T is`, `) loop`, …) is aligned like the other
 continuations *and* opens that block. if-/case-expressions are the same
 mechanism with keyword-aware offsets (see above).
 
-**Inside parentheses**, a continuation line that **starts with an operator** —
-a symbol (`:=`, `=>`, `&`, `+`, `-`, `*`, `/`, `=`, `<`, `>`, `|`, `..`) or a
-word operator (`and`, `or`, `xor`, `mod`, `rem`, covering `and then` / `or
-else`) — takes one extra indent level past the aligned items, so the operator
-stands out from the operand it continues. This applies only within parentheses —
-a bare statement continuation (e.g. a `:=` or `and` on its own line outside any
-`(`) keeps the plain one-level indent:
+A continuation line that **starts with an operator** takes one extra indent
+level so the operator stands out from the operand it continues. Which operators
+qualify depends on whether the line is inside parentheses:
+
+- **Inside parentheses** — any operator: a symbol (`:=`, `=>`, `&`, `+`, `-`,
+  `*`, `/`, `=`, `<`, `>`, `|`, `..`) or a word operator (`and`, `or`, `xor`,
+  `mod`, `rem`, covering `and then` / `or else`).
+- **Outside parentheses** (a bare statement/declaration continuation) — only
+  the **boolean** word operators `and` / `or` / `xor`. An assignment or
+  arithmetic continuation such as a bare `:=` keeps the plain one-level indent.
 
 ```ada
+return New_OBT > Old_OBT
+    and (Departure.Earliest_TTOT (FTFX.Departure_Info) = Time.None_Time   -- 'and': +1 extra (boolean)
+           or else New_OBT > Departure.Off_Block);                        -- 'or else': +1 extra (in parens)
+
 First_Time_In_TACT : constant Count_Option.Set.T
-    := (if Action_Info.Event = External_Create       -- ':=' is a plain +1 (outside the '(')
-        then (others => True)
-        else (Count_Option.Normal
-                => Flight_Updates (Count_Option.Normal).Old_Fixed_Info.Status = Not_Existing,
-              Count_Option.Proposal
-                => Flight_Updates (Count_Option.Proposal).Old_Fixed_Info.Status = Not_Existing));
+  := (if Action_Info.Event = External_Create                              -- ':=': plain +1 (outside '(')
+      then (others => True)
+      else (Count_Option.Normal
+              => Flight_Updates (Count_Option.Normal).Old_Fixed_Info.Status = Not_Existing,  -- '=>': +1 (in parens)
+            Count_Option.Proposal
+              => Flight_Updates (Count_Option.Proposal).Old_Fixed_Info.Status = Not_Existing));
 ```
 
 (The if-/case-expression keyword offsets already build in this extra step for
