@@ -282,7 +282,8 @@ A logical statement or declaration split across several physical lines has its
 continuation lines indented one level deeper. A line is treated as **continued**
 when it is non-empty, does not end in `;`, does not end in `=>`, is not a lone
 splitter/opener keyword (`begin`, `declare`, `else`, `exception`, `or`,
-`private`, `select`), and does not end in a block-opening keyword
+`private`, `select`) or compilation-unit prefix (`separate (Parent)`,
+`[not] overriding`), and does not end in a block-opening keyword
 (`is`, `then`, `loop`, `record`, `select`, `do`). The continuation persists
 until a line completes the statement (typically by ending in `;`):
 
@@ -317,6 +318,20 @@ Because the indenter is level-based (it normalises leading whitespace to whole
 indent steps), `then`/`else` align *with each other* at the continuation level
 rather than under the column of the `if` token — column alignment within a line
 is out of scope.
+
+The one exception is a line that **closes** the parentheses and then opens a
+block — a multi-line parameter list ending in `) is`, `) return T is`,
+`) loop`, etc. Such a line falls through to the normal keyword handling so the
+block frame is pushed and the body that follows indents correctly:
+
+```ada
+procedure Perform (A : Integer;
+  B : Integer;          -- parameter continuation, +1 level
+  C : Integer) is       -- closes '(' and opens the body via 'is'
+  X : Integer;          -- body, +1 level
+begin
+  ...
+```
 
 ### Closers — pop, and align with the opener's header
 

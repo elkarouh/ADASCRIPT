@@ -131,12 +131,15 @@ def stmt_incomplete(code_s: str) -> bool:
     if code_s == "" or code_s.endswith(";") or code_s.endswith("=>"):
         return False
     let lw: str = lead_word(code_s)
+    # Lone splitter/opener keyword lines and compilation-unit prefixes
+    # ('separate (Parent)') are complete despite having no ';'.
     if (lw == "begin" or lw == "declare" or lw == "else" or lw == "exception"
-            or lw == "or" or lw == "private" or lw == "select"):
+            or lw == "or" or lw == "private" or lw == "select" or lw == "separate"):
         return False
     let lt: str = last_word(code_s)
+    # Block openers, plus the '[not] overriding' indicator on its own line.
     if (lt == "is" or lt == "then" or lt == "loop" or lt == "record"
-            or lt == "select" or lt == "do"):
+            or lt == "select" or lt == "do" or lt == "overriding"):
         return False
     result = True
 
@@ -208,11 +211,20 @@ class Indenter:
         # (e.g. an if-/case-expression), so keywords like then/else/elsif/when
         # are operators here, not statement parts. Keep them inert and indent
         # the line as a plain continuation so then/else align with each other.
+        # Exception: a line that closes the parentheses and then opens a block
+        # (a multi-line parameter list ending in ') is', ') return T is',
+        # ') loop', …) must fall through to the normal dispatch so the frame
+        # is pushed.
         if self.paren_depth > 0:
-            disp = len(self.stack)
-            self.in_cont = stmt_incomplete(code_s)
-            self.paren_depth = max(0, self.paren_depth + paren_delta(code))
-            return spaces(disp + cont) + emit_text
+            let new_depth: int = self.paren_depth + paren_delta(code)
+            let plt: str = last_word(code_s)
+            let opens_block: bool = (plt == "is" or plt == "then" or plt == "loop"
+                    or plt == "record" or plt == "select" or plt == "do")
+            if not (new_depth <= 0 and opens_block):
+                disp = len(self.stack)
+                self.in_cont = stmt_incomplete(code_s)
+                self.paren_depth = max(0, new_depth)
+                return spaces(disp + cont) + emit_text
 
         case lw:
             when "end":
@@ -486,6 +498,27 @@ def run_tests() -> int:
         "    then Empty\n"
         "    else Full);\n"
         "  Next_Statement;\n"
+        "end P;\n"))
+
+    # 9. Subunit with a multi-line parameter list. The 'separate (Parent)'
+    #    clause is a complete line (must NOT make the body indent), the
+    #    parameter continuations indent one level, and the closing ') is'
+    #    still opens the body frame so the declarations indent.
+    cases.append((
+        "separate (Flight.Behaviour)\n"
+        "procedure P (A : Integer;\n"
+        "B : Integer) is\n"
+        "X : Integer;\n"
+        "begin\n"
+        "null;\n"
+        "end P;\n",
+
+        "separate (Flight.Behaviour)\n"
+        "procedure P (A : Integer;\n"
+        "  B : Integer) is\n"
+        "  X : Integer;\n"
+        "begin\n"
+        "  null;\n"
         "end P;\n"))
 
     for pair in cases:
