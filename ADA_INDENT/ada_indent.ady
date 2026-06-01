@@ -144,17 +144,18 @@ def stmt_incomplete(code_s: str) -> bool:
     result = True
 
 
-def scan_if_exprs(text: str, base_depth: int, base_col: int) -> [](int, int):
-    """Find conditional-expression openers '(if' in a line.
+def scan_exprs(text: str, base_depth: int, base_col: int) -> [](int, int, int):
+    """Find conditional-/case-expression openers '(if' and '(case' in a line.
 
-    Returns one tuple (paren_level, column) per opener, where paren_level is the
-    parenthesis depth just inside the opening '(' and column is the absolute
-    output column of the 'if' (base_col is the column at which text[0] renders).
-    Used to align an if-expression's then/else with its 'if'. Parentheses inside
-    string literals are not special-cased (rare in a condition), so this is a
-    best-effort scan over the emitted text.
+    Returns one tuple (paren_level, column, kind) per opener: paren_level is the
+    parenthesis depth just inside the opening '(', column is the absolute output
+    column of the keyword (base_col is the column at which text[0] renders), and
+    kind is 0 for 'if' or 1 for 'case'. Used to align an if-expression's
+    then/else under its 'if', and a case-expression's when clauses one level in
+    from its 'case'. Parentheses inside string literals are not special-cased
+    (rare in a condition), so this is a best-effort scan over the emitted text.
     """
-    var openers: [](int, int) = []
+    var openers: [](int, int, int) = []
     var depth: int = base_depth
     var i: int = 0
     let n: int = len(text)
@@ -169,7 +170,14 @@ def scan_if_exprs(text: str, base_depth: int, base_col: int) -> [](int, int):
                     and (text[j] == 'i' or text[j] == 'I')
                     and (text[j + 1] == 'f' or text[j + 1] == 'F')
                     and (j + 2 >= n or not (text[j + 2].isalnum() or text[j + 2] == '_'))):
-                openers.append((depth, base_col + j))
+                openers.append((depth, base_col + j, 0))
+            elif (j + 3 < n
+                    and (text[j] == 'c' or text[j] == 'C')
+                    and (text[j + 1] == 'a' or text[j + 1] == 'A')
+                    and (text[j + 2] == 's' or text[j + 2] == 'S')
+                    and (text[j + 3] == 'e' or text[j + 3] == 'E')
+                    and (j + 4 >= n or not (text[j + 4].isalnum() or text[j + 4] == '_'))):
+                openers.append((depth, base_col + j, 1))
         elif ch == ')':
             depth -= 1
         i += 1
@@ -192,16 +200,16 @@ class Indenter:
     cond_state: int = 0          # 1 = inside multi-line 'if' condition, 2 = 'elsif'
     cond_base: int = 0           # display depth of the opening if/elsif
     in_cont: bool = False        # previous line was an unterminated statement/declaration
-    expr_ifs: [](int, int) = []  # stack of (paren_level, if_column) for open if-expressions
+    expr_stack: [](int, int, int) = []  # (paren_level, keyword_col, kind) for open if/case expressions
 
-    def _push_if_exprs(self, text: str, base_col: int, base_depth: int, new_depth: int):
-        """Record if-expressions opened on this line and drop any now closed."""
-        for opener in scan_if_exprs(text, base_depth, base_col):
-            self.expr_ifs.append(opener)
-        while len(self.expr_ifs) > 0:
-            let top: (int, int) = self.expr_ifs[-1]
+    def _push_exprs(self, text: str, base_col: int, base_depth: int, new_depth: int):
+        """Record if-/case-expressions opened on this line and drop any now closed."""
+        for opener in scan_exprs(text, base_depth, base_col):
+            self.expr_stack.append(opener)
+        while len(self.expr_stack) > 0:
+            let top: (int, int, int) = self.expr_stack[-1]
             if top[0] > new_depth:
-                self.expr_ifs.pop()
+                self.expr_stack.pop()
             else:
                 break
 
@@ -228,8 +236,10 @@ class Indenter:
             self.pending_spec = False
             if code_s.startswith("("):
                 self.in_cont = False
+                let lead_e: int = max(0, len(self.stack) + 1 + cont) * INDENT_WIDTH
                 self.paren_depth = max(0, self.paren_depth + paren_delta(code))
-                return spaces(len(self.stack) + 1 + cont) + emit_text
+                self._push_exprs(emit_text, lead_e, entry_depth, self.paren_depth)
+                return " " * lead_e + emit_text
             else:
                 self.stack.append(PKG)
                 disp = len(self.stack)
@@ -261,11 +271,11 @@ class Indenter:
         # ') loop', …) must fall through to the normal dispatch so the frame
         # is pushed.
         if self.paren_depth > 0:
-            # Drop any if-expressions whose parentheses have already closed.
-            while len(self.expr_ifs) > 0:
-                let stale: (int, int) = self.expr_ifs[-1]
+            # Drop any if-/case-expressions whose parentheses have already closed.
+            while len(self.expr_stack) > 0:
+                let stale: (int, int, int) = self.expr_stack[-1]
                 if stale[0] > entry_depth:
-                    self.expr_ifs.pop()
+                    self.expr_stack.pop()
                 else:
                     break
             let new_depth: int = self.paren_depth + paren_delta(code)
@@ -274,17 +284,26 @@ class Indenter:
                     or plt == "record" or plt == "select" or plt == "do")
             if not (new_depth <= 0 and opens_block):
                 var lead: int = max(0, len(self.stack) + cont) * INDENT_WIDTH
-                # When inside an if-expression, align with its 'if': then/else/
-                # elsif under the 'if' itself, the condition under the condition.
-                if len(self.expr_ifs) > 0:
-                    let top: (int, int) = self.expr_ifs[-1]
-                    if lw == "then" or lw == "else" or lw == "elsif":
-                        lead = top[1]
+                # When inside an if-/case-expression, align to its keyword:
+                #  if-expr  -> then/else/elsif under the 'if', condition past it;
+                #  case-expr -> when clauses one level in from the 'case',
+                #               clause bodies one level deeper still.
+                if len(self.expr_stack) > 0:
+                    let top: (int, int, int) = self.expr_stack[-1]
+                    let kcol: int = top[1]
+                    if top[2] == 0:
+                        if lw == "then" or lw == "else" or lw == "elsif":
+                            lead = kcol
+                        else:
+                            lead = kcol + 3
                     else:
-                        lead = top[1] + 3
+                        if lw == "when":
+                            lead = kcol + INDENT_WIDTH
+                        else:
+                            lead = kcol + 2 * INDENT_WIDTH
                 self.in_cont = stmt_incomplete(code_s)
                 self.paren_depth = max(0, new_depth)
-                self._push_if_exprs(emit_text, lead, entry_depth, self.paren_depth)
+                self._push_exprs(emit_text, lead, entry_depth, self.paren_depth)
                 return " " * lead + emit_text
 
         case lw:
@@ -356,7 +375,7 @@ class Indenter:
         self.in_cont = False if self.cond_state > 0 else stmt_incomplete(code_s)
         self.paren_depth = max(0, self.paren_depth + paren_delta(code))
         let lead_n: int = max(0, disp + cont) * INDENT_WIDTH
-        self._push_if_exprs(emit_text, lead_n, entry_depth, self.paren_depth)
+        self._push_exprs(emit_text, lead_n, entry_depth, self.paren_depth)
         " " * lead_n + emit_text
 
 
@@ -583,6 +602,22 @@ def run_tests() -> int:
         "begin\n"
         "  null;\n"
         "end P;\n"))
+
+    # 10. Case-expression as an expression-function body. 'when' clauses are
+    #     indented one level in from the 'case', and a clause body on its own
+    #     line ('=> ...') one level deeper still.
+    cases.append((
+        "function F return T is\n"
+        "(case X is\n"
+        "when A | B\n"
+        "=> R1,\n"
+        "when others => R2);\n",
+
+        "function F return T is\n"
+        "  (case X is\n"
+        "     when A | B\n"
+        "       => R1,\n"
+        "     when others => R2);\n"))
 
     for pair in cases:
         let src: str = pair[0]

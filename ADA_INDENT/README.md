@@ -319,13 +319,27 @@ Reroutings := (if Cycle_Of (Normal_Flight.IOBT)
                else Normal_Flight.Reroutings);    -- under the 'if'
 ```
 
+A **case-expression** is aligned to its `case` the same way, except the
+`when` clauses are indented one **level** in from the `case` (rather than lined
+up under it), and a clause body that spills onto its own line (`=> …`) indents
+one further level:
+
+```ada
+function F return T is
+  (case X is
+     when A | B            -- one level in from 'case'
+       => R1,              -- clause body, one level deeper
+     when others => R2);
+```
+
 This is the one place the indenter does **column** alignment rather than
 whole-level indentation. The remembered column is relative to where the opening
 line actually lands, so the alignment holds at any nesting depth. Nested
-if-expressions are tracked on a small stack keyed by parenthesis depth and are
-dropped automatically when their `)` closes. (The `(if` scan runs over the
-emitted text, so a `(if` appearing inside a string literal in the condition
-could be mis-detected — rare in practice.)
+if-/case-expressions are tracked on a small stack keyed by parenthesis depth
+(each entry records the keyword column and whether it is an `if` or `case`) and
+are dropped automatically when their `)` closes. (The `(if`/`(case` scan runs
+over the emitted text, so a keyword appearing inside a string literal in the
+expression could be mis-detected — rare in practice.)
 
 The one exception is a line that **closes** the parentheses and then opens a
 block — a multi-line parameter list ending in `) is`, `) return T is`,
@@ -386,9 +400,9 @@ Keeping the grammar simple means a few things are out of scope:
 - **Continuation depth is a single level.** Wrapped statements, multi-line
   `if`/`elsif` conditions, and parenthesised continuations each add exactly one
   level; the indenter does not align continuations under a specific column
-  (e.g. under the opening `(` or the `:=`). The sole exception is the
-  **if-expression**, whose `then`/`else`/`elsif` are column-aligned under the
-  `if` (see above).
+  (e.g. under the opening `(` or the `:=`). The exceptions are **if-** and
+  **case-expressions**, which are aligned to their `if`/`case` keyword
+  (see above).
 - **Character literals** containing a `"` and **doubled-quote escapes**
   (`"a""b"`) are not modelled by the string scanner.
 - **Generic formal parts** (`generic … package …`) are left flat.
