@@ -144,6 +144,38 @@ def stmt_incomplete(code_s: str) -> bool:
     result = True
 
 
+def scan_if_exprs(text: str, base_depth: int, base_col: int) -> [](int, int):
+    """Find conditional-expression openers '(if' in a line.
+
+    Returns one tuple (paren_level, column) per opener, where paren_level is the
+    parenthesis depth just inside the opening '(' and column is the absolute
+    output column of the 'if' (base_col is the column at which text[0] renders).
+    Used to align an if-expression's then/else with its 'if'. Parentheses inside
+    string literals are not special-cased (rare in a condition), so this is a
+    best-effort scan over the emitted text.
+    """
+    var openers: [](int, int) = []
+    var depth: int = base_depth
+    var i: int = 0
+    let n: int = len(text)
+    while i < n:
+        let ch: char = text[i]
+        if ch == '(':
+            depth += 1
+            var j: int = i + 1
+            while j < n and text[j] == ' ':
+                j += 1
+            if (j + 1 < n
+                    and (text[j] == 'i' or text[j] == 'I')
+                    and (text[j + 1] == 'f' or text[j + 1] == 'F')
+                    and (j + 2 >= n or not (text[j + 2].isalnum() or text[j + 2] == '_'))):
+                openers.append((depth, base_col + j))
+        elif ch == ')':
+            depth -= 1
+        i += 1
+    return openers
+
+
 def spaces(levels: int) -> str:
     """A run of spaces for the given number of indent levels (never negative)."""
     " " * (max(0, levels) * INDENT_WIDTH)
@@ -160,6 +192,7 @@ class Indenter:
     cond_state: int = 0          # 1 = inside multi-line 'if' condition, 2 = 'elsif'
     cond_base: int = 0           # display depth of the opening if/elsif
     in_cont: bool = False        # previous line was an unterminated statement/declaration
+    expr_ifs: [](int, int) = []  # stack of (paren_level, if_column) for open if-expressions
 
     def indent_line(self, line: str) -> str:
         """Process one raw line and return it re-indented."""
@@ -171,6 +204,7 @@ class Indenter:
         if emit_text == "":
             return ""
 
+        let entry_depth: int = self.paren_depth
         let cont: int = 1 if (self.paren_depth > 0 or self.in_cont) else 0
         let lw: str = lead_word(code_s)
         var disp: int = len(self.stack)
@@ -216,15 +250,31 @@ class Indenter:
         # ') loop', …) must fall through to the normal dispatch so the frame
         # is pushed.
         if self.paren_depth > 0:
+            # Drop any if-expressions whose parentheses have already closed.
+            while len(self.expr_ifs) > 0:
+                let stale: (int, int) = self.expr_ifs[-1]
+                if stale[0] > entry_depth:
+                    self.expr_ifs.pop()
+                else:
+                    break
             let new_depth: int = self.paren_depth + paren_delta(code)
             let plt: str = last_word(code_s)
             let opens_block: bool = (plt == "is" or plt == "then" or plt == "loop"
                     or plt == "record" or plt == "select" or plt == "do")
             if not (new_depth <= 0 and opens_block):
-                disp = len(self.stack)
+                var lead: int = max(0, len(self.stack) + cont) * INDENT_WIDTH
+                # When inside an if-expression, align with its 'if': then/else/
+                # elsif under the 'if' itself, the condition under the condition.
+                if len(self.expr_ifs) > 0:
+                    let top: (int, int) = self.expr_ifs[-1]
+                    if lw == "then" or lw == "else" or lw == "elsif":
+                        lead = top[1]
+                    else:
+                        lead = top[1] + 3
                 self.in_cont = stmt_incomplete(code_s)
                 self.paren_depth = max(0, new_depth)
-                return spaces(disp + cont) + emit_text
+                self._push_if_exprs(emit_text, lead, entry_depth, self.paren_depth)
+                return " " * lead + emit_text
 
         case lw:
             when "end":
@@ -294,7 +344,20 @@ class Indenter:
         # only flag a general statement continuation when not in that mode.
         self.in_cont = False if self.cond_state > 0 else stmt_incomplete(code_s)
         self.paren_depth = max(0, self.paren_depth + paren_delta(code))
-        spaces(disp + cont) + emit_text
+        let lead_n: int = max(0, disp + cont) * INDENT_WIDTH
+        self._push_if_exprs(emit_text, lead_n, entry_depth, self.paren_depth)
+        " " * lead_n + emit_text
+
+    def _push_if_exprs(self, text: str, base_col: int, base_depth: int, new_depth: int):
+        """Record if-expressions opened on this line and drop any now closed."""
+        for opener in scan_if_exprs(text, base_depth, base_col):
+            self.expr_ifs.append(opener)
+        while len(self.expr_ifs) > 0:
+            let top: (int, int) = self.expr_ifs[-1]
+            if top[0] > new_depth:
+                self.expr_ifs.pop()
+            else:
+                break
 
 
 # ---------------------------------------------------------------------------
@@ -478,9 +541,9 @@ def run_tests() -> int:
         "  null;\n"
         "end P;\n"))
 
-    # 8. If-expression inside parentheses: then/else/elsif are expression
-    #    operators here, not statement parts, so they must NOT dedent like a
-    #    statement 'else' — every continuation line sits at the same level.
+    # 8. If-expression inside parentheses: 'then'/'else'/'elsif' align under the
+    #    'if' itself, condition continuations align under the condition, and the
+    #    statement returns to the normal level once the parenthesis closes.
     cases.append((
         "procedure P is\n"
         "begin\n"
@@ -494,9 +557,9 @@ def run_tests() -> int:
         "procedure P is\n"
         "begin\n"
         "  R := (if Cycle_Of (X)\n"
-        "    /= Cycle_Of (Y)\n"
-        "    then Empty\n"
-        "    else Full);\n"
+        "           /= Cycle_Of (Y)\n"
+        "        then Empty\n"
+        "        else Full);\n"
         "  Next_Statement;\n"
         "end P;\n"))
 
