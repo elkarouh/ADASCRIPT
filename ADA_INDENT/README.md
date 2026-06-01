@@ -322,8 +322,8 @@ the surrounding indentation:
 ```ada
 return New_OBT > Old_OBT
   -- a comment here does not break the continuation
-  and (Departure.Earliest_TTOT = None     -- still +1 (continuation) + operator level
-       or else New_OBT > X);
+  and (Departure.Earliest_TTOT = None     -- +1 continuation, aligned with the comments
+         or else New_OBT > X);            -- 'or else': +1 operator extra (inside the paren)
 ```
 
 ### Expressions inside parentheses (if-/case-expressions)
@@ -426,23 +426,23 @@ continuations *and* opens that block. if-/case-expressions are the same
 mechanism with keyword-aware offsets (see above).
 
 A continuation line that **starts with an operator** takes one extra indent
-level so the operator stands out from the operand it continues. Which operators
-qualify depends on whether the line is inside parentheses:
+level so the operator stands out from the operand it continues — but **only
+inside parentheses**. The qualifying operators are any symbol (`:=`, `=>`, `&`,
+`+`, `-`, `*`, `/`, `=`, `<`, `>`, `|`, `..`) or a word operator (`and`, `or`,
+`xor`, `mod`, `rem`, covering `and then` / `or else`).
 
-- **Inside parentheses** — any operator: a symbol (`:=`, `=>`, `&`, `+`, `-`,
-  `*`, `/`, `=`, `<`, `>`, `|`, `..`) or a word operator (`and`, `or`, `xor`,
-  `mod`, `rem`, covering `and then` / `or else`).
-- **Outside parentheses** (a bare statement/declaration continuation) — only
-  the **boolean** word operators `and` / `or` / `xor`. An assignment or
-  arithmetic continuation such as a bare `:=` keeps the plain one-level indent.
+**Outside parentheses** a statement or declaration continuation always takes a
+plain single level, regardless of any leading operator. So an `and`/`or` line
+continuing a `return`, or a `:=` continuing a declaration, sits at the same
++1 level as a comment that documents it — it does *not* get the operator extra.
 
 ```ada
 return New_OBT > Old_OBT
-    and (Departure.Earliest_TTOT (FTFX.Departure_Info) = Time.None_Time   -- 'and': +1 extra (boolean)
-           or else New_OBT > Departure.Off_Block);                        -- 'or else': +1 extra (in parens)
+  and (Departure.Earliest_TTOT (FTFX.Departure_Info) = Time.None_Time   -- 'and': plain +1 (outside '(')
+         or else New_OBT > Departure.Off_Block);                        -- 'or else': +1 extra (inside '(')
 
 First_Time_In_TACT : constant Count_Option.Set.T
-  := (if Action_Info.Event = External_Create                              -- ':=': plain +1 (outside '(')
+  := (if Action_Info.Event = External_Create                            -- ':=': plain +1 (outside '(')
       then (others => True)
       else (Count_Option.Normal
               => Flight_Updates (Count_Option.Normal).Old_Fixed_Info.Status = Not_Existing,  -- '=>': +1 (in parens)
