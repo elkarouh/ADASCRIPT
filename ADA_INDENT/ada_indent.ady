@@ -163,6 +163,16 @@ def starts_with_operator(code_s: str) -> bool:
     return w == "and" or w == "or" or w == "xor" or w == "mod" or w == "rem"
 
 
+def starts_with_bool_operator(code_s: str) -> bool:
+    """True if the line begins with a boolean word operator: and / or / xor
+    (covering 'and then' and 'or else'). Used for the extra indent of a
+    statement continuation *outside* parentheses, where only boolean operators
+    qualify — an assignment/arithmetic continuation (e.g. a bare ':=') keeps the
+    plain one-level continuation indent."""
+    let w: str = lead_word(code_s)
+    return w == "and" or w == "or" or w == "xor"
+
+
 def scan_parens(text: str, base_depth: int, base_col: int) -> [](int, int, int):
     """Find every '(' opened in a line and how its continuations should align.
 
@@ -420,7 +430,14 @@ class Indenter:
         # only flag a general statement continuation when not in that mode.
         self.in_cont = False if self.cond_state > 0 else stmt_incomplete(code_s)
         self.paren_depth = max(0, self.paren_depth + paren_delta(code))
-        let lead_n: int = max(0, disp + cont) * INDENT_WIDTH
+        var lead_n: int = max(0, disp + cont) * INDENT_WIDTH
+        # A statement continuation that begins with a boolean operator
+        # (and / or / xor, incl. 'and then' / 'or else') takes one extra level
+        # so the operator stands out from the operand above it. Only boolean
+        # operators qualify here, outside parentheses: an assignment continuation
+        # such as a bare ':=' keeps the plain one-level indent.
+        if cont > 0 and starts_with_bool_operator(code_s):
+            lead_n += INDENT_WIDTH
         self._push_parens(emit_text, lead_n, entry_depth, self.paren_depth)
         " " * lead_n + emit_text
 
@@ -692,8 +709,8 @@ def run_tests() -> int:
         "end P;\n"))
 
     # 12. Word boolean operators (and/or/and then/or else) at the start of a
-    #     line inside parentheses also take the extra level; the bare 'and'
-    #     continuation of the return (outside parentheses) does not.
+    #     line take the extra level both as a statement continuation (the 'and'
+    #     under 'return') and inside parentheses (the 'or else').
     cases.append((
         "function F return Boolean is\n"
         "begin\n"
@@ -705,8 +722,8 @@ def run_tests() -> int:
         "function F return Boolean is\n"
         "begin\n"
         "  return A\n"
-        "    and (B = C\n"
-        "           or else D = E);\n"
+        "      and (B = C\n"
+        "             or else D = E);\n"
         "end F;\n"))
 
     for pair in cases:
