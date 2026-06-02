@@ -763,6 +763,11 @@ class Indenter:
         if cont > 0 and code_s.startswith("|"):
             let bar_disp: int = (disp - 1) if (len(self.stack) > 0 and self.stack[-1] == WHEN) else disp
             lead_n = max(0, bar_disp) * INDENT_WIDTH
+        # Standalone 'is' after an aspect-clause continuation (e.g. 'task type T
+        # with ... is') is a block opener, not a value continuation. Snap back to
+        # the declaration level so it aligns with its opener, not indented under it.
+        if lw == "is" and cont > 0:
+            lead_n = max(0, disp) * INDENT_WIDTH
         # As in the cond_state branch: this line is outside any paren at entry, so
         # any paren it opens is fresh. Invalidate paren_next_lead so a comment in
         # that paren uses the kind-aware fallback, not a stale sibling lead.
