@@ -1631,6 +1631,38 @@ def to_nim(self, prec=None):
                     continue
                 method_name = _translate_method(result, method_name)
                 next_tr = trailer_list[i + 1] if i + 1 < len(trailer_list) else None
+                # startswith/endswith with a tuple of prefixes/suffixes: Python
+                # accepts a tuple, but Nim's startsWith/endsWith take a single
+                # string, so expand to an or-chain (s.startsWith(a) or ...).
+                if (method_name in ("startsWith", "endsWith")
+                        and next_tr is not None
+                        and type(next_tr).__name__ == "call_trailer"):
+                    _sw_args = _extract_call_args(next_tr)
+                    if (len(_sw_args) == 1 and _sw_args[0].startswith("(")
+                            and _sw_args[0].endswith(")")):
+                        _sw_elems = []
+                        _sw_depth = 0
+                        _sw_cur = []
+                        for _sw_ch in _sw_args[0][1:-1]:
+                            if _sw_ch in "([{":
+                                _sw_depth += 1
+                            elif _sw_ch in ")]}":
+                                _sw_depth -= 1
+                            elif _sw_ch == "," and _sw_depth == 0:
+                                _sw_elems.append("".join(_sw_cur).strip())
+                                _sw_cur = []
+                                continue
+                            _sw_cur.append(_sw_ch)
+                        if _sw_cur:
+                            _sw_elems.append("".join(_sw_cur).strip())
+                        _sw_elems = [e for e in _sw_elems if e]
+                        if len(_sw_elems) > 1:
+                            ParserState.nim_imports.add("strutils")
+                            _sw_chain = " or ".join(
+                                f"{result}.{method_name}({e})" for e in _sw_elems)
+                            result = f"({_sw_chain})"
+                            skip_next = True
+                            continue
                 # sorted(key=lambda v: v.field) -> sortedByIt(it.field)
                 if method_name == "sorted" and next_tr is not None and type(next_tr).__name__ == "call_trailer":
                     import re as _re_s
