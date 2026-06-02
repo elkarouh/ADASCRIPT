@@ -1078,6 +1078,34 @@ def run_tests() -> int:
         "        Ctrl => C);\n"
         "end P;\n"))
 
+    # Regression: an identifier that merely starts with a keyword
+    # ('Case_Sensitive', 'For_Each', 'If_Valid') must NOT be treated as the
+    # opener of a (case .. / (for .. / (if .. expression. Such plain-paren
+    # continuations align as a normal operator continuation, one level past
+    # the item — not at the deeper case/for/if body level.
+    cases.append((
+        "procedure R is\n"
+        "A : Boolean := (Case_Sensitive\n"
+        "or Other);\n"
+        "B : Integer := (If_Valid\n"
+        "+ Count);\n"
+        "C : Boolean := (For_Each\n"
+        "and Flag);\n"
+        "begin\n"
+        "null;\n"
+        "end R;\n",
+
+        "procedure R is\n"
+        "  A : Boolean := (Case_Sensitive\n"
+        "                    or Other);\n"
+        "  B : Integer := (If_Valid\n"
+        "                    + Count);\n"
+        "  C : Boolean := (For_Each\n"
+        "                    and Flag);\n"
+        "begin\n"
+        "  null;\n"
+        "end R;\n"))
+
     for pair in cases:
         let src: str = pair[0]
         let want: str = pair[1]
