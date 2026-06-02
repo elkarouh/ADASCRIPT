@@ -138,9 +138,13 @@ def paren_delta(line: str) -> int:
 
 
 def lead_word(code: str) -> str:
-    """Lowercased leading identifier of a (comment-stripped) line, or ''."""
+    """Lowercased leading identifier of a (comment-stripped) line, or ''.
+
+    Consumes a full Ada identifier (letters, digits, underscores) so that an
+    identifier which merely starts with a keyword — 'Case_Sensitive', 'For_Each',
+    'If_Valid' — is returned whole and does not compare equal to the keyword."""
     for ch in code.strip().lower():
-        if not ch.isalpha():
+        if not (ch.isalnum() or ch == "_"):
             break
         result += ch
 
