@@ -11,6 +11,7 @@ NIM_VERSION/
 *.png
 EXAMPLES/**/*.nim
 ADA_INDENT/ada_indent
+ADA_INDENT/test_ada_indent
 ADA_INDENT/ada_indent_gen.py
 
 # Obsolete/deprecated code

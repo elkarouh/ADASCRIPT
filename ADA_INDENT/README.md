@@ -16,21 +16,24 @@ the resulting binary directly:
 ```bash
 py2nim ADA_INDENT/ada_indent.ady            # transpile + compile (cached)
 py2nim ADA_INDENT/ada_indent.ady -r -- file.adb   # compile if stale, then run
-py2nim ADA_INDENT/ada_indent.ady -r -- --test     # run self-tests
 cat file.adb | py2nim ADA_INDENT/ada_indent.ady -r  # reindent from stdin
 ```
 
 `py2nim` stores the binary in `~/.cache/hparsec/` and skips recompilation when
 neither the source nor the generated `.nim` have changed.
 
-The core (the `Indenter` class plus the lexical helpers) is pure Adascript and
-transpiles to both Python and Nim. Self-tests are also exercised via the Python
-target in CI:
+## Tests
+
+The self-tests live in `test_ada_indent.ady`, which imports the indenter as a
+library (`nimport ada_indent` auto-transpiles the sibling `.ady`) and runs it
+against a table of messy-input → canonical-output cases:
 
 ```bash
-python3.13 TO_PYTHON/py2py.py ADA_INDENT/ada_indent.ady > /tmp/ada_indent.py
-python3.13 /tmp/ada_indent.py --test
+py2nim ADA_INDENT/test_ada_indent.ady -r    # compile if stale, run all cases
 ```
+
+The core (the `Indenter` class plus the lexical helpers) is pure Adascript and
+transpiles to both Python and Nim.
 
 ## Emacs integration (format-all)
 
@@ -596,6 +599,6 @@ begin
 end Hello;
 ```
 
-See `sample.adb` for a longer example and `ada_indent.ady`'s `run_tests()` for
-the full set of cases (subprograms, records, exception handlers, paren
+See `sample.adb` for a longer example and `test_ada_indent.ady`'s `run_tests()`
+for the full set of cases (subprograms, records, exception handlers, paren
 continuations).
