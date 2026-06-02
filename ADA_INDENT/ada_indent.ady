@@ -302,6 +302,7 @@ class Indenter:
     stack: []Block_T = []
     paren_depth: Natural = 0
     pending_spec: bool = False   # a 'function ... is' header whose body kind is not yet known
+    pending_inst: bool = False   # an 'X is\nnew Y' generic instantiation PKG frame to pop when done
     cond_state: Natural = 0      # 1 = inside multi-line 'if' condition, 2 = 'elsif'
     cond_base: Natural = 0       # display depth of the opening if/elsif
     cond_value_base: Natural = 0 # display level of the line holding the current condition term
@@ -403,6 +404,15 @@ class Indenter:
         let cont: int = 1 if (self.paren_depth > 0 or self.in_cont) else 0
         let lw: str = lead_word(code_s)
         var disp: int = len(self.stack)
+
+        # An 'X is\nnew Y;' generic instantiation pushed a PKG for 'X is'. Once the
+        # 'new' statement finishes (no open parens, no continuation), pop it so the
+        # next declaration or 'begin' aligns at the correct enclosing scope level.
+        if self.pending_inst and not self.in_cont and self.paren_depth == 0:
+            self.pending_inst = False
+            if len(self.stack) > 0 and self.stack[-1] == PKG:
+                self.stack.pop()
+                disp = len(self.stack)
 
         # Resolve a deferred 'function ... is' header (set on the previous line).
         # If the body begins with '(' it is an expression function: indent the
@@ -686,6 +696,11 @@ class Indenter:
                     disp = len(self.stack) - 1
 
             when others:
+                # 'package/procedure X is\nnew Y' is a generic instantiation.
+                # The PKG pushed for 'X is' has no body; mark it for removal once
+                # the 'new' statement ends (paren closes, no continuation left).
+                if lw == "new" and cont == 0 and len(self.stack) > 0 and self.stack[-1] == PKG:
+                    self.pending_inst = True
                 disp = len(self.stack)
                 let last: str = last_word(code_s)
                 # A trailing block keyword opens a block only when it sits at the
