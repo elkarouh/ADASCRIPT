@@ -399,6 +399,9 @@ class Indenter:
                 self.in_cont = False
                 let lead_e: int = max(0, len(self.stack) + 1 + cont) * INDENT_WIDTH
                 self.paren_depth = max(0, self.paren_depth + paren_delta(code))
+                # Fresh paren outside any other: invalidate paren_last_lead so a
+                # comment inside uses the kind-aware fallback (see cond/main).
+                self.paren_last_lead_depth = -1
                 self._push_parens(emit_text, lead_e, entry_depth, self.paren_depth)
                 return " " * lead_e + emit_text
             else:
@@ -583,6 +586,12 @@ class Indenter:
             # list of an unfinished item (not a new element) when it is not, and
             # the comment fallback needs this to align with operator continuations.
             self.paren_cont = self.paren_depth > 0 and not code_s.endswith(",")
+            # This line is outside any paren at entry, so any paren it opens is
+            # fresh and has no interior peer line yet. Invalidate paren_last_lead
+            # (set by some earlier paren-branch line) so a comment inside that
+            # fresh paren takes the kind-aware fallback rather than a stale lead
+            # inherited from a sibling paren that has since closed.
+            self.paren_last_lead_depth = -1
             self._push_parens(emit_text, lead_c, entry_depth, self.paren_depth)
             return " " * lead_c + emit_text
 
@@ -699,6 +708,10 @@ class Indenter:
         # 'cont' bonus on top, which would push it past the body.
         if cont > 0 and code_s.startswith("|"):
             lead_n = max(0, disp) * INDENT_WIDTH
+        # As in the cond_state branch: this line is outside any paren at entry, so
+        # any paren it opens is fresh. Invalidate paren_last_lead so a comment in
+        # that paren uses the kind-aware fallback, not a stale sibling lead.
+        self.paren_last_lead_depth = -1
         self._push_parens(emit_text, lead_n, entry_depth, self.paren_depth)
         " " * lead_n + emit_text
 
@@ -1654,6 +1667,39 @@ def run_tests() -> int:
         "    and then (B\n"
         "                -- note\n"
         "                or else C)\n"
+        "  then\n"
+        "    null;\n"
+        "  end if;\n"
+        "end P;\n"))
+
+    # 40. A comment in a paren must not inherit a stale alignment from a sibling
+    #     paren that already closed. Here a first '(...)' group at the connective
+    #     level closes, then a second '(...)' group opens at the same depth with a
+    #     comment right after its opening line. The comment must align with the
+    #     'and then' operator continuation inside the SECOND group (its item column
+    #     plus one), not with the deeper lead left over from the first group.
+    cases.append((
+        "procedure P is\n"
+        "begin\n"
+        "if First\n"
+        "and then (Ready\n"
+        "or else (Sent (Data)))\n"
+        "or else (Status = No_Deviation\n"
+        "-- a note\n"
+        "and then Has_Message (Info))\n"
+        "then\n"
+        "null;\n"
+        "end if;\n"
+        "end P;\n",
+
+        "procedure P is\n"
+        "begin\n"
+        "  if First\n"
+        "    and then (Ready\n"
+        "                or else (Sent (Data)))\n"
+        "    or else (Status = No_Deviation\n"
+        "               -- a note\n"
+        "               and then Has_Message (Info))\n"
         "  then\n"
         "    null;\n"
         "  end if;\n"
