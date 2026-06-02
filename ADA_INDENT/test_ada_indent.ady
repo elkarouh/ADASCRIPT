@@ -1200,6 +1200,28 @@ def run_tests() -> int:
         "  end select;\n"
         "end T;\n"))
 
+    # 48. Regression: a standalone 'loop' that terminates a multi-line for/while
+    #     header (range continuation '..') must align with the 'for'/'while',
+    #     not be indented one extra level as a value continuation.
+    cases.append((
+        "procedure P is\n"
+        "begin\n"
+        "for C in Foo (A)\n"
+        ".. Bar (B)\n"
+        "loop\n"
+        "null;\n"
+        "end loop;\n"
+        "end P;\n",
+
+        "procedure P is\n"
+        "begin\n"
+        "  for C in Foo (A)\n"
+        "    .. Bar (B)\n"
+        "  loop\n"
+        "    null;\n"
+        "  end loop;\n"
+        "end P;\n"))
+
     for pair in cases:
         let src: str = pair[0]
         let want: str = pair[1]
