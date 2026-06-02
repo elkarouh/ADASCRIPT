@@ -737,6 +737,12 @@ class Indenter:
         # a new list element, so it nests one level deeper. (When no paren is open
         # the next line resets this flag on entry, so setting it here is benign.)
         self.paren_cont = self.in_cont and not code_s.endswith(",")
+        # When a named-association list opens on this line with the value
+        # on the next ('(Title =>\n   "..."'), the paren path's arrow_level
+        # logic cannot fire (this line was outside all parens at entry).
+        # Mirror it here so the next line gets acol + INDENT_WIDTH.
+        if self.paren_depth > 0 and code_s.endswith("=>"):
+            self.arrow_level = self.paren_depth
 
         # Track where the current statement's value expression begins, so that a
         # term continuation below can nest one level past it. A non-continuation
