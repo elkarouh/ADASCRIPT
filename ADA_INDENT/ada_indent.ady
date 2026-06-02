@@ -299,11 +299,8 @@ class Indenter:
     paren_stack: [](int, int, int) = []  # (paren_level, align_col, kind) for every open '('
     paren_cont: bool = False    # prev line within plain paren ended without ',' (arg-list continuation)
     arrow_level: int = 0        # innermost paren level with an active '=>' named-value spill (0 = none)
-    paren_last_lead: int = 0    # lead column of the last code line emitted inside a paren
-    paren_last_lead_depth: int = 0  # paren_depth that paren_last_lead applies to
-    paren_last_was_cont: bool = False  # that last paren line took the operator/term-continuation extra indent
-    paren_last_ended_comma: bool = False  # that last paren line ended with ',' (a list element closed)
-    paren_last_complete_assoc: bool = False  # that last paren line is a complete named association ('X => Y' on one line)
+    paren_next_lead: int = 0         # column where the next code line in this paren will land
+    paren_next_lead_depth: int = -1  # paren_depth that paren_next_lead applies to (-1 = none)
 
     def _push_parens(self, text: str, base_col: int, base_depth: int, new_depth: int):
         """Record parentheses opened on this line and drop any now closed."""
@@ -351,25 +348,12 @@ class Indenter:
             #              term continuation — not a new item — follows.
             if self.paren_depth > 0 and len(self.paren_stack) > 0:
                 let ptop: (int, int, int) = self.paren_stack[-1]
-                # Align with the previous code line in this paren — but only when
-                # that line did NOT close a list element with a comma. A comma
-                # closes the element, so the next line is a fresh element at the
-                # item column; fall through to the kind-aware fallback for it.
-                if (self.paren_last_lead_depth == self.paren_depth
-                        and not self.paren_last_ended_comma):
-                    # When the previous line was a non-continuation (an arm-body
-                    # head or plain bare item, not itself an operator/term
-                    # continuation, and not a complete 'X => Y' named association)
-                    # and its item is unfinished (paren_cont), the next line is an
-                    # operator continuation one level deeper — so anticipate it,
-                    # except in an '(if' expression where then/else/elsif stay
-                    # structural.
-                    var plead: int = self.paren_last_lead
-                    if (ptop[2] != 1 and self.paren_cont
-                            and not self.paren_last_was_cont
-                            and not self.paren_last_complete_assoc):
-                        plead += INDENT_WIDTH
-                    return " " * plead + emit_text
+                if self.paren_next_lead_depth == self.paren_depth:
+                    return " " * self.paren_next_lead + emit_text
+                # No peer code line yet at this paren depth (comment sits right
+                # after the paren opener, or after an inner paren just closed back
+                # to this level). Derive the indent from the paren kind, mirroring
+                # where the first/next code line at this level lands.
                 var pfall: int = ptop[1]
                 if ptop[2] == 2 or ptop[2] == 3:
                     pfall += INDENT_WIDTH
@@ -419,9 +403,8 @@ class Indenter:
                 self.in_cont = False
                 let lead_e: int = max(0, len(self.stack) + 1 + cont) * INDENT_WIDTH
                 self.paren_depth = max(0, self.paren_depth + paren_delta(code))
-                # Fresh paren outside any other: invalidate paren_last_lead so a
-                # comment inside uses the kind-aware fallback (see cond/main).
-                self.paren_last_lead_depth = -1
+                # Fresh paren with no peer line yet: use the kind-aware fallback.
+                self.paren_next_lead_depth = -1
                 self._push_parens(emit_text, lead_e, entry_depth, self.paren_depth)
                 return " " * lead_e + emit_text
             else:
@@ -459,9 +442,10 @@ class Indenter:
             # continuation that comes next, which sits one level deeper; a comment
             # after a line that already took that extra stays at the same level.
             var was_cont: bool = False
+            var acol: int = 0
             if len(self.paren_stack) > 0:
                 let top: (int, int, int) = self.paren_stack[-1]
-                let acol: int = top[1]
+                acol = top[1]
                 entry_top_level = top[0]
                 entry_top_kind = top[2]
                 if top[2] != 0 and code_s.startswith(")"):
@@ -544,18 +528,30 @@ class Indenter:
                     self.arrow_level = 0
             if self.arrow_level > 0 and self.paren_depth < self.arrow_level:
                 self.arrow_level = 0
-            # Record this line's lead for aligning comments that follow it.
-            self.paren_last_lead = lead
-            self.paren_last_lead_depth = entry_depth
-            self.paren_last_was_cont = was_cont
-            self.paren_last_ended_comma = code_s.endswith(",")
-            # A complete named association ('X => Y' fully on this line) is a
-            # finished list element, not an unfinished expression: a comment after
-            # it stays at the item column rather than anticipating a continuation.
-            # A line ending in '=>' (value spilled to the next line) is NOT
-            # complete, so it is excluded — the spilled value still follows.
-            self.paren_last_complete_assoc = (code_s.find("=>") >= 0
+            # Compute where the next code line in this paren will land, for use by
+            # any comment that follows before it arrives.
+            let complete_assoc: bool = (code_s.find("=>") >= 0
                     and not code_s.endswith("=>"))
+            if entry_top_kind >= 0 and code_s.endswith(","):
+                # Comma closes the current element; next is a fresh item.
+                var pnext: int = acol
+                if entry_top_kind == 2 or entry_top_kind == 3:
+                    pnext += INDENT_WIDTH
+                self.paren_next_lead = pnext
+            elif entry_top_kind == 0 and complete_assoc:
+                # Complete named association ('X => Y') in a plain paren: next is
+                # a fresh item at the item column (not an operator continuation).
+                self.paren_next_lead = acol
+            elif entry_top_kind != 1 and self.paren_cont and not was_cont:
+                # Unfinished non-continuation item (arm-body head or plain item):
+                # anticipate the operator continuation that follows, one level
+                # deeper. '(if' structural lines (kind 1) are excluded.
+                self.paren_next_lead = lead + INDENT_WIDTH
+            else:
+                # Already a continuation, or kind-1 structural, or closed item:
+                # the next line chains at the same level.
+                self.paren_next_lead = lead
+            self.paren_next_lead_depth = entry_depth
             self._push_parens(emit_text, lead, entry_depth, self.paren_depth)
             # A line that closes back out of all parentheses and ends in a block
             # opener opens that block.
@@ -626,11 +622,10 @@ class Indenter:
             # the comment fallback needs this to align with operator continuations.
             self.paren_cont = self.paren_depth > 0 and not code_s.endswith(",")
             # This line is outside any paren at entry, so any paren it opens is
-            # fresh and has no interior peer line yet. Invalidate paren_last_lead
-            # (set by some earlier paren-branch line) so a comment inside that
-            # fresh paren takes the kind-aware fallback rather than a stale lead
-            # inherited from a sibling paren that has since closed.
-            self.paren_last_lead_depth = -1
+            # fresh with no peer line yet. Invalidate paren_next_lead so a comment
+            # inside uses the kind-aware fallback, not a stale lead from a sibling
+            # paren that has since closed.
+            self.paren_next_lead_depth = -1
             self._push_parens(emit_text, lead_c, entry_depth, self.paren_depth)
             return " " * lead_c + emit_text
 
@@ -748,9 +743,9 @@ class Indenter:
         if cont > 0 and code_s.startswith("|"):
             lead_n = max(0, disp) * INDENT_WIDTH
         # As in the cond_state branch: this line is outside any paren at entry, so
-        # any paren it opens is fresh. Invalidate paren_last_lead so a comment in
+        # any paren it opens is fresh. Invalidate paren_next_lead so a comment in
         # that paren uses the kind-aware fallback, not a stale sibling lead.
-        self.paren_last_lead_depth = -1
+        self.paren_next_lead_depth = -1
         self._push_parens(emit_text, lead_n, entry_depth, self.paren_depth)
         " " * lead_n + emit_text
 
