@@ -677,6 +677,11 @@ class Indenter:
                     self.cond_value_base = disp
 
             when "else" | "exception" | "or" | "private":
+                # A select alternative ends without popping the WHEN frame
+                # (only 'end' and 'when' pop it). 'or'/'else' splitting the
+                # select must clear it first so they align with 'select'.
+                while len(self.stack) > 0 and self.stack[-1] == WHEN:
+                    self.stack.pop()
                 if cont == 0:
                     disp = len(self.stack) - 1
 

@@ -1172,6 +1172,34 @@ def run_tests() -> int:
         "  end T;\n"
         "end P;\n"))
 
+    # 47. Regression: 'or' / 'else' inside a guarded select statement must align
+    #     with 'select', not be indented under the 'when' guard.  When a select
+    #     alternative body closes ('end Foo;' or just the last statement), the
+    #     WHEN frame pushed by 'when Guard =>' is not popped automatically —
+    #     'or'/'else' must pop it before computing disp.
+    cases.append((
+        "task body T is\n"
+        "begin\n"
+        "select\n"
+        "when G1 =>\n"
+        "accept E1;\n"
+        "or\n"
+        "when G2 =>\n"
+        "accept E2;\n"
+        "end select;\n"
+        "end T;\n",
+
+        "task body T is\n"
+        "begin\n"
+        "  select\n"
+        "    when G1 =>\n"
+        "      accept E1;\n"
+        "  or\n"
+        "    when G2 =>\n"
+        "      accept E2;\n"
+        "  end select;\n"
+        "end T;\n"))
+
     for pair in cases:
         let src: str = pair[0]
         let want: str = pair[1]
