@@ -531,8 +531,7 @@ class Indenter:
                 self.arrow_level = 0
             # Compute where the next code line in this paren will land, for use by
             # any comment that follows before it arrives.
-            let complete_assoc: bool = (code_s.find("=>") >= 0
-                    and not code_s.endswith("=>"))
+            let complete_assoc: bool = "=>" in code_s and not code_s.endswith("=>")
             if entry_top_kind >= 0 and code_s.endswith(","):
                 # Comma closes the current element; next is a fresh item.
                 var pnext: int = acol
