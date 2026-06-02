@@ -28,15 +28,15 @@ const INDENT_WIDTH: int = 2
 # become BLOCK at 'begin'; WHEN frames are popped specially at 'end').
 type Block_T is enum:
     PKG          # package / subprogram / task / protected / type spec opened by trailing 'is'
-    DECLARE_     # a declare block (block label or bare 'declare')
+    DECLARE      # a declare block (block label or bare 'declare')
     BLOCK        # a begin ... end region (statement part)
-    IF_          # if ... then
-    LOOP_        # [while/for] ... loop
-    CASE_        # case ... is
-    WHEN_        # when ... =>   (case alternative or exception handler)
-    RECORD_      # record  ... end record
-    SELECT_      # select ... end select
-    DO_          # accept ... do  /  return ... do  (extended return)
+    IF           # if ... then
+    LOOP         # [while/for] ... loop
+    CASE         # case ... is
+    WHEN         # when ... =>   (case alternative or exception handler)
+    RECORD       # record  ... end record
+    SELECT       # select ... end select
+    DO           # accept ... do  /  return ... do  (extended return)
 
 # Scanner state for string-literal tracking inside a single line.
 type Str_State_T is enum:
@@ -569,23 +569,23 @@ class Indenter:
                     # A multi-line if/elsif condition closed its parens and
                     # reached 'then' on the same line: end it like cond_state.
                     if self.cond_state == 1:
-                        self.stack.append(IF_)
+                        self.stack.append(IF)
                     self.cond_state = 0
                 else:
                     case plt:
                         when "is":
-                            self.stack.append(CASE_ if lw == "case" else PKG)
+                            self.stack.append(CASE if lw == "case" else PKG)
                         when "then":
-                            self.stack.append(IF_)
+                            self.stack.append(IF)
                         when "loop":
-                            self.stack.append(LOOP_)
+                            self.stack.append(LOOP)
                         when "record":
                             if lw != "null":
-                                self.stack.append(RECORD_)
+                                self.stack.append(RECORD)
                         when "select":
-                            self.stack.append(SELECT_)
+                            self.stack.append(SELECT)
                         when "do":
-                            self.stack.append(DO_)
+                            self.stack.append(DO)
                         when others:
                             pass
             return " " * lead + emit_text
@@ -601,7 +601,7 @@ class Indenter:
             if last == "then" or lw == "then":
                 disp = self.cond_base
                 if self.cond_state == 1:
-                    self.stack.append(IF_)
+                    self.stack.append(IF)
                 self.cond_state = 0
             elif is_term_continuation(code_s) and lw != "and" and lw != "or":
                 # A line that continues the previous term across the break (>=,
@@ -640,14 +640,14 @@ class Indenter:
 
         case lw:
             when "end":
-                while len(self.stack) > 0 and self.stack[-1] == WHEN_:
+                while len(self.stack) > 0 and self.stack[-1] == WHEN:
                     self.stack.pop()
                 if len(self.stack) > 0:
                     self.stack.pop()
                 disp = len(self.stack)
 
             when "begin":
-                if len(self.stack) > 0 and (self.stack[-1] == PKG or self.stack[-1] == DECLARE_):
+                if len(self.stack) > 0 and (self.stack[-1] == PKG or self.stack[-1] == DECLARE):
                     disp = len(self.stack) - 1
                     self.stack[-1] = BLOCK
                 else:
@@ -655,10 +655,10 @@ class Indenter:
                     self.stack.append(BLOCK)
 
             when "when":
-                if len(self.stack) > 0 and self.stack[-1] == WHEN_:
+                if len(self.stack) > 0 and self.stack[-1] == WHEN:
                     self.stack.pop()
                 disp = len(self.stack)
-                self.stack.append(WHEN_)
+                self.stack.append(WHEN)
 
             when "elsif":
                 disp = len(self.stack) - 1
@@ -691,20 +691,20 @@ class Indenter:
                             if lw == "function":
                                 self.pending_spec = True
                             else:
-                                self.stack.append(CASE_ if lw == "case" else PKG)
+                                self.stack.append(CASE if lw == "case" else PKG)
                         when "then":
-                            self.stack.append(IF_)
+                            self.stack.append(IF)
                         when "loop":
-                            self.stack.append(LOOP_)
+                            self.stack.append(LOOP)
                         when "record":
                             if lw != "null":
-                                self.stack.append(RECORD_)
+                                self.stack.append(RECORD)
                         when "select":
-                            self.stack.append(SELECT_)
+                            self.stack.append(SELECT)
                         when "do":
-                            self.stack.append(DO_)
+                            self.stack.append(DO)
                         when "declare":
-                            self.stack.append(DECLARE_)
+                            self.stack.append(DECLARE)
                         when others:
                             pass
                 if lw == "if" and last != "then":
@@ -746,7 +746,7 @@ class Indenter:
         if cont > 0 and is_term_continuation(code_s):
             lead_n = max(0, self.value_base + 1) * INDENT_WIDTH
         # A '|' continuation extends a 'when' choice list ('when A | B' split
-        # before the '=>'). The WHEN_ frame already provides the indent, so it
+        # before the '=>'). The WHEN frame already provides the indent, so it
         # aligns at the arm-body level (the frame depth) rather than taking the
         # 'cont' bonus on top, which would push it past the body.
         if cont > 0 and code_s.startswith("|"):
