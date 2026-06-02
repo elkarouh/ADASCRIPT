@@ -155,9 +155,7 @@ def stmt_incomplete(code_s: str) -> bool:
         return False
     let lt: str = last_word(code_s)
     # Block openers, plus the '[not] overriding' indicator on its own line.
-    if lt in ("is", "then", "loop", "record", "select", "do", "overriding"):
-        return False
-    result = True
+    return lt not in ("is", "then", "loop", "record", "select", "do", "overriding")
 
 
 def starts_with_operator(code_s: str) -> bool:
