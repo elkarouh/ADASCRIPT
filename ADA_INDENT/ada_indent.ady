@@ -145,8 +145,7 @@ def stmt_incomplete(code_s: str) -> bool:
     # which is a complete prefix — the labelled construct on the next line stays
     # at the label's level rather than indenting as a continuation. (':=' ends in
     # '=', not ':', so an unfinished assignment is unaffected.)
-    if (code_s == "" or code_s.endswith(";") or code_s.endswith("=>")
-            or code_s.endswith(":")):
+    if code_s == "" or code_s.endswith((";", "=>", ":")):
         return False
     let lw: str = lead_word(code_s)
     # 'separate (Parent)' is a complete compilation-unit prefix despite content.
@@ -206,9 +205,7 @@ def is_term_continuation(code_s: str) -> bool:
         return False
     if code_s.startswith("("):
         return True
-    if (not starts_with_operator(code_s)
-            or code_s.startswith(":=") or code_s.startswith("=>")
-            or code_s.startswith("|")):
+    if not starts_with_operator(code_s) or code_s.startswith((":=", "=>", "|")):
         return False
     let w: str = lead_word(code_s)
     if w in ("and", "or"):
