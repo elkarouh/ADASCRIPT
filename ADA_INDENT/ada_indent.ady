@@ -760,14 +760,11 @@ class Indenter:
         # _push_parens so the inner items align to this line's '('.
         if cont > 0 and is_term_continuation(code_s):
             lead_n = max(0, self.value_base + 1) * INDENT_WIDTH
-        # A '|' continuation extends a 'when' choice list ('when A | B' split
-        # before the '=>'). The '|' aligns with the 'when' keyword, which sits
-        # one level below the WHEN frame (disp - 1). Outside a WHEN frame '|'
-        # is a membership-test alternative ('X in A | B') and keeps the plain
-        # continuation level.
+        # A '|' continuation extends a 'when' choice list or a membership test.
+        # It aligns at the arm-body level (disp, one indent width above 'when'),
+        # which is the GNAT style: '|' and the arm body share the same column.
         if cont > 0 and code_s.startswith("|"):
-            let bar_disp: int = (disp - 1) if (len(self.stack) > 0 and self.stack[-1] == WHEN) else disp
-            lead_n = max(0, bar_disp) * INDENT_WIDTH
+            lead_n = max(0, disp) * INDENT_WIDTH
         # Standalone block-opener keywords that terminate a multi-line header
         # (e.g. 'for C in expr\n  .. expr\nloop', 'task type T with ... is')
         # are not value continuations — snap back to the declaration level.
