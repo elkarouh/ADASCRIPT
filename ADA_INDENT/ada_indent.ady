@@ -21,7 +21,7 @@
 # both Python and Nim. The CLI uses the bash-style argument primitives
 # ($1, $#, quit) so argument handling is target-agnostic.
 
-const INDENT_WIDTH: int = 2
+const INDENT_WIDTH: Natural = 2
 
 # The indentation-significant constructs. A frame is pushed for each open
 # block; the kind is only consulted where it changes behaviour (PKG/DECLARE
@@ -61,14 +61,14 @@ def pairwise(s: str) -> (char, char):
         yield (s[i], s[i + 1])
 
 
-def skip_whitespace(text: str, i: int) -> int:
+def skip_whitespace(text: str, i: Natural) -> Natural:
     let n: int = len(text)
     while i < n and text[i] == ' ':
         i += 1
     return i
 
 
-def skip_literal_string(text: str, i: int) -> int:
+def skip_literal_string(text: str, i: Natural) -> Natural:
     """Skip a double-quoted string starting at i (the opening quote).
     Returns the index just past the closing quote."""
     let n: int = len(text)
@@ -109,7 +109,7 @@ def code_chars(s: str) -> char:
     is NOT followed by a closing quote is an attribute tick (X'Image) and is left
     alone — the letter and everything after it are yielded normally.
     """
-    var i: int = 0
+    var i: Natural = 0
     let n: int = len(s)
     while i < n:
         let c: char = s[i]
@@ -240,7 +240,7 @@ def is_term_continuation(code_s: str) -> bool:
     return w != "xor"
 
 
-def scan_parens(text: str, base_depth: int, base_col: int) -> [](int, int, Paren_Kind_T):
+def scan_parens(text: str, base_depth: Natural, base_col: Natural) -> [](int, int, Paren_Kind_T):
     """Find every '(' opened in a line and how its continuations should align.
 
     Returns one tuple (paren_level, align_col, kind) per opening parenthesis:
@@ -256,7 +256,7 @@ def scan_parens(text: str, base_depth: int, base_col: int) -> [](int, int, Paren
     """
     var openers: [](int, int, Paren_Kind_T) = []
     var depth: int = base_depth
-    var i: int = 0
+    var i: Natural = 0
     let n: int = len(text)
     while i < n:
         let ch: char = text[i]
@@ -266,7 +266,7 @@ def scan_parens(text: str, base_depth: int, base_col: int) -> [](int, int, Paren
             i += 3                               # character literal: skip 'x' whole
         elif ch == '(':
             depth += 1
-            var j: int = i + 1
+            var j: Natural = i + 1
             j = skip_whitespace(text, j)
             let kw: str = lead_word(text[j:])
             if kw == "if":
@@ -299,20 +299,20 @@ def spaces(levels: int) -> str:
 
 class Indenter:
     stack: []Block_T = []
-    paren_depth: int = 0
+    paren_depth: Natural = 0
     pending_spec: bool = False   # a 'function ... is' header whose body kind is not yet known
-    cond_state: int = 0          # 1 = inside multi-line 'if' condition, 2 = 'elsif'
-    cond_base: int = 0           # display depth of the opening if/elsif
-    cond_value_base: int = 0     # display level of the line holding the current condition term
+    cond_state: Natural = 0      # 1 = inside multi-line 'if' condition, 2 = 'elsif'
+    cond_base: Natural = 0       # display depth of the opening if/elsif
+    cond_value_base: Natural = 0 # display level of the line holding the current condition term
     in_cont: bool = False        # previous line was an unterminated statement/declaration
-    value_base: int = 0          # display level where the current statement's value expression starts
+    value_base: Natural = 0      # display level where the current statement's value expression starts
     paren_stack: [](int, int, Paren_Kind_T) = []  # (paren_level, align_col, kind) for every open '('
     paren_cont: bool = False    # prev line within plain paren ended without ',' (arg-list continuation)
-    arrow_level: int = 0        # innermost paren level with an active '=>' named-value spill (0 = none)
-    paren_next_lead: int = 0         # column where the next code line in this paren will land
-    paren_next_lead_depth: int = -1  # paren_depth that paren_next_lead applies to (-1 = none)
+    arrow_level: Natural = 0    # innermost paren level with an active '=>' named-value spill (0 = none)
+    paren_next_lead: Natural = 0         # column where the next code line in this paren will land
+    paren_next_lead_depth: int = -1      # paren_depth that paren_next_lead applies to (-1 = none)
 
-    def _push_parens(self, text: str, base_col: int, base_depth: int, new_depth: int):
+    def _push_parens(self, text: str, base_col: Natural, base_depth: Natural, new_depth: Natural):
         """Record parentheses opened on this line and drop any now closed."""
         for opener in scan_parens(text, base_depth, base_col):
             self.paren_stack.append(opener)
