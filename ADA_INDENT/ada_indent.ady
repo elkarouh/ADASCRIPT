@@ -458,13 +458,13 @@ class Indenter:
                 acol = top[1]
                 entry_top_level = top[0]
                 entry_top_kind = top[2]
-                if top[2] != PLAIN and code_s.startswith(")"):
+                if entry_top_kind != PLAIN and code_s.startswith(")"):
                     # A line that begins by closing an '(if'/'(case'/'(for'
                     # expression aligns the ')' under the opening '(' — one column
                     # left of the keyword that acol points at — rather than taking
                     # the body/condition continuation indent.
                     lead = max(0, acol - 1)
-                elif top[2] == IF_EXPR:
+                elif entry_top_kind == IF_EXPR:
                     if lw == "then" or lw == "else" or lw == "elsif":
                         lead = acol
                     else:
@@ -474,7 +474,7 @@ class Indenter:
                         # width of 'if ', to stay consistent with the case-expr
                         # arms below and the if-statement condition continuation.
                         lead = acol + INDENT_WIDTH
-                elif top[2] == CASE_EXPR:
+                elif entry_top_kind == CASE_EXPR:
                     if lw == "when":
                         lead = acol + INDENT_WIDTH
                     else:
@@ -489,7 +489,7 @@ class Indenter:
                         if starts_with_operator(code_s) and not code_s.startswith("=>"):
                             lead += INDENT_WIDTH
                             was_cont = True
-                elif top[2] == FOR_EXPR:
+                elif entry_top_kind == FOR_EXPR:
                     # '(for some/all … => predicate' (a quantified expression) or
                     # '(for I in … => value' (an iterated component): the body
                     # after the iterator sits one level past the 'for', mirroring
