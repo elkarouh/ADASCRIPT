@@ -1,18 +1,19 @@
 ;;; adascript-mode.el --- Major mode for Adascript (.ady) files -*- lexical-binding: t; -*-
 
 ;; Author: Adascript Project
-;; Version: 0.1.0
-;; Keywords: languages ada python
-;; Package-Requires: ((emacs "28.1") (python "0.28"))
+;; Version: 0.2.0
+;; Keywords: languages ada nim
+;; Package-Requires: ((emacs "28.1") (nim-mode "0.4.1"))
 ;; URL: https://github.com/elkarouh/adascript
 
 ;;; Commentary:
 
 ;; Major mode for Adascript, an Ada-inspired statically-typed superset of Python 3.
 ;;
-;; Derived from `python-mode', this mode adds:
+;; Derived from `nim-mode', this mode adds:
 ;;   - Syntax highlighting for type declarations, tick attributes, and Ada keywords
-;;   - eglot integration (Emacs 29+ built-in LSP client)  — zero extra packages
+;;   - Single-quote strings and f-strings (Python-style, not native to Nim)
+;;   - eglot integration (Emacs 29+ built-in LSP client) — zero extra packages
 ;;   - lsp-mode integration (opt-in, see `adascript-lsp-mode-auto-enable')
 ;;
 ;; Quick setup (init.el):
@@ -25,7 +26,7 @@
 ;;   (use-package adascript-mode
 ;;     :load-path "/path/to/ADASCRIPT/LSP/emacs"
 ;;     :custom
-;;     (adascript-python-command "python3.13")
+;;     (adascript-python-command "python3")
 ;;     (adascript-server-path    "/path/to/ADASCRIPT/LSP/adascript_ls.py"))
 ;;
 ;; eglot (Emacs 29+): open any .ady file, then M-x eglot.
@@ -37,7 +38,7 @@
 ;;; Code:
 
 (require 'rx)
-(require 'python)
+(require 'nim-mode)
 (require 'cl-lib)
 
 ;; ---------------------------------------------------------------------------
@@ -89,65 +90,181 @@ or add `(add-hook \\='adascript-mode-hook \\=#\\='eglot-ensure)' to your init."
   "Face for the attribute part of a tick attribute (First in `Color\\'First')."
   :group 'adascript)
 
+(defface adascript-shell-face
+  '((t :inherit font-lock-preprocessor-face))
+  "Face for shell: and shellLines: keywords."
+  :group 'adascript)
+
+;; --- Regexps ---
+
 (defconst adascript--type-decl-re
   (rx bol (* space)
       (group "type") (+ space)
       (group (+ (any word "_")))
-      (* (any space "[" "]" "," word "_"))   ; optional discriminant params
+      (* (any space "[" "]" "," word "_"))
       (+ space)
       (group (or "is" "=")) (+ space)
       (group (or "enum" "record" "tuple")))
   "Regex matching a type declaration header: type NAME ... is|= enum|record|tuple.")
 
+(defconst adascript--type-subrange-re
+  (rx bol (* space)
+      (group "type") (+ space)
+      (group (+ (any word "_")))
+      (+ space)
+      (group "is") (+ space)
+      (group (or (seq (+ (any digit "_")) (* space) (or ".." "..<"))
+                 (seq (+ (any word "_")) (+ space) "range"))))
+  "Regex matching subrange: type SmallInt is 0 .. 255 or type Age is int range 0..100.")
+
 (defconst adascript--tick-re
-  ;; NAME'ATTR where NAME and ATTR are word sequences.
-  ;; Placed after strings so 'hello' is not mis-matched.
   (rx (group (+ (any word "_"))) "'" (group (+ (any word "_"))))
   "Regex matching tick attributes: Name'Attr.")
 
-(defconst adascript--ada-keyword-re
+(defconst adascript--var-decl-re
   (rx symbol-start
-      (or "when" "is" "enum" "record" "tuple" "type")
+      (group (or "var" "let" "const"))
       symbol-end)
-  "Adascript-specific keywords not already highlighted by python-mode.")
+  "Regex matching variable declaration keywords.")
+
+(defconst adascript--keyword-re
+  (rx symbol-start
+      (or "when" "others" "is" "enum" "record" "tuple" "type"
+          "case" "nimport" "shell" "shellLines"
+          "def" "class" "if" "elif" "else" "for" "while"
+          "return" "yield" "import" "from" "as" "in"
+          "not" "and" "or" "pass" "break" "continue"
+          "try" "except" "finally" "raise" "with"
+          "assert" "del" "global" "nonlocal" "lambda")
+      symbol-end)
+  "Adascript keywords (Ada + Python keywords not covered by nim-mode).")
+
+(defconst adascript--shell-keyword-re
+  (rx symbol-start
+      (group (or "shell" "shellLines"))
+      (* space) ":")
+  "Regex matching shell: and shellLines: constructs.")
+
+(defconst adascript--range-op-re
+  (rx (group (or "..<" "..")))
+  "Regex matching range operators.")
+
+(defconst adascript--builtin-type-re
+  (rx symbol-start
+      (group (or "int" "float" "str" "bool" "Natural" "Positive"
+                 "Byte" "Int8" "Int16" "Int32" "Int64"
+                 "UInt8" "UInt16" "UInt32" "UInt64"
+                 "Float32" "Float64" "char"
+                 "list" "dict" "set" "tuple" "None" "True" "False"))
+      symbol-end)
+  "Regex matching built-in Adascript types and constants.")
+
+(defconst adascript--decorator-re
+  (rx bol (* space) (group "@" (+ (any word "_"))))
+  "Regex matching decorators.")
+
+(defconst adascript--def-re
+  (rx symbol-start
+      (group (or "def" "class"))
+      (+ space)
+      (group (+ (any word "_"))))
+  "Regex matching def/class NAME.")
+
+(defconst adascript--builtin-fn-re
+  (rx symbol-start
+      (group (or "print" "len" "range" "enumerate" "zip" "map" "filter"
+                 "sorted" "reversed" "any" "all" "sum" "min" "max"
+                 "isinstance" "issubclass" "hasattr" "getattr" "setattr"
+                 "input" "open" "type" "super" "property"
+                 "staticmethod" "classmethod" "abs" "round"
+                 "int" "float" "str" "bool" "list" "dict" "set" "tuple"))
+      "(")
+  "Regex matching Python builtin function calls.")
 
 (defvar adascript-font-lock-keywords
   `(
     ;; 1. Type declarations: type NAME is|= enum|record|tuple
     (,adascript--type-decl-re
-     (1 font-lock-keyword-face)          ; "type"
-     (2 'adascript-type-name-face)       ; NAME
-     (3 font-lock-keyword-face)          ; "is" / "="
-     (4 font-lock-keyword-face))         ; "enum" / "record" / "tuple"
+     (1 font-lock-keyword-face)
+     (2 'adascript-type-name-face)
+     (3 font-lock-keyword-face)
+     (4 font-lock-keyword-face))
 
-    ;; 2. Tick attributes: Color'First
+    ;; 2. Subrange type declarations
+    (,adascript--type-subrange-re
+     (1 font-lock-keyword-face)
+     (2 'adascript-type-name-face)
+     (3 font-lock-keyword-face))
+
+    ;; 3. def/class NAME
+    (,adascript--def-re
+     (1 font-lock-keyword-face)
+     (2 font-lock-function-name-face))
+
+    ;; 4. shell:/shellLines: constructs
+    (,adascript--shell-keyword-re
+     (1 'adascript-shell-face))
+
+    ;; 5. Tick attributes: Color'First
     (,adascript--tick-re
-     (1 'adascript-tick-type-face)       ; Color
-     (2 'adascript-tick-attr-face))      ; First
+     (1 'adascript-tick-type-face)
+     (2 'adascript-tick-attr-face))
 
-    ;; 3. Ada/Adascript keywords
-    (,adascript--ada-keyword-re . font-lock-keyword-face))
+    ;; 6. var/let/const declarations
+    (,adascript--var-decl-re (1 font-lock-keyword-face))
+
+    ;; 7. Range operators .. and ..<
+    (,adascript--range-op-re (1 font-lock-operator-face))
+
+    ;; 8. Built-in types
+    (,adascript--builtin-type-re (1 font-lock-type-face))
+
+    ;; 9. Builtin function calls
+    (,adascript--builtin-fn-re (1 font-lock-builtin-face))
+
+    ;; 10. Decorators (@virtual etc.)
+    (,adascript--decorator-re (1 font-lock-preprocessor-face))
+
+    ;; 11. Keywords
+    (,adascript--keyword-re . font-lock-keyword-face))
   "Additional font-lock keywords for `adascript-mode'.")
 
 ;; ---------------------------------------------------------------------------
-;; Syntax table tweak
+;; Syntax table — extend nim-mode's to support single-quote strings
 ;; ---------------------------------------------------------------------------
 
 (defvar adascript-mode-syntax-table
-  (let ((st (copy-syntax-table python-mode-syntax-table)))
-    ;; Treat ' as punctuation so that  Color'First  is not lexed as a string.
-    ;; Single-char string literals like 'x' still work via the font-lock
-    ;; string rules, but multi-word tick sequences won't be confused.
-    (modify-syntax-entry ?\' "." st)
+  (let ((st (make-syntax-table nim-mode-syntax-table)))
+    ;; Make ' a string delimiter so 'hello' is highlighted as a string.
+    ;; Tick attributes (Color'First) are handled via syntax-propertize.
+    (modify-syntax-entry ?\' "\"" st)
     st)
   "Syntax table for `adascript-mode'.")
+
+;; ---------------------------------------------------------------------------
+;; Syntax propertize — handle tick attributes vs. string quotes
+;; ---------------------------------------------------------------------------
+
+(defun adascript--syntax-propertize (start end)
+  "Mark tick apostrophes (WORD'WORD) as punctuation.
+Runs after nim-mode's syntax-propertize.  Skips ticks inside
+double-quoted strings (delimiter char 34) to avoid breaking them."
+  (goto-char start)
+  (while (re-search-forward "\\([[:word:]_]\\)\\('\\)\\([[:word:]_]\\)" end t)
+    (let* ((tick-pos (match-beginning 2))
+           (state (parse-partial-sexp (point-min) tick-pos))
+           (str-delim (nth 3 state)))
+      (when (not (eq str-delim 34))
+        (put-text-property tick-pos (1+ tick-pos)
+                           'syntax-table '(1 . nil)))))
+  (syntax-ppss-flush-cache start))
 
 ;; ---------------------------------------------------------------------------
 ;; Mode definition
 ;; ---------------------------------------------------------------------------
 
 ;;;###autoload
-(define-derived-mode adascript-mode python-mode "Adascript"
+(define-derived-mode adascript-mode nim-mode "Adascript"
   "Major mode for Adascript (.ady) files.
 
 Adascript is a statically-typed, Ada-inspired superset of Python 3.
@@ -165,17 +282,27 @@ Every valid Python 3 file is valid Adascript.  Extensions include:
 
   n: int = Color'Pos(Color'First)           -- tick attributes
 
-Indentation, string syntax, and comment handling are inherited from
-`python-mode'.  This mode adds highlighting for the constructs above
-and wires the Adascript language server via eglot or lsp-mode.
+Indentation and comment handling are inherited from `nim-mode'.
+This mode adds highlighting for the constructs above plus
+single-quote strings, and wires the Adascript language server
+via eglot or lsp-mode.
 
 \\{adascript-mode-map}"
   :syntax-table adascript-mode-syntax-table
-  ;; Prepend so Adascript rules take priority over Python's.
+  ;; Prepend so Adascript rules take priority over Nim's.
   (font-lock-add-keywords nil adascript-font-lock-keywords 'set)
   (setq-local comment-start "# ")
   (setq-local comment-start-skip "#+\\s-*")
-  ;; Reuse Python's indentation engine (offside rule).
+  ;; Chain our tick-handling after nim-mode's syntax-propertize.
+  (let ((nim-spf syntax-propertize-function))
+    (setq-local syntax-propertize-function
+                (lambda (start end)
+                  (when nim-spf (funcall nim-spf start end))
+                  (adascript--syntax-propertize start end))))
+  ;; Force re-propertization since nim-mode may have already run
+  ;; syntax-propertize during mode setup.
+  (setq-local syntax-propertize--done (point-min))
+  (syntax-propertize (point-max))
   (setq-local indent-tabs-mode nil)
   (when adascript-lsp-mode-auto-enable
     (when (fboundp 'lsp-deferred)
