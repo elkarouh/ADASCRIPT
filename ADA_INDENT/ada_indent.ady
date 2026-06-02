@@ -248,23 +248,12 @@ def scan_parens(text: str, base_depth: int, base_col: int) -> [](int, int, int):
             var j: int = i + 1
             while j < n and text[j] == ' ':
                 j += 1
-            if (j + 1 < n
-                    and (text[j] == 'i' or text[j] == 'I')
-                    and (text[j + 1] == 'f' or text[j + 1] == 'F')
-                    and (j + 2 >= n or not (text[j + 2].isalnum() or text[j + 2] == '_'))):
+            let kw: str = lead_word(text[j:])
+            if kw == "if":
                 openers.append((depth, base_col + j, 1))
-            elif (j + 3 < n
-                    and (text[j] == 'c' or text[j] == 'C')
-                    and (text[j + 1] == 'a' or text[j + 1] == 'A')
-                    and (text[j + 2] == 's' or text[j + 2] == 'S')
-                    and (text[j + 3] == 'e' or text[j + 3] == 'E')
-                    and (j + 4 >= n or not (text[j + 4].isalnum() or text[j + 4] == '_'))):
+            elif kw == "case":
                 openers.append((depth, base_col + j, 2))
-            elif (j + 2 < n
-                    and (text[j] == 'f' or text[j] == 'F')
-                    and (text[j + 1] == 'o' or text[j + 1] == 'O')
-                    and (text[j + 2] == 'r' or text[j + 2] == 'R')
-                    and (j + 3 >= n or not (text[j + 3].isalnum() or text[j + 3] == '_'))):
+            elif kw == "for":
                 openers.append((depth, base_col + j, 3))
             elif j < n:
                 openers.append((depth, base_col + j, 0))
