@@ -302,6 +302,8 @@ class Indenter:
     paren_last_lead: int = 0    # lead column of the last code line emitted inside a paren
     paren_last_lead_depth: int = 0  # paren_depth that paren_last_lead applies to
     paren_last_was_cont: bool = False  # that last paren line took the operator/term-continuation extra indent
+    paren_last_ended_comma: bool = False  # that last paren line ended with ',' (a list element closed)
+    paren_last_complete_assoc: bool = False  # that last paren line is a complete named association ('X => Y' on one line)
 
     def _push_parens(self, text: str, base_col: int, base_depth: int, new_depth: int):
         """Record parentheses opened on this line and drop any now closed."""
@@ -349,16 +351,23 @@ class Indenter:
             #              term continuation — not a new item — follows.
             if self.paren_depth > 0 and len(self.paren_stack) > 0:
                 let ptop: (int, int, int) = self.paren_stack[-1]
-                if self.paren_last_lead_depth == self.paren_depth:
-                    # Align with the previous code line in this paren. But when
-                    # that line was a non-continuation (an arm-body head or plain
-                    # item, not itself an operator/term continuation) and its item
-                    # is unfinished (paren_cont), the next line is an operator
-                    # continuation one level deeper — so anticipate it, except in
-                    # an '(if' expression where then/else/elsif stay structural.
+                # Align with the previous code line in this paren — but only when
+                # that line did NOT close a list element with a comma. A comma
+                # closes the element, so the next line is a fresh element at the
+                # item column; fall through to the kind-aware fallback for it.
+                if (self.paren_last_lead_depth == self.paren_depth
+                        and not self.paren_last_ended_comma):
+                    # When the previous line was a non-continuation (an arm-body
+                    # head or plain bare item, not itself an operator/term
+                    # continuation, and not a complete 'X => Y' named association)
+                    # and its item is unfinished (paren_cont), the next line is an
+                    # operator continuation one level deeper — so anticipate it,
+                    # except in an '(if' expression where then/else/elsif stay
+                    # structural.
                     var plead: int = self.paren_last_lead
                     if (ptop[2] != 1 and self.paren_cont
-                            and not self.paren_last_was_cont):
+                            and not self.paren_last_was_cont
+                            and not self.paren_last_complete_assoc):
                         plead += INDENT_WIDTH
                     return " " * plead + emit_text
                 var pfall: int = ptop[1]
@@ -539,6 +548,14 @@ class Indenter:
             self.paren_last_lead = lead
             self.paren_last_lead_depth = entry_depth
             self.paren_last_was_cont = was_cont
+            self.paren_last_ended_comma = code_s.endswith(",")
+            # A complete named association ('X => Y' fully on this line) is a
+            # finished list element, not an unfinished expression: a comment after
+            # it stays at the item column rather than anticipating a continuation.
+            # A line ending in '=>' (value spilled to the next line) is NOT
+            # complete, so it is excluded — the spilled value still follows.
+            self.paren_last_complete_assoc = (code_s.find("=>") >= 0
+                    and not code_s.endswith("=>"))
             self._push_parens(emit_text, lead, entry_depth, self.paren_depth)
             # A line that closes back out of all parentheses and ends in a block
             # opener opens that block.
@@ -1753,6 +1770,58 @@ def run_tests() -> int:
         "         -- middle note\n"
         "         or else Third_Cond,\n"
         "     when others => False);\n"))
+
+    # 42. A trailing comment after the LAST argument of a call (a complete named
+    #     association 'X => Y' with no comma, so paren_cont is set) stays at the
+    #     argument column — the association is a finished list element, not an
+    #     unfinished expression, so the comment must NOT anticipate an operator
+    #     continuation. The lone ')' that closes the list sits one column left.
+    cases.append((
+        "procedure P is\n"
+        "begin\n"
+        "Write (Bin_File => F,\n"
+        "Query => Q,\n"
+        "Validate => False\n"
+        "-- the file stays open for an hour\n"
+        "-- no need to validate now\n"
+        ");\n"
+        "end P;\n",
+
+        "procedure P is\n"
+        "begin\n"
+        "  Write (Bin_File => F,\n"
+        "         Query => Q,\n"
+        "         Validate => False\n"
+        "         -- the file stays open for an hour\n"
+        "         -- no need to validate now\n"
+        "         );\n"
+        "end P;\n"))
+
+    # 43. A comment between two arguments, sitting after an argument whose value
+    #     spilled onto an operator-continuation line that ENDED WITH A COMMA: the
+    #     comma closes that argument, so the comment belongs with the next
+    #     argument at the item column, not at the deeper operator-continuation
+    #     level of the line just above it.
+    cases.append((
+        "procedure P is\n"
+        "begin\n"
+        "Make (M => M,\n"
+        "Differ => A\n"
+        "or else B = U,\n"
+        "-- a note\n"
+        "-- a second note\n"
+        "Ctrl => C);\n"
+        "end P;\n",
+
+        "procedure P is\n"
+        "begin\n"
+        "  Make (M => M,\n"
+        "        Differ => A\n"
+        "          or else B = U,\n"
+        "        -- a note\n"
+        "        -- a second note\n"
+        "        Ctrl => C);\n"
+        "end P;\n"))
 
     for pair in cases:
         let src: str = pair[0]
