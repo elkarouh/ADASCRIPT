@@ -39,9 +39,9 @@ type Block_T is enum:
     DO_          # accept ... do  /  return ... do  (extended return)
 
 # Scanner state for string-literal tracking inside a single line.
-type Scan_T is enum:
-    CODE        # outside any string literal
-    STRING_LIT  # inside a double-quoted string literal
+type Str_State_T is enum:
+    CODE               # outside any string literal
+    INSIDE_STRING_LIT  # inside a double-quoted string literal
 
 
 # ---------------------------------------------------------------------------
@@ -60,7 +60,7 @@ def strip_code(line: str) -> str:
     that a '--' inside a string is not mistaken for a comment. Character
     literals and doubled-quote escapes are not modelled (rare in practice).
     """
-    var state: Scan_T = CODE
+    var state: Str_State_T = CODE
     for c, next_c in pairwise(line + " "):
         case state:
             when CODE:
@@ -68,8 +68,8 @@ def strip_code(line: str) -> str:
                     break
                 result += c
                 if c == '"':
-                    state = STRING_LIT
-            when STRING_LIT:
+                    state = INSIDE_STRING_LIT
+            when INSIDE_STRING_LIT:
                 result += c
                 if c == '"':
                     state = CODE
