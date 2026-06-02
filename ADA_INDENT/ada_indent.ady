@@ -132,10 +132,9 @@ def paren_delta(line: str) -> int:
 def lead_word(code: str) -> str:
     """Lowercased leading identifier of a (comment-stripped) line, or ''."""
     for ch in code.strip().lower():
-        if ch.isalpha() or ch == "_":
-            result += ch
-        else:
+        if not ch.isalpha() and ch != "_":
             break
+        result += ch
 
 
 def last_word(code: str) -> str:
