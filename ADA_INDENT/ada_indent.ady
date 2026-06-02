@@ -28,6 +28,7 @@ const INDENT_WIDTH: Natural = 2
 # become BLOCK at 'begin'; WHEN frames are popped specially at 'end').
 type Block_T is enum:
     PKG          # package / subprogram / task / protected / type spec opened by trailing 'is'
+    TYPE_HEADER  # 'type T is' on its own line — pairs with RECORD below it
     DECLARE      # a declare block (block label or bare 'declare')
     BLOCK        # a begin ... end region (statement part)
     IF           # if ... then
@@ -645,6 +646,13 @@ class Indenter:
                 if len(self.stack) > 0:
                     self.stack.pop()
                 disp = len(self.stack)
+                # 'type T is' on its own line pushes TYPE_HEADER, then the
+                # following 'record' line pushes RECORD. 'end record' closes
+                # only RECORD; pop the paired TYPE_HEADER so that the lines
+                # AFTER this one resume at the enclosing scope level.
+                # disp is set first so 'end record' itself aligns with 'record'.
+                if last_word(code_s) == "record" and len(self.stack) > 0 and self.stack[-1] == TYPE_HEADER:
+                    self.stack.pop()
 
             when "begin":
                 if len(self.stack) > 0 and (self.stack[-1] == PKG or self.stack[-1] == DECLARE):
@@ -690,6 +698,8 @@ class Indenter:
                             # else ending in 'is' opens a block immediately.
                             if lw == "function":
                                 self.pending_spec = True
+                            elif lw == "type":
+                                self.stack.append(TYPE_HEADER)
                             else:
                                 self.stack.append(CASE if lw == "case" else PKG)
                         when "then":
