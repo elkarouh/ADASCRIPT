@@ -527,7 +527,7 @@ def run_tests() -> int:
         "end P;\n"))
 
     # 21. A 'when' choice list split before its '=>': the '|' continuation
-    #     aligns at the arm-body level (the WHEN_ frame already provides the
+    #     aligns at the arm-body level (the WHEN frame already provides the
     #     indent), not one level deeper.
     cases.append((
         "procedure P is\n"
