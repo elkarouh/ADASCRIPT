@@ -357,14 +357,15 @@ class Indenter:
                     pfall += INDENT_WIDTH
                 return " " * pfall + emit_text
             # Outside parentheses a comment is indented like the line that would
-            # follow it. When that next line is a continuation — the current
-            # statement is unfinished (in_cont) or we are inside a multi-line
-            # if/elsif condition — the comment takes the continuation indent
-            # (aligned with the term/connective the next line would join), one
-            # level past where the value (or condition term) began. Otherwise the
-            # next line is a fresh instruction at the current block level.
+            # follow it. Inside a multi-line if/elsif condition it aligns with the
+            # current condition-term line — the connective (and then / or else) or
+            # opener it documents — at cond_value_base. When an unfinished value
+            # statement (in_cont) is interrupted, the next line is a continuation,
+            # so the comment takes that continuation indent, one level past where
+            # the value began. Otherwise the next line is a fresh instruction at
+            # the current block level.
             if self.cond_state > 0:
-                return " " * (max(0, self.cond_value_base + 1) * INDENT_WIDTH) + emit_text
+                return " " * (max(0, self.cond_value_base) * INDENT_WIDTH) + emit_text
             if self.in_cont:
                 return " " * (max(0, self.value_base + 1) * INDENT_WIDTH) + emit_text
             # After a deferred 'function ... is' header the next instruction is
@@ -1160,9 +1161,9 @@ def run_tests() -> int:
     # 19. Multi-line if condition: 'and then' connectives sit at the base
     #     continuation level, but a line starting with another operator ('>=')
     #     continues the previous term across the break and nests one level
-    #     deeper. A comment between the lines stays transparent; the line that
-    #     would follow it is a condition continuation, so the comment takes that
-    #     continuation indent — aligned with the '>=' term it precedes.
+    #     deeper. A comment between the lines stays transparent and aligns with
+    #     the current condition-term line — the 'and then' connective clause it
+    #     documents — not the deeper '>=' term continuation.
     cases.append((
         "procedure P is\n"
         "begin\n"
@@ -1179,7 +1180,7 @@ def run_tests() -> int:
         "begin\n"
         "  if A\n"
         "    and then Take_Off_Time (X)\n"
-        "      -- a comment\n"
+        "    -- a comment\n"
         "      >= Take_Off_Time (Y)\n"
         "  then\n"
         "    null;\n"
@@ -1587,6 +1588,37 @@ def run_tests() -> int:
         "        -- note two\n"
         "        else (A => R,\n"
         "              B => S));\n"
+        "end P;\n"))
+
+    # 38. A comment block after a complete connective clause in a multi-line
+    #     elsif condition, sitting just before 'then': it aligns with the 'or else'
+    #     clause it documents (the current condition-term level, one in from the
+    #     elsif), not one level deeper. 'then' still snaps back to the elsif level.
+    cases.append((
+        "procedure P is\n"
+        "begin\n"
+        "if X then\n"
+        "null;\n"
+        "elsif not A (M)\n"
+        "or else not B\n"
+        "-- note one\n"
+        "-- note two\n"
+        "then\n"
+        "null;\n"
+        "end if;\n"
+        "end P;\n",
+
+        "procedure P is\n"
+        "begin\n"
+        "  if X then\n"
+        "    null;\n"
+        "  elsif not A (M)\n"
+        "    or else not B\n"
+        "    -- note one\n"
+        "    -- note two\n"
+        "  then\n"
+        "    null;\n"
+        "  end if;\n"
         "end P;\n"))
 
     for pair in cases:
