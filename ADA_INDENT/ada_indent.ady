@@ -358,14 +358,19 @@ class Indenter:
                 return " " * pfall + emit_text
             # Outside parentheses a comment is indented like the line that would
             # follow it. Inside a multi-line if/elsif condition it aligns with the
-            # current condition-term line — the connective (and then / or else) or
-            # opener it documents — at cond_value_base. When an unfinished value
+            # connective (and then / or else) level, which is cond_base + 1.
+            # cond_value_base is initialised to cond_base and only bumped to
+            # cond_base + 1 once the first connective is processed, so use
+            # max(cond_value_base, cond_base + 1) to get the right level even
+            # when the comment immediately follows the 'if'/'elsif' opener before
+            # any 'and then'/'or else' has been seen. When an unfinished value
             # statement (in_cont) is interrupted, the next line is a continuation,
             # so the comment takes that continuation indent, one level past where
             # the value began. Otherwise the next line is a fresh instruction at
             # the current block level.
             if self.cond_state > 0:
-                return " " * (max(0, self.cond_value_base) * INDENT_WIDTH) + emit_text
+                let clvl: int = max(self.cond_value_base, self.cond_base + 1)
+                return " " * (max(0, clvl) * INDENT_WIDTH) + emit_text
             if self.in_cont:
                 return " " * (max(0, self.value_base + 1) * INDENT_WIDTH) + emit_text
             # After a deferred 'function ... is' header the next instruction is
