@@ -301,6 +301,7 @@ class Indenter:
     arrow_level: int = 0        # innermost paren level with an active '=>' named-value spill (0 = none)
     paren_last_lead: int = 0    # lead column of the last code line emitted inside a paren
     paren_last_lead_depth: int = 0  # paren_depth that paren_last_lead applies to
+    paren_last_was_cont: bool = False  # that last paren line took the operator/term-continuation extra indent
 
     def _push_parens(self, text: str, base_col: int, base_depth: int, new_depth: int):
         """Record parentheses opened on this line and drop any now closed."""
@@ -349,7 +350,17 @@ class Indenter:
             if self.paren_depth > 0 and len(self.paren_stack) > 0:
                 let ptop: (int, int, int) = self.paren_stack[-1]
                 if self.paren_last_lead_depth == self.paren_depth:
-                    return " " * self.paren_last_lead + emit_text
+                    # Align with the previous code line in this paren. But when
+                    # that line was a non-continuation (an arm-body head or plain
+                    # item, not itself an operator/term continuation) and its item
+                    # is unfinished (paren_cont), the next line is an operator
+                    # continuation one level deeper — so anticipate it, except in
+                    # an '(if' expression where then/else/elsif stay structural.
+                    var plead: int = self.paren_last_lead
+                    if (ptop[2] != 1 and self.paren_cont
+                            and not self.paren_last_was_cont):
+                        plead += INDENT_WIDTH
+                    return " " * plead + emit_text
                 var pfall: int = ptop[1]
                 if ptop[2] == 2 or ptop[2] == 3:
                     pfall += INDENT_WIDTH
@@ -433,6 +444,12 @@ class Indenter:
             var lead: int = max(0, len(self.stack) + cont) * INDENT_WIDTH
             var entry_top_level: int = 0
             var entry_top_kind: int = -1
+            # Whether this line took the operator/term-continuation extra indent.
+            # A comment following a NON-continuation line (an arm-body head or a
+            # plain item) whose item is unfinished must anticipate the operator
+            # continuation that comes next, which sits one level deeper; a comment
+            # after a line that already took that extra stays at the same level.
+            var was_cont: bool = False
             if len(self.paren_stack) > 0:
                 let top: (int, int, int) = self.paren_stack[-1]
                 let acol: int = top[1]
@@ -468,6 +485,7 @@ class Indenter:
                         # level rather than being treated as an operator.
                         if starts_with_operator(code_s) and not code_s.startswith("=>"):
                             lead += INDENT_WIDTH
+                            was_cont = True
                 elif top[2] == 3:
                     # '(for some/all … => predicate' (a quantified expression) or
                     # '(for I in … => value' (an iterated component): the body
@@ -478,6 +496,7 @@ class Indenter:
                     lead = acol + INDENT_WIDTH
                     if starts_with_operator(code_s) and not code_s.startswith("=>"):
                         lead += INDENT_WIDTH
+                        was_cont = True
                 else:
                     # A named association whose value spilled past a trailing
                     # '=>' (arrow_level marks the paren it happened in) starts its
@@ -492,8 +511,10 @@ class Indenter:
                     # one level deeper.
                     if starts_with_operator(code_s):
                         lead = vbase + INDENT_WIDTH
+                        was_cont = True
                     elif code_s.startswith("(") and self.paren_cont:
                         lead = vbase + INDENT_WIDTH
+                        was_cont = True
             let new_depth: int = self.paren_depth + paren_delta(code)
             let plt: str = last_word(code_s)
             self.in_cont = stmt_incomplete(code_s)
@@ -517,6 +538,7 @@ class Indenter:
             # Record this line's lead for aligning comments that follow it.
             self.paren_last_lead = lead
             self.paren_last_lead_depth = entry_depth
+            self.paren_last_was_cont = was_cont
             self._push_parens(emit_text, lead, entry_depth, self.paren_depth)
             # A line that closes back out of all parentheses and ends in a block
             # opener opens that block.
@@ -1704,6 +1726,33 @@ def run_tests() -> int:
         "    null;\n"
         "  end if;\n"
         "end P;\n"))
+
+    # 41. A comment after the HEAD line of a multi-line case-expression arm body:
+    #     the head sits at the arm-body level, but the arm body continues with an
+    #     operator ('or else') one level deeper. The comment must anticipate that
+    #     operator continuation and align with it, not stay at the head level. A
+    #     later comment, sitting after an 'or else' line, stays at that same
+    #     operator level (operators chain without escalating).
+    cases.append((
+        "function F return Boolean is\n"
+        "(case Y is\n"
+        "when A | B =>\n"
+        "First_Cond\n"
+        "-- head note\n"
+        "or else Second_Cond\n"
+        "-- middle note\n"
+        "or else Third_Cond,\n"
+        "when others => False);\n",
+
+        "function F return Boolean is\n"
+        "  (case Y is\n"
+        "     when A | B =>\n"
+        "       First_Cond\n"
+        "         -- head note\n"
+        "         or else Second_Cond\n"
+        "         -- middle note\n"
+        "         or else Third_Cond,\n"
+        "     when others => False);\n"))
 
     for pair in cases:
         let src: str = pair[0]
