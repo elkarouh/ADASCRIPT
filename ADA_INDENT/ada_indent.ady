@@ -465,7 +465,7 @@ class Indenter:
                     # the body/condition continuation indent.
                     lead = max(0, acol - 1)
                 elif entry_top_kind == IF_EXPR:
-                    if lw == "then" or lw == "else" or lw == "elsif":
+                    if lw in ("then", "else", "elsif"):
                         lead = acol
                     else:
                         # Condition continuation: one indent level past the 'if'
