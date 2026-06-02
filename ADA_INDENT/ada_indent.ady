@@ -132,7 +132,7 @@ def paren_delta(line: str) -> int:
 def lead_word(code: str) -> str:
     """Lowercased leading identifier of a (comment-stripped) line, or ''."""
     for ch in code.strip().lower():
-        if not ch.isalpha() and ch != "_":
+        if not ch.isalpha():
             break
         result += ch
 
