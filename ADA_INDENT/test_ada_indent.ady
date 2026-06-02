@@ -1271,6 +1271,31 @@ def run_tests() -> int:
         "     Sev => High);\n"
         "end P;\n"))
 
+    # 51. 'package X is\nnew Y;' inside a subprogram declarative region — the PKG
+    #     pushed for 'package X is' must not survive to misalign the 'begin'.
+    cases.append((
+        "procedure P is\n"
+        "procedure TC is\n"
+        "package Q is\n"
+        "new Gen (A => B);\n"
+        "begin\n"
+        "Q.Run;\n"
+        "end;\n"
+        "begin\n"
+        "null;\n"
+        "end P;\n",
+
+        "procedure P is\n"
+        "  procedure TC is\n"
+        "    package Q is\n"
+        "      new Gen (A => B);\n"
+        "  begin\n"
+        "    Q.Run;\n"
+        "  end;\n"
+        "begin\n"
+        "  null;\n"
+        "end P;\n"))
+
     for pair in cases:
         let src: str = pair[0]
         let want: str = pair[1]
