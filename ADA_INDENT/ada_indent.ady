@@ -43,6 +43,14 @@ type Str_State_T is enum:
     CODE               # outside any string literal
     INSIDE_STRING_LIT  # inside a double-quoted string literal
 
+# Kind of a parenthesised expression, for indentation purposes.
+type Paren_Kind_T is enum:
+    OUTSIDE    # sentinel: entry_top_kind when the paren stack is empty
+    PLAIN      # plain parenthesis
+    IF_EXPR    # (if … then … else …)
+    CASE_EXPR  # (case … is when …)
+    FOR_EXPR   # (for … => …)  quantified or iterated expression
+
 
 # ---------------------------------------------------------------------------
 # Lexical helpers — all work on a single physical line.
@@ -228,14 +236,13 @@ def is_term_continuation(code_s: str) -> bool:
     return w != "xor"
 
 
-def scan_parens(text: str, base_depth: int, base_col: int) -> [](int, int, int):
+def scan_parens(text: str, base_depth: int, base_col: int) -> [](int, int, Paren_Kind_T):
     """Find every '(' opened in a line and how its continuations should align.
 
     Returns one tuple (paren_level, align_col, kind) per opening parenthesis:
     paren_level is the depth just inside the '(', align_col is the absolute
     output column to align continuations to (base_col is the column at which
-    text[0] renders), and kind is 0 for a plain parenthesis, 1 for '(if', 2
-    for '(case' and 3 for '(for' (a quantified or iterated expression). For a
+    text[0] renders), and kind is PLAIN, IF_EXPR, CASE_EXPR, or FOR_EXPR. For a
     plain '(' the alignment column is the first non-blank character after it
     (the first item), or one indent level in if the '(' ends the line. For
     '(if'/'(case'/'(for' the column is the keyword itself, which the caller
@@ -243,7 +250,7 @@ def scan_parens(text: str, base_depth: int, base_col: int) -> [](int, int, int):
     are skipped so a '(' written as '(' (or in "(") is not recorded; otherwise
     this is a best-effort scan.
     """
-    var openers: [](int, int, int) = []
+    var openers: [](int, int, Paren_Kind_T) = []
     var depth: int = base_depth
     var i: int = 0
     let n: int = len(text)
@@ -259,15 +266,15 @@ def scan_parens(text: str, base_depth: int, base_col: int) -> [](int, int, int):
             j = skip_whitespace(text, j)
             let kw: str = lead_word(text[j:])
             if kw == "if":
-                openers.append((depth, base_col + j, 1))
+                openers.append((depth, base_col + j, IF_EXPR))
             elif kw == "case":
-                openers.append((depth, base_col + j, 2))
+                openers.append((depth, base_col + j, CASE_EXPR))
             elif kw == "for":
-                openers.append((depth, base_col + j, 3))
+                openers.append((depth, base_col + j, FOR_EXPR))
             elif j < n:
-                openers.append((depth, base_col + j, 0))
+                openers.append((depth, base_col + j, PLAIN))
             else:
-                openers.append((depth, base_col + INDENT_WIDTH, 0))
+                openers.append((depth, base_col + INDENT_WIDTH, PLAIN))
             i += 1
         elif ch == ')':
             depth -= 1
@@ -295,7 +302,7 @@ class Indenter:
     cond_value_base: int = 0     # display level of the line holding the current condition term
     in_cont: bool = False        # previous line was an unterminated statement/declaration
     value_base: int = 0          # display level where the current statement's value expression starts
-    paren_stack: [](int, int, int) = []  # (paren_level, align_col, kind) for every open '('
+    paren_stack: [](int, int, Paren_Kind_T) = []  # (paren_level, align_col, kind) for every open '('
     paren_cont: bool = False    # prev line within plain paren ended without ',' (arg-list continuation)
     arrow_level: int = 0        # innermost paren level with an active '=>' named-value spill (0 = none)
     paren_next_lead: int = 0         # column where the next code line in this paren will land
@@ -306,7 +313,7 @@ class Indenter:
         for opener in scan_parens(text, base_depth, base_col):
             self.paren_stack.append(opener)
         while len(self.paren_stack) > 0:
-            let top: (int, int, int) = self.paren_stack[-1]
+            let top: (int, int, Paren_Kind_T) = self.paren_stack[-1]
             if top[0] > new_depth:
                 self.paren_stack.pop()
             else:
@@ -346,7 +353,7 @@ class Indenter:
             #              left its item unfinished (paren_cont) so an operator/
             #              term continuation — not a new item — follows.
             if self.paren_depth > 0 and len(self.paren_stack) > 0:
-                let ptop: (int, int, int) = self.paren_stack[-1]
+                let ptop: (int, int, Paren_Kind_T) = self.paren_stack[-1]
                 if self.paren_next_lead_depth == self.paren_depth:
                     return " " * self.paren_next_lead + emit_text
                 # No peer code line yet at this paren depth (comment sits right
@@ -354,9 +361,9 @@ class Indenter:
                 # to this level). Derive the indent from the paren kind, mirroring
                 # where the first/next code line at this level lands.
                 var pfall: int = ptop[1]
-                if ptop[2] == 2 or ptop[2] == 3:
+                if ptop[2] in (CASE_EXPR, FOR_EXPR):
                     pfall += INDENT_WIDTH
-                elif ptop[2] == 0 and self.paren_cont:
+                elif ptop[2] == PLAIN and self.paren_cont:
                     pfall += INDENT_WIDTH
                 return " " * pfall + emit_text
             # Outside parentheses a comment is indented like the line that would
@@ -427,14 +434,14 @@ class Indenter:
         if self.paren_depth > 0:
             # Drop any parentheses that have already closed.
             while len(self.paren_stack) > 0:
-                let stale: (int, int, int) = self.paren_stack[-1]
+                let stale: (int, int, Paren_Kind_T) = self.paren_stack[-1]
                 if stale[0] > entry_depth:
                     self.paren_stack.pop()
                 else:
                     break
             var lead: int = max(0, len(self.stack) + cont) * INDENT_WIDTH
             var entry_top_level: int = 0
-            var entry_top_kind: int = -1
+            var entry_top_kind: Paren_Kind_T = OUTSIDE
             # Whether this line took the operator/term-continuation extra indent.
             # A comment following a NON-continuation line (an arm-body head or a
             # plain item) whose item is unfinished must anticipate the operator
@@ -443,17 +450,17 @@ class Indenter:
             var was_cont: bool = False
             var acol: int = 0
             if len(self.paren_stack) > 0:
-                let top: (int, int, int) = self.paren_stack[-1]
+                let top: (int, int, Paren_Kind_T) = self.paren_stack[-1]
                 acol = top[1]
                 entry_top_level = top[0]
                 entry_top_kind = top[2]
-                if top[2] != 0 and code_s.startswith(")"):
+                if top[2] != PLAIN and code_s.startswith(")"):
                     # A line that begins by closing an '(if'/'(case'/'(for'
                     # expression aligns the ')' under the opening '(' — one column
                     # left of the keyword that acol points at — rather than taking
                     # the body/condition continuation indent.
                     lead = max(0, acol - 1)
-                elif top[2] == 1:
+                elif top[2] == IF_EXPR:
                     if lw == "then" or lw == "else" or lw == "elsif":
                         lead = acol
                     else:
@@ -463,7 +470,7 @@ class Indenter:
                         # width of 'if ', to stay consistent with the case-expr
                         # arms below and the if-statement condition continuation.
                         lead = acol + INDENT_WIDTH
-                elif top[2] == 2:
+                elif top[2] == CASE_EXPR:
                     if lw == "when":
                         lead = acol + INDENT_WIDTH
                     else:
@@ -478,7 +485,7 @@ class Indenter:
                         if starts_with_operator(code_s) and not code_s.startswith("=>"):
                             lead += INDENT_WIDTH
                             was_cont = True
-                elif top[2] == 3:
+                elif top[2] == FOR_EXPR:
                     # '(for some/all … => predicate' (a quantified expression) or
                     # '(for I in … => value' (an iterated component): the body
                     # after the iterator sits one level past the 'for', mirroring
@@ -520,7 +527,7 @@ class Indenter:
             #   that spill for this paren level so following lines align to value.
             # - A line that ends with ',' closes the association: clear the spill.
             # - When the paren itself closes (depth drops): clear.
-            if entry_top_kind == 0:
+            if entry_top_kind == PLAIN:
                 if code_s.endswith("=>"):
                     self.arrow_level = entry_top_level
                 elif self.arrow_level == entry_top_level and code_s.endswith(","):
@@ -530,20 +537,20 @@ class Indenter:
             # Compute where the next code line in this paren will land, for use by
             # any comment that follows before it arrives.
             let complete_assoc: bool = "=>" in code_s and not code_s.endswith("=>")
-            if entry_top_kind >= 0 and code_s.endswith(","):
+            if entry_top_kind != OUTSIDE and code_s.endswith(","):
                 # Comma closes the current element; next is a fresh item.
                 var pnext: int = acol
-                if entry_top_kind == 2 or entry_top_kind == 3:
+                if entry_top_kind in (CASE_EXPR, FOR_EXPR):
                     pnext += INDENT_WIDTH
                 self.paren_next_lead = pnext
-            elif entry_top_kind == 0 and complete_assoc:
+            elif entry_top_kind == PLAIN and complete_assoc:
                 # Complete named association ('X => Y') in a plain paren: next is
                 # a fresh item at the item column (not an operator continuation).
                 self.paren_next_lead = acol
-            elif entry_top_kind != 1 and self.paren_cont and not was_cont:
+            elif entry_top_kind != IF_EXPR and self.paren_cont and not was_cont:
                 # Unfinished non-continuation item (arm-body head or plain item):
                 # anticipate the operator continuation that follows, one level
-                # deeper. '(if' structural lines (kind 1) are excluded.
+                # deeper. '(if' structural lines are excluded.
                 self.paren_next_lead = lead + INDENT_WIDTH
             else:
                 # Already a continuation, or kind-1 structural, or closed item:
