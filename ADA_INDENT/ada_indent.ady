@@ -150,14 +150,12 @@ def stmt_incomplete(code_s: str) -> bool:
     # words occur inside expressions: e.g. the 'else …)' line closing an
     # if-EXPRESSION continues the surrounding statement and must NOT be mistaken
     # for a complete statement-level 'else'.
-    if (code_s.lower() == lw and (lw == "begin" or lw == "declare"
-            or lw == "else" or lw == "exception" or lw == "or"
-            or lw == "private" or lw == "select")):
+    if code_s.lower() == lw and lw in ("begin", "declare", "else", "exception",
+            "or", "private", "select"):
         return False
     let lt: str = last_word(code_s)
     # Block openers, plus the '[not] overriding' indicator on its own line.
-    if (lt == "is" or lt == "then" or lt == "loop" or lt == "record"
-            or lt == "select" or lt == "do" or lt == "overriding"):
+    if lt in ("is", "then", "loop", "record", "select", "do", "overriding"):
         return False
     result = True
 
@@ -208,7 +206,7 @@ def is_term_continuation(code_s: str) -> bool:
             or code_s.startswith("|")):
         return False
     let w: str = lead_word(code_s)
-    if w == "and" or w == "or":
+    if w in ("and", "or"):
         # Boolean connectives join successive operands of a value expression;
         # each continuation sits one level past where the expression began.
         return True
