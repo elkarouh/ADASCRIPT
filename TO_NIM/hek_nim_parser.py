@@ -778,6 +778,15 @@ def to_nim(self, indent=0):
         _em = _re_for.match(r'^seq\[(.+)\]$', _iterable_type)
         if _em:
             ParserState.symbol_table.add(target.strip("()\n "), _em.group(1), "let")
+        else:
+            # Iterating a custom iterator call (e.g. 'for c in code_chars(s)'):
+            # the loop variable's type is the iterator's per-yield return type,
+            # used directly (an iterator's annotation IS the element type).
+            _callee_m = _re_for.match(r'^(\w+)\(', iterable.strip())
+            if _callee_m and _callee_m.group(1) in getattr(ParserState, "iterator_names", set()):
+                _ret = (getattr(ParserState, 'proc_return_types', {}) or {}).get(_callee_m.group(1), "")
+                if _ret and "," not in _ret:
+                    ParserState.symbol_table.add(target.strip("()\n "), _ret, "let")
     elif "," in target:
         # Tuple-destructured loop: register each variable from the iterator's return type.
         # iterable may be a call like 'pairwise(...)'; look up the callee's return type.
@@ -2635,6 +2644,10 @@ def to_nim(self, indent=0):
     keyword = nim_keyword or "proc"
     if "yield " in body:
         keyword = "iterator"
+        # Record the iterator's name so 'for x in name(...)' can type x as the
+        # iterator's (per-yield) return type rather than leaving it unknown.
+        if name:
+            getattr(ParserState, "iterator_names", set()).add(name)
     if _is_fn_cm:
         keyword = "template"
         getattr(ParserState, 'contextmanager_funcs', set()).add(name)
