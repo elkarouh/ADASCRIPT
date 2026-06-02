@@ -543,7 +543,7 @@ def run_tests() -> int:
         "begin\n"
         "  case X is\n"
         "    when Action_1 | Action_15\n"
-        "      | Action_16 | Action_43 =>\n"
+        "    | Action_16 | Action_43 =>\n"
         "      Do_It;\n"
         "  end case;\n"
         "end P;\n"))
