@@ -1106,6 +1106,51 @@ def run_tests() -> int:
         "  null;\n"
         "end R;\n"))
 
+    # 45. Regression: 'type T is' on its own line (not 'type T is record') pushes
+    #     a PKG frame that must be popped together with the RECORD frame when
+    #     'end record' is processed, otherwise every line after the type definition
+    #     is indented one level too deep.  Covers simple and variant-record forms.
+    cases.append((
+        "package P is\n"
+        "type Simple is\n"
+        "record\n"
+        "X : Integer;\n"
+        "end record;\n"
+        "-- after simple\n"
+        "type Mode is (A, B);\n"
+        "type Var (M : Mode := A) is\n"
+        "record\n"
+        "case M is\n"
+        "when A =>\n"
+        "X : Integer;\n"
+        "when B =>\n"
+        "Y : Float;\n"
+        "end case;\n"
+        "end record;\n"
+        "-- after variant\n"
+        "Z : Integer;\n"
+        "end P;\n",
+
+        "package P is\n"
+        "  type Simple is\n"
+        "    record\n"
+        "      X : Integer;\n"
+        "    end record;\n"
+        "  -- after simple\n"
+        "  type Mode is (A, B);\n"
+        "  type Var (M : Mode := A) is\n"
+        "    record\n"
+        "      case M is\n"
+        "        when A =>\n"
+        "          X : Integer;\n"
+        "        when B =>\n"
+        "          Y : Float;\n"
+        "      end case;\n"
+        "    end record;\n"
+        "  -- after variant\n"
+        "  Z : Integer;\n"
+        "end P;\n"))
+
     for pair in cases:
         let src: str = pair[0]
         let want: str = pair[1]
