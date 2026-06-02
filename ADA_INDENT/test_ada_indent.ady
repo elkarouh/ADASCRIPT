@@ -1247,6 +1247,30 @@ def run_tests() -> int:
         "  end T;\n"
         "end P;\n"))
 
+    # 50. Regression: when the opening '(' of a named-argument list appears on
+    #     its own line with 'Name =>' and the value on the NEXT line, that line
+    #     must get the arrow-spill indent (acol + INDENT_WIDTH), not plain acol.
+    #     The paren was opened while the regular path was active (paren_depth=0
+    #     at entry) so arrow_level must be set there, not only in the paren path.
+    cases.append((
+        "procedure P is\n"
+        "begin\n"
+        "Error_Report\n"
+        "(Title =>\n"
+        "\"Long value\",\n"
+        "Desc => Short,\n"
+        "Sev => High);\n"
+        "end P;\n",
+
+        "procedure P is\n"
+        "begin\n"
+        "  Error_Report\n"
+        "    (Title =>\n"
+        "       \"Long value\",\n"
+        "     Desc => Short,\n"
+        "     Sev => High);\n"
+        "end P;\n"))
+
     for pair in cases:
         let src: str = pair[0]
         let want: str = pair[1]
