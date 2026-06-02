@@ -75,36 +75,43 @@ def strip_code(line: str) -> str:
                     state = CODE
 
 
-def paren_delta(line: str) -> int:
-    """Net '(' minus ')' on the line, ignoring parens inside string and character
-    literals.
+def code_chars(s: str) -> char:
+    """Yield each character of s that is outside a string or character literal.
 
     The input must already have comments removed (see strip_code). Double-quoted
-    strings are skipped, and so are character literals: a '(' or ')' written as
-    '(' / ')' must not be counted. A character literal is a quote, any single
-    character, then a closing quote ('x'); a quote followed by a letter is an
-    attribute tick (X'Image) and is left alone.
+    strings are skipped whole. A character literal ('x') is detected as a quote,
+    any single character, then a closing quote; a quote followed by a letter that
+    is NOT followed by a closing quote is an attribute tick (X'Image) and is left
+    alone — the letter and everything after it are yielded normally.
     """
-    var depth: int = 0
     var i: int = 0
-    let n: int = len(line)
+    let n: int = len(s)
     while i < n:
-        let c: char = line[i]
+        let c: char = s[i]
         if c == '"':
             i += 1
-            while i < n and line[i] != '"':
+            while i < n and s[i] != '"':
                 i += 1
             i += 1                               # skip the closing quote
-        elif c == '\'' and i + 2 < n and line[i + 2] == '\'':
+        elif c == '\'' and i + 2 < n and s[i + 2] == '\'':
             i += 3                               # character literal: skip 'x' whole
-        elif c == '(':
-            depth += 1
-            i += 1
-        elif c == ')':
-            depth -= 1
-            i += 1
         else:
+            yield c
             i += 1
+
+
+def paren_delta(line: str) -> int:
+    """Net '(' minus ')' on the line, ignoring parens inside string and character
+    literals. The input must already have comments removed (see strip_code)."""
+    var depth: int = 0
+    for c in code_chars(line):
+        case c:
+            when '(':
+                depth += 1
+            when ')':
+                depth -= 1
+            when others:
+                pass
     return depth
 
 
