@@ -1151,6 +1151,27 @@ def run_tests() -> int:
         "  Z : Integer;\n"
         "end P;\n"))
 
+    # 46. Regression: a standalone 'is' that terminates an aspect-clause
+    #     continuation (task type / protected type / subprogram with an aspect
+    #     clause) must align with the declaration opener, not be indented one
+    #     extra level as a value continuation.
+    cases.append((
+        "package P is\n"
+        "task type T (X : Boolean) with\n"
+        "Storage_Size => 64 * 1024\n"
+        "is\n"
+        "entry E;\n"
+        "end T;\n"
+        "end P;\n",
+
+        "package P is\n"
+        "  task type T (X : Boolean) with\n"
+        "    Storage_Size => 64 * 1024\n"
+        "  is\n"
+        "    entry E;\n"
+        "  end T;\n"
+        "end P;\n"))
+
     for pair in cases:
         let src: str = pair[0]
         let want: str = pair[1]
