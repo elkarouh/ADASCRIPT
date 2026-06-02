@@ -1222,6 +1222,31 @@ def run_tests() -> int:
         "  end loop;\n"
         "end P;\n"))
 
+    # 49. Regression: 'is new' on a continuation line is a generic instantiation,
+    #     not a block opener — it must NOT snap back to the declaration level but
+    #     stay indented as a continuation.  Standalone 'is' (no following token)
+    #     still snaps back as before.
+    cases.append((
+        "package body P is\n"
+        "procedure Inst\n"
+        "is new Gen (Param);\n"
+        "task type T (X : Boolean) with\n"
+        "Storage_Size => 64\n"
+        "is\n"
+        "entry E;\n"
+        "end T;\n"
+        "end P;\n",
+
+        "package body P is\n"
+        "  procedure Inst\n"
+        "    is new Gen (Param);\n"
+        "  task type T (X : Boolean) with\n"
+        "    Storage_Size => 64\n"
+        "  is\n"
+        "    entry E;\n"
+        "  end T;\n"
+        "end P;\n"))
+
     for pair in cases:
         let src: str = pair[0]
         let want: str = pair[1]
