@@ -170,15 +170,16 @@ def starts_with_operator(code_s: str) -> bool:
     if code_s == "":
         return False
     let c0: char = code_s[0]
-    if c0 == ':':
-        return len(code_s) > 1 and code_s[1] == '='   # ':=', not a bare ':'
-    if c0 == '.':
-        return len(code_s) > 1 and code_s[1] == '.'   # '..' range
-    if (c0 == '=' or c0 == '&' or c0 == '+' or c0 == '-' or c0 == '*'
-            or c0 == '/' or c0 == '<' or c0 == '>' or c0 == '|'):
-        return True
-    let w: str = lead_word(code_s)
-    return w == "and" or w == "or" or w == "xor" or w == "mod" or w == "rem"
+    case c0:
+        when ':':
+            return len(code_s) > 1 and code_s[1] == '='   # ':=', not a bare ':'
+        when '.':
+            return len(code_s) > 1 and code_s[1] == '.'   # '..' range
+        when '=' | '&' | '+' | '-' | '*' | '/' | '<' | '>' | '|':
+            return True
+        when others:
+            let w: str = lead_word(code_s)
+            return w in ("and", "or", "xor", "mod", "rem")
 
 
 def is_term_continuation(code_s: str) -> bool:
