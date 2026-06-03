@@ -14,12 +14,15 @@
 # See README.md in this directory for the simplified grammar specification.
 #
 # Usage:
-#   py2nim ADA_INDENT/ada_indent.ady -r -- file.adb   # compile if stale, reindent a file
-#   py2nim ADA_INDENT/ada_indent.ady -r -- --test     # compile if stale, run self-tests
+#   py2nim ADA_INDENT/ada_indent.ady -r -- file.adb         # reindent a file
+#   py2nim ADA_INDENT/ada_indent.ady -r -- --fmt file.adb   # reindent + reformat spacing
+#   py2nim ADA_INDENT/ada_indent.ady -r -- --test           # run self-tests
 #
 # The core logic (reindent + helpers) is pure Adascript and transpiles to
 # both Python and Nim. The CLI uses the bash-style argument primitives
 # ($1, $#, quit) so argument handling is target-agnostic.
+
+nimport ada_line_fmt
 
 const INDENT_WIDTH: Natural = 2
 
@@ -804,14 +807,28 @@ class Indenter:
 
 def main() -> int:
     var ind: Indenter = Indenter()
-    if $# < 1:
+    var do_fmt: bool = False
+    var file_arg: str = ""
+    if $# >= 1:
+        if $1 == "--fmt":
+            do_fmt = True
+            if $# >= 2:
+                file_arg = $2
+        else:
+            file_arg = $1
+    if file_arg == "":
         for line in stdin.lines:
-            print ind.indent_line(line)
+            var r: str = ind.indent_line(line)
+            if do_fmt:
+                r = format_line(r)
+            print r
     else:
-        let arg: str = $1
-        with open(arg) as f:
+        with open(file_arg) as f:
             for line in f:
-                print ind.indent_line(line)
+                var r: str = ind.indent_line(line)
+                if do_fmt:
+                    r = format_line(r)
+                print r
 
 
 if __name__ == "__main__":
