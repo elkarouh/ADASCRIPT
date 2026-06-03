@@ -21,11 +21,15 @@ nimport ada_lexer
 # ---------------------------------------------------------------------------
 
 let BIN_OP_DELIM: {}str = {
-    ":=", "=>",
+    ":=",
     "+", "-", "*", "/", "**", "&",
     "=", "/=", "<", ">", "<=", ">=",
     "..", "|", "<>",
 }
+
+# Tokens before which extra whitespace is preserved for manual alignment.
+# Rule: at least one space, but the original count is kept when it is larger.
+let ALIGN_BEFORE: {}str = {":", "=>"}
 
 let TIGHT_DELIM: {}str = {".", "'"}
 
@@ -33,10 +37,14 @@ let TIGHT_DELIM: {}str = {".", "'"}
 # gap — spaces to insert between two adjacent tokens
 # ---------------------------------------------------------------------------
 
-def gap(lt: Token_T, rt: Token_T) -> int:
+def gap(lt: Token_T, rt: Token_T, orig: int) -> int:
     # Rule 1: no space before ; or ,
     if rt.text == ";" or rt.text == ",":
         return 0
+    # Alignment-preserving tokens: at least one space before, but original
+    # extra spaces (manual column alignment) are kept intact.
+    if rt.text in ALIGN_BEFORE:
+        return max(1, orig)
     # Rule 2: one space around binary-operator delimiters
     if lt.text in BIN_OP_DELIM or rt.text in BIN_OP_DELIM:
         return 1
@@ -84,7 +92,8 @@ def format_line(src: str) -> str:
     buf += toks[0].text
     i = 1
     while i < len(toks):
-        let sp: int = gap(toks[i - 1], toks[i])
+        let orig: int = toks[i].col - (toks[i - 1].col + len(toks[i - 1].text))
+        let sp: int = gap(toks[i - 1], toks[i], orig)
         var j: int = 0
         while j < sp:
             buf += " "
