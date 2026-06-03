@@ -1,0 +1,337 @@
+#!/usr/bin/env py2nim
+# ada_lexer.ady — a lexer (tokenizer) for Ada source, written in Adascript.
+#
+# Splits Ada source text into a stream of lexical tokens following the Ada
+# 2012 lexical grammar (RM 2.x):
+#
+#   * identifiers        Letter { [underline] letter_or_digit }
+#   * reserved words     the 73 Ada 2012 keywords (a keyword is an identifier
+#                        that matches the reserved-word set, case-insensitively)
+#   * numeric literals   decimal_integer, decimal_real (with '.' and/or 'E'
+#                        exponent), and based literals (16#FF#, 2#1010#E4)
+#   * character literals 'x'
+#   * string literals    "..."  with ""  as an embedded quote
+#   * comments           -- to end of line
+#   * delimiters         single (& ' ( ) * + , - . / : ; < = > | @ [ ])
+#                        and compound (=> .. ** := /= >= <= << >> <>)
+#
+# It transpiles to both Python and Nim. The core (Lexer + helpers) is pure
+# Adascript; there is no I/O. See test_ada_lexer.ady for the test suite.
+
+# ---------------------------------------------------------------------------
+# Token model
+# ---------------------------------------------------------------------------
+
+type Token_Kind_T is enum:
+    IDENTIFIER    # a non-reserved identifier
+    KEYWORD       # a reserved word
+    INTEGER_LIT   # decimal integer (no '.', no '#')
+    REAL_LIT      # decimal real (has a '.' fraction, or a based real)
+    BASED_LIT     # based literal (base#numeral#), integer or real
+    CHAR_LIT      # 'x'
+    STRING_LIT    # "..."
+    DELIMITER     # punctuation / operator delimiter
+    COMMENT       # -- ... (text includes the leading '--')
+    ERROR         # a character that is not a legal Ada delimiter
+
+type Token_T is tuple:
+    kind: Token_Kind_T
+    text: str          # exact source spelling
+    line: int          # 1-based line of the first character
+    col:  int          # 1-based column of the first character
+
+
+# ---------------------------------------------------------------------------
+# Character classification — defined by ASCII range so the result is identical
+# under both backends (no reliance on locale-sensitive library predicates).
+# ---------------------------------------------------------------------------
+
+def is_digit_ch(c: char) -> bool:
+    return c >= '0' and c <= '9'
+
+def is_alpha_ch(c: char) -> bool:
+    return (c >= 'a' and c <= 'z') or (c >= 'A' and c <= 'Z')
+
+def is_alnum_ch(c: char) -> bool:
+    return is_alpha_ch(c) or is_digit_ch(c)
+
+def is_newline_ch(c: char) -> bool:
+    return ord(c) == 10                       # '\n' — escape char literals would
+
+def is_space_ch(c: char) -> bool:
+    let o: int = ord(c)                        # space, tab, LF, CR
+    return o == 32 or o == 9 or o == 10 or o == 13
+
+
+# ---------------------------------------------------------------------------
+# Reserved words (Ada 2012, RM 2.9) — stored lowercase; matching is
+# case-insensitive because Ada identifiers are.
+# ---------------------------------------------------------------------------
+
+let ADA_KEYWORDS: {}str = {
+    "abort", "abs", "abstract", "accept", "access", "aliased", "all", "and",
+    "array", "at", "begin", "body", "case", "constant", "declare", "delay",
+    "delta", "digits", "do", "else", "elsif", "end", "entry", "exception",
+    "exit", "for", "function", "generic", "goto", "if", "in", "interface",
+    "is", "limited", "loop", "mod", "new", "not", "null", "of", "or",
+    "others", "out", "overriding", "package", "pragma", "private",
+    "procedure", "protected", "raise", "range", "record", "rem", "renames",
+    "requeue", "return", "reverse", "select", "separate", "some", "subtype",
+    "synchronized", "tagged", "task", "terminate", "then", "type", "until",
+    "use", "when", "while", "with", "xor",
+}
+
+def is_keyword(word: str) -> bool:
+    return word.lower() in ADA_KEYWORDS
+
+
+def kind_name(k: Token_Kind_T) -> str:
+    """The enum member's name, for diagnostics and tests (backend-portable)."""
+    case k:
+        when IDENTIFIER:  return "IDENTIFIER"
+        when KEYWORD:     return "KEYWORD"
+        when INTEGER_LIT: return "INTEGER_LIT"
+        when REAL_LIT:    return "REAL_LIT"
+        when BASED_LIT:   return "BASED_LIT"
+        when CHAR_LIT:    return "CHAR_LIT"
+        when STRING_LIT:  return "STRING_LIT"
+        when DELIMITER:   return "DELIMITER"
+        when COMMENT:     return "COMMENT"
+        when ERROR:       return "ERROR"
+
+
+# ---------------------------------------------------------------------------
+# The lexer.
+# ---------------------------------------------------------------------------
+
+class Lexer:
+    var src:  str = ""
+    var n:    int = 0
+    var pos:  int = 0
+    var line: int = 1
+    var col:  int = 1
+
+    def __init__(self, source: str):
+        self.src = source
+        self.n = len(source)
+        self.pos = 0
+        self.line = 1
+        self.col = 1
+
+    def _advance(self):
+        """Consume the current character, tracking line/column."""
+        let c: char = self.src[self.pos]
+        self.pos += 1
+        if is_newline_ch(c):
+            self.line += 1
+            self.col = 1
+        else:
+            self.col += 1
+
+    def _slice(self, a: int, b: int) -> str:
+        """Source substring [a, b) clipped to bounds; '' if empty/out of range."""
+        var lo: int = a
+        var hi: int = b
+        if lo < 0:
+            lo = 0
+        if hi > self.n:
+            hi = self.n
+        if lo >= hi:
+            return ""
+        return self.src[lo:hi]
+
+    def _skip_whitespace(self):
+        while self.pos < self.n:
+            if is_space_ch(self.src[self.pos]):
+                self._advance()
+            else:
+                break
+
+    def _scan_comment(self, ln: int, cl: int) -> Token_T:
+        var text: str = ""
+        while self.pos < self.n:
+            let c: char = self.src[self.pos]
+            if is_newline_ch(c):
+                break
+            text += c
+            self._advance()
+        return (kind: COMMENT, text: text, line: ln, col: cl)
+
+    def _scan_string(self, ln: int, cl: int) -> Token_T:
+        var text: str = ""
+        text += self.src[self.pos]          # opening quote
+        self._advance()
+        while self.pos < self.n:
+            let c: char = self.src[self.pos]
+            if c == '"':
+                # A doubled "" is an embedded quote, not the terminator.
+                var doubled: bool = False
+                if self.pos + 1 < self.n:
+                    let c1: char = self.src[self.pos + 1]
+                    if c1 == '"':
+                        doubled = True
+                if doubled:
+                    text += c
+                    self._advance()
+                    text += self.src[self.pos]
+                    self._advance()
+                else:
+                    text += c
+                    self._advance()
+                    break
+            else:
+                text += c
+                self._advance()
+        return (kind: STRING_LIT, text: text, line: ln, col: cl)
+
+    def _scan_char(self, ln: int, cl: int) -> Token_T:
+        var text: str = ""
+        text += self.src[self.pos]          # opening '
+        self._advance()
+        text += self.src[self.pos]          # the character
+        self._advance()
+        text += self.src[self.pos]          # closing '
+        self._advance()
+        return (kind: CHAR_LIT, text: text, line: ln, col: cl)
+
+    def _scan_number(self, ln: int, cl: int) -> Token_T:
+        var text: str = ""
+        var is_real: bool = False
+        var is_based: bool = False
+
+        # Leading digit run (with optional '_' separators).
+        while self.pos < self.n:
+            let c: char = self.src[self.pos]
+            if not (is_digit_ch(c) or c == '_'):
+                break
+            text += c
+            self._advance()
+
+        var saw_hash: bool = False
+        if self.pos < self.n:
+            let c: char = self.src[self.pos]
+            if c == '#':
+                saw_hash = True
+
+        if saw_hash:
+            # Based literal: base#numeral# — the numeral may contain extended
+            # digits (A-F) and a '.' for a based real.
+            is_based = True
+            text += self.src[self.pos]      # opening '#'
+            self._advance()
+            while self.pos < self.n:
+                let c: char = self.src[self.pos]
+                if c == '#':
+                    break
+                if c == '.':
+                    is_real = True
+                text += c
+                self._advance()
+            if self.pos < self.n:
+                let c: char = self.src[self.pos]
+                if c == '#':
+                    text += c               # closing '#'
+                    self._advance()
+        else:
+            # A '.' is a fraction only when followed by a digit; otherwise it is
+            # the '..' range delimiter or a record-component dot and is left alone.
+            var frac: bool = False
+            if self.pos + 1 < self.n:
+                let c: char = self.src[self.pos]
+                let c1: char = self.src[self.pos + 1]
+                if c == '.' and is_digit_ch(c1):
+                    frac = True
+            if frac:
+                is_real = True
+                text += self.src[self.pos]  # '.'
+                self._advance()
+                while self.pos < self.n:
+                    let c: char = self.src[self.pos]
+                    if not (is_digit_ch(c) or c == '_'):
+                        break
+                    text += c
+                    self._advance()
+
+        # Exponent (decimal literals): does not by itself make a literal real.
+        var saw_e: bool = False
+        if self.pos < self.n:
+            let c: char = self.src[self.pos]
+            if c == 'e' or c == 'E':
+                saw_e = True
+        if saw_e:
+            text += self.src[self.pos]      # 'e' / 'E'
+            self._advance()
+            if self.pos < self.n:
+                let c: char = self.src[self.pos]
+                if c == '+' or c == '-':
+                    text += c
+                    self._advance()
+            while self.pos < self.n:
+                let c: char = self.src[self.pos]
+                if not is_digit_ch(c):
+                    break
+                text += c
+                self._advance()
+
+        var k: Token_Kind_T = INTEGER_LIT
+        if is_based:
+            k = BASED_LIT
+        elif is_real:
+            k = REAL_LIT
+        return (kind: k, text: text, line: ln, col: cl)
+
+    def _scan_identifier(self, ln: int, cl: int) -> Token_T:
+        var text: str = ""
+        while self.pos < self.n:
+            let c: char = self.src[self.pos]
+            if not (is_alnum_ch(c) or c == '_'):
+                break
+            text += c
+            self._advance()
+        var k: Token_Kind_T = IDENTIFIER
+        if is_keyword(text):
+            k = KEYWORD
+        return (kind: k, text: text, line: ln, col: cl)
+
+    def _scan_delimiter(self, ln: int, cl: int) -> Token_T:
+        let two: str = self._slice(self.pos, self.pos + 2)
+        if two in ("=>", "..", "**", ":=", "/=", ">=", "<=", "<<", ">>", "<>"):
+            self._advance()
+            self._advance()
+            return (kind: DELIMITER, text: two, line: ln, col: cl)
+
+        let one: str = self._slice(self.pos, self.pos + 1)
+        self._advance()
+        if one in ("&", "'", "(", ")", "*", "+", ",", "-", ".", "/",
+                   ":", ";", "<", "=", ">", "|", "@", "[", "]"):
+            return (kind: DELIMITER, text: one, line: ln, col: cl)
+        return (kind: ERROR, text: one, line: ln, col: cl)
+
+    def tokenize(self) -> []Token_T:
+        """Scan the whole source and return the token list (comments included)."""
+        var toks: []Token_T = []
+        while True:
+            self._skip_whitespace()
+            if self.pos >= self.n:
+                break
+
+            let ln: int = self.line
+            let cl: int = self.col
+            let c: char = self.src[self.pos]
+            let two: str = self._slice(self.pos, self.pos + 2)
+
+            if two == "--":
+                toks.append(self._scan_comment(ln, cl))
+            elif c == '"':
+                toks.append(self._scan_string(ln, cl))
+            elif c == '\'' and self._slice(self.pos + 2, self.pos + 3) == "'":
+                # A char literal is ' <one char> ' ; otherwise ' is an attribute
+                # tick (X'Image) and falls through to the delimiter scanner.
+                toks.append(self._scan_char(ln, cl))
+            elif is_digit_ch(c):
+                toks.append(self._scan_number(ln, cl))
+            elif is_alpha_ch(c):
+                toks.append(self._scan_identifier(ln, cl))
+            else:
+                toks.append(self._scan_delimiter(ln, cl))
+        return toks

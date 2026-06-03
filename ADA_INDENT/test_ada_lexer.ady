@@ -1,0 +1,151 @@
+#!/usr/bin/env py2nim
+# test_ada_lexer.ady — tests for ada_lexer.ady
+#
+# Imports the lexer as a library (nimport auto-transpiles the sibling .ady)
+# and checks the token kind and exact spelling produced for a range of Ada
+# lexical elements. Run with:
+#   py2nim ADA_INDENT/test_ada_lexer.ady -r
+
+nimport ada_lexer
+
+# --- helpers ---------------------------------------------------------------
+
+def kinds(src: str) -> []str:
+    """The kind name of every token produced for src."""
+    var lx: Lexer = Lexer(src)
+    var out: []str = []
+    for t in lx.tokenize():
+        out.append(kind_name(t.kind))
+    return out
+
+def texts(src: str) -> []str:
+    """The exact source spelling of every token produced for src."""
+    var lx: Lexer = Lexer(src)
+    var out: []str = []
+    for t in lx.tokenize():
+        out.append(t.text)
+    return out
+
+
+# --- identifiers & reserved words ------------------------------------------
+
+assert kinds("procedure Foo is") == ["KEYWORD", "IDENTIFIER", "KEYWORD"]
+assert texts("procedure Foo is") == ["procedure", "Foo", "is"]
+
+# Reserved words match case-insensitively.
+assert kinds("PROCEDURE Begin RETURN") == ["KEYWORD", "KEYWORD", "KEYWORD"]
+
+# An identifier that merely begins with a keyword is NOT a keyword.
+assert kinds("Case_Sensitive For_Each If_Valid") == \
+    ["IDENTIFIER", "IDENTIFIER", "IDENTIFIER"]
+
+# Underscores and digits inside identifiers.
+assert texts("Get_Line_2") == ["Get_Line_2"]
+
+
+# --- numeric literals ------------------------------------------------------
+
+assert kinds("123") == ["INTEGER_LIT"]
+assert texts("1_000_000") == ["1_000_000"]
+assert kinds("1_000_000") == ["INTEGER_LIT"]
+
+assert kinds("3.14") == ["REAL_LIT"]
+assert texts("3.14") == ["3.14"]
+assert kinds("1.0E5") == ["REAL_LIT"]
+assert texts("2.5e-3") == ["2.5e-3"]
+
+# An integer with a positive exponent is still an integer literal (no point).
+assert kinds("10E3") == ["INTEGER_LIT"]
+assert texts("10E3") == ["10E3"]
+
+# Based literals (integer and real).
+assert kinds("16#FF#") == ["BASED_LIT"]
+assert texts("16#FF#") == ["16#FF#"]
+assert kinds("2#1010#E4") == ["BASED_LIT"]
+assert texts("2#1010#E4") == ["2#1010#E4"]
+assert kinds("16#F.8#") == ["BASED_LIT"]
+
+# A '.' not followed by a digit is the '..' range delimiter, not a fraction.
+assert kinds("1 .. 10") == ["INTEGER_LIT", "DELIMITER", "INTEGER_LIT"]
+assert texts("1..10") == ["1", "..", "10"]
+
+
+# --- character literals ----------------------------------------------------
+
+assert kinds("'x'") == ["CHAR_LIT"]
+assert texts("'x'") == ["'x'"]
+# The apostrophe character literal.
+assert texts("'''") == ["'''"]
+
+# A tick attribute is NOT a character literal — ' becomes a delimiter.
+assert kinds("X'Image") == ["IDENTIFIER", "DELIMITER", "IDENTIFIER"]
+assert texts("X'Image") == ["X", "'", "Image"]
+assert texts("Stage_T'First") == ["Stage_T", "'", "First"]
+
+
+# --- string literals -------------------------------------------------------
+
+assert kinds("\"hello\"") == ["STRING_LIT"]
+assert texts("\"hello\"") == ["\"hello\""]
+
+# A doubled "" inside a string is an embedded quote, not the terminator:
+# the Ada source  "a""b"  is a single string literal.
+let embedded: str = "\"a\"\"b\""
+assert kinds(embedded) == ["STRING_LIT"]
+assert texts(embedded) == [embedded]
+
+
+# --- comments --------------------------------------------------------------
+
+# A comment runs to end of line; the next line resumes normally.
+assert kinds("X; -- note\nY") == \
+    ["IDENTIFIER", "DELIMITER", "COMMENT", "IDENTIFIER"]
+assert texts("X; -- note\nY") == ["X", ";", "-- note", "Y"]
+
+
+# --- delimiters ------------------------------------------------------------
+
+assert texts("A := B + 1") == ["A", ":=", "B", "+", "1"]
+assert texts("X => Y") == ["X", "=>", "Y"]
+assert texts("P /= Q") == ["P", "/=", "Q"]
+assert texts("L <= R >= M") == ["L", "<=", "R", ">=", "M"]
+assert texts("2 ** 8") == ["2", "**", "8"]
+assert kinds("( ) , ; | & .") == \
+    ["DELIMITER", "DELIMITER", "DELIMITER", "DELIMITER",
+     "DELIMITER", "DELIMITER", "DELIMITER"]
+
+# A character with no Ada meaning is reported as ERROR rather than dropped.
+assert kinds("$") == ["ERROR"]
+
+
+# --- line / column tracking ------------------------------------------------
+
+var lx: Lexer = Lexer("a\n  b")
+let toks: []Token_T = lx.tokenize()
+assert toks[0].text == "a"
+assert toks[0].line == 1
+assert toks[0].col == 1
+assert toks[1].text == "b"
+assert toks[1].line == 2
+assert toks[1].col == 3
+
+
+# --- a full subprogram -----------------------------------------------------
+
+let src: str = ("function F (X : Integer) return Integer is\n"
+                "begin\n"
+                "   return X + 1;\n"
+                "end F;\n")
+
+assert kinds("function F (X : Integer) return Integer is") == \
+    ["KEYWORD", "IDENTIFIER", "DELIMITER", "IDENTIFIER", "DELIMITER",
+     "IDENTIFIER", "DELIMITER", "KEYWORD", "IDENTIFIER", "KEYWORD"]
+
+# The whole unit lexes without producing any ERROR tokens.
+var n_err: int = 0
+for k in kinds(src):
+    if k == "ERROR":
+        n_err += 1
+assert n_err == 0
+
+print("all ada_lexer tests passed")
