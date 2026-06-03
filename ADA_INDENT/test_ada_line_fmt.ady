@@ -95,6 +95,11 @@ assert fmt("X     => 1") == "X     => 1"            # 5 spaces kept
 assert fmt("Y_Long => 2") == "Y_Long => 2"          # 1 space kept
 assert fmt("X=>1") == "X => 1"                      # zero → normalised to 1
 
+# in/out parameter mode alignment: extra spaces after keywords are preserved.
+assert fmt("a : in          Float") == "a : in          Float"
+assert fmt("b :      out    Float") == "b :      out    Float"
+assert fmt("c : in out      Float") == "c : in out      Float"
+
 # ) followed by . or ' stays tight (chained component selector / attribute).
 assert fmt("Flight_Updates (Count_Option.Normal).Old_Fixed_Info.The_Flight_Status") == \
     "Flight_Updates (Count_Option.Normal).Old_Fixed_Info.The_Flight_Status"

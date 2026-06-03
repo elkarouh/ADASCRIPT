@@ -65,7 +65,8 @@ def gap(lt: Token_T, rt: Token_T, orig: int) -> int:
         return 0
     if lt.text == ")" or lt.text == "]":
         return 1
-    return 1
+    # Default: preserve the user's spacing for manual alignment, but ensure at least 1.
+    return max(1, orig)
 
 
 # ---------------------------------------------------------------------------
