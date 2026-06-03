@@ -1,0 +1,332 @@
+#!/usr/bin/env py2nim
+"""
+itertools.ady — most useful itertools reimplemented in Adascript
+
+Element type is int throughout; substitute your own type where needed.
+Generator functions use yield and become Nim iterators / Python generators.
+"""
+
+# ---------------------------------------------------------------------------
+# pairwise(s) — consecutive overlapping pairs
+#   pairwise([1,2,3,4]) -> (1,2) (2,3) (3,4)
+#   cf. ada_indent.ady pairwise(s: str) for the string variant
+# ---------------------------------------------------------------------------
+
+def pairwise(s: []int) -> (int, int):
+    for i in 0 ..< len(s) - 1:
+        yield (s[i], s[i + 1])
+
+
+# ---------------------------------------------------------------------------
+# sliding_window(s, n) — generalisation of pairwise; yields each window
+#   sliding_window([1,2,3,4,5], 3) -> [1,2,3] [2,3,4] [3,4,5]
+# ---------------------------------------------------------------------------
+
+def sliding_window(s: []int, n: int) -> []int:
+    let m: int = len(s)
+    for i in 0 ..< m - n + 1:
+        yield s[i ..< i + n]
+
+
+# ---------------------------------------------------------------------------
+# enumerate_seq(s, start) — (index, value) pairs
+#   enumerate_seq([10,20,30]) -> (0,10) (1,20) (2,30)
+# ---------------------------------------------------------------------------
+
+def enumerate_seq(s: []int, start: int = 0) -> (int, int):
+    for i in 0 ..< len(s):
+        yield (start + i, s[i])
+
+
+# ---------------------------------------------------------------------------
+# takewhile(pred, s) — yield elements while predicate holds
+#   takewhile(x < 4, [1,2,3,4,5]) -> 1 2 3
+# ---------------------------------------------------------------------------
+
+def takewhile(pred: [(int,)]bool, s: []int) -> int:
+    for x in s:
+        if not pred(x):
+            break
+        yield x
+
+
+# ---------------------------------------------------------------------------
+# dropwhile(pred, s) — skip elements while predicate holds, yield the rest
+#   dropwhile(x < 4, [1,2,3,4,5]) -> 4 5
+# ---------------------------------------------------------------------------
+
+def dropwhile(pred: [(int,)]bool, s: []int) -> int:
+    var dropping: bool = True
+    for x in s:
+        if dropping and pred(x):
+            continue
+        dropping = False
+        yield x
+
+
+# ---------------------------------------------------------------------------
+# compress(s, selectors) — keep elements where the selector is True
+#   compress([1,2,3,4,5], [True,False,True,False,True]) -> 1 3 5
+# ---------------------------------------------------------------------------
+
+def compress(s: []int, selectors: []bool) -> int:
+    let m: int = min(len(s), len(selectors))
+    for i in 0 ..< m:
+        if selectors[i]:
+            yield s[i]
+
+
+# ---------------------------------------------------------------------------
+# chain(a, b) — concatenate two sequences element by element
+#   chain([1,2], [3,4,5]) -> 1 2 3 4 5
+# ---------------------------------------------------------------------------
+
+def chain(a: []int, b: []int) -> int:
+    for x in a:
+        yield x
+    for x in b:
+        yield x
+
+
+# ---------------------------------------------------------------------------
+# flatten(s) — chain.from_iterable: one level of nesting removed
+#   flatten([[1,2],[3],[4,5]]) -> 1 2 3 4 5
+# ---------------------------------------------------------------------------
+
+def flatten(s: [][]int) -> int:
+    for inner in s:
+        for x in inner:
+            yield x
+
+
+# ---------------------------------------------------------------------------
+# batched(s, n) — non-overlapping chunks of exactly n (last may be shorter)
+#   batched([1,2,3,4,5], 2) -> [1,2] [3,4] [5]
+# ---------------------------------------------------------------------------
+
+def batched(s: []int, n: int) -> []int:
+    var i: int = 0
+    let m: int = len(s)
+    while i < m:
+        yield s[i ..< min(i + n, m)]
+        i += n
+
+
+# ---------------------------------------------------------------------------
+# accumulate(s) — running prefix sum
+#   accumulate([1,2,3,4]) -> 1 3 6 10
+# ---------------------------------------------------------------------------
+
+def accumulate(s: []int) -> int:
+    var total: int = 0
+    for x in s:
+        total += x
+        yield total
+
+
+# ---------------------------------------------------------------------------
+# zip_longest(a, b, fill) — zip, padding the shorter side with fill
+#   zip_longest([1,2,3], [10,20], fill=0) -> (1,10) (2,20) (3,0)
+# ---------------------------------------------------------------------------
+
+def zip_longest(a: []int, b: []int, fill: int = 0) -> (int, int):
+    let m: int = max(len(a), len(b))
+    for i in 0 ..< m:
+        let av: int = a[i] if i < len(a) else fill
+        let bv: int = b[i] if i < len(b) else fill
+        yield (av, bv)
+
+
+# ---------------------------------------------------------------------------
+# product(a, b) — Cartesian product of two sequences
+#   product([1,2], [3,4]) -> (1,3) (1,4) (2,3) (2,4)
+# ---------------------------------------------------------------------------
+
+def product(a: []int, b: []int) -> (int, int):
+    for x in a:
+        for y in b:
+            yield (x, y)
+
+
+# ---------------------------------------------------------------------------
+# combinations(s, r) — r-length subsequences, order-preserving, no repeats
+#   combinations([1,2,3,4], 2) -> [1,2] [1,3] [1,4] [2,3] [2,4] [3,4]
+# ---------------------------------------------------------------------------
+
+def combinations(s: []int, r: int) -> []int:
+    let n: int = len(s)
+    if r <= n:
+        var indices: []int = []
+        for k in 0 ..< r:
+            indices.append(k)
+        var combo: []int = []
+        for idx in indices:
+            combo.append(s[idx])
+        yield combo
+        while True:
+            var i: int = r - 1
+            while i >= 0 and indices[i] == i + n - r:
+                i -= 1
+            if i < 0:
+                break
+            indices[i] += 1
+            for j in i + 1 ..< r:
+                indices[j] = indices[j - 1] + 1
+            combo = []
+            for idx in indices:
+                combo.append(s[idx])
+            yield combo
+
+
+# ---------------------------------------------------------------------------
+# permutations(s) — all orderings in lexicographic order (Narayana Pandita)
+#   permutations([1,2,3]) -> [1,2,3] [1,3,2] [2,1,3] [2,3,1] [3,1,2] [3,2,1]
+# Assumes input is sorted.
+# ---------------------------------------------------------------------------
+
+def permutations(s: []int) -> []int:
+    var a: []int = []
+    for x in s:
+        a.append(x)
+    let n: int = len(a)
+    var snap: []int = []
+    for x in a:
+        snap.append(x)
+    yield snap
+    while True:
+        var i: int = n - 2
+        while i >= 0 and a[i] >= a[i + 1]:
+            i -= 1
+        if i < 0:
+            break
+        var j: int = n - 1
+        while a[j] <= a[i]:
+            j -= 1
+        let t1: int = a[i]
+        a[i] = a[j]
+        a[j] = t1
+        var lo: int = i + 1
+        var hi: int = n - 1
+        while lo < hi:
+            let t2: int = a[lo]
+            a[lo] = a[hi]
+            a[hi] = t2
+            lo += 1
+            hi -= 1
+        snap = []
+        for x in a:
+            snap.append(x)
+        yield snap
+
+
+# ---------------------------------------------------------------------------
+# repeat_elem(x, n) — yield x exactly n times
+#   repeat_elem(7, 3) -> 7 7 7
+# ---------------------------------------------------------------------------
+
+def repeat_elem(x: int, n: int) -> int:
+    for _ in 0 ..< n:
+        yield x
+
+
+# ---------------------------------------------------------------------------
+# count_from(start, step, limit) — arithmetic sequence (bounded; itertools
+#   count() is infinite — pass a large limit or wrap in takewhile)
+#   count_from(0, 2, 5) -> 0 2 4 6 8
+# ---------------------------------------------------------------------------
+
+def count_from(start: int, step: int = 1, limit: int = 1000) -> int:
+    var v: int = start
+    for _ in 0 ..< limit:
+        yield v
+        v += step
+
+
+# ===========================================================================
+# Self-test
+# ===========================================================================
+
+def less_than_4(x: int) -> bool:
+    return x < 4
+
+var got: []int = []
+for p in pairwise([1, 2, 3, 4]):
+    got.append(p[0] * 10 + p[1])
+assert got == [12, 23, 34]
+
+got = []
+for w in sliding_window([1, 2, 3, 4, 5], 3):
+    got.append(w[0] * 100 + w[1] * 10 + w[2])
+assert got == [123, 234, 345]
+
+got = []
+for idx, v in enumerate_seq([10, 20, 30]):
+    got.append(idx * 100 + v)
+assert got == [10, 120, 230]
+
+got = []
+for x in takewhile(less_than_4, [1, 2, 3, 4, 5]):
+    got.append(x)
+assert got == [1, 2, 3]
+
+got = []
+for x in dropwhile(less_than_4, [1, 2, 3, 4, 5]):
+    got.append(x)
+assert got == [4, 5]
+
+got = []
+for x in compress([1, 2, 3, 4, 5], [True, False, True, False, True]):
+    got.append(x)
+assert got == [1, 3, 5]
+
+got = []
+for x in chain([1, 2], [3, 4, 5]):
+    got.append(x)
+assert got == [1, 2, 3, 4, 5]
+
+got = []
+for x in flatten([[1, 2], [3], [4, 5]]):
+    got.append(x)
+assert got == [1, 2, 3, 4, 5]
+
+got = []
+for x in accumulate([1, 2, 3, 4]):
+    got.append(x)
+assert got == [1, 3, 6, 10]
+
+var pairs: [](int, int) = []
+for p in zip_longest([1, 2, 3], [10, 20]):
+    pairs.append(p)
+assert pairs == [(1, 10), (2, 20), (3, 0)]
+
+pairs = []
+for p in product([1, 2], [3, 4]):
+    pairs.append(p)
+assert pairs == [(1, 3), (1, 4), (2, 3), (2, 4)]
+
+var seqs: [][]int = []
+for c in combinations([1, 2, 3, 4], 2):
+    seqs.append(c)
+assert seqs == [[1,2],[1,3],[1,4],[2,3],[2,4],[3,4]]
+
+got = []
+for x in repeat_elem(7, 3):
+    got.append(x)
+assert got == [7, 7, 7]
+
+got = []
+for x in count_from(0, 2, 5):
+    got.append(x)
+assert got == [0, 2, 4, 6, 8]
+
+seqs = []
+for p in permutations([1, 2, 3]):
+    seqs.append(p)
+assert len(seqs) == 6
+
+var batches: [][]int = []
+for b in batched([1, 2, 3, 4, 5], 2):
+    batches.append(b)
+assert batches == [[1, 2], [3, 4], [5]]
+
+print("all itertools tests passed")
