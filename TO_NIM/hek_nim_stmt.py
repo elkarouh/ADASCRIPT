@@ -1877,7 +1877,27 @@ def to_nim(self):
             if _sym and str(_sym.get("type", "")).startswith("_py_module:"):
                 result = f"discard {result}"
     # Method/function call used as a statement with a non-void return type -> discard
-    if len(parts) == 1:
+    # Only when the ENTIRE statement is that single call: a call that is merely the
+    # left operand of a larger expression (e.g. `f(x) or g(x)`) is a value
+    # expression — discarding it would drop the value (and, as an implicit return,
+    # silently return the default). Require the call's parentheses to span to the
+    # end of the statement before treating it as a discardable call statement.
+    import re as _re_whole
+    def _is_whole_call(s):
+        m = _re_whole.match(r'^(?:.+\.)?[A-Za-z_]\w*\(', s)
+        if not m:
+            return False
+        depth = 0
+        for idx in range(m.end() - 1, len(s)):
+            ch = s[idx]
+            if ch == '(':
+                depth += 1
+            elif ch == ')':
+                depth -= 1
+                if depth == 0:
+                    return idx == len(s) - 1   # nothing after the matching ')'
+        return False
+    if len(parts) == 1 and _is_whole_call(result):
         import re as _re_disc
         _proc_rtypes = getattr(ParserState, 'proc_return_types', {})
         _disc_meth_m = _re_disc.match(r'^.+\.([A-Za-z_]\w*)\(', result)
