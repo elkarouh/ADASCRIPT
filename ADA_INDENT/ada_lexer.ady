@@ -47,10 +47,10 @@ type Token_T is tuple:
 # ---------------------------------------------------------------------------
 
 def is_digit_ch(c: char) -> bool:
-    return c >= '0' and c <= '9'
+    return '0' <= c <= '9'
 
 def is_alpha_ch(c: char) -> bool:
-    return (c >= 'a' and c <= 'z') or (c >= 'A' and c <= 'Z')
+    return 'a' <= c <= 'z' or 'A' <= c <= 'Z'
 
 def is_alnum_ch(c: char) -> bool:
     return is_alpha_ch(c) or is_digit_ch(c)
