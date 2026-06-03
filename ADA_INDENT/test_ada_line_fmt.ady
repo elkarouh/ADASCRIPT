@@ -1,0 +1,99 @@
+#!/usr/bin/env py2nim
+# test_ada_line_fmt.ady — tests for ada_line_fmt.ady
+#
+# Run with:
+#   py2nim ADA_INDENT/test_ada_line_fmt.ady -r
+
+nimport ada_line_fmt
+
+def fmt(src: str) -> str:
+    return format_line(src)
+
+
+# --- Rule 1: no space before ; and , ---
+
+assert fmt("X := 1 ;") == "X := 1;"
+assert fmt("Foo (A , B , C)") == "Foo (A, B, C)"
+assert fmt("Foo (A) ;") == "Foo (A);"           # ) then ; — rule 1 beats rule 5
+
+
+# --- Rule 2: one space around binary operators ---
+
+assert fmt("X:=Y") == "X := Y"
+assert fmt("A+B") == "A + B"
+assert fmt("A-B") == "A - B"
+assert fmt("A*B") == "A * B"
+assert fmt("A/B") == "A / B"
+assert fmt("A**B") == "A ** B"
+assert fmt("A&B") == "A & B"
+assert fmt("A=B") == "A = B"
+assert fmt("A/=B") == "A /= B"
+assert fmt("A<B") == "A < B"
+assert fmt("A>B") == "A > B"
+assert fmt("A<=B") == "A <= B"
+assert fmt("A>=B") == "A >= B"
+assert fmt("1..10") == "1 .. 10"
+assert fmt("A|B") == "A | B"
+assert fmt("X=>Y") == "X => Y"
+
+
+# --- Rule 3: one space before comment ---
+
+assert fmt("X := 1;-- note") == "X := 1; -- note"
+assert fmt("X := 1;  -- note") == "X := 1; -- note"
+# Special comment prefixes: body preserved verbatim, one space before --.
+assert fmt("--## adactl") == "--## adactl"
+assert fmt("--% doc") == "--% doc"
+
+
+# --- Rule 4: ( — one space before, no space after ---
+
+assert fmt("Foo(X)") == "Foo (X)"
+assert fmt("Foo( X)") == "Foo (X)"
+assert fmt("Foo  (X)") == "Foo (X)"
+
+
+# --- Rule 5: ) — no space before, one space after ---
+
+assert fmt("Foo(X )") == "Foo (X)"
+
+
+# --- Rule 6: tight delimiters . and ' ---
+
+assert fmt("A .B") == "A.B"
+assert fmt("A. B") == "A.B"
+assert fmt("T 'First") == "T'First"
+assert fmt("T' First") == "T'First"
+
+
+# --- Leading indentation is preserved ---
+
+assert fmt("   X := 1;") == "   X := 1;"
+assert fmt("      return X + 1;") == "      return X + 1;"
+
+
+# --- Blank / whitespace-only lines ---
+
+assert fmt("") == ""
+assert fmt("   ") == ""
+
+
+# --- Compound cases ---
+
+assert fmt("if X>0 then") == "if X > 0 then"
+assert fmt("while I<N loop") == "while I < N loop"
+assert fmt("return X+1 ;") == "return X + 1;"
+assert fmt("X:=A+B*C;") == "X := A + B * C;"
+assert fmt("procedure Foo(X:Integer;Y:Boolean) is") == \
+    "procedure Foo (X : Integer; Y : Boolean) is"
+
+
+# --- format_source: applies format_line line by line ---
+
+let src: str = ("X:=1;\n"
+                "Y:=2;\n")
+assert format_source(src) == ("X := 1;\n"
+                              "Y := 2;\n")
+
+
+print("all ada_line_fmt tests passed")
