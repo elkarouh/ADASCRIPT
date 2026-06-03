@@ -59,8 +59,7 @@ def is_newline_ch(c: char) -> bool:
     return ord(c) == 10                       # '\n' — escape char literals would
 
 def is_space_ch(c: char) -> bool:
-    let o: int = ord(c)                        # space, tab, LF, CR
-    return o == 32 or o == 9 or o == 10 or o == 13
+    return ord(c) in (32, 9, 10, 13)           # space, tab, LF, CR
 
 
 # ---------------------------------------------------------------------------
