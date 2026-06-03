@@ -3409,7 +3409,20 @@ def to_nim(self, indent=0):
     non_empty = [p for p in parts if p.strip()]
     if len(non_empty) == 1:
         r = result.strip()
-        if not _returns_string and r and len(r) >= 2 and r[0] == r[-1] and r[0] in ('"', "'"):
+        # Check AST to verify this is a true string literal, not an expression starting with '
+        _is_docstring = False
+        if not _returns_string and r and len(r) >= 2:
+            # Inspect the original AST to ensure it's a pure STRING, not a comparison or other expr
+            for node in self.nodes:
+                if type(node).__name__ == 'simple_stmt' and hasattr(node, 'nodes') and node.nodes:
+                    _child = node.nodes[0]  # expr_stmt or other statement type
+                    if type(_child).__name__ == 'expr_stmt' and hasattr(_child, 'nodes') and _child.nodes:
+                        _expr = _child.nodes[0]  # the actual expression
+                        # Only treat as docstring if it's a pure STRING node
+                        if type(_expr).__name__ == 'STRING':
+                            _is_docstring = True
+                    break
+        if _is_docstring:
             result = _ind(indent) + '## ' + r[1:-1]
         else:
             result = _ind(indent) + result

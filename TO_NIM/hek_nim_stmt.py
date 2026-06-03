@@ -1900,14 +1900,8 @@ def to_nim(self):
     # Bare print (no args) -> echo "" (empty line)
     if result == "echo":
         result = 'echo ""'
-    # Convert bare string literals (docstrings) to Nim doc comments.
-    # Skip when the function returns string — the literal is an implicit return value.
-    # (Triple-quoted strings are already converted to ## by STRING.to_nim().)
-    _returns_string = _ret.lstrip(": ").strip() in ("string", "cstring")
-    if len(parts) == 1 and not _returns_string:
-        r = parts[0]
-        if r and len(r) >= 2 and r[0] == r[-1] and r[0] in ('"', "'"):
-            result = '## ' + r[1:-1]
+    # NOTE: Docstring detection is implemented in hek_nim_parser.py stmt_line.to_nim(),
+    # not here. This fallback is disabled as it's not the active code path.
     if newline_node is not None and hasattr(newline_node, "comments") and newline_node.comments:
         for kind, text, ind in newline_node.comments:
             if kind == "comment":
