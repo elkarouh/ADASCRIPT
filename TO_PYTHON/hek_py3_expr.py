@@ -527,6 +527,8 @@ def to_py(self, prec=None):
                     result = "0"
                 elif tr._tick_attr == "Last":
                     result = f"(len({result}) - 1)"
+                elif tr._tick_attr == "Image":
+                    result = f"({result}).name"
                 else:
                     op = "+" if tr._tick_attr == "Next" else "-"
                     result = f"type({result})({result}.value {op} 1)"
