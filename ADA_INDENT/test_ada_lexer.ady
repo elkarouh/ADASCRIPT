@@ -15,7 +15,7 @@ def kinds(src: str) -> []str:
     var lx: Lexer = Lexer(src)
     var out: []str = []
     for t in lx.tokenize():
-        out.append(kind_name(t.kind))
+        out.append(t.kind'Image)
     return out
 
 def texts(src: str) -> []str:

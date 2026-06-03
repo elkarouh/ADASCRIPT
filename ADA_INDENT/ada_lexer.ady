@@ -85,15 +85,6 @@ def is_keyword(word: str) -> bool:
     return word.lower() in ADA_KEYWORDS
 
 
-def kind_name(k: Token_Kind_T) -> str:
-    """The enum member's name, for diagnostics and tests.
-
-    NIM-ONLY: 'Image transpiles to Nim's `$` (yielding the bare member name,
-    e.g. "KEYWORD"). The Python backend mistranslates 'Image on a value, so
-    this helper is not portable — the rest of the library is."""
-    return k'Image
-
-
 # ---------------------------------------------------------------------------
 # The lexer.
 # ---------------------------------------------------------------------------
