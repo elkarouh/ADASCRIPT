@@ -42,6 +42,7 @@ STANDALONE := \
     test_shortest_path.ady \
     primes.ady \
     test_ownership.ady \
+    test_iters.ady \
     td_learning/sarsa.ady \
     td_learning/qlearning.ady
 
