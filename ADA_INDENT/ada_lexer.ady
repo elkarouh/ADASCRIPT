@@ -53,13 +53,13 @@ def is_alpha_ch(c: char) -> bool:
     return 'a' <= c <= 'z' or 'A' <= c <= 'Z'
 
 def is_alnum_ch(c: char) -> bool:
-    return is_alpha_ch(c) or is_digit_ch(c)
+    is_alpha_ch(c) or is_digit_ch(c)
 
 def is_newline_ch(c: char) -> bool:
-    return ord(c) == 10                       # '\n' — escape char literals would
+    ord(c) == 10                              # '\n' — escape char literals would
 
 def is_space_ch(c: char) -> bool:
-    return ord(c) in (32, 9, 10, 13)           # space, tab, LF, CR
+    ord(c) in (32, 9, 10, 13)                  # space, tab, LF, CR
 
 
 # ---------------------------------------------------------------------------
@@ -81,7 +81,7 @@ let ADA_KEYWORDS: {}str = {
 }
 
 def is_keyword(word: str) -> bool:
-    return word.lower() in ADA_KEYWORDS
+    word.lower() in ADA_KEYWORDS
 
 
 # ---------------------------------------------------------------------------
