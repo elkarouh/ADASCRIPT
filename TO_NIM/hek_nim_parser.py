@@ -493,11 +493,29 @@ def to_nim(self, indent=0, is_virtual=False, class_name=None, parent_name=None, 
             # Check bare function call first (e.g. "emit(x)"), then method call (e.g. "obj.next(x)")
             _df = _re_disc_blk.match(r'^([A-Za-z_]\w*)\(', _stripped)
             _dm = _re_disc_blk.match(r'^[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*\.([A-Za-z_]\w*)\(', _stripped) if not _df else None
+            # Only discard when the call's parentheses span the whole statement.
+            # A call that is merely the left operand of a larger expression
+            # (e.g. `f(x) or g(x)`) is a value expression, not a void call:
+            # discarding it would drop the value and, as an implicit return,
+            # silently return the default.
+            def _whole_call(s, m):
+                depth = 0
+                for _idx in range(m.end() - 1, len(s)):
+                    _ch = s[_idx]
+                    if _ch == '(':
+                        depth += 1
+                    elif _ch == ')':
+                        depth -= 1
+                        if depth == 0:
+                            return _idx == len(s) - 1
+                return False
             _NIM_VOID_BUILTINS_BLK = {"add", "incl", "excl", "del", "delete", "insert",
                                        "setLen", "sort", "shuffle", "reverse", "reset",
                                        "echo", "write", "writeLine", "close", "flush"}
             _dname = (_df.group(1) if _df else (_dm.group(1) if _dm else None))
-            if _dname and _dname in _proc_rtypes_blk and _dname not in _NIM_VOID_BUILTINS_BLK:
+            _dmatch = _df or _dm
+            if (_dname and _dmatch and _whole_call(_stripped, _dmatch)
+                    and _dname in _proc_rtypes_blk and _dname not in _NIM_VOID_BUILTINS_BLK):
                 _dret = _proc_rtypes_blk[_dname]
                 if _dret not in _void_rets_blk:
                     _ind_prefix = _ln[:len(_ln) - len(_stripped)]
