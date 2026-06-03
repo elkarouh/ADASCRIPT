@@ -86,18 +86,12 @@ def is_keyword(word: str) -> bool:
 
 
 def kind_name(k: Token_Kind_T) -> str:
-    """The enum member's name, for diagnostics and tests (backend-portable)."""
-    case k:
-        when IDENTIFIER:  return "IDENTIFIER"
-        when KEYWORD:     return "KEYWORD"
-        when INTEGER_LIT: return "INTEGER_LIT"
-        when REAL_LIT:    return "REAL_LIT"
-        when BASED_LIT:   return "BASED_LIT"
-        when CHAR_LIT:    return "CHAR_LIT"
-        when STRING_LIT:  return "STRING_LIT"
-        when DELIMITER:   return "DELIMITER"
-        when COMMENT:     return "COMMENT"
-        when ERROR:       return "ERROR"
+    """The enum member's name, for diagnostics and tests.
+
+    NIM-ONLY: 'Image transpiles to Nim's `$` (yielding the bare member name,
+    e.g. "KEYWORD"). The Python backend mistranslates 'Image on a value, so
+    this helper is not portable — the rest of the library is."""
+    return k'Image
 
 
 # ---------------------------------------------------------------------------
