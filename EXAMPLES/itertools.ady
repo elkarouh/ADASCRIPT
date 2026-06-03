@@ -1,18 +1,25 @@
 #!/usr/bin/env py2nim
 """
-itertools.ady — most useful itertools reimplemented in Adascript
+itertools.ady — most useful itertools, generic over element type T
 
-Element type is int throughout; substitute your own type where needed.
-Generator functions use yield and become Nim iterators / Python generators.
+Using an undeclared type name in a function signature makes Nim treat it as
+an implicit generic type parameter.  Every function that is parameterised by
+element type uses T (and U for product's second sequence); the Nim compiler
+instantiates a concrete version for each call-site type automatically.
+
+accumulate takes an explicit binary operator and identity element so it works
+for any type with an associative operation, not just numeric addition.
+zip_longest requires an explicit fill value because there is no sensible
+default for an arbitrary type T.
 """
 
 # ---------------------------------------------------------------------------
 # pairwise(s) — consecutive overlapping pairs
-#   pairwise([1,2,3,4]) -> (1,2) (2,3) (3,4)
-#   cf. ada_indent.ady pairwise(s: str) for the string variant
+#   pairwise([1,2,3,4])     -> (1,2) (2,3) (3,4)
+#   pairwise(["a","b","c"]) -> ("a","b") ("b","c")
 # ---------------------------------------------------------------------------
 
-def pairwise(s: []int) -> (int, int):
+def pairwise(s: []T) -> (T, T):
     for i in 0 ..< len(s) - 1:
         yield (s[i], s[i + 1])
 
@@ -22,7 +29,7 @@ def pairwise(s: []int) -> (int, int):
 #   sliding_window([1,2,3,4,5], 3) -> [1,2,3] [2,3,4] [3,4,5]
 # ---------------------------------------------------------------------------
 
-def sliding_window(s: []int, n: int) -> []int:
+def sliding_window(s: []T, n: int) -> []T:
     let m: int = len(s)
     for i in 0 ..< m - n + 1:
         yield s[i ..< i + n]
@@ -30,20 +37,19 @@ def sliding_window(s: []int, n: int) -> []int:
 
 # ---------------------------------------------------------------------------
 # enumerate_seq(s, start) — (index, value) pairs
-#   enumerate_seq([10,20,30]) -> (0,10) (1,20) (2,30)
+#   enumerate_seq(["x","y","z"]) -> (0,"x") (1,"y") (2,"z")
 # ---------------------------------------------------------------------------
 
-def enumerate_seq(s: []int, start: int = 0) -> (int, int):
+def enumerate_seq(s: []T, start: int = 0) -> (int, T):
     for i in 0 ..< len(s):
         yield (start + i, s[i])
 
 
 # ---------------------------------------------------------------------------
 # takewhile(pred, s) — yield elements while predicate holds
-#   takewhile(x < 4, [1,2,3,4,5]) -> 1 2 3
 # ---------------------------------------------------------------------------
 
-def takewhile(pred: [(int,)]bool, s: []int) -> int:
+def takewhile(pred: [(T,)]bool, s: []T) -> T:
     for x in s:
         if not pred(x):
             break
@@ -52,10 +58,9 @@ def takewhile(pred: [(int,)]bool, s: []int) -> int:
 
 # ---------------------------------------------------------------------------
 # dropwhile(pred, s) — skip elements while predicate holds, yield the rest
-#   dropwhile(x < 4, [1,2,3,4,5]) -> 4 5
 # ---------------------------------------------------------------------------
 
-def dropwhile(pred: [(int,)]bool, s: []int) -> int:
+def dropwhile(pred: [(T,)]bool, s: []T) -> T:
     var dropping: bool = True
     for x in s:
         if dropping and pred(x):
@@ -66,10 +71,10 @@ def dropwhile(pred: [(int,)]bool, s: []int) -> int:
 
 # ---------------------------------------------------------------------------
 # compress(s, selectors) — keep elements where the selector is True
-#   compress([1,2,3,4,5], [True,False,True,False,True]) -> 1 3 5
+#   compress(["a","b","c"], [True,False,True]) -> "a" "c"
 # ---------------------------------------------------------------------------
 
-def compress(s: []int, selectors: []bool) -> int:
+def compress(s: []T, selectors: []bool) -> T:
     let m: int = min(len(s), len(selectors))
     for i in 0 ..< m:
         if selectors[i]:
@@ -78,10 +83,10 @@ def compress(s: []int, selectors: []bool) -> int:
 
 # ---------------------------------------------------------------------------
 # chain(a, b) — concatenate two sequences element by element
-#   chain([1,2], [3,4,5]) -> 1 2 3 4 5
+#   chain(["x","y"], ["z"]) -> "x" "y" "z"
 # ---------------------------------------------------------------------------
 
-def chain(a: []int, b: []int) -> int:
+def chain(a: []T, b: []T) -> T:
     for x in a:
         yield x
     for x in b:
@@ -93,7 +98,7 @@ def chain(a: []int, b: []int) -> int:
 #   flatten([[1,2],[3],[4,5]]) -> 1 2 3 4 5
 # ---------------------------------------------------------------------------
 
-def flatten(s: [][]int) -> int:
+def flatten(s: [][]T) -> T:
     for inner in s:
         for x in inner:
             yield x
@@ -104,7 +109,7 @@ def flatten(s: [][]int) -> int:
 #   batched([1,2,3,4,5], 2) -> [1,2] [3,4] [5]
 # ---------------------------------------------------------------------------
 
-def batched(s: []int, n: int) -> []int:
+def batched(s: []T, n: int) -> []T:
     var i: int = 0
     let m: int = len(s)
     while i < m:
@@ -113,36 +118,39 @@ def batched(s: []int, n: int) -> []int:
 
 
 # ---------------------------------------------------------------------------
-# accumulate(s) — running prefix sum
-#   accumulate([1,2,3,4]) -> 1 3 6 10
+# accumulate(s, op, init) — running reduction with a binary operator
+#   accumulate([1,2,3,4], add, 0)   -> 1 3 6 10
+#   accumulate([2,3,4],   mul, 1)   -> 2 6 24
+#   accumulate(["a","b"], cat, "")  -> "a" "ab"
 # ---------------------------------------------------------------------------
 
-def accumulate(s: []int) -> int:
-    var total: int = 0
+def accumulate(s: []T, op: [(T, T)]T, init: T) -> T:
+    var total: T = init
     for x in s:
-        total += x
+        total = op(total, x)
         yield total
 
 
 # ---------------------------------------------------------------------------
 # zip_longest(a, b, fill) — zip, padding the shorter side with fill
-#   zip_longest([1,2,3], [10,20], fill=0) -> (1,10) (2,20) (3,0)
+#   zip_longest([1,2,3], [10,20], 0) -> (1,10) (2,20) (3,0)
+# fill must be provided explicitly; there is no sensible default for T.
 # ---------------------------------------------------------------------------
 
-def zip_longest(a: []int, b: []int, fill: int = 0) -> (int, int):
+def zip_longest(a: []T, b: []T, fill: T) -> (T, T):
     let m: int = max(len(a), len(b))
     for i in 0 ..< m:
-        let av: int = a[i] if i < len(a) else fill
-        let bv: int = b[i] if i < len(b) else fill
+        let av: T = a[i] if i < len(a) else fill
+        let bv: T = b[i] if i < len(b) else fill
         yield (av, bv)
 
 
 # ---------------------------------------------------------------------------
-# product(a, b) — Cartesian product of two sequences
-#   product([1,2], [3,4]) -> (1,3) (1,4) (2,3) (2,4)
+# product(a, b) — Cartesian product; a and b may have different element types
+#   product([1,2], ["x","y"]) -> (1,"x") (1,"y") (2,"x") (2,"y")
 # ---------------------------------------------------------------------------
 
-def product(a: []int, b: []int) -> (int, int):
+def product(a: []T, b: []U) -> (T, U):
     for x in a:
         for y in b:
             yield (x, y)
@@ -153,13 +161,13 @@ def product(a: []int, b: []int) -> (int, int):
 #   combinations([1,2,3,4], 2) -> [1,2] [1,3] [1,4] [2,3] [2,4] [3,4]
 # ---------------------------------------------------------------------------
 
-def combinations(s: []int, r: int) -> []int:
+def combinations(s: []T, r: int) -> []T:
     let n: int = len(s)
     if r <= n:
         var indices: []int = []
         for k in 0 ..< r:
             indices.append(k)
-        var combo: []int = []
+        var combo: []T = []
         for idx in indices:
             combo.append(s[idx])
         yield combo
@@ -180,16 +188,17 @@ def combinations(s: []int, r: int) -> []int:
 
 # ---------------------------------------------------------------------------
 # permutations(s) — all orderings in lexicographic order (Narayana Pandita)
+# T must support < so the algorithm can find the next permutation.
 #   permutations([1,2,3]) -> [1,2,3] [1,3,2] [2,1,3] [2,3,1] [3,1,2] [3,2,1]
 # Assumes input is sorted.
 # ---------------------------------------------------------------------------
 
-def permutations(s: []int) -> []int:
-    var a: []int = []
+def permutations(s: []T) -> []T:
+    var a: []T = []
     for x in s:
         a.append(x)
     let n: int = len(a)
-    var snap: []int = []
+    var snap: []T = []
     for x in a:
         snap.append(x)
     yield snap
@@ -202,13 +211,13 @@ def permutations(s: []int) -> []int:
         var j: int = n - 1
         while a[j] <= a[i]:
             j -= 1
-        let t1: int = a[i]
+        let t1: T = a[i]
         a[i] = a[j]
         a[j] = t1
         var lo: int = i + 1
         var hi: int = n - 1
         while lo < hi:
-            let t2: int = a[lo]
+            let t2: T = a[lo]
             a[lo] = a[hi]
             a[hi] = t2
             lo += 1
@@ -221,17 +230,16 @@ def permutations(s: []int) -> []int:
 
 # ---------------------------------------------------------------------------
 # repeat_elem(x, n) — yield x exactly n times
-#   repeat_elem(7, 3) -> 7 7 7
+#   repeat_elem("ha", 3) -> "ha" "ha" "ha"
 # ---------------------------------------------------------------------------
 
-def repeat_elem(x: int, n: int) -> int:
+def repeat_elem(x: T, n: int) -> T:
     for _ in 0 ..< n:
         yield x
 
 
 # ---------------------------------------------------------------------------
-# count_from(start, step, limit) — arithmetic sequence (bounded; itertools
-#   count() is infinite — pass a large limit or wrap in takewhile)
+# count_from(start, step, limit) — arithmetic sequence (int only)
 #   count_from(0, 2, 5) -> 0 2 4 6 8
 # ---------------------------------------------------------------------------
 
@@ -243,11 +251,19 @@ def count_from(start: int, step: int = 1, limit: int = 1000) -> int:
 
 
 # ===========================================================================
-# Self-test
+# Self-test — exercises both int and str instantiations
 # ===========================================================================
 
 def less_than_4(x: int) -> bool:
     return x < 4
+
+def add(a: int, b: int) -> int:
+    return a + b
+
+def starts_with_a(s: str) -> bool:
+    return s[0] == 'a'
+
+# --- int tests ---
 
 var got: []int = []
 for p in pairwise([1, 2, 3, 4]):
@@ -290,24 +306,24 @@ for x in flatten([[1, 2], [3], [4, 5]]):
 assert got == [1, 2, 3, 4, 5]
 
 got = []
-for x in accumulate([1, 2, 3, 4]):
+for x in accumulate([1, 2, 3, 4], add, 0):
     got.append(x)
 assert got == [1, 3, 6, 10]
 
 var pairs: [](int, int) = []
-for p in zip_longest([1, 2, 3], [10, 20]):
+for p in zip_longest([1, 2, 3], [10, 20], 0):
     pairs.append(p)
 assert pairs == [(1, 10), (2, 20), (3, 0)]
-
-pairs = []
-for p in product([1, 2], [3, 4]):
-    pairs.append(p)
-assert pairs == [(1, 3), (1, 4), (2, 3), (2, 4)]
 
 var seqs: [][]int = []
 for c in combinations([1, 2, 3, 4], 2):
     seqs.append(c)
 assert seqs == [[1,2],[1,3],[1,4],[2,3],[2,4],[3,4]]
+
+seqs = []
+for p in permutations([1, 2, 3]):
+    seqs.append(p)
+assert len(seqs) == 6
 
 got = []
 for x in repeat_elem(7, 3):
@@ -319,14 +335,48 @@ for x in count_from(0, 2, 5):
     got.append(x)
 assert got == [0, 2, 4, 6, 8]
 
-seqs = []
-for p in permutations([1, 2, 3]):
-    seqs.append(p)
-assert len(seqs) == 6
-
 var batches: [][]int = []
 for b in batched([1, 2, 3, 4, 5], 2):
     batches.append(b)
 assert batches == [[1, 2], [3, 4], [5]]
+
+# --- str tests (exercises a second instantiation of each generic) ---
+
+var str_pw: [](str, str) = []
+for p in pairwise(["a", "b", "c"]):
+    str_pw.append(p)
+assert str_pw == [("a", "b"), ("b", "c")]
+
+var words: []str = []
+for x in chain(["hello"], ["world"]):
+    words.append(x)
+assert words == ["hello", "world"]
+
+words = []
+for x in compress(["keep", "drop", "keep"], [True, False, True]):
+    words.append(x)
+assert words == ["keep", "keep"]
+
+words = []
+for x in repeat_elem("ha", 3):
+    words.append(x)
+assert words == ["ha", "ha", "ha"]
+
+words = []
+for x in takewhile(starts_with_a, ["ant", "ape", "bee", "asp"]):
+    words.append(x)
+assert words == ["ant", "ape"]
+
+var str_pairs: [](str, str) = []
+for p in zip_longest(["a", "b", "c"], ["x", "y"], "?"):
+    str_pairs.append(p)
+assert str_pairs == [("a", "x"), ("b", "y"), ("c", "?")]
+
+# --- mixed types via product ---
+
+var mixed: [](int, str) = []
+for p in product([1, 2], ["x", "y"]):
+    mixed.append(p)
+assert mixed == [(1, "x"), (1, "y"), (2, "x"), (2, "y")]
 
 print("all itertools tests passed")
