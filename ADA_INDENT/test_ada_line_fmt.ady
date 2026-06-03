@@ -87,6 +87,12 @@ assert fmt("X:=A+B*C;") == "X := A + B * C;"
 assert fmt("procedure Foo(X:Integer;Y:Boolean) is") == \
     "procedure Foo (X : Integer; Y : Boolean) is"
 
+# ) followed by . or ' stays tight (chained component selector / attribute).
+assert fmt("Flight_Updates (Count_Option.Normal).Old_Fixed_Info.The_Flight_Status") == \
+    "Flight_Updates (Count_Option.Normal).Old_Fixed_Info.The_Flight_Status"
+assert fmt("Foo(X).Bar") == "Foo (X).Bar"
+assert fmt("Foo(X)'First") == "Foo (X)'First"
+
 
 # --- format_source: applies format_line line by line ---
 
