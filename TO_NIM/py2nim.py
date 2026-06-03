@@ -1410,37 +1410,47 @@ def main(argv=None):
                 ]
         transpiler_mtime = max(os.path.getmtime(p) for p in _transpiler_py_files)
 
-        # Pre-pass: parse nimport'd .ady dependencies to collect constructor
-        # signatures (proc_param_types_full) so the main file can generate
-        # forwarding constructors for subclasses of cross-file base classes.
-        # Signatures are stored in a module-level dict that survives reset().
+        # Pre-pass: parse nimport'd .ady dependencies (transitively, via BFS) to
+        # collect constructor signatures and class names so the main file and any
+        # intermediate deps can use ClassName(args) → newClassName(args).
+        # Signatures are stored in module-level dicts that survive reset().
         import re as _re_prepass
         _ady_dir_pre = os.path.dirname(os.path.abspath(ady_file))
-        for _dep_name_pre in _re_prepass.findall(r'^\s*nimport\s+(\w[\w./]*)', code, _re_prepass.MULTILINE):
-            _candidates_pre = [
-                os.path.join(_ady_dir_pre, _dep_name_pre + ".ady"),
-                os.path.join(os.path.dirname(_ady_dir_pre), _dep_name_pre + ".ady"),
-                os.path.join(cache_dir, _dep_name_pre + ".ady"),
+
+        def _find_dep_ady_pre(dep_name, search_dir):
+            _cands = [
+                os.path.join(search_dir, dep_name + ".ady"),
+                os.path.join(os.path.dirname(search_dir), dep_name + ".ady"),
+                os.path.join(cache_dir, dep_name + ".ady"),
             ]
-            _dep_ady_pre = next((p for p in _candidates_pre if os.path.exists(p)), _candidates_pre[-1])
-            if not os.path.exists(_dep_ady_pre):
-                continue
-            with open(_dep_ady_pre, encoding="utf-8") as _f:
-                _dep_code_pre = _f.read()
+            return next((p for p in _cands if os.path.exists(p)), None)
+
+        _prepass_seen = set()
+        _prepass_worklist = []
+
+        def _enqueue_prepass(src_code, search_dir):
+            for _dn in _re_prepass.findall(r'^\s*nimport\s+(\w[\w./]*)', src_code, _re_prepass.MULTILINE):
+                if _dn not in _prepass_seen:
+                    _path = _find_dep_ady_pre(_dn, search_dir)
+                    if _path:
+                        _prepass_seen.add(_dn)
+                        _prepass_worklist.append((_dn, _path, os.path.dirname(_path)))
+
+        _enqueue_prepass(code, _ady_dir_pre)
+
+        while _prepass_worklist:
+            _ppname, _ppady, _ppdir = _prepass_worklist.pop(0)
             try:
+                with open(_ppady, encoding="utf-8") as _f:
+                    _ppcode = _f.read()
                 from hek_parsec import ParserState as _PS_pre
                 _PS_pre.reset()
-                translate(_dep_code_pre, export_symbols=True)
+                translate(_ppcode, export_symbols=True)
                 _nimport_param_types_full.update(_PS_pre.proc_param_types_full)
-                # Collect class names so ClassName(args) → newClassName(args) in importers.
-                # ParserState.class_names is populated during parsing alongside
-                # symbol_table.add(..., "class") and survives scope teardown.
                 _nimport_class_names.update(getattr(_PS_pre, "class_names", set()))
-                # Collect method return types so _nim_expr_type can resolve e.g. conn.rows()
                 _nimport_proc_return_types.update(getattr(_PS_pre, "proc_return_types", {}))
-                # Collect ref/virtual class names so subclasses in the importer
-                # are also emitted as ref object of BaseClass.
                 _nimport_ref_classes.update(getattr(_PS_pre, "_ref_classes", set()))
+                _enqueue_prepass(_ppcode, _ppdir)
             except Exception:
                 pass  # errors will surface properly during the full dep transpile
 
@@ -1478,40 +1488,66 @@ def main(argv=None):
         else:
             print(f"# up to date: {nim_file}", file=sys.stderr)
 
-        # Auto-transpile nimport'd .ady dependencies into the same cache dir.
-        # For each `nimport <name>` in the source, if <name>.ady exists next to
-        # the source file, transpile it into cache_dir so Nim can find it.
+        # Auto-transpile nimport'd .ady dependencies into the same cache dir,
+        # resolving transitive dependencies via BFS so that deps-of-deps are
+        # also compiled before Nim sees the final import graph.
         import re as _re_nimport
         _ady_dir = os.path.dirname(os.path.abspath(ady_file))
-        for _dep_name in _re_nimport.findall(r'^\s*nimport\s+(\w[\w./]*)', code, _re_nimport.MULTILINE):
+        _root_dir = os.path.dirname(_dir)
+        _root_transpiler_mtime = max(
+            (os.path.getmtime(os.path.join(_root_dir, f))
+             for f in os.listdir(_root_dir)
+             if f.endswith(".py") and os.path.isfile(os.path.join(_root_dir, f))),
+            default=0
+        )
+        _eff_transpiler_mtime = max(transpiler_mtime, _root_transpiler_mtime)
+
+        import re as _re_export
+        def _export_toplevel(src):
+            lines = src.split('\n')
+            out = []
+            for line in lines:
+                m = _re_export.match(
+                    r'^((?:let|var|const|proc|func|iterator|template|macro)\s+)(\w+)(\b[^*])',
+                    line)
+                if m:
+                    line = m.group(1) + m.group(2) + '*' + m.group(3) + line[m.end():]
+                out.append(line)
+            return '\n'.join(out)
+
+        def _find_dep_ady(dep_name, search_dir):
             _candidates = [
-                os.path.join(_ady_dir, _dep_name + ".ady"),
-                os.path.join(os.path.dirname(_ady_dir), _dep_name + ".ady"),
-                os.path.join(cache_dir, _dep_name + ".ady"),
+                os.path.join(search_dir, dep_name + ".ady"),
+                os.path.join(os.path.dirname(search_dir), dep_name + ".ady"),
+                os.path.join(cache_dir, dep_name + ".ady"),
             ]
-            _dep_ady = next((p for p in _candidates if os.path.exists(p)), _candidates[-1])
-            if not os.path.exists(_dep_ady):
-                continue
+            return next((p for p in _candidates if os.path.exists(p)), None)
+
+        # BFS: seed from the top-level source, then follow each dep's own nimports.
+        _seen_deps = set()   # dep names already enqueued
+        _dep_worklist = []   # (dep_name, dep_ady_path, dep_search_dir)
+
+        def _enqueue_nimports(src_code, search_dir):
+            for _dn in _re_nimport.findall(r'^\s*nimport\s+(\w[\w./]*)', src_code, _re_nimport.MULTILINE):
+                if _dn not in _seen_deps:
+                    _path = _find_dep_ady(_dn, search_dir)
+                    if _path:
+                        _seen_deps.add(_dn)
+                        _dep_worklist.append((_dn, _path, os.path.dirname(_path)))
+
+        _enqueue_nimports(code, _ady_dir)
+
+        while _dep_worklist:
+            _dep_name, _dep_ady, _dep_dir = _dep_worklist.pop(0)
             _dep_nim = os.path.join(cache_dir, _dep_name + ".nim")
             _dep_mtime = os.path.getmtime(_dep_ady)
             _dep_nim_mtime = os.path.getmtime(_dep_nim) if os.path.exists(_dep_nim) else 0
-            # Also check root-level .py files (e.g. hek_tokenize.py lives outside TO_NIM/)
-            _root_dir = os.path.dirname(_dir)
-            _root_transpiler_mtime = max(
-                (os.path.getmtime(os.path.join(_root_dir, f))
-                 for f in os.listdir(_root_dir)
-                 if f.endswith(".py") and os.path.isfile(os.path.join(_root_dir, f))),
-                default=0
-            )
-            _eff_transpiler_mtime = max(transpiler_mtime, _root_transpiler_mtime)
             if _dep_nim_mtime < max(_dep_mtime, _eff_transpiler_mtime):
                 with open(_dep_ady, encoding="utf-8") as _f:
                     _dep_code = _f.read()
                 try:
                     from hek_parsec import ParserState as _ParserState
                     _ParserState.reset()
-                    # Clear any per-file state from hek_nim_expr so each dep
-                    # gets its own fresh set of helpers (e.g. jsConstruct).
                     import hek_nim_expr as _hne_dep
                     for _attr in ('_jsnew_helper_added',):
                         if hasattr(_hne_dep.ParserState, _attr):
@@ -1520,31 +1556,18 @@ def main(argv=None):
                 except SyntaxError as _e:
                     print(f"# ERROR transpiling dependency {_dep_ady}: {_e}", file=sys.stderr)
                     sys.exit(1)
-                # Export all top-level declarations so importers can access them.
-                # Nim requires '*' suffix on identifiers to make them public.
-                import re as _re_export
-                def _export_toplevel(src):
-                    lines = src.split('\n')
-                    out = []
-                    for line in lines:
-                        # Match top-level let/var/const/proc/func declarations
-                        m = _re_export.match(
-                            r'^((?:let|var|const|proc|func|iterator|template|macro)\s+)(\w+)(\b[^*])',
-                            line)
-                        if m:
-                            line = m.group(1) + m.group(2) + '*' + m.group(3) + line[m.end():]
-                        out.append(line)
-                    return '\n'.join(out)
                 _dep_nim_output = _export_toplevel(_dep_nim_output)
                 with open(_dep_nim, "w", encoding="utf-8") as _f:
                     _f.write(_dep_nim_output)
-                # Wipe nimcache so stale .c/.o for the dependency are regenerated
                 import shutil as _shutil2
                 if os.path.isdir(nimcache_dir):
                     _shutil2.rmtree(nimcache_dir)
                 print(f"# transpiled dependency → {_dep_nim}", file=sys.stderr)
             else:
                 print(f"# up to date dependency: {_dep_nim}", file=sys.stderr)
+            # Scan this dep for its own nimports regardless of whether we re-transpiled.
+            with open(_dep_ady, encoding="utf-8") as _f:
+                _enqueue_nimports(_f.read(), _dep_dir)
 
         # --- tier 2: compile? ---
         # Only meaningful for binary-producing subcommands.

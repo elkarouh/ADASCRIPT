@@ -1,0 +1,115 @@
+#!/usr/bin/env py2nim
+# ada_line_fmt.ady — token-level line formatter for Ada source.
+#
+# Applies the coding-standard spacing rules (priority order;
+# first applicable rule wins):
+#
+#   1. ";" ","   : no space before, one space after
+#   2. ":=" "=>" and binary-operator delimiters: one space before and after
+#   3. "--"      : one space before (comment body preserved verbatim)
+#   4. "(" "["   : one space before, no space after
+#   5. ")" "]"   : no space before,  one space after
+#   6. "." "'"   : tight — no space on either side
+#
+# Only inter-token spacing is changed; leading indentation is preserved.
+# The source must not contain tab characters (spaces only, per the standard).
+
+nimport ada_lexer
+
+# ---------------------------------------------------------------------------
+# Binary-operator delimiter set (rule 2)
+# ---------------------------------------------------------------------------
+
+let BIN_OP_DELIM: {}str = {
+    ":=", "=>",
+    "+", "-", "*", "/", "**", "&",
+    "=", "/=", "<", ">", "<=", ">=",
+    "..", "|", "<>",
+}
+
+let TIGHT_DELIM: {}str = {".", "'"}
+
+# ---------------------------------------------------------------------------
+# gap — spaces to insert between two adjacent tokens
+# ---------------------------------------------------------------------------
+
+def gap(lt: Token_T, rt: Token_T) -> int:
+    # Rule 1: no space before ; or ,
+    if rt.text == ";" or rt.text == ",":
+        return 0
+    # Rule 2: one space around binary-operator delimiters
+    if lt.text in BIN_OP_DELIM or rt.text in BIN_OP_DELIM:
+        return 1
+    # Rule 3: one space before a comment
+    if rt.kind == COMMENT:
+        return 1
+    # Rule 4: ( [ — one space before, no space after
+    if rt.text == "(" or rt.text == "[":
+        return 1
+    if lt.text == "(" or lt.text == "[":
+        return 0
+    # Rule 5: ) ] — no space before, one space after
+    if rt.text == ")" or rt.text == "]":
+        return 0
+    if lt.text == ")" or lt.text == "]":
+        return 1
+    # Rule 6: tight delimiters — no space on either side
+    if lt.text in TIGHT_DELIM or rt.text in TIGHT_DELIM:
+        return 0
+    return 1
+
+
+# ---------------------------------------------------------------------------
+# format_line — reformat one source line, preserving leading indentation
+# ---------------------------------------------------------------------------
+
+def format_line(src: str) -> str:
+    """Reformat a single Ada source line.
+
+    Returns the reformatted line without a trailing newline.
+    Blank or whitespace-only lines are returned as empty string."""
+    var lx: Lexer = Lexer(src)
+    var toks: []Token_T = lx.tokenize()
+    if len(toks) == 0:
+        return ""
+
+    let indent: int = toks[0].col - 1   # col is 1-based
+    var buf: str = ""
+    var i: int = 0
+    while i < indent:
+        buf += " "
+        i += 1
+
+    buf += toks[0].text
+    i = 1
+    while i < len(toks):
+        let sp: int = gap(toks[i - 1], toks[i])
+        var j: int = 0
+        while j < sp:
+            buf += " "
+            j += 1
+        buf += toks[i].text
+        i += 1
+    return buf
+
+
+# ---------------------------------------------------------------------------
+# format_source — apply format_line to every line of a multi-line string
+# ---------------------------------------------------------------------------
+
+def format_source(src: str) -> str:
+    """Apply format_line to every line of src, preserving newlines."""
+    var result: str = ""
+    var line: str = ""
+    var i: int = 0
+    while i < len(src):
+        let c: char = src[i]
+        if is_newline_ch(c):
+            result += format_line(line) + "\n"
+            line = ""
+        else:
+            line += c
+        i += 1
+    if len(line) > 0:
+        result += format_line(line)
+    return result
