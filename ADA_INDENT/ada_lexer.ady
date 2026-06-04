@@ -291,6 +291,26 @@ class Lexer:
             return (kind: DELIMITER, text: one, line: ln, col: cl)
         return (kind: ERROR, text: one, line: ln, col: cl)
 
+    def _tick_context(self, toks: []Token_T) -> bool:
+        """True when a ' here is an attribute/qualifier tick, not a char literal.
+
+        A tick follows an identifier (T'Image, Character'(...)), a closing
+        parenthesis (Foo (X)'First), or the reserved word 'all' (P.all'Address).
+        Comments are skipped when looking back for the governing token."""
+        var i: int = len(toks) - 1
+        while i >= 0 and toks[i].kind == COMMENT:
+            i -= 1
+        if i < 0:
+            return False
+        let p: Token_T = toks[i]
+        if p.kind == IDENTIFIER:
+            return True
+        if p.kind == DELIMITER and p.text == ")":
+            return True
+        if p.kind == KEYWORD and p.text.lower() == "all":
+            return True
+        return False
+
     def tokenize(self) -> []Token_T:
         """Scan the whole source and return the token list (comments included)."""
         var toks: []Token_T = []
@@ -308,9 +328,13 @@ class Lexer:
                 toks.append(self._scan_comment(ln, cl))
             elif c == '"':
                 toks.append(self._scan_string(ln, cl))
-            elif c == '\'' and self._slice(self.pos + 2, self.pos + 3) == "'":
+            elif c == '\'' and self._slice(self.pos + 2, self.pos + 3) == "'" \
+                    and not self._tick_context(toks):
                 # A char literal is ' <one char> ' ; otherwise ' is an attribute
-                # tick (X'Image) and falls through to the delimiter scanner.
+                # or qualifier tick (X'Image, Character'(...)) and falls through
+                # to the delimiter scanner. The two are distinguished by the
+                # preceding token: a ' that follows an identifier, ')', or the
+                # keyword 'all' is a tick, never a character literal.
                 toks.append(self._scan_char(ln, cl))
             elif is_digit_ch(c):
                 toks.append(self._scan_number(ln, cl))

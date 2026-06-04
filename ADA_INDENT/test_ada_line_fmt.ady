@@ -127,6 +127,13 @@ assert fmt("( others => <> )") == "(others => <>)"
 assert fmt("X : T := (others => <>);") == "X : T := (others => <>);"
 assert fmt("array (<>) of T") == "array (<>) of T"
 
+# qualified expression: ' after a type name is a tick, not a char literal;
+# stays tight against the following ( and the inner 'R' is a char literal.
+assert fmt("Id (1) := Character'('R');") == "Id (1) := Character'('R');"
+assert fmt("X := Character'Pos ('(');") == "X := Character'Pos ('(');"
+assert fmt("Y := '(';") == "Y := '(';"          # plain char literal — unchanged
+assert fmt("Z := Foo (X)'First;") == "Z := Foo (X)'First;"
+
 
 # --- format_source: applies format_line line by line ---
 
