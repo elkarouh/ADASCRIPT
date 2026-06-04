@@ -101,16 +101,12 @@ assert fmt("X=>1") == "X => 1"                      # zero → normalised to 1
 assert fmt("X     := 1") == "X     := 1"            # spaces before := kept
 assert fmt("X:=1") == "X := 1"                      # zero → normalised to 1
 
-# --- Label colon: no space before : ---
+# --- Colon: original spacing preserved with minimum 0 ---
 
-assert fmt("Log_Changes : declare") == "Log_Changes: declare"
-assert fmt("Inner : begin") == "Inner: begin"
-assert fmt("Outer : loop") == "Outer: loop"
-assert fmt("Named : for I in 1..10 loop") == "Named: for I in 1 .. 10 loop"
-assert fmt("W : while Cond loop") == "W: while Cond loop"
-assert fmt("Log_Changes :") == "Log_Changes:"           # label alone on its line
-assert fmt("Find_Model : -- pick the model") == "Find_Model: -- pick the model"  # label + comment
-assert fmt("X : Integer") == "X : Integer"          # type annotation — space kept
+assert fmt("Log_Changes : declare") == "Log_Changes : declare"
+assert fmt("Log_Changes: declare") == "Log_Changes: declare"
+assert fmt("Named : for I in 1..10 loop") == "Named : for I in 1 .. 10 loop"
+assert fmt("X : Integer") == "X : Integer"
 
 # in/out parameter mode alignment: extra spaces after keywords are preserved.
 assert fmt("a : in          Float") == "a : in          Float"
