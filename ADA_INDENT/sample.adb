@@ -25,13 +25,13 @@ procedure Sample is
       Y => 0.0);
 
 begin
-   for I in 1 .. 3 loop
+   Main_Loop : for I in 1 .. 3 loop
       if I mod 2 = 0 then
          Put_Line ("even");
       else
          Put_Line ("odd:" & Name (Blue));
       end if;
-   end loop;
+   end loop Main_Loop;
 
    declare
       Total : Integer := 0;
