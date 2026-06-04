@@ -99,9 +99,15 @@ def format_line(src: str) -> str:
     while i < len(toks):
         let orig: int = toks[i].col - (toks[i - 1].col + len(toks[i - 1].text))
         var sp: int = gap(toks[i - 1], toks[i], orig)
-        # Label colon: 'Name : declare/begin/loop/for/while' → no space before ':'
-        if toks[i].text == ":" and i + 1 < len(toks):
-            if toks[i + 1].text.lower() in LABEL_AFTER:
+        # Label colon: no space before ':' when it is a label separator.
+        # Skip any trailing comment and check if the next real token is a
+        # statement-opening keyword, or if there is no next real token
+        # (label on its own line: 'Log_Changes:').
+        if toks[i].text == ":":
+            var k: int = i + 1
+            while k < len(toks) and toks[k].kind == COMMENT:
+                k += 1
+            if k >= len(toks) or toks[k].text.lower() in LABEL_AFTER:
                 sp = 0
         var j: int = 0
         while j < sp:
