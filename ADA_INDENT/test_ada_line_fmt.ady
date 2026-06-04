@@ -106,6 +106,8 @@ assert fmt("Inner : begin") == "Inner: begin"
 assert fmt("Outer : loop") == "Outer: loop"
 assert fmt("Named : for I in 1..10 loop") == "Named: for I in 1 .. 10 loop"
 assert fmt("W : while Cond loop") == "W: while Cond loop"
+assert fmt("Log_Changes :") == "Log_Changes:"           # label alone on its line
+assert fmt("Find_Model : -- pick the model") == "Find_Model: -- pick the model"  # label + comment
 assert fmt("X : Integer") == "X : Integer"          # type annotation — space kept
 
 # in/out parameter mode alignment: extra spaces after keywords are preserved.
