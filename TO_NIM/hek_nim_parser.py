@@ -492,7 +492,7 @@ def to_nim(self, indent=0, is_virtual=False, class_name=None, parent_name=None, 
                                            '#', 'raise ', 'break', 'continue', 'assert '))):
             # Check bare function call first (e.g. "emit(x)"), then method call (e.g. "obj.next(x)")
             _df = _re_disc_blk.match(r'^([A-Za-z_]\w*)\(', _stripped)
-            _dm = _re_disc_blk.match(r'^[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*\.([A-Za-z_]\w*)\(', _stripped) if not _df else None
+            _dm = _re_disc_blk.match(r'^([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\.([A-Za-z_]\w*)\(', _stripped) if not _df else None
             # Only discard when the call's parentheses span the whole statement.
             # A call that is merely the left operand of a larger expression
             # (e.g. `f(x) or g(x)`) is a value expression, not a void call:
@@ -512,14 +512,34 @@ def to_nim(self, indent=0, is_virtual=False, class_name=None, parent_name=None, 
             _NIM_VOID_BUILTINS_BLK = {"add", "incl", "excl", "del", "delete", "insert",
                                        "setLen", "sort", "shuffle", "reverse", "reset",
                                        "echo", "write", "writeLine", "close", "flush"}
-            _dname = (_df.group(1) if _df else (_dm.group(1) if _dm else None))
-            _dmatch = _df or _dm
-            if (_dname and _dmatch and _whole_call(_stripped, _dmatch)
-                    and _dname in _proc_rtypes_blk and _dname not in _NIM_VOID_BUILTINS_BLK):
-                _dret = _proc_rtypes_blk[_dname]
-                if _dret not in _void_rets_blk:
-                    _ind_prefix = _ln[:len(_ln) - len(_stripped)]
-                    _ln = f"{_ind_prefix}discard {_stripped}"
+            # Resolve the callee's return type. A method call (has a receiver)
+            # lives in a different namespace than a free function: a self-call
+            # must resolve against its own class, never against a free function
+            # sharing the Nim name (a leading '_' is stripped in Nim output, so
+            # e.g. Lexer._skip_whitespace collides with a free skip_whitespace()).
+            _dname = None
+            _dret = None
+            if _df and _whole_call(_stripped, _df):
+                _dname = _df.group(1)
+                if _dname in _proc_rtypes_blk:
+                    _dret = _proc_rtypes_blk[_dname]
+            elif _dm and _whole_call(_stripped, _dm):
+                _drecv = _dm.group(1)
+                _dname = _dm.group(2)
+                if _drecv == "self":
+                    _dcls = getattr(ParserState, "_current_class_name", None)
+                    if _dcls:
+                        for _dkey in (f"{_dcls}.{_dname}", f"{_dcls}._{_dname}"):
+                            if _dkey in _proc_rtypes_blk:
+                                _dret = _proc_rtypes_blk[_dkey]
+                                break
+                elif _dname in _proc_rtypes_blk:
+                    # Unknown receiver type: best-effort unqualified lookup.
+                    _dret = _proc_rtypes_blk[_dname]
+            if (_dname and _dname not in _NIM_VOID_BUILTINS_BLK
+                    and _dret is not None and _dret not in _void_rets_blk):
+                _ind_prefix = _ln[:len(_ln) - len(_stripped)]
+                _ln = f"{_ind_prefix}discard {_stripped}"
         _disc_lines.append(_ln)
     return "\n".join(_disc_lines)
 

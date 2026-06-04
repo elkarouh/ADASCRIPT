@@ -54,6 +54,11 @@ def gap(lt: Token_T, rt: Token_T, orig: int) -> int:
     # Rule 3: one space before a comment
     if rt.kind == COMMENT:
         return 1
+    # Rule 6: tight delimiters . and ' — no space on either side.
+    # Checked before the bracket rules so that Foo (X).Bar, Foo (X)'First and
+    # qualified expressions like Character'(...) all stay tight.
+    if lt.text in TIGHT_DELIM or rt.text in TIGHT_DELIM:
+        return 0
     # Rule 4: ( [ — one space before, no space after
     # Check lt first: no space after an open bracket beats "space before (".
     if lt.text == "(" or lt.text == "[":
@@ -62,10 +67,6 @@ def gap(lt: Token_T, rt: Token_T, orig: int) -> int:
         return 1
     # Rule 5: ) ] — no space before, one space after
     if rt.text == ")" or rt.text == "]":
-        return 0
-    # Rule 6: tight delimiters — no space on either side
-    # (checked before "space after ) ]" so that Foo(X).Bar and Foo(X)'First stay tight)
-    if lt.text in TIGHT_DELIM or rt.text in TIGHT_DELIM:
         return 0
     if lt.text == ")" or lt.text == "]":
         return 1

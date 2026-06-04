@@ -1900,23 +1900,45 @@ def to_nim(self):
     if len(parts) == 1 and _is_whole_call(result):
         import re as _re_disc
         _proc_rtypes = getattr(ParserState, 'proc_return_types', {})
-        _disc_meth_m = _re_disc.match(r'^.+\.([A-Za-z_]\w*)\(', result)
+        _disc_meth_m = _re_disc.match(r'^(.+)\.([A-Za-z_]\w*)\(', result)
         _disc_func_m = _re_disc.match(r'^([A-Za-z_]\w*)\(', result) if not _disc_meth_m else None
-        _disc_name = (_disc_meth_m.group(1) if _disc_meth_m
-                      else (_disc_func_m.group(1) if _disc_func_m else None))
         # Nim builtins that are always void — never auto-discard based on unqualified name
         _NIM_VOID_BUILTINS = {"add", "incl", "excl", "del", "delete", "insert",
                               "setLen", "sort", "shuffle", "reverse", "reset",
                               "echo", "write", "writeLine", "close", "flush"}
         # Nim seq builtins that return a non-void value — always discard when used as stmt
         _NIM_NONVOID_BUILTINS = {"pop"}
+        _void_rets = {"", "void", "None", "unit", ": void", ": None", ": unit"}
+        # Resolve the callee's return type. A method call (has a receiver) lives
+        # in a different namespace than a free function: a self-call must resolve
+        # against its own class, never against a free function that happens to
+        # share the Nim name (leading '_' is stripped in the Nim output, so e.g.
+        # Lexer._skip_whitespace collides with a free skip_whitespace()).
+        _disc_name = None   # short name, for builtin checks
+        _disc_ret = None    # resolved return type, or None when unknown
+        if _disc_meth_m:
+            _disc_recv = _disc_meth_m.group(1)
+            _disc_name = _disc_meth_m.group(2)
+            if _disc_recv == "self":
+                _disc_cls = getattr(ParserState, "_current_class_name", None)
+                if _disc_cls:
+                    for _disc_key in (f"{_disc_cls}.{_disc_name}",
+                                      f"{_disc_cls}._{_disc_name}"):
+                        if _disc_key in _proc_rtypes:
+                            _disc_ret = _proc_rtypes[_disc_key]
+                            break
+            elif _disc_name in _proc_rtypes:
+                # Unknown receiver type: best-effort unqualified lookup.
+                _disc_ret = _proc_rtypes[_disc_name]
+        elif _disc_func_m:
+            _disc_name = _disc_func_m.group(1)
+            if _disc_name in _proc_rtypes:
+                _disc_ret = _proc_rtypes[_disc_name]
         if _disc_name and _disc_name in _NIM_NONVOID_BUILTINS and not result.startswith("discard "):
             result = f"discard {result}"
-        elif _disc_name and _disc_name in _proc_rtypes and _disc_name not in _NIM_VOID_BUILTINS:
-            _disc_ret = _proc_rtypes[_disc_name]
-            _void_rets = {"", "void", "None", "unit", ": void", ": None", ": unit"}
-            if _disc_ret not in _void_rets and not result.startswith("discard "):
-                result = f"discard {result}"
+        elif (_disc_ret is not None and _disc_name not in _NIM_VOID_BUILTINS
+              and _disc_ret not in _void_rets and not result.startswith("discard ")):
+            result = f"discard {result}"
     # Bare print (no args) -> echo "" (empty line)
     if result == "echo":
         result = 'echo ""'
