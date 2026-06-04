@@ -94,6 +94,8 @@ assert fmt("Position    : Integer") == "Position    : Integer"   # 4 spaces kept
 assert fmt("X     => 1") == "X     => 1"            # 5 spaces kept
 assert fmt("Y_Long => 2") == "Y_Long => 2"          # 1 space kept
 assert fmt("X=>1") == "X => 1"                      # zero → normalised to 1
+assert fmt("X     := 1") == "X     := 1"            # spaces before := kept
+assert fmt("X:=1") == "X := 1"                      # zero → normalised to 1
 
 # in/out parameter mode alignment: extra spaces after keywords are preserved.
 assert fmt("a : in          Float") == "a : in          Float"

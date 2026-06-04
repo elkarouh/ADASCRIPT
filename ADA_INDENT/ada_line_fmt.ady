@@ -29,7 +29,7 @@ let BIN_OP_DELIM: {}str = {
 
 # Tokens before which extra whitespace is preserved for manual alignment.
 # Rule: at least one space, but the original count is kept when it is larger.
-let ALIGN_BEFORE: {}str = {":", "=>"}
+let ALIGN_BEFORE: {}str = {":", ":=", "=>"}
 
 let TIGHT_DELIM: {}str = {".", "'"}
 
