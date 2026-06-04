@@ -52,10 +52,11 @@ def gap(lt: Token_T, rt: Token_T, orig: int) -> int:
     if rt.kind == COMMENT:
         return 1
     # Rule 4: ( [ — one space before, no space after
-    if rt.text == "(" or rt.text == "[":
-        return 1
+    # Check lt first: no space after an open bracket beats "space before (".
     if lt.text == "(" or lt.text == "[":
         return 0
+    if rt.text == "(" or rt.text == "[":
+        return 1
     # Rule 5: ) ] — no space before, one space after
     if rt.text == ")" or rt.text == "]":
         return 0
