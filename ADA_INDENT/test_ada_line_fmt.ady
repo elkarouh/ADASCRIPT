@@ -87,11 +87,13 @@ assert fmt("while I<N loop") == "while I < N loop"
 assert fmt("return X+1 ;") == "return X + 1;"
 assert fmt("X:=A+B*C;") == "X := A + B * C;"
 assert fmt("procedure Foo(X:Integer;Y:Boolean) is") == \
-    "procedure Foo (X : Integer; Y : Boolean) is"
+    "procedure Foo (X: Integer; Y: Boolean) is"
 
-# : and => preserve extra spaces for manual column alignment.
+# ':' preserves the original spacing before it (minimum 0); '=>' and ':='
+# keep a minimum of one space while also preserving manual alignment.
 assert fmt("X : Integer") == "X : Integer"         # single space kept
-assert fmt("X:Integer") == "X : Integer"            # zero → normalised to 1
+assert fmt("X:Integer") == "X: Integer"             # zero before ':' kept (min 0)
+assert fmt("CASA_Info: CASA_Input_T") == "CASA_Info: CASA_Input_T"  # tight colon kept
 assert fmt("Position    : Integer") == "Position    : Integer"   # 4 spaces kept
 assert fmt("X     => 1") == "X     => 1"            # 5 spaces kept
 assert fmt("Y_Long => 2") == "Y_Long => 2"          # 1 space kept

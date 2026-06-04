@@ -29,7 +29,7 @@ let BIN_OP_DELIM: {}str = {
 
 # Tokens before which extra whitespace is preserved for manual alignment.
 # Rule: at least one space, but the original count is kept when it is larger.
-let ALIGN_BEFORE: {}str = {":", ":=", "=>"}
+let ALIGN_BEFORE: {}str = {":=", "=>"}
 
 let TIGHT_DELIM: {}str = {".", "'"}
 
@@ -44,6 +44,10 @@ def gap(lt: Token_T, rt: Token_T, orig: int) -> int:
     # Rule 1: no space before ; or ,
     if rt.text == ";" or rt.text == ",":
         return 0
+    # ':' preserves the original spacing entirely (minimum 0): 'X : T' (aligned),
+    # 'X: T' (tight) and label colons are all kept exactly as written.
+    if rt.text == ":":
+        return max(0, orig)
     # Alignment-preserving tokens: at least one space before, but original
     # extra spaces (manual column alignment) are kept intact.
     if rt.text in ALIGN_BEFORE:
