@@ -121,6 +121,12 @@ assert fmt("Flight_Updates (Count_Option.Normal).Old_Fixed_Info.The_Flight_Statu
 assert fmt("Foo(X).Bar") == "Foo (X).Bar"
 assert fmt("Foo(X)'First") == "Foo (X)'First"
 
+# box notation <> : no space before ) and no space after (
+assert fmt("others => <> )") == "others => <>)"
+assert fmt("( others => <> )") == "(others => <>)"
+assert fmt("X : T := (others => <>);") == "X : T := (others => <>);"
+assert fmt("array (<>) of T") == "array (<>) of T"
+
 
 # --- format_source: applies format_line line by line ---
 
