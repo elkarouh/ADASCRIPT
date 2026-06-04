@@ -1,21 +1,21 @@
--- regression_tests.ada  --  exercises all 51 ada_indent test cases
+-- ada_indent_sample_test.adb  --  exercises the ada_indent requirements
 --
 -- Feed this file to ada_indent; the output must be byte-for-byte identical.
--- Test 9 (subunit) appears at the end as a separate compilation unit.
+-- The subunit (§2.7) appears at the end as a separate compilation unit.
 
 ------------------------------------------------------------------------
---  PACKAGE SPEC  (tests 2, 5, 11, 17, 20, 22, 25, 27-31, 37, 45, 46)
+--  PACKAGE SPEC
 ------------------------------------------------------------------------
 
 package Regression_Tests is
 
-  -- ── Test 2: inline record type ───────────────────────────────────────────
+  -- ── §2.3 inline record type ───────────────────────────────────────────────
   type Point is record
     X : Float;
     Y : Float;
   end record;
 
-  -- ── Test 45: 'type T is' on its own line (simple record) ─────────────────
+  -- ── §2.3 'type T is' on its own line (simple record) ─────────────────────
   type Simple is
     record
       X : Integer;
@@ -23,7 +23,7 @@ package Regression_Tests is
 
   type Mode_T is (A, B);
 
-  -- ── Test 45: variant record on two lines ─────────────────────────────────
+  -- ── §2.3 variant record on two lines ─────────────────────────────────────
   type Var_T (M : Mode_T := A) is
     record
       case M is
@@ -34,7 +34,7 @@ package Regression_Tests is
       end case;
     end record;
 
-  -- ── Test 46: task type with aspect-clause; standalone 'is' ───────────────
+  -- ── §2.4 task type with aspect-clause; standalone 'is' ───────────────────
   task type Worker_T (Flag : Boolean) with
     Storage_Size => 64 * 1024
   is
@@ -42,41 +42,41 @@ package Regression_Tests is
     entry Stop;
   end Worker_T;
 
-  -- ── Test 5: declaration continuation ─────────────────────────────────────
+  -- ── §3 declaration continuation ──────────────────────────────────────────
   Curtains : constant Alternatives_Profiles_T
     := Whatever_But_Very_Long;
   Long_Sum : Integer := A
     + B
     + C;
 
-  -- ── Test 17: ':= call\n(args)' nesting ───────────────────────────────────
+  -- ── §3, §4.2 ':= call' then '(args)' on next line ───────────────────────
   Set_Info : constant T
     := Get
       (Query => Q,
        Object => O);
 
-  -- ── Test 22: operator-led term continuation ───────────────────────────────
+  -- ── §3 operator-led term continuation ────────────────────────────────────
   Delta_X : constant Duration_T
     := Take_Off_Time (Curtains (Normal) (RTFM))
       - Take_Off_Time (Flight, FTFM);
 
-  -- ── Test 25: 'and not'/'or not' as value operators ────────────────────────
+  -- ── §3 'and not'/'or not' as value operators ─────────────────────────────
   Clean_Mask : constant Mask_T
     := (Base_Mask or Initially_Flagged)
       and not Initially_Not_Interesting
       and not Clear_Aspects;
 
-  -- ── Test 28: 'or else' continuation in value expression ──────────────────
+  -- ── §3 'or else' continuation in value expression ────────────────────────
   Flag_A : constant Boolean
     := True
       or else False;
 
-  -- ── Test 29: 'and (' continuation ─────────────────────────────────────────
+  -- ── §3 'and (' continuation ───────────────────────────────────────────────
   Both : constant Boolean
     := (A = B)
       and (C = D);
 
-  -- ── Test 30: multi-line boolean expression with interleaved comments ───────
+  -- ── §3, §7.1 multi-line boolean expression with interleaved comments ──────
   Complex : constant Boolean
     := (A
           and then B)
@@ -87,12 +87,12 @@ package Regression_Tests is
       -- comment three
       or else not E;
 
-  -- ── Test 31: quantified expression ────────────────────────────────────────
+  -- ── §3 quantified expression ──────────────────────────────────────────────
   Any_Concerned : constant Boolean
     := (for some Reg of All_Regs (1 .. N) =>
           not Reg.Excluded);
 
-  -- ── Test 11: ':= (if A then (agg) else (agg))' ───────────────────────────
+  -- ── §3, §4.4 ':= (if A then (agg) else (agg))' ──────────────────────────
   Derived : T
     := (if A
         then (others => True)
@@ -101,14 +101,14 @@ package Regression_Tests is
               K2
                 => V2));
 
-  -- ── Test 20: if-expr 'else …)' continues the surrounding statement ────────
+  -- ── §4.4 if-expr 'else …)' continues the surrounding statement ───────────
   Full_Name : constant String := A
     & (if C
        then "0"
        else Trim (X))
     & "_";
 
-  -- ── Test 27: '(' continuing unfinished expression inside outer paren ──────
+  -- ── §4.3 '(' continuing unfinished expression inside outer paren ──────────
   Coord_Fix : constant Def_Location.T :=
     (if C
      then (Def_Location.GPS, X => Y)
@@ -116,7 +116,7 @@ package Regression_Tests is
            Aerodrome => Def_Aerodrome.Convert
              (Env_Location.Value (A))));
 
-  -- ── Test 37: comment between branches of parenthesised if-expression ──────
+  -- ── §7.3 comment between branches of parenthesised if-expression ──────────
   Curtains_Val : constant T
     := (if E
         then (A => P,
@@ -128,19 +128,18 @@ package Regression_Tests is
 
 private
 
-  -- ── Test 2: private part ──────────────────────────────────────────────────
+  -- ── §2.3 private part ─────────────────────────────────────────────────────
   Origin : constant Point := (0.0, 0.0);
 
 end Regression_Tests;
 
 ------------------------------------------------------------------------
---  PACKAGE BODY  (tests 1, 3, 4, 6-10, 12-16, 17b, 18-19, 21, 23-24,
---                      32-35, 38-44, 47-51)
+--  PACKAGE BODY
 ------------------------------------------------------------------------
 
 package body Regression_Tests is
 
-  -- ── Test 35: comment before begin; comment after deferred function header ──
+  -- ── §7.4 comment before begin; comment after deferred function header ──────
 
   procedure P_Empty is
     -- before begin
@@ -156,7 +155,7 @@ package body Regression_Tests is
     null;
   end F_Deferred;
 
-  -- ── Test 7: expression function; pending_spec; no block frame pushed ───────
+  -- ── §2.5 expression function; no block frame pushed ──────────────────────
 
   function Image return String is
     (Compute (A, B'Image));
@@ -165,12 +164,12 @@ package body Regression_Tests is
     null;
   end After_Image;
 
-  -- ── Tests 1, 3, 18: basic statements; declare block; labeled constructs ────
+  -- ── §2.1, §2.2 basic statements; declare block; labeled constructs ────────
 
   procedure Hello is
     X : Integer := 0;
   begin
-    -- Test 3: declare block with exception handler.
+    -- §2.2 declare block with exception handler
     declare
       Y : Integer;
 
@@ -181,7 +180,7 @@ package body Regression_Tests is
         Y := 0;
     end;
 
-    -- Test 1: if/elsif/else.
+    -- §2.1 if/elsif/else
     if X = 0 then
       Put_Line ("zero");
     elsif X > 0 then
@@ -190,7 +189,7 @@ package body Regression_Tests is
       Put_Line ("neg");
     end if;
 
-    -- Test 18: labeled declare block and labeled for loop.
+    -- §2.2 labeled declare block and labeled for loop
     Log_Changes:
     declare
       Z : Integer;
@@ -201,7 +200,7 @@ package body Regression_Tests is
       end loop Find_Model;
     end Log_Changes;
 
-    -- Test 1: for loop and case.
+    -- §2.1 for loop and case
     for I in 1 .. 10 loop
       X := X + I;
     end loop;
@@ -213,7 +212,7 @@ package body Regression_Tests is
     end case;
   end Hello;
 
-  -- ── Test 4: paren-continuation aligns under first item ────────────────────
+  -- ── §4.1 paren-continuation aligns under first item ──────────────────────
 
   procedure Test_4 is
   begin
@@ -221,7 +220,7 @@ package body Regression_Tests is
          B => 2);
   end Test_4;
 
-  -- ── Test 6: multi-line if/elsif conditions ────────────────────────────────
+  -- ── §5 multi-line if/elsif conditions ────────────────────────────────────
 
   procedure Test_6 is
   begin
@@ -237,7 +236,7 @@ package body Regression_Tests is
     end if;
   end Test_6;
 
-  -- ── Test 8: if-expression inside parentheses ──────────────────────────────
+  -- ── §4.4 if-expression inside parentheses ────────────────────────────────
 
   procedure Test_8 is
   begin
@@ -248,7 +247,7 @@ package body Regression_Tests is
     Next_Statement;
   end Test_8;
 
-  -- ── Test 10: case-expression as expression-function body ──────────────────
+  -- ── §2.5, §6 case-expression as expression-function body ─────────────────
 
   function F_10 return T is
     (case X is
@@ -256,7 +255,7 @@ package body Regression_Tests is
          => R1,
        when others => R2);
 
-  -- ── Test 12: 'and' outside paren; 'or else' takes extra inside paren ───────
+  -- ── §4.3 'and' outside paren; 'or else' takes extra indent inside paren ──
 
   function F_12 return Boolean is
   begin
@@ -265,7 +264,7 @@ package body Regression_Tests is
              or else D = E);
   end F_12;
 
-  -- ── Test 13: nested parens inside multi-line if condition ─────────────────
+  -- ── §4.3 nested parens inside multi-line if condition ─────────────────────
 
   procedure Test_13 is
   begin
@@ -278,7 +277,7 @@ package body Regression_Tests is
     end if;
   end Test_13;
 
-  -- ── Test 14: comments between continuation lines are transparent ──────────
+  -- ── §7.1 comments between continuation lines are transparent ─────────────
 
   function F_14 return Boolean is
   begin
@@ -290,7 +289,7 @@ package body Regression_Tests is
              or else New_OBT > X);
   end F_14;
 
-  -- ── Test 15: ':= (case X is …)' inside paren; must NOT push block frame ───
+  -- ── §2.5 ':= (case X is …)' inside paren; must NOT push block frame ───────
 
   procedure G_15 is
     Orig : constant T := (case E is
@@ -305,7 +304,7 @@ package body Regression_Tests is
     null;
   end G_15;
 
-  -- ── Test 16: multi-line case-expression arm body with operator cont ────────
+  -- ── §6 multi-line case-expression arm body with operator continuation ──────
 
   function F_16 return Boolean is
     (case S is
@@ -317,7 +316,7 @@ package body Regression_Tests is
            or else (Z
                       and then W));
 
-  -- ── Test 17b: call name on own line; '(' one level deeper ─────────────────
+  -- ── §4.2 call name on own line; '(' one level deeper ─────────────────────
 
   procedure Test_17b is
   begin
@@ -326,7 +325,7 @@ package body Regression_Tests is
        B);
   end Test_17b;
 
-  -- ── Test 19: term continuation in condition ('>=' past 'and then') ─────────
+  -- ── §5 term continuation in condition ('>=' past 'and then') ─────────────
 
   procedure Test_19 is
   begin
@@ -339,7 +338,7 @@ package body Regression_Tests is
     end if;
   end Test_19;
 
-  -- ── Test 21: '|' choice continuation at arm-body level ───────────────────
+  -- ── §6 '|' choice continuation at arm-body level ─────────────────────────
 
   procedure Test_21 is
   begin
@@ -350,7 +349,7 @@ package body Regression_Tests is
     end case;
   end Test_21;
 
-  -- ── Test 23: '(' argument list in multi-line if condition ─────────────────
+  -- ── §5 '(' argument list in multi-line if condition ──────────────────────
 
   procedure Test_23 is
   begin
@@ -364,7 +363,7 @@ package body Regression_Tests is
     end if;
   end Test_23;
 
-  -- ── Test 23b: call on 'elsif' opener; argument list one level in ──────────
+  -- ── §5 call on 'elsif' opener; argument list one level in ────────────────
 
   procedure Test_23b is
   begin
@@ -377,7 +376,7 @@ package body Regression_Tests is
     end if;
   end Test_23b;
 
-  -- ── Test 24: ')' in character literal must not affect paren depth ──────────
+  -- ── §4.5 ')' in character literal must not affect paren depth ────────────
 
   procedure Test_24 is
   begin
@@ -387,7 +386,7 @@ package body Regression_Tests is
                else ""));
   end Test_24;
 
-  -- ── Test 32: '(' continuing first item of outer paren ────────────────────
+  -- ── §4.3 '(' continuing first item of outer paren ────────────────────────
 
   procedure Test_32 is
   begin
@@ -396,7 +395,7 @@ package body Regression_Tests is
                 Width => W));
   end Test_32;
 
-  -- ── Test 33: named association with value on next line + operator cont ──────
+  -- ── §8 named association with value on next line + operator continuation ──
 
   procedure Test_33 is
   begin
@@ -409,7 +408,7 @@ package body Regression_Tests is
           C => 3);
   end Test_33;
 
-  -- ── Test 34: lone ')' closing if-expression aligns under opening '(' ───────
+  -- ── §4.4 lone ')' closing if-expression aligns under opening '(' ──────────
 
   procedure Test_34 is
   begin
@@ -420,7 +419,7 @@ package body Regression_Tests is
          );
   end Test_34;
 
-  -- ── Test 38: comment block in elsif condition before 'then' ───────────────
+  -- ── §7.1 comment block in elsif condition before 'then' ──────────────────
 
   procedure Test_38 is
   begin
@@ -435,7 +434,7 @@ package body Regression_Tests is
     end if;
   end Test_38;
 
-  -- ── Test 39: comment inside paren opened on cond_state line ───────────────
+  -- ── §7.2 comment inside paren ────────────────────────────────────────────
 
   procedure Test_39 is
   begin
@@ -448,7 +447,7 @@ package body Regression_Tests is
     end if;
   end Test_39;
 
-  -- ── Test 40: comment in paren must not inherit stale paren alignment ───────
+  -- ── §7.2 comment in paren must not inherit stale paren alignment ──────────
 
   procedure Test_40 is
   begin
@@ -463,7 +462,7 @@ package body Regression_Tests is
     end if;
   end Test_40;
 
-  -- ── Test 41: comment after HEAD line of multi-line case-expression arm ──────
+  -- ── §6, §7.1 comment after HEAD line of multi-line case-expression arm ────
 
   function F_41 return Boolean is
     (case Y is
@@ -475,7 +474,7 @@ package body Regression_Tests is
            or else Third_Cond,
        when others => False);
 
-  -- ── Test 42: trailing comment after last argument (paren_cont set) ─────────
+  -- ── §7.2 trailing comment after last argument ────────────────────────────
 
   procedure Test_42 is
   begin
@@ -487,7 +486,7 @@ package body Regression_Tests is
            );
   end Test_42;
 
-  -- ── Test 43: comment between arguments; prior value was comma-terminated ────
+  -- ── §7.2 comment between arguments ───────────────────────────────────────
 
   procedure Test_43 is
   begin
@@ -499,7 +498,7 @@ package body Regression_Tests is
           Ctrl => C);
   end Test_43;
 
-  -- ── Test 44: identifier starting with keyword (Case_Sensitive, …) ──────────
+  -- ── §9 identifier starting with keyword (Case_Sensitive, …) ─────────────
 
   procedure R is
     A : Boolean := (Case_Sensitive
@@ -512,7 +511,7 @@ package body Regression_Tests is
     null;
   end R;
 
-  -- ── Test 47: select with guarded alternatives; 'or' aligns with 'select' ───
+  -- ── §2.4 select with guarded alternatives; 'or' aligns with 'select' ──────
 
   task body Worker_T is
   begin
@@ -525,7 +524,7 @@ package body Regression_Tests is
     end select;
   end Worker_T;
 
-  -- ── Test 48: standalone 'loop' snaps back after '..' continuation ──────────
+  -- ── §4.6 standalone 'loop' snaps back after '..' continuation ────────────
 
   procedure Test_48 is
   begin
@@ -536,7 +535,7 @@ package body Regression_Tests is
     end loop;
   end Test_48;
 
-  -- ── Test 49: 'is new' stays continuation; standalone 'is' snaps back ───────
+  -- ── §2.4, §2.6 'is new' stays continuation; standalone 'is' snaps back ───
 
   procedure Inst
     is new Gen (Param);
@@ -547,7 +546,7 @@ package body Regression_Tests is
     entry E;
   end T_49;
 
-  -- ── Test 50: named-association opening paren; value on next line ─────────
+  -- ── §4.2, §8 named-association opening paren; value on next line ──────────
 
   procedure Test_50 is
   begin
@@ -558,7 +557,7 @@ package body Regression_Tests is
        Sev => High);
   end Test_50;
 
-  -- ── Test 51: 'package Q is\nnew Gen(…)' inside declarative region ──────────
+  -- ── §2.6 'package Q is new Gen(…)' inside declarative region ────────────
 
   procedure Transfer (Stream : Buffer.T;
                       Object : in out Info_Request_List_T) is
@@ -581,7 +580,7 @@ package body Regression_Tests is
 end Regression_Tests;
 
 ------------------------------------------------------------------------
---  TEST 9: SUBUNIT (separate compilation unit)
+--  §2.7 SUBUNIT (separate compilation unit)
 ------------------------------------------------------------------------
 
 separate (Regression_Tests)
