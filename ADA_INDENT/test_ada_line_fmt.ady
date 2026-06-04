@@ -51,6 +51,8 @@ assert fmt("--% doc") == "--% doc"
 assert fmt("Foo(X)") == "Foo (X)"
 assert fmt("Foo( X)") == "Foo (X)"
 assert fmt("Foo  (X)") == "Foo (X)"
+assert fmt("( (X))") == "((X))"
+assert fmt("(not (X))") == "(not (X))"
 
 
 # --- Rule 5: ) — no space before, one space after ---
