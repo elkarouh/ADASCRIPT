@@ -11,6 +11,7 @@
 PYTHON := python3.12
 PY2NIM := $(PYTHON) $(CURDIR)/TO_NIM/py2nim.py
 EXDIR  := $(CURDIR)/EXAMPLES
+AIDIR  := $(CURDIR)/ADA_INDENT
 
 # Prepend choosenim's bin dir so Nim 2.x is used instead of any system Nim 1.x.
 export PATH := /root/.nimble/bin:$(PATH)
@@ -75,6 +76,15 @@ EXPECT_EXAMPLES := \
 TIMETABLE_EXAMPLES := \
     timetable_backtrack.ady \
     timetable_sa.ady
+
+# -----------------------------------------------------------------------
+# ADA_INDENT unit tests — self-checking runners in ADA_INDENT/ (assert +
+# print "all ... passed"). Transpiled, compiled and run with py2nim -r.
+# -----------------------------------------------------------------------
+ADA_INDENT_TESTS := \
+    test_ada_lexer.ady \
+    test_ada_line_fmt.ady \
+    test_ada_indent.ady
 
 # -----------------------------------------------------------------------
 # Skipped at runtime (compiled only):
@@ -164,6 +174,12 @@ test: compile
 	    name=$${f%.ady}; \
 	    printf '  %-42s' "$$f"; \
 	    $(EXDIR)/$$name >/dev/null 2>&1 && echo OK || { echo FAIL; exit 1; }; \
+	done
+
+	@echo "=== ADA_INDENT unit tests (transpile + compile + run) ==="
+	@for f in $(ADA_INDENT_TESTS); do \
+	    printf '  %-42s' "$$f"; \
+	    $(PY2NIM) $(AIDIR)/$$f -r >/dev/null 2>&1 && echo OK || { echo FAIL; exit 1; }; \
 	done
 
 	@echo ""
