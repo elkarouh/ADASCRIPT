@@ -1,10 +1,15 @@
-# Optional Types in Adascript
+# Optional Types and Monadic Patterns in Adascript
 
 Adascript optional types express "a value of type `T`, or nothing." The
 prefix `?` annotates any type to make it optional. The absent state is
 written `None` — exactly as in Python — and the transpiler maps every
 `None`-related construct to Nim's `Option[T]` machinery automatically.
 You never write `some()`, `.get()`, `.isSome`, or `.isNone` by hand.
+
+`?T` is also the **Maybe monad** — a design pattern for composing sequences
+of computations that may each fail, without nested `if` chains or exceptions.
+The second half of this document (sections 16–22) covers monadic composition
+directly.
 
 ```
 source.ady  ──▶  python3 TO_PYTHON/py2py.py source.ady  ──▶  Python 3  (x | None)
@@ -30,6 +35,16 @@ source.ady  ──▶  python3 TO_PYTHON/py2py.py source.ady  ──▶  Python 
 13. [What not to do](#13-what-not-to-do)
 14. [Reference table](#14-reference-table)
 15. [Real-world examples](#15-real-world-examples)
+
+**Monadic patterns:**
+
+16. [?T as the Maybe monad — unit, bind, fmap](#16-t-as-the-maybe-monad--unit-bind-fmap)
+17. [Bind chains — the railroad pattern](#17-bind-chains--the-railroad-pattern)
+18. [Do-notation analogue — walrus as bind](#18-do-notation-analogue--walrus-as-bind)
+19. [Fmap — lifting a pure function over ?T](#19-fmap--lifting-a-pure-function-over-t)
+20. [Sequence and traverse — []?T to ?[]T](#20-sequence-and-traverse--t-to-t)
+21. [Result type — the Either monad](#21-result-type--the-either-monad)
+22. [Choosing between ?T and Result_T](#22-choosing-between-t-and-result_t)
 
 ---
 
@@ -858,3 +873,566 @@ def process_line(line: str) -> ?Result:
 
 Each `parse_*` returns `?Match`. The walrus checks for presence and
 auto-unwraps `m` inside the `if` body.
+
+---
+
+---
+
+## 16. `?T` as the Maybe monad — unit, bind, fmap
+
+A monad is a pattern for composing computations in a context — here the
+context is *possible absence*. The Maybe monad has three core operations.
+In Adascript all three are expressed without ceremony; the transpiler
+inserts the Nim plumbing automatically.
+
+### Unit (return) — wrap a plain value
+
+Lift a value into the optional context. In Adascript this happens
+automatically wherever the compiler knows the target type is `?T`:
+
+```python
+def safe_sqrt(x: float) -> ?float:
+    if x < 0.0:
+        return None        # none(float) in Nim
+    return x ** 0.5        # some(x ** 0.5) in Nim — unit applied implicitly
+```
+
+### Bind (>>=) — chain a fallible step
+
+Apply a function `f: T → ?U` to the value inside `?T`; if the input is
+absent, propagate absence without calling `f`.
+
+In Adascript, bind is expressed with an `if x is not None:` guard or
+the walrus `if r := f(x):` form. Both desugar identically in Nim:
+
+```python
+# Explicit guard form — bind(m, f)
+def bind_int(m: ?int, f: [(int,)]?int) -> ?int:
+    if m is not None:
+        return f(m)      # f applied to the unwrapped value
+    return None          # absence propagated
+
+# Usage
+let x: ?int = some_optional_int()
+let y: ?int = bind_int(x, lambda n: n * 2 if n > 0 else None)
+```
+
+**Nim output of bind_int:**
+
+```nim
+proc bind_int(m: Option[int], f: proc(a0: int): Option[int]): Option[int] =
+    if m.isSome:
+        return f(m.get())
+    return none(int)
+```
+
+### Fmap — apply a pure function
+
+Apply a function `f: T → U` to the value inside `?T`, producing `?U`.
+Unlike bind, `f` itself cannot fail — it always produces a result.
+
+```python
+def fmap_int(m: ?int, f: [(int,)]int) -> ?int:
+    if m is not None:
+        return f(m)
+    return None
+
+# Usage — double the value if present, propagate None otherwise
+let doubled: ?int = fmap_int(parse_int(text), lambda n: n * 2)
+```
+
+**Nim output:**
+
+```nim
+proc fmap_int(m: Option[int], f: proc(a0: int): int): Option[int] =
+    if m.isSome:
+        return some(f(m.get()))
+    return none(int)
+```
+
+### Monad laws
+
+`?T` satisfies the three monad laws. You don't need to prove them — just
+note that the laws hold, so composed bind chains behave predictably:
+
+| Law | Statement | In Adascript |
+|-----|-----------|--------------|
+| **Left identity** | `unit(a) >>= f ≡ f(a)` | `return a` in `-> ?T` fn, then bind is just `f(a)` |
+| **Right identity** | `m >>= unit ≡ m` | binding with `return x` leaves `m` unchanged |
+| **Associativity** | `(m >>= f) >>= g ≡ m >>= (λx. f(x) >>= g)` | chained `if` guards associate freely |
+
+---
+
+## 17. Bind chains — the railroad pattern
+
+A bind chain is a sequence of fallible steps where *the first failure
+short-circuits the rest*. This is sometimes called the "railroad" because
+the happy path is one track and the failure path is another — once you
+fall off, you stay off.
+
+### Without monads (nested ifs)
+
+```python
+def load_user_config(path: str) -> ?Config:
+    let text: ?str = read_file_safe(path)
+    if text is not None:
+        let raw: ?dict = parse_json(text)
+        if raw is not None:
+            let host: ?str = raw.get("host")
+            if host is not None:
+                let port_s: ?str = raw.get("port")
+                if port_s is not None:
+                    let port: ?int = parse_int(port_s)
+                    if port is not None:
+                        return Config(host=host, port=port)
+    return None
+```
+
+This works but pyramids badly. Every step adds one level of indentation.
+
+### With the guard-and-return pattern (flat bind chain)
+
+Return `None` eagerly when a step fails — this is exactly bind written
+out explicitly:
+
+```python
+def load_user_config(path: str) -> ?Config:
+    let text: ?str = read_file_safe(path)
+    if text is None: return None          # bind: propagate failure
+
+    let raw: ?dict = parse_json(text)
+    if raw is None: return None
+
+    let host: ?str = raw.get("host")
+    if host is None: return None
+
+    let port_s: ?str = raw.get("port")
+    if port_s is None: return None
+
+    let port: ?int = parse_int(port_s)
+    if port is None: return None
+
+    return Config(host=host, port=port)   # unit: wrap the result
+```
+
+**Nim output:**
+
+```nim
+proc load_user_config(path: string): Option[Config] =
+    let text: Option[string] = read_file_safe(path)
+    if text.isNone: return none(Config)
+
+    let raw: Option[Table[string, string]] = parse_json(text.get())
+    if raw.isNone: return none(Config)
+
+    let host: Option[string] = raw.get().getOrDefault("host", "")  # simplified
+    if host.isNone: return none(Config)
+
+    ...
+
+    return some(Config(host: host.get(), port: port.get()))
+```
+
+The flat style is idiomatic Adascript for long bind chains. Each `if x
+is None: return None` is a monadic bind step.
+
+### Carrying the error through — annotated failure
+
+When you need to know *which* step failed, attach a reason before each
+short-circuit:
+
+```python
+def load_user_config(path: str) -> ?Config:
+    let text: ?str = read_file_safe(path)
+    if text is None:
+        log(f"cannot read config: {path}")
+        return None
+
+    let raw: ?dict = parse_json(text)
+    if raw is None:
+        log(f"invalid JSON in: {path}")
+        return None
+
+    let port: ?int = parse_int(raw.get("port") or "")
+    if port is None:
+        log("port is not a valid integer")
+        return None
+
+    return Config(host=raw.get("host") or "localhost", port=port)
+```
+
+---
+
+## 18. Do-notation analogue — walrus as bind
+
+Haskell's `do` notation desugars `<-` binding into `>>=` calls. The
+walrus `if r := f(x):` pattern in Adascript is the same idea —
+syntactic sugar over bind, keeping the happy path at a flat indentation
+level.
+
+**Haskell do-notation:**
+
+```haskell
+loadConfig :: FilePath -> Maybe Config
+loadConfig path = do
+    text <- readFileSafe path
+    raw  <- parseJson text
+    host <- Map.lookup "host" raw
+    portS <- Map.lookup "port" raw
+    port <- parseInt portS
+    return Config { host = host, port = port }
+```
+
+**Adascript walrus-as-do:**
+
+```python
+def load_config(path: str) -> ?Config:
+    if text := read_file_safe(path):
+        if raw := parse_json(text):
+            if host := raw.get("host"):
+                if port_s := raw.get("port"):
+                    if port := parse_int(port_s):
+                        return Config(host=host, port=port)
+    return None
+```
+
+Each `if x := f(...):`  line is one `<-` binding:
+- it calls `f`, checks for presence (`.isSome`)  
+- on success, auto-unwraps `x` inside the body
+- on failure, falls through to `return None`
+
+**Nim output:**
+
+```nim
+proc load_config(path: string): Option[Config] =
+    let text = read_file_safe(path)
+    if text.isSome:
+        let raw = parse_json(text.get())
+        if raw.isSome:
+            let host = raw.get().getOrDefault("host", "")
+            if host.len > 0:
+                let port_s = raw.get().getOrDefault("port", "")
+                if port_s.len > 0:
+                    let port = parse_int(port_s)
+                    if port.isSome:
+                        return some(Config(host: host, port: port.get()))
+    return none(Config)
+```
+
+### Choosing walrus vs. flat guard
+
+| Style | Best for |
+|-------|----------|
+| Walrus `if r := f():` | Short chains (≤4 steps), where the nesting is readable |
+| Flat `if x is None: return None` | Long chains, or when you need to log/annotate each failure |
+
+Both are semantically identical — monadic bind either way.
+
+---
+
+## 19. Fmap — lifting a pure function over `?T`
+
+Fmap applies a *pure* (always-succeeding) function to the value inside
+an optional. The optional context is preserved: present maps to present,
+absent maps to absent.
+
+### Inline fmap
+
+For one-off transformations, write the check inline:
+
+```python
+let raw_score: ?str  = get_raw_score(data)
+let score:     ?int  = int(raw_score) if raw_score is not None else None
+let grade:     ?str  = letter_grade(score) if score is not None else None
+```
+
+**Nim output** (auto-unwrap inside the `if` guard):
+
+```nim
+let raw_score: Option[string] = get_raw_score(data)
+let score: Option[int] = if raw_score.isSome: some(int(raw_score.get())) else: none(int)
+let grade: Option[string] = if score.isSome: some(letter_grade(score.get())) else: none(string)
+```
+
+### Reusable fmap helpers
+
+For types you fmap over frequently, write a typed helper:
+
+```python
+def fmap_str(m: ?str, f: [(str,)]str) -> ?str:
+    if m is not None: return f(m)
+    return None
+
+def fmap_int(m: ?int, f: [(int,)]int) -> ?int:
+    if m is not None: return f(m)
+    return None
+
+# Usage
+let upper: ?str = fmap_str(get_name(record), lambda s: s.upper())
+let double: ?int = fmap_int(get_count(record), lambda n: n * 2)
+```
+
+### Fmap through a pipeline
+
+Fmap composes: apply a series of pure transforms without breaking out of
+the optional context:
+
+```python
+def normalise_email(raw: ?str) -> ?str:
+    let stripped: ?str = fmap_str(raw,    lambda s: s.strip())
+    let lowered:  ?str = fmap_str(stripped, lambda s: s.lower())
+    let valid:    ?str = fmap_str(lowered,  lambda s: s if "@" in s else None)
+    return valid
+```
+
+Wait — the last step uses `None` as a signal, which makes it a *bind*
+step (T → ?T), not a fmap step (T → T). Rewrite the final check as bind:
+
+```python
+def normalise_email(raw: ?str) -> ?str:
+    let stripped: ?str = fmap_str(raw,      lambda s: s.strip())
+    let lowered:  ?str = fmap_str(stripped, lambda s: s.lower())
+    if lowered is None: return None
+    if "@" not in lowered: return None    # bind: validate and short-circuit
+    return lowered
+```
+
+---
+
+## 20. Sequence and traverse — `[]?T` to `?[]T`
+
+**Sequence** turns a list of optionals into an optional list.
+If *any* element is absent, the whole result is absent.
+
+```python
+def sequence_ints(items: []?int) -> ?[]int:
+    var result: []int = []
+    for item in items:
+        if item is None:
+            return None          # one failure → whole sequence fails
+        result.append(item)
+    return result
+```
+
+**Nim output:**
+
+```nim
+proc sequence_ints(items: seq[Option[int]]): Option[seq[int]] =
+    var result: seq[int] = @[]
+    for item in items:
+        if item.isNone:
+            return none(seq[int])
+        result.add(item.get())
+    return some(result)
+```
+
+### Traverse — map then sequence in one pass
+
+Traverse applies a fallible function to each element and collects the
+results, failing fast on the first absence:
+
+```python
+def traverse_parse(tokens: []str) -> ?[]int:
+    var result: []int = []
+    for tok in tokens:
+        let n: ?int = parse_int(tok)
+        if n is None:
+            return None          # bad token → fail the whole parse
+        result.append(n)
+    return result
+
+# Usage
+let values: ?[]int = traverse_parse(["1", "42", "7"])   # some([1, 42, 7])
+let bad:    ?[]int = traverse_parse(["1", "??", "7"])   # None
+```
+
+### Traverse with a walrus
+
+```python
+def traverse_parse(tokens: []str) -> ?[]int:
+    var result: []int = []
+    for tok in tokens:
+        if n := parse_int(tok):
+            result.append(n)
+        else:
+            return None
+    return result
+```
+
+### Collecting all results (ignoring failures)
+
+When you want successes only — not the "all or nothing" semantics —
+use a list comprehension with a filter instead:
+
+```python
+# Monadic traverse — all or nothing
+let strict: ?[]int = traverse_parse(tokens)
+
+# Non-monadic filter — keep whatever succeeds
+let loose: []int = [parse_int(t) for t in tokens if parse_int(t) is not None]
+```
+
+---
+
+## 21. Result type — the Either monad
+
+`?T` models absence but carries no information about *why* something is
+absent. The **Either / Result monad** pairs a success value with a
+failure message. In Adascript, express it with a variant record:
+
+```python
+type ResultTag_T is enum OK, ERR
+
+type ParseResult_T (tag: ResultTag_T) is record:
+    case tag is:
+        when OK:
+            value: int
+        when ERR:
+            message: str
+```
+
+**Python output:**
+
+```python
+class ResultTag_T(Enum): OK = auto(); ERR = auto()
+
+@dataclass
+class ParseResult_T:
+    tag:     ResultTag_T
+    value:   int  = 0
+    message: str  = ""
+```
+
+**Nim output:**
+
+```nim
+type ResultTag_T = enum OK, ERR
+
+type ParseResult_T = object
+    case tag: ResultTag_T
+    of OK:  value:   int
+    of ERR: message: string
+```
+
+### Unit — wrap a success or failure
+
+```python
+def ok(value: int) -> ParseResult_T:
+    return ParseResult_T(tag=OK, value=value)
+
+def err(msg: str) -> ParseResult_T:
+    return ParseResult_T(tag=ERR, message=msg)
+```
+
+### Bind — propagate failure automatically
+
+```python
+def bind_result(r: ParseResult_T,
+                f: [(int,)]ParseResult_T) -> ParseResult_T:
+    case r.tag:
+        when OK:  return f(r.value)
+        when ERR: return r              # failure is propagated unchanged
+```
+
+### A complete Result-based parse pipeline
+
+```python
+def parse_positive(s: str) -> ParseResult_T:
+    let n: ?int = parse_int(s)
+    if n is None:
+        return err(f"'{s}' is not an integer")
+    if n < 0:
+        return err(f"expected positive, got {n}")
+    return ok(n)
+
+def parse_ratio(num_s: str, den_s: str) -> ParseResult_T:
+    let num_r: ParseResult_T = parse_positive(num_s)
+    case num_r.tag:
+        when ERR: return num_r          # propagate
+
+    let den_r: ParseResult_T = parse_positive(den_s)
+    case den_r.tag:
+        when ERR: return den_r          # propagate
+
+    if den_r.value == 0:
+        return err("denominator cannot be zero")
+
+    return ok(num_r.value * 100 // den_r.value)
+
+# Usage
+let ratio: ParseResult_T = parse_ratio("3", "4")
+case ratio.tag:
+    when OK:  print f"ratio: {ratio.value}%"
+    when ERR: print f"error: {ratio.message}"
+```
+
+### Bind helper makes the chain cleaner
+
+```python
+def parse_ratio(num_s: str, den_s: str) -> ParseResult_T:
+    let num_r: ParseResult_T = parse_positive(num_s)
+    let den_r: ParseResult_T = bind_result(num_r, lambda _: parse_positive(den_s))
+    return bind_result(den_r, lambda d:
+        err("denominator cannot be zero") if d == 0
+        else ok(num_r.value * 100 // d)
+    )
+```
+
+### Conversion between `?T` and `Result_T`
+
+`?T` and `Result_T` address different needs; convert at boundaries:
+
+```python
+def result_to_option(r: ParseResult_T) -> ?int:
+    case r.tag:
+        when OK:  return r.value
+        when ERR: return None
+
+def option_to_result(m: ?int, err_msg: str) -> ParseResult_T:
+    if m is not None: return ok(m)
+    return err(err_msg)
+```
+
+---
+
+## 22. Choosing between `?T` and `Result_T`
+
+| Criterion | `?T` (Maybe) | `Result_T` (Either) |
+|-----------|-------------|---------------------|
+| Why something is absent | Not recorded | Carried in `message` field |
+| Caller must handle failure reason | No | Yes |
+| Transpilation | `Option[T]` with full automation | Variant object, manual `case` |
+| Compose with walrus | Yes | No (need explicit bind) |
+| Auto-unwrap in `if` guard | Yes | No |
+| Ideal for | Lookup, find, parse (expected absence) | Validation, I/O, pipelines that must report errors |
+
+### Layered design — `?T` at the boundary, `Result_T` inside
+
+A common pattern: use `?T` at the outer API (callers who just want
+success-or-nothing) and `Result_T` internally (where error detail
+matters for logging or user feedback):
+
+```python
+def parse_config_detailed(text: str) -> ParseResult_T:
+    let raw: ?dict = parse_json(text)
+    if raw is None:
+        return err("config is not valid JSON")
+    let host: ?str = raw.get("host")
+    if host is None:
+        return err("missing required key: host")
+    let port: ?int = parse_int(raw.get("port") or "")
+    if port is None:
+        return err("port must be an integer")
+    return ok_config(Config(host=host, port=port))
+
+def parse_config(text: str) -> ?Config:
+    let r: ParseResult_T = parse_config_detailed(text)
+    case r.tag:
+        when OK:  return r.config
+        when ERR:
+            log(f"config parse failed: {r.message}")
+            return None
+```
+
+The detailed version carries error messages for diagnostics; the simple
+version exposes a clean `?Config` interface to the rest of the program.
