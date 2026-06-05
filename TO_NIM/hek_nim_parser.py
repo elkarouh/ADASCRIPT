@@ -653,6 +653,57 @@ def to_nim(self, indent=0):
     return result
 
 
+# --- do block (monadic Maybe bind) ---
+@method(do_stmt)
+def to_nim(self, indent=0):
+    """do_stmt: 'do' ':' NEWLINE INDENT (IDENTIFIER '<-' expression NL)+ DEDENT
+
+    Monadic bind block for ?T chains.  Each bind step `x <- expr`:
+      1. Evaluates expr (must return Option[T])
+      2. Short-circuits to return none(R) from the enclosing function if None
+      3. Binds the unwrapped value to x as a plain let variable
+
+    After the block all bound names are plain (non-Option) and in scope.
+
+    Node structure (inside the Several_Times of bind lines):
+      seq.nodes[0]  = _do_bind_stmt result:
+          .nodes[0] = IDENTIFIER (bind target name)
+          .nodes[1] = Sequence_Parser([]) — empty _LEFT_ARROW artifact
+          .nodes[2] = expression (the Option-returning call)
+      seq.nodes[1]  = NEWLINE node
+    """
+    import re as _re_do
+    ParserState.nim_imports.add("options")
+    ret_ann = getattr(ParserState, '_current_return_type', '')
+    _m_opt = _re_do.search(r'Option\[(.+)\]', ret_ann)
+    inner_ret = _m_opt.group(1) if _m_opt else None
+    ind = _ind(indent)
+    lines = []
+    for node in self.nodes:
+        if type(node).__name__ != "Several_Times":
+            continue
+        for seq in node.nodes:
+            # seq is the flattened (_do_bind_stmt + NEWLINE + NL[:]) sequence.
+            # After post_process (None filtering), layout is:
+            #   seq.nodes[0] = IDENTIFIER (bind target)
+            #   seq.nodes[1] = Sequence_Parser([]) — empty _LEFT_ARROW artifact
+            #   seq.nodes[2] = expression (the Option-returning call)
+            #   seq.nodes[3] = NEWLINE (or NL) node
+            if not hasattr(seq, "nodes") or len(seq.nodes) < 3:
+                continue
+            name = seq.nodes[0].to_nim()
+            expr = seq.nodes[2].to_nim()
+            tmp = f"adado{name[0].upper()}{name[1:]}"
+            ParserState.symbol_table.add(name, "auto", "let")
+            lines.append(f"{ind}let {tmp} = {expr}")
+            if inner_ret:
+                lines.append(f"{ind}if {tmp}.isNone: return none({inner_ret})")
+            else:
+                lines.append(f"{ind}if {tmp}.isNone: return")
+            lines.append(f"{ind}let {name} = {tmp}.get()")
+    return "\n".join(lines)
+
+
 # --- try/except/finally ---
 @method(try_stmt)
 def to_nim(self, indent=0):

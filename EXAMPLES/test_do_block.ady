@@ -1,0 +1,79 @@
+#!/usr/bin/env py2nim
+"""Test: do block — monadic Maybe bind chains.
+
+Verifies that `do:` blocks desugar to safe Option-unwrap sequences:
+each `x <- expr` step short-circuits to none(T) if expr returns None,
+and all bound names are plain (non-Option) variables after the block.
+"""
+
+# ─── helpers that return optional values ─────────────────────────────────────
+
+def try_parse_int(s: str) -> ?int:
+    if len(s) == 0: return None
+    for c in s:
+        if not (c >= '0' and c <= '9'): return None
+    return int(s)
+
+def safe_div(a: int, b: int) -> ?int:
+    if b == 0: return None
+    return a // b
+
+def clamp_positive(n: int) -> ?int:
+    if n <= 0: return None
+    return n
+
+# ─── test 1: happy path — all steps succeed ──────────────────────────────────
+
+def compute(raw_a: str, raw_b: str) -> ?int:
+    """Parse two strings and return their quotient, or None on any failure."""
+    do:
+        a <- try_parse_int(raw_a)
+        b <- try_parse_int(raw_b)
+        q <- safe_div(a, b)
+        r <- clamp_positive(q)
+    return r
+
+let r1: ?int = compute("20", "4")
+assert r1 is not None
+if r1 is not None:
+    assert r1 == 5
+print "test1 OK"
+
+# ─── test 2: first step fails ────────────────────────────────────────────────
+
+let r2: ?int = compute("abc", "4")
+assert r2 is None
+print "test2 OK"
+
+# ─── test 3: middle step fails (division by zero) ────────────────────────────
+
+let r3: ?int = compute("20", "0")
+assert r3 is None
+print "test3 OK"
+
+# ─── test 4: last step fails (result <= 0) ───────────────────────────────────
+
+let r4: ?int = compute("0", "4")   # safe_div(0,4) = 0, clamp_positive(0) = None
+assert r4 is None
+print "test4 OK"
+
+# ─── test 5: do block with three-step pipeline ───────────────────────────────
+
+def pipeline(s: str) -> ?int:
+    do:
+        n <- try_parse_int(s)
+        p <- clamp_positive(n)
+        q <- safe_div(100, p)
+    return q
+
+let r5: ?int = pipeline("5")    # parse→5, clamp→5, div→20
+assert r5 is not None
+if r5 is not None:
+    assert r5 == 20
+print "test5 OK"
+
+let r6: ?int = pipeline("0")    # clamp_positive(0) = None → short-circuit
+assert r6 is None
+print "test6 OK"
+
+print "all do-block tests passed"
