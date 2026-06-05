@@ -127,6 +127,9 @@ async_with_stmt = fw("async_with_stmt")
 # when used with '+' in grammar rules below (see ParserMeta.__add__).
 _star_expressions = fw("star_expressions")
 
+# do block (monadic Maybe bind)
+do_stmt = fw("do_stmt")
+
 # Top-level
 compound_stmt = fw("compound_stmt")
 
@@ -404,6 +407,23 @@ async_with_stmt = (
 )
 
 # ---------------------------------------------------------------------------
+# do block (monadic Maybe bind)
+#
+# Syntax:
+#   do:
+#       x <- expr    # bind x to the Option[T] result of expr
+#       y <- f(x)    # short-circuits to none(R) if any step is None
+#
+# '<-' is the bind arrow, tokenized as OP('<') OP('-') consecutively.
+# Each bind step desugars to:
+#   let adadoX = expr; if adadoX.isNone: return none(R); let x = adadoX.get()
+# After the do block all bound names are plain (non-Option) variables.
+# ---------------------------------------------------------------------------
+_LEFT_ARROW = ignore(expect(tkn.OP, "<")) + ignore(expect(tkn.OP, "-"))
+_do_bind_stmt = IDENTIFIER + _LEFT_ARROW + expression
+do_stmt = ikw("do") + COLON + NEWLINE + NL[:] + INDENT + NL[:] + (_do_bind_stmt + NEWLINE + NL[:])[1:] + DEDENT
+
+# ---------------------------------------------------------------------------
 # Shell statement
 #
 # Syntax:
@@ -463,7 +483,8 @@ shell_stmt = (
 
 # --- compound_stmt: choice of all compound statement types ---
 compound_stmt = (
-    if_stmt
+    do_stmt
+    | if_stmt
     | while_stmt
     | for_stmt
     | try_stmt

@@ -45,7 +45,8 @@ STANDALONE := \
     test_ownership.ady \
     test_iters.ady \
     td_learning/sarsa.ady \
-    td_learning/qlearning.ady
+    td_learning/qlearning.ady \
+    test_do_block.ady
 
 # -----------------------------------------------------------------------
 # Stdin tests — piped from a sample file

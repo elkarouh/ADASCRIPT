@@ -1125,8 +1125,100 @@ proc load_config(path: string): Option[Config] =
 |-------|----------|
 | Walrus `if r := f():` | Short chains (≤4 steps), where the nesting is readable |
 | Flat `if x is None: return None` | Long chains, or when you need to log/annotate each failure |
+| `do:` block | Any length chain; no nesting, no boilerplate — closest to Haskell do-notation |
 
-Both are semantically identical — monadic bind either way.
+Both walrus and flat guard are semantically identical — monadic bind either way. The `do:` block is a dedicated syntax for the same pattern with less ceremony.
+
+---
+
+## 18b. `do:` block — native monadic bind syntax
+
+The `do:` block is Adascript's first-class do-notation. Each `x <- expr`
+line binds the unwrapped value of `expr` (which must return `?T`) to `x`,
+or short-circuits the enclosing function with `return none(R)` if the
+result is `None`.
+
+**Syntax:**
+
+```python
+def load_config(path: str) -> ?Config:
+    do:
+        text   <- read_file_safe(path)
+        raw    <- parse_json(text)
+        host   <- raw.get("host")
+        port_s <- raw.get("port")
+        port   <- parse_int(port_s)
+    return Config(host=host, port=port)
+```
+
+After the `do:` block all bound names (`text`, `raw`, `host`, `port_s`,
+`port`) are plain, non-optional variables in scope — no `.get()` or guard
+needed.
+
+**Nim output:**
+
+```nim
+proc load_config(path: string): Option[Config] =
+    let adadoText = read_file_safe(path)
+    if adadoText.isNone: return none(Config)
+    let text = adadoText.get()
+    let adadoRaw = parse_json(text)
+    if adadoRaw.isNone: return none(Config)
+    let raw = adadoRaw.get()
+    let adadoHost = raw.getOrDefault("host", "")
+    if adadoHost.isNone: return none(Config)
+    let host = adadoHost.get()
+    let adadoPortS = raw.getOrDefault("port", "")
+    if adadoPortS.isNone: return none(Config)
+    let port_s = adadoPortS.get()
+    let adadoPort = parse_int(port_s)
+    if adadoPort.isNone: return none(Config)
+    let port = adadoPort.get()
+    return some(Config(host: host, port: port))
+```
+
+### Comparison: walrus vs. flat guard vs. `do:`
+
+```python
+# walrus — readable for short chains, nesting grows with depth
+def compute(a: str, b: str) -> ?int:
+    if x := parse_int(a):
+        if y := parse_int(b):
+            if q := safe_div(x, y):
+                return q
+    return None
+
+# flat guard — no nesting, but repetitive
+def compute(a: str, b: str) -> ?int:
+    let x: ?int = parse_int(a)
+    if x is None: return None
+    let y: ?int = parse_int(b)
+    if y is None: return None
+    let q: ?int = safe_div(x, y)
+    if q is None: return None
+    return q
+
+# do: block — no nesting, no boilerplate
+def compute(a: str, b: str) -> ?int:
+    do:
+        x <- parse_int(a)
+        y <- parse_int(b)
+        q <- safe_div(x, y)
+    return q
+```
+
+All three compile to equivalent Nim. The `do:` block is preferred for
+chains of three or more steps.
+
+### Rules
+
+- Every `expr` on the right of `<-` must return `?T` for some `T`.
+- The enclosing function must also return `?R` — the block short-circuits
+  via `return none(R)`.
+- Bound names are plain `let` bindings (type `T`, not `?T`) and are in
+  scope after the block.
+- The `do:` block does not introduce its own scope; all bindings are
+  visible in the rest of the function body.
 
 ---
 
