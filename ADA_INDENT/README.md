@@ -86,14 +86,27 @@ indentation that happens **while you type**, wire `ada_indent` up as Emacs'
 `indent-line-function` and bind `RET` to a custom newline-and-indent command.
 
 The one thing to know: `ada_indent` is **stateful** — it carries a stack of
-open blocks, so it cannot indent a line in isolation. To indent the current
-line it must see every line above it. The function below therefore pipes the
-buffer *from the top through the current line* into `ada_indent` and reads back
-the indentation of the last emitted line. (Because blank lines are passed
-through at column 0, an empty current line is probed with a neutral token so it
-picks up the enclosing block's indent instead of snapping to the left margin.)
+open blocks, so it cannot indent a line in isolation. Naively it must see every
+line above the current one. For large files this is slow.
 
-Two things matter for the binding to actually take effect:
+`ada_indent` therefore supports two incremental flags:
+
+- `--emit-state` — after each output line, also emits a `##STATE:…` line
+  encoding the full indenter state.
+- `--state STATE` — start from a previously captured state instead of the
+  beginning of the file.
+
+The Emacs integration below caches the state per buffer. On the first indent of
+line N it pipes *all* lines 1..N through `ada_indent --emit-state` and saves the
+returned state. On every subsequent indent it starts from that cached state and
+pipes only the lines between the cache point and the current line — O(distance)
+instead of O(N). The cache is invalidated automatically whenever the buffer is
+edited before the cache point.
+
+(Blank lines are probed with a neutral token so they pick up the enclosing
+block's indent instead of snapping to the left margin.)
+
+Two things matter for the key binding to actually take effect:
 
 1. **Use a minor-mode keymap, not `local-set-key`.** Minor-mode keymaps
    outrank the major-mode map, so they reliably own `RET` even when the major
@@ -105,19 +118,51 @@ Two things matter for the binding to actually take effect:
 ```elisp
 (require 'subr-x)   ; string-blank-p, string-trim-left (built in on Emacs 27+)
 
+;;; Per-buffer state cache — avoids reprocessing the whole file every keypress.
+(defvar-local ada-indent--state nil
+  "Serialized Indenter state after line `ada-indent--state-lnum', or nil.")
+(defvar-local ada-indent--state-lnum 0
+  "Line number for which `ada-indent--state' was last captured.")
+
+(defun ada-indent--invalidate-cache (beg _end)
+  "Clear the state cache when a change falls at or before the cache point."
+  (when ada-indent--state
+    (when (<= (line-number-at-pos beg) ada-indent--state-lnum)
+      (setq-local ada-indent--state nil ada-indent--state-lnum 0))))
+
 (defun ada-indent--column ()
   "Column `ada_indent' assigns to the current line in its buffer context."
   (let* ((bol   (line-beginning-position))
          (cur   (buffer-substring-no-properties bol (line-end-position)))
          ;; Blank line: probe with a neutral token to get the block-body indent.
          (probe (if (string-blank-p cur) "x" cur))
-         (input (concat (buffer-substring-no-properties (point-min) bol) probe))
-         (out   (with-temp-buffer
-                  (insert input)
-                  (call-process-region (point-min) (point-max)
-                                       "ada_indent" t t nil)
-                  (buffer-string)))
-         (last  (car (last (split-string out "\n" t)))))
+         (lnum  (line-number-at-pos bol))
+         ;; Start from cached state when it was captured before this line.
+         (use-cache (and ada-indent--state (< ada-indent--state-lnum lnum)))
+         (input-start (if use-cache
+                          (save-excursion
+                            (goto-char (point-min))
+                            (forward-line ada-indent--state-lnum)
+                            (point))
+                        (point-min)))
+         (input    (concat (buffer-substring-no-properties input-start bol) probe))
+         (cmd-args (if use-cache
+                       (list "--state" ada-indent--state "--emit-state")
+                     (list "--emit-state")))
+         (out      (with-temp-buffer
+                     (insert input)
+                     (apply #'call-process-region (point-min) (point-max)
+                            "ada_indent" t t nil cmd-args)
+                     (buffer-string)))
+         (all-lines   (split-string out "\n" t))
+         (state-lines (seq-filter (lambda (l) (string-prefix-p "##STATE:" l)) all-lines))
+         (code-lines  (seq-remove (lambda (l) (string-prefix-p "##STATE:" l)) all-lines))
+         (last-state  (car (last state-lines)))
+         (last        (car (last code-lines))))
+    ;; Save state so the next call can skip everything up to this line.
+    (when last-state
+      (setq-local ada-indent--state      (substring last-state 8)
+                  ada-indent--state-lnum lnum))
     (if last (- (length last) (length (string-trim-left last))) 0)))
 
 (defun ada-indent-line ()
@@ -173,8 +218,11 @@ Two things matter for the binding to actually take effect:
         ;; and moves point back, fighting our RET handler.
         (electric-indent-local-mode -1)
         ;; Snap dedenting keywords left as each one is completed.
-        (add-hook 'post-self-insert-hook #'ada-indent--post-insert nil t))
-    (remove-hook 'post-self-insert-hook #'ada-indent--post-insert t)))
+        (add-hook 'post-self-insert-hook  #'ada-indent--post-insert      nil t)
+        ;; Invalidate the state cache whenever the buffer is edited before it.
+        (add-hook 'before-change-functions #'ada-indent--invalidate-cache nil t))
+    (remove-hook 'post-self-insert-hook   #'ada-indent--post-insert          t)
+    (remove-hook 'before-change-functions #'ada-indent--invalidate-cache     t)))
 
 ;; Cover BOTH classic and tree-sitter Ada modes.
 (add-hook 'ada-mode-hook    #'ada-indent-mode)
