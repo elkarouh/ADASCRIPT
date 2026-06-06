@@ -83,7 +83,7 @@ automatically.
 
 `format-all` reformats the *whole buffer* on demand (or on save). For
 indentation that happens **while you type**, wire `ada_indent` up as Emacs'
-`indent-line-function` and let `electric-indent-mode` call it on every newline.
+`indent-line-function` and bind `RET` to a custom newline-and-indent command.
 
 The one thing to know: `ada_indent` is **stateful** — it carries a stack of
 open blocks, so it cannot indent a line in isolation. To indent the current
@@ -117,15 +117,24 @@ picks up the enclosing block's indent instead of snapping to the left margin.)
   (interactive)
   (indent-line-to (ada-indent--column)))
 
+(defun ada-newline-and-indent ()
+  "Insert newline and place point at the indentation ada-indent expects."
+  (interactive)
+  (newline)
+  (indent-line-to (ada-indent--column)))
+
 (add-hook 'ada-mode-hook
           (lambda ()
             (setq-local indent-line-function #'ada-indent-line)
-            (electric-indent-local-mode 1)))
+            ;; Inhibit electric-indent: it reindents the line you just left,
+            ;; which moves point back to the old line instead of the new one.
+            (setq-local electric-indent-inhibit t)
+            (local-set-key (kbd "RET") #'ada-newline-and-indent)))
 ```
 
-Now `RET` indents the new line, `TAB` reindents the current one, and typing a
-dedenting keyword (`end`, `else`, `when`, …) snaps the line left as soon as the
-keyword is recognised.
+Now `RET` inserts a newline and moves point to the correct indentation on the
+new line. `TAB` reindents the current line. Typing a dedenting keyword (`end`,
+`else`, `when`, …) followed by `TAB` snaps the line left.
 
 For *continuous* reformatting as you edit anywhere in the line — not just on
 newline — add [`aggressive-indent-mode`](https://github.com/Malabarba/aggressive-indent-mode)
