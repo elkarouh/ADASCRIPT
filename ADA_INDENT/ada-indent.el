@@ -144,6 +144,84 @@ last output line."
   (interactive)
   (indent-line-to (ada-indent--column)))
 
+(defun ada-indent-region (start end)
+  "Reindent every line of the region START..END with `ada-indent-program'.
+
+Installed as `indent-region-function', so `indent-region' (\\[indent-region])
+and any command that reindents a region (including reindenting the whole
+buffer) go through it.  Runs ada_indent ONCE over the buffer prefix plus the
+region — reusing the per-buffer state cache for the prefix when available —
+and applies the resulting indentation to each region line.  Lines above the
+region are used only to establish the indenter's block state; they are not
+modified."
+  (let* ((first-line (line-number-at-pos start))
+         ;; A line is in the region when its start is before END — the same
+         ;; rule the built-in `indent-region' uses, so a region ending at the
+         ;; very beginning of a line does not pull that line in.
+         (last-line  (save-excursion
+                       (goto-char end)
+                       (if (and (> end start) (bolp))
+                           (1- (line-number-at-pos))
+                         (line-number-at-pos))))
+         ;; Reuse the cache when its checkpoint sits strictly above the region.
+         (use-cache  (and ada-indent--state
+                          (> ada-indent--state-lnum 0)
+                          (< ada-indent--state-lnum first-line)))
+         (start-line (if use-cache (1+ ada-indent--state-lnum) 1))
+         (input-beg  (save-excursion
+                       (goto-char (point-min))
+                       (forward-line (1- start-line))
+                       (point)))
+         (input-end  (save-excursion
+                       (goto-char (point-min))
+                       (forward-line last-line)   ; bol of (last-line + 1) = eol incl. \n
+                       (point)))
+         (input      (buffer-substring-no-properties input-beg input-end))
+         (cmd-args   (if use-cache
+                         (list "--state" ada-indent--state "--emit-state")
+                       (list "--emit-state")))
+         (out        (with-temp-buffer
+                       (insert input)
+                       (apply #'call-process-region
+                              (point-min) (point-max)
+                              ada-indent-program t t nil cmd-args)
+                       (buffer-string)))
+         (all-lines   (split-string out "\n"))
+         ;; ##STATE: lines are interleaved after each code line; keep code lines
+         ;; in order so code-lines[i] is buffer line (start-line + i).
+         (code-lines  (seq-remove (lambda (l) (string-prefix-p "##STATE:" l)) all-lines))
+         (state-lines (seq-filter (lambda (l) (string-prefix-p "##STATE:" l)) all-lines))
+         (last-state  (car (last state-lines))))
+    (save-excursion
+      (goto-char (point-min))
+      (forward-line (1- first-line))
+      (let ((ln first-line))
+        (while (<= ln last-line)
+          (let ((out-line (nth (- ln start-line) code-lines)))
+            (when out-line
+              (indent-line-to (- (length out-line)
+                                 (length (string-trim-left out-line))))))
+          (forward-line 1)
+          (setq ln (1+ ln)))))
+    ;; Advance the cache to the last line we processed.
+    (when last-state
+      (setq-local ada-indent--state      (substring last-state 8)
+                  ada-indent--state-lnum last-line))))
+
+(defun ada-indent-buffer ()
+  "Reindent the entire buffer with `ada-indent-program'."
+  (interactive)
+  (ada-indent-region (point-min) (point-max)))
+
+(defun ada-indent-line-or-region ()
+  "Reindent the active region, or the current line when no region is active.
+Bound to TAB so selecting text and pressing TAB reindents the whole
+selection in one pass."
+  (interactive)
+  (if (use-region-p)
+      (ada-indent-region (region-beginning) (region-end))
+    (ada-indent-line)))
+
 (defun ada-newline-and-indent ()
   "Reindent the current line, insert a newline, then indent the new line.
 
@@ -231,7 +309,8 @@ Requires the `aggressive-indent' package (MELPA)."
     (define-key map (kbd "RET")      #'ada-newline-and-indent)
     (define-key map (kbd "<return>") #'ada-newline-and-indent)
     (define-key map (kbd "C-m")      #'ada-newline-and-indent)
-    (define-key map (kbd "TAB")      #'ada-indent-line)
+    (define-key map (kbd "TAB")      #'ada-indent-line-or-region)
+    (define-key map (kbd "C-M-\\")   #'ada-indent-region)
     map)
   "Keymap for `ada-indent-mode'.
 Minor-mode keymaps outrank the major-mode local map, so these bindings
@@ -246,7 +325,10 @@ Disables `electric-indent-local-mode' to avoid conflicts."
   :keymap ada-indent-mode-map
   (if ada-indent-mode
       (progn
-        (setq-local indent-line-function #'ada-indent-line)
+        (setq-local indent-line-function   #'ada-indent-line)
+        ;; Route `indent-region' (and whole-buffer reindents) through the
+        ;; batched single-process path instead of line-by-line.
+        (setq-local indent-region-function #'ada-indent-region)
         ;; electric-indent reindents the line just left and moves point back,
         ;; which fights our RET handler.  Turn it off for this buffer.
         (electric-indent-local-mode -1)
@@ -256,6 +338,7 @@ Disables `electric-indent-local-mode' to avoid conflicts."
           (ada-indent--aggressive-enable)))
     (ada-indent--aggressive-disable)
     (kill-local-variable 'indent-line-function)
+    (kill-local-variable 'indent-region-function)
     (remove-hook 'post-self-insert-hook   #'ada-indent--post-insert          t)
     (remove-hook 'before-change-functions #'ada-indent--invalidate-cache     t)))
 

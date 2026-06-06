@@ -270,6 +270,24 @@ work rather than O(file size), so aggressive mode is practical on
 small-to-medium files. On very large files prefer the default RET-only
 indentation and `format-all` on save.
 
+### Reindent a region or the whole buffer
+
+`ada-indent.el` installs `ada-indent-region` as Emacs'
+`indent-region-function`, so the standard region commands reindent through
+`ada_indent`:
+
+- **Select a region** and press `C-M-\` (`indent-region`), or press `TAB`
+  while the region is active — the whole selection is reindented in one pass.
+- **Reindent the buffer**: `M-x ada-indent-buffer`, or `C-x h` (select all)
+  then `C-M-\`.
+
+The region is reindented with a **single** `ada_indent` invocation, not one
+process per line. Lines *above* the region are read only to establish the
+block state (the open `if`/`loop`/`record` stack), so a region starting deep
+inside nested blocks still indents correctly; those prefix lines are never
+modified. When the per-buffer state cache already has a checkpoint above the
+region, only the region itself is sent to `ada_indent`.
+
 > **Ready-made package.** The whole snippet above is also shipped as
 > [`ada-indent.el`](./ada-indent.el) in this directory. Put the directory on
 > your `load-path` and `(require 'ada-indent)` — no need to paste the elisp into
