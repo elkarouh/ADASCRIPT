@@ -137,6 +137,22 @@ Two things matter for the binding to actually take effect:
   (newline)
   (indent-line-to (ada-indent--column)))    ; indent the fresh line
 
+(defun ada-indent--post-insert ()
+  "Snap line left as soon as it becomes a bare dedenting keyword."
+  ;; Only reindent when the whole trimmed line is exactly one of the
+  ;; keywords that step left relative to their enclosing block.  Fired via
+  ;; post-self-insert-hook so the snap happens on the final character of the
+  ;; keyword, with no extra keypress needed.
+  (let ((content (string-trim
+                  (buffer-substring-no-properties
+                   (line-beginning-position) (line-end-position)))))
+    (when (member content
+                  '("end" "else" "elsif" "when" "exception"
+                    "begin" "is" "then" "private" "limited"
+                    "record" "loop" "do" "select"))
+      (save-excursion
+        (indent-line-to (ada-indent--column))))))
+
 (defvar ada-indent-mode-map
   (let ((map (make-sparse-keymap)))
     (define-key map (kbd "RET")      #'ada-newline-and-indent)
@@ -150,11 +166,15 @@ Two things matter for the binding to actually take effect:
   "Use the external `ada_indent' program for indentation."
   :lighter " AdaInd"
   :keymap ada-indent-mode-map
-  (when ada-indent-mode
-    (setq-local indent-line-function #'ada-indent-line)
-    ;; Disable electric-indent entirely: it reindents the line you just left
-    ;; and moves point back, fighting our RET handler.
-    (electric-indent-local-mode -1)))
+  (if ada-indent-mode
+      (progn
+        (setq-local indent-line-function #'ada-indent-line)
+        ;; Disable electric-indent entirely: it reindents the line you just left
+        ;; and moves point back, fighting our RET handler.
+        (electric-indent-local-mode -1)
+        ;; Snap dedenting keywords left as each one is completed.
+        (add-hook 'post-self-insert-hook #'ada-indent--post-insert nil t))
+    (remove-hook 'post-self-insert-hook #'ada-indent--post-insert t)))
 
 ;; Cover BOTH classic and tree-sitter Ada modes.
 (add-hook 'ada-mode-hook    #'ada-indent-mode)
@@ -169,8 +189,9 @@ Two things matter for the binding to actually take effect:
 
 Now `RET` reindents the current line, inserts a newline, and places point at
 the correct indentation on the new line. `TAB` reindents the current line.
-Typing a dedenting keyword (`end`, `else`, `when`, …) followed by `TAB` snaps
-the line left.
+Typing a bare dedenting keyword (`end`, `else`, `elsif`, `when`, `exception`,
+`begin`, `is`, `then`, …) snaps the line left on the final keystroke of the
+keyword — no extra `TAB` needed.
 
 
 For *continuous* reformatting as you edit anywhere in the line — not just on
