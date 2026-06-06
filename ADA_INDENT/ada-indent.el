@@ -10,6 +10,13 @@
 ;;   typing a bare dedenting keyword (end, else, when, …) snaps the
 ;;                line left on the final character, no extra TAB needed.
 ;;
+;; Aggressive indent (optional):
+;;   Set `ada-indent-aggressive' to t (or call M-x ada-indent-toggle-aggressive)
+;;   to also enable `aggressive-indent-mode', which continuously reindents the
+;;   surrounding lines as you type.  Requires the `aggressive-indent' package.
+;;   Efficient on small-to-medium files thanks to the state cache; on very large
+;;   files prefer the default RET-only mode plus `format-all' on save.
+;;
 ;; Prerequisites:
 ;;   - `ada_indent' binary must be on PATH (compile from ada_indent.ady once
 ;;     with `py2nim ADA_INDENT/ada_indent.ady', then symlink the result onto
@@ -35,6 +42,20 @@
 (defcustom ada-indent-program "ada_indent"
   "Name or full path of the ada_indent binary."
   :type 'string
+  :group 'ada-indent)
+
+(defcustom ada-indent-aggressive nil
+  "If non-nil, enable `aggressive-indent-mode' alongside `ada-indent-mode'.
+
+Aggressive indent reindents the lines around the edit point after every
+change, giving a continuous indent-as-you-type effect.  The state cache
+keeps each reindent to O(lines since last edit) work rather than O(file
+size), so it is practical on small-to-medium files.  On very large files
+prefer the default RET-only indentation and `format-all' on save.
+
+Requires the `aggressive-indent' package (MELPA: aggressive-indent).
+You can also toggle it interactively with `ada-indent-toggle-aggressive'."
+  :type 'boolean
   :group 'ada-indent)
 
 ;; ---------------------------------------------------------------------------
@@ -151,6 +172,57 @@ character of the keyword with no extra keypress."
         (indent-line-to (ada-indent--column))))))
 
 ;; ---------------------------------------------------------------------------
+;; Aggressive-indent integration
+;; ---------------------------------------------------------------------------
+
+(defvar-local ada-indent--owns-aggressive nil
+  "Non-nil when `ada-indent-mode' itself activated `aggressive-indent-mode'.
+Used to avoid disabling aggressive-indent in buffers where the user enabled
+it independently of ada-indent.")
+
+(defun ada-indent--aggressive-enable ()
+  "Enable `aggressive-indent-mode' for the current Ada buffer.
+Configures it to skip blank lines (which ada_indent always emits at column
+0 so there is nothing to correct) and to use our `ada-indent-line' as the
+single-line indenter."
+  (unless (featurep 'aggressive-indent)
+    (require 'aggressive-indent nil t))
+  (if (not (featurep 'aggressive-indent))
+      (message "ada-indent: aggressive-indent package not found; \
+install it from MELPA with M-x package-install RET aggressive-indent RET")
+    ;; Skip blank lines — ada_indent returns column 0 for them; agressive-indent
+    ;; would otherwise loop trying to "fix" a line that is already correct.
+    (add-to-list (make-local-variable 'aggressive-indent-dont-indent-if)
+                 '(string-blank-p
+                   (buffer-substring-no-properties
+                    (line-beginning-position) (line-end-position))))
+    (setq-local ada-indent--owns-aggressive t)
+    (aggressive-indent-mode 1)))
+
+(defun ada-indent--aggressive-disable ()
+  "Disable `aggressive-indent-mode' if `ada-indent-mode' was the one that enabled it."
+  (when ada-indent--owns-aggressive
+    (setq-local ada-indent--owns-aggressive nil)
+    (when (bound-and-true-p aggressive-indent-mode)
+      (aggressive-indent-mode -1))))
+
+;;;###autoload
+(defun ada-indent-toggle-aggressive ()
+  "Toggle `aggressive-indent-mode' for the current Ada buffer.
+
+When turned on, Emacs reindents the lines around every edit as you type.
+When turned off, indentation fires only on RET and TAB.
+
+Requires the `aggressive-indent' package (MELPA)."
+  (interactive)
+  (if (bound-and-true-p aggressive-indent-mode)
+      (progn
+        (ada-indent--aggressive-disable)
+        (message "ada-indent: aggressive mode off"))
+    (ada-indent--aggressive-enable)
+    (message "ada-indent: aggressive mode on")))
+
+;; ---------------------------------------------------------------------------
 ;; Minor mode
 ;; ---------------------------------------------------------------------------
 
@@ -179,7 +251,10 @@ Disables `electric-indent-local-mode' to avoid conflicts."
         ;; which fights our RET handler.  Turn it off for this buffer.
         (electric-indent-local-mode -1)
         (add-hook 'post-self-insert-hook   #'ada-indent--post-insert       nil t)
-        (add-hook 'before-change-functions #'ada-indent--invalidate-cache  nil t))
+        (add-hook 'before-change-functions #'ada-indent--invalidate-cache  nil t)
+        (when ada-indent-aggressive
+          (ada-indent--aggressive-enable)))
+    (ada-indent--aggressive-disable)
     (kill-local-variable 'indent-line-function)
     (remove-hook 'post-self-insert-hook   #'ada-indent--post-insert          t)
     (remove-hook 'before-change-functions #'ada-indent--invalidate-cache     t)))

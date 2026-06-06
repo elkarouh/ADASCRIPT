@@ -242,17 +242,39 @@ Typing a bare dedenting keyword (`end`, `else`, `elsif`, `when`, `exception`,
 keyword — no extra `TAB` needed.
 
 For *continuous* reformatting as you edit anywhere in the line — not just on
-newline — add [`aggressive-indent-mode`](https://github.com/Malabarba/aggressive-indent-mode)
-(`(add-hook 'ada-mode-hook #'aggressive-indent-mode)`). Be aware of the
-trade-off: each reindent spawns one `ada-indent` process over the buffer prefix,
-so `aggressive-indent` (which reindents whole regions on every change) is fine
-for small files but gets sluggish on large ones. For large files prefer
-electric indent on newline plus `format-all` on save.
+newline — enable aggressive mode. It uses
+[`aggressive-indent-mode`](https://github.com/Malabarba/aggressive-indent-mode)
+under the hood, which reindents the surrounding lines after every change.
+
+**With `ada-indent.el`** (recommended): install `aggressive-indent` from MELPA,
+then either set the custom variable before loading the mode:
+
+```elisp
+(setq ada-indent-aggressive t)  ; before (require 'ada-indent)
+```
+
+or toggle it interactively in any Ada buffer:
+
+```
+M-x ada-indent-toggle-aggressive
+```
+
+**Without `ada-indent.el`**: add the hook manually:
+
+```elisp
+(add-hook 'ada-mode-hook #'aggressive-indent-mode)
+```
+
+In either case, the state cache keeps each reindent to O(lines since last edit)
+work rather than O(file size), so aggressive mode is practical on
+small-to-medium files. On very large files prefer the default RET-only
+indentation and `format-all` on save.
 
 > **Ready-made package.** The whole snippet above is also shipped as
 > [`ada-indent.el`](./ada-indent.el) in this directory. Put the directory on
 > your `load-path` and `(require 'ada-indent)` — no need to paste the elisp into
-> your init file. It adds a `defcustom ada-indent-program` (the binary path) and
+> your init file. It adds a `defcustom ada-indent-program` (the binary path),
+> `defcustom ada-indent-aggressive` (enable aggressive mode globally), and
 > only activates when that binary is found on `PATH`.
 
 ## How incremental mode works
