@@ -126,9 +126,9 @@ picks up the enclosing block's indent instead of snapping to the left margin.)
 (add-hook 'ada-mode-hook
           (lambda ()
             (setq-local indent-line-function #'ada-indent-line)
-            ;; Inhibit electric-indent: it reindents the line you just left,
-            ;; which moves point back to the old line instead of the new one.
-            (setq-local electric-indent-inhibit t)
+            ;; Disable electric-indent-mode entirely: inhibit alone leaves its
+            ;; keymap active, which intercepts RET before our binding is reached.
+            (electric-indent-local-mode -1)
             (local-set-key (kbd "RET") #'ada-newline-and-indent)))
 ```
 
