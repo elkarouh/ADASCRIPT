@@ -302,6 +302,56 @@ def spaces(levels: int) -> str:
 
 
 # ---------------------------------------------------------------------------
+# State serialization helpers — used by Indenter.dump_state / load_state.
+# ---------------------------------------------------------------------------
+
+def block_t_name(b: Block_T) -> str:
+    case b:
+        when PKG:         return "PKG"
+        when TYPE_HEADER: return "TYPE_HEADER"
+        when DECLARE:     return "DECLARE"
+        when BLOCK:       return "BLOCK"
+        when IF:          return "IF"
+        when LOOP:        return "LOOP"
+        when CASE:        return "CASE"
+        when WHEN:        return "WHEN"
+        when RECORD:      return "RECORD"
+        when SELECT:      return "SELECT"
+        when DO:          return "DO"
+
+
+def block_t_from_name(s: str) -> Block_T:
+    if   s == "PKG":         return PKG
+    elif s == "TYPE_HEADER": return TYPE_HEADER
+    elif s == "DECLARE":     return DECLARE
+    elif s == "BLOCK":       return BLOCK
+    elif s == "IF":          return IF
+    elif s == "LOOP":        return LOOP
+    elif s == "CASE":        return CASE
+    elif s == "WHEN":        return WHEN
+    elif s == "RECORD":      return RECORD
+    elif s == "SELECT":      return SELECT
+    else:                    return DO
+
+
+def paren_kind_name(p: Paren_Kind_T) -> str:
+    case p:
+        when OUTSIDE:   return "OUTSIDE"
+        when PLAIN:     return "PLAIN"
+        when IF_EXPR:   return "IF_EXPR"
+        when CASE_EXPR: return "CASE_EXPR"
+        when FOR_EXPR:  return "FOR_EXPR"
+
+
+def paren_kind_from_name(s: str) -> Paren_Kind_T:
+    if   s == "OUTSIDE":   return OUTSIDE
+    elif s == "PLAIN":     return PLAIN
+    elif s == "IF_EXPR":   return IF_EXPR
+    elif s == "CASE_EXPR": return CASE_EXPR
+    else:                  return FOR_EXPR
+
+
+# ---------------------------------------------------------------------------
 # The indenter proper.
 # ---------------------------------------------------------------------------
 
@@ -320,6 +370,93 @@ class Indenter:
     arrow_level: Natural = 0    # innermost paren level with an active '=>' named-value spill (0 = none)
     paren_next_lead: Natural = 0         # column where the next code line in this paren will land
     paren_next_lead_depth: int = -1      # paren_depth that paren_next_lead applies to (-1 = none)
+
+    def dump_state(self) -> str:
+        """Serialize the full indenter state to a compact, opaque string.
+
+        The string can later be passed to load_state to resume processing
+        from this exact point without reprocessing previous lines."""
+        var stack_names: []str = []
+        for b in self.stack:
+            stack_names.append(block_t_name(b))
+        var ps_parts: []str = []
+        for t in self.paren_stack:
+            ps_parts.append(str(t[0]) + ":" + str(t[1]) + ":" + paren_kind_name(t[2]))
+        var parts: []str = [
+            "stack=" + ",".join(stack_names),
+            "pd="    + str(self.paren_depth),
+            "ps="    + ("T" if self.pending_spec    else "F"),
+            "pi="    + ("T" if self.pending_inst    else "F"),
+            "cs="    + str(self.cond_state),
+            "cb="    + str(self.cond_base),
+            "cvb="   + str(self.cond_value_base),
+            "ic="    + ("T" if self.in_cont         else "F"),
+            "vb="    + str(self.value_base),
+            "psk="   + ";".join(ps_parts),
+            "pc="    + ("T" if self.paren_cont      else "F"),
+            "al="    + str(self.arrow_level),
+            "pnl="   + str(self.paren_next_lead),
+            "pnld="  + str(self.paren_next_lead_depth),
+        ]
+        return "|".join(parts)
+
+    def load_state(self, s: str):
+        """Restore indenter state from a string previously produced by dump_state."""
+        self.stack               = []
+        self.paren_depth         = 0
+        self.pending_spec        = False
+        self.pending_inst        = False
+        self.cond_state          = 0
+        self.cond_base           = 0
+        self.cond_value_base     = 0
+        self.in_cont             = False
+        self.value_base          = 0
+        self.paren_stack         = []
+        self.paren_cont          = False
+        self.arrow_level         = 0
+        self.paren_next_lead     = 0
+        self.paren_next_lead_depth = -1
+        for part in s.split("|"):
+            let eq: int = part.find("=")
+            if eq < 0:
+                continue
+            let key: str = part[:eq]
+            let val: str = part[eq + 1:]
+            if key == "stack":
+                if val != "":
+                    for name in val.split(","):
+                        self.stack.append(block_t_from_name(name))
+            elif key == "pd":
+                self.paren_depth = int(val)
+            elif key == "ps":
+                self.pending_spec = val == "T"
+            elif key == "pi":
+                self.pending_inst = val == "T"
+            elif key == "cs":
+                self.cond_state = int(val)
+            elif key == "cb":
+                self.cond_base = int(val)
+            elif key == "cvb":
+                self.cond_value_base = int(val)
+            elif key == "ic":
+                self.in_cont = val == "T"
+            elif key == "vb":
+                self.value_base = int(val)
+            elif key == "psk":
+                if val != "":
+                    for entry in val.split(";"):
+                        let ep: []str = entry.split(":")
+                        if len(ep) == 3:
+                            self.paren_stack.append((int(ep[0]), int(ep[1]),
+                                                     paren_kind_from_name(ep[2])))
+            elif key == "pc":
+                self.paren_cont = val == "T"
+            elif key == "al":
+                self.arrow_level = int(val)
+            elif key == "pnl":
+                self.paren_next_lead = int(val)
+            elif key == "pnld":
+                self.paren_next_lead_depth = int(val)
 
     def _push_parens(self, text: str, base_col: Natural, base_depth: Natural, new_depth: Natural):
         """Record parentheses opened on this line and drop any now closed."""
@@ -814,20 +951,36 @@ class Indenter:
 def main() -> int:
     var ind: Indenter = Indenter()
     var do_fmt: bool = False
+    var do_emit_state: bool = False
     var file_arg: str = ""
-    if $# >= 1:
-        if $1 == "--fmt":
+    var args: []str = []
+    if $# >= 1: args.append($1)
+    if $# >= 2: args.append($2)
+    if $# >= 3: args.append($3)
+    if $# >= 4: args.append($4)
+    if $# >= 5: args.append($5)
+    var ai: int = 0
+    while ai < len(args):
+        let a: str = args[ai]
+        if a == "--fmt":
             do_fmt = True
-            if $# >= 2:
-                file_arg = $2
+        elif a == "--emit-state":
+            do_emit_state = True
+        elif a == "--state":
+            if ai + 1 < len(args):
+                ai += 1
+                ind.load_state(args[ai])
         else:
-            file_arg = $1
+            file_arg = a
+        ai += 1
     if file_arg == "":
         for line in stdin.lines:
             var r: str = ind.indent_line(line)
             if do_fmt:
                 r = format_line(r)
             print r
+            if do_emit_state:
+                print "##STATE:" + ind.dump_state()
     else:
         with open(file_arg) as f:
             for line in f:
@@ -835,6 +988,8 @@ def main() -> int:
                 if do_fmt:
                     r = format_line(r)
                 print r
+                if do_emit_state:
+                    print "##STATE:" + ind.dump_state()
 
 
 if __name__ == "__main__":

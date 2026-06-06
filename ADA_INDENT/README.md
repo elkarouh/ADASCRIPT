@@ -83,49 +83,163 @@ automatically.
 
 `format-all` reformats the *whole buffer* on demand (or on save). For
 indentation that happens **while you type**, wire `ada_indent` up as Emacs'
-`indent-line-function` and let `electric-indent-mode` call it on every newline.
+`indent-line-function` and bind `RET` to a custom newline-and-indent command.
 
 The one thing to know: `ada_indent` is **stateful** — it carries a stack of
-open blocks, so it cannot indent a line in isolation. To indent the current
-line it must see every line above it. The function below therefore pipes the
-buffer *from the top through the current line* into `ada-indent` and reads back
-the indentation of the last emitted line. (Because blank lines are passed
-through at column 0, an empty current line is probed with a neutral token so it
-picks up the enclosing block's indent instead of snapping to the left margin.)
+open blocks, so it cannot indent a line in isolation. Naively it must see every
+line above the current one. For large files this is slow.
+
+`ada_indent` therefore supports two incremental flags:
+
+- `--emit-state` — after each output line, also emits a `##STATE:…` line
+  encoding the full indenter state.
+- `--state STATE` — start from a previously captured state instead of the
+  beginning of the file.
+
+The Emacs integration below caches the state per buffer. On the first indent of
+line N it pipes *all* lines 1..N through `ada_indent --emit-state` and saves the
+returned state. On every subsequent indent it starts from that cached state and
+pipes only the lines between the cache point and the current line — O(distance)
+instead of O(N). The cache is invalidated automatically whenever the buffer is
+edited before the cache point.
+
+(Blank lines are probed with a neutral token so they pick up the enclosing
+block's indent instead of snapping to the left margin.)
+
+Two things matter for the key binding to actually take effect:
+
+1. **Use a minor-mode keymap, not `local-set-key`.** Minor-mode keymaps
+   outrank the major-mode map, so they reliably own `RET` even when the major
+   mode (or `electric-indent-mode`) also binds it.
+2. **Hook both `ada-mode` and `ada-ts-mode`.** If you have the tree-sitter
+   Ada grammar installed, your files open in `ada-ts-mode`, and a hook on
+   `ada-mode-hook` alone never runs.
 
 ```elisp
 (require 'subr-x)   ; string-blank-p, string-trim-left (built in on Emacs 27+)
 
+;;; Per-buffer state cache — avoids reprocessing the whole file every keypress.
+(defvar-local ada-indent--state nil
+  "Serialized Indenter state after line `ada-indent--state-lnum', or nil.")
+(defvar-local ada-indent--state-lnum 0
+  "Line number for which `ada-indent--state' was last captured.")
+
+(defun ada-indent--invalidate-cache (beg _end)
+  "Clear the state cache when a change falls strictly before the cache point."
+  (when ada-indent--state
+    (when (< (line-number-at-pos beg) ada-indent--state-lnum)
+      (setq-local ada-indent--state nil ada-indent--state-lnum 0))))
+
 (defun ada-indent--column ()
-  "Column `ada-indent' assigns to the current line in its buffer context."
+  "Column `ada_indent' assigns to the current line in its buffer context."
   (let* ((bol   (line-beginning-position))
-         (eol   (line-end-position))
-         (cur   (buffer-substring-no-properties bol eol))
+         (cur   (buffer-substring-no-properties bol (line-end-position)))
          ;; Blank line: probe with a neutral token to get the block-body indent.
          (probe (if (string-blank-p cur) "x" cur))
-         (input (concat (buffer-substring-no-properties (point-min) bol) probe))
-         (out   (with-temp-buffer
-                  (insert input)
-                  (call-process-region (point-min) (point-max)
-                                       "ada-indent" t t nil)
-                  (buffer-string)))
-         (last  (car (last (split-string out "\n" t)))))
+         (lnum  (line-number-at-pos bol))
+         ;; Start from cached state when it was captured before this line.
+         (use-cache (and ada-indent--state (< ada-indent--state-lnum lnum)))
+         (input-start (if use-cache
+                          (save-excursion
+                            (goto-char (point-min))
+                            (forward-line ada-indent--state-lnum)
+                            (point))
+                        (point-min)))
+         (input    (concat (buffer-substring-no-properties input-start bol) probe))
+         (cmd-args (if use-cache
+                       (list "--state" ada-indent--state "--emit-state")
+                     (list "--emit-state")))
+         (out      (with-temp-buffer
+                     (insert input)
+                     (apply #'call-process-region (point-min) (point-max)
+                            "ada_indent" t t nil cmd-args)
+                     (buffer-string)))
+         (all-lines   (split-string out "\n" t))
+         (state-lines (seq-filter (lambda (l) (string-prefix-p "##STATE:" l)) all-lines))
+         (code-lines  (seq-remove (lambda (l) (string-prefix-p "##STATE:" l)) all-lines))
+         (last-state  (car (last state-lines)))
+         (last        (car (last code-lines))))
+    ;; Save state so the next call can skip everything up to this line.
+    (when last-state
+      (setq-local ada-indent--state      (substring last-state 8)
+                  ada-indent--state-lnum lnum))
     (if last (- (length last) (length (string-trim-left last))) 0)))
 
 (defun ada-indent-line ()
-  "Indent the current line with `ada-indent'."
+  "Indent the current line with `ada_indent'."
   (interactive)
   (indent-line-to (ada-indent--column)))
 
-(add-hook 'ada-mode-hook
-          (lambda ()
-            (setq-local indent-line-function #'ada-indent-line)
-            (electric-indent-local-mode 1)))
+(defun ada-newline-and-indent ()
+  "Reindent the current line, insert a newline, then indent the new line."
+  (interactive)
+  ;; `indent-line-to' runs `back-to-indentation', which moves point to the
+  ;; start of the line's text.  Wrap it in `save-excursion' so point stays
+  ;; where RET was pressed; otherwise `newline' splits at the line start and
+  ;; the blank line ends up *above* the current line.
+  (save-excursion
+    (indent-line-to (ada-indent--column)))  ; fix the line we are leaving
+  (newline)
+  (indent-line-to (ada-indent--column)))    ; indent the fresh line
+
+(defun ada-indent--post-insert ()
+  "Snap line left as soon as it becomes a bare dedenting keyword."
+  ;; Only reindent when the whole trimmed line is exactly one of the
+  ;; keywords that step left relative to their enclosing block.  Fired via
+  ;; post-self-insert-hook so the snap happens on the final character of the
+  ;; keyword, with no extra keypress needed.
+  (let ((content (string-trim
+                  (buffer-substring-no-properties
+                   (line-beginning-position) (line-end-position)))))
+    (when (member content
+                  '("end" "else" "elsif" "when" "exception"
+                    "begin" "is" "then" "private" "limited"
+                    "record" "loop" "do" "select"))
+      (save-excursion
+        (indent-line-to (ada-indent--column))))))
+
+(defvar ada-indent-mode-map
+  (let ((map (make-sparse-keymap)))
+    (define-key map (kbd "RET")      #'ada-newline-and-indent)
+    (define-key map (kbd "<return>") #'ada-newline-and-indent)
+    (define-key map (kbd "C-m")      #'ada-newline-and-indent)
+    (define-key map (kbd "TAB")      #'ada-indent-line)
+    map)
+  "Keymap for `ada-indent-mode' — minor-mode maps outrank the major map.")
+
+(define-minor-mode ada-indent-mode
+  "Use the external `ada_indent' program for indentation."
+  :lighter " AdaInd"
+  :keymap ada-indent-mode-map
+  (if ada-indent-mode
+      (progn
+        (setq-local indent-line-function #'ada-indent-line)
+        ;; Disable electric-indent entirely: it reindents the line you just left
+        ;; and moves point back, fighting our RET handler.
+        (electric-indent-local-mode -1)
+        ;; Snap dedenting keywords left as each one is completed.
+        (add-hook 'post-self-insert-hook  #'ada-indent--post-insert      nil t)
+        ;; Invalidate the state cache whenever the buffer is edited before it.
+        (add-hook 'before-change-functions #'ada-indent--invalidate-cache nil t))
+    (remove-hook 'post-self-insert-hook   #'ada-indent--post-insert          t)
+    (remove-hook 'before-change-functions #'ada-indent--invalidate-cache     t)))
+
+;; Cover BOTH classic and tree-sitter Ada modes.
+(add-hook 'ada-mode-hook    #'ada-indent-mode)
+(add-hook 'ada-ts-mode-hook #'ada-indent-mode)
+
+;; Retroactively enable in Ada buffers opened before this config loaded.
+(dolist (buf (buffer-list))
+  (with-current-buffer buf
+    (when (derived-mode-p 'ada-mode 'ada-ts-mode)
+      (ada-indent-mode 1))))
 ```
 
-Now `RET` indents the new line, `TAB` reindents the current one, and typing a
-dedenting keyword (`end`, `else`, `when`, …) snaps the line left as soon as the
-keyword is recognised.
+Now `RET` reindents the current line, inserts a newline, and places point at
+the correct indentation on the new line. `TAB` reindents the current line.
+Typing a bare dedenting keyword (`end`, `else`, `elsif`, `when`, `exception`,
+`begin`, `is`, `then`, …) snaps the line left on the final keystroke of the
+keyword — no extra `TAB` needed.
 
 For *continuous* reformatting as you edit anywhere in the line — not just on
 newline — add [`aggressive-indent-mode`](https://github.com/Malabarba/aggressive-indent-mode)
@@ -134,6 +248,112 @@ trade-off: each reindent spawns one `ada-indent` process over the buffer prefix,
 so `aggressive-indent` (which reindents whole regions on every change) is fine
 for small files but gets sluggish on large ones. For large files prefer
 electric indent on newline plus `format-all` on save.
+
+> **Ready-made package.** The whole snippet above is also shipped as
+> [`ada-indent.el`](./ada-indent.el) in this directory. Put the directory on
+> your `load-path` and `(require 'ada-indent)` — no need to paste the elisp into
+> your init file. It adds a `defcustom ada-indent-program` (the binary path) and
+> only activates when that binary is found on `PATH`.
+
+## How incremental mode works
+
+`ada_indent` is a **stack machine**: the indent of line *N* depends on every
+opener/closer above it (see "The model" below). A naive editor integration must
+therefore feed lines *1..N* to the indenter on every keystroke — O(N) work per
+keypress, which crawls on a 5,000-line file.
+
+The `--state` / `--emit-state` flags turn that O(N)-per-keypress cost into
+O(*distance moved since the last edit*). The idea is a **resumable checkpoint**:
+the indenter's entire working memory can be dumped to a string after any line and
+restored before processing the next, so you never reprocess a prefix you have
+already seen.
+
+### The wire protocol
+
+The indenter's state is the `Indenter` object's 14 fields (the block stack, the
+paren stack, the continuation flags, the condition tracker — see `dump_state` in
+`ada_indent.ady`). Two flags expose it on the normal stdin → stdout pipe:
+
+- **`--emit-state`** — after each reindented line, print one extra line
+  `##STATE:<blob>`, where `<blob>` is the serialized state *as of that line*.
+  The blob is an opaque, single-line, `|`-delimited `key=value` string:
+
+  ```
+  package Foo is
+  ##STATE:stack=PKG|pd=0|ps=F|pi=F|cs=0|cb=0|cvb=0|ic=F|vb=0|psk=|pc=F|al=0|pnl=0|pnld=-1
+     procedure Bar;
+  ##STATE:stack=PKG|pd=0|ps=F|pi=F|cs=0|cb=0|cvb=0|ic=F|vb=1|psk=|pc=F|al=0|pnl=0|pnld=-1
+  ```
+
+- **`--state <blob>`** — initialise the indenter from a `<blob>` instead of from
+  an empty stack, then process stdin as usual. Output is identical to what you
+  would get had those earlier lines actually been piped in.
+
+The two are exact inverses: feeding line *K+1* with `--state <blob-for-K>`
+produces byte-for-byte the same result (and the same next blob) as piping
+lines *1..K+1* from scratch. That equivalence is what makes the cache safe.
+
+### What Emacs does with it
+
+`ada-indent.el` keeps two buffer-local variables:
+
+| variable                  | meaning                                            |
+|---------------------------|----------------------------------------------------|
+| `ada-indent--state`       | the last `##STATE:` blob captured, or `nil`        |
+| `ada-indent--state-lnum`  | the line number that blob was captured *after*      |
+
+On each call to `ada-indent--column` (the function behind `RET`/`TAB`):
+
+1. **Decide whether the cache is usable.** It is usable when a blob exists and
+   the cursor is *below* the cached line (`ada-indent--state-lnum < current
+   line`). Editing happens top-to-bottom, so the common case — type a line,
+   press `RET`, type the next — always hits the cache.
+2. **Pick the slice to send.**
+   - *Cache hit:* send only the lines from `ada-indent--state-lnum + 1` through
+     the current line, prefixed with `--state <blob>`.
+   - *Cache miss* (first indent in the buffer, or cursor jumped upward): send the
+     whole prefix `1..N` with no `--state`.
+3. **Run `ada_indent … --emit-state`,** split the output into code lines and
+   `##STATE:` lines.
+4. **Refresh the cache:** store the last blob and set `ada-indent--state-lnum`
+   to the current line.
+5. **Return** the indent column of the last code line to `indent-line-to`.
+
+### Keeping the cache honest
+
+A checkpoint for line *K* is only valid if lines *1..K* have not changed.
+The mode installs `ada-indent--invalidate-cache` on `before-change-functions`.
+
+The condition is **strict `<`**, not `<=`:
+
+```
+(< (line-number-at-pos beg) ada-indent--state-lnum)
+```
+
+The state after line *K* is computed from the *logical content* of lines
+*1..K* — the indenter strips leading whitespace before analysis. So rewriting
+line *K*'s indentation (which is exactly what `indent-line-to` does on the
+very line we just cached) does **not** invalidate the state. Using `<=` would
+cause every `indent-line-to` call to clear the cache the instant it was set,
+making it useless. With `<`:
+
+- Edit on line *K* (the cached line) — indentation fix or continued typing: **cache kept** ✓
+- Edit on lines *K+1, K+2, …* — forward typing: **cache kept** ✓
+- Edit on lines *1..K−1* — going back and changing earlier code: **cache cleared** ✓
+
+The net effect: steady-state forward editing (the common case in both normal
+and `aggressive-indent` modes) keeps the cache alive across every keystroke.
+Only a backwards jump that edits above the cache point pays the one-time
+full-prefix rescan.
+
+The net effect: steady-state editing costs one short `ada_indent` invocation
+over just the handful of lines since your last keystroke, regardless of how large
+the file is — while a jump to the top of a big buffer pays a one-time
+full-prefix scan and then resumes incremental speed.
+
+(One small subtlety re-stated: a blank current line is probed with a neutral
+token `x` before being sent, so the indenter reports the enclosing block's body
+indent instead of column 0. The probe is never inserted into the buffer.)
 
 ## The model: a block stack
 

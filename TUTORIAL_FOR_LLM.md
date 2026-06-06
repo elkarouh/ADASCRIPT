@@ -247,7 +247,7 @@ while n > 0: n -= 1    # inline form
 ```
 
 ### case / when
-Pattern matching. Replaces Python 3.10+ `match/case`.
+Pattern matching. Ada-style alternative to Python 3.10+ `match/case` (both syntaxes work).
 
 **Literal and range patterns:**
 ```adascript
@@ -670,6 +670,215 @@ The Nim backend uses bitset (`set[T]`) for ordinal types (bool, char, byte, smal
 
 ---
 
+## Python 3.10+ `match/case`
+
+Adascript is a superset of Python, so standard `match/case` is supported alongside Adascript's own `case/when`. Both compile to the same Nim output.
+
+```adascript
+def get_kind(arg: str) -> Kind_T:
+    match arg:
+        case "--":
+            return cmdEnd
+        case _ if arg.startswith("--"):
+            return cmdOption
+        case _:
+            return cmdArgument
+```
+
+All Python 3.10 pattern forms work: literals, guards (`if`), wildcards (`_`), capture variables, class patterns, sequence patterns, OR patterns (`|`).
+
+---
+
+## Walrus Operator `:=`
+
+The walrus operator assigns and tests in one expression. The primary use-case is optional-type bind chains — it provides Haskell-do-notation ergonomics without dedicated syntax.
+
+```adascript
+# Optional bind: if the result is present, unwrap and use it
+def load_config(path: str) -> ?Config:
+    if text := read_file_safe(path):
+        if raw := parse_json(text):
+            if port := parse_int(raw.get("port") or ""):
+                return Config(host=raw.get("host") or "localhost", port=port)
+    return None
+
+# While loop consuming an iterator
+while token := lexer.try_next(TK_STRCONST):
+    emit(token)
+```
+
+**Nim output** — the transpiler hoists the binding out of the condition:
+
+```nim
+let text = read_file_safe(path)
+if text.isSome:
+    let raw = parse_json(text.get())
+    if raw.isSome:
+        ...
+```
+
+Inside a `while` condition, `:=` becomes a `let` before the loop with the test inlined.
+
+---
+
+## `do:` Block — Monadic Bind
+
+The `do:` block is first-class do-notation for `?T` chains. Each `x <- expr` step evaluates `expr` (which must return `?T`), short-circuits to `return none(R)` if absent, and binds the unwrapped value to `x` as a plain variable.
+
+```adascript
+def compute(raw_a: str, raw_b: str) -> ?int:
+    do:
+        a <- parse_int(raw_a)
+        b <- parse_int(raw_b)
+        q <- safe_div(a, b)
+        r <- clamp_positive(q)
+    return r
+```
+
+After the block, `a`, `b`, `q`, `r` are plain `int` (not `?int`) and in scope for the rest of the function body.
+
+**Nim output:**
+
+```nim
+proc compute(raw_a: string, raw_b: string): Option[int] =
+    let adadoA = parse_int(raw_a)
+    if adadoA.isNone: return none(int)
+    let a = adadoA.get()
+    ...
+    return some(r)
+```
+
+Rules:
+- Every `expr` after `<-` must return `?T`.
+- The enclosing function must also return `?R`.
+- All bindings are plain (non-optional) `let` variables in scope after the block.
+- Use `do:` for chains of 3+ steps; walrus `:=` for 1–2 steps.
+
+---
+
+## Perl-Style Regex Literals
+
+Adascript supports inline regex literals. No `import re` needed.
+
+```adascript
+# Match / non-match test — returns bool
+if s == /^\d+$/:
+    print("integer")
+
+if s != /^\s*$/:
+    print("non-blank")
+
+# Flags: i (case-insensitive), g (findall)
+if s == /^yes$/i:
+    print("affirmative")
+
+# Positional captures — $+1, $+2, ... after a successful match
+if s == /(\w+)\s*=\s*(\w+)/:
+    print(f"{$+1} → {$+2}")
+
+# Named captures — $+{name}
+if s == /(?P<year>\d{4})-(?P<month>\d{2})-(?P<day>\d{2})/:
+    print(f"{$+{day}}/{$+{month}}/{$+{year}}")
+
+# Whole-match capture
+if s == /\d+/:
+    print($+0)
+
+# Findall — /pat/g returns []str
+let words: []str = s == /\w+/g
+
+# Substitution — s/pat/repl/flags
+s == s/\d+/[N]/g    # replace all digits with [N]
+```
+
+**Python output:** uses `re` module.
+**Nim output:** uses `std/re`.
+
+---
+
+## Block-Form Enum Declarations
+
+In addition to the inline `type E is enum A, B, C` form, enums can be declared with one member per line — useful for long enums or when per-member comments are needed:
+
+```adascript
+type Expr_Kind is enum:
+    EK_IntLit      # integer literal  42
+    EK_RealLit     # float literal    3.14
+    EK_Sym         # symbol           foo
+    EK_List        # list             (...)
+    EK_Builtin     # built-in op      +, -, car, cdr
+```
+
+Both forms are identical at the type level and produce the same Python/Nim output.
+
+---
+
+## `@contextmanager` → Nim Template
+
+Python's `@contextmanager` decorator transpiles to a Nim `template` with a trailing block argument. The `yield` in the body becomes the injection point for the caller's block.
+
+```adascript
+@contextmanager
+def emit_block(self, start: str, close: str):
+    self(start)
+    self.indent_level += 2
+    yield
+    self.indent_level -= 2
+    self(close)
+
+# Call site — caller's block is injected at yield
+with emit.emit_block("{", "}"):
+    emit("int x = 42;")
+```
+
+**Nim output:**
+
+```nim
+template emit_block(self: var Emitter, start: string, close: string, body: untyped) =
+    self(start)
+    self.indent_level += 2
+    body
+    self.indent_level -= 2
+    self(close)
+
+emit.emit_block("{", "}"):
+    emit("int x = 42;")
+```
+
+---
+
+## Ownership (`own` / `lent` / `move` / `drop`)
+
+Adascript exposes Nim's ARC (automatic reference counting) memory model through optional ownership annotations. These are purely additive — unowned code is valid and identical in behaviour.
+
+```adascript
+# own: declare a uniquely-owned value (freed at end of scope by ARC)
+own a: Msg_T = make_msg("hello", 3)
+
+# lent: borrow without taking ownership (read-only in Nim)
+def summarise(msg: lent Msg_T) -> str:
+    f"{msg.text} x{msg.count}"
+
+print(summarise(a))    # borrows a
+
+# with own: RAII scoped block — a is freed when the block exits
+with own tmp = make_msg("scoped", 1):
+    print(summarise(tmp))
+# tmp freed here
+
+# move: explicit ownership transfer (a is invalid after this)
+own b: Msg_T = move(a)
+
+# drop: explicit early release
+own c: Msg_T = make_msg("temp", 5)
+drop(c)
+```
+
+**Python output:** ownership annotations are stripped; code runs identically under GC.
+**Nim output:** `own` → `var`, `lent` → `lent`, `move` → `move()`, `drop` → `=destroy()`.
+
+---
+
 ## Complete Quick Example
 
 ```adascript
@@ -742,14 +951,27 @@ for s in Stage_T'First .. Stage_T'Last:
 | File-test | `-e path`, `-f path`, `-d path` |
 | File comparison | `a -nt b`, `a -ot b` |
 | Python 2-style print | `print "text"` or `print expr, expr` |
+| Python 3.10 match/case | `match x: case P: ...` (full pattern syntax) |
+| Walrus bind | `if r := f():` / `while r := f():` |
+| Monadic do block | `do:` / `x <- expr` |
+| Regex literal | `s == /pat/`, `s != /pat/`, `s == /pat/g` |
+| Regex capture | `$+1`, `$+{name}`, `$+0` |
+| Substitution | `s == s/pat/repl/g` |
+| Block-form enum | `type E is enum:` / one member per indented line |
+| Context manager | `@contextmanager def f(): ... yield ...` |
+| Owned value | `own x: T = expr` |
+| Borrow parameter | `param: lent T` |
+| Ownership transfer | `move(x)` |
+| Explicit release | `drop(x)` |
+| RAII scope | `with own x = expr:` |
 
 ---
 
 ## Known Limitations
 
 - **Blank lines and inline comments** — `py2py.py` collapses blank lines between statements and drops inline comments (`x = 1  # note`). Infrastructure is in place but not yet wired through all compound-statement backends.
-- **Native `match/case`** — Adascript's `case/when` replaces Python 3.10+ `match/case`. Restoring standard `match/case` as an alternative is on the TODO list.
 - **Tick attributes on field accesses** — `self.x'Image` does not work; use `str(self.x)` instead.
 - **Case subject must be structural** — `case state:` where `state` is a tuple variable emits Nim's native `case`, which rejects non-ordinal selectors. Destructure with `let (a, b) = state` first, then `case (a, b):`.
 - **Global parser state** — `ParserState` is a class-level singleton; call `ParserState.reset()` between independent parse runs. Thread-unsafe for concurrent parses.
 - **`nimport` stdlib coverage** — some Python builtins (`PriorityQueue`, `FifoQueue`, `ANY`) live in a local `stdlib.nim` shim (`nimport stdlib`).
+- **`$name` is always a shell variable** — `$HOME`, `$1`, etc. are tokenised as environment/CLI lookups even outside `shell:` blocks. Use explicit `getEnv("NAME")` in Nim-only contexts if needed.
