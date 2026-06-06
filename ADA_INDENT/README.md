@@ -123,13 +123,16 @@ picks up the enclosing block's indent instead of snapping to the left margin.)
   (newline)
   (indent-line-to (ada-indent--column)))
 
+;; t = append: run after all other ada-mode hooks (including wisi),
+;; so our RET binding is set last and is not overridden.
 (add-hook 'ada-mode-hook
           (lambda ()
             (setq-local indent-line-function #'ada-indent-line)
             ;; Disable electric-indent-mode entirely: inhibit alone leaves its
             ;; keymap active, which intercepts RET before our binding is reached.
             (electric-indent-local-mode -1)
-            (local-set-key (kbd "RET") #'ada-newline-and-indent)))
+            (local-set-key (kbd "RET") #'ada-newline-and-indent))
+          t)
 ```
 
 Now `RET` inserts a newline and moves point to the correct indentation on the
