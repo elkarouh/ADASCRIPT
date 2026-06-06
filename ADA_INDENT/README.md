@@ -125,9 +125,9 @@ Two things matter for the key binding to actually take effect:
   "Line number for which `ada-indent--state' was last captured.")
 
 (defun ada-indent--invalidate-cache (beg _end)
-  "Clear the state cache when a change falls at or before the cache point."
+  "Clear the state cache when a change falls strictly before the cache point."
   (when ada-indent--state
-    (when (<= (line-number-at-pos beg) ada-indent--state-lnum)
+    (when (< (line-number-at-pos beg) ada-indent--state-lnum)
       (setq-local ada-indent--state nil ada-indent--state-lnum 0))))
 
 (defun ada-indent--column ()
@@ -322,11 +322,30 @@ On each call to `ada-indent--column` (the function behind `RET`/`TAB`):
 
 ### Keeping the cache honest
 
-A checkpoint for line *K* is only valid if lines *1..K* have not changed. The
-mode installs `ada-indent--invalidate-cache` on `before-change-functions`: any
-edit whose start is at or above `ada-indent--state-lnum` clears the cache, so the
-next indent falls back to a full-prefix scan and rebuilds the checkpoint. Edits
-*below* the cache point (the normal forward-typing case) leave it intact.
+A checkpoint for line *K* is only valid if lines *1..K* have not changed.
+The mode installs `ada-indent--invalidate-cache` on `before-change-functions`.
+
+The condition is **strict `<`**, not `<=`:
+
+```
+(< (line-number-at-pos beg) ada-indent--state-lnum)
+```
+
+The state after line *K* is computed from the *logical content* of lines
+*1..K* — the indenter strips leading whitespace before analysis. So rewriting
+line *K*'s indentation (which is exactly what `indent-line-to` does on the
+very line we just cached) does **not** invalidate the state. Using `<=` would
+cause every `indent-line-to` call to clear the cache the instant it was set,
+making it useless. With `<`:
+
+- Edit on line *K* (the cached line) — indentation fix or continued typing: **cache kept** ✓
+- Edit on lines *K+1, K+2, …* — forward typing: **cache kept** ✓
+- Edit on lines *1..K−1* — going back and changing earlier code: **cache cleared** ✓
+
+The net effect: steady-state forward editing (the common case in both normal
+and `aggressive-indent` modes) keeps the cache alive across every keystroke.
+Only a backwards jump that edits above the cache point pays the one-time
+full-prefix rescan.
 
 The net effect: steady-state editing costs one short `ada_indent` invocation
 over just the handful of lines since your last keystroke, regardless of how large

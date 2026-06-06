@@ -49,9 +49,16 @@ Set by `ada-indent--column' after each successful indent call.")
   "Buffer line number after which `ada-indent--state' was captured.")
 
 (defun ada-indent--invalidate-cache (beg _end)
-  "Clear the state cache when a buffer change falls at or before the cache point."
+  "Clear the state cache when a buffer change falls before the cache point.
+
+Uses strict `<' rather than `<=': the state captured after line N is derived
+from lines 1..N and is unaffected by changes to line N itself (the indenter
+strips leading whitespace before analysis, so rewriting a line's indentation
+does not change the logical content the state machine saw).  Using `<=' would
+cause `indent-line-to' — which changes the current line's whitespace — to
+wipe the cache immediately after it is set, making it useless."
   (when ada-indent--state
-    (when (<= (line-number-at-pos beg) ada-indent--state-lnum)
+    (when (< (line-number-at-pos beg) ada-indent--state-lnum)
       (setq-local ada-indent--state     nil
                   ada-indent--state-lnum 0))))
 
