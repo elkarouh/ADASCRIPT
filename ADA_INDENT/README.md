@@ -88,56 +88,85 @@ indentation that happens **while you type**, wire `ada_indent` up as Emacs'
 The one thing to know: `ada_indent` is **stateful** — it carries a stack of
 open blocks, so it cannot indent a line in isolation. To indent the current
 line it must see every line above it. The function below therefore pipes the
-buffer *from the top through the current line* into `ada-indent` and reads back
+buffer *from the top through the current line* into `ada_indent` and reads back
 the indentation of the last emitted line. (Because blank lines are passed
 through at column 0, an empty current line is probed with a neutral token so it
 picks up the enclosing block's indent instead of snapping to the left margin.)
+
+Two things matter for the binding to actually take effect:
+
+1. **Use a minor-mode keymap, not `local-set-key`.** Minor-mode keymaps
+   outrank the major-mode map, so they reliably own `RET` even when the major
+   mode (or `electric-indent-mode`) also binds it.
+2. **Hook both `ada-mode` and `ada-ts-mode`.** If you have the tree-sitter
+   Ada grammar installed, your files open in `ada-ts-mode`, and a hook on
+   `ada-mode-hook` alone never runs.
 
 ```elisp
 (require 'subr-x)   ; string-blank-p, string-trim-left (built in on Emacs 27+)
 
 (defun ada-indent--column ()
-  "Column `ada-indent' assigns to the current line in its buffer context."
+  "Column `ada_indent' assigns to the current line in its buffer context."
   (let* ((bol   (line-beginning-position))
-         (eol   (line-end-position))
-         (cur   (buffer-substring-no-properties bol eol))
+         (cur   (buffer-substring-no-properties bol (line-end-position)))
          ;; Blank line: probe with a neutral token to get the block-body indent.
          (probe (if (string-blank-p cur) "x" cur))
          (input (concat (buffer-substring-no-properties (point-min) bol) probe))
          (out   (with-temp-buffer
                   (insert input)
                   (call-process-region (point-min) (point-max)
-                                       "ada-indent" t t nil)
+                                       "ada_indent" t t nil)
                   (buffer-string)))
          (last  (car (last (split-string out "\n" t)))))
     (if last (- (length last) (length (string-trim-left last))) 0)))
 
 (defun ada-indent-line ()
-  "Indent the current line with `ada-indent'."
+  "Indent the current line with `ada_indent'."
   (interactive)
   (indent-line-to (ada-indent--column)))
 
 (defun ada-newline-and-indent ()
-  "Insert newline and place point at the indentation ada-indent expects."
+  "Reindent the current line, insert a newline, then indent the new line."
   (interactive)
+  (indent-line-to (ada-indent--column))   ; fix the line we are leaving
   (newline)
-  (indent-line-to (ada-indent--column)))
+  (indent-line-to (ada-indent--column)))  ; indent the fresh line
 
-;; t = append: run after all other ada-mode hooks (including wisi),
-;; so our RET binding is set last and is not overridden.
-(add-hook 'ada-mode-hook
-          (lambda ()
-            (setq-local indent-line-function #'ada-indent-line)
-            ;; Disable electric-indent-mode entirely: inhibit alone leaves its
-            ;; keymap active, which intercepts RET before our binding is reached.
-            (electric-indent-local-mode -1)
-            (local-set-key (kbd "RET") #'ada-newline-and-indent))
-          t)
+(defvar ada-indent-mode-map
+  (let ((map (make-sparse-keymap)))
+    (define-key map (kbd "RET")      #'ada-newline-and-indent)
+    (define-key map (kbd "<return>") #'ada-newline-and-indent)
+    (define-key map (kbd "C-m")      #'ada-newline-and-indent)
+    (define-key map (kbd "TAB")      #'ada-indent-line)
+    map)
+  "Keymap for `ada-indent-mode' — minor-mode maps outrank the major map.")
+
+(define-minor-mode ada-indent-mode
+  "Use the external `ada_indent' program for indentation."
+  :lighter " AdaInd"
+  :keymap ada-indent-mode-map
+  (when ada-indent-mode
+    (setq-local indent-line-function #'ada-indent-line)
+    ;; Disable electric-indent entirely: it reindents the line you just left
+    ;; and moves point back, fighting our RET handler.
+    (electric-indent-local-mode -1)))
+
+;; Cover BOTH classic and tree-sitter Ada modes.
+(add-hook 'ada-mode-hook    #'ada-indent-mode)
+(add-hook 'ada-ts-mode-hook #'ada-indent-mode)
+
+;; Retroactively enable in Ada buffers opened before this config loaded.
+(dolist (buf (buffer-list))
+  (with-current-buffer buf
+    (when (derived-mode-p 'ada-mode 'ada-ts-mode)
+      (ada-indent-mode 1))))
 ```
 
-Now `RET` inserts a newline and moves point to the correct indentation on the
-new line. `TAB` reindents the current line. Typing a dedenting keyword (`end`,
-`else`, `when`, …) followed by `TAB` snaps the line left.
+Now `RET` reindents the current line, inserts a newline, and places point at
+the correct indentation on the new line. `TAB` reindents the current line.
+Typing a dedenting keyword (`end`, `else`, `when`, …) followed by `TAB` snaps
+the line left.
+
 
 For *continuous* reformatting as you edit anywhere in the line — not just on
 newline — add [`aggressive-indent-mode`](https://github.com/Malabarba/aggressive-indent-mode)
