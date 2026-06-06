@@ -400,6 +400,18 @@ package body Regression_Tests is
                 Width => W));
   end Test_32;
 
+  -- ── §4.3 arg-list '(' compounds past an operator-continuation call name ───
+
+  procedure Test_32b is
+  begin
+    Debug.Trace (CPF_Collection_Detailed_Trace,
+                 "   " & I'Image & ". Plot at time "
+                   & Time.Text.Image
+                     (Position_Report.Track_Time_Of
+                        (Earlier_Collected_Report.Report).Value, Sec)
+                   & " is being compared against current plot.");
+  end Test_32b;
+
   -- ── §8 named association with value on next line + operator continuation ──
 
   procedure Test_33 is

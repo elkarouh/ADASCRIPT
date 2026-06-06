@@ -370,6 +370,8 @@ class Indenter:
     arrow_level: Natural = 0    # innermost paren level with an active '=>' named-value spill (0 = none)
     paren_next_lead: Natural = 0         # column where the next code line in this paren will land
     paren_next_lead_depth: int = -1      # paren_depth that paren_next_lead applies to (-1 = none)
+    paren_prev_lead: Natural = 0         # actual lead column of the previous code line in this paren
+                                         # (valid when paren_next_lead_depth == entry depth)
 
     def dump_state(self) -> str:
         """Serialize the full indenter state to a compact, opaque string.
@@ -397,6 +399,7 @@ class Indenter:
             "al="    + str(self.arrow_level),
             "pnl="   + str(self.paren_next_lead),
             "pnld="  + str(self.paren_next_lead_depth),
+            "ppl="   + str(self.paren_prev_lead),
         ]
         return "|".join(parts)
 
@@ -416,6 +419,7 @@ class Indenter:
         self.arrow_level         = 0
         self.paren_next_lead     = 0
         self.paren_next_lead_depth = -1
+        self.paren_prev_lead     = 0
         for part in s.split("|"):
             let eq: int = part.find("=")
             if eq < 0:
@@ -457,6 +461,8 @@ class Indenter:
                 self.paren_next_lead = int(val)
             elif key == "pnld":
                 self.paren_next_lead_depth = int(val)
+            elif key == "ppl":
+                self.paren_prev_lead = int(val)
 
     def _push_parens(self, text: str, base_col: Natural, base_depth: Natural, new_depth: Natural):
         """Record parentheses opened on this line and drop any now closed."""
@@ -671,7 +677,17 @@ class Indenter:
                         lead = vbase + INDENT_WIDTH
                         was_cont = True
                     elif code_s.startswith("(") and self.paren_cont:
+                        # An argument list '(' opening a continuation line is the
+                        # call's arguments, so it nests one level past the call
+                        # name — which sits on the previous code line. When that
+                        # previous line was itself an operator/term continuation
+                        # (deeper than the item column), the '(' must compound past
+                        # it rather than flatten back to the item column. Use the
+                        # previous line's actual lead when it was at this same paren
+                        # depth; otherwise fall back to the item column.
                         lead = vbase + INDENT_WIDTH
+                        if self.paren_next_lead_depth == entry_depth:
+                            lead = max(lead, self.paren_prev_lead + INDENT_WIDTH)
                         was_cont = True
             let new_depth: int = self.paren_depth + paren_delta(code)
             let plt: str = last_word(code_s)
@@ -715,6 +731,7 @@ class Indenter:
                 # Already a continuation, or kind-1 structural, or closed item:
                 # the next line chains at the same level.
                 self.paren_next_lead = lead
+            self.paren_prev_lead = lead
             self.paren_next_lead_depth = entry_depth
             self._push_parens(emit_text, lead, entry_depth, self.paren_depth)
             # A line that closes back out of all parentheses and ends in a block

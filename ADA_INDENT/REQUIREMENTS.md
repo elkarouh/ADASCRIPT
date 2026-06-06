@@ -110,6 +110,12 @@ Each additional open paren that is not closed on the same line increases
 the alignment column by one level. Operators inside an inner paren are
 indented one extra level compared to the same operators outside.
 
+An argument-list `(` that opens a continuation line is the call's argument
+list, so it nests one level past the **call name**, which sits on the
+previous code line. When that previous line is itself an operator/term
+continuation (already deeper than the item column), the `(` compounds past
+it rather than flattening back to the item column.
+
 ### 4.4 If-expression inside paren
 
 - `then` and `else` branches align under `if`.
