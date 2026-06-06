@@ -250,6 +250,93 @@ so `aggressive-indent` (which reindents whole regions on every change) is fine
 for small files but gets sluggish on large ones. For large files prefer
 electric indent on newline plus `format-all` on save.
 
+> **Ready-made package.** The whole snippet above is also shipped as
+> [`ada-indent.el`](./ada-indent.el) in this directory. Put the directory on
+> your `load-path` and `(require 'ada-indent)` — no need to paste the elisp into
+> your init file. It adds a `defcustom ada-indent-program` (the binary path) and
+> only activates when that binary is found on `PATH`.
+
+## How incremental mode works
+
+`ada_indent` is a **stack machine**: the indent of line *N* depends on every
+opener/closer above it (see "The model" below). A naive editor integration must
+therefore feed lines *1..N* to the indenter on every keystroke — O(N) work per
+keypress, which crawls on a 5,000-line file.
+
+The `--state` / `--emit-state` flags turn that O(N)-per-keypress cost into
+O(*distance moved since the last edit*). The idea is a **resumable checkpoint**:
+the indenter's entire working memory can be dumped to a string after any line and
+restored before processing the next, so you never reprocess a prefix you have
+already seen.
+
+### The wire protocol
+
+The indenter's state is the `Indenter` object's 14 fields (the block stack, the
+paren stack, the continuation flags, the condition tracker — see `dump_state` in
+`ada_indent.ady`). Two flags expose it on the normal stdin → stdout pipe:
+
+- **`--emit-state`** — after each reindented line, print one extra line
+  `##STATE:<blob>`, where `<blob>` is the serialized state *as of that line*.
+  The blob is an opaque, single-line, `|`-delimited `key=value` string:
+
+  ```
+  package Foo is
+  ##STATE:stack=PKG|pd=0|ps=F|pi=F|cs=0|cb=0|cvb=0|ic=F|vb=0|psk=|pc=F|al=0|pnl=0|pnld=-1
+     procedure Bar;
+  ##STATE:stack=PKG|pd=0|ps=F|pi=F|cs=0|cb=0|cvb=0|ic=F|vb=1|psk=|pc=F|al=0|pnl=0|pnld=-1
+  ```
+
+- **`--state <blob>`** — initialise the indenter from a `<blob>` instead of from
+  an empty stack, then process stdin as usual. Output is identical to what you
+  would get had those earlier lines actually been piped in.
+
+The two are exact inverses: feeding line *K+1* with `--state <blob-for-K>`
+produces byte-for-byte the same result (and the same next blob) as piping
+lines *1..K+1* from scratch. That equivalence is what makes the cache safe.
+
+### What Emacs does with it
+
+`ada-indent.el` keeps two buffer-local variables:
+
+| variable                  | meaning                                            |
+|---------------------------|----------------------------------------------------|
+| `ada-indent--state`       | the last `##STATE:` blob captured, or `nil`        |
+| `ada-indent--state-lnum`  | the line number that blob was captured *after*      |
+
+On each call to `ada-indent--column` (the function behind `RET`/`TAB`):
+
+1. **Decide whether the cache is usable.** It is usable when a blob exists and
+   the cursor is *below* the cached line (`ada-indent--state-lnum < current
+   line`). Editing happens top-to-bottom, so the common case — type a line,
+   press `RET`, type the next — always hits the cache.
+2. **Pick the slice to send.**
+   - *Cache hit:* send only the lines from `ada-indent--state-lnum + 1` through
+     the current line, prefixed with `--state <blob>`.
+   - *Cache miss* (first indent in the buffer, or cursor jumped upward): send the
+     whole prefix `1..N` with no `--state`.
+3. **Run `ada_indent … --emit-state`,** split the output into code lines and
+   `##STATE:` lines.
+4. **Refresh the cache:** store the last blob and set `ada-indent--state-lnum`
+   to the current line.
+5. **Return** the indent column of the last code line to `indent-line-to`.
+
+### Keeping the cache honest
+
+A checkpoint for line *K* is only valid if lines *1..K* have not changed. The
+mode installs `ada-indent--invalidate-cache` on `before-change-functions`: any
+edit whose start is at or above `ada-indent--state-lnum` clears the cache, so the
+next indent falls back to a full-prefix scan and rebuilds the checkpoint. Edits
+*below* the cache point (the normal forward-typing case) leave it intact.
+
+The net effect: steady-state editing costs one short `ada_indent` invocation
+over just the handful of lines since your last keystroke, regardless of how large
+the file is — while a jump to the top of a big buffer pays a one-time
+full-prefix scan and then resumes incremental speed.
+
+(One small subtlety re-stated: a blank current line is probed with a neutral
+token `x` before being sent, so the indenter reports the enclosing block's body
+indent instead of column 0. The probe is never inserted into the buffer.)
+
 ## The model: a block stack
 
 Indentation in Ada is a function of how many blocks are currently open. The
