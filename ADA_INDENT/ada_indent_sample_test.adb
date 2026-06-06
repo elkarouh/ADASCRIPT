@@ -21,6 +21,11 @@ package Regression_Tests is
       X : Integer;
     end record;
 
+  -- ── §3 subtype declaration split across lines ──────────────────────────────
+  subtype Small_Int is
+    Integer range 1 .. 10;
+  Next_Field : Integer;
+
   type Mode_T is (A, B);
 
   -- ── §2.3 variant record on two lines ─────────────────────────────────────

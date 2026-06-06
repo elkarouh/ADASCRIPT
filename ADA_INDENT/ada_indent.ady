@@ -189,6 +189,10 @@ def stmt_incomplete(code_s: str) -> bool:
             "or", "private", "select"):
         return False
     let lt: str = last_word(code_s)
+    # 'subtype T is' is not a block opener — the type name follows on the next
+    # line as a plain continuation, with no matching 'end'.
+    if lt == "is" and lw == "subtype":
+        return True
     # Block openers, plus the '[not] overriding' indicator on its own line.
     return lt not in ("is", "then", "loop", "record", "select", "do", "overriding")
 
@@ -719,11 +723,13 @@ class Indenter:
                             # expression function; defer the decision to the next
                             # line (see pending_spec handling above). Everything
                             # else ending in 'is' opens a block immediately.
+                            # Exception: 'subtype T is' is not a block opener —
+                            # it is a plain continuation declaration.
                             if lw == "function":
                                 self.pending_spec = True
                             elif lw == "type":
                                 self.stack.append(TYPE_HEADER)
-                            else:
+                            elif lw != "subtype":
                                 self.stack.append(CASE if lw == "case" else PKG)
                         when "then":
                             self.stack.append(IF)
