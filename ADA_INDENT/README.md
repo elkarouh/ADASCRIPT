@@ -128,9 +128,14 @@ Two things matter for the binding to actually take effect:
 (defun ada-newline-and-indent ()
   "Reindent the current line, insert a newline, then indent the new line."
   (interactive)
-  (indent-line-to (ada-indent--column))   ; fix the line we are leaving
+  ;; `indent-line-to' runs `back-to-indentation', which moves point to the
+  ;; start of the line's text.  Wrap it in `save-excursion' so point stays
+  ;; where RET was pressed; otherwise `newline' splits at the line start and
+  ;; the blank line ends up *above* the current line.
+  (save-excursion
+    (indent-line-to (ada-indent--column)))  ; fix the line we are leaving
   (newline)
-  (indent-line-to (ada-indent--column)))  ; indent the fresh line
+  (indent-line-to (ada-indent--column)))    ; indent the fresh line
 
 (defvar ada-indent-mode-map
   (let ((map (make-sparse-keymap)))
