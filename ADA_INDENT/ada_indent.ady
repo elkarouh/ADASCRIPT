@@ -979,7 +979,29 @@ def main() -> int:
     var ai: int = 0
     while ai < len(args):
         let a: str = args[ai]
-        if a == "--fmt":
+        if a == "-h" or a == "--help":
+            print "Usage: ada_indent [OPTIONS] [FILE]"
+            print ""
+            print "Indent Ada source code.  Reads FILE, or stdin when FILE is omitted."
+            print "Output is written to stdout; each source line is replaced by its"
+            print "correctly-indented form (indentation step: 2 spaces, spaces only)."
+            print ""
+            print "Options:"
+            print "  -h, --help          Show this help and exit."
+            print "  --fmt               Apply lightweight formatting in addition to indentation"
+            print "                      (normalises spacing around operators, removes trailing"
+            print "                      whitespace)."
+            print "  --emit-state        After each output line emit a state snapshot on a"
+            print "                      separate line of the form  ##STATE:<data>  that captures"
+            print "                      the indenter's full parse state.  Consumed by editor"
+            print "                      integrations to enable incremental re-indentation."
+            print "  --state <data>      Restore the indenter from a previously-emitted state"
+            print "                      snapshot before processing the first input line.  Must"
+            print "                      precede the lines the snapshot refers to."
+            print ""
+            print "Exit status: 0 on success, non-zero on error."
+            return 0
+        elif a == "--fmt":
             do_fmt = True
         elif a == "--emit-state":
             do_emit_state = True
