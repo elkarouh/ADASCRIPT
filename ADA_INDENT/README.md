@@ -295,6 +295,56 @@ region, only the region itself is sent to `ada_indent`.
 > `defcustom ada-indent-aggressive` (enable aggressive mode globally), and
 > only activates when that binary is found on `PATH`.
 
+## Vim / Neovim integration
+
+The same `ada_indent` binary plugs into Vim's indentation machinery via
+[`ada-indent.vim`](./ada-indent.vim). Put it on your `'runtimepath'` (e.g.
+`~/.vim/plugin/ada-indent.vim`, or `~/.config/nvim/plugin/ada-indent.vim` for
+Neovim) or `:source` it from your vimrc. It activates for any buffer with
+`filetype=ada`, and only when the `ada_indent` binary is found on `$PATH`
+(set `g:ada_indent_program` to a full path otherwise).
+
+It sets the buffer's `'indentexpr'` to call `ada_indent`, so every standard
+Vim indent action is routed through it:
+
+- **`==`** reindents the current line; **`TAB`** in insert mode and `o`/`O`
+  obey the same indenter.
+- **`=` operator** reindents a motion or visual selection —
+  `gg=G` (whole buffer), `=ip` (paragraph), `V}=` (a visual range). Lines
+  *above* the range are read only to establish the block state; they are not
+  modified.
+- **`:AdaIndentBuffer`** is a convenience wrapper for `gg=G` that preserves
+  the cursor and view.
+- Typing a bare dedenting keyword (`end`, `else`, `elsif`, `when`,
+  `exception`, `begin`, `is`, `then`, `record`, `loop`, `do`, `select`)
+  snaps the line left as you finish the word — wired through `'indentkeys'`
+  (`0=end`, `0=else`, …), the Vim analogue of the Emacs post-self-insert snap.
+
+The plugin also sets `autoindent`, `expandtab`, `shiftwidth=2` and
+`softtabstop=2` to match `ada_indent`'s 2-space, spaces-only output.
+
+### Aggressive mode (Vim)
+
+Off by default. For continuous reindent-as-you-type — reindenting the current
+line after every change, the counterpart of `aggressive-indent-mode` — set
+
+```vim
+let g:ada_indent_aggressive = 1   " before the Ada buffer is opened
+```
+
+or toggle it per buffer with `:AdaIndentToggleAggressive`.
+
+### Performance (Vim)
+
+`ada-indent.vim` keeps the same per-buffer state cache as the Emacs version,
+driven by the binary's `--emit-state` / `--state` protocol. Consecutive lines
+resume from the previous line's snapshot instead of replaying from the top, so
+a full-buffer reindent (`gg=G`) is **O(lines)** rather than O(lines²). The
+cache is invalidated automatically when the buffer is edited above the cache
+point (strict `<`, so re-whitespacing a line never wipes its own checkpoint —
+see [How incremental mode works](#how-incremental-mode-works) for why that is
+safe).
+
 ## How incremental mode works
 
 `ada_indent` is a **stack machine**: the indent of line *N* depends on every
