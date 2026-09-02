@@ -20,7 +20,10 @@ const VERSION: str = "2.0"
 # Where a command run with inherited stdio parks its exit status; see sh_status.
 const STATUS_FILE: str = "/tmp/.git1-status"
 
-let PROG:   str = $0
+# py2nim caches the binary as ".<name>" and symlinks it next to the source, so
+# $0 arrives dot-prefixed; drop it, or the tool introduces itself as ".git1".
+let ARGV0:  str = $0
+let PROG:   str = ARGV0[1:] if ARGV0.startswith(".") else ARGV0
 let PREFIX: str = $G1_PREFIX if $G1_PREFIX else ".g1_"
 
 # ---------------------------------------------------------------------------
