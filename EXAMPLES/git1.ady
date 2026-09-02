@@ -220,6 +220,7 @@ def git_output(t: Target_T, args: []str) -> ?str:
 def git_run(t: Target_T, args: []str) -> int:
     """Run git with our own terminal, so its output appears as it happens and
     pagers, $EDITOR and colour all behave; return git's exit code.
+
     The Nim original execs git in place for the pass-through case; running it
     as a child and forwarding the status is the same thing to the caller.
     """
@@ -398,7 +399,7 @@ def help_lines() -> []str:
         "",
         f"  {PROG} init notes.txt",
         f"  {PROG} notes.txt diff",
-        f"  {PROG} notes.txt commit -am 'reworked the intro'",
+        f"  {PROG} notes.txt commit -am \"reworked the intro\"",
         f"  {PROG} notes.txt log --oneline",
         f"  {PROG} sub/config.yml status",
         f"  {PROG} each log -1 --oneline",
@@ -413,8 +414,8 @@ def help_lines() -> []str:
         "    \"status\" stay clean no matter what else is in the directory.",
         "  * To track a file whose name collides with a subcommand, use \"--\":",
         f"      {PROG} -- ls log",
-        f"  * Set G1_PREFIX to use a prefix other than '{PREFIX}'.",
-        f"  * If the directory is itself inside an ordinary git repo, add '{PREFIX}*'",
+        f"  * Set G1_PREFIX to use a prefix other than \"{PREFIX}\".",
+        f"  * If the directory is itself inside an ordinary git repo, add \"{PREFIX}*\"",
         "    to its .gitignore.",
         "",
         f"Tip: for a long session on one file, alias it:  alias gg='{PROG} notes.txt'",

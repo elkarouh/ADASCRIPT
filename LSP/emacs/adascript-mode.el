@@ -95,6 +95,16 @@ or add `(add-hook \\='adascript-mode-hook \\=#\\='eglot-ensure)' to your init."
   "Face for shell: and shellLines: keywords."
   :group 'adascript)
 
+(defface adascript-range-op-face
+  ;; `font-lock-operator-face' only exists from Emacs 30 onwards; referring to
+  ;; it directly in a font-lock keyword raises a void-variable error mid-scan
+  ;; on older Emacsen, which aborts fontification for the rest of the buffer.
+  `((t :inherit ,(if (facep 'font-lock-operator-face)
+                     'font-lock-operator-face
+                   'font-lock-builtin-face)))
+  "Face for the range operators `..' and `..<'."
+  :group 'adascript)
+
 ;; --- Regexps ---
 
 (defconst adascript--type-decl-re
@@ -214,7 +224,7 @@ or add `(add-hook \\='adascript-mode-hook \\=#\\='eglot-ensure)' to your init."
     (,adascript--var-decl-re (1 font-lock-keyword-face))
 
     ;; 7. Range operators .. and ..<
-    (,adascript--range-op-re (1 font-lock-operator-face))
+    (,adascript--range-op-re (1 'adascript-range-op-face))
 
     ;; 8. Built-in types
     (,adascript--builtin-type-re (1 font-lock-type-face))
@@ -235,9 +245,12 @@ or add `(add-hook \\='adascript-mode-hook \\=#\\='eglot-ensure)' to your init."
 
 (defvar adascript-mode-syntax-table
   (let ((st (make-syntax-table nim-mode-syntax-table)))
-    ;; Make ' a string delimiter so 'hello' is highlighted as a string.
-    ;; Tick attributes (Color'First) are handled via syntax-propertize.
-    (modify-syntax-entry ?\' "\"" st)
+    ;; ' is punctuation by default; `adascript--propertize-quotes' promotes
+    ;; the pairs that actually delimit a string.  Doing it the other way
+    ;; round — string delimiter by default, demoted for tick attributes —
+    ;; means every apostrophe in prose ("the command's output" in a
+    ;; docstring) opens a string that never closes.
+    (modify-syntax-entry ?\' "." st)
     st)
   "Syntax table for `adascript-mode'.")
 
@@ -245,19 +258,83 @@ or add `(add-hook \\='adascript-mode-hook \\=#\\='eglot-ensure)' to your init."
 ;; Syntax propertize — handle tick attributes vs. string quotes
 ;; ---------------------------------------------------------------------------
 
-(defun adascript--syntax-propertize (start end)
-  "Mark tick apostrophes (WORD'WORD) as punctuation.
-Runs after nim-mode's syntax-propertize.  Skips ticks inside
-double-quoted strings (delimiter char 34) to avoid breaking them."
+(defun adascript--escaped-p (pos)
+  "Return non-nil if the character at POS is escaped.
+Only an odd-length run of backslashes escapes, so the closing quote of
+`\"\\\\\\\\\"' — a string holding one backslash — is correctly seen as
+unescaped."
+  (let ((n 0)
+        (p (1- pos)))
+    (while (and (>= p (point-min)) (eq (char-after p) ?\\))
+      (setq n (1+ n)
+            p (1- p)))
+    (= 1 (mod n 2))))
+
+(defun adascript--restore-escaped-quotes (start end)
+  "Keep `\\\"' from ending a string, and so from inverting the rest of the file.
+
+Nim reads `ident\"...\"' as a generalized raw string literal, in which a
+backslash is not an escape but an ordinary character.  For a line like
+
+    f\"commit -am \\\"reworked the intro\\\"\"
+
+nim-mode therefore demotes the backslash to punctuation and marks the
+quote after it as the end of the string; from there on code is
+highlighted as string and string as code, to the end of the buffer.
+
+Adascript's prefixed strings are Python strings — `f\"...\"', `r\"...\"'
+and friends all treat a backslash as an escape — so `\\\"' never ends a
+string.  Drop the syntax properties nim-mode put on both characters and
+let the syntax table speak.
+
+Must run after nim-mode's own syntax-propertize."
   (goto-char start)
-  (while (re-search-forward "\\([[:word:]_]\\)\\('\\)\\([[:word:]_]\\)" end t)
-    (let* ((tick-pos (match-beginning 2))
-           (state (parse-partial-sexp (point-min) tick-pos))
-           (str-delim (nth 3 state)))
-      (when (not (eq str-delim 34))
-        (put-text-property tick-pos (1+ tick-pos)
-                           'syntax-table '(1 . nil)))))
-  (syntax-ppss-flush-cache start))
+  (while (search-forward "\"" end t)
+    (let ((q (1- (point))))
+      (when (adascript--escaped-p q)
+        (remove-text-properties (1- q) (1+ q) '(syntax-table nil))))))
+
+(defun adascript--quote-closes-on-line (pos)
+  "Return the position of the apostrophe that closes a string opened at POS.
+The search stops at end of line and honours backslash escapes.  Returning
+nil for an unpaired apostrophe is the point of this function: it is what
+keeps `the command's output' inside a docstring from opening a string."
+  (save-excursion
+    (goto-char (1+ pos))
+    (let ((eol (line-end-position))
+          (found nil))
+      (while (and (not found) (< (point) eol))
+        (cond ((eq (char-after) ?\\) (forward-char 2))
+              ((eq (char-after) ?\') (setq found (point)))
+              (t (forward-char 1))))
+      found)))
+
+(defun adascript--propertize-quotes (start end)
+  "Mark the apostrophes between START and END that really delimit strings.
+
+An apostrophe in Adascript is either a Python string delimiter
+\(\\='hello\\=') or Ada's attribute tick (Stage_T\\='First).  The syntax
+table calls it punctuation, so only genuine string delimiters need a
+property here.  An apostrophe is left as punctuation when it follows a
+name or a closing bracket (a tick attribute), when it is already inside
+a string or comment, or when it has no partner on the same line.
+
+Runs after nim-mode's syntax-propertize."
+  (goto-char start)
+  (while (search-forward "'" end t)
+    (let ((pos (1- (point))))
+      (unless (nth 8 (save-excursion (syntax-ppss pos)))
+        (unless (and (> pos (point-min))
+                     (or (memq (char-syntax (char-before pos)) '(?w ?_))
+                         ;; (1 .. i)'Choice — a tick after a closing bracket.
+                         (memq (char-before pos) '(?\) ?\]))))
+          (let ((close (adascript--quote-closes-on-line pos)))
+            (when close
+              (put-text-property pos (1+ pos)
+                                 'syntax-table (string-to-syntax "\""))
+              (put-text-property close (1+ close)
+                                 'syntax-table (string-to-syntax "\""))
+              (goto-char (1+ close)))))))))
 
 ;; ---------------------------------------------------------------------------
 ;; Mode definition
@@ -293,12 +370,14 @@ via eglot or lsp-mode.
   (font-lock-add-keywords nil adascript-font-lock-keywords 'set)
   (setq-local comment-start "# ")
   (setq-local comment-start-skip "#+\\s-*")
-  ;; Chain our tick-handling after nim-mode's syntax-propertize.
+  ;; Run nim-mode's syntax-propertize first, then repair the two things it
+  ;; gets wrong for Adascript: escaped quotes and apostrophes.
   (let ((nim-spf syntax-propertize-function))
     (setq-local syntax-propertize-function
                 (lambda (start end)
                   (when nim-spf (funcall nim-spf start end))
-                  (adascript--syntax-propertize start end))))
+                  (adascript--restore-escaped-quotes start end)
+                  (adascript--propertize-quotes start end))))
   ;; Force re-propertization since nim-mode may have already run
   ;; syntax-propertize during mode setup.
   (setq-local syntax-propertize--done (point-min))
