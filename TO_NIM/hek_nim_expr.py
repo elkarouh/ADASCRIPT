@@ -830,12 +830,102 @@ def to_nim(self, prec=None):
                 out.append(s[i])
             i += 1
         return ''.join(out)
+    # Python f-string conversions: {x!r}, {x!s}, {x!a}.  Nim's fmt macro has
+    # no such syntax and rejects the whole string ("invalid format string"),
+    # so rewrite the conversion into a call around the expression.
+    def _split_spec(field):
+        """Split a replacement field into (expression, format-spec).
+
+        The spec starts at the first ':' that is not inside quotes, brackets
+        or parentheses, so a Nim tuple literal (a: 1) or a subscript d["k:v"]
+        is left alone."""
+        depth = 0
+        in_str = None
+        k = 0
+        while k < len(field):
+            c = field[k]
+            if in_str:
+                if c == '\\':
+                    k += 2
+                    continue
+                if c == in_str:
+                    in_str = None
+            elif c in '"\'':
+                in_str = c
+            elif c in '([{':
+                depth += 1
+            elif c in ')]}':
+                depth -= 1
+            elif c == ':' and depth == 0:
+                return field[:k], field[k:]
+            k += 1
+        return field, ''
+
+    def _convert_field(field):
+        expr, spec = _split_spec(field)
+        stripped = expr.rstrip()
+        # '!=' never ends in r/s/a, so an expression ending in '!r' can only
+        # be a conversion.
+        if stripped.endswith(('!r', '!a')):
+            return 'repr(' + stripped[:-2].rstrip() + ')' + spec
+        if stripped.endswith('!s'):
+            # fmt already stringifies with $, so !s just drops away.
+            return stripped[:-2].rstrip() + spec
+        return field
+
+    def _apply_conversions(s):
+        out = []
+        i = 0
+        n = len(s)
+        while i < n:
+            ch = s[i]
+            if ch == '{' and i + 1 < n and s[i + 1] == '{':
+                out.append('{{')
+                i += 2
+                continue
+            if ch == '}' and i + 1 < n and s[i + 1] == '}':
+                out.append('}}')
+                i += 2
+                continue
+            if ch == '{':
+                depth = 1
+                in_str = None
+                j = i + 1
+                while j < n:
+                    c = s[j]
+                    if in_str:
+                        if c == '\\':
+                            j += 2
+                            continue
+                        if c == in_str:
+                            in_str = None
+                    elif c in '"\'':
+                        in_str = c
+                    elif c == '{':
+                        depth += 1
+                    elif c == '}':
+                        depth -= 1
+                        if depth == 0:
+                            break
+                    j += 1
+                if depth == 0 and j < n:
+                    out.append('{' + _convert_field(s[i + 1:j]) + '}')
+                    i = j + 1
+                    continue
+            out.append(ch)
+            i += 1
+        return ''.join(out)
+
     # Apply only to the string content (between outer quotes)
     if result.startswith('fmt"') and result.endswith('"'):
         inner = result[4:-1]
+        inner = _apply_conversions(inner)
         inner = _fix_hex_escapes(inner)
-        # Nim's fmt"" macro doesn't handle \" — switch to triple-quoted fmt"""..."""
-        if '\\"' in inner:
+        # Nim's fmt"" macro doesn't handle \" — switch to triple-quoted
+        # fmt"""...""".  Test for a bare quote, not just an escaped one: an
+        # interpolation may have grown quotes during translation, as $+{day}
+        # does when it becomes namedCaptures["day"].
+        if '"' in inner:
             inner = inner.replace('\\"', '"')
             result = 'fmt"""' + inner + '"""'
         else:

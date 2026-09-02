@@ -2462,22 +2462,70 @@ def to_nim(self, indent=0):
     # Add var to params that are mutated in body (assigned to, .add called, or any method call)
     if params and body:
         import re as _re
+
+        def _mask_literals(text):
+            """Blank the contents of string and char literals, keeping offsets.
+
+            The scan below is a regex over the generated Nim, so a pattern such
+            as re"(\\w+)\\s*=\\s*(\\w+)" would otherwise be read as an
+            assignment to a parameter named s."""
+            out = list(text)
+            i, n = 0, len(text)
+            while i < n:
+                c = text[i]
+                if c not in '"\'':
+                    i += 1
+                    continue
+                if text.startswith('"""', i):
+                    j = text.find('"""', i + 3)
+                    end = n if j < 0 else j + 3
+                    inner_end = end - 3
+                    inner_start = i + 3
+                else:
+                    j = i + 1
+                    while j < n:
+                        if text[j] == '\\':
+                            j += 2
+                            continue
+                        if text[j] == c or text[j] == '\n':
+                            break
+                        j += 1
+                    inner_start, inner_end = i + 1, min(j, n)
+                    end = min(j + 1, n)
+                for k in range(inner_start, inner_end):
+                    if out[k] != '\n':
+                        out[k] = ' '
+                i = max(end, i + 1)
+            return ''.join(out)
+
+        _scan = _mask_literals(body)
         new_params = []
         for p in params.split(", "):
             pname = p.split(":")[0].strip()
-            if pname and pname != "self" and _re.search(
-                rf"(?<![=(,.])\b{_re.escape(pname)}\b\s*(\.add\(|\.append\(|\.extend\(|\.pop\(|\.clear\(|\.remove\(|\.sort\(|\.next\(|\.\w+\s*=(?!=)|\[.*\]\s*=(?!=)|[+\-*/]=|=(?!=))", body
-            ):
-                # Ref class params don't need 'var' — refs are inherently mutable
-                _ptype_str = (p.split(": ", 1)[1] if ": " in p else "").split("=")[0].strip()
-                _ptype_sym = ParserState.symbol_table.lookup(_ptype_str)
-                _is_ref_param = _ptype_sym and _ptype_sym.get("kind") == "ref_class"
-                if " = " in p:
+            if pname and pname != "self":
+                _anchor = rf"(?<![=(,.])\b{_re.escape(pname)}\b\s*"
+                # Mutating the object itself is visible to the caller in Python
+                # too, so the parameter genuinely has to be var.
+                _inplace = _re.search(
+                    _anchor + r"(\.add\(|\.append\(|\.extend\(|\.pop\(|\.clear\(|\.remove\(|\.sort\(|\.next\(|\.\w+\s*=(?!=)|\[.*\]\s*=(?!=)|[+\-*/]=)",
+                    _scan)
+                # Rebinding the name (s = ...) is local to the function in
+                # Python and must not turn the parameter into an out-parameter;
+                # shadow it with a mutable local instead.
+                _rebind = _re.search(_anchor + r"=(?!=)", _scan)
+                if _inplace:
+                    # Ref class params don't need 'var' — refs are inherently mutable
+                    _ptype_str = (p.split(": ", 1)[1] if ": " in p else "").split("=")[0].strip()
+                    _ptype_sym = ParserState.symbol_table.lookup(_ptype_str)
+                    _is_ref_param = _ptype_sym and _ptype_sym.get("kind") == "ref_class"
+                    if " = " in p:
+                        _shadow_vars.append(pname)
+                    elif not p.startswith("var ") and ": " in p and not _is_ref_param:
+                        # Nim syntax: param: var T
+                        parts = p.split(": ", 1)
+                        p = parts[0] + ": var " + parts[1]
+                elif _rebind:
                     _shadow_vars.append(pname)
-                elif not p.startswith("var ") and ": " in p and not _is_ref_param:
-                    # Nim syntax: param: var T
-                    parts = p.split(": ", 1)
-                    p = parts[0] + ": var " + parts[1]
             new_params.append(p)
         params = ", ".join(new_params)
         if _shadow_vars:
