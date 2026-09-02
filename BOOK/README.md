@@ -37,7 +37,7 @@ source, transpile it, and run it on either backend.
 | 10 | [Optional Types and the Maybe Monad](10-optionals.md) | `graph.ady`, `phonecode.ady`, `test_do_block.ady` |
 | 11 | [Shell Integration: Adascript as a Better Bash](11-shell-and-scripting.md) | `fsel.ady`, `sv.ady`, `show_status.ady`, `test_shell_block.ady` |
 | 12 | [Living on Two Backends](12-two-backends.md) | `test_ownership.ady`, `rsync_time_machine.ady`, `shortest_path.ady` |
-| 13 | [Case Studies: The Big Programs](13-case-studies.md) | `tsp.ady`, `lispy.ady`, `geo_server.ady`, `sudoku.ady`, `lolcate.ady`, `jacks.ady`, `qlearning.ady` |
+| 13 | [Case Studies: The Big Programs](13-case-studies.md) | `tsp.ady`, `lispy.ady`, `git1.ady`, `geo_server.ady`, `sudoku.ady`, `lolcate.ady`, `jacks.ady`, `qlearning.ady` |
 | A | [Appendix: Syntax Cheat Sheet and Toolchain](14-appendix.md) | — |
 
 ## Running the examples

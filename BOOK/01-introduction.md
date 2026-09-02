@@ -166,7 +166,7 @@ this book:
 | Operations research / RL | `dp/jacks.ady`, `td_learning/qlearning.ady`, `td_learning/sarsa.ady`, `timetable_*.ady` |
 | An interpreter | `INTERACTIVE/lispy.ady` — a full Scheme interpreter |
 | Text processing | `awk_example.ady`, `test_awk.ady`, `test_regex.ady`, `average_line.ady` |
-| System tools | `rsync_time_machine.ady`, `lolcate/lolcate.ady`, `geo_server.ady` |
+| System tools | `rsync_time_machine.ady`, `lolcate/lolcate.ady`, `git1.ady`, `geo_server.ady` |
 | Interactive shell tools | `INTERACTIVE/fsel.ady`, `INTERACTIVE/sv.ady`, `INTERACTIVE/show_status.ady`, `INTERACTIVE/lv.ady`* |
 | Feature exercises | `openarray_demo.ady`, `test_iters.ady`, `test_do_block.ady`, `test_ownership.ady`, `test_shell_block.ady`, `test_expect.ady`, `argparse.ady` |
 

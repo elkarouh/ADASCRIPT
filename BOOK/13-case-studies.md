@@ -105,7 +105,148 @@ as the reference recipe for CLI tools: a `Config` record, `$@` subcommand
 dispatch via `case`, `walkDir`-style scanning through `nimport os`, regex
 queries from Chapter 7.
 
-## 13.7 `dp/jacks.ady`, `td_learning/qlearning.ady`, `td_learning/sarsa.ady` — numeric kernels
+## 13.7 `git1.ady` — translating *into* Adascript (~480 lines)
+
+Every other program in this chapter was written as Adascript from the start.
+`git1.ady` is the opposite exercise: a translation of an existing Nim program
+(`git1.nim`, after kotodharma/single-file-git), which makes it the best place
+to watch the language's idioms being *chosen* rather than merely used.
+
+The tool gives each tracked file its own private git repo, `.g1_<name>`,
+living beside it — so `notes.txt` and `diary.txt` can sit in one directory,
+each with independent history, with no repo at the directory level. The trick
+is a repo that is created `--bare` and then told otherwise:
+
+```python
+var ok: bool = git_run(t, ["config", "core.bare", "false"]) == 0
+if ok:
+    ok = git_run(t, ["config", "core.worktree", ".."]) == 0
+```
+
+plus an `info/exclude` that hides everything except the one file the repo owns,
+so `status` and `commit -a` stay clean no matter what else is in the directory:
+
+```python
+def write_exclude(t: Target_T):
+    # /*        ignore everything in the work tree, including the repo itself
+    # !/<file>  except the one file this repo is responsible for
+    let info: str = os.path.join(repo_path(t), "info")
+    os.makedirs(info)
+    let body: str = "/*\n!/" + ignore_escape(t.base) + "\n"
+    writeFile(os.path.join(info, "exclude"), body)
+```
+
+### What the translation changes
+
+A literal transliteration would have been possible — Nim is the compile
+target, after all. It would also have been the wrong instinct. Four places
+where the Adascript version says something the Nim version could not:
+
+**Dispatch becomes an enum.** The original switches on argument strings
+directly. Adascript names the alternatives first, then dispatches on the name
+— the `argparse.ady` pattern from §5.1:
+
+```python
+type Command_T is enum:
+    CmdFile        # not a subcommand — the argument names a tracked file
+    CmdInit
+    CmdLs
+    ...
+
+def parse_command(arg: str) -> Command_T:
+    case arg:
+        when "init":                   CmdInit
+        when "ls":                     CmdLs
+        when "help" | "-h" | "--help": CmdHelp
+        when "--version":              CmdVersion
+        when others:                   CmdFile
+```
+
+`CmdFile` is the interesting member: "not a subcommand" is a real state of the
+argument, so it gets a name, and the fall-through path in `main` reads as a
+branch rather than as the absence of one.
+
+**A missing answer becomes `?str`.** The Nim `gitOutput` returns `""` for
+both "the command failed" and "the command said nothing". Chapter 10's rule —
+use an optional when absence is meaningful at the interface — applies exactly:
+
+```python
+def git_output(t: Target_T, args: []str) -> ?str:
+    """Captured stdout, or None if the command failed or said nothing."""
+```
+
+and the caller stops having to know that the empty string was standing in for
+something:
+
+```python
+let last: ?str = git_output(t, ["log", "-1", "--format=%cr"])
+var shown: str = "no commits"
+if last is not None:
+    shown = last
+```
+
+**Process spawning becomes `shell:`.** The original builds a `StringTableRef`
+environment and calls `startProcess`. Adascript's answer is `shell:`, so the
+whole program runs on two primitives — one that captures, one that hands the
+child our terminal:
+
+```python
+def sh(cmd: str) -> (str, int):
+    """Run cmd, capturing stdout (with stderr folded in) and the exit code."""
+    let r = shell: {cmd} 2>&1
+    return (r.output, r.code)
+
+def sh_status(cmd: str) -> int:
+    """Run cmd with our own stdin/stdout, and recover its exit status.
+
+    The discarding form of shell: inherits the terminal — which pagers,
+    $EDITOR and the -t tests below all need — but hands back no exit code,
+    so the command records its own status the way a shell script would.
+    """
+    let stat: str = quoted(STATUS_FILE)
+    shell: {cmd}; echo $? > {stat}
+    ...
+```
+
+Everything git-shaped is then one string-building function, which is the only
+place in the program that knows about `GIT_DIR`:
+
+```python
+def git_cmd(t: Target_T, args: []str) -> str:
+    let d:    str = quoted(t.work_dir)
+    let repo: str = quoted(t.repo_name)
+    let cmd:  str = quoted_args(args)
+    f"cd {d} && GIT_DIR={repo} GIT_WORK_TREE=. git {cmd}"
+```
+
+**Existence checks become file tests.** `fileExists(p)` / `dirExists(p)`
+become `-f p` / `-d p`, and argv/environment handling becomes `$0`, `$@`,
+`$G1_PREFIX`, `$PAGER` — the Bash half of the language doing what it is for.
+
+### What it costs, honestly
+
+Going through the shell has two consequences the book should not gloss over.
+
+Arguments now cross a shell boundary, so the program has to quote them itself
+— hence `quoted()` and `quoted_args()`, applied to every path and every git
+argument. A tool that manipulates arbitrary user file names cannot skip this;
+`it's #1*.txt` is a legal file name.
+
+And the pass-through path is no longer an `exec`. The original replaces its
+own process with git; `git1.ady` runs git as a child and forwards the exit
+status, which is indistinguishable to the caller but does mean one extra
+process for the lifetime of the command.
+
+### The moral
+
+Translating into Adascript is not transliteration. The question to ask at each
+construct is not "how do I write this Nim in Adascript?" but "what was this
+Nim *saying*, and what does Adascript have for saying it?" — usually a type
+declaration, a `case/when`, an optional, a file test, or a `shell:` block.
+
+---
+
+## 13.8 `dp/jacks.ady`, `td_learning/qlearning.ady`, `td_learning/sarsa.ady` — numeric kernels
 
 Sutton & Barto's Jack's Car Rental (policy iteration) and Cliff Walking
 (Q-learning vs SARSA). These show the numeric-modelling style:
@@ -121,7 +262,7 @@ Sutton & Barto's Jack's Car Rental (policy iteration) and Cliff Walking
   Q-learning walks the cliff edge and SARSA stays a row above) — the
   examples are teaching documents, deliberately.
 
-## 13.8 `geo_server.ady` — 1990s prototyping experiment, revisited (~450 lines)
+## 13.9 `geo_server.ady` — 1990s prototyping experiment, revisited (~450 lines)
 
 The Yale/NSWC geo-server problem (which zones does each tracked object
 occupy?) was a famous language-comparison exercise — Haskell's entry was
@@ -137,7 +278,7 @@ subclasses (`Circle`, `Sector`, polygon corridors) plus `&`, `|`, `~` and
 It is the clearest demonstration that the Python surface syntax buys real
 expressive power for the compiled target.
 
-## 13.9 The `CFMU/` and `TIMETABLE/` directories — Adascript at work
+## 13.10 The `CFMU/` and `TIMETABLE/` directories — Adascript at work
 
 Finally, two directories of *production-shaped* code: `CFMU/` contains a
 family of FTPS transfer tools (`ftps_get`, `ftps_put`, `ftps_list`,
@@ -149,7 +290,7 @@ exactly why they are worth skimming: multi-file organisation, `nimport`ed
 shared modules, and the boundary between Adascript and the surrounding
 Python/JS world.
 
-## 13.10 What the corpus says, in one paragraph
+## 13.11 What the corpus says, in one paragraph
 
 Across all of these, the same shape recurs. **Types first**: a handful of
 `type` declarations — enums, subranges, tuples, an alias or two — turn the
