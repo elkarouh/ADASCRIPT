@@ -174,7 +174,6 @@ PANDOC_ARGS=(
     --standalone
     --toc
     --toc-depth=2
-    --number-sections
     --shift-heading-level-by=-1
     --highlight-style=tango
     --metadata title="The Adascript Book"
