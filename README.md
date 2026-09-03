@@ -1071,23 +1071,34 @@ print(result.stderr)   # stderr as a string
 print(result.code)     # exit code as int
 ```
 
-### Variable interpolation
+### Variable and expression interpolation
 
-Use `{name}` anywhere in the command body to interpolate an Adascript variable:
+Use `{name}` anywhere in the command body to interpolate an Adascript variable.
+Function calls and other complex expressions also work inside `{}` — the
+transpiler hoists them to temp variables automatically:
 
 ```python
 let name = "world"
 let result = shell: echo hello {name}
+
+def Q(s: str) -> str:
+    "'" + s.replace("'", "'\\''") + "'"
+
+shell: mkdir -p -- {Q(os.path.join(d, "subdir"))}
 ```
 
 ### Output as lines
 
-`shellLines` captures stdout and splits it into `[]str`, one element per line:
+`shellLines` captures stdout and splits it into `[]str`, one element per line.
+The assignment target supports type annotations, bare names, or `let`/`var`/`const`:
 
 ```python
 let lines = shellLines: ls -la
 for line in lines:
     print(line)
+
+let entries: []str = shellLines: ls -1a /tmp
+output = shellLines: find . -name "*.ady"
 ```
 
 ### Options
@@ -1156,6 +1167,7 @@ s.close()
 | `shell: cmd`                | `subprocess.run("cmd", shell=True)`             | `discard execCmd("cmd")`                  |
 | `shellLines: cmd`           | (implicit return of split lines)                | `return execCmdEx("cmd")[0].splitLines()` |
 | `{var}` in body      | `f"""…{var}…"""`                                    | `fmt"""…{var}…"""` (imports `strformat`)   |
+| `{f(x)}` in body    | `f"""…{f(x)}…"""`                                   | `let tmp = f(x); fmt"""…{tmp}…"""`         |
 
 Required imports (`subprocess`, `types`, `osproc`, `strformat`) are inserted
 automatically.

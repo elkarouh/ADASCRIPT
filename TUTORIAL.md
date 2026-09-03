@@ -1176,7 +1176,8 @@ print(result.code)     # exit code as int
 
 ### Lines capture
 
-`shellLines` splits stdout into `[]str`, one element per line:
+`shellLines` splits stdout into `[]str`, one element per line.  The
+assignment target supports type annotations, bare names, or `let`/`var`/`const`:
 
 ```python
 def getTestStatusLines() -> []str:
@@ -1184,15 +1185,22 @@ def getTestStatusLines() -> []str:
 
 for line in getTestStatusLines():
     print(line)
+
+let entries: []str = shellLines: ls -1a /tmp
+output = shellLines: find . -name "*.ady"
 ```
 
-### Variable interpolation
+### Variable and expression interpolation
 
-Use `{name}` to embed an Adascript variable in the command body:
+Use `{name}` to embed an Adascript variable in the command body.  Function
+calls and other complex expressions also work inside `{}` — the transpiler
+hoists them to temp variables automatically:
 
 ```python
 let branch = "main"
 let result = shell: git log --oneline {branch}
+
+shell: mkdir -p -- {Q(os.path.join(d, "subdir"))}
 ```
 
 ### Options
@@ -1265,8 +1273,11 @@ s.close()
 |------------------------------|--------------------------------------------|----------------------------------|
 | `let r = shell: cmd`         | `subprocess.run(…, capture_output=True)`   | `execCmdEx("cmd")`               |
 | `let ls = shellLines: cmd`   | `…stdout.splitlines()`                     | `execCmdEx(…)[0].splitLines()`   |
+| `let ls: []str = shellLines: cmd` | same (type annotation stripped)        | same (Nim infers type)           |
+| `ls = shellLines: cmd`       | same (bare assignment)                     | same                             |
 | `shell: cmd`                 | `subprocess.run("cmd", shell=True)`        | `discard execCmd("cmd")`         |
 | `{var}` in body              | f-string interpolation                     | `fmt"""…"""` with `strformat`    |
+| `{f(x)}` in body             | f-string interpolation                     | hoisted to `let tmp = f(x)`      |
 
 Required imports (`subprocess`, `osproc`, `strformat`) are inserted
 automatically.
@@ -2216,6 +2227,9 @@ advanced scenarios are not yet supported:
 | Nim-only import                   | `nimport module`                         |
 | Shell command capture             | `let r = shell: cmd`                     |
 | Shell lines capture               | `let ls = shellLines: cmd`               |
+| Shell lines (typed)               | `let ls: []str = shellLines: cmd`        |
+| Shell (bare assign)               | `ls = shellLines: cmd`                   |
+| Shell expr interpolation          | `shell: cmd {f(x)}` (auto-hoisted)      |
 | Discard shell output              | `shell: cmd`                             |
 | Shell block (commands joined)     | `shell:` then indented `cmd1` / `cmd2`   |
 | Shell block (PTY expect/send)     | `shell:` then `cmd` / `send(...)` / `expect(...)` |

@@ -23,13 +23,19 @@ let (out, code) = shell: some-command
 ```
 
 `shellLines:` splits stdout into `[]str`, one element per line. Combined
-with implicit return, a shell command becomes a typed function.
-`EXAMPLES/INTERACTIVE/show_status.ady` (a test-monitoring daemon):
+with implicit return, a shell command becomes a typed function:
 
 ```python
 def getTestStatusLines() -> []str:
-  "Run show_tests_status and return output as lines."
-  shellLines: show_tests_status -raw
+    shellLines: show_tests_status -raw
+```
+
+The assignment target accepts type annotations, bare names, or
+`let`/`var`/`const`:
+
+```python
+let entries: []str = shellLines: ls -1a /tmp
+output = shellLines: find . -name "*.ady"
 ```
 
 With no assignment target, output is simply discarded:
@@ -38,13 +44,23 @@ With no assignment target, output is simply discarded:
 shell: rm -rf /tmp/build
 ```
 
-**Interpolation** uses `{name}` anywhere in the command body, and options
-control working directory and timeout:
+**Interpolation** uses `{name}` anywhere in the command body. Function calls
+and other complex expressions also work inside `{}` — the transpiler
+automatically hoists them to temp variables in the Nim output:
 
 ```python
 let branch = "main"
 let result = shell: git log --oneline {branch}
 
+def Q(s: str) -> str:
+    "'" + s.replace("'", "'\\''") + "'"
+
+shell: mkdir -p -- {Q(os.path.join(d, "subdir"))}
+```
+
+Options control working directory and timeout:
+
+```python
 let r2 = shell(cwd = "/tmp", timeout = 3000): ls -la
 ```
 
@@ -213,8 +229,11 @@ s.close()
 |-----------|----------|-----|
 | `let r = shell: cmd` | `subprocess.run(…, capture_output=True, text=True)` | `execCmdEx("cmd")` |
 | `let ls = shellLines: cmd` | `…stdout.splitlines()` | `execCmdEx(…)[0].splitLines()` |
+| `let ls: []str = shellLines: cmd` | same (annotation stripped) | same (Nim infers type) |
+| `ls = shellLines: cmd` | same (bare assignment) | same |
 | `shell: cmd` | `subprocess.run("cmd", shell=True)` | `discard execCmd("cmd")` |
 | `{var}` in body | f-string interpolation | `fmt"""…"""` |
+| `{f(x)}` in body | f-string interpolation | hoisted to `let tmp = f(x)` |
 | block with `send`/`expect` | PTY driver | bundled `expect` lib (`forkpty` + `select`) |
 
 All required imports (`subprocess`, `osproc`, `strformat`, …) are inserted

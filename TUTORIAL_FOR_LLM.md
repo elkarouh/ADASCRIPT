@@ -430,14 +430,16 @@ print(result.output)    # stdout as string
 print(result.stderr)    # stderr as string
 print(result.code)      # exit code as int
 
-# Lines capture
+# Lines capture — type annotations and bare names both work
 let lines: []str = shellLines: ls -la
+entries = shellLines: find . -name "*.ady"
 for line in lines:
     print(line)
 
-# Variable interpolation
+# Variable interpolation — simple names and function calls
 let branch = "main"
 let r = shell: git log --oneline {branch}
+shell: mkdir -p -- {Q(os.path.join(d, "subdir"))}
 
 # Options
 let r = shell(cwd = "/tmp"): pwd
@@ -463,8 +465,11 @@ shell:
 |-----------|----------|-----|
 | `let r = shell: cmd` | `subprocess.run(…, capture_output=True)` | `execCmdEx("cmd")` |
 | `let ls = shellLines: cmd` | `…stdout.splitlines()` | `execCmdEx(…)[0].splitLines()` |
+| `let ls: []str = shellLines: cmd` | same (annotation stripped) | same (Nim infers type) |
+| `ls = shellLines: cmd` | same (bare assignment) | same |
 | `shell: cmd` | `subprocess.run("cmd", shell=True)` | `discard execCmd("cmd")` |
 | `{var}` in body | f-string | `fmt"""…"""` |
+| `{f(x)}` in body | f-string | hoisted to `let tmp = f(x)` |
 
 Required imports (`subprocess`, `osproc`, `strformat`) are inserted automatically.
 
@@ -943,6 +948,9 @@ for s in Stage_T'First .. Stage_T'Last:
 | Raw Nim injection | `# nimraw: <code>` |
 | Shell capture | `let r = shell: cmd` |
 | Shell lines capture | `let ls = shellLines: cmd` |
+| Shell lines (typed) | `let ls: []str = shellLines: cmd` |
+| Shell (bare assign) | `ls = shellLines: cmd` |
+| Shell expr interpolation | `shell: cmd {f(x)}` (auto-hoisted) |
 | Discard shell output | `shell: cmd` |
 | Shell block | `shell:` then indented commands |
 | Interactive PTY block | `shell:` then `cmd` / `send(...)` / `expect(...)` |
