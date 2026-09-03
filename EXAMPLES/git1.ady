@@ -2,12 +2,13 @@
 #ady2nim-args c -d:release --opt:size
 """git1 — version-control individual files independently.
 
-Each tracked file gets its own private git repo, ".g1_<name>", living next
-to it. Many tracked files can coexist in one directory without seeing each
+Each tracked file gets its own private git repo, ".git1/.g1_<name>",
+grouped under a single ".git1" container in the file's directory.
+Many tracked files can coexist in one directory without seeing each
 other, and without a repo at the directory level.
 
 Concept from kotodharma/single-file-git.
-Adascript translation of git1.nim.
+Adascript translation of git1.sh v3.0.
 
 Usage:  ./git1.ady init notes.txt
         ./git1.ady notes.txt log --oneline
@@ -15,13 +16,10 @@ Usage:  ./git1.ady init notes.txt
 
 nimport os, strutils
 
-const VERSION: str = "2.0"
-
-# Where a command run with inherited stdio parks its exit status; see sh_status.
+const VERSION:   str = "3.0"
 const STATUS_FILE: str = "/tmp/.git1-status"
+const CONTAINER: str = ".git1"
 
-# py2nim caches the binary as ".<name>" and symlinks it next to the source, so
-# $0 arrives dot-prefixed; drop it, or the tool introduces itself as ".git1".
 let ARGV0:  str = $0
 let PROG:   str = ARGV0[1:] if ARGV0.startswith(".") else ARGV0
 let PREFIX: str = $G1_PREFIX if $G1_PREFIX else ".g1_"
@@ -31,18 +29,18 @@ let PREFIX: str = $G1_PREFIX if $G1_PREFIX else ".g1_"
 # ---------------------------------------------------------------------------
 
 type Target_T is record:
-    """A tracked file and the repo that belongs to it."""
-    work_dir:  str    # the work tree
-    base:      str    # file name as git sees it
-    repo_name: str    # repo directory name, relative to work_dir
+    work_dir:  str
+    base:      str
+    git_dir:   str
 
 type Command_T is enum:
-    CmdFile        # not a subcommand — the argument names a tracked file
+    CmdFile
     CmdInit
     CmdLs
     CmdRm
     CmdMv
     CmdEach
+    CmdMigrate
     CmdHelp
     CmdVersion
 
@@ -54,23 +52,14 @@ def warn(msg: str):
     stderr.writeLine(f"{PROG}: {msg}")
 
 def fail(msg: str):
-    """Report and abort. The Nim original raises Git1Error; for a tool this
-    size, exiting at the point of failure says the same thing with less rope."""
     warn(msg)
     quit(1)
 
 # ---------------------------------------------------------------------------
 # Shell plumbing
 # ---------------------------------------------------------------------------
-# Two primitives: sh() captures a command's output, sh_status() lets the
-# command own the terminal. Everything external goes through one of them.
 
 def quoted(s: str) -> str:
-    """Wrap s in single quotes for the shell, escaping any embedded quote.
-
-    Every path and git argument goes through here, so file names containing
-    spaces or shell metacharacters survive the trip through the shell.
-    """
     "'" + s.replace("'", "'\\''") + "'"
 
 def quoted_args(args: []str) -> str:
@@ -80,20 +69,12 @@ def quoted_args(args: []str) -> str:
     " ".join(parts)
 
 def sh(cmd: str) -> (str, int):
-    """Run cmd, capturing stdout (with stderr folded in) and the exit code."""
     let r = shell: {cmd} 2>&1
-    return (r.output, r.code)
+    (r.output, r.code)
 
 def sh_status(cmd: str) -> int:
-    """Run cmd with our own stdin/stdout, and recover its exit status.
-
-    The discarding form of shell: inherits the terminal — which pagers,
-    $EDITOR and the -t tests below all need — but hands back no exit code,
-    so the command records its own status the way a shell script would.
-    """
     let stat: str = quoted(STATUS_FILE)
     shell: {cmd}; echo $? > {stat}
-
     var code: int = 0
     if -f STATUS_FILE:
         let raw: str = readFile(STATUS_FILE).strip()
@@ -103,27 +84,20 @@ def sh_status(cmd: str) -> int:
     code
 
 def remove_dir(path: str):
-    let q: str = quoted(path)
-    shell: rm -rf -- {q}
+    shell: rm -rf -- {quoted(path)}
 
 def remove_file(path: str):
-    let q: str = quoted(path)
-    shell: rm -f -- {q}
+    shell: rm -f -- {quoted(path)}
 
 def move_path(src: str, dst: str) -> int:
-    let qs: str = quoted(src)
-    let qd: str = quoted(dst)
-    let (_, code) = sh(f"mv -- {qs} {qd}")
+    let (_, code) = sh(f"mv -- {quoted(src)} {quoted(dst)}")
     code
 
 def dir_entries(d: str) -> []str:
-    """Every entry, dotfiles included — repo names begin with a dot."""
-    let q: str = quoted(d)
-    shellLines: ls -1a {q}
+    shellLines: ls -1a {quoted(d)}
 
 def have_command(name: str) -> bool:
-    let q: str = quoted(name)
-    let (_, code) = sh(f"command -v {q}")
+    let (_, code) = sh(f"command -v {quoted(name)}")
     code == 0
 
 def stdin_is_tty() -> bool:
@@ -140,39 +114,41 @@ def target_join(t: Target_T, name: str) -> str:
     name if t.work_dir == "." else os.path.join(t.work_dir, name)
 
 def target_path(t: Target_T) -> str:
-    return target_join(t, t.base)
+    target_join(t, t.base)
 
 def repo_path(t: Target_T) -> str:
-    return target_join(t, t.repo_name)
+    target_join(t, t.git_dir)
+
+def container_path(t: Target_T) -> str:
+    target_join(t, CONTAINER)
 
 def is_tracked(t: Target_T) -> bool:
-    let repo: str = repo_path(t)
-    (-d repo)
+    -d repo_path(t)
 
 def parse_target(spec: str) -> Target_T:
     var cleaned: str = spec
     while cleaned'Length > 1 and cleaned.endswith("/"):
-        cleaned = cleaned[0:cleaned'Length-1]
+        cleaned = cleaned[0:cleaned'Length - 1]
     let head: str = os.path.dirname(cleaned)
     let tail: str = os.path.basename(cleaned)
     if tail'Length == 0:
         fail(f"not a file name: {spec}")
     let where: str = "." if head'Length == 0 else head
-    return Target_T(work_dir = where, base = tail, repo_name = PREFIX + tail)
+    Target_T(work_dir = where, base = tail,
+             git_dir = CONTAINER + "/" + PREFIX + tail)
 
 def target_from_repo(d: str, repo_name: str) -> Target_T:
     let where: str = "." if d'Length == 0 else d
-    return Target_T(work_dir = where, base = repo_name[PREFIX'Length:],
-                    repo_name = repo_name)
+    Target_T(work_dir = where, base = repo_name[PREFIX'Length:],
+             git_dir = CONTAINER + "/" + repo_name)
 
 def require_tracked(t: Target_T) -> Target_T:
     if not is_tracked(t):
         let p: str = target_path(t)
-        fail(f"{p} is not tracked (run: {PROG} init {p})")
+        fail(f"'{p}' is not tracked (run: {PROG} init {p})")
     t
 
 def ignore_escape(name: str) -> str:
-    """Quote gitignore metacharacters so odd file names still match exactly."""
     var out: str = name.replace("\\", "\\\\")
     for ch in "*?[#!":
         let c: str = str(ch)
@@ -180,8 +156,6 @@ def ignore_escape(name: str) -> str:
     out
 
 def write_exclude(t: Target_T):
-    # /*        ignore everything in the work tree, including the repo itself
-    # !/<file>  except the one file this repo is responsible for
     let info: str = os.path.join(repo_path(t), "info")
     os.makedirs(info)
     let body: str = "/*\n!/" + ignore_escape(t.base) + "\n"
@@ -192,39 +166,26 @@ def write_exclude(t: Target_T):
 # ---------------------------------------------------------------------------
 
 def git_cmd(t: Target_T, args: []str) -> str:
-    """The shell command that points git at this file's private repo.
-
-    GIT_DIR and GIT_WORK_TREE ride on the command itself; that is how the
-    environment override travels through a shell: invocation.
-    """
-    let d:    str = quoted(t.work_dir)
-    let repo: str = quoted(t.repo_name)
-    let cmd:  str = quoted_args(args)
-    f"cd {d} && GIT_DIR={repo} GIT_WORK_TREE=. git {cmd}"
+    let d:   str = quoted(t.work_dir)
+    let gd:  str = quoted(t.git_dir)
+    let cmd: str = quoted_args(args)
+    f"cd {d} && GIT_DIR={gd} GIT_WORK_TREE=. git {cmd}"
 
 def git_quiet(t: Target_T, args: []str) -> int:
-    """Run git and swallow its output; return the exit code."""
     let (_, code) = sh(git_cmd(t, args))
     code
 
 def git_output(t: Target_T, args: []str) -> ?str:
-    """Captured stdout, or None if the command failed or said nothing."""
     let (out, code) = sh(git_cmd(t, args))
     if code != 0:
         return None
     let text: str = out.strip()
     if text'Length == 0:
         return None
-    return text
+    text
 
 def git_run(t: Target_T, args: []str) -> int:
-    """Run git with our own terminal, so its output appears as it happens and
-    pagers, $EDITOR and colour all behave; return git's exit code.
-
-    The Nim original execs git in place for the pass-through case; running it
-    as a child and forwarding the status is the same thing to the caller.
-    """
-    return sh_status(git_cmd(t, args))
+    sh_status(git_cmd(t, args))
 
 def git_or_fail(t: Target_T, args: []str):
     if git_run(t, args) != 0:
@@ -232,17 +193,20 @@ def git_or_fail(t: Target_T, args: []str):
 
 def git_init_bare(t: Target_T) -> int:
     let d: str = quoted(t.work_dir)
-    let q: str = quoted(t.repo_name)
-    let (_, code) = sh(f"cd {d} && git init --quiet --bare -- {q}")
+    let q: str = quoted(t.git_dir)
+    let (_, code) = sh(f"cd {d} && mkdir -p {quoted(CONTAINER)} && git init --quiet --bare -- {q}")
     code
 
 def find_repos(d: str) -> []Target_T:
     if not -d d:
         fail(f"no such directory: {d}")
+    let cdir: str = os.path.join(d, CONTAINER)
+    if not -d cdir:
+        return []
     var found: []Target_T = []
-    for entry in sorted(dir_entries(d)):
+    for entry in sorted(dir_entries(cdir)):
         if entry'Length > PREFIX'Length and entry.startswith(PREFIX):
-            let full: str = os.path.join(d, entry)
+            let full: str = os.path.join(cdir, entry)
             if -d full:
                 found.append(target_from_repo(d, entry))
     found
@@ -252,27 +216,25 @@ def find_repos(d: str) -> []Target_T:
 # ---------------------------------------------------------------------------
 
 def cmd_init(args: []str) -> int:
-    if args'Length != 1:
+    if args'Length < 1:
         fail(f"usage: {PROG} init <file>")
-    let t: Target_T = parse_target(args[0])
-    let p: str      = target_path(t)
-    let repo: str   = repo_path(t)
+    let t:    Target_T = parse_target(args[0])
+    let p:    str = target_path(t)
+    let repo: str = repo_path(t)
 
-    if not -f p:
-        if -d p:
-            fail(f"not a regular file: {p}")
+    if not -e p:
         fail(f"no such file: {p}")
+    if not -f p:
+        fail(f"not a regular file: {p}")
     if is_tracked(t):
         fail(f"already tracked: {p}")
 
     if git_init_bare(t) != 0:
         fail(f"could not create {repo}")
 
-    # Not really bare: point the repo at its containing directory, using a
-    # path relative to the repo, so the two can be moved together.
     var ok: bool = git_run(t, ["config", "core.bare", "false"]) == 0
     if ok:
-        ok = git_run(t, ["config", "core.worktree", ".."]) == 0
+        ok = git_run(t, ["config", "core.worktree", "../.."]) == 0
     if ok:
         write_exclude(t)
         ok = git_run(t, ["add", "--", t.base]) == 0
@@ -294,17 +256,14 @@ def cmd_ls(args: []str) -> int:
         warn(f"no tracked files in {d}")
         return 1
 
-    var width: int = 0
-    for t in repos:
-        width = max(width, t.base'Length)
     for t in repos:
         let last: ?str = git_output(t, ["log", "-1", "--format=%cr"])
-        var shown: str = "no commits"
+        var when: str = ""
         if last is not None:
-            shown = last
+            when = f"  (last commit {last})"
         let p: str = target_path(t)
-        let note: str = "" if (-f p) else "  [file missing]"
-        print f"{t.base.alignLeft(width)}  {shown}{note}"
+        let status: str = "" if (-f p) else "  [file missing]"
+        print f"{t.base}{when}{status}"
     0
 
 def cmd_rm(args: []str) -> int:
@@ -329,6 +288,8 @@ def cmd_rm(args: []str) -> int:
         if not answer.lower().startswith("y"):
             fail("aborted")
     remove_dir(repo_path(t))
+    let cdir: str = container_path(t)
+    shell: rmdir -- {quoted(cdir)} 2>/dev/null || true
     0
 
 def cmd_mv(args: []str) -> int:
@@ -340,25 +301,29 @@ def cmd_mv(args: []str) -> int:
     let dst_p:    str = target_path(dst)
     let old_repo: str = repo_path(old)
     let dst_repo: str = repo_path(dst)
-    let dst_dir:  str = dst.work_dir
 
-    if -f dst_p or -d dst_p:
+    if -e dst_p:
         fail(f"target exists: {dst_p}")
-    if not -d dst_dir:
-        fail(f"no such directory: {dst_dir}")
+    if not -d dst.work_dir:
+        fail(f"no such directory: {dst.work_dir}")
     if is_tracked(dst):
         fail(f"already tracked: {dst_p}")
 
     if move_path(old_p, dst_p) != 0:
         fail(f"could not move {old_p}")
+    let dst_cdir: str = container_path(dst)
+    shell: mkdir -p -- {quoted(dst_cdir)}
     if move_path(old_repo, dst_repo) != 0:
-        move_path(dst_p, old_p)          # put the file back
+        move_path(dst_p, old_p)
         fail("could not move the repo")
 
     write_exclude(dst)
     git_quiet(dst, ["rm", "--quiet", "--cached", "--ignore-unmatch", "--", old.base])
     git_or_fail(dst, ["add", "--", dst.base])
     git_or_fail(dst, ["commit", "--quiet", "-m", f"rename {old.base} -> {dst.base}"])
+
+    let old_cdir: str = container_path(old)
+    shell: rmdir -- {quoted(old_cdir)} 2>/dev/null || true
     0
 
 def cmd_each(args: []str) -> int:
@@ -371,21 +336,50 @@ def cmd_each(args: []str) -> int:
     var status: int = 0
     for t in repos:
         print f"=== {t.base} ==="
-        if git_run(t, args) != 0:
+        let code: int = git_run(t, args)
+        if code != 0:
+            warn(f"'{t.base}': git exited {code}")
             status = 1
     status
+
+def cmd_migrate(args: []str) -> int:
+    let d: str = args[0] if args'Length >= 1 else "."
+    if not -d d:
+        fail(f"no such directory: {d}")
+    var found: int = 0
+    for entry in sorted(dir_entries(d)):
+        if entry'Length > PREFIX'Length and entry.startswith(PREFIX):
+            let old_path: str = os.path.join(d, entry)
+            if not -d old_path:
+                continue
+            let name: str = entry[PREFIX'Length:]
+            let new_dir: str = os.path.join(d, CONTAINER)
+            let new_path: str = os.path.join(new_dir, entry)
+            if -d new_path:
+                warn(f"skipping {name}: already migrated")
+                continue
+            shell: mkdir -p -- {quoted(new_dir)}
+            if move_path(old_path, new_path) != 0:
+                warn(f"could not move {old_path}")
+                continue
+            let (_, _) = sh(f"git --git-dir={quoted(new_path)} config core.worktree ../..")
+            found += 1
+            print f"migrated {old_path} -> {new_path}"
+    if found == 0:
+        warn(f"no v2 repos found to migrate in {d}")
+    0
 
 # ---------------------------------------------------------------------------
 # Help
 # ---------------------------------------------------------------------------
 
-def help_lines() -> []str:
-    return [
+def help_text() -> str:
+    "\n".join([
         f"{PROG} {VERSION} - independent version control for single files",
         "",
-        f"Each tracked file gets a private git repo named \"{PREFIX}<file>\",",
-        "stored beside it. Many tracked files can coexist in one directory without",
-        "seeing each other, and without a repo at the directory level.",
+        f"Each tracked file gets a private git repo named \"{CONTAINER}/{PREFIX}<file>\",",
+        f"grouped under a single \"{CONTAINER}\" directory. Many tracked files can coexist",
+        "in one directory without seeing each other.",
         "",
         f"  {PROG} init <file>            start tracking <file>",
         f"  {PROG} <file> [git args...]   run git in that file's repo (default: status)",
@@ -393,6 +387,7 @@ def help_lines() -> []str:
         f"  {PROG} mv <old> <new>         rename a tracked file and its repo",
         f"  {PROG} rm [-f] <file>         delete a file's history (keeps the file)",
         f"  {PROG} each <git args...>     run one git command in every repo here",
+        f"  {PROG} migrate [dir]          move v2 repos (.g1_* beside files) into {CONTAINER}/",
         f"  {PROG} help                   this text",
         "",
         "Examples:",
@@ -415,24 +410,18 @@ def help_lines() -> []str:
         "  * To track a file whose name collides with a subcommand, use \"--\":",
         f"      {PROG} -- ls log",
         f"  * Set G1_PREFIX to use a prefix other than \"{PREFIX}\".",
-        f"  * If the directory is itself inside an ordinary git repo, add \"{PREFIX}*\"",
+        f"  * If the directory is itself inside an ordinary git repo, add \"{CONTAINER}\"",
         "    to its .gitignore.",
         "",
         f"Tip: for a long session on one file, alias it:  alias gg='{PROG} notes.txt'",
-    ]
-
-def help_text() -> str:
-    "\n".join(help_lines())
+    ])
 
 def cmd_help() -> int:
     let pager: str = $PAGER if $PAGER else "less"
     if stdout_is_tty() and have_command(pager):
-        # Pagers want a terminal, so hand them a file rather than a pipe.
         let tmp: str = "/tmp/git1-help.txt"
         writeFile(tmp, help_text() + "\n")
-        let qp: str = quoted(pager)
-        let qt: str = quoted(tmp)
-        sh_status(f"{qp} {qt}")
+        sh_status(f"{quoted(pager)} {quoted(tmp)}")
         remove_file(tmp)
     else:
         print help_text()
@@ -449,6 +438,7 @@ def parse_command(arg: str) -> Command_T:
         when "rm":                     CmdRm
         when "mv":                     CmdMv
         when "each":                   CmdEach
+        when "migrate":                CmdMigrate
         when "help" | "-h" | "--help": CmdHelp
         when "--version":              CmdVersion
         when others:                   CmdFile
@@ -461,7 +451,7 @@ def main(argv: []str) -> int:
     var rest: []str     = argv
     var cmd:  Command_T = CmdFile
 
-    if rest[0] == "--":            # escape hatch for files named like a command
+    if rest[0] == "--":
         rest = rest[1:]
         if rest'Length == 0:
             fail("expected a file name after --")
@@ -474,14 +464,15 @@ def main(argv: []str) -> int:
         when CmdRm:      return cmd_rm(rest[1:])
         when CmdMv:      return cmd_mv(rest[1:])
         when CmdEach:    return cmd_each(rest[1:])
+        when CmdMigrate: return cmd_migrate(rest[1:])
         when CmdHelp:    return cmd_help()
         when CmdVersion:
             print f"{PROG} {VERSION}"
             return 0
-        when CmdFile:    pass       # rest[0] names a tracked file
+        when CmdFile:    pass
 
     let t: Target_T = require_tracked(parse_target(rest[0]))
     let args: []str = rest[1:] if rest'Length > 1 else ["status", "--short", "--branch"]
-    return git_run(t, args)
+    git_run(t, args)
 
 quit(main($@))

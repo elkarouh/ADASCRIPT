@@ -2432,6 +2432,22 @@ def to_nim(self, indent=0):
     body = block_node.to_nim(indent + 1) if block_node else ""
     ParserState.symbol_table.pop_scope()
     ParserState._current_return_type = ""
+    # Strip trailing 'discard' from implicit return — the value is the return value
+    _void_rets_set = {"void", "None", "unit"}
+    _ret_is_void = ret_ann and ret_ann.lstrip(": ").strip() in _void_rets_set
+    if ret_ann and body and not _ret_is_void:
+        _blines_d = body.rstrip().splitlines()
+        # Find last non-comment, non-empty line
+        _idx_d = len(_blines_d) - 1
+        while _idx_d >= 0 and (_blines_d[_idx_d].lstrip().startswith("#") or _blines_d[_idx_d].strip() == ""):
+            _idx_d -= 1
+        if _idx_d >= 0:
+            _last_d = _blines_d[_idx_d]
+            _last_d_s = _last_d.lstrip()
+            if _last_d_s.startswith("discard "):
+                _indent_d = _last_d[:len(_last_d) - len(_last_d_s)]
+                _blines_d[_idx_d] = _indent_d + _last_d_s[len("discard "):]
+                body = chr(10).join(_blines_d) + chr(10)
     # Strip trailing bare result -- Nim implicit return variable makes it redundant
     if ret_ann and body:
         _blines = body.rstrip().splitlines()
@@ -2458,6 +2474,30 @@ def to_nim(self, indent=0):
                         _indent_prefix = _last[:len(_last) - len(_last_stripped)]
                         _blines2[-1] = f"{_indent_prefix}{_last_stripped}.to({_nim_type})"
                         body = chr(10).join(_blines2) + chr(10)
+    # Implicit return in Option-typed function: wrap last bare expression in some()
+    if ret_ann and body:
+        import re as _re_opt
+        _nim_ret = ret_ann.lstrip(": ").strip()
+        _opt_m = _re_opt.search(r"Option\[(.+)\]", _nim_ret)
+        if _opt_m:
+            _blines_o = body.rstrip().splitlines()
+            # Find last non-comment, non-empty line
+            _idx_o = len(_blines_o) - 1
+            while _idx_o >= 0 and (_blines_o[_idx_o].lstrip().startswith("#") or _blines_o[_idx_o].strip() == ""):
+                _idx_o -= 1
+            if _idx_o >= 0:
+                _last_o = _blines_o[_idx_o]
+                _last_o_s = _last_o.lstrip()
+                _is_stmt = _re_opt.match(
+                    r'^(var|let|const|result|return|if|elif|else|for|while|case|of|discard|raise|try|except|finally|block|when)\b',
+                    _last_o_s)
+                if not _is_stmt and not _last_o_s.startswith("some(") and not _last_o_s.startswith("none("):
+                    _sym_o = ParserState.symbol_table.lookup(_last_o_s.split("(")[0].split(".")[0].split("[")[0].strip())
+                    _sym_type_o = (_sym_o.get("type", "") if isinstance(_sym_o, dict) else "") if _sym_o else ""
+                    if not _sym_type_o.startswith("Option["):
+                        _indent_o = _last_o[:len(_last_o) - len(_last_o_s)]
+                        _blines_o[_idx_o] = f"{_indent_o}some({_last_o_s})"
+                        body = chr(10).join(_blines_o) + chr(10)
     _shadow_vars = []
     # Add var to params that are mutated in body (assigned to, .add called, or any method call)
     if params and body:
