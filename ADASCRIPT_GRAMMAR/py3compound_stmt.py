@@ -456,13 +456,15 @@ shell_opts = LPAREN + shell_opt + (COMMA + shell_opt)[:] + RPAREN
 # Keyword — shellLines must come before shell to avoid prefix match
 shell_kw = literal("shellLines") | literal("shell")
 
-# Optional assignment target: let/var/const name =
-# Optional assignment target: let/var/const name =
-#   scalar form:  let result =
+# Optional assignment target: let/var/const name [: type] =
+#   scalar form:  let result =  or  let result: []str =
 #   tuple  form:  let (out, err, code) =
-shell_target_scalar = decl_keyword + IDENTIFIER + V_EQUAL
+#   bare form:    result =
+shell_ann = COLON + type_annotation
+shell_target_scalar = decl_keyword + IDENTIFIER + shell_ann[:] + V_EQUAL
+shell_target_bare   = IDENTIFIER + V_EQUAL
 shell_target_tuple  = decl_keyword + paren_group + V_EQUAL
-shell_target        = shell_target_tuple | shell_target_scalar
+shell_target        = shell_target_tuple | shell_target_scalar | shell_target_bare
 
 # A single line within a shell block: tokens up to NEWLINE
 shell_block_line = shell_body_token[1:] + ignore(NEWLINE)

@@ -3429,6 +3429,37 @@ def to_nim(self, indent=0):
     import re as _re_env
     has_env_vars = bool(_re_env.search(r'__bash_env_\w+__', cmd))
 
+    # Hoist complex interpolation expressions to temp variables.
+    # Nim's fmt"""...""" only evaluates simple names and dotted paths inside {},
+    # not function calls or subscripts.  Detect {expr} containing '(' or '['
+    # and replace with a pre-bound temp variable.
+    _shell_hoists = []
+    if needs_fstring:
+        import re as _re_interp
+        _hoist_count = getattr(ParserState, "_shell_hoist_count", 0)
+        def _hoist_complex(m):
+            nonlocal _hoist_count
+            expr = m.group(1)
+            if '(' not in expr and '[' not in expr:
+                return m.group(0)
+            tmp = f"shArg{_hoist_count}"
+            _hoist_count += 1
+            # Translate common Adascript/Python patterns to Nim
+            nim_expr = expr
+            nim_expr = nim_expr.replace("os.path.join(", "joinPath(")
+            nim_expr = nim_expr.replace("os.path.dirname(", "parentDir(")
+            nim_expr = nim_expr.replace("os.path.basename(", "lastPathPart(")
+            nim_expr = nim_expr.replace("os.path.exists(", "fileExists(")
+            nim_expr = nim_expr.replace("os.path.isfile(", "fileExists(")
+            nim_expr = nim_expr.replace("os.path.isdir(", "dirExists(")
+            nim_expr = nim_expr.replace("os.makedirs(", "createDir(")
+            nim_expr = nim_expr.replace("len(", "len(")
+            nim_expr = nim_expr.replace("str(", "$")
+            _shell_hoists.append(f"{ind}let {tmp} = {nim_expr}")
+            return "{" + tmp + "}"
+        cmd = _re_interp.sub(r'\{([^}]+)\}', _hoist_complex, cmd)
+        ParserState._shell_hoist_count = _hoist_count
+
     if needs_fstring:
         q = '"""'
         ParserState.nim_imports.add("strformat")
@@ -3496,7 +3527,7 @@ def to_nim(self, indent=0):
     else:
         lines.append(f"{ind}discard execCmd({cmd_str}){timeout_comment}")
 
-    return "\n".join(lines)
+    return "\n".join(_shell_hoists + lines)
 
 
 # --- compound_stmt ---

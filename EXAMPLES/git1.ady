@@ -95,8 +95,7 @@ def cmd_init(target: str):
     let repo: str = os.path.join(G1_DIR, G1_GITDIR)
     if -e repo: die(f"already tracked: {target}")
 
-    let cdir: str = Q(os.path.join(G1_DIR, CONTAINER))
-    shell: mkdir -p -- {cdir}
+    shell: mkdir -p -- {Q(os.path.join(G1_DIR, CONTAINER))}
     let (_, rc) = sh(f"git init --quiet --bare -- {Q(repo)}")
     if rc != 0: die(f"could not create {repo}")
 
@@ -149,10 +148,8 @@ def cmd_rm(argv: []str):
             reply = "n"
         if not reply.lower().startswith("y"):
             die("aborted")
-    let qrepo: str = Q(os.path.join(G1_DIR, G1_GITDIR))
-    let qcdir: str = Q(os.path.join(G1_DIR, CONTAINER))
-    shell: rm -rf -- {qrepo}
-    shell: rmdir -- {qcdir} 2>/dev/null || true
+    shell: rm -rf -- {Q(os.path.join(G1_DIR, G1_GITDIR))}
+    shell: rmdir -- {Q(os.path.join(G1_DIR, CONTAINER))} 2>/dev/null || true
 
 def cmd_mv(old: str, new: str):
     split_target(old)
@@ -166,14 +163,9 @@ def cmd_mv(old: str, new: str):
     let new_repo: str = os.path.join(G1_DIR, G1_GITDIR)
     if -e new_repo: die(f"already tracked: {new}")
 
-    let qold: str = Q(old)
-    let qnew: str = Q(new)
-    let qcdir: str = Q(os.path.join(G1_DIR, CONTAINER))
-    let qold_repo: str = Q(os.path.join(old_dir, old_git))
-    let qnew_repo: str = Q(new_repo)
-    shell: mv -- {qold} {qnew}
-    shell: mkdir -p -- {qcdir}
-    shell: mv -- {qold_repo} {qnew_repo}
+    shell: mv -- {Q(old)} {Q(new)}
+    shell: mkdir -p -- {Q(os.path.join(G1_DIR, CONTAINER))}
+    shell: mv -- {Q(os.path.join(old_dir, old_git))} {Q(new_repo)}
     write_exclude(G1_BASE, new_repo)
     let (_, _) = sh(f"cd {Q(G1_DIR)} && GIT_DIR={Q(G1_GITDIR)} GIT_WORK_TREE=. git rm --quiet --cached --ignore-unmatch -- {Q(old_base)}")
     g(["add", "--", G1_BASE])
@@ -209,12 +201,9 @@ def cmd_migrate(argv: []str):
         if -d new_gitdir:
             warn(f"skipping {name}: already migrated")
             continue
-        let qcdir: str = Q(os.path.join(d, CONTAINER))
-        let qgit: str = Q(gitdir)
-        let qnew: str = Q(new_gitdir)
-        shell: mkdir -p -- {qcdir}
-        shell: mv -- {qgit} {qnew}
-        let (_, _) = sh(f"git --git-dir={qnew} config core.worktree ../..")
+        shell: mkdir -p -- {Q(os.path.join(d, CONTAINER))}
+        shell: mv -- {Q(gitdir)} {Q(new_gitdir)}
+        let (_, _) = sh(f"git --git-dir={Q(new_gitdir)} config core.worktree ../..")
         found = 1
         print f"migrated {gitdir} -> {new_gitdir}"
     if found == 0:
