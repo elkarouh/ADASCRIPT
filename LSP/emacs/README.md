@@ -91,6 +91,63 @@ Five custom faces can be themed independently:
 | `adascript-shell-face` | `font-lock-preprocessor-face` | The `shell:` / `shellLines:` keywords |
 | `adascript-range-op-face` | `font-lock-operator-face`, or `font-lock-builtin-face` before Emacs 30 | The range operators `..` and `..<` |
 
+## `git1-vc.el` — `C-x v ...` on a git1-tracked file
+
+`EXAMPLES/git1.ady` gives each tracked file its own private repository under
+`.git1/`, reached through `GIT_DIR` and `GIT_WORK_TREE`. Emacs locates
+repositories by filename instead — `vc-git-root` is literally
+`(vc-find-root file ".git")` — so a git1 file looks unversioned to VC and
+`C-x v ...` does nothing useful with it.
+
+It can also do something actively wrong: `vc-create-branch` and
+`vc-switch-branch` work off `default-directory`, not off the file's
+registration, so in a directory that sits inside an ordinary git repo
+`C-x v b c` creates the branch in *that* repo.
+
+`git1-vc.el` fixes both. `M-x git1-vc-focus` writes a one-line `.git`
+pointer next to the visited file:
+
+```
+gitdir: .git1/notes.txt
+```
+
+git1 already sets `core.worktree` to the file's directory, so git and VC
+then resolve to that file's own history, and the whole VC interface starts
+working on it:
+
+| Key | Command | Acts on |
+|---|---|---|
+| `C-x v b c` | `vc-create-branch` | the file's git1 repo |
+| `C-x v b s` | `vc-switch-branch` | the file's git1 repo |
+| `C-x v b l` | `vc-print-branch-log` | the file's git1 repo |
+| `C-x v v` `C-x v =` `C-x v l` | commit, diff, log | the file's git1 repo |
+
+`M-x git1-vc-unfocus` removes the pointer again.
+
+```elisp
+(add-to-list 'load-path "/path/to/ADASCRIPT/LSP/emacs")
+(require 'git1-vc)
+(global-set-key (kbd "C-c g f") #'git1-vc-focus)
+(global-set-key (kbd "C-c g u") #'git1-vc-unfocus)
+```
+
+The repository layout is auto-detected, so it does not matter whether
+`G1_PREFIX` was empty (`.git1/notes.txt`) or the shipped default
+(`.git1/.g1_notes.txt`) when the file was first tracked. Pin one with
+`git1-prefix` if you prefer; `git1-container` renames `.git1` itself.
+
+Two things to know:
+
+- Only one file per directory can be focused at a time — there is a single
+  `.git` name to go around.
+- While the pointer exists, an enclosing ordinary repo treats that directory
+  as an embedded repository: it shows up as untracked and git stops
+  recursing into it. Unfocusing restores the previous view. `git1-vc-focus`
+  refuses outright if the directory already has a real `.git`.
+
+`git1-vc.el` is independent of `adascript-mode` — it needs neither
+`nim-mode` nor the language server.
+
 ## Notes
 
 - `'` is punctuation in the syntax table, so `Color'First` is not mis-lexed as the start of a string and an apostrophe in prose — `the command's output` inside a docstring — cannot open one either. `syntax-propertize` then promotes just the pairs that really delimit a string, so `'hello'` is still highlighted as one.
