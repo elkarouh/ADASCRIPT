@@ -7,7 +7,7 @@
 - [ ] py2py: `Natural` / `Positive` are emitted into annotations but never defined (see [Bug 3](#bug-3--py2py-emits-natural--positive-without-defining-them))
 - [x] py2py: no `to_py()` for `pyimport` / `from … nimport …`, so those files cannot transpile at all (see [Bug 4](#bug-4--py2py-has-no-to_py-for-pyimport--from--nimport))
 - [ ] py2py: declarations without an initialiser bind nothing (see [Bug 5](#bug-5--py2py-drops-declarations-that-have-no-initialiser))
-- [ ] `quit()` clamps exit codes to 127, so wrappers cannot forward a child's 128/129 (see [quit() clamps exit codes](#quit-clamps-exit-codes-to-127))
+- [x] `quit()` clamps exit codes to 127, so wrappers cannot forward a child's 128/129 (see [quit() clamps exit codes](#quit-clamps-exit-codes-to-127))
 
 ## Shell improvements
 
@@ -37,7 +37,7 @@ When the assignment target is a bare `int` (not a record/tuple), emit
 
 ---
 
-### `quit()` clamps exit codes to 127
+### `quit()` clamps exit codes to 127 — FIXED
 
 A program that forwards another command's exit status cannot report anything
 above 127: `quit(n)` yields 127 for every n >= 128. Codes 0..127 pass through
@@ -66,21 +66,32 @@ into 127:
 `if git1 f rev-parse --verify b; then` still works, since non-zero stays
 non-zero; only a script that distinguishes 128 from 1 is affected.
 
-**Implementation sketch:**
-- Emit C's `exit()` rather than `quit()` when the argument is not a literal in
-  0..127 — or unconditionally, for a program whose last statement is a quit:
+**Fix (in `TO_NIM/hek_nim_expr.py`):** `quit(x)` and `sys.exit(x)` now emit
+C's `exit()` whenever the argument is not a literal in 0..127 — a variable, an
+expression, or a literal above 127. A literal 0..127 still emits the idiomatic
+`quit(n)` and injects nothing.
 
-  ```nim
-  proc c_exit(code: cint) {.importc: "exit", header: "<stdlib.h>", noreturn.}
-  ```
+```nim
+proc c_exit(code: cint) {.importc: "exit", header: "<stdlib.h>", noreturn.}
+proc adascriptExit*(code: int) {.noreturn.} =
+  c_exit(code.cint)
+```
 
-- Use `exit()`, **not** `posix.exitnow()`. Both preserve the full 0..255
-  range, but `exitnow` is `_exit` and discards buffered output — a program
-  that prints and then exits 128 loses the print. Verified: with `exitnow`
-  the output vanished; with `exit()` it appeared and the status was still 128.
-- The Python backend needs nothing: `sys.exit(128)` already exits 128.
-- Complexity: ~20 lines in `hek_nim_stmt.py`, plus a test that forwards a
-  child status of 128 and checks it survives.
+The helper is added to `nim_top_decls` on first use only. `exit()` is used
+rather than `posix.exitnow()`: both preserve the full 0..255 range, but
+`exitnow` is `_exit` and discards buffered output — a program that prints and
+then exits 128 would lose the print. Verified: with `exitnow` the output
+vanished; with `exit()` it appears and the status is still 128.
+
+The Python backend needed nothing: `sys.exit(128)` already exits 128.
+
+After the fix, `EXAMPLES/git1.ady` forwards git's status faithfully:
+
+```
+                                     git1   raw git
+  diff --quiet (dirty tree)            1       1
+  rev-parse --verify nosuchbranch    128     128
+```
 
 ---
 

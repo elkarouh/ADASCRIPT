@@ -82,6 +82,38 @@ proc nimatch(s: string; pattern: Regex): bool =
   return true\
 """
 
+_EXIT_HELPER = """\
+proc c_exit(code: cint) {.importc: "exit", header: "<stdlib.h>", noreturn.}
+proc adascriptExit*(code: int) {.noreturn.} =
+  ## Nim's quit() clamps the exit status to 127, so a program cannot forward a
+  ## child process's 128 (git's "bad ref") or 129 (usage error). C's exit()
+  ## keeps the whole 0..255 range and still flushes buffered output, which
+  ## _exit()/posix.exitnow() would discard.
+  c_exit(code.cint)\
+"""
+
+def _ensure_exit_helper():
+    """Add the adascriptExit helper the first time a non-trivial quit() is seen."""
+    decls = getattr(ParserState, 'nim_top_decls', [])
+    if not any("adascriptExit" in d for d in decls):
+        decls.append(_EXIT_HELPER)
+        ParserState.nim_top_decls = decls
+
+def _quit_call(arg):
+    """Emit the Nim call that terminates the program with status `arg`.
+
+    A literal 0..127 keeps the idiomatic quit(); anything else — a variable, an
+    expression, or a literal above 127 — goes through the C exit() helper so the
+    full 0..255 range survives (see _EXIT_HELPER).
+    """
+    arg = (arg or "").strip()
+    if arg == "":
+        return "quit()"
+    if arg.isdigit() and int(arg) <= 127:
+        return f"quit({arg})"
+    _ensure_exit_helper()
+    return f"adascriptExit({arg})"
+
 def _ensure_nimatch_helper():
     """Add the nimatch helper to nim_top_decls the first time =~ or !~ is used."""
     ParserState.nim_imports.update({"nre", "tables", "sequtils", "options"})
@@ -1517,6 +1549,14 @@ def to_nim(self, prec=None):
                     ParserState.nim_init_stmts.append("randomize()")
                 return f"rand({inner})"
             raise SyntaxError(f"'{tick_attr} is not supported on a parenthesised expression")
+        # quit(code): Nim's quit clamps anything >= 128 down to 127, so a
+        # wrapper forwarding a child's status silently loses git's 128/129.
+        # A literal 0..127 keeps the idiomatic quit(); anything else — a
+        # variable, an expression, or a literal above 127 — goes through the
+        # C exit() helper, which preserves the full range.
+        if raw_name == "quit":
+            call_node = self.nodes[1].nodes[0]
+            return _quit_call(_extract_call_arg(call_node))
         # drop(x) -> (block: =destroy(x); wasMoved(x))  — explicit early release
         if raw_name == "drop":
             call_node = self.nodes[1].nodes[0]
@@ -1952,6 +1992,14 @@ def _translate_module_call(module_local, func_name, args_str):
     else:
         return None  # pyImport module or unknown — don't translate
 
+    # sys.exit(code) maps onto quit(), which clamps anything above 127; route it
+    # through the same helper as a bare quit() so the full range survives.
+    if py_module == "sys" and func_name == "exit":
+        inner = args_str.strip()
+        if inner.startswith("(") and inner.endswith(")"):
+            inner = inner[1:-1]
+        return _quit_call(inner)
+
     # Look up in function table (import lazily to avoid circular dep)
     try:
         from hek_nim_stmt import _PY_MODULE_FUNC_TO_NIM, _PY_MODULE_TO_NIM
@@ -2104,6 +2152,12 @@ def _translate_stdlib_patterns(expr):
     Python stdlib calls to their native Nim equivalents.
     """
     import re as _re
+
+    # --- 0. sys.exit(code) — handled ahead of the table because the naive
+    # mapping to quit() clamps any status above 127 (see _quit_call).
+    exit_m = _re.match(r"^sys\.exit\((.*)\)$", expr, _re.DOTALL)
+    if exit_m:
+        return _quit_call(exit_m.group(1))
 
     # --- 1. Pattern table (exact or prefix match) ---
     for py_pattern, nim_equiv, nim_import in _STDLIB_PATTERNS:

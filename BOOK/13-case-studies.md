@@ -266,6 +266,9 @@ something like them.
 with git (`exec` semantics via the final `g "$@"` in a subshell).  The
 Adascript version runs git as a child and forwards the exit status — same
 behaviour to the caller, one extra process for the lifetime of the command.
+The forwarding is exact across the whole 0..255 range, including git's 128
+for a bad ref: `quit(n)` compiles to C's `exit()` rather than Nim's `quit()`
+whenever `n` is not a literal in 0..127, since Nim's own `quit` clamps at 127.
 
 ### The scoreboard
 
