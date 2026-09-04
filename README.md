@@ -137,15 +137,36 @@ for s in Stage_T.STAGE1 .. Stage_T.STAGE3:
 
 ## Installation
 
-Clone the repo and run the transpiler scripts directly with Python 3.10+:
-
 ```bash
 git clone --recurse-submodules https://github.com/elkarouh/ADASCRIPT
+cd ADASCRIPT
+make install                      # or: make install PREFIX=$HOME/.local
 ```
+
+`make install` puts `py2nim` and `py2py` on your PATH, so any `.ady` file
+starting with `#!/usr/bin/env py2nim` runs directly:
+
+```bash
+chmod +x script.ady && ./script.ady
+```
+
+It installs into `/usr/local/bin`, falling back to `~/.local/bin` when that
+is not writable, fetches the `HPARSEC` submodule if the clone omitted it, and
+finishes by transpiling and running a small program to prove the install
+works. `make uninstall` removes the launchers again.
+
+The launchers are wrappers rather than symlinks so they can pin the
+interpreter: the scripts' own shebang says `python3`, which on many systems
+is older than the version the transpiler needs.
+
+You can also skip the install and invoke the scripts directly —
+`python3.12 TO_PYTHON/py2py.py source.ady` — but then the shebang line in the
+examples will not resolve.
 
 ### Python dependencies
 
-None beyond the Python standard library.
+Python **3.12 or newer** (the tokenizer relies on `FSTRING_START` tokens,
+which earlier versions do not emit). Nothing beyond the standard library.
 
 ### Nim dependencies
 
