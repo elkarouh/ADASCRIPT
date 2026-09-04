@@ -8,6 +8,69 @@
 - [x] py2py: no `to_py()` for `pyimport` / `from … nimport …`, so those files cannot transpile at all (see [Bug 4](#bug-4--py2py-has-no-to_py-for-pyimport--from--nimport))
 - [ ] py2py: declarations without an initialiser bind nothing (see [Bug 5](#bug-5--py2py-drops-declarations-that-have-no-initialiser))
 
+## Shell improvements
+
+### `shell:` with terminal passthrough and exit code
+
+Currently `shell:` has two modes: discard (inherits terminal, no exit code)
+and capture (`let r = shell:`, captures stdout, returns `.code`). There is no
+way to both inherit the terminal *and* get the exit code — scripts that need
+this (e.g. running git with a pager, or interactive editors) must use a
+`$? > tmpfile` workaround.
+
+**Desired syntax:**
+```python
+let code: int = shell: git log --oneline    # inherits terminal, returns exit code
+```
+
+When the assignment target is a bare `int` (not a record/tuple), emit
+`execCmd()` in Nim which inherits stdio and returns the exit code directly.
+
+**Implementation sketch:**
+- In `_parse_shell_stmt`, detect when target type is `int` (or infer from
+  `shell:` vs `shellLines:`).
+- Emit `execCmd(cmd)` instead of `execCmdEx(cmd)` — Nim's `execCmd` inherits
+  the terminal and returns the exit code.
+- Python backend: `subprocess.call(cmd, shell=True)`.
+- Complexity: ~50 lines in `hek_nim_parser.py` + `hek_py3_parser.py`.
+
+---
+
+### Safe shell interpolation (auto-quoting)
+
+`shell:` interpolation with `{var}` embeds the value as raw text into the
+command string — no quoting. A variable containing spaces or shell
+metacharacters (`my notes.txt`, `hello; rm -rf /`) breaks or is dangerous.
+Scripts must manually wrap every interpolated path in a quoting helper:
+
+```python
+def Q(s: str) -> str:
+    "'" + s.replace("'", "'\\''") + "'"
+
+shell: git add -- {Q(file)}
+```
+
+**Desired syntax** — a distinct sigil (e.g. `${var}` or `{!var}`) that
+auto-quotes the interpolated value:
+
+```python
+shell: git add -- ${file}           # → git add -- 'my notes.txt'
+shell: mv -- ${old} ${new}          # each arg single-quoted automatically
+```
+
+Plain `{var}` stays as-is (raw interpolation) for cases where the value is
+already a command fragment or intentionally unquoted.
+
+**Implementation sketch:**
+- Tokenizer: recognise `${name}` inside shell bodies as a distinct token
+  (e.g. `SHELL_SAFE_INTERP`).
+- Nim backend: emit the value wrapped in `quoteShell()` (Nim's `osproc`
+  provides this) or a single-quote-and-escape helper.
+- Python backend: `shlex.quote(var)`.
+- Complexity: ~100 lines across tokenizer + both backends.
+
+---
+
 ## Monad support improvements (high ROI)
 
 ### Feature 1 — Generic function syntax `def foo[T]`
