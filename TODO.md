@@ -2,8 +2,9 @@
 
 - [x] Restore Python 3.10 match/case syntax alongside Adascript case/when (Adascript should be a superset of Python)
 - [x] add expect/send command in shell
-- [ ] py2py: regex flag constants reference `re` but the prelude imports it as `_re_mod` (see [Bug 1](#bug-1--py2py-emits-reignorecase-while-importing-re-as-_re_mod))
+- [x] py2py: regex flag constants reference `re` but the prelude imports it as `_re_mod` (see [Bug 1](#bug-1--py2py-emits-reignorecase-while-importing-re-as-_re_mod))
 - [ ] py2py: implicit return does not reach into `if`/`else` branches (see [Bug 2](#bug-2--py2py-implicit-return-stops-at-ifelse-branches))
+- [ ] py2py: `Natural` / `Positive` are emitted into annotations but never defined (see [Bug 3](#bug-3--py2py-emits-natural--positive-without-defining-them))
 
 ## Monad support improvements (high ROI)
 
@@ -67,12 +68,17 @@ print(fetch_user(id).map(format_summary) or "not found")
 
 ## Python backend (py2py) — known bugs
 
-Both were found while making `EXAMPLES/test_regex.ady` compile on the Nim
-backend. The Nim backend handles both correctly, so `test_regex.ady` runs
-there; it is the Python output that is wrong. Neither is specific to regex
-code — the second affects any function whose body ends in `if`/`else`.
+Found while making `EXAMPLES/test_regex.ady` compile on the Nim backend
+(bugs 1 and 2) and while regression-testing that work (bug 3). The Nim
+backend handles all three correctly — the affected examples compile and run
+there — so it is the Python output that is wrong in each case. Only the
+first is regex-specific: bug 2 affects any function whose body ends in
+`if`/`else`, and bug 3 any file using `Natural` or `Positive`.
 
 ### Bug 1 — py2py emits `re.IGNORECASE` while importing `re` as `_re_mod`
+
+**Fixed.** `_py_re_flags` now spells the constants with the `_re_mod` alias.
+Kept here for the record.
 
 A regex literal carrying a flag (`/pat/i`, `/pat/m`, `/pat/s`) generates a
 reference to the bare module name `re`, but the injected prelude imports the
@@ -93,18 +99,18 @@ import re as _re_mod                                  # prelude
     return _pymatch(s, r'^yes$', re.IGNORECASE)       # NameError: name 're' is not defined
 ```
 
-**Cause:** `TO_PYTHON/hek_py3_expr.py:1548`
+**Cause:** the flag table in `_py_re_flags` (`TO_PYTHON/hek_py3_expr.py`)
 ```python
 mapping = {'i': 're.IGNORECASE', 'm': 're.MULTILINE', 's': 're.DOTALL'}
 ```
-The rest of the file already uses the alias correctly — e.g. the `/g`
-find-all path emits `_re_mod.findall(...)` at `hek_py3_expr.py:899`.
+The rest of the file already used the alias correctly — e.g. the `/g`
+find-all path emits `_re_mod.findall(...)`.
 
-**Implementation sketch:**
-- Change the three values to `_re_mod.IGNORECASE` / `_re_mod.MULTILINE` /
-  `_re_mod.DOTALL`.
-- Grep for other bare `re.` emissions in `TO_PYTHON/` before closing this out.
-- Complexity: one line, plus a regression test with a flagged literal.
+**Fix applied:** the three values now read `_re_mod.IGNORECASE` /
+`_re_mod.MULTILINE` / `_re_mod.DOTALL`. A sweep for other bare `re.`
+emissions in `TO_PYTHON/` found none — the remaining matches are docstrings.
+Verified on all three flags across both the match path (`_pymatch(s, pat,
+_re_mod.IGNORECASE)`) and the substitution path (`_re_mod.sub(..., flags=…)`).
 
 ---
 
@@ -153,3 +159,42 @@ def add(a: int, b: int) -> int:
   output. `EXAMPLES/test_regex.ady` (`first_word`, `parse_kv`, `parse_date`,
   `first_number`) is the natural test case.
 - Complexity: ~50–100 lines in `hek_py3_parser.py`.
+
+---
+
+### Bug 3 — py2py emits `Natural` / `Positive` without defining them
+
+The Ada-inherited integer subtypes are passed straight through into the
+generated annotations, but nothing defines them, so any file using them dies
+at import time. Python evaluates annotations on module-level assignments, so
+this is a hard failure rather than a cosmetic one. Nim needs no help here —
+`Natural` and `Positive` are built-in there, which is why this shows only in
+Python output.
+
+**Reproduction:**
+```python
+var n: Natural = 0
+var p: Positive = 1
+n += 1
+print n, p
+```
+
+**Generated Python — nothing declares the two names:**
+```python
+n: Natural = 0        # NameError: name 'Natural' is not defined
+p: Positive = 1
+```
+
+This is why `EXAMPLES/awk_example.ady` (`var NR : Natural = 0`) cannot run on
+the Python backend, though it compiles and runs on Nim.
+
+**Implementation sketch:**
+- Emit `Natural = int` / `Positive = int` into the generated prelude the first
+  time either name is used, in the same manner as `_PYMATCH_HELPER`
+  (`TO_PYTHON/hek_py3_expr.py:1507`) is injected via `ParserState.py_top_decls`.
+- Emitting plain `int` in the annotation instead would also work, but loses the
+  documentation value of the subtype name in the generated source.
+- Neither spelling gives Python the range checking Nim gets; that is a separate
+  question, and the aliases at least make the output run.
+- Complexity: ~20 lines, plus a regression test that runs `awk_example.ady`
+  through `py2py -c`.

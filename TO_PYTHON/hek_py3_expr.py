@@ -1545,7 +1545,9 @@ def _get_regex_info_py(node):
 
 def _py_re_flags(flags_str):
     """Convert regex flag chars to a Python re.FLAGS expression, or '0'."""
-    mapping = {'i': 're.IGNORECASE', 'm': 're.MULTILINE', 's': 're.DOTALL'}
+    # The generated file imports the module as `_re_mod` (see _PYMATCH_HELPER),
+    # so the flag constants must be spelled with that alias too.
+    mapping = {'i': '_re_mod.IGNORECASE', 'm': '_re_mod.MULTILINE', 's': '_re_mod.DOTALL'}
     parts = [mapping[f] for f in flags_str.replace('g', '') if f in mapping]
     return " | ".join(parts) if parts else "0"
 
