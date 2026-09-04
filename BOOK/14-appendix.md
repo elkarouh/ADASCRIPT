@@ -139,8 +139,9 @@ in order to build.
 - No borrow checker; `move()` misuse surfaces at runtime, not compile time.
 - Generic methods on `@virtual` classes hit Nim 2.x restrictions — define
   them as free functions taking `self` and rely on UFCS (§9.5).
-- Concurrent parses share global `ParserState`; call `ParserState.reset()`
-  between runs in one process.
+- `ParserState` is a global singleton: call `ParserState.reset()` between
+  sequential runs in one process, or `with ParserState.scoped():` around a
+  nested one. Concurrent parses in separate threads are still unsupported.
 
 The authoritative, up-to-date lists live in `README.md` ("Known
 Limitations") and `TODO.md`.
