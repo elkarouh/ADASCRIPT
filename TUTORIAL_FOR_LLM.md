@@ -371,6 +371,8 @@ class AwkProcessor(AwkBase):
 
 **Mutable self** — the transpiler auto-detects if a method mutates `self` (field assignment, `+=`, `.add()`, or any `self.method()` call) and emits `self: var ClassName` in Nim. No annotation needed.
 
+**Parameter mutation** — parameters follow Python's rules. Rebinding the name (`s = s + "!"`) is local: Nim shadows it with `var s = s`. Mutating in place (`xs.append(...)`, `xs[i] = ...`, `+=`) is visible to the caller: Nim emits `xs: var seq[int]`. No annotation needed either way.
+
 **Forwarding constructors** — when a subclass has no `__init__`, the transpiler generates one mirroring the parent's parameters.
 
 **`@virtual`** — only needed when subclasses live in a different file (module). Makes Nim emit `ref object of RootObj` for cross-module dynamic dispatch.

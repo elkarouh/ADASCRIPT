@@ -916,6 +916,43 @@ def is_even(n: int) -> bool:
 
 `-> None` is excluded: void functions' last expression stays as a statement.
 
+### Parameter mutation
+
+Parameters behave as they do in Python, on both backends. Rebinding the
+parameter name is local to the function; mutating the object it refers to is
+visible to the caller:
+
+```python
+def rebind(s: str) -> str:
+    s = s + "!"        # local — the caller's string is unchanged
+    return s
+
+def append_to(xs: []int):
+    xs.append(99)      # in-place — the caller sees the new element
+
+var msg:  str   = "hi"
+var nums: []int = [1, 2]
+
+let out: str = rebind(msg)
+print f"{out} / {msg}"          # hi! / hi   — the caller's msg is unchanged
+append_to(nums)
+print f"{len(nums)}"            # 3          — the caller's list grew
+```
+
+The Nim backend infers which case applies and needs no annotation. A rebound
+parameter is shadowed by a mutable local, and one mutated in place becomes a
+`var` parameter:
+
+```nim
+proc rebind(s: string): string =
+    var s = s                   # shadow: the caller's value is untouched
+    s = s & "!"
+    return s
+
+proc append_to(xs: var seq[int]) =
+    xs.add(99)                  # var: the mutation reaches the caller
+```
+
 ### Nested functions / closures
 
 ```python

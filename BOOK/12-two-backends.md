@@ -196,6 +196,17 @@ When something behaves differently between targets, run `py2py.py` and
 `py2nim.py -t` and *read both outputs side by side* — they are short, and
 the diff usually explains the behaviour immediately.
 
+One caveat worth carrying into the case studies: the two backends are not
+equally mature. Nim is the one every example is exercised against, and the
+one the `Makefile` builds. The Python backend transpiles the whole corpus,
+but several constructs still produce Python that does not run — implicit
+return inside `if`/`else`, `Natural` and `Positive` in annotations, and
+declarations written without an initialiser. `README.md`'s "Known
+Limitations" and `TODO.md` track these with reproductions. Nothing in this
+chapter's *design* advice changes; it is the "prototype in Python, ship as
+Nim" workflow of §1.1 that currently works better in the shipping direction
+than the prototyping one.
+
 ---
 
 *Next: [Chapter 13 — Case Studies: The Big Programs](13-case-studies.md)*

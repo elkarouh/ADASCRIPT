@@ -4,18 +4,22 @@
 
 ## Features
 
-- **Syntax highlighting** — type declarations, tick attributes (`Color'First`), Ada/Adascript keywords, all Python syntax via `python-mode`
-- **Indentation** — Python offside rule, inherited from `python-mode`
+- **Syntax highlighting** — type declarations, tick attributes (`Color'First`), Ada/Adascript keywords, plus Python and Nim syntax via `nim-mode`
+- **Indentation** — offside rule, inherited from `nim-mode`
 - **Diagnostics, hover, completion** — via the Adascript language server (`adascript_ls.py`) through either **eglot** (built-in, Emacs 29+) or **lsp-mode** (third-party)
-- **Bracket matching and auto-close** — inherited from `python-mode`
+- **Bracket matching and auto-close** — inherited from `nim-mode`
 
 ## Requirements
 
 | Requirement | Version |
 |---|---|
 | Emacs | ≥ 28.1 |
+| `nim-mode` | ≥ 0.4.1 — `M-x package-install RET nim-mode` (MELPA) |
 | Python | 3.13+ |
 | pygls | ≥ 2.1.1 (`python3.13 -m pip install pygls`) |
+
+`nim-mode` is not optional: `adascript-mode` derives from it, so without it
+`(require 'adascript-mode)` fails with "Cannot open load file: nim-mode".
 
 ## Installation
 
@@ -77,15 +81,18 @@ The default `adascript-server-path` resolves to the `adascript_ls.py` sitting on
 
 ## Faces
 
-Three custom faces can be themed independently:
+Five custom faces can be themed independently:
 
 | Face | Default | Applied to |
 |---|---|---|
 | `adascript-type-name-face` | `font-lock-type-face` | The `NAME` in `type NAME is …` |
 | `adascript-tick-type-face` | `font-lock-type-face` | The type part of `Color'First` |
 | `adascript-tick-attr-face` | `font-lock-builtin-face` | The attribute part of `Color'First` |
+| `adascript-shell-face` | `font-lock-preprocessor-face` | The `shell:` / `shellLines:` keywords |
+| `adascript-range-op-face` | `font-lock-operator-face`, or `font-lock-builtin-face` before Emacs 30 | The range operators `..` and `..<` |
 
 ## Notes
 
-- `'` is set to punctuation in the syntax table so that `Color'First` is not mis-lexed as the start of a string. Single-quoted Python strings (`'hello'`) are still highlighted correctly by the inherited font-lock string rules.
-- The mode derives from `python-mode`, so all standard Python navigation commands (`C-M-f`, `C-M-b`, `C-c C-j`, etc.) work in `.ady` files.
+- `'` is punctuation in the syntax table, so `Color'First` is not mis-lexed as the start of a string and an apostrophe in prose — `the command's output` inside a docstring — cannot open one either. `syntax-propertize` then promotes just the pairs that really delimit a string, so `'hello'` is still highlighted as one.
+- Escaped quotes inside a prefixed string (`f"... \"x\" ..."`) are repaired after `nim-mode` runs: Nim reads `ident"..."` as a raw string literal where a backslash is not an escape, which would otherwise end the string early and invert the highlighting of the rest of the buffer.
+- The mode derives from `nim-mode`, so its navigation commands work in `.ady` files.

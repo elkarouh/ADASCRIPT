@@ -447,6 +447,11 @@ Pattern matching with Ada/Nim-inspired syntax. All standard pattern kinds
 are supported: literals, captures, wildcards, OR-patterns, ranges,
 sequences, mappings, class patterns, and `as` bindings.
 
+Python 3.10+ `match` / `case` is accepted as well, so Adascript stays a
+superset; use it when a branch needs an `if` guard, which `case` / `when`
+does not provide. See [TUTORIAL.md](TUTORIAL.md#11-control-flow) and
+[PATTERN_MATCHING.md](PATTERN_MATCHING.md) for the two side by side.
+
 ```python
 case value:
     when 1:
@@ -732,6 +737,24 @@ def find_path(graph: Graph_T, start: Node_T, end: Node_T,
               path: []Node_T = []) -> []Node_T:
     ...
 ```
+
+### Parameter mutation
+
+Parameters follow Python's rules on both backends. Rebinding the name is
+local to the function; mutating the object in place is visible to the caller:
+
+```python
+def rebind(s: str) -> str:
+    s = s + "!"        # local — the caller's string is unchanged
+    return s
+
+def append_to(xs: []int):
+    xs.append(99)      # in-place — the caller sees the new element
+```
+
+The Nim backend infers this: a rebound parameter is shadowed by a mutable
+local (`var s = s`), while one that is mutated in place becomes a `var`
+parameter (`xs: var seq[int]`). No annotation is needed either way.
 
 ### Generator functions
 
@@ -1530,10 +1553,13 @@ infrastructure for fixing this (`RichNL` carrying comments through the parse
 tree) is already in place; the remaining work is threading those tokens
 through all compound-statement `to_py()` methods.
 
-**Native `match/case` syntax** — Adascript's `case/when` currently replaces
-Python 3.10+ `match/case`. Restoring support for standard `match/case` as
-an alternative syntax (so Adascript remains a true superset) is on the
-[TODO list](TODO.md).
+**Python backend maturity** — the Nim backend is the better-tested of the two.
+Several constructs still transpile to Python that does not run: implicit
+return does not reach into `if`/`else` branches, `Natural` and `Positive` are
+emitted into annotations without being defined, and a declaration written
+without an initialiser binds no value. Each is written up with a reproduction
+in the [TODO list](TODO.md#python-backend-py2py--known-bugs). Programs that
+avoid those constructs transpile and run on both backends.
 
 **Nim stdlib coverage** — generated Nim code relies on a local `stdlib.nim`
 shim for some Python builtins (`PriorityQueue`, `FifoQueue`, `ANY`). See
