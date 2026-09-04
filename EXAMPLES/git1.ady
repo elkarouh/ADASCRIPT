@@ -92,6 +92,27 @@ def write_exclude(base: str, gitdir: str):
     writeFile(exclude, "/*\n!/" + ignore_escape(base) + "\n")
 
 def g(args: []str) -> int:
+    """Run git against the current file's repo. Returns git's exit code.
+
+    Every git invocation in this program goes through here. "The current
+    file" is whichever one split_target() was last called with: G1_DIR,
+    G1_BASE and G1_GITDIR are globals, as in the bash original, so callers
+    set them first -- cmd_each does it once per repo in its loop.
+
+    The three settings in the command are what make a per-file repo work:
+    cd into the file's own directory, name the private repo as GIT_DIR so
+    git stops searching upward for a .git, and declare that directory the
+    work tree.
+
+    Each argument goes through Q() because the command is assembled as a
+    string for the shell, which will not quote it for anyone. Without it,
+    g(["commit", "-m", "hello world"]) would reach git as four arguments.
+
+    sh_status() rather than a capturing shell: this way git keeps the
+    terminal -- its output, colours and pager reach the user directly --
+    and the exit code comes back out of band. See TODO.md: no single shell
+    mode offers both.
+    """
     var parts: []str = []
     for a in args:
         parts.append(Q(a))
@@ -99,6 +120,14 @@ def g(args: []str) -> int:
     sh_status(f"cd {Q(G1_DIR)} && GIT_DIR={Q(G1_GITDIR)} GIT_WORK_TREE=. git {cmd}")
 
 def g_lines(args: []str) -> []str:
+    """Run git against the current file's repo. Returns what git printed.
+
+    The capturing twin of g(): same directory, same repo, same quoting,
+    but for the calls whose answer is the output rather than the status --
+    reading the current branch, listing the branches. git does not get the
+    terminal here, so this is not the one to use for anything the user is
+    meant to watch.
+    """
     var parts: []str = []
     for a in args:
         parts.append(Q(a))
