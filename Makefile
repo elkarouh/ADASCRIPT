@@ -198,7 +198,9 @@ test: compile
 # -----------------------------------------------------------------------
 clean:
 	@echo "Removing build cache..."
-	@rm -rf $HOME/.cache/hparsec/
+	@# $$HOME, not $HOME: make would read that as $(H) followed by OME and
+	@# delete a stray ./OME directory, leaving the real cache in place.
+	@rm -rf $$HOME/.cache/hparsec/
 	@echo "Removing binary symlinks from EXAMPLES/..."
 	@for f in $(ALL_COMPILE); do \
 	    name=$${f%.ady}; \

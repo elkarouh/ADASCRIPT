@@ -1312,11 +1312,69 @@ def main(argv=None):
     #     #ady2nim-args c -d:release                                       #
     # ------------------------------------------------------------------ #
     _ADY2NIM_ARGS_PREFIX = "#ady2nim-args "
+
+    def _drop_missing_compiler_pins(tokens):
+        """Remove compiler pins from a directive when the binary is absent.
+
+        A file may pin its C compiler, as several examples do with
+
+            #ady2nim-args c --cc:clang --clang.exe:zigcc --clang.linkerexe:zigcc
+
+        That is a preference, not a requirement — the generated Nim compiles
+        with any C compiler. Passing the pin through when the binary is not
+        installed makes nim fail deep in the build with 'exit code: 127', so
+        drop it instead and let nim fall back to its default.
+
+        Returns (kept_tokens, dropped_tokens).
+        """
+        import re as _re_cc
+        import shutil as _shutil
+        # The binary behind each --cc:NAME we know how to check.
+        _CC_BIN = {"gcc": "gcc", "clang": "clang", "tcc": "tcc",
+                   "icc": "icc", "vcc": "cl", "env": None}
+        dropped = []
+        survivors = []
+        overridden = {}          # cc name -> replacement binary that does exist
+        # Pass 1 — the --<cc>.exe: / --<cc>.linkerexe: overrides.
+        for tok in tokens:
+            m = _re_cc.match(r"^--(\w+)\.(exe|linkerexe):(.+)$", tok)
+            if not m:
+                survivors.append(tok)
+                continue
+            cc_name, _kind, binary = m.groups()
+            if _shutil.which(binary):
+                overridden[cc_name] = binary
+                survivors.append(tok)
+            else:
+                dropped.append(tok)
+        # Pass 2 — --cc:NAME, now that we know which overrides survived.
+        kept = []
+        for tok in survivors:
+            m = _re_cc.match(r"^--cc:(\w+)$", tok)
+            if not m:
+                kept.append(tok)
+                continue
+            cc_name = m.group(1)
+            if cc_name in overridden:
+                kept.append(tok)                  # the override supplies the binary
+                continue
+            binary = _CC_BIN.get(cc_name, cc_name)
+            if binary is None or _shutil.which(binary):
+                kept.append(tok)
+            else:
+                dropped.append(tok)
+        return kept, dropped
+
     if ady_file:
         lines = code.splitlines()
         # Skip the shebang (line 0), look at line 1
         if len(lines) > 1 and lines[1].startswith(_ADY2NIM_ARGS_PREFIX):
             directive_tokens = lines[1][len(_ADY2NIM_ARGS_PREFIX):].split()
+            directive_tokens, _missing_cc = _drop_missing_compiler_pins(directive_tokens)
+            if _missing_cc:
+                print("# note: ignoring compiler pin (not installed): "
+                      + " ".join(_missing_cc)
+                      + " — using nim's default C compiler", file=sys.stderr)
             # First token may be a subcommand (c, cpp, …); remaining are flags
             if directive_tokens:
                 first = directive_tokens[0]

@@ -8,14 +8,17 @@
 #
 # Runtime baseline (not listed below):
 #   Nim  >= 2.2.10  (install via choosenim: https://github.com/dom96/choosenim)
-#   Zig  >= 0.14.0  (required by state_search.ady and others using --cc:clang --clang.exe:zigcc)
+#   Zig  >= 0.14.0  (optional: preferred by state_search.ady and others using
+#                    --cc:clang --clang.exe:zigcc; py2nim falls back to the
+#                    default C compiler when it is absent)
 #   Python >= 3.12  (required by py2nim transpiler)
 #
 # Quick setup:
 #   curl -fsSL https://nim-lang.org/choosenim/init.sh | sh  # installs Nim 2.x
 #   # Then pin to the tested version:
 #   choosenim 2.2.10
-#   # Install Zig (no apt package; download from https://ziglang.org/download/):
+#   # Install Zig — optional, only for the exact toolchain the examples were
+#   # measured with (no apt package; download from https://ziglang.org/download/):
 #   curl -fsSL https://ziglang.org/download/0.14.0/zig-linux-x86_64-0.14.0.tar.xz | tar -xJ -C /opt
 #   ln -sf /opt/zig-linux-x86_64-0.14.0/zig /usr/local/bin/zig
 #   printf '#!/bin/sh\nexec zig cc "$@"\n' > /usr/local/bin/zigcc && chmod +x /usr/local/bin/zigcc
@@ -92,8 +95,10 @@ sqlite3
 # macOS:         included in system libs (no separate install needed)
 libpcre3
 
-# zig / zigcc  — Zig C compiler frontend; required at compile time by examples
-# that pin the compiler via '#ady2nim-args c --cc:clang --clang.exe:zigcc':
+# zig / zigcc  — Zig C compiler frontend. OPTIONAL: preferred by examples that
+# pin the compiler via '#ady2nim-args c --cc:clang --clang.exe:zigcc', but not
+# required — py2nim drops a pin whose binary is missing (noting it on stderr)
+# and falls back to nim's default C compiler, so these files build without zig:
 #   state_search.ady, shortest_path.ady, test_shortest_path.ady,
 #   test_state_search.ady, timetable_engine.ady, timetable_sa.ady,
 #   timetable_backtrack.ady, TIMETABLE/timetable_server.ady

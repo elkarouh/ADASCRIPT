@@ -153,13 +153,19 @@ None beyond the Python standard library.
 |---------|---------|--------------|
 | `nimpy` | `nimble install nimpy` | Any `.ady` file that uses `pyimport` to call Python libraries from Nim |
 | `db_connector` | `nimble install db_connector` | Any `.ady` file that uses `nimport db` (SQLite support; removed from Nim 2.x stdlib) |
-| `zig` / `zigcc` | download from [ziglang.org](https://ziglang.org/download/), then `printf '#!/bin/sh\nexec zig cc "$@"\n' > /usr/local/bin/zigcc && chmod +x /usr/local/bin/zigcc` | Any `.ady` file pinning the C compiler with `#ady2nim-args c --cc:clang --clang.exe:zigcc` — `state_search.ady`, `shortest_path.ady`, their tests, and the timetable examples |
+| `zig` / `zigcc` | *optional* — download from [ziglang.org](https://ziglang.org/download/), then `printf '#!/bin/sh\nexec zig cc "$@"\n' > /usr/local/bin/zigcc && chmod +x /usr/local/bin/zigcc` | Preferred by files pinning `#ady2nim-args c --cc:clang --clang.exe:zigcc` — `state_search.ady`, `shortest_path.ady`, their tests, and the timetable examples |
 
 Standard library Nim modules (`std/deques`, `tables`, `hashes`, `math`, `re`, `posix`, …) are bundled with Nim and need no separate install.
 
-`make test` needs all three, plus `bc` and `libpcre3` at runtime; without them
-it stops at the first example that wants one. [`requirements.txt`](requirements.txt)
-lists every dependency, which example needs it, and the install command.
+A compiler pin is a preference, not a requirement. When the pinned binary is
+not installed, `py2nim` drops the pin — with a note on stderr — and lets Nim
+use its default C compiler, so those files build with whatever compiler is
+present. Install zig only if you want the exact toolchain the examples were
+measured with.
+
+`make test` needs `nimpy` and `db_connector`, plus `bc` and `libpcre3` at
+runtime. [`requirements.txt`](requirements.txt) lists every dependency, which
+example needs it, and the install command.
 
 ---
 
@@ -205,6 +211,13 @@ second line to set per-file nim options (inspired by nimbang's
 `#nimbang-args`). The first token may be a nim subcommand; remaining tokens
 are forwarded to the nim compiler. Command-line flags always override the
 directive.
+
+A compiler pin in the directive (`--cc:NAME`, `--NAME.exe:BIN`,
+`--NAME.linkerexe:BIN`) is treated as a preference. If the named binary is
+not installed, `py2nim` drops just that flag, notes it on stderr, and lets
+nim use its default C compiler — so a file pinning `zigcc` still builds on a
+machine without zig. Every other flag in the directive is passed through
+untouched.
 
 ```python
 #!/usr/bin/env py2nim
