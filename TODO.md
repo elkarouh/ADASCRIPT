@@ -7,6 +7,7 @@
 - [ ] py2py: `Natural` / `Positive` are emitted into annotations but never defined (see [Bug 3](#bug-3--py2py-emits-natural--positive-without-defining-them))
 - [x] py2py: no `to_py()` for `pyimport` / `from … nimport …`, so those files cannot transpile at all (see [Bug 4](#bug-4--py2py-has-no-to_py-for-pyimport--from--nimport))
 - [ ] py2py: declarations without an initialiser bind nothing (see [Bug 5](#bug-5--py2py-drops-declarations-that-have-no-initialiser))
+- [ ] `quit()` clamps exit codes to 127, so wrappers cannot forward a child's 128/129 (see [quit() clamps exit codes](#quit-clamps-exit-codes-to-127))
 
 ## Shell improvements
 
@@ -33,6 +34,53 @@ When the assignment target is a bare `int` (not a record/tuple), emit
   the terminal and returns the exit code.
 - Python backend: `subprocess.call(cmd, shell=True)`.
 - Complexity: ~50 lines in `hek_nim_parser.py` + `hek_py3_parser.py`.
+
+---
+
+### `quit()` clamps exit codes to 127
+
+A program that forwards another command's exit status cannot report anything
+above 127: `quit(n)` yields 127 for every n >= 128. Codes 0..127 pass through
+untouched.
+
+```
+requested: 0  1  2  100 126 127 128 129 200 255
+actual:    0  1  2  100 126 127 127 127 127 127
+```
+
+This is Nim's behaviour, not the transpiler's — the generated code is a plain
+`quit(n)`, and the same clamp appears in a hand-written Nim program, while C's
+`exit(128)` returns 128.
+
+It bites any wrapper that forwards a child's status. `EXAMPLES/git1.ady` ends
+in `quit(g(args))`, so `git1 <file> <git args...>` reports git's 0 and 1
+faithfully but turns git's 128 (bad ref, bad usage) and 129 (usage error)
+into 127:
+
+```
+                                     git1   raw git
+  diff --quiet (dirty tree)            1       1
+  rev-parse --verify nosuchbranch    127     128
+```
+
+`if git1 f rev-parse --verify b; then` still works, since non-zero stays
+non-zero; only a script that distinguishes 128 from 1 is affected.
+
+**Implementation sketch:**
+- Emit C's `exit()` rather than `quit()` when the argument is not a literal in
+  0..127 — or unconditionally, for a program whose last statement is a quit:
+
+  ```nim
+  proc c_exit(code: cint) {.importc: "exit", header: "<stdlib.h>", noreturn.}
+  ```
+
+- Use `exit()`, **not** `posix.exitnow()`. Both preserve the full 0..255
+  range, but `exitnow` is `_exit` and discards buffered output — a program
+  that prints and then exits 128 loses the print. Verified: with `exitnow`
+  the output vanished; with `exit()` it appeared and the status was still 128.
+- The Python backend needs nothing: `sys.exit(128)` already exits 128.
+- Complexity: ~20 lines in `hek_nim_stmt.py`, plus a test that forwards a
+  child status of 128 and checks it survives.
 
 ---
 
