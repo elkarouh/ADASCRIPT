@@ -91,7 +91,7 @@ Five custom faces can be themed independently:
 | `adascript-shell-face` | `font-lock-preprocessor-face` | The `shell:` / `shellLines:` keywords |
 | `adascript-range-op-face` | `font-lock-operator-face`, or `font-lock-builtin-face` before Emacs 30 | The range operators `..` and `..<` |
 
-## `git1-vc.el` — `C-x v ...` on a git1-tracked file
+## `git1.el` — `C-x v ...` on a git1-tracked file
 
 `EXAMPLES/git1.ady` gives each tracked file its own private repository under
 `.git1/`, reached through `GIT_DIR` and `GIT_WORK_TREE`. Emacs locates
@@ -99,54 +99,59 @@ repositories by filename instead — `vc-git-root` is literally
 `(vc-find-root file ".git")` — so a git1 file looks unversioned to VC and
 `C-x v ...` does nothing useful with it.
 
-It can also do something actively wrong: `vc-create-branch` and
-`vc-switch-branch` work off `default-directory`, not off the file's
-registration, so in a directory that sits inside an ordinary git repo
-`C-x v b c` creates the branch in *that* repo.
+It can also do something actively wrong: a directory that sits inside an
+ordinary git repo makes Emacs find *that* repo, which knows nothing about
+the file, so `C-x v b c` would create the branch in the enclosing project.
 
-`git1-vc.el` fixes both. `M-x git1-vc-focus` writes a one-line `.git`
-pointer next to the visited file:
+`git1.el` fixes both, per file rather than per directory. It advises
+`vc-git` so that a tracked file's own directory counts as a VC root, and
+splices `--git-dir=` and `--work-tree=` into the git calls that follow.
+Nothing is written to disk, and several tracked files in one directory work
+at the same time — each buffer talks to its own repository.
 
+```elisp
+(use-package git1
+  :load-path "/path/to/ADASCRIPT/LSP/emacs"
+  :demand t
+  :hook (find-file . git1-maybe-enable)
+  :config
+  (git1-global-mode 1))
 ```
-gitdir: .git1/notes.txt
-```
 
-git1 already sets `core.worktree` to the file's directory, so git and VC
-then resolve to that file's own history, and the whole VC interface starts
-working on it:
+`git1-global-mode` installs the advice; `git1-maybe-enable` on `find-file`
+turns on the buffer-local `git1-mode` for files that are tracked, which
+lights the mode line and binds `C-c g`. Plain `(require 'git1)` and a call
+to `git1-global-mode` work just as well.
+
+What then works in a git1 buffer:
 
 | Key | Command | Acts on |
 |---|---|---|
 | `C-x v b c` | `vc-create-branch` | the file's git1 repo |
-| `C-x v b s` | `vc-switch-branch` | the file's git1 repo |
-| `C-x v b l` | `vc-print-branch-log` | the file's git1 repo |
+| `C-x v b s` | `vc-switch-branch` | the file's git1 repo, branch names completed |
 | `C-x v v` `C-x v =` `C-x v l` | commit, diff, log | the file's git1 repo |
+| `C-c g c` | `git1-commit` | save, then commit this file |
+| `C-c g d` `C-c g l` `C-c g b` | diff, log, annotate | the file's git1 repo |
+| `C-c g s` | `git1-magit-status` | Magit on that repo, if Magit is installed |
 
-`M-x git1-vc-unfocus` removes the pointer again.
+`M-x git1-init` starts tracking the file in the current buffer.
 
-```elisp
-(add-to-list 'load-path "/path/to/ADASCRIPT/LSP/emacs")
-(require 'git1-vc)
-(global-set-key (kbd "C-c g f") #'git1-vc-focus)
-(global-set-key (kbd "C-c g u") #'git1-vc-unfocus)
-```
-
-A repository is named after its file — `notes.txt` is tracked in
-`.git1/notes.txt` — and is confirmed by its `HEAD`, so anything else that
-happens to sit in the container is ignored. `git1-container` renames
-`.git1` itself if you changed it in `git1.ady`.
+Branch commands name a directory rather than a file, since a branch belongs
+to a repository. When several tracked files share a directory, the one
+meant is the file whose buffer the command was invoked from.
 
 Two things to know:
 
-- Only one file per directory can be focused at a time — there is a single
-  `.git` name to go around.
-- While the pointer exists, an enclosing ordinary repo treats that directory
-  as an embedded repository: it shows up as untracked and git stops
-  recursing into it. Unfocusing restores the previous view. `git1-vc-focus`
-  refuses outright if the directory already has a real `.git`.
+- `vc-dir` is not supported. It is inherently a per-directory view, and a
+  directory holding several git1 files has no single repository to show.
+  Use `git1 each status -s` from a shell instead.
+- A repository is named after its file — `notes.txt` is tracked in
+  `.git1/notes.txt` — and is confirmed by its `HEAD`. `git1-container`
+  renames `.git1` itself if you changed it in `git1.ady`, and
+  `git1-program` names the executable used by `git1-init`.
 
-`git1-vc.el` is independent of `adascript-mode` — it needs neither
-`nim-mode` nor the language server.
+`git1.el` is independent of `adascript-mode` — it needs neither `nim-mode`
+nor the language server.
 
 ## Notes
 
