@@ -14,6 +14,7 @@ nimport os, strutils
 const VERSION:   str = "3.0"
 const CONTAINER: str = ".git1"
 const STATUS_FILE: str = "/tmp/.git1-status"
+const G1_PREFIX: str = "" # i want no prefix !!!
 
 let PROG:   str = os.path.basename($0).lstrip(".")
 let PREFIX: str = $G1_PREFIX if $G1_PREFIX else ".g1_"
