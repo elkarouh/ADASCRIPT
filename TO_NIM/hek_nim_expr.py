@@ -948,8 +948,17 @@ def to_nim(self, prec=None):
             i += 1
         return ''.join(out)
 
-    # Apply only to the string content (between outer quotes)
-    if result.startswith('fmt"') and result.endswith('"'):
+    # Apply only to the string content (between outer quotes).
+    # An already triple-quoted literal — an f-string written f"""...""" — has
+    # to be unwrapped by three quotes, not one, or the two left over at each
+    # end become part of the text.
+    if result.startswith('fmt"""') and result.endswith('"""') and len(result) >= 12:
+        inner = result[6:-3]
+        inner = _apply_conversions(inner)
+        inner = _fix_hex_escapes(inner)
+        inner = inner.replace('\\"', '"')
+        result = 'fmt"""' + inner + '"""'
+    elif result.startswith('fmt"') and result.endswith('"'):
         inner = result[4:-1]
         inner = _apply_conversions(inner)
         inner = _fix_hex_escapes(inner)
