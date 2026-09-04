@@ -180,6 +180,41 @@ to (infile buffer command &rest args).")
     (apply orig buffer okstatus file-or-list
            (append extra flags))))
 
+(defun git1--async-advice (orig buffer root command &rest args)
+  "Splice the git1 repo flags into `vc-do-async-command'.
+
+`vc-git-merge-branch' runs git through this rather than through either of
+the two choke points above, so without this a merge would run with no
+repository at all.  Only fires inside a command that has already resolved
+a git1 repo, and only for git itself."
+  (if (and git1--repo (equal command vc-git-program))
+      (apply orig buffer root command (append (git1--global-flags) args))
+    (apply orig buffer root command args)))
+
+(defun git1--dir-command-advice (orig &rest args)
+  "Resolve the git1 repo for a command that names a directory, then run ORIG.
+
+Branch creation, switching, branch logs and merges all act on a repository
+rather than on a file, and reach git through several layers -- some of
+which run in a buffer of their own, where the file in hand can no longer be
+seen.  Resolving the repo once, here at the entry point, and binding it for
+the duration covers all of them."
+  (let* ((file (git1--current-file-in nil))
+         (repo (and file (git1-repo-for-file file))))
+    (if (not repo)
+        (apply orig args)
+      (let ((git1--repo (directory-file-name repo))
+            (git1--worktree (directory-file-name
+                             (file-name-directory (expand-file-name file)))))
+        (apply orig args)))))
+
+(defconst git1--dir-commands
+  '(vc-create-tag                       ; C-x v b c, C-x v s
+    vc-retrieve-tag                     ; C-x v b s, C-x v r
+    vc-print-branch-log                 ; C-x v b l
+    vc-merge)                           ; C-x v m
+  "VC commands that act on a repository rather than on one of its files.")
+
 (defconst git1--advised-functions
   '(vc-git-registered
     vc-git-state
@@ -211,15 +246,23 @@ to (infile buffer command &rest args).")
         (advice-add 'vc-git-root :around #'git1--root-advice)
         (advice-add 'vc-git--call :around #'git1--call-advice)
         (advice-add 'vc-git-command :around #'git1--command-advice)
+        (advice-add 'vc-do-async-command :around #'git1--async-advice)
         (dolist (fn git1--advised-functions)
           (when (fboundp fn)
-            (advice-add fn :around #'git1--env-advice))))
+            (advice-add fn :around #'git1--env-advice)))
+        (dolist (fn git1--dir-commands)
+          (when (fboundp fn)
+            (advice-add fn :around #'git1--dir-command-advice))))
     (advice-remove 'vc-git-root #'git1--root-advice)
     (advice-remove 'vc-git--call #'git1--call-advice)
     (advice-remove 'vc-git-command #'git1--command-advice)
+    (advice-remove 'vc-do-async-command #'git1--async-advice)
     (dolist (fn git1--advised-functions)
       (when (fboundp fn)
-        (advice-remove fn #'git1--env-advice)))))
+        (advice-remove fn #'git1--env-advice)))
+    (dolist (fn git1--dir-commands)
+      (when (fboundp fn)
+        (advice-remove fn #'git1--dir-command-advice)))))
 
 ;;; A buffer-local mode, mostly for the mode line and keys
 
