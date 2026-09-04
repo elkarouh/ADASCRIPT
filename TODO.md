@@ -5,6 +5,7 @@
 - [x] py2py: regex flag constants reference `re` but the prelude imports it as `_re_mod` (see [Bug 1](#bug-1--py2py-emits-reignorecase-while-importing-re-as-_re_mod))
 - [ ] py2py: implicit return does not reach into `if`/`else` branches (see [Bug 2](#bug-2--py2py-implicit-return-stops-at-ifelse-branches))
 - [ ] py2py: `Natural` / `Positive` are emitted into annotations but never defined (see [Bug 3](#bug-3--py2py-emits-natural--positive-without-defining-them))
+- [ ] py2py: no `to_py()` for `pyimport` / `from … nimport …`, so those files cannot transpile at all (see [Bug 4](#bug-4--py2py-has-no-to_py-for-pyimport--from--nimport))
 
 ## Monad support improvements (high ROI)
 
@@ -69,11 +70,16 @@ print(fetch_user(id).map(format_summary) or "not found")
 ## Python backend (py2py) — known bugs
 
 Found while making `EXAMPLES/test_regex.ady` compile on the Nim backend
-(bugs 1 and 2) and while regression-testing that work (bug 3). The Nim
-backend handles all three correctly — the affected examples compile and run
-there — so it is the Python output that is wrong in each case. Only the
-first is regex-specific: bug 2 affects any function whose body ends in
-`if`/`else`, and bug 3 any file using `Natural` or `Positive`.
+(bugs 1 and 2) and while regression-testing that work (bugs 3 and 4). The Nim
+backend handles all four correctly — every affected example compiles and runs
+there — so it is the Python output that is wrong in each case. Only the first
+is regex-specific: bug 2 affects any function whose body ends in `if`/`else`,
+bug 3 any file using `Natural` or `Positive`, and bug 4 any file using
+`pyimport` or `from … nimport …`.
+
+Bugs 3 and 4 are what stops most of `EXAMPLES/` from running under `py2py`;
+bug 4 in particular aborts the transpile outright rather than producing
+wrong output.
 
 ### Bug 1 — py2py emits `re.IGNORECASE` while importing `re` as `_re_mod`
 
@@ -198,3 +204,52 @@ the Python backend, though it compiles and runs on Nim.
   question, and the aliases at least make the output run.
 - Complexity: ~20 lines, plus a regression test that runs `awk_example.ady`
   through `py2py -c`.
+
+---
+
+### Bug 4 — py2py has no `to_py()` for `pyimport` / `from … nimport …`
+
+Three of the four import forms are implemented only in the Nim backend, so a
+file using any of them cannot be transpiled to Python at all — the run aborts
+before producing output, rather than emitting a wrong line.
+
+| Form | `to_py()` | `to_nim()` |
+|---|---|---|
+| `nimport X` | yes | yes |
+| `from X import Y` | yes (plain Python) | yes |
+| `pyimport X` | **missing** | yes |
+| `from X nimport Y` (`from_nim_abs`) | **missing** | yes |
+| `from X pyimport Y` (`from_pyimport`) | **missing** | yes |
+
+**Reproduction:**
+```python
+from stdlib nimport PriorityQueue
+print "ok"
+```
+```
+TypeError: to_py() takes 1 positional argument but 2 were given
+```
+
+**Cause:** the grammar rules `pyimport_stmt`, `from_nim_abs` and
+`from_pyimport` (`ADASCRIPT_GRAMMAR/py3stmt.py`, lines ~251–257) have a
+`@method(...) to_nim` in `TO_NIM/hek_nim_stmt.py` but no matching `to_py` in
+`TO_PYTHON/`. `py2py.py:247` calls `stmt.to_py(0)`, gets a `TypeError` because no
+method is attached, falls back to `stmt.to_py()`, and that walks into a bare
+`Sequence_Parser` — so the failure surfaces as a confusing arity error rather
+than "unimplemented".
+
+**Blocks:** `dijkstra.ady` (`from stdlib nimport PriorityQueue`),
+`primes.ady`, `tsp.ady` and `rsync_time_machine.ady` (all `pyimport`). All
+four compile and run on the Nim backend.
+
+**Implementation sketch:**
+- Add three `to_py` methods in `TO_PYTHON/hek_py3_stmt.py`, next to the
+  existing `nimport_stmt` one, which is the model to copy:
+  - `pyimport X` → `import X` (Python-only import, so it is emitted in full)
+  - `from X pyimport Y` → `from X import Y`
+  - `from X nimport Y` → `# from X nimport Y` (Nim-only, comment it out as
+    `nimport_stmt` already does)
+- Consider making the `except TypeError` fallback in `py2py.py:248` re-raise
+  with the rule name when no `to_py` exists; the current arity error hides
+  which construct is unimplemented and cost real time to track down twice.
+- Complexity: ~30 lines, plus a `py2py -c` run of `dijkstra.ady` as the test.
