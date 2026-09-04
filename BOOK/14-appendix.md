@@ -87,8 +87,28 @@ then `chmod +x script.ady && ./script.ady`. Artifacts live in
 the source. Builds are incremental (transpile / compile / run each skipped
 when up to date); editing any transpiler `.py` file invalidates the caches.
 
+### Building the whole corpus
+
+The `Makefile` at the repository root drives every example:
+
+```bash
+make compile    # transpile + compile every example, no run
+make test       # compile, then run the suite (36 examples, 67 checks)
+make clean      # remove ~/.cache/hparsec/ and the binary symlinks
+```
+
+`make clean` is the one to reach for when a build looks stale in a way the
+incremental check did not catch — it is also what you want before timing
+anything, since an up-to-date binary is simply re-run rather than rebuilt.
+
 Nim dependencies, when used: `nimble install nimpy` (for `pyimport`-bridged
 libraries), `nimble install db_connector` (for `nimport db`).
+
+A file may pin its C compiler on the `#ady2nim-args` line
+(`--cc:clang --clang.exe:zigcc`). That is a preference: when the named
+binary is not installed, `py2nim` drops the pin, says so on stderr, and lets
+Nim use its default C compiler — so no example needs a particular toolchain
+in order to build.
 
 ## A.3 Bundled Adascript/Nim libraries
 
