@@ -277,8 +277,26 @@ the duration covers all of them."
     map)
   "Prefix keymap for git1 commands, bound under C-c g.")
 
-(defvar git1-mode-map (make-sparse-keymap)
-  "Keymap for `git1-mode'.  Empty — keys live in `mode-specific-map'.")
+(defvar git1-branch-map
+  (let ((map (make-sparse-keymap "git1 branch")))
+    ;; Inherit rather than copy, so C-x v b c/s/l keep working and anything
+    ;; Emacs adds to its own branch map later shows up here too.
+    (set-keymap-parent map (lookup-key vc-prefix-map "b"))
+    (define-key map "a" #'git1-adopt)
+    (define-key map "d" #'git1-delete-branch)
+    map)
+  "`C-x v b' inside a git1 buffer.
+
+Emacs binds three commands there -- c create, s switch, l branch log --
+and this adds the two a per-file repo wants: a to adopt a branch
+wholesale, d to delete one.")
+
+(defvar git1-mode-map
+  (let ((map (make-sparse-keymap)))
+    (define-key map (kbd "C-x v b") git1-branch-map)
+    map)
+  "Keymap for `git1-mode'.
+Extends `C-x v b'; the rest live in `mode-specific-map'.")
 
 ;;;###autoload
 (define-minor-mode git1-mode
@@ -357,6 +375,33 @@ Runs `git1 adopt', so the command line and this do the same thing."
     (vc-refresh-state)
     (message "%s now holds %s%s" current branch
              (if prune (format ", %s deleted" (mapconcat #'identity losers ", ")) ""))))
+
+(defun git1-delete-branch (branch)
+  "Delete BRANCH from this file's git1 repo.
+
+Runs `git1 -- <file> branch -D <branch>'.  The current branch is not
+offered; `git1-adopt' is the way to leave it."
+  (interactive
+   (list (completing-read "Delete branch: "
+                          (or (cdr (vc-git-branches))
+                              (user-error "This repo has only one branch"))
+                          nil t)))
+  (let* ((file (or buffer-file-name (user-error "Not visiting a file")))
+         (base (file-name-nondirectory file))
+         (default-directory (file-name-directory (expand-file-name file))))
+    (unless (git1-repo-for-file file)
+      (user-error "%s is not tracked by git1" base))
+    (when (equal branch (car (vc-git-branches)))
+      (user-error "%s is the current branch" branch))
+    (unless (y-or-n-p (format "Delete branch %s?  Its commits survive only in the reflog: "
+                              branch))
+      (user-error "Aborted"))
+    (with-temp-buffer
+      ;; "--" so a file whose name collides with a subcommand still works.
+      (unless (zerop (call-process git1-program nil t nil
+                                   "--" base "branch" "-D" branch))
+        (user-error "git1 branch -D failed: %s" (string-trim (buffer-string))))
+      (message "%s" (string-trim (buffer-string))))))
 
 ;;;###autoload
 (defun git1-maybe-enable ()

@@ -129,15 +129,25 @@ What then works in a git1 buffer:
 |---|---|---|
 | `C-x v b c` | `vc-create-branch` | the file's git1 repo |
 | `C-x v b s` | `vc-switch-branch` | the file's git1 repo, branch names completed |
+| `C-x v b l` | `vc-print-branch-log` | the file's git1 repo |
+| `C-x v b a` | `git1-adopt` | replace the current branch with another, wholesale |
+| `C-x v b d` | `git1-delete-branch` | delete a branch of that repo |
+| `C-x v m` | `vc-merge` | the file's git1 repo (see below) |
 | `C-x v v` `C-x v =` `C-x v l` | commit, diff, log | the file's git1 repo |
 | `C-c g c` | `git1-commit` | save, then commit this file |
 | `C-c g d` `C-c g l` `C-c g b` | diff, log, annotate | the file's git1 repo |
-| `C-c g a` | `git1-adopt` | replace the current branch with another, wholesale |
+| `C-c g a` | `git1-adopt` | same command as `C-x v b a` |
 | `C-c g s` | `git1-magit-status` | Magit on that repo, if Magit is installed |
+
+Emacs itself binds only three commands under `C-x v b` — create, switch and
+branch log. In a git1 buffer that map gains `a` and `d`; it *inherits* from
+the stock one rather than replacing it, so the three keep working and
+anything Emacs adds later appears too. Outside a git1 buffer nothing
+changes: `C-x v b a` stays unbound.
 
 `M-x git1-init` starts tracking the file in the current buffer.
 
-`C-c g a` is the one command here without a VC equivalent, and it exists
+`git1-adopt` is the one command here without a VC equivalent, and it exists
 because merging a single file is a poor fit: a merge combines two versions,
 and with no file boundary to separate the changes, two versions of one file
 conflict readily — edits one line apart already do. `git1-adopt` moves the
