@@ -2,7 +2,7 @@
 #ady2nim-args c -d:release --opt:size
 """git1 — version-control individual files independently.
 
-Each tracked file gets its own private git repo, ".git1/.g1_<name>",
+Each tracked file gets its own private git repo, ".git1/<name>",
 grouped under a single ".git1" container in the file's directory.
 
 Concept from kotodharma/single-file-git.
@@ -14,10 +14,12 @@ nimport os, strutils
 const VERSION:   str = "3.0"
 const CONTAINER: str = ".git1"
 const STATUS_FILE: str = "/tmp/.git1-status"
-const G1_PREFIX: str = "" # i want no prefix !!!
+# The ".git1" container already keeps the repos out of the way, so the repo
+# name needs no prefix of its own. $G1_PREFIX still overrides this.
+const G1_PREFIX: str = ""
 
 let PROG:   str = os.path.basename($0).lstrip(".")
-let PREFIX: str = $G1_PREFIX if $G1_PREFIX else ".g1_"
+let PREFIX: str = $G1_PREFIX if $G1_PREFIX else G1_PREFIX
 
 # --- globals set by split_target (mirrors the bash version) ----------------
 var G1_DIR:    str = ""
@@ -58,6 +60,20 @@ def split_target(target: str):
         die(f"not a file name: '{target}'")
     G1_DIR = "." if head'Length == 0 else head
     G1_GITDIR = CONTAINER + "/" + PREFIX + G1_BASE
+
+def is_repo(cdir: str, entry: str) -> bool:
+    """True when cdir/entry is one of our per-file repos.
+
+    With no prefix every name in the container passes a startswith() test,
+    "." and ".." included, so the repo itself has to be recognised.
+    """
+    if entry'Length == 0 or entry == "." or entry == "..": return False
+    if not entry.startswith(PREFIX): return False
+    let gitdir: str = os.path.join(cdir, entry)
+    if not -d gitdir: return False
+    let head: str = os.path.join(gitdir, "HEAD")
+    if -f head: return True
+    return False
 
 def ignore_escape(name: str) -> str:
     var s: str = name.replace("\\", "\\\\")
@@ -112,9 +128,8 @@ def cmd_ls(argv: []str):
     if -d cdir:
         let entries = shellLines: ls -1a {Q(cdir)}
         for entry in sorted(entries):
-            if not entry.startswith(PREFIX): continue
+            if not is_repo(cdir, entry): continue
             let gitdir: str = os.path.join(cdir, entry)
-            if not -d gitdir: continue
             found = 1
             let name: str = entry[PREFIX'Length:]
             let file: str = os.path.join(d, name)
@@ -174,9 +189,7 @@ def cmd_each(argv: []str):
     if not -d cdir: return
     let entries = shellLines: ls -1a {Q(cdir)}
     for entry in sorted(entries):
-        if not entry.startswith(PREFIX): continue
-        let gitdir: str = os.path.join(cdir, entry)
-        if not -d gitdir: continue
+        if not is_repo(cdir, entry): continue
         let name: str = entry[PREFIX'Length:]
         print f"=== {name} ==="
         split_target(name)
@@ -218,7 +231,7 @@ Notes:
     "status" stay clean no matter what else is in the directory.
   * To track a file whose name collides with a subcommand, use "--":
       {PROG} -- ls log
-  * Set G1_PREFIX to use a prefix other than "{PREFIX}".
+  * Set G1_PREFIX to prefix the repo names inside "{CONTAINER}".
   * If the directory is itself inside an ordinary git repo, add "{CONTAINER}"
     to its .gitignore.
 

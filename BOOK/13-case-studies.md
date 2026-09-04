@@ -113,7 +113,7 @@ Every other program in this chapter was written as Adascript from the start.
 to see what Adascript adds to shell scripting — and what it costs.
 
 The tool gives each tracked file its own private git repo,
-`.git1/.g1_<name>`, grouped under a single `.git1` container in the file's
+`.git1/<name>`, grouped under a single `.git1` container in the file's
 directory.  `notes.txt` and `diary.txt` can sit side by side, each with
 independent history, with no repo at the directory level.
 

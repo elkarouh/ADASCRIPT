@@ -131,9 +131,10 @@ working on it:
 (global-set-key (kbd "C-c g u") #'git1-vc-unfocus)
 ```
 
-The repository layout is auto-detected, so it does not matter whether
-`G1_PREFIX` was empty (`.git1/notes.txt`) or the shipped default
-(`.git1/.g1_notes.txt`) when the file was first tracked. Pin one with
+git1 gives the repositories no prefix — the `.git1` container is enough to
+keep them out of the way — so `notes.txt` is tracked in `.git1/notes.txt`.
+The layout is auto-detected, so repositories left over from an older
+`G1_PREFIX` (`.git1/.g1_notes.txt`) are found too. Pin one with
 `git1-prefix` if you prefer; `git1-container` renames `.git1` itself.
 
 Two things to know:

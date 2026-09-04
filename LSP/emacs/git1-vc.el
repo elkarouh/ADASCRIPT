@@ -18,7 +18,7 @@
 ;; happily create the branch in that enclosing repo.
 ;;
 ;; `git1-vc-focus' writes a one-line ".git" pointer next to the visited
-;; file:
+;; file (".git1/notes.txt" being the repo of "notes.txt"):
 ;;
 ;;     gitdir: .git1/notes.txt
 ;;
@@ -61,24 +61,26 @@
 (defcustom git1-prefix nil
   "Prefix git1 puts in front of each repository name.
 
-nil means auto-detect, which is usually what you want: the repository
-for FILE is looked for under both the empty prefix (\".git1/FILE\") and
-the shipped default (\".git1/.g1_FILE\"), so it does not matter which
-one G1_PREFIX was set to when the file was first tracked.
+git1 uses no prefix -- the \".git1\" container is enough to keep the
+repositories out of the way -- so the repository for FILE is normally
+\".git1/FILE\".
+
+nil means auto-detect, which is usually what you want: repositories left
+over from an older G1_PREFIX (\".git1/.g1_FILE\") are found as well.
 
 Set it to a string to pin one layout."
   :type '(choice (const :tag "Auto-detect" nil) string)
   :group 'git1)
 
 (defun git1--prefixes ()
-  "Return the repository prefixes to try, most specific first."
+  "Return the repository prefixes to try, in order of preference."
   (delete-dups
    (delq nil
          (list git1-prefix
                (let ((env (getenv "G1_PREFIX")))
                  (and env (not (string-empty-p env)) env))
-               ".g1_"
-               ""))))
+               ""        ; what git1 uses
+               ".g1_")))) ; repos from an older G1_PREFIX
 
 (defun git1--repo-p (dir)
   "Return non-nil if DIR looks like a git repository."
