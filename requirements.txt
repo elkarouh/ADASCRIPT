@@ -100,5 +100,5 @@ libpcre3
 # 'zigcc' is a thin wrapper around 'zig cc' (a clang frontend); put it on PATH:
 #   printf '#!/bin/sh\nexec zig cc "$@"\n' > /usr/local/bin/zigcc && chmod +x /usr/local/bin/zigcc
 # Download from: https://ziglang.org/download/  (no OS package available)
-# Tested version: 0.14.0
+# Tested versions: 0.14.0, and 0.16.0 (verified against the full 'make test' run)
 zig >= 0.14.0

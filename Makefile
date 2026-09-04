@@ -45,6 +45,7 @@ STANDALONE := \
     primes.ady \
     test_ownership.ady \
     test_iters.ady \
+    test_regex.ady \
     td_learning/sarsa.ady \
     td_learning/qlearning.ady \
     test_do_block.ady
@@ -63,7 +64,8 @@ STDIN_EXAMPLES := \
 ARG_EXAMPLES := \
     argparse.ady \
     phonecode.ady \
-    spell.ady
+    spell.ady \
+    git1.ady
 
 # -----------------------------------------------------------------------
 # Expect tests — require bc to be installed
@@ -163,6 +165,10 @@ test: compile
 	@printf '  %-42s' "spell.ady (big.txt speling)"; \
 	    $(EXDIR)/spell $(EXDIR)/big.txt speling >/dev/null 2>&1 \
 	        && echo OK || { echo FAIL; exit 1; }
+	@# git1 --version is the only invocation with no side effects: every other
+	@# subcommand creates, moves or deletes a repo in the working directory.
+	@printf '  %-42s' "git1.ady (--version)"; \
+	    $(EXDIR)/git1 --version >/dev/null 2>&1 && echo OK || { echo FAIL; exit 1; }
 
 	@echo "=== Expect / shell examples (require bc) ==="
 	@for f in $(EXPECT_EXAMPLES); do \

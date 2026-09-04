@@ -153,8 +153,13 @@ None beyond the Python standard library.
 |---------|---------|--------------|
 | `nimpy` | `nimble install nimpy` | Any `.ady` file that uses `pyimport` to call Python libraries from Nim |
 | `db_connector` | `nimble install db_connector` | Any `.ady` file that uses `nimport db` (SQLite support; removed from Nim 2.x stdlib) |
+| `zig` / `zigcc` | download from [ziglang.org](https://ziglang.org/download/), then `printf '#!/bin/sh\nexec zig cc "$@"\n' > /usr/local/bin/zigcc && chmod +x /usr/local/bin/zigcc` | Any `.ady` file pinning the C compiler with `#ady2nim-args c --cc:clang --clang.exe:zigcc` — `state_search.ady`, `shortest_path.ady`, their tests, and the timetable examples |
 
 Standard library Nim modules (`std/deques`, `tables`, `hashes`, `math`, `re`, `posix`, …) are bundled with Nim and need no separate install.
+
+`make test` needs all three, plus `bc` and `libpcre3` at runtime; without them
+it stops at the first example that wants one. [`requirements.txt`](requirements.txt)
+lists every dependency, which example needs it, and the install command.
 
 ---
 
