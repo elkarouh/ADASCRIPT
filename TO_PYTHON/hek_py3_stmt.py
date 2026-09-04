@@ -326,17 +326,33 @@ def to_py(self):
     return name
 
 
+def _import_as_list_to_py(node):
+    """Comma-separated import_as list -> 'mod, mod as alias, ...'.
+
+    Shared by `import` and `pyimport`, which have the same shape."""
+    parts = [node.nodes[0].to_py()]
+    for nd in node.nodes[1:]:
+        if not hasattr(nd, "nodes") or not nd.nodes:
+            continue
+        for seq in nd.nodes:
+            if hasattr(seq, "nodes") and len(seq.nodes) >= 1:
+                parts.append(seq.nodes[0].to_py())
+    return ", ".join(parts)
+
+
 @method(import_stmt)
 def to_py(self):
     """import_stmt: 'import' import_as (',' import_as)*"""
-    parts = [self.nodes[0].to_py()]
-    for node in self.nodes[1:]:
-        if not hasattr(node, "nodes") or not node.nodes:
-            continue
-        for seq in node.nodes:
-            if hasattr(seq, "nodes") and len(seq.nodes) >= 1:
-                parts.append(seq.nodes[0].to_py())
-    return "import " + ", ".join(parts)
+    return "import " + _import_as_list_to_py(self)
+
+
+@method(pyimport_stmt)
+def to_py(self):
+    """pyimport_stmt: 'pyimport' import_as (',' import_as)*
+
+    pyimport marks an import that exists only in Python output — the Nim
+    backend routes it through nimpy — so here it is a plain import."""
+    return "import " + _import_as_list_to_py(self)
 
 
 # --- from ... import ---
@@ -535,14 +551,16 @@ def to_py(self):
     return f"from {dots} import {names}"
 
 
-@method(from_abs)
-def to_py(self):
-    """from_abs: 'from' dotted_name 'import' import_names
+def _from_import_parts(self):
+    """Split a 'from X <kw> Y' statement into its (source, names) strings.
 
     Flattened nodes: dotted_name may flatten to [IDENTIFIER, Several_Times...]
     followed by import_names nodes. The dotted_name part is nodes[0] (an IDENTIFIER);
     its dot-separated tails and the import_names are in subsequent nodes.
     For simple cases (single-segment source): [dotted_name, import_names_node].
+
+    Shared by `from X import Y`, `from X pyimport Y` and `from X nimport Y`,
+    which differ only in the keyword and so in how the result is rendered.
     """
     # Build source from dotted_name (nodes[0] + any V_DOT Several_Times)
     source_parts = [self.nodes[0].to_py()]
@@ -579,7 +597,33 @@ def to_py(self):
             names = _import_names_to_py(names_node)
     else:
         names = ""
+    return source, names
+
+
+@method(from_abs)
+def to_py(self):
+    """from_abs: 'from' dotted_name 'import' import_names"""
+    source, names = _from_import_parts(self)
     return f"from {source} import {names}"
+
+
+@method(from_pyimport)
+def to_py(self):
+    """from_pyimport: 'from' dotted_name 'pyimport' import_names
+
+    Python-only import — emit it as an ordinary from-import."""
+    source, names = _from_import_parts(self)
+    return f"from {source} import {names}"
+
+
+@method(from_nim_abs)
+def to_py(self):
+    """from_nim_abs: 'from' dotted_name 'nimport' import_names
+
+    Nim-only import, so it is commented out in Python output — the same
+    treatment `nimport_stmt` gets."""
+    source, names = _from_import_parts(self)
+    return f"# from {source} nimport {names}"
 
 
 @method(from_stmt)

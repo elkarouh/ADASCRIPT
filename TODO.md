@@ -5,7 +5,8 @@
 - [x] py2py: regex flag constants reference `re` but the prelude imports it as `_re_mod` (see [Bug 1](#bug-1--py2py-emits-reignorecase-while-importing-re-as-_re_mod))
 - [ ] py2py: implicit return does not reach into `if`/`else` branches (see [Bug 2](#bug-2--py2py-implicit-return-stops-at-ifelse-branches))
 - [ ] py2py: `Natural` / `Positive` are emitted into annotations but never defined (see [Bug 3](#bug-3--py2py-emits-natural--positive-without-defining-them))
-- [ ] py2py: no `to_py()` for `pyimport` / `from … nimport …`, so those files cannot transpile at all (see [Bug 4](#bug-4--py2py-has-no-to_py-for-pyimport--from--nimport))
+- [x] py2py: no `to_py()` for `pyimport` / `from … nimport …`, so those files cannot transpile at all (see [Bug 4](#bug-4--py2py-has-no-to_py-for-pyimport--from--nimport))
+- [ ] py2py: declarations without an initialiser bind nothing (see [Bug 5](#bug-5--py2py-drops-declarations-that-have-no-initialiser))
 
 ## Monad support improvements (high ROI)
 
@@ -70,16 +71,17 @@ print(fetch_user(id).map(format_summary) or "not found")
 ## Python backend (py2py) — known bugs
 
 Found while making `EXAMPLES/test_regex.ady` compile on the Nim backend
-(bugs 1 and 2) and while regression-testing that work (bugs 3 and 4). The Nim
-backend handles all four correctly — every affected example compiles and runs
-there — so it is the Python output that is wrong in each case. Only the first
-is regex-specific: bug 2 affects any function whose body ends in `if`/`else`,
-bug 3 any file using `Natural` or `Positive`, and bug 4 any file using
-`pyimport` or `from … nimport …`.
+(bugs 1 and 2), then one at a time while fixing and regression-testing that
+work (bugs 3, 4 and 5). The Nim backend handles all five correctly — every
+affected example compiles and runs there — so it is the Python output that is
+wrong in each case. Only the first is regex-specific: bug 2 affects any
+function whose body ends in `if`/`else`, bug 3 any file using `Natural` or
+`Positive`, bug 4 any file using `pyimport` or `from … nimport …`, and bug 5
+any declaration written without an initialiser.
 
-Bugs 3 and 4 are what stops most of `EXAMPLES/` from running under `py2py`;
-bug 4 in particular aborts the transpile outright rather than producing
-wrong output.
+Bugs 1 and 4 are fixed. Bugs 3 and 5 are what still stop most of `EXAMPLES/`
+from running under `py2py`, and they share a shape: a Python annotation that
+binds no value.
 
 ### Bug 1 — py2py emits `re.IGNORECASE` while importing `re` as `_re_mod`
 
@@ -209,6 +211,9 @@ the Python backend, though it compiles and runs on Nim.
 
 ### Bug 4 — py2py has no `to_py()` for `pyimport` / `from … nimport …`
 
+**Fixed.** The three missing `to_py` methods are in place; see the note at the
+end of this entry. Kept here for the record.
+
 Three of the four import forms are implemented only in the Nim backend, so a
 file using any of them cannot be transpiled to Python at all — the run aborts
 before producing output, rather than emitting a wrong line.
@@ -253,3 +258,66 @@ four compile and run on the Nim backend.
   with the rule name when no `to_py` exists; the current arity error hides
   which construct is unimplemented and cost real time to track down twice.
 - Complexity: ~30 lines, plus a `py2py -c` run of `dijkstra.ady` as the test.
+
+**Fix applied:** the three methods were added to `TO_PYTHON/hek_py3_stmt.py`,
+with the bodies of `import_stmt` and `from_abs` factored into
+`_import_as_list_to_py` and `_from_import_parts` so each form renders the
+shared parse. `pyimport X` → `import X`, `from X pyimport Y` →
+`from X import Y`, `from X nimport Y` → `# from X nimport Y`. Verified over
+aliases (`pyimport numpy as np`), multi-module lists (`pyimport os, time`)
+and dotted sources (`from a.b.c nimport X, Y`); `dijkstra.ady`, `primes.ady`,
+`tsp.ady` and `rsync_time_machine.ady` all transpile now.
+
+Transpiling is not yet running: `primes.ady` then hits bug 3, and
+`dijkstra.ady` hits bug 5 below. The suggested `py2py.py` error-reporting
+improvement was **not** done and is still worth doing.
+
+---
+
+### Bug 5 — py2py drops declarations that have no initialiser
+
+`var x: T` with no value emits a bare annotation in Python, which binds
+nothing, so the first use raises `UnboundLocalError` (or `NameError` at module
+level). Nim zero-initialises such a declaration, which is why the same source
+works there. Adascript documents the form as valid: "Declarations without an
+initial value are valid (Nim zero-initialises)".
+
+**Reproduction:**
+```python
+def f() -> int:
+    var seen: {}str
+    seen.add("x")
+    return len(seen)
+print f()
+```
+
+**Generated Python — `seen` is annotated but never bound:**
+```python
+def f() -> int:
+    seen: set[str]
+    seen.add("x")          # UnboundLocalError: cannot access local variable 'seen'
+    return len(seen)
+```
+
+**Generated Nim — zero-initialised, so it works:**
+```nim
+proc f(): int =
+    var seen: HashSet[string]
+    seen.incl("x")
+    return len(seen)
+```
+
+This is what `dijkstra.ady` (`visited : {}Node_T`) hits once bug 4 is out of
+the way. It is the same family as bug 3 — a Python annotation that binds no
+value — but a different cause and a different fix.
+
+**Implementation sketch:**
+- When a `var`/`let`/`const` declaration has no initialiser, emit an
+  explicit empty value for the annotated type rather than a bare annotation:
+  `set[str]` → `set()`, `list[T]` → `[]`, `dict[K,V]` → `{}`, `str` → `""`,
+  `int` → `0`, `float` → `0.0`, `bool` → `False`.
+- The type is already known — it is what the annotation is built from — so
+  this is a lookup keyed on the same information the annotation printer uses.
+- For a class or `?T`, `None` is the honest default.
+- Complexity: ~40 lines, next to the annotated-assignment handling in
+  `TO_PYTHON/hek_py3_stmt.py`; `dijkstra.ady` under `py2py -c` is the test.
