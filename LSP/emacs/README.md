@@ -132,9 +132,19 @@ What then works in a git1 buffer:
 | `C-x v v` `C-x v =` `C-x v l` | commit, diff, log | the file's git1 repo |
 | `C-c g c` | `git1-commit` | save, then commit this file |
 | `C-c g d` `C-c g l` `C-c g b` | diff, log, annotate | the file's git1 repo |
+| `C-c g a` | `git1-adopt` | replace the current branch with another, wholesale |
 | `C-c g s` | `git1-magit-status` | Magit on that repo, if Magit is installed |
 
 `M-x git1-init` starts tracking the file in the current buffer.
+
+`C-c g a` is the one command here without a VC equivalent, and it exists
+because merging a single file is a poor fit: a merge combines two versions,
+and with no file boundary to separate the changes, two versions of one file
+conflict readily — edits one line apart already do. `git1-adopt` moves the
+current branch onto the winner wholesale instead and offers to delete the
+branches that lost, so nothing is combined and nothing can conflict. It
+runs `git1 adopt`, so the command line and the key do the same thing. What
+the branch held before is reachable through `git1 <file> reflog`.
 
 Branch commands name a directory rather than a file, since a branch belongs
 to a repository. When several tracked files share a directory, the one

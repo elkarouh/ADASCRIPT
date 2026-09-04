@@ -28,6 +28,16 @@ def die(msg: str):
 def warn(msg: str):
     stderr.writeLine(f"{PROG}: {msg}")
 
+def confirm(question: str) -> bool:
+    var reply: str = ""
+    stdout.write(question + " [y/N] ")
+    stdout.flushFile()
+    try:
+        reply = input("")
+    except EOFError:
+        reply = "n"
+    return reply.lower().startswith("y")
+
 # --- shell helpers ---------------------------------------------------------
 
 def Q(s: str) -> str:
@@ -88,6 +98,28 @@ def g(args: []str) -> int:
     let cmd: str = " ".join(parts)
     sh_status(f"cd {Q(G1_DIR)} && GIT_DIR={Q(G1_GITDIR)} GIT_WORK_TREE=. git {cmd}")
 
+def g_lines(args: []str) -> []str:
+    var parts: []str = []
+    for a in args:
+        parts.append(Q(a))
+    let cmd: str = " ".join(parts)
+    let lines = shellLines: cd {Q(G1_DIR)} && GIT_DIR={Q(G1_GITDIR)} GIT_WORK_TREE=. git {cmd}
+    lines
+
+def current_branch() -> str:
+    let lines: []str = g_lines(["rev-parse", "--abbrev-ref", "HEAD"])
+    if lines'Length == 0: return "HEAD"
+    return lines[0].strip()
+
+def losing_branches(current: str, winner: str) -> []str:
+    """Every branch other than the one adopted and the one holding it now."""
+    var others: []str = []
+    for line in g_lines(["for-each-ref", "--format=%(refname:short)", "refs/heads"]):
+        let name: str = line.strip()
+        if name'Length > 0 and name != current and name != winner:
+            others.append(name)
+    others
+
 def require_repo(target: str):
     let repo: str = os.path.join(G1_DIR, G1_GITDIR)
     if not -d repo:
@@ -147,15 +179,67 @@ def cmd_rm(argv: []str):
     split_target(args[0])
     require_repo(args[0])
     if not force:
-        var reply: str = ""
-        try:
-            reply = input(f"Delete the history of {args[0]}? The file itself is kept. [y/N] ")
-        except EOFError:
-            reply = "n"
-        if not reply.lower().startswith("y"):
+        if not confirm(f"Delete the history of {args[0]}? The file itself is kept."):
             die("aborted")
     shell: rm -rf -- {Q(os.path.join(G1_DIR, G1_GITDIR))}
     shell: rmdir -- {Q(os.path.join(G1_DIR, CONTAINER))} 2>/dev/null || true
+
+def cmd_adopt(argv: []str):
+    """Replace the current branch with another one, wholesale.
+
+    For the workflow this exists to serve -- try an idea on a branch, keep
+    the winner -- a merge is the wrong tool: it combines two versions, and
+    two versions of one file conflict readily. Adopting moves the current
+    branch to the winning one instead, so nothing is combined.
+    """
+    var args: []str = argv
+    var force: bool = False
+    var prune: str = "ask"
+    while args'Length > 0 and args[0].startswith("-"):
+        if args[0] == "-f":
+            force = True
+        elif args[0] == "--prune":
+            prune = "yes"
+        elif args[0] == "--no-prune":
+            prune = "no"
+        else:
+            die(f"unknown option: {args[0]}")
+        args = args[1:]
+    if args'Length != 2:
+        die(f"usage: {PROG} adopt [-f] [--prune|--no-prune] <file> <branch>")
+
+    let target: str = args[0]
+    let branch: str = args[1]
+    split_target(target)
+    require_repo(target)
+    if g(["show-ref", "--verify", "--quiet", "refs/heads/" + branch]) != 0:
+        die(f"no such branch: {branch}")
+    let current: str = current_branch()
+    if branch == current:
+        die(f"'{branch}' is already the current branch")
+
+    if not force and g(["diff", "--quiet", "HEAD", "--", G1_BASE]) != 0:
+        if not confirm(f"{target} has uncommitted changes; discard them?"):
+            die("aborted")
+
+    if g(["reset", "--hard", branch]) != 0:
+        die(f"could not move {current} to {branch}")
+    print f"{current} now holds {branch}"
+
+    if prune == "no": return
+    let others: []str = losing_branches(current, branch)
+    if others'Length == 0: return
+    var doit: bool = prune == "yes"
+    if prune == "ask":
+        # The join is hoisted out of the f-string: a quoted receiver inside an
+        # interpolation confuses the Nim backend (see TODO.md).
+        let names: str = ", ".join(others)
+        doit = confirm(f"Delete the branches that lost ({names})?")
+    if doit:
+        var cmd: []str = ["branch", "-D"]
+        for name in others:
+            cmd.append(name)
+        g(cmd)
 
 def cmd_mv(old: str, new: str):
     split_target(old)
@@ -202,6 +286,7 @@ in one directory without seeing each other.
   {PROG} ls [dir]               list tracked files in a directory
   {PROG} mv <old> <new>         rename a tracked file and its repo
   {PROG} rm [-f] <file>         delete a file's history (keeps the file)
+  {PROG} adopt <file> <branch>  make <branch> the current branch, wholesale
   {PROG} each <git args...>     run one git command in every repo here
   {PROG} help                   this text
 
@@ -212,6 +297,8 @@ Examples:
   {PROG} notes.txt commit -am "reworked the intro"
   {PROG} notes.txt log --oneline
   {PROG} sub/config.yml status
+  {PROG} notes.txt checkout -b bolder
+  {PROG} adopt notes.txt bolder
   {PROG} each log -1 --oneline
 
 Notes:
@@ -224,6 +311,12 @@ Notes:
     "status" stay clean no matter what else is in the directory.
   * To track a file whose name collides with a subcommand, use "--":
       {PROG} -- ls log
+  * "adopt" is for trying an idea on a branch and keeping the winner: it
+    moves the current branch onto <branch>, discarding what the current one
+    held (recoverable through "reflog"), and offers to delete the branches
+    that lost. Nothing is combined, so nothing can conflict. Use "-f" to
+    skip the prompt about uncommitted changes, "--prune"/"--no-prune" to
+    settle the losing branches without being asked.
   * If the directory is itself inside an ordinary git repo, add "{CONTAINER}"
     to its .gitignore.
 
@@ -263,6 +356,7 @@ def main():
                 if argv'Length != 3: die(f"usage: {PROG} mv <old> <new>")
                 cmd_mv(argv[1], argv[2])
                 return
+            when "adopt":    cmd_adopt(argv[1:]); return
             when "each":     cmd_each(argv[1:]); return
             when "help" | "-h" | "--help": cmd_help(); return
             when "--version": print f"{PROG} {VERSION}"; return

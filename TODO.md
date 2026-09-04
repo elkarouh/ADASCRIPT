@@ -8,6 +8,7 @@
 - [x] py2py: no `to_py()` for `pyimport` / `from … nimport …`, so those files cannot transpile at all (see [Bug 4](#bug-4--py2py-has-no-to_py-for-pyimport--from--nimport))
 - [ ] py2py: declarations without an initialiser bind nothing (see [Bug 5](#bug-5--py2py-drops-declarations-that-have-no-initialiser))
 - [x] `quit()` clamps exit codes to 127, so wrappers cannot forward a child's 128/129 (see [quit() clamps exit codes](#quit-clamps-exit-codes-to-127))
+- [ ] py2nim: a quoted receiver inside an f-string interpolation is mangled (see [Bug 6](#bug-6--py2nim-mangles-a-quoted-receiver-inside-an-f-string))
 
 ## Shell improvements
 
@@ -92,6 +93,47 @@ After the fix, `EXAMPLES/git1.ady` forwards git's status faithfully:
   diff --quiet (dirty tree)            1       1
   rev-parse --verify nosuchbranch    128     128
 ```
+
+---
+
+### Bug 6 — py2nim mangles a quoted receiver inside an f-string
+
+An interpolation whose receiver is a string literal is rewritten across the
+f-string boundary, producing Nim that does not parse.
+
+```python
+let others: []str = ["exp1", "exp3"]
+print f"Delete the branches ({', '.join(others)})?"
+```
+
+emits
+
+```nim
+", ")})?""".join(fmt"""Delete the branches ({others)
+```
+
+— the `'sep'.join(x)` -> `x.join("sep")` rewrite in
+`_translate_stdlib_patterns` runs over the whole emitted expression, and
+inside an f-string the quotes it matches on are the f-string's own.  Nim
+then fails with `invalid indentation` at that line.
+
+The receiver has to be a literal for this to fire: `sep.join(others)` with
+`sep` a variable is fine, as is any `.join` outside an f-string.
+
+**Workaround:** hoist the call into a local.
+
+```python
+let names: str = ", ".join(others)
+print f"Delete the branches ({names})?"
+```
+
+`EXAMPLES/git1.ady` does exactly this in `cmd_adopt`, with a comment
+pointing here.
+
+**Fix sketch:** the post-pass should not treat the inside of an f-string as
+an ordinary expression.  Either convert interpolations before the pattern
+pass and mark them done, or run the `.join` rewrite on the interpolation
+text only, not on the whole `fmt"..."` string.
 
 ---
 

@@ -105,7 +105,7 @@ as the reference recipe for CLI tools: a `Config` record, `$@` subcommand
 dispatch via `case`, `walkDir`-style scanning through `nimport os`, regex
 queries from Chapter 7.
 
-## 13.7 `git1.ady` — Adascript vs. bash, side by side (~300 vs. ~250 lines)
+## 13.7 `git1.ady` — Adascript vs. bash, side by side (~370 vs. ~250 lines)
 
 Every other program in this chapter was written as Adascript from the start.
 `git1.ady` is the opposite exercise: a translation of a **bash script**
@@ -277,16 +277,34 @@ whenever `n` is not a literal in 0..127, since Nim's own `quit` clamps at 127.
 
 | Metric | `git1.sh` | `git1.ady` |
 |--------|-----------|------------|
-| Lines | 246 | 299 |
+| Lines | 246 | 371 |
 | Shell plumbing overhead | 0 | ~18 lines (`sh`, `sh_status`, `Q`) |
 | Type declarations | 0 | 0 (globals, no records) |
 | Runtime | bash interpreter | native binary (~100 KB) |
-| Subcommands | 8 | 8 (+ `migrate`) |
+| Subcommands | 8 | 9 (`adopt` has no bash counterpart) |
 
-The 53-line gap is mostly quoting helpers, type annotations, and the fact
-that `os.path.join(a, b)` is more characters than `$a/$b`.  The structure
-is otherwise 1:1 — someone who reads the bash can read the Adascript,
-and vice versa.
+Roughly 80 of the 125-line gap is `adopt` and the helpers it needed, a
+subcommand the bash version never had.  What is left — about 45 lines —
+is quoting helpers, type annotations, and the fact that
+`os.path.join(a, b)` is more characters than `$a/$b`.  The structure is
+otherwise 1:1 — someone who reads the bash can read the Adascript, and
+vice versa.
+
+### Replacing rather than merging
+
+`adopt` is the one place where the Adascript version takes a position the
+bash original did not.  Branching a single file is cheap and useful — try
+a bolder draft, keep the better one — but *merging* one file is a poor
+fit: a merge combines two versions, and with no file boundary to separate
+the changes, two versions of one file conflict readily.  Edits one line
+apart already do.
+
+So `git1 adopt <file> <branch>` moves the current branch onto the winner
+wholesale, with `reset --hard`, and offers to delete the branches that
+lost.  Nothing is combined, so nothing can conflict, and the losing
+attempts stay reachable through the reflog.  It is a smaller operation
+than merge, and for the workflow it serves — several attempts, one
+survivor — it is the whole of what is wanted.
 
 ---
 

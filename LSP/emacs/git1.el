@@ -273,6 +273,7 @@ the duration covers all of them."
     (define-key map "l" #'vc-print-log)
     (define-key map "b" #'vc-annotate)
     (define-key map "s" #'git1-magit-status)
+    (define-key map "a" #'git1-adopt)
     map)
   "Prefix keymap for git1 commands, bound under C-c g.")
 
@@ -312,6 +313,50 @@ the duration covers all of them."
     (message "git1-global-mode was off; turned it on"))
   (when (buffer-modified-p) (save-buffer))
   (vc-next-action nil))
+
+(defun git1-adopt (branch)
+  "Make BRANCH the current branch of this file's repo, wholesale.
+
+For trying an idea on a branch and keeping the winner.  Nothing is
+combined, so nothing can conflict: the current branch simply moves onto
+BRANCH, and what it held before is reachable only through the reflog.
+Offers to delete the branches that lost.
+
+Runs `git1 adopt', so the command line and this do the same thing."
+  (interactive
+   (list (completing-read "Adopt branch: "
+                          (or (cdr (vc-git-branches))
+                              (user-error "This repo has only one branch"))
+                          nil t)))
+  (let* ((file (or buffer-file-name (user-error "Not visiting a file")))
+         (base (file-name-nondirectory file))
+         (default-directory (file-name-directory (expand-file-name file)))
+         (current (car (vc-git-branches)))
+         (losers (remove branch (cdr (vc-git-branches))))
+         prune)
+    (unless (git1-repo-for-file file)
+      (user-error "%s is not tracked by git1" base))
+    (when (buffer-modified-p)
+      (if (y-or-n-p (format "Save %s first? " base))
+          (save-buffer)
+        (user-error "Aborted")))
+    (unless (yes-or-no-p
+             (format "Move %s onto %s?  What %s holds now is kept only in the reflog: "
+                     current branch current))
+      (user-error "Aborted"))
+    (setq prune (and losers
+                     (y-or-n-p (format "Afterwards delete the branches that lost (%s)? "
+                                       (mapconcat #'identity losers ", ")))))
+    (with-temp-buffer
+      (unless (zerop (call-process git1-program nil t nil "adopt" "-f"
+                                   (if prune "--prune" "--no-prune")
+                                   base branch))
+        (user-error "git1 adopt failed: %s"
+                    (string-trim (buffer-string)))))
+    (revert-buffer t t t)
+    (vc-refresh-state)
+    (message "%s now holds %s%s" current branch
+             (if prune (format ", %s deleted" (mapconcat #'identity losers ", ")) ""))))
 
 ;;;###autoload
 (defun git1-maybe-enable ()
