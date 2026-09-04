@@ -131,11 +131,10 @@ working on it:
 (global-set-key (kbd "C-c g u") #'git1-vc-unfocus)
 ```
 
-git1 gives the repositories no prefix — the `.git1` container is enough to
-keep them out of the way — so `notes.txt` is tracked in `.git1/notes.txt`.
-The layout is auto-detected, so repositories left over from an older
-`G1_PREFIX` (`.git1/.g1_notes.txt`) are found too. Pin one with
-`git1-prefix` if you prefer; `git1-container` renames `.git1` itself.
+A repository is named after its file — `notes.txt` is tracked in
+`.git1/notes.txt` — and is confirmed by its `HEAD`, so anything else that
+happens to sit in the container is ignored. `git1-container` renames
+`.git1` itself if you changed it in `git1.ady`.
 
 Two things to know:
 

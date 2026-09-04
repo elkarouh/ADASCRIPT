@@ -135,7 +135,10 @@ split_target() {
 }
 ```
 
-The Adascript version mirrors this exactly — mutable globals, same names:
+The Adascript version mirrors this closely — mutable globals, same names.
+The one departure is the repo name: bash prefixes it (`$PREFIX$G1_BASE`),
+while the Adascript version drops the prefix, since the `.git1` container
+already keeps the repos out of the way:
 
 ```python
 var G1_DIR:    str = ""
@@ -151,7 +154,7 @@ def split_target(target: str):
     if G1_BASE'Length == 0:
         die(f"not a file name: '{target}'")
     G1_DIR = "." if head'Length == 0 else head
-    G1_GITDIR = CONTAINER + "/" + PREFIX + G1_BASE
+    G1_GITDIR = CONTAINER + "/" + G1_BASE
 ```
 
 The type annotations on the globals and the `os.path` calls replace bash

@@ -7,7 +7,7 @@
 ;;; Commentary:
 
 ;; `EXAMPLES/git1.ady' gives each tracked file its own private git repo,
-;; stored as ".git1/<prefix><file>" and reached through GIT_DIR and
+;; stored as ".git1/<file>" and reached through GIT_DIR and
 ;; GIT_WORK_TREE.  Emacs finds repositories by filename instead --
 ;; `vc-git-root' is literally (vc-find-root file ".git") -- so a git1 file
 ;; looks unversioned to VC, and `C-x v ...' does nothing useful with it.
@@ -45,8 +45,6 @@
 ;;; Code:
 
 (require 'vc)
-(require 'seq)
-(require 'subr-x)
 
 (defgroup git1 nil
   "Emacs support for git1, per-file git repositories."
@@ -58,46 +56,20 @@
   :type 'string
   :group 'git1)
 
-(defcustom git1-prefix nil
-  "Prefix git1 puts in front of each repository name.
-
-git1 uses no prefix -- the \".git1\" container is enough to keep the
-repositories out of the way -- so the repository for FILE is normally
-\".git1/FILE\".
-
-nil means auto-detect, which is usually what you want: repositories left
-over from an older G1_PREFIX (\".git1/.g1_FILE\") are found as well.
-
-Set it to a string to pin one layout."
-  :type '(choice (const :tag "Auto-detect" nil) string)
-  :group 'git1)
-
-(defun git1--prefixes ()
-  "Return the repository prefixes to try, in order of preference."
-  (delete-dups
-   (delq nil
-         (list git1-prefix
-               (let ((env (getenv "G1_PREFIX")))
-                 (and env (not (string-empty-p env)) env))
-               ""        ; what git1 uses
-               ".g1_")))) ; repos from an older G1_PREFIX
-
-(defun git1--repo-p (dir)
-  "Return non-nil if DIR looks like a git repository."
-  (and (file-directory-p dir)
-       (file-exists-p (expand-file-name "HEAD" dir))))
-
 (defun git1--gitdir (file)
-  "Return FILE's git1 repository, or nil if FILE is not tracked by git1."
+  "Return FILE's git1 repository, or nil if FILE is not tracked by git1.
+
+A repository is named after its file, so \"notes.txt\" is tracked in
+\".git1/notes.txt\"."
   (when file
     (let* ((file (expand-file-name file))
-           (dir  (file-name-directory file))
-           (base (file-name-nondirectory file)))
-      (seq-some (lambda (prefix)
-                  (let ((repo (expand-file-name
-                               (concat git1-container "/" prefix base) dir)))
-                    (and (git1--repo-p repo) repo)))
-                (git1--prefixes)))))
+           (repo (expand-file-name
+                  (concat git1-container "/" (file-name-nondirectory file))
+                  (file-name-directory file))))
+      ;; A directory alone is not enough: confirm it is a repository.
+      (and (file-directory-p repo)
+           (file-exists-p (expand-file-name "HEAD" repo))
+           repo))))
 
 (defun git1--pointer-p (dotgit)
   "Return non-nil if DOTGIT is a .git pointer into a git1 container."
