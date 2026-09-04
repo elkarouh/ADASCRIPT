@@ -26,9 +26,14 @@ import posix, re
 
 {.passL: "-lutil".}
 
-proc forkpty(amaster: ptr cint; name: cstring;
-             termp, winp: pointer): Pid
-    {.importc: "forkpty", header: "<pty.h>".}
+when defined(macosx):
+  proc forkpty(amaster: ptr cint; name: cstring;
+               termp, winp: pointer): Pid
+      {.importc: "forkpty", header: "<util.h>".}
+else:
+  proc forkpty(amaster: ptr cint; name: cstring;
+               termp, winp: pointer): Pid
+      {.importc: "forkpty", header: "<pty.h>".}
 
 type
   ExpectError*   = object of IOError

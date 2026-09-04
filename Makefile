@@ -8,13 +8,14 @@
 # Requirements: see requirements.txt
 # -------------------------------------------------------
 
-PYTHON := python3.12
+PYTHON := $(shell command -v python3.12 2>/dev/null || command -v python3.14)
+export PYTHONPATH := $(HOME)/Downloads/hparsec:$(PYTHONPATH)
 PY2NIM := $(PYTHON) $(CURDIR)/TO_NIM/py2nim.py
 EXDIR  := $(CURDIR)/EXAMPLES
 AIDIR  := $(CURDIR)/ADA_INDENT
 
 # Prepend choosenim's bin dir so Nim 2.x is used instead of any system Nim 1.x.
-export PATH := /root/.nimble/bin:$(PATH)
+export PATH := /root/.nimble/bin:$(HOME)/.nimble/bin:$(HOME)/Downloads:$(PATH)
 
 .PHONY: test compile clean
 
