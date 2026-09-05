@@ -103,27 +103,41 @@ After the fix, `EXAMPLES/git1.ady` forwards git's status faithfully:
 
 ### Bug 6 — py2nim mangles a quoted receiver inside an f-string
 
-An interpolation whose receiver is a string literal is rewritten across the
-f-string boundary, producing Nim that does not parse.
+An f-string containing `'sep'.join(x)`, **passed as an argument to a call**,
+is rewritten across the f-string boundary and produces Nim that does not
+parse.
 
 ```python
 let others: []str = ["exp1", "exp3"]
-print f"Delete the branches ({', '.join(others)})?"
+print ask(f"Delete ({', '.join(others)})?")
 ```
 
 emits
 
 ```nim
-", ")})?""".join(fmt"""Delete the branches ({others)
+", ")})?""".join(ask(fmt"""Delete ({others)
 ```
 
-— the `'sep'.join(x)` -> `x.join("sep")` rewrite in
-`_translate_stdlib_patterns` runs over the whole emitted expression, and
-inside an f-string the quotes it matches on are the f-string's own.  Nim
-then fails with `invalid indentation` at that line.
+and Nim fails with `invalid indentation` at that line.
 
-The receiver has to be a literal for this to fire: `sep.join(others)` with
-`sep` a variable is fine, as is any `.join` outside an f-string.
+The `'sep'.join(x)` -> `x.join("sep")` rewrite in
+`_translate_stdlib_patterns` matches `^(.+)\.join\((.+)\)$` against the
+whole enclosing expression.  With the f-string inside a call there is a
+`.join(` to the right of the call's opening paren, so the greedy receiver
+swallows `ask(fmt"""Delete ({', '` and the rewrite reassembles the pieces in
+the wrong order.
+
+**It fires only in that shape.**  Verified:
+
+| Form | Result |
+|---|---|
+| `print f"... ({', '.join(x)}) ..."` | correct -- `others.join(", ")` |
+| `let s: str = f"... ({', '.join(x)}) ..."` | correct |
+| `print ask(f"... ({', '.join(x)}) ...")` | **mangled** |
+| `v = ask(f"... ({', '.join(x)}) ...")` | **mangled** |
+
+A receiver that is a variable (`sep.join(x)`) is fine in every form, since
+the rule needs the quotes.
 
 **Workaround:** hoist the call into a local.
 
@@ -135,10 +149,11 @@ print f"Delete the branches ({names})?"
 `EXAMPLES/git1.ady` does exactly this in `cmd_adopt`, with a comment
 pointing here.
 
-**Fix sketch:** the post-pass should not treat the inside of an f-string as
-an ordinary expression.  Either convert interpolations before the pattern
-pass and mark them done, or run the `.join` rewrite on the interpolation
-text only, not on the whole `fmt"..."` string.
+**Fix sketch:** require the receiver to be a complete expression before
+rewriting -- a quoted string literal with no unbalanced bracket in it, or a
+plain identifier.  `ask(fmt"""Delete ({', '` is neither, so the rule would
+decline and the interpolation would be converted on its own, as it already
+is when the f-string is not inside a call.
 
 ---
 
