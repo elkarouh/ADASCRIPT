@@ -10,7 +10,7 @@
 - [x] `quit()` clamps exit codes to 127, so wrappers cannot forward a child's 128/129 (see [quit() clamps exit codes](#quit-clamps-exit-codes-to-127--fixed))
 - [ ] py2nim: a quoted receiver inside an f-string interpolation is mangled (see [Bug 6](#bug-6--py2nim-mangles-a-quoted-receiver-inside-an-f-string))
 - [x] py2py: assigning a module-level `var` inside a function creates a local (see [Bug 7](#bug-7--py2py-does-not-emit-global-for-module-level-vars))
-- [ ] py2py: `stderr.writeLine` / `stdout.write` are emitted untranslated (see [Bug 8](#bug-8--py2py-does-not-translate-the-nim-stream-objects))
+- [x] py2py: `stderr.writeLine` / `stdout.write` are emitted untranslated (see [Bug 8](#bug-8--py2py-does-not-translate-the-nim-stream-objects))
 
 ## Shell improvements
 
@@ -553,7 +553,7 @@ function's local still binds a local of its own. Same shape, one scope in.
 
 ---
 
-### Bug 8 — py2py does not translate the Nim stream objects
+### Bug 8 — py2py does not translate the Nim stream objects — FIXED
 
 `stderr.writeLine(...)`, `stdout.write(...)` and `stdout.flushFile()` are
 emitted verbatim, so the Python output raises `NameError` on the first call.
@@ -587,13 +587,17 @@ Together with bug 7 this is the second thing keeping `EXAMPLES/git1.ady` off
 the Python backend: `die()` and `warn()` are the program's error path, and
 `confirm()` writes its prompt through `stdout.write` + `stdout.flushFile`.
 
-**Implementation sketch:**
-- Map at the call site, the way `_PY_MODULE_FUNC_TO_NIM` does in the other
-  direction:
-  - `stderr.writeLine(x)` -> `print(x, file=_sys.stderr)`
-  - `stdout.writeLine(x)` -> `print(x)`
-  - `stderr.write(x)` / `stdout.write(x)` -> `_sys.stderr.write(x)` /
-    `_sys.stdout.write(x)`
-  - `stdout.flushFile()` / `stderr.flushFile()` -> `.flush()`
-- The prelude already imports `sys`, so no new import is needed.
-- Complexity: ~25 lines in `hek_py3_expr.py`, plus a test per form.
+**Fix:** `_translate_stream_call()` in `hek_py3_expr.py`, applied at the end
+of the `primary` emitter when the atom is one of the three stream names:
+
+| Adascript | Python |
+|---|---|
+| `stderr.writeLine(x)` | `print(x, file=sys.stderr)` |
+| `stdout.writeLine(x)` | `print(x)` |
+| `stderr.write(x)` / `stdout.write(x)` | `sys.stderr.write(x)` / `sys.stdout.write(x)` |
+| `stderr.flushFile()` / `stdout.flushFile()` | `sys.stderr.flush()` / `sys.stdout.flush()` |
+| `stdin.readLine()` | `input()` |
+
+`import sys` is requested only when one of these fires, so a file that uses
+no stream is unchanged. The rewrite is anchored on the whole emitted
+expression and gated on the atom, so `obj.stdout.write(...)` is left alone.

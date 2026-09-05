@@ -482,6 +482,36 @@ def to_py(self, prec=None):
 
 
 # --- primary: atom + trailer[:] ---
+# --- Nim's stream objects --------------------------------------------------
+#
+# stderr, stdout and stdin are Nim names.  Emitted unchanged they raise
+# NameError on the first call, since Python keeps the streams on `sys`.
+_STREAM_CALLS = (
+    ("stderr", "writeLine", lambda a: f"print({a}, file=sys.stderr)"
+                                      if a.strip() else "print(file=sys.stderr)"),
+    ("stdout", "writeLine", lambda a: f"print({a})"),
+    ("stderr", "write",     lambda a: f"sys.stderr.write({a})"),
+    ("stdout", "write",     lambda a: f"sys.stdout.write({a})"),
+    ("stderr", "flushFile", lambda a: "sys.stderr.flush()"),
+    ("stdout", "flushFile", lambda a: "sys.stdout.flush()"),
+    ("stdin",  "readLine",  lambda a: "input()"),
+)
+
+
+def _translate_stream_call(stream, expr):
+    """Rewrite a call on a Nim stream object onto `sys`, or return None."""
+    import re as _re_s
+    from hek_parsec import ParserState
+    for name, meth, build in _STREAM_CALLS:
+        if name != stream:
+            continue
+        m = _re_s.match(rf'^{name}\.{meth}\((.*)\)$', expr, _re_s.DOTALL)
+        if m:
+            ParserState.nim_imports.add("import sys")
+            return build(m.group(1))
+    return None
+
+
 @method(primary)
 def to_py(self, prec=None):
     """primary: atom trailer*"""
@@ -533,6 +563,11 @@ def to_py(self, prec=None):
                     op = "+" if tr._tick_attr == "Next" else "-"
                     result = f"type({result})({result}.value {op} 1)"
             i += 1
+    atom_name = self.nodes[0].to_py()
+    if atom_name in ("stderr", "stdout", "stdin"):
+        translated = _translate_stream_call(atom_name, result)
+        if translated is not None:
+            return translated
     return result
 
 
