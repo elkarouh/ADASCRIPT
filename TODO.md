@@ -12,6 +12,8 @@
 - [x] py2py: assigning a module-level `var` inside a function creates a local (see [Bug 7](#bug-7--py2py-does-not-emit-global-for-module-level-vars))
 - [x] py2py: `stderr.writeLine` / `stdout.write` are emitted untranslated (see [Bug 8](#bug-8--py2py-does-not-translate-the-nim-stream-objects))
 - [x] py2py: `os.makedirs` / `os.mkdir` raise where Nim's `createDir` does not (see [Bug 9](#bug-9--py2py-emits-directory-creation-that-is-not-idempotent))
+- [x] py2py: `readFile` / `writeFile` are emitted verbatim and undefined (see [Bug 10](#bug-10--py2py-does-not-translate-readfile--writefile))
+- [ ] py2py: implicit return of a multi-line string writes `return` inside the literal (see [Bug 11](#bug-11--py2py-implicit-return-breaks-a-multi-line-string))
 
 ## Shell improvements
 
@@ -493,7 +495,9 @@ value — but a different cause and a different fix.
 
 ---
 
-### Bug 7 — py2py does not emit `global` for module-level `var`s — FIXED
+### Bug 7 — py2py does not emit `global` for module-level `var`s
+
+**Fixed.** Kept here for the record.
 
 A function that assigns a module-level `var` compiles to a plain assignment,
 which in Python creates a *local*.  The global keeps its old value, silently.
@@ -554,7 +558,9 @@ function's local still binds a local of its own. Same shape, one scope in.
 
 ---
 
-### Bug 8 — py2py does not translate the Nim stream objects — FIXED
+### Bug 8 — py2py does not translate the Nim stream objects
+
+**Fixed.** Kept here for the record.
 
 `stderr.writeLine(...)`, `stdout.write(...)` and `stdout.flushFile()` are
 emitted verbatim, so the Python output raises `NameError` on the first call.
@@ -639,3 +645,83 @@ the `primary` emitter when the atom is `os`, rewrites both spellings to
 `createDir`.  A call that already passes `exist_ok` is left alone, and the
 rewrite requests `import os`, since the emitted call needs the module even
 where the source said `nimport os` and meant it for the Nim side only.
+
+---
+
+### Bug 10 — py2py does not translate `readFile` / `writeFile`
+
+The two whole-file builtins are Nim names, emitted verbatim, so the generated
+Python raises `NameError` on the first call.  Five examples use them:
+`git1.ady`, `spell.ady`, `lispy.ady`, `fsel.ady` and `timetable_server.ady`.
+
+**Reproduction:**
+```python
+writeFile("/tmp/demo.txt", "alpha\nbeta\n")
+print readFile("/tmp/demo.txt").strip()
+```
+
+```
+py2nim -r ->  beta
+py2py  -c ->  NameError: name 'writeFile' is not defined
+```
+
+**Fix:** `_file_helper_call()` in `hek_py3_expr.py` rewrites them onto a pair
+of helpers injected into `py_top_decls` on first use:
+
+```python
+def _read_file(_path):
+    with open(_path, encoding="utf-8", errors="surrogateescape") as _f:
+        return _f.read()
+
+def _write_file(_path, _text):
+    with open(_path, "w", encoding="utf-8", errors="surrogateescape") as _f:
+        _f.write(_text)
+```
+
+`surrogateescape` because Nim strings hold bytes: it lets the Python side
+read and rewrite a file it cannot decode, rather than raising where Nim
+would not.  The rewrite happens as the call trailer is consumed rather than
+on the finished expression, so `readFile(p).strip()` -- which `git1.ady`
+uses -- is rewritten too.
+
+### Bug 11 — py2py implicit return breaks a multi-line string
+
+The implicit-return pass prepends `return ` to the last *line* of the
+emitted body rather than to the last statement.  When the trailing
+expression is a multi-line string literal, the keyword lands inside the
+literal and the function returns None.
+
+**Reproduction:**
+```python
+def usage() -> str:
+    """first line
+second line"""
+
+print usage()
+```
+
+**Generated Python — `return` inside the string:**
+```python
+def usage() -> str:
+    """first line
+    return second line"""
+
+print(usage())        # prints None
+```
+
+Two things go wrong at once: a function whose body is a lone string literal
+has no statement to return in Python (the literal is read as a docstring),
+and the line-based rewrite corrupts the literal on the way.
+
+This is what `EXAMPLES/git1.ady` hits in `usage()`: `git1 help` prints
+`None` on the Python backend while the Nim build prints the help text.  It
+is the same family as bug 2 -- an implicit return the pass cannot see --
+but the failure is textual rather than structural.
+
+**Implementation sketch:**
+- Do the rewrite on the statement node, not on the rendered lines: the
+  `func_def` emitter already locates the last statement (`_block_last_stmt`)
+  before deciding to add a return, so render *that* node with a `return `
+  prefix instead of patching the finished body text.
+- A body that is only a string literal needs the return regardless, since
+  Python would otherwise treat it as a docstring and return None.

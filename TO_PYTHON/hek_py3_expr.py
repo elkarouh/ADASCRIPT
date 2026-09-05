@@ -498,6 +498,49 @@ _STREAM_CALLS = (
 )
 
 
+# --- Nim's whole-file builtins ---------------------------------------------
+#
+# readFile/writeFile are Nim names, so Python needs its own pair.  Nim strings
+# hold bytes; surrogateescape is what lets the Python side read and rewrite a
+# file it cannot decode, rather than raising where Nim would not.
+_FILE_HELPERS = '''\
+def _read_file(_path):
+    """Nim's readFile: the whole file, as text."""
+    with open(_path, encoding="utf-8", errors="surrogateescape") as _f:
+        return _f.read()
+
+
+def _write_file(_path, _text):
+    """Nim's writeFile: replace the file's contents."""
+    with open(_path, "w", encoding="utf-8", errors="surrogateescape") as _f:
+        _f.write(_text)\
+'''
+
+
+def _ensure_file_helpers():
+    """Inject the file helpers the first time readFile/writeFile is seen."""
+    from hek_parsec import ParserState
+    decls = getattr(ParserState, 'py_top_decls', [])
+    if not any("_read_file" in d for d in decls):
+        decls.append(_FILE_HELPERS)
+        ParserState.py_top_decls = decls
+
+
+def _file_helper_call(name, call_trailer):
+    """`readFile(args)` -> `_read_file(args)`, or None if not that shape.
+
+    CALL_TRAILER is the rendered `(...)` that follows the name.  The rewrite
+    happens as the trailer is consumed, not on the finished expression, so
+    that anything chained onto it -- `readFile(p).strip()` -- still works.
+    """
+    if not (call_trailer.startswith("(") and call_trailer.endswith(")")):
+        return None
+    if not call_trailer[1:-1].strip():
+        return None
+    _ensure_file_helpers()
+    return f"_{'read' if name == 'readFile' else 'write'}_file{call_trailer}"
+
+
 def _translate_dir_call(expr):
     """Make directory creation idempotent, or return None.
 
@@ -559,6 +602,12 @@ def to_py(self, prec=None):
             tr_str = tr.to_py()
             # .get() on an Optional-typed variable is a no-op in Python (value is already unwrapped)
             # Parsed as two trailers: attr_trailer(".get") + call_trailer("()")
+            if i == 0 and result in ("readFile", "writeFile"):
+                helper = _file_helper_call(result, tr_str)
+                if helper is not None:
+                    result = helper
+                    i += 1
+                    continue
             if tr_str == ".maxIndex":
                 result = f"{result}.index(max({result}))"
                 i += 1
