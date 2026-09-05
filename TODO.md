@@ -4,7 +4,7 @@
 - [x] add expect/send command in shell
 - [x] py2py: regex flag constants reference `re` but the prelude imports it as `_re_mod` (see [Bug 1](#bug-1--py2py-emits-reignorecase-while-importing-re-as-_re_mod))
 - [ ] py2py: implicit return does not reach into `if`/`else` branches (see [Bug 2](#bug-2--py2py-implicit-return-stops-at-ifelse-branches))
-- [ ] py2py: `Natural` / `Positive` are emitted into annotations but never defined (see [Bug 3](#bug-3--py2py-emits-natural--positive-without-defining-them))
+- [x] py2py: `Natural` / `Positive` are emitted into annotations but never defined (see [Bug 3](#bug-3--py2py-emits-natural--positive-without-defining-them))
 - [x] py2py: no `to_py()` for `pyimport` / `from … nimport …`, so those files cannot transpile at all (see [Bug 4](#bug-4--py2py-has-no-to_py-for-pyimport--from--nimport))
 - [ ] py2py: declarations without an initialiser bind nothing (see [Bug 5](#bug-5--py2py-drops-declarations-that-have-no-initialiser))
 - [x] `quit()` clamps exit codes to 127, so wrappers cannot forward a child's 128/129 (see [quit() clamps exit codes](#quit-clamps-exit-codes-to-127--fixed))
@@ -385,16 +385,21 @@ p: Positive = 1
 This is why `EXAMPLES/awk_example.ady` (`var NR : Natural = 0`) cannot run on
 the Python backend, though it compiles and runs on Nim.
 
-**Implementation sketch:**
-- Emit `Natural = int` / `Positive = int` into the generated prelude the first
-  time either name is used, in the same manner as `_PYMATCH_HELPER`
-  (`TO_PYTHON/hek_py3_expr.py:1507`) is injected via `ParserState.py_top_decls`.
-- Emitting plain `int` in the annotation instead would also work, but loses the
-  documentation value of the subtype name in the generated source.
-- Neither spelling gives Python the range checking Nim gets; that is a separate
-  question, and the aliases at least make the output run.
-- Complexity: ~20 lines, plus a regression test that runs `awk_example.ady`
-  through `py2py -c`.
+**Fixed.** The `type_name` emitter calls `_ensure_subtype_aliases()` when an
+annotation names either subtype, injecting into `ParserState.py_top_decls`:
+
+```python
+Natural = int
+Positive = int
+```
+
+The annotation keeps the subtype name, for what it tells the reader. A file
+that names neither gets nothing. Python still has no range checking --
+`Natural` accepts -1 there while Nim rejects it -- which is a separate
+question; the alias is what makes the output run at all.
+
+`EXAMPLES/awk_example.ady` (`var NR : Natural = 0`) now runs under
+`py2py -c`, which was the test named here.
 
 ---
 

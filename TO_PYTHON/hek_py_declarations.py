@@ -160,10 +160,33 @@ def to_py(self, prec=None):
     return name
 
 
+# Adascript's predefined subtypes have no Python spelling.  Nim range-checks
+# them; Python cannot, so they are defined as int and kept in the annotation
+# for what the name tells the reader.
+_SUBTYPE_ALIASES = """\
+# Adascript's predefined subtypes.  Nim range-checks these (Natural is 0..,
+# Positive is 1..); Python does not, so here they are plain ints.
+Natural = int
+Positive = int\
+"""
+
+
+def _ensure_subtype_aliases():
+    """Define Natural/Positive the first time an annotation names one."""
+    from hek_parsec import ParserState
+    decls = getattr(ParserState, 'py_top_decls', [])
+    if not any("Natural = int" in d for d in decls):
+        decls.append(_SUBTYPE_ALIASES)
+        ParserState.py_top_decls = decls
+
+
 @method(type_name)
 def to_py(self, prec=None):
     """type_name: IDENTIFIER (type alias or user-defined type) -> Nim: mapped via _PY_TO_NIM if known"""
-    return self.nodes[0].to_py()  # delegate to primary expression node
+    name = self.nodes[0].to_py()  # delegate to primary expression node
+    if name in ("Natural", "Positive"):
+        _ensure_subtype_aliases()
+    return name
 
 
 @method(seq_type)
