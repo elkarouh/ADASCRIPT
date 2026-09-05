@@ -1201,7 +1201,15 @@ def to_py(self, indent=0):
             ret_ann = node.to_py()
 
     hc = _block_inline_header_comment(block_node) if block_node else ""
-    body = block_node.to_py(indent + 1) if block_node else ""
+    # A function body is an ordinary scope even inside a class, so a local
+    # declared without a value does get its zero here.
+    import hek_py3_stmt as _stmt
+    _outer_class_depth = _stmt.CLASS_BODY_DEPTH
+    _stmt.CLASS_BODY_DEPTH = 0
+    try:
+        body = block_node.to_py(indent + 1) if block_node else ""
+    finally:
+        _stmt.CLASS_BODY_DEPTH = _outer_class_depth
     # Implicit return: if last statement is a bare expression, add return
     # Skip for -> None functions (they don't return a value)
     last_stmt = _block_last_stmt(block_node)
@@ -1290,7 +1298,15 @@ def to_py(self, indent=0):
             ret_ann = node.to_py()
 
     hc = _block_inline_header_comment(block_node) if block_node else ""
-    body = block_node.to_py(indent + 1) if block_node else ""
+    # A function body is an ordinary scope even inside a class, so a local
+    # declared without a value does get its zero here.
+    import hek_py3_stmt as _stmt
+    _outer_class_depth = _stmt.CLASS_BODY_DEPTH
+    _stmt.CLASS_BODY_DEPTH = 0
+    try:
+        body = block_node.to_py(indent + 1) if block_node else ""
+    finally:
+        _stmt.CLASS_BODY_DEPTH = _outer_class_depth
     # Implicit return: if last statement is a bare expression, add return
     # Skip for -> None functions (they don't return a value)
     last_stmt = _block_last_stmt(block_node)
@@ -1528,7 +1544,16 @@ def to_py(self, indent=0):
               f"  Then:  class {name}({_parent}[MyTuple]):", file=sys.stderr)
 
     hc = _block_inline_header_comment(block_node) if block_node else ""
-    body = block_node.to_py(indent + 1) if block_node else ""
+    # A field declared without a value must not be given a mutable one here:
+    # at class level that object is shared by every instance.  See
+    # _zero_value() in hek_py3_stmt.py.
+    import hek_py3_stmt as _stmt
+    _outer_class_depth = _stmt.CLASS_BODY_DEPTH
+    _stmt.CLASS_BODY_DEPTH = _outer_class_depth + 1
+    try:
+        body = block_node.to_py(indent + 1) if block_node else ""
+    finally:
+        _stmt.CLASS_BODY_DEPTH = _outer_class_depth
     return f"{decos}{_ind(indent)}class {name}{type_params}{bases}:{hc}\n{body}"
 
 

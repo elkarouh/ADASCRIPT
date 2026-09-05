@@ -6,7 +6,7 @@
 - [ ] py2py: implicit return does not reach into `if`/`else` branches (see [Bug 2](#bug-2--py2py-implicit-return-stops-at-ifelse-branches))
 - [x] py2py: `Natural` / `Positive` are emitted into annotations but never defined (see [Bug 3](#bug-3--py2py-emits-natural--positive-without-defining-them))
 - [x] py2py: no `to_py()` for `pyimport` / `from … nimport …`, so those files cannot transpile at all (see [Bug 4](#bug-4--py2py-has-no-to_py-for-pyimport--from--nimport))
-- [ ] py2py: declarations without an initialiser bind nothing (see [Bug 5](#bug-5--py2py-drops-declarations-that-have-no-initialiser))
+- [x] py2py: declarations without an initialiser bind nothing (see [Bug 5](#bug-5--py2py-drops-declarations-that-have-no-initialiser))
 - [x] `quit()` clamps exit codes to 127, so wrappers cannot forward a child's 128/129 (see [quit() clamps exit codes](#quit-clamps-exit-codes-to-127--fixed))
 - [x] py2nim: a quoted receiver inside an f-string interpolation is mangled (see [Bug 6](#bug-6--py2nim-mangles-a-quoted-receiver-inside-an-f-string))
 - [x] py2py: assigning a module-level `var` inside a function creates a local (see [Bug 7](#bug-7--py2py-does-not-emit-global-for-module-level-vars))
@@ -501,20 +501,31 @@ proc f(): int =
     return len(seen)
 ```
 
-This is what `dijkstra.ady` (`visited : {}Node_T`) hits once bug 4 is out of
-the way. It is the same family as bug 3 — a Python annotation that binds no
-value — but a different cause and a different fix.
+It is the same family as bug 3 — a Python annotation that binds no value —
+but a different cause and a different fix.
 
-**Implementation sketch:**
-- When a `var`/`let`/`const` declaration has no initialiser, emit an
-  explicit empty value for the annotated type rather than a bare annotation:
-  `set[str]` → `set()`, `list[T]` → `[]`, `dict[K,V]` → `{}`, `str` → `""`,
-  `int` → `0`, `float` → `0.0`, `bool` → `False`.
-- The type is already known — it is what the annotation is built from — so
-  this is a lookup keyed on the same information the annotation printer uses.
-- For a class or `?T`, `None` is the honest default.
-- Complexity: ~40 lines, next to the annotated-assignment handling in
-  `TO_PYTHON/hek_py3_stmt.py`; `dijkstra.ady` under `py2py -c` is the test.
+**Fixed** for the declaration form. `_zero_value()` gives a
+`var`/`let`/`const` without an initialiser the empty value of its type:
+`int` → `0`, `float` → `0.0`, `bool` → `False`, `str` → `""`, `list[T]` →
+`[]`, `dict[K,V]` → `{}`, `set[T]` → `set()`, and `None` for a class or an
+optional, where there is no honest zero.
+
+Two deliberate exceptions:
+
+- **The bare `x : T` form is left alone.** It is also ordinary Python, which
+  py2py round-trips unchanged — `test_py2py.py` has a case ("annotated no
+  value") that pins `x: int` → `x: int`. Write `var x: T` to mean an
+  Adascript declaration.
+- **A class-level field gets no *mutable* zero.** At class scope that object
+  would be shared by every instance, which is worse than the
+  `AttributeError` it replaces; scalars, which cannot be mutated in place,
+  still get theirs. `CLASS_BODY_DEPTH` tracks this, set by `class_def` and
+  cleared by `func_def`, since a method body is an ordinary scope.
+
+`dijkstra.ady` is **not** the test for this after all: it uses the bare form
+(`visited : {}Node_T`), and even spelled as a declaration it cannot run
+under `py2py` because `PriorityQueue` from `nimport stdlib` has no Python
+implementation — `queue.push(...)` finds a plain list.
 
 ---
 

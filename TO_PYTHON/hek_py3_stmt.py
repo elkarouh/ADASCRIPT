@@ -105,6 +105,7 @@ def to_py(self):
     annotation = self.nodes[2].to_py()
     result = f"{name}: {annotation}"
     # Check for optional '= value' part
+    has_value = False
     for node in self.nodes[3:]:
         if not hasattr(node, "nodes") or not node.nodes:
             continue
@@ -112,10 +113,46 @@ def to_py(self):
             if hasattr(seq, "nodes") and len(seq.nodes) >= 2:
                 value = seq.nodes[1].to_py()
                 result += f" = {value}"
+                has_value = True
+    # Deliberately not zero-initialised here, unlike the `var x: T` form:
+    # `x: int` with no value is also ordinary Python, which py2py round-trips
+    # unchanged.  Write `var x: T` to mean an Adascript declaration.
     return result
 
 
 
+
+
+# Non-zero while a class body is being rendered.  A class-level field must not
+# be given a mutable default: that object would be shared by every instance,
+# which is worse than the AttributeError it replaces.  Set by the `class_def`
+# emitter and cleared by `func_def`, since a method body is an ordinary scope.
+CLASS_BODY_DEPTH = 0
+
+_MUTABLE_ZEROS = ("[]", "{}", "set()", "frozenset()", "Counter()")
+
+
+def _zero_value(annotation):
+    """The empty value for ANNOTATION, mirroring Nim's zero-initialisation.
+
+    A bare `x: T` binds nothing in Python, so a declaration written without an
+    initialiser -- valid Adascript, since Nim zero-initialises it -- would
+    raise on first use.  There is no honest zero for a class or an optional,
+    so those become None.
+    """
+    ann = (annotation or "").strip()
+    scalars = {"int": "0", "float": "0.0", "bool": "False", "str": '""',
+               "bytes": 'b""', "complex": "0j"}
+    if ann in scalars:
+        return scalars[ann]
+    for prefix, empty in (("list[", "[]"), ("dict[", "{}"), ("set[", "set()"),
+                          ("frozenset[", "frozenset()"), ("tuple[", "()"),
+                          ("Counter[", "Counter()")):
+        if ann.startswith(prefix):
+            return empty
+    if ann.startswith("Sequence["):
+        return "[]"
+    return "None"
 
 
 @method(decl_ann_assign_stmt)
@@ -128,6 +165,7 @@ def to_py(self):
     keyword = self.nodes[0].nodes[0] if hasattr(self.nodes[0], "nodes") else ""
     ParserState.symbol_table.add(name, annotation, keyword or "var")
     result = f"{name}: {annotation}"
+    has_value = False
     for node in self.nodes[4:]:
         if not hasattr(node, "nodes") or not node.nodes:
             continue
@@ -135,6 +173,11 @@ def to_py(self):
             if hasattr(seq, "nodes") and len(seq.nodes) >= 2:
                 value = seq.nodes[1].to_py()
                 result += f" = {value}"
+                has_value = True
+    if not has_value:
+        zero = _zero_value(annotation)
+        if not (CLASS_BODY_DEPTH and zero in _MUTABLE_ZEROS):
+            result += f" = {zero}"
     return result
 
 # --- own declaration ---
