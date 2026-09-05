@@ -9,7 +9,7 @@
 - [ ] py2py: declarations without an initialiser bind nothing (see [Bug 5](#bug-5--py2py-drops-declarations-that-have-no-initialiser))
 - [x] `quit()` clamps exit codes to 127, so wrappers cannot forward a child's 128/129 (see [quit() clamps exit codes](#quit-clamps-exit-codes-to-127--fixed))
 - [ ] py2nim: a quoted receiver inside an f-string interpolation is mangled (see [Bug 6](#bug-6--py2nim-mangles-a-quoted-receiver-inside-an-f-string))
-- [ ] py2py: assigning a module-level `var` inside a function creates a local (see [Bug 7](#bug-7--py2py-does-not-emit-global-for-module-level-vars))
+- [x] py2py: assigning a module-level `var` inside a function creates a local (see [Bug 7](#bug-7--py2py-does-not-emit-global-for-module-level-vars))
 - [ ] py2py: `stderr.writeLine` / `stdout.write` are emitted untranslated (see [Bug 8](#bug-8--py2py-does-not-translate-the-nim-stream-objects))
 
 ## Shell improvements
@@ -492,7 +492,7 @@ value — but a different cause and a different fix.
 
 ---
 
-### Bug 7 — py2py does not emit `global` for module-level `var`s
+### Bug 7 — py2py does not emit `global` for module-level `var`s — FIXED
 
 A function that assigns a module-level `var` compiles to a plain assignment,
 which in Python creates a *local*.  The global keeps its old value, silently.
@@ -535,16 +535,21 @@ so on Python they stay `""` and every subcommand fails on an empty path
 (`git1: no such directory: `).  `--version`, which touches none of them, is
 the only thing that works.
 
-**Implementation sketch:**
-- Track which names are bound at module level (they already reach the symbol
-  table as globals).
-- When emitting a function body, collect the module-level names it assigns to
-  -- assignment, augmented assignment, `for` target, `with ... as` -- and emit
-  `global a, b, c` as the first statement of the body.
-- A name only read, never assigned, needs nothing.
-- Nested functions need `nonlocal` for the same reason; the same pass covers
-  both if it walks scopes rather than just module/function.
-- Complexity: ~40 lines in `hek_py3_stmt.py`, at the funcdef emitter.
+**Fix:** `register_module_globals()` runs over the top-level statements in
+`translate()` before anything is emitted -- a function may assign a name
+declared below it -- and records what the module binds. The `func_def`
+emitter then walks its own body for assignments (plain, augmented, and `for`
+targets), subtracts what the body declares local (`var`/`let`/`const`, an
+annotated assignment, `own`) and what the parameters bind, and emits
+`global a, b, c` for what is left. It goes after a docstring, not before,
+so the docstring stays one.
+
+A nested def is not descended into: it is emitted in turn and gets its own
+declaration, which is what Python wants -- `global` in the outer function
+does not reach it.
+
+`nonlocal` is not handled: a nested function assigning an enclosing
+function's local still binds a local of its own. Same shape, one scope in.
 
 ---
 

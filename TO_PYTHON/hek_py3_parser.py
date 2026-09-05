@@ -1048,6 +1048,116 @@ def to_py(self):
     return f" -> {self.nodes[1].to_py()}"
 
 
+# --- Python's `global` statement -------------------------------------------
+#
+# Assigning a module-level name inside a function binds a *local* in Python,
+# silently leaving the global untouched.  Nim has no such rule, so Adascript
+# that is correct on the Nim backend needs a `global` declaration added here.
+
+_MODULE_GLOBALS = []
+
+
+def _simple_name(text):
+    """TEXT if it is a bare identifier, else None."""
+    import re as _re_g
+    text = (text or "").strip()
+    return text if _re_g.match(r'^[A-Za-z_]\w*$', text) else None
+
+
+def _bound_names(node):
+    """The names one statement binds, as written (no rendering of values)."""
+    tname = type(node).__name__
+    nodes = getattr(node, "nodes", None) or []
+    raw = []
+    if tname == "assign_stmt":
+        # nodes: [target, Several_Times[('=', x), ...]] -- the last x is the
+        # value, every earlier one is another target of a chained assignment.
+        seqs = []
+        for sub in nodes[1:]:
+            seqs.extend(getattr(sub, "nodes", None) or [])
+        raw.append(nodes[0].to_py())
+        for seq in seqs[:-1]:
+            if getattr(seq, "nodes", None) and len(seq.nodes) >= 2:
+                raw.append(seq.nodes[1].to_py())
+    elif tname == "aug_assign_stmt":
+        raw.append(nodes[0].to_py())
+    elif tname == "ann_assign_stmt":
+        raw.append(nodes[0].to_py())
+    elif tname in ("decl_ann_assign_stmt", "own_stmt"):
+        raw.append(nodes[1].to_py() if len(nodes) > 1 else "")
+    elif tname == "for_stmt":
+        raw.extend(c.to_py() for c in nodes
+                   if type(c).__name__ == "for_target")
+    return [n for n in (_simple_name(t) for t in raw) if n]
+
+
+def _walk_scope(node, assigned, declared, depth=0):
+    """Collect what a function body assigns and what it declares local.
+
+    Does not descend into a nested def or class: each gets its own `global`
+    when it is emitted.
+    """
+    tname = type(node).__name__
+    if depth and tname in ("func_def", "async_func_def", "class_def"):
+        return
+    if tname in ("decl_ann_assign_stmt", "own_stmt", "ann_assign_stmt",
+                 "decl_tuple_unpack"):
+        declared.update(_bound_names(node))
+        return
+    if tname in ("assign_stmt", "aug_assign_stmt"):
+        assigned.update(_bound_names(node))
+        return
+    if tname == "for_stmt":
+        assigned.update(_bound_names(node))
+    for child in (getattr(node, "nodes", None) or []):
+        _walk_scope(child, assigned, declared, depth + 1)
+
+
+def register_module_globals(stmts):
+    """Record the names bound at module level, for `global` in functions."""
+    del _MODULE_GLOBALS[:]
+    for stmt in stmts:
+        queue = [stmt]
+        while queue:
+            node = queue.pop(0)
+            tname = type(node).__name__
+            if tname in ("func_def", "async_func_def", "class_def"):
+                continue
+            names = _bound_names(node)
+            if names:
+                for name in names:
+                    if name not in _MODULE_GLOBALS:
+                        _MODULE_GLOBALS.append(name)
+                continue
+            queue.extend(getattr(node, "nodes", None) or [])
+
+
+def _needed_globals(block_node, params):
+    """Module-level names this function assigns and must declare `global`."""
+    if not _MODULE_GLOBALS or block_node is None:
+        return []
+    import re as _re_g
+    assigned, declared = set(), set()
+    _walk_scope(block_node, assigned, declared)
+    # A parameter of the same name is a local by definition, and `global` on
+    # one is a SyntaxError.
+    for chunk in (params or "").split(","):
+        name = _simple_name(_re_g.sub(r'[:=].*$', '', chunk).lstrip("*"))
+        if name:
+            declared.add(name)
+    return [n for n in _MODULE_GLOBALS if n in assigned and n not in declared]
+
+
+def _insert_into_body(body, line):
+    """Put LINE at the top of BODY, after a docstring if there is one."""
+    import re as _re_g
+    doc = _re_g.match(r'((?:\s*"""(?:[^"]|"(?!""))*"""[ \t]*\n))', body,
+                      _re_g.DOTALL)
+    if doc:
+        return body[:doc.end()] + line + body[doc.end():]
+    return line + body
+
+
 # --- Function definition ---
 @method(func_def)
 def to_py(self, indent=0):
@@ -1130,6 +1240,12 @@ def to_py(self, indent=0):
         # Append implicit return unless the body already ends with a return.
         if not _re_res.search(r'^\s*return\b', body.rstrip().splitlines()[-1]):
             body = body.rstrip("\n") + f"\n{_ind(indent + 1)}return result\n"
+    # Declare the module-level names this function assigns, or Python would
+    # bind locals and leave the globals untouched.
+    _globals = _needed_globals(block_node, params)
+    if _globals:
+        body = _insert_into_body(
+            body, f"{_ind(indent + 1)}global {', '.join(_globals)}\n")
     return f"{decos}{_ind(indent)}def {name}({params}){ret_ann}:{hc}\n{body}"
 
 

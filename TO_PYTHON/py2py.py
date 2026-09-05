@@ -226,6 +226,10 @@ def translate(code):
 
     stmts, leading, trailing = parse_module(code)
 
+    # Which names live at module level has to be known before the first
+    # function is emitted, since a function may assign one declared below it.
+    register_module_globals(stmts)
+
     output = []
 
     def emit_richnl(richnl):
