@@ -11,6 +11,7 @@
 - [ ] py2nim: a quoted receiver inside an f-string interpolation is mangled (see [Bug 6](#bug-6--py2nim-mangles-a-quoted-receiver-inside-an-f-string))
 - [x] py2py: assigning a module-level `var` inside a function creates a local (see [Bug 7](#bug-7--py2py-does-not-emit-global-for-module-level-vars))
 - [x] py2py: `stderr.writeLine` / `stdout.write` are emitted untranslated (see [Bug 8](#bug-8--py2py-does-not-translate-the-nim-stream-objects))
+- [x] py2py: `os.makedirs` / `os.mkdir` raise where Nim's `createDir` does not (see [Bug 9](#bug-9--py2py-emits-directory-creation-that-is-not-idempotent))
 
 ## Shell improvements
 
@@ -601,3 +602,40 @@ of the `primary` emitter when the atom is one of the three stream names:
 `import sys` is requested only when one of these fires, so a file that uses
 no stream is unchanged. The rewrite is anchored on the whole emitted
 expression and gated on the atom, so `obj.stdout.write(...)` is left alone.
+
+---
+
+### Bug 9 — py2py emits directory creation that is not idempotent
+
+Adascript's `os.makedirs(d)` and `os.mkdir(d)` both map to Nim's `createDir`,
+which creates the whole path and, in Nim's own words, "does **not** fail if
+the directory already exists because for most usages this does not indicate
+an error".  Python's raise `FileExistsError`, and `os.mkdir` does not create
+intermediate directories either.  The same source therefore behaves
+differently on the two backends.
+
+**Reproduction:**
+```python
+nimport os
+
+os.makedirs("/tmp/demo/deep/nested")
+os.makedirs("/tmp/demo/deep/nested")
+os.mkdir("/tmp/demo/second")
+os.mkdir("/tmp/demo/second")
+print "created twice, no error"
+```
+
+```
+py2nim -r ->  created twice, no error
+py2py  -c ->  FileExistsError: [Errno 17] File exists: '/tmp/demo/deep/nested'
+```
+
+This is what `EXAMPLES/git1.ady` hits in `write_exclude()` once bugs 7 and 8
+are out of the way.
+
+**Fix:** `_translate_dir_call()` in `hek_py3_expr.py`, applied at the end of
+the `primary` emitter when the atom is `os`, rewrites both spellings to
+`os.makedirs(..., exist_ok=True)` -- recursive and idempotent, matching
+`createDir`.  A call that already passes `exist_ok` is left alone, and the
+rewrite requests `import os`, since the emitted call needs the module even
+where the source said `nimport os` and meant it for the Nim side only.

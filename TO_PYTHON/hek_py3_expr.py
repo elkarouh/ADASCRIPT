@@ -498,6 +498,29 @@ _STREAM_CALLS = (
 )
 
 
+def _translate_dir_call(expr):
+    """Make directory creation idempotent, or return None.
+
+    Both `os.makedirs` and `os.mkdir` map to Nim's `createDir`, which creates
+    the whole path and, in Nim's words, "does not fail if the directory
+    already exists".  Python's raise `FileExistsError` in that case, so the
+    same source behaves differently on the two backends unless the call is
+    emitted as `os.makedirs(..., exist_ok=True)`.
+    """
+    import re as _re_d
+    from hek_parsec import ParserState
+    m = _re_d.match(r'^os\.(?:makedirs|mkdir)\((.*)\)$', expr, _re_d.DOTALL)
+    if not m or "exist_ok" in m.group(1):
+        return None
+    args = m.group(1).strip()
+    if not args:
+        return None
+    # The call we emit needs the module, even where the source said
+    # `nimport os` and meant it only for the Nim side.
+    ParserState.nim_imports.add("import os")
+    return f"os.makedirs({args}, exist_ok=True)"
+
+
 def _translate_stream_call(stream, expr):
     """Rewrite a call on a Nim stream object onto `sys`, or return None."""
     import re as _re_s
@@ -566,6 +589,10 @@ def to_py(self, prec=None):
     atom_name = self.nodes[0].to_py()
     if atom_name in ("stderr", "stdout", "stdin"):
         translated = _translate_stream_call(atom_name, result)
+        if translated is not None:
+            return translated
+    if atom_name == "os":
+        translated = _translate_dir_call(result)
         if translated is not None:
             return translated
     return result
