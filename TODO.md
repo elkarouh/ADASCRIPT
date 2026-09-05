@@ -7,8 +7,10 @@
 - [ ] py2py: `Natural` / `Positive` are emitted into annotations but never defined (see [Bug 3](#bug-3--py2py-emits-natural--positive-without-defining-them))
 - [x] py2py: no `to_py()` for `pyimport` / `from … nimport …`, so those files cannot transpile at all (see [Bug 4](#bug-4--py2py-has-no-to_py-for-pyimport--from--nimport))
 - [ ] py2py: declarations without an initialiser bind nothing (see [Bug 5](#bug-5--py2py-drops-declarations-that-have-no-initialiser))
-- [x] `quit()` clamps exit codes to 127, so wrappers cannot forward a child's 128/129 (see [quit() clamps exit codes](#quit-clamps-exit-codes-to-127))
+- [x] `quit()` clamps exit codes to 127, so wrappers cannot forward a child's 128/129 (see [quit() clamps exit codes](#quit-clamps-exit-codes-to-127--fixed))
 - [ ] py2nim: a quoted receiver inside an f-string interpolation is mangled (see [Bug 6](#bug-6--py2nim-mangles-a-quoted-receiver-inside-an-f-string))
+- [ ] py2py: assigning a module-level `var` inside a function creates a local (see [Bug 7](#bug-7--py2py-does-not-emit-global-for-module-level-vars))
+- [ ] py2py: `stderr.writeLine` / `stdout.write` are emitted untranslated (see [Bug 8](#bug-8--py2py-does-not-translate-the-nim-stream-objects))
 
 ## Shell improvements
 
@@ -245,7 +247,9 @@ any declaration written without an initialiser.
 
 Bugs 1 and 4 are fixed. Bugs 3 and 5 are what still stop most of `EXAMPLES/`
 from running under `py2py`, and they share a shape: a Python annotation that
-binds no value.
+binds no value. Bugs 7 and 8 are a different pair, found in `git1.ady`: a
+scoping rule Python has and Nim does not, and two Nim stream names the
+Python backend never maps.
 
 ### Bug 1 — py2py emits `re.IGNORECASE` while importing `re` as `_re_mod`
 
@@ -485,3 +489,106 @@ value — but a different cause and a different fix.
 - For a class or `?T`, `None` is the honest default.
 - Complexity: ~40 lines, next to the annotated-assignment handling in
   `TO_PYTHON/hek_py3_stmt.py`; `dijkstra.ady` under `py2py -c` is the test.
+
+---
+
+### Bug 7 — py2py does not emit `global` for module-level `var`s
+
+A function that assigns a module-level `var` compiles to a plain assignment,
+which in Python creates a *local*.  The global keeps its old value, silently.
+Nim has no such rule, so the same source is correct there.
+
+**Reproduction:**
+```python
+var counter: int = 0
+
+def bump():
+    counter = 1
+
+bump()
+print counter
+```
+
+**Generated Python — `bump` writes a local, `counter` stays 0:**
+```python
+counter: int = 0
+
+def bump():
+    counter = 1      # local; the module-level counter is untouched
+
+bump()
+print(counter)       # prints 0
+```
+
+```
+py2py -c  ->  0
+py2nim -r ->  1      <- correct
+```
+
+No error is raised, which makes this the worst of the py2py bugs to debug:
+the program runs and quietly does the wrong thing.
+
+This is what stops `EXAMPLES/git1.ady` running on the Python backend.  It
+keeps its state in three module-level `var`s set by `split_target()` --
+`G1_DIR`, `G1_BASE`, `G1_GITDIR`, a shape inherited from the bash original --
+so on Python they stay `""` and every subcommand fails on an empty path
+(`git1: no such directory: `).  `--version`, which touches none of them, is
+the only thing that works.
+
+**Implementation sketch:**
+- Track which names are bound at module level (they already reach the symbol
+  table as globals).
+- When emitting a function body, collect the module-level names it assigns to
+  -- assignment, augmented assignment, `for` target, `with ... as` -- and emit
+  `global a, b, c` as the first statement of the body.
+- A name only read, never assigned, needs nothing.
+- Nested functions need `nonlocal` for the same reason; the same pass covers
+  both if it walks scopes rather than just module/function.
+- Complexity: ~40 lines in `hek_py3_stmt.py`, at the funcdef emitter.
+
+---
+
+### Bug 8 — py2py does not translate the Nim stream objects
+
+`stderr.writeLine(...)`, `stdout.write(...)` and `stdout.flushFile()` are
+emitted verbatim, so the Python output raises `NameError` on the first call.
+They are Nim names; the Python backend has to map them onto `sys.stderr` and
+`sys.stdout`.
+
+**Reproduction:**
+```python
+def warn(msg: str):
+    stderr.writeLine(msg)
+
+warn("careful")
+stdout.write("prompt: ")
+stdout.flushFile()
+print "done"
+```
+
+**Generated Python — unchanged, and undefined:**
+```python
+def warn(msg: str):
+    stderr.writeLine(msg)    # NameError: name 'stderr' is not defined
+```
+
+**Generated Nim — works:**
+```
+careful
+prompt: done
+```
+
+Together with bug 7 this is the second thing keeping `EXAMPLES/git1.ady` off
+the Python backend: `die()` and `warn()` are the program's error path, and
+`confirm()` writes its prompt through `stdout.write` + `stdout.flushFile`.
+
+**Implementation sketch:**
+- Map at the call site, the way `_PY_MODULE_FUNC_TO_NIM` does in the other
+  direction:
+  - `stderr.writeLine(x)` -> `print(x, file=_sys.stderr)`
+  - `stdout.writeLine(x)` -> `print(x)`
+  - `stderr.write(x)` / `stdout.write(x)` -> `_sys.stderr.write(x)` /
+    `_sys.stdout.write(x)`
+  - `stdout.flushFile()` / `stderr.flushFile()` -> `.flush()`
+- The prelude already imports `sys`, so no new import is needed.
+- Complexity: ~25 lines in `hek_py3_expr.py`, plus a test per form.
