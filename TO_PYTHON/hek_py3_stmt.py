@@ -129,6 +129,13 @@ def to_py(self):
 # emitter and cleared by `func_def`, since a method body is an ordinary scope.
 CLASS_BODY_DEPTH = 0
 
+# Statement nodes to render with a leading `return`, held by id().  The
+# implicit-return pass marks them before the body is rendered, so the keyword
+# goes in front of the whole statement -- a multi-line string included --
+# instead of being patched into the finished text afterwards.  Cleared per
+# module by `_py_reset()`.
+RETURN_NODES = set()
+
 _MUTABLE_ZEROS = ("[]", "{}", "set()", "frozenset()", "Counter()")
 
 
@@ -903,6 +910,8 @@ def to_py(self):
             newline_node = node
 
     result = "; ".join(parts)
+    if id(self) in RETURN_NODES:
+        result = "return " + result
     # Append inline comment if present in the NEWLINE RichNL
     if newline_node is not None and hasattr(newline_node, 'comments') and newline_node.comments:
         for kind, text, ind in newline_node.comments:

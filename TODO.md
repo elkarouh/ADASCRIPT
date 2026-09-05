@@ -3,7 +3,7 @@
 - [x] Restore Python 3.10 match/case syntax alongside Adascript case/when (Adascript should be a superset of Python)
 - [x] add expect/send command in shell
 - [x] py2py: regex flag constants reference `re` but the prelude imports it as `_re_mod` (see [Bug 1](#bug-1--py2py-emits-reignorecase-while-importing-re-as-_re_mod))
-- [ ] py2py: implicit return does not reach into `if`/`else` branches (see [Bug 2](#bug-2--py2py-implicit-return-stops-at-ifelse-branches))
+- [x] py2py: implicit return does not reach into `if`/`else` branches (see [Bug 2](#bug-2--py2py-implicit-return-stops-at-ifelse-branches))
 - [x] py2py: `Natural` / `Positive` are emitted into annotations but never defined (see [Bug 3](#bug-3--py2py-emits-natural--positive-without-defining-them))
 - [x] py2py: no `to_py()` for `pyimport` / `from … nimport …`, so those files cannot transpile at all (see [Bug 4](#bug-4--py2py-has-no-to_py-for-pyimport--from--nimport))
 - [x] py2py: declarations without an initialiser bind nothing (see [Bug 5](#bug-5--py2py-drops-declarations-that-have-no-initialiser))
@@ -13,7 +13,7 @@
 - [x] py2py: `stderr.writeLine` / `stdout.write` are emitted untranslated (see [Bug 8](#bug-8--py2py-does-not-translate-the-nim-stream-objects))
 - [x] py2py: `os.makedirs` / `os.mkdir` raise where Nim's `createDir` does not (see [Bug 9](#bug-9--py2py-emits-directory-creation-that-is-not-idempotent))
 - [x] py2py: `readFile` / `writeFile` are emitted verbatim and undefined (see [Bug 10](#bug-10--py2py-does-not-translate-readfile--writefile))
-- [ ] py2py: implicit return of a multi-line string writes `return` inside the literal (see [Bug 11](#bug-11--py2py-implicit-return-breaks-a-multi-line-string))
+- [x] py2py: implicit return of a multi-line string writes `return` inside the literal (see [Bug 11](#bug-11--py2py-implicit-return-breaks-a-multi-line-string))
 
 ## Shell improvements
 
@@ -325,39 +325,18 @@ def first_word(s: str) -> str:
         $+1
     else:
         ""
-print first_word("hello world")          # prints None; expected "hello"
+print first_word("hello world")          # printed None; expected "hello"
 ```
 
-**Generated Python — the branch values are discarded:**
-```python
-def first_word(s: str) -> str:
-    if _pymatch(s, r'(\w+)'):
-        matches[1]
-    else:
-        ""
-```
+**Fixed**, together with bug 11, by marking instead of rewriting.
+`_mark_implicit_returns()` records the statements that carry the function's
+value -- for an `if` in tail position, each branch's own last statement, and
+recursively for nested branches and `elif` chains -- and `stmt_line.to_py()`
+renders those with the keyword in front.
 
-Working case for contrast — a bare last expression is promoted correctly:
-```python
-def add(a: int, b: int) -> int:
-    a + b                                 # -> return a + b, prints 5
-```
-
-**Implementation sketch:**
-- The promotion lives in `TO_PYTHON/hek_py3_parser.py` (see the
-  "Implicit return: if last statement is a bare expression" comments at
-  lines 1095 and 1178). It inspects only the final statement.
-- Make it recursive: when the final statement is an `if`/`elif`/`else` chain,
-  a `case`/`when`, or a `match`/`case`, promote the last bare expression of
-  every branch instead of the statement as a whole. Leave a branch alone if
-  it already ends in `return`, `raise`, `break` or `continue`.
-- The Nim backend needs no such pass — Nim takes the last expression of each
-  branch as the block's value — which is why this only shows up in Python
-  output. `EXAMPLES/test_regex.ady` (`first_word`, `parse_kv`, `parse_date`,
-  `first_number`) is the natural test case.
-- Complexity: ~50–100 lines in `hek_py3_parser.py`.
-
----
+Verified across nested `if`, an `elif` chain, a function that already
+returns explicitly, one with no return annotation, and a `-> None` one; the
+values match the Nim build.
 
 ### Bug 3 — py2py emits `Natural` / `Positive` without defining them
 
@@ -720,10 +699,10 @@ uses -- is rewritten too.
 
 ### Bug 11 — py2py implicit return breaks a multi-line string
 
-The implicit-return pass prepends `return ` to the last *line* of the
+The implicit-return pass prepended `return ` to the last *line* of the
 emitted body rather than to the last statement.  When the trailing
-expression is a multi-line string literal, the keyword lands inside the
-literal and the function returns None.
+expression was a multi-line string literal, the keyword landed inside the
+literal and the function returned None.
 
 **Reproduction:**
 ```python
@@ -731,31 +710,31 @@ def usage() -> str:
     """first line
 second line"""
 
-print usage()
+print usage()                 # printed None
 ```
 
-**Generated Python — `return` inside the string:**
+**Fixed.** The pass now marks statement nodes before the body is rendered,
+and `stmt_line.to_py()` puts `return ` in front of the whole statement, so a
+multi-line literal stays intact:
+
 ```python
 def usage() -> str:
-    """first line
-    return second line"""
-
-print(usage())        # prints None
+    return """first line
+    second line"""
 ```
 
-Two things go wrong at once: a function whose body is a lone string literal
-has no statement to return in Python (the literal is read as a docstring),
-and the line-based rewrite corrupts the literal on the way.
+That also settles the second half of the problem: a body that is only a
+string literal would otherwise be read by Python as a docstring, and the
+function would return None with nothing to give back.  `git1 help` prints
+its text on the Python backend now.
 
-This is what `EXAMPLES/git1.ady` hits in `usage()`: `git1 help` prints
-`None` on the Python backend while the Nim build prints the help text.  It
-is the same family as bug 2 -- an implicit return the pass cannot see --
-but the failure is textual rather than structural.
+The marks are held by `id()` in `RETURN_NODES` and cleared per module by
+`_py_reset()`, since the allocator reuses an id once a parse tree is
+collected.
 
-**Implementation sketch:**
-- Do the rewrite on the statement node, not on the rendered lines: the
-  `func_def` emitter already locates the last statement (`_block_last_stmt`)
-  before deciding to add a return, so render *that* node with a `return `
-  prefix instead of patching the finished body text.
-- A body that is only a string literal needs the return regardless, since
-  Python would otherwise treat it as a docstring and return None.
+**Still open, and visible in that output:** py2py re-indents the
+continuation lines of a multi-line string, changing the string's contents.
+It predates this fix -- a plain Python file round-trips
+`"""line one\nline two"""` with `line two` indented to match the statement --
+and it is why `git1 help` is now correct but indented differently from the
+Nim build.

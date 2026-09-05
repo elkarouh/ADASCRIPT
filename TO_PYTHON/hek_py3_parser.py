@@ -1048,6 +1048,44 @@ def to_py(self):
     return f" -> {self.nodes[1].to_py()}"
 
 
+def _branch_blocks(node, out):
+    """The block nodes belonging directly to one compound statement."""
+    for child in (getattr(node, "nodes", None) or []):
+        tname = type(child).__name__
+        if tname == "block":
+            out.append(child)
+        elif tname in ("Several_Times", "Sequence_Parser", "Filter", "Fmap",
+                       "elif_clause", "else_clause"):
+            _branch_blocks(child, out)
+
+
+def _mark_implicit_returns(stmt, depth=0):
+    """Mark the statements whose value is the function's implicit return.
+
+    A bare expression is that value.  An `if`/`elif`/`else` in tail position
+    returns whichever branch runs, so each branch's own last statement is
+    marked in turn, recursively, since branches nest.
+
+    Marking beats rewriting the rendered text: the keyword then precedes the
+    whole statement, so a multi-line string literal stays intact instead of
+    having `return` spliced into its middle.
+    """
+    import hek_py3_stmt as _stmt
+    if stmt is None or depth > 8:
+        return
+    tname = type(stmt).__name__
+    if tname == "stmt_line":
+        inner = stmt.nodes[0] if getattr(stmt, "nodes", None) else None
+        if inner is not None and type(inner).__name__ == "expressions":
+            _stmt.RETURN_NODES.add(id(stmt))
+        return
+    if tname == "if_stmt":
+        blocks = []
+        _branch_blocks(stmt, blocks)
+        for blk in blocks:
+            _mark_implicit_returns(_block_last_stmt(blk), depth + 1)
+
+
 # --- Python's `global` statement -------------------------------------------
 #
 # Assigning a module-level name inside a function binds a *local* in Python,
@@ -1204,27 +1242,18 @@ def to_py(self, indent=0):
     # A function body is an ordinary scope even inside a class, so a local
     # declared without a value does get its zero here.
     import hek_py3_stmt as _stmt
+    if ret_ann and not ret_ann.strip().endswith("None"):
+        _mark_implicit_returns(_block_last_stmt(block_node))
     _outer_class_depth = _stmt.CLASS_BODY_DEPTH
     _stmt.CLASS_BODY_DEPTH = 0
     try:
         body = block_node.to_py(indent + 1) if block_node else ""
     finally:
         _stmt.CLASS_BODY_DEPTH = _outer_class_depth
-    # Implicit return: if last statement is a bare expression, add return
+    # Implicit return: mark the statements that carry the function's value, so
+    # the body renders with the keyword already in place.
     # Skip for -> None functions (they don't return a value)
-    last_stmt = _block_last_stmt(block_node)
     is_none_return = ret_ann.strip().endswith("None")
-    if ret_ann and not is_none_return and last_stmt and type(last_stmt.nodes[0]).__name__ == "expressions":
-        body = body.rstrip("\n")
-        # Find the last non-comment, non-blank line to prepend return
-        lines = body.split("\n")
-        for i in range(len(lines) - 1, -1, -1):
-            stripped = lines[i].lstrip()
-            if stripped and not stripped.startswith("#"):
-                indent_str = lines[i][:len(lines[i])-len(stripped)]
-                lines[i] = indent_str + "return " + stripped
-                break
-        body = "\n".join(lines) + "\n"
     # Implicit result variable (mirrors Nim): if the body uses `result`,
     # inject a zero-value initialiser after any leading docstring, and
     # append `return result` unless the body already ends with a return.
@@ -1301,27 +1330,18 @@ def to_py(self, indent=0):
     # A function body is an ordinary scope even inside a class, so a local
     # declared without a value does get its zero here.
     import hek_py3_stmt as _stmt
+    if ret_ann and not ret_ann.strip().endswith("None"):
+        _mark_implicit_returns(_block_last_stmt(block_node))
     _outer_class_depth = _stmt.CLASS_BODY_DEPTH
     _stmt.CLASS_BODY_DEPTH = 0
     try:
         body = block_node.to_py(indent + 1) if block_node else ""
     finally:
         _stmt.CLASS_BODY_DEPTH = _outer_class_depth
-    # Implicit return: if last statement is a bare expression, add return
+    # Implicit return: mark the statements that carry the function's value, so
+    # the body renders with the keyword already in place.
     # Skip for -> None functions (they don't return a value)
-    last_stmt = _block_last_stmt(block_node)
     is_none_return = ret_ann.strip().endswith("None")
-    if ret_ann and not is_none_return and last_stmt and type(last_stmt.nodes[0]).__name__ == "expressions":
-        body = body.rstrip("\n")
-        # Find the last non-comment, non-blank line to prepend return
-        lines = body.split("\n")
-        for i in range(len(lines) - 1, -1, -1):
-            stripped = lines[i].lstrip()
-            if stripped and not stripped.startswith("#"):
-                indent_str = lines[i][:len(lines[i])-len(stripped)]
-                lines[i] = indent_str + "return " + stripped
-                break
-        body = "\n".join(lines) + "\n"
     return f"{decos}{_ind(indent)}async def {name}({params}){ret_ann}:{hc}\n{body}"
 
 
