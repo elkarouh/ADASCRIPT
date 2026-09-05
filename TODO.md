@@ -8,7 +8,7 @@
 - [x] py2py: no `to_py()` for `pyimport` / `from … nimport …`, so those files cannot transpile at all (see [Bug 4](#bug-4--py2py-has-no-to_py-for-pyimport--from--nimport))
 - [ ] py2py: declarations without an initialiser bind nothing (see [Bug 5](#bug-5--py2py-drops-declarations-that-have-no-initialiser))
 - [x] `quit()` clamps exit codes to 127, so wrappers cannot forward a child's 128/129 (see [quit() clamps exit codes](#quit-clamps-exit-codes-to-127--fixed))
-- [ ] py2nim: a quoted receiver inside an f-string interpolation is mangled (see [Bug 6](#bug-6--py2nim-mangles-a-quoted-receiver-inside-an-f-string))
+- [x] py2nim: a quoted receiver inside an f-string interpolation is mangled (see [Bug 6](#bug-6--py2nim-mangles-a-quoted-receiver-inside-an-f-string))
 - [x] py2py: assigning a module-level `var` inside a function creates a local (see [Bug 7](#bug-7--py2py-does-not-emit-global-for-module-level-vars))
 - [x] py2py: `stderr.writeLine` / `stdout.write` are emitted untranslated (see [Bug 8](#bug-8--py2py-does-not-translate-the-nim-stream-objects))
 - [x] py2py: `os.makedirs` / `os.mkdir` raise where Nim's `createDir` does not (see [Bug 9](#bug-9--py2py-emits-directory-creation-that-is-not-idempotent))
@@ -149,11 +149,14 @@ print f"Delete the branches ({names})?"
 `EXAMPLES/git1.ady` does exactly this in `cmd_adopt`, with a comment
 pointing here.
 
-**Fix sketch:** require the receiver to be a complete expression before
-rewriting -- a quoted string literal with no unbalanced bracket in it, or a
-plain identifier.  `ask(fmt"""Delete ({', '` is neither, so the rule would
-decline and the interpolation would be converted on its own, as it already
-is when the f-string is not inside a call.
+**Fixed.** `_is_join_receiver()` gates the rule: it rewrites only when the
+receiver is a quoted literal holding no quote of its own, or a bare
+identifier (dotted names included).  `ask(fmt"""Delete ({', '` is neither,
+so the rule declines and the interpolation is converted on its own, as it
+already was when the f-string stood outside a call.
+
+`EXAMPLES/git1.ady` no longer hoists the join out of the prompt in
+`cmd_adopt`.
 
 ---
 

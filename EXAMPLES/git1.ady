@@ -260,10 +260,7 @@ def cmd_adopt(argv: []str):
     if others'Length == 0: return
     var doit: bool = prune == "yes"
     if prune == "ask":
-        # The join is hoisted out of the f-string: a quoted receiver inside an
-        # interpolation confuses the Nim backend (see TODO.md).
-        let names: str = ", ".join(others)
-        doit = confirm(f"Delete the branches that lost ({names})?")
+        doit = confirm(f"Delete the branches that lost ({', '.join(others)})?")
     if doit:
         var cmd: []str = ["branch", "-D"]
         for name in others:

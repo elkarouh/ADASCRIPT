@@ -2154,6 +2154,24 @@ def _wrap_option_args(expr):
     return f"{receiver_prefix}{proc_name}({', '.join(new_args)})"
 
 
+def _is_join_receiver(text):
+    """True when TEXT is a whole expression the join rewrite may consume.
+
+    The `'sep'.join(x)` pattern is greedy and runs over the enclosing
+    expression, so inside something larger -- an f-string passed to a call --
+    it would otherwise swallow the call name and the opening of the string,
+    and reassemble the pieces backwards.  A quoted literal or a bare
+    identifier cannot do that.
+    """
+    import re as _re_j
+    text = text.strip()
+    if _re_j.match(r'^[A-Za-z_][\w.]*$', text):
+        return True
+    if len(text) >= 2 and text[0] == text[-1] and text[0] in ("'", '"'):
+        return text[0] not in text[1:-1]
+    return False
+
+
 def _translate_stdlib_patterns(expr):
     """Post-process a fully-emitted expression string.
 
@@ -2209,7 +2227,7 @@ def _translate_stdlib_patterns(expr):
 
     # --- 4. 'sep'.join(x) -> x.join("sep") ---
     m = _re.match(r"^(.+)\.join\((.+)\)$", expr)
-    if m:
+    if m and _is_join_receiver(m.group(1)):
         sep, arg = m.group(1), m.group(2)
         ParserState.nim_imports.add("strutils")
         if len(sep) == 3 and sep[0] == "'" and sep[-1] == "'":
