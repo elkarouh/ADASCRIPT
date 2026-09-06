@@ -34,6 +34,35 @@ try:
 except:
     print("a failing one raises, and is catchable")
 
+print("=== pipefail ===")
+let lax = shell: false | cat
+print("a pipeline reports its last command:", lax.code)
+let strict = shell(pipefail = true): false | cat
+print("pipefail = true reports the first failure:", strict.code)
+let strict_ok = shell(pipefail = true): true | cat
+print("and still says 0 when nothing failed:", strict_ok.code)
+
+print("=== block join ===")
+let joined_and = shell:
+    echo one
+    false
+    echo three
+print("&& is the default, so it stops:", joined_and.output.strip().replace("\n", ","))
+let joined_semi = shell(join = ";"):
+    echo one
+    false
+    echo three
+print("join = ';' runs them all:  ", joined_semi.output.strip().replace("\n", ","))
+let joined_pipe = shell(join = "|"):
+    printf 'b\na\n'
+    sort
+    head -1
+print("join = '|' makes a pipeline:", joined_pipe.output.strip())
+
+print("=== command presence ===")
+print("sh is installed:", have("sh"))
+print("this one is not:", have("definitely-no-such-program"))
+
 print("=== quoting sigils ===")
 let spaced: str = "two words"
 let argv: []str = ["one arg", "another arg"]

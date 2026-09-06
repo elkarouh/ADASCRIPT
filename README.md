@@ -1301,6 +1301,58 @@ Reach for `shell:` when you want a shell — pipes, redirection, globbing,
 `&&`. Reach for `run` when you just want to run a program, which is most of
 the time.
 
+### Pipelines: `pipefail`
+
+A pipeline's exit status is its *last* command's, which is what POSIX says
+and almost never what a script means:
+
+```python
+let r = shell: false | cat
+print r.code                      # 0 — the failure vanished
+```
+
+`pipefail = true` reports the first command that failed instead:
+
+```python
+let r = shell(pipefail = true): grep -q pat file | sort | uniq
+print r.code                      # non-zero if grep failed
+```
+
+`/bin/sh` is dash on most Linuxes and has no `set -o pipefail`, so both
+backends run these through bash — which therefore has to be installed for
+this option, and a missing one reports 127 like any other missing program.
+It combines with `check = true`, which is usually what you want.
+
+### Block form: choosing the joint
+
+An indented block joins its lines with `&&`, so it stops at the first
+failure. `join` picks something else:
+
+```python
+shell(join = ";"):                # run them all regardless
+    make clean
+    rm -rf tmp
+    echo done
+
+let top = shell(join = "|"):      # one pipeline
+    sort access.log
+    uniq -c
+    head -1
+```
+
+`"&&"`, `";"`, `"|"` and `"||"` are accepted, as literals — the lines are
+joined at transpile time, so it cannot be a variable.
+
+### Is this program installed?
+
+```python
+if not have("git"):
+    die("git is required")
+```
+
+`have` answers from `PATH` — `shutil.which` on Python, `findExe` on Nim —
+so unlike `command -v` it costs neither a process nor a shell.
+
 ### Running commands alongside each other
 
 Every form so far waits: the statement does not finish until the command
@@ -1389,13 +1441,13 @@ let result = shell(cwd = "/tmp", timeout = 3000): ls -la
 
 Which options a form takes:
 
-| | `cwd` | `env` | `timeout` | `stdin` | `check` |
-|---|---|---|---|---|---|
-| `shell:` / `shellLines:` | ✓ | ✓ | ✓ | capturing forms | ✓ |
-| `shellIter` | ✓ | ✓ | | | |
-| `shellExec` | ✓ | ✓ | | | |
-| `shellSpawn` | ✓ | ✓ | | ✓ | |
-| `run` / `runLines` | ✓ | ✓ | ✓ | ✓ | ✓ |
+| | `cwd` | `env` | `timeout` | `stdin` | `check` | `pipefail` | `join` |
+|---|---|---|---|---|---|---|---|
+| `shell:` / `shellLines:` | ✓ | ✓ | ✓ | capturing forms | ✓ | ✓ | block form |
+| `shellIter` | ✓ | ✓ | | | | ✓ | |
+| `shellExec` | ✓ | ✓ | | | | ✓ | block form |
+| `shellSpawn` | ✓ | ✓ | | ✓ | | ✓ | block form |
+| `run` / `runLines` | ✓ | ✓ | ✓ | ✓ | ✓ | n/a — no shell | n/a |
 
 An option a form cannot honour is a transpile-time error, not a silent
 no-op, and a misspelled one says what you probably meant:

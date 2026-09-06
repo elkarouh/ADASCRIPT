@@ -2191,6 +2191,13 @@ def _translate_stdlib_patterns(expr):
     # just an import.  The proc's parameters are spelled the way the options
     # are spelled in Adascript (cwd, env, stdin, timeout, check), so the
     # argument list passes through exactly as written.
+    # have(x) -- is this a program on PATH?  findExe answers from PATH
+    # itself, so it costs neither a process nor a shell.
+    have_m = _re.match(r"^have\((.+)\)$", expr, _re.DOTALL)
+    if have_m and have_m.group(1).count("(") == have_m.group(1).count(")"):
+        ParserState.nim_imports.add("os")
+        return f"(findExe({have_m.group(1)}).len > 0)"
+
     run_m = _re.match(r"^(run|runLines)\(", expr)
     if run_m:
         # Find this call's own closing paren rather than anchoring at the end

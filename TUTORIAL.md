@@ -2275,6 +2275,9 @@ advanced scenarios are not yet supported:
 | Shell, streamed lines             | `for line in shellIter: cmd`            |
 | Shell, replace this process       | `shellExec: cmd` (never returns)        |
 | Shell, run alongside              | `let j: Job = shellSpawn: cmd`          |
+| Pipeline reports first failure    | `shell(pipefail = true): a | b`         |
+| Block joined with something else  | `shell(join = ";"):` / `"|"` / `"||"`   |
+| Is a program installed?           | `have("git")` -> bool                   |
 | Wait for one / many jobs          | `j.wait()` / `waitAll(jobs)`            |
 | Run a program, no shell           | `run(["git", "log"])` -> RunResult      |
 | Run a program, output lines       | `runLines(["ls", d])` -> `[]str`        |

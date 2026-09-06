@@ -49,6 +49,9 @@
 | Shell, streamed lines | `for line in shellIter: cmd` + body |
 | Shell, replace this process | `shellExec: cmd` — never returns, its status becomes ours |
 | Shell, run alongside | `let j: Job = shellSpawn: cmd` — starts it and carries on |
+| Pipeline reports first failure | `shell(pipefail = true): a \| b` — runs under bash |
+| Block join | `shell(join = ";"):` — `"&&"` (default), `";"`, `"\|"`, `"\|\|"` |
+| Is a program installed? | `have("git")` → bool, straight from PATH |
 | Job handle | `j.wait([check])`, `j.running()`, `j.kill()`, `j.pid` |
 | Wait for many at once | `waitAll(jobs)` → `[]RunResult` (drains every pipe) |
 | Run a program, no shell | `run(["git", "log"])` → `RunResult` (.output/.stderr/.code) |

@@ -3371,7 +3371,8 @@ proc adascriptDrain(fd: cint, buf: var string): bool =
 
 proc adascriptRun*(cmd: string, timeoutMs: int = 0, input: string = "",
                    env: Table[string, string] = initTable[string, string](),
-                   argv: seq[string] = @[], workDir: string = ""): tuple[output: string, stderr: string, code: int] =
+                   argv: seq[string] = @[], workDir: string = "",
+                   shellPath: string = ""): tuple[output: string, stderr: string, code: int] =
   ## Run cmd through the shell, capturing stdout and stderr separately.
   ##
   ## execCmdEx merges the two -- its default options include poStdErrToStdOut
@@ -3399,9 +3400,14 @@ proc adascriptRun*(cmd: string, timeoutMs: int = 0, input: string = "",
       envTable[k] = v
     for k, v in env.pairs:
       envTable[k] = v
+  ## `shellPath` names a shell other than the /bin/sh poEvalCommand uses --
+  ## pipefail needs bash, since dash has no `set -o pipefail`.
   let p =
     if argv.len > 0:
       startProcess(argv[0], workingDir = workDir, args = argv[1 .. ^1],
+                   env = envTable, options = {poUsePath})
+    elif shellPath.len > 0:
+      startProcess(shellPath, workingDir = workDir, args = @["-c", cmd],
                    env = envTable, options = {poUsePath})
     else:
       startProcess(cmd, workingDir = workDir, env = envTable,
@@ -3445,7 +3451,8 @@ proc adascriptRun*(cmd: string, timeoutMs: int = 0, input: string = "",
   (outBuf, errBuf, code)
 
 proc adascriptExec*(cmd: string, timeoutMs: int,
-                    env: Table[string, string] = initTable[string, string]()): int =
+                    env: Table[string, string] = initTable[string, string](),
+                    shellPath: string = ""): int =
   ## Run cmd with the terminal inherited, killed after timeoutMs.
   var envTable: StringTableRef = nil
   if env.len > 0:
@@ -3454,7 +3461,12 @@ proc adascriptExec*(cmd: string, timeoutMs: int,
       envTable[k] = v
     for k, v in env.pairs:
       envTable[k] = v
-  let p = startProcess(cmd, env = envTable, options = {poEvalCommand, poParentStreams})
+  let p =
+    if shellPath.len > 0:
+      startProcess(shellPath, args = @["-c", cmd], env = envTable,
+                   options = {poUsePath, poParentStreams})
+    else:
+      startProcess(cmd, env = envTable, options = {poEvalCommand, poParentStreams})
   let deadline = epochTime() + timeoutMs.float / 1000.0
   while true:
     let code = p.peekExitCode()
@@ -3498,7 +3510,8 @@ def _ensure_shell_check_helper():
 
 _SHELL_ITER_HELPER = """\
 iterator adascriptShellIter*(cmd: string,
-                             env: Table[string, string] = initTable[string, string]()): string =
+                             env: Table[string, string] = initTable[string, string](),
+                             shellPath: string = ""): string =
   ## The lines a command prints, yielded as they arrive.
   ##
   ## The capturing forms wait for the child to finish; this one does not, so
@@ -3514,7 +3527,12 @@ iterator adascriptShellIter*(cmd: string,
       envTable[k] = v
     for k, v in env.pairs:
       envTable[k] = v
-  let p = startProcess(cmd, env = envTable, options = {poEvalCommand})
+  let p =
+    if shellPath.len > 0:
+      startProcess(shellPath, args = @["-c", cmd], env = envTable,
+                   options = {poUsePath})
+    else:
+      startProcess(cmd, env = envTable, options = {poEvalCommand})
   p.inputStream.close()
   var line = ""
   while p.outputStream.readLine(line):
@@ -3583,7 +3601,7 @@ type AdascriptJob* = ref object
 
 proc adascriptSpawn*(cmd: string, workDir: string = "",
                      env: Table[string, string] = initTable[string, string](),
-                     input: string = ""): AdascriptJob =
+                     input: string = "", shellPath: string = ""): AdascriptJob =
   ## Start cmd and return without waiting for it.
   var envTable: StringTableRef = nil
   if env.len > 0:
@@ -3592,8 +3610,13 @@ proc adascriptSpawn*(cmd: string, workDir: string = "",
       envTable[k] = v
     for k, v in env.pairs:
       envTable[k] = v
-  let p = startProcess(cmd, workingDir = workDir, env = envTable,
-                       options = {poEvalCommand})
+  let p =
+    if shellPath.len > 0:
+      startProcess(shellPath, workingDir = workDir, args = @["-c", cmd],
+                   env = envTable, options = {poUsePath})
+    else:
+      startProcess(cmd, workingDir = workDir, env = envTable,
+                   options = {poEvalCommand})
   for fd in [p.outputHandle.cint, p.errorHandle.cint, p.inputHandle.cint]:
     discard fcntl(fd, F_SETFL, fcntl(fd, F_GETFL, 0) or O_NONBLOCK)
   result = AdascriptJob(p: p, cmd: cmd, toWrite: input, code: -1,
@@ -3722,7 +3745,8 @@ def to_nim(self, indent=0):
     _to_py_dir = _os.path.join(_os.path.dirname(__file__), '..', 'TO_PYTHON')
     if _to_py_dir not in _sys.path:
         _sys.path.insert(0, _to_py_dir)
-    from hek_py3_parser import _parse_for_shell_stmt, _apply_shell_quoting
+    from hek_py3_parser import (_parse_for_shell_stmt, _apply_shell_quoting,
+                                _apply_pipefail, _shell_wants_pipefail)
     target, cmd, needs_fstring, body_node, opts = _parse_for_shell_stmt(self)
 
     # cwd, as everywhere on this backend, is a `cd <dir> &&` prefix: a quoted
@@ -3751,6 +3775,11 @@ def to_nim(self, indent=0):
     if "env" in opts:
         ParserState.nim_imports.update({"tables", "strtabs", "os"})
         iter_args = f", {opts['env']}"
+    if _shell_wants_pipefail(opts):
+        ParserState.nim_imports.update({"tables", "strtabs", "os"})
+        if "env" not in opts:
+            iter_args = ", initTable[string, string]()"
+        iter_args += ', shellPath = "/bin/bash"'
     ind = _ind(indent)
     # Register the loop variable before rendering the body: the body may ask
     # what type it is — `int(line)` becomes parseInt only for a string.
@@ -3762,13 +3791,14 @@ def to_nim(self, indent=0):
 
 _SHELL_REPLACE_HELPER = """\
 proc adascriptExecReplace*(cmd: string,
-                          env: Table[string, string] = initTable[string, string]()) =
+                          env: Table[string, string] = initTable[string, string](),
+                          shellPath: string = "") =
   ## Replace this process with cmd. Does not return.
   ##
   ## The other forms fork a child and wait; this one hands the process over,
   ## so the command inherits the pid, the terminal and the parent's place in
   ## whatever launched it. A wrapper that ends in one costs no extra process.
-  var argv = @["/bin/sh", "-c", cmd]
+  var argv = @[(if shellPath.len > 0: shellPath else: "/bin/sh"), "-c", cmd]
   var cargs = allocCStringArray(argv)
   if env.len > 0:
     var pairs: seq[string] = @[]
@@ -3777,9 +3807,9 @@ proc adascriptExecReplace*(cmd: string,
     for k, v in env.pairs:
       pairs.add(k & "=" & v)
     var cenv = allocCStringArray(pairs)
-    discard execve("/bin/sh", cargs, cenv)
+    discard execve(argv[0], cargs, cenv)
   else:
-    discard execv("/bin/sh", cargs)
+    discard execv(argv[0], cargs)
   # Only reached if exec failed.
   stderr.writeLine("exec failed: " & cmd)
   quit(127)\
@@ -3823,7 +3853,8 @@ def to_nim(self, indent=0):
     _to_py_dir = _os.path.join(_os.path.dirname(__file__), '..', 'TO_PYTHON')
     if _to_py_dir not in _sys.path:
         _sys.path.insert(0, _to_py_dir)
-    from hek_py3_parser import _parse_shell_stmt
+    from hek_py3_parser import (_parse_shell_stmt, _shell_block_join,
+                                _apply_pipefail, _shell_wants_pipefail)
 
     ind = _ind(indent)
     (target_kw, target_name, target_tuple, kw, opts, cmd, needs_fstring,
@@ -3880,10 +3911,12 @@ def to_nim(self, indent=0):
             ilines.append(f"{ind}{sp}.close()")
             return "\n".join(ilines)
         else:
-            # Pure command block: join with " && " and fall through to normal handling
+            # Pure command block: join and fall through to normal handling
             cmd_parts = [t for (k, t, _f) in block_lines if k == "cmd"]
-            cmd = " && ".join(cmd_parts)
+            cmd = _shell_block_join(opts).join(cmd_parts)
             needs_fstring = any(f for (k, _t, f) in block_lines if k == "cmd")
+
+    cmd = _apply_pipefail(cmd, opts)
 
     ParserState.nim_imports.add("osproc")
 
@@ -3916,6 +3949,13 @@ def to_nim(self, indent=0):
         if "stdin" not in opts:
             run_timeout = f'{run_timeout or ", 0"}, ""'
         run_timeout = f"{run_timeout}, {run_env}"
+    # pipefail needs a shell that has it, and /bin/sh is dash on most Linuxes.
+    # Named, so it need not follow argv and workDir positionally.
+    if _shell_wants_pipefail(opts):
+        run_timeout = f'{run_timeout}, shellPath = "/bin/bash"'
+        run_shell = ', shellPath = "/bin/bash"'
+    else:
+        run_shell = ""
 
     import re as _re_env
     has_env_vars = bool(_re_env.search(r'__bash_env_\w+__', cmd))
@@ -4023,11 +4063,14 @@ def to_nim(self, indent=0):
         # `let code: int = shell: cmd` -- execCmd inherits stdin/stdout/stderr,
         # so the child keeps the terminal (its pager, its colours), and returns
         # the exit code.  execCmdEx would capture both and lose the terminal.
-        if run_timeout or run_env:
+        if run_timeout or run_env or run_shell:
             _ensure_shell_run_helper()
             _exec_args = f", {opts['timeout']}" if "timeout" in opts else ", 0"
             if run_env:
                 _exec_args += f", {run_env}"
+            elif run_shell:
+                _exec_args += ", initTable[string, string]()"
+            _exec_args += run_shell
             lines.append(f"{ind}{nim_kw} {target_name} = adascriptExec({cmd_ref}{_exec_args})")
         else:
             lines.append(f"{ind}{nim_kw} {target_name} = execCmd({cmd_ref})")
@@ -4043,6 +4086,8 @@ def to_nim(self, indent=0):
             _sp_args.append(f"env = {run_env}")
         if "stdin" in opts:
             _sp_args.append(f"input = {opts['stdin']}")
+        if run_shell:
+            _sp_args.append('shellPath = "/bin/bash"')
         lines.append(f"{ind}{nim_kw} {target_name} = "
                      f"adascriptSpawn({', '.join(_sp_args)})")
         ParserState.symbol_table.add(target_name, "AdascriptJob", nim_kw)
@@ -4069,7 +4114,9 @@ def to_nim(self, indent=0):
         # Replaces the process: nothing after it runs.
         _ensure_shell_replace_helper()
         _env_arg = f", {run_env}" if run_env else ""
-        lines.append(f"{ind}adascriptExecReplace({cmd_ref}{_env_arg})")
+        if run_shell and not _env_arg:
+            _env_arg = ", initTable[string, string]()"
+        lines.append(f"{ind}adascriptExecReplace({cmd_ref}{_env_arg}{run_shell})")
     elif kw == "shellLines":
         _ensure_shell_lines_helper()
         _ensure_shell_run_helper()

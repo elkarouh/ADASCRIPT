@@ -1692,20 +1692,60 @@ def _extract_shell_opts(node):
 # its keyword's set used to be dropped without a word -- `shell(timout = 5000)`
 # compiled and waited forever -- so the sets are enforced rather than implied.
 _SHELL_OPTS_BY_KW = {
-    "shell":      {"cwd", "timeout", "check", "stdin", "env"},
-    "shellLines": {"cwd", "timeout", "check", "stdin", "env"},
+    "shell":      {"cwd", "timeout", "check", "stdin", "env", "pipefail", "join"},
+    "shellLines": {"cwd", "timeout", "check", "stdin", "env", "pipefail", "join"},
     # No child to wait for or feed, so no timeout, no stdin, no check.
-    "shellExec":  {"cwd", "env"},
+    "shellExec":  {"cwd", "env", "pipefail", "join"},
     # Starts a command and returns; the waiting happens later, so `timeout`
     # and `check` belong on the wait rather than here.
-    "shellSpawn": {"cwd", "env", "stdin"},
+    "shellSpawn": {"cwd", "env", "stdin", "pipefail", "join"},
     # Streams stdout and has no exit code to inspect; `check` would have
     # nothing to check and a timeout would fight the point of streaming.
-    "shellIter":  {"cwd", "env"},
+    "shellIter":  {"cwd", "env", "pipefail"},
 }
 
 # Options that need somewhere to put what they produce or take.
 _SHELL_OPTS_NEEDING_CAPTURE = {"stdin"}
+
+
+# How a block's lines are strung together.  && is the default because a
+# block that keeps going after a failed step is almost never what was meant;
+# the other two are here because sometimes it is.
+_SHELL_JOINS = {"&&": " && ", ";": "; ", "|": " | ", "||": " || "}
+
+
+def _shell_block_join(opts):
+    """The separator a shell block's lines are joined with."""
+    raw = opts.get("join")
+    if raw is None:
+        return " && "
+    sep = raw.strip()
+    if len(sep) >= 2 and sep[0] == sep[-1] and sep[0] in ("'", '"'):
+        sep = sep[1:-1]
+    if sep not in _SHELL_JOINS:
+        raise SyntaxError(
+            f"shell(join = {raw}): expected one of "
+            f"{', '.join(repr(k) for k in sorted(_SHELL_JOINS))} — "
+            "a literal, since the lines are joined at transpile time")
+    return _SHELL_JOINS[sep]
+
+
+def _shell_wants_pipefail(opts):
+    """True when pipefail = true was asked for."""
+    return str(opts.get("pipefail", "")).strip().lower() in ("true", "1")
+
+
+def _apply_pipefail(cmd, opts):
+    """Prefix the command so a pipeline reports its first failure.
+
+    `false | cat` reports 0, because a pipeline's status is its *last*
+    command -- which is what POSIX says and almost never what a script
+    wants.  `set -o pipefail` fixes it, and dash does not have it, so both
+    backends run these through bash instead of /bin/sh.
+    """
+    if not _shell_wants_pipefail(opts):
+        return cmd
+    return "set -o pipefail; " + cmd
 
 
 def _shell_opt_hint(name, allowed):
@@ -1755,6 +1795,7 @@ _SHELL_OPT_WHY = {
     ("shellIter", "timeout"): "streams until the command ends",
     ("shellIter", "stdin"):   "closes the child's stdin so the stream can end",
     ("shellIter", "check"):   "yields lines and never sees an exit code",
+    ("shellIter", "join"):    "takes a single command, not a block",
     ("shellSpawn", "timeout"): "returns before the command finishes -- pass it to the wait instead",
     ("shellSpawn", "check"):   "returns before there is a status to check -- use j.wait(check = true)",
 }
@@ -2119,14 +2160,14 @@ def _ensure_run_argv_helper():
 
 
 _SHELL_REPLACE_HELPER = """\
-def _shell_exec(_cmd, _env=None, _cwd=None):
+def _shell_exec(_cmd, _env=None, _cwd=None, _shell="/bin/sh"):
     \"\"\"Replace this process with _cmd. Does not return.\"\"\"
     if _cwd is not None:
         os.chdir(_cwd)
     if _env is None:
-        os.execv("/bin/sh", ["/bin/sh", "-c", _cmd])
+        os.execv(_shell, [_shell, "-c", _cmd])
     else:
-        os.execve("/bin/sh", ["/bin/sh", "-c", _cmd], _env)\
+        os.execve(_shell, [_shell, "-c", _cmd], _env)\
 """
 
 
@@ -2227,7 +2268,7 @@ def _shell_target_annotation(seq):
 
 
 _SHELL_ITER_HELPER = """\
-def _shell_iter(_cmd, _cwd=None, _env=None):
+def _shell_iter(_cmd, _cwd=None, _env=None, _shell="/bin/sh"):
     \"\"\"The lines a command prints, yielded as they arrive.
 
     The capturing forms wait for the child to finish; this one does not, so a
@@ -2235,7 +2276,7 @@ def _shell_iter(_cmd, _cwd=None, _env=None):
     \"\"\"
     _p = _subprocess.Popen(_cmd, shell=True, stdout=_subprocess.PIPE,
                            stdin=_subprocess.DEVNULL, text=True,
-                           cwd=_cwd, env=_env)
+                           cwd=_cwd, env=_env, executable=_shell)
     try:
         for _line in _p.stdout:
             yield _line.rstrip("\\n")
@@ -2258,6 +2299,7 @@ def _ensure_shell_iter_helper():
 def to_py(self, indent=0):
     """for x in shellIter: cmd  ->  for x in _shell_iter(cmd): body"""
     target, cmd, needs_fstring, body_node, opts = _parse_for_shell_stmt(self)
+    cmd = _apply_pipefail(cmd, opts)
     cmd, _quoted = _apply_shell_quoting(
         cmd, "_shlex.quote({expr})",
         "' '.join(_shlex.quote(_a) for _a in {expr})")
@@ -2274,6 +2316,8 @@ def to_py(self, indent=0):
     if "env" in opts:
         ParserState.nim_imports.add("import os")
         iter_args += ", _env={**os.environ, **(" + opts["env"] + ")}"
+    if _shell_wants_pipefail(opts):
+        iter_args += ', _shell="/bin/bash"'
     ind = _ind(indent)
     # Register the loop variable before rendering the body, so anything in it
     # that asks what type the variable is gets the right answer.
@@ -2456,11 +2500,13 @@ def to_py(self, indent=0):
     (target_kw, target_name, target_tuple, kw, opts, cmd, needs_fstring,
      block_lines, target_ann) = _parse_shell_stmt(self)
 
-    # Block form in Python backend: join cmd lines with " && ", ignore expect/send for now
+    # Block form in Python backend: join cmd lines, ignore expect/send for now
     if block_lines is not None:
         cmd_parts = [t for (k, t, _f) in block_lines if k == "cmd"]
-        cmd = " && ".join(cmd_parts)
+        cmd = _shell_block_join(opts).join(cmd_parts)
         needs_fstring = any(f for (k, _t, f) in block_lines if k == "cmd")
+
+    cmd = _apply_pipefail(cmd, opts)
 
     cmd, _quoted = _apply_shell_quoting(
         cmd, "_shlex.quote({expr})",
@@ -2482,6 +2528,10 @@ def to_py(self, indent=0):
     # checked in _parse_shell_stmt, which both backends go through.
 
     run_kwargs = ["shell=True"]
+    if _shell_wants_pipefail(opts):
+        # /bin/sh is dash on most Linuxes and has no `set -o pipefail`, so
+        # the command needs a shell that does.
+        run_kwargs.append('executable="/bin/bash"')
     if has_target:
         run_kwargs += ["capture_output=True", "text=True"]
         if "stdin" in opts:
@@ -2568,6 +2618,8 @@ def to_py(self, indent=0):
         _ensure_spawn_helper()
         _sp = ["shell=True", "stdout=_subprocess.PIPE",
                "stderr=_subprocess.PIPE", "text=True"]
+        if _shell_wants_pipefail(opts):
+            _sp.append('executable="/bin/bash"')
         if "cwd" in opts:
             _sp.append(f"cwd={opts['cwd']}")
         if "env" in opts:
@@ -2588,7 +2640,8 @@ def to_py(self, indent=0):
         _ensure_shell_replace_helper()
         _env_arg = (", _env={**os.environ, **(" + opts["env"] + ")}") if "env" in opts else ""
         _cwd_arg = f", _cwd={opts['cwd']}" if "cwd" in opts else ""
-        lines.append(f"{ind}_shell_exec({cmd_ref}{_env_arg}{_cwd_arg})")
+        _sh_arg = ', _shell="/bin/bash"' if _shell_wants_pipefail(opts) else ""
+        lines.append(f"{ind}_shell_exec({cmd_ref}{_env_arg}{_cwd_arg}{_sh_arg})")
     elif target_name:
         lines.append(f"{ind}_r = {runner}({cmd_ref}, {kwargs_str})")
         if kw == "shellLines":

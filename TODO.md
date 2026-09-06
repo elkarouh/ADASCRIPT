@@ -36,6 +36,8 @@
 - [ ] py2py: tick attributes are dropped in a call spanning lines — same root cause as Bug 22, still open
 - [x] every command went through `/bin/sh`, so quoting was always the caller's problem (see [Argv form](#argv-form-run--runlines--done))
 - [x] every shell form waited, so N commands took the sum of their times (see [Concurrency form](#concurrency-form-shellspawn--done))
+- [x] a pipeline's failure vanished, a block could only join with `&&`, and asking whether a program exists cost a process (see [pipefail, join and have()](#pipefail-block-join-and-have--done))
+- [ ] streaming stdin — deliberately not built; the deadlock case is already handled (see [Streaming stdin](#streaming-stdin--not-done-and-here-is-why))
 
 ## Shell improvements
 
@@ -1444,3 +1446,83 @@ output had accumulated, which is the same answer on both sides.
 real NUL byte in the emitted string literal, not the two characters the
 shell would see.  `tr '\0' a` therefore receives an empty argument and
 hangs.  Found while writing this test; the test uses `yes` instead.
+
+---
+
+### `pipefail`, block `join`, and `have()` — DONE
+
+Three smaller gaps, closed together.
+
+**`pipefail = true`.** A pipeline's exit status is its last command's, so
+`shell: false | cat` reported 0 and the failure vanished. That is what POSIX
+says and almost never what a script means.
+
+```python
+let r = shell(pipefail = true): grep -q pat file | sort | uniq
+```
+
+The catch is that `set -o pipefail` is a bash builtin and `/bin/sh` is dash
+on most Linuxes -- prefixing the command alone would have made it *fail*
+(dash exits 2 on `set -o pipefail`) rather than work, which is worse than
+not having the option. Both backends therefore run these through bash:
+Python passes `executable="/bin/bash"` to `subprocess`, and Nim gained a
+`shellPath` parameter that switches `startProcess` from `poEvalCommand` to
+`bash -c`. It applies to every form that runs a command through a shell.
+
+Verified on both: `false | cat` gives 0 without the option and 1 with it,
+and `true | cat` still gives 0.
+
+**`join`.** An indented block joined its lines with `&&` and there was no
+way to ask for anything else -- so "run these three regardless" and "these
+three are a pipeline" both had to be written as one long line.
+
+```python
+let top = shell(join = "|"):
+    sort access.log
+    uniq -c
+    head -1
+```
+
+`"&&"` (the default), `";"`, `"|"` and `"||"`, as literals: the lines are
+joined at transpile time, so a variable could not work, and passing one
+says so rather than being ignored.
+
+**`have()`.** Asking whether a program is installed meant
+`shell: command -v tool` and knowing that 127 is the answer -- a process and
+a shell to ask a question PATH already answers.
+
+```python
+if not have("git"):
+    die("git is required")
+```
+
+`shutil.which` on Python, `findExe` on Nim. It was tempting to spell this as
+a file test, in the family of `-f` and `-x`, but the tokenizer matches those
+as single letters from a nearly exhausted set (`-c` is already the character
+-device test), and that tokenizer lives in HPARSEC rather than here. A
+function costs no new syntax and reads at least as well.
+
+---
+
+### Streaming stdin — NOT DONE, and here is why
+
+The case for it was that `stdin = expr` takes one whole string, so a large
+input has to be built before the command starts. Measured before building
+anything: 200 000 bytes fed to `head -c 3` -- a command that reads three
+bytes and exits -- completes on both backends, no deadlock, no stall.
+
+That is the interesting half of the problem, and it is already solved. Nim's
+runner writes the input non-blockingly *inside* the same loop that drains
+stdout and stderr, so a child that writes while we write cannot block us,
+and Python's `communicate` does the equivalent with selectors. The child
+consumes while we are still writing.
+
+What is left is only that the input must fit in memory. Closing that would
+mean a producer the runtime can pull from -- a closure iterator stored in
+the job -- threaded through the most delicate loop in the project, the one
+that took the most care to get right and whose failure mode is a hang.
+Narrow benefit, real risk, and no reproduction that motivates it.
+
+Worth revisiting if a program ever wants to feed a command more than it can
+hold. A cheaper middle step, if that day comes: let `stdin` accept `[]str`
+and write it element by element without ever joining it.

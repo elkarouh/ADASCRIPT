@@ -655,6 +655,32 @@ def _run_argv_call(name, call_trailer):
     return f"_run_argv({inner})"
 
 
+_HAVE_HELPER = '''\
+def _have(_name):
+    """True when _name is a program on PATH.
+
+    The shell answer is `command -v x` and knowing that 127 means no, which
+    costs a process and a shell to ask a question PATH already answers.
+    """
+    import shutil as _shutil
+    return _shutil.which(_name) is not None\
+'''
+
+
+def _have_call(call_trailer):
+    """`have(x)` -> `_have(x)`, or None if not that shape."""
+    if not (call_trailer.startswith("(") and call_trailer.endswith(")")):
+        return None
+    if not call_trailer[1:-1].strip():
+        return None
+    from hek_parsec import ParserState
+    decls = getattr(ParserState, 'py_top_decls', [])
+    if not any("def _have(" in d for d in decls):
+        decls.append(_HAVE_HELPER)
+        ParserState.py_top_decls = decls
+    return "_have" + call_trailer
+
+
 def _translate_dir_call(expr):
     """Make directory creation idempotent, or return None.
 
@@ -724,6 +750,12 @@ def to_py(self, prec=None):
                     continue
             if i == 0 and result in ("run", "runLines"):
                 helper = _run_argv_call(result, tr_str)
+                if helper is not None:
+                    result = helper
+                    i += 1
+                    continue
+            if i == 0 and result == "have":
+                helper = _have_call(tr_str)
                 if helper is not None:
                     result = helper
                     i += 1

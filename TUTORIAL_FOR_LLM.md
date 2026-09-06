@@ -958,6 +958,9 @@ for s in Stage_T'First .. Stage_T'Last:
 | Shell, streamed lines | `for line in shellIter: cmd` |
 | Shell, replace this process | `shellExec: cmd` (never returns) |
 | Shell, run alongside | `let j: Job = shellSpawn: cmd` |
+| Pipeline reports first failure | `shell(pipefail = true): a \| b` |
+| Block join | `shell(join = ";"):` (`&&` default, `;`, `\|`, `\|\|`) |
+| Is a program installed? | `have("git")` -> bool |
 | Wait for one / many jobs | `j.wait()` / `waitAll(jobs)` |
 | Run a program, no shell | `run(["git", "log"])` -> RunResult |
 | Run a program, output lines | `runLines(["ls", d])` -> `[]str` |
