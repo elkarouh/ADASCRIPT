@@ -1353,6 +1353,32 @@ let top = shell(join = "|"):      # one pipeline
 `"&&"`, `";"`, `"|"` and `"||"` are accepted, as literals — the lines are
 joined at transpile time, so it cannot be a variable.
 
+### Paths: `Path` and `/`
+
+A path is a string, and joining two of them is `os.path.join` in most
+languages. `Path` makes it an operator:
+
+```python
+let root: Path = Path("/tmp")
+let cdir: Path = root / ".git1"
+let repo: Path = cdir / name / "HEAD"
+```
+
+`Path` is *a string that also joins*, not a separate world: it goes wherever
+a `str` goes — file tests, `readFile`, shell interpolation, a `str`
+parameter, a dict key, `.upper()`. Only the reverse needs saying: `Path(s)`
+to make one, and `str(p)` where a `{str}str` table or similar needs the plain
+type.
+
+That is deliberate. Nim's `std/paths.Path` is a `distinct string`, so the
+backend injects a converter back to `string`; Python gets the same shape from
+a `str` subclass with `__truediv__`. Real `pathlib.Path` was the obvious
+choice and is the wrong one here — `p + "!"` and `p.upper()` work on Nim and
+raise on pathlib, so the two backends would disagree.
+
+One wrinkle: a file test takes a primary, so a join inside one needs
+parentheses — `-f (gitdir / "HEAD")`.
+
 ### Is this program installed?
 
 ```python

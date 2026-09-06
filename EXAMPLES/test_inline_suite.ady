@@ -93,6 +93,19 @@ def classify_block(n: int) -> str:
             "many"
 assert classify_block(1) == "one" and classify_block(5) == "many"
 
+# Path: a string that also joins with `/`. Both backends give the same
+# thing -- Nim's std/paths Path (distinct string) with a converter back to
+# string, Python a str subclass -- so a Path goes wherever a str goes.
+let root: Path = Path("/tmp")
+let leaf: Path = root / "a" / "b"
+assert leaf == "/tmp/a/b"
+assert (root / "x") == "/tmp/x"
+let as_str: str = str(leaf)
+assert as_str == "/tmp/a/b"
+assert leaf.upper() == "/TMP/A/B"        # still a string
+assert (-d root)                          # and a file test takes one
+assert (root / "no-such-thing")'Length > 0
+
 # case with inline when clauses
 let y: int = 2
 case y:

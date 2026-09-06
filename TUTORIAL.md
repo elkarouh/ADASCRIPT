@@ -2279,6 +2279,8 @@ advanced scenarios are not yet supported:
 | Pipeline reports first failure    | `shell(pipefail = true): a | b`         |
 | Block joined with something else  | `shell(join = ";"):` / `"|"` / `"||"`   |
 | Is a program installed?           | `have("git")` -> bool                   |
+| Path join                         | `let p: Path = root / "sub" / name`     |
+| Path <-> str                      | `Path(s)` / `str(p)`; a Path is a str   |
 | Wait for one / many jobs          | `j.wait()` / `waitAll(jobs)`            |
 | Run a program, no shell           | `run(["git", "log"])` -> RunResult      |
 | Run a program, output lines       | `runLines(["ls", d])` -> `[]str`        |

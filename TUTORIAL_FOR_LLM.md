@@ -962,6 +962,8 @@ for s in Stage_T'First .. Stage_T'Last:
 | Pipeline reports first failure | `shell(pipefail = true): a \| b` |
 | Block join | `shell(join = ";"):` (`&&` default, `;`, `\|`, `\|\|`) |
 | Is a program installed? | `have("git")` -> bool |
+| Path join | `let p: Path = root / "sub"` (Path is a str subclass/distinct) |
+| Path <-> str | `Path(s)` / `str(p)` |
 | Wait for one / many jobs | `j.wait()` / `waitAll(jobs)` |
 | Run a program, no shell | `run(["git", "log"])` -> RunResult |
 | Run a program, output lines | `runLines(["ls", d])` -> `[]str` |

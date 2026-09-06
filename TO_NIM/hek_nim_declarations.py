@@ -41,6 +41,9 @@ _PY_TO_NIM = {
     "RunResult": "tuple[output: string, stderr: string, code: int]",
     # The handle shellSpawn returns, so `let jobs: []Job = @[]` can name it.
     "Job": "AdascriptJob",
+    # std/paths already has it, with `/` defined; see _ensure_path_helper for
+    # the converter that keeps it usable everywhere a string is.
+    "Path": "Path",
 }
 
 # Nim ordinal types — eligible for built-in set[T]
@@ -67,6 +70,36 @@ def to_nim(self, prec=None):
     return _PY_TO_NIM.get(name, name)
 
 
+_PATH_HELPER = """\
+proc `/`*(head: Path, tail: string): Path = head / Path(tail)
+  ## Joining a Path with a plain string keeps it a Path. Without these two,
+  ## overload resolution takes the converter below, finds the string `/`, and
+  ## hands back a string -- while the Python backend returns a Path. The two
+  ## backends have to agree on the type of `d / "sub"`.
+proc `/`*(head: string, tail: Path): Path = Path(head) / tail
+
+converter adascriptPathToString*(p: Path): string = p.string
+  ## Path is `distinct string` in std/paths, so without this every use of one
+  ## where a string belongs -- readFile, string concatenation, a proc taking
+  ## string -- would need an explicit `.string`. The converter is what lets a
+  ## Path be passed anywhere a str is, which is what the Python backend gets
+  ## for free by making Path a str subclass. The two backends have to agree.\
+"""
+
+
+def _ensure_path_helper():
+    """Inject std/paths and the converter the first time Path is named."""
+    from hek_parsec import ParserState
+    # Only std/paths: the converter below lets os's string-based fileExists,
+    # readFile and friends take a Path, so std/files and std/dirs would only
+    # add unused-import warnings.
+    ParserState.nim_imports.add("std/paths")
+    decls = getattr(ParserState, "nim_top_decls", [])
+    if not any("adascriptPathToString" in d for d in decls):
+        decls.append(_PATH_HELPER)
+        ParserState.nim_top_decls = decls
+
+
 @method(type_name)
 def to_nim(self, prec=None):
     """type_name: IDENTIFIER (type alias or user-defined type) -> Nim: mapped via _PY_TO_NIM if known"""
@@ -75,6 +108,8 @@ def to_nim(self, prec=None):
     if hasattr(node, 'nodes') and node.nodes and isinstance(node.nodes[0], str):
         mapped = _PY_TO_NIM.get(node.nodes[0])
         if mapped:
+            if node.nodes[0] == "Path":
+                _ensure_path_helper()
             return mapped
     result = node.to_nim()
     # Append any trailing nodes (e.g. generic params [T] from subscript trailers)

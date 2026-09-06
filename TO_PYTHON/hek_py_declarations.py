@@ -180,6 +180,43 @@ def _ensure_subtype_aliases():
         ParserState.py_top_decls = decls
 
 
+# A path that is still a string.
+#
+# `pathlib.Path` was the obvious choice and is the wrong one here: Nim's
+# `std/paths.Path` is a `distinct string`, and with the converter the Nim
+# backend injects, `p & "!"` and `p.toUpperAscii` both work there.  On
+# pathlib those are a TypeError and an AttributeError, so the same source
+# would behave differently per backend -- the one thing this project cannot
+# afford.  A str subclass with `/` gives both backends "a string that also
+# joins", which is what Nim has.
+_PATH_ALIAS = """\
+class Path(str):
+    \"\"\"A filesystem path: a str that also joins with `/`.
+
+    Everything that takes a str takes one of these -- open(), os.path.*,
+    subprocess, f-strings, .upper() -- which mirrors Nim, where Path is a
+    distinct string with a converter back to string.
+    \"\"\"
+    __slots__ = ()
+
+    def __truediv__(self, other):
+        return Path(os.path.join(self, str(other)))
+
+    def __rtruediv__(self, other):
+        return Path(os.path.join(str(other), self))\
+"""
+
+
+def _ensure_path_alias():
+    """Define Path the first time an annotation names it."""
+    from hek_parsec import ParserState
+    ParserState.nim_imports.add("import os")
+    decls = getattr(ParserState, 'py_top_decls', [])
+    if not any("class Path(str)" in d for d in decls):
+        decls.append(_PATH_ALIAS)
+        ParserState.py_top_decls = decls
+
+
 # What `shell:` and `run()` hand back.  The shell forms infer it, so it only
 # needs a spelling where a binding must be annotated -- `let r: RunResult =
 # run(argv)`.  Python has no record type here, only the SimpleNamespace the
@@ -208,6 +245,8 @@ def to_py(self, prec=None):
         _ensure_subtype_aliases()
     elif name == "RunResult":
         _ensure_run_result_alias()
+    elif name == "Path":
+        _ensure_path_alias()
     elif name == "Job":
         # `let jobs: []Job = []` has to name the handle shellSpawn returns,
         # so the class the helper defines answers to that name too.

@@ -16,9 +16,9 @@ let PROG:   str = os.path.basename($0).lstrip(".")
 
 # --- what every git call needs to know about the file it acts on -----------
 type Target_T is tuple:
-    dir:    str    # the directory holding the file; git runs here
+    dir:    Path   # the directory holding the file; git runs here
     base:   str    # the file's own name
-    gitdir: str    # its private repo, relative to dir
+    gitdir: Path   # its private repo, relative to dir
 
 def die(msg: str):
     stderr.writeLine(f"{PROG}: {msg}")
@@ -55,11 +55,11 @@ def split_target(target: str) -> Target_T:
     let base: str = os.path.basename(t)
     if base'Length == 0:
         die(f"not a file name: '{target}'")
-    (dir: "." if head'Length == 0 else head,
+    (dir: Path("." if head'Length == 0 else head),
      base: base,
-     gitdir: CONTAINER + "/" + base)
+     gitdir: Path(CONTAINER) / base)
 
-def is_repo(cdir: str, entry: str) -> bool:
+def is_repo(cdir: Path, entry: str) -> bool:
     """True when cdir/entry is one of our per-file repos.
 
     A repo is named after its file, so the entry is recognised by its
@@ -67,9 +67,10 @@ def is_repo(cdir: str, entry: str) -> bool:
     else in the container without a HEAD is not one of ours.
     """
     if entry'Length == 0 or entry == "." or entry == "..": return False
-    let gitdir: str = os.path.join(cdir, entry)
+    let gitdir: Path = cdir / entry
     if not -d gitdir: return False
-    -f os.path.join(gitdir, "HEAD")
+    # Parenthesised: a file test takes a primary, so the join has to be one.
+    -f (gitdir / "HEAD")
 
 def ignore_escape(name: str) -> str:
     var s: str = name.replace("\\", "\\\\")
@@ -77,8 +78,8 @@ def ignore_escape(name: str) -> str:
         s = s.replace(str(ch), "\\" + str(ch))
     s
 
-def write_exclude(base: str, gitdir: str):
-    let exclude: str = os.path.join(gitdir, "info", "exclude")
+def write_exclude(base: str, gitdir: Path):
+    let exclude: Path = gitdir / "info" / "exclude"
     os.makedirs(os.path.dirname(exclude))
     writeFile(exclude, "/*\n!/" + ignore_escape(base) + "\n")
 
@@ -105,7 +106,7 @@ def g(t: Target_T, args: []str) -> int:
     capturing one: git keeps the terminal, so its output, colours and pager
     reach the user directly, and the exit code still comes back.
     """
-    let env: {str}str = {"GIT_DIR": t.gitdir, "GIT_WORK_TREE": "."}
+    let env: {str}str = {"GIT_DIR": str(t.gitdir), "GIT_WORK_TREE": "."}
     let code: int = shell(cwd = t.dir, env = env): git {*args}
     code
 
@@ -123,7 +124,7 @@ def g_exec(t: Target_T, args: []str):
     Only the final dispatch can use this. Every other caller needs g(),
     because they still have work to do once git returns.
     """
-    let env: {str}str = {"GIT_DIR": t.gitdir, "GIT_WORK_TREE": "."}
+    let env: {str}str = {"GIT_DIR": str(t.gitdir), "GIT_WORK_TREE": "."}
     shellExec(cwd = t.dir, env = env): git {*args}
 
 def g_lines(t: Target_T, args: []str) -> []str:
@@ -135,7 +136,7 @@ def g_lines(t: Target_T, args: []str) -> []str:
     terminal here, so this is not the one to use for anything the user is
     meant to watch.
     """
-    let env: {str}str = {"GIT_DIR": t.gitdir, "GIT_WORK_TREE": "."}
+    let env: {str}str = {"GIT_DIR": str(t.gitdir), "GIT_WORK_TREE": "."}
     let lines = shellLines(cwd = t.dir, env = env): git {*args}
     lines
 
@@ -154,7 +155,7 @@ def losing_branches(t: Target_T, current: str, winner: str) -> []str:
     others
 
 def require_repo(t: Target_T, target: str):
-    let repo: str = os.path.join(t.dir, t.gitdir)
+    let repo: Path = t.dir / t.gitdir
     if not -d repo:
         die(f"'{target}' is not tracked (run: {PROG} init {target})")
 
@@ -165,10 +166,10 @@ def cmd_init(target: str):
     if not -f target: die(f"not a regular file: {target}")
     let t: Target_T = split_target(target)
     if not -d t.dir: die(f"no such directory: {t.dir}")
-    let repo: str = os.path.join(t.dir, t.gitdir)
+    let repo: Path = t.dir / t.gitdir
     if -e repo: die(f"already tracked: {target}")
 
-    shell: mkdir -p -- {!os.path.join(t.dir, CONTAINER)}
+    shell: mkdir -p -- {!t.dir / CONTAINER}
     let r = shell: git init --quiet --bare -- {!repo} 2>&1
     if r.code != 0: die(f"could not create {repo}")
 
@@ -183,15 +184,15 @@ def cmd_init(target: str):
 
 def cmd_ls(argv: []str):
     let d: str = argv[0] if argv'Length >= 1 else "."
-    let cdir: str = os.path.join(d, CONTAINER)
+    let cdir: Path = Path(d) / CONTAINER
     var found: int = 0
     if -d cdir:
         let entries = shellLines: ls -1a {!cdir}
         for name in sorted(entries):
             if not is_repo(cdir, name): continue
-            let gitdir: str = os.path.join(cdir, name)
+            let gitdir: Path = cdir / name
             found = 1
-            let file: str = os.path.join(d, name)
+            let file: Path = Path(d) / name
             var status: str = ""
             if not -e file: status = " [file missing]"
             # `env` rather than `GIT_DIR=...` in the command, for the reason
@@ -199,7 +200,7 @@ def cmd_ls(argv: []str):
             # the language can hand over without the shell parsing it.  The
             # capturing form keeps stderr in r.stderr, so there is nothing
             # here for a 2>/dev/null to suppress either.
-            let one_env: {str}str = {"GIT_DIR": gitdir}
+            let one_env: {str}str = {"GIT_DIR": str(gitdir)}
             let r = shell(env = one_env): git log -1 --format='%cr'
             var when: str = ""
             if r.output.strip()'Length > 0:
@@ -220,8 +221,8 @@ def cmd_rm(argv: []str):
     if not force:
         if not confirm(f"Delete the history of {args[0]}? The file itself is kept."):
             die("aborted")
-    shell: rm -rf -- {!os.path.join(t.dir, t.gitdir)}
-    shell: rmdir -- {!os.path.join(t.dir, CONTAINER)} 2>/dev/null || true
+    shell: rm -rf -- {!t.dir / t.gitdir}
+    shell: rmdir -- {!t.dir / CONTAINER} 2>/dev/null || true
 
 def cmd_adopt(argv: []str):
     """Replace the current branch with another one, wholesale.
@@ -286,12 +287,12 @@ def cmd_mv(old: str, new: str):
     if -e new: die(f"target exists: {new}")
     let nt: Target_T = split_target(new)
     if not -d nt.dir: die(f"no such directory: {nt.dir}")
-    let new_repo: str = os.path.join(nt.dir, nt.gitdir)
+    let new_repo: Path = nt.dir / nt.gitdir
     if -e new_repo: die(f"already tracked: {new}")
 
     shell: mv -- {!old} {!new}
-    shell: mkdir -p -- {!os.path.join(nt.dir, CONTAINER)}
-    shell: mv -- {!os.path.join(ot.dir, ot.gitdir)} {!new_repo}
+    shell: mkdir -p -- {!nt.dir / CONTAINER}
+    shell: mv -- {!ot.dir / ot.gitdir} {!new_repo}
     write_exclude(nt.base, new_repo)
     g(nt, ["rm", "--quiet", "--cached", "--ignore-unmatch", "--", ot.base])
     g(nt, ["add", "--", nt.base])
@@ -299,7 +300,7 @@ def cmd_mv(old: str, new: str):
 
 def cmd_each(argv: []str):
     if argv'Length == 0: die(f"usage: {PROG} each <git command> [args...]")
-    let cdir: str = CONTAINER
+    let cdir: Path = Path(CONTAINER)
     if not -d cdir: return
     let entries = shellLines: ls -1a {!cdir}
     for name in sorted(entries):
