@@ -86,6 +86,7 @@ else_clause = fw("else_clause")
 while_stmt = fw("while_stmt")
 for_target = fw("for_target")
 for_stmt = fw("for_stmt")
+for_shell_stmt = fw("for_shell_stmt")
 try_stmt = fw("try_stmt")
 except_clause = fw("except_clause")
 except_star_clause = fw("except_star_clause")
@@ -483,9 +484,25 @@ shell_stmt = (
     + (shell_block | shell_inline_body)
 )
 
+# Streaming form: for line in shellIter: cmd
+#     <body>
+# The command body stops at the NEWLINE, which `block` then consumes along
+# with the INDENT, so the loop body parses as an ordinary suite.
+for_shell_stmt = (
+    ikw("for")
+    + for_target
+    + ikw("in")
+    + literal("shellIter")
+    + shell_opts[:]
+    + COLON
+    + shell_body_token[1:]
+    + block
+)
+
 # --- compound_stmt: choice of all compound statement types ---
 compound_stmt = (
     do_stmt
+    | for_shell_stmt
     | if_stmt
     | while_stmt
     | for_stmt

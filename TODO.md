@@ -25,6 +25,7 @@
 - [x] `shell:` had no way to fail on a non-zero status (see [Checked form](#checked-form-check--true--done))
 - [x] `shell:` had no way to feed a command's stdin (see [stdin feeding](#stdin-feeding-stdin--expr--done))
 - [x] `shell:` had no way to set a child's environment (see [env mapping](#env-mapping-env--expr--done))
+- [x] `shell:` buffered every command to completion (see [Streaming form](#streaming-form-shelliter--done))
 - [x] py2py: a shell body ending in `"` collides with the `"""` wrapper (see [Bug 17](#bug-17--py2py-mis-quotes-a-shell-body-ending-in-a-double-quote))
 
 ## Shell improvements
@@ -1075,3 +1076,46 @@ The Nim side needed `strtabs`: `startProcess` takes a `StringTableRef`, so
 the helper builds one from `envPairs()` and applies the `Table[string, string]`
 the dict literal already compiles to.  Python gets
 `env={**os.environ, **(...)}`.
+
+---
+
+### Streaming form `shellIter` — DONE
+
+Every capture waited for the child to finish, so a long-running or endless
+command showed nothing until it exited — `tail -f` was unusable, and a slow
+build's output arrived all at once at the end.
+
+```python
+for line in shellIter: tail -f build.log
+    print line
+```
+
+Lines are yielded as they arrive.  Measured on both backends against
+`echo first; sleep 1; echo second; sleep 1; echo third`: the three lines
+arrive at 0s, 1s and 2s, not together at the end.
+
+This one needed grammar work, unlike the other options — a `for` loop's
+iterable is expression grammar and a shell body is not an expression.
+`for_shell_stmt` is a production of its own:
+
+```
+for_shell_stmt = "for" for_target "in" "shellIter" shell_opts* ":"
+                 shell_body_token+ block
+```
+
+The command body stops at the NEWLINE, which `block` then consumes with the
+INDENT, so the loop body parses as an ordinary suite.  Both backends get a
+helper — a Nim `iterator` over `p.outputStream.readLine`, a Python generator
+over `Popen.stdout` — and the quoting sigils work inside the command as
+usual.
+
+**One thing to know:** only stdout is streamed, and there is no exit code.
+A command whose status matters wants a capturing form; this one is for
+watching output as it happens.
+
+**A subtle bug caught while writing the test:** the loop variable has to be
+registered in the symbol table *before* the body is rendered, or a body
+containing `int(line)` does not know `line` is a string and emits a Nim type
+conversion instead of `parseInt`. It compiled in a file where an earlier
+loop had already registered the name, which is exactly the kind of thing
+that hides until someone reorders their code.

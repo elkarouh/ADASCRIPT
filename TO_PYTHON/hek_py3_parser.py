@@ -1980,6 +1980,79 @@ def _shell_target_annotation(seq):
     return None
 
 
+
+
+_SHELL_ITER_HELPER = """\
+def _shell_iter(_cmd):
+    \"\"\"The lines a command prints, yielded as they arrive.
+
+    The capturing forms wait for the child to finish; this one does not, so a
+    long-running or endless command can be read while it runs.
+    \"\"\"
+    _p = _subprocess.Popen(_cmd, shell=True, stdout=_subprocess.PIPE,
+                           stdin=_subprocess.DEVNULL, text=True)
+    try:
+        for _line in _p.stdout:
+            yield _line.rstrip("\\n")
+    finally:
+        _p.stdout.close()
+        _p.wait()\
+"""
+
+
+def _ensure_shell_iter_helper():
+    """Inject the streaming iterator the first time shellIter is used."""
+    ParserState.nim_imports.add("import subprocess as _subprocess")
+    decls = getattr(ParserState, "py_top_decls", [])
+    if not any("_shell_iter" in d for d in decls):
+        decls.append(_SHELL_ITER_HELPER)
+        ParserState.py_top_decls = decls
+
+
+@method(for_shell_stmt)
+def to_py(self, indent=0):
+    """for x in shellIter: cmd  ->  for x in _shell_iter(cmd): body"""
+    target, cmd, needs_fstring, body_node = _parse_for_shell_stmt(self)
+    cmd, _quoted = _apply_shell_quoting(
+        cmd, "_shlex.quote({expr})",
+        "' '.join(_shlex.quote(_a) for _a in {expr})")
+    if _quoted:
+        needs_fstring = True
+        ParserState.nim_imports.add("import shlex as _shlex")
+    _ensure_shell_iter_helper()
+    cmd_str = _py_shell_literal(cmd, needs_fstring)
+    ind = _ind(indent)
+    # Register the loop variable before rendering the body, so anything in it
+    # that asks what type the variable is gets the right answer.
+    ParserState.symbol_table.add(target, "str", "let")
+    body = body_node.to_py(indent + 1) if body_node else f"{_ind(indent + 1)}pass"
+    return f"{ind}for {target} in _shell_iter({cmd_str}):\n{body}"
+
+
+def _parse_for_shell_stmt(node):
+    """Decompose `for x in shellIter: cmd` into (target, cmd, needs_fstring, body).
+
+    The command body is the run of shell tokens between the colon and the
+    newline; the loop body is the block that follows.
+    """
+    from hek_tokenize import RichNL
+    target = None
+    body_node = None
+    cmd, needs_fstring = "", False
+    for n in node.nodes:
+        tname = type(n).__name__
+        if tname == "block":
+            body_node = n
+        elif tname == "for_target" and target is None:
+            target = n.to_py()
+        elif tname == "Several_Times" and n.nodes:
+            first = n.nodes[0]
+            tok = getattr(first, "node", None)
+            if hasattr(tok, "string") and not isinstance(tok, str):
+                cmd, needs_fstring = _extract_shell_body(n)
+    return target, cmd, needs_fstring, body_node
+
+
 def _parse_shell_stmt(node):
     """Decompose a shell_stmt AST node into its logical parts.
 

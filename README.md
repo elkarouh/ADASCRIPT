@@ -1243,6 +1243,20 @@ let r = shell(env = extra): git status
 Names already in the environment are overridden; everything else — `PATH`
 included — is still there. Like `stdin`, it applies to the capturing forms.
 
+### Reading output as it arrives
+
+The capturing forms wait for the command to finish. `shellIter` yields each
+line as the command prints it:
+
+```python
+for line in shellIter: tail -f build.log
+    print line
+```
+
+Only stdout is streamed and there is no exit code — a command whose status
+matters wants a capturing form. Interpolation works as usual, `{!x}` and
+`{*xs}` included.
+
 ### Options
 
 ```python

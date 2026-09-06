@@ -3475,6 +3475,61 @@ def _ensure_shell_check_helper():
         decls.append(_SHELL_CHECK_HELPER)
         ParserState.nim_top_decls = decls
 
+
+_SHELL_ITER_HELPER = """\
+iterator adascriptShellIter*(cmd: string): string =
+  ## The lines a command prints, yielded as they arrive.
+  ##
+  ## The capturing forms wait for the child to finish; this one does not, so
+  ## a long-running or endless command can be read while it runs. stdin is
+  ## closed, as it is for a capture, and the child is reaped at the end.
+  let p = startProcess(cmd, options = {poEvalCommand})
+  p.inputStream.close()
+  var line = ""
+  while p.outputStream.readLine(line):
+    yield line
+  discard p.waitForExit()
+  p.close()\
+"""
+
+
+def _ensure_shell_iter_helper():
+    """Inject the streaming iterator the first time shellIter is used."""
+    ParserState.nim_imports.update({"osproc", "streams"})
+    decls = getattr(ParserState, "nim_top_decls", [])
+    if not any("adascriptShellIter" in d for d in decls):
+        decls.append(_SHELL_ITER_HELPER)
+        ParserState.nim_top_decls = decls
+
+
+@method(for_shell_stmt)
+def to_nim(self, indent=0):
+    """for x in shellIter: cmd  ->  for x in adascriptShellIter(cmd): body"""
+    # Same grammar-neutral helpers the shell_stmt emitter borrows.
+    import sys as _sys, os as _os
+    _to_py_dir = _os.path.join(_os.path.dirname(__file__), '..', 'TO_PYTHON')
+    if _to_py_dir not in _sys.path:
+        _sys.path.insert(0, _to_py_dir)
+    from hek_py3_parser import _parse_for_shell_stmt, _apply_shell_quoting
+    target, cmd, needs_fstring, body_node = _parse_for_shell_stmt(self)
+    cmd, _quoted = _apply_shell_quoting(
+        cmd, "quoteShell({expr})", 'mapIt({expr}, quoteShell(it)).join(" ")')
+    if _quoted:
+        needs_fstring = True
+        ParserState.nim_imports.update({"osproc", "sequtils", "strutils"})
+    _ensure_shell_iter_helper()
+    if needs_fstring:
+        ParserState.nim_imports.add("strformat")
+    q = '"""'
+    cmd_str = (f"fmt{q}{cmd}{q}" if needs_fstring else f"{q}{cmd}{q}")
+    ind = _ind(indent)
+    # Register the loop variable before rendering the body: the body may ask
+    # what type it is — `int(line)` becomes parseInt only for a string.
+    ParserState.symbol_table.add(target, "string", "let")
+    body = body_node.to_nim(indent + 1) if body_node else f"{_ind(indent + 1)}discard"
+    return f"{ind}for {target} in adascriptShellIter({cmd_str}):\n{body}"
+
+
 @method(shell_stmt)
 def to_nim(self, indent=0):
     """shell_stmt: [decl_keyword IDENTIFIER '='] ('shell'|'shellLines') [shell_opts] ':' cmd+

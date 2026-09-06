@@ -58,4 +58,13 @@ print("added and overridden:", envd.output.strip())
 let inherited = shell(env = extra): sh -c 'test -n "$PATH" && printf inherited-too'
 print("the rest of the environment is", inherited.output.strip())
 
+print("=== streaming form (shellIter) ===")
+var total: int = 0
+for num in shellIter: seq 1 5
+    total = total + int(num)
+print("summed five streamed lines:", total)
+let word: str = "two words"
+for line in shellIter: printf '%s\n' {!word} plain
+    print("streamed with quoting: [" + line + "]")
+
 print("done — all expects matched, bc was driven successfully")

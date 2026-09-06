@@ -2272,6 +2272,7 @@ advanced scenarios are not yet supported:
 | Shell, fail on non-zero           | `shell(check = true): cmd`              |
 | Shell, feed stdin                 | `shell(stdin = text): cmd`              |
 | Shell, child environment          | `shell(env = e): cmd` (added to)        |
+| Shell, streamed lines             | `for line in shellIter: cmd`            |
 | Shell exit code, terminal kept    | `let code: int = shell: cmd`            |
 | Discard shell output              | `shell: cmd`                             |
 | Shell block (commands joined)     | `shell:` then indented `cmd1` / `cmd2`   |
