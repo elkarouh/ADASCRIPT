@@ -3364,7 +3364,8 @@ def to_nim(self, indent=0):
     from hek_py3_parser import _parse_shell_stmt
 
     ind = _ind(indent)
-    target_kw, target_name, target_tuple, kw, opts, cmd, needs_fstring, block_lines = _parse_shell_stmt(self)
+    (target_kw, target_name, target_tuple, kw, opts, cmd, needs_fstring,
+     block_lines, target_ann) = _parse_shell_stmt(self)
 
     # Block form: handle interactive (expect/send) cases specially via expect.nim
     if block_lines is not None:
@@ -3507,6 +3508,12 @@ def to_nim(self, indent=0):
                 ParserState.symbol_table.add(var_name, slot_type, nim_kw)
         else:
             lines.append(f"{ind}discard execCmdEx({cmd_str}){timeout_comment}")
+    elif target_name and target_ann == "int" and kw == "shell":
+        # `let code: int = shell: cmd` -- execCmd inherits stdin/stdout/stderr,
+        # so the child keeps the terminal (its pager, its colours), and returns
+        # the exit code.  execCmdEx would capture both and lose the terminal.
+        lines.append(f"{ind}{nim_kw} {target_name} = execCmd({cmd_str}){timeout_comment}")
+        ParserState.symbol_table.add(target_name, "int", nim_kw)
     elif target_name:
         if kw == "shellLines":
             # Inline directly — no temp needed

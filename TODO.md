@@ -15,32 +15,46 @@
 - [x] py2py: `readFile` / `writeFile` are emitted verbatim and undefined (see [Bug 10](#bug-10--py2py-does-not-translate-readfile--writefile))
 - [x] py2py: implicit return of a multi-line string writes `return` inside the literal (see [Bug 11](#bug-11--py2py-implicit-return-breaks-a-multi-line-string))
 - [x] both backends re-indent the inside of a multi-line string, changing its value (see [Bug 12](#bug-12--a-multi-line-string-is-re-indented-changing-its-value))
+- [x] `shell:` could not both inherit the terminal and return an exit code (see [shell: with terminal passthrough](#shell-with-terminal-passthrough-and-exit-code--done))
 
 ## Shell improvements
 
-### `shell:` with terminal passthrough and exit code
+### `shell:` with terminal passthrough and exit code — DONE
 
-Currently `shell:` has two modes: discard (inherits terminal, no exit code)
-and capture (`let r = shell:`, captures stdout, returns `.code`). There is no
-way to both inherit the terminal *and* get the exit code — scripts that need
-this (e.g. running git with a pager, or interactive editors) must use a
-`$? > tmpfile` workaround.
+`shell:` had two modes: discard (inherits the terminal, no exit code) and
+capture (`let r = shell:`, captures stdout, returns `.code`). There was no
+way to both inherit the terminal *and* get the exit code, so scripts that
+needed it wrote the status to a temp file and read it back.
 
-**Desired syntax:**
+**Syntax:** an `int`-typed target.
+
 ```python
 let code: int = shell: git log --oneline    # inherits terminal, returns exit code
 ```
 
-When the assignment target is a bare `int` (not a record/tuple), emit
-`execCmd()` in Nim which inherits stdio and returns the exit code directly.
+`_parse_shell_stmt()` now reports the target's primitive annotation, and the
+backends act on `int`:
 
-**Implementation sketch:**
-- In `_parse_shell_stmt`, detect when target type is `int` (or infer from
-  `shell:` vs `shellLines:`).
-- Emit `execCmd(cmd)` instead of `execCmdEx(cmd)` — Nim's `execCmd` inherits
-  the terminal and returns the exit code.
-- Python backend: `subprocess.call(cmd, shell=True)`.
-- Complexity: ~50 lines in `hek_nim_parser.py` + `hek_py3_parser.py`.
+| Backend | Emitted |
+|---|---|
+| Nim | `let code = execCmd(cmd)` — inherits stdin/stdout/stderr |
+| Python | `code = subprocess.call(cmd, shell=True)` — no capture kwargs |
+
+Anything else is unchanged: `let r = shell:` still captures into
+`(output, code)`, `shellLines:` still splits stdout, and a bare `shell:`
+still discards.
+
+`EXAMPLES/git1.ady` was the motivating case and loses its whole workaround —
+`sh_status()` and the `/tmp/.git1-status` constant, 13 lines — and with them
+a bug nobody had hit yet: that path was fixed, so two git1 processes running
+at once could read each other's exit status. `g()` now ends
+
+```python
+    let code: int = shell: cd {Q(G1_DIR)} && GIT_DIR={Q(G1_GITDIR)} GIT_WORK_TREE=. git {cmd}
+    code
+```
+
+and `cmd_help` asks `let is_tty: int = shell: test -t 1` directly.
 
 ---
 

@@ -13,7 +13,6 @@ nimport os, strutils
 
 const VERSION:   str = "3.0"
 const CONTAINER: str = ".git1"
-const STATUS_FILE: str = "/tmp/.git1-status"
 let PROG:   str = os.path.basename($0).lstrip(".")
 
 # --- globals set by split_target (mirrors the bash version) ----------------
@@ -42,16 +41,6 @@ def confirm(question: str) -> bool:
 
 def Q(s: str) -> str:
     "'" + s.replace("'", "'\\''") + "'"
-
-def sh_status(cmd: str) -> int:
-    shell: {cmd}; echo $? > {Q(STATUS_FILE)}
-    var code: int = 0
-    if -f STATUS_FILE:
-        let raw: str = readFile(STATUS_FILE).strip()
-        if raw'Length > 0:
-            code = int(raw)
-        shell: rm -f -- {Q(STATUS_FILE)}
-    code
 
 # --- path handling ---------------------------------------------------------
 
@@ -108,16 +97,16 @@ def g(args: []str) -> int:
     string for the shell, which will not quote it for anyone. Without it,
     g(["commit", "-m", "hello world"]) would reach git as four arguments.
 
-    sh_status() rather than a capturing shell: this way git keeps the
-    terminal -- its output, colours and pager reach the user directly --
-    and the exit code comes back out of band. See TODO.md: no single shell
-    mode offers both.
+    An int-typed target -- `let code: int = shell: ...` -- rather than a
+    capturing one: git keeps the terminal, so its output, colours and pager
+    reach the user directly, and the exit code still comes back.
     """
     var parts: []str = []
     for a in args:
         parts.append(Q(a))
     let cmd: str = " ".join(parts)
-    sh_status(f"cd {Q(G1_DIR)} && GIT_DIR={Q(G1_GITDIR)} GIT_WORK_TREE=. git {cmd}")
+    let code: int = shell: cd {Q(G1_DIR)} && GIT_DIR={Q(G1_GITDIR)} GIT_WORK_TREE=. git {cmd}
+    code
 
 def g_lines(args: []str) -> []str:
     """Run git against the current file's repo. Returns what git printed.
@@ -351,10 +340,12 @@ Tip: for a long session on one file, alias it:  alias gg='{PROG} notes.txt'"""
 def cmd_help():
     let pager: str = $PAGER if $PAGER else "less"
     let r = shell: command -v {Q(pager)} 2>&1
-    if sh_status("test -t 1") == 0 and r.code == 0:
+    let is_tty: int = shell: test -t 1
+    if is_tty == 0 and r.code == 0:
         let tmp: str = "/tmp/git1-help.txt"
         writeFile(tmp, usage() + "\n")
-        sh_status(f"{Q(pager)} {Q(tmp)}")
+        let shown: int = shell: {Q(pager)} {Q(tmp)}
+        if shown != 0: warn("pager failed")
         shell: rm -f -- {Q(tmp)}
     else:
         print usage()

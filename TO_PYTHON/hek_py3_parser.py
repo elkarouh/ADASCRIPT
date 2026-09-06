@@ -1851,6 +1851,24 @@ def _classify_line(tokens):
 import tokenize as _tknmod
 
 
+def _shell_target_annotation(seq):
+    """The primitive type named in a shell target's annotation, or None.
+
+    `let code: int = shell: ...` is the one annotation the backends act on:
+    it asks for the exit code with the terminal left alone.  Anything else is
+    inferred from `shell` versus `shellLines` as before.
+    """
+    for node in (getattr(seq, "nodes", None) or []):
+        stack = [node]
+        while stack:
+            cur = stack.pop()
+            if type(cur).__name__ == "primitive_type":
+                name = cur.nodes[0] if getattr(cur, "nodes", None) else None
+                return name if isinstance(name, str) else None
+            stack.extend(getattr(cur, "nodes", None) or [])
+    return None
+
+
 def _parse_shell_stmt(node):
     """Decompose a shell_stmt AST node into its logical parts.
 
@@ -1865,6 +1883,7 @@ def _parse_shell_stmt(node):
       block_lines  -- None for inline form;
                       list of (kind, text, needs_fstring) tuples for block form
                       where kind ∈ {'cmd','expect','send'}
+      target_ann   -- str | None     (the primitive type in `let x: T =`)
 
     Exactly one of target_name / target_tuple is non-None when a target is
     present; both are None for a bare shell statement.
@@ -1882,7 +1901,7 @@ def _parse_shell_stmt(node):
             break
 
     # Optional assignment target sits before the keyword
-    target_kw = target_name = target_tuple = None
+    target_kw = target_name = target_tuple = target_ann = None
     if kw_idx > 0:
         target_st = nodes[0]
         if hasattr(target_st, "nodes") and target_st.nodes:
@@ -1908,6 +1927,8 @@ def _parse_shell_stmt(node):
                         target_kw = val
                     elif val.isidentifier() and val not in ("let", "var", "const", "="):
                         target_name = val
+                # `let name: T =` -- the annotation sits in its own optional slot
+                target_ann = _shell_target_annotation(seq)
 
     # Remaining nodes after the keyword: opts (Several_Times of shell_opt) and
     # body (either inline Several_Times of tokens, or a Sequence_Parser wrapping
@@ -1947,10 +1968,12 @@ def _parse_shell_stmt(node):
     if block_seq is not None:
         line_toks = _flatten_block_lines(block_seq)
         block_lines = [_classify_line(tl) for tl in line_toks]
-        return target_kw, target_name, target_tuple, kw, opts, "", False, block_lines
+        return (target_kw, target_name, target_tuple, kw, opts, "", False,
+                block_lines, target_ann)
 
     cmd, needs_fstring = _extract_shell_body(body_st) if body_st else ("", False)
-    return target_kw, target_name, target_tuple, kw, opts, cmd, needs_fstring, None
+    return (target_kw, target_name, target_tuple, kw, opts, cmd, needs_fstring,
+            None, target_ann)
 
 
 @method(shell_stmt)
@@ -1980,7 +2003,8 @@ def to_py(self, indent=0):
       out, err, code = _r.stdout, _r.stderr, _r.returncode
     """
     ind = _ind(indent)
-    target_kw, target_name, target_tuple, kw, opts, cmd, needs_fstring, block_lines = _parse_shell_stmt(self)
+    (target_kw, target_name, target_tuple, kw, opts, cmd, needs_fstring,
+     block_lines, target_ann) = _parse_shell_stmt(self)
 
     # Block form in Python backend: join cmd lines with " && ", ignore expect/send for now
     if block_lines is not None:
@@ -2021,6 +2045,13 @@ def to_py(self, indent=0):
         rhs = ", ".join(slots[:len(target_tuple)])
         lines.append(f"{ind}_r = _subprocess.run({cmd_str}, {kwargs_str})")
         lines.append(f"{ind}{lhs} = {rhs}")
+    elif target_name and target_ann == "int" and kw == "shell":
+        # `let code: int = shell: cmd` -- the child keeps the terminal, and the
+        # exit code comes back directly.  Nothing is captured, so no kwargs
+        # beyond the shell itself.
+        call_kwargs = ", ".join(k for k in run_kwargs
+                                if not k.startswith(("capture_output", "text")))
+        lines.append(f"{ind}{target_name} = _subprocess.call({cmd_str}, {call_kwargs})")
     elif target_name:
         lines.append(f"{ind}_r = _subprocess.run({cmd_str}, {kwargs_str})")
         if kw == "shellLines":
