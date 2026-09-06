@@ -33,7 +33,7 @@
 - [x] an unknown or inapplicable shell option was silently ignored (see [Bug 20](#bug-20--an-unknown-or-inapplicable-shell-option-is-silently-ignored))
 - [x] `shellIter` accepted options and discarded all of them (see [Bug 21](#bug-21--shelliter-accepted-options-and-discarded-all-of-them))
 - [x] py2py: a call spanning lines skips every name-anchored rewrite (see [Bug 22](#bug-22--a-call-spanning-lines-skips-every-name-anchored-rewrite-python-backend))
-- [ ] py2py: tick attributes are dropped in a call spanning lines — same root cause as Bug 22, still open
+- [x] py2py: tick attributes were dropped in a call spanning lines (see [Bug 22 (rest)](#bug-22-rest--tick-attributes-in-a-call-spanning-lines--fixed))
 - [x] every command went through `/bin/sh`, so quoting was always the caller's problem (see [Argv form](#argv-form-run--runlines--done))
 - [x] every shell form waited, so N commands took the sum of their times (see [Concurrency form](#concurrency-form-shellspawn--done))
 - [x] a pipeline's failure vanished, a block could only join with `&&`, and asking whether a program exists cost a process (see [pipefail, join and have()](#pipefail-block-join-and-have--done))
@@ -1576,3 +1576,56 @@ no test combined the two. `shellIter(pipefail = true)` silently ran without
 pipefail on Nim while working on Python. Fixed, and placed after the cwd
 prefix so both backends emit `set -o pipefail; cd x && ...` in the same
 order.
+
+---
+
+### Bug 22 (rest) — tick attributes in a call spanning lines — FIXED
+
+The half of bug 22 left open. `call_trailer.to_py` and four sibling
+displays returned the *raw source text* for a bracketed expression spanning
+lines, to keep a long call or a table literal readable instead of collapsing
+it onto one line. The cost was that the text is Adascript, so anything the
+backend had to translate stayed in Adascript spelling:
+
+```python
+print("x:",
+      xs'Length)       # emitted xs'Length into Python
+```
+
+Five constructs shared it, not just calls -- `paren_group`, `list_display`,
+`dict_display`, `set_display` and `call_trailer`. Confirmed on all of them.
+The Nim backend was unaffected throughout, since it renders from the tree.
+
+The earlier pass patched only the piece that was in the way -- `readFile`,
+`writeFile`, `run`, `runLines` rewritten textually in the raw span -- and
+said the real fix was to stop bypassing the tree. This is that fix.
+
+**Prefer the layout, but only when it says the same thing.** The tree is
+rendered either way, and compared with the raw span ignoring whitespace and
+a trailing comma; they agree unless something was translated, and where they
+differ the translation wins. So a table literal written one entry per line
+keeps its shape, and one containing `xs'Length` is collapsed and correct. A
+long line is ugly; a wrong line is a bug.
+
+The trailing comma had to be normalised away or the fix would have been
+self-defeating: a literal written one entry per line almost always ends with
+one, the renderer does not emit it, and treating that as a difference would
+have collapsed exactly the literals whose layout was worth keeping.
+
+The tokenizer strips the newlines inside brackets before parsing, so the
+tree was always complete -- the bypass was only ever about formatting, which
+is why rendering from it costs nothing but layout.
+
+`_has_named_tuple`, the carve-out that already existed for the one
+translation someone had noticed, is now subsumed by the comparison; it is
+left in place as a cheap short-circuit.
+
+**88 lines deleted.** `_rewrite_builtins_in_raw` -- the textual rewriter
+from the earlier pass, with its own string-literal and tick-attribute
+scanner -- is redundant now that a translated call simply loses the
+comparison. Duplicating a translator is exactly what this avoids.
+
+**Verified:** all three suites at baseline, a cold `make clean && make
+test`, and every one of the 67 examples transpiled through py2py and parsed
+with `ast.parse` -- 66 clean, the one failure (`argparse.ady`, an
+IndentationError around a class body) confirmed identical before the change.

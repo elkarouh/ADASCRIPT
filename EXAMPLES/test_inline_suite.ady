@@ -20,6 +20,26 @@ if x > 0:
 else:
     print("zero or negative")
 
+# A bracketed expression spanning lines used to be emitted as the source
+# wrote it, which skipped every translation inside: 'Length and the rest
+# went into the Python output in Adascript spelling.  The layout is kept
+# only where it says the same thing as the translated form.
+let items: []str = ["a", "b", "c"]
+let spread: []int = [
+    items'Length,
+    2]
+let mapped: {str}int = {
+    "n": items'Length}
+let parend: int = (
+    items'Length)
+assert spread[0] == 3 and mapped["n"] == 3 and parend == 3
+# Nothing to translate here, so this one keeps its shape.
+let kept: {str}int = {
+    "alpha": 1,
+    "beta": 2,
+}
+assert kept["beta"] == 2
+
 # case with inline when clauses
 let y: int = 2
 case y:

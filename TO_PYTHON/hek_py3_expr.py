@@ -333,6 +333,44 @@ def to_py(self, prec=None):
     return "()"
 
 
+def _keep_layout(pos, ml, rendered):
+    """The source's own layout when it says the same thing, else the render.
+
+    A bracketed expression spanning lines is emitted as the source wrote it,
+    which keeps a long call or a table literal readable instead of collapsing
+    it onto one line.  The catch is that the source is *Adascript*: anything
+    the backend had to translate — `xs'Length`, `readFile(p)`, `run(argv)`,
+    a named-tuple literal — is still in Adascript spelling in that text, and
+    went into the Python output untranslated, to fail at import or at run
+    time depending on which line it was.
+
+    So the raw span is used only where it agrees with what the tree renders,
+    whitespace aside.  Where they differ something was translated, and the
+    translation wins even though the layout is lost.  That is the right way
+    round: a long line is ugly, a wrong line is a bug.
+    """
+    raw = ml.get(pos)
+    if raw is None:
+        return rendered
+    return raw if _same_but_for_layout(raw, rendered) else rendered
+
+
+def _same_but_for_layout(raw, rendered):
+    """True when two spellings differ only in whitespace and trailing commas.
+
+    The trailing comma matters: a table literal written one entry per line
+    almost always has one, the renderer does not emit it, and treating that
+    as a difference would collapse exactly the literals whose layout was
+    worth keeping.
+    """
+    def norm(s):
+        s = "".join(s.split())
+        for close in ")]}":
+            s = s.replace("," + close, close)
+        return s
+    return norm(raw) == norm(rendered)
+
+
 @method(paren_group)
 def to_py(self, prec=None):
     """paren_group: '(' (yield_expr | walrus | expressions) ')'
@@ -340,9 +378,10 @@ def to_py(self, prec=None):
     from hek_tokenize import get_multiline_brackets
     pos = _get_bracket_start(self.nodes[0])
     ml = get_multiline_brackets()
+    rendered = f"({self.nodes[1].to_py()})"
     if pos and pos in ml and not _has_named_tuple(self):
-        return ml[pos]
-    return f"({self.nodes[1].to_py()})"
+        return _keep_layout(pos, ml, rendered)
+    return rendered
 
 
 @method(empty_list)
@@ -357,9 +396,10 @@ def to_py(self, prec=None):
     from hek_tokenize import get_multiline_brackets
     pos = _get_bracket_start(self.nodes[0])
     ml = get_multiline_brackets()
+    rendered = f"[{self.nodes[1].to_py()}]"
     if pos and pos in ml and not _has_named_tuple(self):
-        return ml[pos]
-    return f"[{self.nodes[1].to_py()}]"
+        return _keep_layout(pos, ml, rendered)
+    return rendered
 
 
 @method(empty_set)
@@ -389,10 +429,10 @@ def to_py(self, prec=None):
     from hek_tokenize import get_multiline_brackets
     pos = _get_bracket_start(self.nodes[0])
     ml = get_multiline_brackets()
-    if pos and pos in ml:
-        if not _has_named_tuple(self):
-            return ml[pos]
-    return "{" + self.nodes[1].to_py() + "}"
+    rendered = "{" + self.nodes[1].to_py() + "}"
+    if pos and pos in ml and not _has_named_tuple(self):
+        return _keep_layout(pos, ml, rendered)
+    return rendered
 
 
 @method(enum_array_display)
@@ -407,9 +447,10 @@ def to_py(self, prec=None):
     from hek_tokenize import get_multiline_brackets
     pos = _get_bracket_start(self.nodes[0])
     ml = get_multiline_brackets()
+    rendered = "{" + self.nodes[1].to_py() + "}"
     if pos and pos in ml and not _has_named_tuple(self):
-        return ml[pos]
-    return "{" + self.nodes[1].to_py() + "}"
+        return _keep_layout(pos, ml, rendered)
+    return rendered
 
 
 @method(atom)
@@ -422,107 +463,21 @@ def to_py(self, prec=None):
 
 
 # --- trailers ---
-def _rewrite_builtins_in_raw(text):
-    """Apply the name+trailer builtin rewrites to raw source text.
-
-    A call whose parentheses span lines is emitted as the original source
-    (see call_trailer below), which skips the expression tree -- and with it
-    every rewrite that keys on a name plus its call trailer.  `readFile` on a
-    wrapped line therefore reached Python as an undefined name, while the Nim
-    backend, which translates finished expression strings, was fine: the same
-    source worked on one backend and raised NameError on the other.
-
-    Expression-level rewrites that match a whole finished expression, like
-    os.makedirs, already survive this path; only the name-anchored ones need
-    doing here.
-    """
-    if not any(_n in text for _n in ("readFile", "writeFile", "run(", "runLines(")):
-        return text
-
-    # Walk the text tracking string literals, so a name inside a quoted
-    # string is left alone.
-    out = []
-    i, n = 0, len(text)
-    quote = None
-    while i < n:
-        ch = text[i]
-        if quote:
-            out.append(ch)
-            if ch == "\\" and i + 1 < n:
-                out.append(text[i + 1])
-                i += 2
-                continue
-            if text.startswith(quote, i):
-                i += len(quote)
-                out.append(text[i - len(quote) + 1:i])
-                quote = None
-                continue
-            i += 1
-            continue
-        if ch in "\"'":
-            # A tick attribute -- xs'Length, r'First -- is not a string, and
-            # taking it for one would swallow everything to the next quote.
-            if (ch == "'" and i > 0 and (text[i - 1].isalnum() or text[i - 1] in "_)]")
-                    and i + 1 < n and (text[i + 1].isalpha() or text[i + 1] == "_")):
-                out.append(ch)
-                i += 1
-                continue
-            quote = text[i:i + 3] if text[i:i + 3] in ('"""', "'''") else ch
-            out.append(text[i:i + len(quote)])
-            i += len(quote)
-            continue
-        m = _re_builtin_call.match(text, i)
-        if m and (i == 0 or not (text[i - 1].isalnum() or text[i - 1] in "._")):
-            name = m.group(1)
-            if name in ("readFile", "writeFile"):
-                _ensure_file_helpers()
-                out.append("_read_file(" if name == "readFile" else "_write_file(")
-                i = m.end()
-                continue
-            # run / runLines: runLines needs an argument added, so its own
-            # closing paren has to be found first.
-            depth, close = 0, -1
-            for j in range(m.end() - 1, n):
-                if text[j] == "(":
-                    depth += 1
-                elif text[j] == ")":
-                    depth -= 1
-                    if depth == 0:
-                        close = j
-                        break
-            if close == -1:
-                out.append(ch)
-                i += 1
-                continue
-            from hek_py3_parser import _ensure_run_argv_helper
-            _ensure_run_argv_helper()
-            inner = _rewrite_builtins_in_raw(text[m.end():close])
-            tail = ", _lines=True" if name == "runLines" else ""
-            out.append(f"_run_argv({inner}{tail})")
-            i = close + 1
-            continue
-        out.append(ch)
-        i += 1
-    return "".join(out)
-
-
-import re as _re_bc
-_re_builtin_call = _re_bc.compile(r"(readFile|writeFile|runLines|run)\s*\(")
-
-
 @method(call_trailer)
 def to_py(self, prec=None):
     """call_trailer: '(' arguments? ')'"""
     from hek_tokenize import get_multiline_brackets
     pos = _get_bracket_start(self.nodes[0])
     ml = get_multiline_brackets()
-    if pos and pos in ml and not _has_named_tuple(self):
-        return _rewrite_builtins_in_raw(ml[pos])
     if len(self.nodes) > 1 and hasattr(self.nodes[1], "nodes") and self.nodes[1].nodes:
-        return "(" + self.nodes[1].nodes[0].to_py() + ")"
+        rendered = "(" + self.nodes[1].nodes[0].to_py() + ")"
     elif len(self.nodes) > 1 and hasattr(self.nodes[1], "to_py"):
-        return "(" + self.nodes[1].to_py() + ")"
-    return "()"
+        rendered = "(" + self.nodes[1].to_py() + ")"
+    else:
+        rendered = "()"
+    if pos and pos in ml and not _has_named_tuple(self):
+        return _keep_layout(pos, ml, rendered)
+    return rendered
 
 
 @method(slice_trailer)

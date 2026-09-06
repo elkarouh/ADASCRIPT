@@ -147,7 +147,9 @@ in order to build.
 
 ## A.4 Known limitations (as of this writing)
 
-- `py2py.py` collapses blank lines and drops inline comments in output.
+- `py2py.py` collapses blank lines and drops inline comments in output, and
+  collapses a bracketed expression that spans lines onto one line whenever
+  anything inside it needed translating (the layout is kept when nothing did).
 - `case` subjects must be structural expressions (`(a, b)`, `x.field`) for
   tuple/record patterns — a plain variable falls through to Nim's ordinal
   `case` and fails to compile (§5.3).
