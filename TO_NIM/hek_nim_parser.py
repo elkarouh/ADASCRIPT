@@ -3333,6 +3333,28 @@ def to_nim(self, indent=0):
 # sys.path setup.  We import lazily inside the method to avoid a circular
 # import at module load time.
 
+
+_SHELL_LINES_HELPER = """\
+proc adascriptShellLines*(output: string): seq[string] =
+  ## The lines a command printed.
+  ##
+  ## splitLines keeps the empty string after a trailing newline, and command
+  ## output almost always ends in one, so every result would be one longer
+  ## than Python's splitlines gives for the same command.
+  result = output.splitLines()
+  if result.len > 0 and result[^1].len == 0:
+    result.setLen(result.len - 1)\
+"""
+
+
+def _ensure_shell_lines_helper():
+    """Inject the shellLines splitter the first time shellLines is used."""
+    ParserState.nim_imports.add("strutils")
+    decls = getattr(ParserState, "nim_top_decls", [])
+    if not any("adascriptShellLines" in d for d in decls):
+        decls.append(_SHELL_LINES_HELPER)
+        ParserState.nim_top_decls = decls
+
 @method(shell_stmt)
 def to_nim(self, indent=0):
     """shell_stmt: [decl_keyword IDENTIFIER '='] ('shell'|'shellLines') [shell_opts] ':' cmd+
@@ -3523,8 +3545,8 @@ def to_nim(self, indent=0):
     elif target_name:
         if kw == "shellLines":
             # Inline directly — no temp needed
-            ParserState.nim_imports.add("strutils")
-            lines.append(f"{ind}{nim_kw} {target_name} = execCmdEx({cmd_str}){timeout_comment}[0].splitLines()")
+            _ensure_shell_lines_helper()
+            lines.append(f"{ind}{nim_kw} {target_name} = adascriptShellLines(execCmdEx({cmd_str}){timeout_comment}[0])")
             ParserState.symbol_table.add(target_name, "seq[string]", nim_kw)
         else:
             lines.append(f"{ind}let {exec_tmp} = execCmdEx({cmd_str}){timeout_comment}")
@@ -3535,8 +3557,8 @@ def to_nim(self, indent=0):
             # field access like result.output -> result.output.len > 0
             ParserState.symbol_table.add(target_name, "shell_result", nim_kw)
     elif kw == "shellLines":
-        ParserState.nim_imports.add("strutils")
-        lines.append(f"{ind}return execCmdEx({cmd_str}){timeout_comment}[0].splitLines()")
+        _ensure_shell_lines_helper()
+        lines.append(f"{ind}return adascriptShellLines(execCmdEx({cmd_str}){timeout_comment}[0])")
     else:
         lines.append(f"{ind}discard execCmd({cmd_str}){timeout_comment}")
 

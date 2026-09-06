@@ -19,7 +19,7 @@
 - [x] `shell:` interpolation did not quote, so every path needed a helper (see [Safe shell interpolation](#safe-shell-interpolation-auto-quoting--done))
 - [ ] shell tuple capture: the slots mean different things on each backend (see [Bug 13](#bug-13--shell-tuple-capture-slots-disagree-between-backends))
 - [ ] `r.stderr` is documented, works on Python, and does not exist on Nim (see [Bug 14](#bug-14--rstderr-does-not-exist-on-the-nim-backend))
-- [ ] `shellLines` yields one more element on Nim than on Python (see [Bug 15](#bug-15--shelllines-differs-by-a-trailing-empty-element))
+- [x] `shellLines` yields one more element on Nim than on Python (see [Bug 15](#bug-15--shelllines-differs-by-a-trailing-empty-element))
 - [ ] `shell(timeout = ms)` is silently ignored on Nim (see [Bug 16](#bug-16--shelltimeout--ms-is-ignored-on-nim))
 
 ## Shell improvements
@@ -855,9 +855,13 @@ Nim's `splitLines` keeps the empty string after a trailing newline; Python's
 almost every `shellLines` result is one longer on Nim, and any `'Length`,
 index or loop over it disagrees between the backends.
 
-**Fix sketch:** drop one trailing empty element on the Nim side —
-`.splitLines()` then discard a final `""` — which matches both Python and
-what the caller means by "the lines this command printed".
+**Fixed.** `adascriptShellLines()`, injected into `nim_top_decls` on first
+use, splits and then drops a single trailing empty element — matching both
+Python and what the caller means by "the lines this command printed".
+
+Verified against the edges too: no output gives 0 lines on both backends,
+output with no trailing newline gives 1, and a blank line *in the middle* is
+kept.
 
 ---
 
