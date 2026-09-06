@@ -106,6 +106,28 @@ assert leaf.upper() == "/TMP/A/B"        # still a string
 assert (-d root)                          # and a file test takes one
 assert (root / "no-such-thing")'Length > 0
 
+# Splitting one apart. `parent` and `name` follow Python's pathlib, which is
+# what Nim's parentDir/lastPathPart already do -- os.path is the odd one out
+# and is deliberately not the model: it calls the basename of "a/b/" empty.
+assert leaf.parent == "/tmp/a"
+assert leaf.name == "b"
+assert Path("c.txt").parent == "."        # no directory part -> "."
+assert Path("c.txt").name == "c.txt"
+assert Path("a/b/").parent == "a"         # a trailing slash is not a component
+assert Path("a/b/").name == "b"
+assert Path("/a").parent == "/"           # ... but the root is its own parent
+assert Path("/").parent == "/"
+assert Path("").parent == "."
+assert Path(".").name == ""               # "." names no file
+assert Path("..").name == ".."
+
+# mkdir() is mkdir -p on both backends: parents made, already-there is fine.
+let deep: Path = Path("/tmp/adascript_path_test") / "x" / "y"
+deep.mkdir()
+deep.mkdir()
+assert (-d deep)
+shell: rm -rf -- {!Path("/tmp/adascript_path_test")}
+
 # An inline `when` branch that already returns must not be turned into an
 # implicit return: `f(x); return True` has its value in the *last* statement,
 # and marking the head both drops the real return and returns the wrong thing.

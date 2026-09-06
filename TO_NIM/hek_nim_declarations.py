@@ -83,17 +83,43 @@ converter adascriptPathToString*(p: Path): string = p.string
   ## where a string belongs -- readFile, string concatenation, a proc taking
   ## string -- would need an explicit `.string`. The converter is what lets a
   ## Path be passed anywhere a str is, which is what the Python backend gets
-  ## for free by making Path a str subclass. The two backends have to agree.\
+  ## for free by making Path a str subclass. The two backends have to agree.
+
+proc parent*(p: Path): Path =
+  ## The directory holding p -- "." when there is none.
+  ## parentDir already agrees with Python's pathlib on every path that names
+  ## a file; it returns "" only for the four navigation-only inputs "/", "",
+  ## "." and "..", where pathlib answers "/" for the first and "." for the
+  ## rest. That is the whole difference, so that is all this fixes up.
+  result = p.parentDir
+  if result.string.len == 0:
+    result = if p.isAbsolute: Path("/") else: Path(".")
+
+proc name*(p: Path): string =
+  ## The last component of p, with no directory part.
+  ## lastPathPart matches pathlib everywhere except on "." itself, which it
+  ## reports as "." where pathlib reports no name at all.
+  result = p.lastPathPart.string
+  if result == ".":
+    result = ""
+
+proc mkdir*(p: Path) =
+  ## Create this directory and any missing parents (mkdir -p). createDir is
+  ## already both recursive and idempotent, which is the contract the Python
+  ## backend gets from os.makedirs(exist_ok = True).
+  createDir(p)\
 """
 
 
 def _ensure_path_helper():
     """Inject std/paths and the converter the first time Path is named."""
     from hek_parsec import ParserState
-    # Only std/paths: the converter below lets os's string-based fileExists,
-    # readFile and friends take a Path, so std/files and std/dirs would only
-    # add unused-import warnings.
+    # std/paths for the type and its splitting procs, std/dirs for the one
+    # createDir that Path.mkdir needs -- it takes a Path directly, where os's
+    # takes a string. std/files stays out: the converter below lets os's
+    # string-based fileExists, readFile and friends take a Path already.
     ParserState.nim_imports.add("std/paths")
+    ParserState.nim_imports.add("std/dirs")
     decls = getattr(ParserState, "nim_top_decls", [])
     if not any("adascriptPathToString" in d for d in decls):
         decls.append(_PATH_HELPER)

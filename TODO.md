@@ -11,11 +11,25 @@ history of this file if the reasoning behind one of them is ever wanted.
       Nim C backend (it does not compile there either), so this is a bad
       diagnostic rather than a missing feature: py2py should say the construct
       is not for this backend instead of raising AttributeError.
-- [ ] py2py: `nimport os` + `os.path.join(...)` emits `os.` without importing it.
-      Pre-existing; `git1.ady` only works because `os.makedirs` happens to
-      trigger the import through a separate rewrite. Either honour a
-      Python-available module named by `nimport` when it is actually used, or
-      say so at transpile time instead of at run time.
+- [ ] py2py: `nimport os` + `os.path.join(...)` emits `os.` without importing it,
+      so the program dies at run time with `NameError: name 'os' is not
+      defined`. Three lines reproduce it: `nimport os` / `let b: str =
+      os.path.basename("/a/b.txt")` / `print b`. Add an `os.makedirs(...)`
+      call anywhere and it starts working, because that one *is* rewritten
+      into an import. Either honour a Python-available module named by
+      `nimport` when it is actually used, or say so at transpile time instead
+      of at run time. (`git1.ady` used to depend on that accident; it now
+      names no `os.` at all, so it is no longer a witness.)
+- [ ] `print x, y` puts a space between the arguments on Python and none on
+      Nim: `print "n=", 1` gives `n= 1` there and `n=1` here. Same source,
+      different output, which is the one thing the two backends must not do.
+- [ ] `-e` is false for a directory on Nim and true on Python. It maps to
+      `fileExists` in `hek_nim_expr.py` (`"e": ("fileExists", "os")`), whose
+      own comment says "exists (file or dir)" — Nim's `fileExists` is files
+      only, so `-e /tmp` is false there and true here. Should be
+      `fileExists(p) or dirExists(p)`. `os.path.exists` is mapped to the same
+      `fileExists` two hundred lines up and has the same hole. This is the
+      most-used file test, so the divergence is worth closing early.
 - [ ] py2nim: `any(xs)` and `all(xs)` over a `[]bool` do not translate. `any`
       hits Nim's deprecated `any` *type* ("illegal type conversion to 'any'")
       and `all` is simply undeclared; both work on the Python backend, so the

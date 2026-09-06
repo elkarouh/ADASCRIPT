@@ -203,14 +203,35 @@ class Path(str):
         return Path(os.path.join(self, str(other)))
 
     def __rtruediv__(self, other):
-        return Path(os.path.join(str(other), self))\
+        return Path(os.path.join(str(other), self))
+
+    @property
+    def parent(self):
+        \"\"\"The directory holding this path -- "." when there is none.\"\"\"
+        return Path(_pathlib.PurePath(self).parent)
+
+    @property
+    def name(self):
+        \"\"\"The last component, with no directory part.\"\"\"
+        return _pathlib.PurePath(self).name
+
+    def mkdir(self):
+        \"\"\"Create this directory and any missing parents (mkdir -p).\"\"\"
+        os.makedirs(self, exist_ok=True)\
 """
+# `parent` and `name` go through PurePath rather than os.path.dirname /
+# os.path.basename because those two disagree with Nim on a trailing slash:
+# os.path says "a/b/" has no basename and "a/b" as its dirname, while both
+# pathlib and Nim's lastPathPart/parentDir say "b" and "a".  Nim is the one
+# that cannot be changed, so Python follows pathlib's splitting rules --
+# without becoming a pathlib.Path, which is what the note above rules out.
 
 
 def _ensure_path_alias():
     """Define Path the first time an annotation names it."""
     from hek_parsec import ParserState
     ParserState.nim_imports.add("import os")
+    ParserState.nim_imports.add("import pathlib as _pathlib")
     decls = getattr(ParserState, 'py_top_decls', [])
     if not any("class Path(str)" in d for d in decls):
         decls.append(_PATH_ALIAS)

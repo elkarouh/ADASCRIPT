@@ -2281,6 +2281,8 @@ advanced scenarios are not yet supported:
 | Is a program installed?           | `have("git")` -> bool                   |
 | Path join                         | `let p: Path = root / "sub" / name`     |
 | Path <-> str                      | `Path(s)` / `str(p)`; a Path is a str   |
+| Path split                        | `p.parent` -> Path, `p.name` -> str     |
+| Path mkdir                        | `p.mkdir()` -- mkdir -p                 |
 | Wait for one / many jobs          | `j.wait()` / `waitAll(jobs)`            |
 | Run a program, no shell           | `run(["git", "log"])` -> RunResult      |
 | Run a program, output lines       | `runLines(["ls", d])` -> `[]str`        |

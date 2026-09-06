@@ -127,7 +127,9 @@ class Target:
     dir:    Path   # the directory holding the file; git runs here
     base:   str    # the file's own name
     gitdir: Path   # its private repo, relative to dir
+    repo:   Path   # where that repo actually lives: dir / gitdir
     name:   str    # what the user typed, for messages
+    env:    {str}str   # the two variables that make git use that repo
 
     def __init__(self, target: str): ...
     def git(self, args: []str) -> int          # run git here
@@ -329,13 +331,13 @@ The shell half of Adascript covers most of what a shell script does:
 `shell:` body:
 
 ```python
-shell: mkdir -p -- {!os.path.join(t.dir, CONTAINER)}
-shell: rm -rf -- {!os.path.join(t.dir, t.gitdir)}
+shell: mkdir -p -- {!self.dir / CONTAINER}
+shell: rm -rf -- {!self.repo}
 ```
 
 The transpiler hoists complex `{expr}` interpolations to temp variables
-automatically — you write `{!os.path.join(...)}` and the generated Nim
-pre-binds `let shArg0 = joinPath(...)` before the command.  The `!` asks for
+automatically — you write `{!self.dir / CONTAINER}` and the generated Nim
+pre-binds `let shArg0 = ...` before the command.  The `!` asks for
 the value to be quoted as one argument, which is what a path assembled at run
 time needs; an earlier draft of this file carried a hand-written `Q()` quoter
 for the job, which is exactly what the sigil replaced.

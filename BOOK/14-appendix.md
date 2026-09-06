@@ -55,6 +55,8 @@
 | Is a program installed? | `have("git")` → bool, straight from PATH |
 | Path join | `let p: Path = root / "sub" / name` — a str that also joins |
 | Path ↔ str | `Path(s)` to make one, `str(p)` where a plain str is needed |
+| Path split | `p.parent` → Path, `p.name` → str (pathlib's rules, not `os.path`'s) |
+| Path mkdir | `p.mkdir()` — `mkdir -p`: parents made, already-there is fine |
 | Job handle | `j.wait([check])`, `j.running()`, `j.kill()`, `j.pid` |
 | Wait for many at once | `waitAll(jobs)` → `[]RunResult` (drains every pipe) |
 | Run a program, no shell | `run(["git", "log"])` → `RunResult` (.output/.stderr/.code) |

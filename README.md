@@ -1376,6 +1376,27 @@ a `str` subclass with `__truediv__`. Real `pathlib.Path` was the obvious
 choice and is the wrong one here — `p + "!"` and `p.upper()` work on Nim and
 raise on pathlib, so the two backends would disagree.
 
+Taking one apart is the other half:
+
+```python
+let p: Path = Path("/etc/nginx/nginx.conf")
+p.parent        # Path("/etc/nginx") — the directory holding it
+p.name          # "nginx.conf" — the last component, a plain str
+(p.parent / "sites").mkdir()   # mkdir -p: parents made, already-there is fine
+```
+
+`parent` and `name` follow `pathlib`'s splitting rules, which is what Nim's
+`parentDir`/`lastPathPart` already do. `os.path` is the odd one out and is
+deliberately not the model: it calls the basename of `"a/b/"` empty and its
+dirname `"a/b"`, where both `pathlib` and Nim say `"b"` and `"a"`. A path
+with no directory part has `"."` as its parent, and the root is its own
+parent.
+
+`mkdir()` is `mkdir -p` on both backends — it creates missing parents and
+succeeds on a directory that already exists. That is Nim's `createDir` and
+Python's `os.makedirs(..., exist_ok = true)`, not `pathlib.mkdir()`'s
+stricter default.
+
 One wrinkle: a file test takes a primary, so a join inside one needs
 parentheses — `-f (gitdir / "HEAD")`.
 

@@ -6,11 +6,9 @@ Each tracked file gets its own private git repo, ".git1/<name>",
 grouped under a single ".git1" container in the file's directory.
 """
 
-nimport os, strutils
-
 const VERSION:   str = "3.0"
 const CONTAINER: str = ".git1"
-let PROG:   str = os.path.basename($0).lstrip(".")
+let PROG:   str = Path($0).name.lstrip(".")
 
 def die(msg: str):
     stderr.writeLine(f"{PROG}: {msg}")
@@ -56,11 +54,11 @@ class Target:
         var t: str = target.rstrip("/")
         if t'Length == 0:
             die("empty file name")
-        let head: str = os.path.dirname(t)
-        self.base = os.path.basename(t)
+        let p: Path = Path(t)
+        self.base = p.name
         if self.base'Length == 0:
             die(f"not a file name: '{target}'")
-        self.dir    = Path("." if head'Length == 0 else head)
+        self.dir    = p.parent
         self.gitdir = Path(CONTAINER) / self.base
         self.repo   = self.dir / self.gitdir
         self.name   = target
@@ -120,7 +118,7 @@ class Target:
     def write_exclude(self, repo: Path):
         """Make the repo ignore every path except its own file."""
         let exclude: Path = repo / "info" / "exclude"
-        os.makedirs(os.path.dirname(exclude))
+        exclude.parent.mkdir()
         writeFile(exclude, "/*\n!/" + ignore_escape(self.base) + "\n")
 
     def track(self):
