@@ -3755,7 +3755,8 @@ def to_nim(self, indent=0):
         _sys.path.insert(0, _to_py_dir)
     from hek_py3_parser import (_parse_for_shell_stmt, _apply_shell_quoting,
                                 _apply_pipefail, _shell_wants_pipefail)
-    target, cmd, needs_fstring, body_node, opts = _parse_for_shell_stmt(self)
+    target, cmd, needs_fstring, body_node, opts = _parse_for_shell_stmt(
+        self, render=lambda n: n.to_nim())
 
     # cwd, as everywhere on this backend, is a `cd <dir> &&` prefix: a quoted
     # literal is spliced as text, anything else is interpolated and quoted so
@@ -3879,7 +3880,7 @@ def to_nim(self, indent=0):
 
     ind = _ind(indent)
     (target_kw, target_name, target_tuple, kw, opts, cmd, needs_fstring,
-     block_lines, target_ann) = _parse_shell_stmt(self)
+     block_lines, target_ann) = _parse_shell_stmt(self, render=lambda n: n.to_nim())
 
     from hek_py3_parser import _apply_shell_quoting
     cmd, _quoted = _apply_shell_quoting(

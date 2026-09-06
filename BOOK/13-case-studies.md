@@ -105,94 +105,84 @@ as the reference recipe for CLI tools: a `Config` record, `$@` subcommand
 dispatch via `case`, `walkDir`-style scanning through `nimport os`, regex
 queries from Chapter 7.
 
-## 13.7 `git1.ady` — Adascript vs. bash, side by side (~380 vs. ~250 lines)
+## 13.7 `git1.ady` — a single-file version-control tool (~400 lines)
 
-Every other program in this chapter was written as Adascript from the start.
-`git1.ady` is the opposite exercise: a translation of a **bash script**
-(`git1.sh`, after kotodharma/single-file-git), which makes it the best place
-to see what Adascript adds to shell scripting — and what it costs.
+Every other program in this chapter is an algorithm or a port of one.
+`git1.ady` is the workflow tool: the kind of program that is usually written
+as a shell script and then regretted. It is the best place in the book to see
+what the shell half of Adascript is for.
 
 The tool gives each tracked file its own private git repo,
 `.git1/<name>`, grouped under a single `.git1` container in the file's
 directory.  `notes.txt` and `diary.txt` can sit side by side, each with
-independent history, with no repo at the directory level.
+independent history, with no repo at the directory level. (The concept comes
+from kotodharma/single-file-git.)
 
-### Structure: bash globals translate directly
+### Structure: one record, not three globals
 
-The bash version uses three globals set by `split_target`:
-
-```bash
-G1_DIR= G1_BASE= G1_GITDIR=
-split_target() {
-    local t=${1%/}
-    [ -n "$t" ] || die "empty file name"
-    case $t in
-        */*) G1_DIR=${t%/*}; G1_BASE=${t##*/} ;;
-        *)   G1_DIR=.;       G1_BASE=$t ;;
-    esac
-    [ -n "$G1_BASE" ] || die "not a file name: '$1'"
-    G1_GITDIR=$CONTAINER/$PREFIX$G1_BASE
-}
-```
-
-The Adascript version mirrors this closely — mutable globals, same names.
-The one departure is the repo name: bash prefixes it (`$PREFIX$G1_BASE`),
-while the Adascript version drops the prefix, since the `.git1` container
-already keeps the repos out of the way:
+Every git call needs three things about the file it acts on, and they travel
+together:
 
 ```python
-var G1_DIR:    str = ""
-var G1_BASE:   str = ""
-var G1_GITDIR: str = ""
+type Target_T is tuple:
+    dir:    str    # the directory holding the file; git runs here
+    base:   str    # the file's own name
+    gitdir: str    # its private repo, relative to dir
 
-def split_target(target: str):
+def split_target(target: str) -> Target_T:
     var t: str = target.rstrip("/")
     if t'Length == 0:
         die("empty file name")
     let head: str = os.path.dirname(t)
-    G1_BASE = os.path.basename(t)
-    if G1_BASE'Length == 0:
+    let base: str = os.path.basename(t)
+    if base'Length == 0:
         die(f"not a file name: '{target}'")
-    G1_DIR = "." if head'Length == 0 else head
-    G1_GITDIR = CONTAINER + "/" + G1_BASE
+    (dir: "." if head'Length == 0 else head,
+     base: base,
+     gitdir: CONTAINER + "/" + base)
 ```
 
-The type annotations on the globals and the `os.path` calls replace bash
-parameter expansion (`${t%/*}`, `${t##*/}`).  The logic is the same.
+An earlier version of this file kept those three as module-level `var`s that
+`split_target` assigned and every helper read. It worked, and it is what a
+shell script has to do, having no records — but it meant `g(args)` did not
+say which repo it acted on. It acted on whichever file was split last.
 
-### The `g()` function: bash's one-liner becomes Adascript's
+The version that returns a value is better in three specific ways, and each
+one is worth more than the annotation it costs:
 
-In bash, running git against a file's repo is one function:
+- `g(t, args)` names its target, so a caller that forgets to split cannot
+  quietly operate on the previous file. For a version-control tool,
+  committing to the wrong repo is the failure worth designing against.
+- `cmd_mv` holds two targets at once. With globals it had to copy the old
+  values into locals before `split_target(new)` overwrote them; with a record
+  it simply has `ot` and `nt`.
+- Assigning a module-level `var` inside a function is a local in Python and
+  not in Nim, so the pattern needed a `global` declaration on one backend and
+  not the other. A returned value has no such asymmetry.
 
-```bash
-g() {
-    ( cd -- "$G1_DIR" && GIT_DIR=$G1_GITDIR GIT_WORK_TREE=. git "$@" )
-}
-```
+### The `g()` function
 
-The Adascript version says the same things one at a time:
+Every git invocation goes through one helper:
 
 ```python
-def g(args: []str) -> int:
-    let env: {str}str = {"GIT_DIR": G1_GITDIR, "GIT_WORK_TREE": "."}
-    let code: int = shell(cwd = G1_DIR, env = env): git {*args}
+def g(t: Target_T, args: []str) -> int:
+    let env: {str}str = {"GIT_DIR": t.gitdir, "GIT_WORK_TREE": "."}
+    let code: int = shell(cwd = t.dir, env = env): git {*args}
     code
 ```
 
-The bash line does four things at once — change directory, set two
-variables, run git with the arguments — and the shell parses all of it out
-of one string.  The Adascript version says each of them separately: `cwd`,
-`env`, and `{*args}`, which quotes each element of the list and joins them,
-which is what `"$@"` does for free.  The `int` annotation asks for git to
-keep the terminal — its output, colours and pager — while still returning
-its exit status.
+Three settings make a per-file repo work: run in the file's own directory,
+name the private repo as `GIT_DIR` so git stops searching upward for a
+`.git`, and declare that directory the work tree. The first is the `cwd`
+option; the other two go through `env`, which is where a value crossing into
+a child's environment belongs — spelling them as `GIT_DIR={!x}` inside the
+command would work, but then the shell is parsing what the language can hand
+over directly.
 
-The first version of this file spelled the whole thing as command text,
-`cd {!G1_DIR} && GIT_DIR={!G1_GITDIR} GIT_WORK_TREE=. git {*args}`, which
-also works.  The difference is who parses it: `GIT_DIR=...` in a command
-string is the shell's syntax for setting a variable, while `env` is the
-language handing the child an environment.  Only the second can quote for
-you, and only the second is checkable by anything but the shell.
+`{*args}` quotes each element and joins them, so
+`g(t, ["commit", "-m", "hello world"])` reaches git as three arguments and
+not four. The `int`-typed target is the form that keeps the terminal — git's
+output, colours and pager reach the user — while still returning the status.
 
 ### The last git call is different: `g_exec()`
 
@@ -205,7 +195,7 @@ user typed after the file name is handed to git, and git1's only remaining
 job is to copy git's exit code into its own.  It used to say so:
 
 ```python
-quit(g(args))
+quit(g(t, args))
 ```
 
 That works, and it costs a process.  git1 forks git, blocks until it
@@ -214,9 +204,9 @@ holding a pid for the sole purpose of relaying a status.  `shellExec:`
 removes the middle:
 
 ```python
-def g_exec(args: []str):
-    let env: {str}str = {"GIT_DIR": G1_GITDIR, "GIT_WORK_TREE": "."}
-    shellExec(cwd = G1_DIR, env = env): git {*args}
+def g_exec(t: Target_T, args: []str):
+    let env: {str}str = {"GIT_DIR": t.gitdir, "GIT_WORK_TREE": "."}
+    shellExec(cwd = t.dir, env = env): git {*args}
 ```
 
 The statement does not return.  git1 *becomes* git: same pid, same terminal,
@@ -231,20 +221,7 @@ do: `g()` when the program continues, `g_exec()` when it does not.
 
 ### Subcommand dispatch
 
-Bash dispatches with a `case` in `main()`:
-
-```bash
-case $first in
-    init)          shift; cmd_init "$@"; return ;;
-    ls)            shift; cmd_ls "$@"; return ;;
-    rm)            shift; cmd_rm "$@"; return ;;
-    help|-h|--help) cmd_help; return ;;
-    --version)     printf '%s %s\n' "$PROG" "$VERSION"; return ;;
-esac
-```
-
-Adascript uses `case/when` with identical structure — one inline statement
-per branch:
+`case`/`when`, one inline statement per branch:
 
 ```python
 case argv[0]:
@@ -259,70 +236,74 @@ case argv[0]:
     when others: pass
 ```
 
-### What maps 1:1
+### Shell idioms, in Adascript
 
-The shell half of Adascript covers most of what a bash script does:
+The shell half of Adascript covers most of what a shell script does:
 
-| bash | Adascript | Notes |
+| Shell | Adascript | Notes |
 |------|-----------|-------|
 | `$0`, `$1`, `$@`, `$#` | `$0`, `$1`, `$@`, `$#` | Identical syntax |
 | `${PAGER:-less}` | `$PAGER if $PAGER else "less"` | Same intent, explicit |
 | `[ -f "$f" ]` | `-f f` | File-test operators |
 | `[ -d "$d" ]` | `-d d` | |
+| `command -v tool` | `have("tool")` | Straight from PATH, no process |
 | `$(cmd)` | `let r = shell: cmd` | Capture with `shell:` |
 | `cmd \|\| die` | `let code: int = shell: cmd` | Exit code, terminal kept |
 | `"$f"` (quoted expansion) | `{!f}` in a shell body | Quoted interpolation |
+| `"$@"` | `{*args}` | Each element quoted |
+| `exec cmd "$@"` | `shellExec: cmd {*args}` | Replaces the process |
 | `for f in *.txt` | `let entries = shellLines: ls -1a ...` | Glob via shell |
 | `cat <<EOF ... EOF` | `f"""..."""` | Triple-quoted f-string |
 
-### What Adascript adds
+### What the language adds
 
-**Shell interpolation with expressions.** Bash requires `"$G1_DIR/$G1_GITDIR"`;
-Adascript allows function calls directly inside `shell:` interpolation:
+**Interpolation with expressions.** A function call goes directly inside a
+`shell:` body:
 
 ```python
-shell: mkdir -p -- {!os.path.join(G1_DIR, CONTAINER)}
-shell: rm -rf -- {!os.path.join(G1_DIR, G1_GITDIR)}
+shell: mkdir -p -- {!os.path.join(t.dir, CONTAINER)}
+shell: rm -rf -- {!os.path.join(t.dir, t.gitdir)}
 ```
 
 The transpiler hoists complex `{expr}` interpolations to temp variables
-automatically — so you write `{!os.path.join(...)}` and the generated Nim
+automatically — you write `{!os.path.join(...)}` and the generated Nim
 pre-binds `let shArg0 = joinPath(...)` before the command.  The `!` asks for
-the value to be quoted as one argument, which is what a path assembled at
-run time needs; an earlier draft of this file carried a hand-written `Q()`
-quoter for the job, which is exactly what the sigil replaced.
+the value to be quoted as one argument, which is what a path assembled at run
+time needs; an earlier draft of this file carried a hand-written `Q()` quoter
+for the job, which is exactly what the sigil replaced.
 
-**Compiled binary.** `git1.sh` starts a new bash process on every invocation;
-`git1.ady` compiles to a native binary (~100 KB).  For a tool that runs
-once per user action this rarely matters, but `git1 each` iterates over every
-repo — a compiled loop with compiled string handling.
+**Compiled binary.** A shell script starts a new interpreter on every
+invocation; `git1.ady` compiles to a native binary (~100 KB).  For a tool
+that runs once per user action this rarely matters, but `git1 each` iterates
+over every repo — a compiled loop with compiled string handling.
 
-**Type annotations.** `args: []str`, `-> int`, `-> ?str` — a reader
-knows what flows through each function without tracing the bash.
+**Type annotations.** `args: []str`, `-> int`, `-> Target_T` — a reader knows
+what flows through each function without tracing it.
 
 ### What it costs, honestly
 
-**Quoting.** Bash word-splits `"$@"` correctly by default.  Adascript shell
-commands are strings, so a value that might contain spaces or shell
-metacharacters has to be quoted where it is interpolated — `{!f}` for one
-value, `{*args}` for a list.  That is a character of syntax per site rather
-than a habit to remember, which is the point.
+**Quoting.** A shell word-splits `"$@"` correctly by default. Adascript shell
+commands are strings, so a value that might contain spaces or metacharacters
+has to be quoted where it is interpolated — `{!f}` for one value, `{*args}`
+for a list. That is a character of syntax per site rather than a habit to
+remember, which is the point. `run(["git", ...])`, which never builds a
+command line at all, removes even that.
 
 **Shell plumbing helpers — none, now.**  This section used to describe three
-of them, eighteen lines that bash gives you for free: `sh_status()` existed
-because `shell:` could not both keep the terminal and return an exit code,
-and `Q()` because interpolation did not quote.  Both gaps are closed in the
-language, so the example stopped needing the workarounds rather than
-documenting them.  That is the healthier outcome, and the reason to port a
-shell script to a new language at all: what the port cannot say comfortably
-is a bug report about the language.
+of them, eighteen lines: `sh_status()` existed because `shell:` could not
+both keep the terminal and return an exit code, and `Q()` because
+interpolation did not quote.  Both gaps are closed in the language, so the
+example stopped needing the workarounds rather than documenting them.  That
+is the healthier outcome, and the reason to write a tool like this in a new
+language at all: what it cannot say comfortably is a bug report about the
+language.
 
-**`exec` — the last gap, now closed.**  This section used to say the bash
-version replaced its own process with git while the Adascript version ran it
-as a child and forwarded the status: same behaviour to the caller, one extra
-process for the command's lifetime.  `shellExec:` closed that too, and
-`g_exec()` above is where it went, so the passthrough now costs no process
-at all and the status is git's by construction rather than by copying.
+**`exec` — the last gap, now closed.**  This section used to say the
+passthrough ran git as a child and forwarded the status: same behaviour to
+the caller, one extra process for the command's lifetime.  `shellExec:`
+closed that too, and `g_exec()` above is where it went, so the passthrough
+now costs no process at all and the status is git's by construction rather
+than by copying.
 
 The forwarding machinery is still there for the calls that do return —
 `quit(n)` compiles to C's `exit()` rather than Nim's `quit()` whenever `n`
@@ -332,29 +313,24 @@ it, having stopped forwarding anything; a wrapper that still forwards does.
 
 ### The scoreboard
 
-| Metric | `git1.sh` | `git1.ady` |
-|--------|-----------|------------|
-| Lines | 246 | 398 |
-| Shell plumbing overhead | 0 | 0 |
-| Type declarations | 0 | 0 (globals, no records) |
-| Runtime | bash interpreter | native binary (~100 KB) |
-| Subcommands | 8 | 9 (`adopt` has no bash counterpart) |
+| Metric | `git1.ady` |
+|--------|------------|
+| Lines | ~400, of which 66 are docstrings |
+| Shell plumbing overhead | 0 |
+| Type declarations | 1 record (`Target_T`) |
+| Runtime | native binary (~100 KB) |
+| Subcommands | 9 |
 
-Roughly 80 of the 152-line gap is `adopt` and the helpers it needed, a
-subcommand the bash version never had, and 66 lines are docstrings.  What
-is left — a handful — is type annotations, the two `env` tables, and
-the fact that `os.path.join(a, b)` is more characters than `$a/$b`.  The structure is
-otherwise 1:1 — someone who reads the bash can read the Adascript, and
-vice versa.
+Nearly a quarter of the file is docstrings, and another 80 lines are `adopt`
+and the helpers it needed. What is left is the tool.
 
 ### Replacing rather than merging
 
-`adopt` is the one place where the Adascript version takes a position the
-bash original did not.  Branching a single file is cheap and useful — try
-a bolder draft, keep the better one — but *merging* one file is a poor
-fit: a merge combines two versions, and with no file boundary to separate
-the changes, two versions of one file conflict readily.  Edits one line
-apart already do.
+`adopt` is the one place where this tool takes a position of its own.
+Branching a single file is cheap and useful — try a bolder draft, keep the
+better one — but *merging* one file is a poor fit: a merge combines two
+versions, and with no file boundary to separate the changes, two versions of
+one file conflict readily. Edits one line apart already do.
 
 So `git1 adopt <file> <branch>` moves the current branch onto the winner
 wholesale, with `reset --hard`, and offers to delete the branches that

@@ -1712,8 +1712,16 @@ def to_py(self, indent=0):
 # Shell statement helpers and to_py()
 # ---------------------------------------------------------------------------
 
-def _extract_shell_opts(node):
+def _extract_shell_opts(node, render=None):
     """Walk a shell_opts Several_Times node, returning a {key: value_str} dict.
+
+    RENDER turns an option's value node into backend source; it defaults to
+    `to_py`, and the Nim emitter passes a `to_nim` one.  Rendering the whole
+    value matters: this used to take the first plain-string leaf it found,
+    which is right for `cwd = d` and `cwd = "/tmp"` and silently wrong for
+    everything else -- `cwd = t.dir` became `cwd = t`, `cwd = os.path.join(a, b)`
+    became `cwd = os`, `timeout = cfg.ms` became `timeout = cfg`.  Each of
+    those compiled and ran with an object where a string belonged.
 
     shell_opt grammar: IDENTIFIER iop("=") expression
     Terminal nodes (STRING, NUMBER, IDENTIFIER) all store their string value in
@@ -1751,8 +1759,17 @@ def _extract_shell_opts(node):
             first_val = getattr(first, "node", None)
             if isinstance(first_val, str) and first_val.isidentifier():
                 for sibling in n.nodes[1:]:
-                    val = _find_str_value(sibling)
-                    if val is not None:
+                    if sibling is None:
+                        continue
+                    val = None
+                    try:
+                        val = (render(sibling) if render is not None
+                               else sibling.to_py())
+                    except (AttributeError, TypeError):
+                        # Not a renderable expression node; fall back to the
+                        # old leaf search rather than dropping the option.
+                        val = _find_str_value(sibling)
+                    if val:
                         opts[first_val] = val
                         return  # consumed this opt, don't recurse deeper
         if hasattr(n, "nodes"):
@@ -2409,7 +2426,7 @@ def to_py(self, indent=0):
     return f"{ind}for {target} in _shell_iter({cmd_str}{iter_args}):\n{body}"
 
 
-def _parse_for_shell_stmt(node):
+def _parse_for_shell_stmt(node, render=None):
     """Decompose `for x in shellIter: cmd` into (target, cmd, needs_fstring, body, opts).
 
     The command body is the run of shell tokens between the colon and the
@@ -2436,12 +2453,12 @@ def _parse_for_shell_stmt(node):
             if hasattr(tok, "string") and not isinstance(tok, str):
                 cmd, needs_fstring = _extract_shell_body(n)
             else:
-                opts = _extract_shell_opts(n)
+                opts = _extract_shell_opts(n, render)
     _validate_shell_opts("shellIter", opts, has_target=True)
     return target, cmd, needs_fstring, body_node, opts
 
 
-def _parse_shell_stmt(node):
+def _parse_shell_stmt(node, render=None):
     """Decompose a shell_stmt AST node into its logical parts.
 
     Returns (target_kw, target_name, target_tuple, kw, opts, cmd, needs_fstring, block_lines) where:
@@ -2531,7 +2548,7 @@ def _parse_shell_stmt(node):
             body_st = n
             return True
         # Otherwise it's an opts node
-        opts = _extract_shell_opts(n)
+        opts = _extract_shell_opts(n, render)
         return False
 
     for n in nodes[kw_idx + 1 :]:

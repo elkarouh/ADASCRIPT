@@ -11,6 +11,11 @@ history of this file if the reasoning behind one of them is ever wanted.
       Nim C backend (it does not compile there either), so this is a bad
       diagnostic rather than a missing feature: py2py should say the construct
       is not for this backend instead of raising AttributeError.
+- [ ] py2py: `nimport os` + `os.path.join(...)` emits `os.` without importing it.
+      Pre-existing; `git1.ady` only works because `os.makedirs` happens to
+      trigger the import through a separate rewrite. Either honour a
+      Python-available module named by `nimport` when it is actually used, or
+      say so at transpile time instead of at run time.
 - [ ] generic function syntax `def foo[T]` (Feature 1)
 - [ ] `.map()` / `.and_then()` rewriting on `?T` (Feature 2)
 
