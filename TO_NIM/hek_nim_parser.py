@@ -3432,9 +3432,17 @@ proc adascriptRun*(cmd: string, timeoutMs: int = 0, input: string = "",
   p.close()
   (outBuf, errBuf, code)
 
-proc adascriptExec*(cmd: string, timeoutMs: int): int =
+proc adascriptExec*(cmd: string, timeoutMs: int,
+                    env: Table[string, string] = initTable[string, string]()): int =
   ## Run cmd with the terminal inherited, killed after timeoutMs.
-  let p = startProcess(cmd, options = {poEvalCommand, poParentStreams})
+  var envTable: StringTableRef = nil
+  if env.len > 0:
+    envTable = newStringTable(modeCaseSensitive)
+    for k, v in envPairs():
+      envTable[k] = v
+    for k, v in env.pairs:
+      envTable[k] = v
+  let p = startProcess(cmd, env = envTable, options = {poEvalCommand, poParentStreams})
   let deadline = epochTime() + timeoutMs.float / 1000.0
   while true:
     let code = p.peekExitCode()
@@ -3622,10 +3630,18 @@ def to_nim(self, indent=0):
 
     ParserState.nim_imports.add("osproc")
 
-    # cwd: prefix the command with "cd <dir> && "
+    # cwd: prefix the command with "cd <dir> && ".  A quoted literal can be
+    # spliced as text; anything else is an expression, and splicing that would
+    # put the variable's *name* in the command — `cd d && pwd`, which fails
+    # and leaves the command running wherever it started.
     if "cwd" in opts:
-        cwd_val = opts["cwd"].strip('"').strip("'")
-        cmd = f"cd {cwd_val} && {cmd}"
+        _cwd_raw = opts["cwd"].strip()
+        if len(_cwd_raw) >= 2 and _cwd_raw[0] == _cwd_raw[-1] and _cwd_raw[0] in ("'", '"'):
+            cmd = f"cd {_cwd_raw[1:-1]} && {cmd}"
+        else:
+            ParserState.nim_imports.add("osproc")
+            cmd = f"cd {{quoteShell({_cwd_raw})}} && {cmd}"
+            needs_fstring = True
 
     # timeout: passed to the runner in milliseconds, honoured by killing the
     # child when the deadline passes.  execCmdEx has no timeout, which is why
@@ -3640,14 +3656,13 @@ def to_nim(self, indent=0):
                 "shell(stdin = ...) needs a form that captures — "
                 "`let r = shell(stdin = x): cmd`, a tuple, or shellLines:")
         run_timeout = f"{run_timeout or ', 0'}, {opts['stdin']}"
-    if "env" in opts:
-        if not (target_name or target_tuple):
-            raise SyntaxError(
-                "shell(env = ...) needs a form that captures — "
-                "`let r = shell(env = e): cmd`, a tuple, or shellLines:")
+    # env applies to every form: unlike stdin it needs no pipe, only a
+    # different environment for the child.
+    run_env = opts.get("env")
+    if run_env:
         if "stdin" not in opts:
             run_timeout = f'{run_timeout or ", 0"}, ""'
-        run_timeout = f"{run_timeout}, {opts['env']}"
+        run_timeout = f"{run_timeout}, {run_env}"
 
     import re as _re_env
     has_env_vars = bool(_re_env.search(r'__bash_env_\w+__', cmd))
@@ -3750,9 +3765,12 @@ def to_nim(self, indent=0):
         # `let code: int = shell: cmd` -- execCmd inherits stdin/stdout/stderr,
         # so the child keeps the terminal (its pager, its colours), and returns
         # the exit code.  execCmdEx would capture both and lose the terminal.
-        if run_timeout:
+        if run_timeout or run_env:
             _ensure_shell_run_helper()
-            lines.append(f"{ind}{nim_kw} {target_name} = adascriptExec({cmd_ref}{run_timeout})")
+            _exec_args = f", {opts['timeout']}" if "timeout" in opts else ", 0"
+            if run_env:
+                _exec_args += f", {run_env}"
+            lines.append(f"{ind}{nim_kw} {target_name} = adascriptExec({cmd_ref}{_exec_args})")
         else:
             lines.append(f"{ind}{nim_kw} {target_name} = execCmd({cmd_ref})")
         ParserState.symbol_table.add(target_name, "int", nim_kw)
@@ -3785,13 +3803,16 @@ def to_nim(self, indent=0):
             lines.append(f"{ind}return adascriptShellLines({exec_tmp}.output)")
         else:
             lines.append(f"{ind}return adascriptShellLines(adascriptRun({cmd_ref}{run_timeout}).output)")
-    elif run_timeout or checked:
+    elif run_timeout or checked or run_env:
         # A bare `shell:` keeps the terminal, so it needs the passthrough
-        # runner rather than the capturing one to honour a timeout.
+        # runner rather than the capturing one to honour a timeout or an env.
         code_var = f"shellCode{_exec_count}"
-        if run_timeout:
+        if run_timeout or run_env:
             _ensure_shell_run_helper()
-            lines.append(f"{ind}let {code_var} = adascriptExec({cmd_ref}{run_timeout})")
+            _exec_args = f", {opts['timeout']}" if "timeout" in opts else ", 0"
+            if run_env:
+                _exec_args += f", {run_env}"
+            lines.append(f"{ind}let {code_var} = adascriptExec({cmd_ref}{_exec_args})")
         else:
             lines.append(f"{ind}let {code_var} = execCmd({cmd_ref})")
         if checked:

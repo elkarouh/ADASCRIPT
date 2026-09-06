@@ -1241,7 +1241,7 @@ let r = shell(env = extra): git status
 ```
 
 Names already in the environment are overridden; everything else — `PATH`
-included — is still there. Like `stdin`, it applies to the capturing forms.
+included — is still there. Unlike `stdin`, it applies to every form.
 
 ### Reading output as it arrives
 

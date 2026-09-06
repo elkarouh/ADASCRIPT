@@ -26,6 +26,7 @@
 - [x] `shell:` had no way to feed a command's stdin (see [stdin feeding](#stdin-feeding-stdin--expr--done))
 - [x] `shell:` had no way to set a child's environment (see [env mapping](#env-mapping-env--expr--done))
 - [x] `shell:` buffered every command to completion (see [Streaming form](#streaming-form-shelliter--done))
+- [x] py2nim: `shell(cwd = expr)` splices the variable's name (see [Bug 18](#bug-18--py2nim-splices-a-non-literal-cwd-as-text))
 - [x] py2py: a shell body ending in `"` collides with the `"""` wrapper (see [Bug 17](#bug-17--py2py-mis-quotes-a-shell-body-ending-in-a-double-quote))
 
 ## Shell improvements
@@ -1069,8 +1070,10 @@ copied in first and the given names layered over — a child that loses `PATH`
 is nobody's intent.  Overriding an inherited name works: `HOME` set to
 `/overridden` is what the child sees, while `PATH` survives.
 
-Like `stdin`, it applies to the capturing forms and is a transpile-time
-error on a bare `shell:` or an `int`-typed target.
+It applies to **every** form, unlike `stdin`: setting a variable needs no
+pipe, only a different environment for the child, so a bare `shell:` and an
+`int`-typed target take it too — those route through `adascriptExec`, which
+inherits the terminal and accepts an environment.
 
 The Nim side needed `strtabs`: `startProcess` takes a `StringTableRef`, so
 the helper builds one from `envPairs()` and applies the `Table[string, string]`
@@ -1119,3 +1122,35 @@ containing `int(line)` does not know `line` is a string and emits a Nim type
 conversion instead of `parseInt`. It compiled in a file where an earlier
 loop had already registered the name, which is exactly the kind of thing
 that hides until someone reorders their code.
+
+---
+
+### Bug 18 — py2nim splices a non-literal `cwd` as text
+
+`cwd` is implemented on the Nim side by prefixing the command with
+`cd <dir> &&`, and the option's value was spliced in as raw text.  A quoted
+literal survives that; an expression does not — the *name* of the variable
+lands in the command.
+
+**Reproduction:**
+```python
+let d: str = "/tmp"
+let r = shell(cwd = d): pwd
+print r.output.strip()
+```
+
+```
+Nim    ->              (emitted `cd d && pwd`; cd fails, pwd never runs)
+Python ->  /tmp        (subprocess takes a real cwd= argument)
+```
+
+Nothing reports the failure: `cd` writes to stderr, `&&` swallows the rest,
+and the capture comes back empty.  A command that was meant to run somewhere
+else quietly does not run at all.
+
+**Fixed.** A quoted literal is still spliced as text; anything else is
+interpolated and quoted — `cd {quoteShell(d)} && …` — which also handles a
+directory whose name contains a space.
+
+Found while converting `EXAMPLES/git1.ady` to the `env` option, which is why
+that file still spells the directory change itself.
