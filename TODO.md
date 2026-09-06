@@ -34,6 +34,7 @@
 - [x] `shellIter` accepted options and discarded all of them (see [Bug 21](#bug-21--shelliter-accepted-options-and-discarded-all-of-them))
 - [x] py2py: a call spanning lines skips every name-anchored rewrite (see [Bug 22](#bug-22--a-call-spanning-lines-skips-every-name-anchored-rewrite-python-backend))
 - [x] py2py: tick attributes were dropped in a call spanning lines (see [Bug 22 (rest)](#bug-22-rest--tick-attributes-in-a-call-spanning-lines--fixed))
+- [x] py2py: argparse.ady did not run at all — four stacked faults (see [Bugs 23–26](#bugs-2326--examplesargparseady-did-not-run-on-the-python-backend))
 - [x] every command went through `/bin/sh`, so quoting was always the caller's problem (see [Argv form](#argv-form-run--runlines--done))
 - [x] every shell form waited, so N commands took the sum of their times (see [Concurrency form](#concurrency-form-shellspawn--done))
 - [x] a pipeline's failure vanished, a block could only join with `&&`, and asking whether a program exists cost a process (see [pipefail, join and have()](#pipefail-block-join-and-have--done))
@@ -1629,3 +1630,88 @@ comparison. Duplicating a translator is exactly what this avoids.
 test`, and every one of the 67 examples transpiled through py2py and parsed
 with `ast.parse` -- 66 clean, the one failure (`argparse.ady`, an
 IndentationError around a class body) confirmed identical before the change.
+
+---
+
+### Bugs 23–26 — `EXAMPLES/argparse.ady` did not run on the Python backend
+
+The one example that failed the "transpile every file and `ast.parse` it"
+sweep.  It turned out to be four independent faults stacked on one file,
+each hidden behind the one before it -- the reason it had gone unnoticed is
+that `make test` exercises the Nim backend, where all four are fine.
+
+**Bug 23 — a statement rendering to several lines lost every line but the
+first.**  `stmt_line.to_py` took no indent, so the caller's fallback added
+one to the head and left the rest alone.  That fallback is right for what it
+was written for -- the lines after the first are usually the contents of a
+multi-line string, which must not be re-indented (bug 12) -- but an enum
+declared inside a function renders to *code*:
+
+```python
+def process_args(args: []str) -> ...:
+    type State_T is enum expecting_option, processing_option, ...
+```
+
+```
+    class State_T(Enum):
+    expecting_option = 0            <- class body, at the wrong depth
+expecting_option = State_T.expecting_option   <- outside the function
+```
+
+Fixed by giving `stmt_line.to_py` an indent, as its sibling
+`type_block_stmt` already had, and threading it into `type_stmt`.
+
+**Bug 24 — a statement node and an expression node take different single
+positionals.**  Introduced while fixing 23 and caught immediately: statement
+`to_py` takes `indent`, expression `to_py` takes `prec`.  Passing one as the
+other is accepted *in silence* -- no TypeError to catch -- so every plain
+call statement lost its indentation and had its parenthesisation rewritten
+from a precedence of 4.
+
+```
+def g(n: int):
+print(n)            <- and this was the *fix* misfiring
+```
+
+The test has to be on the parameter's name, not on whether the call raises.
+`_to_py_takes_indent` inspects the signature, cached per function.
+
+**Bug 25 — a dataclass field with no default followed fields with defaults.**
+
+```python
+type Command_Line_Arguments_T is record:
+    outputFile : str = "output.txt"
+    free_args  : []str            # no initialiser -- fine in Nim
+```
+
+```
+TypeError: non-default argument 'free_args' follows default argument
+```
+
+Raised at *import*, so the whole module died rather than the one record.
+Every defaultless field now gets the zero Nim would have given it, and a
+mutable one goes through `field(default_factory=list)` -- writing `= []` on
+a dataclass field is the shared-mutable-default bug, which is why a plain
+class body suppresses it (bug 5).
+
+**Bug 26 — a record variable with no initialiser was None.**
+
+```python
+var res : Command_Line_Arguments_T
+res.free_args.append(arg)     # AttributeError: 'NoneType' has no attribute
+```
+
+`_zero_value` returned None for any class, which is honest for an arbitrary
+one but not for a record: Nim gives it a real object with every field at its
+zero, and declaring one and filling it in field by field is how a record is
+normally built.  Now that every field has a default (bug 25), `T()` *is*
+that object.  `ParserState.record_types` remembers which names are records.
+
+Both backends now agree on `argparse.ady` across a plain run, `-v`,
+`-o/-n`, several free arguments and an unknown option.
+
+**What this says about the sweep.**  These four had been sitting in a file
+that `make test` builds and runs green every time, because it only runs the
+Nim backend for it.  Transpiling every example through py2py and parsing the
+result is three lines of shell and found all of them; it is worth keeping as
+a habit whenever the Python emitter changes.

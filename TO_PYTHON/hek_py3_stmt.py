@@ -144,10 +144,19 @@ def _zero_value(annotation):
 
     A bare `x: T` binds nothing in Python, so a declaration written without an
     initialiser -- valid Adascript, since Nim zero-initialises it -- would
-    raise on first use.  There is no honest zero for a class or an optional,
-    so those become None.
+    raise on first use.  There is no honest zero for an arbitrary class or an
+    optional, so those become None.
+
+    A record is the exception: Nim gives it a real object with every field at
+    its zero, and since the dataclass this backend emits now gives every field
+    a default, `T()` is exactly that object.  Without it a record declared and
+    then filled in field by field -- the ordinary way to build one -- starts
+    as None and fails on the first assignment.
     """
+    from hek_parsec import ParserState
     ann = (annotation or "").strip()
+    if ann in getattr(ParserState, "record_types", ()):
+        return f"{ann}()"
     scalars = {"int": "0", "float": "0.0", "bool": "False", "str": '""',
                "bytes": 'b""', "complex": "0j"}
     if ann in scalars:
@@ -778,8 +787,17 @@ def to_py(self):
     return f"[{', '.join(parts)}]"
 
 @method(type_stmt)
-def to_py(self):
-    """type_stmt: 'type' IDENTIFIER type_alias_params? '=' (enum_def | expression)"""
+def to_py(self, indent=0):
+    """type_stmt: 'type' IDENTIFIER type_alias_params? '=' (enum_def | expression)
+
+    Takes an indent, as its block-form sibling type_block_stmt does. Without
+    one, a declaration inside a function reached the caller's fallback for a
+    statement that renders to several lines -- which indents the first line
+    and leaves the rest alone, because the lines after the first are usually
+    the contents of a multi-line string and must not be touched. An enum's
+    are not: they are generated code, and landed at column zero, outside the
+    function they were declared in.
+    """
     name = self.nodes[0].to_py()
     params = ""
     eq_idx = 1
@@ -801,31 +819,31 @@ def to_py(self):
         lo = str(rhs.nodes[2].node)
         hi = str(rhs.nodes[4].node)  # [float, range, lo, range_op, hi]
         ParserState.tick_types[name] = {"First": lo, "Last": hi, "is_float_range": True}
-        return f"{name} = float  # range {lo} .. {hi}"
+        return f"{_ind(indent)}{name} = float  # range {lo} .. {hi}"
     if rhs_type == 'int_range_def':
         sr = rhs.nodes[2]  # the subrange_def inside (nodes[0]=int, nodes[1]=range)
         lo = str(sr.nodes[0].node)
         hi = str(sr.nodes[2].node)   # [lo, range_op, hi]
         ParserState.tick_types[name] = {"First": lo, "Last": hi}
-        return f"{name} = {rhs.to_py()}"
+        return f"{_ind(indent)}{name} = {rhs.to_py()}"
     if rhs_type == 'constrained_subrange_def':
         sr = rhs.nodes[1]  # the subrange_def inside
         lo = str(sr.nodes[0].node)
         hi = str(sr.nodes[2].node)   # [lo, range_op, hi]
         ParserState.tick_types[name] = {"First": lo, "Last": hi}
-        return f"{name} = {rhs.to_py()}"
+        return f"{_ind(indent)}{name} = {rhs.to_py()}"
     if rhs_type == 'subrange_def':
         # Register First/Last for tick attributes (Name'First, Name'Last)
         lo = rhs.nodes[0].node
         hi = rhs.nodes[2].node  # [lo, range_op, hi]
         ParserState.tick_types[name] = {"First": lo, "Last": hi}
-        return f"{name} = {rhs.to_py()}"
+        return f"{_ind(indent)}{name} = {rhs.to_py()}"
     if rhs_type == 'enum_def':
         members = rhs.to_py()
         member_names = [m.strip() for m in members[len("enum "):].split(",")]
-        return _emit_enum_py(name, member_names)
+        return _emit_enum_py(name, member_names, indent)
     value = rhs.to_py()
-    return f"{name} = {value}"
+    return f"{_ind(indent)}{name} = {value}"
 
 
 
@@ -887,12 +905,59 @@ def to_py(self):
 
 
 # --- stmt_line ---
-@method(stmt_line)
-def to_py(self):
-    """stmt_line: simple_stmt (';' simple_stmt)* ';'? NEWLINE"""
-    from hek_tokenize import RichNL
+_TAKES_INDENT_CACHE = {}
 
-    parts = [self.nodes[0].to_py()]
+
+def _to_py_takes_indent(fn):
+    """True when this to_py's first parameter is an indent rather than a prec.
+
+    Statement nodes take `indent`, expression nodes take `prec`, and both are
+    a single positional -- so calling one as the other is accepted in silence.
+    Cached: this is asked once per statement rendered.
+    """
+    import inspect
+    key = getattr(fn, "__func__", fn)
+    hit = _TAKES_INDENT_CACHE.get(key)
+    if hit is None:
+        try:
+            params = list(inspect.signature(fn).parameters)
+        except (TypeError, ValueError):
+            params = []
+        hit = bool(params) and params[0] == "indent"
+        _TAKES_INDENT_CACHE[key] = hit
+    return hit
+
+
+@method(stmt_line)
+def to_py(self, indent=0):
+    """stmt_line: simple_stmt (';' simple_stmt)* ';'? NEWLINE
+
+    Takes an indent so that a statement rendering to several lines can place
+    them itself.  The caller's fallback for a statement that cannot take one
+    indents the first line and leaves the rest, since the lines after the
+    first are usually the contents of a multi-line string and must not be
+    touched.  A `type T is enum ...` inside a function is the exception:
+    those lines are generated code, and used to land at column zero.
+
+    Only the first statement on the line is placed -- the ones after a
+    semicolon are continuations of it, and carry no indentation of their own.
+    """
+    from hek_tokenize import RichNL
+    ind = _ind(indent)
+
+    def _placed(node):
+        """Render a statement, letting it place its own lines when it can.
+
+        The test has to be on the parameter's *name*, not on whether the call
+        raises: an expression node's to_py takes `prec`, so passing an indent
+        positionally is accepted in silence, adds no indentation, and quietly
+        rewrites the expression's parenthesisation into the bargain.
+        """
+        if _to_py_takes_indent(node.to_py):
+            return node.to_py(indent)
+        return ind + node.to_py()
+
+    parts = [_placed(self.nodes[0])]
     newline_node = None
 
     for node in self.nodes[1:]:
@@ -911,7 +976,9 @@ def to_py(self):
 
     result = "; ".join(parts)
     if id(self) in RETURN_NODES:
-        result = "return " + result
+        # `return` goes before the statement, not before its indentation.
+        result = ind + "return " + (result[len(ind):] if result.startswith(ind)
+                                    else result)
     # Append inline comment if present in the NEWLINE RichNL
     if newline_node is not None and hasattr(newline_node, 'comments') and newline_node.comments:
         for kind, text, ind in newline_node.comments:

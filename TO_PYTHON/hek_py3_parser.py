@@ -1387,6 +1387,38 @@ def _extract_py_fields(block_node, indent=1):
     return lines
 
 
+def _dataclass_defaults(field_lines):
+    """Give every defaultless field a default, mirroring Nim's zero value.
+
+    A record field written without an initialiser is ordinary Adascript --
+    Nim zero-initialises it -- but Python rejects a dataclass whose
+    defaultless field follows one with a default, and does so at *import*
+    time, so the whole module dies rather than the one record:
+
+        TypeError: non-default argument 'free_args' follows default argument
+
+    A mutable zero has to go through default_factory: writing `= []` on a
+    dataclass field is the shared-mutable-default bug, which is the same
+    reason a plain class body suppresses it.
+    """
+    import re as _re_dd
+    factories = {"[]": "list", "{}": "dict", "set()": "set"}
+    out = []
+    for line in field_lines:
+        m = _re_dd.match(r"^(\s*)([A-Za-z_]\w*)\s*:\s*(.+?)\s*$", line)
+        if not m or "=" in m.group(3):
+            out.append(line)
+            continue
+        pad, fname, ann = m.groups()
+        zero = hek_py3_stmt._zero_value(ann)
+        if zero in factories:
+            ParserState.nim_imports.add("from dataclasses import dataclass, field")
+            out.append(f"{pad}{fname}: {ann} = field(default_factory={factories[zero]})")
+        else:
+            out.append(f"{pad}{fname}: {ann} = {zero}")
+    return out
+
+
 def _extract_variant_fields_py(stmt_nodes, indent):
     """Extract field declarations from variant_when stmt_line nodes for Python."""
     import re as _re
@@ -1518,10 +1550,14 @@ def to_py(self, indent=0):
             _register_named_tuple(name, field_names)
         return "\n".join(lines)
     elif keyword == "record":
+        # Remembered so a `var r: T` with no initialiser can be given the
+        # empty record Nim would have zero-initialised, rather than None.
+        if not hasattr(ParserState, "record_types"):
+            ParserState.record_types = set()
+        ParserState.record_types.add(name)
         ParserState.nim_imports.add("from dataclasses import dataclass")
         lines = [f"{_ind(indent)}@dataclass", f"{_ind(indent)}class {name}{params}:"]
-        for f in fields:
-            lines.append(f)
+        lines.extend(_dataclass_defaults(fields))
         return "\n".join(lines)
     return f"{_ind(indent)}type {name}{params} = {rhs.to_py()}"
 

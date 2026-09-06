@@ -40,6 +40,35 @@ let kept: {str}int = {
 }
 assert kept["beta"] == 2
 
+# A record field with no initialiser: Nim zero-initialises it, and Python
+# rejects a dataclass whose defaultless field follows one with a default --
+# at import time, so the whole module used to die rather than the record.
+type Rec_T is record:
+    label : str = "x"
+    items : []str
+    counts: {str}int
+
+# And a record variable with no initialiser is that empty record, not None,
+# so it can be filled in field by field the way one is normally built.
+var rec : Rec_T
+rec.items.append("one")
+rec.counts["n"] = 1
+assert rec.label == "x" and rec.items'Length == 1 and rec.counts["n"] == 1
+
+# An enum declared inside a function renders to several lines, which used to
+# land at column zero -- outside the function that declared them.
+def local_enum_works() -> int:
+    type Local_T is enum P, Q, R
+    var got: int = 0
+    case Q:
+        when P: got = 1
+        when Q:
+            got = 2
+            got = got + 10
+        when others: got = 0
+    got
+assert local_enum_works() == 12
+
 # case with inline when clauses
 let y: int = 2
 case y:
