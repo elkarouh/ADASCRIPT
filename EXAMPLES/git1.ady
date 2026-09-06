@@ -50,7 +50,9 @@ class Target:
     dir:    Path   # the directory holding the file; git runs here
     base:   str    # the file's own name
     gitdir: Path   # its private repo, relative to dir
+    repo:   Path   # where that repo actually lives: dir / gitdir
     name:   str    # what the user typed, for messages
+    env:    {str}str   # the two variables that make git use that repo
 
     def __init__(self, target: str):
         var t: str = target.rstrip("/")
@@ -62,15 +64,9 @@ class Target:
             die(f"not a file name: '{target}'")
         self.dir    = Path("." if head'Length == 0 else head)
         self.gitdir = Path(CONTAINER) / self.base
+        self.repo   = self.dir / self.gitdir
         self.name   = target
-
-    def repo(self) -> Path:
-        """Where the private repo actually lives."""
-        self.dir / self.gitdir
-
-    def env(self) -> {str}str:
-        """The two variables that make git use the private repo."""
-        {"GIT_DIR": str(self.gitdir), "GIT_WORK_TREE": "."}
+        self.env    = {"GIT_DIR": str(self.gitdir), "GIT_WORK_TREE": "."}
 
     def git(self, args: []str) -> int:
         """Run git here. Returns its exit code; git keeps the terminal.
@@ -81,8 +77,7 @@ class Target:
         t.git(["commit", "-m", "hello world"]) reaches git as three
         arguments and not four.
         """
-        let e: {str}str = self.env()
-        let code: int = shell(cwd = self.dir, env = e): git {*args}
+        let code: int = shell(cwd = self.dir, env = self.env): git {*args}
         code
 
     def git_exec(self, args: []str):
@@ -94,8 +89,7 @@ class Target:
         less process, the status is git's by construction, and Ctrl-C
         reaches git directly.  Only the final dispatch can use this.
         """
-        let e: {str}str = self.env()
-        shellExec(cwd = self.dir, env = e): git {*args}
+        shellExec(cwd = self.dir, env = self.env): git {*args}
 
     def git_lines(self, args: []str) -> []str:
         """Run git here and return what it printed.
@@ -104,12 +98,11 @@ class Target:
         output rather than the status. git does not get the terminal, so
         this is not the one for anything the user is meant to watch.
         """
-        let e: {str}str = self.env()
-        let lines = shellLines(cwd = self.dir, env = e): git {*args}
+        let lines = shellLines(cwd = self.dir, env = self.env): git {*args}
         lines
 
     def require(self):
-        if not -d self.repo():
+        if not -d self.repo:
             die(f"'{self.name}' is not tracked (run: {PROG} init {self.name})")
 
     def current_branch(self) -> str:
@@ -137,7 +130,7 @@ class Target:
         if not -e self.name: die(f"no such file: {self.name}")
         if not -f self.name: die(f"not a regular file: {self.name}")
         if not -d self.dir: die(f"no such directory: {self.dir}")
-        let repo: Path = self.repo()
+        let repo: Path = self.repo
         if -e repo: die(f"already tracked: {self.name}")
 
         shell: mkdir -p -- {!self.dir / CONTAINER}
@@ -159,7 +152,7 @@ class Target:
         if not force:
             if not confirm(f"Delete the history of {self.name}? The file itself is kept."):
                 die("aborted")
-        shell: rm -rf -- {!self.repo()}
+        shell: rm -rf -- {!self.repo}
         shell: rmdir -- {!self.dir / CONTAINER} 2>/dev/null || true
 
     def adopt(self, branch: str, force: bool, prune: str):
@@ -206,12 +199,12 @@ class Target:
         if -e new: die(f"target exists: {new}")
         var nt: Target = Target(new)
         if not -d nt.dir: die(f"no such directory: {nt.dir}")
-        let new_repo: Path = nt.repo()
+        let new_repo: Path = nt.repo
         if -e new_repo: die(f"already tracked: {new}")
 
         shell: mv -- {!self.name} {!new}
         shell: mkdir -p -- {!nt.dir / CONTAINER}
-        shell: mv -- {!self.repo()} {!new_repo}
+        shell: mv -- {!self.repo} {!new_repo}
         nt.write_exclude(new_repo)
         # The statuses are kept rather than dropped: a rename whose commit
         # fails leaves the repo moved but the history not recording it, which
