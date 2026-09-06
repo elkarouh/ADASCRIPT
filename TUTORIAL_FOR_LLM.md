@@ -952,6 +952,7 @@ for s in Stage_T'First .. Stage_T'Last:
 | Shell exit code, terminal kept | `let code: int = shell: cmd` |
 | Shell interpolation, quoted | `shell: cmd {!path}` |
 | Shell interpolation, list | `shell: cmd {*args}` |
+| Shell, fail on non-zero | `shell(check = true): cmd` |
 | Shell lines capture | `let ls = shellLines: cmd` |
 | Shell lines (typed) | `let ls: []str = shellLines: cmd` |
 | Shell (bare assign) | `ls = shellLines: cmd` |

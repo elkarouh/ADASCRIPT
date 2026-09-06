@@ -1197,6 +1197,24 @@ shell: git {*args}             # git commit -m 'two words'
 Nim emits `quoteShell(expr)` and `mapIt(xs, quoteShell(it)).join(" ")`;
 Python `shlex.quote(expr)` and `' '.join(...)`.
 
+### Failing on a non-zero status
+
+`check = true` raises when the command fails, instead of leaving the status
+to be inspected — `OSError` on the Nim backend, `CalledProcessError` on
+Python, both catchable:
+
+```python
+shell(check = true): git commit -m {!msg}
+
+try:
+    shell(check = true): exit 9
+except:
+    print "handled"
+```
+
+It works with every form: bare, capture, tuple, `shellLines:` and an
+`int`-typed target.
+
 ### Options
 
 ```python

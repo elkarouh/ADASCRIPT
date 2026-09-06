@@ -22,6 +22,7 @@
 - [x] `shellLines` yields one more element on Nim than on Python (see [Bug 15](#bug-15--shelllines-differs-by-a-trailing-empty-element))
 - [x] `shell(timeout = ms)` is silently ignored on Nim (see [Bug 16](#bug-16--shelltimeout--ms-is-ignored-on-nim))
 - [x] `shell:` had no way to interpolate an argument *list* (see [Splat interpolation](#splat-interpolation-args--done))
+- [x] `shell:` had no way to fail on a non-zero status (see [Checked form](#checked-form-check--true--done))
 - [x] py2py: a shell body ending in `"` collides with the `"""` wrapper (see [Bug 17](#bug-17--py2py-mis-quotes-a-shell-body-ending-in-a-double-quote))
 
 ## Shell improvements
@@ -974,3 +975,42 @@ through for printf to interpret; Python's `"""` is not, so the same body
 reaches the shell with a real newline. Both happen to print the same thing
 here, but the two are not the same command. The escaped fallback this fix
 adds is the raw-faithful one.
+
+---
+
+### Checked form `check = true` — DONE
+
+Every script that cared about a command failing wrote the same three lines:
+run it, look at the code, complain.  `check = true` says it once.
+
+```python
+shell(check = true): git commit -m {!msg}
+```
+
+A non-zero status raises — `OSError` on Nim naming the status and the
+command, `CalledProcessError` on Python — and both are catchable, so the
+form composes with `try`/`except` rather than only killing the program:
+
+```python
+try:
+    shell(check = true): exit 9
+except:
+    print "handled"
+```
+
+It is an option rather than a new keyword (`shell!:` was the alternative),
+which needed no grammar change: `shell_opts` already parses `name = value`,
+and it reads alongside `cwd` and `timeout` as one more thing to say about
+how the command should run.
+
+Works with every form — bare, capture, tuple, `shellLines:` and an
+`int`-typed target.  The command string is bound to a temp first, since it is
+needed twice, to run and to name in the error, and may be an f-string with
+side effects.
+
+**Not used in `EXAMPLES/git1.ady` on purpose.** Its failures are reported
+with `die()`, which prints `git1: could not create <repo>` and exits 1 — for
+a CLI that is better than an uncaught exception's traceback. The checked form
+suits a script whose failures should stop it outright.
+`EXAMPLES/test_shell_block.ady` covers it, along with `{!x}` and `{*xs}`, so
+the suite exercises all three.

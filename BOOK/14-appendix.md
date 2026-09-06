@@ -43,6 +43,7 @@
 | Shell expr interpolation | `{f(x)}` in body — auto-hoisted to temp variable |
 | Shell interpolation, quoted | `{!path}` — one argument whatever it holds |
 | Shell interpolation, list | `{*args}` — each element quoted, space-joined |
+| Shell, fail on non-zero | `shell(check = true): cmd` |
 | Shell options | `shell(cwd = "...", timeout = ms): cmd` |
 | Shell block / PTY automation | `shell:` + lines / + `send()`/`expect()` |
 | CLI args | `$0`, `$1`…`$9`, `$@`, `$#` |

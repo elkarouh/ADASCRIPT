@@ -21,4 +21,25 @@ shell:
     expect("50")
     send("quit\n")
 
+print("=== checked form (check = true) ===")
+shell(check = true): true
+print("a command that succeeds passes through")
+
+let checked = shell(check = true): echo captured and checked
+print("capture still works:", checked.output.strip())
+
+try:
+    shell(check = true): exit 9
+    print("BUG: a failing checked command did not raise")
+except:
+    print("a failing one raises, and is catchable")
+
+print("=== quoting sigils ===")
+let spaced: str = "two words"
+let argv: []str = ["one arg", "another arg"]
+let r1 = shell: printf '[%s]' {!spaced}
+print("{!x}: ", r1.output.strip())
+let r2 = shell: printf '[%s]' {*argv}
+print("{*xs}:", r2.output.strip())
+
 print("done — all expects matched, bc was driven successfully")

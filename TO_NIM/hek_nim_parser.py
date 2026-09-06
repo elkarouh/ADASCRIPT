@@ -3425,6 +3425,22 @@ def _ensure_shell_run_helper():
         decls.append(_SHELL_RUN_HELPER)
         ParserState.nim_top_decls = decls
 
+
+_SHELL_CHECK_HELPER = """\
+proc adascriptCheck*(cmd: string, code: int) =
+  ## Abort when a command run with check = true fails.
+  if code != 0:
+    raise newException(OSError, "command failed with status " & $code & ": " & cmd)\
+"""
+
+
+def _ensure_shell_check_helper():
+    """Inject the failure check the first time check = true is used."""
+    decls = getattr(ParserState, "nim_top_decls", [])
+    if not any("adascriptCheck" in d for d in decls):
+        decls.append(_SHELL_CHECK_HELPER)
+        ParserState.nim_top_decls = decls
+
 @method(shell_stmt)
 def to_nim(self, indent=0):
     """shell_stmt: [decl_keyword IDENTIFIER '='] ('shell'|'shellLines') [shell_opts] ':' cmd+
@@ -3595,56 +3611,90 @@ def to_nim(self, indent=0):
     ParserState._exec_result_count = _exec_count + 1
     exec_tmp = f"execResult{_exec_count}"
 
+    # check = true: bind the command once, then abort if it failed.  The
+    # command string is needed twice — to run and to name in the error — and
+    # it may be an f-string with side effects, so it goes into a temp.
+    checked = str(opts.get("check", "")).strip().lower() in ("true", "1")
+    cmd_ref = cmd_str
+    if checked:
+        _ensure_shell_check_helper()
+        cmd_var = f"shellCmd{_exec_count}"
+        lines.append(f"{ind}let {cmd_var} = {cmd_str}")
+        cmd_ref = cmd_var
+
+    def _check(code_expr):
+        if checked:
+            lines.append(f"{ind}adascriptCheck({cmd_ref}, {code_expr})")
+
     if target_tuple:
         # let (out, code) = shell: cmd            — 2-element
         # let (out, code, err) = shell: cmd       — 3-element
         slots = [f"{exec_tmp}.output", f"{exec_tmp}.code", f"{exec_tmp}.stderr"]
         # Emit the temp only if at least one non-_ slot needs it
         named = [(i, v) for i, v in enumerate(target_tuple) if v != "_"]
-        if named:
-            _ensure_shell_run_helper()
-            lines.append(f"{ind}let {exec_tmp} = adascriptRun({cmd_str}{run_timeout})")
-            for i, var_name in named:
-                slot_type = _SLOT_TYPES[i] if i < len(_SLOT_TYPES) else "string"
-                lines.append(f"{ind}{nim_kw} {var_name} = {slots[i]}")
-                ParserState.symbol_table.add(var_name, slot_type, nim_kw)
-        else:
-            _ensure_shell_run_helper()
-            lines.append(f"{ind}discard adascriptRun({cmd_str}{run_timeout})")
+        _ensure_shell_run_helper()
+        lines.append(f"{ind}let {exec_tmp} = adascriptRun({cmd_ref}{run_timeout})")
+        for i, var_name in named:
+            slot_type = _SLOT_TYPES[i] if i < len(_SLOT_TYPES) else "string"
+            lines.append(f"{ind}{nim_kw} {var_name} = {slots[i]}")
+            ParserState.symbol_table.add(var_name, slot_type, nim_kw)
+        if not named:
+            lines[-1] = lines[-1].replace(f"let {exec_tmp} = ", "discard ", 1)
+        _check(f"{exec_tmp}.code" if named else "0")
     elif target_name and target_ann == "int" and kw == "shell":
         # `let code: int = shell: cmd` -- execCmd inherits stdin/stdout/stderr,
         # so the child keeps the terminal (its pager, its colours), and returns
         # the exit code.  execCmdEx would capture both and lose the terminal.
         if run_timeout:
             _ensure_shell_run_helper()
-            lines.append(f"{ind}{nim_kw} {target_name} = adascriptExec({cmd_str}{run_timeout})")
+            lines.append(f"{ind}{nim_kw} {target_name} = adascriptExec({cmd_ref}{run_timeout})")
         else:
-            lines.append(f"{ind}{nim_kw} {target_name} = execCmd({cmd_str})")
+            lines.append(f"{ind}{nim_kw} {target_name} = execCmd({cmd_ref})")
         ParserState.symbol_table.add(target_name, "int", nim_kw)
+        _check(target_name)
     elif target_name:
         if kw == "shellLines":
-            # Inline directly — no temp needed
             _ensure_shell_lines_helper()
             _ensure_shell_run_helper()
-            lines.append(f"{ind}{nim_kw} {target_name} = adascriptShellLines(adascriptRun({cmd_str}{run_timeout}).output)")
+            if checked:
+                lines.append(f"{ind}let {exec_tmp} = adascriptRun({cmd_ref}{run_timeout})")
+                lines.append(f"{ind}{nim_kw} {target_name} = adascriptShellLines({exec_tmp}.output)")
+                _check(f"{exec_tmp}.code")
+            else:
+                # Inline directly — no temp needed
+                lines.append(f"{ind}{nim_kw} {target_name} = adascriptShellLines(adascriptRun({cmd_ref}{run_timeout}).output)")
             ParserState.symbol_table.add(target_name, "seq[string]", nim_kw)
         else:
             _ensure_shell_run_helper()
-            lines.append(f"{ind}{nim_kw} {target_name} = adascriptRun({cmd_str}{run_timeout})")
+            lines.append(f"{ind}{nim_kw} {target_name} = adascriptRun({cmd_ref}{run_timeout})")
             # Register as shell_result so _nim_truthiness can resolve
             # field access like result.output -> result.output.len > 0
             ParserState.symbol_table.add(target_name, "shell_result", nim_kw)
+            _check(f"{target_name}.code")
     elif kw == "shellLines":
         _ensure_shell_lines_helper()
         _ensure_shell_run_helper()
-        lines.append(f"{ind}return adascriptShellLines(adascriptRun({cmd_str}{run_timeout}).output)")
-    elif run_timeout:
+        if checked:
+            lines.append(f"{ind}let {exec_tmp} = adascriptRun({cmd_ref}{run_timeout})")
+            _check(f"{exec_tmp}.code")
+            lines.append(f"{ind}return adascriptShellLines({exec_tmp}.output)")
+        else:
+            lines.append(f"{ind}return adascriptShellLines(adascriptRun({cmd_ref}{run_timeout}).output)")
+    elif run_timeout or checked:
         # A bare `shell:` keeps the terminal, so it needs the passthrough
         # runner rather than the capturing one to honour a timeout.
-        _ensure_shell_run_helper()
-        lines.append(f"{ind}discard adascriptExec({cmd_str}{run_timeout})")
+        code_var = f"shellCode{_exec_count}"
+        if run_timeout:
+            _ensure_shell_run_helper()
+            lines.append(f"{ind}let {code_var} = adascriptExec({cmd_ref}{run_timeout})")
+        else:
+            lines.append(f"{ind}let {code_var} = execCmd({cmd_ref})")
+        if checked:
+            _check(code_var)
+        else:
+            lines.append(f"{ind}discard {code_var}")
     else:
-        lines.append(f"{ind}discard execCmd({cmd_str})")
+        lines.append(f"{ind}discard execCmd({cmd_ref})")
 
     return "\n".join(_shell_hoists + lines)
 

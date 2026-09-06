@@ -1878,6 +1878,23 @@ def _ensure_shell_timeout_helper():
 
 
 
+
+_SHELL_CHECK_HELPER = """\
+def _check_shell(_cmd, _code):
+    \"\"\"Abort when a command run with check = true fails.\"\"\"
+    if _code != 0:
+        raise _subprocess.CalledProcessError(_code, _cmd)\
+"""
+
+
+def _ensure_shell_check_helper():
+    """Inject the failure check the first time check = true is used."""
+    decls = getattr(ParserState, "py_top_decls", [])
+    if not any("_check_shell" in d for d in decls):
+        decls.append(_SHELL_CHECK_HELPER)
+        ParserState.py_top_decls = decls
+
+
 def _py_shell_literal(cmd, needs_fstring):
     """Wrap a shell body as a Python string literal.
 
@@ -2142,6 +2159,20 @@ def to_py(self, indent=0):
         runner = "_run_shell"
     lines = []
 
+    # check = true: bind the command once, then abort if it failed.  The
+    # string is needed twice — to run and to name in the error — and it may be
+    # an f-string with side effects, so it goes into a temp.
+    checked = str(opts.get("check", "")).strip().lower() in ("true", "1")
+    cmd_ref = cmd_str
+    if checked:
+        _ensure_shell_check_helper()
+        lines.append(f"{ind}_cmd = {cmd_str}")
+        cmd_ref = "_cmd"
+
+    def _check(code_expr):
+        if checked:
+            lines.append(f"{ind}_check_shell({cmd_ref}, {code_expr})")
+
     if target_tuple:
         # let (out, code) = shell: cmd        — 2-element
         # let (out, code, _) = shell: cmd     — 3-element
@@ -2152,19 +2183,21 @@ def to_py(self, indent=0):
         slots = ["_r.stdout", "_r.returncode", "_r.stderr"]
         lhs = ", ".join(target_tuple)
         rhs = ", ".join(slots[:len(target_tuple)])
-        lines.append(f"{ind}_r = {runner}({cmd_str}, {kwargs_str})")
+        lines.append(f"{ind}_r = {runner}({cmd_ref}, {kwargs_str})")
         lines.append(f"{ind}{lhs} = {rhs}")
+        _check("_r.returncode")
     elif target_name and target_ann == "int" and kw == "shell":
         # `let code: int = shell: cmd` -- the child keeps the terminal, and the
         # exit code comes back directly.  Nothing is captured, so no kwargs
         # beyond the shell itself.
         call_kwargs = ", ".join(k for k in run_kwargs
                                 if not k.startswith(("capture_output", "text")))
-        lines.append(f"{ind}{target_name} = _subprocess.call({cmd_str}, {call_kwargs})"
+        lines.append(f"{ind}{target_name} = _subprocess.call({cmd_ref}, {call_kwargs})"
                      if "timeout" not in opts else
-                     f"{ind}{target_name} = {runner}({cmd_str}, {call_kwargs}).returncode")
+                     f"{ind}{target_name} = {runner}({cmd_ref}, {call_kwargs}).returncode")
+        _check(target_name)
     elif target_name:
-        lines.append(f"{ind}_r = {runner}({cmd_str}, {kwargs_str})")
+        lines.append(f"{ind}_r = {runner}({cmd_ref}, {kwargs_str})")
         if kw == "shellLines":
             lines.append(f"{ind}{target_name} = _r.stdout.splitlines()")
         else:
@@ -2172,6 +2205,10 @@ def to_py(self, indent=0):
                 f"{ind}{target_name} = _types.SimpleNamespace("
                 f"output=_r.stdout, stderr=_r.stderr, code=_r.returncode)"
             )
+        _check("_r.returncode")
+    elif checked:
+        lines.append(f"{ind}_r = {runner}({cmd_ref}, {kwargs_str})")
+        _check("_r.returncode")
     else:
         lines.append(f"{ind}{runner}({cmd_str}, {kwargs_str})")
 
