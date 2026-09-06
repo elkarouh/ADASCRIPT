@@ -37,6 +37,7 @@
 - [x] every command went through `/bin/sh`, so quoting was always the caller's problem (see [Argv form](#argv-form-run--runlines--done))
 - [x] every shell form waited, so N commands took the sum of their times (see [Concurrency form](#concurrency-form-shellspawn--done))
 - [x] a pipeline's failure vanished, a block could only join with `&&`, and asking whether a program exists cost a process (see [pipefail, join and have()](#pipefail-block-join-and-have--done))
+- [x] `shellIter` had no exit status, so a stream that died looked like one that ended (see [shellIter check](#shelliterchecktrue--done))
 - [ ] streaming stdin — deliberately not built; the deadlock case is already handled (see [Streaming stdin](#streaming-stdin--not-done-and-here-is-why))
 
 ## Shell improvements
@@ -1526,3 +1527,52 @@ Narrow benefit, real risk, and no reproduction that motivates it.
 Worth revisiting if a program ever wants to feed a command more than it can
 hold. A cheaper middle step, if that day comes: let `stdin` accept `[]str`
 and write it element by element without ever joining it.
+
+---
+
+### `shellIter(check = true)` — DONE
+
+The streaming form had no exit status at all: the loop ended and nothing
+said whether the command finished or died. A `tail -f` that the kernel
+killed and one that ran out of input looked identical.
+
+```python
+for line in shellIter(check = true): make -j4
+    print line
+# raises here if make failed
+```
+
+Both helpers already reap the child, so the code was in hand at the end of
+iteration; the raise goes there.
+
+**The design point that needed settling: what a `break` means.** Leaving the
+loop early leaves the command unfinished, and an unfinished command has no
+status to object to -- raising then would be reporting a failure that has
+not happened. So `check` applies only to a loop that ran to completion, and
+both backends get that for free from how their iteration ends:
+
+- Python: `break` throws `GeneratorExit` in at the `yield`, so the `finally`
+  runs and the raise after it is never reached.
+- Nim: this is an inline iterator, so `break` leaves the whole construct and
+  never reaches the code after the yield loop.
+
+Verified on both, four cases each: a stream that ends well does not raise,
+one that ends badly raises after the last line, a `break` does not raise,
+and without `check` a bad status is still ignored. It composes with `cwd`,
+`env` and `pipefail`.
+
+**An honest note on how this got here.** It was proposed as part of the
+shell-syntax review, and then the first implementation pass did the opposite
+-- listed `check` among the options `shellIter` refuses, with a rationale
+("yields lines and never sees an exit code") written as though that had been
+the intent. It reads like a decision but was a reversal that never got
+surfaced. The rationale was also wrong: the iterator does see the exit code,
+it just discarded it.
+
+**A second bug fell out of testing this.** `pipefail` was never applied on
+the Nim `shellIter` path -- the emitter edit that added it had been part of
+a batch that aborted before writing, and nothing caught it because until now
+no test combined the two. `shellIter(pipefail = true)` silently ran without
+pipefail on Nim while working on Python. Fixed, and placed after the cwd
+prefix so both backends emit `set -o pipefail; cd x && ...` in the same
+order.

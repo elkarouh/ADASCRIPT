@@ -2273,6 +2273,7 @@ advanced scenarios are not yet supported:
 | Shell, feed stdin                 | `shell(stdin = text): cmd`              |
 | Shell, child environment          | `shell(env = e): cmd` (added to)        |
 | Shell, streamed lines             | `for line in shellIter: cmd`            |
+| Streamed, fail on non-zero        | `shellIter(check = true)` — at the end  |
 | Shell, replace this process       | `shellExec: cmd` (never returns)        |
 | Shell, run alongside              | `let j: Job = shellSpawn: cmd`          |
 | Pipeline reports first failure    | `shell(pipefail = true): a | b`         |

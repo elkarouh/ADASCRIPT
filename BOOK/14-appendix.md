@@ -47,6 +47,7 @@
 | Shell, feed stdin | `shell(stdin = text): cmd` (capturing forms) |
 | Shell, child environment | `shell(env = {"K": v}): cmd` — added, not replaced, any form |
 | Shell, streamed lines | `for line in shellIter: cmd` + body |
+| Streamed, fail on non-zero | `shellIter(check = true)` — raises once the stream ends, not on `break` |
 | Shell, replace this process | `shellExec: cmd` — never returns, its status becomes ours |
 | Shell, run alongside | `let j: Job = shellSpawn: cmd` — starts it and carries on |
 | Pipeline reports first failure | `shell(pipefail = true): a \| b` — runs under bash |

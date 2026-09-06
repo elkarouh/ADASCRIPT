@@ -96,6 +96,20 @@ let word: str = "two words"
 for line in shellIter: printf '%s\n' {!word} plain
     print("streamed with quoting: [" + line + "]")
 
+print("=== shellIter, checked ===")
+try:
+    for bad in shellIter(check = true): sh -c 'echo streamed; exit 3'
+        print("last line before the failure:", bad)
+    print("BUG: a failing stream did not raise")
+except:
+    print("a failing stream raises once it is over")
+# Breaking out leaves the command unfinished, so there is no status to
+# object to yet -- the check applies to a loop that ran to the end.
+for early in shellIter(check = true): sh -c 'echo first; echo second; exit 3'
+    print("broke out after:", early)
+    break
+print("breaking out early does not raise")
+
 print("=== shellIter options ===")
 for line in shellIter(cwd = "/tmp"): pwd
     print("cwd:", line)

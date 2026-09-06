@@ -3511,7 +3511,7 @@ def _ensure_shell_check_helper():
 _SHELL_ITER_HELPER = """\
 iterator adascriptShellIter*(cmd: string,
                              env: Table[string, string] = initTable[string, string](),
-                             shellPath: string = ""): string =
+                             shellPath: string = "", check: bool = false): string =
   ## The lines a command prints, yielded as they arrive.
   ##
   ## The capturing forms wait for the child to finish; this one does not, so
@@ -3520,6 +3520,11 @@ iterator adascriptShellIter*(cmd: string,
   ##
   ## `env` adds to the environment rather than replacing it, matching every
   ## other form; `cwd` is handled by the caller, which prefixes the command.
+  ##
+  ## With `check`, a command that ends badly raises once the stream is over --
+  ## but only for a loop that ran to completion. This is an inline iterator,
+  ## so a `break` in the caller's body leaves the whole construct and never
+  ## reaches the code below: an unfinished command has no status to object to.
   var envTable: StringTableRef = nil
   if env.len > 0:
     envTable = newStringTable(modeCaseSensitive)
@@ -3537,8 +3542,11 @@ iterator adascriptShellIter*(cmd: string,
   var line = ""
   while p.outputStream.readLine(line):
     yield line
-  discard p.waitForExit()
-  p.close()\
+  let code = p.waitForExit()
+  p.close()
+  if check and code != 0:
+    raise newException(OSError,
+                       "command failed with exit code " & $code & ": " & cmd)\
 """
 
 
@@ -3761,6 +3769,10 @@ def to_nim(self, indent=0):
             cmd = f"cd {{quoteShell({_cwd_raw})}} && {cmd}"
             needs_fstring = True
 
+    # After the cwd prefix, as on the shell_stmt path, so the emitted command
+    # reads `set -o pipefail; cd x && ...` on both.
+    cmd = _apply_pipefail(cmd, opts)
+
     cmd, _quoted = _apply_shell_quoting(
         cmd, "quoteShell({expr})", 'mapIt({expr}, quoteShell(it)).join(" ")')
     if _quoted:
@@ -3780,6 +3792,11 @@ def to_nim(self, indent=0):
         if "env" not in opts:
             iter_args = ", initTable[string, string]()"
         iter_args += ', shellPath = "/bin/bash"'
+    if str(opts.get("check", "")).strip().lower() in ("true", "1"):
+        ParserState.nim_imports.update({"tables", "strtabs", "os"})
+        if "env" not in opts and not _shell_wants_pipefail(opts):
+            iter_args = ", initTable[string, string]()"
+        iter_args += ", check = true"
     ind = _ind(indent)
     # Register the loop variable before rendering the body: the body may ask
     # what type it is — `int(line)` becomes parseInt only for a string.

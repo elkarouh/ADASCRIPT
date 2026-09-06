@@ -1253,14 +1253,27 @@ for line in shellIter: tail -f build.log
     print line
 ```
 
-Only stdout is streamed and there is no exit code — a command whose status
-matters wants a capturing form. Interpolation works as usual, `{!x}` and
-`{*xs}` included, and `cwd` and `env` apply:
+Only stdout is streamed, so a command whose output you also want captured
+wants a capturing form. Interpolation works as usual, `{!x}` and `{*xs}`
+included, and `cwd`, `env` and `pipefail` apply:
 
 ```python
 for line in shellIter(cwd = src, env = e): make -j4
     print line
 ```
+
+`check = true` raises when the command ends badly — once the stream is over,
+since that is when the status exists:
+
+```python
+for line in shellIter(check = true): make -j4
+    print line
+# raises here if make failed
+```
+
+It applies to a loop that ran to completion. Breaking out early leaves the
+command unfinished, and an unfinished command has no status to object to, so
+a `break` never raises.
 
 ### Leaving the shell out: `run` and `runLines`
 
@@ -1444,7 +1457,7 @@ Which options a form takes:
 | | `cwd` | `env` | `timeout` | `stdin` | `check` | `pipefail` | `join` |
 |---|---|---|---|---|---|---|---|
 | `shell:` / `shellLines:` | ✓ | ✓ | ✓ | capturing forms | ✓ | ✓ | block form |
-| `shellIter` | ✓ | ✓ | | | | ✓ | |
+| `shellIter` | ✓ | ✓ | | | ✓ (at the end) | ✓ | |
 | `shellExec` | ✓ | ✓ | | | | ✓ | block form |
 | `shellSpawn` | ✓ | ✓ | | ✓ | | ✓ | block form |
 | `run` / `runLines` | ✓ | ✓ | ✓ | ✓ | ✓ | n/a — no shell | n/a |

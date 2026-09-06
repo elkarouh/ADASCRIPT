@@ -1699,9 +1699,9 @@ _SHELL_OPTS_BY_KW = {
     # Starts a command and returns; the waiting happens later, so `timeout`
     # and `check` belong on the wait rather than here.
     "shellSpawn": {"cwd", "env", "stdin", "pipefail", "join"},
-    # Streams stdout and has no exit code to inspect; `check` would have
-    # nothing to check and a timeout would fight the point of streaming.
-    "shellIter":  {"cwd", "env", "pipefail"},
+    # `check` fires once the stream is over, on a loop that ran to the end.
+    # A timeout would fight the point of streaming.
+    "shellIter":  {"cwd", "env", "pipefail", "check"},
 }
 
 # Options that need somewhere to put what they produce or take.
@@ -1794,7 +1794,6 @@ _SHELL_OPT_WHY = {
     ("shellExec", "check"):   "replaces this process, so its status becomes ours directly",
     ("shellIter", "timeout"): "streams until the command ends",
     ("shellIter", "stdin"):   "closes the child's stdin so the stream can end",
-    ("shellIter", "check"):   "yields lines and never sees an exit code",
     ("shellIter", "join"):    "takes a single command, not a block",
     ("shellSpawn", "timeout"): "returns before the command finishes -- pass it to the wait instead",
     ("shellSpawn", "check"):   "returns before there is a status to check -- use j.wait(check = true)",
@@ -2268,11 +2267,16 @@ def _shell_target_annotation(seq):
 
 
 _SHELL_ITER_HELPER = """\
-def _shell_iter(_cmd, _cwd=None, _env=None, _shell="/bin/sh"):
+def _shell_iter(_cmd, _cwd=None, _env=None, _shell="/bin/sh", _check=False):
     \"\"\"The lines a command prints, yielded as they arrive.
 
     The capturing forms wait for the child to finish; this one does not, so a
     long-running or endless command can be read while it runs.
+
+    With _check, a command that ends badly raises once the stream is over --
+    but only for a loop that ran to completion. Breaking out early leaves the
+    command unfinished, and there is no status yet to object to: the break
+    throws GeneratorExit in at the yield, so the raise below is never reached.
     \"\"\"
     _p = _subprocess.Popen(_cmd, shell=True, stdout=_subprocess.PIPE,
                            stdin=_subprocess.DEVNULL, text=True,
@@ -2282,7 +2286,9 @@ def _shell_iter(_cmd, _cwd=None, _env=None, _shell="/bin/sh"):
             yield _line.rstrip("\\n")
     finally:
         _p.stdout.close()
-        _p.wait()\
+        _code = _p.wait()
+    if _check and _code != 0:
+        raise _subprocess.CalledProcessError(_code, _cmd)\
 """
 
 
@@ -2318,6 +2324,8 @@ def to_py(self, indent=0):
         iter_args += ", _env={**os.environ, **(" + opts["env"] + ")}"
     if _shell_wants_pipefail(opts):
         iter_args += ', _shell="/bin/bash"'
+    if str(opts.get("check", "")).strip().lower() in ("true", "1"):
+        iter_args += ", _check=True"
     ind = _ind(indent)
     # Register the loop variable before rendering the body, so anything in it
     # that asks what type the variable is gets the right answer.
