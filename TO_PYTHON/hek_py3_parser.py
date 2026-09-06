@@ -1877,17 +1877,22 @@ def _ensure_shell_timeout_helper():
         ParserState.py_top_decls = decls
 
 
-def _apply_shell_quoting(cmd, wrapper):
-    """Rewrite `{!expr}` interpolations in a shell body into `{wrapper}`.
+def _apply_shell_quoting(cmd, wrapper, splat_wrapper=None):
+    """Rewrite the quoting sigils in a shell body.
 
     `{x}` interpolates the value as written, which is what a command fragment
     wants.  `{!x}` asks for it quoted, so a path holding spaces or shell
-    metacharacters arrives as one argument instead of several.
+    metacharacters arrives as one argument instead of several.  `{*xs}` does
+    the same for a list, quoting each element and joining them with spaces —
+    the form an argument vector needs.
 
-    WRAPPER is a format string taking `expr`, e.g. "quoteShell({expr})".
-    Returns (rewritten, changed).
+    WRAPPER and SPLAT_WRAPPER are format strings taking `expr`, e.g.
+    "quoteShell({expr})".  Returns (rewritten, changed).
     """
-    if "{!" not in cmd:
+    sigils = {"!": wrapper}
+    if splat_wrapper:
+        sigils["*"] = splat_wrapper
+    if not any("{" + s in cmd for s in sigils):
         return cmd, False
     out = []
     i = 0
@@ -1899,7 +1904,8 @@ def _apply_shell_quoting(cmd, wrapper):
             out.append(cmd[i:i + 2])
             i += 2
             continue
-        if cmd.startswith("{!", i):
+        sigil = cmd[i + 1] if cmd[i] == "{" and i + 1 < n else ""
+        if sigil in sigils:
             depth = 1
             j = i + 2
             while j < n:
@@ -1913,7 +1919,7 @@ def _apply_shell_quoting(cmd, wrapper):
             if j < n and depth == 0:
                 expr = cmd[i + 2:j].strip()
                 if expr:
-                    out.append("{" + wrapper.format(expr=expr) + "}")
+                    out.append("{" + sigils[sigil].format(expr=expr) + "}")
                     i = j + 1
                     changed = True
                     continue
@@ -2083,7 +2089,9 @@ def to_py(self, indent=0):
         cmd = " && ".join(cmd_parts)
         needs_fstring = any(f for (k, _t, f) in block_lines if k == "cmd")
 
-    cmd, _quoted = _apply_shell_quoting(cmd, "_shlex.quote({expr})")
+    cmd, _quoted = _apply_shell_quoting(
+        cmd, "_shlex.quote({expr})",
+        "' '.join(_shlex.quote(_a) for _a in {expr})")
     if _quoted:
         needs_fstring = True
         ParserState.nim_imports.add("import shlex as _shlex")

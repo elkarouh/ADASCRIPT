@@ -21,6 +21,8 @@
 - [x] `r.stderr` is documented, works on Python, and does not exist on Nim (see [Bug 14](#bug-14--rstderr-does-not-exist-on-the-nim-backend))
 - [x] `shellLines` yields one more element on Nim than on Python (see [Bug 15](#bug-15--shelllines-differs-by-a-trailing-empty-element))
 - [x] `shell(timeout = ms)` is silently ignored on Nim (see [Bug 16](#bug-16--shelltimeout--ms-is-ignored-on-nim))
+- [x] `shell:` had no way to interpolate an argument *list* (see [Splat interpolation](#splat-interpolation-args--done))
+- [ ] py2py: a shell body ending in `"` collides with the `"""` wrapper (see [Bug 17](#bug-17--py2py-mis-quotes-a-shell-body-ending-in-a-double-quote))
 
 ## Shell improvements
 
@@ -55,7 +57,7 @@ a bug nobody had hit yet: that path was fixed, so two git1 processes running
 at once could read each other's exit status. `g()` now ends
 
 ```python
-    let code: int = shell: cd {!G1_DIR} && GIT_DIR={!G1_GITDIR} GIT_WORK_TREE=. git {cmd}
+    let code: int = shell: cd {!G1_DIR} && GIT_DIR={!G1_GITDIR} GIT_WORK_TREE=. git {*args}
     code
 ```
 
@@ -898,3 +900,60 @@ A killed command reports **124**, as `timeout(1)` does. Python raised
 catch, so `_run_shell()` there returns 124 as well. Verified:
 `shell(timeout = 400): sleep 3` gives code 124 and empty output on both
 backends, for the capture form and the int-typed one.
+
+---
+
+### Splat interpolation `{*args}` — DONE
+
+`{!x}` quotes one value, but an argument *list* had no spelling: a script
+had to loop, quote each element itself and join them, then interpolate the
+result raw.  `EXAMPLES/git1.ady` carried exactly that — a `Q()` helper and a
+four-line loop in each of `g()` and `g_lines()`.
+
+**Syntax:** `{*xs}` quotes each element and joins them with spaces.
+
+```python
+let args: []str = ["commit", "-m", "two words; and a semicolon"]
+shell: git {*args}          # git commit -m 'two words; and a semicolon'
+```
+
+| Backend | Emitted |
+|---|---|
+| Nim | `mapIt(xs, quoteShell(it)).join(" ")` |
+| Python | `' '.join(_shlex.quote(_a) for _a in xs)` |
+
+`_apply_shell_quoting()` handles both sigils in one scan.  An empty list
+interpolates to nothing, which is what an absent argument vector should do.
+
+`git1.ady` now has **no shell plumbing at all** — `Q()` and both loops are
+gone, and `g()` is two lines:
+
+```python
+    let code: int = shell: cd {!G1_DIR} && GIT_DIR={!G1_GITDIR} GIT_WORK_TREE=. git {*args}
+    code
+```
+
+---
+
+### Bug 17 — py2py mis-quotes a shell body ending in a double quote
+
+A `shell:` body is wrapped in `"""..."""`, so a body whose last character is
+`"` produces four quotes in a row and the generated Python does not parse.
+
+**Reproduction:**
+```python
+shell: echo "end"
+```
+
+```python
+_subprocess.run("""echo "end"""", shell=True)
+#                                ^ SyntaxError: unterminated string literal
+```
+
+Predates the quoting sigils — it reproduces with them stashed — and the Nim
+backend already guards against it: `_quote()` there switches to an escaped
+single-quoted form when the body would collide with its delimiter.
+
+**Fix sketch:** give the Python emitter the same guard.  When the body ends
+with `"` or contains `"""`, emit an escaped `"`-delimited literal instead of
+the triple-quoted one, keeping the `f` prefix where interpolation is needed.

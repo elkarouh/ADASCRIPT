@@ -2268,6 +2268,7 @@ advanced scenarios are not yet supported:
 | Shell (bare assign)               | `ls = shellLines: cmd`                   |
 | Shell expr interpolation          | `shell: cmd {f(x)}` (auto-hoisted)      |
 | Shell interpolation, quoted       | `shell: cmd {!path}` (one argument)     |
+| Shell interpolation, list         | `shell: cmd {*args}` (each quoted)      |
 | Shell exit code, terminal kept    | `let code: int = shell: cmd`            |
 | Discard shell output              | `shell: cmd`                             |
 | Shell block (commands joined)     | `shell:` then indented `cmd1` / `cmd2`   |

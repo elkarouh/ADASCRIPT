@@ -1187,7 +1187,15 @@ shell: ls -l {!f}              # ls -l 'my notes.txt'
 shell: ls -l {f}               # ls -l my notes.txt   — two arguments
 ```
 
-Nim emits `quoteShell(expr)`, Python `shlex.quote(expr)`.
+For a whole argument list, `{*xs}` quotes each element and joins them:
+
+```python
+let args: []str = ["commit", "-m", "two words"]
+shell: git {*args}             # git commit -m 'two words'
+```
+
+Nim emits `quoteShell(expr)` and `mapIt(xs, quoteShell(it)).join(" ")`;
+Python `shlex.quote(expr)` and `' '.join(...)`.
 
 ### Options
 

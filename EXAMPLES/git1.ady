@@ -37,17 +37,6 @@ def confirm(question: str) -> bool:
         reply = "n"
     return reply.lower().startswith("y")
 
-# --- shell helpers ---------------------------------------------------------
-
-def Q(s: str) -> str:
-    """Single-quote one argument for the shell.
-
-    Only g() and g_lines() need this: they join a list of arguments into one
-    command fragment, and a fragment is interpolated raw. Everywhere else the
-    shell body quotes for itself with `{!expr}`.
-    """
-    "'" + s.replace("'", "'\\''") + "'"
-
 # --- path handling ---------------------------------------------------------
 
 def split_target(target: str):
@@ -99,20 +88,15 @@ def g(args: []str) -> int:
     git stops searching upward for a .git, and declare that directory the
     work tree.
 
-    Each argument goes through Q() because they are joined into a single
-    command fragment, which `{cmd}` interpolates raw -- `{!cmd}` would quote
-    the whole line as one word. Without it, g(["commit", "-m", "hello world"])
-    would reach git as four arguments.
+    `{*args}` quotes each argument and joins them, so
+    g(["commit", "-m", "hello world"]) reaches git as three arguments and not
+    four. `{!x}` does the same for one value.
 
     An int-typed target -- `let code: int = shell: ...` -- rather than a
     capturing one: git keeps the terminal, so its output, colours and pager
     reach the user directly, and the exit code still comes back.
     """
-    var parts: []str = []
-    for a in args:
-        parts.append(Q(a))
-    let cmd: str = " ".join(parts)
-    let code: int = shell: cd {!G1_DIR} && GIT_DIR={!G1_GITDIR} GIT_WORK_TREE=. git {cmd}
+    let code: int = shell: cd {!G1_DIR} && GIT_DIR={!G1_GITDIR} GIT_WORK_TREE=. git {*args}
     code
 
 def g_lines(args: []str) -> []str:
@@ -124,11 +108,7 @@ def g_lines(args: []str) -> []str:
     terminal here, so this is not the one to use for anything the user is
     meant to watch.
     """
-    var parts: []str = []
-    for a in args:
-        parts.append(Q(a))
-    let cmd: str = " ".join(parts)
-    let lines = shellLines: cd {!G1_DIR} && GIT_DIR={!G1_GITDIR} GIT_WORK_TREE=. git {cmd}
+    let lines = shellLines: cd {!G1_DIR} && GIT_DIR={!G1_GITDIR} GIT_WORK_TREE=. git {*args}
     lines
 
 def current_branch() -> str:

@@ -3460,10 +3460,12 @@ def to_nim(self, indent=0):
      block_lines, target_ann) = _parse_shell_stmt(self)
 
     from hek_py3_parser import _apply_shell_quoting
-    cmd, _quoted = _apply_shell_quoting(cmd, "quoteShell({expr})")
+    cmd, _quoted = _apply_shell_quoting(
+        cmd, "quoteShell({expr})",
+        'mapIt({expr}, quoteShell(it)).join(\" \")')
     if _quoted:
         needs_fstring = True
-        ParserState.nim_imports.add("osproc")
+        ParserState.nim_imports.update({"osproc", "sequtils", "strutils"})
 
     # Block form: handle interactive (expect/send) cases specially via expect.nim
     if block_lines is not None:

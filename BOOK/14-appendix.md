@@ -42,6 +42,7 @@
 | Shell lines (typed/bare) | `let ls: []str = shellLines: cmd` / `ls = shellLines: cmd` |
 | Shell expr interpolation | `{f(x)}` in body — auto-hoisted to temp variable |
 | Shell interpolation, quoted | `{!path}` — one argument whatever it holds |
+| Shell interpolation, list | `{*args}` — each element quoted, space-joined |
 | Shell options | `shell(cwd = "...", timeout = ms): cmd` |
 | Shell block / PTY automation | `shell:` + lines / + `send()`/`expect()` |
 | CLI args | `$0`, `$1`…`$9`, `$@`, `$#` |

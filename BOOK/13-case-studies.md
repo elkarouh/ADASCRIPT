@@ -105,7 +105,7 @@ as the reference recipe for CLI tools: a `Config` record, `$@` subcommand
 dispatch via `case`, `walkDir`-style scanning through `nimport os`, regex
 queries from Chapter 7.
 
-## 13.7 `git1.ady` — Adascript vs. bash, side by side (~395 vs. ~250 lines)
+## 13.7 `git1.ady` — Adascript vs. bash, side by side (~375 vs. ~250 lines)
 
 Every other program in this chapter was written as Adascript from the start.
 `git1.ady` is the opposite exercise: a translation of a **bash script**
@@ -170,26 +170,19 @@ g() {
 }
 ```
 
-The Adascript version is the same idea — build a command string and run it
-through the shell:
+The Adascript version is the same idea, and now the same length:
 
 ```python
 def g(args: []str) -> int:
-    var parts: []str = []
-    for a in args:
-        parts.append(Q(a))
-    let cmd: str = " ".join(parts)
-    let code: int = shell: cd {!G1_DIR} && GIT_DIR={!G1_GITDIR} GIT_WORK_TREE=. git {cmd}
+    let code: int = shell: cd {!G1_DIR} && GIT_DIR={!G1_GITDIR} GIT_WORK_TREE=. git {*args}
     code
 ```
 
-The extra lines are quoting — bash's `"$@"` word-splits correctly by default,
-while these arguments cross a shell boundary as text.  `{!expr}` quotes an
-interpolated value on the spot; `Q()` survives only for the argument *list*,
-which is joined into one fragment and so must be interpolated raw.
-
-The `int` annotation on the target is what asks for git to keep the terminal
-— its output, colours and pager — while still returning its exit status.
+One line, like the bash.  `{!expr}` quotes an interpolated value and
+`{*args}` quotes each element of a list and joins them, which is what bash's
+`"$@"` does for free.  The `int` annotation on the target asks for git to
+keep the terminal — its output, colours and pager — while still returning its
+exit status.
 
 ### Subcommand dispatch
 
@@ -263,18 +256,18 @@ knows what flows through each function without tracing the bash.
 
 **Quoting.** Bash word-splits `"$@"` correctly by default.  Adascript shell
 commands are strings, so a value that might contain spaces or shell
-metacharacters has to be quoted where it is interpolated — `{!f}` rather
-than `{f}`.  One case the sigil cannot cover is a whole argument *list*:
-`g(["commit", "-m", "hello world"])` must produce
-`git 'commit' '-m' 'hello world'`, and those arguments are joined into a
-single fragment first, so `Q()` quotes them one at a time.
+metacharacters has to be quoted where it is interpolated — `{!f}` for one
+value, `{*args}` for a list.  That is a character of syntax per site rather
+than a habit to remember, which is the point.
 
-**Shell plumbing helpers.** `Q()` is six lines that bash gives you for free.
-It used to be three helpers and eighteen lines: `sh_status()` existed only
+**Shell plumbing helpers — none, now.**  This section used to describe three
+of them, eighteen lines that bash gives you for free: `sh_status()` existed
 because `shell:` could not both keep the terminal and return an exit code,
-and it worked around that by writing `$?` to a temp file.  Both gaps are
-closed in the language now, which is the healthier outcome — the example
-stopped needing the workaround rather than documenting it.
+and `Q()` because interpolation did not quote.  Both gaps are closed in the
+language, so the example stopped needing the workarounds rather than
+documenting them.  That is the healthier outcome, and the reason to port a
+shell script to a new language at all: what the port cannot say comfortably
+is a bug report about the language.
 
 **No `exec`.** The bash version's pass-through path replaces its own process
 with git (`exec` semantics via the final `g "$@"` in a subshell).  The
@@ -288,16 +281,16 @@ whenever `n` is not a literal in 0..127, since Nim's own `quit` clamps at 127.
 
 | Metric | `git1.sh` | `git1.ady` |
 |--------|-----------|------------|
-| Lines | 246 | 395 |
-| Shell plumbing overhead | 0 | 6 lines (`Q`) |
+| Lines | 246 | 375 |
+| Shell plumbing overhead | 0 | 0 |
 | Type declarations | 0 | 0 (globals, no records) |
 | Runtime | bash interpreter | native binary (~100 KB) |
 | Subcommands | 8 | 9 (`adopt` has no bash counterpart) |
 
-Roughly 80 of the 149-line gap is `adopt` and the helpers it needed, a
+Roughly 80 of the 129-line gap is `adopt` and the helpers it needed, a
 subcommand the bash version never had, and another 40 is docstrings.  What
-is left — about 30 lines — is the quoting helper, type annotations, and the
-fact that `os.path.join(a, b)` is more characters than `$a/$b`.  The structure is
+is left — about 10 lines — is type annotations and the fact that
+`os.path.join(a, b)` is more characters than `$a/$b`.  The structure is
 otherwise 1:1 — someone who reads the bash can read the Adascript, and
 vice versa.
 
