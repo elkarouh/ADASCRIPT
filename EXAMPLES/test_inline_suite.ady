@@ -69,6 +69,30 @@ def local_enum_works() -> int:
     got
 assert local_enum_works() == 12
 
+# A tuple pattern has no to_py of its own -- the parens belong to the
+# grammar -- which used to crash the Python backend outright.  And a case in
+# tail position returns whichever branch runs, exactly as an if does; without
+# that the function returned None on Python while Nim got it right.
+def classify(a: int, b: int) -> str:
+    case (a, b):
+        when (1, 2): "one-two"
+        when (1, _): "one-any"
+        when (_, 2): "any-two"
+        when others: "neither"
+assert classify(1, 2) == "one-two"
+assert classify(1, 9) == "one-any"
+assert classify(9, 2) == "any-two"
+assert classify(7, 7) == "neither"
+
+# The same, with block bodies rather than inline ones.
+def classify_block(n: int) -> str:
+    case n:
+        when 1:
+            "one"
+        when others:
+            "many"
+assert classify_block(1) == "one" and classify_block(5) == "many"
+
 # case with inline when clauses
 let y: int = 2
 case y:

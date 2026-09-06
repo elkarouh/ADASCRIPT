@@ -6,6 +6,11 @@ history of this file if the reasoning behind one of them is ever wanted.
 
 - [ ] streaming stdin — deliberately not built; the deadlock case is already
       handled, so only the in-memory limit remains (see below)
+- [ ] `EXAMPLES/JOINTJS_DEMO/roi_glue.ady` crashes py2py on `jsvar`, which the
+      grammar marks JS-backend-only. The file targets neither Python nor the
+      Nim C backend (it does not compile there either), so this is a bad
+      diagnostic rather than a missing feature: py2py should say the construct
+      is not for this backend instead of raising AttributeError.
 - [ ] generic function syntax `def foo[T]` (Feature 1)
 - [ ] `.map()` / `.and_then()` rewriting on `?T` (Feature 2)
 

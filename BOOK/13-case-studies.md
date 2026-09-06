@@ -317,27 +317,32 @@ documenting them.  That is the healthier outcome, and the reason to port a
 shell script to a new language at all: what the port cannot say comfortably
 is a bug report about the language.
 
-**No `exec`.** The bash version's pass-through path replaces its own process
-with git (`exec` semantics via the final `g "$@"` in a subshell).  The
-Adascript version runs git as a child and forwards the exit status — same
-behaviour to the caller, one extra process for the lifetime of the command.
-The forwarding is exact across the whole 0..255 range, including git's 128
-for a bad ref: `quit(n)` compiles to C's `exit()` rather than Nim's `quit()`
-whenever `n` is not a literal in 0..127, since Nim's own `quit` clamps at 127.
+**`exec` — the last gap, now closed.**  This section used to say the bash
+version replaced its own process with git while the Adascript version ran it
+as a child and forwarded the status: same behaviour to the caller, one extra
+process for the command's lifetime.  `shellExec:` closed that too, and
+`g_exec()` above is where it went, so the passthrough now costs no process
+at all and the status is git's by construction rather than by copying.
+
+The forwarding machinery is still there for the calls that do return —
+`quit(n)` compiles to C's `exit()` rather than Nim's `quit()` whenever `n`
+is not a literal in 0..127, since Nim's own `quit` clamps at 127, which
+would have turned git's 128 for a bad ref into 127.  git1 no longer exercises
+it, having stopped forwarding anything; a wrapper that still forwards does.
 
 ### The scoreboard
 
 | Metric | `git1.sh` | `git1.ady` |
 |--------|-----------|------------|
-| Lines | 246 | 380 |
+| Lines | 246 | 398 |
 | Shell plumbing overhead | 0 | 0 |
 | Type declarations | 0 | 0 (globals, no records) |
 | Runtime | bash interpreter | native binary (~100 KB) |
 | Subcommands | 8 | 9 (`adopt` has no bash counterpart) |
 
-Roughly 80 of the 134-line gap is `adopt` and the helpers it needed, a
-subcommand the bash version never had, and another 40 is docstrings.  What
-is left — about 15 lines — is type annotations, the two `env` tables, and
+Roughly 80 of the 152-line gap is `adopt` and the helpers it needed, a
+subcommand the bash version never had, and 66 lines are docstrings.  What
+is left — a handful — is type annotations, the two `env` tables, and
 the fact that `os.path.join(a, b)` is more characters than `$a/$b`.  The structure is
 otherwise 1:1 — someone who reads the bash can read the Adascript, and
 vice versa.

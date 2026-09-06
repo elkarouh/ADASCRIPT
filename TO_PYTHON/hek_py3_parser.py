@@ -867,6 +867,29 @@ def to_py(self, indent=0):
     return result
 
 
+def _tuple_pattern_to_py(node):
+    """Render a parenthesised pattern list that has no to_py of its own.
+
+    `when (1, _)` parses to a Sequence_Parser holding the first element and a
+    Several_Times of the rest, with the parentheses consumed by the grammar --
+    so no single node knows how to print the whole pattern, and asking the
+    outer one for its to_py raises AttributeError.  Collect the elements in
+    order and put the parentheses back; Python's match takes the same
+    sequence pattern the source wrote.
+    """
+    parts = []
+
+    def walk(n):
+        if hasattr(n, "to_py"):
+            parts.append(n.to_py())
+            return
+        for g in getattr(n, "nodes", None) or []:
+            walk(g)
+
+    walk(node)
+    return "(" + ", ".join(p for p in parts if p) + ")"
+
+
 def _case_from_seq(seq, indent):
     """Reconstruct a case clause from a flattened Sequence_Parser [pattern, guard?, body]."""
     pat = ""
@@ -884,7 +907,10 @@ def _case_from_seq(seq, indent):
         elif tname == "case_guard":
             guard = child.to_py()
         elif not pat_seen:
-            pat = child.to_py()
+            # A tuple pattern has no to_py -- the parens are the grammar's,
+            # not a node's -- so it is reassembled from its elements.
+            pat = (child.to_py() if hasattr(child, "to_py")
+                   else _tuple_pattern_to_py(child))
             pat_seen = True
     hc = _block_inline_header_comment(block_node) if block_node else ""
     body = _suite_to_py(block_node, indent + 1) if block_node else ""
@@ -1057,13 +1083,19 @@ def to_py(self):
 
 
 def _branch_blocks(node, out):
-    """The block nodes belonging directly to one compound statement."""
+    """The bodies belonging directly to one compound statement.
+
+    A body is a `block` or, for the inline form (`when (1, 2): "one-two"`),
+    the `stmt_line` that follows the colon.  The clause wrappers are descended
+    through so that a case/match branch is found as readily as an elif.
+    """
     for child in (getattr(node, "nodes", None) or []):
         tname = type(child).__name__
-        if tname == "block":
+        if tname in ("block", "stmt_line"):
             out.append(child)
         elif tname in ("Several_Times", "Sequence_Parser", "Filter", "Fmap",
-                       "elif_clause", "else_clause"):
+                       "elif_clause", "else_clause", "when_clause",
+                       "case_clause"):
             _branch_blocks(child, out)
 
 
@@ -1087,11 +1119,18 @@ def _mark_implicit_returns(stmt, depth=0):
         if inner is not None and type(inner).__name__ == "expressions":
             _stmt.RETURN_NODES.add(id(stmt))
         return
-    if tname == "if_stmt":
-        blocks = []
-        _branch_blocks(stmt, blocks)
-        for blk in blocks:
-            _mark_implicit_returns(_block_last_stmt(blk), depth + 1)
+    if tname in ("if_stmt", "case_stmt", "match_stmt"):
+        # A case/match in tail position returns whichever branch runs, exactly
+        # as an if does; without this every branch's value was dropped and the
+        # function returned None, which the Nim backend got right and this one
+        # did not.
+        bodies = []
+        _branch_blocks(stmt, bodies)
+        for body in bodies:
+            if type(body).__name__ == "stmt_line":
+                _mark_implicit_returns(body, depth + 1)
+            else:
+                _mark_implicit_returns(_block_last_stmt(body), depth + 1)
 
 
 # --- Python's `global` statement -------------------------------------------
