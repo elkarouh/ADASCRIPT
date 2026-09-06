@@ -103,6 +103,51 @@ try:
 except:
     print("check = true raises here too")
 
+print("=== concurrency (shellSpawn) ===")
+# Three commands that each sleep a second. Started rather than waited for,
+# they finish together instead of one after another.
+var sleepers: []Job = []
+for tag in ["alpha", "beta", "gamma"]:
+    let one: Job = shellSpawn: sleep 1 && echo {tag}
+    sleepers.append(one)
+let done_all: []RunResult = waitAll(sleepers)
+var names: []str = []
+for one_r in done_all:
+    names.append(one_r.output.strip())
+# All three slept a second; the suite as a whole would take two seconds
+# longer if this ran them one after another.
+print("three 1s commands finished together:", ", ".join(names))
+
+# More output than a pipe holds (64K on Linux): waitAll drains every job as
+# it goes, so none of them stalls waiting for its turn to be read.
+var bulky: []Job = []
+for ch in ["a", "b"]:
+    let one: Job = shellSpawn: yes {ch} | head -c 200000
+    bulky.append(one)
+let bulk_rs: []RunResult = waitAll(bulky)
+var total_bytes: int = 0
+for one_r in bulk_rs:
+    total_bytes = total_bytes + one_r.output'Length
+print("two jobs past the pipe buffer, bytes drained:", total_bytes)
+
+let spawn_opts: {str}str = {"WHO": "spawned"}
+let opt_job: Job = shellSpawn(cwd = "/tmp", env = spawn_opts): sh -c 'printf "%s in %s" "$WHO" "$(pwd)"'
+print("cwd and env apply:", opt_job.wait().output.strip())
+let fed: Job = shellSpawn(stdin = "gamma\nalpha\n"): sort
+print("stdin applies:", fed.wait().output.strip().replace("\n", ","))
+
+let slow_job: Job = shellSpawn: sleep 30
+print("running() right after spawn:", slow_job.running())
+slow_job.kill()
+print("and after kill():", slow_job.running())
+
+let failing: Job = shellSpawn: exit 7
+try:
+    let must_fail: RunResult = failing.wait(check = true)
+    print("BUG: wait(check = true) did not raise")
+except:
+    print("wait(check = true) raises, like the other checked forms")
+
 print("done — all expects matched, bc was driven successfully")
 
 print("=== exec form (shellExec) ===")

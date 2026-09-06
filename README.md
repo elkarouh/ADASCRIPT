@@ -1301,6 +1301,60 @@ Reach for `shell:` when you want a shell — pipes, redirection, globbing,
 `&&`. Reach for `run` when you just want to run a program, which is most of
 the time.
 
+### Running commands alongside each other
+
+Every form so far waits: the statement does not finish until the command
+does, so N commands take the sum of their times. `shellSpawn` starts one and
+carries on, handing back a `Job` to collect later:
+
+```python
+var jobs: []Job = []
+for host in hosts:
+    let j: Job = shellSpawn: ping -c1 {!host}
+    jobs.append(j)
+
+let results: []RunResult = waitAll(jobs)
+for r in results:
+    print r.code
+```
+
+Those pings happen at the same time, so the loop takes about as long as the
+slowest one rather than the sum.
+
+A single job is waited on directly, and the handle answers a few other
+questions:
+
+```python
+let j: Job = shellSpawn: make -j8
+while j.running():          # never blocks
+    print "still building"
+let r: RunResult = j.wait() # blocks; .output, .stderr, .code
+let r2 = j.wait(check = true)   # raises if it failed
+j.kill()                    # SIGTERM, reported as 143; safe to call twice
+print j.pid
+```
+
+`wait` is safe to call twice — the result is kept once the child has been
+reaped, so the second call returns rather than hanging.
+
+`cwd`, `env` and `stdin` apply at the spawn. `timeout` and `check` do not:
+there is nothing to time or check yet, and both belong on the wait —
+`j.wait(check = true)`.
+
+**Use `waitAll` for more than one job.** The output goes into a pipe, and a
+pipe holds only so much — 64K on Linux. A job that produces more stops when
+it fills and resumes when something drains it, so waiting for jobs one at a
+time in a loop quietly serialises them again. `waitAll` drains every job as
+it goes; on Nim that is one non-blocking loop over all of them, on Python a
+thread per job.
+
+A spawned command needs a target, since without one nothing is left to
+collect it:
+
+```python
+shellSpawn: sleep 5        # transpile-time error — assign it to a Job
+```
+
 ### Handing the process over
 
 `shellExec:` replaces the running process with the command. It does not
@@ -1340,6 +1394,7 @@ Which options a form takes:
 | `shell:` / `shellLines:` | ✓ | ✓ | ✓ | capturing forms | ✓ |
 | `shellIter` | ✓ | ✓ | | | |
 | `shellExec` | ✓ | ✓ | | | |
+| `shellSpawn` | ✓ | ✓ | | ✓ | |
 | `run` / `runLines` | ✓ | ✓ | ✓ | ✓ | ✓ |
 
 An option a form cannot honour is a transpile-time error, not a silent

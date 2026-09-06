@@ -48,6 +48,9 @@
 | Shell, child environment | `shell(env = {"K": v}): cmd` — added, not replaced, any form |
 | Shell, streamed lines | `for line in shellIter: cmd` + body |
 | Shell, replace this process | `shellExec: cmd` — never returns, its status becomes ours |
+| Shell, run alongside | `let j: Job = shellSpawn: cmd` — starts it and carries on |
+| Job handle | `j.wait([check])`, `j.running()`, `j.kill()`, `j.pid` |
+| Wait for many at once | `waitAll(jobs)` → `[]RunResult` (drains every pipe) |
 | Run a program, no shell | `run(["git", "log"])` → `RunResult` (.output/.stderr/.code) |
 | Run a program, output lines | `runLines(["ls", d])` → `[]str` |
 | run/runLines options | `run(argv, cwd = d, env = e, stdin = s, timeout = ms, check = true)` |

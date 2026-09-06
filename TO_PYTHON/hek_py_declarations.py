@@ -208,6 +208,12 @@ def to_py(self, prec=None):
         _ensure_subtype_aliases()
     elif name == "RunResult":
         _ensure_run_result_alias()
+    elif name == "Job":
+        # `let jobs: []Job = []` has to name the handle shellSpawn returns,
+        # so the class the helper defines answers to that name too.
+        from hek_py3_parser import _ensure_spawn_helper
+        _ensure_spawn_helper()
+        return "_Job"
     return name
 
 

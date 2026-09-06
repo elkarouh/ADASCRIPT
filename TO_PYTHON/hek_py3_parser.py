@@ -1696,6 +1696,9 @@ _SHELL_OPTS_BY_KW = {
     "shellLines": {"cwd", "timeout", "check", "stdin", "env"},
     # No child to wait for or feed, so no timeout, no stdin, no check.
     "shellExec":  {"cwd", "env"},
+    # Starts a command and returns; the waiting happens later, so `timeout`
+    # and `check` belong on the wait rather than here.
+    "shellSpawn": {"cwd", "env", "stdin"},
     # Streams stdout and has no exit code to inspect; `check` would have
     # nothing to check and a timeout would fight the point of streaming.
     "shellIter":  {"cwd", "env"},
@@ -1752,6 +1755,8 @@ _SHELL_OPT_WHY = {
     ("shellIter", "timeout"): "streams until the command ends",
     ("shellIter", "stdin"):   "closes the child's stdin so the stream can end",
     ("shellIter", "check"):   "yields lines and never sees an exit code",
+    ("shellSpawn", "timeout"): "returns before the command finishes -- pass it to the wait instead",
+    ("shellSpawn", "check"):   "returns before there is a status to check -- use j.wait(check = true)",
 }
 
 
@@ -2008,6 +2013,100 @@ def _run_argv(_argv, cwd=None, env=None, stdin=None, timeout=0, check=False,
 '''
 
 
+_SPAWN_HELPER = '''\
+class _Job:
+    """A command running alongside this program.
+
+    Every other form waits: the statement does not finish until the command
+    does, so N commands take the sum of their times.  A spawned one is
+    started and left running, and the program decides later when it wants
+    the answer -- so N commands take about as long as the slowest.
+
+    The output is captured into a pipe the child writes to.  A pipe holds
+    only so much (64K on Linux), so a job producing more than that stops
+    when it fills and resumes when something drains it: correct, but not
+    running in parallel any more.  waitAll drains every job at once and is
+    what to use for more than one.
+    """
+
+    def __init__(self, _popen, _cmd, _stdin=None):
+        self._p = _popen
+        self._cmd = _cmd
+        self._stdin = _stdin
+        self._done = None
+
+    @property
+    def pid(self):
+        """The child's process id, while it is running."""
+        return self._p.pid
+
+    def running(self):
+        """True while the command has not finished. Never blocks."""
+        return self._done is None and self._p.poll() is None
+
+    def wait(self, check=False):
+        """Block until the command finishes, then give back its result.
+
+        Calling it twice gives the same answer rather than hanging: the
+        result is kept once the child has been reaped.
+        """
+        if self._done is None:
+            _out, _err = self._p.communicate(input=self._stdin)
+            self._done = _types.SimpleNamespace(
+                output=_out or "", stderr=_err or "", code=self._p.returncode)
+        if check and self._done.code != 0:
+            raise _subprocess.CalledProcessError(self._done.code, self._cmd)
+        return self._done
+
+    def kill(self):
+        """Stop the command if it is still running. Safe to call twice.
+
+        Sends SIGTERM and reaps, so running() answers False afterwards and a
+        later wait() returns rather than blocking on a child nobody collected.
+        The status is reported as 143 -- what a shell reports for a command
+        SIGTERMed -- so both backends say the same thing.
+        """
+        if self._done is None:
+            if self._p.poll() is None:
+                self._p.terminate()
+            _out, _err = self._p.communicate()
+            self._done = _types.SimpleNamespace(
+                output=_out or "", stderr=_err or "", code=143)
+
+
+def _wait_all(_jobs, check=False):
+    """Wait for every job at once, and give back their results in order.
+
+    One thread per job, each doing that job's own communicate(): every pipe
+    is drained while the others are, so a job that outgrows its pipe buffer
+    does not hold up the rest.  Waiting for them one at a time in a loop
+    would work too, and would stall exactly there.
+    """
+    import concurrent.futures as _futures
+    _jobs = list(_jobs)
+    if not _jobs:
+        return []
+    with _futures.ThreadPoolExecutor(max_workers=len(_jobs)) as _ex:
+        list(_ex.map(lambda _j: _j.wait(), _jobs))
+    _results = [_j.wait() for _j in _jobs]
+    if check:
+        for _j, _r in zip(_jobs, _results):
+            if _r.code != 0:
+                raise _subprocess.CalledProcessError(_r.code, _j._cmd)
+    return _results\
+'''
+
+
+def _ensure_spawn_helper():
+    """Inject the job handle the first time shellSpawn is used."""
+    ParserState.nim_imports.update({"import subprocess as _subprocess",
+                                    "import types as _types"})
+    decls = getattr(ParserState, "py_top_decls", [])
+    if not any("class _Job" in d for d in decls):
+        decls.append(_SPAWN_HELPER)
+        ParserState.py_top_decls = decls
+
+
 def _ensure_run_argv_helper():
     """Inject the shell-free runner the first time run()/runLines() is seen."""
     ParserState.nim_imports.update({"import subprocess as _subprocess",
@@ -2241,7 +2340,8 @@ def _parse_shell_stmt(node):
     kw_idx = -1
     for i, n in enumerate(nodes):
         val = getattr(n, "node", None)
-        if isinstance(val, str) and val in ("shell", "shellLines", "shellExec"):
+        if isinstance(val, str) and val in ("shell", "shellLines", "shellExec",
+                                            "shellSpawn"):
             kw = val
             kw_idx = i
             break
@@ -2418,6 +2518,11 @@ def to_py(self, indent=0):
         raise SyntaxError(
             "shellExec: replaces the process and never returns, so it "
             "cannot be assigned — write it as a statement")
+    if kw == "shellSpawn" and not target_name:
+        raise SyntaxError(
+            "shellSpawn: returns a job to wait on, so it needs a target — "
+            "`let j: Job = shellSpawn: cmd`. Without one the command runs "
+            "with nothing left to reap it.")
 
     lines = []
 
@@ -2458,6 +2563,22 @@ def to_py(self, indent=0):
                      if "timeout" not in opts else
                      f"{ind}{target_name} = {runner}({cmd_ref}, {call_kwargs}).returncode")
         _check(target_name)
+    elif kw == "shellSpawn":
+        # Starts the command and carries on; the waiting is j.wait().
+        _ensure_spawn_helper()
+        _sp = ["shell=True", "stdout=_subprocess.PIPE",
+               "stderr=_subprocess.PIPE", "text=True"]
+        if "cwd" in opts:
+            _sp.append(f"cwd={opts['cwd']}")
+        if "env" in opts:
+            ParserState.nim_imports.add("import os")
+            _sp.append("env={**os.environ, **(" + opts["env"] + ")}")
+        _sp.append("stdin=" + ("_subprocess.PIPE" if "stdin" in opts
+                               else "_subprocess.DEVNULL"))
+        _in = f", {opts['stdin']}" if "stdin" in opts else ""
+        lines.append(f"{ind}{target_name} = _Job("
+                     f"_subprocess.Popen({cmd_ref}, {', '.join(_sp)}), "
+                     f"{cmd_ref}{_in})")
     elif kw == "shellExec":
         # Replaces the process: nothing after it runs.  There is no child to
         # configure, so `timeout`, `stdin` and `check` are meaningless here --

@@ -3565,6 +3565,133 @@ proc adascriptRunArgvLines*(argv: seq[string], cwd: string = "",
 """
 
 
+_SPAWN_HELPER = """\
+type AdascriptJob* = ref object
+  ## A command running alongside this program.
+  ##
+  ## Every other form waits: the statement does not finish until the command
+  ## does, so N commands take the sum of their times. A spawned one is
+  ## started and left running, and the program decides later when it wants
+  ## the answer -- so N commands take about as long as the slowest.
+  p*: Process
+  cmd*: string
+  toWrite*: string
+  outBuf*, errBuf*: string
+  iOpen*, oOpen*, eOpen*: bool
+  code*: int
+  reaped*: bool
+
+proc adascriptSpawn*(cmd: string, workDir: string = "",
+                     env: Table[string, string] = initTable[string, string](),
+                     input: string = ""): AdascriptJob =
+  ## Start cmd and return without waiting for it.
+  var envTable: StringTableRef = nil
+  if env.len > 0:
+    envTable = newStringTable(modeCaseSensitive)
+    for k, v in envPairs():
+      envTable[k] = v
+    for k, v in env.pairs:
+      envTable[k] = v
+  let p = startProcess(cmd, workingDir = workDir, env = envTable,
+                       options = {poEvalCommand})
+  for fd in [p.outputHandle.cint, p.errorHandle.cint, p.inputHandle.cint]:
+    discard fcntl(fd, F_SETFL, fcntl(fd, F_GETFL, 0) or O_NONBLOCK)
+  result = AdascriptJob(p: p, cmd: cmd, toWrite: input, code: -1,
+                        iOpen: input.len > 0, oOpen: true, eOpen: true,
+                        reaped: false)
+  if not result.iOpen:
+    p.inputStream.close()
+
+proc adascriptJobStep(j: AdascriptJob): bool =
+  ## One non-blocking pass over a job's pipes. True while it is unfinished.
+  ##
+  ## Pulled out of the waiting loop so that one job and many jobs are driven
+  ## by exactly the same code: waitAll is this called round-robin, which is
+  ## what keeps a job that outgrows its pipe buffer from stalling the rest.
+  if j.reaped: return false
+  if j.iOpen:
+    let w = write(j.p.inputHandle.cint, addr j.toWrite[0], j.toWrite.len)
+    if w > 0:
+      j.toWrite = j.toWrite[w .. ^1]
+    elif w < 0 and not (errno == EAGAIN or errno == EWOULDBLOCK):
+      j.toWrite = ""
+    if j.toWrite.len == 0:
+      j.iOpen = false
+      j.p.inputStream.close()
+  if j.oOpen: j.oOpen = adascriptDrain(j.p.outputHandle.cint, j.outBuf)
+  if j.eOpen: j.eOpen = adascriptDrain(j.p.errorHandle.cint, j.errBuf)
+  j.code = j.p.peekExitCode()
+  if j.code != -1 and not j.oOpen and not j.eOpen:
+    j.p.close()
+    j.reaped = true
+    return false
+  return true
+
+proc wait*(j: AdascriptJob, check: bool = false): tuple[output: string, stderr: string, code: int] =
+  ## Block until the command finishes, then give back its result.
+  ##
+  ## Calling it twice gives the same answer rather than hanging: the result
+  ## is kept once the child has been reaped.
+  while adascriptJobStep(j):
+    sleep(2)
+  result = (j.outBuf, j.errBuf, j.code)
+  if check and j.code != 0:
+    raise newException(OSError,
+                       "command failed with exit code " & $j.code & ": " & j.cmd)
+
+proc running*(j: AdascriptJob): bool =
+  ## True while the command has not finished. Never blocks.
+  if j.reaped: return false
+  discard adascriptJobStep(j)
+  not j.reaped
+
+proc pid*(j: AdascriptJob): int =
+  ## The child's process id, while it is running.
+  j.p.processID()
+
+proc kill*(j: AdascriptJob) =
+  ## Stop the command if it is still running. Safe to call twice.
+  if not j.reaped:
+    j.p.terminate()
+    discard j.p.waitForExit()
+    j.code = 143
+    j.p.close()
+    j.reaped = true
+
+proc waitAll*(jobs: seq[AdascriptJob], check: bool = false): seq[tuple[output: string, stderr: string, code: int]] =
+  ## Wait for every job at once, and give back their results in order.
+  ##
+  ## Every pipe is drained while the others are, so a job that outgrows its
+  ## pipe buffer does not hold up the rest. Waiting for them one at a time
+  ## in a loop would work too, and would stall exactly there.
+  while true:
+    var anyLive = false
+    for j in jobs:
+      if adascriptJobStep(j):
+        anyLive = true
+    if not anyLive: break
+    sleep(2)
+  result = @[]
+  for j in jobs:
+    result.add((j.outBuf, j.errBuf, j.code))
+  if check:
+    for j in jobs:
+      if j.code != 0:
+        raise newException(OSError,
+                           "command failed with exit code " & $j.code & ": " & j.cmd)\
+"""
+
+
+def _ensure_spawn_helper():
+    """Inject the job handle the first time shellSpawn is used."""
+    _ensure_shell_run_helper()      # adascriptDrain and its imports
+    ParserState.nim_imports.update({"tables", "strtabs", "os", "streams"})
+    decls = getattr(ParserState, "nim_top_decls", [])
+    if not any("AdascriptJob" in d for d in decls):
+        decls.append(_SPAWN_HELPER)
+        ParserState.nim_top_decls = decls
+
+
 def _ensure_run_argv_helper():
     """Inject the shell-free runner the first time run()/runLines() is seen."""
     # adascriptRun's own imports come from _ensure_shell_run_helper; these are
@@ -3780,11 +3907,7 @@ def to_nim(self, indent=0):
     run_timeout = f", {opts['timeout']}" if "timeout" in opts else ""
     # stdin = expr: fed to the child. The runner takes it after the timeout,
     # so a stdin without a timeout still has to name the default.
-    if "stdin" in opts:
-        if not (target_name or target_tuple):
-            raise SyntaxError(
-                "shell(stdin = ...) needs a form that captures — "
-                "`let r = shell(stdin = x): cmd`, a tuple, or shellLines:")
+    if "stdin" in opts and kw != "shellSpawn":
         run_timeout = f"{run_timeout or ', 0'}, {opts['stdin']}"
     # env applies to every form: unlike stdin it needs no pipe, only a
     # different environment for the child.
@@ -3910,6 +4033,19 @@ def to_nim(self, indent=0):
             lines.append(f"{ind}{nim_kw} {target_name} = execCmd({cmd_ref})")
         ParserState.symbol_table.add(target_name, "int", nim_kw)
         _check(target_name)
+    elif kw == "shellSpawn":
+        # Starts the command and carries on; the waiting is j.wait().
+        # cwd has already been folded into the command as a `cd <dir> &&`
+        # prefix above, so only env and stdin are passed along here.
+        _ensure_spawn_helper()
+        _sp_args = [cmd_ref]
+        if run_env:
+            _sp_args.append(f"env = {run_env}")
+        if "stdin" in opts:
+            _sp_args.append(f"input = {opts['stdin']}")
+        lines.append(f"{ind}{nim_kw} {target_name} = "
+                     f"adascriptSpawn({', '.join(_sp_args)})")
+        ParserState.symbol_table.add(target_name, "AdascriptJob", nim_kw)
     elif target_name:
         if kw == "shellLines":
             _ensure_shell_lines_helper()

@@ -39,6 +39,8 @@ _PY_TO_NIM = {
     # the name is only needed where a binding must be annotated:
     # `let r: RunResult = run(argv)`.
     "RunResult": "tuple[output: string, stderr: string, code: int]",
+    # The handle shellSpawn returns, so `let jobs: []Job = @[]` can name it.
+    "Job": "AdascriptJob",
 }
 
 # Nim ordinal types — eligible for built-in set[T]

@@ -728,6 +728,12 @@ def to_py(self, prec=None):
                     result = helper
                     i += 1
                     continue
+            if i == 0 and result == "waitAll" and tr_str.startswith("("):
+                from hek_py3_parser import _ensure_spawn_helper
+                _ensure_spawn_helper()
+                result = "_wait_all" + tr_str
+                i += 1
+                continue
             if tr_str == ".maxIndex":
                 result = f"{result}.index(max({result}))"
                 i += 1

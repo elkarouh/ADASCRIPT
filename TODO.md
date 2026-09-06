@@ -35,6 +35,7 @@
 - [x] py2py: a call spanning lines skips every name-anchored rewrite (see [Bug 22](#bug-22--a-call-spanning-lines-skips-every-name-anchored-rewrite-python-backend))
 - [ ] py2py: tick attributes are dropped in a call spanning lines — same root cause as Bug 22, still open
 - [x] every command went through `/bin/sh`, so quoting was always the caller's problem (see [Argv form](#argv-form-run--runlines--done))
+- [x] every shell form waited, so N commands took the sum of their times (see [Concurrency form](#concurrency-form-shellspawn--done))
 
 ## Shell improvements
 
@@ -1381,3 +1382,65 @@ with no keyword translation.  The one casualty is `stdin`, which the Python
 backend had already rewritten to `sys.stdin` by the time the call site sees
 it -- not a name a keyword argument may have -- so it is put back, and only
 where it is a keyword.
+
+---
+
+### Concurrency form `shellSpawn` — DONE
+
+Every other form waits.  The statement does not finish until the command
+does, so N commands take the sum of their times, and a script that fetches
+ten things fetched them one at a time.  There was no way to say "start this
+and carry on".
+
+```python
+var jobs: []Job = []
+for host in hosts:
+    let j: Job = shellSpawn: ping -c1 {!host}
+    jobs.append(j)
+
+let results: []RunResult = waitAll(jobs)
+```
+
+Measured: three commands that each `sleep 1` finish in about a second on
+both backends, not three.
+
+`shellSpawn` hands back a `Job`.  `j.wait()` blocks and gives the same
+`RunResult` the other forms do; `j.wait(check = true)` raises on failure;
+`j.running()` answers without blocking; `j.kill()` sends SIGTERM and reaps;
+`j.pid` is the child's.  `wait` is safe to call twice -- the result is kept
+once the child is reaped, so the second call returns instead of hanging on
+a child nobody can collect again.
+
+`cwd`, `env` and `stdin` apply at the spawn.  `timeout` and `check` are
+refused by bug 20's validator with a reason: there is nothing to time or
+check yet, and both belong on the wait.  A spawn without a target is also
+an error -- nothing would be left to reap the command.
+
+**Why `waitAll` exists, and why it is not a loop over `wait`.** The output
+goes into a pipe, and a pipe holds 64K on Linux.  A job producing more than
+that stops when it fills and resumes when something drains it -- so waiting
+for jobs one at a time quietly serialises them again, and the concurrency
+the form was added for evaporates in exactly the case where it matters.
+`waitAll` drains every job as it goes.
+
+The two backends get there differently, and both were verified against two
+jobs producing 200 000 bytes each:
+
+- Nim: `adascriptJobStep` is one non-blocking pass over a job's three
+  pipes, and both `wait` and `waitAll` are that called in a loop -- one job
+  and many jobs are driven by exactly the same code, which is the only way
+  they stay consistent.
+- Python: a thread per job, each running that job's own `communicate()`.
+
+**A divergence caught by the tests.** `kill()` originally called
+`communicate()` on Python after SIGTERM, which hung: killing `/bin/sh -c
+'sleep 30'` reaps the shell but leaves `sleep` holding the write end of the
+pipe, so waiting for EOF waits for the full 30 seconds.  Nim did not hang,
+because its `kill` never drained.  Both now terminate, reap and report 143
+-- what a shell reports for a SIGTERMed command -- and discard whatever
+output had accumulated, which is the same answer on both sides.
+
+**Not a bug, but worth knowing:** a `\0` written in a shell body becomes a
+real NUL byte in the emitted string literal, not the two characters the
+shell would see.  `tr '\0' a` therefore receives an empty argument and
+hangs.  Found while writing this test; the test uses `yes` instead.
