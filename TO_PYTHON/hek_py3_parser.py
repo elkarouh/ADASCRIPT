@@ -2146,6 +2146,10 @@ def to_py(self, indent=0):
         raise SyntaxError(
             "shell(stdin = ...) needs a form that captures — "
             "`let r = shell(stdin = x): cmd`, a tuple, or shellLines:")
+    if "env" in opts and not (target_name or target_tuple):
+        raise SyntaxError(
+            "shell(env = ...) needs a form that captures — "
+            "`let r = shell(env = e): cmd`, a tuple, or shellLines:")
 
     run_kwargs = ["shell=True"]
     if has_target:
@@ -2157,6 +2161,11 @@ def to_py(self, indent=0):
             # that, so a capture of a command that reads stdin ends rather
             # than waiting on a terminal the caller never meant to offer.
             run_kwargs.append("stdin=_subprocess.DEVNULL")
+        if "env" in opts:
+            # Additive, like the Nim side: subprocess replaces the whole
+            # environment, and a child that loses PATH is nobody's intent.
+            ParserState.nim_imports.add("import os")
+            run_kwargs.append("env={**os.environ, **(" + opts["env"] + ")}")
     if "cwd" in opts:
         run_kwargs.append(f"cwd={opts['cwd']}")
     if "timeout" in opts:

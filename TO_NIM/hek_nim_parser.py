@@ -3369,7 +3369,8 @@ proc adascriptDrain(fd: cint, buf: var string): bool =
     return false
   return errno == EAGAIN or errno == EWOULDBLOCK
 
-proc adascriptRun*(cmd: string, timeoutMs: int = 0, input: string = ""): tuple[output: string, stderr: string, code: int] =
+proc adascriptRun*(cmd: string, timeoutMs: int = 0, input: string = "",
+                   env: Table[string, string] = initTable[string, string]()): tuple[output: string, stderr: string, code: int] =
   ## Run cmd through the shell, capturing stdout and stderr separately.
   ##
   ## execCmdEx merges the two -- its default options include poStdErrToStdOut
@@ -3381,7 +3382,18 @@ proc adascriptRun*(cmd: string, timeoutMs: int = 0, input: string = ""): tuple[o
   ## which writes while we write cannot deadlock us. The pipe is closed once
   ## it is written -- immediately when there is nothing to send -- so a child
   ## that reads stdin sees EOF instead of waiting for input that never comes.
-  let p = startProcess(cmd, options = {poEvalCommand})
+  ##
+  ## `env` adds to the environment rather than replacing it: startProcess
+  ## takes the child's whole environment, so ours is copied in first and the
+  ## given names layered over it. A child that loses PATH is nobody's intent.
+  var envTable: StringTableRef = nil
+  if env.len > 0:
+    envTable = newStringTable(modeCaseSensitive)
+    for k, v in envPairs():
+      envTable[k] = v
+    for k, v in env.pairs:
+      envTable[k] = v
+  let p = startProcess(cmd, env = envTable, options = {poEvalCommand})
   let ofd = p.outputHandle.cint
   let efd = p.errorHandle.cint
   let ifd = p.inputHandle.cint
@@ -3440,7 +3452,8 @@ proc adascriptExec*(cmd: string, timeoutMs: int): int =
 
 def _ensure_shell_run_helper():
     """Inject the capturing runner the first time a shell capture is emitted."""
-    ParserState.nim_imports.update({"osproc", "os", "times", "posix", "streams"})
+    ParserState.nim_imports.update({"osproc", "os", "times", "posix", "streams",
+                                    "tables", "strtabs"})
     decls = getattr(ParserState, "nim_top_decls", [])
     if not any("adascriptRun" in d for d in decls):
         decls.append(_SHELL_RUN_HELPER)
@@ -3572,6 +3585,14 @@ def to_nim(self, indent=0):
                 "shell(stdin = ...) needs a form that captures — "
                 "`let r = shell(stdin = x): cmd`, a tuple, or shellLines:")
         run_timeout = f"{run_timeout or ', 0'}, {opts['stdin']}"
+    if "env" in opts:
+        if not (target_name or target_tuple):
+            raise SyntaxError(
+                "shell(env = ...) needs a form that captures — "
+                "`let r = shell(env = e): cmd`, a tuple, or shellLines:")
+        if "stdin" not in opts:
+            run_timeout = f'{run_timeout or ", 0"}, ""'
+        run_timeout = f"{run_timeout}, {opts['env']}"
 
     import re as _re_env
     has_env_vars = bool(_re_env.search(r'__bash_env_\w+__', cmd))

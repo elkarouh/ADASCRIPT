@@ -954,6 +954,7 @@ for s in Stage_T'First .. Stage_T'Last:
 | Shell interpolation, list | `shell: cmd {*args}` |
 | Shell, fail on non-zero | `shell(check = true): cmd` |
 | Shell, feed stdin | `shell(stdin = text): cmd` |
+| Shell, child environment | `shell(env = e): cmd` |
 | Shell lines capture | `let ls = shellLines: cmd` |
 | Shell lines (typed) | `let ls: []str = shellLines: cmd` |
 | Shell (bare assign) | `ls = shellLines: cmd` |

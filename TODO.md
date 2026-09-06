@@ -24,6 +24,7 @@
 - [x] `shell:` had no way to interpolate an argument *list* (see [Splat interpolation](#splat-interpolation-args--done))
 - [x] `shell:` had no way to fail on a non-zero status (see [Checked form](#checked-form-check--true--done))
 - [x] `shell:` had no way to feed a command's stdin (see [stdin feeding](#stdin-feeding-stdin--expr--done))
+- [x] `shell:` had no way to set a child's environment (see [env mapping](#env-mapping-env--expr--done))
 - [x] py2py: a shell body ending in `"` collides with the `"""` wrapper (see [Bug 17](#bug-17--py2py-mis-quotes-a-shell-body-ending-in-a-double-quote))
 
 ## Shell improvements
@@ -1046,3 +1047,31 @@ input that never came — `let r = shell: cat` sat there until the timeout
 (code 124), or forever without one. The pipe is now closed immediately when
 there is nothing to send, so the child sees EOF; Python matches with
 `stdin=DEVNULL`. Both return 0 at once.
+
+---
+
+### env mapping `env = expr` — DONE
+
+Setting a variable for one command meant splicing `NAME=value` into the
+command text, which is the one place a value crosses into the shell's own
+namespace and so cannot be quoted by `{!x}`.  `EXAMPLES/git1.ady` does it
+three times with `GIT_DIR=` and `GIT_WORK_TREE=`.
+
+```python
+let extra: {str}str = {"GIT_DIR": repo, "LC_ALL": "C"}
+let r = shell(env = extra): git status
+```
+
+**It adds to the environment rather than replacing it.**  `startProcess` and
+`subprocess` both take the child's *whole* environment, so the parent's is
+copied in first and the given names layered over — a child that loses `PATH`
+is nobody's intent.  Overriding an inherited name works: `HOME` set to
+`/overridden` is what the child sees, while `PATH` survives.
+
+Like `stdin`, it applies to the capturing forms and is a transpile-time
+error on a bare `shell:` or an `int`-typed target.
+
+The Nim side needed `strtabs`: `startProcess` takes a `StringTableRef`, so
+the helper builds one from `envPairs()` and applies the `Table[string, string]`
+the dict literal already compiles to.  Python gets
+`env={**os.environ, **(...)}`.

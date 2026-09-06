@@ -1230,6 +1230,19 @@ transpile-time error rather than a silently ignored option. When no `stdin`
 is given, a captured command sees EOF straight away rather than waiting on a
 terminal.
 
+### Setting the child's environment
+
+`env = expr` takes a `{str}str` and **adds** to the environment the child
+inherits, rather than replacing it:
+
+```python
+let extra: {str}str = {"GIT_DIR": repo, "LC_ALL": "C"}
+let r = shell(env = extra): git status
+```
+
+Names already in the environment are overridden; everything else — `PATH`
+included — is still there. Like `stdin`, it applies to the capturing forms.
+
 ### Options
 
 ```python

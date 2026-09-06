@@ -51,4 +51,11 @@ print("shellLines with stdin:", counted[0].strip())
 let no_input = shell: cat
 print("a capture of a stdin-reading command ends, code:", no_input.code)
 
+print("=== env mapping ===")
+let extra: {str}str = {"GREETING": "hello", "HOME": "/overridden"}
+let envd = shell(env = extra): sh -c 'printf "%s %s" "$GREETING" "$HOME"'
+print("added and overridden:", envd.output.strip())
+let inherited = shell(env = extra): sh -c 'test -n "$PATH" && printf inherited-too'
+print("the rest of the environment is", inherited.output.strip())
+
 print("done — all expects matched, bc was driven successfully")
