@@ -2186,6 +2186,33 @@ def _translate_stdlib_patterns(expr):
     if exit_m:
         return _quit_call(exit_m.group(1))
 
+    # --- 0b. run(argv, ...) / runLines(argv, ...) — the shell-free forms.
+    # Ahead of the table because they need their runtime helper injected, not
+    # just an import.  The proc's parameters are spelled the way the options
+    # are spelled in Adascript (cwd, env, stdin, timeout, check), so the
+    # argument list passes through exactly as written.
+    run_m = _re.match(r"^(run|runLines)\(", expr)
+    if run_m:
+        # Find this call's own closing paren rather than anchoring at the end
+        # of the string: `run(argv).code` has a tail, and `run(f(x))` has
+        # nested parens, so neither a greedy nor a lazy match gets it right.
+        name = run_m.group(1)
+        depth, close = 0, -1
+        for _i, _ch in enumerate(expr[len(name):], start=len(name)):
+            if _ch == "(":
+                depth += 1
+            elif _ch == ")":
+                depth -= 1
+                if depth == 0:
+                    close = _i
+                    break
+        if close != -1:
+            from hek_nim_parser import _ensure_run_argv_helper
+            _ensure_run_argv_helper()
+            proc = ("adascriptRunArgv" if name == "run"
+                    else "adascriptRunArgvLines")
+            return f"{proc}{expr[len(name):close + 1]}{expr[close + 1:]}"
+
     # --- 1. Pattern table (exact or prefix match) ---
     for py_pattern, nim_equiv, nim_import in _STDLIB_PATTERNS:
         if expr == py_pattern:

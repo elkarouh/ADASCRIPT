@@ -3370,7 +3370,8 @@ proc adascriptDrain(fd: cint, buf: var string): bool =
   return errno == EAGAIN or errno == EWOULDBLOCK
 
 proc adascriptRun*(cmd: string, timeoutMs: int = 0, input: string = "",
-                   env: Table[string, string] = initTable[string, string]()): tuple[output: string, stderr: string, code: int] =
+                   env: Table[string, string] = initTable[string, string](),
+                   argv: seq[string] = @[], workDir: string = ""): tuple[output: string, stderr: string, code: int] =
   ## Run cmd through the shell, capturing stdout and stderr separately.
   ##
   ## execCmdEx merges the two -- its default options include poStdErrToStdOut
@@ -3386,6 +3387,11 @@ proc adascriptRun*(cmd: string, timeoutMs: int = 0, input: string = "",
   ## `env` adds to the environment rather than replacing it: startProcess
   ## takes the child's whole environment, so ours is copied in first and the
   ## given names layered over it. A child that loses PATH is nobody's intent.
+  ##
+  ## When `argv` is non-empty the shell is left out of it entirely: argv[0]
+  ## is the program and the rest are its arguments, passed as they are. That
+  ## is the one path where quoting cannot go wrong, because nothing parses
+  ## the arguments a second time.
   var envTable: StringTableRef = nil
   if env.len > 0:
     envTable = newStringTable(modeCaseSensitive)
@@ -3393,7 +3399,13 @@ proc adascriptRun*(cmd: string, timeoutMs: int = 0, input: string = "",
       envTable[k] = v
     for k, v in env.pairs:
       envTable[k] = v
-  let p = startProcess(cmd, env = envTable, options = {poEvalCommand})
+  let p =
+    if argv.len > 0:
+      startProcess(argv[0], workingDir = workDir, args = argv[1 .. ^1],
+                   env = envTable, options = {poUsePath})
+    else:
+      startProcess(cmd, workingDir = workDir, env = envTable,
+                   options = {poEvalCommand})
   let ofd = p.outputHandle.cint
   let efd = p.errorHandle.cint
   let ifd = p.inputHandle.cint
@@ -3485,13 +3497,24 @@ def _ensure_shell_check_helper():
 
 
 _SHELL_ITER_HELPER = """\
-iterator adascriptShellIter*(cmd: string): string =
+iterator adascriptShellIter*(cmd: string,
+                             env: Table[string, string] = initTable[string, string]()): string =
   ## The lines a command prints, yielded as they arrive.
   ##
   ## The capturing forms wait for the child to finish; this one does not, so
   ## a long-running or endless command can be read while it runs. stdin is
   ## closed, as it is for a capture, and the child is reaped at the end.
-  let p = startProcess(cmd, options = {poEvalCommand})
+  ##
+  ## `env` adds to the environment rather than replacing it, matching every
+  ## other form; `cwd` is handled by the caller, which prefixes the command.
+  var envTable: StringTableRef = nil
+  if env.len > 0:
+    envTable = newStringTable(modeCaseSensitive)
+    for k, v in envPairs():
+      envTable[k] = v
+    for k, v in env.pairs:
+      envTable[k] = v
+  let p = startProcess(cmd, env = envTable, options = {poEvalCommand})
   p.inputStream.close()
   var line = ""
   while p.outputStream.readLine(line):
@@ -3501,9 +3524,63 @@ iterator adascriptShellIter*(cmd: string): string =
 """
 
 
+_RUN_ARGV_HELPER = """\
+proc adascriptRunArgv*(argv: seq[string], cwd: string = "",
+                       env: Table[string, string] = initTable[string, string](),
+                       stdin: string = "", timeout: int = 0,
+                       check: bool = false): tuple[output: string, stderr: string, code: int] =
+  ## Run a command from an argument list, with no shell in the way.
+  ##
+  ## Every shell: form builds a command line and hands it to /bin/sh, so the
+  ## shell parses it and quoting is the caller's problem -- {!x} and {*xs}
+  ## solve it, but only when remembered. Here there is nothing to quote: the
+  ## list is the argument vector, and a filename holding a space, a quote or
+  ## a semicolon is just an element.
+  ##
+  ## timeout is milliseconds, as everywhere else, and a killed command
+  ## reports 124 the way timeout(1) does.
+  if argv.len == 0:
+    raise newException(ValueError, "run(): the argument list is empty")
+  try:
+    result = adascriptRun("", timeout, stdin, env, argv, cwd)
+  except OSError:
+    # A shell would have said "not found" and exited 127; without one, say
+    # the same thing rather than letting startProcess's error escape.
+    result = ("", argv[0] & ": not found\\n", 127)
+  if check and result.code != 0:
+    raise newException(OSError,
+                       "command failed with exit code " & $result.code & ": " & argv.join(" "))
+
+proc adascriptRunArgvLines*(argv: seq[string], cwd: string = "",
+                            env: Table[string, string] = initTable[string, string](),
+                            stdin: string = "", timeout: int = 0,
+                            check: bool = false): seq[string] =
+  ## The lines a shell-free command printed. The splitLines twin of run().
+  let r = adascriptRunArgv(argv, cwd, env, stdin, timeout, check)
+  result = r.output.splitLines()
+  # splitLines gives a trailing "" for output ending in a newline, which
+  # shellLines drops too -- the two forms have to agree.
+  if result.len > 0 and result[^1] == "":
+    result.setLen(result.len - 1)\
+"""
+
+
+def _ensure_run_argv_helper():
+    """Inject the shell-free runner the first time run()/runLines() is seen."""
+    # adascriptRun's own imports come from _ensure_shell_run_helper; these are
+    # what the wrappers add on top -- join for the check message, splitLines
+    # for runLines.
+    ParserState.nim_imports.update({"tables", "strutils"})
+    _ensure_shell_run_helper()
+    decls = getattr(ParserState, "nim_top_decls", [])
+    if not any("adascriptRunArgv" in d for d in decls):
+        decls.append(_RUN_ARGV_HELPER)
+        ParserState.nim_top_decls = decls
+
+
 def _ensure_shell_iter_helper():
     """Inject the streaming iterator the first time shellIter is used."""
-    ParserState.nim_imports.update({"osproc", "streams"})
+    ParserState.nim_imports.update({"osproc", "streams", "tables", "strtabs", "os"})
     decls = getattr(ParserState, "nim_top_decls", [])
     if not any("adascriptShellIter" in d for d in decls):
         decls.append(_SHELL_ITER_HELPER)
@@ -3519,7 +3596,20 @@ def to_nim(self, indent=0):
     if _to_py_dir not in _sys.path:
         _sys.path.insert(0, _to_py_dir)
     from hek_py3_parser import _parse_for_shell_stmt, _apply_shell_quoting
-    target, cmd, needs_fstring, body_node = _parse_for_shell_stmt(self)
+    target, cmd, needs_fstring, body_node, opts = _parse_for_shell_stmt(self)
+
+    # cwd, as everywhere on this backend, is a `cd <dir> &&` prefix: a quoted
+    # literal is spliced as text, anything else is interpolated and quoted so
+    # a directory holding a space still works (the shape bug 18 established).
+    if "cwd" in opts:
+        _cwd_raw = opts["cwd"].strip()
+        if len(_cwd_raw) >= 2 and _cwd_raw[0] == _cwd_raw[-1] and _cwd_raw[0] in ("'", '"'):
+            cmd = f"cd {_cwd_raw[1:-1]} && {cmd}"
+        else:
+            ParserState.nim_imports.add("osproc")
+            cmd = f"cd {{quoteShell({_cwd_raw})}} && {cmd}"
+            needs_fstring = True
+
     cmd, _quoted = _apply_shell_quoting(
         cmd, "quoteShell({expr})", 'mapIt({expr}, quoteShell(it)).join(" ")')
     if _quoted:
@@ -3530,12 +3620,16 @@ def to_nim(self, indent=0):
         ParserState.nim_imports.add("strformat")
     q = '"""'
     cmd_str = (f"fmt{q}{cmd}{q}" if needs_fstring else f"{q}{cmd}{q}")
+    iter_args = ""
+    if "env" in opts:
+        ParserState.nim_imports.update({"tables", "strtabs", "os"})
+        iter_args = f", {opts['env']}"
     ind = _ind(indent)
     # Register the loop variable before rendering the body: the body may ask
     # what type it is — `int(line)` becomes parseInt only for a string.
     ParserState.symbol_table.add(target, "string", "let")
     body = body_node.to_nim(indent + 1) if body_node else f"{_ind(indent + 1)}discard"
-    return f"{ind}for {target} in adascriptShellIter({cmd_str}):\n{body}"
+    return f"{ind}for {target} in adascriptShellIter({cmd_str}{iter_args}):\n{body}"
 
 
 

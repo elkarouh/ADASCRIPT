@@ -48,6 +48,9 @@
 | Shell, child environment | `shell(env = {"K": v}): cmd` — added, not replaced, any form |
 | Shell, streamed lines | `for line in shellIter: cmd` + body |
 | Shell, replace this process | `shellExec: cmd` — never returns, its status becomes ours |
+| Run a program, no shell | `run(["git", "log"])` → `RunResult` (.output/.stderr/.code) |
+| Run a program, output lines | `runLines(["ls", d])` → `[]str` |
+| run/runLines options | `run(argv, cwd = d, env = e, stdin = s, timeout = ms, check = true)` |
 | Shell options | `shell(cwd = "...", timeout = ms): cmd` |
 | Shell block / PTY automation | `shell:` + lines / + `send()`/`expect()` |
 | CLI args | `$0`, `$1`…`$9`, `$@`, `$#` |

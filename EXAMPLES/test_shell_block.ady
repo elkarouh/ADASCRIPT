@@ -67,6 +67,42 @@ let word: str = "two words"
 for line in shellIter: printf '%s\n' {!word} plain
     print("streamed with quoting: [" + line + "]")
 
+print("=== shellIter options ===")
+for line in shellIter(cwd = "/tmp"): pwd
+    print("cwd:", line)
+let iter_env: {str}str = {"STREAMED": "from env"}
+for line in shellIter(env = iter_env): sh -c 'echo $STREAMED'
+    print("env:", line)
+
+print("=== argv form (run / runLines) — no shell at all ===")
+# The list *is* the argument vector, so nothing re-parses it: a filename
+# holding spaces, a semicolon or a $(...) is just an element.
+let hostile: str = "; touch run-form-canary"
+let listed: RunResult = run(["printf", "[%s]\n", "two words", hostile])
+# Each element arrived as one argument, the metacharacters included, and the
+# semicolon started nothing: it is a string, not a command separator.
+print(listed.output.strip().replace("\n", " "))
+print("the ; was data, not a separator:", not -e "run-form-canary")
+let three: []str = runLines(["seq", "1", "3"])
+let n_three: int = three'Length
+print("runLines gave", n_three, "lines, last =", three[2])
+let split_r: RunResult = run(["sh", "-c", "echo out; echo err >&2; exit 3"])
+print("stdout/stderr/code kept apart:", split_r.output.strip(),
+      split_r.stderr.strip(), split_r.code)
+print("a missing program reports 127, as a shell would:",
+      run(["definitely-no-such-program"]).code)
+print("timeout still reports 124:", run(["sleep", "5"], timeout = 300).code)
+let run_env: {str}str = {"PASSED": "yes"}
+print("cwd, env and stdin all apply:",
+      run(["pwd"], cwd = "/tmp").output.strip(),
+      run(["sh", "-c", "echo $PASSED"], env = run_env).output.strip(),
+      run(["sort"], stdin = "b\na\n").output.strip().replace("\n", ","))
+try:
+    let must_fail: RunResult = run(["false"], check = true)
+    print("BUG: check = true did not raise")
+except:
+    print("check = true raises here too")
+
 print("done — all expects matched, bc was driven successfully")
 
 print("=== exec form (shellExec) ===")

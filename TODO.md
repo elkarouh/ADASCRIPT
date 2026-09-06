@@ -28,6 +28,13 @@
 - [x] `shell:` buffered every command to completion (see [Streaming form](#streaming-form-shelliter--done))
 - [x] py2nim: `shell(cwd = expr)` splices the variable's name (see [Bug 18](#bug-18--py2nim-splices-a-non-literal-cwd-as-text))
 - [x] py2py: a shell body ending in `"` collides with the `"""` wrapper (see [Bug 17](#bug-17--py2py-mis-quotes-a-shell-body-ending-in-a-double-quote))
+- [x] py2nim: the cache did not watch TO_PYTHON, so a stale `.nim` was reused (see [Bug 19](#bug-19--py2nims-cache-does-not-watch-to_python))
+- [x] `shell:` had no way to hand the process over (see [Exec form](#exec-form-shellexec--done))
+- [x] an unknown or inapplicable shell option was silently ignored (see [Bug 20](#bug-20--an-unknown-or-inapplicable-shell-option-is-silently-ignored))
+- [x] `shellIter` accepted options and discarded all of them (see [Bug 21](#bug-21--shelliter-accepted-options-and-discarded-all-of-them))
+- [x] py2py: a call spanning lines skips every name-anchored rewrite (see [Bug 22](#bug-22--a-call-spanning-lines-skips-every-name-anchored-rewrite-python-backend))
+- [ ] py2py: tick attributes are dropped in a call spanning lines — same root cause as Bug 22, still open
+- [x] every command went through `/bin/sh`, so quoting was always the caller's problem (see [Argv form](#argv-form-run--runlines--done))
 
 ## Shell improvements
 
@@ -1228,3 +1235,149 @@ already applied and appeared to do nothing.
 # without it, editing those leaves a stale .nim behind.
 for _extra_dir in ("HPARSEC", "ADASCRIPT_GRAMMAR", "TO_PYTHON"):
 ```
+
+---
+
+### Bug 20 — an unknown or inapplicable shell option is silently ignored
+
+Every option is looked up by name from a dict; nothing ever checked the key
+set.  A misspelling therefore compiled and did nothing:
+
+```python
+shell(timout = 5000): sleep 3600      # waits forever
+shellExec(check = true, timeout = 5000): echo hi   # both dropped
+```
+
+Confirmed on both backends.  Only `stdin` on a non-capturing form was
+diagnosed, and that check lived in the Python emitter, so the Nim backend
+did not give it.
+
+This is the same shape as bugs 16 and 18: the source says one thing, the
+program does another, and nothing is printed.  The cost is worse here
+because the option *looks* right -- someone reading the line sees a timeout
+that is not there.
+
+**Fixed.** `_validate_shell_opts` in `_parse_shell_stmt`, which both
+backends decompose through, so one diagnostic serves both:
+
+```
+shell: unknown option `timout` -- did you mean `timeout`?
+       (supported: check, cwd, env, stdin, timeout)
+shellExec(timeout = ...) is not supported: shellExec replaces this process,
+       so there is no child to time out. timeout works on shell, shellLines.
+```
+
+An option that exists but not on this form says why, and names the forms
+that do take it; a misspelling gets a suggestion via `difflib`.  The
+per-keyword sets are the table in the README.
+
+---
+
+### Bug 21 — `shellIter` accepted options and discarded all of them
+
+The grammar allows `shell_opts` on the streaming form, but
+`_parse_for_shell_stmt` never extracted them:
+
+```python
+for line in shellIter(cwd = "/tmp"): pwd
+    print line          # printed the *current* directory, both backends
+```
+
+Worse than a typo being ignored: `cwd` here is spelled exactly as the
+documentation spells it and still did nothing.
+
+**Fixed**, by implementing the options rather than rejecting them, since
+the grammar plainly intends to allow them.  `cwd` and `env` now work on
+`shellIter`: Python passes them to `Popen`, Nim prefixes `cd <dir> &&`
+(with the quoting bug 18 established) and builds a `StringTableRef` the way
+the other forms do.  `timeout`, `stdin` and `check` are rejected by bug
+20's validator with a reason -- a stream has no exit code to check and no
+end to time out.
+
+---
+
+### Bug 22 — a call spanning lines skips every name-anchored rewrite (Python backend)
+
+`call_trailer.to_py` returns the *raw source text* for a call whose
+parentheses span lines (`get_multiline_brackets()`), which skips the
+expression tree -- and with it every rewrite keyed on a name plus its call
+trailer.
+
+**Reproduction:**
+```python
+print("a:", readFile("/etc/hostname").strip())      # fine
+print("b:",
+      readFile("/etc/hostname").strip())            # not fine
+```
+
+```
+Nim    ->  vm / vm          (translates finished expression strings)
+Python ->  NameError: name 'readFile' is not defined
+```
+
+The same source works on one backend and dies on the other, and it dies at
+*runtime*, in whichever branch happens to reach that line.
+
+Expression-level rewrites that match a whole finished expression survive
+this path -- `os.makedirs(...)` spanning lines still gets `exist_ok=True`.
+Only the name-anchored ones are affected: `readFile`, `writeFile`, and the
+`run` / `runLines` added in this pass.
+
+**Fixed** for those, by rewriting the raw text before returning it
+(`_rewrite_builtins_in_raw`), tracking string literals so a name inside a
+quoted string is left alone, and tick attributes so `xs'Length` is not
+mistaken for one.
+
+**Still open, same root cause:** tick attributes themselves are dropped on
+this path -- `print("x:",\n      xs'Length)` emits `xs'Length` into Python.
+That predates this work and wants the real fix, which is not to bypass the
+tree at all; translating ticks textually here would be duplicating the
+translator that already exists.
+
+---
+
+### Argv form `run` / `runLines` — DONE
+
+Every `shell:` form builds a command line and hands it to `/bin/sh`, so the
+shell parses it and quoting is the caller's problem.  `{!x}` and `{*xs}`
+solve that -- but only when remembered, and the default is still wrong.
+
+```python
+let r: RunResult = run(["git", "commit", "-m", msg])
+let names: []str = runLines(["ls", dir])
+```
+
+The list *is* the argument vector.  Nothing parses the arguments a second
+time, so there is nothing to quote:
+
+```python
+let nasty: str = "; touch canary"
+run(["ls", nasty])        # ls: cannot access '; touch canary'
+shell: ls {nasty}         # creates canary
+shell: ls {!nasty}        # safe -- if you remember the !
+```
+
+Both were run: the argv form leaves the canary absent, the unquoted
+interpolation creates it, identically on both backends.
+
+`run` returns the same record as `shell` -- `.output`, `.stderr`, `.code` --
+spelled `RunResult` where a binding needs an annotation (Python aliases it
+to `SimpleNamespace`, Nim to the tuple).  `runLines` returns `[]str`.  Both
+take `cwd`, `env`, `stdin`, `timeout` and `check` as keyword arguments; a
+missing program reports 127 and a timeout 124, so the two families agree on
+what failure looks like.
+
+**Implementation note.** The Nim side reuses `adascriptRun` rather than
+duplicating it: two new parameters, `argv` and `workDir`, pick
+`startProcess(argv[0], args = argv[1..^1], options = {poUsePath})` over
+`startProcess(cmd, options = {poEvalCommand})`.  All the drain, timeout and
+stdin logic -- the part that took the care -- is therefore shared, which is
+also the only way the two paths are guaranteed to behave the same.
+
+**Two things the naming forced.** The Nim proc's parameters are spelled the
+way the options are spelled in Adascript (`cwd`, `env`, `stdin`, `timeout`,
+`check`), so the argument list passes through as written on both backends
+with no keyword translation.  The one casualty is `stdin`, which the Python
+backend had already rewritten to `sys.stdin` by the time the call site sees
+it -- not a name a keyword argument may have -- so it is put back, and only
+where it is a keyword.

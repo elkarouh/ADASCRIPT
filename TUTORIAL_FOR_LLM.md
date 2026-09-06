@@ -957,6 +957,8 @@ for s in Stage_T'First .. Stage_T'Last:
 | Shell, child environment | `shell(env = e): cmd` |
 | Shell, streamed lines | `for line in shellIter: cmd` |
 | Shell, replace this process | `shellExec: cmd` (never returns) |
+| Run a program, no shell | `run(["git", "log"])` -> RunResult |
+| Run a program, output lines | `runLines(["ls", d])` -> `[]str` |
 | Shell lines capture | `let ls = shellLines: cmd` |
 | Shell lines (typed) | `let ls: []str = shellLines: cmd` |
 | Shell (bare assign) | `ls = shellLines: cmd` |

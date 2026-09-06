@@ -180,12 +180,34 @@ def _ensure_subtype_aliases():
         ParserState.py_top_decls = decls
 
 
+# What `shell:` and `run()` hand back.  The shell forms infer it, so it only
+# needs a spelling where a binding must be annotated -- `let r: RunResult =
+# run(argv)`.  Python has no record type here, only the SimpleNamespace the
+# helpers build, so the name is an alias to that.
+_RUN_RESULT_ALIAS = """\
+# What run() and the shell forms return: output, stderr and code.
+RunResult = _types.SimpleNamespace\
+"""
+
+
+def _ensure_run_result_alias():
+    """Define RunResult the first time an annotation names it."""
+    from hek_parsec import ParserState
+    ParserState.nim_imports.add("import types as _types")
+    decls = getattr(ParserState, 'py_top_decls', [])
+    if not any("RunResult = " in d for d in decls):
+        decls.append(_RUN_RESULT_ALIAS)
+        ParserState.py_top_decls = decls
+
+
 @method(type_name)
 def to_py(self, prec=None):
     """type_name: IDENTIFIER (type alias or user-defined type) -> Nim: mapped via _PY_TO_NIM if known"""
     name = self.nodes[0].to_py()  # delegate to primary expression node
     if name in ("Natural", "Positive"):
         _ensure_subtype_aliases()
+    elif name == "RunResult":
+        _ensure_run_result_alias()
     return name
 
 

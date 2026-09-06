@@ -2274,6 +2274,8 @@ advanced scenarios are not yet supported:
 | Shell, child environment          | `shell(env = e): cmd` (added to)        |
 | Shell, streamed lines             | `for line in shellIter: cmd`            |
 | Shell, replace this process       | `shellExec: cmd` (never returns)        |
+| Run a program, no shell           | `run(["git", "log"])` -> RunResult      |
+| Run a program, output lines       | `runLines(["ls", d])` -> `[]str`        |
 | Shell exit code, terminal kept    | `let code: int = shell: cmd`            |
 | Discard shell output              | `shell: cmd`                             |
 | Shell block (commands joined)     | `shell:` then indented `cmd1` / `cmd2`   |

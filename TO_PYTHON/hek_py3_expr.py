@@ -422,6 +422,94 @@ def to_py(self, prec=None):
 
 
 # --- trailers ---
+def _rewrite_builtins_in_raw(text):
+    """Apply the name+trailer builtin rewrites to raw source text.
+
+    A call whose parentheses span lines is emitted as the original source
+    (see call_trailer below), which skips the expression tree -- and with it
+    every rewrite that keys on a name plus its call trailer.  `readFile` on a
+    wrapped line therefore reached Python as an undefined name, while the Nim
+    backend, which translates finished expression strings, was fine: the same
+    source worked on one backend and raised NameError on the other.
+
+    Expression-level rewrites that match a whole finished expression, like
+    os.makedirs, already survive this path; only the name-anchored ones need
+    doing here.
+    """
+    if not any(_n in text for _n in ("readFile", "writeFile", "run(", "runLines(")):
+        return text
+
+    # Walk the text tracking string literals, so a name inside a quoted
+    # string is left alone.
+    out = []
+    i, n = 0, len(text)
+    quote = None
+    while i < n:
+        ch = text[i]
+        if quote:
+            out.append(ch)
+            if ch == "\\" and i + 1 < n:
+                out.append(text[i + 1])
+                i += 2
+                continue
+            if text.startswith(quote, i):
+                i += len(quote)
+                out.append(text[i - len(quote) + 1:i])
+                quote = None
+                continue
+            i += 1
+            continue
+        if ch in "\"'":
+            # A tick attribute -- xs'Length, r'First -- is not a string, and
+            # taking it for one would swallow everything to the next quote.
+            if (ch == "'" and i > 0 and (text[i - 1].isalnum() or text[i - 1] in "_)]")
+                    and i + 1 < n and (text[i + 1].isalpha() or text[i + 1] == "_")):
+                out.append(ch)
+                i += 1
+                continue
+            quote = text[i:i + 3] if text[i:i + 3] in ('"""', "'''") else ch
+            out.append(text[i:i + len(quote)])
+            i += len(quote)
+            continue
+        m = _re_builtin_call.match(text, i)
+        if m and (i == 0 or not (text[i - 1].isalnum() or text[i - 1] in "._")):
+            name = m.group(1)
+            if name in ("readFile", "writeFile"):
+                _ensure_file_helpers()
+                out.append("_read_file(" if name == "readFile" else "_write_file(")
+                i = m.end()
+                continue
+            # run / runLines: runLines needs an argument added, so its own
+            # closing paren has to be found first.
+            depth, close = 0, -1
+            for j in range(m.end() - 1, n):
+                if text[j] == "(":
+                    depth += 1
+                elif text[j] == ")":
+                    depth -= 1
+                    if depth == 0:
+                        close = j
+                        break
+            if close == -1:
+                out.append(ch)
+                i += 1
+                continue
+            from hek_py3_parser import _ensure_run_argv_helper
+            _ensure_run_argv_helper()
+            inner = _rewrite_builtins_in_raw(text[m.end():close])
+            tail = ", _lines=True" if name == "runLines" else ""
+            out.append(f"_run_argv({inner}{tail})")
+            i = close + 1
+            continue
+        out.append(ch)
+        i += 1
+    return "".join(out)
+
+
+import re as _re_bc
+_re_builtin_call = _re_bc.compile(r"(readFile|writeFile|runLines|run)\s*\(")
+
+
 @method(call_trailer)
 def to_py(self, prec=None):
     """call_trailer: '(' arguments? ')'"""
@@ -429,7 +517,7 @@ def to_py(self, prec=None):
     pos = _get_bracket_start(self.nodes[0])
     ml = get_multiline_brackets()
     if pos and pos in ml and not _has_named_tuple(self):
-        return ml[pos]
+        return _rewrite_builtins_in_raw(ml[pos])
     if len(self.nodes) > 1 and hasattr(self.nodes[1], "nodes") and self.nodes[1].nodes:
         return "(" + self.nodes[1].nodes[0].to_py() + ")"
     elif len(self.nodes) > 1 and hasattr(self.nodes[1], "to_py"):
@@ -541,6 +629,32 @@ def _file_helper_call(name, call_trailer):
     return f"_{'read' if name == 'readFile' else 'write'}_file{call_trailer}"
 
 
+def _run_argv_call(name, call_trailer):
+    """`run(argv, ...)` -> `_run_argv(argv, ...)`, or None if not that shape.
+
+    The keyword options are spelled the same as the helper's parameters --
+    cwd, env, stdin, timeout, check -- so the trailer passes through as
+    written; only `runLines` needs anything added.  Rewritten as the trailer
+    is consumed, like readFile, so `run(argv).output` still chains.
+    """
+    if not (call_trailer.startswith("(") and call_trailer.endswith(")")):
+        return None
+    inner = call_trailer[1:-1].strip()
+    if not inner:
+        return None
+    # `stdin = x` is a keyword here, but the trailer has already been through
+    # the stdlib rewrite that turns a bare `stdin` into `sys.stdin`, which is
+    # not a name a keyword argument may have.  Put it back -- only where it
+    # is a keyword, never where someone really is passing sys.stdin along.
+    import re as _re_r
+    inner = _re_r.sub(r'(?<![\w.])sys\.stdin(\s*)=(?!=)', r'stdin\1=', inner)
+    from hek_py3_parser import _ensure_run_argv_helper
+    _ensure_run_argv_helper()
+    if name == "runLines":
+        return f"_run_argv({inner}, _lines=True)"
+    return f"_run_argv({inner})"
+
+
 def _translate_dir_call(expr):
     """Make directory creation idempotent, or return None.
 
@@ -604,6 +718,12 @@ def to_py(self, prec=None):
             # Parsed as two trailers: attr_trailer(".get") + call_trailer("()")
             if i == 0 and result in ("readFile", "writeFile"):
                 helper = _file_helper_call(result, tr_str)
+                if helper is not None:
+                    result = helper
+                    i += 1
+                    continue
+            if i == 0 and result in ("run", "runLines"):
+                helper = _run_argv_call(result, tr_str)
                 if helper is not None:
                     result = helper
                     i += 1

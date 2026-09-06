@@ -1688,6 +1688,73 @@ def _extract_shell_opts(node):
     return opts
 
 
+# Which options each shell keyword can actually honour.  An option outside
+# its keyword's set used to be dropped without a word -- `shell(timout = 5000)`
+# compiled and waited forever -- so the sets are enforced rather than implied.
+_SHELL_OPTS_BY_KW = {
+    "shell":      {"cwd", "timeout", "check", "stdin", "env"},
+    "shellLines": {"cwd", "timeout", "check", "stdin", "env"},
+    # No child to wait for or feed, so no timeout, no stdin, no check.
+    "shellExec":  {"cwd", "env"},
+    # Streams stdout and has no exit code to inspect; `check` would have
+    # nothing to check and a timeout would fight the point of streaming.
+    "shellIter":  {"cwd", "env"},
+}
+
+# Options that need somewhere to put what they produce or take.
+_SHELL_OPTS_NEEDING_CAPTURE = {"stdin"}
+
+
+def _shell_opt_hint(name, allowed):
+    """`did you mean` for a misspelled option, or '' when nothing is close."""
+    import difflib
+    near = difflib.get_close_matches(name, sorted(allowed), n=1, cutoff=0.6)
+    return f" -- did you mean `{near[0]}`?" if near else ""
+
+
+def _validate_shell_opts(kw, opts, has_target):
+    """Reject an option the given form cannot honour.
+
+    Both backends route through here, so a diagnostic written once is a
+    diagnostic both of them give.  The alternative -- what this replaces --
+    is that an option nobody implemented for this keyword simply evaporates,
+    which is the failure mode where the source says one thing and the program
+    does another with nothing to read.
+    """
+    allowed = _SHELL_OPTS_BY_KW.get(kw)
+    if allowed is None:          # unknown keyword: not ours to police
+        return
+    for name in sorted(opts):
+        if name not in allowed:
+            elsewhere = sorted(k for k, v in _SHELL_OPTS_BY_KW.items()
+                               if name in v and k != kw)
+            if elsewhere:
+                raise SyntaxError(
+                    f"{kw}({name} = ...) is not supported: {kw} "
+                    f"{_SHELL_OPT_WHY.get((kw, name), 'cannot honour it')}. "
+                    f"{name} works on {', '.join(elsewhere)}.")
+            raise SyntaxError(
+                f"{kw}: unknown option `{name}`"
+                f"{_shell_opt_hint(name, allowed)} "
+                f"(supported: {', '.join(sorted(allowed))})")
+        if name in _SHELL_OPTS_NEEDING_CAPTURE and not has_target:
+            raise SyntaxError(
+                f"{kw}({name} = ...) needs a form that captures — "
+                f"`let r = {kw}({name} = x): cmd`, a tuple, or shellLines:")
+
+
+# Why a real option is refused by a particular form, so the message says
+# something more useful than "not supported".
+_SHELL_OPT_WHY = {
+    ("shellExec", "timeout"): "replaces this process, so there is no child to time out",
+    ("shellExec", "stdin"):   "replaces this process, so there is no child to feed",
+    ("shellExec", "check"):   "replaces this process, so its status becomes ours directly",
+    ("shellIter", "timeout"): "streams until the command ends",
+    ("shellIter", "stdin"):   "closes the child's stdin so the stream can end",
+    ("shellIter", "check"):   "yields lines and never sees an exit code",
+}
+
+
 def _extract_shell_body(body_st):
     """Reconstruct the shell command string from the body Several_Times node.
 
@@ -1895,6 +1962,62 @@ def _ensure_shell_check_helper():
         ParserState.py_top_decls = decls
 
 
+_RUN_ARGV_HELPER = '''\
+def _run_argv(_argv, cwd=None, env=None, stdin=None, timeout=0, check=False,
+              _lines=False):
+    """Run a command from an argument list, with no shell in the way.
+
+    Every shell: form builds a command line and hands it to /bin/sh, so the
+    shell parses it and quoting is the caller's problem -- {!x} and {*xs}
+    solve it, but only when remembered.  Here there is nothing to quote: the
+    list is the argument vector, and a filename holding a space, a quote or a
+    semicolon is just an element.
+
+    timeout is milliseconds, as it is everywhere else, and a killed command
+    reports 124 the way timeout(1) does.  env adds to the environment rather
+    than replacing it.
+    """
+    _argv = [str(_a) for _a in _argv]
+    if not _argv:
+        raise ValueError("run(): the argument list is empty")
+    _kw = {"capture_output": True, "text": True, "cwd": cwd}
+    if env is not None:
+        _kw["env"] = {**os.environ, **env}
+    if stdin is None:
+        _kw["stdin"] = _subprocess.DEVNULL
+    else:
+        _kw["input"] = stdin
+    if timeout:
+        _kw["timeout"] = timeout / 1000.0
+    try:
+        _r = _subprocess.run(_argv, **_kw)
+        _out, _err, _code = _r.stdout, _r.stderr, _r.returncode
+    except _subprocess.TimeoutExpired as _e:
+        _out = _e.stdout if isinstance(_e.stdout, str) else ""
+        _err = _e.stderr if isinstance(_e.stderr, str) else ""
+        _code = 124
+    except FileNotFoundError:
+        # A shell would have said "not found" and exited 127; without one,
+        # say the same thing rather than raising something unrecognisable.
+        _out, _err, _code = "", _argv[0] + ": not found\\n", 127
+    if check and _code != 0:
+        raise _subprocess.CalledProcessError(_code, _argv)
+    if _lines:
+        return _out.splitlines()
+    return _types.SimpleNamespace(output=_out, stderr=_err, code=_code)\
+'''
+
+
+def _ensure_run_argv_helper():
+    """Inject the shell-free runner the first time run()/runLines() is seen."""
+    ParserState.nim_imports.update({"import subprocess as _subprocess",
+                                    "import types as _types", "import os"})
+    decls = getattr(ParserState, "py_top_decls", [])
+    if not any("_run_argv" in d for d in decls):
+        decls.append(_RUN_ARGV_HELPER)
+        ParserState.py_top_decls = decls
+
+
 
 _SHELL_REPLACE_HELPER = """\
 def _shell_exec(_cmd, _env=None, _cwd=None):
@@ -2005,14 +2128,15 @@ def _shell_target_annotation(seq):
 
 
 _SHELL_ITER_HELPER = """\
-def _shell_iter(_cmd):
+def _shell_iter(_cmd, _cwd=None, _env=None):
     \"\"\"The lines a command prints, yielded as they arrive.
 
     The capturing forms wait for the child to finish; this one does not, so a
     long-running or endless command can be read while it runs.
     \"\"\"
     _p = _subprocess.Popen(_cmd, shell=True, stdout=_subprocess.PIPE,
-                           stdin=_subprocess.DEVNULL, text=True)
+                           stdin=_subprocess.DEVNULL, text=True,
+                           cwd=_cwd, env=_env)
     try:
         for _line in _p.stdout:
             yield _line.rstrip("\\n")
@@ -2034,7 +2158,7 @@ def _ensure_shell_iter_helper():
 @method(for_shell_stmt)
 def to_py(self, indent=0):
     """for x in shellIter: cmd  ->  for x in _shell_iter(cmd): body"""
-    target, cmd, needs_fstring, body_node = _parse_for_shell_stmt(self)
+    target, cmd, needs_fstring, body_node, opts = _parse_for_shell_stmt(self)
     cmd, _quoted = _apply_shell_quoting(
         cmd, "_shlex.quote({expr})",
         "' '.join(_shlex.quote(_a) for _a in {expr})")
@@ -2043,23 +2167,36 @@ def to_py(self, indent=0):
         ParserState.nim_imports.add("import shlex as _shlex")
     _ensure_shell_iter_helper()
     cmd_str = _py_shell_literal(cmd, needs_fstring)
+    # env adds to the environment rather than replacing it, as it does
+    # everywhere else.
+    iter_args = ""
+    if "cwd" in opts:
+        iter_args += f", _cwd={opts['cwd']}"
+    if "env" in opts:
+        ParserState.nim_imports.add("import os")
+        iter_args += ", _env={**os.environ, **(" + opts["env"] + ")}"
     ind = _ind(indent)
     # Register the loop variable before rendering the body, so anything in it
     # that asks what type the variable is gets the right answer.
     ParserState.symbol_table.add(target, "str", "let")
     body = body_node.to_py(indent + 1) if body_node else f"{_ind(indent + 1)}pass"
-    return f"{ind}for {target} in _shell_iter({cmd_str}):\n{body}"
+    return f"{ind}for {target} in _shell_iter({cmd_str}{iter_args}):\n{body}"
 
 
 def _parse_for_shell_stmt(node):
-    """Decompose `for x in shellIter: cmd` into (target, cmd, needs_fstring, body).
+    """Decompose `for x in shellIter: cmd` into (target, cmd, needs_fstring, body, opts).
 
     The command body is the run of shell tokens between the colon and the
     newline; the loop body is the block that follows.
+
+    A Several_Times node here is either the command body or the option list;
+    the two are told apart the same way `_parse_shell_stmt` does it -- the
+    body's first child holds a real token, an option's holds a string.
     """
     from hek_tokenize import RichNL
     target = None
     body_node = None
+    opts = {}
     cmd, needs_fstring = "", False
     for n in node.nodes:
         tname = type(n).__name__
@@ -2072,7 +2209,10 @@ def _parse_for_shell_stmt(node):
             tok = getattr(first, "node", None)
             if hasattr(tok, "string") and not isinstance(tok, str):
                 cmd, needs_fstring = _extract_shell_body(n)
-    return target, cmd, needs_fstring, body_node
+            else:
+                opts = _extract_shell_opts(n)
+    _validate_shell_opts("shellIter", opts, has_target=True)
+    return target, cmd, needs_fstring, body_node, opts
 
 
 def _parse_shell_stmt(node):
@@ -2171,6 +2311,10 @@ def _parse_shell_stmt(node):
         if _scan_for_body(n):
             break
 
+    # Both backends decompose through here, so validating the options once
+    # gives them the same diagnostic instead of two chances to drop one.
+    _validate_shell_opts(kw, opts, has_target=bool(target_name or target_tuple))
+
     if block_seq is not None:
         line_toks = _flatten_block_lines(block_seq)
         block_lines = [_classify_line(tl) for tl in line_toks]
@@ -2234,13 +2378,8 @@ def to_py(self, indent=0):
 
     cmd_str = _py_shell_literal(cmd, needs_fstring)
 
-    # stdin = expr feeds the child; it needs a pipe, which only the capturing
-    # forms have, so asking for it on a bare `shell:` is an error rather than
-    # a silently ignored option.
-    if "stdin" in opts and not (target_name or target_tuple):
-        raise SyntaxError(
-            "shell(stdin = ...) needs a form that captures — "
-            "`let r = shell(stdin = x): cmd`, a tuple, or shellLines:")
+    # Option applicability -- stdin needing a capturing form included -- is
+    # checked in _parse_shell_stmt, which both backends go through.
 
     run_kwargs = ["shell=True"]
     if has_target:

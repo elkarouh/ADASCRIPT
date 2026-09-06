@@ -35,6 +35,10 @@ _PY_TO_NIM = {
     "None": "void",
     "list": "seq",
     "object": "auto",
+    # What run() and the shell forms hand back.  The shell forms infer it, so
+    # the name is only needed where a binding must be annotated:
+    # `let r: RunResult = run(argv)`.
+    "RunResult": "tuple[output: string, stderr: string, code: int]",
 }
 
 # Nim ordinal types — eligible for built-in set[T]

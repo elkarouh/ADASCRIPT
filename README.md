@@ -1255,7 +1255,51 @@ for line in shellIter: tail -f build.log
 
 Only stdout is streamed and there is no exit code — a command whose status
 matters wants a capturing form. Interpolation works as usual, `{!x}` and
-`{*xs}` included.
+`{*xs}` included, and `cwd` and `env` apply:
+
+```python
+for line in shellIter(cwd = src, env = e): make -j4
+    print line
+```
+
+### Leaving the shell out: `run` and `runLines`
+
+Every `shell:` form builds a command line and hands it to `/bin/sh`, so the
+shell parses it and quoting is the caller's problem. `{!x}` and `{*xs}` solve
+that — but only when remembered. `run` takes an argument list instead, and
+there is nothing to quote because nothing parses the arguments a second time:
+
+```python
+let r: RunResult = run(["git", "commit", "-m", msg])
+print r.output, r.code
+let names: []str = runLines(["ls", dir])
+```
+
+The difference shows up on a value that is also shell syntax:
+
+```python
+let nasty: str = "; rm -rf ~"
+run(["ls", nasty])        # ls complains about a file named "; rm -rf ~"
+shell: ls {nasty}         # the shell runs it
+shell: ls {!nasty}        # quoted — safe, if you remember the !
+```
+
+`run` returns the same record as `shell`: `.output`, `.stderr`, `.code`. Its
+type is spelled `RunResult` where a binding needs an annotation. `runLines`
+returns `[]str`. Both take the same options, as keyword arguments rather than
+in parentheses before the colon:
+
+```python
+let r: RunResult = run(["make", "-j4"], cwd = src, env = e,
+                       stdin = text, timeout = 30000, check = true)
+```
+
+A program that isn't there reports 127 and a timeout 124, the way a shell and
+`timeout(1)` do, so the two families agree on what a failure looks like.
+
+Reach for `shell:` when you want a shell — pipes, redirection, globbing,
+`&&`. Reach for `run` when you just want to run a program, which is most of
+the time.
 
 ### Handing the process over
 
@@ -1287,6 +1331,26 @@ quit(code)                            # forwarding the status by hand
 let result = shell(cwd = "/tmp"):           pwd
 let result = shell(timeout = 5000):         slow-command
 let result = shell(cwd = "/tmp", timeout = 3000): ls -la
+```
+
+Which options a form takes:
+
+| | `cwd` | `env` | `timeout` | `stdin` | `check` |
+|---|---|---|---|---|---|
+| `shell:` / `shellLines:` | ✓ | ✓ | ✓ | capturing forms | ✓ |
+| `shellIter` | ✓ | ✓ | | | |
+| `shellExec` | ✓ | ✓ | | | |
+| `run` / `runLines` | ✓ | ✓ | ✓ | ✓ | ✓ |
+
+An option a form cannot honour is a transpile-time error, not a silent
+no-op, and a misspelled one says what you probably meant:
+
+```
+shell: unknown option `timout` -- did you mean `timeout`?
+       (supported: check, cwd, env, stdin, timeout)
+shellExec(timeout = ...) is not supported: shellExec replaces this
+       process, so there is no child to time out. timeout works on
+       shell, shellLines.
 ```
 
 ### Discarding output
