@@ -1249,8 +1249,10 @@ s.close()
 
 | Adascript              | Python 3                                            | Nim                                        |
 |----------------------|-----------------------------------------------------|--------------------------------------------|
-| `let r = shell: cmd`        | `subprocess.run(…, capture_output=True, text=True)` | `execCmdEx("cmd")`                        |
-| `let (out, code) = shell: cmd` | `…stdout, …returncode`                       | `(execResult[0], execResult[1])`          |
+| `let r = shell: cmd`        | `subprocess.run(…, capture_output=True, text=True)` | `adascriptRun("cmd")` — streams kept apart |
+| `let (out, code) = shell: cmd` | `…stdout, …returncode`                       | `(r.output, r.code)`                      |
+| `let (out, code, err) = shell: cmd` | `…stdout, …returncode, …stderr`         | `(r.output, r.code, r.stderr)`            |
+| `shell(timeout = ms): cmd`  | killed at the deadline, code `124`              | same — the child is killed, code `124`    |
 | `let ls = shellLines: cmd`  | `…stdout.splitlines()`                          | `execCmdEx("cmd")[0].splitLines()`        |
 | `shell: cmd`                | `subprocess.run("cmd", shell=True)`             | `discard execCmd("cmd")`                  |
 | `shellLines: cmd`           | (implicit return of split lines)                | `return execCmdEx("cmd")[0].splitLines()` |

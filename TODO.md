@@ -18,9 +18,9 @@
 - [x] `shell:` could not both inherit the terminal and return an exit code (see [shell: with terminal passthrough](#shell-with-terminal-passthrough-and-exit-code--done))
 - [x] `shell:` interpolation did not quote, so every path needed a helper (see [Safe shell interpolation](#safe-shell-interpolation-auto-quoting--done))
 - [x] shell tuple capture: the slots mean different things on each backend (see [Bug 13](#bug-13--shell-tuple-capture-slots-disagree-between-backends))
-- [ ] `r.stderr` is documented, works on Python, and does not exist on Nim (see [Bug 14](#bug-14--rstderr-does-not-exist-on-the-nim-backend))
+- [x] `r.stderr` is documented, works on Python, and does not exist on Nim (see [Bug 14](#bug-14--rstderr-does-not-exist-on-the-nim-backend))
 - [x] `shellLines` yields one more element on Nim than on Python (see [Bug 15](#bug-15--shelllines-differs-by-a-trailing-empty-element))
-- [ ] `shell(timeout = ms)` is silently ignored on Nim (see [Bug 16](#bug-16--shelltimeout--ms-is-ignored-on-nim))
+- [x] `shell(timeout = ms)` is silently ignored on Nim (see [Bug 16](#bug-16--shelltimeout--ms-is-ignored-on-nim))
 
 ## Shell improvements
 
@@ -810,9 +810,9 @@ shows up at all if the third variable is used somewhere that type-checks.
 
 `README.md` documents Nim's order: `let (out, code) = shell: cmd`.
 
-**Fixed.** Python now follows the documented order: slot 0 stdout, slot 1
-the exit code, slot 2 an empty string kept for compatibility.  A real third
-slot waits on bug 14, since Nim has no separate stderr to put there.
+**Fixed.** Both backends fill the slots `(stdout, code, stderr)`. Slot 1 is
+the exit code — the order README documents and Nim always used — and slot 2
+became real stderr once bug 14 gave Nim a separate stream.
 
 Python was the outlier, not the documentation: every tuple capture in
 `EXAMPLES/` reads as `(out, code)` — `(env_out, env_rc)`,
@@ -840,15 +840,19 @@ The Nim emitter builds `(output: tmp[0], code: tmp[1])` — two fields — and
 `execCmdEx` merges the child's stderr into its stdout anyway, so there was
 never a separate stream to expose.
 
-**Fix sketch:** two steps, and the first is worth doing on its own.
+**Fixed**, and properly rather than with an empty placeholder.
+`adascriptRun()`, injected on first use, replaces `execCmdEx` for every
+capture form: `startProcess` with both pipes set non-blocking, drained in a
+loop as the child runs, so a child that fills one buffer cannot block the
+other. Confirmed against 1.3 MB of stderr alongside stdout.
 
-1. Emit a `stderr` field on the Nim record so the same source compiles on
-   both backends. It holds `""` until step 2, which is a documented
-   limitation rather than a silent one.
-2. Capture the two streams separately. `execCmdEx` cannot: its default
-   options include `poStdErrToStdOut`. Doing it properly means
-   `startProcess` with both pipes, drained so a child that fills one buffer
-   cannot deadlock the reader.
+`r.stderr` now returns the same text on both backends, and two more things
+follow from real separation:
+
+- `shellLines:` no longer carries stderr lines. `execCmdEx` merged them, so
+  `shellLines: sh -c 'echo good; echo noise >&2'` gave two lines on Nim and
+  one on Python.
+- The tuple's third slot means something: `(out, code, err)` (bug 13).
 
 ---
 
@@ -884,8 +888,13 @@ Python raises `TimeoutExpired` after half a second.  Nim runs the command to
 completion — the emitter appends `# timeout: 500ms (execCmdEx has no
 timeout)` and carries on, so the option reads as supported and does nothing.
 
-**Fix sketch:** `execCmdEx` has no timeout, so honouring it needs
-`startProcess` plus a wait loop on `peekExitCode`, killing the process when
-the deadline passes — the same plumbing bug 14 needs, which argues for doing
-them together.  Until then the emitter should at least warn on stderr at
-transpile time rather than leaving a comment in the output.
+**Fixed**, together with bug 14 as expected. `adascriptRun()` takes the
+timeout and kills the child when the deadline passes; `adascriptExec()` does
+the same for the forms that keep the terminal (a bare `shell:` and an
+`int`-typed target), since those cannot go through the capturing runner.
+
+A killed command reports **124**, as `timeout(1)` does. Python raised
+`TimeoutExpired`, which Nim has no equivalent for and Adascript cannot
+catch, so `_run_shell()` there returns 124 as well. Verified:
+`shell(timeout = 400): sleep 3` gives code 124 and empty output on both
+backends, for the capture form and the int-typed one.

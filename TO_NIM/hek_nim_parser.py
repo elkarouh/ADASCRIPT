@@ -3355,6 +3355,76 @@ def _ensure_shell_lines_helper():
         decls.append(_SHELL_LINES_HELPER)
         ParserState.nim_top_decls = decls
 
+
+_SHELL_RUN_HELPER = """\
+proc adascriptDrain(fd: cint, buf: var string): bool =
+  ## Read what is available on FD without blocking; false once it is closed.
+  var chunk = newString(4096)
+  let n = read(fd, addr chunk[0], 4096)
+  if n > 0:
+    chunk.setLen(n)
+    buf.add(chunk)
+    return true
+  if n == 0:
+    return false
+  return errno == EAGAIN or errno == EWOULDBLOCK
+
+proc adascriptRun*(cmd: string, timeoutMs: int = 0): tuple[output: string, stderr: string, code: int] =
+  ## Run cmd through the shell, capturing stdout and stderr separately.
+  ##
+  ## execCmdEx merges the two -- its default options include poStdErrToStdOut
+  ## -- and has no timeout. Both pipes are drained while the child runs, so a
+  ## child that fills one buffer cannot block the other. A command killed by
+  ## the timeout reports 124, as timeout(1) does.
+  let p = startProcess(cmd, options = {poEvalCommand})
+  let ofd = p.outputHandle.cint
+  let efd = p.errorHandle.cint
+  discard fcntl(ofd, F_SETFL, fcntl(ofd, F_GETFL, 0) or O_NONBLOCK)
+  discard fcntl(efd, F_SETFL, fcntl(efd, F_GETFL, 0) or O_NONBLOCK)
+  var outBuf, errBuf = ""
+  var oOpen, eOpen = true
+  let deadline = epochTime() + timeoutMs.float / 1000.0
+  var code = -1
+  while true:
+    if oOpen: oOpen = adascriptDrain(ofd, outBuf)
+    if eOpen: eOpen = adascriptDrain(efd, errBuf)
+    code = p.peekExitCode()
+    if code != -1 and not oOpen and not eOpen: break
+    if timeoutMs > 0 and epochTime() > deadline:
+      p.terminate()
+      discard p.waitForExit()
+      code = 124
+      break
+    sleep(2)
+  p.close()
+  (outBuf, errBuf, code)
+
+proc adascriptExec*(cmd: string, timeoutMs: int): int =
+  ## Run cmd with the terminal inherited, killed after timeoutMs.
+  let p = startProcess(cmd, options = {poEvalCommand, poParentStreams})
+  let deadline = epochTime() + timeoutMs.float / 1000.0
+  while true:
+    let code = p.peekExitCode()
+    if code != -1:
+      p.close()
+      return code
+    if timeoutMs > 0 and epochTime() > deadline:
+      p.terminate()
+      discard p.waitForExit()
+      p.close()
+      return 124
+    sleep(2)\
+"""
+
+
+def _ensure_shell_run_helper():
+    """Inject the capturing runner the first time a shell capture is emitted."""
+    ParserState.nim_imports.update({"osproc", "os", "times", "posix"})
+    decls = getattr(ParserState, "nim_top_decls", [])
+    if not any("adascriptRun" in d for d in decls):
+        decls.append(_SHELL_RUN_HELPER)
+        ParserState.nim_top_decls = decls
+
 @method(shell_stmt)
 def to_nim(self, indent=0):
     """shell_stmt: [decl_keyword IDENTIFIER '='] ('shell'|'shellLines') [shell_opts] ':' cmd+
@@ -3450,10 +3520,11 @@ def to_nim(self, indent=0):
         cwd_val = opts["cwd"].strip('"').strip("'")
         cmd = f"cd {cwd_val} && {cmd}"
 
-    # timeout comment
+    # timeout: passed to the runner in milliseconds, honoured by killing the
+    # child when the deadline passes.  execCmdEx has no timeout, which is why
+    # the capture forms go through adascriptRun instead.
     timeout_comment = ""
-    if "timeout" in opts:
-        timeout_comment = f"  # timeout: {opts['timeout']}ms (execCmdEx has no timeout)"
+    run_timeout = f", {opts['timeout']}" if "timeout" in opts else ""
 
     import re as _re_env
     has_env_vars = bool(_re_env.search(r'__bash_env_\w+__', cmd))
@@ -3523,44 +3594,55 @@ def to_nim(self, indent=0):
     exec_tmp = f"execResult{_exec_count}"
 
     if target_tuple:
-        # let (out, code) = shell: cmd        — 2-element
-        # let (out, code, _) = shell: cmd     — 3-element (3rd slot is "" for compat)
-        slots = [f"{exec_tmp}[0]", f"{exec_tmp}[1]", '""']
+        # let (out, code) = shell: cmd            — 2-element
+        # let (out, code, err) = shell: cmd       — 3-element
+        slots = [f"{exec_tmp}.output", f"{exec_tmp}.code", f"{exec_tmp}.stderr"]
         # Emit the temp only if at least one non-_ slot needs it
         named = [(i, v) for i, v in enumerate(target_tuple) if v != "_"]
         if named:
-            lines.append(f"{ind}let {exec_tmp} = execCmdEx({cmd_str}){timeout_comment}")
+            _ensure_shell_run_helper()
+            lines.append(f"{ind}let {exec_tmp} = adascriptRun({cmd_str}{run_timeout})")
             for i, var_name in named:
                 slot_type = _SLOT_TYPES[i] if i < len(_SLOT_TYPES) else "string"
                 lines.append(f"{ind}{nim_kw} {var_name} = {slots[i]}")
                 ParserState.symbol_table.add(var_name, slot_type, nim_kw)
         else:
-            lines.append(f"{ind}discard execCmdEx({cmd_str}){timeout_comment}")
+            _ensure_shell_run_helper()
+            lines.append(f"{ind}discard adascriptRun({cmd_str}{run_timeout})")
     elif target_name and target_ann == "int" and kw == "shell":
         # `let code: int = shell: cmd` -- execCmd inherits stdin/stdout/stderr,
         # so the child keeps the terminal (its pager, its colours), and returns
         # the exit code.  execCmdEx would capture both and lose the terminal.
-        lines.append(f"{ind}{nim_kw} {target_name} = execCmd({cmd_str}){timeout_comment}")
+        if run_timeout:
+            _ensure_shell_run_helper()
+            lines.append(f"{ind}{nim_kw} {target_name} = adascriptExec({cmd_str}{run_timeout})")
+        else:
+            lines.append(f"{ind}{nim_kw} {target_name} = execCmd({cmd_str})")
         ParserState.symbol_table.add(target_name, "int", nim_kw)
     elif target_name:
         if kw == "shellLines":
             # Inline directly — no temp needed
             _ensure_shell_lines_helper()
-            lines.append(f"{ind}{nim_kw} {target_name} = adascriptShellLines(execCmdEx({cmd_str}){timeout_comment}[0])")
+            _ensure_shell_run_helper()
+            lines.append(f"{ind}{nim_kw} {target_name} = adascriptShellLines(adascriptRun({cmd_str}{run_timeout}).output)")
             ParserState.symbol_table.add(target_name, "seq[string]", nim_kw)
         else:
-            lines.append(f"{ind}let {exec_tmp} = execCmdEx({cmd_str}){timeout_comment}")
-            lines.append(
-                f"{ind}{nim_kw} {target_name} = (output: {exec_tmp}[0], code: {exec_tmp}[1])"
-            )
+            _ensure_shell_run_helper()
+            lines.append(f"{ind}{nim_kw} {target_name} = adascriptRun({cmd_str}{run_timeout})")
             # Register as shell_result so _nim_truthiness can resolve
             # field access like result.output -> result.output.len > 0
             ParserState.symbol_table.add(target_name, "shell_result", nim_kw)
     elif kw == "shellLines":
         _ensure_shell_lines_helper()
-        lines.append(f"{ind}return adascriptShellLines(execCmdEx({cmd_str}){timeout_comment}[0])")
+        _ensure_shell_run_helper()
+        lines.append(f"{ind}return adascriptShellLines(adascriptRun({cmd_str}{run_timeout}).output)")
+    elif run_timeout:
+        # A bare `shell:` keeps the terminal, so it needs the passthrough
+        # runner rather than the capturing one to honour a timeout.
+        _ensure_shell_run_helper()
+        lines.append(f"{ind}discard adascriptExec({cmd_str}{run_timeout})")
     else:
-        lines.append(f"{ind}discard execCmd({cmd_str}){timeout_comment}")
+        lines.append(f"{ind}discard execCmd({cmd_str})")
 
     return "\n".join(_shell_hoists + lines)
 

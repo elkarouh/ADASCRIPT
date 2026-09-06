@@ -1851,6 +1851,32 @@ def _classify_line(tokens):
 import tokenize as _tknmod
 
 
+
+_SHELL_TIMEOUT_HELPER = """\
+def _run_shell(_cmd, **_kw):
+    \"\"\"subprocess.run, but a timeout reports 124 instead of raising.
+
+    Nim has no exception to raise here, and 124 is what timeout(1) reports,
+    so both backends can say the same thing about a killed command.
+    \"\"\"
+    try:
+        return _subprocess.run(_cmd, **_kw)
+    except _subprocess.TimeoutExpired as _e:
+        return _types.SimpleNamespace(
+            stdout=(_e.stdout or "") if isinstance(_e.stdout, str) else "",
+            stderr=(_e.stderr or "") if isinstance(_e.stderr, str) else "",
+            returncode=124)\
+"""
+
+
+def _ensure_shell_timeout_helper():
+    """Inject the timeout-tolerant runner the first time a timeout is used."""
+    decls = getattr(ParserState, "py_top_decls", [])
+    if not any("_run_shell" in d for d in decls):
+        decls.append(_SHELL_TIMEOUT_HELPER)
+        ParserState.py_top_decls = decls
+
+
 def _apply_shell_quoting(cmd, wrapper):
     """Rewrite `{!expr}` interpolations in a shell body into `{wrapper}`.
 
@@ -2085,6 +2111,11 @@ def to_py(self, indent=0):
             run_kwargs.append(f"timeout={ms} / 1000")
 
     kwargs_str = ", ".join(run_kwargs)
+    runner = "_subprocess.run"
+    if "timeout" in opts:
+        _ensure_shell_timeout_helper()
+        ParserState.nim_imports.add("import types as _types")
+        runner = "_run_shell"
     lines = []
 
     if target_tuple:
@@ -2093,12 +2124,11 @@ def to_py(self, indent=0):
         # Slot 1 is the exit code, not stderr: that is the order the Nim
         # backend fills and the one README documents, and the two have to
         # agree or the same source means different things per backend.
-        # Slot 2 is kept as "" for compatibility; a real third slot waits on
-        # separate stderr capture (TODO.md bug 14).
-        slots = ["_r.stdout", "_r.returncode", '""']
+        # Slot 2 is stderr, which the Nim backend can now supply too.
+        slots = ["_r.stdout", "_r.returncode", "_r.stderr"]
         lhs = ", ".join(target_tuple)
         rhs = ", ".join(slots[:len(target_tuple)])
-        lines.append(f"{ind}_r = _subprocess.run({cmd_str}, {kwargs_str})")
+        lines.append(f"{ind}_r = {runner}({cmd_str}, {kwargs_str})")
         lines.append(f"{ind}{lhs} = {rhs}")
     elif target_name and target_ann == "int" and kw == "shell":
         # `let code: int = shell: cmd` -- the child keeps the terminal, and the
@@ -2106,9 +2136,11 @@ def to_py(self, indent=0):
         # beyond the shell itself.
         call_kwargs = ", ".join(k for k in run_kwargs
                                 if not k.startswith(("capture_output", "text")))
-        lines.append(f"{ind}{target_name} = _subprocess.call({cmd_str}, {call_kwargs})")
+        lines.append(f"{ind}{target_name} = _subprocess.call({cmd_str}, {call_kwargs})"
+                     if "timeout" not in opts else
+                     f"{ind}{target_name} = {runner}({cmd_str}, {call_kwargs}).returncode")
     elif target_name:
-        lines.append(f"{ind}_r = _subprocess.run({cmd_str}, {kwargs_str})")
+        lines.append(f"{ind}_r = {runner}({cmd_str}, {kwargs_str})")
         if kw == "shellLines":
             lines.append(f"{ind}{target_name} = _r.stdout.splitlines()")
         else:
@@ -2117,7 +2149,7 @@ def to_py(self, indent=0):
                 f"output=_r.stdout, stderr=_r.stderr, code=_r.returncode)"
             )
     else:
-        lines.append(f"{ind}_subprocess.run({cmd_str}, {kwargs_str})")
+        lines.append(f"{ind}{runner}({cmd_str}, {kwargs_str})")
 
     return "\n".join(lines)
 
