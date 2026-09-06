@@ -16,6 +16,11 @@ history of this file if the reasoning behind one of them is ever wanted.
       trigger the import through a separate rewrite. Either honour a
       Python-available module named by `nimport` when it is actually used, or
       say so at transpile time instead of at run time.
+- [ ] py2nim: `any(xs)` and `all(xs)` over a `[]bool` do not translate. `any`
+      hits Nim's deprecated `any` *type* ("illegal type conversion to 'any'")
+      and `all` is simply undeclared; both work on the Python backend, so the
+      same source gives a working program on one and a compile error on the
+      other. `sequtils` has `anyIt`/`allIt` to map onto.
 - [ ] generic function syntax `def foo[T]` (Feature 1)
 - [ ] `.map()` / `.and_then()` rewriting on `?T` (Feature 2)
 

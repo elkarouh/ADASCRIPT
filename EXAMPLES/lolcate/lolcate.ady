@@ -133,10 +133,7 @@ def count_lines(path: str) -> int:
     return n
 
 def should_ignore(entry: str, ignores: []str) -> bool:
-    for pat in ignores:
-        if entry == pat:
-            return True
-    return False
+    entry in ignores
 
 def path_should_skip(fpath: str, ignores: []str) -> bool:
     let parts: []str = fpath.split("/")

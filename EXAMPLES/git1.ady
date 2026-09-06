@@ -69,9 +69,7 @@ def is_repo(cdir: str, entry: str) -> bool:
     if entry'Length == 0 or entry == "." or entry == "..": return False
     let gitdir: str = os.path.join(cdir, entry)
     if not -d gitdir: return False
-    let head: str = os.path.join(gitdir, "HEAD")
-    if -f head: return True
-    return False
+    -f os.path.join(gitdir, "HEAD")
 
 def ignore_escape(name: str) -> str:
     var s: str = name.replace("\\", "\\\\")
