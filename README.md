@@ -1896,13 +1896,16 @@ infrastructure for fixing this (`RichNL` carrying comments through the parse
 tree) is already in place; the remaining work is threading those tokens
 through all compound-statement `to_py()` methods.
 
-**Python backend maturity** — the Nim backend is the better-tested of the two.
-Several constructs still transpile to Python that does not run: implicit
-return does not reach into `if`/`else` branches, `Natural` and `Positive` are
-emitted into annotations without being defined, and a declaration written
-without an initialiser binds no value. Each is written up with a reproduction
-in the [TODO list](TODO.md#python-backend-py2py--known-bugs). Programs that
-avoid those constructs transpile and run on both backends.
+**Python backend maturity** — the Nim backend is still the better-tested of
+the two, since `make test` builds and runs every example through it. Every
+example now also transpiles to Python that parses, and the constructs that
+used to break it — implicit return into `if`/`else` branches, `Natural` and
+`Positive` used without being defined, declarations without an initialiser,
+records whose fields have no default — are fixed. The round-trip suite in
+`TO_PYTHON/test_py2py.py` still records failures, so treat the Python output
+as the less exercised of the two and check it on anything unusual. Sweeping
+every example through `py2py` and parsing the result is a cheap way to catch
+a regression the Nim-only test suite cannot see.
 
 **Nim stdlib coverage** — generated Nim code relies on a local `stdlib.nim`
 shim for some Python builtins (`PriorityQueue`, `FifoQueue`, `ANY`). See
