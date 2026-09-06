@@ -17,7 +17,7 @@
 - [x] both backends re-indent the inside of a multi-line string, changing its value (see [Bug 12](#bug-12--a-multi-line-string-is-re-indented-changing-its-value))
 - [x] `shell:` could not both inherit the terminal and return an exit code (see [shell: with terminal passthrough](#shell-with-terminal-passthrough-and-exit-code--done))
 - [x] `shell:` interpolation did not quote, so every path needed a helper (see [Safe shell interpolation](#safe-shell-interpolation-auto-quoting--done))
-- [ ] shell tuple capture: the slots mean different things on each backend (see [Bug 13](#bug-13--shell-tuple-capture-slots-disagree-between-backends))
+- [x] shell tuple capture: the slots mean different things on each backend (see [Bug 13](#bug-13--shell-tuple-capture-slots-disagree-between-backends))
 - [ ] `r.stderr` is documented, works on Python, and does not exist on Nim (see [Bug 14](#bug-14--rstderr-does-not-exist-on-the-nim-backend))
 - [x] `shellLines` yields one more element on Nim than on Python (see [Bug 15](#bug-15--shelllines-differs-by-a-trailing-empty-element))
 - [ ] `shell(timeout = ms)` is silently ignored on Nim (see [Bug 16](#bug-16--shelltimeout--ms-is-ignored-on-nim))
@@ -810,10 +810,19 @@ shows up at all if the third variable is used somewhere that type-checks.
 
 `README.md` documents Nim's order: `let (out, code) = shell: cmd`.
 
-**Fix sketch:** make Python follow the documented order — slot 0 stdout,
-slot 1 the exit code, slot 2 an empty string kept for compatibility.  A real
-third slot has to wait for bug 14, since Nim has no separate stderr to put
-there.
+**Fixed.** Python now follows the documented order: slot 0 stdout, slot 1
+the exit code, slot 2 an empty string kept for compatibility.  A real third
+slot waits on bug 14, since Nim has no separate stderr to put there.
+
+Python was the outlier, not the documentation: every tuple capture in
+`EXAMPLES/` reads as `(out, code)` — `(env_out, env_rc)`,
+`(selection, sel_code)`, `(comment_line, _)` — so the corpus expected the
+Nim order too, and those on the Python backend were quietly getting stderr
+where they asked for a status.
+
+Verified: both backends now give `7` for the second slot of
+`let (o, c) = shell: sh -c 'echo hi; exit 7'`, agree on the three-slot form,
+and still skip `_` slots.
 
 ---
 

@@ -22,6 +22,10 @@ Destructuring works — take just what you need:
 let (out, code) = shell: some-command
 ```
 
+The slots are stdout, then the exit code. (`print(result.stderr)` above is
+Python-only for now — the Nim backend has no separate stderr stream; see
+TODO.md bug 14.)
+
 `shellLines:` splits stdout into `[]str`, one element per line. Combined
 with implicit return, a shell command becomes a typed function:
 

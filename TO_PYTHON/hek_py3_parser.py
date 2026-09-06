@@ -2088,9 +2088,14 @@ def to_py(self, indent=0):
     lines = []
 
     if target_tuple:
-        # let (out, err, code) = shell: cmd
-        # Positional slots: 0→stdout, 1→stderr, 2→returncode
-        slots = ["_r.stdout", "_r.stderr", "_r.returncode"]
+        # let (out, code) = shell: cmd        — 2-element
+        # let (out, code, _) = shell: cmd     — 3-element
+        # Slot 1 is the exit code, not stderr: that is the order the Nim
+        # backend fills and the one README documents, and the two have to
+        # agree or the same source means different things per backend.
+        # Slot 2 is kept as "" for compatibility; a real third slot waits on
+        # separate stderr capture (TODO.md bug 14).
+        slots = ["_r.stdout", "_r.returncode", '""']
         lhs = ", ".join(target_tuple)
         rhs = ", ".join(slots[:len(target_tuple)])
         lines.append(f"{ind}_r = _subprocess.run({cmd_str}, {kwargs_str})")
