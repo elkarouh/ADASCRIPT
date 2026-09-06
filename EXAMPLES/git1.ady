@@ -40,6 +40,12 @@ def confirm(question: str) -> bool:
 # --- shell helpers ---------------------------------------------------------
 
 def Q(s: str) -> str:
+    """Single-quote one argument for the shell.
+
+    Only g() and g_lines() need this: they join a list of arguments into one
+    command fragment, and a fragment is interpolated raw. Everywhere else the
+    shell body quotes for itself with `{!expr}`.
+    """
     "'" + s.replace("'", "'\\''") + "'"
 
 # --- path handling ---------------------------------------------------------
@@ -93,9 +99,10 @@ def g(args: []str) -> int:
     git stops searching upward for a .git, and declare that directory the
     work tree.
 
-    Each argument goes through Q() because the command is assembled as a
-    string for the shell, which will not quote it for anyone. Without it,
-    g(["commit", "-m", "hello world"]) would reach git as four arguments.
+    Each argument goes through Q() because they are joined into a single
+    command fragment, which `{cmd}` interpolates raw -- `{!cmd}` would quote
+    the whole line as one word. Without it, g(["commit", "-m", "hello world"])
+    would reach git as four arguments.
 
     An int-typed target -- `let code: int = shell: ...` -- rather than a
     capturing one: git keeps the terminal, so its output, colours and pager
@@ -105,7 +112,7 @@ def g(args: []str) -> int:
     for a in args:
         parts.append(Q(a))
     let cmd: str = " ".join(parts)
-    let code: int = shell: cd {Q(G1_DIR)} && GIT_DIR={Q(G1_GITDIR)} GIT_WORK_TREE=. git {cmd}
+    let code: int = shell: cd {!G1_DIR} && GIT_DIR={!G1_GITDIR} GIT_WORK_TREE=. git {cmd}
     code
 
 def g_lines(args: []str) -> []str:
@@ -121,7 +128,7 @@ def g_lines(args: []str) -> []str:
     for a in args:
         parts.append(Q(a))
     let cmd: str = " ".join(parts)
-    let lines = shellLines: cd {Q(G1_DIR)} && GIT_DIR={Q(G1_GITDIR)} GIT_WORK_TREE=. git {cmd}
+    let lines = shellLines: cd {!G1_DIR} && GIT_DIR={!G1_GITDIR} GIT_WORK_TREE=. git {cmd}
     lines
 
 def current_branch() -> str:
@@ -153,16 +160,16 @@ def cmd_init(target: str):
     let repo: str = os.path.join(G1_DIR, G1_GITDIR)
     if -e repo: die(f"already tracked: {target}")
 
-    shell: mkdir -p -- {Q(os.path.join(G1_DIR, CONTAINER))}
-    let r = shell: git init --quiet --bare -- {Q(repo)} 2>&1
+    shell: mkdir -p -- {!os.path.join(G1_DIR, CONTAINER)}
+    let r = shell: git init --quiet --bare -- {!repo} 2>&1
     if r.code != 0: die(f"could not create {repo}")
 
-    shell: git --git-dir={Q(repo)} config core.bare false
-    shell: git --git-dir={Q(repo)} config core.worktree ../..
+    shell: git --git-dir={!repo} config core.bare false
+    shell: git --git-dir={!repo} config core.worktree ../..
     write_exclude(G1_BASE, repo)
 
     if g(["add", "--", G1_BASE]) != 0 or g(["commit", "--quiet", "-m", "initial commit"]) != 0:
-        shell: rm -rf -- {Q(repo)}
+        shell: rm -rf -- {!repo}
         die("could not create the initial commit (is user.email set?)")
     print f"tracking {target} in {repo}"
 
@@ -171,7 +178,7 @@ def cmd_ls(argv: []str):
     let cdir: str = os.path.join(d, CONTAINER)
     var found: int = 0
     if -d cdir:
-        let entries = shellLines: ls -1a {Q(cdir)}
+        let entries = shellLines: ls -1a {!cdir}
         for name in sorted(entries):
             if not is_repo(cdir, name): continue
             let gitdir: str = os.path.join(cdir, name)
@@ -179,7 +186,7 @@ def cmd_ls(argv: []str):
             let file: str = os.path.join(d, name)
             var status: str = ""
             if not -e file: status = " [file missing]"
-            let r = shell: GIT_DIR={Q(gitdir)} git log -1 --format='%cr' 2>/dev/null
+            let r = shell: GIT_DIR={!gitdir} git log -1 --format='%cr' 2>/dev/null
             var when: str = ""
             if r.output.strip()'Length > 0:
                 when = f"  (last commit {r.output.strip()})"
@@ -199,8 +206,8 @@ def cmd_rm(argv: []str):
     if not force:
         if not confirm(f"Delete the history of {args[0]}? The file itself is kept."):
             die("aborted")
-    shell: rm -rf -- {Q(os.path.join(G1_DIR, G1_GITDIR))}
-    shell: rmdir -- {Q(os.path.join(G1_DIR, CONTAINER))} 2>/dev/null || true
+    shell: rm -rf -- {!os.path.join(G1_DIR, G1_GITDIR)}
+    shell: rmdir -- {!os.path.join(G1_DIR, CONTAINER)} 2>/dev/null || true
 
 def cmd_adopt(argv: []str):
     """Replace the current branch with another one, wholesale.
@@ -268,11 +275,11 @@ def cmd_mv(old: str, new: str):
     let new_repo: str = os.path.join(G1_DIR, G1_GITDIR)
     if -e new_repo: die(f"already tracked: {new}")
 
-    shell: mv -- {Q(old)} {Q(new)}
-    shell: mkdir -p -- {Q(os.path.join(G1_DIR, CONTAINER))}
-    shell: mv -- {Q(os.path.join(old_dir, old_git))} {Q(new_repo)}
+    shell: mv -- {!old} {!new}
+    shell: mkdir -p -- {!os.path.join(G1_DIR, CONTAINER)}
+    shell: mv -- {!os.path.join(old_dir, old_git)} {!new_repo}
     write_exclude(G1_BASE, new_repo)
-    shell: cd {Q(G1_DIR)} && GIT_DIR={Q(G1_GITDIR)} GIT_WORK_TREE=. git rm --quiet --cached --ignore-unmatch -- {Q(old_base)}
+    shell: cd {!G1_DIR} && GIT_DIR={!G1_GITDIR} GIT_WORK_TREE=. git rm --quiet --cached --ignore-unmatch -- {!old_base}
     g(["add", "--", G1_BASE])
     g(["commit", "--quiet", "-m", f"rename {old_base} -> {G1_BASE}"])
 
@@ -280,7 +287,7 @@ def cmd_each(argv: []str):
     if argv'Length == 0: die(f"usage: {PROG} each <git command> [args...]")
     let cdir: str = CONTAINER
     if not -d cdir: return
-    let entries = shellLines: ls -1a {Q(cdir)}
+    let entries = shellLines: ls -1a {!cdir}
     for name in sorted(entries):
         if not is_repo(cdir, name): continue
         print f"=== {name} ==="
@@ -339,14 +346,14 @@ Tip: for a long session on one file, alias it:  alias gg='{PROG} notes.txt'"""
 
 def cmd_help():
     let pager: str = $PAGER if $PAGER else "less"
-    let r = shell: command -v {Q(pager)} 2>&1
+    let r = shell: command -v {!pager} 2>&1
     let is_tty: int = shell: test -t 1
     if is_tty == 0 and r.code == 0:
         let tmp: str = "/tmp/git1-help.txt"
         writeFile(tmp, usage() + "\n")
-        let shown: int = shell: {Q(pager)} {Q(tmp)}
+        let shown: int = shell: {!pager} {!tmp}
         if shown != 0: warn("pager failed")
-        shell: rm -f -- {Q(tmp)}
+        shell: rm -f -- {!tmp}
     else:
         print usage()
 

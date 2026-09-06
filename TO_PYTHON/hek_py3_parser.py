@@ -1851,6 +1851,51 @@ def _classify_line(tokens):
 import tokenize as _tknmod
 
 
+def _apply_shell_quoting(cmd, wrapper):
+    """Rewrite `{!expr}` interpolations in a shell body into `{wrapper}`.
+
+    `{x}` interpolates the value as written, which is what a command fragment
+    wants.  `{!x}` asks for it quoted, so a path holding spaces or shell
+    metacharacters arrives as one argument instead of several.
+
+    WRAPPER is a format string taking `expr`, e.g. "quoteShell({expr})".
+    Returns (rewritten, changed).
+    """
+    if "{!" not in cmd:
+        return cmd, False
+    out = []
+    i = 0
+    n = len(cmd)
+    changed = False
+    while i < n:
+        # `{{` and `}}` are escaped braces, not interpolations
+        if cmd.startswith(("{{", "}}"), i):
+            out.append(cmd[i:i + 2])
+            i += 2
+            continue
+        if cmd.startswith("{!", i):
+            depth = 1
+            j = i + 2
+            while j < n:
+                if cmd[j] == "{":
+                    depth += 1
+                elif cmd[j] == "}":
+                    depth -= 1
+                    if depth == 0:
+                        break
+                j += 1
+            if j < n and depth == 0:
+                expr = cmd[i + 2:j].strip()
+                if expr:
+                    out.append("{" + wrapper.format(expr=expr) + "}")
+                    i = j + 1
+                    changed = True
+                    continue
+        out.append(cmd[i])
+        i += 1
+    return "".join(out), changed
+
+
 def _shell_target_annotation(seq):
     """The primitive type named in a shell target's annotation, or None.
 
@@ -2011,6 +2056,11 @@ def to_py(self, indent=0):
         cmd_parts = [t for (k, t, _f) in block_lines if k == "cmd"]
         cmd = " && ".join(cmd_parts)
         needs_fstring = any(f for (k, _t, f) in block_lines if k == "cmd")
+
+    cmd, _quoted = _apply_shell_quoting(cmd, "_shlex.quote({expr})")
+    if _quoted:
+        needs_fstring = True
+        ParserState.nim_imports.add("import shlex as _shlex")
 
     has_target = bool(target_name or target_tuple)
 

@@ -1163,6 +1163,32 @@ let entries: []str = shellLines: ls -1a /tmp
 output = shellLines: find . -name "*.ady"
 ```
 
+### Exit code with the terminal left alone
+
+An `int`-typed target runs the command with stdin, stdout and stderr
+inherited — its output, colours and pager reach the user directly — and
+returns the exit status:
+
+```python
+let code: int = shell: git log --oneline
+```
+
+`let r = shell:` captures instead, and gives `.output`, `.stderr`, `.code`.
+
+### Quoting an interpolated value
+
+`{expr}` interpolates the value as written, which is what a command fragment
+needs. `{!expr}` quotes it, so a path holding spaces or shell metacharacters
+arrives as a single argument:
+
+```python
+let f: str = "my notes.txt"
+shell: ls -l {!f}              # ls -l 'my notes.txt'
+shell: ls -l {f}               # ls -l my notes.txt   — two arguments
+```
+
+Nim emits `quoteShell(expr)`, Python `shlex.quote(expr)`.
+
 ### Options
 
 ```python

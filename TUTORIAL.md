@@ -2267,6 +2267,8 @@ advanced scenarios are not yet supported:
 | Shell lines (typed)               | `let ls: []str = shellLines: cmd`        |
 | Shell (bare assign)               | `ls = shellLines: cmd`                   |
 | Shell expr interpolation          | `shell: cmd {f(x)}` (auto-hoisted)      |
+| Shell interpolation, quoted       | `shell: cmd {!path}` (one argument)     |
+| Shell exit code, terminal kept    | `let code: int = shell: cmd`            |
 | Discard shell output              | `shell: cmd`                             |
 | Shell block (commands joined)     | `shell:` then indented `cmd1` / `cmd2`   |
 | Shell block (PTY expect/send)     | `shell:` then `cmd` / `send(...)` / `expect(...)` |

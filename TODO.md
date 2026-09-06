@@ -16,6 +16,7 @@
 - [x] py2py: implicit return of a multi-line string writes `return` inside the literal (see [Bug 11](#bug-11--py2py-implicit-return-breaks-a-multi-line-string))
 - [x] both backends re-indent the inside of a multi-line string, changing its value (see [Bug 12](#bug-12--a-multi-line-string-is-re-indented-changing-its-value))
 - [x] `shell:` could not both inherit the terminal and return an exit code (see [shell: with terminal passthrough](#shell-with-terminal-passthrough-and-exit-code--done))
+- [x] `shell:` interpolation did not quote, so every path needed a helper (see [Safe shell interpolation](#safe-shell-interpolation-auto-quoting--done))
 
 ## Shell improvements
 
@@ -50,7 +51,7 @@ a bug nobody had hit yet: that path was fixed, so two git1 processes running
 at once could read each other's exit status. `g()` now ends
 
 ```python
-    let code: int = shell: cd {Q(G1_DIR)} && GIT_DIR={Q(G1_GITDIR)} GIT_WORK_TREE=. git {cmd}
+    let code: int = shell: cd {!G1_DIR} && GIT_DIR={!G1_GITDIR} GIT_WORK_TREE=. git {cmd}
     code
 ```
 
@@ -165,38 +166,38 @@ already was when the f-string stood outside a call.
 
 ---
 
-### Safe shell interpolation (auto-quoting)
+### Safe shell interpolation (auto-quoting) — DONE
 
-`shell:` interpolation with `{var}` embeds the value as raw text into the
-command string — no quoting. A variable containing spaces or shell
-metacharacters (`my notes.txt`, `hello; rm -rf /`) breaks or is dangerous.
-Scripts must manually wrap every interpolated path in a quoting helper:
+`shell:` interpolation with `{var}` embeds the value as raw text — no
+quoting — so a value holding spaces or shell metacharacters
+(`my notes.txt`, `a; rm -rf /`) broke the command or ran part of it. Every
+script had to wrap each interpolated path in a helper of its own.
 
-```python
-def Q(s: str) -> str:
-    "'" + s.replace("'", "'\\''") + "'"
-
-shell: git add -- {Q(file)}
-```
-
-**Desired syntax** — a distinct sigil (e.g. `${var}` or `{!var}`) that
-auto-quotes the interpolated value:
+**Syntax:** `{!expr}` interpolates quoted; `{expr}` still interpolates raw.
 
 ```python
-shell: git add -- ${file}           # → git add -- 'my notes.txt'
-shell: mv -- ${old} ${new}          # each arg single-quoted automatically
+let f: str = "my notes.txt"
+shell: ls -l {!f}              # ls -l 'my notes.txt'
+shell: ls -l {f}               # ls -l my notes.txt   -- two arguments
 ```
 
-Plain `{var}` stays as-is (raw interpolation) for cases where the value is
-already a command fragment or intentionally unquoted.
+`_apply_shell_quoting()` rewrites `{!expr}` into `{quoteShell(expr)}` for
+Nim and `{_shlex.quote(expr)}` for Python before either backend builds the
+command, so the existing interpolation and hoisting machinery handles it
+from there. Escaped braces (`{{`, `}}`) are left alone, and the scan matches
+nested braces, so `{!os.path.join(a, b)}` works.
 
-**Implementation sketch:**
-- Tokenizer: recognise `${name}` inside shell bodies as a distinct token
-  (e.g. `SHELL_SAFE_INTERP`).
-- Nim backend: emit the value wrapped in `quoteShell()` (Nim's `osproc`
-  provides this) or a single-quote-and-escape helper.
-- Python backend: `shlex.quote(var)`.
-- Complexity: ~100 lines across tokenizer + both backends.
+**Not `${var}`**, which the original sketch proposed: `$` reaches the shell
+untouched inside a `shell:` body, so `${PATH}` is shell parameter expansion
+and `${file}` would have been indistinguishable from it — to a reader and to
+the tokenizer both. `{` is already the interpolation sigil, and `!` carries
+no meaning after it.
+
+`EXAMPLES/git1.ady` converted 26 interpolations and no longer needs `Q()`
+anywhere a shell body appears. It keeps `Q` for one job the sigil cannot do:
+`g()` and `g_lines()` join a *list* of arguments into one command fragment,
+and a fragment has to be interpolated raw — `{!cmd}` would quote the whole
+line into a single word.
 
 ---
 

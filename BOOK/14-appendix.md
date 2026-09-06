@@ -37,9 +37,11 @@
 | Raw Nim line | `# nimraw: <code>` |
 | Per-file Nim flags | `#ady2nim-args c -d:release` (line 2) |
 | Shell capture | `let r = shell: cmd` → `.output`, `.stderr`, `.code` |
+| Shell exit code, terminal kept | `let code: int = shell: cmd` |
 | Shell lines | `let ls = shellLines: cmd` |
 | Shell lines (typed/bare) | `let ls: []str = shellLines: cmd` / `ls = shellLines: cmd` |
 | Shell expr interpolation | `{f(x)}` in body — auto-hoisted to temp variable |
+| Shell interpolation, quoted | `{!path}` — one argument whatever it holds |
 | Shell options | `shell(cwd = "...", timeout = ms): cmd` |
 | Shell block / PTY automation | `shell:` + lines / + `send()`/`expect()` |
 | CLI args | `$0`, `$1`…`$9`, `$@`, `$#` |
