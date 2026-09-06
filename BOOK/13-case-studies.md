@@ -118,57 +118,87 @@ directory.  `notes.txt` and `diary.txt` can sit side by side, each with
 independent history, with no repo at the directory level. (The concept comes
 from kotodharma/single-file-git.)
 
-### Structure: one record, not three globals
+### Structure: two classes, each with one job
 
-Every git call needs three things about the file it acts on, and they travel
-together:
+`Target` is one tracked file and the private repo holding its history:
 
 ```python
-type Target_T is tuple:
-    dir:    str    # the directory holding the file; git runs here
+class Target:
+    dir:    Path   # the directory holding the file; git runs here
     base:   str    # the file's own name
-    gitdir: str    # its private repo, relative to dir
+    gitdir: Path   # its private repo, relative to dir
+    name:   str    # what the user typed, for messages
 
-def split_target(target: str) -> Target_T:
-    var t: str = target.rstrip("/")
-    if t'Length == 0:
-        die("empty file name")
-    let head: str = os.path.dirname(t)
-    let base: str = os.path.basename(t)
-    if base'Length == 0:
-        die(f"not a file name: '{target}'")
-    (dir: "." if head'Length == 0 else head,
-     base: base,
-     gitdir: CONTAINER + "/" + base)
+    def __init__(self, target: str): ...
+    def git(self, args: []str) -> int          # run git here
+    def git_exec(self, args: []str)            # become git
+    def git_lines(self, args: []str) -> []str  # run git, keep the output
+    def track(self)                            # the `init` subcommand
+    def rm(self, force: bool)
+    def adopt(self, branch: str, force: bool, prune: str)
+    def move_to(self, new: str)
 ```
 
-An earlier version of this file kept those three as module-level `var`s that
-`split_target` assigned and every helper read. It worked, and it is what a
-shell script has to do, having no records — but it meant `g(args)` did not
-say which repo it acted on. It acted on whichever file was split last.
-
-The version that returns a value is better in three specific ways, and each
-one is worth more than the annotation it costs:
-
-- `g(t, args)` names its target, so a caller that forgets to split cannot
-  quietly operate on the previous file. For a version-control tool,
-  committing to the wrong repo is the failure worth designing against.
-- `cmd_mv` holds two targets at once. With globals it had to copy the old
-  values into locals before `split_target(new)` overwrote them; with a record
-  it simply has `ot` and `nt`.
-- Assigning a module-level `var` inside a function is a local in Python and
-  not in Nim, so the pattern needed a `global` declaration on one backend and
-  not the other. A returned value has no such asymmetry.
-
-### The `g()` function
-
-Every git invocation goes through one helper:
+`RepoDir` is a directory's `.git1` and the repos inside it:
 
 ```python
-def g(t: Target_T, args: []str) -> int:
-    let env: {str}str = {"GIT_DIR": t.gitdir, "GIT_WORK_TREE": "."}
-    let code: int = shell(cwd = t.dir, env = env): git {*args}
-    code
+class RepoDir:
+    dir:  Path
+    path: Path
+
+    def is_repo(self, entry: str) -> bool
+    def names(self) -> []str
+    def ls(self)
+    def each(self, args: []str)
+```
+
+**The split is the design decision worth noticing.** `ls` and `each` look
+like they belong on `Target` and do not: they are asked about a *directory*
+and only then find the files it tracks. `t.each(...)` would have to answer
+"each what?" — the receiver would be one file and the work would be over
+many. Putting them on the thing they are actually about leaves both classes
+with one job, and `main()` reads as the two of them:
+
+```python
+when "init":  var t: Target = Target(argv[1]); t.track()
+when "ls":    var rd: RepoDir = RepoDir(where); rd.ls()
+when "each":  var here: RepoDir = RepoDir("."); here.each(argv[1:])
+```
+
+Earlier versions of this file kept `dir`, `base` and `gitdir` as
+module-level `var`s that a `split_target` procedure assigned and every
+helper read. That is what a shell script has to do, having neither records
+nor objects — but it meant `g(args)` did not say which repo it acted on. It
+acted on whichever file was split last. A caller that forgot to split
+operated on the previous one, which for a version-control tool is the
+failure worth designing against.
+
+Two smaller things the object buys. `move_to` holds two targets at once and
+simply has `self` and `nt`, where globals had to copy the old values into
+locals before the new split overwrote them. And assigning a module-level
+`var` inside a function is a local in Python and not in Nim, so the old
+shape needed a `global` declaration on one backend and not the other.
+
+**Two portability traps this rewrite walked into**, both worth knowing before
+writing Adascript classes:
+
+- Nim identifiers ignore case and underscores, so a class `Container` and a
+  constant `CONTAINER` are *the same name* there while Python sees two. The
+  class is called `RepoDir` for that reason.
+- A method takes `var self` on the Nim side, so calling one on a temporary —
+  `RepoDir(where).ls()` — does not compile: the receiver has to be bound to a
+  variable first. That is why `main()` reads `var rd: RepoDir = ...` rather
+  than chaining.
+
+### The `git()` method
+
+Every git invocation goes through one method:
+
+```python
+    def git(self, args: []str) -> int:
+        let e: {str}str = self.env()
+        let code: int = shell(cwd = self.dir, env = e): git {*args}
+        code
 ```
 
 Three settings make a per-file repo work: run in the file's own directory,
@@ -180,22 +210,22 @@ command would work, but then the shell is parsing what the language can hand
 over directly.
 
 `{*args}` quotes each element and joins them, so
-`g(t, ["commit", "-m", "hello world"])` reaches git as three arguments and
+`t.git(["commit", "-m", "hello world"])` reaches git as three arguments and
 not four. The `int`-typed target is the form that keeps the terminal — git's
 output, colours and pager reach the user — while still returning the status.
 
-### The last git call is different: `g_exec()`
+### The last git call is different: `git_exec()`
 
 Most of the program's git calls have work waiting behind them — `cmd_ls`
 reads the log it just asked for, `cmd_adopt` checks whether the reset
-worked.  Those need `g()`.
+worked.  Those need `git()`.
 
 One does not.  The last line of `main()` is the passthrough: whatever the
 user typed after the file name is handed to git, and git1's only remaining
 job is to copy git's exit code into its own.  It used to say so:
 
 ```python
-quit(g(t, args))
+quit(t.git(args))
 ```
 
 That works, and it costs a process.  git1 forks git, blocks until it
@@ -204,9 +234,9 @@ holding a pid for the sole purpose of relaying a status.  `shellExec:`
 removes the middle:
 
 ```python
-def g_exec(t: Target_T, args: []str):
-    let env: {str}str = {"GIT_DIR": t.gitdir, "GIT_WORK_TREE": "."}
-    shellExec(cwd = t.dir, env = env): git {*args}
+    def git_exec(self, args: []str):
+        let e: {str}str = self.env()
+        shellExec(cwd = self.dir, env = e): git {*args}
 ```
 
 The statement does not return.  git1 *becomes* git: same pid, same terminal,
@@ -217,7 +247,7 @@ it.  This is what bash's `exec git "$@"` is for, and what every wrapper
 script written by someone who has been bitten ends in.
 
 The rule for which to reach for is simply whether there is anything left to
-do: `g()` when the program continues, `g_exec()` when it does not.
+do: `git()` when the program continues, `git_exec()` when it does not.
 
 ### Subcommand dispatch
 
@@ -277,7 +307,7 @@ invocation; `git1.ady` compiles to a native binary (~100 KB).  For a tool
 that runs once per user action this rarely matters, but `git1 each` iterates
 over every repo — a compiled loop with compiled string handling.
 
-**Type annotations.** `args: []str`, `-> int`, `-> Target_T` — a reader knows
+**Type annotations.** `args: []str`, `-> int`, `-> Path` — a reader knows
 what flows through each function without tracing it.
 
 ### What it costs, honestly
@@ -301,7 +331,7 @@ language.
 **`exec` — the last gap, now closed.**  This section used to say the
 passthrough ran git as a child and forwarded the status: same behaviour to
 the caller, one extra process for the command's lifetime.  `shellExec:`
-closed that too, and `g_exec()` above is where it went, so the passthrough
+closed that too, and `git_exec()` above is where it went, so the passthrough
 now costs no process at all and the status is git's by construction rather
 than by copying.
 
@@ -315,9 +345,9 @@ it, having stopped forwarding anything; a wrapper that still forwards does.
 
 | Metric | `git1.ady` |
 |--------|------------|
-| Lines | ~400, of which 66 are docstrings |
+| Lines | ~440, of which a quarter are docstrings |
 | Shell plumbing overhead | 0 |
-| Type declarations | 1 record (`Target_T`) |
+| Type declarations | 2 classes (`Target`, `RepoDir`) |
 | Runtime | native binary (~100 KB) |
 | Subcommands | 9 |
 

@@ -21,6 +21,16 @@ history of this file if the reasoning behind one of them is ever wanted.
       and `all` is simply undeclared; both work on the Python backend, so the
       same source gives a working program on one and a compile error on the
       other. `sequtils` has `anyIt`/`allIt` to map onto.
+- [ ] py2nim: a value-returning call used as a statement gets `discard` inside
+      a plain `def` but not inside a *method body* or at module level, so the
+      same source compiles on Python and fails on Nim with "expression ... has
+      to be used (or discarded)". The richer logic in `hek_nim_stmt.py` is the
+      disabled fallback; the active `stmt_line.to_nim` in `hek_nim_parser.py`
+      only discards `pop` and nimpy calls.
+- [ ] Nim identifiers ignore case and underscores, so an Adascript class
+      `Container` and a constant `CONTAINER` are one name there and two on
+      Python. Worth a transpile-time warning: the Nim error names a
+      "redefinition" at a line the author did not write.
 - [ ] generic function syntax `def foo[T]` (Feature 1)
 - [ ] `.map()` / `.and_then()` rewriting on `?T` (Feature 2)
 

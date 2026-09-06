@@ -14,12 +14,6 @@ const VERSION:   str = "3.0"
 const CONTAINER: str = ".git1"
 let PROG:   str = os.path.basename($0).lstrip(".")
 
-# --- what every git call needs to know about the file it acts on -----------
-type Target_T is tuple:
-    dir:    Path   # the directory holding the file; git runs here
-    base:   str    # the file's own name
-    gitdir: Path   # its private repo, relative to dir
-
 def die(msg: str):
     stderr.writeLine(f"{PROG}: {msg}")
     quit(1)
@@ -37,279 +31,272 @@ def confirm(question: str) -> bool:
         reply = "n"
     return reply.lower().startswith("y")
 
-# --- path handling ---------------------------------------------------------
-
-def split_target(target: str) -> Target_T:
-    """Split a file name into the three things a git call needs.
-
-    Returned rather than assigned to globals: a Target_T says which file it
-    describes, so g(t, ...) cannot act on whichever file happened to be
-    split last. cmd_mv is the case that makes the difference plain -- it
-    holds an old target and a new one at the same time, which globals can
-    only manage by copying them into locals first.
-    """
-    var t: str = target.rstrip("/")
-    if t'Length == 0:
-        die("empty file name")
-    let head: str = os.path.dirname(t)
-    let base: str = os.path.basename(t)
-    if base'Length == 0:
-        die(f"not a file name: '{target}'")
-    (dir: Path("." if head'Length == 0 else head),
-     base: base,
-     gitdir: Path(CONTAINER) / base)
-
-def is_repo(cdir: Path, entry: str) -> bool:
-    """True when cdir/entry is one of our per-file repos.
-
-    A repo is named after its file, so the entry is recognised by its
-    content rather than by its name: "." and ".." are skipped, and anything
-    else in the container without a HEAD is not one of ours.
-    """
-    if entry'Length == 0 or entry == "." or entry == "..": return False
-    let gitdir: Path = cdir / entry
-    if not -d gitdir: return False
-    # Parenthesised: a file test takes a primary, so the join has to be one.
-    -f (gitdir / "HEAD")
-
 def ignore_escape(name: str) -> str:
+    """Escape a file name for a .gitignore line."""
     var s: str = name.replace("\\", "\\\\")
     for ch in "*?[#!":
         s = s.replace(str(ch), "\\" + str(ch))
     s
 
-def write_exclude(base: str, gitdir: Path):
-    let exclude: Path = gitdir / "info" / "exclude"
-    os.makedirs(os.path.dirname(exclude))
-    writeFile(exclude, "/*\n!/" + ignore_escape(base) + "\n")
+# --- one tracked file ------------------------------------------------------
 
-def g(t: Target_T, args: []str) -> int:
-    """Run git against the current file's repo. Returns git's exit code.
+class Target:
+    """One tracked file and the private repo that holds its history.
 
-    Every git invocation in this program goes through here, and the target
-    says which file it acts on -- cmd_each walks a directory of repos and
-    passes a different one each time round its loop.
-
-    The three settings are what make a per-file repo work: run in the file's
-    own directory, name the private repo as GIT_DIR so git stops searching
-    upward for a .git, and declare that directory the work tree. The first is
-    the `cwd` option; the other two go through `env`, which is where a value
-    crossing into the shell's own namespace belongs -- spelling them as
-    `GIT_DIR={!x}` in the command would work, but the shell would be parsing
-    what the language can hand over directly.
-
-    `{*args}` quotes each argument and joins them, so
-    g(["commit", "-m", "hello world"]) reaches git as three arguments and not
-    four.
-
-    An int-typed target -- `let code: int = shell: ...` -- rather than a
-    capturing one: git keeps the terminal, so its output, colours and pager
-    reach the user directly, and the exit code still comes back.
+    Everything a git call needs to know travels with the object: run in the
+    file's own directory, name the private repo as GIT_DIR so git stops
+    searching upward for a .git, and declare that directory the work tree.
     """
-    let env: {str}str = {"GIT_DIR": str(t.gitdir), "GIT_WORK_TREE": "."}
-    let code: int = shell(cwd = t.dir, env = env): git {*args}
-    code
+    dir:    Path   # the directory holding the file; git runs here
+    base:   str    # the file's own name
+    gitdir: Path   # its private repo, relative to dir
+    name:   str    # what the user typed, for messages
 
-def g_exec(t: Target_T, args: []str):
-    """Hand this process over to git. Does not return.
+    def __init__(self, target: str):
+        var t: str = target.rstrip("/")
+        if t'Length == 0:
+            die("empty file name")
+        let head: str = os.path.dirname(t)
+        self.base = os.path.basename(t)
+        if self.base'Length == 0:
+            die(f"not a file name: '{target}'")
+        self.dir    = Path("." if head'Length == 0 else head)
+        self.gitdir = Path(CONTAINER) / self.base
+        self.name   = target
 
-    Same repo, same directory, same quoting as g() -- the difference is that
-    there is no coming back. The last thing main() does is run git and pass
-    its exit code on, and that is what exec is for: git1 *becomes* git rather
-    than sitting there as a parent whose only remaining job is to copy a
-    number. One less process in the tree, the exit status is git's by
-    construction, and Ctrl-C reaches git directly instead of arriving at a
-    wrapper that has to decide what to do about it.
+    def repo(self) -> Path:
+        """Where the private repo actually lives."""
+        self.dir / self.gitdir
 
-    Only the final dispatch can use this. Every other caller needs g(),
-    because they still have work to do once git returns.
+    def env(self) -> {str}str:
+        """The two variables that make git use the private repo."""
+        {"GIT_DIR": str(self.gitdir), "GIT_WORK_TREE": "."}
+
+    def git(self, args: []str) -> int:
+        """Run git here. Returns its exit code; git keeps the terminal.
+
+        An int-typed target rather than a capturing one, so git's output,
+        colours and pager reach the user directly and the status still comes
+        back.  `{*args}` quotes each argument, so
+        t.git(["commit", "-m", "hello world"]) reaches git as three
+        arguments and not four.
+        """
+        let e: {str}str = self.env()
+        let code: int = shell(cwd = self.dir, env = e): git {*args}
+        code
+
+    def git_exec(self, args: []str):
+        """Hand this process over to git. Does not return.
+
+        The last thing main() does is run git and pass its exit code on, and
+        that is what exec is for: git1 *becomes* git rather than sitting
+        there as a parent whose only remaining job is to copy a number. One
+        less process, the status is git's by construction, and Ctrl-C
+        reaches git directly.  Only the final dispatch can use this.
+        """
+        let e: {str}str = self.env()
+        shellExec(cwd = self.dir, env = e): git {*args}
+
+    def git_lines(self, args: []str) -> []str:
+        """Run git here and return what it printed.
+
+        The capturing twin of git(), for the calls whose answer is the
+        output rather than the status. git does not get the terminal, so
+        this is not the one for anything the user is meant to watch.
+        """
+        let e: {str}str = self.env()
+        let lines = shellLines(cwd = self.dir, env = e): git {*args}
+        lines
+
+    def require(self):
+        if not -d self.repo():
+            die(f"'{self.name}' is not tracked (run: {PROG} init {self.name})")
+
+    def current_branch(self) -> str:
+        let lines: []str = self.git_lines(["rev-parse", "--abbrev-ref", "HEAD"])
+        if lines'Length == 0: return "HEAD"
+        return lines[0].strip()
+
+    def losing_branches(self, current: str, winner: str) -> []str:
+        """Every branch other than the one adopted and the one holding it."""
+        var others: []str = []
+        for line in self.git_lines(["for-each-ref", "--format=%(refname:short)", "refs/heads"]):
+            let name: str = line.strip()
+            if name'Length > 0 and name != current and name != winner:
+                others.append(name)
+        others
+
+    def write_exclude(self, repo: Path):
+        """Make the repo ignore every path except its own file."""
+        let exclude: Path = repo / "info" / "exclude"
+        os.makedirs(os.path.dirname(exclude))
+        writeFile(exclude, "/*\n!/" + ignore_escape(self.base) + "\n")
+
+    def track(self):
+        """Start tracking this file: the `init` subcommand."""
+        if not -e self.name: die(f"no such file: {self.name}")
+        if not -f self.name: die(f"not a regular file: {self.name}")
+        if not -d self.dir: die(f"no such directory: {self.dir}")
+        let repo: Path = self.repo()
+        if -e repo: die(f"already tracked: {self.name}")
+
+        shell: mkdir -p -- {!self.dir / CONTAINER}
+        let r = shell: git init --quiet --bare -- {!repo} 2>&1
+        if r.code != 0: die(f"could not create {repo}")
+
+        shell: git --git-dir={!repo} config core.bare false
+        shell: git --git-dir={!repo} config core.worktree ../..
+        self.write_exclude(repo)
+
+        if self.git(["add", "--", self.base]) != 0 or self.git(["commit", "--quiet", "-m", "initial commit"]) != 0:
+            shell: rm -rf -- {!repo}
+            die("could not create the initial commit (is user.email set?)")
+        print f"tracking {self.name} in {repo}"
+
+    def rm(self, force: bool):
+        """Delete this file's history, keeping the file."""
+        self.require()
+        if not force:
+            if not confirm(f"Delete the history of {self.name}? The file itself is kept."):
+                die("aborted")
+        shell: rm -rf -- {!self.repo()}
+        shell: rmdir -- {!self.dir / CONTAINER} 2>/dev/null || true
+
+    def adopt(self, branch: str, force: bool, prune: str):
+        """Replace the current branch with another one, wholesale.
+
+        For the workflow this exists to serve -- try an idea on a branch,
+        keep the winner -- a merge is the wrong tool: it combines two
+        versions, and two versions of one file conflict readily. Adopting
+        moves the current branch to the winning one instead, so nothing is
+        combined.
+        """
+        self.require()
+        if self.git(["show-ref", "--verify", "--quiet", "refs/heads/" + branch]) != 0:
+            die(f"no such branch: {branch}")
+        let current: str = self.current_branch()
+        if branch == current:
+            die(f"'{branch}' is already the current branch")
+
+        if not force and self.git(["diff", "--quiet", "HEAD", "--", self.base]) != 0:
+            if not confirm(f"{self.name} has uncommitted changes; discard them?"):
+                die("aborted")
+
+        if self.git(["reset", "--hard", branch]) != 0:
+            die(f"could not move {current} to {branch}")
+        print f"{current} now holds {branch}"
+
+        if prune == "no": return
+        let others: []str = self.losing_branches(current, branch)
+        if others'Length == 0: return
+        var doit: bool = prune == "yes"
+        if prune == "ask":
+            doit = confirm(f"Delete the branches that lost ({', '.join(others)})?")
+        if doit:
+            var cmd: []str = ["branch", "-D"]
+            for name in others:
+                cmd.append(name)
+            let pruned: int = self.git(cmd)
+            if pruned != 0:
+                warn(f"could not delete every losing branch (git exited {pruned})")
+
+    def move_to(self, new: str):
+        """Rename this file and its repo. Two targets, so two objects."""
+        self.require()
+        if -e new: die(f"target exists: {new}")
+        var nt: Target = Target(new)
+        if not -d nt.dir: die(f"no such directory: {nt.dir}")
+        let new_repo: Path = nt.repo()
+        if -e new_repo: die(f"already tracked: {new}")
+
+        shell: mv -- {!self.name} {!new}
+        shell: mkdir -p -- {!nt.dir / CONTAINER}
+        shell: mv -- {!self.repo()} {!new_repo}
+        nt.write_exclude(new_repo)
+        # The statuses are kept rather than dropped: a rename whose commit
+        # fails leaves the repo moved but the history not recording it, which
+        # is worth a word. (Nim also needs a value-returning call used as a
+        # statement to be discarded, and only does that automatically outside
+        # a method body -- see TODO.md.)
+        var rc: int = nt.git(["rm", "--quiet", "--cached", "--ignore-unmatch", "--", self.base])
+        rc = nt.git(["add", "--", nt.base])
+        rc = nt.git(["commit", "--quiet", "-m", f"rename {self.base} -> {nt.base}"])
+        if rc != 0:
+            warn(f"renamed, but recording it failed (git exited {rc})")
+
+# --- a directory of them ---------------------------------------------------
+
+class RepoDir:
+    """The .git1 directory in one place, and the repos inside it.
+
+    Named RepoDir rather than Container because Nim identifiers ignore case
+    and underscores, so `Container` and the `CONTAINER` const above are the
+    same name there -- a collision the Python backend does not have.
+
+    `ls` and `each` are its methods rather than a Target's: they are asked
+    about a *directory*, and only then find the files it tracks.
     """
-    let env: {str}str = {"GIT_DIR": str(t.gitdir), "GIT_WORK_TREE": "."}
-    shellExec(cwd = t.dir, env = env): git {*args}
+    dir:  Path   # the directory that holds the container
+    path: Path   # the container itself
 
-def g_lines(t: Target_T, args: []str) -> []str:
-    """Run git against the current file's repo. Returns what git printed.
+    def __init__(self, d: str):
+        self.dir  = Path(d)
+        self.path = self.dir / CONTAINER
 
-    The capturing twin of g(): same directory, same repo, same quoting,
-    but for the calls whose answer is the output rather than the status --
-    reading the current branch, listing the branches. git does not get the
-    terminal here, so this is not the one to use for anything the user is
-    meant to watch.
-    """
-    let env: {str}str = {"GIT_DIR": str(t.gitdir), "GIT_WORK_TREE": "."}
-    let lines = shellLines(cwd = t.dir, env = env): git {*args}
-    lines
+    def is_repo(self, entry: str) -> bool:
+        """True when entry is one of our per-file repos.
 
-def current_branch(t: Target_T) -> str:
-    let lines: []str = g_lines(t, ["rev-parse", "--abbrev-ref", "HEAD"])
-    if lines'Length == 0: return "HEAD"
-    return lines[0].strip()
+        A repo is named after its file, so it is recognised by content
+        rather than by name: "." and ".." are skipped, and anything else in
+        the container without a HEAD is not one of ours.
+        """
+        if entry'Length == 0 or entry == "." or entry == "..": return False
+        let gitdir: Path = self.path / entry
+        if not -d gitdir: return False
+        # Parenthesised: a file test takes a primary, so the join has to be one.
+        -f (gitdir / "HEAD")
 
-def losing_branches(t: Target_T, current: str, winner: str) -> []str:
-    """Every branch other than the one adopted and the one holding it now."""
-    var others: []str = []
-    for line in g_lines(t, ["for-each-ref", "--format=%(refname:short)", "refs/heads"]):
-        let name: str = line.strip()
-        if name'Length > 0 and name != current and name != winner:
-            others.append(name)
-    others
-
-def require_repo(t: Target_T, target: str):
-    let repo: Path = t.dir / t.gitdir
-    if not -d repo:
-        die(f"'{target}' is not tracked (run: {PROG} init {target})")
-
-# --- subcommands -----------------------------------------------------------
-
-def cmd_init(target: str):
-    if not -e target: die(f"no such file: {target}")
-    if not -f target: die(f"not a regular file: {target}")
-    let t: Target_T = split_target(target)
-    if not -d t.dir: die(f"no such directory: {t.dir}")
-    let repo: Path = t.dir / t.gitdir
-    if -e repo: die(f"already tracked: {target}")
-
-    shell: mkdir -p -- {!t.dir / CONTAINER}
-    let r = shell: git init --quiet --bare -- {!repo} 2>&1
-    if r.code != 0: die(f"could not create {repo}")
-
-    shell: git --git-dir={!repo} config core.bare false
-    shell: git --git-dir={!repo} config core.worktree ../..
-    write_exclude(t.base, repo)
-
-    if g(t, ["add", "--", t.base]) != 0 or g(t, ["commit", "--quiet", "-m", "initial commit"]) != 0:
-        shell: rm -rf -- {!repo}
-        die("could not create the initial commit (is user.email set?)")
-    print f"tracking {target} in {repo}"
-
-def cmd_ls(argv: []str):
-    let d: str = argv[0] if argv'Length >= 1 else "."
-    let cdir: Path = Path(d) / CONTAINER
-    var found: int = 0
-    if -d cdir:
-        let entries = shellLines: ls -1a {!cdir}
+    def names(self) -> []str:
+        """The tracked file names here, in order."""
+        var out: []str = []
+        if not -d self.path: return out
+        let entries = shellLines: ls -1a {!self.path}
         for name in sorted(entries):
-            if not is_repo(cdir, name): continue
-            let gitdir: Path = cdir / name
+            if self.is_repo(name):
+                out.append(name)
+        out
+
+    def ls(self):
+        """List the tracked files here, newest commit first-hand."""
+        var found: int = 0
+        for name in self.names():
             found = 1
-            let file: Path = Path(d) / name
+            let gitdir: Path = self.path / name
+            let file: Path = self.dir / name
             var status: str = ""
             if not -e file: status = " [file missing]"
-            # `env` rather than `GIT_DIR=...` in the command, for the reason
-            # g() gives: the value crosses into the child's environment, which
-            # the language can hand over without the shell parsing it.  The
-            # capturing form keeps stderr in r.stderr, so there is nothing
-            # here for a 2>/dev/null to suppress either.
+            # `env` rather than `GIT_DIR=...` in the command: the value
+            # crosses into the child's environment, which the language hands
+            # over without the shell parsing it. The capturing form keeps
+            # stderr in r.stderr, so there is nothing for a 2>/dev/null to
+            # suppress either.
             let one_env: {str}str = {"GIT_DIR": str(gitdir)}
             let r = shell(env = one_env): git log -1 --format='%cr'
             var when: str = ""
             if r.output.strip()'Length > 0:
                 when = f"  (last commit {r.output.strip()})"
             print f"{name}{when}{status}"
-    if found == 0:
-        warn("no tracked files here")
+        if found == 0:
+            warn("no tracked files here")
 
-def cmd_rm(argv: []str):
-    var args: []str = argv
-    var force: bool = False
-    if args'Length > 0 and args[0] == "-f":
-        force = True
-        args = args[1:]
-    if args'Length < 1: die(f"usage: {PROG} rm [-f] <file>")
-    let t: Target_T = split_target(args[0])
-    require_repo(t, args[0])
-    if not force:
-        if not confirm(f"Delete the history of {args[0]}? The file itself is kept."):
-            die("aborted")
-    shell: rm -rf -- {!t.dir / t.gitdir}
-    shell: rmdir -- {!t.dir / CONTAINER} 2>/dev/null || true
-
-def cmd_adopt(argv: []str):
-    """Replace the current branch with another one, wholesale.
-
-    For the workflow this exists to serve -- try an idea on a branch, keep
-    the winner -- a merge is the wrong tool: it combines two versions, and
-    two versions of one file conflict readily. Adopting moves the current
-    branch to the winning one instead, so nothing is combined.
-    """
-    var args: []str = argv
-    var force: bool = False
-    var prune: str = "ask"
-    while args'Length > 0 and args[0].startswith("-"):
-        if args[0] == "-f":
-            force = True
-        elif args[0] == "--prune":
-            prune = "yes"
-        elif args[0] == "--no-prune":
-            prune = "no"
-        else:
-            die(f"unknown option: {args[0]}")
-        args = args[1:]
-    if args'Length != 2:
-        die(f"usage: {PROG} adopt [-f] [--prune|--no-prune] <file> <branch>")
-
-    let target: str = args[0]
-    let branch: str = args[1]
-    let t: Target_T = split_target(target)
-    require_repo(t, target)
-    if g(t, ["show-ref", "--verify", "--quiet", "refs/heads/" + branch]) != 0:
-        die(f"no such branch: {branch}")
-    let current: str = current_branch(t)
-    if branch == current:
-        die(f"'{branch}' is already the current branch")
-
-    if not force and g(t, ["diff", "--quiet", "HEAD", "--", t.base]) != 0:
-        if not confirm(f"{target} has uncommitted changes; discard them?"):
-            die("aborted")
-
-    if g(t, ["reset", "--hard", branch]) != 0:
-        die(f"could not move {current} to {branch}")
-    print f"{current} now holds {branch}"
-
-    if prune == "no": return
-    let others: []str = losing_branches(t, current, branch)
-    if others'Length == 0: return
-    var doit: bool = prune == "yes"
-    if prune == "ask":
-        doit = confirm(f"Delete the branches that lost ({', '.join(others)})?")
-    if doit:
-        var cmd: []str = ["branch", "-D"]
-        for name in others:
-            cmd.append(name)
-        g(t, cmd)
-
-def cmd_mv(old: str, new: str):
-    # Two targets at once, which is the whole argument for returning one
-    # rather than assigning three globals: with globals the old values had
-    # to be copied into locals before split_target(new) overwrote them.
-    let ot: Target_T = split_target(old)
-    require_repo(ot, old)
-    if -e new: die(f"target exists: {new}")
-    let nt: Target_T = split_target(new)
-    if not -d nt.dir: die(f"no such directory: {nt.dir}")
-    let new_repo: Path = nt.dir / nt.gitdir
-    if -e new_repo: die(f"already tracked: {new}")
-
-    shell: mv -- {!old} {!new}
-    shell: mkdir -p -- {!nt.dir / CONTAINER}
-    shell: mv -- {!ot.dir / ot.gitdir} {!new_repo}
-    write_exclude(nt.base, new_repo)
-    g(nt, ["rm", "--quiet", "--cached", "--ignore-unmatch", "--", ot.base])
-    g(nt, ["add", "--", nt.base])
-    g(nt, ["commit", "--quiet", "-m", f"rename {ot.base} -> {nt.base}"])
-
-def cmd_each(argv: []str):
-    if argv'Length == 0: die(f"usage: {PROG} each <git command> [args...]")
-    let cdir: Path = Path(CONTAINER)
-    if not -d cdir: return
-    let entries = shellLines: ls -1a {!cdir}
-    for name in sorted(entries):
-        if not is_repo(cdir, name): continue
-        print f"=== {name} ==="
-        let t: Target_T = split_target(name)
-        let rc: int = g(t, argv)
-        if rc != 0:
-            warn(f"'{name}': git exited {rc}")
+    def each(self, args: []str):
+        """Run one git command in every repo here."""
+        for name in self.names():
+            print f"=== {name} ==="
+            var t: Target = Target(name)
+            let rc: int = t.git(args)
+            if rc != 0:
+                warn(f"'{name}': git exited {rc}")
 
 def usage() -> str:
     f"""{PROG} {VERSION} - independent version control for single files
@@ -359,6 +346,37 @@ Notes:
 
 Tip: for a long session on one file, alias it:  alias gg='{PROG} notes.txt'"""
 
+def cmd_rm(argv: []str):
+    """Parse `rm [-f] <file>` and hand the work to the Target."""
+    var args: []str = argv
+    var force: bool = False
+    if args'Length > 0 and args[0] == "-f":
+        force = True
+        args = args[1:]
+    if args'Length < 1: die(f"usage: {PROG} rm [-f] <file>")
+    var t: Target = Target(args[0])
+    t.rm(force)
+
+def cmd_adopt(argv: []str):
+    """Parse `adopt [-f] [--prune|--no-prune] <file> <branch>`."""
+    var args: []str = argv
+    var force: bool = False
+    var prune: str = "ask"
+    while args'Length > 0 and args[0].startswith("-"):
+        if args[0] == "-f":
+            force = True
+        elif args[0] == "--prune":
+            prune = "yes"
+        elif args[0] == "--no-prune":
+            prune = "no"
+        else:
+            die(f"unknown option: {args[0]}")
+        args = args[1:]
+    if args'Length != 2:
+        die(f"usage: {PROG} adopt [-f] [--prune|--no-prune] <file> <branch>")
+    var t: Target = Target(args[0])
+    t.adopt(args[1], force, prune)
+
 def cmd_help():
     let pager: str = $PAGER if $PAGER else "less"
     # have() asks PATH directly; `command -v` cost a shell and a process to
@@ -388,24 +406,34 @@ def main():
         case argv[0]:
             when "init":
                 if argv'Length < 2: die(f"usage: {PROG} init <file>")
-                cmd_init(argv[1])
+                var t: Target = Target(argv[1])
+                t.track()
                 return
-            when "ls":       cmd_ls(argv[1:]); return
+            when "ls":
+                let where: str = argv[1] if argv'Length >= 2 else "."
+                var rd: RepoDir = RepoDir(where)
+                rd.ls()
+                return
             when "rm":       cmd_rm(argv[1:]); return
             when "mv":
                 if argv'Length != 3: die(f"usage: {PROG} mv <old> <new>")
-                cmd_mv(argv[1], argv[2])
+                var mt: Target = Target(argv[1])
+                mt.move_to(argv[2])
                 return
             when "adopt":    cmd_adopt(argv[1:]); return
-            when "each":     cmd_each(argv[1:]); return
+            when "each":
+                if argv'Length < 2: die(f"usage: {PROG} each <git command> [args...]")
+                var here: RepoDir = RepoDir(".")
+                here.each(argv[1:])
+                return
             when "help" | "-h" | "--help": cmd_help(); return
             when "--version": print f"{PROG} {VERSION}"; return
             when others: pass
 
     let target: str = argv[0]
-    let t: Target_T = split_target(target)
-    require_repo(t, target)
+    var t: Target = Target(target)
+    t.require()
     let args: []str = argv[1:] if argv'Length > 1 else ["status", "--short", "--branch"]
-    g_exec(t, args)
+    t.git_exec(args)
 
 main()
