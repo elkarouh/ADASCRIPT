@@ -23,6 +23,7 @@
 - [x] `shell(timeout = ms)` is silently ignored on Nim (see [Bug 16](#bug-16--shelltimeout--ms-is-ignored-on-nim))
 - [x] `shell:` had no way to interpolate an argument *list* (see [Splat interpolation](#splat-interpolation-args--done))
 - [x] `shell:` had no way to fail on a non-zero status (see [Checked form](#checked-form-check--true--done))
+- [x] `shell:` had no way to feed a command's stdin (see [stdin feeding](#stdin-feeding-stdin--expr--done))
 - [x] py2py: a shell body ending in `"` collides with the `"""` wrapper (see [Bug 17](#bug-17--py2py-mis-quotes-a-shell-body-ending-in-a-double-quote))
 
 ## Shell improvements
@@ -1014,3 +1015,34 @@ a CLI that is better than an uncaught exception's traceback. The checked form
 suits a script whose failures should stop it outright.
 `EXAMPLES/test_shell_block.ady` covers it, along with `{!x}` and `{*xs}`, so
 the suite exercises all three.
+
+---
+
+### stdin feeding `stdin = expr` — DONE
+
+There was no way to send a command its input: a script had to write a temp
+file, or build an `echo ... |` prefix and quote it by hand.
+
+```python
+let text: str = "gamma\nalpha\nbeta\n"
+let r = shell(stdin = text): sort          # r.output is alpha,beta,gamma
+```
+
+Works with the three capturing forms — record, tuple and `shellLines:`. On
+Python it becomes `input=`; on Nim `adascriptRun` writes the text to the
+child's pipe **inside the drain loop**, so a child that writes while we write
+cannot deadlock us. Checked with 204 KB of input, well past the 64 KB pipe
+buffer.
+
+**It is refused on a bare `shell:` or an `int`-typed target**, with a
+transpile-time error naming the forms that work. Feeding stdin needs a pipe,
+and those two forms hand the child the terminal; silently ignoring the option
+was the alternative, and that is the class of bug this session spent its time
+removing.
+
+**It also fixed a hang.** A capture gives the child a pipe for stdin, which
+nobody wrote to and nobody closed, so a command that reads stdin waited for
+input that never came — `let r = shell: cat` sat there until the timeout
+(code 124), or forever without one. The pipe is now closed immediately when
+there is nothing to send, so the child sees EOF; Python matches with
+`stdin=DEVNULL`. Both return 0 at once.

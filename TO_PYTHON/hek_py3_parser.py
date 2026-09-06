@@ -2139,9 +2139,24 @@ def to_py(self, indent=0):
 
     cmd_str = _py_shell_literal(cmd, needs_fstring)
 
+    # stdin = expr feeds the child; it needs a pipe, which only the capturing
+    # forms have, so asking for it on a bare `shell:` is an error rather than
+    # a silently ignored option.
+    if "stdin" in opts and not (target_name or target_tuple):
+        raise SyntaxError(
+            "shell(stdin = ...) needs a form that captures — "
+            "`let r = shell(stdin = x): cmd`, a tuple, or shellLines:")
+
     run_kwargs = ["shell=True"]
     if has_target:
         run_kwargs += ["capture_output=True", "text=True"]
+        if "stdin" in opts:
+            run_kwargs.append(f"input={opts['stdin']}")
+        else:
+            # Nim closes the child's stdin when nothing is fed to it; match
+            # that, so a capture of a command that reads stdin ends rather
+            # than waiting on a terminal the caller never meant to offer.
+            run_kwargs.append("stdin=_subprocess.DEVNULL")
     if "cwd" in opts:
         run_kwargs.append(f"cwd={opts['cwd']}")
     if "timeout" in opts:

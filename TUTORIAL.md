@@ -2270,6 +2270,7 @@ advanced scenarios are not yet supported:
 | Shell interpolation, quoted       | `shell: cmd {!path}` (one argument)     |
 | Shell interpolation, list         | `shell: cmd {*args}` (each quoted)      |
 | Shell, fail on non-zero           | `shell(check = true): cmd`              |
+| Shell, feed stdin                 | `shell(stdin = text): cmd`              |
 | Shell exit code, terminal kept    | `let code: int = shell: cmd`            |
 | Discard shell output              | `shell: cmd`                             |
 | Shell block (commands joined)     | `shell:` then indented `cmd1` / `cmd2`   |

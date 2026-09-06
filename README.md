@@ -1215,6 +1215,21 @@ except:
 It works with every form: bare, capture, tuple, `shellLines:` and an
 `int`-typed target.
 
+### Feeding a command's input
+
+`stdin = expr` sends a string to the child:
+
+```python
+let text: str = "gamma\nalpha\nbeta\n"
+let r = shell(stdin = text): sort        # r.output is alpha, beta, gamma
+```
+
+It applies to the capturing forms — record, tuple, `shellLines:` — since
+those are the ones that give the child a pipe; on a bare `shell:` it is a
+transpile-time error rather than a silently ignored option. When no `stdin`
+is given, a captured command sees EOF straight away rather than waiting on a
+terminal.
+
 ### Options
 
 ```python

@@ -3369,23 +3369,44 @@ proc adascriptDrain(fd: cint, buf: var string): bool =
     return false
   return errno == EAGAIN or errno == EWOULDBLOCK
 
-proc adascriptRun*(cmd: string, timeoutMs: int = 0): tuple[output: string, stderr: string, code: int] =
+proc adascriptRun*(cmd: string, timeoutMs: int = 0, input: string = ""): tuple[output: string, stderr: string, code: int] =
   ## Run cmd through the shell, capturing stdout and stderr separately.
   ##
   ## execCmdEx merges the two -- its default options include poStdErrToStdOut
   ## -- and has no timeout. Both pipes are drained while the child runs, so a
   ## child that fills one buffer cannot block the other. A command killed by
   ## the timeout reports 124, as timeout(1) does.
+  ##
+  ## `input` is fed to the child's stdin, in the same loop so that a child
+  ## which writes while we write cannot deadlock us. The pipe is closed once
+  ## it is written -- immediately when there is nothing to send -- so a child
+  ## that reads stdin sees EOF instead of waiting for input that never comes.
   let p = startProcess(cmd, options = {poEvalCommand})
   let ofd = p.outputHandle.cint
   let efd = p.errorHandle.cint
+  let ifd = p.inputHandle.cint
   discard fcntl(ofd, F_SETFL, fcntl(ofd, F_GETFL, 0) or O_NONBLOCK)
   discard fcntl(efd, F_SETFL, fcntl(efd, F_GETFL, 0) or O_NONBLOCK)
+  discard fcntl(ifd, F_SETFL, fcntl(ifd, F_GETFL, 0) or O_NONBLOCK)
+  var toWrite = input
+  var iOpen = true
+  if toWrite.len == 0:
+    iOpen = false
+    p.inputStream.close()
   var outBuf, errBuf = ""
   var oOpen, eOpen = true
   let deadline = epochTime() + timeoutMs.float / 1000.0
   var code = -1
   while true:
+    if iOpen:
+      let w = write(ifd, addr toWrite[0], toWrite.len)
+      if w > 0:
+        toWrite = toWrite[w .. ^1]
+      elif w < 0 and not (errno == EAGAIN or errno == EWOULDBLOCK):
+        toWrite = ""
+      if toWrite.len == 0:
+        iOpen = false
+        p.inputStream.close()
     if oOpen: oOpen = adascriptDrain(ofd, outBuf)
     if eOpen: eOpen = adascriptDrain(efd, errBuf)
     code = p.peekExitCode()
@@ -3419,7 +3440,7 @@ proc adascriptExec*(cmd: string, timeoutMs: int): int =
 
 def _ensure_shell_run_helper():
     """Inject the capturing runner the first time a shell capture is emitted."""
-    ParserState.nim_imports.update({"osproc", "os", "times", "posix"})
+    ParserState.nim_imports.update({"osproc", "os", "times", "posix", "streams"})
     decls = getattr(ParserState, "nim_top_decls", [])
     if not any("adascriptRun" in d for d in decls):
         decls.append(_SHELL_RUN_HELPER)
@@ -3543,6 +3564,14 @@ def to_nim(self, indent=0):
     # the capture forms go through adascriptRun instead.
     timeout_comment = ""
     run_timeout = f", {opts['timeout']}" if "timeout" in opts else ""
+    # stdin = expr: fed to the child. The runner takes it after the timeout,
+    # so a stdin without a timeout still has to name the default.
+    if "stdin" in opts:
+        if not (target_name or target_tuple):
+            raise SyntaxError(
+                "shell(stdin = ...) needs a form that captures — "
+                "`let r = shell(stdin = x): cmd`, a tuple, or shellLines:")
+        run_timeout = f"{run_timeout or ', 0'}, {opts['stdin']}"
 
     import re as _re_env
     has_env_vars = bool(_re_env.search(r'__bash_env_\w+__', cmd))

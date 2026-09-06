@@ -42,4 +42,13 @@ print("{!x}: ", r1.output.strip())
 let r2 = shell: printf '[%s]' {*argv}
 print("{*xs}:", r2.output.strip())
 
+print("=== stdin feeding ===")
+let text: str = "gamma\nalpha\nbeta\n"
+let sorted_r = shell(stdin = text): sort
+print("fed three lines, sorted:", sorted_r.output.strip().replace("\n", ","))
+let counted: []str = shellLines(stdin = text): wc -l
+print("shellLines with stdin:", counted[0].strip())
+let no_input = shell: cat
+print("a capture of a stdin-reading command ends, code:", no_input.code)
+
 print("done — all expects matched, bc was driven successfully")

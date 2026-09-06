@@ -44,6 +44,7 @@
 | Shell interpolation, quoted | `{!path}` — one argument whatever it holds |
 | Shell interpolation, list | `{*args}` — each element quoted, space-joined |
 | Shell, fail on non-zero | `shell(check = true): cmd` |
+| Shell, feed stdin | `shell(stdin = text): cmd` (capturing forms) |
 | Shell options | `shell(cwd = "...", timeout = ms): cmd` |
 | Shell block / PTY automation | `shell:` + lines / + `send()`/`expect()` |
 | CLI args | `$0`, `$1`…`$9`, `$@`, `$#` |
