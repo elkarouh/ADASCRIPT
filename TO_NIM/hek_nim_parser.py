@@ -3815,8 +3815,12 @@ proc adascriptExecReplace*(cmd: string,
   ## The other forms fork a child and wait; this one hands the process over,
   ## so the command inherits the pid, the terminal and the parent's place in
   ## whatever launched it. A wrapper that ends in one costs no extra process.
-  var argv = @[(if shellPath.len > 0: shellPath else: "/bin/sh"), "-c", cmd]
+  let prog = (if shellPath.len > 0: shellPath else: "/bin/sh")
+  var argv = @[prog, "-c", cmd]
   var cargs = allocCStringArray(argv)
+  # Explicit .cstring: Nim warns on an implicit conversion from a non-const
+  # location and says it will become an error. `prog` outlives the call --
+  # exec does not return -- so the pointer stays valid.
   if env.len > 0:
     var pairs: seq[string] = @[]
     for k, v in envPairs():
@@ -3824,9 +3828,9 @@ proc adascriptExecReplace*(cmd: string,
     for k, v in env.pairs:
       pairs.add(k & "=" & v)
     var cenv = allocCStringArray(pairs)
-    discard execve(argv[0], cargs, cenv)
+    discard execve(prog.cstring, cargs, cenv)
   else:
-    discard execv(argv[0], cargs)
+    discard execv(prog.cstring, cargs)
   # Only reached if exec failed.
   stderr.writeLine("exec failed: " & cmd)
   quit(127)\

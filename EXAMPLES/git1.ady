@@ -188,7 +188,13 @@ def cmd_ls(argv: []str):
             let file: str = os.path.join(d, name)
             var status: str = ""
             if not -e file: status = " [file missing]"
-            let r = shell: GIT_DIR={!gitdir} git log -1 --format='%cr' 2>/dev/null
+            # `env` rather than `GIT_DIR=...` in the command, for the reason
+            # g() gives: the value crosses into the child's environment, which
+            # the language can hand over without the shell parsing it.  The
+            # capturing form keeps stderr in r.stderr, so there is nothing
+            # here for a 2>/dev/null to suppress either.
+            let one_env: {str}str = {"GIT_DIR": gitdir}
+            let r = shell(env = one_env): git log -1 --format='%cr'
             var when: str = ""
             if r.output.strip()'Length > 0:
                 when = f"  (last commit {r.output.strip()})"
@@ -281,7 +287,10 @@ def cmd_mv(old: str, new: str):
     shell: mkdir -p -- {!os.path.join(G1_DIR, CONTAINER)}
     shell: mv -- {!os.path.join(old_dir, old_git)} {!new_repo}
     write_exclude(G1_BASE, new_repo)
-    shell: cd {!G1_DIR} && GIT_DIR={!G1_GITDIR} GIT_WORK_TREE=. git rm --quiet --cached --ignore-unmatch -- {!old_base}
+    # split_target(new) above already pointed G1_DIR and G1_GITDIR at the new
+    # repo, which is what g() runs against -- so this is g(), not a command
+    # that has to spell out the directory change and the two variables itself.
+    g(["rm", "--quiet", "--cached", "--ignore-unmatch", "--", old_base])
     g(["add", "--", G1_BASE])
     g(["commit", "--quiet", "-m", f"rename {old_base} -> {G1_BASE}"])
 
@@ -348,9 +357,10 @@ Tip: for a long session on one file, alias it:  alias gg='{PROG} notes.txt'"""
 
 def cmd_help():
     let pager: str = $PAGER if $PAGER else "less"
-    let r = shell: command -v {!pager} 2>&1
+    # have() asks PATH directly; `command -v` cost a shell and a process to
+    # answer the same question, and made the caller know that 127 means no.
     let is_tty: int = shell: test -t 1
-    if is_tty == 0 and r.code == 0:
+    if is_tty == 0 and have(pager):
         let tmp: str = "/tmp/git1-help.txt"
         writeFile(tmp, usage() + "\n")
         let shown: int = shell: {!pager} {!tmp}
