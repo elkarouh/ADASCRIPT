@@ -1877,6 +1877,23 @@ def _ensure_shell_timeout_helper():
         ParserState.py_top_decls = decls
 
 
+
+def _py_shell_literal(cmd, needs_fstring):
+    """Wrap a shell body as a Python string literal.
+
+    `\"\"\"` is the usual delimiter, since a shell body is full of single
+    quotes.  A body that ends in `"` or contains `\"\"\"` runs into it --
+    `echo "end"` would emit four quotes in a row and not parse -- so those
+    fall back to a `"`-delimited literal with backslashes and quotes escaped,
+    the same guard the Nim backend applies.
+    """
+    prefix = "f" if needs_fstring else ""
+    if '"""' not in cmd and not cmd.endswith('"'):
+        return f'{prefix}"""{cmd}"""'
+    escaped = cmd.replace("\\", "\\\\").replace('"', '\\"')
+    return f'{prefix}"{escaped}"'
+
+
 def _apply_shell_quoting(cmd, wrapper, splat_wrapper=None):
     """Rewrite the quoting sigils in a shell body.
 
@@ -2103,8 +2120,7 @@ def to_py(self, indent=0):
     if has_target and not target_tuple:
         ParserState.nim_imports.add("import types as _types")
 
-    q = '"""'
-    cmd_str = f"f{q}{cmd}{q}" if needs_fstring else f"{q}{cmd}{q}"
+    cmd_str = _py_shell_literal(cmd, needs_fstring)
 
     run_kwargs = ["shell=True"]
     if has_target:

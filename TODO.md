@@ -22,7 +22,7 @@
 - [x] `shellLines` yields one more element on Nim than on Python (see [Bug 15](#bug-15--shelllines-differs-by-a-trailing-empty-element))
 - [x] `shell(timeout = ms)` is silently ignored on Nim (see [Bug 16](#bug-16--shelltimeout--ms-is-ignored-on-nim))
 - [x] `shell:` had no way to interpolate an argument *list* (see [Splat interpolation](#splat-interpolation-args--done))
-- [ ] py2py: a shell body ending in `"` collides with the `"""` wrapper (see [Bug 17](#bug-17--py2py-mis-quotes-a-shell-body-ending-in-a-double-quote))
+- [x] py2py: a shell body ending in `"` collides with the `"""` wrapper (see [Bug 17](#bug-17--py2py-mis-quotes-a-shell-body-ending-in-a-double-quote))
 
 ## Shell improvements
 
@@ -954,6 +954,23 @@ Predates the quoting sigils — it reproduces with them stashed — and the Nim
 backend already guards against it: `_quote()` there switches to an escaped
 single-quoted form when the body would collide with its delimiter.
 
-**Fix sketch:** give the Python emitter the same guard.  When the body ends
-with `"` or contains `"""`, emit an escaped `"`-delimited literal instead of
-the triple-quoted one, keeping the `f` prefix where interpolation is needed.
+**Fixed.** `_py_shell_literal()` gives the Python emitter the same guard:
+when the body ends with `"` or contains `"""`, it emits a `"`-delimited
+literal with backslashes and quotes escaped, keeping the `f` prefix where
+interpolation is needed.
+
+```python
+_subprocess.run("echo \"end\"", shell=True)
+```
+
+Checked across every shell form — bare, capture, `shellLines:`, and with
+interpolation — and against a body that is genuinely malformed
+(`shell: echo {!x}"`), where both backends now emit valid code and the shell
+reports the same unterminated-quote error, which is the right outcome.
+
+**An aside worth knowing:** the two delimiters treat backslashes
+differently. Nim's `"""` is raw, so `shell: printf 'a\nb\n'` passes `\n`
+through for printf to interpret; Python's `"""` is not, so the same body
+reaches the shell with a real newline. Both happen to print the same thing
+here, but the two are not the same command. The escaped fallback this fix
+adds is the raw-faithful one.
