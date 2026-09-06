@@ -258,13 +258,9 @@ class RepoDir:
 
     def names(self) -> []str:
         """The tracked file names here, in order."""
-        var out: []str = []
-        if not -d self.path: return out
+        if not -d self.path: return []
         let entries = shellLines: ls -1a {!self.path}
-        for name in sorted(entries):
-            if self.is_repo(name):
-                out.append(name)
-        out
+        [name for name in sorted(entries) if self.is_repo(name)]
 
     def ls(self):
         """List the tracked files here, newest commit first-hand."""
