@@ -4,8 +4,6 @@
 
 Each tracked file gets its own private git repo, ".git1/<name>",
 grouped under a single ".git1" container in the file's directory.
-
-Concept from kotodharma/single-file-git.
 """
 
 nimport os, strutils
