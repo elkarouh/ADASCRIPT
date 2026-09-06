@@ -1143,10 +1143,7 @@ transpiler hoists them to temp variables automatically:
 let name = "world"
 let result = shell: echo hello {name}
 
-def Q(s: str) -> str:
-    "'" + s.replace("'", "'\\''") + "'"
-
-shell: mkdir -p -- {Q(os.path.join(d, "subdir"))}
+shell: mkdir -p -- {!os.path.join(d, "subdir")}
 ```
 
 ### Output as lines

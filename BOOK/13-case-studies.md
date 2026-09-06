@@ -281,13 +281,16 @@ The shell half of Adascript covers most of what a bash script does:
 Adascript allows function calls directly inside `shell:` interpolation:
 
 ```python
-shell: mkdir -p -- {Q(os.path.join(G1_DIR, CONTAINER))}
-shell: rm -rf -- {Q(os.path.join(G1_DIR, G1_GITDIR))}
+shell: mkdir -p -- {!os.path.join(G1_DIR, CONTAINER)}
+shell: rm -rf -- {!os.path.join(G1_DIR, G1_GITDIR)}
 ```
 
 The transpiler hoists complex `{expr}` interpolations to temp variables
-automatically — so you write `{Q(os.path.join(...))}` and the generated Nim
-pre-binds `let shArg0 = joinPath(...)` before the command.
+automatically — so you write `{!os.path.join(...)}` and the generated Nim
+pre-binds `let shArg0 = joinPath(...)` before the command.  The `!` asks for
+the value to be quoted as one argument, which is what a path assembled at
+run time needs; an earlier draft of this file carried a hand-written `Q()`
+quoter for the job, which is exactly what the sigil replaced.
 
 **Compiled binary.** `git1.sh` starts a new bash process on every invocation;
 `git1.ady` compiles to a native binary (~100 KB).  For a tool that runs

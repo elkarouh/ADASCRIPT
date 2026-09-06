@@ -1237,7 +1237,7 @@ hoists them to temp variables automatically:
 let branch = "main"
 let result = shell: git log --oneline {branch}
 
-shell: mkdir -p -- {Q(os.path.join(d, "subdir"))}
+shell: mkdir -p -- {!os.path.join(d, "subdir")}
 ```
 
 ### Options

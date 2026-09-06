@@ -58,10 +58,7 @@ automatically hoists them to temp variables in the Nim output:
 let branch = "main"
 let result = shell: git log --oneline {branch}
 
-def Q(s: str) -> str:
-    "'" + s.replace("'", "'\\''") + "'"
-
-shell: mkdir -p -- {Q(os.path.join(d, "subdir"))}
+shell: mkdir -p -- {!os.path.join(d, "subdir")}
 ```
 
 Options control working directory and timeout:

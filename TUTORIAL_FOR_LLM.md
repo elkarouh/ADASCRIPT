@@ -441,7 +441,7 @@ for line in lines:
 # Variable interpolation — simple names and function calls
 let branch = "main"
 let r = shell: git log --oneline {branch}
-shell: mkdir -p -- {Q(os.path.join(d, "subdir"))}
+shell: mkdir -p -- {!os.path.join(d, "subdir")}
 
 # Options
 let r = shell(cwd = "/tmp"): pwd
