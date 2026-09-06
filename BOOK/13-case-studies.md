@@ -160,10 +160,48 @@ many. Putting them on the thing they are actually about leaves both classes
 with one job, and `main()` reads as the two of them:
 
 ```python
-when "init":  var t: Target = Target(argv[1]); t.track()
-when "ls":    var rd: RepoDir = RepoDir(where); rd.ls()
-when "each":  var here: RepoDir = RepoDir("."); here.each(argv[1:])
+def main():
+    if $# == 0:
+        stderr.writeLine(usage())
+        quit(2)                      # 2 = invoked wrongly; die() uses 1
+
+    let argv: []str = $@
+
+    # "--" means: no subcommand here, the next word is a file name.
+    if argv[0] == "--":
+        if argv'Length < 2: die("expected a file name after --")
+        run_on_file(argv[1:])
+        return
+
+    if run_subcommand(argv): return
+
+    run_on_file(argv)
 ```
+
+Three cases, one line each, because the whole function answers one question:
+**is the first word a subcommand or a file name?** It is usually a file name
+-- `git1 notes.txt log` -- so an unrecognised word is not an error but the
+common case, and `run_subcommand` says so by returning False:
+
+```python
+def run_subcommand(argv: []str) -> bool:
+    let rest: []str = argv[1:]
+    case argv[0]:
+        when "init":      cmd_init(rest);  return True
+        when "ls":        cmd_ls(rest);    return True
+        when "each":      cmd_each(rest);  return True
+        ...
+        when others:      return False
+```
+
+An earlier version nested that `case` inside the `else` of the `--` test and
+let the default path fall out below both, so reading it meant tracing
+`when others: pass` out through two levels to find where control landed. The
+boolean says it instead.
+
+The `cmd_*` functions are one layer with one job: validate argv and build the
+object. `main` decides *which*, `cmd_*` reads the command line, and the
+classes touch the filesystem.
 
 Earlier versions of this file kept `dir`, `base` and `gitdir` as
 module-level `var`s that a `split_target` procedure assigned and every

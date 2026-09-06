@@ -106,6 +106,18 @@ assert leaf.upper() == "/TMP/A/B"        # still a string
 assert (-d root)                          # and a file test takes one
 assert (root / "no-such-thing")'Length > 0
 
+# An inline `when` branch that already returns must not be turned into an
+# implicit return: `f(x); return True` has its value in the *last* statement,
+# and marking the head both drops the real return and returns the wrong thing.
+def noop():
+    pass
+def dispatch(word: str) -> bool:
+    case word:
+        when "go":    noop(); return True
+        when "stop":  noop(); return True
+        when others:  return False
+assert dispatch("go") and dispatch("stop") and not dispatch("other")
+
 # case with inline when clauses
 let y: int = 2
 case y:

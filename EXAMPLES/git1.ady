@@ -393,47 +393,82 @@ def cmd_help():
 
 # --- dispatch ---------------------------------------------------------------
 
+def cmd_init(argv: []str):
+    """`init <file>`"""
+    if argv'Length < 1: die(f"usage: {PROG} init <file>")
+    var t: Target = Target(argv[0])
+    t.track()
+
+def cmd_ls(argv: []str):
+    """`ls [dir]` — the directory defaults to here."""
+    let where: str = argv[0] if argv'Length >= 1 else "."
+    var rd: RepoDir = RepoDir(where)
+    rd.ls()
+
+def cmd_mv(argv: []str):
+    """`mv <old> <new>`"""
+    if argv'Length != 2: die(f"usage: {PROG} mv <old> <new>")
+    var t: Target = Target(argv[0])
+    t.move_to(argv[1])
+
+def cmd_each(argv: []str):
+    """`each <git args...>` — in every repo here."""
+    if argv'Length == 0: die(f"usage: {PROG} each <git command> [args...]")
+    var here: RepoDir = RepoDir(".")
+    here.each(argv)
+
+# --- dispatch ---------------------------------------------------------------
+#
+# One question decides everything: is the first word a subcommand or a file
+# name?  It is usually a file name -- `git1 notes.txt log` -- so an
+# unrecognised word is not an error, it is the common case.
+
+def run_subcommand(argv: []str) -> bool:
+    """Run argv as a subcommand. False when the first word is not one.
+
+    Every branch returns True; `when others` returns False, which is what
+    sends main() on to treat the word as a file name.
+    """
+    let rest: []str = argv[1:]
+    case argv[0]:
+        when "init":      cmd_init(rest);  return True
+        when "ls":        cmd_ls(rest);    return True
+        when "rm":        cmd_rm(rest);    return True
+        when "mv":        cmd_mv(rest);    return True
+        when "adopt":     cmd_adopt(rest); return True
+        when "each":      cmd_each(rest);  return True
+        when "help" | "-h" | "--help": cmd_help(); return True
+        when "--version": print f"{PROG} {VERSION}"; return True
+        when others:      return False
+
+def run_on_file(argv: []str):
+    """argv[0] is a tracked file; everything after it is for git.
+
+    Does not return: git1 becomes git, so the exit status is git's own.
+    """
+    var t: Target = Target(argv[0])
+    t.require()
+    var args: []str = argv[1:]
+    if args'Length == 0:
+        args = ["status", "--short", "--branch"]
+    t.git_exec(args)
+
 def main():
     if $# == 0:
         stderr.writeLine(usage())
-        quit(2)
+        quit(2)                      # 2 = invoked wrongly; die() uses 1
 
-    var argv: []str = $@
+    let argv: []str = $@
+
+    # "--" means: no subcommand here, the next word is a file name. It is how
+    # you reach a file that happens to be called "ls" or "--version".
     if argv[0] == "--":
-        argv = argv[1:]
-        if argv'Length == 0: die("expected a file name after --")
-    else:
-        case argv[0]:
-            when "init":
-                if argv'Length < 2: die(f"usage: {PROG} init <file>")
-                var t: Target = Target(argv[1])
-                t.track()
-                return
-            when "ls":
-                let where: str = argv[1] if argv'Length >= 2 else "."
-                var rd: RepoDir = RepoDir(where)
-                rd.ls()
-                return
-            when "rm":       cmd_rm(argv[1:]); return
-            when "mv":
-                if argv'Length != 3: die(f"usage: {PROG} mv <old> <new>")
-                var mt: Target = Target(argv[1])
-                mt.move_to(argv[2])
-                return
-            when "adopt":    cmd_adopt(argv[1:]); return
-            when "each":
-                if argv'Length < 2: die(f"usage: {PROG} each <git command> [args...]")
-                var here: RepoDir = RepoDir(".")
-                here.each(argv[1:])
-                return
-            when "help" | "-h" | "--help": cmd_help(); return
-            when "--version": print f"{PROG} {VERSION}"; return
-            when others: pass
+        if argv'Length < 2: die("expected a file name after --")
+        run_on_file(argv[1:])
+        return
 
-    let target: str = argv[0]
-    var t: Target = Target(target)
-    t.require()
-    let args: []str = argv[1:] if argv'Length > 1 else ["status", "--short", "--branch"]
-    t.git_exec(args)
+    if run_subcommand(argv): return
+
+    run_on_file(argv)
 
 main()

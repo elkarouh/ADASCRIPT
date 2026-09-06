@@ -1099,6 +1099,23 @@ def _branch_blocks(node, out):
             _branch_blocks(child, out)
 
 
+def _stmt_line_has_more(stmt):
+    """True when a stmt_line holds several `;`-separated statements."""
+    from hek_tokenize import RichNL
+    for node in getattr(stmt, "nodes", [])[1:]:
+        if isinstance(node, RichNL):
+            continue
+        if not (hasattr(node, "nodes") and node.nodes):
+            continue
+        first = node.nodes[0]
+        if len(node.nodes) == 1 and isinstance(first, RichNL):
+            continue
+        for seq in node.nodes:
+            if hasattr(seq, "nodes") and len(seq.nodes) >= 1:
+                return True
+    return False
+
+
 def _mark_implicit_returns(stmt, depth=0):
     """Mark the statements whose value is the function's implicit return.
 
@@ -1117,7 +1134,12 @@ def _mark_implicit_returns(stmt, depth=0):
     if tname == "stmt_line":
         inner = stmt.nodes[0] if getattr(stmt, "nodes", None) else None
         if inner is not None and type(inner).__name__ == "expressions":
-            _stmt.RETURN_NODES.add(id(stmt))
+            # Only a line holding a single statement. `f(x); return True` --
+            # an inline `when` branch that already returns -- has its value in
+            # the *last* statement, not the first, so prefixing `return` to
+            # the head both drops the real return and returns the wrong thing.
+            if not _stmt_line_has_more(stmt):
+                _stmt.RETURN_NODES.add(id(stmt))
         return
     if tname in ("if_stmt", "case_stmt", "match_stmt"):
         # A case/match in tail position returns whichever branch runs, exactly
