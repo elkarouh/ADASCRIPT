@@ -17,6 +17,10 @@
 - [x] both backends re-indent the inside of a multi-line string, changing its value (see [Bug 12](#bug-12--a-multi-line-string-is-re-indented-changing-its-value))
 - [x] `shell:` could not both inherit the terminal and return an exit code (see [shell: with terminal passthrough](#shell-with-terminal-passthrough-and-exit-code--done))
 - [x] `shell:` interpolation did not quote, so every path needed a helper (see [Safe shell interpolation](#safe-shell-interpolation-auto-quoting--done))
+- [ ] shell tuple capture: the slots mean different things on each backend (see [Bug 13](#bug-13--shell-tuple-capture-slots-disagree-between-backends))
+- [ ] `r.stderr` is documented, works on Python, and does not exist on Nim (see [Bug 14](#bug-14--rstderr-does-not-exist-on-the-nim-backend))
+- [ ] `shellLines` yields one more element on Nim than on Python (see [Bug 15](#bug-15--shelllines-differs-by-a-trailing-empty-element))
+- [ ] `shell(timeout = ms)` is silently ignored on Nim (see [Bug 16](#bug-16--shelltimeout--ms-is-ignored-on-nim))
 
 ## Shell improvements
 
@@ -780,3 +784,95 @@ lines that must be indented.
 
 `git1 help` is now byte-identical on the two backends, and matches the
 layout written in `usage()`.
+
+---
+
+### Bug 13 — shell tuple capture slots disagree between backends
+
+The same tuple means different things depending on the backend, with no
+error either way.
+
+**Reproduction:**
+```python
+let (o, c) = shell: sh -c 'echo hi; exit 7'
+print "second slot:", c
+```
+
+```
+Nim    ->  7          (the exit code)
+Python ->             (stderr, empty)
+```
+
+Nim fills the slots `(stdout, code, "")`; Python fills them
+`(stdout, stderr, returncode)`.  With three variables it is worse — on Nim
+the code lands in the second name and the third is a bare `""` — and it only
+shows up at all if the third variable is used somewhere that type-checks.
+
+`README.md` documents Nim's order: `let (out, code) = shell: cmd`.
+
+**Fix sketch:** make Python follow the documented order — slot 0 stdout,
+slot 1 the exit code, slot 2 an empty string kept for compatibility.  A real
+third slot has to wait for bug 14, since Nim has no separate stderr to put
+there.
+
+---
+
+### Bug 14 — `r.stderr` does not exist on the Nim backend
+
+The record form is documented as carrying `.output`, `.stderr` and `.code`,
+and does on Python.  On Nim the field is simply absent:
+
+```python
+let r = shell: sh -c 'echo out; echo err >&2'
+print r.stderr        # Nim: Error: undeclared field: 'stderr'
+```
+
+The Nim emitter builds `(output: tmp[0], code: tmp[1])` — two fields — and
+`execCmdEx` merges the child's stderr into its stdout anyway, so there was
+never a separate stream to expose.
+
+**Fix sketch:** two steps, and the first is worth doing on its own.
+
+1. Emit a `stderr` field on the Nim record so the same source compiles on
+   both backends. It holds `""` until step 2, which is a documented
+   limitation rather than a silent one.
+2. Capture the two streams separately. `execCmdEx` cannot: its default
+   options include `poStdErrToStdOut`. Doing it properly means
+   `startProcess` with both pipes, drained so a child that fills one buffer
+   cannot deadlock the reader.
+
+---
+
+### Bug 15 — `shellLines` differs by a trailing empty element
+
+```python
+let ls = shellLines: printf 'a\nb\n'
+print ls'Length          # Nim: 3    Python: 2
+```
+
+Nim's `splitLines` keeps the empty string after a trailing newline; Python's
+`splitlines` drops it.  Command output almost always ends in a newline, so
+almost every `shellLines` result is one longer on Nim, and any `'Length`,
+index or loop over it disagrees between the backends.
+
+**Fix sketch:** drop one trailing empty element on the Nim side —
+`.splitLines()` then discard a final `""` — which matches both Python and
+what the caller means by "the lines this command printed".
+
+---
+
+### Bug 16 — `shell(timeout = ms)` is ignored on Nim
+
+```python
+let r = shell(timeout = 500): sleep 3; echo finished
+```
+
+Python raises `TimeoutExpired` after half a second.  Nim runs the command to
+completion — the emitter appends `# timeout: 500ms (execCmdEx has no
+timeout)` and carries on, so the option reads as supported and does nothing.
+
+**Fix sketch:** `execCmdEx` has no timeout, so honouring it needs
+`startProcess` plus a wait loop on `peekExitCode`, killing the process when
+the deadline passes — the same plumbing bug 14 needs, which argues for doing
+them together.  Until then the emitter should at least warn on stderr at
+transpile time rather than leaving a comment in the output.
