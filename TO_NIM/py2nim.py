@@ -1460,7 +1460,10 @@ def main(argv=None):
             [os.path.join(_root_dir_main, f) for f in os.listdir(_root_dir_main)
              if f.endswith(".py") and os.path.isfile(os.path.join(_root_dir_main, f))]
         )
-        for _extra_dir in ("HPARSEC", "ADASCRIPT_GRAMMAR"):
+        # TO_PYTHON is in here because the Nim shell emitter borrows its
+        # grammar-neutral helpers (_parse_shell_stmt, _apply_shell_quoting);
+        # without it, editing those leaves a stale .nim behind.
+        for _extra_dir in ("HPARSEC", "ADASCRIPT_GRAMMAR", "TO_PYTHON"):
             _ed = os.path.join(_root_dir_main, _extra_dir)
             if os.path.isdir(_ed):
                 _transpiler_py_files += [
