@@ -1257,6 +1257,30 @@ Only stdout is streamed and there is no exit code — a command whose status
 matters wants a capturing form. Interpolation works as usual, `{!x}` and
 `{*xs}` included.
 
+### Handing the process over
+
+`shellExec:` replaces the running process with the command. It does not
+return: nothing written after it can run, and the command's own exit status
+becomes the script's.
+
+```python
+shellExec: git {*args}          # this script *becomes* git
+print "never reached"
+```
+
+That is what a wrapper script wants — one less process in the tree, no
+status to forward by hand, and signals going straight to the real command.
+`cwd` and `env` apply; `timeout`, `stdin` and `check` do not, since there is
+no child to wait for or feed. Both backends exec `/bin/sh -c`: Nim through
+`execv` / `execve`, Python through `os.execv` / `os.execve`.
+
+Compare with the capturing form, which does return:
+
+```python
+let code: int = shell: git {*args}    # runs git, then carries on
+quit(code)                            # forwarding the status by hand
+```
+
 ### Options
 
 ```python

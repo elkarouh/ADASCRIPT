@@ -3538,6 +3538,42 @@ def to_nim(self, indent=0):
     return f"{ind}for {target} in adascriptShellIter({cmd_str}):\n{body}"
 
 
+
+_SHELL_REPLACE_HELPER = """\
+proc adascriptExecReplace*(cmd: string,
+                          env: Table[string, string] = initTable[string, string]()) =
+  ## Replace this process with cmd. Does not return.
+  ##
+  ## The other forms fork a child and wait; this one hands the process over,
+  ## so the command inherits the pid, the terminal and the parent's place in
+  ## whatever launched it. A wrapper that ends in one costs no extra process.
+  var argv = @["/bin/sh", "-c", cmd]
+  var cargs = allocCStringArray(argv)
+  if env.len > 0:
+    var pairs: seq[string] = @[]
+    for k, v in envPairs():
+      pairs.add(k & "=" & v)
+    for k, v in env.pairs:
+      pairs.add(k & "=" & v)
+    var cenv = allocCStringArray(pairs)
+    discard execve("/bin/sh", cargs, cenv)
+  else:
+    discard execv("/bin/sh", cargs)
+  # Only reached if exec failed.
+  stderr.writeLine("exec failed: " & cmd)
+  quit(127)\
+"""
+
+
+def _ensure_shell_replace_helper():
+    """Inject the exec helper the first time shellExec is used."""
+    ParserState.nim_imports.update({"posix", "os", "tables"})
+    decls = getattr(ParserState, "nim_top_decls", [])
+    if not any("adascriptExecReplace" in d for d in decls):
+        decls.append(_SHELL_REPLACE_HELPER)
+        ParserState.nim_top_decls = decls
+
+
 @method(shell_stmt)
 def to_nim(self, indent=0):
     """shell_stmt: [decl_keyword IDENTIFIER '='] ('shell'|'shellLines') [shell_opts] ':' cmd+
@@ -3746,6 +3782,11 @@ def to_nim(self, indent=0):
         if checked:
             lines.append(f"{ind}adascriptCheck({cmd_ref}, {code_expr})")
 
+    if kw == "shellExec" and (target_name or target_tuple):
+        raise SyntaxError(
+            "shellExec: replaces the process and never returns, so it "
+            "cannot be assigned — write it as a statement")
+
     if target_tuple:
         # let (out, code) = shell: cmd            — 2-element
         # let (out, code, err) = shell: cmd       — 3-element
@@ -3794,6 +3835,11 @@ def to_nim(self, indent=0):
             # field access like result.output -> result.output.len > 0
             ParserState.symbol_table.add(target_name, "shell_result", nim_kw)
             _check(f"{target_name}.code")
+    elif kw == "shellExec":
+        # Replaces the process: nothing after it runs.
+        _ensure_shell_replace_helper()
+        _env_arg = f", {run_env}" if run_env else ""
+        lines.append(f"{ind}adascriptExecReplace({cmd_ref}{_env_arg})")
     elif kw == "shellLines":
         _ensure_shell_lines_helper()
         _ensure_shell_run_helper()

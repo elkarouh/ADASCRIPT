@@ -1154,3 +1154,77 @@ directory whose name contains a space.
 
 Found while converting `EXAMPLES/git1.ady` to the `env` option, which is why
 that file still spells the directory change itself.
+
+---
+
+### Exec form `shellExec` — DONE
+
+Every other form forks a child and waits.  A wrapper script — `git1` being
+the case in point — spends its whole life doing that: it forks the real
+command, sits there holding a pid, then forwards the child's exit status by
+hand and hopes signals land in the right place.
+
+```python
+shellExec: git {*args}          # this script *becomes* git
+print "never reached"
+```
+
+`shellExec:` replaces the running process.  It does not return, the
+command's own exit status becomes the script's, and the command inherits the
+pid, the terminal and the parent's place in whatever launched it.
+
+Compare with what it replaces:
+
+```python
+let code: int = shell: git {*args}
+quit(code)
+```
+
+Both backends exec `/bin/sh -c`: Nim through `execv` / `execve`, Python
+through `os.execv` / `os.execve`.  `cwd` and `env` apply; `timeout`, `stdin`
+and `check` do not, because there is no child to wait for or feed.
+Interpolation works as usual, `{!x}` and `{*xs}` included.
+
+`cwd` nearly became a backend divergence.  Nim implements it by prefixing
+the command with `cd <dir> &&`, which the exec path inherited for free;
+Python passes a real `cwd=` argument to `subprocess`, and `os.execv` has no
+such argument, so the option was silently dropped.  The same source ran in
+two different directories.  The Python helper now takes `_cwd` and calls
+`os.chdir` before the exec.
+
+Verified on both backends: `shellExec: exit 42` gives the script exit
+status 42, nothing written after the statement runs, and `env` reaches the
+command.
+
+**A false alarm worth recording.** The splat looked broken at first —
+`shellExec(env = e): sh -c 'echo $MSG; printf "[%s]\n" {*args}'` printed
+`[hello]` and `[two]` rather than `[hello]` and `[two words]`.  The splat
+was fine; the test was not.  The inner `sh -c '…'` consumed a level of
+quoting, so `'two words'` arrived at the inner shell already unwrapped.
+Dropping the nested shell — `shellExec: printf '[%s]\n' {*args}` — prints
+the two arguments correctly on both backends.  A quoting test that itself
+nests shells cannot tell you which layer ate the quotes.
+
+---
+
+### Bug 19 — py2nim's cache does not watch TO_PYTHON
+
+The Nim shell emitter borrows the grammar-neutral halves of the Python
+backend — `_parse_shell_stmt`, `_apply_shell_quoting` — but py2nim's
+staleness check only hashed `HPARSEC` and `ADASCRIPT_GRAMMAR` alongside
+`TO_NIM`.  Editing one of those shared helpers therefore left the cached
+`.nim` in place, and the run used the *old* translation.
+
+This is the worst shape a caching bug can take: the edit is correct, the
+test fails, and nothing points at the cache.  It cost a debugging session on
+`shellExec` — the fix that made the statement stop emitting `execCmd` was
+already applied and appeared to do nothing.
+
+**Fixed.** `TO_PYTHON` joined the watched directories:
+
+```python
+# TO_PYTHON is in here because the Nim shell emitter borrows its
+# grammar-neutral helpers (_parse_shell_stmt, _apply_shell_quoting);
+# without it, editing those leaves a stale .nim behind.
+for _extra_dir in ("HPARSEC", "ADASCRIPT_GRAMMAR", "TO_PYTHON"):
+```

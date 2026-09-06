@@ -68,3 +68,11 @@ for line in shellIter: printf '%s\n' {!word} plain
     print("streamed with quoting: [" + line + "]")
 
 print("done — all expects matched, bc was driven successfully")
+
+print("=== exec form (shellExec) ===")
+# shellExec replaces this process: it never returns, the command's own
+# exit status becomes the script's, and nothing below it can run.  That is
+# why this section has to be last.
+print("handing the process over — nothing after this line runs")
+shellExec: printf 'replaced by exec: [%s]\n' {*argv}
+print("BUG: shellExec returned instead of replacing the process")

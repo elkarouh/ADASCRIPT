@@ -1895,6 +1895,28 @@ def _ensure_shell_check_helper():
         ParserState.py_top_decls = decls
 
 
+
+_SHELL_REPLACE_HELPER = """\
+def _shell_exec(_cmd, _env=None, _cwd=None):
+    \"\"\"Replace this process with _cmd. Does not return.\"\"\"
+    if _cwd is not None:
+        os.chdir(_cwd)
+    if _env is None:
+        os.execv("/bin/sh", ["/bin/sh", "-c", _cmd])
+    else:
+        os.execve("/bin/sh", ["/bin/sh", "-c", _cmd], _env)\
+"""
+
+
+def _ensure_shell_replace_helper():
+    """Inject the exec helper the first time shellExec is used."""
+    ParserState.nim_imports.add("import os")
+    decls = getattr(ParserState, "py_top_decls", [])
+    if not any("_shell_exec" in d for d in decls):
+        decls.append(_SHELL_REPLACE_HELPER)
+        ParserState.py_top_decls = decls
+
+
 def _py_shell_literal(cmd, needs_fstring):
     """Wrap a shell body as a Python string literal.
 
@@ -2079,7 +2101,7 @@ def _parse_shell_stmt(node):
     kw_idx = -1
     for i, n in enumerate(nodes):
         val = getattr(n, "node", None)
-        if isinstance(val, str) and val in ("shell", "shellLines"):
+        if isinstance(val, str) and val in ("shell", "shellLines", "shellExec"):
             kw = val
             kw_idx = i
             break
@@ -2253,6 +2275,11 @@ def to_py(self, indent=0):
         _ensure_shell_timeout_helper()
         ParserState.nim_imports.add("import types as _types")
         runner = "_run_shell"
+    if kw == "shellExec" and (target_name or target_tuple):
+        raise SyntaxError(
+            "shellExec: replaces the process and never returns, so it "
+            "cannot be assigned — write it as a statement")
+
     lines = []
 
     # check = true: bind the command once, then abort if it failed.  The
@@ -2292,6 +2319,16 @@ def to_py(self, indent=0):
                      if "timeout" not in opts else
                      f"{ind}{target_name} = {runner}({cmd_ref}, {call_kwargs}).returncode")
         _check(target_name)
+    elif kw == "shellExec":
+        # Replaces the process: nothing after it runs.  There is no child to
+        # configure, so `timeout`, `stdin` and `check` are meaningless here --
+        # but `cwd` still is not: the Nim backend gets it for free from its
+        # `cd <dir> &&` prefix, so Python has to chdir before the exec or the
+        # same source means different things per backend.
+        _ensure_shell_replace_helper()
+        _env_arg = (", _env={**os.environ, **(" + opts["env"] + ")}") if "env" in opts else ""
+        _cwd_arg = f", _cwd={opts['cwd']}" if "cwd" in opts else ""
+        lines.append(f"{ind}_shell_exec({cmd_ref}{_env_arg}{_cwd_arg})")
     elif target_name:
         lines.append(f"{ind}_r = {runner}({cmd_ref}, {kwargs_str})")
         if kw == "shellLines":

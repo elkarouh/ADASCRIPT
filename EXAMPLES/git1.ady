@@ -103,6 +103,23 @@ def g(args: []str) -> int:
     let code: int = shell(cwd = G1_DIR, env = env): git {*args}
     code
 
+def g_exec(args: []str):
+    """Hand this process over to git. Does not return.
+
+    Same repo, same directory, same quoting as g() -- the difference is that
+    there is no coming back. The last thing main() does is run git and pass
+    its exit code on, and that is what exec is for: git1 *becomes* git rather
+    than sitting there as a parent whose only remaining job is to copy a
+    number. One less process in the tree, the exit status is git's by
+    construction, and Ctrl-C reaches git directly instead of arriving at a
+    wrapper that has to decide what to do about it.
+
+    Only the final dispatch can use this. Every other caller needs g(),
+    because they still have work to do once git returns.
+    """
+    let env: {str}str = {"GIT_DIR": G1_GITDIR, "GIT_WORK_TREE": "."}
+    shellExec(cwd = G1_DIR, env = env): git {*args}
+
 def g_lines(args: []str) -> []str:
     """Run git against the current file's repo. Returns what git printed.
 
@@ -375,6 +392,6 @@ def main():
     split_target(target)
     require_repo(target)
     let args: []str = argv[1:] if argv'Length > 1 else ["status", "--short", "--branch"]
-    quit(g(args))
+    g_exec(args)
 
 main()

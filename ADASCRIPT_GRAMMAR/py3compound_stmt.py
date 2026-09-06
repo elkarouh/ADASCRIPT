@@ -455,7 +455,7 @@ shell_opt = IDENTIFIER + iop("=") + expression
 shell_opts = LPAREN + shell_opt + (COMMA + shell_opt)[:] + RPAREN
 
 # Keyword — shellLines must come before shell to avoid prefix match
-shell_kw = literal("shellLines") | literal("shell")
+shell_kw = literal("shellLines") | literal("shellExec") | literal("shell")
 
 # Optional assignment target: let/var/const name [: type] =
 #   scalar form:  let result =  or  let result: []str =

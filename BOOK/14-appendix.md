@@ -47,6 +47,7 @@
 | Shell, feed stdin | `shell(stdin = text): cmd` (capturing forms) |
 | Shell, child environment | `shell(env = {"K": v}): cmd` — added, not replaced, any form |
 | Shell, streamed lines | `for line in shellIter: cmd` + body |
+| Shell, replace this process | `shellExec: cmd` — never returns, its status becomes ours |
 | Shell options | `shell(cwd = "...", timeout = ms): cmd` |
 | Shell block / PTY automation | `shell:` + lines / + `send()`/`expect()` |
 | CLI args | `$0`, `$1`…`$9`, `$@`, `$#` |

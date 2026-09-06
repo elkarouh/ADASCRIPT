@@ -194,6 +194,41 @@ string is the shell's syntax for setting a variable, while `env` is the
 language handing the child an environment.  Only the second can quote for
 you, and only the second is checkable by anything but the shell.
 
+### The last git call is different: `g_exec()`
+
+Most of the program's git calls have work waiting behind them — `cmd_ls`
+reads the log it just asked for, `cmd_adopt` checks whether the reset
+worked.  Those need `g()`.
+
+One does not.  The last line of `main()` is the passthrough: whatever the
+user typed after the file name is handed to git, and git1's only remaining
+job is to copy git's exit code into its own.  It used to say so:
+
+```python
+quit(g(args))
+```
+
+That works, and it costs a process.  git1 forks git, blocks until it
+finishes, reads a number, and exits with it — a parent standing around
+holding a pid for the sole purpose of relaying a status.  `shellExec:`
+removes the middle:
+
+```python
+def g_exec(args: []str):
+    let env: {str}str = {"GIT_DIR": G1_GITDIR, "GIT_WORK_TREE": "."}
+    shellExec(cwd = G1_DIR, env = env): git {*args}
+```
+
+The statement does not return.  git1 *becomes* git: same pid, same terminal,
+same place in whatever launched it.  The exit status is git's by
+construction rather than by forwarding, and Ctrl-C reaches git directly
+instead of arriving at a wrapper that then has to decide what to do about
+it.  This is what bash's `exec git "$@"` is for, and what every wrapper
+script written by someone who has been bitten ends in.
+
+The rule for which to reach for is simply whether there is anything left to
+do: `g()` when the program continues, `g_exec()` when it does not.
+
 ### Subcommand dispatch
 
 Bash dispatches with a `case` in `main()`:
