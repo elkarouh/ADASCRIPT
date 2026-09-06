@@ -83,20 +83,24 @@ def g(args: []str) -> int:
     G1_BASE and G1_GITDIR are globals, as in the bash original, so callers
     set them first -- cmd_each does it once per repo in its loop.
 
-    The three settings in the command are what make a per-file repo work:
-    cd into the file's own directory, name the private repo as GIT_DIR so
-    git stops searching upward for a .git, and declare that directory the
-    work tree.
+    The three settings are what make a per-file repo work: run in the file's
+    own directory, name the private repo as GIT_DIR so git stops searching
+    upward for a .git, and declare that directory the work tree. The first is
+    the `cwd` option; the other two go through `env`, which is where a value
+    crossing into the shell's own namespace belongs -- spelling them as
+    `GIT_DIR={!x}` in the command would work, but the shell would be parsing
+    what the language can hand over directly.
 
     `{*args}` quotes each argument and joins them, so
     g(["commit", "-m", "hello world"]) reaches git as three arguments and not
-    four. `{!x}` does the same for one value.
+    four.
 
     An int-typed target -- `let code: int = shell: ...` -- rather than a
     capturing one: git keeps the terminal, so its output, colours and pager
     reach the user directly, and the exit code still comes back.
     """
-    let code: int = shell: cd {!G1_DIR} && GIT_DIR={!G1_GITDIR} GIT_WORK_TREE=. git {*args}
+    let env: {str}str = {"GIT_DIR": G1_GITDIR, "GIT_WORK_TREE": "."}
+    let code: int = shell(cwd = G1_DIR, env = env): git {*args}
     code
 
 def g_lines(args: []str) -> []str:
@@ -108,7 +112,8 @@ def g_lines(args: []str) -> []str:
     terminal here, so this is not the one to use for anything the user is
     meant to watch.
     """
-    let lines = shellLines: cd {!G1_DIR} && GIT_DIR={!G1_GITDIR} GIT_WORK_TREE=. git {*args}
+    let env: {str}str = {"GIT_DIR": G1_GITDIR, "GIT_WORK_TREE": "."}
+    let lines = shellLines(cwd = G1_DIR, env = env): git {*args}
     lines
 
 def current_branch() -> str:

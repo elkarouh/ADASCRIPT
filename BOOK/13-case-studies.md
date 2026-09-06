@@ -105,7 +105,7 @@ as the reference recipe for CLI tools: a `Config` record, `$@` subcommand
 dispatch via `case`, `walkDir`-style scanning through `nimport os`, regex
 queries from Chapter 7.
 
-## 13.7 `git1.ady` — Adascript vs. bash, side by side (~375 vs. ~250 lines)
+## 13.7 `git1.ady` — Adascript vs. bash, side by side (~380 vs. ~250 lines)
 
 Every other program in this chapter was written as Adascript from the start.
 `git1.ady` is the opposite exercise: a translation of a **bash script**
@@ -170,19 +170,29 @@ g() {
 }
 ```
 
-The Adascript version is the same idea, and now the same length:
+The Adascript version says the same things one at a time:
 
 ```python
 def g(args: []str) -> int:
-    let code: int = shell: cd {!G1_DIR} && GIT_DIR={!G1_GITDIR} GIT_WORK_TREE=. git {*args}
+    let env: {str}str = {"GIT_DIR": G1_GITDIR, "GIT_WORK_TREE": "."}
+    let code: int = shell(cwd = G1_DIR, env = env): git {*args}
     code
 ```
 
-One line, like the bash.  `{!expr}` quotes an interpolated value and
-`{*args}` quotes each element of a list and joins them, which is what bash's
-`"$@"` does for free.  The `int` annotation on the target asks for git to
-keep the terminal — its output, colours and pager — while still returning its
-exit status.
+The bash line does four things at once — change directory, set two
+variables, run git with the arguments — and the shell parses all of it out
+of one string.  The Adascript version says each of them separately: `cwd`,
+`env`, and `{*args}`, which quotes each element of the list and joins them,
+which is what `"$@"` does for free.  The `int` annotation asks for git to
+keep the terminal — its output, colours and pager — while still returning
+its exit status.
+
+The first version of this file spelled the whole thing as command text,
+`cd {!G1_DIR} && GIT_DIR={!G1_GITDIR} GIT_WORK_TREE=. git {*args}`, which
+also works.  The difference is who parses it: `GIT_DIR=...` in a command
+string is the shell's syntax for setting a variable, while `env` is the
+language handing the child an environment.  Only the second can quote for
+you, and only the second is checkable by anything but the shell.
 
 ### Subcommand dispatch
 
@@ -281,16 +291,16 @@ whenever `n` is not a literal in 0..127, since Nim's own `quit` clamps at 127.
 
 | Metric | `git1.sh` | `git1.ady` |
 |--------|-----------|------------|
-| Lines | 246 | 375 |
+| Lines | 246 | 380 |
 | Shell plumbing overhead | 0 | 0 |
 | Type declarations | 0 | 0 (globals, no records) |
 | Runtime | bash interpreter | native binary (~100 KB) |
 | Subcommands | 8 | 9 (`adopt` has no bash counterpart) |
 
-Roughly 80 of the 129-line gap is `adopt` and the helpers it needed, a
+Roughly 80 of the 134-line gap is `adopt` and the helpers it needed, a
 subcommand the bash version never had, and another 40 is docstrings.  What
-is left — about 10 lines — is type annotations and the fact that
-`os.path.join(a, b)` is more characters than `$a/$b`.  The structure is
+is left — about 15 lines — is type annotations, the two `env` tables, and
+the fact that `os.path.join(a, b)` is more characters than `$a/$b`.  The structure is
 otherwise 1:1 — someone who reads the bash can read the Adascript, and
 vice versa.
 
