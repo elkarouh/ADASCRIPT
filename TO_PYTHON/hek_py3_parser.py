@@ -62,7 +62,12 @@ def to_py(self, indent=0):
                         except TypeError:
                             raw = stmt_node.to_py()
                             if '\n' in raw:
-                                lines.extend(_ind(indent) + ln for ln in raw.split('\n'))
+                                # Indent the statement, not the lines inside a
+                                # multi-line string literal it may contain --
+                                # those belong to the string's own contents.
+                                head, _, rest = raw.partition('\n')
+                                lines.append(_ind(indent) + head)
+                                lines.extend(rest.split('\n'))
                             else:
                                 lines.append(_ind(indent) + raw)
                     # Emit trailing NLs (blank lines / comments) after the statement
@@ -106,7 +111,10 @@ def _suite_to_py(node, indent):
     except TypeError:
         raw = node.to_py()
         if "\n" in raw:
-            return "\n".join(_ind(indent) + ln for ln in raw.split("\n"))
+            # Only the statement is indented; a multi-line string literal
+            # inside it keeps the layout it was written with.
+            head, _, rest = raw.partition("\n")
+            return _ind(indent) + head + "\n" + rest
         return _ind(indent) + raw
 
 

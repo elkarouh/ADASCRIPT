@@ -14,6 +14,7 @@
 - [x] py2py: `os.makedirs` / `os.mkdir` raise where Nim's `createDir` does not (see [Bug 9](#bug-9--py2py-emits-directory-creation-that-is-not-idempotent))
 - [x] py2py: `readFile` / `writeFile` are emitted verbatim and undefined (see [Bug 10](#bug-10--py2py-does-not-translate-readfile--writefile))
 - [x] py2py: implicit return of a multi-line string writes `return` inside the literal (see [Bug 11](#bug-11--py2py-implicit-return-breaks-a-multi-line-string))
+- [x] both backends re-indent the inside of a multi-line string, changing its value (see [Bug 12](#bug-12--a-multi-line-string-is-re-indented-changing-its-value))
 
 ## Shell improvements
 
@@ -138,16 +139,6 @@ the wrong order.
 
 A receiver that is a variable (`sep.join(x)`) is fine in every form, since
 the rule needs the quotes.
-
-**Workaround:** hoist the call into a local.
-
-```python
-let names: str = ", ".join(others)
-print f"Delete the branches ({names})?"
-```
-
-`EXAMPLES/git1.ady` does exactly this in `cmd_adopt`, with a comment
-pointing here.
 
 **Fixed.** `_is_join_receiver()` gates the rule: it rewrites only when the
 receiver is a quoted literal holding no quote of its own, or a bare
@@ -732,9 +723,45 @@ The marks are held by `id()` in `RETURN_NODES` and cleared per module by
 `_py_reset()`, since the allocator reuses an id once a parse tree is
 collected.
 
-**Still open, and visible in that output:** py2py re-indents the
-continuation lines of a multi-line string, changing the string's contents.
-It predates this fix -- a plain Python file round-trips
-`"""line one\nline two"""` with `line two` indented to match the statement --
-and it is why `git1 help` is now correct but indented differently from the
-Nim build.
+See bug 12 for the re-indentation this exposed.
+
+---
+
+### Bug 12 — a multi-line string is re-indented, changing its value
+
+Both backends pushed the continuation lines of a multi-line string literal
+out to the statement's indent, so the string a program produced was not the
+string its source contained.
+
+**Reproduction:**
+```python
+def f():
+    s = """line one
+line two"""
+    return s
+```
+
+Every line after the first came back indented to match the statement, and
+on the Nim side `lstrip()`ped first, so relative indentation inside the
+literal was flattened too.  `git1 help` showed it: every line of the help
+text was indented four spaces on the Nim build and, once bug 11 was fixed,
+not on the Python one.
+
+**Fixed on both sides**, in the two places that indent a rendered statement:
+
+- `TO_PYTHON/hek_py3_parser.py` (the `block` emitter and `_suite_to_py`)
+  indented every line of a multi-line statement.  It now indents the first
+  line and leaves the rest, which is what the single-line path already did
+  by concatenation.
+- `TO_NIM/hek_nim_parser.py` (the `statement` emitter) re-applied the indent
+  to every continuation line, which generated code does need -- a `##`
+  docstring is one comment per line, and a subrange range-check is emitted
+  as a following statement.  It now tracks whether a line falls inside a
+  triple-quoted literal and leaves those alone.
+
+The narrower rule matters: excluding *every* non-comment block instead broke
+`test_shortest_path.ady`, whose generated `assert` guards are continuation
+lines that must be indented.
+
+`git1 help` is now byte-identical on the two backends, and matches the
+layout written in `usage()`.

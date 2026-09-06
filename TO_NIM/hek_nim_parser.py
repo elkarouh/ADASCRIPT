@@ -3640,11 +3640,22 @@ def to_nim(self, indent=0):
     # Multiline results (e.g. ## docstrings from STRING.to_nim()) have the
     # indent prefix only on the first line.  Re-apply it to every subsequent
     # non-empty line so the generated Nim is properly indented.
+    #
+    # Lines inside a triple-quoted literal are excepted: they are data, and
+    # re-indenting them -- lstrip()ping them, at that -- changes the value the
+    # program produces.  Everything else here is generated code (a `##`
+    # docstring, a subrange range-check) that does need the indent.
     if '\n' in result:
         _lines = result.split('\n')
         _fixed = [_lines[0]]
+        _in_str = _lines[0].count('"""') % 2 == 1 or _lines[0].count("'''") % 2 == 1
         for _l in _lines[1:]:
-            _fixed.append(_ind(indent) + _l.lstrip() if _l.strip() else '')
+            if _in_str:
+                _fixed.append(_l)
+            else:
+                _fixed.append(_ind(indent) + _l.lstrip() if _l.strip() else '')
+            if _l.count('"""') % 2 == 1 or _l.count("'''") % 2 == 1:
+                _in_str = not _in_str
         result = '\n'.join(_fixed)
     if newline_node is not None and hasattr(newline_node, 'comments') and newline_node.comments:
         for kind, text, ind in newline_node.comments:
