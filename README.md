@@ -314,10 +314,11 @@ other ordinal — `[bool]str`, `[Color]int`, `[char]int`. All of these work on
 both backends.
 
 `char` is an ordinal like the rest, spanning `chr(0) .. chr(255)`, so
-`[char]int` is a 256-slot array. One catch: Adascript inherits Python's lack
-of a character type, so `'a'` is a one-character *string*, not a char. Index
-with `chr(97)`, which works on both backends — `freq['a']` works on the
-Python backend but will not compile on Nim.
+`[char]int` is a 256-slot array. Adascript inherits Python's lack of a
+character type, so `'a'` is a one-character *string* rather than a char —
+the Nim backend converts it to a char literal where the domain says one is
+meant, escapes included, so `freq['a']`, `freq["\\"]` and `freq[chr(97)]`
+all work on both.
 
 The empty literals follow the same logic, which is what makes them easy to
 remember: `{:}` carries the colon of a `key: value` pair, so it is the empty

@@ -175,9 +175,6 @@ in order to build.
   and binds nothing, which is what `py2py` emits; the Nim backend treats it
   as a declaration and zero-initialises. Write `var s: {}int` for a
   declaration — that works on both (§2.1).
-- `[char]T` indexed by a quoted literal works on Python and does not compile
-  on Nim: Adascript has no char literal, so `'a'` is a one-character string.
-  Index with `chr(97)`, which works on both.
 - No borrow checker; `move()` misuse surfaces at runtime, not compile time.
 - Generic methods on `@virtual` classes hit Nim 2.x restrictions — define
   them as free functions taking `self` and rely on UFCS (§9.5).

@@ -176,6 +176,24 @@ assert (bh == bn % 5) == False
 let proot: Path = Path("/tmp")
 assert (proot / "x") == proot / "x"
 
+# char is an ordinal, so [char]T is an array with 256 slots. Adascript has
+# no character literal -- it is a Python superset, so 'a' is a one-character
+# string -- and Nim's array[char, T] cannot be indexed by a string, so the
+# emitter converts. Escapes included: "\\" and "\n" are one character in the
+# source but two once rendered, which a naive conversion leaves behind.
+var freq: [char]int
+freq['a'] = 3
+freq['z'] = freq['a'] + 1
+freq[chr(98)] = 7
+freq["'"] = 1
+freq["\\"] = 2
+freq["\n"] = 4
+assert freq['a'] == 3 and freq['z'] == 4 and freq[chr(98)] == 7
+assert freq["'"] == 1 and freq["\\"] == 2 and freq["\n"] == 4
+var keyed: {str}int = {:}      # a string-keyed table is not touched
+keyed["a"] = 9
+assert keyed["a"] == 9
+
 # 'Range on a type is its domain; on a value it is the index range.
 type Hue is enum PINK, TEAL
 let hues: {}Hue = Hue'Range

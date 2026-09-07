@@ -747,6 +747,53 @@ def to_nim(self, prec=None):
 
 
 
+def nim_char_literal(text):
+    """A Nim char literal for a one-character string, or None.
+
+    Adascript has no character type -- it is a Python superset, and `'a'`
+    there is a one-character *string*. Nim distinguishes the two, so the
+    places where a char is what is meant have to convert.
+    """
+    if len(text) != 1:
+        return None
+    if text == "'":
+        return "'\\''"
+    if text == "\\":
+        return "'\\\\'"
+    return "'" + text + "'"
+
+
+def _char_subscript(base_name, rendered):
+    """`["a"]` -> `['a']` when base_name is an array indexed by char.
+
+    `var freq: [char]int` is `array[char, int]` on Nim and a dict on Python,
+    so `freq['a']` works there and does not compile here: the index arrives
+    as the string "a". Only a declared char domain triggers this, so an
+    ordinary `xs["a"]` on a table keyed by string is left alone.
+    """
+    sym = ParserState.symbol_table.lookup(base_name) if base_name else None
+    typ = (sym.get("type") or "") if isinstance(sym, dict) else ""
+    if not typ.replace(" ", "").startswith("array[char,"):
+        return rendered
+    import re as _re_ci
+    # One character, or one escape sequence -- "\\" and "\n" are a single
+    # character in the source but two in the rendered string, so matching a
+    # bare `.` would silently leave those two behind as strings.
+    m = _re_ci.match(r'^\["((?:\\.)|[^"\\])"\]$', rendered)
+    if not m:
+        return rendered
+    tok = m.group(1)
+    if tok == "\\'":
+        lit = "'\\''"          # Nim needs the quote escaped inside a char
+    elif tok == '\\"':
+        lit = "'\"'"           # ... and does not want it escaped here
+    elif tok.startswith("\\"):
+        lit = "'" + tok + "'"  # \n, \t, \r, \\, \0: same spelling in Nim
+    else:
+        lit = nim_char_literal(tok)
+    return f"[{lit}]" if lit else rendered
+
+
 def comma_parts(node):
     """The elements of a comma-separated node, rendered separately.
 
@@ -1960,9 +2007,9 @@ def to_nim(self, prec=None):
                         result = f"substr({result}, 0)"
                     ParserState.nim_imports.add("strutils")
                 else:
-                    result += tr.to_nim()
+                    result += _char_subscript(raw_name, tr.to_nim())
             else:
-                result += tr.to_nim()
+                result += _char_subscript(raw_name, tr.to_nim())
                 # Apply Option[T] arg coercion immediately after each call_trailer
                 # so subsequent trailers (e.g. .content) don't break the regex match
                 if type(tr).__name__ == "call_trailer":

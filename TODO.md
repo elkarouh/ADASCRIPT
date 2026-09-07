@@ -28,15 +28,6 @@ history of this file if the reasoning behind one of them is ever wanted.
       most examples from producing byte-identical output on the two backends.
       `'Image` and f-strings already agree; it is the default `$`/`str()` of a
       container that does not.
-- [ ] `[char]T` indexed by a quoted literal compiles on Python and fails on
-      Nim. `var freq: [char]int` / `freq['a'] = 3` works on Python (the
-      array becomes a `dict[str, int]`) but emits `freq["a"]` for Nim, where
-      the type really is `array[char, int]` and a string cannot index it.
-      Adascript inherits Python's lack of a char literal, so `'a'` is a
-      one-character string. `freq[chr(97)]` works on both and is the
-      documented spelling; either the emitter should turn a one-character
-      string index into a Nim char literal when the domain is `char`, or the
-      mismatch should be reported at transpile time.
 - [ ] iterating an `[E]T` means two different things. `for x in score:`
       where `score: [Color]int` yields the *values* on Nim (it is an
       `array[E, T]`) and the *keys* on Python (it is a `dict`), and the
