@@ -153,6 +153,67 @@ def get_next_decisions(self, current_state: State_T) -> []Choice_T:
     [(size, rev) for size, rev in self.choices if size <= remaining_size]
 ```
 
+### Comprehensions that build arrays
+
+A comprehension normally produces a growable sequence. In Adascript the
+annotation decides what it produces, and the *same* comprehension will fill
+a fixed-size array instead:
+
+```python
+var asSeq: []int  = [i*i for i in 0..4]     # a seq / list
+var asArr: [5]int = [i*i for i in 0..4]     # a stack array, 5 slots
+```
+
+Nothing about the right-hand side changed. That is the part worth noticing:
+the length lives in the type, so the expression that fills the container
+does not have to know it, and switching between the two is an edit to the
+annotation alone.
+
+The Nim backend earns that. Nim will not assign a `collect()` to an
+`array[N, T]`, so the transpiler emits the copy:
+
+```nim
+var asSeq: seq[int] = toSeq(collect(for i in 0 .. 4: i * i))
+var asArr: array[5, int] = (block:
+let adasq = collect(for i in 0 .. 4: i * i)
+var adaarr: array[5, int]
+for adai in 0 ..< 5: adaarr[adai] = adasq[adai]
+adaarr)
+```
+
+Among statically typed languages this is rarer than it looks, though not
+unique: Fortran has had implied-do array constructors since F90
+(`[(i*2, i=1,10)]`) and Ada 2022 added iterated component associations
+(`(for I in 1 .. 10 => I * 2)`), both filling compile-time-sized arrays.
+Haskell gets there through `listArray (0,9) [i*i | i <- [0..9]]`. Rust has
+no comprehension at all and reaches the same place with
+`std::array::from_fn`; Julia's comprehensions do produce arrays, but Julia
+is not statically typed. Nim, the backend this compiles to, cannot do it —
+hence the copy above.
+
+What is unusual is not the array case on its own but that *one* comprehension
+syntax covers every container, with the annotation choosing:
+
+```python
+var asList:  []int    = [i*i for i in 0..4]     # seq / list
+var asArray: [5]int   = [i*i for i in 0..4]     # stack array
+var asSet:   {}int    = {i*i for i in 0..4}     # set
+var asDict:  {int}int = {i: i*i for i in 0..4}  # dict
+```
+
+Fortran's implied-do and Ada's iterated aggregate are array constructors and
+nothing else — neither language has a set or dict comprehension to be
+consistent with. Here the four differ only in the brackets and the
+annotation, which is the same scheme §2.2 sets out, used to build rather
+than to declare.
+
+One gap, since this section is about what works: the array being filled must
+be sized by a literal or a constant. A comprehension into a *subrange-keyed*
+array — `type Idx is 0 .. 4`, then `[Idx]int = [i for i in 0..4]` — compiles
+on the Python backend and fails on Nim, and an enum-keyed comprehension is
+not a supported form at all. Both are in `TODO.md`; the literal forms
+(`[Idx]int = [1, 2, 3, 4, 5]`) work on both.
+
 ## 6.5 Standard containers from `stdlib`
 
 The bundled `stdlib` shim (imported with `nimport stdlib` / `from stdlib

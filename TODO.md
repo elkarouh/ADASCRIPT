@@ -28,6 +28,14 @@ history of this file if the reasoning behind one of them is ever wanted.
       most examples from producing byte-identical output on the two backends.
       `'Image` and f-strings already agree; it is the default `$`/`str()` of a
       container that does not.
+- [ ] a comprehension initialising a *subrange-keyed* array compiles on
+      Python and fails on Nim. `type Idx is 0 .. 4` / `var byidx: [Idx]int =
+      [i+100 for i in 0..4]` gives "type mismatch: pred(Idx)" there, while
+      `[5]int` from the same comprehension works on both and `[Idx]int` from
+      a *literal* works on both. So it is the comprehension-into-array
+      wrapper (`_wrap_comprehension_for_array`) not handling a named ordinal
+      bound. An enum-keyed comprehension (`[c: v for c in E]`) is not
+      supported on either backend -- it is a parse error, consistently.
 - [ ] `.keys()` and `.items()` on an `[E]T` work on Python and do not exist
       on Nim, where the type is an `array[E, T]`: `score.keys()` fails with
       "type mismatch ... expected Table". Iteration and indexing agree now;
