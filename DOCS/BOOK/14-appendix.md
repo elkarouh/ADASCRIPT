@@ -171,10 +171,10 @@ in order to build.
 - Iterating an `[E]T` is not the same operation on the two backends: Nim
   yields the values, Python the keys. Indexing agrees, so walk the domain —
   `for c in Color: score[c]` (§3.3).
-- `py2py` drops all but the last term of a compound range bound
-  (`n-k+1..n` becomes `range(n, n+1)`), and does not zero-initialise a
-  declared-but-uninitialised local. Both break `floyd.ady` there — see
-  `TODO.md`.
+- A bare annotated declaration (`s: {}int`, no `var`) is ordinary Python
+  and binds nothing, which is what `py2py` emits; the Nim backend treats it
+  as a declaration and zero-initialises. Write `var s: {}int` for a
+  declaration — that works on both (§2.1).
 - `[char]T` indexed by a quoted literal works on Python and does not compile
   on Nim: Adascript has no char literal, so `'a'` is a one-character string.
   Index with `chr(97)`, which works on both.

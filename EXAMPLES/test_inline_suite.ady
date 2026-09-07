@@ -136,6 +136,42 @@ let real_file: Path = deep / "real.txt"
 writeFile(real_file, "content\n")
 let link: Path = sandbox / "link.txt"
 shell: ln -s {!real_file} {!link}
+# A range bound may be a whole expression, not just a name. Taking only the
+# first node of a flattened `n-k+1 .. n` used to emit range(n, n + 1) --
+# every `for j in i+1..hi` loop then started at i and quietly did an extra
+# iteration, which is how tsp.ady and timetable_engine.ady were wrong on the
+# Python backend without failing.
+let rn: int = 10
+let rk: int = 3
+var lo_terms: []int = []
+for i in rn-rk+1..rn:
+    lo_terms.append(i)
+assert lo_terms == [8, 9, 10]
+var hi_terms: []int = []
+for i in 1..rn-rk:
+    hi_terms.append(i)
+assert hi_terms == [1, 2, 3, 4, 5, 6, 7]
+var excl: []int = []
+for i in rn-rk+1..<rn:
+    excl.append(i)
+assert excl == [8, 9]
+var pairs: []str = []
+for i in 0..3:
+    for j in i+1..3:
+        pairs.append(f"{i}{j}")
+assert pairs == ["01", "02", "03", "12", "13", "23"]
+
+# 'Range on a type is its domain; on a value it is the index range.
+type Hue is enum PINK, TEAL
+let hues: {}Hue = Hue'Range
+assert hues'Length == 2
+assert (Hue'Range - {PINK})'Length == 1
+let word: str = "abc"          # a tick needs a name, not a literal
+var idxs: []int = []
+for i in word'Range:
+    idxs.append(i)
+assert idxs == [0, 1, 2]
+
 let gone: Path = sandbox / "gone.txt"
 assert link.resolve() == real_file
 assert gone.resolve() == gone     # nothing there: resolved, not rejected

@@ -1135,7 +1135,7 @@ def to_py(self, prec=None):
     if last_comp_idx is None:
         # Check if this is a range expression (2 .. n or 2 ..< n)
         # that was flattened into comparison from range_expr
-        for node in self.nodes:
+        for _idx, node in enumerate(self.nodes):
             if (type(node).__name__ == "Several_Times"
                     and hasattr(node, "nodes") and node.nodes):
                 seq = node.nodes[0]
@@ -1143,7 +1143,22 @@ def to_py(self, prec=None):
                     op_node = seq.nodes[0]
                     op_val = getattr(op_node, 'node', None)
                     if op_val in ("..", "..<"):
-                        lo = self.nodes[0].to_py(prec)
+                        # The lower bound is everything *before* the range
+                        # operator, not just the first node. Arithmetic
+                        # arrives here flattened across self.nodes, so
+                        # `n-k+1 .. n` used to take `n` and silently drop
+                        # `- k + 1`, emitting range(n, n + 1) -- a loop of
+                        # one where Nim ran k of them. Rebuilt the same way
+                        # the comparison branch below rebuilds its base.
+                        if _idx <= 1:
+                            lo = self.nodes[0].to_py(prec)
+                        else:
+                            class _MockLo:
+                                pass
+
+                            _m = _MockLo()
+                            _m.nodes = self.nodes[:_idx]
+                            lo = binop_to_py(_m, None, None)
                         hi = seq.nodes[1].to_py(prec)
                         if op_val == "..<":
                             return f"range({lo}, {hi})"

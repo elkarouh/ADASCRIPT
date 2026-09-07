@@ -1,7 +1,7 @@
 #!/usr/bin/env py2nim
 
 def floyd(n : Positive, k : Positive) -> {}Positive:
-    s : {}Positive
+    var s : {}Positive
     for i in n-k+1..n:
         t = (1..i)'Choice
         if t in s:

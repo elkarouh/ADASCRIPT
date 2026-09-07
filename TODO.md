@@ -38,16 +38,15 @@ history of this file if the reasoning behind one of them is ever wanted.
       Python order is the literal's, not the enum's. Indexing agrees, so
       `for c in Color: score[c]` is portable and is what the README now
       recommends; direct iteration should either agree or be rejected.
-- [ ] py2py drops all but the last term of a compound lower bound in a
-      range. `for i in n-k+1..n:` emits `range(n, n + 1)`, so with n=10, k=3
-      Python prints `10` where Nim prints `8 9 10`. Another silent wrong
-      answer, and the same shape as the `/`-after-comparison bug below: the
-      range operator takes the wrong operand. Breaks `floyd.ady` on the
-      Python backend.
-- [ ] py2py does not zero-initialise a declared-but-uninitialised local.
-      `s: {}int` inside a function emits a bare annotation, which binds
-      nothing, so the next `s.add(1)` raises `UnboundLocalError`. Nim
-      zero-initialises and prints `{1}`. Also breaks `floyd.ady`.
+- [ ] py2nim zero-initialises a *bare* annotated declaration where Python
+      binds nothing. `s: {}int` inside a function is ordinary Python, and
+      ordinary Python raises `UnboundLocalError` on the next `s.add(1)`;
+      py2py round-trips it unchanged and so does raise, but the Nim backend
+      treats it as a declaration and prints `{1}`. py2py is the correct side
+      here — `var s: {}int` is the Adascript spelling for a declaration, and
+      it works on both — so the fix belongs in py2nim, which should either
+      match Python or reject the bare form. Found via `floyd.ady`, which was
+      written with the bare form and only worked on Nim.
 - [ ] **py2py reads `/` as the range operator on the right of a comparison,
       and gets the wrong answer without saying anything.** `half == n / 2`
       emits `half == range(n, 2 + 1)`, so a program that should print True

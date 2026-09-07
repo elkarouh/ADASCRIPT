@@ -193,7 +193,7 @@ sampling k distinct integers — applies `'Choice` to a *range expression*:
 
 ```python
 def floyd(n : Positive, k : Positive) -> {}Positive:
-    s : {}Positive
+    var s : {}Positive
     for i in n-k+1..n:
         t = (1..i)'Choice          # random integer in 1..i
         if t in s:
