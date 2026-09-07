@@ -1632,28 +1632,23 @@ on enum values, inclusive range `1 .. trials`.
 
 ### dijkstra.ady — Priority queue, enum-keyed dicts, nimport
 
+The whole file — 28 lines for the complete algorithm:
+
 ```python
 #!/usr/bin/env py2nim
-nimport stdlib
-
-type Node_T     is enum A, B, C, D
+from stdlib nimport PriorityQueue
+type Node_T is enum A, B, C, D
 type Distance_T is float
-type Graph_T    is {Node_T}{Node_T}Distance_T
-
-const MAX_DIST: float = 1e6
-
+type Graph_T is {Node_T}{Node_T}Distance_T
+const MAX_DIST : float = 1e6
 type Neighbour_T is tuple:
     distance: Distance_T
     neighbor: Node_T
 
-def dijkstra(graph: Graph_T, start: Node_T) -> {Node_T}Distance_T:
-    distances: {Node_T}Distance_T = {node: MAX_DIST for node in graph if node != start}
-    distances[start] = 0.0
-
-    visited: {}Node_T = {}
-    queue:   PriorityQueue[Neighbour_T]
-    queue.push((0.0, start))
-
+def dijkstra(graph : Graph_T, start: Node_T) -> {Node_T}Distance_T:
+    distances: {Node_T}Distance_T = {node: (0.0 if node==start else MAX_DIST) for node in graph}
+    var visited : {}Node_T
+    queue : PriorityQueue[Neighbour_T] = [(0.0, start)]
     while queue:
         current_dist, node = queue.pop()
         if node in visited:
@@ -1664,15 +1659,22 @@ def dijkstra(graph: Graph_T, start: Node_T) -> {Node_T}Distance_T:
             if new_dist < distances[neighbor]:
                 distances[neighbor] = new_dist
                 queue.push((new_dist, neighbor))
-
     return distances
 
-graph: Graph_T = {A: {B: 1.0, C: 4.0}, B: {C: 2.0, D: 5.0}, C: {D: 1.0}, D: {:}}
+graph : Graph_T = {A:{B:1.0, C:4.0}, B: {C:2.0, D:5.0}, C: {D:1.0}, D: {:}}
 print dijkstra(graph, A)
 ```
 
-Features: `nimport stdlib` for `PriorityQueue`, nested dict type `{K}{K}V`,
-enum members as dict keys, `const`, comprehension-initialised dict.
+Prints `{D: 4.0, C: 3.0, A: 0.0, B: 1.0}`.
+
+Features: `from stdlib nimport` for `PriorityQueue`, nested dict type
+`{K}{K}V`, enum members as dict keys, `const`, and a dict comprehension that
+does the whole initialisation — the conditional sits *inside* it, so there
+is no second pass to set the start node to zero. `for node in graph`
+iterates a `{K}V`, which yields its keys.
+
+Runs on the Nim backend; the Python backend cannot yet supply a `nimport`ed
+module, so `PriorityQueue` is unavailable there (see `TODO.md`).
 
 ---
 

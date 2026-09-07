@@ -75,6 +75,13 @@ Dict comprehensions work, including conditional expressions inside.
 distances: {Node_T}Distance_T = {node: (0.0 if node==start else MAX_DIST) for node in graph}
 ```
 
+Two things are carrying the weight there. The conditional is *inside* the
+comprehension, so Dijkstra's initialisation has no second phase where the
+start node gets fixed up afterwards — which is where that loop usually goes
+wrong. And `for node in graph` iterates a `{K}V`, which yields its keys, so
+the clause reads "for each node in the graph". §1.4 shows the whole
+program, which is 28 lines for the entire algorithm.
+
 ## 6.3 Sets
 
 Beyond the ordinal bitsets of Chapter 3, `{}T` over strings or other
@@ -82,7 +89,7 @@ non-ordinal types is a hash set (`HashSet` in Nim). The visited-set idiom
 from `dijkstra.ady`:
 
 ```python
-visited : {}Node_T
+var visited : {}Node_T
 ...
 if node in visited:
     continue

@@ -125,7 +125,170 @@ Note `line'Length` — an Ada *tick attribute* applied to a string, and
 Chapter 3 covers tick attributes; Chapter 11 shows how far the
 shell-scripting side of the language goes.
 
-## 1.4 The toolchain at a glance
+## 1.4 Dijkstra, entire
+
+The claim this book keeps returning to is that Adascript reads as executable
+pseudocode. `EXAMPLES/dijkstra.ady` is the shortest way to see what that
+means — this is the whole file, nothing elided:
+
+```python
+#!/usr/bin/env py2nim
+from stdlib nimport PriorityQueue
+type Node_T is enum A, B, C, D
+type Distance_T is float
+type Graph_T is {Node_T}{Node_T}Distance_T
+const MAX_DIST : float = 1e6
+type Neighbour_T is tuple:
+    distance: Distance_T
+    neighbor: Node_T
+
+def dijkstra(graph : Graph_T, start: Node_T) -> {Node_T}Distance_T:
+    distances: {Node_T}Distance_T = {node: (0.0 if node==start else MAX_DIST) for node in graph}
+    var visited : {}Node_T
+    queue : PriorityQueue[Neighbour_T] = [(0.0, start)]
+    while queue:
+        current_dist, node = queue.pop()
+        if node in visited:
+            continue
+        visited.add(node)
+        for neighbor in graph[node]:
+            let new_dist: Distance_T = current_dist + graph[node][neighbor]
+            if new_dist < distances[neighbor]:
+                distances[neighbor] = new_dist
+                queue.push((new_dist, neighbor))
+    return distances
+
+graph : Graph_T = {A:{B:1.0, C:4.0}, B: {C:2.0, D:5.0}, C: {D:1.0}, D: {:}}
+print dijkstra(graph, A)
+```
+
+It prints `{D: 4.0, C: 3.0, A: 0.0, B: 1.0}`.
+
+Four things are worth stopping on, and none of them is a trick.
+
+**The types are the specification.** `type Graph_T is {Node_T}{Node_T}Distance_T`
+is the textbook definition of a weighted digraph — a mapping from a node to
+a mapping from a node to a distance — and it is also, with no further
+ceremony, the data structure. Chapter 2 gives the notation; here it is
+enough that the declaration says what a graph *is* rather than how to build
+one.
+
+**The initialisation is one line, and it is the sentence you would write.**
+
+```python
+distances: {Node_T}Distance_T = {node: (0.0 if node==start else MAX_DIST) for node in graph}
+```
+
+"Every node starts at infinity, except the start, which starts at zero."
+That is Dijkstra's initialisation phase in full. In most languages it is a
+loop with a special case afterwards, and the special case is where the bug
+lives. Here the special case is a conditional inside the comprehension, so
+there is no afterwards.
+
+**`for node in graph` means what it says.** A `{K}V` is an unordered mapping
+and iterating one yields its keys, so that phrase reads "for each node in
+the graph" — and the same line is a valid dict comprehension in Python,
+which is what a superset buys.
+
+**The loop body is the algorithm, line for line.** Pop the nearest unvisited
+node; skip it if already visited; mark it; relax each edge out of it. There
+is no scaffolding around that — no class to hold the state, no visitor, no
+manual bookkeeping of the queue's invariants. Twenty-eight lines, and the
+only line that is not the algorithm is the `#!` on the first.
+
+### The same program in Python
+
+Adascript is a superset, so it can never say *less* than Python — every
+Python program is already an Adascript one. The interesting question is
+whether the additions let you say the same thing more directly. Here is the
+same algorithm written in idiomatic Python 3, checked to produce the same
+distances:
+
+```python
+#!/usr/bin/env python3
+import heapq
+from enum import IntEnum
+from typing import NamedTuple, TypeAlias
+
+class Node_T(IntEnum):
+    A = 0
+    B = 1
+    C = 2
+    D = 3
+
+Distance_T: TypeAlias = float
+Graph_T: TypeAlias = dict[Node_T, dict[Node_T, Distance_T]]
+MAX_DIST: float = 1e6
+
+class Neighbour_T(NamedTuple):
+    distance: Distance_T
+    neighbor: Node_T
+
+def dijkstra(graph: Graph_T, start: Node_T) -> dict[Node_T, Distance_T]:
+    distances: dict[Node_T, Distance_T] = {node: (0.0 if node == start else MAX_DIST) for node in graph}
+    visited: set[Node_T] = set()
+    queue: list[Neighbour_T] = [Neighbour_T(0.0, start)]
+    while queue:
+        current_dist, node = heapq.heappop(queue)
+        if node in visited:
+            continue
+        visited.add(node)
+        for neighbor in graph[node]:
+            new_dist: Distance_T = current_dist + graph[node][neighbor]
+            if new_dist < distances[neighbor]:
+                distances[neighbor] = new_dist
+                heapq.heappush(queue, Neighbour_T(new_dist, neighbor))
+    return distances
+
+A, B, C, D = Node_T.A, Node_T.B, Node_T.C, Node_T.D
+graph: Graph_T = {A: {B: 1.0, C: 4.0}, B: {C: 2.0, D: 5.0}, C: {D: 1.0}, D: {}}
+print(dijkstra(graph, A))
+```
+
+Twenty-six non-blank lines against thirty-three, and 1018 characters against
+1222 — worth having, but the line count is the weaker half of the argument.
+Three of those extra lines are not algorithm at all:
+
+- **`import heapq`, and `heappush`/`heappop` written out.** Python's heap is
+  a module of functions operating on a list, so the queue is not an object
+  and the calls do not read as pushing and popping a queue. Adascript's
+  `PriorityQueue[Neighbour_T]` is a value with `.push()` and `.pop()`, and
+  `while queue:` tests it for emptiness the way any container is tested.
+- **`IntEnum` rather than `Enum`.** This one is a trap rather than a
+  nuisance. `heapq` compares tuples, so when two distances tie it goes on to
+  compare the nodes — and a plain `Enum` is not ordered. Write the obvious
+  `class Node_T(Enum)` and this program dies on *this* graph, where `(4.0,
+  C)` and `(4.0, D)` both reach the queue:
+  `TypeError: '<' not supported between instances of 'Node_T' and 'Node_T'`.
+  Nothing in the source hints that the enum's base class and the heap are
+  connected. Adascript's queue orders on the tuple's first element and never
+  reaches the second.
+- **`A, B, C, D = Node_T.A, Node_T.B, Node_T.C, Node_T.D`.** Without it the
+  graph literal has to qualify every member — `{Node_T.A: {Node_T.B: 1.0,
+  …}}` — and stops looking like a graph. Adascript uses enum members bare,
+  so the literal is the adjacency list as you would draw it.
+
+The type declarations are the other half:
+
+```python
+type Graph_T is {Node_T}{Node_T}Distance_T                  # Adascript
+Graph_T: TypeAlias = dict[Node_T, dict[Node_T, Distance_T]]  # Python
+```
+
+and the difference is not only the width. Python's annotation is
+documentation that nothing enforces; Adascript's is what the Nim backend
+compiles the program *from*, and what its compiler checks. The same line is
+carrying more.
+
+One caveat, since this chapter is called *One Language, Two Targets*: this
+particular file builds and runs on the Nim backend only. `PriorityQueue`
+comes from the bundled `stdlib` library through `from stdlib nimport`, and
+the Python backend cannot yet supply a `nimport`ed module, so `queue` stays
+a plain list there. That is a gap in the toolchain rather than the language,
+and it is written up in `TODO.md`; every other program quoted in this book
+runs on both.
+
+## 1.5 The toolchain at a glance
 
 ```bash
 # Python backend
@@ -152,7 +315,7 @@ transpilation is skipped if the `.nim` file is newer than both the source and
 the transpiler; compilation is skipped if the binary is newer than the
 `.nim`; and if everything is current the cached binary simply runs.
 
-## 1.5 What the examples directory contains
+## 1.6 What the examples directory contains
 
 The `EXAMPLES/` directory is the language's proving ground — every feature
 was driven by a real program there. A rough map, which is also the plan of
