@@ -262,8 +262,67 @@ python3 TO_NIM/py2nim.py c -d:release source.ady   # optimised build
 ## Type Annotations
 
 Adascript uses a concise **left-to-right** annotation syntax rather than
-Python's `typing` module. Container kinds are expressed as prefixes:
-`[]int` reads naturally as "list of int".
+Python's `typing` module. There is one idea behind all of the container
+forms, and it is worth learning once: **every container is a mapping**,
+written `<domain>value`. The brackets carry the domain — what you index
+with — and the value type follows them.
+
+Two things vary, and they are independent:
+
+**The shape of the brackets says whether the domain is ordered.**
+
+- `[…]` — **ordered**. The domain has a first, a next and a last, and the
+  container is held in that order.
+- `{…}` — **unordered**. The domain has no order at all, so neither does the
+  container, and you must not rely on one (see the warning below — the two
+  backends genuinely differ).
+
+**What sits inside says what the domain is.**
+
+- Something inside — `[O]T`, `{K}V` — names the domain outright. Between
+  `[…]` it must be an **ordinal type**, since that is what has an order to
+  index by: an enum, `bool`, `char`, an integer subrange. Between `{…}` any
+  hashable type `K` will do.
+- Nothing inside — `[]T`, `{}T` — leaves it implicit and unbounded: the
+  container grows as far as you need.
+
+That gives four forms, one per corner:
+
+|                    | ordered `[…]`                      | unordered `{…}`            |
+|--------------------|------------------------------------|----------------------------|
+| **domain named**   | `[O]T` — indexed by an ordinal type| `{K}V` — dict              |
+| **domain implicit**| `[]T` — list, indexed `0 ..< n`    | `{}T` — set                |
+
+Read them aloud and they say what they are:
+
+- `[]int` — an ordered mapping from position to `int`, unbounded. A list.
+- `[0..9]int` — an ordered mapping from `0 .. 9` to `int`. A fixed array.
+- `[10]int` — **the same type**, spelled by size instead of by bound. A
+  length `N` is shorthand for the subrange `0 .. N-1`, so `[10]int` and
+  `[0..9]int` are one type, not two — on the Nim backend
+  `array[10, int] is array[0..9, int]` is literally `true`, and a value of
+  one is assignable to the other.
+- `[Color]int` — an ordered mapping from `Color` to `int`. One slot per enum
+  member, held in enum order.
+- `{str}int` — an unordered mapping from `str` to `int`. A dict.
+- `{}str` — an unordered mapping to `str`, unbounded. A set.
+
+So the fixed array is not a special form: it is `[O]T` where the ordinal
+type happens to be a subrange. The domain may equally be written out
+(`[0..9]int`), named (`type Idx is 0 .. 4`, then `[Idx]int`), or be any
+other ordinal — `[bool]str`, `[Color]int`, `[char]int`. All of these work on
+both backends.
+
+`char` is an ordinal like the rest, spanning `chr(0) .. chr(255)`, so
+`[char]int` is a 256-slot array. One catch: Adascript inherits Python's lack
+of a character type, so `'a'` is a one-character *string*, not a char. Index
+with `chr(97)`, which works on both backends — `freq['a']` works on the
+Python backend but will not compile on Nim.
+
+The empty literals follow the same logic, which is what makes them easy to
+remember: `{:}` carries the colon of a `key: value` pair, so it is the empty
+**mapping with a named domain** — a dict. Bare `{}` has no colon, so it is
+the empty **set**.
 
 | Adascript        | Python                    | Nim                            |
 |----------------|---------------------------|--------------------------------|
@@ -276,6 +335,47 @@ Python's `typing` module. Container kinds are expressed as prefixes:
 | `?T`           | `T \| None`               | `Option[T]`                    |
 | `(T, U)`       | `tuple[T, U]`             | `(T, U)`                       |
 | `[(T, U)]R`    | `Callable[[T, U], R]`     | `proc(a0: T, a1: U): R`        |
+
+`?T` and `(T, U)` are not containers and stand outside the scheme. `[*]T` is
+`[]T` with the domain left to the caller — see below. The function type
+`[(T, U)]R` reuses the bracket for a different job: an ordered list of
+parameter types on the left, the result on the right.
+
+> **`{…}` means unordered on purpose, and the backends prove it.** Iterating
+> the same `{str}int` gives insertion order on the Python backend and hash
+> order on Nim:
+>
+> ```
+> keys inserted:  zebra, apple, mango, kiwi, banana
+> Python backend: zebra, apple, mango, kiwi, banana
+> Nim backend:    zebra, kiwi, apple, mango, banana
+> ```
+>
+> Sets diverge the same way. So a program that iterates a `{…}` type and
+> depends on what comes out first is not portable between the two backends —
+> sort the keys, or use an ordered form.
+>
+> `[]T`, `[N]T` and `[*]T` carry no such caveat: iterating them yields the
+> values in position order on both backends.
+>
+> `[E]T` is the one place where the ordering is a property of the *type*
+> that the backends do not both expose. Indexing it — `score[RED]` — is
+> identical on both. Iterating it directly is not: the Nim backend has an
+> `array[E, T]` and yields the values, while the Python backend has a `dict`
+> and yields the keys, in the order the literal was written. Walk it through
+> its domain instead, which is identical on both and follows the enum
+> whatever order the literal used:
+>
+> ```python
+> type Color is enum RED, GREEN, BLUE, AMBER
+> var score: [Color]int = [BLUE: 3, RED: 1, AMBER: 4, GREEN: 2]
+> for c in Color:
+>     print c'Image, score[c]      # RED 1, GREEN 2, BLUE 3, AMBER 4
+> ```
+>
+> (`for c in Color:` is the portable spelling. `Color'Range`, `Color'First`
+> and `Color'Last` are correct on Nim but currently mistranslated by the
+> Python backend — see `TODO.md`.)
 
 Types compose freely:
 
@@ -488,8 +588,8 @@ sequences, mappings, class patterns, and `as` bindings.
 
 Python 3.10+ `match` / `case` is accepted as well, so Adascript stays a
 superset; use it when a branch needs an `if` guard, which `case` / `when`
-does not provide. See [TUTORIAL.md](TUTORIAL.md#11-control-flow) and
-[PATTERN_MATCHING.md](PATTERN_MATCHING.md) for the two side by side.
+does not provide. See [DOCS/TUTORIAL.md](DOCS/TUTORIAL.md#11-control-flow) and
+[DOCS/PATTERN_MATCHING.md](DOCS/PATTERN_MATCHING.md) for the two side by side.
 
 ```python
 case value:

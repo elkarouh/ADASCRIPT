@@ -23,6 +23,34 @@ history of this file if the reasoning behind one of them is ever wanted.
 - [ ] `print x, y` puts a space between the arguments on Python and none on
       Nim: `print "n=", 1` gives `n= 1` there and `n=1` here. Same source,
       different output, which is the one thing the two backends must not do.
+- [ ] `[char]T` indexed by a quoted literal compiles on Python and fails on
+      Nim. `var freq: [char]int` / `freq['a'] = 3` works on Python (the
+      array becomes a `dict[str, int]`) but emits `freq["a"]` for Nim, where
+      the type really is `array[char, int]` and a string cannot index it.
+      Adascript inherits Python's lack of a char literal, so `'a'` is a
+      one-character string. `freq[chr(97)]` works on both and is the
+      documented spelling; either the emitter should turn a one-character
+      string index into a Nim char literal when the domain is `char`, or the
+      mismatch should be reported at transpile time.
+- [ ] iterating an `[E]T` means two different things. `for x in score:`
+      where `score: [Color]int` yields the *values* on Nim (it is an
+      `array[E, T]`) and the *keys* on Python (it is a `dict`), and the
+      Python order is the literal's, not the enum's. Indexing agrees, so
+      `for c in Color: score[c]` is portable and is what the README now
+      recommends; direct iteration should either agree or be rejected.
+- [ ] py2py emits ints, not enum members, for `E'First` and `E'Last`, and
+      emits the `'Prev` codegen for `E'Range`. For `type Color is enum RED,
+      GREEN, BLUE`:
+
+          Color'First  ->  0                            (want Color.RED)
+          Color'Last   ->  (len(Color) - 1)             (want Color.BLUE)
+          Color'Range  ->  type(Color)(Color.value - 1) (want the full set)
+
+      All three are right on Nim, so the same source prints `RED BLUE 3`
+      there and raises `AttributeError: 'int' object has no attribute
+      'name'` here. `for x in E'First .. E'Last` is why this survived: the
+      ints iterate, so the loop looks fine until the body treats `x` as an
+      enum.
 - [ ] **py2py reads `/` as the range operator on the right of a comparison,
       and gets the wrong answer without saying anything.** `half == n / 2`
       emits `half == range(n, 2 + 1)`, so a program that should print True
