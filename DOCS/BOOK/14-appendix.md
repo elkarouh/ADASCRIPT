@@ -168,9 +168,6 @@ in order to build.
   on Python, hash on Nim). The types promise no order; sort the keys where
   the output has to match (§6.2). Sort the *keys*, not the table —
   `sorted(counts)` compiles only on the Python backend.
-- Iterating an `[E]T` is not the same operation on the two backends: Nim
-  yields the values, Python the keys. Indexing agrees, so walk the domain —
-  `for c in Color: score[c]` (§3.3).
 - A bare annotated declaration (`s: {}int`, no `var`) is ordinary Python
   and binds nothing, which is what `py2py` emits; the Nim backend treats it
   as a declaration and zero-initialises. Write `var s: {}int` for a

@@ -161,7 +161,8 @@ def _zero_value(annotation):
                "bytes": 'b""', "complex": "0j"}
     if ann in scalars:
         return scalars[ann]
-    for prefix, empty in (("list[", "[]"), ("dict[", "{}"), ("set[", "set()"),
+    for prefix, empty in (("_EnumArray[", "_EnumArray()"),
+                          ("list[", "[]"), ("dict[", "{}"), ("set[", "set()"),
                           ("frozenset[", "frozenset()"), ("tuple[", "()"),
                           ("Counter[", "Counter()")):
         if ann.startswith(prefix):

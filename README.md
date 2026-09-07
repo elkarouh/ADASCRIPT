@@ -359,24 +359,18 @@ parameter types on the left, the result on the right.
 > `[]T`, `[N]T` and `[*]T` carry no such caveat: iterating them yields the
 > values in position order on both backends.
 >
-> `[E]T` is the one place where the ordering is a property of the *type*
-> that the backends do not both expose. Indexing it — `score[RED]` — is
-> identical on both. Iterating it directly is not: the Nim backend has an
-> `array[E, T]` and yields the values, while the Python backend has a `dict`
-> and yields the keys, in the order the literal was written. Walk it through
-> its domain instead, which is identical on both and follows the enum
-> whatever order the literal used:
+> `[E]T` included: it yields its values in enum order, whatever order the
+> literal was written in, and `score[RED]` indexes it. On the Python backend
+> it is a dict keyed by the members, so it would otherwise have been the one
+> member of the family to yield its keys; it iterates its values instead, to
+> agree with the other three and with the `array[E, T]` Nim compiles it to.
 >
 > ```python
 > type Color is enum RED, GREEN, BLUE, AMBER
 > var score: [Color]int = [BLUE: 3, RED: 1, AMBER: 4, GREEN: 2]
-> for c in Color:
->     print c'Image, score[c]      # RED 1, GREEN 2, BLUE 3, AMBER 4
+> for v in score:  print v         # 1 2 3 4
+> for c in Color:  print score[c]  # the same, by domain
 > ```
->
-> (`for c in Color:` is the portable spelling. `Color'Range`, `Color'First`
-> and `Color'Last` are correct on Nim but currently mistranslated by the
-> Python backend — see `TODO.md`.)
 
 Types compose freely:
 

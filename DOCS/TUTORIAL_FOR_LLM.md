@@ -64,9 +64,8 @@ dict; bare `{}` is the empty set.
 
 **Portability:** `{…}` types iterate in insertion order on Python and hash
 order on Nim — never depend on it; sort the keys (sort the *keys*, not the
-table: `sorted(d)` compiles only on Python). `[E]T` is worse: iterating it
-yields values on Nim and keys on Python. Index it, and walk the domain with
-`for c in Color: score[c]`, which is identical on both.
+table: `sorted(d)` compiles only on Python). `[O]T` is fine: all four forms
+yield values in domain order on both backends, `[E]T` included.
 
 | Adascript | Python | Nim |
 |-----------|--------|-----|

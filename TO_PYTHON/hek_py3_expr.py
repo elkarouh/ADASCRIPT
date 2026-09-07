@@ -434,7 +434,9 @@ def to_py(self, prec=None):
 @method(enum_array_display)
 def to_py(self, prec=None):
     """enum_array_display: '[' enum_key ':' value (',' enum_key ':' value)* ']' -> Python: dict {K: V, ...}"""
-    return "{" + self.nodes[1].to_py() + "}"
+    from hek_py_declarations import _ensure_enum_array_alias
+    _ensure_enum_array_alias()
+    return "_EnumArray({" + self.nodes[1].to_py() + "})"
 
 
 @method(set_display)

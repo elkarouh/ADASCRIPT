@@ -105,20 +105,24 @@ Both work on both backends. `for s in E:` is usually the one to reach for —
 it is shorter and says what it means — while the `'First .. 'Last` spelling
 earns its keep when the bounds themselves matter.
 
-Walking an enum is also how you should walk an `[E]T`. Indexing one is
-identical on both backends, but *iterating* it is not the same operation:
-the Nim backend has an `array[E, T]` and yields the values, while the Python
-backend has a dict and yields the keys, in whatever order the literal was
-written. Go through the domain instead, which is portable and follows the
-enum regardless of how the literal was ordered:
+An `[E]T` iterates its values, in enum order, whatever order its literal
+was written in — the same as every other `[O]T`, and the same as the
+`array[E, T]` it becomes on Nim. Walking the domain instead gives you the
+member alongside its value:
 
 ```python
 type Color is enum RED, GREEN, BLUE, AMBER
 var score: [Color]int = [BLUE: 3, RED: 1, AMBER: 4, GREEN: 2]
 
+for v in score:
+    print v                      # 1 2 3 4
 for c in Color:
     print c'Image, score[c]      # RED 1, GREEN 2, BLUE 3, AMBER 4
 ```
+
+On the Python backend `[E]T` is a dict keyed by the members, so it would
+otherwise be the one member of the family to yield its keys, and in the
+literal's order rather than the enum's.
 
 ## 3.4 Ordinal sets: `{}E`
 

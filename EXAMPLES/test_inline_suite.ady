@@ -136,6 +136,16 @@ let real_file: Path = deep / "real.txt"
 writeFile(real_file, "content\n")
 let link: Path = sandbox / "link.txt"
 shell: ln -s {!real_file} {!link}
+let gone: Path = sandbox / "gone.txt"
+assert link.resolve() == real_file
+assert gone.resolve() == gone     # nothing there: resolved, not rejected
+assert (-L link)                  # the link itself is still a link
+assert (-f link)                  # ... and -f follows it to the file
+assert (-e sandbox)               # -e is true for a directory on both
+                                  # backends: it is exists(), not isfile()
+shell: rm -rf -- {!sandbox}
+assert not (-e sandbox)
+
 # A range bound may be a whole expression, not just a name. Taking only the
 # first node of a flattened `n-k+1 .. n` used to emit range(n, n + 1) --
 # every `for j in i+1..hi` loop then started at i and quietly did an extra
@@ -176,6 +186,35 @@ assert (bh == bn % 5) == False
 let proot: Path = Path("/tmp")
 assert (proot / "x") == proot / "x"
 
+# Every [O]T yields its values, in domain order, on both backends. The
+# enum-keyed one is a dict on Python, so left alone it would be the only
+# member of the family to yield its keys -- and in the order the literal
+# happened to be written rather than the order of the enum.
+type Shade_T is enum LIGHT, MID, DARK
+var shade: [Shade_T]int = [DARK: 3, LIGHT: 1, MID: 2]
+var shades: []int = []
+for v in shade:
+    shades.append(v)
+assert shades == [1, 2, 3]        # enum order, not literal order
+assert shade[LIGHT] == 1 and shade[DARK] == 3
+shade[MID] = 9
+assert shade[MID] == 9
+assert shade'Length == 3
+var fixed3: [3]int = [10, 20, 30]
+var fixed3v: []int = []
+for v in fixed3:
+    fixed3v.append(v)
+assert fixed3v == [10, 20, 30]    # ... and the rest of the family agrees
+
+# A real dict keyed by an enum is untouched: `{E}V` iterates keys, which is
+# what a dict does on Python and a Table does on Nim.
+var shade_tbl: {Shade_T}int = {:}
+shade_tbl[LIGHT] = 1
+var shade_keys: []str = []
+for k in shade_tbl:
+    shade_keys.append(k'Image)
+assert shade_keys == ["LIGHT"]
+
 # char is an ordinal, so [char]T is an array with 256 slots. Adascript has
 # no character literal -- it is a Python superset, so 'a' is a one-character
 # string -- and Nim's array[char, T] cannot be indexed by a string, so the
@@ -205,15 +244,6 @@ for i in word'Range:
     idxs.append(i)
 assert idxs == [0, 1, 2]
 
-let gone: Path = sandbox / "gone.txt"
-assert link.resolve() == real_file
-assert gone.resolve() == gone     # nothing there: resolved, not rejected
-assert (-L link)                  # the link itself is still a link
-assert (-f link)                  # ... and -f follows it to the file
-assert (-e sandbox)               # -e is true for a directory on both
-                                  # backends: it is exists(), not isfile()
-shell: rm -rf -- {!sandbox}
-assert not (-e sandbox)
 
 # An inline `when` branch that already returns must not be turned into an
 # implicit return: `f(x); return True` has its value in the *last* statement,

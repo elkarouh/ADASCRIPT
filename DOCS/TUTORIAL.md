@@ -371,16 +371,15 @@ print(costs[HIGH])   # 10
 An enum is just one ordinal domain; `[10]T`, `[0..9]T` and `[bool]T` are the
 same construct with a different one in the brackets.
 
-Index it freely — that is identical on both backends. Do not iterate it
-directly, though: the Nim backend has an `array[E, T]` and yields the
-values, while the Python backend has a dict and yields the keys, in the
-order the literal was written. Walk the domain instead, which is portable
-and follows the enum however the literal was ordered:
+It iterates its values in enum order, whatever order the literal used, like
+every other `[O]T`. Walk the domain when you want the member too:
 
 ```python
 type Color is enum RED, GREEN, BLUE, AMBER
 var score: [Color]int = [BLUE: 3, RED: 1, AMBER: 4, GREEN: 2]
 
+for v in score:
+    print v                      # 1 2 3 4
 for c in Color:
     print c'Image, score[c]      # RED 1, GREEN 2, BLUE 3, AMBER 4
 ```

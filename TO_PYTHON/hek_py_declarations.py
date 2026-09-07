@@ -299,12 +299,64 @@ def to_py(self, prec=None):
     return f"Sequence[{self.nodes[1].to_py()}]"
 
 
+_ENUM_ARRAY_ALIAS = '''\
+class _EnumArray(dict):
+    """[O]T where the domain is an enum: an array indexed by its members.
+
+    A dict, so `score[RED]` is the natural lookup, but it iterates its
+    values, in the order of the domain. Every other member of the [O]T
+    family -- [3]int, [0..2]int, a named subrange -- is a list here and
+    yields values in index order, and the Nim backend does the same for all
+    four because they are all `array[O, T]` there. A plain dict would make
+    this one alone yield its keys, in whatever order the literal was written.
+
+    `{E}V` is unaffected: that is a real dict and iterating it gives keys,
+    which is what both Python and Nim's Table do.
+    """
+    __slots__ = ()
+
+    def __iter__(self):
+        def _ordinal(kv):
+            k = kv[0]
+            return getattr(k, "value", k)
+        return iter(v for _, v in sorted(self.items(), key=_ordinal))\
+'''
+
+
+def _ensure_enum_array_alias():
+    """Define _EnumArray the first time an [E]T is named or built."""
+    from hek_parsec import ParserState
+    decls = getattr(ParserState, 'py_top_decls', [])
+    if not any("class _EnumArray(dict)" in d for d in decls):
+        decls.append(_ENUM_ARRAY_ALIAS)
+        ParserState.py_top_decls = decls
+
+
 @method(enum_array_type)
 def to_py(self, prec=None):
     """enum_array_type: '[' IDENTIFIER ']' type_annotation (enum-indexed array) -> Nim: array[EnumType, T]"""
+    from hek_parsec import ParserState
     idx = self.nodes[0].to_py()
     elem = self.nodes[1].to_py()
-    return f"dict[{idx}, {elem}]"
+    # `[E]T` and `[N]T` are the same shape once N is a named constant --
+    # both are '[' IDENTIFIER ']' T -- so the grammar cannot separate them
+    # and the identifier has to be looked up. An enum (or char/bool, the
+    # other ordinals that arrive by name) indexes a mapping; an integer
+    # constant just gives the length, and that is the fixed array of
+    # array_type above.
+    # tick_types holds the named ordinal *types* -- enums by their members,
+    # subranges by their bounds -- and not plain constants, which is exactly
+    # the line to draw. `[Prisoner_T]Box_T` over `1 .. 100` is a mapping and
+    # cannot be a list: its domain does not start at 0.
+    _info = getattr(ParserState, "tick_types", {}).get(idx)
+    _is_ordinal_domain = _info is not None or idx in ("str", "bool")
+    if not _is_ordinal_domain:
+        return f"tuple[{elem}, ...]"
+    # Named rather than `dict[...]` so the annotation still says which of the
+    # two it is: `[E]T` and `{E}T` both rendered as dict[E, T], and the zero
+    # value below has nothing else to go on.
+    _ensure_enum_array_alias()
+    return f"_EnumArray[{idx}, {elem}]"
 
 
 @method(subrange_array_type)

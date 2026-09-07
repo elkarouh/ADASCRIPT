@@ -28,12 +28,11 @@ history of this file if the reasoning behind one of them is ever wanted.
       most examples from producing byte-identical output on the two backends.
       `'Image` and f-strings already agree; it is the default `$`/`str()` of a
       container that does not.
-- [ ] iterating an `[E]T` means two different things. `for x in score:`
-      where `score: [Color]int` yields the *values* on Nim (it is an
-      `array[E, T]`) and the *keys* on Python (it is a `dict`), and the
-      Python order is the literal's, not the enum's. Indexing agrees, so
-      `for c in Color: score[c]` is portable and is what the README now
-      recommends; direct iteration should either agree or be rejected.
+- [ ] `.keys()` and `.items()` on an `[E]T` work on Python and do not exist
+      on Nim, where the type is an `array[E, T]`: `score.keys()` fails with
+      "type mismatch ... expected Table". Iteration and indexing agree now;
+      these two do not. Nim's `pairs`/`keys` iterators over an array are the
+      shape to map onto.
 - [ ] py2nim zero-initialises a *bare* annotated declaration where Python
       binds nothing. `s: {}int` inside a function is ordinary Python, and
       ordinary Python raises `UnboundLocalError` on the next `s.add(1)`;
