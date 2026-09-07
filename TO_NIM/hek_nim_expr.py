@@ -747,6 +747,53 @@ def to_nim(self, prec=None):
 
 
 
+def comma_parts(node):
+    """The elements of a comma-separated node, rendered separately.
+
+    `arguments` and `star_expressions` both flatten to `X (',' X)*` and both
+    join with ", ". print needs them apart instead: Python separates its
+    arguments with a space where Nim's echo concatenates, so the separator
+    has to be written in explicitly.
+    """
+    if not hasattr(node, "nodes") or not node.nodes:
+        return None
+    try:
+        parts = [node.nodes[0].to_nim()]
+        for n in node.nodes[1:]:
+            if not hasattr(n, "nodes") or not n.nodes:
+                continue
+            for seq in n.nodes:
+                if hasattr(seq, "nodes") and len(seq.nodes) >= 1:
+                    parts.append(seq.nodes[0].to_nim())
+    except Exception:
+        return None
+    return parts
+
+
+def _spaced_echo(primary_node):
+    """`print(a, b)` -> `echo(a, " ", b)`, or None if this is not that.
+
+    The parenthesised spelling reaches Nim as an ordinary call renamed
+    through _PY_IDENT_TO_NIM, not through print_stmt, so it needs the same
+    treatment separately or the two spellings of print would disagree with
+    each other on one backend.
+    """
+    if len(primary_node.nodes) < 2:
+        return None
+    st = primary_node.nodes[1]
+    if not hasattr(st, "nodes") or len(getattr(st, "nodes", ())) != 1:
+        return None
+    call = st.nodes[0]
+    if type(call).__name__ != "call_trailer":
+        return None
+    if len(call.nodes) < 2 or not hasattr(call.nodes[1], "nodes") or not call.nodes[1].nodes:
+        return None
+    parts = comma_parts(call.nodes[1].nodes[0])
+    if parts is None or len(parts) < 2:
+        return None
+    return "echo(" + ', " ", '.join(parts) + ")"
+
+
 _PY_IDENT_TO_NIM = {
     "print": "echo",
     "str": "string",
@@ -1452,6 +1499,10 @@ def to_nim(self, prec=None):
     # Map Python builtin names to Nim equivalents
     raw_name = result
     result = _PY_IDENT_TO_NIM.get(result, result)
+    if raw_name == "print":
+        _spaced = _spaced_echo(self)
+        if _spaced is not None:
+            return _spaced
     # Auto-unwrap Option vars proven non-None by an enclosing if x.isSome guard.
     # Only applies when used as a bare name (no trailers that already dereference it).
     _unwrap_vars = getattr(ParserState, '_option_unwrap_vars', set())

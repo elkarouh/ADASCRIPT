@@ -20,9 +20,14 @@ history of this file if the reasoning behind one of them is ever wanted.
       `nimport` when it is actually used, or say so at transpile time instead
       of at run time. (`git1.ady` used to depend on that accident; it now
       names no `os.` at all, so it is no longer a witness.)
-- [ ] `print x, y` puts a space between the arguments on Python and none on
-      Nim: `print "n=", 1` gives `n= 1` there and `n=1` here. Same source,
-      different output, which is the one thing the two backends must not do.
+- [ ] container and enum values stringify differently. `print xs` where
+      `xs: []Node_T` gives `@[A, B, C, D]` on Nim and
+      `[<Node_T.A: 0>, <Node_T.B: 1>, ...]` on Python -- Nim's seq syntax and
+      bare enum names against Python's list syntax and Enum repr. Much wider
+      than the print separator that used to sit here, and it is what stops
+      most examples from producing byte-identical output on the two backends.
+      `'Image` and f-strings already agree; it is the default `$`/`str()` of a
+      container that does not.
 - [ ] `[char]T` indexed by a quoted literal compiles on Python and fails on
       Nim. `var freq: [char]int` / `freq['a'] = 3` works on Python (the
       array becomes a `dict[str, int]`) but emits `freq["a"]` for Nim, where

@@ -1804,8 +1804,16 @@ def to_nim(self):
 
     Adascript bare print statement. In Nim output, 'print x' becomes 'echo x'.
     Option-typed bare arguments are automatically unwrapped with .get().
-    Multiple comma-separated arguments are passed directly to echo.
+
+    Several arguments are separated by a space, as Python's print does.
+    Nim's echo concatenates, so `print "n=", 1` used to give `n=1` here and
+    `n= 1` there -- the same source printing two different things, which is
+    the one thing the two backends must not do.
     """
+    from hek_nim_expr import comma_parts
+    _parts = comma_parts(self.nodes[0])
+    if _parts is not None and len(_parts) > 1:
+        return "echo(" + ', " ", '.join(_parts) + ")"
     arg = self.nodes[0].to_nim()
     # Auto-unwrap a bare Option-typed variable (no trailers, just a name)
     import re as _re_print
