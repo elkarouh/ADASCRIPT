@@ -161,6 +161,21 @@ for i in 0..3:
         pairs.append(f"{i}{j}")
 assert pairs == ["01", "02", "03", "12", "13", "23"]
 
+# An ordinary binary operator on the right of a comparison is not a range.
+# The range emitter used to ask only whether the operator was "..<", so
+# every other one -- `-`, `*`, `/` -- fell into the inclusive branch and
+# `a < b - c` came out as `a < range(b, c + 1)`. It parsed and it ran.
+let bn: int = 8
+let bh: int = 4
+assert bh == bn // 2
+assert not (bh == bn * 2)
+assert bh < bn - 1
+assert not (bh > bn - 1)
+assert bh == bn - 4
+assert (bh == bn % 5) == False
+let proot: Path = Path("/tmp")
+assert (proot / "x") == proot / "x"
+
 # 'Range on a type is its domain; on a value it is the index range.
 type Hue is enum PINK, TEAL
 let hues: {}Hue = Hue'Range

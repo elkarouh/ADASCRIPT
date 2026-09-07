@@ -47,18 +47,24 @@ history of this file if the reasoning behind one of them is ever wanted.
       it works on both — so the fix belongs in py2nim, which should either
       match Python or reject the bare form. Found via `floyd.ady`, which was
       written with the bare form and only worked on Nim.
-- [ ] **py2py reads `/` as the range operator on the right of a comparison,
-      and gets the wrong answer without saying anything.** `half == n / 2`
-      emits `half == range(n, 2 + 1)`, so a program that should print True
-      prints False. `!=` does the same; parenthesising the division
-      (`half == (n / 2)`) is the workaround, and division on its own
-      (`let f = n / 2`) has always been fine. Nothing about it is
-      Path-specific -- plain ints reproduce it -- and it is the worst
-      failure shape there is: no error, just a different answer.
-      py2nim emits `half == n / 2` correctly here, so this is a py2py
-      grammar bug rather than a shared one; Nim then declines to compile it,
-      because `/` on two ints is a float and `==` has no int/float overload.
-      Repro: `let n: int = 8` / `let half: int = 4` / `print half == n / 2`.
+- [ ] py2py generates annotations whose names are not in scope at import
+      time. `Callable` is fixed (the emitter now adds the typing import),
+      but a class that names itself -- `def __and__(self, other: Region)`
+      inside `class Region` -- is still a NameError, because Python
+      evaluates annotations eagerly while Adascript writes them the way Nim
+      does, as compile-time types. `from __future__ import annotations` is
+      the right answer and is a one-line change, but every expected output
+      in `py2py --test` and `test_py2py.py` is a literal string that would
+      gain the import line: 43 and 122 cases respectively fail on it. Worth
+      doing together with a pass over those fixtures.
+- [ ] `int == int / int` compiles on Python and is rejected by Nim, whose
+      `/` yields a float and whose `==` has no int/float overload. Python
+      says `4 == 8 / 2` is True. Either the emitter converts, or the
+      limitation is documented.
+- [ ] a variable named `b`, `r`, `f` or `u` cannot take a tick: `b'Length`
+      lexes as the start of a bytes literal and fails to parse on both
+      backends. Consistent, so not a divergence, but the error names the
+      wrong thing.
 - [ ] `Path` joins diverge on a `.` segment once three terms are chained:
       `Path(".") / ".git1" / "x.txt"` is `./.git1/x.txt` on Python and
       `.git1/x.txt` on Nim. Two terms agree (`Path(".") / ".git1"` is
@@ -71,13 +77,6 @@ history of this file if the reasoning behind one of them is ever wanted.
       both sides; the lexical `os.path.join` rule is the easier one to
       match, but it means shadowing the `/` that std/paths exports.
       `git1.ady` sidesteps it by joining in two steps.
-- [ ] `-e` is false for a directory on Nim and true on Python. It maps to
-      `fileExists` in `hek_nim_expr.py` (`"e": ("fileExists", "os")`), whose
-      own comment says "exists (file or dir)" — Nim's `fileExists` is files
-      only, so `-e /tmp` is false there and true here. Should be
-      `fileExists(p) or dirExists(p)`. `os.path.exists` is mapped to the same
-      `fileExists` two hundred lines up and has the same hole. This is the
-      most-used file test, so the divergence is worth closing early.
 - [ ] py2nim: `any(xs)` and `all(xs)` over a `[]bool` do not translate. `any`
       hits Nim's deprecated `any` *type* ("illegal type conversion to 'any'")
       and `all` is simply undeclared; both work on the Python backend, so the

@@ -952,13 +952,20 @@ def to_py(self, prec=None):
     if not hasattr(seq, 'nodes') or len(seq.nodes) < 2:
         return lo
     range_op_node = seq.nodes[0]
+    op_val = getattr(range_op_node, 'node', None)
+    if op_val not in ("..", "..<"):
+        # Not a range at all. Sequence flattening can leave an ordinary
+        # binary operator on this node, and the old code asked only whether
+        # the operator was "..<" -- so everything that was not, `/`
+        # included, fell into the inclusive branch below. `a == b / c` came
+        # out as `a == range(b, c + 1)`: it parsed, it ran, and it answered
+        # a different question. Hand those back to the generic binary
+        # emitter, which is what builds them everywhere else.
+        return binop_to_py(self, prec, None)
     hi = seq.nodes[1].to_py(prec)
-    # Detect exclusive (..<) vs inclusive (..)
-    is_exclusive = getattr(range_op_node, 'node', None) == "..<"
-    if is_exclusive:
+    if op_val == "..<":
         return f"range({lo}, {hi})"
-    else:
-        return f"range({lo}, {hi} + 1)"
+    return f"range({lo}, {hi} + 1)"
 
 
 # --- power ---

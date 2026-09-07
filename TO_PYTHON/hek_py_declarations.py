@@ -337,6 +337,11 @@ def to_py(self, prec=None):
     # Extract individual param types from the tuple
     params = _tuple_elements(tup)
     param_str = ", ".join(params)
+    # The name has to come from somewhere: an annotation is evaluated at
+    # class-body and module level, so an unimported Callable is a NameError
+    # at import time rather than a quiet typing-only omission.
+    from hek_parsec import ParserState
+    ParserState.nim_imports.add("from typing import Callable")
     return f"Callable[[{param_str}], {ret}]"
 
 
