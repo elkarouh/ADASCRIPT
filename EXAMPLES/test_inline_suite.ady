@@ -186,6 +186,28 @@ assert (bh == bn % 5) == False
 let proot: Path = Path("/tmp")
 assert (proot / "x") == proot / "x"
 
+# A bare `x : T` is Python's annotation: it records a type and binds
+# nothing, so the assignment is what declares. py2nim used to emit `var x: T`
+# for it, which made code written that way build here and raise
+# UnboundLocalError there. The annotation's type is still carried to the
+# assignment, so this is `var ann_then: int = 5` in the Nim output.
+ann_then: int
+ann_then = 5
+assert ann_then == 5
+# (A declaration is `var x: T`. Reading a bare-annotated name before
+# assigning it is now an error on both backends, so it cannot be asserted
+# here -- it fails to compile on Nim and raises on Python.)
+
+# A field, though, is declared by exactly that spelling -- Rec_T above has
+# `items : []str` with no initialiser -- which is why the two cases are
+# told apart rather than the form being rejected outright.
+type Field_T is record:
+    tag:   str = "t"
+    extra: []str
+var fr : Field_T
+fr.extra.append("e")
+assert fr.tag == "t" and fr.extra'Length == 1
+
 # Every [O]T yields its values, in domain order, on both backends. The
 # enum-keyed one is a dict on Python, so left alone it would be the only
 # member of the family to yield its keys -- and in the order the literal

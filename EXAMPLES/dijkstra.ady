@@ -10,7 +10,7 @@ type Neighbour_T is tuple:
 
 def dijkstra(graph : Graph_T, start: Node_T) -> {Node_T}Distance_T:
     distances: {Node_T}Distance_T = {node: (0.0 if node==start else MAX_DIST) for node in graph}
-    visited : {}Node_T
+    var visited : {}Node_T
     queue : PriorityQueue[Neighbour_T] = [(0.0, start)]
     while queue:
         current_dist, node = queue.pop()

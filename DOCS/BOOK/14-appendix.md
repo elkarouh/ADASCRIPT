@@ -168,10 +168,12 @@ in order to build.
   on Python, hash on Nim). The types promise no order; sort the keys where
   the output has to match (§6.2). Sort the *keys*, not the table —
   `sorted(counts)` compiles only on the Python backend.
-- A bare annotated declaration (`s: {}int`, no `var`) is ordinary Python
-  and binds nothing, which is what `py2py` emits; the Nim backend treats it
-  as a declaration and zero-initialises. Write `var s: {}int` for a
-  declaration — that works on both (§2.1).
+- A bare annotated declaration (`s: {}int`, no `var`) is Python's
+  annotation: it records a type and binds nothing, on both backends. Write
+  `var s: {}int` to declare one (§2.1). The type is carried to the first
+  assignment, so `count: int` then `count = 5` still declares `count` as an
+  `int`. Inside a record or class body the same spelling *is* a field
+  declaration, which is the documented form there.
 - No borrow checker; `move()` misuse surfaces at runtime, not compile time.
 - Generic methods on `@virtual` classes hit Nim 2.x restrictions — define
   them as free functions taking `self` and rely on UFCS (§9.5).

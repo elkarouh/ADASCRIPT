@@ -2353,6 +2353,17 @@ def _parse_func_decorators(decos_str, indent):
 @method(func_def)
 def to_nim(self, indent=0):
     """def f(a: int) -> str:  ->  proc f(a: int): string ="""
+    import hek_nim_stmt as _hns_fn
+    _saved_field_depth = _hns_fn.FIELD_BODY_DEPTH
+    _hns_fn.FIELD_BODY_DEPTH = 0   # a method body is an ordinary scope
+    try:
+        return _func_def_to_nim_inner(self, indent)
+    finally:
+        _hns_fn.FIELD_BODY_DEPTH = _saved_field_depth
+
+
+def _func_def_to_nim_inner(self, indent=0):
+    """The body of func_def.to_nim; see the wrapper above for why."""
     decos = ""
     name = ""
     params = ""
@@ -3013,7 +3024,15 @@ def to_nim(self, indent=0):
         block_node._base_indent = indent  # Store original indent for procs/methods
     # Always use is_virtual=True for block processing to get init/new procs
     # The 'ref' keyword is controlled separately
-    body = block_node.to_nim(indent + 1, is_virtual=True, class_name=name, parent_name=parent_name, type_params=type_params) if block_node else ""
+    # A class body's `name: T` lines are field declarations, not Python
+    # annotations -- func_def clears the flag again so a method body is an
+    # ordinary scope, the same split py2py makes with CLASS_BODY_DEPTH.
+    import hek_nim_stmt as _hns_cls
+    _hns_cls.FIELD_BODY_DEPTH += 1
+    try:
+        body = block_node.to_nim(indent + 1, is_virtual=True, class_name=name, parent_name=parent_name, type_params=type_params) if block_node else ""
+    finally:
+        _hns_cls.FIELD_BODY_DEPTH -= 1
 
     parent = f" of {parent_name}" if parent_name else " of RootObj"
     # Check field declarations for self-reference (e.g., children: array[X, TrieNode])
@@ -3043,6 +3062,16 @@ def _extract_fields_from_block(block_node, indent, export_fields=False):
     field_lines: indented Nim field declarations with defaults and var/let/const stripped.
     field_defaults: list of (field_name, default_expr) for fields that have defaults.
     Also strips export markers (*) from field names: tuple fields cannot be exported."""
+    import hek_nim_stmt as _hns
+    _hns.FIELD_BODY_DEPTH += 1
+    try:
+        return _extract_fields_from_block_inner(block_node, indent, export_fields)
+    finally:
+        _hns.FIELD_BODY_DEPTH -= 1
+
+
+def _extract_fields_from_block_inner(block_node, indent, export_fields=False):
+    """The body of _extract_fields_from_block; see the wrapper above for why."""
     import re as _re
     lines = []
     defaults = []
@@ -3095,6 +3124,16 @@ def _extract_fields_from_block(block_node, indent, export_fields=False):
 
 def _extract_variant_fields_nim(stmt_nodes, indent):
     """Extract field declarations from variant_when stmt_line nodes."""
+    import hek_nim_stmt as _hns
+    _hns.FIELD_BODY_DEPTH += 1
+    try:
+        return _extract_variant_fields_nim_inner(stmt_nodes, indent)
+    finally:
+        _hns.FIELD_BODY_DEPTH -= 1
+
+
+def _extract_variant_fields_nim_inner(stmt_nodes, indent):
+    """The body of _extract_variant_fields_nim; see the wrapper above."""
     import re as _re
     lines = []
     for seq in stmt_nodes:

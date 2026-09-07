@@ -3,8 +3,8 @@
 nimport os
 nimport times
 
-completedTests: {}str  ## All completed tests (persistent)
-intervalTests: {}str   ## Tests since last 5-min summary
+var completedTests: {}str  ## All completed tests (persistent)
+var intervalTests: {}str   ## Tests since last 5-min summary
 
 def getTestStatusLines() -> []str:
   "Run show_tests_status and return output as lines."

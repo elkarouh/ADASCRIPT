@@ -294,6 +294,15 @@ def to_nim(self):
                     if _m:
                         parts[1] = f"some({rhs})"
                         ParserState.nim_imports.add("options")
+    # A bare `x: T` earlier left its type here rather than declaring: this is
+    # the assignment that binds x, in Python and now in Nim alike, so it is
+    # the one that carries the annotation.
+    if prefix == "var " and len(parts) == 2:
+        _pending = getattr(ParserState, "_pending_annotations", {})
+        _ann = _pending.pop(lhs, None)
+        if _ann:
+            ParserState.symbol_table.add(lhs, _ann, "var")
+            return f"var {lhs}: {_ann} = {parts[1]}"
     stmt = prefix + " = ".join(parts)
     # Float range constraint: append assert after assignment
     if len(parts) == 2 and not "," in lhs:
@@ -678,6 +687,14 @@ def _specialize_init_table(value, annotation):
 
 
 # --- annotated assignment ---
+# Non-zero while a record, tuple or class body is being rendered. There, a
+# `name: T` with no initialiser is a *field* and does declare one -- it is
+# the documented spelling. Only in statement position is it Python's
+# annotation, which binds nothing. Set by the field extractors in
+# hek_nim_parser.py.
+FIELD_BODY_DEPTH = 0
+
+
 @method(ann_assign_stmt)
 def to_nim(self):
     """ann_assign_stmt: IDENTIFIER ':' type_annotation ('=' expression)?
@@ -685,6 +702,25 @@ def to_nim(self):
     """
     name = self.nodes[0].to_nim()
     annotation = self.nodes[2].to_nim()
+    _has_value = any(
+        hasattr(seq, "nodes") and len(seq.nodes) >= 2
+        for node in self.nodes[3:] if hasattr(node, "nodes") and node.nodes
+        for seq in node.nodes
+    )
+    if not _has_value and name != "result" and not FIELD_BODY_DEPTH:
+        # `x: T` with no value is a Python *annotation*: it records a type and
+        # binds nothing, so the next read of x raises. Emitting `var x: T`
+        # here declared it, which is why code written this way built on Nim
+        # and failed on Python -- the one thing the two backends must not do.
+        # The type is kept for the first assignment, which is what binds it in
+        # Python too, so `count: int` / `count = 5` still gives `var count:
+        # int = 5`. Write `var x: T` for a declaration.
+        _pending = getattr(ParserState, "_pending_annotations", None)
+        if _pending is None:
+            _pending = {}
+            ParserState._pending_annotations = _pending
+        _pending[name] = annotation
+        return ""
     # Record type in symbol table
     ParserState.symbol_table.add(name, annotation, "var")
     # Nim's implicit result variable: skip var and type inside typed procs

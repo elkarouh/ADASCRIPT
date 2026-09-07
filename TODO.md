@@ -33,15 +33,6 @@ history of this file if the reasoning behind one of them is ever wanted.
       "type mismatch ... expected Table". Iteration and indexing agree now;
       these two do not. Nim's `pairs`/`keys` iterators over an array are the
       shape to map onto.
-- [ ] py2nim zero-initialises a *bare* annotated declaration where Python
-      binds nothing. `s: {}int` inside a function is ordinary Python, and
-      ordinary Python raises `UnboundLocalError` on the next `s.add(1)`;
-      py2py round-trips it unchanged and so does raise, but the Nim backend
-      treats it as a declaration and prints `{1}`. py2py is the correct side
-      here — `var s: {}int` is the Adascript spelling for a declaration, and
-      it works on both — so the fix belongs in py2nim, which should either
-      match Python or reject the bare form. Found via `floyd.ady`, which was
-      written with the bare form and only worked on Nim.
 - [ ] py2py generates annotations whose names are not in scope at import
       time. `Callable` is fixed (the emitter now adds the typing import),
       but a class that names itself -- `def __and__(self, other: Region)`

@@ -354,7 +354,7 @@ typedefs: {str}CType_T = {:}
 
 def parse_type_and_name(lexer: Lexer, prev_t: ?str = None) -> (CType_T, Token_T):
     t: str = prev_t or lexer.next(TK_TYPE).content
-    ctype: CType_T
+    var ctype: CType_T
     if t in typedefs:
         base: CType_T = typedefs[t]
         ctype = CType_T(base.typename, base.pointer_level, base.array_size, lexer.line)
