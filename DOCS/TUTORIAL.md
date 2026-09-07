@@ -125,6 +125,35 @@ Adascript uses **left-to-right** annotation syntax. Container kinds are
 prefixes, so `[]int` reads "list of int" and `{str}int` reads "dict mapping
 str to int".
 
+There is one idea behind the whole table, and it is worth having up front:
+**every container is a mapping**, written `<domain>value`. The brackets hold
+the domain — what you index with — and the value type follows.
+
+- The **shape** says whether the domain is ordered: `[…]` is ordered, `{…}`
+  is not.
+- **What sits inside** says what the domain is: named (`[O]T`, `{K}V`) or
+  left implicit and unbounded (`[]T`, `{}T`).
+
+Between `[…]` the domain must be an **ordinal type** — an enum, `bool`,
+`char`, or an integer subrange — because that is what has an order to index
+by. Between `{…}` any hashable type works.
+
+|                     | ordered `[…]`                       | unordered `{…}` |
+|---------------------|-------------------------------------|-----------------|
+| **domain named**    | `[O]T` — indexed by an ordinal type | `{K}V` — dict   |
+| **domain implicit** | `[]T` — list, indexed `0 ..< n`     | `{}T` — set     |
+
+That makes the fixed-size array unremarkable rather than a special case: a
+length is shorthand for a subrange, so `[10]int` and `[0..9]int` are one
+type. On the Nim backend `array[10, int] is array[0..9, int]` is literally
+`true`. And `{:}` versus `{}` stops being arbitrary — `{:}` carries the
+colon of a `key: value` pair, so it is the empty mapping with a named
+domain; bare `{}` is the empty set.
+
+"Unordered" is a portability rule, not a mnemonic: the same `{str}int`
+iterates in insertion order on Python and hash order on Nim. Sort the keys
+if the output has to match.
+
 | Adascript      | Python                | Nim                            |
 |----------------|----------------------|--------------------------------|
 | `[]T`          | `list[T]`            | `seq[T]`                       |
@@ -339,6 +368,23 @@ var costs: [Priority]int = [LOW: 1, MED: 5, HIGH: 10]
 print(costs[HIGH])   # 10
 ```
 
+An enum is just one ordinal domain; `[10]T`, `[0..9]T` and `[bool]T` are the
+same construct with a different one in the brackets.
+
+Index it freely — that is identical on both backends. Do not iterate it
+directly, though: the Nim backend has an `array[E, T]` and yields the
+values, while the Python backend has a dict and yields the keys, in the
+order the literal was written. Walk the domain instead, which is portable
+and follows the enum however the literal was ordered:
+
+```python
+type Color is enum RED, GREEN, BLUE, AMBER
+var score: [Color]int = [BLUE: 3, RED: 1, AMBER: 4, GREEN: 2]
+
+for c in Color:
+    print c'Image, score[c]      # RED 1, GREEN 2, BLUE 3, AMBER 4
+```
+
 Nested enum arrays work too (2-D lookup table):
 
 ```python
@@ -472,6 +518,12 @@ before parsing, so Python's lexer is never confused by the apostrophe.
 > **Limitation:** tick attributes are only supported on bare identifiers and
 > type names. They do not work on field accesses (`self.num'Image`) or
 > subscripts (`args[0]'Image`). Use `str()` in those cases instead.
+
+> **Backend note:** `E'First`, `E'Last` and `E'Range` are correct on the Nim
+> backend but are currently mistranslated by `py2py`, which emits plain
+> integers where the enum members belong. Prefer `for x in E:` when you just
+> want the members — it is shorter and behaves identically on both backends.
+> See `TODO.md`.
 
 ### Iterating over an enum's full range
 

@@ -47,6 +47,27 @@ Sudoku's whole board is a `{str}str` — square name to remaining candidate
 digits — and the solver threads it functionally through `assign`/`eliminate`,
 returning `{:}` to signal contradiction (see §2.3).
 
+The `{…}` in the notation is a promise about order, or rather the absence of
+one, and it is worth taking literally when a program has to build on both
+backends. Iterating the same `{str}int` yields insertion order on Python and
+hash order on Nim — keys inserted `zebra, apple, mango, kiwi, banana` come
+back in that order from one and as `zebra, kiwi, apple, mango, banana` from
+the other. Sets behave the same way. Nothing is wrong in either case; the
+type simply never promised an order. Where output has to match, collect the
+keys and sort those, or keep the data in one of the `[…]` forms, which do
+iterate in order on both:
+
+```python
+var keys: []str = []
+for k in counts.keys():
+    keys.append(k)
+for key in sorted(keys):
+    print key, counts[key]
+```
+
+Sort the keys rather than the table: `sorted(counts)` works on the Python
+backend but has no meaning for a Nim `Table`, and fails to compile there.
+
 Dict comprehensions work, including conditional expressions inside.
 `dijkstra.ady` initialises all distances in one line:
 

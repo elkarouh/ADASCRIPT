@@ -43,6 +43,41 @@ Adascript replaces Python's `typing` module with a compact, left-to-right
 notation where the container kind is a *prefix*. `[]int` reads "list of
 int"; `{str}int` reads "dict from str to int".
 
+That reading is right as far as it goes, but it makes the notation look like
+a list of separate spellings to memorise. It is one idea. **Every container
+is a mapping**, written `<domain>value`: the brackets carry the domain — the
+thing you index with — and the value type follows them. Two independent
+choices then generate the entire table.
+
+The first is the *shape* of the brackets, which says whether the domain is
+ordered. `[…]` is ordered: the domain has a first, a next and a last, and
+the container is held in that order. `{…}` is unordered: the domain has no
+order, so neither does the container.
+
+The second is *what sits inside*, which says what the domain is. Name it
+outright — `[O]T`, `{K}V` — or leave it out, and it is implicit and
+unbounded: `[]T` and `{}T` grow as far as you need. Between `[…]` the domain
+must be an **ordinal type**, since an order to index by is exactly what an
+ordinal has: an enum, `bool`, `char`, an integer subrange. Between `{…}` any
+hashable type will do.
+
+Four corners, four forms:
+
+|                     | ordered `[…]`                       | unordered `{…}` |
+|---------------------|-------------------------------------|-----------------|
+| **domain named**    | `[O]T` — indexed by an ordinal type | `{K}V` — dict   |
+| **domain implicit** | `[]T` — list, indexed `0 ..< n`     | `{}T` — set     |
+
+One consequence is worth drawing out, because it removes a form from the
+list rather than adding one: the fixed-size array is not special. `[10]int`
+is `[O]T` whose ordinal type happens to be a subrange — a length `N` is
+shorthand for `0 .. N-1`. So `[10]int` and `[0..9]int` are the same type,
+not two similar ones. Nim agrees literally: there,
+`array[10, int] is array[0..9, int]` evaluates to `true`, and a value of one
+spelling assigns to the other. The domain can equally be written out, named
+(`type Idx is 0 .. 4`, then `[Idx]int`), or be any other ordinal —
+`[bool]str`, `[Priority]int`, `[char]int`.
+
 | Adascript | Python | Nim |
 |-----------|--------|-----|
 | `[]T` | `list[T]` | `seq[T]` |
@@ -54,6 +89,19 @@ int"; `{str}int` reads "dict from str to int".
 | `?T` | `T \| None` | `Option[T]` |
 | `(T, U)` | `tuple[T, U]` | `(T, U)` |
 | `[(T, U)]R` | `Callable[[T, U], R]` | `proc(a0: T, a1: U): R` |
+
+`?T` and `(T, U)` are not containers and sit outside the scheme; the
+function type `[(T, U)]R` reuses the bracket for a different job — an
+ordered list of parameter types on the left, the result on the right.
+
+"Unordered" is a portability rule rather than a mnemonic, because the two
+backends really do disagree. Iterating the same `{str}int` gives insertion
+order on the Python backend and hash order on Nim: for keys inserted
+`zebra, apple, mango, kiwi, banana`, Python returns them in that order and
+Nim returns `zebra, kiwi, apple, mango, banana`. Sets diverge the same way.
+A program that iterates a `{…}` type and depends on what comes out first is
+therefore not portable between the backends — sort the keys, or use an
+ordered form.
 
 The notations compose freely. `EXAMPLES/graph.ady` models a graph as a type
 alias built from two of them:
@@ -132,6 +180,13 @@ type Index     is 0 ..< 10     # values 0–9
 type Prisoner_T is int range 1..NUM_PRISONERS
 type Box_T      is int range 1..NUM_BOXES
 ```
+
+A subrange is an ordinal type, so it is also a domain: `[Box_T]Prisoner_T`
+is an array with one slot per box, indexed by box number rather than by a
+position that happens to line up with one. This is the other end of the
+observation in §2.2 — `[10]int` is shorthand for `[0..9]int` — and it is
+what makes the fixed-size array and the enum-indexed array the same
+construct with different ordinals in the brackets.
 
 and then uses `Prisoner_T` both as an array index type and as a loop range —
 the Pascal/Ada "base minimum" the README insists on:

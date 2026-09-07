@@ -59,6 +59,10 @@ type Priority is enum LOW, MED, HIGH
 var costs: [Priority]int = [LOW: 1, MED: 5, HIGH: 10]
 ```
 
+An enum is one ordinal among several here — §2.2 covers the general form
+`[O]T`, of which this and the fixed-size array are two instances. What the
+enum adds is a *named* domain: `costs[HIGH]` rather than `costs[2]`.
+
 In Nim this is `array[Priority, int]` — a fixed-size, stack-allocated array
 with O(1) indexing and *no hashing*. In Python it becomes a dict keyed by
 enum members. `EXAMPLES/awk_example.ady` tallies log-line severities in one:
@@ -95,6 +99,29 @@ or, when you want to be explicit about bounds, the Ada way:
 ```python
 for s in Stage_T'First .. Stage_T'Last:
     ...
+```
+
+Prefer the first. `for s in E:` is the form to reach for by default: it is
+shorter, it yields the members in declaration order, and it behaves
+identically on both backends. The `'First .. 'Last` spelling is solid on the
+Nim backend but is currently mistranslated by the Python one, which emits
+plain integers where the enum members belong — see `TODO.md`. The loop still
+runs there, which is what makes it worth knowing about: it goes wrong only
+once the body treats the loop variable as an enum.
+
+Walking an enum is also how you should walk an `[E]T`. Indexing one is
+identical on both backends, but *iterating* it is not the same operation:
+the Nim backend has an `array[E, T]` and yields the values, while the Python
+backend has a dict and yields the keys, in whatever order the literal was
+written. Go through the domain instead, which is portable and follows the
+enum regardless of how the literal was ordered:
+
+```python
+type Color is enum RED, GREEN, BLUE, AMBER
+var score: [Color]int = [BLUE: 3, RED: 1, AMBER: 4, GREEN: 2]
+
+for c in Color:
+    print c'Image, score[c]      # RED 1, GREEN 2, BLUE 3, AMBER 4
 ```
 
 ## 3.4 Ordinal sets: `{}E`

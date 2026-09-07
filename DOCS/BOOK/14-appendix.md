@@ -13,7 +13,10 @@
 | Variant record | `type S (Kind: K) is record: case Kind is when ...` |
 | Subrange | `type T is lo .. hi` / `type T is int range lo..hi` |
 | Float subrange | `type T is float range lo .. hi` |
+| Containers are mappings | `[…]` ordered domain, `{…}` unordered; inside = the domain |
 | List / fixed array / open array | `[]T` / `[N]T` / `[*]T` (params only) |
+| Fixed array is a subrange domain | `[10]T` ≡ `[0..9]T` |
+| Ordinal-indexed array | `[O]T` — `O` an enum, `bool`, `char`, or a subrange |
 | Dict / set / enum-indexed array | `{K}V` / `{}T` / `[E]T` |
 | Optional | `?T` |
 | Function type | `[(T, U)]R` |
@@ -161,6 +164,21 @@ in order to build.
 - Tick attributes don't attach to field accesses or subscripts
   (`self.x'Image` — bind to a local first).
 - `[*]T` is parameter/return-only.
+- Iterating a `{…}` type is in a different order on each backend (insertion
+  on Python, hash on Nim). The types promise no order; sort the keys where
+  the output has to match (§6.2). Sort the *keys*, not the table —
+  `sorted(counts)` compiles only on the Python backend.
+- Iterating an `[E]T` is not the same operation on the two backends: Nim
+  yields the values, Python the keys. Indexing agrees, so walk the domain —
+  `for c in Color: score[c]` (§3.3).
+- `E'Range`, `E'First` and `E'Last` are correct on the Nim backend but
+  mistranslated by `py2py` (ints instead of members; `'Range` gets the
+  `'Prev` codegen). `for x in E:` is the portable spelling. This breaks
+  `floyd.ady`, `monty_hall.ady` and `prisoners.ady` on the Python backend —
+  see `TODO.md`.
+- `[char]T` indexed by a quoted literal works on Python and does not compile
+  on Nim: Adascript has no char literal, so `'a'` is a one-character string.
+  Index with `chr(97)`, which works on both.
 - No borrow checker; `move()` misuse surfaces at runtime, not compile time.
 - Generic methods on `@virtual` classes hit Nim 2.x restrictions — define
   them as free functions taking `self` and rely on UFCS (§9.5).

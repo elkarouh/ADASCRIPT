@@ -43,6 +43,31 @@ Build artifacts go into `~/.cache/hparsec/cache-<HASH>/` — source directories 
 
 Adascript uses prefix notation for containers. `[]int` = "list of int".
 
+**The scheme:** every container is a mapping written `<domain>value`. The
+brackets hold the domain (what you index with); the value type follows.
+
+- Shape = ordering. `[…]` ordered, `{…}` unordered.
+- Inside = the domain. Named (`[O]T`, `{K}V`) or implicit and unbounded
+  (`[]T`, `{}T`).
+- Inside `[…]` the domain must be an **ordinal type**: enum, `bool`, `char`,
+  or an integer subrange. Inside `{…}`, any hashable type.
+
+|                 | ordered `[…]`            | unordered `{…}` |
+|-----------------|--------------------------|-----------------|
+| domain named    | `[O]T` ordinal-indexed   | `{K}V` dict     |
+| domain implicit | `[]T` list (`0 ..< n`)   | `{}T` set       |
+
+Consequences: `[10]T` ≡ `[0..9]T` (a length is shorthand for a subrange; on
+Nim `array[10,int] is array[0..9,int]` is `true`), so the fixed array is not
+a special form. `{:}` has the colon of `key: value`, so it is the empty
+dict; bare `{}` is the empty set.
+
+**Portability:** `{…}` types iterate in insertion order on Python and hash
+order on Nim — never depend on it; sort the keys (sort the *keys*, not the
+table: `sorted(d)` compiles only on Python). `[E]T` is worse: iterating it
+yields values on Nim and keys on Python. Index it, and walk the domain with
+`for c in Color: score[c]`, which is identical on both.
+
 | Adascript | Python | Nim |
 |-----------|--------|-----|
 | `[]T` | `list[T]` | `seq[T]` |
@@ -193,8 +218,14 @@ Ada-style `'` attributes. Tokeniser converts `Type'Attr` → `Type__tick__Attr` 
 
 > **Limitation:** tick attributes only work on bare identifiers and type names — not on field accesses (`self.x'Image`) or subscripts. Use `str()` in those cases.
 
+> **Backend note:** `E'First`, `E'Last` and `E'Range` are correct on Nim but currently mistranslated by `py2py` (plain ints instead of enum members; `'Range` gets the `'Prev` codegen). Prefer `for x in E:` to walk an enum — shorter, and identical on both backends. See `TODO.md`.
+
 ```adascript
-# Iterating over full enum range
+# Iterating over an enum — prefer this, it works on both backends
+for s in Stage_T:
+    print(f"processing stage {s}")
+
+# The Ada spelling of the same thing (Nim-only for now, see the note above)
 for s in Stage_T'First .. Stage_T'Last:
     print(f"processing stage {s}")
 
