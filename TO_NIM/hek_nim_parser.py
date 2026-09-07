@@ -4002,7 +4002,10 @@ def to_nim(self, indent=0):
             nim_expr = nim_expr.replace("os.path.join(", "joinPath(")
             nim_expr = nim_expr.replace("os.path.dirname(", "parentDir(")
             nim_expr = nim_expr.replace("os.path.basename(", "lastPathPart(")
-            nim_expr = nim_expr.replace("os.path.exists(", "fileExists(")
+            if "os.path.exists(" in nim_expr:
+                from hek_nim_expr import _ensure_exists_helper
+                _ensure_exists_helper()
+                nim_expr = nim_expr.replace("os.path.exists(", "adascriptExists(")
             nim_expr = nim_expr.replace("os.path.isfile(", "fileExists(")
             nim_expr = nim_expr.replace("os.path.isdir(", "dirExists(")
             nim_expr = nim_expr.replace("os.makedirs(", "createDir(")

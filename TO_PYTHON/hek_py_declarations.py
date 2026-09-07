@@ -217,7 +217,11 @@ class Path(str):
 
     def mkdir(self):
         \"\"\"Create this directory and any missing parents (mkdir -p).\"\"\"
-        os.makedirs(self, exist_ok=True)\
+        os.makedirs(self, exist_ok=True)
+
+    def resolve(self):
+        \"\"\"The absolute path, with every symlink along it expanded.\"\"\"
+        return Path(os.path.realpath(self))\
 """
 # `parent` and `name` go through PurePath rather than os.path.dirname /
 # os.path.basename because those two disagree with Nim on a trailing slash:

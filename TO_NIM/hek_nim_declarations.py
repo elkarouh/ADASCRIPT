@@ -107,7 +107,24 @@ proc mkdir*(p: Path) =
   ## Create this directory and any missing parents (mkdir -p). createDir is
   ## already both recursive and idempotent, which is the contract the Python
   ## backend gets from os.makedirs(exist_ok = True).
-  createDir(p)\
+  createDir(p)
+
+proc resolve*(p: Path): Path =
+  ## The absolute path, with every symlink along it expanded.
+  ## expandFilename does this in one call but raises when the path does not
+  ## exist, where Python's realpath expands as much of it as does exist and
+  ## keeps the rest. Matching that costs the two fallbacks below and makes
+  ## the backends agree on a path that is only about to be created, on a
+  ## broken link, and on one reached through a symlinked directory.
+  if fileExists(p.string) or dirExists(p.string):
+    return Path(expandFilename(p.string))
+  if symlinkExists(p.string):
+    let target = Path(expandSymlink(p.string))
+    return (if target.isAbsolute: target else: p.parent.resolve / target)
+  let up = p.parent
+  if up.string == p.string:
+    return Path(absolutePath(p.string))
+  up.resolve / Path(p.name)\
 """
 
 
@@ -116,10 +133,14 @@ def _ensure_path_helper():
     from hek_parsec import ParserState
     # std/paths for the type and its splitting procs, std/dirs for the one
     # createDir that Path.mkdir needs -- it takes a Path directly, where os's
-    # takes a string. std/files stays out: the converter below lets os's
-    # string-based fileExists, readFile and friends take a Path already.
+    # takes a string -- and os for the existence tests and link expansion
+    # behind Path.resolve. All three are used by the helper itself, so none
+    # of them can turn into an unused-import warning. std/files stays out:
+    # the converter below lets os's string-based fileExists, readFile and
+    # friends take a Path already.
     ParserState.nim_imports.add("std/paths")
     ParserState.nim_imports.add("std/dirs")
+    ParserState.nim_imports.add("os")
     decls = getattr(ParserState, "nim_top_decls", [])
     if not any("adascriptPathToString" in d for d in decls):
         decls.append(_PATH_HELPER)

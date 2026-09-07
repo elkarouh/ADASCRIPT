@@ -42,12 +42,20 @@ class Target:
     Everything a git call needs to know travels with the object: run in the
     file's own directory, name the private repo as GIT_DIR so git stops
     searching upward for a .git, and declare that directory the work tree.
+
+    A symlink is treated as if the file were local. Left alone, git would
+    version the link itself -- a one-line blob holding the target's path --
+    so the content could change forever without a single commit having
+    anything to record. Instead git runs in the directory holding the real
+    content, while the repo stays beside the link. A directory of symlinks
+    is then a parallel history for files that live anywhere on the disk.
     """
-    dir:    Path   # the directory holding the file; git runs here
-    base:   str    # the file's own name
-    gitdir: Path   # its private repo, relative to dir
-    repo:   Path   # where that repo actually lives: dir / gitdir
+    dir:    Path   # the directory holding the content; git runs here
+    base:   str    # the content file's own name
+    gitdir: Path   # GIT_DIR, as git sees it from dir
+    repo:   Path   # where that repo actually lives: beside the typed name
     name:   str    # what the user typed, for messages
+    link:   bool   # that name is a symlink, so dir is not beside repo
     env:    {str}str   # the two variables that make git use that repo
 
     def __init__(self, target: str):
@@ -55,14 +63,31 @@ class Target:
         if t'Length == 0:
             die("empty file name")
         let p: Path = Path(t)
-        self.base = p.name
-        if self.base'Length == 0:
+        let typed: str = p.name
+        if typed'Length == 0:
             die(f"not a file name: '{target}'")
-        self.dir    = p.parent
-        self.gitdir = Path(CONTAINER) / self.base
-        self.repo   = self.dir / self.gitdir
-        self.name   = target
-        self.env    = {"GIT_DIR": str(self.gitdir), "GIT_WORK_TREE": "."}
+        self.name = target
+        self.link = -L t
+        # The repo always sits beside the name the user typed, whether or not
+        # that name is a symlink pointing somewhere else entirely.
+        # Joined in two steps, not three: `dir / CONTAINER / typed` prints
+        # ".git1/x" on Nim and "./.git1/x" on Python when dir is "." (see
+        # TODO.md), and this message is user-visible.
+        let inner: Path = Path(CONTAINER) / typed
+        self.repo = p.parent / inner
+        if self.link:
+            # Content and repo are in different directories now, so GIT_DIR
+            # can no longer be the relative path that git would resolve from
+            # the one it runs in.
+            let real: Path = p.resolve()
+            self.dir    = real.parent
+            self.base   = real.name
+            self.gitdir = self.repo.resolve()
+        else:
+            self.dir    = p.parent
+            self.base   = typed
+            self.gitdir = Path(CONTAINER) / typed
+        self.env = {"GIT_DIR": str(self.gitdir), "GIT_WORK_TREE": "."}
 
     def git(self, args: []str) -> int:
         """Run git here. Returns its exit code; git keeps the terminal.
@@ -129,12 +154,17 @@ class Target:
         let repo: Path = self.repo
         if -e repo: die(f"already tracked: {self.name}")
 
-        shell: mkdir -p -- {!self.dir / CONTAINER}
+        repo.parent.mkdir()
         let r = shell: git init --quiet --bare -- {!repo} 2>&1
         if r.code != 0: die(f"could not create {repo}")
 
+        # A plain file's repo names its work tree relatively, so the whole
+        # directory can be moved without breaking it. A symlink's cannot: the
+        # content is elsewhere, so the work tree has to be named outright.
+        var worktree: str = "../.."
+        if self.link: worktree = str(self.dir.resolve())
         shell: git --git-dir={!repo} config core.bare false
-        shell: git --git-dir={!repo} config core.worktree ../..
+        shell: git --git-dir={!repo} config core.worktree {!worktree}
         self.write_exclude(repo)
 
         if self.git(["add", "--", self.base]) != 0 or self.git(["commit", "--quiet", "-m", "initial commit"]) != 0:
@@ -149,7 +179,7 @@ class Target:
             if not confirm(f"Delete the history of {self.name}? The file itself is kept."):
                 die("aborted")
         shell: rm -rf -- {!self.repo}
-        shell: rmdir -- {!self.dir / CONTAINER} 2>/dev/null || true
+        shell: rmdir -- {!self.repo.parent} 2>/dev/null || true
 
     def adopt(self, branch: str, force: bool, prune: str):
         """Replace the current branch with another one, wholesale.
@@ -193,15 +223,27 @@ class Target:
         """Rename this file and its repo. Two targets, so two objects."""
         self.require()
         if -e new: die(f"target exists: {new}")
-        var nt: Target = Target(new)
-        if not -d nt.dir: die(f"no such directory: {nt.dir}")
-        let new_repo: Path = nt.repo
+        # The new name's paths are worked out by hand rather than through a
+        # Target, because a Target asks the filesystem what the name *is* --
+        # and nothing is there yet. Building one before the move would read a
+        # symlink rename as a plain file and put the work tree in the wrong
+        # place; the object is built below, once `new` exists.
+        let np: Path = Path(new)
+        if not -d np.parent: die(f"no such directory: {np.parent}")
+        let new_repo: Path = np.parent / CONTAINER / np.name
         if -e new_repo: die(f"already tracked: {new}")
 
         shell: mv -- {!self.name} {!new}
-        shell: mkdir -p -- {!nt.dir / CONTAINER}
+        new_repo.parent.mkdir()
         shell: mv -- {!self.repo} {!new_repo}
+        var nt: Target = Target(new)
         nt.write_exclude(new_repo)
+        if nt.base == self.base:
+            # Renaming a symlink moves the pointer, not the content. The file
+            # git tracks has not changed name, so its history has nothing to
+            # record -- and `git add` would find nothing, which the warning
+            # below would then report as a failure.
+            return
         # The statuses are kept rather than dropped: a rename whose commit
         # fails leaves the repo moved but the history not recording it, which
         # is worth a word. (Nim also needs a value-returning call used as a
@@ -326,6 +368,9 @@ Notes:
     that lost. Nothing is combined, so nothing can conflict. Use "-f" to
     skip the prompt about uncommitted changes, "--prune"/"--no-prune" to
     settle the losing branches without being asked.
+  * A symlink is tracked as if the file were local: the content is what gets
+    versioned, and the history lives beside the link. A directory of symlinks
+    is a parallel history for files anywhere on the disk.
   * If the directory is itself inside an ordinary git repo, add "{CONTAINER}"
     to its .gitignore.
 

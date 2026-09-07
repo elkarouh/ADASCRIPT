@@ -966,6 +966,7 @@ for s in Stage_T'First .. Stage_T'Last:
 | Path <-> str | `Path(s)` / `str(p)` |
 | Path split | `p.parent` -> Path, `p.name` -> str (pathlib rules, not os.path) |
 | Path mkdir | `p.mkdir()` = mkdir -p (parents, exist_ok) |
+| Path resolve | `p.resolve()` = realpath (absolute, symlinks expanded) |
 | Wait for one / many jobs | `j.wait()` / `waitAll(jobs)` |
 | Run a program, no shell | `run(["git", "log"])` -> RunResult |
 | Run a program, output lines | `runLines(["ls", d])` -> `[]str` |

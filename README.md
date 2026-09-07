@@ -1392,6 +1392,12 @@ dirname `"a/b"`, where both `pathlib` and Nim say `"b"` and `"a"`. A path
 with no directory part has `"."` as its parent, and the root is its own
 parent.
 
+`resolve()` is the other direction: the absolute path with every symlink
+along it expanded. It follows `os.path.realpath`, including on a path that
+does not exist yet — Nim's `expandFilename` raises there, so the helper
+resolves as much of the path as does exist and keeps the rest, which is what
+Python does.
+
 `mkdir()` is `mkdir -p` on both backends — it creates missing parents and
 succeeds on a directory that already exists. That is Nim's `createDir` and
 Python's `os.makedirs(..., exist_ok = true)`, not `pathlib.mkdir()`'s

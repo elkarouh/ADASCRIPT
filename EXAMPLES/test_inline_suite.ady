@@ -122,11 +122,29 @@ assert Path(".").name == ""               # "." names no file
 assert Path("..").name == ".."
 
 # mkdir() is mkdir -p on both backends: parents made, already-there is fine.
-let deep: Path = Path("/tmp/adascript_path_test") / "x" / "y"
+let sandbox: Path = Path("/tmp/adascript_path_test")
+shell: rm -rf -- {!sandbox}
+let deep: Path = sandbox / "x" / "y"
 deep.mkdir()
 deep.mkdir()
 assert (-d deep)
-shell: rm -rf -- {!Path("/tmp/adascript_path_test")}
+
+# resolve() expands every symlink along the path. It follows Python's
+# realpath, including on a path that does not exist yet: Nim's expandFilename
+# raises there, so the helper falls back to resolving as much as does exist.
+let real_file: Path = deep / "real.txt"
+writeFile(real_file, "content\n")
+let link: Path = sandbox / "link.txt"
+shell: ln -s {!real_file} {!link}
+let gone: Path = sandbox / "gone.txt"
+assert link.resolve() == real_file
+assert gone.resolve() == gone     # nothing there: resolved, not rejected
+assert (-L link)                  # the link itself is still a link
+assert (-f link)                  # ... and -f follows it to the file
+assert (-e sandbox)               # -e is true for a directory on both
+                                  # backends: it is exists(), not isfile()
+shell: rm -rf -- {!sandbox}
+assert not (-e sandbox)
 
 # An inline `when` branch that already returns must not be turned into an
 # implicit return: `f(x); return True` has its value in the *last* statement,

@@ -114,6 +114,24 @@ def _quit_call(arg):
     _ensure_exit_helper()
     return f"adascriptExit({arg})"
 
+_EXISTS_HELPER = """\
+proc adascriptExists*(path: string): bool =
+  ## `-e` and os.path.exists: does anything sit at this path, of any kind?
+  ## Nim has no single call for it -- fileExists is files only, so on its own
+  ## it makes `-e somedir` false where Python's os.path.exists says true.
+  ## A proc rather than an inlined `or` so the path expression is evaluated
+  ## once; a broken symlink is false on both backends, since both follow it.
+  fileExists(path) or dirExists(path)\
+"""
+
+def _ensure_exists_helper():
+    """Add the adascriptExists helper the first time -e or os.path.exists is seen."""
+    ParserState.nim_imports.add("os")
+    decls = getattr(ParserState, 'nim_top_decls', [])
+    if not any("adascriptExists" in d for d in decls):
+        decls.append(_EXISTS_HELPER)
+        ParserState.nim_top_decls = decls
+
 def _ensure_nimatch_helper():
     """Add the nimatch helper to nim_top_decls the first time =~ or !~ is used."""
     ParserState.nim_imports.update({"nre", "tables", "sequtils", "options"})
@@ -1944,7 +1962,7 @@ def to_nim(self, prec=None):
 # Only patterns that MUST be native Nim belong here.
 _STDLIB_PATTERNS = [
     # (python_pattern, nim_equivalent, nim_import_needed)
-    ("os.path.exists",    "fileExists",      "os"),
+    ("os.path.exists",    "adascriptExists", "os"),
     ("os.path.isfile",    "fileExists",      "os"),
     ("os.path.isdir",     "dirExists",       "os"),
     ("os.path.join",      "joinPath",        "os"),
@@ -2222,18 +2240,18 @@ def _translate_stdlib_patterns(expr):
 
     # --- 1. Pattern table (exact or prefix match) ---
     for py_pattern, nim_equiv, nim_import in _STDLIB_PATTERNS:
+        matched = (expr == py_pattern
+                   or expr.startswith(py_pattern + "(")
+                   or expr.startswith(py_pattern + "["))
+        if not matched:
+            continue
+        if nim_import:
+            ParserState.nim_imports.add(nim_import)
+        if nim_equiv == "adascriptExists":
+            _ensure_exists_helper()
         if expr == py_pattern:
-            if nim_import:
-                ParserState.nim_imports.add(nim_import)
             return nim_equiv
-        if expr.startswith(py_pattern + "("):
-            if nim_import:
-                ParserState.nim_imports.add(nim_import)
-            return nim_equiv + expr[len(py_pattern):]
-        if expr.startswith(py_pattern + "["):
-            if nim_import:
-                ParserState.nim_imports.add(nim_import)
-            return nim_equiv + expr[len(py_pattern):]
+        return nim_equiv + expr[len(py_pattern):]
 
     # --- 2. Module-qualified call: local.func(args) ---
     call_m = _re.match(r"^([A-Za-z_]\w*)\.([A-Za-z_]\w*)(\(.*\))$", expr, _re.DOTALL)
@@ -2373,7 +2391,7 @@ def to_nim(self, prec=None):
 # --- bash file-test operators ---
 # Mapping from bash flag letter to (nim_func, nim_import)
 _BASH_FILE_TEST_NIM = {
-    "e": ("fileExists",        "os"),   # -e: exists (file or dir)
+    "e": ("adascriptExists",   "os"),   # -e: exists (file or dir)
     "f": ("fileExists",        "os"),   # -f: regular file
     "d": ("dirExists",         "os"),   # -d: directory
     "L": ("symlinkExists",     "os"),   # -L: symbolic link
@@ -2391,7 +2409,8 @@ _BASH_FILE_TEST_NIM = {
 def to_nim(self, prec=None):
     """file_test: BASH_TEST IDENTIFIER primary -> Nim os file-test call.
 
-    -e/-f  -> fileExists(path)
+    -e     -> adascriptExists(path)   (file or dir, like Python's os.path.exists)
+    -f     -> fileExists(path)
     -d     -> dirExists(path)
     -L     -> symlinkExists(path)
     -r/-w/-x -> fpUserRead/Write/Exec in getFilePermissions(path)
@@ -2401,7 +2420,10 @@ def to_nim(self, prec=None):
     flag = self.nodes[1].node   # IDENTIFIER node: 'e', 'f', 'd', etc.
     path = self.nodes[2].to_nim()
     ParserState.nim_imports.add("os")
-    if flag in ("e", "f"):
+    if flag == "e":
+        _ensure_exists_helper()
+        return f"adascriptExists({path})"
+    elif flag == "f":
         return f"fileExists({path})"
     elif flag == "d":
         return f"dirExists({path})"

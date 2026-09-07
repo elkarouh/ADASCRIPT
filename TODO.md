@@ -23,6 +23,30 @@ history of this file if the reasoning behind one of them is ever wanted.
 - [ ] `print x, y` puts a space between the arguments on Python and none on
       Nim: `print "n=", 1` gives `n= 1` there and `n=1` here. Same source,
       different output, which is the one thing the two backends must not do.
+- [ ] **py2py reads `/` as the range operator on the right of a comparison,
+      and gets the wrong answer without saying anything.** `half == n / 2`
+      emits `half == range(n, 2 + 1)`, so a program that should print True
+      prints False. `!=` does the same; parenthesising the division
+      (`half == (n / 2)`) is the workaround, and division on its own
+      (`let f = n / 2`) has always been fine. Nothing about it is
+      Path-specific -- plain ints reproduce it -- and it is the worst
+      failure shape there is: no error, just a different answer.
+      py2nim emits `half == n / 2` correctly here, so this is a py2py
+      grammar bug rather than a shared one; Nim then declines to compile it,
+      because `/` on two ints is a float and `==` has no int/float overload.
+      Repro: `let n: int = 8` / `let half: int = 4` / `print half == n / 2`.
+- [ ] `Path` joins diverge on a `.` segment once three terms are chained:
+      `Path(".") / ".git1" / "x.txt"` is `./.git1/x.txt` on Python and
+      `.git1/x.txt` on Nim. Two terms agree (`Path(".") / ".git1"` is
+      `./.git1` on both), and so does `Path(".") / Path(".git1/x.txt")` --
+      only the chained form differs, because Nim's `joinPath` normalizes a
+      head that already holds a separator and `os.path.join` never
+      normalizes anything. Same expression, two different strings: it
+      changes printed output, dict keys and `==`, even though both still
+      name the same file. Fixing it means one `/` doing the same thing on
+      both sides; the lexical `os.path.join` rule is the easier one to
+      match, but it means shadowing the `/` that std/paths exports.
+      `git1.ady` sidesteps it by joining in two steps.
 - [ ] `-e` is false for a directory on Nim and true on Python. It maps to
       `fileExists` in `hek_nim_expr.py` (`"e": ("fileExists", "os")`), whose
       own comment says "exists (file or dir)" — Nim's `fileExists` is files
