@@ -38,19 +38,16 @@ history of this file if the reasoning behind one of them is ever wanted.
       Python order is the literal's, not the enum's. Indexing agrees, so
       `for c in Color: score[c]` is portable and is what the README now
       recommends; direct iteration should either agree or be rejected.
-- [ ] py2py emits ints, not enum members, for `E'First` and `E'Last`, and
-      emits the `'Prev` codegen for `E'Range`. For `type Color is enum RED,
-      GREEN, BLUE`:
-
-          Color'First  ->  0                            (want Color.RED)
-          Color'Last   ->  (len(Color) - 1)             (want Color.BLUE)
-          Color'Range  ->  type(Color)(Color.value - 1) (want the full set)
-
-      All three are right on Nim, so the same source prints `RED BLUE 3`
-      there and raises `AttributeError: 'int' object has no attribute
-      'name'` here. `for x in E'First .. E'Last` is why this survived: the
-      ints iterate, so the loop looks fine until the body treats `x` as an
-      enum.
+- [ ] py2py drops all but the last term of a compound lower bound in a
+      range. `for i in n-k+1..n:` emits `range(n, n + 1)`, so with n=10, k=3
+      Python prints `10` where Nim prints `8 9 10`. Another silent wrong
+      answer, and the same shape as the `/`-after-comparison bug below: the
+      range operator takes the wrong operand. Breaks `floyd.ady` on the
+      Python backend.
+- [ ] py2py does not zero-initialise a declared-but-uninitialised local.
+      `s: {}int` inside a function emits a bare annotation, which binds
+      nothing, so the next `s.add(1)` raises `UnboundLocalError`. Nim
+      zero-initialises and prints `{1}`. Also breaks `floyd.ady`.
 - [ ] **py2py reads `/` as the range operator on the right of a comparison,
       and gets the wrong answer without saying anything.** `half == n / 2`
       emits `half == range(n, 2 + 1)`, so a program that should print True

@@ -219,13 +219,9 @@ def to_py(self, prec=None):
         if info and attr in info:
             val = info[attr]
             return str(val)
-        # Enum next/prev: Type'Next -> Type(Type.value + 1)
-        if attr == "Next":
-            return f"{type_name}({type_name}.value + 1)"
-        elif attr == "Prev":
-            return f"{type_name}({type_name}.value - 1)"
-        elif attr == "Shuffle":
-            return f"__import__('random').shuffle({type_name})"
+        # Everything else goes through the one renderer, so this path and
+        # the trailer path cannot drift apart on what a tick means.
+        return _tick_to_py(type_name, attr)
     if name == "stdin":
         ParserState.nim_imports.add("import sys")
         return "sys.stdin"
@@ -507,6 +503,102 @@ def to_py(self, prec=None):
     return "." + self.nodes[0].to_py()
 
 
+_SHUFFLE_HELPER = '''\
+def _adascript_shuffle(_x):
+    """expr'Shuffle: shuffle in place, and return the container.
+
+    Both halves matter. It returns, because 'Shuffle is an expression and is
+    routinely the last one in a function -- the Nim backend spells the same
+    thing `(block: shuffle(x); x)`. And it mutates, because callers may hold
+    another reference.
+
+    An ordinal-indexed array `[O]T` is a dict on this backend and an array
+    on Nim, so shuffling one means permuting the values while the domain
+    stays where it is; random.shuffle on the dict itself raises KeyError.
+    """
+    import random as _r
+    if isinstance(_x, dict):
+        _vals = list(_x.values())
+        _r.shuffle(_vals)
+        _x.update(zip(list(_x.keys()), _vals))
+        return _x
+    _r.shuffle(_x)
+    return _x\
+'''
+
+
+def _ensure_shuffle_helper():
+    """Define _adascript_shuffle the first time 'Shuffle is used."""
+    decls = getattr(ParserState, 'py_top_decls', [])
+    if not any("_adascript_shuffle" in d for d in decls):
+        decls.append(_SHUFFLE_HELPER)
+        ParserState.py_top_decls = decls
+
+
+def _tick_to_py(expr, attr):
+    """Render `expr'attr` for the Python backend.
+
+    Mirrors _tick_to_nim in the Nim backend, including the distinction that
+    matters most: a tick on a *type name* asks about the type's domain,
+    while the same tick on any other expression asks about the value. That
+    is why the type case is tried first -- `Color'First` is the first
+    member, where `xs'First` is the index 0.
+
+    Unknown attributes raise rather than falling through. The catch-all this
+    replaced handed anything it did not recognise to the Next/Prev codegen,
+    so `E'Range` and `x'Choice` silently emitted `type(x)(x.value - 1)` --
+    which parses, runs, and is nonsense.
+    """
+    info = getattr(ParserState, "tick_types", {}).get(expr)
+    if info is not None:
+        if attr in ("First", "Low"):
+            return str(info["First"])
+        if attr in ("Last", "High"):
+            return str(info["Last"])
+        if attr == "Range":
+            if "members" in info:
+                # An enum's range is the set of its members, matching the
+                # Nim backend's {E.low..E.high}. A set is also what the
+                # annotation says it is -- `{}Door_T` -- so set arithmetic
+                # (`E'Range - {x}`) works and the order is not promised.
+                return f"set({expr})"
+            if info.get("is_float_range"):
+                raise ValueError(
+                    f"'Range is not defined for the float subrange {expr!r}: "
+                    "a float interval has no enumerable domain")
+            return f"range({info['First']}, {info['Last']} + 1)"
+        if attr == "Choice":
+            ParserState.nim_imports.add("import random as _random")
+            return f"_random.choice(list({expr}))"
+    if attr in ("Length", "len"):
+        return f"len({expr})"
+    if attr in ("First", "Low"):
+        return "0"
+    if attr in ("Last", "High"):
+        return f"(len({expr}) - 1)"
+    if attr == "Range":
+        # On a value rather than a type: its index range, matching the Nim
+        # backend's non-enum `expr.low..expr.high`. `for i in word'Range`
+        # walks the positions of a string or sequence.
+        return f"range(len({expr}))"
+    if attr == "Image":
+        return f"({expr}).name"
+    if attr == "Next":
+        return f"type({expr})({expr}.value + 1)"
+    if attr == "Prev":
+        return f"type({expr})({expr}.value - 1)"
+    if attr == "Choice":
+        # list() so a set, a range and a seq all work, as they do on Nim.
+        ParserState.nim_imports.add("import random as _random")
+        return f"_random.choice(list({expr}))"
+    if attr == "Shuffle":
+        _ensure_shuffle_helper()
+        return f"_adascript_shuffle({expr})"
+    raise ValueError(
+        f"unknown tick attribute {attr!r} in {expr}'{attr}. Known: "
+        "First, Last, Range, Next, Prev, Choice, Shuffle, Image, Length")
+
+
 @method(tick_trailer)
 def to_py(self, prec=None):
     """tick_trailer: TICK IDENTIFIER -> stored as _tick_attr for primary to consume"""
@@ -736,17 +828,7 @@ def to_py(self, prec=None):
             result += tr_str
             # Handle tick attributes on expressions
             if hasattr(tr, '_tick_attr'):
-                if tr._tick_attr == "Length":
-                    result = f"len({result})"
-                elif tr._tick_attr == "First":
-                    result = "0"
-                elif tr._tick_attr == "Last":
-                    result = f"(len({result}) - 1)"
-                elif tr._tick_attr == "Image":
-                    result = f"({result}).name"
-                else:
-                    op = "+" if tr._tick_attr == "Next" else "-"
-                    result = f"type({result})({result}.value {op} 1)"
+                result = _tick_to_py(result, tr._tick_attr)
             i += 1
     atom_name = self.nodes[0].to_py()
     if atom_name in ("stderr", "stdout", "stdin"):

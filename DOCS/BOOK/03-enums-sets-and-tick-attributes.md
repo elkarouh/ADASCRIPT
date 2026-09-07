@@ -101,13 +101,9 @@ for s in Stage_T'First .. Stage_T'Last:
     ...
 ```
 
-Prefer the first. `for s in E:` is the form to reach for by default: it is
-shorter, it yields the members in declaration order, and it behaves
-identically on both backends. The `'First .. 'Last` spelling is solid on the
-Nim backend but is currently mistranslated by the Python one, which emits
-plain integers where the enum members belong — see `TODO.md`. The loop still
-runs there, which is what makes it worth knowing about: it goes wrong only
-once the body treats the loop variable as an enum.
+Both work on both backends. `for s in E:` is usually the one to reach for —
+it is shorter and says what it means — while the `'First .. 'Last` spelling
+earns its keep when the bounds themselves matter.
 
 Walking an enum is also how you should walk an `[E]T`. Indexing one is
 identical on both backends, but *iterating* it is not the same operation:

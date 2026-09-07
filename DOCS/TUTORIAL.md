@@ -519,11 +519,11 @@ before parsing, so Python's lexer is never confused by the apostrophe.
 > type names. They do not work on field accesses (`self.num'Image`) or
 > subscripts (`args[0]'Image`). Use `str()` in those cases instead.
 
-> **Backend note:** `E'First`, `E'Last` and `E'Range` are correct on the Nim
-> backend but are currently mistranslated by `py2py`, which emits plain
-> integers where the enum members belong. Prefer `for x in E:` when you just
-> want the members — it is shorter and behaves identically on both backends.
-> See `TODO.md`.
+> **Note:** `E'Range` is a *set* of the members (`set(E)` on the Python
+> backend, `{E.low..E.high}` on Nim), so set arithmetic works on it —
+> `Door_T'Range - {chosen}`. On a value rather than a type, `x'Range` is the
+> index range instead: `for i in word'Range` walks the positions of a
+> string.
 
 ### Iterating over an enum's full range
 

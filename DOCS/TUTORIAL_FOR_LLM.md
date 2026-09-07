@@ -218,14 +218,13 @@ Ada-style `'` attributes. Tokeniser converts `Type'Attr` → `Type__tick__Attr` 
 
 > **Limitation:** tick attributes only work on bare identifiers and type names — not on field accesses (`self.x'Image`) or subscripts. Use `str()` in those cases.
 
-> **Backend note:** `E'First`, `E'Last` and `E'Range` are correct on Nim but currently mistranslated by `py2py` (plain ints instead of enum members; `'Range` gets the `'Prev` codegen). Prefer `for x in E:` to walk an enum — shorter, and identical on both backends. See `TODO.md`.
+> **Note:** `E'Range` is a set of the members, so set arithmetic works (`Door_T'Range - {chosen}`). On a value, `x'Range` is the index range: `for i in word'Range`.
 
 ```adascript
-# Iterating over an enum — prefer this, it works on both backends
+# Iterating over an enum — two spellings, both fine
 for s in Stage_T:
     print(f"processing stage {s}")
 
-# The Ada spelling of the same thing (Nim-only for now, see the note above)
 for s in Stage_T'First .. Stage_T'Last:
     print(f"processing stage {s}")
 

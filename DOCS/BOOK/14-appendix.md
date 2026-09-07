@@ -171,11 +171,10 @@ in order to build.
 - Iterating an `[E]T` is not the same operation on the two backends: Nim
   yields the values, Python the keys. Indexing agrees, so walk the domain —
   `for c in Color: score[c]` (§3.3).
-- `E'Range`, `E'First` and `E'Last` are correct on the Nim backend but
-  mistranslated by `py2py` (ints instead of members; `'Range` gets the
-  `'Prev` codegen). `for x in E:` is the portable spelling. This breaks
-  `floyd.ady`, `monty_hall.ady` and `prisoners.ady` on the Python backend —
-  see `TODO.md`.
+- `py2py` drops all but the last term of a compound range bound
+  (`n-k+1..n` becomes `range(n, n+1)`), and does not zero-initialise a
+  declared-but-uninitialised local. Both break `floyd.ady` there — see
+  `TODO.md`.
 - `[char]T` indexed by a quoted literal works on Python and does not compile
   on Nim: Adascript has no char literal, so `'a'` is a one-character string.
   Index with `chr(97)`, which works on both.
