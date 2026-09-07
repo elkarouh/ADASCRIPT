@@ -21,13 +21,21 @@ const MAX_OPEN      : Natural = 50
 const TRIALS        : Natural = 1000
 ```
 
-Declarations without an initial value are legal; the Nim backend
-zero-initialises them and the Python backend emits a bare annotation:
+A declaration without an initial value is legal, and both backends give it
+the empty value of its type — `seq[int]` and `list[int] = []`, and so on:
 
 ```python
 var result: []int          # empty seq[int] / list[int]
 var visited: {}Node_T      # empty set — see dijkstra.ady
 ```
+
+The keyword is what makes it a declaration. Dropping it leaves `result:
+[]int`, which is Python's *annotation*: it records a type and binds nothing,
+so reading the name before assigning to it is an error on both backends.
+That is deliberate — a valid Python file has to keep its meaning — and the
+type is not wasted, since the first assignment picks it up: `count: int`
+then `count = 5` declares `count` as an `int`. Inside a record or class body
+the bare form is the field spelling and does declare.
 
 Tuple unpacking works in three spellings:
 
@@ -55,18 +63,30 @@ the container is held in that order. `{…}` is unordered: the domain has no
 order, so neither does the container.
 
 The second is *what sits inside*, which says what the domain is. Name it
-outright — `[O]T`, `{K}V` — or leave it out, and it is implicit and
-unbounded: `[]T` and `{}T` grow as far as you need. Between `[…]` the domain
-must be an **ordinal type**, since an order to index by is exactly what an
-ordinal has: an enum, `bool`, `char`, an integer subrange. Between `{…}` any
-hashable type will do.
+outright — `[O]T`, `{K}V` — or leave it out and there is no separate domain
+to name: `[]T` numbers its own elements, so its domain is the positions
+`0 ..< n`. Between `[…]` a named domain must be an **ordinal type**, since
+an order to index by is exactly what an ordinal has: an enum, `bool`,
+`char`, an integer subrange. Between `{…}` any hashable type will do.
 
 Four corners, four forms:
 
-|                     | ordered `[…]`                       | unordered `{…}` |
-|---------------------|-------------------------------------|-----------------|
-| **domain named**    | `[O]T` — indexed by an ordinal type | `{K}V` — dict   |
-| **domain implicit** | `[]T` — list, indexed `0 ..< n`     | `{}T` — set     |
+|                      | ordered `[…]`                       | unordered `{…}`                 |
+|----------------------|-------------------------------------|---------------------------------|
+| **both sides named** | `[O]T` — indexed by an ordinal type | `{K}V` — dict                   |
+| **one side implied** | `[]T` — list (domain = position)    | `{}T` — set (value = in or out) |
+
+`{}T` repays a second look, because its empty braces are not doing the same
+job as `[]T`'s. A set does not map its elements *to* anything you supply: it
+answers one question about each, in or out. The element type is therefore
+the **domain**, and the value is an implied `bool` — a set is exactly the
+mapping `T -> bool`, its characteristic function. That is where its
+behaviour comes from rather than being a restatement of it: `x in s` *is*
+the lookup, the same operation as `d[k]` on a dict and returning that bool;
+and an element cannot appear twice, because a point of the domain is in or
+out with no third state for "in twice", which is why adding a duplicate
+changes nothing. Read it aloud as "a set of `T`" — the mapping is
+underneath, holding the scheme together.
 
 One consequence is worth drawing out, because it removes a form from the
 list rather than adding one: the fixed-size array is not special. `[10]int`

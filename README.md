@@ -265,7 +265,8 @@ Adascript uses a concise **left-to-right** annotation syntax rather than
 Python's `typing` module. There is one idea behind all of the container
 forms, and it is worth learning once: **every container is a mapping**,
 written `<domain>value`. The brackets carry the domain — what you index
-with — and the value type follows them.
+with — and the value type follows them. Sets turn out to read the other way
+round, for a reason that explains what a set *is*; that comes last.
 
 Two things vary, and they are independent:
 
@@ -283,15 +284,34 @@ Two things vary, and they are independent:
   `[…]` it must be an **ordinal type**, since that is what has an order to
   index by: an enum, `bool`, `char`, an integer subrange. Between `{…}` any
   hashable type `K` will do.
-- Nothing inside — `[]T`, `{}T` — leaves it implicit and unbounded: the
-  container grows as far as you need.
+- Nothing inside — `[]T`, `{}T` — means there is no separate domain to name.
+  `[]T` numbers its own elements, so the domain is the positions `0 ..< n`,
+  and it grows as you append.
 
 That gives four forms, one per corner:
 
-|                    | ordered `[…]`                      | unordered `{…}`            |
-|--------------------|------------------------------------|----------------------------|
-| **domain named**   | `[O]T` — indexed by an ordinal type| `{K}V` — dict              |
-| **domain implicit**| `[]T` — list, indexed `0 ..< n`    | `{}T` — set                |
+|                       | ordered `[…]`                       | unordered `{…}`                  |
+|-----------------------|-------------------------------------|----------------------------------|
+| **both sides named**  | `[O]T` — indexed by an ordinal type | `{K}V` — dict                    |
+| **one side implied**  | `[]T` — list (domain = position)    | `{}T` — set (value = in or out)  |
+
+`{}T` is the one worth a second look, because its empty braces are not doing
+the same job as `[]T`'s. A set does not map its elements *to* anything you
+supply — it answers a single question about each one, in or out. So the
+element type is the **domain**, and the value is an implied `bool`: a set is
+exactly the mapping `T -> bool`, its characteristic function. That is not
+word-play, it is where a set's behaviour comes from:
+
+- `x in s` **is** the lookup. It is the same operation as `d[k]` on a dict,
+  reading the value at a point of the domain; the value just happens to be
+  the bool.
+- An element cannot appear twice. A point of the domain is in or out, and
+  there is no third state for "in twice" — which is why adding a duplicate
+  changes nothing.
+- It sits in the unordered column for the same reason `{K}V` does: `T` need
+  only be hashable, not ordered.
+
+So read `{}T` as "a set of `T`" and the scheme still holds underneath.
 
 Read them aloud and they say what they are:
 
@@ -305,7 +325,7 @@ Read them aloud and they say what they are:
 - `[Color]int` — an ordered mapping from `Color` to `int`. One slot per enum
   member, held in enum order.
 - `{str}int` — an unordered mapping from `str` to `int`. A dict.
-- `{}str` — an unordered mapping to `str`, unbounded. A set.
+- `{}str` — an unordered mapping from `str` to in-or-out. A set of strings.
 
 So the fixed array is not a special form: it is `[O]T` where the ordinal
 type happens to be a subrange. The domain may equally be written out

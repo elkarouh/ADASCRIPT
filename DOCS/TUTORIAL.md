@@ -132,16 +132,24 @@ the domain — what you index with — and the value type follows.
 - The **shape** says whether the domain is ordered: `[…]` is ordered, `{…}`
   is not.
 - **What sits inside** says what the domain is: named (`[O]T`, `{K}V`) or
-  left implicit and unbounded (`[]T`, `{}T`).
+  left out (`[]T`, `{}T`) — see below, they leave out different halves.
 
 Between `[…]` the domain must be an **ordinal type** — an enum, `bool`,
 `char`, or an integer subrange — because that is what has an order to index
 by. Between `{…}` any hashable type works.
 
-|                     | ordered `[…]`                       | unordered `{…}` |
-|---------------------|-------------------------------------|-----------------|
-| **domain named**    | `[O]T` — indexed by an ordinal type | `{K}V` — dict   |
-| **domain implicit** | `[]T` — list, indexed `0 ..< n`     | `{}T` — set     |
+|                      | ordered `[…]`                       | unordered `{…}`                 |
+|----------------------|-------------------------------------|---------------------------------|
+| **both sides named** | `[O]T` — indexed by an ordinal type | `{K}V` — dict                   |
+| **one side implied** | `[]T` — list (domain = position)    | `{}T` — set (value = in or out) |
+
+The two bottom forms leave out different halves. `[]T` numbers its own
+elements, so the domain is the positions. `{}T` does the opposite: a set
+does not map its elements *to* anything you supply, it answers in-or-out
+about each, so `T` is the **domain** and the value is an implied `bool`. A
+set is the mapping `T -> bool`, which is why `x in s` is the lookup — the
+same operation as `d[k]`, returning that bool — and why an element cannot
+appear twice.
 
 That makes the fixed-size array unremarkable rather than a special case: a
 length is shorthand for a subrange, so `[10]int` and `[0..9]int` are one

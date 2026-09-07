@@ -47,15 +47,20 @@ Adascript uses prefix notation for containers. `[]int` = "list of int".
 brackets hold the domain (what you index with); the value type follows.
 
 - Shape = ordering. `[…]` ordered, `{…}` unordered.
-- Inside = the domain. Named (`[O]T`, `{K}V`) or implicit and unbounded
-  (`[]T`, `{}T`).
+- Inside = the domain. Named (`[O]T`, `{K}V`), or left out — and `[]T` and
+  `{}T` leave out different halves (see below).
 - Inside `[…]` the domain must be an **ordinal type**: enum, `bool`, `char`,
   or an integer subrange. Inside `{…}`, any hashable type.
 
-|                 | ordered `[…]`            | unordered `{…}` |
-|-----------------|--------------------------|-----------------|
-| domain named    | `[O]T` ordinal-indexed   | `{K}V` dict     |
-| domain implicit | `[]T` list (`0 ..< n`)   | `{}T` set       |
+|                  | ordered `[…]`           | unordered `{…}`              |
+|------------------|-------------------------|------------------------------|
+| both sides named | `[O]T` ordinal-indexed  | `{K}V` dict                  |
+| one side implied | `[]T` list (domain=pos) | `{}T` set (value=in-or-out)  |
+
+`[]T` implies the *domain* (positions). `{}T` implies the *value*: a set
+answers in-or-out about each element, so `T` is the domain and a set is the
+mapping `T -> bool`. Hence `x in s` is the lookup (same operation as
+`d[k]`), and an element cannot appear twice.
 
 Consequences: `[10]T` ≡ `[0..9]T` (a length is shorthand for a subrange; on
 Nim `array[10,int] is array[0..9,int]` is `true`), so the fixed array is not
@@ -98,7 +103,10 @@ var   counter: int   = 0        # mutable
 let   name:    str   = "Alice"  # immutable
 const MAX:     int   = 1_000    # compile-time constant
 
-var result: []int               # declaration without init (zero-initialised in Nim)
+var result: []int               # no init: empty value of the type, both backends
+# `result: []int` without `var` is Python's annotation -- binds nothing, on
+# both backends. The first assignment picks the type up. In a record/class
+# body the bare form is the field spelling and does declare.
 ```
 
 **Tuple unpacking:**
