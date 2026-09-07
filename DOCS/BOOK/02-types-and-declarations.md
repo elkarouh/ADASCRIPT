@@ -52,41 +52,39 @@ notation where the container kind is a *prefix*. `[]int` reads "list of
 int"; `{str}int` reads "dict from str to int".
 
 That reading is right as far as it goes, but it makes the notation look like
-a list of separate spellings to memorise. It is one idea. **Every container
-is a mapping**, written `<domain>value`: the brackets carry the domain — the
-thing you index with — and the value type follows them. Two independent
-choices then generate the entire table.
+a list of separate spellings to memorise. It is one idea, and two
+independent questions settle which form you want.
 
-The first is the *shape* of the brackets, which says whether the domain is
-ordered. `[…]` is ordered: the domain has a first, a next and a last, and
-the container is held in that order. `{…}` is unordered: the domain has no
-order, so neither does the container.
+The first is *is it ordered?*, which is the shape of the brackets. `[…]` is
+ordered: there is a first, a next and a last, and the container is held in
+that order. `{…}` is unordered: there is no order at all.
 
-The second is *what sits inside*, which says what the domain is. Name it
-outright — `[O]T`, `{K}V` — or leave it out and there is no separate domain
-to name: `[]T` numbers its own elements, so its domain is the positions
-`0 ..< n`. Between `[…]` a named domain must be an **ordinal type**, since
-an order to index by is exactly what an ordinal has: an enum, `bool`,
-`char`, an integer subrange. Between `{…}` any hashable type will do.
+The second is *is it keyed?*, which is whether anything sits inside them.
+Nothing inside — `[]T`, `{}T` — is a **collection** of `T`. A type inside —
+`[O]T`, `{K}V` — is a **mapping**, from the type in the brackets to the one
+that follows.
 
-Four corners, four forms:
+Four combinations, four forms, and each corner is the everyday name of the
+thing:
 
-|                      | ordered `[…]`                       | unordered `{…}`                 |
-|----------------------|-------------------------------------|---------------------------------|
-| **both sides named** | `[O]T` — indexed by an ordinal type | `{K}V` — dict                   |
-| **one side implied** | `[]T` — list (domain = position)    | `{}T` — set (value = in or out) |
+|                | ordered `[…]`                    | unordered `{…}` |
+|----------------|----------------------------------|-----------------|
+| **collection** | `[]T` — a list                   | `{}T` — a set   |
+| **mapping**    | `[O]T` — an array indexed by `O` | `{K}V` — a dict |
 
-`{}T` repays a second look, because its empty braces are not doing the same
-job as `[]T`'s. A set does not map its elements *to* anything you supply: it
-answers one question about each, in or out. The element type is therefore
-the **domain**, and the value is an implied `bool` — a set is exactly the
-mapping `T -> bool`, its characteristic function. That is where its
-behaviour comes from rather than being a restatement of it: `x in s` *is*
-the lookup, the same operation as `d[k]` on a dict and returning that bool;
-and an element cannot appear twice, because a point of the domain is in or
-out with no third state for "in twice", which is why adding a duplicate
-changes nothing. Read it aloud as "a set of `T`" — the mapping is
-underneath, holding the scheme together.
+The two questions meet in one place: a mapping's key type is constrained by
+the ordering. Between `[…]` it must be an **ordinal type** — an enum,
+`bool`, `char`, an integer subrange — since an order to index by is exactly
+what an ordinal has. Between `{…}` any hashable type will do.
+
+The row above the line is not really a separate kind, which is why the four
+line up so neatly: a collection is a mapping whose key it supplies itself. A
+list maps its positions to its elements; a set maps its elements to
+in-or-out, its characteristic function. That is why `xs[i]` and `x in s` are
+both lookups, and why a set cannot hold the same element twice — a key is
+present or absent, with no third state for "present twice". The four names
+in the table are the level to think at day to day; this is why they hold
+together.
 
 One consequence is worth drawing out, because it removes a form from the
 list rather than adding one: the fixed-size array is not special. `[10]int`
@@ -94,7 +92,7 @@ is `[O]T` whose ordinal type happens to be a subrange — a length `N` is
 shorthand for `0 .. N-1`. So `[10]int` and `[0..9]int` are the same type,
 not two similar ones. Nim agrees literally: there,
 `array[10, int] is array[0..9, int]` evaluates to `true`, and a value of one
-spelling assigns to the other. The domain can equally be written out, named
+spelling assigns to the other. The key can equally be written out, named
 (`type Idx is 0 .. 4`, then `[Idx]int`), or be any other ordinal —
 `[bool]str`, `[Priority]int`, `[char]int`.
 
@@ -158,7 +156,8 @@ Read it inside-out: `[(Point,)]bool` is "callable taking a `Point`, returning
 
 Python's `{}` is famously ambiguous — it is an empty *dict*, and there is no
 literal for an empty set. Adascript fixes this with a dedicated empty-dict
-literal:
+literal, and the two follow the split above: the colon of a `key: value`
+pair marks the **mapping**, and its absence the **collection**.
 
 | Literal | Meaning | Python output | Nim output |
 |---------|---------|---------------|------------|
@@ -201,7 +200,7 @@ type Prisoner_T is int range 1..NUM_PRISONERS
 type Box_T      is int range 1..NUM_BOXES
 ```
 
-A subrange is an ordinal type, so it is also a domain: `[Box_T]Prisoner_T`
+A subrange is an ordinal type, so it is also a key type: `[Box_T]Prisoner_T`
 is an array with one slot per box, indexed by box number rather than by a
 position that happens to line up with one. This is the other end of the
 observation in §2.2 — `[10]int` is shorthand for `[0..9]int` — and it is

@@ -263,72 +263,51 @@ python3 TO_NIM/py2nim.py c -d:release source.ady   # optimised build
 
 Adascript uses a concise **left-to-right** annotation syntax rather than
 Python's `typing` module. There is one idea behind all of the container
-forms, and it is worth learning once: **every container is a mapping**,
-written `<domain>value`. The brackets carry the domain — what you index
-with — and the value type follows them. Sets turn out to read the other way
-round, for a reason that explains what a set *is*; that comes last.
+forms, and it is worth learning once, because two independent questions
+settle which form you want.
 
-Two things vary, and they are independent:
+**Is it ordered?** — that is the *shape* of the brackets.
 
-**The shape of the brackets says whether the domain is ordered.**
-
-- `[…]` — **ordered**. The domain has a first, a next and a last, and the
+- `[…]` — **ordered**. There is a first, a next and a last, and the
   container is held in that order.
-- `{…}` — **unordered**. The domain has no order at all, so neither does the
-  container, and you must not rely on one (see the warning below — the two
-  backends genuinely differ).
+- `{…}` — **unordered**. There is no order at all, and you must not rely on
+  one (see the warning below — the two backends genuinely differ).
 
-**What sits inside says what the domain is.**
+**Is it keyed?** — that is whether anything sits *inside* the brackets.
 
-- Something inside — `[O]T`, `{K}V` — names the domain outright. Between
-  `[…]` it must be an **ordinal type**, since that is what has an order to
-  index by: an enum, `bool`, `char`, an integer subrange. Between `{…}` any
-  hashable type `K` will do.
-- Nothing inside — `[]T`, `{}T` — means there is no separate domain to name.
-  `[]T` numbers its own elements, so the domain is the positions `0 ..< n`,
-  and it grows as you append.
+- Nothing inside — `[]T`, `{}T` — a **collection** of `T`.
+- A type inside — `[O]T`, `{K}V` — a **mapping**, from the type in the
+  brackets to the one that follows them.
 
-That gives four forms, one per corner:
+Four combinations, four forms, and each corner is just the everyday name of
+the thing:
 
-|                       | ordered `[…]`                       | unordered `{…}`                  |
-|-----------------------|-------------------------------------|----------------------------------|
-| **both sides named**  | `[O]T` — indexed by an ordinal type | `{K}V` — dict                    |
-| **one side implied**  | `[]T` — list (domain = position)    | `{}T` — set (value = in or out)  |
-
-`{}T` is the one worth a second look, because its empty braces are not doing
-the same job as `[]T`'s. A set does not map its elements *to* anything you
-supply — it answers a single question about each one, in or out. So the
-element type is the **domain**, and the value is an implied `bool`: a set is
-exactly the mapping `T -> bool`, its characteristic function. That is not
-word-play, it is where a set's behaviour comes from:
-
-- `x in s` **is** the lookup. It is the same operation as `d[k]` on a dict,
-  reading the value at a point of the domain; the value just happens to be
-  the bool.
-- An element cannot appear twice. A point of the domain is in or out, and
-  there is no third state for "in twice" — which is why adding a duplicate
-  changes nothing.
-- It sits in the unordered column for the same reason `{K}V` does: `T` need
-  only be hashable, not ordered.
-
-So read `{}T` as "a set of `T`" and the scheme still holds underneath.
+|                | ordered `[…]`                    | unordered `{…}`   |
+|----------------|----------------------------------|-------------------|
+| **collection** | `[]T` — a list                   | `{}T` — a set     |
+| **mapping**    | `[O]T` — an array indexed by `O` | `{K}V` — a dict   |
 
 Read them aloud and they say what they are:
 
-- `[]int` — an ordered mapping from position to `int`, unbounded. A list.
+- `[]int` — an ordered collection of `int`. A list.
+- `{}str` — an unordered collection of `str`. A set.
+- `{str}int` — an unordered mapping from `str` to `int`. A dict.
+- `[Color]int` — an ordered mapping from `Color` to `int`. One slot per enum
+  member, held in enum order.
 - `[0..9]int` — an ordered mapping from `0 .. 9` to `int`. A fixed array.
 - `[10]int` — **the same type**, spelled by size instead of by bound. A
   length `N` is shorthand for the subrange `0 .. N-1`, so `[10]int` and
   `[0..9]int` are one type, not two — on the Nim backend
   `array[10, int] is array[0..9, int]` is literally `true`, and a value of
   one is assignable to the other.
-- `[Color]int` — an ordered mapping from `Color` to `int`. One slot per enum
-  member, held in enum order.
-- `{str}int` — an unordered mapping from `str` to `int`. A dict.
-- `{}str` — an unordered mapping from `str` to in-or-out. A set of strings.
+
+A mapping's key type is constrained by the ordering, which is the one place
+the two questions meet. Between `[…]` it must be an **ordinal type** — an
+enum, `bool`, `char`, an integer subrange — since an order to index by is
+exactly what an ordinal has. Between `{…}` any hashable type will do.
 
 So the fixed array is not a special form: it is `[O]T` where the ordinal
-type happens to be a subrange. The domain may equally be written out
+type happens to be a subrange. The key may equally be written out
 (`[0..9]int`), named (`type Idx is 0 .. 4`, then `[Idx]int`), or be any
 other ordinal — `[bool]str`, `[Color]int`, `[char]int`. All of these work on
 both backends.
@@ -336,14 +315,22 @@ both backends.
 `char` is an ordinal like the rest, spanning `chr(0) .. chr(255)`, so
 `[char]int` is a 256-slot array. Adascript inherits Python's lack of a
 character type, so `'a'` is a one-character *string* rather than a char —
-the Nim backend converts it to a char literal where the domain says one is
+the Nim backend converts it to a char literal where the key type says one is
 meant, escapes included, so `freq['a']`, `freq["\\"]` and `freq[chr(97)]`
 all work on both.
 
-The empty literals follow the same logic, which is what makes them easy to
-remember: `{:}` carries the colon of a `key: value` pair, so it is the empty
-**mapping with a named domain** — a dict. Bare `{}` has no colon, so it is
-the empty **set**.
+The empty literals fall out of the same split, which is what makes them easy
+to keep straight: `{:}` carries the colon of a `key: value` pair, so it is
+the empty **mapping** — a dict. Bare `{}` has no colon, so it is the empty
+**collection** — a set.
+
+Underneath, the two collections are mappings as well: a list maps its
+positions to its elements, and a set maps its elements to in-or-out, which
+is its characteristic function. That is why `xs[i]` and `x in s` are both
+lookups, and why a set cannot hold the same element twice — a key is present
+or absent, and there is no third state for "present twice". The four names
+in the table are the useful level to think at; this is the reason they line
+up as neatly as they do.
 
 | Adascript        | Python                    | Nim                            |
 |----------------|---------------------------|--------------------------------|
@@ -358,7 +345,7 @@ the empty **set**.
 | `[(T, U)]R`    | `Callable[[T, U], R]`     | `proc(a0: T, a1: U): R`        |
 
 `?T` and `(T, U)` are not containers and stand outside the scheme. `[*]T` is
-`[]T` with the domain left to the caller — see below. The function type
+`[]T` with the length left to the caller — see below. The function type
 `[(T, U)]R` reuses the bracket for a different job: an ordered list of
 parameter types on the left, the result on the right.
 

@@ -43,24 +43,24 @@ Build artifacts go into `~/.cache/hparsec/cache-<HASH>/` — source directories 
 
 Adascript uses prefix notation for containers. `[]int` = "list of int".
 
-**The scheme:** every container is a mapping written `<domain>value`. The
-brackets hold the domain (what you index with); the value type follows.
+**The scheme:** two independent questions pick the form.
 
-- Shape = ordering. `[…]` ordered, `{…}` unordered.
-- Inside = the domain. Named (`[O]T`, `{K}V`), or left out — and `[]T` and
-  `{}T` leave out different halves (see below).
-- Inside `[…]` the domain must be an **ordinal type**: enum, `bool`, `char`,
-  or an integer subrange. Inside `{…}`, any hashable type.
+- **Ordered?** = bracket shape. `[…]` ordered, `{…}` unordered.
+- **Keyed?** = whether a type sits inside. Empty (`[]T`, `{}T`) = a
+  **collection** of T; a type inside (`[O]T`, `{K}V`) = a **mapping** from
+  the bracketed type to the one that follows.
+- A mapping's key is constrained by the ordering: inside `[…]` it must be an
+  **ordinal type** (enum, `bool`, `char`, integer subrange); inside `{…}`,
+  any hashable type.
 
-|                  | ordered `[…]`           | unordered `{…}`              |
-|------------------|-------------------------|------------------------------|
-| both sides named | `[O]T` ordinal-indexed  | `{K}V` dict                  |
-| one side implied | `[]T` list (domain=pos) | `{}T` set (value=in-or-out)  |
+|                | ordered `[…]`          | unordered `{…}` |
+|----------------|------------------------|-----------------|
+| **collection** | `[]T` list             | `{}T` set       |
+| **mapping**    | `[O]T` ordinal-indexed | `{K}V` dict     |
 
-`[]T` implies the *domain* (positions). `{}T` implies the *value*: a set
-answers in-or-out about each element, so `T` is the domain and a set is the
-mapping `T -> bool`. Hence `x in s` is the lookup (same operation as
-`d[k]`), and an element cannot appear twice.
+Underneath, a collection is a mapping that supplies its own key: a list maps
+positions to elements, a set maps elements to in-or-out. Hence `xs[i]` and
+`x in s` are both lookups, and a set cannot hold anything twice.
 
 Consequences: `[10]T` ≡ `[0..9]T` (a length is shorthand for a subrange; on
 Nim `array[10,int] is array[0..9,int]` is `true`), so the fixed array is not

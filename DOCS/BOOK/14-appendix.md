@@ -13,10 +13,10 @@
 | Variant record | `type S (Kind: K) is record: case Kind is when ...` |
 | Subrange | `type T is lo .. hi` / `type T is int range lo..hi` |
 | Float subrange | `type T is float range lo .. hi` |
-| Containers are mappings | `[…]` ordered domain, `{…}` unordered; inside = the domain |
+| Container scheme | `[…]`/`{…}` = ordered/unordered; empty = collection, type inside = mapping |
 | List / fixed array / open array | `[]T` / `[N]T` / `[*]T` (params only) |
-| Fixed array is a subrange domain | `[10]T` ≡ `[0..9]T` |
-| Ordinal-indexed array | `[O]T` — `O` an enum, `bool`, `char`, or a subrange |
+| Fixed array is a subrange key | `[10]T` ≡ `[0..9]T` |
+| Ordinal-keyed mapping | `[O]T` — `O` an enum, `bool`, `char`, or a subrange |
 | Dict / set / enum-indexed array | `{K}V` / `{}T` / `[E]T` |
 | Optional | `?T` |
 | Function type | `[(T, U)]R` |

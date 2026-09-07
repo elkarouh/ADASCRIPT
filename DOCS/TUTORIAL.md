@@ -126,37 +126,34 @@ prefixes, so `[]int` reads "list of int" and `{str}int` reads "dict mapping
 str to int".
 
 There is one idea behind the whole table, and it is worth having up front:
-**every container is a mapping**, written `<domain>value`. The brackets hold
-the domain — what you index with — and the value type follows.
+two independent questions settle which form you want.
 
-- The **shape** says whether the domain is ordered: `[…]` is ordered, `{…}`
+- **Is it ordered?** — the *shape* of the brackets. `[…]` is ordered, `{…}`
   is not.
-- **What sits inside** says what the domain is: named (`[O]T`, `{K}V`) or
-  left out (`[]T`, `{}T`) — see below, they leave out different halves.
+- **Is it keyed?** — whether anything sits *inside* them. Nothing inside
+  (`[]T`, `{}T`) is a **collection** of `T`; a type inside (`[O]T`, `{K}V`)
+  is a **mapping**, from the bracketed type to the one that follows.
 
-Between `[…]` the domain must be an **ordinal type** — an enum, `bool`,
-`char`, or an integer subrange — because that is what has an order to index
-by. Between `{…}` any hashable type works.
+|                | ordered `[…]`                    | unordered `{…}` |
+|----------------|----------------------------------|-----------------|
+| **collection** | `[]T` — a list                   | `{}T` — a set   |
+| **mapping**    | `[O]T` — an array indexed by `O` | `{K}V` — a dict |
 
-|                      | ordered `[…]`                       | unordered `{…}`                 |
-|----------------------|-------------------------------------|---------------------------------|
-| **both sides named** | `[O]T` — indexed by an ordinal type | `{K}V` — dict                   |
-| **one side implied** | `[]T` — list (domain = position)    | `{}T` — set (value = in or out) |
-
-The two bottom forms leave out different halves. `[]T` numbers its own
-elements, so the domain is the positions. `{}T` does the opposite: a set
-does not map its elements *to* anything you supply, it answers in-or-out
-about each, so `T` is the **domain** and the value is an implied `bool`. A
-set is the mapping `T -> bool`, which is why `x in s` is the lookup — the
-same operation as `d[k]`, returning that bool — and why an element cannot
-appear twice.
+The two questions meet in one place: a mapping's key type is constrained by
+the ordering. Between `[…]` it must be an **ordinal type** — an enum,
+`bool`, `char`, or an integer subrange — because an order to index by is
+what an ordinal has. Between `{…}` any hashable type works.
 
 That makes the fixed-size array unremarkable rather than a special case: a
 length is shorthand for a subrange, so `[10]int` and `[0..9]int` are one
 type. On the Nim backend `array[10, int] is array[0..9, int]` is literally
-`true`. And `{:}` versus `{}` stops being arbitrary — `{:}` carries the
-colon of a `key: value` pair, so it is the empty mapping with a named
-domain; bare `{}` is the empty set.
+`true`. And `{:}` versus `{}` stops being arbitrary — the colon of a
+`key: value` pair marks the mapping, so `{:}` is the empty dict and bare
+`{}` the empty set.
+
+Underneath, a collection is a mapping that supplies its own key: a list maps
+positions to elements, a set maps elements to in-or-out. That is why `xs[i]`
+and `x in s` are both lookups, and why a set cannot hold anything twice.
 
 "Unordered" is a portability rule, not a mnemonic: the same `{str}int`
 iterates in insertion order on Python and hash order on Nim. Sort the keys
@@ -376,7 +373,7 @@ var costs: [Priority]int = [LOW: 1, MED: 5, HIGH: 10]
 print(costs[HIGH])   # 10
 ```
 
-An enum is just one ordinal domain; `[10]T`, `[0..9]T` and `[bool]T` are the
+An enum is just one ordinal key; `[10]T`, `[0..9]T` and `[bool]T` are the
 same construct with a different one in the brackets.
 
 It iterates its values in enum order, whatever order the literal used, like
