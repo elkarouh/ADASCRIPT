@@ -29,17 +29,26 @@ def dijkstra(graph : Graph_T, start: Node_T) -> {Node_T}Distance_T:
 # edge into D would look up a key that is not there: an unhandled KeyError
 # on the last line of a program that looks right.
 #
-# The generic version in the bundled library does not have that trap. It
-# seeds its table from the keys *and* every destination those keys name, so
-# a sink needs no entry of its own and this literal may stop at C:
+# The generic version in the bundled library seeds its table from the keys
+# in exactly the same way, but relaxes with `dist.get(neighbour, Inf)`
+# rather than `dist[neighbour]`, so a sink that is reached is put in the
+# table by the edge that reaches it and this literal may stop at C:
 #
 #     nimport graphs
 #     print dijkstra[Node_T]({A: [(1.0, B), (4.0, C)], B: [(2.0, C), (5.0, D)], C: [(1.0, D)]}, A)
+#     # {D: 4.0, C: 3.0, A: 0.0, B: 1.0}
+#
+# That covers a sink, not every omission: a node left out of the keys that
+# nothing reaches either is a node the walk never sees, and it is missing
+# from the result instead of sitting there at Inf. Naming every node as a
+# key, as this literal does, is still the rule -- it is what makes the
+# table exhaustive.
 #
 # See TO_NIM/STDLIB/graphs.ady, which also offers shortest_path() for the
-# route rather than the distances. Its `def dijkstra[N](...)` names the node
-# type as a parameter, so `[Node_T]` above says which one this call wants;
-# both backends also infer it from the argument if the brackets are left off. The version here stays written out because it is what
-# §1.4 of the book reads line by line.
+# route rather than the distances. Its `def dijkstra[Node_T](...)` names the
+# node type as a parameter, so `[Node_T]` above says which one this call
+# wants; both backends also infer it from the argument if the brackets are
+# left off. The version here stays written out because it is what §1.4 of
+# the book reads line by line.
 graph : Graph_T = {A: [(1.0, B), (4.0, C)], B: [(2.0, C), (5.0, D)], C: [(1.0, D)], D: []}
 print dijkstra(graph, A)

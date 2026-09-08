@@ -71,4 +71,31 @@ assert dsink[Q] == 2.0
 assert shortest_path(gsink, P, Q) == [P, Q]
 assert shortest_path(gsink, Q, P) == []        # nothing leaves the sink
 
+# --- unreachable nodes ------------------------------------------------------
+# A graph names every one of its nodes as a key, the edgeless ones included,
+# so the keys are the node set and every node is in the table. The ones
+# nothing reaches answer Inf.
+type Far_T is enum W, X, Y, Z
+let gfar: {Far_T}[](float, Far_T) = {W: [(1.0, X)], X: [], Y: [(1.0, Z)], Z: []}
+let dfar: {Far_T}float = dijkstra(gfar, W)
+assert dfar[W] == 0.0
+assert dfar[X] == 1.0
+assert dfar[Y] == Inf          # a key, but nothing reaches it
+assert dfar[Z] == Inf          # a key, reachable only from the stranded Y
+assert shortest_path(gfar, W, Z) == []
+
+# Break the convention and the table stops being exhaustive, which is the
+# whole reason the convention is written down. Z below is neither a key nor
+# reachable -- the graph mentions it in no place the walk ever visits -- so
+# it is absent rather than Inf. X is not a key either, but it is reached,
+# and the relax step puts it in.
+let gpartial: {Far_T}[](float, Far_T) = {W: [(1.0, X)], Y: [(1.0, Z)]}
+let dpartial: {Far_T}float = dijkstra(gpartial, W)
+assert dpartial[W] == 0.0
+assert dpartial[X] == 1.0             # not a key, but reached
+assert dpartial[Y] == Inf             # a key, so present, and unreached
+assert Z not in dpartial              # neither a key nor reached
+assert dpartial.get(Z, Inf) == Inf    # ask this way if you cannot be sure
+assert shortest_path(gpartial, W, Z) == []
+
 print "all graphs tests passed"

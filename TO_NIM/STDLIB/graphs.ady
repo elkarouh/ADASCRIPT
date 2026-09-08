@@ -12,6 +12,13 @@ The edge tuple is deliberately (weight, node) and not (node, weight): the
 priority queue orders on the tuple's first element, so an edge is already
 in the shape the queue wants and no repacking is needed.
 
+A graph names every one of its nodes as a key, including the ones with no
+outgoing edges — `BER: []` below is not decoration. The keys are therefore
+the node set, which is what lets the distance table be seeded in one line.
+A destination that is never a key still works if something reaches it, but
+one that is neither a key nor reachable is a node the graph never mentions,
+and it is simply absent from the result.
+
     nimport graphs
 
     type City_T is enum PAR, LON, BER
@@ -28,27 +35,13 @@ from stdlib nimport PriorityQueue
 
 
 # ---------------------------------------------------------------------------
-# all_nodes(graph) — the graph's keys, plus every destination they name
-#   A sink has no adjacency entry of its own: it appears only as some edge's
-#   destination. Reading the keys alone would leave it out, and the first
-#   edge into it would then be a lookup of a key that is not there.
-#
-#   Duplicates are left in: every caller feeds this straight to a `{…}`
-#   comprehension, which collapses them.
-# ---------------------------------------------------------------------------
-
-def all_nodes[Node_T](graph: {Node_T}[](float, Node_T)) -> []Node_T:
-    [n for n in graph] + [nb for n in graph for w, nb in graph[n]]
-
-
-# ---------------------------------------------------------------------------
 # dijkstra(graph, start) — distance from start to every reachable node
 #   Unreachable nodes come back as Inf, which compares and adds like any
 #   other float; nothing has to be unwrapped in the loop.
 # ---------------------------------------------------------------------------
 
 def dijkstra[Node_T](graph: {Node_T}[](float, Node_T), start: Node_T) -> {Node_T}float:
-    var dist: {Node_T}float = {n: (0.0 if n == start else Inf) for n in all_nodes(graph)}
+    var dist: {Node_T}float = {n: (0.0 if n == start else Inf) for n in graph}
     var seen: {}Node_T
     queue: PriorityQueue[(float, Node_T)] = [(0.0, start)]
     while queue:
@@ -60,7 +53,7 @@ def dijkstra[Node_T](graph: {Node_T}[](float, Node_T), start: Node_T) -> {Node_T
             continue                 # a sink: reached, but nothing leaves it
         for weight, neighbour in graph[node]:
             let candidate: float = current + weight
-            if candidate < dist[neighbour]:
+            if candidate < dist.get(neighbour, Inf):
                 dist[neighbour] = candidate
                 queue.push((candidate, neighbour))
     return dist
@@ -74,9 +67,7 @@ def dijkstra[Node_T](graph: {Node_T}[](float, Node_T), start: Node_T) -> {Node_T
 
 def shortest_path[Node_T](graph: {Node_T}[](float, Node_T), start: Node_T, goal: Node_T) -> []Node_T:
     var route: []Node_T = []
-    var dist: {Node_T}float = {n: (0.0 if n == start else Inf) for n in all_nodes(graph)}
-    if start not in dist or goal not in dist:
-        return route
+    var dist: {Node_T}float = {n: (0.0 if n == start else Inf) for n in graph}
     var came_from: {Node_T}Node_T = {:}
     var seen: {}Node_T
     queue: PriorityQueue[(float, Node_T)] = [(0.0, start)]
@@ -91,7 +82,7 @@ def shortest_path[Node_T](graph: {Node_T}[](float, Node_T), start: Node_T, goal:
             continue                 # a sink: reached, but nothing leaves it
         for weight, neighbour in graph[node]:
             let candidate: float = current + weight
-            if candidate < dist[neighbour]:
+            if candidate < dist.get(neighbour, Inf):
                 dist[neighbour] = candidate
                 came_from[neighbour] = node
                 queue.push((candidate, neighbour))
