@@ -50,6 +50,7 @@ STANDALONE := \
     primes.ady \
     test_ownership.ady \
     test_iters.ady \
+    test_graphs.ady \
     test_regex.ady \
     td_learning/sarsa.ady \
     td_learning/qlearning.ady \

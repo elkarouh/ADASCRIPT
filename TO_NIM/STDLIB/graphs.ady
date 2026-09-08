@@ -1,0 +1,86 @@
+#!/usr/bin/env py2nim
+"""
+graphs.ady — shortest paths over a weighted digraph, generic in the node type
+
+A graph is `{N}[](float, N)`: each node maps to its outgoing edges, and an
+edge is a (weight, destination) pair. The node type N is undeclared in the
+signatures, which makes it an implicit generic parameter — the Nim compiler
+instantiates a concrete version per call site, so the same definition serves
+enum, string and integer nodes without duplication.
+
+The edge tuple is deliberately (weight, node) and not (node, weight): the
+priority queue orders on the tuple's first element, so an edge is already
+in the shape the queue wants and no repacking is needed.
+
+    nimport graphs
+
+    type City_T is enum PAR, LON, BER
+    let g: {City_T}[](float, City_T) = {PAR: [(3.0, LON)], LON: [(2.0, BER)], BER: []}
+    print dijkstra(g, PAR)            # {PAR: 0.0, LON: 3.0, BER: 5.0}
+    print shortest_path(g, PAR, BER)  # @[PAR, LON, BER]
+"""
+
+from stdlib nimport PriorityQueue
+
+
+# ---------------------------------------------------------------------------
+# dijkstra(graph, start) — distance from start to every reachable node
+#   Unreachable nodes come back as Inf, which compares and adds like any
+#   other float; nothing has to be unwrapped in the loop.
+# ---------------------------------------------------------------------------
+
+def dijkstra(graph: {N}[](float, N), start: N) -> {N}float:
+    var dist: {N}float = {node: (0.0 if node == start else Inf) for node in graph}
+    var seen: {}N
+    queue: PriorityQueue[(float, N)] = [(0.0, start)]
+    while queue:
+        current, node = queue.pop()
+        if node in seen:
+            continue
+        seen.add(node)
+        for weight, neighbour in graph[node]:
+            let candidate: float = current + weight
+            if candidate < dist[neighbour]:
+                dist[neighbour] = candidate
+                queue.push((candidate, neighbour))
+    return dist
+
+
+# ---------------------------------------------------------------------------
+# shortest_path(graph, start, goal) — the route itself, start..goal inclusive
+#   Empty when there is no route, or when either end is not in the graph.
+#   A single-node path is [start], so an empty result is never ambiguous.
+# ---------------------------------------------------------------------------
+
+def shortest_path(graph: {N}[](float, N), start: N, goal: N) -> []N:
+    var route: []N = []
+    if start not in graph or goal not in graph:
+        return route
+    var dist: {N}float = {node: (0.0 if node == start else Inf) for node in graph}
+    var came_from: {N}N = {:}
+    var seen: {}N
+    queue: PriorityQueue[(float, N)] = [(0.0, start)]
+    while queue:
+        current, node = queue.pop()
+        if node in seen:
+            continue
+        seen.add(node)
+        if node == goal:
+            break
+        for weight, neighbour in graph[node]:
+            let candidate: float = current + weight
+            if candidate < dist[neighbour]:
+                dist[neighbour] = candidate
+                came_from[neighbour] = node
+                queue.push((candidate, neighbour))
+    if goal != start and goal not in came_from:
+        return route
+    # Walk the predecessors back from the goal, then reverse.
+    var backwards: []N = [goal]
+    var at: N = goal
+    while at != start:
+        at = came_from[at]
+        backwards.append(at)
+    for i in 0 ..< len(backwards):
+        route.append(backwards[len(backwards) - 1 - i])
+    return route

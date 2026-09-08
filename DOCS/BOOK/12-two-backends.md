@@ -26,8 +26,8 @@ Two prefixed forms give per-backend control:
 
 - **`nimport x`** — import that appears *only* in Nim output. Use it for Nim
   stdlib modules (`nimport strutils, sequtils, algorithm`), for the bundled
-  shims (`nimport stdlib`, `nimport awk`, `nimport iters`, `nimport
-  expect`), and for other `.ady` files compiled as libraries.
+  shims (`nimport stdlib`, `nimport awk`, `nimport iters`, `nimport graphs`,
+  `nimport expect`), and for other `.ady` files compiled as libraries.
 - **`pyimport x`** — the reverse emphasis; see `primes.ady` (`pyimport
   time`) and `rsync_time_machine.ady`, which opens with both:
 

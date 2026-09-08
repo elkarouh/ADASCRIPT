@@ -395,7 +395,43 @@ The full menu in the test file: `pairwise`, `sliding_window`,
 `count_from`, `product`, `batched`. Each is tested with both `int` and `str`
 instantiations — a reminder that these are true generics in the Nim build.
 
-## 6.7 Iteration odds and ends
+## 6.7 The graph library: `nimport graphs`
+
+`§1.4`'s Dijkstra is written out in full because it reads well; the same
+algorithm generalised over the node type is in the bundled library, and
+`EXAMPLES/test_graphs.ady` exercises it:
+
+```python
+nimport graphs
+
+type City_T is enum PAR, LON, BER
+let g: {City_T}[](float, City_T) = {PAR: [(3.0, LON), (9.0, BER)],
+                                    LON: [(2.0, BER)],
+                                    BER: []}
+let d: {City_T}float = dijkstra(g, PAR)
+print d[BER]                      # 5.0 — the 3+2 route, not the direct 9
+print shortest_path(g, PAR, BER)  # PAR, LON, BER
+```
+
+A graph is `{N}[](float, N)`: each node maps to its outgoing edges, an edge
+being a (weight, destination) pair. `N` is undeclared in the library's
+signatures, which makes it an *implicit generic* — the Nim compiler
+instantiates a version per call site, so one definition serves enum, string
+and integer nodes. The test file runs every case against all three.
+
+Two details are worth the space. The edge is `(weight, node)` rather than
+`(node, weight)` because the priority queue orders on a tuple's first
+element, so an edge is already in the shape the queue wants. And an
+unreached node's distance is `Inf`, not an optional — it compares and adds
+like any other float, so nothing is unwrapped inside the loop (§10.5).
+
+There is no explicit `def foo[T]` syntax yet — it is the first item under
+"Monad support improvements" in `TODO.md` — so the implicit form is what
+carries a library of this shape in the meantime. It is enough here because
+every type parameter appears in the arguments; a combinator whose parameter
+appears only in the return type would need the explicit form.
+
+## 6.8 Iteration odds and ends
 
 - Ranges are first-class: `for i in 0 ..< 10:`, membership `if x in 1 .. 100:`.
 - `for key, val in mapping.items():` and `for i, x in enumerate(xs):` work as

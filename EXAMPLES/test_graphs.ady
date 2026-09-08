@@ -1,0 +1,61 @@
+#!/usr/bin/env py2nim
+# test_graphs.ady — tests for the generic shortest-path library, graphs.ady
+#
+#   py2nim EXAMPLES/test_graphs.ady -r
+#
+# The point of the library is that one definition serves any node type, so
+# every case here runs against three of them: an enum, a string and an int.
+
+nimport graphs
+
+type City_T is enum PAR, LON, BER, ROM
+
+# --- enum nodes ------------------------------------------------------------
+# PAR -3-> LON -2-> BER, and PAR -9-> BER direct: the two-hop route wins.
+let ge: {City_T}[](float, City_T) = {
+    PAR: [(3.0, LON), (9.0, BER)],
+    LON: [(2.0, BER)],
+    BER: [],
+    ROM: []}
+let de: {City_T}float = dijkstra(ge, PAR)
+assert de[PAR] == 0.0
+assert de[LON] == 3.0
+assert de[BER] == 5.0            # 3 + 2, not the direct 9
+assert de[ROM] == Inf            # no edge into it
+assert shortest_path(ge, PAR, BER) == [PAR, LON, BER]
+assert shortest_path(ge, PAR, PAR) == [PAR]        # a node reaches itself
+assert shortest_path(ge, PAR, ROM) == []           # unreachable
+assert shortest_path(ge, BER, PAR) == []           # edges are directed
+
+# --- string nodes ----------------------------------------------------------
+let gs: {str}[](float, str) = {
+    "a": [(1.5, "b"), (10.0, "d")],
+    "b": [(2.5, "c")],
+    "c": [(1.0, "d")],
+    "d": []}
+let ds: {str}float = dijkstra(gs, "a")
+assert ds["a"] == 0.0
+assert ds["b"] == 1.5
+assert ds["c"] == 4.0
+assert ds["d"] == 5.0            # 1.5+2.5+1, beating the direct 10
+assert shortest_path(gs, "a", "d") == ["a", "b", "c", "d"]
+assert shortest_path(gs, "a", "zz") == []          # goal not in the graph
+assert shortest_path(gs, "zz", "a") == []          # start not in the graph
+
+# --- int nodes -------------------------------------------------------------
+let gi: {int}[](float, int) = {1: [(7.0, 2)], 2: [(1.0, 3)], 3: []}
+let di: {int}float = dijkstra(gi, 1)
+assert di[1] == 0.0
+assert di[2] == 7.0
+assert di[3] == 8.0
+assert shortest_path(gi, 1, 3) == [1, 2, 3]
+
+# --- a single node with no edges at all ------------------------------------
+# The empty edge list is named: in a one-entry table literal Nim has no
+# sibling entry to infer `@[]`'s element type from, and rejects the literal.
+let no_edges: [](float, int) = []
+let g1: {int}[](float, int) = {42: no_edges}
+assert dijkstra(g1, 42)[42] == 0.0
+assert shortest_path(g1, 42, 42) == [42]
+
+print "all graphs tests passed"
