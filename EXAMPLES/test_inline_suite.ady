@@ -346,6 +346,17 @@ for ch in pair:
     if ch != "y":
         seen.append(ch)
 assert seen == ["x"]
+# A string method with part-char, part-string arguments. Nim overloads
+# these all-char or all-string and has nothing mixed, so the char side of
+# `s.replace(ch, "\\" + ch)` failed there -- git1.ady's ignore_escape had
+# a str(ch) on it for that reason alone. An all-char or all-string call is
+# left as it was: that overload is already the right one.
+var esc: str = "a*b"
+for ch in "*":
+    esc = esc.replace(ch, "\\" + ch)
+assert esc == "a\\*b"
+assert "x-y-z".replace("-", "+") == "x+y+z"
+assert "a,b,c".split(",") == ["a", "b", "c"]
 # The binding is scoped to the comprehension, as it is in Python: the same
 # name can be a string in one and an int in the next, and an outer name of
 # that spelling is untouched.

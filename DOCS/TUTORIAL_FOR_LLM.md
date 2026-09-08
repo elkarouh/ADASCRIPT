@@ -823,9 +823,12 @@ since Nim will not assign a `collect()` to one. Iterating a string yields
 `char` there, so `p + q` above relies on `&(char, char)` giving a string.
 A char is also stringified automatically wherever a string is wanted — a
 call argument whose parameter is `str` (`cross(ROWS, c)` needs no
-`str(c)`), a declaration annotated `str`, and `.append` onto a `[]str`.
-A slice is not a char and is left alone (`s[i]` indexes, `s[2:10]` cuts).
-On Python a char *is* a one-character string, so none of this arises.
+`str(c)`), a declaration annotated `str`, `.append` onto a `[]str`, and a
+string method given part chars and part strings (`s.replace(c, "\\" + c)`;
+Nim overloads `replace`/`split`/… all-char or all-string, never mixed, and
+an all-char call is left alone). A slice is not a char and is left alone
+(`s[i]` indexes, `s[2:10]` cuts). On Python a char *is* a one-character
+string, so none of this arises.
 
 **Not supported:** the keyed form `[LOW: 1 for ...]` — values are
 positional. Iterate the key type when filling an `[O]T`.

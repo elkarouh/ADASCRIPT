@@ -497,11 +497,13 @@ line relies on `char + char` being a string. That is `sudoku.ady`'s
 `cross()`, whole.
 
 The same knowledge lets a character go wherever a string is wanted, so no
-`str(c)` conversion is needed in three common places: a call argument whose
+`str(c)` conversion is needed in four common places: a call argument whose
 parameter is `str` (`cross(ROWS, c)` above), a declaration annotated `str`,
-and `.append` onto a `[]str`. Each is an error on Nim and a no-op on
-Python, where a character *is* a one-character string. `sudoku.ady`'s grid
-parser is the shape that benefits:
+`.append` onto a `[]str`, and a string method given part characters and
+part strings — `s.replace(c, "\\" + c)` works, because Nim overloads
+`replace` all-char or all-string with nothing mixed. Each is an error on
+Nim and a no-op on Python, where a character *is* a one-character string.
+`sudoku.ady`'s grid parser is the shape that benefits:
 
 ```python
 var chars: []str

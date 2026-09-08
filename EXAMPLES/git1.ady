@@ -31,7 +31,7 @@ def ignore_escape(name: str) -> str:
     """Escape a file name for a .gitignore line."""
     var s: str = name.replace("\\", "\\\\")
     for ch in "*?[#!":
-        s = s.replace(str(ch), "\\" + str(ch))
+        s = s.replace(ch, "\\" + ch)
     s
 
 # --- one tracked file ------------------------------------------------------

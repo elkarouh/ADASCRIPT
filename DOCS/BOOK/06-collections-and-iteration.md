@@ -181,10 +181,14 @@ yields chars there, and the second line relies on `char + char` being a
 string — it is `sudoku.ady`'s `cross()`, whole.
 
 The same knowledge lets a char go wherever a string is wanted, so the
-`str(c)` conversions that used to litter code like this are gone. Three
+`str(c)` conversions that used to litter code like this are gone. Four
 places take it: a call argument whose parameter is `str` (`cross(ROWS, c)`
-in §6.1), a declaration annotated `str`, and `.append` onto a `[]str`. All
-three are errors on Nim and no-ops on Python, where a char *is* a
+in §6.1), a declaration annotated `str`, `.append` onto a `[]str`, and a
+string method given part chars and part strings — Nim overloads `replace`,
+`split` and the rest all-char or all-string with nothing mixed, so
+`s.replace(c, "\\" + c)` needed a conversion on the first argument alone.
+An all-char call is left as it is; that overload is the better one. Each
+case is an error on Nim and a no-op on Python, where a char *is* a
 one-character string, so converting can only make the two agree.
 `sudoku.ady`'s grid parser is the shape that gets shorter:
 

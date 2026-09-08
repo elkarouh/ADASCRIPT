@@ -1923,6 +1923,24 @@ def to_nim(self, prec=None):
                             result = f"{result}.add(${_add_args[0]})"
                             skip_next = True
                             continue
+                # A string method whose arguments are part char and part
+                # string: Nim overloads these all-char or all-string and has
+                # nothing mixed, so `s.replace(ch, "\\" & ch)` fails on the
+                # char while both `s.replace(ch, ch)` and the all-string
+                # form are fine. Promote the chars; leave an all-char call
+                # alone, since that overload is the better one.
+                if (method_name in _CHAR_OR_STRING_METHODS
+                        and next_tr is not None
+                        and type(next_tr).__name__ == "call_trailer"):
+                    _ca = _extract_call_args(next_tr)
+                    if len(_ca) > 1:
+                        _chars = [a for a in _ca if _expr_is_char(a)]
+                        _strs = [a for a in _ca if _expr_is_string(a)]
+                        if _chars and _strs:
+                            _ca = [f"${a}" if _expr_is_char(a) else a for a in _ca]
+                            result = f"{result}.{method_name}({', '.join(_ca)})"
+                            skip_next = True
+                            continue
                 # startswith/endswith with a tuple of prefixes/suffixes: Python
                 # accepts a tuple, but Nim's startsWith/endsWith take a single
                 # string, so expand to an or-chain (s.startsWith(a) or ...).
@@ -2313,6 +2331,27 @@ def _wrap_option_args(expr):
     if not changed:
         return expr
     return f"{receiver_prefix}{proc_name}({', '.join(new_args)})"
+
+
+# Nim overloads these for char and for string, with nothing mixed.
+_CHAR_OR_STRING_METHODS = frozenset({"replace", "split", "rsplit", "join",
+                                     "count", "find", "rfind", "strip"})
+
+
+def _expr_is_string(arg):
+    """True when ARG is known to be a string rather than a char."""
+    import re as _re_st
+    a = (arg or "").strip()
+    if not a:
+        return False
+    if a.startswith('"') or a.startswith('fmt"') or a.startswith('r"') or a.startswith("$"):
+        return True
+    if " & " in a:
+        return True
+    if _re_st.fullmatch(r"[A-Za-z_]\w*", a):
+        sym = ParserState.symbol_table.lookup(a)
+        return bool(sym) and (sym.get("type") or "") in ("string", "str")
+    return False
 
 
 def _expr_is_char(arg):
