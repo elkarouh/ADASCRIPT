@@ -97,8 +97,8 @@ while True:
             let old_action: int = policy[i][j]
             var best_action: int = old_action
             var best_val: Reward_T = -1e18
-            let lo: int = -min(MAX_MOVE, int(j))
-            let hi: int =  min(MAX_MOVE, int(i))
+            let lo: int = -min(MAX_MOVE, j)
+            let hi: int =  min(MAX_MOVE, i)
             for a in lo .. hi:
                 let v: Reward_T = expected_return(i, j, a)
                 if v > best_val:
@@ -119,11 +119,11 @@ def print_policy():
     print "\nOptimal Policy  (row = cars at loc1, col = cars at loc2, value = cars moved 1→2):"
     var header: str = "    "
     for j in Cars_T:
-        let jj: int = int(j)
+        let jj: int = j
         header &= f"{jj:3}"
     print header
     for i in Cars_T:
-        let ii: int = int(i)
+        let ii: int = i
         var line: str = f"{ii:3}:"
         for j in Cars_T:
             let a: int = policy[i][j]

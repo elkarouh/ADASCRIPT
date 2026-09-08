@@ -33,7 +33,7 @@ var peers: {str}{}str = {s: {s2 for u in units[s] for s2 in u if s2 != s} for s 
 # Constraint propagation
 # ============================================================
 
-def eliminate(values: {str}str, s: str, d: str) -> {str}str:
+def eliminate(values: {str}str, s: str, d: char) -> {str}str:
     """Eliminate d from values[s]; propagate. Return False (empty dict) if contradiction."""
     if d not in values[s]:
         return values
@@ -45,7 +45,7 @@ def eliminate(values: {str}str, s: str, d: str) -> {str}str:
 
     # Naked single: only one value left — eliminate it from peers
     if len(values[s]) == 1:
-        d2: str = values[s]
+        d2: char = values[s][0]
         for s2 in peers[s]:
             values = eliminate(values, s2, d2)
             if not values:
@@ -70,7 +70,7 @@ def eliminate(values: {str}str, s: str, d: str) -> {str}str:
 
     return values
 
-def assign(values: {str}str, s: str, d: str) -> {str}str:
+def assign(values: {str}str, s: str, d: char) -> {str}str:
     """Assign d to s by eliminating all other digits. Return False on contradiction."""
     var other_digits: str = values[s].replace(d, "")
     for d2 in other_digits:
