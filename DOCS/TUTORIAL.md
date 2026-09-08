@@ -460,6 +460,73 @@ proc sum_values(xs: openArray[int]): int =
 variable declarations. Callers never need to do anything special: Nim passes
 both seq and array to an `openArray` parameter automatically.
 
+### Comprehensions
+
+One syntax builds every container; the brackets and the annotation choose
+which, the same scheme the type notation uses to declare them:
+
+```python
+var asList:  []int    = [i*i for i in 0..4]     # seq / list
+var asArray: [5]int   = [i*i for i in 0..4]     # stack array (see `[E]T` above)
+var asSet:   {}int    = {i*i for i in 0..4}     # set
+var asDict:  {int}int = {i: i*i for i in 0..4}  # dict
+```
+
+Multiple generators and `if` guards work as in Python, and two lists join
+with `+`, so a list drawn from several sources is still one expression.
+`sudoku.ady` builds its 27 units that way:
+
+```python
+var unitlist: [][]str = (
+    [cross(ROWS, c) for c in COLS]
+    + [cross(r, COLS) for r in ROWS]
+    + [cross(rb, cb) for rb in ["ABC", "DEF", "GHI"] for cb in ["123", "456", "789"]])
+```
+
+The loop variable is typed from whatever it iterates, so the element
+expression can operate on it — which the Nim backend needs, having separate
+operators for arithmetic and concatenation:
+
+```python
+[r + c for r in ["A", "B"] for c in ["1", "2"]]   # ["A1","A2","B1","B2"]
+[p + q for p in "AB" for q in "12"]               # the same, over strings
+```
+
+Iterating a string yields characters on the Nim backend, and the second
+line relies on `char + char` being a string. That is `sudoku.ady`'s
+`cross()`, whole.
+
+The same knowledge lets a character go wherever a string is wanted, so no
+`str(c)` conversion is needed in three common places: a call argument whose
+parameter is `str` (`cross(ROWS, c)` above), a declaration annotated `str`,
+and `.append` onto a `[]str`. Each is an error on Nim and a no-op on
+Python, where a character *is* a one-character string. `sudoku.ady`'s grid
+parser is the shape that benefits:
+
+```python
+var chars: []str
+for c in grid:
+    if c in DIGITS or c == "0" or c == ".":
+        chars.append(c)
+```
+
+A slice is not a character and is left alone: `s[i]` indexes, `s[2:10]`
+cuts.
+
+The binding is scoped to the comprehension, as in Python — the same name
+can hold different types in two of them, and an outer name of that spelling
+is untouched:
+
+```python
+let same: int = 5
+[same + "?" for same in ["p"]]      # a string in here
+assert same + 1 == 6                # still the outer int out here
+```
+
+Concatenate with `+`. Nim spells it `&` and the backend rewrites `+` to
+that, but writing `&` yourself is a Nim-only spelling: it is bitwise-and on
+Python and raises there.
+
 ### Optional values `?T`
 
 ```python

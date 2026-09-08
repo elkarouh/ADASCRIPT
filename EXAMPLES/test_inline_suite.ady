@@ -328,6 +328,24 @@ assert [[a + b for b in ["1", "2"]] for a in ["A"]] == [["A1", "A2"]]
 # backends -- Nim's `&(char, char)` builds one, Python's are already
 # one-character strings. This is sudoku.ady's cross().
 assert [p + q for p in "AB" for q in "12"] == ["A1", "A2", "B1", "B2"]
+# And a char reaching a `str` parameter is converted rather than rejected:
+# `cross(ROWS, c)` type-checks on Python, where c is a one-character
+# string, and used to need a hand-written str(c) for Nim alone.
+def take_str(s: str, t: str) -> str:
+    s + t
+let pair: str = "xy"
+assert [take_str("<", ch) for ch in pair] == ["<x", "<y"]
+assert take_str("<", pair[0]) == "<x"
+# ... and the same at a declaration, and appending to a []str. Those three
+# sites are what let sudoku.ady's parse_grid filter grid characters
+# directly, with no `str(c)` temporary standing in between.
+var first: str = pair[0]
+assert first == "x"
+var seen: []str = []
+for ch in pair:
+    if ch != "y":
+        seen.append(ch)
+assert seen == ["x"]
 # The binding is scoped to the comprehension, as it is in Python: the same
 # name can be a string in one and an int in the next, and an outer name of
 # that spelling is untouched.

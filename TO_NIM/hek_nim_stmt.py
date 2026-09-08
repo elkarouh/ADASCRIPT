@@ -361,6 +361,24 @@ def to_nim(self):
     return stmt
 
 
+def _coerce_char_to_string(value, annotation):
+    """`var s: str = c` where c is a char -- stringify it.
+
+    Iterating or indexing a string yields a char on Nim and a
+    one-character string on Python, so a declaration like this compiles
+    there and not here. Assigning a char to a `string` is always an error
+    on Nim, so converting can only turn a failure into the Python meaning;
+    it cannot change a declaration that already compiled. The same rule
+    applies to call arguments, in `_wrap_option_args`.
+    """
+    if annotation not in ("string", "str"):
+        return value
+    from hek_nim_expr import _expr_is_char
+    if not _expr_is_char(value):
+        return value
+    return f"${value}"
+
+
 def _coerce_scalar_value(value, annotation):
     """If annotation is a range subtype or enum and value is an int literal or
     int-valued expression, wrap with AnnotationType(value)."""
@@ -771,6 +789,7 @@ def to_nim(self):
                 value = _unwrap_array_values_in_table(value, annotation)
                 # Range/enum scalar: wrap int literals and int-valued calls
                 value = _coerce_scalar_value(value, annotation)
+                value = _coerce_char_to_string(value, annotation)
                 # array types: {} is unnecessary — arrays are zero-initialized
                 if value == "initTable()" and annotation.startswith("array["):
                     value = ""
@@ -880,6 +899,7 @@ def to_nim(self):
                 value = _unwrap_array_values_in_table(value, annotation)
                 # Range/enum scalar: wrap int literals and int-valued calls
                 value = _coerce_scalar_value(value, annotation)
+                value = _coerce_char_to_string(value, annotation)
                 # array types: {} is unnecessary — arrays are zero-initialized
                 if value == "initTable()" and annotation.startswith("array["):
                     value = ""

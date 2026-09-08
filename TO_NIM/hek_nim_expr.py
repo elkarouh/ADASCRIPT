@@ -1906,6 +1906,23 @@ def to_nim(self, prec=None):
                     continue
                 method_name = _translate_method(result, method_name)
                 next_tr = trailer_list[i + 1] if i + 1 < len(trailer_list) else None
+                # `chars.append(c)` where chars is []str and c is a char --
+                # which is what iterating or indexing a string gives here,
+                # and a one-character string on Python. Adding a char to a
+                # seq[string] is always an error on Nim, so stringifying can
+                # only turn a failure into the Python meaning. Same rule as
+                # the call-argument and declaration cases.
+                if (method_name == "add"
+                        and next_tr is not None
+                        and type(next_tr).__name__ == "call_trailer"):
+                    _rsym = ParserState.symbol_table.lookup(result)
+                    _rtype = (_rsym.get("type") or "") if _rsym else ""
+                    if _rtype in ("seq[string]", "seq[str]"):
+                        _add_args = _extract_call_args(next_tr)
+                        if len(_add_args) == 1 and _expr_is_char(_add_args[0]):
+                            result = f"{result}.add(${_add_args[0]})"
+                            skip_next = True
+                            continue
                 # startswith/endswith with a tuple of prefixes/suffixes: Python
                 # accepts a tuple, but Nim's startsWith/endsWith take a single
                 # string, so expand to an or-chain (s.startsWith(a) or ...).
@@ -2283,11 +2300,45 @@ def _wrap_option_args(expr):
                     changed = True
             else:
                 new_args.append(arg)
+        elif ptype in ("string", "str") and _expr_is_char(arg):
+            # Iterating a string yields char here and one-character strings
+            # on Python, so `cross(ROWS, c)` type-checks there and not here.
+            # Passing a char where a string is wanted is always an error on
+            # Nim, so stringifying can only turn a failure into the Python
+            # meaning -- it cannot change a call that already compiled.
+            new_args.append(f"${arg}")
+            changed = True
         else:
             new_args.append(arg)
     if not changed:
         return expr
     return f"{receiver_prefix}{proc_name}({', '.join(new_args)})"
+
+
+def _expr_is_char(arg):
+    """True when ARG is known to be a single char rather than a string.
+
+    Only names the symbol table has typed, and subscripts of a string --
+    the two shapes that arise from iterating or indexing one. Anything
+    else is left alone rather than guessed at.
+    """
+    import re as _re_ch
+    a = (arg or "").strip()
+    if not a:
+        return False
+    if _re_ch.fullmatch(r"[A-Za-z_]\w*", a):
+        sym = ParserState.symbol_table.lookup(a)
+        return bool(sym) and (sym.get("type") or "") == "char"
+    _m = _re_ch.fullmatch(r"([A-Za-z_]\w*)\[([^\[\]]+)\]", a)
+    if _m:
+        # A slice of a string is a string, not a char: `s[i]` and `s[^1]`
+        # index, `s[i .. j]` and `s[2..<10]` cut. Only the first kind is
+        # one character.
+        if ".." in _m.group(2):
+            return False
+        sym = ParserState.symbol_table.lookup(_m.group(1))
+        return bool(sym) and (sym.get("type") or "") in ("string", "str")
+    return False
 
 
 def _is_join_receiver(text):

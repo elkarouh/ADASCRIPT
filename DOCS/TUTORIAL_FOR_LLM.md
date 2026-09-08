@@ -778,6 +778,60 @@ The Nim backend uses bitset (`set[T]`) for ordinal types (bool, char, byte, smal
 
 ---
 
+## Comprehensions
+
+One syntax builds every container; the brackets and the annotation pick
+which — the same scheme the type notation uses to declare them.
+
+```adascript
+var asList:  []int    = [i*i for i in 0..4]     # seq / list
+var asArray: [5]int   = [i*i for i in 0..4]     # stack array
+var asSet:   {}int    = {i*i for i in 0..4}     # set
+var asDict:  {int}int = {i: i*i for i in 0..4}  # dict
+```
+
+Multiple generators and `if` guards work as in Python. Two lists join with
+`+`, so a list drawn from several sources is one expression:
+
+```adascript
+var unitlist: [][]str = (
+    [cross(ROWS, c) for c in COLS]
+    + [cross(r, COLS) for r in ROWS]
+    + [cross(rb, cb) for rb in ["ABC", "DEF", "GHI"] for cb in ["123", "456", "789"]])
+```
+
+The loop variable is typed from what it iterates, and the binding is scoped
+to the comprehension as it is in Python:
+
+```adascript
+[r + c for r in ["A", "B"] for c in ["1", "2"]]   # ["A1","A2","B1","B2"]
+[p + q for p in "AB" for q in "12"]               # the same, over strings
+
+let same: int = 5
+[same + "?" for same in ["p"]]      # a string in here
+assert same + 1 == 6                # still the outer int out here
+```
+
+**Concatenation:** use `+`. Nim spells it `&` and the backend rewrites `+`
+to that once it knows an operand is a string or seq; writing `&` yourself
+is Nim-only — it is bitwise-and on Python and raises there.
+
+**Nim output:** `collect(...)` from `std/sugar`, nested for multiple
+generators; `toHashSet(collect(...))` for a set; `collect(initTable, ...)`
+for a dict; and a copy loop into `array[N, T]` for a fixed-size array,
+since Nim will not assign a `collect()` to one. Iterating a string yields
+`char` there, so `p + q` above relies on `&(char, char)` giving a string.
+A char is also stringified automatically wherever a string is wanted — a
+call argument whose parameter is `str` (`cross(ROWS, c)` needs no
+`str(c)`), a declaration annotated `str`, and `.append` onto a `[]str`.
+A slice is not a char and is left alone (`s[i]` indexes, `s[2:10]` cuts).
+On Python a char *is* a one-character string, so none of this arises.
+
+**Not supported:** the keyed form `[LOW: 1 for ...]` — values are
+positional. Iterate the key type when filling an `[O]T`.
+
+---
+
 ## Python 3.10+ `match/case`
 
 Adascript is a superset of Python, so standard `match/case` is supported alongside Adascript's own `case/when`. Both compile to the same Nim output.

@@ -24,8 +24,8 @@ and nine boxes — as three comprehensions joined:
 
 ```python
 var unitlist: [][]str = (
-    [cross(ROWS, str(c)) for c in COLS]
-    + [cross(str(r), COLS) for r in ROWS]
+    [cross(ROWS, c) for c in COLS]
+    + [cross(r, COLS) for r in ROWS]
     + [cross(rb, cb) for rb in ["ABC", "DEF", "GHI"] for cb in ["123", "456", "789"]])
 ```
 
@@ -165,6 +165,48 @@ def get_next_decisions(self, current_state: State_T) -> []Choice_T:
     [(size, rev) for size, rev in self.choices if size <= remaining_size]
 ```
 
+### The loop variable
+
+A comprehension's loop variable is typed from whatever it iterates, the
+same as a `for` statement's, so the element expression can operate on it:
+
+```python
+[r + c for r in ["A", "B"] for c in ["1", "2"]]   # ["A1","A2","B1","B2"]
+[p + q for p in "AB" for q in "12"]               # the same, over strings
+```
+
+Both matter on the Nim backend, which has separate operators for arithmetic
+and concatenation and so has to know which one is meant. Iterating a string
+yields chars there, and the second line relies on `char + char` being a
+string — it is `sudoku.ady`'s `cross()`, whole.
+
+The same knowledge lets a char go wherever a string is wanted, so the
+`str(c)` conversions that used to litter code like this are gone. Three
+places take it: a call argument whose parameter is `str` (`cross(ROWS, c)`
+in §6.1), a declaration annotated `str`, and `.append` onto a `[]str`. All
+three are errors on Nim and no-ops on Python, where a char *is* a
+one-character string, so converting can only make the two agree.
+`sudoku.ady`'s grid parser is the shape that gets shorter:
+
+```python
+var chars: []str
+for c in grid:
+    if c in DIGITS or c == "0" or c == ".":
+        chars.append(c)
+```
+
+A slice is not a char, and is left alone: `s[i]` indexes, `s[2:10]` cuts.
+
+The binding is scoped to the comprehension, as in Python. The same name can
+hold different types in two of them, and an outer name of that spelling is
+untouched:
+
+```python
+let same: int = 5
+[same + "?" for same in ["p"]]      # a string in here
+assert same + 1 == 6                # still the outer int out here
+```
+
 ### Comprehensions that build arrays
 
 A comprehension normally produces a growable sequence. In Adascript the
@@ -218,6 +260,9 @@ nothing else — neither language has a set or dict comprehension to be
 consistent with. Here the four differ only in the brackets and the
 annotation, which is the same scheme §2.2 sets out, used to build rather
 than to declare.
+
+Two of them join with `+`, so a list that comes from more than one source
+is still one expression — §6.1 builds Sudoku's 27 units that way.
 
 The key type can be any of the ordinals, not just a length, and the values
 fill the slots in domain order. When the key is a named type, that type is

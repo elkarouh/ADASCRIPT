@@ -21,8 +21,8 @@ var squares: []str = cross(ROWS, COLS)
 
 # The 27 units: nine columns, nine rows, nine boxes.
 var unitlist: [][]str = (
-    [cross(ROWS, str(c)) for c in COLS]
-    + [cross(str(r), COLS) for r in ROWS]
+    [cross(ROWS, c) for c in COLS]
+    + [cross(r, COLS) for r in ROWS]
     + [cross(rb, cb) for rb in ["ABC", "DEF", "GHI"] for cb in ["123", "456", "789"]])
 
 # For each square, the three units containing it; and its 20 peers.
@@ -64,7 +64,7 @@ def eliminate(values: {str}str, s: str, d: str) -> {str}str:
             var sp: str = dplaces[0]
             var other: str = values[sp].replace(d, "")
             for d3 in other:
-                values = eliminate(values, sp, str(d3))
+                values = eliminate(values, sp, d3)
                 if not values:
                     return {:}
 
@@ -74,7 +74,7 @@ def assign(values: {str}str, s: str, d: str) -> {str}str:
     """Assign d to s by eliminating all other digits. Return False on contradiction."""
     var other_digits: str = values[s].replace(d, "")
     for d2 in other_digits:
-        values = eliminate(values, s, str(d2))
+        values = eliminate(values, s, d2)
         if not values:
             return {:}
     return values
@@ -90,9 +90,8 @@ def parse_grid(grid: str) -> {str}str:
         values[s] = DIGITS
     var chars: []str
     for c in grid:
-        var cs: str = str(c)
-        if cs in DIGITS or cs == "0" or cs == ".":
-            chars.append(cs)
+        if c in DIGITS or c == "0" or c == ".":
+            chars.append(c)
     for i in 0..len(chars)-1:
         s: str = squares[i]
         c: str = chars[i]
@@ -116,7 +115,7 @@ def display(values: {str}str) -> None:
     for r in ROWS:
         var row_str: str = ""
         for c in COLS:
-            s: str = str(r) + str(c)
+            s: str = r + c
             var cell: str = values[s]
             while len(cell) < width:
                 cell += " "
@@ -160,7 +159,7 @@ def search(values: {str}str) -> {str}str:
         var attempt: {str}str = {:}
         for s in squares:
             attempt[s] = values[s]
-        attempt = assign(attempt, chosen, str(d))
+        attempt = assign(attempt, chosen, d)
         var result: {str}str = search(attempt)
         if result:
             return result
