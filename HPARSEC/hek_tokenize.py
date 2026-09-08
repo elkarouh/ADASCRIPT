@@ -1408,7 +1408,7 @@ if __name__ == "__main__":
             self.assertIn((TICK_TOKEN, "'"), toks)
 
         def test_tick_paren(self):
-            toks = _tok_seq("(expr)'Choice\n")
+            toks = _tok_seq("(expr)'choose\n")
             self.assertIn((TICK_TOKEN, "'"), toks)
 
         def test_tick_inside_string_untouched(self):

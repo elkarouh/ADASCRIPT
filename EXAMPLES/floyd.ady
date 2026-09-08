@@ -3,7 +3,7 @@
 def floyd(n : Positive, k : Positive) -> {}Positive:
     var s : {}Positive
     for i in n-k+1..n:
-        t = (1..i)'Choice
+        t = (1..i)'choose
         if t in s:
             s.add(i)
         else:

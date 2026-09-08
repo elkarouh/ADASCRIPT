@@ -548,7 +548,7 @@ def _tick_to_py(expr, attr):
 
     Unknown attributes raise rather than falling through. The catch-all this
     replaced handed anything it did not recognise to the Next/Prev codegen,
-    so `E'Range` and `x'Choice` silently emitted `type(x)(x.value - 1)` --
+    so `E'Range` and `x'choose` silently emitted `type(x)(x.value - 1)` --
     which parses, runs, and is nonsense.
     """
     info = getattr(ParserState, "tick_types", {}).get(expr)
@@ -569,7 +569,7 @@ def _tick_to_py(expr, attr):
                     f"'Range is not defined for the float subrange {expr!r}: "
                     "a float interval has no enumerable domain")
             return f"range({info['First']}, {info['Last']} + 1)"
-        if attr == "Choice":
+        if attr == "choose":
             ParserState.nim_imports.add("import random as _random")
             return f"_random.choice(list({expr}))"
     if attr in ("Length", "len"):
@@ -589,7 +589,7 @@ def _tick_to_py(expr, attr):
         return f"type({expr})({expr}.value + 1)"
     if attr == "Prev":
         return f"type({expr})({expr}.value - 1)"
-    if attr == "Choice":
+    if attr == "choose":
         # list() so a set, a range and a seq all work, as they do on Nim.
         ParserState.nim_imports.add("import random as _random")
         return f"_random.choice(list({expr}))"
@@ -598,7 +598,7 @@ def _tick_to_py(expr, attr):
         return f"_adascript_shuffle({expr})"
     raise ValueError(
         f"unknown tick attribute {attr!r} in {expr}'{attr}. Known: "
-        "First, Last, Range, Next, Prev, Choice, Shuffle, Image, Length")
+        "First, Last, Range, Next, Prev, choose, Shuffle, Image, Length")
 
 
 @method(tick_trailer)

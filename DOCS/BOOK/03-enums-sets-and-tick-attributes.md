@@ -171,10 +171,10 @@ def monty_hall_simulation(trials=100_000):
   var switchWins : Natural = 0
 
   for _ in 1..trials:
-    let carLocation : Door_T = Door_T'Choice
-    let candidateFirstChoice : Door_T = Door_T'Choice
+    let carLocation : Door_T = Door_T'choose
+    let candidateFirstChoice : Door_T = Door_T'choose
     let availableDoors : {}Door_T = Door_T'Range - {candidateFirstChoice, carLocation}
-    let hostChoice : Door_T = availableDoors'Choice
+    let hostChoice : Door_T = availableDoors'choose
     let switchOptions : {}Door_T = Door_T'Range - {candidateFirstChoice, hostChoice}
     for choice in Choice_T:
       case choice:
@@ -182,7 +182,7 @@ def monty_hall_simulation(trials=100_000):
           if candidateFirstChoice == carLocation:
             stayWins += 1
         when Switch:
-          let candidateSecondChoice : Door_T = switchOptions'Choice
+          let candidateSecondChoice : Door_T = switchOptions'choose
           if candidateSecondChoice == carLocation:
               switchWins += 1
 
@@ -198,7 +198,7 @@ The problem's logic *is* set algebra, and the code says so directly:
 - `Door_T'Range` — the full set of doors;
 - `- {candidateFirstChoice, carLocation}` — set difference with a set
   literal: the doors the host may open;
-- `availableDoors'Choice` — a uniformly random element of that set.
+- `availableDoors'choose` — a uniformly random element of that set.
 
 Compare this with the bookkeeping any conventional implementation needs
 (lists, `random.choice`, membership scans) and the appeal of ordinal types
@@ -217,18 +217,18 @@ the apostrophe never confuses the Python-shaped grammar.
 | `E'Range` | the set (or iteration range) of all members |
 | `expr'Next` | successor |
 | `expr'Prev` | predecessor |
-| `expr'Choice` | uniformly random element of an enum, set, or range |
+| `expr'choose` | uniformly random element of an enum, set, or range |
 | `expr'Image` | string representation |
 | `s'Length` | length of a string/sequence |
 
 They work on more than enums. `EXAMPLES/floyd.ady` — Floyd's algorithm for
-sampling k distinct integers — applies `'Choice` to a *range expression*:
+sampling k distinct integers — applies `'choose` to a *range expression*:
 
 ```python
 def floyd(n : Positive, k : Positive) -> {}Positive:
     var s : {}Positive
     for i in n-k+1..n:
-        t = (1..i)'Choice          # random integer in 1..i
+        t = (1..i)'choose          # random integer in 1..i
         if t in s:
             s.add(i)
         else:
@@ -274,7 +274,7 @@ declaration buys all of this at once:
 2. an array index type (`[E]T`) — fixed-size lookup tables, no hashing;
 3. a loop range (`for x in E:` / `E'First .. E'Last`);
 4. a bitset element type (`{}E`) with `-`, `+`, `in`;
-5. random sampling (`E'Choice`) for simulations;
+5. random sampling (`E'choose`) for simulations;
 6. ordered navigation (`'Next`, `'Prev`) for stage machines.
 
 The examples keep proving the point: doors (`monty_hall`), digits

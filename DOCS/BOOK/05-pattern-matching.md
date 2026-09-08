@@ -61,7 +61,7 @@ for choice in Choice_T:
             if candidateFirstChoice == carLocation:
                 stayWins += 1
         when Switch:
-            let candidateSecondChoice : Door_T = switchOptions'Choice
+            let candidateSecondChoice : Door_T = switchOptions'choose
             if candidateSecondChoice == carLocation:
                 switchWins += 1
 ```

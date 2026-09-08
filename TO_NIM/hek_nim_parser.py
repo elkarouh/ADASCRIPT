@@ -1167,13 +1167,13 @@ def to_nim(self, prec=None):
         info = ParserState.tick_types.get(type_name)
         if info and attr in info:
             return str(info[attr])
-        # Check for set variable — only 'Choice and 'Size are valid on sets
+        # Check for set variable — only 'choose and 'Size are valid on sets
         _sym = ParserState.symbol_table.lookup(type_name)
         _sym_type = _sym.get("type", "") if _sym else ""
         _is_set = _sym_type.startswith("HashSet") or _sym_type.startswith("set[")
-        if _is_set and attr not in ("Choice", "Size", "len", "Length"):
+        if _is_set and attr not in ("choose", "Size", "len", "Length"):
             raise SyntaxError(
-                f"'{attr} is not valid on a set; only 'Choice and 'Size are supported for sets"
+                f"'{attr} is not valid on a set; only 'choose and 'Size are supported for sets"
             )
         # Ada tick attributes for enum operations
         if attr == "Range":
@@ -1186,7 +1186,7 @@ def to_nim(self, prec=None):
             return type_name + ".succ"
         elif attr == "Prev":
             return type_name + ".pred"
-        elif attr == "Choice":
+        elif attr == "choose":
             ParserState.nim_imports.add("random")
             if "randomize()" not in ParserState.nim_init_stmts:
                 ParserState.nim_init_stmts.append("randomize()")

@@ -1525,7 +1525,7 @@ def _emit_tick_attr(base, field, attr):
 
     base  - already-emitted Nim expression string
     field - field name if tick was on a dotted field (e.g. 'num' for self.num'Image), else ""
-    attr  - the tick attribute name (e.g. 'Image', 'Next', 'Choice')
+    attr  - the tick attribute name (e.g. 'Image', 'Next', 'choose')
     """
     expr = base + ("." + field if field else "")
     if attr == "Image":
@@ -1549,7 +1549,7 @@ def _emit_tick_attr(base, field, attr):
         if info and "members" in info:
             return f"{{{expr}.low..{expr}.high}}"
         return f"{expr}.low..{expr}.high"
-    if attr == "Choice":
+    if attr == "choose":
         ParserState.nim_imports.add("random")
         if "randomize()" not in ParserState.nim_init_stmts:
             ParserState.nim_init_stmts.append("randomize()")
@@ -1696,14 +1696,14 @@ def to_nim(self, prec=None):
                 args = _extract_call_args(call_node)
                 all_args = ", ".join([raw_name] + args)
                 return f"callObject({all_args})"
-        # (expr)'Choice -> rand(lo..hi), etc.
+        # (expr)'choose -> rand(lo..hi), etc.
         if raw_name.startswith("__paren_tick_") and raw_name.endswith("__"):
             tick_attr = raw_name[len("__paren_tick_"):-2]
             call_node = self.nodes[1].nodes[0]
             inner = _extract_call_arg(call_node)
             if tick_attr == "Image":
                 return f"$({inner})"
-            if tick_attr == "Choice":
+            if tick_attr == "choose":
                 ParserState.nim_imports.add("random")
                 if "randomize()" not in ParserState.nim_init_stmts:
                     ParserState.nim_init_stmts.append("randomize()")
@@ -1914,7 +1914,7 @@ def to_nim(self, prec=None):
             if type(tr).__name__ == "attr_trailer":
                 method_name = tr.nodes[0].to_nim()
                 # Handle Ada tick attributes: field'Next -> field.succ, field'Prev -> field.pred
-                # Type'Choice -> rand(Type)
+                # Type'choose -> rand(Type)
                 if "__tick__" in method_name:
                     base_attr, _, tick_attr = method_name.partition("__tick__")
                     result = _emit_tick_attr(result, base_attr, tick_attr)

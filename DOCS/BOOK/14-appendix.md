@@ -24,7 +24,7 @@
 | Inclusive / exclusive range | `lo .. hi` / `lo ..< hi` |
 | Enum bounds / full set | `E'First`, `E'Last` / `E'Range` |
 | Successor / predecessor | `x'Next` / `x'Prev` |
-| Random element | `x'Choice` (enum, set, or range) |
+| Random element | `x'choose` (enum, set, or range) |
 | String repr / length | `x'Image` / `s'Length` |
 | Named tuple literal | `(field: value, ...)` |
 | Enum array literal | `[KEY: value, ...]` |

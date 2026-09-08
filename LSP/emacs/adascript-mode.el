@@ -326,7 +326,7 @@ Runs after nim-mode's syntax-propertize."
       (unless (nth 8 (save-excursion (syntax-ppss pos)))
         (unless (and (> pos (point-min))
                      (or (memq (char-syntax (char-before pos)) '(?w ?_))
-                         ;; (1 .. i)'Choice — a tick after a closing bracket.
+                         ;; (1 .. i)'choose — a tick after a closing bracket.
                          (memq (char-before pos) '(?\) ?\]))))
           (let ((close (adascript--quote-closes-on-line pos)))
             (when close

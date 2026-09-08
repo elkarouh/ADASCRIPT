@@ -227,7 +227,7 @@ Ada-style `'` attributes. Tokeniser converts `Type'Attr` → `Type__tick__Attr` 
 | `E'Range` | Full ordinal set of enum `E` |
 | `expr'Next` | Successor |
 | `expr'Prev` | Predecessor |
-| `expr'Choice` | Random element from enum, set, or range |
+| `expr'choose` | Random element from enum, set, or range |
 | `expr'Image` | String representation |
 
 > **Limitation:** tick attributes only work on bare identifiers and type names — not on field accesses (`self.x'Image`) or subscripts. Use `str()` in those cases.
@@ -244,10 +244,10 @@ for s in Stage_T'First .. Stage_T'Last:
 
 # Set arithmetic with 'Range
 let available: {}Door_T = Door_T'Range - {candidateFirstChoice, carLocation}
-let hostChoice: Door_T  = available'Choice   # random door from the set
+let hostChoice: Door_T  = available'choose   # random door from the set
 
 # Random selection from a range
-t = (1..i)'Choice    # random int in 1..i
+t = (1..i)'choose    # random int in 1..i
 ```
 
 ---
@@ -1129,7 +1129,7 @@ for s in Stage_T'First .. Stage_T'Last:
 | Enum first/last | `E'First`, `E'Last` |
 | Full enum set | `E'Range` |
 | Successor/predecessor | `expr'Next`, `expr'Prev` |
-| Random selection | `expr'Choice` |
+| Random selection | `expr'choose` |
 | Empty dict literal | `{:}` |
 | Named tuple literal | `(field: value, ...)` |
 | Enum-indexed array literal | `[KEY: value, ...]` |

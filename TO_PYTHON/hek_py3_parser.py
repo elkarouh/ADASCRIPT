@@ -515,7 +515,7 @@ def to_py(self, prec=None):
         info = ParserState.tick_types.get(type_name)
         if info and attr in info:
             return str(info[attr])
-        if attr == "Choice":
+        if attr == "choose":
             return f"random.choice(list({type_name}))"
         elif attr == "Range":
             return f"list({type_name})"

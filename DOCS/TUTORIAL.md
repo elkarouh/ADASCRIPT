@@ -618,7 +618,7 @@ before parsing, so Python's lexer is never confused by the apostrophe.
 | `E'Range`          | Ordinal set of all members of `E`  |
 | `expr'Next`        | Successor of `expr`                |
 | `expr'Prev`        | Predecessor of `expr`              |
-| `expr'Choice`      | Random element from expr or range  |
+| `expr'choose`      | Random element from expr or range  |
 | `expr'Image`       | String representation of `expr`    |
 
 > **Limitation:** tick attributes are only supported on bare identifiers and
@@ -674,20 +674,20 @@ complements:
 type Door_T is enum Door1, Door2, Door3
 
 let available: {}Door_T = Door_T'Range - {candidateFirstChoice, carLocation}
-let hostChoice: Door_T  = available'Choice   # random door from the set
+let hostChoice: Door_T  = available'choose   # random door from the set
 ```
 
-### Random selection with `'Choice`
+### Random selection with `'choose`
 
-`'Choice` picks a uniformly random element from an enum, set, or range:
+`'choose` picks a uniformly random element from an enum, set, or range:
 
 ```python
-let carLocation:         Door_T = Door_T'Choice       # random enum member
-let candidateFirstChoice: Door_T = Door_T'Choice
+let carLocation:         Door_T = Door_T'choose       # random enum member
+let candidateFirstChoice: Door_T = Door_T'choose
 
-# 'Choice also works on a range expression:
+# 'choose also works on a range expression:
 # from floyd.ady — Floyd's algorithm for distinct random sampling
-t = (1..i)'Choice    # random int in 1..i
+t = (1..i)'choose    # random int in 1..i
 ```
 
 ### Enum successor/predecessor
@@ -707,7 +707,7 @@ next_stage: Stage_T = current_stage'Next    # STAGE2
 
 The `..` (inclusive) and `..<` (exclusive) operators produce integer or enum
 ranges. They are first-class values, usable in `for` loops, membership tests,
-and with `'Choice`.
+and with `'choose`.
 
 ```python
 for i in 0 .. 10:      # 0, 1, …, 10  (inclusive)
@@ -839,7 +839,7 @@ for choice in Choice_T:
             if candidateFirstChoice == carLocation:
                 stayWins += 1
         when Switch:
-            let candidateSecondChoice: Door_T = switchOptions'Choice
+            let candidateSecondChoice: Door_T = switchOptions'choose
             if candidateSecondChoice == carLocation:
                 switchWins += 1
 ```
@@ -1727,10 +1727,10 @@ def monty_hall_simulation(trials = 100_000):
     var switchWins: int = 0
 
     for _ in 1 .. trials:
-        let carLocation:          Door_T  = Door_T'Choice
-        let candidateFirstChoice: Door_T  = Door_T'Choice
+        let carLocation:          Door_T  = Door_T'choose
+        let candidateFirstChoice: Door_T  = Door_T'choose
         let availableDoors:       {}Door_T = Door_T'Range - {candidateFirstChoice, carLocation}
-        let hostChoice:           Door_T  = availableDoors'Choice
+        let hostChoice:           Door_T  = availableDoors'choose
         let switchOptions:        {}Door_T = Door_T'Range - {candidateFirstChoice, hostChoice}
 
         for choice in Choice_T:
@@ -1739,7 +1739,7 @@ def monty_hall_simulation(trials = 100_000):
                     if candidateFirstChoice == carLocation:
                         stayWins += 1
                 when Switch:
-                    let candidateSecondChoice: Door_T = switchOptions'Choice
+                    let candidateSecondChoice: Door_T = switchOptions'choose
                     if candidateSecondChoice == carLocation:
                         switchWins += 1
 
@@ -1750,7 +1750,7 @@ def monty_hall_simulation(trials = 100_000):
 monty_hall_simulation()
 ```
 
-Features: enums, ordinal sets (`{}Door_T`), `'Choice` for random selection,
+Features: enums, ordinal sets (`{}Door_T`), `'choose` for random selection,
 `'Range` for the full set of enum members, set difference (`-`), `case/when`
 on enum values, inclusive range `1 .. trials`.
 
@@ -2434,7 +2434,7 @@ advanced scenarios are not yet supported:
 | Enum first/last                   | `E'First`, `E'Last`                      |
 | Full enum set                     | `E'Range`                                |
 | Successor / predecessor           | `expr'Next`, `expr'Prev`                 |
-| Random selection                  | `expr'Choice`                            |
+| Random selection                  | `expr'choose`                            |
 | Empty dict literal                | `{:}`                                    |
 | Named tuple literal               | `(field: value, ...)`                    |
 | Enum-indexed array literal        | `[KEY: value, ...]`                      |
