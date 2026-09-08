@@ -28,23 +28,17 @@ from stdlib nimport PriorityQueue
 
 
 # ---------------------------------------------------------------------------
-# node_table(graph) — every node the graph mentions, each at Inf
+# all_nodes(graph) — the graph's keys, plus every destination they name
 #   A sink has no adjacency entry of its own: it appears only as some edge's
 #   destination. Reading the keys alone would leave it out, and the first
 #   edge into it would then be a lookup of a key that is not there.
 #
-#   This returns the distance table rather than a set of nodes because Nim
-#   cannot resolve `sets`' items iterator inside a generic proc -- iterating
-#   a HashSet[Node_T] here does not compile, while a Table[Node_T, float] does.
+#   Duplicates are left in: every caller feeds this straight to a `{…}`
+#   comprehension, which collapses them.
 # ---------------------------------------------------------------------------
 
-def node_table[Node_T](graph: {Node_T}[](float, Node_T)) -> {Node_T}float:
-    var dist: {Node_T}float = {:}
-    for node in graph:
-        dist[node] = Inf
-        for weight, neighbour in graph[node]:
-            dist[neighbour] = Inf
-    return dist
+def all_nodes[Node_T](graph: {Node_T}[](float, Node_T)) -> []Node_T:
+    [n for n in graph] + [nb for n in graph for w, nb in graph[n]]
 
 
 # ---------------------------------------------------------------------------
@@ -54,8 +48,7 @@ def node_table[Node_T](graph: {Node_T}[](float, Node_T)) -> {Node_T}float:
 # ---------------------------------------------------------------------------
 
 def dijkstra[Node_T](graph: {Node_T}[](float, Node_T), start: Node_T) -> {Node_T}float:
-    var dist: {Node_T}float = node_table(graph)
-    dist[start] = 0.0
+    var dist: {Node_T}float = {n: (0.0 if n == start else Inf) for n in all_nodes(graph)}
     var seen: {}Node_T
     queue: PriorityQueue[(float, Node_T)] = [(0.0, start)]
     while queue:
@@ -81,10 +74,9 @@ def dijkstra[Node_T](graph: {Node_T}[](float, Node_T), start: Node_T) -> {Node_T
 
 def shortest_path[Node_T](graph: {Node_T}[](float, Node_T), start: Node_T, goal: Node_T) -> []Node_T:
     var route: []Node_T = []
-    var dist: {Node_T}float = node_table(graph)
+    var dist: {Node_T}float = {n: (0.0 if n == start else Inf) for n in all_nodes(graph)}
     if start not in dist or goal not in dist:
         return route
-    dist[start] = 0.0
     var came_from: {Node_T}Node_T = {:}
     var seen: {}Node_T
     queue: PriorityQueue[(float, Node_T)] = [(0.0, start)]
