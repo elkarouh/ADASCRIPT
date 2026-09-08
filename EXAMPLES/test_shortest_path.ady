@@ -95,6 +95,29 @@ def example2():
         print(solution)
         break
 
+    # Cross-check the shortest half against the graph library. Costs are a
+    # 0..100 subrange here, so they widen to the float `graphs` works in, and
+    # the edge turns round: (destination, cost) becomes (cost, destination).
+    # `j` is a sink -- nobody's key, only a destination -- which the library
+    # has to seed into its distance table or never reach.
+    let g2: {State_T}[](float, State_T) = {
+        node: [(float(cost), dest) for dest, cost in op2s.G[node]] for node in op2s.G}
+    let d2: {State_T}float = dijkstra(g2, a)
+    let r2: []State_T = shortest_path(g2, a, j)
+    print("dijkstra a->j:", d2[j], r2)
+    assert d2[a] == 0.0
+    assert d2[j] == 11.0
+    # Several routes cost 11 -- the Optimizer picks a-d-e-h-j and Dijkstra
+    # a-d-f-i-j -- so the route is checked by re-adding its own edges rather
+    # than by pinning one tie-break.
+    assert r2[0] == a and r2[r2'Length - 1] == j
+    var total: float = 0.0
+    for i in 0 ..< r2'Length - 1:
+        for cost, dest in g2[r2[i]]:
+            if dest == r2[i + 1]:
+                total += cost
+    assert total == d2[j]
+
 
 def example3():
     # -----------------------------------------------------------------------

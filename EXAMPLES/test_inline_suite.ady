@@ -526,3 +526,37 @@ assert ran                    # a non-tail shell still just runs
 # working Nim program and a NameError here.
 nimport times
 assert time.time() > 0.0
+
+# Iterating a Table reached through an attribute. The `.keys` rewrite needs
+# the iterable's type, and the type of `obj.field` was not worked out -- only
+# a bare name's was -- so `for k in self.G` did not compile while the same
+# loop over a local did.
+type Box_T is record:
+    tbl: {str}int
+var bx: Box_T
+bx.tbl["k"] = 1
+bx.tbl["j"] = 2
+var boxed: []str = []
+for k in bx.tbl:
+    boxed.append(k)
+assert boxed'Length == 2
+class Holder_C:
+    var G: {str}int = {"a": 1}
+    def count(self) -> int:
+        var n: int = 0
+        for k in self.G:          # ... and the same through `self`
+            n += 1
+        n
+let hc: Holder_C = Holder_C()
+assert hc.count() == 1
+
+# A local whose name is one capital and a digit is a local, not a module
+# constant. The hoist rule reads a SCREAMING_CASE name as a constant and
+# lifts it to module scope; its regex counted a digit as the second
+# uppercase character, so `A2` was carried out of the function -- past the
+# very declaration it reads.
+def hoist_check() -> int:
+    let base: int = 5
+    let A2: int = base + 1
+    A2
+assert hoist_check() == 6

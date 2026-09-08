@@ -2574,10 +2574,12 @@ def _func_def_to_nim_inner(self, indent=0):
     #                          plain closures are kept in-place so they
     #                          can close over local variables.
     #   const X: ...           always hoisted
-    #   let/var  XX_CAPS: ...  hoisted when the name matches [A-Z][A-Z_0-9]{1,}
-    #                          (two or more uppercase chars) — genuine module-
-    #                          level constants like N, WORDS.
-    #                          Single-letter vars (L, R, …) are NOT hoisted
+    #   let/var  XX_CAPS: ...  hoisted when the name has two or more uppercase
+#                          letters, or an underscore (RC_OK, WORDS, MAX_N).
+    #                          A digit does not count as one of them: `G2`
+    #                          and `A1` are ordinary locals, and hoisting them
+    #                          moved a declaration out past the code it read.
+    #                          Single-letter vars (L, R, N, …) are NOT hoisted
     #                          so they stay local to the proc where they live.
     #   import  X              dropped (already collected into nim_imports)
     #
@@ -2653,7 +2655,7 @@ def _func_def_to_nim_inner(self, indent=0):
             stripped = line.lstrip()
             for kw in ("var ", "let ", "const "):
                 if stripped.startswith(kw):
-                    vm = _re_h.match(r'(?:var|let|const)\s+([A-Z][A-Z_0-9]*)\s*:', stripped)
+                    vm = _re_h.match(r'(?:var|let|const)\s+([A-Z][A-Z0-9_]*[A-Z_][A-Z0-9_]*)\s*:', stripped)
                     if vm:
                         local_vars.append(vm.group(1))
                     break
@@ -2756,13 +2758,13 @@ def _func_def_to_nim_inner(self, indent=0):
             # by convention — hoist them.  Single-letter names (L, R, N, …) are
             # intentionally excluded: they are local loop/scratch variables.
             if stripped.startswith("let "):
-                let_m = _re_h.match(r"let\s+([A-Z][A-Z_0-9]{1,})\s*:", stripped)
+                let_m = _re_h.match(r"let\s+([A-Z][A-Z0-9_]*[A-Z_][A-Z0-9_]*)\s*:", stripped)
                 if let_m:
                     dedented_line = line[cur_indent:] if cur_indent > 0 else line
                     hoisted.append(_mangle_line(dedented_line))
                     continue
             if stripped.startswith("var "):
-                var_m = _re_h.match(r"var\s+([A-Z][A-Z_0-9]{1,})\s*:", stripped)
+                var_m = _re_h.match(r"var\s+([A-Z][A-Z0-9_]*[A-Z_][A-Z0-9_]*)\s*:", stripped)
                 if var_m:
                     dedented_line = line[cur_indent:] if cur_indent > 0 else line
                     hoisted.append(_mangle_line(dedented_line))

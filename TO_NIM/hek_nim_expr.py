@@ -235,6 +235,21 @@ def _nim_expr_type(expr):
                     return "int"
                 if bt == "string" and field == "len":
                     return "int"
+                # A field of a known class or record. Without this the type
+                # of `self.G` was unknown, so `for k in self.G` over a
+                # Table never had `.keys` appended and did not compile --
+                # while the same loop over a bare name did.
+                _bt = _re.sub(r'^var\s+', '', bt)
+                _ft = getattr(ParserState, "class_field_types", {}).get(_bt, {}).get(field)
+                if _ft:
+                    return _ft
+            # `self` inside a method is not in the symbol table as a name;
+            # its class is, so look the field up there.
+            _cls = getattr(ParserState, "_current_class_name", "") or ""
+            if base_name == "self" and _cls:
+                _ft = getattr(ParserState, "class_field_types", {}).get(_cls, {}).get(field)
+                if _ft:
+                    return _ft
             return None
 
         # subscript: base[index]
