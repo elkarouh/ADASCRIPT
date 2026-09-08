@@ -205,6 +205,8 @@ def to_py(self, indent=0):
     """for_stmt: 'for' for_target 'in' star_expressions ':' block ('else' ...)?"""
     target = self.nodes[0].to_py()
     iterable = self.nodes[1].to_py()
+    from hek_py3_expr import _builtin_ordinal_domain
+    iterable = _builtin_ordinal_domain(iterable) or iterable
     hc = _block_inline_header_comment(self.nodes[2])
     body = self.nodes[2].to_py(indent + 1)
     result = f"{_ind(indent)}for {target} in {iterable}:{hc}\n{body}"

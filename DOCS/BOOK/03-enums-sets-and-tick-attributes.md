@@ -124,6 +124,35 @@ On the Python backend `[E]T` is a dict keyed by the members, so it would
 otherwise be the one member of the family to yield its keys, and in the
 literal's order rather than the enum's.
 
+Nor is this only for enums. Every ordinal type is a domain, so every one of
+them is something a `for` can walk — a named subrange, and the two builtin
+ordinals that are never declared anywhere:
+
+```python
+type Idx is 0 .. 4
+type Off is 2 .. 6
+
+for i in Idx:                    # 0 1 2 3 4
+    ...
+for o in Off:                    # 2 3 4 5 6 -- its own domain, not 0-based
+    ...
+for b in bool:                   # False True
+    ...
+for c in char:                   # 256 of them
+    ...
+```
+
+`ord(x)` gives the position of any of these — the character case Python's
+builtin covers, and also an enum member, a bool and an int. It is what to
+reach for when the loop wants a number rather than the value:
+`ord(GREEN)` is 1.
+
+Naming the type rather than an equivalent integer range is the habit worth
+forming, and §6.4 shows why: in `[Color]int = [ord(c) * 10 for c in Color]`
+the loop variable is the key each value belongs to, so adding a member to
+`Color` cannot leave the two out of step. `for i in 0..2` only happens to
+be the right length.
+
 ## 3.4 Ordinal sets: `{}E`
 
 A set whose element type is ordinal (an enum, `bool`, `char`, a small int

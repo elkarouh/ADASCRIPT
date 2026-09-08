@@ -3376,6 +3376,21 @@ def to_nim(self, prec=None):
     return ", ".join(parts)
 
 
+def ordinal_domain_nim(iterable):
+    """An ordinal type named as something to iterate, or None.
+
+    Nim's `items` over a typedesc covers enums and nothing else, so a
+    subrange and the two builtin ordinals have to be spelled out as the
+    range they are.  An enum is left alone -- Nim already iterates it.
+    """
+    _tick = getattr(ParserState, 'tick_types', {}).get(iterable, {})
+    if _tick and 'First' in _tick and 'members' not in _tick and not _tick.get('is_float_range'):
+        return f"{iterable}.low..{iterable}.high"
+    if iterable in ("bool", "char") and not ParserState.symbol_table.lookup(iterable):
+        return f"{iterable}.low..{iterable}.high"
+    return None
+
+
 @method(for_if_clause)
 def to_nim(self, prec=None):
     """for_if_clause: 'for' target 'in' disjunction ('if' disjunction)* -> Nim: 'for target in iter (if cond)'"""
@@ -3384,11 +3399,8 @@ def to_nim(self, prec=None):
     if "," in tgt and not tgt.startswith("("):
         tgt = f"({tgt})"
     iterable = self.nodes[1].to_nim()
-    # Range types have no items() iterator in Nim; expand to low..high
-    _tick = getattr(ParserState, 'tick_types', {}).get(iterable, {})
-    if _tick and 'First' in _tick and 'members' not in _tick and not _tick.get('is_float_range'):
-        iterable = f"{iterable}.low..{iterable}.high"
-    
+    iterable = ordinal_domain_nim(iterable) or iterable
+
     # Table iteration fix: Nim Tables need .keys or .pairs for iteration
     # If target is a single variable and iterable is a Table, use .keys
     # If target is a tuple (k, v) and iterable is a Table, use .pairs

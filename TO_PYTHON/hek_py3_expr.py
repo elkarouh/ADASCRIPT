@@ -730,6 +730,57 @@ def _have_call(call_trailer):
     return "_have" + call_trailer
 
 
+def _builtin_ordinal_domain(name):
+    """`bool` / `char` as something to iterate, or None for anything else.
+
+    A named ordinal type is already iterable on this backend -- an enum is a
+    class, a subrange is a `range` object -- so `for c in Color` needs no
+    help.  These two are spelled as builtins and are not, though Nim
+    iterates them like any other ordinal.
+    """
+    from hek_parsec import ParserState
+    if name not in ("bool", "char"):
+        return None
+    if ParserState.symbol_table.lookup(name):
+        return None
+    if name == "bool":
+        return "(False, True)"
+    return "(chr(_i) for _i in range(256))"
+
+
+_ORD_HELPER = '''\
+def _ada_ord(_x):
+    """The ordinal position of an ordinal value, as Nim's `ord` gives it.
+
+    Python's builtin is the character case alone -- it takes a
+    one-character string and nothing else.  Adascript has more ordinals
+    than that: an enum member's position is its value, and an int is
+    already its own.  A bool is an int in Python, so it needs converting
+    or `ord(True)` prints as True rather than 1.
+    """
+    _v = getattr(_x, "value", _x)
+    if isinstance(_v, bool):
+        return int(_v)
+    if isinstance(_v, int):
+        return _v
+    return ord(_v)\
+'''
+
+
+def _ord_call(call_trailer):
+    """`ord(x)` -> `_ada_ord(x)`, or None if not that shape."""
+    if not (call_trailer.startswith("(") and call_trailer.endswith(")")):
+        return None
+    if not call_trailer[1:-1].strip():
+        return None
+    from hek_parsec import ParserState
+    decls = getattr(ParserState, 'py_top_decls', [])
+    if not any("def _ada_ord(" in d for d in decls):
+        decls.append(_ORD_HELPER)
+        ParserState.py_top_decls = decls
+    return "_ada_ord" + call_trailer
+
+
 def _translate_dir_call(expr):
     """Make directory creation idempotent, or return None.
 
@@ -805,6 +856,12 @@ def to_py(self, prec=None):
                     continue
             if i == 0 and result == "have":
                 helper = _have_call(tr_str)
+                if helper is not None:
+                    result = helper
+                    i += 1
+                    continue
+            if i == 0 and result == "ord":
+                helper = _ord_call(tr_str)
                 if helper is not None:
                     result = helper
                     i += 1
@@ -1565,6 +1622,7 @@ def to_py(self, prec=None):
     """for_if_clause: 'for' target 'in' disjunction ('if' disjunction)*"""
     tgt = self.nodes[0].to_py()
     iterable = self.nodes[1].to_py()
+    iterable = _builtin_ordinal_domain(iterable) or iterable
     result = f"for {tgt} in {iterable}"
     # nodes[2] is Several_Times of Sequence_Parser(I_IF + disjunction).
     # I_IF is ignored so each Sequence_Parser has exactly one node: the disjunction.

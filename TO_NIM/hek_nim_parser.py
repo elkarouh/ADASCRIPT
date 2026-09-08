@@ -837,9 +837,8 @@ def to_nim(self, indent=0):
     target = self.nodes[0].to_nim()
     iterable = self.nodes[1].to_nim()
     # Range types have no items() iterator in Nim; expand to low..high
-    _tick = getattr(ParserState, 'tick_types', {}).get(iterable, {})
-    if _tick and 'First' in _tick and 'members' not in _tick and not _tick.get('is_float_range'):
-        iterable = f"{iterable}.low..{iterable}.high"
+    from hek_nim_expr import ordinal_domain_nim
+    iterable = ordinal_domain_nim(iterable) or iterable
     # File iteration: for line in f -> for line in f.lines
     sym = ParserState.symbol_table.lookup(iterable)
     if sym and sym.get("type") == "File":

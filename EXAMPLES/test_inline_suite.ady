@@ -214,19 +214,36 @@ assert fr.tag == "t" and fr.extra'Length == 1
 # or bool: Nim was emitting `0 ..< Idx` for the named ones, which is
 # `pred` on a typedesc, and Python was leaving the value a plain list, which
 # indexes from 0 whatever the domain says.
+#
+# Where the key is a named type the generator iterates that type, so the
+# loop variable is the key each value is about rather than a count that
+# happens to be the right length. `ord` gives its position -- Python's
+# builtin is the one-character-string case only, so the emitter supplies
+# the rest. A length has no type to name, so those two still count.
 type Off_T is 2 .. 6
 type Hue_T is enum ROSE, JADE, SLATE
 const NC: int = 5
 var cLit:  [5]int     = [i*i for i in 0..4]
 var cConst:[NC]int    = [i*i for i in 0..4]
-var cOff:  [Off_T]int = [i+200 for i in 0..4]
-var cHue:  [Hue_T]int = [i*10 for i in 0..2]
-var cBool: [bool]int  = [i+300 for i in 0..1]
+var cOff:  [Off_T]int = [o*10 for o in Off_T]
+var cHue:  [Hue_T]int = [ord(h)*10 for h in Hue_T]
+var cBool: [bool]int  = [ord(b)+300 for b in bool]
 assert cLit[0] == 0 and cLit[4] == 16
 assert cConst[4] == 16
-assert cOff[2] == 200 and cOff[6] == 204     # first value at 2, not at 0
+assert cOff[2] == 20 and cOff[6] == 60       # domain 2..6, so 20 sits at 2
 assert cHue[ROSE] == 0 and cHue[SLATE] == 20
 assert cBool[False] == 300 and cBool[True] == 301
+# ord() over every ordinal, not just the character it is in Python
+assert ord("a") == 97 and ord(JADE) == 1 and ord(True) == 1 and ord(4) == 4
+# and the two builtin ordinals are domains a plain loop can walk too
+var nchars: int = 0
+for c in char:
+    nchars += 1
+assert nchars == 256
+var nbools: []bool = []
+for b in bool:
+    nbools.append(b)
+assert nbools == [False, True]
 # and the literal forms are untouched
 var cLitE: [Hue_T]int = [ROSE: 1, JADE: 2, SLATE: 3]
 assert cLitE[SLATE] == 3

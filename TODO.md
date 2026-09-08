@@ -29,11 +29,13 @@ history of this file if the reasoning behind one of them is ever wanted.
       `'Image` and f-strings already agree; it is the default `$`/`str()` of a
       container that does not.
 - [ ] the keyed-comprehension form `[k: v for k in E]` is a parse error on
-      both backends. Consistent rather than divergent, and the plain
-      comprehension into an ordinal-keyed array works, so this is a missing
-      form rather than a bug: `[Color]int = [expr for ...]` fills the slots
-      positionally, but there is no way to say which key each value belongs
-      to.
+      both backends. Consistent rather than divergent, and a missing form
+      rather than a bug -- less pressing than it was, now that the
+      generator can name the domain: `[Color]int = [ord(c)*10 for c in
+      Color]` computes each value *from* its own key, which is what the
+      keyed form was mostly wanted for. What is still missing is filling
+      the slots out of domain order, the way the `[BLUE: 3, RED: 1]`
+      literal does.
 - [ ] `.keys()` and `.items()` on an `[E]T` work on Python and do not exist
       on Nim, where the type is an `array[E, T]`: `score.keys()` fails with
       "type mismatch ... expected Table". Iteration and indexing agree now;

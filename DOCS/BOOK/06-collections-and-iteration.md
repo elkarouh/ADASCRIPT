@@ -208,25 +208,48 @@ annotation, which is the same scheme §2.2 sets out, used to build rather
 than to declare.
 
 The key type can be any of the ordinals, not just a length, and the values
-fill the slots in domain order:
+fill the slots in domain order. When the key is a named type, that type is
+what the generator iterates:
 
 ```python
 type Idx is 0 .. 4
 type Off is 2 .. 6                 # a domain that does not start at zero
 type Color is enum RED, GREEN, BLUE
 
-var byIdx:  [Idx]int   = [i + 100 for i in 0..4]
-var byOff:  [Off]int   = [i + 200 for i in 0..4]   # byOff[2] .. byOff[6]
-var byE:    [Color]int = [i * 10  for i in 0..2]   # byE[RED] .. byE[BLUE]
-var byBool: [bool]int  = [i + 300 for i in 0..1]
+var byIdx:  [Idx]int   = [i * 100     for i in Idx]
+var byOff:  [Off]int   = [o * 10      for o in Off]     # byOff[2] is 20
+var byE:    [Color]int = [ord(c) * 10 for c in Color]   # byE[RED] .. byE[BLUE]
+var byBool: [bool]int  = [ord(b)      for b in bool]
 ```
 
-`byOff` is the one that shows the difference between filling an array and
-filling a list: its first value lands at index 2, because that is where its
-domain starts. The backends have to work for this — Nim iterates
-`low(Off) .. high(Off)` and offsets into the collected seq, and the Python
-backend zips the comprehension against `range(2, 7)` so the dict it uses is
-keyed the same way.
+A type is a domain, so it is something to iterate — `for c in Color` visits
+`RED, GREEN, BLUE`, and `for o in Off` visits `2, 3, 4, 5, 6`. That is
+worth insisting on, because the alternative is writing `for i in 0..2` and
+relying on it being the right *length*: nothing in that line says which key
+each value belongs to, and the two drift apart the first time a member is
+added to the enum. Written this way the loop variable *is* the key, so the
+value beside it is about that key by construction. `ord` gives its position
+where a number is wanted (Python's builtin only takes a one-character
+string; the emitter supplies the rest of the ordinals).
+
+A length is the one key with no type to name, so `[5]int` still takes a
+`0..4`.
+
+`byOff` shows the difference between filling an array and filling a list:
+its first value lands at index 2, because that is where its domain starts.
+The backends have to work for this — Nim iterates `low(Off) .. high(Off)`
+and offsets into the collected seq, and the Python backend zips the
+comprehension against `range(2, 7)` so the dict it uses is keyed the same
+way.
+
+The same reading of a type as a domain is what makes the trie node in
+`phonecode.ady` (Chapter 9) read as it does:
+
+```python
+self.children = {d: None for d in Digit_T}
+```
+
+— one entry per digit, and no way for that to be the wrong number of them.
 
 One form is missing rather than broken: there is no keyed comprehension,
 `[k: v for k in E]`, so the values are positional and cannot name their own
