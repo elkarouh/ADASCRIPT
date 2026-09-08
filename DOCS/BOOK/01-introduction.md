@@ -136,7 +136,7 @@ means — this is the whole file, nothing elided:
 from stdlib nimport PriorityQueue
 type Node_T is enum A, B, C, D
 type Distance_T is float
-const MAX_DIST : float = 1e6
+const MAX_DIST : Distance_T = Inf
 type Neighbour_T is tuple:
     distance: Distance_T
     neighbor: Node_T
@@ -220,7 +220,7 @@ class Node_T(IntEnum):
     D = 3
 
 Distance_T: TypeAlias = float
-MAX_DIST: float = 1e6
+MAX_DIST: Distance_T = float("inf")
 
 class Neighbour_T(NamedTuple):
     distance: Distance_T
@@ -249,8 +249,8 @@ graph: Graph_T = {A: [(1.0, B), (4.0, C)], B: [(2.0, C), (5.0, D)], C: [(1.0, D)
 print(dijkstra(graph, A))
 ```
 
-Twenty-six non-blank lines against thirty-three, and 1017 characters against
-1215 — worth having, but the line count is the weaker half of the argument.
+Twenty-six non-blank lines against thirty-three, and 1022 characters against
+1229 — worth having, but the line count is the weaker half of the argument.
 Three of those extra lines are not algorithm at all:
 
 - **`import heapq`, and `heappush`/`heappop` written out.** Python's heap is

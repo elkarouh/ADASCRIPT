@@ -1765,7 +1765,7 @@ The whole file — 28 lines for the complete algorithm:
 from stdlib nimport PriorityQueue
 type Node_T is enum A, B, C, D
 type Distance_T is float
-const MAX_DIST : float = 1e6
+const MAX_DIST : Distance_T = Inf
 type Neighbour_T is tuple:
     distance: Distance_T
     neighbor: Node_T

@@ -397,6 +397,20 @@ assert "x" in "da" + "xf"
 assert hay[2] in DIGITS_T + "x."
 let gridc: []char = [c for c in "1.0x9" if c in DIGITS_T+"0."]
 assert gridc'Length == 4
+
+# Nim names the float specials as system constants and Python has no names
+# for them at all, only literals -- so `Inf` was a working program there and
+# a NameError here. It is the honest spelling for "no path yet", which is
+# what dijkstra.ady used a 1e6 sentinel for.
+type Dist_T is float
+const FAR: Dist_T = Inf
+assert 5.0 < FAR and 1e300 < FAR
+assert NegInf < -1e300
+let nan_v: float = NaN
+assert nan_v != nan_v          # the only value that is not itself
+# A declaration binds the name rather than reading it, so it still shadows.
+let Inf: int = 3
+assert Inf == 3
 # The binding is scoped to the comprehension, as it is in Python: the same
 # name can be a string in one and an int in the next, and an outer name of
 # that spelling is untouched.

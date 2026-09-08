@@ -537,7 +537,21 @@ def to_py(self, prec=None):
     if name == "stdin":
         ParserState.nim_imports.add("import sys")
         return "sys.stdin"
+    # Nim spells the float specials as system constants; Python has no
+    # names for them at all, only these literals. Without this, `Inf` is a
+    # NameError here and a working program there.
+    if (name in _FLOAT_SPECIALS
+            and not getattr(ParserState, "_declaring_target", False)
+            and not ParserState.symbol_table.lookup(name)):
+        return _FLOAT_SPECIALS[name]
     return name
+
+
+_FLOAT_SPECIALS = {
+    "Inf":     'float("inf")',
+    "NegInf":  'float("-inf")',
+    "NaN":     'float("nan")',
+}
 
 
 @method(pattern_wildcard)

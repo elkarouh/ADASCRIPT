@@ -65,6 +65,14 @@ history of this file if the reasoning behind one of them is ever wanted.
       of a string, so `+` failed on Nim in exactly the position where
       `sudoku.ady` had reached for `&`. Worth a transpile-time warning on
       `&` between strings rather than a Python run-time error.
+- [ ] `T'Last` on an alias of a non-ordinal type emits nonsense on Python.
+      With `type Distance_T is float`, `Distance_T'Last` is `Distance_T.high`
+      on Nim -- which is `inf`, and right -- and `(len(Distance_T) - 1)` on
+      Python, which raises `TypeError: object of type 'type' has no len()`.
+      The tick means the largest value of the type; the Python emitter is
+      reaching for the ordinal-domain reading without checking that the
+      type has one. `Inf` is the portable spelling meanwhile, and is what
+      `dijkstra.ady` uses.
 - [ ] `int == int / int` compiles on Python and is rejected by Nim, whose
       `/` yields a float and whose `==` has no int/float overload. Python
       says `4 == 8 / 2` is True. Either the emitter converts, or the

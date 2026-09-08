@@ -213,7 +213,13 @@ def to_py(self):
     """decl_ann_assign_stmt: decl_keyword IDENTIFIER ':' type_annotation ('=' expression)?"""
     # nodes[0] is decl_keyword (dropped), nodes[1] is name, nodes[2] is V_COLON, nodes[3] is type
     from hek_parsec import ParserState
+    # The target is a name being bound, not a name being read, so the
+    # substitutions the name emitter makes for reads -- `Inf` and the other
+    # float specials -- must not apply: `let Inf: int = 3` shadows them,
+    # exactly as it does on Nim.
+    ParserState._declaring_target = True
     name = self.nodes[1].to_py()
+    ParserState._declaring_target = False
     annotation = self.nodes[3].to_py()
     keyword = self.nodes[0].nodes[0] if hasattr(self.nodes[0], "nodes") else ""
     ParserState.symbol_table.add(name, annotation, keyword or "var")
