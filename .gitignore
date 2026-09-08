@@ -23,6 +23,7 @@ ADA_INDENT/*_gen.py
 # into ~/.cache/hparsec, which is per-machine.
 TO_NIM/STDLIB/awk
 TO_NIM/STDLIB/db
+TO_NIM/STDLIB/graphs
 TO_NIM/STDLIB/iters
 
 # Obsolete/deprecated code
