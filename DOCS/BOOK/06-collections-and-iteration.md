@@ -207,12 +207,30 @@ consistent with. Here the four differ only in the brackets and the
 annotation, which is the same scheme §2.2 sets out, used to build rather
 than to declare.
 
-One gap, since this section is about what works: the array being filled must
-be sized by a literal or a constant. A comprehension into a *subrange-keyed*
-array — `type Idx is 0 .. 4`, then `[Idx]int = [i for i in 0..4]` — compiles
-on the Python backend and fails on Nim, and an enum-keyed comprehension is
-not a supported form at all. Both are in `TODO.md`; the literal forms
-(`[Idx]int = [1, 2, 3, 4, 5]`) work on both.
+The key type can be any of the ordinals, not just a length, and the values
+fill the slots in domain order:
+
+```python
+type Idx is 0 .. 4
+type Off is 2 .. 6                 # a domain that does not start at zero
+type Color is enum RED, GREEN, BLUE
+
+var byIdx:  [Idx]int   = [i + 100 for i in 0..4]
+var byOff:  [Off]int   = [i + 200 for i in 0..4]   # byOff[2] .. byOff[6]
+var byE:    [Color]int = [i * 10  for i in 0..2]   # byE[RED] .. byE[BLUE]
+var byBool: [bool]int  = [i + 300 for i in 0..1]
+```
+
+`byOff` is the one that shows the difference between filling an array and
+filling a list: its first value lands at index 2, because that is where its
+domain starts. The backends have to work for this — Nim iterates
+`low(Off) .. high(Off)` and offsets into the collected seq, and the Python
+backend zips the comprehension against `range(2, 7)` so the dict it uses is
+keyed the same way.
+
+One form is missing rather than broken: there is no keyed comprehension,
+`[k: v for k in E]`, so the values are positional and cannot name their own
+keys. It is a parse error on both backends, and it is in `TODO.md`.
 
 ## 6.5 Standard containers from `stdlib`
 

@@ -645,13 +645,28 @@ def _wrap_comprehension_for_array(value, annotation):
     # `foo(collect(...))` — the wrapper would change semantics).
     if not value.startswith("collect("):
         return value
+    # The size slot holds either a length or an ordinal *type*, and the copy
+    # loop differs. `array[5, T]` and `array[N, T]` are indexed `0 ..< N`,
+    # but `array[Idx, T]` and `array[Color, T]` are indexed by the values of
+    # a type, where `0 ..< Idx` is meaningless -- Nim reports `pred(Idx)` on
+    # a typedesc. Those iterate the type and subtract its low bound to index
+    # the collected seq, so a subrange starting anywhere still lines up.
+    # tick_types holds the named ordinal types (enums by their members,
+    # subranges by their bounds) and not plain constants, which is the line
+    # to draw; char and bool arrive as primitive names.
+    _info = getattr(ParserState, "tick_types", {}).get(_size)
+    if _info is not None or _size in ("char", "bool"):
+        _copy = (f"    for adai in low({_size}) .. high({_size}): "
+                 f"adaarr[adai] = adasq[ord(adai) - ord(low({_size}))]\n")
+    else:
+        _copy = f"    for adai in 0 ..< {_size}: adaarr[adai] = adasq[adai]\n"
     # Wrap the comprehension. Names are prefixed `ada` (no leading underscore
     # — Nim rejects identifiers starting with `_`).
     return (
         "(block:\n"
         f"    let adasq = {value}\n"
         f"    var adaarr: {_ann}\n"
-        f"    for adai in 0 ..< {_size}: adaarr[adai] = adasq[adai]\n"
+        + _copy +
         "    adaarr)"
     )
 

@@ -112,6 +112,7 @@ def to_py(self):
         for seq in node.nodes:
             if hasattr(seq, "nodes") and len(seq.nodes) >= 2:
                 value = seq.nodes[1].to_py()
+                value = _wrap_seq_for_enum_array(value, annotation)
                 result += f" = {value}"
                 has_value = True
     # Deliberately not zero-initialised here, unlike the `var x: T` form:
@@ -137,6 +138,41 @@ CLASS_BODY_DEPTH = 0
 RETURN_NODES = set()
 
 _MUTABLE_ZEROS = ("[]", "{}", "set()", "frozenset()", "Counter()")
+
+
+def _wrap_seq_for_enum_array(value, annotation):
+    """`[O]T = [ ... ]` -> keyed by the domain rather than by position.
+
+    A comprehension or list literal yields a plain list, and an
+    ordinal-keyed array is a dict on this backend, so the two have to be
+    zipped together. For a domain that does not start at zero -- `type Off
+    is 2 .. 6` -- positional indexing is not merely untidy but wrong:
+    `byOff[2]` would be the third element and `byOff[6]` an IndexError. The
+    Nim backend indexes such an array by the ordinal itself, so this is what
+    keeps the two agreeing.
+    """
+    from hek_parsec import ParserState
+    ann = (annotation or "").strip()
+    if not ann.startswith("_EnumArray["):
+        return value
+    v = (value or "").strip()
+    # Already keyed (the `[KEY: v]` literal, or the zero value), or not a
+    # sequence at all: leave it alone.
+    if v.startswith("_EnumArray(") or not v.startswith("["):
+        return value
+    key = ann[len("_EnumArray["):].split(",")[0].strip()
+    info = getattr(ParserState, "tick_types", {}).get(key)
+    if info is not None and "members" in info:
+        domain = key                     # an Enum class iterates its members
+    elif info is not None:
+        domain = f"range({info['First']}, {info['Last']} + 1)"
+    elif key == "bool":
+        domain = "(False, True)"
+    elif key == "str":                   # [char]T
+        domain = "(chr(_i) for _i in range(256))"
+    else:
+        return value
+    return f"_EnumArray(zip({domain}, {v}))"
 
 
 def _zero_value(annotation):
@@ -189,6 +225,7 @@ def to_py(self):
         for seq in node.nodes:
             if hasattr(seq, "nodes") and len(seq.nodes) >= 2:
                 value = seq.nodes[1].to_py()
+                value = _wrap_seq_for_enum_array(value, annotation)
                 result += f" = {value}"
                 has_value = True
     if not has_value:

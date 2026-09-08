@@ -208,6 +208,29 @@ var fr : Field_T
 fr.extra.append("e")
 assert fr.tag == "t" and fr.extra'Length == 1
 
+# A comprehension fills an array as well as a list -- the annotation decides
+# which, and the values land in domain order. The key may be a length, a
+# constant, a subrange (including one that does not start at zero), an enum
+# or bool: Nim was emitting `0 ..< Idx` for the named ones, which is
+# `pred` on a typedesc, and Python was leaving the value a plain list, which
+# indexes from 0 whatever the domain says.
+type Off_T is 2 .. 6
+type Hue_T is enum ROSE, JADE, SLATE
+const NC: int = 5
+var cLit:  [5]int     = [i*i for i in 0..4]
+var cConst:[NC]int    = [i*i for i in 0..4]
+var cOff:  [Off_T]int = [i+200 for i in 0..4]
+var cHue:  [Hue_T]int = [i*10 for i in 0..2]
+var cBool: [bool]int  = [i+300 for i in 0..1]
+assert cLit[0] == 0 and cLit[4] == 16
+assert cConst[4] == 16
+assert cOff[2] == 200 and cOff[6] == 204     # first value at 2, not at 0
+assert cHue[ROSE] == 0 and cHue[SLATE] == 20
+assert cBool[False] == 300 and cBool[True] == 301
+# and the literal forms are untouched
+var cLitE: [Hue_T]int = [ROSE: 1, JADE: 2, SLATE: 3]
+assert cLitE[SLATE] == 3
+
 # Every [O]T yields its values, in domain order, on both backends. The
 # enum-keyed one is a dict on Python, so left alone it would be the only
 # member of the family to yield its keys -- and in the order the literal
