@@ -855,42 +855,8 @@ def to_nim(self, indent=0):
     if "," in target and not target.startswith("("):
         target = f"({target})"
     # Register loop variable type from iterable's element type
-    _iterable_sym = ParserState.symbol_table.lookup(iterable)
-    _iterable_type = (_iterable_sym.get("type") or "") if _iterable_sym else ""
-    if not _iterable_type:
-        _iterable_type = _nim_expr_type(iterable) or ""
-    if _iterable_type in ("str", "string") and "," not in target:
-        ParserState.symbol_table.add(target.strip("()\n "), "char", "let")
-    elif "," not in target:
-        import re as _re_for
-        _em = _re_for.match(r'^seq\[(.+)\]$', _iterable_type)
-        if _em:
-            ParserState.symbol_table.add(target.strip("()\n "), _em.group(1), "let")
-        else:
-            # Iterating a custom iterator call (e.g. 'for c in code_chars(s)'):
-            # the loop variable's type is the iterator's per-yield return type,
-            # used directly (an iterator's annotation IS the element type).
-            _callee_m = _re_for.match(r'^(\w+)\(', iterable.strip())
-            if _callee_m and _callee_m.group(1) in getattr(ParserState, "iterator_names", set()):
-                _ret = (getattr(ParserState, 'proc_return_types', {}) or {}).get(_callee_m.group(1), "")
-                if _ret and "," not in _ret:
-                    ParserState.symbol_table.add(target.strip("()\n "), _ret, "let")
-    elif "," in target:
-        # Tuple-destructured loop: register each variable from the iterator's return type.
-        # iterable may be a call like 'pairwise(...)'; look up the callee's return type.
-        import re as _re_tfor
-        _callee_m = _re_tfor.match(r'^(\w+)\(', iterable.strip())
-        if _callee_m:
-            _callee = _callee_m.group(1)
-            _ret = (getattr(ParserState, 'proc_return_types', {}) or {}).get(_callee, "")
-            if _ret:
-                # Strip outer parens: '(char, char)' -> 'char, char'
-                _inner = _ret.strip().lstrip("(").rstrip(")")
-                _elem_types = [t.strip() for t in _inner.split(",")]
-                _var_names = [v.strip().strip("()") for v in target.strip("()").split(",")]
-                for _vn, _vt in zip(_var_names, _elem_types):
-                    if _vn:
-                        ParserState.symbol_table.add(_vn, _vt, "let")
+    from hek_nim_expr import register_loop_var_types
+    register_loop_var_types(target, iterable)
     hc = _block_inline_header_comment(self.nodes[2])
     body = self.nodes[2].to_nim(indent + 1)
     result = f"{_ind(indent)}for {target} in {iterable}:{hc}\n{body}"

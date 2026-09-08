@@ -65,14 +65,6 @@ history of this file if the reasoning behind one of them is ever wanted.
       of a string, so `+` failed on Nim in exactly the position where
       `sudoku.ady` had reached for `&`. Worth a transpile-time warning on
       `&` between strings rather than a Python run-time error.
-- [ ] a comprehension's loop variables are not registered in the symbol
-      table, so the `+` -> `&` rewrite cannot see their types: `[r + c for
-      r in ["A","B"] for c in ["1","2"]]` fails on Nim with "type mismatch:
-      r: string, c: lent string" while working on Python. `str(r) + str(c)`
-      is the portable spelling (a `$`-prefixed operand *is* recognised),
-      which is what `sudoku.ady` uses. The `for_stmt` emitters already
-      register a loop variable's element type from the iterable; the
-      comprehension emitters (`for_if_clause`) do not.
 - [ ] `int == int / int` compiles on Python and is rejected by Nim, whose
       `/` yields a float and whose `==` has no int/float overload. Python
       says `4 == 8 / 2` is True. Either the emitter converts, or the

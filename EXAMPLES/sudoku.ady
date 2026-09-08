@@ -15,7 +15,7 @@ const COLS   : str = "123456789"
 
 def cross(xs: str, ys: str) -> []str:
     """Cartesian product of characters: cross("AB", "12") -> ["A1","A2","B1","B2"]"""
-    [str(a) + str(b) for a in xs for b in ys]
+    [a + b for a in xs for b in ys]
 
 var squares: []str = cross(ROWS, COLS)
 

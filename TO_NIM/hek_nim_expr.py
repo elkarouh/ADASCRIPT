@@ -563,8 +563,14 @@ def binop_to_nim(self, prec=None, my_prec=None):
                     left_is_str = ltype in ("string", "str")
                     right_is_str = rtype in ("string", "str")
                     if not (left_is_str or right_is_str):
-                        left_is_str  = ltype == "char" and rtype in ("string", "str")
-                        right_is_str = rtype == "char" and ltype in ("string", "str")
+                        # char + char is a string on both sides: Nim's
+                        # `&(char, char)` builds one, and on Python these
+                        # are one-character strings already. Iterating a
+                        # string gives chars, so a comprehension over two
+                        # of them -- sudoku's cross() -- lands here.
+                        _chars = ltype == "char" and rtype == "char"
+                        left_is_str  = _chars or (ltype == "char" and rtype in ("string", "str"))
+                        right_is_str = _chars or (rtype == "char" and ltype in ("string", "str"))
                 if left_is_seq or right_is_seq or left_is_str or right_is_str:
                     nim_op = "&"
             # string repetition: "x" * n -> repeat("x", n)
@@ -3405,6 +3411,86 @@ def ordinal_domain_nim(iterable):
     return None
 
 
+def _literal_iterable_type(iterable):
+    """The Nim type of a literal being iterated, or "" if it is not one.
+
+    Only the shapes that say their element type outright: a string literal,
+    and a seq literal whose first element is a literal of a known kind. An
+    empty or mixed one gives "" so the caller registers nothing rather than
+    registering a guess.
+    """
+    import re as _re_lit
+    s = (iterable or "").strip()
+    if s.startswith('"') or s.startswith('fmt"') or s.startswith('r"'):
+        return "string"
+    if not (s.startswith("@[") and s.endswith("]")):
+        return ""
+    _inner = s[2:-1].strip()
+    if not _inner:
+        return ""
+    _first = _inner.split(",", 1)[0].strip()
+    if _first.startswith('"') or _first.startswith('fmt"') or _first.startswith('r"'):
+        return "seq[string]"
+    if _re_lit.fullmatch(r"-?\d+", _first):
+        return "seq[int]"
+    if _re_lit.fullmatch(r"-?\d+\.\d*", _first):
+        return "seq[float]"
+    if _first in ("true", "false"):
+        return "seq[bool]"
+    return ""
+
+
+def register_loop_var_types(target, iterable):
+    """Give a loop variable the element type of whatever it iterates.
+
+    Shared by `for` statements and comprehension clauses. Without it the
+    emitter cannot tell that `r` in `[r + c for r in ["A", "B"] ...]` is a
+    string, so `+` is left as Nim's numeric one and the comprehension does
+    not compile.
+    """
+    _iterable_sym = ParserState.symbol_table.lookup(iterable)
+    _iterable_type = (_iterable_sym.get("type") or "") if _iterable_sym else ""
+    if not _iterable_type:
+        _iterable_type = _nim_expr_type(iterable) or ""
+    if not _iterable_type:
+        # _nim_expr_type resolves names, not literals, and a comprehension
+        # is usually written over one: `for r in ["A", "B"]` left `r`
+        # untyped where `for r in rows` did not.
+        _iterable_type = _literal_iterable_type(iterable)
+    if _iterable_type in ("str", "string") and "," not in target:
+        ParserState.symbol_table.add(target.strip("()\n "), "char", "let")
+    elif "," not in target:
+        import re as _re_for
+        _em = _re_for.match(r'^seq\[(.+)\]$', _iterable_type)
+        if _em:
+            ParserState.symbol_table.add(target.strip("()\n "), _em.group(1), "let")
+        else:
+            # Iterating a custom iterator call (e.g. 'for c in code_chars(s)'):
+            # the loop variable's type is the iterator's per-yield return type,
+            # used directly (an iterator's annotation IS the element type).
+            _callee_m = _re_for.match(r'^(\w+)\(', iterable.strip())
+            if _callee_m and _callee_m.group(1) in getattr(ParserState, "iterator_names", set()):
+                _ret = (getattr(ParserState, 'proc_return_types', {}) or {}).get(_callee_m.group(1), "")
+                if _ret and "," not in _ret:
+                    ParserState.symbol_table.add(target.strip("()\n "), _ret, "let")
+    elif "," in target:
+        # Tuple-destructured loop: register each variable from the iterator's return type.
+        # iterable may be a call like 'pairwise(...)'; look up the callee's return type.
+        import re as _re_tfor
+        _callee_m = _re_tfor.match(r'^(\w+)\(', iterable.strip())
+        if _callee_m:
+            _callee = _callee_m.group(1)
+            _ret = (getattr(ParserState, 'proc_return_types', {}) or {}).get(_callee, "")
+            if _ret:
+                # Strip outer parens: '(char, char)' -> 'char, char'
+                _inner = _ret.strip().lstrip("(").rstrip(")")
+                _elem_types = [t.strip() for t in _inner.split(",")]
+                _var_names = [v.strip().strip("()") for v in target.strip("()").split(",")]
+                for _vn, _vt in zip(_var_names, _elem_types):
+                    if _vn:
+                        ParserState.symbol_table.add(_vn, _vt, "let")
+
+
 @method(for_if_clause)
 def to_nim(self, prec=None):
     """for_if_clause: 'for' target 'in' disjunction ('if' disjunction)* -> Nim: 'for target in iter (if cond)'"""
@@ -3426,7 +3512,14 @@ def to_nim(self, prec=None):
         else:
             # Single variable target -> use .keys
             iterable = iterable + ".keys"
-    
+
+    # A `for` statement registers its loop variable's type; a comprehension
+    # clause has to as well, or nothing downstream -- the `if` guards here,
+    # and the element expression the caller renders next -- can tell what
+    # the variable holds. The comprehension emitters push a scope around
+    # this so the binding does not outlive the comprehension.
+    register_loop_var_types(tgt, iterable)
+
     result = f"for {tgt} in {iterable}"
     if len(self.nodes) > 2:
         st = self.nodes[2]
@@ -3481,12 +3574,28 @@ def _build_nested_collect(clause_parts, expr):
     return f"collect({result})"
 
 
+def _comp_clauses_then(clauses_node, render_element):
+    """Render a comprehension's clauses first, then its element expression.
+
+    The element mentions the loop variables, so the clauses have to be
+    rendered first for their types to be known -- `[r + c for r in ...]`
+    was emitted with a numeric `+` because the element went first and `r`
+    was still an unknown name. The scope keeps the bindings from outliving
+    the comprehension, which is where Python scopes them too.
+    """
+    ParserState.symbol_table.push_scope("<comprehension>")
+    try:
+        clause_parts = _for_if_clauses_parts(clauses_node)
+        return clause_parts, render_element()
+    finally:
+        ParserState.symbol_table.pop_scope()
+
+
 @method(listcomp)
 def to_nim(self, prec=None):
     """listcomp: named_expression for_if_clauses -> Nim: collect(...) with proper nesting"""
     ParserState.nim_imports.add("sugar")
-    expr = self.nodes[0].to_nim()
-    clause_parts = _for_if_clauses_parts(self.nodes[1])
+    clause_parts, expr = _comp_clauses_then(self.nodes[1], lambda: self.nodes[0].to_nim())
     return _build_nested_collect(clause_parts, expr)
 
 
@@ -3494,22 +3603,23 @@ def to_nim(self, prec=None):
 def to_nim(self, prec=None):
     """genexpr: named_expression for_if_clauses -> Nim: collect(...) with proper nesting"""
     ParserState.nim_imports.add("sugar")
-    expr = self.nodes[0].to_nim()
-    clause_parts = _for_if_clauses_parts(self.nodes[1])
+    clause_parts, expr = _comp_clauses_then(self.nodes[1], lambda: self.nodes[0].to_nim())
     return _build_nested_collect(clause_parts, expr)
 
 
 @method(dictcomp)
 def to_nim(self, prec=None):
     """dictcomp: expression ':' expression for_if_clauses -> Nim: toTable comprehension"""
-    key = self.nodes[0].to_nim()
-    ParserState._in_dictcomp_value = True
-    val = self.nodes[1].to_nim()
-    ParserState._in_dictcomp_value = False
-    clause_parts = _for_if_clauses_parts(self.nodes[2])
+    def _kv():
+        key = self.nodes[0].to_nim()
+        ParserState._in_dictcomp_value = True
+        val = self.nodes[1].to_nim()
+        ParserState._in_dictcomp_value = False
+        return f"{{{key}: {val}}}"
+    clause_parts, kv = _comp_clauses_then(self.nodes[2], _kv)
     ParserState.nim_imports.add("sugar")
     ParserState.nim_imports.add("tables")
-    inner = _build_nested_collect(clause_parts, f"{{{key}: {val}}}")
+    inner = _build_nested_collect(clause_parts, kv)
     # dictcomp uses collect(initTable, ...)
     return inner.replace("collect(", "collect(initTable, ", 1)
 
@@ -3519,8 +3629,7 @@ def to_nim(self, prec=None):
     """setcomp: expression for_if_clauses -> Nim: collect into seq then toHashSet"""
     ParserState.nim_imports.add("sugar")
     ParserState.nim_imports.add("sets")
-    expr = self.nodes[0].to_nim()
-    clause_parts = _for_if_clauses_parts(self.nodes[1])
+    clause_parts, expr = _comp_clauses_then(self.nodes[1], lambda: self.nodes[0].to_nim())
     inner = _build_nested_collect(clause_parts, expr)
     return f"toHashSet({inner})"
 

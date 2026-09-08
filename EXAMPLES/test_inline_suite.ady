@@ -308,11 +308,33 @@ assert [str(c) for c in "ab"] + [str(c) for c in "cd"] == ["a", "b", "c", "d"]
 assert lhs + [str(c) for c in "cd"] == ["a", "b", "c", "d"]
 assert [str(c) for c in "ab"] + lhs == ["a", "b", "a", "b"]
 # ... including a comprehension with two generators, as that list uses.
-# `str(x) + str(y)` is the portable spelling inside one: a comprehension's
-# loop variables are not in the symbol table, so a bare `r + c` between two
-# of them is not seen as string concatenation and fails on Nim (TODO.md).
 var grid: []str = [str(r) + str(c) for r in ["A", "B"] for c in ["1", "2"]]
 assert grid == ["A1", "A2", "B1", "B2"]
+
+# A comprehension's loop variables are typed from what they iterate, the
+# same as a `for` statement's. Without that, a bare `r + c` between two of
+# them was not seen as string concatenation and reached Nim's numeric `+`,
+# so only the `str(r) + str(c)` spelling above compiled. The element
+# expression is rendered after the clauses now, for the types to exist by
+# the time it needs them.
+assert [r + c for r in ["A", "B"] for c in ["1", "2"]] == ["A1", "A2", "B1", "B2"]
+assert [w + "!" for w in ["a", "b"]] == ["a!", "b!"]
+assert [v for v in ["aa", "b"] if v'Length > 1] == ["aa"]
+assert {k: k + "!" for k in ["p"]}["p"] == "p!"
+let zset: {}str = {v + "z" for v in ["m", "n"]}   # a tick needs a name
+assert zset'Length == 2
+assert [[a + b for b in ["1", "2"]] for a in ["A"]] == [["A1", "A2"]]
+# Iterating a string gives chars, and char + char is a string on both
+# backends -- Nim's `&(char, char)` builds one, Python's are already
+# one-character strings. This is sudoku.ady's cross().
+assert [p + q for p in "AB" for q in "12"] == ["A1", "A2", "B1", "B2"]
+# The binding is scoped to the comprehension, as it is in Python: the same
+# name can be a string in one and an int in the next, and an outer name of
+# that spelling is untouched.
+assert [same + 1 for same in [10, 20]] == [11, 21]
+assert [same + "?" for same in ["p"]] == ["p?"]
+let same: int = 5
+assert same + 1 == 6
 # and the literal forms are untouched
 var cLitE: [Hue_T]int = [ROSE: 1, JADE: 2, SLATE: 3]
 assert cLitE[SLATE] == 3

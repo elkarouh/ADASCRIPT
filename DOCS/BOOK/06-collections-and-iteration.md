@@ -358,13 +358,17 @@ instantiations — a reminder that these are true generics in the Nim build.
           ...
   ```
 
-- Strings iterate per character; `str(c)` converts a char back to a string
-  where the Nim backend distinguishes them (`sudoku.ady` does this in
-  `cross()`). Concatenate with `+`, which the Nim backend rewrites to that
-  language's `&`. Writing `&` directly is a Nim-only spelling — it is
-  bitwise-and on Python and raises there — so prefer `+` in code meant for
-  both. `sudoku.ady` used to use `&` throughout and so ran on one backend
-  only; it now uses `+` and produces byte-identical output on both.
+- Strings iterate per character, and `str(c)` converts a char back to a
+  string where the Nim backend distinguishes them. Concatenating two of
+  them needs no conversion: `+` between chars is a string on both sides,
+  which is why `sudoku.ady`'s `cross()` is just
+  `[a + b for a in xs for b in ys]`.
+
+- Concatenate with `+` — the Nim backend rewrites it to that language's
+  `&`. Writing `&` directly is a Nim-only spelling: it is bitwise-and on
+  Python and raises there, so prefer `+` in code meant for both.
+  `sudoku.ady` used to use `&` throughout and so ran on one backend only;
+  it now uses `+` and produces byte-identical output on both.
 
 ---
 
