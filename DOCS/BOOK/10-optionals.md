@@ -148,13 +148,13 @@ error messages).
 
 The examples are equally instructive about the negative space:
 
-- **Container "not found"** — `dijkstra.ady` uses `MAX_DIST`, which is a
-  real `Inf`, rather than `?Distance_T`, because arithmetic on distances
-  must stay unconditional inside the hot loop. An infinity compares and
-  adds like any other float; an optional would have to be unwrapped at
-  every comparison. (A *magic* sentinel like `1e6` would be the bad
-  version of this: it is a ceiling a large graph can exceed, where `Inf`
-  cannot.)
+- **Container "not found"** — `dijkstra.ady` initialises unreached nodes
+  to `Inf` rather than typing them `?Distance_T`, because arithmetic on
+  distances must stay unconditional inside the hot loop. An infinity
+  compares and adds like any other float; an optional would have to be
+  unwrapped at every comparison. (A *magic* sentinel like `1e6` would be
+  the bad version of this: it is a ceiling a large graph can exceed, where
+  `Inf` cannot.)
 - **Contradiction in a solver** — `sudoku.ady` returns the empty dict `{:}`
   rather than `?{str}str`, because the empty dict is already falsy and the
   algorithm tests `if not values:` a dozen times.

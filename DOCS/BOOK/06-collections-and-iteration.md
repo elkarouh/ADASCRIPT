@@ -84,7 +84,7 @@ Dict comprehensions work, including conditional expressions inside.
 `dijkstra.ady` initialises all distances in one line:
 
 ```python
-distances: {Node_T}Distance_T = {node: (0.0 if node==start else MAX_DIST) for node in graph}
+distances: {Node_T}Distance_T = {node: (0.0 if node==start else Inf) for node in graph}
 ```
 
 Two things are carrying the weight there. The conditional is *inside* the
@@ -92,7 +92,7 @@ comprehension, so Dijkstra's initialisation has no second phase where the
 start node gets fixed up afterwards — which is where that loop usually goes
 wrong. And `for node in graph` iterates a `{K}V`, which yields its keys, so
 the clause reads "for each node in the graph". §1.4 shows the whole
-program, which is 28 lines for the entire algorithm.
+program, which is 27 lines for the entire algorithm.
 
 ## 6.3 Sets
 

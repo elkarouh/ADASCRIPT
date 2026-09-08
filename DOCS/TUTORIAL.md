@@ -1758,21 +1758,20 @@ on enum values, inclusive range `1 .. trials`.
 
 ### dijkstra.ady — Priority queue, enum-keyed dicts, nimport
 
-The whole file — 28 lines for the complete algorithm:
+The whole file — 27 lines for the complete algorithm:
 
 ```python
 #!/usr/bin/env py2nim
 from stdlib nimport PriorityQueue
 type Node_T is enum A, B, C, D
 type Distance_T is float
-const MAX_DIST : Distance_T = Inf
 type Neighbour_T is tuple:
     distance: Distance_T
     neighbor: Node_T
 type Graph_T is {Node_T}[]Neighbour_T
 
 def dijkstra(graph : Graph_T, start: Node_T) -> {Node_T}Distance_T:
-    distances: {Node_T}Distance_T = {node: (0.0 if node==start else MAX_DIST) for node in graph}
+    distances: {Node_T}Distance_T = {node: (0.0 if node==start else Inf) for node in graph}
     var visited : {}Node_T
     queue : PriorityQueue[Neighbour_T] = [(0.0, start)]
     while queue:

@@ -136,14 +136,13 @@ means — this is the whole file, nothing elided:
 from stdlib nimport PriorityQueue
 type Node_T is enum A, B, C, D
 type Distance_T is float
-const MAX_DIST : Distance_T = Inf
 type Neighbour_T is tuple:
     distance: Distance_T
     neighbor: Node_T
 type Graph_T is {Node_T}[]Neighbour_T
 
 def dijkstra(graph : Graph_T, start: Node_T) -> {Node_T}Distance_T:
-    distances: {Node_T}Distance_T = {node: (0.0 if node==start else MAX_DIST) for node in graph}
+    distances: {Node_T}Distance_T = {node: (0.0 if node==start else Inf) for node in graph}
     var visited : {}Node_T
     queue : PriorityQueue[Neighbour_T] = [(0.0, start)]
     while queue:
@@ -179,7 +178,7 @@ one.
 **The initialisation is one line, and it is the sentence you would write.**
 
 ```python
-distances: {Node_T}Distance_T = {node: (0.0 if node==start else MAX_DIST) for node in graph}
+distances: {Node_T}Distance_T = {node: (0.0 if node==start else Inf) for node in graph}
 ```
 
 "Every node starts at infinity, except the start, which starts at zero."
@@ -220,7 +219,6 @@ class Node_T(IntEnum):
     D = 3
 
 Distance_T: TypeAlias = float
-MAX_DIST: Distance_T = float("inf")
 
 class Neighbour_T(NamedTuple):
     distance: Distance_T
@@ -229,7 +227,7 @@ class Neighbour_T(NamedTuple):
 Graph_T: TypeAlias = dict[Node_T, list[Neighbour_T]]
 
 def dijkstra(graph: Graph_T, start: Node_T) -> dict[Node_T, Distance_T]:
-    distances: dict[Node_T, Distance_T] = {node: (0.0 if node == start else MAX_DIST) for node in graph}
+    distances: dict[Node_T, Distance_T] = {node: (0.0 if node == start else float("inf")) for node in graph}
     visited: set[Node_T] = set()
     queue: list[Neighbour_T] = [Neighbour_T(0.0, start)]
     while queue:
@@ -249,8 +247,8 @@ graph: Graph_T = {A: [(1.0, B), (4.0, C)], B: [(2.0, C), (5.0, D)], C: [(1.0, D)
 print(dijkstra(graph, A))
 ```
 
-Twenty-six non-blank lines against thirty-three, and 1022 characters against
-1229 — worth having, but the line count is the weaker half of the argument.
+Twenty-five non-blank lines against thirty-two, and 983 characters against
+1197 — worth having, but the line count is the weaker half of the argument.
 Three of those extra lines are not algorithm at all:
 
 - **`import heapq`, and `heappush`/`heappop` written out.** Python's heap is
