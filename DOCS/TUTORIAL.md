@@ -496,21 +496,25 @@ Iterating a string yields characters on the Nim backend, and the second
 line relies on `char + char` being a string. That is `sudoku.ady`'s
 `cross()`, whole.
 
-The same knowledge lets a character go wherever a string is wanted, so no
-`str(c)` conversion is needed in four common places: a call argument whose
-parameter is `str` (`cross(ROWS, c)` above), a declaration annotated `str`,
-`.append` onto a `[]str`, and a string method given part characters and
-part strings — `s.replace(c, "\\" + c)` works, because Nim overloads
-`replace` all-char or all-string with nothing mixed. Each is an error on
-Nim and a no-op on Python, where a character *is* a one-character string.
-`sudoku.ady`'s grid parser is the shape that benefits:
+Since iterating a string gives characters, `char` is the honest annotation
+for keeping them, and `[]char` works throughout — appending, indexing back
+out, adding to a string, comparing, passing to a `str` parameter.
+`sudoku.ady`'s grid parser says what it means in one line:
 
 ```python
-var chars: []str
-for c in grid:
-    if c in DIGITS or c == "0" or c == ".":
-        chars.append(c)
+let chars: []char = [c for c in grid if c in DIGITS+"0."]
 ```
+
+`in` over strings is a membership test on both backends, so `"x" in
+"daxfdjd"` answers the substring question too.
+
+Where a character does have to become a string it happens on its own, so no
+`str(c)` is needed in four common places: a call argument whose parameter is
+`str` (`cross(ROWS, c)` above), a declaration annotated `str`, `.append`
+onto a `[]str`, and a string method given part characters and part strings —
+`s.replace(c, "\\" + c)` works, because Nim overloads `replace` all-char or
+all-string with nothing mixed. Each is an error on Nim and a no-op on
+Python, where a character *is* a one-character string.
 
 A slice is not a character and is left alone: `s[i]` indexes, `s[2:10]`
 cuts.

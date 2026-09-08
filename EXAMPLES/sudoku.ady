@@ -88,13 +88,10 @@ def parse_grid(grid: str) -> {str}str:
     var values: {str}str = {:}
     for s in squares:
         values[s] = DIGITS
-    var chars: []str
-    for c in grid:
-        if c in DIGITS or c == "0" or c == ".":
-            chars.append(c)
+    let chars: []char = [c for c in grid if c in DIGITS+"0."]
     for i in 0..len(chars)-1:
-        s: str = squares[i]
-        c: str = chars[i]
+        s: str = squares[i]      # a square name is two characters, "A1"
+        c: char = chars[i]
         if c in DIGITS:
             values = assign(values, s, c)
             if not values:

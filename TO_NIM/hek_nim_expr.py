@@ -2734,8 +2734,17 @@ def to_nim(self, prec=None):
                         op_str = getattr(first.nodes[0], 'node', str(first.nodes[0]))
                     nim_op = _PY_OP_TO_NIM.get(str(op_str), str(op_str)) if op_str else ""
                     right = seq.nodes[1].to_nim(prec) if len(seq.nodes) > 1 else ""
-                    # seq concat: + -> & when operand is seq literal
-                    if nim_op == "+" and (right.startswith("@[") or result.startswith("@[")):
+                    # seq/string concat: + -> &. This path has its own
+                    # arithmetic handling because bitor_expr's operators
+                    # flatten into range_expr, and it knew only about seq
+                    # literals -- so `x in DIGITS + "0."`, where the right
+                    # of `in` is a range_expr, kept Nim's numeric `+` and
+                    # failed, while the same expression as a statement was
+                    # rewritten correctly.
+                    if nim_op == "+" and (
+                            right.startswith("@[") or result.startswith("@[")
+                            or _expr_is_string(right) or _expr_is_string(result)
+                            or _expr_is_char(right) or _expr_is_char(result)):
                         nim_op = "&"
                     # string repeat: "x" * n -> repeat("x", n)
                     if nim_op == "*":
@@ -3099,6 +3108,17 @@ def to_nim(self, prec=None):
             # x in (a, b, ...) — Python tuple literal → Nim array literal [a, b, ...]
             if nim_op in ("in", "notin") and right.startswith("(") and right.endswith(")"):
                 right = "[" + right[1:-1] + "]"
+            # `sub in s` over two strings is a substring test. Nim's bare
+            # `in` is `contains`, and system only defines it for a char in
+            # a string -- which is why `c in DIGITS` compiled and
+            # `"x" in "daxfdjd"` did not. strutils has the string/string
+            # one; a char operand still takes the system overload.
+            if (nim_op in ("in", "notin")
+                    and _expr_is_string(right) and _expr_is_string(chain)):
+                ParserState.nim_imports.add("strutils")
+                _call = f"contains({right}, {chain})"
+                chain = f"not {_call}" if nim_op == "notin" else _call
+                continue
             # Option-aware: x is/== None -> x.isNone, x is not/!= None -> x.isSome
             if right == "nil" and nim_op in ("isnot", "is", "==", "!="):
                 is_option = _expr_is_option(chain)

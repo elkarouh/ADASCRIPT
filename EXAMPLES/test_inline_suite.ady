@@ -357,6 +357,46 @@ for ch in "*":
 assert esc == "a\\*b"
 assert "x-y-z".replace("-", "+") == "x+y+z"
 assert "a,b,c".split(",") == ["a", "b", "c"]
+
+# Iterating a string gives a char, and `[]char` is the honest annotation
+# for keeping them. It works throughout: appending, indexing back out,
+# adding to a string, and passing to a `str` parameter.
+const DIGITS_T: str = "123456789"
+var kept_chars: []char
+for c in "1.0x9":
+    if c in DIGITS_T or c in "0.":
+        kept_chars.append(c)
+assert kept_chars'Length == 4
+let firstc: char = kept_chars[0]
+assert firstc == "1"
+var glued: str = ""
+for c in kept_chars:
+    glued += c
+assert glued == "1.09"
+assert take_str("<", firstc) == "<1"
+
+# `sub in s` over two strings is a substring test. Nim's bare `in` is
+# `contains`, and system defines it only for a char in a string -- so
+# `c in DIGITS` compiled while `"x" in "daxfdjd"` did not, on every shape
+# including two variables. strutils has the string/string overload.
+let hay: str = "daxfdjd"
+let needle: str = "xf"
+assert needle in hay
+assert "xf" in hay
+assert "x" in hay
+assert needle in "daxfdjd"
+assert "x" in "daxfdjd"
+assert "zz" not in hay
+assert hay[2] in "xy"          # a char operand still takes system's
+assert hay[2] in hay
+# The right of `in` is a range_expr, which has its own arithmetic path for
+# the flattened operators -- and that path knew `+` was concatenation only
+# for a seq literal. `c in DIGITS + "0."` kept Nim's numeric `+` and failed,
+# while the same expression as a statement was rewritten to `&`.
+assert "x" in "da" + "xf"
+assert hay[2] in DIGITS_T + "x."
+let gridc: []char = [c for c in "1.0x9" if c in DIGITS_T+"0."]
+assert gridc'Length == 4
 # The binding is scoped to the comprehension, as it is in Python: the same
 # name can be a string in one and an int in the next, and an outer name of
 # that spelling is untouched.

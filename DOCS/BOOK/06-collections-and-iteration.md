@@ -180,7 +180,20 @@ and concatenation and so has to know which one is meant. Iterating a string
 yields chars there, and the second line relies on `char + char` being a
 string — it is `sudoku.ady`'s `cross()`, whole.
 
-The same knowledge lets a char go wherever a string is wanted, so the
+Since iterating a string gives characters, `char` is the honest annotation
+for keeping them, and `[]char` works throughout — appending, indexing back
+out, adding to a string, comparing, passing to a `str` parameter.
+`sudoku.ady`'s grid parser says exactly what it means in one line:
+
+```python
+let chars: []char = [c for c in grid if c in DIGITS+"0."]
+```
+
+`c in DIGITS+"0."` is a membership test over a string, which is what `in`
+means on both backends; `"x" in "daxfdjd"` reads the same way and answers
+the substring question.
+
+Where a char does have to become a string it happens on its own, so the
 `str(c)` conversions that used to litter code like this are gone. Four
 places take it: a call argument whose parameter is `str` (`cross(ROWS, c)`
 in §6.1), a declaration annotated `str`, `.append` onto a `[]str`, and a
@@ -190,14 +203,6 @@ string method given part chars and part strings — Nim overloads `replace`,
 An all-char call is left as it is; that overload is the better one. Each
 case is an error on Nim and a no-op on Python, where a char *is* a
 one-character string, so converting can only make the two agree.
-`sudoku.ady`'s grid parser is the shape that gets shorter:
-
-```python
-var chars: []str
-for c in grid:
-    if c in DIGITS or c == "0" or c == ".":
-        chars.append(c)
-```
 
 A slice is not a char, and is left alone: `s[i]` indexes, `s[2:10]` cuts.
 

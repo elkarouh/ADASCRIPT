@@ -821,6 +821,12 @@ generators; `toHashSet(collect(...))` for a set; `collect(initTable, ...)`
 for a dict; and a copy loop into `array[N, T]` for a fixed-size array,
 since Nim will not assign a `collect()` to one. Iterating a string yields
 `char` there, so `p + q` above relies on `&(char, char)` giving a string.
+Iterating a string gives a char, so `[]char` is the annotation for keeping
+them and works throughout (append, index, add to a string, compare, pass to
+a `str` parameter): `let chars: []char = [c for c in grid if c in
+DIGITS+"0."]`. `in` over two strings is a membership/substring test on both
+backends (`"x" in "daxfdjd"`).
+
 A char is also stringified automatically wherever a string is wanted — a
 call argument whose parameter is `str` (`cross(ROWS, c)` needs no
 `str(c)`), a declaration annotated `str`, `.append` onto a `[]str`, and a
