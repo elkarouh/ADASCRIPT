@@ -14,15 +14,12 @@
 # See README.md in this directory for the simplified grammar specification.
 #
 # Usage:
-#   py2nim ADA_INDENT/ada_indent.ady -r -- file.adb         # reindent a file
-#   py2nim ADA_INDENT/ada_indent.ady -r -- --fmt file.adb   # reindent + reformat spacing
-#   py2nim ADA_INDENT/ada_indent.ady -r -- --test           # run self-tests
+#   py2nim ADA_INDENT/ada_indent.ady -r -- file.adb   # compile if stale, reindent a file
+#   py2nim ADA_INDENT/ada_indent.ady -r -- --test     # compile if stale, run self-tests
 #
 # The core logic (reindent + helpers) is pure Adascript and transpiles to
 # both Python and Nim. The CLI uses the bash-style argument primitives
 # ($1, $#, quit) so argument handling is target-agnostic.
-
-nimport ada_line_fmt
 
 const INDENT_WIDTH: Natural = 2
 
@@ -189,10 +186,6 @@ def stmt_incomplete(code_s: str) -> bool:
             "or", "private", "select"):
         return False
     let lt: str = last_word(code_s)
-    # 'subtype T is' is not a block opener — the type name follows on the next
-    # line as a plain continuation, with no matching 'end'.
-    if lt == "is" and lw == "subtype":
-        return True
     # Block openers, plus the '[not] overriding' indicator on its own line.
     return lt not in ("is", "then", "loop", "record", "select", "do", "overriding")
 
@@ -370,14 +363,9 @@ class Indenter:
     arrow_level: Natural = 0    # innermost paren level with an active '=>' named-value spill (0 = none)
     paren_next_lead: Natural = 0         # column where the next code line in this paren will land
     paren_next_lead_depth: int = -1      # paren_depth that paren_next_lead applies to (-1 = none)
-    paren_prev_lead: Natural = 0         # actual lead column of the previous code line in this paren
-                                         # (valid when paren_next_lead_depth == entry depth)
 
     def dump_state(self) -> str:
-        """Serialize the full indenter state to a compact, opaque string.
-
-        The string can later be passed to load_state to resume processing
-        from this exact point without reprocessing previous lines."""
+        """Serialize the full indenter state to a compact, opaque string."""
         var stack_names: []str = []
         for b in self.stack:
             stack_names.append(block_t_name(b))
@@ -399,7 +387,6 @@ class Indenter:
             "al="    + str(self.arrow_level),
             "pnl="   + str(self.paren_next_lead),
             "pnld="  + str(self.paren_next_lead_depth),
-            "ppl="   + str(self.paren_prev_lead),
         ]
         return "|".join(parts)
 
@@ -419,7 +406,6 @@ class Indenter:
         self.arrow_level         = 0
         self.paren_next_lead     = 0
         self.paren_next_lead_depth = -1
-        self.paren_prev_lead     = 0
         for part in s.split("|"):
             let eq: int = part.find("=")
             if eq < 0:
@@ -461,8 +447,6 @@ class Indenter:
                 self.paren_next_lead = int(val)
             elif key == "pnld":
                 self.paren_next_lead_depth = int(val)
-            elif key == "ppl":
-                self.paren_prev_lead = int(val)
 
     def _push_parens(self, text: str, base_col: Natural, base_depth: Natural, new_depth: Natural):
         """Record parentheses opened on this line and drop any now closed."""
@@ -677,17 +661,7 @@ class Indenter:
                         lead = vbase + INDENT_WIDTH
                         was_cont = True
                     elif code_s.startswith("(") and self.paren_cont:
-                        # An argument list '(' opening a continuation line is the
-                        # call's arguments, so it nests one level past the call
-                        # name — which sits on the previous code line. When that
-                        # previous line was itself an operator/term continuation
-                        # (deeper than the item column), the '(' must compound past
-                        # it rather than flatten back to the item column. Use the
-                        # previous line's actual lead when it was at this same paren
-                        # depth; otherwise fall back to the item column.
                         lead = vbase + INDENT_WIDTH
-                        if self.paren_next_lead_depth == entry_depth:
-                            lead = max(lead, self.paren_prev_lead + INDENT_WIDTH)
                         was_cont = True
             let new_depth: int = self.paren_depth + paren_delta(code)
             let plt: str = last_word(code_s)
@@ -731,7 +705,6 @@ class Indenter:
                 # Already a continuation, or kind-1 structural, or closed item:
                 # the next line chains at the same level.
                 self.paren_next_lead = lead
-            self.paren_prev_lead = lead
             self.paren_next_lead_depth = entry_depth
             self._push_parens(emit_text, lead, entry_depth, self.paren_depth)
             # A line that closes back out of all parentheses and ends in a block
@@ -877,13 +850,11 @@ class Indenter:
                             # expression function; defer the decision to the next
                             # line (see pending_spec handling above). Everything
                             # else ending in 'is' opens a block immediately.
-                            # Exception: 'subtype T is' is not a block opener —
-                            # it is a plain continuation declaration.
                             if lw == "function":
                                 self.pending_spec = True
                             elif lw == "type":
                                 self.stack.append(TYPE_HEADER)
-                            elif lw != "subtype":
+                            else:
                                 self.stack.append(CASE if lw == "case" else PKG)
                         when "then":
                             self.stack.append(IF)
@@ -967,7 +938,6 @@ class Indenter:
 
 def main() -> int:
     var ind: Indenter = Indenter()
-    var do_fmt: bool = False
     var do_emit_state: bool = False
     var file_arg: str = ""
     var args: []str = []
@@ -988,9 +958,6 @@ def main() -> int:
             print ""
             print "Options:"
             print "  -h, --help          Show this help and exit."
-            print "  --fmt               Apply lightweight formatting in addition to indentation"
-            print "                      (normalises spacing around operators, removes trailing"
-            print "                      whitespace)."
             print "  --emit-state        After each output line emit a state snapshot on a"
             print "                      separate line of the form  ##STATE:<data>  that captures"
             print "                      the indenter's full parse state.  Consumed by editor"
@@ -1001,8 +968,6 @@ def main() -> int:
             print ""
             print "Exit status: 0 on success, non-zero on error."
             return 0
-        elif a == "--fmt":
-            do_fmt = True
         elif a == "--emit-state":
             do_emit_state = True
         elif a == "--state":
@@ -1014,19 +979,13 @@ def main() -> int:
         ai += 1
     if file_arg == "":
         for line in stdin.lines:
-            var r: str = ind.indent_line(line)
-            if do_fmt:
-                r = format_line(r)
-            print r
+            print ind.indent_line(line)
             if do_emit_state:
                 print "##STATE:" + ind.dump_state()
     else:
         with open(file_arg) as f:
             for line in f:
-                var r: str = ind.indent_line(line)
-                if do_fmt:
-                    r = format_line(r)
-                print r
+                print ind.indent_line(line)
                 if do_emit_state:
                     print "##STATE:" + ind.dump_state()
 
