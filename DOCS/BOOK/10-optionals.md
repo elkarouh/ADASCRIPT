@@ -4,8 +4,8 @@
 as in Python — and the transpiler maps the whole vocabulary (`None`,
 `is None`, `is not None`, truthiness) to Nim's `Option[T]` machinery. You
 never write `some()`, `.get()`, or `.isSome` by hand. The full reference is
-`OPTIONAL_TYPES.md` at the repository root; this chapter covers what the
-examples actually use.
+`DOCS/OPTIONAL_TYPES.md`; this chapter covers what the examples actually
+use.
 
 ## 10.1 Basic use
 
@@ -140,9 +140,9 @@ let r4: ?int = compute("0", "4")     # None — last step fails
 
 This is the Maybe monad's "railroad" pattern: the happy path reads straight
 down the page, and failure at any step diverts to the `None` track without
-another line of code. `OPTIONAL_TYPES.md` §16–22 develops the theme further
-(fmap, sequence/traverse, and a `Result_T` Either-analogue for carrying
-error messages).
+another line of code. `DOCS/OPTIONAL_TYPES.md` §16–22 develops the theme
+further (fmap, sequence/traverse, and a `Result_T` Either-analogue for
+carrying error messages).
 
 ## 10.5 When *not* to use `?T`
 

@@ -141,7 +141,7 @@ The vocabulary:
 | `drop(x)` | destroy now | `=destroy` + `=wasMoved` | `del x` |
 | `with own x = e:` | scoped RAII | `block:` + ARC | `try/finally: del x` |
 
-Where they pay off in the examples (per `TUTORIAL.md` §20):
+Where they pay off in the examples (per `DOCS/TUTORIAL.md` §20):
 
 - **`lent`** on read-only traversals — the graph parameter in `graph.ady` /
   `dijkstra.ady`, the candidate set in `spell.ady`. The annotation promises
@@ -182,7 +182,8 @@ reach for the Nim names when they are simply better tools — `sortedByIt` and
 ## 12.6 The generated-code contract
 
 It helps to know what the backends emit for each construct — the translation
-tables in `README.md` and `TUTORIAL.md` are the authority, but the shape is:
+tables in `README.md` and `DOCS/TUTORIAL.md` are the authority, but the
+shape is:
 
 - Python output is *plain* Python 3: `Enum`/`NamedTuple`/`@dataclass`
   classes, `match/case`, `subprocess`, `re` — reviewable and debuggable with

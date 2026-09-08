@@ -188,11 +188,11 @@ Limitations") and `TODO.md`.
 ## A.5 Further reading in this repository
 
 - `README.md` — feature reference with translation tables.
-- `TUTORIAL.md` — the long-form tutorial this book complements (20 sections,
-  including the full memory-ownership chapter).
-- `TUTORIAL_FOR_LLM.md` — a condensed variant tuned for language models.
-- `OPTIONAL_TYPES.md` — optionals and monadic patterns, 22 sections.
-- `PATTERN_MATCHING.md` — the complete pattern-matching reference.
+- `DOCS/TUTORIAL.md` — the long-form tutorial this book complements
+  (20 sections, including the full memory-ownership chapter).
+- `DOCS/TUTORIAL_FOR_LLM.md` — a condensed variant tuned for language models.
+- `DOCS/OPTIONAL_TYPES.md` — optionals and monadic patterns, 22 sections.
+- `DOCS/PATTERN_MATCHING.md` — the complete pattern-matching reference.
 - `ADASCRIPT_GRAMMAR/`, `HPARSEC/` — the grammar and the parser-combinator
   engine, if you want to extend the language itself.
 
