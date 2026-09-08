@@ -132,14 +132,21 @@ graph: Graph_T = {A: [B, C], B: [C, D], C: [D], D: [C], E: [F], F: [C]}
 
 `{Node_T}[]Node_T` — a dict mapping each node to a list of neighbours — would
 be `dict[Node_T, list[Node_T]]` in Python and `Table[Node_T, seq[Node_T]]`
-in Nim. `EXAMPLES/dijkstra.ady` goes one step further with a dict of dicts:
+in Nim. `EXAMPLES/dijkstra.ady` maps each node to a list of tuples — an
+adjacency list, weights included:
 
 ```python
 type Distance_T is float
-type Graph_T is {Node_T}{Node_T}Distance_T
+type Neighbour_T is tuple:
+    distance: Distance_T
+    neighbor: Node_T
+type Graph_T is {Node_T}[]Neighbour_T
 
-graph : Graph_T = {A:{B:1.0, C:4.0}, B: {C:2.0, D:5.0}, C: {D:1.0}, D: {:}}
+graph : Graph_T = {A: [(1.0, B), (4.0, C)], B: [(2.0, C), (5.0, D)], C: [(1.0, D)], D: []}
 ```
+
+Three levels of the notation compose in that one declaration: a `{…}`
+mapping, whose values are a `[…]` collection, of a named tuple.
 
 Even function types follow the pattern. In `EXAMPLES/geo_server.ady`, a
 geometric region is defined by an optional predicate from `Point` to `bool`:

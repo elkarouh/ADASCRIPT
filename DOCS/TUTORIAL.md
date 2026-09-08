@@ -171,8 +171,8 @@ if the output has to match.
 | `(T, U)`       | `tuple[T, U]`        | `(T, U)`                       |
 | `[(T, U)]R`    | `Callable[[T,U], R]` | `proc(a0: T, a1: U): R`       |
 
-Types compose freely — a graph represented as a dict-of-dicts-of-floats is
-simply `{Node_T}{Node_T}float`:
+Types compose freely — a graph as an adjacency list is a `{…}` mapping
+whose values are a `[…]` collection:
 
 ```python
 type Node_T is str
@@ -180,6 +180,9 @@ type Graph_T is {Node_T}[]Node_T
 
 graph: Graph_T = {'A': ['B', 'C'], 'B': ['C', 'D']}
 ```
+
+Add weights by making the element a named tuple, which is what
+`dijkstra.ady` does — `{Node_T}[]Neighbour_T`, three levels in one line.
 
 ### Empty collection literals
 
@@ -1762,11 +1765,11 @@ The whole file — 28 lines for the complete algorithm:
 from stdlib nimport PriorityQueue
 type Node_T is enum A, B, C, D
 type Distance_T is float
-type Graph_T is {Node_T}{Node_T}Distance_T
 const MAX_DIST : float = 1e6
 type Neighbour_T is tuple:
     distance: Distance_T
     neighbor: Node_T
+type Graph_T is {Node_T}[]Neighbour_T
 
 def dijkstra(graph : Graph_T, start: Node_T) -> {Node_T}Distance_T:
     distances: {Node_T}Distance_T = {node: (0.0 if node==start else MAX_DIST) for node in graph}
@@ -1777,14 +1780,14 @@ def dijkstra(graph : Graph_T, start: Node_T) -> {Node_T}Distance_T:
         if node in visited:
             continue
         visited.add(node)
-        for neighbor in graph[node]:
-            let new_dist: Distance_T = current_dist + graph[node][neighbor]
+        for dist, neighbor in graph[node]:
+            let new_dist: Distance_T = current_dist + dist
             if new_dist < distances[neighbor]:
                 distances[neighbor] = new_dist
                 queue.push((new_dist, neighbor))
     return distances
 
-graph : Graph_T = {A:{B:1.0, C:4.0}, B: {C:2.0, D:5.0}, C: {D:1.0}, D: {:}}
+graph : Graph_T = {A: [(1.0, B), (4.0, C)], B: [(2.0, C), (5.0, D)], C: [(1.0, D)], D: []}
 print dijkstra(graph, A)
 ```
 

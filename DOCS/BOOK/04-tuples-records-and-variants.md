@@ -186,7 +186,7 @@ liberally to give domain names to structural types:
 ```python
 type Node_T     is str                       # graph.ady (tutorial variant)
 type Distance_T is float                     # dijkstra.ady
-type Graph_T    is {Node_T}{Node_T}Distance_T
+type Graph_T    is {Node_T}[]Neighbour_T     # dijkstra.ady, adjacency list
 type Result_T   is [][]str                   # phonecode.ady
 type Coord_T    is (row: Row_T, col: Col_T)  # qlearning.ady — inline named tuple
 ```

@@ -136,11 +136,11 @@ means — this is the whole file, nothing elided:
 from stdlib nimport PriorityQueue
 type Node_T is enum A, B, C, D
 type Distance_T is float
-type Graph_T is {Node_T}{Node_T}Distance_T
 const MAX_DIST : float = 1e6
 type Neighbour_T is tuple:
     distance: Distance_T
     neighbor: Node_T
+type Graph_T is {Node_T}[]Neighbour_T
 
 def dijkstra(graph : Graph_T, start: Node_T) -> {Node_T}Distance_T:
     distances: {Node_T}Distance_T = {node: (0.0 if node==start else MAX_DIST) for node in graph}
@@ -151,14 +151,14 @@ def dijkstra(graph : Graph_T, start: Node_T) -> {Node_T}Distance_T:
         if node in visited:
             continue
         visited.add(node)
-        for neighbor in graph[node]:
-            let new_dist: Distance_T = current_dist + graph[node][neighbor]
+        for dist, neighbor in graph[node]:
+            let new_dist: Distance_T = current_dist + dist
             if new_dist < distances[neighbor]:
                 distances[neighbor] = new_dist
                 queue.push((new_dist, neighbor))
     return distances
 
-graph : Graph_T = {A:{B:1.0, C:4.0}, B: {C:2.0, D:5.0}, C: {D:1.0}, D: {:}}
+graph : Graph_T = {A: [(1.0, B), (4.0, C)], B: [(2.0, C), (5.0, D)], C: [(1.0, D)], D: []}
 print dijkstra(graph, A)
 ```
 
@@ -166,10 +166,13 @@ It prints `{D: 4.0, C: 3.0, A: 0.0, B: 1.0}`.
 
 Four things are worth stopping on, and none of them is a trick.
 
-**The types are the specification.** `type Graph_T is {Node_T}{Node_T}Distance_T`
-is the textbook definition of a weighted digraph — a mapping from a node to
-a mapping from a node to a distance — and it is also, with no further
-ceremony, the data structure. Chapter 2 gives the notation; here it is
+**The types are the specification.** `type Graph_T is {Node_T}[]Neighbour_T`
+is the textbook definition of a weighted digraph as an adjacency list — a
+mapping from a node to its neighbours, each carrying the distance to it —
+and it is also, with no further ceremony, the data structure. Note that it
+reuses `Neighbour_T`, the same tuple the priority queue holds, so the
+graph's edges and the queue's entries are one type rather than two
+descriptions of the same pair. Chapter 2 gives the notation; here it is
 enough that the declaration says what a graph *is* rather than how to build
 one.
 
@@ -217,12 +220,13 @@ class Node_T(IntEnum):
     D = 3
 
 Distance_T: TypeAlias = float
-Graph_T: TypeAlias = dict[Node_T, dict[Node_T, Distance_T]]
 MAX_DIST: float = 1e6
 
 class Neighbour_T(NamedTuple):
     distance: Distance_T
     neighbor: Node_T
+
+Graph_T: TypeAlias = dict[Node_T, list[Neighbour_T]]
 
 def dijkstra(graph: Graph_T, start: Node_T) -> dict[Node_T, Distance_T]:
     distances: dict[Node_T, Distance_T] = {node: (0.0 if node == start else MAX_DIST) for node in graph}
@@ -233,20 +237,20 @@ def dijkstra(graph: Graph_T, start: Node_T) -> dict[Node_T, Distance_T]:
         if node in visited:
             continue
         visited.add(node)
-        for neighbor in graph[node]:
-            new_dist: Distance_T = current_dist + graph[node][neighbor]
+        for dist, neighbor in graph[node]:
+            new_dist: Distance_T = current_dist + dist
             if new_dist < distances[neighbor]:
                 distances[neighbor] = new_dist
                 heapq.heappush(queue, Neighbour_T(new_dist, neighbor))
     return distances
 
 A, B, C, D = Node_T.A, Node_T.B, Node_T.C, Node_T.D
-graph: Graph_T = {A: {B: 1.0, C: 4.0}, B: {C: 2.0, D: 5.0}, C: {D: 1.0}, D: {}}
+graph: Graph_T = {A: [(1.0, B), (4.0, C)], B: [(2.0, C), (5.0, D)], C: [(1.0, D)], D: []}
 print(dijkstra(graph, A))
 ```
 
-Twenty-six non-blank lines against thirty-three, and 1018 characters against
-1222 — worth having, but the line count is the weaker half of the argument.
+Twenty-six non-blank lines against thirty-three, and 1017 characters against
+1215 — worth having, but the line count is the weaker half of the argument.
 Three of those extra lines are not algorithm at all:
 
 - **`import heapq`, and `heappush`/`heappop` written out.** Python's heap is
@@ -271,8 +275,8 @@ Three of those extra lines are not algorithm at all:
 The type declarations are the other half:
 
 ```python
-type Graph_T is {Node_T}{Node_T}Distance_T                  # Adascript
-Graph_T: TypeAlias = dict[Node_T, dict[Node_T, Distance_T]]  # Python
+type Graph_T is {Node_T}[]Neighbour_T                   # Adascript
+Graph_T: TypeAlias = dict[Node_T, list[Neighbour_T]]     # Python
 ```
 
 and the difference is not only the width. Python's annotation is
