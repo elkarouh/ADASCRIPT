@@ -58,4 +58,17 @@ let g1: {int}[](float, int) = {42: no_edges}
 assert dijkstra(g1, 42)[42] == 0.0
 assert shortest_path(g1, 42, 42) == [42]
 
+# --- a sink: a node that is only ever a destination -------------------------
+# It has no adjacency entry of its own, so reading the graph's keys alone
+# would leave it out of the distance table and the first edge into it would
+# look up a key that is not there.
+type Sink_T is enum P, Q
+let one_way: [](float, Sink_T) = [(2.0, Q)]
+let gsink: {Sink_T}[](float, Sink_T) = {P: one_way}      # Q is never a key
+let dsink: {Sink_T}float = dijkstra(gsink, P)
+assert dsink[P] == 0.0
+assert dsink[Q] == 2.0
+assert shortest_path(gsink, P, Q) == [P, Q]
+assert shortest_path(gsink, Q, P) == []        # nothing leaves the sink
+
 print "all graphs tests passed"

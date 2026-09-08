@@ -6,6 +6,7 @@ nimport math
 
 nimport stdlib
 nimport shortest_path  # provides Minimizer and Maximizer
+nimport graphs         # provides dijkstra, shortest_path
 
 
 def example1():
@@ -93,6 +94,7 @@ def example2():
     for solution in op2l.longest_path(start_state=a, end_state=j):
         print(solution)
         break
+
 
 def example3():
     # -----------------------------------------------------------------------
@@ -349,6 +351,25 @@ def example7():
     print("======= ROMANIA MAP: oradea -> bucharest =======")
     for solution in op7.shortest_path(start_state=oradea, end_state=bucharest):
         print(solution)
+
+    # The same question asked of the bundled graph library, as a check on
+    # both: the Optimizer gets there by A* over a user-supplied heuristic,
+    # `graphs` by plain Dijkstra, and they must agree on cost and route.
+    # GR lists an edge as (destination, weight); `graphs` wants (weight,
+    # destination), since the priority queue orders on the first element --
+    # one comprehension turns the map round.
+    let g: {State_T}[](Distance_T, State_T) = {
+        city: [(w, d) for d, w in GR[city]] for city in GR}
+    let dist: {State_T}Distance_T = dijkstra(g, oradea)
+    let route: []State_T = shortest_path(g, oradea, bucharest)
+    print("dijkstra:", dist[bucharest], route)
+    assert dist[bucharest] == 429.0
+    # The Optimizer reports the path without its start node; graphs includes it.
+    assert route == [oradea, sibiu, rimnicu, pitesti, bucharest]
+    # Every city on this map is reachable from oradea, so nothing is left
+    # at the Inf the distance table starts from.
+    for city in GR:
+        assert dist[city] < Inf
 
 
 def example8():

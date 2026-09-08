@@ -24,13 +24,34 @@ from stdlib nimport PriorityQueue
 
 
 # ---------------------------------------------------------------------------
+# node_table(graph) — every node the graph mentions, each at Inf
+#   A sink has no adjacency entry of its own: it appears only as some edge's
+#   destination. Reading the keys alone would leave it out, and the first
+#   edge into it would then be a lookup of a key that is not there.
+#
+#   This returns the distance table rather than a set of nodes because Nim
+#   cannot resolve `sets`' items iterator inside a generic proc -- iterating
+#   a HashSet[N] here does not compile, while a Table[N, float] does.
+# ---------------------------------------------------------------------------
+
+def node_table(graph: {N}[](float, N)) -> {N}float:
+    var dist: {N}float = {:}
+    for node in graph:
+        dist[node] = Inf
+        for weight, neighbour in graph[node]:
+            dist[neighbour] = Inf
+    return dist
+
+
+# ---------------------------------------------------------------------------
 # dijkstra(graph, start) — distance from start to every reachable node
 #   Unreachable nodes come back as Inf, which compares and adds like any
 #   other float; nothing has to be unwrapped in the loop.
 # ---------------------------------------------------------------------------
 
 def dijkstra(graph: {N}[](float, N), start: N) -> {N}float:
-    var dist: {N}float = {node: (0.0 if node == start else Inf) for node in graph}
+    var dist: {N}float = node_table(graph)
+    dist[start] = 0.0
     var seen: {}N
     queue: PriorityQueue[(float, N)] = [(0.0, start)]
     while queue:
@@ -38,6 +59,8 @@ def dijkstra(graph: {N}[](float, N), start: N) -> {N}float:
         if node in seen:
             continue
         seen.add(node)
+        if node not in graph:
+            continue                 # a sink: reached, but nothing leaves it
         for weight, neighbour in graph[node]:
             let candidate: float = current + weight
             if candidate < dist[neighbour]:
@@ -54,9 +77,10 @@ def dijkstra(graph: {N}[](float, N), start: N) -> {N}float:
 
 def shortest_path(graph: {N}[](float, N), start: N, goal: N) -> []N:
     var route: []N = []
-    if start not in graph or goal not in graph:
+    var dist: {N}float = node_table(graph)
+    if start not in dist or goal not in dist:
         return route
-    var dist: {N}float = {node: (0.0 if node == start else Inf) for node in graph}
+    dist[start] = 0.0
     var came_from: {N}N = {:}
     var seen: {}N
     queue: PriorityQueue[(float, N)] = [(0.0, start)]
@@ -67,6 +91,8 @@ def shortest_path(graph: {N}[](float, N), start: N, goal: N) -> []N:
         seen.add(node)
         if node == goal:
             break
+        if node not in graph:
+            continue                 # a sink: reached, but nothing leaves it
         for weight, neighbour in graph[node]:
             let candidate: float = current + weight
             if candidate < dist[neighbour]:
