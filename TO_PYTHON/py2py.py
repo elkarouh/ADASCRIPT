@@ -224,6 +224,32 @@ def _inject_before_elif_else(rendered, spill_lines):
     return None
 
 
+# Modules Adascript names in source and both languages provide, under the
+# same spelling on the Python side. A `nimport` is Nim-only by design, so
+# nothing imports these here -- `nimport times` plus `time.time()` gave a
+# working Nim program and a NameError on Python. Only the ones whose
+# Python spelling matches what the source writes are listed; anything
+# needing a rename is a mapping question, not an import one.
+_AUTO_STDLIB_MODULES = ("os", "time", "math", "random", "json")
+
+
+def _add_stdlib_module_imports(output):
+    """Import a stdlib module the generated code actually calls into."""
+    import re as _re_ai
+    from hek_parsec import ParserState
+    body = "\n".join(output)
+    for mod in _AUTO_STDLIB_MODULES:
+        # Anchored: `nimport times` contains "import time" as a substring,
+        # so a plain `in` test saw an import that is not there.
+        if _re_ai.search(rf'(?m)^\s*(?:import {mod}\b|from {mod}\b)', body):
+            continue
+        if any(imp.split()[-1] == mod for imp in ParserState.nim_imports):
+            continue
+        # A use, not a mention: `time.time()` counts, `self.time` does not.
+        if _re_ai.search(rf'(?<![\w.]){mod}\.\w', body):
+            ParserState.nim_imports.add(f"import {mod}")
+
+
 def translate(code):
     """Parse Python source and reconstruct it via to_py()."""
     if not code.strip():
@@ -274,6 +300,7 @@ def translate(code):
 
     # Insert auto-collected imports at the top (after leading comments)
     from hek_parsec import ParserState
+    _add_stdlib_module_imports(output)
     if ParserState.nim_imports:
         # Find the first non-comment, non-blank line
         insert_pos = 0

@@ -502,3 +502,27 @@ case y:
     when others: print("other")
 
 print("done")
+
+# A shell capture in tail position is the function's value, the spelling
+# both tutorials give. On Python it emitted a bare subprocess.run with the
+# output discarded, so the function returned None there and the lines on
+# Nim.
+def etc_entries() -> []str:
+    shellLines: ls -1 /etc
+assert etc_entries()'Length > 0
+def echoed() -> str:
+    let r = shell: echo hi
+    r.output.strip()
+assert echoed() == "hi"
+var ran: bool = False
+def discards():
+    shell: true
+    ran = True
+discards()
+assert ran                    # a non-tail shell still just runs
+
+# `nimport` is Nim-only by design, so a module Python also has under the
+# same name went unimported: `nimport times` plus `time.time()` was a
+# working Nim program and a NameError here.
+nimport times
+assert time.time() > 0.0

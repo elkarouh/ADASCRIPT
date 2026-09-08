@@ -1157,6 +1157,16 @@ def _mark_implicit_returns(stmt, depth=0):
             if not _stmt_line_has_more(stmt):
                 _stmt.RETURN_NODES.add(id(stmt))
         return
+    if tname == "shell_stmt":
+        # A capture in tail position is the function's value, same as any
+        # other last expression. Marked rather than rewritten, so the emitter
+        # can capture instead of discarding.
+        _stmt.RETURN_NODES.add(id(stmt))
+        return
+    if tname == "compound_stmt" and getattr(stmt, "nodes", None):
+        if type(stmt.nodes[0]).__name__ == "shell_stmt":
+            _mark_implicit_returns(stmt.nodes[0], depth + 1)
+            return
     if tname in ("if_stmt", "case_stmt", "match_stmt"):
         # A case/match in tail position returns whichever branch runs, exactly
         # as an if does; without this every branch's value was dropped and the
@@ -2653,7 +2663,11 @@ def to_py(self, indent=0):
         needs_fstring = True
         ParserState.nim_imports.add("import shlex as _shlex")
 
-    has_target = bool(target_name or target_tuple)
+    # A shell statement in tail position of a function is a capture even
+    # with no assignment target: its value is the function's return value.
+    from hek_py3_stmt import RETURN_NODES
+    _is_tail_return = id(self) in RETURN_NODES
+    has_target = bool(target_name or target_tuple) or _is_tail_return
 
     # Mark that shell imports are needed; py2py.translate() inserts them at top
     ParserState.nim_imports.add("import subprocess as _subprocess")
@@ -2794,7 +2808,22 @@ def to_py(self, indent=0):
         lines.append(f"{ind}_r = {runner}({cmd_ref}, {kwargs_str})")
         _check("_r.returncode")
     else:
-        lines.append(f"{ind}{runner}({cmd_str}, {kwargs_str})")
+        # In tail position of a function this *is* the return value, the way
+        # any other last expression is -- `def f() -> []str: shellLines: ls`
+        # is the spelling both tutorials give. Without this the output was
+        # discarded and the function returned None here while the Nim
+        # backend returned the lines.
+        if _is_tail_return:
+            lines.append(f"{ind}_r = {runner}({cmd_ref}, {kwargs_str})")
+            if kw == "shellLines":
+                lines.append(f"{ind}return _r.stdout.splitlines()")
+            else:
+                ParserState.nim_imports.add("import types as _types")
+                lines.append(
+                    f"{ind}return _types.SimpleNamespace("
+                    f"output=_r.stdout, stderr=_r.stderr, code=_r.returncode)")
+        else:
+            lines.append(f"{ind}{runner}({cmd_str}, {kwargs_str})")
 
     return "\n".join(lines)
 
