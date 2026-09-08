@@ -1,16 +1,17 @@
 #!/usr/bin/env py2nim
 """
-iters.ady — most useful itertools equivalents, generic over element type T
+iters.ady — most useful itertools equivalents, generic over element type Elem_T
 
-Using an undeclared type name in a function signature makes Nim treat it as
-an implicit generic type parameter.  Every function that is parameterised by
-element type uses T (and U for product's second sequence); the Nim compiler
-instantiates a concrete version for each call-site type automatically.
+Each function declares its type parameters in brackets after the name:
+`def pairwise[Elem_T](s: []Elem_T)`.  Every function parameterised by
+element type uses Elem_T, and product a second one, Elem2_T.  The compiler
+instantiates a concrete version for each call-site type automatically, so
+one definition covers every element type.
 
 accumulate takes an explicit binary operator and identity element so it works
 for any type with an associative operation, not just numeric addition.
 zip_longest requires an explicit fill value because there is no sensible
-default for an arbitrary type T.
+default for an arbitrary type Elem_T.
 """
 
 # ---------------------------------------------------------------------------
@@ -19,7 +20,7 @@ default for an arbitrary type T.
 #   pairwise(["a","b","c"]) -> ("a","b") ("b","c")
 # ---------------------------------------------------------------------------
 
-def pairwise(s: []T) -> (T, T):
+def pairwise[Elem_T](s: []Elem_T) -> (Elem_T, Elem_T):
     for i in 0 ..< len(s) - 1:
         yield (s[i], s[i + 1])
 
@@ -29,7 +30,7 @@ def pairwise(s: []T) -> (T, T):
 #   sliding_window([1,2,3,4,5], 3) -> [1,2,3] [2,3,4] [3,4,5]
 # ---------------------------------------------------------------------------
 
-def sliding_window(s: []T, n: int) -> []T:
+def sliding_window[Elem_T](s: []Elem_T, n: int) -> []Elem_T:
     let m: int = len(s)
     for i in 0 ..< m - n + 1:
         yield s[i ..< i + n]
@@ -40,7 +41,7 @@ def sliding_window(s: []T, n: int) -> []T:
 #   enumerate_seq(["x","y","z"]) -> (0,"x") (1,"y") (2,"z")
 # ---------------------------------------------------------------------------
 
-def enumerate_seq(s: []T, start: int = 0) -> (int, T):
+def enumerate_seq[Elem_T](s: []Elem_T, start: int = 0) -> (int, Elem_T):
     for i in 0 ..< len(s):
         yield (start + i, s[i])
 
@@ -49,7 +50,7 @@ def enumerate_seq(s: []T, start: int = 0) -> (int, T):
 # takewhile(pred, s) — yield elements while predicate holds
 # ---------------------------------------------------------------------------
 
-def takewhile(pred: [(T,)]bool, s: []T) -> T:
+def takewhile[Elem_T](pred: [(Elem_T,)]bool, s: []Elem_T) -> Elem_T:
     for x in s:
         if not pred(x):
             break
@@ -60,7 +61,7 @@ def takewhile(pred: [(T,)]bool, s: []T) -> T:
 # dropwhile(pred, s) — skip elements while predicate holds, yield the rest
 # ---------------------------------------------------------------------------
 
-def dropwhile(pred: [(T,)]bool, s: []T) -> T:
+def dropwhile[Elem_T](pred: [(Elem_T,)]bool, s: []Elem_T) -> Elem_T:
     var dropping: bool = True
     for x in s:
         if dropping and pred(x):
@@ -74,7 +75,7 @@ def dropwhile(pred: [(T,)]bool, s: []T) -> T:
 #   compress(["a","b","c"], [True,False,True]) -> "a" "c"
 # ---------------------------------------------------------------------------
 
-def compress(s: []T, selectors: []bool) -> T:
+def compress[Elem_T](s: []Elem_T, selectors: []bool) -> Elem_T:
     let m: int = min(len(s), len(selectors))
     for i in 0 ..< m:
         if selectors[i]:
@@ -86,7 +87,7 @@ def compress(s: []T, selectors: []bool) -> T:
 #   chain(["x","y"], ["z"]) -> "x" "y" "z"
 # ---------------------------------------------------------------------------
 
-def chain(a: []T, b: []T) -> T:
+def chain[Elem_T](a: []Elem_T, b: []Elem_T) -> Elem_T:
     for x in a:
         yield x
     for x in b:
@@ -98,7 +99,7 @@ def chain(a: []T, b: []T) -> T:
 #   flatten([[1,2],[3],[4,5]]) -> 1 2 3 4 5
 # ---------------------------------------------------------------------------
 
-def flatten(s: [][]T) -> T:
+def flatten[Elem_T](s: [][]Elem_T) -> Elem_T:
     for inner in s:
         for x in inner:
             yield x
@@ -109,7 +110,7 @@ def flatten(s: [][]T) -> T:
 #   batched([1,2,3,4,5], 2) -> [1,2] [3,4] [5]
 # ---------------------------------------------------------------------------
 
-def batched(s: []T, n: int) -> []T:
+def batched[Elem_T](s: []Elem_T, n: int) -> []Elem_T:
     var i: int = 0
     let m: int = len(s)
     while i < m:
@@ -124,8 +125,8 @@ def batched(s: []T, n: int) -> []T:
 #   accumulate(["a","b"], cat, "")  -> "a" "ab"
 # ---------------------------------------------------------------------------
 
-def accumulate(s: []T, op: [(T, T)]T, init: T) -> T:
-    var total: T = init
+def accumulate[Elem_T](s: []Elem_T, op: [(Elem_T, Elem_T)]Elem_T, init: Elem_T) -> Elem_T:
+    var total: Elem_T = init
     for x in s:
         total = op(total, x)
         yield total
@@ -134,14 +135,14 @@ def accumulate(s: []T, op: [(T, T)]T, init: T) -> T:
 # ---------------------------------------------------------------------------
 # zip_longest(a, b, fill) — zip, padding the shorter side with fill
 #   zip_longest([1,2,3], [10,20], 0) -> (1,10) (2,20) (3,0)
-# fill must be provided explicitly; there is no sensible default for T.
+# fill must be provided explicitly; there is no sensible default for Elem_T.
 # ---------------------------------------------------------------------------
 
-def zip_longest(a: []T, b: []T, fill: T) -> (T, T):
+def zip_longest[Elem_T](a: []Elem_T, b: []Elem_T, fill: Elem_T) -> (Elem_T, Elem_T):
     let m: int = max(len(a), len(b))
     for i in 0 ..< m:
-        let av: T = a[i] if i < len(a) else fill
-        let bv: T = b[i] if i < len(b) else fill
+        let av: Elem_T = a[i] if i < len(a) else fill
+        let bv: Elem_T = b[i] if i < len(b) else fill
         yield (av, bv)
 
 
@@ -150,7 +151,7 @@ def zip_longest(a: []T, b: []T, fill: T) -> (T, T):
 #   product([1,2], ["x","y"]) -> (1,"x") (1,"y") (2,"x") (2,"y")
 # ---------------------------------------------------------------------------
 
-def product(a: []T, b: []U) -> (T, U):
+def product[Elem_T, Elem2_T](a: []Elem_T, b: []Elem2_T) -> (Elem_T, Elem2_T):
     for x in a:
         for y in b:
             yield (x, y)
@@ -161,13 +162,13 @@ def product(a: []T, b: []U) -> (T, U):
 #   combinations([1,2,3,4], 2) -> [1,2] [1,3] [1,4] [2,3] [2,4] [3,4]
 # ---------------------------------------------------------------------------
 
-def combinations(s: []T, r: int) -> []T:
+def combinations[Elem_T](s: []Elem_T, r: int) -> []Elem_T:
     let n: int = len(s)
     if r <= n:
         var indices: []int = []
         for k in 0 ..< r:
             indices.append(k)
-        var combo: []T = []
+        var combo: []Elem_T = []
         for idx in indices:
             combo.append(s[idx])
         yield combo
@@ -188,17 +189,17 @@ def combinations(s: []T, r: int) -> []T:
 
 # ---------------------------------------------------------------------------
 # permutations(s) — all orderings in lexicographic order (Narayana Pandita)
-# T must support < so the algorithm can find the next permutation.
+# Elem_T must support < so the algorithm can find the next permutation.
 #   permutations([1,2,3]) -> [1,2,3] [1,3,2] [2,1,3] [2,3,1] [3,1,2] [3,2,1]
 # Assumes input is sorted.
 # ---------------------------------------------------------------------------
 
-def permutations(s: []T) -> []T:
-    var a: []T = []
+def permutations[Elem_T](s: []Elem_T) -> []Elem_T:
+    var a: []Elem_T = []
     for x in s:
         a.append(x)
     let n: int = len(a)
-    var snap: []T = []
+    var snap: []Elem_T = []
     for x in a:
         snap.append(x)
     yield snap
@@ -211,13 +212,13 @@ def permutations(s: []T) -> []T:
         var j: int = n - 1
         while a[j] <= a[i]:
             j -= 1
-        let t1: T = a[i]
+        let t1: Elem_T = a[i]
         a[i] = a[j]
         a[j] = t1
         var lo: int = i + 1
         var hi: int = n - 1
         while lo < hi:
-            let t2: T = a[lo]
+            let t2: Elem_T = a[lo]
             a[lo] = a[hi]
             a[hi] = t2
             lo += 1
@@ -233,7 +234,7 @@ def permutations(s: []T) -> []T:
 #   repeat_elem("ha", 3) -> "ha" "ha" "ha"
 # ---------------------------------------------------------------------------
 
-def repeat_elem(x: T, n: int) -> T:
+def repeat_elem[Elem_T](x: Elem_T, n: int) -> Elem_T:
     for _ in 0 ..< n:
         yield x
 

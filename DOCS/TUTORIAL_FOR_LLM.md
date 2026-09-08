@@ -496,7 +496,10 @@ object is not subscriptable.
 
 A single uppercase letter in a signature is still treated as a type
 parameter without being declared — the older convention — but the declared
-form is the one to use: it is the only one that admits a multi-letter name.
+form is the one to use. It is the only one that admits a name worth reading:
+the bundled libraries declare `[Node_T]` and `[Elem_T]` rather than `[N]`
+and `[T]`. A declared parameter is scoped to the function, so it may share a
+name with a real type the caller has.
 
 ---
 

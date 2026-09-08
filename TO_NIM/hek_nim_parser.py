@@ -2830,6 +2830,15 @@ def _func_def_to_nim_inner(self, indent=0):
         _generic_params = declared_type_params
     else:
         _gp_candidates = set(_re_gp.findall(r'\b([A-Z])\b', params + " " + ret_ann))
+        # A single capital that names a real type is that type, not a
+        # parameter. Without this check `type T is enum ...` plus
+        # `def describe(c: T)` became `proc describe[T](c: T)`, and the
+        # annotation stopped meaning anything: describe(5) compiled and
+        # printed 5.
+        _gp_candidates -= set(getattr(ParserState, "tick_types", {}))
+        _gp_candidates -= set(getattr(ParserState, "class_field_types", {}))
+        _gp_candidates = {_g for _g in _gp_candidates
+                          if not ((ParserState.symbol_table.lookup(_g) or {}).get("kind") == "type")}
         _generic_params = "[" + ", ".join(sorted(_gp_candidates)) + "]" if _gp_candidates else ""
     # Escape Nim keywords that aren't already backtick-wrapped (dunders get their own escaping)
     if not nim_name.startswith("`"):

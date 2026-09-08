@@ -413,12 +413,15 @@ print d[BER]                              # 5.0 — the 3+2 route, not the direc
 print shortest_path[City_T](g, PAR, BER)  # PAR, LON, BER
 ```
 
-A graph is `{N}[](float, N)`: each node maps to its outgoing edges, an edge
-being a (weight, destination) pair. The library declares the node type as a
-parameter — `def dijkstra[N](graph: {N}[](float, N), start: N)` — so one
-definition serves enum, string and integer nodes; the test file runs every
-case against all three. `[City_T]` at the call site says which one is
-wanted, and both backends infer it from the argument if left off.
+A graph is `{Node_T}[](float, Node_T)`: each node maps to its outgoing
+edges, an edge being a (weight, destination) pair. The library declares the
+node type as a parameter — `def dijkstra[Node_T](graph: {Node_T}[](float,
+Node_T), start: Node_T)` — so one definition serves enum, string and integer
+nodes; the test file runs every case against all three. A parameter is not
+restricted to a single letter, and is worth naming for what it is.
+`[City_T]` at the call site says which type is wanted, and both backends
+infer it from the argument if left off — the caller's own type may even be
+called `Node_T` too, since the parameter is scoped to the proc.
 
 Two details are worth the space. The edge is `(weight, node)` rather than
 `(node, weight)` because the priority queue orders on a tuple's first

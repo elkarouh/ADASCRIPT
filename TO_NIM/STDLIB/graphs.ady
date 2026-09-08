@@ -2,8 +2,8 @@
 """
 graphs.ady — shortest paths over a weighted digraph, generic in the node type
 
-A graph is `{N}[](float, N)`: each node maps to its outgoing edges, and an
-edge is a (weight, destination) pair. The node type is declared `[N]` on
+A graph is `{Node_T}[](float, Node_T)`: each node maps to its outgoing edges, and an
+edge is a (weight, destination) pair. The node type is declared `[Node_T]` on
 each signature, so one definition serves enum, string and integer nodes:
 the Nim compiler instantiates a concrete version per call site, and Python
 takes the same brackets as PEP 695 type parameters.
@@ -35,11 +35,11 @@ from stdlib nimport PriorityQueue
 #
 #   This returns the distance table rather than a set of nodes because Nim
 #   cannot resolve `sets`' items iterator inside a generic proc -- iterating
-#   a HashSet[N] here does not compile, while a Table[N, float] does.
+#   a HashSet[Node_T] here does not compile, while a Table[Node_T, float] does.
 # ---------------------------------------------------------------------------
 
-def node_table[N](graph: {N}[](float, N)) -> {N}float:
-    var dist: {N}float = {:}
+def node_table[Node_T](graph: {Node_T}[](float, Node_T)) -> {Node_T}float:
+    var dist: {Node_T}float = {:}
     for node in graph:
         dist[node] = Inf
         for weight, neighbour in graph[node]:
@@ -53,11 +53,11 @@ def node_table[N](graph: {N}[](float, N)) -> {N}float:
 #   other float; nothing has to be unwrapped in the loop.
 # ---------------------------------------------------------------------------
 
-def dijkstra[N](graph: {N}[](float, N), start: N) -> {N}float:
-    var dist: {N}float = node_table(graph)
+def dijkstra[Node_T](graph: {Node_T}[](float, Node_T), start: Node_T) -> {Node_T}float:
+    var dist: {Node_T}float = node_table(graph)
     dist[start] = 0.0
-    var seen: {}N
-    queue: PriorityQueue[(float, N)] = [(0.0, start)]
+    var seen: {}Node_T
+    queue: PriorityQueue[(float, Node_T)] = [(0.0, start)]
     while queue:
         current, node = queue.pop()
         if node in seen:
@@ -79,15 +79,15 @@ def dijkstra[N](graph: {N}[](float, N), start: N) -> {N}float:
 #   A single-node path is [start], so an empty result is never ambiguous.
 # ---------------------------------------------------------------------------
 
-def shortest_path[N](graph: {N}[](float, N), start: N, goal: N) -> []N:
-    var route: []N = []
-    var dist: {N}float = node_table(graph)
+def shortest_path[Node_T](graph: {Node_T}[](float, Node_T), start: Node_T, goal: Node_T) -> []Node_T:
+    var route: []Node_T = []
+    var dist: {Node_T}float = node_table(graph)
     if start not in dist or goal not in dist:
         return route
     dist[start] = 0.0
-    var came_from: {N}N = {:}
-    var seen: {}N
-    queue: PriorityQueue[(float, N)] = [(0.0, start)]
+    var came_from: {Node_T}Node_T = {:}
+    var seen: {}Node_T
+    queue: PriorityQueue[(float, Node_T)] = [(0.0, start)]
     while queue:
         current, node = queue.pop()
         if node in seen:
@@ -106,8 +106,8 @@ def shortest_path[N](graph: {N}[](float, N), start: N, goal: N) -> []N:
     if goal != start and goal not in came_from:
         return route
     # Walk the predecessors back from the goal, then reverse.
-    var backwards: []N = [goal]
-    var at: N = goal
+    var backwards: []Node_T = [goal]
+    var at: Node_T = goal
     while at != start:
         at = came_from[at]
         backwards.append(at)

@@ -150,7 +150,7 @@ in order to build.
 | `nimport stdlib` | `PriorityQueue`, `FifoQueue`, `LifoQueue`, `Counter_T`, `ANY` | `dijkstra.ady`, `shortest_path.ady`, `state_search.ady`, `spell.ady` |
 | `nimport awk` | `AwkBase` record-processor base class | `test_awk.ady` |
 | `nimport iters` | itertools analogues (`pairwise`, `chain`, `combinations`, …) | `test_iters.ady` |
-| `nimport graphs` | `dijkstra[N]`, `shortest_path[N]` over `{N}[](float, N)` | `test_graphs.ady` |
+| `nimport graphs` | `dijkstra[Node_T]`, `shortest_path[Node_T]` over `{Node_T}[](float, Node_T)` | `test_graphs.ady` |
 | `nimport expect` | `Spawn`, `send`, `expect` PTY automation | `test_expect.ady` |
 | `nimport <file>` | any other `.ady` compiled as a library | `test_shortest_path.ady` |
 
