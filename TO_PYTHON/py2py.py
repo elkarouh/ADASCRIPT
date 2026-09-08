@@ -518,12 +518,12 @@ def run_tests():
         # --- enum declarations ---
         (
             "type Color is enum RED, GREEN, BLUE\n",
-            "from enum import Enum\nclass Color(Enum):\n    RED = 0\n    GREEN = 1\n    BLUE = 2\nRED = Color.RED\nGREEN = Color.GREEN\nBLUE = Color.BLUE\n",
+            "from enum import Enum\nclass Color(Enum):\n    RED = 0\n    GREEN = 1\n    BLUE = 2\n    def __str__(self): return self.name\nRED = Color.RED\nGREEN = Color.GREEN\nBLUE = Color.BLUE\n",
         ),
         # block-form enum (one member per line) -> same output as inline form
         (
             "type Color is enum:\n    RED\n    GREEN\n    BLUE\n",
-            "from enum import Enum\nclass Color(Enum):\n    RED = 0\n    GREEN = 1\n    BLUE = 2\nRED = Color.RED\nGREEN = Color.GREEN\nBLUE = Color.BLUE\n",
+            "from enum import Enum\nclass Color(Enum):\n    RED = 0\n    GREEN = 1\n    BLUE = 2\n    def __str__(self): return self.name\nRED = Color.RED\nGREEN = Color.GREEN\nBLUE = Color.BLUE\n",
         ),
     ]
 

@@ -235,6 +235,12 @@ Both `is` and `=` are accepted as the assignment keyword.
 **Python output:** `class Door_T(Enum): Door1 = auto()` …  
 **Nim output:** `type Door_T = enum Door1, Door2, Door3`
 
+A member stringifies as its bare name on both backends — `str(d)`, `print
+d`, `f"{d}"` and `d'Image` all give `Door1`, which is what Nim's `$` gives.
+A *container* of enum values is the exception: Python formats elements with
+`repr`, so printing a `[]Door_T` still shows `[<Door_T.Door1: 0>, …]`
+against Nim's `@[Door1, …]`. That one is in `TODO.md`.
+
 Enums integrate tightly with arrays, case statements, and tick attributes —
 see those sections below.
 
@@ -389,6 +395,26 @@ for c in Color:
     print c'Image, score[c]      # RED 1, GREEN 2, BLUE 3, AMBER 4
 ```
 
+A comprehension fills one as readily as it fills a list — the annotation
+decides which, and the values land in domain order. Iterate the key type,
+not an integer range that happens to be the same length:
+
+```python
+type Off is 2 .. 6
+var byE:   [Color]int = [ord(c) * 10 for c in Color]   # byE[RED] .. byE[AMBER]
+var byOff: [Off]int   = [o * 10      for o in Off]     # byOff[2] is 20
+var byB:   [bool]int  = [ord(b)      for b in bool]
+```
+
+`for c in Color` makes the loop variable the key each value belongs to, so
+adding a member to `Color` cannot leave the two out of step. `for i in
+0..2` only happens to be the right length. A plain length is the one key
+with no type to name, so `[5]int` still takes a `0..4`.
+
+There is no keyed comprehension (`[RED: 1 for ...]`); the values are
+positional, which is why iterating the domain is the spelling that keeps
+them honest.
+
 Nested enum arrays work too (2-D lookup table):
 
 ```python
@@ -529,14 +555,38 @@ before parsing, so Python's lexer is never confused by the apostrophe.
 > index range instead: `for i in word'Range` walks the positions of a
 > string.
 
-### Iterating over an enum's full range
+### Iterating an ordinal type
+
+Every ordinal type is a domain, so naming one is enough to walk it — an
+enum, a named subrange, and the two builtin ordinals that are never
+declared anywhere:
 
 ```python
 type Stage_T is enum STAGE1, STAGE2, STAGE3
+type Off     is 2 .. 6
 
+for s in Stage_T:                # STAGE1 STAGE2 STAGE3
+    print(f"processing stage {s}")
+
+for o in Off:                    # 2 3 4 5 6 — its own domain, not 0-based
+    pass
+for b in bool:                   # False True
+    pass
+for c in char:                   # 256 of them
+    pass
+```
+
+The bounds spelling is also available where the bounds themselves matter:
+
+```python
 for s in Stage_T'First .. Stage_T'Last:
     print(f"processing stage {s}")
 ```
+
+`ord(x)` gives the ordinal position of any of these — Python's builtin
+takes a one-character string and nothing else, so the emitter supplies the
+rest: `ord(STAGE2)` is 1, `ord(True)` is 1, `ord(4)` is 4, `ord("a")` is
+97. Both backends agree.
 
 ### Set arithmetic with `'Range`
 

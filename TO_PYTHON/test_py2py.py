@@ -792,6 +792,7 @@ class Color(Enum):
     Red = 0
     Green = 1
     Blue = 2
+    def __str__(self): return self.name
 Red = Color.Red
 Green = Color.Green
 Blue = Color.Blue
@@ -823,6 +824,7 @@ from enum import Enum
 class Status(Enum):
     Ok = 0
     Err = 1
+    def __str__(self): return self.name
 Ok = Status.Ok
 Err = Status.Err
 

@@ -244,6 +244,45 @@ var nbools: []bool = []
 for b in bool:
     nbools.append(b)
 assert nbools == [False, True]
+
+# An enum-bounded range is written like an integer one and means the same
+# thing on Nim. Python's range() takes integers, so `E'First .. E'Last` --
+# which both tutorials give as the Ada spelling of the enum loop -- emitted
+# `range(STAGE1, STAGE3 + 1)` and died on the addition.
+type Stage_T is enum STAGE1, STAGE2, STAGE3, STAGE4
+var walked: []str = []
+for s in Stage_T'First .. Stage_T'Last:
+    walked.append(s'Image)
+assert walked == ["STAGE1", "STAGE2", "STAGE3", "STAGE4"]
+var partly: []str = []
+for s in STAGE2 .. STAGE4:
+    partly.append(s'Image)
+assert partly == ["STAGE2", "STAGE3", "STAGE4"]
+var upto: []str = []
+for s in Stage_T'First ..< Stage_T'Last:
+    upto.append(s'Image)
+assert upto == ["STAGE1", "STAGE2", "STAGE3"]
+# Membership over the same bounds. A plain Enum has no ordering, so the
+# `lo <= x <= hi` chain the integer form uses raises here; ask the members.
+assert STAGE2 in Stage_T'First .. Stage_T'Last
+assert not (STAGE1 in STAGE2 .. STAGE4)
+assert not (STAGE4 in Stage_T'First ..< Stage_T'Last)
+# ... and `..<` really is exclusive. The emitter looked for a child node
+# spelled '<' where the whole `..<` token sits, so it never matched and
+# every `x in lo ..< hi` came out inclusive: `100 in 1 ..< 100` was true
+# on Python and false on Nim.
+assert 5 in 1 .. 100
+assert not (100 in 1 ..< 100)
+assert 99 in 1 ..< 100
+
+# A bare enum prints as its member name, as Nim's `$` does. Python's
+# default is "Stage_T.STAGE2", so the same f-string said two different
+# things depending on the backend. (A *container* of them still differs --
+# that is repr, and it is in TODO.md.)
+let st: Stage_T = STAGE2
+assert f"{st}" == "STAGE2"
+assert str(st) == "STAGE2"
+assert st'Image == "STAGE2"
 # and the literal forms are untouched
 var cLitE: [Hue_T]int = [ROSE: 1, JADE: 2, SLATE: 3]
 assert cLitE[SLATE] == 3

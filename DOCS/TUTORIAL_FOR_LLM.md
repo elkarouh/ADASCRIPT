@@ -131,6 +131,13 @@ Both `is` and `=` are valid assignment keywords.
 **Python output:** `class Door_T(Enum): Door1 = auto(); ...`
 **Nim output:** `type Door_T = enum Door1, Door2, Door3`
 
+A member stringifies as its bare name on both backends — `str(d)`,
+`print d`, `f"{d}"` and `d'Image` all give `Door1`, matching Nim's `$`.
+(The generated Python class carries a `__str__` for this.) A *container* of
+enum values still differs: Python formats elements with `repr`, so
+`print xs` over a `[]Door_T` gives `[<Door_T.Door1: 0>, ...]` against Nim's
+`@[Door1, ...]`. Known, and in `TODO.md`.
+
 Calling an enum type with a string argument emits `parseEnum` in Nim:
 ```adascript
 def parse_state(s: str) -> State:
@@ -242,6 +249,42 @@ let hostChoice: Door_T  = available'Choice   # random door from the set
 # Random selection from a range
 t = (1..i)'Choice    # random int in 1..i
 ```
+
+---
+
+## Ordinal Types as Domains
+
+Every ordinal type is iterable by naming it — an enum, a named subrange,
+and the two builtin ordinals that are never declared anywhere.
+
+```adascript
+type Off is 2 .. 6
+
+for c in Color:      # RED GREEN BLUE
+    pass
+for o in Off:        # 2 3 4 5 6 — its own domain, not 0-based
+    pass
+for b in bool:       # False True
+    pass
+for ch in char:      # 256 of them
+    pass
+```
+
+`ord(x)` is the ordinal position of any ordinal value, not just the
+one-character string Python's builtin accepts:
+
+| Expression | Value |
+|------------|-------|
+| `ord("a")` | 97 |
+| `ord(GREEN)` | 1 (position in the enum) |
+| `ord(True)` | 1 |
+| `ord(4)` | 4 |
+
+**Python output:** `for c in Color` needs no help (an enum is a class, a
+subrange is a `range`); `bool` becomes `(False, True)` and `char` a
+256-element generator. `ord(...)` becomes an injected `_ada_ord` helper.
+**Nim output:** `bool.low..bool.high`, `Off.low..Off.high`; `ord` is
+native.
 
 ---
 
@@ -656,6 +699,27 @@ var transition: [Hidden_State_T][Hidden_State_T]float = [
 
 **Python output:** nested dict
 **Nim output:** `array[Hidden_State_T, array[Hidden_State_T, float]]` — stack-allocated, O(1) lookup.
+
+An enum is one ordinal key among several; `[10]T`, `[0..9]T`, `[Off]T`,
+`[bool]T` and `[char]T` are the same construct. All of them iterate their
+values in domain order on both backends.
+
+A comprehension fills one as readily as it fills a list — the annotation
+picks which. Iterate the key type, not an integer range of the same length:
+
+```adascript
+type Off is 2 .. 6
+var byE:   [Priority]int = [ord(p) * 10 for p in Priority]
+var byOff: [Off]int      = [o * 10      for o in Off]      # byOff[2] is 20
+var byB:   [bool]int     = [ord(b)      for b in bool]
+var asList: []int = [i*i for i in 0..4]    # same RHS, a seq/list here
+var asArr:  [5]int = [i*i for i in 0..4]   # a length has no type to name
+```
+
+`for p in Priority` makes the loop variable the key each value belongs to,
+so adding a member cannot leave the two out of step; `for i in 0..2` only
+happens to be the right length. There is no keyed comprehension
+(`[LOW: 1 for ...]`) — values are positional.
 
 ---
 

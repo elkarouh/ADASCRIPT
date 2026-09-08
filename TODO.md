@@ -20,14 +20,17 @@ history of this file if the reasoning behind one of them is ever wanted.
       `nimport` when it is actually used, or say so at transpile time instead
       of at run time. (`git1.ady` used to depend on that accident; it now
       names no `os.` at all, so it is no longer a witness.)
-- [ ] container and enum values stringify differently. `print xs` where
+- [ ] containers holding enum values stringify differently. `print xs` where
       `xs: []Node_T` gives `@[A, B, C, D]` on Nim and
       `[<Node_T.A: 0>, <Node_T.B: 1>, ...]` on Python -- Nim's seq syntax and
-      bare enum names against Python's list syntax and Enum repr. Much wider
-      than the print separator that used to sit here, and it is what stops
-      most examples from producing byte-identical output on the two backends.
-      `'Image` and f-strings already agree; it is the default `$`/`str()` of a
-      container that does not.
+      bare enum names against Python's list syntax and Enum *repr*. It is
+      what stops most examples from producing byte-identical output on the
+      two backends. A bare enum agrees now (the generated class gets a
+      `__str__` returning the member name, so `'Image`, `str()`, `print` and
+      f-strings all give `A`); it is a container's elements that do not,
+      because a container formats its elements with `repr`. Giving the class
+      a `__repr__` as well would leave only the `@` prefix -- and the set
+      ordering, which `{}T` never promised anyway.
 - [ ] the keyed-comprehension form `[k: v for k in E]` is a parse error on
       both backends. Consistent rather than divergent, and a missing form
       rather than a bug -- less pressing than it was, now that the

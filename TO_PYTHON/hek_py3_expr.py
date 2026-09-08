@@ -730,6 +730,72 @@ def _have_call(call_trailer):
     return "_have" + call_trailer
 
 
+_ENUM_RANGE_HELPER = '''\
+def _ada_enum_range(_lo, _hi, _inclusive=True):
+    """The members from _lo to _hi, the way Nim's `lo .. hi` walks an enum.
+
+    Python's range is integers only, so an enum-bounded range has no
+    builtin to fall back on.  Positions are taken by looking the members
+    up, which stays right for an enum that names its own values.
+    """
+    _members = list(type(_lo))
+    _start = _members.index(_lo)
+    _stop = _members.index(_hi) + (1 if _inclusive else 0)
+    return _members[_start:_stop]\
+'''
+
+
+def _enum_member_owner(text):
+    """The enum a member name belongs to, or None.
+
+    Only the two spellings the emitter itself writes are recognised -- the
+    bare alias and the qualified `E.MEMBER` -- because the type of an
+    arbitrary expression is not known here.
+    """
+    from hek_parsec import ParserState
+    t = (text or "").strip()
+    if not t:
+        return None
+    tick = getattr(ParserState, "tick_types", {})
+    if "." in t:
+        head, _, tail = t.rpartition(".")
+        info = tick.get(head)
+        if info and tail in (info.get("members") or ()):
+            return head
+        return None
+    for enum_type, info in tick.items():
+        if t in (info.get("members") or ()):
+            return enum_type
+    return None
+
+
+def _ensure_enum_range_helper():
+    from hek_parsec import ParserState
+    decls = getattr(ParserState, 'py_top_decls', [])
+    if not any("def _ada_enum_range(" in d for d in decls):
+        decls.append(_ENUM_RANGE_HELPER)
+        ParserState.py_top_decls = decls
+
+
+def range_bounds_to_py(lo, hi, op_val):
+    """`lo .. hi` / `lo ..< hi` as a Python iterable.
+
+    An enum-bounded range -- `Stage_T'First .. Stage_T'Last` -- is written
+    exactly like an integer one and means the same thing on Nim, but
+    Python's range() takes integers: it used to emit `range(STAGE1, STAGE3
+    + 1)` and die on the addition.
+    """
+    _owner = _enum_member_owner(lo)
+    if _owner is not None and _enum_member_owner(hi) == _owner:
+        _ensure_enum_range_helper()
+        if op_val == "..<":
+            return f"_ada_enum_range({lo}, {hi}, False)"
+        return f"_ada_enum_range({lo}, {hi})"
+    if op_val == "..<":
+        return f"range({lo}, {hi})"
+    return f"range({lo}, {hi} + 1)"
+
+
 def _builtin_ordinal_domain(name):
     """`bool` / `char` as something to iterate, or None for anything else.
 
@@ -1022,9 +1088,7 @@ def to_py(self, prec=None):
         # emitter, which is what builds them everywhere else.
         return binop_to_py(self, prec, None)
     hi = seq.nodes[1].to_py(prec)
-    if op_val == "..<":
-        return f"range({lo}, {hi})"
-    return f"range({lo}, {hi} + 1)"
+    return range_bounds_to_py(lo, hi, op_val)
 
 
 # --- power ---
@@ -1226,10 +1290,7 @@ def to_py(self, prec=None):
                             _m.nodes = self.nodes[:_idx]
                             lo = binop_to_py(_m, None, None)
                         hi = seq.nodes[1].to_py(prec)
-                        if op_val == "..<":
-                            return f"range({lo}, {hi})"
-                        else:
-                            return f"range({lo}, {hi} + 1)"
+                        return range_bounds_to_py(lo, hi, op_val)
         # No comparison ops — delegate to binop_to_py for inner reconstruction
         return binop_to_py(self, prec, PREC_CMP)
 
@@ -1258,9 +1319,25 @@ def to_py(self, prec=None):
                 lo = seq.nodes[1].to_py(operand_prec)
                 range_op_node = seq.nodes[2]
                 hi = seq.nodes[3].to_py(operand_prec)
-                is_exclusive = (hasattr(range_op_node, 'nodes')
-                    and any(hasattr(n, 'node') and str(n.node) == '<'
+                # `in_range_excl` puts the whole `..<` token here, so the
+                # operator is this node's own value. Looking for a child
+                # spelled '<' never matched, and every `x in lo ..< hi`
+                # came out as `lo <= x <= hi` -- inclusive at the top,
+                # where Nim excludes it. `100 in 1 ..< 100` was True here
+                # and false there.
+                _rop = str(getattr(range_op_node, 'node', '') or '')
+                is_exclusive = _rop == "..<" or (
+                    hasattr(range_op_node, 'nodes')
+                    and any(str(getattr(n, 'node', '')) in ('<', '..<')
                             for n in range_op_node.nodes))
+                # Enum bounds have no ordering to chain: a plain Enum
+                # rejects `<=` outright. Ask the members instead, which is
+                # what the loop form over the same range walks.
+                _owner = _enum_member_owner(lo)
+                if _owner is not None and _enum_member_owner(hi) == _owner:
+                    _rng = range_bounds_to_py(lo, hi, "..<" if is_exclusive else "..")
+                    chain = f"{chain} in {_rng}"
+                    continue
                 hi_op = "<" if is_exclusive else "<="
                 chain = f"{lo} <= {chain} {hi_op} {hi}"
                 continue
