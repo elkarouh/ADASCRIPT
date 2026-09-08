@@ -473,6 +473,33 @@ class Circle(Shape):
 
 ---
 
+## Generic Functions
+
+Type parameters are declared in brackets after the name and used in the
+annotations. One definition serves every instantiation.
+
+```adascript
+def first_of[T](xs: []T) -> T:
+    xs[0]
+def head_of[Elem](xs: []Elem) -> Elem:   # any name, not just one letter
+    xs[0]
+
+print(first_of([7, 8]))          # inferred from the argument
+print(first_of[int]([7, 8]))     # ... or named explicitly
+```
+
+**Nim output:** `proc first_of[T](xs: seq[T]): T`; an explicit `[int]` at the
+call site is passed through.
+**Python output:** `def first_of[T](xs: list[T]) -> T` (PEP 695, 3.12+); an
+explicit type application is dropped, since Python infers it and a function
+object is not subscriptable.
+
+A single uppercase letter in a signature is still treated as a type
+parameter without being declared — the older convention — but the declared
+form is the one to use: it is the only one that admits a multi-letter name.
+
+---
+
 ## Generic Classes
 
 ```adascript

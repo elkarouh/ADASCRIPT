@@ -34,11 +34,12 @@ def dijkstra(graph : Graph_T, start: Node_T) -> {Node_T}Distance_T:
 # a sink needs no entry of its own and this literal may stop at C:
 #
 #     nimport graphs
-#     print dijkstra({A: [(1.0, B), (4.0, C)], B: [(2.0, C), (5.0, D)], C: [(1.0, D)]}, A)
+#     print dijkstra[Node_T]({A: [(1.0, B), (4.0, C)], B: [(2.0, C), (5.0, D)], C: [(1.0, D)]}, A)
 #
 # See TO_NIM/STDLIB/graphs.ady, which also offers shortest_path() for the
-# route rather than the distances, and works for any node type rather than
-# this file's Node_T. The version here stays written out because it is what
+# route rather than the distances. Its `def dijkstra[N](...)` names the node
+# type as a parameter, so `[Node_T]` above says which one this call wants;
+# both backends also infer it from the argument if the brackets are left off. The version here stays written out because it is what
 # §1.4 of the book reads line by line.
 graph : Graph_T = {A: [(1.0, B), (4.0, C)], B: [(2.0, C), (5.0, D)], C: [(1.0, D)], D: []}
 print dijkstra(graph, A)

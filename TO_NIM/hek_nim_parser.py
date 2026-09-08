@@ -2334,6 +2334,7 @@ def _func_def_to_nim_inner(self, indent=0):
     params = ""
     ret_ann = ""
     block_node = None
+    declared_type_params = ""
 
     for node in self.nodes:
         tname = type(node).__name__
@@ -2352,12 +2353,16 @@ def _func_def_to_nim_inner(self, indent=0):
                     ret_ann = seq.to_nim()
                 elif stname in ("param_plain", "param_star", "param_dstar", "param_slash"):
                     params = seq.to_nim()
+                elif stname == "type_alias_params":
+                    declared_type_params = seq.to_nim()
         elif tname == "IDENTIFIER":
             name = node.to_nim()
         elif tname == "block":
             block_node = node
         elif tname == "param_list":
             params = node.to_nim()
+        elif tname == "type_alias_params":
+            declared_type_params = node.to_nim()
         elif tname == "return_annotation":
             ret_ann = node.to_nim()
 
@@ -2817,8 +2822,15 @@ def _func_def_to_nim_inner(self, indent=0):
     # variables by Adascript convention; collect them and add [S, D, C] to
     # the proc signature so Nim accepts the generic proc.
     import re as _re_gp
-    _gp_candidates = set(_re_gp.findall(r'\b([A-Z])\b', params + " " + ret_ann))
-    _generic_params = "[" + ", ".join(sorted(_gp_candidates)) + "]" if _gp_candidates else ""
+    if declared_type_params:
+        # `def foo[T, U](...)` names its type parameters outright, so the
+        # single-capital convention below is not consulted: a multi-letter
+        # one like [Elem] is a parameter here and would not be inferred
+        # there, and a lone `T` that is a real type stays a real type.
+        _generic_params = declared_type_params
+    else:
+        _gp_candidates = set(_re_gp.findall(r'\b([A-Z])\b', params + " " + ret_ann))
+        _generic_params = "[" + ", ".join(sorted(_gp_candidates)) + "]" if _gp_candidates else ""
     # Escape Nim keywords that aren't already backtick-wrapped (dunders get their own escaping)
     if not nim_name.startswith("`"):
         nim_name = _nim_ident(nim_name)

@@ -1301,6 +1301,7 @@ def to_py(self, indent=0):
     ret_ann = ""
     body = ""
     block_node = None
+    declared_type_params = ""
 
     for node in self.nodes:
         tname = type(node).__name__
@@ -1324,8 +1325,12 @@ def to_py(self, indent=0):
                     "param_slash",
                 ):
                     params = seq.to_py()
+                elif stname == "type_alias_params":
+                    declared_type_params = seq.to_py()
         elif tname == "IDENTIFIER":
             name = node.to_py()
+        elif tname == "type_alias_params":
+            declared_type_params = node.to_py()
         elif tname == "block":
             block_node = node
         elif tname == "param_list":
@@ -1378,7 +1383,47 @@ def to_py(self, indent=0):
     if _globals:
         body = _insert_into_body(
             body, f"{_ind(indent + 1)}global {', '.join(_globals)}\n")
-    return f"{decos}{_ind(indent)}def {name}({params}){ret_ann}:{hc}\n{body}"
+    # `def foo[T](...)` is PEP 695, which Python 3.12 takes directly -- no
+    # TypeVar needed, and the parameter is scoped to the function rather
+    # than shared module-wide. Only the inferred form falls back to one.
+    if not declared_type_params:
+        _declare_type_vars(params + " " + ret_ann)
+    # Remembered so an explicit type application at the call site --
+    # `first_of[int](xs)`, which Nim accepts -- can be dropped: Python
+    # infers the parameter and a function object is not subscriptable.
+    if name:
+        _fn = getattr(ParserState, "py_func_names", set())
+        _fn.add(name)
+        ParserState.py_func_names = _fn
+    return (f"{decos}{_ind(indent)}def {name}{declared_type_params}"
+            f"({params}){ret_ann}:{hc}\n{body}")
+
+
+def _declare_type_vars(signature):
+    """Declare a TypeVar for each implicit generic parameter in SIGNATURE.
+
+    A single uppercase-letter identifier in an annotation is a type
+    variable by Adascript convention -- the same rule py2nim uses to build
+    its `[T, U]` proc parameters. Python evaluates annotations eagerly, so
+    without a binding `def first_of(xs: list[T]) -> T` is a NameError at
+    definition time and the whole module dies.
+    """
+    import re as _re_tv
+    from hek_parsec import ParserState
+    names = set(_re_tv.findall(r'\b([A-Z])\b', signature or ""))
+    if not names:
+        return
+    decls = getattr(ParserState, "py_top_decls", [])
+    for n in sorted(names):
+        # A name that is a real type here -- an enum, a record -- is not a
+        # type variable, whatever its length.
+        if ParserState.symbol_table.lookup(n) or n in getattr(ParserState, "tick_types", {}):
+            continue
+        decl = f'{n} = _typing.TypeVar("{n}")'
+        if decl not in decls:
+            ParserState.nim_imports.add("import typing as _typing")
+            decls.append(decl)
+    ParserState.py_top_decls = decls
 
 
 @method(async_func_def)

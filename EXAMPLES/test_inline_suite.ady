@@ -560,3 +560,21 @@ def hoist_check() -> int:
     let A2: int = base + 1
     A2
 assert hoist_check() == 6
+
+# Explicit generic parameters: `def f[T](...)` declares T rather than
+# leaving it to be inferred from the single-capital convention, which is
+# what a multi-letter name needs -- [Elem] was dropped and Nim then had an
+# undeclared identifier. Nim takes the brackets as its own generic proc
+# params; Python takes them as PEP 695.
+def first_of[T](xs: []T) -> T:
+    xs[0]
+def head_of[Elem](xs: []Elem) -> Elem:
+    xs[0]
+assert first_of([7, 8]) == 7
+assert first_of(["x", "y"]) == "x"
+assert head_of([1.5, 2.5]) == 1.5
+# An explicit type application at the call site is accepted too. Nim uses
+# it; Python infers instead and a function object is not subscriptable, so
+# the emitter drops it there.
+assert first_of[int]([7, 8]) == 7
+assert head_of[str](["a"]) == "a"

@@ -233,6 +233,30 @@ def _inject_before_elif_else(rendered, spill_lines):
 _AUTO_STDLIB_MODULES = ("os", "time", "math", "random", "json")
 
 
+def _drop_type_applications(output):
+    """`f[T](x)` -> `f(x)` for a function this module defines.
+
+    Nim takes an explicit type application at the call site and Adascript
+    passes it through; Python infers the parameter instead, and a function
+    object is not subscriptable. Applied as a post-pass so a call that
+    appears above its own `def` is rewritten too. Only names defined here
+    are touched, so `list[int](xs)` and friends are left alone.
+    """
+    import re as _re_ta
+    from hek_parsec import ParserState
+    names = getattr(ParserState, "py_func_names", set())
+    if not names:
+        return
+    alt = "|".join(sorted((_re_ta.escape(n) for n in names), key=len, reverse=True))
+    pat = _re_ta.compile(rf'(?<![\w.])({alt})\[[^][]*\]\s*\(')
+    for i, line in enumerate(output):
+        # A `def f[T](...)` line declares the parameters rather than
+        # applying them -- PEP 695, which Python takes as written. Only
+        # call sites are rewritten.
+        if "[" in line and not line.lstrip().startswith(("def ", "async def ")):
+            output[i] = pat.sub(r'\1(', line)
+
+
 def _add_stdlib_module_imports(output):
     """Import a stdlib module the generated code actually calls into."""
     import re as _re_ai
@@ -301,6 +325,7 @@ def translate(code):
     # Insert auto-collected imports at the top (after leading comments)
     from hek_parsec import ParserState
     _add_stdlib_module_imports(output)
+    _drop_type_applications(output)
     if ParserState.nim_imports:
         # Find the first non-comment, non-blank line
         insert_pos = 0

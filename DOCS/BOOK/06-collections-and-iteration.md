@@ -408,16 +408,17 @@ type City_T is enum PAR, LON, BER
 let g: {City_T}[](float, City_T) = {PAR: [(3.0, LON), (9.0, BER)],
                                     LON: [(2.0, BER)],
                                     BER: []}
-let d: {City_T}float = dijkstra(g, PAR)
-print d[BER]                      # 5.0 — the 3+2 route, not the direct 9
-print shortest_path(g, PAR, BER)  # PAR, LON, BER
+let d: {City_T}float = dijkstra[City_T](g, PAR)
+print d[BER]                              # 5.0 — the 3+2 route, not the direct 9
+print shortest_path[City_T](g, PAR, BER)  # PAR, LON, BER
 ```
 
 A graph is `{N}[](float, N)`: each node maps to its outgoing edges, an edge
-being a (weight, destination) pair. `N` is undeclared in the library's
-signatures, which makes it an *implicit generic* — the Nim compiler
-instantiates a version per call site, so one definition serves enum, string
-and integer nodes. The test file runs every case against all three.
+being a (weight, destination) pair. The library declares the node type as a
+parameter — `def dijkstra[N](graph: {N}[](float, N), start: N)` — so one
+definition serves enum, string and integer nodes; the test file runs every
+case against all three. `[City_T]` at the call site says which one is
+wanted, and both backends infer it from the argument if left off.
 
 Two details are worth the space. The edge is `(weight, node)` rather than
 `(node, weight)` because the priority queue orders on a tuple's first
@@ -425,11 +426,12 @@ element, so an edge is already in the shape the queue wants. And an
 unreached node's distance is `Inf`, not an optional — it compares and adds
 like any other float, so nothing is unwrapped inside the loop (§10.5).
 
-There is no explicit `def foo[T]` syntax yet — it is the first item under
-"Monad support improvements" in `TODO.md` — so the implicit form is what
-carries a library of this shape in the meantime. It is enough here because
-every type parameter appears in the arguments; a combinator whose parameter
-appears only in the return type would need the explicit form.
+A single uppercase letter in a signature is still taken as a type parameter
+without being declared — the older convention, which `iters.ady` uses — but
+the declared form is what to reach for: it is the only one that admits a
+multi-letter name like `[Elem]`, and it says what is a parameter rather
+than leaving it to spelling. On Nim the brackets become the proc's own
+generic parameters; on Python they become PEP 695 type parameters.
 
 ## 6.8 Iteration odds and ends
 

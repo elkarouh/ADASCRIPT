@@ -3,10 +3,10 @@
 graphs.ady — shortest paths over a weighted digraph, generic in the node type
 
 A graph is `{N}[](float, N)`: each node maps to its outgoing edges, and an
-edge is a (weight, destination) pair. The node type N is undeclared in the
-signatures, which makes it an implicit generic parameter — the Nim compiler
-instantiates a concrete version per call site, so the same definition serves
-enum, string and integer nodes without duplication.
+edge is a (weight, destination) pair. The node type is declared `[N]` on
+each signature, so one definition serves enum, string and integer nodes:
+the Nim compiler instantiates a concrete version per call site, and Python
+takes the same brackets as PEP 695 type parameters.
 
 The edge tuple is deliberately (weight, node) and not (node, weight): the
 priority queue orders on the tuple's first element, so an edge is already
@@ -16,8 +16,12 @@ in the shape the queue wants and no repacking is needed.
 
     type City_T is enum PAR, LON, BER
     let g: {City_T}[](float, City_T) = {PAR: [(3.0, LON)], LON: [(2.0, BER)], BER: []}
-    print dijkstra(g, PAR)            # {PAR: 0.0, LON: 3.0, BER: 5.0}
-    print shortest_path(g, PAR, BER)  # @[PAR, LON, BER]
+    let d: {City_T}float = dijkstra[City_T](g, PAR)
+    print d[BER]                              # 5.0
+    print shortest_path[City_T](g, PAR, BER)  # PAR, LON, BER
+
+The brackets name the node type explicitly; both backends infer it from the
+argument when they are left off.
 """
 
 from stdlib nimport PriorityQueue
@@ -34,7 +38,7 @@ from stdlib nimport PriorityQueue
 #   a HashSet[N] here does not compile, while a Table[N, float] does.
 # ---------------------------------------------------------------------------
 
-def node_table(graph: {N}[](float, N)) -> {N}float:
+def node_table[N](graph: {N}[](float, N)) -> {N}float:
     var dist: {N}float = {:}
     for node in graph:
         dist[node] = Inf
@@ -49,7 +53,7 @@ def node_table(graph: {N}[](float, N)) -> {N}float:
 #   other float; nothing has to be unwrapped in the loop.
 # ---------------------------------------------------------------------------
 
-def dijkstra(graph: {N}[](float, N), start: N) -> {N}float:
+def dijkstra[N](graph: {N}[](float, N), start: N) -> {N}float:
     var dist: {N}float = node_table(graph)
     dist[start] = 0.0
     var seen: {}N
@@ -75,7 +79,7 @@ def dijkstra(graph: {N}[](float, N), start: N) -> {N}float:
 #   A single-node path is [start], so an empty result is never ambiguous.
 # ---------------------------------------------------------------------------
 
-def shortest_path(graph: {N}[](float, N), start: N, goal: N) -> []N:
+def shortest_path[N](graph: {N}[](float, N), start: N, goal: N) -> []N:
     var route: []N = []
     var dist: {N}float = node_table(graph)
     if start not in dist or goal not in dist:

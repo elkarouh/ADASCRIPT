@@ -99,41 +99,18 @@ history of this file if the reasoning behind one of them is ever wanted.
       `Container` and a constant `CONTAINER` are one name there and two on
       Python. Worth a transpile-time warning: the Nim error names a
       "redefinition" at a line the author did not write.
-- [ ] generic function syntax `def foo[T]` (Feature 1)
+- [ ] a `[]?T` parameter does not accept a plain list. `def sequence[T](items:
+      []?T)` -- the combinator Feature 2 below is really about -- is written
+      and compiled, but no call reaches it: `sequence([1, 2, 3])` wraps the
+      whole literal as `some(@[1,2,3])` and `let xs: []?int = [1,2,3]` fails
+      to build at all, "got 'seq[int]' ... expected 'seq[Option[int]]'". The
+      elements need lifting, not the container. Generic syntax is no longer
+      what blocks these; this is.
 - [ ] `.map()` / `.and_then()` rewriting on `?T` (Feature 2)
 
 ---
 
 ## Monad support improvements (high ROI)
-
-### Feature 1 — Generic function syntax `def foo[T]`
-
-Currently there is no way to write type-parametric functions. Implicit generics
-(undeclared type names used as parameters) work for simple cases, but callers
-cannot write explicit type applications and reusable combinators like `fmap`,
-`sequence`, and `traverse` must be duplicated for every concrete type.
-
-**Desired syntax:**
-```python
-def fmap[T, U](opt: ?T, f: proc(T): U) -> ?U:
-    if opt is None: return None
-    return f(opt)
-
-def sequence[T](items: []?T) -> ?[]T:
-    var out: []T = []
-    for x in items:
-        if x is None: return None
-        out.append(x)
-    return out
-```
-
-**Implementation sketch:**
-- Grammar: extend `func_def` to accept `[TypeParam, ...]` after the name.
-- Transpiler: emit `proc foo[T, U](...)` in Nim; add type params to the symbol
-  table as unresolved type names for the duration of the function scope.
-- Complexity: ~200–300 lines in grammar + `hek_nim_parser.py`.
-
----
 
 ### Feature 2 — `.map()` and `.and_then()` method rewriting on `?T`
 

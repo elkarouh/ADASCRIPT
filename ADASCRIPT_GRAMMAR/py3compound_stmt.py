@@ -338,6 +338,7 @@ func_def = (
     decorators[:]
     + ikw("def")
     + IDENTIFIER
+    + type_alias_params[:]
     + LPAREN
     + param_list[:]
     + RPAREN
