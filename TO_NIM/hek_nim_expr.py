@@ -516,14 +516,28 @@ def binop_to_nim(self, prec=None, my_prec=None):
             right = seq.nodes[1].to_nim(right_prec)
             # seq/string concatenation: + -> & when operand is seq or string
             if nim_op == "+":
-                left_is_seq = result.startswith("@[")
-                right_is_seq = right.startswith("@[")
+                # `collect(...)` / `toSeq(...)` is what a comprehension
+                # renders to, so joining two of them with `+` -- the way
+                # Norvig's sudoku builds its unit list -- is seq
+                # concatenation and needs `&`, exactly as a `@[...]`
+                # literal does.
+                def _renders_seq(s):
+                    return (s.startswith("@[") or s.startswith("collect(")
+                            or s.startswith("toSeq("))
+                left_is_seq = _renders_seq(result)
+                right_is_seq = _renders_seq(right)
+                # A leading `$` is Nim's stringify -- what `str(x)` renders
+                # to -- so the operand is a string whatever x was. Without
+                # this, `str(r) + str(c)` emitted `$r + $c`, and Nim's `+`
+                # has no string overload: the one spelling left was `&`,
+                # which then does not run on the Python backend. The `&`
+                # branch below already trusts this same signal.
                 left_is_str = (result.startswith('"') or result.startswith('fmt"')
-                               or result.startswith('r"')
+                               or result.startswith('r"') or result.startswith('$')
                                or result.endswith('.join("")') or result.endswith(".join(\"\")")
                                or " & " in result)  # already a string concat chain
                 right_is_str = (right.startswith('"') or right.startswith('fmt"')
-                                or right.startswith('r"')
+                                or right.startswith('r"') or right.startswith('$')
                                 or right.endswith('.join("")') or right.endswith(".join(\"\")")
                                 or '.join(' in right)
 

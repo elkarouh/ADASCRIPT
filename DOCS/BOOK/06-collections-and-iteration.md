@@ -16,19 +16,31 @@ print(len(words))
 ```
 
 Python list methods (`append`, slicing, `in`, `not in`, `len`) work
-unchanged and map to `seq` operations in Nim. `EXAMPLES/sudoku.ady` builds
-its unit list — all rows, columns and boxes — by appending to sequences:
+unchanged and map to `seq` operations in Nim. `+` concatenates two
+sequences, and the Nim backend rewrites it to that language's `&`.
+
+`EXAMPLES/sudoku.ady` builds its unit list — all nine rows, nine columns
+and nine boxes — as three comprehensions joined:
 
 ```python
-var unitlist: [][]str
-for c in COLS:
-    unitlist.append(cross(ROWS, str(c)))
-for r in ROWS:
-    unitlist.append(cross(str(r), COLS))
-for rb in ["ABC", "DEF", "GHI"]:
-    for cb in ["123", "456", "789"]:
-        unitlist.append(cross(rb, cb))
+var unitlist: [][]str = (
+    [cross(ROWS, str(c)) for c in COLS]
+    + [cross(str(r), COLS) for r in ROWS]
+    + [cross(rb, cb) for rb in ["ABC", "DEF", "GHI"] for cb in ["123", "456", "789"]])
 ```
+
+That is Norvig's own line, transliterated. The two derived tables read the
+same way — a dict comprehension whose value is itself a comprehension:
+
+```python
+var units: {str}[][]str = {s: [u for u in unitlist if s in u] for s in squares}
+var peers: {str}{}str = {s: {s2 for u in units[s] for s2 in u if s2 != s} for s in squares}
+```
+
+`units` maps a square to the three units containing it, `peers` to the 20
+squares it shares a unit with — and note the second comprehension is a
+`{…}` set, so duplicates across the three units collapse without the
+algorithm having to think about them.
 
 ## 6.2 Hash tables
 
@@ -296,7 +308,11 @@ differently:
 ## 6.6 The iterator library: `nimport iters`
 
 `EXAMPLES/test_iters.ady` exercises a bundled itertools-alike, generic over
-element type, usable directly in `for` loops on both backends:
+element type, usable directly in `for` loops. It is a `nimport`, so it is
+Nim-only by construction (§12.2): on the Python backend the line becomes a
+comment and the names are simply undefined. Reaching for it pins the
+program to one backend, which is why `sudoku.ady` writes its own `cross()`
+rather than building on `product()`.
 
 ```python
 nimport iters
@@ -344,8 +360,11 @@ instantiations — a reminder that these are true generics in the Nim build.
 
 - Strings iterate per character; `str(c)` converts a char back to a string
   where the Nim backend distinguishes them (`sudoku.ady` does this in
-  `cross()` — also note Nim's `&` string concatenation working alongside
-  Python's `+`).
+  `cross()`). Concatenate with `+`, which the Nim backend rewrites to that
+  language's `&`. Writing `&` directly is a Nim-only spelling — it is
+  bitwise-and on Python and raises there — so prefer `+` in code meant for
+  both. `sudoku.ady` used to use `&` throughout and so ran on one backend
+  only; it now uses `+` and produces byte-identical output on both.
 
 ---
 

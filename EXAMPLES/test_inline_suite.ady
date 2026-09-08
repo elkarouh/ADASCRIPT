@@ -283,6 +283,36 @@ let st: Stage_T = STAGE2
 assert f"{st}" == "STAGE2"
 assert str(st) == "STAGE2"
 assert st'Image == "STAGE2"
+
+# `+` concatenates strings on both backends: the Nim emitter rewrites it to
+# that language's `&` once it can tell an operand is a string. It could not
+# see through `str(...)`, which renders as `$x` -- so `str(a) + str(b)`
+# emitted `$a + $b`, and Nim's `+` has no string overload. The only
+# spelling left was `&`, which is bitwise-and on Python: that is how
+# sudoku.ady came to be Nim-only.
+let ca: str = "A"
+let cb: str = "1"
+assert ca + cb == "A1"
+assert str(ca) + str(cb) == "A1"
+var joined: str = ""
+for ch in "AB":
+    joined += str(ch) + "-"
+assert joined == "A-B-"
+
+# `+` joins two comprehensions as well as two literals. A comprehension
+# renders to `collect(...)` on Nim, which the seq/string test did not
+# recognise, so `[..] + [..]` reached Nim's numeric `+` -- and sudoku.ady's
+# unit list had to be built by appending in a loop instead.
+var lhs: []str = ["a", "b"]
+assert [str(c) for c in "ab"] + [str(c) for c in "cd"] == ["a", "b", "c", "d"]
+assert lhs + [str(c) for c in "cd"] == ["a", "b", "c", "d"]
+assert [str(c) for c in "ab"] + lhs == ["a", "b", "a", "b"]
+# ... including a comprehension with two generators, as that list uses.
+# `str(x) + str(y)` is the portable spelling inside one: a comprehension's
+# loop variables are not in the symbol table, so a bare `r + c` between two
+# of them is not seen as string concatenation and fails on Nim (TODO.md).
+var grid: []str = [str(r) + str(c) for r in ["A", "B"] for c in ["1", "2"]]
+assert grid == ["A1", "A2", "B1", "B2"]
 # and the literal forms are untouched
 var cLitE: [Hue_T]int = [ROSE: 1, JADE: 2, SLATE: 3]
 assert cLitE[SLATE] == 3
