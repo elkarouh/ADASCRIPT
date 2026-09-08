@@ -963,42 +963,38 @@ def main() -> int:
     var ind: Indenter = Indenter()
     var do_emit_state: bool = False
     var file_arg: str = ""
-    var args: []str = []
-    if $# >= 1: args.append($1)
-    if $# >= 2: args.append($2)
-    if $# >= 3: args.append($3)
-    if $# >= 4: args.append($4)
-    if $# >= 5: args.append($5)
+    var args: []str = $@
     var ai: int = 0
     while ai < len(args):
         let a: str = args[ai]
-        if a == "-h" or a == "--help":
-            print "Usage: ada_indent [OPTIONS] [FILE]"
-            print ""
-            print "Indent Ada source code.  Reads FILE, or stdin when FILE is omitted."
-            print "Output is written to stdout; each source line is replaced by its"
-            print "correctly-indented form (indentation step: 2 spaces, spaces only)."
-            print ""
-            print "Options:"
-            print "  -h, --help          Show this help and exit."
-            print "  --emit-state        After each output line emit a state snapshot on a"
-            print "                      separate line of the form  ##STATE:<data>  that captures"
-            print "                      the indenter's full parse state.  Consumed by editor"
-            print "                      integrations to enable incremental re-indentation."
-            print "  --state <data>      Restore the indenter from a previously-emitted state"
-            print "                      snapshot before processing the first input line.  Must"
-            print "                      precede the lines the snapshot refers to."
-            print ""
-            print "Exit status: 0 on success, non-zero on error."
-            return 0
-        elif a == "--emit-state":
-            do_emit_state = True
-        elif a == "--state":
-            if ai + 1 < len(args):
-                ai += 1
-                ind.load_state(args[ai])
-        else:
-            file_arg = a
+        case a:
+            when "-h" | "--help":
+                print f"""Usage: ada_indent [OPTIONS] [FILE]
+
+Indent Ada source code.  Reads FILE, or stdin when FILE is omitted.
+Output is written to stdout; each source line is replaced by its
+correctly-indented form (indentation step: 2 spaces, spaces only).
+
+Options:
+  -h, --help          Show this help and exit.
+  --emit-state        After each output line emit a state snapshot on a
+                      separate line of the form  ##STATE:<data>  that captures
+                      the indenter's full parse state.  Consumed by emacs
+                      integration to enable incremental re-indentation.
+  --state <data>      Restore the indenter from a previously-emitted state
+                      snapshot before processing the first input line.  Must
+                      precede the lines the snapshot refers to.
+
+Exit status: 0 on success, non-zero on error."""
+                return 0
+            when "--emit-state":
+                do_emit_state = True
+            when "--state":
+                if ai + 1 < len(args):
+                    ai += 1
+                    ind.load_state(args[ai])
+            when others:
+                file_arg = a
         ai += 1
     if file_arg == "":
         for line in stdin.lines:
