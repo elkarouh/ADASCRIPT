@@ -1758,7 +1758,8 @@ on enum values, inclusive range `1 .. trials`.
 
 ### dijkstra.ady — Priority queue, enum-keyed dicts, nimport
 
-The whole file — 27 lines for the complete algorithm:
+The algorithm entire — 27 lines (`dijkstra.ady` closes with a comment
+about the generic version in the bundled `graphs` library, not shown here):
 
 ```python
 #!/usr/bin/env py2nim

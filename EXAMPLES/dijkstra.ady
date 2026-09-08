@@ -23,5 +23,22 @@ def dijkstra(graph : Graph_T, start: Node_T) -> {Node_T}Distance_T:
                 queue.push((new_dist, neighbor))
     return distances
 
+# `D: []` is load-bearing. D has no outgoing edges, so it is tempting to
+# leave it out -- but the distance table above is built from `for node in
+# graph`, which reads the keys, and D would then not be in it. The first
+# edge into D would look up a key that is not there: an unhandled KeyError
+# on the last line of a program that looks right.
+#
+# The generic version in the bundled library does not have that trap. It
+# seeds its table from the keys *and* every destination those keys name, so
+# a sink needs no entry of its own and this literal may stop at C:
+#
+#     nimport graphs
+#     print dijkstra({A: [(1.0, B), (4.0, C)], B: [(2.0, C), (5.0, D)], C: [(1.0, D)]}, A)
+#
+# See TO_NIM/STDLIB/graphs.ady, which also offers shortest_path() for the
+# route rather than the distances, and works for any node type rather than
+# this file's Node_T. The version here stays written out because it is what
+# §1.4 of the book reads line by line.
 graph : Graph_T = {A: [(1.0, B), (4.0, C)], B: [(2.0, C), (5.0, D)], C: [(1.0, D)], D: []}
 print dijkstra(graph, A)

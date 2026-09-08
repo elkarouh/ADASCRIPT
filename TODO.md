@@ -11,15 +11,6 @@ history of this file if the reasoning behind one of them is ever wanted.
       Nim C backend (it does not compile there either), so this is a bad
       diagnostic rather than a missing feature: py2py should say the construct
       is not for this backend instead of raising AttributeError.
-- [ ] py2py: `nimport os` + `os.path.join(...)` emits `os.` without importing it,
-      so the program dies at run time with `NameError: name 'os' is not
-      defined`. Three lines reproduce it: `nimport os` / `let b: str =
-      os.path.basename("/a/b.txt")` / `print b`. Add an `os.makedirs(...)`
-      call anywhere and it starts working, because that one *is* rewritten
-      into an import. Either honour a Python-available module named by
-      `nimport` when it is actually used, or say so at transpile time instead
-      of at run time. (`git1.ady` used to depend on that accident; it now
-      names no `os.` at all, so it is no longer a witness.)
 - [ ] containers holding enum values stringify differently. `print xs` where
       `xs: []Node_T` gives `@[A, B, C, D]` on Nim and
       `[<Node_T.A: 0>, <Node_T.B: 1>, ...]` on Python -- Nim's seq syntax and
