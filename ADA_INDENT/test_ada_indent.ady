@@ -14,6 +14,45 @@
 nimport ada_indent
 
 
+def sample_fixpoint() -> int:
+    """Re-indent the reference sample and require it to come back unchanged.
+
+    ada_indent_sample_test.adb is correctly indented by construction -- each
+    block is a numbered requirement -- so the indenter must be the identity
+    on it. That makes it the one test that covers the requirements as a
+    whole rather than case by case, and it is worth having: a revert once
+    dropped the `subtype T is` rule, which pushed a block frame that never
+    popped, and 511 of the file's 608 lines shifted while every table case
+    here still passed.
+    """
+    var sp: Path = Path("")
+    for cand in [Path("ADA_INDENT/ada_indent_sample_test.adb"),
+                 Path("ada_indent_sample_test.adb")]:
+        if -f cand:
+            sp = cand
+    if sp == "":
+        # Not a skip: a sample that cannot be found is a test that is not
+        # running, which is how the regression above went unnoticed.
+        print "FAIL: ada_indent_sample_test.adb not found from this directory"
+        return 1
+    var ind: Indenter = Indenter()
+    var bad: int = 0
+    var lineno: int = 0
+    for want in readFile(sp).split("\n"):
+        lineno += 1
+        let got: str = ind.indent_line(want)
+        if got != want:
+            bad += 1
+            if bad == 1:
+                print f"FAIL: sample is not a fixpoint, first difference at line {lineno}"
+                print f"  want |{want}|"
+                print f"  got  |{got}|"
+    if bad > 0:
+        print f"  {bad} lines differ in total"
+        return 1
+    return 0
+
+
 def run_tests() -> int:
     var passed: int = 0
     var failed: int = 0
@@ -1310,6 +1349,12 @@ def run_tests() -> int:
             print want
             print "--- got ---"
             print got
+
+    let fx: int = sample_fixpoint()
+    if fx == 0:
+        passed += 1
+    else:
+        failed += 1
 
     print f"{passed} passed, {failed} failed"
     if failed > 0:
