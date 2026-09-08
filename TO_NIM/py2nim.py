@@ -1285,7 +1285,11 @@ def main(argv=None):
     #   -t was not given), it behaves exactly as if 'c -r' had been      #
     #   specified.                                                        #
     #                                                                     #
-    #   To transpile only (print .nim to stdout), use -t / --transpile.  #
+    #   To transpile only, use -t / --transpile.  With a .ady file that   #
+    #   writes the .nim into the cache directory and prints its path to  #
+    #   stderr -- stdout stays empty, so `py2nim -t f.ady > out.nim`     #
+    #   yields an empty file.  Reading from stdin is the case that does  #
+    #   print the Nim to stdout.                                          #
     # ------------------------------------------------------------------ #
     if ady_file and subcommand is None and not transpile_only and ady_file.endswith(".ady"):
         subcommand = "c"
