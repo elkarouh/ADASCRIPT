@@ -323,6 +323,16 @@ the Nim backend converts it to a char literal where the key type says one is
 meant, escapes included, so `freq['a']`, `freq["\\"]` and `freq[chr(97)]`
 all work on both.
 
+`char` is also a container element type in its own right. Iterating a string
+yields characters, so a `[]char` annotation says what the loop already
+produces, and `in` on two strings is a substring test:
+
+```python
+let cs: []char = [c for c in "abc"]      # ['a', 'b', 'c']
+let digits: []char = [c for c in grid if c in "0123456789"]
+print "b" in "abc"                       # True — substring, not membership
+```
+
 The empty literals fall out of the same split, which is what makes them easy
 to keep straight: `{:}` carries the colon of a `key: value` pair, so it is
 the empty **mapping** — a dict. Bare `{}` has no colon, so it is the empty
@@ -444,6 +454,27 @@ var flags:   set[bool]          = {}
 For sets, the Nim backend uses the type annotation to pick between
 `initHashSet` (heap-allocated, any T) and `{}` (Nim ordinal set for
 `bool`, `char`, `byte`, small integers, and user-defined enums).
+
+### Float infinities
+
+`Inf`, `NegInf` and `NaN` are float literals on both backends, so an
+"unreachable" or "not yet measured" distance needs no sentinel constant and
+no `?float` wrapper — it compares and arithmetises like any other float:
+
+```python
+var dist: {str}float = {n: (0.0 if n == start else Inf) for n in graph}
+if candidate < dist[node]:            # Inf loses every comparison
+    dist[node] = candidate
+```
+
+They pass through to Nim as `Inf`, `NegInf` and `NaN`, and become
+`float("inf")`, `float("-inf")` and `float("nan")` in Python — no import is
+needed on either side. `NaN` keeps IEEE semantics on both, so `NaN != NaN`
+is true.
+
+Note that the two backends part company on division by zero: Nim's
+`1.0 / 0.0` evaluates to `Inf`, while Python raises `ZeroDivisionError`.
+Write `Inf` when you mean it rather than computing it.
 
 ---
 
@@ -794,6 +825,49 @@ useful for set arithmetic:
 let available: {}Door = Door'Range - {picked, car}
 ```
 
+### Full attribute reference
+
+Several attributes read differently on a *type* than on a *value*: on the
+type they ask about the domain, on a value about the container. `Stage_T'First`
+is the first member, where `xs'First` is the index `0`.
+
+| Attribute | Applies to | Meaning |
+|-----------|------------|---------|
+| `T'First`, `T'Low`   | enum or subrange type | first member |
+| `T'Last`, `T'High`   | enum or subrange type | last member |
+| `xs'First`, `xs'Low` | sequence or string    | first index (`0`) |
+| `xs'Last`, `xs'High` | sequence or string    | last index (`len - 1`) |
+| `T'Range`            | enum type             | set of every member, for set arithmetic |
+| `xs'Range`           | sequence or string    | its index range, for `for i in xs'Range:` |
+| `x'Next`, `x'Prev`   | enum value            | successor / predecessor |
+| `x'Image`            | enum value            | the member's name as a `str` |
+| `xs'Length`, `xs'len`| sequence, string, set | element count — the same as `len(xs)` |
+| `xs'Shuffle`         | sequence              | a shuffled copy |
+| `x'choose`           | enum type, set, or range expression | a uniformly random element |
+| `x'Size`             | any value             | **Nim only** — machine size in bytes |
+
+`'choose` and `'Shuffle` draw on the random number generator, which is seeded
+once per program:
+
+```python
+let d: Door_T = Door_T'choose         # random member
+let t: int    = (1..6)'choose         # random int in 1..6
+let r: []int  = deck'Shuffle          # shuffled copy
+```
+
+On the Nim backend `'Shuffle` needs a mutable sequence, so declare the source
+with `var` rather than `let`.
+
+`'Size` is Ada's representation attribute, not a count: it reports how many
+bytes the value occupies, so a set of a three-member enum is `1` while
+`len()` of that same set is however many members it holds. Reach for
+`len(s)` or `s'Length` when you want the number of elements. It is also the
+one attribute the Python backend does not implement — it raises `unknown
+tick attribute 'Size'` there.
+
+Attributes do not chain: write `let f: Stage_T = Stage_T'First` and then
+`f'Image`, not `Stage_T'First'Image`.
+
 ---
 
 ## Enum Array Literals
@@ -900,6 +974,36 @@ def append_to(xs: []int):
 The Nim backend infers this: a rebound parameter is shadowed by a mutable
 local (`var s = s`), while one that is mutated in place becomes a `var`
 parameter (`xs: var seq[int]`). No annotation is needed either way.
+
+### Generic functions
+
+Type parameters are declared in brackets after the function name, the same
+way [generic classes](#generic-classes) declare theirs:
+
+```python
+def first_of[Elem_T](xs: []Elem_T) -> Elem_T:
+    xs[0]
+
+def pair_up[A_T, B_T](a: A_T, b: B_T) -> (A_T, B_T):
+    (a, b)
+```
+
+Nim gets `proc first_of[Elem_T](xs: seq[Elem_T]): Elem_T` and instantiates
+one version per call site; Python gets the same brackets as PEP 695 type
+parameters, `def first_of[Elem_T](xs: list[Elem_T]) -> Elem_T`.
+
+A call may name the types explicitly or leave them to be inferred from the
+arguments — both forms work on both backends:
+
+```python
+print first_of[int]([4, 5, 6])       # explicit
+print first_of([7, 8])               # inferred
+```
+
+Any identifier may be a type parameter once it is declared in the brackets,
+so prefer a name that says what it stands for — `Node_T`, `Elem_T` — over a
+bare letter. The bundled `iters` and `graphs` libraries are written this
+way.
 
 ### Generator functions
 
