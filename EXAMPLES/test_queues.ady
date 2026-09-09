@@ -77,15 +77,19 @@ assert lifo_order == [C, B, A]     # last in, first out
 var counted: FifoQueue[Node_T] = [A]
 counted.push(B)
 assert len(counted) == 2
-let first_out: Node_T = counted.pop()
-assert len(counted) == 1
-let second_out: Node_T = counted.pop()
-assert len(counted) == 0
-assert first_out == A and second_out == B
-# Each pop is bound with its own `let` rather than reassigning one name:
-# `x = q.pop()` is emitted as `discard x = q.pop()` on the Nim backend,
-# which does not compile. That is a pre-existing quirk of `.pop()` in
-# statement position -- a plain `[]int` reassigned from `xs.pop()` hits it
-# too -- and has nothing to do with the queues.
+var popped: Node_T = counted.pop()
+assert popped == A and len(counted) == 1
+popped = counted.pop()                # reassigned, not re-declared
+assert popped == B and len(counted) == 0
+
+# The reassignment above is the interesting line. A bare `xs.pop()` throws
+# its value away, which Nim requires be said out loud, so the backend adds
+# `discard`; it used to add it here too, emitting `discard out =
+# counted.pop()`, which does not compile. Nothing queue-specific -- a plain
+# []int reassigned from xs.pop() hit it as well.
+var plain: []int = [1, 2, 3]
+var taken: int = plain.pop()
+taken = plain.pop()                # same shape, ordinary sequence
+assert taken == 2 and len(plain) == 1
 
 print "all queue tests passed"

@@ -1106,6 +1106,16 @@ def run_tests():
         ),
     ]
 
+    # `discard` belongs on a pop whose value is dropped, and only there.
+    # `w = xs.pop()` used to come out as `discard w = xs.pop()`, which nim
+    # rejects; both halves are pinned here because fixing one by removing the
+    # discard everywhere would break the other.
+    tests.append((
+        "var xs: []int = [1, 2]\nvar w: int = xs.pop()\nw = xs.pop()\nxs.pop()\n",
+        "var xs: seq[int] = @[1, 2]\nvar w: int = xs.pop()\n"
+        "w = xs.pop()\ndiscard xs.pop()\n",
+    ))
+
     passed = failed = 0
     for code, expected in tests:
         try:

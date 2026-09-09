@@ -141,6 +141,42 @@ def _strip_generic(name):
     idx = name.find("[")
     return name[:idx] if idx >= 0 else name
 
+
+def _has_toplevel_assignment(s):
+    """True when an emitted statement assigns, rather than being a bare call.
+
+    Used to tell `xs.pop()` -- whose value is thrown away, and which Nim
+    therefore wants a `discard` on -- from `x = xs.pop()`, where the value
+    has somewhere to go.
+
+    Only a bare `=` outside brackets counts.  One inside them is a named
+    argument (`f(end = "")`); `==`, `!=`, `<=`, `>=` and the augmented forms
+    (`+=`, `//=`) are operators; and one inside a string literal is text.
+    """
+    depth = 0
+    i = 0
+    n = len(s)
+    while i < n:
+        ch = s[i]
+        if ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+        elif ch in "\"'":
+            quote = ch
+            i += 1
+            while i < n and s[i] != quote:
+                if s[i] == "\\":
+                    i += 1
+                i += 1
+        elif ch == "=" and depth == 0:
+            prev = s[i - 1] if i else ""
+            nxt = s[i + 1] if i + 1 < n else ""
+            if nxt != "=" and prev not in "=!<>+-*/%&|^~":
+                return True
+        i += 1
+    return False
+
 def _is_new_method(class_name, method_name):
     """Return True if method_name is not defined in any ancestor of class_name.
     Conservatively returns False if any ancestor's method set is unknown (e.g.
@@ -4210,9 +4246,16 @@ def to_nim(self, indent=0):
             _sym = ParserState.symbol_table.lookup(_root)
             if _sym and str(_sym.get("type", "")).startswith("_py_module:"):
                 result = f"discard {result}"
-    # Nim builtins that return a non-void value — must discard when used as a statement
+    # Nim builtins that return a non-void value — must discard when used as a
+    # statement.  Only when the call *is* the statement: `xs.pop()` alone
+    # throws the value away and Nim insists that be said, but in
+    # `x = xs.pop()` the value is going somewhere, and prefixing that yields
+    # `discard x = xs.pop()`, which does not compile.  The leading-keyword
+    # test below catches `var x = xs.pop()` but not a plain reassignment,
+    # whose `=` the receiver pattern `^.+\.` then happily spans.
     if (len([p for p in parts if p.strip()]) == 1
-            and not result.strip().startswith(("discard ", "let ", "var ", "const "))):
+            and not result.strip().startswith(("discard ", "let ", "var ", "const "))
+            and not _has_toplevel_assignment(result.strip())):
         import re as _re_disc2
         _dm = _re_disc2.match(r'^.+\.([A-Za-z_]\w*)\(', result.strip())
         if _dm and _dm.group(1) in {"pop"}:
