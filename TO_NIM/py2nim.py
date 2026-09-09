@@ -1128,6 +1128,34 @@ def run_tests():
             traceback.print_exc()
             failed += 1
 
+    # --- constructs the backend must refuse --------------------------------
+    # These check the *absence* of silent codegen, which the (source, output)
+    # pairs above cannot express.  A tick the emitter does not know used to
+    # fall through to `expr.attr`, so a typo -- or the pre-rename 'Choice --
+    # reached nim and failed there as "undeclared field" in generated code.
+    error_tests = [
+        ("type C_T is enum A, B\nlet v: C_T = A\nprint v'Bogus\n",
+         "unknown tick attribute 'Bogus'"),
+        ("type C_T is enum A, B\nlet v: C_T = C_T'Choice\n",
+         "unknown tick attribute 'Choice'"),
+    ]
+    for code, want in error_tests:
+        label = code.splitlines()[-1]
+        try:
+            translate(code)
+        except SyntaxError as e:
+            if want in str(e):
+                print(f"  PASS: {label!r} is refused...")
+                passed += 1
+            else:
+                print(f"  MISMATCH: {label!r} raised {str(e)!r}")
+                print(f"    expected the message to contain: {want!r}")
+                failed += 1
+        else:
+            print(f"  MISSING ERROR: {label!r} should have been refused")
+            print(f"    expected a SyntaxError containing: {want!r}")
+            failed += 1
+
     print("=" * 60)
     print(f"Results: {passed} passed, {failed} failed")
     return failed

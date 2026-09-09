@@ -1570,8 +1570,17 @@ def _emit_tick_attr(base, field, attr):
         return expr + ".len"
     if attr == "Size":
         return expr + ".sizeof"
-    # Unknown tick attr — emit as method call
-    return expr + "." + attr
+    # Unknown tick attribute.  The catch-all this replaced emitted
+    # `expr.attr`, so a typo became a Nim "undeclared field" error pointing
+    # at generated code the user never wrote -- and `'Size` on a type that
+    # happened to have a matching proc would have compiled into something
+    # else entirely.  The Python backend refuses here, and so do we.
+    # 'Low, 'High and 'len are accepted above as aliases of 'First, 'Last
+    # and 'Length; they are left out of the list to keep it short.
+    raise SyntaxError(
+        f"unknown tick attribute {attr!r} in {expr}'{attr}. Known: "
+        "First, Last, Range, Next, Prev, choose, Shuffle, Image, Length, Size"
+    )
 
 
 @method(primary)
