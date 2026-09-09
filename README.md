@@ -798,8 +798,10 @@ into the generated file whenever a regex literal is used.
 ## Tick Attributes
 
 Ada-style `'` attributes provide first-class access to enum and subrange
-metadata. The tokenizer preprocesses `Type'Attr` to `Type__tick__Attr`
-before parsing, so Python's lexer is not confused by the apostrophe.
+metadata. Where a name is followed immediately by `'` and an identifier, the
+tokenizer emits the apostrophe as a token of its own (`TICK_TOKEN`) rather
+than letting Python's lexer read it as the start of a string; the grammar
+then matches the pair as `tick_trailer = TICK + IDENTIFIER`.
 
 ```python
 type Stage_T is enum A, B, C
@@ -2127,9 +2129,10 @@ ADASCRIPT/
 
 ### How transpilation works
 
-1. `hek_tokenize.Tokenizer` scans the source, preprocesses tick attributes
-   (`Type'Attr` → `Type__tick__Attr`), and bundles inline comments into
-   `RichNL` objects so they travel with the parse tree.
+1. `hek_tokenize.Tokenizer` scans the source, emits the `'` of a tick
+   attribute as its own `TICK_TOKEN` so Python's lexer does not take it for
+   a string quote, and bundles inline comments into `RichNL` objects so they
+   travel with the parse tree.
 2. The grammar combinators in `ADASCRIPT_GRAMMAR/` define the language using
    `hek_parsec` operators. Parsers are plain classes composed with `+`, `|`,
    and `[:]`; forward references use `fw("name")`.

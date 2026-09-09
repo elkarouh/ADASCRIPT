@@ -609,8 +609,10 @@ The range constraint is stored in the symbol table and checked after **every ass
 ## 9. Tick Attributes
 
 Ada-style `'` attributes provide metadata about enums and ranges without
-any runtime overhead. The tokeniser converts `Type'Attr` to `Type__tick__Attr`
-before parsing, so Python's lexer is never confused by the apostrophe.
+any runtime overhead. Where a name is followed immediately by `'` and an
+identifier, the tokeniser emits the apostrophe as a token of its own
+(`TICK_TOKEN`), so Python's lexer never takes it for the start of a string;
+the grammar matches the pair as `tick_trailer = TICK + IDENTIFIER`.
 
 | Expression         | Meaning                            |
 |--------------------|------------------------------------|

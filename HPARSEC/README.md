@@ -167,12 +167,17 @@ generated output.
 Before Python's `tokenize` module sees the source, `Tokenizer` applies
 several source-level rewrites:
 
-- **Tick attributes**: `Type'First` → `Type__tick__First`
 - **Range operators**: `0..10` → `0 .. 10` (avoids float tokenisation)
 - **Bash variables**: `$HOME` → `__bash_env_HOME__`, `$1` → `__bash_arg1__`
 - **Bash file tests**: `-e file` → `__bash_test_e__ file`
 
 These are reversed by the backend's output methods on the relevant AST nodes.
+
+Tick attributes are not rewritten. `Type'First` comes out as three tokens —
+the name, a `TICK_TOKEN` for the apostrophe, and the attribute name — which
+is what keeps Python's lexer from reading the `'` as the start of a string
+literal. The grammar matches the last two as `tick_trailer = TICK +
+IDENTIFIER`, and the backends resolve the attribute from there.
 
 ---
 

@@ -218,7 +218,7 @@ Tick attributes `T'First` and `T'Last` give the bounds of a subrange.
 
 ## Tick Attributes
 
-Ada-style `'` attributes. Tokeniser converts `Type'Attr` → `Type__tick__Attr` before parsing, so Python's lexer is unaffected.
+Ada-style `'` attributes. Where a name is followed immediately by `'` and an identifier, the tokeniser emits the apostrophe as its own `TICK_TOKEN` instead of letting Python's lexer read it as a string quote; the grammar matches the pair as `tick_trailer = TICK + IDENTIFIER`.
 
 | Expression | Meaning |
 |------------|---------|
