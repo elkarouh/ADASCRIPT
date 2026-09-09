@@ -1,0 +1,63 @@
+#!/usr/bin/env py2nim
+# test_char_slice.ady — indexing a string gives a char, slicing gives a string
+#
+#   py2nim EXAMPLES/test_char_slice.ady -r
+#   py2py  EXAMPLES/test_char_slice.ady -c
+#
+# Nim distinguishes the two and refuses to compare them, so the emitter has
+# to decide which side of a comparison is a char and rewrite a one-character
+# string literal to match. It used to answer that with `^(\w+)\[`, which
+# cannot tell `s[i]` from `s[i:j]`:
+#
+#   inner[i..<i + 1] != '\\'   # Error: type mismatch, string vs char
+#
+# That is EXAMPLES/c500.ady's parse_c_str, and it kept the whole file from
+# compiling. Python is indifferent to the distinction, so every assertion
+# here has to hold on either backend.
+
+let s: str = "a\\bc"
+
+# --- an index is a char; the literal has to become one on Nim --------------
+assert s[0] == "a"
+assert s[0] != "b"
+assert s[1] == "\\"
+
+# --- a slice is a string; the literal has to stay one -----------------------
+assert s[0:1] == "a"
+assert s[0:1] != "b"
+assert s[1:2] == "\\"          # the c500 shape
+assert s[0:2] == "a\\"
+
+# --- both spellings agree on the character they pick out --------------------
+var i: int = 0
+var picked: str = ""
+while i < len(s):
+    if s[i:i+1] != "\\":
+        picked = picked + s[i:i+1]
+    i += 1
+assert picked == "abc"
+
+# --- chained comparison over an index ---------------------------------------
+assert "a" <= s[0] <= "z"
+assert not ("b" <= s[0] <= "z")
+
+# --- a subscript that does not span the whole expression --------------------
+# `s[0:1] + "x"` starts with a subscript but is not one, so nothing here may
+# be treated as a char -- the old test never checked that the bracket closed
+# the expression.
+assert s[0:1] + "x" == "ax"
+assert s[2:3] + "c" == "bc"
+# The same for an index rather than a slice, which is where the emitter has
+# to notice that the bracket does not close the expression: `s[0]` is a char
+# but `s[0] + e` is a string, so the "a" must stay one too.
+let e: str = ""
+assert s[0] + e == "a"
+# Not `s[2:3] + s[3:4]`: two slices either side of `+` are not recognised as
+# strings, so Nim keeps numeric `+` and rejects it. A separate gap from this
+# file's subject, and unchanged by it.
+
+# --- an ordinary char variable still compares as a char ---------------------
+let c: char = s[0]
+assert c == "a"
+
+print "all char/slice tests passed"

@@ -534,6 +534,37 @@ def _str_to_char_lit(s):
             return f"'{inner}'"
     return s
 
+def _is_nim_char_expr(expr):
+    """Is this emitted Nim expression a char rather than a string?
+
+    A char on one side of a comparison forces the other side to be one too,
+    so this decides whether a one-character string literal is rewritten as
+    'x'.  Getting it wrong is not cosmetic: nim refuses to compare a string
+    with a char, and the file stops compiling.
+
+    `s[i]` on a string is a char, but `s[i..<j]` is a *string*.  The test used
+    to be `^(\w+)\[`, which cannot tell those apart -- nor `s[0] + t` from a
+    subscript at all, since it never checked that the bracket closed the
+    expression.  `inner[i..<i + 1] != "\\"` in EXAMPLES/c500.ady had its
+    literal turned into a char by it, and that file has never compiled on nim.
+    """
+    import re as _re_ce
+    sym = ParserState.symbol_table.lookup(expr)
+    if sym and (sym.get("type") or "") == "char":
+        return True
+    m = _re_ce.match(r"^(\w+)\[", expr)
+    # A subscript has to *be* the expression, not merely start it: without
+    # the closing bracket `s[0] & e` counts as one, and the `"a"` it is
+    # compared against becomes a char while the left side stays a string.
+    if not m or not expr.endswith("]"):
+        return False
+    index = expr[m.end():-1]
+    if ".." in index:          # a slice: s[a..b], s[a..<b], s[a..^b]
+        return False
+    base_sym = ParserState.symbol_table.lookup(m.group(1))
+    return bool(base_sym) and (base_sym.get("type") or "") in ("string", "str")
+
+
 def _nim_type_of(expr_str):
     """Best-effort type lookup for a Nim expression string."""
     sym = ParserState.symbol_table.lookup(expr_str)
@@ -685,22 +716,10 @@ def binop_to_nim(self, prec=None, my_prec=None):
                 if _looks_like_str(result) or _looks_like_str(right):
                     nim_op = "&"
             # char comparisons: coerce single-char string literals to char literals
-            def _is_char_type(s):
-                sym = ParserState.symbol_table.lookup(s)
-                if sym and (sym.get("type") or "") == "char":
-                    return True
-                # subscript of a string variable is always char in Nim
-                import re as _re_ct
-                _m = _re_ct.match(r'^(\w+)\[', s)
-                if _m:
-                    base_sym = ParserState.symbol_table.lookup(_m.group(1))
-                    if base_sym and (base_sym.get("type") or "") in ("string", "str"):
-                        return True
-                return False
             if nim_op in ("<", ">", "<=", ">=", "==", "!="):
-                if _is_char_type(result):
+                if _is_nim_char_expr(result):
                     right = _str_to_char_lit(right)
-                elif _is_char_type(right):
+                elif _is_nim_char_expr(right):
                     result = _str_to_char_lit(result)
             # | stays as | when operands are non-integer (e.g. string | Style pipe)
             if nim_op == "or" and py_op == "|" and _is_pipe_not_bitor([result, right]):
@@ -3081,18 +3100,7 @@ def to_nim(self, prec=None):
     if len(pairs) > 1:
         operands = [base] + [seq.nodes[1].to_nim(operand_prec) for seq in pairs]
         ops = [_PY_OP_TO_NIM.get(_op_string(seq.nodes[0]), _op_string(seq.nodes[0])) for seq in pairs]
-        def _is_char(s):
-            sym = ParserState.symbol_table.lookup(s)
-            if sym and (sym.get("type") or "") == "char":
-                return True
-            import re as _re_ict
-            _mc = _re_ict.match(r'^(\w+)\[', s)
-            if _mc:
-                bsym = ParserState.symbol_table.lookup(_mc.group(1))
-                if bsym and (bsym.get("type") or "") in ("string", "str"):
-                    return True
-            return False
-        if any(_is_char(o) for o in operands):
+        if any(_is_nim_char_expr(o) for o in operands):
             operands = [_str_to_char_lit(o) for o in operands]
         parts = [f"{operands[i]} {ops[i]} {operands[i+1]}" for i in range(len(ops))]
         result = " and ".join(parts)
@@ -3149,21 +3157,10 @@ def to_nim(self, prec=None):
                     continue
             right = seq.nodes[1].to_nim(operand_prec)
             # char comparisons: coerce single-char string literals to char literals
-            def _is_char(s):
-                sym = ParserState.symbol_table.lookup(s)
-                if sym and (sym.get("type") or "") == "char":
-                    return True
-                import re as _re_ict
-                _mc = _re_ict.match(r'^(\w+)\[', s)
-                if _mc:
-                    bsym = ParserState.symbol_table.lookup(_mc.group(1))
-                    if bsym and (bsym.get("type") or "") in ("string", "str"):
-                        return True
-                return False
             if nim_op in ("<", ">", "<=", ">=", "==", "!="):
-                if _is_char(chain):
+                if _is_nim_char_expr(chain):
                     right = _str_to_char_lit(right)
-                elif _is_char(right):
+                elif _is_nim_char_expr(right):
                     chain = _str_to_char_lit(chain)
             # | stays as | when operands are non-integer (e.g. string | Style pipe)
             if nim_op == "or" and py_op == "|" and _is_pipe_not_bitor([chain, right]):
