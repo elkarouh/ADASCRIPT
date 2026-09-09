@@ -549,6 +549,17 @@ class Indenter:
         let lw: str = lead_word(code_s)
         var disp: int = len(self.stack)
 
+        # A 'type T is' that turns out to be an enum, derived, or other non-record
+        # type pushed TYPE_HEADER waiting for 'record'. When the declaration finishes
+        # (no open parens, no continuation) without ever seeing 'record', the type is
+        # complete — pop the stale frame so subsequent lines return to the enclosing
+        # scope level.  (A record type is handled separately: 'record' pushes RECORD
+        # and pops TYPE_HEADER in the keyword dispatch below.)
+        # Guard: do NOT pop if this line IS 'record' — let the keyword dispatch handle it.
+        if not self.in_cont and self.paren_depth == 0 and len(self.stack) > 0 and self.stack[-1] == TYPE_HEADER and lw != "record" and not code_s.startswith("("):
+            self.stack.pop()
+            disp = len(self.stack)
+
         # An 'X is\nnew Y;' generic instantiation pushed a PKG for 'X is'. Once the
         # 'new' statement finishes (no open parens, no continuation), pop it so the
         # next declaration or 'begin' aligns at the correct enclosing scope level.
