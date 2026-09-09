@@ -133,7 +133,7 @@ class StringPool:
     def pooled(self) -> str:
         HEX: str = "0123456789abcdef"
         result: str = ""
-        for b in keys(self.strs):
+        for b in self.strs.keys():
             i: int = 0
             while i < len(b):
                 n: int = ord(b[i])

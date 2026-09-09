@@ -997,7 +997,8 @@ def to_py(self):
                 elif hasattr(op_node, "nodes") and op_node.nodes:
                     op_str = op_node.nodes[0] if isinstance(op_node.nodes[0], str) else ""
                 if op_str == ":":
-                    annotation = f": {val_node.to_py()}"
+                    from hek_py3_expr import py_self_ref_annotation
+                    annotation = f": {py_self_ref_annotation(val_node.to_py())}"
                 elif op_str == "=":
                     default = f"={val_node.to_py()}"
     # A parameter is a typed name like any other, and until now only
@@ -1107,7 +1108,8 @@ def to_py(self, indent=0):
 def to_py(self):
     """return_annotation: '->' expression"""
     # V_ARROW is visible, so nodes = [V_ARROW, expression]
-    return f" -> {self.nodes[1].to_py()}"
+    from hek_py3_expr import py_self_ref_annotation
+    return f" -> {py_self_ref_annotation(self.nodes[1].to_py())}"
 
 
 def _branch_blocks(node, out):
@@ -1756,12 +1758,18 @@ def to_py(self, indent=0):
     # at class level that object is shared by every instance.  See
     # _zero_value() in hek_py3_stmt.py.
     import hek_py3_stmt as _stmt
+    import hek_py3_expr as _pyexpr
     _outer_class_depth = _stmt.CLASS_BODY_DEPTH
     _stmt.CLASS_BODY_DEPTH = _outer_class_depth + 1
+    # The class does not exist as a name until its body has finished, so any
+    # annotation inside it that names it has to be a forward reference.
+    _outer_defining = _pyexpr.DEFINING_CLASS
+    _pyexpr.DEFINING_CLASS = name
     try:
         body = block_node.to_py(indent + 1) if block_node else ""
     finally:
         _stmt.CLASS_BODY_DEPTH = _outer_class_depth
+        _pyexpr.DEFINING_CLASS = _outer_defining
     return f"{decos}{_ind(indent)}class {name}{type_params}{bases}:{hc}\n{body}"
 
 

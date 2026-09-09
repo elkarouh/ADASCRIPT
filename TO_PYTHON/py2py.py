@@ -504,6 +504,33 @@ def run_tests():
             "class Foo:\n    def bar(self):\n        pass\n",
             "class Foo:\n    def bar(self):\n        pass\n",
         ),
+        # --- a class body cannot name the class it is defining ---
+        # Python evaluates an annotation where it is written, and the class
+        # does not exist until its body ends, so these have to be forward
+        # references. EXAMPLES/c500.ady could not be imported without this.
+        (
+            "class Node:\n    nxt: ?Node\n",
+            'class Node:\n    nxt: "Node | None"\n',
+        ),
+        (
+            "class Node:\n    def clone(self) -> Node:\n        pass\n",
+            'class Node:\n    def clone(self) -> "Node":\n        pass\n',
+        ),
+        (
+            "class Node:\n    def link(self, other: Node):\n        pass\n",
+            'class Node:\n    def link(self, other: "Node"):\n        pass\n',
+        ),
+        # ...but a method body is an ordinary scope, entered only once the
+        # class exists, so a local there keeps its plain annotation.
+        (
+            "class Node:\n    def f(self):\n        n: Node = self\n",
+            "class Node:\n    def f(self):\n        n: Node = self\n",
+        ),
+        # An unrelated type in a class body is not quoted either.
+        (
+            "class Node:\n    count: int\n",
+            "class Node:\n    count: int\n",
+        ),
         # --- larger program ---
         (
             "import os\nimport sys\ndef main():\n    x = 1\n    if x:\n        return x\n    return None\n",

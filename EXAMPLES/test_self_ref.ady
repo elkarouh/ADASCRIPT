@@ -1,0 +1,68 @@
+#!/usr/bin/env py2nim
+# test_self_ref.ady — a class whose body names the class it is defining
+#
+#   py2nim EXAMPLES/test_self_ref.ady -r
+#   py2py  EXAMPLES/test_self_ref.ady -c
+#
+# Python evaluates an annotation where it is written, and a class does not
+# exist as a name until its body has finished. So a field typed with the
+# enclosing class, or a method returning or taking one, is a NameError at
+# import -- the generated module would not load at all:
+#
+#   lookahead_ref: Lexer | None
+#                  ^^^^^ NameError: name 'Lexer' is not defined
+#
+# Nim has no such rule and needed nothing. EXAMPLES/c500.ady is the corpus
+# file that hit it, in all three shapes below.
+
+class Node:
+    value: int
+    nxt: ?Node
+
+    def __init__(self, value: int):
+        self.value = value
+        self.nxt = None
+
+    # a method returning the class it belongs to
+    def clone(self) -> Node:
+        return Node(self.value)
+
+    # ...and one taking it as a parameter
+    def link(self, other: Node) -> None:
+        self.nxt = other
+
+    def depth(self) -> int:
+        # A local annotation inside a method body is *not* a forward
+        # reference: the body runs long after the class exists. It stays
+        # plain, and this is the shape that would break if it were quoted
+        # wholesale rather than only where Python needs it.
+        var cur: ?Node = self.nxt
+        var n: int = 1
+        while cur:
+            n += 1
+            cur = cur.nxt
+        return n
+
+
+var a: Node = Node(1)
+var b: Node = Node(2)
+var c: Node = Node(3)
+a.link(b)
+b.link(c)
+
+assert a.depth() == 3
+assert b.depth() == 2
+assert c.depth() == 1
+
+let copy: Node = a.clone()
+assert copy.value == 1
+assert copy.nxt == None      # a clone is not linked
+
+# The field really holds the class, not something coerced to it.
+# Tested through `!= None` rather than `if a.nxt:`: a ?T *field* of a ref
+# class is not presence-tested on Nim -- only a bare name is -- so the guard
+# form fails to compile there. That gap is unrelated to this file's subject.
+assert a.nxt != None
+assert a.nxt.value == 2
+
+print "all self-reference tests passed"

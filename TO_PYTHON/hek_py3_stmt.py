@@ -102,7 +102,8 @@ def to_py(self):
     """ann_assign_stmt: IDENTIFIER ':' expression ('=' expression)?"""
     name = self.nodes[0].to_py()
     # nodes[1] is V_COLON, nodes[2] is the type annotation
-    annotation = self.nodes[2].to_py()
+    from hek_py3_expr import py_self_ref_annotation
+    annotation = py_self_ref_annotation(self.nodes[2].to_py())
     result = f"{name}: {annotation}"
     # Check for optional '= value' part
     has_value = False

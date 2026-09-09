@@ -57,6 +57,7 @@ STANDALONE := \
     test_env_default.ady \
     test_env_optional.ady \
     test_optional_truthy.ady \
+    test_self_ref.ady \
     td_learning/sarsa.ady \
     td_learning/qlearning.ady \
     test_do_block.ady

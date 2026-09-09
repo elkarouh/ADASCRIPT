@@ -474,6 +474,42 @@ def _adascript_shuffle(_x):
 _ENVOPT_CALL_RE = r"os\.environ\.get\('[A-Za-z_]\w*'\)"
 
 
+# The class whose body is being emitted, or None.  Set by the class_def
+# emitter around the body only, so a nested class restores the outer one.
+DEFINING_CLASS = None
+
+
+def py_self_ref_annotation(annotation):
+    """Quote an annotation that names the class currently being defined.
+
+    Python evaluates annotations where they are written, and a class does not
+    exist until its body has finished, so `lookahead_ref: Lexer` inside
+    `class Lexer` is a NameError at import -- as is `def clone(self) -> Lexer`.
+    A string is the language's own answer: it is a forward reference, resolved
+    only by whoever asks for the type later.  Nim has no such rule and needed
+    nothing here, so this is where the two backends had to differ.
+
+    Only the enclosing class is handled. A reference to a class defined
+    *later* in the file fails on both backends and is a separate problem.
+    """
+    import re as _re_sr
+    import hek_py3_stmt as _stmt   # deferred: that module imports this one
+    if not DEFINING_CLASS or not annotation:
+        return annotation
+    # Only annotations evaluated *in the class body* need this -- the fields,
+    # and the parameter and return annotations of the methods, which Python
+    # evaluates at `def` time. Inside a method body the class already exists
+    # by the time the code runs, so a local keeps its plain annotation.
+    if not _stmt.CLASS_BODY_DEPTH:
+        return annotation
+    if annotation.startswith(('"', "'")):
+        return annotation
+    if not _re_sr.search(r"\b%s\b" % _re_sr.escape(DEFINING_CLASS), annotation):
+        return annotation
+    quote = "'" if '"' in annotation else '"'
+    return f"{quote}{annotation}{quote}"
+
+
 def py_expr_is_optional(expr):
     """Is this already-emitted Python expression a `?T`?
 
