@@ -213,6 +213,21 @@ test: compile
 	    ADY_TEST_EMPTY= $(EXDIR)/test_env_optional >/dev/null 2>&1 \
 	        && echo OK || { echo FAIL; exit 1; }
 
+	@# -t has to resolve nimport'd dependencies, not just translate the one
+	@# file: it writes to the very path a later build reads, so a .nim
+	@# emitted without the imported module's declarations poisons the cache.
+	@# test_awk.ady is the case -- its class inherits its constructor from
+	@# awk.ady -- and the check is that a build straight after a -t works.
+	@# A throwaway HOME gives it a cache of its own, so the check starts
+	@# cold and leaves the real cache alone either way.
+	@echo "=== Transpile-only, then build (py2nim -t) ==="
+	@printf '  %-42s' "test_awk.ady (-t then -r)"; \
+	    tmp=$$(mktemp -d); \
+	    HOME=$$tmp $(PY2NIM) -t $(EXDIR)/test_awk.ady >/dev/null 2>&1 \
+	      && HOME=$$tmp $(PY2NIM) $(EXDIR)/test_awk.ady -r </dev/null >/dev/null 2>&1 \
+	      && { echo OK; rm -rf $$tmp; } \
+	      || { echo FAIL; rm -rf $$tmp; exit 1; }
+
 	@# The one js-backend module. It is a library, not a program, so the
 	@# check is that `nim js` accepts it -- nothing else in this target
 	@# exercises the js path, and a dict literal is emitted differently

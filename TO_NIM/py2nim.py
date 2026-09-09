@@ -1216,7 +1216,7 @@ def main(argv=None):
     Modes
     -----
     py2nim                          read stdin, print Nim to stdout
-    py2nim -t file.ady              transpile → write .nim to cache, stop
+    py2nim -t file.ady              transpile (with deps) → cache, stop
     py2nim file.ady                 shebang default: compile + run (= c -r)
     py2nim c file.ady               transpile → compile (artifacts in cache)
     py2nim c -r file.ady            transpile → compile → run
@@ -1273,6 +1273,13 @@ def main(argv=None):
 
     Non-binary subcommands (check, doc, …) stop after tier 1 and always
     invoke nim (they produce no persistent executable to compare).
+
+    ``-t`` runs the same tier-1 pass, including the ``nimport`` dependency
+    resolution and the transpilation of each dependency into the cache, and
+    then stops.  It is the build's first tier, not a separate translation:
+    the .nim it writes is the one a later build compiles, so anything the
+    build would have known -- a base class's constructor, say -- has to be
+    known here too.
     """
     import subprocess
 
@@ -1358,10 +1365,19 @@ def main(argv=None):
     #   stderr -- stdout stays empty, so `py2nim -t f.ady > out.nim`     #
     #   yields an empty file.  Reading from stdin is the case that does  #
     #   print the Nim to stdout.                                          #
+    #                                                                     #
+    #   -t takes the same route as a build and stops before nim, rather  #
+    #   than translating the one file on its own: a `nimport`ed module's  #
+    #   declarations are needed to emit the importing file correctly, and #
+    #   the result is written to the very path a later build reads.  On   #
+    #   its own, `-t` on EXAMPLES/test_awk.ady emitted a constructor      #
+    #   without the parameters test_awk inherits from awk.ady, cached it, #
+    #   and the next build compiled that and failed on an argument the    #
+    #   proc no longer took.                                              #
     # ------------------------------------------------------------------ #
-    if ady_file and subcommand is None and not transpile_only and ady_file.endswith(".ady"):
+    if ady_file and subcommand is None and ady_file.endswith(".ady"):
         subcommand = "c"
-        run = True
+        run = not transpile_only
 
     # ------------------------------------------------------------------ #
     # 3.  Read source                                                     #
@@ -1716,6 +1732,11 @@ def main(argv=None):
             # Scan this dep for its own nimports regardless of whether we re-transpiled.
             with open(_dep_ady, encoding="utf-8") as _f:
                 _enqueue_nimports(_f.read(), _dep_dir)
+
+        # -t stops here: the .nim and every dependency it needs are written,
+        # which is all it was asked for.  Tier 1 has already printed the path.
+        if transpile_only:
+            sys.exit(0)
 
         # --- tier 2: compile? ---
         # Only meaningful for binary-producing subcommands.
