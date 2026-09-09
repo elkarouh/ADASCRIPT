@@ -1826,6 +1826,22 @@ path   = $PATH
 editor = $EDITOR
 ```
 
+An unset variable reads as the empty string. To supply something else, the
+shell's `${var:-val}` form works, falling back when the variable is unset
+**or** set to the empty string:
+
+```python
+cache  = ${XDG_CACHE_HOME:-"/tmp/cache"}
+editor = ${EDITOR:-$VISUAL}
+outdir = ${OUTDIR:-$HOME + "/output"}
+```
+
+Unlike the shell, where the fallback is a bare word, here it is an ordinary
+expression — so literal text needs quoting. A bare `/tmp` would lex as
+division and then as a regex literal.
+
+`${NAME}` without a fallback is accepted too, and means exactly `$NAME`.
+
 ### In expressions
 
 ```python

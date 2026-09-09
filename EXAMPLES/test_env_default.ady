@@ -1,0 +1,54 @@
+#!/usr/bin/env py2nim
+# test_env_default.ady — ${NAME:-default} and ${NAME}
+#
+#   py2nim EXAMPLES/test_env_default.ady -r
+#   py2py  EXAMPLES/test_env_default.ady -c
+#
+# The shell spells the fallback ${var:-val}, and the `:` in it matters: it
+# falls back when the variable is unset *or* set to the empty string. Both
+# backends have to agree on all of that, so every assertion here runs
+# unchanged on either.
+#
+# Adascript can read an environment variable but not set one, so this file
+# only reads. It passes standalone; `make test` additionally runs it with
+# ADY_TEST_SET and an empty ADY_TEST_EMPTY in the environment, which is what
+# makes the set-but-empty case below test `:-` rather than plain `-`.
+
+# --- unset: the default wins -----------------------------------------------
+assert ${ADY_TEST_NO_SUCH_VAR:-"fallback"} == "fallback"
+
+# --- set but empty: the default wins too ------------------------------------
+# The reason `:-` is not plain `-`. Nim's getEnv takes a default of its own,
+# but it only covers the unset case, so this is the assertion that stops the
+# emitter being simplified into it. True either way when the variable is
+# merely absent, which is why make test sets it to the empty string.
+assert ${ADY_TEST_EMPTY:-"fallback"} == "fallback"
+
+# --- set and non-empty: the variable wins -----------------------------------
+# HOME is the one variable that can be relied on to be set here.
+assert ${HOME:-"/fallback"} == $HOME
+assert ${HOME:-"/fallback"} != "/fallback"
+
+# --- the default is an expression, not a bare word --------------------------
+# Unlike the shell, where it is text. Quotes are needed for literal text,
+# because a bare /tmp would lex as division and then as a regex literal.
+let other: str = "computed"
+assert ${ADY_TEST_NO_SUCH_VAR:-other} == "computed"
+assert ${ADY_TEST_NO_SUCH_VAR:-other + "-suffix"} == "computed-suffix"
+assert ${ADY_TEST_NO_SUCH_VAR:-$HOME} == $HOME
+
+# The default is not what comes back when the variable is there.
+assert ${HOME:-other} == $HOME
+
+# --- ${NAME} is just $NAME --------------------------------------------------
+assert ${HOME} == $HOME
+assert ${ADY_TEST_NO_SUCH_VAR} == ""      # unset reads as empty, as $NAME does
+
+# --- and plain $NAME still works --------------------------------------------
+assert $HOME != ""
+
+# --- nested inside a larger expression --------------------------------------
+let joined: str = ${ADY_TEST_NO_SUCH_VAR:-"a"} + ${ADY_TEST_NO_SUCH_VAR:-"b"}
+assert joined == "ab"
+
+print "all env default tests passed"

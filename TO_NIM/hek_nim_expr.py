@@ -132,6 +132,26 @@ def _ensure_exists_helper():
         decls.append(_EXISTS_HELPER)
         ParserState.nim_top_decls = decls
 
+_ENVOR_HELPER = """\
+proc adascriptEnvOr(name, fallback: string): string =
+  ## `${NAME:-fallback}`: the variable, or the fallback when it is unset or
+  ## empty. os.getEnv takes a default of its own, but that one only applies
+  ## when the variable is absent -- the shell's `:-` also falls back on an
+  ## empty value, which is what this adds.
+  let v = getEnv(name)
+  if v.len > 0: v else: fallback
+"""
+
+
+def _ensure_envor_helper():
+    """Add adascriptEnvOr to nim_top_decls the first time ${NAME:-x} is used."""
+    ParserState.nim_imports.add("os")
+    decls = getattr(ParserState, 'nim_top_decls', [])
+    if not any("adascriptEnvOr" in d for d in decls):
+        decls.append(_ENVOR_HELPER)
+        ParserState.nim_top_decls = decls
+
+
 def _ensure_nimatch_helper():
     """Add the nimatch helper to nim_top_decls the first time =~ or !~ is used."""
     ParserState.nim_imports.update({"nre", "tables", "sequtils", "options"})
@@ -154,6 +174,13 @@ def _get_regex_info(node):
         else:
             return None
     return None
+
+# Bundled procs whose result is a string. Several places ask "is this
+# operand a string" -- to choose `&` over `+`, mostly -- and each had its own
+# list; this is the one they share.
+_STRING_RETURNING_CALLS = ("adascriptEnvOr(", "getEnv(", "paramStr(",
+                           "getAppFilename(")
+
 
 def _nim_expr_type(expr):
     """Infer the Nim type of an already-emitted expression string.
@@ -261,8 +288,7 @@ def _nim_expr_type(expr):
             return None
 
         # known string-returning stdlib calls
-        _STRING_CALLS = ("getEnv(", "paramStr(", "getAppFilename(")
-        if any(s.startswith(f) for f in _STRING_CALLS):
+        if s.startswith(_STRING_RETURNING_CALLS):
             return "string"
 
         # plain identifier — try both the raw form and the backtick-stripped form,
@@ -550,10 +576,12 @@ def binop_to_nim(self, prec=None, my_prec=None):
                 left_is_str = (result.startswith('"') or result.startswith('fmt"')
                                or result.startswith('r"') or result.startswith('$')
                                or result.endswith('.join("")') or result.endswith(".join(\"\")")
+                               or result.startswith(_STRING_RETURNING_CALLS)
                                or " & " in result)  # already a string concat chain
                 right_is_str = (right.startswith('"') or right.startswith('fmt"')
                                 or right.startswith('r"') or right.startswith('$')
                                 or right.endswith('.join("")') or right.endswith(".join(\"\")")
+                                or right.startswith(_STRING_RETURNING_CALLS)
                                 or '.join(' in right)
 
                 # field access on typed object (e.g. self.off where off: string)
@@ -2311,6 +2339,8 @@ def _expr_is_string(arg):
         return True
     if " & " in a:
         return True
+    if a.startswith(_STRING_RETURNING_CALLS):
+        return True
     if _re_st.fullmatch(r"[A-Za-z_]\w*", a):
         sym = ParserState.symbol_table.lookup(a)
         return bool(sym) and (sym.get("type") or "") in ("string", "str")
@@ -2643,6 +2673,26 @@ def to_nim(self, prec=None):
         n = int(name)
         return f'(if paramCount() >= {n}: paramStr({n}) else: "")'
     return f'getEnv("{name}")'
+
+
+@method(env_default)
+def to_nim(self, prec=None):
+    """env_default: ${NAME:-expr} -> the variable, or expr when it is empty.
+
+    The shell's `:-` falls back when the variable is unset *or* set to the
+    empty string, and Nim's getEnv cannot express the second on its own --
+    its own default argument only covers unset -- so the emptiness test is
+    written out. getEnv is a pure lookup, so naming it twice costs nothing
+    and keeps this an expression.
+    """
+    raw = self.nodes[0]
+    # Same shape dollar_var unwraps: the ENVDEF terminal is an fmap, so the
+    # name is on .node rather than on the parser object itself.
+    raw = raw.node if hasattr(raw, "node") else raw
+    name = raw.string if hasattr(raw, "string") else str(raw)
+    default = self.nodes[1].to_nim()
+    _ensure_envor_helper()
+    return f'adascriptEnvOr("{name}", {default})'
 
 
 # --- range expression (.., ..<) ---

@@ -1143,6 +1143,25 @@ def to_py(self, prec=None):
     return f"os.environ.get('{name}', '')"
 
 
+@method(env_default)
+def to_py(self, prec=None):
+    """env_default: ${NAME:-expr} -> the variable, or expr when it is empty.
+
+    `or` is exactly the shell's `:-`: os.environ.get returns None when the
+    variable is unset and "" when it is set but empty, and both are falsy,
+    so either one falls through to the default.
+    """
+    from hek_parsec import ParserState
+    raw = self.nodes[0]
+    # Same shape dollar_var unwraps: the ENVDEF terminal is an fmap, so the
+    # name is on .node rather than on the parser object itself.
+    raw = raw.node if hasattr(raw, "node") else raw
+    name = raw.string if hasattr(raw, "string") else str(raw)
+    default = self.nodes[1].to_py()
+    ParserState.nim_imports.add("import os")
+    return f"(os.environ.get('{name}') or {default})"
+
+
 # --- range expression (.., ..<) ---
 @method(range_incl_op)
 def to_py(self, prec=None):

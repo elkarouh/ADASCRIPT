@@ -34,6 +34,7 @@ REGEX_TOKEN         = 98   # Perl regex lit:  /pattern/flags
 CAPTURE_TOKEN       = 99   # Regex capture:   $+1, $+2, ...
 NAMED_CAPTURE_TOKEN = 100  # Named capture:   $+{name}
 SUBST_TOKEN         = 101  # Perl substitution: s/pattern/replacement/flags
+ENVDEF_TOKEN        = 102  # Env var with a default: ${NAME:-  (default expr follows)
 
 # ---------------------------------------------------------------------------
 # Monkey-patch TokenInfo so existing code can compare tok == "string"
@@ -1042,6 +1043,31 @@ def _lex_impl(source):
                     yield tkn.TokenInfo(_NAME, '@', at_lc, at_end, line_txt)
                     prev_name = '@'; last_type = _NAME
                     i = j + 1; continue
+                elif nc == '{':
+                    # ${NAME}          -- same as $NAME, braces are noise
+                    # ${NAME:-default} -- default when unset *or* empty, as
+                    #                     in the shell's ${var:-val}
+                    _envm = re.match(r'\{([A-Za-z_]\w*)(:-|\})', src[j:])
+                    if _envm:
+                        _ename = _envm.group(1)
+                        if _envm.group(2) == '}':
+                            # Plain braced form: emit what $NAME emits and
+                            # swallow both braces.
+                            yield tkn.TokenInfo(DOLLAR_TOKEN, '$', dol_lc, dol_end, line_txt)
+                            _e_lc = get_linecol(j + 1)
+                            _e_end = get_linecol(j + 1 + len(_ename))
+                            yield tkn.TokenInfo(_NAME, _ename, _e_lc, _e_end, line_txt)
+                            last_type = _NAME
+                            i = j + _envm.end(); continue
+                        # `${NAME:-` becomes one token carrying the name. The
+                        # default is an ordinary expression, so it tokenises
+                        # by itself, and the `}` that closes it is the usual
+                        # brace token -- which is what lets the default be
+                        # anything, not just a bare word as in the shell.
+                        _en_end = get_linecol(j + _envm.end())
+                        yield tkn.TokenInfo(ENVDEF_TOKEN, _ename, dol_lc, _en_end, line_txt)
+                        last_type = ENVDEF_TOKEN
+                        i = j + _envm.end(); continue
                 elif nc.isdigit():
                     nm2 = re.match(r'\d+', src[j:])
                     num_s = nm2.group(0)

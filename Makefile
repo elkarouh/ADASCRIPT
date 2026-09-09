@@ -54,6 +54,7 @@ STANDALONE := \
     test_queues.ady \
     test_regex.ady \
     test_regex_g.ady \
+    test_env_default.ady \
     td_learning/sarsa.ady \
     td_learning/qlearning.ady \
     test_do_block.ady
@@ -197,6 +198,14 @@ test: compile
 	    printf '  %-42s' "$$f"; \
 	    $(PY2NIM) $(AIDIR)/$$f -r >/dev/null 2>&1 && echo OK || { echo FAIL; exit 1; }; \
 	done
+
+	@# test_env_default.ady passes standalone, but the `:-` case that
+	@# distinguishes it from plain `-` needs a variable that is *set* and
+	@# empty, and Adascript can read the environment but not write it.
+	@echo "=== Env default (set-but-empty case) ==="
+	@printf '  %-42s' "test_env_default.ady (ADY_TEST_EMPTY=)"; \
+	    ADY_TEST_EMPTY= $(EXDIR)/test_env_default >/dev/null 2>&1 \
+	        && echo OK || { echo FAIL; exit 1; }
 
 	@# The one js-backend module. It is a library, not a program, so the
 	@# check is that `nim js` accepts it -- nothing else in this target

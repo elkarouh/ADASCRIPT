@@ -52,6 +52,7 @@ from hek_parsec import (
     STRING,
     TICK,
     DOLLAR,
+    ENVDEF,
     BASH_TEST,
     BASH_CMP,
     RANGE_OP,
@@ -248,6 +249,13 @@ _DOLLAR_SUFFIX = filt(
 )
 dollar_var = DOLLAR + _DOLLAR_SUFFIX
 
+# --- env var with a default: ${NAME:-expr} ---
+# The shell spells this ${var:-val}; the default here is a full
+# expression rather than a bare word, so text needs quoting --
+# ${HOME:-"/tmp"} -- since a bare /tmp would lex as division and
+# then as a regex literal.
+env_default = ENVDEF + expression + RBRACE
+
 # --- regex capture references: $+1  $+{name} ---
 capture_var       = CAPTURE        # $+N   positional capture group
 named_capture_var = NAMED_CAPTURE  # $+{name} named capture group
@@ -288,6 +296,7 @@ atom = (
     | K_FALSE
     | capture_var
     | named_capture_var
+    | env_default
     | dollar_var
     | regex_lit
     | IDENTIFIER
