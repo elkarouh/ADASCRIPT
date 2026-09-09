@@ -1,0 +1,29 @@
+"""
+geometry — points, distances, and the units the rest of the program speaks.
+
+A leaf module: it nimports nothing of its own, so every other module in the
+project can depend on it without creating a cycle.  Nim compiles a module
+once per build no matter how many modules import it.
+"""
+
+nimport math
+
+type Point_T is tuple:
+    x: float
+    y: float
+
+
+let ORIGIN: Point_T = (x: 0.0, y: 0.0)
+
+
+def distance(a: Point_T, b: Point_T) -> float:
+    """Euclidean distance between two points."""
+    return sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2)
+
+
+def bearing(a: Point_T, b: Point_T) -> float:
+    """Compass bearing from a to b, in degrees clockwise from north."""
+    let deg: float = arctan2(b.x - a.x, b.y - a.y) * 180.0 / PI
+    if deg < 0.0:
+        return deg + 360.0
+    return deg

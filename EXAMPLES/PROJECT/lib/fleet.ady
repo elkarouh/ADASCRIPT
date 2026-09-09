@@ -1,0 +1,35 @@
+"""
+fleet — the domain model: a vehicle, and a depot that owns vehicles.
+
+Depends on `geometry`, a sibling inside lib/.  A sibling is nimported by its
+bare name: dependency resolution looks beside the importing file first.
+"""
+
+nimport geometry
+
+type Vehicle_T is record:
+    name:     str
+    position: Point_T
+    fuel:     float
+
+
+class Depot:
+    var name:     str
+    var position: Point_T
+    var vehicles: []Vehicle_T
+
+    def __init__(self, name: str, position: Point_T):
+        self.name     = name
+        self.position = position
+        self.vehicles = []
+
+    def add(self, name: str, position: Point_T, fuel: float) -> None:
+        self.vehicles.append(Vehicle_T(name, position, fuel))
+
+    def out_of_range(self, km_per_litre: float) -> []str:
+        """Vehicles that cannot make it home on the fuel they carry."""
+        var stranded: []str = []
+        for v in self.vehicles:
+            if distance(v.position, self.position) > v.fuel * km_per_litre:
+                stranded.append(v.name)
+        return stranded

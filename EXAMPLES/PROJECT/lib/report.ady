@@ -1,0 +1,12 @@
+"""
+report — turns the model into text.  Depends on geometry, not on fleet:
+formatting knows about points, and nothing about depots.
+"""
+
+nimport geometry
+
+
+def format_leg(label: str, a: Point_T, b: Point_T) -> str:
+    let km:  float = distance(a, b)
+    let brg: float = bearing(a, b)
+    return f"{label}: {km:.1f} km, bearing {brg:.1f}"

@@ -13,9 +13,10 @@ interpreters, system tools and interactive shell utilities.
 ## How to read this book
 
 Chapters 1–5 cover the core language and should be read in order. Chapters
-6–12 are feature deep-dives that can be read in any order. Chapter 13 walks
-through the large example programs as case studies, and the appendix is a
-condensed syntax reference.
+6–12 are feature deep-dives that can be read in any order. Chapter 13 leaves
+the single file behind and covers modules, project layout and the build.
+Chapter 14 walks through the large example programs as case studies, and the
+appendix is a condensed syntax reference.
 
 Whenever a chapter quotes a program, the path is given relative to the
 repository root (e.g. `EXAMPLES/monty_hall.ady`) so you can open the full
@@ -37,8 +38,9 @@ source, transpile it, and run it on either backend.
 | 10 | [Optional Types and the Maybe Monad](10-optionals.md) | `graph.ady`, `phonecode.ady`, `test_do_block.ady` |
 | 11 | [Shell Integration: Adascript as a Better Bash](11-shell-and-scripting.md) | `fsel.ady`, `sv.ady`, `show_status.ady`, `test_shell_block.ady` |
 | 12 | [Living on Two Backends](12-two-backends.md) | `test_ownership.ady`, `rsync_time_machine.ady`, `shortest_path.ady` |
-| 13 | [Case Studies: The Big Programs](13-case-studies.md) | `tsp.ady`, `lispy.ady`, `git1.ady`, `geo_server.ady`, `sudoku.ady`, `lolcate.ady`, `jacks.ady`, `qlearning.ady` |
-| A | [Appendix: Syntax Cheat Sheet and Toolchain](14-appendix.md) | — |
+| 13 | [Programming in the Large: Modules, Projects, and Builds](13-programming-in-the-large.md) | `PROJECT/`, `CFMU/`, `TIMETABLE/` |
+| 14 | [Case Studies: The Big Programs](14-case-studies.md) | `tsp.ady`, `lispy.ady`, `git1.ady`, `geo_server.ady`, `sudoku.ady`, `lolcate.ady`, `jacks.ady`, `qlearning.ady` |
+| A | [Appendix: Syntax Cheat Sheet and Toolchain](15-appendix.md) | — |
 
 ## Running the examples
 

@@ -1,0 +1,16 @@
+#!/usr/bin/env py2nim
+"""
+test_geometry — a unit test is just an entry point that nimports the module
+under test and asserts.  Build and run it like any other program:
+
+    py2nim c -r EXAMPLES/PROJECT/test_geometry.ady
+"""
+
+nimport lib/geometry
+
+assert distance(ORIGIN, (x: 3.0, y: 4.0)) == 5.0
+assert distance(ORIGIN, ORIGIN) == 0.0
+assert bearing(ORIGIN, (x: 0.0, y: 1.0)) == 0.0
+assert bearing(ORIGIN, (x: 1.0, y: 0.0)) == 90.0
+assert bearing(ORIGIN, (x: -1.0, y: 0.0)) == 270.0
+print "all geometry checks passed"

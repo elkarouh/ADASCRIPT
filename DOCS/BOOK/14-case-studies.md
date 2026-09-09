@@ -1,4 +1,4 @@
-# Chapter 13 — Case Studies: The Big Programs
+# Chapter 14 — Case Studies: The Big Programs
 
 The previous chapters quoted the examples feature by feature. This chapter
 reverses the lens: each section takes one substantial program and asks what
@@ -469,4 +469,4 @@ its author does.
 
 ---
 
-*Next: [Appendix — Syntax Cheat Sheet and Toolchain](14-appendix.md)*
+*Next: [Appendix — Syntax Cheat Sheet and Toolchain](15-appendix.md)*

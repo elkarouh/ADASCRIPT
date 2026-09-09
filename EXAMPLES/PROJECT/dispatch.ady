@@ -1,0 +1,42 @@
+#!/usr/bin/env py2nim
+"""
+dispatch — the entry point of the PROJECT example.
+
+    EXAMPLES/PROJECT/
+        dispatch.ady        <- this file: the program
+        lib/geometry.ady    <- leaf module: types and pure functions
+        lib/fleet.ady       <- domain model, nimports geometry
+        lib/report.ady      <- formatting, nimports geometry
+
+Modules under a subdirectory are nimported by their path relative to this
+file (`lib/fleet`); modules beside the importing file are nimported by their
+bare name (`geometry`, from inside lib/).  Build it like any other program:
+
+    py2nim c -r EXAMPLES/PROJECT/dispatch.ady
+"""
+
+nimport lib/geometry
+nimport lib/fleet
+nimport lib/report
+
+let base: Point_T = (x: 0.0, y: 0.0)
+
+var d: Depot = Depot("Central", base)
+d.add("truck-1", (x: 12.0, y:  5.0), 4.0)
+d.add("truck-2", (x: 40.0, y: 30.0), 4.0)
+d.add("van-7",   (x:  3.0, y:  1.0), 1.0)
+
+# A record declared in lib/fleet.ady, built here: the field order crosses the
+# module boundary with the type, so the positional form works in either file.
+let spare: Vehicle_T = Vehicle_T("van-9", (x: 2.0, y: 2.0), 6.0)
+print "spare:", spare.name, spare.fuel
+
+print format_leg("truck-1", base, d.vehicles[0].position)
+print format_leg("truck-2", base, d.vehicles[1].position)
+
+let stranded: []str = d.out_of_range(10.0)
+print "out of range:", stranded
+
+assert len(stranded) == 1
+assert stranded[0] == "truck-2"
+print "all PROJECT checks passed"

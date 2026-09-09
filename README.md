@@ -54,6 +54,7 @@ source.ady
 - [Named Tuple Literals](#named-tuple-literals)
 - [Functions](#functions)
 - [Classes and Inheritance](#classes-and-inheritance)
+- [Modules and Project Layout](#modules-and-project-layout)
 - [Nim-Only Imports](#nim-only-imports)
 - [Raw Nim Injection](#raw-nim-injection)
 - [Python Interoperability](#python-interoperability)
@@ -1126,6 +1127,142 @@ class AwkProcessor(AwkBase):
     var counts: [Severity_T]int = [INFO: 0, WARN: 0, ERROR: 0, OTHER: 0]
     # no __init__ needed — AwkProcessor(fs, ofs) is generated automatically
 ```
+
+---
+
+## Modules and Project Layout
+
+Everything above describes one file. A program that outgrows one file splits
+into modules, and `nimport` is how they find each other. This is a
+**Nim-backend feature**: py2nim resolves, transpiles and compiles a whole
+dependency graph, while py2py translates one file at a time (see
+[Known Limitations](#known-limitations)).
+
+A module is just a `.ady` file; there is no manifest and nothing to register.
+`EXAMPLES/PROJECT/` is a complete four-file program:
+
+```
+EXAMPLES/PROJECT/
+    dispatch.ady          # the program — nimport lib/geometry, lib/fleet, lib/report
+    lib/geometry.ady      # leaf module: Point_T, distance(), bearing()
+    lib/fleet.ady         # domain model — nimport geometry  (sibling, bare name)
+    lib/report.ady        # formatting   — nimport geometry
+    test_geometry.ady     # a second entry point: the unit test for lib/geometry
+```
+
+```bash
+py2nim c -r EXAMPLES/PROJECT/dispatch.ady
+```
+
+### Importing your own modules
+
+```python
+nimport geometry           # geometry.ady beside this file, or one directory up
+nimport lib/fleet          # lib/fleet.ady — path form, written with '/'
+from geometry nimport distance   # selective form; imports the whole module
+```
+
+Imported names arrive **unqualified** — after `nimport geometry`,
+`distance(a, b)` is in scope. `geometry.distance(a, b)` is accepted too and
+compiles to the same call.
+
+Plain `import geometry` is rejected: `import` is reserved for Python modules,
+`pyimport` for Python packages via nimpy.
+
+### How a name is resolved
+
+For every `nimport`, py2nim looks for a matching `.ady` file in three places,
+in order:
+
+1. the directory of the file doing the importing,
+2. that directory's parent,
+3. the build cache, where the bundled `TO_NIM/STDLIB/*.ady` libraries live.
+
+The first hit wins; if nothing matches, the name is handed to Nim untouched —
+which is exactly what makes `nimport strutils` work. There is no `..`
+syntax; the parent rule covers the one level of escape a layout needs, and
+it is what lets an entry point in `bin/` say `nimport lib/util`.
+
+### Layouts that work
+
+| Layout | When | Example |
+|--------|------|---------|
+| Flat — every module in one directory | up to a dozen modules | `EXAMPLES/CFMU/` (17 scripts over `ftps_common.ady`) |
+| Entry point at the root, modules in `lib/` | modules with their own relationships | `EXAMPLES/PROJECT/` |
+| `bin/` programs, `lib/` modules | several programs, one library | resolved by the parent rule |
+
+Modules address each other by bare name (siblings); the program addresses
+them by path from the project root (`lib/geometry`).
+
+### The build
+
+```
+py2nim c -r EXAMPLES/PROJECT/dispatch.ady
+
+# transpiled → ~/.cache/hparsec/cache-<HASH>/dispatch.nim
+# transpiled dependency → ~/.cache/hparsec/cache-<HASH>/lib/geometry.nim
+# transpiled dependency → ~/.cache/hparsec/cache-<HASH>/lib/fleet.nim
+# transpiled dependency → ~/.cache/hparsec/cache-<HASH>/lib/report.nim
+# nim c --nimcache:… --out:…/.dispatch --path:…/cache-<HASH> …/dispatch.nim
+```
+
+1. py2nim walks the `nimport` graph breadth-first and pre-parses every
+   dependency, collecting what importers need: class names, constructor
+   signatures, `ref`/virtual classes, return types, and the field order of
+   records and named tuples.
+2. Each dependency is transpiled into the entry point's cache directory with
+   Nim export markers (`proc distance*`), mirroring any subdirectory in its
+   name.
+3. One `nim c` compiles the graph, with `--path:<cache dir>` so
+   `import lib/geometry` resolves inside the cache.
+
+The cache directory is keyed by a hash of the entry point's absolute path and
+the backend, so each program gets its own; nothing but the binary symlink is
+written next to your sources. Rebuilds follow the same three mtime tiers as a
+single file: a dependency edited at any depth re-triggers the compile.
+`py2nim -t` runs the transpile step for the whole graph and stops.
+
+### What crosses a module boundary
+
+Types (records, named tuples, enums, subranges, classes), procs, iterators,
+constants and `let` bindings — plus the two pieces of knowledge the
+transpiler needs to keep its rewrites working across files:
+
+```python
+# lib/fleet.ady declares the record and the class
+type Vehicle_T is record:
+    name: str
+    position: Point_T
+    fuel: float
+
+# dispatch.ady builds both — field order and constructor signature travel
+# with the type, so the positional forms work in the importer too
+let spare: Vehicle_T = Vehicle_T("van-9", (x: 2.0, y: 2.0), 6.0)
+var d:     Depot     = Depot("Central", base)       # -> newDepot("Central", base)
+```
+
+Inheritance works across files as well: a `@virtual` base class in one module
+and a subclass in another (that is `EXAMPLES/test_awk.ady` over the bundled
+`awk.ady`), including the inherited constructor.
+
+### Rules to respect
+
+- **Module top-level code runs at import time**, before the program's first
+  line — modules declare, programs act.
+- **Keep the graph acyclic.** Give the project a leaf module for shared
+  types. Nim tolerates some mutual imports, but a cycle involving type
+  declarations does not resolve.
+- **Basenames must be unique across the project** — dependencies land in one
+  cache directory, keyed by the name they were imported by.
+- **A basename cannot be a Nim keyword.** `mod.ady` fails with
+  ``Error: invalid module name: `mod` ``.
+- **Exported names share one namespace.** Nim overloading absorbs most of it;
+  rename the rest.
+- **A module test is just another entry point** that nimports the module and
+  asserts — see `EXAMPLES/PROJECT/test_geometry.ady`.
+
+Full treatment, with the layouts and failure modes worked through:
+[The Adascript Book, Chapter 13 — Programming in the Large](DOCS/BOOK/13-programming-in-the-large.md).
 
 ---
 
@@ -2224,6 +2361,16 @@ records whose fields have no default — are fixed. The round-trip suite in
 as the less exercised of the two and check it on anything unusual. Sweeping
 every example through `py2py` and parsing the result is a cheap way to catch
 a regression the Nim-only test suite cannot see.
+
+**Multi-module programs are Nim-only** — `nimport` is the module mechanism,
+and py2nim is the only side of the toolchain that resolves a dependency
+graph: it finds each `nimport`ed `.ady`, transpiles it with export markers and
+compiles the lot. py2py strips `nimport` to a comment, translates exactly one
+file (to `<name>_gen.py`), and carries no type knowledge across files, so a
+record built in one file and used in another degrades to a bare tuple.
+`from geometry import *` is not a way round it — it survives into the Nim
+output as invalid Nim. Code that has to run on both backends stays in one
+file; see [Modules and Project Layout](#modules-and-project-layout).
 
 **Nim stdlib coverage** — generated Nim code relies on a local `stdlib.nim`
 shim for some Python builtins (`PriorityQueue`, `FifoQueue`, `ANY`). See

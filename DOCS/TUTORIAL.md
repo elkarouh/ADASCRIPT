@@ -37,7 +37,8 @@ source.ady  ──▶  python3 TO_PYTHON/py2py.py source.ady  ──▶  Python 
 18. [Real Examples](#18-real-examples)
 19. [Regex Literals](#19-regex-literals)
 20. [Memory Ownership](#20-memory-ownership)
-21. [Summary of Adascript-Only Syntax](#summary-of-adascript-only-syntax)
+21. [Programming in the Large](#21-programming-in-the-large)
+22. [Summary of Adascript-Only Syntax](#summary-of-adascript-only-syntax)
 
 ---
 
@@ -2421,6 +2422,102 @@ advanced scenarios are not yet supported:
   (Nim does not have a borrow checker either).  Misusing `move()` does not
   produce a compile-time error; the moved-from variable simply becomes a
   zero/nil value at runtime.
+
+---
+
+## 21. Programming in the Large
+
+Up to here every program has been one file. Past a few hundred lines a
+program wants modules, and `nimport` is how they find each other. This is a
+Nim-backend feature: py2nim builds a whole dependency graph, py2py translates
+one file at a time.
+
+### 21.1 A module is a file
+
+No manifest, no package file, nothing to register. `EXAMPLES/PROJECT/` is a
+complete example:
+
+```
+EXAMPLES/PROJECT/
+    dispatch.ady          # the program
+    lib/geometry.ady      # leaf module: Point_T, distance(), bearing()
+    lib/fleet.ady         # domain model — nimport geometry
+    lib/report.ady        # formatting   — nimport geometry
+    test_geometry.ady     # a second entry point: the unit test
+```
+
+```bash
+py2nim c -r EXAMPLES/PROJECT/dispatch.ady
+```
+
+```python
+# dispatch.ady
+nimport lib/geometry
+nimport lib/fleet
+nimport lib/report
+
+let base: Point_T = (x: 0.0, y: 0.0)
+
+var d: Depot = Depot("Central", base)        # constructor crosses the file boundary
+d.add("truck-1", (x: 12.0, y: 5.0), 4.0)
+
+print format_leg("truck-1", base, d.vehicles[0].position)
+```
+
+Every top-level declaration of a nimported file is exported automatically —
+`def distance(...)` becomes `proc distance*(...)` in the generated Nim. Names
+arrive unqualified, so `distance(a, b)` just works; `geometry.distance(a, b)`
+is accepted and means the same thing.
+
+### 21.2 How a name is found
+
+For each `nimport`, py2nim looks for the `.ady` file in three places, in
+order: the importing file's own directory, that directory's parent, then the
+build cache (where the bundled `TO_NIM/STDLIB/*.ady` libraries are
+installed). The first hit wins; if nothing matches, the name is passed to Nim
+untouched, which is what makes `nimport strutils` work.
+
+So a sibling is imported by its bare name (`nimport geometry` inside
+`lib/fleet.ady`), and the program addresses modules by their path from the
+project root (`nimport lib/geometry`). There is no `..` — the parent rule is
+what lets an entry point in `bin/` write `nimport lib/util`.
+
+### 21.3 Layouts
+
+| Layout | When |
+|--------|------|
+| Flat — every module in one directory | up to a dozen modules (`EXAMPLES/CFMU/`) |
+| Program at the root, modules in `lib/` | modules with their own relationships (`EXAMPLES/PROJECT/`) |
+| `bin/` programs over a shared `lib/` | several programs, one library |
+
+### 21.4 The build
+
+`py2nim c -r dispatch.ady` walks the `nimport` graph breadth-first,
+pre-parses each dependency (collecting class names, constructor signatures,
+return types, and the field order of records and named tuples), transpiles
+each into a per-program cache directory under `~/.cache/hparsec/`, and then
+runs one `nim c` over the graph with `--path` pointing at that cache. Only
+the binary symlink is written next to your sources. Editing any module at any
+depth triggers a rebuild; `py2nim -t` transpiles the graph and stops.
+
+### 21.5 Rules
+
+- A module's top-level statements run at import time, before the program's
+  first line. Modules declare; programs act.
+- Keep the graph acyclic — give the project a leaf module for shared types.
+  Nim tolerates some mutual imports, but a cycle involving type declarations
+  does not resolve.
+- Basenames must be unique project-wide, and must not be Nim keywords
+  (`mod.ady` fails with `invalid module name`).
+- Exported names share one namespace; Nim overloading absorbs most clashes.
+- A module's test is another entry point that nimports it and asserts
+  (`EXAMPLES/PROJECT/test_geometry.ady`).
+- `nimport` is Nim-only. py2py comments it out and translates one file at a
+  time, so a program split across modules is a Nim program; dual-backend code
+  stays in one file.
+
+Chapter 13 of the book (`DOCS/BOOK/13-programming-in-the-large.md`) works
+through the same ground in more detail.
 
 ---
 

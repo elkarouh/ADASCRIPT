@@ -641,6 +641,31 @@ nimport awk             # AwkBase record-processor base class
 nimport shortest_path   # another .ady file as a library (auto-transpiled)
 ```
 
+**Modules (Nim backend only)** — a module is a `.ady` file; `nimport` links a whole project:
+
+```adascript
+# EXAMPLES/PROJECT/dispatch.ady — the program
+nimport lib/geometry    # lib/geometry.ady, path written with '/'
+nimport lib/fleet
+# EXAMPLES/PROJECT/lib/fleet.ady — a module
+nimport geometry        # a sibling is imported by its bare name
+```
+
+Resolution order for each nimported name: the importing file's directory, its
+parent, then the build cache (where the bundled `TO_NIM/STDLIB/*.ady`
+libraries live). No match -> the name goes to Nim untouched, which is why
+`nimport strutils` works. No `..` syntax; the parent rule covers `bin/` +
+`lib/` layouts.
+
+- Imported names arrive unqualified (`distance(a, b)`); `geometry.distance(a, b)` is the same call.
+- Every top-level declaration of a dependency is exported automatically.
+- Types, constructor signatures and record field order cross the boundary, so `Vehicle_T("van-9", p, 6.0)` and `Depot("Central", base)` work in an importer.
+- A dependency's top-level statements run at import time — modules declare, programs act.
+- Basenames must be unique project-wide and must not be Nim keywords (`mod.ady` fails).
+- Keep the import graph acyclic: put shared types in a leaf module.
+- Build the whole graph with `py2nim c -r <entry>.ady`; `py2nim -t` transpiles it and stops.
+- **py2py has no module resolution**: `nimport` is stripped to a comment and each file is translated alone, so a multi-module program is a Nim program. Dual-backend code stays in one file.
+
 **`# nimraw: <code>`** — raw Nim line verbatim, stripped from Python. Mainly for forward declarations of mutually recursive functions:
 ```adascript
 # nimraw: proc b(x: int): int

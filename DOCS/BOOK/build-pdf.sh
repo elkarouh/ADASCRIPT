@@ -44,8 +44,9 @@ CHAPTERS=(
     10-optionals.md
     11-shell-and-scripting.md
     12-two-backends.md
-    13-case-studies.md
-    14-appendix.md
+    13-programming-in-the-large.md
+    14-case-studies.md
+    15-appendix.md
 )
 
 command -v pandoc >/dev/null 2>&1 || { echo "error: pandoc not found" >&2; exit 1; }

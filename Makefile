@@ -61,6 +61,8 @@ STANDALONE := \
     test_char_slice.ady \
     td_learning/sarsa.ady \
     td_learning/qlearning.ady \
+    PROJECT/dispatch.ady \
+    PROJECT/test_geometry.ady \
     test_do_block.ady
 
 # -----------------------------------------------------------------------

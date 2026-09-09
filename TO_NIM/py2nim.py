@@ -51,6 +51,13 @@ _nimport_proc_return_types: dict = {}
 # subclasses in the importing file are also emitted as ref object.
 _nimport_ref_classes: set = set()
 
+# Field order of records and named tuples declared in nimport'd .ady
+# dependencies.  Positional construction -- Rec_T("hi", 1) -- is rewritten to
+# Nim's named form using the declared order, so a type declared in one module
+# and constructed in another needs its order carried across the file boundary.
+_nimport_object_field_order: dict = {}
+_nimport_tuple_field_order: dict = {}
+
 
 def _nim_reset():
     """Initialise all Nim-backend fields on ParserState.
@@ -102,6 +109,10 @@ def parse_module(code):
     _nim_reset()
     ParserState.proc_param_types_full.update(_nimport_param_types_full)
     ParserState.proc_return_types.update(_nimport_proc_return_types)
+    # Field orders from deps go in first, so a type redeclared locally still
+    # wins: the local declaration overwrites the entry while parsing.
+    ParserState.object_field_order.update(_nimport_object_field_order)
+    ParserState.tuple_field_order.update(_nimport_tuple_field_order)
     # Register class names from nimport'd deps so ClassName(args) → newClassName(args)
     for _cls in _nimport_class_names:
         if not ParserState.symbol_table.lookup(_cls):
@@ -1581,6 +1592,27 @@ def main(argv=None):
         import re as _re_prepass
         _ady_dir_pre = os.path.dirname(os.path.abspath(ady_file))
 
+        _NIMPORT_DEP_RE = (r'^\s*(?:nimport\s+(\w[\w./]*(?:\s*,\s*\w[\w./]*)*)'
+                           r'|from\s+(\w[\w./]*)\s+nimport\b)')
+
+        def _dep_names(src_code):
+            """Module names a source file nimports, in source order.
+
+            Both spellings name a dependency -- `nimport geom, util` and
+            `from geom nimport dist` -- and each name in a comma list is one.
+            A name with no .ady beside it (`nimport strutils`, `from stdlib
+            nimport PriorityQueue`) resolves to nothing here and is left to
+            Nim's own import path.
+            """
+            names = []
+            for _plain, _from in _re_prepass.findall(_NIMPORT_DEP_RE, src_code,
+                                                     _re_prepass.MULTILINE):
+                if _from:
+                    names.append(_from)
+                else:
+                    names += [n.strip() for n in _plain.split(",") if n.strip()]
+            return names
+
         def _find_dep_ady_pre(dep_name, search_dir):
             _cands = [
                 os.path.join(search_dir, dep_name + ".ady"),
@@ -1593,7 +1625,7 @@ def main(argv=None):
         _prepass_worklist = []
 
         def _enqueue_prepass(src_code, search_dir):
-            for _dn in _re_prepass.findall(r'^\s*nimport\s+(\w[\w./]*)', src_code, _re_prepass.MULTILINE):
+            for _dn in _dep_names(src_code):
                 if _dn not in _prepass_seen:
                     _path = _find_dep_ady_pre(_dn, search_dir)
                     if _path:
@@ -1614,6 +1646,10 @@ def main(argv=None):
                 _nimport_class_names.update(getattr(_PS_pre, "class_names", set()))
                 _nimport_proc_return_types.update(getattr(_PS_pre, "proc_return_types", {}))
                 _nimport_ref_classes.update(getattr(_PS_pre, "_ref_classes", set()))
+                _nimport_object_field_order.update(
+                    getattr(_PS_pre, "object_field_order", {}))
+                _nimport_tuple_field_order.update(
+                    getattr(_PS_pre, "tuple_field_order", {}))
                 _enqueue_prepass(_ppcode, _ppdir)
             except Exception:
                 pass  # errors will surface properly during the full dep transpile
@@ -1655,7 +1691,6 @@ def main(argv=None):
         # Auto-transpile nimport'd .ady dependencies into the same cache dir,
         # resolving transitive dependencies via BFS so that deps-of-deps are
         # also compiled before Nim sees the final import graph.
-        import re as _re_nimport
         _ady_dir = os.path.dirname(os.path.abspath(ady_file))
         _root_dir = os.path.dirname(_dir)
         _root_transpiler_mtime = max(
@@ -1692,7 +1727,7 @@ def main(argv=None):
         _dep_worklist = []   # (dep_name, dep_ady_path, dep_search_dir)
 
         def _enqueue_nimports(src_code, search_dir):
-            for _dn in _re_nimport.findall(r'^\s*nimport\s+(\w[\w./]*)', src_code, _re_nimport.MULTILINE):
+            for _dn in _dep_names(src_code):
                 if _dn not in _seen_deps:
                     _path = _find_dep_ady(_dn, search_dir)
                     if _path:
@@ -1703,7 +1738,12 @@ def main(argv=None):
 
         while _dep_worklist:
             _dep_name, _dep_ady, _dep_dir = _dep_worklist.pop(0)
-            _dep_nim = os.path.join(cache_dir, _dep_name + ".nim")
+            # A dep named with a path (`nimport lib/geom`) mirrors that path
+            # inside the cache, so `import lib/geom` in the generated Nim finds
+            # it under --path:<cache_dir>.  The subdirectory has to exist before
+            # the write, or the build dies on a FileNotFoundError instead.
+            _dep_nim = os.path.join(cache_dir, *(_dep_name.split("/"))) + ".nim"
+            os.makedirs(os.path.dirname(_dep_nim), exist_ok=True)
             _dep_mtime = os.path.getmtime(_dep_ady)
             _dep_nim_mtime = os.path.getmtime(_dep_nim) if os.path.exists(_dep_nim) else 0
             if _dep_nim_mtime < max(_dep_mtime, _eff_transpiler_mtime):
@@ -1750,9 +1790,13 @@ def main(argv=None):
         # Exclude stdlib.nim, awk.nim, db.nim (bundled support files) to avoid spurious rebuilds
         # caused by their copy2-preserved mtimes being newer than a fresh exe.
         _BUNDLED_NIMS = {"stdlib.nim", "awk.nim", "db.nim"}
+        # os.walk, not listdir: a dep imported by path (`nimport lib/geom`)
+        # lives in a subdirectory of the cache, and editing it has to force a
+        # recompile just like a top-level one.
         _dep_nim_max_mtime = max(
-            (os.path.getmtime(os.path.join(cache_dir, f))
-             for f in os.listdir(cache_dir)
+            (os.path.getmtime(os.path.join(_root, f))
+             for _root, _dirs, _files in os.walk(cache_dir)
+             for f in _files
              if f.endswith(".nim") and f not in _BUNDLED_NIMS),
             default=0)
         need_compile = need_transpile or (exe_mtime < max(nim_mtime, _dep_nim_max_mtime))
