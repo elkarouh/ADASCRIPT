@@ -7,6 +7,12 @@ type Neighbour_T is tuple:
     neighbor: Node_T
 type Graph_T is {Node_T}[]Neighbour_T
 
+# WARNING: every node in the graph must appear as a key, even sink nodes
+# with no outgoing edges (e.g. D: []).  The distance table is seeded from
+# the keys; a destination that is not a key will cause a KeyError at
+# `distances[neighbor]`.  For a version that tolerates missing keys, see
+# TO_NIM/STDLIB/graphs.ady which uses `dist.get(neighbour, Inf)` instead.
+
 def dijkstra(graph : Graph_T, start: Node_T) -> {Node_T}Distance_T:
     distances: {Node_T}Distance_T = {node: (0.0 if node==start else Inf) for node in graph}
     var visited : {}Node_T
