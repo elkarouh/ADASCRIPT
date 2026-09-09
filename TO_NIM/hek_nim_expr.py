@@ -671,9 +671,7 @@ def to_nim(self, prec=None):
 
 @method(STRING)
 def to_nim(self, prec=None):
-    """STRING: string literal -> Nim: single-quoted strings become double-quoted; triple-quoted become ## doc-comments.
-    If the entire string content is a __bash_*__ placeholder (e.g. "$1" tokenised as "__bash_arg1__"),
-    emit the Nim call directly (paramStr(1) etc.) instead of a string literal."""
+    """STRING: string literal -> Nim: single-quoted become double-quoted; triple-quoted become ## doc-comments."""
     s = self.node
     # Convert triple-quoted strings to Nim ## comments
     triple_dq = chr(34)*3
@@ -708,13 +706,6 @@ def to_nim(self, prec=None):
                 # Content contains " — use triple double-quote raw string
                 s = _raw_pfx + triple_dq + _inner + triple_dq
         break
-    # Unwrap single- or double-quoted string and check for a bash placeholder
-    if (s.startswith(chr(34)) and s.endswith(chr(34)) and len(s) > 2) or \
-       (s.startswith(chr(39)) and s.endswith(chr(39)) and len(s) > 2):
-        inner = s[1:-1]
-        if inner.startswith("__bash_") and inner.endswith("__"):
-            from hek_nim_parser import _bash_to_nim
-            return _bash_to_nim(inner)
     # Nim uses double quotes for strings; single quotes are char literals.
     # Special case: a single-quoted Python string whose only content is a double-
     # quote character ('"') becomes the Nim char literal '"' — no escaping needed
@@ -742,42 +733,6 @@ def to_nim(self, prec=None):
         new_inner = _dollar_re.sub(_dollar_repl, inner)
         if new_inner != inner:
             s = 'fmt"' + new_inner + '"'
-    # Replace embedded __bash_*__ positional/special arg placeholders with
-    # fmt-string interpolations so they resolve at runtime.
-    if "__bash_" in s:
-        def _subst_bash(m):
-            from hek_nim_parser import _bash_to_nim
-            return "{" + _bash_to_nim(m.group(0)) + "}"
-        # Only the inner content (strip outer quotes, patch, re-wrap as fmt"")
-        quote = s[0]
-        inner = s[1:-1]
-        new_inner = _re_str.sub(r'__bash_\w+__', _subst_bash, inner)
-        if new_inner != inner:
-            # Build the result as string concatenation with & to avoid embedding
-            # function calls with double-quote arguments inside fmt"..." — Nim's
-            # fmt macro cannot handle getEnv("X") inside {}, even with escaping.
-            import re as _re_fmtesc
-            # Split new_inner into alternating literal and {expr} segments
-            parts = _re_fmtesc.split(r'(\{[^}]+\})', new_inner)
-            # Escape pre-existing double quotes in literal segments if source was single-quoted
-            nim_parts = []
-            for part in parts:
-                if part.startswith('{') and part.endswith('}'):
-                    # interpolation: emit as bare Nim expression
-                    nim_parts.append(part[1:-1])
-                else:
-                    lit = part.replace('"', '\\"') if quote == "'" else part
-                    if lit:
-                        nim_parts.append(f'"{lit}"')
-            s = ' & '.join(nim_parts) if nim_parts else '""'
-            # Wrap in parens if multiple parts so it works as an expression
-            if ' & ' in s:
-                s = '(' + s + ')'
-            ParserState.nim_imports.add("strformat")
-    # Replace embedded __bash_env_NAME__ placeholders with literal $NAME text
-    # (only reached if not already converted above — env vars in non-fmt context)
-    if "__bash_env_" in s:
-        s = _re_str.sub(r'__bash_env_(\w+)__', r'$\1', s)
     return s
 
 
@@ -1361,15 +1316,13 @@ _PY_METHOD_TO_NIM = {
 
 @method(attr_trailer)
 def to_nim(self, prec=None):
-    """attr_trailer: '.' IDENTIFIER -> Nim: '.field'; tick attrs (.field'Next) handled specially"""
+    """attr_trailer: '.' IDENTIFIER -> Nim: '.field'
+
+    A tick after a field -- `r.c'Next` -- does not arrive here: the tick is
+    its own token, so it becomes a tick_trailer that `primary` resolves with
+    _emit_tick_attr.
+    """
     attr_name = self.nodes[0].to_nim()
-    # Handle tick attributes on expressions: .field'Next -> .field.succ, .field'Prev -> .field.pred
-    if "__tick__" in attr_name:
-        base, _, tick_attr = attr_name.partition("__tick__")
-        if tick_attr == "Next":
-            return "." + base + ".succ"
-        elif tick_attr == "Prev":
-            return "." + base + ".pred"
     return "." + attr_name
 
 
@@ -1818,8 +1771,7 @@ def to_nim(self, prec=None):
                         _field_is_str = True
                         break
             _is_str = (
-                "__bash_arg" in arg          # $1, $2, etc. (pre-substitution)
-                or "paramStr" in arg         # $1, $2, etc. (post-substitution)
+                "paramStr" in arg            # $1, $2, etc.
                 or arg.startswith('"')       # string literal
                 or arg.startswith("getEnv(") # os.environ.get() -> string
                 or _field_is_str             # expr.field where field: string
@@ -1922,12 +1874,6 @@ def to_nim(self, prec=None):
                 continue
             if type(tr).__name__ == "attr_trailer":
                 method_name = tr.nodes[0].to_nim()
-                # Handle Ada tick attributes: field'Next -> field.succ, field'Prev -> field.pred
-                # Type'choose -> rand(Type)
-                if "__tick__" in method_name:
-                    base_attr, _, tick_attr = method_name.partition("__tick__")
-                    result = _emit_tick_attr(result, base_attr, tick_attr)
-                    continue
                 method_name = _translate_method(result, method_name)
                 next_tr = trailer_list[i + 1] if i + 1 < len(trailer_list) else None
                 # `chars.append(c)` where chars is []str and c is a char --

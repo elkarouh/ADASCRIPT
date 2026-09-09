@@ -308,50 +308,6 @@ def _any_subclass_overrides(base_class, method_name):
 # to_nim() methods for compound statements
 ###############################################################################
 
-###############################################################################
-# Bashism resolution — Nim equivalents
-###############################################################################
-
-_BASH_NIM = {
-    "__bash_arg0__": "getAppFilename()",
-    "__bash_args__": "commandLineParams()",
-    "__bash_argc__": "paramCount()",
-}
-
-
-def _bash_to_nim(placeholder):
-    """Translate a __bash_*__ placeholder to its Nim equivalent.
-
-    Dispatch table:
-      $0        -> getAppFilename()                          (requires os)
-      $1 .. $N  -> (if paramCount() >= N: paramStr(N) else: "")  (multi-digit)
-                   Guards against IndexDefect when the script is called
-                   with fewer arguments than expected, matching bash
-                   semantics where unset positional params expand to "".
-      $@        -> commandLineParams()                       (requires os)
-      $#        -> paramCount()                              (requires os)
-      $NAME     -> getEnv("NAME")                           (requires os)
-
-    All forms add ``os`` to ParserState.nim_imports so that the translate()
-    driver inserts ``import os`` at the top of the output.
-    """
-    if placeholder in _BASH_NIM:
-        ParserState.nim_imports.add("os")
-        return _BASH_NIM[placeholder]
-    # $1 .. $9 — safe, bash-compatible: return "" when argument is absent
-    if placeholder.startswith("__bash_arg") and placeholder.endswith("__"):
-        num_str = placeholder[len("__bash_arg"):-2]
-        if num_str.isdigit() and num_str != "0":
-            n = int(num_str)
-            ParserState.nim_imports.add("os")
-            return f'(if paramCount() >= {n}: paramStr({n}) else: "")'
-    if placeholder.startswith("__bash_env_") and placeholder.endswith("__"):
-        env_name = placeholder[len("__bash_env_"):-2]
-        ParserState.nim_imports.add("os")
-        return f'getEnv("{env_name}")'
-    return placeholder  # unknown placeholder — pass through unchanged
-
-
 @method(NL)
 def to_nim(self, indent=0):
     """NL: newline/blank-line token -> emit preserved comment/blank lines from RichNL"""
@@ -1203,7 +1159,6 @@ def to_nim(self, prec=None):
     Also handles all plain IDENTIFIER uses (expressions, assignments, etc.)
     because pattern_capture = IDENTIFIER in the grammar — this method is the
     last writer on the shared class.  It therefore covers:
-      - Bash placeholders (__bash_*__)
       - Normal identifier pass-through
 
     Tick attributes do *not* arrive here.  They reach the emitter as a
@@ -4006,9 +3961,6 @@ def to_nim(self, indent=0):
     else:
         run_shell = ""
 
-    import re as _re_env
-    has_env_vars = bool(_re_env.search(r'__bash_env_\w+__', cmd))
-
     # Hoist complex interpolation expressions to temp variables.
     # Nim's fmt"""...""" only evaluates simple names and dotted paths inside {},
     # not function calls or subscripts.  Detect {expr} containing '(' or '['
@@ -4047,20 +3999,9 @@ def to_nim(self, indent=0):
         q = '"""'
         ParserState.nim_imports.add("strformat")
         cmd_str = f"fmt{q}{cmd}{q}"
-    elif has_env_vars:
-        # Use regular quotes so & getEnv(...) concatenation works
-        q = '"'
-        cmd_str = f"{q}{cmd}{q}"
     else:
         q = '"""'
         cmd_str = f"{q}{cmd}{q}"
-    # Replace __bash_env_NAME__ placeholders with getEnv("NAME") concatenation
-    def _subst_env(s):
-        ParserState.nim_imports.add("os")
-        return '" & getEnv("' + s.group(1) + '") & "'
-    cmd_str = _re_env.sub(r'__bash_env_(\w+)__', _subst_env, cmd_str)
-    # Clean up empty string fragments: "" & ... -> ... and ... & "" -> ...
-    cmd_str = cmd_str.replace('"" & ', '').replace(' & ""', '')
 
     lines = []
 

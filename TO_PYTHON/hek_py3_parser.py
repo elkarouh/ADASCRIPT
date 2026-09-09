@@ -16,7 +16,6 @@ from hek_tokenize import RichNL
 from hek_parsec import method, ParserState
 from hek_helpers import INDENT_STR, _ind, _richnl_lines, _block_inline_header_comment, _block_last_stmt
 import hek_py3_stmt  # noqa: F401 — registers stmt to_py() methods
-from hek_py3_expr import _bash_to_py  # bash placeholder resolution
 
 ###############################################################################
 # to_py() methods
@@ -509,24 +508,6 @@ def to_py(self, prec=None):
     name = (
         self.nodes[0].to_py() if hasattr(self.nodes[0], "to_py") else str(self.nodes[0])
     )
-    # Resolve tick attributes: Type__tick__First -> first value of subrange/enum
-    if "__tick__" in name:
-        type_name, _, attr = name.partition("__tick__")
-        info = ParserState.tick_types.get(type_name)
-        if info and attr in info:
-            return str(info[attr])
-        if attr == "choose":
-            return f"random.choice(list({type_name}))"
-        elif attr == "Range":
-            return f"list({type_name})"
-        elif attr == "Next":
-            return type_name + ".__class__((" + type_name + ".value + 1))"
-        elif attr == "Prev":
-            return type_name + ".__class__((" + type_name + ".value - 1))"
-        elif attr == "len" or attr == "Length":
-            return f"len({type_name})"
-        elif attr == "Size":
-            return f"len({type_name})"
     # Qualify known enum members: bare names are capture patterns in Python
     # match/case, but dotted names are value patterns. e.g. cmdArgument ->
     # Kind_T.cmdArgument so 'case Kind_T.cmdArgument:' matches by value.

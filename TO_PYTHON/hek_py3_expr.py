@@ -55,50 +55,6 @@ def _get_bracket_start(node):
 # Bashism resolution helpers
 ###############################################################################
 
-# Python equivalents for each __bash_*__ placeholder.
-# sys.argv[0] is the script name; sys.argv[1:] are the user arguments.
-_BASH_PY = {
-    "__bash_arg0__":  "sys.argv[0]",
-    "__bash_arg1__":  "sys.argv[1]",
-    "__bash_arg2__":  "sys.argv[2]",
-    "__bash_arg3__":  "sys.argv[3]",
-    "__bash_arg4__":  "sys.argv[4]",
-    "__bash_arg5__":  "sys.argv[5]",
-    "__bash_arg6__":  "sys.argv[6]",
-    "__bash_arg7__":  "sys.argv[7]",
-    "__bash_arg8__":  "sys.argv[8]",
-    "__bash_arg9__":  "sys.argv[9]",
-    "__bash_args__":  "sys.argv[1:]",
-    "__bash_argc__":  "len(sys.argv) - 1",
-}
-
-
-def _bash_to_py(placeholder):
-    """Translate a __bash_*__ placeholder to its Python 3 equivalent.
-
-    Fixed bashisms ($0, $@, $#, $0-$9) are looked up in _BASH_PY.
-    Environment variable bashisms ($NAME -> __bash_env_NAME__) become
-    os.environ.get('NAME', '').
-    A 'import sys' / 'import os' line is auto-inserted at the top of the
-    output by the translate() driver via ParserState.nim_imports.
-    """
-    if placeholder in _BASH_PY:
-        ParserState.nim_imports.add("import sys")
-        return _BASH_PY[placeholder]
-    if placeholder.startswith("__bash_env_") and placeholder.endswith("__"):
-        env_name = placeholder[len("__bash_env_"):-2]
-        ParserState.nim_imports.add("import os")
-        return f"os.environ.get('{env_name}', '')"
-    return placeholder  # unknown placeholder — pass through unchanged
-
-
-
-
-###############################################################################
-# Helper: left-associative binary operator to_py
-###############################################################################
-
-
 def binop_to_py(self, prec=None, my_prec=None):
     """Generic to_py for left-associative binary operators.
 
@@ -212,16 +168,6 @@ def to_py(self, prec=None):
 def to_py(self, prec=None):
     """IDENTIFIER: a name token (filtered by str.isidentifier)."""
     name = self.node
-    # Resolve tick attributes: Type__tick__First -> first value of subrange/enum
-    if "__tick__" in name:
-        type_name, _, attr = name.partition("__tick__")
-        info = ParserState.tick_types.get(type_name)
-        if info and attr in info:
-            val = info[attr]
-            return str(val)
-        # Everything else goes through the one renderer, so this path and
-        # the trailer path cannot drift apart on what a tick means.
-        return _tick_to_py(type_name, attr)
     if name == "stdin":
         ParserState.nim_imports.add("import sys")
         return "sys.stdin"
@@ -491,17 +437,6 @@ def to_py(self, prec=None):
     # .lines on a file/stdin is a Nim-ism; Python files are directly iterable
     if attr_name == "lines":
         return ""
-    # Handle tick attributes on expressions: .field'Next / .field'Prev / expr'Length
-    if "__tick__" in attr_name:
-        base, _, tick_attr = attr_name.partition("__tick__")
-        if tick_attr in ("Next", "Prev"):
-            # Store tick info for primary.to_py() to wrap the expression
-            self._tick_base = base
-            self._tick_attr = tick_attr
-            return "." + base  # just emit .field, primary will wrap
-        if tick_attr in ("len", "Length"):
-            self._tick_attr = "Length"
-            return ""  # primary will wrap with len()
     return "." + self.nodes[0].to_py()
 
 
