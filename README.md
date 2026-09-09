@@ -2087,7 +2087,8 @@ ADASCRIPT/
 │   │                           SymbolTable, forward references, token helpers
 │   ├── hek_tokenize.py         Enhanced tokenizer
 │   │                           RichNL (comments attached to newlines),
-│   │                           tick-attribute preprocessing (Type'Attr),
+│   │                           extra token types Python has none of
+│   │                           (TICK, DOLLAR, RANGE, REGEX, bash tests),
 │   │                           bracket-context NL stripping
 │   └── hek_helpers.py          Shared indentation and RichNL utilities
 │

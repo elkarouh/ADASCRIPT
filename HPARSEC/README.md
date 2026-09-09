@@ -162,22 +162,33 @@ generated output.
 
 ---
 
-## Tokenizer preprocessing
+## Extra token types
 
-Before Python's `tokenize` module sees the source, `Tokenizer` applies
-several source-level rewrites:
+`Tokenizer` does not rewrite the source. It wraps Python's `tokenize` and
+emits token types Python has no notion of, so the Adascript syntax that
+Python's lexer would otherwise mis-read arrives at the grammar intact:
 
-- **Range operators**: `0..10` → `0 .. 10` (avoids float tokenisation)
-- **Bash variables**: `$HOME` → `__bash_env_HOME__`, `$1` → `__bash_arg1__`
-- **Bash file tests**: `-e file` → `__bash_test_e__ file`
+| Token | Matches | Why Python's lexer needs help |
+|-------|---------|-------------------------------|
+| `TICK_TOKEN` | the `'` of `x'Image` | it would open a string literal |
+| `DOLLAR_TOKEN` | the `$` of `$HOME`, `$1`, `$@`, `$#` | `$` is not a Python token at all |
+| `BASH_TEST_TOKEN` | the `-` of `-e path` | it would be unary minus |
+| `BASH_CMP_TOKEN` | `-nt`, `-ot` | as above |
+| `RANGE_TOKEN` | `..` | `0..10` would lex as two floats |
+| `RANGE_EXCL_TOKEN` | `..<` | as above |
+| `REGEX_TOKEN` | `/pattern/flags` | it would be division |
+| `CAPTURE_TOKEN` | `$+1` | — |
+| `NAMED_CAPTURE_TOKEN` | `$+{name}` | — |
+| `SUBST_TOKEN` | `s/pattern/replacement/flags` | — |
 
-These are reversed by the backend's output methods on the relevant AST nodes.
+The grammar consumes these like any other token — `tick_trailer = TICK +
+IDENTIFIER`, `dollar_var = DOLLAR + _DOLLAR_SUFFIX` — and the backends
+resolve them from the parse tree.
 
-Tick attributes are not rewritten. `Type'First` comes out as three tokens —
-the name, a `TICK_TOKEN` for the apostrophe, and the attribute name — which
-is what keeps Python's lexer from reading the `'` as the start of a string
-literal. The grammar matches the last two as `tick_trailer = TICK +
-IDENTIFIER`, and the backends resolve the attribute from there.
+Several are context-sensitive rather than lexical: `-e` is a
+`BASH_TEST_TOKEN` in `if -e path:` but stays an ordinary minus in
+`func(-e, y)`, and a `'` only opens a tick when a name precedes it, so
+`'hello'` is still one string token.
 
 ---
 
