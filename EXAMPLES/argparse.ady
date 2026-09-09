@@ -14,7 +14,7 @@ def get_kind(arg: str) -> Kind_T:
             return cmdArgument
 
 def usage(code: Natural):
-    print "Usage: $0 [options] <input>"
+    print f"Usage: {$0} [options] <input>"
     print "  -o, --output=FILE    Output file (default: output.txt)"
     print "  -v, --verbose        Enable verbose mode"
     print "  -n, --count=N        Repeat count (default: 1)"

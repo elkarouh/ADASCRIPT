@@ -716,23 +716,16 @@ def to_nim(self, prec=None):
         inner = s[1:-1]
         inner = inner.replace(chr(34), chr(92) + chr(34))
         s = chr(34) + inner + chr(34)
-    # Replace bare $0/$#/$N/$@ shell vars inside string literals with Nim calls.
-    import re as _re_str
-    _dollar_re = _re_str.compile(r'\$([0-9]+|#|@)')
-    if _dollar_re.search(s):
-        def _dollar_repl(m):
-            tok = m.group(1)
-            ParserState.nim_imports.add("os")
-            ParserState.nim_imports.add("strformat")
-            if tok == "0":   return "{getAppFilename().extractFilename()}"
-            if tok == "#":   return "{paramCount()}"
-            if tok == "@":   return "{commandLineParams().join(\" \")}"
-            n = int(tok)
-            return "{" + f'(if paramCount() >= {n}: paramStr({n}) else: "")' + "}"
-        inner = s[1:-1]
-        new_inner = _dollar_re.sub(_dollar_repl, inner)
-        if new_inner != inner:
-            s = 'fmt"' + new_inner + '"'
+    # A `$0`/`$1`/`$@`/`$#` inside a plain string stays exactly that: text.
+    # This used to be rewritten into paramStr and friends, which broke more
+    # than it served -- `"$6"` is an awk field reference and `"if [[ -r $1 ]]"`
+    # is a shell script being written to a file, and both came out with the
+    # caller's arguments substituted into them. The Python backend never did
+    # this, so the two disagreed on what a string literal means.
+    #
+    # Interpolation is what f-strings are for, and `f"{$0} {$1}"` works on
+    # both backends -- which is the form the Bash Variables section of
+    # README.md documents.
     return s
 
 
