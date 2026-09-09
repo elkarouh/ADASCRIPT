@@ -162,8 +162,9 @@ in order to build.
 - `case` subjects must be structural expressions (`(a, b)`, `x.field`) for
   tuple/record patterns — a plain variable falls through to Nim's ordinal
   `case` and fails to compile (§5.3).
-- Tick attributes don't attach to field accesses or subscripts
-  (`self.x'Image` — bind to a local first).
+- Tick attributes don't chain: `Stage_T'First'Image` is a parse error, so
+  bind the intermediate value first. They do attach to field accesses and
+  subscripts (`self.x'Image`, `xs[0]'Image`).
 - `[*]T` is parameter/return-only.
 - Iterating a `{…}` type is in a different order on each backend (insertion
   on Python, hash on Nim). The types promise no order; sort the keys where

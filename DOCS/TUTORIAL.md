@@ -37,6 +37,7 @@ source.ady  ──▶  python3 TO_PYTHON/py2py.py source.ady  ──▶  Python 
 18. [Real Examples](#18-real-examples)
 19. [Regex Literals](#19-regex-literals)
 20. [Memory Ownership](#20-memory-ownership)
+21. [Summary of Adascript-Only Syntax](#summary-of-adascript-only-syntax)
 
 ---
 
@@ -105,8 +106,8 @@ python3 TO_PYTHON/py2py.py -c source.ady
 # Transpile to Nim and compile+run (default)
 python3 TO_NIM/py2nim.py source.ady
 
-# Transpile only — write the .nim file
-python3 TO_NIM/py2nim.py --transpile-only source.ady
+# Transpile only — writes the .nim into the cache and prints its path
+python3 TO_NIM/py2nim.py -t source.ady
 
 # Optimised build
 python3 TO_NIM/py2nim.py c -d:release source.ady
@@ -621,9 +622,12 @@ before parsing, so Python's lexer is never confused by the apostrophe.
 | `expr'choose`      | Random element from expr or range  |
 | `expr'Image`       | String representation of `expr`    |
 
-> **Limitation:** tick attributes are only supported on bare identifiers and
-> type names. They do not work on field accesses (`self.num'Image`) or
-> subscripts (`args[0]'Image`). Use `str()` in those cases instead.
+> **Note:** a tick attaches to a field access or a subscript as readily as
+> to a bare name — `r.c'Image`, `xs[0]'Image` and `self.num'Image` all work,
+> on both backends. There is no need to bind a local or reach for `str()`
+> first. What a tick does *not* do is chain: bind the intermediate value
+> (`let f: Stage_T = Stage_T'First`, then `f'Image`) rather than writing
+> `Stage_T'First'Image`, which is a parse error.
 
 > **Note:** `E'Range` is a *set* of the members (`set(E)` on the Python
 > backend, `{E.low..E.high}` on Nim), so set arithmetic works on it —

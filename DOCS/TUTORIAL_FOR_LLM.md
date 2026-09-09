@@ -230,7 +230,7 @@ Ada-style `'` attributes. Tokeniser converts `Type'Attr` → `Type__tick__Attr` 
 | `expr'choose` | Random element from enum, set, or range |
 | `expr'Image` | String representation |
 
-> **Limitation:** tick attributes only work on bare identifiers and type names — not on field accesses (`self.x'Image`) or subscripts. Use `str()` in those cases.
+> **Note:** a tick attaches to a field access or a subscript as readily as to a bare name — `r.c'Image`, `xs[0]'Image` and `self.x'Image` all work on both backends, with no local binding or `str()` needed. Ticks do not *chain*: bind the intermediate value rather than writing `Stage_T'First'Image`, which is a parse error.
 
 > **Note:** `E'Range` is a set of the members, so set arithmetic works (`Door_T'Range - {chosen}`). On a value, `x'Range` is the index range: `for i in word'Range`.
 
@@ -1194,8 +1194,8 @@ for s in Stage_T'First .. Stage_T'Last:
 
 ## Known Limitations
 
-- **Blank lines and inline comments** — `py2py.py` collapses blank lines between statements and drops inline comments (`x = 1  # note`). Infrastructure is in place but not yet wired through all compound-statement backends.
-- **Tick attributes on field accesses** — `self.x'Image` does not work; use `str(self.x)` instead.
+- **Comments on a `case` header** — blank lines and inline comments survive into the output, inside `def`, `class`, `for`, `while`, `if`, fields and method bodies alike. Two placements do not, on both backends: a comment on the `case` line itself is dropped, and one on a `type ... is enum` line is relocated to the last generated member.
+- **Ticks do not chain** — `Stage_T'First'Image` is a parse error; bind the intermediate value first. Ticks on field accesses and subscripts are fine.
 - **Case subject must be structural** — `case state:` where `state` is a tuple variable emits Nim's native `case`, which rejects non-ordinal selectors. Destructure with `let (a, b) = state` first, then `case (a, b):`.
 - **Global parser state** — `ParserState` is a class-level singleton; call `ParserState.reset()` between independent parse runs. Thread-unsafe for concurrent parses.
 - **`nimport` stdlib coverage** — some Python builtins (`PriorityQueue`, `FifoQueue`, `ANY`) live in a local `stdlib.nim` shim (`nimport stdlib`).
