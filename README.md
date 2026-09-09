@@ -138,7 +138,7 @@ for s in Stage_T.STAGE1 .. Stage_T.STAGE3:
 ## Installation
 
 ```bash
-git clone --recurse-submodules https://github.com/elkarouh/ADASCRIPT
+git clone https://github.com/elkarouh/ADASCRIPT
 cd ADASCRIPT
 make install                      # or: make install PREFIX=$HOME/.local
 ```
@@ -151,9 +151,8 @@ chmod +x script.ady && ./script.ady
 ```
 
 It installs into `/usr/local/bin`, falling back to `~/.local/bin` when that
-is not writable, fetches the `HPARSEC` submodule if the clone omitted it, and
-finishes by transpiling and running a small program to prove the install
-works. `make uninstall` removes the launchers again.
+is not writable, and finishes by transpiling and running a small program to
+prove the install works. `make uninstall` removes the launchers again.
 
 The launchers are wrappers rather than symlinks so they can pin the
 interpreter: the scripts' own shebang says `python3`, which on many systems
@@ -1971,19 +1970,17 @@ while True:
 ## Architecture
 
 ```
-hparsec/
-├── hek_parsec.py               Parser combinator engine
-│                               ParserMeta (+, |, [], *, ~), packrat memoization,
-│                               SymbolTable, forward references, token helpers
+ADASCRIPT/
+├── HPARSEC/                    Parser combinator engine
+│   ├── hek_parsec.py           ParserMeta (+, |, [], *, ~), packrat memoization,
+│   │                           SymbolTable, forward references, token helpers
+│   ├── hek_tokenize.py         Enhanced tokenizer
+│   │                           RichNL (comments attached to newlines),
+│   │                           tick-attribute preprocessing (Type'Attr),
+│   │                           bracket-context NL stripping
+│   └── hek_helpers.py          Shared indentation and RichNL utilities
 │
-├── hek_tokenize.py             Enhanced tokenizer
-│                               RichNL (comments attached to newlines),
-│                               tick-attribute preprocessing (Type'Attr),
-│                               bracket-context NL stripping
-│
-├── hek_helpers.py              Shared indentation and RichNL utilities
-│
-├── ADASCRIPT_GRAMMAR/            Language-neutral grammar definitions
+├── ADASCRIPT_GRAMMAR/          Language-neutral grammar definitions
 │   ├── py3expr.py              Expression grammar (precedence, all operators)
 │   ├── py3stmt.py              Simple statements (assignment, import, raise, …)
 │   ├── py3compound_stmt.py     Compound statements (if/while/for/def/class/shell/…)
@@ -2002,13 +1999,21 @@ hparsec/
 │   ├── hek_nim_parser.py       to_nim() for compound statements + type decls
 │   ├── hek_nim_declarations.py to_nim() for type annotations
 │   ├── py2nim.py               Entry point: parse + emit Nim
-│   ├── stdlib.nim              Nim shim for Python builtins (PriorityQueue, etc.)
-│   └── awk.ady                 Bundled Adascript stdlib: AwkBase record processor
+│   └── STDLIB/                 Bundled runtime, reachable with `nimport`
+│       ├── stdlib.nim          Nim shim for Python builtins (PriorityQueue, etc.)
+│       ├── awk.ady             AwkBase record processor
+│       ├── graphs.ady          Shortest paths, generic in the node type
+│       ├── iters.ady           Iterator toolkit (take, chunks, pairwise, …)
+│       └── db.ady, jointjs.ady, expect.nim
 │
-└── EXAMPLES/                  End-to-end example programs
-    ├── *.ady                   Adascript source
-    ├── *.nim                   Transpiled Nim output
-    └── stdlib.nim              Nim shim for Python builtins (PriorityQueue, etc.)
+├── EXAMPLES/                   End-to-end example programs (`*.ady`)
+│                               Transpiled output is not kept here — it goes to
+│                               ~/.cache/hparsec/cache-<HASH>/
+│
+├── ADA_INDENT/                 Ada source indenter, itself written in Adascript
+├── LSP/                        Editor support: language server, emacs,
+│                               vscode, sublime
+└── DOCS/                       Tutorials, topic references, and BOOK/
 ```
 
 ### How transpilation works

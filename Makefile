@@ -221,10 +221,9 @@ install:
 	fi
 	@echo "  python      $(PYTHON)"
 	@if [ ! -f "$(CURDIR)/HPARSEC/hek_parsec.py" ]; then \
-	    echo "  hparsec     submodule empty — fetching"; \
-	    git -C "$(CURDIR)" submodule update --init HPARSEC || { \
-	        echo "  error: could not fetch the HPARSEC submodule; it holds the"; \
-	        echo "         parser engine and nothing works without it."; exit 1; }; \
+	    echo "  error: HPARSEC/hek_parsec.py is missing from this checkout; it"; \
+	    echo "         holds the parser engine and nothing works without it."; \
+	    exit 1; \
 	fi
 	@echo "  hparsec     $(CURDIR)/HPARSEC"
 	@set -e; \

@@ -127,8 +127,8 @@ make uninstall  # remove the launchers again
 
 `make install` is what makes the `#!/usr/bin/env py2nim` shebang at the top
 of every example resolve, so a `.ady` file becomes directly executable from
-any directory. It also fetches the `HPARSEC` submodule if the clone omitted
-it, and verifies itself by transpiling and running a small program.
+any directory. It verifies itself by transpiling and running a small
+program.
 
 `make clean` is the one to reach for when a build looks stale in a way the
 incremental check did not catch — it is also what you want before timing
