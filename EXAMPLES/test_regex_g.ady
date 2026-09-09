@@ -1,0 +1,66 @@
+#!/usr/bin/env py2nim
+# test_regex_g.ady — the /g flag, and that both backends agree on it
+#
+#   py2nim EXAMPLES/test_regex_g.ady -r
+#   py2py  EXAMPLES/test_regex_g.ady -c
+#
+# `/g` is documented to hand back every match as []str. The Nim backend
+# emits std/re.findAll, which does that whatever the pattern looks like.
+# The Python backend used to emit re.findall, which switches to returning
+# the *capture groups* as soon as the pattern has any -- so a grouped
+# pattern quietly meant two different things. Everything here has to hold
+# unchanged on either backend.
+
+let text: str = "a1 b2 c3"
+
+# --- a pattern with no groups -----------------------------------------------
+let plain: []str = text == /\w\d/g
+assert plain == ["a1", "b2", "c3"]
+
+# --- the same pattern, grouped ----------------------------------------------
+# This is the case that diverged: re.findall would answer
+# [("a", "1"), ("b", "2"), ("c", "3")] while Nim answered the whole matches.
+let grouped: []str = text == /(\w)(\d)/g
+assert grouped == ["a1", "b2", "c3"]
+
+# One group is enough to trigger it, so check that shape too.
+let one_group: []str = text == /(\w)\d/g
+assert one_group == ["a1", "b2", "c3"]
+
+# A non-capturing group must behave like the plain pattern.
+let non_capturing: []str = text == /(?:\w)\d/g
+assert non_capturing == ["a1", "b2", "c3"]
+
+# --- no matches -------------------------------------------------------------
+let none_found: []str = text == /zzz/g
+assert len(none_found) == 0
+
+# --- `!=` with /g asks whether the pattern matched at all -------------------
+# The Python side used to count empty strings rather than matches, so a
+# subject that *did* match still answered True.
+assert (text != /\w\d/g) == False
+assert (text != /(\w)(\d)/g) == False      # grouped, still matches
+assert (text != /zzz/g) == True
+
+# --- flags combine with g ---------------------------------------------------
+let mixed: str = "A1 b2 C3"
+let ci: []str = mixed == /[a-z]\d/gi
+assert ci == ["A1", "b2", "C3"]
+
+# --- /g as a case/when pattern ----------------------------------------------
+# A different emitter, changed alongside the expression one so both spell
+# the match the same way.
+def classify(s: str) -> str:
+    case s:
+        when /\d\d\d/g:
+            return "three digits"
+        when /[a-z]+/g:
+            return "letters"
+        when others:
+            return "other"
+
+assert classify("123") == "three digits"
+assert classify("abc") == "letters"
+assert classify("!!") == "other"
+
+print "all /g tests passed"

@@ -1454,8 +1454,13 @@ def to_py(self, prec=None):
                     _flags_val = _py_re_flags(_flags)
                     _safe_pat = _pat.replace("'", "\\'")
                     if _has_g:
-                        _call = f"_re_mod.findall(r'{_safe_pat}', {chain})" if _flags_val == "0" else f"_re_mod.findall(r'{_safe_pat}', {chain}, {_flags_val})"
-                        chain = (_call + ".count('') == 0" if op == "!=" else _call)
+                        _call = (f"_pyfindall({chain}, r'{_safe_pat}')" if _flags_val == "0"
+                                 else f"_pyfindall({chain}, r'{_safe_pat}', {_flags_val})")
+                        # `!=` asks whether the pattern matched at all, which
+                        # is the length of that list -- the Nim side spells it
+                        # `.len == 0`. It used to count empty strings, so a
+                        # subject that *did* match still came back True.
+                        chain = (f"len({_call}) == 0" if op == "!=" else _call)
                     else:
                         _call = f"_pymatch({chain}, r'{_safe_pat}')" if _flags_val == "0" else f"_pymatch({chain}, r'{_safe_pat}', {_flags_val})"
                         chain = f"not {_call}" if op == "!=" else _call
@@ -2078,6 +2083,17 @@ def _pymatch(s, pat, flags=0):
     matches = [m.group(0)] + [g if g is not None else "" for g in m.groups()]
     namedCaptures = {k: (v if v is not None else "") for k, v in m.groupdict().items()}
     return True
+
+def _pyfindall(s, pat, flags=0):
+    '''`x == /pat/g`: every match, whole, as a list of str.
+
+    Deliberately not re.findall, which returns the capture groups whenever
+    the pattern has any -- a list of tuples for two groups. Nim emits
+    std/re.findAll, which returns the whole match either way, so a grouped
+    pattern used to mean different things on the two backends. finditer
+    keeps group(0) whatever the pattern contains.
+    '''
+    return [m.group(0) for m in _re_mod.finditer(pat, s, flags)]
 """
 
 def _ensure_pymatch_helper():

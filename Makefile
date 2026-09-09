@@ -53,6 +53,7 @@ STANDALONE := \
     test_graphs.ady \
     test_queues.ady \
     test_regex.ady \
+    test_regex_g.ady \
     td_learning/sarsa.ady \
     td_learning/qlearning.ady \
     test_do_block.ady

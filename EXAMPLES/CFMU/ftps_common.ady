@@ -109,11 +109,9 @@ def check_date(date: str, option_name: str) -> (str, int):
 # ---------------------------------------------------------------------------
 def parse_dbt_hdr(text: str) -> {str}str:
   var d : {str}str = {:}
-  # The groups are deliberately non-capturing. `/g` is documented to give
-  # the whole matches as []str, which is what Nim does, but the Python
-  # backend passes a grouped pattern to re.findall and gets tuples back --
-  # so a pattern with groups means different things on the two backends.
-  # Without them both hand back `KEY="value"`, split here on the first `=`.
+  # `/g` gives the whole matches, not the capture groups, so the pattern
+  # hands back `KEY="value"` and the key is split off here at the first `=`.
+  # The group is non-capturing because nothing needs it to capture.
   let pairs : []str = text == /\w+="(?:[^"\\]|\\.)*"/g
   for pair in pairs:
     let eq  : int = pair.find("=")

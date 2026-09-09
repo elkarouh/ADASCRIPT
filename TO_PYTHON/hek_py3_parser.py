@@ -833,9 +833,9 @@ def to_py(self, indent=0):
                 safe_pat = pat.replace("'", "\\'")
                 if has_g:
                     if flags_val != "0":
-                        cond = f"_re_mod.findall(r'{safe_pat}', {subject}, {flags_val})"
+                        cond = f"_pyfindall({subject}, r'{safe_pat}', {flags_val})"
                     else:
-                        cond = f"_re_mod.findall(r'{safe_pat}', {subject})"
+                        cond = f"_pyfindall({subject}, r'{safe_pat}')"
                 else:
                     if flags_val != "0":
                         cond = f"_pymatch({subject}, r'{safe_pat}', {flags_val})"
