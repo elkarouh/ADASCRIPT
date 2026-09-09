@@ -47,7 +47,7 @@ source.ady
 - [Type Declarations](#type-declarations)
 - [Variable Declarations](#variable-declarations)
 - [Range Expressions](#range-expressions)
-- [Case / When Statements](#casewhen-statements)
+- [Case / When Statements](#case--when-statements)
 - [Regex Literals](#regex-literals)
 - [Tick Attributes](#tick-attributes)
 - [Enum Array Literals](#enum-array-literals)
@@ -55,10 +55,13 @@ source.ady
 - [Functions](#functions)
 - [Classes and Inheritance](#classes-and-inheritance)
 - [Nim-Only Imports](#nim-only-imports)
+- [Raw Nim Injection](#raw-nim-injection)
 - [Python Interoperability](#python-interoperability)
 - [Print Statement](#print-statement)
 - [Shell Statements](#shell-statements)
 - [Bash Variables](#bash-variables)
+- [Callable objects and pipe operator](#callable-objects-and-pipe-operator)
+- [Enum constructors](#enum-constructors)
 - [Benchmark Programs](#benchmark-programs)
 - [Architecture](#architecture)
 - [Known Limitations](#known-limitations)
@@ -203,7 +206,9 @@ echo "var x: int = 42" | python3 TO_PYTHON/py2py.py  # from stdin
 
 ```bash
 python3 TO_NIM/py2nim.py source.ady           # transpile and compile+run (default)
-python3 TO_NIM/py2nim.py -t source.ady        # transpile only, write source.nim
+python3 TO_NIM/py2nim.py -t source.ady        # transpile only; writes the .nim
+                                              # into the cache and prints its
+                                              # path to stderr
 python3 TO_NIM/py2nim.py c source.ady         # compile (nim c)
 python3 TO_NIM/py2nim.py c -r source.ady      # compile and run (nim c -r)
 python3 TO_NIM/py2nim.py --test               # run built-in self-tests
@@ -2047,11 +2052,22 @@ ADASCRIPT/
 
 ## Known Limitations
 
-**Blank lines and inline comments** — `py2py.py` currently collapses blank
-lines between statements and drops inline comments (`x = 1  # note`). The
-infrastructure for fixing this (`RichNL` carrying comments through the parse
-tree) is already in place; the remaining work is threading those tokens
-through all compound-statement `to_py()` methods.
+**Comments on a `case` header** — `RichNL` carries comments through the parse
+tree, so blank lines and inline comments survive into the output, inside
+`def`, `class`, `for`, `while`, `if` and method bodies alike. Two placements
+are still not reproduced faithfully, on both backends:
+
+```python
+case c:                      # this comment is dropped
+    when 1:                  # this one survives
+        print "one"
+
+type Color_T is enum RED, GREEN   # kept, but moved to the last member line
+```
+
+A comment on the `case` line itself is lost, and one on a `type ... is enum`
+line is preserved but relocated, since the declaration expands to several
+generated lines and the comment lands on the last of them.
 
 **Python backend maturity** — the Nim backend is still the better-tested of
 the two, since `make test` builds and runs every example through it. Every
@@ -2066,15 +2082,20 @@ a regression the Nim-only test suite cannot see.
 
 **Nim stdlib coverage** — generated Nim code relies on a local `stdlib.nim`
 shim for some Python builtins (`PriorityQueue`, `FifoQueue`, `ANY`). See
-`TO_NIM/stdlib.nim`.
+`TO_NIM/STDLIB/stdlib.nim`.
 
-**Bundled Adascript libraries** — `.ady` files in `TO_NIM/` are automatically
-installed into the build cache so they can be used via `nimport` from any
-directory without a local copy:
+**Bundled Adascript libraries** — the `.ady` files in `TO_NIM/STDLIB/` are
+automatically installed into the build cache so they can be used via
+`nimport` from any directory without a local copy. `nimport` is Nim-only, so
+these are available on that backend alone:
 
-| `nimport` name | Provides              |
-|----------------|-----------------------|
-| `nimport awk`  | `AwkBase` — generic stdin record-processor base class |
+| `nimport` name    | Provides                                                  |
+|-------------------|-----------------------------------------------------------|
+| `nimport awk`     | `AwkBase` — generic stdin record-processor base class      |
+| `nimport iters`   | itertools equivalents (`take`, `chunks`, `pairwise`, …), generic over the element type |
+| `nimport graphs`  | `dijkstra` and `shortest_path` over a weighted digraph, generic in the node type |
+| `nimport db`      | thin SQLite wrapper                                        |
+| `nimport jointjs` | `JsElem` base class and helpers for JointJS applications   |
 
 **Global parser state** — `ParserState` is a class-level singleton, so
 independent parse runs in the same process share it. For a *sequence* of
