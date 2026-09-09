@@ -1155,6 +1155,14 @@ def to_nim(self, prec=None):
       - Tick attributes  (Type__tick__Attr)
       - Bash placeholders (__bash_*__)
       - Normal identifier pass-through
+
+    The Type__tick__Attr branch below appears to be unreached on this
+    backend: ticks arrive as a TICK_TOKEN trailer and are resolved in
+    hek_nim_expr.py instead, so a bad attribute reaches nim rather than
+    raising here.  Instrumenting the branch and running py2nim --test plus
+    every .ady file under EXAMPLES/, TO_NIM/STDLIB/ and ADA_INDENT/ produced
+    no hits, nor did a tick on a set, on a type, or inside a case pattern.
+    Treat the validation below as inactive until that is fixed.
     """
     n = self.nodes[0]
     if hasattr(n, "to_nim"):
@@ -1167,13 +1175,18 @@ def to_nim(self, prec=None):
         info = ParserState.tick_types.get(type_name)
         if info and attr in info:
             return str(info[attr])
-        # Check for set variable — only 'choose and 'Size are valid on sets
+        # Check for set variable — a set takes 'choose, 'len / 'Length and
+        # 'Size.  'Size is Ada's representation attribute and emits sizeof,
+        # so it answers the machine size in bytes, not how many members the
+        # set holds; 'len / 'Length are the count.
         _sym = ParserState.symbol_table.lookup(type_name)
         _sym_type = _sym.get("type", "") if _sym else ""
         _is_set = _sym_type.startswith("HashSet") or _sym_type.startswith("set[")
         if _is_set and attr not in ("choose", "Size", "len", "Length"):
             raise SyntaxError(
-                f"'{attr} is not valid on a set; only 'choose and 'Size are supported for sets"
+                f"'{attr} is not valid on a set; sets support 'choose, "
+                f"'len and 'Length for the number of members, and 'Size "
+                f"for the machine size in bytes"
             )
         # Ada tick attributes for enum operations
         if attr == "Range":
