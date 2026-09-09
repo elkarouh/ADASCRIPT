@@ -1,0 +1,91 @@
+#!/usr/bin/env py2nim
+# test_queues.ady — the bundled stdlib queues, on both backends
+#
+#   py2nim EXAMPLES/test_queues.ady -r
+#   py2py  EXAMPLES/test_queues.ady -c
+#
+# Nim compiles against TO_NIM/STDLIB/stdlib.nim; Python has no module to
+# import, so py2py writes the same three classes into its output. The point
+# of this file is that the two agree, so every assertion below has to hold
+# unchanged on either backend.
+
+from stdlib import PriorityQueue, FifoQueue, LifoQueue
+
+type Node_T is enum A, B, C, D
+
+# --- PriorityQueue: seeded from a one-element literal ------------------------
+# The literal is the reason this needs backend support at all. `[(2.0, B)]`
+# is a list, and a list has no .push, so both backends rewrite the
+# declaration into a constructor call rather than leaving the name bound to
+# the literal.
+var pq: PriorityQueue[(float, Node_T)] = [(2.0, B)]
+pq.push((1.0, A))
+pq.push((3.0, C))
+
+var order: []Node_T = []
+while pq:
+    dist, node = pq.pop()
+    order.append(node)
+assert order == [A, B, C]          # smallest first, not push order
+
+# --- PriorityQueue: equal priorities -----------------------------------------
+# Three entries share a priority, and the thing after it is an enum member,
+# which has no ordering. A heap that fell through to comparing payloads
+# would fail here rather than return a wrong answer -- on Python with
+# "TypeError: '<' not supported between instances of 'Node_T'". Getting all
+# four back is the assertion.
+#
+# Which order the tied three come out in is *not* asserted, because the
+# backends genuinely differ: Nim's heap yields C, B, D and Python's yields
+# D, C, B (push order, since its tie-break counter is monotonic). Only the
+# lowest priority coming out first is promised.
+var tied: PriorityQueue[(float, Node_T)] = [(5.0, D)]
+tied.push((5.0, C))
+tied.push((5.0, B))
+tied.push((1.0, A))
+
+var tied_order: []Node_T = []
+while tied:
+    d2, n2 = tied.pop()
+    tied_order.append(n2)
+assert len(tied_order) == 4
+assert tied_order[0] == A                      # 1.0 beats the tied 5.0s
+assert A in tied_order and B in tied_order     # all four came back
+assert C in tied_order and D in tied_order
+
+# --- FifoQueue ---------------------------------------------------------------
+var fifo: FifoQueue[Node_T] = [A]
+fifo.push(B)
+fifo.push(C)
+var fifo_order: []Node_T = []
+while fifo:
+    let out_f: Node_T = fifo.pop()
+    fifo_order.append(out_f)
+assert fifo_order == [A, B, C]     # first in, first out
+
+# --- LifoQueue ---------------------------------------------------------------
+var lifo: LifoQueue[Node_T] = [A]
+lifo.push(B)
+lifo.push(C)
+var lifo_order: []Node_T = []
+while lifo:
+    let out_l: Node_T = lifo.pop()
+    lifo_order.append(out_l)
+assert lifo_order == [C, B, A]     # last in, first out
+
+# --- len() and emptiness -----------------------------------------------------
+var counted: FifoQueue[Node_T] = [A]
+counted.push(B)
+assert len(counted) == 2
+let first_out: Node_T = counted.pop()
+assert len(counted) == 1
+let second_out: Node_T = counted.pop()
+assert len(counted) == 0
+assert first_out == A and second_out == B
+# Each pop is bound with its own `let` rather than reassigning one name:
+# `x = q.pop()` is emitted as `discard x = q.pop()` on the Nim backend,
+# which does not compile. That is a pre-existing quirk of `.pop()` in
+# statement position -- a plain `[]int` reassigned from `xs.pop()` hits it
+# too -- and has nothing to do with the queues.
+
+print "all queue tests passed"

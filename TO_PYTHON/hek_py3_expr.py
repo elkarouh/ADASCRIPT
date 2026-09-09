@@ -537,6 +537,165 @@ def _ensure_shuffle_helper():
         ParserState.py_top_decls = decls
 
 
+# The queue types from TO_NIM/STDLIB/stdlib.nim, as Python.  Nim gets them
+# from the shim it compiles against; here they are emitted into the output so
+# it stays a single self-contained file, the same way _adascript_shuffle is.
+#
+# Each mirrors the Nim object's surface exactly -- push, pop, len, and
+# truthiness, so `while queue:` reads the same on both backends.
+_QUEUE_HELPERS = {
+    "PriorityQueue": '''\
+class PriorityQueue:
+    """Min-heap, ordered on the first element of each item.
+
+    heapq is the natural fit: Nim's version is a hand-written binary heap
+    over `data[i][0]`, which is heapq's ordering with the payload carried
+    along.  The counter is not decoration -- heapq falls through to the next
+    tuple element when priorities tie, and the next element here is a node,
+    which for an enum or a record raises TypeError rather than ordering.
+    The counter is unique and always comparable, so the tie is settled
+    before the payload is ever reached, and equal priorities come out in
+    push order.
+    """
+
+    def __init__(self, first=None):
+        import itertools as _it
+        self._counter = _it.count()
+        self._heap = []
+        if first is not None:
+            self.push(first)
+
+    def push(self, item):
+        import heapq as _hq
+        _hq.heappush(self._heap, (item[0], next(self._counter), item[1:]))
+
+    def pop(self):
+        import heapq as _hq
+        priority, _count, rest = _hq.heappop(self._heap)
+        return (priority,) + rest
+
+    def __len__(self):
+        return len(self._heap)
+
+    def __bool__(self):
+        return bool(self._heap)\
+''',
+    "FifoQueue": '''\
+class FifoQueue:
+    """First in, first out.  Nim backs this with a Deque; so do we."""
+
+    def __init__(self, first=None):
+        from collections import deque as _dq
+        self._items = _dq()
+        if first is not None:
+            self.push(first)
+
+    def push(self, item):
+        self._items.append(item)
+
+    def pop(self):
+        return self._items.popleft()
+
+    def __len__(self):
+        return len(self._items)
+
+    def __bool__(self):
+        return bool(self._items)\
+''',
+    "LifoQueue": '''\
+class LifoQueue:
+    """Last in, first out -- a stack."""
+
+    def __init__(self, first=None):
+        self._items = []
+        if first is not None:
+            self.push(first)
+
+    def push(self, item):
+        self._items.append(item)
+
+    def pop(self):
+        return self._items.pop()
+
+    def __len__(self):
+        return len(self._items)
+
+    def __bool__(self):
+        return bool(self._items)\
+''',
+}
+
+
+_ANY_HELPER = '''\
+class _Any:
+    """The ANY wildcard: compares equal to everything.
+
+    Nim gets this from three `==` overloads on AnyType.  Python needs only
+    the one, because when `x == ANY` finds x's own __eq__ returning
+    NotImplemented it retries with the operands swapped -- but defining
+    __eq__ drops the inherited __hash__, so that is restored explicitly or
+    ANY could not be a dict key or set member.
+    """
+    _instance = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
+    def __eq__(self, _other):
+        return True
+
+    def __hash__(self):
+        return hash("ANY")
+
+    def __repr__(self):
+        return "ANY"
+
+
+ANY = _Any()\
+'''
+
+
+def ensure_queue_helper(name):
+    """Define one of the stdlib queue classes the first time it is used.
+
+    Returns True when `name` is a queue type this backend supplies, so
+    callers can also use it as the membership test.
+    """
+    if name not in _QUEUE_HELPERS:
+        return False
+    decls = getattr(ParserState, 'py_top_decls', [])
+    marker = "class %s:" % name
+    if not any(marker in d for d in decls):
+        decls.append(_QUEUE_HELPERS[name])
+        ParserState.py_top_decls = decls
+    return True
+
+
+# Everything this backend can supply in place of `from stdlib import ...`.
+# Checked before anything is emitted, so a statement naming one supplied and
+# one unsupplied thing does not leave a stray class definition behind.
+STDLIB_SUPPLIED = frozenset(_QUEUE_HELPERS) | {"ANY"}
+
+
+def ensure_stdlib_helper(name):
+    """Define anything `from stdlib import ...` names that we supply here.
+
+    Returns True if the name was supplied, so the import emitter can tell
+    whether the statement still has to be carried into the output.
+    """
+    if ensure_queue_helper(name):
+        return True
+    if name == "ANY":
+        decls = getattr(ParserState, 'py_top_decls', [])
+        if not any("class _Any:" in d for d in decls):
+            decls.append(_ANY_HELPER)
+            ParserState.py_top_decls = decls
+        return True
+    return False
+
+
 def _tick_to_py(expr, attr):
     """Render `expr'attr` for the Python backend.
 

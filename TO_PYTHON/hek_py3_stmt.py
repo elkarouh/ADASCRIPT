@@ -113,6 +113,7 @@ def to_py(self):
             if hasattr(seq, "nodes") and len(seq.nodes) >= 2:
                 value = seq.nodes[1].to_py()
                 value = _wrap_seq_for_enum_array(value, annotation)
+                value = _wrap_list_for_queue(value, annotation)
                 result += f" = {value}"
                 has_value = True
     # Deliberately not zero-initialised here, unlike the `var x: T` form:
@@ -138,6 +139,48 @@ CLASS_BODY_DEPTH = 0
 RETURN_NODES = set()
 
 _MUTABLE_ZEROS = ("[]", "{}", "set()", "frozenset()", "Counter()")
+
+
+def _wrap_list_for_queue(value, annotation):
+    """`q: PriorityQueue[T] = [seed]` -> `q = PriorityQueue(seed)`.
+
+    The mirror of _wrap_seq_for_queue on the Nim side, which turns the same
+    declaration into `newPriorityQueueWith(seed)`.  Without it the annotation
+    is decoration and the name is left bound to a plain list, so the first
+    `q.push(...)` fails with "'list' object has no attribute 'push'".
+
+    Only a single-element literal is rewritten, matching both the Nim
+    constructors and this shim's `__init__(first=None)`.  An empty or
+    multi-element seed is left alone, as on Nim, where the user writes the
+    constructor and pushes the rest.
+
+    Declaring the queue is also what pulls its class into the output, so the
+    helper is ensured here rather than at the use site.
+    """
+    from hek_py3_expr import ensure_queue_helper
+    ann = (annotation or "").strip()
+    # The annotation reaches us with its type arguments already dropped
+    # (`PriorityQueue[(float, Node_T)]` renders as `PriorityQueue`), but
+    # accept the subscripted spelling too rather than depend on that.
+    base = ann.split("[", 1)[0].strip()
+    if not ensure_queue_helper(base):
+        return value
+    v = (value or "").strip()
+    if not (v.startswith("[") and v.endswith("]")):
+        return value                     # already a constructor call, or empty
+    item = v[1:-1].strip()
+    if not item:
+        return value
+    # A comma at depth zero means several elements, which no constructor takes.
+    depth = 0
+    for ch in item:
+        if ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+        elif ch == "," and depth == 0:
+            return value
+    return f"{base}({item})"
 
 
 def _wrap_seq_for_enum_array(value, annotation):
@@ -232,6 +275,7 @@ def to_py(self):
             if hasattr(seq, "nodes") and len(seq.nodes) >= 2:
                 value = seq.nodes[1].to_py()
                 value = _wrap_seq_for_enum_array(value, annotation)
+                value = _wrap_list_for_queue(value, annotation)
                 result += f" = {value}"
                 has_value = True
     if not has_value:
@@ -703,10 +747,41 @@ def _from_import_parts(self):
     return source, names
 
 
+def _supply_stdlib_names(source, names):
+    """Emit the bundled stdlib shims rather than importing them.
+
+    `from stdlib import PriorityQueue` names the Nim shim in
+    TO_NIM/STDLIB/stdlib.nim, which has no Python counterpart on the import
+    path -- the statement raises ModuleNotFoundError before any of the
+    generated code runs.  The classes are written into the output instead,
+    so what comes out is a single file that stands on its own.
+
+    Returns a replacement line, or None when the import is left alone --
+    either it is not `stdlib`, or it names something not supplied here, in
+    which case the statement is carried through unchanged rather than
+    silently dropping part of it.
+    """
+    if source != "stdlib":
+        return None
+    from hek_py3_expr import ensure_stdlib_helper, STDLIB_SUPPLIED
+    wanted = [n.strip() for n in names.split(",") if n.strip()]
+    # Decided before anything is emitted: a statement naming one supplied and
+    # one unsupplied thing keeps its import and gets no definitions, rather
+    # than half of each.
+    if not wanted or not all(n in STDLIB_SUPPLIED for n in wanted):
+        return None
+    for n in wanted:
+        ensure_stdlib_helper(n)
+    return f"# from {source} import {names}  (supplied inline for Python)"
+
+
 @method(from_abs)
 def to_py(self):
     """from_abs: 'from' dotted_name 'import' import_names"""
     source, names = _from_import_parts(self)
+    supplied = _supply_stdlib_names(source, names)
+    if supplied is not None:
+        return supplied
     return f"from {source} import {names}"
 
 

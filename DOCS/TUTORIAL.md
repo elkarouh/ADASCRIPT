@@ -1803,8 +1803,16 @@ does the whole initialisation — the conditional sits *inside* it, so there
 is no second pass to set the start node to zero. `for node in graph`
 iterates a `{K}V`, which yields its keys.
 
-Runs on the Nim backend; the Python backend cannot yet supply a `nimport`ed
-module, so `PriorityQueue` is unavailable there (see `TODO.md`).
+Runs on both backends. Nim compiles against the shim in
+`TO_NIM/STDLIB/stdlib.nim`; Python has no module of that name to import, so
+`py2py` writes `PriorityQueue` into its output instead — a `heapq` heap,
+which is what Nim's hand-written binary heap amounts to. `FifoQueue`,
+`LifoQueue` and the `ANY` sentinel come the same way.
+
+One difference is worth knowing before you rely on it: when two entries
+carry the same priority, the order they come back in is not promised and
+the two backends do differ. Only the lowest priority is guaranteed to
+come out first.
 
 ---
 
