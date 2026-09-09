@@ -1916,120 +1916,15 @@ def to_nim(self):
 
 
 # --- stmt_line ---
-@method(stmt_line)
-def to_nim(self):
-    """stmt_line: simple_stmt NL -> Nim: simple statement line"""
-    from hek_tokenize import RichNL
-
-    _first = self.nodes[0].to_nim()
-    # Top-level 'await expr' must be 'waitFor expr' in Nim
-    if _first.startswith("await "):
-        _first = "waitFor " + _first[len("await "):]
-    parts = [_first]
-    newline_node = None
-
-    for node in self.nodes[1:]:
-        if hasattr(node, "nodes") and node.nodes:
-            inner = node.nodes[0] if len(node.nodes) == 1 else None
-            if inner is not None and isinstance(inner, RichNL):
-                newline_node = inner
-                continue
-            for seq in node.nodes:
-                if hasattr(seq, "nodes") and len(seq.nodes) >= 1:
-                    parts.append(seq.nodes[0].to_nim())
-        elif isinstance(node, RichNL):
-            newline_node = node
-
-    result = "; ".join(parts)
-    # PyObject method call used as a statement must be discarded in Nim.
-    # Detect: single expression that is a dotted call on a known _py_module symbol.
-    # Skip discard when inside a function that returns a non-void type — the
-    # expression may be the implicit return value.
-    _ret = getattr(ParserState, '_current_return_type', '')
-    _in_returning_func = bool(_ret and _ret not in (': void', ': None', ': unit'))
-    if len(parts) == 1 and "nimpy" in ParserState.nim_imports and not _in_returning_func:
-        import re as _re_pyc
-        _pyc_m = _re_pyc.match(r'^([A-Za-z_]\w*)\.', result)
-        if _pyc_m:
-            _root = _pyc_m.group(1)
-            _sym = ParserState.symbol_table.lookup(_root)
-            if _sym and str(_sym.get("type", "")).startswith("_py_module:"):
-                result = f"discard {result}"
-    # Method/function call used as a statement with a non-void return type -> discard
-    # Only when the ENTIRE statement is that single call: a call that is merely the
-    # left operand of a larger expression (e.g. `f(x) or g(x)`) is a value
-    # expression — discarding it would drop the value (and, as an implicit return,
-    # silently return the default). Require the call's parentheses to span to the
-    # end of the statement before treating it as a discardable call statement.
-    import re as _re_whole
-    def _is_whole_call(s):
-        m = _re_whole.match(r'^(?:.+\.)?[A-Za-z_]\w*\(', s)
-        if not m:
-            return False
-        depth = 0
-        for idx in range(m.end() - 1, len(s)):
-            ch = s[idx]
-            if ch == '(':
-                depth += 1
-            elif ch == ')':
-                depth -= 1
-                if depth == 0:
-                    return idx == len(s) - 1   # nothing after the matching ')'
-        return False
-    if len(parts) == 1 and _is_whole_call(result):
-        import re as _re_disc
-        _proc_rtypes = getattr(ParserState, 'proc_return_types', {})
-        _disc_meth_m = _re_disc.match(r'^(.+)\.([A-Za-z_]\w*)\(', result)
-        _disc_func_m = _re_disc.match(r'^([A-Za-z_]\w*)\(', result) if not _disc_meth_m else None
-        # Nim builtins that are always void — never auto-discard based on unqualified name
-        _NIM_VOID_BUILTINS = {"add", "incl", "excl", "del", "delete", "insert",
-                              "setLen", "sort", "shuffle", "reverse", "reset",
-                              "echo", "write", "writeLine", "close", "flush"}
-        # Nim seq builtins that return a non-void value — always discard when used as stmt
-        _NIM_NONVOID_BUILTINS = {"pop"}
-        _void_rets = {"", "void", "None", "unit", ": void", ": None", ": unit"}
-        # Resolve the callee's return type. A method call (has a receiver) lives
-        # in a different namespace than a free function: a self-call must resolve
-        # against its own class, never against a free function that happens to
-        # share the Nim name (leading '_' is stripped in the Nim output, so e.g.
-        # Lexer._skip_whitespace collides with a free skip_whitespace()).
-        _disc_name = None   # short name, for builtin checks
-        _disc_ret = None    # resolved return type, or None when unknown
-        if _disc_meth_m:
-            _disc_recv = _disc_meth_m.group(1)
-            _disc_name = _disc_meth_m.group(2)
-            if _disc_recv == "self":
-                _disc_cls = getattr(ParserState, "_current_class_name", None)
-                if _disc_cls:
-                    for _disc_key in (f"{_disc_cls}.{_disc_name}",
-                                      f"{_disc_cls}._{_disc_name}"):
-                        if _disc_key in _proc_rtypes:
-                            _disc_ret = _proc_rtypes[_disc_key]
-                            break
-            elif _disc_name in _proc_rtypes:
-                # Unknown receiver type: best-effort unqualified lookup.
-                _disc_ret = _proc_rtypes[_disc_name]
-        elif _disc_func_m:
-            _disc_name = _disc_func_m.group(1)
-            if _disc_name in _proc_rtypes:
-                _disc_ret = _proc_rtypes[_disc_name]
-        if _disc_name and _disc_name in _NIM_NONVOID_BUILTINS and not result.startswith("discard "):
-            result = f"discard {result}"
-        elif (_disc_ret is not None and _disc_name not in _NIM_VOID_BUILTINS
-              and _disc_ret not in _void_rets and not result.startswith("discard ")):
-            result = f"discard {result}"
-    # Bare print (no args) -> echo "" (empty line)
-    if result == "echo":
-        result = 'echo ""'
-    # NOTE: Docstring detection is implemented in hek_nim_parser.py stmt_line.to_nim(),
-    # not here. This fallback is disabled as it's not the active code path.
-    if newline_node is not None and hasattr(newline_node, "comments") and newline_node.comments:
-        for kind, text, ind in newline_node.comments:
-            if kind == "comment":
-                result += "  " + text
-    return result
-
-
+# Emitted by hek_nim_parser.py, not here.  A 120-line @method(stmt_line)
+# used to sit at this point as well; both files registered on the same
+# grammar class, and since hek_nim_parser imports this module before
+# defining its own, the parser's was the one that ran and this one never
+# did -- instrumenting it produced no hits from py2nim --test or from any
+# .ady in the corpus, and deleting it left every generated file
+# byte-identical.  Two versions of the discard rules had already drifted
+# apart by then.  If stmt_line needs changing, hek_nim_parser.py is the
+# only place it lives.
 
 
 ###############################################################################
