@@ -142,6 +142,85 @@ def _strip_generic(name):
     return name[:idx] if idx >= 0 else name
 
 
+def _add_call_discards(lines):
+    """Put `discard` on a call statement whose value nim would insist be used.
+
+    Nim rejects an expression whose result is thrown away, so a call to a
+    non-void proc standing alone as a statement needs `discard` in front.
+    Return types come from ParserState.proc_return_types, so only calls
+    whose callee this module has already seen are touched; an unknown name
+    is left alone rather than guessed at.
+
+    Takes and returns a list of emitted Nim lines, indentation included.
+    A caller emitting into a body with an implicit return -- where the last
+    expression *is* the value -- must strip a trailing discard afterwards.
+    """
+    import re as _re_disc_blk
+    _proc_rtypes_blk = getattr(ParserState, 'proc_return_types', {})
+    _void_rets_blk = {'', 'void', 'None', 'unit', ': void', ': None', ': unit'}
+    _disc_lines = []
+    for _ln in lines:
+        _stripped = _ln.lstrip()
+        # Skip lines that contain an assignment (=) at top level — those are not bare calls
+        _has_assign = bool(_re_disc_blk.search(r'(?<![=!<>])=(?!=)', _stripped))
+        if (_stripped and not _has_assign and
+                not _stripped.startswith(('var ', 'let ', 'const ', 'discard ', 'return ',
+                                           'if ', 'while ', 'for ', 'result ', 'echo ',
+                                           '#', 'raise ', 'break', 'continue', 'assert '))):
+            # Check bare function call first (e.g. "emit(x)"), then method call (e.g. "obj.next(x)")
+            _df = _re_disc_blk.match(r'^([A-Za-z_]\w*)\(', _stripped)
+            _dm = _re_disc_blk.match(r'^([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\.([A-Za-z_]\w*)\(', _stripped) if not _df else None
+            # Only discard when the call's parentheses span the whole statement.
+            # A call that is merely the left operand of a larger expression
+            # (e.g. `f(x) or g(x)`) is a value expression, not a void call:
+            # discarding it would drop the value and, as an implicit return,
+            # silently return the default.
+            def _whole_call(s, m):
+                depth = 0
+                for _idx in range(m.end() - 1, len(s)):
+                    _ch = s[_idx]
+                    if _ch == '(':
+                        depth += 1
+                    elif _ch == ')':
+                        depth -= 1
+                        if depth == 0:
+                            return _idx == len(s) - 1
+                return False
+            _NIM_VOID_BUILTINS_BLK = {"add", "incl", "excl", "del", "delete", "insert",
+                                       "setLen", "sort", "shuffle", "reverse", "reset",
+                                       "echo", "write", "writeLine", "close", "flush"}
+            # Resolve the callee's return type. A method call (has a receiver)
+            # lives in a different namespace than a free function: a self-call
+            # must resolve against its own class, never against a free function
+            # sharing the Nim name (a leading '_' is stripped in Nim output, so
+            # e.g. Lexer._skip_whitespace collides with a free skip_whitespace()).
+            _dname = None
+            _dret = None
+            if _df and _whole_call(_stripped, _df):
+                _dname = _df.group(1)
+                if _dname in _proc_rtypes_blk:
+                    _dret = _proc_rtypes_blk[_dname]
+            elif _dm and _whole_call(_stripped, _dm):
+                _drecv = _dm.group(1)
+                _dname = _dm.group(2)
+                if _drecv == "self":
+                    _dcls = getattr(ParserState, "_current_class_name", None)
+                    if _dcls:
+                        for _dkey in (f"{_dcls}.{_dname}", f"{_dcls}._{_dname}"):
+                            if _dkey in _proc_rtypes_blk:
+                                _dret = _proc_rtypes_blk[_dkey]
+                                break
+                elif _dname in _proc_rtypes_blk:
+                    # Unknown receiver type: best-effort unqualified lookup.
+                    _dret = _proc_rtypes_blk[_dname]
+            if (_dname and _dname not in _NIM_VOID_BUILTINS_BLK
+                    and _dret is not None and _dret not in _void_rets_blk):
+                _ind_prefix = _ln[:len(_ln) - len(_stripped)]
+                _ln = f"{_ind_prefix}discard {_stripped}"
+        _disc_lines.append(_ln)
+    return _disc_lines
+
+
 def _has_toplevel_assignment(s):
     """True when an emitted statement assigns, rather than being a bare call.
 
@@ -513,71 +592,7 @@ def to_nim(self, indent=0, is_virtual=False, class_name=None, parent_name=None, 
     # For non-class blocks, if empty emit discard
     if not lines:
         return _ind(indent) + "discard"
-    # Post-process: add `discard` for non-void function/method calls used as statements
-    import re as _re_disc_blk
-    _proc_rtypes_blk = getattr(ParserState, 'proc_return_types', {})
-    _void_rets_blk = {'', 'void', 'None', 'unit', ': void', ': None', ': unit'}
-    _disc_lines = []
-    for _ln in lines:
-        _stripped = _ln.lstrip()
-        # Skip lines that contain an assignment (=) at top level — those are not bare calls
-        _has_assign = bool(_re_disc_blk.search(r'(?<![=!<>])=(?!=)', _stripped))
-        if (_stripped and not _has_assign and
-                not _stripped.startswith(('var ', 'let ', 'const ', 'discard ', 'return ',
-                                           'if ', 'while ', 'for ', 'result ', 'echo ',
-                                           '#', 'raise ', 'break', 'continue', 'assert '))):
-            # Check bare function call first (e.g. "emit(x)"), then method call (e.g. "obj.next(x)")
-            _df = _re_disc_blk.match(r'^([A-Za-z_]\w*)\(', _stripped)
-            _dm = _re_disc_blk.match(r'^([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\.([A-Za-z_]\w*)\(', _stripped) if not _df else None
-            # Only discard when the call's parentheses span the whole statement.
-            # A call that is merely the left operand of a larger expression
-            # (e.g. `f(x) or g(x)`) is a value expression, not a void call:
-            # discarding it would drop the value and, as an implicit return,
-            # silently return the default.
-            def _whole_call(s, m):
-                depth = 0
-                for _idx in range(m.end() - 1, len(s)):
-                    _ch = s[_idx]
-                    if _ch == '(':
-                        depth += 1
-                    elif _ch == ')':
-                        depth -= 1
-                        if depth == 0:
-                            return _idx == len(s) - 1
-                return False
-            _NIM_VOID_BUILTINS_BLK = {"add", "incl", "excl", "del", "delete", "insert",
-                                       "setLen", "sort", "shuffle", "reverse", "reset",
-                                       "echo", "write", "writeLine", "close", "flush"}
-            # Resolve the callee's return type. A method call (has a receiver)
-            # lives in a different namespace than a free function: a self-call
-            # must resolve against its own class, never against a free function
-            # sharing the Nim name (a leading '_' is stripped in Nim output, so
-            # e.g. Lexer._skip_whitespace collides with a free skip_whitespace()).
-            _dname = None
-            _dret = None
-            if _df and _whole_call(_stripped, _df):
-                _dname = _df.group(1)
-                if _dname in _proc_rtypes_blk:
-                    _dret = _proc_rtypes_blk[_dname]
-            elif _dm and _whole_call(_stripped, _dm):
-                _drecv = _dm.group(1)
-                _dname = _dm.group(2)
-                if _drecv == "self":
-                    _dcls = getattr(ParserState, "_current_class_name", None)
-                    if _dcls:
-                        for _dkey in (f"{_dcls}.{_dname}", f"{_dcls}._{_dname}"):
-                            if _dkey in _proc_rtypes_blk:
-                                _dret = _proc_rtypes_blk[_dkey]
-                                break
-                elif _dname in _proc_rtypes_blk:
-                    # Unknown receiver type: best-effort unqualified lookup.
-                    _dret = _proc_rtypes_blk[_dname]
-            if (_dname and _dname not in _NIM_VOID_BUILTINS_BLK
-                    and _dret is not None and _dret not in _void_rets_blk):
-                _ind_prefix = _ln[:len(_ln) - len(_stripped)]
-                _ln = f"{_ind_prefix}discard {_stripped}"
-        _disc_lines.append(_ln)
-    return "\n".join(_disc_lines)
+    return "\n".join(_add_call_discards(lines))
 
 
 @method(statement)
@@ -4680,7 +4695,27 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
     _exp = "*" if getattr(ParserState, 'export_symbols', False) and indent == 0 else ""
     method_sig = f"{deco_prefix}{_ind(indent)}{keyword} {nim_name}{_exp}{generic_params}({params_str}){ret_ann}{pragma} ="
     lines.append(method_sig)
-    lines.extend(body_lines)
+    # A method body is assembled here rather than by `block`, so the discard
+    # pass that runs there has to be applied by hand -- without it a non-void
+    # call standing alone in a method is emitted bare and nim rejects the file
+    # with "has to be used (or discarded)".
+    _mbody = _add_call_discards(body_lines)
+    # ...except in tail position, where the call *is* the return value. The
+    # equivalent strip for plain procs lives in _func_def_to_nim_inner; methods
+    # never had one, because nothing used to add a discard here.
+    _m_ret_void = (not ret_ann) or ret_ann.lstrip(": ").strip() in ("void", "None", "unit")
+    if not _m_ret_void:
+        _m_idx = len(_mbody) - 1
+        while _m_idx >= 0 and (_mbody[_m_idx].strip() == ""
+                               or _mbody[_m_idx].lstrip().startswith("#")):
+            _m_idx -= 1
+        if _m_idx >= 0:
+            _m_last = _mbody[_m_idx]
+            _m_stripped = _m_last.lstrip()
+            if _m_stripped.startswith("discard "):
+                _m_pad = _m_last[:len(_m_last) - len(_m_stripped)]
+                _mbody[_m_idx] = _m_pad + _m_stripped[len("discard "):]
+    lines.extend(_mbody)
     # Register param types for call-site Option[T] some() coercion (_wrap_option_args)
     if nim_name and params:
         import re as _re_mpt

@@ -357,6 +357,15 @@ def translate(code, export_symbols=False):
             rendered = stmt.to_nim(0)
         except TypeError:
             rendered = stmt.to_nim()
+        # A top-level call statement needs the same `discard` a call inside a
+        # proc body gets; module level is not a `block`, so the pass that runs
+        # there never saw these lines.  Only single-line statements are offered
+        # to it: anything multi-line is a rendered def or class whose body has
+        # already been through the pass, and whose last line may be an implicit
+        # return that must keep its value.
+        if '\n' not in rendered and rendered.strip():
+            from hek_nim_parser import _add_call_discards
+            rendered = _add_call_discards([rendered])[0]
         # Strip trailing blank lines from compound statement bodies
         rendered_lines = rendered.split('\n')
         trailing_blanks = 0
@@ -1105,6 +1114,27 @@ def run_tests():
             "type Color = enum RED, GREEN, BLUE\n",
         ),
     ]
+
+    # A non-void call standing alone as a statement needs `discard`, in all
+    # three places a statement can sit -- a proc body, a method body, and
+    # module level. Only the first was covered; the other two emitted the call
+    # bare and nim refused the file. `tail` is the counter-case: there the call
+    # is the implicit return, and a discard would silently drop the value.
+    tests.append((
+        "def emit(x: int) -> int:\n    return x + 1\n\n"
+        "class Box:\n    var n: int = 0\n"
+        "    def bump(self) -> int:\n        self.n += 1\n        return self.n\n"
+        "    def run(self):\n        self.bump()\n"
+        "    def tail(self) -> int:\n        emit(self.n)\n\n"
+        "emit(2)\n",
+        "proc emit(x: int): int =\n    return x + 1\n\n"
+        "type Box = object of RootObj\n    n: int\n\n"
+        "proc newBox*(): Box =\n    result = Box()\n    result.n = 0\n"
+        "proc bump(self: var Box): int =\n    self.n += 1\n    return self.n\n"
+        "proc run(self: var Box) =\n    discard self.bump()\n"
+        "proc tail(self: Box): int =\n    emit(self.n)\n\n"
+        "discard emit(2)\n",
+    ))
 
     # `discard` belongs on a pop whose value is dropped, and only there.
     # `w = xs.pop()` used to come out as `discard w = xs.pop()`, which nim
