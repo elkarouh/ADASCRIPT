@@ -711,13 +711,17 @@ from hek_tokenize import TICK_TOKEN as _TICK_TOKEN, DOLLAR_TOKEN as _DOLLAR_TOKE
     RANGE_TOKEN as _RANGE_TOKEN, RANGE_EXCL_TOKEN as _RANGE_EXCL_TOKEN, \
     REGEX_TOKEN as _REGEX_TOKEN, CAPTURE_TOKEN as _CAPTURE_TOKEN, \
     NAMED_CAPTURE_TOKEN as _NAMED_CAPTURE_TOKEN, \
-    SUBST_TOKEN as _SUBST_TOKEN, ENVDEF_TOKEN as _ENVDEF_TOKEN
+    SUBST_TOKEN as _SUBST_TOKEN, ENVDEF_TOKEN as _ENVDEF_TOKEN, \
+    ENVOPT_TOKEN as _ENVOPT_TOKEN
 TICK          = ignore(filt(lambda tok: tok.type == _TICK_TOKEN,       shift, name="'"))
 DOLLAR        = ignore(filt(lambda tok: tok.type == _DOLLAR_TOKEN,     shift, name="$"))
 # `${NAME:-` — carries NAME; the default expression and its closing `}`
 # are ordinary tokens after it.
 ENVDEF        = fmap(lambda tok: tok.string,
                      filt(lambda tok: tok.type == _ENVDEF_TOKEN, shift, name="envdef"))
+# `$?NAME` / `${?NAME}` — one token carrying NAME; nothing follows it.
+ENVOPT        = fmap(lambda tok: tok.string,
+                     filt(lambda tok: tok.type == _ENVOPT_TOKEN, shift, name="envopt"))
 BASH_TEST     = filt(lambda tok: tok.type == _BASH_TEST_TOKEN,  shift, name="bash_test")
 BASH_CMP      = fmap(lambda tok: tok.string, filt(lambda tok: tok.type == _BASH_CMP_TOKEN,  shift, name="bash_cmp"))
 RANGE_OP      = fmap(lambda tok: tok.string, filt(lambda tok: tok.type == _RANGE_TOKEN,      shift, name=".."))
@@ -811,6 +815,7 @@ __all__ = [
     "LBRACE",
     "RBRACE",
     "ENVDEF",
+    "ENVOPT",
     "LBRACKET",
     "RBRACKET",
     "COMMA",

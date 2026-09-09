@@ -53,6 +53,7 @@ from hek_parsec import (
     TICK,
     DOLLAR,
     ENVDEF,
+    ENVOPT,
     BASH_TEST,
     BASH_CMP,
     RANGE_OP,
@@ -256,6 +257,11 @@ dollar_var = DOLLAR + _DOLLAR_SUFFIX
 # then as a regex literal.
 env_default = ENVDEF + expression + RBRACE
 
+# --- env var as an optional: $?NAME / ${?NAME} ---
+# `$NAME` is a str and cannot tell unset from set-but-empty; this is the
+# ?str spelling, which can. One token, so there is nothing to sequence.
+env_optional = ENVOPT
+
 # --- regex capture references: $+1  $+{name} ---
 capture_var       = CAPTURE        # $+N   positional capture group
 named_capture_var = NAMED_CAPTURE  # $+{name} named capture group
@@ -296,6 +302,7 @@ atom = (
     | K_FALSE
     | capture_var
     | named_capture_var
+    | env_optional
     | env_default
     | dollar_var
     | regex_lit

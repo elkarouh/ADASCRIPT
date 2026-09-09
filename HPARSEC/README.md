@@ -180,6 +180,8 @@ Python's lexer would otherwise mis-read arrives at the grammar intact:
 | `CAPTURE_TOKEN` | `$+1` | — |
 | `NAMED_CAPTURE_TOKEN` | `$+{name}` | — |
 | `SUBST_TOKEN` | `s/pattern/replacement/flags` | — |
+| `ENVDEF_TOKEN` | the `${NAME:-` of `${NAME:-default}` | as `DOLLAR_TOKEN` |
+| `ENVOPT_TOKEN` | `$?NAME`, `${?NAME}` | as `DOLLAR_TOKEN` |
 
 The grammar consumes these like any other token — `tick_trailer = TICK +
 IDENTIFIER`, `dollar_var = DOLLAR + _DOLLAR_SUFFIX` — and the backends

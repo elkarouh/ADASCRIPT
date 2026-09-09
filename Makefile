@@ -55,6 +55,7 @@ STANDALONE := \
     test_regex.ady \
     test_regex_g.ady \
     test_env_default.ady \
+    test_env_optional.ady \
     test_optional_truthy.ady \
     td_learning/sarsa.ady \
     td_learning/qlearning.ady \
@@ -200,12 +201,16 @@ test: compile
 	    $(PY2NIM) $(AIDIR)/$$f -r >/dev/null 2>&1 && echo OK || { echo FAIL; exit 1; }; \
 	done
 
-	@# test_env_default.ady passes standalone, but the `:-` case that
-	@# distinguishes it from plain `-` needs a variable that is *set* and
-	@# empty, and Adascript can read the environment but not write it.
+	@# test_env_default.ady and test_env_optional.ady pass standalone, but
+	@# the cases that give each its point -- `:-` rather than plain `-`,
+	@# and presence rather than truthiness -- need a variable that is *set*
+	@# and empty, and Adascript can read the environment but not write it.
 	@echo "=== Env default (set-but-empty case) ==="
 	@printf '  %-42s' "test_env_default.ady (ADY_TEST_EMPTY=)"; \
 	    ADY_TEST_EMPTY= $(EXDIR)/test_env_default >/dev/null 2>&1 \
+	        && echo OK || { echo FAIL; exit 1; }
+	@printf '  %-42s' "test_env_optional.ady (ADY_TEST_EMPTY=)"; \
+	    ADY_TEST_EMPTY= $(EXDIR)/test_env_optional >/dev/null 2>&1 \
 	        && echo OK || { echo FAIL; exit 1; }
 
 	@# The one js-backend module. It is a library, not a program, so the

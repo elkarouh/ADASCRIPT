@@ -86,6 +86,17 @@ result = 42                # present
 result = None              # absent again
 ```
 
+One `?T` comes from the language rather than from an annotation: `$?NAME`
+reads an environment variable as a `?str`, `None` when it is not in the
+environment at all. `$NAME` stays a plain `str` and still reads an unset
+variable as `""`, so the two spellings answer different questions:
+
+```python
+if $?EDITOR:                   # is it set? "" counts as set
+    print "EDITOR is set"
+let editor: str = $?EDITOR or "vi"
+```
+
 ---
 
 ## 2. Optional function parameters
@@ -367,9 +378,15 @@ def connect(host: str, port: ?int = None) -> None:
 
 ```python
 def connect(host: str, port: int | None = None) -> None:
-    p: int = port or 5432
+    p: int = (port if port is not None else 5432)
     ...
 ```
+
+Not a bare `port or 5432`: presence decides, so a `?str` holding `""` keeps
+its value rather than falling through to the default. Python's `or` asks
+about the wrapped value and would have replaced it. The conditional form is
+still lazy, so a default that calls something is evaluated only when the
+optional is absent.
 
 **Nim output:**
 

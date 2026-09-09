@@ -1,0 +1,86 @@
+#!/usr/bin/env py2nim
+# test_env_optional.ady — $?NAME and ${?NAME}, the environment as a ?str
+#
+#   py2nim EXAMPLES/test_env_optional.ady -r
+#   py2py  EXAMPLES/test_env_optional.ady -c
+#
+# `$NAME` is a str, so it answers "" both for a variable that is absent and
+# for one that is set to nothing -- a sentinel, and OPTIONAL_TYPES.md §13
+# says not to use those. `$?NAME` is the ?str spelling, which can tell the
+# two apart. Both backends have to agree on all of it, so every assertion
+# here runs unchanged on either.
+#
+# Adascript reads the environment but cannot write it, so this file only
+# reads. It passes standalone; `make test` additionally runs it with an
+# empty ADY_TEST_EMPTY in the environment, which is what makes the
+# set-but-empty case below test presence rather than truthiness.
+
+# --- unset is None ----------------------------------------------------------
+assert $?ADY_TEST_NO_SUCH_VAR == None
+
+# --- set and non-empty carries the value ------------------------------------
+# HOME is the one variable that can be relied on to be set here.
+assert $?HOME != None
+# Unwrapped before the comparison: a ?str and a str are different types, and
+# Nim says so. Python would have compared them happily, which is the looser
+# of the two behaviours, not the one to write tests against.
+assert ($?HOME or "") == $HOME
+
+# --- as a condition: presence, not truthiness -------------------------------
+var log: []str = []
+
+if $?HOME:
+    log.append("home-present")
+if not $?ADY_TEST_NO_SUCH_VAR:
+    log.append("missing-absent")
+
+# The distinction the whole feature exists for. When ADY_TEST_EMPTY is set to
+# the empty string this is a *present* variable holding "", so the guard runs
+# -- `$ADY_TEST_EMPTY` alone could not have told it from an absent one.
+# Standalone, with the variable unset, the else branch runs instead.
+if $?ADY_TEST_EMPTY:
+    log.append("empty-present")
+else:
+    log.append("empty-absent")
+
+# --- `or` supplies a default, on absence only -------------------------------
+# Nim writes this as options.get(x, d); Python's plain `or` would also fire
+# on a present-but-empty value, which is a different question.
+assert ($?ADY_TEST_NO_SUCH_VAR or "vi") == "vi"
+assert ($?HOME or "vi") == $HOME
+
+# The case that separates the two questions: a variable that is *there* and
+# holds "". It is present, so there is nothing to default to and the empty
+# value survives. Plain `or` would have replaced it. Standalone, with the
+# variable unset, this is the ordinary absent case instead.
+let empty_expected: str = "defaulted" if $?ADY_TEST_EMPTY == None else ""
+assert ($?ADY_TEST_EMPTY or "defaulted") == empty_expected
+
+# ...and the same through a name, which is the other shape `or` sees.
+let bound_empty: ?str = $?ADY_TEST_EMPTY
+assert (bound_empty or "defaulted") == empty_expected
+
+# --- bound to a name, it stays a ?str ---------------------------------------
+let home: ?str = $?HOME
+let missing: ?str = $?ADY_TEST_NO_SUCH_VAR
+if home:
+    log.append("bound-present")
+if not missing:
+    log.append("bound-absent")
+assert (missing or "fallback") == "fallback"
+
+# --- ${?NAME} is just $?NAME ------------------------------------------------
+assert ${?HOME} == $?HOME
+assert ${?ADY_TEST_NO_SUCH_VAR} == None
+
+# --- $NAME is untouched by any of this --------------------------------------
+# The plain form stays a str and keeps reading unset as "", so nothing that
+# reads the environment today changes shape.
+assert $ADY_TEST_NO_SUCH_VAR == ""
+assert $HOME != ""
+
+assert log == ["home-present", "missing-absent",
+               "empty-absent" if $?ADY_TEST_EMPTY == None else "empty-present",
+               "bound-present", "bound-absent"]
+
+print "all env optional tests passed"

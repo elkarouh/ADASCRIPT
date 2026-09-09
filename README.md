@@ -1842,6 +1842,27 @@ division and then as a regex literal.
 
 `${NAME}` without a fallback is accepted too, and means exactly `$NAME`.
 
+Because `$NAME` is a `str`, it cannot tell a variable that is absent from one
+that is set to nothing — both read as `""`. When that difference matters,
+`$?NAME` is the same lookup as a `?str`:
+
+```python
+if $?EDITOR:                  # set at all? "" counts as set
+    print "EDITOR is set"
+
+let editor: ?str = $?EDITOR   # …and it carries the value
+print $?EDITOR or "vi"        # …with a default, applied only when absent
+```
+
+`${?NAME}` is the braced spelling of the same thing. `$NAME` is unchanged and
+still a `str`, so nothing that reads the environment today has to be revisited
+— reach for `$?NAME` only where "unset" and "set to nothing" are different
+answers.
+
+Note the difference between the two fallbacks: `${NAME:-default}` follows the
+shell and substitutes for an empty value as well, while `$?NAME or default`
+substitutes only when the variable is absent.
+
 ### In expressions
 
 ```python

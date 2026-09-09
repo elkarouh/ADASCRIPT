@@ -55,7 +55,7 @@ def _get_bracket_start(node):
 # Bashism resolution helpers
 ###############################################################################
 
-def binop_to_py(self, prec=None, my_prec=None):
+def binop_to_py(self, prec=None, my_prec=None, combine=None):
     """Generic to_py for left-associative binary operators.
 
     Due to Sequence flattening, inner rule nodes may be inlined.
@@ -71,7 +71,11 @@ def binop_to_py(self, prec=None, my_prec=None):
     Args:
         prec: parent context's precedence (None = no wrapping needed)
         my_prec: this operator's precedence level
+        combine: optional (left, op, right) -> str, for operators that do
+            not always join with a plain infix -- `or` over a ?T, so far.
     """
+    if combine is None:
+        combine = lambda left, op, right: f"{left} {op} {right}"
     # Find the last Several_Times that has (op, operand) pairs
     last_st_idx = None
     for i in range(len(self.nodes) - 1, -1, -1):
@@ -103,7 +107,7 @@ def binop_to_py(self, prec=None, my_prec=None):
 
         mock = _Mock()
         mock.nodes = self.nodes[:last_st_idx]
-        result = binop_to_py(mock, left_prec, my_prec)
+        result = binop_to_py(mock, left_prec, my_prec, combine)
 
     # Apply our (op, operand) pairs
     # Right child gets my_prec+1 (forces parens for same-precedence right operands)
@@ -113,7 +117,7 @@ def binop_to_py(self, prec=None, my_prec=None):
         if hasattr(seq, "nodes") and len(seq.nodes) >= 2:
             op = seq.nodes[0].to_py()
             right = seq.nodes[1].to_py(right_prec)
-            result = f"{result} {op} {right}"
+            result = combine(result, op, right)
 
     # Only wrap in parens if parent context requires higher precedence
     if prec is not None and my_prec is not None and my_prec < prec:
@@ -462,6 +466,30 @@ def _adascript_shuffle(_x):
     _r.shuffle(_x)
     return _x\
 '''
+
+
+# The one-argument os.environ.get is what `$?NAME` emits: it answers None for
+# an absent variable and the value -- "" included -- for a present one, which
+# is exactly a ?str.  `$NAME` emits the two-argument form and stays a str.
+_ENVOPT_CALL_RE = r"os\.environ\.get\('[A-Za-z_]\w*'\)"
+
+
+def py_expr_is_optional(expr):
+    """Is this already-emitted Python expression a `?T`?
+
+    Only two shapes are recognised, and deliberately so: a bare name whose
+    declared type ends in `| None`, and the `$?NAME` lookup.  For anything
+    else the Python backend has no return-type table to consult, and a wrong
+    answer here changes what a program does rather than merely how it reads.
+    """
+    import re as _re_opt
+    e = (expr or "").strip()
+    if _re_opt.fullmatch(_ENVOPT_CALL_RE, e):
+        return True
+    if not _re_opt.fullmatch(r"[A-Za-z_]\w*", e):
+        return False
+    sym = ParserState.symbol_table.lookup(e)
+    return bool(sym) and (sym.get("type") or "").endswith("| None")
 
 
 def _ensure_shuffle_helper():
@@ -1162,6 +1190,19 @@ def to_py(self, prec=None):
     return f"(os.environ.get('{name}') or {default})"
 
 
+@method(env_optional)
+def to_py(self, prec=None):
+    """env_optional: $?NAME -> os.environ.get('NAME'), a ?str.
+
+    The one-argument form already has the semantics wanted: the value when
+    the variable is present, including "" when it is set to nothing, and
+    None when it is absent. `$NAME` keeps its `, ''` default and stays str.
+    """
+    from hek_parsec import ParserState
+    ParserState.nim_imports.add("import os")
+    return f"os.environ.get('{self.node}')"
+
+
 # --- range expression (.., ..<) ---
 @method(range_incl_op)
 def to_py(self, prec=None):
@@ -1514,10 +1555,25 @@ def to_py(self, prec=None):
     return binop_to_py(self, prec, PREC_AND)
 
 
+def _or_combine(left, op, right):
+    """`x or default` where x is a ?T asks about presence, not truthiness.
+
+    The Nim backend emits options.get(x, default) here, so a ?str holding ""
+    keeps its value there while Python's plain `or` replaced it with the
+    default.  A conditional expression asks the right question and stays lazy,
+    as `or` was -- `x or f()` must not call f when x is present.  Naming the
+    left side twice is safe because py_expr_is_optional accepts only a bare
+    name and the `$?NAME` lookup, both pure.  Every other `or` is untouched.
+    """
+    if op != "or" or not py_expr_is_optional(left):
+        return f"{left} {op} {right}"
+    return f"({left} if {left} is not None else {right})"
+
+
 @method(disjunction)
 def to_py(self, prec=None):
     """disjunction: conjunction ('or' conjunction)*"""
-    return binop_to_py(self, prec, PREC_OR)
+    return binop_to_py(self, prec, PREC_OR, _or_combine)
 
 
 # --- walrus / named_expression ---

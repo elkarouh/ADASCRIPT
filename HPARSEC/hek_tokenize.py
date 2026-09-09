@@ -35,6 +35,7 @@ CAPTURE_TOKEN       = 99   # Regex capture:   $+1, $+2, ...
 NAMED_CAPTURE_TOKEN = 100  # Named capture:   $+{name}
 SUBST_TOKEN         = 101  # Perl substitution: s/pattern/replacement/flags
 ENVDEF_TOKEN        = 102  # Env var with a default: ${NAME:-  (default expr follows)
+ENVOPT_TOKEN        = 103  # Env var as ?str:  $?NAME, ${?NAME}
 
 # ---------------------------------------------------------------------------
 # Monkey-patch TokenInfo so existing code can compare tok == "string"
@@ -1029,6 +1030,17 @@ def _lex_impl(source):
                                 yield tkn.TokenInfo(NAMED_CAPTURE_TOKEN, cap_str, dol_lc, end_lc, line_txt)
                                 last_type = NAMED_CAPTURE_TOKEN
                                 i = close + 1; continue
+                elif nc == '?':
+                    # $?NAME — the variable as a ?str: none when it is not in
+                    # the environment at all, so unset and set-but-empty stay
+                    # distinguishable. `$NAME` keeps returning a plain str.
+                    _optm = re.match(r'\?([A-Za-z_]\w*)', src[j:])
+                    if _optm:
+                        _oname = _optm.group(1)
+                        _o_end = get_linecol(j + _optm.end())
+                        yield tkn.TokenInfo(ENVOPT_TOKEN, _oname, dol_lc, _o_end, line_txt)
+                        last_type = ENVOPT_TOKEN
+                        i = j + _optm.end(); continue
                 elif nc == '#':
                     yield tkn.TokenInfo(DOLLAR_TOKEN, '$', dol_lc, dol_end, line_txt)
                     h_lc = get_linecol(j)
@@ -1047,6 +1059,14 @@ def _lex_impl(source):
                     # ${NAME}          -- same as $NAME, braces are noise
                     # ${NAME:-default} -- default when unset *or* empty, as
                     #                     in the shell's ${var:-val}
+                    # ${?NAME}         -- same as $?NAME, braces are noise
+                    _optb = re.match(r'\{\?([A-Za-z_]\w*)\}', src[j:])
+                    if _optb:
+                        _o_end = get_linecol(j + _optb.end())
+                        yield tkn.TokenInfo(ENVOPT_TOKEN, _optb.group(1),
+                                            dol_lc, _o_end, line_txt)
+                        last_type = ENVOPT_TOKEN
+                        i = j + _optb.end(); continue
                     _envm = re.match(r'\{([A-Za-z_]\w*)(:-|\})', src[j:])
                     if _envm:
                         _ename = _envm.group(1)

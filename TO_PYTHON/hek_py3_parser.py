@@ -125,22 +125,17 @@ def _py_presence_cond(cond):
     OPTIONAL_TYPES.md §9 spells this out, and the Nim backend emits
     `v.isSome`. Plain Python truthiness agrees for every value except the
     falsy ones: a `?str` holding "" is *present*, so the guard should run,
-    and `if v:` would skip it. Only a bare name of known optional type is
-    rewritten -- for anything else the declared type is not in reach here,
-    and a wrong rewrite would be worse than the narrow disagreement.
+    and `if v:` would skip it. py_expr_is_optional says which expressions
+    are known to be optionals; everything else is left alone.
     """
-    from hek_parsec import ParserState
+    from hek_py3_expr import py_expr_is_optional
     import re as _re_pc
     c = (cond or "").strip()
     negated = False
-    m = _re_pc.fullmatch(r"not\s+([A-Za-z_]\w*)", c)
-    if m:
-        negated, c = True, m.group(1)
-    elif not _re_pc.fullmatch(r"[A-Za-z_]\w*", c):
-        return cond
-    sym = ParserState.symbol_table.lookup(c)
-    t = (sym.get("type") or "") if sym else ""
-    if not t.endswith("| None"):
+    m = _re_pc.fullmatch(r"not\s+(.+)", c)
+    if m and py_expr_is_optional(m.group(1)):
+        negated, c = True, m.group(1).strip()
+    elif not py_expr_is_optional(c):
         return cond
     return f"{c} is None" if negated else f"{c} is not None"
 
@@ -1005,6 +1000,15 @@ def to_py(self):
                     annotation = f": {val_node.to_py()}"
                 elif op_str == "=":
                     default = f"={val_node.to_py()}"
+    # A parameter is a typed name like any other, and until now only
+    # let/var/const declarations were recorded. That left `?T` parameters --
+    # the case OPTIONAL_TYPES.md §2 is entirely about -- invisible to
+    # everything that asks the symbol table what a name is, so `port or 5432`
+    # inside the body could not tell an optional from an ordinary value.
+    if annotation:
+        from hek_parsec import ParserState
+        ParserState.symbol_table.add(name, annotation[2:], "var")
+
     # PEP 8: spaces around = when annotation present
     if annotation and default:
         default = " " + default[0] + " " + default[1:]  # "=val" -> "= val"

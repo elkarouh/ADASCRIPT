@@ -152,6 +152,24 @@ def _ensure_envor_helper():
         ParserState.nim_top_decls = decls
 
 
+_ENVOPT_HELPER = """\
+proc adascriptEnvOpt(name: string): Option[string] =
+  ## `$?NAME`: the variable as a ?str. getEnv alone cannot express this --
+  ## it answers "" both for a variable that is absent and for one that is
+  ## set to the empty string, and those are different states.
+  if existsEnv(name): some(getEnv(name)) else: none(string)
+"""
+
+
+def _ensure_envopt_helper():
+    """Add adascriptEnvOpt to nim_top_decls the first time $?NAME is used."""
+    ParserState.nim_imports.update({"os", "options"})
+    decls = getattr(ParserState, 'nim_top_decls', [])
+    if not any("adascriptEnvOpt" in d for d in decls):
+        decls.append(_ENVOPT_HELPER)
+        ParserState.nim_top_decls = decls
+
+
 def _ensure_nimatch_helper():
     """Add the nimatch helper to nim_top_decls the first time =~ or !~ is used."""
     ParserState.nim_imports.update({"nre", "tables", "sequtils", "options"})
@@ -180,6 +198,11 @@ def _get_regex_info(node):
 # list; this is the one they share.
 _STRING_RETURNING_CALLS = ("adascriptEnvOr(", "getEnv(", "paramStr(",
                            "getAppFilename(")
+
+# ...and the one bundled proc whose result is an Option. Kept beside the list
+# above so the two stay together, since both answer "what does this emitted
+# call return" for callers that have no symbol-table entry to consult.
+_OPTION_RETURNING_CALLS = ("adascriptEnvOpt(",)
 
 
 def _nim_expr_type(expr):
@@ -290,6 +313,8 @@ def _nim_expr_type(expr):
         # known string-returning stdlib calls
         if s.startswith(_STRING_RETURNING_CALLS):
             return "string"
+        if s.startswith(_OPTION_RETURNING_CALLS):
+            return "Option[string]"
 
         # plain identifier — try both the raw form and the backtick-stripped form,
         # since keywords (result, proc, …) are stored with backticks in the symbol table.
@@ -2703,6 +2728,18 @@ def to_nim(self, prec=None):
     return f'adascriptEnvOr("{name}", {default})'
 
 
+@method(env_optional)
+def to_nim(self, prec=None):
+    """env_optional: $?NAME -> adascriptEnvOpt("NAME"), an Option[string].
+
+    `$NAME` stays a plain string, so nothing that reads an environment
+    variable today changes shape; this is the spelling for the cases that
+    have to tell "unset" from "set to nothing".
+    """
+    _ensure_envopt_helper()
+    return f'adascriptEnvOpt("{self.node}")'
+
+
 # --- range expression (.., ..<) ---
 @method(range_incl_op)
 def to_nim(self, prec=None):
@@ -2975,6 +3012,11 @@ def _expr_is_option(expr_str):
       for the current class (tracked by ParserState._current_class_name)
     """
     import re as _re
+    # Bundled procs that return an Option -- `$?NAME or "x"` has to reach the
+    # .get(default) form the same way `let v: ?str = ...` then `v or "x"`
+    # does, and a call has no symbol-table entry to find it by.
+    if expr_str.startswith(_OPTION_RETURNING_CALLS):
+        return True
     # Plain name lookup
     sym = ParserState.symbol_table.lookup(expr_str)
     if sym and "Option[" in (sym.get("type") or ""):

@@ -79,6 +79,26 @@ if absent:
 elif empty_but_set:
     log.append("elif-empty-is-present")
 
+# --- a ?T parameter is a ?T like any other -----------------------------------
+# The shape OPTIONAL_TYPES.md §2 is about. The Python backend recorded only
+# let/var/const declarations, so a parameter's type was not in reach and both
+# `if p:` and `p or default` fell back to plain truthiness inside a body.
+def describe(p: ?str) -> str:
+    if p:
+        return "present"
+    return "absent"
+
+def with_default(p: ?str) -> str:
+    return p or "(none)"
+
+assert describe(present) == "present"
+assert describe(absent) == "absent"
+assert describe(empty_but_set) == "present"    # "" is there, so it is present
+
+assert with_default(present) == "value"
+assert with_default(absent) == "(none)"
+assert with_default(empty_but_set) == ""       # present, so nothing to default
+
 assert log == ["call-present", "call-absent", "var-present", "var-absent",
                "value", "combined", "looped-0",
                "empty-is-present", "elif", "elif-empty-is-present"]
