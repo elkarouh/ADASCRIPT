@@ -1152,88 +1152,24 @@ def to_nim(self, prec=None):
     Also handles all plain IDENTIFIER uses (expressions, assignments, etc.)
     because pattern_capture = IDENTIFIER in the grammar — this method is the
     last writer on the shared class.  It therefore covers:
-      - Tick attributes  (Type__tick__Attr)
       - Bash placeholders (__bash_*__)
       - Normal identifier pass-through
 
-    The Type__tick__Attr branch below appears to be unreached on this
-    backend: ticks arrive as a TICK_TOKEN trailer and are resolved in
-    hek_nim_expr.py instead, so a bad attribute reaches nim rather than
-    raising here.  Instrumenting the branch and running py2nim --test plus
-    every .ady file under EXAMPLES/, TO_NIM/STDLIB/ and ADA_INDENT/ produced
-    no hits, nor did a tick on a set, on a type, or inside a case pattern.
-    Treat the validation below as inactive until that is fixed.
+    Tick attributes do *not* arrive here.  They reach the emitter as a
+    TICK_TOKEN trailer and are resolved by _emit_tick_attr() in
+    hek_nim_expr.py, which is the single place that knows the attribute set.
+    A second, divergent copy of that dispatch used to sit in this function
+    behind a `"__tick__" in name` test; it was removed once instrumentation
+    showed it took no hits from py2nim --test, from any .ady under
+    EXAMPLES/, TO_NIM/STDLIB/ and ADA_INDENT/, or from a tick on a set, on a
+    type, or inside a case pattern, and once deleting it left the generated
+    Nim for every one of those files byte-identical.
     """
     n = self.nodes[0]
     if hasattr(n, "to_nim"):
         name = n.to_nim()
     else:
         name = str(n)
-    # Resolve tick attributes
-    if "__tick__" in name:
-        type_name, _, attr = name.partition("__tick__")
-        info = ParserState.tick_types.get(type_name)
-        if info and attr in info:
-            return str(info[attr])
-        # Check for set variable — a set takes 'choose, 'len / 'Length and
-        # 'Size.  'Size is Ada's representation attribute and emits sizeof,
-        # so it answers the machine size in bytes, not how many members the
-        # set holds; 'len / 'Length are the count.
-        _sym = ParserState.symbol_table.lookup(type_name)
-        _sym_type = _sym.get("type", "") if _sym else ""
-        _is_set = _sym_type.startswith("HashSet") or _sym_type.startswith("set[")
-        if _is_set and attr not in ("choose", "Size", "len", "Length"):
-            raise SyntaxError(
-                f"'{attr} is not valid on a set; sets support 'choose, "
-                f"'len and 'Length for the number of members, and 'Size "
-                f"for the machine size in bytes"
-            )
-        # Ada tick attributes for enum operations
-        if attr == "Range":
-            # Enum: T'Range as set literal {T.low..T.high} (for set arithmetic)
-            # Range type: T'Range as plain range T.low..T.high (for iteration)
-            if info and "members" in info:
-                return f"{{{type_name}.low..{type_name}.high}}"
-            return f"{type_name}.low..{type_name}.high"
-        if attr == "Next":
-            return type_name + ".succ"
-        elif attr == "Prev":
-            return type_name + ".pred"
-        elif attr == "choose":
-            ParserState.nim_imports.add("random")
-            if "randomize()" not in ParserState.nim_init_stmts:
-                ParserState.nim_init_stmts.append("randomize()")
-            if _is_set:
-                if _sym_type.startswith("HashSet"):
-                    ParserState.nim_imports.add("sequtils")
-                    return f"{type_name}.toSeq[rand({type_name}.len - 1)]"
-                else:
-                    # set[T] (ordinal set) — use sample()
-                    return f"sample({type_name})"
-            return f"rand({type_name})"
-        elif attr == "Shuffle":
-            ParserState.nim_imports.add("random")
-            if "randomize()" not in ParserState.nim_init_stmts:
-                ParserState.nim_init_stmts.append("randomize()")
-            return f"(block: shuffle({type_name}); {type_name})"
-        # General value tick attributes
-        elif attr == "Image":
-            return f"${type_name}"
-        elif attr == "len" or attr == "Length":
-            return type_name + ".len"
-        elif attr == "Size":
-            return type_name + ".sizeof"
-        # seq/array variable: 'First -> .low, 'Last -> .high
-        _sym2 = ParserState.symbol_table.lookup(type_name)
-        _sym2_type = (_sym2.get("type", "") or "") if _sym2 else ""
-        _is_seq = _sym2_type.startswith("seq[") or _sym2_type.startswith("array[") or _sym2_type.startswith("[]")
-        if _is_seq:
-            if attr == "First":
-                return type_name + ".low"
-            elif attr == "Last":
-                return type_name + ".high"
-        # Unknown tick attribute — emit as method call
-        return type_name + "." + attr
     # '_' alone is the discard identifier in Nim — keep it.
     # Other single-leading-underscore names: strip the underscore.
     # But leave double-underscore names (dunder) intact.
