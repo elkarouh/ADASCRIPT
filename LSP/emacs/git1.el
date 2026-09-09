@@ -149,9 +149,9 @@ Falls back to ORIG, so ordinary repos are unaffected."
                    (file-name-directory (expand-file-name file)))))))
 
 (defvar git1--call-has-infile
-  (>= emacs-major-version 32)
+  (>= emacs-major-version 31)
   "Non-nil if `vc-git--call' takes an INFILE argument before BUFFER.
-Emacs 32 changed the signature from (buffer command &rest args)
+Emacs 31 changed the signature from (buffer command &rest args)
 to (infile buffer command &rest args).")
 
 (defun git1--call-advice (orig &rest args)
