@@ -4,7 +4,6 @@
 # Translated from FTPS::Common (Perl).
 
 import os
-import re
 
 # ---------------------------------------------------------------------------
 # Return codes
@@ -68,7 +67,7 @@ def construct_filename_pattern(date: str, sequence: str, period: str,
 def filter_output(filename: str, start_date: str, end_date: str) -> bool:
   let base      : str = os.path.basename(filename)
   let file_date : str = base[2:10]
-  if re.match(r"^\d+$", file_date):
+  if file_date == /^\d+$/:
     return start_date <= file_date and file_date <= end_date
   elif start_date == "00000000" and end_date == "99999999":
     return True
@@ -81,7 +80,7 @@ def filter_output(filename: str, start_date: str, end_date: str) -> bool:
 def check_period(period: str) -> (str, int):
   if period == "":
     return ("", RC_OK)
-  if re.match(r"^\d{3}$", period):
+  if period == /^\d{3}$/:
     return (period, RC_OK)
   print "ERROR: -period must be 3 digits, got: ", period
   return ("", RC_ARG_ERROR)
@@ -91,7 +90,7 @@ def check_sequence(sequence: str) -> (str, int):
     return ("", RC_OK)
   if sequence == "ALL":
     return ("?", RC_OK)
-  if re.match(r"^\d$", sequence):
+  if sequence == /^\d$/:
     return (sequence, RC_OK)
   print "ERROR: -sequence must be a single digit or ALL, got: ", sequence
   return ("", RC_ARG_ERROR)
@@ -99,7 +98,7 @@ def check_sequence(sequence: str) -> (str, int):
 def check_date(date: str, option_name: str) -> (str, int):
   if date == "":
     return ("", RC_OK)
-  if re.match(r"^\d+$", date):
+  if date == /^\d+$/:
     return (date, RC_OK)
   print f"ERROR: -{option_name} must be numeric, got: {date}"
   return ("", RC_ARG_ERROR)
@@ -110,14 +109,19 @@ def check_date(date: str, option_name: str) -> (str, int):
 # ---------------------------------------------------------------------------
 def parse_dbt_hdr(text: str) -> {str}str:
   var d : {str}str = {:}
-  let pairs : []str = re.findall("(\\w+)=\"((?:[^\"\\\\]|\\\\.)*)\"", text)
-  var i : int = 0
-  while i + 1 < len(pairs):
-    let key : str = pairs[i]
-    var val : str = pairs[i + 1]
+  # The groups are deliberately non-capturing. `/g` is documented to give
+  # the whole matches as []str, which is what Nim does, but the Python
+  # backend passes a grouped pattern to re.findall and gets tuples back --
+  # so a pattern with groups means different things on the two backends.
+  # Without them both hand back `KEY="value"`, split here on the first `=`.
+  let pairs : []str = text == /\w+="(?:[^"\\]|\\.)*"/g
+  for pair in pairs:
+    let eq  : int = pair.find("=")
+    let key : str = pair[0:eq]
+    # +2 and -1 drop the `="` that opens the value and the `"` that ends it.
+    var val : str = pair[eq + 2:len(pair) - 1]
     val = val.replace("\\\"", "\"").replace("\\\\", "\\")
     d[key] = val
-    i += 2
   return d
 
 # ---------------------------------------------------------------------------
