@@ -364,6 +364,14 @@ def _nim_truthiness(expr):
         if _rname and _proc_rtypes.get(_rname, "").startswith("Option["):
             ParserState.nim_imports.add("options")
             return f"{expr}.isSome"
+        # ...and anything else already known to be an Option: `if v:` where
+        # v is a ?str. The two patterns above both require a '(', so only the
+        # call form was ever converted -- a bare name came through unchanged
+        # and nim rejected it with "got 'Option[system.string]' ... expected
+        # 'bool'", though OPTIONAL_TYPES.md documents both spellings.
+        if (_nim_expr_type(expr) or "").startswith("Option["):
+            ParserState.nim_imports.add("options")
+            return f"{expr}.isSome"
     _STRING_LIKE = ("string", "seq[", "str", "PriorityQueue", "FifoQueue",
                     "LifoQueue", "HashSet", "Table", "Deque")
     t = _nim_expr_type(expr)

@@ -55,6 +55,7 @@ STANDALONE := \
     test_regex.ady \
     test_regex_g.ady \
     test_env_default.ady \
+    test_optional_truthy.ady \
     td_learning/sarsa.ady \
     td_learning/qlearning.ady \
     test_do_block.ady

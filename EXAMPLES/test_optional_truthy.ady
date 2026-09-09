@@ -1,0 +1,86 @@
+#!/usr/bin/env py2nim
+# test_optional_truthy.ady — a ?T used directly as a condition
+#
+#   py2nim EXAMPLES/test_optional_truthy.ady -r
+#   py2py  EXAMPLES/test_optional_truthy.ady -c
+#
+# OPTIONAL_TYPES.md §9 says a `?T` in a condition is tested for presence,
+# not for the truthiness of what it wraps, and gives the Nim output as
+# `if result.isSome:`. Only the call form did that: a bare variable came
+# through unchanged and nim rejected it with
+#
+#   type mismatch: got 'Option[system.string]' ... but expected 'bool'
+#
+# while the Python backend accepted both. Every shape below therefore has
+# to behave the same on either backend.
+
+def find(k: str) -> ?str:
+    if k == "yes":
+        return "value"
+    return None
+
+def zero_len(k: str) -> ?str:
+    if k == "yes":
+        return ""
+    return None
+
+var log: []str = []
+
+# --- the call form, which already worked -----------------------------------
+if find("yes"):
+    log.append("call-present")
+if not find("no"):
+    log.append("call-absent")
+
+# --- a bare variable, which did not ----------------------------------------
+let present: ?str = find("yes")
+let absent:  ?str = find("no")
+if present:
+    log.append("var-present")
+if not absent:
+    log.append("var-absent")
+
+# --- the value is still there inside the guard ------------------------------
+# §9's example is `if result: use(result)`, emitted as `use(result.get())`.
+if present:
+    log.append(present)
+
+# --- combined with other conditions -----------------------------------------
+if present and not absent:
+    log.append("combined")
+# `if absent or present:` is deliberately not tested here: `or` between two
+# optionals is read as the ?T-default idiom and emitted as get(absent,
+# present) on Nim, which is a value rather than a condition. That is a
+# separate bug from this one and is not fixed here.
+
+# --- as a while condition ----------------------------------------------------
+var countdown: int = 2
+while present and countdown > 0:
+    countdown -= 1
+log.append(f"looped-{countdown}")
+
+# --- presence is not the wrapped value's truthiness --------------------------
+# The distinction §9 is actually about: an empty string is present, so the
+# guard runs. Testing the value would skip it.
+let empty_but_set: ?str = zero_len("yes")
+if empty_but_set:
+    log.append("empty-is-present")
+
+# --- elif keeps working ------------------------------------------------------
+if absent:
+    log.append("wrong")
+elif present:
+    log.append("elif")
+
+# An elif is a condition like any other, so the empty-but-set case has to come
+# out the same there. Nim ran this branch and Python skipped it.
+if absent:
+    log.append("wrong")
+elif empty_but_set:
+    log.append("elif-empty-is-present")
+
+assert log == ["call-present", "call-absent", "var-present", "var-absent",
+               "value", "combined", "looped-0",
+               "empty-is-present", "elif", "elif-empty-is-present"]
+
+print "all optional truthiness tests passed"

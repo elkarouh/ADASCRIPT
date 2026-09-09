@@ -118,10 +118,37 @@ def _suite_to_py(node, indent):
 
 
 # --- if / elif / else ---
+def _py_presence_cond(cond):
+    """`if v:` where v is a ?T asks whether it is present, not whether the
+    value it holds is truthy.
+
+    OPTIONAL_TYPES.md §9 spells this out, and the Nim backend emits
+    `v.isSome`. Plain Python truthiness agrees for every value except the
+    falsy ones: a `?str` holding "" is *present*, so the guard should run,
+    and `if v:` would skip it. Only a bare name of known optional type is
+    rewritten -- for anything else the declared type is not in reach here,
+    and a wrong rewrite would be worse than the narrow disagreement.
+    """
+    from hek_parsec import ParserState
+    import re as _re_pc
+    c = (cond or "").strip()
+    negated = False
+    m = _re_pc.fullmatch(r"not\s+([A-Za-z_]\w*)", c)
+    if m:
+        negated, c = True, m.group(1)
+    elif not _re_pc.fullmatch(r"[A-Za-z_]\w*", c):
+        return cond
+    sym = ParserState.symbol_table.lookup(c)
+    t = (sym.get("type") or "") if sym else ""
+    if not t.endswith("| None"):
+        return cond
+    return f"{c} is None" if negated else f"{c} is not None"
+
+
 @method(elif_clause)
 def to_py(self, indent=0):
     """elif_clause: 'elif' named_expression ':' suite"""
-    cond = self.nodes[0].to_py()
+    cond = _py_presence_cond(self.nodes[0].to_py())
     hc = _block_inline_header_comment(self.nodes[1])
     body = _suite_to_py(self.nodes[1], indent + 1)
     return f"{_ind(indent)}elif {cond}:{hc}\n{body}"
@@ -138,7 +165,7 @@ def to_py(self, indent=0):
 @method(if_stmt)
 def to_py(self, indent=0):
     """if_stmt: 'if' named_expression ':' suite ('elif' ...)* ('else' ...)?"""
-    cond = self.nodes[0].to_py()
+    cond = _py_presence_cond(self.nodes[0].to_py())
     hc = _block_inline_header_comment(self.nodes[1])
     body = _suite_to_py(self.nodes[1], indent + 1)
     result = f"{_ind(indent)}if {cond}:{hc}\n{body}"
@@ -163,7 +190,7 @@ def to_py(self, indent=0):
 @method(while_stmt)
 def to_py(self, indent=0):
     """while_stmt: 'while' named_expression ':' suite ('else' ':' block)?"""
-    cond = self.nodes[0].to_py()
+    cond = _py_presence_cond(self.nodes[0].to_py())
     hc = _block_inline_header_comment(self.nodes[1])
     body = _suite_to_py(self.nodes[1], indent + 1)
     result = f"{_ind(indent)}while {cond}:{hc}\n{body}"
