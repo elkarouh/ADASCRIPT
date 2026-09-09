@@ -25,6 +25,9 @@ TO_NIM/STDLIB/awk
 TO_NIM/STDLIB/db
 TO_NIM/STDLIB/graphs
 TO_NIM/STDLIB/iters
+# The js backend names its output after the source rather than hiding it,
+# so jointjs leaves a .js symlink rather than an extensionless one.
+TO_NIM/STDLIB/jointjs.js
 
 # Obsolete/deprecated code
 OBSOLETE/
