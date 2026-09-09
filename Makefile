@@ -197,6 +197,16 @@ test: compile
 	    $(PY2NIM) $(AIDIR)/$$f -r >/dev/null 2>&1 && echo OK || { echo FAIL; exit 1; }; \
 	done
 
+	@# The one js-backend module. It is a library, not a program, so the
+	@# check is that `nim js` accepts it -- nothing else in this target
+	@# exercises the js path, and a dict literal is emitted differently
+	@# there (js{...} rather than {...}.toTable), so a native-only run
+	@# would not have caught a break.
+	@echo "=== JS backend (compile only) ==="
+	@printf '  %-42s' "STDLIB/jointjs.ady (py2nim js)"; \
+	    $(PY2NIM) js $(CURDIR)/TO_NIM/STDLIB/jointjs.ady >/dev/null 2>&1 \
+	        && echo OK || { echo FAIL; exit 1; }
+
 	@echo ""
 	@echo "All tests passed."
 

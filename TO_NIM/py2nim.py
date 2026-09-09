@@ -1470,10 +1470,25 @@ def main(argv=None):
     #     ~/.cache/hparsec/<HASH>/nimcache/     ← nim object cache      #
     # ------------------------------------------------------------------ #
     def _cache_paths(ady_path):
-        """Return (cache_dir, nim_file, exe_file, nimcache_dir) for *ady_path*."""
+        """Return (cache_dir, nim_file, exe_file, nimcache_dir) for *ady_path*.
+
+        The backend is part of the identity, not just the path.  `js` and the
+        native backends emit different Nim for the same source -- a dict
+        literal becomes `js{...}` rather than `{...}.toTable` -- and both used
+        to be written to the same file, so
+
+            py2nim -t jointjs.ady     # caches the native .nim
+            py2nim js jointjs.ady     # "up to date", compiles that as JS
+
+        reported the file up to date and handed the native output to `nim js`,
+        which failed on the Table literal with a type mismatch that had nothing
+        to do with the source.
+        """
         import hashlib
         abs_path = os.path.realpath(ady_path)
-        digest   = hashlib.sha1(abs_path.encode()).hexdigest()[:16].upper()
+        _backend = "js" if subcommand == "js" else "native"
+        digest   = hashlib.sha1(
+            (abs_path + "\0" + _backend).encode()).hexdigest()[:16].upper()
         base_dir = os.path.join(os.path.expanduser("~"), ".cache", "hparsec")
         cache_dir = os.path.join(base_dir, "cache-" + digest)
         stem     = os.path.splitext(os.path.basename(ady_path))[0]
