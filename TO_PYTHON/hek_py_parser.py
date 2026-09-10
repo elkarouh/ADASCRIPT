@@ -387,37 +387,6 @@ def to_py(self):
     return expr
 
 
-@method(with_own_stmt)
-def to_py(self, indent=0):
-    """with own x = expr: block  ->  x = expr / try: body / finally: del x
-
-    Node layout (ikw tokens invisible):
-      nodes[0] = IDENTIFIER, nodes[1] = V_EQUAL, nodes[2] = expression, nodes[3] = block
-    """
-    name_node = expr_node = block_node = None
-    for node in self.nodes:
-        tname = type(node).__name__
-        if tname == "IDENTIFIER" and name_node is None:
-            name_node = node
-        elif tname == "block":
-            block_node = node
-        elif name_node is not None and expr_node is None and tname not in ("Fmap", "Filter"):
-            val = getattr(node, "node", None)
-            if isinstance(val, str) and val == "=":
-                continue   # skip visible V_EQUAL
-            expr_node = node
-    name = name_node.to_py() if name_node else "_own_var"
-    expr = expr_node.to_py() if expr_node else "None"
-    body = _suite_to_py(block_node, indent + 1) if block_node else f"{_ind(indent + 1)}pass"
-    ind = _ind(indent)
-    ind1 = _ind(indent + 1)
-    return (
-        f"{ind}{name} = {expr}\n"
-        f"{ind}try:\n"
-        f"{body}\n"
-        f"{ind}finally:\n"
-        f"{ind1}del {name}"
-    )
 
 
 @method(with_stmt)

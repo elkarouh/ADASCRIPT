@@ -459,16 +459,8 @@ def to_py(self, prec=None):
     return " | ".join(parts)
 
 
-@method(lent_type)
-def to_py(self, prec=None):
-    """lent T  ->  T  (ownership annotation stripped for Python; GC handles it)"""
-    return self.nodes[0].to_py()
 
 
-@method(own_param_type)
-def to_py(self, prec=None):
-    """own T  ->  T  (ownership annotation stripped for Python; GC handles it)"""
-    return self.nodes[0].to_py()
 
 @method(lent_type)
 def to_py(self, prec=None):

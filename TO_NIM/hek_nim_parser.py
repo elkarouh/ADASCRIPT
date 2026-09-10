@@ -272,36 +272,6 @@ def _is_new_method(class_name, method_name):
     return True
 
 
-def _any_subclass_overrides(base_class, method_name):
-    """Return True if any known subclass of base_class defines method_name.
-
-    Uses the whole-file pre-scan stored in ParserState._all_class_methods
-    (populated before translation begins) so that subclasses defined later in
-    the file are already visible when the base-class methods are emitted.
-    """
-    all_methods = getattr(ParserState, "_all_class_methods", None)
-    if all_methods is None:
-        return True  # no pre-scan data → conservative: keep as method
-    # Build the set of all subclasses (direct and transitive) of base_class.
-    # _class_parents is populated incrementally during translation, but
-    # _all_class_methods covers the whole file so we can derive subclass
-    # relationships from it via the pre-scan hierarchy stored alongside.
-    # Fallback: check every class whose *name* suggests it extends base_class.
-    # We walk all_methods keys and check _class_parents for parentage.
-    all_parents = getattr(ParserState, "_all_class_parents", None)
-    if all_parents is None:
-        return True
-    # Collect all subclasses (BFS)
-    subclasses = set()
-    frontier = {base_class}
-    while frontier:
-        nxt = set()
-        for cls, par in all_parents.items():
-            if par and _strip_generic(par) in frontier and cls not in subclasses:
-                subclasses.add(cls)
-                nxt.add(cls)
-        frontier = nxt
-    return any(method_name in all_methods.get(sc, set()) for sc in subclasses)
 
 # to_nim() methods for compound statements
 ###############################################################################
@@ -811,79 +781,9 @@ def to_nim(self, indent=0):
 
 
 # --- try/except/finally ---
-@method(try_stmt)
-def to_nim(self, indent=0):
-    # Delegate to whichever sub-form was matched
-    return self.nodes[0].to_nim(indent)
 
-@method(try_except)
-def to_nim(self, indent=0):
-    """try/except -> Nim: try/except"""
-    import re as _re
-    ind = _ind(indent)
-    ind1 = _ind(indent + 1)
-    # nodes: [block, (except_clause|except_bare)+, else_clause?, finally_clause?]
-    body_node = self.nodes[0]
-    body = body_node.to_nim(indent + 1)
-    result = f"{ind}try:\n{body}"
-    for node in self.nodes[1:]:
-        ntype = type(node).__name__
-        if ntype == "Several_Times":
-            for child in node.nodes:
-                result += _emit_except_clause(child, indent)
-        elif ntype in ("except_clause", "except_bare", "Sequence_Parser"):
-            result += _emit_except_clause(node, indent)
-        elif ntype == "else_clause":
-            pass  # Nim has no try/else
-        elif ntype == "finally_clause":
-            fc_block = node.nodes[-1] if hasattr(node, "nodes") else None
-            if fc_block:
-                result += f"{ind}finally:\n{fc_block.to_nim(indent + 1)}"
-    return result
 
-def _emit_except_clause(node, indent):
-    ind = _ind(indent)
-    ind1 = _ind(indent + 1)
-    ntype = type(node).__name__
-    if ntype == "except_bare":
-        # except: block
-        block = node.nodes[-1]
-        return f"{ind}except:\n{block.to_nim(indent + 1)}"
-    # except_clause: except ExcType [as name]: block
-    nodes = node.nodes if hasattr(node, "nodes") else []
-    # Find exception type expression and optional 'as name' and block
-    exc_type = ""
-    exc_name = ""
-    block_node = None
-    i = 0
-    while i < len(nodes):
-        nname = type(nodes[i]).__name__
-        if nname == "block":
-            block_node = nodes[i]
-        elif nname == "IDENTIFIER" and exc_name == "" and exc_type != "":
-            exc_name = nodes[i].to_nim()
-        elif nname not in ("Literal_keyword", "Filter", "Fmap", "NL", "INDENT", "DEDENT"):
-            if exc_type == "":
-                exc_type = nodes[i].to_nim() if hasattr(nodes[i], "to_nim") else ""
-        i += 1
-    if not block_node and nodes:
-        block_node = nodes[-1]
-    body = block_node.to_nim(indent + 1) if block_node else f"{ind1}discard"
-    if exc_name:
-        return f"{ind}except {exc_type} as {exc_name}:\n{body}"
-    elif exc_type:
-        return f"{ind}except {exc_type}:\n{body}"
-    else:
-        return f"{ind}except:\n{body}"
 
-@method(try_finally)
-def to_nim(self, indent=0):
-    ind = _ind(indent)
-    body = self.nodes[0].to_nim(indent + 1)
-    finally_block = self.nodes[-1]
-    if hasattr(finally_block, "nodes"):
-        finally_block = finally_block.nodes[-1]
-    return f"{ind}try:\n{body}{ind}finally:\n{finally_block.to_nim(indent + 1)}"
 
 
 # --- for ---
@@ -1498,9 +1398,6 @@ def _is_structural_pattern(pat_node):
     return False
 
 
-def _pat_node_of(when_node):
-    """Extract the pattern node from a when_clause node."""
-    return when_node.nodes[0]
 
 
 def _block_node_of(when_node):
@@ -1784,24 +1681,6 @@ def _case_has_structural_patterns(case_node):
     return False
 
 
-def _collect_when_clauses(nodes):
-    """Collect all when_clause nodes from a case_stmt's node list."""
-    clauses = []
-    for node in nodes:
-        tname = type(node).__name__
-        if tname == "when_clause":
-            clauses.append(node)
-        elif tname == "Several_Times":
-            for seq in node.nodes:
-                stname = type(seq).__name__
-                if stname == "when_clause":
-                    clauses.append(seq)
-                elif stname == "Sequence_Parser" and hasattr(seq, "nodes"):
-                    # unwrap: find when_clause inside the sequence
-                    for child in seq.nodes:
-                        if type(child).__name__ == "when_clause":
-                            clauses.append(child)
-    return clauses
 
 
 def _tuple_pattern_to_cond(pat_nim, subject_parts):

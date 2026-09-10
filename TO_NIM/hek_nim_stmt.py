@@ -1438,14 +1438,6 @@ def to_nim(self):
     return ", ".join(parts)
 
 
-def _dots_to_nim(nodes):
-    dots = ""
-    for node in nodes:
-        if hasattr(node, "nodes"):
-            for sub in node.nodes:
-                if hasattr(sub, "nodes") and sub.nodes and sub.nodes[0] == ".":
-                    dots += "."
-    return dots
 
 
 def _import_names_to_nim(node):

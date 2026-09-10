@@ -607,15 +607,6 @@ def to_py(self):
     return ", ".join(parts)
 
 
-def _dots_to_py(nodes):
-    """Extract leading dots from Several_Times of V_DOT nodes."""
-    dots = ""
-    for node in nodes:
-        if hasattr(node, "nodes"):
-            for sub in node.nodes:
-                if hasattr(sub, "nodes") and sub.nodes and sub.nodes[0] == ".":
-                    dots += "."
-    return dots
 
 
 def _import_name_to_py(nodes):
