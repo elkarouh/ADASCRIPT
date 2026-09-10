@@ -37,6 +37,7 @@ sys.path.insert(0, os.path.join(_dir, "..", "ADASCRIPT_GRAMMAR"))
 
 from ady_expr import *
 from hek_parsec import method, ParserState
+import re as _re_mod_pfx
 
 
 
@@ -137,10 +138,33 @@ def to_py(self, prec=None):
     return self.node
 
 
+_re_pfx = _re_mod_pfx.compile(r'^([A-Za-z]{1,2})(?=["\'])')
+
+
+def strip_bytes_unicode_prefix(text):
+    """A string literal with its `b` and `u` prefixes removed.
+
+    Adascript has no bytes type -- nothing can be declared, passed or
+    returned as one -- so a `b` literal has nowhere to live, and Nim's
+    string is a byte string anyway, which makes dropping the prefix the
+    faithful reading rather than a lossy one. `u` is a no-op left over from
+    Python 2. An `r` in the prefix stays: br'...' becomes r'...', because
+    raw is about escapes and survives on its own.
+    """
+    m = _re_pfx.match(text)
+    if not m:
+        return text
+    kept = ''.join(c for c in m.group(1) if c.lower() not in 'ub')
+    return kept + text[m.end():]
+
+
 @method(STRING)
 def to_py(self, prec=None):
     """STRING: a string literal token."""
-    return self.node
+    # Dropped here as well as on Nim, so `b"x"` is the same string on both.
+    # Left alone, Python built a real bytes object out of it while Nim would
+    # not compile at all, and a `let s: str = b"x"` was quietly neither.
+    return strip_bytes_unicode_prefix(self.node)
 
 
 @method(fstring)

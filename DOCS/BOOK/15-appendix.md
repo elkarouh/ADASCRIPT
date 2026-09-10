@@ -166,6 +166,12 @@ in order to build.
   bind the intermediate value first. They do attach to field accesses and
   subscripts (`self.x'Image`, `xs[0]'Image`).
 - `[*]T` is parameter/return-only.
+- There is no bytes type, so `b"..."` is a plain string: the prefix is
+  dropped on both backends. Nim's `string` is a byte string, which makes
+  that the faithful reading rather than a lossy one, but it does mean
+  `b"x" == "x"` where Python would say otherwise. `u"..."` is dropped too,
+  being a no-op since Python 3. An `r` in the prefix stays — `br"\d"` is
+  `r"\d"` — because raw is about escapes and survives on its own.
 - Iterating a `{…}` type is in a different order on each backend (insertion
   on Python, hash on Nim). The types promise no order; sort the keys where
   the output has to match (§6.2). Sort the *keys*, not the table —

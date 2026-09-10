@@ -23,6 +23,7 @@ sys.path.insert(0, os.path.join(_dir, "..", "ADASCRIPT_GRAMMAR"))
 from hek_parsec import method, ParserState
 from ady_expr import *
 import ast as _ast
+import re as _re_mod_pfx
 
 # Set to True by ady2nim before translating a file compiled with `nim js`.
 # Guards JS-only code-generation paths so the native backend is unaffected.
@@ -791,13 +792,11 @@ def to_nim(self, prec=None):
     s = self.node
     triple_dq = chr(34)*3
     triple_sq = chr(39)*3
-    # Python 3's `u` prefix is a no-op left over from 2.x -- u"x" is exactly
-    # "x" -- but Nim has no such prefix: it reads u"..." as a generalized raw
-    # string literal calling a proc named u, and u'...' as a char literal that
-    # never closes. Drop it and let everything below run on the bare literal,
-    # so u'x', u"x" and u"""x""" all take the same paths r and f already do.
-    if s[:1] in ("u", "U") and (s[1:2] in (chr(34), chr(39))):
-        s = s[1:]
+    # Nim has neither prefix: it reads u"..." / b"..." as a generalized raw
+    # string literal calling a proc of that name, and u'...' as a char literal
+    # that never closes. Dropping them lets everything below run on the bare
+    # literal, so these take the same paths r and f already do.
+    s = strip_bytes_unicode_prefix(s)
     # A triple-quoted string is a value here. In statement position it is a
     # docstring and becomes a Nim `##` comment, but only simple_stmt can tell
     # the two apart, so that conversion lives there (nim_doc_comment below).
@@ -856,6 +855,26 @@ def to_nim(self, prec=None):
 
 
 
+_re_pfx = _re_mod_pfx.compile(r'^([A-Za-z]{1,2})(?=["\'])')
+
+
+def strip_bytes_unicode_prefix(text):
+    """A string literal with its `b` and `u` prefixes removed.
+
+    Adascript has no bytes type -- nothing can be declared, passed or
+    returned as one -- so a `b` literal has nowhere to live, and Nim's
+    string is a byte string anyway, which makes dropping the prefix the
+    faithful reading rather than a lossy one. `u` is a no-op left over from
+    Python 2. An `r` in the prefix stays: br'...' becomes r'...', because
+    raw is about escapes and survives on its own.
+    """
+    m = _re_pfx.match(text)
+    if not m:
+        return text
+    kept = ''.join(c for c in m.group(1) if c.lower() not in 'ub')
+    return kept + text[m.end():]
+
+
 def nim_string_literal(value):
     """A Nim double-quoted literal holding exactly `value`.
 
@@ -892,8 +911,7 @@ def nim_doc_comment(text):
     `text` is the literal as written. Only a triple-quoted one becomes a
     comment; anything else is a value and the caller emits it normally.
     """
-    if text[:1] in ('u', 'U') and text[1:2] in (chr(34), chr(39)):
-        text = text[1:]                   # the no-op prefix, as in STRING
+    text = strip_bytes_unicode_prefix(text)   # as in STRING
     if not (text.startswith(chr(34) * 3) or text.startswith(chr(39) * 3)):
         return None
     inner = text[3:-3]

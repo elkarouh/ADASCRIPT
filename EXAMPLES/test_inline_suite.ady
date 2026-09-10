@@ -953,6 +953,19 @@ assert U'upper single' == "upper single"
 assert u'has "quotes" too' == 'has "quotes" too'
 assert len(u"") == 0
 
+# And the `b` prefix. Adascript has no bytes type -- nothing can be declared,
+# passed or returned as one -- so a bytes literal had nowhere to live: Nim
+# read b"x" as a call to a proc named b and would not compile, while Python
+# built a real bytes object, so `let s: str = b"x"` was quietly neither a str
+# nor the same thing on the two backends. Nim's string is a byte string, so
+# dropping the prefix is the faithful reading. An `r` in the prefix stays.
+assert b"double" == "double"
+assert b'single' == "single"
+assert B"upper" == "upper"
+assert len(b"double") == 6
+assert br"raw\d+" == r"raw\d+"
+assert rb'raw\w+' == r"raw\w+"
+
 # A triple-quoted string used as a *value*. The Nim backend turned every
 # triple-quoted literal into a `##` doc comment, wherever it appeared, so an
 # assignment lost its right-hand side entirely. Only a bare expression
