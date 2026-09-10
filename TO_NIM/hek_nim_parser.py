@@ -1744,7 +1744,7 @@ def _structural_conds_and_bindings(pat_node, subj, indent):
     if nim_text in ("_", "others"):
         return [], []
     if _is_literal_nim(nim_text):
-        return [f"{subj} == {nim_text}"], []
+        return [_literal_cond_nim(subj, nim_text)], []
     # plain capture name
     return [], [f"{_ind(indent)}let {nim_text} = {subj}"]
 
@@ -1843,6 +1843,28 @@ def _tuple_pattern_to_cond(pat_nim, subject_parts):
     return " and ".join(conds) if conds else "true"
 
 
+def _subject_is_char(subject):
+    """True when the case/match subject is a char-typed expression."""
+    sym = ParserState.symbol_table.lookup(subject)
+    if sym and (sym.get("type") or "") == "char":
+        return True
+    from hek_nim_expr import _is_nim_char_expr
+    return _is_nim_char_expr(subject)
+
+
+def _literal_cond_nim(subject, pat_nim):
+    """`subject == pattern`, with a one-character pattern read as a char.
+
+    The native case path coerces these (a char subject cannot be compared with
+    a string in Nim); the if/elif paths did not, so a guarded or regex-carrying
+    block over a char subject emitted `ch == "("` and failed to compile.
+    """
+    if _subject_is_char(subject):
+        from hek_nim_expr import _str_to_char_lit
+        pat_nim = _str_to_char_lit(pat_nim)
+    return f"{subject} == {pat_nim}"
+
+
 def _pat_regex_info_nim(pat_node):
     """Return (pattern, flags) if pat_node is a regex literal, else None."""
     val = getattr(pat_node, 'node', None)
@@ -1903,7 +1925,7 @@ def _regex_chain_nim(branches, subject, indent):
                 nim_pat = f're"(?{nim_flags}){esc}"' if nim_flags else f're"{esc}"'
                 cond = f"nimatch({subject}, {nim_pat})"
         else:
-            cond = f"{subject} == {pat_nim}"
+            cond = _literal_cond_nim(subject, pat_nim)
         if guard_node is not None:
             cond = f"{cond} and {guard_node.nodes[0].to_nim()}"
         result += f"\n{_ind(indent)}{keyword} {cond}:{hc}\n{body}"
@@ -1938,7 +1960,7 @@ def _guarded_chain_nim(branches, subject, indent):
         else:
             conds, lets = _structural_conds_and_bindings(pat_node, subject, indent + 1)
             if not conds and _is_literal_nim(pat_nim):
-                conds = [f"{subject} == {pat_nim}"]
+                conds = [_literal_cond_nim(subject, pat_nim)]
             if guard_node:
                 conds.append(_guard_cond_nim(guard_node, lets))
             cond_str = " and ".join(conds) if conds else "true"

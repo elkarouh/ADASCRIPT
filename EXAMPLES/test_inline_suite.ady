@@ -859,3 +859,31 @@ assert str(-7) == "-7"
 assert str(3 - 5) == "-2"
 assert str(sx + 1) == "5"
 assert str(sx) == "4"
+
+# A char subject compared against character patterns in a block that cannot be
+# a native Nim case -- one branch carries a guard -- was emitted as a string
+# comparison (`ch == "("`), which Nim rejects.
+def scan_chars(s: str) -> str:
+    var acc: str = ""
+    var i: int = 0
+    let n: int = len(s)
+    while i < n:
+        let ch: char = s[i]
+        match ch:
+            case '"':
+                acc = acc + "Q"
+                i += 1
+            case '\'' if i + 2 < n and s[i + 2] == '\'':
+                acc = acc + "C"
+                i += 3
+            case '(':
+                acc = acc + "["
+                i += 1
+            case ')':
+                acc = acc + "]"
+                i += 1
+            case _:
+                acc = acc + "."
+                i += 1
+    return acc
+assert scan_chars("a(b)'x'") == ".[.]C"
