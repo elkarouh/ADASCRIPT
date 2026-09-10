@@ -272,6 +272,16 @@ def to_py(self, prec=None):
         _ensure_run_result_alias()
     elif name == "Path":
         _ensure_path_alias()
+    elif name == "File":
+        # Nim's File is what open() returns and what stdin/stdout/stderr are,
+        # so one variable can hold either -- `(open(p) if p else stdin)` is
+        # how a program reads a named file or its input without writing the
+        # loop twice. typing.TextIO is the annotation that covers both here;
+        # the name itself is not defined in Python and reached the output
+        # verbatim, so any program that wrote it raised NameError.
+        from hek_parsec import ParserState as _PS_file
+        _PS_file.nim_imports.add("from typing import TextIO")
+        return "TextIO"
     elif name == "Job":
         # `let jobs: []Job = []` has to name the handle shellSpawn returns,
         # so the class the helper defines answers to that name too.

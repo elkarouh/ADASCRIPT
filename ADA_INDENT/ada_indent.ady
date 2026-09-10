@@ -258,11 +258,6 @@ def scan_parens(text: str, base_depth: Natural, base_col: Natural) -> [](int, in
     return openers
 
 
-def spaces(levels: int) -> str:
-    """A run of spaces for the given number of indent levels (never negative)."""
-    " " * (max(0, levels) * INDENT_WIDTH)
-
-
 # ---------------------------------------------------------------------------
 # The indenter proper.
 # ---------------------------------------------------------------------------
@@ -943,17 +938,15 @@ def main() -> int:
             when others:
                 file_arg = a
         ai += 1
-    if file_arg == "":
-        for line in stdin.lines:
-            print ind.indent_line(line)
-            if do_emit_state:
-                print "##STATE:" + ind.dump_state()
-    else:
-        with open(file_arg) as f:
-            for line in f:
-                print ind.indent_line(line)
-                if do_emit_state:
-                    print "##STATE:" + ind.dump_state()
+    # One source, so the loop is written once: Nim's File is both what open()
+    # returns and what stdin is. The file is not closed explicitly -- there is
+    # nothing after this but the exit, and the branch that would close it is
+    # the whole reason the loop was duplicated.
+    let f: File = (open(file_arg) if file_arg != "" else stdin)
+    for line in f.lines:
+        print ind.indent_line(line)
+        if do_emit_state:
+            print "##STATE:" + ind.dump_state()
 
 
 if __name__ == "__main__":

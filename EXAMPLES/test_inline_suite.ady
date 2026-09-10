@@ -1046,3 +1046,29 @@ def have(x: str) -> str:
 
 assert run("cmd") == "ran:cmd"
 assert have("prog") == "had:prog"
+
+# `File` — the type a file handle has, so open() and stdin can share one
+# variable and a program reads a named file or its input without writing the
+# loop twice. The name reached the Python output verbatim and raised
+# NameError there; it is typing.TextIO now, which covers both.
+let tmp_lines: str = "test_inline_suite_lines.tmp"
+writeFile(tmp_lines, "alpha\nbeta\n")
+let fh: File = open(tmp_lines)
+var got: []str = []
+for line in fh.lines:
+    got.append(line)
+# Line COUNT only, deliberately. `.lines` does not mean the same thing on the
+# two backends -- Nim strips the newline, the Python target emits a plain
+# `for line in fh` and keeps it -- so the contents cannot be asserted here
+# until that is settled one way or the other. Pre-existing; ada_indent never
+# saw it because indent_line strips anyway.
+assert len(got) == 2
+
+# and the conditional that motivates it: either branch is a File
+let use_stdin: bool = False
+let src: File = (open(tmp_lines) if not use_stdin else stdin)
+var n_lines: int = 0
+for line in src.lines:
+    n_lines += 1
+assert n_lines == 2
+os.remove(tmp_lines)
