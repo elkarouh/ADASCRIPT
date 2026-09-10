@@ -4744,6 +4744,11 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
             # Direct field mutation
             if _re.search(r"self\.\w+\s*(\.add\(|\.append\(|\.extend\(|\.pop\(|\.clear\(|\.remove\(|\.sort\(|\[.*\]\s*=(?!=)|[+\-*/]=|=(?!=))", body_text):
                 return True
+            # Mutation reached through a subscript or a nested field:
+            # `self.builds[i].host = x`, `self.rows[i].n += 1`.  Without this
+            # the method kept a non-var self and Nim refused the assignment.
+            if _re.search(r"self\.\w+(?:\[[^\]]*\]|\.\w+)+\s*[+\-*/]?=(?!=)", body_text):
+                return True
             # Method call on self that isn't known-read-only
             for m in _re.finditer(r'self\.(\w+)\s*\(', body_text):
                 if m.group(1) not in _READONLY_METHODS:
