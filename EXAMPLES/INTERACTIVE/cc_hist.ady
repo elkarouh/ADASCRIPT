@@ -71,6 +71,8 @@ if __name__ == "__main__":
             when [label, user, id, month, day, *rest] if num.isdigit():
                 let year: str = rest[len(rest) - 1] if len(rest) > 0 else day
                 version2user[num] = f"{user}-{month}-{day}-{year}"
+            when others:
+                pass              # a path of another shape is not a version line
 
     let parent_path: str = get_cfmu_parent(remote_file)
     if len(parent_path) == 0:

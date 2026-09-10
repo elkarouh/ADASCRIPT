@@ -1991,11 +1991,90 @@ def _guard_cond_nim(guard_node, lets):
     return cond
 
 
+def _case_branches(case_node):
+    """(pattern_node, has_guard) for every branch of a case block.
+
+    The when_clause wrapper is flattened by the time this runs, so a branch
+    is a Sequence_Parser holding [pattern, body] or [pattern, guard, body].
+
+    The guard has to be located by position, not by type: the grammar is
+    `when pattern case_guard[:] : suite`, so a guard is a Several_Times
+    sitting *between* the pattern and the body. The last branch of a block
+    also carries a trailing Several_Times -- the NL[:] after it -- and
+    reading that as a guard is what made a plain `when others:` look
+    guarded, which reported half the corpus as missing the catch-all it
+    plainly had.
+    """
+    out = []
+    for node in case_node.nodes[1:]:
+        if type(node).__name__ != "Several_Times":
+            continue
+        for seq in node.nodes:
+            kids = getattr(seq, "nodes", None) or []
+            if not kids:
+                continue
+            body_ix = next((i for i, k in enumerate(kids)
+                            if type(k).__name__ in ("block", "stmt_line")),
+                           len(kids))
+            guarded = any(type(k).__name__ == "Several_Times" and k.nodes
+                          for k in kids[1:body_ix])
+            out.append((kids[0], guarded))
+    return out
+
+
+def _require_catch_all(subject, case_node):
+    """Refuse a case block whose completeness Nim will not be checking.
+
+    Nim checks that an ordinal subject's branches cover the type, and that
+    check is most of what the construct is worth. Two things switch it off
+    without saying so:
+
+      * a guard anywhere in the block, because a guarded branch cannot be a
+        Nim `of` and the whole block lowers to if/elif;
+      * a string subject, because Nim lets a `case` statement on a string
+        fall through with no else at all.
+
+    In both, a subject matching nothing makes the block quietly do nothing.
+    Where Nim stops asking, Adascript asks: write the catch-all and say what
+    happens, or drop the guard and let the compiler check the branches.
+    """
+    branches = _case_branches(case_node)
+    if not branches:
+        return
+    guarded = any(g for _, g in branches)
+    has_catch_all = False
+    for pat, pat_guarded in branches:
+        if pat_guarded:
+            continue          # `when others if c:` can still fail: not a catch-all
+        if type(pat).__name__ == "pattern_others":
+            has_catch_all = True
+            break
+        try:
+            if (pat.to_nim() or "").strip() in ("others", "_"):
+                has_catch_all = True
+                break
+        except Exception:
+            pass
+    if has_catch_all:
+        return
+    _sym = ParserState.symbol_table.lookup((subject or "").strip())
+    _stype = (_sym.get("type") or "") if isinstance(_sym, dict) else ""
+    subject_is_str = _stype in ("str", "string")
+    if not (guarded or subject_is_str):
+        return
+    why = "a guarded branch" if guarded else "a string subject"
+    raise SyntaxError(
+        f"case on {subject!r} needs a `when others:` branch: {why} means Nim "
+        "cannot check the branches for completeness, and a subject matching "
+        "none of them would do nothing at all.")
+
+
 @method(case_stmt)
 def to_nim(self, indent=0):
     """match -> Nim case statement; desugars tuple patterns to if/elif."""
     import re as _re
     subject = self.nodes[0].to_nim()
+    _require_catch_all(subject, self)
 
     # Detect tuple subject: (a, b, ...) — desugar to if/elif
     _tm = _re.match(r'^\((.+)\)$', subject.strip())

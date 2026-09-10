@@ -281,6 +281,8 @@ def apply_builtin(name: str, args: []Val_T) -> Val_T:
                         cmp = a >= b
                     when "=":
                         cmp = a == b
+                    when others:
+                        pass      # cmp stays False, as it did by falling through
                 if not cmp:
                     ok = False
                     break
@@ -457,6 +459,8 @@ def apply_builtin(name: str, args: []Val_T) -> Val_T:
                     return Val_T(kind=VBool, flag=a <= b)
                 when "string>=?":
                     return Val_T(kind=VBool, flag=a >= b)
+                when others:
+                    pass          # falls through to the VNil below
             return Val_T(kind=VNil)
         when "substring":
             var s: str = args[0].sym
