@@ -226,7 +226,9 @@ transpiler `.py` file automatically triggers retranspilation of all cached
 compiled binary, nimcache) are stored in `~/.cache/hparsec/cache-<HASH>/`,
 keyed by the absolute path of the `.ady` file. Source directories stay
 uncluttered and the cache survives reboots (inspired by
-[nimbang](https://github.com/jabbalaci/nimbang)).
+[nimbang](https://github.com/jabbalaci/nimbang)). Set `XDG_CACHE_HOME` to put
+the cache somewhere else — `XDG_CACHE_HOME=$(mktemp -d) py2nim prog.ady`
+builds from cold without touching the real one.
 
 **Shebang support** — add `#!/usr/bin/env py2nim` as the first line of an
 `.ady` file and make it executable. The file compiles and runs directly

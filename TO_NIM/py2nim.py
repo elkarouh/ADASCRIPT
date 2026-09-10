@@ -1236,7 +1236,8 @@ def main(argv=None):
 
     Cache layout
     ------------
-    All generated artifacts go to ``~/.cache/hparsec/`` so source directories
+    All generated artifacts go to ``~/.cache/hparsec/`` (or
+    ``$XDG_CACHE_HOME/hparsec`` where that is set) so source directories
     stay clean.  Each script gets its own subdirectory keyed by a SHA-1 hash
     of its absolute path (inspired by nimbang / rdmd)::
 
@@ -1516,7 +1517,13 @@ def main(argv=None):
         _backend = "js" if subcommand == "js" else "native"
         digest   = hashlib.sha1(
             (abs_path + "\0" + _backend).encode()).hexdigest()[:16].upper()
-        base_dir = os.path.join(os.path.expanduser("~"), ".cache", "hparsec")
+        # XDG_CACHE_HOME first, ~/.cache otherwise, as the spec says.  It is
+        # also the only way to move the cache without moving HOME: overriding
+        # HOME takes the Nim toolchain with it, which is why the test suite
+        # could not build anything under a throwaway cache before.
+        base_dir = os.path.join(
+            os.environ.get("XDG_CACHE_HOME") or os.path.join(os.path.expanduser("~"), ".cache"),
+            "hparsec")
         cache_dir = os.path.join(base_dir, "cache-" + digest)
         stem     = os.path.splitext(os.path.basename(ady_path))[0]
         # Nim module names must be valid identifiers — replace dots with underscores
