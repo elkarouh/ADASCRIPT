@@ -185,7 +185,7 @@ test: compile
 	@# Vcheck takes a log file rather than stdin; a path that exists is used
 	@# as-is, which is what makes it runnable here.
 	@printf '  %-42s' "CFMU/Vcheck_coded_flight.ady"; \
-	    $(EXDIR)/CFMU/Vcheck_coded_flight $(EXDIR)/CFMU/vcheck_sample.log >/dev/null 2>&1 \
+	    $(EXDIR)/CFMU/Vcheck_coded_flight $(EXDIR)/CFMU/vcheck_sample.txt >/dev/null 2>&1 \
 	        && echo OK || { echo FAIL; exit 1; }
 
 	@echo "=== Arg examples ==="

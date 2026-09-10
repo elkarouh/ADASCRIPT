@@ -1,0 +1,21 @@
+Treplay performance log — trimmed to what Vcheck_coded_flight reads.
+
+LENGTH histogram of CODED_FLIGHT:
+< 100 bytes: 5
+< 200 bytes: 10
+< 400 bytes: 0
+< 800 bytes: 3
+total entries: 18
+
+second pass
+
+LENGTH histogram of CODED_FLIGHT:
+< 50 bytes: 1
+< 150 bytes: 0
+end of histogram
+
+third pass, ends with the histogram still open
+
+LENGTH histogram of CODED_FLIGHT:
+< 64 bytes: 7
+< 128 bytes: 2

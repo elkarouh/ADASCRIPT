@@ -7,7 +7,7 @@ Usage:
     Vcheck_coded_flight <baseline1> [baseline2]
 
 A path to an existing log file is taken as-is, which is what the bundled
-vcheck_sample.log is for; anything else is a baseline label looked up under
+vcheck_sample.txt is for; anything else is a baseline label looked up under
 the test-report directory.
 
 E.g.:
