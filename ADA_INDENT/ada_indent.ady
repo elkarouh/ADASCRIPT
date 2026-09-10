@@ -302,58 +302,6 @@ def spaces(levels: int) -> str:
 
 
 # ---------------------------------------------------------------------------
-# State serialization helpers — used by Indenter.dump_state / load_state.
-# ---------------------------------------------------------------------------
-
-def block_t_name(b: Block_T) -> str:
-    case b:
-        when PKG:         return "PKG"
-        when TYPE_HEADER: return "TYPE_HEADER"
-        when DECLARE:     return "DECLARE"
-        when BLOCK:       return "BLOCK"
-        when IF:          return "IF"
-        when LOOP:        return "LOOP"
-        when CASE:        return "CASE"
-        when WHEN:        return "WHEN"
-        when RECORD:      return "RECORD"
-        when SELECT:      return "SELECT"
-        when DO:          return "DO"
-
-
-def block_t_from_name(s: str) -> Block_T:
-    match s:
-        case "PKG":         return PKG
-        case "TYPE_HEADER": return TYPE_HEADER
-        case "DECLARE":     return DECLARE
-        case "BLOCK":       return BLOCK
-        case "IF":          return IF
-        case "LOOP":        return LOOP
-        case "CASE":        return CASE
-        case "WHEN":        return WHEN
-        case "RECORD":      return RECORD
-        case "SELECT":      return SELECT
-        case _:             return DO
-
-
-def paren_kind_name(p: Paren_Kind_T) -> str:
-    case p:
-        when OUTSIDE:   return "OUTSIDE"
-        when PLAIN:     return "PLAIN"
-        when IF_EXPR:   return "IF_EXPR"
-        when CASE_EXPR: return "CASE_EXPR"
-        when FOR_EXPR:  return "FOR_EXPR"
-
-
-def paren_kind_from_name(s: str) -> Paren_Kind_T:
-    match s:
-        case "OUTSIDE":   return OUTSIDE
-        case "PLAIN":     return PLAIN
-        case "IF_EXPR":   return IF_EXPR
-        case "CASE_EXPR": return CASE_EXPR
-        case _:           return FOR_EXPR
-
-
-# ---------------------------------------------------------------------------
 # The indenter proper.
 # ---------------------------------------------------------------------------
 
@@ -379,10 +327,10 @@ class Indenter:
         """Serialize the full indenter state to a compact, opaque string."""
         var stack_names: []str = []
         for b in self.stack:
-            stack_names.append(block_t_name(b))
+            stack_names.append(str(b))
         var ps_parts: []str = []
         for t in self.paren_stack:
-            ps_parts.append(str(t[0]) + ":" + str(t[1]) + ":" + paren_kind_name(t[2]))
+            ps_parts.append(str(t[0]) + ":" + str(t[1]) + ":" + str(t[2]))
         var parts: []str = [
             "stack=" + ",".join(stack_names),
             "pd="    + str(self.paren_depth),
@@ -428,7 +376,7 @@ class Indenter:
             if key == "stack":
                 if val != "":
                     for name in val.split(","):
-                        self.stack.append(block_t_from_name(name))
+                        self.stack.append(Block_T(name))
             elif key == "pd":
                 self.paren_depth = int(val)
             elif key == "ps":
@@ -451,7 +399,7 @@ class Indenter:
                         let ep: []str = entry.split(":")
                         if len(ep) == 3:
                             self.paren_stack.append((int(ep[0]), int(ep[1]),
-                                                     paren_kind_from_name(ep[2])))
+                                                     Paren_Kind_T(ep[2])))
             elif key == "pc":
                 self.paren_cont = val == "T"
             elif key == "al":
