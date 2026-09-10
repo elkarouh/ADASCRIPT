@@ -6,14 +6,49 @@
 
 const PAGE_SIZE : int = 65536
 
-# C escape sequences.  The two literal forms disagree about the backslash of
-# an escape the table does not list: a char literal drops it ('\q' is q), a
-# string literal keeps it ("\q" stays \q), so they get a table each rather
-# than sharing one.
-const CHAR_ESCAPES : {str}str = {"n": "\n", "t": "\t", "r": "\r",
-                                 "0": "\0", "\\": "\\", "'": "'"}
-const STR_ESCAPES  : {str}str = {"n": "\n", "t": "\t", "r": "\r",
-                                 "0": "\0", "\\": "\\", "\"": "\""}
+# C escape sequences.  The lexer accepts everything C defines -- the named
+# escapes, \NNN octal and \xNN hex -- so the decoder has to handle the same
+# set, in one place both literal forms share.
+const SIMPLE_ESCAPES : {str}str = {
+    "a": "\a", "b": "\b", "f": "\f", "n": "\n", "r": "\r", "t": "\t",
+    "v": "\v", "\\": "\\", "'": "'", "\"": "\"", "?": "?"}
+const HEX_DIGITS   : str = "0123456789abcdef"
+const OCTAL_DIGITS : str = "01234567"
+
+
+type Escape_T is record:
+    text: str     # what the escape stands for
+    size: int     # source characters it spans, backslash included
+
+
+def decode_escape(s: str, i: int) -> Escape_T:
+    """Decode the escape whose backslash sits at s[i].
+
+    size 0 means "not an escape this compiler knows"; the two literal forms
+    disagree about those, so each decides for itself what to do with one.
+    """
+    if i + 1 >= len(s):
+        return Escape_T("\\", 1)                  # trailing backslash, kept as written
+    let c: str = s[i+1:i+2]
+    if c in SIMPLE_ESCAPES:
+        return Escape_T(SIMPLE_ESCAPES[c], 2)
+    if c == "x":                                  # \xN, \xNN
+        var v: int = 0
+        var j: int = i + 2
+        while j < len(s) and j < i + 4 and HEX_DIGITS.find(s[j:j+1].lower()) >= 0:
+            v = v * 16 + HEX_DIGITS.find(s[j:j+1].lower())
+            j = j + 1
+        if j == i + 2:
+            return Escape_T("", 0)                # \x with no digit
+        return Escape_T(str(chr(v)), j - i)
+    if OCTAL_DIGITS.find(c) >= 0:                 # \N, \NN, \NNN
+        var v: int = 0
+        var j: int = i + 1
+        while j < len(s) and j < i + 4 and OCTAL_DIGITS.find(s[j:j+1]) >= 0:
+            v = v * 8 + OCTAL_DIGITS.find(s[j:j+1])
+            j = j + 1
+        return Escape_T(str(chr(v)), j - i)
+    return Escape_T("", 0)
 
 
 def parse_c_char(tok: str) -> str:
@@ -21,8 +56,10 @@ def parse_c_char(tok: str) -> str:
     let inner: str = tok[1:-1]
     match inner:
         case "":  "\0"
-        case _ if len(inner) >= 2 and inner.startswith("\\"):
-            CHAR_ESCAPES.get(inner[1:2], inner[1:2])
+        case _ if inner.startswith("\\"):
+            let e: Escape_T = decode_escape(inner, 0)
+            # An escape this compiler does not know loses its backslash.
+            e.text if e.size > 0 else inner[1:2]
         case _:   inner[0:1]
 
 
@@ -32,12 +69,13 @@ def parse_c_str(tok: str) -> str:
     var buf: str = ""
     var i: int = 0
     while i < len(inner):
-        # An unrecognised escape keeps its backslash, so only a table hit
-        # consumes two characters.
-        if inner[i:i+1] == "\\" and i + 1 < len(inner) and inner[i+1:i+2] in STR_ESCAPES:
-            buf = buf + STR_ESCAPES[inner[i+1:i+2]]
-            i = i + 2
+        let e: Escape_T = decode_escape(inner, i) if inner[i:i+1] == "\\" else Escape_T("", 0)
+        if e.size > 0:
+            buf = buf + e.text
+            i = i + e.size
         else:
+            # Not an escape, or one this compiler does not know: the character
+            # stands for itself, backslash included.
             buf = buf + inner[i:i+1]
             i = i + 1
     return buf
@@ -233,25 +271,28 @@ class Lexer:
             pass
         if self.loc >= len(self.src):
             return Token_T(kind=TK_EOF, content="", line=self.line)
-        if self.src[self.loc:] == /^[a-zA-Z_][a-zA-Z0-9_]*/:
-            tok: str = $+0
-            if tok in LITERAL_TOKENS:
-                return Token_T(kind=STR_TO_KIND[tok], content=tok, line=self.line)
-            kind: TokKind_T = TK_TYPE if tok in self.types else TK_NAME
-            return Token_T(kind=kind, content=tok, line=self.line)
-        if self.src[self.loc:] == /^[0-9]+/:
-            tok: str = $+0
-            return Token_T(kind=TK_INTCONST, content=tok, line=self.line)
-        if self.src[self.loc:] == /^'([^'\\]|(\\([\\abfnrtv'"?]|[0-7]{1,3}|x[A-Fa-f0-9]{1,2})))'/:
-            tok: str = $+0
-            return Token_T(kind=TK_CHARCONST, content=tok, line=self.line)
-        if self.src[self.loc:] == /^"([^"\\]|(\\([\\abfnrtv'"?]|[0-7]{1,3}|x[A-Fa-f0-9]{1,2})))*?(?<!\\)"/:
-            tok: str = $+0
-            return Token_T(kind=TK_STRCONST, content=tok, line=self.line)
-        for token_str in LITERAL_TOKENS:
-            if self.src[self.loc:].startswith(token_str):
-                return Token_T(kind=STR_TO_KIND[token_str], content=token_str, line=self.line)
-        return Token_T(kind=TK_INVALID, content=self.src[self.loc:self.loc + 10], line=self.line)
+        # One table of token shapes: each regex claims the text at the cursor,
+        # and $+0 is what it claimed.  The catch-all keeps the punctuation scan,
+        # which is a search through a list rather than a shape.
+        let rest: str = self.src[self.loc:]
+        match rest:
+            case /^[a-zA-Z_][a-zA-Z0-9_]*/:
+                let tok: str = $+0
+                if tok in LITERAL_TOKENS:
+                    return Token_T(kind=STR_TO_KIND[tok], content=tok, line=self.line)
+                let kind: TokKind_T = TK_TYPE if tok in self.types else TK_NAME
+                return Token_T(kind=kind, content=tok, line=self.line)
+            case /^[0-9]+/:
+                return Token_T(kind=TK_INTCONST, content=$+0, line=self.line)
+            case /^'([^'\\]|(\\([\\abfnrtv'"?]|[0-7]{1,3}|x[A-Fa-f0-9]{1,2})))'/:
+                return Token_T(kind=TK_CHARCONST, content=$+0, line=self.line)
+            case /^"([^"\\]|(\\([\\abfnrtv'"?]|[0-7]{1,3}|x[A-Fa-f0-9]{1,2})))*?(?<!\\)"/:
+                return Token_T(kind=TK_STRCONST, content=$+0, line=self.line)
+            case _:
+                for token_str in LITERAL_TOKENS:
+                    if rest.startswith(token_str):
+                        return Token_T(kind=STR_TO_KIND[token_str], content=token_str, line=self.line)
+                return Token_T(kind=TK_INVALID, content=rest[0:10], line=self.line)
 
     def next(self, kind: ?TokKind_T = None) -> Token_T:
         token: Token_T = self.peek()
