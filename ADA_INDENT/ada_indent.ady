@@ -920,7 +920,7 @@ Exit status: 0 on success, non-zero on error."""
 def main() -> int:
     var ind: Indenter = Indenter()
     var do_emit_state: bool = False
-    var file_arg: str = ""
+    var file_arg: Path            # empty until a non-option argument names one
     var args: []str = $@
     var ai: int = 0
     while ai < len(args):
@@ -936,7 +936,7 @@ def main() -> int:
                     ai += 1
                     ind.load_state(args[ai])
             when others:
-                file_arg = a
+                file_arg = Path(a)
         ai += 1
     # One source, so the loop is written once: Nim's File is both what open()
     # returns and what stdin is. The file is not closed explicitly -- there is
