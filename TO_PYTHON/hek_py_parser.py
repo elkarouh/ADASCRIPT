@@ -891,7 +891,15 @@ def _pattern_chain_to_py(case_node, subject, indent):
         body = _suite_to_py(block_node, indent + 1) if block_node else ""
         pat_py = pat_node.to_py() if hasattr(pat_node, "to_py") else str(pat_node)
         if pat_py in ("others", "_"):
-            result += f"\n{_ind(indent)}else:{hc}\n{body}"
+            # A guarded catch-all is a condition, not the end of the chain:
+            # emitting `else:` for it dropped the guard and left the branches
+            # after it behind an else, which does not parse.
+            if guard_node is not None:
+                result += (f"\n{_ind(indent)}{keyword} "
+                           f"{guard_node.nodes[0].to_py()}:{hc}\n{body}")
+                keyword = "elif"
+            else:
+                result += f"\n{_ind(indent)}else:{hc}\n{body}"
             continue
         ginfo = _pat_range_info_py(pat_node)
         rinfo = _pat_regex_info_py(pat_node)

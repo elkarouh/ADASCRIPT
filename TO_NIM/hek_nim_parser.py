@@ -1879,7 +1879,15 @@ def _regex_chain_nim(branches, subject, indent):
                 body = _ind(indent + 1) + block_node.to_nim()
         pat_nim = pat_node.to_nim() if hasattr(pat_node, "to_nim") else str(pat_node)
         if pat_nim in ("others", "_"):
-            result += f"\n{_ind(indent)}else:{hc}\n{body}"
+            # A guarded catch-all is a condition, not the end of the chain:
+            # emitting `else:` for it dropped the guard and left the branches
+            # after it dangling behind an else.
+            if guard_node is not None:
+                result += (f"\n{_ind(indent)}{keyword} "
+                           f"{guard_node.nodes[0].to_nim()}:{hc}\n{body}")
+                keyword = "elif"
+            else:
+                result += f"\n{_ind(indent)}else:{hc}\n{body}"
             continue
         rinfo = _pat_regex_info_nim(pat_node)
         if rinfo is not None:

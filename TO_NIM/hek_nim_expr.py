@@ -1422,7 +1422,7 @@ def to_nim(self, prec=None):
     return self.nodes[0].to_nim()
 
 
-_STRUTILS_METHODS = {"toLowerAscii", "toUpperAscii", "strip", "startsWith", "endsWith", "splitLines", "parseInt", "split", "join", "replace", "find", "alignLeft", "alignRight",
+_STRUTILS_METHODS = {"toLowerAscii", "toUpperAscii", "strip", "startsWith", "endsWith", "splitLines", "parseInt", "split", "join", "replace", "find", "alignLeft", "align",
                      "isAlphaAscii", "isAlphaNumeric", "isDigit", "isSpaceAscii", "isLowerAscii", "isUpperAscii"}
 
 # Universal method mappings that apply regardless of receiver type
@@ -1437,7 +1437,7 @@ _PY_UNIVERSAL_METHOD_TO_NIM = {
     "get": "getOrDefault",
     "index": "find",
     "ljust": "alignLeft",
-    "rjust": "alignRight",
+    "rjust": "align",       # strutils spells right-align `align`
     "isalpha": "isAlphaAscii",
     "isalnum": "isAlphaNumeric",
     "isdigit": "isDigit",
@@ -1777,6 +1777,24 @@ def to_nim(self, prec=None):
         if raw_name == "str":
             call_node = self.nodes[1].nodes[0]
             arg = _extract_call_arg(call_node)
+            # Anything chained onto the result -- str(n).ljust(7), str(n)[0] --
+            # has to come with it, and parenthesised: Nim binds `.` tighter
+            # than the `$` prefix, so $n.ljust(7) would stringify the padded
+            # number instead of padding the string.  Dropping the trailers, as
+            # this did, silently lost the call.
+            rest = "".join(tr.to_nim() for tr in self.nodes[1].nodes[1:])
+            if rest:
+                # The result is a string, so a method on it is a string method:
+                # translate the name the way a string-typed receiver would.
+                import re as _re_strc
+                _m_meth = _re_strc.match(r'^\.(\w+)\(', rest)
+                if _m_meth:
+                    _nim_meth = _PY_UNIVERSAL_METHOD_TO_NIM.get(_m_meth.group(1))
+                    if _nim_meth:
+                        if _nim_meth in _STRUTILS_METHODS:
+                            ParserState.nim_imports.add("strutils")
+                        rest = "." + _nim_meth + rest[_m_meth.end() - 1:]
+                return f"(${arg}){rest}"
             return "$" + arg
         if raw_name == "list":
             call_node = self.nodes[1].nodes[0]

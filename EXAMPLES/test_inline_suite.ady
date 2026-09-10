@@ -809,3 +809,31 @@ def guarded_regex(line: str) -> str:
 assert guarded_regex("ERROR: disk full") == "long error"
 assert guarded_regex("error") == "error"
 assert guarded_regex("all fine") == "other"
+
+# A method on the result of str() has to survive the translation to Nim's `$`,
+# and be read as a string method: `str(n).ljust(7)` used to emit a bare `$n`,
+# dropping the call silently. rjust maps to strutils' `align` -- there is no
+# alignRight, so it did not compile at all.
+assert str(42).ljust(7) == "42     "
+assert str(42).rjust(5) == "   42"
+assert str(3.5).ljust(6) == "3.5   "
+let pad_me: str = "ab"
+assert pad_me.rjust(5) == "   ab"
+assert pad_me.ljust(4) == "ab  "
+
+# A guarded catch-all inside a regex match is a condition, not the end of the
+# chain: emitted as `else:` it swallowed the branches after it.
+def guarded_tail(line: str, on: bool) -> str:
+    match line:
+        case /^< [0-9]+ bytes:/ if on:
+            return "bucket"
+        case _ if on:
+            return "closing"
+        case /^header/:
+            return "header"
+        case _:
+            return "ignored"
+assert guarded_tail("< 10 bytes: 3", True) == "bucket"
+assert guarded_tail("something else", True) == "closing"
+assert guarded_tail("header line", False) == "header"
+assert guarded_tail("plain", False) == "ignored"
