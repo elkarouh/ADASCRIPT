@@ -788,9 +788,16 @@ def to_nim(self, prec=None):
 def to_nim(self, prec=None):
     """STRING: string literal -> Nim: single-quoted become double-quoted; triple-quoted become ## doc-comments."""
     s = self.node
-    # Convert triple-quoted strings to Nim ## comments
     triple_dq = chr(34)*3
     triple_sq = chr(39)*3
+    # Python 3's `u` prefix is a no-op left over from 2.x -- u"x" is exactly
+    # "x" -- but Nim has no such prefix: it reads u"..." as a generalized raw
+    # string literal calling a proc named u, and u'...' as a char literal that
+    # never closes. Drop it and let everything below run on the bare literal,
+    # so u'x', u"x" and u"""x""" all take the same paths r and f already do.
+    if s[:1] in ("u", "U") and (s[1:2] in (chr(34), chr(39))):
+        s = s[1:]
+    # Convert triple-quoted strings to Nim ## comments
     if s.startswith(triple_dq) or s.startswith(triple_sq):
         inner = s[3:-3]
         comment_lines = ["## " + line.strip() for line in inner.strip().splitlines()]

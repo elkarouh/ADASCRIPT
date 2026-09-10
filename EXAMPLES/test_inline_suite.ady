@@ -941,3 +941,14 @@ assert r'First' == "First"               # an attribute name inside a literal
 assert r'Image thing' == "Image thing"   # ... and one that continues past it
 let who: str = "world"
 assert f'hello {who}' == "hello world"
+
+# Python 3's `u` prefix is a no-op left over from 2.x, but Nim has no such
+# prefix: u"x" was emitted verbatim and read there as a call to a proc named
+# u, and u'x' as a char literal that never closes. It now takes exactly the
+# paths a bare literal takes.
+assert u"double" == "double"
+assert u'single' == "single"
+assert U"upper" == "upper"
+assert U'upper single' == "upper single"
+assert u'has "quotes" too' == 'has "quotes" too'
+assert len(u"") == 0
