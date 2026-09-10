@@ -10,22 +10,11 @@
 # display indent of a line is the stack depth (times the indent width), with
 # small adjustments for keywords that align with their opener rather than the
 # block body (end / elsif / else / when / exception / or / private / begin).
-#
-# See README.md in this directory for the simplified grammar specification.
-#
-# Usage:
-#   ady2nim ADA_INDENT/ada_indent.ady -r -- file.adb   # compile if stale, reindent a file
-#   ady2nim ADA_INDENT/ada_indent.ady -r -- --test     # compile if stale, run self-tests
-#
-# The core logic (reindent + helpers) is pure Adascript and transpiles to
-# both Python and Nim. The CLI uses the bash-style argument primitives
-# ($1, $#, quit) so argument handling is target-agnostic.
 
 const INDENT_WIDTH: Natural = 2
 
-# The indentation-significant constructs. A frame is pushed for each open
-# block; the kind is only consulted where it changes behaviour (PKG/DECLARE
-# become BLOCK at 'begin'; WHEN frames are popped specially at 'end').
+# The indentation-significant constructs. A frame is pushed for each open block; the kind is only consulted where it
+# changes behaviour (PKG/DECLARE become BLOCK at 'begin'; WHEN frames are popped specially at 'end').
 type Block_T is enum:
     PKG          # package / subprogram / task / protected / type spec opened by trailing 'is'
     TYPE_HEADER  # 'type T is' on its own line — pairs with RECORD below it
@@ -55,25 +44,13 @@ type Paren_Kind_T is enum:
 
 # ---------------------------------------------------------------------------
 # Lexical helpers — all work on a single physical line.
-#
-# The language-neutral ones live in the standard library: character
-# classification, skipping runs and quoted literals, the leading identifier
-# of a line, and stripping a to-end-of-line comment. What stays here is what
-# knows Ada: a character literal that has to be told from an attribute tick,
-# and the parenthesis scan that classifies '(if' / '(case' / '(for'.
 # ---------------------------------------------------------------------------
-
 nimport strscan
-
 
 def lead_ident_lower(code: str) -> str:
     """The leading identifier of a (comment-stripped) line, lowercased, or ''.
-
-    Ada is case-insensitive, so every comparison against a keyword wants the
-    lowercased form; the library's lead_ident preserves case, because most
-    languages are not."""
+    Ada is case-insensitive"""
     return lead_ident(code).lower()
-
 
 def code_chars(s: str) -> char:
     """Yield each character of s that is outside a string or character literal.
@@ -906,16 +883,12 @@ correctly-indented form (indentation step: 2 spaces, spaces only).
 
 Options:
   -h, --help          Show this help and exit.
-  --emit-state        After each output line emit a state snapshot on a
-                      separate line of the form  ##STATE:<data>  that captures
-                      the indenter's full parse state.  Consumed by emacs
-                      integration to enable incremental re-indentation.
-  --state <data>      Restore the indenter from a previously-emitted state
-                      snapshot before processing the first input line.  Must
-                      precede the lines the snapshot refers to.
-
-Exit status: 0 on success, non-zero on error."""
-
+  --emit-state        After each output line emit a state snapshot on a separate line of the
+                      form  ##STATE:<data>  that captures the indenter's full parse state.
+                      Consumed by emacs integration to enable incremental re-indentation.
+  --state <data>      Restore the indenter from a previously-emitted state snapshot before processing
+                      the first input line.  Must  precede the lines the snapshot refers to.
+"""
 
 def main() -> int:
     var ind: Indenter = Indenter()
@@ -923,7 +896,7 @@ def main() -> int:
     var file_arg: Path            # empty until a non-option argument names one
     var args: []str = $@
     var ai: int = 0
-    while ai < len(args):
+    while ai < $#:
         let a: str = args[ai]
         case a:
             when "-h" | "--help":
@@ -932,22 +905,17 @@ def main() -> int:
             when "--emit-state":
                 do_emit_state = True
             when "--state":
-                if ai + 1 < len(args):
+                if ai + 1 < $#:
                     ai += 1
                     ind.load_state(args[ai])
             when others:
                 file_arg = Path(a)
         ai += 1
-    # One source, so the loop is written once: Nim's File is both what open()
-    # returns and what stdin is. The file is not closed explicitly -- there is
-    # nothing after this but the exit, and the branch that would close it is
-    # the whole reason the loop was duplicated.
+
     let f: File = (open(file_arg) if file_arg != "" else stdin)
     for line in f.lines:
         print ind.indent_line(line)
         if do_emit_state:
             print "##STATE:" + ind.dump_state()
 
-
-if __name__ == "__main__":
-    quit(main())
+quit(main())
