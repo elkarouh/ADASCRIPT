@@ -9,6 +9,7 @@ Reference: https://norvig.com/lispy.html
 """
 
 nimport math
+nimport strscan          # character classification and the atom scan
 # ============================================================
 # Value representation
 # ============================================================
@@ -138,40 +139,46 @@ def bind_parms(e: Env_T, parms: []str, args: []Val_T) -> None:
 # Tokenizer / Parser
 # ============================================================
 
+def is_atom_ch(c: char) -> bool:
+    """A character that continues an atom: anything that does not end one.
+
+    Scheme's delimiter set, which is Scheme's business and stays here — the
+    library supplies the whitespace test it is written against."""
+    not (is_space_ch(c) or c == '(' or c == ')' or c == '"' or c == ';')
+
+
 def tokenize(s: str) -> []str:
     var tokens: []str
-    var i: int = 0
-    while i < len(s):
-        var c: char = s[i]
+    var i: Natural = 0
+    let n: int = len(s)
+    while i < n:
+        let c: char = s[i]
         if c == ';':
-            break
-        elif c == ' ' or c == '\t' or c == '\n' or c == '\r':
+            break                      # comment to end of line
+        elif is_space_ch(c):
             i += 1
         elif c == '(' or c == ')' or c == '\'' or c == '`':
-            var cs: str = "" & c
-            tokens.append(cs)
+            tokens.append("" & c)
             i += 1
         elif c == ',':
-            if i + 1 < len(s) and ord(s[i+1]) == 64:
+            if i + 1 < n and s[i + 1] == '@':
                 tokens.append(",@")
                 i += 2
             else:
                 tokens.append(",")
                 i += 1
-        elif ord(c) == 34:
-            var j: int = i + 1
-            while j < len(s) and ord(s[j]) != 34:
-                if ord(s[j]) == 92:
-                    j += 1
-                j += 1
-            tokens.append(s[i..j])
-            i = j + 1
+        elif c == '"':
+            # A backslash escapes the next character, so an escaped quote does
+            # not end the literal. An unterminated one lands past the end,
+            # hence the clamp — slicing past the end raises on Nim, where the
+            # hand-rolled scan this replaces used to walk straight off it.
+            let e: Natural = skip_quoted_esc(s, i, '"', '\\')
+            tokens.append(s[i .. min(e, n) - 1])
+            i = e
         else:
-            var j: int = i
-            while j < len(s) and ord(s[j]) != 32 and ord(s[j]) != 9 and ord(s[j]) != 10 and ord(s[j]) != 13 and ord(s[j]) != 40 and ord(s[j]) != 41 and ord(s[j]) != 34 and ord(s[j]) != 59:
-                j += 1
-            tokens.append(s[i..j-1])
-            i = j
+            let e: Natural = skip_while(s, i, is_atom_ch)
+            tokens.append(s[i .. e - 1])
+            i = e
     tokens
 
 def parse_atom(token: str) -> Val_T:

@@ -122,7 +122,8 @@ COMPILE_ONLY := \
     tsp.ady \
     lv.ady \
     lolcate/lolcate.ady \
-    dp/jacks.ady
+    dp/jacks.ady \
+    INTERACTIVE/lispy.ady
 
 ALL_COMPILE := \
     $(LIBS) \
@@ -187,6 +188,13 @@ test: compile
 	@printf '  %-42s' "CFMU/Vcheck_coded_flight.ady"; \
 	    $(EXDIR)/CFMU/Vcheck_coded_flight $(EXDIR)/CFMU/vcheck_sample.txt >/dev/null 2>&1 \
 	        && echo OK || { echo FAIL; exit 1; }
+
+	@# lispy checks itself before it offers a prompt, so an empty stdin runs
+	@# the whole suite and then leaves at EOF. It went unbuilt for a long
+	@# while without anyone noticing, which is the argument for it being here.
+	@printf '  %-42s' "INTERACTIVE/lispy.ady (self-test)"; \
+	    $(EXDIR)/INTERACTIVE/lispy < /dev/null 2>&1 \
+	        | grep -q "lispy: all tests passed" && echo OK || { echo FAIL; exit 1; }
 
 	@echo "=== Arg examples ==="
 	@printf '  %-42s' "phonecode.ady (test_words.txt test_phones.txt)"; \
