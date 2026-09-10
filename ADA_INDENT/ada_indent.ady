@@ -632,76 +632,86 @@ class Indenter:
                 acol = top[1]
                 entry_top_level = top[0]
                 entry_top_kind = top[2]
-                if entry_top_kind != PLAIN and code_s.startswith(")"):
-                    # A line that begins by closing an '(if'/'(case'/'(for'
-                    # expression aligns the ')' under the opening '(' — one column
-                    # left of the keyword that acol points at — rather than taking
-                    # the body/condition continuation indent.
-                    lead = max(0, acol - 1)
-                elif entry_top_kind == IF_EXPR:
-                    if lw in ("then", "else", "elsif"):
-                        lead = acol
-                    else:
-                        # Condition continuation: one indent level past the 'if'
-                        # (so it sits one level in from the then/else, which
-                        # align with the 'if'). Uses INDENT_WIDTH, not the literal
-                        # width of 'if ', to stay consistent with the case-expr
-                        # arms below and the if-statement condition continuation.
+                match entry_top_kind:
+                    case _ if entry_top_kind != PLAIN and code_s.startswith(")"):
+                        # A line that begins by closing an '(if'/'(case'/'(for'
+                        # expression aligns the ')' under the opening '(' — one
+                        # column left of the keyword that acol points at —
+                        # rather than taking the body/condition continuation
+                        # indent.
+                        lead = max(0, acol - 1)
+                    case IF_EXPR:
+                        if lw in ("then", "else", "elsif"):
+                            lead = acol
+                        else:
+                            # Condition continuation: one indent level past the
+                            # 'if' (so it sits one level in from the then/else,
+                            # which align with the 'if'). Uses INDENT_WIDTH,
+                            # not the literal width of 'if ', to stay
+                            # consistent with the case-expr arms below and the
+                            # if-statement condition continuation.
+                            lead = acol + INDENT_WIDTH
+                    case CASE_EXPR:
+                        if lw == "when":
+                            lead = acol + INDENT_WIDTH
+                        else:
+                            lead = acol + 2 * INDENT_WIDTH
+                            # An arm body spanning several lines is an
+                            # expression: a continuation line that starts with
+                            # an operator (or else, and then, &, …) takes one
+                            # extra level past the arm body, exactly as inside
+                            # a plain parenthesis. A leading '=>' is excluded —
+                            # that is the arm's result arrow (its choices
+                            # spilled onto earlier lines), which stays at the
+                            # arm-body level rather than being treated as an
+                            # operator.
+                            if starts_with_operator(code_s) and not code_s.startswith("=>"):
+                                lead += INDENT_WIDTH
+                                was_cont = True
+                    case FOR_EXPR:
+                        # '(for some/all … => predicate' (a quantified
+                        # expression) or '(for I in … => value' (an iterated
+                        # component): the body after the iterator sits one
+                        # level past the 'for', mirroring the '(if'/'(case'
+                        # bodies. A leading operator takes one more level; a
+                        # leading '=>' (the predicate arrow spilled onto its
+                        # own line) stays at the body level.
                         lead = acol + INDENT_WIDTH
-                elif entry_top_kind == CASE_EXPR:
-                    if lw == "when":
-                        lead = acol + INDENT_WIDTH
-                    else:
-                        lead = acol + 2 * INDENT_WIDTH
-                        # An arm body spanning several lines is an expression: a
-                        # continuation line that starts with an operator (or else,
-                        # and then, &, …) takes one extra level past the arm body,
-                        # exactly as inside a plain parenthesis. A leading '=>' is
-                        # excluded — that is the arm's result arrow (its choices
-                        # spilled onto earlier lines), which stays at the arm-body
-                        # level rather than being treated as an operator.
                         if starts_with_operator(code_s) and not code_s.startswith("=>"):
                             lead += INDENT_WIDTH
                             was_cont = True
-                elif entry_top_kind == FOR_EXPR:
-                    # '(for some/all … => predicate' (a quantified expression) or
-                    # '(for I in … => value' (an iterated component): the body
-                    # after the iterator sits one level past the 'for', mirroring
-                    # the '(if'/'(case' bodies. A leading operator takes one more
-                    # level; a leading '=>' (the predicate arrow spilled onto its
-                    # own line) stays at the body level.
-                    lead = acol + INDENT_WIDTH
-                    if starts_with_operator(code_s) and not code_s.startswith("=>"):
-                        lead += INDENT_WIDTH
-                        was_cont = True
-                else:
-                    # A named association whose value spilled past a trailing
-                    # '=>' (arrow_level marks the paren it happened in) starts its
-                    # value one level past the item column; everything else is a
-                    # plain list item at the item column.
-                    let vbase: int = acol + (INDENT_WIDTH if self.arrow_level == top[0] else 0)
-                    lead = vbase
-                    # A continuation that starts with an operator (&, +, and, or
-                    # else, …) takes one extra level past the value/items. A '(' on
-                    # a continuation line is the argument list of the expression on
-                    # the previous line (which ended without ','), so it also nests
-                    # one level deeper.
-                    if starts_with_operator(code_s):
-                        lead = vbase + INDENT_WIDTH
-                        was_cont = True
-                    elif code_s.startswith("(") and self.paren_cont:
-                        # An argument list '(' opening a continuation line is the
-                        # call's arguments, so it nests one level past the call
-                        # name — which sits on the previous code line. When that
-                        # previous line was itself an operator/term continuation
-                        # (deeper than the item column), the '(' must compound past
-                        # it rather than flatten back to the item column. Use the
-                        # previous line's actual lead when it was at this same paren
-                        # depth; otherwise fall back to the item column.
-                        lead = vbase + INDENT_WIDTH
-                        if self.paren_next_lead_depth == entry_depth:
-                            lead = max(lead, self.paren_prev_lead + INDENT_WIDTH)
-                        was_cont = True
+                    case _:
+                        # A named association whose value spilled past a
+                        # trailing '=>' (arrow_level marks the paren it
+                        # happened in) starts its value one level past the item
+                        # column; everything else is a plain list item at the
+                        # item column.
+                        let vbase: int = acol + (INDENT_WIDTH if self.arrow_level == top[0] else 0)
+                        lead = vbase
+                        # A continuation that starts with an operator (&, +,
+                        # and, or else, …) takes one extra level past the
+                        # value/items. A '(' on a continuation line is the
+                        # argument list of the expression on the previous line
+                        # (which ended without ','), so it also nests one level
+                        # deeper.
+                        if starts_with_operator(code_s):
+                            lead = vbase + INDENT_WIDTH
+                            was_cont = True
+                        elif code_s.startswith("(") and self.paren_cont:
+                            # An argument list '(' opening a continuation line
+                            # is the call's arguments, so it nests one level
+                            # past the call name — which sits on the previous
+                            # code line. When that previous line was itself an
+                            # operator/term continuation (deeper than the item
+                            # column), the '(' must compound past it rather
+                            # than flatten back to the item column. Use the
+                            # previous line's actual lead when it was at this
+                            # same paren depth; otherwise fall back to the item
+                            # column.
+                            lead = vbase + INDENT_WIDTH
+                            if self.paren_next_lead_depth == entry_depth:
+                                lead = max(lead, self.paren_prev_lead + INDENT_WIDTH)
+                            was_cont = True
             let new_depth: int = self.paren_depth + paren_delta(code)
             let plt: str = last_word(code_s)
             self.in_cont = stmt_incomplete(code_s)
