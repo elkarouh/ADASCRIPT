@@ -114,13 +114,14 @@ def code_chars(s: str) -> char:
     let n: int = len(s)
     while i < n:
         let c: char = s[i]
-        if c == '"':
-            i = skip_literal_string(s, i)
-        elif c == '\'' and i + 2 < n and s[i + 2] == '\'':
-            i += 3                               # character literal: skip 'x' whole
-        else:
-            yield c
-            i += 1
+        match c:
+            case '"':
+                i = skip_literal_string(s, i)
+            case '\'' if i + 2 < n and s[i + 2] == '\'':
+                i += 3                           # character literal: skip 'x' whole
+            case _:
+                yield c
+                i += 1
 
 
 def paren_delta(line: str) -> int:
@@ -265,31 +266,33 @@ def scan_parens(text: str, base_depth: Natural, base_col: Natural) -> [](int, in
     let n: int = len(text)
     while i < n:
         let ch: char = text[i]
-        if ch == '"':
-            i = skip_literal_string(text, i)
-        elif ch == '\'' and i + 2 < n and text[i + 2] == '\'':
-            i += 3                               # character literal: skip 'x' whole
-        elif ch == '(':
-            depth += 1
-            var j: Natural = i + 1
-            j = skip_whitespace(text, j)
-            let kw: str = lead_word(text[j:])
-            if kw == "if":
-                openers.append((depth, base_col + j, IF_EXPR))
-            elif kw == "case":
-                openers.append((depth, base_col + j, CASE_EXPR))
-            elif kw == "for":
-                openers.append((depth, base_col + j, FOR_EXPR))
-            elif j < n:
-                openers.append((depth, base_col + j, PLAIN))
-            else:
-                openers.append((depth, base_col + INDENT_WIDTH, PLAIN))
-            i += 1
-        elif ch == ')':
-            depth -= 1
-            i += 1
-        else:
-            i += 1
+        match ch:
+            case '"':
+                i = skip_literal_string(text, i)
+            case '\'' if i + 2 < n and text[i + 2] == '\'':
+                i += 3                           # character literal: skip 'x' whole
+            case '(':
+                depth += 1
+                var j: Natural = i + 1
+                j = skip_whitespace(text, j)
+                let kw: str = lead_word(text[j:])
+                match kw:
+                    case "if":
+                        openers.append((depth, base_col + j, IF_EXPR))
+                    case "case":
+                        openers.append((depth, base_col + j, CASE_EXPR))
+                    case "for":
+                        openers.append((depth, base_col + j, FOR_EXPR))
+                    case _ if j < n:
+                        openers.append((depth, base_col + j, PLAIN))
+                    case _:
+                        openers.append((depth, base_col + INDENT_WIDTH, PLAIN))
+                i += 1
+            case ')':
+                depth -= 1
+                i += 1
+            case _:
+                i += 1
     return openers
 
 
@@ -318,17 +321,18 @@ def block_t_name(b: Block_T) -> str:
 
 
 def block_t_from_name(s: str) -> Block_T:
-    if   s == "PKG":         return PKG
-    elif s == "TYPE_HEADER": return TYPE_HEADER
-    elif s == "DECLARE":     return DECLARE
-    elif s == "BLOCK":       return BLOCK
-    elif s == "IF":          return IF
-    elif s == "LOOP":        return LOOP
-    elif s == "CASE":        return CASE
-    elif s == "WHEN":        return WHEN
-    elif s == "RECORD":      return RECORD
-    elif s == "SELECT":      return SELECT
-    else:                    return DO
+    match s:
+        case "PKG":         return PKG
+        case "TYPE_HEADER": return TYPE_HEADER
+        case "DECLARE":     return DECLARE
+        case "BLOCK":       return BLOCK
+        case "IF":          return IF
+        case "LOOP":        return LOOP
+        case "CASE":        return CASE
+        case "WHEN":        return WHEN
+        case "RECORD":      return RECORD
+        case "SELECT":      return SELECT
+        case _:             return DO
 
 
 def paren_kind_name(p: Paren_Kind_T) -> str:
@@ -341,11 +345,12 @@ def paren_kind_name(p: Paren_Kind_T) -> str:
 
 
 def paren_kind_from_name(s: str) -> Paren_Kind_T:
-    if   s == "OUTSIDE":   return OUTSIDE
-    elif s == "PLAIN":     return PLAIN
-    elif s == "IF_EXPR":   return IF_EXPR
-    elif s == "CASE_EXPR": return CASE_EXPR
-    else:                  return FOR_EXPR
+    match s:
+        case "OUTSIDE":   return OUTSIDE
+        case "PLAIN":     return PLAIN
+        case "IF_EXPR":   return IF_EXPR
+        case "CASE_EXPR": return CASE_EXPR
+        case _:           return FOR_EXPR
 
 
 # ---------------------------------------------------------------------------
@@ -511,10 +516,13 @@ class Indenter:
                 # to this level). Derive the indent from the paren kind, mirroring
                 # where the first/next code line at this level lands.
                 var pfall: int = ptop[1]
-                if ptop[2] in (CASE_EXPR, FOR_EXPR):
-                    pfall += INDENT_WIDTH
-                elif ptop[2] == PLAIN and self.paren_cont:
-                    pfall += INDENT_WIDTH
+                match ptop[2]:
+                    case CASE_EXPR | FOR_EXPR:
+                        pfall += INDENT_WIDTH
+                    case PLAIN if self.paren_cont:
+                        pfall += INDENT_WIDTH
+                    case _:
+                        pass
                 return " " * pfall + emit_text
             # Outside parentheses a comment is indented like the line that would
             # follow it. Inside a multi-line if/elsif condition it aligns with the
