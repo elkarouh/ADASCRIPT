@@ -53,10 +53,6 @@ def to_py(self):
     return "="
 
 
-@method(V_COLON)
-def to_py(self):
-    """V_COLON: ':'"""
-    return ":"
 
 
 @method(V_DOT)
@@ -1065,14 +1061,6 @@ def to_py(self):
 
 
 # --- simple_stmt ---
-@method(simple_stmt)
-def to_py(self):
-    """simple_stmt: ann_assign_stmt | aug_assign_stmt | assign_stmt
-    | return_stmt | pass_stmt | break_stmt | continue_stmt
-    | del_stmt | assert_stmt | raise_stmt
-    | global_stmt | nonlocal_stmt
-    | import_stmt | from_stmt | type_stmt | expr_stmt"""
-    return self.nodes[0].to_py()
 
 
 # --- stmt_line ---

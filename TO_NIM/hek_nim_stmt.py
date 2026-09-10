@@ -101,10 +101,6 @@ def to_nim(self):
     return "="
 
 
-@method(V_COLON)
-def to_nim(self):
-    """V_COLON: visible ':' operator token"""
-    return ":"
 
 
 @method(V_DOT)
@@ -1944,19 +1940,6 @@ def to_nim(self):
 
 
 # --- simple_stmt ---
-@method(simple_stmt)
-def to_nim(self):
-    """simple_stmt: assign_stmt | aug_assign_stmt | ann_assign_stmt | decl_* | return_stmt | del_stmt | assert_stmt | raise_stmt | pass_stmt | break_stmt | continue_stmt | import_stmt | from_stmt | type_alias_stmt | expr_stmt"""
-    child = self.nodes[0]
-    # Top-level 'await expr()' outside an async def must use waitFor in Nim
-    if isinstance(child, await_expr) or (
-        hasattr(child, "nodes") and len(child.nodes) == 1
-        and isinstance(child.nodes[0], await_expr)
-    ):
-        from hek_nim_expr import await_expr as _ae
-        inner = child if isinstance(child, _ae) else child.nodes[0]
-        return f"waitFor {inner.nodes[0].to_nim()}"
-    return child.to_nim()
 
 
 # --- stmt_line ---
@@ -1964,11 +1947,13 @@ def to_nim(self):
 # used to sit at this point as well; both files registered on the same
 # grammar class, and since hek_nim_parser imports this module before
 # defining its own, the parser's was the one that ran and this one never
-# did -- instrumenting it produced no hits from ady2nim --test or from any
-# .ady in the corpus, and deleting it left every generated file
-# byte-identical.  Two versions of the discard rules had already drifted
-# apart by then.  If stmt_line needs changing, hek_nim_parser.py is the
-# only place it lives.
+# did.  Two versions of the discard rules had already drifted apart by then.
+#
+# @method(simple_stmt) sat here too, and was dead for a different reason:
+# simple_stmt is a choice, so it hands back the child it matched and no node
+# of that class is ever built.  Both are gone; removing them left all 171
+# generated files byte-identical.  If stmt_line needs changing,
+# hek_nim_parser.py is the only place it lives.
 
 
 ###############################################################################
