@@ -918,4 +918,10 @@ def main() -> int:
         if do_emit_state:
             print "##STATE:" + ind.dump_state()
 
-quit(main())
+# The guard is what lets this file be both a program and a module: without it
+# the call sits at module scope, and `nimport ada_indent` runs main() at
+# import time. test_ada_indent.ady imports it, so main() read the empty stdin
+# and quit(0) before a single test ran -- and the suite exited 0, which is
+# what the Makefile was checking.
+if __name__ == "__main__":
+    quit(main())
