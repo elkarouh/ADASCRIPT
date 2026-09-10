@@ -1,0 +1,151 @@
+#!/usr/bin/env ady2nim
+"""strscan.ady — character classification and the small scanners a
+hand-written lexer keeps needing.
+
+Every classifier is defined by ASCII range rather than by a library
+predicate, so the answer is the same on both backends: Python's isalpha()
+and isdigit() are Unicode-aware and locale-sensitive, Nim's are not, and a
+lexer that disagreed with itself across backends would be worse than no
+lexer at all.
+
+The scanners take an index and return one: `i` is where to start and the
+result is where to carry on, so they compose in a while loop without any of
+them needing to own the loop. None of them raise on unterminated input --
+they return an index past the end, which the caller's own `i < n` test then
+stops on -- because a lexer runs on text that is being edited and is
+routinely half-written.
+
+What is deliberately NOT here: anything that knows one language's grammar.
+Ada's `'x'`-versus-`X'Image` ambiguity, C's escape decoding and Scheme's
+delimiter set live with their own lexers, because generalising them costs
+more than it saves.
+"""
+
+# ---------------------------------------------------------------------------
+# Character classification
+# ---------------------------------------------------------------------------
+
+def is_digit_ch(c: char) -> bool:
+    '0' <= c <= '9'
+
+def is_alpha_ch(c: char) -> bool:
+    'a' <= c <= 'z' or 'A' <= c <= 'Z'
+
+def is_alnum_ch(c: char) -> bool:
+    is_alpha_ch(c) or is_digit_ch(c)
+
+def is_ident_ch(c: char) -> bool:
+    """A character that may appear inside an identifier: alphanumeric or '_'.
+
+    The leading character is the caller's business -- most languages forbid a
+    digit there -- and every one of them allows all of these after it."""
+    is_alnum_ch(c) or c == '_'
+
+def is_newline_ch(c: char) -> bool:
+    ord(c) == 10                               # '\n'
+
+def is_space_ch(c: char) -> bool:
+    ord(c) in (32, 9, 10, 13)                  # space, tab, LF, CR
+
+
+# ---------------------------------------------------------------------------
+# Scanners — each takes the index to start at and returns the one to go on at
+# ---------------------------------------------------------------------------
+
+def skip_while(s: str, i: Natural, pred: [(char,)]bool) -> Natural:
+    """The first index at or after i whose character fails pred."""
+    var j: Natural = i
+    let n: int = len(s)
+    while j < n and pred(s[j]):
+        j += 1
+    return j
+
+
+def skip_ch(s: str, i: Natural, c: char) -> Natural:
+    """The first index at or after i that is not c.
+
+    Narrower than skip_while(s, i, is_space_ch) on purpose: a formatter that
+    treats a tab as a hard error wants to stop on one, not step over it."""
+    var j: Natural = i
+    let n: int = len(s)
+    while j < n and s[j] == c:
+        j += 1
+    return j
+
+
+def skip_space(s: str, i: Natural) -> Natural:
+    """The first index at or after i that is not whitespace."""
+    return skip_while(s, i, is_space_ch)
+
+
+def skip_quoted(s: str, i: Natural, quote: char) -> Natural:
+    """Index just past the literal opening at i, which must be the quote.
+
+    No escape convention: the literal ends at the next quote. That is Ada,
+    where a quote is doubled rather than escaped -- so a doubled one reads as
+    a close immediately followed by an open, and the scan lands in the same
+    place either way. Use skip_quoted_esc where a backslash escapes."""
+    var j: Natural = i + 1
+    let n: int = len(s)
+    while j < n and s[j] != quote:
+        j += 1
+    return j + 1
+
+
+def skip_quoted_esc(s: str, i: Natural, quote: char, escape: char) -> Natural:
+    """Index just past the literal opening at i, honouring an escape char.
+
+    C, Scheme and the shells all spell it backslash. An escape at the very
+    end of the input consumes the character that is not there, which leaves
+    the index past the end -- the same answer an unterminated literal gives,
+    and the caller stops on it the same way."""
+    var j: Natural = i + 1
+    let n: int = len(s)
+    while j < n and s[j] != quote:
+        if s[j] == escape:
+            j += 1
+        j += 1
+    return j + 1
+
+
+# ---------------------------------------------------------------------------
+# Whole-token and whole-line helpers
+# ---------------------------------------------------------------------------
+
+def lead_ident(s: str) -> str:
+    """The identifier s begins with, after leading blanks, or ''.
+
+    A *whole* identifier: a word that merely starts with a keyword --
+    'Case_Sensitive', 'for_each', 'ifdef' -- comes back whole and does not
+    compare equal to the keyword it starts with. Case is preserved; a
+    case-insensitive language lowercases the result itself."""
+    for ch in s.strip():
+        if not is_ident_ch(ch):
+            break
+        result += ch
+
+
+def strip_line_comment(line: str, marker: str, quote: char) -> str:
+    """The line with any trailing comment removed, string literals kept.
+
+    `marker` is what introduces a comment to end of line -- '--', '#', '//',
+    ';' -- and `quote` the string delimiter, tracked so that a marker written
+    inside a string is not mistaken for one. Escapes are not modelled: a
+    quote is a quote. That is enough for the languages whose comment runs to
+    end of line, and a language where it is not has bigger scanning problems
+    than this function was meant to solve."""
+    var i: Natural = 0
+    let n: int = len(line)
+    let m: int = len(marker)
+    var in_str: bool = False
+    while i < n:
+        let c: char = line[i]
+        # `i + m <= n` before the slice: Python clamps a slice that runs
+        # past the end, Nim raises IndexDefect, and the last few characters
+        # of every line are shorter than the marker.
+        if not in_str and m > 0 and i + m <= n and line[i : i + m] == marker:
+            break
+        result += c
+        if c == quote:
+            in_str = not in_str
+        i += 1

@@ -55,50 +55,24 @@ type Paren_Kind_T is enum:
 
 # ---------------------------------------------------------------------------
 # Lexical helpers — all work on a single physical line.
+#
+# The language-neutral ones live in the standard library: character
+# classification, skipping runs and quoted literals, the leading identifier
+# of a line, and stripping a to-end-of-line comment. What stays here is what
+# knows Ada: a character literal that has to be told from an attribute tick,
+# and the parenthesis scan that classifies '(if' / '(case' / '(for'.
 # ---------------------------------------------------------------------------
 
-def pairwise(s: str) -> (char, char):
-    for i in s'First..<s'Last:
-        yield (s[i], s[i + 1])
+nimport strscan
 
 
-def skip_whitespace(text: str, i: Natural) -> Natural:
-    let n: int = len(text)
-    while i < n and text[i] == ' ':
-        i += 1
-    return i
+def lead_ident_lower(code: str) -> str:
+    """The leading identifier of a (comment-stripped) line, lowercased, or ''.
 
-
-def skip_literal_string(text: str, i: Natural) -> Natural:
-    """Skip a double-quoted string starting at i (the opening quote).
-    Returns the index just past the closing quote."""
-    let n: int = len(text)
-    i += 1
-    while i < n and text[i] != '"':
-        i += 1
-    return i + 1
-
-
-def strip_code(line: str) -> str:
-    """Return the line with any '--' comment removed, string literals kept.
-
-    Quote handling is deliberately simple: it tracks double-quoted strings so
-    that a '--' inside a string is not mistaken for a comment. Character
-    literals and doubled-quote escapes are not modelled (rare in practice).
-    """
-    var state: Str_State_T = CODE
-    for c, next_c in pairwise(line + " "):
-        case state:
-            when CODE:
-                if c == '-' and next_c == '-':
-                    break
-                result += c
-                if c == '"':
-                    state = INSIDE_STRING_LIT
-            when INSIDE_STRING_LIT:
-                result += c
-                if c == '"':
-                    state = CODE
+    Ada is case-insensitive, so every comparison against a keyword wants the
+    lowercased form; the library's lead_ident preserves case, because most
+    languages are not."""
+    return lead_ident(code).lower()
 
 
 def code_chars(s: str) -> char:
@@ -116,7 +90,7 @@ def code_chars(s: str) -> char:
         let c: char = s[i]
         match c:
             case '"':
-                i = skip_literal_string(s, i)
+                i = skip_quoted(s, i, '"')
             case '\'' if i + 2 < n and s[i + 2] == '\'':
                 i += 3                           # character literal: skip 'x' whole
             case _:
@@ -137,18 +111,6 @@ def paren_delta(line: str) -> int:
             when others:
                 pass
     return depth
-
-
-def lead_word(code: str) -> str:
-    """Lowercased leading identifier of a (comment-stripped) line, or ''.
-
-    Consumes a full Ada identifier (letters, digits, underscores) so that an
-    identifier which merely starts with a keyword — 'Case_Sensitive', 'For_Each',
-    'If_Valid' — is returned whole and does not compare equal to the keyword."""
-    for ch in code.strip().lower():
-        if not (ch.isalnum() or ch == "_"):
-            break
-        result += ch
 
 
 def last_word(code: str) -> str:
@@ -174,7 +136,7 @@ def stmt_incomplete(code_s: str) -> bool:
     # '=', not ':', so an unfinished assignment is unaffected.)
     if code_s == "" or code_s.endswith((";", "=>", ":")):
         return False
-    let lw: str = lead_word(code_s)
+    let lw: str = lead_ident_lower(code_s)
     # 'separate (Parent)' is a complete compilation-unit prefix despite content.
     if lw == "separate":
         return False
@@ -211,7 +173,7 @@ def starts_with_operator(code_s: str) -> bool:
         when '=' | '&' | '+' | '-' | '*' | '/' | '<' | '>' | '|':
             return True
         when others:
-            let w: str = lead_word(code_s)
+            let w: str = lead_ident_lower(code_s)
             return w in ("and", "or", "xor", "mod", "rem")
 
 
@@ -238,7 +200,7 @@ def is_term_continuation(code_s: str) -> bool:
         return True
     if not starts_with_operator(code_s) or code_s.startswith((":=", "=>", "|")):
         return False
-    let w: str = lead_word(code_s)
+    let w: str = lead_ident_lower(code_s)
     if w in ("and", "or"):
         # Boolean connectives join successive operands of a value expression;
         # each continuation sits one level past where the expression began.
@@ -268,14 +230,14 @@ def scan_parens(text: str, base_depth: Natural, base_col: Natural) -> [](int, in
         let ch: char = text[i]
         match ch:
             case '"':
-                i = skip_literal_string(text, i)
+                i = skip_quoted(text, i, '"')
             case '\'' if i + 2 < n and text[i + 2] == '\'':
                 i += 3                           # character literal: skip 'x' whole
             case '(':
                 depth += 1
                 var j: Natural = i + 1
-                j = skip_whitespace(text, j)
-                let kw: str = lead_word(text[j:])
+                j = skip_ch(text, j, ' ')
+                let kw: str = lead_ident_lower(text[j:])
                 match kw:
                     case "if":
                         openers.append((depth, base_col + j, IF_EXPR))
@@ -425,7 +387,10 @@ class Indenter:
     def indent_line(self, line: str) -> str:
         """Process one raw line and return it re-indented."""
         let raw2: str = line.rstrip()
-        let code: str = strip_code(raw2)
+        # Ada's conventions for the library's generic stripper: '--' opens a
+        # comment, '"' delimits a string, so a '--' inside one is not a
+        # comment. Character literals and doubled quotes are not modelled.
+        let code: str = strip_line_comment(raw2, "--", '"')
         let code_s: str = code.strip()
         let emit_text: str = raw2.strip()
 
@@ -502,7 +467,7 @@ class Indenter:
             self.paren_cont = False
             self.arrow_level = 0
         let cont: int = 1 if (self.paren_depth > 0 or self.in_cont) else 0
-        let lw: str = lead_word(code_s)
+        let lw: str = lead_ident_lower(code_s)
         var disp: int = len(self.stack)
 
         # A 'type T is' that turns out to be an enum, derived, or other non-record
@@ -926,7 +891,7 @@ class Indenter:
         # Exception: 'is new' is a generic instantiation (a true continuation).
         if lw in ("loop", "do") and cont > 0:
             lead_n = max(0, disp) * INDENT_WIDTH
-        if lw == "is" and cont > 0 and lead_word(code_s[2:]) != "new":
+        if lw == "is" and cont > 0 and lead_ident_lower(code_s[2:]) != "new":
             lead_n = max(0, disp) * INDENT_WIDTH
         # As in the cond_state branch: this line is outside any paren at entry, so
         # any paren it opens is fresh. Invalidate paren_next_lead so a comment in

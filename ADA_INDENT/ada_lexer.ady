@@ -41,25 +41,10 @@ type Token_T is tuple:
     col:  int          # 1-based column of the first character
 
 
-# ---------------------------------------------------------------------------
-# Character classification — defined by ASCII range so the result is identical
-# under both backends (no reliance on locale-sensitive library predicates).
-# ---------------------------------------------------------------------------
-
-def is_digit_ch(c: char) -> bool:
-    '0' <= c <= '9'
-
-def is_alpha_ch(c: char) -> bool:
-    'a' <= c <= 'z' or 'A' <= c <= 'Z'
-
-def is_alnum_ch(c: char) -> bool:
-    is_alpha_ch(c) or is_digit_ch(c)
-
-def is_newline_ch(c: char) -> bool:
-    ord(c) == 10                              # '\n' — escape char literals would
-
-def is_space_ch(c: char) -> bool:
-    ord(c) in (32, 9, 10, 13)                  # space, tab, LF, CR
+# Character classification comes from the standard library: the predicates
+# are the same in every lexer, and defining them by ASCII range rather than
+# by a library call is what keeps the two backends agreeing.
+nimport strscan
 
 
 # ---------------------------------------------------------------------------

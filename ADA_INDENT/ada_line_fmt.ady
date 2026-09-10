@@ -15,6 +15,7 @@
 # The source must not contain tab characters (spaces only, per the standard).
 
 nimport ada_lexer
+nimport strscan          # is_newline_ch — nimport does not re-export
 
 # ---------------------------------------------------------------------------
 # Binary-operator delimiter set (rule 2)
