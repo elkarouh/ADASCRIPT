@@ -2424,7 +2424,7 @@ def _parse_func_decorators(decos_str, indent):
 
 # --- Function definition ---
 def _bind_user_result(body, ret_ann):
-    """Make a user variable named `result` *be* Nim's implicit result.
+    r"""Make a user variable named `result` *be* Nim's implicit result.
 
     A function that accumulates into `result` and lets the implicit return
     hand it back is an idiom this codebase uses (EXAMPLES/primes.ady), and the

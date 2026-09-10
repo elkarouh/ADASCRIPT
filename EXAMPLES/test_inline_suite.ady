@@ -837,3 +837,25 @@ assert guarded_tail("< 10 bytes: 3", True) == "bucket"
 assert guarded_tail("something else", True) == "closing"
 assert guarded_tail("header line", False) == "header"
 assert guarded_tail("plain", False) == "ignored"
+
+# zfill pads with zeros but keeps a leading sign ahead of the padding, which
+# strutils' align() cannot do -- it pads in front of the sign too. The Nim
+# backend emits a helper for it.
+assert str(42).zfill(6) == "000042"
+assert "-5".zfill(4) == "-005"
+assert "+5".zfill(4) == "+005"
+assert "".zfill(4) == "0000"
+assert "12345".zfill(4) == "12345"
+assert "-12345".zfill(4) == "-12345"
+assert "abc".zfill(4) == "0abc"
+assert "-".zfill(4) == "-000"
+assert str(-7).zfill(5) == "-0007"
+
+# `$` binds tighter than any operator in Nim, so str() of anything that is not
+# a name has to be parenthesised: `$-7` reads as the operator `$-`, and
+# `$x + 1` stringifies x and then adds.
+let sx: int = 4
+assert str(-7) == "-7"
+assert str(3 - 5) == "-2"
+assert str(sx + 1) == "5"
+assert str(sx) == "4"

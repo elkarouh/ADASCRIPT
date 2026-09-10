@@ -181,6 +181,30 @@ def _ensure_envopt_helper():
         ParserState.nim_top_decls = decls
 
 
+_ZFILL_HELPER = """\
+proc adascriptZfill(s: string, width: int): string =
+  ## Python's str.zfill: left-pad with '0' to `width`, keeping a leading sign
+  ## ahead of the padding ("-5".zfill(4) == "-005").  strutils' align() pads
+  ## in front of everything, sign included, so it cannot stand in for this.
+  if s.len >= width:
+    return s
+  let signed = s.len > 0 and (s[0] == '-' or s[0] == '+')
+  let pad = repeat('0', width - s.len)
+  if signed:
+    return s[0] & pad & s[1..^1]
+  return pad & s
+"""
+
+
+def _ensure_zfill_helper():
+    """Add the zfill helper to nim_top_decls the first time zfill is used."""
+    ParserState.nim_imports.add("strutils")          # repeat()
+    decls = getattr(ParserState, 'nim_top_decls', [])
+    if not any("adascriptZfill" in d for d in decls):
+        decls.append(_ZFILL_HELPER)
+        ParserState.nim_top_decls = decls
+
+
 def _ensure_nimatch_helper():
     """Add the nimatch helper to nim_top_decls the first time =~ or !~ is used."""
     ParserState.nim_imports.update({"nre", "tables", "sequtils", "options"})
@@ -1438,6 +1462,7 @@ _PY_UNIVERSAL_METHOD_TO_NIM = {
     "index": "find",
     "ljust": "alignLeft",
     "rjust": "align",       # strutils spells right-align `align`
+    "zfill": "adascriptZfill",
     "isalpha": "isAlphaAscii",
     "isalnum": "isAlphaNumeric",
     "isdigit": "isDigit",
@@ -1521,6 +1546,8 @@ def _translate_method(obj_name, method_name):
     nim_method = _PY_UNIVERSAL_METHOD_TO_NIM.get(method_name, method_name)
     if nim_method in _STRUTILS_METHODS:
         ParserState.nim_imports.add("strutils")
+    if nim_method == "adascriptZfill":
+        _ensure_zfill_helper()
     return nim_method
 
 
@@ -1777,6 +1804,13 @@ def to_nim(self, prec=None):
         if raw_name == "str":
             call_node = self.nodes[1].nodes[0]
             arg = _extract_call_arg(call_node)
+            # `$` binds tighter than any operator, so only a name or a dotted
+            # name can follow it bare: `$-7` is read as the operator `$-`, and
+            # `$x + 1` stringifies x and then adds.  Anything else is
+            # parenthesised.
+            import re as _re_strarg
+            if not _re_strarg.match(r'^[A-Za-z_]\w*(?:\.\w+)*$', arg.strip()):
+                arg = f"({arg})"
             # Anything chained onto the result -- str(n).ljust(7), str(n)[0] --
             # has to come with it, and parenthesised: Nim binds `.` tighter
             # than the `$` prefix, so $n.ljust(7) would stringify the padded
@@ -1793,6 +1827,8 @@ def to_nim(self, prec=None):
                     if _nim_meth:
                         if _nim_meth in _STRUTILS_METHODS:
                             ParserState.nim_imports.add("strutils")
+                        if _nim_meth == "adascriptZfill":
+                            _ensure_zfill_helper()
                         rest = "." + _nim_meth + rest[_m_meth.end() - 1:]
                 return f"(${arg}){rest}"
             return "$" + arg
