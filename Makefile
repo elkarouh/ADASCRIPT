@@ -222,13 +222,17 @@ test: compile
 	@# emitted without the imported module's declarations poisons the cache.
 	@# test_awk.ady is the case -- its class inherits its constructor from
 	@# awk.ady -- and the check is that a build straight after a -t works.
-	@# A throwaway HOME gives it a cache of its own, so the check starts
-	@# cold and leaves the real cache alone either way.
+	@# A throwaway XDG_CACHE_HOME gives it a cache of its own, so the check
+	@# starts cold and leaves the real cache alone either way.  Not a
+	@# throwaway HOME: that moves the Nim toolchain out of reach too, and a
+	@# choosenim install -- the one the docs recommend -- then cannot compile
+	@# anything, so the step failed for a reason that had nothing to do with
+	@# the transpiler.
 	@echo "=== Transpile-only, then build (ady2nim -t) ==="
 	@printf '  %-42s' "test_awk.ady (-t then -r)"; \
 	    tmp=$$(mktemp -d); \
-	    HOME=$$tmp $(ADY2NIM) -t $(EXDIR)/test_awk.ady >/dev/null 2>&1 \
-	      && HOME=$$tmp $(ADY2NIM) $(EXDIR)/test_awk.ady -r </dev/null >/dev/null 2>&1 \
+	    XDG_CACHE_HOME=$$tmp $(ADY2NIM) -t $(EXDIR)/test_awk.ady >/dev/null 2>&1 \
+	      && XDG_CACHE_HOME=$$tmp $(ADY2NIM) $(EXDIR)/test_awk.ady -r </dev/null >/dev/null 2>&1 \
 	      && { echo OK; rm -rf $$tmp; } \
 	      || { echo FAIL; rm -rf $$tmp; exit 1; }
 
@@ -335,11 +339,13 @@ clean:
 	@echo "Removing build cache..."
 	@# $$HOME, not $HOME: make would read that as $(H) followed by OME and
 	@# delete a stray ./OME directory, leaving the real cache in place.
-	@rm -rf $$HOME/.cache/adascript/
+	@# The same place ady2nim writes to: XDG_CACHE_HOME when it is set,
+	@# ~/.cache otherwise.
+	@rm -rf $${XDG_CACHE_HOME:-$$HOME/.cache}/adascript/
 	@# The cache lived under ~/.cache/hparsec until it was named after the
 	@# language rather than the parser engine; sweep the old tree too, or it
 	@# sits there for good holding artifacts nothing will ever read again.
-	@rm -rf $$HOME/.cache/hparsec/
+	@rm -rf $${XDG_CACHE_HOME:-$$HOME/.cache}/hparsec/
 	@echo "Removing binary symlinks from EXAMPLES/..."
 	@for f in $(ALL_COMPILE); do \
 	    name=$${f%.ady}; \
