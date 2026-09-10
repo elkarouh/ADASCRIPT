@@ -153,7 +153,40 @@ endef
 # -----------------------------------------------------------------------
 # compile — transpile + build everything
 # -----------------------------------------------------------------------
-compile:
+# -----------------------------------------------------------------------
+# lint-emitters — no grammar rule may be registered twice in one backend.
+#
+# @method(X) is a setattr, so a second registration of the same rule silently
+# overwrites the first and the earlier definition becomes unreachable. That
+# is not hypothetical: try_except carried two copies for long enough that the
+# dead one predated inline header comments in a try body, and a reader coming
+# down the file met the stale one first. Six such pairs were found at once,
+# four of them already drifted apart.
+#
+# This catches only the shadowed kind. A rule registered on a class no node is
+# ever built from -- simple_stmt, being a choice that hands back its child --
+# is invisible here and shows up only as an emitter that never fires.
+# -----------------------------------------------------------------------
+.PHONY: lint-emitters
+lint-emitters:
+	@echo "=== No grammar rule is registered twice ==="
+	@for d in TO_NIM TO_PYTHON; do \
+	    printf '  %-42s' "$$d/*.py"; \
+	    dups=$$(grep -h '^@method(' $(CURDIR)/$$d/*.py \
+	            | sed 's/^@method(\(.*\))$$/\1/' | sort | uniq -d); \
+	    if [ -n "$$dups" ]; then \
+	        echo FAIL; \
+	        echo "  registered more than once -- the later one wins, the rest are dead:"; \
+	        for r in $$dups; do \
+	            echo "    $$r"; \
+	            grep -ln "^@method($$r)" $(CURDIR)/$$d/*.py | sed 's/^/      /'; \
+	        done; \
+	        exit 1; \
+	    fi; \
+	    echo OK; \
+	done
+
+compile: lint-emitters
 	@echo "=== Compiling $(words $(ALL_COMPILE)) examples ==="
 	@$(foreach f,$(ALL_COMPILE),$(call compile_one,$(f));)
 	@echo "=== Compile step complete ==="
