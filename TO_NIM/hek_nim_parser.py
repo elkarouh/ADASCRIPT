@@ -2606,6 +2606,26 @@ def _func_def_to_nim_inner(self, indent=0):
                 _indent_d = _last_d[:len(_last_d) - len(_last_d_s)]
                 _blines_d[_idx_d] = _indent_d + _last_d_s[len("discard "):]
                 body = chr(10).join(_blines_d) + chr(10)
+    # An implicit return of a character literal: the trailing expression IS the
+    # result on Nim, and 'z' has been emitted as the one-character string it is
+    # in Adascript. Narrowed here for the same reason it is narrowed at a
+    # declaration, an assignment, a return and a call argument -- a string
+    # where Nim wants a char is always an error, so this can only turn a
+    # failure into what was written.
+    if ret_ann and body and ret_ann.lstrip(": ").strip() == "char":
+        from hek_nim_expr import _char_literal_arg as _cla
+        _bl_c = body.rstrip().splitlines()
+        _ix_c = len(_bl_c) - 1
+        while _ix_c >= 0 and (_bl_c[_ix_c].lstrip().startswith("#")
+                              or _bl_c[_ix_c].strip() == ""):
+            _ix_c -= 1
+        if _ix_c >= 0:
+            _ln_c = _bl_c[_ix_c]
+            _body_c = _ln_c.lstrip()
+            _lit_c = _cla(_body_c)
+            if _lit_c is not None:
+                _bl_c[_ix_c] = _ln_c[:len(_ln_c) - len(_body_c)] + _lit_c
+                body = chr(10).join(_bl_c) + chr(10)
     # Strip a trailing bare `result` -- Nim's implicit return variable makes it
     # redundant.  A user variable of that name is renamed (see _nim_user_ident),
     # so this only ever fires on the implicit one.

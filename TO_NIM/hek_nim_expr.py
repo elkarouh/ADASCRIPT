@@ -1806,6 +1806,12 @@ def to_nim(self, prec=None):
                             # Fix bare initTable() when field type is known
                             if fv == "initTable()" and ftype.startswith("Table["):
                                 fv = f"initTable[{ftype[6:-1]}]()"
+                            # A char field given a literal: 'z' is a
+                            # one-character string until something narrows it.
+                            if ftype.strip() == "char":
+                                _cl = _char_literal_arg(fv)
+                                if _cl is not None:
+                                    fv = _cl
                             pairs_parts.append(f"{fn}: {fv}")
                         else:
                             pairs_parts.append(_re_ctor.sub(r'^(\w+) = ', r'\1: ', a, count=1))
@@ -1821,6 +1827,10 @@ def to_nim(self, prec=None):
                     for fn, av in zip(named_fields, args):
                         ftype = ftype_map.get(fn, "")
                         # If field type is a ref object class, cast to that type for proper subtype coercion
+                        if ftype.strip() == "char":
+                            _cl = _char_literal_arg(av)
+                            if _cl is not None:
+                                av = _cl
                         sym = ParserState.symbol_table.lookup(ftype)
                         if ftype and sym and sym.get("kind") in ("class", "ref_class"):
                             pairs_parts.append(f"{fn}: {ftype}({av})")

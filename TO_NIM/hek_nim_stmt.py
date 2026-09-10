@@ -150,7 +150,13 @@ def to_nim(self):
         for seq in node.nodes:
             if hasattr(seq, "nodes") and len(seq.nodes) >= 2:
                 rhs_node = seq.nodes[1]
-                parts.append(rhs_node.to_nim())
+                _rhs = rhs_node.to_nim()
+                # `c = 'z'` where c was declared a char: same narrowing as at
+                # the declaration, using the target's recorded type.
+                _tsym = ParserState.symbol_table.lookup(parts[0])
+                if isinstance(_tsym, dict):
+                    _rhs = _coerce_string_to_char(_rhs, _tsym.get("type") or "")
+                parts.append(_rhs)
     # Skip var for dotted assignments (field mutation), indexed assignments,
     # and variables already declared in the current scope
     lhs = parts[0]
@@ -377,6 +383,41 @@ def _coerce_char_to_string(value, annotation):
     if not _expr_is_char(value):
         return value
     return f"${value}"
+
+
+def _coerce_string_to_char(value, annotation):
+    """`let c: char = 'z'` -- a one-character literal becomes a Nim char.
+
+    The mirror of _coerce_char_to_string above. Adascript has no character
+    type: 'z' is a one-character *string*, and the emitter only turns the
+    quotes into double ones, so every char-typed declaration, assignment and
+    return got a string and no char could be written down at all -- one could
+    only be obtained by indexing. Call arguments were fixed separately, in
+    _char_literal_arg's caller.
+
+    As safe as its mirror: a string where Nim wants a char is always an
+    error, so narrowing can only turn a failure into the meaning that was
+    written. `seq[char]` gets the same treatment element by element, since
+    `let cs: []char = ['a', 'b']` has exactly the same problem.
+    """
+    from hek_nim_expr import _char_literal_arg
+    ann = (annotation or "").strip()
+    if ann == "char":
+        lit = _char_literal_arg(value)
+        return lit if lit is not None else value
+    if ann in ("seq[char]", "openArray[char]"):
+        v = (value or "").strip()
+        if not (v.startswith("@[") and v.endswith("]")):
+            return value
+        inner = v[2:-1].strip()
+        if not inner:
+            return value
+        items = [i.strip() for i in inner.split(",")]
+        lits = [_char_literal_arg(i) for i in items]
+        if any(l is None for l in lits):
+            return value
+        return "@[" + ", ".join(lits) + "]"
+    return value
 
 
 def _coerce_scalar_value(value, annotation):
@@ -790,6 +831,7 @@ def to_nim(self):
                 # Range/enum scalar: wrap int literals and int-valued calls
                 value = _coerce_scalar_value(value, annotation)
                 value = _coerce_char_to_string(value, annotation)
+                value = _coerce_string_to_char(value, annotation)
                 # array types: {} is unnecessary — arrays are zero-initialized
                 if value == "initTable()" and annotation.startswith("array["):
                     value = ""
@@ -900,6 +942,7 @@ def to_nim(self):
                 # Range/enum scalar: wrap int literals and int-valued calls
                 value = _coerce_scalar_value(value, annotation)
                 value = _coerce_char_to_string(value, annotation)
+                value = _coerce_string_to_char(value, annotation)
                 # array types: {} is unnecessary — arrays are zero-initialized
                 if value == "initTable()" and annotation.startswith("array["):
                     value = ""
@@ -1018,6 +1061,7 @@ def to_nim(self):
     """return_val: 'return' star_expressions -> Nim: 'return expr'; Option-typed returns wrapped in some()/none()"""
     val = self.nodes[0].to_nim()
     ret_type = getattr(ParserState, "_current_return_type", "")
+    val = _coerce_string_to_char(val, ret_type.lstrip(": ").strip())
     if ret_type and "Option[" in ret_type:
         import re as _re
         m = _re.search(r"Option\[(.+)\]", ret_type)

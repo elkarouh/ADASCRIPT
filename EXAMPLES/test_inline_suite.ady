@@ -1096,3 +1096,39 @@ assert Path(pname) == "leaf"             # and this is how a str becomes one
 var punset: Path
 assert punset == ""
 assert len(punset) == 0
+
+# A character literal in every position that has a declared char type.
+# Adascript has no character type -- 'z' is a one-character string -- so the
+# emitter only turned the quotes into double ones and Nim rejected the lot:
+# a char could not be written down at all, only obtained by indexing. Call
+# arguments were narrowed first; these are the rest of the places.
+let ch_let: char = 'z'
+var ch_var: char = 'a'
+ch_var = 'b'                              # assignment
+assert ord(ch_let) == 122
+assert ord(ch_var) == 98
+
+def ch_return() -> char:
+    return 'r'
+
+def ch_implicit() -> char:
+    'i'                                   # the trailing expression is the result
+
+assert ord(ch_return()) == 114
+assert ord(ch_implicit()) == 105
+
+let ch_seq: []char = ['a', 'b', 'c']      # element by element
+assert ord(ch_seq[2]) == 99
+
+type Ch_R is record:
+    c: char = 'd'                         # field default
+let ch_kw: Ch_R = Ch_R(c='k')             # keyword construction
+let ch_pos: Ch_R = Ch_R('p')              # positional construction
+assert ord(ch_kw.c) == 107
+assert ord(ch_pos.c) == 112
+
+# the escapes carry over in these positions too
+let ch_esc: char = '\\'
+let ch_tab: char = '\t'
+assert ord(ch_esc) == 92
+assert ord(ch_tab) == 9
