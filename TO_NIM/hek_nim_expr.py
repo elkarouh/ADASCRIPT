@@ -535,7 +535,7 @@ def _str_to_char_lit(s):
     return s
 
 def _is_nim_char_expr(expr):
-    """Is this emitted Nim expression a char rather than a string?
+    r"""Is this emitted Nim expression a char rather than a string?
 
     A char on one side of a comparison forces the other side to be one too,
     so this decides whether a one-character string literal is rewritten as
