@@ -887,3 +887,30 @@ def scan_chars(s: str) -> str:
                 i += 1
     return acc
 assert scan_chars("a(b)'x'") == ".[.]C"
+
+# An enum round-trips through its own name without hand-written lookup
+# ladders: str()/'Image serialize it, and the enum constructor reads it back.
+# On Nim that is parseEnum[T](s); Python's Enum call syntax looks up by value,
+# so the string form has to become T[s] there -- it used to pass straight
+# through and raise ValueError.
+type Kind_T is enum ALPHA, BETA, GAMMA
+
+let kk: Kind_T = BETA
+assert kk'Image == "BETA"
+assert str(kk) == "BETA"
+let kinds: []Kind_T = [ALPHA, GAMMA]
+assert str(kinds[1]) == "GAMMA"          # 'Image does not attach to a subscript
+assert Kind_T("GAMMA") == GAMMA          # string literal -> member by name
+let kname: str = "ALPHA"
+assert Kind_T(kname) == ALPHA            # str-typed variable -> member by name
+assert Kind_T(2) == GAMMA                # ordinal argument still reads the ordinal
+# The one argument may itself contain commas -- lv.ady writes
+# State(s.replace("-", "_")) -- so only top-level commas mean "not a
+# single-argument call".
+let dashed: str = "GAM-MA"
+assert Kind_T(dashed.replace("-", "")) == GAMMA
+
+var round: []str = []
+for k in Kind_T:
+    round.append(str(Kind_T(str(k))))
+assert ",".join(round) == "ALPHA,BETA,GAMMA"

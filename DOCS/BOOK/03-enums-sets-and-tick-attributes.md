@@ -46,8 +46,20 @@ def parse_state(s: str) -> State:
         ACTIVE
 ```
 
-(In Nim this becomes `parseEnum[State](...)`; note also the implicit return
-of the last expression in each branch — Chapter 8.)
+(In Nim this becomes `parseEnum[State](...)`, in Python a lookup by member
+name; note also the implicit return of the last expression in each branch —
+Chapter 8.) An *integer* argument is read as a position instead —
+`State(0)` is the first member, the same numbering on both backends — so the
+call covers both of the conversions an enum has.
+
+The other direction is `'Image`, or `str()` where the value is not a bare
+name (§3.5), and the two together are all an enum needs to survive a round
+trip through text:
+
+```python
+let blob: str = str(state)          # "ACTIVE"
+let back: State = State(blob)       # ACTIVE
+```
 
 ## 3.2 Enums as array indexes: `[E]T`
 

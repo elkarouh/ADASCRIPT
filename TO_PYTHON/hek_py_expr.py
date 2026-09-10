@@ -903,6 +903,84 @@ def _ada_enum_range(_lo, _hi, _inclusive=True):
 '''
 
 
+def _enum_ctor_call(name, call_trailer):
+    """`E(x)` on an enum type: the member named x, or the member at ordinal x.
+
+    Nim reads the two apart already -- a string argument becomes
+    parseEnum[E](s), an ordinal one stays E(i) -- and Python needs the same
+    split, because Enum's own call syntax looks up by *value*: members are
+    numbered from 0 here, so the ordinal form E(i) is already right, while
+    E("PKG") raises ValueError and has to be written E["PKG"].
+
+    Returns None when this is not an enum type or not a single-argument
+    call, leaving the trailer to be emitted as written.
+    """
+    from hek_parsec import ParserState
+    if not (call_trailer.startswith("(") and call_trailer.endswith(")")):
+        return None
+    info = getattr(ParserState, "tick_types", {}).get(name)
+    if not info or not info.get("members"):
+        return None
+    arg = call_trailer[1:-1].strip()
+    if not arg or not _is_single_arg(arg):
+        return None
+    if _is_ordinal_arg(arg):
+        return None                      # E(i) already reads the ordinal
+    return f"{name}[{arg}]"
+
+
+def _is_single_arg(arg):
+    """Whether an argument list holds exactly one argument.
+
+    A plain `"," in arg` test is wrong: the one argument may contain commas
+    of its own -- `State(s.replace("-", "_"))` -- so only commas at bracket
+    depth zero and outside a string separate arguments.
+    """
+    depth = 0
+    quote = ""
+    i = 0
+    while i < len(arg):
+        c = arg[i]
+        if quote:
+            if c == "\\":
+                i += 2
+                continue
+            if c == quote:
+                quote = ""
+        elif c in "\"'":
+            quote = c
+        elif c in "([{":
+            depth += 1
+        elif c in ")]}":
+            depth -= 1
+        elif c == "," and depth == 0:
+            return False
+        i += 1
+    return True
+
+
+def _is_ordinal_arg(arg):
+    """Whether an enum constructor's argument is an ordinal, not a member name.
+
+    The same test the Nim backend applies: a numeric literal, one of the
+    calls that yields an index, or a variable the symbol table types as an
+    integer. Anything else -- a string literal, a str-typed variable, an
+    expression -- is taken to be a member name.
+    """
+    import re as _re_enum
+    from hek_parsec import ParserState
+    if _re_enum.match(r"^\d+$", arg):
+        return True
+    if (arg.startswith(("len(", "ord(", "_ada_ord(", "maxIndex("))
+            or arg.endswith(".maxIndex")):
+        return True
+    sym = ParserState.symbol_table.lookup(arg)
+    if sym and sym.get("type") in ("int", "int64", "uint", "uint64",
+                                   "Natural", "Positive"):
+        return True
+    return False
+
+
 def _enum_member_owner(text):
     """The enum a member name belongs to, or None.
 
@@ -1086,6 +1164,12 @@ def to_py(self, prec=None):
                     continue
             if i == 0 and result == "ord":
                 helper = _ord_call(tr_str)
+                if helper is not None:
+                    result = helper
+                    i += 1
+                    continue
+            if i == 0:
+                helper = _enum_ctor_call(result, tr_str)
                 if helper is not None:
                     result = helper
                     i += 1
