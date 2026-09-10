@@ -31,6 +31,7 @@ from ady_stmt import *
 from hek_py_expr import _get_bracket_start
 import hek_py_declarations  # noqa: F401 — registers decl to_py() methods
 from hek_parsec import method, ParserState
+import re as _re_mod_p2s
 from hek_helpers import _ind
 
 # to_py() methods
@@ -77,6 +78,11 @@ def to_py(self):
         for seq in node.nodes:
             if hasattr(seq, "nodes") and len(seq.nodes) >= 2:
                 parts.append(seq.nodes[1].to_py())
+    # `p = s` where p was declared a Path: the same refusal as at declaration.
+    if len(parts) > 1:
+        _t = ParserState.symbol_table.lookup(parts[0])
+        if isinstance(_t, dict) and (_t.get("type") or "") == "Path":
+            _reject_str_to_path(parts[0], "Path", parts[-1])
     return " = ".join(parts)
 
 
@@ -113,6 +119,7 @@ def to_py(self):
         for seq in node.nodes:
             if hasattr(seq, "nodes") and len(seq.nodes) >= 2:
                 value = seq.nodes[1].to_py()
+                _reject_str_to_path(name, annotation, value)
                 value = _wrap_seq_for_enum_array(value, annotation)
                 value = _wrap_list_for_queue(value, annotation)
                 result += f" = {value}"
@@ -219,6 +226,42 @@ def _wrap_seq_for_enum_array(value, annotation):
     return f"_EnumArray(zip({domain}, {v}))"
 
 
+_re_p2s = _re_mod_p2s.compile(r'^[A-Za-z_]\w*$')
+
+
+def _reject_str_to_path(name, annotation, value):
+    """Refuse a plain str where a Path is declared, as the Nim backend does.
+
+    Path is a distinct string there, so neither a literal nor a str-typed
+    variable assigns to one -- `Path(s)` is how you make one (appendix A.1).
+    Here Path is a str subclass and both went through silently, so a program
+    written against this backend alone failed only once someone built it
+    with ady2nim. Same rule, same place, both backends now.
+
+    Deliberately narrow: a literal, or a name the symbol table types as str.
+    An arbitrary expression's type is not known here, and a false refusal is
+    worse than a missed one -- Nim still catches everything this does not.
+    """
+    from hek_parsec import ParserState
+    if annotation != 'Path':
+        return
+    v = (value or '').strip()
+    if not v:
+        return
+    lit = (v[:1] in (chr(34), chr(39))
+           or (v[:1] in 'fFrR' and v[1:2] in (chr(34), chr(39))))
+    if not lit:
+        if not _re_p2s.match(v):
+            return
+        sym = ParserState.symbol_table.lookup(v)
+        if not (isinstance(sym, dict) and (sym.get('type') or '') == 'str'):
+            return
+    raise ValueError(
+        f'cannot assign a str to {name}, which is a Path: write Path({v}). '
+        'Path is a distinct type on the Nim backend, so the conversion is '
+        'explicit on both.')
+
+
 def _zero_value(annotation):
     """The empty value for ANNOTATION, mirroring Nim's zero-initialisation.
 
@@ -238,7 +281,10 @@ def _zero_value(annotation):
     if ann in getattr(ParserState, "record_types", ()):
         return f"{ann}()"
     scalars = {"int": "0", "float": "0.0", "bool": "False", "str": '""',
-               "bytes": 'b""', "complex": "0j"}
+               "bytes": 'b""', "complex": "0j",
+               # Nim zeroes a distinct string to an empty one, so `var p: Path`
+               # compares equal to "" there while None here did not.
+               "Path": 'Path("")'}
     if ann in scalars:
         return scalars[ann]
     for prefix, empty in (("_EnumArray[", "_EnumArray()"),
@@ -275,6 +321,7 @@ def to_py(self):
         for seq in node.nodes:
             if hasattr(seq, "nodes") and len(seq.nodes) >= 2:
                 value = seq.nodes[1].to_py()
+                _reject_str_to_path(name, annotation, value)
                 value = _wrap_seq_for_enum_array(value, annotation)
                 value = _wrap_list_for_queue(value, annotation)
                 result += f" = {value}"

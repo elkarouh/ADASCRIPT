@@ -1080,3 +1080,19 @@ for line in open(tmp_lines).lines:
     edge.append("[" + line + "]")
 assert edge == ["[a]", "[]", "[b]"]
 os.remove(tmp_lines)
+
+# Path is a distinct type: a plain str does not become one by assignment.
+# Nim refuses a literal and a str-typed variable alike, and this backend --
+# where Path is a str subclass -- used to let both through, so a program
+# written here failed only once someone built it with ady2nim. `Path(s)` is
+# the conversion, per appendix A.1, and it is explicit on both backends.
+let pdir: Path = Path("/tmp")
+let pname: str = "leaf"
+assert pdir / pname == "/tmp/leaf"       # a Path expression needs no wrapper
+assert Path(pname) == "leaf"             # and this is how a str becomes one
+
+# A declared-but-unset Path is empty, not None: Nim zeroes a distinct string
+# to an empty one, and this backend answered None to the same question.
+var punset: Path
+assert punset == ""
+assert len(punset) == 0
