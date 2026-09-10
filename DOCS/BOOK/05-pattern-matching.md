@@ -52,9 +52,40 @@ case sev:              # a guard, so no proof is possible --
 
 `when others` may not itself carry a guard. `others` is everything that is
 left, so a condition on it is a contradiction: a guarded catch-all that fails
-leaves the block with nothing to do. Use `when _ if cond:` for a wildcard
-branch that may decline — it is an ordinary pattern, and it does not count as
-the catch-all.
+leaves the block with nothing to do.
+
+Nothing is lost by that, because a condition on the last branch can always be
+written inside it — and writing it there is the improvement, since the `else`
+becomes impossible to leave out:
+
+```python
+case sev:
+    when LOW:
+        note("low")
+    when others:                # everything left, unconditionally
+        if n > threshold:       # the condition moves inside, where the
+            escalate(sev)       # other outcome has to be written down
+        else:
+            note("ignored")
+```
+
+The other tool is `when _ if cond:`, and it is not the same thing. It is an
+ordinary pattern that *declines* when the condition is false, letting a later
+branch take the subject, and it does not count as the catch-all. It also
+matches whatever the value is, so its position decides what it shadows:
+
+```python
+case sev:
+    when _ if n > threshold:    # first, so it wins over `when LOW` too
+        escalate(sev)
+    when LOW:
+        note("low")
+    when others:                # still required: the wildcard may decline
+        note("ignored")
+```
+
+Use the first when the last branch has two outcomes; use the second when a
+condition should pre-empt the patterns below it.
 
 **None of this is enforced on the Python backend.** Exhaustiveness is a
 property of the Nim build, so a block `ady2py` accepts and runs can still be
