@@ -277,6 +277,16 @@ def get_next_state(self, current_state: State_T, decision: Decision_T) -> State_
 only — `self.num'Image` and `args[0]'Image` do not parse. Bind the value to
 a local first, or use `str()`.
 
+A name that is also one of Python's string prefixes — `b`, `r`, `u`, `f` and
+their pairs — is the one place the two languages' syntax collides: `b'Image`
+opens a bytes literal to Python and names an attribute of `b` to Ada.
+Python wins wherever it can, so the quote is read as a tick only when the
+literal it would open is never closed *and* a known attribute follows it.
+`b'Image` at the end of a line is the attribute; `r'First'` and
+`r'Image thing'` are the raw strings they look like; and `b'Image + c'Image`
+is genuinely ambiguous and reads as a literal, exactly as it would in
+Python. Rename the variable if you need that last one.
+
 ## 3.6 Why this matters: a checklist
 
 When you model a domain in Adascript, reach for an enum early, because one

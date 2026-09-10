@@ -914,3 +914,30 @@ var round: []str = []
 for k in Kind_T:
     round.append(str(Kind_T(str(k))))
 assert ",".join(round) == "ALPHA,BETA,GAMMA"
+
+# A tick on a name that is also a Python string prefix. `b'Image` is
+# ambiguous -- Python opens a bytes literal at `b'`, Ada reads an attribute
+# of b -- and the lexer's string branch, which runs first, used to swallow
+# the tick and leave a parse error. Python wins wherever it can: the quote
+# is a tick only when the literal it would open is never closed and a known
+# attribute name follows it.
+type Tick_T is enum ONE, TWO
+
+let b: Tick_T = TWO
+let r: Tick_T = ONE
+let u: Tick_T = TWO
+let f: Tick_T = ONE
+let rb: Tick_T = TWO
+assert b'Image == "TWO"                  # b, r, u, f, rb: all string prefixes
+assert r'Image == "ONE"
+assert u'Image == "TWO"
+assert f'Image == "ONE"
+assert rb'Image == "TWO"
+
+# and the literals those prefixes really do open still tokenize as literals
+assert r"raw\d+" == "raw\\d+"
+assert r'raw\w+' == "raw\\w+"
+assert r'First' == "First"               # an attribute name inside a literal
+assert r'Image thing' == "Image thing"   # ... and one that continues past it
+let who: str = "world"
+assert f'hello {who}' == "hello world"

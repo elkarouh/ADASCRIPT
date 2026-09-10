@@ -212,6 +212,16 @@ _TICK_CONTEXT = frozenset((
     tkn.RPAR, tkn.RSQB,       # (e)'C, arr[i]'F
 ))
 
+# The attribute names a tick may carry, both backends' lists plus the aliases
+# they accept ('Low/'High/'len). Only used to tell `b'Image` (an attribute of
+# b) from `b'...'` (a bytes literal) -- see _prefix_is_tick_name -- so an
+# attribute missing from here is still parsed everywhere it is unambiguous.
+_TICK_ATTRS = frozenset((
+    "First", "Low", "Last", "High", "Range", "Next", "Prev",
+    "choose", "Shuffle", "Image", "Length", "len", "Size",
+))
+_TICK_ATTR_RE = re.compile(r'[A-Za-z_]\w*')
+
 # ---------------------------------------------------------------------------
 # Core lexer: _lex(source) -> generator of TokenInfo
 #
@@ -360,6 +370,33 @@ def _split_fstring(s_str, start_lc, end_lc, line_txt):
                     yield tkn.TokenInfo(_FSTRING_MIDDLE, spec_text, start_lc, start_lc, line_txt)
             yield tkn.TokenInfo(_OP, '}', start_lc, start_lc, line_txt)
     yield end_tok
+
+
+def _prefix_is_tick_name(src, i, pfx_len, line_no, col, lines):
+    """Whether src[i:] is a name carrying a tick, not a prefixed string.
+
+    Python's string prefixes -- b, r, u, f and their pairs -- are ordinary
+    identifiers too, so `b'Image` is ambiguous: Python reads `b'` as the
+    opening of a bytes literal, Ada reads `'Image` as an attribute of b. The
+    string branch runs first and would swallow the tick, which is why this
+    exists.
+
+    Python wins wherever it can: the quote is a tick only when the literal it
+    would open is never closed, *and* a known attribute name follows it. So
+    `b'x'`, `r'First'` and `r'Image thing'` stay the literals they look like,
+    an unterminated `b'oops` still reports as the broken string it is, and
+    `b'Image` at the end of a line is the attribute. `b'Image + c'Image` is
+    genuinely ambiguous and reads as a literal, as it would in Python.
+    """
+    if pfx_len == 0 or src[i + pfx_len] != "'":
+        return False                      # a double quote is never a tick
+    m = _TICK_ATTR_RE.match(src, i + pfx_len + 1)
+    if not m or m.group(0) not in _TICK_ATTRS:
+        return False
+    s_str, _, _ = _read_string(src, i, line_no, col, lines)
+    if s_str is None:
+        return True                       # not a literal at all
+    return not (len(s_str) > pfx_len + 1 and s_str.endswith("'"))
 
 
 def _read_string(src, pos, line_no, col, lines):
@@ -918,7 +955,8 @@ def _lex_impl(source):
         # ---- string literal ----
         str_pfx_m = _STR_PREFIX_RE.match(src, i)
         pfx_len = len(str_pfx_m.group(0)) if str_pfx_m else 0
-        if pfx_len > 0 or c in ('"', "'"):
+        if (pfx_len > 0 or c in ('"', "'")) and not _prefix_is_tick_name(
+                src, i, pfx_len, start_lc[0], start_lc[1], lines):
             qi = i + pfx_len
             if qi < n and src[qi] in ('"', "'"):
                 s_str, new_i, _ = _read_string(src, i, start_lc[0], start_lc[1], lines)
