@@ -2465,15 +2465,28 @@ def _bind_user_result(body, ret_ann):
     if ret_ann.lstrip(": ").strip() in ("void", "None", "unit"):
         return body
     import re as _re_ur
+    _decl = _re_ur.compile(r'^(\s*)(?:var|let)\s+`result`\s*(?::([^=]+))?(?:=\s*(.*))?$')
+    # Only when the local's declared type IS the return type. A proc that
+    # builds a `seq[T]` named result and returns a T made from it -- lispy's
+    # list builders do exactly that -- means an ordinary local, and binding it
+    # to the implicit result made the two types collide. There the escaped
+    # name stays a local, which is what it is, and shadowing the implicit
+    # result is harmless: a proc whose result has a different type cannot have
+    # been relying on the implicit return of this variable.
+    _want = ret_ann.lstrip(": ").strip()
+    for line in body.split("\n"):
+        m = _decl.match(line)
+        if m and m.group(2) and m.group(2).strip() != _want:
+            return body
     out = []
     for line in body.split("\n"):
         # `var `result`: T = v` / `let `result` = v` -> `result = v`; a bare
         # declaration with no value is dropped, since Nim has already made it.
-        m = _re_ur.match(r'^(\s*)(?:var|let)\s+`result`\s*(?::[^=]+)?(?:=\s*(.*))?$', line)
+        m = _decl.match(line)
         if m:
-            if m.group(2) is None:
+            if m.group(3) is None:
                 continue
-            line = f"{m.group(1)}result = {m.group(2)}"
+            line = f"{m.group(1)}result = {m.group(3)}"
         out.append(line.replace("`result`", "result"))
     return "\n".join(out)
 
