@@ -226,9 +226,20 @@ test: compile
 	done
 
 	@echo "=== ADA_INDENT unit tests (transpile + compile + run) ==="
+	@# The output is checked, not just the exit status. A suite that never
+	@# runs exits 0 too: ada_indent.ady once lost its `__main__` guard, so
+	@# importing it ran main(), which read the empty stdin and quit(0) before
+	@# a single test started -- and this step said OK for all 52 of them.
 	@for f in $(ADA_INDENT_TESTS); do \
 	    printf '  %-42s' "$$f"; \
-	    $(ADY2NIM) $(AIDIR)/$$f -r >/dev/null 2>&1 && echo OK || { echo FAIL; exit 1; }; \
+	    out=$$($(ADY2NIM) $(AIDIR)/$$f -r 2>&1); rc=$$?; \
+	    if [ $$rc -eq 0 ] \
+	       && printf '%s' "$$out" | grep -q 'passed' \
+	       && ! printf '%s' "$$out" | grep -qE '[1-9][0-9]* failed'; then \
+	        echo OK; \
+	    else \
+	        echo FAIL; printf '%s\n' "$$out" | tail -20; exit 1; \
+	    fi; \
 	done
 
 	@# test_env_default.ady and test_env_optional.ady pass standalone, but
