@@ -6,71 +6,86 @@ size from perf replay logs.
 Usage:
     Vcheck_coded_flight <baseline1> [baseline2]
 
+A path to an existing log file is taken as-is, which is what the bundled
+vcheck_sample.log is for; anything else is a baseline label looked up under
+the test-report directory.
+
 E.g.:
     Vcheck_coded_flight 30.0.0.6 VVL.TACT_PHASERND2
 """
-import re
-import os
-
 nimport awk
+
 
 type State_T is enum OUT_OF_HIST, IN_HIST
 
+
+type Histogram_T is record:
+    """One `LENGTH histogram of CODED_FLIGHT` block, folded as its lines arrive.
+
+    Buckets are cumulative upper bounds in ascending order, so a bucket's own
+    span is `prev .. bucket` and its entries are counted at the midpoint.
+    """
+    total     : Natural = 0      # entries seen
+    weighted  : float   = 0.0    # sum of midpoint * count
+    prev      : Natural = 0      # previous bucket bound
+    max_bucket: Natural = 0      # largest bound with entries in it
+
+
 class HistogramExtractor(AwkBase):
-    var total     : Natural = 0
-    var weighted  : float   = 0.0
-    var prev      : Natural = 0
-    var max_bucket: Natural = 0
-    var state     : State_T = OUT_OF_HIST
+    var hist : Histogram_T = Histogram_T()
+    var state: State_T     = OUT_OF_HIST
+
+    def _fold(self, bucket: Natural, count: Natural) -> None:
+        """Fold one `< N bytes: count` line into the running histogram."""
+        let mid: float = float(self.hist.prev + bucket) / 2.0
+        self.hist.weighted += mid * float(count)
+        self.hist.total    += count
+        if count > 0:                       # buckets are ascending
+            self.hist.max_bucket = bucket
+        self.hist.prev = bucket
+
+    def _report(self) -> None:
+        """Print the summary, if the histogram held anything at all."""
+        if self.hist.total > 0:
+            let mb: str     = str(self.hist.max_bucket).ljust(7)
+            let av: Natural = int(self.hist.weighted / float(self.hist.total) + 0.5)
+            print f"  max_bucket={mb}  avg={av}  (n={self.hist.total})"
 
     def process_record(self):
-        let line: str   = self.line
-        let F:    []str = self.Fields
-        case self.state:
-            when IN_HIST:
-                if re.search(r"^< [0-9]+ +bytes:", line):
-                    let bucket: Natural = int(F[2])
-                    let count:  Natural = int(F[self.NF])
-                    let mid:    float = float(self.prev + bucket) / 2.0
-                    self.weighted   += mid * float(count)
-                    self.total      += count
-                    if count > 0: # buckets are ascending
-                        self.max_bucket = bucket
-                    self.prev = bucket
-                else:
-                    if self.total > 0:
-                        let mb: str = str(self.max_bucket).ljust(7)
-                        let av: Natural = int(self.weighted / float(self.total) + 0.5)
-                        print f"  max_bucket={mb}  avg={av}  (n={self.total})"
-                    self.state=OUT_OF_HIST
-                    self.prev    = 0
-            when OUT_OF_HIST:
-                if re.search(r"LENGTH histogram of CODED_FLIGHT:", line):
-                    self.total      = 0
-                    self.weighted   = 0.0
-                    self.prev       = 0
-                    self.max_bucket = 0
-                    self.state=IN_HIST
-
+        let F: []str = self.Fields
+        # Order carries the state machine: inside a histogram a bucket line
+        # extends it and anything else ends it, and only outside one does a
+        # header start the next.
+        match self.line:
+            case /^< [0-9]+ +bytes:/ if self.state == IN_HIST:
+                self._fold(int(F[2]), int(F[self.NF]))
+            case _ if self.state == IN_HIST:
+                self._report()
+                self.state     = OUT_OF_HIST
+                self.hist.prev = 0
+            case /LENGTH histogram of CODED_FLIGHT:/:
+                self.hist  = Histogram_T()
+                self.state = IN_HIST
+            case _:
+                pass
 
     def finish(self):
-        if self.state == IN_HIST and self.total > 0:
-            let mb: str = str(self.max_bucket).ljust(7)
-            let av: Natural = int(self.weighted / float(self.total) + 0.5)
-            print f"  max_bucket={mb}  avg={av}  (n={self.total})"
+        if self.state == IN_HIST:
+            self._report()
 
 
 def resolve_log(label: str) -> str:
-    let cm_env_id: str = os.environ.get("CM_ENV_ID", "")
+    """The log a label stands for: newest run for a baseline, oldest for a version."""
+    if -f label:                            # already a path to a log file
+        return label
+    let cm_env_id: str = $?CM_ENV_ID or ""
     let op_id:     str = cm_env_id.replace("IP", "OP")
     let pattern:   str = f"/cm/ot/TACT/test_reports/Treplay_{op_id}_{label}_*performance*log"
     var logs = shellLines: ls -tr {pattern} 2>/dev/null
     logs = [x for x in logs if x != ""]
     if len(logs) == 0:
         return ""
-    if re.search(r"^[A-Z]", label):
-        return logs[-1]
-    return logs[0]
+    return logs[-1] if label == /^[A-Z]/ else logs[0]
 
 
 def extract_histogram(log: str):
@@ -78,28 +93,25 @@ def extract_histogram(log: str):
     p.run_file(log)
 
 
+def report_for(label: str) -> None:
+    """Resolve a label to its log and print every histogram in it."""
+    let log: str = resolve_log(label)
+    if log == "":
+        print f"No log found for: {label}"
+        quit(1)
+    print f"=== {log} ==="
+    extract_histogram(log)
+
+
 def main():
     if $# < 1:
         print "Usage: Vcheck_coded_flight <baseline1> [baseline2]"
         quit(1)
 
-    let baseline1: str = $1
-    let log1: str = resolve_log(baseline1)
-    if log1 == "":
-        print f"No log found for: {baseline1}"
-        quit(1)
-    print f"=== {log1} ==="
-    extract_histogram(log1)
-
+    report_for($1)
     if $# >= 2:
-        let baseline2: str = $2
-        let log2: str = resolve_log(baseline2)
-        if log2 == "":
-            print f"No log found for: {baseline2}"
-            quit(1)
         print ""
-        print f"=== {log2} ==="
-        extract_histogram(log2)
+        report_for($2)
 
 
 main()

@@ -100,7 +100,8 @@ TIMETABLE_EXAMPLES := \
 # CFMU — the build-status monitor, fed its own sample of tacot_corico output
 # -----------------------------------------------------------------------
 CFMU_EXAMPLES := \
-    CFMU/Tstatus_monitor.ady
+    CFMU/Tstatus_monitor.ady \
+    CFMU/Vcheck_coded_flight.ady
 
 # -----------------------------------------------------------------------
 # ADA_INDENT unit tests — self-checking runners in ADA_INDENT/ (assert +
@@ -177,13 +178,15 @@ test: compile
 	        && echo OK || { echo FAIL; exit 1; }; \
 	done
 
-	@echo "=== CFMU examples (piped from their own sample) ==="
-	@for f in $(CFMU_EXAMPLES); do \
-	    name=$${f%.ady}; \
-	    printf '  %-42s' "$$f"; \
-	    $(EXDIR)/$$name < $(EXDIR)/CFMU/tstatus_sample.txt >/dev/null 2>&1 \
-	        && echo OK || { echo FAIL; exit 1; }; \
-	done
+	@echo "=== CFMU examples (fed their own samples) ==="
+	@printf '  %-42s' "CFMU/Tstatus_monitor.ady"; \
+	    $(EXDIR)/CFMU/Tstatus_monitor < $(EXDIR)/CFMU/tstatus_sample.txt >/dev/null 2>&1 \
+	        && echo OK || { echo FAIL; exit 1; }
+	@# Vcheck takes a log file rather than stdin; a path that exists is used
+	@# as-is, which is what makes it runnable here.
+	@printf '  %-42s' "CFMU/Vcheck_coded_flight.ady"; \
+	    $(EXDIR)/CFMU/Vcheck_coded_flight $(EXDIR)/CFMU/vcheck_sample.log >/dev/null 2>&1 \
+	        && echo OK || { echo FAIL; exit 1; }
 
 	@echo "=== Arg examples ==="
 	@printf '  %-42s' "phonecode.ady (test_words.txt test_phones.txt)"; \
