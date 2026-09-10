@@ -2617,13 +2617,17 @@ def _translate_stdlib_patterns(expr):
     # argument list passes through exactly as written.
     # have(x) -- is this a program on PATH?  findExe answers from PATH
     # itself, so it costs neither a process nor a shell.
+    # A module that defines one of these names for itself means its own proc;
+    # the builtin rewrite would silently call something else entirely.
+    _own = getattr(ParserState, "user_top_level_procs", ())
     have_m = _re.match(r"^have\((.+)\)$", expr, _re.DOTALL)
-    if have_m and have_m.group(1).count("(") == have_m.group(1).count(")"):
+    if (have_m and "have" not in _own
+            and have_m.group(1).count("(") == have_m.group(1).count(")")):
         ParserState.nim_imports.add("os")
         return f"(findExe({have_m.group(1)}).len > 0)"
 
     run_m = _re.match(r"^(run|runLines)\(", expr)
-    if run_m:
+    if run_m and run_m.group(1) not in _own:
         # Find this call's own closing paren rather than anchoring at the end
         # of the string: `run(argv).code` has a tail, and `run(f(x))` has
         # nested parens, so neither a greedy nor a lazy match gets it right.

@@ -351,6 +351,15 @@ def translate(code, export_symbols=False):
     # classes are also emitted as ref object.
     ParserState._ref_classes.update(_nimport_ref_classes)
 
+    # The names this module defines at top level. A builtin call rewrite must
+    # not capture a call to one of them: lispy.ady defines its own `run`, and
+    # every call to it was emitted as the shell helper adascriptRunArgv.
+    # Module level only -- a method is called through its receiver and never
+    # matches a bare-name rewrite.
+    import re as _re_udef
+    ParserState.user_top_level_procs = set(
+        _re_udef.findall(r'^def\s+([A-Za-z_]\w*)\s*[\(\[]', code, _re_udef.M))
+
     ParserState.symbol_table.push_scope("module")
     output = []
 

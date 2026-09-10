@@ -285,6 +285,14 @@ def translate(code):
     # function is emitted, since a function may assign one declared below it.
     register_module_globals(stmts)
 
+    # The names this module defines at top level, for the same reason: a
+    # builtin call rewrite must not capture a call to one of them. Known
+    # before the first function is emitted, since a call can precede the def.
+    from hek_parsec import ParserState as _PS_udef
+    import re as _re_udef
+    _PS_udef.user_top_level_procs = set(
+        _re_udef.findall(r'^def\s+([A-Za-z_]\w*)\s*[\(\[]', code, _re_udef.M))
+
     output = []
 
     def emit_richnl(richnl):

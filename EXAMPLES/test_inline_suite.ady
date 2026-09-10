@@ -1019,3 +1019,17 @@ assert char_code('\n') == 10
 assert char_code('"') == 34
 assert is_open_paren('(')
 assert not is_open_paren(')')
+
+# A module-level def wins over a builtin of the same name. `run` and
+# `runLines` are the shell builtins, and a call to a user function named run
+# was emitted as the shell helper adascriptRunArgv -- lispy.ady defines its
+# own run, and had not built on the Nim backend for as long as it was in the
+# tree because of it.
+def run(x: str) -> str:
+    "ran:" + x
+
+def have(x: str) -> str:
+    "had:" + x
+
+assert run("cmd") == "ran:cmd"
+assert have("prog") == "had:prog"

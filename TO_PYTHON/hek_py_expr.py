@@ -1150,13 +1150,16 @@ def to_py(self, prec=None):
                     result = helper
                     i += 1
                     continue
-            if i == 0 and result in ("run", "runLines"):
+            # A module that defines one of these names for itself means its
+            # own function; the builtin rewrite would call something else.
+            _own = getattr(ParserState, "user_top_level_procs", ())
+            if i == 0 and result in ("run", "runLines") and result not in _own:
                 helper = _run_argv_call(result, tr_str)
                 if helper is not None:
                     result = helper
                     i += 1
                     continue
-            if i == 0 and result == "have":
+            if i == 0 and result == "have" and "have" not in _own:
                 helper = _have_call(tr_str)
                 if helper is not None:
                     result = helper
