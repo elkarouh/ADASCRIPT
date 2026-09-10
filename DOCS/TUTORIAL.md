@@ -799,7 +799,8 @@ Adascript supports two pattern-matching syntaxes:
 
 Both syntaxes produce identical Python output (`match/case`). The Nim output
 differs only when patterns require desugaring (structural, guards, tuple
-subjects). For a full reference see `PATTERN_MATCHING.md`.
+subjects). For a full reference see
+[The Adascript Book, Chapter 5](BOOK/05-pattern-matching.md).
 
 **Literal and range patterns:**
 

@@ -578,3 +578,172 @@ assert head_of([1.5, 2.5]) == 1.5
 # the emitter drops it there.
 assert first_of[int]([7, 8]) == 7
 assert head_of[str](["a"]) == "a"
+
+# --- patterns and optionals, the cases the book documents ----------------
+
+# Range patterns: `when lo .. hi:` is one RANGE token, not two dots, and the
+# grammar asked for two -- so every range pattern was a parse error. Nim gets
+# `of 0 .. 12:`; Python has no range pattern, so the block lowers to a chain.
+def tier_of(age: int) -> str:
+    case age:
+        when 0 .. 12:
+            return "child"
+        when 13 .. 17:
+            return "teen"
+        when others:
+            return "adult"
+assert tier_of(9) == "child"
+assert tier_of(15) == "teen"
+assert tier_of(40) == "adult"
+
+# The same in match/case, and over characters.
+def grade_of(score: int) -> str:
+    match score:
+        case 90 .. 100:
+            return "A"
+        case 80 .. 89:
+            return "B"
+        case _:
+            return "C"
+assert grade_of(95) == "A" and grade_of(85) == "B" and grade_of(20) == "C"
+
+def char_kind(ch: char) -> str:
+    case ch:
+        when 'a' .. 'z':
+            return "lower"
+        when '0' .. '9':
+            return "digit"
+        when others:
+            return "other"
+let sample: str = "q7!"
+assert char_kind(sample[0]) == "lower"
+assert char_kind(sample[1]) == "digit"
+assert char_kind(sample[2]) == "other"
+
+# A guard reads the captures of its own pattern, but those are `let`s inside
+# the branch body -- so the Nim condition named identifiers that did not
+# exist yet. The captures are substituted into the condition instead.
+def pair_order(items: []int) -> str:
+    match items:
+        case [a, b] if a > b:
+            return "descending"
+        case [a, b] if a == b:
+            return "equal"
+        case [a, b]:
+            return "ascending"
+        case _:
+            return "not a pair"
+assert pair_order([2, 1]) == "descending"
+assert pair_order([1, 1]) == "equal"
+assert pair_order([1, 2]) == "ascending"
+assert pair_order([1]) == "not a pair"
+
+def sign_of(n: int) -> str:
+    match n:
+        case v if v < 0:
+            return "negative"
+        case 0:
+            return "zero"
+        case _:
+            return "positive"
+assert sign_of(-2) == "negative" and sign_of(0) == "zero" and sign_of(5) == "positive"
+
+# None/True/False as patterns: the keyword literals had no rendering of their
+# own, so `when None:` came out as an empty pattern. On an optional subject it
+# is a presence test.
+def presence(v: ?int) -> str:
+    case v:
+        when None:
+            return "nothing"
+        when others:
+            return "something"
+assert presence(None) == "nothing"
+assert presence(3) == "something"
+
+def flag_name(b: bool) -> str:
+    case b:
+        when True:
+            return "on"
+        when False:
+            return "off"
+assert flag_name(True) == "on" and flag_name(False) == "off"
+
+# Optionals: a walrus in `if` tests presence (it used to ask an Option for
+# .isNil), a guard that returns unwraps the name for the rest of the block,
+# and an already-optional argument is not wrapped a second time.
+def digits_to_int(s: str) -> ?int:
+    if len(s) == 0:
+        return None
+    for c in s:
+        if not (c >= '0' and c <= '9'):
+            return None
+    return int(s)
+
+def fmap_int(m: ?int, f: [(int,)]int) -> ?int:
+    if m is not None:
+        return f(m)
+    return None
+
+def bump_one(raw: str) -> ?int:
+    let v: ?int = digits_to_int(raw)
+    if v is None:
+        return None
+    return v + 1              # v is a plain int from here on
+
+var walrus_hit: int = 0
+if w := digits_to_int("42"):
+    walrus_hit = w
+assert walrus_hit == 42
+
+let doubled: ?int = fmap_int(digits_to_int("21"), lambda v: v * 2)
+assert doubled is not None
+let bumped: ?int = bump_one("41")
+assert bumped is not None
+if doubled is not None and bumped is not None:
+    assert doubled == 42
+    assert bumped == 42
+assert bump_one("x") is None
+
+# Traverse: all-or-nothing over a list of fallible parses.
+def traverse_ints(tokens: []str) -> ?[]int:
+    var acc: []int = []
+    for tok in tokens:
+        let v: ?int = digits_to_int(tok)
+        if v is None:
+            return None
+        acc.append(v)
+    return acc
+let all_good: ?[]int = traverse_ints(["1", "42", "7"])
+let one_bad:  ?[]int = traverse_ints(["1", "??", "7"])
+assert all_good is not None
+assert one_bad is None
+
+# A discriminated record is an object, and construction has to know it:
+# `Res_T(tag=OK, value=3)` was emitted as a call with keyword arguments.
+type ResultTag_T is enum RTOk, RTErr
+
+type Res_T (tag: ResultTag_T) is record:
+    case tag is
+        when RTOk:
+            value: int
+        when RTErr:
+            message: str
+
+def res_ok(value: int) -> Res_T:
+    return Res_T(tag=RTOk, value=value)
+
+def res_err(msg: str) -> Res_T:
+    return Res_T(tag=RTErr, message=msg)
+
+def parse_positive(s: str) -> Res_T:
+    let n: ?int = digits_to_int(s)
+    if n is None:
+        return res_err("not an integer")
+    return res_ok(n)
+
+let good_res: Res_T = parse_positive("12")
+let bad_res:  Res_T = parse_positive("oops")
+assert good_res.tag == RTOk
+assert good_res.value == 12
+assert bad_res.tag == RTErr
+assert bad_res.message == "not an integer"

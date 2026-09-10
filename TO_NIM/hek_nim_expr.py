@@ -393,7 +393,7 @@ def _nim_truthiness(expr):
         # v is a ?str. The two patterns above both require a '(', so only the
         # call form was ever converted -- a bare name came through unchanged
         # and nim rejected it with "got 'Option[system.string]' ... expected
-        # 'bool'", though OPTIONAL_TYPES.md documents both spellings.
+        # 'bool'", though book chapter 10 documents both spellings.
         if (_nim_expr_type(expr) or "").startswith("Option["):
             ParserState.nim_imports.add("options")
             return f"{expr}.isSome"
@@ -3040,6 +3040,16 @@ def _expr_is_option(expr_str):
     sym = ParserState.symbol_table.lookup(expr_str)
     if sym and "Option[" in (sym.get("type") or ""):
         return True
+    # A call to a proc declared `-> ?T` already yields an Option, so passing
+    # it straight to a `?T` parameter must not wrap it a second time --
+    # some(f(x)) on an optional f is Option[Option[T]], which Nim rejects.
+    if expr_str.rstrip().endswith(")"):
+        _mc = (_re.match(r'^([A-Za-z_]\w*)\(', expr_str)
+               or _re.match(r'^.+\.([A-Za-z_]\w*)\(', expr_str))
+        if _mc:
+            _rt = getattr(ParserState, "proc_return_types", {}).get(_mc.group(1), "")
+            if _rt.startswith("Option["):
+                return True
     # Attribute access: obj.field
     m = _re.match(r"(\w+)\.(\w+)$", expr_str)
     if m:

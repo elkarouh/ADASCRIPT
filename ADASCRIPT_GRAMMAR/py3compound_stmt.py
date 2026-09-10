@@ -230,12 +230,21 @@ with_stmt = ikw("with") + with_item + (COMMA + with_item)[:] + COLON + block
 
 # --- match / case patterns ---
 # base_pattern: everything except or-pattern (to avoid left recursion)
-pattern_literal = NUMBER | STRING | literal("None") | literal("True") | literal("False")
+# The keyword literals are named parsers, not anonymous literal() calls, so
+# the backends can give them a to_py/to_nim: an unnamed one has no method
+# to render with and `when None:` came out as an empty pattern.
+pattern_none  = literal("None")
+pattern_true  = literal("True")
+pattern_false = literal("False")
+pattern_literal = NUMBER | STRING | pattern_none | pattern_true | pattern_false
 pattern_regex   = REGEX_LIT
 pattern_capture = IDENTIFIER
 pattern_wildcard = literal("_")
 pattern_others = literal("others")
-pattern_range = (NUMBER | IDENTIFIER) + V_DOT + V_DOT + (NUMBER | IDENTIFIER)
+# The tokenizer emits '..' as one RANGE_OP token, not two dots, so a pattern
+# range has to ask for that token: spelling it V_DOT + V_DOT never matched
+# and every `when 4 .. 10:` was a parse error.
+pattern_range = (NUMBER | STRING | IDENTIFIER) + RANGE_OP + (NUMBER | STRING | IDENTIFIER)
 pattern_tuple = LPAREN + pattern + (COMMA + pattern)[1:] + RPAREN
 pattern_group = LPAREN + pattern + RPAREN
 pattern_star = vop("*") + (pattern_capture | pattern_wildcard)

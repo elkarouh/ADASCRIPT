@@ -122,7 +122,7 @@ def _py_presence_cond(cond):
     """`if v:` where v is a ?T asks whether it is present, not whether the
     value it holds is truthy.
 
-    OPTIONAL_TYPES.md §9 spells this out, and the Nim backend emits
+    Book chapter 10.4 spells this out, and the Nim backend emits
     `v.isSome`. Plain Python truthiness agrees for every value except the
     falsy ones: a `?str` holding "" is *present*, so the guard should run,
     and `if v:` would skip it. py_expr_is_optional says which expressions
@@ -518,6 +518,24 @@ def to_py(self):
     )
 
 
+@method(pattern_none)
+def to_py(self, prec=None):
+    """`when None:` -> Python's None literal pattern."""
+    return "None"
+
+
+@method(pattern_true)
+def to_py(self, prec=None):
+    """`when True:` -> Python's True literal pattern."""
+    return "True"
+
+
+@method(pattern_false)
+def to_py(self, prec=None):
+    """`when False:` -> Python's False literal pattern."""
+    return "False"
+
+
 @method(pattern_capture)
 def to_py(self, prec=None):
     """pattern_capture: IDENTIFIER
@@ -768,10 +786,15 @@ def _block_node_of_py(when_node):
 
 
 def _extract_branches_py(case_node):
-    """Yield (pat_node, block_node, guard_node_or_None) for each branch in a case_stmt."""
+    """Yield (pat_node, block_node, guard_node_or_None) for each branch.
+
+    Both statement forms are branch-per-pattern with the same shape, so the
+    match/case spelling (`case_clause`) is walked exactly like the case/when
+    one (`when_clause`) -- the range desugar below serves both.
+    """
     for node in case_node.nodes[1:]:
         tname = type(node).__name__
-        if tname == "when_clause":
+        if tname in ("when_clause", "case_clause"):
             pat = node.nodes[0]
             blk = _block_node_of_py(node)
             guard = None
@@ -786,7 +809,7 @@ def _extract_branches_py(case_node):
         elif tname == "Several_Times":
             for seq in node.nodes:
                 stname = type(seq).__name__
-                if stname == "when_clause":
+                if stname in ("when_clause", "case_clause"):
                     pat = seq.nodes[0]
                     blk = _block_node_of_py(seq)
                     guard = None
@@ -819,6 +842,21 @@ def _extract_branches_py(case_node):
                         yield pat_node, blk_node, guard_node
 
 
+def _pat_range_info_py(pat_node):
+    """Return (lo, hi) if pat_node is a range pattern (`4 .. 10`), else None.
+
+    Python's match has no range pattern, so a case carrying one cannot stay a
+    match statement -- the whole block is desugared to an if/elif chain that
+    compares against the subject instead.
+    """
+    if type(pat_node).__name__ != "pattern_range":
+        return None
+    bounds = [n for n in pat_node.nodes if hasattr(n, "to_py")]
+    if len(bounds) < 2:
+        return None
+    return bounds[0].to_py(), bounds[-1].to_py()
+
+
 def _pat_regex_info_py(pat_node):
     """Return (pattern, flags) if pat_node is a regex literal, else None."""
     val = getattr(pat_node, 'node', None)
@@ -829,47 +867,68 @@ def _pat_regex_info_py(pat_node):
     return None
 
 
+def _needs_chain_py(case_node):
+    """True when a branch pattern has no Python match spelling (regex, range)."""
+    return any(_pat_regex_info_py(p) is not None or _pat_range_info_py(p) is not None
+               for p, _, _ in _extract_branches_py(case_node))
+
+
+def _pattern_chain_to_py(case_node, subject, indent):
+    """Render a case/when or match/case block as an if/elif/else chain.
+
+    Regex and range patterns have no Python match syntax, so the whole block
+    is lowered to conditions over the subject -- the same shape Nim gets for
+    these patterns.
+    """
+    self = case_node
+    from hek_py3_expr import _ensure_pymatch_helper, _py_re_flags
+    if any(_pat_regex_info_py(p) is not None for p, _, _ in _extract_branches_py(self)):
+        _ensure_pymatch_helper()
+    result = ""
+    keyword = "if"
+    for pat_node, block_node, guard_node in _extract_branches_py(self):
+        hc = _block_inline_header_comment(block_node) if block_node else ""
+        body = _suite_to_py(block_node, indent + 1) if block_node else ""
+        pat_py = pat_node.to_py() if hasattr(pat_node, "to_py") else str(pat_node)
+        if pat_py in ("others", "_"):
+            result += f"\n{_ind(indent)}else:{hc}\n{body}"
+            continue
+        ginfo = _pat_range_info_py(pat_node)
+        rinfo = _pat_regex_info_py(pat_node)
+        if ginfo is not None:
+            lo, hi = ginfo
+            cond = f"{lo} <= {subject} <= {hi}"
+        elif rinfo is not None:
+            pat, flags = rinfo
+            has_g = 'g' in flags
+            flags_val = _py_re_flags(flags)
+            safe_pat = pat.replace("'", "\\'")
+            if has_g:
+                if flags_val != "0":
+                    cond = f"_pyfindall({subject}, r'{safe_pat}', {flags_val})"
+                else:
+                    cond = f"_pyfindall({subject}, r'{safe_pat}')"
+            else:
+                if flags_val != "0":
+                    cond = f"_pymatch({subject}, r'{safe_pat}', {flags_val})"
+                else:
+                    cond = f"_pymatch({subject}, r'{safe_pat}')"
+        else:
+            cond = f"{subject} == {pat_py}"
+        if guard_node is not None:
+            cond = f"{cond} and {guard_node.nodes[0].to_py()}"
+        result += f"\n{_ind(indent)}{keyword} {cond}:{hc}\n{body}"
+        keyword = "elif"
+    return result.lstrip("\n")
+
+
 @method(case_stmt)
 def to_py(self, indent=0):
     """case_stmt: 'case' expression ':' when_clause+ — Adascript case/when"""
     subject = self.nodes[0].to_py()
 
-    # If any branch uses a regex pattern, desugar to if/elif/else
-    if any(_pat_regex_info_py(p) is not None for p, _, _ in _extract_branches_py(self)):
-        from hek_py3_expr import _ensure_pymatch_helper, _py_re_flags
-        _ensure_pymatch_helper()
-        result = ""
-        keyword = "if"
-        for pat_node, block_node, guard_node in _extract_branches_py(self):
-            hc = _block_inline_header_comment(block_node) if block_node else ""
-            body = _suite_to_py(block_node, indent + 1) if block_node else ""
-            pat_py = pat_node.to_py() if hasattr(pat_node, "to_py") else str(pat_node)
-            if pat_py in ("others", "_"):
-                result += f"\n{_ind(indent)}else:{hc}\n{body}"
-                continue
-            rinfo = _pat_regex_info_py(pat_node)
-            if rinfo is not None:
-                pat, flags = rinfo
-                has_g = 'g' in flags
-                flags_val = _py_re_flags(flags)
-                safe_pat = pat.replace("'", "\\'")
-                if has_g:
-                    if flags_val != "0":
-                        cond = f"_pyfindall({subject}, r'{safe_pat}', {flags_val})"
-                    else:
-                        cond = f"_pyfindall({subject}, r'{safe_pat}')"
-                else:
-                    if flags_val != "0":
-                        cond = f"_pymatch({subject}, r'{safe_pat}', {flags_val})"
-                    else:
-                        cond = f"_pymatch({subject}, r'{safe_pat}')"
-            else:
-                cond = f"{subject} == {pat_py}"
-            if guard_node is not None:
-                cond = f"{cond} and {guard_node.nodes[0].to_py()}"
-            result += f"\n{_ind(indent)}{keyword} {cond}:{hc}\n{body}"
-            keyword = "elif"
-        return result.lstrip("\n")
+    if _needs_chain_py(self):
+        return _pattern_chain_to_py(self, subject, indent)
 
     result = f"{_ind(indent)}match {subject}:"
     for node in self.nodes[1:]:
@@ -960,6 +1019,8 @@ def to_py(self, indent=0):
 def to_py(self, indent=0):
     """match_stmt: 'match' expression ':' NEWLINE INDENT case_clause+ DEDENT"""
     subject = self.nodes[0].to_py()
+    if _needs_chain_py(self):
+        return _pattern_chain_to_py(self, subject, indent)
     result = f"{_ind(indent)}match {subject}:"
     for node in self.nodes[1:]:
         tname = type(node).__name__
@@ -1003,7 +1064,7 @@ def to_py(self):
                     default = f"={val_node.to_py()}"
     # A parameter is a typed name like any other, and until now only
     # let/var/const declarations were recorded. That left `?T` parameters --
-    # the case OPTIONAL_TYPES.md §2 is entirely about -- invisible to
+    # the case book chapter 10.2 is entirely about -- invisible to
     # everything that asks the symbol table what a name is, so `port or 5432`
     # inside the body could not tell an optional from an ordinary value.
     if annotation:

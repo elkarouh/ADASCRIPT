@@ -622,12 +622,15 @@ for s in Stage_T'First .. Stage_T'Last:
 
 Pattern matching with Ada/Nim-inspired syntax. All standard pattern kinds
 are supported: literals, captures, wildcards, OR-patterns, ranges,
-sequences, mappings, class patterns, and `as` bindings.
+sequences, class patterns, `as` bindings and guards. (Mapping patterns are
+not — see [Known Limitations](#known-limitations).)
 
 Python 3.10+ `match` / `case` is accepted as well, so Adascript stays a
-superset; use it when a branch needs an `if` guard, which `case` / `when`
-does not provide. See [DOCS/TUTORIAL.md](DOCS/TUTORIAL.md#11-control-flow) and
-[DOCS/PATTERN_MATCHING.md](DOCS/PATTERN_MATCHING.md) for the two side by side.
+superset; both spellings take the same patterns, including `if` guards
+(`when pat if cond:` and `case pat if cond:`), and produce the same code.
+See [DOCS/TUTORIAL.md](DOCS/TUTORIAL.md#11-control-flow) and
+[The Adascript Book, Chapter 5](DOCS/BOOK/05-pattern-matching.md) — the
+complete pattern reference, with both syntaxes side by side.
 
 ```python
 case value:
@@ -2361,6 +2364,15 @@ records whose fields have no default — are fixed. The round-trip suite in
 as the less exercised of the two and check it on anything unusual. Sweeping
 every example through `py2py` and parsing the result is a cheap way to catch
 a regression the Nim-only test suite cannot see.
+
+**Pattern forms with no Nim path** — four Python pattern spellings are
+deliberately absent, each with a one-line rewrite (worked through in
+[Chapter 5](DOCS/BOOK/05-pattern-matching.md#512-what-is-not-supported)):
+mapping patterns (`case {"host": h}:` — test membership and read instead),
+positional class patterns (`case Point_T(0, y):` — name the fields),
+structural patterns inside an alternation (`case Point_T(x=0) | Circle_T(radius=0):`
+— split the branches), and `as` over an alternation (`case 400 | 401 as code:`
+— bind in the body).
 
 **Multi-module programs are Nim-only** — `nimport` is the module mechanism,
 and py2nim is the only side of the toolchain that resolves a dependency

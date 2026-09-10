@@ -323,6 +323,40 @@ def to_nim(self, indent=0, is_virtual=False, class_name=None, parent_name=None, 
     fields = []
     methods = []
 
+    # A guard that leaves the block -- `if v is None: return None` -- proves the
+    # optional is present in everything that follows it, which is the whole
+    # point of the flat bind-chain style.  Nim has no flow typing, so the
+    # names it establishes are collected here and auto-unwrapped for the rest
+    # of this block, exactly as `if v is not None:` does for its body.
+    _guard_unwrapped = []
+
+    def _note_option_guard(chunk):
+        chunk_lines = [l for l in chunk.split("\n") if l.strip()]
+        if len(chunk_lines) < 2:
+            return
+        m = re.match(r'^(\s*)if\s+([A-Za-z_]\w*)\.isNone:\s*(?:#.*)?$', chunk_lines[0])
+        if not m:
+            return
+        head_indent, name = m.group(1), m.group(2)
+        rest = chunk_lines[1:]
+        # An elif/else at the guard's own indent means it is a branch, not a
+        # guard: the code after it is reached with the optional still unknown.
+        for l in rest:
+            if len(l) - len(l.lstrip()) <= len(head_indent):
+                return
+        last = rest[-1].lstrip().split("(")[0].split()
+        if not last or last[0] not in ("return", "break", "continue", "raise", "quit"):
+            return
+        if not hasattr(ParserState, '_option_unwrap_vars'):
+            ParserState._option_unwrap_vars = set()
+        if name not in ParserState._option_unwrap_vars:
+            ParserState._option_unwrap_vars.add(name)
+            _guard_unwrapped.append(name)
+
+    def _emit(chunk):
+        lines.append(chunk)
+        _note_option_guard(chunk)
+
     for node in self.nodes:
         tname = type(node).__name__
         if tname in ("Fmap", "Filter"):
@@ -353,19 +387,19 @@ def to_nim(self, indent=0, is_virtual=False, class_name=None, parent_name=None, 
                                         break
                                 if not found_field:
                                     try:
-                                        lines.append(stmt_node.to_nim(indent))
+                                        _emit(stmt_node.to_nim(indent))
                                     except TypeError:
-                                        lines.append(_ind(indent) + stmt_node.to_nim())
+                                        _emit(_ind(indent) + stmt_node.to_nim())
                             else:
                                 try:
-                                    lines.append(stmt_node.to_nim(indent))
+                                    _emit(stmt_node.to_nim(indent))
                                 except TypeError:
-                                    lines.append(_ind(indent) + stmt_node.to_nim())
+                                    _emit(_ind(indent) + stmt_node.to_nim())
                         else:
                             try:
-                                lines.append(stmt_node.to_nim(indent))
+                                _emit(stmt_node.to_nim(indent))
                             except TypeError:
-                                lines.append(_ind(indent) + stmt_node.to_nim())
+                                _emit(_ind(indent) + stmt_node.to_nim())
                     if nl_several is not None:
                         for nl_node in nl_several.nodes:
                             trivia = _richnl_lines(nl_node)
@@ -375,14 +409,14 @@ def to_nim(self, indent=0, is_virtual=False, class_name=None, parent_name=None, 
                     inner = seq
                     if inner is not None and hasattr(inner, "to_nim"):
                         try:
-                            lines.append(inner.to_nim(indent))
+                            _emit(inner.to_nim(indent))
                         except TypeError:
-                            lines.append(_ind(indent) + inner.to_nim())
+                            _emit(_ind(indent) + inner.to_nim())
         elif hasattr(node, "to_nim"):
             try:
-                lines.append(node.to_nim(indent))
+                _emit(node.to_nim(indent))
             except TypeError:
-                lines.append(_ind(indent) + node.to_nim())
+                _emit(_ind(indent) + node.to_nim())
 
     if class_name:  # Process all classes with fields/methods
         ParserState._current_class_name = class_name
@@ -543,11 +577,15 @@ def to_nim(self, indent=0, is_virtual=False, class_name=None, parent_name=None, 
         if not result_lines:
             result_lines.append(_ind(indent) + "discard")
         ParserState._current_class_name = None
+        for _gname in _guard_unwrapped:
+            ParserState._option_unwrap_vars.discard(_gname)
         return "\n".join(result_lines)
 
     # For non-class blocks, if empty emit discard
     if not lines:
         return _ind(indent) + "discard"
+    for _gname in _guard_unwrapped:
+        ParserState._option_unwrap_vars.discard(_gname)
     return "\n".join(_add_call_discards(lines))
 
 
@@ -592,6 +630,20 @@ def _extract_walrus(node):
     return None
 
 
+def _walrus_call_returns_option(val):
+    """True when the walrus right-hand side calls something declared `-> ?T`.
+
+    `if m := f():` and `while m := f():` have to test presence (`isSome`) for
+    an Option and nil-ness for a ref type, so both ask this before choosing.
+    """
+    import re as _re_wo
+    _rtypes = getattr(ParserState, 'proc_return_types', {})
+    _meth = _re_wo.match(r'^.+\.([A-Za-z_]\w*)\(', val)
+    _func = _re_wo.match(r'^([A-Za-z_]\w*)\(', val) if not _meth else None
+    _fname = _meth.group(1) if _meth else (_func.group(1) if _func else None)
+    return bool(_fname) and _rtypes.get(_fname, "").startswith("Option[")
+
+
 def _register_walrus_type(name, val):
     """Register walrus variable as PyObject in symbol table if value comes from a py_module call."""
     import re as _re_wt
@@ -617,7 +669,15 @@ def to_nim(self, indent=0):
         else:
             _hoist = f"{_ind(indent)}var {_w_name} = {_w_val}\n"  # first declaration
             _register_walrus_type(_w_name, _w_val)
-        cond = f"not {_w_name}.isNil"
+        # An Option is present-tested, a ref type is nil-tested.  Asking a
+        # `?T` for .isNil is a compile error, so the two cannot share one
+        # spelling -- and the .isSome form also turns on auto-unwrap below,
+        # which is what lets the body use the bound name directly.
+        if _walrus_call_returns_option(_w_val):
+            ParserState.nim_imports.add("options")
+            cond = f"{_w_name}.isSome"
+        else:
+            cond = f"not {_w_name}.isNil"
     else:
         _hoist = ""
         cond = hek_nim_expr._nim_truthiness(self.nodes[0].to_nim())
@@ -628,15 +688,24 @@ def to_nim(self, indent=0):
         body = self.nodes[1].to_nim(indent + 1)
         return f"{_ind(indent)}when isMainModule:{hc}\n{body}"
     hc = _block_inline_header_comment(self.nodes[1])
-    # Detect x.isSome guard — auto-unwrap x in the if body
-    _unwrap_var = None
-    _m_some = _re_if.match(r'^(\w+)\.isSome$', cond.strip())
-    if _m_some:
-        _unwrap_var = _m_some.group(1)
-        getattr(ParserState, '_option_unwrap_vars', set()).add(_unwrap_var)
+    # Detect x.isSome guards — auto-unwrap those names in the if body.  An
+    # `and` chain proves every one of its conjuncts, so `if a.isSome and
+    # b.isSome:` unwraps both; anything else (an `or`, a call) proves nothing.
+    _unwrap_vars = []
+    if " or " not in cond:
+        for _part in cond.split(" and "):
+            _m_some = _re_if.match(r'^\(?\s*(\w+)\.isSome\s*\)?$', _part.strip())
+            if _m_some:
+                _unwrap_vars.append(_m_some.group(1))
+    if _unwrap_vars and not hasattr(ParserState, '_option_unwrap_vars'):
+        ParserState._option_unwrap_vars = set()
+    _newly_unwrapped = [v for v in _unwrap_vars
+                        if v not in getattr(ParserState, '_option_unwrap_vars', set())]
+    for _v in _newly_unwrapped:
+        ParserState._option_unwrap_vars.add(_v)
     body = self.nodes[1].to_nim(indent + 1)
-    if _unwrap_var:
-        getattr(ParserState, '_option_unwrap_vars', set()).discard(_unwrap_var)
+    for _v in _newly_unwrapped:
+        ParserState._option_unwrap_vars.discard(_v)
     result = f"{_hoist}{_ind(indent)}if {cond}:{hc}\n{body}"
     for node in self.nodes[2:]:
         if not hasattr(node, "nodes") or not node.nodes:
@@ -667,13 +736,7 @@ def to_nim(self, indent=0):
         ind = _ind(indent)
         ind1 = _ind(indent + 1)
         # Determine break condition: .isNone for Option[T] return, .isNil for ref types
-        import re as _re_ww
-        _proc_rtypes_ww = getattr(ParserState, 'proc_return_types', {})
-        _ww_meth = _re_ww.match(r'^.+\.([A-Za-z_]\w*)\(', _w_val)
-        _ww_func = _re_ww.match(r'^([A-Za-z_]\w*)\(', _w_val) if not _ww_meth else None
-        _ww_fname = (_ww_meth.group(1) if _ww_meth else (_ww_func.group(1) if _ww_func else None))
-        _ww_ret = _proc_rtypes_ww.get(_ww_fname, "") if _ww_fname else ""
-        _is_option_ret = _ww_ret.startswith("Option[")
+        _is_option_ret = _walrus_call_returns_option(_w_val)
         _break_check = f"{_w_name}.isNone" if _is_option_ret else f"{_w_name}.isNil"
         if _is_option_ret:
             ParserState.nim_imports.add("options")
@@ -1152,6 +1215,25 @@ def to_nim(self):
     return name
 
 
+@method(pattern_none)
+def to_nim(self, prec=None):
+    """`when None:` -- rendered as nil; the case desugar turns it into the
+    presence test the subject's type calls for (see _structural_conds_and_bindings)."""
+    return "nil"
+
+
+@method(pattern_true)
+def to_nim(self, prec=None):
+    """`when True:` -> Nim's true."""
+    return "true"
+
+
+@method(pattern_false)
+def to_nim(self, prec=None):
+    """`when False:` -> Nim's false."""
+    return "false"
+
+
 @method(pattern_capture)
 def to_nim(self, prec=None):
     """pattern_capture: IDENTIFIER in pattern (capture variable) -> Nim: name binding
@@ -1434,6 +1516,10 @@ def _is_structural_pattern(pat_node):
     tname = type(pat_node).__name__
     if tname in ("pattern_class", "pattern_sequence", "pattern_empty_seq"):
         return True
+    # `when None:` is a presence test on the subject, not a value Nim can
+    # switch on, so it forces the if/elif form for the whole block.
+    if tname in ("pattern_none", "Literal_None"):
+        return True
     if tname in ("pattern_as", "pattern", "base_pattern", "pattern_seq_item"):
         return _is_structural_pattern(pat_node.nodes[0])
     return False
@@ -1591,6 +1677,14 @@ def _structural_conds_and_bindings(pat_node, subj, indent):
                     # capture name
                     lets.append(f"{_ind(indent)}let {sub_nim} = {field_expr}")
         return conds, lets
+
+    # `None` — absence test.  An Option asks .isNone; a ref type is nil.
+    if tname in ("pattern_none", "Literal_None"):
+        from hek_nim_expr import _expr_is_option
+        if _expr_is_option(subj):
+            ParserState.nim_imports.add("options")
+            return [f"{subj}.isNone"], []
+        return [f"{subj} == nil"], []
 
     # `[]` — empty sequence pattern
     if tname == "pattern_empty_seq":
@@ -1753,6 +1847,64 @@ def _tuple_pattern_to_cond(pat_nim, subject_parts):
     return " and ".join(conds) if conds else "true"
 
 
+def _guarded_chain_nim(branches, subject, indent):
+    """Render branches with guards as an if/elif chain.
+
+    Nim's case/of takes no guard, so a guarded block cannot stay a case --
+    both spellings, `when pat if cond:` and `case pat if cond:`, come here.
+    """
+    result = ""
+    keyword = "if"
+    for pat_node, block_node, guard_node in branches:
+        hc = _block_inline_header_comment(block_node) if block_node else ""
+        body = ""
+        if block_node:
+            try:
+                body = block_node.to_nim(indent + 1)
+            except TypeError:
+                body = _ind(indent + 1) + block_node.to_nim()
+        pat_nim = pat_node.to_nim() if hasattr(pat_node, "to_nim") else str(pat_node)
+        if pat_nim in ("others", "_"):
+            guard_cond = guard_node.nodes[0].to_nim() if guard_node else None
+            if guard_cond:
+                result += f"\n{_ind(indent)}{keyword} {guard_cond}:{hc}\n{body}"
+                keyword = "elif"
+            else:
+                result += f"\n{_ind(indent)}else:{hc}\n{body}"
+        else:
+            conds, lets = _structural_conds_and_bindings(pat_node, subject, indent + 1)
+            if not conds and _is_literal_nim(pat_nim):
+                conds = [f"{subject} == {pat_nim}"]
+            if guard_node:
+                conds.append(_guard_cond_nim(guard_node, lets))
+            cond_str = " and ".join(conds) if conds else "true"
+            let_block = "\n".join(lets)
+            full_body = (let_block + "\n" + body) if let_block else body
+            result += f"\n{_ind(indent)}{keyword} {cond_str}:{hc}\n{full_body}"
+            keyword = "elif"
+    return result.lstrip("\n")
+
+
+def _guard_cond_nim(guard_node, lets):
+    """Render a branch guard with its pattern captures substituted in.
+
+    A guard runs as part of the `if` condition, but the captures it talks
+    about (`case [a, b] if a > b:`) are `let`s emitted inside the branch
+    body -- so the condition referred to names Nim had not seen yet and the
+    generated code did not compile.  Each capture is replaced by the
+    expression it is bound to, which is what the guard means anyway.
+    """
+    import re as _re_g
+    cond = guard_node.nodes[0].to_nim()
+    for line in lets:
+        m = _re_g.match(r'\s*let\s+(\w+)\s*=\s*(.+?)\s*$', line)
+        if not m:
+            continue
+        name, expr = m.group(1), m.group(2)
+        cond = _re_g.sub(r'\b' + _re_g.escape(name) + r'\b', "(" + expr + ")", cond)
+    return cond
+
+
 @method(case_stmt)
 def to_nim(self, indent=0):
     """match -> Nim case statement; desugars tuple patterns to if/elif."""
@@ -1819,7 +1971,7 @@ def to_nim(self, indent=0):
 
             conds, lets = _structural_conds_and_bindings(pat_node, subject, indent + 1)
             if guard_node is not None:
-                conds.append(guard_node.nodes[0].to_nim())
+                conds.append(_guard_cond_nim(guard_node, lets))
             cond_str = " and ".join(conds) if conds else "true"
             let_block = "\n".join(lets)
             full_body = (let_block + "\n" + body) if let_block else body
@@ -1874,6 +2026,11 @@ def to_nim(self, indent=0):
             result += f"\n{_ind(indent)}{keyword} {cond}:{hc}\n{body}"
             keyword = "elif"
         return result.lstrip("\n")
+
+    # A `when` clause may carry a guard too, and Nim's case/of cannot -- the
+    # regex path above handles its own guards, so anything left comes here.
+    if any(guard is not None for _, _, guard in _extract_branches(self)):
+        return _guarded_chain_nim(_extract_branches(self), subject, indent)
 
     from hek_nim_expr import _str_to_char_lit
     _subj_sym = ParserState.symbol_table.lookup(subject)
@@ -2044,7 +2201,7 @@ def to_nim(self, indent=0):
                 continue
             conds, lets = _structural_conds_and_bindings(pat_node, subject, indent + 1)
             if guard_node is not None:
-                conds.append(guard_node.nodes[0].to_nim())
+                conds.append(_guard_cond_nim(guard_node, lets))
             cond_str = " and ".join(conds) if conds else "true"
             let_block = "\n".join(lets)
             full_body = (let_block + "\n" + body) if let_block else body
@@ -2055,36 +2212,7 @@ def to_nim(self, indent=0):
     # Non-structural patterns with guards: desugar to if/elif
     # (Nim case/of cannot use guards on else: branches)
     if any(guard is not None for _, _, guard in _extract_match_branches(self)):
-        result = ""
-        keyword = "if"
-        for pat_node, block_node, guard_node in _extract_match_branches(self):
-            hc = _block_inline_header_comment(block_node) if block_node else ""
-            body = ""
-            if block_node:
-                try:
-                    body = block_node.to_nim(indent + 1)
-                except TypeError:
-                    body = _ind(indent + 1) + block_node.to_nim()
-            pat_nim = pat_node.to_nim() if hasattr(pat_node, "to_nim") else str(pat_node)
-            if pat_nim in ("others", "_"):
-                guard_cond = guard_node.nodes[0].to_nim() if guard_node else None
-                if guard_cond:
-                    result += f"\n{_ind(indent)}{keyword} {guard_cond}:{hc}\n{body}"
-                    keyword = "elif"
-                else:
-                    result += f"\n{_ind(indent)}else:{hc}\n{body}"
-            else:
-                conds, lets = _structural_conds_and_bindings(pat_node, subject, indent + 1)
-                if not conds and _is_literal_nim(pat_nim):
-                    conds = [f"{subject} == {pat_nim}"]
-                if guard_node:
-                    conds.append(guard_node.nodes[0].to_nim())
-                cond_str = " and ".join(conds) if conds else "true"
-                let_block = "\n".join(lets)
-                full_body = (let_block + "\n" + body) if let_block else body
-                result += f"\n{_ind(indent)}{keyword} {cond_str}:{hc}\n{full_body}"
-                keyword = "elif"
-        return result.lstrip("\n")
+        return _guarded_chain_nim(_extract_match_branches(self), subject, indent)
 
     # Simple patterns: emit native Nim case/of
     from hek_nim_expr import _str_to_char_lit
@@ -3186,6 +3314,16 @@ def to_nim(self, indent=0):
         # Discriminated record -> Nim object with case
         result = f"{_ind(indent)}type {name}{_exp}{params} = object\n"
         result += f"{_ind(indent + 1)}case {discrim_name}: {discrim_type}\n"
+        # A variant record is an object like any other, and construction has to
+        # know that: without these registrations `Res_T(tag=OK, value=3)` was
+        # emitted as a call with keyword arguments (`Res_T(tag = OK, ...)`),
+        # which is not Nim's object-construction syntax.
+        _variant_fields = []
+        ParserState.symbol_table.add(name, "object", "type")
+        if name not in ParserState.class_field_types:
+            ParserState.class_field_types[name] = {}
+        ParserState.class_field_types[name][discrim_name] = discrim_type
+        _variant_fields.append(discrim_name)
         whens_node = None
         for child in variant_case_node.nodes:
             if type(child).__name__ == "Several_Times":
@@ -3210,6 +3348,13 @@ def to_nim(self, indent=0):
                     fields = _extract_variant_fields_nim(fields_node.nodes, indent + 2)
                     for fld in fields:
                         result += fld + "\n"
+                        _fm = re.match(r'\s*(\w+)\*?\s*:\s*(.+)', fld)
+                        if _fm:
+                            _variant_fields.append(_fm.group(1))
+                            ParserState.class_field_types[name][_fm.group(1)] = _fm.group(2).strip()
+        if not hasattr(ParserState, 'object_field_order'):
+            ParserState.object_field_order = {}
+        ParserState.object_field_order[name] = _variant_fields
         return result.rstrip("\n")
     if not block_node:
         block_node = rhs

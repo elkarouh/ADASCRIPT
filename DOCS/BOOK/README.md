@@ -13,7 +13,9 @@ interpreters, system tools and interactive shell utilities.
 ## How to read this book
 
 Chapters 1–5 cover the core language and should be read in order. Chapters
-6–12 are feature deep-dives that can be read in any order. Chapter 13 leaves
+6–12 are feature deep-dives that can be read in any order; chapters 5 and 10
+double as the complete references for pattern matching and for optional
+types, so each ends with a table you can look things up in. Chapter 13 leaves
 the single file behind and covers modules, project layout and the build.
 Chapter 14 walks through the large example programs as case studies, and the
 appendix is a condensed syntax reference.

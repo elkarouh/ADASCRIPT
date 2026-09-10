@@ -192,8 +192,10 @@ Limitations") and `TODO.md`.
 - `DOCS/TUTORIAL.md` — the long-form tutorial this book complements
   (20 sections, including the full memory-ownership chapter).
 - `DOCS/TUTORIAL_FOR_LLM.md` — a condensed variant tuned for language models.
-- `DOCS/OPTIONAL_TYPES.md` — optionals and monadic patterns, 22 sections.
-- `DOCS/PATTERN_MATCHING.md` — the complete pattern-matching reference.
+- Chapters [5](05-pattern-matching.md) and [10](10-optionals.md) of this book
+  are the reference for pattern matching and for optional types; the standalone
+  `PATTERN_MATCHING.md` and `OPTIONAL_TYPES.md` documents were merged into
+  them.
 - `ADASCRIPT_GRAMMAR/`, `HPARSEC/` — the grammar and the parser-combinator
   engine, if you want to extend the language itself.
 
