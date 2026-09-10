@@ -983,3 +983,19 @@ def tq_implicit() -> str:
 return"""
     s
 assert tq_implicit() == "implicit\nreturn"
+
+# A function whose only statement is a docstring. The Python backend read
+# the docstring as the value of the last expression and rewrote it to
+# `return """..."""`, so the function returned its own documentation and the
+# docstring vanished from the output. A triple-quoted string in statement
+# position is a docstring on both backends now, never a value.
+def doc_only() -> str:
+    """This is documentation, not a return value."""
+
+assert doc_only() != "This is documentation, not a return value."
+
+# A single-quoted string in tail position is still a value, as it is on Nim.
+def single_quoted_tail() -> str:
+    "the value"
+
+assert single_quoted_tail() == "the value"

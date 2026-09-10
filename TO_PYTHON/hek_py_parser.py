@@ -1215,6 +1215,30 @@ def _stmt_line_has_more(stmt):
     return False
 
 
+def _is_docstring_line(stmt):
+    """Whether a statement is nothing but a triple-quoted string literal.
+
+    Such a statement is a docstring, not a value: the Nim backend renders it
+    as a `##` comment and returns the zero value, and marking it as the
+    implicit return here made the two backends disagree -- and swallowed the
+    docstring, since it came out as `return \"\"\"...\"\"\"`. A single-quoted
+    string in tail position is still a value, exactly as it is on Nim.
+    """
+    from ady_expr import STRING as _STRING
+    node = stmt.nodes[0] if getattr(stmt, "nodes", None) else None
+    while node is not None and not isinstance(node, _STRING):
+        kids = getattr(node, "nodes", None) or []
+        if len(kids) != 1:
+            return False
+        node = kids[0]
+    if node is None:
+        return False
+    text = node.node
+    if text[:1] in ("u", "U") and text[1:2] in (chr(34), chr(39)):
+        text = text[1:]
+    return text.startswith(chr(34) * 3) or text.startswith(chr(39) * 3)
+
+
 def _mark_implicit_returns(stmt, depth=0):
     """Mark the statements whose value is the function's implicit return.
 
@@ -1237,7 +1261,7 @@ def _mark_implicit_returns(stmt, depth=0):
             # an inline `when` branch that already returns -- has its value in
             # the *last* statement, not the first, so prefixing `return` to
             # the head both drops the real return and returns the wrong thing.
-            if not _stmt_line_has_more(stmt):
+            if not _stmt_line_has_more(stmt) and not _is_docstring_line(stmt):
                 _stmt.RETURN_NODES.add(id(stmt))
         return
     if tname == "shell_stmt":
