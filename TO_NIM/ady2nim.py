@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.join(_dir, "..", "ADASCRIPT_GRAMMAR"))
 
 import token as token_mod
 
-from py3compound_stmt import *  # fw() resolves names in calling module's globals
+from ady_compound_stmt import *  # fw() resolves names in calling module's globals
 from hek_tokenize import Tokenizer, RichNL, set_current_tokenizer
 
 # Import Nim translation modules to register to_nim() methods
@@ -1236,13 +1236,13 @@ def main(argv=None):
 
     Cache layout
     ------------
-    All generated artifacts go to ``~/.cache/hparsec/`` so source directories
+    All generated artifacts go to ``~/.cache/adascript/`` so source directories
     stay clean.  Each script gets its own subdirectory keyed by a SHA-1 hash
     of its absolute path (inspired by nimbang / rdmd)::
 
-        ~/.cache/hparsec/cache-<HASH>/script.nim     ← transpiled source
-        ~/.cache/hparsec/cache-<HASH>/.script        ← compiled binary
-        ~/.cache/hparsec/cache-<HASH>/nimcache/      ← nim object cache
+        ~/.cache/adascript/cache-<HASH>/script.nim     ← transpiled source
+        ~/.cache/adascript/cache-<HASH>/.script        ← compiled binary
+        ~/.cache/adascript/cache-<HASH>/nimcache/      ← nim object cache
 
     Subsequent runs are fast: if neither the source nor the compiled binary
     have changed, ady2nim skips all transpilation and compilation and directly
@@ -1487,14 +1487,14 @@ def main(argv=None):
     # ------------------------------------------------------------------#
     # 4.  Resolve cache paths (nimbang-style)                           #
     #                                                                   #
-    #   All generated artifacts go to ~/.cache/hparsec/ so the source   #
+    #   All generated artifacts go to ~/.cache/adascript/ so the source #
     #   directory stays clean.  A hash of the absolute .ady path gives  #
     #   each script its own isolated subdirectory, just like nimbang.   #
     #                                                                   #
     #   Layout inside the cache:                                        #
-    #     ~/.cache/hparsec/<HASH>/script.nim    ← transpiled source     #
-    #     ~/.cache/hparsec/<HASH>/.script       ← compiled binary       #
-    #     ~/.cache/hparsec/<HASH>/nimcache/     ← nim object cache      #
+    #     ~/.cache/adascript/<HASH>/script.nim    ← transpiled source   #
+    #     ~/.cache/adascript/<HASH>/.script       ← compiled binary     #
+    #     ~/.cache/adascript/<HASH>/nimcache/     ← nim object cache    #
     # ------------------------------------------------------------------#
     def _cache_paths(ady_path):
         """Return (cache_dir, nim_file, exe_file, nimcache_dir) for *ady_path*.
@@ -1516,7 +1516,7 @@ def main(argv=None):
         _backend = "js" if subcommand == "js" else "native"
         digest   = hashlib.sha1(
             (abs_path + "\0" + _backend).encode()).hexdigest()[:16].upper()
-        base_dir = os.path.join(os.path.expanduser("~"), ".cache", "hparsec")
+        base_dir = os.path.join(os.path.expanduser("~"), ".cache", "adascript")
         cache_dir = os.path.join(base_dir, "cache-" + digest)
         stem     = os.path.splitext(os.path.basename(ady_path))[0]
         # Nim module names must be valid identifiers — replace dots with underscores

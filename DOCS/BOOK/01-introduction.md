@@ -44,7 +44,7 @@ print "Hello, world!"
 
 The shebang line matters. With `chmod +x`, running `./hello.ady` transpiles
 the file to Nim, compiles it into a cache directory
-(`~/.cache/hparsec/cache-<HASH>/`), symlinks the binary next to the source,
+(`~/.cache/adascript/cache-<HASH>/`), symlinks the binary next to the source,
 and runs it. Subsequent runs skip whatever is already up to date, so an
 unchanged script starts as fast as any native executable.
 

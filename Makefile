@@ -335,6 +335,10 @@ clean:
 	@echo "Removing build cache..."
 	@# $$HOME, not $HOME: make would read that as $(H) followed by OME and
 	@# delete a stray ./OME directory, leaving the real cache in place.
+	@rm -rf $$HOME/.cache/adascript/
+	@# The cache lived under ~/.cache/hparsec until it was named after the
+	@# language rather than the parser engine; sweep the old tree too, or it
+	@# sits there for good holding artifacts nothing will ever read again.
 	@rm -rf $$HOME/.cache/hparsec/
 	@echo "Removing binary symlinks from EXAMPLES/..."
 	@for f in $(ALL_COMPILE); do \

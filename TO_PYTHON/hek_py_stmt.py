@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Python 3.14 Simple Statement Parser using hek_parsec combinator framework.
 
-Builds on hek_py3_expr.py (expression grammar) to parse simple (non-compound)
+Builds on hek_py_expr.py (expression grammar) to parse simple (non-compound)
 Python 3.14 statements. Simple statements fit on one line, can be separated
 by ';', and are terminated by NEWLINE.
 
@@ -27,8 +27,8 @@ sys.path.insert(0, os.path.join(_dir, ".."))
 sys.path.insert(0, os.path.join(_dir, "..", "HPARSEC"))
 sys.path.insert(0, os.path.join(_dir, "..", "ADASCRIPT_GRAMMAR"))
 
-from py3stmt import *
-from hek_py3_expr import _get_bracket_start
+from ady_stmt import *
+from hek_py_expr import _get_bracket_start
 import hek_py_declarations  # noqa: F401 — registers decl to_py() methods
 from hek_parsec import method, ParserState
 from hek_helpers import _ind
@@ -102,7 +102,7 @@ def to_py(self):
     """ann_assign_stmt: IDENTIFIER ':' expression ('=' expression)?"""
     name = self.nodes[0].to_py()
     # nodes[1] is V_COLON, nodes[2] is the type annotation
-    from hek_py3_expr import py_self_ref_annotation
+    from hek_py_expr import py_self_ref_annotation
     annotation = py_self_ref_annotation(self.nodes[2].to_py())
     result = f"{name}: {annotation}"
     # Check for optional '= value' part
@@ -158,7 +158,7 @@ def _wrap_list_for_queue(value, annotation):
     Declaring the queue is also what pulls its class into the output, so the
     helper is ensured here rather than at the use site.
     """
-    from hek_py3_expr import ensure_queue_helper
+    from hek_py_expr import ensure_queue_helper
     ann = (annotation or "").strip()
     # The annotation reaches us with its type arguments already dropped
     # (`PriorityQueue[(float, Node_T)]` renders as `PriorityQueue`), but
@@ -764,7 +764,7 @@ def _supply_stdlib_names(source, names):
     """
     if source != "stdlib":
         return None
-    from hek_py3_expr import ensure_stdlib_helper, STDLIB_SUPPLIED
+    from hek_py_expr import ensure_stdlib_helper, STDLIB_SUPPLIED
     wanted = [n.strip() for n in names.split(",") if n.strip()]
     # Decided before anything is emitted: a statement naming one supplied and
     # one unsupplied thing keeps its import and gets no definitions, rather
@@ -976,7 +976,7 @@ def to_py(self, indent=0):
 def to_py(self):
     """subst_stmt: primary '=' s/pat/repl/flags -> Python: lhs = re.sub(r'pat', 'repl', lhs, flags=...)"""
     import re as _re_s
-    from hek_py3_expr import _ensure_pymatch_helper, _py_re_flags
+    from hek_py_expr import _ensure_pymatch_helper, _py_re_flags
     _ensure_pymatch_helper()
     lhs = self.nodes[0].to_py()
     raw = self.nodes[1].node     # e.g. "s/\d+/[N]/gi"

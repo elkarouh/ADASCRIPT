@@ -2,7 +2,7 @@
 """Nim translation methods for Python 3.14 simple statements.
 
 Adds to_nim() methods to the statement parser classes defined in
-hek_py3_stmt.py. Import this module to enable .to_nim() on statement AST nodes.
+hek_py_stmt.py. Import this module to enable .to_nim() on statement AST nodes.
 
 Usage:
     from hek_nim_stmt import *
@@ -18,8 +18,8 @@ sys.path.insert(0, os.path.join(_dir, "..", "ADASCRIPT_GRAMMAR"))
 # (no TO_PYTHON dependency needed)
 
 from hek_parsec import method, ParserState
-from py3stmt import *  # noqa: F403 — need all parser rule names
-from py3stmt import parse_stmt
+from ady_stmt import *  # noqa: F403 — need all parser rule names
+from ady_stmt import parse_stmt
 import hek_nim_expr  # noqa: F401 — registers expr to_nim() methods
 import hek_nim_declarations  # noqa: F401
 from hek_nim_expr import _infer_literal_nim_type

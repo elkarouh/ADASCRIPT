@@ -20,7 +20,7 @@ ADA_INDENT/test_ada_line_fmt
 ADA_INDENT/*_gen.py
 # ady2nim drops a symlink to the built binary next to each source, so the
 # bundled libraries leave one behind whenever they are compiled. They point
-# into ~/.cache/hparsec, which is per-machine.
+# into ~/.cache/adascript, which is per-machine.
 TO_NIM/STDLIB/awk
 TO_NIM/STDLIB/db
 TO_NIM/STDLIB/graphs

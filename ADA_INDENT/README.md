@@ -19,7 +19,7 @@ ady2nim ADA_INDENT/ada_indent.ady -r -- file.adb   # compile if stale, then run
 cat file.adb | ady2nim ADA_INDENT/ada_indent.ady -r  # reindent from stdin
 ```
 
-`ady2nim` stores the binary in `~/.cache/hparsec/` and skips recompilation when
+`ady2nim` stores the binary in `~/.cache/adascript/` and skips recompilation when
 neither the source nor the generated `.nim` have changed.
 
 ## Tests
@@ -46,8 +46,8 @@ writes re-indented source to stdout, which is exactly the interface
 onto your `PATH`:
 
 ```bash
-ady2nim ADA_INDENT/ada_indent.ady          # compile; binary lands in ~/.cache/hparsec/
-ln -s ~/.cache/hparsec/cache-*/ada_indent ~/.local/bin/ada-indent
+ady2nim ADA_INDENT/ada_indent.ady          # compile; binary lands in ~/.cache/adascript/
+ln -s ~/.cache/adascript/cache-*/ada_indent ~/.local/bin/ada-indent
 ```
 
 Or let `ady2nim` install it for you with an explicit output path:

@@ -142,10 +142,10 @@ sys.path.insert(0, os.path.join(_dir, ".."))
 sys.path.insert(0, os.path.join(_dir, "..", "HPARSEC"))
 sys.path.insert(0, os.path.join(_dir, "..", "ADASCRIPT_GRAMMAR"))
 
-from py_declarations import *
-import hek_py3_expr  # noqa: F401 — registers expr to_py() methods
+from ady_declarations import *
+import hek_py_expr  # noqa: F401 — registers expr to_py() methods
 from hek_parsec import method
-from py3stmt import subrange_array_type  # noqa: F401 — defined after py_declarations
+from ady_stmt import subrange_array_type  # noqa: F401 — defined after ady_declarations
 
 # to_py() methods
 ###############################################################################
@@ -275,7 +275,7 @@ def to_py(self, prec=None):
     elif name == "Job":
         # `let jobs: []Job = []` has to name the handle shellSpawn returns,
         # so the class the helper defines answers to that name too.
-        from hek_py3_parser import _ensure_spawn_helper
+        from hek_py_parser import _ensure_spawn_helper
         _ensure_spawn_helper()
         return "_Job"
     return name

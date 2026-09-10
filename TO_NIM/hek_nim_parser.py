@@ -2,7 +2,7 @@
 """Nim translation methods for Python 3.14 compound statements.
 
 Adds to_nim() methods to the compound statement parser classes defined in
-hek_py3_parser.py. Import this module to enable .to_nim() on compound
+hek_py_parser.py. Import this module to enable .to_nim() on compound
 statement AST nodes.
 
 Usage:
@@ -19,9 +19,9 @@ sys.path.insert(0, os.path.join(_dir, "..", "ADASCRIPT_GRAMMAR"))
 
 
 from hek_parsec import method, ParserState
-from py3compound_stmt import *  # noqa: F403 — grammar definitions
+from ady_compound_stmt import *  # noqa: F403 — grammar definitions
 from hek_helpers import _ind, _richnl_lines, _block_inline_header_comment
-from py3compound_stmt import parse_compound, parse_module
+from ady_compound_stmt import parse_compound, parse_module
 from hek_tokenize import RichNL
 import re
 import hek_nim_expr  # noqa: F401 — registers expr to_nim()
@@ -3456,7 +3456,7 @@ def to_nim(self, indent=0):
 # Shell statement — to_nim()
 # ---------------------------------------------------------------------------
 # Reuse the Python-backend helpers by importing them. They live in
-# hek_py3_parser which is already on the import path via hek_nim_parser's
+# hek_py_parser which is already on the import path via hek_nim_parser's
 # sys.path setup.  We import lazily inside the method to avoid a circular
 # import at module load time.
 
@@ -3880,7 +3880,7 @@ def to_nim(self, indent=0):
     _to_py_dir = _os.path.join(_os.path.dirname(__file__), '..', 'TO_PYTHON')
     if _to_py_dir not in _sys.path:
         _sys.path.insert(0, _to_py_dir)
-    from hek_py3_parser import (_parse_for_shell_stmt, _apply_shell_quoting,
+    from hek_py_parser import (_parse_for_shell_stmt, _apply_shell_quoting,
                                 _apply_pipefail, _shell_wants_pipefail)
     target, cmd, needs_fstring, body_node, opts = _parse_for_shell_stmt(
         self, render=lambda n: n.to_nim())
@@ -4002,14 +4002,14 @@ def to_nim(self, indent=0):
     _to_py_dir = _os.path.join(_os.path.dirname(__file__), '..', 'TO_PYTHON')
     if _to_py_dir not in _sys.path:
         _sys.path.insert(0, _to_py_dir)
-    from hek_py3_parser import (_parse_shell_stmt, _shell_block_join,
+    from hek_py_parser import (_parse_shell_stmt, _shell_block_join,
                                 _apply_pipefail, _shell_wants_pipefail)
 
     ind = _ind(indent)
     (target_kw, target_name, target_tuple, kw, opts, cmd, needs_fstring,
      block_lines, target_ann) = _parse_shell_stmt(self, render=lambda n: n.to_nim())
 
-    from hek_py3_parser import _apply_shell_quoting
+    from hek_py_parser import _apply_shell_quoting
     cmd, _quoted = _apply_shell_quoting(
         cmd, "quoteShell({expr})",
         'mapIt({expr}, quoteShell(it)).join(\" \")')

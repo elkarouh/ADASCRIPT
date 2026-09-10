@@ -109,7 +109,7 @@ Executable scripts:
 ```
 
 then `chmod +x script.ady && ./script.ady`. Artifacts live in
-`~/.cache/hparsec/cache-<HASH>/`; a symlink to the binary is placed next to
+`~/.cache/adascript/cache-<HASH>/`; a symlink to the binary is placed next to
 the source. Builds are incremental (transpile / compile / run each skipped
 when up to date); editing any transpiler `.py` file invalidates the caches.
 
@@ -121,7 +121,7 @@ The `Makefile` at the repository root drives every example:
 make install    # put ady2nim and ady2py on PATH (PREFIX=... to relocate)
 make compile    # transpile + compile every example, no run
 make test       # compile, then run the suite (36 examples, 67 checks)
-make clean      # remove ~/.cache/hparsec/ and the binary symlinks
+make clean      # remove ~/.cache/adascript/ and the binary symlinks
 make uninstall  # remove the launchers again
 ```
 

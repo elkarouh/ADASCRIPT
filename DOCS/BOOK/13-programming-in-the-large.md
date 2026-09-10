@@ -213,10 +213,10 @@ written the same way.
 `ady2nim c -r EXAMPLES/PROJECT/dispatch.ady` prints its own story:
 
 ```
-# transpiled → ~/.cache/hparsec/cache-DECF844B7E36524E/dispatch.nim
-# transpiled dependency → ~/.cache/hparsec/cache-DECF844B7E36524E/lib/geometry.nim
-# transpiled dependency → ~/.cache/hparsec/cache-DECF844B7E36524E/lib/fleet.nim
-# transpiled dependency → ~/.cache/hparsec/cache-DECF844B7E36524E/lib/report.nim
+# transpiled → ~/.cache/adascript/cache-DECF844B7E36524E/dispatch.nim
+# transpiled dependency → ~/.cache/adascript/cache-DECF844B7E36524E/lib/geometry.nim
+# transpiled dependency → ~/.cache/adascript/cache-DECF844B7E36524E/lib/fleet.nim
+# transpiled dependency → ~/.cache/adascript/cache-DECF844B7E36524E/lib/report.nim
 # nim c --nimcache:… --out:…/.dispatch --path:…/cache-DECF844B7E36524E …/dispatch.nim
 ```
 
@@ -446,7 +446,7 @@ Two build knobs matter at this size:
 - **`#ady2nim-args`** on the second line of an entry point sets that program's
   compiler options: `#ady2nim-args c -d:release` builds it optimised without a
   flag on every invocation.
-- **`make clean`**, or `rm -rf ~/.cache/hparsec`, throws away every cache
+- **`make clean`**, or `rm -rf ~/.cache/adascript`, throws away every cache
   directory. You need it after upgrading Nim, and essentially never
   otherwise — the mtime tiers handle the rest.
 

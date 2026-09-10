@@ -35,7 +35,7 @@ sys.path.insert(0, os.path.join(_dir, ".."))
 sys.path.insert(0, os.path.join(_dir, "..", "HPARSEC"))
 sys.path.insert(0, os.path.join(_dir, "..", "ADASCRIPT_GRAMMAR"))
 
-from py3expr import *
+from ady_expr import *
 from hek_parsec import method, ParserState
 
 
@@ -493,7 +493,7 @@ def py_self_ref_annotation(annotation):
     *later* in the file fails on both backends and is a separate problem.
     """
     import re as _re_sr
-    import hek_py3_stmt as _stmt   # deferred: that module imports this one
+    import hek_py_stmt as _stmt   # deferred: that module imports this one
     if not DEFINING_CLASS or not annotation:
         return annotation
     # Only annotations evaluated *in the class body* need this -- the fields,
@@ -855,7 +855,7 @@ def _run_argv_call(name, call_trailer):
     # is a keyword, never where someone really is passing sys.stdin along.
     import re as _re_r
     inner = _re_r.sub(r'(?<![\w.])sys\.stdin(\s*)=(?!=)', r'stdin\1=', inner)
-    from hek_py3_parser import _ensure_run_argv_helper
+    from hek_py_parser import _ensure_run_argv_helper
     _ensure_run_argv_helper()
     if name == "runLines":
         return f"_run_argv({inner}, _lines=True)"
@@ -1091,7 +1091,7 @@ def to_py(self, prec=None):
                     i += 1
                     continue
             if i == 0 and result == "waitAll" and tr_str.startswith("("):
-                from hek_py3_parser import _ensure_spawn_helper
+                from hek_py_parser import _ensure_spawn_helper
                 _ensure_spawn_helper()
                 result = "_wait_all" + tr_str
                 i += 1

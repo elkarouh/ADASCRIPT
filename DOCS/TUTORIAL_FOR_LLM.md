@@ -35,7 +35,7 @@ Shebang + per-file Nim options (first two lines only):
 #ady2nim-args c -d:release
 ```
 
-Build artifacts go into `~/.cache/hparsec/cache-<HASH>/` — source directories stay clean. Builds are incremental.
+Build artifacts go into `~/.cache/adascript/cache-<HASH>/` — source directories stay clean. Builds are incremental.
 
 ---
 

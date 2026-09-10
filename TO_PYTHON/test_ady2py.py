@@ -164,7 +164,7 @@ section("BUG CATEGORY A — Missing grammar rules")
 
 # A1 — f-strings
 # Python 3.12+ tokenises f-strings as FSTRING_START / FSTRING_MIDDLE /
-# FSTRING_END tokens.  The atom parser in hek_py3_expr.py only handles STRING
+# FSTRING_END tokens.  The atom parser in hek_py_expr.py only handles STRING
 # (token type 3), so f-strings are never matched.
 test(
     "f-string simple",
@@ -248,7 +248,7 @@ test(
 )
 
 # A5 — type aliases (Python 3.12 soft keyword)
-# The 'type' soft-keyword statement is defined in hek_py3_stmt.py (type_stmt)
+# The 'type' soft-keyword statement is defined in hek_py_stmt.py (type_stmt)
 # but Tokenizer / ParserState interaction causes it to fail in some contexts.
 test(
     "type alias simple",

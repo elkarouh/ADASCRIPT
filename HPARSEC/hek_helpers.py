@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Shared helper functions for compound statement translators.
 
-Used by both TO_PYTHON/hek_py3_parser.py and TO_NIM/hek_nim_parser.py.
+Used by both TO_PYTHON/hek_py_parser.py and TO_NIM/hek_nim_parser.py.
 """
 
 from hek_tokenize import RichNL

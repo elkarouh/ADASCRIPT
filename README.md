@@ -227,7 +227,7 @@ transpiler `.py` file automatically triggers retranspilation of all cached
 `.ady` files on their next run.
 
 **Clean source directories** — all generated artifacts (`.nim` file,
-compiled binary, nimcache) are stored in `~/.cache/hparsec/cache-<HASH>/`,
+compiled binary, nimcache) are stored in `~/.cache/adascript/cache-<HASH>/`,
 keyed by the absolute path of the `.ady` file. Source directories stay
 uncluttered and the cache survives reboots (inspired by
 [nimbang](https://github.com/jabbalaci/nimbang)).
@@ -1206,10 +1206,10 @@ them by path from the project root (`lib/geometry`).
 ```
 ady2nim c -r EXAMPLES/PROJECT/dispatch.ady
 
-# transpiled → ~/.cache/hparsec/cache-<HASH>/dispatch.nim
-# transpiled dependency → ~/.cache/hparsec/cache-<HASH>/lib/geometry.nim
-# transpiled dependency → ~/.cache/hparsec/cache-<HASH>/lib/fleet.nim
-# transpiled dependency → ~/.cache/hparsec/cache-<HASH>/lib/report.nim
+# transpiled → ~/.cache/adascript/cache-<HASH>/dispatch.nim
+# transpiled dependency → ~/.cache/adascript/cache-<HASH>/lib/geometry.nim
+# transpiled dependency → ~/.cache/adascript/cache-<HASH>/lib/fleet.nim
+# transpiled dependency → ~/.cache/adascript/cache-<HASH>/lib/report.nim
 # nim c --nimcache:… --out:…/.dispatch --path:…/cache-<HASH> …/dispatch.nim
 ```
 
@@ -2263,50 +2263,50 @@ while True:
 
 ```
 ADASCRIPT/
-├── HPARSEC/                    Parser combinator engine
-│   ├── hek_parsec.py           ParserMeta (+, |, [], *, ~), packrat memoization,
-│   │                           SymbolTable, forward references, token helpers
-│   ├── hek_tokenize.py         Enhanced tokenizer
-│   │                           RichNL (comments attached to newlines),
-│   │                           extra token types Python has none of
-│   │                           (TICK, DOLLAR, RANGE, REGEX, bash tests),
-│   │                           bracket-context NL stripping
-│   └── hek_helpers.py          Shared indentation and RichNL utilities
+├── HPARSEC/                   Parser combinator engine
+│   ├── hek_parsec.py          ParserMeta (+, |, [], *, ~), packrat memoization,
+│   │                          SymbolTable, forward references, token helpers
+│   ├── hek_tokenize.py        Enhanced tokenizer
+│   │                          RichNL (comments attached to newlines),
+│   │                          extra token types Python has none of
+│   │                          (TICK, DOLLAR, RANGE, REGEX, bash tests),
+│   │                          bracket-context NL stripping
+│   └── hek_helpers.py         Shared indentation and RichNL utilities
 │
-├── ADASCRIPT_GRAMMAR/          Language-neutral grammar definitions
-│   ├── py3expr.py              Expression grammar (precedence, all operators)
-│   ├── py3stmt.py              Simple statements (assignment, import, raise, …)
-│   ├── py3compound_stmt.py     Compound statements (if/while/for/def/class/shell/…)
-│   └── py_declarations.py      Adascript type annotations and type declarations
+├── ADASCRIPT_GRAMMAR/         Language-neutral grammar definitions
+│   ├── ady_expr.py            Expression grammar (precedence, all operators)
+│   ├── ady_stmt.py            Simple statements (assignment, import, raise, …)
+│   ├── ady_compound_stmt.py   Compound statements (if/while/for/def/class/shell/…)
+│   └── ady_declarations.py    Adascript type annotations and type declarations
 │
-├── TO_PYTHON/                  Python 3 backend
-│   ├── hek_py3_expr.py         to_py() for all expression nodes
-│   ├── hek_py3_stmt.py         to_py() for simple statements
-│   ├── hek_py3_parser.py       to_py() for compound statements + type decls
-│   ├── hek_py_declarations.py  to_py() for type annotations
-│   └── ady2py.py                Entry point: parse + emit Python 3
+├── TO_PYTHON/                 Python 3 backend
+│   ├── hek_py_expr.py         to_py() for all expression nodes
+│   ├── hek_py_stmt.py         to_py() for simple statements
+│   ├── hek_py_parser.py       to_py() for compound statements + type decls
+│   ├── hek_py_declarations.py to_py() for type annotations
+│   └── ady2py.py              Entry point: parse + emit Python 3
 │
-├── TO_NIM/                     Nim backend
-│   ├── hek_nim_expr.py         to_nim() for all expression nodes
-│   ├── hek_nim_stmt.py         to_nim() for simple statements
-│   ├── hek_nim_parser.py       to_nim() for compound statements + type decls
+├── TO_NIM/                    Nim backend
+│   ├── hek_nim_expr.py        to_nim() for all expression nodes
+│   ├── hek_nim_stmt.py        to_nim() for simple statements
+│   ├── hek_nim_parser.py      to_nim() for compound statements + type decls
 │   ├── hek_nim_declarations.py to_nim() for type annotations
-│   ├── ady2nim.py               Entry point: parse + emit Nim
-│   └── STDLIB/                 Bundled runtime, reachable with `nimport`
-│       ├── stdlib.nim          Nim shim for Python builtins (PriorityQueue, etc.)
-│       ├── awk.ady             AwkBase record processor
-│       ├── graphs.ady          Shortest paths, generic in the node type
-│       ├── iters.ady           Iterator toolkit (take, chunks, pairwise, …)
+│   ├── ady2nim.py             Entry point: parse + emit Nim
+│   └── STDLIB/                Bundled runtime, reachable with `nimport`
+│       ├── stdlib.nim         Nim shim for Python builtins (PriorityQueue, etc.)
+│       ├── awk.ady            AwkBase record processor
+│       ├── graphs.ady         Shortest paths, generic in the node type
+│       ├── iters.ady          Iterator toolkit (take, chunks, pairwise, …)
 │       └── db.ady, jointjs.ady, expect.nim
 │
-├── EXAMPLES/                   End-to-end example programs (`*.ady`)
-│                               Transpiled output is not kept here — it goes to
-│                               ~/.cache/hparsec/cache-<HASH>/
+├── EXAMPLES/                  End-to-end example programs (`*.ady`)
+│                              Transpiled output is not kept here — it goes to
+│                              ~/.cache/adascript/cache-<HASH>/
 │
-├── ADA_INDENT/                 Ada source indenter, itself written in Adascript
-├── LSP/                        Editor support: language server, emacs,
-│                               vscode, sublime
-└── DOCS/                       Tutorials, topic references, and BOOK/
+├── ADA_INDENT/                Ada source indenter, itself written in Adascript
+├── LSP/                       Editor support: language server, emacs,
+│                              vscode, sublime
+└── DOCS/                      Tutorials, topic references, and BOOK/
 ```
 
 ### How transpilation works

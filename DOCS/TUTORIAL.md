@@ -114,7 +114,7 @@ python3 TO_NIM/ady2nim.py -t source.ady
 python3 TO_NIM/ady2nim.py c -d:release source.ady
 ```
 
-All build artifacts go into `~/.cache/hparsec/cache-<HASH>/`, keeping your
+All build artifacts go into `~/.cache/adascript/cache-<HASH>/`, keeping your
 source directory clean. Builds are incremental: re-runs skip transpilation or
 compilation whenever the cached output is newer than both the source and the
 transpiler itself.
@@ -2496,7 +2496,7 @@ what lets an entry point in `bin/` write `nimport lib/util`.
 `ady2nim c -r dispatch.ady` walks the `nimport` graph breadth-first,
 pre-parses each dependency (collecting class names, constructor signatures,
 return types, and the field order of records and named tuples), transpiles
-each into a per-program cache directory under `~/.cache/hparsec/`, and then
+each into a per-program cache directory under `~/.cache/adascript/`, and then
 runs one `nim c` over the graph with `--path` pointing at that cache. Only
 the binary symlink is written next to your sources. Editing any module at any
 depth triggers a rebuild; `ady2nim -t` transpiles the graph and stops.

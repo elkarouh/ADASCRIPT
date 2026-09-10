@@ -278,7 +278,7 @@ from hek_parsec import (
     literal,
     method,
 )
-from py3expr import expression, ikw
+from ady_expr import expression, ikw
 
 ###############################################################################
 # Tokens
@@ -322,7 +322,7 @@ primitive_type = filt(lambda s: s in _PRIMITIVES, IDENTIFIER)
 # --- User-defined type name: any non-primitive identifier, including subscripts
 # e.g. MyClass, List[int], Optional[str], Dict[str, int]
 # We use the full Python primary expression so subscript trailers are consumed.
-from py3expr import primary as _primary
+from ady_expr import primary as _primary
 type_name = filt(
     lambda node: (
         # Accept primary expressions that start with a non-primitive identifier.
