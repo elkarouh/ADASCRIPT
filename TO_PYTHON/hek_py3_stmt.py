@@ -118,7 +118,7 @@ def to_py(self):
                 result += f" = {value}"
                 has_value = True
     # Deliberately not zero-initialised here, unlike the `var x: T` form:
-    # `x: int` with no value is also ordinary Python, which py2py round-trips
+    # `x: int` with no value is also ordinary Python, which ady2py round-trips
     # unchanged.  Write `var x: T` to mean an Adascript declaration.
     return result
 

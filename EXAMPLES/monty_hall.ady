@@ -1,4 +1,4 @@
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 
 type Door_T is enum Door1, Door2, Door3
 type Choice_T is enum Switch, DontSwitch

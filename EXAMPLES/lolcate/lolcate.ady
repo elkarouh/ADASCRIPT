@@ -1,4 +1,4 @@
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 """
 lolcate.ady — fast file indexer, Adascript port of lolcate-rs.
 

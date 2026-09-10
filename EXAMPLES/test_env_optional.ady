@@ -1,8 +1,8 @@
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 # test_env_optional.ady — $?NAME and ${?NAME}, the environment as a ?str
 #
-#   py2nim EXAMPLES/test_env_optional.ady -r
-#   py2py  EXAMPLES/test_env_optional.ady -c
+#   ady2nim EXAMPLES/test_env_optional.ady -r
+#   ady2py  EXAMPLES/test_env_optional.ady -c
 #
 # `$NAME` is a str, so it answers "" both for a variable that is absent and
 # for one that is set to nothing -- a sentinel, and OPTIONAL_TYPES.md §13

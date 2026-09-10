@@ -1,7 +1,7 @@
 # Test file for float/int range types
 # type T is float range lo .. hi  -- runtime assert on every assignment
 # type T is int range lo .. hi    -- synonym for type T is lo .. hi (Nim range[])
-# Run with: python3 TO_NIM/py2nim.py TO_NIM/TEST/test_float_range.ady
+# Run with: python3 TO_NIM/ady2nim.py TO_NIM/TEST/test_float_range.ady
 
 type Temperature is float range 0.0 .. 100.0
 type Probability  is float range 0.0 .. 1.0

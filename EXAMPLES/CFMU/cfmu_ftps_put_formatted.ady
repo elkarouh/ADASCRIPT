@@ -1,4 +1,4 @@
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 # cfmu_ftps_put_formatted.ady
 # Upload files that already follow the FTPS naming convention.
 # Fields are extracted from the filename itself.

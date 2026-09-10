@@ -1,4 +1,4 @@
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 """
 graphs.ady — shortest paths over a weighted digraph, generic in the node type
 

@@ -1,4 +1,4 @@
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 #ady2nim-args c -d:release --opt:speed
 # test_ada_indent.ady — self-tests for the ada_indent re-indenter.
 #
@@ -6,7 +6,7 @@
 # library (nimport auto-transpiles the sibling .ady) and exercises it against a
 # table of messy-input -> canonical-output cases. Run it with:
 #
-#   py2nim ADA_INDENT/test_ada_indent.ady -r        # compile if stale, run tests
+#   ady2nim ADA_INDENT/test_ada_indent.ady -r        # compile if stale, run tests
 #
 # Each case is independent: a fresh Indenter re-indents the input line by line
 # and the result is compared to the expected output.

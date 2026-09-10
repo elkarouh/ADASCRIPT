@@ -1,4 +1,4 @@
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 # cfmu_ftps_recover.ady
 # Recovery script: upload a previously failed file to the FTPS server.
 # Translated from cfmu_ftps_recover.pl (wrapper around FTPS::Recover)

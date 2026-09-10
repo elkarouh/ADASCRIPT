@@ -1,4 +1,4 @@
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 # ftps_delete.ady
 # Delete files from the FTPS server.
 # Translated from FTPS::Delete (Perl).

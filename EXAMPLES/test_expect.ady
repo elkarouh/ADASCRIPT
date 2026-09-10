@@ -1,4 +1,4 @@
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 """
 test_expect — drive bc via PTY using the expect stdlib.
 """

@@ -24,8 +24,8 @@ A single `.ady` source file transpiles to *both* ecosystems:
 ```
 source.ady
     │
-    ├── python3 TO_PYTHON/py2py.py source.ady  ──▶  Python 3
-    └── python3 TO_NIM/py2nim.py   source.ady  ──▶  Nim  ──▶  native binary
+    ├── python3 TO_PYTHON/ady2py.py source.ady  ──▶  Python 3
+    └── python3 TO_NIM/ady2nim.py   source.ady  ──▶  Nim  ──▶  native binary
 ```
 
 You prototype with Python's ecosystem and debugging comfort, then ship the
@@ -38,7 +38,7 @@ The smallest Adascript program is also a valid Python program, except for one
 courtesy inherited from Python 2: `print` works without parentheses.
 
 ```python
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 print "Hello, world!"
 ```
 
@@ -52,7 +52,7 @@ Here is the first real program, `EXAMPLES/primes.ady`, which counts the
 primes below one million and times itself:
 
 ```python
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 
 pyimport time
 
@@ -95,8 +95,8 @@ Twenty lines, and already half the language's character is on display:
 - **f-strings and parenthesis-free `print`**, which becomes `echo fmt"..."`
   in Nim.
 
-The payoff for these twenty lines: run it with `py2py.py -c` and you get
-Python's answer in Python's time; run it with `py2nim.py -d:release` and the
+The payoff for these twenty lines: run it with `ady2py.py -c` and you get
+Python's answer in Python's time; run it with `ady2nim.py -d:release` and the
 identical source runs at native speed.
 
 ## 1.3 A four-line filter
@@ -105,7 +105,7 @@ Adascript is also meant for the small end of the scale — the scripts you
 would otherwise write in AWK. `EXAMPLES/average_line.ady` in its entirety:
 
 ```python
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 """
 cat FILE | ./average_line
 ./average_line < FILE
@@ -132,7 +132,7 @@ pseudocode. `EXAMPLES/dijkstra.ady` is the shortest way to see what that
 means — this is the whole file, nothing elided:
 
 ```python
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 from stdlib nimport PriorityQueue
 type Node_T is enum A, B, C, D
 type Distance_T is float
@@ -294,24 +294,24 @@ runs on both.
 
 ```bash
 # Python backend
-python3 TO_PYTHON/py2py.py source.ady        # print generated Python to stdout
-python3 TO_PYTHON/py2py.py -c source.ady     # transpile and run
+python3 TO_PYTHON/ady2py.py source.ady        # print generated Python to stdout
+python3 TO_PYTHON/ady2py.py -c source.ady     # transpile and run
 
 # Nim backend
-python3 TO_NIM/py2nim.py source.ady          # transpile + compile + run (default)
-python3 TO_NIM/py2nim.py -t source.ady       # transpile only, write source.nim
-python3 TO_NIM/py2nim.py c -d:release source.ady   # optimised build
+python3 TO_NIM/ady2nim.py source.ady          # transpile + compile + run (default)
+python3 TO_NIM/ady2nim.py -t source.ady       # transpile only, write source.nim
+python3 TO_NIM/ady2nim.py c -d:release source.ady   # optimised build
 ```
 
 Per-file compiler options live on the second line of the source, after the
 shebang. Many examples pin their C compiler this way:
 
 ```python
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 #ady2nim-args c --cc:clang --clang.exe:zigcc --clang.linkerexe:zigcc
 ```
 
-Any flag `py2nim` does not recognise (e.g. `-d:release`, `--opt:speed`) is
+Any flag `ady2nim` does not recognise (e.g. `-d:release`, `--opt:speed`) is
 forwarded to the Nim compiler. Builds are incremental at three levels:
 transpilation is skipped if the `.nim` file is newer than both the source and
 the transpiler; compilation is skipped if the binary is newer than the

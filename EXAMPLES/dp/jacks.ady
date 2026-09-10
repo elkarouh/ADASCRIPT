@@ -1,4 +1,4 @@
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 """Jack's Car Rental — Policy Iteration.
 
 Original Python: https://github.com/dennybritz/reinforcement-learning/blob/master/DP/Jack%27s%20Car%20Rental%20Solution.ipynb

@@ -6,10 +6,10 @@ history of this file if the reasoning behind one of them is ever wanted.
 
 - [ ] streaming stdin — deliberately not built; the deadlock case is already
       handled, so only the in-memory limit remains (see below)
-- [ ] `EXAMPLES/JOINTJS_DEMO/roi_glue.ady` crashes py2py on `jsvar`, which the
+- [ ] `EXAMPLES/JOINTJS_DEMO/roi_glue.ady` crashes ady2py on `jsvar`, which the
       grammar marks JS-backend-only. The file targets neither Python nor the
       Nim C backend (it does not compile there either), so this is a bad
-      diagnostic rather than a missing feature: py2py should say the construct
+      diagnostic rather than a missing feature: ady2py should say the construct
       is not for this backend instead of raising AttributeError.
 - [ ] containers holding enum values stringify differently. `print xs` where
       `xs: []Node_T` gives `@[A, B, C, D]` on Nim and
@@ -35,14 +35,14 @@ history of this file if the reasoning behind one of them is ever wanted.
       "type mismatch ... expected Table". Iteration and indexing agree now;
       these two do not. Nim's `pairs`/`keys` iterators over an array are the
       shape to map onto.
-- [ ] py2py generates annotations whose names are not in scope at import
+- [ ] ady2py generates annotations whose names are not in scope at import
       time. `Callable` is fixed (the emitter now adds the typing import),
       but a class that names itself -- `def __and__(self, other: Region)`
       inside `class Region` -- is still a NameError, because Python
       evaluates annotations eagerly while Adascript writes them the way Nim
       does, as compile-time types. `from __future__ import annotations` is
       the right answer and is a one-line change, but every expected output
-      in `py2py --test` and `test_py2py.py` is a literal string that would
+      in `ady2py --test` and `test_ady2py.py` is a literal string that would
       gain the import line: 43 and 122 cases respectively fail on it. Worth
       doing together with a pass over those fixtures.
 - [ ] `&` as string concatenation is Nim-only: `a & b` over two strings
@@ -84,12 +84,12 @@ history of this file if the reasoning behind one of them is ever wanted.
       both sides; the lexical `os.path.join` rule is the easier one to
       match, but it means shadowing the `/` that std/paths exports.
       `git1.ady` sidesteps it by joining in two steps.
-- [ ] py2nim: `any(xs)` and `all(xs)` over a `[]bool` do not translate. `any`
+- [ ] ady2nim: `any(xs)` and `all(xs)` over a `[]bool` do not translate. `any`
       hits Nim's deprecated `any` *type* ("illegal type conversion to 'any'")
       and `all` is simply undeclared; both work on the Python backend, so the
       same source gives a working program on one and a compile error on the
       other. `sequtils` has `anyIt`/`allIt` to map onto.
-- [ ] py2nim: a value-returning call used as a statement gets `discard` inside
+- [ ] ady2nim: a value-returning call used as a statement gets `discard` inside
       a plain `def` but not inside a *method body* or at module level, so the
       same source compiles on Python and fails on Nim with "expression ... has
       to be used (or discarded)". The richer logic in `hek_nim_stmt.py` is the

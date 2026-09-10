@@ -1,4 +1,4 @@
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 """Norvig's lis.py — a Scheme interpreter — in AdaScript.
 
 Supports: numbers, symbols, booleans, if, define, set!, lambda, quote,

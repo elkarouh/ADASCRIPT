@@ -1,7 +1,7 @@
 # Test string slicing: s[lo:hi] -> substr(s, lo, hi-1)
 # Regression test: slicing str fields of tuples was incorrectly emitted as
 # array indexing s[lo..<hi] instead of substr(s, lo, hi-1).
-# Run with: python3 TO_NIM/py2nim.py TO_NIM/TEST/test_string_slice.ady
+# Run with: python3 TO_NIM/ady2nim.py TO_NIM/TEST/test_string_slice.ady
 
 # ── basic variable slicing ──────────────────────────────────────────────────
 

@@ -9,8 +9,8 @@ Python 3 file is also valid Adascript — the extra features are purely additive
 You write one source file; both ecosystems get idiomatic, efficient output.
 
 ```
-source.ady  ──▶  python3 TO_PYTHON/py2py.py source.ady  ──▶  Python 3
-            ──▶  python3 TO_NIM/py2nim.py   source.ady  ──▶  Nim
+source.ady  ──▶  python3 TO_PYTHON/ady2py.py source.ady  ──▶  Python 3
+            ──▶  python3 TO_NIM/ady2nim.py   source.ady  ──▶  Nim
 ```
 
 ---
@@ -50,7 +50,7 @@ Adascript files use the `.ady` extension. The first two lines can carry a
 shebang and per-file compiler options:
 
 ```python
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 #ady2nim-args c --cc:clang -d:release
 ```
 
@@ -87,7 +87,7 @@ def b(x: int) -> int:
 ### The simplest program
 
 ```python
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 print "Hello, world!"
 ```
 
@@ -99,19 +99,19 @@ rewrites it to `print(...)` in Python 3 and `echo(...)` in Nim. The call form
 
 ```bash
 # Transpile to Python 3 and print to stdout
-python3 TO_PYTHON/py2py.py source.ady
+python3 TO_PYTHON/ady2py.py source.ady
 
 # Transpile to Python 3 and run
-python3 TO_PYTHON/py2py.py -c source.ady
+python3 TO_PYTHON/ady2py.py -c source.ady
 
 # Transpile to Nim and compile+run (default)
-python3 TO_NIM/py2nim.py source.ady
+python3 TO_NIM/ady2nim.py source.ady
 
 # Transpile only — writes the .nim into the cache and prints its path
-python3 TO_NIM/py2nim.py -t source.ady
+python3 TO_NIM/ady2nim.py -t source.ady
 
 # Optimised build
-python3 TO_NIM/py2nim.py c -d:release source.ady
+python3 TO_NIM/ady2nim.py c -d:release source.ady
 ```
 
 All build artifacts go into `~/.cache/hparsec/cache-<HASH>/`, keeping your
@@ -1581,7 +1581,7 @@ nimport awk                         # AwkBase — bundled record-processor stdli
 nimport shortest_path             # another .ady file compiled as a library
 ```
 
-When `nimport`-ing another `.ady` file, `py2nim` automatically transpiles
+When `nimport`-ing another `.ady` file, `ady2nim` automatically transpiles
 that dependency (if not already cached and up to date) and places both `.nim`
 files in the same cache directory, wiring up `--path` for the Nim compiler.
 
@@ -1599,7 +1599,7 @@ without a local copy next to your source file:
 Example — a custom awk processor in any directory:
 
 ```python
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 nimport awk
 
 class WordCounter(AwkBase):
@@ -1620,7 +1620,7 @@ wc.run()
 **shortest_path.ady** (the library, decorated with `@virtual`):
 
 ```python
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 #ady2nim-args c --cc:clang --clang.exe:zigcc --clang.linkerexe:zigcc
 
 nimport stdlib
@@ -1634,7 +1634,7 @@ class Optimizer[S, D, C]:
 **test_shortest_path.ady** (the test file):
 
 ```python
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 #ady2nim-args c --cc:clang --clang.exe:zigcc --clang.linkerexe:zigcc
 
 nimport stdlib
@@ -1656,7 +1656,7 @@ highlights from each.
 ### primes.ady — Range operators and timing
 
 ```python
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 import time
 
 N = 1_000_000
@@ -1687,7 +1687,7 @@ Python-2-style `print`, f-strings.
 ### graph.ady — Type aliases and recursive functions
 
 ```python
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 
 type Node_T  is str
 type Graph_T is {Node_T}[]Node_T    # dict mapping node to list of neighbours
@@ -1725,7 +1725,7 @@ Features: type aliases for readability, `{}` and `[]` collections,
 ### monty_hall.ady — Enums, sets, tick attributes, case/when
 
 ```python
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 
 type Door_T   is enum Door1, Door2, Door3
 type Choice_T is enum Switch, DontSwitch
@@ -1770,7 +1770,7 @@ The algorithm entire — 27 lines (`dijkstra.ady` closes with a comment
 about the generic version in the bundled `graphs` library, not shown here):
 
 ```python
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 from stdlib nimport PriorityQueue
 type Node_T is enum A, B, C, D
 type Distance_T is float
@@ -1809,7 +1809,7 @@ iterates a `{K}V`, which yields its keys.
 
 Runs on both backends. Nim compiles against the shim in
 `TO_NIM/STDLIB/stdlib.nim`; Python has no module of that name to import, so
-`py2py` writes `PriorityQueue` into its output instead — a `heapq` heap,
+`ady2py` writes `PriorityQueue` into its output instead — a `heapq` heap,
 which is what Nim's hand-written binary heap amounts to. `FifoQueue`,
 `LifoQueue` and the `ANY` sentinel come the same way.
 
@@ -2430,7 +2430,7 @@ advanced scenarios are not yet supported:
 
 Up to here every program has been one file. Past a few hundred lines a
 program wants modules, and `nimport` is how they find each other. This is a
-Nim-backend feature: py2nim builds a whole dependency graph, py2py translates
+Nim-backend feature: ady2nim builds a whole dependency graph, ady2py translates
 one file at a time.
 
 ### 21.1 A module is a file
@@ -2448,7 +2448,7 @@ EXAMPLES/PROJECT/
 ```
 
 ```bash
-py2nim c -r EXAMPLES/PROJECT/dispatch.ady
+ady2nim c -r EXAMPLES/PROJECT/dispatch.ady
 ```
 
 ```python
@@ -2472,7 +2472,7 @@ is accepted and means the same thing.
 
 ### 21.2 How a name is found
 
-For each `nimport`, py2nim looks for the `.ady` file in three places, in
+For each `nimport`, ady2nim looks for the `.ady` file in three places, in
 order: the importing file's own directory, that directory's parent, then the
 build cache (where the bundled `TO_NIM/STDLIB/*.ady` libraries are
 installed). The first hit wins; if nothing matches, the name is passed to Nim
@@ -2493,13 +2493,13 @@ what lets an entry point in `bin/` write `nimport lib/util`.
 
 ### 21.4 The build
 
-`py2nim c -r dispatch.ady` walks the `nimport` graph breadth-first,
+`ady2nim c -r dispatch.ady` walks the `nimport` graph breadth-first,
 pre-parses each dependency (collecting class names, constructor signatures,
 return types, and the field order of records and named tuples), transpiles
 each into a per-program cache directory under `~/.cache/hparsec/`, and then
 runs one `nim c` over the graph with `--path` pointing at that cache. Only
 the binary symlink is written next to your sources. Editing any module at any
-depth triggers a rebuild; `py2nim -t` transpiles the graph and stops.
+depth triggers a rebuild; `ady2nim -t` transpiles the graph and stops.
 
 ### 21.5 Rules
 
@@ -2513,7 +2513,7 @@ depth triggers a rebuild; `py2nim -t` transpiles the graph and stops.
 - Exported names share one namespace; Nim overloading absorbs most clashes.
 - A module's test is another entry point that nimports it and asserts
   (`EXAMPLES/PROJECT/test_geometry.ady`).
-- `nimport` is Nim-only. py2py comments it out and translates one file at a
+- `nimport` is Nim-only. ady2py comments it out and translates one file at a
   time, so a program split across modules is a Nim program; dual-backend code
   stays in one file.
 

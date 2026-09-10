@@ -1,4 +1,4 @@
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 # cfmu_list_ftp_server.ady
 # List files on an FTP server instance under a given directory level.
 # Translated from cfmu_list_ftp_server.ksh

@@ -193,8 +193,8 @@ shape is:
   `if/elif`, with a small `stdlib.nim` shim for `PriorityQueue`, `Counter_T`
   and friends.
 
-When something behaves differently between targets, run `py2py.py` and
-`py2nim.py -t` and *read both outputs side by side* — they are short, and
+When something behaves differently between targets, run `ady2py.py` and
+`ady2nim.py -t` and *read both outputs side by side* — they are short, and
 the diff usually explains the behaviour immediately.
 
 One caveat worth carrying into the case studies: the two backends are not

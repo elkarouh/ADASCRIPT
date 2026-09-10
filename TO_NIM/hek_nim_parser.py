@@ -1248,7 +1248,7 @@ def to_nim(self, prec=None):
     hek_nim_expr.py, which is the single place that knows the attribute set.
     A second, divergent copy of that dispatch used to sit in this function
     behind a `"__tick__" in name` test; it was removed once instrumentation
-    showed it took no hits from py2nim --test, from any .ady under
+    showed it took no hits from ady2nim --test, from any .ady under
     EXAMPLES/, TO_NIM/STDLIB/ and ADA_INDENT/, or from a tick on a set, on a
     type, or inside a case pattern, and once deleting it left the generated
     Nim for every one of those files byte-identical.
@@ -3097,7 +3097,7 @@ def to_nim(self, indent=0):
     # The 'ref' keyword is controlled separately
     # A class body's `name: T` lines are field declarations, not Python
     # annotations -- func_def clears the flag again so a method body is an
-    # ordinary scope, the same split py2py makes with CLASS_BODY_DEPTH.
+    # ordinary scope, the same split ady2py makes with CLASS_BODY_DEPTH.
     import hek_nim_stmt as _hns_cls
     _hns_cls.FIELD_BODY_DEPTH += 1
     try:

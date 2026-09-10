@@ -12,7 +12,7 @@ CHANGES MADE:
 - hek_parsec.py: Added expect_type_node() to return token nodes (not strings)
 - hek_py3_parser.py: NL = expect_type_node(tkn.NL), added NL.to_py() method
 - hek_py3_stmt.py: Fixed import_names_paren to allow NL[:] inside parens
-- py2py.py: Simplified parse_module() and translate()
+- ady2py.py: Simplified parse_module() and translate()
 
 TEST STATUS (as of implementation):
 ===================================
@@ -74,8 +74,8 @@ TODO FOR FUTURE WORK:
    - Some grammar rules may still not handle RichNL properly
 
 USAGE:
-    python3 py2py.py [file.py]       # translate a file
-    echo "x = 1" | python3 py2py.py  # translate from stdin
+    python3 ady2py.py [file.py]       # translate a file
+    echo "x = 1" | python3 ady2py.py  # translate from stdin
 """
 
 """Python 3.14 source-to-source translator using parser combinators.
@@ -88,8 +88,8 @@ in the tokenizer and attaching them to AST nodes. This approach is
 language-agnostic — trivia travels with the AST, not with line numbers.
 
 Usage:
-    python3 py2py.py [file.py]       # translate a file
-    echo "x = 1" | python3 py2py.py  # translate from stdin
+    python3 ady2py.py [file.py]       # translate a file
+    echo "x = 1" | python3 ady2py.py  # translate from stdin
 """
 
 import sys, os
@@ -392,7 +392,7 @@ def main(args=None):
 
 def run_tests():
     print("=" * 60)
-    print("Python 3.14 py2py Translator Tests")
+    print("Python 3.14 ady2py Translator Tests")
     print("=" * 60)
 
     tests = [

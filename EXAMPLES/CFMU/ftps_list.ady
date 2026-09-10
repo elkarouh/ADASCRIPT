@@ -1,4 +1,4 @@
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 # ftps_list.ady
 # List files on the FTPS server matching a pattern.
 # Translated from FTPS::List (Perl).

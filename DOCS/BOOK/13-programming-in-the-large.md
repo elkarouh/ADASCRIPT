@@ -15,7 +15,7 @@ The worked example is `EXAMPLES/PROJECT/`, a four-file program you can build
 and run:
 
 ```bash
-py2nim c -r EXAMPLES/PROJECT/dispatch.ady
+ady2nim c -r EXAMPLES/PROJECT/dispatch.ady
 ```
 
 ---
@@ -34,7 +34,7 @@ Two roles, one file format:
 
 | Role | Shape | Top-level code |
 |------|-------|----------------|
-| **Program** (entry point) | has a `#!/usr/bin/env py2nim` shebang, is the file you hand to `py2nim` | this *is* the program |
+| **Program** (entry point) | has a `#!/usr/bin/env ady2nim` shebang, is the file you hand to `ady2nim` | this *is* the program |
 | **Module** (library) | declarations only: types, procs, classes, constants | runs at import time — see 13.7 |
 
 `EXAMPLES/PROJECT/` has one of the first and three of the second:
@@ -49,7 +49,7 @@ EXAMPLES/PROJECT/
 ```
 
 Nothing marks a module as a module, and nothing marks a declaration as
-exported. When py2nim transpiles a file *as a dependency* it emits every
+exported. When ady2nim transpiles a file *as a dependency* it emits every
 top-level declaration with Nim's export marker, so `def distance(...)`
 becomes `proc distance*(...)`. Exporting is the default, and the unit of
 privacy is the module you choose not to import.
@@ -68,7 +68,7 @@ nimport geometry            # 3. your own geometry.ady
 ```
 
 The difference is only whether a `.ady` file with that name is found next to
-your source. If one is, py2nim transpiles it and compiles it into your
+your source. If one is, ady2nim transpiles it and compiles it into your
 program; if not, the name is handed to Nim untouched. That is why
 `nimport os` and `nimport lib/fleet` can sit in the same file without
 ceremony.
@@ -106,7 +106,7 @@ Nim/stdlib modules or 'pyimport geometry' for Python packages.
 
 ## 13.3 How a module name is resolved
 
-For each name it nimports, py2nim looks for a `.ady` file in three places, in
+For each name it nimports, ady2nim looks for a `.ady` file in three places, in
 order:
 
 1. **the directory of the file doing the importing**
@@ -135,7 +135,7 @@ Two consequences worth internalising:
   one directory up.
 
 There is no `..` syntax: a module name starts with a letter, so
-`nimport ../lib/util` is not a name py2nim will resolve. The parent rule
+`nimport ../lib/util` is not a name ady2nim will resolve. The parent rule
 covers the one level of escape you actually need.
 
 ---
@@ -210,7 +210,7 @@ written the same way.
 
 ## 13.5 What the build actually does
 
-`py2nim c -r EXAMPLES/PROJECT/dispatch.ady` prints its own story:
+`ady2nim c -r EXAMPLES/PROJECT/dispatch.ady` prints its own story:
 
 ```
 # transpiled → ~/.cache/hparsec/cache-DECF844B7E36524E/dispatch.nim
@@ -222,7 +222,7 @@ written the same way.
 
 Step by step:
 
-1. **Pre-pass.** Before anything is written, py2nim walks the `nimport` graph
+1. **Pre-pass.** Before anything is written, ady2nim walks the `nimport` graph
    breadth-first and parses each dependency to collect what the *importers*
    need to know about it: class names, constructor signatures, which classes
    are `ref`/virtual, proc return types, and the field order of records and
@@ -238,7 +238,7 @@ Step by step:
    `EXAMPLES/PROJECT/dispatch` runs the built binary.
 
 The cache directory is keyed by a SHA-1 of the entry point's absolute path
-*and* the backend, so `py2nim c` and `py2nim js` never hand each other the
+*and* the backend, so `ady2nim c` and `ady2nim js` never hand each other the
 wrong `.nim`, and two programs sharing a `lib/` get one cache each. Nothing is
 ever written next to your source but the symlink.
 
@@ -249,9 +249,9 @@ bundled support files aside — is newer than the binary; otherwise exec the bin
 `lib/geometry.ady` therefore rebuilds `dispatch`, and editing nothing costs
 one `stat` per file.
 
-`py2nim -t` runs step 1 and 2 and stops. It is the build's first tier, not a
+`ady2nim -t` runs step 1 and 2 and stops. It is the build's first tier, not a
 different translation: use it to read the generated Nim, and expect the same
-`.nim` a later `py2nim c` compiles.
+`.nim` a later `ady2nim c` compiles.
 
 ---
 
@@ -315,7 +315,7 @@ def twice(n: int) -> int:
 ```
 
 ```
-$ py2nim c -r bin/tool.ady
+$ ady2nim c -r bin/tool.ady
 util module init
 42
 ```
@@ -386,7 +386,7 @@ print dist(ORIGIN, p)
 print(dist(ORIGIN, p))          # NameError: dist is not defined
 ```
 
-And `py2py` translates exactly one file — it has no dependency resolution, it
+And `ady2py` translates exactly one file — it has no dependency resolution, it
 writes `<name>_gen.py` next to the source, and type knowledge does not cross
 files, so even after transpiling each module by hand a `Point_T` built in one
 file and used in another comes out as a bare tuple. `from geometry import *`
@@ -412,7 +412,7 @@ There is no test runner, and none is needed: a test is an entry point that
 imports the module under test and asserts.
 
 ```python
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 # EXAMPLES/PROJECT/test_geometry.ady
 nimport lib/geometry
 
@@ -426,18 +426,18 @@ print "all geometry checks passed"
 and prints `all PROJECT checks passed`, which is what lets the repository's
 `make test` run it as a self-checking example. The repository Makefile is
 worth copying for your own project: it lists sources by path relative to a
-single examples directory, builds each with `py2nim c`, then runs the ones
+single examples directory, builds each with `ady2nim c`, then runs the ones
 that are self-contained.
 
 ```makefile
-PY2NIM := python3 /path/to/TO_NIM/py2nim.py
+ADY2NIM := python3 /path/to/TO_NIM/ady2nim.py
 
 TESTS := test_geometry.ady test_fleet.ady
 
 test:
 	@for t in $(TESTS); do \
 	    printf '  %-30s' "$$t"; \
-	    $(PY2NIM) c -r $$t >/dev/null 2>&1 && echo OK || { echo FAIL; exit 1; }; \
+	    $(ADY2NIM) c -r $$t >/dev/null 2>&1 && echo OK || { echo FAIL; exit 1; }; \
 	done
 ```
 
@@ -465,7 +465,7 @@ Splitting a program that outgrew one file:
 - [ ] No top-level statements in modules beyond constants and `let`.
 - [ ] A `test_<module>.ady` entry point per module, each ending in an assert
       and a line saying it passed.
-- [ ] `py2nim c -r <entry>.ady` builds the whole graph; nothing else to
+- [ ] `ady2nim c -r <entry>.ady` builds the whole graph; nothing else to
       configure.
 
 ---

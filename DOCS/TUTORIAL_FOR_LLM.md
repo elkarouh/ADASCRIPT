@@ -5,8 +5,8 @@
 Adascript (`.ady` files) is a statically-typed superset of Python 3. Every valid Python 3 file is valid Adascript. It transpiles to both **Python 3** and **Nim**. Features are purely additive — you write one source file and target either ecosystem.
 
 ```
-source.ady  ──▶  python3 TO_PYTHON/py2py.py source.ady  ──▶  Python 3
-            ──▶  python3 TO_NIM/py2nim.py   source.ady  ──▶  Nim
+source.ady  ──▶  python3 TO_PYTHON/ady2py.py source.ady  ──▶  Python 3
+            ──▶  python3 TO_NIM/ady2nim.py   source.ady  ──▶  Nim
 ```
 
 Key design goals: Ada-style type safety, Python ergonomics, Nim performance.
@@ -17,21 +17,21 @@ Key design goals: Ada-style type safety, Python ergonomics, Nim performance.
 
 ```bash
 # Transpile to Python 3 and run
-python3 TO_PYTHON/py2py.py -c source.ady
+python3 TO_PYTHON/ady2py.py -c source.ady
 
 # Transpile to Nim and compile+run (default)
-python3 TO_NIM/py2nim.py source.ady
+python3 TO_NIM/ady2nim.py source.ady
 
 # Transpile only (write .nim file)
-python3 TO_NIM/py2nim.py -t source.ady
+python3 TO_NIM/ady2nim.py -t source.ady
 
 # Optimised Nim build
-python3 TO_NIM/py2nim.py c -d:release source.ady
+python3 TO_NIM/ady2nim.py c -d:release source.ady
 ```
 
 Shebang + per-file Nim options (first two lines only):
 ```adascript
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 #ady2nim-args c -d:release
 ```
 
@@ -663,8 +663,8 @@ libraries live). No match -> the name goes to Nim untouched, which is why
 - A dependency's top-level statements run at import time — modules declare, programs act.
 - Basenames must be unique project-wide and must not be Nim keywords (`mod.ady` fails).
 - Keep the import graph acyclic: put shared types in a leaf module.
-- Build the whole graph with `py2nim c -r <entry>.ady`; `py2nim -t` transpiles it and stops.
-- **py2py has no module resolution**: `nimport` is stripped to a comment and each file is translated alone, so a multi-module program is a Nim program. Dual-backend code stays in one file.
+- Build the whole graph with `ady2nim c -r <entry>.ady`; `ady2nim -t` transpiles it and stops.
+- **ady2py has no module resolution**: `nimport` is stripped to a comment and each file is translated alone, so a multi-module program is a Nim program. Dual-backend code stays in one file.
 
 **`# nimraw: <code>`** — raw Nim line verbatim, stripped from Python. Mainly for forward declarations of mutually recursive functions:
 ```adascript

@@ -1,6 +1,6 @@
 # Test the db stdlib shim: open an in-memory SQLite database,
 # insert rows, query them back, and verify values.
-# Run with: python3 TO_NIM/py2nim.py TO_NIM/TEST/test_db.ady
+# Run with: python3 TO_NIM/ady2nim.py TO_NIM/TEST/test_db.ady
 
 nimport db
 

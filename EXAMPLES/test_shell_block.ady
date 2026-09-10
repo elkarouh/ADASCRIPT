@@ -1,4 +1,4 @@
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 """
 test_shell_block — exercise the shell: block form with expect/send.
 """

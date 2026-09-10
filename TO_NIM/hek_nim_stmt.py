@@ -1920,7 +1920,7 @@ def to_nim(self):
 # used to sit at this point as well; both files registered on the same
 # grammar class, and since hek_nim_parser imports this module before
 # defining its own, the parser's was the one that ran and this one never
-# did -- instrumenting it produced no hits from py2nim --test or from any
+# did -- instrumenting it produced no hits from ady2nim --test or from any
 # .ady in the corpus, and deleting it left every generated file
 # byte-identical.  Two versions of the discard rules had already drifted
 # apart by then.  If stmt_line needs changing, hek_nim_parser.py is the

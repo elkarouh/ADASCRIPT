@@ -1,4 +1,4 @@
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 """
 Tstatus_monitor — parse tacot_corico output and display a formatted build status table.
 

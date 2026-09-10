@@ -1,4 +1,4 @@
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 # test_timing - Monitor test execution with timing information
 nimport os
 nimport times

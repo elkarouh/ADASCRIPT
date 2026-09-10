@@ -1,8 +1,8 @@
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 # test_self_ref.ady — a class whose body names the class it is defining
 #
-#   py2nim EXAMPLES/test_self_ref.ady -r
-#   py2py  EXAMPLES/test_self_ref.ady -c
+#   ady2nim EXAMPLES/test_self_ref.ady -r
+#   ady2py  EXAMPLES/test_self_ref.ady -c
 #
 # Python evaluates an annotation where it is written, and a class does not
 # exist as a name until its body has finished. So a field typed with the

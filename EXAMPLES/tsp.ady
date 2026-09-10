@@ -1,4 +1,4 @@
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 """Travelling Salesman Problem — a progression of algorithms from naive to near-optimal.
 Based on Norvig's pytudes: https://github.com/norvig/pytudes/blob/main/ipynb/TSP.ipynb
 

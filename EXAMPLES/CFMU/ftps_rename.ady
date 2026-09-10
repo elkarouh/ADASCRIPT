@@ -1,4 +1,4 @@
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 # ftps_rename.ady
 # Rename a file on the FTPS server.
 # Translated from FTPS::Rename (Perl).

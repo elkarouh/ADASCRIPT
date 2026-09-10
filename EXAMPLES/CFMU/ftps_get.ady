@@ -1,4 +1,4 @@
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 # ftps_get.ady
 # Download files from the FTPS server.
 # Translated from FTPS::Get (Perl).

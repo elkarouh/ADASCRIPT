@@ -1,4 +1,4 @@
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 # ftps_put.ady
 # Upload a file to the FTPS server.
 # Translated from FTPS::Put (Perl).

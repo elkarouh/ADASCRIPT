@@ -1478,7 +1478,7 @@ def _declare_type_vars(signature):
     """Declare a TypeVar for each implicit generic parameter in SIGNATURE.
 
     A single uppercase-letter identifier in an annotation is a type
-    variable by Adascript convention -- the same rule py2nim uses to build
+    variable by Adascript convention -- the same rule ady2nim uses to build
     its `[T, U]` proc parameters. Python evaluates annotations eagerly, so
     without a binding `def first_of(xs: list[T]) -> T` is a NameError at
     definition time and the whole module dies.
@@ -2795,7 +2795,7 @@ def to_py(self, indent=0):
     _is_tail_return = id(self) in RETURN_NODES
     has_target = bool(target_name or target_tuple) or _is_tail_return
 
-    # Mark that shell imports are needed; py2py.translate() inserts them at top
+    # Mark that shell imports are needed; ady2py.translate() inserts them at top
     ParserState.nim_imports.add("import subprocess as _subprocess")
     if has_target and not target_tuple:
         ParserState.nim_imports.add("import types as _types")

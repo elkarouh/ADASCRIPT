@@ -1,4 +1,4 @@
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 """Norvig's Sudoku solver in AdaScript.
 
 Constraint propagation + recursive DFS with MRV (minimum remaining values).

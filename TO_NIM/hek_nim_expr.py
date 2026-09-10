@@ -23,7 +23,7 @@ sys.path.insert(0, os.path.join(_dir, "..", "ADASCRIPT_GRAMMAR"))
 from hek_parsec import method, ParserState
 from py3expr import *
 
-# Set to True by py2nim before translating a file compiled with `nim js`.
+# Set to True by ady2nim before translating a file compiled with `nim js`.
 # Guards JS-only code-generation paths so the native backend is unaffected.
 JS_BACKEND = False
 from hek_nim_declarations import _is_nim_ordinal  # noqa: F403 — need all parser rule names
