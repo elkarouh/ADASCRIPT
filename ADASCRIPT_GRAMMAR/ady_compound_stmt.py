@@ -97,8 +97,6 @@ with_own_stmt = fw("with_own_stmt")
 with_item = fw("with_item")
 case_stmt = fw("case_stmt")
 when_clause = fw("when_clause")
-case_clause = fw("case_clause")
-match_stmt = fw("match_stmt")
 pattern = fw("pattern")
 variant_when = fw("variant_when")
 variant_case = fw("variant_case")
@@ -306,28 +304,6 @@ case_stmt = (
     + INDENT
     + NL[:]
     + (when_clause + NL[:])[1:]
-    + DEDENT
-)
-
-# Python 3.10+ match/case. No longer part of the language: the two spellings
-# were the same construct -- guards, ranges, sequence patterns, `as` bindings
-# and Nim's exhaustiveness all behaved identically -- and having both meant
-# `case` headed a block in one and a branch in the other, so a reader had to
-# look at the enclosing line to know which. case/when is the one that stayed:
-# `when` is required for variant records regardless, so it cannot leave.
-# The rules below are kept only because the emitters still register on them;
-# nothing reaches them now that compound_stmt no longer offers match_stmt.
-# case_clause: branch inside a match block — 'case pattern [if guard]: suite'
-case_clause = ikw("case") + pattern + case_guard[:] + COLON + suite
-
-match_stmt = (
-    ikw("match")
-    + expression
-    + COLON
-    + NEWLINE
-    + INDENT
-    + NL[:]
-    + (case_clause + NL[:])[1:]
     + DEDENT
 )
 

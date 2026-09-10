@@ -753,7 +753,7 @@ def to_py(self):
 
 @method(when_clause)
 def to_py(self, indent=0):
-    """case_clause: 'case' pattern ('if' guard)? ':' block"""
+    """when_clause: 'when' pattern ('if' guard)? ':' block"""
     pat = self.nodes[0].to_py()
     guard = ""
     block_node = None
@@ -786,15 +786,10 @@ def _block_node_of_py(when_node):
 
 
 def _extract_branches_py(case_node):
-    """Yield (pat_node, block_node, guard_node_or_None) for each branch.
-
-    Both statement forms are branch-per-pattern with the same shape, so the
-    match/case spelling (`case_clause`) is walked exactly like the case/when
-    one (`when_clause`) -- the range desugar below serves both.
-    """
+    """Yield (pat_node, block_node, guard_node_or_None) for each branch."""
     for node in case_node.nodes[1:]:
         tname = type(node).__name__
-        if tname in ("when_clause", "case_clause"):
+        if tname == "when_clause":
             pat = node.nodes[0]
             blk = _block_node_of_py(node)
             guard = None
@@ -809,7 +804,7 @@ def _extract_branches_py(case_node):
         elif tname == "Several_Times":
             for seq in node.nodes:
                 stname = type(seq).__name__
-                if stname in ("when_clause", "case_clause"):
+                if stname == "when_clause":
                     pat = seq.nodes[0]
                     blk = _block_node_of_py(seq)
                     guard = None
@@ -1005,43 +1000,8 @@ def _case_from_seq(seq, indent):
 
 # --- Python 3.10+ match/case ---
 
-@method(case_clause)
-def to_py(self, indent=0):
-    """case_clause: 'case' pattern guard? ':' suite — Python match/case branch"""
-    pat = self.nodes[0].to_py()
-    guard = ""
-    block_node = None
-    for node in self.nodes[1:]:
-        if type(node).__name__ == "Several_Times" and node.nodes:
-            for seq in node.nodes:
-                if hasattr(seq, "to_py"):
-                    guard = seq.to_py()
-        elif hasattr(node, "to_py"):
-            block_node = node
-    hc = _block_inline_header_comment(block_node) if block_node else ""
-    body = _suite_to_py(block_node, indent + 1) if block_node else ""
-    return f"{_ind(indent)}case {pat}{guard}:{hc}\n{body}"
 
 
-@method(match_stmt)
-def to_py(self, indent=0):
-    """match_stmt: 'match' expression ':' NEWLINE INDENT case_clause+ DEDENT"""
-    subject = self.nodes[0].to_py()
-    if _needs_chain_py(self):
-        return _pattern_chain_to_py(self, subject, indent)
-    result = f"{_ind(indent)}match {subject}:"
-    for node in self.nodes[1:]:
-        tname = type(node).__name__
-        if tname == "case_clause":
-            result += "\n" + node.to_py(indent + 1)
-        elif tname == "Several_Times":
-            for seq in node.nodes:
-                stname = type(seq).__name__
-                if stname == "case_clause":
-                    result += "\n" + seq.to_py(indent + 1)
-                elif stname == "Sequence_Parser" and hasattr(seq, "nodes"):
-                    result += "\n" + _case_from_seq(seq, indent + 1)
-    return result
 
 
 # --- Function parameters ---
@@ -1193,8 +1153,7 @@ def _branch_blocks(node, out):
         if tname in ("block", "stmt_line"):
             out.append(child)
         elif tname in ("Several_Times", "Sequence_Parser", "Filter", "Fmap",
-                       "elif_clause", "else_clause", "when_clause",
-                       "case_clause"):
+                       "elif_clause", "else_clause", "when_clause"):
             _branch_blocks(child, out)
 
 
@@ -1274,8 +1233,8 @@ def _mark_implicit_returns(stmt, depth=0):
         if type(stmt.nodes[0]).__name__ == "shell_stmt":
             _mark_implicit_returns(stmt.nodes[0], depth + 1)
             return
-    if tname in ("if_stmt", "case_stmt", "match_stmt"):
-        # A case/match in tail position returns whichever branch runs, exactly
+    if tname in ("if_stmt", "case_stmt"):
+        # A case in tail position returns whichever branch runs, exactly
         # as an if does; without this every branch's value was dropped and the
         # function returned None, which the Nim backend got right and this one
         # did not.
