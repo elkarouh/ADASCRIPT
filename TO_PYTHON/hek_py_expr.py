@@ -461,10 +461,11 @@ def to_py(self, prec=None):
 @method(attr_trailer)
 def to_py(self, prec=None):
     """attr_trailer: '.' IDENTIFIER"""
-    attr_name = self.nodes[0].node if hasattr(self.nodes[0], 'node') else str(self.nodes[0])
-    # .lines on a file/stdin is a Nim-ism; Python files are directly iterable
-    if attr_name == "lines":
-        return ""
+    # `.lines` used to be dropped here, leaving the bare file: Python's own
+    # iteration is close enough to Nim's `.lines` to pass for it, except that
+    # it keeps the newline and Nim's does not, so the same source line handed
+    # back different strings on the two backends. It is kept whole now and
+    # turned into the helper by `primary`, which has the receiver.
     return "." + self.nodes[0].to_py()
 
 
@@ -550,6 +551,31 @@ def py_expr_is_optional(expr):
         return False
     sym = ParserState.symbol_table.lookup(e)
     return bool(sym) and (sym.get("type") or "").endswith("| None")
+
+
+_LINES_HELPER = '''\
+def _lines(_f):
+    """The lines of a file with their terminators removed.
+
+    Nim's `.lines` yields a line without its newline; Python's own iteration
+    keeps it. Dropping the trailer and iterating the file directly was close,
+    and wrong by exactly one character on every line.
+
+    Text mode already folds \\r\\n to \\n on the way in, so there is one
+    terminator to remove, and a last line without one is yielded as it is --
+    both of which is what Nim does.
+    """
+    for _l in _f:
+        yield _l[:-1] if _l.endswith("\\n") else _l\
+'''
+
+
+def _ensure_lines_helper():
+    """Define _lines the first time `.lines` is used."""
+    decls = getattr(ParserState, 'py_top_decls', [])
+    if not any("def _lines(" in d for d in decls):
+        decls.append(_LINES_HELPER)
+        ParserState.py_top_decls = decls
 
 
 def _ensure_shuffle_helper():
@@ -1209,6 +1235,11 @@ def to_py(self, prec=None):
                 continue
             if tr_str == ".maxIndex":
                 result = f"{result}.index(max({result}))"
+                i += 1
+                continue
+            if tr_str == ".lines":
+                _ensure_lines_helper()
+                result = f"_lines({result})"
                 i += 1
                 continue
             if (tr_str == ".get"

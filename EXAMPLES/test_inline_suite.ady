@@ -1057,12 +1057,12 @@ let fh: File = open(tmp_lines)
 var got: []str = []
 for line in fh.lines:
     got.append(line)
-# Line COUNT only, deliberately. `.lines` does not mean the same thing on the
-# two backends -- Nim strips the newline, the Python target emits a plain
-# `for line in fh` and keeps it -- so the contents cannot be asserted here
-# until that is settled one way or the other. Pre-existing; ada_indent never
-# saw it because indent_line strips anyway.
-assert len(got) == 2
+# Contents, not just the count: `.lines` yields a line without its terminator
+# on both backends now. The Python target used to drop the trailer and
+# iterate the file directly, which keeps the newline -- average_line.ady
+# answered 28.0 there and 27.0 on Nim for the same input, and the newline was
+# the whole difference.
+assert got == ["alpha", "beta"]
 
 # and the conditional that motivates it: either branch is a File
 let use_stdin: bool = False
@@ -1071,4 +1071,12 @@ var n_lines: int = 0
 for line in src.lines:
     n_lines += 1
 assert n_lines == 2
+
+# A blank line keeps its emptiness and a last line without a terminator is
+# still yielded -- the two places a naive rstrip or a blind slice goes wrong.
+writeFile(tmp_lines, "a\n\nb")
+var edge: []str = []
+for line in open(tmp_lines).lines:
+    edge.append("[" + line + "]")
+assert edge == ["[a]", "[]", "[b]"]
 os.remove(tmp_lines)
