@@ -55,6 +55,7 @@ _nimport_ref_classes: set = set()
 # dependencies.  Positional construction -- Rec_T("hi", 1) -- is rewritten to
 # Nim's named form using the declared order, so a type declared in one module
 # and constructed in another needs its order carried across the file boundary.
+_nimport_param_types: dict = {}
 _nimport_object_field_order: dict = {}
 _nimport_tuple_field_order: dict = {}
 
@@ -108,6 +109,10 @@ def parse_module(code):
     ParserState.reset()
     _nim_reset()
     ParserState.proc_param_types_full.update(_nimport_param_types_full)
+    # The per-parameter type list, which the argument coercions read: a call
+    # into an imported module needs its signatures as much as a local call
+    # does, or a char parameter there cannot be given a character literal.
+    ParserState.proc_param_types.update(_nimport_param_types)
     ParserState.proc_return_types.update(_nimport_proc_return_types)
     # Field orders from deps go in first, so a type redeclared locally still
     # wins: the local declaration overwrites the entry while parsing.
@@ -1650,6 +1655,7 @@ def main(argv=None):
                 _PS_pre.reset()
                 translate(_ppcode, export_symbols=True)
                 _nimport_param_types_full.update(_PS_pre.proc_param_types_full)
+                _nimport_param_types.update(_PS_pre.proc_param_types)
                 _nimport_class_names.update(getattr(_PS_pre, "class_names", set()))
                 _nimport_proc_return_types.update(getattr(_PS_pre, "proc_return_types", {}))
                 _nimport_ref_classes.update(getattr(_PS_pre, "_ref_classes", set()))

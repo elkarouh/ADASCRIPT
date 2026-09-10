@@ -999,3 +999,23 @@ def single_quoted_tail() -> str:
     "the value"
 
 assert single_quoted_tail() == "the value"
+
+# Calling a proc that takes a char with a character literal. Adascript has no
+# character type -- 'a' is a one-character string -- so every literal argument
+# reached Nim with its quotes merely converted to double ones, and no proc
+# taking a char could be called with one, not even 'a'. The reverse coercion,
+# a char passed where a string is wanted, already existed.
+def char_code(c: char) -> int:
+    ord(c)
+
+def is_open_paren(c: char) -> bool:
+    c == '('
+
+assert char_code('a') == 97
+assert char_code('\'') == 39
+assert char_code('\\') == 92
+assert char_code('\t') == 9
+assert char_code('\n') == 10
+assert char_code('"') == 34
+assert is_open_paren('(')
+assert not is_open_paren(')')

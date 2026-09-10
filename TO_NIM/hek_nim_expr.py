@@ -2402,6 +2402,30 @@ def _translate_module_call(module_local, func_name, args_str):
     return result
 
 
+def _char_literal_arg(arg):
+    """A Nim char literal for a one-character string-literal argument.
+
+    None when ARG is not such a literal, so the caller leaves it alone.
+    Nim spells escapes in a char literal exactly as it does in a string, so
+    the escape text carries over unchanged; a double quote is the one that
+    differs, needing no escape between single quotes.
+    """
+    a = (arg or '').strip()
+    if len(a) < 3 or not (a.startswith(chr(34)) and a.endswith(chr(34))):
+        return None
+    inner = a[1:-1]
+    if len(inner) == 1 and inner != chr(92):
+        return nim_char_literal(inner)
+    if inner[:1] == chr(92):
+        if inner == chr(92) + chr(34):
+            return chr(39) + chr(34) + chr(39)
+        if len(inner) == 2 and inner[1] in chr(92) + 'trn0ae' + chr(39):
+            return chr(39) + inner + chr(39)
+        if len(inner) == 4 and inner[1] in 'xX':
+            return chr(39) + inner + chr(39)
+    return None
+
+
 def _wrap_option_args(expr):
     """Wrap call arguments in some() where the proc parameter expects Option[T].
 
@@ -2481,6 +2505,15 @@ def _wrap_option_args(expr):
                     changed = True
             else:
                 new_args.append(arg)
+        elif ptype == "char" and _char_literal_arg(arg) is not None:
+            # The mirror of the rule below. Adascript has no character type --
+            # 'a' is a one-character *string* -- so a literal argument reached
+            # Nim with its quotes merely converted to double ones, and no proc
+            # taking a char could be called with one, not even 'a'. Passing a
+            # string where Nim wants a char is always an error, so narrowing it
+            # can only turn a failure into the meaning that was written.
+            new_args.append(_char_literal_arg(arg))
+            changed = True
         elif ptype in ("string", "str") and _expr_is_char(arg):
             # Iterating a string yields char here and one-character strings
             # on Python, so `cross(ROWS, c)` type-checks there and not here.
