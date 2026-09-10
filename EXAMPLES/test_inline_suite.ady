@@ -747,3 +747,65 @@ assert good_res.tag == RTOk
 assert good_res.value == 12
 assert bad_res.tag == RTErr
 assert bad_res.message == "not an integer"
+
+# A local named `result` is the accumulator idiom Nim spells with its implicit
+# result variable, and the Python backend spells with a synthesised prologue
+# and return. On Nim it used to be emitted as an escaped local, `var `result``,
+# which shadowed the implicit one -- so a function that let the implicit return
+# hand it back returned the empty value instead, silently.
+def concat_all(items: []str) -> str:
+    result: str = ""
+    for it in items:
+        result = result + it
+    result
+assert concat_all(["a", "b", "c"]) == "abc"
+
+def concat_all_explicit(items: []str) -> str:
+    var result: str = ""
+    for it in items:
+        result = result + it
+    return result
+assert concat_all_explicit(["x", "y"]) == "xy"
+
+# The same shape as c500's parse_c_str: accumulate into `result` inside a
+# while loop, no explicit return.
+def unescape_nl(inner: str) -> str:
+    result: str = ""
+    var i: int = 0
+    while i < len(inner):
+        if inner[i:i+1] == "\\" and i + 1 < len(inner) and inner[i+1:i+2] == "n":
+            result = result + "\n"
+            i = i + 2
+        else:
+            result = result + inner[i:i+1]
+            i = i + 1
+assert unescape_nl("a\\nb") == "a\nb"
+assert len(unescape_nl("plain")) == 5
+
+# A regex is a legal pattern in the match/case spelling too. It cannot stay a
+# Nim `case` -- a regex is not a compile-time constant -- and only the
+# case/when spelling used to be desugared, so this emitted `of re"...":` and
+# never compiled. $+0 is the text the pattern claimed.
+def token_kind(rest: str) -> str:
+    match rest:
+        case /^[a-zA-Z_][a-zA-Z0-9_]*/:
+            return "name:" + $+0
+        case /^[0-9]+/:
+            return "int:" + $+0
+        case _:
+            return "other"
+assert token_kind("foo_bar+1") == "name:foo_bar"
+assert token_kind("1234;") == "int:1234"
+assert token_kind("+++") == "other"
+
+def guarded_regex(line: str) -> str:
+    match line:
+        case /error/i if len(line) > 8:
+            return "long error"
+        case /error/i:
+            return "error"
+        case _:
+            return "other"
+assert guarded_regex("ERROR: disk full") == "long error"
+assert guarded_regex("error") == "error"
+assert guarded_regex("all fine") == "other"

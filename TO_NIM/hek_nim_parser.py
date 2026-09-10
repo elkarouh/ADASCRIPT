@@ -108,10 +108,8 @@ _REVERSED_DUNDERS = {
 
 def _nim_ident(name):
     """Escape a user identifier that happens to be a Nim keyword."""
-    from hek_nim_expr import _NIM_KEYWORDS
-    if name in _NIM_KEYWORDS:
-        return f"`{name}`"
-    return name
+    from hek_nim_expr import _nim_user_ident
+    return _nim_user_ident(name)
 
 def _nim_proc_name(py_name):
     """Translate a Python dunder/magic method name to its Nim proc name.
@@ -1265,10 +1263,8 @@ def to_nim(self, prec=None):
         name = name[1:]
     # Strip trailing underscores (forbidden in Nim); escape keyword conflicts.
     name = _nim_safe_ident(name)
-    from hek_nim_expr import _NIM_KEYWORDS
-    if name.lower() in _NIM_KEYWORDS:
-        return f"`{name}`"
-    return name
+    from hek_nim_expr import _nim_user_ident
+    return _nim_user_ident(name)
 
 
 @method(pattern_wildcard)
@@ -1847,6 +1843,66 @@ def _tuple_pattern_to_cond(pat_nim, subject_parts):
     return " and ".join(conds) if conds else "true"
 
 
+def _pat_regex_info_nim(pat_node):
+    """Return (pattern, flags) if pat_node is a regex literal, else None."""
+    val = getattr(pat_node, 'node', None)
+    if isinstance(val, str) and val.startswith('/'):
+        last = val.rfind('/')
+        if last > 0:
+            return val[1:last], val[last + 1:]
+    return None
+
+
+def _has_regex_pattern(branches):
+    return any(_pat_regex_info_nim(p) is not None for p, _, _ in branches)
+
+
+def _regex_chain_nim(branches, subject, indent):
+    """Render branches carrying a regex pattern as an if/elif chain.
+
+    Nim's case takes compile-time constants, and a regex is neither, so a block
+    with one has to become a chain of match tests -- for `match`/`case` as much
+    as for `case`/`when`, which is what it used to be limited to: a regex in the
+    Python spelling emitted `of re"...":` and never compiled.
+    """
+    from hek_nim_expr import _ensure_nimatch_helper
+    _ensure_nimatch_helper()
+    result = ""
+    keyword = "if"
+    for pat_node, block_node, guard_node in branches:
+        hc = _block_inline_header_comment(block_node) if block_node else ""
+        body = ""
+        if block_node:
+            try:
+                body = block_node.to_nim(indent + 1)
+            except TypeError:
+                body = _ind(indent + 1) + block_node.to_nim()
+        pat_nim = pat_node.to_nim() if hasattr(pat_node, "to_nim") else str(pat_node)
+        if pat_nim in ("others", "_"):
+            result += f"\n{_ind(indent)}else:{hc}\n{body}"
+            continue
+        rinfo = _pat_regex_info_nim(pat_node)
+        if rinfo is not None:
+            pat, flags = rinfo
+            has_g = 'g' in flags
+            nim_flags = flags.replace('g', '')
+            esc = pat.replace('"', '""')   # Nim raw-string: embed " as ""
+            if has_g:
+                # std/re.findAll (nre.findAll has quadratic blowup)
+                srx_pat = f'srx.re(r"(?{nim_flags}){esc}")' if nim_flags else f'srx.re(r"{esc}")'
+                cond = f"{subject}.findAll({srx_pat}).len > 0"
+            else:
+                nim_pat = f're"(?{nim_flags}){esc}"' if nim_flags else f're"{esc}"'
+                cond = f"nimatch({subject}, {nim_pat})"
+        else:
+            cond = f"{subject} == {pat_nim}"
+        if guard_node is not None:
+            cond = f"{cond} and {guard_node.nodes[0].to_nim()}"
+        result += f"\n{_ind(indent)}{keyword} {cond}:{hc}\n{body}"
+        keyword = "elif"
+    return result.lstrip("\n")
+
+
 def _guarded_chain_nim(branches, subject, indent):
     """Render branches with guards as an if/elif chain.
 
@@ -1980,52 +2036,8 @@ def to_nim(self, indent=0):
         return result.lstrip("\n")
 
     # Regex patterns in when clauses: desugar to if/elif/else
-    def _pat_regex_info(pat_node):
-        """Return (pattern, flags) if pat_node is a regex literal, else None."""
-        val = getattr(pat_node, 'node', None)
-        if isinstance(val, str) and val.startswith('/'):
-            last = val.rfind('/')
-            if last > 0:
-                return val[1:last], val[last + 1:]
-        return None
-
-    if any(_pat_regex_info(p) is not None for p, _, _ in _extract_branches(self)):
-        from hek_nim_expr import _ensure_nimatch_helper
-        _ensure_nimatch_helper()
-        result = ""
-        keyword = "if"
-        for pat_node, block_node, guard_node in _extract_branches(self):
-            hc = _block_inline_header_comment(block_node) if block_node else ""
-            body = ""
-            if block_node:
-                try:
-                    body = block_node.to_nim(indent + 1)
-                except TypeError:
-                    body = _ind(indent + 1) + block_node.to_nim()
-            pat_nim = pat_node.to_nim() if hasattr(pat_node, "to_nim") else str(pat_node)
-            if pat_nim in ("others", "_"):
-                result += f"\n{_ind(indent)}else:{hc}\n{body}"
-                continue
-            rinfo = _pat_regex_info(pat_node)
-            if rinfo is not None:
-                pat, flags = rinfo
-                has_g = 'g' in flags
-                nim_flags = flags.replace('g', '')
-                esc = pat.replace('"', '""')   # Nim raw-string: embed " as ""
-                if has_g:
-                    # std/re.findAll (nre.findAll has quadratic blowup)
-                    srx_pat = f'srx.re(r"(?{nim_flags}){esc}")' if nim_flags else f'srx.re(r"{esc}")'
-                    cond = f"{subject}.findAll({srx_pat}).len > 0"
-                else:
-                    nim_pat = f're"(?{nim_flags}){esc}"' if nim_flags else f're"{esc}"'
-                    cond = f"nimatch({subject}, {nim_pat})"
-            else:
-                cond = f"{subject} == {pat_nim}"
-            if guard_node is not None:
-                cond = f"{cond} and {guard_node.nodes[0].to_nim()}"
-            result += f"\n{_ind(indent)}{keyword} {cond}:{hc}\n{body}"
-            keyword = "elif"
-        return result.lstrip("\n")
+    if _has_regex_pattern(_extract_branches(self)):
+        return _regex_chain_nim(_extract_branches(self), subject, indent)
 
     # A `when` clause may carry a guard too, and Nim's case/of cannot -- the
     # regex path above handles its own guards, so anything left comes here.
@@ -2208,6 +2220,11 @@ def to_nim(self, indent=0):
             result += f"\n{_ind(indent)}{keyword} {cond_str}:{hc}\n{full_body}"
             keyword = "elif"
         return result.lstrip("\n")
+
+    # A regex pattern is not a compile-time constant, so the block cannot stay
+    # a Nim case -- same desugar the case/when spelling gets.
+    if _has_regex_pattern(_extract_match_branches(self)):
+        return _regex_chain_nim(_extract_match_branches(self), subject, indent)
 
     # Non-structural patterns with guards: desugar to if/elif
     # (Nim case/of cannot use guards on else: branches)
@@ -2398,6 +2415,39 @@ def _parse_func_decorators(decos_str, indent):
 
 
 # --- Function definition ---
+def _bind_user_result(body, ret_ann):
+    """Make a user variable named `result` *be* Nim's implicit result.
+
+    A function that accumulates into `result` and lets the implicit return
+    hand it back is an idiom this codebase uses (EXAMPLES/primes.ady), and the
+    Python backend supports it by synthesising the prologue and the return.
+    On Nim the name collides with the implicit result variable every proc
+    already has: emitted as an escaped local, `var \`result\`` shadows it, and
+    the proc returns the untouched implicit one -- an empty string, silently.
+    So the declaration becomes an assignment and every use loses its backticks,
+    which is the same idiom expressed in Nim's own terms.
+
+    Only inside a proc that returns something: a void proc has no implicit
+    result, and outside a proc the escaped name is a perfectly good local.
+    """
+    if not body or not ret_ann or "`result`" not in body:
+        return body
+    if ret_ann.lstrip(": ").strip() in ("void", "None", "unit"):
+        return body
+    import re as _re_ur
+    out = []
+    for line in body.split("\n"):
+        # `var `result`: T = v` / `let `result` = v` -> `result = v`; a bare
+        # declaration with no value is dropped, since Nim has already made it.
+        m = _re_ur.match(r'^(\s*)(?:var|let)\s+`result`\s*(?::[^=]+)?(?:=\s*(.*))?$', line)
+        if m:
+            if m.group(2) is None:
+                continue
+            line = f"{m.group(1)}result = {m.group(2)}"
+        out.append(line.replace("`result`", "result"))
+    return "\n".join(out)
+
+
 @method(func_def)
 def to_nim(self, indent=0):
     """def f(a: int) -> str:  ->  proc f(a: int): string ="""
@@ -2495,6 +2545,7 @@ def _func_def_to_nim_inner(self, indent=0):
     hc = _block_inline_header_comment(block_node) if block_node else ""
     body = block_node.to_nim(indent + 1) if block_node else ""
     ParserState.symbol_table.pop_scope()
+    body = _bind_user_result(body, ret_ann)
     ParserState._current_return_type = ""
     # Strip trailing 'discard' from implicit return — the value is the return value
     _void_rets_set = {"void", "None", "unit"}
@@ -2512,7 +2563,9 @@ def _func_def_to_nim_inner(self, indent=0):
                 _indent_d = _last_d[:len(_last_d) - len(_last_d_s)]
                 _blines_d[_idx_d] = _indent_d + _last_d_s[len("discard "):]
                 body = chr(10).join(_blines_d) + chr(10)
-    # Strip trailing bare result -- Nim implicit return variable makes it redundant
+    # Strip a trailing bare `result` -- Nim's implicit return variable makes it
+    # redundant.  A user variable of that name is renamed (see _nim_user_ident),
+    # so this only ever fires on the implicit one.
     if ret_ann and body:
         _blines = body.rstrip().splitlines()
         if _blines and _blines[-1].strip() == "result":

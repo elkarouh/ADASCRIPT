@@ -47,6 +47,19 @@ _NIM_KEYWORDS = {
     "when", "while", "xor", "yield",
 }
 
+def _nim_user_ident(name):
+    """Render a user identifier for Nim, escaping the ones Nim reserves.
+
+    `result` is escaped like any other keyword here; inside a proc the func_def
+    emitter rewrites it to Nim's own implicit result variable (see
+    _bind_user_result), which is what an Adascript function that accumulates
+    into `result` means on both backends.
+    """
+    if name.lower() in _NIM_KEYWORDS:
+        return f"`{name}`"
+    return name
+
+
 @method(IDENTIFIER)
 def to_nim(self, prec=None):
     name = self.node
@@ -55,9 +68,7 @@ def to_nim(self, prec=None):
         name = name.rstrip("_")
         if name.lower() in _NIM_KEYWORDS:
             name = name + "t"
-    if name.lower() in _NIM_KEYWORDS:
-        return f"`{name}`"
-    return name
+    return _nim_user_ident(name)
 
 _COMP_OPS = {"==", "!=", "<", ">", "<=", ">=", "in", "is", "not in", "is not", "isnot", "notin",
              "-nt", "-ot"}
