@@ -22,6 +22,7 @@ sys.path.insert(0, os.path.join(_dir, "..", "ADASCRIPT_GRAMMAR"))
 
 from hek_parsec import method, ParserState
 from ady_expr import *
+import ast as _ast
 
 # Set to True by ady2nim before translating a file compiled with `nim js`.
 # Guards JS-only code-generation paths so the native backend is unaffected.
@@ -797,11 +798,14 @@ def to_nim(self, prec=None):
     # so u'x', u"x" and u"""x""" all take the same paths r and f already do.
     if s[:1] in ("u", "U") and (s[1:2] in (chr(34), chr(39))):
         s = s[1:]
-    # Convert triple-quoted strings to Nim ## comments
+    # A triple-quoted string is a value here. In statement position it is a
+    # docstring and becomes a Nim `##` comment, but only simple_stmt can tell
+    # the two apart, so that conversion lives there (nim_doc_comment below).
+    # This branch used to make the comment unconditionally, which left
+    # `let s: str = ` with a triple-quoted right-hand side turned into a
+    # comment -- an assignment with nothing assigned.
     if s.startswith(triple_dq) or s.startswith(triple_sq):
-        inner = s[3:-3]
-        comment_lines = ["## " + line.strip() for line in inner.strip().splitlines()]
-        return chr(10).join(comment_lines)
+        return nim_string_literal(_ast.literal_eval(s))
     # Handle raw strings: r'...' and r"..." — Nim only supports r"..." syntax.
     # r'''...''' and r"""...""" are converted to Nim triple raw strings.
     for _raw_pfx in ("r", "R"):
@@ -850,6 +854,50 @@ def to_nim(self, prec=None):
     # README.md documents.
     return s
 
+
+
+def nim_string_literal(value):
+    """A Nim double-quoted literal holding exactly `value`.
+
+    Used where a Python triple-quoted string is a value rather than a
+    docstring. Nim's own triple-quoted string is raw -- it does not read
+    escapes -- so a Python literal whose text contains a backslash escape
+    would change meaning if it were passed through as one. Re-emitting the
+    *value* with Nim escapes keeps the two backends agreeing on what the
+    string holds.
+    """
+    out = ['"']
+    for ch in value:
+        if ch == chr(92):
+            out.append(chr(92) * 2)
+        elif ch == chr(34):
+            out.append(chr(92) + chr(34))
+        elif ch == chr(10):
+            out.append(chr(92) + 'n')
+        elif ch == chr(13):
+            out.append(chr(92) + 'r')
+        elif ch == chr(9):
+            out.append(chr(92) + 't')
+        elif ord(ch) < 32 or ord(ch) == 127:
+            out.append(chr(92) + 'x%02X' % ord(ch))
+        else:
+            out.append(ch)                # non-ASCII passes through as UTF-8
+    out.append('"')
+    return "".join(out)
+
+
+def nim_doc_comment(text):
+    """The Nim `##` doc comment for a Python docstring, or None.
+
+    `text` is the literal as written. Only a triple-quoted one becomes a
+    comment; anything else is a value and the caller emits it normally.
+    """
+    if text[:1] in ('u', 'U') and text[1:2] in (chr(34), chr(39)):
+        text = text[1:]                   # the no-op prefix, as in STRING
+    if not (text.startswith(chr(34) * 3) or text.startswith(chr(39) * 3)):
+        return None
+    inner = text[3:-3]
+    return chr(10).join('## ' + line.strip() for line in inner.strip().splitlines())
 
 
 def nim_char_literal(text):

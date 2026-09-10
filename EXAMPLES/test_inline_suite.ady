@@ -952,3 +952,34 @@ assert U"upper" == "upper"
 assert U'upper single' == "upper single"
 assert u'has "quotes" too' == 'has "quotes" too'
 assert len(u"") == 0
+
+# A triple-quoted string used as a *value*. The Nim backend turned every
+# triple-quoted literal into a `##` doc comment, wherever it appeared, so an
+# assignment lost its right-hand side entirely. Only a bare expression
+# statement is a docstring; everywhere else the literal is a value.
+let tq1: str = """triple
+double"""
+let tq2: str = '''triple
+single'''
+assert tq1 == "triple\ndouble"
+assert tq2 == "triple\nsingle"
+assert len(tq1) == 13
+assert u"""with the u prefix""" == "with the u prefix"
+
+# Nim's own triple-quoted string is raw, so the value is re-emitted with Nim
+# escapes rather than passed through: a literal that carries an escape or a
+# double quote has to survive.
+assert """has "quotes" and a tab\there""" == 'has "quotes" and a tab\there'
+assert """back\\slash""" == "back" + chr(92) + "slash"
+
+def tq_return() -> str:
+    """A docstring stays a doc comment, next to a returned triple string."""
+    return """the
+value"""
+assert tq_return() == "the\nvalue"
+
+def tq_implicit() -> str:
+    let s: str = """implicit
+return"""
+    s
+assert tq_implicit() == "implicit\nreturn"

@@ -4377,9 +4377,45 @@ def to_nim(self, indent=0):
 
 
 # --- stmt_line (override from hek_nim_stmt to call to_nim recursively) ---
+def _lone_string_node(node):
+    """The STRING node when a statement is nothing but a string literal.
+
+    A docstring parses as a chain of single-child expression nodes ending in
+    STRING -- expressions, disjunction, comparison, power, primary -- so
+    descending while there is exactly one child finds it, and finds nothing
+    for a statement that does anything else with the string.
+    """
+    from ady_expr import STRING as _STRING
+    while not isinstance(node, _STRING):
+        kids = getattr(node, "nodes", None) or []
+        if len(kids) != 1:
+            return None
+        node = kids[0]
+    return node
+
+
 @method(stmt_line)
 def to_nim(self, indent=0):
     """stmt_line: simple_stmt NL -> Nim: simple statement line"""
+    # A statement that is nothing but a triple-quoted string is a docstring,
+    # and Nim spells that `##`. Everywhere else the same literal is a value,
+    # and STRING emits it as one -- telling the two apart needs the position,
+    # which only this level has. The conversion used to live in STRING and so
+    # ran for every occurrence, which turned a triple-quoted string used as a
+    # value into a comment and took its assignment's right-hand side with it.
+    from hek_nim_expr import nim_doc_comment
+    # Only a bare expression statement can be a docstring. `return """..."""`
+    # descends to a lone STRING too -- the return keyword is not a node -- so
+    # the statement class has to be checked, or the returned value becomes a
+    # comment and the proc returns nothing.
+    _str_node = (_lone_string_node(self.nodes[0])
+                 if self.nodes and type(self.nodes[0]).__name__ == "expressions"
+                 else None)
+    if _str_node is not None:
+        _doc = nim_doc_comment(_str_node.node)
+        if _doc is not None:
+            return chr(10).join(_ind(indent) + ln for ln in _doc.splitlines())
+
     parts = []
     newline_node = None
 
