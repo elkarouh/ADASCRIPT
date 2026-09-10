@@ -97,6 +97,12 @@ TIMETABLE_EXAMPLES := \
     timetable_sa.ady
 
 # -----------------------------------------------------------------------
+# CFMU — the build-status monitor, fed its own sample of tacot_corico output
+# -----------------------------------------------------------------------
+CFMU_EXAMPLES := \
+    CFMU/Tstatus_monitor.ady
+
+# -----------------------------------------------------------------------
 # ADA_INDENT unit tests — self-checking runners in ADA_INDENT/ (assert +
 # print "all ... passed"). Transpiled, compiled and run with ady2nim -r.
 # -----------------------------------------------------------------------
@@ -121,6 +127,7 @@ ALL_COMPILE := \
     $(LIBS) \
     $(STANDALONE) \
     $(STDIN_EXAMPLES) \
+    $(CFMU_EXAMPLES) \
     $(ARG_EXAMPLES) \
     $(EXPECT_EXAMPLES) \
     $(TIMETABLE_EXAMPLES) \
@@ -167,6 +174,14 @@ test: compile
 	    name=$${f%.ady}; \
 	    printf '  %-42s' "$$f"; \
 	    $(EXDIR)/$$name < $(EXDIR)/test_awk_sample.txt >/dev/null 2>&1 \
+	        && echo OK || { echo FAIL; exit 1; }; \
+	done
+
+	@echo "=== CFMU examples (piped from their own sample) ==="
+	@for f in $(CFMU_EXAMPLES); do \
+	    name=$${f%.ady}; \
+	    printf '  %-42s' "$$f"; \
+	    $(EXDIR)/$$name < $(EXDIR)/CFMU/tstatus_sample.txt >/dev/null 2>&1 \
 	        && echo OK || { echo FAIL; exit 1; }; \
 	done
 

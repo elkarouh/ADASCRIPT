@@ -1,0 +1,22 @@
+User: alice
+Host: build01
+TACT.TACT_CONFIG v1.2.3 0.51 build01:1
+Showing p2 p3 p4 p5 p6 p7 p8 2026-09-10 12:30 /cm/nasdata/logs/run.log 4102444800
+General result: 2 x x 17
+User: cmadm
+Host: build02
+IFPS.FPL_CONFIG v9.9 1.20 build02:2
+Showing p2 p3 p4 p5 p6 p7 p8 2026-09-11 08:05 /auto/home/x/work/logging-ENVA/LOGS_NAMEB/thing.log 4102444800
+General result: 0 x x 42
+User: bob
+Host: build03
+running with -valgrind_tool memcheck now
+TACT.TACT_CONFIG v3.0 0.10 other01:5
+Showing p2 p3 p4 p5 p6 p7 p8 2026-09-12 09:00 /cm/local_build/TACTDEV_HOME/replay_dir/work/a.log 4102444800
+a b c replay_day: 2026-01-01
+General result: 5 x x 6
+User: carol
+Host: build04
+TACT.TACT_CONFIG v4.0 2.00
+Showing p2 p3 p4 p5 p6 p7 p8 2026-09-13 10:00 /somewhere/saved_logs/replay_dir-CASE1.extra 4102444800
+General result: 1 x x 2
