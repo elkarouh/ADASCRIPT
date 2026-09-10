@@ -37,8 +37,8 @@ type Token_Kind_T is enum:
 type Token_T is tuple:
     kind: Token_Kind_T
     text: str          # exact source spelling
-    line: int          # 1-based line of the first character
-    col:  int          # 1-based column of the first character
+    line: Positive     # 1-based line of the first character
+    col:  Positive     # 1-based column of the first character
 
 
 # Character classification comes from the standard library: the predicates
@@ -75,10 +75,11 @@ def is_keyword(word: str) -> bool:
 
 class Lexer:
     var src:  str = ""
-    var n:    int = 0
-    var pos:  int = 0
-    var line: int = 1
-    var col:  int = 1
+    var n:    Natural = 0
+    var pos:  Natural = 0
+    var line: Natural = 1      # 1-based; Natural not Positive because the
+    var col:  Natural = 1      # object is default-constructed, and Nim's
+                               # zero for a Positive is out of its range
 
     def __init__(self, source: str):
         self.src = source
@@ -97,7 +98,7 @@ class Lexer:
         else:
             self.col += 1
 
-    def _slice(self, a: int, b: int) -> str:
+    def _slice(self, a: int, b: int) -> str:   # int: clipping out-of-range bounds is the point
         """Source substring [a, b) clipped to bounds; '' if empty/out of range."""
         var lo: int = a
         var hi: int = b
@@ -116,7 +117,7 @@ class Lexer:
             else:
                 break
 
-    def _scan_comment(self, ln: int, cl: int) -> Token_T:
+    def _scan_comment(self, ln: Positive, cl: Positive) -> Token_T:
         var text: str = ""
         while self.pos < self.n:
             let c: char = self.src[self.pos]
@@ -126,7 +127,7 @@ class Lexer:
             self._advance()
         return (kind: COMMENT, text: text, line: ln, col: cl)
 
-    def _scan_string(self, ln: int, cl: int) -> Token_T:
+    def _scan_string(self, ln: Positive, cl: Positive) -> Token_T:
         var text: str = ""
         text += self.src[self.pos]          # opening quote
         self._advance()
@@ -153,7 +154,7 @@ class Lexer:
                 self._advance()
         return (kind: STRING_LIT, text: text, line: ln, col: cl)
 
-    def _scan_char(self, ln: int, cl: int) -> Token_T:
+    def _scan_char(self, ln: Positive, cl: Positive) -> Token_T:
         var text: str = ""
         text += self.src[self.pos]          # opening '
         self._advance()
@@ -163,7 +164,7 @@ class Lexer:
         self._advance()
         return (kind: CHAR_LIT, text: text, line: ln, col: cl)
 
-    def _scan_number(self, ln: int, cl: int) -> Token_T:
+    def _scan_number(self, ln: Positive, cl: Positive) -> Token_T:
         var text: str = ""
         var is_real: bool = False
         var is_based: bool = False
@@ -249,7 +250,7 @@ class Lexer:
             k = REAL_LIT
         return (kind: k, text: text, line: ln, col: cl)
 
-    def _scan_identifier(self, ln: int, cl: int) -> Token_T:
+    def _scan_identifier(self, ln: Positive, cl: Positive) -> Token_T:
         var text: str = ""
         while self.pos < self.n:
             let c: char = self.src[self.pos]
@@ -262,7 +263,7 @@ class Lexer:
             k = KEYWORD
         return (kind: k, text: text, line: ln, col: cl)
 
-    def _scan_delimiter(self, ln: int, cl: int) -> Token_T:
+    def _scan_delimiter(self, ln: Positive, cl: Positive) -> Token_T:
         let two: str = self._slice(self.pos, self.pos + 2)
         if two in ("=>", "..", "**", ":=", "/=", ">=", "<=", "<<", ">>", "<>"):
             self._advance()
@@ -282,7 +283,7 @@ class Lexer:
         A tick follows an identifier (T'Image, Character'(...)), a closing
         parenthesis (Foo (X)'First), or the reserved word 'all' (P.all'Address).
         Comments are skipped when looking back for the governing token."""
-        var i: int = len(toks) - 1
+        var i: int = len(toks) - 1          # int: -1 on an empty list, and the loop tests for it
         while i >= 0 and toks[i].kind == COMMENT:
             i -= 1
         if i < 0:
@@ -304,8 +305,8 @@ class Lexer:
             if self.pos >= self.n:
                 break
 
-            let ln: int = self.line
-            let cl: int = self.col
+            let ln: Positive = self.line
+            let cl: Positive = self.col
             let c: char = self.src[self.pos]
             let two: str = self._slice(self.pos, self.pos + 2)
 

@@ -38,7 +38,10 @@ let TIGHT_DELIM: {}str = {".", "'"}
 # gap — spaces to insert between two adjacent tokens
 # ---------------------------------------------------------------------------
 
-def gap(lt: Token_T, rt: Token_T, orig: int) -> int:
+def gap(lt: Token_T, rt: Token_T, orig: int) -> Natural:
+    # orig is int: it is a measured distance, and tokens that overlap or
+    # sit out of order make it negative -- which is what the max() guards
+    # below are for. The answer is a count of spaces, so Natural.
     # Rule 1: no space before ; or ,
     if rt.text == ";" or rt.text == ",":
         return 0
@@ -90,9 +93,9 @@ def format_line(src: str) -> str:
     if len(toks) == 0:
         return ""
 
-    let indent: int = toks[0].col - 1   # col is 1-based
+    let indent: Natural = toks[0].col - 1   # col is 1-based, so this is >= 0
     var buf: str = ""
-    var i: int = 0
+    var i: Natural = 0
     while i < indent:
         buf += " "
         i += 1
@@ -100,9 +103,9 @@ def format_line(src: str) -> str:
     buf += toks[0].text
     i = 1
     while i < len(toks):
-        let orig: int = toks[i].col - (toks[i - 1].col + len(toks[i - 1].text))
-        let sp: int = gap(toks[i - 1], toks[i], orig)
-        var j: int = 0
+        let orig: int = toks[i].col - (toks[i - 1].col + len(toks[i - 1].text))  # int: may be negative
+        let sp: Natural = gap(toks[i - 1], toks[i], orig)
+        var j: Natural = 0
         while j < sp:
             buf += " "
             j += 1
@@ -119,7 +122,7 @@ def format_source(src: str) -> str:
     """Apply format_line to every line of src, preserving newlines."""
     var result: str = ""
     var line: str = ""
-    var i: int = 0
+    var i: Natural = 0
     while i < len(src):
         let c: char = src[i]
         if is_newline_ch(c):
