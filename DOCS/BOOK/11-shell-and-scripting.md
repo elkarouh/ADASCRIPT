@@ -429,15 +429,15 @@ while True:
 
     if sel_code != 0 or len(selection) == 0:
         quit(0)
-    match sel:
-        case "/" | "..":
+    case sel:
+        when "/" | "..":
             setCurrentDir(sel)
-        case _ if -d (f"{cwd}/{sel}"):
+        when _ if -d (f"{cwd}/{sel}"):
             setCurrentDir(sel)
-        case _ if key == "right" and -x (f"{cwd}/{sel}"):
+        when _ if key == "right" and -x (f"{cwd}/{sel}"):
             shell: {cwd}/{sel}
             quit(0)
-        case _:
+        when others:
             shell: {editor} {cwd}/{sel}
             quit(0)
 ```

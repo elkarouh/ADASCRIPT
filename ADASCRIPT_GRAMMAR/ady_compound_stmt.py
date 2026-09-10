@@ -309,7 +309,14 @@ case_stmt = (
     + DEDENT
 )
 
-# Python 3.10+ match/case syntax (alternative to Adascript case/when)
+# Python 3.10+ match/case. No longer part of the language: the two spellings
+# were the same construct -- guards, ranges, sequence patterns, `as` bindings
+# and Nim's exhaustiveness all behaved identically -- and having both meant
+# `case` headed a block in one and a branch in the other, so a reader had to
+# look at the enclosing line to know which. case/when is the one that stayed:
+# `when` is required for variant records regardless, so it cannot leave.
+# The rules below are kept only because the emitters still register on them;
+# nothing reaches them now that compound_stmt no longer offers match_stmt.
 # case_clause: branch inside a match block — 'case pattern [if guard]: suite'
 case_clause = ikw("case") + pattern + case_guard[:] + COLON + suite
 
@@ -521,7 +528,6 @@ compound_stmt = (
     | with_own_stmt
     | with_stmt_paren
     | with_stmt
-    | match_stmt
     | case_stmt
     | shell_stmt
     | async_func_def

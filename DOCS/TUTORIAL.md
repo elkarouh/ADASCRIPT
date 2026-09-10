@@ -1039,14 +1039,14 @@ Guards are not available on `case/when` branches.
 
 ```python
 def classify(arg: str) -> str:
-    match arg:
-        case "--":
+    case arg:
+        when "--":
             return "end-of-options"
-        case _ if arg.startswith("--"):
+        when _ if arg.startswith("--"):
             return "long option"
-        case _ if arg.startswith("-") and len(arg) > 1:
+        when _ if arg.startswith("-") and len(arg) > 1:
             return "short option"
-        case _:
+        when others:
             return "argument"
 ```
 

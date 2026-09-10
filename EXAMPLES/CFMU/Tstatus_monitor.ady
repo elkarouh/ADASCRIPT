@@ -69,14 +69,14 @@ class ShowBuilds(AwkBase):
             self.builds[self.cur].details = (self.valgrind_tool
                                              + self._stuck_note(file_mod, 4, " <-- STUCK? "))
         else:
-            match log_file:
-                case /\/cm\/local_build\/TACTDEV_HOME\/replay_dir\/work/:
+            case log_file:
+                when /\/cm\/local_build\/TACTDEV_HOME\/replay_dir\/work/:
                     self.builds[self.cur].details = "performance"
-                case /saved_logs\/replay_dir-([^.]*)/:
+                when /saved_logs\/replay_dir-([^.]*)/:
                     self.builds[self.cur].details = $+1
-                case /work\/logging-([^\/]*)\/LOGS_([^\/]{1,16})/:
+                when /work\/logging-([^\/]*)\/LOGS_([^\/]{1,16})/:
                     self.builds[self.cur].details = $+1 + "/" + $+2
-                case _:
+                when others:
                     pass
             self.builds[self.cur].details = (self.builds[self.cur].details
                                              + self._stuck_note(file_mod, 2, "  <-- STUCK "))
@@ -123,33 +123,33 @@ class ShowBuilds(AwkBase):
         let F:    []str = self.Fields
 
         # --- valgrind state, carried between records ---
-        match line:
-            case /-valgrind_tool memcheck/:
+        case line:
+            when /-valgrind_tool memcheck/:
                 self.valgrind      = True
                 self.valgrind_tool = "memcheck"
-            case /-valgrind_tool helgrind/:
+            when /-valgrind_tool helgrind/:
                 self.valgrind      = True
                 self.valgrind_tool = "helgrind"
-            case /Error: cannot get the LOG_FILE\. Check for errors on file|Error: could not find/:
+            when /Error: cannot get the LOG_FILE\. Check for errors on file|Error: could not find/:
                 self.valgrind = False
-            case _:
+            when others:
                 pass
 
         # --- main record action ---
         if self.NF >= 1:
-            match F[1]:
-                case "Showing" if self.NF >= 12:
+            case F[1]:
+                when "Showing" if self.NF >= 12:
                     self._showing(F)
-                case "User:" if self.NF >= 2:
+                when "User:" if self.NF >= 2:
                     self._open_build()
                     self.builds[self.cur].user = F[2]
-                case "Host:" if self.NF >= 2:
+                when "Host:" if self.NF >= 2:
                     self.builds[self.cur].host      = F[2]
                     self.builds[self.cur].test_mode = "REGRESS"
                     self.newhost                    = True
-                case /TACT\.TACT_CONFIG|IFPS\.FPL_CONFIG/:
+                when /TACT\.TACT_CONFIG|IFPS\.FPL_CONFIG/:
                     self._config(F)
-                case _:
+                when others:
                     pass
 
         if self.NF >= 4 and F[4] == "replay_day:":

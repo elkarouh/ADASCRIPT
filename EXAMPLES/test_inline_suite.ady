@@ -598,12 +598,12 @@ assert tier_of(40) == "adult"
 
 # The same in match/case, and over characters.
 def grade_of(score: int) -> str:
-    match score:
-        case 90 .. 100:
+    case score:
+        when 90 .. 100:
             return "A"
-        case 80 .. 89:
+        when 80 .. 89:
             return "B"
-        case _:
+        when others:
             return "C"
 assert grade_of(95) == "A" and grade_of(85) == "B" and grade_of(20) == "C"
 
@@ -624,14 +624,14 @@ assert char_kind(sample[2]) == "other"
 # the branch body -- so the Nim condition named identifiers that did not
 # exist yet. The captures are substituted into the condition instead.
 def pair_order(items: []int) -> str:
-    match items:
-        case [a, b] if a > b:
+    case items:
+        when [a, b] if a > b:
             return "descending"
-        case [a, b] if a == b:
+        when [a, b] if a == b:
             return "equal"
-        case [a, b]:
+        when [a, b]:
             return "ascending"
-        case _:
+        when others:
             return "not a pair"
 assert pair_order([2, 1]) == "descending"
 assert pair_order([1, 1]) == "equal"
@@ -639,12 +639,12 @@ assert pair_order([1, 2]) == "ascending"
 assert pair_order([1]) == "not a pair"
 
 def sign_of(n: int) -> str:
-    match n:
-        case v if v < 0:
+    case n:
+        when v if v < 0:
             return "negative"
-        case 0:
+        when 0:
             return "zero"
-        case _:
+        when others:
             return "positive"
 assert sign_of(-2) == "negative" and sign_of(0) == "zero" and sign_of(5) == "positive"
 
@@ -787,24 +787,24 @@ assert len(unescape_nl("plain")) == 5
 # case/when spelling used to be desugared, so this emitted `of re"...":` and
 # never compiled. $+0 is the text the pattern claimed.
 def token_kind(rest: str) -> str:
-    match rest:
-        case /^[a-zA-Z_][a-zA-Z0-9_]*/:
+    case rest:
+        when /^[a-zA-Z_][a-zA-Z0-9_]*/:
             return "name:" + $+0
-        case /^[0-9]+/:
+        when /^[0-9]+/:
             return "int:" + $+0
-        case _:
+        when others:
             return "other"
 assert token_kind("foo_bar+1") == "name:foo_bar"
 assert token_kind("1234;") == "int:1234"
 assert token_kind("+++") == "other"
 
 def guarded_regex(line: str) -> str:
-    match line:
-        case /error/i if len(line) > 8:
+    case line:
+        when /error/i if len(line) > 8:
             return "long error"
-        case /error/i:
+        when /error/i:
             return "error"
-        case _:
+        when others:
             return "other"
 assert guarded_regex("ERROR: disk full") == "long error"
 assert guarded_regex("error") == "error"
@@ -824,14 +824,14 @@ assert pad_me.ljust(4) == "ab  "
 # A guarded catch-all inside a regex match is a condition, not the end of the
 # chain: emitted as `else:` it swallowed the branches after it.
 def guarded_tail(line: str, on: bool) -> str:
-    match line:
-        case /^< [0-9]+ bytes:/ if on:
+    case line:
+        when /^< [0-9]+ bytes:/ if on:
             return "bucket"
-        case _ if on:
+        when _ if on:
             return "closing"
-        case /^header/:
+        when /^header/:
             return "header"
-        case _:
+        when others:
             return "ignored"
 assert guarded_tail("< 10 bytes: 3", True) == "bucket"
 assert guarded_tail("something else", True) == "closing"
@@ -869,20 +869,20 @@ def scan_chars(s: str) -> str:
     let n: int = len(s)
     while i < n:
         let ch: char = s[i]
-        match ch:
-            case '"':
+        case ch:
+            when '"':
                 acc = acc + "Q"
                 i += 1
-            case '\'' if i + 2 < n and s[i + 2] == '\'':
+            when '\'' if i + 2 < n and s[i + 2] == '\'':
                 acc = acc + "C"
                 i += 3
-            case '(':
+            when '(':
                 acc = acc + "["
                 i += 1
-            case ')':
+            when ')':
                 acc = acc + "]"
                 i += 1
-            case _:
+            when others:
                 acc = acc + "."
                 i += 1
     return acc

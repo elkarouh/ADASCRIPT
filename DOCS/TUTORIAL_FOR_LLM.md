@@ -902,12 +902,12 @@ Adascript is a superset of Python, so standard `match/case` is supported alongsi
 
 ```adascript
 def get_kind(arg: str) -> Kind_T:
-    match arg:
-        case "--":
+    case arg:
+        when "--":
             return cmdEnd
-        case _ if arg.startswith("--"):
+        when _ if arg.startswith("--"):
             return cmdOption
-        case _:
+        when others:
             return cmdArgument
 ```
 

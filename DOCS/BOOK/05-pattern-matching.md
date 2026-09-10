@@ -1,28 +1,74 @@
 # Chapter 5 — Pattern Matching
 
-Adascript supports two pattern-matching syntaxes side by side:
+A pattern-matching block is `case subject:` with one `when pattern:` branch
+per alternative, and `when others:` last for everything not named:
 
-| Syntax | Style | Best for |
-|--------|-------|----------|
-| `case x:` / `when pat:` | Ada / Nim | enum dispatch, ranges, tuples, structural patterns |
-| `match x:` / `case pat:` | Python 3.10+ | code that other Python readers will read |
+```python
+case tok:
+    when "+" | "-":
+        apply_additive(tok)
+    when others:
+        die(f"unexpected {tok}")
+```
 
-They are interchangeable: the same patterns, the same semantics, the same
-generated code. The catch-all is spelled `others` in `case`/`when` and `_` in
-`match`/`case`; both mean "match anything, bind nothing" and both must come
-last.
+`when` is the same word a variant record uses for its arms (§4.4), so one
+keyword means "arm of a discriminated choice" everywhere in the language.
+
+Adascript used to offer Python's `match`/`case` alongside this. It no longer
+does. The two were one construct with two spellings — the same patterns, the
+same guards, the same generated code — and keeping both meant `case` headed
+the block in one and a branch in the other, so a reader had to look at the
+enclosing line to know which. Convert a `match` block by writing `case` for
+`match`, `when` for `case`, and `when others` for `case _`.
+
+## What is checked, and what is not
+
+The reason to write this rather than an `if`/`elif` chain is that the Nim
+backend can be made to prove you have covered everything. That guarantee is
+narrower than it looks, and it is worth knowing exactly where it holds.
+
+| subject | branches | checked? |
+|---|---|---|
+| enum | all constants | **yes** — a missing member is a compile error |
+| ordinal (int, char) | all constants | **yes** — so a catch-all is in practice required |
+| str | all constants | **no** — Nim lets a string `case` fall through |
+| any | one or more guarded | **no** — a guard forces the `if`/`elif` lowering |
+
+Where Nim stops checking, Adascript asks for the catch-all instead: a block
+with a guarded branch, or with a string subject, is refused unless it has an
+unguarded `when others:`. So the safety is continuous even though its source
+changes:
+
+```python
+case sev:              # enum, no guards: Nim proves the branches are total,
+    when LOW:  ...     # and a `when others:` here would only hide a mistake
+    when MID:  ...
+    when HIGH: ...
+
+case sev:              # a guard, so no proof is possible --
+    when LOW if n > 0: ...
+    when others: ...   # ... and this is now required
+```
+
+`when others` may not itself carry a guard. `others` is everything that is
+left, so a condition on it is a contradiction: a guarded catch-all that fails
+leaves the block with nothing to do. Use `when _ if cond:` for a wildcard
+branch that may decline — it is an ordinary pattern, and it does not count as
+the catch-all.
+
+**None of this is enforced on the Python backend.** Exhaustiveness is a
+property of the Nim build, so a block `ady2py` accepts and runs can still be
+refused by `ady2nim`. Build with both before believing a block is complete.
+
+## How a block is lowered
 
 On the Python backend a block becomes a `match`/`case` statement, except when
 it uses a pattern Python has no syntax for (a regex, a range), in which case
 the whole block is lowered to an `if`/`elif` chain. On the Nim backend, a
-simple ordinal or string subject becomes a native `case` statement — with
-compile-time exhaustiveness checking on enums — and anything structural
+simple ordinal or string subject becomes a native `case` statement — which is
+where the exhaustiveness check above comes from — and anything structural
 (tuples, sequences, record patterns, regexes, guards) desugars into
 `if`/`elif`/`else`.
-
-Pick one syntax per block. You cannot mix `when` and `case` branches inside
-one block, though different blocks in the same file may use different
-spellings.
 
 ## 5.1 Literals and alternatives
 
@@ -200,9 +246,8 @@ case age:
         return "other"
 ```
 
-Ranges are also legal in `match`/`case` blocks; that block then lowers to an
-`if`/`elif` chain on both backends, since it can no longer be a Python
-`match`.
+A block containing a range lowers to an `if`/`elif` chain on both backends,
+since Python has no range pattern for the target to use.
 
 ## 5.4 Captures and `as` bindings
 
@@ -211,10 +256,10 @@ to that name for the branch body. In structural positions, captures are how
 you take a value apart:
 
 ```python
-match response:
-    case [first, *rest]:
+case response:
+    when [first, *rest]:
         print(f"first: {first}, {len(rest)} more")
-    case []:
+    when []:
         print("empty")
 ```
 
@@ -233,10 +278,10 @@ elif len(response) == 0:
 it:
 
 ```python
-match items:
-    case [first, *_] as whole:
+case items:
+    when [first, *_] as whole:
         return str(first) + "/" + str(len(whole))
-    case []:
+    when []:
         return "empty"
 ```
 
@@ -259,14 +304,14 @@ Sequence patterns match a list by length and element structure. `*name`
 captures the tail, `*_` discards it, and `[]` matches only the empty list:
 
 ```python
-match parts:
-    case [host, port]:
+case parts:
+    when [host, port]:
         connect(host, int(port))
-    case [host]:
+    when [host]:
         connect(host, 80)
-    case []:
+    when []:
         raise ValueError("empty address")
-    case _:
+    when others:
         raise ValueError("too many components")
 ```
 
@@ -288,12 +333,12 @@ Literals may sit inside a sequence pattern, which is how you recognise a
 prefix — a keyword, a magic number, a byte-order mark:
 
 ```python
-match tokens:
-    case ["if", cond, "then", *body]:
+case tokens:
+    when ["if", cond, "then", *body]:
         parse_if(cond, body)
-    case ["while", cond, "do", *body]:
+    when ["while", cond, "do", *body]:
         parse_while(cond, body)
-    case [keyword, *_]:
+    when [keyword, *_]:
         raise SyntaxError(f"unexpected keyword: {keyword}")
 ```
 
@@ -341,12 +386,12 @@ type Token_T is record:
     lexem: str
 
 def compile_token(tok: Token_T) -> str:
-    match tok:
-        case Token_T(kind="INT", lexem=v):
+    case tok:
+        when Token_T(kind="INT", lexem=v):
             return "int " + v
-        case Token_T(kind="OP", lexem="+"):
+        when Token_T(kind="OP", lexem="+"):
             return "plus"
-        case Token_T(kind=k, lexem=v):
+        when Token_T(kind=k, lexem=v):
             return k + " " + v
 ```
 
@@ -452,14 +497,14 @@ Nim's `case` takes no guard.
 
 ```python
 def pairs(items: []int) -> str:
-    match items:
-        case [a, b] if a > b:
+    case items:
+        when [a, b] if a > b:
             return "descending"
-        case [a, b] if a == b:
+        when [a, b] if a == b:
             return "equal"
-        case [a, b]:
+        when [a, b]:
             return "ascending"
-        case _:
+        when others:
             return "not a pair"
 ```
 
@@ -484,14 +529,14 @@ Classifying command-line tokens in `argparse.ady`:
 
 ```python
 def get_kind(arg: str) -> Kind_T:
-    match arg:
-        case "--":
+    case arg:
+        when "--":
             return cmdEnd
-        case _ if arg.startswith("--"):
+        when _ if arg.startswith("--"):
             return cmdOption
-        case _ if arg.startswith("-") and len(arg) > 1:
+        when _ if arg.startswith("-") and len(arg) > 1:
             return cmdOption
-        case _:
+        when others:
             return cmdArgument
 ```
 
@@ -499,18 +544,18 @@ def get_kind(arg: str) -> Kind_T:
 alternatives, a directory test, and an executability test in one block:
 
 ```python
-match sel:
-    case "/" | "..":
+case sel:
+    when "/" | "..":
         setCurrentDir(sel)
-    case _ if -d (f"{cwd}/{sel}"):
+    when _ if -d (f"{cwd}/{sel}"):
         setCurrentDir(sel)
-    case _ if key == "right" and -x (f"{cwd}/{sel}"):
+    when _ if key == "right" and -x (f"{cwd}/{sel}"):
         if "/" in sel:
             shell: {sel}
         else:
             shell: {cwd}/{sel}
         quit(0)
-    case _:
+    when others:
         shell: {editor} {cwd}/{sel}
         quit(0)
 ```
@@ -520,19 +565,19 @@ match sel:
 Guards are also where you put the checks that have no pattern syntax at all:
 
 ```python
-match token:
-    case s if s.startswith("0x"):
+case token:
+    when s if s.startswith("0x"):
         return int(s, 16)
-    case s if s.isdigit():
+    when s if s.isdigit():
         return int(s)
-    case s:
+    when s:
         raise ValueError(f"not a number: {s}")
 ```
 
 ## 5.9 Regex patterns
 
 A regex literal is a legal pattern; the block then desugars to a chain of
-match tests on both backends. The line classifier in `awk_example.ady`:
+case tests on both backends. The line classifier in `awk_example.ady`:
 
 ```python
 def classify(line: str) -> Severity_T:
@@ -553,12 +598,12 @@ sequences of records, records containing sequences, and literals inside
 either all work:
 
 ```python
-match events:
-    case [MouseClick(x=x, y=y), *_]:
+case events:
+    when [MouseClick(x=x, y=y), *_]:
         handle_first_click(x, y)
-    case [KeyPress(key="Escape"), *_]:
+    when [KeyPress(key="Escape"), *_]:
         cancel()
-    case []:
+    when []:
         idle()
 ```
 
@@ -571,25 +616,25 @@ does with reflection into plain visible control flow.
 
 ## 5.11 Pattern reference
 
-| Pattern | `case`/`when` | `match`/`case` | Nim output |
-|---------|---------------|----------------|------------|
-| Literal | `when 42:` | `case 42:` | `of 42:` |
-| String | `when "ok":` | `case "ok":` | `of "ok":` |
-| Bool | `when True:` | `case True:` | `of true:` |
-| `None` | `when None:` | `case None:` | presence test (Chapter 10) |
-| Wildcard | `when others:` | `case _:` | `else:` |
-| Capture | `when x:` | `case x:` | `let x = subject` |
+| Pattern | Written | Nim output |
+|---------|---------|------------|
+| Literal | `when 42:` | `of 42:` |
+| String | `when "ok":` | `of "ok":` |
+| Bool | `when True:` | `of true:` |
+| `None` | `when None:` | presence test (Chapter 10) |
+| Wildcard | `when others:` | `else:` |
+| Capture | `when x:` | `let x = subject` |
 | Alternatives | `when 1 \| 2:` | `case 1 \| 2:` | `of 1, 2:` |
-| Enum value | `when Red:` | `case Red:` | `of Red:` |
-| Range | `when 1 .. 10:` | `case 1 .. 10:` | `of 1 .. 10:` |
-| Fixed sequence | `when [a, b]:` | `case [a, b]:` | `if len == 2: let ...` |
-| Sequence + tail | `when [a, *xs]:` | `case [a, *xs]:` | `if len >= 1: let ...` |
-| Empty sequence | `when []:` | `case []:` | `if len == 0:` |
-| Record / class | `when P(x=0, y=y):` | `case P(x=0, y=y):` | `if subj.x == 0: let y = subj.y` |
-| Tuple subject | `when (a, _):` | `case (a, _):` | `if s0 == a:` |
-| `as` binding | `when pat as n:` | `case pat as n:` | `let n = subject` |
-| Guard | `when pat if cond:` | `case pat if cond:` | `if ... and cond:` |
-| Regex | `when /err/i:` | `case /err/i:` | `nimatch(subject, re"(?i)err")` |
+| Enum value | `when Red:` | `of Red:` |
+| Range | `when 1 .. 10:` | `of 1 .. 10:` |
+| Fixed sequence | `when [a, b]:` | `if len == 2: let ...` |
+| Sequence + tail | `when [a, *xs]:` | `if len >= 1: let ...` |
+| Empty sequence | `when []:` | `if len == 0:` |
+| Record / class | `when P(x=0, y=y):` | `if subj.x == 0: let y = subj.y` |
+| Tuple subject | `when (a, _):` | `if s0 == a:` |
+| `as` binding | `when pat as n:` | `let n = subject` |
+| Guard | `when pat if cond:` | `if ... and cond:` |
+| Regex | `when /err/i:` | `nimatch(subject, re"(?i)err")` |
 
 ## 5.12 What is not supported
 
@@ -600,8 +645,8 @@ clean compilation path on the Nim side. Each has a one-line rewrite.
 
 ```python
 # not supported
-match config:
-    case {"host": h, "port": p}:
+case config:
+    when {"host": h, "port": p}:
         connect(h, p)
 
 # instead — test membership, then read
@@ -613,21 +658,21 @@ if "host" in config and "port" in config:
 site, so name the fields:
 
 ```python
-match point:
-    case Point_T(0, y): ...      # not supported
-    case Point_T(x=0, y=y): ...  # supported
+case point:
+    when Point_T(0, y): ...      # not supported
+    when Point_T(x=0, y=y): ...  # supported
 ```
 
 **Structural patterns inside an alternation.** Alternatives must be simple
 values; split them into separate branches:
 
 ```python
-match x:
-    case Point_T(x=0) | Circle_T(radius=0): ...   # not supported
+case x:
+    when Point_T(x=0) | Circle_T(radius=0): ...   # not supported
 
-    case Point_T(x=0):
+    when Point_T(x=0):
         handle_zero()
-    case Circle_T(radius=0):
+    when Circle_T(radius=0):
         handle_zero()
 ```
 
@@ -640,11 +685,10 @@ own branch.
 Both spellings compile to the same code, so the choice is about who reads the
 file.
 
-Reach for `case`/`when` when the file is already dense with Adascript
-extensions — enums, records, `let`/`var` — and when you want Nim's
-exhaustiveness check to carry the weight of an enum dispatch. Reach for
-`match`/`case` when the file is mostly plain Python being migrated, or when
-the patterns are Python-idiomatic and the next reader will be too.
+Reach for a `case` block over an `if`/`elif` chain when the subject is an
+enum and the branches are constants: that is the one shape where Nim proves
+the dispatch is total, and the proof is the whole reason the construct earns
+its keep.
 
 ```python
 # Adascript style for the enum dispatch
@@ -654,10 +698,10 @@ case score:
     when others:    grade = "C or below"
 
 # Python style for the structural match
-match result:
-    case Ok_T(value=v):
+case result:
+    when Ok_T(value=v):
         process(v)
-    case Err_T(msg=m):
+    when Err_T(msg=m):
         log(m)
 ```
 

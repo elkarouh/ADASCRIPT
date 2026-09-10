@@ -65,12 +65,12 @@ def code_chars(s: str) -> char:
     let n: Natural = len(s)
     while i < n:
         let c: char = s[i]
-        match c:
-            case '"':
+        case c:
+            when '"':
                 i = skip_quoted(s, i, '"')
-            case '\'' if i + 2 < n and s[i + 2] == '\'':
+            when '\'' if i + 2 < n and s[i + 2] == '\'':
                 i += 3                           # character literal: skip 'x' whole
-            case _:
+            when others:
                 yield c
                 i += 1
 
@@ -205,32 +205,32 @@ def scan_parens(text: str, base_depth: Natural, base_col: Natural) -> [](int, in
     let n: Natural = len(text)
     while i < n:
         let ch: char = text[i]
-        match ch:
-            case '"':
+        case ch:
+            when '"':
                 i = skip_quoted(text, i, '"')
-            case '\'' if i + 2 < n and text[i + 2] == '\'':
+            when '\'' if i + 2 < n and text[i + 2] == '\'':
                 i += 3                           # character literal: skip 'x' whole
-            case '(':
+            when '(':
                 depth += 1
                 var j: Natural = i + 1
                 j = skip_ch(text, j, ' ')
                 let kw: str = lead_ident_lower(text[j:])
-                match kw:
-                    case "if":
+                case kw:
+                    when "if":
                         openers.append((depth, base_col + j, IF_EXPR))
-                    case "case":
+                    when "case":
                         openers.append((depth, base_col + j, CASE_EXPR))
-                    case "for":
+                    when "for":
                         openers.append((depth, base_col + j, FOR_EXPR))
-                    case _ if j < n:
+                    when _ if j < n:
                         openers.append((depth, base_col + j, PLAIN))
-                    case _:
+                    when others:
                         openers.append((depth, base_col + INDENT_WIDTH, PLAIN))
                 i += 1
-            case ')':
+            when ')':
                 depth -= 1
                 i += 1
-            case _:
+            when others:
                 i += 1
     return openers
 
@@ -401,12 +401,12 @@ class Indenter:
                 # to this level). Derive the indent from the paren kind, mirroring
                 # where the first/next code line at this level lands.
                 var pfall: Natural = ptop[1]
-                match ptop[2]:
-                    case CASE_EXPR | FOR_EXPR:
+                case ptop[2]:
+                    when CASE_EXPR | FOR_EXPR:
                         pfall += INDENT_WIDTH
-                    case PLAIN if self.paren_cont:
+                    when PLAIN if self.paren_cont:
                         pfall += INDENT_WIDTH
-                    case _:
+                    when others:
                         pass
                 return " " * pfall + emit_text
             # Outside parentheses a comment is indented like the line that would
@@ -517,15 +517,15 @@ class Indenter:
                 acol = top[1]
                 entry_top_level = top[0]
                 entry_top_kind = top[2]
-                match entry_top_kind:
-                    case _ if entry_top_kind != PLAIN and code_s.startswith(")"):
+                case entry_top_kind:
+                    when _ if entry_top_kind != PLAIN and code_s.startswith(")"):
                         # A line that begins by closing an '(if'/'(case'/'(for'
                         # expression aligns the ')' under the opening '(' — one
                         # column left of the keyword that acol points at —
                         # rather than taking the body/condition continuation
                         # indent.
                         lead = max(0, acol - 1)
-                    case IF_EXPR:
+                    when IF_EXPR:
                         if lw in ("then", "else", "elsif"):
                             lead = acol
                         else:
@@ -536,7 +536,7 @@ class Indenter:
                             # consistent with the case-expr arms below and the
                             # if-statement condition continuation.
                             lead = acol + INDENT_WIDTH
-                    case CASE_EXPR:
+                    when CASE_EXPR:
                         if lw == "when":
                             lead = acol + INDENT_WIDTH
                         else:
@@ -553,7 +553,7 @@ class Indenter:
                             if starts_with_operator(code_s) and not code_s.startswith("=>"):
                                 lead += INDENT_WIDTH
                                 was_cont = True
-                    case FOR_EXPR:
+                    when FOR_EXPR:
                         # '(for some/all … => predicate' (a quantified
                         # expression) or '(for I in … => value' (an iterated
                         # component): the body after the iterator sits one
@@ -565,7 +565,7 @@ class Indenter:
                         if starts_with_operator(code_s) and not code_s.startswith("=>"):
                             lead += INDENT_WIDTH
                             was_cont = True
-                    case _:
+                    when others:
                         # A named association whose value spilled past a
                         # trailing '=>' (arrow_level marks the paren it
                         # happened in) starts its value one level past the item

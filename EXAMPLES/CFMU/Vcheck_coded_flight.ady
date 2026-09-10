@@ -56,17 +56,17 @@ class HistogramExtractor(AwkBase):
         # Order carries the state machine: inside a histogram a bucket line
         # extends it and anything else ends it, and only outside one does a
         # header start the next.
-        match self.line:
-            case /^< [0-9]+ +bytes:/ if self.state == IN_HIST:
+        case self.line:
+            when /^< [0-9]+ +bytes:/ if self.state == IN_HIST:
                 self._fold(int(F[2]), int(F[self.NF]))
-            case _ if self.state == IN_HIST:
+            when _ if self.state == IN_HIST:
                 self._report()
                 self.state     = OUT_OF_HIST
                 self.hist.prev = 0
-            case /LENGTH histogram of CODED_FLIGHT:/:
+            when /LENGTH histogram of CODED_FLIGHT:/:
                 self.hist  = Histogram_T()
                 self.state = IN_HIST
-            case _:
+            when others:
                 pass
 
     def finish(self):
