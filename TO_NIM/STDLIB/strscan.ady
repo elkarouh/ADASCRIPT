@@ -55,7 +55,7 @@ def is_space_ch(c: char) -> bool:
 def skip_while(s: str, i: Natural, pred: [(char,)]bool) -> Natural:
     """The first index at or after i whose character fails pred."""
     var j: Natural = i
-    let n: int = len(s)
+    let n: Natural = len(s)
     while j < n and pred(s[j]):
         j += 1
     return j
@@ -67,7 +67,7 @@ def skip_ch(s: str, i: Natural, c: char) -> Natural:
     Narrower than skip_while(s, i, is_space_ch) on purpose: a formatter that
     treats a tab as a hard error wants to stop on one, not step over it."""
     var j: Natural = i
-    let n: int = len(s)
+    let n: Natural = len(s)
     while j < n and s[j] == c:
         j += 1
     return j
@@ -86,7 +86,7 @@ def skip_quoted(s: str, i: Natural, quote: char) -> Natural:
     a close immediately followed by an open, and the scan lands in the same
     place either way. Use skip_quoted_esc where a backslash escapes."""
     var j: Natural = i + 1
-    let n: int = len(s)
+    let n: Natural = len(s)
     while j < n and s[j] != quote:
         j += 1
     return j + 1
@@ -100,7 +100,7 @@ def skip_quoted_esc(s: str, i: Natural, quote: char, escape: char) -> Natural:
     the index past the end -- the same answer an unterminated literal gives,
     and the caller stops on it the same way."""
     var j: Natural = i + 1
-    let n: int = len(s)
+    let n: Natural = len(s)
     while j < n and s[j] != quote:
         if s[j] == escape:
             j += 1
@@ -135,8 +135,8 @@ def strip_line_comment(line: str, marker: str, quote: char) -> str:
     end of line, and a language where it is not has bigger scanning problems
     than this function was meant to solve."""
     var i: Natural = 0
-    let n: int = len(line)
-    let m: int = len(marker)
+    let n: Natural = len(line)
+    let m: Natural = len(marker)
     var in_str: bool = False
     while i < n:
         let c: char = line[i]
