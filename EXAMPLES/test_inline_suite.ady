@@ -1166,6 +1166,10 @@ def cw_str(w: str) -> str:
 assert cw_str("a") == "A"
 assert cw_str("zzz") == "?"
 
+# `when others if c:` is refused outright rather than quietly not counting:
+# others is everything that is left, so a condition on it is a contradiction.
+# (Not assertable here for the same reason as above -- it does not compile.)
+
 # and an unguarded ordinal block still needs no catch-all: Nim checks it
 def cw_total(k: Cw_T) -> str:
     case k:

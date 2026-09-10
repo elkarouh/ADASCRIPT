@@ -2044,17 +2044,29 @@ def _require_catch_all(subject, case_node):
     guarded = any(g for _, g in branches)
     has_catch_all = False
     for pat, pat_guarded in branches:
-        if pat_guarded:
-            continue          # `when others if c:` can still fail: not a catch-all
-        if type(pat).__name__ == "pattern_others":
+        _is_others = type(pat).__name__ == "pattern_others"
+        if not _is_others:
+            try:
+                _is_others = (pat.to_nim() or "").strip() == "others"
+            except Exception:
+                _is_others = False
+        if _is_others and pat_guarded:
+            raise SyntaxError(
+                "`when others` cannot carry a guard: others is everything "
+                "that is left, so a condition on it is a contradiction -- a "
+                "guarded catch-all that fails leaves the block with nothing "
+                "to do. Put the condition on a real pattern, or test it "
+                "inside the branch.")
+        if _is_others:
             has_catch_all = True
             break
-        try:
-            if (pat.to_nim() or "").strip() in ("others", "_"):
-                has_catch_all = True
-                break
-        except Exception:
-            pass
+        if not pat_guarded:
+            try:
+                if (pat.to_nim() or "").strip() == "_":
+                    has_catch_all = True
+                    break
+            except Exception:
+                pass
     if has_catch_all:
         return
     _sym = ParserState.symbol_table.lookup((subject or "").strip())
