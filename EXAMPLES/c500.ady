@@ -6,61 +6,41 @@
 
 const PAGE_SIZE : int = 65536
 
+# C escape sequences.  The two literal forms disagree about the backslash of
+# an escape the table does not list: a char literal drops it ('\q' is q), a
+# string literal keeps it ("\q" stays \q), so they get a table each rather
+# than sharing one.
+const CHAR_ESCAPES : {str}str = {"n": "\n", "t": "\t", "r": "\r",
+                                 "0": "\0", "\\": "\\", "'": "'"}
+const STR_ESCAPES  : {str}str = {"n": "\n", "t": "\t", "r": "\r",
+                                 "0": "\0", "\\": "\\", "\"": "\""}
+
 
 def parse_c_char(tok: str) -> str:
     """Parse a C char literal like 'a' or '\n' → single character string."""
-    inner: str = tok[1:-1]
-    if len(inner) == 0:
-        "\0"
-    elif not inner.startswith("\\"):
-        inner[0:1]
-    elif len(inner) < 2:
-        inner[0:1]
-    else:
-        c: str = inner[1:2]
-        case c:
-            when "n":  "\n"
-            when "t":  "\t"
-            when "r":  "\r"
-            when "0":  "\0"
-            when "\\": "\\"
-            when "'":  "'"
-            when others: c
+    let inner: str = tok[1:-1]
+    match inner:
+        case "":  "\0"
+        case _ if len(inner) >= 2 and inner.startswith("\\"):
+            CHAR_ESCAPES.get(inner[1:2], inner[1:2])
+        case _:   inner[0:1]
 
 
 def parse_c_str(tok: str) -> str:
     """Parse a C string literal like "hello\n" → plain string (without surrounding quotes)."""
-    inner: str = tok[1:-1]
-    result: str = ""
-    i: int = 0
+    let inner: str = tok[1:-1]
+    var buf: str = ""
+    var i: int = 0
     while i < len(inner):
-        if inner[i:i+1] != "\\" or i + 1 >= len(inner):
-            result = result + inner[i:i+1]
-            i = i + 1
+        # An unrecognised escape keeps its backslash, so only a table hit
+        # consumes two characters.
+        if inner[i:i+1] == "\\" and i + 1 < len(inner) and inner[i+1:i+2] in STR_ESCAPES:
+            buf = buf + STR_ESCAPES[inner[i+1:i+2]]
+            i = i + 2
         else:
-            c: str = inner[i+1:i+2]
-            case c:
-                when "n":
-                    result = result + "\n"
-                    i = i + 2
-                when "t":
-                    result = result + "\t"
-                    i = i + 2
-                when "r":
-                    result = result + "\r"
-                    i = i + 2
-                when "0":
-                    result = result + "\0"
-                    i = i + 2
-                when "\\":
-                    result = result + "\\"
-                    i = i + 2
-                when "\"":
-                    result = result + '"'
-                    i = i + 2
-                when others:
-                    result = result + inner[i:i+1]
-                    i = i + 1
+            buf = buf + inner[i:i+1]
+            i = i + 1
+    return buf
 
 
 def die(message: str, line: ?int = None) -> None:
@@ -115,16 +95,23 @@ class StringPool:
     base: int
     current: int
     strs: {str}int
+    # add() hands out addresses in insertion order, so pooled() has to emit the
+    # bytes in that order too.  Iterating the dict does not: it is insertion
+    # ordered on the Python backend and hash ordered on the Nim one, where the
+    # data segment then disagreed with every address already emitted.
+    order: []str
 
     def __init__(self):
         self.base    = PAGE_SIZE
         self.current = PAGE_SIZE
         self.strs    = {:}
+        self.order   = []
 
     def add(self, s: str) -> int:
         s = s + "\0"
         if s not in self.strs:
             self.strs[s] = self.current
+            self.order.append(s)
             self.current += len(s)
             if self.current - self.base > PAGE_SIZE:
                 die("string pool too large")
@@ -133,7 +120,7 @@ class StringPool:
     def pooled(self) -> str:
         HEX: str = "0123456789abcdef"
         result: str = ""
-        for b in self.strs.keys():
+        for b in self.order:
             i: int = 0
             while i < len(b):
                 n: int = ord(b[i])
