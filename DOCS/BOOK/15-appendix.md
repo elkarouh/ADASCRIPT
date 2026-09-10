@@ -88,28 +88,28 @@ Predefined subtypes: `Natural` (0..), `Positive` (1..).
 
 ```bash
 # Python backend
-python3 TO_PYTHON/py2py.py source.ady          # emit Python to stdout
-python3 TO_PYTHON/py2py.py -c source.ady       # transpile and run
-echo "var x: int = 42" | python3 TO_PYTHON/py2py.py    # from stdin
+python3 TO_PYTHON/ady2py.py source.ady          # emit Python to stdout
+python3 TO_PYTHON/ady2py.py -c source.ady       # transpile and run
+echo "var x: int = 42" | python3 TO_PYTHON/ady2py.py    # from stdin
 
 # Nim backend
-python3 TO_NIM/py2nim.py source.ady            # transpile + compile + run
-python3 TO_NIM/py2nim.py -t source.ady         # transpile only → source.nim
-python3 TO_NIM/py2nim.py c source.ady          # nim c
-python3 TO_NIM/py2nim.py c -r source.ady       # nim c -r
-python3 TO_NIM/py2nim.py c -d:release source.ady  # optimised; unknown flags → nim
-python3 TO_NIM/py2nim.py --test                # transpiler self-tests
+python3 TO_NIM/ady2nim.py source.ady            # transpile + compile + run
+python3 TO_NIM/ady2nim.py -t source.ady         # transpile only → source.nim
+python3 TO_NIM/ady2nim.py c source.ady          # nim c
+python3 TO_NIM/ady2nim.py c -r source.ady       # nim c -r
+python3 TO_NIM/ady2nim.py c -d:release source.ady  # optimised; unknown flags → nim
+python3 TO_NIM/ady2nim.py --test                # transpiler self-tests
 ```
 
 Executable scripts:
 
 ```python
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 #ady2nim-args c -d:release
 ```
 
 then `chmod +x script.ady && ./script.ady`. Artifacts live in
-`~/.cache/hparsec/cache-<HASH>/`; a symlink to the binary is placed next to
+`~/.cache/adascript/cache-<HASH>/`; a symlink to the binary is placed next to
 the source. Builds are incremental (transpile / compile / run each skipped
 when up to date); editing any transpiler `.py` file invalidates the caches.
 
@@ -118,14 +118,14 @@ when up to date); editing any transpiler `.py` file invalidates the caches.
 The `Makefile` at the repository root drives every example:
 
 ```bash
-make install    # put py2nim and py2py on PATH (PREFIX=... to relocate)
+make install    # put ady2nim and ady2py on PATH (PREFIX=... to relocate)
 make compile    # transpile + compile every example, no run
 make test       # compile, then run the suite (36 examples, 67 checks)
-make clean      # remove ~/.cache/hparsec/ and the binary symlinks
+make clean      # remove ~/.cache/adascript/ and the binary symlinks
 make uninstall  # remove the launchers again
 ```
 
-`make install` is what makes the `#!/usr/bin/env py2nim` shebang at the top
+`make install` is what makes the `#!/usr/bin/env ady2nim` shebang at the top
 of every example resolve, so a `.ady` file becomes directly executable from
 any directory. It verifies itself by transpiling and running a small
 program.
@@ -139,7 +139,7 @@ libraries), `nimble install db_connector` (for `nimport db`).
 
 A file may pin its C compiler on the `#ady2nim-args` line
 (`--cc:clang --clang.exe:zigcc`). That is a preference: when the named
-binary is not installed, `py2nim` drops the pin, says so on stderr, and lets
+binary is not installed, `ady2nim` drops the pin, says so on stderr, and lets
 Nim use its default C compiler — so no example needs a particular toolchain
 in order to build.
 
@@ -156,7 +156,7 @@ in order to build.
 
 ## A.4 Known limitations (as of this writing)
 
-- `py2py.py` collapses blank lines and drops inline comments in output, and
+- `ady2py.py` collapses blank lines and drops inline comments in output, and
   collapses a bracketed expression that spans lines onto one line whenever
   anything inside it needed translating (the layout is kept when nothing did).
 - `case` subjects must be structural expressions (`(a, b)`, `x.field`) for

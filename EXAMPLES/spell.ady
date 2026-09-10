@@ -1,4 +1,4 @@
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 """Norvig's spelling corrector — https://norvig.com/spell-correct.html
 
 Usage:  spell.ady big.txt                  # load corpus, enter REPL

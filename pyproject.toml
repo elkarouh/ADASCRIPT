@@ -11,8 +11,8 @@ requires-python = ">=3.10"
 license = { text = "MIT" }
 
 [project.scripts]
-hpy2py  = "hparsec.to_python.py2py:main"
-hpy2nim = "hparsec.to_nim.py2nim:main"
+ady2py  = "hparsec.to_python.ady2py:main"
+ady2nim = "hparsec.to_nim.ady2nim:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
@@ -24,8 +24,8 @@ include = ["hparsec*"]
 # Until the package is restructured with __init__.py files, the scripts above
 # won't work as installed entry points.  Run the transpilers directly instead:
 #
-#   python3 TO_PYTHON/py2py.py  source.ady
-#   python3 TO_NIM/py2nim.py    source.ady
+#   python3 TO_PYTHON/ady2py.py  source.ady
+#   python3 TO_NIM/ady2nim.py    source.ady
 #
 # The sys.path.insert() calls in each module handle sibling imports in the
 # meantime.  A future refactor would:

@@ -18,9 +18,9 @@ sys.path.insert(0, os.path.join(_dir, "..", "ADASCRIPT_GRAMMAR"))
 # (no TO_PYTHON dependency needed)
 
 from hek_parsec import method, ParserState
-from py_declarations import *  # noqa: F403 — need all parser rule names
-from py_declarations import parse_type
-from py3stmt import subrange_array_type  # noqa: F401 — defined after py_declarations
+from ady_declarations import *  # noqa: F403 — need all parser rule names
+from ady_declarations import parse_type
+from ady_stmt import subrange_array_type  # noqa: F401 — defined after ady_declarations
 
 ###############################################################################
 # to_nim() methods

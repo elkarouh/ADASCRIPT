@@ -5,7 +5,7 @@ PORT ?= 8800
 all: roi.js
 
 roi.js: roi_glue.ady
-	py2nim js roi_glue.ady
+	ady2nim js roi_glue.ady
 	cp -L roi_glue.js $@
 	rm -f roi_glue.js
 

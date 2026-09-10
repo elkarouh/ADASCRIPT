@@ -1,9 +1,9 @@
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 """
 test_geometry — a unit test is just an entry point that nimports the module
 under test and asserts.  Build and run it like any other program:
 
-    py2nim c -r EXAMPLES/PROJECT/test_geometry.ady
+    ady2nim c -r EXAMPLES/PROJECT/test_geometry.ady
 """
 
 nimport lib/geometry

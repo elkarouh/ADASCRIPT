@@ -10,9 +10,9 @@ Comments travel naturally with the parse tree, eliminating position arithmetic.
 CHANGES MADE:
 - hek_tokenize.py: Added RichNL class, bundles COMMENT+NL tokens
 - hek_parsec.py: Added expect_type_node() to return token nodes (not strings)
-- hek_py3_parser.py: NL = expect_type_node(tkn.NL), added NL.to_py() method
-- hek_py3_stmt.py: Fixed import_names_paren to allow NL[:] inside parens
-- py2py.py: Simplified parse_module() and translate()
+- hek_py_parser.py: NL = expect_type_node(tkn.NL), added NL.to_py() method
+- hek_py_stmt.py: Fixed import_names_paren to allow NL[:] inside parens
+- ady2py.py: Simplified parse_module() and translate()
 
 TEST STATUS (as of implementation):
 ===================================
@@ -70,12 +70,12 @@ TODO FOR FUTURE WORK:
 2. Handle inline comments - they use NEWLINE token, not NL
    - Tokenizer needs to bundle COMMENT+NEWLINE or handle separately
 3. Preserve blank line counts (currently all blanks collapse to single)
-4. Fix statement parsing - only parses ~5 statements from hek_py3_expr.py
+4. Fix statement parsing - only parses ~5 statements from hek_py_expr.py
    - Some grammar rules may still not handle RichNL properly
 
 USAGE:
-    python3 py2py.py [file.py]       # translate a file
-    echo "x = 1" | python3 py2py.py  # translate from stdin
+    python3 ady2py.py [file.py]       # translate a file
+    echo "x = 1" | python3 ady2py.py  # translate from stdin
 """
 
 """Python 3.14 source-to-source translator using parser combinators.
@@ -88,8 +88,8 @@ in the tokenizer and attaching them to AST nodes. This approach is
 language-agnostic — trivia travels with the AST, not with line numbers.
 
 Usage:
-    python3 py2py.py [file.py]       # translate a file
-    echo "x = 1" | python3 py2py.py  # translate from stdin
+    python3 ady2py.py [file.py]       # translate a file
+    echo "x = 1" | python3 ady2py.py  # translate from stdin
 """
 
 import sys, os
@@ -102,7 +102,7 @@ sys.path.insert(0, os.path.join(_dir, "..", "ADASCRIPT_GRAMMAR"))
 import sys
 import token as token_mod
 
-from hek_py3_parser import *  # fw() resolves names in calling module's globals
+from hek_py_parser import *  # fw() resolves names in calling module's globals
 from hek_tokenize import Tokenizer, RichNL, set_current_tokenizer
 
 
@@ -128,7 +128,7 @@ def _py_reset():
     ParserState.py_top_decls = []
     # Marks are held by id(), which the allocator reuses once a parse tree is
     # collected, so they must not outlive the module that set them.
-    import hek_py3_stmt as _stmt
+    import hek_py_stmt as _stmt
     _stmt.RETURN_NODES.clear()
 
 
@@ -392,7 +392,7 @@ def main(args=None):
 
 def run_tests():
     print("=" * 60)
-    print("Python 3.14 py2py Translator Tests")
+    print("Python 3.14 ady2py Translator Tests")
     print("=" * 60)
 
     tests = [

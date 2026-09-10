@@ -1,4 +1,4 @@
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 """
 HPython equivalent of the list_all_changes() python script.
 

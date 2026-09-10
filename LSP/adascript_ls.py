@@ -56,13 +56,13 @@ def _parse(source: str) -> tuple[bool, list, dict, object]:
     We call translate() rather than parse_module() because tick_types and
     symbol_table are only filled during the to_py() emission pass.
     """
-    import py2py
+    import ady2py
     from hek_parsec import ParserState
 
     captured = io.StringIO()
     old_stderr, sys.stderr = sys.stderr, captured
     try:
-        py2py.translate(source)
+        ady2py.translate(source)
     except Exception as exc:
         sys.stderr = old_stderr
         return False, [(1, 0, str(exc))], {}, None

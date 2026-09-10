@@ -1,4 +1,4 @@
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 #ady2nim-args c -d:release --opt:speed
 # ada_indent.ady — a simplified Ada source re-indenter, written in Adascript.
 #
@@ -14,8 +14,8 @@
 # See README.md in this directory for the simplified grammar specification.
 #
 # Usage:
-#   py2nim ADA_INDENT/ada_indent.ady -r -- file.adb   # compile if stale, reindent a file
-#   py2nim ADA_INDENT/ada_indent.ady -r -- --test     # compile if stale, run self-tests
+#   ady2nim ADA_INDENT/ada_indent.ady -r -- file.adb   # compile if stale, reindent a file
+#   ady2nim ADA_INDENT/ada_indent.ady -r -- --test     # compile if stale, run self-tests
 #
 # The core logic (reindent + helpers) is pure Adascript and transpiles to
 # both Python and Nim. The CLI uses the bash-style argument primitives

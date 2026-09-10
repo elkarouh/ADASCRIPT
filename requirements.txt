@@ -9,9 +9,9 @@
 # Runtime baseline (not listed below):
 #   Nim  >= 2.2.10  (install via choosenim: https://github.com/dom96/choosenim)
 #   Zig  >= 0.14.0  (optional: preferred by state_search.ady and others using
-#                    --cc:clang --clang.exe:zigcc; py2nim falls back to the
+#                    --cc:clang --clang.exe:zigcc; ady2nim falls back to the
 #                    default C compiler when it is absent)
-#   Python >= 3.12  (required by py2nim transpiler)
+#   Python >= 3.12  (required by ady2nim transpiler)
 #
 # Quick setup:
 #   curl -fsSL https://nim-lang.org/choosenim/init.sh | sh  # installs Nim 2.x
@@ -97,7 +97,7 @@ libpcre3
 
 # zig / zigcc  — Zig C compiler frontend. OPTIONAL: preferred by examples that
 # pin the compiler via '#ady2nim-args c --cc:clang --clang.exe:zigcc', but not
-# required — py2nim drops a pin whose binary is missing (noting it on stderr)
+# required — ady2nim drops a pin whose binary is missing (noting it on stderr)
 # and falls back to nim's default C compiler, so these files build without zig:
 #   state_search.ady, shortest_path.ady, test_shortest_path.ady,
 #   test_state_search.ady, timetable_engine.ady, timetable_sa.ady,

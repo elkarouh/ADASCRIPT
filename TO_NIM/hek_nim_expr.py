@@ -2,7 +2,7 @@
 """Nim translation methods for Python 3.14 expressions.
 
 Adds to_nim() methods to the expression parser classes defined in
-hek_py3_expr.py. Import this module to enable .to_nim() on expression AST nodes.
+hek_py_expr.py. Import this module to enable .to_nim() on expression AST nodes.
 
 Usage:
     from hek_nim_expr import *
@@ -21,13 +21,13 @@ sys.path.insert(0, os.path.join(_dir, "..", "ADASCRIPT_GRAMMAR"))
 # (no TO_PYTHON dependency needed)
 
 from hek_parsec import method, ParserState
-from py3expr import *
+from ady_expr import *
 
-# Set to True by py2nim before translating a file compiled with `nim js`.
+# Set to True by ady2nim before translating a file compiled with `nim js`.
 # Guards JS-only code-generation paths so the native backend is unaffected.
 JS_BACKEND = False
 from hek_nim_declarations import _is_nim_ordinal  # noqa: F403 — need all parser rule names
-from py3expr import (
+from ady_expr import (
     PREC_WALRUS, PREC_CONDITIONAL, PREC_OR, PREC_AND, PREC_NOT,
     PREC_CMP, PREC_BOR, PREC_BXOR, PREC_BAND, PREC_SHIFT,
     PREC_ARITH, PREC_TERM, PREC_UNARY, PREC_POWER, PREC_ATOM,

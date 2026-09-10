@@ -1,4 +1,4 @@
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 """
 jointjs — JsElem base class and shared helpers for JointJS applications.
 """

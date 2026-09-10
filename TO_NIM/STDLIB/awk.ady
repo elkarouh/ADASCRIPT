@@ -1,4 +1,4 @@
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 """
 awk_base — generic stdin record-processor framework.
 

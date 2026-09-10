@@ -1,4 +1,4 @@
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 """
 Vcheck_coded_flight — extract max-bucket and weighted-avg of ft.coded_flight
 size from perf replay logs.

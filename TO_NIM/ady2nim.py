@@ -5,8 +5,8 @@ Parses Python source code using the hek_parsec combinator framework
 and translates it to Nim via to_nim() methods on each AST node.
 
 Usage:
-    python3 py2nim.py [file.py]       # translate a file
-    echo "x = 1" | python3 py2nim.py  # translate from stdin
+    python3 ady2nim.py [file.py]       # translate a file
+    echo "x = 1" | python3 ady2nim.py  # translate from stdin
 """
 
 import sys, os
@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.join(_dir, "..", "ADASCRIPT_GRAMMAR"))
 
 import token as token_mod
 
-from py3compound_stmt import *  # fw() resolves names in calling module's globals
+from ady_compound_stmt import *  # fw() resolves names in calling module's globals
 from hek_tokenize import Tokenizer, RichNL, set_current_tokenizer
 
 # Import Nim translation modules to register to_nim() methods
@@ -1217,8 +1217,8 @@ def main(argv=None):
 
     Mirrors the nim compiler's own CLI so muscle memory transfers directly::
 
-        nim  c        [-r] [nim-flags] file.nim  [-- prog-args]
-        py2nim  c     [-r] [nim-flags] file.ady  [-- prog-args]
+        nim      c    [-r] [nim-flags] file.nim  [-- prog-args]
+        ady2nim  c    [-r] [nim-flags] file.ady  [-- prog-args]
 
     Subcommands (anything that nim accepts: c, cpp, js, check, doc, …) are
     passed straight through to the nim compiler.  All unrecognised flags (those
@@ -1226,37 +1226,37 @@ def main(argv=None):
 
     Modes
     -----
-    py2nim                          read stdin, print Nim to stdout
-    py2nim -t file.ady              transpile (with deps) → cache, stop
-    py2nim file.ady                 shebang default: compile + run (= c -r)
-    py2nim c file.ady               transpile → compile (artifacts in cache)
-    py2nim c -r file.ady            transpile → compile → run
-    py2nim c -r file.ady -- a b     same, pass a b as program arguments
-    py2nim --test                   run built-in self-tests
+    ady2nim                          read stdin, print Nim to stdout
+    ady2nim -t file.ady              transpile (with deps) → cache, stop
+    ady2nim file.ady                 shebang default: compile + run (= c -r)
+    ady2nim c file.ady               transpile → compile (artifacts in cache)
+    ady2nim c -r file.ady            transpile → compile → run
+    ady2nim c -r file.ady -- a b     same, pass a b as program arguments
+    ady2nim --test                   run built-in self-tests
 
     Cache layout
     ------------
-    All generated artifacts go to ``~/.cache/hparsec/`` (or
-    ``$XDG_CACHE_HOME/hparsec`` where that is set) so source directories
+    All generated artifacts go to ``~/.cache/adascript/`` (or
+    ``$XDG_CACHE_HOME/adascript`` where that is set) so source directories
     stay clean.  Each script gets its own subdirectory keyed by a SHA-1 hash
     of its absolute path (inspired by nimbang / rdmd)::
 
-        ~/.cache/hparsec/cache-<HASH>/script.nim     ← transpiled source
-        ~/.cache/hparsec/cache-<HASH>/.script        ← compiled binary
-        ~/.cache/hparsec/cache-<HASH>/nimcache/      ← nim object cache
+        ~/.cache/adascript/cache-<HASH>/script.nim     ← transpiled source
+        ~/.cache/adascript/cache-<HASH>/.script        ← compiled binary
+        ~/.cache/adascript/cache-<HASH>/nimcache/      ← nim object cache
 
     Subsequent runs are fast: if neither the source nor the compiled binary
-    have changed, py2nim skips all transpilation and compilation and directly
+    have changed, ady2nim skips all transpilation and compilation and directly
     execs the cached binary.
 
     Shebang usage
     -------------
     Because the Linux kernel only passes a single token after ``/usr/bin/env``
-    in a shebang line, ``#!/usr/bin/env py2nim c -r`` is illegal.  Use::
+    in a shebang line, ``#!/usr/bin/env ady2nim c -r`` is illegal.  Use::
 
-        #!/usr/bin/env py2nim
+        #!/usr/bin/env ady2nim
 
-    When py2nim is invoked with a ``.ady`` file and no subcommand it defaults
+    When ady2nim is invoked with a ``.ady`` file and no subcommand it defaults
     to ``c -r``, so the three-tier up-to-date check and direct binary execution
     all work transparently.
 
@@ -1265,7 +1265,7 @@ def main(argv=None):
     Add a ``#ady2nim-args`` directive as the **second line** of the file to set
     per-file nim compiler options (inspired by nimbang)::
 
-        #!/usr/bin/env py2nim
+        #!/usr/bin/env ady2nim
         #ady2nim-args c -d:release
 
     The directive is split on whitespace.  If the first token is a nim
@@ -1275,7 +1275,7 @@ def main(argv=None):
 
     Up-to-date check (three tiers, like make)
     -----------------------------------------
-    When a binary-producing subcommand (c, cpp, …) is given, py2nim runs
+    When a binary-producing subcommand (c, cpp, …) is given, ady2nim runs
     three mtime comparisons before doing any work:
 
     1. **.nim older than .ady** → re-transpile, then continue to tier 2.
@@ -1299,7 +1299,7 @@ def main(argv=None):
         argv = sys.argv[1:]
 
     # ------------------------------------------------------------------ #
-    # 1.  Intercept --test before any other parsing                       #
+    # 1.  Intercept --test before any other parsing                      #
     # ------------------------------------------------------------------ #
     if "--test" in argv:
         sys.exit(run_tests())
@@ -1307,10 +1307,10 @@ def main(argv=None):
     # ------------------------------------------------------------------ #
     # 2.  nim-style manual argument parsing                               #
     #                                                                     #
-    #   py2nim [subcommand] [flags...] [file.ady] [-- prog-args...]      #
+    #   ady2nim [subcommand] [flags...] [file.ady] [-- prog-args...]      #
     #                                                                     #
     #   We don't use argparse here because argparse doesn't handle        #
-    #   nim-style --flag:value pairs (the colon is unusual) and we want  #
+    #   nim-style --flag:value pairs (the colon is unusual) and we want   #
     #   to forward unknown flags verbatim without error.                  #
     # ------------------------------------------------------------------ #
     NIM_COMMANDS = {
@@ -1363,22 +1363,22 @@ def main(argv=None):
         i += 1
 
     # ------------------------------------------------------------------ #
-    # 2b. Shebang default: no subcommand + .ady file → c -r              #
+    # 2b. Shebang default: no subcommand + .ady file → c -r               #
     #                                                                     #
-    #   The Linux kernel only passes a single token after /usr/bin/env   #
-    #   in a shebang line, so '#!/usr/bin/env py2nim c -r' is illegal.  #
-    #   Instead, write '#!/usr/bin/env py2nim' and rely on this default: #
-    #   when py2nim is called with a .ady file but no subcommand (and    #
-    #   -t was not given), it behaves exactly as if 'c -r' had been      #
+    #   The Linux kernel only passes a single token after /usr/bin/env    #
+    #   in a shebang line, so '#!/usr/bin/env ady2nim c -r' is illegal.   #
+    #   Instead, write '#!/usr/bin/env ady2nim' and rely on this default: #
+    #   when ady2nim is called with a .ady file but no subcommand (and    #
+    #   -t was not given), it behaves exactly as if 'c -r' had been       #
     #   specified.                                                        #
     #                                                                     #
     #   To transpile only, use -t / --transpile.  With a .ady file that   #
-    #   writes the .nim into the cache directory and prints its path to  #
-    #   stderr -- stdout stays empty, so `py2nim -t f.ady > out.nim`     #
-    #   yields an empty file.  Reading from stdin is the case that does  #
+    #   writes the .nim into the cache directory and prints its path to   #
+    #   stderr -- stdout stays empty, so `ady2nim -t f.ady > out.nim`     #
+    #   yields an empty file.  Reading from stdin is the case that does   #
     #   print the Nim to stdout.                                          #
     #                                                                     #
-    #   -t takes the same route as a build and stops before nim, rather  #
+    #   -t takes the same route as a build and stops before nim, rather   #
     #   than translating the one file on its own: a `nimport`ed module's  #
     #   declarations are needed to emit the importing file correctly, and #
     #   the result is written to the very path a later build reads.  On   #
@@ -1392,7 +1392,7 @@ def main(argv=None):
         run = not transpile_only
 
     # ------------------------------------------------------------------ #
-    # 3.  Read source                                                     #
+    # 3.  Read source                                                    #
     # ------------------------------------------------------------------ #
     if ady_file:
         with open(ady_file, encoding="utf-8") as f:
@@ -1403,13 +1403,13 @@ def main(argv=None):
     # ------------------------------------------------------------------ #
     # 3b. Parse optional #ady2nim-args directive (nimbang-style)          #
     #                                                                     #
-    #   If the second non-empty line of the .ady file starts with        #
+    #   If the second non-empty line of the .ady file starts with         #
     #   "#ady2nim-args", the rest of that line is split into tokens and   #
-    #   prepended to nim_flags (explicit CLI flags still take priority). #
+    #   prepended to nim_flags (explicit CLI flags still take priority).  #
     #                                                                     #
     #   Example:                                                          #
-    #     #!/usr/bin/env py2nim                                           #
-    #     #ady2nim-args c -d:release                                       #
+    #     #!/usr/bin/env ady2nim                                          #
+    #     #ady2nim-args c -d:release                                      #
     # ------------------------------------------------------------------ #
     _ADY2NIM_ARGS_PREFIX = "#ady2nim-args "
 
@@ -1485,18 +1485,18 @@ def main(argv=None):
                 # Prepend so explicit CLI flags override the directive
                 nim_flags = directive_tokens + nim_flags
 
-    # ------------------------------------------------------------------ #
-    # 4.  Resolve cache paths (nimbang-style)                            #
-    #                                                                     #
-    #   All generated artifacts go to ~/.cache/hparsec/ so the source   #
+    # ------------------------------------------------------------------#
+    # 4.  Resolve cache paths (nimbang-style)                           #
+    #                                                                   #
+    #   All generated artifacts go to ~/.cache/adascript/ so the source #
     #   directory stays clean.  A hash of the absolute .ady path gives  #
     #   each script its own isolated subdirectory, just like nimbang.   #
-    #                                                                     #
-    #   Layout inside the cache:                                          #
-    #     ~/.cache/hparsec/<HASH>/script.nim    ← transpiled source     #
-    #     ~/.cache/hparsec/<HASH>/.script       ← compiled binary       #
-    #     ~/.cache/hparsec/<HASH>/nimcache/     ← nim object cache      #
-    # ------------------------------------------------------------------ #
+    #                                                                   #
+    #   Layout inside the cache:                                        #
+    #     ~/.cache/adascript/<HASH>/script.nim    ← transpiled source   #
+    #     ~/.cache/adascript/<HASH>/.script       ← compiled binary     #
+    #     ~/.cache/adascript/<HASH>/nimcache/     ← nim object cache    #
+    # ------------------------------------------------------------------#
     def _cache_paths(ady_path):
         """Return (cache_dir, nim_file, exe_file, nimcache_dir) for *ady_path*.
 
@@ -1505,8 +1505,8 @@ def main(argv=None):
         literal becomes `js{...}` rather than `{...}.toTable` -- and both used
         to be written to the same file, so
 
-            py2nim -t jointjs.ady     # caches the native .nim
-            py2nim js jointjs.ady     # "up to date", compiles that as JS
+            ady2nim -t jointjs.ady     # caches the native .nim
+            ady2nim js jointjs.ady     # "up to date", compiles that as JS
 
         reported the file up to date and handed the native output to `nim js`,
         which failed on the Table literal with a type mismatch that had nothing
@@ -1523,7 +1523,7 @@ def main(argv=None):
         # could not build anything under a throwaway cache before.
         base_dir = os.path.join(
             os.environ.get("XDG_CACHE_HOME") or os.path.join(os.path.expanduser("~"), ".cache"),
-            "hparsec")
+            "adascript")
         cache_dir = os.path.join(base_dir, "cache-" + digest)
         stem     = os.path.splitext(os.path.basename(ady_path))[0]
         # Nim module names must be valid identifiers — replace dots with underscores
@@ -1536,13 +1536,13 @@ def main(argv=None):
 
     # ------------------------------------------------------------------ #
     # 5.  Three-tier up-to-date check then build/run                     #
-    #                                                                     #
-    #   tier 1 — transpile:  .nim older than .ady  (or .nim missing)    #
+    #                                                                    #
+    #   tier 1 — transpile:  .nim older than .ady  (or .nim missing)     #
     #   tier 2 — compile:    exe  older than .nim  (or exe  missing)     #
     #   tier 3 — run:        nothing to do, just exec the existing exe   #
-    #                                                                     #
+    #                                                                    #
     #   Compilation-only subcommands (check, doc, …) have no executable, #
-    #   so the exe check is skipped for them.                             #
+    #   so the exe check is skipped for them.                            #
     # ------------------------------------------------------------------ #
     if ady_file and subcommand:
         cache_dir, nim_file, exe_file, nimcache_dir = _cache_paths(ady_file)

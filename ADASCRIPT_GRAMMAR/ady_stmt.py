@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Python 3.14 Simple Statement Parser using hek_parsec combinator framework.
 
-Builds on hek_py3_expr.py (expression grammar) to parse simple (non-compound)
+Builds on hek_py_expr.py (expression grammar) to parse simple (non-compound)
 Python 3.14 statements. Simple statements fit on one line, can be separated
 by ';', and are terminated by NEWLINE.
 
@@ -63,8 +63,8 @@ from hek_parsec import (
     nothing,
     shift,
 )
-from py3expr import *  # noqa: F403 — need all fw() names in namespace
-from py_declarations import type_annotation
+from ady_expr import *  # noqa: F403 — need all fw() names in namespace
+from ady_declarations import type_annotation
 
 ###############################################################################
 # Tokens not in hek_parsec
@@ -292,9 +292,9 @@ subrange_array_type = LBRACKET + subrange_def + RBRACKET + type_annotation
 type_annotation.parsers.insert(0, subrange_def)
 # Allow [lo..hi]T as a type_annotation; insert before enum_array_type (position 2:
 # after seq_type and callable_type, both of which also start with '[')
-from py_declarations import basic_type as _basic_type
+from ady_declarations import basic_type as _basic_type
 _basic_type.parsers.insert(2, subrange_array_type)
-# type_stmt for simple (inline) forms only; block forms (tuple/record) are in py3compound_stmt
+# type_stmt for simple (inline) forms only; block forms (tuple/record) are in ady_compound_stmt
 type_stmt = ikw("type") + IDENTIFIER + type_alias_params[:] + (V_EQUAL | ikw("is")) + (enum_def | float_range_def | int_range_def | constrained_subrange_def | subrange_def | type_annotation)
 
 # --- simple_stmt: choice of all statement types ---

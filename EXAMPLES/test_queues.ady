@@ -1,11 +1,11 @@
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 # test_queues.ady — the bundled stdlib queues, on both backends
 #
-#   py2nim EXAMPLES/test_queues.ady -r
-#   py2py  EXAMPLES/test_queues.ady -c
+#   ady2nim EXAMPLES/test_queues.ady -r
+#   ady2py  EXAMPLES/test_queues.ady -c
 #
 # Nim compiles against TO_NIM/STDLIB/stdlib.nim; Python has no module to
-# import, so py2py writes the same three classes into its output. The point
+# import, so ady2py writes the same three classes into its output. The point
 # of this file is that the two agree, so every assertion below has to hold
 # unchanged on either backend.
 

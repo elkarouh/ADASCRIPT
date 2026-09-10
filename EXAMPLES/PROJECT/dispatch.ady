@@ -1,4 +1,4 @@
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 """
 dispatch — the entry point of the PROJECT example.
 
@@ -12,7 +12,7 @@ Modules under a subdirectory are nimported by their path relative to this
 file (`lib/fleet`); modules beside the importing file are nimported by their
 bare name (`geometry`, from inside lib/).  Build it like any other program:
 
-    py2nim c -r EXAMPLES/PROJECT/dispatch.ady
+    ady2nim c -r EXAMPLES/PROJECT/dispatch.ady
 """
 
 nimport lib/geometry

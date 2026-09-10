@@ -1,8 +1,8 @@
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 #ady2nim-args js
 """
 JointJS Return-on-Investment demo — rendering layer.
-Compile:  py2nim roi_glue.ady   (or: make)
+Compile:  ady2nim roi_glue.ady   (or: make)
 """
 
 nimport js/jsffi

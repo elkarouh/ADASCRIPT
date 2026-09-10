@@ -14,12 +14,12 @@ Compile once (the shebang already encodes `-d:release --opt:speed`), then run
 the resulting binary directly:
 
 ```bash
-py2nim ADA_INDENT/ada_indent.ady            # transpile + compile (cached)
-py2nim ADA_INDENT/ada_indent.ady -r -- file.adb   # compile if stale, then run
-cat file.adb | py2nim ADA_INDENT/ada_indent.ady -r  # reindent from stdin
+ady2nim ADA_INDENT/ada_indent.ady            # transpile + compile (cached)
+ady2nim ADA_INDENT/ada_indent.ady -r -- file.adb   # compile if stale, then run
+cat file.adb | ady2nim ADA_INDENT/ada_indent.ady -r  # reindent from stdin
 ```
 
-`py2nim` stores the binary in `~/.cache/hparsec/` and skips recompilation when
+`ady2nim` stores the binary in `~/.cache/adascript/` and skips recompilation when
 neither the source nor the generated `.nim` have changed.
 
 ## Tests
@@ -29,7 +29,7 @@ library (`nimport ada_indent` auto-transpiles the sibling `.ady`) and runs it
 against a table of messy-input → canonical-output cases:
 
 ```bash
-py2nim ADA_INDENT/test_ada_indent.ady -r    # compile if stale, run all cases
+ady2nim ADA_INDENT/test_ada_indent.ady -r    # compile if stale, run all cases
 ```
 
 The core (the `Indenter` class plus the lexical helpers) is pure Adascript and
@@ -46,14 +46,14 @@ writes re-indented source to stdout, which is exactly the interface
 onto your `PATH`:
 
 ```bash
-py2nim ADA_INDENT/ada_indent.ady          # compile; binary lands in ~/.cache/hparsec/
-ln -s ~/.cache/hparsec/cache-*/ada_indent ~/.local/bin/ada-indent
+ady2nim ADA_INDENT/ada_indent.ady          # compile; binary lands in ~/.cache/adascript/
+ln -s ~/.cache/adascript/cache-*/ada_indent ~/.local/bin/ada-indent
 ```
 
-Or let `py2nim` install it for you with an explicit output path:
+Or let `ady2nim` install it for you with an explicit output path:
 
 ```bash
-py2nim c -o:~/.local/bin/ada-indent ADA_INDENT/ada_indent.ady
+ady2nim c -o:~/.local/bin/ada-indent ADA_INDENT/ada_indent.ady
 ```
 
 **Step 2 — register the formatter in Emacs.**  Add to your `init.el` (or the
@@ -62,7 +62,7 @@ relevant `use-package` block):
 ```elisp
 (define-format-all-formatter ada-indent
   (:executable "ada-indent")
-  (:install "Compile ADA_INDENT/ada_indent.ady with py2nim, then put ada-indent on PATH")
+  (:install "Compile ADA_INDENT/ada_indent.ady with ady2nim, then put ada-indent on PATH")
   (:languages "Ada")
   (:features)
   (:format (format-all--buffer-easy executable)))

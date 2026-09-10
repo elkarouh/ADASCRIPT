@@ -1,4 +1,4 @@
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 # c500.ady — Single-pass C→WebAssembly compiler in Adascript
 # Port of https://github.com/vgel/c500 by Theia Vogel
 # Original blog post: https://vgel.me/posts/c500/

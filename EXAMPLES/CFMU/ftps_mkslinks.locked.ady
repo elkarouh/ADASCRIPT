@@ -1,4 +1,4 @@
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 # ftps_mkslinks.locked.ady
 # Rebuild/maintain FTPS symlink indices.  Optionally restart the ftps_notifier.
 # Translated from ftps_mkslinks.locked.pl

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Python 3.14 Compound Statement Parser — to_py() methods.
 
-Grammar definitions are in py3compound_stmt.py. This module adds to_py() rendering
+Grammar definitions are in ady_compound_stmt.py. This module adds to_py() rendering
 methods to the grammar node classes.
 """
 
@@ -11,11 +11,11 @@ sys.path.insert(0, os.path.join(_dir, ".."))
 sys.path.insert(0, os.path.join(_dir, "..", "HPARSEC"))
 sys.path.insert(0, os.path.join(_dir, "..", "ADASCRIPT_GRAMMAR"))
 
-from py3compound_stmt import *  # noqa: F403 — grammar definitions
+from ady_compound_stmt import *  # noqa: F403 — grammar definitions
 from hek_tokenize import RichNL
 from hek_parsec import method, ParserState
 from hek_helpers import INDENT_STR, _ind, _richnl_lines, _block_inline_header_comment, _block_last_stmt
-import hek_py3_stmt  # noqa: F401 — registers stmt to_py() methods
+import hek_py_stmt  # noqa: F401 — registers stmt to_py() methods
 
 ###############################################################################
 # to_py() methods
@@ -128,7 +128,7 @@ def _py_presence_cond(cond):
     and `if v:` would skip it. py_expr_is_optional says which expressions
     are known to be optionals; everything else is left alone.
     """
-    from hek_py3_expr import py_expr_is_optional
+    from hek_py_expr import py_expr_is_optional
     import re as _re_pc
     c = (cond or "").strip()
     negated = False
@@ -226,7 +226,7 @@ def to_py(self, indent=0):
     """for_stmt: 'for' for_target 'in' star_expressions ':' block ('else' ...)?"""
     target = self.nodes[0].to_py()
     iterable = self.nodes[1].to_py()
-    from hek_py3_expr import _builtin_ordinal_domain
+    from hek_py_expr import _builtin_ordinal_domain
     iterable = _builtin_ordinal_domain(iterable) or iterable
     hc = _block_inline_header_comment(self.nodes[2])
     body = self.nodes[2].to_py(indent + 1)
@@ -881,7 +881,7 @@ def _pattern_chain_to_py(case_node, subject, indent):
     these patterns.
     """
     self = case_node
-    from hek_py3_expr import _ensure_pymatch_helper, _py_re_flags
+    from hek_py_expr import _ensure_pymatch_helper, _py_re_flags
     if any(_pat_regex_info_py(p) is not None for p, _, _ in _extract_branches_py(self)):
         _ensure_pymatch_helper()
     result = ""
@@ -1058,7 +1058,7 @@ def to_py(self):
                 elif hasattr(op_node, "nodes") and op_node.nodes:
                     op_str = op_node.nodes[0] if isinstance(op_node.nodes[0], str) else ""
                 if op_str == ":":
-                    from hek_py3_expr import py_self_ref_annotation
+                    from hek_py_expr import py_self_ref_annotation
                     annotation = f": {py_self_ref_annotation(val_node.to_py())}"
                 elif op_str == "=":
                     default = f"={val_node.to_py()}"
@@ -1169,7 +1169,7 @@ def to_py(self, indent=0):
 def to_py(self):
     """return_annotation: '->' expression"""
     # V_ARROW is visible, so nodes = [V_ARROW, expression]
-    from hek_py3_expr import py_self_ref_annotation
+    from hek_py_expr import py_self_ref_annotation
     return f" -> {py_self_ref_annotation(self.nodes[1].to_py())}"
 
 
@@ -1218,7 +1218,7 @@ def _mark_implicit_returns(stmt, depth=0):
     whole statement, so a multi-line string literal stays intact instead of
     having `return` spliced into its middle.
     """
-    import hek_py3_stmt as _stmt
+    import hek_py_stmt as _stmt
     if stmt is None or depth > 8:
         return
     tname = type(stmt).__name__
@@ -1416,7 +1416,7 @@ def to_py(self, indent=0):
     hc = _block_inline_header_comment(block_node) if block_node else ""
     # A function body is an ordinary scope even inside a class, so a local
     # declared without a value does get its zero here.
-    import hek_py3_stmt as _stmt
+    import hek_py_stmt as _stmt
     if ret_ann and not ret_ann.strip().endswith("None"):
         _mark_implicit_returns(_block_last_stmt(block_node))
     _outer_class_depth = _stmt.CLASS_BODY_DEPTH
@@ -1478,7 +1478,7 @@ def _declare_type_vars(signature):
     """Declare a TypeVar for each implicit generic parameter in SIGNATURE.
 
     A single uppercase-letter identifier in an annotation is a type
-    variable by Adascript convention -- the same rule py2nim uses to build
+    variable by Adascript convention -- the same rule ady2nim uses to build
     its `[T, U]` proc parameters. Python evaluates annotations eagerly, so
     without a binding `def first_of(xs: list[T]) -> T` is a NameError at
     definition time and the whole module dies.
@@ -1544,7 +1544,7 @@ def to_py(self, indent=0):
     hc = _block_inline_header_comment(block_node) if block_node else ""
     # A function body is an ordinary scope even inside a class, so a local
     # declared without a value does get its zero here.
-    import hek_py3_stmt as _stmt
+    import hek_py_stmt as _stmt
     if ret_ann and not ret_ann.strip().endswith("None"):
         _mark_implicit_returns(_block_last_stmt(block_node))
     _outer_class_depth = _stmt.CLASS_BODY_DEPTH
@@ -1617,7 +1617,7 @@ def _dataclass_defaults(field_lines):
             out.append(line)
             continue
         pad, fname, ann = m.groups()
-        zero = hek_py3_stmt._zero_value(ann)
+        zero = hek_py_stmt._zero_value(ann)
         if zero in factories:
             ParserState.nim_imports.add("from dataclasses import dataclass, field")
             out.append(f"{pad}{fname}: {ann} = field(default_factory={factories[zero]})")
@@ -1708,7 +1708,7 @@ def to_py(self, indent=0):
     if keyword == "enum":
         # Block enum form: 'type T is enum:' with one member per line.
         member_names = _enum_block_members(rhs)
-        return hek_py3_stmt._emit_enum_py(name, member_names, indent)
+        return hek_py_stmt._emit_enum_py(name, member_names, indent)
     if variant_case_node and discrim_name:
         # Discriminated record -> Python @dataclass with all fields flattened
         ParserState.nim_imports.add("from dataclasses import dataclass, field")
@@ -1753,7 +1753,7 @@ def to_py(self, indent=0):
             if m:
                 field_names.append(m.group(1))
         if field_names:
-            from hek_py3_expr import _register_named_tuple
+            from hek_py_expr import _register_named_tuple
             _register_named_tuple(name, field_names)
         return "\n".join(lines)
     elif keyword == "record":
@@ -1817,9 +1817,9 @@ def to_py(self, indent=0):
     hc = _block_inline_header_comment(block_node) if block_node else ""
     # A field declared without a value must not be given a mutable one here:
     # at class level that object is shared by every instance.  See
-    # _zero_value() in hek_py3_stmt.py.
-    import hek_py3_stmt as _stmt
-    import hek_py3_expr as _pyexpr
+    # _zero_value() in hek_py_stmt.py.
+    import hek_py_stmt as _stmt
+    import hek_py_expr as _pyexpr
     _outer_class_depth = _stmt.CLASS_BODY_DEPTH
     _stmt.CLASS_BODY_DEPTH = _outer_class_depth + 1
     # The class does not exist as a name until its body has finished, so any
@@ -2791,11 +2791,11 @@ def to_py(self, indent=0):
 
     # A shell statement in tail position of a function is a capture even
     # with no assignment target: its value is the function's return value.
-    from hek_py3_stmt import RETURN_NODES
+    from hek_py_stmt import RETURN_NODES
     _is_tail_return = id(self) in RETURN_NODES
     has_target = bool(target_name or target_tuple) or _is_tail_return
 
-    # Mark that shell imports are needed; py2py.translate() inserts them at top
+    # Mark that shell imports are needed; ady2py.translate() inserts them at top
     ParserState.nim_imports.add("import subprocess as _subprocess")
     if has_target and not target_tuple:
         ParserState.nim_imports.add("import types as _types")

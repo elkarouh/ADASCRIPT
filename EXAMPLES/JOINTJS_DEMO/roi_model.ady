@@ -1,4 +1,4 @@
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 #ady2nim-args js
 """
 ROI model: price data, financial calculations, and graph topology.

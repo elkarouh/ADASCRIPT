@@ -32,8 +32,8 @@ Pascal has set base minimum for systems programming languages. In Pascal it is p
 ```
 source.ady
     │
-    ├── python3 TO_PYTHON/py2py.py source.ady  ──▶  Python 3
-    └── python3 TO_NIM/py2nim.py   source.ady  ──▶  Nim
+    ├── python3 TO_PYTHON/ady2py.py source.ady  ──▶  Python 3
+    └── python3 TO_NIM/ady2nim.py   source.ady  ──▶  Nim
 ```
 
 ---
@@ -147,8 +147,8 @@ cd ADASCRIPT
 make install                      # or: make install PREFIX=$HOME/.local
 ```
 
-`make install` puts `py2nim` and `py2py` on your PATH, so any `.ady` file
-starting with `#!/usr/bin/env py2nim` runs directly:
+`make install` puts `ady2nim` and `ady2py` on your PATH, so any `.ady` file
+starting with `#!/usr/bin/env ady2nim` runs directly:
 
 ```bash
 chmod +x script.ady && ./script.ady
@@ -158,12 +158,16 @@ It installs into `/usr/local/bin`, falling back to `~/.local/bin` when that
 is not writable, and finishes by transpiling and running a small program to
 prove the install works. `make uninstall` removes the launchers again.
 
+The two tools were called `py2nim` and `py2py` while Adascript was still a
+Python dialect rather than its own language. `make install` also writes those
+names as aliases, so a `.ady` file carrying the old shebang keeps working.
+
 The launchers are wrappers rather than symlinks so they can pin the
 interpreter: the scripts' own shebang says `python3`, which on many systems
 is older than the version the transpiler needs.
 
 You can also skip the install and invoke the scripts directly —
-`python3.12 TO_PYTHON/py2py.py source.ady` — but then the shebang line in the
+`python3.12 TO_PYTHON/ady2py.py source.ady` — but then the shebang line in the
 examples will not resolve.
 
 ### Python dependencies
@@ -182,7 +186,7 @@ which earlier versions do not emit). Nothing beyond the standard library.
 Standard library Nim modules (`std/deques`, `tables`, `hashes`, `math`, `re`, `posix`, …) are bundled with Nim and need no separate install.
 
 A compiler pin is a preference, not a requirement. When the pinned binary is
-not installed, `py2nim` drops the pin — with a note on stderr — and lets Nim
+not installed, `ady2nim` drops the pin — with a note on stderr — and lets Nim
 use its default C compiler, so those files build with whatever compiler is
 present. Install zig only if you want the exact toolchain the examples were
 measured with.
@@ -198,24 +202,24 @@ example needs it, and the install command.
 ### Transpile to Python 3
 
 ```bash
-python3 TO_PYTHON/py2py.py source.ady         # print to stdout
-python3 TO_PYTHON/py2py.py -c source.ady      # transpile and run
-echo "var x: int = 42" | python3 TO_PYTHON/py2py.py  # from stdin
+python3 TO_PYTHON/ady2py.py source.ady         # print to stdout
+python3 TO_PYTHON/ady2py.py -c source.ady      # transpile and run
+echo "var x: int = 42" | python3 TO_PYTHON/ady2py.py  # from stdin
 ```
 
 ### Transpile to Nim
 
 ```bash
-python3 TO_NIM/py2nim.py source.ady           # transpile and compile+run (default)
-python3 TO_NIM/py2nim.py -t source.ady        # transpile only; writes the .nim
-                                              # into the cache and prints its
-                                              # path to stderr
-python3 TO_NIM/py2nim.py c source.ady         # compile (nim c)
-python3 TO_NIM/py2nim.py c -r source.ady      # compile and run (nim c -r)
-python3 TO_NIM/py2nim.py --test               # run built-in self-tests
+python3 TO_NIM/ady2nim.py source.ady           # transpile and compile+run (default)
+python3 TO_NIM/ady2nim.py -t source.ady        # transpile only; writes the .nim
+                                               # into the cache and prints its
+                                               # path to stderr
+python3 TO_NIM/ady2nim.py c source.ady         # compile (nim c)
+python3 TO_NIM/ady2nim.py c -r source.ady      # compile and run (nim c -r)
+python3 TO_NIM/ady2nim.py --test               # run built-in self-tests
 ```
 
-**Incremental builds** — `py2nim` performs a three-tier up-to-date check:
+**Incremental builds** — `ady2nim` performs a three-tier up-to-date check:
 skip transpilation if `.nim` is newer than both `.ady` and the transpiler
 source files; skip compilation if the binary is newer than `.nim`; execute
 the existing binary directly if everything is current. Changing any
@@ -223,14 +227,14 @@ transpiler `.py` file automatically triggers retranspilation of all cached
 `.ady` files on their next run.
 
 **Clean source directories** — all generated artifacts (`.nim` file,
-compiled binary, nimcache) are stored in `~/.cache/hparsec/cache-<HASH>/`,
+compiled binary, nimcache) are stored in `~/.cache/adascript/cache-<HASH>/`,
 keyed by the absolute path of the `.ady` file. Source directories stay
 uncluttered and the cache survives reboots (inspired by
 [nimbang](https://github.com/jabbalaci/nimbang)). Set `XDG_CACHE_HOME` to put
-the cache somewhere else — `XDG_CACHE_HOME=$(mktemp -d) py2nim prog.ady`
+the cache somewhere else — `XDG_CACHE_HOME=$(mktemp -d) ady2nim prog.ady`
 builds from cold without touching the real one.
 
-**Shebang support** — add `#!/usr/bin/env py2nim` as the first line of an
+**Shebang support** — add `#!/usr/bin/env ady2nim` as the first line of an
 `.ady` file and make it executable. The file compiles and runs directly
 without arguments to the transpiler.
 
@@ -242,26 +246,26 @@ directive.
 
 A compiler pin in the directive (`--cc:NAME`, `--NAME.exe:BIN`,
 `--NAME.linkerexe:BIN`) is treated as a preference. If the named binary is
-not installed, `py2nim` drops just that flag, notes it on stderr, and lets
+not installed, `ady2nim` drops just that flag, notes it on stderr, and lets
 nim use its default C compiler — so a file pinning `zigcc` still builds on a
 machine without zig. Every other flag in the directive is passed through
 untouched.
 
 ```python
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 #ady2nim-args c -d:release
 ```
 
-**Symlink next to source** — after a successful compile, `py2nim` creates a
+**Symlink next to source** — after a successful compile, `ady2nim` creates a
 symlink in the same directory as the `.ady` file pointing to the cached
 binary. Running `./script` from the source directory works without any path
 gymnastics.
 
-**Forwarding flags to Nim** — any flag not recognised by `py2nim` (e.g.
+**Forwarding flags to Nim** — any flag not recognised by `ady2nim` (e.g.
 `-d:release`, `--opt:speed`) is passed straight to `nim`.
 
 ```bash
-python3 TO_NIM/py2nim.py c -d:release source.ady   # optimised build
+python3 TO_NIM/ady2nim.py c -d:release source.ady   # optimised build
 ```
 
 ---
@@ -1139,8 +1143,8 @@ class AwkProcessor(AwkBase):
 
 Everything above describes one file. A program that outgrows one file splits
 into modules, and `nimport` is how they find each other. This is a
-**Nim-backend feature**: py2nim resolves, transpiles and compiles a whole
-dependency graph, while py2py translates one file at a time (see
+**Nim-backend feature**: ady2nim resolves, transpiles and compiles a whole
+dependency graph, while ady2py translates one file at a time (see
 [Known Limitations](#known-limitations)).
 
 A module is just a `.ady` file; there is no manifest and nothing to register.
@@ -1156,7 +1160,7 @@ EXAMPLES/PROJECT/
 ```
 
 ```bash
-py2nim c -r EXAMPLES/PROJECT/dispatch.ady
+ady2nim c -r EXAMPLES/PROJECT/dispatch.ady
 ```
 
 ### Importing your own modules
@@ -1176,7 +1180,7 @@ Plain `import geometry` is rejected: `import` is reserved for Python modules,
 
 ### How a name is resolved
 
-For every `nimport`, py2nim looks for a matching `.ady` file in three places,
+For every `nimport`, ady2nim looks for a matching `.ady` file in three places,
 in order:
 
 1. the directory of the file doing the importing,
@@ -1202,16 +1206,16 @@ them by path from the project root (`lib/geometry`).
 ### The build
 
 ```
-py2nim c -r EXAMPLES/PROJECT/dispatch.ady
+ady2nim c -r EXAMPLES/PROJECT/dispatch.ady
 
-# transpiled → ~/.cache/hparsec/cache-<HASH>/dispatch.nim
-# transpiled dependency → ~/.cache/hparsec/cache-<HASH>/lib/geometry.nim
-# transpiled dependency → ~/.cache/hparsec/cache-<HASH>/lib/fleet.nim
-# transpiled dependency → ~/.cache/hparsec/cache-<HASH>/lib/report.nim
+# transpiled → ~/.cache/adascript/cache-<HASH>/dispatch.nim
+# transpiled dependency → ~/.cache/adascript/cache-<HASH>/lib/geometry.nim
+# transpiled dependency → ~/.cache/adascript/cache-<HASH>/lib/fleet.nim
+# transpiled dependency → ~/.cache/adascript/cache-<HASH>/lib/report.nim
 # nim c --nimcache:… --out:…/.dispatch --path:…/cache-<HASH> …/dispatch.nim
 ```
 
-1. py2nim walks the `nimport` graph breadth-first and pre-parses every
+1. ady2nim walks the `nimport` graph breadth-first and pre-parses every
    dependency, collecting what importers need: class names, constructor
    signatures, `ref`/virtual classes, return types, and the field order of
    records and named tuples.
@@ -1225,7 +1229,7 @@ The cache directory is keyed by a hash of the entry point's absolute path and
 the backend, so each program gets its own; nothing but the binary symlink is
 written next to your sources. Rebuilds follow the same three mtime tiers as a
 single file: a dependency edited at any depth re-triggers the compile.
-`py2nim -t` runs the transpile step for the whole graph and stops.
+`ady2nim -t` runs the transpile step for the whole graph and stops.
 
 ### What crosses a module boundary
 
@@ -2261,50 +2265,50 @@ while True:
 
 ```
 ADASCRIPT/
-├── HPARSEC/                    Parser combinator engine
-│   ├── hek_parsec.py           ParserMeta (+, |, [], *, ~), packrat memoization,
-│   │                           SymbolTable, forward references, token helpers
-│   ├── hek_tokenize.py         Enhanced tokenizer
-│   │                           RichNL (comments attached to newlines),
-│   │                           extra token types Python has none of
-│   │                           (TICK, DOLLAR, RANGE, REGEX, bash tests),
-│   │                           bracket-context NL stripping
-│   └── hek_helpers.py          Shared indentation and RichNL utilities
+├── HPARSEC/                   Parser combinator engine
+│   ├── hek_parsec.py          ParserMeta (+, |, [], *, ~), packrat memoization,
+│   │                          SymbolTable, forward references, token helpers
+│   ├── hek_tokenize.py        Enhanced tokenizer
+│   │                          RichNL (comments attached to newlines),
+│   │                          extra token types Python has none of
+│   │                          (TICK, DOLLAR, RANGE, REGEX, bash tests),
+│   │                          bracket-context NL stripping
+│   └── hek_helpers.py         Shared indentation and RichNL utilities
 │
-├── ADASCRIPT_GRAMMAR/          Language-neutral grammar definitions
-│   ├── py3expr.py              Expression grammar (precedence, all operators)
-│   ├── py3stmt.py              Simple statements (assignment, import, raise, …)
-│   ├── py3compound_stmt.py     Compound statements (if/while/for/def/class/shell/…)
-│   └── py_declarations.py      Adascript type annotations and type declarations
+├── ADASCRIPT_GRAMMAR/         Language-neutral grammar definitions
+│   ├── ady_expr.py            Expression grammar (precedence, all operators)
+│   ├── ady_stmt.py            Simple statements (assignment, import, raise, …)
+│   ├── ady_compound_stmt.py   Compound statements (if/while/for/def/class/shell/…)
+│   └── ady_declarations.py    Adascript type annotations and type declarations
 │
-├── TO_PYTHON/                  Python 3 backend
-│   ├── hek_py3_expr.py         to_py() for all expression nodes
-│   ├── hek_py3_stmt.py         to_py() for simple statements
-│   ├── hek_py3_parser.py       to_py() for compound statements + type decls
-│   ├── hek_py_declarations.py  to_py() for type annotations
-│   └── py2py.py                Entry point: parse + emit Python 3
+├── TO_PYTHON/                 Python 3 backend
+│   ├── hek_py_expr.py         to_py() for all expression nodes
+│   ├── hek_py_stmt.py         to_py() for simple statements
+│   ├── hek_py_parser.py       to_py() for compound statements + type decls
+│   ├── hek_py_declarations.py to_py() for type annotations
+│   └── ady2py.py              Entry point: parse + emit Python 3
 │
-├── TO_NIM/                     Nim backend
-│   ├── hek_nim_expr.py         to_nim() for all expression nodes
-│   ├── hek_nim_stmt.py         to_nim() for simple statements
-│   ├── hek_nim_parser.py       to_nim() for compound statements + type decls
+├── TO_NIM/                    Nim backend
+│   ├── hek_nim_expr.py        to_nim() for all expression nodes
+│   ├── hek_nim_stmt.py        to_nim() for simple statements
+│   ├── hek_nim_parser.py      to_nim() for compound statements + type decls
 │   ├── hek_nim_declarations.py to_nim() for type annotations
-│   ├── py2nim.py               Entry point: parse + emit Nim
-│   └── STDLIB/                 Bundled runtime, reachable with `nimport`
-│       ├── stdlib.nim          Nim shim for Python builtins (PriorityQueue, etc.)
-│       ├── awk.ady             AwkBase record processor
-│       ├── graphs.ady          Shortest paths, generic in the node type
-│       ├── iters.ady           Iterator toolkit (take, chunks, pairwise, …)
+│   ├── ady2nim.py             Entry point: parse + emit Nim
+│   └── STDLIB/                Bundled runtime, reachable with `nimport`
+│       ├── stdlib.nim         Nim shim for Python builtins (PriorityQueue, etc.)
+│       ├── awk.ady            AwkBase record processor
+│       ├── graphs.ady         Shortest paths, generic in the node type
+│       ├── iters.ady          Iterator toolkit (take, chunks, pairwise, …)
 │       └── db.ady, jointjs.ady, expect.nim
 │
-├── EXAMPLES/                   End-to-end example programs (`*.ady`)
-│                               Transpiled output is not kept here — it goes to
-│                               ~/.cache/hparsec/cache-<HASH>/
+├── EXAMPLES/                  End-to-end example programs (`*.ady`)
+│                              Transpiled output is not kept here — it goes to
+│                              ~/.cache/adascript/cache-<HASH>/
 │
-├── ADA_INDENT/                 Ada source indenter, itself written in Adascript
-├── LSP/                        Editor support: language server, emacs,
-│                               vscode, sublime
-└── DOCS/                       Tutorials, topic references, and BOOK/
+├── ADA_INDENT/                Ada source indenter, itself written in Adascript
+├── LSP/                       Editor support: language server, emacs,
+│                              vscode, sublime
+└── DOCS/                      Tutorials, topic references, and BOOK/
 ```
 
 ### How transpilation works
@@ -2319,7 +2323,7 @@ ADASCRIPT/
 3. Each grammar rule class gets `to_py()` and `to_nim()` methods attached
    via the `@method` decorator (defined in the respective backend modules).
    Every method carries a docstring quoting the grammar rule it implements.
-4. `py2py.py` / `py2nim.py` parse the full module and walk the AST, calling
+4. `ady2py.py` / `ady2nim.py` parse the full module and walk the AST, calling
    `to_py()` or `to_nim()` on each node.
 
 ### Parser combinator operators
@@ -2362,9 +2366,9 @@ example now also transpiles to Python that parses, and the constructs that
 used to break it — implicit return into `if`/`else` branches, `Natural` and
 `Positive` used without being defined, declarations without an initialiser,
 records whose fields have no default — are fixed. The round-trip suite in
-`TO_PYTHON/test_py2py.py` still records failures, so treat the Python output
+`TO_PYTHON/test_ady2py.py` still records failures, so treat the Python output
 as the less exercised of the two and check it on anything unusual. Sweeping
-every example through `py2py` and parsing the result is a cheap way to catch
+every example through `ady2py` and parsing the result is a cheap way to catch
 a regression the Nim-only test suite cannot see.
 
 **Pattern forms with no Nim path** — four Python pattern spellings are
@@ -2377,9 +2381,9 @@ structural patterns inside an alternation (`case Point_T(x=0) | Circle_T(radius=
 — bind in the body).
 
 **Multi-module programs are Nim-only** — `nimport` is the module mechanism,
-and py2nim is the only side of the toolchain that resolves a dependency
+and ady2nim is the only side of the toolchain that resolves a dependency
 graph: it finds each `nimport`ed `.ady`, transpiles it with export markers and
-compiles the lot. py2py strips `nimport` to a comment, translates exactly one
+compiles the lot. ady2py strips `nimport` to a comment, translates exactly one
 file (to `<name>_gen.py`), and carries no type knowledge across files, so a
 record built in one file and used in another degrades to a bare tuple.
 `from geometry import *` is not a way round it — it survives into the Nim

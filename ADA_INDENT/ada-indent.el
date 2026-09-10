@@ -12,7 +12,7 @@
 ;;
 ;; Prerequisites:
 ;;   - `ada_indent' binary must be on PATH (compile from ada_indent.ady once
-;;     with `py2nim ADA_INDENT/ada_indent.ady', then symlink the result onto
+;;     with `ady2nim ADA_INDENT/ada_indent.ady', then symlink the result onto
 ;;     your PATH, e.g. ~/.local/bin/ada_indent).
 ;;
 ;; Performance:

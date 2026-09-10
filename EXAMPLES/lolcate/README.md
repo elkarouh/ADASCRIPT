@@ -30,16 +30,16 @@ Install on macOS: `brew install fd ripgrep`
 ### As a Python script (interpreted)
 
 ```sh
-python3.12 ../../TO_PYTHON/py2py.py lolcate.ady create default
-python3.12 ../../TO_PYTHON/py2py.py lolcate.ady update
-python3.12 ../../TO_PYTHON/py2py.py lolcate.ady query myfile
+python3.12 ../../TO_PYTHON/ady2py.py lolcate.ady create default
+python3.12 ../../TO_PYTHON/ady2py.py lolcate.ady update
+python3.12 ../../TO_PYTHON/ady2py.py lolcate.ady query myfile
 ```
 
 ### As a compiled Nim binary (fast)
 
 ```sh
 # Transpile once
-python3.12 ../../TO_NIM/py2nim.py lolcate.ady > lolcate.nim
+python3.12 ../../TO_NIM/ady2nim.py lolcate.ady > lolcate.nim
 
 # Compile
 nim c -d:release -o:lolcate lolcate.nim

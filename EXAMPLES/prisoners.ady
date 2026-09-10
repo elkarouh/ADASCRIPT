@@ -1,4 +1,4 @@
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 """100 Prisoners Problem simulation.
 
 Each prisoner is assigned a number 0..99. The warden places slips numbered

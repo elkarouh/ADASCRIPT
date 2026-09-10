@@ -1,4 +1,4 @@
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 # cfmu_get_pattern_for_ftps.ady
 # Return the pattern string for an APPLICATION_INSTANCE_KEY used to get files from FTPS server.
 # Translated from cfmu_get_pattern_for_ftps.pl

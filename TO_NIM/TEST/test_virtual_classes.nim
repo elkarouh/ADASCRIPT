@@ -1,5 +1,5 @@
 # Test file for virtual and non-virtual class translation to Nim
-# Run with: python3 py2nim.py TEST/test_virtual_classes.py
+# Run with: python3 ady2nim.py TEST/test_virtual_classes.py
 # Inspired by ADASCRIPT/TEST/test_virtual.nim
 
 # ============================================================================

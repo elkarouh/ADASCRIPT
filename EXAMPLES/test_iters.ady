@@ -1,9 +1,9 @@
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 # test_iters.ady — tests for iters.ady
 #
 # Exercises both int and str instantiations of every generic function.
 # Run with:
-#   py2nim EXAMPLES/test_iters.ady -r
+#   ady2nim EXAMPLES/test_iters.ady -r
 
 nimport iters
 

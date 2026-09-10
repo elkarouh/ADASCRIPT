@@ -1,4 +1,4 @@
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 # cfmu_get_file_type.ady
 # Return the file type for a free_text pattern or symbolic name.
 # Translated from cfmu_get_file_type.ksh

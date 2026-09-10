@@ -1,7 +1,7 @@
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 # test_graphs.ady — tests for the generic shortest-path library, graphs.ady
 #
-#   py2nim EXAMPLES/test_graphs.ady -r
+#   ady2nim EXAMPLES/test_graphs.ady -r
 #
 # The point of the library is that one definition serves any node type, so
 # every case here runs against three of them: an enum, a string and an int.

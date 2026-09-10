@@ -1,4 +1,4 @@
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 
 type Kind_T is enum cmdArgument, cmdOption, cmdEnd
 

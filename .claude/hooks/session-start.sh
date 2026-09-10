@@ -1,6 +1,6 @@
 #!/bin/bash
-# SessionStart hook: install the Nim toolchain so py2nim can compile .ady files
-# (e.g. `make test`, `py2nim c ...`). See requirements.txt for the full
+# SessionStart hook: install the Nim toolchain so ady2nim can compile .ady files
+# (e.g. `make test`, `ady2nim c ...`). See requirements.txt for the full
 # dependency list. Idempotent and safe to re-run.
 set -euo pipefail
 

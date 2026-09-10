@@ -1,4 +1,4 @@
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 # cfmu_ftps_get_ft.ady
 # Return the file type for a given symbolic name.
 # Translated from cfmu_ftps_get_ft.ksh

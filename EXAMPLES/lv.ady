@@ -1,4 +1,4 @@
-#! /usr/bin/env py2nim
+#! /usr/bin/env ady2nim
 nimport algorithm, sequtils
 type State = enum:
     ACTIVE        # being worked on

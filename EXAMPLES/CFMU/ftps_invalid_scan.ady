@@ -1,4 +1,4 @@
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 # ftps_invalid_scan.ady
 # Scan FTPSROOT for invalid symlinks in a given time window per CFMU system.
 # Translated from ftps_invalid_scan.ksh

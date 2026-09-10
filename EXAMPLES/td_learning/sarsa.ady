@@ -1,4 +1,4 @@
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 """SARSA (on-policy TD control) on the Windy Gridworld.
 
 Original Python: https://github.com/dennybritz/reinforcement-learning/blob/master/TD/SARSA%20Solution.ipynb

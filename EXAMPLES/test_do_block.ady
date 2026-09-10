@@ -1,4 +1,4 @@
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 """Test: do block — monadic Maybe bind chains.
 
 Verifies that `do:` blocks desugar to safe Option-unwrap sequences:

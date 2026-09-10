@@ -379,7 +379,7 @@ tools, and it is worth quoting whole because this is the *most common kind of
 program in the world* — the workflow wrapper:
 
 ```python
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 # set view TAKES AN OPTIONAL BASELINE AS A PARAMETER !!!
 let pattern : str =$1
 let baseline : str =$2

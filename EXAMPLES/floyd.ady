@@ -1,4 +1,4 @@
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 
 def floyd(n : Positive, k : Positive) -> {}Positive:
     var s : {}Positive

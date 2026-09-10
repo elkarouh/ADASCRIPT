@@ -48,11 +48,11 @@ source, transpile it, and run it on either backend.
 
 ```bash
 # Transpile to Python 3 and run
-python3 TO_PYTHON/py2py.py -c EXAMPLES/monty_hall.ady
+python3 TO_PYTHON/ady2py.py -c EXAMPLES/monty_hall.ady
 
 # Transpile to Nim, compile, and run (results are cached)
-python3 TO_NIM/py2nim.py EXAMPLES/monty_hall.ady
+python3 TO_NIM/ady2nim.py EXAMPLES/monty_hall.ady
 
-# Or, with the py2nim shebang and chmod +x:
+# Or, with the ady2nim shebang and chmod +x:
 EXAMPLES/monty_hall.ady
 ```

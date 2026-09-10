@@ -1,4 +1,4 @@
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 """
 iters.ady — most useful itertools equivalents, generic over element type Elem_T
 

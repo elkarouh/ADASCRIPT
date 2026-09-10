@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Python 3.14 Compound Statement Parser using hek_parsec combinator framework.
 
-Builds on hek_py3_expr.py (expressions) and hek_py3_stmt.py (simple statements)
+Builds on hek_py_expr.py (expressions) and hek_py_stmt.py (simple statements)
 to parse compound (block) statements: if, while, for, try, with, match, def, class,
 and async variants.
 
@@ -43,8 +43,8 @@ from hek_parsec import (
     nothing,
     shift,
 )
-from py3stmt import *  # noqa: F403 — need all fw() names in namespace
-from py_declarations import type_annotation
+from ady_stmt import *  # noqa: F403 — need all fw() names in namespace
+from ady_declarations import type_annotation
 
 ###############################################################################
 # Tokens not in hek_parsec

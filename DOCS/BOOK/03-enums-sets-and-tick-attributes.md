@@ -161,7 +161,7 @@ membership, and set arithmetic with `-`, `+`, `*`. The canonical
 demonstration is `EXAMPLES/monty_hall.ady`, which is worth reading whole:
 
 ```python
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 
 type Door_T is enum Door1, Door2, Door3
 type Choice_T is enum Switch, DontSwitch

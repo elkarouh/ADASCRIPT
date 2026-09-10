@@ -1,8 +1,8 @@
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 # test_ada_line_fmt.ady — tests for ada_line_fmt.ady
 #
 # Run with:
-#   py2nim ADA_INDENT/test_ada_line_fmt.ady -r
+#   ady2nim ADA_INDENT/test_ada_line_fmt.ady -r
 
 nimport ada_line_fmt
 

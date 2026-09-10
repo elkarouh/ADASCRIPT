@@ -1,4 +1,4 @@
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 # ftps_common.ady
 # Shared constants, helpers and server-lookup for FTPS scripts.
 # Translated from FTPS::Common (Perl).

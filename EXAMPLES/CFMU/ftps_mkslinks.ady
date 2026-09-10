@@ -1,4 +1,4 @@
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 # ftps_mkslinks.ady
 # Front-end caller to ftps_mkslinks.locked; handles locking via the 'locked' command.
 # Translated from ftps_mkslinks.ksh

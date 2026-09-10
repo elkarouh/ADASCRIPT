@@ -1,8 +1,8 @@
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 # test_optional_truthy.ady — a ?T used directly as a condition
 #
-#   py2nim EXAMPLES/test_optional_truthy.ady -r
-#   py2py  EXAMPLES/test_optional_truthy.ady -c
+#   ady2nim EXAMPLES/test_optional_truthy.ady -r
+#   ady2py  EXAMPLES/test_optional_truthy.ady -c
 #
 # OPTIONAL_TYPES.md §9 says a `?T` in a condition is tested for presence,
 # not for the truthiness of what it wraps, and gives the Nim output as

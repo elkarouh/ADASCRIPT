@@ -1,8 +1,8 @@
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 # test_regex_g.ady — the /g flag, and that both backends agree on it
 #
-#   py2nim EXAMPLES/test_regex_g.ady -r
-#   py2py  EXAMPLES/test_regex_g.ady -c
+#   ady2nim EXAMPLES/test_regex_g.ady -r
+#   ady2py  EXAMPLES/test_regex_g.ady -c
 #
 # `/g` is documented to hand back every match as []str. The Nim backend
 # emits std/re.findAll, which does that whatever the pattern looks like.

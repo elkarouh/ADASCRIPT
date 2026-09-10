@@ -1,5 +1,5 @@
 # Test file for import statement translation to Nim
-# Run with: python3 py2nim.py TEST/test_imports.py
+# Run with: python3 ady2nim.py TEST/test_imports.py
 
 # ============================================================================
 # Test 1: Simple import

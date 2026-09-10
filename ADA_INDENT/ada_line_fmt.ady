@@ -1,4 +1,4 @@
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 # ada_line_fmt.ady — token-level line formatter for Ada source.
 #
 # Applies the coding-standard spacing rules (priority order;

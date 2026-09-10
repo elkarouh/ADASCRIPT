@@ -1,4 +1,4 @@
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 # ada_lexer.ady — a lexer (tokenizer) for Ada source, written in Adascript.
 #
 # Splits Ada source text into a stream of lexical tokens following the Ada

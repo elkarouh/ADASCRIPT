@@ -1,8 +1,8 @@
-#!/usr/bin/env py2nim
+#!/usr/bin/env ady2nim
 # test_env_default.ady — ${NAME:-default} and ${NAME}
 #
-#   py2nim EXAMPLES/test_env_default.ady -r
-#   py2py  EXAMPLES/test_env_default.ady -c
+#   ady2nim EXAMPLES/test_env_default.ady -r
+#   ady2py  EXAMPLES/test_env_default.ady -c
 #
 # The shell spells the fallback ${var:-val}, and the `:` in it matters: it
 # falls back when the variable is unset *or* set to the empty string. Both

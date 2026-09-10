@@ -30,7 +30,7 @@
 "
 " Prerequisites:
 "   The `ada_indent' binary must be on $PATH (compile it from ada_indent.ady
-"   once with py2nim, then symlink the result onto your PATH, e.g.
+"   once with ady2nim, then symlink the result onto your PATH, e.g.
 "   ~/.local/bin/ada_indent).  Point g:ada_indent_program at a full path if it
 "   is not on $PATH.
 "

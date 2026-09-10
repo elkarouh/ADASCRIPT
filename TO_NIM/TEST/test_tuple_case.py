@@ -1,7 +1,7 @@
 # Test file for tuple pattern case/when desugaring
 # Syntax: case (a, b): when (val, _): ...
 # Desugars to if/elif chains in Nim (Nim does not support tuple case selectors)
-# Run with: python3 TO_NIM/py2nim.py TO_NIM/TEST/test_tuple_case.py
+# Run with: python3 TO_NIM/ady2nim.py TO_NIM/TEST/test_tuple_case.py
 
 # ============================================================================
 # Test 1: Basic tuple pattern — two-element tuple

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Comprehensive test suite for py2py.py
+"""Comprehensive test suite for ady2py.py
 
 Run with:
-    # Copy this file into the same directory as py2py.py, then:
-    python3 test_py2py.py
+    # Copy this file into the same directory as ady2py.py, then:
+    python3 test_ady2py.py
 
 Each test is labelled PASS, FAIL, or ERROR. FAIL and ERROR entries include
 a short bug description so the root cause is immediately obvious.
@@ -16,7 +16,7 @@ import os
 # Allow running from any directory that contains the hek_* files.
 sys.path.insert(0, os.path.dirname(__file__))
 
-from py2py import translate
+from ady2py import translate
 
 ###############################################################################
 # Test runner
@@ -164,7 +164,7 @@ section("BUG CATEGORY A — Missing grammar rules")
 
 # A1 — f-strings
 # Python 3.12+ tokenises f-strings as FSTRING_START / FSTRING_MIDDLE /
-# FSTRING_END tokens.  The atom parser in hek_py3_expr.py only handles STRING
+# FSTRING_END tokens.  The atom parser in hek_py_expr.py only handles STRING
 # (token type 3), so f-strings are never matched.
 test(
     "f-string simple",
@@ -248,7 +248,7 @@ test(
 )
 
 # A5 — type aliases (Python 3.12 soft keyword)
-# The 'type' soft-keyword statement is defined in hek_py3_stmt.py (type_stmt)
+# The 'type' soft-keyword statement is defined in hek_py_stmt.py (type_stmt)
 # but Tokenizer / ParserState interaction causes it to fail in some contexts.
 test(
     "type alias simple",
