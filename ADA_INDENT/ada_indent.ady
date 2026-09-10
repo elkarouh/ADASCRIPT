@@ -936,17 +936,9 @@ class Indenter:
         " " * lead_n + emit_text
 
 
-def main() -> int:
-    var ind: Indenter = Indenter()
-    var do_emit_state: bool = False
-    var file_arg: str = ""
-    var args: []str = $@
-    var ai: int = 0
-    while ai < len(args):
-        let a: str = args[ai]
-        case a:
-            when "-h" | "--help":
-                print f"""Usage: ada_indent [OPTIONS] [FILE]
+def usage():
+    """The -h/--help text, on stdout."""
+    print f"""Usage: ada_indent [OPTIONS] [FILE]
 
 Indent Ada source code.  Reads FILE, or stdin when FILE is omitted.
 Output is written to stdout; each source line is replaced by its
@@ -963,6 +955,19 @@ Options:
                       precede the lines the snapshot refers to.
 
 Exit status: 0 on success, non-zero on error."""
+
+
+def main() -> int:
+    var ind: Indenter = Indenter()
+    var do_emit_state: bool = False
+    var file_arg: str = ""
+    var args: []str = $@
+    var ai: int = 0
+    while ai < len(args):
+        let a: str = args[ai]
+        case a:
+            when "-h" | "--help":
+                usage()
                 return 0
             when "--emit-state":
                 do_emit_state = True
