@@ -181,6 +181,15 @@ history of this file if the reasoning behind one of them is ever wanted.
       field: 'sorted'", because `keys` is an iterator there and wants
       `toSeq`. Same family as the `[E]T` `.keys()` entry above. An example
       that needs a stable report order has to carry its own list of keys.
+- [ ] `.lines` on the Python backend now applies only to a receiver it can
+      see is a file -- stdin, an `open(...)` call, a string literal, or a
+      `File`/`str`/`Path` binding -- because `lines` is also an ordinary field
+      name and `trace.lines` was being rewritten into `_lines(trace)`. The
+      cases left over are a file reached through an expression the emitter
+      cannot type: a `[]File` element, a field holding a handle, a call
+      returning one. Those now keep `.lines` as an attribute and raise
+      AttributeError, which is at least loud. A receiver-type pass would
+      settle it properly.
 - [ ] `.map()` / `.and_then()` rewriting on `?T` (Feature 2)
 
 ---

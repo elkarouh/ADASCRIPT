@@ -10,3 +10,8 @@ ValueError: no stock left
 2026-09-11 08:00:11 WARN  POST /api/login 401 45ms
 2026-09-11 08:00:12 INFO  GET /favicon.ico 404 1ms
 2026-09-11 08:00:15 INFO  GET /index.html 200 121ms
+2026-09-11 08:00:17 ERROR GET /api/report 500 12ms
+Traceback (most recent call last):
+  File "report.py", line 9, in build
+    raise TimeoutException("upstream is not answering")
+TimeoutException: upstream is not answering

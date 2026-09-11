@@ -1248,10 +1248,26 @@ def to_py(self, prec=None):
                 i += 1
                 continue
             if tr_str == ".lines":
-                _ensure_lines_helper()
-                result = f"_lines({result})"
-                i += 1
-                continue
+                # `.lines` is the file iterator -- but `lines` is also an
+                # ordinary field name, and `trace.lines` meant the field.
+                # So the helper applies to a receiver that is known to name
+                # a file: stdin, an open() call, or a File/str/Path binding.
+                # Anything else keeps `.lines` as the attribute it looks
+                # like, which fails loudly rather than iterating a record.
+                _rsym = ParserState.symbol_table.lookup(result)
+                _rtype = (_rsym.get("type", "") if isinstance(_rsym, dict) else "") if _rsym else ""
+                _rtype = _rtype.replace("| None", "").replace("Optional[", "").strip(" []")
+                _is_file = (result in ("stdin", "sys.stdin")
+                            or result.startswith("open(")
+                            or result.startswith('"') or result.startswith("'")
+                            or result.startswith('f"') or result.startswith("f'")
+                            or _rtype in ("TextIO", "typing.TextIO", "File",
+                                          "str", "Path"))
+                if _is_file:
+                    _ensure_lines_helper()
+                    result = f"_lines({result})"
+                    i += 1
+                    continue
             if (tr_str == ".get"
                     and i + 1 < len(trailers)
                     and trailers[i + 1].to_py() == "()"):

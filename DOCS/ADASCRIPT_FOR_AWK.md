@@ -17,11 +17,54 @@ that buys them.
 
 Every example here is compiled and run on **both** backends — `ady2nim` and
 `ady2py` — before being quoted. `EXAMPLES/awk_logscan.ady` is the worked
-example at the end, and `make test` runs it.
+example, and `make test` runs it.
 
 ---
 
-## 1. The shape of a program
+## 1. The problem
+
+Before any syntax, the shape of the job. It is the same job every time, and
+naming its five parts is what makes the rest of this document a list of
+answers rather than a list of features.
+
+**There is a file, and it holds records.** Not rows of one table — records.
+A log, a dump, a report, a protocol trace, a configuration.
+
+**A record is usually a line, and sometimes it is not.** One line per record
+is the common case and the default everywhere. But a record can span several
+lines and be closed by a blank line, or by a marker of its own, or by nothing
+at all except the next record starting. Anything that assumes "record ==
+line" has to be rewritten from scratch the first time that stops being true.
+`RS` is AWK's answer and Adascript keeps it (§2.1).
+
+**The records are not all of the same kind.** A file of build output holds
+user lines, host lines, config lines and result lines; an application log
+holds events and stack traces. They have different fields, they mean
+different things, and a program that treats them as one shape ends up with a
+row of mostly-empty columns and a comment explaining which ones apply.
+
+**Which kind a record is may depend on the records before it.** This is the
+part that turns a filter into a program. A stack trace carries no timestamp,
+so nothing *in* the line says whom it belongs to — only the fact that the
+line before it was a failure. AWK spells this with an integer flag and a
+condition repeated on every pattern. It is a **state machine**, and saying so
+out loud is most of the work: the state decides which kind of record you are
+looking at, and reaching a new kind is what changes the state.
+
+**What comes out is one or more lists of similar records, which are then
+post-processed — and some of the work happens on the way past.** A running
+total needs no second pass and should not wait for one. A median, a ranking,
+a join between two of the lists, "which requests have no trace" — those
+cannot be answered until every record is in hand. Both kinds of work belong
+in the same program, and the difference between them is worth being
+deliberate about.
+
+Everything below is one of those five points answered. The worked example in
+§10 is all five at once.
+
+---
+
+## 2. The shape of a program
 
 AWK's implicit loop has two spellings in Adascript, and the choice is about
 how much state you carry.
@@ -77,9 +120,60 @@ the same loop over a named file.
 One caveat: `nimport` means "a module the Nim backend provides", so the
 `AwkBase` form is Nim-only. The flat form runs on both backends.
 
+### 2.1 When a record is not a line
+
+`RS` is the record separator, and setting it is the whole of the answer to
+§1's second point. Pass it at construction and the loop changes shape
+underneath you — `AwkBase` reads the input whole and splits on `RS` instead
+of iterating lines:
+
+```python
+class Para(AwkBase):
+    def process_record(self):
+        print f"record {self.NR}: NF={self.NF} [{self.line}]"
+
+def main():
+    var p: Para = Para(rs = "\n\n")      # a blank line ends a record
+    p.run()
+```
+
+Fed a file of blank-line-separated stanzas:
+
+```
+User: alice
+Host: build01
+
+User: bob
+Host: build02
+
+User: carol
+Host: build03
+```
+
+it prints:
+
+```
+record 1: NF=4 [User: alice
+Host: build01]
+record 2: NF=4 [User: bob
+Host: build02]
+record 3: NF=4 [User: carol
+Host: build03]
+```
+
+`self.line` is the whole multi-line record and the fields run across the
+newlines, which is what AWK's paragraph mode does. Any other separator works
+the same way — `rs = "%%\n"` for a marker, `rs = "\x1e"` for a record
+separator byte. Nothing else in the program changes: `process_record` still
+gets one record at a time and still does not know how the input was cut up.
+
+The cost is the one AWK has too — a non-newline `RS` reads the input whole
+rather than streaming it, so it is for files that fit in memory. The default
+`rs = "\n"` streams.
+
 ---
 
-## 2. Patterns: `case` instead of a pattern list
+## 3. Patterns: `case` instead of a pattern list
 
 An AWK program is a list of `pattern { action }` pairs, tried in order.
 Adascript writes the same thing as a `case` over the record, and a `when`
@@ -129,7 +223,7 @@ never give you.
 
 ---
 
-## 3. Regex is syntax
+## 4. Regex is syntax
 
 There is never an `import re`. A pattern is a literal, matching is an
 operator, captures are variables.
@@ -177,7 +271,7 @@ assert stamp == "11.09.2026"
 
 ---
 
-## 4. Enums: the thing AWK has no word for
+## 5. Enums: the thing AWK has no word for
 
 This is the centre of the argument. In AWK a severity is a string, a parser
 state is an integer, and a status class is a key you hope you spelled the
@@ -232,7 +326,7 @@ quietly creating a fifth bucket, which is what AWK would have done.
 
 ---
 
-## 5. Numbers that cannot be wrong
+## 6. Numbers that cannot be wrong
 
 `Natural` is an integer that cannot go below zero; `Positive` is one that
 cannot reach it. They are range-checked at run time on the Nim backend —
@@ -249,7 +343,7 @@ instead of as a nonsense average at the end of the report.
 
 ---
 
-## 6. Records instead of parallel arrays
+## 7. Records instead of parallel arrays
 
 The AWK idiom is `user[i]`, `host[i]`, `build[i]` and an `i` you increment by
 hand. A record names the row:
@@ -275,7 +369,7 @@ Pulling the fields out of a record beats pulling them out of `$1 $2 $3`
 mostly because of what it does six months later: `req.ms > self.slowest.ms`
 survives a change to the log format, `$7 > slowest[7]` does not.
 
-### 6.1 One of several shapes: the variant record
+### 7.1 One of several shapes: the variant record
 
 A plain record gives every row the same fields. When the rows are genuinely
 *different* — a schema in which a number has bounds and a choice has a word
@@ -319,7 +413,7 @@ a configuration checker whose whole schema is one variant record.
 
 ---
 
-## 7. Missing is not the empty string
+## 8. Missing is not the empty string
 
 AWK's uninitialised variable is `""` and also `0`, and a field that is
 genuinely empty is indistinguishable from one that is not there. `?T` is the
@@ -340,7 +434,7 @@ it. The same distinction reaches the environment: `$NAME` is a `str` that
 reads unset as `""`, `$?NAME` is a `?str` that can tell unset from empty, and
 `${NAME:-default}` is the shell's fallback.
 
-### 7.1 Getting a value in and out of a `?T`
+### 8.1 Getting a value in and out of a `?T`
 
 You never write `some()` or `none()`. A plain value put where a `?T` is
 expected is **lifted** for you, and `None` becomes the empty one:
@@ -390,7 +484,7 @@ value without first saying which case it is in.
 
 ---
 
-## 8. The shell, without `system()`
+## 9. The shell, without `system()`
 
 AWK shells out through `system()` and `"cmd" | getline`, with quoting left
 to you. In Adascript a command is a statement:
@@ -441,44 +535,95 @@ if have("git"): ...   # is it even installed?
 
 ---
 
-## 9. A worked example
+## 10. A worked example
 
-`EXAMPLES/awk_logscan.ady` scans an application log where most lines are
-timestamped events and the lines after a failure are a stack trace. That is
-the case AWK makes awkward: what a line *means* depends on the state the
-scanner is in.
+`EXAMPLES/awk_logscan.ady` is §1's five points in one file. An application
+log holds **two kinds of record**: timestamped events, and the stack traces
+that follow a failure. A trace carries no timestamp, so nothing in the line
+says whom it belongs to — only **the state the scanner is in**. Each kind is
+gathered into **its own list**, some work is done **on the way past** and the
+rest **once both lists are complete**.
 
-Three types carry the program:
+Three enums and two record types carry it:
 
 ```python
-type Severity_T    is enum DEBUG, INFO, WARN, ERROR
-type Scan_State_T  is enum OUTSIDE, IN_TRACE
-type Status_T      is enum SUCCESS, REDIRECT, CLIENT_ERROR, SERVER_ERROR, ODD
+type Severity_T   is enum DEBUG, INFO, WARN, ERROR
+type Scan_State_T is enum OUTSIDE, IN_TRACE
+type Status_T     is enum SUCCESS, REDIRECT, CLIENT_ERROR, SERVER_ERROR, ODD
+
+type Request_T is record:      # a timestamped event
+    at:      str     = ""
+    verb:    str     = ""
+    path:    str     = ""
+    status:  Natural = 0
+    ms:      Natural = 0
+
+type Trace_T is record:        # the lines after a failure
+    under:   str     = ""      # the request it followed
+    lines:   Natural = 0
+    failure: str     = ""      # the exception line that ends it
 ```
 
-The state machine is a `case` over `Scan_State_T`, not a flag:
+**The two lists, and the totals kept on the way past:**
+
+```python
+class LogScan(AwkBase):
+    var state    : Scan_State_T        = OUTSIDE
+
+    # One list per kind of record. Both are complete by finish().
+    var requests : []Request_T         = []
+    var traces   : []Trace_T           = []
+
+    # Counted on the way past, because a total needs no second pass.
+    var counts   : [Severity_T]Natural = [DEBUG: 0, INFO: 0, WARN: 0, ERROR: 0]
+    var by_status: [Status_T]Natural   = [SUCCESS: 0, REDIRECT: 0, CLIENT_ERROR: 0,
+                                          SERVER_ERROR: 0, ODD: 0]
+```
+
+**The state machine decides which kind of record this is.** It is a `case`
+over `Scan_State_T`, not an integer flag and not a condition repeated on
+every pattern:
 
 ```python
 case self.state:
     when IN_TRACE:
         if self.line != /^\d{4}-\d{2}-\d{2} /:
-            self.traced += 1
+            self.open_trace.lines += 1
+            if self.line == /^([A-Z]\w+(Error|Exception)): /:
+                self.open_trace.failure = $+1
             return
+        # A timestamped line ends the trace: file it and carry on.
+        self.traces.append(self.open_trace)
         self.state = OUTSIDE
     when others:
         pass
 ```
 
-One regex takes the record apart, and the groups go straight into a record:
+**Reaching a new kind of record is what changes the state.** A failure line
+opens a trace, and the request it belongs to is the last one in the other
+list — which is a thing only the state machine knows:
+
+```python
+elif self.line == /^Traceback |^[A-Z]\w+(Error|Exception): /:
+    self.state      = IN_TRACE
+    self.open_trace = Trace_T(lines=1)
+    if self.requests'Length > 0:
+        let prev: Request_T = self.requests[self.requests'Length - 1]
+        self.open_trace.under = prev.verb + " " + prev.path
+```
+
+**One regex takes an event apart**, and the groups go straight into a record:
 
 ```python
 if self.line == /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}) (\w+) +(\w+) (\S+) (\d{3}) (\d+)ms$/:
     let req: Request_T = Request_T(at=$+1 + " " + $+2, verb=$+4, path=$+5,
                                    status=int($+6), ms=int($+7))
     let sev: Severity_T = Severity_T($+3.upper())
+    self.requests.append(req)
+    self._event(sev, req)           # the on-the-fly half
 ```
 
-That last line is worth a second look. The log writes `INFO`, `WARN`,
+That last-but-one line is worth a second look. The log writes `INFO`, `WARN`,
 `ERROR` as text; `Severity_T($+3.upper())` turns the text into a value of the
 type, and a log line carrying a severity nobody declared fails there, at the
 line that read it, rather than becoming a silent extra bucket in the report.
@@ -495,45 +640,74 @@ def _status_class(self, status: Natural) -> Status_T:
         when others:     return ODD
 ```
 
-And the report loops over the types themselves, so a new enum member appears
-in the output without anyone remembering to add it:
+**And the post-processing**, which is `finish()`. First the housekeeping the
+streaming form cannot do: a trace that runs to the end of the file has no
+following record to close it, so this is where the last one is filed.
+
+```python
+if self.state == IN_TRACE:
+    self.traces.append(self.open_trace)
+```
+
+Then the questions no running total can answer, because they need every
+record in hand before any of them has one — a percentile has to sort, and a
+maximum has to have seen the last record:
+
+```python
+var times: []Natural = []
+for r in self.requests:
+    times.append(r.ms)
+times = sorted(times)
+
+var slowest: Request_T = Request_T()
+for r in self.requests:
+    if r.ms > slowest.ms:
+        slowest = r
+```
+
+...next to the totals that were already answered on the way past, and a walk
+over the *other* list:
 
 ```python
 for s in Severity_T:
     print f"  {s'Image:<5} {self.counts[s]}"
-for k in Status_T:
-    print f"  {k'Image:<13} {self.by_status[k]}"
+for t in self.traces:
+    print f"  trace   {t.lines} line(s) under {t.under} -- {t.failure}"
 ```
-
-Iterate the *type*, not `Enum_T'Range`: `'Range` is the set of members, and a
-set has no order to promise — on the Python backend it comes out shuffled,
-differently on each run.
 
 Run it:
 
 ```
 $ EXAMPLES/awk_logscan < EXAMPLES/awk_logscan_sample.txt
 --- awk_logscan ---
-records : 12
-traces  : 4 line(s), the last one under POST /api/order
+records : 17
+requests: 9    traces: 2
 
   DEBUG 1
   INFO  4
   WARN  2
-  ERROR 1
+  ERROR 2
 
   SUCCESS       4
   REDIRECT      1
   CLIENT_ERROR  2
-  SERVER_ERROR  1
+  SERVER_ERROR  2
   ODD           0
 
+p50     : 45 ms
 slowest : 2317 ms  GET /reports/full at 2026-09-11 08:00:04
+
+  trace   4 line(s) under POST /api/order -- ValueError
+  trace   4 line(s) under GET /api/report -- TimeoutException
 ```
+
+17 records in, two lists out: nine `Request_T` and two `Trace_T`, each trace
+carrying the request it belongs to. The second one runs to the end of the
+file, which is why `finish()` has to file it.
 
 ---
 
-## 10. Translation table
+## 11. Translation table
 
 | AWK | Adascript |
 |-----|-----------|
@@ -543,6 +717,8 @@ slowest : 2317 ms  GET /reports/full at 2026-09-11 08:00:04
 | `$0` | `self.line`, or `Fields[0]` |
 | `$1`, `$NF` | `Fields[1]`, `Fields[self.NF]` |
 | `NR`, `NF`, `FS`, `OFS`, `RS` | `self.NR`, `self.NF`, `self.FS`, `self.OFS`, `self.RS` |
+| `RS=""` (paragraph mode) | `AwkBase(rs = "\\n\\n")` |
+| `RS="%%\\n"` (a marker) | `AwkBase(rs = "%%\\n")` |
 | `/re/ { a }` | `when /re/:` in a `case` over the record |
 | `/re/ && cond { a }` | `when /re/ if cond:` |
 | `$0 ~ /re/` | `line == /re/` |
@@ -569,12 +745,12 @@ slowest : 2317 ms  GET /reports/full at 2026-09-11 08:00:04
 
 ---
 
-## 11. Where to go next
+## 12. Where to go next
 
 - `EXAMPLES/awk_example.ady` — the flat form, runs on both backends
 - `EXAMPLES/test_awk.ady` — the same program as an `AwkBase` subclass
-- `EXAMPLES/awk_logscan.ady` — the worked example above
-- `EXAMPLES/config_check.ady` — the variant-record schema of 6.1, in full
+- `EXAMPLES/awk_logscan.ady` — the worked example above, all of §1 at once
+- `EXAMPLES/config_check.ady` — the variant-record schema of 7.1, in full
 - `EXAMPLES/CFMU/Tstatus_monitor.ady` — a real AWK script, translated
 - `DOCS/BOOK/05-pattern-matching.md` — `case`/`when` in full
 - `DOCS/BOOK/07-regex.md` — every regex form
