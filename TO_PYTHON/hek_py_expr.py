@@ -564,7 +564,17 @@ def _lines(_f):
     Text mode already folds \\r\\n to \\n on the way in, so there is one
     terminator to remove, and a last line without one is yielded as it is --
     both of which is what Nim does.
+
+    A str -- and Path is one -- names a file, the way Nim's lines(filename)
+    does. Without this a path went to Python's own iteration and yielded its
+    characters, one at a time, silently: the same source read a file on one
+    backend and spelled its name on the other.
     """
+    if isinstance(_f, str):
+        with open(_f) as _fh:
+            for _l in _fh:
+                yield _l[:-1] if _l.endswith("\\n") else _l
+        return
     for _l in _f:
         yield _l[:-1] if _l.endswith("\\n") else _l\
 '''

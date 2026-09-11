@@ -1,0 +1,202 @@
+#!/usr/bin/env ady2nim
+"""
+config_check — check a configuration file against a schema.
+
+    ./config_check [FILE]
+
+The point of the example is the schema. A setting is not "a string that
+something later parses": it is one of four shapes, and a *variant record*
+gives each shape only the fields that shape has. A NUMBER has bounds; a
+CHOICE has a word list; neither carries the other's fields at all, so there
+is no branch in which reading the wrong one is possible.
+
+With no argument it writes its own fixture under /tmp and checks that, so a
+run is self-contained and its report is the same every time.
+"""
+
+type Kind_T is enum FLAG, NUMBER, CHOICE, PATHNAME
+
+type Spec_T (kind: Kind_T) is record:
+    case kind is
+        when FLAG:
+            on_by_default: bool
+        when NUMBER:
+            lo: int
+            hi: int
+        when CHOICE:
+            allowed: []str
+        when PATHNAME:
+            must_exist: bool
+
+
+type Level_T is enum NOTE, WARNING, ERROR
+
+type Finding_T is record:
+    # A finding about the file as a whole has no line, and "no line" is not
+    # line 0 -- that is what ?Natural is for.
+    line:  ?Natural = None
+    level: Level_T  = NOTE
+    key:   str      = ""
+    text:  str      = ""
+
+
+def at(line: Natural, level: Level_T, key: str, text: str) -> Finding_T:
+    """A finding about one line."""
+    var f: Finding_T = Finding_T(level=level, key=key, text=text)
+    f.line = line
+    return f
+
+
+def about(level: Level_T, key: str, text: str) -> Finding_T:
+    """A finding about the file as a whole; it has no line, and says so."""
+    return Finding_T(level=level, key=key, text=text)
+
+
+def where(f: Finding_T) -> str:
+    """The guard is what narrows `ln` from ?Natural to Natural below it."""
+    let ln: ?Natural = f.line
+    if ln is None:
+        return ""
+    return "line " + str(ln)
+
+
+# The schema, and the order a report should walk it in. A dict alone cannot
+# say "workers comes after verbose", and a report that changes order between
+# runs is a diff nobody can read.
+let SCHEMA: {str}Spec_T = {
+    "verbose":  Spec_T(kind=FLAG,     on_by_default=False),
+    "workers":  Spec_T(kind=NUMBER,   lo=1, hi=64),
+    "mode":     Spec_T(kind=CHOICE,   allowed=["fast", "safe", "paranoid"]),
+    "log_dir":  Spec_T(kind=PATHNAME, must_exist=True),
+    "cache_dir":Spec_T(kind=PATHNAME, must_exist=False),
+}
+let KEYS:     []str = ["verbose", "workers", "mode", "log_dir", "cache_dir"]
+let REQUIRED: []str = ["workers", "mode", "log_dir"]
+
+let TRUE_WORDS:  []str = ["true", "yes", "on", "1"]
+let FALSE_WORDS: []str = ["false", "no", "off", "0"]
+
+
+def describe(s: Spec_T) -> str:
+    """One line per shape. No `when others:` -- the enum has four members and
+    the compiler has checked that all four are here."""
+    case s.kind:
+        when FLAG:
+            return "a flag (" + ", ".join(TRUE_WORDS) + " / " + ", ".join(FALSE_WORDS) + ")"
+        when NUMBER:
+            return f"a whole number in {s.lo} .. {s.hi}"
+        when CHOICE:
+            return "one of " + ", ".join(s.allowed)
+        when PATHNAME:
+            return "a path that must exist" if s.must_exist else "a path"
+
+
+def check_value(s: Spec_T, value: str) -> str:
+    """Empty means the value is fine; otherwise the complaint.
+
+    Each branch reads only the fields its own shape declares. `s.lo` inside
+    the CHOICE branch is not a mistake to be careful about -- on the Nim
+    backend the field is not there to read.
+    """
+    case s.kind:
+        when FLAG:
+            if value.lower() in TRUE_WORDS or value.lower() in FALSE_WORDS:
+                return ""
+            return f"'{value}' is not a yes/no word"
+        when NUMBER:
+            if value != /^-?\d+$/:
+                return f"'{value}' is not a whole number"
+            let n: int = int(value)
+            if n < s.lo or n > s.hi:
+                return f"{n} is outside {s.lo} .. {s.hi}"
+            return ""
+        when CHOICE:
+            if value in s.allowed:
+                return ""
+            return f"'{value}' is not one of " + ", ".join(s.allowed)
+        when PATHNAME:
+            if s.must_exist and not -d Path(value):
+                return f"'{value}' is not an existing directory"
+            return ""
+
+
+def check(path: Path) -> []Finding_T:
+    var found:   []Finding_T = []
+    var seen:    {}str       = {}
+    var line_nr: Natural     = 0
+
+    for raw in path.lines:
+        line_nr += 1
+        let line: str = raw.strip()
+        if line == "" or line == /^[#;]/:
+            continue
+
+        if line != /^(\w+)\s*=\s*(.*?)\s*$/:
+            found.append(at(line_nr, ERROR, "", "not a 'key = value' line"))
+            continue
+
+        let key:   str = $+1
+        let value: str = $+2
+
+        if key not in SCHEMA:
+            found.append(at(line_nr, ERROR, key, "unknown setting"))
+            continue
+        let spec: Spec_T = SCHEMA[key]
+
+        if key in seen:
+            found.append(at(line_nr, WARNING, key,
+                            "set more than once; the last one wins"))
+        seen.add(key)
+
+        let complaint: str = check_value(spec, value)
+        if complaint != "":
+            found.append(at(line_nr, ERROR, key,
+                            complaint + " -- expected " + describe(spec)))
+
+    for key in REQUIRED:
+        if key not in seen:
+            found.append(about(ERROR, key, "required setting is missing -- expected "
+                                              + describe(SCHEMA[key])))
+    for key in KEYS:
+        if key not in seen and key not in REQUIRED:
+            found.append(about(NOTE, key, "not set; " + describe(SCHEMA[key])))
+    return found
+
+
+def build_fixture() -> Path:
+    let d: Path = Path("/tmp/ady_config_check")
+    shell: rm -rf {!d}
+    (d / "logs").mkdir()
+    writeFile(str(d / "app.conf"), """# a configuration with one of everything
+verbose = yes
+workers = 200
+workers = 8
+mode    = reckless
+log_dir = /tmp/ady_config_check/logs
+colour  = blue
+this line has no equals sign
+""")
+    return d / "app.conf"
+
+
+def main() -> int:
+    let path: Path = Path($1) if $# >= 1 else build_fixture()
+    if not -f path:
+        print f"config_check: no such file: {path}"
+        return 2
+
+    let findings: []Finding_T = check(path)
+
+    var counts: [Level_T]Natural = [NOTE: 0, WARNING: 0, ERROR: 0]
+    print f"--- config_check {path} ---"
+    for f in findings:
+        counts[f.level] += 1
+        print f"  {f.level'Image:<7} {where(f):<8} {f.key:<10} {f.text}"
+
+    print ""
+    for lv in Level_T:
+        print f"  {lv'Image:<7} {counts[lv]}"
+    return 1 if counts[ERROR] > 0 else 0
+
+
+quit(main())

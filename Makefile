@@ -125,7 +125,8 @@ COMPILE_ONLY := \
     dp/jacks.ady \
     INTERACTIVE/lispy.ady \
     awk_logscan.ady \
-    sh_janitor.ady
+    sh_janitor.ady \
+    config_check.ady
 
 ALL_COMPILE := \
     $(LIBS) \
@@ -231,6 +232,11 @@ test: compile
 	    $(EXDIR)/sh_janitor >/dev/null 2>&1 \
 	        && test -f "/tmp/ady_janitor/quiet service.log.gz" \
 	        && echo OK || { echo FAIL; exit 1; }
+	@# config_check reports findings and exits 1 when any of them is an
+	@# error, which is the point -- so the check is on what it printed.
+	@printf '  %-42s' "config_check.ady"; \
+	    $(EXDIR)/config_check 2>&1 \
+	        | grep -q "200 is outside 1 .. 64" && echo OK || { echo FAIL; exit 1; }
 	@# Vcheck takes a log file rather than stdin; a path that exists is used
 	@# as-is, which is what makes it runnable here.
 	@printf '  %-42s' "CFMU/Vcheck_coded_flight.ady"; \

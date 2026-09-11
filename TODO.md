@@ -166,6 +166,23 @@ history of this file if the reasoning behind one of them is ever wanted.
       the examples use; the divergence is in the set form. Either Python emits
       something ordered for `'Range` in a for-loop, or `'Range` is documented
       as unordered and the examples keep away from it.
+- [ ] a plain value is not lifted into `?T` at a typed declaration or a record
+      keyword argument on the Nim backend. `let a: ?Natural = 7` is "got 'int
+      literal(7)' ... expected 'Option[system.Natural]'", and so is
+      `R_T(line=n)` for a `line: ?Natural` field -- while `return n` from a
+      `-> ?T` proc and a later `r.line = n` both lift correctly, and Python
+      accepts every one of them. Chapter 10 says you never write `some()`, so
+      the two paths that do not lift are the odd ones out rather than the
+      documented behaviour.
+- [ ] `is None` narrowing does not reach a record field. `if f.line is None:
+      return` then `str(f.line)` still emits `$f.line` over the Option on Nim
+      and prints `some(3)`; binding it first -- `let ln: ?Natural = f.line` --
+      narrows as documented. Python prints the value either way, so this is a
+      divergence in output, not just a compile error.
+- [ ] `sorted(d.keys())` over a `{K}V` does not compile on Nim: "undeclared
+      field: 'sorted'", because `keys` is an iterator there and wants
+      `toSeq`. Same family as the `[E]T` `.keys()` entry above. An example
+      that needs a stable report order has to carry its own list of keys.
 - [ ] `.map()` / `.and_then()` rewriting on `?T` (Feature 2)
 
 ---
