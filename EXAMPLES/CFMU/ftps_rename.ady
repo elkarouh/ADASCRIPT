@@ -9,7 +9,6 @@
 # At least one of: --free_text, --from_appl, --file_type, --seq_number, --period, --date
 
 nimport ftps_common
-import re
 
 if $# < 2:
   print "Usage: ftps_rename <ftps_service> <old_file_name> [options]"
@@ -60,28 +59,27 @@ if not (free_text_set or appl_set or ft_set or seq_set or period_set or date_set
   print "ERROR: at least one of --free_text, --from_appl, --file_type, --seq_number, --period, --date must be specified"
   sys.exit(RC_ARG_ERROR)
 
-let fnc_re : str = "" + FNC_VERSION + FNC_DATE + FNC_SEQ_NB + FNC_PERIOD + FNC_APP_KEY + FNC_TYPE + FNC_FREE
+# The FTPS naming convention: an optional "1." version prefix, then the
+# date, the sequence number, the period, the application key, the file type
+# and the free text -- the seven groups read back as $+1 .. $+7 below.
 var remote_file : str = old_file_name
-let fnc_re_pat : str = "^" + fnc_re + "$"
-var m_bare      : bool = bool(re.match(fnc_re_pat, old_file_name))
-let versioned_name : str = "1." + old_file_name
-var m_versioned : bool = bool(re.match(fnc_re_pat, versioned_name))
-if m_versioned and not m_bare:
+if old_file_name != /^(1\.){0,1}(\d{8})(\d{1})(\d{3})(\w{6})(\d{2})(.{0,100})$/:
+  # A name given without its version prefix is accepted when the "1." form
+  # is the one that matches; the check below reports it if neither does.
   remote_file = "1." + old_file_name
 
-var fnc_captures : [7]str = ["", "", "", "", "", "", ""]
-let m_ok : bool = remote_file.match(re(fnc_re_pat), fnc_captures)
-if not m_ok:
+if remote_file != /^(1\.){0,1}(\d{8})(\d{1})(\d{3})(\w{6})(\d{2})(.{0,100})$/:
   print f"ERROR: '{old_file_name}' does not match FTPS naming convention"
   sys.exit(RC_ARG_ERROR)
 
-let version_prefix : str = fnc_captures[0]
-let old_date       : str = fnc_captures[1]
-let old_seq        : str = fnc_captures[2]
-let old_period     : str = fnc_captures[3]
-let old_appl       : str = fnc_captures[4]
-let old_ft         : str = fnc_captures[5]
-let old_free_text  : str = fnc_captures[6]
+# Straight off the match above -- nothing may run another regex in between.
+let version_prefix : str = $+1
+let old_date       : str = $+2
+let old_seq        : str = $+3
+let old_period     : str = $+4
+let old_appl       : str = $+5
+let old_ft         : str = $+6
+let old_free_text  : str = $+7
 
 if not appl_set and old_appl != appl_part:
   print f"ERROR: Not allowed to rename file {old_file_name} (owned by '{old_appl}', you are '{appl_part}')"
@@ -114,13 +112,11 @@ if date_set and eff_date == old_date:
   sys.exit(RC_ARG_ERROR)
 
 if date_set:
-  var dm_caps : [3]str = ["", "", ""]
-  let dm_ok : bool = eff_date.match(re(r"^(\d{4})(\d{2})(\d{2})$"), dm_caps)
-  if not dm_ok:
+  if eff_date != /^(\d{4})(\d{2})(\d{2})$/:
     print f"ERROR: --date must be exactly 8 digits (YYYYMMDD), got: '{eff_date}'"
     sys.exit(RC_ARG_ERROR)
-  let mo : int = int(dm_caps[1])
-  let dy : int = int(dm_caps[2])
+  let mo : int = int($+2)
+  let dy : int = int($+3)
   if mo < 1 or mo > 12 or dy < 1 or dy > 31:
     print f"ERROR: Invalid date: '{eff_date}'"
     sys.exit(RC_ARG_ERROR)
@@ -137,7 +133,7 @@ let src_dir : str = server["dir"]
 
 var file_src_dir  : str = src_dir
 var file_dest_dir : str = src_dir
-if secure != "FALSE" and re.match(r"^1\.\d{12}", remote_file):
+if secure != "FALSE" and remote_file == /^1\.\d{12}/:
   let s_month : str = remote_file[6:8] + "m"
   let s_day   : str = remote_file[8:10] + "d"
   let d_month : str = new_remote_file[6:8] + "m"
@@ -150,7 +146,8 @@ if check_out.strip() != "":
   if allow_multi:
     var found_slot : bool = False
     for seq_try in range(1, 10):
-      let try_file : str = re.sub(r"^(1\.\d{8})\d", f"\\g<1>{seq_try}", new_remote_file)
+      # The sequence number is the digit after "1." and the 8-digit date.
+      let try_file : str = new_remote_file[0:10] + str(seq_try) + new_remote_file[11:]
       let (try_out, _) = lftp_run(server, f"cd {file_dest_dir}\nnlist {try_file}")
       if try_out.strip() == "":
         new_remote_file = try_file
@@ -166,9 +163,12 @@ if check_out.strip() != "":
 var from_path : str = remote_file
 var to_path   : str = new_remote_file
 if file_src_dir != file_dest_dir:
-  let clean_src : str = re.sub(r"^\./", "", src_dir)
-  from_path = re.sub("^[./]+", "", file_src_dir + "/" + remote_file)
-  to_path   = re.sub("^[./]+", "", file_dest_dir + "/" + new_remote_file)
+  var clean_src : str = src_dir
+  clean_src == s/^\.\///g
+  from_path = file_src_dir + "/" + remote_file
+  from_path == s/^[.\/]+//g
+  to_path   = file_dest_dir + "/" + new_remote_file
+  to_path   == s/^[.\/]+//g
   let base : str = "/" + clean_src if clean_src else "/"
   let (_, mv_rc) = lftp_run(server, f"cd {base}\nmv {from_path} {to_path}")
   if mv_rc != 0:

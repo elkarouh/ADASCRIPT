@@ -11,7 +11,7 @@
 # Exit 1: not found
 # Exit 2: multiple matches
 
-import re
+pyimport re
 
 var app_key      : str = $APPLICATION_INSTANCE_KEY
 var service      : str = "FTPS"

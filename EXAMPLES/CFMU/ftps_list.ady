@@ -31,7 +31,6 @@
 #   --source_key=APPKEY
 
 nimport ftps_common
-import re
 
 if $# < 1:
   print "Usage: ftps_list <ftps_service> [options]"
@@ -214,17 +213,17 @@ while retries > 0 and not exit_loop:
     for entry in sorted(entries):
       if entry == "":
         continue
-      if re.search(r"(\s|^)\d\d$", entry):
+      if entry == /(\s|^)\d\d$/:
         continue
-      if re.search(r"(\s|^)\d\dm:?$", entry):
+      if entry == /(\s|^)\d\dm:?$/:
         continue
-      if re.search(r"(\s|^)\d\dd:?$", entry):
+      if entry == /(\s|^)\d\dd:?$/:
         continue
-      if re.search(r"(\s|^)\d{4}y$", entry):
+      if entry == /(\s|^)\d{4}y$/:
         continue
-      if re.search(r"(\s|^)upload_area:?$", entry):
+      if entry == /(\s|^)upload_area:?$/:
         continue
-      if re.search(r"(\s|^)OPS$", entry):
+      if entry == /(\s|^)OPS$/:
         continue
       if seen.get(entry):
         continue
@@ -251,7 +250,7 @@ while retries > 0 and not exit_loop:
         print "-" * len(ftp_server)
       var out_line : str = line
       if no_prefix:
-        out_line = re.sub(r"^1\.", "", out_line)
+        out_line == s/^1\.//g
       print out_line
       fcount += 1
 

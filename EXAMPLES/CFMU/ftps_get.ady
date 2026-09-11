@@ -8,7 +8,6 @@
 
 nimport ftps_common
 nimport os
-import re
 
 if $# < 3:
   print "Usage: ftps_get <dest_dir> <ftps_service> <decompress:true|false> [options]"
@@ -171,17 +170,17 @@ if len(unchecked) == 0:
 
 var remote_files : []str = []
 for remote_file in sorted(unchecked):
-  if re.search(r"(\s|^)\d\d$", remote_file):
+  if remote_file == /(\s|^)\d\d$/:
     continue
-  if re.search(r"(\s|^)\d\dm:?$", remote_file):
+  if remote_file == /(\s|^)\d\dm:?$/:
     continue
-  if re.search(r"(\s|^)\d\dd:?$", remote_file):
+  if remote_file == /(\s|^)\d\dd:?$/:
     continue
-  if re.search(r"(\s|^)\d{4}y$", remote_file):
+  if remote_file == /(\s|^)\d{4}y$/:
     continue
-  if re.search(r"(\s|^)upload_area:?$", remote_file):
+  if remote_file == /(\s|^)upload_area:?$/:
     continue
-  if re.search(r"(\s|^)OPS$", remote_file):
+  if remote_file == /(\s|^)OPS$/:
     continue
   if remote_file in subdirs:
     continue
@@ -193,16 +192,19 @@ var received_ok : int = 0
 for remote_file in sorted(remote_files):
   var local_name : str = remote_file
   if not always_prefix:
-    local_name = re.sub(r"^\d\.", "", local_name)
+    local_name == s/^\d\.//g
 
   let local_file      : str = dest_dir + "/" + local_name
   let full_local_file : str = str(full_path / local_name)
 
   if mount_point == "":
     if use_dest_cache:
-      let no_gz     : str = re.sub(r"\.gz$", "", remote_file)
-      let no_prefix : str = re.sub(r"^\d\.", "", remote_file)
-      let just_mid  : str = re.sub(r"\.gz$", "", no_prefix)
+      var no_gz     : str = remote_file
+      no_gz     == s/\.gz$//g
+      var no_prefix : str = remote_file
+      no_prefix == s/^\d\.//g
+      var just_mid  : str = no_prefix
+      just_mid  == s/\.gz$//g
       var found_cached : str = ""
       for candidate in [remote_file, no_gz, no_prefix, just_mid]:
         let cpath : str = str(full_path / candidate)
@@ -247,7 +249,8 @@ for remote_file in sorted(remote_files):
     continue
 
   if full_local_file.endswith(".gz"):
-    let target_unzipped : str = re.sub(r"\.gz$", "", full_local_file)
+    var target_unzipped : str = full_local_file
+    target_unzipped == s/\.gz$//g
     if -f target_unzipped:
       shell: rm -f {target_unzipped}
     let (_, gz_rc) = shell: gunzip {full_local_file}
@@ -255,7 +258,8 @@ for remote_file in sorted(remote_files):
       print f"ERROR: gunzip failed for '{full_local_file}'"
       received_ok -= 1
     else:
-      let local_unzipped : str = re.sub(r"\.gz$", "", local_file)
+      var local_unzipped : str = local_file
+      local_unzipped == s/\.gz$//g
       if show_path:
         print local_unzipped
       else:

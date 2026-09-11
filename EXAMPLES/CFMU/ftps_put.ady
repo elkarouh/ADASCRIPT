@@ -25,7 +25,6 @@
 
 nimport ftps_common
 nimport os
-import re
 
 let source_dir      : str  = $1
 let source_file     : str  = $2
@@ -158,7 +157,9 @@ if overwrite == 0 or overwrite == 2:
       # increment sequence number
       var found_slot : bool = False
       for seq_try in range(1, 10):
-        let try_file : str = re.sub(r"^(1\.\d{8})\d", f"\\g<1>{seq_try}", dest_file)
+        # The sequence number is the one digit after the "1." and the
+        # 8-digit date, so bumping a version is a splice, not a regex.
+        let try_file : str = dest_file[0:10] + str(seq_try) + dest_file[11:]
         let try_cmd  : str = f"cd {dest_dir}\nnlist {try_file}"
         let (try_out, _) = lftp_run(server, try_cmd)
         if try_out.strip() == "":

@@ -106,6 +106,44 @@ history of this file if the reasoning behind one of them is ever wanted.
       to build at all, "got 'seq[int]' ... expected 'seq[Option[int]]'". The
       elements need lifting, not the container. Generic syntax is no longer
       what blocks these; this is.
+- [ ] `.isdigit()` on a str does not compile on Nim. The emitter maps it to
+      `isDigit`, which is `strutils`' *char* predicate, so `parts[4].isdigit()`
+      fails with "type mismatch ... [1] parts[4]: string" where Python answers
+      a bool. Python's `str.isdigit()` is also false for `""`, so the shape to
+      emit for a string receiver is `s.len > 0 and s.allCharsInSet(Digits)`.
+      The mapping lives in `_PY_UNIVERSAL_METHOD_TO_NIM`, which is untyped, so
+      the fix belongs in the type-aware `_translate_method` -- the char
+      receiver, which the lexers rely on, has to keep `isDigit`. Three files
+      in `EXAMPLES/CFMU` are blocked on it.
+- [ ] `Path` in expression position needs a `: Path` annotation somewhere in
+      the same file. `let base: str = Path(p).name` on its own does not
+      compile on Nim -- "undeclared identifier: 'Path'" -- because the Path
+      prelude is injected by `_ensure_path_helper`, and only `type_name` calls
+      it. Hooking the identifier instead does fire, and is still too late:
+      `nim_top_decls` has been flushed by the time expressions are emitted, so
+      the appended helper never reaches the output. The fix is a pre-scan, the
+      way `user_top_level_procs` already works in `ady2nim.py`, not another
+      emission-time hook. Binding the path to a name is the workaround, and
+      reads better anyway when both `.parent` and `.name` are wanted.
+- [ ] a bare file test as an `assert` condition is dropped on Nim. `assert -s
+      path` emits just the path -- "expression ... has to be used (or
+      discarded)" -- losing both the assert and the operator, while `assert
+      not -s path` and `assert (-s path)` are both fine. So it is the
+      unnegated, unparenthesised form that the assert emitter does not route
+      through the file-test rule.
+- [ ] no spelling for a pattern that is not known until run time. Regex
+      literals are syntax, which is the point, but it leaves a program that
+      reads a pattern out of a database or builds one from parts with nowhere
+      to go: `EXAMPLES/CFMU/cfmu_get_file_type.ady` matches against a pattern
+      the query returned and has to say `pyimport re` for that one call, which
+      drags CPython into a Nim binary. `re(expr)` appears in a couple of older
+      CFMU files as if it existed; it does not. Either a `Regex(s)` value that
+      `==` accepts on the right, or interpolation inside a literal.
+- [ ] `s.split(None, maxsplit)` emits `split(s, nil, 1)`, which is not valid
+      Nim. Python's "split on runs of whitespace, at most n times" has no
+      single Nim call -- `splitWhitespace` takes no maxsplit -- so it wants a
+      helper. It is the last thing keeping `cfmu_get_file_type.ady` from
+      compiling.
 - [ ] `.map()` / `.and_then()` rewriting on `?T` (Feature 2)
 
 ---

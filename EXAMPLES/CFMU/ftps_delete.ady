@@ -7,7 +7,6 @@
 #   ftps_delete <ftps_service> [options]
 
 nimport ftps_common
-import re
 
 if $# < 1:
   print "Usage: ftps_delete <ftps_service> [options]"
@@ -119,7 +118,7 @@ var seen_r      : {str}bool = {:}
 
 for pattern in patterns:
   var target_dir : str = src_dir
-  if secure != "FALSE" and re.match(r"^1\.\d{12}", pattern):
+  if secure != "FALSE" and pattern == /^1\.\d{12}/:
     let month : str = pattern[6:8] + "m"
     let day   : str = pattern[8:10] + "d"
     target_dir = src_dir + f"/{month}/{day}"
@@ -147,7 +146,7 @@ if len(remote_list) == 0:
 
 var files_per_key : {str}int = {:}
 for f in remote_list:
-  if re.match(r"^1\.", f):
+  if f == /^1\./:
     let src_key_part : str = f[14:20]
     files_per_key[src_key_part] = files_per_key.get(src_key_part, 0) + 1
 
@@ -172,7 +171,7 @@ if len(files_to_delete) > 1 and not in_regression:
 
 for remote_file in files_to_delete:
   var target_dir : str = src_dir
-  if secure != "FALSE" and re.match(r"^1\.\d{12}", remote_file):
+  if secure != "FALSE" and remote_file == /^1\.\d{12}/:
     let month : str = remote_file[6:8] + "m"
     let day   : str = remote_file[8:10] + "d"
     target_dir = src_dir + f"/{month}/{day}"
