@@ -76,7 +76,7 @@ _COMP_OPS = {"==", "!=", "<", ">", "<=", ">=", "in", "is", "not in", "is not", "
              "-nt", "-ot"}
 
 _NIMATCH_HELPER = """\
-from std/re as srx import findAll, replace
+from std/re as srx import findAll, replace, replacef
 var matches: seq[string]
 var namedCaptures: Table[string, string]
 proc nimatch(s: string; pattern: Regex): bool =
@@ -1996,6 +1996,8 @@ def to_nim(self, prec=None):
                 or arg.startswith('"')       # string literal
                 or arg.startswith("getEnv(") # $NAME -> string
                 or arg.startswith("adascriptEnvOr(")  # ${NAME:-default} -> string
+                or arg.startswith("matches[")        # $+N -> string
+                or arg.startswith("namedCaptures[")  # $+{name} -> string
                 or _field_is_str             # expr.field where field: string
                 or (_sym and _sym.get("type") in ("string", "seq[string]"))
                 or (_base_sym and (

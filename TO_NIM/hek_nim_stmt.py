@@ -1898,7 +1898,12 @@ def to_nim(self):
     # $+N in replacement → $N  (std/re replacement backreference syntax)
     repl = _re_s.sub(r'\$\+(\d+)', r'$\1', repl)
     repl = _re_s.sub(r'\$\+\{(\w+)\}', r'${\1}', repl)
-    return f'{lhs} = {lhs}.replace({srx_pat}, "{repl}")'
+    # std/re's replace copies the replacement verbatim; only replacef expands
+    # $1 / ${name}. Python's re.sub expands either way, so a replacement that
+    # carries a backreference has to take the other proc or the two backends
+    # disagree -- Nim writing a literal "$1" where Python writes the capture.
+    _fn = "replacef" if _re_s.search(r'\$(\d+|\{\w+\})', repl) else "replace"
+    return f'{lhs} = {lhs}.{_fn}({srx_pat}, "{repl}")'
 
 
 @method(print_stmt)
