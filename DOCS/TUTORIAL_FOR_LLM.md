@@ -896,9 +896,13 @@ positional. Iterate the key type when filling an `[O]T`.
 
 ---
 
-## Python 3.10+ `match/case`
+## Guards, and the catch-all they require
 
-Adascript is a superset of Python, so standard `match/case` is supported alongside Adascript's own `case/when`. Both compile to the same Nim output.
+Python's `match/case` is NOT part of Adascript; `case`/`when` is the only
+spelling. A branch may carry an `if` guard, but a guard anywhere in the block
+stops Nim checking the branches for completeness, so such a block must carry
+an unguarded `when others:`. The same applies to a block whose subject is a
+`str`. `when others` may not itself be guarded.
 
 ```adascript
 def get_kind(arg: str) -> Kind_T:
@@ -1201,7 +1205,7 @@ for s in Stage_T'First .. Stage_T'Last:
 | File-test | `-e path`, `-f path`, `-d path` |
 | File comparison | `a -nt b`, `a -ot b` |
 | Python 2-style print | `print "text"` or `print expr, expr` |
-| Python 3.10 match/case | `match x: case P: ...` (full pattern syntax) |
+| Pattern match | `case x:` / `when P:` / `when others:` (full pattern syntax) |
 | Walrus bind | `if r := f():` / `while r := f():` |
 | Monadic do block | `do:` / `x <- expr` |
 | Regex literal | `s == /pat/`, `s != /pat/`, `s == /pat/g` |

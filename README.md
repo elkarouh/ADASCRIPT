@@ -631,12 +631,18 @@ are supported: literals, captures, wildcards, OR-patterns, ranges,
 sequences, class patterns, `as` bindings and guards. (Mapping patterns are
 not — see [Known Limitations](#known-limitations).)
 
-Python 3.10+ `match` / `case` is accepted as well, so Adascript stays a
-superset; both spellings take the same patterns, including `if` guards
-(`when pat if cond:` and `case pat if cond:`), and produce the same code.
-See [DOCS/TUTORIAL.md](DOCS/TUTORIAL.md#11-control-flow) and
-[The Adascript Book, Chapter 5](DOCS/BOOK/05-pattern-matching.md) — the
-complete pattern reference, with both syntaxes side by side.
+This is the only pattern-matching construct. Python's `match` / `case` was
+accepted alongside it and no longer is: the two were one construct with two
+spellings, and keeping both meant `case` headed the block in one and a branch
+in the other. Convert a `match` block by writing `case` for `match`, `when`
+for `case`, and `when others` for `case _`.
+
+A block Nim cannot check for completeness has to carry `when others:` — that
+means a block with a guarded branch, or with a string subject. `when others`
+may not itself be guarded. See
+[The Adascript Book, Chapter 5](DOCS/BOOK/05-pattern-matching.md) for the
+complete pattern reference and for what exhaustiveness does and does not
+cover, and [DOCS/TUTORIAL.md](DOCS/TUTORIAL.md#11-control-flow).
 
 ```python
 case value:
@@ -2360,6 +2366,21 @@ A comment on the `case` line itself is lost, and one on a `type ... is enum`
 line is preserved but relocated, since the declaration expands to several
 generated lines and the comment lands on the last of them.
 
+**No bytes type** — `b"..."` is a plain string: the prefix is dropped on both
+backends, so `b"x" == "x"` where Python would say otherwise. Nim's `string`
+is a byte string, which makes that the faithful reading rather than a lossy
+one, but nothing can be declared, passed or returned as bytes. `u"..."` is
+dropped too, being a no-op since Python 3; an `r` in the prefix survives, so
+`br"\d"` is `r"\d"`.
+
+**Exhaustiveness is a Nim-build property** — a `case` block is checked for
+completeness only when the Nim backend can make it a native `case`: an
+ordinal subject whose branches are all constants. A string subject is not
+checked, and a guard anywhere in the block switches the check off. Adascript
+asks for `when others:` in exactly those two cases, but `ady2py` enforces
+none of it, so a block that backend accepts can still be refused by
+`ady2nim`. Chapter 5 has the table.
+
 **Python backend maturity** — the Nim backend is still the better-tested of
 the two, since `make test` builds and runs every example through it. Every
 example now also transpiles to Python that parses, and the constructs that
@@ -2403,6 +2424,7 @@ these are available on that backend alone:
 |-------------------|-----------------------------------------------------------|
 | `nimport awk`     | `AwkBase` — generic stdin record-processor base class      |
 | `nimport iters`   | itertools equivalents (`take`, `chunks`, `pairwise`, …), generic over the element type |
+| `nimport strscan` | character classification and the small scanners a hand-written lexer needs (`is_digit_ch`, `skip_quoted`, `lead_ident`, `strip_line_comment`, …) |
 | `nimport graphs`  | `dijkstra` and `shortest_path` over a weighted digraph, generic in the node type |
 | `nimport db`      | thin SQLite wrapper                                        |
 | `nimport jointjs` | `JsElem` base class and helpers for JointJS applications   |

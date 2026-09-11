@@ -788,18 +788,15 @@ var n: int = 3
 while n > 0: n -= 1
 ```
 
-### case / when  and  match / case
+### case / when
 
-Adascript supports two pattern-matching syntaxes:
+Pattern matching is written `case x:` with `when pat:` branches, and
+`when others:` for everything not named. It is the only spelling: Python's
+`match`/`case` was accepted alongside it and no longer is.
 
-| Syntax | Style | Best for |
-|---|---|---|
-| `case x: / when pat:` | Ada/Nim | Enum dispatch, ranges, structural patterns |
-| `match x: / case pat:` | Python 3.10+ | Guards on arbitrary expressions, Python-idiomatic code |
-
-Both syntaxes produce identical Python output (`match/case`). The Nim output
-differs only when patterns require desugaring (structural, guards, tuple
-subjects). For a full reference see
+The Python output is a `match/case` statement. The Nim output differs only
+when patterns require desugaring (structural, guards, tuple subjects). For a
+full reference see
 [The Adascript Book, Chapter 5](BOOK/05-pattern-matching.md).
 
 **Literal and range patterns:**
@@ -1032,10 +1029,11 @@ is always to destructure the compound value with `let` first.
 
 ---
 
-**`match / case` with guards:**
+**Guards:**
 
-Use `match/case` when branches need `if` guards on arbitrary expressions.
-Guards are not available on `case/when` branches.
+A branch may carry an `if` guard on an arbitrary expression. A guard anywhere
+in the block means Nim can no longer check the branches for completeness, so
+the block must then carry an unguarded `when others:`.
 
 ```python
 def classify(arg: str) -> str:
@@ -1595,6 +1593,7 @@ without a local copy next to your source file:
 |----------------|-------------------------------------------------------|
 | `nimport stdlib` | `PriorityQueue`, `FifoQueue`, `LifoQueue`, `ANY`    |
 | `nimport awk`  | `AwkBase` — subclass and override `process_record()`, `begin()`, `finish()` |
+| `nimport strscan` | character classification (`is_digit_ch`, `is_space_ch`, …) and the small scanners a hand-written lexer needs (`skip_space`, `skip_quoted`, `lead_ident`, `strip_line_comment`) |
 
 Example — a custom awk processor in any directory:
 
