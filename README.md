@@ -2432,20 +2432,8 @@ these are available on that backend alone:
 | `nimport db`      | thin SQLite wrapper                                        |
 | `nimport jointjs` | `JsElem` base class and helpers for JointJS applications   |
 
-**Global parser state** — `ParserState` is a class-level singleton, so
-independent parse runs in the same process share it. For a *sequence* of
-runs, `ParserState.reset()` between them is still the simplest thing. For a
-*nested* run — translating one unit while another is in progress — use the
-context manager, which saves the state on entry and restores it on exit, so
-the inner unit may `reset()` and mutate freely:
-
-```python
-with ParserState.scoped():
-    translate(inner_source)      # free to reset() and mutate
-# the outer unit's state is back
-```
-
-`snapshot()` and `restore()` are the same mechanism without the `with`.
-Containers are copied one level deep, so in-place mutation inside the nested
-run does not leak into the captured state. None of this makes the singleton
-thread-safe: concurrent parses in separate threads remain unsupported.
+**Global parser state** — embedding the transpiler means sharing hparsec's
+`ParserState` singleton: call `ParserState.reset()` between sequential runs
+in one process, or wrap a nested run in `with ParserState.scoped():`.
+Concurrent parses in separate threads are unsupported. The mechanism is
+described in [HPARSEC/README.md](HPARSEC/README.md#parserstate).
