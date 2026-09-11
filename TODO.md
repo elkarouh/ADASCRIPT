@@ -106,15 +106,15 @@ history of this file if the reasoning behind one of them is ever wanted.
       to build at all, "got 'seq[int]' ... expected 'seq[Option[int]]'". The
       elements need lifting, not the container. Generic syntax is no longer
       what blocks these; this is.
-- [ ] `.isdigit()` on a str does not compile on Nim. The emitter maps it to
-      `isDigit`, which is `strutils`' *char* predicate, so `parts[4].isdigit()`
-      fails with "type mismatch ... [1] parts[4]: string" where Python answers
-      a bool. Python's `str.isdigit()` is also false for `""`, so the shape to
-      emit for a string receiver is `s.len > 0 and s.allCharsInSet(Digits)`.
-      The mapping lives in `_PY_UNIVERSAL_METHOD_TO_NIM`, which is untyped, so
-      the fix belongs in the type-aware `_translate_method` -- the char
-      receiver, which the lexers rely on, has to keep `isDigit`. Three files
-      in `EXAMPLES/CFMU` are blocked on it.
+- [ ] `.isdigit()` is ASCII-only on Nim and Unicode-aware on Python:
+      a string of Arabic-Indic digits answers false there and true here. It is what every
+      strutils predicate does -- `TO_NIM/STDLIB/strscan.ady` says so in its
+      header -- and it became *reachable* rather than new when the string
+      overload landed, since before that a string receiver did not compile at
+      all. The same gap is waiting behind `.isalpha()`, `.isalnum()`,
+      `.isspace()`, `.islower()` and `.isupper()`, none of which have a string
+      overload yet. Either the Python backend narrows to ASCII, or unicode's
+      predicates go behind the Nim ones, or it is documented per method.
 - [ ] `Path` in expression position needs a `: Path` annotation somewhere in
       the same file. `let base: str = Path(p).name` on its own does not
       compile on Nim -- "undeclared identifier: 'Path'" -- because the Path

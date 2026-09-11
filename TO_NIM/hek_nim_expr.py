@@ -198,6 +198,37 @@ proc adascriptZfill(s: string, width: int): string =
 """
 
 
+_ISDIGIT_HELPER = """\
+proc adascriptIsDigit*(c: char): bool =
+  ## isdigit() on a char -- strutils' predicate, unchanged.
+  c.isDigit
+
+proc adascriptIsDigit*(s: string): bool =
+  ## isdigit() on a string, which strutils has no predicate for: isDigit is
+  ## the char one, so `s.isDigit` was a type mismatch where Python answered a
+  ## bool. Python also calls the empty string not-all-digits, which
+  ## allCharsInSet on its own calls true.
+  ##
+  ## Two overloads rather than one emitter guessing which it has: the
+  ## receiver may be a literal, a subscript or the result of a call, and Nim
+  ## knows its type in every one of those cases where the emitter does not.
+  ##
+  ## ASCII only, as every strutils predicate is, where Python's is
+  ## Unicode-aware: a string of Arabic-Indic digits is false here and true
+  ## there. See TODO.md.
+  s.len > 0 and s.allCharsInSet(Digits)\
+"""
+
+
+def _ensure_isdigit_helper():
+    """Add the isdigit overloads the first time isdigit is used."""
+    ParserState.nim_imports.add("strutils")          # isDigit, allCharsInSet, Digits
+    decls = getattr(ParserState, 'nim_top_decls', [])
+    if not any("adascriptIsDigit" in d for d in decls):
+        decls.append(_ISDIGIT_HELPER)
+        ParserState.nim_top_decls = decls
+
+
 def _ensure_zfill_helper():
     """Add the zfill helper to nim_top_decls the first time zfill is used."""
     ParserState.nim_imports.add("strutils")          # repeat()
@@ -1538,7 +1569,7 @@ _PY_UNIVERSAL_METHOD_TO_NIM = {
     "zfill": "adascriptZfill",
     "isalpha": "isAlphaAscii",
     "isalnum": "isAlphaNumeric",
-    "isdigit": "isDigit",
+    "isdigit": "adascriptIsDigit",
     "isspace": "isSpaceAscii",
     "islower": "isLowerAscii",
     "isupper": "isUpperAscii",
@@ -1621,6 +1652,8 @@ def _translate_method(obj_name, method_name):
         ParserState.nim_imports.add("strutils")
     if nim_method == "adascriptZfill":
         _ensure_zfill_helper()
+    if nim_method == "adascriptIsDigit":
+        _ensure_isdigit_helper()
     return nim_method
 
 
