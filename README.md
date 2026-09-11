@@ -326,9 +326,13 @@ both backends.
 `char` is an ordinal like the rest, spanning `chr(0) .. chr(255)`, so
 `[char]int` is a 256-slot array. Adascript inherits Python's lack of a
 character type, so `'a'` is a one-character *string* rather than a char —
-the Nim backend converts it to a char literal where the key type says one is
-meant, escapes included, so `freq['a']`, `freq["\\"]` and `freq[chr(97)]`
-all work on both.
+the Nim backend narrows it to a char literal wherever a char is what the
+declaration asks for, escapes included. That covers every position, not just
+subscripts: a `let`/`var` with a `char` annotation, an assignment to one, a
+`return`, the trailing expression of a `-> char` function, an element of a
+`[]char` literal, a record field, and an argument to a parameter typed
+`char`. So `freq['a']`, `freq["\\"]`, `let c: char = '\\t'` and
+`is_digit_ch('7')` all work on both backends.
 
 `char` is also a container element type in its own right. Iterating a string
 yields characters, so a `[]char` annotation says what the loop already
@@ -1730,9 +1734,14 @@ let repo: Path = cdir / name / "HEAD"
 
 `Path` is *a string that also joins*, not a separate world: it goes wherever
 a `str` goes — file tests, `readFile`, shell interpolation, a `str`
-parameter, a dict key, `.upper()`. Only the reverse needs saying: `Path(s)`
-to make one, and `str(p)` where a `{str}str` table or similar needs the plain
-type.
+parameter, a dict key, `.upper()`. The other direction is not automatic and
+both backends refuse it: `Path(s)` makes one from a `str`, `str(p)` goes
+back. A bare `p = s` is an error, because `Path` is a `distinct string` on
+Nim and always was — this backend used to let it through and the same source
+then failed to build.
+
+A declared-but-unset `Path` is empty, not None, so `var p: Path` compares
+equal to `""` on both backends.
 
 That is deliberate. Nim's `std/paths.Path` is a `distinct string`, so the
 backend injects a converter back to `string`; Python gets the same shape from
@@ -1769,6 +1778,22 @@ stricter default.
 
 One wrinkle: a file test takes a primary, so a join inside one needs
 parentheses — `-f (gitdir / "HEAD")`.
+
+### Reading a file or standard input: `File`
+
+`File` is the type a file handle has, and `stdin` is one, so a program that
+reads either can hold both in one variable and write the loop once:
+
+```python
+let f: File = (open(file_arg) if file_arg != "" else stdin)
+for line in f.lines:
+    print process(line)
+```
+
+`.lines` yields each line **without** its terminator, on both backends —
+Python's own iteration keeps the newline and Nim's drops it, so the trailer
+is what makes the two agree. `open()` returns a `File`; on the Python target
+the annotation becomes `typing.TextIO`.
 
 ### Is this program installed?
 

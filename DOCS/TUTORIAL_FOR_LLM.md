@@ -1186,7 +1186,10 @@ for s in Stage_T'First .. Stage_T'Last:
 | Block join | `shell(join = ";"):` (`&&` default, `;`, `\|`, `\|\|`) |
 | Is a program installed? | `have("git")` -> bool |
 | Path join | `let p: Path = root / "sub"` (Path is a str subclass/distinct) |
-| Path <-> str | `Path(s)` / `str(p)` |
+| Path <-> str | `Path(s)` / `str(p)`; a bare `p = s` is refused on both backends |
+| Read a file or stdin | `let f: File = (open(p) if p != "" else stdin)`; `File` is `typing.TextIO` on Python |
+| Lines without the newline | `for line in f.lines:` -- the trailer strips it on both backends |
+| Character literal | `let c: char = '\t'`; narrowed in every position a char is declared (let/var, assignment, return, implicit return, `[]char` element, record field, argument) |
 | Path split | `p.parent` -> Path, `p.name` -> str (pathlib rules, not os.path) |
 | Path mkdir | `p.mkdir()` = mkdir -p (parents, exist_ok) |
 | Path resolve | `p.resolve()` = realpath (absolute, symlinks expanded) |

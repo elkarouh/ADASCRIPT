@@ -2575,7 +2575,10 @@ through the same ground in more detail.
 | Block joined with something else  | `shell(join = ";"):` / `"|"` / `"||"`   |
 | Is a program installed?           | `have("git")` -> bool                   |
 | Path join                         | `let p: Path = root / "sub" / name`     |
-| Path <-> str                      | `Path(s)` / `str(p)`; a Path is a str   |
+| Path <-> str                      | `Path(s)` / `str(p)`; a bare `p = s` is refused |
+| Read a file or stdin              | `let f: File = (open(p) if p != "" else stdin)` |
+| Lines without the newline         | `for line in f.lines:` -- same on both backends |
+| Character literal                 | `let c: char = '\t'`; narrowed wherever a char is declared |
 | Path split                        | `p.parent` -> Path, `p.name` -> str     |
 | Path mkdir                        | `p.mkdir()` -- mkdir -p                 |
 | Path resolve                      | `p.resolve()` -- abs, symlinks expanded |
