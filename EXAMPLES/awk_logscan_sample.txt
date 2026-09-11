@@ -1,0 +1,12 @@
+2026-09-11 08:00:01 INFO  GET /index.html 200 134ms
+2026-09-11 08:00:02 DEBUG GET /static/app.js 304 3ms
+2026-09-11 08:00:04 WARN  GET /reports/full 200 2317ms
+2026-09-11 08:00:07 ERROR POST /api/order 500 87ms
+Traceback (most recent call last):
+  File "order.py", line 42, in place
+    raise ValueError("no stock left")
+ValueError: no stock left
+2026-09-11 08:00:09 INFO  GET /health 200 2ms
+2026-09-11 08:00:11 WARN  POST /api/login 401 45ms
+2026-09-11 08:00:12 INFO  GET /favicon.ico 404 1ms
+2026-09-11 08:00:15 INFO  GET /index.html 200 121ms

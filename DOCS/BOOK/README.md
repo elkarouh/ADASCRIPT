@@ -24,6 +24,10 @@ Whenever a chapter quotes a program, the path is given relative to the
 repository root (e.g. `EXAMPLES/monty_hall.ady`) so you can open the full
 source, transpile it, and run it on either backend.
 
+Coming from AWK, `DOCS/ADASCRIPT_FOR_AWK.md` is a shorter way in: it keeps
+AWK's shape -- records, fields, patterns and actions -- and shows what
+replaces its one scalar type.
+
 ## Table of contents
 
 | # | Chapter | Featured examples |

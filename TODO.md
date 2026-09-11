@@ -144,6 +144,18 @@ history of this file if the reasoning behind one of them is ever wanted.
       single Nim call -- `splitWhitespace` takes no maxsplit -- so it wants a
       helper. It is the last thing keeping `cfmu_get_file_type.ady` from
       compiling.
+- [ ] an escaped delimiter in the *replacement* half of `s///` keeps its
+      backslash. `s == s/(\d{4})-(\d{2})-(\d{2})/$+3\/$+2\/$+1/g` gives Nim
+      `"$3\/$2\/$1"`, which is not a valid character escape and does not
+      compile, and Python `r'\3\/\2\/\1'`, which leaves a stray backslash in
+      the result. The pattern half is fine -- `s/^[.\/]+//g` works on both --
+      so it is only the replacement scanner that keeps the backslash instead
+      of dropping it.
+- [ ] a Nim keyword used as a tuple-unpacking target is not escaped. `let out:
+      str = "x"` emits `` let `out` `` and is fine; `let (out, rc) = shell: echo
+      hi` emits a bare `out` and fails with "identifier expected, but got
+      'keyword out'". The plain-declaration path calls `_nim_user_ident` and
+      the unpacking path does not.
 - [ ] `.map()` / `.and_then()` rewriting on `?T` (Feature 2)
 
 ---

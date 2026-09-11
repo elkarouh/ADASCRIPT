@@ -1,0 +1,104 @@
+#!/usr/bin/env ady2nim
+"""
+awk_logscan — an application-log scanner, written the way an awk programmer
+would think about it, using the parts of Adascript that awk does not have.
+
+    ./awk_logscan < EXAMPLES/awk_logscan_sample.txt
+
+A record is a line. Most lines are timestamped events; the lines after a
+failure are a stack trace, which is what makes this more than one pattern
+per line: the meaning of a line depends on the state the scanner is in.
+"""
+nimport awk
+
+
+type Severity_T is enum DEBUG, INFO, WARN, ERROR
+
+# Where in the file we are.  A trace line carries no timestamp of its own, so
+# only the state says whom it belongs to.
+type Scan_State_T is enum OUTSIDE, IN_TRACE
+
+# What the status code meant.  awk would keep these as strings in an
+# associative array; naming them makes the report loop over the type itself.
+type Status_T is enum SUCCESS, REDIRECT, CLIENT_ERROR, SERVER_ERROR, ODD
+
+
+type Request_T is record:
+    """One served request, taken apart by a single regex."""
+    at:      str = ""
+    verb:    str = ""
+    path:    str = ""
+    status:  Natural = 0
+    ms:      Natural = 0
+
+
+class LogScan(AwkBase):
+    var state    : Scan_State_T          = OUTSIDE
+    var counts   : [Severity_T]Natural   = [DEBUG: 0, INFO: 0, WARN: 0, ERROR: 0]
+    var by_status: [Status_T]Natural     = [SUCCESS: 0, REDIRECT: 0, CLIENT_ERROR: 0,
+                                            SERVER_ERROR: 0, ODD: 0]
+    var slowest  : Request_T             = Request_T()
+    var traced   : Natural               = 0
+    var last_req : str                   = ""
+    var trace_of : str                   = ""
+
+    def _status_class(self, status: Natural) -> Status_T:
+        """A case over ranges, which awk has to spell as an if/else chain."""
+        case status:
+            when 200 .. 299: return SUCCESS
+            when 300 .. 399: return REDIRECT
+            when 400 .. 499: return CLIENT_ERROR
+            when 500 .. 599: return SERVER_ERROR
+            when others:     return ODD
+
+    def _event(self, sev: Severity_T, req: Request_T) -> None:
+        self.counts[sev] += 1
+        self.by_status[self._status_class(req.status)] += 1
+        if req.ms > self.slowest.ms:
+            self.slowest = req
+
+    def process_record(self):
+        # A trace runs until the next timestamped line. Ask the state first:
+        # in awk this is a flag and a guard on every pattern.
+        case self.state:
+            when IN_TRACE:
+                if self.line != /^\d{4}-\d{2}-\d{2} /:
+                    self.traced += 1
+                    return
+                self.state = OUTSIDE
+            when others:
+                pass
+
+        # One regex takes the whole record apart; $+1 .. $+7 are the groups.
+        if self.line == /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}) (\w+) +(\w+) (\S+) (\d{3}) (\d+)ms$/:
+            let req: Request_T = Request_T(at=$+1 + " " + $+2, verb=$+4, path=$+5,
+                                           status=int($+6), ms=int($+7))
+            let sev: Severity_T = Severity_T($+3.upper())
+            self._event(sev, req)
+            self.last_req = req.verb + " " + req.path
+        elif self.line == /^Traceback |^[A-Z]\w+Error: /:
+            # The trace belongs to the request logged just before it.
+            self.state    = IN_TRACE
+            self.trace_of = self.last_req
+            self.traced  += 1
+
+    def finish(self):
+        print "--- awk_logscan ---"
+        print f"records : {self.NR}"
+        print f"traces  : {self.traced} line(s), the last one under {self.trace_of}"
+        print ""
+        for s in Severity_T'Range:
+            print f"  {s'Image:<5} {self.counts[s]}"
+        print ""
+        for k in Status_T'Range:
+            print f"  {k'Image:<13} {self.by_status[k]}"
+        print ""
+        print f"slowest : {self.slowest.ms} ms  {self.slowest.verb} {self.slowest.path} at {self.slowest.at}"
+
+
+def main():
+    var p: LogScan = LogScan()
+    p.run()
+
+
+main()

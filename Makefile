@@ -123,7 +123,8 @@ COMPILE_ONLY := \
     lv.ady \
     lolcate/lolcate.ady \
     dp/jacks.ady \
-    INTERACTIVE/lispy.ady
+    INTERACTIVE/lispy.ady \
+    awk_logscan.ady
 
 ALL_COMPILE := \
     $(LIBS) \
@@ -216,6 +217,12 @@ test: compile
 	@printf '  %-42s' "CFMU/Tstatus_monitor.ady"; \
 	    $(EXDIR)/CFMU/Tstatus_monitor < $(EXDIR)/CFMU/tstatus_sample.txt >/dev/null 2>&1 \
 	        && echo OK || { echo FAIL; exit 1; }
+	@# awk_logscan is the worked example in DOCS/ADASCRIPT_FOR_AWK.md, so the
+	@# check is on its output, not its exit status: the report is what the
+	@# document quotes.
+	@printf '  %-42s' "awk_logscan.ady"; \
+	    $(EXDIR)/awk_logscan < $(EXDIR)/awk_logscan_sample.txt 2>&1 \
+	        | grep -q "slowest : 2317 ms" && echo OK || { echo FAIL; exit 1; }
 	@# Vcheck takes a log file rather than stdin; a path that exists is used
 	@# as-is, which is what makes it runnable here.
 	@printf '  %-42s' "CFMU/Vcheck_coded_flight.ady"; \
