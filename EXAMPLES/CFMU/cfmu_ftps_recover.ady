@@ -13,7 +13,7 @@
 #   8  failed to upload the file
 #   16 symlink for the uploaded file was not created in the allocated time
 
-import os
+nimport os
 
 let RC_OK            : int = 0
 let RC_ARG_ERROR     : int = 5
@@ -46,12 +46,13 @@ if app_key == "":
   print "ERROR: APPLICATION_INSTANCE_KEY is not set"
   sys.exit(RC_ARG_ERROR)
 
-if not os.path.isfile(local_file):
+if not -f local_file:
   print f"ERROR: Local file {local_file} does not exist or is not readable"
   sys.exit(RC_ARG_ERROR)
 
-let local_size : int = os.path.getsize(local_file)
-let base_name  : str = os.path.basename(local_file)
+let local_path : Path = Path(local_file)
+let local_size : int  = os.path.getsize(local_file)
+let base_name  : str  = local_path.name
 
 # Determine if secure (dated directory) or flat directory layout
 let (secure_out, _) = shell: oracle_server_location.hdr.query SECURE_DOMAIN -where PACKAGE_NAME {ftp_server} -list
@@ -108,10 +109,10 @@ else:
       if $CFMU_REGRESS_TEST_RECOVERY_DIR != "":
         let symlink_path : str = $CFMU_REGRESS_TEST_RECOVERY_DIR + "/" + base_name
         var waited : int = 0
-        while waited < 300 and not os.path.islink(symlink_path):
+        while waited < 300 and not -L symlink_path:
           shell: sleep 1
           waited += 1
-        if not os.path.islink(symlink_path):
+        if not -L symlink_path:
           print f"ERROR: Symlink for {base_name} was not created within 5 minutes"
           rc = RC_SYMLINK_ERROR
     else:

@@ -7,7 +7,7 @@
 #   ftps_get <dest_dir> <ftps_service> <decompress:true|false> [options]
 
 nimport ftps_common
-import os
+nimport os
 import re
 
 if $# < 3:
@@ -20,11 +20,11 @@ let decompress   : bool = $3 == "true" or $3 == "1"
 let app_key      : str  = $APPLICATION_INSTANCE_KEY
 
 let (_, dest_w_rc) = shell: test -w {dest_dir}
-if not os.path.isdir(dest_dir) or dest_w_rc != 0:
+if not -d dest_dir or dest_w_rc != 0:
   print f"ERROR: {dest_dir} does not exist or is not writable"
   sys.exit(RC_ARG_ERROR)
 
-let full_path : str = os.path.realpath(dest_dir)
+let full_path : Path = Path(dest_dir).resolve()
 
 var file_name_mask  : str  = ""
 var from_dmz        : str  = ""
@@ -157,7 +157,7 @@ for pattern in patterns:
     let (ls_out, _) = lftp_run(server, f"cd {src_dir}\nnlist {pattern}")
     raw_files = [l.strip() for l in ls_out.splitlines() if l.strip() != "" and "*" not in l]
   for f in raw_files:
-    let fname : str = os.path.basename(f)
+    let fname : str = Path(f).name
     if not seen_files.get(fname):
       seen_files[fname] = True
       unchecked.append(fname)
@@ -196,7 +196,7 @@ for remote_file in sorted(remote_files):
     local_name = re.sub(r"^\d\.", "", local_name)
 
   let local_file      : str = dest_dir + "/" + local_name
-  let full_local_file : str = full_path + "/" + local_name
+  let full_local_file : str = str(full_path / local_name)
 
   if mount_point == "":
     if use_dest_cache:
@@ -205,8 +205,8 @@ for remote_file in sorted(remote_files):
       let just_mid  : str = re.sub(r"\.gz$", "", no_prefix)
       var found_cached : str = ""
       for candidate in [remote_file, no_gz, no_prefix, just_mid]:
-        let cpath : str = full_path + "/" + candidate
-        if os.path.isfile(cpath):
+        let cpath : str = str(full_path / candidate)
+        if -f cpath:
           found_cached = cpath
           break
       if found_cached != "":
@@ -235,7 +235,7 @@ for remote_file in sorted(remote_files):
   received_ok += 1
 
   var is_gzipped : bool = False
-  if os.path.getsize(full_local_file) > 0:
+  if -s full_local_file:
     let (magic_hex, _) = shell: xxd -p -l 2 {full_local_file}
     is_gzipped = magic_hex.strip() == "1f8b"
 
@@ -248,7 +248,7 @@ for remote_file in sorted(remote_files):
 
   if full_local_file.endswith(".gz"):
     let target_unzipped : str = re.sub(r"\.gz$", "", full_local_file)
-    if os.path.isfile(target_unzipped):
+    if -f target_unzipped:
       shell: rm -f {target_unzipped}
     let (_, gz_rc) = shell: gunzip {full_local_file}
     if gz_rc != 0:
@@ -261,7 +261,7 @@ for remote_file in sorted(remote_files):
       else:
         print f"remote file = '{remote_file}', local file = '{local_unzipped}'"
   else:
-    let tmp_file : str = full_path + f"/.ftptmplocal_{os.getpid()}"
+    let tmp_file : str = str(full_path / f".ftptmplocal_{os.getpid()}")
     let (_, mv_rc) = shell: mv {full_local_file} {tmp_file}
     if mv_rc != 0:
       print f"ERROR: mv failed for '{full_local_file}'"

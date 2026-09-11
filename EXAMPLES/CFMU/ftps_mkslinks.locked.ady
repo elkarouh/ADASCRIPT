@@ -11,11 +11,11 @@
 #     [-retouch] [[-ops_link_check] [-del_bad_links]]
 #     [[-check_ftime] [-fix_ftime]] [-mail [<address>]]
 
-import os
+nimport os
 
 let app_key  : str = $APPLICATION_INSTANCE_KEY
 let ftpsroot : str = $FTPSROOT
-let script   : str = os.path.basename($0)
+let script   : str = Path($0).name
 
 if app_key == "":
   print "FATAL: APPLICATION_INSTANCE_KEY is not set"
@@ -26,7 +26,7 @@ if ftpsroot == "":
   sys.exit(1)
 
 var work_dir : str = $WORK_DIR
-if work_dir == "" or not os.path.isdir(work_dir):
+if work_dir == "" or not -d work_dir:
   work_dir = ${HOME:-"."}
 shell: mkdir -p {work_dir}
 
@@ -171,11 +171,12 @@ while i < len(argv):
 # ---- helpers ----
 
 def atomic_symlink(target: str, name: str) -> bool:
-  let name_dir  : str = os.path.dirname(name)
-  let name_base : str = os.path.basename(name)
+  let name_p    : Path = Path(name)
+  let name_dir  : str  = str(name_p.parent)
+  let name_base : str  = name_p.name
   let tmp_sym  : str = name_dir + "/." + name_base + "." + str(os.getpid()) + ".tmp"
   os.symlink(target, tmp_sym)
-  if not os.path.islink(tmp_sym):
+  if not -L tmp_sym:
     return False
   let (_, rc) = shell: mv {tmp_sym} {name}
   return rc == 0
@@ -205,7 +206,7 @@ def file_checks(the_file: str, the_full_path: str) -> int:
 def make_dirs(base_dir: str, new_dated_path: str, the_ft: str, month: str) -> bool:
   for d in [base_dir + "upload_area", base_dir + month + "/upload_area",
              base_dir + the_ft, new_dated_path]:
-    if not os.path.isdir(d):
+    if not -d d:
       let (_, rc) = shell: mkdir -p {d}
       if rc != 0:
         bad_dirs.append(d)
@@ -213,20 +214,20 @@ def make_dirs(base_dir: str, new_dated_path: str, the_ft: str, month: str) -> bo
   return True
 
 def make_link(new_file: str, path_to_orig: str) -> bool:
-  let the_path : str = os.path.dirname(new_file)
-  if not os.path.isdir(the_path):
+  let the_path : str = str(Path(new_file).parent)
+  if not -d the_path:
     let (_, rc) = shell: mkdir -p {the_path}
     if rc != 0:
       bad_dirs.append(the_path)
       return False
-  if not os.path.islink(new_file):
+  if not -L new_file:
     if not silent:
       print f"INFO Making symlink {new_file} -> {path_to_orig}"
     let ok : bool = atomic_symlink(path_to_orig, new_file)
     if not ok:
       print f"SEVERE Failed to make symlink {new_file} -> {path_to_orig}"
       return False
-    if os.path.islink(new_file) and not do_restart:
+    if -L new_file and not do_restart:
       let (abs_out, _) = shell: readlink -f {new_file}
       let abs_path : str = abs_out.strip()
       shell: touch -h -r {abs_path} {new_file}
@@ -252,7 +253,7 @@ def make_symname_link(base_dir: str, the_sym: str, the_ft: str) -> bool:
   if the_sym == "":
     return True
   let link_file : str = base_dir + the_sym
-  if not os.path.islink(link_file):
+  if not -L link_file:
     if not silent:
       print f"INFO Making symlink {link_file} -> {the_ft}"
     let ok : bool = atomic_symlink(the_ft, link_file)
@@ -332,13 +333,13 @@ def check_ops_links(sys_dir: str, current_ops: [](int, str)):
       continue
     let full_link_name : str = next_dir + "/" + next_link
     let next_file_path : str = next_dir + "/" + next_target
-    if not os.path.isfile(next_file_path):
+    if not -f next_file_path:
       print f"WARNING The following file just disappeared: {next_file_path}"
       continue
     let (mtime_out, _) = shell: stat -c "%Y" {next_file_path}
     let mtime_s : str = mtime_out.strip()
     let next_time : int = int(mtime_s)
-    let base_file : str = os.path.basename(next_file_path)
+    let base_file : str = Path(next_file_path).name
     let correct_link : bool = check_ops_link_timing(next_time, base_file, current_ops)
     if not correct_link:
       let (bad_epoch_out, _) = shell: stat -c "%Y" {full_link_name}
@@ -362,7 +363,7 @@ def check_file_times(sys_dir: str):
       continue
     let next_time  : str = parts[0]
     let next_file_path : str = parts[1]
-    let filebase   : str = os.path.basename(next_file_path)
+    let filebase   : str = Path(next_file_path).name
     if len(filebase) < 10:
       continue
     let date_str : str = filebase[2:10]
@@ -393,7 +394,7 @@ def link_scan():
     print "========================================================================="
     print f"INFO Processing {sys_dir} on {app_key}"
 
-    if not os.path.isdir(sys_dir):
+    if not -d sys_dir:
       bad_dirs.append(sys_dir)
       print f"SEVERE Directory {sys_dir} does not exist on {app_key}"
       continue
@@ -405,7 +406,7 @@ def link_scan():
       while d <= month_days[mon]:
         let day_str : str = f"{d:02d}"
         let day_dir : str = mon_dir + "/" + day_str + "d"
-        if not os.path.isdir(day_dir):
+        if not -d day_dir:
           let (_, rc) = shell: mkdir -p {day_dir}
           if rc != 0:
             bad_dirs.append(day_dir)
@@ -429,14 +430,14 @@ def link_scan():
         let day2    : str = next_file2[6:8] + "d"
         let dated_file2 : str = sys_dir + "/" + month2 + "/" + day2 + "/" + next_file2
         let dated_link2 : str = month2 + "/" + day2 + "/" + next_file2
-        if os.path.islink(full_path2):
+        if -L full_path2:
           let (cur_t2_out, _) = shell: readlink {full_path2}
           if cur_t2_out.strip() != dated_link2:
             shell: rm {full_path2}
             shell: ln -sf {dated_link2} {full_path2}
           continue
         if reloc_pattern == "ALL" or next_file2.find(reloc_pattern) >= 0:
-          if os.path.islink(dated_file2):
+          if -L dated_file2:
             shell: rm {dated_file2}
           let new_path2 : str = sys_dir + "/" + month2 + "/" + day2
           shell: cp -p {full_path2} {new_path2}
@@ -457,7 +458,7 @@ def link_scan():
       let op_file : str = ep[1]
       let op_path : str = ep[2]
       let op_full  : str = op_path + "/" + op_file
-      if not os.path.isfile(op_full) or os.path.getsize(op_full) == 0:
+      if not -s op_full:
         print f"SEVERE File {op_full} is empty or missing, ignoring"
         continue
       let (key_raw_out, _) = shell: head -c 7 {op_full}
@@ -527,10 +528,10 @@ def link_scan():
           continue
 
         # Ensure top-level <-> month/day linkage
-        if os.path.isfile(top_file) and not os.path.islink(top_file):
+        if -f top_file and not -L top_file:
           if not make_link(file_path, back_to_top):
             continue
-        elif os.path.isfile(file_path) and not os.path.islink(file_path):
+        elif -f file_path and not -L file_path:
           if not make_link(top_file, rel_dated):
             continue
 
@@ -542,7 +543,7 @@ def link_scan():
         if not make_link(ft_file, one_redirect):
           continue
 
-        if not os.path.isdir(app_key_path):
+        if not -d app_key_path:
           let (_, rc) = shell: mkdir -p {app_key_path}
           if rc != 0:
             bad_dirs.append(app_key_path)
@@ -551,7 +552,7 @@ def link_scan():
         if not make_link(app_key_file, one_redirect):
           continue
 
-        if not os.path.isdir(key_ft_dir):
+        if not -d key_ft_dir:
           let (_, rc) = shell: mkdir -p {key_ft_dir}
           if rc != 0:
             bad_dirs.append(key_ft_dir)
@@ -561,7 +562,7 @@ def link_scan():
           continue
 
         if len(current_ops) > 0:
-          if not os.path.isdir(ops_dir_ft_path):
+          if not -d ops_dir_ft_path:
             let (_, rc) = shell: mkdir -p {ops_dir_ft_path}
             if rc != 0:
               bad_dirs.append(ops_dir_ft_path)
@@ -612,10 +613,10 @@ def controlled_wait(the_flag: str, the_host: str):
       print f"INFO Removing archaic flag file: {next_file}"
       shell: rm {next_file}
   var count : int = 0
-  while count < 360 and not os.path.isfile(the_flag):
+  while count < 360 and not -f the_flag:
     shell: sleep 5
     count += 1
-  if not os.path.isfile(the_flag):
+  if not -f the_flag:
     print f"SEVERE Watch points not created after 30 minutes on {the_host}"
   else:
     let duration : int = count * 5

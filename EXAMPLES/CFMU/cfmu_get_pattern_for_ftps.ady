@@ -6,7 +6,6 @@
 # Usage:
 #   cfmu_get_pattern_for_ftps --app_key=<APPLICATION_INSTANCE_KEY>
 
-import os
 
 var app_key   : str  = ""
 var show_help : bool = False

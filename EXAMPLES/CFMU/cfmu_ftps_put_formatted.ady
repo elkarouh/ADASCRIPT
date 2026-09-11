@@ -7,20 +7,18 @@
 # Usage:
 #   cfmu_ftps_put_formatted <file> [<file> ...]
 
-import os
-
 if $# < 1:
   print "Usage: cfmu_ftps_put_formatted <file> [<file> ...]"
   sys.exit(1)
 
-let here : str = os.path.dirname(os.path.abspath($0))
+let here : Path = Path($0).resolve().parent
 
 for next_file in $@:
-  if not os.path.isfile(next_file):
+  if not -f next_file:
     print f"{next_file} does not exist"
     continue
 
-  let base : str = os.path.basename(next_file)
+  let base : str = Path(next_file).name
   let file : str = base[2:] if base.startswith("1.") else base
 
   if len(file) < 20:
@@ -44,9 +42,9 @@ for next_file in $@:
     print f"Skipping {next_file}"
     continue
 
-  let src_dir : str = os.path.dirname(os.path.abspath(next_file))
+  let src_dir : Path = Path(next_file).resolve().parent
 
-  let (_, put_rc) = shell: {here}/ftps_put {src_dir} {base} false FTPS {date_part} {seq_part} {period_part} {file_type_part} 1 {free_text_part}
+  let (_, put_rc) = shell: {here / "ftps_put"} {src_dir} {base} false FTPS {date_part} {seq_part} {period_part} {file_type_part} 1 {free_text_part}
   if put_rc != 0:
     print f"The ftps_put failed for {next_file}. Check the put log."
   else:

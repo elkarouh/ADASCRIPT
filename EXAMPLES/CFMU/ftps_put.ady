@@ -24,7 +24,7 @@
 #   --sym    symlink source file into recovery dir instead of copying
 
 nimport ftps_common
-import os
+nimport os
 import re
 
 let source_dir      : str  = $1
@@ -72,7 +72,7 @@ let dest_file : str = "1." + date_arg + sequence_nr + period_arg + appl_part + f
 # --- validate source file ---
 let src_path : str = source_dir + "/" + source_file
 let (_, src_r_rc) = shell: test -r {src_path}
-if not os.path.isfile(src_path) or src_r_rc != 0:
+if not -f src_path or src_r_rc != 0:
   print f"ERROR: Source file {src_path} does not exist or is not readable"
   sys.exit(RC_NO_SRCE_FILE_ERROR)
 
@@ -102,7 +102,7 @@ else:
 
 var bad_recovery_dir : bool = False
 let (_, recov_wx_rc) = shell: test -w {recovery_dir} && test -x {recovery_dir}
-if not os.path.isdir(recovery_dir) or recov_wx_rc != 0:
+if not -d recovery_dir or recov_wx_rc != 0:
   print f"WARNING: Recovery directory '{recovery_dir}' is not accessible"
   bad_recovery_dir = True
 
@@ -227,7 +227,7 @@ if rc != RC_OK:
   var existing_scripts : []str = [s.strip() for s in scripts_out.splitlines() if s.strip() != ""]
 
   var need_new_file : bool = True
-  if os.path.isfile(recover_file):
+  if -f recover_file:
     let awk_f1 : str = "$1"
     let (local_cksum_out, _) = shell: cksum {local_file} | awk "{{ print {awk_f1} }}"
     let (recov_cksum_out, _) = shell: cksum {recover_file} | awk "{{ print {awk_f1} }}"
@@ -245,11 +245,11 @@ if rc != RC_OK:
     # copy (or symlink) local file to recovery dir
     if sym_link:
       let (cwd_out, _) = shell: cd {source_dir} && pwd
-      let cwd : str = cwd_out.strip()
-      let local_name : str = os.path.basename(local_file)
-      if os.path.islink(recover_file) or os.path.exists(recover_file):
+      let cwd : Path = Path(cwd_out.strip())
+      let local_name : str = Path(local_file).name
+      if -L recover_file or -e recover_file:
         os.unlink(recover_file)
-      os.symlink(cwd + "/" + local_name, recover_file)
+      os.symlink(str(cwd / local_name), recover_file)
     elif need_new_file:
       shell: cp -p {local_file} {recover_file}
 

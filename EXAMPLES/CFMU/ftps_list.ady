@@ -31,7 +31,6 @@
 #   --source_key=APPKEY
 
 nimport ftps_common
-import os
 import re
 
 if $# < 1:
@@ -201,7 +200,7 @@ while retries > 0 and not exit_loop:
         let (ls_out, _) = shell: echo {full_pattern} | xargs ls -1 2>/dev/null
         entries = [l for l in ls_out.splitlines() if l.strip() != ""]
       if entries and not long_listing and not show_path:
-        entries = [os.path.basename(e) for e in entries]
+        entries = [Path(e).name for e in entries]
     else:
       if long_listing:
         let (ls_out, _) = lftp_run(server, f"cd {src_dir}\nls {pattern}")
@@ -239,7 +238,8 @@ while retries > 0 and not exit_loop:
           let (ts_out, _) = shell: date --reference {entry} "+%Y%m%d%H%M%S"
           output_list.append(ts_out.strip() + " " + entry)
         else:
-          let fname : str = os.path.basename(entry)
+          let entry_path : Path = Path(entry)
+          let fname : str = entry_path.name
           let (mt_out, _) = lftp_run(server, f"cd {src_dir}\nmodtime {fname}")
           output_list.append(mt_out.strip() + " " + entry)
       else:

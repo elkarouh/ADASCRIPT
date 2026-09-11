@@ -13,7 +13,6 @@
 #   FTPS_INVALID_SCAN_END_MINUTES- minimum age of links to scan (default: 5)
 #   USE_FIND                     - set to "ls" to use ls-based scan instead of find
 
-import os
 
 let ftpsroot : str = ${FTPSROOT:-"/ftpdir"}
 let app_key  : str = $APPLICATION_INSTANCE_KEY
@@ -56,7 +55,7 @@ for next_stype in systems:
     # ls-based scan using pre-built scan log
     let (scan_log_out, _) = shell: get_scan_log_file_for_cfmu_system {next_stype}
     let scan_log : str = scan_log_out.strip()
-    if not os.path.isfile(scan_log):
+    if not -f scan_log:
       shell: scan_directory {scan_log} {ftpsroot}/{next_stype} yes
     let awk_f1 : str = "$1"
     let awk_f3 : str = "$3"
@@ -67,7 +66,7 @@ for next_stype in systems:
       let candidate : str = slink.strip()
       if candidate == "":
         continue
-      if os.path.islink(candidate):
+      if -L candidate:
         let (_, check_rc) = shell: readlink -e {candidate} 2>/dev/null
         if check_rc != 0:
           print candidate
@@ -82,7 +81,7 @@ print f"Re-test invalid symlinks"
 var did_something : bool = False
 
 for log_file in log_files:
-  if not os.path.isfile(log_file):
+  if not -f log_file:
     continue
   let (log_content_out, _) = shell: cat {log_file}
   for slink in log_content_out.splitlines():

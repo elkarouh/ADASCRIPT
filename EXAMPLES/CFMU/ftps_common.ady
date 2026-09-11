@@ -3,7 +3,7 @@
 # Shared constants, helpers and server-lookup for FTPS scripts.
 # Translated from FTPS::Common (Perl).
 
-import os
+nimport os
 
 # ---------------------------------------------------------------------------
 # Return codes
@@ -65,7 +65,7 @@ def construct_filename_pattern(date: str, sequence: str, period: str,
 #   Returns True if file's embedded date is within [start_date, end_date].
 # ---------------------------------------------------------------------------
 def filter_output(filename: str, start_date: str, end_date: str) -> bool:
-  let base      : str = os.path.basename(filename)
+  let base      : str = Path(filename).name
   let file_date : str = base[2:10]
   if file_date == /^\d+$/:
     return start_date <= file_date and file_date <= end_date
@@ -156,8 +156,8 @@ def get_server_info(app_key: str, ftps_service: str, direction: str,
   let password_db : str = conn.get("PASSWORD", "")
 
   # contingency override file
-  let override_file : str = os.path.join($HOME, "opdata", "common", f"ftp_server_{ftps_service}.txt")
-  if os.path.exists(override_file):
+  let override_file : Path = Path($HOME) / "opdata" / "common" / f"ftp_server_{ftps_service}.txt"
+  if -e override_file:
     with open(override_file) as f:
       let ov : str = f.readline().strip()
       if ov:
@@ -238,7 +238,7 @@ def get_server_info(app_key: str, ftps_service: str, direction: str,
           else:
             mnt = ""
         let (_, mnt_x_rc) = shell: test -x {mnt}
-        if mnt != "" and os.path.isdir(mnt) and mnt_x_rc == 0:
+        if mnt != "" and -d mnt and mnt_x_rc == 0:
           let (_, cd_rc) = shell: cd {mnt}
           if cd_rc == 0:
             if secure != "FALSE":
