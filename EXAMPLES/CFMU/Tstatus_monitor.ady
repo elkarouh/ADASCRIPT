@@ -11,29 +11,34 @@ nimport time
 nimport awk
 
 
-type Build_T is record:
+# A row is filled in over several records, and it is in the table from the
+# moment it is opened, so it has to be a reference rather than a value.
+@virtual
+class Build_T:
     """One build's worth of the table: a row, gathered over several records."""
-    user:       str = ""
-    host:       str = ""
-    build:      str = ""
-    version:    str = ""
-    day:        str = ""
-    hour:       str = ""
-    details:    str = ""
-    test_mode:  str = ""
-    vnc:        str = ""
-    team:       str = ""
-    load_sched: str = ""      # host load15 / scheduling
-    nr_failed:  str = ""
-    nr_success: str = ""
+    var user:       str = ""
+    var host:       str = ""
+    var build:      str = ""
+    var version:    str = ""
+    var day:        str = ""
+    var hour:       str = ""
+    var details:    str = ""
+    var test_mode:  str = ""
+    var vnc:        str = ""
+    var team:       str = ""
+    var load_sched: str = ""      # host load15 / scheduling
+    var nr_failed:  str = ""
+    var nr_success: str = ""
 
 
 class ShowBuilds(AwkBase):
-    # builds[0] is a scratch row: a "Showing" record can arrive before the
-    # "User:" line that starts the first real build, exactly as in the awk
-    # original, and it has to land somewhere.  Rows 1 .. cur are the table.
-    var builds: []Build_T = []
-    var cur   : int       = 0
+    # The table, one row per build, in the order the builds were seen, and
+    # the row every record fills in.  current_build is already in builds, so
+    # opening the next one is all it takes to finish the current one -- except
+    # for the very first, which is a scratch row: a record arriving before any
+    # build belongs to none, and writing it there is how it gets dropped.
+    var builds       : []Build_T = []
+    var current_build: Build_T   = Build_T()
 
     # transient state
     var valgrind     : bool  = False
@@ -42,13 +47,14 @@ class ShowBuilds(AwkBase):
     var current_time : float = 0.0
 
     def start(self):
-        self.builds       = [Build_T()]
-        self.current_time = time.time()
+        self.builds        = []
+        self.current_build = Build_T()
+        self.current_time  = time.time()
 
     def _open_build(self) -> None:
-        """Start a new row and make it the current one."""
-        self.builds.append(Build_T())
-        self.cur += 1
+        """Start a new row, add it to the table, and make it the current one."""
+        self.current_build = Build_T()
+        self.builds.append(self.current_build)
 
     def _stuck_note(self, file_mod: float, hours: int, label: str) -> str:
         """The `<-- STUCK` suffix, when the log file has not moved for hours."""
@@ -59,63 +65,65 @@ class ShowBuilds(AwkBase):
 
     def _showing(self, F: []str) -> None:
         """`Showing ...` — the log file and its timestamp for the current row."""
-        let log_file: str   = F[11]
-        let file_mod: float = float(F[12])
-        self.builds[self.cur].day  = F[9]
-        self.builds[self.cur].hour = F[10]
+        let b:        Build_T = self.current_build
+        let log_file: str     = F[11]
+        let file_mod: float   = float(F[12])
+        b.day  = F[9]
+        b.hour = F[10]
 
         if self.valgrind:
             self.valgrind = False
-            self.builds[self.cur].details = (self.valgrind_tool
-                                             + self._stuck_note(file_mod, 4, " <-- STUCK? "))
+            b.details = (self.valgrind_tool
+                         + self._stuck_note(file_mod, 4, " <-- STUCK? "))
         else:
             case log_file:
                 when /\/cm\/local_build\/TACTDEV_HOME\/replay_dir\/work/:
-                    self.builds[self.cur].details = "performance"
+                    b.details = "performance"
                 when /saved_logs\/replay_dir-([^.]*)/:
-                    self.builds[self.cur].details = $+1
+                    b.details = $+1
                 when /work\/logging-([^\/]*)\/LOGS_([^\/]{1,16})/:
-                    self.builds[self.cur].details = $+1 + "/" + $+2
+                    b.details = $+1 + "/" + $+2
                 when others:
                     pass
-            self.builds[self.cur].details = (self.builds[self.cur].details
-                                             + self._stuck_note(file_mod, 2, "  <-- STUCK "))
+            b.details = (b.details
+                         + self._stuck_note(file_mod, 2, "  <-- STUCK "))
 
         if log_file == /\/cm\/nasdata|\/auto\/home/:
-            self.builds[self.cur].test_mode = "TACTDEV"
+            b.test_mode = "TACTDEV"
 
     def _config(self, F: []str) -> None:
         """`TACT.TACT_CONFIG ...` / `IFPS.FPL_CONFIG ...` — the build itself."""
         if not self.newhost:
             # No "Host:" line since the last build: the config line belongs to
             # another build on the same host, so carry who and where forward.
-            let user: str = self.builds[self.cur].user
-            let host: str = self.builds[self.cur].host
+            let user: str = self.current_build.user
+            let host: str = self.current_build.host
             self._open_build()
-            self.builds[self.cur].user      = user
-            self.builds[self.cur].host      = host
-            self.builds[self.cur].test_mode = "REGRESS"
+            self.current_build.user      = user
+            self.current_build.host      = host
+            self.current_build.test_mode = "REGRESS"
 
-        self.builds[self.cur].build      = F[1]
-        self.builds[self.cur].version    = (F[2] if self.NF >= 2 else "")
-        self.builds[self.cur].load_sched = (F[3] if self.NF >= 3 else "")
+        let b: Build_T = self.current_build
+        b.build      = F[1]
+        b.version    = (F[2] if self.NF >= 2 else "")
+        b.load_sched = (F[3] if self.NF >= 3 else "")
 
         if self.NF < 4 or F[4] == "":
-            self.builds[self.cur].vnc  = ""
-            self.builds[self.cur].team = "?"
+            b.vnc  = ""
+            b.team = "?"
         else:
             let display: str = F[4]
-            self.builds[self.cur].vnc = f"(vncviewer \"{display}\")"
-            if self.builds[self.cur].user == "cmadm":
+            b.vnc = f"(vncviewer \"{display}\")"
+            if b.user == "cmadm":
                 # A display on the build's own host is NeOS; anywhere else is
                 # the shared test account.
-                let own_host: str = self.builds[self.cur].host
+                let own_host: str = b.host
                 if display == own_host or display.startswith(own_host + ":"):
-                    self.builds[self.cur].team = "NeOS"
+                    b.team = "NeOS"
                 else:
-                    self.builds[self.cur].team = "CFMUTEST"
+                    b.team = "CFMUTEST"
             else:
-                self.builds[self.cur].team = self.builds[self.cur].user
+                b.team = b.user
         self.newhost = False
 
     def process_record(self):
@@ -142,52 +150,57 @@ class ShowBuilds(AwkBase):
                     self._showing(F)
                 when "User:" if self.NF >= 2:
                     self._open_build()
-                    self.builds[self.cur].user = F[2]
+                    self.current_build.user = F[2]
                 when "Host:" if self.NF >= 2:
-                    self.builds[self.cur].host      = F[2]
-                    self.builds[self.cur].test_mode = "REGRESS"
-                    self.newhost                    = True
+                    self.current_build.host      = F[2]
+                    self.current_build.test_mode = "REGRESS"
+                    self.newhost = True
                 when /TACT\.TACT_CONFIG|IFPS\.FPL_CONFIG/:
                     self._config(F)
                 when others:
                     pass
 
         if self.NF >= 4 and F[4] == "replay_day:":
-            self.builds[self.cur].test_mode = "REPLAY"
+            self.current_build.test_mode = "REPLAY"
 
         if line == /General result:/ and self.NF >= 6:
-            self.builds[self.cur].nr_failed  = F[3]
-            self.builds[self.cur].nr_success = F[6]
+            self.current_build.nr_failed  = F[3]
+            self.current_build.nr_success = F[6]
 
     def finish(self):
-        var max_build  : int = 0
-        var max_mode   : int = 0
-        var max_details: int = 0
-        var max_load   : int = 0
+        var max_build  : Natural = 0
+        var max_mode   : Natural = 0
+        var max_details: Natural = 0
+        var max_load   : Natural = 0
 
-        for i in 1 .. self.cur:
-            let b: Build_T = self.builds[i]
+        for b in self.builds:
             max_build   = max(max_build,   len(b.build))
             max_mode    = max(max_mode,    len(b.test_mode))
             max_details = max(max_details, len(b.details))
             max_load    = max(max_load,    len(b.load_sched))
 
-        def row(fail: str, succ: str, team: str, host: str,
-                build: str, ver: str, upd: str, mode: str,
-                details: str, load: str, vnc: str):
-            print (fail.ljust(4) + " " + succ.ljust(4) + " " + team.ljust(8) + " " +
-                   host.ljust(8) + " " + build.ljust(max_build) + " " + ver.ljust(12) + " " +
-                   upd.ljust(10) + " " + mode.ljust(max_mode) + " " +
-                   details.ljust(max_details) + " " + load.ljust(max_load) + " " + vnc)
+        # Column widths, in order; the last column is free, hence 0.
+        let widths: []Natural = [4, 4, 8, 8, max_build, 12, 10,
+                                 max_mode, max_details, max_load, 0]
 
-        row("FAIL", "SUCC", "TEAM", "HOST", "BASELINE",  "CM_ENV_ID",  "LAST_UPD", "TEST", "DETAILS", "LOAD-SCHED", "EMACS VNC COMMAND")
-        row("----", "----", "----", "----", "--------",  "---------",  "--------", "----", "-------",  "----------", "-----------------")
+        var rows: [][]str = [
+            ["FAIL", "SUCC", "TEAM", "HOST", "BASELINE", "CM_ENV_ID", "LAST_UPD",
+             "TEST", "DETAILS", "LOAD-SCHED", "EMACS VNC COMMAND"],
+            ["----", "----", "----", "----", "--------", "---------", "--------",
+             "----", "-------", "----------", "-----------------"],
+        ]
+        for b in self.builds:
+            rows.append([b.nr_failed, b.nr_success, b.team, b.host,
+                         b.build, b.version, b.day + "-" + b.hour,
+                         b.test_mode, b.details, b.load_sched, b.vnc])
 
-        for i in 1 .. self.cur:
-            let b: Build_T = self.builds[i]
-            row(b.nr_failed, b.nr_success, b.team, b.host,
-                b.build, b.version, b.day + "-" + b.hour,
-                b.test_mode, b.details, b.load_sched, b.vnc)
+        for cells in rows:
+            var out: str = ""
+            for i in cells'Range:
+                if i > 0:
+                    out = out + " "
+                out = out + cells[i].ljust(widths[i])
+            print out
 
 
 def main():
