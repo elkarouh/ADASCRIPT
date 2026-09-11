@@ -1287,6 +1287,23 @@ Python equivalent:
 nimport strutils, sequtils, algorithm, stdlib
 ```
 
+### Bundled libraries
+
+The `.ady` files in `TO_NIM/STDLIB/` are installed into the build cache, so
+`nimport` reaches them from any directory without a local copy:
+
+| `nimport` name    | Provides                                                  |
+|-------------------|-----------------------------------------------------------|
+| `nimport awk`     | `AwkBase` — generic stdin record-processor base class      |
+| `nimport iters`   | itertools equivalents (`take`, `chunks`, `pairwise`, …), generic over the element type |
+| `nimport strscan` | character classification and the small scanners a hand-written lexer needs (`is_digit_ch`, `skip_quoted`, `lead_ident`, `strip_line_comment`, …) |
+| `nimport graphs`  | `dijkstra` and `shortest_path` over a weighted digraph, generic in the node type |
+| `nimport db`      | thin SQLite wrapper                                        |
+| `nimport jointjs` | `JsElem` base class and helpers for JointJS applications   |
+
+`stdlib.nim` in the same directory is a Nim shim for a few Python builtins
+(`PriorityQueue`, `FifoQueue`, `ANY`) that generated code relies on.
+
 ---
 
 ## Raw Nim Injection
@@ -2407,21 +2424,7 @@ record built in one file and used in another degrades to a bare tuple.
 output as invalid Nim. Code that has to run on both backends stays in one
 file; see [Modules and Project Layout](#modules-and-project-layout).
 
-**Nim stdlib coverage** — generated Nim code relies on a local `stdlib.nim`
-shim for some Python builtins (`PriorityQueue`, `FifoQueue`, `ANY`). See
-`TO_NIM/STDLIB/stdlib.nim`.
-
-**Bundled Adascript libraries** — the `.ady` files in `TO_NIM/STDLIB/` are
-automatically installed into the build cache so they can be used via
-`nimport` from any directory without a local copy. `nimport` is Nim-only, so
-these are available on that backend alone:
-
-| `nimport` name    | Provides                                                  |
-|-------------------|-----------------------------------------------------------|
-| `nimport awk`     | `AwkBase` — generic stdin record-processor base class      |
-| `nimport iters`   | itertools equivalents (`take`, `chunks`, `pairwise`, …), generic over the element type |
-| `nimport strscan` | character classification and the small scanners a hand-written lexer needs (`is_digit_ch`, `skip_quoted`, `lead_ident`, `strip_line_comment`, …) |
-| `nimport graphs`  | `dijkstra` and `shortest_path` over a weighted digraph, generic in the node type |
-| `nimport db`      | thin SQLite wrapper                                        |
-| `nimport jointjs` | `JsElem` base class and helpers for JointJS applications   |
+**Nim stdlib coverage** — a few Python builtins reach Nim through the
+`stdlib.nim` shim rather than natively; see [Bundled
+libraries](#bundled-libraries).
 
