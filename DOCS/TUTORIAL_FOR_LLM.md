@@ -898,8 +898,8 @@ positional. Iterate the key type when filling an `[O]T`.
 
 ## Guards, and the catch-all they require
 
-Python's `match/case` is NOT part of Adascript; `case`/`when` is the only
-spelling. A branch may carry an `if` guard, but a guard anywhere in the block
+`case`/`when` is the only pattern-matching construct; Python's `match`/`case`
+is not accepted. A branch may carry an `if` guard, but a guard anywhere in the block
 stops Nim checking the branches for completeness, so such a block must carry
 an unguarded `when others:`. The same applies to a block whose subject is a
 `str`. `when others` may not itself be guarded.

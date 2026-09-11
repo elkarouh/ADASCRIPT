@@ -791,8 +791,7 @@ while n > 0: n -= 1
 ### case / when
 
 Pattern matching is written `case x:` with `when pat:` branches, and
-`when others:` for everything not named. It is the only spelling: Python's
-`match`/`case` was accepted alongside it and no longer is.
+`when others:` for everything not named. It is the only spelling.
 
 The Python output is a `match/case` statement. The Nim output differs only
 when patterns require desugaring (structural, guards, tuple subjects). For a
@@ -1032,7 +1031,7 @@ is always to destructure the compound value with `let` first.
 **Guards:**
 
 A branch may carry an `if` guard on an arbitrary expression. A guard anywhere
-in the block means Nim can no longer check the branches for completeness, so
+in the block means Nim cannot check the branches for completeness, so
 the block must then carry an unguarded `when others:`.
 
 ```python

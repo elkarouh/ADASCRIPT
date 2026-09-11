@@ -635,12 +635,6 @@ are supported: literals, captures, wildcards, OR-patterns, ranges,
 sequences, class patterns, `as` bindings and guards. (Mapping patterns are
 not — see [Known Limitations](#known-limitations).)
 
-This is the only pattern-matching construct. Python's `match` / `case` was
-accepted alongside it and no longer is: the two were one construct with two
-spellings, and keeping both meant `case` headed the block in one and a branch
-in the other. Convert a `match` block by writing `case` for `match`, `when`
-for `case`, and `when others` for `case _`.
-
 A block Nim cannot check for completeness has to carry `when others:` — that
 means a block with a guarded branch, or with a string subject. `when others`
 may not itself be guarded. See
@@ -1736,9 +1730,8 @@ let repo: Path = cdir / name / "HEAD"
 a `str` goes — file tests, `readFile`, shell interpolation, a `str`
 parameter, a dict key, `.upper()`. The other direction is not automatic and
 both backends refuse it: `Path(s)` makes one from a `str`, `str(p)` goes
-back. A bare `p = s` is an error, because `Path` is a `distinct string` on
-Nim and always was — this backend used to let it through and the same source
-then failed to build.
+back. A bare `p = s` is an error on both backends: `Path` is a
+`distinct string` on Nim.
 
 A declared-but-unset `Path` is empty, not None, so `var p: Path` compares
 equal to `""` on both backends.
@@ -2406,12 +2399,9 @@ asks for `when others:` in exactly those two cases, but `ady2py` enforces
 none of it, so a block that backend accepts can still be refused by
 `ady2nim`. Chapter 5 has the table.
 
-**Python backend maturity** — the Nim backend is still the better-tested of
-the two, since `make test` builds and runs every example through it. Every
-example now also transpiles to Python that parses, and the constructs that
-used to break it — implicit return into `if`/`else` branches, `Natural` and
-`Positive` used without being defined, declarations without an initialiser,
-records whose fields have no default — are fixed. The round-trip suite in
+**Python backend maturity** — the Nim backend is the better-tested of the
+two, since `make test` builds and runs every example through it. Every
+example also transpiles to Python that parses, but the round-trip suite in
 `TO_PYTHON/test_ady2py.py` still records failures, so treat the Python output
 as the less exercised of the two and check it on anything unusual. Sweeping
 every example through `ady2py` and parsing the result is a cheap way to catch

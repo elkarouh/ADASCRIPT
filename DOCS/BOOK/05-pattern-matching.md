@@ -14,13 +14,6 @@ case tok:
 `when` is the same word a variant record uses for its arms (§4.4), so one
 keyword means "arm of a discriminated choice" everywhere in the language.
 
-Adascript used to offer Python's `match`/`case` alongside this. It no longer
-does. The two were one construct with two spellings — the same patterns, the
-same guards, the same generated code — and keeping both meant `case` headed
-the block in one and a branch in the other, so a reader had to look at the
-enclosing line to know which. Convert a `match` block by writing `case` for
-`match`, `when` for `case`, and `when others` for `case _`.
-
 ## What is checked, and what is not
 
 The reason to write this rather than an `if`/`elif` chain is that the Nim
