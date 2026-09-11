@@ -26,7 +26,9 @@ source, transpile it, and run it on either backend.
 
 Coming from AWK, `DOCS/ADASCRIPT_FOR_AWK.md` is a shorter way in: it keeps
 AWK's shape -- records, fields, patterns and actions -- and shows what
-replaces its one scalar type.
+replaces its one scalar type. `DOCS/ADASCRIPT_FOR_SHELL.md` does the same for
+shell: the command stays the syntax, and quoting, exit status, parallelism and
+the missing type system are what change.
 
 ## Table of contents
 

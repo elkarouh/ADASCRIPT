@@ -87,10 +87,10 @@ class LogScan(AwkBase):
         print f"records : {self.NR}"
         print f"traces  : {self.traced} line(s), the last one under {self.trace_of}"
         print ""
-        for s in Severity_T'Range:
+        for s in Severity_T:
             print f"  {s'Image:<5} {self.counts[s]}"
         print ""
-        for k in Status_T'Range:
+        for k in Status_T:
             print f"  {k'Image:<13} {self.by_status[k]}"
         print ""
         print f"slowest : {self.slowest.ms} ms  {self.slowest.verb} {self.slowest.path} at {self.slowest.at}"

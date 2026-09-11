@@ -1,0 +1,126 @@
+#!/usr/bin/env ady2nim
+"""
+sh_janitor — the log-rotation script every site has written in Bash, with the
+parts Bash gets wrong done by the type system instead.
+
+    ./sh_janitor [WORKDIR]
+
+With no argument it builds its own fixture under /tmp and cleans that, so the
+run is self-contained and its report is the same every time. Filenames in the
+fixture contain spaces on purpose: that is the bug the Bash version has.
+"""
+
+# What is to become of a file.  In Bash this is a string in a variable and a
+# typo in one of the four places that test it is a silent no-op.
+type Action_T is enum COMPRESS, DELETE, KEEP, SKIP
+
+
+type Entry_T is record:
+    """One file, decided once."""
+    path:   Path    = Path("")
+    size:   Natural = 0
+    action: Action_T = KEEP
+
+
+let KEEP_SUFFIXES : []str  = [".conf", ".pid"]
+let BIG_ENOUGH    : Natural = 64          # bytes; a real one would say 10 MB
+
+
+def decide(p: Path, size: Natural) -> Action_T:
+    """One decision per file, in one place, over a closed set of outcomes."""
+    let name: str = p.name
+    case name:
+        when /\.gz$/:            return SKIP        # already done
+        when /^\./:              return SKIP        # dotfile
+        when /\.(log|out|err)$/:
+            if size >= BIG_ENOUGH:
+                return COMPRESS
+            return KEEP
+        when /\.tmp$|~$/:        return DELETE
+        when others:
+            for suffix in KEEP_SUFFIXES:
+                if name.endswith(suffix):
+                    return KEEP
+            return KEEP
+
+
+def build_fixture() -> Path:
+    """A deterministic work directory, spaces in the names included."""
+    let d: Path = Path("/tmp/ady_janitor")
+    shell: rm -rf {!d}
+    d.mkdir()
+    writeFile(str(d / "app.log"),            "x" * 200)
+    writeFile(str(d / "quiet service.log"),  "x" * 300)   # a space, on purpose
+    writeFile(str(d / "tiny.log"),           "x" * 3)
+    writeFile(str(d / "build.out"),          "x" * 128)
+    writeFile(str(d / "scratch.tmp"),        "x" * 10)
+    writeFile(str(d / "editor backup~"),     "x" * 10)
+    writeFile(str(d / "app.conf"),           "x" * 20)
+    writeFile(str(d / ".hidden"),            "x" * 20)
+    writeFile(str(d / "old.log.gz"),         "x" * 20)
+    return d
+
+
+def scan(dir: Path) -> []Entry_T:
+    """`ls` is not parsed; the directory is listed and each name stays one name."""
+    var out: []Entry_T = []
+    for name in sorted(runLines(["ls", "-A", str(dir)])):
+        let p: Path = dir / name
+        if not -f p:
+            continue
+        let size: Natural = len(readFile(str(p)))
+        out.append(Entry_T(path=p, size=size, action=decide(p, size)))
+    return out
+
+
+def main() -> int:
+    if not have("gzip"):
+        print "sh_janitor: gzip is not installed"
+        return 1
+
+    let dir: Path = Path($1) if $# >= 1 else build_fixture()
+    if not -d dir:
+        print f"sh_janitor: {dir} is not a directory"
+        return 2
+
+    let entries: []Entry_T = scan(dir)
+
+    # The work itself.  Every compression is independent, so they run at the
+    # same time instead of one after another -- `&` and `wait` without the
+    # bookkeeping, and with an exit status per job rather than one for the lot.
+    var jobs   : []Job     = []
+    var zipped : []Entry_T = []
+    for e in entries:
+        case e.action:
+            when COMPRESS:
+                let j: Job = shellSpawn: gzip -f -- {!e.path}
+                jobs.append(j)
+                zipped.append(e)
+            when DELETE:
+                shell(check = true): rm -f -- {!e.path}
+            when others:
+                pass
+
+    # One waitAll, not a wait per job: a pipe holds 64K, so collecting them
+    # one at a time would quietly serialise what was just started in parallel.
+    let results: []RunResult = waitAll(jobs)
+    var failed: Natural = 0
+    for i in results'Range:
+        if results[i].code != 0:
+            failed += 1
+            print f"  FAILED {zipped[i].path.name}: {results[i].stderr.strip()}"
+
+    var counts: [Action_T]Natural = [COMPRESS: 0, DELETE: 0, KEEP: 0, SKIP: 0]
+    var bytes : [Action_T]Natural = [COMPRESS: 0, DELETE: 0, KEEP: 0, SKIP: 0]
+    for e in entries:
+        counts[e.action] += 1
+        bytes[e.action]  += e.size
+
+    print f"--- sh_janitor {dir} ---"
+    for a in Action_T:
+        print f"  {a'Image:<8} {counts[a]:>2} file(s), {bytes[a]:>4} bytes"
+    print f"  {failed} failure(s)"
+    return 1 if failed > 0 else 0
+
+
+quit(main())

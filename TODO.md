@@ -156,6 +156,16 @@ history of this file if the reasoning behind one of them is ever wanted.
       hi` emits a bare `out` and fails with "identifier expected, but got
       'keyword out'". The plain-declaration path calls `_nim_user_ident` and
       the unpacking path does not.
+- [ ] `for x in Enum_T'Range:` iterates in a different order on each backend,
+      and on Python in a different order on each *run*. `'Range` is the set of
+      members, which the Nim backend renders as a `set[Enum_T]` -- ordinal
+      order -- and the Python backend as `set(Enum_T)`, whose order is hash
+      order. A report built that way comes out shuffled and differently
+      shuffled every time. `for x in Enum_T:` and `for x in Enum_T'First ..
+      Enum_T'Last:` both give declaration order on both backends and are what
+      the examples use; the divergence is in the set form. Either Python emits
+      something ordered for `'Range` in a for-loop, or `'Range` is documented
+      as unordered and the examples keep away from it.
 - [ ] `.map()` / `.and_then()` rewriting on `?T` (Feature 2)
 
 ---

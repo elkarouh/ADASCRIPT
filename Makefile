@@ -124,7 +124,8 @@ COMPILE_ONLY := \
     lolcate/lolcate.ady \
     dp/jacks.ady \
     INTERACTIVE/lispy.ady \
-    awk_logscan.ady
+    awk_logscan.ady \
+    sh_janitor.ady
 
 ALL_COMPILE := \
     $(LIBS) \
@@ -223,6 +224,13 @@ test: compile
 	@printf '  %-42s' "awk_logscan.ady"; \
 	    $(EXDIR)/awk_logscan < $(EXDIR)/awk_logscan_sample.txt 2>&1 \
 	        | grep -q "slowest : 2317 ms" && echo OK || { echo FAIL; exit 1; }
+	@# sh_janitor is the worked example in DOCS/ADASCRIPT_FOR_SHELL.md. It
+	@# builds its own fixture under /tmp, so the report is the same every
+	@# run -- and the filename with a space in it is the point of the check.
+	@printf '  %-42s' "sh_janitor.ady"; \
+	    $(EXDIR)/sh_janitor >/dev/null 2>&1 \
+	        && test -f "/tmp/ady_janitor/quiet service.log.gz" \
+	        && echo OK || { echo FAIL; exit 1; }
 	@# Vcheck takes a log file rather than stdin; a path that exists is used
 	@# as-is, which is what makes it runnable here.
 	@printf '  %-42s' "CFMU/Vcheck_coded_flight.ady"; \

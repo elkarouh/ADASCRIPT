@@ -221,7 +221,7 @@ var counts: [Severity_T]Natural = [DEBUG: 0, INFO: 0, WARN: 0, ERROR: 0]
 counts[classify("warn: hot")] += 1
 assert counts[WARN] == 1
 
-for s in Severity_T'Range:            # every member, in declaration order
+for s in Severity_T:                  # every member, in declaration order
     print f"  {s'Image:<5} {counts[s]}"
 ```
 
@@ -311,13 +311,17 @@ assert rc == 0
 assert greeting.strip() == "hello world"
 ```
 
-A value goes in braces and is quoted for you — no more `"ls " path` and
-hoping there are no spaces:
+A value goes in braces. `{x}` puts it in as written, which is what a command
+fragment wants; `{!x}` quotes it, so a path holding spaces arrives as one
+argument instead of two:
 
 ```python
 let dir: str = "/tmp"
-let (count_out, _) = shell: ls -1d {dir}
+let (count_out, _) = shell: ls -1d {!dir}
 ```
+
+`run(["ls", dir])` skips the shell altogether, and then there is nothing to
+quote because nothing parses the arguments twice.
 
 A pipeline can report the first failure rather than the last, and a long
 output can be streamed instead of held:
@@ -405,11 +409,15 @@ And the report loops over the types themselves, so a new enum member appears
 in the output without anyone remembering to add it:
 
 ```python
-for s in Severity_T'Range:
+for s in Severity_T:
     print f"  {s'Image:<5} {self.counts[s]}"
-for k in Status_T'Range:
+for k in Status_T:
     print f"  {k'Image:<13} {self.by_status[k]}"
 ```
+
+Iterate the *type*, not `Enum_T'Range`: `'Range` is the set of members, and a
+set has no order to promise — on the Python backend it comes out shuffled,
+differently on each run.
 
 Run it:
 
@@ -457,7 +465,7 @@ slowest : 2317 ms  GET /reports/full at 2026-09-11 08:00:04
 | `split(s, a)` | `let a: []str = s.split()` |
 | — (no equivalent; `gsub` counting is the hack) | `let all: []str = s == /re/g` |
 | `a[k] += 1` over strings | `counts[member] += 1` over `[Enum_T]Natural` |
-| `for (k in a)` | `for k in Enum_T'Range:` — in declaration order |
+| `for (k in a)` | `for k in Enum_T:` — in declaration order |
 | `printf "%-8s"` | `f"{value:<8}"` |
 | `system("cmd")` | `shell: cmd` |
 | `"cmd" \| getline line` | `let (out, rc) = shell: cmd` |
