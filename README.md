@@ -812,10 +812,8 @@ into the generated file whenever a regex literal is used.
 ## Tick Attributes
 
 Ada-style `'` attributes provide first-class access to enum and subrange
-metadata. Where a name is followed immediately by `'` and an identifier, the
-tokenizer emits the apostrophe as a token of its own (`TICK_TOKEN`) rather
-than letting Python's lexer read it as the start of a string; the grammar
-then matches the pair as `tick_trailer = TICK + IDENTIFIER`.
+metadata. A name followed immediately by `'` and an identifier is read as an
+attribute, not as the start of a string literal.
 
 ```python
 type Stage_T is enum A, B, C
@@ -2289,15 +2287,8 @@ while True:
 
 ```
 ADASCRIPT/
-├── HPARSEC/                   Parser combinator engine
-│   ├── hek_parsec.py          ParserMeta (+, |, [], *, ~), packrat memoization,
-│   │                          SymbolTable, forward references, token helpers
-│   ├── hek_tokenize.py        Enhanced tokenizer
-│   │                          RichNL (comments attached to newlines),
-│   │                          extra token types Python has none of
-│   │                          (TICK, DOLLAR, RANGE, REGEX, bash tests),
-│   │                          bracket-context NL stripping
-│   └── hek_helpers.py         Shared indentation and RichNL utilities
+├── HPARSEC/                   Parser combinator engine and tokenizer
+│                              (see HPARSEC/README.md)
 │
 ├── ADASCRIPT_GRAMMAR/         Language-neutral grammar definitions
 │   ├── ady_expr.py            Expression grammar (precedence, all operators)
@@ -2337,28 +2328,30 @@ ADASCRIPT/
 
 ### How transpilation works
 
-1. `hek_tokenize.Tokenizer` scans the source, emits the `'` of a tick
-   attribute as its own `TICK_TOKEN` so Python's lexer does not take it for
-   a string quote, and bundles inline comments into `RichNL` objects so they
-   travel with the parse tree.
-2. The grammar combinators in `ADASCRIPT_GRAMMAR/` define the language using
-   `hek_parsec` operators. Parsers are plain classes composed with `+`, `|`,
-   and `[:]`; forward references use `fw("name")`. The operator table is in
-   [HPARSEC/README.md](HPARSEC/README.md#operators).
-3. Each grammar rule class gets `to_py()` and `to_nim()` methods attached
-   via the `@method` decorator (defined in the respective backend modules).
-   Every method carries a docstring quoting the grammar rule it implements.
-4. `ady2py.py` / `ady2nim.py` parse the full module and walk the AST, calling
+1. The tokenizer scans the source, adding the token types Python has no
+   syntax for — the `'` of a tick attribute, `$` variables, ranges, regex
+   literals, bash tests — and keeps inline comments attached so they survive
+   into the output.
+2. The grammar in `ADASCRIPT_GRAMMAR/` defines the language, one rule per
+   construct, independently of either target.
+3. Each grammar rule gets a `to_py()` and a `to_nim()` method, in
+   `TO_PYTHON/` and `TO_NIM/` respectively. Every method carries a docstring
+   quoting the grammar rule it implements.
+4. `ady2py.py` / `ady2nim.py` parse the module and walk the tree, calling
    `to_py()` or `to_nim()` on each node.
+
+The engine underneath — combinator operators, the tokenizer's extra token
+types, the parse-time state — is documented in
+[HPARSEC/README.md](HPARSEC/README.md).
 
 ---
 
 ## Known Limitations
 
-**Comments on a `case` header** — `RichNL` carries comments through the parse
-tree, so blank lines and inline comments survive into the output, inside
-`def`, `class`, `for`, `while`, `if` and method bodies alike. Two placements
-are still not reproduced faithfully, on both backends:
+**Comments on a `case` header** — blank lines and inline comments survive
+into the output, inside `def`, `class`, `for`, `while`, `if` and method
+bodies alike. Two placements are still not reproduced faithfully, on both
+backends:
 
 ```python
 case c:                      # this comment is dropped
@@ -2432,8 +2425,3 @@ these are available on that backend alone:
 | `nimport db`      | thin SQLite wrapper                                        |
 | `nimport jointjs` | `JsElem` base class and helpers for JointJS applications   |
 
-**Global parser state** — embedding the transpiler means sharing hparsec's
-`ParserState` singleton: call `ParserState.reset()` between sequential runs
-in one process, or wrap a nested run in `with ParserState.scoped():`.
-Concurrent parses in separate threads are unsupported. The mechanism is
-described in [HPARSEC/README.md](HPARSEC/README.md#parserstate).
