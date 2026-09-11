@@ -41,7 +41,7 @@ let dest_dir    : str = $3
 let user_id     : str = $4
 let user_pwd    : str = $5
 
-let app_key : str = os.environ.get("APPLICATION_INSTANCE_KEY", "")
+let app_key : str = $APPLICATION_INSTANCE_KEY
 if app_key == "":
   print "ERROR: APPLICATION_INSTANCE_KEY is not set"
   sys.exit(RC_ARG_ERROR)
@@ -105,8 +105,8 @@ else:
     if remote_size == local_size:
       print f"Recovery procedure completed successfully"
       # If regression test, check symlink creation
-      if os.environ.get("CFMU_REGRESS_TEST_RECOVERY_DIR", "") != "":
-        let symlink_path : str = os.environ.get("CFMU_REGRESS_TEST_RECOVERY_DIR") + "/" + base_name
+      if $CFMU_REGRESS_TEST_RECOVERY_DIR != "":
+        let symlink_path : str = $CFMU_REGRESS_TEST_RECOVERY_DIR + "/" + base_name
         var waited : int = 0
         while waited < 300 and not os.path.islink(symlink_path):
           shell: sleep 1

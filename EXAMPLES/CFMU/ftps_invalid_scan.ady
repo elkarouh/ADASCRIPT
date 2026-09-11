@@ -15,12 +15,12 @@
 
 import os
 
-let ftpsroot : str = os.environ.get("FTPSROOT", "/ftpdir")
-let app_key  : str = os.environ.get("APPLICATION_INSTANCE_KEY", "")
+let ftpsroot : str = ${FTPSROOT:-"/ftpdir"}
+let app_key  : str = $APPLICATION_INSTANCE_KEY
 
-let end_minutes   : int = int(os.environ.get("FTPS_INVALID_SCAN_END_MINUTES", "5"))
-let start_days    : int = int(os.environ.get("FTPS_INVALID_SCAN_START_DAYS",  "2"))
-let use_find_mode : str = os.environ.get("USE_FIND", "find")
+let end_minutes   : int = int(${FTPS_INVALID_SCAN_END_MINUTES:-"5"})
+let start_days    : int = int(${FTPS_INVALID_SCAN_START_DAYS:-"2"})
+let use_find_mode : str = ${USE_FIND:-"find"}
 
 let end_min_str   : str = str(end_minutes) + " minutes ago"
 let start_day_str : str = str(start_days) + " days ago"

@@ -7,7 +7,6 @@
 #   ftps_delete <ftps_service> [options]
 
 nimport ftps_common
-import os
 import re
 
 if $# < 1:
@@ -15,7 +14,7 @@ if $# < 1:
   sys.exit(RC_ARG_ERROR)
 
 let ftps_service : str = $1
-let app_key      : str = os.environ.get("APPLICATION_INSTANCE_KEY", "")
+let app_key      : str = $APPLICATION_INSTANCE_KEY
 
 var file_name_mask : str  = ""
 var override_key   : str  = ""
@@ -152,7 +151,7 @@ for f in remote_list:
     let src_key_part : str = f[14:20]
     files_per_key[src_key_part] = files_per_key.get(src_key_part, 0) + 1
 
-let in_regression : bool = os.environ.get("CFMU_REGRESS_TEST_RECOVERY_DIR", "") != ""
+let in_regression : bool = $CFMU_REGRESS_TEST_RECOVERY_DIR != ""
 if len(files_per_key) > 1 and not in_regression:
   print "ERROR: Cannot delete files from different originating instances at the same time."
   for f in sorted(remote_list):

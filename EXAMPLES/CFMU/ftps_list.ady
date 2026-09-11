@@ -39,7 +39,7 @@ if $# < 1:
   sys.exit(RC_ARG_ERROR)
 
 let ftps_service : str = $1
-let app_key      : str = os.environ.get("APPLICATION_INSTANCE_KEY", "")
+let app_key      : str = $APPLICATION_INSTANCE_KEY
 
 var file_name_mask : str = ""
 var from_dmz       : str = ""
@@ -140,7 +140,7 @@ if len(server) == 0:
   sys.exit(RC_NO_FTP_SERVER_ERROR)
 
 var mount_point : str = server["nfs_mount"]
-if os.environ.get("CFMU_FTPS_FORCE_FTP") == "FTP":
+if $CFMU_FTPS_FORCE_FTP == "FTP":
   mount_point = ""
 
 var src_dir : str = server["dir"]
@@ -164,8 +164,8 @@ elif date_arg != "" or sequence_arg != "" or period_arg != "" or free_text_arg !
 else:
   patterns = ["*"]
 
-var retries   : int = int(os.environ.get("CFMU_FTPS_LIST_RETRIES", "5"))
-let sleep_secs : int = int(os.environ.get("CFMU_FTPS_LIST_SLEEP", "5"))
+var retries   : int = int(${CFMU_FTPS_LIST_RETRIES:-"5"})
+let sleep_secs : int = int(${CFMU_FTPS_LIST_SLEEP:-"5"})
 if need_not_exist:
   retries = 1
 

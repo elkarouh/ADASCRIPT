@@ -39,7 +39,7 @@ let overwrite_str   : str  = $9
 let free_text       : str  = $10 if $# >= 10 else ""
 let overwrite      : int  = int(overwrite_str) if overwrite_str in ["0","1","2"] else 0
 
-let app_key        : str  = os.environ.get("APPLICATION_INSTANCE_KEY", "")
+let app_key        : str  = $APPLICATION_INSTANCE_KEY
 var sym_link : bool = False
 
 for arg in $@[10:]:
@@ -87,15 +87,15 @@ let base_dir    : str = server["dir"]
 let ftp_server  : str = server["host"]
 
 # check CFMU_FTP_DISABLE
-if os.environ.get("CFMU_FTP_DISABLE") != "":
+if $CFMU_FTP_DISABLE != "":
   sys.exit(RC_OK)
 
 # --- resolve recovery directory ---
 var recovery_dir : str = ""
-if os.environ.get("CFMU_REGRESS_TEST_RECOVERY_DIR") != "":
-  recovery_dir = os.environ.get("CFMU_REGRESS_TEST_RECOVERY_DIR")
-elif os.environ.get("CFMU_REGRESS_TEST_FTPS_DIR") != "":
-  recovery_dir = os.environ.get("CFMU_REGRESS_TEST_FTPS_DIR")
+if $CFMU_REGRESS_TEST_RECOVERY_DIR != "":
+  recovery_dir = $CFMU_REGRESS_TEST_RECOVERY_DIR
+elif $CFMU_REGRESS_TEST_FTPS_DIR != "":
+  recovery_dir = $CFMU_REGRESS_TEST_FTPS_DIR
 else:
   let (rd_out, _) = shell: oracle_server_location.hdr.query FTPS_RECOVERY_DIR -where APP_KEY {app_key} -list
   recovery_dir = rd_out.strip()
@@ -138,9 +138,9 @@ else:
 print f"Begin upload of {src_path}"
 
 # --- handle regression test directory setup ---
-let in_regress : bool = os.environ.get("CFMU_REGRESS_TEST_FTPS_DIR", "") != ""
+let in_regress : bool = $CFMU_REGRESS_TEST_FTPS_DIR != ""
 if in_regress:
-  let reg_dir : str = os.environ.get("CFMU_REGRESS_TEST_FTPS_DIR")
+  let reg_dir : str = $CFMU_REGRESS_TEST_FTPS_DIR
   shell: mkdir -p {reg_dir}/{dest_dir}
   shell: mkdir -p {reg_dir}/{upload_area}
 

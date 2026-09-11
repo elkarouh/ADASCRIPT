@@ -17,7 +17,7 @@ if $# < 3:
 let dest_dir     : str  = $1
 let ftps_service : str  = $2
 let decompress   : bool = $3 == "true" or $3 == "1"
-let app_key      : str  = os.environ.get("APPLICATION_INSTANCE_KEY", "")
+let app_key      : str  = $APPLICATION_INSTANCE_KEY
 
 let (_, dest_w_rc) = shell: test -w {dest_dir}
 if not os.path.isdir(dest_dir) or dest_w_rc != 0:
@@ -113,7 +113,7 @@ if len(server) == 0:
   sys.exit(RC_NO_FTP_SERVER_ERROR)
 
 var mount_point : str = server["nfs_mount"]
-if os.environ.get("CFMU_FTPS_FORCE_FTP") == "FTP":
+if $CFMU_FTPS_FORCE_FTP == "FTP":
   mount_point = ""
 
 let (the_env_out, _) = shell: oracle_server_location.hdr.query EXEC_ENV -where APP_KEY {eff_app_key} -list

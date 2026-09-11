@@ -11,10 +11,9 @@
 # Exit 1: not found
 # Exit 2: multiple matches
 
-import os
 import re
 
-var app_key      : str = os.environ.get("APPLICATION_INSTANCE_KEY", "")
+var app_key      : str = $APPLICATION_INSTANCE_KEY
 var service      : str = "FTPS"
 var in_text      : str = ""
 var search_field : str = ""
@@ -91,7 +90,7 @@ if target_dir != "":
 
 let (rows_out, _) = shell: ftps_cleanup.info.query FILE_TYPE {search_field} -where EXEC_ENV {exec_env} -where SECURE_DOMAIN {secure_dom} -where CFMU_SYSTEM {the_sys} -list " "
 
-let match_prefix : str = ".*" if (os.environ.get("CM_SYSTEM") == "TACT" and os.environ.get("CONFIGURATION_TYPE") == "dev") else ""
+let match_prefix : str = ".*" if ($CM_SYSTEM == "TACT" and $CONFIGURATION_TYPE == "dev") else ""
 
 var matched_types : []str = []
 for row in rows_out.splitlines():

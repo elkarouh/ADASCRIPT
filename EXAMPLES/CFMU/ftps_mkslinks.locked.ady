@@ -13,8 +13,8 @@
 
 import os
 
-let app_key  : str = os.environ.get("APPLICATION_INSTANCE_KEY", "")
-let ftpsroot : str = os.environ.get("FTPSROOT", "")
+let app_key  : str = $APPLICATION_INSTANCE_KEY
+let ftpsroot : str = $FTPSROOT
 let script   : str = os.path.basename($0)
 
 if app_key == "":
@@ -25,9 +25,9 @@ if ftpsroot == "":
   print "FATAL: FTPSROOT is not set"
   sys.exit(1)
 
-var work_dir : str = os.environ.get("WORK_DIR", "")
+var work_dir : str = $WORK_DIR
 if work_dir == "" or not os.path.isdir(work_dir):
-  work_dir = os.environ.get("HOME", ".")
+  work_dir = ${HOME:-"."}
 shell: mkdir -p {work_dir}
 
 let (loc_date_out, _) = shell: date +"%y%m%d%H%M%S"

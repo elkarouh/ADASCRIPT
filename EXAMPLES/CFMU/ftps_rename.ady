@@ -9,7 +9,6 @@
 # At least one of: --free_text, --from_appl, --file_type, --seq_number, --period, --date
 
 nimport ftps_common
-import os
 import re
 
 if $# < 2:
@@ -18,7 +17,7 @@ if $# < 2:
 
 let ftps_service  : str = $1
 let old_file_name : str = $2
-let app_key       : str = os.environ.get("APPLICATION_INSTANCE_KEY", "")
+let app_key       : str = $APPLICATION_INSTANCE_KEY
 let appl_part     : str = app_key.lower().replace("_", "")[:6]
 
 var new_free_text  : str  = ""

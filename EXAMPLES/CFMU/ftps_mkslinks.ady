@@ -7,14 +7,13 @@
 #   ftps_mkslinks [-h|-help|-ht|-html] [-controlled_restart] [-skip_lock] [-nowait]
 #                 [<args passed to ftps_mkslinks.locked>]
 
-import os
 
-let ftpsroot : str = os.environ.get("FTPSROOT", "")
+let ftpsroot : str = $FTPSROOT
 if ftpsroot == "":
   print "FATAL: FTPSROOT env var not set"
   sys.exit(1)
 
-let app_key : str = os.environ.get("APPLICATION_INSTANCE_KEY", "")
+let app_key : str = $APPLICATION_INSTANCE_KEY
 if app_key == "":
   print "FATAL: APPLICATION_INSTANCE_KEY env var not set"
   sys.exit(1)

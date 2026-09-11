@@ -136,8 +136,8 @@ def get_server_info(app_key: str, ftps_service: str, direction: str,
   let empty : {str}str = {:}
 
   # local simulation override (regression testing)
-  if os.environ.get("CFMU_REGRESS_TEST_FTPS_DIR") != "":
-    let sim_dir : str = os.environ.get("CFMU_REGRESS_TEST_FTPS_DIR")
+  if $CFMU_REGRESS_TEST_FTPS_DIR != "":
+    let sim_dir : str = $CFMU_REGRESS_TEST_FTPS_DIR
     return {"host": "localsim", "user": "user", "pass": "pass",
             "dir": sim_dir, "sftp": "0", "secure": "TRUE",
             "app_key": "FTP_SIM", "cfmu_system": "", "nfs_mount": sim_dir}
@@ -156,7 +156,7 @@ def get_server_info(app_key: str, ftps_service: str, direction: str,
   let password_db : str = conn.get("PASSWORD", "")
 
   # contingency override file
-  let override_file : str = os.path.join(os.environ.get("HOME", ""), "opdata", "common", f"ftp_server_{ftps_service}.txt")
+  let override_file : str = os.path.join($HOME, "opdata", "common", f"ftp_server_{ftps_service}.txt")
   if os.path.exists(override_file):
     with open(override_file) as f:
       let ov : str = f.readline().strip()
@@ -170,7 +170,7 @@ def get_server_info(app_key: str, ftps_service: str, direction: str,
     return empty
   let loc : {str}str = parse_dbt_hdr(loc_out)
 
-  var host        : str = os.environ.get("CFMU_FTPS_FORCE_PACKAGE_NAME", loc.get("PACKAGE_NAME", ""))
+  var host        : str = ${CFMU_FTPS_FORCE_PACKAGE_NAME:-loc.get("PACKAGE_NAME", "")}
   let exec_env    : str = loc.get("EXEC_ENV", "")
   var secure      : str = loc.get("SECURE_DOMAIN", "TRUE")
   let mode        : str = loc.get("MODE", "")
@@ -193,7 +193,7 @@ def get_server_info(app_key: str, ftps_service: str, direction: str,
       ftp_app_key = nk
       let (loc2_out, _) = shell: oracle_server_location.hdr.query -all -where APP_KEY {ftp_app_key}
       let loc2 : {str}str = parse_dbt_hdr(loc2_out)
-      host   = os.environ.get("CFMU_FTPS_FORCE_PACKAGE_NAME", loc2.get("PACKAGE_NAME", host))
+      host   = ${CFMU_FTPS_FORCE_PACKAGE_NAME:-loc2.get("PACKAGE_NAME", host)}
       secure = loc2.get("SECURE_DOMAIN", secure)
   elif secure == "FALSE":
     area = "_DMZ"
@@ -222,7 +222,7 @@ def get_server_info(app_key: str, ftps_service: str, direction: str,
     let (sys_out, _) = shell: user_to_group_relationship.hdr.query CFMU_SYSTEM -where USER_NAME {user} -list
     cfmu_system = sys_out.strip()
     if cfmu_system:
-      let aik : str = os.environ.get("ACTUAL_APPLICATION_INSTANCE_KEY", app_key)
+      let aik : str = ${ACTUAL_APPLICATION_INSTANCE_KEY:-app_key}
       let (ploc_local_out,  _) = shell: physical_location.hdr.query REAL_LOCATION -where APP_KEY {aik} -list
       let (ploc_remote_out, _) = shell: physical_location.hdr.query REAL_LOCATION -where APP_KEY {ftp_app_key} -list
       let ploc_local  : str = ploc_local_out.strip()
