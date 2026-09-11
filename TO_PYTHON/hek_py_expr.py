@@ -1303,7 +1303,8 @@ def to_py(self, prec=None):
     elif flag == "x":
         return f"os.access({path}, os.X_OK)"
     elif flag == "s":
-        return f"(os.path.getsize({path}) > 0)"
+        # Nim answers false for a path that is not there; getsize alone raises.
+        return f"(os.path.isfile({path}) and os.path.getsize({path}) > 0)"
     elif flag == "c":
         ParserState.nim_imports.add("import stat")
         return f"stat.S_ISCHR(os.stat({path}).st_mode)"

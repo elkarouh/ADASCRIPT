@@ -2111,7 +2111,7 @@ if -f comment_path:
 | `-r path`    | `os.access(path, os.R_OK)`      | `fileExists(path)`           |
 | `-w path`    | `os.access(path, os.W_OK)`      | `fileExists(path)`           |
 | `-x path`    | `os.access(path, os.X_OK)`      | `fileExists(path)`           |
-| `-s path`    | `os.path.getsize(path) > 0`     | `fileExists(path) and getFileSize(path) > 0` |
+| `-s path`    | `os.path.isfile(path) and os.path.getsize(path) > 0` | `fileExists(path) and getFileSize(path) > 0` |
 | `a -nt b`    | `os.path.getmtime(a) > os.path.getmtime(b)` | `getLastModificationTime(a) > getLastModificationTime(b)` |
 | `a -ot b`    | `os.path.getmtime(a) < os.path.getmtime(b)` | `getLastModificationTime(a) < getLastModificationTime(b)` |
 

@@ -1994,7 +1994,8 @@ def to_nim(self, prec=None):
             _is_str = (
                 "paramStr" in arg            # $1, $2, etc.
                 or arg.startswith('"')       # string literal
-                or arg.startswith("getEnv(") # os.environ.get() -> string
+                or arg.startswith("getEnv(") # $NAME -> string
+                or arg.startswith("adascriptEnvOr(")  # ${NAME:-default} -> string
                 or _field_is_str             # expr.field where field: string
                 or (_sym and _sym.get("type") in ("string", "seq[string]"))
                 or (_base_sym and (
@@ -2836,7 +2837,7 @@ _BASH_FILE_TEST_NIM = {
     "r": ("(fpUserRead  in getFilePermissions", "os"),   # -r: readable
     "w": ("(fpUserWrite in getFilePermissions", "os"),   # -w: writable
     "x": ("(fpUserExec  in getFilePermissions", "os"),   # -x: executable
-    "s": ("(getFileSize(",     "os"),   # -s: non-empty
+    "s": ("(getFileSize(",     "os"),   # -s: exists and non-empty
     "c": ("(pcDevice  == getFileInfo(",  "os"),  # -c: char device
     "b": ("(pcDir     == getFileInfo(",  "os"),  # -b: block device (approx)
     "p": ("(pcLinkToDir == getFileInfo(", "os"), # -p: named pipe (approx)
@@ -2852,7 +2853,7 @@ def to_nim(self, prec=None):
     -d     -> dirExists(path)
     -L     -> symlinkExists(path)
     -r/-w/-x -> fpUserRead/Write/Exec in getFilePermissions(path)
-    -s     -> getFileSize(path) > 0
+    -s     -> fileExists(path) and getFileSize(path) > 0
     -nt/-ot handled in comparison via BASH_CMP
     """
     flag = self.nodes[1].node   # IDENTIFIER node: 'e', 'f', 'd', etc.
@@ -2874,7 +2875,8 @@ def to_nim(self, prec=None):
     elif flag == "x":
         return f"(fpUserExec in getFilePermissions({path}))"
     elif flag == "s":
-        return f"(getFileSize({path}) > 0)"
+        # getFileSize raises on a path that is not there; -s answers false.
+        return f"(fileExists({path}) and getFileSize({path}) > 0)"
     else:
         # -c, -b, -p, -S: no clean Nim equivalent — emit a comment
         return f"(true) # TODO: -{flag} {path} not supported in Nim"
