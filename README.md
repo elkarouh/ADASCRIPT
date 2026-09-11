@@ -2343,25 +2343,13 @@ ADASCRIPT/
    travel with the parse tree.
 2. The grammar combinators in `ADASCRIPT_GRAMMAR/` define the language using
    `hek_parsec` operators. Parsers are plain classes composed with `+`, `|`,
-   and `[:]`; forward references use `fw("name")`.
+   and `[:]`; forward references use `fw("name")`. The operator table is in
+   [HPARSEC/README.md](HPARSEC/README.md#operators).
 3. Each grammar rule class gets `to_py()` and `to_nim()` methods attached
    via the `@method` decorator (defined in the respective backend modules).
    Every method carries a docstring quoting the grammar rule it implements.
 4. `ady2py.py` / `ady2nim.py` parse the full module and walk the AST, calling
    `to_py()` or `to_nim()` on each node.
-
-### Parser combinator operators
-
-| Expression  | Meaning                                      |
-|-------------|----------------------------------------------|
-| `A + B`     | Sequence: match A then B                    |
-| `A \| B`    | Ordered choice: try A, fall back to B       |
-| `A[1:]`     | One or more repetitions                     |
-| `A[:]`      | Zero or more repetitions                    |
-| `A[n:m]`    | Between n and m repetitions                 |
-| `A * n`     | Exactly n repetitions                       |
-| `~A`        | Negative lookahead: succeed only if A fails |
-| `fw("X")`   | Lazy forward reference (recursive grammars) |
 
 ---
 

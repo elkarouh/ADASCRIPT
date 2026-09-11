@@ -29,6 +29,8 @@ can be given output methods via the `@method` decorator.
 | `A[1:]` | One or more repetitions |
 | `A[n:m]` | Between n and m repetitions |
 | `A * n` | Exactly n repetitions |
+| `~A` | Negative lookahead — succeed only if A fails, consuming nothing |
+| `fw("X")` | Lazy forward reference, for a recursive grammar |
 
 ---
 
