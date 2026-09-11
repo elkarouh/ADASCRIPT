@@ -1812,6 +1812,25 @@ def to_nim(self, prec=None):
                                 _cl = _char_literal_arg(fv)
                                 if _cl is not None:
                                     fv = _cl
+                            # An Option[T] field given a plain value: lift it,
+                            # the way a typed declaration and an assignment to
+                            # the field already do. some[T](v) rather than
+                            # some(v), so a literal does not infer Option[int]
+                            # where Option[Natural] is wanted.
+                            if ftype.startswith("Option["):
+                                _fsym = ParserState.symbol_table.lookup(fv.strip())
+                                _ftyp = (_fsym.get("type") or "") if _fsym else ""
+                                import re as _re_nil
+                                if not (_ftyp.startswith("Option[")
+                                        or fv.startswith("some(")
+                                        or fv.startswith("none(")
+                                        or _re_nil.search(r"\bnil\b", fv)
+                                        or _expr_is_option(fv)):
+                                    fv = f"some[{ftype[7:-1]}]({fv})"
+                                    ParserState.nim_imports.add("options")
+                                elif fv == "nil":
+                                    fv = f"none({ftype[7:-1]})"
+                                    ParserState.nim_imports.add("options")
                             pairs_parts.append(f"{fn}: {fv}")
                         else:
                             pairs_parts.append(_re_ctor.sub(r'^(\w+) = ', r'\1: ', a, count=1))

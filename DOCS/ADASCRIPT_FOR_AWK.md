@@ -275,6 +275,48 @@ Pulling the fields out of a record beats pulling them out of `$1 $2 $3`
 mostly because of what it does six months later: `req.ms > self.slowest.ms`
 survives a change to the log format, `$7 > slowest[7]` does not.
 
+### 6.1 One of several shapes: the variant record
+
+A plain record gives every row the same fields. When the rows are genuinely
+*different* — a schema in which a number has bounds and a choice has a word
+list — Ada's answer is a record whose field set depends on an enum
+discriminant, and Adascript adopts the syntax:
+
+```python
+type Kind_T is enum FLAG, NUMBER, CHOICE, PATHNAME
+
+type Spec_T (kind: Kind_T) is record:
+    case kind is
+        when FLAG:
+            on_by_default: bool
+        when NUMBER:
+            lo: int
+            hi: int
+        when CHOICE:
+            allowed: []str
+        when PATHNAME:
+            must_exist: bool
+```
+
+Reading `s.lo` where `s.kind` is `CHOICE` is not a mistake to be careful
+about. On the Nim backend the field is not there to read at all. And a `case`
+over the discriminant needs no `when others:` — the enum has four members, so
+the compiler checks that all four are handled:
+
+```python
+def describe(s: Spec_T) -> str:
+    case s.kind:
+        when FLAG:     return "a flag"
+        when NUMBER:   return f"a whole number in {s.lo} .. {s.hi}"
+        when CHOICE:   return "one of " + ", ".join(s.allowed)
+        when PATHNAME: return "a path that must exist" if s.must_exist else "a path"
+```
+
+In AWK this is `kind[i]`, `lo[i]`, `hi[i]`, `allowed[i]` and a convention
+about which of them are meaningful for a given `i` — written down in a
+comment if you were lucky. `EXAMPLES/config_check.ady` is the worked example:
+a configuration checker whose whole schema is one variant record.
+
 ---
 
 ## 7. Missing is not the empty string
@@ -297,6 +339,54 @@ assert field(F, 99) == None
 it. The same distinction reaches the environment: `$NAME` is a `str` that
 reads unset as `""`, `$?NAME` is a `?str` that can tell unset from empty, and
 `${NAME:-default}` is the shell's fallback.
+
+### 7.1 Getting a value in and out of a `?T`
+
+You never write `some()` or `none()`. A plain value put where a `?T` is
+expected is **lifted** for you, and `None` becomes the empty one:
+
+```python
+type Finding_T is record:
+    line: ?Natural = None
+    text: str      = ""
+
+let n: Natural = 12
+let maybe: ?Natural = n                              # a declaration lifts
+let one:   Finding_T = Finding_T(line=n, text="on a line")     # so does a field
+let none_: Finding_T = Finding_T(text="about the file")        # left out: None
+```
+
+Getting the value back out is the half worth reading carefully, because a
+`?T` and a `T` are different types and the Nim backend says so — `maybe == 12`
+does not compile. Two ways out:
+
+```python
+assert (maybe or 0) == 12          # `or` supplies a default
+assert none_.line == None          # comparing against None is always fine
+```
+
+...and, for the case where you have already established it is there, an
+**early-return guard**, which narrows the name below it to a plain `Natural`:
+
+```python
+def where(f: Finding_T) -> str:
+    let ln: ?Natural = f.line      # bind it to a name first
+    if ln is None:
+        return ""
+    return "line " + str(ln)       # a plain Natural from here on
+```
+
+That first line is not ceremony. The guard narrows a **name**, and `f.line`
+is a field access rather than a name, so `if f.line is None: return` leaves
+the field an `Option` below it — on Nim `str(f.line)` then prints `some(12)`
+where Python prints `12`. Binding it first is what makes the two backends
+agree. (It is a wart, and it is in `TODO.md`.)
+
+The point of all this is what it replaces. AWK's `line[i]` is `""` when the
+finding has no line, `""` when the line number was never filled in, and `0`
+if you compare it to a number — three different situations wearing the same
+face. `?Natural` distinguishes "no line" from "line 0", and nothing reads the
+value without first saying which case it is in.
 
 ---
 
@@ -474,6 +564,7 @@ slowest : 2317 ms  GET /reports/full at 2026-09-11 08:00:04
 | `ENVIRON["HOME"]` | `$HOME`, or `$?HOME` for a `?str` |
 | an integer state flag | an `enum`, checked for completeness |
 | parallel arrays sharing an index | a `record` |
+| `kind[i]` plus a comment about which columns apply | a variant record |
 | `""` meaning "not set" | `?T` and `None` |
 
 ---
@@ -483,6 +574,7 @@ slowest : 2317 ms  GET /reports/full at 2026-09-11 08:00:04
 - `EXAMPLES/awk_example.ady` — the flat form, runs on both backends
 - `EXAMPLES/test_awk.ady` — the same program as an `AwkBase` subclass
 - `EXAMPLES/awk_logscan.ady` — the worked example above
+- `EXAMPLES/config_check.ady` — the variant-record schema of 6.1, in full
 - `EXAMPLES/CFMU/Tstatus_monitor.ady` — a real AWK script, translated
 - `DOCS/BOOK/05-pattern-matching.md` — `case`/`when` in full
 - `DOCS/BOOK/07-regex.md` — every regex form

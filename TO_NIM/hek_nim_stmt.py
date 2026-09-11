@@ -890,6 +890,32 @@ def to_nim(self):
                     if _m:
                         value = f"none({_m.group(1)})"
                         ParserState.nim_imports.add("options")
+                # Option[T] = a plain value -> some(value). Chapter 10 says
+                # you never write some() yourself, and the assignment path
+                # already honours that; a *declaration* did not, so
+                # `let a: ?Natural = 7` was a type mismatch on Nim and fine
+                # on Python. Anything already optional is left alone.
+                elif value and annotation.startswith("Option["):
+                    import re as _re_opt
+                    _rhs_sym = ParserState.symbol_table.lookup(value.strip())
+                    _rhs_type = (_rhs_sym.get("type") or "") if _rhs_sym else ""
+                    # A conditional with a None branch -- `x if c else None`
+                    # -- arrives as `(if c: v else: nil)`, where the two
+                    # halves need some() and none() separately rather than
+                    # one wrap around the whole thing. Left alone; see TODO.
+                    _has_nil = bool(_re_opt.search(r"\bnil\b", value))
+                    _already = (_rhs_type.startswith("Option[")
+                                or value.startswith("some(")
+                                or value.startswith("none(")
+                                or _has_nil
+                                or hek_nim_expr._expr_is_option(value))
+                    if not _already:
+                        _im = _re_opt.search(r"Option\[(.+)\]", annotation)
+                        # some[T](v), not some(v): Nim infers Option[int] from
+                        # a literal, which is not Option[Natural].
+                        value = (f"some[{_im.group(1)}]({value})" if _im
+                                 else f"some({value})")
+                        ParserState.nim_imports.add("options")
                 if value:
                     result += f" = {value}"
     # Float range constraint: if annotation is a float range type and there's
@@ -1000,6 +1026,32 @@ def to_nim(self):
                     _m = _re_opt.search(r"Option\[(.+)\]", annotation)
                     if _m:
                         value = f"none({_m.group(1)})"
+                        ParserState.nim_imports.add("options")
+                # Option[T] = a plain value -> some(value). Chapter 10 says
+                # you never write some() yourself, and the assignment path
+                # already honours that; a *declaration* did not, so
+                # `let a: ?Natural = 7` was a type mismatch on Nim and fine
+                # on Python. Anything already optional is left alone.
+                elif value and annotation.startswith("Option["):
+                    import re as _re_opt
+                    _rhs_sym = ParserState.symbol_table.lookup(value.strip())
+                    _rhs_type = (_rhs_sym.get("type") or "") if _rhs_sym else ""
+                    # A conditional with a None branch -- `x if c else None`
+                    # -- arrives as `(if c: v else: nil)`, where the two
+                    # halves need some() and none() separately rather than
+                    # one wrap around the whole thing. Left alone; see TODO.
+                    _has_nil = bool(_re_opt.search(r"\bnil\b", value))
+                    _already = (_rhs_type.startswith("Option[")
+                                or value.startswith("some(")
+                                or value.startswith("none(")
+                                or _has_nil
+                                or hek_nim_expr._expr_is_option(value))
+                    if not _already:
+                        _im = _re_opt.search(r"Option\[(.+)\]", annotation)
+                        # some[T](v), not some(v): Nim infers Option[int] from
+                        # a literal, which is not Option[Natural].
+                        value = (f"some[{_im.group(1)}]({value})" if _im
+                                 else f"some({value})")
                         ParserState.nim_imports.add("options")
                 if value:
                     result += f" = {value}"
