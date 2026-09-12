@@ -24,8 +24,7 @@ type Scan_State_T is enum OUTSIDE, IN_TRACE
 
 # What the status code meant.  awk would keep these as strings in an
 # associative array; naming them makes the report loop over the type itself.
-type Status_T     is enum SUCCESS, REDIRECT, CLIENT_ERROR, SERVER_ERROR, ODD
-
+type Status_T is enum SUCCESS, REDIRECT, CLIENT_ERROR, SERVER_ERROR, ODD
 
 type Request_T is record:      # a timestamped event
     """One served request, taken apart by a single regex."""
@@ -35,13 +34,11 @@ type Request_T is record:      # a timestamped event
     status:  Natural = 0
     ms:      Natural = 0
 
-
 type Trace_T is record:        # the lines after a failure
     """One stack trace: several lines, belonging to the request before it."""
     under:   str     = ""      # the request it followed
     lines:   Natural = 0
     failure: str     = ""      # the exception line that ends it
-
 
 def status_class(status: Natural) -> Status_T:
     """A case over ranges, which awk has to spell as an if/else chain.
@@ -51,12 +48,11 @@ def status_class(status: Natural) -> Status_T:
     class.
     """
     case status:
-        when 200 .. 299: return SUCCESS
-        when 300 .. 399: return REDIRECT
-        when 400 .. 499: return CLIENT_ERROR
-        when 500 .. 599: return SERVER_ERROR
-        when others:     return ODD
-
+        when 200 .. 299: SUCCESS
+        when 300 .. 399: REDIRECT
+        when 400 .. 499: CLIENT_ERROR
+        when 500 .. 599: SERVER_ERROR
+        when others:     ODD
 
 class LogScan(AwkBase):
     var state    : Scan_State_T          = OUTSIDE
@@ -67,9 +63,7 @@ class LogScan(AwkBase):
 
     # Counted on the way past, because a total needs no second pass.
     var counts   : [Severity_T]Natural   = [DEBUG: 0, INFO: 0, WARN: 0, ERROR: 0]
-    var by_status: [Status_T]Natural     = [SUCCESS: 0, REDIRECT: 0, CLIENT_ERROR: 0,
-                                            SERVER_ERROR: 0, ODD: 0]
-
+    var by_status: [Status_T]Natural     = [SUCCESS: 0, REDIRECT: 0, CLIENT_ERROR: 0, SERVER_ERROR: 0, ODD: 0]
     var open_trace: Trace_T              = Trace_T()
 
     def _event(self, sev: Severity_T, req: Request_T) -> None:
@@ -82,8 +76,7 @@ class LogScan(AwkBase):
         # One regex takes the record apart; $+1 .. $+7 are its groups.
         case self.line:
             when /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}) (\w+) +(\w+) (\S+) (\d{3}) (\d+)ms$/:
-                let req: Request_T = Request_T(at=$+1 + " " + $+2, verb=$+4, path=$+5,
-                                               status=int($+6), ms=int($+7))
+                let req: Request_T = Request_T(at=$+1 + " " + $+2, verb=$+4, path=$+5, status=int($+6), ms=int($+7))
                 let sev: Severity_T = Severity_T($+3.upper())
                 self.requests.append(req)
                 self._event(sev, req)
