@@ -379,6 +379,7 @@ The decision is made once, over a closed set of outcomes:
 
 ```python
 def decide(p: Path, size: Natural) -> Action_T:
+    """One decision per file, in one place, over a closed set of outcomes."""
     let name: str = p.name
     case name:
         when /\.gz$/:            return SKIP        # already done
@@ -389,7 +390,7 @@ def decide(p: Path, size: Natural) -> Action_T:
             return KEEP
         when /\.tmp$|~$/:        return DELETE
         when others:
-            ...
+            return KEEP
 ```
 
 The listing does not parse `ls` through `$IFS` — `runLines` skips the shell
@@ -406,12 +407,14 @@ The work runs in parallel, with a status per job rather than one for the lot,
 and every interpolated path is quoted:
 
 ```python
-var jobs: []Job = []
+var jobs   : []Job     = []
+var zipped : []Entry_T = []
 for e in entries:
     case e.action:
         when COMPRESS:
             let j: Job = shellSpawn: gzip -f -- {!e.path}
             jobs.append(j)
+            zipped.append(e)
         when DELETE:
             shell(check = true): rm -f -- {!e.path}
         when others:

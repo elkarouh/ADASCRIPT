@@ -22,8 +22,7 @@ type Entry_T is record:
     action: Action_T = KEEP
 
 
-let KEEP_SUFFIXES : []str  = [".conf", ".pid"]
-let BIG_ENOUGH    : Natural = 64          # bytes; a real one would say 10 MB
+let BIG_ENOUGH : Natural = 64      # bytes; a real one would say 10 MB
 
 
 def decide(p: Path, size: Natural) -> Action_T:
@@ -38,9 +37,6 @@ def decide(p: Path, size: Natural) -> Action_T:
             return KEEP
         when /\.tmp$|~$/:        return DELETE
         when others:
-            for suffix in KEEP_SUFFIXES:
-                if name.endswith(suffix):
-                    return KEEP
             return KEEP
 
 
