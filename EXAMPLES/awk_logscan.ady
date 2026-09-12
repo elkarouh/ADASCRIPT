@@ -43,6 +43,21 @@ type Trace_T is record:        # the lines after a failure
     failure: str     = ""      # the exception line that ends it
 
 
+def status_class(status: Natural) -> Status_T:
+    """A case over ranges, which awk has to spell as an if/else chain.
+
+    Nothing here is about one scanner: a status code means the same thing
+    whoever read it, so it is a function of the code and lives outside the
+    class.
+    """
+    case status:
+        when 200 .. 299: return SUCCESS
+        when 300 .. 399: return REDIRECT
+        when 400 .. 499: return CLIENT_ERROR
+        when 500 .. 599: return SERVER_ERROR
+        when others:     return ODD
+
+
 class LogScan(AwkBase):
     var state    : Scan_State_T          = OUTSIDE
 
@@ -57,51 +72,47 @@ class LogScan(AwkBase):
 
     var open_trace: Trace_T              = Trace_T()
 
-    def _status_class(self, status: Natural) -> Status_T:
-        """A case over ranges, which awk has to spell as an if/else chain."""
-        case status:
-            when 200 .. 299: return SUCCESS
-            when 300 .. 399: return REDIRECT
-            when 400 .. 499: return CLIENT_ERROR
-            when 500 .. 599: return SERVER_ERROR
-            when others:     return ODD
-
     def _event(self, sev: Severity_T, req: Request_T) -> None:
         """On the fly: what a running total can answer without a second pass."""
         self.counts[sev] += 1
-        self.by_status[self._status_class(req.status)] += 1
+        self.by_status[status_class(req.status)] += 1
 
     def _outside(self) -> None:
         """Between traces: a record is an event, the start of one, or noise."""
-        # One regex takes the whole record apart; $+1 .. $+7 are the groups.
-        if self.line == /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}) (\w+) +(\w+) (\S+) (\d{3}) (\d+)ms$/:
-            let req: Request_T = Request_T(at=$+1 + " " + $+2, verb=$+4, path=$+5,
-                                           status=int($+6), ms=int($+7))
-            let sev: Severity_T = Severity_T($+3.upper())
-            self.requests.append(req)
-            self._event(sev, req)
-        elif self.line == /^Traceback |^[A-Z]\w+(Error|Exception): /:
-            # A trace belongs to the request logged just before it, which is
-            # the last one in the other list.
-            self.open_trace = Trace_T(lines=1)
-            if self.requests'Length > 0:
-                let prev: Request_T = self.requests[self.requests'Length - 1]
-                self.open_trace.under = prev.verb + " " + prev.path
-            self.state = IN_TRACE
+        # One regex takes the record apart; $+1 .. $+7 are its groups.
+        case self.line:
+            when /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}) (\w+) +(\w+) (\S+) (\d{3}) (\d+)ms$/:
+                let req: Request_T = Request_T(at=$+1 + " " + $+2, verb=$+4, path=$+5,
+                                               status=int($+6), ms=int($+7))
+                let sev: Severity_T = Severity_T($+3.upper())
+                self.requests.append(req)
+                self._event(sev, req)
+            when /^Traceback |^[A-Z]\w+(Error|Exception): /:
+                # A trace belongs to the request logged just before it, which
+                # is the last one in the other list.
+                self.open_trace = Trace_T(lines=1)
+                if self.requests'Length > 0:
+                    let prev: Request_T = self.requests[self.requests'Length - 1]
+                    self.open_trace.under = prev.verb + " " + prev.path
+                self.state = IN_TRACE
+            when others:
+                pass                      # a line belonging to neither kind
 
     def _in_trace(self) -> None:
         """Inside a trace: every record is part of it until one is not."""
-        if self.line != /^\d{4}-\d{2}-\d{2} /:
-            self.open_trace.lines += 1
-            if self.line == /^([A-Z]\w+(Error|Exception)): /:
+        case self.line:
+            when /^\d{4}-\d{2}-\d{2} /:
+                # A timestamped line is not part of the trace: close it, leave
+                # the state, and hand this same record to the state just
+                # entered -- it is an event, and is counted as one.
+                self.traces.append(self.open_trace)
+                self.state = OUTSIDE
+                self._outside()
+            when /^([A-Z]\w+(Error|Exception)): /:
+                self.open_trace.lines  += 1
                 self.open_trace.failure = $+1
-            return
-
-        # A timestamped line is not part of the trace: close it, leave the
-        # state, and hand this same record to the state we just entered.
-        self.traces.append(self.open_trace)
-        self.state = OUTSIDE
-        self._outside()
+            when others:
+                self.open_trace.lines += 1
 
     def process_record(self):
         """The whole dispatch: one branch per state, and nothing outside it.

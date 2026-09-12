@@ -190,6 +190,11 @@ history of this file if the reasoning behind one of them is ever wanted.
       returning one. Those now keep `.lines` as an attribute and raise
       AttributeError, which is at least loud. A receiver-type pass would
       settle it properly.
+- [ ] a comment between `case X:` and its first `when` is a parse error on
+      both backends: "got RichNL, expected one of: ... regex_lit". A comment
+      above the `case`, or between two `when` clauses, is fine -- it is only
+      the position before the first clause, where a reader naturally puts the
+      note explaining what the block dispatches on.
 - [ ] `.map()` / `.and_then()` rewriting on `?T` (Feature 2)
 
 ---

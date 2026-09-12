@@ -634,20 +634,25 @@ event apart, and the groups go straight into a record:
 
 ```python
 def _outside(self) -> None:
-    if self.line == /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}) (\w+) +(\w+) (\S+) (\d{3}) (\d+)ms$/:
-        let req: Request_T = Request_T(at=$+1 + " " + $+2, verb=$+4, path=$+5,
-                                       status=int($+6), ms=int($+7))
-        let sev: Severity_T = Severity_T($+3.upper())
-        self.requests.append(req)
-        self._event(sev, req)
-    elif self.line == /^Traceback |^[A-Z]\w+(Error|Exception): /:
-        # A trace belongs to the request logged just before it, which is
-        # the last one in the other list.
-        self.open_trace = Trace_T(lines=1)
-        if self.requests'Length > 0:
-            let prev: Request_T = self.requests[self.requests'Length - 1]
-            self.open_trace.under = prev.verb + " " + prev.path
-        self.state = IN_TRACE
+    """Between traces: a record is an event, the start of one, or noise."""
+    # One regex takes the record apart; $+1 .. $+7 are its groups.
+    case self.line:
+        when /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}) (\w+) +(\w+) (\S+) (\d{3}) (\d+)ms$/:
+            let req: Request_T = Request_T(at=$+1 + " " + $+2, verb=$+4, path=$+5,
+                                           status=int($+6), ms=int($+7))
+            let sev: Severity_T = Severity_T($+3.upper())
+            self.requests.append(req)
+            self._event(sev, req)
+        when /^Traceback |^[A-Z]\w+(Error|Exception): /:
+            # A trace belongs to the request logged just before it, which
+            # is the last one in the other list.
+            self.open_trace = Trace_T(lines=1)
+            if self.requests'Length > 0:
+                let prev: Request_T = self.requests[self.requests'Length - 1]
+                self.open_trace.under = prev.verb + " " + prev.path
+            self.state = IN_TRACE
+        when others:
+            pass                      # a line belonging to neither kind
 ```
 
 `Severity_T($+3.upper())` is worth a second look. The log writes `INFO`,
@@ -659,29 +664,44 @@ Inside a trace, every record is part of it until one is not:
 
 ```python
 def _in_trace(self) -> None:
-    if self.line != /^\d{4}-\d{2}-\d{2} /:
-        self.open_trace.lines += 1
-        if self.line == /^([A-Z]\w+(Error|Exception)): /:
+    """Inside a trace: every record is part of it until one is not."""
+    case self.line:
+        when /^\d{4}-\d{2}-\d{2} /:
+            # A timestamped line is not part of the trace: close it, leave
+            # the state, and hand this same record to the state just
+            # entered -- it is an event, and is counted as one.
+            self.traces.append(self.open_trace)
+            self.state = OUTSIDE
+            self._outside()
+        when /^([A-Z]\w+(Error|Exception)): /:
+            self.open_trace.lines  += 1
             self.open_trace.failure = $+1
-        return
-
-    # A timestamped line is not part of the trace: close it, leave the
-    # state, and hand this same record to the state we just entered.
-    self.traces.append(self.open_trace)
-    self.state = OUTSIDE
-    self._outside()
+        when others:
+            self.open_trace.lines += 1
 ```
 
-That last line is the other half of the pattern. A record that *ends* one
-state usually belongs to the next one, so the transition re-dispatches it
-rather than dropping it — the timestamped line that closes a trace is itself
-an event, and gets counted as one.
+The `self._outside()` in that first branch is the other half of the pattern.
+A record that *ends* one state usually belongs to the next one, so the
+transition re-dispatches it rather than dropping it — the timestamped line
+that closes a trace is itself an event, and gets counted as one.
 
-The status class, for completeness, is a `case` over ranges — AWK's if/else
-chain, said once:
+Both handlers are a `case` over the record: the dispatch on *state* picks the
+handler, and a dispatch on the *record* picks the branch. The catch-all is
+needed here because the subject is a string — §3 — and it is where a line
+belonging to neither kind goes.
+
+The status class is the third `case`, over ranges this time, and it is not a
+method: nothing about it concerns one scanner, so it is a plain function of
+the code.
 
 ```python
-def _status_class(self, status: Natural) -> Status_T:
+def status_class(status: Natural) -> Status_T:
+    """A case over ranges, which awk has to spell as an if/else chain.
+
+    Nothing here is about one scanner: a status code means the same thing
+    whoever read it, so it is a function of the code and lives outside the
+    class.
+    """
     case status:
         when 200 .. 299: return SUCCESS
         when 300 .. 399: return REDIRECT
