@@ -81,19 +81,21 @@ class LogScan(AwkBase):
                 self.requests.append(req)
                 self._event(sev, req)
             when /^Traceback |^[A-Z]\w+(Error|Exception): /:
-                # A trace belongs to the request logged just before it, which
-                # is the last one in the other list.
-                self.open_trace = Trace_T(lines=1)
-                if self.requests'Length > 0:
-                    let prev: Request_T = self.requests[self.requests'Length - 1]
-                    self.open_trace.under = prev.verb + " " + prev.path
                 self.state = IN_TRACE
+                self._in_trace() # FORWARD DECLARATION SHOULD NOT BE NECESSARY FOR METHODS ???
             when others:
                 pass                      # a line belonging to neither kind
 
     def _in_trace(self) -> None:
         """Inside a trace: every record is part of it until one is not."""
         case self.line:
+            when /^Traceback |^[A-Z]\w+(Error|Exception): /:
+                # A trace belongs to the request logged just before it, which
+                # is the last one in the other list.
+                self.open_trace = Trace_T(lines=1)
+                if self.requests'Length > 0:
+                    let prev: Request_T = self.requests[self.requests'Length - 1]
+                    self.open_trace.under = prev.verb + " " + prev.path
             when /^\d{4}-\d{2}-\d{2} /:
                 # A timestamped line is not part of the trace: close it, leave
                 # the state, and hand this same record to the state just
