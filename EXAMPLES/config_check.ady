@@ -69,14 +69,10 @@ def describe(s: Spec_T) -> str:
     """One line per shape. No `when others:` -- the enum has four members and
     the compiler has checked that all four are here."""
     case s.kind:
-        when FLAG:
-            return "a flag (" + ", ".join(TRUE_WORDS) + " / " + ", ".join(FALSE_WORDS) + ")"
-        when NUMBER:
-            return f"a whole number in {s.lo} .. {s.hi}"
-        when CHOICE:
-            return "one of " + ", ".join(s.allowed)
-        when PATHNAME:
-            return "a path that must exist" if s.must_exist else "a path"
+        when FLAG: "a flag (" + ", ".join(TRUE_WORDS) + " / " + ", ".join(FALSE_WORDS) + ")"
+        when NUMBER: f"a whole number in {s.lo} .. {s.hi}"
+        when CHOICE: "one of " + ", ".join(s.allowed)
+        when PATHNAME: "a path that must exist" if s.must_exist else "a path"
 
 
 def check_value(s: Spec_T, value: str) -> str:
@@ -155,11 +151,12 @@ def check(path: Path) -> []Finding_T:
     return found
 
 
-def build_fixture() -> Path:
-    let d: Path = Path("/tmp/ady_config_check")
-    shell: rm -rf {!d}
-    (d / "logs").mkdir()
-    writeFile(str(d / "app.conf"), """# a configuration with one of everything
+def main() -> int:
+    def build_fixture() -> Path:
+        let d: Path = Path("/tmp/ady_config_check")
+        shell: rm -rf {!d}
+        (d / "logs").mkdir()
+        writeFile(str(d / "app.conf"), """# a configuration with one of everything
 verbose = yes
 workers = 200
 workers = 8
@@ -168,10 +165,8 @@ log_dir = /tmp/ady_config_check/logs
 colour  = blue
 this line has no equals sign
 """)
-    return d / "app.conf"
+        return d / "app.conf"
 
-
-def main() -> int:
     let path: Path = Path($1) if $# >= 1 else build_fixture()
     if not -f path:
         print f"config_check: no such file: {path}"
