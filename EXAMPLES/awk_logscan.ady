@@ -16,7 +16,7 @@ way past and the rest once both lists are complete.
 nimport awk
 
 
-type Severity_T is enum DEBUG, INFO, WARN, ERROR
+type Severity_T   is enum DEBUG, INFO, WARN, ERROR
 
 # Where in the file we are.  A trace line carries no timestamp of its own, so
 # only the state says whom it belongs to.
@@ -24,19 +24,19 @@ type Scan_State_T is enum OUTSIDE, IN_TRACE
 
 # What the status code meant.  awk would keep these as strings in an
 # associative array; naming them makes the report loop over the type itself.
-type Status_T is enum SUCCESS, REDIRECT, CLIENT_ERROR, SERVER_ERROR, ODD
+type Status_T     is enum SUCCESS, REDIRECT, CLIENT_ERROR, SERVER_ERROR, ODD
 
 
-type Request_T is record:
+type Request_T is record:      # a timestamped event
     """One served request, taken apart by a single regex."""
-    at:      str = ""
-    verb:    str = ""
-    path:    str = ""
+    at:      str     = ""
+    verb:    str     = ""
+    path:    str     = ""
     status:  Natural = 0
     ms:      Natural = 0
 
 
-type Trace_T is record:
+type Trace_T is record:        # the lines after a failure
     """One stack trace: several lines, belonging to the request before it."""
     under:   str     = ""      # the request it followed
     lines:   Natural = 0
@@ -71,22 +71,8 @@ class LogScan(AwkBase):
         self.counts[sev] += 1
         self.by_status[self._status_class(req.status)] += 1
 
-    def process_record(self):
-        # A trace runs until the next timestamped line. Ask the state first:
-        # in awk this is a flag and a guard on every pattern.
-        case self.state:
-            when IN_TRACE:
-                if self.line != /^\d{4}-\d{2}-\d{2} /:
-                    self.open_trace.lines += 1
-                    if self.line == /^([A-Z]\w+(Error|Exception)): /:
-                        self.open_trace.failure = $+1
-                    return
-                # A timestamped line ends the trace: file it and carry on.
-                self.traces.append(self.open_trace)
-                self.state = OUTSIDE
-            when others:
-                pass
-
+    def _outside(self) -> None:
+        """Between traces: a record is an event, the start of one, or noise."""
         # One regex takes the whole record apart; $+1 .. $+7 are the groups.
         if self.line == /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}) (\w+) +(\w+) (\S+) (\d{3}) (\d+)ms$/:
             let req: Request_T = Request_T(at=$+1 + " " + $+2, verb=$+4, path=$+5,
@@ -96,12 +82,39 @@ class LogScan(AwkBase):
             self._event(sev, req)
         elif self.line == /^Traceback |^[A-Z]\w+(Error|Exception): /:
             # A trace belongs to the request logged just before it, which is
-            # the last one in the list -- the state machine is what knows so.
-            self.state      = IN_TRACE
+            # the last one in the other list.
             self.open_trace = Trace_T(lines=1)
             if self.requests'Length > 0:
                 let prev: Request_T = self.requests[self.requests'Length - 1]
                 self.open_trace.under = prev.verb + " " + prev.path
+            self.state = IN_TRACE
+
+    def _in_trace(self) -> None:
+        """Inside a trace: every record is part of it until one is not."""
+        if self.line != /^\d{4}-\d{2}-\d{2} /:
+            self.open_trace.lines += 1
+            if self.line == /^([A-Z]\w+(Error|Exception)): /:
+                self.open_trace.failure = $+1
+            return
+
+        # A timestamped line is not part of the trace: close it, leave the
+        # state, and hand this same record to the state we just entered.
+        self.traces.append(self.open_trace)
+        self.state = OUTSIDE
+        self._outside()
+
+    def process_record(self):
+        """The whole dispatch: one branch per state, and nothing outside it.
+
+        Every record is handled by the state it arrives in. Because the case
+        covers both members of Scan_State_T there is no `when others:`, and
+        the compiler is checking that a new state cannot be forgotten here --
+        which is the point of making the state a type. In awk this is a flag
+        and a condition repeated on the front of every pattern.
+        """
+        case self.state:
+            when OUTSIDE:  self._outside()
+            when IN_TRACE: self._in_trace()
 
     def finish(self):
         # A trace that runs to the end of the file has no following record to

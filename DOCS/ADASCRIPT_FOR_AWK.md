@@ -278,7 +278,23 @@ state is an integer, and a status class is a key you hope you spelled the
 same way in both places. In Adascript each is a type.
 
 ```python
-type Severity_T is enum DEBUG, INFO, WARN, ERROR
+type Severity_T   is enum DEBUG, INFO, WARN, ERROR
+type Scan_State_T is enum OUTSIDE, IN_TRACE
+type Status_T     is enum SUCCESS, REDIRECT, CLIENT_ERROR, SERVER_ERROR, ODD
+
+type Request_T is record:
+    """One served request, taken apart by a single regex."""
+    at:      str     = ""
+    verb:    str     = ""
+    path:    str     = ""
+    status:  Natural = 0
+    ms:      Natural = 0
+
+type Trace_T is record:
+    """One stack trace: several lines, belonging to the request before it."""
+    under:   str     = ""      # the request it followed
+    lines:   Natural = 0
+    failure: str     = ""      # the exception line that ends it
 ```
 
 A `case` over that type is checked for completeness — leave out `WARN` and
@@ -568,67 +584,101 @@ type Trace_T is record:        # the lines after a failure
 
 ```python
 class LogScan(AwkBase):
-    var state    : Scan_State_T        = OUTSIDE
+    var state    : Scan_State_T          = OUTSIDE
 
     # One list per kind of record. Both are complete by finish().
-    var requests : []Request_T         = []
-    var traces   : []Trace_T           = []
+    var requests : []Request_T           = []
+    var traces   : []Trace_T             = []
 
     # Counted on the way past, because a total needs no second pass.
-    var counts   : [Severity_T]Natural = [DEBUG: 0, INFO: 0, WARN: 0, ERROR: 0]
-    var by_status: [Status_T]Natural   = [SUCCESS: 0, REDIRECT: 0, CLIENT_ERROR: 0,
-                                          SERVER_ERROR: 0, ODD: 0]
+    var counts   : [Severity_T]Natural   = [DEBUG: 0, INFO: 0, WARN: 0, ERROR: 0]
+    var by_status: [Status_T]Natural     = [SUCCESS: 0, REDIRECT: 0, CLIENT_ERROR: 0,
+                                            SERVER_ERROR: 0, ODD: 0]
+
+    var open_trace: Trace_T              = Trace_T()
 ```
 
-**The state machine decides which kind of record this is.** It is a `case`
-over `Scan_State_T`, not an integer flag and not a condition repeated on
-every pattern:
+**The state machine decides which kind of record this is**, and the `case`
+over the state is the *whole* dispatch — one branch per state, and nothing
+outside it:
 
 ```python
-case self.state:
-    when IN_TRACE:
-        if self.line != /^\d{4}-\d{2}-\d{2} /:
-            self.open_trace.lines += 1
-            if self.line == /^([A-Z]\w+(Error|Exception)): /:
-                self.open_trace.failure = $+1
-            return
-        # A timestamped line ends the trace: file it and carry on.
-        self.traces.append(self.open_trace)
-        self.state = OUTSIDE
-    when others:
-        pass
+def process_record(self):
+    case self.state:
+        when OUTSIDE:  self._outside()
+        when IN_TRACE: self._in_trace()
 ```
 
-**Reaching a new kind of record is what changes the state.** A failure line
-opens a trace, and the request it belongs to is the last one in the other
-list — which is a thing only the state machine knows:
+That shape is worth copying, and it is not the obvious one. The tempting
+version tests for the state you care about, falls through, and handles the
+other state in the code *below* the `case` — at which point the `case` is a
+pre-check rather than a dispatch, one state's handling sits nowhere near the
+other's, and the block needs a `when others:` to paper over the state that
+appears to do nothing.
+
+With one branch per state there is no `when others:`, and that is what buys
+the check. Delete a branch and the Nim backend refuses the program:
+
+```
+Error: not all cases are covered; missing: {IN_TRACE}
+```
+
+Add a third state later and every `case` over the type names itself as a
+place you have to think about. In AWK this is an integer flag and a condition
+repeated on the front of every pattern, and nothing tells you when you miss
+one.
+
+**Each branch is a handler for the records valid in that state.** Between
+traces, a record is an event or the start of a trace. One regex takes an
+event apart, and the groups go straight into a record:
 
 ```python
-elif self.line == /^Traceback |^[A-Z]\w+(Error|Exception): /:
-    self.state      = IN_TRACE
-    self.open_trace = Trace_T(lines=1)
-    if self.requests'Length > 0:
-        let prev: Request_T = self.requests[self.requests'Length - 1]
-        self.open_trace.under = prev.verb + " " + prev.path
+def _outside(self) -> None:
+    if self.line == /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}) (\w+) +(\w+) (\S+) (\d{3}) (\d+)ms$/:
+        let req: Request_T = Request_T(at=$+1 + " " + $+2, verb=$+4, path=$+5,
+                                       status=int($+6), ms=int($+7))
+        let sev: Severity_T = Severity_T($+3.upper())
+        self.requests.append(req)
+        self._event(sev, req)
+    elif self.line == /^Traceback |^[A-Z]\w+(Error|Exception): /:
+        # A trace belongs to the request logged just before it, which is
+        # the last one in the other list.
+        self.open_trace = Trace_T(lines=1)
+        if self.requests'Length > 0:
+            let prev: Request_T = self.requests[self.requests'Length - 1]
+            self.open_trace.under = prev.verb + " " + prev.path
+        self.state = IN_TRACE
 ```
 
-**One regex takes an event apart**, and the groups go straight into a record:
+`Severity_T($+3.upper())` is worth a second look. The log writes `INFO`,
+`WARN`, `ERROR` as text; that turns the text into a value of the type, and a
+log line carrying a severity nobody declared fails there, at the line that
+read it, rather than becoming a silent extra bucket in the report.
+
+Inside a trace, every record is part of it until one is not:
 
 ```python
-if self.line == /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}) (\w+) +(\w+) (\S+) (\d{3}) (\d+)ms$/:
-    let req: Request_T = Request_T(at=$+1 + " " + $+2, verb=$+4, path=$+5,
-                                   status=int($+6), ms=int($+7))
-    let sev: Severity_T = Severity_T($+3.upper())
-    self.requests.append(req)
-    self._event(sev, req)           # the on-the-fly half
+def _in_trace(self) -> None:
+    if self.line != /^\d{4}-\d{2}-\d{2} /:
+        self.open_trace.lines += 1
+        if self.line == /^([A-Z]\w+(Error|Exception)): /:
+            self.open_trace.failure = $+1
+        return
+
+    # A timestamped line is not part of the trace: close it, leave the
+    # state, and hand this same record to the state we just entered.
+    self.traces.append(self.open_trace)
+    self.state = OUTSIDE
+    self._outside()
 ```
 
-That last-but-one line is worth a second look. The log writes `INFO`, `WARN`,
-`ERROR` as text; `Severity_T($+3.upper())` turns the text into a value of the
-type, and a log line carrying a severity nobody declared fails there, at the
-line that read it, rather than becoming a silent extra bucket in the report.
+That last line is the other half of the pattern. A record that *ends* one
+state usually belongs to the next one, so the transition re-dispatches it
+rather than dropping it — the timestamped line that closes a trace is itself
+an event, and gets counted as one.
 
-The status class is a `case` over ranges — AWK's if/else chain, said once:
+The status class, for completeness, is a `case` over ranges — AWK's if/else
+chain, said once:
 
 ```python
 def _status_class(self, status: Natural) -> Status_T:
