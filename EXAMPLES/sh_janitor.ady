@@ -14,41 +14,20 @@ fixture contain spaces on purpose: that is the bug the Bash version has.
 # typo in one of the four places that test it is a silent no-op.
 type Action_T is enum COMPRESS, DELETE, KEEP, SKIP
 
-
 type Entry_T is record:
     """One file, decided once."""
-    path:   Path    = Path("")
+    path:   Path
     size:   Natural = 0
     action: Action_T = KEEP
 
-
-let BIG_ENOUGH : Natural = 64      # bytes; a real one would say 10 MB
-
-def decide(p: Path, size: Natural) -> Action_T:
+def decide(p: Path, size: Natural) -> Action_T: # a pure function is also a mapping.
+    let BIG_ENOUGH : Natural = 64      # bytes; a real one would say 10 MB
     case p.name:
         when /\.gz$/: SKIP       # already done
         when /^\./: SKIP        # dotfile
         when /\.(log|out|err)$/: COMPRESS if size >= BIG_ENOUGH else KEEP
         when /\.tmp$|~$/: DELETE
         when others: KEEP
-
-
-def build_fixture() -> Path:
-    """A deterministic work directory, spaces in the names included."""
-    let d: Path = Path("/tmp/ady_janitor")
-    shell: rm -rf {!d}
-    d.mkdir()
-    writeFile(str(d / "app.log"),            "x" * 200)
-    writeFile(str(d / "quiet service.log"),  "x" * 300)   # a space, on purpose
-    writeFile(str(d / "tiny.log"),           "x" * 3)
-    writeFile(str(d / "build.out"),          "x" * 128)
-    writeFile(str(d / "scratch.tmp"),        "x" * 10)
-    writeFile(str(d / "editor backup~"),     "x" * 10)
-    writeFile(str(d / "app.conf"),           "x" * 20)
-    writeFile(str(d / ".hidden"),            "x" * 20)
-    writeFile(str(d / "old.log.gz"),         "x" * 20)
-    return d
-
 
 def scan(dir: Path) -> []Entry_T:
     """`ls` is not parsed; the directory is listed and each name stays one name."""
@@ -61,11 +40,26 @@ def scan(dir: Path) -> []Entry_T:
         out.append(Entry_T(path=p, size=size, action=decide(p, size)))
     return out
 
-
 def main() -> int:
     if not have("gzip"):
         print "sh_janitor: gzip is not installed"
         return 1
+
+    def build_fixture() -> Path:
+        """A deterministic work directory, spaces in the names included."""
+        let d: Path = Path("/tmp/ady_janitor")
+        shell: rm -rf {!d}
+        d.mkdir()
+        writeFile(str(d / "app.log"),            "x" * 200)
+        writeFile(str(d / "quiet service.log"),  "x" * 300)   # a space, on purpose
+        writeFile(str(d / "tiny.log"),           "x" * 3)
+        writeFile(str(d / "build.out"),          "x" * 128)
+        writeFile(str(d / "scratch.tmp"),        "x" * 10)
+        writeFile(str(d / "editor backup~"),     "x" * 10)
+        writeFile(str(d / "app.conf"),           "x" * 20)
+        writeFile(str(d / ".hidden"),            "x" * 20)
+        writeFile(str(d / "old.log.gz"),         "x" * 20)
+        return d
 
     let dir: Path = Path($1) if $# >= 1 else build_fixture()
     if not -d dir:
