@@ -24,20 +24,13 @@ type Entry_T is record:
 
 let BIG_ENOUGH : Natural = 64      # bytes; a real one would say 10 MB
 
-
 def decide(p: Path, size: Natural) -> Action_T:
-    """One decision per file, in one place, over a closed set of outcomes."""
-    let name: str = p.name
-    case name:
-        when /\.gz$/:            return SKIP        # already done
-        when /^\./:              return SKIP        # dotfile
-        when /\.(log|out|err)$/:
-            if size >= BIG_ENOUGH:
-                return COMPRESS
-            return KEEP
-        when /\.tmp$|~$/:        return DELETE
-        when others:
-            return KEEP
+    case p.name:
+        when /\.gz$/: SKIP       # already done
+        when /^\./: SKIP        # dotfile
+        when /\.(log|out|err)$/: COMPRESS if size >= BIG_ENOUGH else KEEP
+        when /\.tmp$|~$/: DELETE
+        when others: KEEP
 
 
 def build_fixture() -> Path:
