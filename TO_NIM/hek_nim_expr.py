@@ -2262,6 +2262,15 @@ def to_nim(self, prec=None):
                     ParserState.nim_imports.add("strutils")
                     skip_next = True  # consume the call_trailer
                     continue
+                # Path.mkdir() needs createDir, which lives in std/dirs -- a
+                # stdlib module split out of `os` in a comparatively recent
+                # Nim release. Add it only when this call is actually seen,
+                # so a file that uses Path but never calls .mkdir() is not
+                # made to depend on it (see _ensure_path_helper).
+                if (method_name == "mkdir"
+                        and next_tr is not None
+                        and type(next_tr).__name__ == "call_trailer"):
+                    ParserState.nim_imports.add("std/dirs")
                 # Option-typed field called as proc: insert .get() before call trailer
                 if (next_tr is not None
                         and type(next_tr).__name__ == "call_trailer"

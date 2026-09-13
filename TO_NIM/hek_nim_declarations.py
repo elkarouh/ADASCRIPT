@@ -131,15 +131,18 @@ proc resolve*(p: Path): Path =
 def _ensure_path_helper():
     """Inject std/paths and the converter the first time Path is named."""
     from hek_parsec import ParserState
-    # std/paths for the type and its splitting procs, std/dirs for the one
-    # createDir that Path.mkdir needs -- it takes a Path directly, where os's
-    # takes a string -- and os for the existence tests and link expansion
-    # behind Path.resolve. All three are used by the helper itself, so none
-    # of them can turn into an unused-import warning. std/files stays out:
-    # the converter below lets os's string-based fileExists, readFile and
+    # std/paths for the type and its splitting procs, and os for the
+    # existence tests and link expansion behind Path.resolve. Both are used
+    # by the helper itself, so neither can turn into an unused-import
+    # warning. std/dirs is NOT added here: it is only needed for the one
+    # createDir that Path.mkdir calls, so it is added lazily, only when a
+    # `.mkdir()` call is actually seen (see the attr_trailer handling in
+    # hek_nim_expr.py) -- a file that uses Path but never calls .mkdir()
+    # should not have to depend on a stdlib module split out of `os` in a
+    # comparatively recent Nim release. std/files stays out entirely: the
+    # converter below lets os's string-based fileExists, readFile and
     # friends take a Path already.
     ParserState.nim_imports.add("std/paths")
-    ParserState.nim_imports.add("std/dirs")
     ParserState.nim_imports.add("os")
     decls = getattr(ParserState, "nim_top_decls", [])
     if not any("adascriptPathToString" in d for d in decls):

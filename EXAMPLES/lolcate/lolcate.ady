@@ -1,9 +1,6 @@
 #!/usr/bin/env ady2nim
 """
-lolcate_oo.ady — fast file indexer, object-oriented Adascript port of lolcate-rs.
-
-Same behaviour and on-disk format as lolcate.ady, restructured around a
-`Database` class instead of a free-function + record (`Config`) pair.
+lolcate.ady — fast file indexer, object-oriented Adascript port of lolcate-rs.
 
 Each named database lives in  ~/.local/share/lolcate-ady/<name>/
   config.txt — dirs to scan, patterns to ignore, symlink policy
@@ -80,7 +77,7 @@ class Database:
         let cpath: Path = self.config_path()
         if not -f cpath:
             print(f"Error: database '{self.name}' not found.")
-            print(f"  Run: lolcate_oo.ady create {self.name}")
+            print(f"  Run: lolcate.ady create {self.name}")
             quit(1)
         var dirs:            []str = []
         var ignores:         []str = []
@@ -165,15 +162,15 @@ class Database:
         if self.exists():
             print(f"Database '{self.name}' already exists at {self.db_dir()}")
             return
-        self.db_dir().mkdir()
+        shell: mkdir -p {!self.db_dir()}
         self.reset_to_defaults()
         self.save()
         let home_dir: str = $HOME
         print(f"Created database '{self.name}'")
         print(f"  Config : {self.config_path()}")
         print(f"  Default scan dir: {home_dir}")
-        print(f"  Add more dirs:  lolcate_oo.ady add-dir {self.name} <path>")
-        print(f"  Build index:    lolcate_oo.ady update {self.name}")
+        print(f"  Add more dirs:  lolcate.ady add-dir {self.name} <path>")
+        print(f"  Build index:    lolcate.ady update {self.name}")
 
     def update(self):
         self.load()
@@ -199,7 +196,7 @@ class Database:
     def query(self, pattern: str):
         let ipath: Path = self.index_path()
         if not -f ipath:
-            print(f"Index for '{self.name}' not built. Run: lolcate_oo.ady update {self.name}")
+            print(f"Index for '{self.name}' not built. Run: lolcate.ady update {self.name}")
             quit(1)
         let hits: []str = self._search_index(pattern)
         for path in hits:
@@ -232,7 +229,7 @@ class Database:
 
     def add_dir(self, new_dir: str):
         if not self.exists():
-            print(f"Database '{self.name}' not found. Run: lolcate_oo.ady create {self.name}")
+            print(f"Database '{self.name}' not found. Run: lolcate.ady create {self.name}")
             quit(1)
         var expanded: Path = Path(new_dir)
         if new_dir == "~":
@@ -247,11 +244,11 @@ class Database:
         self.dirs.append(abs_expanded)
         self.save()
         print(f"Added '{abs_expanded}' to database '{self.name}'")
-        print(f"  Rebuild index with: lolcate_oo.ady update {self.name}")
+        print(f"  Rebuild index with: lolcate.ady update {self.name}")
 
     def add_ignore(self, pat: str):
         if not self.exists():
-            print(f"Database '{self.name}' not found. Run: lolcate_oo.ady create {self.name}")
+            print(f"Database '{self.name}' not found. Run: lolcate.ady create {self.name}")
             quit(1)
         self.load()
         if pat in self.ignores:
@@ -274,7 +271,7 @@ class DatabaseManager:
     def list_all(self):
         let ddir: Path = data_dir()
         if not -d ddir:
-            print("No databases. Create one: lolcate_oo.ady create <name>")
+            print("No databases. Create one: lolcate.ady create <name>")
             return
         var found: bool = False
         let raw_entries: []str = self._list_dir(ddir)
@@ -291,22 +288,22 @@ class DatabaseManager:
                 else:
                     print(f"  {entry:<20}  (not indexed yet)")
         if not found:
-            print("No databases. Create one: lolcate_oo.ady create <name>")
+            print("No databases. Create one: lolcate.ady create <name>")
 
 # ---------------------------------------------------------------------------
 # Usage
 # ---------------------------------------------------------------------------
 
 def usage():
-    print("lolcate_oo.ady — file indexer (object-oriented Adascript port of lolcate-rs)")
+    print("lolcate.ady — file indexer (object-oriented Adascript port of lolcate-rs)")
     print("")
-    print("  lolcate_oo.ady create <name>              create a new database")
-    print("  lolcate_oo.ady update [name]              rebuild the index     (default: 'default')")
-    print("  lolcate_oo.ady query  <pattern> [name]    search via regex      (default: 'default')")
-    print("  lolcate_oo.ady ls                         list all databases")
-    print("  lolcate_oo.ady info   [name]              show database info    (default: 'default')")
-    print("  lolcate_oo.ady add-dir    <name> <path>   add a directory to scan")
-    print("  lolcate_oo.ady add-ignore <name> <pat>    add an ignore pattern")
+    print("  lolcate.ady create <name>              create a new database")
+    print("  lolcate.ady update [name]              rebuild the index     (default: 'default')")
+    print("  lolcate.ady query  <pattern> [name]    search via regex      (default: 'default')")
+    print("  lolcate.ady ls                         list all databases")
+    print("  lolcate.ady info   [name]              show database info    (default: 'default')")
+    print("  lolcate.ady add-dir    <name> <path>   add a directory to scan")
+    print("  lolcate.ady add-ignore <name> <pat>    add an ignore pattern")
     quit(1)
 
 # ---------------------------------------------------------------------------
