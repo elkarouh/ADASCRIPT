@@ -1,6 +1,9 @@
 #!/usr/bin/env ady2nim
 """
-lolcate.ady — fast file indexer, Adascript port of lolcate-rs.
+lolcate_oo.ady — fast file indexer, object-oriented Adascript port of lolcate-rs.
+
+Same behaviour and on-disk format as lolcate.ady, restructured around a
+`Database` class instead of a free-function + record (`Config`) pair.
 
 Each named database lives in  ~/.local/share/lolcate-ady/<name>/
   config.txt — dirs to scan, patterns to ignore, symlink policy
@@ -24,15 +27,6 @@ Commands:
 nimport strutils, times
 
 # ---------------------------------------------------------------------------
-# Types
-# ---------------------------------------------------------------------------
-
-type Config is record:
-    dirs:            []str
-    ignores:         []str
-    follow_symlinks: bool
-
-# ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
@@ -40,253 +34,279 @@ const DEFAULT_DB: str = "default"
 const DEFAULT_IGNORES: []str = [".git", ".hg", ".svn", "node_modules", "__pycache__", ".mypy_cache", "target", ".cargo", "build", "dist", ".tox", ".venv"]
 
 # ---------------------------------------------------------------------------
-# Path helpers  (implicit returns — last expression in function)
+# Module-level path helper — not database-specific, so it stays a function
 # ---------------------------------------------------------------------------
 
 def data_dir() -> Path:
     Path($HOME) / ".local" / "share" / "lolcate-ady"
 
-def db_dir(name: str) -> Path:
-    data_dir() / name
-
-def config_path(name: str) -> Path:
-    db_dir(name) / "config.txt"
-
-def index_path(name: str) -> Path:
-    db_dir(name) / "db.txt"
-
 # ---------------------------------------------------------------------------
-# Config I/O — line-based text format, no JSON dependency
+# Database — everything that used to be Config + the free functions that
+# took a Config/name pair is now a method on this class.
 # ---------------------------------------------------------------------------
 
-def default_config() -> Config:
-    let ign: []str = list(DEFAULT_IGNORES)
-    let cfg: Config = Config(dirs=[$HOME], ignores=ign, follow_symlinks=False)
-    return cfg
+class Database:
+    var name:            str
+    var dirs:            []str = []
+    var ignores:         []str = []
+    var follow_symlinks: bool  = False
 
-def load_config(name: str) -> Config:
-    let cpath: Path = config_path(name)
-    if not -f cpath:
-        print(f"Error: database '{name}' not found.")
-        print(f"  Run: lolcate.ady create {name}")
-        quit(1)
-    var dirs: []str = []
-    var ignores: []str = []
-    var follow_symlinks: bool = False
-    var section: str = ""
-    with open(cpath) as f:
-        for line in f:
-            var stripped: str = line.strip()
-            if stripped == "" or stripped.startswith("#"):
+    def __init__(self, name: str):
+        self.name = name
+
+    # -- paths --------------------------------------------------------
+
+    def db_dir(self) -> Path:
+        data_dir() / self.name
+
+    def config_path(self) -> Path:
+        self.db_dir() / "config.txt"
+
+    def index_path(self) -> Path:
+        self.db_dir() / "db.txt"
+
+    def exists(self) -> bool:
+        -d self.db_dir()
+
+    # -- config I/O -----------------------------------------------------
+    # line-based text format, no JSON dependency
+
+    def reset_to_defaults(self):
+        self.dirs = [$HOME]
+        self.ignores = list(DEFAULT_IGNORES)
+        self.follow_symlinks = False
+
+    def load(self):
+        let cpath: Path = self.config_path()
+        if not -f cpath:
+            print(f"Error: database '{self.name}' not found.")
+            print(f"  Run: lolcate_oo.ady create {self.name}")
+            quit(1)
+        var dirs:            []str = []
+        var ignores:         []str = []
+        var follow_symlinks: bool  = False
+        var section:         str   = ""
+        with open(cpath) as f:
+            for line in f:
+                let stripped: str = line.strip()
+                case stripped:
+                    when "":
+                        continue
+                    when "dirs:":
+                        section = "dirs"
+                    when "ignores:":
+                        section = "ignores"
+                    when "follow_symlinks:":
+                        section = "follow_symlinks"
+                    when _ if stripped.startswith("#"):
+                        continue
+                    when _ if section == "dirs":
+                        dirs.append(stripped)
+                    when _ if section == "ignores":
+                        ignores.append(stripped)
+                    when _ if section == "follow_symlinks":
+                        follow_symlinks = (stripped == "true")
+                    when others:
+                        pass          # a line before any section header is ignored
+        self.dirs = dirs
+        self.ignores = ignores
+        self.follow_symlinks = follow_symlinks
+
+    def save(self):
+        with open(self.config_path(), "w") as f:
+            f.write("# lolcate-ady config\n")
+            f.write("dirs:\n")
+            for d in self.dirs:
+                f.write(d + "\n")
+            f.write("ignores:\n")
+            for ig in self.ignores:
+                f.write(ig + "\n")
+            f.write("follow_symlinks:\n")
+            let fsym: str = "true" if self.follow_symlinks else "false"
+            f.write(fsym + "\n")
+
+    # -- ignore-list matching -------------------------------------------
+
+    def should_ignore(self, entry: str) -> bool:
+        entry in self.ignores
+
+    def path_should_skip(self, fpath: str) -> bool:
+        let parts: []str = fpath.split("/")
+        for part in parts:
+            if self.should_ignore(part):
+                return True
+        return False
+
+    # -- shell helpers ---------------------------------------------------
+    # each of these is nothing but a single shellLines:/shell: statement,
+    # so it can be called from inside a loop elsewhere in the class
+    # (shellLines: itself must sit at function-body level, not nested
+    # inside if/for — see lolcate.ady's original comment on this).
+
+    def _find_files(self, root_dir: Path) -> []str:
+        let fd_flags: str = "-L" if self.follow_symlinks else ""
+        shellLines: fd {fd_flags} --type f --no-ignore --hidden . {!root_dir}
+
+    def _search_index(self, pattern: str) -> []str:
+        let ipath: Path = self.index_path()
+        shellLines: rg --ignore-case {pattern} {!ipath}
+
+    def stats(self) -> (int, int):
+        """Lines and bytes in one pass -- exactly what `wc` is for, and one
+        process instead of reading the whole index in to count its newlines."""
+        let ipath: Path = self.index_path()
+        let r = shell: wc -lc {!ipath}
+        let parts: []str = r.output.split()
+        (int(parts[0]), int(parts[1]))
+
+    # -- commands ---------------------------------------------------------
+
+    def create(self):
+        if self.exists():
+            print(f"Database '{self.name}' already exists at {self.db_dir()}")
+            return
+        self.db_dir().mkdir()
+        self.reset_to_defaults()
+        self.save()
+        let home_dir: str = $HOME
+        print(f"Created database '{self.name}'")
+        print(f"  Config : {self.config_path()}")
+        print(f"  Default scan dir: {home_dir}")
+        print(f"  Add more dirs:  lolcate_oo.ady add-dir {self.name} <path>")
+        print(f"  Build index:    lolcate_oo.ady update {self.name}")
+
+    def update(self):
+        self.load()
+        let ipath: Path = self.index_path()
+        var all_paths: []str = []
+        var t0: float = time.time()
+        for root_dir in self.dirs:
+            if not -d root_dir:
+                print(f"Warning: {root_dir} not found — skipping.")
                 continue
-            case stripped:
-                when "dirs:":
-                    section = "dirs"
-                when "ignores:":
-                    section = "ignores"
-                when "follow_symlinks:":
-                    section = "follow_symlinks"
-                when _ if section == "dirs":
-                    dirs.append(stripped)
-                when _ if section == "ignores":
-                    ignores.append(stripped)
-                when _ if section == "follow_symlinks":
-                    follow_symlinks = (stripped == "true")
-                when others:
-                    pass          # a line before any section header is ignored
-    let cfg: Config = Config(dirs=dirs, ignores=ignores, follow_symlinks=follow_symlinks)
-    return cfg
+            let paths: []str = self._find_files(Path(root_dir))
+            for fpath in paths:
+                if not self.path_should_skip(fpath):
+                    all_paths.append(fpath)
+        let count: int = len(all_paths)
+        with open(ipath, "w") as outf:
+            for fpath in all_paths:
+                outf.write(fpath + "\n")
+        let elapsed: float = time.time() - t0
+        print(f"Indexed {count} files in {elapsed:.2f}s")
+        print(f"  Index : {ipath}")
 
-def save_config(name: str, cfg: Config):
-    with open(config_path(name), "w") as f:
-        f.write("# lolcate-ady config\n")
-        f.write("dirs:\n")
-        for d in cfg.dirs:
-            f.write(d + "\n")
-        f.write("ignores:\n")
-        for ig in cfg.ignores:
-            f.write(ig + "\n")
-        f.write("follow_symlinks:\n")
-        let fsym: str = "true" if cfg.follow_symlinks else "false"
-        f.write(fsym + "\n")
+    def query(self, pattern: str):
+        let ipath: Path = self.index_path()
+        if not -f ipath:
+            print(f"Index for '{self.name}' not built. Run: lolcate_oo.ady update {self.name}")
+            quit(1)
+        let hits: []str = self._search_index(pattern)
+        for path in hits:
+            print(path)
+        if len(hits) == 0:
+            print(f"(no matches for '{pattern}' in database '{self.name}')")
+
+    def info(self):
+        if not self.exists():
+            print(f"Database '{self.name}' not found.")
+            quit(1)
+        self.load()
+        let ipath: Path = self.index_path()
+        print(f"Database : {self.name}")
+        print(f"Location : {self.db_dir()}")
+        print(f"Dirs     :")
+        for d in self.dirs:
+            print(f"  {d}")
+        let ign_str: str = ", ".join(self.ignores)
+        let sym_str: str = "follow" if self.follow_symlinks else "skip"
+        print(f"Ignores  : {ign_str}")
+        print(f"Symlinks : {sym_str}")
+        if -f ipath:
+            let (n, sz) = self.stats()
+            print(f"Index    : {ipath}")
+            print(f"Files    : {n}")
+            print(f"Size     : {sz} bytes")
+        else:
+            print("Index    : not built yet")
+
+    def add_dir(self, new_dir: str):
+        if not self.exists():
+            print(f"Database '{self.name}' not found. Run: lolcate_oo.ady create {self.name}")
+            quit(1)
+        var expanded: Path = Path(new_dir)
+        if new_dir == "~":
+            expanded = Path($HOME)
+        elif new_dir.startswith("~/"):
+            expanded = Path($HOME) / new_dir[2:]
+        let abs_expanded: Path = expanded.resolve()
+        self.load()
+        if abs_expanded in self.dirs:
+            print(f"'{abs_expanded}' is already in database '{self.name}'")
+            return
+        self.dirs.append(abs_expanded)
+        self.save()
+        print(f"Added '{abs_expanded}' to database '{self.name}'")
+        print(f"  Rebuild index with: lolcate_oo.ady update {self.name}")
+
+    def add_ignore(self, pat: str):
+        if not self.exists():
+            print(f"Database '{self.name}' not found. Run: lolcate_oo.ady create {self.name}")
+            quit(1)
+        self.load()
+        if pat in self.ignores:
+            print(f"'{pat}' is already in the ignore list for '{self.name}'")
+            return
+        self.ignores.append(pat)
+        self.save()
+        print(f"Added ignore pattern '{pat}' to database '{self.name}'")
 
 # ---------------------------------------------------------------------------
-# Shell helpers  (shellLines: must be at function-body level, not in nested blocks)
+# DatabaseManager — operations that span every database rather than one,
+# so they don't belong on Database itself (no single self.name to act on).
 # ---------------------------------------------------------------------------
 
-def find_files(root_dir: Path, extra_flags: str) -> []str:
-    shellLines: fd {extra_flags} --type f --no-ignore --hidden . {!root_dir}
+class DatabaseManager:
 
-def search_index(pattern: str, ipath: Path) -> []str:
-    shellLines: rg --ignore-case {pattern} {!ipath}
+    def _list_dir(self, d: Path) -> []str:
+        shellLines: ls -1 {!d}
 
-def list_dir(dir: Path) -> []str:
-    shellLines: ls -1 {!dir}
-
-# ---------------------------------------------------------------------------
-# Index helpers
-# ---------------------------------------------------------------------------
-
-def index_stats(ipath: Path) -> (int, int):
-    """Lines and bytes in one pass -- exactly what `wc` is for, and one
-    process instead of reading the whole index in to count its newlines."""
-    let r = shell: wc -lc {!ipath}
-    let parts: []str = r.output.split()
-    (int(parts[0]), int(parts[1]))
-
-def should_ignore(entry: str, ignores: []str) -> bool:
-    entry in ignores
-
-def path_should_skip(fpath: str, ignores: []str) -> bool:
-    let parts: []str = fpath.split("/")
-    for part in parts:
-        if should_ignore(part, ignores):
-            return True
-    return False
-
-# ---------------------------------------------------------------------------
-# Commands
-# ---------------------------------------------------------------------------
-
-def cmd_create(name: str):
-    let ddir: Path = db_dir(name)
-    if -d ddir:
-        print(f"Database '{name}' already exists at {ddir}")
-        return
-    ddir.mkdir()
-    save_config(name, default_config())
-    let home_dir: str = $HOME
-    print(f"Created database '{name}'")
-    print(f"  Config : {config_path(name)}")
-    print(f"  Default scan dir: {home_dir}")
-    print(f"  Add more dirs:  lolcate.ady add-dir {name} <path>")
-    print(f"  Build index:    lolcate.ady update {name}")
-
-def cmd_update(name: str):
-    let cfg: Config = load_config(name)
-    let ipath: Path = index_path(name)
-    var all_paths: []str = []
-    var t0: float   = time.time()
-    let fd_flags: str = "-L" if cfg.follow_symlinks else ""
-    for root_dir in cfg.dirs:
-        if not -d root_dir:
-            print(f"Warning: {root_dir} not found — skipping.")
-            continue
-        let paths: []str = find_files(Path(root_dir), fd_flags)
-        for fpath in paths:
-            if not path_should_skip(fpath, cfg.ignores):
-                all_paths.append(fpath)
-    let count: int = len(all_paths)
-    with open(ipath, "w") as outf:
-        for fpath in all_paths:
-            outf.write(fpath + "\n")
-    let elapsed: float = time.time() - t0
-    print(f"Indexed {count} files in {elapsed:.2f}s")
-    print(f"  Index : {ipath}")
-
-def cmd_query(pattern: str, name: str):
-    let ipath: Path = index_path(name)
-    if not -f ipath:
-        print(f"Index for '{name}' not built. Run: lolcate.ady update {name}")
-        quit(1)
-    let hits: []str = search_index(pattern, ipath)
-    for path in hits:
-        print(path)
-    if len(hits) == 0:
-        print(f"(no matches for '{pattern}' in database '{name}')")
-
-def cmd_ls():
-    let ddir: Path = data_dir()
-    if not -d ddir:
-        print("No databases. Create one: lolcate.ady create <name>")
-        return
-    var found: bool = False
-    let raw_entries: []str = list_dir(ddir)
-    for entry in sorted(raw_entries):
-        let epath: Path = ddir / entry
-        let cpath: Path = epath / "config.txt"
-        if -d epath and -f cpath:
-            found = True
-            let ipath: Path = epath / "db.txt"
-            if -f ipath:
-                let (n, sz) = index_stats(ipath)
-                print(f"  {entry:<20}  {n:>8} files   ({sz} bytes)")
-            else:
-                print(f"  {entry:<20}  (not indexed yet)")
-    if not found:
-        print("No databases. Create one: lolcate.ady create <name>")
-
-def cmd_info(name: str):
-    let ddir: Path  = db_dir(name)
-    if not -d ddir:
-        print(f"Database '{name}' not found.")
-        quit(1)
-    let cfg: Config = load_config(name)
-    let ipath: Path = index_path(name)
-    print(f"Database : {name}")
-    print(f"Location : {ddir}")
-    print(f"Dirs     :")
-    for d in cfg.dirs:
-        print(f"  {d}")
-    let ign_str: str = ", ".join(cfg.ignores)
-    let sym_str: str = "follow" if cfg.follow_symlinks else "skip"
-    print(f"Ignores  : {ign_str}")
-    print(f"Symlinks : {sym_str}")
-    if -f ipath:
-        let (n, sz) = index_stats(ipath)
-        print(f"Index    : {ipath}")
-        print(f"Files    : {n}")
-        print(f"Size     : {sz} bytes")
-    else:
-        print("Index    : not built yet")
-
-def cmd_add_dir(name: str, new_dir: str):
-    let ddir: Path = db_dir(name)
-    if not -d ddir:
-        print(f"Database '{name}' not found. Run: lolcate.ady create {name}")
-        quit(1)
-    var expanded: Path = Path(new_dir)
-    if new_dir == "~":
-        expanded = Path($HOME)
-    elif new_dir.startswith("~/"):
-        expanded = Path($HOME) / new_dir[2:]
-    let abs_expanded: Path = expanded.resolve()
-    var cfg: Config = load_config(name)
-    if abs_expanded in cfg.dirs:
-        print(f"'{abs_expanded}' is already in database '{name}'")
-        return
-    cfg.dirs.append(abs_expanded)
-    save_config(name, cfg)
-    print(f"Added '{abs_expanded}' to database '{name}'")
-    print(f"  Rebuild index with: lolcate.ady update {name}")
-
-def cmd_add_ignore(name: str, pat: str):
-    let ddir: Path = db_dir(name)
-    if not -d ddir:
-        print(f"Database '{name}' not found. Run: lolcate.ady create {name}")
-        quit(1)
-    var cfg: Config = load_config(name)
-    if pat in cfg.ignores:
-        print(f"'{pat}' is already in the ignore list for '{name}'")
-        return
-    cfg.ignores.append(pat)
-    save_config(name, cfg)
-    print(f"Added ignore pattern '{pat}' to database '{name}'")
+    def list_all(self):
+        let ddir: Path = data_dir()
+        if not -d ddir:
+            print("No databases. Create one: lolcate_oo.ady create <name>")
+            return
+        var found: bool = False
+        let raw_entries: []str = self._list_dir(ddir)
+        for entry in sorted(raw_entries):
+            let epath: Path = ddir / entry
+            let cpath: Path = epath / "config.txt"
+            if -d epath and -f cpath:
+                found = True
+                let ipath: Path = epath / "db.txt"
+                if -f ipath:
+                    var db: Database = Database(entry)
+                    let (n, sz) = db.stats()
+                    print(f"  {entry:<20}  {n:>8} files   ({sz} bytes)")
+                else:
+                    print(f"  {entry:<20}  (not indexed yet)")
+        if not found:
+            print("No databases. Create one: lolcate_oo.ady create <name>")
 
 # ---------------------------------------------------------------------------
 # Usage
 # ---------------------------------------------------------------------------
 
 def usage():
-    print("lolcate.ady — file indexer (Adascript port of lolcate-rs)")
+    print("lolcate_oo.ady — file indexer (object-oriented Adascript port of lolcate-rs)")
     print("")
-    print("  lolcate.ady create <name>              create a new database")
-    print("  lolcate.ady update [name]              rebuild the index     (default: 'default')")
-    print("  lolcate.ady query  <pattern> [name]    search via regex      (default: 'default')")
-    print("  lolcate.ady ls                         list all databases")
-    print("  lolcate.ady info   [name]              show database info    (default: 'default')")
-    print("  lolcate.ady add-dir    <name> <path>   add a directory to scan")
-    print("  lolcate.ady add-ignore <name> <pat>    add an ignore pattern")
+    print("  lolcate_oo.ady create <name>              create a new database")
+    print("  lolcate_oo.ady update [name]              rebuild the index     (default: 'default')")
+    print("  lolcate_oo.ady query  <pattern> [name]    search via regex      (default: 'default')")
+    print("  lolcate_oo.ady ls                         list all databases")
+    print("  lolcate_oo.ady info   [name]              show database info    (default: 'default')")
+    print("  lolcate_oo.ady add-dir    <name> <path>   add a directory to scan")
+    print("  lolcate_oo.ady add-ignore <name> <pat>    add an ignore pattern")
     quit(1)
 
 # ---------------------------------------------------------------------------
@@ -300,22 +320,29 @@ let cmd: str = $1
 case cmd:
     when "create":
         if $# < 2: usage()
-        cmd_create($2)
+        var db: Database = Database($2)
+        db.create()
     when "update":
-        cmd_update($2 if $# >= 2 else DEFAULT_DB)
+        var db: Database = Database($2 if $# >= 2 else DEFAULT_DB)
+        db.update()
     when "query":
         if $# < 2: usage()
-        cmd_query($2, $3 if $# >= 3 else DEFAULT_DB)
+        var db: Database = Database($3 if $# >= 3 else DEFAULT_DB)
+        db.query($2)
     when "ls":
-        cmd_ls()
+        var mgr: DatabaseManager = DatabaseManager()
+        mgr.list_all()
     when "info":
-        cmd_info($2 if $# >= 2 else DEFAULT_DB)
+        var db: Database = Database($2 if $# >= 2 else DEFAULT_DB)
+        db.info()
     when "add-dir":
         if $# < 3: usage()
-        cmd_add_dir($2, $3)
+        var db: Database = Database($2)
+        db.add_dir($3)
     when "add-ignore":
         if $# < 3: usage()
-        cmd_add_ignore($2, $3)
+        var db: Database = Database($2)
+        db.add_ignore($3)
     when others:
         print(f"Unknown command: '{cmd}'")
         usage()
