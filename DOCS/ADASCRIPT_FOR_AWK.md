@@ -185,10 +185,10 @@ takes a regex literal:
 ```python
 def classify(s: str) -> Severity_T:
     case s:
-        when /error|fatal/i: return ERROR
-        when /warn/i:        return WARN
-        when /info|debug/i:  return INFO
-        when others:         return DEBUG
+        when /error|fatal/i: ERROR
+        when /warn/i:        WARN
+        when /info|debug/i:  INFO
+        when others:         DEBUG
 ```
 
 The `i` is a flag on the literal, not an argument to a function. Literal
@@ -311,9 +311,9 @@ Guards work here too, and are what makes a catch-all necessary again:
 ```python
 def prefix(sev: Severity_T, nr: Natural) -> str:
     case sev:
-        when ERROR:            return "!!"
-        when WARN if nr < 10:  return " !"   # only shout early
-        when others:           return "  "
+        when ERROR:            "!!"
+        when WARN if nr < 10:  " !"   # only shout early
+        when others:           "  "
 ```
 
 The type answers questions about itself, through tick attributes borrowed
@@ -419,10 +419,10 @@ the compiler checks that all four are handled:
 ```python
 def describe(s: Spec_T) -> str:
     case s.kind:
-        when FLAG:     return "a flag"
-        when NUMBER:   return f"a whole number in {s.lo} .. {s.hi}"
-        when CHOICE:   return "one of " + ", ".join(s.allowed)
-        when PATHNAME: return "a path that must exist" if s.must_exist else "a path"
+        when FLAG:     "a flag"
+        when NUMBER:   f"a whole number in {s.lo} .. {s.hi}"
+        when CHOICE:   "one of " + ", ".join(s.allowed)
+        when PATHNAME: "a path that must exist" if s.must_exist else "a path"
 ```
 
 In AWK this is `kind[i]`, `lo[i]`, `hi[i]`, `allowed[i]` and a convention
@@ -595,10 +595,10 @@ if $# > 0:
 
 def classify(line: str) -> Severity_T:
     case line:
-        when /error/i:      return ERROR
-        when /warn/i:       return WARN
-        when /info|debug/i: return INFO
-        when others:        return OTHER
+        when /error/i:      ERROR
+        when /warn/i:       WARN
+        when /info|debug/i: INFO
+        when others:        OTHER
 
 
 def process(raw: str):
@@ -907,11 +907,11 @@ def status_class(status: Natural) -> Status_T:
     class.
     """
     case status:
-        when 200 .. 299: return SUCCESS
-        when 300 .. 399: return REDIRECT
-        when 400 .. 499: return CLIENT_ERROR
-        when 500 .. 599: return SERVER_ERROR
-        when others:     return ODD
+        when 200 .. 299: SUCCESS
+        when 300 .. 399: REDIRECT
+        when 400 .. 499: CLIENT_ERROR
+        when 500 .. 599: SERVER_ERROR
+        when others:     ODD
 ```
 
 **And the post-processing**, which is `finish()`. First the housekeeping the
