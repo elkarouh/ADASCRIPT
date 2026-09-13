@@ -473,9 +473,14 @@ def to_nim(self, indent=0, is_virtual=False, class_name=None, parent_name=None, 
         class_type = class_name + type_params if class_name else None
 
         _generic_ctx = bool(type_params or (parent_name and "[" in parent_name))
-        # Emit forward declarations for methods so __init__ can call them
+        # Emit forward declarations for methods so any method (not just
+        # __init__) can call a sibling method defined later in the class body.
+        # Nim requires a routine to be declared before use, and two or more
+        # methods that call each other out of source order (or in a cycle)
+        # would otherwise fail to compile depending on which one Adascript
+        # happened to write first.
         fwd_lines = []
-        if inits and other_methods:
+        if len(other_methods) > 1:
             for func_node_m, mname in other_methods:
                 fwd = _generate_method_decl(func_node_m, base_indent, class_name, parent_name, is_virtual_class, type_params)
                 if fwd:
