@@ -15,9 +15,12 @@ Adascript keeps AWK's shape and replaces its type system. This document is
 for someone who already thinks in records and fields and wants to know what
 that buys them.
 
-Every example here is compiled and run on **both** backends — `ady2nim` and
-`ady2py` — before being quoted. `EXAMPLES/awk_logscan.ady` is the worked
-example, and `make test` runs it.
+Every example quoted here is a real, runnable file under `EXAMPLES/`, and
+`make test` runs it. Most run on **both** backends — `ady2nim` and `ady2py`;
+the one exception is `awk_logscan.ady`, whose `AwkBase` form is Nim-only
+(§2). §10 works through three of them, built up in stages: no state, then
+one record shape or another, then a state machine deciding which shape a
+record even is.
 
 ---
 
@@ -60,7 +63,7 @@ in the same program, and the difference between them is worth being
 deliberate about.
 
 Everything below is one of those five points answered. The worked example in
-§10 is all five at once.
+§10.3 is all five at once.
 
 ---
 
@@ -72,7 +75,7 @@ how much state you carry.
 ### The flat form
 
 For a filter, iterate `stdin.lines` and be done. `EXAMPLES/awk_example.ady`
-is this shape:
+is this shape (quoted in full in §10.1):
 
 ```python
 def main():
@@ -424,8 +427,8 @@ def describe(s: Spec_T) -> str:
 
 In AWK this is `kind[i]`, `lo[i]`, `hi[i]`, `allowed[i]` and a convention
 about which of them are meaningful for a given `i` — written down in a
-comment if you were lucky. `EXAMPLES/config_check.ady` is the worked example:
-a configuration checker whose whole schema is one variant record.
+comment if you were lucky. `EXAMPLES/config_check.ady` is a configuration
+checker whose whole schema is one variant record; §10.2 walks through it.
 
 ---
 
@@ -551,7 +554,183 @@ if have("git"): ...   # is it even installed?
 
 ---
 
-## 10. A worked example
+## 10. Worked examples
+
+The rest of this document is vocabulary. These three files put it to work,
+in the order complexity actually arrives in practice: no state, then one
+record shape or another, then a state machine deciding which shape a record
+even is. Each is a complete, runnable program — `make test` runs all three —
+and each is quoted here as it actually stands in `EXAMPLES/`, not as a
+simplified stand-in for it.
+
+### 10.1 No state: `awk_example.ady`
+
+The plainest case first: one kind of record, no memory of the records
+before it. This is §2's flat form, in full — every line is classified and
+printed on its own, and nothing about line *N* depends on line *N-1*:
+
+```python
+#!/usr/bin/env ady2nim
+"""
+awk-style line processor.
+
+Usage:
+    ./awk_example < FILE                   # FS = whitespace
+    cat FILE | ./awk_example ,             # FS = comma
+    cat FILE | ./awk_example '\t'          # FS = tab
+"""
+type Severity_T is enum INFO, WARN, ERROR, OTHER
+
+
+var FS        : str = " "
+var OFS       : str = " "
+var NR        : Natural = 0
+var NF        : Natural = 0
+var total_len : Natural = 0
+var total_nf  : Natural = 0
+var counts    : [Severity_T]Natural = [INFO : 0, WARN : 0, ERROR : 0, OTHER: 0]
+
+if $# > 0:
+    FS = $1
+
+def classify(line: str) -> Severity_T:
+    case line:
+        when /error/i:      return ERROR
+        when /warn/i:       return WARN
+        when /info|debug/i: return INFO
+        when others:        return OTHER
+
+
+def process(raw: str):
+    let line: str = raw.rstrip()
+    NR += 1
+    let Fields: []str = (line.split() if FS == " " else line.split(FS))
+    NF = Fields'Length
+    total_len += line'Length
+    total_nf  += NF
+
+    let sev: Severity_T = classify(line)
+    counts[sev] += 1
+
+    case sev:
+        when ERROR: print f"!! {NR:>3}: {line}"
+        when WARN:  print f" ! {NR:>3}: {line}"
+        when INFO:
+            if NF >= 1:
+                let first: str = Fields[0]
+                let last:  str = Fields[NF-1]
+                print f"[info] NR={NR} NF={NF} first={first}{OFS}last={last}"
+            else:
+                print f"[info] NR={NR} (empty)"
+        when others:
+            let joined: str = OFS.join(Fields)
+            print f"   {NR:>3}: {joined}"
+
+
+def main():
+    print "--- awk report ---"
+    print f"FS = {repr(FS)}"
+
+    for raw in stdin.lines:
+        process(raw)
+
+    print ""
+    print "--- summary ---"
+    print f"records : {NR}"
+    if NR > 0:
+        let avg_len: float = total_len / NR
+        let avg_nf:  float = total_nf  / NR
+        print f"avg len : {avg_len:.2f}"
+        print f"avg NF  : {avg_nf:.2f}"
+    for s in Severity_T:
+        print f"  {s:<6} {counts[s]}"
+
+
+main()
+```
+
+Nothing here needs `AwkBase` at all — module-level `var`s stand in for `NR`
+and the running totals, and `for raw in stdin.lines: process(raw)` is the
+whole loop. `Severity_T` is doing real work even in the simplest case: a
+severity is a type from the first line of the program, not a string
+convention `classify` and every caller have to agree on separately.
+
+### 10.2 One shape or another: `config_check.ady`
+
+Still no state carried between records — but now the records are not all
+the same shape. `config_check.ady` checks a config file against a schema
+where a setting is a flag, a bounded number, a word from a list, or a path,
+and a variant record gives each shape only the fields that shape has (§7.1):
+
+```python
+type Kind_T is enum FLAG, NUMBER, CHOICE, PATHNAME
+
+type Spec_T (kind: Kind_T) is record:
+    case kind is
+        when FLAG:
+            on_by_default: bool
+        when NUMBER:
+            lo: int
+            hi: int
+        when CHOICE:
+            allowed: []str
+        when PATHNAME:
+            must_exist: bool
+```
+
+Checking a value is a `case` over the same discriminant, and each branch
+reads only the fields its own shape declares — `s.lo` inside the `CHOICE`
+branch is not a mistake to be careful about; on the Nim backend the field is
+not there to read. (`TRUE_WORDS` and `FALSE_WORDS` are two module-level word
+lists defined earlier in the file.)
+
+```python
+def check_value(s: Spec_T, value: str) -> str:
+    """Empty means the value is fine; otherwise the complaint."""
+    case s.kind:
+        when FLAG:
+            if value.lower() in TRUE_WORDS or value.lower() in FALSE_WORDS:
+                return ""
+            return f"'{value}' is not a yes/no word"
+        when NUMBER:
+            if value != /^-?\d+$/:
+                return f"'{value}' is not a whole number"
+            let n: int = int(value)
+            if n < s.lo or n > s.hi:
+                return f"{n} is outside {s.lo} .. {s.hi}"
+            return ""
+        when CHOICE:
+            if value in s.allowed:
+                return ""
+            return f"'{value}' is not one of " + ", ".join(s.allowed)
+        when PATHNAME:
+            if s.must_exist and not -d Path(value):
+                return f"'{value}' is not an existing directory"
+            return ""
+```
+
+The schema itself is a plain dict from setting name to `Spec_T`, which is
+where AWK's associative array is doing fine — the shape that needs the
+variant record is the *value*, not the lookup:
+
+```python
+let SCHEMA: {str}Spec_T = {
+    "verbose":  Spec_T(kind=FLAG,     on_by_default=False),
+    "workers":  Spec_T(kind=NUMBER,   lo=1, hi=64),
+    "mode":     Spec_T(kind=CHOICE,   allowed=["fast", "safe", "paranoid"]),
+    "log_dir":  Spec_T(kind=PATHNAME, must_exist=True),
+    "cache_dir":Spec_T(kind=PATHNAME, must_exist=False),
+}
+```
+
+`check()` reads the file line by line, matches `key = value` with a regex,
+looks the key up in `SCHEMA`, and calls `check_value` — no state carried
+from one line to the next, only a `seen` set so a key set twice is a warning
+rather than silently keeping the last one. The full file, with the report
+loop and the self-contained fixture `main()` writes under `/tmp`, is in
+`EXAMPLES/config_check.ady`.
+
+### 10.3 A state machine: `awk_logscan.ady`
 
 `EXAMPLES/awk_logscan.ady` is §1's five points in one file. An application
 log holds **two kinds of record**: timestamped events, and the stack traces
@@ -629,8 +808,8 @@ repeated on the front of every pattern, and nothing tells you when you miss
 one.
 
 **Each branch is a handler for the records valid in that state.** Between
-traces, a record is an event or the start of a trace. One regex takes an
-event apart, and the groups go straight into a record:
+traces, a record is an event, the start of a trace, or noise. One regex takes
+an event apart, and the groups go straight into a record:
 
 ```python
 def _outside(self) -> None:
@@ -644,13 +823,8 @@ def _outside(self) -> None:
             self.requests.append(req)
             self._event(sev, req)
         when /^Traceback |^[A-Z]\w+(Error|Exception): /:
-            # A trace belongs to the request logged just before it, which
-            # is the last one in the other list.
-            self.open_trace = Trace_T(lines=1)
-            if self.requests'Length > 0:
-                let prev: Request_T = self.requests[self.requests'Length - 1]
-                self.open_trace.under = prev.verb + " " + prev.path
             self.state = IN_TRACE
+            self._in_trace()
         when others:
             pass                      # a line belonging to neither kind
 ```
@@ -660,12 +834,24 @@ def _outside(self) -> None:
 log line carrying a severity nobody declared fails there, at the line that
 read it, rather than becoming a silent extra bucket in the report.
 
-Inside a trace, every record is part of it until one is not:
+The second branch is deliberately thin: recognising the line that *starts* a
+trace is not the same job as setting one up, so `_outside()` only flips the
+state and hands the very same record straight to `_in_trace()` — the state
+it just entered. Inside a trace, every record is part of it until one is not:
 
 ```python
 def _in_trace(self) -> None:
     """Inside a trace: every record is part of it until one is not."""
     case self.line:
+        when /^Traceback /:
+            # Only the literal header can mean "a new trace starts here";
+            # unlike _outside()'s regex, this one must NOT also match an
+            # exception-summary line (below), or that line -- which ends
+            # the trace -- would be misread as starting another one.
+            self.open_trace = Trace_T(lines=1)
+            if self.requests'Length > 0:
+                let prev: Request_T = self.requests[self.requests'Length - 1]
+                self.open_trace.under = prev.verb + " " + prev.path
         when /^\d{4}-\d{2}-\d{2} /:
             # A timestamped line is not part of the trace: close it, leave
             # the state, and hand this same record to the state just
@@ -680,10 +866,28 @@ def _in_trace(self) -> None:
             self.open_trace.lines += 1
 ```
 
-The `self._outside()` in that first branch is the other half of the pattern.
-A record that *ends* one state usually belongs to the next one, so the
-transition re-dispatches it rather than dropping it — the timestamped line
-that closes a trace is itself an event, and gets counted as one.
+The hand-off is symmetric, and worth seeing as one pattern rather than two.
+Neither transition ever handles the boundary record itself: each recognises
+that the record belongs to the *other* state and re-dispatches it there,
+rather than special-casing it in place. Going in, `_outside()` does no setup
+at all — it flips the flag and calls `self._in_trace()`, and the first branch
+above, now looking at the same line a second time, is what actually opens
+`open_trace`. Coming out, `_in_trace()` does the opposite: it finishes its
+own bookkeeping first — the completed trace goes on the list — *then* flips
+the flag and calls `self._outside()`, so the timestamped line that closed the
+trace is itself counted as the event it is, by the ordinary event branch,
+rather than by any special case for "the line after a trace." One recursion
+each way, and no record is ever dropped or double-handled.
+
+Look closely and the two regexes for "a trace is starting" are not quite the
+same, and that difference is load-bearing. `_outside()` watches for either
+the literal `Traceback ` header or a bare one-line `SomeError: ...` summary,
+because either can open a trace. `_in_trace()`'s own first branch only
+watches for the header. It has to: once inside a trace, a line that matches
+`SomeError: ...` is the trace's *closing* summary (the third branch below),
+not the start of a second, nested one — and a regex that could not tell
+those apart would reset `open_trace` on the very line meant to finish it,
+losing every line counted so far and the failure text with it.
 
 Both handlers are a `case` over the record: the dispatch on *state* picks the
 handler, and a dispatch on the *record* picks the branch. The catch-all is
@@ -817,10 +1021,10 @@ file, which is why `finish()` has to file it.
 
 ## 12. Where to go next
 
-- `EXAMPLES/awk_example.ady` — the flat form, runs on both backends
+- `EXAMPLES/awk_example.ady` — the flat form, in full in §10.1, runs on both backends
 - `EXAMPLES/test_awk.ady` — the same program as an `AwkBase` subclass
-- `EXAMPLES/awk_logscan.ady` — the worked example above, all of §1 at once
-- `EXAMPLES/config_check.ady` — the variant-record schema of 7.1, in full
+- `EXAMPLES/config_check.ady` — the variant-record schema, walked through in §10.2
+- `EXAMPLES/awk_logscan.ady` — the state-machine example, in full in §10.3, all of §1 at once
 - `EXAMPLES/CFMU/Tstatus_monitor.ady` — a real AWK script, translated
 - `DOCS/BOOK/05-pattern-matching.md` — `case`/`when` in full
 - `DOCS/BOOK/07-regex.md` — every regex form

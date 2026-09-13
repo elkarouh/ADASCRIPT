@@ -357,6 +357,17 @@ or absent, and there is no third state for "present twice". The four names
 in the table are the useful level to think at; this is the reason they line
 up as neatly as they do.
 
+A pure function is the same idea taken one step further: `f(x)` is a lookup
+too, mapping the argument to a result, and nothing about that mapping is
+ordered — call it twice with the same argument and it owes you the same
+answer both times, in whatever order you like. It is an **unordered
+mapping**, kin to `{K}V` in spirit even though the callable type below is
+spelled with `[…]`, not `{…}` — the square brackets there are borrowed for a
+different reason (an ordered parameter *list*, not an ordered *domain*; see
+below). It sits outside the four-way grid only because its "key" is a whole
+parameter list rather than the single hashable or ordinal type the grid's
+shape assumes — not because it fails to be a mapping.
+
 | Adascript        | Python                    | Nim                            |
 |----------------|---------------------------|--------------------------------|
 | `[]T`          | `list[T]`                 | `seq[T]`                       |
@@ -369,10 +380,26 @@ up as neatly as they do.
 | `(T, U)`       | `tuple[T, U]`             | `(T, U)`                       |
 | `[(T, U)]R`    | `Callable[[T, U], R]`     | `proc(a0: T, a1: U): R`        |
 
-`?T` and `(T, U)` are not containers and stand outside the scheme. `[*]T` is
-`[]T` with the length left to the caller — see below. The function type
+`?T` and `(T, U)` are not containers and stand outside the scheme. `[(T, U)]R`
+stands outside it too, but not for the same reason — it is a mapping, as
+above, just not one the grid's shape can index. `[*]T` is `[]T` with the
+length left to the caller — see below. The function type
 `[(T, U)]R` reuses the bracket for a different job: an ordered list of
 parameter types on the left, the result on the right.
+
+> **Note.** By the language's own ordered/unordered convention, this looks
+> like the one inconsistent spelling: an unordered mapping ought to take
+> `{…}`, not `[…]`. In practice, `{…}` is unavailable here for a sharper
+> reason than consistency: `{(int, str)}bool` is genuinely ambiguous — it
+> reads equally well as *the function type from `(int, str)` to `bool`* and
+> as *a dict keyed on the tuple type `(int, str)`, valued in `bool`*, and
+> both are real, constructible types. `[…]` reuses the ordered-list bracket
+> instead, which is available because no dict is ever spelled with a
+> parameter list on the left. This is squarely a *this-abstraction-needs-
+> one-spelling-per-concrete-transpile-target* problem: Nim and Python each
+> need one unambiguous form to emit, so the underlying kinship between
+> "callable" and "unordered mapping" has to be set aside for now in favor of
+> a spelling that parses without lookahead.
 
 > **`{…}` means unordered on purpose, and the backends prove it.** Iterating
 > the same `{str}int` gives insertion order on the Python backend and hash

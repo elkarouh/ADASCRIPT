@@ -82,16 +82,18 @@ class LogScan(AwkBase):
                 self._event(sev, req)
             when /^Traceback |^[A-Z]\w+(Error|Exception): /:
                 self.state = IN_TRACE
-                self._in_trace() # FORWARD DECLARATION SHOULD NOT BE NECESSARY FOR METHODS ???
+                self._in_trace()
             when others:
                 pass                      # a line belonging to neither kind
 
     def _in_trace(self) -> None:
         """Inside a trace: every record is part of it until one is not."""
         case self.line:
-            when /^Traceback |^[A-Z]\w+(Error|Exception): /:
-                # A trace belongs to the request logged just before it, which
-                # is the last one in the other list.
+            when /^Traceback /:
+                # Only the literal header can mean "a new trace starts here";
+                # unlike _outside()'s regex, this one must NOT also match an
+                # exception-summary line (below), or that line -- which ends
+                # the trace -- would be misread as starting another one.
                 self.open_trace = Trace_T(lines=1)
                 if self.requests'Length > 0:
                     let prev: Request_T = self.requests[self.requests'Length - 1]
