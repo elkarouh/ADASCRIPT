@@ -44,9 +44,12 @@ def data_dir() -> Path:
 
 class Database:
     var name:            str
-    var dirs:            []str = []
-    var ignores:         []str = []
-    var follow_symlinks: bool  = False
+    var dirs:            []Path = []   # directories to scan
+    var ignores:         []str  = []   # name patterns, not paths -- matched
+                                        # against one path component at a
+                                        # time in should_ignore(), never
+                                        # resolved or joined as a location
+    var follow_symlinks: bool   = False
 
     def __init__(self, name: str):
         self.name = name
@@ -69,7 +72,7 @@ class Database:
     # line-based text format, no JSON dependency
 
     def reset_to_defaults(self):
-        self.dirs = [$HOME]
+        self.dirs = [Path($HOME)]
         self.ignores = list(DEFAULT_IGNORES)
         self.follow_symlinks = False
 
@@ -79,10 +82,10 @@ class Database:
             print(f"Error: database '{self.name}' not found.")
             print(f"  Run: lolcate.ady create {self.name}")
             quit(1)
-        var dirs:            []str = []
-        var ignores:         []str = []
-        var follow_symlinks: bool  = False
-        var section:         str   = ""
+        var dirs:            []Path = []
+        var ignores:         []str  = []
+        var follow_symlinks: bool   = False
+        var section:         str    = ""
         with open(cpath) as f:
             for line in f:
                 let stripped: str = line.strip()
@@ -98,7 +101,7 @@ class Database:
                     when _ if stripped.startswith("#"):
                         continue
                     when _ if section == "dirs":
-                        dirs.append(stripped)
+                        dirs.append(Path(stripped))
                     when _ if section == "ignores":
                         ignores.append(stripped)
                     when _ if section == "follow_symlinks":
@@ -181,7 +184,7 @@ class Database:
             if not -d root_dir:
                 print(f"Warning: {root_dir} not found — skipping.")
                 continue
-            let paths: []str = self._find_files(Path(root_dir))
+            let paths: []str = self._find_files(root_dir)
             for fpath in paths:
                 if not self.path_should_skip(fpath):
                     all_paths.append(fpath)
