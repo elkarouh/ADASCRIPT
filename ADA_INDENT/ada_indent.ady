@@ -41,7 +41,6 @@ type Paren_Kind_T is enum:
     CASE_EXPR  # (case … is when …)
     FOR_EXPR   # (for … => …)  quantified or iterated expression
 
-
 # ---------------------------------------------------------------------------
 # Lexical helpers — all work on a single physical line.
 # ---------------------------------------------------------------------------
@@ -59,16 +58,14 @@ def code_chars(s: str) -> char:
     var i: Natural = 0
     let n: Natural = len(s)
     while i < n:
-        let c: char = s[i]
-        case c:
+        case s[i]:
             when '"':
                 i = skip_quoted(s, i, '"')
             when '\'' if i + 2 < n and s[i + 2] == '\'':
                 i += 3                           # character literal: skip 'x' whole
             when others:
-                yield c
+                yield s[i]
                 i += 1
-
 
 def paren_delta(line: str) -> int:          # int: ')' without '(' makes it negative
     """Net '(' minus ')' on the line, ignoring parens inside string and character
@@ -76,21 +73,16 @@ def paren_delta(line: str) -> int:          # int: ')' without '(' makes it nega
     var depth: int = 0                      # int: a line may close more than it opens
     for c in code_chars(line):
         case c:
-            when '(':
-                depth += 1
-            when ')':
-                depth -= 1
-            when others:
-                pass
+            when '(': depth += 1
+            when ')': depth -= 1
+            when others: pass
     return depth
-
 
 def last_word(code: str) -> str:
     """Lowercased final token, after dropping a trailing ';'. '' if empty."""
     let parts: []str = code.strip().rstrip(";").split()
     if len(parts) > 0:
         result = parts[-1].lower()
-
 
 def stmt_incomplete(code_s: str) -> bool:
     """True if a (comment-stripped) code line continues onto the next line.
@@ -136,17 +128,12 @@ def starts_with_operator(code_s: str) -> bool:
     takes one extra indent level so it stands out from the operand it continues."""
     if code_s == "":
         return False
-    let c0: char = code_s[0]
-    case c0:
-        when ':':
-            return len(code_s) > 1 and code_s[1] == '='   # ':=', not a bare ':'
-        when '.':
-            return len(code_s) > 1 and code_s[1] == '.'   # '..' range
-        when '=' | '&' | '+' | '-' | '*' | '/' | '<' | '>' | '|':
-            return True
-        when others:
-            let w: str = lead_ident(code_s).lower()
-            return w in ("and", "or", "xor", "mod", "rem")
+    let c: char = code_s[0]
+    case c: # bug here, cannot replace c with code_s[0] in the case statement
+        when ':': len(code_s) > 1 and code_s[1] == '='   # ':=', not a bare ':'
+        when '.': len(code_s) > 1 and code_s[1] == '.'   # '..' range
+        when '=' | '&' | '+' | '-' | '*' | '/' | '<' | '>' | '|': True
+        when others: lead_ident(code_s).lower() in ("and", "or", "xor", "mod", "rem")
 
 def is_term_continuation(code_s: str) -> bool:
     """True if the line continues a value (sub-)expression across a line break,
@@ -215,10 +202,8 @@ def scan_parens(text: str, base_depth: Natural, base_col: Natural) -> [](int, in
                         openers.append((depth, base_col + j, CASE_EXPR))
                     when "for":
                         openers.append((depth, base_col + j, FOR_EXPR))
-                    when _ if j < n:
-                        openers.append((depth, base_col + j, PLAIN))
                     when others:
-                        openers.append((depth, base_col + INDENT_WIDTH, PLAIN))
+                        openers.append((depth, base_col + (j if j < n else INDENT_WIDTH), PLAIN))
                 i += 1
             when ')':
                 depth -= 1

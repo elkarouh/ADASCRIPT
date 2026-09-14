@@ -29,6 +29,10 @@ def dijkstra(graph : Graph_T, start: Node_T) -> {Node_T}Distance_T:
                 queue.push((new_dist, neighbor))
     return distances
 
+if __name__ == "__main__":
+    graph : Graph_T = {A: [(1.0, B), (4.0, C)], B: [(2.0, C), (5.0, D)], C: [(1.0, D)], D: []}
+    print dijkstra(graph, A)    
+
 # `D: []` is load-bearing. D has no outgoing edges, so it is tempting to
 # leave it out -- but the distance table above is built from `for node in
 # graph`, which reads the keys, and D would then not be in it. The first
@@ -56,5 +60,4 @@ def dijkstra(graph : Graph_T, start: Node_T) -> {Node_T}Distance_T:
 # wants; both backends also infer it from the argument if the brackets are
 # left off. The version here stays written out because it is what §1.4 of
 # the book reads line by line.
-graph : Graph_T = {A: [(1.0, B), (4.0, C)], B: [(2.0, C), (5.0, D)], C: [(1.0, D)], D: []}
-print dijkstra(graph, A)
+
