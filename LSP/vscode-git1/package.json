@@ -1,0 +1,108 @@
+{
+  "name": "vscode-git1",
+  "displayName": "git1 — Single-File Version Control",
+  "description": "VC integration for git1: each file has its own private git repo under .git1/",
+  "version": "0.2.0",
+  "publisher": "adascript",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": ["SCM Providers", "Other"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/elkarouh/adascript"
+  },
+  "activationEvents": [
+    "*"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "git1.init",
+        "title": "git1: Start Tracking This File"
+      },
+      {
+        "command": "git1.commit",
+        "title": "git1: Commit"
+      },
+      {
+        "command": "git1.diff",
+        "title": "git1: Show Diff"
+      },
+      {
+        "command": "git1.log",
+        "title": "git1: Show Log"
+      },
+      {
+        "command": "git1.status",
+        "title": "git1: Status"
+      },
+      {
+        "command": "git1.rm",
+        "title": "git1: Stop Tracking (Delete History)"
+      },
+      {
+        "command": "git1.switchBranch",
+        "title": "git1: Switch Branch"
+      },
+      {
+        "command": "git1.createBranch",
+        "title": "git1: Create Branch"
+      }
+    ],
+    "submenus": [
+      {
+        "id": "git1.submenu",
+        "label": "git1"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        { "command": "git1.init", "when": "editorIsOpen" },
+        { "command": "git1.commit", "when": "git1:tracked && git1:dirty" },
+        { "command": "git1.diff", "when": "git1:tracked" },
+        { "command": "git1.log", "when": "git1:tracked" },
+        { "command": "git1.status", "when": "git1:tracked" },
+        { "command": "git1.rm", "when": "git1:tracked" },
+        { "command": "git1.switchBranch", "when": "git1:tracked" },
+        { "command": "git1.createBranch", "when": "git1:tracked" }
+      ],
+      "editor/context": [
+        { "submenu": "git1.submenu", "group": "git1", "when": "git1:tracked" },
+        { "command": "git1.init", "group": "git1", "when": "!git1:tracked && editorIsOpen" }
+      ],
+      "explorer/context": [
+        { "submenu": "git1.submenu", "group": "git1", "when": "git1:tracked" },
+        { "command": "git1.init", "group": "git1", "when": "!git1:tracked" }
+      ],
+      "git1.submenu": [
+        { "command": "git1.commit", "group": "1_changes", "when": "git1:dirty" },
+        { "command": "git1.diff", "group": "1_changes" },
+        { "command": "git1.status", "group": "1_changes" },
+        { "command": "git1.log", "group": "2_history" },
+        { "command": "git1.switchBranch", "group": "3_branch" },
+        { "command": "git1.createBranch", "group": "3_branch" },
+        { "command": "git1.rm", "group": "4_danger" }
+      ]
+    },
+    "configuration": {
+      "title": "git1",
+      "properties": {
+        "git1.program": {
+          "type": "string",
+          "default": "git1",
+          "description": "Path to the git1 binary."
+        },
+        "git1.container": {
+          "type": "string",
+          "default": ".git1",
+          "description": "Name of the container directory (default: .git1)."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "install-deps": "npm install"
+  }
+}
