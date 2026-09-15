@@ -13,14 +13,14 @@ so the documents read the same as before.
     <!-- from: EXAMPLES/awk_logscan.ady -->
         a quote. Every non-blank line must appear in that file, verbatim.
 
-    <!-- illustrative -->
+    <!-- illustrative: why it cannot be a quote -->
         not a quote: a sketch, a signature, a fragment with an undefined
         name or an elided body. Not checked against anything -- which is
-        why the count is capped below. Most of what the documents show
-        outside their worked examples has an equivalent in
-        EXAMPLES/DOC/*_snippets.ady, which `make test` runs; equivalent is
-        not identical, so those blocks are marked illustrative rather than
-        quoted, honestly.
+        why the reason is required, and why the count is capped below. The
+        reason is the part that does the work: a block that cannot say what
+        stops it being real code usually can be made into real code. Most
+        of what the documents show outside their worked examples lives in
+        EXAMPLES/DOC/*_snippets.ady, which `make test` runs.
 
     (no comment)
         a quote from somewhere in the repository. Every non-blank line
@@ -38,9 +38,9 @@ import sys
 # illustrative and moving on -- costs a deliberate edit here. Lower these
 # when a sketch becomes a quote; raising one should need a reason.
 DOCS = {
-    "DOCS/ADASCRIPT_FOR_AWK.md":   16,
-    "DOCS/ADASCRIPT_FOR_SHELL.md": 11,
-    "DOCS/WHY_ADASCRIPT.md":        5,
+    "DOCS/ADASCRIPT_FOR_AWK.md":    3,
+    "DOCS/ADASCRIPT_FOR_SHELL.md":  4,
+    "DOCS/WHY_ADASCRIPT.md":        2,
 }
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -83,7 +83,14 @@ def main():
             body = match.group("body")
             first = next(significant(body), "")
 
-            if marker == "illustrative":
+            if marker.startswith("illustrative"):
+                reason = marker[len("illustrative"):].lstrip(":").strip()
+                if not reason:
+                    print(f"  {doc}: illustrative without a reason:")
+                    print(f"      block starting {first[:60]!r}")
+                    print(f"      write `<!-- illustrative: why it cannot "
+                          f"be a quote -->`")
+                    failures += 1
                 illustrative += 1
                 continue
 

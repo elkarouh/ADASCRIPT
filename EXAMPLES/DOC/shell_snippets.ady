@@ -8,11 +8,12 @@ DOCS/check_quotes.py has a real file to point at.
 
 # --- the four shapes of a command ---------------------------------------
 shell: true                                   # run it, ignore the result
-let r = shell: echo captured                  # .output .stderr .code
-assert r.output.strip() == "captured"
-assert r.code == 0
+shell: true                                   # run it; nothing captured
 
-let (text, rc) = shell: echo tuple            # the two halves by name
+let r = shell: echo captured                  # .output, .stderr, .code
+assert r.output.strip() == "captured"
+
+let (text, rc) = shell: echo tuple            # the two halves, by name
 assert text.strip() == "tuple" and rc == 0
 
 let names: []str = shellLines: printf 'a\nb\nc\n'
@@ -25,8 +26,8 @@ assert status == 0
 let f: str = "my notes.txt"
 let split_up = shell: printf '[%s]' {f}
 let one_arg  = shell: printf '[%s]' {!f}
-assert split_up.output == "[my][notes.txt]"
-assert one_arg.output  == "[my notes.txt]"
+assert split_up.output == "[my][notes.txt]"      # two arguments
+assert one_arg.output  == "[my notes.txt]"       # one
 
 let argv: []str = ["-m", "two words"]
 let starred = shell: printf '[%s]' {*argv}
@@ -45,13 +46,14 @@ var caught: bool = False
 try:
     shell(check = true): exit 9
 except:
+    print "handled"
     caught = True
 assert caught
 
 # --- a pipeline reports the first failure, not the last -------------------
 let loose  = shell: false | cat
 let strict = shell(pipefail = true): false | cat
-assert loose.code == 0                        # POSIX; the failure vanished
+assert loose.code == 0            # the failure vanished, as POSIX says
 assert strict.code != 0
 
 # --- a block joins with && and stops at the first failure -----------------
@@ -64,10 +66,11 @@ let anyway = shell(join = ";"):
     false
     echo still here
 assert anyway.output.strip() == "still here"
+let (_, pipe_rc) = shell(pipefail = true): false | cat
+assert pipe_rc != 0
 
-# --- streaming, instead of while read ------------------------------------
 var seen: Natural = 0
-for line in shellIter: printf 'x\ny\nz\n'
+for l in shellIter: printf 'a\nb\nc\n'
     seen += 1
 assert seen == 3
 
@@ -95,6 +98,7 @@ let log:  Path = root / "ady_shell_doc" / "app.log"
 assert str(log) == "/tmp/ady_shell_doc/app.log"
 assert log.name == "app.log"
 assert str(log.parent) == "/tmp/ady_shell_doc"
+log.parent.mkdir()                  # mkdir -p: parents made, existing is fine
 log.parent.mkdir()                            # mkdir -p, already-there is fine
 writeFile(str(log), "hello\n")
 
@@ -109,8 +113,9 @@ assert not have("no_such_program_xyz")
 # --- arguments and the environment ---------------------------------------
 assert $# >= 0
 assert $HOME != ""
-assert $NO_SUCH_VAR_HERE == ""                # unset reads as empty, as in sh
+assert $NO_SUCH_VAR_HERE == ""                  # unset reads as empty, as in sh
 assert ${NO_SUCH_VAR_HERE:-"fallback"} == "fallback"
+assert $?NO_SUCH_VAR_HERE == None               # ...unless you ask this way
 assert $?NO_SUCH_VAR_HERE == None             # ...unless you ask this way
 
 # --- arithmetic is arithmetic --------------------------------------------
@@ -143,5 +148,17 @@ if "key=42" == /^(\w+)=(\d+)$/:
     let key:   str = $+1
     let value: int = int($+2)
     assert key == "key" and value == 42
+
+# --- the two the AWK document shows in its shell section ------------------
+# In a proc, so `rc` here is not the `rc` of the tuple example above.
+def awk_document_shell_fragments() -> None:
+    let (greeting, rc) = shell: echo hello world
+    assert rc == 0
+    assert greeting.strip() == "hello world"
+
+    let dir: str = "/tmp"
+    let (count_out, _) = shell: ls -1d {!dir}
+
+awk_document_shell_fragments()
 
 print "all shell-document snippets ok"

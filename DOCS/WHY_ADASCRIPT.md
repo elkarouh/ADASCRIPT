@@ -51,16 +51,16 @@ them, so the type exists in the compiler and not on the page.
 
 The compiler is not the audience. When I read
 
-<!-- illustrative -->
+<!-- illustrative: the counter-example -- a bare assignment is not a declaration, and does not compile -->
 ```python
 speed = compute(track, wind)
 ```
 
 I know nothing. When I read
 
-<!-- illustrative -->
+<!-- from: EXAMPLES/DOC/why_snippets.ady -->
 ```python
-let speed: Velocity_T = compute(track, wind)
+let speed: Velocity_T = compute("BAW117", 12.0)
 ```
 
 I know what came back, I know what `compute` is for, and if the next line
@@ -102,7 +102,7 @@ the layer never forms.
 
 `float` says how the value is stored. `Velocity_T` says what it *is*. Consider:
 
-<!-- illustrative -->
+<!-- illustrative: two signatures contrasted, neither of them with a body -->
 ```python
 def separation(a: float, b: float, c: float, d: float) -> float
 def separation(own: Position_T, other: Position_T,
@@ -191,23 +191,31 @@ reads left to right as a sentence:
 | `?T` | a T, possibly absent |
 | `Fix_T is tuple:` | a named tuple, fields by name |
 
-<!-- illustrative -->
+<!-- from: EXAMPLES/DOC/why_snippets.ady -->
 ```python
 let xs   : []int              = [1, 2, 3]                 # a list of
 let m    : {str}int           = {"a": 1}                  # a mapping from .. to
 let s    : {}str              = {"x", "y"}                # a set of
-let arr  : [Phase_T]int       = [CLIMB: 1, CRUISE: 2, DESCENT: 3]  # one per member
+let arr  : [Sector_T]int       = [NORTH: 1, CENTRE: 2, SOUTH: 3]  # one per member
 let opt  : ?int               = 7                         # possibly absent
 let pair : Fix_T              = (lat: 51.5, lon: -0.1)    # named tuple
 ```
 
 They compose by stacking, with no brackets to hold open:
 
-<!-- illustrative -->
+<!-- from: EXAMPLES/DOC/why_snippets.ady -->
 ```python
 var routes : {str}[]str       = {"BA117": ["EGLL", "KJFK"]}
-var byphase: [Phase_T][]str   = [CLIMB: [], CRUISE: ["BA117"], DESCENT: []]
+var bysector: [Sector_T][]str   = [NORTH: [], CENTRE: ["BA117"], SOUTH: []]
 var nested : {str}{str}int    = {"a": {"b": 1}}
+
+routes["AF22"] = ["LFPG", "LEMD"]
+
+assert xs'Length == 3 and m["a"] == 1 and "x" in s
+assert arr[CENTRE] == 2 and (opt or 0) == 7 and pair.lat == 51.5
+assert routes["BA117"]'Length == 2 and routes'Length == 2
+assert bysector[CENTRE][0] == "BA117" and bysector[NORTH]'Length == 0
+assert nested["a"]["b"] == 1
 ```
 
 `{Callsign_T}[]Waypoint_T` is "for each callsign, a list of waypoints", and

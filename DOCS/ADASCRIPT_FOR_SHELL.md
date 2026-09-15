@@ -28,7 +28,7 @@ the two backends.
 `shell:` takes a command line, not a string. What differs is the target you
 give it, and the target is what decides how the command is run.
 
-<!-- illustrative -->
+<!-- from: EXAMPLES/DOC/shell_snippets.ady -->
 ```python
 shell: true                                   # run it; nothing captured
 
@@ -76,7 +76,7 @@ shellExec(cwd = self.dir, env = self.env): git {*args}
 needs. `{!x}` quotes it. `{*xs}` quotes every element of a list and joins
 them. The difference is the single most common bug in shell:
 
-<!-- illustrative -->
+<!-- from: EXAMPLES/DOC/shell_snippets.ady -->
 ```python
 let f: str = "my notes.txt"
 let split_up = shell: printf '[%s]' {f}
@@ -117,7 +117,7 @@ most of the time.
 and every one of them has exceptions you have to remember. Adascript makes
 the choice per command.
 
-<!-- illustrative -->
+<!-- from: EXAMPLES/DOC/shell_snippets.ady -->
 ```python
 try:
     shell(check = true): exit 9
@@ -132,7 +132,7 @@ forget to set.
 
 A pipeline's status is the POSIX one unless you ask otherwise:
 
-<!-- illustrative -->
+<!-- from: EXAMPLES/DOC/shell_snippets.ady -->
 ```python
 let loose  = shell: false | cat
 let strict = shell(pipefail = true): false | cat
@@ -179,7 +179,7 @@ because `-1a` puts one name on each line and `shellLines` splits on newlines
 only. When the output is long or slow, `shellIter` yields each line as it
 arrives, so nothing is held in memory:
 
-<!-- illustrative -->
+<!-- illustrative: `tail -f` never ends, so there is nothing for `make test` to run -->
 ```python
 for line in shellIter: tail -f build.log
     print line
@@ -261,7 +261,7 @@ String concatenation with `/` between the parts is how a shell script ends up
 with `//` in the middle of a path and an empty variable turning `$dir/$name`
 into `/etc/passwd`. `Path` makes joining an operation:
 
-<!-- illustrative -->
+<!-- from: EXAMPLES/DOC/shell_snippets.ady -->
 ```python
 let root: Path = Path("/tmp")
 let log:  Path = root / "ady_shell_doc" / "app.log"
@@ -278,7 +278,7 @@ an error on both backends.
 
 The shell's file tests come across unchanged, and mean what they mean:
 
-<!-- illustrative -->
+<!-- illustrative: a checklist of the file tests, with the bodies elided -->
 ```python
 if -f path:  ...      # and -d -e -L -r -w -x -s
 if a -nt b:  ...
@@ -306,7 +306,7 @@ for arg in $@[1:]:
 The environment has three readings, and the difference between them is one
 shell can only fake:
 
-<!-- illustrative -->
+<!-- from: EXAMPLES/DOC/shell_snippets.ady -->
 ```python
 assert $HOME != ""
 assert $NO_SUCH_VAR_HERE == ""                  # unset reads as empty, as in sh
@@ -327,7 +327,7 @@ The sed/grep/awk pipeline exists because shell has no way to look at a
 string. Adascript has regex literals, so matching is an operator and captures
 are variables:
 
-<!-- illustrative -->
+<!-- illustrative: a fragment -- `line` comes from a loop that is not shown -->
 ```python
 if line == /^(\w+)=(\d+)$/:
     let key:   str = $+1
@@ -351,7 +351,7 @@ four places that test it are four independent chances to typo. Here it is a
 type, and a `case` over it is checked for completeness by the Nim backend —
 miss a member and the program does not compile:
 
-<!-- illustrative -->
+<!-- illustrative: a case over Action_T with the branch bodies elided -->
 ```python
 type Action_T is enum COMPRESS, DELETE, KEEP, SKIP
 
@@ -366,10 +366,10 @@ listing the places you have to think about. Iterate the type itself to get
 every member in declaration order — useful for a report that must not forget
 a category:
 
-<!-- illustrative -->
+<!-- from: EXAMPLES/sh_janitor.ady -->
 ```python
 for a in Action_T:
-    print f"  {a'Image:<8} {counts[a]:>2} file(s)"
+    print f"  {a'Image:<8} {counts[a]:>2} file(s), {bytes[a]:>4} bytes"
 ```
 
 **A record instead of parallel arrays.** Shell's answer to a table is

@@ -6,7 +6,21 @@ shows outside its worked examples, so that `make test` runs them and
 DOCS/check_quotes.py has a real file to point at.
 """
 
-type Severity_T is enum DEBUG, INFO, WARN, ERROR
+type Severity_T   is enum DEBUG, INFO, WARN, ERROR
+type Scan_State_T is enum OUTSIDE, IN_TRACE
+type Status_T     is enum SUCCESS, REDIRECT, CLIENT_ERROR, SERVER_ERROR, ODD
+
+type Request_T is record:      # a timestamped event
+    at:      str     = ""
+    verb:    str     = ""
+    path:    str     = ""
+    status:  Natural = 0
+    ms:      Natural = 0
+
+type Trace_T is record:        # the lines after a failure
+    under:   str     = ""      # the request it followed
+    lines:   Natural = 0
+    failure: str     = ""      # the exception line that ends it
 
 # --- regex as an operator -------------------------------------------------
 let line: str = "2026-09-11 ERROR disk full on /var/log"
@@ -34,10 +48,10 @@ assert stamp == "11.09.2026"
 # --- case over regex ------------------------------------------------------
 def classify(s: str) -> Severity_T:
     case s:
-        when /error|fatal/i: return ERROR
-        when /warn/i:        return WARN
-        when /info|debug/i:  return INFO
-        when others:         return DEBUG
+        when /error|fatal/i: ERROR
+        when /warn/i:        WARN
+        when /info|debug/i:  INFO
+        when others:         DEBUG
 
 assert classify("Disk ERROR") == ERROR
 assert classify("nothing here") == DEBUG
@@ -45,24 +59,26 @@ assert classify("nothing here") == DEBUG
 # --- case over an enum, with a guard --------------------------------------
 def prefix(sev: Severity_T, nr: Natural) -> str:
     case sev:
-        when ERROR:            return "!!"
-        when WARN if nr < 10:  return " !"   # only shout early
-        when others:           return "  "
+        when ERROR:            "!!"
+        when WARN if nr < 10:  " !"   # only shout early
+        when others:           "  "
 
 assert prefix(ERROR, 99) == "!!"
 assert prefix(WARN, 3)   == " !"
 assert prefix(WARN, 30)  == "  "
 
 # --- the enum as a type ---------------------------------------------------
-assert ERROR'Image == "ERROR"
+assert ERROR'Image      == "ERROR"    # the name, for printing
 assert Severity_T'First == DEBUG
 assert Severity_T'Last  == ERROR
+assert Severity_T("WARN") == WARN     # and back from a string
 assert Severity_T("WARN") == WARN
-
 var counts: [Severity_T]Natural = [DEBUG: 0, INFO: 0, WARN: 0, ERROR: 0]
 counts[classify("warn: hot")] += 1
 assert counts[WARN] == 1
 
+for s in Severity_T:                  # every member, in declaration order
+    print f"  {s'Image:<5} {counts[s]}"
 # --- fields ---------------------------------------------------------------
 let F: []str = line.split()
 assert F'Length == 6
@@ -79,16 +95,16 @@ assert field(F, 99) == None
 
 # --- ?T: lifting and narrowing -------------------------------------------
 type Finding_T is record:
-    line:  ?Natural = None
-    text:  str      = ""
+    line: ?Natural = None
+    text: str      = ""
 
 let n: Natural = 12
-let maybe: ?Natural = n                        # a declaration lifts
-let one:  Finding_T = Finding_T(line=n, text="on a line")     # so does a field
-let none_: Finding_T = Finding_T(text="about the file")       # left out: None
-assert (maybe or 0) == 12       # a ?T and an int are different types
+let maybe: ?Natural = n                              # a declaration lifts
+let one:   Finding_T = Finding_T(line=n, text="on a line")     # so does a field
+let none_: Finding_T = Finding_T(text="about the file")        # left out: None
+assert (maybe or 0) == 12          # `or` supplies a default
+assert none_.line == None          # comparing against None is always fine
 assert (one.line or 0) == 12
-assert none_.line == None
 
 def where(f: Finding_T) -> str:
     let ln: ?Natural = f.line                  # bind, then guard
@@ -98,6 +114,5 @@ def where(f: Finding_T) -> str:
 
 assert where(one) == "line 12"
 assert where(none_) == ""
-print "tdoc ok"
 
 print "all AWK-document snippets ok"
