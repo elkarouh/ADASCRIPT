@@ -817,12 +817,20 @@ def _outside(self) -> None:
     # One regex takes the record apart; $+1 .. $+7 are its groups.
     case self.line:
         when /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}) (\w+) +(\w+) (\S+) (\d{3}) (\d+)ms$/:
-            let req: Request_T = Request_T(at=$+1 + " " + $+2, verb=$+4, path=$+5,
-                                           status=int($+6), ms=int($+7))
+            let req: Request_T = Request_T(at=$+1 + " " + $+2, verb=$+4, path=$+5, status=int($+6), ms=int($+7))
             let sev: Severity_T = Severity_T($+3.upper())
             self.requests.append(req)
             self._event(sev, req)
         when /^Traceback |^[A-Z]\w+(Error|Exception): /:
+            # Opening the trace belongs here, with the record that starts
+            # it: this is the branch that knows a trace is beginning, and
+            # it knows which request it belongs to -- the last one in the
+            # other list. Then hand the same record on, so the line that
+            # started the trace is also counted by it.
+            self.open_trace = Trace_T()
+            if self.requests'Length > 0:
+                let prev: Request_T = self.requests[self.requests'Length - 1]
+                self.open_trace.under = prev.verb + " " + prev.path
             self.state = IN_TRACE
             self._in_trace()
         when others:
@@ -834,24 +842,15 @@ def _outside(self) -> None:
 log line carrying a severity nobody declared fails there, at the line that
 read it, rather than becoming a silent extra bucket in the report.
 
-The second branch is deliberately thin: recognising the line that *starts* a
-trace is not the same job as setting one up, so `_outside()` only flips the
-state and hands the very same record straight to `_in_trace()` — the state
-it just entered. Inside a trace, every record is part of it until one is not:
+The second branch does three things in order: it opens the trace, it flips
+the state, and it hands the very same record straight to `_in_trace()` — the
+state it has just entered — so the line that started the trace is also
+counted by it. Inside a trace, every record is part of it until one is not:
 
 ```python
 def _in_trace(self) -> None:
     """Inside a trace: every record is part of it until one is not."""
     case self.line:
-        when /^Traceback /:
-            # Only the literal header can mean "a new trace starts here";
-            # unlike _outside()'s regex, this one must NOT also match an
-            # exception-summary line (below), or that line -- which ends
-            # the trace -- would be misread as starting another one.
-            self.open_trace = Trace_T(lines=1)
-            if self.requests'Length > 0:
-                let prev: Request_T = self.requests[self.requests'Length - 1]
-                self.open_trace.under = prev.verb + " " + prev.path
         when /^\d{4}-\d{2}-\d{2} /:
             # A timestamped line is not part of the trace: close it, leave
             # the state, and hand this same record to the state just
@@ -879,15 +878,21 @@ trace is itself counted as the event it is, by the ordinary event branch,
 rather than by any special case for "the line after a trace." One recursion
 each way, and no record is ever dropped or double-handled.
 
-Look closely and the two regexes for "a trace is starting" are not quite the
-same, and that difference is load-bearing. `_outside()` watches for either
-the literal `Traceback ` header or a bare one-line `SomeError: ...` summary,
-because either can open a trace. `_in_trace()`'s own first branch only
-watches for the header. It has to: once inside a trace, a line that matches
-`SomeError: ...` is the trace's *closing* summary (the third branch below),
-not the start of a second, nested one — and a regex that could not tell
-those apart would reset `open_trace` on the very line meant to finish it,
-losing every line counted so far and the failure text with it.
+Where the opening lives is worth dwelling on, because it is the whole lesson
+of the section in miniature. A bare `SomeError: ...` line can *start* a trace
+— not every failure has a `Traceback ` header — and it can also *end* one, as
+the summary of a trace already running. Same text, two meanings. No regex can
+tell them apart, because the difference is not in the line: it is in which
+state you are in when you read it.
+
+So the opening belongs in `_outside()`, where the state has already answered
+that question. `_in_trace()` never opens a trace at all; it only counts and
+closes. The alternative — matching "a trace is starting" in both handlers and
+narrowing the second regex so it cannot fire on a closing line — was tried,
+and it works only for traces that have a header: one that starts with a bare
+`SomeError: ...` is entered but never opened, so it loses the request it
+belongs to and its line count leaks into the next one. The regexes are not
+the state machine. That is what the state machine is for.
 
 Both handlers are a `case` over the record: the dispatch on *state* picks the
 handler, and a dispatch on the *record* picks the branch. The catch-all is

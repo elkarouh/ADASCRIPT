@@ -71,46 +71,6 @@ class LogScan(AwkBase):
         self.counts[sev] += 1
         self.by_status[status_class(req.status)] += 1
 
-    def _outside(self) -> None:
-        """Between traces: a record is an event, the start of one, or noise."""
-        # One regex takes the record apart; $+1 .. $+7 are its groups.
-        case self.line:
-            when /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}) (\w+) +(\w+) (\S+) (\d{3}) (\d+)ms$/:
-                let req: Request_T = Request_T(at=$+1 + " " + $+2, verb=$+4, path=$+5, status=int($+6), ms=int($+7))
-                let sev: Severity_T = Severity_T($+3.upper())
-                self.requests.append(req)
-                self._event(sev, req)
-            when /^Traceback |^[A-Z]\w+(Error|Exception): /:
-                self.state = IN_TRACE
-                self._in_trace()
-            when others:
-                pass                      # a line belonging to neither kind
-
-    def _in_trace(self) -> None:
-        """Inside a trace: every record is part of it until one is not."""
-        case self.line:
-            when /^Traceback /:
-                # Only the literal header can mean "a new trace starts here";
-                # unlike _outside()'s regex, this one must NOT also match an
-                # exception-summary line (below), or that line -- which ends
-                # the trace -- would be misread as starting another one.
-                self.open_trace = Trace_T(lines=1)
-                if self.requests'Length > 0:
-                    let prev: Request_T = self.requests[self.requests'Length - 1]
-                    self.open_trace.under = prev.verb + " " + prev.path
-            when /^\d{4}-\d{2}-\d{2} /:
-                # A timestamped line is not part of the trace: close it, leave
-                # the state, and hand this same record to the state just
-                # entered -- it is an event, and is counted as one.
-                self.traces.append(self.open_trace)
-                self.state = OUTSIDE
-                self._outside()
-            when /^([A-Z]\w+(Error|Exception)): /:
-                self.open_trace.lines  += 1
-                self.open_trace.failure = $+1
-            when others:
-                self.open_trace.lines += 1
-
     def process_record(self):
         """The whole dispatch: one branch per state, and nothing outside it.
 
@@ -123,6 +83,46 @@ class LogScan(AwkBase):
         case self.state:
             when OUTSIDE:  self._outside()
             when IN_TRACE: self._in_trace()
+
+    def _outside(self) -> None:
+        """Between traces: a record is an event, the start of one, or noise."""
+        # One regex takes the record apart; $+1 .. $+7 are its groups.
+        case self.line:
+            when /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}) (\w+) +(\w+) (\S+) (\d{3}) (\d+)ms$/:
+                let req: Request_T = Request_T(at=$+1 + " " + $+2, verb=$+4, path=$+5, status=int($+6), ms=int($+7))
+                let sev: Severity_T = Severity_T($+3.upper())
+                self.requests.append(req)
+                self._event(sev, req)
+            when /^Traceback |^[A-Z]\w+(Error|Exception): /:
+                # Opening the trace belongs here, with the record that starts
+                # it: this is the branch that knows a trace is beginning, and
+                # it knows which request it belongs to -- the last one in the
+                # other list. Then hand the same record on, so the line that
+                # started the trace is also counted by it.
+                self.open_trace = Trace_T()
+                if self.requests'Length > 0:
+                    let prev: Request_T = self.requests[self.requests'Length - 1]
+                    self.open_trace.under = prev.verb + " " + prev.path
+                self.state = IN_TRACE
+                self._in_trace()
+            when others:
+                pass                      # a line belonging to neither kind
+
+    def _in_trace(self) -> None:
+        """Inside a trace: every record is part of it until one is not."""
+        case self.line:
+            when /^\d{4}-\d{2}-\d{2} /:
+                # A timestamped line is not part of the trace: close it, leave
+                # the state, and hand this same record to the state just
+                # entered -- it is an event, and is counted as one.
+                self.traces.append(self.open_trace)
+                self.state = OUTSIDE
+                self._outside()
+            when /^([A-Z]\w+(Error|Exception)): /:
+                self.open_trace.lines  += 1
+                self.open_trace.failure = $+1
+            when others:
+                self.open_trace.lines += 1
 
     def finish(self):
         # A trace that runs to the end of the file has no following record to

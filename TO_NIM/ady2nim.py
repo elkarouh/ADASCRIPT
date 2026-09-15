@@ -1154,6 +1154,13 @@ def run_tests():
         "emit(2)\n",
         "proc emit(x: int): int =\n    return x + 1\n\n"
         "type Box = object of RootObj\n    n: int\n\n"
+        # Every method is forward-declared ahead of the class body, so one
+        # may call a sibling defined after it. Pinned here because the
+        # discard cases below it are what this fixture is really about, and
+        # they would be read as regressions if the header drifted silently.
+        "proc bump(self: var Box): int\n"
+        "proc run(self: var Box)\n"
+        "proc tail(self: Box): int\n"
         "proc newBox*(): Box =\n    result = Box()\n    result.n = 0\n"
         "proc bump(self: var Box): int =\n    self.n += 1\n    return self.n\n"
         "proc run(self: var Box) =\n    discard self.bump()\n"
