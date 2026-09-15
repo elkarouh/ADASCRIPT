@@ -1151,6 +1151,12 @@ def to_nim(self, prec=None):
     # does not process \xNN hex escapes, so we replace them with \e (for \x1b)
     # or embed the literal character for other values.
     import re as _re_fstr
+    # The escapes Python processes in an f-string and Nim's raw `fmt` does
+    # not. `\"` is left out: it is handled downstream, where the choice
+    # between fmt"..." and fmt"""...""" is made.
+    _ESCAPES = {'n': '\n', 't': '\t', 'r': '\r', 'a': '\a', 'b': '\b',
+                'f': '\f', 'v': '\v', '0': '\0', '\\': '\\'}
+
     def _fix_hex_escapes(s):
         # Only replace in literal portions (outside {} interpolations)
         out = []
@@ -1172,6 +1178,17 @@ def to_nim(self, prec=None):
                     continue
                 else:
                     out.append(s[i])
+            elif depth == 0 and s[i] == '\\' and i + 1 < len(s) and s[i+1] in _ESCAPES:
+                # Same reason as the hex case above, and the same cure.
+                # `fmt"..."` is one of Nim's *generalized raw string
+                # literals*, so a backslash in it is a backslash: f"a\nb"
+                # printed the two characters \ and n where Python prints a
+                # newline. Every f-string with an escape in it was wrong,
+                # silently. Embedding the character itself is what the raw
+                # literal will carry through unchanged.
+                out.append(_ESCAPES[s[i+1]])
+                i += 2
+                continue
             else:
                 out.append(s[i])
             i += 1
@@ -1280,7 +1297,9 @@ def to_nim(self, prec=None):
         # fmt"""...""".  Test for a bare quote, not just an escaped one: an
         # interpolation may have grown quotes during translation, as $+{day}
         # does when it becomes namedCaptures["day"].
-        if '"' in inner:
+        if '"' in inner or '\n' in inner or '\r' in inner:
+            # A literal newline is only legal inside a triple-quoted string,
+            # and _fix_hex_escapes has just turned every \n into one.
             inner = inner.replace('\\"', '"')
             result = 'fmt"""' + inner + '"""'
         else:

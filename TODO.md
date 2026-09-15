@@ -296,6 +296,19 @@ arguments to Option parameters, log/ln, pyimport placement). Two remain:
   receiver and two arguments.
 - After that, unknown -- the compile stops there.
 
+`EXAMPLES/rsync_time_machine_oo.ady` is the same program rewritten around
+`Path` and native argv, and it does compile and run on both backends -- so
+the remaining bug is in what the original does, not in the transpiler's
+handling of the job.
+
+## A method chained onto a call whose last argument is Optional
+
+`find_backups(dest, ssh).sorted(...)` emits
+`find_backups(dest, some(ssh).sorted(...))` -- the chain attaches to the
+argument rather than the call's result. A chained call with *no* arguments
+(`get_type(p, ssh).lower()`) is fine, which is why this looks intermittent.
+Workaround: hoist the call into its own `let` first.
+
 The fix is worth finishing and then the example belongs in `make test`,
 because the next thing to rot will rot the same way.
 
