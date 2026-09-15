@@ -15,26 +15,20 @@ this reaches for the language.
     needs resolving, instead of embedding literal "$HOME" text and
     expanding it later with Python's os.path (imported as pyos).
   - Command-line parsing via Adascript's native `$@`/`$#`/`$0`, not
-    Python's argparse (which pulls in sys.argv, and with it a chunk of
-    pyimport machinery this script otherwise doesn't need).
+    Python's argparse.
+  - No `pyimport` at all. The clock is `date`, the process id is `$PPID`
+    seen from inside a `shell:` (the shell's parent is this program), the
+    platform is `uname -s`, exiting is `quit()`, and a backup directory's
+    name becomes an epoch by arithmetic rather than by strptime. The Nim
+    build therefore needs neither nimpy nor libpython, which is what lets
+    `make test` compile it.
 """
 
-pyimport os as pyos
-# aliased -- the Nim backend always imports std/os for Path support, so a
-# plain `pyimport os` collides with that and fails with "redefinition of 'os'"
-pyimport sys
-pyimport time
-pyimport signal
-pyimport datetime
-# All pyimports live at module level, not inside the functions that use
-# them (now_str, expire_backups). The Nim backend places its sys.argv-init
-# boilerplate right after whichever `pyImport(...)` line is textually last
-# in the file, without checking whether that line sits inside a function
-# body -- a function-local pyimport later in the file than this one
-# confuses that placement and produces invalid indentation. (Argument
-# parsing itself no longer touches sys.argv at all -- see main() below,
-# which uses Adascript's own $@/$#/$0 instead of argparse.)
-nimport strutils, osproc, posix, times
+# No pyimports. What the Python originals were here for -- the clock, the
+# process id, the platform, exiting -- is a shell word or a builtin, and
+# doing it that way means the Nim build needs neither nimpy nor libpython
+# at run time.
+nimport strutils
 
 # ---------------------------------------------------------------------------
 # Global state
@@ -102,13 +96,6 @@ def log(message: str, level: LogLevel_T = INFO) -> None:
             print f"{prefix}: [ERROR] {style(message, red, bold=True)}"
         when INFO:
             print f"{prefix}: {message}"
-
-def handle_sigint(sig_num: int, frame: int) -> None:
-    # a named function rather than a lambda: an untyped `lambda n, f: ...`
-    # doesn't transpile to a valid standalone Nim proc (its parameters
-    # need concrete types, not `auto`, outside of an inference context)
-    log("SIGINT caught.", INFO)
-    sys.exit(1)
 
 def log_cmd(message: str, level: LogLevel_T = INFO, ssh: ?SSH = None) -> None:
     if ssh is not None:
@@ -281,22 +268,64 @@ def parse_ssh(
 # Date helpers
 # ---------------------------------------------------------------------------
 
+def days_from_civil(y_in: int, m: int, d: int) -> int:
+    """Days since 1970-01-01, by arithmetic rather than by a library.
+
+    Howard Hinnant's days-from-civil, exact for every date the proleptic
+    Gregorian calendar has. Doing it here rather than shelling out to
+    `date -d` keeps it portable -- `-d` is GNU, and a backup tool has no
+    business being Linux-only -- and costs no process per backup directory.
+    """
+    var y: int = y_in
+    if m <= 2:
+        y -= 1
+    let era: int = (y if y >= 0 else y - 399) // 400
+    let yoe: int = y - era * 400                      # [0, 399]
+    let mp:  int = (m + 9) if m <= 2 else (m - 3)     # March is month 0
+    let doy: int = (153 * mp + 2) // 5 + d - 1        # [0, 365]
+    let doe: int = yoe * 365 + yoe // 4 - yoe // 100 + doy
+    era * 146097 + doe - 719468
+
+def own_pid() -> int:
+    """This process's id, which the lock file records so a later run can
+    ask `ps` whether the earlier one is still going.
+
+    `$$` would be the shell's own id, not ours -- but the shell's parent
+    *is* this program, and $PPID is how a child says so.
+    """
+    let (pid, rc) = shell: echo $PPID
+    let digits: str = pid.strip()
+    return int(digits)
+
 def parse_date_to_epoch(date_str: str) -> int:
-    let date_fmt: str = "%Y-%m-%d-%H%M%S"
-    let dt = time.strptime(date_str, date_fmt)
-    # mktime() and timestamp() both hand back a Python float, and a float
-    # PyObject converted straight to `int` raises at runtime ("Cannot
-    # convert python object to int"). Land it in a float first.
-    let epoch_f: float = time.mktime(dt)
-    let epoch: int = int(epoch_f)
-    return epoch
+    """A backup directory's name -- "2026-09-15-112313" -- as a UTC epoch.
+
+    Every use of the result is a difference or a day bucket, so what
+    matters is that this and now_epoch() agree about the zero, not which
+    zone they are in.
+    """
+    let year:   int = int(date_str[0:4])
+    let month:  int = int(date_str[5:7])
+    let day:    int = int(date_str[8:10])
+    let hour:   int = int(date_str[11:13])
+    let minute: int = int(date_str[13:15])
+    let second: int = int(date_str[15:17])
+    days_from_civil(year, month, day) * 86400 + hour * 3600 + minute * 60 + second
 
 def now_str() -> str:
-    # a backup's directory *name* (e.g. "2026-09-13-153000") -- not a path
-    # until it's joined onto dest_folder, so this stays str
-    let _now = datetime.datetime.now()
-    let formatted: str = _now.strftime("%Y-%m-%d-%H%M%S")
-    return formatted
+    """A backup's directory *name* (e.g. "2026-09-13-153000").
+
+    Not a path until it is joined onto dest_folder, so it stays str. The
+    clock is `date`, which every system has and which needs no import.
+    """
+    let (stamp, rc) = shell: date +%Y-%m-%d-%H%M%S
+    return stamp.strip()
+
+def now_epoch() -> int:
+    """The current UTC epoch. `date +%s` is POSIX and needs no import."""
+    let (secs, rc) = shell: date +%s
+    let digits: str = secs.strip()
+    return int(digits)
 
 # ---------------------------------------------------------------------------
 # Backup marker
@@ -339,7 +368,7 @@ def expire_backup(backup_path: Path, ssh: ?SSH) -> None:
     let parent_dir: Path = backup_path.parent
     if find_backup_marker(parent_dir, ssh) is None:
         log(f"{backup_path} is not on a backup destination - aborting.", ERROR)
-        sys.exit(1)
+        quit(1)
     log(f"Expiring {backup_path}", INFO)
     rm_dir(backup_path, ssh)
 
@@ -349,9 +378,7 @@ def expire_backups(
     backup_to_keep:      Path,
     ssh:                 ?SSH,
 ) -> None:
-    let _now = datetime.datetime.now()
-    let ts_f: float = _now.timestamp()          # a float, see parse_date_to_epoch
-    let current_timestamp: int = int(ts_f)
+    let current_timestamp: int = now_epoch()
     var last_kept_timestamp: int = 9999999999
     let backups: []Path = find_backups(dest_folder, ssh)
     var oldest_backup_to_keep: ?Path = None
@@ -418,7 +445,7 @@ def check_dest_is_backup_folder(dest_folder: Path, ssh: ?SSH) -> None:
             INFO,
             ssh,
         )
-        sys.exit(1)
+        quit(1)
 
 # ---------------------------------------------------------------------------
 # rsync helpers
@@ -480,14 +507,18 @@ def get_rsync_flags(
 def exit_if_pid_running(running_pid: str, ssh: ?SSH = None) -> None:
     # running_pid is a PID rendered as text (read back out of a lock file),
     # not a path -- stays str
-    let platform: str = sys.platform
+    # `uname -s` in place of sys.platform: Linux, Darwin, NetBSD,
+    # CYGWIN_NT-10.0-... . Lowercased, the two the original singled out
+    # read the same way they did.
+    let (uname_s, uname_rc) = shell: uname -s
+    let platform: str = uname_s.strip().lower()
     var cmd: str = ""
-    if platform == "cygwin":
+    if platform.startswith("cygwin"):
         cmd = f"procps -wwfo cmd -p {running_pid} --no-headers | grep '{APPNAME}'"
         let cmd_result: CmdResult = run_cmd(cmd, ssh)
         if cmd_result.returncode == 0:
             log(f"Previous backup task is still active - aborting (command: {cmd_result.stdout}).", ERROR)
-            sys.exit(1)
+            quit(1)
     else:
         var ps_flags: str = "-p"
         if platform.startswith("netbsd"):
@@ -496,7 +527,7 @@ def exit_if_pid_running(running_pid: str, ssh: ?SSH = None) -> None:
         let check_result: CmdResult = run_cmd(cmd)
         if check_result.stdout:
             log("Previous backup task is still active - aborting.", ERROR)
-            sys.exit(1)
+            quit(1)
 
 def handle_still_running_or_failed_or_interrupted_backup(
     inprogress_file: Path,
@@ -541,13 +572,13 @@ def deal_with_no_space_left(
 
     if not auto_expire:
         log("No space left on device, and automatic purging of old backups is disabled.", ERROR)
-        sys.exit(1)
+        quit(1)
 
     log("No space left on device - removing oldest backup and resuming.", WARNING)
     let backups: []Path = find_backups(dest_folder, ssh)
     if len(backups) <= 1:
         log("No space left on device, and no old backup to delete.", ERROR)
-        sys.exit(1)
+        quit(1)
 
     expire_backup(sorted(backups)[-1], ssh)
     return True
@@ -597,7 +628,7 @@ def handle_ssh(
 
     if not src or not dest:
         log("Source and destination folder cannot be empty.", ERROR)
-        sys.exit(1)
+        quit(1)
 
     var has_quote: bool = "'" in src or "'" in dest
     if exclusion_file is not None:
@@ -605,7 +636,7 @@ def handle_ssh(
             has_quote = True
     if has_quote:
         log("Source and destination directories may not contain single quote characters.", ERROR)
-        sys.exit(1)
+        quit(1)
 
     # now that any "user@host:" prefix is gone, these really are paths
     let handled: ResolvedPaths = (src: Path(src), dest: Path(dest), ssh: ssh)
@@ -695,7 +726,7 @@ def backup(
 
     if not test_file_exists(src, ssh):
         log(f"Source folder '{src}' does not exist - aborting.", ERROR)
-        sys.exit(1)
+        quit(1)
 
     check_dest_is_backup_folder(dest_f, dest_is_ssh(ssh))
 
@@ -710,7 +741,7 @@ def backup(
     if sorted_backups:
         previous_dest = sorted_backups[0]
     let inprogress_file: Path = dest_f / "backup.inprogress"
-    let mypid: int = pyos.getpid()
+    let mypid: int = own_pid()
 
     if not -d log_dir:
         log(f"Creating log folder in '{log_dir}'...", INFO)
@@ -733,7 +764,7 @@ def backup(
 
     if rsync_get_flags:
         log(f"Rsync flags:\n{style(' '.join(rsync_flags), yellow, bold=True)}", INFO)
-        sys.exit(0)
+        quit(0)
 
     var log_file: Path = Path("")
     for _ in 0 ..< 100:
@@ -883,13 +914,23 @@ def main() -> None:
     let auto_delete_log: bool = (log_dir_arg == str(default_log_dir))
 
     VERBOSE = verbose
-    signal.signal(signal.SIGINT, handle_sigint)
+    # The Python original installed a SIGINT handler that logged one line
+    # and exited 1. There is no native way to ask for that, and the default
+    # action already ends the process, so the log line is what was lost.
 
     # A relative --log-dir is resolved against $PWD -- the directory the
     # script was actually invoked from -- the same way a shell resolves a
     # relative path, rather than leaving it to whatever the interpreter's
     # cwd happens to be by the time this runs.
-    let expanded: str = pyos.path.expandvars(pyos.path.expanduser(log_dir_arg))
+    # `~` expanded here rather than by os.path.expanduser. A bare $VAR in
+    # --log-dir is no longer expanded: the shell the user typed it at does
+    # that already unless they quoted it, and expanding it a second time
+    # ourselves is the surprising half of what expandvars did.
+    var expanded: str = log_dir_arg
+    if expanded == "~":
+        expanded = $HOME
+    elif expanded.startswith("~/"):
+        expanded = $HOME + expanded[1:]
     var log_dir: Path = Path(expanded)
     if not str(log_dir).startswith("/"):
         log_dir = Path($PWD) / log_dir

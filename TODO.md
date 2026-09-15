@@ -281,4 +281,15 @@ transpiler bug, and it cannot be fixed in one without picking a side, so
 filter the empty lines after splitting input that might be empty.
 Everything else the outside session catalogued now compiles and runs the
 same on both backends; the probes are in the session log.
+## `int(x.strip())` does not convert
+
+    let digits: str = pid.strip()
+    return int(digits)      # fine
+    return int(pid.strip()) # "got 'string' ... but expected 'int'"
+
+`int()` around a method call does not reach for parseInt the way it does
+around a name or a slice -- `int(s[0:4])` is fine. Same family as the
+pyimport-era note about `int(pyobj_expr)`, and the same workaround: bind it
+first. EXAMPLES/rsync_time_machine.ady has two of these.
+
 ## Nim keyword as a tuple-unpacking target
