@@ -49,6 +49,14 @@
       {
         "command": "git1.createBranch",
         "title": "git1: Create Branch"
+      },
+      {
+        "command": "git1.graphText",
+        "title": "git1: Show Commit Graph (Text)"
+      },
+      {
+        "command": "git1.graphVisual",
+        "title": "git1: Show Commit Graph"
       }
     ],
     "submenus": [
@@ -66,7 +74,9 @@
         { "command": "git1.status", "when": "git1:tracked" },
         { "command": "git1.rm", "when": "git1:tracked" },
         { "command": "git1.switchBranch", "when": "git1:tracked" },
-        { "command": "git1.createBranch", "when": "git1:tracked" }
+        { "command": "git1.createBranch", "when": "git1:tracked" },
+        { "command": "git1.graphText", "when": "git1:tracked" },
+        { "command": "git1.graphVisual", "when": "git1:tracked" }
       ],
       "editor/context": [
         { "submenu": "git1.submenu", "group": "git1", "when": "git1:tracked" },
@@ -83,6 +93,8 @@
         { "command": "git1.log", "group": "2_history" },
         { "command": "git1.switchBranch", "group": "3_branch" },
         { "command": "git1.createBranch", "group": "3_branch" },
+        { "command": "git1.graphVisual", "group": "2_history" },
+        { "command": "git1.graphText", "group": "2_history" },
         { "command": "git1.rm", "group": "4_danger" }
       ]
     },

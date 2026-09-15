@@ -291,6 +291,127 @@ async function cmdLog() {
   }
 }
 
+async function cmdGraphText() {
+  const editor = vscode.window.activeTextEditor;
+  if (!editor) return;
+  const filePath = editor.document.uri.fsPath;
+  if (!isTracked(filePath))
+    return vscode.window.showErrorMessage("Not tracked by git1");
+  try {
+    const graph = gitSync(filePath, [
+      "log", "--graph", "--oneline", "master", "--all", "--decorate",
+      "--color=never",
+    ]);
+    const doc = await vscode.workspace.openTextDocument({
+      content: graph || "(no commits)",
+      language: "plaintext",
+    });
+    vscode.window.showTextDocument(doc, { preview: true });
+  } catch (e) {
+    vscode.window.showErrorMessage(`git log --graph failed: ${e.message}`);
+  }
+}
+
+async function cmdGraphVisual() {
+  const editor = vscode.window.activeTextEditor;
+  if (!editor) return;
+  const filePath = editor.document.uri.fsPath;
+  if (!isTracked(filePath))
+    return vscode.window.showErrorMessage("Not tracked by git1");
+  const base = path.basename(filePath);
+  try {
+    // Use git's own graph layout — it handles the topology correctly
+    const raw = gitSync(filePath, [
+      "log", "--graph", "master", "--all", "--color=never",
+      "--format=%x00%h%x00%s%x00%cr%x00%D",
+    ]).trim();
+    if (!raw) return vscode.window.showInformationMessage("git1: no commits");
+
+    const panel = vscode.window.createWebviewPanel(
+      "git1Graph",
+      `git1 graph: ${base}`,
+      vscode.ViewColumn.Beside,
+      { enableScripts: false }
+    );
+
+    // Get the hashes on the current branch to highlight them
+    let currentHashes = new Set();
+    try {
+      const headLog = gitSync(filePath, ["log", "--format=%h", "--color=never"]).trim();
+      if (headLog) headLog.split("\n").forEach((h) => currentHashes.add(h.trim()));
+    } catch (_) {}
+
+    panel.webview.html = graphHTML(base, raw, currentHashes);
+  } catch (e) {
+    vscode.window.showErrorMessage(`git graph failed: ${e.message}`);
+  }
+}
+
+function graphHTML(filename, raw, currentHashes) {
+  // Parse git log --graph output: each line has graph chars then \0hash\0msg\0date\0refs
+  // or just graph chars (for merge lines like |\ |/)
+  const lines = raw.split("\n");
+  const rows = lines.map((line) => {
+    const parts = line.split("\0");
+    if (parts.length >= 4) {
+      return { graph: parts[0], hash: parts[1], msg: parts[2], date: parts[3], refs: parts[4] || "" };
+    }
+    return { graph: line, hash: "", msg: "", date: "", refs: "" };
+  });
+
+  // Colorise the graph characters: * = node, | / \ = edges
+  // Process char-by-char to avoid escaping the HTML we generate.
+  function colorGraph(g) {
+    let out = "";
+    for (const ch of g) {
+      if (ch === "*")       out += '<span class="node">●</span>';
+      else if (ch === "|")  out += '<span class="edge">│</span>';
+      else if (ch === "/")  out += '<span class="edge">╱</span>';
+      else if (ch === "\\") out += '<span class="edge">╲</span>';
+      else                  out += ch;
+    }
+    return out;
+  }
+
+  const rowsHTML = rows.map((r) => {
+    if (!r.hash) {
+      return `<div class="line"><span class="graph">${colorGraph(r.graph)}</span></div>`;
+    }
+    const isCurrent = currentHashes && currentHashes.has(r.hash);
+    const cls = isCurrent ? "line current" : "line";
+    const refBadge = r.refs ? ` <span class="ref">${escHtml(r.refs)}</span>` : "";
+    return `<div class="${cls}"><span class="graph">${colorGraph(r.graph)}</span> <span class="hash">${escHtml(r.hash)}</span>${refBadge} <span class="msg">${escHtml(r.msg)}</span> <span class="date">${escHtml(r.date)}</span></div>`;
+  }).join("\n");
+
+  return `<!DOCTYPE html>
+<html><head><style>
+  body { font-family: 'Fira Code', 'DejaVu Sans Mono', Consolas, monospace;
+         font-size: 13px; margin: 0; padding: 16px; color: #ccc; background: #1e1e1e; }
+  h2 { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+       color: #eee; margin: 0 0 12px 0; font-size: 15px; font-weight: 500; }
+  .line { white-space: pre; line-height: 1.6; }
+  .graph { color: #666; }
+  .node { color: #2ea043; font-size: 14px; }
+  .edge { color: #555; }
+  .hash { color: #f0c674; }
+  .ref { background: #2d5a88; color: #58a6ff; padding: 1px 6px; border-radius: 3px;
+         font-size: 11px; font-family: -apple-system, sans-serif; }
+  .msg { color: #ddd; }
+  .date { color: #666; font-size: 11px; }
+  .current { background: #1a3a1a; border-radius: 3px; }
+  .current .node { color: #58a6ff; }
+  .current .hash { color: #58a6ff; }
+  .current .msg { color: #fff; }
+</style></head><body>
+  <h2>git1 commit graph — ${escHtml(filename)}</h2>
+  ${rowsHTML}
+</body></html>`;
+}
+
+function escHtml(s) {
+  return (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 async function cmdStatus() {
   const editor = vscode.window.activeTextEditor;
   if (!editor) return;
@@ -475,7 +596,9 @@ function activate(context) {
     vscode.commands.registerCommand("git1.status", cmdStatus),
     vscode.commands.registerCommand("git1.rm", cmdRm),
     vscode.commands.registerCommand("git1.switchBranch", cmdSwitchBranch),
-    vscode.commands.registerCommand("git1.createBranch", cmdCreateBranch)
+    vscode.commands.registerCommand("git1.createBranch", cmdCreateBranch),
+    vscode.commands.registerCommand("git1.graphText", cmdGraphText),
+    vscode.commands.registerCommand("git1.graphVisual", cmdGraphVisual)
   );
 
   // When an editor becomes active, set up its SCM and update decorations
