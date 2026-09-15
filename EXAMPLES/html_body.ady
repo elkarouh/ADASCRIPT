@@ -15,14 +15,24 @@ Three jobs at once, which is why it is a state machine and not a filter:
     the fragment can be linked to), and the relative links are made
     absolute (they are about to be read from a different directory).
 
-A translation of process_html.awk, which is where the shape came from.
+A translation of process_html.awk, which is where the shape came from. The
+awk keeps three booleans -- in_body, in_footer, div_processed -- and tests
+them on the front of every pattern. Eight combinations, of which six are
+reachable and nothing checks the other two. Here the six are the type
+below, and the compiler counts them.
 """
 nimport awk
 
 
 # Where in the page we are. The record on its own does not say: </div>
 # closes the footer or is content, <body> is a boundary or a mistake.
-type Scan_State_T is enum HEAD, BODY, FOOTER, DONE
+#
+# Whether the id has been placed is part of where we are, not a flag beside
+# it: BODY is the body before the first <div>, BODY_TAGGED the body after
+# it, and the two FOOTER states differ only in which of those they go back
+# to. A state machine with a boolean hanging off it is a bigger state
+# machine that has not been written down.
+type Scan_State_T is enum HEAD, BODY, BODY_TAGGED, FOOTER, FOOTER_TAGGED, DONE
 
 
 type Anchor_T is record:
@@ -47,24 +57,28 @@ def anchor(arg: str) -> Anchor_T:
 
 
 class HtmlBody(AwkBase):
-    var state   : Scan_State_T = HEAD
-    var at      : Anchor_T     = Anchor_T()
-    var div_done: bool         = false     # the id goes on the first div only
+    var state: Scan_State_T = HEAD
+    var at   : Anchor_T     = Anchor_T()
 
     def process_record(self):
         """One branch per state, and nothing outside it.
 
         The case covers every member of Scan_State_T, so there is no
-        `when others:` and a fifth state would not compile until it is
-        handled here. In awk this is three flags -- in_body, in_footer,
-        div_processed -- repeated on the front of every pattern, where
-        nothing checks that the combinations make sense.
+        `when others:` and a seventh state would not compile until it is
+        handled here. In awk this is three flags tested on the front of
+        every pattern, where nothing checks that the combinations make
+        sense -- and where the id can be spent on a line inside the footer,
+        which is then not printed, leaving the fragment with no id at all.
+        Here the states that drop a record do not rewrite it, so that
+        cannot happen.
         """
         case self.state:
-            when HEAD:   self._head()
-            when BODY:   self._body()
-            when FOOTER: self._footer()
-            when DONE:   pass          # awk's `exit`, spelled as a state
+            when HEAD:          self._head()
+            when BODY:          self._body()
+            when BODY_TAGGED:   self._body_tagged()
+            when FOOTER:        self._footer()
+            when FOOTER_TAGGED: self._footer_tagged()
+            when DONE:          pass      # awk's `exit`, spelled as a state
 
     def _head(self) -> None:
         """Before the body: preamble, dropped, and the <body> tag with it."""
@@ -73,39 +87,60 @@ class HtmlBody(AwkBase):
             when others:        pass
 
     def _body(self) -> None:
-        """Inside the body: rewrite, print, and watch for the two exits."""
+        """In the body, before the id has been placed.
+
+        The footer test comes first because `<div title="footer">` is a
+        `<div ...>` too, and it is not the one that gets the id.
+        """
         case self.line:
             when /<\/body>/:             self.state = DONE
             when /<div title="footer">/: self.state = FOOTER
+            when /(<div[^>]+)>/:
+                self._tag($+1)
+                self.state = BODY_TAGGED
+                self._emit()
             when others:
-                self._rewrite()
-                print self.line
+                self._emit()
+
+    def _body_tagged(self) -> None:
+        """In the body, with the id placed: nothing left to look for."""
+        case self.line:
+            when /<\/body>/:             self.state = DONE
+            when /<div title="footer">/: self.state = FOOTER_TAGGED
+            when others:                 self._emit()
 
     def _footer(self) -> None:
-        """Inside the footer: dropped, up to the </div> that closes it."""
+        """In the footer, id still to place: dropped, back to BODY."""
         case self.line:
             when /<\/body>/: self.state = DONE
             when /<\/div>/:  self.state = BODY
             when others:     pass
 
-    def _rewrite(self) -> None:
-        """The three edits, in the order awk applies them to one line."""
-        if not self.div_done:
-            case self.line:
-                when /(<div[^>]+)>/:
-                    # $+1 is the open tag without its `>`: put the id
-                    # inside the tag it came from, wherever on the line
-                    # that tag is.
-                    let open: str = $+1
-                    self.line = self.line.replace(open + ">",
-                                                  open + " id=\"" + self.at.stem + "\">")
-                    self.div_done = true
-                when others: pass
+    def _footer_tagged(self) -> None:
+        """In the footer, id already placed: dropped, back to BODY_TAGGED."""
+        case self.line:
+            when /<\/body>/: self.state = DONE
+            when /<\/div>/:  self.state = BODY_TAGGED
+            when others:     pass
 
-        # Relative links, made absolute: the fragment is about to be read
-        # from somewhere else, and `test_x.html` would follow it there.
+    def _tag(self, tag: str) -> None:
+        """Put the page's own name on the open tag `$+1` just matched.
+
+        `tag` is the tag without its `>`, so the id goes inside the tag it
+        came from, wherever on the line that tag is.
+        """
+        self.line = self.line.replace(tag + ">",
+                                      tag + " id=\"" + self.at.stem + "\">")
+
+    def _emit(self) -> None:
+        """Relative links, made absolute, and the record printed.
+
+        The fragment is about to be read from somewhere else, where
+        `test_x.html` would follow it.
+        """
         self.line = self.line.replace("href=\"test_", "href=\"" + self.at.dir + "/test_")
         self.line = self.line.replace("<img src=\"",  "<img src=\"" + self.at.dir + "/")
+        print self.line
 
 
 def main():
