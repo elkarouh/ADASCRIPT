@@ -46,14 +46,22 @@ writes re-indented source to stdout, which is exactly the interface
 onto your `PATH`:
 
 ```bash
-ady2nim ADA_INDENT/ada_indent.ady          # compile; binary lands in ~/.cache/adascript/
-ln -s ~/.cache/adascript/cache-*/ada_indent ~/.local/bin/ada-indent
+ady2nim c ADA_INDENT/ada_indent.ady        # compile; binary lands in ~/.cache/adascript/
+ln -sf "$PWD/ADA_INDENT/ada_indent" ~/.local/bin/ada-indent
 ```
 
-Or let `ady2nim` install it for you with an explicit output path:
+The link goes to the symlink `ady2nim` leaves next to the source, not into the
+cache: the built file there is `.ada_indent`, with a leading dot, under a
+directory whose name carries a hash of the source, so a link into it is both
+easy to misspell and stale after the next edit.
+
+`ady2nim c` also drops a symlink to the freshly built binary next to the
+source and refreshes it on every rebuild, so linking to *that* is the form
+that survives a recompile:
 
 ```bash
-ady2nim c -o:~/.local/bin/ada-indent ADA_INDENT/ada_indent.ady
+ady2nim c ADA_INDENT/ada_indent.ady
+ln -sf "$PWD/ADA_INDENT/ada_indent" ~/.local/bin/ada-indent
 ```
 
 **Step 2 — register the formatter in Emacs.**  Add to your `init.el` (or the

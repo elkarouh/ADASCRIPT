@@ -65,6 +65,7 @@ source.ady
 - [Enum constructors](#enum-constructors)
 - [Side by Side with awk and Bash](#side-by-side-with-awk-and-bash)
 - [Benchmark Programs](#benchmark-programs)
+- [Editor Support](#editor-support)
 - [Architecture](#architecture)
 - [Known Limitations](#known-limitations)
 
@@ -2452,6 +2453,76 @@ def suggest(word: str) -> []str:
 
 ---
 
+## Editor Support
+
+Two separate things live under this heading, and it is worth keeping them
+apart: support for **writing Adascript**, and support for the **Ada indenter**
+that happens to be written in it.
+
+### Writing Adascript — [`LSP/`](LSP)
+
+A language server plus one client per editor.
+[`LSP/adascript_ls.py`](LSP/adascript_ls.py) provides three features over
+stdio — **diagnostics** (parse errors on open, change and save), **hover**
+(type and enum information for an identifier) and **completion** (enum type
+names, their members, and tick attributes). It needs Python 3.13 and `pygls`.
+
+| | |
+|---|---|
+| [`LSP/vscode-adascript/`](LSP/vscode-adascript) | VS Code: the `.ady` language, a TextMate grammar, and a client for the server |
+| [`LSP/emacs/adascript-mode.el`](LSP/emacs) | a major mode deriving from `nim-mode`, with the server reached through eglot or lsp-mode |
+| [`LSP/sublime-adascript/`](LSP/sublime-adascript) | Sublime Text: syntax highlighting and language defaults (no server) |
+| [`LSP/vscode-git1/`](LSP/vscode-git1) | unrelated to the language — a VS Code front end for [`git1.ady`](EXAMPLES/git1.ady), the per-file version control example |
+
+Each directory has its own README with the install steps.
+
+### Indenting Ada — [`ADA_INDENT/EDITOR_SUPPORT/`](ADA_INDENT/EDITOR_SUPPORT)
+
+[`ADA_INDENT/ada_indent.ady`](ADA_INDENT) re-indents **Ada** source. It is an
+Adascript program, but what it edits is `.adb` / `.ads`, so its editor
+integrations are a separate set — one directory per editor, all three driving
+the same binary:
+
+| | |
+|---|---|
+| [`emacs/`](ADA_INDENT/EDITOR_SUPPORT/emacs) | a minor mode on `RET` and `TAB`, plus `indent-region-function` |
+| [`vim/`](ADA_INDENT/EDITOR_SUPPORT/vim) | sets `'indentexpr'`, so `==`, `gg=G`, `=ip` and `o`/`O` all route through it |
+| [`vs_code/`](ADA_INDENT/EDITOR_SUPPORT/vs_code) | Format Document, Format Selection, and format-on-type |
+
+None of them is a language-server client: each calls the binary directly, so
+no editor needs Python or a server process for indentation. There is a
+[`ADA_INDENT/LSP/`](ADA_INDENT/LSP) as well, for editors where LSP is the
+shorter path (Helix, Neovim's built-in client, eglot).
+
+Build the binary once and put it on `PATH`, and any of the three will find it:
+
+```bash
+ady2nim c ADA_INDENT/ada_indent.ady     # builds, and drops a symlink next to the source
+ln -sf "$PWD/ADA_INDENT/ada_indent" ~/.local/bin/ada_indent
+```
+
+(`ady2nim c` rebuilds into `~/.cache/adascript/` and refreshes the
+`ADA_INDENT/ada_indent` symlink each time, so a link pointing at *that* keeps
+working across rebuilds — one pointing into the cache directory goes stale as
+soon as the source changes and the hash with it.)
+
+The one idea all three share is that `ada_indent` is **stateful** — it carries
+a stack of open blocks, so it cannot indent a line in isolation, and replaying
+the file from the top on every keypress is O(file size). The binary therefore
+offers `--emit-state` (interleave a `##STATE:…` line after each output line)
+and `--state S` (resume from one), and each integration caches the last state
+per buffer, sends only the lines since, and drops the cache when the buffer is
+edited *strictly* above the cache point.
+
+All three have test suites, and `make test` runs them — each SKIPping rather
+than failing when its editor is absent, since none of node, emacs or vim is
+otherwise a dependency here. Every suite drives the shipped integration against
+the real binary and checks the same short list of properties, the state cache
+included. [`ADA_INDENT/EDITOR_SUPPORT/README.md`](ADA_INDENT/EDITOR_SUPPORT)
+has the details.
+
+---
+
 ## Architecture
 
 ```
@@ -2490,7 +2561,9 @@ ADASCRIPT/
 │                              ~/.cache/adascript/cache-<HASH>/
 │
 ├── ADA_INDENT/                Ada source indenter, itself written in Adascript
-├── LSP/                       Editor support: language server, emacs,
+│   ├── EDITOR_SUPPORT/        emacs/, vim/, vs_code/ — each calls the binary
+│   └── LSP/                   the same, for editors that prefer a server
+├── LSP/                       Editing Adascript: language server, emacs,
 │                              vscode, sublime
 └── DOCS/                      Tutorials, topic references, and BOOK/
 ```

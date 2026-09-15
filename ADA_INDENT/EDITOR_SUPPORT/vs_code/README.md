@@ -28,15 +28,14 @@ Format on save works too — it goes through Format Document:
 **1. Build the binary and put it on `PATH`.**
 
 ```bash
-ady2nim ADA_INDENT/ada_indent.ady               # compiles into ~/.cache/adascript/
-ln -s ~/.cache/adascript/cache-*/.ada_indent ~/.local/bin/ada_indent
+ady2nim c ADA_INDENT/ada_indent.ady     # builds, and drops a symlink next to the source
+ln -sf "$PWD/ADA_INDENT/ada_indent" ~/.local/bin/ada_indent
 ```
 
-or let `ady2nim` place it directly:
-
-```bash
-ady2nim c -o:~/.local/bin/ada_indent ADA_INDENT/ada_indent.ady
-```
+`ady2nim c` builds into `~/.cache/adascript/` and refreshes the
+`ADA_INDENT/ada_indent` symlink each time, so linking to that survives a
+rebuild — linking into the cache directory does not, since the hash in its
+name changes with the source.
 
 **2. Install the extension.** For everyday use, symlink this directory into
 your extensions folder and restart VS Code:

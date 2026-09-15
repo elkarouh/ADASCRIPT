@@ -21,8 +21,8 @@ last cache point — O(distance) per edit instead of O(file size).
 - **`ada_indent`** binary on your PATH.  Build it once from `ada_indent.ady`:
 
   ```bash
-  python3 TO_NIM/py2nim.py ADA_INDENT/ada_indent.ady
-  ln -s ~/.cache/hparsec/cache-*/.ada_indent ~/.local/bin/ada_indent
+  ady2nim c ADA_INDENT/ada_indent.ady
+  ln -sf "$PWD/ADA_INDENT/ada_indent" ~/.local/bin/ada_indent
   ```
 
 - **Python 3.10+** with `pygls` and `lsprotocol`:

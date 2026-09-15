@@ -15,8 +15,13 @@ indenter — they are the wiring, not the logic.
 Build the binary once and put it on `PATH`:
 
 ```bash
-ady2nim c -o:~/.local/bin/ada_indent ADA_INDENT/ada_indent.ady
+ady2nim c ADA_INDENT/ada_indent.ady     # builds, and drops a symlink next to the source
+ln -sf "$PWD/ADA_INDENT/ada_indent" ~/.local/bin/ada_indent
 ```
+
+`ady2nim c` refreshes that symlink on every rebuild, so a link pointing at it
+keeps working; one pointing straight into `~/.cache/adascript/` goes stale as
+soon as the source changes and the hash with it.
 
 Each directory's header comment or README says how to load that editor's half.
 
