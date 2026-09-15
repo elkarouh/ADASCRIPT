@@ -16,13 +16,13 @@ All editor features beyond highlighting are provided by the Adascript language s
 | Requirement | Version |
 |---|---|
 | VS Code | ≥ 1.75 |
-| Python | 3.13+ |
+| Python | 3.12+ — the server imports the transpiler, whose floor is 3.12; the bundled defaults name `python3.13`, so on a machine without it point the setting below at the interpreter you have |
 | Node.js | (build only — any LTS) |
 
 The language server also requires the `pygls` Python package:
 
 ```bash
-python3.13 -m pip install pygls
+python3.13 -m pip install pygls   # or whichever 3.12+ you will point the extension at
 ```
 
 ## Installation
@@ -42,7 +42,7 @@ Then open the `ADASCRIPT` folder in VS Code and press **F5** to launch an Extens
 cd LSP/vscode-adascript
 npm install
 npx vsce package
-# produces adascript-0.1.0.vsix
+# produces adascript-<version>.vsix, the version taken from package.json
 ```
 
 Install the resulting `.vsix` via **Extensions → ··· → Install from VSIX…**

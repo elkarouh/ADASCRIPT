@@ -49,7 +49,7 @@ Settings**:
 ```
 
 Replace `/path/to/ADASCRIPT` with the absolute path to the repository root.
-The server requires Python 3.13 and the `pygls` package (`pip install pygls`).
+The server needs Python 3.12 or newer — it imports the transpiler, whose floor is 3.12 — and the `pygls` package (`pip install pygls`). The command above names `python3.13`; change it to whichever 3.12+ interpreter has `pygls` installed.
 
 Once configured, open an `.ady` file and run **LSP: Enable Language Server in
 Project** from the Command Palette.  Hover, go-to-definition, and diagnostics

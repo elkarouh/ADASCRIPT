@@ -38,9 +38,12 @@ Location..." → select the `vscode-git1` folder.
 Or package as a `.vsix`:
 
 ```bash
-npx vsce package
-code --install-extension vscode-git1-0.1.0.vsix
+npx vsce package                              # vscode-git1-<version>.vsix
+code --install-extension vscode-git1-*.vsix
 ```
+
+The version in the filename is the one in `package.json`, so the glob saves
+keeping this line in step with it.
 
 ## Configuration
 

@@ -22,32 +22,50 @@ lolcate maintains named **databases**, each stored under `~/.local/share/lolcate
 | [`fd`](https://github.com/sharkdp/fd) | Fast recursive file finder, used during `update` |
 | [`rg`](https://github.com/BurntSushi/ripgrep) (ripgrep) | Fast regex search, used during `query` |
 
-Install on Debian/Ubuntu: `apt install fd-find ripgrep`  
 Install on macOS: `brew install fd ripgrep`
+
+On Debian/Ubuntu: `apt install fd-find ripgrep` — but note that the package
+installs the finder as **`fdfind`**, not `fd`, because the name is taken by
+another package. `lolcate.ady` calls `fd`, so put one on the path too:
+
+```sh
+apt install fd-find ripgrep
+ln -s "$(command -v fdfind)" ~/.local/bin/fd
+```
 
 ## Running
 
 ### As a Python script (interpreted)
 
+`-c` is what transpiles and runs; without it `ady2py` prints the generated
+Python to stdout and the arguments after the file are never used.
+
 ```sh
-python3.12 ../../TO_PYTHON/ady2py.py lolcate.ady create default
-python3.12 ../../TO_PYTHON/ady2py.py lolcate.ady update
-python3.12 ../../TO_PYTHON/ady2py.py lolcate.ady query myfile
+python3.12 ../../TO_PYTHON/ady2py.py -c lolcate.ady create default
+python3.12 ../../TO_PYTHON/ady2py.py -c lolcate.ady update
+python3.12 ../../TO_PYTHON/ady2py.py -c lolcate.ady query myfile
 ```
 
 ### As a compiled Nim binary (fast)
 
-```sh
-# Transpile once
-python3.12 ../../TO_NIM/ady2nim.py lolcate.ady > lolcate.nim
+`ady2nim c` builds into `~/.cache/adascript/` and leaves a `lolcate` symlink
+to the binary next to the source, so there is no `.nim` to handle and no
+separate `nim c` step:
 
-# Compile
-nim c -d:release -o:lolcate lolcate.nim
+```sh
+# Build once
+python3.12 ../../TO_NIM/ady2nim.py c lolcate.ady
 
 # Run
 ./lolcate create default
 ./lolcate update
 ./lolcate query myfile
+```
+
+Or build-if-stale and run in one go, which is what `c -r` is for:
+
+```sh
+python3.12 ../../TO_NIM/ady2nim.py c -r lolcate.ady query myfile
 ```
 
 ## Commands

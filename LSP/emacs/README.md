@@ -15,7 +15,7 @@
 |---|---|
 | Emacs | ≥ 28.1 |
 | `nim-mode` | ≥ 0.4.1 — `M-x package-install RET nim-mode` (MELPA) |
-| Python | 3.13+ |
+| Python | 3.12+ — the server imports the transpiler, whose floor is 3.12; `adascript-python-command` defaults to `python3.13`, so set it to the interpreter you have |
 | pygls | ≥ 2.1.1 (`python3.13 -m pip install pygls`) |
 
 `nim-mode` is not optional: `adascript-mode` derives from it, so without it
