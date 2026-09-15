@@ -304,7 +304,7 @@ def to_nim(self, indent=0, is_virtual=False, class_name=None, parent_name=None, 
             return
         # A dotted path as well as a bare name: `if f.line is None: return`
         # proves f.line below it exactly as `if x is None: return` proves x.
-        m = re.match(r'^(\s*)if\s+([A-Za-z_]\w*(?:\.\w+)*)\.isNone:\s*(?:#.*)?$',
+        m = re.match(r'^(\s*)if\s+([A-Za-z_]\w*(?:\.\w+)*(?:\[\d+\])?)\.isNone:\s*(?:#.*)?$',
                      chunk_lines[0])
         if not m:
             return
@@ -581,7 +581,30 @@ def to_nim(self, indent=0):
     """elif_clause: 'elif' expression ':' block -> Nim: 'elif cond:\n  body'"""
     cond = hek_nim_expr._nim_truthiness(self.nodes[0].to_nim())
     hc = _block_inline_header_comment(self.nodes[1])
-    body = self.nodes[1].to_nim(indent + 1)
+    # An elif narrows its own body exactly as the `if` above it does -- and
+    # for the same reason, since reaching the body means this condition was
+    # the one that held. Without this, `if other: ... elif x is not None:
+    # use(x)` read the field off the Option.  An `and` chain proves every
+    # conjunct; an `or` proves nothing.
+    import re as _re_if
+    _unwrap_vars = []
+    if " or " not in cond:
+        for _part in cond.split(" and "):
+            _m_some = _re_if.match(r'^\(?\s*(\w+(?:\.\w+)*(?:\[\d+\])?)\.isSome\s*\)?$',
+                                   _part.strip())
+            if _m_some:
+                _unwrap_vars.append(_m_some.group(1))
+    if _unwrap_vars and not hasattr(ParserState, '_option_unwrap_vars'):
+        ParserState._option_unwrap_vars = set()
+    _newly = [v for v in _unwrap_vars
+              if v not in getattr(ParserState, '_option_unwrap_vars', set())]
+    for _v in _newly:
+        ParserState._option_unwrap_vars.add(_v)
+    try:
+        body = self.nodes[1].to_nim(indent + 1)
+    finally:
+        for _v in _newly:
+            ParserState._option_unwrap_vars.discard(_v)
     return f"{_ind(indent)}elif {cond}:{hc}\n{body}"
 
 
@@ -670,7 +693,7 @@ def to_nim(self, indent=0):
     _unwrap_vars = []
     if " or " not in cond:
         for _part in cond.split(" and "):
-            _m_some = _re_if.match(r'^\(?\s*(\w+(?:\.\w+)*)\.isSome\s*\)?$',
+            _m_some = _re_if.match(r'^\(?\s*(\w+(?:\.\w+)*(?:\[\d+\])?)\.isSome\s*\)?$',
                                    _part.strip())
             if _m_some:
                 _unwrap_vars.append(_m_some.group(1))
@@ -689,7 +712,7 @@ def to_nim(self, indent=0):
     # own body, and proves x has a value in *every* clause after it -- the
     # else, and any elif, which is only reached when the isNone was false.
     # Without this, the else branch read the field off the Option.
-    _m_none = _re_if.match(r'^\(?\s*(\w+(?:\.\w+)*)\.isNone\s*\)?$', cond.strip())
+    _m_none = _re_if.match(r'^\(?\s*(\w+(?:\.\w+)*(?:\[\d+\])?)\.isNone\s*\)?$', cond.strip())
     _else_unwrapped = []
     if _m_none:
         if not hasattr(ParserState, '_option_unwrap_vars'):

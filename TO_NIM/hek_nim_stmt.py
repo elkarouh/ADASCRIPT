@@ -932,6 +932,38 @@ def to_nim(self):
 
 
 
+def _split_top_level(text):
+    """Split on commas outside brackets and string literals."""
+    out, depth, quote, esc, cur = [], 0, "", False, []
+    for ch in text:
+        if quote:
+            cur.append(ch)
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == quote:
+                quote = ""
+            continue
+        if ch in "\"'":
+            quote = ch
+            cur.append(ch)
+        elif ch in "([{":
+            depth += 1
+            cur.append(ch)
+        elif ch in ")]}":
+            depth -= 1
+            cur.append(ch)
+        elif ch == "," and depth == 0:
+            out.append("".join(cur).strip())
+            cur = []
+        else:
+            cur.append(ch)
+    if cur:
+        out.append("".join(cur).strip())
+    return out
+
+
 def _lift_option_ternary(value, inner):
     """Wrap the branches of `(if c: a else: b)` for an Option[inner] target.
 
@@ -1201,7 +1233,36 @@ def to_nim(self):
     val = self.nodes[0].to_nim()
     ret_type = getattr(ParserState, "_current_return_type", "")
     val = _coerce_string_to_char(val, ret_type.lstrip(": ").strip())
-    if ret_type and "Option[" in ret_type:
+    # An inline tuple return type that merely *contains* an Option --
+    # `def f() -> (int, ?S_T)` -- is not itself an Option, and wrapping the
+    # whole tuple in some() typed nothing: `some((1, nil))` is
+    # Option[(int, typeof(nil))]. Lift the elements instead.
+    _rt_bare = ret_type.lstrip(": ").strip()
+    if (_rt_bare.startswith("(") and _rt_bare.endswith(")")
+            and "Option[" in _rt_bare and val.strip().startswith("(")
+            and val.strip().endswith(")")):
+        _elem_types = _split_top_level(_rt_bare[1:-1])
+        _elem_vals = _split_top_level(val.strip()[1:-1])
+        if len(_elem_types) == len(_elem_vals):
+            import re as _re_t
+            _out = []
+            for _et, _ev in zip(_elem_types, _elem_vals):
+                _em = _re_t.search(r"Option\[(.+)\]", _et)
+                if not _em:
+                    _out.append(_ev)
+                elif _ev == "nil":
+                    ParserState.nim_imports.add("options")
+                    _out.append(f"none({_em.group(1)})")
+                elif (_ev.startswith("some(") or _ev.startswith("none(")
+                      or _ev.startswith("some[")
+                      or hek_nim_expr._expr_is_option(_ev)):
+                    _out.append(_ev)
+                else:
+                    ParserState.nim_imports.add("options")
+                    _out.append(f"some[{_em.group(1)}]({_ev})")
+            return "return (" + ", ".join(_out) + ")"
+
+    if ret_type and _rt_bare.startswith("Option["):
         import re as _re
         m = _re.search(r"Option\[(.+)\]", ret_type)
         if m:

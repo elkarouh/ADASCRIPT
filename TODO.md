@@ -273,28 +273,12 @@ whatever spelling keeps the sed flavour -- would make the copy unnecessary
 and leave the statement form for the in-place case. Needs a `sub` on `str`
 in both emitters.
 
-## What the outside session's bug catalogue still reproduces
+## The one cross-backend difference the catalogue named
 
-Re-run as probes against this tree. Fourteen of the nineteen entries pass on
-both backends now; these four do not, and the fifth is a divergence rather
-than a bug:
-
-- an `elif` does not narrow from its own condition. `if other: ... elif x is
-  not None: use(x)` reads the field off the Option. The `if` body, the
-  `else` of an `is None`, an `and` chain and a ternary all narrow; the elif
-  condition's own body is the one position left.
-- an Optional field re-extracted into an Optional binding double-wraps:
-  `let got: ?str = o.inner.key` emits `some[string](o.inner.key)`, which is
-  Option[Option[string]]. Passing the value through a parameter sidesteps it.
-- an inline tuple return type containing a `?T` -- `def f() -> (int, ?S_T)`
-  -- wraps the whole tuple in some(). A named tuple type does not have the
-  bug, which is what EXAMPLES/rsync_time_machine.ady uses.
-- `if some_path:` does not get the bool conversion a `str` gets, so a `Path`
-  in a truthiness position is a type mismatch. `if str(p):` works.
-
-And the semantic one, which is not a transpiler bug and cannot be fixed in
-one: `"".splitlines()` is `[]` on Python and `@[""]` on Nim, so a program
-that iterates the result of splitting possibly-empty input sees one blank
-line on one backend and none on the other. Filter the empty lines.
-
+`"".splitlines()` is `[]` on Python and `@[""]` on Nim -- one blank line
+rather than none. It is a standard-library difference rather than a
+transpiler bug, and it cannot be fixed in one without picking a side, so
+filter the empty lines after splitting input that might be empty.
+Everything else the outside session catalogued now compiles and runs the
+same on both backends; the probes are in the session log.
 ## Nim keyword as a tuple-unpacking target

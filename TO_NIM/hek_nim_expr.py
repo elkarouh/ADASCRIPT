@@ -448,6 +448,14 @@ def _nim_truthiness(expr):
             return f"{expr}.len > 0"
     if _is_comparison:
         return expr
+    # A Path in a truthiness position. Path is `distinct string` on Nim, so
+    # it has no more implicit bool than a string does, and the string rules
+    # above do not see through the distinct. `if p:` asks whether the path
+    # is the empty one, which is what a str would ask.
+    if (not _has_top_bool and not _is_comparison
+            and _re_truth.match(r'^[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*$', expr)
+            and (_nim_expr_type(expr) or "") == "Path"):
+        return f"{expr}.string.len > 0"
     # Option[T] truthiness: method/function call whose return type is Option[T] -> .isSome
     # Only applies to bare calls (no leading 'not', no trailing .isSome, no operators).
     if (not _has_top_bool and not _is_comparison
@@ -2420,9 +2428,21 @@ def to_nim(self, prec=None):
     # a field path needs it after the whole path, so it is done here, on
     # the finished expression. Exact match only -- a longer chain hanging
     # off the path is not the thing that was proved.
-    if result in getattr(ParserState, "_option_unwrap_vars", ()) and "." in result:
-        ParserState.nim_imports.add("options")
-        return f"{result}.get()"
+    _paths = [v for v in getattr(ParserState, "_option_unwrap_vars", ())
+              if "." in v or "[" in v]
+    if _paths:
+        # Longest first: `o.inner.key` must win over `o.inner` when both
+        # have been narrowed.
+        for _pth in sorted(_paths, key=len, reverse=True):
+            if result == _pth:
+                ParserState.nim_imports.add("options")
+                return f"{_pth}.get()"
+            # The narrowed thing can be a prefix of what is being read:
+            # `if b[1] is not None:` proves b[1], and the body says
+            # `b[1].a`. The .get() belongs between the two.
+            if result.startswith(_pth + ".") or result.startswith(_pth + "["):
+                ParserState.nim_imports.add("options")
+                return f"{_pth}.get()" + result[len(_pth):]
     return result
 
 
@@ -3481,8 +3501,38 @@ def _expr_is_option(expr_str):
             _rt = getattr(ParserState, "proc_return_types", {}).get(_mc.group(1), "")
             if _rt.startswith("Option["):
                 return True
-    # Attribute access: obj.field
-    m = _re.match(r"(\w+)\.(\w+)$", expr_str)
+    # Indexing a tuple whose element at that position is an Option:
+    # `let b: (int, ?S_T) = f()` then `b[1] is not None`. Without this the
+    # comparison fell through to `b[1] != nil`, which Nim rejects -- the
+    # tuple-with-an-Optional return type was only half usable.
+    _tix = _re.match(r"^([A-Za-z_]\w*)\[(\d+)\]$", expr_str.strip())
+    if _tix:
+        _tsym = ParserState.symbol_table.lookup(_tix.group(1))
+        _ttype = (_tsym.get("type") or "") if _tsym else ""
+        if _ttype.startswith("(") and _ttype.endswith(")"):
+            _parts, _depth, _cur = [], 0, []
+            for _ch in _ttype[1:-1]:
+                if _ch in "([{":
+                    _depth += 1
+                elif _ch in ")]}":
+                    _depth -= 1
+                if _ch == "," and _depth == 0:
+                    _parts.append("".join(_cur).strip())
+                    _cur = []
+                else:
+                    _cur.append(_ch)
+            if _cur:
+                _parts.append("".join(_cur).strip())
+            _idx = int(_tix.group(2))
+            if _idx < len(_parts) and _parts[_idx].startswith("Option["):
+                return True
+
+    # Attribute access: obj.field, and any longer path ending in a field --
+    # `o.inner.key` is as much a field access as `o.key`, and matching only
+    # the two-component form meant a nested Optional field was not
+    # recognised as one, so `let got: ?str = o.inner.key` wrapped it a
+    # second time into Option[Option[string]].
+    m = _re.match(r"(?:\w+\.)*(\w+)\.(\w+)$", expr_str)
     if m:
         field_name = m.group(2)
         class_name = getattr(ParserState, "_current_class_name", None)
@@ -3731,7 +3781,7 @@ def to_nim(self, prec=None):
     _added = []
 
     def _note_proved(piece):
-        _m = _re_dis.match(r"^([A-Za-z_]\w*(?:\.\w+)*)\.isSome$", str(piece).strip())
+        _m = _re_dis.match(r"^([A-Za-z_]\w*(?:\.\w+)*(?:\[\d+\])?)\.isSome$", str(piece).strip())
         if _m and _m.group(1) not in _vars:
             _vars.add(_m.group(1))
             _added.append(_m.group(1))
@@ -3788,7 +3838,7 @@ def to_nim(self, prec=None):
     # emitter about it, which is all this does.
     import re as _re_cond
     cond = _nim_truthiness(self.nodes[1].to_nim())
-    _m_narrow = _re_cond.match(r"^([A-Za-z_]\w*(?:\.\w+)*)\.(isSome|isNone)$", cond.strip())
+    _m_narrow = _re_cond.match(r"^([A-Za-z_]\w*(?:\.\w+)*(?:\[\d+\])?)\.(isSome|isNone)$", cond.strip())
     _narrowed = _m_narrow.group(1) if _m_narrow else None
     # isSome narrows the value branch, isNone the else branch -- the branch
     # reached when the name is known to hold something.
