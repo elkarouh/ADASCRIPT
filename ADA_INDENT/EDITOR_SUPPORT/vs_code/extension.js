@@ -39,6 +39,10 @@ const DEDENT_KEYWORDS = [
   "record", "loop", "do", "select",
 ];
 
+const DEDENT_FINALS = new Set(DEDENT_KEYWORDS.map((k) => k[k.length - 1]));
+
+let applyingIndent = false;
+
 // ---------------------------------------------------------------------------
 // Per-document state cache
 // ---------------------------------------------------------------------------
@@ -73,16 +77,76 @@ function dropCache(document) {
 // itself, because ada_indent strips leading whitespace before it looks at a
 // line. Using <= instead would wipe the cache on the very edit that formatting
 // makes, leaving it permanently useless.
+//
+// Also drives on-type indentation via handleOnTypeIndent, which uses
+// WorkspaceEdit rather than registerOnTypeFormattingEditProvider. VS Code only
+// allows one on-type formatting provider per language; when AdaCore's Ada
+// extension registers its own, it shadows ours. A change-event listener has
+// no such conflict.
 function onDocumentChanged(event) {
   const entry = cache.get(event.document.uri.toString());
-  if (!entry) {
-    return;
+  if (entry) {
+    for (const change of event.contentChanges) {
+      if (change.range.start.line + 1 < entry.lnum) {
+        dropCache(event.document);
+        break;
+      }
+    }
   }
-  for (const change of event.contentChanges) {
-    if (change.range.start.line + 1 < entry.lnum) {
-      dropCache(event.document);
+
+  if (
+    !applyingIndent &&
+    event.document.languageId === "ada" &&
+    event.contentChanges.length > 0
+  ) {
+    handleOnTypeIndent(event.document, event.contentChanges);
+  }
+}
+
+async function handleOnTypeIndent(document, changes) {
+  const cfg = vscode.workspace.getConfiguration("editor", { uri: document.uri, languageId: document.languageId });
+  if (!cfg.get("formatOnType")) return;
+
+  for (const change of changes) {
+    if (change.text.includes("\n")) {
+      const nlCount = (change.text.match(/\n/g) || []).length;
+      const targetLine = change.range.start.line + nlCount;
+      if (targetLine >= document.lineCount) continue;
+      await applyOnTypeIndent(document, targetLine);
       return;
     }
+
+    if (change.text.length === 1 && DEDENT_FINALS.has(change.text.toLowerCase())) {
+      const targetLine = change.range.start.line;
+      if (!DEDENT_KEYWORDS.includes(document.lineAt(targetLine).text.trim().toLowerCase())) {
+        continue;
+      }
+      await applyOnTypeIndent(document, targetLine);
+      return;
+    }
+  }
+}
+
+async function applyOnTypeIndent(document, line) {
+  const want = await indentColumn(document, line);
+  if (want === null) return;
+
+  const text = document.lineAt(line).text;
+  const have = text.length - text.replace(/^[ \t]+/, "").length;
+  if (want === have && !/^\t/.test(text)) return;
+
+  const edit = new vscode.WorkspaceEdit();
+  edit.replace(
+    document.uri,
+    new vscode.Range(line, 0, line, have),
+    " ".repeat(want)
+  );
+
+  applyingIndent = true;
+  try {
+    await vscode.workspace.applyEdit(edit);
+  } finally {
+    applyingIndent = false;
   }
 }
 
@@ -279,36 +343,6 @@ const rangeFormatter = {
   },
 };
 
-const onTypeFormatter = {
-  async provideOnTypeFormattingEdits(document, position, ch) {
-    const line = document.lineAt(position.line);
-
-    if (ch !== "\n") {
-      // A trigger letter only matters when the line is now exactly one of the
-      // dedenting keywords. Anything else is an ordinary word being typed, and
-      // returning no edits keeps the binary out of it.
-      if (!DEDENT_KEYWORDS.includes(line.text.trim().toLowerCase())) {
-        return [];
-      }
-    }
-
-    const want = await indentColumn(document, position.line);
-    if (want === null) {
-      return [];
-    }
-    const have = line.text.length - line.text.replace(/^[ \t]+/, "").length;
-    if (want === have && !/^\t/.test(line.text)) {
-      return [];
-    }
-    return [
-      vscode.TextEdit.replace(
-        new vscode.Range(position.line, 0, position.line, have),
-        " ".repeat(want)
-      ),
-    ];
-  },
-};
-
 // ---------------------------------------------------------------------------
 // Activation
 // ---------------------------------------------------------------------------
@@ -316,17 +350,9 @@ const onTypeFormatter = {
 function activate(context) {
   const selector = { scheme: "file", language: "ada" };
 
-  // Enter, plus the final letter of each dedenting keyword. Triggering on
-  // every keystroke would mean a process per character; this way the binary is
-  // asked only when the line could have just become a keyword.
-  const finals = [...new Set(DEDENT_KEYWORDS.map((k) => k[k.length - 1]))];
-
   context.subscriptions.push(
     vscode.languages.registerDocumentFormattingEditProvider(selector, documentFormatter),
     vscode.languages.registerDocumentRangeFormattingEditProvider(selector, rangeFormatter),
-    vscode.languages.registerOnTypeFormattingEditProvider(
-      selector, onTypeFormatter, "\n", ...finals
-    ),
     vscode.workspace.onDidChangeTextDocument(onDocumentChanged),
     vscode.workspace.onDidCloseTextDocument(dropCache),
     vscode.commands.registerCommand("adaIndent.reindentBuffer", async () => {

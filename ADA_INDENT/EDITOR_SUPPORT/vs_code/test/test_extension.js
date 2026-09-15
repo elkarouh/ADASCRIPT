@@ -103,24 +103,28 @@ const CANON = require("child_process")
         JSON.stringify(warm.map(e => [e.range.start.line, e.newText])),
         JSON.stringify(cold.map(e => [e.range.start.line, e.newText])));
 
-  // 6. On-type: a bare "else" snaps left; a word that merely ends in "e" does not.
+  // 6. On-type via onChange: a bare "else" snaps left.
   const d6 = doc(["procedure P is", "begin", "   if X then", "      Y := 1;", "else", "end P;"].join("\n"));
-  const e6 = await R.onType.provideOnTypeFormattingEdits(d6, new vscode.Position(4, 4), "e");
-  check("bare else snaps to column 2", e6.length && e6[0].newText.length, 2);
+  vscode.__clearApplied();
+  R.onChange({ document: d6, contentChanges: [{ text: "e", range: { start: { line: 4 } } }] });
+  await new Promise(r => setTimeout(r, 500));
+  const a6 = vscode.__lastApplied();
+  check("bare else snaps to column 2", a6 && a6._edits[0].newText.length, 2);
 
+  // A word that merely ends in "e" does not trigger.
   const d7 = doc(["procedure P is", "begin", "   if X then", "      Something_Else", "end P;"].join("\n"));
-  const e7 = await R.onType.provideOnTypeFormattingEdits(d7, new vscode.Position(3, 20), "e");
-  check("non-keyword ending in e -> no edits", e7.length, 0);
+  vscode.__clearApplied();
+  R.onChange({ document: d7, contentChanges: [{ text: "e", range: { start: { line: 3 } } }] });
+  await new Promise(r => setTimeout(r, 500));
+  check("non-keyword ending in e -> no edits", vscode.__lastApplied(), null);
 
   // 7. Enter on a blank line inside a block indents to the block body.
   const d8 = doc(["procedure P is", "begin", "   if X then", "", "end P;"].join("\n"));
-  const e8 = await R.onType.provideOnTypeFormattingEdits(d8, new vscode.Position(3, 0), "\n");
-  check("blank line inside if -> body indent 4", e8.length && e8[0].newText.length, 4);
-
-  // 8. Trigger characters are the keyword finals, plus newline.
-  // end->d else->e elsif->f when/exception/begin/then->n is->s private->e
-  // limited/record->d loop->p do->o select->t
-  check("trigger chars", R.triggers.join(""), "\ndefnspot");
+  vscode.__clearApplied();
+  R.onChange({ document: d8, contentChanges: [{ text: "\n", range: { start: { line: 2 } } }] });
+  await new Promise(r => setTimeout(r, 500));
+  const a8 = vscode.__lastApplied();
+  check("blank line inside if -> body indent 4", a8 && a8._edits[0].newText.length, 4);
 
   // 9. Formatting is a fixpoint: format twice, nothing the second time.
   const d9 = doc(apply(doc(MESSY), await R.doc.provideDocumentFormattingEdits(doc(MESSY))), "file:///t9.adb");
