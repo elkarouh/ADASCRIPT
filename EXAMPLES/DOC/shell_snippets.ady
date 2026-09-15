@@ -161,4 +161,16 @@ def awk_document_shell_fragments() -> None:
 
 awk_document_shell_fragments()
 
+
+# --- there is no $?: a status is a value, named where it is used ----------
+def status_is_a_value() -> None:
+    let (text, rc) = shell: git rev-parse --git-dir
+    # Either answer is fine here -- the point is that rc is a name, and is
+    # still the status of *that* command however many run after it.
+    assert rc == 0 or rc == 128
+    if rc == 0:
+        assert text.strip() != ""
+
+status_is_a_value()
+
 print "all shell-document snippets ok"

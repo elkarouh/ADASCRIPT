@@ -1362,7 +1362,7 @@ keeps checking.
 | `for (k in a)` | `for k in Enum_T:` — in declaration order |
 | `printf "%-8s"` | `f"{value:<8}"` |
 | `system("cmd")` | `shell: cmd` |
-| `"cmd" \| getline line` | `let (out, rc) = shell: cmd` |
+| `"cmd" \| getline line` | `let (text, rc) = shell: cmd` |
 | `close(cmd)` | — nothing to close |
 | `ARGV[1]`, `ARGC` | `$1`, `$#` (a command-line argument) |
 | `ENVIRON["HOME"]` | `$HOME`, or `$?HOME` for a `?str` |

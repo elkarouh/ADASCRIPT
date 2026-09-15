@@ -517,8 +517,8 @@ that have to be updated in step by hand.
 | Shell | Adascript |
 |-------|-----------|
 | `cmd` | `shell: cmd` |
-| `out=$(cmd)` | `let r = shell: cmd` → `r.output`, or `let (out, rc) = shell: cmd` |
-| `cmd; rc=$?` | `let (out, rc) = shell: cmd` |
+| `out=$(cmd)` | `let r = shell: cmd` → `r.output`, or `let (text, rc) = shell: cmd` |
+| `cmd; rc=$?` | `let (text, rc) = shell: cmd` — the status is a value, not `$?` |
 | `readarray -t a < <(cmd)` | `let a: []str = shellLines: cmd` |
 | `cmd` with the terminal (pager, colours) | `let code: int = shell: cmd` |
 | `exec cmd` | `shellExec: cmd` |
@@ -550,9 +550,38 @@ that have to be updated in step by hand.
 | `case "$x" in p) … esac` | `case x:` with `when /p/:` |
 | `echo "$s" \| sed 's/a/b/g'` | `s = s/a/b/g` |
 | `grep -q pat <<< "$s"` | `s == /pat/` |
+| `[[ $s =~ re ]]; ${BASH_REMATCH[1]}` | `if s == /re/:` … `$+1` |
 | `$(( a + b ))` | `a + b` |
 | `action="compress"` | `type Action_T is enum COMPRESS, …` |
 | `name_1`, `size_1`, `name_2`, … | a `record` |
+
+### The dollars that do not mean what they mean in the shell
+
+Most of them carry over unchanged, which is the point — `$1`, `$#`, `$@`,
+`$HOME` and `${VAR:-default}` are all themselves. Three are not:
+
+| | means | the shell's version |
+|---|---|---|
+| `$NAME` | an **environment** variable, only ever that | `$NAME`, which may also be a local |
+| `$?NAME` | **is it set at all** — a `?str`, `None` when it is not | `${NAME+set}`, or `[ -v NAME ]` in bash |
+| `$+1` | a **capture group** of the regex that just matched | `${BASH_REMATCH[1]}`, after `[[ =~ ]]` |
+
+And one that is simply absent: **there is no `$?`**. A command's status is a
+value the shell form hands back, so it is named where it is used and cannot
+be read after the wrong command:
+
+<!-- from: EXAMPLES/DOC/shell_snippets.ady -->
+```python
+    let (text, rc) = shell: git rev-parse --git-dir
+```
+
+`$?NAME` is not `$?` with a name after it — the `?` belongs to the `?str`
+the whole thing produces, and `$?` on its own does not parse. The other
+collision is quieter: `$name` in Adascript always means the environment,
+never a local. A local is an ordinary identifier, and inside a command it
+goes in braces — `{!name}` quoted, `{name}` deliberately not. So the shell's
+habit of writing `$x` for a variable you set two lines earlier reads, here,
+as "the environment variable `x`", and finds nothing.
 
 ---
 
