@@ -5,4 +5,8 @@
 !*.ady
 !*.md
 !*.txt
+!*.awk
+!*.sh
+!*.html
+!*.conf
 !*/
