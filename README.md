@@ -63,6 +63,7 @@ source.ady
 - [Bash Variables](#bash-variables)
 - [Callable objects and pipe operator](#callable-objects-and-pipe-operator)
 - [Enum constructors](#enum-constructors)
+- [Side by Side with awk and Bash](#side-by-side-with-awk-and-bash)
 - [Benchmark Programs](#benchmark-programs)
 - [Architecture](#architecture)
 - [Known Limitations](#known-limitations)
@@ -2201,6 +2202,77 @@ proc parse_state(s: string): State =
     except:
         ACTIVE
 ```
+
+---
+
+## Side by Side with awk and Bash
+
+Four examples ship with the program they are arguing against, so the claims
+about what Adascript buys can be run rather than read. Each pair does the
+same job on the same input, and `make test` compares them on every run — the
+first three must agree byte for byte, and the fourth must not.
+
+| Adascript | Written against | Same output? |
+|---|---|---|
+| `EXAMPLES/awk_logscan.ady` | `EXAMPLES/awk_logscan.awk` | yes, on two inputs |
+| `EXAMPLES/config_check.ady` | `EXAMPLES/config_check.awk` | yes, on two inputs |
+| `EXAMPLES/html_body.ady` | `EXAMPLES/process_html.awk` | yes, except one case below |
+| `EXAMPLES/sh_janitor.ady` | `EXAMPLES/sh_janitor.sh` | **no**, and that is the point |
+
+Run any of them yourself:
+
+Every command below is bash (the `<(...)` needs it), and each prints nothing
+when the two agree:
+
+```bash
+# a log scanner: two kinds of record, a state machine, two lists at the end
+awk -f EXAMPLES/awk_logscan.awk EXAMPLES/awk_logscan_sample.txt \
+    | diff - <(EXAMPLES/awk_logscan < EXAMPLES/awk_logscan_sample.txt)
+
+# a config checker against a four-shape schema
+EXAMPLES/config_check                     # writes its fixture under /tmp
+awk -f EXAMPLES/config_check.awk /tmp/ady_config_check/app.conf \
+    | diff - <(EXAMPLES/config_check /tmp/ady_config_check/app.conf)
+
+# lifting the <body> out of an HTML page (needs gawk: gensub is a GNU thing)
+cd EXAMPLES && gawk -f process_html.awk html_body_sample.html \
+    | diff - <(./html_body html_body_sample.html)
+
+# the log-rotation janitor -- these two do NOT agree
+EXAMPLES/sh_janitor.sh; EXAMPLES/sh_janitor
+```
+
+**The three that agree** are there so the comparison is about the code and
+not about the answer. What the awk has to spell out — parallel arrays
+because there is no record, enum members as a string and their order written
+out twice, an `if`/`else` chain where a `case` over ranges would do, an
+insertion sort by hand to answer one median, a schema whose four shapes
+share one flat set of fields — is walked through in
+`DOCS/ADASCRIPT_FOR_AWK.md` §10.
+
+**The two exceptions are the interesting part.**
+
+`process_html.awk` and `html_body.ady` agree on ordinary pages and diverge
+on one: a page whose footer contains a `<div>` on a line of its own. The awk
+spends the page's id on that line and then drops the line, so the output has
+no id at all. Its tagging rule tests `in_body`, and the footer is inside the
+body; the translation cannot do this because the states that drop a record
+never rewrite it. `EXAMPLES/html_body_wasted_id.html` is that page.
+
+`sh_janitor.sh` disagrees on every run, silently:
+
+```
+$ EXAMPLES/sh_janitor.sh        $ EXAMPLES/sh_janitor
+  COMPRESS  2 file(s),  328       COMPRESS  3 file(s),  628
+  DELETE    1 file(s),   10       DELETE    2 file(s),   20
+  0 failure(s)   → exit 0         0 failure(s)   → exit 0
+```
+
+`for f in $(ls -A "$DIR")` splits `quiet service.log` into two names that do
+not exist. Nine files go in, seven come out of the report, no error is
+printed and the exit status is 0. `make test` asserts that this is still
+what happens, so the claim fails rather than rots. The quoting is fixable;
+what is not is the rest of `DOCS/ADASCRIPT_FOR_SHELL.md` §11.
 
 ---
 
