@@ -1186,8 +1186,24 @@ it was the footer's own.)
 **Rewriting on the way past.** Two of §1's five points apply here and two do
 not: there is a state machine and there is processing on the fly, but there
 are no lists at the end — the output *is* the stream, one record at a time.
-The first `<div>` gets the page's own name as an id, so the fragment can be
-linked to once it has been pasted somewhere else:
+
+What gets rewritten, and why, is worth a sentence, because the two edits are
+really one. A file is a *name* and a *place*, and the fragment this program
+produces has neither: it is about to be pasted into a bigger page.
+
+- The place is gone. `href="test_x.html"` and `<img src="plot.png">` meant
+  "next to me"; in the combined page they mean "next to whoever swallowed
+  me", which is somewhere else. Making them absolute is what keeps them
+  pointing where they pointed.
+- The name is gone. Nothing addresses the block any more — it used to be
+  `results.html`, and now it is some markup in the middle of another
+  document. Putting the file's own name on the first `<div>` as an id is
+  what gives it a name again: the body of `results.html` is `#results`
+  wherever it lands, so a link, a stylesheet rule or a script can still
+  find it. It goes on the *first* `<div>` because that is the block the
+  whole page was, and only on the first, because a page has one name.
+
+That is what `div_done` is for, and why it is a latch rather than a state:
 
 <!-- from: EXAMPLES/html_body.ady -->
 ```python

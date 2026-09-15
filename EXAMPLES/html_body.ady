@@ -11,9 +11,21 @@ Three jobs at once, which is why it is a state machine and not a filter:
   * the block marked as the footer is dropped, up to the </div> that ends
     it -- and that </div> is an ordinary line anywhere else, so only the
     state says which one it is;
-  * on the way past, the first <div> gets an id (the page's own name, so
-    the fragment can be linked to), and the relative links are made
-    absolute (they are about to be read from a different directory).
+  * on the way past, the first <div> gets an id and the relative links are
+    made absolute.
+
+That third job is one job, not two. A file is a name and a place, and a
+fragment has neither once it has been pasted into a bigger page:
+
+  * the place is gone, so `href="test_x.html"` and `<img src="plot.png">`,
+    which meant "next to me", now mean "next to whoever swallowed me".
+    Making them absolute is what keeps them pointing where they did.
+  * the name is gone, so nothing addresses this block any more. Putting
+    the file's own name on the first <div> as an id is what keeps it
+    addressable: the body of results.html becomes `#results` wherever it
+    ends up, and a link, a stylesheet rule or a bit of script can still
+    find it. It goes on the first <div> because that is the block the
+    whole page was, and only on the first: a page has one name.
 
 A translation of process_html.awk, which is where the shape came from.
 """
