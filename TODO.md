@@ -166,17 +166,13 @@ history of this file if the reasoning behind one of them is ever wanted.
       the examples use; the divergence is in the set form. Either Python emits
       something ordered for `'Range` in a for-loop, or `'Range` is documented
       as unordered and the examples keep away from it.
-- [ ] `x if c else None` is not lifted into a `?T` declaration on Nim. It
-      arrives as `(if c: v else: nil)`, where the two halves want `some(v)`
-      and `none(T)` separately rather than one wrap around the whole
-      expression, so the lifting added for a plain value steps around it and
-      the old output stands. `EXAMPLES/rsync_time_machine.ady` has two, and
-      does not compile for an unrelated reason either.
-- [ ] `is None` narrowing does not reach a record field. `if f.line is None:
-      return` then `str(f.line)` still emits `$f.line` over the Option on Nim
-      and prints `some(3)`; binding it first -- `let ln: ?Natural = f.line` --
-      narrows as documented. Python prints the value either way, so this is a
-      divergence in output, not just a compile error.
+- [ ] `is None` narrowing does not reach a record *field*. `if f.line is
+      None: return` then `str(f.line)` still emits `$f.line` over the Option
+      on Nim and prints `some(3)`; binding it first -- `let ln: ?Natural =
+      f.line` -- narrows as documented. Python prints the value either way,
+      so this is a divergence in output, not just a compile error. Narrowing
+      a plain *name* works in every position now: an if guard, an else, an
+      `and`, a ternary.
 - [ ] `sorted(d.keys())` over a `{K}V` does not compile on Nim: "undeclared
       field: 'sorted'", because `keys` is an iterator there and wants
       `toSeq`. Same family as the `[E]T` `.keys()` entry above. An example
@@ -283,27 +279,5 @@ An expression form -- `let no_gz: str = remote_file.sub(/\.gz$/, "")`, or
 whatever spelling keeps the sed flavour -- would make the copy unnecessary
 and leave the statement form for the in-place case. Needs a `sub` on `str`
 in both emitters.
-
-## A comparison inside `if` gets truthiness-coerced
-
-    let d: {str}str = {"a": "b"}
-    if d.get("a", "") == "b":          # -> `... == "b".len > 0`
-
-The `if` handler runs `_nim_truthiness` over the whole condition, and a
-condition that *ends* in a string literal is taken for a string. Through a
-name it is fine (`let got: str = d.get("a", ""); if got == "b":`), which is
-why this has gone unnoticed. Predates the narrowing work -- confirmed
-against the tree before it.
-
-## The `else` branch of `x is None` does not narrow
-
-    if v is None:
-        ...
-    else:
-        use(v)                         # v is still Option[T] here
-
-`if v is not None:` narrows, and so does an early-return guard; the else of
-the inverse test does not. Same shape as the `and` case that was fixed, and
-probably the same fix in a different place.
 
 ## Nim keyword as a tuple-unpacking target

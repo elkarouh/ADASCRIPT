@@ -437,8 +437,11 @@ def _nim_truthiness(expr):
                 return f"{expr}.to(bool)"
     # getOrDefault on a Table[K, string] returns string — check truthiness
     # Only convert when we can verify the table maps to string values
+    # ... but not when the expression is already a bool: `d.get(k) == "b"`
+    # is a comparison that happens to start with a getOrDefault, and
+    # appending .len > 0 to it gave `== "b".len > 0`.
     _god_m = _re_truth.search(r'^(\w+)\.getOrDefault\(', expr)
-    if _god_m:
+    if _god_m and not _is_comparison and not _has_top_bool:
         _tbl_sym = ParserState.symbol_table.lookup(_god_m.group(1))
         _tbl_type = (_tbl_sym.get("type") or "") if _tbl_sym else ""
         if _tbl_type.endswith(", string]"):  # Table[K, string]

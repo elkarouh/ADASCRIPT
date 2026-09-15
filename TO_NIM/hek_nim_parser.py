@@ -680,19 +680,37 @@ def to_nim(self, indent=0):
     for _v in _newly_unwrapped:
         ParserState._option_unwrap_vars.discard(_v)
     result = f"{_hoist}{_ind(indent)}if {cond}:{hc}\n{body}"
-    for node in self.nodes[2:]:
-        if not hasattr(node, "nodes") or not node.nodes:
-            continue
-        for seq in node.nodes:
-            if hasattr(seq, "nodes") and seq.nodes:
-                clause = seq.nodes[0] if hasattr(seq.nodes[0], "to_nim") else seq
-            else:
-                clause = seq
-            if hasattr(clause, "to_nim"):
-                try:
-                    result += "\n" + clause.to_nim(indent)
-                except TypeError:
-                    result += "\n" + _ind(indent) + clause.to_nim()
+
+    # The mirror of the guard above: `if x is None:` proves nothing in its
+    # own body, and proves x has a value in *every* clause after it -- the
+    # else, and any elif, which is only reached when the isNone was false.
+    # Without this, the else branch read the field off the Option.
+    _m_none = _re_if.match(r'^\(?\s*(\w+)\.isNone\s*\)?$', cond.strip())
+    _else_unwrapped = []
+    if _m_none:
+        if not hasattr(ParserState, '_option_unwrap_vars'):
+            ParserState._option_unwrap_vars = set()
+        _n = _m_none.group(1)
+        if _n not in ParserState._option_unwrap_vars:
+            ParserState._option_unwrap_vars.add(_n)
+            _else_unwrapped.append(_n)
+    try:
+        for node in self.nodes[2:]:
+            if not hasattr(node, "nodes") or not node.nodes:
+                continue
+            for seq in node.nodes:
+                if hasattr(seq, "nodes") and seq.nodes:
+                    clause = seq.nodes[0] if hasattr(seq.nodes[0], "to_nim") else seq
+                else:
+                    clause = seq
+                if hasattr(clause, "to_nim"):
+                    try:
+                        result += "\n" + clause.to_nim(indent)
+                    except TypeError:
+                        result += "\n" + _ind(indent) + clause.to_nim()
+    finally:
+        for _v in _else_unwrapped:
+            ParserState._option_unwrap_vars.discard(_v)
     return result
 
 
