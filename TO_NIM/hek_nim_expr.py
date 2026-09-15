@@ -3650,7 +3650,58 @@ def to_nim(self, prec=None):
 @method(disjunction)
 def to_nim(self, prec=None):
     """disjunction: conjunction ('or' conjunction)* -> Nim: 'or' unchanged"""
-    return binop_to_nim(self, prec, PREC_OR)
+    # The grammar flattens `and` into this node as well, so this is where a
+    # conjunction is actually emitted -- and therefore the only place that
+    # can narrow across one. `x is not None and x.field` is the ordinary
+    # way to ask, and `and` short-circuits, so every operand to the right
+    # of `x.isSome` may read x. An `or` proves nothing about either side,
+    # so a chain containing one is handed to the generic path untouched.
+    #
+    # Operand by operand rather than through binop_to_nim, because the
+    # narrowing must not apply to the operand that establishes it: with x
+    # already in the unwrap set, `x is not None` would come out as
+    # `x.get().isSome`.
+    import re as _re_dis
+    _st_idx = None
+    for _i, _node in enumerate(self.nodes):
+        if type(_node).__name__ == "Several_Times" and getattr(_node, "nodes", None):
+            _st_idx = _i
+            break
+    if _st_idx != 1:
+        return binop_to_nim(self, prec, PREC_OR)
+
+    _seqs = [s for s in self.nodes[1].nodes
+             if hasattr(s, "nodes") and len(s.nodes) >= 2]
+    if not _seqs or any(_op_string(s.nodes[0]) != "and" for s in _seqs):
+        return binop_to_nim(self, prec, PREC_OR)
+
+    _vars = getattr(ParserState, "_option_unwrap_vars", None)
+    if _vars is None:
+        _vars = set()
+        ParserState._option_unwrap_vars = _vars
+    _added = []
+
+    def _note_proved(piece):
+        _m = _re_dis.match(r"^([A-Za-z_]\w*)\.isSome$", str(piece).strip())
+        if _m and _m.group(1) not in _vars:
+            _vars.add(_m.group(1))
+            _added.append(_m.group(1))
+
+    try:
+        result = _nim_truthiness(self.nodes[0].to_nim(PREC_OR))
+        _note_proved(result)
+        _right_prec = PREC_OR + 1 if PREC_OR is not None else None
+        for _s in _seqs:
+            right = _nim_truthiness(_s.nodes[1].to_nim(_right_prec))
+            _note_proved(right)
+            result = f"{result} and {right}"
+    finally:
+        for _n in _added:
+            _vars.discard(_n)
+
+    if prec is not None and PREC_OR < prec:
+        return f"({result})"
+    return result
 
 
 # --- walrus ---

@@ -205,9 +205,8 @@ def get_filesystem_type(path: Path, ssh: ?SSH = None) -> str:
 # ---------------------------------------------------------------------------
 
 def dest_is_ssh(ssh: ?SSH) -> ?SSH:
-    if ssh is not None:
-        if ssh.dest_folder_prefix != "":
-            return ssh
+    if ssh is not None and ssh.dest_folder_prefix != "":
+        return ssh
     return None
 
 def parse_ssh_pattern(folder: str, allow_host_only: bool = False) -> ?{str}str:
@@ -234,11 +233,10 @@ def parse_ssh(
     if ssh_src is None and ssh_dest is None:
         return None
 
-    # if-blocks rather than `x if x is not None else y` ternaries throughout
-    # this function: the transpiler reliably narrows/unwraps an Optional
-    # inside `if x is not None:` (per the docs' own worked example), but not
-    # consistently when a field/index access on the Optional sits inside a
-    # ternary expression instead.
+    # if-blocks rather than `x if x is not None else y` ternaries: here the
+    # two candidates are checked in turn, so an if reads better than a
+    # nested ternary would. (Narrowing works in a ternary and across an
+    # `and` as well, so this is a choice rather than a workaround.)
     var ssh: {str}str = {:}
     if ssh_src is not None:
         ssh = ssh_src

@@ -286,28 +286,12 @@ in both emitters.
 
 ## Nim-backend bugs the rsync_time_machine rewrite had to work around
 
-The file compiles and runs on both backends now, but four of the reasons it
-is written the way it is are transpiler bugs rather than taste:
+The file compiles and runs on both backends now. Two of the reasons it is
+written the way it is are still transpiler bugs rather than taste:
 
-- narrowing does not cross an `and`: `if x is not None and x.field:` still
-  reads the field off the Option. Nested `if`s work. (A ternary narrows
-  correctly now, and so does an `if` guard.)
 - a `?T` ternary with `None` on one side emits a bare `nil` rather than
   `none(T)`, so `let x: ?T = v if c else None` does not compile.
 - `d.get(k) is None` becomes `getOrDefault(k) == nil`, which Nim rejects for
   string values. `if k not in d:` is the way to ask.
-- a method chained onto a call whose last argument is Optional attaches to
-  the argument: see the next entry.
-
-## A method chained onto a call whose last argument is Optional
-
-`find_backups(dest, ssh).sorted(...)` emits
-`find_backups(dest, some(ssh).sorted(...))` -- the chain attaches to the
-argument rather than the call's result. A chained call with *no* arguments
-(`get_type(p, ssh).lower()`) is fine, which is why this looks intermittent.
-Workaround: hoist the call into its own `let` first.
-
-The fix is worth finishing and then the example belongs in `make test`,
-because the next thing to rot will rot the same way.
 
 ## Nim keyword as a tuple-unpacking target
