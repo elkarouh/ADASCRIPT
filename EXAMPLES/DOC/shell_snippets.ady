@@ -1,0 +1,147 @@
+#!/usr/bin/env ady2nim
+"""Every free-standing snippet quoted in DOCS/ADASCRIPT_FOR_SHELL.md.
+
+Not a program anyone would write: a place for the fragments the document
+shows outside its worked examples, so that `make test` runs them and
+DOCS/check_quotes.py has a real file to point at.
+"""
+
+# --- the four shapes of a command ---------------------------------------
+shell: true                                   # run it, ignore the result
+let r = shell: echo captured                  # .output .stderr .code
+assert r.output.strip() == "captured"
+assert r.code == 0
+
+let (text, rc) = shell: echo tuple            # the two halves by name
+assert text.strip() == "tuple" and rc == 0
+
+let names: []str = shellLines: printf 'a\nb\nc\n'
+assert names == ["a", "b", "c"]
+
+let status: int = shell: true                 # inherits the terminal
+assert status == 0
+
+# --- quoting -------------------------------------------------------------
+let f: str = "my notes.txt"
+let split_up = shell: printf '[%s]' {f}
+let one_arg  = shell: printf '[%s]' {!f}
+assert split_up.output == "[my][notes.txt]"
+assert one_arg.output  == "[my notes.txt]"
+
+let argv: []str = ["-m", "two words"]
+let starred = shell: printf '[%s]' {*argv}
+assert starred.output == "[-m][two words]"
+
+# --- or leave the shell out entirely -------------------------------------
+let nasty: str = "; echo pwned"
+let safe: RunResult = run(["printf", "[%s]", nasty])
+assert safe.output == "[; echo pwned]"
+
+let listing: []str = runLines(["printf", "a\nb\n"])
+assert listing == ["a", "b"]
+
+# --- errors: check = true instead of set -e ------------------------------
+var caught: bool = False
+try:
+    shell(check = true): exit 9
+except:
+    caught = True
+assert caught
+
+# --- a pipeline reports the first failure, not the last -------------------
+let loose  = shell: false | cat
+let strict = shell(pipefail = true): false | cat
+assert loose.code == 0                        # POSIX; the failure vanished
+assert strict.code != 0
+
+# --- a block joins with && and stops at the first failure -----------------
+let built = shell:
+    echo one
+    echo two
+assert built.output == "one\ntwo\n"
+
+let anyway = shell(join = ";"):
+    false
+    echo still here
+assert anyway.output.strip() == "still here"
+
+# --- streaming, instead of while read ------------------------------------
+var seen: Natural = 0
+for line in shellIter: printf 'x\ny\nz\n'
+    seen += 1
+assert seen == 3
+
+# --- parallel, instead of & and wait -------------------------------------
+var jobs: []Job = []
+for n in ["1", "2", "3"]:
+    let j: Job = shellSpawn: echo {!n}
+    jobs.append(j)
+let results: []RunResult = waitAll(jobs)
+assert results'Length == 3
+for res in results:
+    assert res.code == 0
+
+# --- feeding a command, and its environment ------------------------------
+let sorted_out = shell(stdin = "gamma\nalpha\nbeta\n"): sort
+assert sorted_out.output == "alpha\nbeta\ngamma\n"
+
+let extra: {str}str = {"ADY_DOC_VAR": "set-by-parent"}
+let seen_env = shell(env = extra): printf '%s' "$ADY_DOC_VAR"
+assert seen_env.output == "set-by-parent"
+
+# --- paths join with an operator -----------------------------------------
+let root: Path = Path("/tmp")
+let log:  Path = root / "ady_shell_doc" / "app.log"
+assert str(log) == "/tmp/ady_shell_doc/app.log"
+assert log.name == "app.log"
+assert str(log.parent) == "/tmp/ady_shell_doc"
+log.parent.mkdir()                            # mkdir -p, already-there is fine
+writeFile(str(log), "hello\n")
+
+# --- the shell's file tests, unchanged ------------------------------------
+assert (-f log)
+assert (-d log.parent)
+assert (-s log)
+assert not (-e (root / "ady_no_such_file"))
+assert have("sort")
+assert not have("no_such_program_xyz")
+
+# --- arguments and the environment ---------------------------------------
+assert $# >= 0
+assert $HOME != ""
+assert $NO_SUCH_VAR_HERE == ""                # unset reads as empty, as in sh
+assert ${NO_SUCH_VAR_HERE:-"fallback"} == "fallback"
+assert $?NO_SUCH_VAR_HERE == None             # ...unless you ask this way
+
+# --- arithmetic is arithmetic --------------------------------------------
+var kept: Natural = 0
+kept += 3
+assert kept * 2 == 6
+
+let first: str = $1
+var rest: []str = []
+for arg in $@[1:]:
+    rest.append(arg)
+print "first=" + first + " rest=" + ",".join(rest)
+
+writeFile("/tmp/ady_older.txt", "a")
+shell: sleep 1
+writeFile("/tmp/ady_newer.txt", "b")
+assert ("/tmp/ady_newer.txt" -nt "/tmp/ady_older.txt")
+assert ("/tmp/ady_older.txt" -ot "/tmp/ady_newer.txt")
+
+let here = shell(cwd = "/tmp"): pwd
+assert here.output.strip() == "/tmp"
+
+let slow: RunResult = run(["sleep", "5"], timeout = 300)
+assert slow.code == 124                       # timeout(1)'s number
+
+let gone: RunResult = run(["no_such_program_xyz"])
+assert gone.code == 127                       # a missing program's number
+
+if "key=42" == /^(\w+)=(\d+)$/:
+    let key:   str = $+1
+    let value: int = int($+2)
+    assert key == "key" and value == 42
+
+print "all shell-document snippets ok"

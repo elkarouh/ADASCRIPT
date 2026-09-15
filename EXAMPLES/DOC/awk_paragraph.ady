@@ -1,0 +1,19 @@
+#!/usr/bin/env ady2nim
+"""A record that is not a line: RS says where one ends.
+
+The §2.1 example from DOCS/ADASCRIPT_FOR_AWK.md. `rs = "\n\n"` is awk's
+paragraph mode -- a blank line ends a record -- and nothing else in the
+program changes: process_record() still gets one record at a time and
+still does not know how the input was cut up.
+"""
+nimport awk
+
+class Para(AwkBase):
+    def process_record(self):
+        print f"record {self.NR}: NF={self.NF} [{self.line}]"
+
+def main():
+    var p: Para = Para(rs = "\n\n")      # a blank line ends a record
+    p.run()
+
+main()

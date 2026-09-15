@@ -51,12 +51,14 @@ them, so the type exists in the compiler and not on the page.
 
 The compiler is not the audience. When I read
 
+<!-- illustrative -->
 ```python
 speed = compute(track, wind)
 ```
 
 I know nothing. When I read
 
+<!-- illustrative -->
 ```python
 let speed: Velocity_T = compute(track, wind)
 ```
@@ -100,6 +102,7 @@ the layer never forms.
 
 `float` says how the value is stored. `Velocity_T` says what it *is*. Consider:
 
+<!-- illustrative -->
 ```python
 def separation(a: float, b: float, c: float, d: float) -> float
 def separation(own: Position_T, other: Position_T,
@@ -129,6 +132,7 @@ set of values — a phase of flight, a message kind, a state. Records for
 anything with parts. Names ending `_T` so a reader can see at a glance what is
 a type.
 
+<!-- from: EXAMPLES/DOC/why_snippets.ady -->
 ```python
 type Callsign_T     is str
 type Altitude_T     is Natural        # feet
@@ -153,6 +157,7 @@ Found by callsign, or walked in order? Grouped by phase?
 
 Write those down as declarations, before any logic:
 
+<!-- from: EXAMPLES/DOC/why_snippets.ady -->
 ```python
 var fleet   : {Callsign_T}Aircraft_T     = {:}   # every aircraft, by callsign
 var by_phase: [Flight_Phase_T][]Callsign_T       # who is in each phase
@@ -186,6 +191,7 @@ reads left to right as a sentence:
 | `?T` | a T, possibly absent |
 | `Fix_T is tuple:` | a named tuple, fields by name |
 
+<!-- illustrative -->
 ```python
 let xs   : []int              = [1, 2, 3]                 # a list of
 let m    : {str}int           = {"a": 1}                  # a mapping from .. to
@@ -197,6 +203,7 @@ let pair : Fix_T              = (lat: 51.5, lon: -0.1)    # named tuple
 
 They compose by stacking, with no brackets to hold open:
 
+<!-- illustrative -->
 ```python
 var routes : {str}[]str       = {"BA117": ["EGLL", "KJFK"]}
 var byphase: [Phase_T][]str   = [CLIMB: [], CRUISE: ["BA117"], DESCENT: []]
@@ -239,6 +246,7 @@ characters.
 
 The whole of step 1 and step 2, and then the code:
 
+<!-- from: EXAMPLES/DOC/why_snippets.ady -->
 ```python
 for cs in ["AFR22", "BAW117"]:
     let a: Aircraft_T = fleet[cs]
@@ -263,6 +271,7 @@ were done first.
 An advocacy document that overclaims is worth less than no document, so:
 **a scalar type alias is documentation, not enforcement.**
 
+<!-- from: EXAMPLES/DOC/why_snippets.ady -->
 ```python
 type Velocity_T is float
 type Distance_T is float

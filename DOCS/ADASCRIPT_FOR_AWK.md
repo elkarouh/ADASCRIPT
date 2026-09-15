@@ -77,6 +77,7 @@ how much state you carry.
 For a filter, iterate `stdin.lines` and be done. `EXAMPLES/awk_example.ady`
 is this shape (quoted in full in §10.1):
 
+<!-- from: EXAMPLES/awk_example.ady -->
 ```python
 def main():
     for raw in stdin.lines:
@@ -86,6 +87,7 @@ def main():
 `stdin` has type `File`, and so does `open(path)` — the same variable holds
 either, so the loop is written once:
 
+<!-- illustrative -->
 ```python
 let f: File = (open(file_arg) if file_arg != "" else stdin)
 for line in f.lines:
@@ -100,6 +102,7 @@ When the program is a state machine — when what a record *means* depends on
 the records before it — subclass `AwkBase` from the bundled library
 (`TO_NIM/STDLIB/awk.ady`) and override three methods:
 
+<!-- illustrative -->
 ```python
 nimport awk
 
@@ -130,6 +133,7 @@ One caveat: `nimport` means "a module the Nim backend provides", so the
 underneath you — `AwkBase` reads the input whole and splits on `RS` instead
 of iterating lines:
 
+<!-- from: EXAMPLES/DOC/awk_paragraph.ady -->
 ```python
 class Para(AwkBase):
     def process_record(self):
@@ -182,6 +186,7 @@ An AWK program is a list of `pattern { action }` pairs, tried in order.
 Adascript writes the same thing as a `case` over the record, and a `when`
 takes a regex literal:
 
+<!-- illustrative -->
 ```python
 def classify(s: str) -> Severity_T:
     case s:
@@ -194,6 +199,7 @@ def classify(s: str) -> Severity_T:
 The `i` is a flag on the literal, not an argument to a function. Literal
 strings, regexes and ranges mix freely in one `case`:
 
+<!-- illustrative -->
 ```python
 case F[1]:
     when "Showing" if self.NF >= 12:              # a literal, plus a guard
@@ -231,6 +237,7 @@ never give you.
 There is never an `import re`. A pattern is a literal, matching is an
 operator, captures are variables.
 
+<!-- from: EXAMPLES/DOC/awk_snippets.ady -->
 ```python
 let line: str = "2026-09-11 ERROR disk full on /var/log"
 
@@ -240,6 +247,7 @@ assert line != /^#/
 
 Captures come back as `$+1`, `$+2`, … with `$+0` the whole match:
 
+<!-- from: EXAMPLES/DOC/awk_snippets.ady -->
 ```python
 if line == /^(\d{4})-(\d{2})-(\d{2}) (\w+)/:
     assert $+1 == "2026"
@@ -251,6 +259,7 @@ Named groups use `(?P<name>...)` and read back as `$+{name}`.
 The `g` flag turns the match test into a list of every match — this is AWK's
 `split` with a regex, and rather more:
 
+<!-- from: EXAMPLES/DOC/awk_snippets.ady -->
 ```python
 let nums: []str = "a1 b22 c333" == /\d+/g
 assert nums == ["1", "22", "333"]
@@ -259,6 +268,7 @@ assert nums == ["1", "22", "333"]
 Substitution is Perl's, and assigns back to the left-hand side, so the
 target is a `var`:
 
+<!-- from: EXAMPLES/DOC/awk_snippets.ady -->
 ```python
 var path: str = "/var/log/app.log.gz"
 path == s/\.gz$//g
@@ -280,12 +290,13 @@ This is the centre of the argument. In AWK a severity is a string, a parser
 state is an integer, and a status class is a key you hope you spelled the
 same way in both places. In Adascript each is a type.
 
+<!-- from: EXAMPLES/awk_logscan.ady -->
 ```python
 type Severity_T   is enum DEBUG, INFO, WARN, ERROR
 type Scan_State_T is enum OUTSIDE, IN_TRACE
-type Status_T     is enum SUCCESS, REDIRECT, CLIENT_ERROR, SERVER_ERROR, ODD
+type Status_T is enum SUCCESS, REDIRECT, CLIENT_ERROR, SERVER_ERROR, ODD
 
-type Request_T is record:
+type Request_T is record:      # a timestamped event
     """One served request, taken apart by a single regex."""
     at:      str     = ""
     verb:    str     = ""
@@ -293,11 +304,25 @@ type Request_T is record:
     status:  Natural = 0
     ms:      Natural = 0
 
-type Trace_T is record:
+type Trace_T is record:        # the lines after a failure
     """One stack trace: several lines, belonging to the request before it."""
     under:   str     = ""      # the request it followed
     lines:   Natural = 0
     failure: str     = ""      # the exception line that ends it
+
+def status_class(status: Natural) -> Status_T:
+    """A case over ranges, which awk has to spell as an if/else chain.
+
+    Nothing here is about one scanner: a status code means the same thing
+    whoever read it, so it is a function of the code and lives outside the
+    class.
+    """
+    case status:
+        when 200 .. 299: SUCCESS
+        when 300 .. 399: REDIRECT
+        when 400 .. 499: CLIENT_ERROR
+        when 500 .. 599: SERVER_ERROR
+        when others:     ODD
 ```
 
 A `case` over that type is checked for completeness — leave out `WARN` and
@@ -308,6 +333,7 @@ you with at all.
 
 Guards work here too, and are what makes a catch-all necessary again:
 
+<!-- illustrative -->
 ```python
 def prefix(sev: Severity_T, nr: Natural) -> str:
     case sev:
@@ -319,6 +345,7 @@ def prefix(sev: Severity_T, nr: Natural) -> str:
 The type answers questions about itself, through tick attributes borrowed
 from Ada:
 
+<!-- illustrative -->
 ```python
 assert ERROR'Image      == "ERROR"    # the name, for printing
 assert Severity_T'First == DEBUG
@@ -329,6 +356,7 @@ assert Severity_T("WARN") == WARN     # and back from a string
 And it can index an array, which is AWK's associative array with the typos
 removed and the iteration order fixed:
 
+<!-- illustrative -->
 ```python
 var counts: [Severity_T]Natural = [DEBUG: 0, INFO: 0, WARN: 0, ERROR: 0]
 counts[classify("warn: hot")] += 1
@@ -351,6 +379,7 @@ quietly creating a fifth bucket, which is what AWK would have done.
 cannot reach it. They are range-checked at run time on the Nim backend —
 including under `-d:release`.
 
+<!-- from: EXAMPLES/awk_example.ady -->
 ```python
 var NR        : Natural = 0
 var total_len : Natural = 0
@@ -367,6 +396,7 @@ instead of as a nonsense average at the end of the report.
 The AWK idiom is `user[i]`, `host[i]`, `build[i]` and an `i` you increment by
 hand. A record names the row:
 
+<!-- illustrative -->
 ```python
 type Request_T is record:
     """One served request, taken apart by a single regex."""
@@ -380,6 +410,7 @@ type Request_T is record:
 Fields have defaults, so `Request_T()` is a complete zero row, and a
 construction names what it sets:
 
+<!-- illustrative -->
 ```python
 let req: Request_T = Request_T(at=$+1, verb=$+4, path=$+5, status=int($+6), ms=int($+7))
 ```
@@ -395,6 +426,7 @@ A plain record gives every row the same fields. When the rows are genuinely
 list — Ada's answer is a record whose field set depends on an enum
 discriminant, and Adascript adopts the syntax:
 
+<!-- from: EXAMPLES/config_check.ady -->
 ```python
 type Kind_T is enum FLAG, NUMBER, CHOICE, PATHNAME
 
@@ -416,6 +448,7 @@ about. On the Nim backend the field is not there to read at all. And a `case`
 over the discriminant needs no `when others:` — the enum has four members, so
 the compiler checks that all four are handled:
 
+<!-- from: EXAMPLES/config_check.ady -->
 ```python
 def describe(s: Spec_T) -> str:
     """One line per shape. No `when others:` -- the enum has four members and
@@ -440,6 +473,7 @@ AWK's uninitialised variable is `""` and also `0`, and a field that is
 genuinely empty is indistinguishable from one that is not there. `?T` is the
 type that can tell:
 
+<!-- from: EXAMPLES/DOC/awk_snippets.ady -->
 ```python
 def field(fs: []str, i: Natural) -> ?str:
     if i >= fs'Length:
@@ -460,6 +494,7 @@ reads unset as `""`, `$?NAME` is a `?str` that can tell unset from empty, and
 You never write `some()` or `none()`. A plain value put where a `?T` is
 expected is **lifted** for you, and `None` becomes the empty one:
 
+<!-- illustrative -->
 ```python
 type Finding_T is record:
     line: ?Natural = None
@@ -475,6 +510,7 @@ Getting the value back out is the half worth reading carefully, because a
 `?T` and a `T` are different types and the Nim backend says so — `maybe == 12`
 does not compile. Two ways out:
 
+<!-- illustrative -->
 ```python
 assert (maybe or 0) == 12          # `or` supplies a default
 assert none_.line == None          # comparing against None is always fine
@@ -483,6 +519,7 @@ assert none_.line == None          # comparing against None is always fine
 ...and, for the case where you have already established it is there, an
 **early-return guard**, which narrows the name below it to a plain `Natural`:
 
+<!-- from: EXAMPLES/config_check.ady -->
 ```python
 def where(f: Finding_T) -> str:
     let ln: ?Natural = f.line      # bind it to a name first
@@ -510,6 +547,7 @@ value without first saying which case it is in.
 AWK shells out through `system()` and `"cmd" | getline`, with quoting left
 to you. In Adascript a command is a statement:
 
+<!-- illustrative -->
 ```python
 let (greeting, rc) = shell: echo hello world
 assert rc == 0
@@ -520,6 +558,7 @@ A value goes in braces. `{x}` puts it in as written, which is what a command
 fragment wants; `{!x}` quotes it, so a path holding spaces arrives as one
 argument instead of two:
 
+<!-- illustrative -->
 ```python
 let dir: str = "/tmp"
 let (count_out, _) = shell: ls -1d {!dir}
@@ -531,6 +570,7 @@ quote because nothing parses the arguments twice.
 A pipeline can report the first failure rather than the last, and a long
 output can be streamed instead of held:
 
+<!-- illustrative -->
 ```python
 let (_, pipe_rc) = shell(pipefail = true): false | cat
 assert pipe_rc != 0
@@ -544,6 +584,7 @@ assert seen == 3
 Arguments, the environment and the shell's file tests come across as they
 are:
 
+<!-- illustrative -->
 ```python
 assert $HOME != ""
 assert $NO_SUCH_VAR_HERE == ""
@@ -571,6 +612,7 @@ The plainest case first: one kind of record, no memory of the records
 before it. This is §2's flat form, in full — every line is classified and
 printed on its own, and nothing about line *N* depends on line *N-1*:
 
+<!-- from: EXAMPLES/awk_example.ady -->
 ```python
 #!/usr/bin/env ady2nim
 """
@@ -664,6 +706,7 @@ the same shape. `config_check.ady` checks a config file against a schema
 where a setting is a flag, a bounded number, a word from a list, or a path,
 and a variant record gives each shape only the fields that shape has (§7.1):
 
+<!-- from: EXAMPLES/config_check.ady -->
 ```python
 type Kind_T is enum FLAG, NUMBER, CHOICE, PATHNAME
 
@@ -686,6 +729,7 @@ branch is not a mistake to be careful about; on the Nim backend the field is
 not there to read. (`TRUE_WORDS` and `FALSE_WORDS` are two module-level word
 lists defined earlier in the file.)
 
+<!-- from: EXAMPLES/config_check.ady -->
 ```python
 def check_value(s: Spec_T, value: str) -> str:
     """Empty means the value is fine; otherwise the complaint.
@@ -720,6 +764,7 @@ The schema itself is a plain dict from setting name to `Spec_T`, which is
 where AWK's associative array is doing fine — the shape that needs the
 variant record is the *value*, not the lookup:
 
+<!-- from: EXAMPLES/config_check.ady -->
 ```python
 let SCHEMA: {str}Spec_T = {
     "verbose":  Spec_T(kind=FLAG,     on_by_default=False),
@@ -748,6 +793,7 @@ rest **once both lists are complete**.
 
 Three enums and two record types carry it:
 
+<!-- illustrative -->
 ```python
 type Severity_T   is enum DEBUG, INFO, WARN, ERROR
 type Scan_State_T is enum OUTSIDE, IN_TRACE
@@ -768,6 +814,7 @@ type Trace_T is record:        # the lines after a failure
 
 **The two lists, and the totals kept on the way past:**
 
+<!-- from: EXAMPLES/awk_logscan.ady -->
 ```python
 class LogScan(AwkBase):
     var state    : Scan_State_T          = OUTSIDE
@@ -788,6 +835,7 @@ class LogScan(AwkBase):
 over the state is the *whole* dispatch — one branch per state, and nothing
 outside it:
 
+<!-- from: EXAMPLES/awk_logscan.ady -->
 ```python
 def process_record(self):
     case self.state:
@@ -818,6 +866,7 @@ one.
 traces, a record is an event, the start of a trace, or noise. One regex takes
 an event apart, and the groups go straight into a record:
 
+<!-- from: EXAMPLES/awk_logscan.ady -->
 ```python
 def _outside(self) -> None:
     """Between traces: a record is an event, the start of one, or noise."""
@@ -854,6 +903,7 @@ the state, and it hands the very same record straight to `_in_trace()` — the
 state it has just entered — so the line that started the trace is also
 counted by it. Inside a trace, every record is part of it until one is not:
 
+<!-- from: EXAMPLES/awk_logscan.ady -->
 ```python
 def _in_trace(self) -> None:
     """Inside a trace: every record is part of it until one is not."""
@@ -910,6 +960,7 @@ The status class is the third `case`, over ranges this time, and it is not a
 method: nothing about it concerns one scanner, so it is a plain function of
 the code.
 
+<!-- from: EXAMPLES/awk_logscan.ady -->
 ```python
 def status_class(status: Natural) -> Status_T:
     """A case over ranges, which awk has to spell as an if/else chain.
@@ -930,6 +981,7 @@ def status_class(status: Natural) -> Status_T:
 streaming form cannot do: a trace that runs to the end of the file has no
 following record to close it, so this is where the last one is filed.
 
+<!-- from: EXAMPLES/awk_logscan.ady -->
 ```python
 if self.state == IN_TRACE:
     self.traces.append(self.open_trace)
@@ -939,6 +991,7 @@ Then the questions no running total can answer, because they need every
 record in hand before any of them has one — a percentile has to sort, and a
 maximum has to have seen the last record:
 
+<!-- from: EXAMPLES/awk_logscan.ady -->
 ```python
 var times: []Natural = []
 for r in self.requests:
@@ -954,6 +1007,7 @@ for r in self.requests:
 ...next to the totals that were already answered on the way past, and a walk
 over the *other* list:
 
+<!-- from: EXAMPLES/awk_logscan.ady -->
 ```python
 for s in Severity_T:
     print f"  {s'Image:<5} {self.counts[s]}"

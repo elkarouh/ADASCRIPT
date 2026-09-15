@@ -126,7 +126,11 @@ COMPILE_ONLY := \
     INTERACTIVE/lispy.ady \
     awk_logscan.ady \
     sh_janitor.ady \
-    config_check.ady
+    config_check.ady \
+    DOC/awk_snippets.ady \
+    DOC/shell_snippets.ady \
+    DOC/why_snippets.ady \
+    DOC/awk_paragraph.ady
 
 ALL_COMPILE := \
     $(LIBS) \
@@ -189,7 +193,12 @@ lint-emitters:
 	    echo OK; \
 	done
 
-compile: lint-emitters
+.PHONY: check-quotes
+check-quotes:
+	@echo "=== Every code block in DOCS/ is code that exists ==="
+	@$(PYTHON) $(CURDIR)/DOCS/check_quotes.py || exit 1
+
+compile: lint-emitters check-quotes
 	@echo "=== Compiling $(words $(ALL_COMPILE)) examples ==="
 	@$(foreach f,$(ALL_COMPILE),$(call compile_one,$(f));)
 	@echo "=== Compile step complete ==="
@@ -237,6 +246,21 @@ test: compile
 	@printf '  %-42s' "config_check.ady"; \
 	    $(EXDIR)/config_check 2>&1 \
 	        | grep -q "200 is outside 1 .. 64" && echo OK || { echo FAIL; exit 1; }
+	@# The documents' own snippets, so that what DOCS/*.md quotes is code
+	@# that ran rather than code that was written down. check-quotes below
+	@# is what ties each block to the file it came from.
+	@for f in DOC/awk_snippets.ady DOC/why_snippets.ady; do \
+	    name=$${f%.ady}; \
+	    printf '  %-42s' "$$f"; \
+	    $(EXDIR)/$$name 2>&1 | grep -q "snippets ok" \
+	        && echo OK || { echo FAIL; exit 1; }; \
+	done
+	@printf '  %-42s' "DOC/shell_snippets.ady"; \
+	    $(EXDIR)/DOC/shell_snippets one two three 2>&1 \
+	        | grep -q "snippets ok" && echo OK || { echo FAIL; exit 1; }
+	@printf '  %-42s' "DOC/awk_paragraph.ady"; \
+	    $(EXDIR)/DOC/awk_paragraph < $(EXDIR)/DOC/awk_paragraph_sample.txt 2>&1 \
+	        | grep -q "record 3: NF=4" && echo OK || { echo FAIL; exit 1; }
 	@# Vcheck takes a log file rather than stdin; a path that exists is used
 	@# as-is, which is what makes it runnable here.
 	@printf '  %-42s' "CFMU/Vcheck_coded_flight.ady"; \

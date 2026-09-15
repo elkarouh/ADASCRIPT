@@ -1,0 +1,103 @@
+#!/usr/bin/env ady2nim
+"""Every free-standing snippet quoted in DOCS/ADASCRIPT_FOR_AWK.md.
+
+Not a program anyone would write: a place for the fragments the document
+shows outside its worked examples, so that `make test` runs them and
+DOCS/check_quotes.py has a real file to point at.
+"""
+
+type Severity_T is enum DEBUG, INFO, WARN, ERROR
+
+# --- regex as an operator -------------------------------------------------
+let line: str = "2026-09-11 ERROR disk full on /var/log"
+assert line == /ERROR|FATAL/
+assert line != /^#/
+
+# --- captures -------------------------------------------------------------
+if line == /^(\d{4})-(\d{2})-(\d{2}) (\w+)/:
+    assert $+1 == "2026"
+    assert $+4 == "ERROR"
+
+# --- find-all -------------------------------------------------------------
+let nums: []str = "a1 b22 c333" == /\d+/g
+assert nums == ["1", "22", "333"]
+
+# --- substitution ---------------------------------------------------------
+var path: str = "/var/log/app.log.gz"
+path == s/\.gz$//g
+assert path == "/var/log/app.log"
+
+var stamp: str = "2026-09-11"
+stamp == s/(\d{4})-(\d{2})-(\d{2})/$+3.$+2.$+1/g
+assert stamp == "11.09.2026"
+
+# --- case over regex ------------------------------------------------------
+def classify(s: str) -> Severity_T:
+    case s:
+        when /error|fatal/i: return ERROR
+        when /warn/i:        return WARN
+        when /info|debug/i:  return INFO
+        when others:         return DEBUG
+
+assert classify("Disk ERROR") == ERROR
+assert classify("nothing here") == DEBUG
+
+# --- case over an enum, with a guard --------------------------------------
+def prefix(sev: Severity_T, nr: Natural) -> str:
+    case sev:
+        when ERROR:            return "!!"
+        when WARN if nr < 10:  return " !"   # only shout early
+        when others:           return "  "
+
+assert prefix(ERROR, 99) == "!!"
+assert prefix(WARN, 3)   == " !"
+assert prefix(WARN, 30)  == "  "
+
+# --- the enum as a type ---------------------------------------------------
+assert ERROR'Image == "ERROR"
+assert Severity_T'First == DEBUG
+assert Severity_T'Last  == ERROR
+assert Severity_T("WARN") == WARN
+
+var counts: [Severity_T]Natural = [DEBUG: 0, INFO: 0, WARN: 0, ERROR: 0]
+counts[classify("warn: hot")] += 1
+assert counts[WARN] == 1
+
+# --- fields ---------------------------------------------------------------
+let F: []str = line.split()
+assert F'Length == 6
+assert F[1] == "ERROR"
+
+# --- optionals instead of "" --------------------------------------------
+def field(fs: []str, i: Natural) -> ?str:
+    if i >= fs'Length:
+        return None
+    return fs[i]
+
+assert (field(F, 1) or "-") == "ERROR"
+assert field(F, 99) == None
+
+# --- ?T: lifting and narrowing -------------------------------------------
+type Finding_T is record:
+    line:  ?Natural = None
+    text:  str      = ""
+
+let n: Natural = 12
+let maybe: ?Natural = n                        # a declaration lifts
+let one:  Finding_T = Finding_T(line=n, text="on a line")     # so does a field
+let none_: Finding_T = Finding_T(text="about the file")       # left out: None
+assert (maybe or 0) == 12       # a ?T and an int are different types
+assert (one.line or 0) == 12
+assert none_.line == None
+
+def where(f: Finding_T) -> str:
+    let ln: ?Natural = f.line                  # bind, then guard
+    if ln is None:
+        return ""
+    return "line " + str(ln)                   # a plain Natural from here
+
+assert where(one) == "line 12"
+assert where(none_) == ""
+print "tdoc ok"
+
+print "all AWK-document snippets ok"

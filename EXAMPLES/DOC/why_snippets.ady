@@ -1,0 +1,96 @@
+#!/usr/bin/env ady2nim
+"""Every snippet quoted in DOCS/WHY_ADASCRIPT.md.
+
+The document's method in one file: name the concepts, name the
+collections and the mappings, then write what it does -- plus the
+notation tour and the signatures it argues from. `make test` runs it, and
+DOCS/check_quotes.py checks the document against it.
+"""
+
+# --- the concepts, the collections and the mappings ------------------------
+type Callsign_T     is str
+type Altitude_T     is Natural        # feet
+type Velocity_T     is float          # knots
+type Flight_Phase_T is enum CLIMB, CRUISE, DESCENT, HOLD
+
+type Aircraft_T is record:
+    callsign: Callsign_T     = ""
+    phase:    Flight_Phase_T = CLIMB
+    altitude: Altitude_T     = 0
+    speed:    Velocity_T     = 0.0
+
+var fleet   : {Callsign_T}Aircraft_T     = {:}   # every aircraft, by callsign
+var by_phase: [Flight_Phase_T][]Callsign_T       # who is in each phase
+var watched : {}Callsign_T               = {}    # the ones above their ceiling
+var ceiling : [Flight_Phase_T]Altitude_T = [CLIMB: 41000, CRUISE: 41000,
+                                            DESCENT: 41000, HOLD: 24000]
+
+fleet["BAW117"] = Aircraft_T(callsign="BAW117", phase=CRUISE,
+                             altitude=37000, speed=452.0)
+fleet["AFR22"]  = Aircraft_T(callsign="AFR22", phase=HOLD,
+                             altitude=25000, speed=210.0)
+
+for cs in ["AFR22", "BAW117"]:
+    let a: Aircraft_T = fleet[cs]
+    by_phase[a.phase].append(a.callsign)
+    if a.altitude > ceiling[a.phase]:
+        watched.add(a.callsign)
+
+for phase in Flight_Phase_T:
+    print f"{phase'Image:<8} {by_phase[phase]'Length}"
+
+# --- the "not yet true" section: an alias does not enforce ------------------
+type Distance_T is float
+let v: Velocity_T = 250.0
+let d: Distance_T = v        # compiles today, on both backends
+assert d == 250.0
+
+# --- the notation, one line per shape --------------------------------------
+type Sector_T is enum NORTH, CENTRE, SOUTH
+
+type Fix_T is tuple:
+    lat: float
+    lon: float
+
+let xs   : []int              = [1, 2, 3]                 # a list of
+let m    : {str}int           = {"a": 1}                  # a mapping from .. to
+let s    : {}str              = {"x", "y"}                # a set of
+let arr  : [Sector_T]int       = [NORTH: 1, CENTRE: 2, SOUTH: 3]  # one per member
+let opt  : ?int               = 7                         # possibly absent
+let pair : Fix_T              = (lat: 51.5, lon: -0.1)    # named tuple
+
+# They compose as prefixes, so the type reads left to right.
+var routes : {str}[]str       = {"BA117": ["EGLL", "KJFK"]}
+var bysector: [Sector_T][]str   = [NORTH: [], CENTRE: ["BA117"], SOUTH: []]
+var nested : {str}{str}int    = {"a": {"b": 1}}
+
+routes["AF22"] = ["LFPG", "LEMD"]
+
+assert xs'Length == 3 and m["a"] == 1 and "x" in s
+assert arr[CENTRE] == 2 and (opt or 0) == 7 and pair.lat == 51.5
+assert routes["BA117"]'Length == 2 and routes'Length == 2
+assert bysector[CENTRE][0] == "BA117" and bysector[NORTH]'Length == 0
+assert nested["a"]["b"] == 1
+
+# --- the signatures the document argues from -------------------------------
+type Velocity_T is float
+type Distance_T is float
+type Duration_T is float
+
+type Position_T is record:
+    lat: float = 0.0
+    lon: float = 0.0
+
+def compute(track: str, wind: float) -> Velocity_T:
+    return 250.0
+
+let speed: Velocity_T = compute("BAW117", 12.0)
+assert speed == 250.0
+
+def separation(own: Position_T, other: Position_T,
+               closing: Velocity_T, horizon: Duration_T) -> Distance_T:
+    return closing * horizon
+
+assert separation(Position_T(), Position_T(), 250.0, 0.1) == 25.0
+
+print "all WHY-document snippets ok"

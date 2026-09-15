@@ -28,6 +28,7 @@ the two backends.
 `shell:` takes a command line, not a string. What differs is the target you
 give it, and the target is what decides how the command is run.
 
+<!-- illustrative -->
 ```python
 shell: true                                   # run it; nothing captured
 
@@ -51,6 +52,7 @@ still get the status. `EXAMPLES/git1.ady` uses the two forms deliberately —
 one for the commands the user is meant to watch, one for the commands whose
 answer is their output:
 
+<!-- from: EXAMPLES/git1.ady -->
 ```python
 let code: int = shell(cwd = self.dir, env = self.env): git {*args}
 ...
@@ -61,6 +63,7 @@ And when the last thing your script does is run a program, `shellExec`
 replaces this process with it — the status is the child's by construction and
 Ctrl-C reaches it directly:
 
+<!-- from: EXAMPLES/git1.ady -->
 ```python
 shellExec(cwd = self.dir, env = self.env): git {*args}
 ```
@@ -73,6 +76,7 @@ shellExec(cwd = self.dir, env = self.env): git {*args}
 needs. `{!x}` quotes it. `{*xs}` quotes every element of a list and joins
 them. The difference is the single most common bug in shell:
 
+<!-- illustrative -->
 ```python
 let f: str = "my notes.txt"
 let split_up = shell: printf '[%s]' {f}
@@ -92,6 +96,7 @@ But the real answer is not to quote better — it is to stop handing a string
 to a parser. `run` takes an argument list, and nothing parses it a second
 time:
 
+<!-- from: EXAMPLES/DOC/shell_snippets.ady -->
 ```python
 let nasty: str = "; echo pwned"
 let safe: RunResult = run(["printf", "[%s]", nasty])
@@ -112,6 +117,7 @@ most of the time.
 and every one of them has exceptions you have to remember. Adascript makes
 the choice per command.
 
+<!-- illustrative -->
 ```python
 try:
     shell(check = true): exit 9
@@ -126,6 +132,7 @@ forget to set.
 
 A pipeline's status is the POSIX one unless you ask otherwise:
 
+<!-- illustrative -->
 ```python
 let loose  = shell: false | cat
 let strict = shell(pipefail = true): false | cat
@@ -136,6 +143,7 @@ assert strict.code != 0
 An indented block joins its lines with `&&`, so it stops at the first
 failure — the `set -e` behaviour, scoped to the block that wanted it:
 
+<!-- from: EXAMPLES/DOC/shell_snippets.ady -->
 ```python
 let built = shell:
     echo one
@@ -145,6 +153,7 @@ assert built.output == "one\ntwo\n"
 
 `join = ";"` runs them all regardless, `join = "|"` makes one pipeline:
 
+<!-- from: EXAMPLES/DOC/shell_snippets.ady -->
 ```python
 let anyway = shell(join = ";"):
     false
@@ -160,6 +169,7 @@ assert anyway.output.strip() == "still here"
 space becomes two filenames. `while read -r line; do ... done < <(cmd)` fixes
 it and is three constructs deep. `shellLines:` is the whole thing:
 
+<!-- from: EXAMPLES/git1.ady -->
 ```python
 let entries = shellLines: ls -1a {!self.path}
 ```
@@ -169,6 +179,7 @@ because `-1a` puts one name on each line and `shellLines` splits on newlines
 only. When the output is long or slow, `shellIter` yields each line as it
 arrives, so nothing is held in memory:
 
+<!-- illustrative -->
 ```python
 for line in shellIter: tail -f build.log
     print line
@@ -185,6 +196,7 @@ command has no status to object to.
 Backgrounding in shell gives you `$!`, a `wait` that returns one status, and
 no way to say which job produced what. `shellSpawn` hands back a `Job`:
 
+<!-- from: EXAMPLES/DOC/shell_snippets.ady -->
 ```python
 var jobs: []Job = []
 for n in ["1", "2", "3"]:
@@ -214,6 +226,7 @@ A single job answers a few questions directly: `j.running()` never blocks,
 `env` takes a `{str}str` and **adds** to what the child inherits — `PATH` and
 everything else is still there:
 
+<!-- from: EXAMPLES/DOC/shell_snippets.ady -->
 ```python
 let extra: {str}str = {"ADY_DOC_VAR": "set-by-parent"}
 let seen_env = shell(env = extra): printf '%s' "$ADY_DOC_VAR"
@@ -223,6 +236,7 @@ assert seen_env.output == "set-by-parent"
 `git1.ady` uses it for the reason that matters — the value crosses into the
 child without the shell parsing it on the way:
 
+<!-- from: EXAMPLES/git1.ady -->
 ```python
 let one_env: {str}str = {"GIT_DIR": str(gitdir)}
 let r = shell(env = one_env): git log -1 --format='%cr'
@@ -230,6 +244,7 @@ let r = shell(env = one_env): git log -1 --format='%cr'
 
 `stdin = expr` feeds the child, so a here-document becomes an expression:
 
+<!-- from: EXAMPLES/DOC/shell_snippets.ady -->
 ```python
 let sorted_out = shell(stdin = "gamma\nalpha\nbeta\n"): sort
 assert sorted_out.output == "alpha\nbeta\ngamma\n"
@@ -246,6 +261,7 @@ String concatenation with `/` between the parts is how a shell script ends up
 with `//` in the middle of a path and an empty variable turning `$dir/$name`
 into `/etc/passwd`. `Path` makes joining an operation:
 
+<!-- illustrative -->
 ```python
 let root: Path = Path("/tmp")
 let log:  Path = root / "ady_shell_doc" / "app.log"
@@ -262,6 +278,7 @@ an error on both backends.
 
 The shell's file tests come across unchanged, and mean what they mean:
 
+<!-- illustrative -->
 ```python
 if -f path:  ...      # and -d -e -L -r -w -x -s
 if a -nt b:  ...
@@ -278,6 +295,7 @@ thought about.
 Positional parameters, the count, and the whole list are spelled as you would
 expect:
 
+<!-- from: EXAMPLES/DOC/shell_snippets.ady -->
 ```python
 assert $# >= 0
 let first: str = $1
@@ -288,6 +306,7 @@ for arg in $@[1:]:
 The environment has three readings, and the difference between them is one
 shell can only fake:
 
+<!-- illustrative -->
 ```python
 assert $HOME != ""
 assert $NO_SUCH_VAR_HERE == ""                  # unset reads as empty, as in sh
@@ -308,6 +327,7 @@ The sed/grep/awk pipeline exists because shell has no way to look at a
 string. Adascript has regex literals, so matching is an operator and captures
 are variables:
 
+<!-- illustrative -->
 ```python
 if line == /^(\w+)=(\d+)$/:
     let key:   str = $+1
@@ -331,6 +351,7 @@ four places that test it are four independent chances to typo. Here it is a
 type, and a `case` over it is checked for completeness by the Nim backend —
 miss a member and the program does not compile:
 
+<!-- illustrative -->
 ```python
 type Action_T is enum COMPRESS, DELETE, KEEP, SKIP
 
@@ -345,6 +366,7 @@ listing the places you have to think about. Iterate the type itself to get
 every member in declaration order — useful for a report that must not forget
 a category:
 
+<!-- illustrative -->
 ```python
 for a in Action_T:
     print f"  {a'Image:<8} {counts[a]:>2} file(s)"
@@ -354,9 +376,11 @@ for a in Action_T:
 `name_1`, `size_1`, `name_2`, `size_2`, or an array per column and an index
 you carry by hand:
 
+<!-- from: EXAMPLES/sh_janitor.ady -->
 ```python
 type Entry_T is record:
-    path:   Path    = Path("")
+    """One file, decided once."""
+    path:   Path
     size:   Natural = 0
     action: Action_T = KEEP
 ```
@@ -377,25 +401,22 @@ version has.
 
 The decision is made once, over a closed set of outcomes:
 
+<!-- from: EXAMPLES/sh_janitor.ady -->
 ```python
-def decide(p: Path, size: Natural) -> Action_T:
-    """One decision per file, in one place, over a closed set of outcomes."""
-    let name: str = p.name
-    case name:
-        when /\.gz$/:            return SKIP        # already done
-        when /^\./:              return SKIP        # dotfile
-        when /\.(log|out|err)$/:
-            if size >= BIG_ENOUGH:
-                return COMPRESS
-            return KEEP
-        when /\.tmp$|~$/:        return DELETE
-        when others:
-            return KEEP
+def decide(p: Path, size: Natural) -> Action_T: # a pure function is also a mapping.
+    let BIG_ENOUGH : Natural = 64      # bytes; a real one would say 10 MB
+    case p.name:
+        when /\.gz$/: SKIP       # already done
+        when /^\./: SKIP        # dotfile
+        when /\.(log|out|err)$/: COMPRESS if size >= BIG_ENOUGH else KEEP
+        when /\.tmp$|~$/: DELETE
+        when others: KEEP
 ```
 
 The listing does not parse `ls` through `$IFS` — `runLines` skips the shell
 entirely, so each name stays one name however many spaces it holds:
 
+<!-- from: EXAMPLES/sh_janitor.ady -->
 ```python
 for name in sorted(runLines(["ls", "-A", str(dir)])):
     let p: Path = dir / name
@@ -406,6 +427,7 @@ for name in sorted(runLines(["ls", "-A", str(dir)])):
 The work runs in parallel, with a status per job rather than one for the lot,
 and every interpolated path is quoted:
 
+<!-- from: EXAMPLES/sh_janitor.ady -->
 ```python
 var jobs   : []Job     = []
 var zipped : []Entry_T = []
