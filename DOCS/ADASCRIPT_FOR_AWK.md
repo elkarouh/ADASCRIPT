@@ -1341,8 +1341,8 @@ keeps checking.
 | `BEGIN { }` | `def start(self):` — or just code before the loop |
 | `END { }` | `def finish(self):` |
 | `{ action }` | `def process_record(self):` |
-| `$0` | `self.line`, or `Fields[0]` |
-| `$1`, `$NF` | `Fields[1]`, `Fields[self.NF]` |
+| `$0` (the record) | `self.line`, or `Fields[0]` |
+| `$1`, `$NF` (a field) | `Fields[1]`, `Fields[self.NF]` |
 | `NR`, `NF`, `FS`, `OFS`, `RS` | `self.NR`, `self.NF`, `self.FS`, `self.OFS`, `self.RS` |
 | `RS=""` (paragraph mode) | `AwkBase(rs = "\\n\\n")` |
 | `RS="%%\\n"` (a marker) | `AwkBase(rs = "%%\\n")` |
@@ -1350,8 +1350,9 @@ keeps checking.
 | `/re/ && cond { a }` | `when /re/ if cond:` |
 | `$0 ~ /re/` | `line == /re/` |
 | `$0 !~ /re/` | `line != /re/` |
-| `match($0, re); substr($0, RSTART, RLENGTH)` | `if line == /re/: … $+0` |
-| capture groups | `$+1`, `$+2`, `$+{name}` |
+| `match($0, re); substr($0, RSTART, RLENGTH)` | `if line == /re/: … $+0` (the whole match) |
+| gawk `match($0, re, m); m[1]`, or `gensub`'s `\\1` | `$+1`, `$+2` (a capture group) |
+| — (no equivalent at all) | `$+{name}` for a named group |
 | `sub(/re/, "x")` | `s = s/re/x/` |
 | `gsub(/re/, "x")` | `s = s/re/x/g` |
 | `split(s, a, sep)` | `let a: []str = s.split(sep)` |
@@ -1363,12 +1364,33 @@ keeps checking.
 | `system("cmd")` | `shell: cmd` |
 | `"cmd" \| getline line` | `let (out, rc) = shell: cmd` |
 | `close(cmd)` | — nothing to close |
-| `ARGV[1]`, `ARGC` | `$1`, `$#` |
+| `ARGV[1]`, `ARGC` | `$1`, `$#` (a command-line argument) |
 | `ENVIRON["HOME"]` | `$HOME`, or `$?HOME` for a `?str` |
 | an integer state flag | an `enum`, checked for completeness |
 | parallel arrays sharing an index | a `record` |
 | `kind[i]` plus a comment about which columns apply | a variant record |
 | `""` meaning "not set" | `?T` and `None` |
+
+### Three things spelled with a dollar
+
+Worth separating, because two of them collide with what `$` means in AWK:
+
+| | means | AWK's spelling |
+|---|---|---|
+| `Fields[1]` | **a field** of the record | `$1` |
+| `$+1` | **a capture group** of the regex that just matched | gawk's `match(s, re, m); m[1]` |
+| `$1` | **a command-line argument** | `ARGV[1]` |
+
+So AWK's `$1` is `Fields[1]`, and Adascript's `$1` is AWK's `ARGV[1]`: the
+same three characters, and not the same thing. The `+` is the reminder that
+a capture belongs to a match rather than to the record — `$+0` is the whole
+match, `$+1` the first group, `$+{name}` a named one, and all of them are
+only meaningful inside the branch whose pattern produced them.
+
+Fields are positional and always there; captures exist only where a regex
+matched. That is why `$+1` is what §10.3's scanner uses to take a request
+apart, even though the record does have fields: the regex is what says the
+record *is* a request, and the groups it hands back are the parts of one.
 
 ---
 
