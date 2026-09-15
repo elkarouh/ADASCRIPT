@@ -2515,7 +2515,7 @@ depth triggers a rebuild; `ady2nim -t` transpiles the graph and stops.
   time, so a program split across modules is a Nim program; dual-backend code
   stays in one file.
 
-Chapter 13 of the book (`DOCS/BOOK/13-programming-in-the-large.md`) works
+Chapter 14 of the book (`DOCS/BOOK/14-programming-in-the-large.md`) works
 through the same ground in more detail.
 
 ---

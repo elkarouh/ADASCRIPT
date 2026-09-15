@@ -94,67 +94,19 @@ to keep numpy/matplotlib access while the core logic compiles natively.
 
 Use both sparingly; they are the escape hatches, not the road.
 
-## 12.4 Memory ownership: `own`, `lent`, `move`, `drop`, `with own`
+## 12.4 Memory ownership
 
 Python has a GC; Nim (ARC/ORC) frees values deterministically when their
-owner's scope ends. Adascript exposes optional ownership annotations that
-document intent and help ARC elide copies — and are stripped or trivialised
-in Python output. `EXAMPLES/test_ownership.ady` demonstrates the whole set:
+owner's scope ends. Adascript has a small vocabulary for writing down what
+you know about a value's lifetime — `own`, `lent`, `move`, `drop` and
+`with own` — which guides ARC on one backend and is mostly erased on the
+other.
 
-```python
-type Msg_T is record:
-    text: str
-    count: int
-
-def summarise(msg: lent Msg_T) -> str:      # lent: read-only borrow
-    f"{msg.text} x{msg.count}"
-
-def make_msg(text: str, n: int) -> Msg_T:
-    var m: Msg_T = Msg_T(text=text, count=n)
-    m
-
-def main():
-    own a: Msg_T = make_msg("hello", 3)     # unique owner
-    print(summarise(a))
-
-    with own tmp = make_msg("scoped", 1):   # RAII block
-        print(summarise(tmp))
-    # tmp freed here
-
-    own b: Msg_T = move(a)                  # transfer; a is now invalid
-    print(summarise(b))
-
-    own c: Msg_T = make_msg("temp", 5)
-    drop(c)                                 # explicit early release
-
-    print("done")
-```
-
-The vocabulary:
-
-| Construct | Meaning | Nim | Python |
-|-----------|---------|-----|--------|
-| `own x: T = e` | unique owner; freed at scope end | `var x` (ARC) | plain binding |
-| `param: lent T` | borrow: callee only reads | `param: T` | `param: T` |
-| `param: own T` | callee takes ownership | `param: sink T` | `param: T` |
-| `move(x)` | transfer; `x` becomes invalid | `move(x)` | alias |
-| `drop(x)` | destroy now | `=destroy` + `=wasMoved` | `del x` |
-| `with own x = e:` | scoped RAII | `block:` + ARC | `try/finally: del x` |
-
-Where they pay off in the examples (per `DOCS/TUTORIAL.md` §20):
-
-- **`lent`** on read-only traversals — the graph parameter in `graph.ady` /
-  `dijkstra.ady`, the candidate set in `spell.ady`. The annotation promises
-  "no mutation, no storage" and lets ARC pass a view.
-- **`drop`** after an algorithm's working structures are done — releasing the
-  `visited` set and queue before returning results.
-- **`with own`** around per-branch board copies in `sudoku.ady`'s DFS, so
-  each speculative copy dies with its branch instead of accumulating across
-  the recursion.
-
-Honest limitations: no borrow checker (misusing `move` is a runtime
-zero-value, not a compile error), no shared ownership, no custom destructors
-from Adascript, and cyclic structures need Nim's ORC directly.
+It is the one part of the two-backend contract where a program can observe
+the difference, so it has a chapter of its own:
+[Chapter 13 — Memory Ownership](13-memory-ownership.md), with what each form
+emits, what to use when, and the two cases where the backends give different
+answers.
 
 ## 12.5 Nim idioms that leak in (pleasantly)
 
@@ -210,4 +162,4 @@ than the prototyping one.
 
 ---
 
-*Next: [Chapter 13 — Programming in the Large: Modules, Projects, and Builds](13-programming-in-the-large.md)*
+*Next: [Chapter 13 — Memory Ownership](13-memory-ownership.md)*

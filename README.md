@@ -1301,7 +1301,7 @@ and a subclass in another (that is `EXAMPLES/test_awk.ady` over the bundled
   asserts — see `EXAMPLES/PROJECT/test_geometry.ady`.
 
 Full treatment, with the layouts and failure modes worked through:
-[The Adascript Book, Chapter 13 — Programming in the Large](DOCS/BOOK/13-programming-in-the-large.md).
+[The Adascript Book, Chapter 14 — Programming in the Large](DOCS/BOOK/14-programming-in-the-large.md).
 
 ---
 

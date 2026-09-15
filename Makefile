@@ -50,6 +50,7 @@ STANDALONE := \
     test_shortest_path.ady \
     primes.ady \
     test_ownership.ady \
+    ownership_tour.ady \
     test_iters.ady \
     test_graphs.ady \
     test_queues.ady \

@@ -13,12 +13,14 @@ interpreters, system tools and interactive shell utilities.
 ## How to read this book
 
 Chapters 1–5 cover the core language and should be read in order. Chapters
-6–12 are feature deep-dives that can be read in any order; chapters 5 and 10
+6–13 are feature deep-dives that can be read in any order; chapters 5 and 10
 double as the complete references for pattern matching and for optional
-types, so each ends with a table you can look things up in. Chapter 13 leaves
-the single file behind and covers modules, project layout and the build.
-Chapter 14 walks through the large example programs as case studies, and the
-appendix is a condensed syntax reference.
+types, so each ends with a table you can look things up in, and chapter 13
+does the same for the ownership vocabulary — what `own`, `lent`, `move`,
+`drop` and `with own` are for, and where the two backends stop agreeing.
+Chapter 14 leaves the single file behind and covers modules, project layout
+and the build. Chapter 15 walks through the large example programs as case
+studies, and the appendix is a condensed syntax reference.
 
 Whenever a chapter quotes a program, the path is given relative to the
 repository root (e.g. `EXAMPLES/monty_hall.ady`) so you can open the full
@@ -50,9 +52,10 @@ the missing type system are what change.
 | 10 | [Optional Types and the Maybe Monad](10-optionals.md) | `graph.ady`, `phonecode.ady`, `test_do_block.ady` |
 | 11 | [Shell Integration: Adascript as a Better Bash](11-shell-and-scripting.md) | `fsel.ady`, `sv.ady`, `show_status.ady`, `test_shell_block.ady` |
 | 12 | [Living on Two Backends](12-two-backends.md) | `test_ownership.ady`, `rsync_time_machine.ady`, `shortest_path.ady` |
-| 13 | [Programming in the Large: Modules, Projects, and Builds](13-programming-in-the-large.md) | `PROJECT/`, `CFMU/`, `TIMETABLE/` |
-| 14 | [Case Studies: The Big Programs](14-case-studies.md) | `tsp.ady`, `lispy.ady`, `git1.ady`, `geo_server.ady`, `sudoku.ady`, `lolcate.ady`, `jacks.ady`, `qlearning.ady` |
-| A | [Appendix: Syntax Cheat Sheet and Toolchain](15-appendix.md) | — |
+| 13 | [Memory Ownership](13-memory-ownership.md) | `ownership_tour.ady`, `qlearning.ady` |
+| 14 | [Programming in the Large: Modules, Projects, and Builds](14-programming-in-the-large.md) | `PROJECT/`, `CFMU/`, `TIMETABLE/` |
+| 15 | [Case Studies: The Big Programs](15-case-studies.md) | `tsp.ady`, `lispy.ady`, `git1.ady`, `geo_server.ady`, `sudoku.ady`, `lolcate.ady`, `jacks.ady`, `qlearning.ady` |
+| A | [Appendix: Syntax Cheat Sheet and Toolchain](16-appendix.md) | — |
 
 ## Running the examples
 

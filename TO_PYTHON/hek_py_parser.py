@@ -1567,16 +1567,52 @@ def _dataclass_defaults(field_lines):
     A mutable zero has to go through default_factory: writing `= []` on a
     dataclass field is the shared-mutable-default bug, which is the same
     reason a plain class body suppresses it.
+
+    That applies to a default the *source* wrote, too. `xs: []int = []` is
+    the ordinary way to spell an empty list field, and emitting it verbatim
+    gives `ValueError: mutable default <class 'list'> ... use
+    default_factory` when the class is created -- at import, so the module
+    dies rather than the record. The annotation also decides which empty
+    container is meant: a bare `{}` is a set literal everywhere else in the
+    language, but on a `{K}V` field it is a dict.
     """
     import re as _re_dd
     factories = {"[]": "list", "{}": "dict", "set()": "set"}
+    empties = ("[]", "{}", "set()", "list()", "dict()", "{{}}")
     out = []
     for line in field_lines:
         m = _re_dd.match(r"^(\s*)([A-Za-z_]\w*)\s*:\s*(.+?)\s*$", line)
-        if not m or "=" in m.group(3):
+        if not m:
             out.append(line)
             continue
-        pad, fname, ann = m.groups()
+        pad, fname, rest = m.groups()
+
+        if "=" in rest:
+            ann, _, written = rest.partition("=")
+            ann, written = ann.strip(), written.strip()
+            if written in empties:
+                # An empty container, written by hand. What it should be is
+                # the annotation's zero, not what the expression emitter
+                # made of the literal on its own.
+                zero = hek_py_stmt._zero_value(ann)
+                if zero in factories:
+                    ParserState.nim_imports.add(
+                        "from dataclasses import dataclass, field")
+                    out.append(f"{pad}{fname}: {ann} = "
+                               f"field(default_factory={factories[zero]})")
+                    continue
+            elif written[:1] in "[{" and written[-1:] in "]}":
+                # A non-empty container default is shared between every
+                # instance, which is the same bug with a later symptom.
+                ParserState.nim_imports.add(
+                    "from dataclasses import dataclass, field")
+                out.append(f"{pad}{fname}: {ann} = "
+                           f"field(default_factory=lambda: {written})")
+                continue
+            out.append(line)
+            continue
+
+        ann = rest
         zero = hek_py_stmt._zero_value(ann)
         if zero in factories:
             ParserState.nim_imports.add("from dataclasses import dataclass, field")

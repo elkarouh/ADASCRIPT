@@ -1,0 +1,96 @@
+#!/usr/bin/env ady2nim
+"""
+ownership_tour — what each ownership annotation does, and where the two
+backends stop agreeing.
+
+    EXAMPLES/ownership_tour                     # the Nim build
+    ady2py EXAMPLES/ownership_tour.ady -c       # the Python one
+
+Everything except the last section prints the same on both. The last
+section is the one that does not, and it prints what *this* backend does
+rather than asserting an answer -- which is the whole lesson. The chapter
+that walks through it is DOCS/BOOK/13-memory-ownership.md.
+"""
+
+type Frame_T is record:
+    """A block of samples. Big enough that copying it would be a waste."""
+    id:      Natural  = 0
+    samples: []int    = []
+
+
+def load(id: Natural, n: Natural) -> Frame_T:
+    """Build a frame. The caller becomes its owner."""
+    var s: []int = []
+    for i in 0 ..< n:
+        s.append(i * i)
+    Frame_T(id=id, samples=s)
+
+
+# --- lent: I will read it and give it back -------------------------------
+# The caller keeps ownership. The promise is not to store the value
+# anywhere, not to hand it on to something that will, and not to mutate it.
+def energy(f: lent Frame_T) -> Natural:
+    var total: Natural = 0
+    for v in f.samples:
+        total += v
+    total
+
+
+def describe(f: lent Frame_T) -> str:
+    f"frame {f.id}: {f.samples'Length} samples, energy {energy(f)}"
+
+
+# --- own parameter: hand it over and forget it ---------------------------
+# `own` on a parameter is Nim's `sink`: the caller is giving the value away,
+# so the callee may consume it and the caller must not read it afterwards.
+def archive(f: own Frame_T) -> str:
+    """Takes the frame. The caller's binding is dead after this call."""
+    f"archived frame {f.id} ({f.samples'Length} samples)"
+
+
+def main():
+    print "--- ownership_tour ---"
+
+    # --- own: this name is responsible for the value ---------------------
+    own live: Frame_T = load(1, 6)
+    print describe(live)               # lent: read it, it stays mine
+
+    # --- with own: the value dies with the block -------------------------
+    # The scope is the lifetime. On Nim, reading `scratch` after the block
+    # is a compile error -- the name does not exist out here -- which is
+    # what makes this the safest of the three release forms.
+    with own scratch = load(2, 4):
+        print describe(scratch)
+    print "scratch is gone"
+
+    # --- own parameter: given away, on purpose ---------------------------
+    own outgoing: Frame_T = load(3, 3)
+    print archive(outgoing)
+    # Nothing below reads `outgoing`. That is not a style choice: it was
+    # handed to archive(), and what is left here is not defined to be
+    # anything.
+
+    # --- drop: release it before the scope ends --------------------------
+    own big: Frame_T = load(4, 5)
+    print describe(big)
+    drop(big)                          # the memory goes back now
+    print "big released early"
+    # Reading `big` here is the mistake this chapter is about: Nim prints
+    # a zeroed frame, Python raises UnboundLocalError. Neither is an
+    # answer, so do not ask.
+
+    # --- move: the one whose observable behaviour differs ----------------
+    own source: Frame_T = load(5, 4)
+    own target: Frame_T = move(source)
+    print describe(target)             # the same frame, under a new name
+
+    # A moved-from value is not defined to hold anything. Both backends
+    # will happily tell you what it holds, and they do not agree, which is
+    # the most useful thing this program prints:
+    print f"the moved-from value reports {source.samples'Length} samples"
+    print "  (Nim says 0 -- the seq was taken; Python says 4 -- it aliases)"
+
+    print "--- done ---"
+
+
+main()
