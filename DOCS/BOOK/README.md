@@ -24,6 +24,10 @@ Whenever a chapter quotes a program, the path is given relative to the
 repository root (e.g. `EXAMPLES/monty_hall.ady`) so you can open the full
 source, transpile it, and run it on either backend.
 
+`DOCS/WHY_ADASCRIPT.md` is the argument rather than the manual: what the
+language is for, and the method -- name the concepts, then name the
+collections and the mappings, then write the code.
+
 Coming from AWK, `DOCS/ADASCRIPT_FOR_AWK.md` is a shorter way in: it keeps
 AWK's shape -- records, fields, patterns and actions -- and shows what
 replaces its one scalar type. `DOCS/ADASCRIPT_FOR_SHELL.md` does the same for

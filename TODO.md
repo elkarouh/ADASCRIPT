@@ -195,6 +195,21 @@ history of this file if the reasoning behind one of them is ever wanted.
       above the `case`, or between two `when` clauses, is fine -- it is only
       the position before the first clause, where a reader naturally puts the
       note explaining what the block dispatches on.
+- [ ] a user-defined scalar type is an alias, not a distinct type, so
+      `type Velocity_T is float` documents a unit without enforcing it:
+      `let d: Distance_T = v` over two float aliases compiles on both
+      backends. `Path` proves the machinery is there -- it is a distinct
+      string on Nim and a str subclass on Python, and `p = s` is refused on
+      both -- so the shape of the feature is `type Velocity_T is distinct
+      float`, with an explicit `Velocity_T(x)` to get in and `float(v)` to
+      get out. DOCS/WHY_ADASCRIPT.md rests its central argument on the name
+      alone and says so; this is what would let it rest on the compiler.
+- [ ] `[E]{}T` cannot infer the element type of an empty set literal in its
+      initialiser: `var seen: [Phase_T]{}str = [CLIMB: {}, ...]` gives Nim
+      "cannot instantiate: 'A'" from initHashSet. `{}` is ambiguous on its
+      own -- empty set or empty table -- and the enum-array literal is not
+      passing the annotation down to its elements. `[E][]T` is fine, so it
+      is the set literal specifically.
 - [ ] `.map()` / `.and_then()` rewriting on `?T` (Feature 2)
 
 ---

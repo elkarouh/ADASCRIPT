@@ -278,11 +278,42 @@ def _zero_value(annotation):
         return f"{ann}()"
     scalars = {"int": "0", "float": "0.0", "bool": "False", "str": '""',
                "bytes": 'b""', "complex": "0j",
+               # Natural is an int here and a 0-based subrange on Nim, which
+               # zeroes to 0. Positive is deliberately absent: Nim would zero
+               # it to 0 too, which is outside the type.
+               "Natural": "0",
                # Nim zeroes a distinct string to an empty one, so `var p: Path`
                # compares equal to "" there while None here did not.
                "Path": 'Path("")'}
     if ann in scalars:
         return scalars[ann]
+    # [E]T: Nim's array[E, T] has a slot per member, already zeroed, so
+    # `var counts: [Phase_T]Natural` counts from the first += on either
+    # backend. An empty _EnumArray raised KeyError on the first read here.
+    # A generator rather than a literal, so a mutable zero -- [] for an
+    # [E][]T -- is a fresh one per member and not one list shared by all.
+    if ann.startswith("_EnumArray[") and ann.endswith("]"):
+        inner = ann[len("_EnumArray["):-1]
+        depth = 0
+        for _i, _ch in enumerate(inner):
+            if _ch in "[(":
+                depth += 1
+            elif _ch in "])":
+                depth -= 1
+            elif _ch == "," and depth == 0:
+                _key, _elem = inner[:_i].strip(), inner[_i + 1:].strip()
+                # Only when both halves are known: the domain has to be an
+                # enum to iterate at all -- [3]int and [str]int reach here
+                # too -- and the element needs a zero worth filling with.
+                # A nested [E][E]T is left alone rather than nesting two
+                # generators over the same loop name.
+                _dom = getattr(ParserState, "tick_types", {}).get(_key, {})
+                _ez = _zero_value(_elem)
+                if ("members" in _dom and _ez != "None"
+                        and not _elem.startswith("_EnumArray[")):
+                    return f"_EnumArray((_m, {_ez}) for _m in {_key})"
+                break
+        return "_EnumArray()"
     for prefix, empty in (("_EnumArray[", "_EnumArray()"),
                           ("list[", "[]"), ("dict[", "{}"), ("set[", "set()"),
                           ("frozenset[", "frozenset()"), ("tuple[", "()"),
