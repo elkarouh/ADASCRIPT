@@ -523,22 +523,21 @@ assert none_.line == None          # comparing against None is always fine
 ```
 
 ...and, for the case where you have already established it is there, an
-**early-return guard**, which narrows the name below it to a plain `Natural`:
+**early-return guard**, which narrows what it tested to a plain `Natural`
+below it:
 
 <!-- from: EXAMPLES/config_check.ady -->
 ```python
 def where(f: Finding_T) -> str:
-    let ln: ?Natural = f.line      # bind it to a name first
-    if ln is None:
+    if f.line is None:
         return ""
-    return "line " + str(ln)       # a plain Natural from here on
+    return "line " + str(f.line)   # a plain Natural from here on
 ```
 
-That first line is not ceremony. The guard narrows a **name**, and `f.line`
-is a field access rather than a name, so `if f.line is None: return` leaves
-the field an `Option` below it — on Nim `str(f.line)` then prints `some(12)`
-where Python prints `12`. Binding it first is what makes the two backends
-agree. (It is a wart, and it is in `TODO.md`.)
+Narrowing follows the test wherever it is written: the body of an
+`if x is not None:`, the `else` of an `if x is None:`, everything to the
+right of an `and`, both halves of a ternary, and — as here — a record field
+rather than a bare name.
 
 The point of all this is what it replaces. AWK's `line[i]` is `""` when the
 finding has no line, `""` when the line number was never filled in, and `0`

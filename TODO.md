@@ -166,13 +166,6 @@ history of this file if the reasoning behind one of them is ever wanted.
       the examples use; the divergence is in the set form. Either Python emits
       something ordered for `'Range` in a for-loop, or `'Range` is documented
       as unordered and the examples keep away from it.
-- [ ] `is None` narrowing does not reach a record *field*. `if f.line is
-      None: return` then `str(f.line)` still emits `$f.line` over the Option
-      on Nim and prints `some(3)`; binding it first -- `let ln: ?Natural =
-      f.line` -- narrows as documented. Python prints the value either way,
-      so this is a divergence in output, not just a compile error. Narrowing
-      a plain *name* works in every position now: an if guard, an else, an
-      `and`, a ternary.
 - [ ] `sorted(d.keys())` over a `{K}V` does not compile on Nim: "undeclared
       field: 'sorted'", because `keys` is an iterator there and wants
       `toSeq`. Same family as the `[E]T` `.keys()` entry above. An example

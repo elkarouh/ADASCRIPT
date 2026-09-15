@@ -2392,6 +2392,17 @@ def to_nim(self, prec=None):
                 break
     # Option[T] call-site coercion: wrap non-Option args in some() where param expects Option
     result = _wrap_option_args(result)
+
+    # A narrowed *path* rather than a narrowed name: `if f.line is None:
+    # return` proves f.line has a value below it, the same way an
+    # `if x is None: return` guard proves x does. The name case is handled
+    # at the top of this proc, where .get() goes in after the base name;
+    # a field path needs it after the whole path, so it is done here, on
+    # the finished expression. Exact match only -- a longer chain hanging
+    # off the path is not the thing that was proved.
+    if result in getattr(ParserState, "_option_unwrap_vars", ()) and "." in result:
+        ParserState.nim_imports.add("options")
+        return f"{result}.get()"
     return result
 
 
@@ -3700,7 +3711,7 @@ def to_nim(self, prec=None):
     _added = []
 
     def _note_proved(piece):
-        _m = _re_dis.match(r"^([A-Za-z_]\w*)\.isSome$", str(piece).strip())
+        _m = _re_dis.match(r"^([A-Za-z_]\w*(?:\.\w+)*)\.isSome$", str(piece).strip())
         if _m and _m.group(1) not in _vars:
             _vars.add(_m.group(1))
             _added.append(_m.group(1))
@@ -3757,7 +3768,7 @@ def to_nim(self, prec=None):
     # emitter about it, which is all this does.
     import re as _re_cond
     cond = _nim_truthiness(self.nodes[1].to_nim())
-    _m_narrow = _re_cond.match(r"^([A-Za-z_]\w*)\.(isSome|isNone)$", cond.strip())
+    _m_narrow = _re_cond.match(r"^([A-Za-z_]\w*(?:\.\w+)*)\.(isSome|isNone)$", cond.strip())
     _narrowed = _m_narrow.group(1) if _m_narrow else None
     # isSome narrows the value branch, isNone the else branch -- the branch
     # reached when the name is known to hold something.
