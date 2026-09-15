@@ -46,11 +46,37 @@ talks to the binary itself, so an editor needs no Python and no server process.
 
 ## Tests
 
-Only the VS Code extension has a runnable harness so far:
+Each has one, and all three need `ada_indent` on `PATH`:
 
 ```bash
-cd vs_code && node test/test_extension.js     # needs ada_indent on PATH
+cd vs_code && node test/test_extension.js
+emacs -Q --batch -L emacs -l emacs/test-ada-indent.el -f ert-run-tests-batch-and-exit
+cd vim && vim -es -N -u NONE -S test-ada-indent.vim
 ```
 
-It drives the shipped `extension.js` against the real binary with a stubbed
-editor API. The Emacs and Vim halves are exercised by hand.
+`make test` runs all three, and SKIPs rather than fails when node, emacs or vim
+is absent — none of them is otherwise a dependency of this repo.
+
+Every suite drives the **shipped** integration against the **real binary**: the
+editor half is the file you would install (the VS Code one stubs only the
+`vscode` API), and the indenter is the actual `ada_indent`. Expectations come
+from the binary's own output wherever they could otherwise drift from it — how
+wide an indent is, is the indenter's business, not the tests'.
+
+They check the same short list of properties, which is the point of having
+three: reindenting the whole buffer agrees with piping the file through the
+binary; an already-indented buffer is a fixpoint; a region reindent leaves the
+lines outside it alone; a line opened inside a block lands at the body indent
+(the neutral-token probe); a line that becomes a bare `else` snaps left while a
+word merely ending in `e` does not; and **a warm state cache produces the same
+result as a cold run**, which is the property the whole cache design rests on.
+The Emacs suite additionally pins the invalidation rule from both sides —
+re-whitespacing the cache line keeps the cache, editing above it drops it —
+because that is the one place the strict `<` could be "corrected" into a bug.
+
+Each suite was mutation-checked when written, which is the only evidence that a
+green test is testing anything: breaking the blank-line probe, emptying the
+dedent-keyword list, or relaxing the cache's "strictly above" guard each makes
+the relevant tests fail. Four of the ten VS Code checks failed on first run —
+all four wrong expectations of mine rather than bugs, which is what the
+"take the expectation from the binary" rule above is for.

@@ -102,6 +102,10 @@ Two more details worth knowing:
 node test/test_extension.js        # or: npm test
 ```
 
+`make test` runs it too, and SKIPs when node is missing. The Emacs and Vim
+halves have their own suites checking the same properties; see
+[`../README.md`](../README.md).
+
 Ten checks against the **real binary** — `ada_indent` has to be on `PATH`. The
 editor API is stubbed (`test/vscode-stub.js`), but the code under test is the
 shipped `extension.js`, so what passes here is what the extension does. Among

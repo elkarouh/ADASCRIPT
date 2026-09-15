@@ -407,13 +407,17 @@ test: compile
 	    fi; \
 	done
 
-	@# The VS Code extension drives the ada_indent binary directly, so its
-	@# harness needs the built binary and node. Both are optional here --
-	@# node is not otherwise a dependency of this repo -- so this skips
-	@# rather than fails when either is missing. It is the only one of the
-	@# three editor integrations with a runnable test; the point of running
-	@# it is that the state-cache protocol it shares with the Emacs and Vim
-	@# versions cannot drift without something noticing.
+	@# Each editor integration drives the ada_indent binary itself, so each
+	@# harness needs the built binary plus its own editor. None of node,
+	@# emacs or vim is otherwise a dependency of this repo, so every one of
+	@# these SKIPs rather than fails when what it needs is missing. The
+	@# point of running them is that the three share a design -- the
+	@# --emit-state / --state cache and the rule for invalidating it -- and
+	@# could otherwise drift apart silently.
+	@#
+	@# Each suite was mutation-checked when written: breaking the blank-line
+	@# probe, the dedent-keyword list, or the cache's "strictly above" guard
+	@# makes the relevant tests fail rather than pass.
 	@echo "=== ADA_INDENT editor support ==="
 	@printf '  %-42s' "vs_code/test_extension.js"; \
 	    if ! command -v node >/dev/null 2>&1; then echo "SKIP (no node)"; \
@@ -421,6 +425,26 @@ test: compile
 	    else \
 	        out=$$(PATH="$(AIDIR):$$PATH" node \
 	                 $(AIDIR)/EDITOR_SUPPORT/vs_code/test/test_extension.js 2>&1); \
+	        if [ $$? -eq 0 ] && printf '%s' "$$out" | grep -q 'all ok'; then echo OK; \
+	        else echo FAIL; printf '%s\n' "$$out" | tail -20; exit 1; fi; \
+	    fi
+	@printf '  %-42s' "emacs/test-ada-indent.el"; \
+	    if ! command -v emacs >/dev/null 2>&1; then echo "SKIP (no emacs)"; \
+	    elif [ ! -x "$(AIDIR)/ada_indent" ]; then echo "SKIP (ada_indent not built)"; \
+	    else \
+	        out=$$(PATH="$(AIDIR):$$PATH" emacs -Q --batch \
+	                 -L $(AIDIR)/EDITOR_SUPPORT/emacs \
+	                 -l $(AIDIR)/EDITOR_SUPPORT/emacs/test-ada-indent.el \
+	                 -f ert-run-tests-batch-and-exit 2>&1); \
+	        if [ $$? -eq 0 ] && printf '%s' "$$out" | grep -q '0 unexpected'; then echo OK; \
+	        else echo FAIL; printf '%s\n' "$$out" | tail -20; exit 1; fi; \
+	    fi
+	@printf '  %-42s' "vim/test-ada-indent.vim"; \
+	    if ! command -v vim >/dev/null 2>&1; then echo "SKIP (no vim)"; \
+	    elif [ ! -x "$(AIDIR)/ada_indent" ]; then echo "SKIP (ada_indent not built)"; \
+	    else \
+	        out=$$(cd $(AIDIR)/EDITOR_SUPPORT/vim && PATH="$(AIDIR):$$PATH" \
+	                 vim -es -N -u NONE -S test-ada-indent.vim 2>&1); \
 	        if [ $$? -eq 0 ] && printf '%s' "$$out" | grep -q 'all ok'; then echo OK; \
 	        else echo FAIL; printf '%s\n' "$$out" | tail -20; exit 1; fi; \
 	    fi
