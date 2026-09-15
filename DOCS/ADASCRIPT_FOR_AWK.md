@@ -798,6 +798,12 @@ says whom it belongs to — only **the state the scanner is in**. Each kind is
 gathered into **its own list**, some work is done **on the way past** and the
 rest **once both lists are complete**.
 
+The same report, written in awk, is next to it as
+`EXAMPLES/awk_logscan.awk` — POSIX awk, no GNU extensions, and not a straw
+man: it is what this program looks like with awk's tools and only those.
+The two agree byte for byte on the sample, and `make test` runs `cmp` on
+their output, so the comparisons below can be checked rather than believed.
+
 Three enums and two record types carry it:
 
 <!-- from: EXAMPLES/DOC/awk_snippets.ady -->
@@ -1051,6 +1057,31 @@ slowest : 2317 ms  GET /reports/full at 2026-09-11 08:00:04
 17 records in, two lists out: nine `Request_T` and two `Trace_T`, each trace
 carrying the request it belongs to. The second one runs to the end of the
 file, which is why `finish()` has to file it.
+
+**What the awk version has to spell out.** Read the two side by side and the
+differences are not stylistic:
+
+| in `awk_logscan.ady` | in `awk_logscan.awk` |
+|---|---|
+| `type Request_T is record:` with five named fields | five parallel arrays, `req_at[i]`, `req_verb[i]`, … , sharing an index by convention |
+| `type Severity_T is enum DEBUG, INFO, WARN, ERROR` | `split("DEBUG INFO WARN ERROR", sev_name, " ")` — the members as a string, and their order written out a second time so the report can loop over it |
+| `case status: when 200 .. 299: SUCCESS` | an `if`/`else` chain returning string constants that nothing checks against the ones counted in `BEGIN` |
+| `self.state`, a `Scan_State_T` | `in_trace`, an integer flag tested on the front of two rules |
+| `times = sorted(times)` | an insertion sort, written out, to answer one median |
+| `var counts: [Severity_T]Natural` — indexed *by the type* | `sev_count[$3]` — indexed by whatever string was in field 3 |
+
+That last row is the one that bites. `sev_count[$3]` creates a new entry for
+any severity the log invents, silently, and the report loops over the list in
+`BEGIN`, so the new one is counted into a row nobody prints. In the
+Adascript, `self.counts[sev]` takes a `Severity_T`, and `Severity_T($+3.upper())`
+is where an unknown word is rejected — at the edge, once, rather than as a
+missing row in a report three weeks later.
+
+Writing the awk companion also found a bug in the Adascript one, which is
+the sort of thing that happens when a claim is checked: on a log with no
+requests in it at all, `times[times'Length // 2]` indexed an empty list and
+the program died. Both now print `n/a`, and `make test` compares them on
+that input too.
 
 ### 10.4 State that decides what to keep: `html_body.ady`
 
@@ -1324,6 +1355,7 @@ keeps checking.
 - `EXAMPLES/test_awk.ady` — the same program as an `AwkBase` subclass
 - `EXAMPLES/config_check.ady` — the variant-record schema, walked through in §10.2
 - `EXAMPLES/awk_logscan.ady` — the state-machine example, in full in §10.3, all of §1 at once
+- `EXAMPLES/awk_logscan.awk` — the same report in POSIX awk, to read against it
 - `EXAMPLES/html_body.ady` — a real AWK script translated, in full in §10.4: state that decides what to keep
 - `EXAMPLES/process_html.awk` — that script, as it was, to read against the translation
 - `EXAMPLES/CFMU/Tstatus_monitor.ady` — a real AWK script, translated

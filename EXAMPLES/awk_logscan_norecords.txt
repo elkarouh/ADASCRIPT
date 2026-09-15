@@ -1,0 +1,2 @@
+a log with nothing in it that this program recognises
+not a timestamp, not a traceback

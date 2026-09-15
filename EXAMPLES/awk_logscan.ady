@@ -155,8 +155,14 @@ class LogScan(AwkBase):
                 slowest = r
 
         print ""
-        print f"p50     : {times[times'Length // 2]} ms"
-        print f"slowest : {slowest.ms} ms  {slowest.verb} {slowest.path} at {slowest.at}"
+        if self.requests'Length == 0:
+            # A median of nothing is not zero, it is no answer -- and
+            # asking a list of nothing for its middle element is a crash.
+            print "p50     : n/a"
+            print "slowest : n/a"
+        else:
+            print f"p50     : {times[times'Length // 2]} ms"
+            print f"slowest : {slowest.ms} ms  {slowest.verb} {slowest.path} at {slowest.at}"
 
         print ""
         for t in self.traces:

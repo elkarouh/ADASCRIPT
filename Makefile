@@ -12,6 +12,7 @@ PYTHON := $(shell command -v python3.12 2>/dev/null || command -v python3.14)
 export PYTHONPATH := $(HOME)/Downloads/hparsec:$(PYTHONPATH)
 ADY2NIM := $(PYTHON) $(CURDIR)/TO_NIM/ady2nim.py
 EXDIR  := $(CURDIR)/EXAMPLES
+TMPDIR ?= /tmp
 AIDIR  := $(CURDIR)/ADA_INDENT
 
 # Prepend choosenim's bin dir so Nim 2.x is used instead of any system Nim 1.x.
@@ -235,6 +236,23 @@ test: compile
 	@printf '  %-42s' "awk_logscan.ady"; \
 	    $(EXDIR)/awk_logscan < $(EXDIR)/awk_logscan_sample.txt 2>&1 \
 	        | grep -q "slowest : 2317 ms" && echo OK || { echo FAIL; exit 1; }
+	@# The same report, written in awk, kept next to it. The document says
+	@# the two agree byte for byte on this sample; this is where that stops
+	@# being an assertion. POSIX awk, so mawk runs it too.
+	@# ... on the sample, and on a log with no requests in it, which is the
+	@# input that once crashed the Adascript side.
+	@for input in awk_logscan_sample.txt awk_logscan_norecords.txt; do \
+	    name=$${input%.txt}; name=$${name#awk_logscan_}; \
+	    printf '  %-42s' "awk_logscan.awk == .ady ($$name)"; \
+	    awk -f $(EXDIR)/awk_logscan.awk $(EXDIR)/$$input \
+	        > $(TMPDIR)/ady_logscan_awk.out 2>&1; \
+	    $(EXDIR)/awk_logscan < $(EXDIR)/$$input \
+	        > $(TMPDIR)/ady_logscan_ady.out 2>&1; \
+	    cmp -s $(TMPDIR)/ady_logscan_awk.out $(TMPDIR)/ady_logscan_ady.out \
+	        && echo OK || { echo FAIL; \
+	           diff $(TMPDIR)/ady_logscan_awk.out $(TMPDIR)/ady_logscan_ady.out | head -10; \
+	           exit 1; }; \
+	done
 	@# sh_janitor is the worked example in DOCS/ADASCRIPT_FOR_SHELL.md. It
 	@# builds its own fixture under /tmp, so the report is the same every
 	@# run -- and the filename with a space in it is the point of the check.
