@@ -2027,9 +2027,9 @@ words:  list[str] = re.findall(r'\w+', text)
 ### 19.5 Substitution (`s/pat/repl/flags`)
 
 ```python
-text == s/\s+/ /g         # collapse whitespace runs to single space
-name == s/[^a-z]//gi      # strip everything that is not a–z
-line == s/\bfoo\b/bar/    # replace first occurrence of whole word "foo"
+text = s/\s+/ /g         # collapse whitespace runs to single space
+name = s/[^a-z]//gi      # strip everything that is not a–z
+line = s/\bfoo\b/bar/    # replace first occurrence of whole word "foo"
 ```
 
 Backreferences in the replacement use `$+1`, `$+2` (positional) or
@@ -2110,9 +2110,9 @@ the whole block still desugars to `if/elif/else`.
 | `$+N` | `matches[N]` (N-th group) | `matches[N]` |
 | `$+{name}` | `namedCaptures["name"]` | `namedCaptures["name"]` |
 | `$+{k}` | `namedCaptures["k"]` | `namedCaptures["k"]` |
-| `s == s/pat/repl/` | `s = s.replace(srx.re(r"pat"), "repl")` | `s = re.sub(r'pat', r'repl', s)` |
-| `s == s/pat/$+1/` | `s = s.replace(srx.re(r"pat"), "$1")` | `s = re.sub(r'pat', r'\1', s)` |
-| `s == s/pat/repl/g` | same (std/re replace is always global) | same (`re.sub` is always global) |
+| `s = s/pat/repl/` | `s = s.replace(srx.re(r"pat"), "repl")` | `s = re.sub(r'pat', r'repl', s)` |
+| `s = s/pat/$+1/` | `s = s.replace(srx.re(r"pat"), "$1")` | `s = re.sub(r'pat', r'\1', s)` |
+| `s = s/pat/repl/g` | same (std/re replace is always global) | same (`re.sub` is always global) |
 | `when /pat/:` in `case` | `elif nimatch(subject, re"pat"):` | `elif _pymatch(subject, r'pat'):` |
 
 ---
@@ -2595,7 +2595,7 @@ through the same ground in more detail.
 | Regex positional capture          | `$+0`, `$+1`, `$+2` …                   |
 | Regex named capture               | `namedCaptures["name"]`                  |
 | Regex find-all                    | `s == /pat/g` → `[]str`                  |
-| Regex substitution                | `s == s/pat/repl/g`                      |
+| Regex substitution                | `s = s/pat/repl/g`                      |
 | Regex in case/when                | `when /pat/:`                            |
 | File comparison                   | `a -nt b`, `a -ot b`                     |
 | Python 2-style print              | `print "text"` or `print expr, expr`    |

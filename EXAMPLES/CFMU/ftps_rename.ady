@@ -164,11 +164,11 @@ var from_path : str = remote_file
 var to_path   : str = new_remote_file
 if file_src_dir != file_dest_dir:
   var clean_src : str = src_dir
-  clean_src == s/^\.\///g
+  clean_src = s/^\.\///g
   from_path = file_src_dir + "/" + remote_file
-  from_path == s/^[.\/]+//g
+  from_path = s/^[.\/]+//g
   to_path   = file_dest_dir + "/" + new_remote_file
-  to_path   == s/^[.\/]+//g
+  to_path   = s/^[.\/]+//g
   let base : str = "/" + clean_src if clean_src else "/"
   let (_, mv_rc) = lftp_run(server, f"cd {base}\nmv {from_path} {to_path}")
   if mv_rc != 0:

@@ -1018,7 +1018,7 @@ if s == /\d+/:
 let words: []str = s == /\w+/g
 
 # Substitution — s/pat/repl/flags
-s == s/\d+/[N]/g    # replace all digits with [N]
+s = s/\d+/[N]/g    # replace all digits with [N]
 ```
 
 **Python output:** uses `re` module.
@@ -1213,7 +1213,7 @@ for s in Stage_T'First .. Stage_T'Last:
 | Monadic do block | `do:` / `x <- expr` |
 | Regex literal | `s == /pat/`, `s != /pat/`, `s == /pat/g` |
 | Regex capture | `$+1`, `$+{name}`, `$+0` |
-| Substitution | `s == s/pat/repl/g` |
+| Substitution | `s = s/pat/repl/g` |
 | Block-form enum | `type E is enum:` / one member per indented line |
 | Context manager | `@contextmanager def f(): ... yield ...` |
 | Owned value | `own x: T = expr` |

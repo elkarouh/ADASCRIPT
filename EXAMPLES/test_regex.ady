@@ -42,11 +42,11 @@ def first_number(s: str) -> str:
 
 # --- substitution ---
 def redact_numbers(s: str) -> str:
-    s == s/\d+/[N]/g
+    s = s/\d+/[N]/g
     s
 
 def normalize_spaces(s: str) -> str:
-    s == s/\s+/ /g
+    s = s/\s+/ /g
     s
 
 # --- findall: /g returns []str ---

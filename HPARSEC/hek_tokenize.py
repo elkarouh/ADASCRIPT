@@ -1404,7 +1404,23 @@ class Tokenizer:
         if best_expected:
             unique = sorted(set(best_expected))
             msg += f", expected one of: {', '.join(unique)}"
+        msg += self._hint(best_idx, tok)
         return msg
+
+    def _hint(self, idx, tok):
+        """An extra line, where the failure has one likely cause.
+
+        Only for mistakes the parser cannot make sense of but a reader can:
+        the expected-token list is long and says nothing about why.
+        """
+        nxt = self.tokens[idx + 1][0] if idx + 1 < len(self.tokens) else None
+        if (getattr(tok, "string", None) == "=="
+                and getattr(nxt, "type", None) == SUBST_TOKEN):
+            return ("\n  hint: a substitution is written `target = " + nxt.string
+                    + "`, with one `=`. It rewrites its target rather than "
+                      "testing it, so it is an assignment and not a comparison. "
+                      "(`==` was the spelling before 2026-09.)")
+        return ""
 
     def set_failed_token(self, expected_token_as_string):
         self.tokens[self.pos - 1][1].append(expected_token_as_string)

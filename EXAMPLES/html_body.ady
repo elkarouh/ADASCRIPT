@@ -53,7 +53,7 @@ def anchor(arg: str) -> Anchor_T:
     """
     let full: Path = Path(arg).resolve()
     var stem: str  = full.name
-    stem == s/\.html$//g
+    stem = s/\.html$//g
     Anchor_T(dir=full.parent, stem=stem)
 
 

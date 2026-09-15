@@ -73,7 +73,7 @@
 | File tests | `-e -f -d -L -r -w -x -s path`; `a -nt b`; `a -ot b` |
 | Regex match / find-all | `s == /pat/flags` / `s == /pat/g` → `[]str` |
 | Regex captures | `$+0`, `$+1`, …, `$+{name}`, `namedCaptures` |
-| Regex substitution | `s == s/pat/repl/g` |
+| Regex substitution | `s = s/pat/repl/g` |
 | Regex pattern in case | `when /pat/:` |
 | Print statement | `print "x =", x` (parens optional) |
 | Ownership | `own x: T`, `lent T`, `own T` (param), `move(x)`, `drop(x)`, `with own x = e:` |

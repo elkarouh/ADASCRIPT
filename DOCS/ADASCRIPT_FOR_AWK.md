@@ -269,16 +269,19 @@ assert nums == ["1", "22", "333"]
 ```
 
 Substitution is Perl's, and assigns back to the left-hand side, so the
-target is a `var`:
+target is a `var` — and the operator is `=`, not the `==` of a match. The
+two are different kinds of thing and are spelled differently: a match is a
+test and yields a bool, a substitution rewrites its target and yields
+nothing, which is what an assignment does.
 
 <!-- from: EXAMPLES/DOC/awk_snippets.ady -->
 ```python
 var path: str = "/var/log/app.log.gz"
-path == s/\.gz$//g
+path = s/\.gz$//g
 assert path == "/var/log/app.log"
 
 var stamp: str = "2026-09-11"
-stamp == s/(\d{4})-(\d{2})-(\d{2})/$+3.$+2.$+1/g
+stamp = s/(\d{4})-(\d{2})-(\d{2})/$+3.$+2.$+1/g
 assert stamp == "11.09.2026"
 ```
 
@@ -1224,7 +1227,7 @@ three strings that are all just strings afterwards:
 def anchor(arg: str) -> Anchor_T:
     let full: Path = Path(arg).resolve()
     var stem: str  = full.name
-    stem == s/\.html$//g
+    stem = s/\.html$//g
     Anchor_T(dir=full.parent, stem=stem)
 ```
 
@@ -1279,8 +1282,8 @@ keeps checking.
 | `$0 !~ /re/` | `line != /re/` |
 | `match($0, re); substr($0, RSTART, RLENGTH)` | `if line == /re/: … $+0` |
 | capture groups | `$+1`, `$+2`, `$+{name}` |
-| `sub(/re/, "x")` | `s == s/re/x/` |
-| `gsub(/re/, "x")` | `s == s/re/x/g` |
+| `sub(/re/, "x")` | `s = s/re/x/` |
+| `gsub(/re/, "x")` | `s = s/re/x/g` |
 | `split(s, a, sep)` | `let a: []str = s.split(sep)` |
 | `split(s, a)` | `let a: []str = s.split()` |
 | — (no equivalent; `gsub` counting is the hack) | `let all: []str = s == /re/g` |

@@ -1920,7 +1920,7 @@ def to_nim(self, indent=0):
 # --- simple_stmt ---
 @method(subst_stmt)
 def to_nim(self):
-    """subst_stmt: primary '=~' s/pat/repl/flags -> Nim: lhs = lhs.replace(re"(?f)pat", "repl")"""
+    """subst_stmt: primary '=' s/pat/repl/flags -> Nim: lhs = lhs.replace(re"(?f)pat", "repl")"""
     import re as _re_s
     from hek_nim_expr import _ensure_nimatch_helper
     _ensure_nimatch_helper()

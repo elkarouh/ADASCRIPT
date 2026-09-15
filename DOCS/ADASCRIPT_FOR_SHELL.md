@@ -334,7 +334,7 @@ if line == /^(\w+)=(\d+)$/:
     let value: int = int($+2)
 ```
 
-`s == /pat/g` is every match as a `[]str`; `s == s/pat/repl/g` is `sed
+`s == /pat/g` is every match as a `[]str`; `s = s/pat/repl/g` is `sed
 's/pat/repl/g'` assigning back to the variable. `DOCS/ADASCRIPT_FOR_AWK.md`
 covers the whole family, along with `case`/`when` over regex patterns — which
 is what a chain of `case "$x" in ... esac` wanted to be.
@@ -507,7 +507,7 @@ file or directory` and carried on with status 0 because nobody checked.
 | `${VAR:-default}` | `${VAR:-default}` |
 | unset vs. empty | `$?NAME` → `?str`; `None` vs `""` |
 | `case "$x" in p) … esac` | `case x:` with `when /p/:` |
-| `echo "$s" \| sed 's/a/b/g'` | `s == s/a/b/g` |
+| `echo "$s" \| sed 's/a/b/g'` | `s = s/a/b/g` |
 | `grep -q pat <<< "$s"` | `s == /pat/` |
 | `$(( a + b ))` | `a + b` |
 | `action="compress"` | `type Action_T is enum COMPRESS, …` |

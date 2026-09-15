@@ -256,10 +256,16 @@ from_pyimport = ikw("from") + dotted_name + ikw("pyimport") + import_names
 # pyimport: Python-only import via nimpy (becomes pyImport() in Nim)
 pyimport_stmt = ikw("pyimport") + import_as + (COMMA + import_as)[:]
 
-# --- Perl substitution: text == s/pattern/replacement/flags ---
+# --- Perl substitution: text = s/pattern/replacement/flags ---
 # Must be tried before 'expressions' so the parser doesn't try to interpret
-# s/.../ as division. V_EQ (==) is consumed (ignored) in this rule.
-subst_stmt = primary + ignore(V_EQ) + SUBST
+# s/.../ as division, and before assign_stmt, which would otherwise take it.
+# V_EQUAL (=) is consumed (ignored) in this rule.
+#
+# The operator is `=` and not `==`: this is a statement that rewrites its
+# target, not a test, and `==` read as an equality to everyone who was not
+# already expecting Perl. It is also exactly what both backends emit --
+# `stem = stem.replace(...)`.
+subst_stmt = primary + ignore(V_EQUAL) + SUBST
 
 # --- print statement (Python 2 / Adascript style) ---
 # print expr [, expr ...]  with no parentheses.
@@ -301,6 +307,8 @@ type_stmt = ikw("type") + IDENTIFIER + type_alias_params[:] + (V_EQUAL | ikw("is
 # Ordering matters: try more specific forms before general expression.
 # aug_assign before assign (both start with expr, but augop is distinctive).
 # ann_assign before assign (starts with IDENTIFIER + ':').
+# subst before assign: both are `target = ...`, and only subst accepts a
+# SUBST token on the right, so it must be offered the line first.
 # expressions is the fallback (expression statement).
 simple_stmt = (
     own_stmt
@@ -308,6 +316,7 @@ simple_stmt = (
     | decl_ann_assign_stmt
     | ann_assign_stmt
     | aug_assign_stmt
+    | subst_stmt
     | assign_stmt
     | return_stmt
     | pass_stmt
@@ -328,7 +337,6 @@ simple_stmt = (
     | type_stmt
     | yield_expr
     | print_stmt
-    | subst_stmt
     | expressions
 )
 

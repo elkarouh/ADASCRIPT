@@ -791,8 +791,8 @@ let digits: []str = line == /\d+/g
 ### Substitution
 
 ```python
-text == s/\s+/ /g         # collapse whitespace runs
-name == s/[^a-z]//gi      # strip non-alpha characters
+text = s/\s+/ /g         # collapse whitespace runs
+name = s/[^a-z]//gi      # strip non-alpha characters
 ```
 
 ### Regex patterns in `case/when`
@@ -828,7 +828,7 @@ def classify(line: str) -> Severity_T:
 | `s == /pat/g` | `s.findAll(srx.re(r"pat"))` | `re.findall(r'pat', s)` |
 | `$+0` … `$+N` | `matches[0]` … `matches[N]` | `matches[0]` … `matches[N]` |
 | `$+{k}` | `namedCaptures["k"]` | `namedCaptures["k"]` |
-| `s == s/pat/repl/g` | `s = s.replace(srx.re(r"pat"), "repl")` | `s = re.sub(r'pat', r'repl', s)` |
+| `s = s/pat/repl/g` | `s = s.replace(srx.re(r"pat"), "repl")` | `s = re.sub(r'pat', r'repl', s)` |
 | `when /pat/:` in `case` | `elif nimatch(subject, re"pat"):` | `elif _pymatch(subject, r'pat'):` |
 
 `nimatch`/`_pymatch`, `matches`, and `namedCaptures` are injected automatically

@@ -192,7 +192,7 @@ var received_ok : int = 0
 for remote_file in sorted(remote_files):
   var local_name : str = remote_file
   if not always_prefix:
-    local_name == s/^\d\.//g
+    local_name = s/^\d\.//g
 
   let local_file      : str = dest_dir + "/" + local_name
   let full_local_file : str = str(full_path / local_name)
@@ -200,11 +200,11 @@ for remote_file in sorted(remote_files):
   if mount_point == "":
     if use_dest_cache:
       var no_gz     : str = remote_file
-      no_gz     == s/\.gz$//g
+      no_gz     = s/\.gz$//g
       var no_prefix : str = remote_file
-      no_prefix == s/^\d\.//g
+      no_prefix = s/^\d\.//g
       var just_mid  : str = no_prefix
-      just_mid  == s/\.gz$//g
+      just_mid  = s/\.gz$//g
       var found_cached : str = ""
       for candidate in [remote_file, no_gz, no_prefix, just_mid]:
         let cpath : str = str(full_path / candidate)
@@ -250,7 +250,7 @@ for remote_file in sorted(remote_files):
 
   if full_local_file.endswith(".gz"):
     var target_unzipped : str = full_local_file
-    target_unzipped == s/\.gz$//g
+    target_unzipped = s/\.gz$//g
     if -f target_unzipped:
       shell: rm -f {target_unzipped}
     let (_, gz_rc) = shell: gunzip {full_local_file}
@@ -259,7 +259,7 @@ for remote_file in sorted(remote_files):
       received_ok -= 1
     else:
       var local_unzipped : str = local_file
-      local_unzipped == s/\.gz$//g
+      local_unzipped = s/\.gz$//g
       if show_path:
         print local_unzipped
       else:

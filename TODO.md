@@ -145,7 +145,7 @@ history of this file if the reasoning behind one of them is ever wanted.
       helper. It is the last thing keeping `cfmu_get_file_type.ady` from
       compiling.
 - [ ] an escaped delimiter in the *replacement* half of `s///` keeps its
-      backslash. `s == s/(\d{4})-(\d{2})-(\d{2})/$+3\/$+2\/$+1/g` gives Nim
+      backslash. `s = s/(\d{4})-(\d{2})-(\d{2})/$+3\/$+2\/$+1/g` gives Nim
       `"$3\/$2\/$1"`, which is not a valid character escape and does not
       compile, and Python `r'\3\/\2\/\1'`, which leaves a stray backslash in
       the result. The pattern half is fine -- `s/^[.\/]+//g` works on both --
@@ -269,3 +269,17 @@ Narrow benefit, real risk, and no reproduction that motivates it.
 Worth revisiting if a program ever wants to feed a command more than it can
 hold. A cheaper middle step, if that day comes: let `stdin` accept `[]str`
 and write it element by element without ever joining it.
+
+## Substitution as an expression
+
+`target = s/pat/repl/` rewrites a variable in place, which means a name
+cannot be derived from another in one step: `EXAMPLES/CFMU/ftps_get.ady`
+copies first and substitutes second, four times in a row.
+
+    var no_gz : str = remote_file
+    no_gz = s/\.gz$//g
+
+An expression form -- `let no_gz: str = remote_file.sub(/\.gz$/, "")`, or
+whatever spelling keeps the sed flavour -- would make the copy unnecessary
+and leave the statement form for the in-place case. Needs a `sub` on `str`
+in both emitters.

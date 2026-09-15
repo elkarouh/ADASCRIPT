@@ -250,7 +250,7 @@ while retries > 0 and not exit_loop:
         print "-" * len(ftp_server)
       var out_line : str = line
       if no_prefix:
-        out_line == s/^1\.//g
+        out_line = s/^1\.//g
       print out_line
       fcount += 1
 

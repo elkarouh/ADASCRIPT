@@ -38,11 +38,11 @@ assert nums == ["1", "22", "333"]
 
 # --- substitution ---------------------------------------------------------
 var path: str = "/var/log/app.log.gz"
-path == s/\.gz$//g
+path = s/\.gz$//g
 assert path == "/var/log/app.log"
 
 var stamp: str = "2026-09-11"
-stamp == s/(\d{4})-(\d{2})-(\d{2})/$+3.$+2.$+1/g
+stamp = s/(\d{4})-(\d{2})-(\d{2})/$+3.$+2.$+1/g
 assert stamp == "11.09.2026"
 
 # --- case over regex ------------------------------------------------------

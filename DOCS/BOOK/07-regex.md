@@ -79,15 +79,18 @@ let WORDS: Counter_T[str] = Counter_T(words(readFile(corpus_file)))
 
 ## 7.4 Substitution: `s/pat/repl/flags`
 
-The Perl substitution form assigns its result back to the left-hand side:
+The Perl substitution form assigns its result back to the left-hand side,
+and is written with `=` for that reason — `==` in §7.2 asks whether a string
+matches and yields a bool; this rewrites the string and yields nothing, so it
+is an assignment and reads as one:
 
 ```python
 def redact_numbers(s: str) -> str:
-    s == s/\d+/[N]/g       # "phone: 555-1234" -> "phone: [N]-[N]"
+    s = s/\d+/[N]/g       # "phone: 555-1234" -> "phone: [N]-[N]"
     s
 
 def normalize_spaces(s: str) -> str:
-    s == s/\s+/ /g         # collapse whitespace runs
+    s = s/\s+/ /g         # collapse whitespace runs
     s
 ```
 
@@ -142,7 +145,7 @@ whole block desugars to a match-test chain on both backends.
 | `s == /pat/g` | `s.findAll(srx.re(r"pat"))` | `re.findall(r'pat', s)` |
 | `$+N` | `matches[N]` | `matches[N]` |
 | `$+{k}` | `namedCaptures["k"]` | `namedCaptures["k"]` |
-| `s == s/pat/repl/g` | `s = s.replace(srx.re(r"pat"), "repl")` | `s = re.sub(r'pat', r'repl', s)` |
+| `s = s/pat/repl/g` | `s = s.replace(srx.re(r"pat"), "repl")` | `s = re.sub(r'pat', r'repl', s)` |
 | `when /pat/:` | `elif nimatch(subject, re"pat"):` | `elif _pymatch(subject, r'pat'):` |
 
 ## 7.7 A worked example: config-file parsing without a parser
