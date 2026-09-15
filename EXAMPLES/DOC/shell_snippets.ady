@@ -5,6 +5,9 @@ Not a program anyone would write: a place for the fragments the document
 shows outside its worked examples, so that `make test` runs them and
 DOCS/check_quotes.py has a real file to point at.
 """
+nimport os
+nimport time
+
 
 # --- the four shapes of a command ---------------------------------------
 shell: true                                   # run it, ignore the result
@@ -174,20 +177,40 @@ def status_is_a_value() -> None:
 status_is_a_value()
 
 
-# --- what you do not need a Python import for ----------------------------
-def without_pyimport() -> None:
-    # the clock: datetime.now().strftime(...) and time.time()
-    let (stamp, rc_stamp) = shell: date +%Y-%m-%d-%H%M%S
-    let (epoch, rc_epoch) = shell: date +%s
-    assert stamp.strip()'Length == 17
-    let secs: str = epoch.strip()
-    assert int(secs) > 0
+# --- what a nimport already answers --------------------------------------
+# Before the shell: some of what a script would pyimport for is mapped
+# natively, and a nimport costs the build nothing at all. Reach here first.
+def without_any_import() -> None:
+    # this process's id -- getCurrentProcessId() on Nim, os.getpid() on
+    # Python. No process started to learn what this one already knows.
+    assert os.getpid() > 0
 
-    # this process's id: os.getpid(). `$$` is the shell's own, but the
-    # shell's parent is this program.
+    # the clock, with the fraction of a second that `date +%s` lacks:
+    # epochTime() on Nim, time.time() on Python.
+    let t0: float = time.time()
+    assert t0 > 0.0
+
+without_any_import()
+
+
+# --- ... and what you do need the shell for ------------------------------
+# The rest has no native mapping, so it is a shell word rather than an
+# import. Every one of these is a fact about the machine, not a library.
+def without_pyimport() -> None:
+    # a formatted stamp: datetime.now().strftime(...). `date` formats;
+    # time.time() above gives only the number.
+    let (stamp, rc_stamp) = shell: date +%Y-%m-%d-%H%M%S
+    assert stamp.strip()'Length == 17
+
+    # PPID is a shell variable and no shell exports it, so the bare env read
+    # is empty -- the mistake this line exists to record. `echo $PPID` from
+    # inside a shell: does work (the shell's parent is this program), but
+    # os.getpid() above is the answer; this is only how you would reach it
+    # from inside a pipeline that is already running.
+    let from_env: str = $PPID
+    assert from_env == ""
     let (pid, rc_pid) = shell: echo $PPID
-    let digits: str = pid.strip()
-    assert int(digits) > 0
+    assert int(pid.strip()) == os.getpid()
 
     # the platform: sys.platform
     let (kernel, rc_uname) = shell: uname -s

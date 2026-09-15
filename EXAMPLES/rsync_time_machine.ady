@@ -16,19 +16,27 @@ this reaches for the language.
     expanding it later with Python's os.path (imported as pyos).
   - Command-line parsing via Adascript's native `$@`/`$#`/`$0`, not
     Python's argparse.
-  - No `pyimport` at all. The clock is `date`, the process id is `$PPID`
-    seen from inside a `shell:` (the shell's parent is this program), the
-    platform is `uname -s`, exiting is `quit()`, and a backup directory's
-    name becomes an epoch by arithmetic rather than by strptime. The Nim
-    build therefore needs neither nimpy nor libpython, which is what lets
-    `make test` compile it.
+  - No `pyimport` at all -- but note which of the replacements is which.
+    The process id and the clock are `nimport os` / `nimport time`, native
+    on both backends and free. Only what has no mapping goes to the shell:
+    `date +%Y-%m-%d-%H%M%S` for a formatted stamp, `uname -s` for the
+    platform. Exiting is `quit()`, and a backup directory's name becomes an
+    epoch by arithmetic rather than by strptime, because `date -d` is GNU
+    and `date -j -f` is BSD. The Nim build therefore needs neither nimpy nor
+    libpython, which is what lets `make test` compile it.
 """
 
 # No pyimports. What the Python originals were here for -- the clock, the
-# process id, the platform, exiting -- is a shell word or a builtin, and
-# doing it that way means the Nim build needs neither nimpy nor libpython
-# at run time.
+# process id, the platform, exiting -- is a nimport, a shell word or a
+# builtin, and doing it that way means the Nim build needs neither nimpy nor
+# libpython at run time.
+# `os` and `time` are nimports, not pyimports: they map to Nim's own
+# getCurrentProcessId() and epochTime() and to Python's os / time on the
+# other backend. A nimport is free. A pyimport would cost nimpy on the Nim
+# path and a libpython link, which is the whole reason this file has none.
 nimport strutils
+nimport os
+nimport time
 
 # ---------------------------------------------------------------------------
 # Global state
@@ -290,11 +298,15 @@ def own_pid() -> int:
     """This process's id, which the lock file records so a later run can
     ask `ps` whether the earlier one is still going.
 
-    `$$` would be the shell's own id, not ours -- but the shell's parent
-    *is* this program, and $PPID is how a child says so.
+    Behind a `nimport` this is native on both backends -- Nim's
+    getCurrentProcessId(), Python's os.getpid() -- and costs nothing. It was
+    `shell: echo $PPID` here for a while, which is correct but starts a
+    process to learn something this one already knows. (The bare env read
+    `$PPID` is not an option at all: PPID is a shell variable, and no shell
+    exports it, so it reads as empty. That is the trap the shell form was
+    written to get around; the import is the way past it.)
     """
-    let (pid, rc) = shell: echo $PPID
-    return int(pid.strip())
+    os.getpid()
 
 def parse_date_to_epoch(date_str: str) -> int:
     """A backup directory's name -- "2026-09-15-112313" -- as a UTC epoch.
@@ -321,9 +333,14 @@ def now_str() -> str:
     return stamp.strip()
 
 def now_epoch() -> int:
-    """The current UTC epoch. `date +%s` is POSIX and needs no import."""
-    let (secs, rc) = shell: date +%s
-    return int(secs.strip())
+    """The current UTC epoch.
+
+    `date +%s` would answer too, and did; `time.time()` behind a `nimport`
+    is the same number without a process, and with the fraction of a second
+    that `date` does not have. Truncated here because a backup's name has
+    one-second resolution anyway.
+    """
+    int(time.time())
 
 # ---------------------------------------------------------------------------
 # Backup marker

@@ -1366,17 +1366,25 @@ Adascript knows whether each Python `import` has a direct Nim equivalent or
 needs the [nimpy](https://github.com/yglukhov/nimpy) bridge. You write
 ordinary Python imports; the transpiler decides how to map them.
 
-> **Before reaching for `pyimport`:** it is for libraries with no shell
-> equivalent — `numpy`, `requests`, a vendor SDK. The time, the process id,
-> the platform, the environment, a temp directory and a file test all have
-> one-line answers (`date +%s`, `echo $PPID`, `uname -s`, `$HOME`,
-> `mktemp -d`, `-f`/`-d`), and a `pyimport` costs the Nim build a nimpy
-> dependency and a libpython link for each of them. Regexes are not a
-> reason either: matching is an operator here, so `pyimport re` has no use
-> at all. `DOCS/ADASCRIPT_FOR_SHELL.md` §11 has the table, and
+> **Before reaching for `pyimport`:** it is for libraries with no
+> equivalent here — `numpy`, `requests`, a vendor SDK. Try things in this
+> order.
+>
+> **`nimport` first.** `os` and `time` are mapped natively, so `os.getpid()`
+> and `time.time()` are ordinary calls that cost the build nothing —
+> `getCurrentProcessId()` and `epochTime()` on Nim, Python's own on the
+> other side. Changing `pyimport` to `nimport` is often the whole fix.
+>
+> **Then the shell,** for what has no mapping: `date +%Y-%m-%d-%H%M%S` for a
+> formatted stamp, `uname -s`, `id -un`, `mktemp -d`, `$HOME`, `-f`/`-d`.
+> Regexes need neither — matching is an operator here, so `pyimport re` has
+> no use at all. (Watch `$PPID`: `$NAME` reads the *environment*, and no
+> shell exports `PPID`, so a bare `$PPID` is always `""`.)
+>
+> **Then `pyimport`,** knowing it costs the Nim build a nimpy dependency and
+> a libpython link. `DOCS/ADASCRIPT_FOR_SHELL.md` §11 has the table, and
 > `EXAMPLES/pyimport_similar.ady` is the worked example of an import that
-> *is* worth it — `difflib`, asked which subcommand a typo resembles, which
-> nothing in `/usr/bin` can answer.
+> *is* worth it.
 
 ### Natively mapped stdlib modules
 
@@ -2297,7 +2305,10 @@ transpiled `.nim` output, and in most cases a reference Python `.py` file.
 ### `primes.ady` — Prime sieve
 
 Counts primes up to 1,000,000 and measures wall time. Demonstrates the
-`..` and `..<` range operators and `time.perf_counter()`.
+`..` and `..<` range operators, and the cheapest of the three ways to ask
+the machine something: `nimport time` maps `time.time()` to Nim's
+`epochTime()` and to Python's own, so the clock costs the build nothing.
+It used to be a `pyimport`, which is what the rule above is about.
 
 ```python
 def is_prime(n: int) -> bool:
@@ -2407,6 +2418,36 @@ while True:
     time.sleep(60)
     for test in parseCompletedTests(getTestStatusLines()):
         completedTests.add(test)
+```
+
+### `pyimport_similar.ady` — when the bridge is worth it
+
+The counterweight to the rule above: the one example whose subject *is*
+`pyimport`, and the one `make test` runs across the nimpy bridge rather
+than merely compiling. It asks `difflib` which of a tool's subcommands a
+typo most resembles — a similarity ranking, which nothing in `/usr/bin`
+computes (`grep` answers whether a pattern matched, not how close it came)
+and which Nim's `std/editdistance` measures differently enough to rank
+differently. `difflib` ships with Python, so no install stands between a
+reader and running it; the mechanism is the same one `numpy` and
+`requests` use. The file says what it costs, down to the
+`Testing libpython: ...` line nimpy prints ahead of the program's output.
+
+```python
+pyimport difflib
+
+def suggest(word: str) -> []str:
+    var out : []str = []
+    for hit in difflib.get_close_matches(word, KNOWN, 3, 0.6):
+        out.append(str(hit))
+    out
+```
+
+```
+  comit      did you mean commit? (91% alike)
+  stauts     did you mean status? (83% alike)
+              ... or stash (73%)
+  xyzzy      no idea
 ```
 
 ---

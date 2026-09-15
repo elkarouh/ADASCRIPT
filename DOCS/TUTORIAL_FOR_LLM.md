@@ -640,14 +640,29 @@ process id, the platform, the environment, temp directories or file tests —
 those have one-line answers and a `pyimport` costs the Nim build a nimpy
 dependency and a libpython link:
 
+Try `nimport` first: `os` and `time` are mapped natively, so the fix for
+`pyimport os` is usually `nimport os` and not a subprocess at all.
+
+```adascript
+nimport os
+nimport time
+let pid: int    = os.getpid()                     # native, starts nothing
+let now: float = time.time()                      # native, sub-second
+```
+
+Only what has no mapping goes to the shell:
+
 ```adascript
 let (stamp, rc1) = shell: date +%Y-%m-%d-%H%M%S   # not datetime
-let (epoch, rc2) = shell: date +%s                # not time.time()
-let (pid,   rc3) = shell: echo $PPID              # not os.getpid()
 let (kern,  rc4) = shell: uname -s                # not sys.platform
 quit(1)                                           # not sys.exit(1)
 let home: Path = Path($HOME)                      # not os.environ
 ```
+
+`$PPID` is the one to watch: `$NAME` reads the *environment*, and no shell
+exports `PPID`, so a bare `$PPID` is always `""`. Inside a `shell:` it is
+your pid (the shell it starts is your child) — but `os.getpid()` is the
+answer.
 
 Never for regexes either: matching is an operator, so `pyimport re` has no
 use at all. A pattern you can write is a literal; a pattern that arrives as

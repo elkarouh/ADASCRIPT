@@ -62,12 +62,17 @@ had a one-line answer:
 
 | was | now |
 |---|---|
+| `os.getpid()` | `nimport os` — the same call, mapped natively |
+| `time.time()` | `nimport time` — `epochTime()` on Nim, free |
 | `datetime.now().strftime(...)` | `shell: date +%Y-%m-%d-%H%M%S` |
-| `time.time()` | `shell: date +%s` |
-| `os.getpid()` | `shell: echo $PPID` — the shell's parent is this program |
 | `sys.platform` | `shell: uname -s` |
 | `sys.exit(n)` | `quit(n)` |
 | `os.path.expanduser` | `$HOME` and `Path` |
+
+Note which two did not need the shell. `os` and `time` are in the native
+mapping table, so changing one word — `pyimport` to `nimport` — is the whole
+fix, and starting a process to read a clock would have been worse than the
+import, not better. The shell is for what has no mapping.
 
 `DOCS/ADASCRIPT_FOR_SHELL.md` §11 has the longer table, including the
 cases where the shell answer is *not* portable — `date -d` is GNU, so
@@ -86,13 +91,13 @@ With the imports gone the file compiles with no nimpy, no libpython, and
 joins the compile list. That is the rule in one sentence: **if a shell
 script would know how to ask, ask that way.**
 
-`EXAMPLES/primes.ady` is the smallest version of the same move, and it
-lands somewhere slightly different: it wanted a clock with a fraction of a
-second in it, which `date +%s` does not have. It did not need Python for
-that either — `nimport time` gives `time.time()` on both backends, Nim's
-`epochTime()` on one and Python's own on the other, for nothing. A
-`nimport` is free; a `pyimport` is not. Reach past the second before you
-reach past the language.
+`EXAMPLES/primes.ady` is the smallest version of the same move: it imported
+Python for a clock, and `nimport time` gives it the same `time.time()` on
+both backends for nothing.
+
+So the order to try things in is: **`nimport` first, then the shell, then
+`pyimport`.** Most of the reflex to reach for Python is answered before the
+shell is even involved.
 
 ### When it really is a library
 

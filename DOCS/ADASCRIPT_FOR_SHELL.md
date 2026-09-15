@@ -406,11 +406,18 @@ the Nim path, the binary links against libpython, and it has to find a
 matching interpreter at run time. A program that imports `datetime` to
 format a timestamp has bought all of that for one line of `date`.
 
-| you might reach for | ask the shell, or the language |
+**Two of them are not even the shell's job.** `os` and `time` are mapped
+natively: written `nimport os` and `nimport time` rather than `pyimport`,
+they become Nim's own `getCurrentProcessId()` and `epochTime()` on one
+backend and Python's `os` and `time` on the other. A `nimport` costs the
+build nothing, so it beats starting a process. Only what has *no* mapping
+goes to the shell.
+
+| you might reach for | ask the language, or the shell |
 |---|---|
+| `pyimport os` → `os.getpid()` | **`nimport os`** → `os.getpid()` |
+| `pyimport time` → `time.time()` | **`nimport time`** → `time.time()` |
 | `pyimport datetime` → `now().strftime(...)` | `shell: date +%Y-%m-%d-%H%M%S` |
-| `pyimport time` → `time.time()` | `shell: date +%s` |
-| `pyimport os` → `os.getpid()` | `shell: echo $PPID` |
 | `pyimport sys` → `sys.platform` | `shell: uname -s` |
 | `pyimport sys` → `sys.exit(1)` | `quit(1)` |
 | `pyimport getpass` → `getuser()` | `shell: id -un` |
@@ -423,24 +430,37 @@ format a timestamp has bought all of that for one line of `date`.
 | `pyimport subprocess` | `shell:`, `run()` — the whole of §1–§7 |
 | `pyimport re` → `re.match(...)` | a regex literal: `s == /pat/`, `$+1`, `s = s/a/b/g` |
 
-Each of these is one line, and the capture forms of §2 are how the answer
+The two native ones read as ordinary calls, and start nothing:
+
+<!-- from: EXAMPLES/DOC/shell_snippets.ady -->
+```python
+    assert os.getpid() > 0
+    let t0: float = time.time()
+```
+
+The rest are one line each, and the capture forms of §2 are how the answer
 gets back:
 
 <!-- from: EXAMPLES/DOC/shell_snippets.ady -->
 ```python
-    # the clock: datetime.now().strftime(...) and time.time()
     let (stamp, rc_stamp) = shell: date +%Y-%m-%d-%H%M%S
-    let (epoch, rc_epoch) = shell: date +%s
+    assert stamp.strip()'Length == 17
 ```
 
-**The process id is the one worth knowing.** `$$` inside a `shell:` is the
-*shell's* id, not yours — but the shell it starts is your child, so its
-`$PPID` is you:
+**`$PPID` is the trap worth knowing.** `$NAME` in Adascript reads the
+*environment*, and `PPID` is a shell variable that no shell exports — so a
+bare `$PPID` is the empty string, every time, on both backends. Inside a
+`shell:` it does work, because there a shell is running and the shell it
+starts is your child, so its `$PPID` is you. That is a real fact and
+occasionally the only way to reach the number from inside a pipeline that
+is already running. It is not how you ask for your own process id:
 
 <!-- from: EXAMPLES/DOC/shell_snippets.ady -->
 ```python
+    let from_env: str = $PPID
+    assert from_env == ""
     let (pid, rc_pid) = shell: echo $PPID
-    let digits: str = pid.strip()
+    assert int(pid.strip()) == os.getpid()
 ```
 
 **Prefer the command that answers where the environment is thin.** `$USER`
@@ -453,7 +473,7 @@ is unset in most containers; `id -un` answers anyway:
 
 ### When a date needs arithmetic rather than formatting
 
-`date` formats and `date +%s` gives you now, but turning *a stamp you
+`time.time()` gives you now and `date` formats, but turning *a stamp you
 already have* into an epoch is where the shell answer stops being portable:
 `date -d` is GNU, and `date -j -f` is BSD. If a program has to do that —
 comparing backup directories by age, say — the arithmetic is a dozen lines

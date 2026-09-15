@@ -9,10 +9,11 @@ native call on both backends -- Nim's `epochTime()`, Python's `time.time()`
 number at the price of nimpy on the Nim path, a libpython link, and a
 matching interpreter at run time.
 
-The rule that follows is in DOCS/ADASCRIPT_FOR_SHELL.md §11: `pyimport` is
-for libraries with no equivalent here, and a clock is not one of those. For
-a whole second `shell: date +%s` would do just as well; a benchmark needs
-the fraction, so this asks the clock the language already has.
+The rule that follows is in DOCS/ADASCRIPT_FOR_SHELL.md §11, and the order
+it puts things in is `nimport`, then the shell, then `pyimport`. A clock
+stops at the first step: `shell: date +%s` would answer too, and starting a
+process to read a clock is worse than an import that costs nothing -- and
+it has no fraction of a second in it, which a benchmark wants.
 
 EXAMPLES/pyimport_similar.ady is the other side of that rule -- what a
 `pyimport` looks like when the library really has no equivalent.
