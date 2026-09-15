@@ -1371,8 +1371,12 @@ ordinary Python imports; the transpiler decides how to map them.
 > the platform, the environment, a temp directory and a file test all have
 > one-line answers (`date +%s`, `echo $PPID`, `uname -s`, `$HOME`,
 > `mktemp -d`, `-f`/`-d`), and a `pyimport` costs the Nim build a nimpy
-> dependency and a libpython link for each of them.
-> `DOCS/ADASCRIPT_FOR_SHELL.md` §11 has the table.
+> dependency and a libpython link for each of them. Regexes are not a
+> reason either: matching is an operator here, so `pyimport re` has no use
+> at all. `DOCS/ADASCRIPT_FOR_SHELL.md` §11 has the table, and
+> `EXAMPLES/pyimport_similar.ady` is the worked example of an import that
+> *is* worth it — `difflib`, asked which subcommand a typo resembles, which
+> nothing in `/usr/bin` can answer.
 
 ### Natively mapped stdlib modules
 

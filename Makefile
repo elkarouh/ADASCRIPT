@@ -35,6 +35,13 @@ LIBS := \
 
 # -----------------------------------------------------------------------
 # Self-contained — no stdin, no mandatory args
+#
+# pyimport_similar.ady is the one file in here that pyimports on purpose: it
+# is the worked example for when the bridge is worth its cost, so it has to
+# be exercised rather than described. It runs rather than compile-only
+# because difflib ships with Python -- unlike tsp.ady below, which wants
+# matplotlib and therefore only compiles. `make test` already requires
+# nimpy; see README.md.
 # -----------------------------------------------------------------------
 STANDALONE := \
     monty_hall.ady \
@@ -61,6 +68,7 @@ STANDALONE := \
     test_optional_truthy.ady \
     test_self_ref.ady \
     test_char_slice.ady \
+    pyimport_similar.ady \
     td_learning/sarsa.ady \
     td_learning/qlearning.ady \
     PROJECT/dispatch.ady \

@@ -1,0 +1,89 @@
+#!/usr/bin/env ady2nim
+"""
+pyimport_similar — "did you mean ...?", and the one import worth paying for.
+
+Most of what a script reaches into Python for is a fact about the machine,
+and DOCS/ADASCRIPT_FOR_SHELL.md §11 is a table of the one-line answers: the
+clock is `date`, the process id is `$PPID`, the user is `id -un`, the
+environment is `$VAR`. EXAMPLES/primes.ady is a file that used to import
+Python for its clock and no longer does.
+
+This is the other side of that rule. `difflib` ranks strings by how alike
+they are, and there is no answer to that in `/usr/bin`: `grep` tells you
+whether a pattern matched, and the question here is not whether but *how
+close*, and which of several candidates is closest. Nim's stdlib does not
+have it either -- `std/editdistance` counts edits, which is a different
+measure and gives different rankings. Reimplementing Ratcliff/Obershelp to
+avoid an import would be the tail wagging the dog.
+
+So this one pays, and it is worth knowing what it pays with. On the Nim
+backend a `pyimport` routes through nimpy: the build needs nimpy on the Nim
+path, the binary links against libpython, it has to find a matching
+interpreter at run time, and the bridge announces itself on stdout with a
+`Testing libpython: ...` line before the program's own output. None of that
+is a reason not to do it here. All of it is a reason not to do it for a
+timestamp.
+
+`difflib` is in the Python standard library, which is why `make test` can
+run this file at all -- a demonstration that needed `pip install` first
+would not be much of a demonstration. That is the difference from
+EXAMPLES/tsp.ady, which pyimports `matplotlib` for a real reason of its own
+and is therefore compiled but never run. The mechanism is the same one
+`pyimport numpy` or `pyimport requests` uses; only the install step differs.
+
+    EXAMPLES/pyimport_similar                      # the Nim build
+    ady2py EXAMPLES/pyimport_similar.ady -c        # the Python one
+"""
+pyimport difflib
+
+# The subcommands a tool understands. A typo in one of these is the
+# canonical reason to want this library.
+let KNOWN : []str = [
+    "commit", "checkout", "cherry-pick", "clone", "config",
+    "branch", "bisect", "blame",
+    "status", "stash", "submodule",
+    "rebase", "reset", "restore", "remote",
+]
+
+
+def suggest(word: str) -> []str:
+    """The known subcommands closest to `word`, best first.
+
+    0.6 is difflib's own default cutoff and it is a good one: below it the
+    suggestions stop being suggestions.
+    """
+    var out : []str = []
+    for hit in difflib.get_close_matches(word, KNOWN, 3, 0.6):
+        out.append(str(hit))
+    out
+
+
+def closeness(a: str, b: str) -> int:
+    """How alike two strings are, as a percentage. Rounded, so that two
+    backends comparing floats cannot disagree about the last bit."""
+    let ratio : float = difflib.SequenceMatcher(None, a, b).ratio()
+    int(ratio * 100.0 + 0.5)
+
+
+let TYPOS : []str = ["comit", "chekout", "stauts", "reabse", "xyzzy"]
+
+print "--- pyimport_similar ---"
+for typo in TYPOS:
+    let hits : []str = suggest(typo)
+    if hits'Length == 0:
+        print f"  {typo:<10} no idea"
+    else:
+        print f"  {typo:<10} did you mean {hits[0]}? ({closeness(typo, hits[0])}% alike)"
+        for alt in hits[1:]:
+            print f"              ... or {alt} ({closeness(typo, alt)}%)"
+
+# The rankings are the library's, so this is a check that the bridge carried
+# them across rather than a check on difflib.
+assert suggest("comit")[0]   == "commit"
+assert suggest("chekout")[0] == "checkout"
+assert suggest("stauts")[0]  == "status"
+assert suggest("reabse")[0]  == "rebase"
+assert suggest("xyzzy")'Length == 0
+assert closeness("comit", "commit") == 91
+
+print "--- all suggestions as expected ---"

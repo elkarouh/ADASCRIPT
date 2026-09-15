@@ -1,7 +1,23 @@
 #!/usr/bin/env ady2nim
+"""
+primes — count the primes below a million by trial division, and say how
+long it took.
 
-#nimport time
-pyimport time
+The timing is the part worth reading. `time.time()` behind a `nimport` is a
+native call on both backends -- Nim's `epochTime()`, Python's `time.time()`
+-- and it costs the build nothing. Behind a `pyimport` it is the same
+number at the price of nimpy on the Nim path, a libpython link, and a
+matching interpreter at run time.
+
+The rule that follows is in DOCS/ADASCRIPT_FOR_SHELL.md §11: `pyimport` is
+for libraries with no equivalent here, and a clock is not one of those. For
+a whole second `shell: date +%s` would do just as well; a benchmark needs
+the fraction, so this asks the clock the language already has.
+
+EXAMPLES/pyimport_similar.ady is the other side of that rule -- what a
+`pyimport` looks like when the library really has no equivalent.
+"""
+nimport time
 
 N = 1000000
 
@@ -19,9 +35,7 @@ def count_primes(n: Positive) -> Positive:
         if is_prime(k):
             result += 1
 
-#start = time.cpuTime()  # the nim version
-start = time.perf_counter() # the python version
+start = time.time()
 print f"Number of primes: {count_primes(N)}"
-#finish = time.cpuTime()  # the nim version
-finish = time.perf_counter() # the python version
+finish = time.time()
 print f"time elapsed: {finish - start}/s"

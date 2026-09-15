@@ -52,12 +52,13 @@ id, the platform, the environment, a temporary directory or a file test,
 and reaching for it there costs more than it appears to.
 
 What it costs on the Nim side is a real dependency: the build needs nimpy on
-the Nim path, the binary links against libpython, and it has to find a
-matching interpreter at run time. `EXAMPLES/rsync_time_machine.ady` used to
-open with five `pyimport`s — `os`, `sys`, `time`, `signal`, `datetime` —
-and for that it could not be compiled by `make test` at all, because the
-test run cannot assume nimpy is installed. Every one of the five had a
-one-line answer:
+the Nim path, the binary links against libpython, it has to find a matching
+interpreter at run time, and the bridge prints a `Testing libpython: ...`
+line on stdout before the program says anything of its own.
+`EXAMPLES/rsync_time_machine.ady` used to open with five `pyimport`s —
+`os`, `sys`, `time`, `signal`, `datetime` — and for that it sat outside
+every list in the Makefile, neither compiled nor run. Every one of the five
+had a one-line answer:
 
 | was | now |
 |---|---|
@@ -85,7 +86,24 @@ With the imports gone the file compiles with no nimpy, no libpython, and
 joins the compile list. That is the rule in one sentence: **if a shell
 script would know how to ask, ask that way.**
 
+`EXAMPLES/primes.ady` is the smallest version of the same move, and it
+lands somewhere slightly different: it wanted a clock with a fraction of a
+second in it, which `date +%s` does not have. It did not need Python for
+that either — `nimport time` gives `time.time()` on both backends, Nim's
+`epochTime()` on one and Python's own on the other, for nothing. A
+`nimport` is free; a `pyimport` is not. Reach past the second before you
+reach past the language.
+
 ### When it really is a library
+
+`EXAMPLES/pyimport_similar.ady` is the counterweight to all of the above:
+a file that keeps its `pyimport` because the import is earned, and the one
+`make test` runs over the bridge rather than merely compiling. It asks
+`difflib` which of a tool's subcommands a typo most resembles — a similarity *ranking*, which `grep` has no notion of (it
+answers whether, not how close) and which Nim's `std/editdistance` measures
+differently enough to give other answers. `make test` runs it, and it can,
+only because `difflib` ships with Python; the bridge it goes over is the
+same one `numpy` and `requests` use.
 
 Import a third-party Python library and the Nim backend routes it through
 [nimpy](https://github.com/yglukhov/nimpy) automatically:

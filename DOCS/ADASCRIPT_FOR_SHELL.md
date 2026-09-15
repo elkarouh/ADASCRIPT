@@ -498,6 +498,20 @@ requests`, `pyimport yaml` — things with no `/usr/bin` equivalent and no
 answer in `$VAR`. There the bridge earns its cost, and
 `DOCS/BOOK/12-two-backends.md` §12.2 covers how it works.
 
+`EXAMPLES/pyimport_similar.ady` is what that looks like: the file whose
+whole subject is the bridge, and the only one `make test` actually runs
+across it. (`EXAMPLES/tsp.ady` keeps a `pyimport` too — `matplotlib`, to
+draw its tours — but that one needs an install, so it is compiled and not
+run.) It asks `difflib`
+which of a tool's subcommands a typo most resembles. `grep` answers
+*whether* a pattern matched, and the question here is *how close* and which
+candidate is closest — a ranking, which no standard tool computes. It is a
+standard-library module rather than `numpy` so that `make test` can run it
+without an install first; the bridge is the same one either way, and so is
+what it costs: nimpy on the Nim path, a libpython link, an interpreter at
+run time, and a `Testing libpython: ...` line on stdout ahead of the
+program's own output.
+
 ---
 
 ## 12. A worked example
