@@ -1,0 +1,121 @@
+#!/usr/bin/env ady2nim
+"""
+html_body — lift the body out of an HTML page so it can be included in
+another one, rewriting its links to still point at the right files.
+
+    ./html_body EXAMPLES/html_body_sample.html
+
+Three jobs at once, which is why it is a state machine and not a filter:
+
+  * only the lines between <body> and </body> are wanted, and neither tag;
+  * the block marked as the footer is dropped, up to the </div> that ends
+    it -- and that </div> is an ordinary line anywhere else, so only the
+    state says which one it is;
+  * on the way past, the first <div> gets an id (the page's own name, so
+    the fragment can be linked to), and the relative links are made
+    absolute (they are about to be read from a different directory).
+
+A translation of process_html.awk, which is where the shape came from.
+"""
+nimport awk
+
+
+# Where in the page we are. The record on its own does not say: </div>
+# closes the footer or is content, <body> is a boundary or a mistake.
+type Scan_State_T is enum HEAD, BODY, FOOTER, DONE
+
+
+type Anchor_T is record:
+    """Where the page lives -- which is all the rewriting needs to know."""
+    dir:  Path = Path(".")     # the directory holding it, absolute
+    stem: str  = ""            # its name without the .html, used as the id
+
+
+def anchor(arg: str) -> Anchor_T:
+    """realpath, dirname and basename -s .html, without leaving the process.
+
+    The awk original shells out three times for this -- `cmd | getline`,
+    once each -- because awk has no filesystem library and no way to ask
+    about a path. Three processes, and three chances to get the quoting
+    wrong. Here it is the standard library, and `Path` is a type, so a
+    directory cannot be passed where the id was meant.
+    """
+    let full: Path = Path(arg).resolve()
+    var stem: str  = full.name
+    stem == s/\.html$//g
+    Anchor_T(dir=full.parent, stem=stem)
+
+
+class HtmlBody(AwkBase):
+    var state   : Scan_State_T = HEAD
+    var at      : Anchor_T     = Anchor_T()
+    var div_done: bool         = false     # the id goes on the first div only
+
+    def process_record(self):
+        """One branch per state, and nothing outside it.
+
+        The case covers every member of Scan_State_T, so there is no
+        `when others:` and a fifth state would not compile until it is
+        handled here. In awk this is three flags -- in_body, in_footer,
+        div_processed -- repeated on the front of every pattern, where
+        nothing checks that the combinations make sense.
+        """
+        case self.state:
+            when HEAD:   self._head()
+            when BODY:   self._body()
+            when FOOTER: self._footer()
+            when DONE:   pass          # awk's `exit`, spelled as a state
+
+    def _head(self) -> None:
+        """Before the body: preamble, dropped, and the <body> tag with it."""
+        case self.line:
+            when /<body[^>]*>/: self.state = BODY
+            when others:        pass
+
+    def _body(self) -> None:
+        """Inside the body: rewrite, print, and watch for the two exits."""
+        case self.line:
+            when /<\/body>/:             self.state = DONE
+            when /<div title="footer">/: self.state = FOOTER
+            when others:
+                self._rewrite()
+                print self.line
+
+    def _footer(self) -> None:
+        """Inside the footer: dropped, up to the </div> that closes it."""
+        case self.line:
+            when /<\/body>/: self.state = DONE
+            when /<\/div>/:  self.state = BODY
+            when others:     pass
+
+    def _rewrite(self) -> None:
+        """The three edits, in the order awk applies them to one line."""
+        if not self.div_done:
+            case self.line:
+                when /(<div[^>]+)>/:
+                    # $+1 is the open tag without its `>`: put the id
+                    # inside the tag it came from, wherever on the line
+                    # that tag is.
+                    let open: str = $+1
+                    self.line = self.line.replace(open + ">",
+                                                  open + " id=\"" + self.at.stem + "\">")
+                    self.div_done = true
+                when others: pass
+
+        # Relative links, made absolute: the fragment is about to be read
+        # from somewhere else, and `test_x.html` would follow it there.
+        self.line = self.line.replace("href=\"test_", "href=\"" + self.at.dir + "/test_")
+        self.line = self.line.replace("<img src=\"",  "<img src=\"" + self.at.dir + "/")
+
+
+def main():
+    if $# < 1:
+        print "usage: html_body PAGE.html"
+        quit(2)
+
+    var p: HtmlBody = HtmlBody()
+    p.at = anchor($1)
+    p.run_file($1)
+
+
+main()

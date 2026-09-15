@@ -127,6 +127,7 @@ COMPILE_ONLY := \
     awk_logscan.ady \
     sh_janitor.ady \
     config_check.ady \
+    html_body.ady \
     DOC/awk_snippets.ady \
     DOC/shell_snippets.ady \
     DOC/why_snippets.ady \
@@ -246,6 +247,16 @@ test: compile
 	@printf '  %-42s' "config_check.ady"; \
 	    $(EXDIR)/config_check 2>&1 \
 	        | grep -q "200 is outside 1 .. 64" && echo OK || { echo FAIL; exit 1; }
+	@# html_body rewrites links to absolute paths, so its output depends on
+	@# where the repository is. The stable parts are what it did: the id
+	@# taken from the page's own name, the footer gone, and the link made
+	@# absolute against this directory.
+	@printf '  %-42s' "html_body.ady"; \
+	    out=$$($(EXDIR)/html_body $(EXDIR)/html_body_sample.html 2>&1); \
+	    echo "$$out" | grep -q 'id="html_body_sample"' \
+	        && ! echo "$$out" | grep -q 'test_ignored' \
+	        && echo "$$out" | grep -q "href=\"$(EXDIR)/test_alpha.html\"" \
+	        && echo OK || { echo FAIL; exit 1; }
 	@# The documents' own snippets, so that what DOCS/*.md quotes is code
 	@# that ran rather than code that was written down. check-quotes below
 	@# is what ties each block to the file it came from.
