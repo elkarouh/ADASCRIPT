@@ -1601,6 +1601,16 @@ def _dataclass_defaults(field_lines):
                     out.append(f"{pad}{fname}: {ann} = "
                                f"field(default_factory={factories[zero]})")
                     continue
+            elif _re_dd.match(r"^[A-Za-z_]\w*\(", written) and written.endswith(")"):
+                # A constructed default -- `inner: Inner_T = Inner_T()`. A
+                # dataclass whose eq is on is unhashable, so dataclasses
+                # rejects it as a mutable default exactly as it rejects a
+                # list, and again at import time.
+                ParserState.nim_imports.add(
+                    "from dataclasses import dataclass, field")
+                out.append(f"{pad}{fname}: {ann} = "
+                           f"field(default_factory=lambda: {written})")
+                continue
             elif written[:1] in "[{" and written[-1:] in "]}":
                 # A non-empty container default is shared between every
                 # instance, which is the same bug with a later symptom.

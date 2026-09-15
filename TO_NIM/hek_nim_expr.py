@@ -1584,6 +1584,9 @@ _PY_UNIVERSAL_METHOD_TO_NIM = {
     "strip": "strip",
     "startswith": "startsWith",
     "endswith": "endsWith",
+    # Nim spells it with the capital L, and without this a plain
+    # `s.splitlines()` reached the compiler as an undeclared routine.
+    "splitlines": "splitLines",
     "get": "getOrDefault",
     "index": "find",
     "ljust": "alignLeft",
@@ -1693,12 +1696,29 @@ def _extract_call_args(call_node):
     full = _extract_call_arg(call_node)
     if not full:
         return []
-    # Split on top-level commas (not inside brackets/parens)
+    # Split on top-level commas: outside brackets, and outside string
+    # literals. A comma inside a literal is a comma in English --
+    # `S_T(v="a,b,c")` is one argument, and splitting it into three left
+    # none of them looking like `name = value`, so the record constructor
+    # gave up and emitted Python's `=` where Nim wants `:`.
     args = []
     depth = 0
     current = []
+    quote = ""
+    escaped = False
     for ch in full:
-        if ch in "([{":
+        if quote:
+            current.append(ch)
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == quote:
+                quote = ""
+            continue
+        if ch in "\"'":
+            quote = ch
+        elif ch in "([{":
             depth += 1
         elif ch in ")]}":
             depth -= 1
