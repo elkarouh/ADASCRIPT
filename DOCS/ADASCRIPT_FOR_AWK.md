@@ -1086,19 +1086,18 @@ type Scan_State_T is enum HEAD, BODY, BODY_TAGGED, FOOTER, FOOTER_TAGGED, DONE
             when HEAD:          self._head()
             when BODY:          self._body()
             when BODY_TAGGED:   self._body_tagged()
-            when FOOTER:        self._footer()
-            when FOOTER_TAGGED: self._footer_tagged()
+            when FOOTER:        self._footer(BODY)
+            when FOOTER_TAGGED: self._footer(BODY_TAGGED)
             when DONE:          pass      # awk's `exit`, spelled as a state
 ```
 
 Note what is *not* there: a `div_processed` flag. Whether the id has been
 placed is part of where we are, not a fact kept beside it — `BODY` is the
-body before the first `<div>`, `BODY_TAGGED` the body after it, and the two
-footer states differ only in which of those they go back to. A state machine
-with a boolean hanging off it is a bigger state machine that has not been
-written down. Writing it down costs two extra enum members and buys a
+body before the first `<div>`, `BODY_TAGGED` the body after it. A state
+machine with a boolean hanging off it is a bigger state machine that has not
+been written down. Writing it down costs two extra enum members and buys a
 `case` the compiler can check; leaving it as a flag costs nothing today and
-a wrong answer later, which §1's own example shows below.
+a wrong answer later, which the example below shows.
 
 `DONE` is worth a second look too. The awk says `exit` when it reaches
 `</body>`, which leaves the program; `AwkBase` has no early exit, so the
@@ -1108,7 +1107,24 @@ that turns out to be the better answer. `exit` says *stop*; `DONE` says
 compiler counts it when it checks that the `case` is complete.
 
 Each state is a `case` over the record, with the regexes that matter in that
-state and no others:
+state and no others. The two footer states differ only in which body state
+they go back to, and the dispatch is where that is already known — so it
+says so, and passes it. One footer, not two copies of one:
+
+<!-- from: EXAMPLES/html_body.ady -->
+```python
+    def _footer(self, resume: Scan_State_T) -> None:
+        case self.line:
+            when /<\/body>/: self.state = DONE
+            when /<\/div>/:  self.state = resume
+            when others:     pass
+```
+
+A state passed as an argument is an ordinary value of an ordinary type: the
+resume state cannot be a state that does not exist, and cannot be quietly
+mistyped, in the way `in_footer = 2` cannot be caught. The body states go
+the same way — each is a `case` over the record, carrying only the regexes
+that mean something where it is:
 
 <!-- from: EXAMPLES/html_body.ady -->
 ```python
@@ -1118,13 +1134,6 @@ state and no others:
             when /<\/body>/:             self.state = DONE
             when /<div title="footer">/: self.state = FOOTER_TAGGED
             when others:                 self._emit()
-
-    def _footer_tagged(self) -> None:
-        """In the footer, id already placed: dropped, back to BODY_TAGGED."""
-        case self.line:
-            when /<\/body>/: self.state = DONE
-            when /<\/div>/:  self.state = BODY_TAGGED
-            when others:     pass
 ```
 
 `</div>` appears exactly once in the program, in the one state where it
