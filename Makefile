@@ -407,6 +407,24 @@ test: compile
 	    fi; \
 	done
 
+	@# The VS Code extension drives the ada_indent binary directly, so its
+	@# harness needs the built binary and node. Both are optional here --
+	@# node is not otherwise a dependency of this repo -- so this skips
+	@# rather than fails when either is missing. It is the only one of the
+	@# three editor integrations with a runnable test; the point of running
+	@# it is that the state-cache protocol it shares with the Emacs and Vim
+	@# versions cannot drift without something noticing.
+	@echo "=== ADA_INDENT editor support ==="
+	@printf '  %-42s' "vs_code/test_extension.js"; \
+	    if ! command -v node >/dev/null 2>&1; then echo "SKIP (no node)"; \
+	    elif [ ! -x "$(AIDIR)/ada_indent" ]; then echo "SKIP (ada_indent not built)"; \
+	    else \
+	        out=$$(PATH="$(AIDIR):$$PATH" node \
+	                 $(AIDIR)/EDITOR_SUPPORT/vs_code/test/test_extension.js 2>&1); \
+	        if [ $$? -eq 0 ] && printf '%s' "$$out" | grep -q 'all ok'; then echo OK; \
+	        else echo FAIL; printf '%s\n' "$$out" | tail -20; exit 1; fi; \
+	    fi
+
 	@# test_env_default.ady and test_env_optional.ady pass standalone, but
 	@# the cases that give each its point -- `:-` rather than plain `-`,
 	@# and presence rather than truthiness -- need a variable that is *set*

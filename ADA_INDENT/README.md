@@ -289,8 +289,8 @@ modified. When the per-buffer state cache already has a checkpoint above the
 region, only the region itself is sent to `ada_indent`.
 
 > **Ready-made package.** The whole snippet above is also shipped as
-> [`ada-indent.el`](./ada-indent.el) in this directory. Put the directory on
-> your `load-path` and `(require 'ada-indent)` — no need to paste the elisp into
+> [`ada-indent.el`](./EDITOR_SUPPORT/emacs/ada-indent.el) in
+> `EDITOR_SUPPORT/emacs/`. Put that directory on your `load-path` and `(require 'ada-indent)` — no need to paste the elisp into
 > your init file. It adds a `defcustom ada-indent-program` (the binary path),
 > `defcustom ada-indent-aggressive` (enable aggressive mode globally), and
 > only activates when that binary is found on `PATH`.
@@ -298,7 +298,8 @@ region, only the region itself is sent to `ada_indent`.
 ## Vim / Neovim integration
 
 The same `ada_indent` binary plugs into Vim's indentation machinery via
-[`ada-indent.vim`](./ada-indent.vim). Put it on your `'runtimepath'` (e.g.
+[`ada-indent.vim`](./EDITOR_SUPPORT/vim/ada-indent.vim). Put it on your
+`'runtimepath'` (e.g.
 `~/.vim/plugin/ada-indent.vim`, or `~/.config/nvim/plugin/ada-indent.vim` for
 Neovim) or `:source` it from your vimrc. It activates for any buffer with
 `filetype=ada`, and only when the `ada_indent` binary is found on `$PATH`

@@ -1,0 +1,74 @@
+{
+  "name": "ada-indent",
+  "displayName": "Ada Indent",
+  "description": "Ada indentation via the external ada_indent program \u2014 format document, format selection, and indent as you type. No language server and no Python: the extension calls the binary directly.",
+  "version": "0.1.0",
+  "publisher": "adascript",
+  "license": "Apache-2.0",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Formatters",
+    "Programming Languages"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/elkarouh/adascript"
+  },
+  "activationEvents": [
+    "onLanguage:ada"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "ada",
+        "aliases": [
+          "Ada",
+          "ada"
+        ],
+        "extensions": [
+          ".adb",
+          ".ads",
+          ".ada"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "configurationDefaults": {
+      "[ada]": {
+        "editor.insertSpaces": true,
+        "editor.tabSize": 2,
+        "editor.formatOnType": true
+      }
+    },
+    "commands": [
+      {
+        "command": "adaIndent.reindentBuffer",
+        "title": "Ada Indent: Reindent Whole Buffer"
+      }
+    ],
+    "configuration": {
+      "title": "Ada Indent",
+      "properties": {
+        "adaIndent.program": {
+          "type": "string",
+          "default": "ada_indent",
+          "description": "Name or full path of the ada_indent binary. A bare name is looked up on PATH."
+        },
+        "adaIndent.enableStateCache": {
+          "type": "boolean",
+          "default": true,
+          "description": "Reuse the indenter state captured after the last formatted line, so an edit only replays the lines since that point instead of the whole file. Turn off to diagnose a suspected stale-cache problem."
+        }
+      }
+    }
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.75.0"
+  },
+  "scripts": {
+    "test": "node test/test_extension.js"
+  }
+}
