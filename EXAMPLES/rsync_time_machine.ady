@@ -294,8 +294,7 @@ def own_pid() -> int:
     *is* this program, and $PPID is how a child says so.
     """
     let (pid, rc) = shell: echo $PPID
-    let digits: str = pid.strip()
-    return int(digits)
+    return int(pid.strip())
 
 def parse_date_to_epoch(date_str: str) -> int:
     """A backup directory's name -- "2026-09-15-112313" -- as a UTC epoch.
@@ -324,8 +323,7 @@ def now_str() -> str:
 def now_epoch() -> int:
     """The current UTC epoch. `date +%s` is POSIX and needs no import."""
     let (secs, rc) = shell: date +%s
-    let digits: str = secs.strip()
-    return int(digits)
+    return int(secs.strip())
 
 # ---------------------------------------------------------------------------
 # Backup marker

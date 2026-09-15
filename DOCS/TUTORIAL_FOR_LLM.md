@@ -633,6 +633,22 @@ if not -f dict_file:
 
 ## Nim-Only Features
 
+**`pyimport`** — an import that appears only in Python output; the Nim
+backend routes it through nimpy. Use it **only for libraries with no shell
+equivalent** (`numpy`, `requests`, a vendor SDK). Never for the time, the
+process id, the platform, the environment, temp directories or file tests —
+those have one-line answers and a `pyimport` costs the Nim build a nimpy
+dependency and a libpython link:
+
+```adascript
+let (stamp, rc1) = shell: date +%Y-%m-%d-%H%M%S   # not datetime
+let (epoch, rc2) = shell: date +%s                # not time.time()
+let (pid,   rc3) = shell: echo $PPID              # not os.getpid()
+let (kern,  rc4) = shell: uname -s                # not sys.platform
+quit(1)                                           # not sys.exit(1)
+let home: Path = Path($HOME)                      # not os.environ
+```
+
 **`nimport`** — imports that appear only in Nim output, stripped from Python:
 ```adascript
 nimport strutils, sequtils, algorithm

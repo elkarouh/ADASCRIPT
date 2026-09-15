@@ -186,7 +186,11 @@ _MULTICHAR_OPS_RE = re.compile(
 # ---------------------------------------------------------------------------
 # Bash file-test context keywords (token immediately before must be one of these)
 # ---------------------------------------------------------------------------
-_FILE_TEST_CONTEXT = frozenset(('if', 'elif', 'while', 'and', 'or', 'not', 'return'))
+# `assert` belongs here for the same reason `if` does: what follows is a
+# condition. Without it `assert -d p` did not tokenise as a file test at
+# all, and the assertion was dropped -- silently, on both backends.
+_FILE_TEST_CONTEXT = frozenset(('if', 'elif', 'while', 'and', 'or', 'not',
+                                'return', 'assert'))
 _FILE_TEST_STMT_START = frozenset((_NEWLINE, _NL, _INDENT, _DEDENT))
 _FILE_TEST_OPS = frozenset(('(', '=', ',', '['))
 

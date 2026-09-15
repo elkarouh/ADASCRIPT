@@ -28,18 +28,9 @@ Two prefixed forms give per-backend control:
   stdlib modules (`nimport strutils, sequtils, algorithm`), for the bundled
   shims (`nimport stdlib`, `nimport awk`, `nimport iters`, `nimport graphs`,
   `nimport expect`), and for other `.ady` files compiled as libraries.
-- **`pyimport x`** — the reverse emphasis; see `primes.ady` (`pyimport
-  time`) and `rsync_time_machine.ady`, which opens with both:
-
-  ```python
-  pyimport os
-  pyimport sys
-  pyimport time
-  pyimport signal
-  nimport strutils, osproc, posix, times
-  ```
-
-  One source file, each backend importing what it natively needs.
+- **`pyimport x`** — the reverse emphasis: an import that appears only in
+  Python output, and that the Nim backend routes through nimpy. Read §12.2
+  before reaching for it, because it costs more than it looks like it does.
 
 `nimport`-ing another `.ady` file triggers automatic transpilation of the
 dependency into the same build cache. That is how the optimiser framework
@@ -52,6 +43,40 @@ nimport shortest_path  # provides Minimizer and Maximizer — auto-transpiled
 ```
 
 ## 12.2 Python libraries with no Nim equivalent: the nimpy bridge
+
+### First: is it a library, or a fact about the machine?
+
+`pyimport` is for **libraries with no shell equivalent** — `numpy`,
+`requests`, `pandas`, a vendor's SDK. It is not for the time, the process
+id, the platform, the environment, a temporary directory or a file test,
+and reaching for it there costs more than it appears to.
+
+What it costs on the Nim side is a real dependency: the build needs nimpy on
+the Nim path, the binary links against libpython, and it has to find a
+matching interpreter at run time. `EXAMPLES/rsync_time_machine.ady` used to
+open with five `pyimport`s — `os`, `sys`, `time`, `signal`, `datetime` —
+and for that it could not be compiled by `make test` at all, because the
+test run cannot assume nimpy is installed. Every one of the five had a
+one-line answer:
+
+| was | now |
+|---|---|
+| `datetime.now().strftime(...)` | `shell: date +%Y-%m-%d-%H%M%S` |
+| `time.time()` | `shell: date +%s` |
+| `os.getpid()` | `shell: echo $PPID` — the shell's parent is this program |
+| `sys.platform` | `shell: uname -s` |
+| `sys.exit(n)` | `quit(n)` |
+| `os.path.expanduser` | `$HOME` and `Path` |
+
+`DOCS/ADASCRIPT_FOR_SHELL.md` §11 has the longer table, including the
+cases where the shell answer is *not* portable — `date -d` is GNU, so
+turning a stamp into an epoch is arithmetic rather than a command.
+
+With the imports gone the file compiles with no nimpy, no libpython, and
+joins the compile list. That is the rule in one sentence: **if a shell
+script would know how to ask, ask that way.**
+
+### When it really is a library
 
 Import a third-party Python library and the Nim backend routes it through
 [nimpy](https://github.com/yglukhov/nimpy) automatically:

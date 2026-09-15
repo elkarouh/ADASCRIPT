@@ -392,7 +392,85 @@ no surprise when a value has a leading zero.
 
 ---
 
-## 11. A worked example
+## 11. What you do not need a Python import for
+
+Adascript can reach into Python with `pyimport`, and the temptation, coming
+from Python, is to reach for it the moment you want the time or the process
+id. Don't. **`pyimport` is for libraries with no shell equivalent** —
+`numpy`, `requests`, `pandas`, a vendor's SDK. Everything a shell script
+already knows how to ask for, ask for the same way here.
+
+It is not a style preference. On the Nim backend a `pyimport` is a real
+dependency: the build needs [nimpy](https://github.com/yglukhov/nimpy) on
+the Nim path, the binary links against libpython, and it has to find a
+matching interpreter at run time. A program that imports `datetime` to
+format a timestamp has bought all of that for one line of `date`.
+
+| you might reach for | ask the shell, or the language |
+|---|---|
+| `pyimport datetime` → `now().strftime(...)` | `shell: date +%Y-%m-%d-%H%M%S` |
+| `pyimport time` → `time.time()` | `shell: date +%s` |
+| `pyimport os` → `os.getpid()` | `shell: echo $PPID` |
+| `pyimport sys` → `sys.platform` | `shell: uname -s` |
+| `pyimport sys` → `sys.exit(1)` | `quit(1)` |
+| `pyimport getpass` → `getuser()` | `shell: id -un` |
+| `pyimport socket` → `gethostname()` | `shell: hostname` |
+| `pyimport tempfile` → `mkdtemp()` | `shell: mktemp -d` |
+| `pyimport os` → `os.environ["HOME"]` | `$HOME`, `$?HOME`, `${HOME:-"/root"}` |
+| `pyimport os.path` → `join`, `dirname`, `exists` | `Path`, `/`, `.parent`, `-f`, `-d` |
+| `pyimport shutil` → `copy`, `move` | `shell: cp -a {!src} {!dst}` |
+| `pyimport glob` → `glob("*.log")` | `shellLines: ls -1 {!dir}` |
+| `pyimport subprocess` | `shell:`, `run()` — the whole of §1–§7 |
+
+Each of these is one line, and the capture forms of §2 are how the answer
+gets back:
+
+<!-- from: EXAMPLES/DOC/shell_snippets.ady -->
+```python
+    # the clock: datetime.now().strftime(...) and time.time()
+    let (stamp, rc_stamp) = shell: date +%Y-%m-%d-%H%M%S
+    let (epoch, rc_epoch) = shell: date +%s
+```
+
+**The process id is the one worth knowing.** `$$` inside a `shell:` is the
+*shell's* id, not yours — but the shell it starts is your child, so its
+`$PPID` is you:
+
+<!-- from: EXAMPLES/DOC/shell_snippets.ady -->
+```python
+    let (pid, rc_pid) = shell: echo $PPID
+    let digits: str = pid.strip()
+```
+
+**Prefer the command that answers where the environment is thin.** `$USER`
+is unset in most containers; `id -un` answers anyway:
+
+<!-- from: EXAMPLES/DOC/shell_snippets.ady -->
+```python
+    let (who, rc_who) = shell: id -un
+```
+
+### When a date needs arithmetic rather than formatting
+
+`date` formats and `date +%s` gives you now, but turning *a stamp you
+already have* into an epoch is where the shell answer stops being portable:
+`date -d` is GNU, and `date -j -f` is BSD. If a program has to do that —
+comparing backup directories by age, say — the arithmetic is a dozen lines
+and runs anywhere. `EXAMPLES/rsync_time_machine.ady` has it as
+`days_from_civil`, and dropping its five `pyimport`s for that plus the table
+above is what let it into `make test`: the Nim build no longer needs nimpy
+at all.
+
+### What is left for `pyimport`
+
+A library, not a fact about the machine. `pyimport numpy`, `pyimport
+requests`, `pyimport yaml` — things with no `/usr/bin` equivalent and no
+answer in `$VAR`. There the bridge earns its cost, and
+`DOCS/BOOK/12-two-backends.md` §12.2 covers how it works.
+
+---
+
+## 12. A worked example
 
 `EXAMPLES/sh_janitor.ady` is the log-rotation script every site has written
 in Bash. It builds its own fixture under `/tmp` so the run is self-contained,
@@ -512,7 +590,7 @@ that have to be updated in step by hand.
 
 ---
 
-## 12. Translation table
+## 13. Translation table
 
 | Shell | Adascript |
 |-------|-----------|
@@ -585,7 +663,7 @@ as "the environment variable `x`", and finds nothing.
 
 ---
 
-## 13. Where to go next
+## 14. Where to go next
 
 - `EXAMPLES/sh_janitor.ady` — the worked example above
 - `EXAMPLES/sh_janitor.sh` — the Bash version of it, to run side by side

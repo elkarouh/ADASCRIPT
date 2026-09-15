@@ -173,4 +173,43 @@ def status_is_a_value() -> None:
 
 status_is_a_value()
 
+
+# --- what you do not need a Python import for ----------------------------
+def without_pyimport() -> None:
+    # the clock: datetime.now().strftime(...) and time.time()
+    let (stamp, rc_stamp) = shell: date +%Y-%m-%d-%H%M%S
+    let (epoch, rc_epoch) = shell: date +%s
+    assert stamp.strip()'Length == 17
+    let secs: str = epoch.strip()
+    assert int(secs) > 0
+
+    # this process's id: os.getpid(). `$$` is the shell's own, but the
+    # shell's parent is this program.
+    let (pid, rc_pid) = shell: echo $PPID
+    let digits: str = pid.strip()
+    assert int(digits) > 0
+
+    # the platform: sys.platform
+    let (kernel, rc_uname) = shell: uname -s
+    assert kernel.strip()'Length > 0
+
+    # who is running this: getpass.getuser(). `id -un` answers where $USER
+    # is unset, which it is in a container more often than not.
+    let (who, rc_who) = shell: id -un
+    assert who.strip()'Length > 0
+
+    # a scratch directory: tempfile.mkdtemp()
+    let (tmp, rc_tmp) = shell: mktemp -d
+    let tmpdir: Path = Path(tmp.strip())
+    assert -d tmpdir
+    shell: rm -rf {!tmpdir}
+
+    # the environment: os.environ / os.getenv
+    let home: Path = Path($HOME)
+    assert -d home
+    let shell_name: str = ${SHELL:-"/bin/sh"}
+    assert shell_name'Length > 0
+
+without_pyimport()
+
 print "all shell-document snippets ok"

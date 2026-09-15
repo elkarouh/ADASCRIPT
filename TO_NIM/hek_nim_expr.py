@@ -2107,6 +2107,13 @@ def to_nim(self, prec=None):
                     or _base_sym.get("type", "") in ("seq[string]", "string", "seq[seq[string]]")
                 ))
                 or _base_sym2 is not None    # row[i][j] where row is seq[seq[string]]
+                # ...and anything the type resolver can name as a string,
+                # which is how a method call gets in: `int(s.strip())` used
+                # to reach Nim as the bare strip() and fail against int,
+                # while `int(s[0:4])` -- a shape on the list above -- was
+                # fine. Every shell capture wants this, since the first
+                # thing done to captured output is .strip().
+                or (_nim_expr_type(arg) or "") in ("string", "str")
             )
             _NUMERIC_TYPES = {"int", "int8", "int16", "int32", "int64",
                               "uint", "uint8", "uint16", "uint32", "uint64",

@@ -1366,6 +1366,14 @@ Adascript knows whether each Python `import` has a direct Nim equivalent or
 needs the [nimpy](https://github.com/yglukhov/nimpy) bridge. You write
 ordinary Python imports; the transpiler decides how to map them.
 
+> **Before reaching for `pyimport`:** it is for libraries with no shell
+> equivalent — `numpy`, `requests`, a vendor SDK. The time, the process id,
+> the platform, the environment, a temp directory and a file test all have
+> one-line answers (`date +%s`, `echo $PPID`, `uname -s`, `$HOME`,
+> `mktemp -d`, `-f`/`-d`), and a `pyimport` costs the Nim build a nimpy
+> dependency and a libpython link for each of them.
+> `DOCS/ADASCRIPT_FOR_SHELL.md` §11 has the table.
+
 ### Natively mapped stdlib modules
 
 These modules translate directly to their Nim counterparts with no runtime
@@ -2272,7 +2280,7 @@ $ EXAMPLES/sh_janitor.sh        $ EXAMPLES/sh_janitor
 not exist. Nine files go in, seven come out of the report, no error is
 printed and the exit status is 0. `make test` asserts that this is still
 what happens, so the claim fails rather than rots. The quoting is fixable;
-what is not is the rest of `DOCS/ADASCRIPT_FOR_SHELL.md` §11.
+what is not is the rest of `DOCS/ADASCRIPT_FOR_SHELL.md` §12.
 
 ---
 
