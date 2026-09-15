@@ -86,20 +86,28 @@ Predefined subtypes: `Natural` (0..), `Positive` (1..).
 
 ## A.2 Toolchain reference
 
+The transpiler needs **Python 3.12 or newer** — its tokenizer relies on the
+`FSTRING_START` tokens introduced there — so on a system whose `python3` is
+older, spell the version explicitly (`python3.12`, `python3.13`). Every
+command below refuses with a one-line message rather than misbehaving.
+
 ```bash
 # Python backend
 python3 TO_PYTHON/ady2py.py source.ady          # emit Python to stdout
-python3 TO_PYTHON/ady2py.py -c source.ady       # transpile and run
+python3 TO_PYTHON/ady2py.py -c source.ady       # transpile to <stem>_gen.py and run
 echo "var x: int = 42" | python3 TO_PYTHON/ady2py.py    # from stdin
 
 # Nim backend
 python3 TO_NIM/ady2nim.py source.ady            # transpile + compile + run
-python3 TO_NIM/ady2nim.py -t source.ady         # transpile only → source.nim
+python3 TO_NIM/ady2nim.py -t source.ady         # transpile only; prints the .nim path
 python3 TO_NIM/ady2nim.py c source.ady          # nim c
 python3 TO_NIM/ady2nim.py c -r source.ady       # nim c -r
 python3 TO_NIM/ady2nim.py c -d:release source.ady  # optimised; unknown flags → nim
 python3 TO_NIM/ady2nim.py --test                # transpiler self-tests
 ```
+
+`-t` writes into the cache directory, not next to the source: there is no
+`source.nim` to look for afterwards, which is why it prints the path it used.
 
 Executable scripts:
 
@@ -120,7 +128,7 @@ The `Makefile` at the repository root drives every example:
 ```bash
 make install    # put ady2nim and ady2py on PATH (PREFIX=... to relocate)
 make compile    # transpile + compile every example, no run
-make test       # compile, then run the suite (36 examples, 67 checks)
+make test       # compile every example, then run the runnable ones
 make clean      # remove ~/.cache/adascript/ and the binary symlinks
 make uninstall  # remove the launchers again
 ```

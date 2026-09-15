@@ -292,6 +292,11 @@ runs on both.
 
 ## 1.5 The toolchain at a glance
 
+`python3` here means **3.12 or newer** — the tokenizer needs the
+`FSTRING_START` tokens introduced there, and every entry point below refuses
+with one line of explanation on anything older. Spell the version out
+(`python3.12`) where a system's `python3` is older than that.
+
 ```bash
 # Python backend
 python3 TO_PYTHON/ady2py.py source.ady        # print generated Python to stdout
@@ -299,9 +304,12 @@ python3 TO_PYTHON/ady2py.py -c source.ady     # transpile and run
 
 # Nim backend
 python3 TO_NIM/ady2nim.py source.ady          # transpile + compile + run (default)
-python3 TO_NIM/ady2nim.py -t source.ady       # transpile only, write source.nim
+python3 TO_NIM/ady2nim.py -t source.ady       # transpile only; prints the .nim path
 python3 TO_NIM/ady2nim.py c -d:release source.ady   # optimised build
 ```
+
+`-t` writes into the cache directory rather than next to the source, which is
+why it prints where it put the file. Appendix A.2 has the rest of the flags.
 
 Per-file compiler options live on the second line of the source, after the
 shebang. Many examples pin their C compiler this way:

@@ -430,6 +430,8 @@ single examples directory, builds each with `ady2nim c`, then runs the ones
 that are self-contained.
 
 ```makefile
+# python3.12 or newer; the repository's own Makefile looks one up rather
+# than trusting `python3` to be recent enough.
 ADY2NIM := python3 /path/to/TO_NIM/ady2nim.py
 
 TESTS := test_geometry.ady test_fleet.ady

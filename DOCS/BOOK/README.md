@@ -59,6 +59,9 @@ the missing type system are what change.
 
 ## Running the examples
 
+`python3` here means **3.12 or newer** — spell the version out
+(`python3.12`) if your system's `python3` is older.
+
 ```bash
 # Transpile to Python 3 and run
 python3 TO_PYTHON/ady2py.py -c EXAMPLES/monty_hall.ady
