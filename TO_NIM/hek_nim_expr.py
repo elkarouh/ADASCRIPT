@@ -2104,7 +2104,15 @@ def to_nim(self, prec=None):
                 ParserState.nim_imports.add("sequtils")
                 return f"sum({arg}.mapIt(int(it))){rest}"
             return f"sum({arg}){rest}"
-        if raw_name == "log":
+        if raw_name == "log" and "log" not in getattr(
+                ParserState, "user_top_level_procs", ()):
+            # `log(x)` is math.log, and Nim spells the one-argument form
+            # `ln`. But a program that defines its own `log` means its own
+            # log -- a logger taking (message, level=INFO) called with just
+            # a message looks identical here, and used to be emitted as
+            # `ln("some message")`, which fails against Nim's
+            # `ln(x: float): float`. Same hazard as `have` and `run` below,
+            # and the same guard.
             call_node = self.nodes[1].nodes[0]
             args = _extract_call_args(call_node)
             ParserState.nim_imports.add("math")
@@ -2526,6 +2534,7 @@ def _wrap_option_args(expr):
     Also handles method-call style: obj.method(args) -- skips the self param.
     """
     import re as _re
+    import re as _re_kw
     # Try bare function call: func(args)
     m = _re.match(r"^([A-Za-z_]\w*)\((.+)\)$", expr, _re.DOTALL)
     skip_self = False
@@ -2550,12 +2559,31 @@ def _wrap_option_args(expr):
         param_types = param_types[1:]  # skip self param for method calls
     if not param_types:
         return expr
-    # Split args on top-level commas
+    # Split args on top-level commas -- outside brackets *and* outside
+    # string literals. A comma inside a literal is a comma in English, not
+    # an argument separator: `style("a folder, and more", yellow)` used to
+    # split into two arguments here, and the second one came back out
+    # wrapped in some(), which is a syntax error at the call site and was
+    # blamed on multi-line calls for a long time.
     args = []
     depth = 0
     cur = []
+    quote = ""          # the quote character we are inside, or ""
+    escaped = False
     for ch in args_str:
-        if ch in "([{":
+        if quote:
+            cur.append(ch)
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == quote:
+                quote = ""
+            continue
+        if ch in "\"'":
+            quote = ch
+            cur.append(ch)
+        elif ch in "([{":
             depth += 1
             cur.append(ch)
         elif ch in ")]}":
@@ -2573,30 +2601,46 @@ def _wrap_option_args(expr):
     new_args = []
     changed = False
     import re as _re_woa
+    # A keyword argument is `name = value`, and only the *value* is the
+    # thing an Option[T] parameter wants wrapped. Wrapping the whole arg
+    # gave `some(maxdepth = 0)`, which is a type error on every call --
+    # so a proc with an optional parameter could not be called by keyword
+    # at all. Splitting it here leaves the name where Nim expects it.
+    # `==`, `<=`, `>=` and `!=` are comparisons, not keyword arguments.
+    _KWARG = _re_kw.compile(r"^([A-Za-z_]\w*)\s*=(?!=)\s*(.+)$", _re_kw.DOTALL)
+
+    def _split_kwarg(a):
+        """(prefix, value) -- ('', a) when a is positional."""
+        m_kw = _KWARG.match(a.strip())
+        if not m_kw or a.strip()[:2] in ("==", "<=", ">=", "!="):
+            return "", a
+        return f"{m_kw.group(1)} = ", m_kw.group(2)
+
     for arg, ptype in zip(args, param_types):
+        kw_prefix, arg = _split_kwarg(arg)
         if "Option[" in ptype:
             if arg == "nil":
                 # None/nil passed to Option[T] param -> none(T)
                 _m_opt = _re_woa.search(r"Option\[(.+)\]", ptype)
                 if _m_opt:
                     ParserState.nim_imports.add("options")
-                    new_args.append(f"none({_m_opt.group(1)})")
+                    new_args.append(kw_prefix + f"none({_m_opt.group(1)})")
                     changed = True
                 else:
-                    new_args.append(arg)
+                    new_args.append(kw_prefix + arg)
             elif not arg.startswith("some(") and not arg.startswith("none("):
                 # Don't double-wrap if the arg is already an Option[T] type
                 _arg_m = _re_woa.match(r'^([A-Za-z_]\w*)$', arg.strip())
                 _arg_sym = ParserState.symbol_table.lookup(_arg_m.group(1)) if _arg_m else None
                 _arg_type = (_arg_sym.get("type") or "") if _arg_sym else ""
                 if _arg_type.startswith("Option[") or _expr_is_option(arg):
-                    new_args.append(arg)
+                    new_args.append(kw_prefix + arg)
                 else:
                     ParserState.nim_imports.add("options")
-                    new_args.append(f"some({arg})")
+                    new_args.append(kw_prefix + f"some({arg})")
                     changed = True
             else:
-                new_args.append(arg)
+                new_args.append(kw_prefix + arg)
         elif ptype == "char" and _char_literal_arg(arg) is not None:
             # The mirror of the rule below. Adascript has no character type --
             # 'a' is a one-character *string* -- so a literal argument reached
@@ -2604,7 +2648,7 @@ def _wrap_option_args(expr):
             # taking a char could be called with one, not even 'a'. Passing a
             # string where Nim wants a char is always an error, so narrowing it
             # can only turn a failure into the meaning that was written.
-            new_args.append(_char_literal_arg(arg))
+            new_args.append(kw_prefix + _char_literal_arg(arg))
             changed = True
         elif ptype in ("string", "str") and _expr_is_char(arg):
             # Iterating a string yields char here and one-character strings
@@ -2612,10 +2656,10 @@ def _wrap_option_args(expr):
             # Passing a char where a string is wanted is always an error on
             # Nim, so stringifying can only turn a failure into the Python
             # meaning -- it cannot change a call that already compiled.
-            new_args.append(f"${arg}")
+            new_args.append(kw_prefix + f"${arg}")
             changed = True
         else:
-            new_args.append(arg)
+            new_args.append(kw_prefix + arg)
     if not changed:
         return expr
     return f"{receiver_prefix}{proc_name}({', '.join(new_args)})"
@@ -2842,6 +2886,21 @@ def _translate_stdlib_patterns(expr):
         ParserState.nim_imports.add("algorithm")
         ParserState.nim_imports.add("sequtils")
         return f"toSeq({_sorted_m.group(1)}.pairs).sortedByIt(it[0])"
+
+    # --- 6b. sorted(X, reverse=True) -> X.sorted(SortOrder.Descending) ---
+    # Ahead of rule 7, whose `sorted\((.+)\)` would otherwise swallow the
+    # keyword argument into the sequence expression and emit
+    # `xs, reverse = true.sorted` -- which is not valid Nim, and is what
+    # EXAMPLES/rsync_time_machine.ady has been failing to compile on for
+    # as long as it has had a `reverse=True` in it.
+    _sorted_rev = _re.match(
+        r'^sorted\((.+),\s*reverse\s*=\s*(True|true|False|false)\)$', expr, _re.DOTALL)
+    if _sorted_rev:
+        ParserState.nim_imports.add("algorithm")
+        _order = ("SortOrder.Descending"
+                  if _sorted_rev.group(2).lower() == "true"
+                  else "SortOrder.Ascending")
+        return f"{_sorted_rev.group(1)}.sorted({_order})"
 
     # --- 7. sorted(X) -> X.sorted ---
     _sorted_plain = _re.match(r'^sorted\((.+)\)$', expr)

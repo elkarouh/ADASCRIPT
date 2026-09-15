@@ -4,7 +4,9 @@
 Adascript translation of rsync-time-machine.py by basnijholt (Apache-2.0).
 """
 
-pyimport os
+# aliased: the Nim backend imports std/os for Path support, so a plain
+# `pyimport os` is a redefinition of 'os' there.
+pyimport os as pyos
 pyimport sys
 pyimport time
 pyimport signal
@@ -190,7 +192,7 @@ def now_str() -> str:
 # ---------------------------------------------------------------------------
 
 def backup_marker_path(folder: str) -> str:
-    return os.path.join(folder, "backup.marker")
+    return pyos.path.join(folder, "backup.marker")
 
 def find_backup_marker(folder: str, ssh: ?SSH = None) -> ?str:
     let marker: str = backup_marker_path(folder)
@@ -212,7 +214,7 @@ def find_backups(dest_folder: str, ssh: ?SSH = None) -> []str:
 # ---------------------------------------------------------------------------
 
 def expire_backup(backup_path: str, ssh: ?SSH) -> None:
-    let parent_dir: str = os.path.dirname(backup_path)
+    let parent_dir: str = pyos.path.dirname(backup_path)
     if find_backup_marker(parent_dir, ssh) is None:
         log(f"{backup_path} is not on a backup destination - aborting.", ERROR)
         sys.exit(1)
@@ -233,7 +235,7 @@ def expire_backups(
     let oldest_backup_to_keep: ?str = sorted(backups)[0] if backups else None
 
     for backup_dir in sorted(backups):
-        let backup_date: str = os.path.basename(backup_dir)
+        let backup_date: str = pyos.path.basename(backup_dir)
         let backup_timestamp: int = parse_date_to_epoch(backup_date)
 
         if backup_dir == backup_to_keep:
@@ -416,7 +418,7 @@ def check_rsync_errors(log_file: str, auto_delete_log: bool) -> None:
     else:
         log(style("Backup completed without errors.", magenta), INFO)
         if auto_delete_log:
-            os.remove(log_file)
+            pyos.remove(log_file)
 
 # ---------------------------------------------------------------------------
 # SSH input validation
@@ -471,7 +473,7 @@ def start_backup(
     ssh:               ?SSH,
     now:               str,
 ) -> str:
-    let log_file: str = os.path.join(log_dir, f"{now}.log")
+    let log_file: str = pyos.path.join(log_dir, f"{now}.log")
 
     var src:  str = src_folder
     var dst:  str = dest
@@ -536,15 +538,15 @@ def backup(
     check_dest_is_backup_folder(dest_f, dest_is_ssh(ssh))
 
     let now:  str = now_str()
-    let dest: str = os.path.join(dest_f, now)
+    let dest: str = pyos.path.join(dest_f, now)
     let sorted_backups: []str = sorted(find_backups(dest_f, ssh), reverse=True)
     var previous_dest: ?str = sorted_backups[0] if sorted_backups else None
-    let inprogress_file: str = os.path.join(dest_f, "backup.inprogress")
-    let mypid: int = os.getpid()
+    let inprogress_file: str = pyos.path.join(dest_f, "backup.inprogress")
+    let mypid: int = pyos.getpid()
 
-    if not os.path.exists(log_dir):
+    if not pyos.path.exists(log_dir):
         log(f"Creating log folder in '{log_dir}'...", INFO)
-        os.makedirs(log_dir)
+        pyos.makedirs(log_dir)
 
     handle_still_running_or_failed_or_interrupted_backup(
         inprogress_file, mypid, dest, dest_f, previous_dest, ssh,
@@ -593,8 +595,8 @@ def backup(
         log("Dry run complete - no backup was saved.", INFO)
         return
 
-    rm_file(os.path.join(dest_f, "latest"), dest_is_ssh(ssh))
-    ln_s(os.path.basename(dest), os.path.join(dest_f, "latest"), dest_is_ssh(ssh))
+    rm_file(pyos.path.join(dest_f, "latest"), dest_is_ssh(ssh))
+    ln_s(pyos.path.basename(dest), pyos.path.join(dest_f, "latest"), dest_is_ssh(ssh))
     rm_file(inprogress_file, ssh)
 
 # ---------------------------------------------------------------------------
@@ -649,7 +651,7 @@ def main() -> None:
         src_folder=args.src_folder,
         dest_folder=args.dest_folder,
         exclusion_file=args.exclusion_file or "",
-        log_dir=os.path.expandvars(os.path.expanduser(args.log_dir)),
+        log_dir=pyos.path.expandvars(pyos.path.expanduser(args.log_dir)),
         auto_delete_log=auto_delete_log,
         expiration_strategy=args.strategy,
         auto_expire=not args.no_auto_expire,

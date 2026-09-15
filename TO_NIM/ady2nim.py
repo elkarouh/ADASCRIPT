@@ -626,18 +626,28 @@ def translate(code, export_symbols=False):
         if "nimpy" in ParserState.nim_imports:
             if getattr(ParserState, 'nimpy_len_needed', False):
                 helper = 'proc len(o: PyObject): int = pyBuiltinsModule().len(o).to(int)'
-                # Insert right after the pyImport lines (find last pyImport line)
+                # Insert right after the last *module-level* pyImport line.
+                # Indented ones sit inside a proc, and a module-level
+                # declaration inserted after one of those lands in the middle
+                # of that proc's body at column 0 -- "invalid indentation".
                 helper_pos = len(output)
                 for j in range(len(output) - 1, -1, -1):
-                    if 'pyImport(' in output[j]:
+                    if 'pyImport(' in output[j] and not output[j][:1].isspace():
                         helper_pos = j + 1
                         break
                 output.insert(helper_pos, helper)
             # If sys was imported via pyImport, initialize sys.argv from Nim args
-            has_sys_import = any('pyImport("sys")' in line for line in output)
+            # Only a module-level `pyimport sys` gives a module-level `sys` to
+            # assign argv on. A function-local one is a local variable, so
+            # there is nothing here to initialise -- and inserting this line
+            # after it would put a column-0 statement inside a proc body.
+            has_sys_import = any('pyImport("sys")' in line and not line[:1].isspace()
+                                 for line in output)
             if has_sys_import:
                 helper_pos = len(output)
                 for j in range(len(output) - 1, -1, -1):
+                    if output[j][:1].isspace():
+                        continue
                     if 'pyImport(' in output[j] or 'proc len(' in output[j]:
                         helper_pos = j + 1
                         break
