@@ -15,11 +15,7 @@ Three jobs at once, which is why it is a state machine and not a filter:
     the fragment can be linked to), and the relative links are made
     absolute (they are about to be read from a different directory).
 
-A translation of process_html.awk, which is where the shape came from. The
-awk keeps three booleans -- in_body, in_footer, div_processed -- and tests
-them on the front of every pattern. Eight combinations, five of which the
-program is meaningfully in, and `exit` is a sixth thing that can be true of
-it. Here those six are the type below, and the compiler counts them.
+A translation of process_html.awk, which is where the shape came from.
 """
 nimport awk
 
@@ -27,13 +23,12 @@ nimport awk
 # Where in the page we are. The record on its own does not say: </div>
 # closes the footer or is content, <body> is a boundary or a mistake.
 #
-# Whether the id has been placed is part of where we are, not a flag beside
-# it: BODY is the body before the first <div>, BODY_TAGGED the body after
-# it, and the two FOOTER states differ only in which of those they go back
-# to -- which is what the state passes to _footer, so that there is one
-# footer and not two copies of it. A state machine with a boolean hanging
-# off it is a bigger state machine that has not been written down.
-type Scan_State_T is enum HEAD, BODY, BODY_TAGGED, FOOTER, FOOTER_TAGGED, DONE
+# Where we are is the only thing the state carries. Whether the id has been
+# placed is not a place, it is a latch: set once, never cleared, read in one
+# spot. Folding it in gives six states that say the same thing at twice the
+# size -- and loses something, because a latch survives a return into a
+# state while a state has to remember which one to return to.
+type Scan_State_T is enum HEAD, BODY, FOOTER, DONE
 
 
 type Anchor_T is record:
@@ -58,106 +53,77 @@ def anchor(arg: str) -> Anchor_T:
 
 
 class HtmlBody(AwkBase):
-    var state: Scan_State_T = HEAD
-    var at   : Anchor_T     = Anchor_T()
+    var state   : Scan_State_T = HEAD
+    var at      : Anchor_T     = Anchor_T()
+    # A latch, not a state: set once when the id is placed, never cleared,
+    # and read in exactly one place. The awk's third boolean is the same
+    # thing -- what goes wrong there is where it is read, not that it exists.
+    var div_done: bool         = false
 
     def process_record(self):
         """One branch per state, and nothing outside it.
 
         The case covers every member of Scan_State_T, so there is no
-        `when others:` and a seventh state would not compile until it is
-        handled here. In awk this is three flags tested on the front of
-        every pattern, where nothing checks that the combinations make
-        sense -- and where the id can be spent on a line inside the footer,
-        which is then not printed, leaving the fragment with no id at all.
-        Here the states that drop a record do not rewrite it, so that
-        cannot happen.
-
-        Each handler is also handed the state it moves to, which makes this
-        the transition table: the arrows are here, in one place, rather
-        than spread over the methods that take them. Two are not, because
-        they are the same wherever they happen: </body> ends the page, and
-        placing the id ends BODY.
+        `when others:` and a fifth state would not compile until it is
+        handled here. In awk this is in_body and in_footer, repeated on the
+        front of every pattern: two booleans whose four combinations are
+        never checked against each other, and whose meaning has to be
+        reconstructed by the reader every time they meet `&& in_footer`.
         """
         case self.state:
-            when HEAD:          self._head(BODY)
-            when BODY:          self._body(FOOTER)
-            when BODY_TAGGED:   self._body(FOOTER_TAGGED)
-            when FOOTER:        self._footer(BODY)
-            when FOOTER_TAGGED: self._footer(BODY_TAGGED)
-            when DONE:          pass      # awk's `exit`, spelled as a state
+            when HEAD:   self._head()
+            when BODY:   self._body()
+            when FOOTER: self._footer()
+            when DONE:   pass          # awk's `exit`, spelled as a state
 
-    def _head(self, body: Scan_State_T) -> None:
-        """Before the body: preamble, dropped, and the <body> tag with it.
-
-        There is only one state to go to, and it is still the dispatch that
-        says so: every handler is handed the state it moves to, so the case
-        above is the transition table and not merely a jump table.
-        """
+    def _head(self) -> None:
+        """Before the body: preamble, dropped, and the <body> tag with it."""
         case self.line:
-            when /<body[^>]*>/: self.state = body
+            when /<body[^>]*>/: self.state = BODY
             when others:        pass
 
-    def _body(self, footer: Scan_State_T) -> None:
-        """The body, in whichever of its two states: the exits are the same.
-
-        Which footer state this one goes to is the only thing that differs
-        between them, and the dispatch above knows which one it is, so it
-        says so. Whether the id is still owed is not asked here at all --
-        see _emit.
-        """
+    def _body(self) -> None:
+        """Inside the body: rewrite, print, and watch for the two exits."""
         case self.line:
             when /<\/body>/:             self.state = DONE
-            when /<div title="footer">/: self.state = footer
-            when others:                 self._emit()
+            when /<div title="footer">/: self.state = FOOTER
+            when others:
+                self._rewrite()
+                print self.line
 
-    def _footer(self, resume: Scan_State_T) -> None:
-        """In the footer: every record dropped, up to the </div> that ends it.
-
-        The two footer states differ only in where they go back to, and the
-        dispatch above already knows which one it is looking at -- so it
-        says so, and there is one footer here rather than two copies of it.
-        """
+    def _footer(self) -> None:
+        """Inside the footer: dropped, up to the </div> that closes it."""
         case self.line:
             when /<\/body>/: self.state = DONE
-            when /<\/div>/:  self.state = resume
+            when /<\/div>/:  self.state = BODY
             when others:     pass
 
-    def _tag(self) -> None:
-        """Give the first <div> on this record the page's own name.
+    def _rewrite(self) -> None:
+        """The three edits, in the order awk applies them to one line.
 
-        `$+1` is the open tag without its `>`, so the id goes inside the
-        tag it came from, wherever on the record that tag is. Having placed
-        it, there is nothing left to look for: BODY_TAGGED.
+        Called only from the body, so a record that is dropped is never
+        rewritten. That is what keeps the id from being spent on a line
+        inside the footer, which the awk does spend it on -- its tagging
+        rule tests in_body, and the footer is inside the body, so the id
+        lands on a record that is then not printed and the page comes out
+        with no id at all.
         """
-        case self.line:
-            when /(<div[^>]+)>/:
-                let tag: str = $+1
-                self.line = self.line.replace(tag + ">",
-                                              tag + " id=\"" + self.at.stem + "\">")
-                self.state = BODY_TAGGED
-            when others:
-                pass
+        if not self.div_done:
+            case self.line:
+                when /(<div[^>]+)>/:
+                    # $+1 is the open tag without its `>`: put the id
+                    # inside the tag it came from, wherever on the line
+                    # that tag is.
+                    let open: str = $+1
+                    self.line = self.line.replace(open + ">",
+                                                  open + " id=\"" + self.at.stem + "\">")
+                    self.div_done = true
+                when others: pass
 
-    def _emit(self) -> None:
-        """Relative links, made absolute, and the record printed.
-
-        The fragment is about to be read from somewhere else, where
-        `test_x.html` would follow it.
-
-        The tagging happens here because a record that is printed is the
-        only one that can carry the id -- which is the thing the awk gets
-        wrong. So the one state that still owes an id does its looking
-        where the printing is, and the states that drop a record never get
-        the chance.
-        """
-        case self.state:
-            when BODY:   self._tag()
-            when others: pass
-
+        # Relative links, made absolute: the fragment is about to be read
+        # from somewhere else, and `test_x.html` would follow it there.
         self.line = self.line.replace("href=\"test_", "href=\"" + self.at.dir + "/test_")
         self.line = self.line.replace("<img src=\"",  "<img src=\"" + self.at.dir + "/")
-        print self.line
 
 
 def main():

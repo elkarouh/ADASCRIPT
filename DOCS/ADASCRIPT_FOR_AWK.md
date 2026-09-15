@@ -1069,120 +1069,93 @@ The point of the file is one line of HTML:
 
 That record means two entirely different things — the end of the footer that
 is being dropped, or an ordinary line to print — and nothing about it says
-which. Only the state does. The original spells that with three booleans,
-`in_body`, `in_footer` and `div_processed`, tested on the front of every
-pattern; nothing checks that their eight combinations make sense, because in
-awk nothing can.
+which. Only the state does. The original spells that with `in_body` and
+`in_footer`, tested on the front of every pattern; nothing checks the four
+combinations against each other, and every reader has to reconstruct what
+`&& in_footer` is guarding against.
 
-The program is meaningfully in five of those eight, and `exit` is a sixth
-thing that can be true of it. Those six are the type:
+Four states, and the case over them is the whole dispatch:
 
 <!-- from: EXAMPLES/html_body.ady -->
 ```python
-type Scan_State_T is enum HEAD, BODY, BODY_TAGGED, FOOTER, FOOTER_TAGGED, DONE
+type Scan_State_T is enum HEAD, BODY, FOOTER, DONE
 ```
 
 <!-- from: EXAMPLES/html_body.ady -->
 ```python
     def process_record(self):
         case self.state:
-            when HEAD:          self._head(BODY)
-            when BODY:          self._body(FOOTER)
-            when BODY_TAGGED:   self._body(FOOTER_TAGGED)
-            when FOOTER:        self._footer(BODY)
-            when FOOTER_TAGGED: self._footer(BODY_TAGGED)
-            when DONE:          pass      # awk's `exit`, spelled as a state
+            when HEAD:   self._head()
+            when BODY:   self._body()
+            when FOOTER: self._footer()
+            when DONE:   pass          # awk's `exit`, spelled as a state
 ```
 
-Note what is *not* there: a `div_processed` flag. Whether the id has been
-placed is part of where we are, not a fact kept beside it — `BODY` is the
-body before the first `<div>`, `BODY_TAGGED` the body after it. A state
-machine with a boolean hanging off it is a bigger state machine that has not
-been written down. Writing it down costs two extra enum members and buys a
-`case` the compiler can check; leaving it as a flag costs nothing today and
-a wrong answer later, which the example below shows.
-
-`DONE` is worth a second look too. The awk says `exit` when it reaches
+`DONE` is worth a second look. The awk says `exit` when it reaches
 `</body>`, which leaves the program; `AwkBase` has no early exit, so the
 translation needs a state for "everything from here on is not wanted" — and
 that turns out to be the better answer. `exit` says *stop*; `DONE` says
-*why*, and it is a member of the same type as the other five, so the
+*why*, and it is a member of the same type as the other three, so the
 compiler counts it when it checks that the `case` is complete.
 
-Every handler is handed the state it moves to, which makes that `case` the
-transition table: the arrows are in one place, where they can be read
-together, rather than spread across the methods that take them. Only two are
-not there, because they are the same wherever they happen — `</body>` ends
-the page, and placing the id ends `BODY`.
-
-Handing the destination in also means the six states need only three
-handlers. They come in pairs that differ by exactly one constant: which
-footer state the body goes to, which body state the footer comes back to.
-One footer and one body, not two copies of each:
+Each state is a `case` over the record, with the regexes that matter in that
+state and no others:
 
 <!-- from: EXAMPLES/html_body.ady -->
 ```python
-    def _body(self, footer: Scan_State_T) -> None:
+    def _body(self) -> None:
+        """Inside the body: rewrite, print, and watch for the two exits."""
         case self.line:
             when /<\/body>/:             self.state = DONE
-            when /<div title="footer">/: self.state = footer
-            when others:                 self._emit()
+            when /<div title="footer">/: self.state = FOOTER
+            when others:
+                self._rewrite()
+                print self.line
 
-    def _footer(self, resume: Scan_State_T) -> None:
+    def _footer(self) -> None:
+        """Inside the footer: dropped, up to the </div> that closes it."""
         case self.line:
             when /<\/body>/: self.state = DONE
-            when /<\/div>/:  self.state = resume
+            when /<\/div>/:  self.state = BODY
             when others:     pass
 ```
-
-A state passed as an argument is an ordinary value of an ordinary type: the
-one passed in cannot be a state that does not exist, and cannot be quietly
-mistyped, in the way `in_footer = 2` cannot be caught. This is the part that
-does not survive translation into flags at all — `in_footer = 1` says *that*
-we are in the footer and nothing about where we came from, so the awk has no
-way to express "go back to whichever of the two you were in" other than by
-consulting the other flag, which is exactly the coupling that makes three
-booleans hard to read.
 
 `</div>` appears exactly once in the program, in the one state where it
 means something. That is the whole argument for naming the state: the awk
 version writes the same test as `/<\/div>/ && in_footer`, and every reader
 after the first has to work out what the `&&` is guarding against.
 
-**Rewriting on the way past.** Two of §1's five points apply here and two do
-not: there is a state machine and there is processing on the fly, but there
-are no lists at the end — the output *is* the stream, one record at a time.
-The one edit that happens once is the id, and it is the state that makes it
-happen once. Look at where the looking is done — not in `_body`, which never
-asks whether the id is still owed, but in the method that prints:
+### What a state is, and what it is not
+
+There is a third boolean in the awk, `div_processed`, and it survives the
+translation:
 
 <!-- from: EXAMPLES/html_body.ady -->
 ```python
-        case self.state:
-            when BODY:   self._tag()
-            when others: pass
+    var div_done: bool         = false
 ```
 
-<!-- from: EXAMPLES/html_body.ady -->
-```python
-    def _tag(self) -> None:
-        case self.line:
-            when /(<div[^>]+)>/:
-                let tag: str = $+1
-                self.line = self.line.replace(tag + ">",
-                                              tag + " id=\"" + self.at.stem + "\">")
-                self.state = BODY_TAGGED
-            when others:
-                pass
-```
+That is deliberate, and it is worth being precise about why, because "turn
+the flags into states" is the kind of rule that is right until it is not.
+`in_body` and `in_footer` answer *where are we*, and where-we-are is one
+question with four answers — a type. `div_done` answers something else:
+*has this already happened?* It is a **latch** — set once, never cleared,
+read in exactly one place. Folding it into `Scan_State_T` is possible, and
+it doubles the type: `BODY`/`BODY_TAGGED`, `FOOTER`/`FOOTER_TAGGED`, six
+states for the same program. It also loses something. A latch survives a
+return into a state; a state has to remember which state to return to, so
+the single footer becomes two, or one that is told where to come back from.
 
-A record that is printed is the only one that can carry the id, so the
-search for the `<div>` lives where the printing is, and `BODY` is the only
-state that does it — placing the id is what stops being `BODY`. The states
-that drop a record never reach this code.
+Six states with nothing to check between them are not safer than four states
+and a monotonic flag. The test is not "is it a boolean" but "does it
+multiply with the others" — `in_body` × `in_footer` × `div_processed` is
+eight combinations and the awk tests them independently; `state` ×
+`div_done` is a type the compiler checks, times a latch that only ever goes
+one way.
 
-Here is what that buys, and it is not hypothetical. Put a `<div>` inside the
-footer, on a line of its own:
+**Where the awk actually goes wrong** is not that it keeps the flag; it is
+*where the flag is read*. Put a `<div>` inside the footer, on a line of its
+own:
 
 ```
 <div title="footer">
@@ -1192,27 +1165,44 @@ footer, on a line of its own:
 </div>
 ```
 
-The awk spends the id on that inner `<div>` — its rules test `in_body` but
-the footer is inside the body, so the tagging rule fires, `div_processed`
-latches, and then the line is not printed. The page comes out with **no id
-at all**. The translation cannot do this, and not because anybody thought of
-this case: the search happens in the method that prints, and the footer
-states do not print. `BODY` is still `BODY` when the footer ends. Same
-input, two outputs:
+The tagging rule tests `in_body`, and the footer is inside the body — so the
+id lands on that inner `<div>`, `div_processed` latches, and the line is then
+not printed. The page comes out with **no id at all**:
 
 ```
-$ awk -f process_html.awk wasted_id.html | head -2
-</div>
-<div class="content">
-
-$ html_body wasted_id.html | head -2
-</div>
-<div class="content" id="wasted_id">
+$ awk -f process_html.awk wasted_id.html | head -2      $ html_body wasted_id.html | head -2
+</div>                                                  </div>
+<div class="content">                                   <div class="content" id="wasted_id">
 ```
 
-That is the flag-versus-state argument in one line of output. Both keep the
-awk's other quirk faithfully, by the way — the stray `</div>`, because the
-first `</div>` ends the footer whether or not it was the footer's own.
+The translation cannot do this, because `_rewrite` is called from one place
+— the branch of `BODY` that prints — so a record that is dropped is never
+rewritten. The states did that, not the flag: in awk every rule sees every
+record and has to re-derive whether it should act, and that re-derivation is
+what goes wrong. (Both keep the awk's other quirk faithfully, by the way:
+the stray `</div>`, because the first `</div>` ends the footer whether or not
+it was the footer's own.)
+
+**Rewriting on the way past.** Two of §1's five points apply here and two do
+not: there is a state machine and there is processing on the fly, but there
+are no lists at the end — the output *is* the stream, one record at a time.
+The first `<div>` gets the page's own name as an id, so the fragment can be
+linked to once it has been pasted somewhere else:
+
+<!-- from: EXAMPLES/html_body.ady -->
+```python
+        if not self.div_done:
+            case self.line:
+                when /(<div[^>]+)>/:
+                    # $+1 is the open tag without its `>`: put the id
+                    # inside the tag it came from, wherever on the line
+                    # that tag is.
+                    let open: str = $+1
+                    self.line = self.line.replace(open + ">",
+                                                  open + " id=\"" + self.at.stem + "\">")
+                    self.div_done = true
+                when others: pass
+```
 
 **The part awk cannot do at all.** The rewriting needs to know where the
 page lives: the directory, to make the links absolute, and the file's name
