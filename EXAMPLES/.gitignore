@@ -1,12 +1,30 @@
-# ady2nim creates a symlink (same name, no extension) next to each compiled .ady file.
-# Ignore everything that isn't a source file, doc, or subdirectory.
+# Ignore what the toolchain generates, not everything-except-a-list.
+#
+# The old rule was `*` plus an allow-list of .ady, .md and .txt. It did its
+# job for the build output, and quietly dropped every new kind of source
+# file nobody had thought to add to the list -- .awk, .sh, .html and .conf
+# fixtures were written, committed with `git add -A`, pushed, and were not
+# in the repository. `git add` says nothing when it skips an ignored file,
+# so the first sign of it was a reader not finding the files.
+#
+# What is actually generated in here:
+#
+#   * ady2nim drops a symlink to the built binary next to each compiled
+#     source: same name, extension removed. That is the one pattern worth
+#     keeping, and "a name with no dot in it" is what it comes to.
+#   * ady2py writes <stem>_gen.py next to the source it transpiled.
+#   * a few examples take a lock while they run and leave the file behind.
+#
+# Everything else is a source file and belongs in the repository.
+
+# Build output: the extensionless symlinks, by way of "has no dot at all".
 *
-!.gitignore
-!*.ady
-!*.md
-!*.txt
-!*.awk
-!*.sh
-!*.html
-!*.conf
 !*/
+!*.*
+
+# ... and the generated files that do have an extension.
+*_gen.py
+*.locked
+
+# Makefile has no dot in its name and is not build output.
+!Makefile
