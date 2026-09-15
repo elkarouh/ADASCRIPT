@@ -23,10 +23,10 @@ if $# > 0:
 
 def classify(line: str) -> Severity_T:
     case line:
-        when /error/i:      return ERROR
-        when /warn/i:       return WARN
-        when /info|debug/i: return INFO
-        when others:        return OTHER
+        when /error/i:      ERROR
+        when /warn/i:       WARN
+        when /info|debug/i: INFO
+        when others:        OTHER
 
 
 def process(raw: str):

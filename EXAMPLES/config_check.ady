@@ -42,10 +42,10 @@ type Finding_T is record:
 
 def where(f: Finding_T) -> str:
     """The guard is what narrows `ln` from ?Natural to Natural below it."""
-    let ln: ?Natural = f.line
+    let ln: ?Natural = f.line      # bind it to a name first
     if ln is None:
         return ""
-    return "line " + str(ln)
+    return "line " + str(ln)       # a plain Natural from here on
 
 
 # The schema, and the order a report should walk it in. A dict alone cannot

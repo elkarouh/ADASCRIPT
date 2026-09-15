@@ -418,10 +418,12 @@ the compiler checks that all four are handled:
 
 ```python
 def describe(s: Spec_T) -> str:
+    """One line per shape. No `when others:` -- the enum has four members and
+    the compiler has checked that all four are here."""
     case s.kind:
-        when FLAG:     "a flag"
-        when NUMBER:   f"a whole number in {s.lo} .. {s.hi}"
-        when CHOICE:   "one of " + ", ".join(s.allowed)
+        when FLAG: "a flag (" + ", ".join(TRUE_WORDS) + " / " + ", ".join(FALSE_WORDS) + ")"
+        when NUMBER: f"a whole number in {s.lo} .. {s.hi}"
+        when CHOICE: "one of " + ", ".join(s.allowed)
         when PATHNAME: "a path that must exist" if s.must_exist else "a path"
 ```
 
@@ -686,7 +688,12 @@ lists defined earlier in the file.)
 
 ```python
 def check_value(s: Spec_T, value: str) -> str:
-    """Empty means the value is fine; otherwise the complaint."""
+    """Empty means the value is fine; otherwise the complaint.
+
+    Each branch reads only the fields its own shape declares. `s.lo` inside
+    the CHOICE branch is not a mistake to be careful about -- on the Nim
+    backend the field is not there to read.
+    """
     case s.kind:
         when FLAG:
             if value.lower() in TRUE_WORDS or value.lower() in FALSE_WORDS:
