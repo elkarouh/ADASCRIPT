@@ -27,7 +27,9 @@ fragment has neither once it has been pasted into a bigger page:
     find it. It goes on the first <div> because that is the block the
     whole page was, and only on the first: a page has one name.
 
-A translation of process_html.awk, which is where the shape came from.
+A translation of EXAMPLES/process_html.awk, kept next to this file so the
+two can be read side by side. The awk needs gawk: `gensub` is a GNU
+extension and the mawk that is /usr/bin/awk on many machines refuses it.
 """
 nimport awk
 

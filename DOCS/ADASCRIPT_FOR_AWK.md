@@ -1056,6 +1056,8 @@ file, which is why `finish()` has to file it.
 
 `EXAMPLES/html_body.ady` is a translation of a real awk script — one that
 lifts the `<body>` out of an HTML page so it can be included in another one.
+The original is in the repository as `EXAMPLES/process_html.awk`, 48 lines,
+so every claim below can be checked against it.
 It is the state machine again, turned a quarter turn: in §10.3 the state
 decided *which kind* of record had arrived, here it decides whether the
 record is wanted at all, and what has to be rewritten before it is let
@@ -1167,12 +1169,20 @@ own:
 
 The tagging rule tests `in_body`, and the footer is inside the body — so the
 id lands on that inner `<div>`, `div_processed` latches, and the line is then
-not printed. The page comes out with **no id at all**:
+not printed. The page comes out with **no id at all**. That page is
+`EXAMPLES/html_body_wasted_id.html` in the repository, and the original is
+`EXAMPLES/process_html.awk`, so this is checkable rather than asserted
+(with gawk — `gensub` is a GNU extension):
 
 ```
-$ awk -f process_html.awk wasted_id.html | head -2      $ html_body wasted_id.html | head -2
-</div>                                                  </div>
-<div class="content">                                   <div class="content" id="wasted_id">
+$ cd EXAMPLES
+$ gawk -f process_html.awk html_body_wasted_id.html | head -2
+</div>
+<div class="content">
+
+$ ./html_body html_body_wasted_id.html | head -2
+</div>
+<div class="content" id="html_body_wasted_id">
 ```
 
 The translation cannot do this, because `_rewrite` is called from one place
@@ -1315,6 +1325,7 @@ keeps checking.
 - `EXAMPLES/config_check.ady` — the variant-record schema, walked through in §10.2
 - `EXAMPLES/awk_logscan.ady` — the state-machine example, in full in §10.3, all of §1 at once
 - `EXAMPLES/html_body.ady` — a real AWK script translated, in full in §10.4: state that decides what to keep
+- `EXAMPLES/process_html.awk` — that script, as it was, to read against the translation
 - `EXAMPLES/CFMU/Tstatus_monitor.ady` — a real AWK script, translated
 - `DOCS/BOOK/05-pattern-matching.md` — `case`/`when` in full
 - `DOCS/BOOK/07-regex.md` — every regex form
