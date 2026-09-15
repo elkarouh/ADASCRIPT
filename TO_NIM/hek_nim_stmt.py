@@ -899,23 +899,27 @@ def to_nim(self):
                     import re as _re_opt
                     _rhs_sym = ParserState.symbol_table.lookup(value.strip())
                     _rhs_type = (_rhs_sym.get("type") or "") if _rhs_sym else ""
-                    # A conditional with a None branch -- `x if c else None`
-                    # -- arrives as `(if c: v else: nil)`, where the two
-                    # halves need some() and none() separately rather than
-                    # one wrap around the whole thing. Left alone; see TODO.
-                    _has_nil = bool(_re_opt.search(r"\bnil\b", value))
-                    _already = (_rhs_type.startswith("Option[")
-                                or value.startswith("some(")
-                                or value.startswith("none(")
-                                or _has_nil
-                                or hek_nim_expr._expr_is_option(value))
-                    if not _already:
-                        _im = _re_opt.search(r"Option\[(.+)\]", annotation)
-                        # some[T](v), not some(v): Nim infers Option[int] from
-                        # a literal, which is not Option[Natural].
-                        value = (f"some[{_im.group(1)}]({value})" if _im
-                                 else f"some({value})")
-                        ParserState.nim_imports.add("options")
+                    _im = _re_opt.search(r"Option\[(.+)\]", annotation)
+                    # A conditional -- `x if c else None` -- needs its two
+                    # halves wrapped separately; one some() around the whole
+                    # thing types neither.
+                    _lifted = (_lift_option_ternary(value, _im.group(1))
+                               if _im else None)
+                    if _lifted is not None:
+                        value = _lifted
+                    else:
+                        _has_nil = bool(_re_opt.search(r"\bnil\b", value))
+                        _already = (_rhs_type.startswith("Option[")
+                                    or value.startswith("some(")
+                                    or value.startswith("none(")
+                                    or _has_nil
+                                    or hek_nim_expr._expr_is_option(value))
+                        if not _already:
+                            # some[T](v), not some(v): Nim infers Option[int]
+                            # from a literal, which is not Option[Natural].
+                            value = (f"some[{_im.group(1)}]({value})" if _im
+                                     else f"some({value})")
+                            ParserState.nim_imports.add("options")
                 if value:
                     result += f" = {value}"
     # Float range constraint: if annotation is a float range type and there's
@@ -925,6 +929,89 @@ def to_nim(self):
         result = result + "\n" + _fra
     return result
 
+
+
+
+def _lift_option_ternary(value, inner):
+    """Wrap the branches of `(if c: a else: b)` for an Option[inner] target.
+
+    `let x: ?str = v if c else None` arrives here as
+    `(if c: v else: nil)`, and neither half is an Option. One `some()`
+    around the whole conditional does not type either: the branches need
+    `some(v)` and `none(str)` separately. Returns None when VALUE is not a
+    conditional, so the caller can fall back to wrapping it whole.
+    """
+    v = value.strip()
+    # A nested conditional arrives doubly parenthesised -- `((if d: ...))` --
+    # once from the emitter and once from the precedence wrap. Peel the
+    # redundant layers, but only where the first paren really does close at
+    # the last one: `(a) + (b)` must be left alone.
+    while v.startswith("((") and v.endswith("))"):
+        _d, _stop = 0, False
+        for _k, _c in enumerate(v):
+            if _c == "(":
+                _d += 1
+            elif _c == ")":
+                _d -= 1
+                if _d == 0 and _k != len(v) - 1:
+                    _stop = True
+                    break
+        if _stop:
+            break
+        v = v[1:-1].strip()
+    if not (v.startswith("(if ") and v.endswith(")")):
+        return None
+    body = v[1:-1]
+
+    depth = 0
+    quote = ""
+    esc = False
+    colon_idx = None
+    else_idx = None
+    i = 0
+    while i < len(body):
+        ch = body[i]
+        if quote:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == quote:
+                quote = ""
+        elif ch in "\"'":
+            quote = ch
+        elif ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+        elif depth == 0:
+            if colon_idx is None and ch == ":":
+                colon_idx = i
+            elif body.startswith(" else: ", i):
+                else_idx = i
+        i += 1
+    if colon_idx is None or else_idx is None or else_idx < colon_idx:
+        return None
+
+    cond = body[len("if "):colon_idx].strip()
+    then_part = body[colon_idx + 1:else_idx].strip()
+    else_part = body[else_idx + len(" else: "):].strip()
+
+    def _lift(branch):
+        nested = _lift_option_ternary(branch, inner)
+        if nested is not None:
+            return nested
+        if branch == "nil" or branch == "None":
+            ParserState.nim_imports.add("options")
+            return f"none({inner})"
+        if (branch.startswith("some(") or branch.startswith("none(")
+                or branch.startswith("some[")
+                or hek_nim_expr._expr_is_option(branch)):
+            return branch
+        ParserState.nim_imports.add("options")
+        return f"some[{inner}]({branch})"
+
+    return f"(if {cond}: {_lift(then_part)} else: {_lift(else_part)})"
 
 
 # --- declaration with keyword (var/let/const) ---
@@ -1036,23 +1123,27 @@ def to_nim(self):
                     import re as _re_opt
                     _rhs_sym = ParserState.symbol_table.lookup(value.strip())
                     _rhs_type = (_rhs_sym.get("type") or "") if _rhs_sym else ""
-                    # A conditional with a None branch -- `x if c else None`
-                    # -- arrives as `(if c: v else: nil)`, where the two
-                    # halves need some() and none() separately rather than
-                    # one wrap around the whole thing. Left alone; see TODO.
-                    _has_nil = bool(_re_opt.search(r"\bnil\b", value))
-                    _already = (_rhs_type.startswith("Option[")
-                                or value.startswith("some(")
-                                or value.startswith("none(")
-                                or _has_nil
-                                or hek_nim_expr._expr_is_option(value))
-                    if not _already:
-                        _im = _re_opt.search(r"Option\[(.+)\]", annotation)
-                        # some[T](v), not some(v): Nim infers Option[int] from
-                        # a literal, which is not Option[Natural].
-                        value = (f"some[{_im.group(1)}]({value})" if _im
-                                 else f"some({value})")
-                        ParserState.nim_imports.add("options")
+                    _im = _re_opt.search(r"Option\[(.+)\]", annotation)
+                    # A conditional -- `x if c else None` -- needs its two
+                    # halves wrapped separately; one some() around the whole
+                    # thing types neither.
+                    _lifted = (_lift_option_ternary(value, _im.group(1))
+                               if _im else None)
+                    if _lifted is not None:
+                        value = _lifted
+                    else:
+                        _has_nil = bool(_re_opt.search(r"\bnil\b", value))
+                        _already = (_rhs_type.startswith("Option[")
+                                    or value.startswith("some(")
+                                    or value.startswith("none(")
+                                    or _has_nil
+                                    or hek_nim_expr._expr_is_option(value))
+                        if not _already:
+                            # some[T](v), not some(v): Nim infers Option[int]
+                            # from a literal, which is not Option[Natural].
+                            value = (f"some[{_im.group(1)}]({value})" if _im
+                                     else f"some({value})")
+                            ParserState.nim_imports.add("options")
                 if value:
                     result += f" = {value}"
     # For record types with defaults and no explicit initializer, call init proc

@@ -284,14 +284,26 @@ whatever spelling keeps the sed flavour -- would make the copy unnecessary
 and leave the statement form for the in-place case. Needs a `sub` on `str`
 in both emitters.
 
-## Nim-backend bugs the rsync_time_machine rewrite had to work around
+## A comparison inside `if` gets truthiness-coerced
 
-The file compiles and runs on both backends now. Two of the reasons it is
-written the way it is are still transpiler bugs rather than taste:
+    let d: {str}str = {"a": "b"}
+    if d.get("a", "") == "b":          # -> `... == "b".len > 0`
 
-- a `?T` ternary with `None` on one side emits a bare `nil` rather than
-  `none(T)`, so `let x: ?T = v if c else None` does not compile.
-- `d.get(k) is None` becomes `getOrDefault(k) == nil`, which Nim rejects for
-  string values. `if k not in d:` is the way to ask.
+The `if` handler runs `_nim_truthiness` over the whole condition, and a
+condition that *ends* in a string literal is taken for a string. Through a
+name it is fine (`let got: str = d.get("a", ""); if got == "b":`), which is
+why this has gone unnoticed. Predates the narrowing work -- confirmed
+against the tree before it.
+
+## The `else` branch of `x is None` does not narrow
+
+    if v is None:
+        ...
+    else:
+        use(v)                         # v is still Option[T] here
+
+`if v is not None:` narrows, and so does an early-return guard; the else of
+the inverse test does not. Same shape as the `and` case that was fixed, and
+probably the same fix in a different place.
 
 ## Nim keyword as a tuple-unpacking target

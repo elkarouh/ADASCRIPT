@@ -3596,6 +3596,21 @@ def to_nim(self, prec=None):
                     else:
                         chain = f"{chain}.isNone"
                     continue
+            # `d.get(k) is None` asks whether the key is there. It emits as
+            # `d.getOrDefault(k)`, and comparing that to nil is not legal
+            # Nim for a string-valued table -- `usage of '==' is an
+            # {.error.}` since Nim 2.0. Ask the table instead. (A table
+            # whose values are themselves Option[T] takes the isNone branch
+            # above and never reaches this.)
+            if right == "nil" and nim_op in ("isnot", "is", "==", "!="):
+                import re as _re_god
+                _god = _re_god.match(r"^(.+)\.getOrDefault\((.+)\)$", chain.strip())
+                if _god:
+                    ParserState.nim_imports.add("tables")
+                    _has = f"{_god.group(1)}.hasKey({_god.group(2)})"
+                    chain = _has if nim_op in ("isnot", "!=") else f"not {_has}"
+                    continue
+
             # For nil checks on ref types, use == / != instead of is / isnot
             if right == "nil" and nim_op in ("is", "isnot"):
                 nim_op = "==" if nim_op == "is" else "!="
