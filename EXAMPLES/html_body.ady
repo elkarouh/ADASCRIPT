@@ -72,19 +72,30 @@ class HtmlBody(AwkBase):
         which is then not printed, leaving the fragment with no id at all.
         Here the states that drop a record do not rewrite it, so that
         cannot happen.
+
+        Each handler is also handed the state it moves to, which makes this
+        the transition table: the arrows are here, in one place, rather
+        than spread over the methods that take them. Two are not, because
+        they are the same wherever they happen: </body> ends the page, and
+        placing the id ends BODY.
         """
         case self.state:
-            when HEAD:          self._head()
+            when HEAD:          self._head(BODY)
             when BODY:          self._body(FOOTER)
             when BODY_TAGGED:   self._body(FOOTER_TAGGED)
             when FOOTER:        self._footer(BODY)
             when FOOTER_TAGGED: self._footer(BODY_TAGGED)
             when DONE:          pass      # awk's `exit`, spelled as a state
 
-    def _head(self) -> None:
-        """Before the body: preamble, dropped, and the <body> tag with it."""
+    def _head(self, body: Scan_State_T) -> None:
+        """Before the body: preamble, dropped, and the <body> tag with it.
+
+        There is only one state to go to, and it is still the dispatch that
+        says so: every handler is handed the state it moves to, so the case
+        above is the transition table and not merely a jump table.
+        """
         case self.line:
-            when /<body[^>]*>/: self.state = BODY
+            when /<body[^>]*>/: self.state = body
             when others:        pass
 
     def _body(self, footer: Scan_State_T) -> None:

@@ -1083,7 +1083,7 @@ type Scan_State_T is enum HEAD, BODY, BODY_TAGGED, FOOTER, FOOTER_TAGGED, DONE
 ```python
     def process_record(self):
         case self.state:
-            when HEAD:          self._head()
+            when HEAD:          self._head(BODY)
             when BODY:          self._body(FOOTER)
             when BODY_TAGGED:   self._body(FOOTER_TAGGED)
             when FOOTER:        self._footer(BODY)
@@ -1106,12 +1106,16 @@ that turns out to be the better answer. `exit` says *stop*; `DONE` says
 *why*, and it is a member of the same type as the other five, so the
 compiler counts it when it checks that the `case` is complete.
 
-Each state is a `case` over the record, with the regexes that matter in that
-state and no others — but notice that the six states need only four
-handlers. The states come in pairs that differ by one constant: which footer
-state the body goes to, which body state the footer comes back to. The
-dispatch is where that is already known, so it says so, and passes it. One
-footer and one body, not two copies of each:
+Every handler is handed the state it moves to, which makes that `case` the
+transition table: the arrows are in one place, where they can be read
+together, rather than spread across the methods that take them. Only two are
+not there, because they are the same wherever they happen — `</body>` ends
+the page, and placing the id ends `BODY`.
+
+Handing the destination in also means the six states need only three
+handlers. They come in pairs that differ by exactly one constant: which
+footer state the body goes to, which body state the footer comes back to.
+One footer and one body, not two copies of each:
 
 <!-- from: EXAMPLES/html_body.ady -->
 ```python
