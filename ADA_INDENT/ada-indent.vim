@@ -1,7 +1,6 @@
 " ada-indent.vim --- Ada indentation via the external ada_indent program
 "
-" This is the Vim/Neovim counterpart of ada-indent.el.  It wires the same
-" `ada_indent' binary into Vim's indentation machinery so that Ada buffers are
+" wires the ada_indent binary into Vim's indentation machinery so that Ada buffers are
 " indented by ada_indent rather than by Vim's built-in heuristics.
 "
 " Installation:
@@ -10,7 +9,7 @@
 "       ~/.config/nvim/plugin/ada-indent.vim  (Neovim)
 "   or :source it from your vimrc / init.vim.
 "
-" What you get (parity with ada-indent.el):
+" What you get:
 "   TAB / ==            reindent the current line (Vim's 'indentexpr').
 "   =  (operator)       reindent a motion/visual selection, e.g.
 "                         gg=G   whole buffer
@@ -21,12 +20,6 @@
 "     dedent keyword      (end, else, when, ...) snaps left automatically,
 "                         via 'indentkeys' — no extra keypress needed.
 "   :AdaIndentBuffer    reindent the whole buffer (convenience for gg=G).
-"
-" Aggressive indent (optional, off by default):
-"   Set  let g:ada_indent_aggressive = 1  before a buffer is opened, or run
-"   :AdaIndentToggleAggressive in a buffer, to reindent the current line after
-"   every change (continuous indent-as-you-type), mirroring aggressive-indent
-"   in the Emacs integration.
 "
 " Prerequisites:
 "   The `ada_indent' binary must be on $PATH (compile it from ada_indent.ady
@@ -50,11 +43,6 @@ let g:loaded_ada_indent = 1
 if !exists('g:ada_indent_program')
   " Name or full path of the ada_indent binary.
   let g:ada_indent_program = 'ada_indent'
-endif
-
-if !exists('g:ada_indent_aggressive')
-  " When 1, reindent the current line after every change (see header).
-  let g:ada_indent_aggressive = 0
 endif
 
 " ---------------------------------------------------------------------------
@@ -159,57 +147,6 @@ function! s:IndentBuffer() abort
 endfunction
 
 " ---------------------------------------------------------------------------
-" Aggressive indent (optional): reindent the current line after every change
-" ---------------------------------------------------------------------------
-
-function! s:ReindentCurrentLine() abort
-  let l:line = getline('.')
-  if l:line =~# '^\s*$'
-    return
-  endif
-  let l:want = s:RunIndent(line('.'))
-  if l:want < 0
-    return
-  endif
-  let l:have = indent('.')
-  " Idempotent: bail when already correct.  This guard also stops the setline()
-  " below from re-triggering us into an infinite TextChanged loop.
-  if l:want == l:have
-    return
-  endif
-  let l:col = col('.')
-  let l:body = substitute(l:line, '^\s*', '', '')
-  call setline('.', repeat(' ', l:want) . l:body)
-  " Keep the cursor over the same character it was on.
-  call cursor(line('.'), l:col + (l:want - l:have))
-endfunction
-
-function! s:AggressiveEnable() abort
-  augroup ada_indent_aggressive_buf
-    autocmd! * <buffer>
-    autocmd TextChanged,TextChangedI <buffer> call s:ReindentCurrentLine()
-  augroup END
-  let b:ada_indent_aggressive_on = 1
-endfunction
-
-function! s:AggressiveDisable() abort
-  augroup ada_indent_aggressive_buf
-    autocmd! * <buffer>
-  augroup END
-  let b:ada_indent_aggressive_on = 0
-endfunction
-
-function! s:ToggleAggressive() abort
-  if get(b:, 'ada_indent_aggressive_on', 0)
-    call s:AggressiveDisable()
-    echo 'ada-indent: aggressive mode off'
-  else
-    call s:AggressiveEnable()
-    echo 'ada-indent: aggressive mode on'
-  endif
-endfunction
-
-" ---------------------------------------------------------------------------
 " Per-buffer setup, hung off the Ada FileType event
 " ---------------------------------------------------------------------------
 
@@ -233,12 +170,7 @@ function! s:Setup() abort
     autocmd TextChanged,TextChangedI <buffer> call s:Invalidate()
   augroup END
 
-  command! -buffer AdaIndentBuffer          call s:IndentBuffer()
-  command! -buffer AdaIndentToggleAggressive call s:ToggleAggressive()
-
-  if g:ada_indent_aggressive
-    call s:AggressiveEnable()
-  endif
+  command! -buffer AdaIndentBuffer call s:IndentBuffer()
 endfunction
 
 augroup ada_indent
