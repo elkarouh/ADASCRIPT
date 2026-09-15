@@ -284,22 +284,20 @@ whatever spelling keeps the sed flavour -- would make the copy unnecessary
 and leave the statement form for the in-place case. Needs a `sub` on `str`
 in both emitters.
 
-## rsync_time_machine.ady does not compile on the Nim backend
+## Nim-backend bugs the rsync_time_machine rewrite had to work around
 
-It is not in `make test` -- the only example of its size that is not -- so it
-rotted unnoticed. Five of the bugs behind it are now fixed in the transpiler
-(see git log: sorted(reverse=), the quote-blind argument splitter, keyword
-arguments to Option parameters, log/ln, pyimport placement). Two remain:
+The file compiles and runs on both backends now, but four of the reasons it
+is written the way it is are transpiler bugs rather than taste:
 
-- `pyos.path.join(a, b)` is method-ified into `a, b.join(pyos.path)`. The
-  `sep.join(list)` rewrite fires on any `.join(` with a module-qualified
-  receiver and two arguments.
-- After that, unknown -- the compile stops there.
-
-`EXAMPLES/rsync_time_machine_oo.ady` is the same program rewritten around
-`Path` and native argv, and it does compile and run on both backends -- so
-the remaining bug is in what the original does, not in the transpiler's
-handling of the job.
+- narrowing does not cross an `and`: `if x is not None and x.field:` still
+  reads the field off the Option. Nested `if`s work. (A ternary narrows
+  correctly now, and so does an `if` guard.)
+- a `?T` ternary with `None` on one side emits a bare `nil` rather than
+  `none(T)`, so `let x: ?T = v if c else None` does not compile.
+- `d.get(k) is None` becomes `getOrDefault(k) == nil`, which Nim rejects for
+  string values. `if k not in d:` is the way to ask.
+- a method chained onto a call whose last argument is Optional attaches to
+  the argument: see the next entry.
 
 ## A method chained onto a call whose last argument is Optional
 

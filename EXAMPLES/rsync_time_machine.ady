@@ -2,14 +2,38 @@
 #ady2nim-args c -d:release
 """rsync-time-machine.ady: Time Machine-style backups using rsync.
 Adascript translation of rsync-time-machine.py by basnijholt (Apache-2.0).
+
+Not a line-for-line port: where the Python original reaches for a library,
+this reaches for the language.
+  - `Path` instead of `str` for anything that's actually a filesystem path
+    (a database name, an rsync flag, or a PID-as-text is not a path, and
+    stays `str` -- see the comment on each such field for why).
+  - Native `{!path}` shell quoting and file-test operators (`-e`) for the
+    purely-local case, instead of always hand-building a quoted command
+    string and shelling out even for a stat() the runtime can do directly.
+  - `$HOME` / `$PWD` read natively where a default or a relative path
+    needs resolving, instead of embedding literal "$HOME" text and
+    expanding it later with Python's os.path (imported as pyos).
+  - Command-line parsing via Adascript's native `$@`/`$#`/`$0`, not
+    Python's argparse (which pulls in sys.argv, and with it a chunk of
+    pyimport machinery this script otherwise doesn't need).
 """
 
-# aliased: the Nim backend imports std/os for Path support, so a plain
-# `pyimport os` is a redefinition of 'os' there.
 pyimport os as pyos
+# aliased -- the Nim backend always imports std/os for Path support, so a
+# plain `pyimport os` collides with that and fails with "redefinition of 'os'"
 pyimport sys
 pyimport time
 pyimport signal
+pyimport datetime
+# All pyimports live at module level, not inside the functions that use
+# them (now_str, expire_backups). The Nim backend places its sys.argv-init
+# boilerplate right after whichever `pyImport(...)` line is textually last
+# in the file, without checking whether that line sits inside a function
+# body -- a function-local pyimport later in the file than this one
+# confuses that placement and produces invalid indentation. (Argument
+# parsing itself no longer touches sys.argv at all -- see main() below,
+# which uses Adascript's own $@/$#/$0 instead of argparse.)
 nimport strutils, osproc, posix, times
 
 # ---------------------------------------------------------------------------
@@ -24,21 +48,26 @@ var VERBOSE: bool = False
 # ---------------------------------------------------------------------------
 
 type SSH is tuple:
-    src_folder_prefix: str
-    dest_folder_prefix: str
-    cmd:               str
-    src_folder:        str
-    dest_folder:       str
-    port:              str
-    id_rsa:            ?str
+    src_folder_prefix:  str    # "" or "user@host:" -- text glued in front of a path, not a path itself
+    dest_folder_prefix: str    # same, for the destination
+    cmd:                str    # the `ssh ...` invocation used to run a command on the remote host
+    src_folder:         Path   # the real path on whichever side is remote (or unchanged, if src is local)
+    dest_folder:        Path   # likewise for the destination
+    port:               str    # SSH port, as text -- goes straight into a command line, not a path
+    id_rsa:             ?Path  # private key file -- always a *local* file read by the local ssh client
 
 type CmdResult is tuple:
-    stdout:     str
+    stdout:     str    # arbitrary command output -- sometimes path-shaped text, often not; stays str
     stderr:     str
     returncode: int
 
+type ResolvedPaths is tuple:
+    src:  Path   # source path, with any "user@host:" prefix stripped off
+    dest: Path   # destination path, likewise
+    ssh:  ?SSH   # set when either side turned out to be remote
+
 type LogLevel_T is enum INFO, WARNING, ERROR
-type Color_T    is enum green, magenta, yellow, red, orange
+type Color_T    is enum green, magenta, yellow, red, orange, no_color
 
 # ---------------------------------------------------------------------------
 # ANSI styling
@@ -50,10 +79,13 @@ var ANSI: [Color_T]str = [
     yellow:  "\x1b[93m",
     red:     "\x1b[91m",
     orange:  "\x1b[33m",
+    no_color:   "",          # style()'s default -- avoids indexing ANSI with
+                           # an Optional, which isn't supported the way
+                           # `.field` access on a `?T` is
 ]
 
-def style(text: str, color: ?Color_T = None, bold: bool = False) -> str:
-    let color_code: str = ANSI[color] if color is not None else ""
+def style(text: str, color: Color_T = no_color, bold: bool = False) -> str:
+    let color_code: str = ANSI[color]
     let bold_code:  str = "\x1b[1m" if bold else ""
     return bold_code + color_code + text + "\x1b[0m"
 
@@ -71,6 +103,13 @@ def log(message: str, level: LogLevel_T = INFO) -> None:
         when INFO:
             print f"{prefix}: {message}"
 
+def handle_sigint(sig_num: int, frame: int) -> None:
+    # a named function rather than a lambda: an untyped `lambda n, f: ...`
+    # doesn't transpile to a valid standalone Nim proc (its parameters
+    # need concrete types, not `auto`, outside of an inference context)
+    log("SIGINT caught.", INFO)
+    sys.exit(1)
+
 def log_cmd(message: str, level: LogLevel_T = INFO, ssh: ?SSH = None) -> None:
     if ssh is not None:
         log(f"{ssh.cmd} '{message}'", level)
@@ -79,10 +118,22 @@ def log_cmd(message: str, level: LogLevel_T = INFO, ssh: ?SSH = None) -> None:
 
 # ---------------------------------------------------------------------------
 # Shell helpers — Adascript shell: integration
+#
+# Every primitive below branches on `ssh is None`. Locally, it uses
+# Adascript's own shell:/file-test syntax directly -- `{!path}` quotes the
+# path itself (no hand-rolled '...' wrapping to get wrong), and a couple of
+# operations (existence, absolute-path resolution) skip the subprocess
+# entirely and go through the runtime's own filesystem calls. Remotely, the
+# whole command still has to be handed to `ssh` as one opaque string, so
+# that path keeps building it with run_cmd() as before -- there's no way to
+# quote pieces of a command that's about to be re-parsed by a shell on the
+# other end of an SSH connection from inside our own shell: block.
 # ---------------------------------------------------------------------------
 
 def run_cmd(cmd: str, ssh: ?SSH = None) -> CmdResult:
-    let full_cmd: str = f"{ssh.cmd} '{cmd}'" if ssh is not None else cmd
+    var full_cmd: str = cmd
+    if ssh is not None:
+        full_cmd = f"{ssh.cmd} '{cmd}'"
     if VERBOSE:
         let target: str = "remote" if ssh is not None else "local"
         log(f"Running {target} command: {style(full_cmd, green, bold=True)}", INFO)
@@ -91,32 +142,60 @@ def run_cmd(cmd: str, ssh: ?SSH = None) -> CmdResult:
         log(f"Command exit code: {style(str(r.code), red, bold=True)}", ERROR)
     return (stdout: r.output, stderr: r.stderr, returncode: r.code)
 
-def find_cmd(path: str, ssh: ?SSH = None, maxdepth: ?int = None) -> str:
+def find_cmd(path: Path, ssh: ?SSH = None, maxdepth: ?int = None) -> str:
+    if ssh is None:
+        if maxdepth is not None:
+            let r = shell: find {!path} -maxdepth {maxdepth}
+            return r.output
+        let r = shell: find {!path}
+        return r.output
     var cmd: str = f"find '{path}'"
     if maxdepth is not None:
         cmd = cmd + f" -maxdepth {maxdepth}"
     return run_cmd(cmd, ssh).stdout
 
-def get_absolute_path(path: str, ssh: ?SSH = None) -> str:
-    return run_cmd(f"cd '{path}' && pwd", ssh).stdout
+def get_absolute_path(path: Path, ssh: ?SSH = None) -> Path:
+    if ssh is None:
+        return path.resolve()   # native resolve -- absolute, symlinks expanded, no subprocess
+    return Path(run_cmd(f"cd '{path}' && pwd", ssh).stdout)
 
-def mkdir_p(path: str, ssh: ?SSH = None) -> None:
+def mkdir_p(path: Path, ssh: ?SSH = None) -> None:
+    if ssh is None:
+        shell: mkdir -p -- {!path}
+        return
     run_cmd(f"mkdir -p -- '{path}'", ssh)
 
-def rm_file(path: str, ssh: ?SSH = None) -> None:
+def rm_file(path: Path, ssh: ?SSH = None) -> None:
+    if ssh is None:
+        shell: rm -f -- {!path}
+        return
     run_cmd(f"rm -f -- '{path}'", ssh)
 
-def rm_dir(path: str, ssh: ?SSH = None) -> None:
+def rm_dir(path: Path, ssh: ?SSH = None) -> None:
+    if ssh is None:
+        shell: rm -rf -- {!path}
+        return
     run_cmd(f"rm -rf -- '{path}'", ssh)
 
-def ln_s(src: str, dest: str, ssh: ?SSH = None) -> None:
+def ln_s(src: Path, dest: Path, ssh: ?SSH = None) -> None:
+    if ssh is None:
+        shell: ln -s -- {!src} {!dest}
+        return
     run_cmd(f"ln -s -- '{src}' '{dest}'", ssh)
 
-def test_file_exists(path: str, ssh: ?SSH = None) -> bool:
+def test_file_exists(path: Path, ssh: ?SSH = None) -> bool:
+    if ssh is None:
+        return -e path        # native file-test operator, no `test` subprocess needed
     return run_cmd(f"test -e '{path}'", ssh).returncode == 0
 
-def get_filesystem_type(path: str, ssh: ?SSH = None) -> str:
-    let lines: []str = run_cmd(f"df -T '{path}'", ssh).stdout.split("\n")
+def get_filesystem_type(path: Path, ssh: ?SSH = None) -> str:
+    var lines: []str
+    if ssh is None:
+        let r = shell: df -T {!path}
+        lines = r.output.split("\n")
+    else:
+        let r: CmdResult = run_cmd(f"df -T '{path}'", ssh)
+        lines = r.stdout.split("\n")
     if len(lines) > 1:
         return lines[1].split()[1]
     return ""
@@ -126,42 +205,69 @@ def get_filesystem_type(path: str, ssh: ?SSH = None) -> str:
 # ---------------------------------------------------------------------------
 
 def dest_is_ssh(ssh: ?SSH) -> ?SSH:
-    if ssh is not None and ssh.dest_folder_prefix != "":
-        return ssh
+    if ssh is not None:
+        if ssh.dest_folder_prefix != "":
+            return ssh
     return None
 
 def parse_ssh_pattern(folder: str, allow_host_only: bool = False) -> ?{str}str:
+    # `folder` is raw CLI text here -- it might be "user@host:/path" (not a
+    # real local path at all) or a plain path, so it has to stay `str`
+    # until this regex has had a chance to tell the two apart.
     if folder == /^(?:(?P<user>[a-z0-9\._\-]+)@)?(?P<host>[A-Za-z0-9.\-]+):(?P<path>.+)$/:
-        let result: {str}str = namedCaptures
-        if not allow_host_only and result.get("user") is None:
+        let match_result: {str}str = namedCaptures
+        if not allow_host_only and "user" not in match_result:
             return None
-        return result
+        return match_result
     return None
 
 def parse_ssh(
     src_folder: str,
     dest_folder: str,
     ssh_port: str,
-    id_rsa: ?str,
+    id_rsa: ?Path,
     allow_host_only: bool,
 ) -> ?SSH:
-    let ssh_src:  ?{str}str = parse_ssh_pattern(src_folder,  allow_host_only=allow_host_only)
-    let ssh_dest: ?{str}str = parse_ssh_pattern(dest_folder, allow_host_only=allow_host_only)
+    let ssh_src:  ?{str}str = parse_ssh_pattern(src_folder,  allow_host_only)
+    let ssh_dest: ?{str}str = parse_ssh_pattern(dest_folder, allow_host_only)
 
     if ssh_src is None and ssh_dest is None:
         return None
 
-    let ssh: {str}str = ssh_src if ssh_src is not None else ssh_dest
+    # if-blocks rather than `x if x is not None else y` ternaries throughout
+    # this function: the transpiler reliably narrows/unwraps an Optional
+    # inside `if x is not None:` (per the docs' own worked example), but not
+    # consistently when a field/index access on the Optional sits inside a
+    # ternary expression instead.
+    var ssh: {str}str = {:}
+    if ssh_src is not None:
+        ssh = ssh_src
+    else:
+        if ssh_dest is not None:
+            ssh = ssh_dest
+
     let ssh_user: str = ssh.get("user", "")
     let ssh_host: str = ssh["host"]
-    let auth: str     = f"{ssh_user}@{ssh_host}" if ssh_user else ssh_host
-    let id_rsa_opt: str = f"-i {id_rsa} " if id_rsa is not None else ""
-    let ssh_cmd: str  = f"ssh -p {ssh_port} {id_rsa_opt}{auth}"
+    let auth: str = f"{ssh_user}@{ssh_host}" if ssh_user else ssh_host
 
-    let src_prefix:  str = f"{auth}:" if ssh_src  is not None else ""
-    let dest_prefix: str = f"{auth}:" if ssh_dest is not None else ""
-    let real_src:    str = ssh_src["path"]  if ssh_src  is not None else src_folder
-    let real_dest:   str = ssh_dest["path"] if ssh_dest is not None else dest_folder
+    var id_rsa_opt: str = ""
+    if id_rsa is not None:
+        id_rsa_opt = f"-i {id_rsa} "
+    let ssh_cmd: str = f"ssh -p {ssh_port} {id_rsa_opt}{auth}"
+
+    # the regex capture is plain `str`; this is the one place it becomes a
+    # real Path, once we know it's a genuine filesystem path and not
+    # "user@host:..." syntax
+    var src_prefix:  str  = ""
+    var dest_prefix: str  = ""
+    var real_src:    Path = Path(src_folder)
+    var real_dest:   Path = Path(dest_folder)
+    if ssh_src is not None:
+        src_prefix = f"{auth}:"
+        real_src = Path(ssh_src["path"])
+    if ssh_dest is not None:
+        dest_prefix = f"{auth}:"
+        real_dest = Path(ssh_dest["path"])
 
     return (
         src_folder_prefix:  src_prefix,
@@ -178,24 +284,31 @@ def parse_ssh(
 # ---------------------------------------------------------------------------
 
 def parse_date_to_epoch(date_str: str) -> int:
-    let fmt: str = "%Y-%m-%d-%H%M%S"
-    let dt: time.struct_time = time.strptime(date_str, fmt)
-    return int(time.mktime(dt))
+    let date_fmt: str = "%Y-%m-%d-%H%M%S"
+    let dt = time.strptime(date_str, date_fmt)
+    # mktime() and timestamp() both hand back a Python float, and a float
+    # PyObject converted straight to `int` raises at runtime ("Cannot
+    # convert python object to int"). Land it in a float first.
+    let epoch_f: float = time.mktime(dt)
+    let epoch: int = int(epoch_f)
+    return epoch
 
 def now_str() -> str:
-    pyimport datetime
-    let _now: datetime.datetime = datetime.datetime.now()
-    return _now.strftime("%Y-%m-%d-%H%M%S")
+    # a backup's directory *name* (e.g. "2026-09-13-153000") -- not a path
+    # until it's joined onto dest_folder, so this stays str
+    let _now = datetime.datetime.now()
+    let formatted: str = _now.strftime("%Y-%m-%d-%H%M%S")
+    return formatted
 
 # ---------------------------------------------------------------------------
 # Backup marker
 # ---------------------------------------------------------------------------
 
-def backup_marker_path(folder: str) -> str:
-    return pyos.path.join(folder, "backup.marker")
+def backup_marker_path(folder: Path) -> Path:
+    return folder / "backup.marker"
 
-def find_backup_marker(folder: str, ssh: ?SSH = None) -> ?str:
-    let marker: str = backup_marker_path(folder)
+def find_backup_marker(folder: Path, ssh: ?SSH = None) -> ?Path:
+    let marker: Path = backup_marker_path(folder)
     let output: str = find_cmd(marker, dest_is_ssh(ssh))
     if output:
         return marker
@@ -205,16 +318,27 @@ def find_backup_marker(folder: str, ssh: ?SSH = None) -> ?str:
 # Backup enumeration
 # ---------------------------------------------------------------------------
 
-def find_backups(dest_folder: str, ssh: ?SSH = None) -> []str:
+def find_backups(dest_folder: Path, ssh: ?SSH = None) -> []Path:
     let cmd: str = f"find '{dest_folder}/' -maxdepth 1 -type d -name '????-??-??-??????' -prune | sort -r"
-    return run_cmd(cmd, dest_is_ssh(ssh)).stdout.splitlines()
+    let r: CmdResult = run_cmd(cmd, dest_is_ssh(ssh))
+    let raw_lines: []str = r.stdout.splitlines()
+    var backups: []Path = []
+    for line in raw_lines:
+        # Nim's splitLines("") yields @[""] (one blank entry), unlike
+        # Python's "".splitlines() which yields [] -- without this guard,
+        # an empty destination silently produced one bogus empty-Path
+        # "backup" on the Nim backend, which then cascaded into treating
+        # it as a real (if unparseable) previous backup.
+        if line:
+            backups.append(Path(line))
+    return backups
 
 # ---------------------------------------------------------------------------
 # Backup expiration
 # ---------------------------------------------------------------------------
 
-def expire_backup(backup_path: str, ssh: ?SSH) -> None:
-    let parent_dir: str = pyos.path.dirname(backup_path)
+def expire_backup(backup_path: Path, ssh: ?SSH) -> None:
+    let parent_dir: Path = backup_path.parent
     if find_backup_marker(parent_dir, ssh) is None:
         log(f"{backup_path} is not on a backup destination - aborting.", ERROR)
         sys.exit(1)
@@ -222,31 +346,47 @@ def expire_backup(backup_path: str, ssh: ?SSH) -> None:
     rm_dir(backup_path, ssh)
 
 def expire_backups(
-    dest_folder:         str,
+    dest_folder:         Path,
     expiration_strategy: str,
-    backup_to_keep:      str,
+    backup_to_keep:      Path,
     ssh:                 ?SSH,
 ) -> None:
-    pyimport datetime
-    let _now: datetime.datetime = datetime.datetime.now()
-    let current_timestamp: int = int(_now.timestamp())
+    let _now = datetime.datetime.now()
+    let ts_f: float = _now.timestamp()          # a float, see parse_date_to_epoch
+    let current_timestamp: int = int(ts_f)
     var last_kept_timestamp: int = 9999999999
-    let backups: []str = find_backups(dest_folder, ssh)
-    let oldest_backup_to_keep: ?str = sorted(backups)[0] if backups else None
+    let backups: []Path = find_backups(dest_folder, ssh)
+    var oldest_backup_to_keep: ?Path = None
+    if backups:
+        oldest_backup_to_keep = sorted(backups)[0]
 
     for backup_dir in sorted(backups):
-        let backup_date: str = pyos.path.basename(backup_dir)
+        let backup_date: str = backup_dir.name
         let backup_timestamp: int = parse_date_to_epoch(backup_date)
 
         if backup_dir == backup_to_keep:
             break
 
-        if backup_dir == oldest_backup_to_keep:
+        var is_oldest: bool = False
+        if oldest_backup_to_keep is not None:
+            if backup_dir == oldest_backup_to_keep:
+                is_oldest = True
+        if is_oldest:
             last_kept_timestamp = backup_timestamp
             continue
 
-        for strategy_token in sorted(expiration_strategy.split(), reverse=True):
-            let t: []int = list(map(int, strategy_token.split(":")))
+        # Hoisted out of the for-loop header for readability only.
+        # `sorted(..., reverse=True)` used to mis-transpile on the Nim
+        # backend, which is why an earlier draft of this file spelled it
+        # `list(reversed(sorted(...)))`; that is fixed, so this says what
+        # it means.
+        let strategy_tokens: []str = sorted(expiration_strategy.split(), reverse=True)
+        for strategy_token in strategy_tokens:
+            var t: []int = []
+            for piece in strategy_token.split(":"):
+                let piece_str: str = piece
+                let n: int = int(piece_str)
+                t.append(n)
             let cut_off_timestamp: int = current_timestamp - t[0] * 86400
             let cut_off_interval_days: int = t[1]
 
@@ -270,17 +410,11 @@ def expire_backups(
 # Destination checks
 # ---------------------------------------------------------------------------
 
-def check_dest_is_backup_folder(dest_folder: str, ssh: ?SSH) -> None:
+def check_dest_is_backup_folder(dest_folder: Path, ssh: ?SSH) -> None:
     if find_backup_marker(dest_folder, ssh) is None:
-        let marker: str = backup_marker_path(dest_folder)
-        log(style(
-            "Safety check failed - the destination does not appear to be a backup folder or drive (marker file not found).",
-            yellow,
-        ), INFO)
-        log(style(
-            "If it is indeed a backup folder, you may add the marker file by running the following command:",
-            yellow,
-        ), INFO)
+        let marker: Path = backup_marker_path(dest_folder)
+        log(style("Safety check failed - the destination does not appear to be a backup folder or drive (marker file not found).", yellow), INFO)
+        log(style("If it is indeed a backup folder — you may add the marker file by running the following command:", yellow), INFO)
         log_cmd(
             style(f'mkdir -p -- "{dest_folder}" ; touch "{marker}"', green, bold=True),
             INFO,
@@ -292,21 +426,20 @@ def check_dest_is_backup_folder(dest_folder: str, ssh: ?SSH) -> None:
 # rsync helpers
 # ---------------------------------------------------------------------------
 
-def get_link_dest_option(previous_dest: ?str, ssh: ?SSH) -> str:
+def get_link_dest_option(previous_dest: ?Path, ssh: ?SSH) -> str:
     if previous_dest is None:
         log("No previous backup - creating new one.", INFO)
         return ""
-    let abs_prev: str = get_absolute_path(previous_dest, ssh)
-    let full_prev: str = f"{ssh.dest_folder_prefix}{abs_prev}" if ssh is not None else abs_prev
-    log(style(
-        f"Previous backup found - doing incremental backup from {style(full_prev, bold=True)}",
-        yellow,
-    ), INFO)
+    let abs_prev: Path = get_absolute_path(previous_dest, ssh)
+    var full_prev: str = str(abs_prev)
+    if ssh is not None:
+        full_prev = f"{ssh.dest_folder_prefix}{abs_prev}"
+    log(style(f"Previous backup found - doing incremental backup from {style(full_prev, bold=True)}", yellow), INFO)
     return f"--link-dest='{abs_prev}'"
 
 def get_rsync_flags(
-    src_folder:        str,
-    dest_folder:       str,
+    src_folder:        Path,
+    dest_folder:       Path,
     rsync_set_flags:   ?str,
     rsync_append_flags: ?str,
     ssh:               ?SSH,
@@ -331,8 +464,9 @@ def get_rsync_flags(
     if rsync_append_flags is not None:
         rsync_flags = rsync_flags + rsync_append_flags.split()
 
-    if (get_filesystem_type(src_folder, ssh).lower() == "fat" or
-        get_filesystem_type(dest_folder, dest_is_ssh(ssh)).lower() == "fat"):
+    let fs_type_src:  str = get_filesystem_type(src_folder, ssh)
+    let fs_type_dest: str = get_filesystem_type(dest_folder, dest_is_ssh(ssh))
+    if fs_type_src.lower() == "fat" or fs_type_dest.lower() == "fat":
         log("File-system is a version of FAT.", INFO)
         log("Using the --modify-window rsync parameter with value 2.", INFO)
         rsync_flags.append("--modify-window=2")
@@ -346,36 +480,45 @@ def get_rsync_flags(
 # ---------------------------------------------------------------------------
 
 def exit_if_pid_running(running_pid: str, ssh: ?SSH = None) -> None:
+    # running_pid is a PID rendered as text (read back out of a lock file),
+    # not a path -- stays str
+    let platform: str = sys.platform
     var cmd: str = ""
-    if sys.platform == "cygwin":
+    if platform == "cygwin":
         cmd = f"procps -wwfo cmd -p {running_pid} --no-headers | grep '{APPNAME}'"
-        let result: CmdResult = run_cmd(cmd, ssh)
-        if result.returncode == 0:
-            log(f"Previous backup task is still active - aborting (command: {result.stdout}).", ERROR)
+        let cmd_result: CmdResult = run_cmd(cmd, ssh)
+        if cmd_result.returncode == 0:
+            log(f"Previous backup task is still active - aborting (command: {cmd_result.stdout}).", ERROR)
             sys.exit(1)
     else:
-        let ps_flags: str = "-axp" if sys.platform.startswith("netbsd") else "-p"
+        var ps_flags: str = "-p"
+        if platform.startswith("netbsd"):
+            ps_flags = "-axp"
         cmd = f"ps {ps_flags} {running_pid} -o 'command' | grep '{APPNAME}'"
-        if run_cmd(cmd).stdout:
+        let check_result: CmdResult = run_cmd(cmd)
+        if check_result.stdout:
             log("Previous backup task is still active - aborting.", ERROR)
             sys.exit(1)
 
 def handle_still_running_or_failed_or_interrupted_backup(
-    inprogress_file: str,
+    inprogress_file: Path,
     mypid:           int,
-    dest:            str,
-    dest_folder:     str,
-    previous_dest:   ?str,
+    dest:            Path,
+    dest_folder:     Path,
+    previous_dest:   ?Path,
     ssh:             ?SSH,
 ) -> None:
-    if not find_cmd(inprogress_file, ssh):
+    let marker_hit: str = find_cmd(inprogress_file, ssh)
+    if not marker_hit:
         return
 
     let running_pid: str = run_cmd(f"cat {inprogress_file}", ssh).stdout
     exit_if_pid_running(running_pid, ssh)
 
     if previous_dest is not None:
-        let prefix: str = ssh.dest_folder_prefix if ssh is not None else ""
+        var prefix: str = ""
+        if ssh is not None:
+            prefix = ssh.dest_folder_prefix
         log(f"{prefix}{inprogress_file} already exists - the previous backup failed or was interrupted. Backup will resume from there.", INFO)
         run_cmd(f"mv -- {previous_dest} {dest}", ssh)
 
@@ -386,12 +529,14 @@ def handle_still_running_or_failed_or_interrupted_backup(
 # ---------------------------------------------------------------------------
 
 def deal_with_no_space_left(
-    log_file:    str,
-    dest_folder: str,
+    log_file:    Path,
+    dest_folder: Path,
     ssh:         ?SSH,
     auto_expire: bool,
 ) -> bool:
-    let log_data: str = open(log_file, encoding="utf-8", errors="surrogateescape").read()
+    var log_data: str = ""
+    with open(log_file) as f:
+        log_data = f.read()
     let no_space: bool = log_data == /No space left on device \(28\)|Result too large \(34\)/
     if not no_space:
         return False
@@ -401,7 +546,7 @@ def deal_with_no_space_left(
         sys.exit(1)
 
     log("No space left on device - removing oldest backup and resuming.", WARNING)
-    let backups: []str = find_backups(dest_folder, ssh)
+    let backups: []Path = find_backups(dest_folder, ssh)
     if len(backups) <= 1:
         log("No space left on device, and no old backup to delete.", ERROR)
         sys.exit(1)
@@ -409,8 +554,10 @@ def deal_with_no_space_left(
     expire_backup(sorted(backups)[-1], ssh)
     return True
 
-def check_rsync_errors(log_file: str, auto_delete_log: bool) -> None:
-    let log_data: str = open(log_file, encoding="utf-8", errors="surrogateescape").read()
+def check_rsync_errors(log_file: Path, auto_delete_log: bool) -> None:
+    var log_data: str = ""
+    with open(log_file) as f:
+        log_data = f.read()
     if "rsync error:" in log_data:
         log(f"Rsync reported an error. Run this command for more details: grep -E 'rsync:|rsync error:' '{log_file}'", ERROR)
     elif "rsync:" in log_data:
@@ -418,65 +565,75 @@ def check_rsync_errors(log_file: str, auto_delete_log: bool) -> None:
     else:
         log(style("Backup completed without errors.", magenta), INFO)
         if auto_delete_log:
-            pyos.remove(log_file)
+            rm_file(log_file)   # log_file is always local -- reuse the local fast path directly
 
 # ---------------------------------------------------------------------------
 # SSH input validation
 # ---------------------------------------------------------------------------
 
 def handle_ssh(
-    src_folder:    str,
-    dest_folder:   str,
-    ssh_port:      str,
-    id_rsa:        ?str,
-    exclusion_file: str,
+    src_folder:     str,
+    dest_folder:    str,
+    ssh_port:       str,
+    id_rsa:         ?Path,
+    exclusion_file: ?Path,
     allow_host_only: bool,
-) -> (str, str, ?SSH):
+) -> ResolvedPaths:
     var ssh: ?SSH = parse_ssh(
-        src_folder, dest_folder,
-        ssh_port=ssh_port, id_rsa=id_rsa,
-        allow_host_only=allow_host_only,
+        src_folder, dest_folder, ssh_port, id_rsa, allow_host_only,
     )
+    # src/dest stay `str` here -- they may still carry "user@host:" syntax
+    # (or need .rstrip()), neither of which is a real Path
+    var src:  str = src_folder
+    var dest: str = dest_folder
     if ssh is not None:
-        if ssh.dest_folder:
-            dest_folder = ssh.dest_folder
-        if ssh.src_folder:
-            src_folder = ssh.src_folder
+        let ssh_dest_str: str = str(ssh.dest_folder)
+        if ssh_dest_str:
+            dest = ssh_dest_str
+        let ssh_src_str: str = str(ssh.src_folder)
+        if ssh_src_str:
+            src = ssh_src_str
 
-    dest_folder = dest_folder.rstrip("/") if dest_folder != "/" else dest_folder
-    src_folder  = src_folder.rstrip("/")  if src_folder  != "/" else src_folder
+    dest = dest.rstrip("/") if dest != "/" else dest
+    src  = src.rstrip("/")  if src  != "/" else src
 
-    if not src_folder or not dest_folder:
+    if not src or not dest:
         log("Source and destination folder cannot be empty.", ERROR)
         sys.exit(1)
 
-    if ("'" in src_folder or "'" in dest_folder or
-        (bool(exclusion_file) and "'" in exclusion_file)):
+    var has_quote: bool = "'" in src or "'" in dest
+    if exclusion_file is not None:
+        if "'" in str(exclusion_file):
+            has_quote = True
+    if has_quote:
         log("Source and destination directories may not contain single quote characters.", ERROR)
         sys.exit(1)
 
-    return (src_folder, dest_folder, ssh)
+    # now that any "user@host:" prefix is gone, these really are paths
+    let handled: ResolvedPaths = (src: Path(src), dest: Path(dest), ssh: ssh)
+    return handled
 
 # ---------------------------------------------------------------------------
 # Core backup logic
 # ---------------------------------------------------------------------------
 
 def start_backup(
-    src_folder:        str,
-    dest:              str,
-    exclusion_file:    str,
-    inprogress_file:   str,
+    src_folder:        Path,
+    dest:              Path,
+    exclusion_file:    ?Path,
+    inprogress_file:   Path,
     link_dest_option:  str,
     rsync_flags:       []str,
-    log_dir:           str,
+    log_dir:           Path,
     mypid:             int,
     ssh:               ?SSH,
+    id_rsa:            ?Path,
     now:               str,
-) -> str:
-    let log_file: str = pyos.path.join(log_dir, f"{now}.log")
+) -> Path:
+    let log_file: Path = log_dir / f"{now}.log"
 
-    var src:  str = src_folder
-    var dst:  str = dest
+    var src: str = str(src_folder)
+    var dst: str = str(dest)
     if ssh is not None:
         src = f"{ssh.src_folder_prefix}{src_folder}"
         dst = f"{ssh.dest_folder_prefix}{dest}"
@@ -487,13 +644,23 @@ def start_backup(
 
     var cmd: str = "rsync"
     if ssh is not None:
-        let id_rsa_opt: str = f"-i {ssh.id_rsa} " if ssh.id_rsa is not None else ""
+        # id_rsa comes in as its own top-level parameter, not via
+        # ssh.id_rsa -- extracting an Optional field straight out of an
+        # already-unwrapped struct and into another Optional-typed
+        # variable double-wraps it on the Nim backend (ssh.id_rsa is
+        # already ?Path; a `let key: ?Path = ssh.id_rsa` re-wraps it as
+        # Option[Option[Path]]). id_rsa and ssh.id_rsa are always the same
+        # value -- ssh.id_rsa is set from this same parameter in
+        # parse_ssh() -- so passing it straight through sidesteps the bug.
+        var id_rsa_opt: str = ""
+        if id_rsa is not None:
+            id_rsa_opt = f"-i {id_rsa} "
         cmd = f"{cmd} -e 'ssh -p {ssh.port} {id_rsa_opt}-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'"
 
     let flags_str: str = " ".join(rsync_flags)
     cmd = f"{cmd} {flags_str}"
     cmd = f"{cmd} --log-file '{log_file}'"
-    if exclusion_file:
+    if exclusion_file is not None:
         cmd = f"{cmd} --exclude-from '{exclusion_file}'"
     cmd = f"{cmd} {link_dest_option}"
     cmd = f"{cmd} -- '{src}/' '{dst}/'"
@@ -506,30 +673,27 @@ def start_backup(
     return log_file
 
 def backup(
-    src_folder:         str,
-    dest_folder:        str,
-    exclusion_file:     str,
-    log_dir:            str,
-    auto_delete_log:    bool,
+    src_folder:          str,
+    dest_folder:         str,
+    exclusion_file:      ?Path,
+    log_dir:             Path,
+    auto_delete_log:     bool,
     expiration_strategy: str,
-    auto_expire:        bool,
-    port:               str,
-    id_rsa:             ?str,
-    rsync_set_flags:    ?str,
-    rsync_append_flags: ?str,
-    rsync_get_flags:    bool,
-    allow_host_only:    bool,
-    dry_run:            bool,
+    auto_expire:         bool,
+    port:                str,
+    id_rsa:              ?Path,
+    rsync_set_flags:     ?str,
+    rsync_append_flags:  ?str,
+    rsync_get_flags:     bool,
+    allow_host_only:     bool,
+    dry_run:             bool,
 ) -> None:
-    var src:  str
-    var dest_f: str
-    var ssh:  ?SSH
-    (src, dest_f, ssh) = handle_ssh(
-        src_folder, dest_folder,
-        ssh_port=port, id_rsa=id_rsa,
-        exclusion_file=exclusion_file,
-        allow_host_only=allow_host_only,
+    let resolved: ResolvedPaths = handle_ssh(
+        src_folder, dest_folder, port, id_rsa, exclusion_file, allow_host_only,
     )
+    let src:    Path = resolved.src
+    let dest_f: Path = resolved.dest
+    let ssh:    ?SSH = resolved.ssh
 
     if not test_file_exists(src, ssh):
         log(f"Source folder '{src}' does not exist - aborting.", ERROR)
@@ -537,16 +701,22 @@ def backup(
 
     check_dest_is_backup_folder(dest_f, dest_is_ssh(ssh))
 
-    let now:  str = now_str()
-    let dest: str = pyos.path.join(dest_f, now)
-    let sorted_backups: []str = sorted(find_backups(dest_f, ssh), reverse=True)
-    var previous_dest: ?str = sorted_backups[0] if sorted_backups else None
-    let inprogress_file: str = pyos.path.join(dest_f, "backup.inprogress")
+    let now:  str  = now_str()
+    let dest: Path = dest_f / now
+    # Hoisted rather than nested: a method chained onto a call whose last
+    # argument is an Optional gets attached to that argument instead of to
+    # the call's result -- `find_backups(dest_f, some(ssh).sorted(...))`.
+    let all_backups: []Path = find_backups(dest_f, ssh)
+    let sorted_backups: []Path = sorted(all_backups, reverse=True)
+    var previous_dest: ?Path = None
+    if sorted_backups:
+        previous_dest = sorted_backups[0]
+    let inprogress_file: Path = dest_f / "backup.inprogress"
     let mypid: int = pyos.getpid()
 
-    if not pyos.path.exists(log_dir):
+    if not -d log_dir:
         log(f"Creating log folder in '{log_dir}'...", INFO)
-        pyos.makedirs(log_dir)
+        log_dir.mkdir()   # native mkdir -p, log_dir is always local
 
     handle_still_running_or_failed_or_interrupted_backup(
         inprogress_file, mypid, dest, dest_f, previous_dest, ssh,
@@ -567,12 +737,16 @@ def backup(
         log(f"Rsync flags:\n{style(' '.join(rsync_flags), yellow, bold=True)}", INFO)
         sys.exit(0)
 
-    var log_file: str = ""
+    var log_file: Path = Path("")
     for _ in 0 ..< 100:
         let link_dest: str = get_link_dest_option(previous_dest, ssh)
 
-        if not find_cmd(dest, ssh, maxdepth=0):
-            let full_dest: str = style(f"{ssh.cmd if ssh is not None else ''}{dest}", bold=True)
+        let dest_marker: str = find_cmd(dest, ssh, 0)
+        if not dest_marker:
+            var dest_prefix: str = ""
+            if ssh is not None:
+                dest_prefix = ssh.cmd
+            let full_dest: str = style(f"{dest_prefix}{dest}", bold=True)
             log(f"Creating destination {full_dest}", INFO)
             mkdir_p(dest, ssh)
 
@@ -580,10 +754,10 @@ def backup(
 
         log_file = start_backup(
             src, dest, exclusion_file, inprogress_file,
-            link_dest, rsync_flags, log_dir, mypid, ssh, now,
+            link_dest, rsync_flags, log_dir, mypid, ssh, id_rsa, now,
         )
 
-        let retry: bool = deal_with_no_space_left(log_file, dest_f, ssh=ssh, auto_expire=auto_expire)
+        let retry: bool = deal_with_no_space_left(log_file, dest_f, ssh, auto_expire)
         if not retry:
             break
 
@@ -595,73 +769,143 @@ def backup(
         log("Dry run complete - no backup was saved.", INFO)
         return
 
-    rm_file(pyos.path.join(dest_f, "latest"), dest_is_ssh(ssh))
-    ln_s(pyos.path.basename(dest), pyos.path.join(dest_f, "latest"), dest_is_ssh(ssh))
+    rm_file(dest_f / "latest", dest_is_ssh(ssh))
+    ln_s(Path(dest.name), dest_f / "latest", dest_is_ssh(ssh))
     rm_file(inprogress_file, ssh)
 
 # ---------------------------------------------------------------------------
 # Argument parsing and entry point
 # ---------------------------------------------------------------------------
 
+def print_usage() -> None:
+    print(f"Usage: {$0} [options] SRC DEST [EXCLUSION_FILE]")
+    print("")
+    print("  -p, --port PORT              SSH port. Default: 22")
+    print("  -i, --id_rsa KEYFILE         Specify the private ssh key to use.")
+    print("  --rsync-get-flags            Display the default rsync flags used for backup.")
+    print("  --rsync-set-flags FLAGS      Set the rsync flags.")
+    print("  --rsync-append-flags FLAGS   Append rsync flags.")
+    print("  --log-dir DIR                Set the log file directory.")
+    print('  --strategy STRATEGY          Set the expiration strategy. Default: "1:1 30:7 365:30"')
+    print("  --no-auto-expire             Disable automatically deleting backups when out of space.")
+    print("  --allow-host-only            Allow HOST-only pattern (without USER@) for SSH connections.")
+    print("  --dry-run                    Simulate the backup process without making any persistent changes.")
+    print("  --exclude-from FILE          Path to the file containing exclude patterns (alternative to positional arg).")
+    print("  -v, --verbose                Enable verbose output.")
+    print("  -h, --help                   Show this help message and exit.")
+    quit(2)
+
 def main() -> None:
-    pyimport argparse
+    # computed natively via $HOME, rather than embedding the literal text
+    # "$HOME" and relying on pyos.path.expandvars() to expand it at runtime
+    let default_log_dir: Path = Path($HOME) / ".rsync-time-backup"
 
-    let parser: argparse.ArgumentParser = argparse.ArgumentParser(
-        description="A script for creating and managing time-stamped backups using rsync.",
-    )
-    parser.add_argument("-p", "--port", default="22", help="SSH port.")
-    parser.add_argument("-i", "--id_rsa", default=None, help="Specify the private ssh key to use.")
-    parser.add_argument("--rsync-get-flags", action="store_true",
-        help="Display the default rsync flags that are used for backup.")
-    parser.add_argument("--rsync-set-flags",    default=None, help="Set the rsync flags.")
-    parser.add_argument("--rsync-append-flags", default=None, help="Append rsync flags.")
-    parser.add_argument("--log-dir", default="$HOME/.rsync-time-backup",
-        help="Set the log file directory. Default: $HOME/.rsync-time-backup")
-    parser.add_argument("--strategy", default="1:1 30:7 365:30",
-        help='Set the expiration strategy. Default: "1:1 30:7 365:30"')
-    parser.add_argument("--no-auto-expire",  action="store_true",
-        help="Disable automatically deleting backups when out of space.")
-    parser.add_argument("--allow-host-only", action="store_true",
-        help="Allow HOST-only pattern (without USER@) for SSH connections.")
-    parser.add_argument("--dry-run",         action="store_true",
-        help="Simulate the backup process without making any persistent changes.")
-    parser.add_argument("src_folder",  help="Source folder. Format: [USER@HOST:]SOURCE")
-    parser.add_argument("dest_folder", help="Destination folder. Format: [USER@HOST:]DESTINATION")
-    parser.add_argument("exclusion_file", nargs="?", default=None,
-        help="Path to the file containing exclude patterns.")
-    parser.add_argument("--exclude-from", dest="exclude_from", default=None,
-        help="Path to the file containing exclude patterns (alternative to positional arg).")
-    parser.add_argument("-v", "--verbose", action="store_true",
-        help="Enable verbose output.")
+    var port:              str   = "22"
+    var id_rsa:            ?Path = None
+    var rsync_get_flags:   bool  = False
+    var rsync_set_flags:   ?str  = None
+    var rsync_append_flags: ?str = None
+    var log_dir_arg:       str   = str(default_log_dir)
+    var strategy:          str   = "1:1 30:7 365:30"
+    var no_auto_expire:    bool  = False
+    var allow_host_only:   bool  = False
+    var dry_run:           bool  = False
+    var exclude_from:      ?str  = None
+    var verbose:           bool  = False
+    var positionals:       []str = []
 
-    let args: argparse.Namespace = parser.parse_args()
+    # native Adascript argv access ($@ / $#) instead of Python's sys.argv --
+    # a plain if/elif chain rather than case/when, since case/when's
+    # documented patterns are list/tuple matches, not an OR of string
+    # literals for a single arm (e.g. `when "-p", "--port":` would be read
+    # as a 2-tuple pattern, not "either flag spelling").
+    let argv: []str = $@
+    var i: int = 0
+    while i < len(argv):
+        let arg: str = argv[i]
+        if arg == "-p" or arg == "--port":
+            i += 1
+            if i >= len(argv): print_usage()
+            port = argv[i]
+        elif arg == "-i" or arg == "--id_rsa":
+            i += 1
+            if i >= len(argv): print_usage()
+            id_rsa = Path(argv[i])
+        elif arg == "--rsync-get-flags":
+            rsync_get_flags = True
+        elif arg == "--rsync-set-flags":
+            i += 1
+            if i >= len(argv): print_usage()
+            rsync_set_flags = argv[i]
+        elif arg == "--rsync-append-flags":
+            i += 1
+            if i >= len(argv): print_usage()
+            rsync_append_flags = argv[i]
+        elif arg == "--log-dir":
+            i += 1
+            if i >= len(argv): print_usage()
+            log_dir_arg = argv[i]
+        elif arg == "--strategy":
+            i += 1
+            if i >= len(argv): print_usage()
+            strategy = argv[i]
+        elif arg == "--no-auto-expire":
+            no_auto_expire = True
+        elif arg == "--allow-host-only":
+            allow_host_only = True
+        elif arg == "--dry-run":
+            dry_run = True
+        elif arg == "--exclude-from":
+            i += 1
+            if i >= len(argv): print_usage()
+            exclude_from = argv[i]
+        elif arg == "-v" or arg == "--verbose":
+            verbose = True
+        elif arg == "-h" or arg == "--help":
+            print_usage()
+        elif arg.startswith("-") and arg != "-":
+            print(f"Unknown option: {arg}")
+            print_usage()
+        else:
+            positionals.append(arg)
+        i += 1
 
-    if args.exclusion_file and args.exclude_from:
-        parser.error("Both positional `exclusion_file` and `--exclude-from` were provided. Please use only one.")
-    if args.exclude_from:
-        args.exclusion_file = args.exclude_from
+    if len(positionals) < 2:
+        print_usage()
 
-    let log_dir_default: str = "$HOME/.rsync-time-backup"
-    let auto_delete_log: bool = (args.log_dir == log_dir_default)
+    let src_folder:  str = positionals[0]
+    let dest_folder: str = positionals[1]
+    var exclusion_file_arg: ?str = exclude_from
+    if len(positionals) >= 3:
+        if exclude_from is not None:
+            log("Both positional `exclusion_file` and `--exclude-from` were provided. Please use only one.", ERROR)
+            quit(2)
+        exclusion_file_arg = positionals[2]
 
-    VERBOSE = args.verbose
-    signal.signal(signal.SIGINT, lambda n, f: (log("SIGINT caught."), sys.exit(1)), INFO)
+    let auto_delete_log: bool = (log_dir_arg == str(default_log_dir))
+
+    VERBOSE = verbose
+    signal.signal(signal.SIGINT, handle_sigint)
+
+    # A relative --log-dir is resolved against $PWD -- the directory the
+    # script was actually invoked from -- the same way a shell resolves a
+    # relative path, rather than leaving it to whatever the interpreter's
+    # cwd happens to be by the time this runs.
+    let expanded: str = pyos.path.expandvars(pyos.path.expanduser(log_dir_arg))
+    var log_dir: Path = Path(expanded)
+    if not str(log_dir).startswith("/"):
+        log_dir = Path($PWD) / log_dir
+
+    var exclusion_file: ?Path = None
+    if exclusion_file_arg is not None:
+        let raw: Path = Path(exclusion_file_arg)
+        exclusion_file = raw if str(raw).startswith("/") else Path($PWD) / raw
 
     backup(
-        src_folder=args.src_folder,
-        dest_folder=args.dest_folder,
-        exclusion_file=args.exclusion_file or "",
-        log_dir=pyos.path.expandvars(pyos.path.expanduser(args.log_dir)),
-        auto_delete_log=auto_delete_log,
-        expiration_strategy=args.strategy,
-        auto_expire=not args.no_auto_expire,
-        port=args.port,
-        id_rsa=args.id_rsa,
-        rsync_set_flags=args.rsync_set_flags,
-        rsync_append_flags=args.rsync_append_flags,
-        rsync_get_flags=args.rsync_get_flags,
-        allow_host_only=args.allow_host_only,
-        dry_run=args.dry_run,
+        src_folder, dest_folder, exclusion_file, log_dir, auto_delete_log,
+        strategy, not no_auto_expire, port, id_rsa,
+        rsync_set_flags, rsync_append_flags, rsync_get_flags,
+        allow_host_only, dry_run,
     )
 
 main()

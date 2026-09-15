@@ -2584,6 +2584,35 @@ def _wrap_option_args(expr):
     # split into two arguments here, and the second one came back out
     # wrapped in some(), which is a syntax error at the call site and was
     # blamed on multi-line calls for a long time.
+    # `f(a, b).field.method(x)` also ends in `)`, so the greedy match above
+    # can take `f` as the proc and `a, b).field.method(x` as its arguments.
+    # The tell is the bracket depth: a real argument list never closes a
+    # bracket it did not open. Without this the trailing chain was attached
+    # to the last argument -- run_cmd(cmd, some(ssh).stdout) -- which is the
+    # "method-chaining after a call with an Optional last argument" bug.
+    _d = 0
+    _q = ""
+    _esc = False
+    for _ch in args_str:
+        if _q:
+            if _esc:
+                _esc = False
+            elif _ch == "\\":
+                _esc = True
+            elif _ch == _q:
+                _q = ""
+            continue
+        if _ch in "\"'":
+            _q = _ch
+        elif _ch in "([{":
+            _d += 1
+        elif _ch in ")]}":
+            _d -= 1
+            if _d < 0:
+                return expr
+    if _d != 0:
+        return expr
+
     args = []
     depth = 0
     cur = []
@@ -2751,6 +2780,46 @@ def _is_join_receiver(text):
     return False
 
 
+def _top_level_arg_count(args_str):
+    """How many arguments, counting only commas outside brackets and quotes."""
+    n, depth, quote, escaped = 1, 0, "", False
+    for ch in args_str:
+        if quote:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == quote:
+                quote = ""
+        elif ch in "\"'":
+            quote = ch
+        elif ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+        elif ch == "," and depth == 0:
+            n += 1
+    return n
+
+
+def _is_str_join_call(receiver, args_str):
+    """True when `receiver.join(args)` really is Python's `sep.join(seq)`.
+
+    Two things it is not. `os.path.join(a, b)` takes two arguments, and
+    str.join takes exactly one -- that alone settles it, and settles the
+    `pyos.path.join(log_dir, name)` that used to come out as
+    `log_dir, name.join(pyos.path)`. And a receiver rooted at a pyimport
+    alias is a module path rather than a separator, whatever its arity.
+    """
+    if _top_level_arg_count(args_str) != 1:
+        return False
+    root = receiver.strip().split(".")[0]
+    sym = ParserState.symbol_table.lookup(root)
+    if sym and (sym.get("type") or "").startswith(("PyObject", "_sys_native")):
+        return False
+    return True
+
+
 def _translate_stdlib_patterns(expr):
     """Post-process a fully-emitted expression string.
 
@@ -2844,7 +2913,7 @@ def _translate_stdlib_patterns(expr):
 
     # --- 4. 'sep'.join(x) -> x.join("sep") ---
     m = _re.match(r"^(.+)\.join\((.+)\)$", expr)
-    if m and _is_join_receiver(m.group(1)):
+    if m and _is_join_receiver(m.group(1)) and _is_str_join_call(m.group(1), m.group(2)):
         sep, arg = m.group(1), m.group(2)
         ParserState.nim_imports.add("strutils")
         if len(sep) == 3 and sep[0] == "'" and sep[-1] == "'":
@@ -3609,9 +3678,40 @@ def to_nim(self, prec=None):
 def to_nim(self, prec=None):
     """conditional: disjunction 'if' disjunction 'else' expression -> Nim: 'if cond: a else: b'"""
     # Python: value if cond else alt -> Nim: (if cond: value else: alt)
-    value = self.nodes[0].to_nim()
+    #
+    # The condition is emitted first, because it may be what licenses the
+    # branches to read an Optional. `x.field if x is not None else d` is
+    # the ordinary way to spell this, and it used to emit a bare
+    # `x.field` on an Option[T] -- "expression '`.`(x, field)' cannot be
+    # called". An `if x is not None:` *statement* has narrowed the name
+    # since long before this; the ternary simply never told the name
+    # emitter about it, which is all this does.
+    import re as _re_cond
     cond = _nim_truthiness(self.nodes[1].to_nim())
-    alt = self.nodes[2].to_nim()
+    _m_narrow = _re_cond.match(r"^([A-Za-z_]\w*)\.(isSome|isNone)$", cond.strip())
+    _narrowed = _m_narrow.group(1) if _m_narrow else None
+    # isSome narrows the value branch, isNone the else branch -- the branch
+    # reached when the name is known to hold something.
+    _in_value = _narrowed if (_m_narrow and _m_narrow.group(2) == "isSome") else None
+    _in_alt = _narrowed if (_m_narrow and _m_narrow.group(2) == "isNone") else None
+
+    def _emit_narrowed(node, name):
+        if name is None:
+            return node.to_nim()
+        _vars = getattr(ParserState, "_option_unwrap_vars", None)
+        if _vars is None:
+            _vars = set()
+            ParserState._option_unwrap_vars = _vars
+        _added = name not in _vars
+        _vars.add(name)
+        try:
+            return node.to_nim()
+        finally:
+            if _added:
+                _vars.discard(name)
+
+    value = _emit_narrowed(self.nodes[0], _in_value)
+    alt = _emit_narrowed(self.nodes[2], _in_alt)
     result = f"(if {cond}: {value} else: {alt})"
     return result
 

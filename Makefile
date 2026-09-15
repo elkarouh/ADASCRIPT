@@ -119,18 +119,16 @@ ADA_INDENT_TESTS := \
 #   tsp.ady         — matplotlib not installed by default (pyimport)
 #   lv.ady          — requires clv shell utility
 #   lolcate/lolcate.ady — integration test (requires fd + rg)
-#   lolcate/lolcate_oo.ady — the same tool as classes; same requirements
 #
-# rsync_time_machine.ady and rsync_time_machine_oo.ady are in neither list:
-# they pyimport, and compiling a pyimport needs nimpy on the Nim path, which
-# is not something `make test` can assume. Run them by hand -- see
-# DOCS/BOOK/12-two-backends.md on the nimpy bridge.
+# rsync_time_machine.ady is in neither list: it pyimports, and compiling a
+# pyimport needs nimpy on the Nim path, which is not something `make test`
+# can assume. Run it by hand -- see DOCS/BOOK/12-two-backends.md on the
+# nimpy bridge.
 # -----------------------------------------------------------------------
 COMPILE_ONLY := \
     tsp.ady \
     lv.ady \
     lolcate/lolcate.ady \
-    lolcate/lolcate_oo.ady \
     dp/jacks.ady \
     INTERACTIVE/lispy.ady \
     awk_logscan.ady \
