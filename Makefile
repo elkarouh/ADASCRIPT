@@ -275,6 +275,29 @@ test: compile
 	        && ! echo "$$out" | grep -q 'test_ignored' \
 	        && echo "$$out" | grep -q "href=\"$(EXDIR)/test_alpha.html\"" \
 	        && echo OK || { echo FAIL; exit 1; }
+	@# The same checker in awk, kept next to it: same schema, same findings,
+	@# same bytes. Runs after config_check, which is what writes the fixture.
+	@for input in /tmp/ady_config_check/app.conf $(EXDIR)/config_check_other.conf; do \
+	    name=$$(basename $$input .conf); name=$${name#config_check_}; \
+	    printf '  %-42s' "config_check.awk == .ady ($$name)"; \
+	    awk -f $(EXDIR)/config_check.awk $$input > $(TMPDIR)/ady_cfg_awk.out 2>&1; \
+	    $(EXDIR)/config_check $$input > $(TMPDIR)/ady_cfg_ady.out 2>&1; \
+	    cmp -s $(TMPDIR)/ady_cfg_awk.out $(TMPDIR)/ady_cfg_ady.out \
+	        && echo OK || { echo FAIL; \
+	           diff $(TMPDIR)/ady_cfg_awk.out $(TMPDIR)/ady_cfg_ady.out | head -10; \
+	           exit 1; }; \
+	done
+	@# sh_janitor.sh is the shell version of the same janitor, and the check
+	@# is that it is WRONG: `for f in $$(ls)` splits the name with a space in
+	@# it, so two files fall out of the report with no error and exit 0. If
+	@# this ever passes, the claim in DOCS/ADASCRIPT_FOR_SHELL.md is stale.
+	@printf '  %-42s' "sh_janitor.sh loses the spaced name"; \
+	    $(EXDIR)/sh_janitor.sh > $(TMPDIR)/ady_janitor_sh.out 2>&1; \
+	    test $$? -eq 0 \
+	        && grep -q "COMPRESS  2 file(s)" $(TMPDIR)/ady_janitor_sh.out \
+	        && test -f "/tmp/sh_janitor_sh/quiet service.log" \
+	        && test -f "/tmp/sh_janitor_sh/editor backup~" \
+	        && echo OK || { echo FAIL; cat $(TMPDIR)/ady_janitor_sh.out; exit 1; }
 	@# The documents' own snippets, so that what DOCS/*.md quotes is code
 	@# that ran rather than code that was written down. check-quotes below
 	@# is what ties each block to the file it came from.

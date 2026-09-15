@@ -399,6 +399,10 @@ in Bash. It builds its own fixture under `/tmp` so the run is self-contained,
 and **the filenames contain spaces on purpose**: that is the bug the Bash
 version has.
 
+That Bash version is in the repository too, as `EXAMPLES/sh_janitor.sh`, so
+the claim can be run rather than believed. It is not sabotaged: same
+decisions, same fixture, same report, written the way these are written.
+
 The decision is made once, over a closed set of outcomes:
 
 <!-- from: EXAMPLES/sh_janitor.ady -->
@@ -465,9 +469,46 @@ quiet service.log.gz
 tiny.log
 ```
 
-`quiet service.log.gz` is the whole point. The Bash version compressed a file
-called `quiet` and a file called `service.log`, or said `gzip: quiet: No such
-file or directory` and carried on with status 0 because nobody checked.
+`quiet service.log.gz` is the whole point. Here is the Bash version of the
+same run, on its own copy of the same fixture:
+
+```
+$ EXAMPLES/sh_janitor.sh
+--- sh_janitor /tmp/sh_janitor_sh ---
+  COMPRESS  2 file(s),  328 bytes
+  DELETE    1 file(s),   10 bytes
+  KEEP      2 file(s),   23 bytes
+  SKIP      2 file(s),   40 bytes
+  0 failure(s)
+$ echo $?
+0
+```
+
+Two files are missing from the report, and the report does not say so. The
+line responsible is the one everybody writes:
+
+```bash
+for f in $(ls -A "$DIR"); do
+```
+
+`ls` writes one name per line; the shell splits that on whitespace; `quiet
+service.log` becomes `quiet` and `service.log`; neither exists, so `[ -f
+"$path" ] || continue` drops both. The file is never compressed, `editor
+backup~` is never deleted, nine files go in and seven are accounted for, and
+the exit status is 0. Nothing in that output is an error message, which is
+what makes it worth a section: the failure mode of shell quoting is not a
+crash, it is a report that is quietly wrong.
+
+`make test` asserts that this is still what happens — if `sh_janitor.sh`
+ever agrees with `sh_janitor`, this section is stale and the check fails.
+
+The quoting itself is fixable, and it is worth being clear that it is:
+`find "$DIR" -maxdepth 1 -print0 | while IFS= read -r -d '' path` and quotes
+on every expansion after it. What the fix does not touch is everything else
+this section is about — `ACTION` is still a string that nothing checks
+against the four places that test it, `wait` still reports the last job
+rather than each of them, and the totals are still four pairs of variables
+that have to be updated in step by hand.
 
 ---
 
@@ -518,6 +559,7 @@ file or directory` and carried on with status 0 because nobody checked.
 ## 13. Where to go next
 
 - `EXAMPLES/sh_janitor.ady` — the worked example above
+- `EXAMPLES/sh_janitor.sh` — the Bash version of it, to run side by side
 - `EXAMPLES/git1.ady` — a real tool: `cwd`, `env`, `shellExec`, `Path`, file tests
 - `EXAMPLES/CFMU/` — a directory of ksh scripts translated line by line
 - `EXAMPLES/test_shell_block.ady` — every block and join form

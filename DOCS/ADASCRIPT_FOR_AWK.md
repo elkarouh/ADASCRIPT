@@ -730,6 +730,29 @@ type Spec_T (kind: Kind_T) is record:
             must_exist: bool
 ```
 
+The awk is next to it, as `EXAMPLES/config_check.awk`: same schema, same
+findings, same bytes, and `make test` runs `cmp` on the two. Here is its
+schema, which is the whole argument for the variant record:
+
+```awk
+function spec(key, kind, a, b, c) {
+    spec_kind[key] = kind
+    keys[nkeys++] = key
+    if (kind == "FLAG")     spec_default[key] = a          # on_by_default
+    if (kind == "NUMBER")   { spec_lo[key] = a; spec_hi[key] = b }
+    if (kind == "CHOICE")   spec_allowed[key] = a          # a blank-separated list
+    if (kind == "PATHNAME") spec_must_exist[key] = a
+}
+```
+
+One constructor for four shapes, so it takes the union of their fields, and
+what `a` and `b` mean depends on `kind` — which only the comment says.
+Afterwards every setting has every field: `spec_lo["mode"]` exists, is empty,
+and can be read. Nothing stops `check_value` from consulting it and
+reporting that 5 is outside `0 .. 0`. The `describe` function needs a
+`return "???"` at the end for a `kind` that cannot happen, because nothing
+has told awk that there are four of them.
+
 Checking a value is a `case` over the same discriminant, and each branch
 reads only the fields its own shape declares — `s.lo` inside the `CHOICE`
 branch is not a mistake to be careful about; on the Nim backend the field is
@@ -1354,6 +1377,7 @@ keeps checking.
 - `EXAMPLES/awk_example.ady` — the flat form, in full in §10.1, runs on both backends
 - `EXAMPLES/test_awk.ady` — the same program as an `AwkBase` subclass
 - `EXAMPLES/config_check.ady` — the variant-record schema, walked through in §10.2
+- `EXAMPLES/config_check.awk` — the same checker in POSIX awk, to read against it
 - `EXAMPLES/awk_logscan.ady` — the state-machine example, in full in §10.3, all of §1 at once
 - `EXAMPLES/awk_logscan.awk` — the same report in POSIX awk, to read against it
 - `EXAMPLES/html_body.ady` — a real AWK script translated, in full in §10.4: state that decides what to keep
