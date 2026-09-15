@@ -75,8 +75,8 @@ class HtmlBody(AwkBase):
         """
         case self.state:
             when HEAD:          self._head()
-            when BODY:          self._body()
-            when BODY_TAGGED:   self._body_tagged()
+            when BODY:          self._body(FOOTER)
+            when BODY_TAGGED:   self._body(FOOTER_TAGGED)
             when FOOTER:        self._footer(BODY)
             when FOOTER_TAGGED: self._footer(BODY_TAGGED)
             when DONE:          pass      # awk's `exit`, spelled as a state
@@ -87,27 +87,17 @@ class HtmlBody(AwkBase):
             when /<body[^>]*>/: self.state = BODY
             when others:        pass
 
-    def _body(self) -> None:
-        """In the body, before the id has been placed.
+    def _body(self, footer: Scan_State_T) -> None:
+        """The body, in whichever of its two states: the exits are the same.
 
-        The footer test comes first because `<div title="footer">` is a
-        `<div ...>` too, and it is not the one that gets the id.
+        Which footer state this one goes to is the only thing that differs
+        between them, and the dispatch above knows which one it is, so it
+        says so. Whether the id is still owed is not asked here at all --
+        see _emit.
         """
         case self.line:
             when /<\/body>/:             self.state = DONE
-            when /<div title="footer">/: self.state = FOOTER
-            when /(<div[^>]+)>/:
-                self._tag($+1)
-                self.state = BODY_TAGGED
-                self._emit()
-            when others:
-                self._emit()
-
-    def _body_tagged(self) -> None:
-        """In the body, with the id placed: nothing left to look for."""
-        case self.line:
-            when /<\/body>/:             self.state = DONE
-            when /<div title="footer">/: self.state = FOOTER_TAGGED
+            when /<div title="footer">/: self.state = footer
             when others:                 self._emit()
 
     def _footer(self, resume: Scan_State_T) -> None:
@@ -122,21 +112,38 @@ class HtmlBody(AwkBase):
             when /<\/div>/:  self.state = resume
             when others:     pass
 
-    def _tag(self, tag: str) -> None:
-        """Put the page's own name on the open tag `$+1` just matched.
+    def _tag(self) -> None:
+        """Give the first <div> on this record the page's own name.
 
-        `tag` is the tag without its `>`, so the id goes inside the tag it
-        came from, wherever on the line that tag is.
+        `$+1` is the open tag without its `>`, so the id goes inside the
+        tag it came from, wherever on the record that tag is. Having placed
+        it, there is nothing left to look for: BODY_TAGGED.
         """
-        self.line = self.line.replace(tag + ">",
-                                      tag + " id=\"" + self.at.stem + "\">")
+        case self.line:
+            when /(<div[^>]+)>/:
+                let tag: str = $+1
+                self.line = self.line.replace(tag + ">",
+                                              tag + " id=\"" + self.at.stem + "\">")
+                self.state = BODY_TAGGED
+            when others:
+                pass
 
     def _emit(self) -> None:
         """Relative links, made absolute, and the record printed.
 
         The fragment is about to be read from somewhere else, where
         `test_x.html` would follow it.
+
+        The tagging happens here because a record that is printed is the
+        only one that can carry the id -- which is the thing the awk gets
+        wrong. So the one state that still owes an id does its looking
+        where the printing is, and the states that drop a record never get
+        the chance.
         """
+        case self.state:
+            when BODY:   self._tag()
+            when others: pass
+
         self.line = self.line.replace("href=\"test_", "href=\"" + self.at.dir + "/test_")
         self.line = self.line.replace("<img src=\"",  "<img src=\"" + self.at.dir + "/")
         print self.line
