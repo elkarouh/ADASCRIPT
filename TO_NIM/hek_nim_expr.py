@@ -2999,6 +2999,21 @@ def _translate_stdlib_patterns(expr):
         ParserState.nim_imports.add("strutils")
         return f"{obj}.splitWhitespace()"
 
+    # --- 5b'. x.split(None, n) -> x.splitWhitespace(n) ---
+    # The same rule as 5b, with a split limit. By the time an expression
+    # reaches here the call has already been turned round into Nim's
+    # `split(recv, sep, n)` and Python's None has become `nil`, which is what
+    # the patterns below look for: `split(s, nil, n)` does not compile, since
+    # no overload of split takes a nil separator. Nim counts maxsplit the way
+    # Python does -- splits, not parts -- so the limit carries over unchanged.
+    for _pat in (r"^split\((.+),\s*nil\s*,\s*(.+?)\s*\)$",
+                 r"^(.+)\.split\(\s*nil\s*,\s*(.+?)\s*\)$"):
+        _splitn_m = _re.match(_pat, expr, _re.DOTALL)
+        if _splitn_m:
+            obj, limit = _splitn_m.group(1), _splitn_m.group(2)
+            ParserState.nim_imports.add("strutils")
+            return f"{obj}.splitWhitespace({limit})"
+
     # --- 5c. x.isdigit() -> x.allCharsInSet({'0'..'9'}) ---
     # Python str.isdigit() checks all chars are digits; Nim has no direct equivalent
     if expr.endswith(".isdigit()"):

@@ -105,6 +105,29 @@ CFMU_EXAMPLES := \
     CFMU/Tstatus_monitor.ady \
     CFMU/Vcheck_coded_flight.ady
 
+# The rest of CFMU/ drives lftp against a real FTPS server and queries an
+# Oracle-backed configuration, so there is nothing to run here -- but there is
+# something to compile. They were outside every list until now, which is how
+# cfmu_get_file_type.ady came to sit in the repository not compiling at all:
+# nothing ever asked it to. Compile-only is the whole coverage these can have,
+# and it is enough to catch that.
+CFMU_COMPILE_ONLY := \
+    CFMU/cfmu_ftps_get_ft.ady \
+    CFMU/cfmu_ftps_put_formatted.ady \
+    CFMU/cfmu_ftps_recover.ady \
+    CFMU/cfmu_get_file_type.ady \
+    CFMU/cfmu_get_pattern_for_ftps.ady \
+    CFMU/cfmu_list_ftp_server.ady \
+    CFMU/ftps_common.ady \
+    CFMU/ftps_delete.ady \
+    CFMU/ftps_get.ady \
+    CFMU/ftps_invalid_scan.ady \
+    CFMU/ftps_list.ady \
+    CFMU/ftps_mkslinks.ady \
+    CFMU/ftps_mkslinks.locked.ady \
+    CFMU/ftps_put.ady \
+    CFMU/ftps_rename.ady
+
 # -----------------------------------------------------------------------
 # ADA_INDENT unit tests — self-checking runners in ADA_INDENT/ (assert +
 # print "all ... passed"). Transpiled, compiled and run with ady2nim -r.
@@ -142,6 +165,7 @@ ALL_COMPILE := \
     $(STANDALONE) \
     $(STDIN_EXAMPLES) \
     $(CFMU_EXAMPLES) \
+    $(CFMU_COMPILE_ONLY) \
     $(ARG_EXAMPLES) \
     $(EXPECT_EXAMPLES) \
     $(TIMETABLE_EXAMPLES) \

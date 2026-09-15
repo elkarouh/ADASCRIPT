@@ -72,6 +72,15 @@ one-line answer:
 cases where the shell answer is *not* portable — `date -d` is GNU, so
 turning a stamp into an epoch is arithmetic rather than a command.
 
+`pyimport re` is the same mistake in a different register, and the answer is
+not the shell but Chapter 7: matching is an operator and captures are
+variables, so a pattern you can write needs no import. The one case that is
+neither is a pattern that arrives as *data* — a rule read out of a database
+column, say, which a literal has nowhere to put.
+`EXAMPLES/CFMU/cfmu_get_file_type.ady` had exactly that, and the whole of
+its `re` is now three lines around `grep -qE`, fed through `stdin =` so the
+subject never touches the quoting.
+
 With the imports gone the file compiles with no nimpy, no libpython, and
 joins the compile list. That is the rule in one sentence: **if a shell
 script would know how to ask, ask that way.**

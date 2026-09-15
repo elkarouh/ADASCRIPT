@@ -649,6 +649,20 @@ quit(1)                                           # not sys.exit(1)
 let home: Path = Path($HOME)                      # not os.environ
 ```
 
+Never for regexes either: matching is an operator, so `pyimport re` has no
+use at all. A pattern you can write is a literal; a pattern that arrives as
+data — a rule from a config file or a database column — is `grep`'s job,
+since a literal has nowhere to put it:
+
+```adascript
+if name == /^[A-Z]{3}_[0-9]+\.xml$/:              # a pattern you can write
+    print $+0
+
+def matches(text: str, pattern: str) -> bool:     # a pattern you cannot
+  let (_, rc) = shell(stdin = text + "\n"): grep -qE -- {!pattern}
+  return rc == 0
+```
+
 **`nimport`** — imports that appear only in Nim output, stripped from Python:
 ```adascript
 nimport strutils, sequtils, algorithm

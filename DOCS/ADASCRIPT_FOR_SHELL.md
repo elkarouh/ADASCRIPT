@@ -421,6 +421,7 @@ format a timestamp has bought all of that for one line of `date`.
 | `pyimport shutil` → `copy`, `move` | `shell: cp -a {!src} {!dst}` |
 | `pyimport glob` → `glob("*.log")` | `shellLines: ls -1 {!dir}` |
 | `pyimport subprocess` | `shell:`, `run()` — the whole of §1–§7 |
+| `pyimport re` → `re.match(...)` | a regex literal: `s == /pat/`, `$+1`, `s = s/a/b/g` |
 
 Each of these is one line, and the capture forms of §2 are how the answer
 gets back:
@@ -460,6 +461,35 @@ and runs anywhere. `EXAMPLES/rsync_time_machine.ady` has it as
 `days_from_civil`, and dropping its five `pyimport`s for that plus the table
 above is what let it into `make test`: the Nim build no longer needs nimpy
 at all.
+
+### When the pattern is data
+
+`re` is the one row in that table where the replacement is not the shell but
+the language: matching is an operator and captures are variables, so
+`pyimport re` is never the way to match against a pattern you can *write*.
+Chapter 7 of the book has the whole family.
+
+The exception is a pattern you cannot write, because it is not known until
+the program runs -- a rule read out of a configuration file or a database
+column. A regex literal is a literal, so there is nothing to put in it, and
+this is where the reflex to reach for `re` is strongest. The shell has
+matched a string against a pattern handed to it at runtime since v7, and
+`grep`'s exit status is the whole answer:
+
+<!-- from: EXAMPLES/CFMU/cfmu_get_file_type.ady -->
+```python
+def matches(text: str, pattern: str) -> bool:
+  let (_, rc) = shell(stdin = text + "\n"): grep -qE -- {!pattern}
+  return rc == 0
+```
+
+`-E` is POSIX ERE; `-q` answers without printing; `--` keeps a pattern that
+starts with a dash from being read as an option; and feeding the subject
+through `stdin =` rather than the command line keeps it out of the quoting
+entirely. `EXAMPLES/CFMU/cfmu_get_file_type.ady` is the live use -- its
+patterns are rows of an `ftps_cleanup` table -- and dropping its `pyimport
+re` for those three lines is what let it compile at all: it was the last
+file under `EXAMPLES/CFMU/` still asking the Nim build for nimpy.
 
 ### What is left for `pyimport`
 
