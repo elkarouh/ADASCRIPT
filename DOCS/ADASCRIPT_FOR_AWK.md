@@ -17,10 +17,11 @@ that buys them.
 
 Every example quoted here is a real, runnable file under `EXAMPLES/`, and
 `make test` runs it. Most run on **both** backends — `ady2nim` and `ady2py`;
-the one exception is `awk_logscan.ady`, whose `AwkBase` form is Nim-only
-(§2). §10 works through three of them, built up in stages: no state, then
-one record shape or another, then a state machine deciding which shape a
-record even is.
+the exceptions are `awk_logscan.ady` and `html_body.ady`, whose `AwkBase`
+form is Nim-only (§2). §10 works through four of them, built up in stages:
+no state, then one record shape or another, then a state machine deciding
+which shape a record even is, and one deciding whether a record is wanted at
+all.
 
 ---
 
@@ -601,12 +602,13 @@ if have("git"): ...   # is it even installed?
 
 ## 10. Worked examples
 
-The rest of this document is vocabulary. These three files put it to work,
+The rest of this document is vocabulary. These four files put it to work,
 in the order complexity actually arrives in practice: no state, then one
 record shape or another, then a state machine deciding which shape a record
-even is. Each is a complete, runnable program — `make test` runs all three —
-and each is quoted here as it actually stands in `EXAMPLES/`, not as a
-simplified stand-in for it.
+even is, and finally one deciding whether a record is wanted at all. Each is
+a complete, runnable program — `make test` runs all four — and each is quoted
+here as it actually stands in `EXAMPLES/`, not as a simplified stand-in for
+it.
 
 ### 10.1 No state: `awk_example.ady`
 
@@ -1047,6 +1049,145 @@ slowest : 2317 ms  GET /reports/full at 2026-09-11 08:00:04
 carrying the request it belongs to. The second one runs to the end of the
 file, which is why `finish()` has to file it.
 
+### 10.4 State that decides what to keep: `html_body.ady`
+
+`EXAMPLES/html_body.ady` is a translation of a real awk script — one that
+lifts the `<body>` out of an HTML page so it can be included in another one.
+It is the state machine again, turned a quarter turn: in §10.3 the state
+decided *which kind* of record had arrived, here it decides whether the
+record is wanted at all, and what has to be rewritten before it is let
+through.
+
+The point of the file is one line of HTML:
+
+```
+</div>
+```
+
+That record means two entirely different things — the end of the footer that
+is being dropped, or an ordinary line to print — and nothing about it says
+which. Only the state does. The original spells that with three booleans,
+`in_body`, `in_footer` and `div_processed`, tested on the front of every
+pattern; nothing checks that their eight combinations make sense, because in
+awk nothing can.
+
+Four states, and the case over them is the whole dispatch:
+
+<!-- from: EXAMPLES/html_body.ady -->
+```python
+type Scan_State_T is enum HEAD, BODY, FOOTER, DONE
+```
+
+<!-- from: EXAMPLES/html_body.ady -->
+```python
+    def process_record(self):
+        case self.state:
+            when HEAD:   self._head()
+            when BODY:   self._body()
+            when FOOTER: self._footer()
+            when DONE:   pass          # awk's `exit`, spelled as a state
+```
+
+`DONE` is worth a second look. The awk says `exit` when it reaches
+`</body>`, which leaves the program; `AwkBase` has no early exit, so the
+translation needs a state for "everything from here on is not wanted" — and
+that turns out to be the better answer. `exit` says *stop*; `DONE` says
+*why*, and it is a member of the same type as the other three, so the
+compiler counts it when it checks that the `case` is complete.
+
+Each state is a `case` over the record, with the regexes that matter in that
+state and no others:
+
+<!-- from: EXAMPLES/html_body.ady -->
+```python
+    def _body(self) -> None:
+        """Inside the body: rewrite, print, and watch for the two exits."""
+        case self.line:
+            when /<\/body>/:             self.state = DONE
+            when /<div title="footer">/: self.state = FOOTER
+            when others:
+                self._rewrite()
+                print self.line
+
+    def _footer(self) -> None:
+        """Inside the footer: dropped, up to the </div> that closes it."""
+        case self.line:
+            when /<\/body>/: self.state = DONE
+            when /<\/div>/:  self.state = BODY
+            when others:     pass
+```
+
+`</div>` appears exactly once in the program, in the one state where it
+means something. That is the whole argument for naming the state: the awk
+version writes the same test as `/<\/div>/ && in_footer`, and every reader
+after the first has to work out what the `&&` is guarding against.
+
+**Rewriting on the way past.** Two of §1's five points apply here and two do
+not: there is a state machine and there is processing on the fly, but there
+are no lists at the end — the output *is* the stream, one record at a time.
+The first `<div>` gets the page's own name as an id, so the fragment can be
+linked to once it has been pasted somewhere else:
+
+<!-- from: EXAMPLES/html_body.ady -->
+```python
+        if not self.div_done:
+            case self.line:
+                when /(<div[^>]+)>/:
+                    # $+1 is the open tag without its `>`: put the id
+                    # inside the tag it came from, wherever on the line
+                    # that tag is.
+                    let open: str = $+1
+                    self.line = self.line.replace(open + ">",
+                                                  open + " id=\"" + self.at.stem + "\">")
+                    self.div_done = true
+                when others: pass
+```
+
+**The part awk cannot do at all.** The rewriting needs to know where the
+page lives: the directory, to make the links absolute, and the file's name
+without its extension, to use as the id. awk has no way to ask, so the
+original shells out three times — `realpath`, then `dirname`, then
+`basename -s .html`, each through a `cmd | getline` helper. Three processes,
+three chances to get the quoting wrong on a path with a space in it, and
+three strings that are all just strings afterwards:
+
+<!-- from: EXAMPLES/html_body.ady -->
+```python
+def anchor(arg: str) -> Anchor_T:
+    let full: Path = Path(arg).resolve()
+    var stem: str  = full.name
+    stem == s/\.html$//g
+    Anchor_T(dir=full.parent, stem=stem)
+```
+
+One process, no quoting, and the two results are no longer both strings:
+`dir` is a `Path` and `stem` is a `str`, which is the difference between a
+typo and a compile error. The `s/\.html$//g` is §4's substitution doing what
+`basename -s .html` was there for, and the last line is the value the
+function returns — a trailing expression is the result, the way the `case`
+branches in §3 are.
+
+Run it:
+
+```
+$ cp EXAMPLES/html_body_sample.html /tmp/ady_html_body/results.html
+$ EXAMPLES/html_body /tmp/ady_html_body/results.html
+<div class="content" data-kind="page" id="results">
+<h1>Results</h1>
+<p>See <a href="/tmp/ady_html_body/test_alpha.html">alpha</a> and <a href="/tmp/ady_html_body/test_beta.html">beta</a>.</p>
+<p><img src="/tmp/ady_html_body/plot.png" alt="a plot"></p>
+<p>An <a href="https://example.com/">external link</a> is left alone.</p>
+<p>After the footer, still inside the body.</p>
+</div>
+```
+
+The `<head>` is gone, the `<body>` tag with it, the footer and its link are
+gone, the first div carries the page's own name, the relative links point at
+the directory the page came from, and the external link was not touched.
+Byte for byte, that is what the awk original prints — with one footnote: the
+original needs *gawk*, because `gensub` is a GNU extension, and will not run
+under the `mawk` that is `/usr/bin/awk` on a lot of machines.
+
 ---
 
 ## 11. Translation table
@@ -1093,6 +1234,7 @@ file, which is why `finish()` has to file it.
 - `EXAMPLES/test_awk.ady` — the same program as an `AwkBase` subclass
 - `EXAMPLES/config_check.ady` — the variant-record schema, walked through in §10.2
 - `EXAMPLES/awk_logscan.ady` — the state-machine example, in full in §10.3, all of §1 at once
+- `EXAMPLES/html_body.ady` — a real AWK script translated, in full in §10.4: state that decides what to keep
 - `EXAMPLES/CFMU/Tstatus_monitor.ady` — a real AWK script, translated
 - `DOCS/BOOK/05-pattern-matching.md` — `case`/`when` in full
 - `DOCS/BOOK/07-regex.md` — every regex form
