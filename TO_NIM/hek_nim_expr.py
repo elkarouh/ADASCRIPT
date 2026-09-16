@@ -2035,8 +2035,13 @@ def to_nim(self, prec=None):
         if raw_name == "set":
             call_node = self.nodes[1].nodes[0]
             arg = _extract_call_arg(call_node)
+            # toHashSet and initHashSet are std/sets, and nothing else on this
+            # path asks for it: `print len(set(xs))` emitted a call to an
+            # undeclared routine unless something else in the file happened to
+            # pull the import in -- a set-typed annotation, usually.
+            ParserState.nim_imports.add("sets")
             if arg:
-                return f"{arg}.toHashSet()"
+                return f"{_paren_if_compound(arg)}.toHashSet()"
             return "initHashSet()"
         if raw_name == "range":
             call_node = self.nodes[1].nodes[0]
@@ -2051,7 +2056,7 @@ def to_nim(self, prec=None):
         if raw_name == "enumerate":
             call_node = self.nodes[1].nodes[0]
             arg = _extract_call_arg(call_node)
-            return f"{arg}.pairs"
+            return f"{_paren_if_compound(arg)}.pairs"
         if raw_name == "input":
             call_node = self.nodes[1].nodes[0]
             prompt = _extract_call_arg(call_node) if call_node and hasattr(call_node, 'nodes') and call_node.nodes else ""
@@ -2136,7 +2141,7 @@ def to_nim(self, prec=None):
             if _is_str and not _is_numeric:
                 ParserState.nim_imports.add("strutils")
                 _parse_fn = {"int": "parseInt", "float": "parseFloat", "bool": "parseBool"}[raw_name]
-                return f"{arg}.{_parse_fn}()"
+                return f"{_paren_if_compound(arg)}.{_parse_fn}()"
             return f"{raw_name}({arg})"
         if raw_name == "sum":
             call_node = self.nodes[1].nodes[0]
@@ -2823,6 +2828,57 @@ def _expr_is_char(arg):
     return False
 
 
+def _paren_if_compound(text):
+    """TEXT, parenthesised unless it is already a single primary.
+
+    A rewrite that turns `sep.join(xs)` into `xs.join(sep)` moves its
+    argument into receiver position, where a method call binds tighter than
+    any operator: `":".join(a + b)` emitted as `a & b.join(":")` joins b
+    alone and hands the result to `&`. Nothing warns about it -- the seq of
+    the left operand and the string of the right are a type error on a good
+    day and a plausible expression on a bad one.
+
+    Atomic here means no operator outside brackets and quotes: a name, a
+    call, a subscript, a literal, or something already parenthesised.
+    """
+    t = text.strip()
+    if not t:
+        return t
+    _OPS = set("&+-*/<>=!%^|~")
+    depth, quote, escaped, word = 0, "", False, ""
+    for ch in t:
+        if quote:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == quote:
+                quote = ""
+            continue
+        if ch in "\"'":
+            quote = ch
+            continue
+        if ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+        elif depth == 0:
+            if ch in _OPS:
+                return f"({t})"
+            if ch.isalnum() or ch == "_":
+                word += ch
+                continue
+            if word in ("and", "or", "xor", "not", "mod", "div",
+                        "shl", "shr", "in", "notin", "is", "if", "else"):
+                return f"({t})"
+            word = ""
+            continue
+        word = ""
+    if word in ("and", "or", "xor", "mod", "div", "shl", "shr", "in", "notin"):
+        return f"({t})"
+    return t
+
+
 def _is_join_receiver(text):
     """True when TEXT is a whole expression the join rewrite may consume.
 
@@ -2981,7 +3037,7 @@ def _translate_stdlib_patterns(expr):
             sep = "$" + sep
         elif len(sep) == 3 and sep[0] == '"' and sep[-1] == '"':
             sep = "$'" + sep[1] + "'"
-        return f"{arg}.join({sep})"
+        return f"{_paren_if_compound(arg)}.join({sep})"
 
     # --- 5. f.read() -> f.readAll(); f.readlines() -> f.readAll().splitLines() ---
     if expr.endswith(".read()"):
@@ -3064,13 +3120,13 @@ def _translate_stdlib_patterns(expr):
         _order = ("SortOrder.Descending"
                   if _sorted_rev.group(2).lower() == "true"
                   else "SortOrder.Ascending")
-        return f"{_sorted_rev.group(1)}.sorted({_order})"
+        return f"{_paren_if_compound(_sorted_rev.group(1))}.sorted({_order})"
 
     # --- 7. sorted(X) -> X.sorted ---
     _sorted_plain = _re.match(r'^sorted\((.+)\)$', expr)
     if _sorted_plain:
         ParserState.nim_imports.add("algorithm")
-        return f"{_sorted_plain.group(1)}.sorted"
+        return f"{_paren_if_compound(_sorted_plain.group(1))}.sorted"
 
     # --- 8. max(X, key=f) / min(X, key=f) -> foldl ---
     _maxmin_key = _re.match(r'^(max|min)\((.+),\s*key\s*=\s*(.+)\)$', expr)

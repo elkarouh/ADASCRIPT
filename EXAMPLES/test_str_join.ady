@@ -1,0 +1,58 @@
+#!/usr/bin/env ady2nim
+"""Test: a rewrite that moves its argument into receiver position.
+
+Nim has no str.join, so the emitter rewrites `sep.join(xs)` into
+`xs.join(sep)` -- which moves xs into receiver position, where a method call
+binds tighter than any operator. `",".join(a + b)` came out as
+`a & b.join(",")`: the join applied to b alone and its result was handed to
+`&`, which is a type error on a good day and a plausible expression on a bad
+one.
+
+`sorted(xs)` -> `xs.sorted`, `set(xs)` -> `xs.toHashSet()` and
+`enumerate(xs)` -> `xs.pairs` are the same move and had the same hole, so
+they are here too. Python is indifferent to all of this, so every case has
+to hold on either backend.
+"""
+
+let a: []str = ["x", "y"]
+let b: []str = ["z"]
+let empty: []str = []
+
+# --- a plain receiver, which never needed the parentheses ------------------
+assert ",".join(a) == "x,y"
+assert ",".join(empty) == ""
+
+# --- a sum: the case that was wrong ----------------------------------------
+assert ",".join(a + b) == "x,y,z"
+assert ",".join(b + a) == "z,x,y"
+assert "".join(a + b) == "xyz"
+
+# --- other shapes that are one expression and must not gain parentheses -----
+assert "-".join([str(1), str(2)]) == "1-2"      # a literal
+assert ",".join(a[0:1]) == "x"                  # a slice
+assert ",".join(sorted(b + a)) == "x,y,z"       # a call over a sum
+
+# --- the join's own result still composes ----------------------------------
+assert "/".join(a) + "!" == "x/y!"
+assert len(",".join(a + b)) == 5
+
+# --- sorted(), the other rewrite that moves its argument -------------------
+assert sorted(b + a) == ["x", "y", "z"]
+assert sorted(a + b, reverse = True) == ["z", "y", "x"]
+assert ",".join(sorted(b + a)) == "x,y,z"
+
+# --- set() and enumerate(), which move their argument the same way --------
+let ns: []int = [1, 2]
+let ms: []int = [2, 3]
+assert len(set(ns + ms)) == 3          # {1, 2, 3}: the 2 appears twice
+
+var seen: []str = []
+for i, v in enumerate(a + b):
+    seen.append(str(i) + v)
+assert ",".join(seen) == "0x,1y,2z"
+
+var acc: str = ""
+acc = ":".join(a + b)
+assert acc == "x:y:z"
+
+print "all receiver-position tests passed"
