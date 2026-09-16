@@ -304,10 +304,8 @@ class Indenter:
             self.paren_stack.append(opener)
         while len(self.paren_stack) > 0:
             let top: (int, int, Paren_Kind_T) = self.paren_stack[-1]
-            if top[0] > new_depth:
-                self.paren_stack.pop()
-            else:
-                break
+            break if top[0] <= new_depth
+            self.paren_stack.pop()
 
     def indent_line(self, line: str) -> str:
         """Process one raw line and return it re-indented."""
