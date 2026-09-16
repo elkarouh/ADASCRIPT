@@ -56,7 +56,7 @@
 | Shell, run alongside | `let j: Job = shellSpawn: cmd` — starts it and carries on |
 | Pipeline reports first failure | `shell(pipefail = true): a \| b` — runs under bash |
 | Block join | `shell(join = ";"):` — `"&&"` (default), `";"`, `"\|"`, `"\|\|"` |
-| Is a program installed? | `have("git")` → bool, straight from PATH |
+| Where is a program? | `which("git")` → `?Path`, straight from PATH |
 | Path join | `let p: Path = root / "sub" / name` — a str that also joins |
 | Path ↔ str | `Path(s)` to make one, `str(p)` where a plain str is needed |
 | Path split | `p.parent` → Path, `p.name` → str (pathlib's rules, not `os.path`'s) |

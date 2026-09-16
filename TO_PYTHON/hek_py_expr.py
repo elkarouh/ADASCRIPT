@@ -940,6 +940,8 @@ def _have_call(call_trailer):
         return None
     if not call_trailer[1:-1].strip():
         return None
+    from hek_helpers import warn_deprecated
+    warn_deprecated("have(x)", "`which(x) is not None`, which also has the path")
     from hek_parsec import ParserState
     decls = getattr(ParserState, 'py_top_decls', [])
     if not any("def _have(" in d for d in decls):

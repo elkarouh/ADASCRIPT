@@ -2603,7 +2603,7 @@ through the same ground in more detail.
 | Shell, run alongside              | `let j: Job = shellSpawn: cmd`          |
 | Pipeline reports first failure    | `shell(pipefail = true): a | b`         |
 | Block joined with something else  | `shell(join = ";"):` / `"|"` / `"||"`   |
-| Is a program installed?           | `have("git")` -> bool                   |
+| Where is a program?               | `which("git")` -> `?Path`                |
 | Path join                         | `let p: Path = root / "sub" / name`     |
 | Path <-> str                      | `Path(s)` / `str(p)`; a bare `p = s` is refused |
 | Read a file or stdin              | `let f: File = (open(p) if p != "" else stdin)` |

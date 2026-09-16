@@ -1,10 +1,11 @@
 #!/usr/bin/env ady2nim
 """Test: `which(name)`, and the guard clause that unwraps what it returns.
 
-`have(name)` answers a bool over the same lookup -- findExe on Nim,
-shutil.which on Python -- and throws the path away. A program that needs to
-find its own installation had to spawn `which(1)` for it, which is a process
-and a program not every system carries.
+`have(name)` answered a bool over the same lookup -- findExe on Nim,
+shutil.which on Python -- and threw the path away, so a program that needed
+to find its own installation had to spawn `which(1)` for it: a process, and
+a program not every system carries. It is deprecated in favour of this one,
+and still works.
 
 The return is a `?Path` -- a path, since that is what it is, and an optional
 rather than "" for not-found, because "" does not stay empty: `Path("").parent`
@@ -25,6 +26,8 @@ def die(msg: str):
 
 assert which("sh") is not None
 assert which("definitely_not_a_program_xyz") is None
+# have() is the deprecated spelling of the same question, and still answers
+# it: deprecated means warned about, not broken.
 assert have("sh") == (which("sh") is not None)
 assert have("definitely_not_a_program_xyz") == False
 

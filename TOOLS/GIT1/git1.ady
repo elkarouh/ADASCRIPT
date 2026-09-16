@@ -409,10 +409,10 @@ def cmd_adopt(argv: []str):
 
 def cmd_help():
     let pager: str = $PAGER if $PAGER else "less"
-    # have() asks PATH directly; `command -v` cost a shell and a process to
+    # which() asks PATH directly; `command -v` cost a shell and a process to
     # answer the same question, and made the caller know that 127 means no.
     let is_tty: int = shell: test -t 1
-    if is_tty == 0 and have(pager):
+    if is_tty == 0 and which(pager) is not None:
         let tmp: str = "/tmp/git1-help.txt"
         writeFile(tmp, usage() + "\n")
         let shown: int = shell: {!pager} {!tmp}

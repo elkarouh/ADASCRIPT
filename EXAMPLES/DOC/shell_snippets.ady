@@ -110,8 +110,8 @@ assert (-f log)
 assert (-d log.parent)
 assert (-s log)
 assert not (-e (root / "ady_no_such_file"))
-assert have("sort")
-assert not have("no_such_program_xyz")
+assert which("sort") is not None
+assert which("no_such_program_xyz") is None
 
 # --- arguments and the environment ---------------------------------------
 assert $# >= 0

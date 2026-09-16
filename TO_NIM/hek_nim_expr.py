@@ -185,7 +185,7 @@ def _ensure_envopt_helper():
 
 _WHICH_HELPER = """\
 proc adascriptWhich(name: string): Option[Path] =
-  ## `which(name)`: where the program is on PATH, as a ?str.
+  ## `which(name)`: where the program is on PATH, as a ?Path.
   ## findExe answers "" when it finds nothing, and "" is not a path a caller
   ## can be trusted to notice -- `Path("").parent` is ".".
   ##
@@ -3054,6 +3054,8 @@ def _translate_stdlib_patterns(expr):
     have_m = _re.match(r"^have\((.+)\)$", expr, _re.DOTALL)
     if (have_m and "have" not in _own
             and have_m.group(1).count("(") == have_m.group(1).count(")")):
+        from hek_helpers import warn_deprecated
+        warn_deprecated("have(x)", "`which(x) is not None`, which also has the path")
         ParserState.nim_imports.add("os")
         return f"(findExe({have_m.group(1)}).len > 0)"
 

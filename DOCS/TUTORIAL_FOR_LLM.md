@@ -1245,7 +1245,7 @@ for s in Stage_T'First .. Stage_T'Last:
 | Shell, run alongside | `let j: Job = shellSpawn: cmd` |
 | Pipeline reports first failure | `shell(pipefail = true): a \| b` |
 | Block join | `shell(join = ";"):` (`&&` default, `;`, `\|`, `\|\|`) |
-| Is a program installed? | `have("git")` -> bool |
+| Where is a program? | `which("git")` -> `?Path` (`have()` is deprecated) |
 | Path join | `let p: Path = root / "sub"` (Path is a str subclass/distinct) |
 | Path <-> str | `Path(s)` / `str(p)`; a bare `p = s` is refused on both backends |
 | Read a file or stdin | `let f: File = (open(p) if p != "" else stdin)`; `File` is `typing.TextIO` on Python |

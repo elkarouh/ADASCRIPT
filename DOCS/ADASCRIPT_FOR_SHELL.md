@@ -282,11 +282,12 @@ The shell's file tests come across unchanged, and mean what they mean:
 ```python
 if -f path:  ...      # and -d -e -L -r -w -x -s
 if a -nt b:  ...
-if have("git"): ...   # is it even installed?
+if which("git") is not None: ...   # is it even installed?
 ```
 
-`have` is `command -v foo >/dev/null 2>&1` with the redirection already
-thought about.
+`which` is `command -v foo` with the redirection already thought about, and
+the answer kept: a `?Path` rather than an exit status. (`have("git")` is the
+older spelling that only ever said yes or no; it is deprecated and warns.)
 
 ---
 
@@ -691,7 +692,7 @@ that have to be updated in step by hand.
 | `mkdir -p "$d"` | `d.mkdir()` |
 | `dirname`, `basename` | `p.parent`, `p.name` |
 | `[ -f "$p" ]`, `[ -d "$p" ]` | `-f p`, `-d p` — unchanged |
-| `command -v foo >/dev/null` | `have("foo")` |
+| `command -v foo >/dev/null` | `which("foo") is not None` |
 | `p=$(command -v foo)` | `which("foo")`, a `?Path` |
 | `$1`, `$#`, `$@` | `$1`, `$#`, `$@` |
 | `$HOME` | `$HOME` |

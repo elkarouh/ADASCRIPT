@@ -597,7 +597,7 @@ assert ${NO_SUCH_VAR_HERE:-"fallback"} == "fallback"
 assert $?NO_SUCH_VAR_HERE == None
 
 if -f path:    ...    # and -d -e -L -r -w -x -s, plus a -nt b
-if have("git"): ...   # is it even installed?
+if which("git") is not None: ...   # is it even installed?
 ```
 
 ---

@@ -41,7 +41,7 @@ def scan(dir: Path) -> []Entry_T:
     return out
 
 def main() -> int:
-    if not have("gzip"):
+    if which("gzip") is None:
         print "sh_janitor: gzip is not installed"
         return 1
 

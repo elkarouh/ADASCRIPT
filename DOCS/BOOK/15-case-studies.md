@@ -316,7 +316,7 @@ The shell half of Adascript covers most of what a shell script does:
 | `${PAGER:-less}` | `$PAGER if $PAGER else "less"` | Same intent, explicit |
 | `[ -f "$f" ]` | `-f f` | File-test operators |
 | `[ -d "$d" ]` | `-d d` | |
-| `command -v tool` | `have("tool")` | Straight from PATH, no process |
+| `command -v tool` | `which("tool")` | Straight from PATH, no process |
 | `$(cmd)` | `let r = shell: cmd` | Capture with `shell:` |
 | `cmd \|\| die` | `let code: int = shell: cmd` | Exit code, terminal kept |
 | `"$f"` (quoted expansion) | `{!f}` in a shell body | Quoted interpolation |

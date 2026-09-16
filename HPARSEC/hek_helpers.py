@@ -153,3 +153,26 @@ def reject_dollar_assignment(target_node, op="="):
         f"  same option, and it adds to the child's environment rather than\n"
         f"  replacing it."
     )
+
+
+###############################################################################
+# Deprecations
+###############################################################################
+
+def warn_deprecated(what, instead):
+    """Say once per translation unit that WHAT is deprecated.
+
+    A warning rather than a refusal: a deprecated spelling still means what
+    it meant, and a program that uses it still transpiles. It goes to stderr
+    so that a transpile whose output is a pipe is unaffected.
+    """
+    from hek_parsec import ParserState
+    seen = getattr(ParserState, "_deprecations_warned", None)
+    if seen is None:
+        seen = set()
+        ParserState._deprecations_warned = seen
+    if what in seen:
+        return
+    seen.add(what)
+    import sys
+    print(f"warning: {what} is deprecated -- use {instead}", file=sys.stderr)

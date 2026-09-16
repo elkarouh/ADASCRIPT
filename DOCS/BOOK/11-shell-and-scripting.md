@@ -210,7 +210,7 @@ print(strict.code)                     # non-zero
 backends run these through bash — which therefore has to be installed for
 this option.
 
-## 11.5 Bash variables, file tests, and `have()`
+## 11.5 Bash variables, file tests, and `which()`
 
 | Adascript | Meaning | Python | Nim |
 |-----------|---------|--------|-----|
@@ -225,15 +225,19 @@ File tests are expressions: `-e` (exists), `-f` (file), `-d` (dir), `-L`
 comparisons `a -nt b` / `a -ot b` (newer/older than). They negate and
 combine normally: `if not -f dict_file:`.
 
-Whether a *program* exists is the same kind of question, and `have` answers
-it from `PATH` — `shutil.which` on Python, `findExe` on Nim — so unlike
-`command -v` it costs neither a process nor a shell:
+Where a *program* is, is the same kind of question, and `which` answers it
+from `PATH` — `shutil.which` on Python, `findExe` on Nim — so unlike
+`command -v` it costs neither a process nor a shell. It hands back a
+`?Path`, so the answer is usable and not only true:
 
 ```python
-if not have("git"):
+if which("git") is None:
     print("git is required")
     quit(1)
 ```
+
+`have("git")` is the older spelling of the same lookup with the path thrown
+away. It is deprecated — it still works, and warns.
 
 `phonecode.ady`'s argument handling shows the whole kit in six lines:
 
@@ -543,7 +547,7 @@ s.close()
 | `waitAll(jobs)` | a thread per job, each `communicate()` | one non-blocking pass over every job |
 | `shellExec: cmd` | `os.execv` / `os.execve` | `execv` / `execve` |
 | `run(argv)` | `subprocess.run(list)` — no shell | `startProcess(argv[0], args = …)` |
-| `have("x")` | `shutil.which` | `findExe` |
+| `which("x")` | `shutil.which` | `findExe` |
 | `{var}` in body | f-string interpolation | `fmt"""…"""` |
 | `{!x}` / `{*xs}` | `shlex.quote` / joined | `quoteShell` / `mapIt(…).join(" ")` |
 | `pipefail = true` | `executable="/bin/bash"` | `startProcess("/bin/bash", …)` |

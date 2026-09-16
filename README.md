@@ -1916,18 +1916,7 @@ Python's own iteration keeps the newline and Nim's drops it, so the trailer
 is what makes the two agree. `open()` returns a `File`; on the Python target
 the annotation becomes `typing.TextIO`.
 
-### Is this program installed?
-
-```python
-if not have("git"):
-    die("git is required")
-```
-
-`have` answers from `PATH` — `shutil.which` on Python, `findExe` on Nim —
-so unlike `command -v` it costs neither a process nor a shell.
-
-`which` is the same lookup keeping the answer: a `?Path`, `None` when the
-program is not there.
+### Where is this program?
 
 ```python
 let git: ?Path = which("git")
@@ -1936,12 +1925,25 @@ if git is None:
 print "using " + str(git)
 ```
 
+`which` answers from `PATH` — `shutil.which` on Python, `findExe` on Nim —
+so unlike `command -v` it costs neither a process nor a shell. It hands back
+a `?Path`: `None` when the program is not there.
+
+**`have(x)` is deprecated.** It asked the same question and threw the path
+away; it still works and now warns, and `which(x) is not None` is what it
+meant.
+
+```python
+if which("git") is None:        # was: if not have("git")
+    die("git is required")
+```
+
 A program that has to find its own installation is the reason it exists —
 `which($0's name).parent` is where this binary lives, without spawning the
 `which` command, which is a process and a program not every system carries.
 A `?Path` rather than an empty string because an empty path does not stay
 empty: `Path("").parent` is `"."`, so a missed check builds a plausible path
-out of nothing. `have(x)` is `which(x) is not None`.
+out of nothing.
 
 A guard that leaves proves the value is there, and both backends know it:
 

@@ -60,8 +60,8 @@ let joined_pipe = shell(join = "|"):
 print("join = '|' makes a pipeline:", joined_pipe.output.strip())
 
 print("=== command presence ===")
-print("sh is installed:", have("sh"))
-print("this one is not:", have("definitely-no-such-program"))
+print("sh is installed:", which("sh") is not None)
+print("this one is not:", which("definitely-no-such-program") is not None)
 
 print("=== quoting sigils ===")
 let spaced: str = "two words"
