@@ -66,6 +66,7 @@ source.ady
 - [Enum constructors](#enum-constructors)
 - [Side by Side with awk and Bash](#side-by-side-with-awk-and-bash)
 - [Benchmark Programs](#benchmark-programs)
+- [Tools](#tools)
 - [Editor Support](#editor-support)
 - [Architecture](#architecture)
 - [Known Limitations](#known-limitations)
@@ -2516,11 +2517,44 @@ def suggest(word: str) -> []str:
 
 ---
 
+## Tools
+
+[`TOOLS/`](TOOLS) holds the programs written in Adascript that are tools in
+their own right rather than examples of a language feature: each has a
+command set, a test suite, editor integrations and a README. They are also
+the language's own proof that it is worth using — both are the kind of
+program the README argues Adascript is for.
+
+| | |
+|---|---|
+| [`TOOLS/ADA_INDENT/`](TOOLS/ADA_INDENT) | re-indents **Ada** source. Not a parser: indentation needs only the keywords that open, close or split a block, and [its README](TOOLS/ADA_INDENT/README.md) specifies that simplified grammar |
+| [`TOOLS/GIT1/`](TOOLS/GIT1) | version control for **one file at a time**: every tracked file gets its own private git repository, so many of them share a directory without seeing each other |
+
+Both build the same way any `.ady` file does, and `make test` builds and
+exercises both:
+
+```bash
+ady2nim c TOOLS/ADA_INDENT/ada_indent.ady   # then: cat file.adb | ada_indent
+ady2nim c TOOLS/GIT1/git1.ady               # then: git1 init notes.txt
+```
+
+`ady2nim c` drops a symlink to the built binary beside the source, so
+`~/.local/bin/ada_indent` pointing at `TOOLS/ADA_INDENT/ada_indent` survives
+a rebuild — a link into `~/.cache/adascript/` does not, since the hash
+changes with the source.
+
+Each tool's own README is the reference: what it does, how it is invoked,
+and what it deliberately does not do — `git1` has no merge, and
+`ada_indent` has no semantic analysis.
+
+---
+
 ## Editor Support
 
-Two separate things live under this heading, and it is worth keeping them
-apart: support for **writing Adascript**, and support for the **Ada indenter**
-that happens to be written in it.
+Three separate things live under this heading, and it is worth keeping them
+apart: support for **writing Adascript**, and the editor integrations that
+belong to the two tools in [`TOOLS/`](TOOLS) — the **Ada indenter** and
+**git1** — which are editor support for something other than the language.
 
 ### Writing Adascript — [`LSP/`](LSP)
 
@@ -2556,17 +2590,13 @@ no editor needs Python or a server process for indentation. There is a
 [`TOOLS/ADA_INDENT/LSP/`](TOOLS/ADA_INDENT/LSP) as well, for editors where LSP is the
 shorter path (Helix, Neovim's built-in client, eglot).
 
-Build the binary once and put it on `PATH`, and any of the three will find it:
+Build the binary once and put it on `PATH` (see [Tools](#tools) above), and
+any of the three will find it:
 
 ```bash
-ady2nim c TOOLS/ADA_INDENT/ada_indent.ady     # builds, and drops a symlink next to the source
-ln -sf "$PWD/ADA_INDENT/ada_indent" ~/.local/bin/ada_indent
+ady2nim c TOOLS/ADA_INDENT/ada_indent.ady
+ln -sf "$PWD/TOOLS/ADA_INDENT/ada_indent" ~/.local/bin/ada_indent
 ```
-
-(`ady2nim c` rebuilds into `~/.cache/adascript/` and refreshes the
-`TOOLS/ADA_INDENT/ada_indent` symlink each time, so a link pointing at *that* keeps
-working across rebuilds — one pointing into the cache directory goes stale as
-soon as the source changes and the hash with it.)
 
 The one idea all three share is that `ada_indent` is **stateful** — it carries
 a stack of open blocks, so it cannot indent a line in isolation, and replaying
