@@ -211,10 +211,18 @@ define compile_one_tool
 	fi
 endef
 
-# Programs with a directory of their own. ADA_INDENT's are compiled and run
-# by the test target further down; these only need building here.
+# Programs with a directory of their own, built here so that `make clean`
+# followed by `make test` leaves both of them on disk.
+#
+# ada_indent is on this list for a reason beyond symmetry: the three editor
+# harnesses below drive the *binary*, and each SKIPs when it is missing. The
+# ADA_INDENT test files above build themselves but not it -- they import the
+# module, and importing leaves no binary behind -- so after a clean the
+# three reported "SKIP (ada_indent not built)" and the editor integrations
+# went unchecked in exactly the run that was meant to check everything.
 TOOLS := \
-    GIT1/git1.ady
+    GIT1/git1.ady \
+    ADA_INDENT/ada_indent.ady
 
 # -----------------------------------------------------------------------
 # compile — transpile + build everything
