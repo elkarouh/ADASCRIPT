@@ -89,3 +89,38 @@ print "--- findall ---"
 let html: str = "<b>bold</b> and <i>italic</i>"
 print(f"input:       {html!r}")
 print(f"all_tags:    {all_tags(html)!r}")
+
+# --- a case that mixes regex patterns with choice lists ----------------------
+#
+# A case carrying a regex desugars to if/elif, and a choice list renders as
+# the comma-separated alternatives an of-branch takes -- which is not a
+# condition. The chain emitted `arg == "-h", "--help"`, which nim will not
+# parse, and `arg == "-h" | "--help"`, which Python reads as a bitwise or of
+# two strings and raises on. Each alternative gets its own comparison now.
+def option_kind(arg: str) -> str:
+    case arg:
+        when "-h" | "--help" | "-help":  return "help"
+        when /^--key=(.*)$/:             return "key:" + $+1
+        when "-v" | "--version":         return "version"
+        when others:                     return "other"
+
+assert option_kind("-h") == "help"
+assert option_kind("--help") == "help"
+assert option_kind("-help") == "help"
+assert option_kind("--key=SECRET") == "key:SECRET"
+assert option_kind("--key=") == "key:"
+assert option_kind("-v") == "version"
+assert option_kind("--version") == "version"
+assert option_kind("zzz") == "other"
+
+# The same choice list with no regex in the block, which stays a native case.
+def plain_kind(arg: str) -> str:
+    case arg:
+        when "-h" | "--help" | "-help":  return "help"
+        when "-v" | "--version":         return "version"
+        when others:                     return "other"
+
+assert plain_kind("-help") == "help"
+assert plain_kind("--version") == "version"
+assert plain_kind("zzz") == "other"
+print "--- case with regex and choice lists: ok ---"

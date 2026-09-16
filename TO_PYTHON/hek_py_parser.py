@@ -886,7 +886,12 @@ def _pattern_chain_to_py(case_node, subject, indent):
                 else:
                     cond = f"_pymatch({subject}, r'{safe_pat}')"
         else:
-            cond = f"{subject} == {pat_py}"
+            # A choice list is `a | b | c` in a match/case pattern, and that
+            # is not what `|` means in an expression: `arg == "-h" | "--help"`
+            # is a bitwise or of two strings, which raises. In this chain each
+            # alternative needs its own comparison.
+            _alts = [a.strip() for a in pat_py.split(" | ")] if " | " in pat_py else [pat_py]
+            cond = " or ".join(f"{subject} == {a}" for a in _alts)
         if guard_node is not None:
             cond = f"{cond} and {guard_node.nodes[0].to_py()}"
         result += f"\n{_ind(indent)}{keyword} {cond}:{hc}\n{body}"

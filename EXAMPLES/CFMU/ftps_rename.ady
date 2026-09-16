@@ -33,27 +33,32 @@ var seq_set        : bool = False
 var period_set     : bool = False
 var date_set       : bool = False
 
+# `--name=value` is a pattern and `$+1` is the value; see ftps_get.ady. Each
+# option also records that it was given, which is what the check below reads.
 for arg in $@[2:]:
-  if arg.startswith("--free_text="):
-    new_free_text = arg[12:]
-    free_text_set = True
-  elif arg.startswith("--from_appl="):
-    new_appl = arg[12:]
-    appl_set = True
-  elif arg.startswith("--file_type="):
-    new_file_type = arg[12:]
-    ft_set = True
-  elif arg.startswith("--seq_number="):
-    new_seq_number = arg[13:]
-    seq_set = True
-  elif arg.startswith("--period="):
-    new_period = arg[9:]
-    period_set = True
-  elif arg.startswith("--date="):
-    new_date = arg[7:]
-    date_set = True
-  elif arg == "--allow_multi_ver":
-    allow_multi = True
+  case arg:
+    when /^--free_text=(.*)$/:
+      new_free_text = $+1
+      free_text_set = True
+    when /^--from_appl=(.*)$/:
+      new_appl = $+1
+      appl_set = True
+    when /^--file_type=(.*)$/:
+      new_file_type = $+1
+      ft_set = True
+    when /^--seq_number=(.*)$/:
+      new_seq_number = $+1
+      seq_set = True
+    when /^--period=(.*)$/:
+      new_period = $+1
+      period_set = True
+    when /^--date=(.*)$/:
+      new_date = $+1
+      date_set = True
+    when "--allow_multi_ver":
+      allow_multi = True
+    when others:
+      pass
 
 if not (free_text_set or appl_set or ft_set or seq_set or period_set or date_set):
   print "ERROR: at least one of --free_text, --from_appl, --file_type, --seq_number, --period, --date must be specified"

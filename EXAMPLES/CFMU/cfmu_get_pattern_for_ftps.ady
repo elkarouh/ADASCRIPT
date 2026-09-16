@@ -14,14 +14,19 @@ var args      : []str = $@
 var i : int = 0
 while i < len(args):
   let arg : str = args[i]
-  if arg == "-help" or arg == "-h" or arg == "--help":
-    show_help = True
-  elif arg.startswith("--app_key="):
-    app_key = arg[10:]
-  elif arg == "--app_key" or arg == "-app_key":
-    i += 1
-    if i < len(args):
-      app_key = args[i]
+  # The aliases are one choice list, and `--app_key=<key>` is a pattern whose
+  # $+1 is the key -- where the separate-argument spelling has to look ahead.
+  case arg:
+    when "-help" | "-h" | "--help":
+      show_help = True
+    when /^--app_key=(.*)$/:
+      app_key = $+1
+    when "--app_key" | "-app_key":
+      i += 1
+      if i < len(args):
+        app_key = args[i]
+    when others:
+      pass
   i += 1
 
 if show_help:

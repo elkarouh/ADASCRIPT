@@ -27,29 +27,22 @@ var period_arg     : str  = ""
 var free_text_arg  : str  = ""
 var source_key_arg : str  = ""
 
+# `--name=value` is a pattern and `$+1` is the value; see ftps_get.ady, which
+# parses the same options the same way.
 for arg in $@[1:]:
-  if arg.startswith("--file_name_mask="):
-    file_name_mask = arg[17:]
-  elif arg.startswith("--app_key="):
-    override_key = arg[10:]
-  elif arg.startswith("--file_type="):
-    file_type = arg[12:]
-  elif arg == "--ops_file_only":
-    ops_file_only = True
-  elif arg.startswith("--date="):
-    date_arg = arg[7:]
-  elif arg.startswith("--start_date="):
-    start_date = arg[13:]
-  elif arg.startswith("--end_date="):
-    end_date = arg[11:]
-  elif arg.startswith("--sequence="):
-    sequence_arg = arg[11:]
-  elif arg.startswith("--period="):
-    period_arg = arg[9:]
-  elif arg.startswith("--free_text="):
-    free_text_arg = arg[12:]
-  elif arg.startswith("--source_key="):
-    source_key_arg = arg[13:]
+  case arg:
+    when /^--file_name_mask=(.*)$/: file_name_mask = $+1
+    when /^--app_key=(.*)$/:        override_key   = $+1
+    when /^--file_type=(.*)$/:      file_type      = $+1
+    when /^--date=(.*)$/:           date_arg       = $+1
+    when /^--start_date=(.*)$/:     start_date     = $+1
+    when /^--end_date=(.*)$/:       end_date       = $+1
+    when /^--sequence=(.*)$/:       sequence_arg   = $+1
+    when /^--period=(.*)$/:         period_arg     = $+1
+    when /^--free_text=(.*)$/:      free_text_arg  = $+1
+    when /^--source_key=(.*)$/:     source_key_arg = $+1
+    when "--ops_file_only":         ops_file_only  = True
+    when others:                    pass
 
 if date_arg != "" and (start_date != "00000000" or end_date != "99999999"):
   print "ERROR: --date is mutually exclusive with --start_date and --end_date"

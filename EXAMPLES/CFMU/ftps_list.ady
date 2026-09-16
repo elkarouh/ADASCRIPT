@@ -59,45 +59,30 @@ var period_arg     : str = ""
 var free_text_arg  : str = ""
 var source_key_arg : str = ""
 
+# `--name=value` is a pattern and `$+1` is the value; see ftps_get.ady, which
+# parses the same options the same way. The flags follow, as constants.
 for arg in $@[1:]:
-  if arg.startswith("--file_name_mask="):
-    file_name_mask = arg[17:]
-  elif arg.startswith("--from_dmz="):
-    from_dmz = arg[11:]
-  elif arg.startswith("--app_key="):
-    override_key = arg[10:]
-  elif arg.startswith("--file_type="):
-    file_type = arg[12:]
-  elif arg == "--ops_file_only":
-    ops_file_only = True
-  elif arg == "--need_not_exist":
-    need_not_exist = True
-  elif arg == "--no_header_ever":
-    no_header_ever = True
-  elif arg == "--no_header":
-    no_header = True
-  elif arg == "--no_prefix":
-    no_prefix = True
-  elif arg == "--long":
-    long_listing = True
-  elif arg == "--time":
-    timestamp = True
-  elif arg == "--path":
-    show_path = True
-  elif arg.startswith("--date="):
-    date_arg = arg[7:]
-  elif arg.startswith("--start_date="):
-    start_date = arg[13:]
-  elif arg.startswith("--end_date="):
-    end_date = arg[11:]
-  elif arg.startswith("--sequence="):
-    sequence_arg = arg[11:]
-  elif arg.startswith("--period="):
-    period_arg = arg[9:]
-  elif arg.startswith("--free_text="):
-    free_text_arg = arg[12:]
-  elif arg.startswith("--source_key="):
-    source_key_arg = arg[13:]
+  case arg:
+    when /^--file_name_mask=(.*)$/: file_name_mask = $+1
+    when /^--from_dmz=(.*)$/:       from_dmz       = $+1
+    when /^--app_key=(.*)$/:        override_key   = $+1
+    when /^--file_type=(.*)$/:      file_type      = $+1
+    when /^--date=(.*)$/:           date_arg       = $+1
+    when /^--start_date=(.*)$/:     start_date     = $+1
+    when /^--end_date=(.*)$/:       end_date       = $+1
+    when /^--sequence=(.*)$/:       sequence_arg   = $+1
+    when /^--period=(.*)$/:         period_arg     = $+1
+    when /^--free_text=(.*)$/:      free_text_arg  = $+1
+    when /^--source_key=(.*)$/:     source_key_arg = $+1
+    when "--ops_file_only":         ops_file_only  = True
+    when "--need_not_exist":        need_not_exist = True
+    when "--no_header_ever":        no_header_ever = True
+    when "--no_header":             no_header      = True
+    when "--no_prefix":             no_prefix      = True
+    when "--long":                  long_listing   = True
+    when "--time":                  timestamp      = True
+    when "--path":                  show_path      = True
+    when others:                    pass
 
 if long_listing:
   timestamp = False

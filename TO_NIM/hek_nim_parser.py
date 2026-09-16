@@ -1801,11 +1801,49 @@ def _literal_cond_nim(subject, pat_nim):
     The native case path coerces these (a char subject cannot be compared with
     a string in Nim); the if/elif paths did not, so a guarded or regex-carrying
     block over a char subject emitted `ch == "("` and failed to compile.
+
+    A choice list is a comma-separated pattern -- `when "-h" | "--help":`
+    renders as `"-h", "--help"`, which is an of-branch and not a condition.
+    In an if/elif chain it came out as `arg == "-h", "--help"`, which nim
+    will not parse; each alternative gets its own comparison here.
     """
+    alts = _split_toplevel_commas(pat_nim)
+    if len(alts) > 1:
+        return " or ".join(_literal_cond_nim(subject, a) for a in alts)
     if _subject_is_char(subject):
         from hek_nim_expr import _str_to_char_lit
         pat_nim = _str_to_char_lit(pat_nim)
     return f"{subject} == {pat_nim}"
+
+
+def _split_toplevel_commas(text):
+    """TEXT split on commas outside brackets and quotes."""
+    parts, depth, quote, escaped, cur = [], 0, "", False, ""
+    for ch in text:
+        if quote:
+            cur += ch
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == quote:
+                quote = ""
+            continue
+        if ch in "\"'":
+            quote = ch
+            cur += ch
+            continue
+        if ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+        elif ch == "," and depth == 0:
+            parts.append(cur)
+            cur = ""
+            continue
+        cur += ch
+    parts.append(cur)
+    return [p.strip() for p in parts if p.strip()]
 
 
 def _pat_regex_info_nim(pat_node):
