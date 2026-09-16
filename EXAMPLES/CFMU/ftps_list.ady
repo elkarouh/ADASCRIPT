@@ -196,26 +196,19 @@ while retries > 0 and not exit_loop:
     var seen         : {str}bool = {:}
     var output_list  : []str = []
     for entry in sorted(entries):
-      if entry == "":
-        continue
-      if entry == /(\s|^)\d\d$/:
-        continue
-      if entry == /(\s|^)\d\dm:?$/:
-        continue
-      if entry == /(\s|^)\d\dd:?$/:
-        continue
-      if entry == /(\s|^)\d{4}y$/:
-        continue
-      if entry == /(\s|^)upload_area:?$/:
-        continue
-      if entry == /(\s|^)OPS$/:
-        continue
-      if seen.get(entry):
-        continue
+      # What `ls -R` prints that is not a file: the directory headers it
+      # emits between sections, and the same entry seen twice.
+      continue if entry == ""
+      continue if entry == /(\s|^)\d\d$/
+      continue if entry == /(\s|^)\d\dm:?$/
+      continue if entry == /(\s|^)\d\dd:?$/
+      continue if entry == /(\s|^)\d{4}y$/
+      continue if entry == /(\s|^)upload_area:?$/
+      continue if entry == /(\s|^)OPS$/
+      continue if seen.get(entry)
       seen[entry] = True
 
-      if not filter_output(entry, start_date, end_date):
-        continue
+      continue if not filter_output(entry, start_date, end_date)
 
       if timestamp and not long_listing:
         if mount_point != "":
