@@ -123,8 +123,7 @@ def starts_with_operator(code_s: str) -> bool:
     symbol (:=, =>, =, &, +, -, *, /, <, >, |, ..) or a word operator
     (and, or, xor, mod, rem, covering 'and then'/'or else'). Such a continuation
     takes one extra indent level so it stands out from the operand it continues."""
-    if code_s == "":
-        return False
+    return False if code_s == ""
     let c: char = code_s[0]
     case c: # bug here, cannot replace c with code_s[0] in the case statement
         when ':': len(code_s) > 1 and code_s[1] == '='   # ':=', not a bare ':'
