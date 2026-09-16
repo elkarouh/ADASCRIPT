@@ -41,19 +41,31 @@ type Paren_Kind_T is enum:
     CASE_EXPR  # (case … is when …)
     FOR_EXPR   # (for … => …)  quantified or iterated expression
 
+# The keywords that make a '(' more than a plain one. Anything else after the
+# '(' -- an operand, another '(', or nothing at all -- leaves it PLAIN.
+const PAREN_KIND: {str}Paren_Kind_T = {
+    "if": IF_EXPR, "case": CASE_EXPR, "for": FOR_EXPR,
+}
+
 # ---------------------------------------------------------------------------
 # Lexical helpers — all work on a single physical line.
 # ---------------------------------------------------------------------------
 nimport strscan
 
-def code_chars(s: str) -> char:
-    """Yield each character of s that is outside a string or character literal.
+def code_positions(s: str) -> (Natural, char):
+    """Yield (index, character) for each character of s that is outside a string
+    or character literal.
 
     The input must already have comments removed (see strip_code). Double-quoted
     strings are skipped whole. A character literal ('x') is detected as a quote,
     any single character, then a closing quote; a quote followed by a letter that
     is NOT followed by a closing quote is an attribute tick (X'Image) and is left
     alone — the letter and everything after it are yielded normally.
+
+    The index comes back with the character because a caller that only counts
+    (paren_delta) and one that has to look at what follows (scan_parens) both
+    need this rule, and a second copy of it in the second caller is a copy that
+    can drift.
     """
     var i: Natural = 0
     let n: Natural = len(s)
@@ -64,14 +76,14 @@ def code_chars(s: str) -> char:
             when '\'' if i + 2 < n and s[i + 2] == '\'':
                 i += 3                           # character literal: skip 'x' whole
             when others:
-                yield s[i]
+                yield (i, s[i])
                 i += 1
 
 def paren_delta(line: str) -> int:          # int: ')' without '(' makes it negative
     """Net '(' minus ')' on the line, ignoring parens inside string and character
     literals. The input must already have comments removed (see strip_code)."""
     var depth: int = 0                      # int: a line may close more than it opens
-    for c in code_chars(line):
+    for _i, c in code_positions(line):
         case c:
             when '(': depth += 1
             when ')': depth -= 1
@@ -173,35 +185,21 @@ def scan_parens(text: str, base_depth: Natural, base_col: Natural) -> [](int, in
     """
     var openers: [](int, int, Paren_Kind_T) = []
     var depth: int = base_depth             # int: a line may close more than it opens
-    var i: Natural = 0
     let n: Natural = len(text)
-    while i < n:
-        let ch: char = text[i]
-        case ch:
-            when '"':
-                i = skip_quoted(text, i, '"')
-            when '\'' if i + 2 < n and text[i + 2] == '\'':
-                i += 3                           # character literal: skip 'x' whole
-            when '(':
-                depth += 1
-                var j: Natural = i + 1
-                j = skip_ch(text, j, ' ')
-                let kw: str = lead_ident(text[j:]).lower()
-                case kw:
-                    when "if":
-                        openers.append((depth, base_col + j, IF_EXPR))
-                    when "case":
-                        openers.append((depth, base_col + j, CASE_EXPR))
-                    when "for":
-                        openers.append((depth, base_col + j, FOR_EXPR))
-                    when others:
-                        openers.append((depth, base_col + (j if j < n else INDENT_WIDTH), PLAIN))
-                i += 1
-            when ')':
-                depth -= 1
-                i += 1
-            when others:
-                i += 1
+    for i, ch in code_positions(text):
+        if ch == ')':
+            depth -= 1
+        elif ch == '(':
+            depth += 1
+            # The first item after the '(' is what continuations align to, and
+            # the keyword it starts with, if any, is what kind of paren this is.
+            # A '(' that ends the line has no item to align to, so the column is
+            # one level in -- and no keyword either, so it is PLAIN.
+            let j: Natural = skip_ch(text, i + 1, ' ')
+            let kw: str = lead_ident(text[j:]).lower()
+            openers.append((depth,
+                            base_col + (j if j < n else INDENT_WIDTH),
+                            PAREN_KIND.get(kw, PLAIN)))
     return openers
 
 
