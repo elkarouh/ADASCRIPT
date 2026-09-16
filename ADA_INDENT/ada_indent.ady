@@ -152,12 +152,9 @@ def is_term_continuation(code_s: str) -> bool:
     branch (its 'lw != and/or' guard), not here, because the rule differs
     between a free value expression (connectives indent under their operand)
     and a condition (connectives align under the 'if')."""
-    if code_s == "":
-        return False
-    if code_s.startswith("("):
-        return True
-    if not starts_with_operator(code_s) or code_s.startswith((":=", "=>", "|")):
-        return False
+    return False if code_s == ""
+    return True if code_s.startswith("(")
+    return False if not starts_with_operator(code_s) or code_s.startswith((":=", "=>", "|"))
     let w: str = lead_ident(code_s).lower()
     if w in ("and", "or"):
         # Boolean connectives join successive operands of a value expression;

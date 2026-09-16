@@ -836,6 +836,38 @@ match result:
 """,
 )
 
+section("Statement modifier — `<stmt> if <cond>`")
+
+test("modifier: return", 'return False if code_s == ""\n',
+     'if code_s == "": return False\n')
+test("modifier: return true", 'return True if code_s.startswith("(")\n',
+     'if code_s.startswith("("): return True\n')
+test("modifier: condition with or",
+     'return False if not starts_with_operator(s) or s.startswith((":=", "=>"))\n',
+     'if not starts_with_operator(s) or s.startswith((":=", "=>")): return False\n')
+test("modifier: continue", "continue if i == 2\n", "if i == 2: continue\n")
+test("modifier: break", "break if i > 5\n", "if i > 5: break\n")
+test("modifier: pass", "pass if quiet\n", "if quiet: pass\n")
+test("modifier: augmented assign", "total += i if i > 0\n", "if i > 0: total += i\n")
+test("modifier: assignment", "v = 100 if v > 100\n", "if v > 100: v = 100\n")
+test("modifier: raise", 'raise ValueError("neg") if n < 0\n',
+     'if n < 0: raise ValueError("neg")\n')
+test("modifier: assert", "assert n < 1000 if n > 0\n", "if n > 0: assert n < 1000\n")
+test("modifier: bare print", 'print "seen", i if i == 4\n',
+     'if i == 4: print("seen", i)\n')
+test("modifier: call statement", "log(x) if verbose\n", "if verbose: log(x)\n")
+test("modifier: inline comment travels", "return 0 if n < 0  # guard\n",
+     "if n < 0: return 0  # guard\n")
+test("modifier: inside a one-line suite", "if big: return 1 if x == 1\n",
+     "if big:\n    if x == 1: return 1\n")
+# The conditional expression keeps its reading: an `if` with an `else` is a
+# ternary, and the modifier declines the line.
+test("ternary still an expression", "v: int = 1 if flag else 2\n")
+test("ternary in a return", "return 1 if flag else 2\n")
+test("ternary as an argument", "f(1 if flag else 2)\n")
+test("ternary in a comprehension", "xs = [a if a else b for a in ys]\n")
+
+
 print(f"\n{'='*60}")
 print(f"Results: {_passed} passed, {_failed} failed, {_errors} errors")
 print(f"  (FAIL/ERROR includes both known bugs and any regressions)")

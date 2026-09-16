@@ -31,6 +31,7 @@
 | Pattern matching (Ada style) | `case x:` / `when pat:` / `when others:` |
 | Pattern matching (Python style) | `match x:` / `case pat if guard:` |
 | Inline suite | `if c: stmt`, `when p: stmt`, `while c: stmt` |
+| Statement modifier | `stmt if cond` (`return False if s == ""`) |
 | Implicit return | last bare expression of a `-> T` function |
 | Nim result variable | `result` inside a `-> T` function |
 | Class field | `var x: T = default` in class body |

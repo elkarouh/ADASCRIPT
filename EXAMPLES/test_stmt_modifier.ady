@@ -1,0 +1,87 @@
+#!/usr/bin/env ady2nim
+"""Test: `if` statement modifier — `<statement> if <condition>`.
+
+A guard clause written on one line: the statement runs only when the
+condition holds. Both backends emit the one-line `if cond: stmt` form, so
+the check here is that the two agree — every case is an assert, and the
+ternary cases are the ones that must keep parsing as expressions rather
+than as a modifier.
+"""
+
+# ─── test 1: return, the guard-clause case ───────────────────────────────────
+
+def is_term_continuation(code_s: str) -> bool:
+    """The shape the modifier was added for: three guards, then the work."""
+    return False if code_s == ""
+    return True if code_s.startswith("(")
+    return False if code_s.startswith(":=") or code_s.startswith("=>")
+    return code_s[0] != 'x'
+
+assert not is_term_continuation("")
+assert is_term_continuation("(a, b)")
+assert not is_term_continuation(":= 1")
+assert not is_term_continuation("xor y")
+assert is_term_continuation("and then z")
+print "test1 OK"
+
+# ─── test 2: continue / break inside a loop ──────────────────────────────────
+
+def sum_small(xs: []int) -> int:
+    var total: int = 0
+    for x in xs:
+        continue if x == 0
+        break if x < 0
+        total += x if x < 10
+    return total
+
+assert sum_small([1, 0, 2, 100, 3]) == 6      # 100 skipped by the += guard
+assert sum_small([1, 2, -1, 4]) == 3          # -1 breaks
+print "test2 OK"
+
+# ─── test 3: assignment to an existing variable, and print ───────────────────
+
+def clamp(n: int) -> int:
+    var v: int = n
+    v = 100 if v > 100
+    v = 0 if v < 0
+    return v
+
+assert clamp(150) == 100
+assert clamp(-5) == 0
+assert clamp(42) == 42
+print "hello from the modifier" if clamp(1) == 1
+print "test3 OK"
+
+# ─── test 4: raise and assert under a modifier ───────────────────────────────
+
+def checked(n: int) -> int:
+    raise ValueError("negative") if n < 0
+    assert n < 1000 if n > 0
+    return n
+
+assert checked(7) == 7
+var caught: bool = False
+try:
+    let _bad: int = checked(-1)
+except ValueError:
+    caught = True
+assert caught
+print "test4 OK"
+
+# ─── test 5: the conditional expression is untouched ─────────────────────────
+#
+# `a if c else b` is an expression and must keep parsing as one: the modifier
+# only takes a line whose `if` has no `else`.
+
+def pick(flag: bool) -> int:
+    let v: int = 1 if flag else 2
+    return v
+
+assert pick(True) == 1
+assert pick(False) == 2
+
+var chosen: str = "big" if len("abcd") > 3 else "small"
+assert chosen == "big"
+print "test5 OK"
+
+print "all statement-modifier tests passed"

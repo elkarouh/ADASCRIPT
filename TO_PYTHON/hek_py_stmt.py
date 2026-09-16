@@ -15,6 +15,7 @@ Statements implemented:
     - import, from ... import
     - type alias:          type X = int | str  (3.12+)
     - Expression statement: f(x), x
+    - Statement modifier: return False if x == ""
 
 Usage:
     ast = parse_stmt("x = 1")
@@ -1083,6 +1084,21 @@ def to_py(self):
 
 
 # --- simple_stmt ---
+
+
+# --- statement modifier ---
+@method(modifier_if_stmt)
+def to_py(self, indent=0):
+    """modifier_if_stmt: <stmt> 'if' disjunction -> Python: if cond: <stmt>
+
+    The one-line `if` is what both backends emit, rather than a two-line
+    block: stmt_line hands a statement a single indent and joins whatever
+    comes back, so a rendering that spans lines would have every line after
+    the first re-indented to the first one's column.
+    """
+    body, cond = self.nodes[0], self.nodes[1]
+    body_py = body.to_py(0) if _to_py_takes_indent(body.to_py) else body.to_py()
+    return f"{_ind(indent)}if {cond.to_py()}: {body_py.strip()}"
 
 
 # --- stmt_line ---

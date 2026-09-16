@@ -761,6 +761,43 @@ elif x < 10: print("5<=x<10")
 else: print("x>=10")
 ```
 
+### Statement modifier: `<statement> if <condition>`
+
+A statement can carry its own `if`, and runs only when the condition holds.
+The guard clause reads answer-first:
+
+```python
+def is_term_continuation(code_s: str) -> bool:
+    return False if code_s == ""
+    return True if code_s.startswith("(")
+    return False if not starts_with_operator(code_s)
+    return lead_ident(code_s).lower() != "xor"
+```
+
+Each of those lines emits the one-line `if` on both backends
+(`if code_s == "": return False`). `return`, `break`, `continue`, `pass`,
+`raise`, `assert`, `del`, `yield`, `print`, an assignment or augmented
+assignment and any call can take one:
+
+```python
+continue if line.startswith("#")
+total += n if n > 0
+raise ValueError("negative") if n < 0
+```
+
+A declaration cannot: `var`, `let`, `const`, `x: int = 1`, `import` and
+`type` bind a name, and the name would live only inside the body the
+modifier builds. A first assignment to a name is a declaration on the Nim
+side, so that is refused too -- declare it, then guard the assignment:
+
+```python
+var v: int = n
+v = 100 if v > 100
+```
+
+The conditional expression is untouched: a modifier's `if` has no `else`, so
+`v: int = 1 if flag else 2` is still a ternary.
+
 ### for loops
 
 ```python
@@ -2550,6 +2587,7 @@ through the same ground in more detail.
 | Enum-indexed array literal        | `[KEY: value, ...]`                      |
 | Pattern matching                  | `case x: when P: ... when others: ...`  |
 | Inline suite (single-stmt body)   | `if x>0: f()`, `while c: g()`, `when P: h()` |
+| Statement modifier                | `return False if s == ""`               |
 | Generator functions               | `def f(): ... yield value`               |
 | Field with inline default         | `var x: int = 0` inside class body       |
 | Mutable self (auto-detected)      | any `self.field =` / `self.method()`     |

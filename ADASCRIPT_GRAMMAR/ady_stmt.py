@@ -15,6 +15,7 @@ Statements implemented:
     - import, from ... import
     - type alias:          type X = int | str  (3.12+)
     - Expression statement: f(x), x
+    - Statement modifier: return False if x == ""
 
 Usage:
     ast = parse_stmt("x = 1")
@@ -144,6 +145,9 @@ variant_case = fw("variant_case")
 discrim_record_def = fw("discrim_record_def")
 type_block_stmt = fw("type_block_stmt")
 simple_stmt = fw("simple_stmt")
+modifier_body = fw("modifier_body")
+modifier_if_stmt = fw("modifier_if_stmt")
+stmt_head = fw("stmt_head")
 stmt_line = fw("stmt_line")
 
 # Re-wrap imported Sequence_Parsers as fw() so they don't get flattened
@@ -340,8 +344,47 @@ simple_stmt = (
     | expressions
 )
 
+# --- statement modifier: `<stmt> if <condition>` (Perl / Ruby style) ---
+#
+#   return False if code_s == ""      ->      if code_s == "":
+#                                                 return False
+#
+# The guarded statement is deliberately not the whole of simple_stmt: a
+# declaration (`var`, `let`, `const`, `own`, `x: int = 1`) binds a name, and
+# both backends would bind it inside the body the modifier builds, where Nim
+# scopes it to that body and the name is gone by the next line. An import or a
+# type declaration has the same problem. What is left is the set of statements
+# that only *do* something, which is what a modifier is for.
+#
+# The condition is a disjunction rather than a full expression, the same rule a
+# comprehension's `if` uses, so `x = a if b else c` keeps parsing as a
+# conditional expression: the assignment swallows the whole ternary and the
+# modifier's `if` never matches. ~I_ELSE is the second lock on that
+# door: an `else` after the condition means the line was a conditional
+# expression the statement did not take, so the modifier declines and the
+# plain form is parsed instead.
+modifier_body = (
+    return_stmt
+    | pass_stmt
+    | break_stmt
+    | continue_stmt
+    | del_stmt
+    | assert_stmt
+    | raise_stmt
+    | aug_assign_stmt
+    | subst_stmt
+    | assign_stmt
+    | yield_expr
+    | print_stmt
+    | expressions
+)
+modifier_if_stmt = modifier_body + I_IF + disjunction + ~I_ELSE
+
 # --- stmt_line: semicolon-separated statements on one line ---
-stmt_line = simple_stmt + (SEMICOLON + simple_stmt)[:] + SEMICOLON[:] + NEWLINE
+# The modifier form is offered first, and only as the whole line: `a; b if c`
+# has no reading that both backends can emit on one line, so it is not one.
+stmt_head = modifier_if_stmt | simple_stmt
+stmt_line = stmt_head + (SEMICOLON + simple_stmt)[:] + SEMICOLON[:] + NEWLINE
 
 ###############################################################################
 

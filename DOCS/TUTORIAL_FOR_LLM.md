@@ -318,6 +318,23 @@ elif x < 10: print("5<=x<10")
 else: print("x>=10")
 ```
 
+### Statement modifier
+A statement may carry its own `if` (Perl/Ruby style) and runs only when the
+condition holds. Emits the one-line `if cond: stmt` on both backends.
+```adascript
+return False if code_s == ""
+return True if code_s.startswith("(")
+continue if line.startswith("#")
+total += n if n > 0
+raise ValueError("negative") if n < 0
+```
+Allowed on `return`, `break`, `continue`, `pass`, `raise`, `assert`, `del`,
+`yield`, `print`, assignment / augmented assignment and any call. NOT allowed
+on a declaration (`var`, `let`, `const`, `x: int = 1`, `import`, `type`): the
+name would be scoped to the modifier's body. A first assignment to a name is
+a declaration on the Nim side, so declare first, then guard the assignment.
+A modifier's `if` has no `else` -- `x = 1 if flag else 2` is still a ternary.
+
 ### while
 ```adascript
 while queue:

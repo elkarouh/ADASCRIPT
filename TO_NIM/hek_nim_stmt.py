@@ -2140,6 +2140,50 @@ def to_nim(self):
     return f"echo({arg})"
 
 
+# --- statement modifier ---
+@method(modifier_if_stmt)
+def to_nim(self, indent=0):
+    """modifier_if_stmt: <stmt> 'if' disjunction -> Nim: if cond: <stmt>
+
+    One line rather than a two-line block, as on the Python side: stmt_line
+    re-indents every line after the first to the statement's own column, so a
+    body on its own line would come back out level with its `if`.
+
+    The condition goes through _nim_truthiness for the same reason an `if`
+    statement's does -- `return 0 if not xs` is a test on a sequence, and Nim
+    has no truthiness of its own to fall back on.
+    """
+    import hek_nim_expr
+    body, cond = self.nodes[0], self.nodes[1]
+    try:
+        body_nim = body.to_nim(0)
+    except TypeError:
+        body_nim = body.to_nim()
+    cond_nim = hek_nim_expr._nim_truthiness(cond.to_nim())
+    _body = body_nim.strip()
+    # A first assignment to a name emits `var x = ...` here, and Nim will not
+    # take a declaration on the same line as the `if` -- nor would the name
+    # outlive the body if it did, which is the real objection: the statement
+    # after it would not see x. The grammar keeps `var`/`let`/`const` and an
+    # annotated assignment out of the modifier for that reason, and a plain
+    # `x = ...` that turns out to be the first mention of x is the same
+    # statement wearing another hat. Say so here rather than leave it to Nim,
+    # whose own message ("nestable statement requires indentation") names
+    # neither the modifier nor the variable.
+    if _body.startswith(("var ", "let ", "const ")):
+        _kw, _rest = _body.split(None, 1)
+        _target = _rest.split("=", 1)[0].split(":")[0].strip()
+        raise SyntaxError(
+            f"'{_target} = ...' declares {_target}, and a declaration cannot take "
+            f"an 'if' modifier: the name would live only inside the modifier's "
+            f"body.\n"
+            f"  Declare it first, then guard the assignment:\n"
+            f"      {_kw} {_target} = ...\n"
+            f"      {_target} = ... if <condition>"
+        )
+    return f"{_ind(indent)}if {cond_nim}: {_body}"
+
+
 # --- simple_stmt ---
 
 

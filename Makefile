@@ -73,7 +73,8 @@ STANDALONE := \
     td_learning/qlearning.ady \
     PROJECT/dispatch.ady \
     PROJECT/test_geometry.ady \
-    test_do_block.ady
+    test_do_block.ady \
+    test_stmt_modifier.ady
 
 # -----------------------------------------------------------------------
 # Stdin tests — piped from a sample file

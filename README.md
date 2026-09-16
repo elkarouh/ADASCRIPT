@@ -48,6 +48,7 @@ source.ady
 - [Variable Declarations](#variable-declarations)
 - [Range Expressions](#range-expressions)
 - [Case / When Statements](#case--when-statements)
+- [Statement Modifier](#statement-modifier)
 - [Regex Literals](#regex-literals)
 - [Tick Attributes](#tick-attributes)
 - [Enum Array Literals](#enum-array-literals)
@@ -740,6 +741,77 @@ not:
 case state:              # ✗ plain variable — emits Nim `case`, fails at compile
     when (right, right, right, right): ...
 ```
+
+---
+
+## Statement Modifier
+
+A statement can carry its own `if`, Perl- and Ruby-style: the statement runs
+only when the condition holds. It is the guard clause written the way it
+reads -- the answer first, the reason for it after.
+
+```python
+def is_term_continuation(code_s: str) -> bool:
+    return False if code_s == ""
+    return True if code_s.startswith("(")
+    return False if not starts_with_operator(code_s) or code_s.startswith((":=", "=>", "|"))
+    let w: str = lead_ident(code_s).lower()
+    return w != "xor"
+```
+
+Both backends emit the one-line `if`, so the shape of the generated code is
+the shape of the source:
+
+**Python output:**
+
+```python
+if code_s == "": return False
+```
+
+**Nim output:**
+
+```nim
+if code_s == "": return false
+```
+
+The condition is an ordinary expression -- calls, `and` / `or` / `not`,
+comparisons, `in`:
+
+```python
+continue if line.startswith("#") or line.strip() == ""
+break if depth < 0
+total += n if n > 0
+raise ValueError("negative") if n < 0
+print "skipped:", path if verbose
+```
+
+**A conditional expression is still a conditional expression.** The modifier
+takes only an `if` with no `else`, so the ternary keeps its Python reading:
+
+```python
+v: int = 1 if flag else 2      # conditional expression, unchanged
+v = 100 if v > 100             # modifier: if v > 100: v = 100
+```
+
+**What can carry a modifier:** `return`, `break`, `continue`, `pass`,
+`raise`, `assert`, `del`, `yield`, `print`, an assignment or augmented
+assignment, a substitution, and any expression statement (a call).
+
+**What cannot:** a declaration -- `var` / `let` / `const`, an annotated
+assignment (`x: int = 1`), an `import`, or a `type` declaration. The name
+such a statement binds would live only inside the body the modifier builds,
+which is not what the line looks like it says, so the parser rejects it
+rather than emit it. For the same reason, a first assignment to a name (the
+one the Nim backend turns into a `var`) is a transpile-time error under a
+modifier; declare the variable first and guard the assignment to it:
+
+```python
+var v: int = n
+v = 100 if v > 100
+```
+
+One statement per line: `a; b if c` is not accepted, because neither backend
+can spell it on one line.
 
 ---
 
