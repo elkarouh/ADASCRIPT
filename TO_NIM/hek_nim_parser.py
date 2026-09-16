@@ -284,6 +284,66 @@ def to_nim(self, indent=0):
 
 
 # --- block ---
+def _leaves_the_block(last_line):
+    """Does this statement leave the block it is in?
+
+    The language's own exits, and a call to a proc that never returns -- a
+    `die` that ends in quit(1) is the guard clause this codebase is written
+    in, and without it the guard below proved nothing.
+    """
+    stripped = last_line.lstrip()
+    head = stripped.split("(")[0].split()
+    if head and head[0] in ("return", "break", "continue", "raise", "quit"):
+        return True
+    import re as _re_lb
+    call = _re_lb.match(r'^(?:discard\s+)?([A-Za-z_]\w*)\(', stripped)
+    return bool(call) and call.group(1) in getattr(ParserState, "noreturn_procs", set())
+
+
+def note_option_guard(chunk, collected=None):
+    """Record the optionals a leaving guard proves present.
+
+    `if v is None: return` proves v has a value in everything after it, which
+    is the whole point of the flat guard-clause style. Nim has no flow
+    typing, so the names are collected here and auto-unwrapped for the rest
+    of the scope, exactly as `if v is not None:` does for its body.
+
+    Called for a block's statements and for the module's: module level is not
+    a `block`, so a guard written there used to prove nothing -- which is
+    where a wrapper script does all its work.
+    """
+    chunk_lines = [l for l in chunk.split("\n") if l.strip()]
+    if len(chunk_lines) < 2:
+        return
+    # A dotted path as well as a bare name: `if f.line is None: return`
+    # proves f.line below it exactly as `if x is None: return` proves x.
+    m = re.match(r'^(\s*)if\s+([A-Za-z_]\w*(?:\.\w+)*(?:\[\d+\])?)\.isNone:\s*(?:#.*)?$',
+                 chunk_lines[0])
+    if not m:
+        return
+    head_indent, name = m.group(1), m.group(2)
+    # Comments are not statements: a note written under the guard -- which is
+    # exactly where one gets written, explaining what the guard establishes --
+    # was taken for the guard's last line, and a comment does not leave the
+    # block, so the guard proved nothing.
+    rest = [l for l in chunk_lines[1:] if not l.lstrip().startswith("#")]
+    if not rest:
+        return
+    # An elif/else at the guard's own indent means it is a branch, not a
+    # guard: the code after it is reached with the optional still unknown.
+    for l in rest:
+        if len(l) - len(l.lstrip()) <= len(head_indent):
+            return
+    if not _leaves_the_block(rest[-1]):
+        return
+    if not hasattr(ParserState, '_option_unwrap_vars'):
+        ParserState._option_unwrap_vars = set()
+    if name not in ParserState._option_unwrap_vars:
+        ParserState._option_unwrap_vars.add(name)
+        if collected is not None:
+            collected.append(name)
+
+
 @method(block)
 def to_nim(self, indent=0, is_virtual=False, class_name=None, parent_name=None, type_params=""):
     """Emit body lines. For virtual classes, generates proper Nim structure."""
@@ -299,30 +359,7 @@ def to_nim(self, indent=0, is_virtual=False, class_name=None, parent_name=None, 
     _guard_unwrapped = []
 
     def _note_option_guard(chunk):
-        chunk_lines = [l for l in chunk.split("\n") if l.strip()]
-        if len(chunk_lines) < 2:
-            return
-        # A dotted path as well as a bare name: `if f.line is None: return`
-        # proves f.line below it exactly as `if x is None: return` proves x.
-        m = re.match(r'^(\s*)if\s+([A-Za-z_]\w*(?:\.\w+)*(?:\[\d+\])?)\.isNone:\s*(?:#.*)?$',
-                     chunk_lines[0])
-        if not m:
-            return
-        head_indent, name = m.group(1), m.group(2)
-        rest = chunk_lines[1:]
-        # An elif/else at the guard's own indent means it is a branch, not a
-        # guard: the code after it is reached with the optional still unknown.
-        for l in rest:
-            if len(l) - len(l.lstrip()) <= len(head_indent):
-                return
-        last = rest[-1].lstrip().split("(")[0].split()
-        if not last or last[0] not in ("return", "break", "continue", "raise", "quit"):
-            return
-        if not hasattr(ParserState, '_option_unwrap_vars'):
-            ParserState._option_unwrap_vars = set()
-        if name not in ParserState._option_unwrap_vars:
-            ParserState._option_unwrap_vars.add(name)
-            _guard_unwrapped.append(name)
+        note_option_guard(chunk, _guard_unwrapped)
 
     def _emit(chunk):
         lines.append(chunk)
@@ -2457,6 +2494,17 @@ def _func_def_to_nim_inner(self, indent=0):
     body = block_node.to_nim(indent + 1) if block_node else ""
     ParserState.symbol_table.pop_scope()
     body = _bind_user_result(body, ret_ann)
+    # A proc that always leaves -- a `die` ending in quit(1) -- so that a
+    # guard whose body calls it counts as one that leaves the block.
+    if name and body:
+        _blines_nr = [l for l in body.splitlines()
+                      if l.strip() and not l.lstrip().startswith("#")]
+        if _blines_nr:
+            _last_nr = _blines_nr[-1].lstrip().split("(")[0].split()
+            if _last_nr and _last_nr[0] in ("quit", "raise"):
+                if not hasattr(ParserState, "noreturn_procs"):
+                    ParserState.noreturn_procs = set()
+                ParserState.noreturn_procs.add(name)
     ParserState._current_return_type = ""
     # Strip trailing 'discard' from implicit return — the value is the return value
     _void_rets_set = {"void", "None", "unit"}

@@ -1926,6 +1926,32 @@ if not have("git"):
 `have` answers from `PATH` — `shutil.which` on Python, `findExe` on Nim —
 so unlike `command -v` it costs neither a process nor a shell.
 
+`which` is the same lookup keeping the answer: a `?Path`, `None` when the
+program is not there.
+
+```python
+let git: ?Path = which("git")
+if git is None:
+    die("git is required")
+print "using " + str(git)
+```
+
+A program that has to find its own installation is the reason it exists —
+`which($0's name).parent` is where this binary lives, without spawning the
+`which` command, which is a process and a program not every system carries.
+A `?Path` rather than an empty string because an empty path does not stay
+empty: `Path("").parent` is `"."`, so a missed check builds a plausible path
+out of nothing. `have(x)` is `which(x) is not None`.
+
+A guard that leaves proves the value is there, and both backends know it:
+
+```python
+let found: ?Path = which(prog)
+if found is None:
+    die("not on PATH")
+let base: Path = found.parent.parent    # a plain Path from here on
+```
+
 ### Running commands alongside each other
 
 Every form so far waits: the statement does not finish until the command

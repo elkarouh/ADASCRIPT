@@ -86,6 +86,7 @@ def _nim_reset():
     ParserState.iterator_names = set()  # names of defs that become Nim iterators (have 'yield')
     ParserState.nimpy_len_needed = False  # set when len() is called on a PyObject
     ParserState._option_unwrap_vars = set()  # Option vars proven non-None by enclosing if-guard
+    ParserState.noreturn_procs = set()  # procs that always quit/raise, so a guard calling one leaves
     ParserState.contextmanager_funcs = set()  # names of @contextmanager-decorated functions
 
     # Install to_nim() fallback on the base Parser class so any node that
@@ -391,6 +392,12 @@ def translate(code, export_symbols=False):
         if '\n' not in rendered and rendered.strip():
             from hek_nim_parser import _add_call_discards
             rendered = _add_call_discards([rendered])[0]
+        # ...and the same for the guard pass, for the same reason: a
+        # `if p is None: die(...)` written at module level proves p present
+        # for the statements after it, which is where a wrapper script does
+        # all of its work.
+        from hek_nim_parser import note_option_guard
+        note_option_guard(rendered)
         # Strip trailing blank lines from compound statement bodies
         rendered_lines = rendered.split('\n')
         trailing_blanks = 0

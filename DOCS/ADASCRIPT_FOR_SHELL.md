@@ -692,6 +692,7 @@ that have to be updated in step by hand.
 | `dirname`, `basename` | `p.parent`, `p.name` |
 | `[ -f "$p" ]`, `[ -d "$p" ]` | `-f p`, `-d p` — unchanged |
 | `command -v foo >/dev/null` | `have("foo")` |
+| `p=$(command -v foo)` | `which("foo")`, a `?Path` |
 | `$1`, `$#`, `$@` | `$1`, `$#`, `$@` |
 | `$HOME` | `$HOME` |
 | `${VAR:-default}` | `${VAR:-default}` |

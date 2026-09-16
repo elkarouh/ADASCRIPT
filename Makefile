@@ -77,7 +77,8 @@ STANDALONE := \
     PROJECT/test_geometry.ady \
     test_do_block.ady \
     test_stmt_modifier.ady \
-    test_str_join.ady
+    test_str_join.ady \
+    test_which.ady
 
 # -----------------------------------------------------------------------
 # Stdin tests — piped from a sample file

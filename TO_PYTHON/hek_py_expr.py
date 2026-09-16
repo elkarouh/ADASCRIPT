@@ -948,6 +948,39 @@ def _have_call(call_trailer):
     return "_have" + call_trailer
 
 
+_WHICH_HELPER = '''\
+def _which(_name):
+    """Where _name is on PATH, or None when it is not there.
+
+    `have(x)` is this with the answer thrown away; a program that needs the
+    path -- to find its own installation, say -- would otherwise have to
+    spawn `which`, which is both a process and a program not every system
+    carries.
+    """
+    import shutil as _shutil
+    _found = _shutil.which(_name)
+    return None if _found is None else Path(_found)\
+'''
+
+
+def _which_call(call_trailer):
+    """`which(x)` -> `_which(x)`, or None if not that shape."""
+    if not (call_trailer.startswith("(") and call_trailer.endswith(")")):
+        return None
+    if not call_trailer[1:-1].strip():
+        return None
+    from hek_parsec import ParserState
+    # The answer is a Path: a program's location is joined and taken apart,
+    # not concatenated.
+    from hek_py_declarations import _ensure_path_alias
+    _ensure_path_alias()
+    decls = getattr(ParserState, 'py_top_decls', [])
+    if not any("def _which(" in d for d in decls):
+        decls.append(_WHICH_HELPER)
+        ParserState.py_top_decls = decls
+    return "_which" + call_trailer
+
+
 _ENUM_RANGE_HELPER = '''\
 def _ada_enum_range(_lo, _hi, _inclusive=True):
     """The members from _lo to _hi, the way Nim's `lo .. hi` walks an enum.
@@ -1221,6 +1254,12 @@ def to_py(self, prec=None):
                     continue
             if i == 0 and result == "have" and "have" not in _own:
                 helper = _have_call(tr_str)
+                if helper is not None:
+                    result = helper
+                    i += 1
+                    continue
+            if i == 0 and result == "which" and "which" not in _own:
+                helper = _which_call(tr_str)
                 if helper is not None:
                     result = helper
                     i += 1

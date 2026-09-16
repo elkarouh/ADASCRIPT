@@ -1,0 +1,58 @@
+#!/usr/bin/env ady2nim
+"""Test: `which(name)`, and the guard clause that unwraps what it returns.
+
+`have(name)` answers a bool over the same lookup -- findExe on Nim,
+shutil.which on Python -- and throws the path away. A program that needs to
+find its own installation had to spawn `which(1)` for it, which is a process
+and a program not every system carries.
+
+The return is a `?Path` -- a path, since that is what it is, and an optional
+rather than "" for not-found, because "" does not stay empty: `Path("").parent`
+is ".", so a missed check builds a plausible path out of nothing.
+
+The other half is the guard: `if p is None: <leave>` proves p present for
+everything after it, and Nim has no flow typing, so the emitter has to see
+that and unwrap. It did so inside a block, for the language's own exits;
+this file covers the two cases it missed -- a guard at module level, and one
+whose body calls a proc that always quits.
+"""
+
+def die(msg: str):
+    stderr.writeLine("test_which: " + msg)
+    quit(1)
+
+# --- what it answers --------------------------------------------------------
+
+assert which("sh") is not None
+assert which("definitely_not_a_program_xyz") is None
+assert have("sh") == (which("sh") is not None)
+assert have("definitely_not_a_program_xyz") == False
+
+let sh_path: ?Path = which("sh")
+if sh_path is not None:
+    assert sh_path.name == "sh"                  # a Path, so it comes apart
+
+# --- the default form -------------------------------------------------------
+
+assert str(which("definitely_not_a_program_xyz") or Path("/bin/sh")) == "/bin/sh"
+
+# --- a guard at module level, which is where a wrapper does its work --------
+
+let found: ?Path = which("sh")
+if found is None:
+    die("sh is not on PATH, which this test needs")
+# `found` is a plain Path from here on, on both backends.
+assert found.name == "sh"
+assert str(found.parent).startswith("/")
+
+# --- ...and a guard whose body calls a proc that always quits ---------------
+
+def parent_of(name: str) -> str:
+    let hit: ?Path = which(name)
+    if hit is None:
+        die(name + " is not on PATH")
+    return str(hit.parent)
+
+assert parent_of("sh").startswith("/")
+
+print "all which() tests passed"

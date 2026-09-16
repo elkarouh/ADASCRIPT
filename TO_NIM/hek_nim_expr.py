@@ -183,6 +183,30 @@ def _ensure_envopt_helper():
         ParserState.nim_top_decls = decls
 
 
+_WHICH_HELPER = """\
+proc adascriptWhich(name: string): Option[Path] =
+  ## `which(name)`: where the program is on PATH, as a ?str.
+  ## findExe answers "" when it finds nothing, and "" is not a path a caller
+  ## can be trusted to notice -- `Path("").parent` is ".".
+  ##
+  ## followSymlinks = false: findExe resolves them by default, so `which("sh")`
+  ## answered /usr/bin/dash here and /usr/bin/sh on the Python backend, which
+  ## reports the name it found. A caller deriving its own installation from
+  ## this wants the link it was invoked through, not the file behind it.
+  let found = findExe(name, followSymlinks = false)
+  if found.len > 0: some(Path(found)) else: none(Path)
+"""
+
+
+def _ensure_which_helper():
+    """Add adascriptWhich to nim_top_decls the first time which() is used."""
+    ParserState.nim_imports.update({"os", "options", "std/paths"})
+    decls = getattr(ParserState, 'nim_top_decls', [])
+    if not any("adascriptWhich" in d for d in decls):
+        decls.append(_WHICH_HELPER)
+        ParserState.nim_top_decls = decls
+
+
 _ZFILL_HELPER = """\
 proc adascriptZfill(s: string, width: int): string =
   ## Python's str.zfill: left-pad with '0' to `width`, keeping a leading sign
@@ -270,7 +294,7 @@ _STRING_RETURNING_CALLS = ("adascriptEnvOr(", "getEnv(", "paramStr(",
 # ...and the one bundled proc whose result is an Option. Kept beside the list
 # above so the two stay together, since both answer "what does this emitted
 # call return" for callers that have no symbol-table entry to consult.
-_OPTION_RETURNING_CALLS = ("adascriptEnvOpt(",)
+_OPTION_RETURNING_CALLS = ("adascriptEnvOpt(", "adascriptWhich(")
 
 
 def _nim_expr_type(expr):
@@ -400,6 +424,8 @@ def _nim_expr_type(expr):
         # known string-returning stdlib calls
         if s.startswith(_STRING_RETURNING_CALLS):
             return "string"
+        if s.startswith("adascriptWhich("):
+            return "Option[Path]"
         if s.startswith(_OPTION_RETURNING_CALLS):
             return "Option[string]"
 
@@ -3030,6 +3056,16 @@ def _translate_stdlib_patterns(expr):
             and have_m.group(1).count("(") == have_m.group(1).count(")")):
         ParserState.nim_imports.add("os")
         return f"(findExe({have_m.group(1)}).len > 0)"
+
+    # which(x) -- the same lookup, keeping the answer. findExe returns "" for
+    # a program it cannot find, and the `?str` that reaches Adascript tells
+    # that from a path, so a caller cannot walk into the empty one: `Path("")`
+    # has a parent, and it is ".".
+    which_m = _re.match(r"^which\((.+)\)$", expr, _re.DOTALL)
+    if (which_m and "which" not in _own
+            and which_m.group(1).count("(") == which_m.group(1).count(")")):
+        _ensure_which_helper()
+        return f"adascriptWhich({which_m.group(1)})"
 
     run_m = _re.match(r"^(run|runLines)\(", expr)
     if run_m and run_m.group(1) not in _own:
