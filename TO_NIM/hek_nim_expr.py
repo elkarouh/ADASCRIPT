@@ -378,6 +378,25 @@ def _nim_expr_type(expr):
                 return _seq_elem(base_type)
             return None
 
+        # a string literal, which the operand of a concatenation often is:
+        # `_resolve('"2"')` answered None, so `s & "2"` had no type and
+        # `int(s + "2")` stayed an int() of a string.
+        if len(s) >= 2 and s[-1] == '"' and (s[0] == '"' or s.startswith(("fmt\"", "$\"", "r\""))):
+            return "string"
+
+        # concatenation: every operand of a top-level `&` has the same type,
+        # and it is the type of the whole. Without this the resolver gave up
+        # on `s & "2"` and `a & b` -- so `int(s + "2")` never reached
+        # parseInt, and `if a + b:` never had its `.len > 0` appended, both
+        # of which Nim then rejected.
+        _operands = _split_toplevel_concat(s)
+        if _operands is not None:
+            _types = [_resolve(o) for o in _operands]
+            if _types[0] and all(t == _types[0] for t in _types):
+                if _types[0] == "string" or _types[0].startswith("seq["):
+                    return _types[0]
+            return None
+
         # known string-returning stdlib calls
         if s.startswith(_STRING_RETURNING_CALLS):
             return "string"
@@ -445,7 +464,7 @@ def _nim_truthiness(expr):
         _tbl_sym = ParserState.symbol_table.lookup(_god_m.group(1))
         _tbl_type = (_tbl_sym.get("type") or "") if _tbl_sym else ""
         if _tbl_type.endswith(", string]"):  # Table[K, string]
-            return f"{expr}.len > 0"
+            return f"{_paren_if_compound(expr)}.len > 0"
     if _is_comparison:
         return expr
     # A Path in a truthiness position. Path is `distinct string` on Nim, so
@@ -480,7 +499,7 @@ def _nim_truthiness(expr):
                     "LifoQueue", "HashSet", "Table", "Deque")
     t = _nim_expr_type(expr)
     if t and any(t.startswith(p) for p in _STRING_LIKE):
-        return f"{expr}.len > 0"
+        return f"{_paren_if_compound(expr)}.len > 0"
     # ref class (nullable): truthiness is != nil
     _bare = _re_truth.match(r'^[A-Za-z_]\w*$', expr)
     if _bare:
@@ -720,7 +739,14 @@ def binop_to_nim(self, prec=None, my_prec=None):
                                or result.startswith('r"') or result.startswith('$')
                                or result.endswith('.join("")') or result.endswith(".join(\"\")")
                                or result.startswith(_STRING_RETURNING_CALLS)
-                               or " & " in result)  # already a string concat chain
+                               # already a string concat chain -- but only
+                               # when the `&` is this expression's own
+                               # operator. Inside a call or a bracket it
+                               # belongs to something else, and
+                               # `(s & "2").parseInt() + 1` was read as a
+                               # string concatenation because of the `&`
+                               # buried in the receiver.
+                               or _split_toplevel_concat(result) is not None)
                 right_is_str = (right.startswith('"') or right.startswith('fmt"')
                                 or right.startswith('r"') or right.startswith('$')
                                 or right.endswith('.join("")') or right.endswith(".join(\"\")")
@@ -2826,6 +2852,44 @@ def _expr_is_char(arg):
         sym = ParserState.symbol_table.lookup(_m.group(1))
         return bool(sym) and (sym.get("type") or "") in ("string", "str")
     return False
+
+
+def _split_toplevel_concat(text):
+    """The operands of a top-level `&`, or None when there is no such `&`.
+
+    Brackets and quotes are skipped, so `f(a & b) & c` splits in two and
+    `"a & b"` not at all. Only `&` counts: `+` between two strings is already
+    `&` by the time an emitted expression gets here, and a `+` that survived
+    is arithmetic.
+    """
+    parts, depth, quote, escaped, cur = [], 0, "", False, ""
+    for ch in text:
+        if quote:
+            cur += ch
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == quote:
+                quote = ""
+            continue
+        if ch in "\"'":
+            quote = ch
+            cur += ch
+            continue
+        if ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+        elif ch == "&" and depth == 0:
+            parts.append(cur)
+            cur = ""
+            continue
+        cur += ch
+    if not parts:
+        return None
+    parts.append(cur)
+    return [p.strip() for p in parts if p.strip()]
 
 
 def _paren_if_compound(text):

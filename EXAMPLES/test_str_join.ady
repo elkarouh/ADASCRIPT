@@ -10,13 +10,20 @@ one.
 
 `sorted(xs)` -> `xs.sorted`, `set(xs)` -> `xs.toHashSet()` and
 `enumerate(xs)` -> `xs.pairs` are the same move and had the same hole, so
-they are here too. Python is indifferent to all of this, so every case has
-to hold on either backend.
+they are here too.
+
+The other half is the resolver that decides whether a rewrite applies at
+all. It could not type a concatenation, so `int(s + "1")` stayed an int() of
+a string and `if a + b:` never had its `.len > 0` -- Nim rejected both.
+Python is indifferent to all of this, so every case has to hold on either
+backend.
 """
 
 let a: []str = ["x", "y"]
 let b: []str = ["z"]
 let empty: []str = []
+var acc_seen: bool = False
+var str_seen: bool = False
 
 # --- a plain receiver, which never needed the parentheses ------------------
 assert ",".join(a) == "x,y"
@@ -50,6 +57,20 @@ var seen: []str = []
 for i, v in enumerate(a + b):
     seen.append(str(i) + v)
 assert ",".join(seen) == "0x,1y,2z"
+
+# --- a concatenation has a type, so the rewrites that need one fire -------
+let one: str = "1"
+assert int(one + "2") == 12
+assert int(one + "2") + 1 == 13      # ...and the result is an int, not a str
+assert float(one + ".5") + 0.5 == 2.0
+
+if a + b:                             # a seq sum is truthy when non-empty
+    acc_seen = True
+assert acc_seen
+if one + "x":                         # ...and so is a string sum
+    str_seen = True
+assert str_seen
+assert not (empty + empty)
 
 var acc: str = ""
 acc = ":".join(a + b)
