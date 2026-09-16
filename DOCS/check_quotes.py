@@ -64,8 +64,35 @@ def significant(body):
             yield text
 
 
+def ady_sources():
+    """Every .ady file in the repository, as a path -> text mapping.
+
+    Two things rglob hands over that are not a source file:
+
+    A *directory* named like one. git1.ady, the worked git example, gives
+    each tracked file its own repository under `.git1/<name>` -- so running
+    it in ADA_INDENT leaves a directory called `.git1/ada_indent.ady`, and
+    read_text() on it raises IsADirectoryError and takes `make test` down
+    on the way past.
+
+    A copy of one. Those same private repositories hold checked-out copies
+    of the files they track, and a copy is not evidence: a quote whose
+    original had changed would still be found in the snapshot of it taken
+    before the change, and the check would pass while the document was
+    stale. Hidden directories are skipped whole for that reason -- nothing
+    a document quotes lives in one.
+    """
+    sources = {}
+    for path in ROOT.rglob("*.ady"):
+        if any(part.startswith(".") for part in path.relative_to(ROOT).parts):
+            continue
+        if path.is_file():
+            sources[path] = path.read_text()
+    return sources
+
+
 def main():
-    sources = {p: p.read_text() for p in ROOT.rglob("*.ady")}
+    sources = ady_sources()
     every_source = "\n".join(sources.values())
 
     failures = 0
