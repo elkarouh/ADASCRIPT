@@ -2,7 +2,7 @@
 # test_ada_line_fmt.ady — tests for ada_line_fmt.ady
 #
 # Run with:
-#   ady2nim ADA_INDENT/test_ada_line_fmt.ady -r
+#   ady2nim TOOLS/ADA_INDENT/test_ada_line_fmt.ady -r
 
 nimport ada_line_fmt
 

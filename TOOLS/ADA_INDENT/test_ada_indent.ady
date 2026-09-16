@@ -6,7 +6,7 @@
 # library (nimport auto-transpiles the sibling .ady) and exercises it against a
 # table of messy-input -> canonical-output cases. Run it with:
 #
-#   ady2nim ADA_INDENT/test_ada_indent.ady -r        # compile if stale, run tests
+#   ady2nim TOOLS/ADA_INDENT/test_ada_indent.ady -r        # compile if stale, run tests
 #
 # Each case is independent: a fresh Indenter re-indents the input line by line
 # and the result is compared to the expected output.
@@ -26,7 +26,7 @@ def sample_fixpoint() -> int:
     here still passed.
     """
     var sp: Path = Path("")
-    for cand in [Path("ADA_INDENT/ada_indent_sample_test.adb"),
+    for cand in [Path("TOOLS/ADA_INDENT/ada_indent_sample_test.adb"),
                  Path("ada_indent_sample_test.adb")]:
         if -f cand:
             sp = cand

@@ -2538,33 +2538,33 @@ names, their members, and tick attributes). It needs Python 3.13 and `pygls`.
 
 Each directory has its own README with the install steps.
 
-### Indenting Ada — [`ADA_INDENT/EDITOR_SUPPORT/`](ADA_INDENT/EDITOR_SUPPORT)
+### Indenting Ada — [`TOOLS/ADA_INDENT/EDITOR_SUPPORT/`](TOOLS/ADA_INDENT/EDITOR_SUPPORT)
 
-[`ADA_INDENT/ada_indent.ady`](ADA_INDENT) re-indents **Ada** source. It is an
+[`TOOLS/ADA_INDENT/ada_indent.ady`](TOOLS/ADA_INDENT) re-indents **Ada** source. It is an
 Adascript program, but what it edits is `.adb` / `.ads`, so its editor
 integrations are a separate set — one directory per editor, all three driving
 the same binary:
 
 | | |
 |---|---|
-| [`emacs/`](ADA_INDENT/EDITOR_SUPPORT/emacs) | a minor mode on `RET` and `TAB`, plus `indent-region-function` |
-| [`vim/`](ADA_INDENT/EDITOR_SUPPORT/vim) | sets `'indentexpr'`, so `==`, `gg=G`, `=ip` and `o`/`O` all route through it |
-| [`vs_code/`](ADA_INDENT/EDITOR_SUPPORT/vs_code) | Format Document, Format Selection, and format-on-type |
+| [`emacs/`](TOOLS/ADA_INDENT/EDITOR_SUPPORT/emacs) | a minor mode on `RET` and `TAB`, plus `indent-region-function` |
+| [`vim/`](TOOLS/ADA_INDENT/EDITOR_SUPPORT/vim) | sets `'indentexpr'`, so `==`, `gg=G`, `=ip` and `o`/`O` all route through it |
+| [`vs_code/`](TOOLS/ADA_INDENT/EDITOR_SUPPORT/vs_code) | Format Document, Format Selection, and format-on-type |
 
 None of them is a language-server client: each calls the binary directly, so
 no editor needs Python or a server process for indentation. There is a
-[`ADA_INDENT/LSP/`](ADA_INDENT/LSP) as well, for editors where LSP is the
+[`TOOLS/ADA_INDENT/LSP/`](TOOLS/ADA_INDENT/LSP) as well, for editors where LSP is the
 shorter path (Helix, Neovim's built-in client, eglot).
 
 Build the binary once and put it on `PATH`, and any of the three will find it:
 
 ```bash
-ady2nim c ADA_INDENT/ada_indent.ady     # builds, and drops a symlink next to the source
+ady2nim c TOOLS/ADA_INDENT/ada_indent.ady     # builds, and drops a symlink next to the source
 ln -sf "$PWD/ADA_INDENT/ada_indent" ~/.local/bin/ada_indent
 ```
 
 (`ady2nim c` rebuilds into `~/.cache/adascript/` and refreshes the
-`ADA_INDENT/ada_indent` symlink each time, so a link pointing at *that* keeps
+`TOOLS/ADA_INDENT/ada_indent` symlink each time, so a link pointing at *that* keeps
 working across rebuilds — one pointing into the cache directory goes stale as
 soon as the source changes and the hash with it.)
 
@@ -2580,12 +2580,12 @@ All three have test suites, and `make test` runs them — each SKIPping rather
 than failing when its editor is absent, since none of node, emacs or vim is
 otherwise a dependency here. Every suite drives the shipped integration against
 the real binary and checks the same short list of properties, the state cache
-included. [`ADA_INDENT/EDITOR_SUPPORT/README.md`](ADA_INDENT/EDITOR_SUPPORT)
+included. [`TOOLS/ADA_INDENT/EDITOR_SUPPORT/README.md`](TOOLS/ADA_INDENT/EDITOR_SUPPORT)
 has the details.
 
-### Versioning one file — [`GIT1/`](GIT1)
+### Versioning one file — [`TOOLS/GIT1/`](TOOLS/GIT1)
 
-[`GIT1/git1.ady`](GIT1/git1.ady) gives every tracked file its own private git
+[`TOOLS/GIT1/git1.ady`](TOOLS/GIT1/git1.ady) gives every tracked file its own private git
 repository, named after the file and kept in a `.git1` container beside it, so
 many tracked files share a directory without seeing each other. Its editor
 support has the same problem to solve in both editors: a tracked file lives in
@@ -2595,10 +2595,10 @@ git calls that follow at that file's repo.
 
 | | |
 |---|---|
-| [`GIT1/git1.el`](GIT1/git1.el) | Emacs: `C-x v ...` on a tracked file, plus `C-c g` and branch commands VC has no equivalent for |
-| [`GIT1/vscode-git1/`](GIT1/vscode-git1) | VS Code: the same idea, as a front end |
+| [`TOOLS/GIT1/git1.el`](TOOLS/GIT1/git1.el) | Emacs: `C-x v ...` on a tracked file, plus `C-c g` and branch commands VC has no equivalent for |
+| [`TOOLS/GIT1/vscode-git1/`](TOOLS/GIT1/vscode-git1) | VS Code: the same idea, as a front end |
 
-[`GIT1/README.md`](GIT1) covers the tool, the layout on disk, and why it
+[`TOOLS/GIT1/README.md`](TOOLS/GIT1) covers the tool, the layout on disk, and why it
 adopts a branch rather than merging one.
 
 ---
@@ -2640,9 +2640,15 @@ ADASCRIPT/
 │                              Transpiled output is not kept here — it goes to
 │                              ~/.cache/adascript/cache-<HASH>/
 │
-├── ADA_INDENT/                Ada source indenter, itself written in Adascript
-│   ├── EDITOR_SUPPORT/        emacs/, vim/, vs_code/ — each calls the binary
-│   └── LSP/                   the same, for editors that prefer a server
+├── TOOLS/                     Programs written in Adascript that are tools in
+│   │                          their own right, each with its own README
+│   ├── ADA_INDENT/            Ada source indenter
+│   │   ├── EDITOR_SUPPORT/    emacs/, vim/, vs_code/ — each calls the binary
+│   │   └── LSP/               the same, for editors that prefer a server
+│   └── GIT1/                  Per-file version control: one git repo per file
+│       ├── git1.el            Emacs VC integration
+│       └── vscode-git1/       the same idea for VS Code
+│
 ├── LSP/                       Editing Adascript: language server, emacs,
 │                              vscode, sublime
 └── DOCS/                      Tutorials, topic references, and BOOK/

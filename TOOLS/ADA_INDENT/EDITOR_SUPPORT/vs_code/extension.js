@@ -4,7 +4,7 @@
 //
 // The same design as ada-indent.el and ada-indent.vim in this directory: the
 // editor calls the binary directly. There is no language server and no Python
-// in the path -- ADA_INDENT/LSP/ is the option for editors that would rather
+// in the path -- TOOLS/ADA_INDENT/LSP/ is the option for editors that would rather
 // speak LSP, and this is the option for VS Code, which does not need to.
 //
 // What it wires up:
@@ -218,7 +218,7 @@ function reportFailure(err) {
   warnedMissing = true;
   vscode.window.showErrorMessage(
     `Ada Indent: could not run '${program()}' (${err.code || err.message}). ` +
-      "Build it with `ady2nim ADA_INDENT/ada_indent.ady` and put it on PATH, " +
+      "Build it with `ady2nim TOOLS/ADA_INDENT/ada_indent.ady` and put it on PATH, " +
       "or set adaIndent.program to its full path."
   );
 }

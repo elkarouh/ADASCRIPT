@@ -48,11 +48,11 @@ assert status == 0
 That last one is worth dwelling on. An `int`-typed target does **not**
 capture: stdin, stdout and stderr are inherited, so colours, progress bars
 and the pager reach the user exactly as they would from a script, and you
-still get the status. `GIT1/git1.ady` uses the two forms deliberately —
+still get the status. `TOOLS/GIT1/git1.ady` uses the two forms deliberately —
 one for the commands the user is meant to watch, one for the commands whose
 answer is their output:
 
-<!-- from: GIT1/git1.ady -->
+<!-- from: TOOLS/GIT1/git1.ady -->
 ```python
 let code: int = shell(cwd = self.dir, env = self.env): git {*args}
 ...
@@ -63,7 +63,7 @@ And when the last thing your script does is run a program, `shellExec`
 replaces this process with it — the status is the child's by construction and
 Ctrl-C reaches it directly:
 
-<!-- from: GIT1/git1.ady -->
+<!-- from: TOOLS/GIT1/git1.ady -->
 ```python
 shellExec(cwd = self.dir, env = self.env): git {*args}
 ```
@@ -169,7 +169,7 @@ assert anyway.output.strip() == "still here"
 space becomes two filenames. `while read -r line; do ... done < <(cmd)` fixes
 it and is three constructs deep. `shellLines:` is the whole thing:
 
-<!-- from: GIT1/git1.ady -->
+<!-- from: TOOLS/GIT1/git1.ady -->
 ```python
 let entries = shellLines: ls -1a {!self.path}
 ```
@@ -236,7 +236,7 @@ assert seen_env.output == "set-by-parent"
 `git1.ady` uses it for the reason that matters — the value crosses into the
 child without the shell parsing it on the way:
 
-<!-- from: GIT1/git1.ady -->
+<!-- from: TOOLS/GIT1/git1.ady -->
 ```python
 let one_env: {str}str = {"GIT_DIR": str(gitdir)}
 let r = shell(env = one_env): git log -1 --format='%cr'
@@ -731,7 +731,7 @@ as "the environment variable `x`", and finds nothing.
 
 - `EXAMPLES/sh_janitor.ady` — the worked example above
 - `EXAMPLES/sh_janitor.sh` — the Bash version of it, to run side by side
-- `GIT1/git1.ady` — a real tool: `cwd`, `env`, `shellExec`, `Path`, file tests
+- `TOOLS/GIT1/git1.ady` — a real tool: `cwd`, `env`, `shellExec`, `Path`, file tests
 - `EXAMPLES/CFMU/` — a directory of ksh scripts translated line by line
 - `EXAMPLES/test_shell_block.ady` — every block and join form
 - `DOCS/ADASCRIPT_FOR_AWK.md` — the text-processing half of the same argument

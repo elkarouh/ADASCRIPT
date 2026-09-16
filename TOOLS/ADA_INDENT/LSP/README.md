@@ -21,7 +21,7 @@ last cache point — O(distance) per edit instead of O(file size).
 - **`ada_indent`** binary on your PATH.  Build it once from `ada_indent.ady`:
 
   ```bash
-  ady2nim c ADA_INDENT/ada_indent.ady
+  ady2nim c TOOLS/ADA_INDENT/ada_indent.ady
   ln -sf "$PWD/ADA_INDENT/ada_indent" ~/.local/bin/ada_indent
   ```
 
@@ -150,7 +150,7 @@ editors, the LSP server is the way in.
 ## Testing
 
 ```bash
-cd ADA_INDENT/LSP
+cd TOOLS/ADA_INDENT/LSP
 python3 test_lsp.py
 ```
 

@@ -28,7 +28,7 @@ git1-tracked file is open.
 From the extension directory:
 
 ```bash
-cd GIT1/vscode-git1
+cd TOOLS/GIT1/vscode-git1
 npm install
 ```
 

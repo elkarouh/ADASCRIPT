@@ -7,8 +7,8 @@ directory to be a repository.
 
 It is written in **Adascript** and transpiles to Python and Nim like any
 other `.ady` file. It is also the worked example behind
-[DOCS/ADASCRIPT_FOR_SHELL.md](../DOCS/ADASCRIPT_FOR_SHELL.md) and §13.7 of
-[the book](../DOCS/BOOK/15-case-studies.md): `cwd`, `env`, `shellExec:`,
+[DOCS/ADASCRIPT_FOR_SHELL.md](../../DOCS/ADASCRIPT_FOR_SHELL.md) and §13.7 of
+[the book](../../DOCS/BOOK/15-case-studies.md): `cwd`, `env`, `shellExec:`,
 `Path`, file tests and `shellLines:` all doing a real job rather than
 demonstrating themselves.
 
@@ -23,8 +23,8 @@ demonstrating themselves.
 ## Building
 
 ```bash
-ady2nim GIT1/git1.ady              # transpile + compile (cached)
-ady2nim GIT1/git1.ady -r -- ls     # compile if stale, then run
+ady2nim TOOLS/GIT1/git1.ady              # transpile + compile (cached)
+ady2nim TOOLS/GIT1/git1.ady -r -- ls     # compile if stale, then run
 ```
 
 The shebang already carries `-d:release --opt:size`. Put the resulting

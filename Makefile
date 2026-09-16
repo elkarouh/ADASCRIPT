@@ -13,8 +13,9 @@ export PYTHONPATH := $(HOME)/Downloads/hparsec:$(PYTHONPATH)
 ADY2NIM := $(PYTHON) $(CURDIR)/TO_NIM/ady2nim.py
 EXDIR  := $(CURDIR)/EXAMPLES
 TMPDIR ?= /tmp
-AIDIR  := $(CURDIR)/ADA_INDENT
-G1DIR  := $(CURDIR)/GIT1
+TOOLDIR:= $(CURDIR)/TOOLS
+AIDIR  := $(TOOLDIR)/ADA_INDENT
+G1DIR  := $(TOOLDIR)/GIT1
 
 # Prepend choosenim's bin dir so Nim 2.x is used instead of any system Nim 1.x.
 export PATH := /root/.nimble/bin:$(HOME)/.nimble/bin:$(HOME)/Downloads:$(PATH)
@@ -138,7 +139,7 @@ CFMU_COMPILE_ONLY := \
     CFMU/ftps_rename.ady
 
 # -----------------------------------------------------------------------
-# ADA_INDENT unit tests — self-checking runners in ADA_INDENT/ (assert +
+# ADA_INDENT unit tests — self-checking runners in TOOLS/ADA_INDENT/ (assert +
 # print "all ... passed"). Transpiled, compiled and run with ady2nim -r.
 # -----------------------------------------------------------------------
 ADA_INDENT_TESTS := \
@@ -211,7 +212,7 @@ define compile_one_tool
 	fi
 endef
 
-# Programs with a directory of their own, built here so that `make clean`
+# The programs under TOOLS/, built here so that `make clean`
 # followed by `make test` leaves both of them on disk.
 #
 # ada_indent is on this list for a reason beyond symmetry: the three editor
@@ -220,9 +221,9 @@ endef
 # module, and importing leaves no binary behind -- so after a clean the
 # three reported "SKIP (ada_indent not built)" and the editor integrations
 # went unchecked in exactly the run that was meant to check everything.
-TOOLS := \
-    GIT1/git1.ady \
-    ADA_INDENT/ada_indent.ady
+TOOL_PROGRAMS := \
+    TOOLS/GIT1/git1.ady \
+    TOOLS/ADA_INDENT/ada_indent.ady
 
 # -----------------------------------------------------------------------
 # compile — transpile + build everything
@@ -268,8 +269,8 @@ check-quotes:
 compile: lint-emitters check-quotes
 	@echo "=== Compiling $(words $(ALL_COMPILE)) examples ==="
 	@$(foreach f,$(ALL_COMPILE),$(call compile_one,$(f));)
-	@echo "=== Compiling $(words $(TOOLS)) tools ==="
-	@$(foreach t,$(TOOLS),$(call compile_one_tool,$(t));)
+	@echo "=== Compiling $(words $(TOOL_PROGRAMS)) tools ==="
+	@$(foreach t,$(TOOL_PROGRAMS),$(call compile_one_tool,$(t));)
 	@echo "=== Compile step complete ==="
 
 # -----------------------------------------------------------------------
@@ -405,7 +406,7 @@ test: compile
 	        && echo OK || { echo FAIL; exit 1; }
 	@# git1 --version is the only invocation with no side effects: every other
 	@# subcommand creates, moves or deletes a repo in the working directory.
-	@printf '  %-42s' "GIT1/git1.ady (--version)"; \
+	@printf '  %-42s' "TOOLS/GIT1/git1.ady (--version)"; \
 	    $(G1DIR)/git1 --version >/dev/null 2>&1 && echo OK || { echo FAIL; exit 1; }
 
 	@echo "=== Expect / shell examples (require bc) ==="
@@ -442,7 +443,7 @@ test: compile
 	@# beside its source, and unlike ada_indent -- which the editor
 	@# harnesses below go on to drive, and which a user wants on PATH --
 	@# a test runner is of no use once it has reported. Left behind they
-	@# sit in ADA_INDENT/ pointing into a cache that the next `make clean`
+	@# sit in TOOLS/ADA_INDENT/ pointing into a cache that the next `make clean`
 	@# empties, so the link outlives what it points at.
 	@for f in $(ADA_INDENT_TESTS); do rm -f $(AIDIR)/$${f%.ady}; done
 
@@ -634,7 +635,7 @@ clean:
 	    name=$${f%.ady}; \
 	    rm -f $(EXDIR)/$$name; \
 	done
-	@for t in $(TOOLS); do \
+	@for t in $(TOOL_PROGRAMS); do \
 	    rm -f $(CURDIR)/$${t%.ady}; \
 	done
 	@# `make test` deletes these as soon as each suite has reported; this is

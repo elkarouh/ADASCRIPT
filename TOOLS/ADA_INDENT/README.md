@@ -14,9 +14,9 @@ Compile once (the shebang already encodes `-d:release --opt:speed`), then run
 the resulting binary directly:
 
 ```bash
-ady2nim ADA_INDENT/ada_indent.ady            # transpile + compile (cached)
-ady2nim ADA_INDENT/ada_indent.ady -r -- file.adb   # compile if stale, then run
-cat file.adb | ady2nim ADA_INDENT/ada_indent.ady -r  # reindent from stdin
+ady2nim TOOLS/ADA_INDENT/ada_indent.ady            # transpile + compile (cached)
+ady2nim TOOLS/ADA_INDENT/ada_indent.ady -r -- file.adb   # compile if stale, then run
+cat file.adb | ady2nim TOOLS/ADA_INDENT/ada_indent.ady -r  # reindent from stdin
 ```
 
 `ady2nim` stores the binary in `~/.cache/adascript/` and skips recompilation when
@@ -29,7 +29,7 @@ library (`nimport ada_indent` auto-transpiles the sibling `.ady`) and runs it
 against a table of messy-input → canonical-output cases:
 
 ```bash
-ady2nim ADA_INDENT/test_ada_indent.ady -r    # compile if stale, run all cases
+ady2nim TOOLS/ADA_INDENT/test_ada_indent.ady -r    # compile if stale, run all cases
 ```
 
 The core (the `Indenter` class plus the lexical helpers) is pure Adascript and
@@ -46,7 +46,7 @@ writes re-indented source to stdout, which is exactly the interface
 onto your `PATH`:
 
 ```bash
-ady2nim c ADA_INDENT/ada_indent.ady        # compile; binary lands in ~/.cache/adascript/
+ady2nim c TOOLS/ADA_INDENT/ada_indent.ady        # compile; binary lands in ~/.cache/adascript/
 ln -sf "$PWD/ADA_INDENT/ada_indent" ~/.local/bin/ada-indent
 ```
 
@@ -60,7 +60,7 @@ source and refreshes it on every rebuild, so linking to *that* is the form
 that survives a recompile:
 
 ```bash
-ady2nim c ADA_INDENT/ada_indent.ady
+ady2nim c TOOLS/ADA_INDENT/ada_indent.ady
 ln -sf "$PWD/ADA_INDENT/ada_indent" ~/.local/bin/ada-indent
 ```
 
@@ -70,7 +70,7 @@ relevant `use-package` block):
 ```elisp
 (define-format-all-formatter ada-indent
   (:executable "ada-indent")
-  (:install "Compile ADA_INDENT/ada_indent.ady with ady2nim, then put ada-indent on PATH")
+  (:install "Compile TOOLS/ADA_INDENT/ada_indent.ady with ady2nim, then put ada-indent on PATH")
   (:languages "Ada")
   (:features)
   (:format (format-all--buffer-easy executable)))

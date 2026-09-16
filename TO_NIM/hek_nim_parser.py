@@ -1197,7 +1197,7 @@ def to_nim(self, prec=None):
     A second, divergent copy of that dispatch used to sit in this function
     behind a `"__tick__" in name` test; it was removed once instrumentation
     showed it took no hits from ady2nim --test, from any .ady under
-    EXAMPLES/, TO_NIM/STDLIB/ and ADA_INDENT/, or from a tick on a set, on a
+    EXAMPLES/, TO_NIM/STDLIB/ and TOOLS/ADA_INDENT/, or from a tick on a set, on a
     type, or inside a case pattern, and once deleting it left the generated
     Nim for every one of those files byte-identical.
     """

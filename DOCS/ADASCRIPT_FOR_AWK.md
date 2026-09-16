@@ -88,7 +88,7 @@ def main():
 `stdin` has type `File`, and so does `open(path)` — the same variable holds
 either, so the loop is written once:
 
-<!-- from: ADA_INDENT/ada_indent.ady -->
+<!-- from: TOOLS/ADA_INDENT/ada_indent.ady -->
 ```python
 let f: File = (open(file_arg) if file_arg != "" else stdin)
 for line in f.lines:

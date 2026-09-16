@@ -4,7 +4,7 @@
 # Imports the lexer as a library (nimport auto-transpiles the sibling .ady)
 # and checks the token kind and exact spelling produced for a range of Ada
 # lexical elements. Run with:
-#   ady2nim ADA_INDENT/test_ada_lexer.ady -r
+#   ady2nim TOOLS/ADA_INDENT/test_ada_lexer.ady -r
 
 nimport ada_lexer
 

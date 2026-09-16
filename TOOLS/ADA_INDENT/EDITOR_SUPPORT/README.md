@@ -15,7 +15,7 @@ indenter — they are the wiring, not the logic.
 Build the binary once and put it on `PATH`:
 
 ```bash
-ady2nim c ADA_INDENT/ada_indent.ady     # builds, and drops a symlink next to the source
+ady2nim c TOOLS/ADA_INDENT/ada_indent.ady     # builds, and drops a symlink next to the source
 ln -sf "$PWD/ADA_INDENT/ada_indent" ~/.local/bin/ada_indent
 ```
 

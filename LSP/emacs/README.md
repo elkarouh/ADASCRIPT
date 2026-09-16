@@ -94,7 +94,7 @@ Five custom faces can be themed independently:
 ## `git1.el` — moved
 
 The Emacs integration for git1-tracked files lives with the tool it belongs
-to, in [`GIT1/`](../../GIT1), together with `git1.ady` itself and its own
+to, in [`TOOLS/GIT1/`](../../TOOLS/GIT1), together with `git1.ady` itself and its own
 README. It is independent of `adascript-mode` -- it needs neither `nim-mode`
 nor the language server -- which is why it does not live here.
 
