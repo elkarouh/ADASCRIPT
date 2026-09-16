@@ -302,7 +302,7 @@ class Indenter:
         """Record parentheses opened on this line and drop any now closed."""
         for opener in scan_parens(text, base_depth, base_col):
             self.paren_stack.append(opener)
-        while len(self.paren_stack) > 0:
+        while self.paren_stack:
             let top: (int, int, Paren_Kind_T) = self.paren_stack[-1]
             break if top[0] <= new_depth
             self.paren_stack.pop()
@@ -342,7 +342,7 @@ class Indenter:
             #   plain   -> the item column, plus one level when the opening line
             #              left its item unfinished (paren_cont) so an operator/
             #              term continuation — not a new item — follows.
-            if self.paren_depth > 0 and len(self.paren_stack) > 0:
+            if self.paren_depth > 0 and self.paren_stack:
                 let ptop: (int, int, Paren_Kind_T) = self.paren_stack[-1]
                 if self.paren_next_lead_depth == self.paren_depth:
                     return " " * self.paren_next_lead + emit_text
@@ -399,7 +399,7 @@ class Indenter:
         # scope level.  (A record type is handled separately: 'record' pushes RECORD
         # and pops TYPE_HEADER in the keyword dispatch below.)
         # Guard: do NOT pop if this line IS 'record' — let the keyword dispatch handle it.
-        if not self.in_cont and self.paren_depth == 0 and len(self.stack) > 0 and \
+        if not self.in_cont and self.paren_depth == 0 and self.stack and \
           self.stack[-1] == TYPE_HEADER and lw != "record" and not code_s.startswith("("):
             self.stack.pop()
             disp = len(self.stack)
@@ -409,7 +409,7 @@ class Indenter:
         # next declaration or 'begin' aligns at the correct enclosing scope level.
         if self.pending_inst and not self.in_cont and self.paren_depth == 0:
             self.pending_inst = False
-            if len(self.stack) > 0 and self.stack[-1] == PKG:
+            if self.stack and self.stack[-1] == PKG:
                 self.stack.pop()
                 disp = len(self.stack)
 
@@ -447,7 +447,7 @@ class Indenter:
         # …) the block frame is pushed here, after the line is aligned.
         if self.paren_depth > 0:
             # Drop any parentheses that have already closed.
-            while len(self.paren_stack) > 0:
+            while self.paren_stack:
                 let stale: (int, int, Paren_Kind_T) = self.paren_stack[-1]
                 if stale[0] > entry_depth:
                     self.paren_stack.pop()
@@ -463,7 +463,7 @@ class Indenter:
             # after a line that already took that extra stays at the same level.
             var was_cont: bool = False
             var acol: Natural = 0
-            if len(self.paren_stack) > 0:
+            if self.paren_stack:
                 let top: (int, int, Paren_Kind_T) = self.paren_stack[-1]
                 acol = top[1]
                 entry_top_level = top[0]
@@ -663,9 +663,9 @@ class Indenter:
 
         case lw:
             when "end":
-                while len(self.stack) > 0 and self.stack[-1] == WHEN:
+                while self.stack and self.stack[-1] == WHEN:
                     self.stack.pop()
-                if len(self.stack) > 0:
+                if self.stack:
                     self.stack.pop()
                 disp = len(self.stack)
                 # 'type T is' on its own line pushes TYPE_HEADER, then the
@@ -673,11 +673,11 @@ class Indenter:
                 # only RECORD; pop the paired TYPE_HEADER so that the lines
                 # AFTER this one resume at the enclosing scope level.
                 # disp is set first so 'end record' itself aligns with 'record'.
-                if last_word(code_s) == "record" and len(self.stack) > 0 and self.stack[-1] == TYPE_HEADER:
+                if last_word(code_s) == "record" and self.stack and self.stack[-1] == TYPE_HEADER:
                     self.stack.pop()
 
             when "begin":
-                if len(self.stack) > 0 and (self.stack[-1] == PKG or self.stack[-1] == DECLARE):
+                if self.stack and (self.stack[-1] == PKG or self.stack[-1] == DECLARE):
                     disp = len(self.stack) - 1
                     self.stack[-1] = BLOCK
                 else:
@@ -685,7 +685,7 @@ class Indenter:
                     self.stack.append(BLOCK)
 
             when "when":
-                if len(self.stack) > 0 and self.stack[-1] == WHEN:
+                if self.stack and self.stack[-1] == WHEN:
                     self.stack.pop()
                 disp = len(self.stack)
                 self.stack.append(WHEN)
@@ -702,7 +702,7 @@ class Indenter:
                 # A select alternative ends without popping the WHEN frame
                 # (only 'end' and 'when' pop it). 'or'/'else' splitting the
                 # select must clear it first so they align with 'select'.
-                while len(self.stack) > 0 and self.stack[-1] == WHEN:
+                while self.stack and self.stack[-1] == WHEN:
                     self.stack.pop()
                 if cont == 0:
                     disp = len(self.stack) - 1
@@ -711,7 +711,7 @@ class Indenter:
                 # 'package/procedure X is\nnew Y' is a generic instantiation.
                 # The PKG pushed for 'X is' has no body; mark it for removal once
                 # the 'new' statement ends (paren closes, no continuation left).
-                if lw == "new" and cont == 0 and len(self.stack) > 0 and self.stack[-1] == PKG:
+                if lw == "new" and cont == 0 and self.stack and self.stack[-1] == PKG:
                     self.pending_inst = True
                 disp = len(self.stack)
                 let last: str = last_word(code_s)
