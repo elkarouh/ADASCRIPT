@@ -2535,7 +2535,7 @@ names, their members, and tick attributes). It needs Python 3.13 and `pygls`.
 | [`LSP/vscode-adascript/`](LSP/vscode-adascript) | VS Code: the `.ady` language, a TextMate grammar, and a client for the server |
 | [`LSP/emacs/adascript-mode.el`](LSP/emacs) | a major mode deriving from `nim-mode`, with the server reached through eglot or lsp-mode |
 | [`LSP/sublime-adascript/`](LSP/sublime-adascript) | Sublime Text: syntax highlighting and language defaults (no server) |
-| [`LSP/vscode-git1/`](LSP/vscode-git1) | unrelated to the language — a VS Code front end for [`git1.ady`](EXAMPLES/git1.ady), the per-file version control example |
+| [`LSP/vscode-git1/`](LSP/vscode-git1) | unrelated to the language — a VS Code front end for [`git1.ady`](GIT1/git1.ady), the per-file version control example |
 
 Each directory has its own README with the install steps.
 
@@ -2583,6 +2583,24 @@ otherwise a dependency here. Every suite drives the shipped integration against
 the real binary and checks the same short list of properties, the state cache
 included. [`ADA_INDENT/EDITOR_SUPPORT/README.md`](ADA_INDENT/EDITOR_SUPPORT)
 has the details.
+
+### Versioning one file — [`GIT1/`](GIT1)
+
+[`GIT1/git1.ady`](GIT1/git1.ady) gives every tracked file its own private git
+repository, named after the file and kept in a `.git1` container beside it, so
+many tracked files share a directory without seeing each other. Its editor
+support has the same problem to solve in both editors: a tracked file lives in
+no repository that the editor can find by walking up the tree, so each
+integration has to make the file's own directory count as a root and point the
+git calls that follow at that file's repo.
+
+| | |
+|---|---|
+| [`GIT1/git1.el`](GIT1/git1.el) | Emacs: `C-x v ...` on a tracked file, plus `C-c g` and branch commands VC has no equivalent for |
+| [`LSP/vscode-git1/`](LSP/vscode-git1) | VS Code: the same idea, as a front end |
+
+[`GIT1/README.md`](GIT1) covers the tool, the layout on disk, and why it
+adopts a branch rather than merging one.
 
 ---
 

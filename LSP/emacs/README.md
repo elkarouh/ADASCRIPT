@@ -91,87 +91,12 @@ Five custom faces can be themed independently:
 | `adascript-shell-face` | `font-lock-preprocessor-face` | The `shell:` / `shellLines:` keywords |
 | `adascript-range-op-face` | `font-lock-operator-face`, or `font-lock-builtin-face` before Emacs 30 | The range operators `..` and `..<` |
 
-## `git1.el` — `C-x v ...` on a git1-tracked file
+## `git1.el` — moved
 
-`EXAMPLES/git1.ady` gives each tracked file its own private repository under
-`.git1/`, reached through `GIT_DIR` and `GIT_WORK_TREE`. Emacs locates
-repositories by filename instead — `vc-git-root` is literally
-`(vc-find-root file ".git")` — so a git1 file looks unversioned to VC and
-`C-x v ...` does nothing useful with it.
-
-It can also do something actively wrong: a directory that sits inside an
-ordinary git repo makes Emacs find *that* repo, which knows nothing about
-the file, so `C-x v b c` would create the branch in the enclosing project.
-
-`git1.el` fixes both, per file rather than per directory. It advises
-`vc-git` so that a tracked file's own directory counts as a VC root, and
-splices `--git-dir=` and `--work-tree=` into the git calls that follow.
-Nothing is written to disk, and several tracked files in one directory work
-at the same time — each buffer talks to its own repository.
-
-```elisp
-(use-package git1
-  :load-path "/path/to/ADASCRIPT/LSP/emacs"
-  :demand t
-  :hook (find-file . git1-maybe-enable)
-  :config
-  (git1-global-mode 1))
-```
-
-`git1-global-mode` installs the advice; `git1-maybe-enable` on `find-file`
-turns on the buffer-local `git1-mode` for files that are tracked, which
-lights the mode line and binds `C-c g`. Plain `(require 'git1)` and a call
-to `git1-global-mode` work just as well.
-
-What then works in a git1 buffer:
-
-| Key | Command | Acts on |
-|---|---|---|
-| `C-x v b c` | `vc-create-branch` | the file's git1 repo |
-| `C-x v b s` | `vc-switch-branch` | the file's git1 repo, branch names completed |
-| `C-x v b l` | `vc-print-branch-log` | the file's git1 repo |
-| `C-x v b a` | `git1-adopt` | replace the current branch with another, wholesale |
-| `C-x v b d` | `git1-delete-branch` | delete a branch of that repo |
-| `C-x v m` | `vc-merge` | the file's git1 repo (see below) |
-| `C-x v v` `C-x v =` `C-x v l` | commit, diff, log | the file's git1 repo |
-| `C-c g c` | `git1-commit` | save, then commit this file |
-| `C-c g d` `C-c g l` `C-c g b` | diff, log, annotate | the file's git1 repo |
-| `C-c g a` | `git1-adopt` | same command as `C-x v b a` |
-| `C-c g s` | `git1-magit-status` | Magit on that repo, if Magit is installed |
-
-Emacs itself binds only three commands under `C-x v b` — create, switch and
-branch log. In a git1 buffer that map gains `a` and `d`; it *inherits* from
-the stock one rather than replacing it, so the three keep working and
-anything Emacs adds later appears too. Outside a git1 buffer nothing
-changes: `C-x v b a` stays unbound.
-
-`M-x git1-init` starts tracking the file in the current buffer.
-
-`git1-adopt` is the one command here without a VC equivalent, and it exists
-because merging a single file is a poor fit: a merge combines two versions,
-and with no file boundary to separate the changes, two versions of one file
-conflict readily — edits one line apart already do. `git1-adopt` moves the
-current branch onto the winner wholesale instead and offers to delete the
-branches that lost, so nothing is combined and nothing can conflict. It
-runs `git1 adopt`, so the command line and the key do the same thing. What
-the branch held before is reachable through `git1 <file> reflog`.
-
-Branch commands name a directory rather than a file, since a branch belongs
-to a repository. When several tracked files share a directory, the one
-meant is the file whose buffer the command was invoked from.
-
-Two things to know:
-
-- `vc-dir` is not supported. It is inherently a per-directory view, and a
-  directory holding several git1 files has no single repository to show.
-  Use `git1 each status -s` from a shell instead.
-- A repository is named after its file — `notes.txt` is tracked in
-  `.git1/notes.txt` — and is confirmed by its `HEAD`. `git1-container`
-  renames `.git1` itself if you changed it in `git1.ady`, and
-  `git1-program` names the executable used by `git1-init`.
-
-`git1.el` is independent of `adascript-mode` — it needs neither `nim-mode`
-nor the language server.
+The Emacs integration for git1-tracked files lives with the tool it belongs
+to, in [`GIT1/`](../../GIT1), together with `git1.ady` itself and its own
+README. It is independent of `adascript-mode` -- it needs neither `nim-mode`
+nor the language server -- which is why it does not live here.
 
 ## Notes
 

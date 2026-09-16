@@ -369,7 +369,7 @@ let code2: int = shell: git {*args}
 quit(code2)                     # forwarding the status by hand
 ```
 
-`EXAMPLES/git1.ady` ends in `shellExec:` for exactly this reason; §13.7
+`GIT1/git1.ady` ends in `shellExec:` for exactly this reason; §13.7
 walks through the change.
 
 ## 11.10 Case study: a five-minute wrapper — `sv.ady`

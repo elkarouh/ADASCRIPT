@@ -14,6 +14,7 @@ ADY2NIM := $(PYTHON) $(CURDIR)/TO_NIM/ady2nim.py
 EXDIR  := $(CURDIR)/EXAMPLES
 TMPDIR ?= /tmp
 AIDIR  := $(CURDIR)/ADA_INDENT
+G1DIR  := $(CURDIR)/GIT1
 
 # Prepend choosenim's bin dir so Nim 2.x is used instead of any system Nim 1.x.
 export PATH := /root/.nimble/bin:$(HOME)/.nimble/bin:$(HOME)/Downloads:$(PATH)
@@ -90,8 +91,7 @@ STDIN_EXAMPLES := \
 ARG_EXAMPLES := \
     argparse.ady \
     phonecode.ady \
-    spell.ady \
-    git1.ady
+    spell.ady
 
 # -----------------------------------------------------------------------
 # Expect tests — require bc to be installed
@@ -196,6 +196,27 @@ define compile_one
 endef
 
 # -----------------------------------------------------------------------
+# compile_one_tool — the same, for a program that lives in its own
+# directory rather than under EXAMPLES/: $(1) is a path from the repository
+# root, so the tool keeps its README and its editor integration beside it.
+# -----------------------------------------------------------------------
+define compile_one_tool
+	printf '  %-42s' "$(1)"; \
+	if $(ADY2NIM) c $(CURDIR)/$(1) >/dev/null 2>&1; then \
+	    echo OK; \
+	else \
+	    echo FAIL; \
+	    $(ADY2NIM) c $(CURDIR)/$(1) 2>&1 | grep -E 'Error:' | head -5; \
+	    exit 1; \
+	fi
+endef
+
+# Programs with a directory of their own. ADA_INDENT's are compiled and run
+# by the test target further down; these only need building here.
+TOOLS := \
+    GIT1/git1.ady
+
+# -----------------------------------------------------------------------
 # compile — transpile + build everything
 # -----------------------------------------------------------------------
 # -----------------------------------------------------------------------
@@ -239,6 +260,8 @@ check-quotes:
 compile: lint-emitters check-quotes
 	@echo "=== Compiling $(words $(ALL_COMPILE)) examples ==="
 	@$(foreach f,$(ALL_COMPILE),$(call compile_one,$(f));)
+	@echo "=== Compiling $(words $(TOOLS)) tools ==="
+	@$(foreach t,$(TOOLS),$(call compile_one_tool,$(t));)
 	@echo "=== Compile step complete ==="
 
 # -----------------------------------------------------------------------
@@ -374,8 +397,8 @@ test: compile
 	        && echo OK || { echo FAIL; exit 1; }
 	@# git1 --version is the only invocation with no side effects: every other
 	@# subcommand creates, moves or deletes a repo in the working directory.
-	@printf '  %-42s' "git1.ady (--version)"; \
-	    $(EXDIR)/git1 --version >/dev/null 2>&1 && echo OK || { echo FAIL; exit 1; }
+	@printf '  %-42s' "GIT1/git1.ady (--version)"; \
+	    $(G1DIR)/git1 --version >/dev/null 2>&1 && echo OK || { echo FAIL; exit 1; }
 
 	@echo "=== Expect / shell examples (require bc) ==="
 	@for f in $(EXPECT_EXAMPLES); do \
@@ -595,5 +618,8 @@ clean:
 	@for f in $(ALL_COMPILE); do \
 	    name=$${f%.ady}; \
 	    rm -f $(EXDIR)/$$name; \
+	done
+	@for t in $(TOOLS); do \
+	    rm -f $(CURDIR)/$${t%.ady}; \
 	done
 	@echo "Done."

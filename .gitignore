@@ -18,6 +18,9 @@ ADA_INDENT/test_ada_lexer
 ADA_INDENT/ada_line_fmt
 ADA_INDENT/test_ada_line_fmt
 ADA_INDENT/*_gen.py
+# git1 lives in GIT1/ and leaves the same symlink next to its source.
+GIT1/git1
+GIT1/*_gen.py
 # ady2nim drops a symlink to the built binary next to each source, so the
 # bundled libraries leave one behind whenever they are compiled. They point
 # into ~/.cache/adascript, which is per-machine.
