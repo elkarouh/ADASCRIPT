@@ -33,7 +33,7 @@ from hek_py_expr import _get_bracket_start
 import hek_py_declarations  # noqa: F401 — registers decl to_py() methods
 from hek_parsec import method, ParserState
 import re as _re_mod_p2s
-from hek_helpers import _ind
+from hek_helpers import _ind, reject_dollar_assignment
 
 # to_py() methods
 ###############################################################################
@@ -66,6 +66,7 @@ def to_py(self):
 @method(assign_stmt)
 def to_py(self):
     """assign_stmt: star_expressions ('=' star_expressions)+"""
+    reject_dollar_assignment(self.nodes[0])
     # nodes: [target1, Several_Times[(=, target2), (=, target3), ...]]
     # The last (=, expr) pair is the value; everything before is a target.
     parts = [self.nodes[0].to_py()]
@@ -87,6 +88,7 @@ def to_py(self):
 @method(aug_assign_stmt)
 def to_py(self):
     """aug_assign_stmt: star_expressions augop expressions"""
+    reject_dollar_assignment(self.nodes[0], "+=")
     target = self.nodes[0].to_py()
     # augop is an Fmap whose nodes[0] is a plain string like '+='
     op_node = self.nodes[1]

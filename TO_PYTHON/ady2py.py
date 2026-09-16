@@ -380,7 +380,14 @@ def main(args=None):
             code = f.read()
     else:
         code = sys.stdin.read()
-    output = translate(code)
+    # A refusal from an emitter is an answer, not a crash: ady2nim prints it
+    # and exits 1, and this printed a traceback with the message at the
+    # bottom of it.
+    try:
+        output = translate(code)
+    except SyntaxError as exc:
+        print(str(exc), file=sys.stderr)
+        sys.exit(1)
     if args.c and args.file:
         base = os.path.splitext(args.file)[0]
         py_file = base + "_gen.py"

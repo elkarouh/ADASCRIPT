@@ -23,7 +23,7 @@ from ady_stmt import parse_stmt
 import hek_nim_expr  # noqa: F401 — registers expr to_nim() methods
 import hek_nim_declarations  # noqa: F401
 from hek_nim_expr import _infer_literal_nim_type
-from hek_helpers import _ind
+from hek_helpers import _ind, reject_dollar_assignment
 
 ###############################################################################
 # to_nim() methods
@@ -138,6 +138,7 @@ def to_nim(self):
     """assign_stmt: star_expressions ('=' star_expressions)+
     Python: a = b = 1  ->  Nim: var a = 1 (chained not supported, just use =)
     """
+    reject_dollar_assignment(self.nodes[0])
     parts = [self.nodes[0].to_nim()]
     rhs_node = None
     for node in self.nodes[1:]:
@@ -323,6 +324,7 @@ def to_nim(self):
     """aug_assign_stmt: star_expressions augop expressions
     Translate augmented ops: //= -> expand to div, etc.
     """
+    reject_dollar_assignment(self.nodes[0], "+=")
     target = self.nodes[0].to_nim()
     op_node = self.nodes[1]
     py_op = (

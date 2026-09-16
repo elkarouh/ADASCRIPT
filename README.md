@@ -2161,6 +2161,33 @@ Note the difference between the two fallbacks: `${NAME:-default}` follows the
 shell and substitutes for an empty value as well, while `$?NAME or default`
 substitutes only when the variable is absent.
 
+### The environment is read-only
+
+`$NAME` reads; there is no `export`. An assignment to one is refused, with
+the alternative in the message:
+
+```python
+$PATH = "/opt/bin:" + $PATH      # error: assigns to the environment, which is read-only
+```
+
+The reason is that writing it would buy almost nothing: a process's own
+environment reaches no further than the commands it starts, and those take
+one directly — `env` adds to what the child inherits, so the rest of the
+environment, `PATH` included, is still there:
+
+```python
+let extra: {str}str = {"PATH": "/opt/bin:" + $PATH}
+
+shell(env = extra): make -j4          # this command sees it
+run(["make", "-j4"], env = extra)     # so does this one
+shellExec(env = extra): make -j4      # ...and this becomes it
+```
+
+That last line is the shell wrapper's whole shape — `export` then `exec`,
+without the `export`. Argument variables (`$0`, `$1`, `$@`, `$#`) are
+read-only for the same reason and refuse assignment the same way; copy one
+into a `var` if you want to change it.
+
 ### In expressions
 
 ```python

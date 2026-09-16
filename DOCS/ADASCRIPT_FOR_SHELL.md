@@ -319,6 +319,13 @@ assert $?NO_SUCH_VAR_HERE == None               # ...unless you ask this way
 unset *or* empty. `$?NAME` is a `?str`, which is the one shell cannot
 express: it tells "not set" from "set to nothing".
 
+All three read. There is no `export`: `$PATH = "/opt/bin:" + $PATH` is
+refused, and the message says what to write instead. A shell exports so that
+the commands it runs will see the value, and §6 above hands those commands
+the value directly — `shellExec(env = extra): cmd` is `export` and `exec` in
+one line, with nothing left behind in a process that is about to be replaced
+anyway. Argument variables refuse assignment for the same reason.
+
 ---
 
 ## 9. Text, without the pipeline

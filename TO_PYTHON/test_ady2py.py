@@ -65,6 +65,31 @@ def test(label, code, expected=None, *, bug=None):
             print(f"    bug:      {bug}")
 
 
+def refused(label, code, want):
+    """Check that CODE is refused, with WANT in the message.
+
+    The absence of codegen is the point, and the round-trip helper above
+    cannot express it: an exception there is an ERROR, which is what a
+    refusal would look like if it were tested that way.
+    """
+    global _passed, _failed
+    try:
+        got = translate(code)
+    except SyntaxError as exc:
+        if want in str(exc):
+            _passed += 1
+            print(f"  PASS: {label}")
+        else:
+            _failed += 1
+            print(f"  FAIL: {label}")
+            print(f"    expected the message to contain: {want!r}")
+            print(f"    got: {str(exc)!r}")
+        return
+    _failed += 1
+    print(f"  FAIL: {label} — not refused")
+    print(f"    got: {got!r}")
+
+
 def section(title):
     print(f"\n{'─'*60}")
     print(f"  {title}")
@@ -860,6 +885,22 @@ test("ternary still an expression", "v: int = 1 if flag else 2\n")
 test("ternary in a return", "return 1 if flag else 2\n")
 test("ternary as an argument", "f(1 if flag else 2)\n")
 test("ternary in a comprehension", "xs = [a if a else b for a in ys]\n")
+
+
+section("The environment and the arguments are read-only")
+
+refused("assign to $NAME", '$PATH = "d:" + $PATH\n',
+        "assigns to the environment, which is read-only")
+refused("augmented assign to $NAME", '$PATH += "d:"\n',
+        "assigns to the environment, which is read-only")
+refused("assign to ${NAME:-default}", '${HOME:-"/t"} = "x"\n',
+        "assigns to the environment, which is read-only")
+refused("assign to $?NAME", '$?HOME = "x"\n',
+        "assigns to the environment, which is read-only")
+refused("assign to a positional", '$1 = "x"\n',
+        "assigns to an argument, which is read-only")
+# ...while reading them is untouched.
+test("read $NAME", "path = $PATH\n", "import os\npath = os.environ.get('PATH', '')\n")
 
 
 print(f"\n{'='*60}")

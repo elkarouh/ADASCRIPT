@@ -1220,6 +1220,19 @@ def run_tests():
          "unknown tick attribute 'Bogus'"),
         ("type C_T is enum A, B\nlet v: C_T = C_T'Choice\n",
          "unknown tick attribute 'Choice'"),
+        # The environment is read, never written: `$PATH = ...` used to emit
+        # the read into target position -- `var getEnv("PATH") = ...` -- and
+        # leave nim to object to a line it could not point back at.
+        ('$PATH = "d:" + $PATH\n',
+         "assigns to the environment, which is read-only"),
+        ('$PATH += "d:"\n',
+         "assigns to the environment, which is read-only"),
+        ('${HOME:-"/t"} = "x"\n',
+         "assigns to the environment, which is read-only"),
+        ('$?HOME = "x"\n',
+         "assigns to the environment, which is read-only"),
+        ('$1 = "x"\n',
+         "assigns to an argument, which is read-only"),
     ]
     for code, want in error_tests:
         label = code.splitlines()[-1]
