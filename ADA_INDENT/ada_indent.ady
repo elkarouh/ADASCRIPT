@@ -445,12 +445,8 @@ class Indenter:
         # …) the block frame is pushed here, after the line is aligned.
         if self.paren_depth > 0:
             # Drop any parentheses that have already closed.
-            while self.paren_stack:
-                let stale: (int, int, Paren_Kind_T) = self.paren_stack[-1]
-                if stale[0] > entry_depth:
-                    self.paren_stack.pop()
-                else:
-                    break
+            while self.paren_stack and self.paren_stack[-1][0] > entry_depth:
+                self.paren_stack.pop()
             var lead: Natural = max(0, len(self.stack) + cont) * INDENT_WIDTH
             var entry_top_level: Natural = 0
             var entry_top_kind: Paren_Kind_T = OUTSIDE
