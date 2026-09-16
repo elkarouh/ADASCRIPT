@@ -2072,15 +2072,45 @@ def to_nim(self, indent=0):
         return _guarded_chain_nim(_extract_branches(self), subject, indent)
 
     from hek_nim_expr import _str_to_char_lit
-    _subj_sym = ParserState.symbol_table.lookup(subject)
-    _subj_is_char = _subj_sym and (_subj_sym.get("type") or "") == "char"
+    # _subject_is_char, not a symbol-table lookup on its own: a subject that is
+    # an expression rather than a name has no symbol, and `case code_s[0]:`
+    # then emitted `of ":"` against a char and stopped compiling -- while the
+    # guarded and regex chains, which have always asked _subject_is_char, got
+    # the same subject right. ada_indent.ady carried a `let c: char = code_s[0]`
+    # and a comment naming this as the reason it could not say what it meant.
+    _subj_is_char = _subject_is_char(subject)
     def _fix_when(clause_nim):
+        """Read this clause's one-character patterns as chars, not strings.
+
+        The subject is a char, and Nim will not compare one with a string, so
+        `when ':':` has to come out as `of ':':` rather than `of ":":`.
+
+        Only the `of ...:` line, and only the code on it: the rule used to be
+        applied to the whole rendered clause, which reached into the body and
+        turned every one-character string there into a char too -- `when ':':
+        return "a"` came out as `return 'a'` and the proc stopped compiling.
+        A trailing comment is left alone for the same reason.
+        """
         if not _subj_is_char:
             return clause_nim
         import re as _re_wc
+        head, sep, rest = clause_nim.partition("\n")
+        # The comment marker has to be found outside the literals: a pattern
+        # may be '#' itself.
+        _cut, _in_str = len(head), None
+        for _i, _ch in enumerate(head):
+            if _in_str is not None:
+                if _ch == _in_str:
+                    _in_str = None
+            elif _ch in "\"'":
+                _in_str = _ch
+            elif _ch == "#":
+                _cut = _i
+                break
         def _coerce(m):
             return _str_to_char_lit(m.group(0))
-        return _re_wc.sub(r'"[^"]*"', _coerce, clause_nim)
+        head = _re_wc.sub(r'"[^"]*"', _coerce, head[:_cut]) + head[_cut:]
+        return head + sep + rest
     result = f"{_ind(indent)}case {subject}:"
     for node in self.nodes[1:]:
         tname = type(node).__name__

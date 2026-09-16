@@ -60,4 +60,33 @@ assert s[0] + e == "a"
 let c: char = s[0]
 assert c == "a"
 
+# --- a case whose subject is an index, not a name ---------------------------
+# The native case path used to decide char-ness by looking the subject up in
+# the symbol table, which an expression is not in: `case s[0]:` emitted
+# `of "a":` against a char and the file stopped compiling. ada_indent.ady
+# carried a `let c: char = s[0]` and a comment saying so.
+
+def classify(text: str) -> str:
+    case text[0]:
+        when 'a': return "vowel-ish"
+        when 'b' | 'c': return "early"
+        when others: return "other"
+
+assert classify("abc") == "vowel-ish"
+assert classify("bbb") == "early"
+assert classify("cxx") == "early"
+assert classify("zzz") == "other"
+
+# A one-character string in the *body* of a branch is a string and has to
+# stay one: the char coercion applies to the pattern, not to the whole
+# branch. `return "a"` came out as `return 'a'` under a char subject.
+
+def first_or_dash(text: str) -> str:
+    case text[0]:
+        when 'x': return "-"
+        when others: return text[0:1]
+
+assert first_or_dash("xyz") == "-"
+assert first_or_dash("abc") == "a"
+
 print "all char/slice tests passed"

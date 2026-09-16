@@ -124,8 +124,7 @@ def starts_with_operator(code_s: str) -> bool:
     (and, or, xor, mod, rem, covering 'and then'/'or else'). Such a continuation
     takes one extra indent level so it stands out from the operand it continues."""
     return False if code_s == ""
-    let c: char = code_s[0]
-    case c: # bug here, cannot replace c with code_s[0] in the case statement
+    case code_s[0]:
         when ':': len(code_s) > 1 and code_s[1] == '='   # ':=', not a bare ':'
         when '.': len(code_s) > 1 and code_s[1] == '.'   # '..' range
         when '=' | '&' | '+' | '-' | '*' | '/' | '<' | '>' | '|': True
