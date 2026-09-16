@@ -438,6 +438,13 @@ test: compile
 	        echo FAIL; printf '%s\n' "$$out" | tail -20; exit 1; \
 	    fi; \
 	done
+	@# The suites are run, not kept. Each leaves a symlink to its binary
+	@# beside its source, and unlike ada_indent -- which the editor
+	@# harnesses below go on to drive, and which a user wants on PATH --
+	@# a test runner is of no use once it has reported. Left behind they
+	@# sit in ADA_INDENT/ pointing into a cache that the next `make clean`
+	@# empties, so the link outlives what it points at.
+	@for f in $(ADA_INDENT_TESTS); do rm -f $(AIDIR)/$${f%.ady}; done
 
 	@# Each editor integration drives the ada_indent binary itself, so each
 	@# harness needs the built binary plus its own editor. None of node,
@@ -630,4 +637,7 @@ clean:
 	@for t in $(TOOLS); do \
 	    rm -f $(CURDIR)/$${t%.ady}; \
 	done
+	@# `make test` deletes these as soon as each suite has reported; this is
+	@# for the run that stopped before it got there.
+	@for f in $(ADA_INDENT_TESTS); do rm -f $(AIDIR)/$${f%.ady}; done
 	@echo "Done."
