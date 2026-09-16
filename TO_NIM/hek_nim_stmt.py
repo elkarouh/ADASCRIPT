@@ -2140,6 +2140,38 @@ def to_nim(self):
     return f"echo({arg})"
 
 
+# --- discard: a value a statement throws away ---
+def _nim_needs_discard(stmt_text):
+    """True when Nim requires an explicit `discard` in front of this statement.
+
+    Two cases, and they are the ones stmt_line used to decide inline: a call
+    on a pyimport'ed module (nimpy's callMethodAux answers a PyObject, and an
+    unused one is an error), and a Nim builtin whose value is dropped --
+    `xs.pop()` alone, but not `x = xs.pop()`, where the value has somewhere
+    to go. Factored out of stmt_line because the `if` modifier needs the same
+    answer for the statement it guards: the `discard` belongs on that
+    statement, inside the `if`, not in front of the `if`.
+    """
+    import re as _re_disc
+    s = stmt_text.strip()
+    _ret = getattr(ParserState, '_current_return_type', '')
+    # Inside a returning proc the expression may be the implicit result.
+    _in_returning = bool(_ret and _ret not in (': void', ': None', ': unit'))
+    if "nimpy" in ParserState.nim_imports and not _in_returning:
+        _m = _re_disc.match(r'^([A-Za-z_]\w*)\.', s)
+        if _m:
+            _sym = ParserState.symbol_table.lookup(_m.group(1))
+            if _sym and str(_sym.get("type", "")).startswith("_py_module:"):
+                return True
+    if not s.startswith(("discard ", "let ", "var ", "const ")):
+        from hek_nim_parser import _has_toplevel_assignment
+        if not _has_toplevel_assignment(s):
+            _m = _re_disc.match(r'^.+\.([A-Za-z_]\w*)\(', s)
+            if _m and _m.group(1) in {"pop"}:
+                return True
+    return False
+
+
 # --- statement modifier ---
 @method(modifier_if_stmt)
 def to_nim(self, indent=0):
@@ -2181,6 +2213,8 @@ def to_nim(self, indent=0):
             f"      {_kw} {_target} = ...\n"
             f"      {_target} = ... if <condition>"
         )
+    if _nim_needs_discard(_body):
+        _body = "discard " + _body
     return f"{_ind(indent)}if {cond_nim}: {_body}"
 
 

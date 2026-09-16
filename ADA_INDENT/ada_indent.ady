@@ -98,12 +98,10 @@ def stmt_incomplete(code_s: str) -> bool:
     # which is a complete prefix — the labelled construct on the next line stays
     # at the label's level rather than indenting as a continuation. (':=' ends in
     # '=', not ':', so an unfinished assignment is unaffected.)
-    if code_s == "" or code_s.endswith((";", "=>", ":")):
-        return False
+    return False if code_s == "" or code_s.endswith((";", "=>", ":"))
     let lw: str = lead_ident(code_s).lower()
     # 'separate (Parent)' is a complete compilation-unit prefix despite content.
-    if lw == "separate":
-        return False
+    return False if lw == "separate"
     # A *bare* splitter/opener keyword line (just the keyword, nothing trailing)
     # is complete. The 'code_s.lower() == lw' guard matters because the same
     # words occur inside expressions: e.g. the 'else …)' line closing an
@@ -115,8 +113,7 @@ def stmt_incomplete(code_s: str) -> bool:
     let lt: str = last_word(code_s)
     # 'subtype T is' is not a block opener — the type name follows on the next
     # line as a plain continuation, with no matching 'end'.
-    if lt == "is" and lw == "subtype":
-        return True
+    return True if lt == "is" and lw == "subtype"
     # Block openers, plus the '[not] overriding' indicator on its own line.
     return lt not in ("is", "then", "loop", "record", "select", "do", "overriding")
 
@@ -278,8 +275,7 @@ class Indenter:
         self.paren_prev_lead     = 0
         for part in s.split("|"):
             let eq: int = part.find("=")       # int: find answers -1 when absent
-            if eq < 0:
-                continue
+            continue if eq < 0
             let key: str = part[:eq]
             let val: str = part[eq + 1:]
             case key:
@@ -327,8 +323,7 @@ class Indenter:
         let code_s: str = code.strip()
         let emit_text: str = raw2.strip()
 
-        if emit_text == "":
-            return ""
+        return "" if emit_text == ""
 
         # A comment-only line (text remains, but nothing is left after stripping
         # the '--' comment) is transparent to the parser: indent it to the
@@ -610,8 +605,7 @@ class Indenter:
                 if self.cond_state > 0 and plt == "then":
                     # A multi-line if/elsif condition closed its parens and
                     # reached 'then' on the same line: end it like cond_state.
-                    if self.cond_state == 1:
-                        self.stack.append(IF)
+                    self.stack.append(IF) if self.cond_state == 1
                     self.cond_state = 0
                 else:
                     case plt:
@@ -634,8 +628,7 @@ class Indenter:
             let last: str = last_word(code_s)
             if last == "then" or lw == "then":
                 disp = self.cond_base
-                if self.cond_state == 1:
-                    self.stack.append(IF)
+                self.stack.append(IF) if self.cond_state == 1
                 self.cond_state = 0
             elif is_term_continuation(code_s) and lw != "and" and lw != "or":
                 # A line that continues the previous term across the break (>=,
@@ -676,8 +669,7 @@ class Indenter:
             when "end":
                 while len(self.stack) > 0 and self.stack[-1] == WHEN:
                     self.stack.pop()
-                if len(self.stack) > 0:
-                    self.stack.pop()
+                self.stack.pop() if len(self.stack) > 0
                 disp = len(self.stack)
                 # 'type T is' on its own line pushes TYPE_HEADER, then the
                 # following 'record' line pushes RECORD. 'end record' closes
@@ -696,8 +688,7 @@ class Indenter:
                     self.stack.append(BLOCK)
 
             when "when":
-                if len(self.stack) > 0 and self.stack[-1] == WHEN:
-                    self.stack.pop()
+                self.stack.pop() if len(self.stack) > 0 and self.stack[-1] == WHEN
                 disp = len(self.stack)
                 self.stack.append(WHEN)
 
@@ -862,8 +853,7 @@ def main() -> Natural:
     let f: File = (open(file_arg) if file_arg != "" else stdin)
     for line in f.lines:
         print ind.indent_line(line)
-        if do_emit_state:
-            print "##STATE:" + ind.dump_state()
+        print "##STATE:" + ind.dump_state() if do_emit_state
 
 if __name__ == "__main__":
     quit(main())

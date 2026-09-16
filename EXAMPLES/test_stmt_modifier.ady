@@ -84,4 +84,20 @@ var chosen: str = "big" if len("abcd") > 3 else "small"
 assert chosen == "big"
 print "test5 OK"
 
+# ─── test 6: a guarded call whose value is dropped ───────────────────────────
+#
+# `xs.pop()` answers a value Nim will not let go unused, so the backend puts a
+# `discard` on it. Under a modifier the `discard` belongs on the call, inside
+# the `if` -- `discard if c: xs.pop()` does not compile.
+
+def drop_last(xs: []int, doit: bool) -> []int:
+    var ys: []int = xs
+    ys.pop() if doit and len(ys) > 0
+    return ys
+
+assert len(drop_last([1, 2, 3], True)) == 2
+assert len(drop_last([1, 2, 3], False)) == 3
+assert len(drop_last([], True)) == 0
+print "test6 OK"
+
 print "all statement-modifier tests passed"
