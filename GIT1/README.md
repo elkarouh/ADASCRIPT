@@ -18,7 +18,7 @@ demonstrating themselves.
 |---|---|
 | [`git1.ady`](git1.ady) | the tool |
 | [`git1.el`](git1.el) | Emacs VC integration, so `C-x v ...` works on a tracked file |
-| [`../LSP/vscode-git1/`](../LSP/vscode-git1) | the same idea for VS Code |
+| [`vscode-git1/`](vscode-git1) | VS Code integration, the same idea as `git1.el` |
 
 ## Building
 

@@ -1,6 +1,6 @@
 # vscode-git1 — Single-File Version Control for VS Code
 
-VS Code integration for [git1](../../GIT1/git1.ady): each tracked file
+VS Code integration for [git1](../git1.ady): each tracked file
 gets its own private git repo under `.git1/.g1_<name>`, independent of any
 directory-level repository.
 
@@ -19,7 +19,7 @@ git1-tracked file is open.
 
 ## Prerequisites
 
-- **`git1`** binary on your PATH (compile from `GIT1/git1.ady` or install
+- **`git1`** binary on your PATH (compile from `../git1.ady` or install
   `~/bin/git1.sh`)
 - **`git`** (standard git — git1 uses it under the hood)
 
@@ -28,7 +28,7 @@ git1-tracked file is open.
 From the extension directory:
 
 ```bash
-cd LSP/vscode-git1
+cd GIT1/vscode-git1
 npm install
 ```
 
