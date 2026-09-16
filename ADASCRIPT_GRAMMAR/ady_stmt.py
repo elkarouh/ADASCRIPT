@@ -15,7 +15,7 @@ Statements implemented:
     - import, from ... import
     - type alias:          type X = int | str  (3.12+)
     - Expression statement: f(x), x
-    - Statement modifier: return False if x == ""
+    - Statement modifier: return False if x == ""  (return/break/continue)
 
 Usage:
     ast = parse_stmt("x = 1")
@@ -145,6 +145,7 @@ variant_case = fw("variant_case")
 discrim_record_def = fw("discrim_record_def")
 type_block_stmt = fw("type_block_stmt")
 simple_stmt = fw("simple_stmt")
+return_bare_if = fw("return_bare_if")
 modifier_body = fw("modifier_body")
 modifier_if_stmt = fw("modifier_if_stmt")
 stmt_head = fw("stmt_head")
@@ -349,35 +350,26 @@ simple_stmt = (
 #   return False if code_s == ""      ->      if code_s == "":
 #                                                 return False
 #
-# The guarded statement is deliberately not the whole of simple_stmt: a
-# declaration (`var`, `let`, `const`, `own`, `x: int = 1`) binds a name, and
-# both backends would bind it inside the body the modifier builds, where Nim
-# scopes it to that body and the name is gone by the next line. An import or a
-# type declaration has the same problem. What is left is the set of statements
-# that only *do* something, which is what a modifier is for.
+# Only the three statements that leave where they are -- `return`, `break`,
+# `continue` -- may carry one. That is what a guard clause is: the exit, and
+# the condition it is taken on. An assignment or a call written this way
+# reads as a conditional expression whose `else` has gone missing (`x = 1 if
+# c` opens exactly like `x = 1 if c else 2`), and a declaration would bind
+# its name inside the body the modifier builds, where Nim scopes it to that
+# body and the name is gone by the next line. Neither is offered here.
 #
-# The condition is a disjunction rather than a full expression, the same rule a
-# comprehension's `if` uses, so `x = a if b else c` keeps parsing as a
-# conditional expression: the assignment swallows the whole ternary and the
-# modifier's `if` never matches. ~I_ELSE is the second lock on that
-# door: an `else` after the condition means the line was a conditional
-# expression the statement did not take, so the modifier declines and the
-# plain form is parsed instead.
-modifier_body = (
-    return_stmt
-    | pass_stmt
-    | break_stmt
-    | continue_stmt
-    | del_stmt
-    | assert_stmt
-    | raise_stmt
-    | aug_assign_stmt
-    | subst_stmt
-    | assign_stmt
-    | yield_expr
-    | print_stmt
-    | expressions
-)
+# The condition is a disjunction rather than a full expression, the same rule
+# a comprehension's `if` uses. ~I_ELSE is the second lock on that door: an
+# `else` after the condition means the line was a conditional expression, so
+# the modifier declines and the plain form is parsed instead -- which is what
+# keeps `return a if c else b` a ternary.
+# A bare `return` needs the lookahead, and has to be offered before the form
+# that returns a value: IDENTIFIER matches any NAME token, keywords included,
+# so `return if q` otherwise has its `if` taken as the expression returned,
+# leaving `q` where the modifier expected the keyword. `~~` is a positive
+# lookahead (the negation of a negation) and consumes nothing.
+return_bare_if = return_bare + ~~I_IF
+modifier_body = return_bare_if | return_val | break_stmt | continue_stmt
 modifier_if_stmt = modifier_body + I_IF + disjunction + ~I_ELSE
 
 # --- stmt_line: semicolon-separated statements on one line ---

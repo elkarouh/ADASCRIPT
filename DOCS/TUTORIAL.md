@@ -761,10 +761,10 @@ elif x < 10: print("5<=x<10")
 else: print("x>=10")
 ```
 
-### Statement modifier: `<statement> if <condition>`
+### Statement modifier: `return` / `break` / `continue` if cond
 
-A statement can carry its own `if`, and runs only when the condition holds.
-The guard clause reads answer-first:
+Those three statements can carry their own `if`, and run only when the
+condition holds. The guard clause reads exit-first:
 
 ```python
 def is_term_continuation(code_s: str) -> bool:
@@ -775,28 +775,21 @@ def is_term_continuation(code_s: str) -> bool:
 ```
 
 Each of those lines emits the one-line `if` on both backends
-(`if code_s == "": return False`). `return`, `break`, `continue`, `pass`,
-`raise`, `assert`, `del`, `yield`, `print`, an assignment or augmented
-assignment and any call can take one:
+(`if code_s == "": return False`). A bare `return` takes one too:
 
 ```python
+return if quiet
 continue if line.startswith("#")
-total += n if n > 0
-raise ValueError("negative") if n < 0
+break if depth < 0
 ```
 
-A declaration cannot: `var`, `let`, `const`, `x: int = 1`, `import` and
-`type` bind a name, and the name would live only inside the body the
-modifier builds. A first assignment to a name is a declaration on the Nim
-side, so that is refused too -- declare it, then guard the assignment:
+Nothing else may: an assignment, a call, a `print` or a `raise` under an
+`if` modifier is a parse error. `x = 1 if c` opens exactly like the
+conditional expression `x = 1 if c else 2` and would only stop looking like
+one at the end of the line.
 
-```python
-var v: int = n
-v = 100 if v > 100
-```
-
-The conditional expression is untouched: a modifier's `if` has no `else`, so
-`v: int = 1 if flag else 2` is still a ternary.
+The conditional expression itself is untouched: a modifier's `if` has no
+`else`, so `v: int = 1 if flag else 2` is still a ternary.
 
 ### for loops
 
@@ -2587,7 +2580,7 @@ through the same ground in more detail.
 | Enum-indexed array literal        | `[KEY: value, ...]`                      |
 | Pattern matching                  | `case x: when P: ... when others: ...`  |
 | Inline suite (single-stmt body)   | `if x>0: f()`, `while c: g()`, `when P: h()` |
-| Statement modifier                | `return False if s == ""`               |
+| Statement modifier                | `return False if s == ""` (return/break/continue) |
 | Generator functions               | `def f(): ... yield value`               |
 | Field with inline default         | `var x: int = 0` inside class body       |
 | Mutable self (auto-detected)      | any `self.field =` / `self.method()`     |

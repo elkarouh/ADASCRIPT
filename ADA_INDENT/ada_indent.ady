@@ -604,7 +604,8 @@ class Indenter:
                 if self.cond_state > 0 and plt == "then":
                     # A multi-line if/elsif condition closed its parens and
                     # reached 'then' on the same line: end it like cond_state.
-                    self.stack.append(IF) if self.cond_state == 1
+                    if self.cond_state == 1:
+                        self.stack.append(IF)
                     self.cond_state = 0
                 else:
                     case plt:
@@ -627,7 +628,8 @@ class Indenter:
             let last: str = last_word(code_s)
             if last == "then" or lw == "then":
                 disp = self.cond_base
-                self.stack.append(IF) if self.cond_state == 1
+                if self.cond_state == 1:
+                    self.stack.append(IF)
                 self.cond_state = 0
             elif is_term_continuation(code_s) and lw != "and" and lw != "or":
                 # A line that continues the previous term across the break (>=,
@@ -668,7 +670,8 @@ class Indenter:
             when "end":
                 while len(self.stack) > 0 and self.stack[-1] == WHEN:
                     self.stack.pop()
-                self.stack.pop() if len(self.stack) > 0
+                if len(self.stack) > 0:
+                    self.stack.pop()
                 disp = len(self.stack)
                 # 'type T is' on its own line pushes TYPE_HEADER, then the
                 # following 'record' line pushes RECORD. 'end record' closes
@@ -687,7 +690,8 @@ class Indenter:
                     self.stack.append(BLOCK)
 
             when "when":
-                self.stack.pop() if len(self.stack) > 0 and self.stack[-1] == WHEN
+                if len(self.stack) > 0 and self.stack[-1] == WHEN:
+                    self.stack.pop()
                 disp = len(self.stack)
                 self.stack.append(WHEN)
 
@@ -852,7 +856,8 @@ def main() -> Natural:
     let f: File = (open(file_arg) if file_arg != "" else stdin)
     for line in f.lines:
         print ind.indent_line(line)
-        print "##STATE:" + ind.dump_state() if do_emit_state
+        if do_emit_state:
+            print "##STATE:" + ind.dump_state()
 
 if __name__ == "__main__":
     quit(main())

@@ -746,9 +746,10 @@ case state:              # ✗ plain variable — emits Nim `case`, fails at com
 
 ## Statement Modifier
 
-A statement can carry its own `if`, Perl- and Ruby-style: the statement runs
-only when the condition holds. It is the guard clause written the way it
-reads -- the answer first, the reason for it after.
+`return`, `break` and `continue` can carry their own `if`, Perl- and
+Ruby-style: the statement runs only when the condition holds. It is the
+guard clause written the way it reads -- the exit first, the reason for it
+after.
 
 ```python
 def is_term_continuation(code_s: str) -> bool:
@@ -774,44 +775,34 @@ if code_s == "": return False
 if code_s == "": return false
 ```
 
-The condition is an ordinary expression -- calls, `and` / `or` / `not`,
+A bare `return` takes one too, and so do `break` and `continue`. The
+condition is an ordinary expression -- calls, `and` / `or` / `not`,
 comparisons, `in`:
 
 ```python
+return if quiet
 continue if line.startswith("#") or line.strip() == ""
 break if depth < 0
-total += n if n > 0
-raise ValueError("negative") if n < 0
-print "skipped:", path if verbose
 ```
+
+**Those three statements and no others.** An assignment, a call, a `print`,
+a `raise` -- none of them may carry a modifier, and the parser rejects the
+line rather than emit it. The modifier is for the guard clause, where the
+statement leaves the block it is in and the condition is the reason it left.
+`x = 1 if c` would open exactly like the conditional expression
+`x = 1 if c else 2` and stop looking like one only at the end of the line,
+which is the opposite of what a guard is for.
 
 **A conditional expression is still a conditional expression.** The modifier
 takes only an `if` with no `else`, so the ternary keeps its Python reading:
 
 ```python
 v: int = 1 if flag else 2      # conditional expression, unchanged
-v = 100 if v > 100             # modifier: if v > 100: v = 100
+return 1 if flag else 2        # likewise -- not a modifier
 ```
 
-**What can carry a modifier:** `return`, `break`, `continue`, `pass`,
-`raise`, `assert`, `del`, `yield`, `print`, an assignment or augmented
-assignment, a substitution, and any expression statement (a call).
-
-**What cannot:** a declaration -- `var` / `let` / `const`, an annotated
-assignment (`x: int = 1`), an `import`, or a `type` declaration. The name
-such a statement binds would live only inside the body the modifier builds,
-which is not what the line looks like it says, so the parser rejects it
-rather than emit it. For the same reason, a first assignment to a name (the
-one the Nim backend turns into a `var`) is a transpile-time error under a
-modifier; declare the variable first and guard the assignment to it:
-
-```python
-var v: int = n
-v = 100 if v > 100
-```
-
-One statement per line: `a; b if c` is not accepted, because neither backend
-can spell it on one line.
+One statement per line: `a; return if c` is not accepted, because neither
+backend can spell it on one line.
 
 ---
 

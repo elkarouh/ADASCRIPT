@@ -4324,18 +4324,33 @@ def to_nim(self, indent=0):
         parts = [_ind(indent) + self.nodes[0].to_nim()]
 
     result = "; ".join(p.strip() for p in parts if p.strip())
-    # A statement whose value Nim will not let go unused needs `discard` in
-    # front of it: a call on a pyimport'ed module, or a builtin such as
-    # `xs.pop()` used as a statement.  The rule lives in hek_nim_stmt so the
-    # `if` modifier can ask the same question about the statement it guards --
-    # and a modifier line is skipped here for exactly that reason: its
-    # `discard` goes inside the `if`, where the call is, not in front of it.
+    # PyObject method call as statement: wrap with discard so Nim doesn't
+    # complain about an unused expression from nimpy callMethodAux.
+    # Skip when inside a returning function — the expression may be the implicit return value.
     _ret_pyc = getattr(ParserState, '_current_return_type', '')
-    _is_modifier = bool(self.nodes) and type(self.nodes[0]).__name__ == "modifier_if_stmt"
-    if (not _is_modifier
-            and len([p for p in parts if p.strip()]) == 1
-            and hek_nim_stmt._nim_needs_discard(result)):
-        result = "discard " + result.strip()
+    _in_returning = bool(_ret_pyc and _ret_pyc not in (': void', ': None', ': unit'))
+    if "nimpy" in ParserState.nim_imports and len([p for p in parts if p.strip()]) == 1 and not _in_returning:
+        import re as _re_pyc
+        _pyc_m = _re_pyc.match(r'^([A-Za-z_]\w*)\.', result.strip())
+        if _pyc_m:
+            _root = _pyc_m.group(1)
+            _sym = ParserState.symbol_table.lookup(_root)
+            if _sym and str(_sym.get("type", "")).startswith("_py_module:"):
+                result = f"discard {result}"
+    # Nim builtins that return a non-void value — must discard when used as a
+    # statement.  Only when the call *is* the statement: `xs.pop()` alone
+    # throws the value away and Nim insists that be said, but in
+    # `x = xs.pop()` the value is going somewhere, and prefixing that yields
+    # `discard x = xs.pop()`, which does not compile.  The leading-keyword
+    # test below catches `var x = xs.pop()` but not a plain reassignment,
+    # whose `=` the receiver pattern `^.+\.` then happily spans.
+    if (len([p for p in parts if p.strip()]) == 1
+            and not result.strip().startswith(("discard ", "let ", "var ", "const "))
+            and not _has_toplevel_assignment(result.strip())):
+        import re as _re_disc2
+        _dm = _re_disc2.match(r'^.+\.([A-Za-z_]\w*)\(', result.strip())
+        if _dm and _dm.group(1) in {"pop"}:
+            result = "discard " + result.strip()
     # Bare print (no args) -> echo "" (empty line)
     if result.strip() == "echo":
         result = 'echo ""'

@@ -836,7 +836,7 @@ match result:
 """,
 )
 
-section("Statement modifier — `<stmt> if <cond>`")
+section("Statement modifier — `return` / `break` / `continue` if cond")
 
 test("modifier: return", 'return False if code_s == ""\n',
      'if code_s == "": return False\n')
@@ -845,17 +845,11 @@ test("modifier: return true", 'return True if code_s.startswith("(")\n',
 test("modifier: condition with or",
      'return False if not starts_with_operator(s) or s.startswith((":=", "=>"))\n',
      'if not starts_with_operator(s) or s.startswith((":=", "=>")): return False\n')
+# A bare `return` has to be recognised before the form that returns a value:
+# IDENTIFIER matches any NAME token, `if` included.
+test("modifier: bare return", "return if quiet\n", "if quiet: return\n")
 test("modifier: continue", "continue if i == 2\n", "if i == 2: continue\n")
 test("modifier: break", "break if i > 5\n", "if i > 5: break\n")
-test("modifier: pass", "pass if quiet\n", "if quiet: pass\n")
-test("modifier: augmented assign", "total += i if i > 0\n", "if i > 0: total += i\n")
-test("modifier: assignment", "v = 100 if v > 100\n", "if v > 100: v = 100\n")
-test("modifier: raise", 'raise ValueError("neg") if n < 0\n',
-     'if n < 0: raise ValueError("neg")\n')
-test("modifier: assert", "assert n < 1000 if n > 0\n", "if n > 0: assert n < 1000\n")
-test("modifier: bare print", 'print "seen", i if i == 4\n',
-     'if i == 4: print("seen", i)\n')
-test("modifier: call statement", "log(x) if verbose\n", "if verbose: log(x)\n")
 test("modifier: inline comment travels", "return 0 if n < 0  # guard\n",
      "if n < 0: return 0  # guard\n")
 test("modifier: inside a one-line suite", "if big: return 1 if x == 1\n",

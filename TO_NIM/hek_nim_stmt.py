@@ -2140,46 +2140,21 @@ def to_nim(self):
     return f"echo({arg})"
 
 
-# --- discard: a value a statement throws away ---
-def _nim_needs_discard(stmt_text):
-    """True when Nim requires an explicit `discard` in front of this statement.
-
-    Two cases, and they are the ones stmt_line used to decide inline: a call
-    on a pyimport'ed module (nimpy's callMethodAux answers a PyObject, and an
-    unused one is an error), and a Nim builtin whose value is dropped --
-    `xs.pop()` alone, but not `x = xs.pop()`, where the value has somewhere
-    to go. Factored out of stmt_line because the `if` modifier needs the same
-    answer for the statement it guards: the `discard` belongs on that
-    statement, inside the `if`, not in front of the `if`.
-    """
-    import re as _re_disc
-    s = stmt_text.strip()
-    _ret = getattr(ParserState, '_current_return_type', '')
-    # Inside a returning proc the expression may be the implicit result.
-    _in_returning = bool(_ret and _ret not in (': void', ': None', ': unit'))
-    if "nimpy" in ParserState.nim_imports and not _in_returning:
-        _m = _re_disc.match(r'^([A-Za-z_]\w*)\.', s)
-        if _m:
-            _sym = ParserState.symbol_table.lookup(_m.group(1))
-            if _sym and str(_sym.get("type", "")).startswith("_py_module:"):
-                return True
-    if not s.startswith(("discard ", "let ", "var ", "const ")):
-        from hek_nim_parser import _has_toplevel_assignment
-        if not _has_toplevel_assignment(s):
-            _m = _re_disc.match(r'^.+\.([A-Za-z_]\w*)\(', s)
-            if _m and _m.group(1) in {"pop"}:
-                return True
-    return False
-
-
 # --- statement modifier ---
+@method(return_bare_if)
+def to_nim(self):
+    """return_bare_if: a bare 'return' standing before an `if` modifier."""
+    return self.nodes[0].to_nim()
+
+
 @method(modifier_if_stmt)
 def to_nim(self, indent=0):
-    """modifier_if_stmt: <stmt> 'if' disjunction -> Nim: if cond: <stmt>
+    """modifier_if_stmt: ('return'|'break'|'continue') 'if' disjunction
 
-    One line rather than a two-line block, as on the Python side: stmt_line
-    re-indents every line after the first to the statement's own column, so a
-    body on its own line would come back out level with its `if`.
+    -> Nim: `if cond: <stmt>`, one line rather than a two-line block, as on
+    the Python side: stmt_line re-indents every line after the first to the
+    statement's own column, so a body on its own line would come back out
+    level with its `if`.
 
     The condition goes through _nim_truthiness for the same reason an `if`
     statement's does -- `return 0 if not xs` is a test on a sequence, and Nim
@@ -2187,35 +2162,8 @@ def to_nim(self, indent=0):
     """
     import hek_nim_expr
     body, cond = self.nodes[0], self.nodes[1]
-    try:
-        body_nim = body.to_nim(0)
-    except TypeError:
-        body_nim = body.to_nim()
     cond_nim = hek_nim_expr._nim_truthiness(cond.to_nim())
-    _body = body_nim.strip()
-    # A first assignment to a name emits `var x = ...` here, and Nim will not
-    # take a declaration on the same line as the `if` -- nor would the name
-    # outlive the body if it did, which is the real objection: the statement
-    # after it would not see x. The grammar keeps `var`/`let`/`const` and an
-    # annotated assignment out of the modifier for that reason, and a plain
-    # `x = ...` that turns out to be the first mention of x is the same
-    # statement wearing another hat. Say so here rather than leave it to Nim,
-    # whose own message ("nestable statement requires indentation") names
-    # neither the modifier nor the variable.
-    if _body.startswith(("var ", "let ", "const ")):
-        _kw, _rest = _body.split(None, 1)
-        _target = _rest.split("=", 1)[0].split(":")[0].strip()
-        raise SyntaxError(
-            f"'{_target} = ...' declares {_target}, and a declaration cannot take "
-            f"an 'if' modifier: the name would live only inside the modifier's "
-            f"body.\n"
-            f"  Declare it first, then guard the assignment:\n"
-            f"      {_kw} {_target} = ...\n"
-            f"      {_target} = ... if <condition>"
-        )
-    if _nim_needs_discard(_body):
-        _body = "discard " + _body
-    return f"{_ind(indent)}if {cond_nim}: {_body}"
+    return f"{_ind(indent)}if {cond_nim}: {body.to_nim().strip()}"
 
 
 # --- simple_stmt ---
