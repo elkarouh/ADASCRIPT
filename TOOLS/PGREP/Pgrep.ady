@@ -226,102 +226,129 @@ def print_help(as_html: bool):
 # Options
 # ---------------------------------------------------------------------------
 
-var closure        : str  = ""
-var subsys_pattern : str  = ""
-var file_pattern   : str  = "*"
-var path_pattern   : str  = ""
-var good           : str  = ""      # "" or "_GOOD"
-var verbose        : bool = False
-var basenames      : bool = False
-var use_grep       : bool = True
-var skip_projects  : bool = True
-var ada            : bool = False
-var fpat_given     : bool = False
-var sort_output    : bool = False
+def value_after(argv: []str, i: Natural, what: str) -> str:
+    """The argument after position i, or an error naming the option."""
+    if i + 1 >= argv'Length:
+        die(what + " needs a value")
+    return argv[i + 1]
 
-# Colours by default when stdout is a terminal, and never when it is a file.
-let stdout_is_tty: int = shell: test -t 1
-var with_colors: bool = stdout_is_tty == 0
 
-# What goes to grep. Everything after the options -- or after `--` -- is the
-# caller's, passed through untouched.
-var grep_params: []str = ["--line-number", "--with-filename"]
-let default_grep_params: Natural = grep_params'Length
+class Options:
+    """What the command line decided.
+
+    One object rather than a dozen module-level vars: the searching procs
+    below read half of these and the two that write them are `parse` and
+    `resolve`, which is a great deal easier to see when the state has a name
+    and a scope.
+    """
+    closure        : str       # -closure: the system or baseline to search
+    subsys_pattern : str       # -subsys
+    file_pattern   : str       # -fpat, or -ada's "*.ad?"
+    path_pattern   : str       # -ppat
+    good           : str       # -latest_good: "" or "_GOOD"
+    verbose        : bool
+    basenames      : bool
+    use_grep       : bool      # not -no-grep
+    skip_projects  : bool      # not -all
+    ada            : bool
+    fpat_given     : bool      # -fpat, which -ada may not also be
+    sort_output    : bool
+    with_colors    : bool
+    grep_params    : []str     # what goes to grep, the caller's part included
+    base_params    : Natural   # how many of those are ours, not the caller's
+
+    def __init__(self):
+        self.closure        = ""
+        self.subsys_pattern = ""
+        self.file_pattern   = "*"
+        self.path_pattern   = ""
+        self.good           = ""
+        self.verbose        = False
+        self.basenames      = False
+        self.use_grep       = True
+        self.skip_projects  = True
+        self.ada            = False
+        self.fpat_given     = False
+        self.sort_output    = False
+        # Colours by default when stdout is a terminal, never when it is a file.
+        let stdout_is_tty: int = shell: test -t 1
+        self.with_colors    = stdout_is_tty == 0
+        self.grep_params    = ["--line-number", "--with-filename"]
+        self.base_params    = self.grep_params'Length
+
+    def parse(self, argv: []str):
+        """The command line, option by option."""
+        var i: Natural = 0
+        var in_grep_args: bool = False
+        while i < argv'Length:
+            let arg: str = argv[i]
+            if in_grep_args:
+                # Past the options: the rest belongs to grep, `-` and all.
+                self.grep_params.append(arg)
+                i += 1
+                continue
+            # How many arguments this option takes: the shell version's `shift`
+            # count, and zero for the one that ends the options without being
+            # one itself.
+            var eaten: Natural = 1
+            case arg:
+                when "-?" | "-help":         print_help(False)
+                when "-ht" | "-html":        print_help(True)
+                when "-ada":
+                    self.ada = True
+                    self.file_pattern = "*.ad?"
+                when "-all":                 self.skip_projects = False
+                when "-latest_good":         self.good = "_GOOD"
+                when "-no-grep":             self.use_grep = False
+                when "-basenames":           self.basenames = True
+                when "-verbose":             self.verbose = True
+                when "-no_colors":           self.with_colors = False
+                when "-sort":                self.sort_output = True
+                when "-closure":
+                    self.closure = value_after(argv, i, arg)
+                    eaten = 2
+                when "-fpat":
+                    self.file_pattern = value_after(argv, i, arg)
+                    self.fpat_given = True
+                    eaten = 2
+                when "-ppat":
+                    self.path_pattern = value_after(argv, i, arg)
+                    eaten = 2
+                when "-subsys":
+                    self.subsys_pattern = value_after(argv, i, arg)
+                    eaten = 2
+                when "--":
+                    # The explicit end of the options.
+                    in_grep_args = True
+                when others:
+                    # Anything else is the search pattern: it belongs to grep,
+                    # and it is not consumed here.
+                    in_grep_args = True
+                    eaten = 0
+            i += eaten
+
+    def resolve(self):
+        """What the options mean together, and what they may not mean at all."""
+        if self.use_grep and self.grep_params'Length == self.base_params:
+            die("a search pattern must be defined. Use -no-grep if you want to list the files searched.")
+        if not self.use_grep and self.grep_params'Length > self.base_params:
+            stderr.writeLine(PROG + ": warning: the search pattern will be ignored since -no-grep is used.")
+        if self.closure != "" and (self.subsys_pattern != "" or not self.skip_projects):
+            die("option -closure cannot be used with -all or -subsys")
+        if self.ada and self.fpat_given:
+            die("-ada and -fpat cannot be used at the same time")
+        if self.with_colors:
+            self.grep_params.append("--color=always")
+
 
 let args: []str = $@
 if args'Length == 0:
     print usage()
     quit(0)
 
-def value_after(argv: []str, i: Natural, opt: str) -> str:
-    """The argument after position i, or an error naming the option."""
-    if i + 1 >= argv'Length:
-        die(opt + " needs a value")
-    return argv[i + 1]
-
-var i: Natural = 0
-var in_grep_args: bool = False
-while i < args'Length:
-    let arg: str = args[i]
-    if in_grep_args:
-        # Past the options: the rest belongs to grep, `-` and all.
-        grep_params.append(arg)
-        i += 1
-        continue
-    # How many arguments this option takes: the shell version's `shift` count,
-    # and zero for the one that ends the options without being one.
-    var eaten: Natural = 1
-    case arg:
-        when "-?" | "-help":         print_help(False)
-        when "-ht" | "-html":        print_help(True)
-        when "-ada":
-            ada = True
-            file_pattern = "*.ad?"
-        when "-all":                 skip_projects = False
-        when "-latest_good":         good = "_GOOD"
-        when "-no-grep":             use_grep = False
-        when "-basenames":           basenames = True
-        when "-verbose":             verbose = True
-        when "-no_colors":           with_colors = False
-        when "-sort":                sort_output = True
-        when "-closure":
-            closure = value_after(args, i, arg)
-            eaten = 2
-        when "-fpat":
-            file_pattern = value_after(args, i, arg)
-            fpat_given = True
-            eaten = 2
-        when "-ppat":
-            path_pattern = value_after(args, i, arg)
-            eaten = 2
-        when "-subsys":
-            subsys_pattern = value_after(args, i, arg)
-            eaten = 2
-        when "--":
-            # The explicit end of the options.
-            in_grep_args = True
-        when others:
-            # Anything else is the search pattern: it belongs to grep, and it
-            # is not consumed here.
-            in_grep_args = True
-            eaten = 0
-    i += eaten
-
-# ---------------------------------------------------------------------------
-# What the options mean together
-# ---------------------------------------------------------------------------
-
-if use_grep and grep_params'Length == default_grep_params:
-    die("a search pattern must be defined. Use -no-grep if you want to list the files searched.")
-if not use_grep and grep_params'Length > default_grep_params:
-    stderr.writeLine(PROG + ": warning: the search pattern will be ignored since -no-grep is used.")
-if closure != "" and (subsys_pattern != "" or not skip_projects):
-    die("option -closure cannot be used with -all or -subsys")
-if ada and fpat_given:
-    die("-ada and -fpat cannot be used at the same time")
-
-if with_colors:
-    grep_params.append("--color=always")
+var opt: Options = Options()
+opt.parse(args)
+opt.resolve()
 
 # ---------------------------------------------------------------------------
 # Where to search
@@ -370,7 +397,7 @@ def closure_dir(name: str) -> str:
     let prefix: str = name + "." + topmost + "."
     if $CONTEXT_CM_BASELINE.startswith(prefix):
         return replace_first($CONTEXT_CM_BASELINE, ".", "/")
-    return name + "/" + topmost + ".LATEST" + good
+    return name + "/" + topmost + ".LATEST" + opt.good
 
 def all_subsystem_builds() -> []str:
     """Every subsystem whose LATEST build has sources, less the project branches.
@@ -380,6 +407,7 @@ def all_subsystem_builds() -> []str:
     out when -all is not given.
     """
     let build_dir: str = "build_" + $CM_ENV_ID
+    let good: str = opt.good
     var out: []str = []
     let listing: []str = shellLines: ls -1d /cm/ot/*/*[A-Z].LATEST{good}/{build_dir}/sources 2>/dev/null
     for line in listing:
@@ -414,7 +442,8 @@ def find_files(subsys: str) -> Job:
     var dirs: []str = [subsys + "/" + build + "/sources"]
     if -d (subsys + "/sources/special_files"):
         dirs.append(subsys + "/" + build + "/special_files")
-    let finder: Job = shellSpawn: find {*dirs} -type f ! -name '*.gz' -name {!file_pattern} 2>/dev/null
+    let pattern: str = opt.file_pattern
+    let finder: Job = shellSpawn: find {*dirs} -type f ! -name '*.gz' -name {!pattern} 2>/dev/null
     return finder
 
 def keep_wanted(files: []str) -> []str:
@@ -422,10 +451,10 @@ def keep_wanted(files: []str) -> []str:
     var kept: []str = []
     for f in files:
         continue if f == ""
-        if path_pattern != "" and not matches_runtime_i(f, path_pattern):
+        if opt.path_pattern != "" and not matches_runtime_i(f, opt.path_pattern):
             continue
         kept.append(f)
-    if sort_output:
+    if opt.sort_output:
         kept = sorted(kept)
     return kept
 
@@ -436,7 +465,8 @@ def grep_files(files: []str) -> Job:
     thousands of files, and the argument list has a limit that a file list
     reaches long before a search does.
     """
-    let searcher: Job = shellSpawn(stdin = "\n".join(files) + "\n"): xargs -r grep {*grep_params} --
+    let params: []str = opt.grep_params
+    let searcher: Job = shellSpawn(stdin = "\n".join(files) + "\n"): xargs -r grep {*params} --
     return searcher
 
 def strip_dirnames(text: str) -> str:
@@ -465,7 +495,7 @@ def search(subsystems: []str):
     for r in found:
         let files: []str = keep_wanted(r.output.split("\n"))
         per_subsys.append(files)
-        if use_grep and files'Length > 0:
+        if opt.use_grep and files'Length > 0:
             greppers.append(grep_files(files))
 
     var grep_out: []RunResult = []
@@ -478,9 +508,9 @@ def search(subsystems: []str):
         let files: []str = per_subsys[idx]
         # Without a closure the search is long enough that showing where it
         # has got to is worth a line; with one, only -verbose asks for it.
-        if closure == "" or verbose:
+        if opt.closure == "" or opt.verbose:
             print header_for(subsys)
-        if not use_grep:
+        if not opt.use_grep:
             for f in files:
                 print f
             continue
@@ -488,7 +518,7 @@ def search(subsystems: []str):
         let text: str = grep_out[g].output
         g += 1
         continue if text.strip() == ""
-        if basenames:
+        if opt.basenames:
             print strip_dirnames(text).rstrip("\n")
         else:
             print text.rstrip("\n")
@@ -499,9 +529,9 @@ def search(subsystems: []str):
 
 var targets: []str = []
 
-if closure != "":
-    let dir_name: str = closure_dir(closure)
-    if verbose:
+if opt.closure != "":
+    let dir_name: str = closure_dir(opt.closure)
+    if opt.verbose:
         print "Closure     : " + replace_first(dir_name, "/", ".")
     # Psort orders the closure the way the CM tools do; the environment
     # variable is read into a name first, since an interpolation is an
@@ -512,28 +542,28 @@ if closure != "":
     targets = ordered
 else:
     targets = all_subsystem_builds()
-    if skip_projects:
+    if opt.skip_projects:
         let project_pattern: str = shell_capture("cc_pattern PROJECT_BASELINE_ID")
         var kept: []str = []
         for d in targets:
             continue if is_project_build(d, project_pattern)
             kept.append(d)
         targets = kept
-    if subsys_pattern != "":
+    if opt.subsys_pattern != "":
         var matched: []str = []
         for d in targets:
-            continue if not matches_runtime_i(d, subsys_pattern)
+            continue if not matches_runtime_i(d, opt.subsys_pattern)
             matched.append(d)
         targets = matched
-    if verbose and subsys_pattern != "":
-        print "Subsys pattern: " + subsys_pattern
+    if opt.verbose and opt.subsys_pattern != "":
+        print "Subsys pattern: " + opt.subsys_pattern
 
-if verbose:
-    print "ada option  : " + str(ada)
-    print "sort option : " + str(sort_output)
-    print "File pattern: " + file_pattern
-    if use_grep:
-        print "Grep params : " + " ".join(grep_params)
+if opt.verbose:
+    print "ada option  : " + str(opt.ada)
+    print "sort option : " + str(opt.sort_output)
+    print "File pattern: " + opt.file_pattern
+    if opt.use_grep:
+        print "Grep params : " + " ".join(opt.grep_params)
     else:
         print "Grep params : no grep"
 
