@@ -25,6 +25,7 @@ TOOLS/GIT1/*_gen.py
 # Pgrep, the same again.
 TOOLS/PGREP/Pgrep
 TOOLS/PGREP/*_gen.py
+
 # ady2nim drops a symlink to the built binary next to each source, so the
 # bundled libraries leave one behind whenever they are compiled. They point
 # into ~/.cache/adascript, which is per-machine.
