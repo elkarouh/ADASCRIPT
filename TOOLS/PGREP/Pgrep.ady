@@ -404,61 +404,18 @@ def after_first(text: str, marker: str) -> str:
         return text
     return text[at + len(marker):]
 
-def cm_matches(text: str, what: str) -> bool:
-    """Does TEXT match the pattern cc_pattern gives for WHAT?
-
-    Perl, anchored at both ends, which is what `matches_pattern` in
-    Caux_functions does:
-
-        return $(perl -e "exit 1 if (\"$2\" !~ m{^$(cc_pattern $1)$})")
-
-    Not `grep -E`, which cannot read one of those patterns and answers no to
-    everything. Here that meant a SYSTEM was never recognised as one, so
-    -closure TACT was taken for a baseline ID and resolved to the directory
-    `TACT` rather than to TACT's topmost subsystem -- and Psort, handed a
-    directory that is not a build, had nothing to say.
-    """
-    let pattern: str = cm_run("cc_pattern " + what).strip()
-    if pattern == "":
-        die("cc_pattern " + what + " gave nothing. Is Caux_functions on your PATH?")
-    var one: []str = []
-    one.append(text)
-    let hits: []bool = perl_matching_lines(one, "^" + pattern + "$")
-    return hits[0]
-
-def matches_runtime(text: str, pattern: str) -> bool:
-    """`text` against a pattern that is not known until the program runs.
-
-    A regex literal is a literal, so a pattern read from cc_pattern or from
-    an option cannot be one; grep's exit status is the whole answer.
-    """
-    let (_, rc) = shell(stdin = text + "\n"): grep -qE -- {!pattern}
-    return rc == 0
-
-def matches_runtime_i(text: str, pattern: str) -> bool:
-    """The same, ignoring case: what -ppat and -subsys are matched with."""
-    let (_, rc) = shell(stdin = text + "\n"): grep -qiE -- {!pattern}
-    return rc == 0
-
 def shell_capture(cmd: str) -> str:
     """One line of output from an ordinary command."""
     let r = shell: {cmd}
     return r.output.strip()
 
 def cm_run(what: str) -> str:
-    """What a CM helper answers: cc_pattern, get_topmost_subsystems, Psort.
+    """What a CM helper answers: get_topmost_subsystems, Psort.
 
-    They are ksh functions from `Caux_functions`, which the original
-    dot-sources at the top of the file. Run as commands they do not exist,
-    and the shell says so on a stderr nobody reads: `cc_pattern
-    PROJECT_BASELINE_ID` came back empty, every baseline was tested against
-    `^$`, and nothing matched -- which was a search of every subsystem or of
-    none, depending which way that answer was taken.
-
-    So it is asked where the answer lives: a ksh, with the file sourced. If
-    there is no ksh, or the source fails, the command is tried directly, so
-    that a site where these are real programs still works; and a helper that
-    answers nothing at all says so rather than being taken at its silence.
+    These are ksh functions (get_topmost_subsystems) or Perl programs (Psort)
+    from the CM toolchain. ksh functions must be sourced from Caux_functions
+    first; if there is no ksh, or the source fails, the command is tried
+    directly, so that a site where these are real programs still works.
     """
     let ksh_path: ?Path = which("ksh")
     if ksh_path is not None:
@@ -485,7 +442,9 @@ def closure_dir(name: str) -> Path:
     wins when it names a baseline of that same system; a baseline ID is
     already a path with its first dot turned into a slash.
     """
-    if not cm_matches(name, "SYSTEM"):
+    if "." in name:
+        # A baseline ID (TACT.TACT_CONFIG.30.0.0.128) always contains dots;
+        # a plain system name (TACT, IFPS) never does.
         return Path(replace_first(name, ".", "/"))
     let topmost: str = cm_run("get_topmost_subsystems " + name).strip().split()[0]
     let prefix: str = name + "." + topmost + "."
@@ -509,120 +468,21 @@ def all_subsystem_builds() -> []Path:
         out.append(Path(line.replace("/" + build_dir + "/sources", "")))
     return out
 
-def matching_lines(lines: []str, pattern: str, fold_case: bool) -> []bool:
-    """Which of these lines match the pattern -- one grep for the whole list.
-
-    A grep for each line is a process for each line, and the lists here are
-    as long as the site has subsystems. `grep -n` numbers the lines it keeps,
-    which is enough to say yes or no about each one without asking again.
-
-    This is for -ppat and -subsys, which the shell version matches with
-    `grep -Ei` too.
-    """
-    let numbers: str = capture_numbers(lines, "grep", pattern, fold_case)
-    return numbered_hits(numbers, lines'Length)
-
-def perl_matching_lines(lines: []str, pattern: str) -> []bool:
-    """The same, judged by perl.
-
-    cc_pattern's patterns are perl regexps and the shell version tests them
-    with perl. `grep -E` is a different language: given one of them it warns,
-    matches nothing, and every subsystem looks like a project branch -- which
-    is a search of everything or a search of nothing, depending on which way
-    the answer is read. Nothing said so, because no match is a valid answer.
-    """
-    let numbers: str = capture_numbers(lines, "perl", pattern, False)
-    return numbered_hits(numbers, lines'Length)
-
-def capture_numbers(lines: []str, engine: str, pattern: str, fold_case: bool) -> str:
-    """The 1-based numbers of the lines that match, one per line.
-
-    Both engines are asked the same way -- the list on stdin, the pattern as
-    an argument rather than inside the command text, since it is a regexp
-    full of the characters a shell also wants.
-    """
-    if lines'Length == 0:
-        return ""
-    let text: str = "\n".join(lines) + "\n"
-    if engine == "perl":
-        # -s sets $pat from -pat=..., so the pattern needs no quoting inside
-        # the program; -l supplies the newline print would otherwise spell.
-        let r = shell(stdin = text): perl -s -l -n -e 'print $. if /^$pat$/' -- -pat={!pattern}
-        if r.code != 0:
-            # A pattern perl cannot compile leaves no output, which reads as
-            # "nothing matched" and is not the same thing at all.
-            stderr.writeLine(PROG + ": warning: perl could not use the pattern "
-                             "(status " + str(r.code) + "): " + r.stderr.strip())
-        return r.output
-    var flags: str = "-nE"
-    if fold_case:
-        flags = "-niE"
-    let g = shell(stdin = text): grep {flags} -- {!pattern}
-    var out: []str = []
-    for numbered in g.output.split("\n"):
-        continue if numbered == ""
-        let at: int = numbered.find(":")
-        continue if at < 0
-        out.append(numbered[0:at])
-    return "\n".join(out)
-
-def numbered_hits(numbers: str, count: Natural) -> []bool:
-    """A line number per line, turned into a yes or no for each of `count`."""
-    var hits: []bool = []
-    for i in range(count):
-        hits.append(False)
-    for line in numbers.split("\n"):
-        continue if line == ""
-        # Through a name of its own: int() straight off the loop variable is
-        # an int conversion on the Nim side rather than a parse.
-        let counted: str = line
-        let idx: int = int(counted) - 1
-        if idx >= 0 and idx < count:
-            hits[idx] = True
-    return hits
-
 def ordinary_builds(dirs: []Path) -> []Path:
     """The builds a search without -all wants: the project branches dropped.
 
-    A baseline ID is the resolved path under /cm/ot with its slash and its
-    '!' turned into dots -- CMA/MASTER!DEFIANT.27 reads as
-    CMA.MASTER.DEFIANT.27 -- and cc_pattern PROJECT_BASELINE_ID describes
-    exactly that shape:
+    A baseline ID, after resolving the symlink and normalising
+    SYSTEM/SUBSYSTEM!NAME.N → SYSTEM.SUBSYSTEM.NAME.N, has a third component
+    that is either a version major (digit: 28, 30) for an ordinary build, or
+    a project name (letter: DEFIANT, EKHASSAN) for a branch. The first
+    character of the third component is the tell.
 
-        SYSTEM . SUBSYSTEM . <project_name_uc> . <build_counter>
-
-    An ordinary build's baseline is a version rather than a project and a
-    count -- ALM.ALM_CONFIG.28.0.0.4 -- and does not match. So a match is a
-    project branch build, and a match is what is dropped.
-
-    The shell version's perl line reads the other way round
-
-        if echo "${PROJECT_BASELINE_ID}" | perl -ne "exit 1 if ! /^${PAT}$/"
-
-    -- a match exits 0 and the directory is kept -- which would search the
-    branches and nothing else. It does not: its own runs search the 165
-    ordinary builds, which is the behaviour here, and which the "?? This is
-    bizarre" comment beside that line is about.
-
-    One readlink and one perl for the list, rather than two processes for
-    each subsystem: at a few hundred subsystems that was the better part of a
-    second before the first file was looked at.
+    One readlink for the whole list; the match is then in-process with a
+    native regex literal -- no subprocess per subsystem or per list.
     """
     if dirs'Length == 0:
         return dirs
-    if which("perl") is None:
-        stderr.writeLine(PROG + ": warning: no perl, so project branch builds "
-                         "cannot be told apart; searching them too, as -all does.")
-        return dirs
     note("subsystems listed: " + str(dirs'Length))
-    let pattern: str = cm_run("cc_pattern PROJECT_BASELINE_ID").strip()
-    note("baseline pattern: " + pattern)
-    if pattern == "":
-        # Without it there is no telling a project branch from an ordinary
-        # build, and guessing either way has been wrong in both directions.
-        die("cc_pattern PROJECT_BASELINE_ID gave nothing, so project branch "
-            "builds cannot be told apart. Is Caux_functions on your PATH? "
-            "Use -all to search every build instead.")
     # readlink takes the whole list; its output is one line per argument, in
     # the order given, which is what lines the answers up with the dirs.
     let resolved = shell: readlink -m {*dirs}
@@ -630,25 +490,20 @@ def ordinary_builds(dirs: []Path) -> []Path:
     if real'Length > 0:
         note("first resolved path: " + real[0])
 
-    var baselines: []str = []
+    var kept: []Path = []
     for i in range(dirs'Length):
         var line: str = str(dirs[i])
         if i < real'Length and real[i] != "":
             line = real[i]
         let tail: str = after_first(line, CM_MARKER)
-        baselines.append(replace_first(replace_first(tail, "/", "."), "!", "."))
-
-    if baselines'Length > 0:
-        note("first baseline: " + baselines[0])
-    let hits: []bool = perl_matching_lines(baselines, "^" + pattern + "$")
-    var kept: []Path = []
-    for i in range(dirs'Length):
-        continue if hits[i]                  # a match is a project branch
+        let baseline: str = replace_first(replace_first(tail, "/", "."), "!", ".")
+        if i == 0:
+            note("first baseline: " + baseline)
+        # Third component starts with a letter → project branch; digit → ordinary.
+        continue if baseline == /^\w+\.\w+\.[A-Za-z]/
         kept.append(dirs[i])
     note("kept after the project-branch filter: " + str(kept'Length))
     if kept'Length == 0:
-        # Every subsystem a project branch is not an answer, it is a pattern
-        # that did not work. Saying so beats searching nothing in silence.
         stderr.writeLine(PROG + ": warning: every subsystem looked like a "
                          "project branch build, so there is nothing to "
                          "search. Use -all to search them all.")
@@ -658,31 +513,7 @@ def ordinary_builds(dirs: []Path) -> []Path:
 # Searching one subsystem
 # ---------------------------------------------------------------------------
 
-def has_special_files(dirs: []Path) -> []bool:
-    """Which subsystems have a sources/special_files, in one `ls`.
-
-    A file test each is an NFS round trip each, and they were made in the
-    loop that starts the searches -- one at a time, before any of them could
-    run. At 165 subsystems that was most of a second in which nothing was
-    being searched. The shell version makes the same test inside each
-    background job, where they at least overlap.
-    """
-    var flags: []bool = []
-    for d in dirs:
-        flags.append(False)
-    if dirs'Length == 0:
-        return flags
-    var probes: []Path = []
-    for d in dirs:
-        probes.append(d / "sources" / "special_files")
-    let r = shell: ls -d {*probes} 2>/dev/null
-    let listed: str = "\n" + r.output + "\n"
-    for i in range(dirs'Length):
-        if listed.find("\n" + str(probes[i]) + "\n") >= 0:
-            flags[i] = True
-    return flags
-
-def search_one(subsys: Path, out_file: Path, err_file: Path, special: bool) -> Job:
+def search_one(subsys: Path, out_file: Path, err_file: Path) -> Job:
     """Everything one subsystem needs, as a single pipeline into a file.
 
     The stages are the ksh original's, and for its reason: grep starts on
@@ -696,11 +527,13 @@ def search_one(subsys: Path, out_file: Path, err_file: Path, special: bool) -> J
     few hundred subsystems this process sits in the middle of every byte
     and polls every pipe to get it; a file lets each child write at its own
     speed and lets this one sleep until there is something to print.
+
+    Both sources and special_files are always passed to find; find silently
+    skips whichever does not exist (2>/dev/null). This matches the ksh
+    version and avoids a blocking pre-check before any jobs can start.
     """
     let build: str = "build_" + $CM_ENV_ID
-    var dirs: []Path = [subsys / build / "sources"]
-    if special:
-        dirs.append(subsys / build / "special_files")
+    let dirs: []Path = [subsys / build / "sources", subsys / build / "special_files"]
     let pattern: str = opt.file_pattern
 
     # A stage the options did not ask for is left out of the pipeline rather
@@ -764,7 +597,6 @@ def search(subsystems: []Path):
     slowest one is, and a search that takes a minute shows its work.
     """
     let started: float = time.time()
-    let specials: []bool = has_special_files(subsystems)
     let tmp_dir: Path = Path(shell_capture("mktemp -d"))
     var jobs: []Job = []
     var outs: []Path = []
@@ -775,7 +607,7 @@ def search(subsystems: []Path):
         let err_file: Path = tmp_dir / (str(n) + ".err")
         outs.append(out_file)
         errs.append(err_file)
-        jobs.append(search_one(subsys, out_file, err_file, specials[n]))
+        jobs.append(search_one(subsys, out_file, err_file))
         n += 1
     report("started " + str(n) + " subsystem searches in", time.time() - started)
 
@@ -836,14 +668,11 @@ else:
     if opt.skip_projects:
         targets = ordinary_builds(targets)
     if opt.subsys_pattern != "":
-        var names: []str = []
-        for d in targets:
-            names.append(str(d))
-        let hits: []bool = matching_lines(names, opt.subsys_pattern, True)
         var matched: []Path = []
-        for i in range(targets'Length):
-            continue if not hits[i]
-            matched.append(targets[i])
+        for d in targets:
+            let (_, rc) = shell(stdin = str(d) + "\n"): grep -qiE -- {opt.subsys_pattern}
+            continue if rc != 0
+            matched.append(d)
         targets = matched
     if opt.verbose and opt.subsys_pattern != "":
         print "Subsys pattern: " + opt.subsys_pattern
