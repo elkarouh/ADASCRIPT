@@ -83,7 +83,8 @@ STANDALONE := \
     test_shell_stdin_status.ady \
     test_strip_chars.ady \
     test_path_call.ady \
-    test_shell_throughput.ady
+    test_shell_throughput.ady \
+    test_shell_braces.ady
 
 # -----------------------------------------------------------------------
 # Stdin tests — piped from a sample file

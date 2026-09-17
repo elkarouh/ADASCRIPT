@@ -1,0 +1,32 @@
+#!/usr/bin/env ady2nim
+"""Test: what a brace means inside a shell block.
+
+`{name}` is an interpolation wherever it appears, quotes or not. It did not
+used to be: the tokenizer sees a quoted run as one string with no brace
+among its operators, so a command whose only interpolation was inside
+quotes kept its braces and ran them as text --
+
+    shell: ksh -c '. Caux_functions; {what}'      # ran `{what}`
+
+-- unless some other interpolation appeared outside the quotes, which
+turned the whole command into a format string and interpolated both. So the
+same line worked or did not according to its company.
+
+A brace that is not an identifier is still the command's own: an awk
+program keeps `{print $1}`, and `{}` is `{}`.
+"""
+let one: str = "alpha beta"
+let prog: str = "{print $2}"
+
+# the awk program is the command's own text, not an interpolation
+let (a, _) = shell(stdin = one + "\n"): awk '{print $1}'
+assert a.strip() == "alpha"
+
+# ...and a name in the same position is one
+let (b, _) = shell(stdin = one + "\n"): awk '{prog}'
+assert b.strip() == "beta"
+
+# a brace that is neither
+let (c, _) = shell: echo 'a{}b'
+assert c.strip() == "a{}b"
+print "braces in a shell block behave"

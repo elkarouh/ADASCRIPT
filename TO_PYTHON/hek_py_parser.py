@@ -2077,6 +2077,9 @@ _SHELL_OPT_WHY = {
 }
 
 
+import re as _re
+
+
 def _extract_shell_body(body_st):
     """Reconstruct the shell command string from the body Several_Times node.
 
@@ -2115,7 +2118,29 @@ def _extract_shell_body(body_st):
         tok.type == _tkn.OP and tok.string in ("{", "}")
         for tok in tokens
     )
+    if not needs_fstring:
+        # A {name} inside quotes is an interpolation too, and the tokenizer
+        # cannot see it: the whole quoted run arrives as one STRING token
+        # with no brace among the OPs. So a command whose only interpolation
+        # was inside quotes -- `ksh -c '. Caux_functions; {what}'` -- was
+        # emitted with the braces intact and ran {what} as a command.
+        #
+        # What made it hard to see is that it depended on company: the same
+        # command with any other interpolation outside the quotes did
+        # interpolate both, since one bare brace turns the whole command into
+        # a format string. `awk '{awk_cmd}' {scan_log}` works for that
+        # reason and `awk '{awk_cmd}' file` would not have.
+        #
+        # Only an identifier counts, so an awk program keeps its braces:
+        # {print $1} has a space in it and is nobody's variable.
+        needs_fstring = bool(_QUOTED_INTERP.search(cmd))
     return cmd, needs_fstring
+
+
+# {name}, {!name} and {*name} -- an identifier, optionally with the quoting or
+# splatting mark. Deliberately not `{anything}`: a shell block is full of
+# braces that are the command's own.
+_QUOTED_INTERP = _re.compile(r"\{[!*]?[A-Za-z_][A-Za-z0-9_.]*\}")
 
 
 def _collect_identifiers_from_paren(node):

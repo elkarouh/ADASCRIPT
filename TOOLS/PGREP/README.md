@@ -111,6 +111,32 @@ It is here because three bugs hid in that path in a row, and every one of
 them came out as "no match", which is indistinguishable from a site with
 nothing to search.
 
+## The CM helpers are ksh functions
+
+`cc_pattern`, `get_topmost_subsystems` and `Psort` are not programs. They
+are ksh functions defined by `Caux_functions`, which the original
+dot-sources at the top of the file -- `cc_pattern` in particular is written
+in ksh, with an associative array and a `for ((;;)){ }` loop, and answers
+with a perl regexp built from `Regexp::Common`, `(?^:…)` and all.
+
+So Pgrep asks them where they live:
+
+```sh
+ksh -c '. Caux_functions; cc_pattern PROJECT_BASELINE_ID'
+```
+
+Run as plain commands they simply do not exist, and a command that does not
+exist prints nothing -- which is exactly what a helper answering with an
+empty string looks like. `cc_pattern` came back empty, every baseline was
+tested against `^$`, and nothing matched. That was read once as "every
+subsystem is a project branch" (so all 200 were searched) and once as "none
+of them is an ordinary build" (so none were). It now says so instead: a
+helper that answers nothing is named on stderr, and an empty pattern stops
+the run rather than guessing.
+
+Where the helpers really are programs, and there is no ksh, the direct call
+is still the fallback.
+
 ## What it needs around it
 
 The CM environment: `$CM_ROOT`, `$CM_ENV_ID`, `$CONTEXT_CM_BASELINE`, the

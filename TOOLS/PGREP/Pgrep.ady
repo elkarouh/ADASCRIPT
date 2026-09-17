@@ -12,11 +12,16 @@ printed in subsystem order, so the wall time is the slowest subsystem's
 rather than the sum of all of them.
 
 The ksh original dot-sources `trace`, `cm_audit_logger` and
-`Caux_functions`. None of the three is ever called by name -- what they
-install is a ksh environment (traps, an ERR hook, the audit record a sourced
-library writes on its own), and none of it has a meaning in a compiled
-program. The CM helpers the script really uses -- `Psort`, `cc_pattern`,
-`get_topmost_subsystems` -- are run as commands, as they are there.
+`Caux_functions`. The last of those is not decoration: it is where
+`cc_pattern` and the other CM helpers are *defined*. They are ksh
+functions, not programs, so running them as commands finds nothing -- and a
+command that does not exist prints nothing, which is indistinguishable from
+a helper that answered with an empty string. `cm_run` below sources the
+file in a ksh and asks there, which is the only place the answer exists.
+
+`trace` and `cm_audit_logger` are left out: neither is called by name, and
+what they install -- traps, an ERR hook, the audit record a sourced library
+writes on its own -- belongs to a ksh session rather than to a program.
 """
 
 nimport os
@@ -408,9 +413,39 @@ def matches_runtime_i(text: str, pattern: str) -> bool:
     return rc == 0
 
 def shell_capture(cmd: str) -> str:
-    """One line of output from a CM helper, which lives in the ksh environment."""
+    """One line of output from an ordinary command."""
     let r = shell: {cmd}
     return r.output.strip()
+
+def cm_run(what: str) -> str:
+    """What a CM helper answers: cc_pattern, get_topmost_subsystems, Psort.
+
+    They are ksh functions from `Caux_functions`, which the original
+    dot-sources at the top of the file. Run as commands they do not exist,
+    and the shell says so on a stderr nobody reads: `cc_pattern
+    PROJECT_BASELINE_ID` came back empty, every baseline was tested against
+    `^$`, and nothing matched -- which was a search of every subsystem or of
+    none, depending which way that answer was taken.
+
+    So it is asked where the answer lives: a ksh, with the file sourced. If
+    there is no ksh, or the source fails, the command is tried directly, so
+    that a site where these are real programs still works; and a helper that
+    answers nothing at all says so rather than being taken at its silence.
+    """
+    let ksh_path: ?Path = which("ksh")
+    if ksh_path is not None:
+        # A real ksh, not whichever shell we are run from: cc_pattern is
+        # written in ksh -- an associative array, a `for ((;;)){ }` loop --
+        # and sh does not read it.
+        let program: str = ". Caux_functions; " + what
+        let r = shell: ksh -c {!program}
+        if r.output.strip() != "":
+            return r.output
+        note("nothing from ksh with Caux_functions sourced: " + what)
+    let direct = shell: {what}
+    if direct.output.strip() == "":
+        stderr.writeLine(PROG + ": warning: the CM helper answered nothing: " + what)
+    return direct.output
 
 def closure_dir(name: str) -> Path:
     """The directory holding the closure named on the command line.
@@ -422,9 +457,9 @@ def closure_dir(name: str) -> Path:
     wins when it names a baseline of that same system; a baseline ID is
     already a path with its first dot turned into a slash.
     """
-    if not matches_runtime(name, "^" + shell_capture("cc_pattern SYSTEM")):
+    if not matches_runtime(name, "^" + cm_run("cc_pattern SYSTEM").strip()):
         return Path(replace_first(name, ".", "/"))
-    let topmost: str = shell_capture("get_topmost_subsystems " + name).split()[0]
+    let topmost: str = cm_run("get_topmost_subsystems " + name).strip().split()[0]
     let prefix: str = name + "." + topmost + "."
     if $CONTEXT_CM_BASELINE.startswith(prefix):
         return Path(replace_first($CONTEXT_CM_BASELINE, ".", "/"))
@@ -547,8 +582,14 @@ def ordinary_builds(dirs: []Path) -> []Path:
                          "cannot be told apart; searching them too, as -all does.")
         return dirs
     note("subsystems listed: " + str(dirs'Length))
-    let pattern: str = shell_capture("cc_pattern PROJECT_BASELINE_ID")
+    let pattern: str = cm_run("cc_pattern PROJECT_BASELINE_ID").strip()
     note("baseline pattern: " + pattern)
+    if pattern == "":
+        # Without it there is no telling a project branch from an ordinary
+        # build, and guessing either way has been wrong in both directions.
+        die("cc_pattern PROJECT_BASELINE_ID gave nothing, so project branch "
+            "builds cannot be told apart. Is Caux_functions on your PATH? "
+            "Use -all to search every build instead.")
     # readlink takes the whole list; its output is one line per argument, in
     # the order given, which is what lines the answers up with the dirs.
     let resolved = shell: readlink -m {*dirs}
@@ -714,8 +755,9 @@ if opt.closure != "":
     # expression and `$NAME` is not one inside it.
     let cm_root: Path = Path($CM_ROOT)
     let closure_path: Path = cm_root / dir_name
-    let ordered: []str = shellLines: echo {!closure_path} | Psort
+    let ordered: []str = cm_run("echo " + str(closure_path) + " | Psort").split("\n")
     for line in ordered:
+        continue if line == ""
         targets.append(Path(line))
 else:
     targets = all_subsystem_builds()

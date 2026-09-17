@@ -39,10 +39,28 @@ for sys in ALPHA BETA; do
     ln -s "$REAL/$sys/SUB!TBO.44.0.0.A"  "$OT/$sys/SUB.TBO.LATEST"
 done
 
-# The CM helpers. cc_pattern's answer is a perl regexp, as it is on the real
-# system: (?:...) and \d are not what grep -E reads.
-mkdir -p "$WORK/bin"
-cat > "$WORK/bin/cc_pattern" <<'EOF'
+# The CM helpers, as they are on the real system: shell *functions* in a
+# Caux_functions file, not programs. Run as commands they do not exist, and
+# a command that does not exist prints nothing -- which is what an empty
+# answer looks like too. cc_pattern's answer is a perl regexp, (?:...) and
+# \d and all, which is not what grep -E reads.
+mkdir -p "$WORK/bin" "$WORK/progs"
+cat > "$WORK/bin/Caux_functions" <<'EOF'
+cc_pattern() {
+  case "$1" in
+    SYSTEM)              printf '%s\n' '[A-Z][A-Z0-9_]*' ;;
+    PROJECT_BASELINE_ID) printf '%s\n' '(?:[A-Z][A-Z0-9_]*)\.\w+\.\d+\.\d+\.\d+\.\w+' ;;
+    *)                   printf '%s\n' '.*' ;;
+  esac
+}
+EOF
+# A ksh standing in for the site's: all that matters is that it sources the
+# file and runs the function.
+printf '#!/bin/sh\nexec /bin/sh "$@"\n' > "$WORK/bin/ksh"
+chmod +x "$WORK/bin/ksh"
+
+# The same helper as a program, for the site where it is one.
+cat > "$WORK/progs/cc_pattern" <<'EOF'
 #!/bin/sh
 case "$1" in
   SYSTEM)              printf '%s\n' '[A-Z][A-Z0-9_]*' ;;
@@ -50,8 +68,9 @@ case "$1" in
   *)                   printf '%s\n' '.*' ;;
 esac
 EOF
-chmod +x "$WORK/bin/cc_pattern"
+chmod +x "$WORK/progs/cc_pattern"
 
+BASE_PATH=$PATH
 PATH=$WORK/bin:$PATH
 export PATH CM_ENV_ID=E1
 PGREP_CM_OT=$OT
@@ -86,13 +105,29 @@ check "a .gz is never searched"    0 "$("$PGREP" -no-grep | grep -c '\.gz')"
 check "special_files are searched" 2 "$("$PGREP" -no-grep | grep -c 'special_files')"
 check "-basenames cuts the path"   6 "$("$PGREP" -basenames -no_colors remote | grep -c '^[a-z]*\.[a-z]*:')"
 
+# The helper as a program and no ksh to be found: the direct call is the
+# fallback, so a site whose helpers really are programs still works.
+check "helpers as programs, no ksh" 2 \
+    "$(PATH=$WORK/progs:$BASE_PATH "$PGREP" -no_colors remote | grep -c '^!=====')"
+
+# Neither: the pattern cannot be had, and searching everything or nothing
+# would both be guesses. It says so and stops.
+check "no helper at all is an error" 1 \
+    "$(PATH=$BASE_PATH "$PGREP" -no_colors remote 2>&1 >/dev/null | grep -c 'gave nothing')"
+# `|| status=$?` rather than a substitution: with set -e a failing command
+# inside one takes the script with it, and an empty capture is not a status.
+status=0
+PATH=$BASE_PATH "$PGREP" -no_colors remote >/dev/null 2>&1 || status=$?
+check "...with a failing status"     1 "$status"
+
 # A pattern that matches nothing is a broken filter, not an empty result.
-cat > "$WORK/bin/cc_pattern" <<'EOF'
-#!/bin/sh
-case "$1" in
-  PROJECT_BASELINE_ID) printf '%s\n' 'NOTHING_MATCHES_THIS' ;;
-  *)                   printf '%s\n' '[A-Z][A-Z0-9_]*' ;;
-esac
+cat > "$WORK/bin/Caux_functions" <<'EOF'
+cc_pattern() {
+  case "$1" in
+    PROJECT_BASELINE_ID) printf '%s\n' 'NOTHING_MATCHES_THIS' ;;
+    *)                   printf '%s\n' '[A-Z][A-Z0-9_]*' ;;
+  esac
+}
 EOF
 check "an empty filter says so"    1 "$("$PGREP" -no_colors remote 2>&1 >/dev/null | grep -c 'no subsystem matched')"
 
