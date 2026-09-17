@@ -358,6 +358,12 @@ class Options:
 # declaration has to precede its readers, the parsing does not.
 var opt: Options = Options()
 
+def note(what: str):
+    """What the program decided, for -verbose. On stderr: it is not a result."""
+    if opt.verbose:
+        stderr.writeLine(PROG + ": " + what)
+
+
 # ---------------------------------------------------------------------------
 # Where to search
 # ---------------------------------------------------------------------------
@@ -479,6 +485,11 @@ def capture_numbers(lines: []str, engine: str, pattern: str, fold_case: bool) ->
         # -s sets $pat from -pat=..., so the pattern needs no quoting inside
         # the program; -l supplies the newline print would otherwise spell.
         let r = shell(stdin = text): perl -s -l -n -e 'print $. if /^$pat$/' -- -pat={!pattern}
+        if r.code != 0:
+            # A pattern perl cannot compile leaves no output, which reads as
+            # "nothing matched" and is not the same thing at all.
+            stderr.writeLine(PROG + ": warning: perl could not use the pattern "
+                             "(status " + str(r.code) + "): " + r.stderr.strip())
         return r.output
     var flags: str = "-nE"
     if fold_case:
@@ -535,11 +546,15 @@ def ordinary_builds(dirs: []Path) -> []Path:
         stderr.writeLine(PROG + ": warning: no perl, so project branch builds "
                          "cannot be told apart; searching them too, as -all does.")
         return dirs
+    note("subsystems listed: " + str(dirs'Length))
     let pattern: str = shell_capture("cc_pattern PROJECT_BASELINE_ID")
+    note("baseline pattern: " + pattern)
     # readlink takes the whole list; its output is one line per argument, in
     # the order given, which is what lines the answers up with the dirs.
     let resolved = shell: readlink -m {*dirs}
     let real: []str = resolved.output.split("\n")
+    if real'Length > 0:
+        note("first resolved path: " + real[0])
 
     var baselines: []str = []
     for i in range(dirs'Length):
@@ -549,11 +564,14 @@ def ordinary_builds(dirs: []Path) -> []Path:
         let tail: str = after_first(line, CM_MARKER)
         baselines.append(replace_first(replace_first(tail, "/", "."), "!", "."))
 
+    if baselines'Length > 0:
+        note("first baseline: " + baselines[0])
     let hits: []bool = perl_matching_lines(baselines, "^" + pattern + "$")
     var kept: []Path = []
     for i in range(dirs'Length):
         continue if not hits[i]
         kept.append(dirs[i])
+    note("kept after the project-branch filter: " + str(kept'Length))
     if kept'Length == 0:
         # Every subsystem a project branch is not an answer, it is a pattern
         # that did not work. Saying so beats searching nothing in silence.
@@ -622,8 +640,7 @@ def header_for(subsys: Path) -> str:
 
 def report(what: str, seconds: float):
     """Where the time went, for -verbose. On stderr: it is not a result."""
-    if opt.verbose:
-        stderr.writeLine(PROG + ": " + what + " " + str(seconds) + "s")
+    note(what + " " + str(seconds) + "s")
 
 def search(subsystems: []Path):
     """Search every subsystem at once, and print each one as it finishes.
