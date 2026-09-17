@@ -1,0 +1,62 @@
+#!/usr/bin/env ady2nim
+"""Every snippet quoted in DOCS/BOOK/02-types-and-declarations.md § 2.7.
+
+The string literal forms and the way adjacent ones join. `make test` runs
+it, so a document that claims one of these spellings works is claiming it
+about code that ran.
+"""
+
+# --- the quote characters are interchangeable ------------------------------
+# Both spellings make a str. Which one to reach for is a readability
+# question -- the other quote can then sit inside without an escape.
+let double: str = "she said hello"
+let single: str = 'she said "hello"'
+assert double'Length == 14
+assert '"' in single
+
+# A char is a separate type, not a one-character str, and it is the
+# declared type that says so -- the same 'x' is a str where a str is
+# declared.
+let initial: char = 'x'
+let one_char: str = 'x'
+assert initial == 'x'
+assert one_char'Length == 1
+
+# --- triple quotes span lines ----------------------------------------------
+let banner: str = """first
+second"""
+assert "\n" in banner
+assert banner'Length == 12
+
+# --- raw strings keep their backslashes ------------------------------------
+# Without the r a '\d' would be an escape for the compiler to interpret;
+# with it the two characters survive, which is what a regex wants.
+let pattern: str = r"\d+"
+assert pattern'Length == 3
+
+# --- f-strings interpolate -------------------------------------------------
+let n: Natural = 42
+assert f"n is {n}" == "n is 42"
+assert f"{n * 2}" == "84"
+# A format spec after ':' aligns and pads, as in Python.
+assert f"[{n:>5}]" == "[   42]"
+
+# --- adjacent literals join ------------------------------------------------
+# Juxtaposition concatenates, as in Python and C. No operator, and nothing
+# is evaluated at run time: the pieces are one literal by the time the
+# backend sees them.
+assert "ab" == "a" "b"
+
+# A piece may be an f-string, and the kinds mix freely in one run -- what
+# holds the run together is the juxtaposition, not what each piece is.
+assert f"x={n} " "then plain " f"and {n * 2}" == "x=42 then plain and 84"
+
+# The point of it is a long message that has to be read in the source as
+# well as in the output: parentheses let the run break across lines, and
+# each line stays inside the margin.
+let report: str = (f"{n} item(s) processed, "
+                   "none rejected, "
+                   f"{n * 2} checks run")
+assert report == "42 item(s) processed, none rejected, 84 checks run"
+
+print "all string-literal snippets ok"

@@ -41,7 +41,7 @@ the missing type system are what change.
 | # | Chapter | Featured examples |
 |---|---------|-------------------|
 | 1 | [Introduction: One Language, Two Targets](01-introduction.md) | `primes.ady`, `average_line.ady` |
-| 2 | [Types, Declarations, and Annotations](02-types-and-declarations.md) | `graph.ady`, `prisoners.ady`, `openarray_demo.ady` |
+| 2 | [Types, Declarations, and Annotations](02-types-and-declarations.md) | `graph.ady`, `prisoners.ady`, `openarray_demo.ady`, `DOC/string_snippets.ady` |
 | 3 | [Enums, Sets, and Tick Attributes](03-enums-sets-and-tick-attributes.md) | `monty_hall.ady`, `floyd.ady`, `prisoners.ady` |
 | 4 | [Tuples, Records, and Variant Records](04-tuples-records-and-variants.md) | `dijkstra.ady`, `argparse.ady`, `lispy.ady` |
 | 5 | [Pattern Matching](05-pattern-matching.md) | `argparse.ady`, `awk_example.ady`, `lispy.ady`, `test_shortest_path.ady` |
