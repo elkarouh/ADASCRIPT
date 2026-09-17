@@ -171,6 +171,11 @@ finds nothing.
 * The file list reaches `xargs` split on **lines**, not on whitespace, so a
   source file with a space in its name is one file. In the shell version it
   is two, and grep reports both halves missing.
+* The `!=====` header names the whole subsystem directory and carries the
+  padding whole after it, as the shell version's does — its `${PADDING:${#subsys}}`
+  offsets by a variable nothing sets, so nothing is ever trimmed. Printing
+  the basename padded to a constant width reads better and makes every line
+  differ when the two outputs are compared.
 * `. trace`, `. cm_audit_logger` and `. Caux_functions` are gone. None is
   ever called by name; what they install is a ksh environment, and none of
   it has a meaning in a compiled program.

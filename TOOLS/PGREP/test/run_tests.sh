@@ -114,7 +114,9 @@ check "-all finds the branch"      2 "$("$PGREP" -all -no_colors remote | grep -
 
 # The rest of the options, on the same tree.
 check "-subsys narrows"            1 "$("$PGREP" -subsys alpha -no_colors remote | grep -c '^!=====')"
-check "-no-grep lists files"       8 "$("$PGREP" -no-grep | grep -c '/')"
+# The file lines, not the header lines: a header names the subsystem
+# directory, so it has a slash in it too.
+check "-no-grep lists files"       8 "$("$PGREP" -no-grep | grep -c '^/')"
 check "a name with a space is one" 2 "$("$PGREP" -no_colors remote | grep -c 'two words.txt:')"
 check "-ada takes only .ad?"       2 "$("$PGREP" -ada -no-grep | grep -c '\.adb$')"
 check "-ppat filters on the path"  2 "$("$PGREP" -ppat deep -no-grep | grep -c 'queue.ksh')"

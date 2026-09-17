@@ -729,9 +729,20 @@ def search_one(subsys: Path, out_file: Path, err_file: Path, special: bool) -> J
     return searcher
 
 def header_for(subsys: Path) -> str:
-    """The `!===== SUBSYS ====...` line, padded to a constant width."""
-    let name: str = str(subsys.name)
-    return "!===== " + name + " " + PADDING[len(name):]
+    """The `!===== SUBSYS ====...` line that separates one subsystem's hits.
+
+    The whole directory, and the padding whole after it, which is what the
+    shell version prints:
+
+        print "!===== ${SUBSYS} ${PADDING:${#subsys}}"
+
+    -- `subsys` there is lower case and nothing sets it, so the offset is
+    zero and none of the padding is ever trimmed. The line is as long as the
+    name makes it. This said the basename and padded to a constant width,
+    which reads better and diffs against the shell version's output as
+    noise on every line.
+    """
+    return "!===== " + str(subsys) + " " + PADDING
 
 def report(what: str, seconds: float):
     """Where the time went, for -verbose. On stderr: it is not a result."""
