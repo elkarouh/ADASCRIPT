@@ -1,6 +1,6 @@
 #!/usr/bin/env ady2nim
 #ady2nim-args c -d:release --opt:speed
-# ada_indent.ady — a simplified Ada source re-indenter, written in Adascript.
+# ada_indent.ady - a simplified Ada source re-indenter, written in Adascript.
 #
 # This is NOT a full Ada parser. It implements only the slice of Ada grammar
 # that matters for indentation: the keywords that open, close, or split an
@@ -17,7 +17,7 @@ const INDENT_WIDTH: Natural = 2
 # changes behaviour (PKG/DECLARE become BLOCK at 'begin'; WHEN frames are popped specially at 'end').
 type Block_T is enum:
     PKG          # package / subprogram / task / protected / type spec opened by trailing 'is'
-    TYPE_HEADER  # 'type T is' on its own line — pairs with RECORD below it
+    TYPE_HEADER  # 'type T is' on its own line - pairs with RECORD below it
     DECLARE      # a declare block (block label or bare 'declare')
     BLOCK        # a begin ... end region (statement part)
     IF           # if ... then
@@ -37,9 +37,9 @@ type Str_State_T is enum:
 type Paren_Kind_T is enum:
     OUTSIDE    # sentinel: entry_top_kind when the paren stack is empty
     PLAIN      # plain parenthesis
-    IF_EXPR    # (if … then … else …)
-    CASE_EXPR  # (case … is when …)
-    FOR_EXPR   # (for … => …)  quantified or iterated expression
+    IF_EXPR    # (if ... then ... else ...)
+    CASE_EXPR  # (case ... is when ...)
+    FOR_EXPR   # (for ... => ...)  quantified or iterated expression
 
 # The keywords that make a '(' more than a plain one. Anything else after the
 # '(' -- an operand, another '(', or nothing at all -- leaves it PLAIN.
@@ -48,7 +48,7 @@ const PAREN_KIND: {str}Paren_Kind_T = {
 }
 
 # ---------------------------------------------------------------------------
-# Lexical helpers — all work on a single physical line.
+# Lexical helpers - all work on a single physical line.
 # ---------------------------------------------------------------------------
 nimport strscan
 
@@ -60,7 +60,7 @@ def code_positions(s: str) -> (Natural, char):
     strings are skipped whole. A character literal ('x') is detected as a quote,
     any single character, then a closing quote; a quote followed by a letter that
     is NOT followed by a closing quote is an attribute tick (X'Image) and is left
-    alone — the letter and everything after it are yielded normally.
+    alone - the letter and everything after it are yielded normally.
 
     The index comes back with the character because a caller that only counts
     (paren_delta) and one that has to look at what follows (scan_parens) both
@@ -103,11 +103,11 @@ def stmt_incomplete(code_s: str) -> bool:
     unterminated lines that are nonetheless complete are the structural keyword
     lines: openers ending in is/then/loop/record/select/do, choice lines ending
     in '=>', block/loop label lines ending in ':', and the lone splitter/opener
-    keywords (begin/declare/else/…). Any other line that does not end in ';' is a
+    keywords (begin/declare/else/...). Any other line that does not end in ';' is a
     logical line split across physical lines, so the next line is a continuation.
     """
     # A trailing ':' marks a block/loop label ('Find_Model :', 'Log_Changes:'),
-    # which is a complete prefix — the labelled construct on the next line stays
+    # which is a complete prefix - the labelled construct on the next line stays
     # at the label's level rather than indenting as a continuation. (':=' ends in
     # '=', not ':', so an unfinished assignment is unaffected.)
     return False if code_s == "" or code_s.endswith((";", "=>", ":"))
@@ -116,14 +116,14 @@ def stmt_incomplete(code_s: str) -> bool:
     return False if lw == "separate"
     # A *bare* splitter/opener keyword line (just the keyword, nothing trailing)
     # is complete. The 'code_s.lower() == lw' guard matters because the same
-    # words occur inside expressions: e.g. the 'else …)' line closing an
+    # words occur inside expressions: e.g. the 'else ...)' line closing an
     # if-EXPRESSION continues the surrounding statement and must NOT be mistaken
     # for a complete statement-level 'else'.
     if code_s.lower() == lw and lw in ("begin", "declare", "else", "exception",
             "or", "private", "select"):
         return False
     let lt: str = last_word(code_s)
-    # 'subtype T is' is not a block opener — the type name follows on the next
+    # 'subtype T is' is not a block opener - the type name follows on the next
     # line as a plain continuation, with no matching 'end'.
     return True if lt == "is" and lw == "subtype"
     # Block openers, plus the '[not] overriding' indicator on its own line.
@@ -131,7 +131,7 @@ def stmt_incomplete(code_s: str) -> bool:
 
 
 def starts_with_operator(code_s: str) -> bool:
-    """True if the line begins with a binary/assignment operator — either a
+    """True if the line begins with a binary/assignment operator - either a
     symbol (:=, =>, =, &, +, -, *, /, <, >, |, ..) or a word operator
     (and, or, xor, mod, rem, covering 'and then'/'or else'). Such a continuation
     takes one extra indent level so it stands out from the operand it continues."""
@@ -155,7 +155,7 @@ def is_term_continuation(code_s: str) -> bool:
     list), and 'xor'.
 
     NOTE: inside a multi-line if/elsif condition the boolean connectives are
-    kept at the base level instead — that exception lives in the cond_state
+    kept at the base level instead - that exception lives in the cond_state
     branch (its 'lw != and/or' guard), not here, because the rule differs
     between a free value expression (connectives indent under their operand)
     and a condition (connectives align under the 'if')."""
@@ -204,7 +204,7 @@ def scan_parens(text: str, base_depth: Natural, base_col: Natural) -> [](int, in
 
 
 # ---------------------------------------------------------------------------
-# The indenter proper.
+# The indenter proper (where the real interesting logic sits).
 # ---------------------------------------------------------------------------
 
 class Indenter:
@@ -335,16 +335,16 @@ class Indenter:
             # Inside a parenthesis a comment follows the surrounding lines: align
             # it with the previous code line in this same paren (which, in a list
             # or expression, sits at the same level as the line that follows it).
-            # When no line has been emitted at this paren level yet — the comment
+            # When no line has been emitted at this paren level yet - the comment
             # sits right after the line that opened the paren, or after an inner
-            # paren just closed back to it — derive the level from the paren kind,
+            # paren just closed back to it - derive the level from the paren kind,
             # mirroring where the next code line would land:
             #   '(if'   -> the then/else/elsif column (acol);
             #   '(case' -> the 'when' level (acol + one);
             #   '(for'  -> the body level (acol + one);
             #   plain   -> the item column, plus one level when the opening line
             #              left its item unfinished (paren_cont) so an operator/
-            #              term continuation — not a new item — follows.
+            #              term continuation - not a new item - follows.
             if self.paren_depth > 0 and self.paren_stack:
                 let ptop: (int, int, Paren_Kind_T) = self.paren_stack[-1]
                 if self.paren_next_lead_depth == self.paren_depth:
@@ -380,7 +380,7 @@ class Indenter:
             if self.in_cont:
                 return " " * (max(0, self.value_base + 1) * INDENT_WIDTH) + emit_text
             # After a deferred 'function ... is' header the next instruction is
-            # the body — a declaration or expression one level deeper — so a
+            # the body - a declaration or expression one level deeper - so a
             # comment documenting it sits at that body level, not at the header's.
             let blvl: Natural = len(self.stack) + (1 if self.pending_spec else 0)
             return " " * (max(0, blvl) * INDENT_WIDTH) + emit_text
@@ -404,10 +404,10 @@ class Indenter:
         # A 'type T is' that turns out to be an enum, derived, or other non-record
         # type pushed TYPE_HEADER waiting for 'record'. When the declaration finishes
         # (no open parens, no continuation) without ever seeing 'record', the type is
-        # complete — pop the stale frame so subsequent lines return to the enclosing
+        # complete - pop the stale frame so subsequent lines return to the enclosing
         # scope level.  (A record type is handled separately: 'record' pushes RECORD
         # and pops TYPE_HEADER in the keyword dispatch below.)
-        # Guard: do NOT pop if this line IS 'record' — let the keyword dispatch handle it.
+        # Guard: do NOT pop if this line IS 'record' - let the keyword dispatch handle it.
         if not self.in_cont and self.paren_depth == 0 and self.stack and \
           self.stack[-1] == TYPE_HEADER and lw != "record" and not code_s.startswith("("):
             self.stack.pop()
@@ -453,7 +453,7 @@ class Indenter:
         # to that parenthesis (the condition tracker records those parens).
         # If the line also closes the parentheses and opens a block (a
         # multi-line parameter list ending in ') is', ') return T is', ') loop',
-        # …) the block frame is pushed here, after the line is aligned.
+        # ...) the block frame is pushed here, after the line is aligned.
         if self.paren_depth > 0:
             # Drop any parentheses that have already closed.
             while self.paren_stack and self.paren_stack[-1][0] > entry_depth:
@@ -476,8 +476,8 @@ class Indenter:
                 case entry_top_kind:
                     when _ if entry_top_kind != PLAIN and code_s.startswith(")"):
                         # A line that begins by closing an '(if'/'(case'/'(for'
-                        # expression aligns the ')' under the opening '(' — one
-                        # column left of the keyword that acol points at —
+                        # expression aligns the ')' under the opening '(' - one
+                        # column left of the keyword that acol points at -
                         # rather than taking the body/condition continuation
                         # indent.
                         lead = max(0, acol - 1)
@@ -499,9 +499,9 @@ class Indenter:
                             lead = acol + 2 * INDENT_WIDTH
                             # An arm body spanning several lines is an
                             # expression: a continuation line that starts with
-                            # an operator (or else, and then, &, …) takes one
+                            # an operator (or else, and then, &, ...) takes one
                             # extra level past the arm body, exactly as inside
-                            # a plain parenthesis. A leading '=>' is excluded —
+                            # a plain parenthesis. A leading '=>' is excluded -
                             # that is the arm's result arrow (its choices
                             # spilled onto earlier lines), which stays at the
                             # arm-body level rather than being treated as an
@@ -510,8 +510,8 @@ class Indenter:
                                 lead += INDENT_WIDTH
                                 was_cont = True
                     when FOR_EXPR:
-                        # '(for some/all … => predicate' (a quantified
-                        # expression) or '(for I in … => value' (an iterated
+                        # '(for some/all ... => predicate' (a quantified
+                        # expression) or '(for I in ... => value' (an iterated
                         # component): the body after the iterator sits one
                         # level past the 'for', mirroring the '(if'/'(case'
                         # bodies. A leading operator takes one more level; a
@@ -530,7 +530,7 @@ class Indenter:
                         let vbase: Natural = acol + (INDENT_WIDTH if self.arrow_level == top[0] else 0)
                         lead = vbase
                         # A continuation that starts with an operator (&, +,
-                        # and, or else, …) takes one extra level past the
+                        # and, or else, ...) takes one extra level past the
                         # value/items. A '(' on a continuation line is the
                         # argument list of the expression on the previous line
                         # (which ended without ','), so it also nests one level
@@ -541,7 +541,7 @@ class Indenter:
                         elif code_s.startswith("(") and self.paren_cont:
                             # An argument list '(' opening a continuation line
                             # is the call's arguments, so it nests one level
-                            # past the call name — which sits on the previous
+                            # past the call name - which sits on the previous
                             # code line. When that previous line was itself an
                             # operator/term continuation (deeper than the item
                             # column), the '(' must compound past it rather
@@ -632,7 +632,7 @@ class Indenter:
 
         # Multi-line if/elsif condition (outside any parenthesis): continuation
         # lines are one level deeper than the 'if'/'elsif'. When 'then' appears
-        # the IF frame is pushed (for 'if' only — for 'elsif' it is already on
+        # the IF frame is pushed (for 'if' only - for 'elsif' it is already on
         # the stack) and 'then' snaps back to the opener level. Parens opened in
         # the condition are recorded so the lines inside them are aligned by the
         # branch above.
@@ -645,8 +645,8 @@ class Indenter:
                 self.cond_state = 0
             elif is_term_continuation(code_s) and lw != "and" and lw != "or":
                 # A line that continues the previous term across the break (>=,
-                # &, '(', …) nests one level past the line that holds that term
-                # — which may be the opener itself (call name on the 'if'/'elsif'
+                # &, '(', ...) nests one level past the line that holds that term
+                # - which may be the opener itself (call name on the 'if'/'elsif'
                 # line) or a preceding 'and then' connective line. 'and not' /
                 # 'or not' are excluded here even though is_term_continuation
                 # returns True for them: inside a condition they are connectives,
@@ -660,7 +660,7 @@ class Indenter:
                 self.cond_value_base = self.cond_base + 1
             self.in_cont = False
             # cond_state lines are outside parentheses (inside-paren lines are
-            # handled above), so they use only the if/elsif-relative depth — no
+            # handled above), so they use only the if/elsif-relative depth - no
             # 'cont', which could otherwise leak in from a preceding paren line.
             let lead_c: Natural = max(0, disp) * INDENT_WIDTH
             self.paren_depth = max(0, self.paren_depth + paren_delta(code))
@@ -734,8 +734,8 @@ class Indenter:
                 let last: str = last_word(code_s)
                 # A trailing block keyword opens a block only when it sits at the
                 # top level of the line. If the line ends with a net-open '(' the
-                # keyword is inside that parenthesis — part of an expression such
-                # as ':= (case X is' or ':= (if C then' — so it must NOT push a
+                # keyword is inside that parenthesis - part of an expression such
+                # as ':= (case X is' or ':= (if C then' - so it must NOT push a
                 # block frame (which would shift every following line).
                 let opens_paren: bool = paren_delta(code) > 0
                 if not opens_paren:
@@ -745,7 +745,7 @@ class Indenter:
                             # expression function; defer the decision to the next
                             # line (see pending_spec handling above). Everything
                             # else ending in 'is' opens a block immediately.
-                            # Exception: 'subtype T is' is not a block opener —
+                            # Exception: 'subtype T is' is not a block opener -
                             # it is a plain continuation declaration.
                             if lw == "function":
                                 self.pending_spec = True
@@ -772,7 +772,7 @@ class Indenter:
         self.paren_depth = max(0, self.paren_depth + paren_delta(code))
         # If this statement line opened a parenthesis and the text inside it ends
         # without a comma, the expression that is the paren's first item is not
-        # finished — its argument list '(' on the next line is a continuation, not
+        # finished - its argument list '(' on the next line is a continuation, not
         # a new list element, so it nests one level deeper. (When no paren is open
         # the next line resets this flag on entry, so setting it here is benign.)
         self.paren_cont = self.in_cont and not code_s.endswith(",")
@@ -794,10 +794,10 @@ class Indenter:
             self.value_base = disp + cont
 
         var lead_n: Natural = max(0, disp + cont) * INDENT_WIDTH
-        # A term continuation (a value operator -, +, &, >=, … or an argument list
+        # A term continuation (a value operator -, +, &, >=, ... or an argument list
         # opening with '(') continues the value expression, so it sits one level
         # past where that expression began (value_base). This nests it under the
-        # line it continues — e.g. the '- …' / '(args)' under a continued ':= F' —
+        # line it continues - e.g. the '- ...' / '(args)' under a continued ':= F' -
         # while a chain of such continuations all align at the same level rather
         # than escalating. The boolean connectives and bindings (':=', '=>') are
         # excluded by is_term_continuation and keep the plain continuation level,
@@ -812,7 +812,7 @@ class Indenter:
             lead_n = max(0, disp) * INDENT_WIDTH
         # Standalone block-opener keywords that terminate a multi-line header
         # (e.g. 'for C in expr\n  .. expr\nloop', 'task type T with ... is')
-        # are not value continuations — snap back to the declaration level.
+        # are not value continuations - snap back to the declaration level.
         # Exception: 'is new' is a generic instantiation (a true continuation).
         if lw in ("loop", "do") and cont > 0:
             lead_n = max(0, disp) * INDENT_WIDTH
