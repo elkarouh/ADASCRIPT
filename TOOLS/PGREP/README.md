@@ -53,6 +53,30 @@ Pgrep -closure IFPS -no-grep | wc -l
 Pgrep -subsys eld -- -w queue
 ```
 
+### What reaches grep, and what does not
+
+Everything Pgrep does not recognise itself is passed on untouched, so `-w`,
+`-c`, `-l`, `-i`, `-h`, `-E` and the rest all work. Five things to know:
+
+* **Pgrep's options come first.** The first argument Pgrep does not
+  recognise ends its own parsing: that one and everything after it is
+  grep's. A Pgrep option written after the search pattern goes to grep.
+* **The sixteen names Pgrep claims never reach grep** — `-?`, `-help`,
+  `-ht`, `-html`, `-ada`, `-all`, `-latest_good`, `-no-grep`, `-basenames`,
+  `-verbose`, `-no_colors`, `-sort`, `-closure`, `-fpat`, `-ppat`,
+  `-subsys` and `--`. None of them is a grep option, which spells its long
+  options with two dashes; `--help` does reach grep and prints grep's.
+* **`--` is consumed rather than forwarded.** A pattern that starts with a
+  dash goes through `-e`: `Pgrep -e -v`. Files cannot be passed at all —
+  the list comes from `find` through `xargs`, and Pgrep ends the grep
+  arguments with its own `--`.
+* **`--color=never` loses.** On a terminal Pgrep appends `--color=always`
+  after your arguments, and grep takes the last one. Use `-no_colors`.
+* **grep's own complaints go to stderr**, one per subsystem, so a mistyped
+  grep argument says so rather than searching nothing quietly. The exit
+  status is grep's neither here nor in the ksh original: Pgrep exits 0
+  whether or not anything matched.
+
 ## What it needs around it
 
 The CM environment: `$CM_ROOT`, `$CM_ENV_ID`, `$CONTEXT_CM_BASELINE`, the

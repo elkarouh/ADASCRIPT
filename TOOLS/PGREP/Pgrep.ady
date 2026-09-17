@@ -515,8 +515,16 @@ def search(subsystems: []str):
                 print f
             continue
         continue if files'Length == 0
-        let text: str = grep_out[g].output
+        let result: RunResult = grep_out[g]
         g += 1
+        # An unknown option, an unreadable file: grep says so on stderr, and
+        # the job captured that rather than letting it reach the terminal.
+        # Unprinted it is an empty result and a zero status, which is what a
+        # mistyped grep argument looked like.
+        let complaints: str = result.stderr.strip()
+        if complaints != "":
+            stderr.writeLine(complaints)
+        let text: str = result.output
         continue if text.strip() == ""
         if opt.basenames:
             print strip_dirnames(text).rstrip("\n")
