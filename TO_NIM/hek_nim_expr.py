@@ -297,6 +297,27 @@ _STRING_RETURNING_CALLS = ("adascriptEnvOr(", "getEnv(", "paramStr(",
 _OPTION_RETURNING_CALLS = ("adascriptEnvOpt(", "adascriptWhich(")
 
 
+def _unescape_str_literal(text):
+    """The characters a source-level string literal stands for.
+
+    `"\\n"` in the source is a backslash and an n here; a caller that means
+    the character has to say so, and a char set built from the raw text is
+    built from the wrong characters.
+    """
+    _MAP = {"n": "\n", "t": "\t", "r": "\r", "0": "\0",
+            "v": "\x0b", "f": "\x0c", "\\": "\\", '"': '"', "'": "'"}
+    out, i = [], 0
+    while i < len(text):
+        ch = text[i]
+        if ch == "\\" and i + 1 < len(text) and text[i + 1] in _MAP:
+            out.append(_MAP[text[i + 1]])
+            i += 2
+            continue
+        out.append(ch)
+        i += 1
+    return "".join(out)
+
+
 def _nim_expr_type(expr):
     """Infer the Nim type of an already-emitted expression string.
 
@@ -2084,6 +2105,13 @@ def to_nim(self, prec=None):
                     return f"toSeq({arg})"
                 return "@" + arg
             return "@[]"
+        if raw_name == "Path":
+            # `Path(s)` is a call, and the import it needs was pulled in only
+            # by an *annotation* naming the type: a file that says
+            # `Path($0).name` and never declares a Path got "undeclared
+            # identifier: 'Path'" from nim.
+            from hek_nim_declarations import _ensure_path_helper
+            _ensure_path_helper()
         if raw_name == "set":
             call_node = self.nodes[1].nodes[0]
             arg = _extract_call_arg(call_node)
@@ -2366,8 +2394,17 @@ def to_nim(self, prec=None):
                     else:
                         side = ""
                     if raw_arg:
-                        char_arg = raw_arg.strip('"').strip("'")
+                        # The argument arrives as source text, so "\n" is a
+                        # backslash and an n: iterating it built the char set
+                        # {'\\', 'n'}, which strips those two letters and
+                        # leaves the newline that was asked for -- and eats a
+                        # trailing 'n' off real text on the way past.
+                        char_arg = _unescape_str_literal(raw_arg.strip('"').strip("'"))
                         def _nim_char(c):
+                            _ESCAPED = {"\n": "'\\n'", "\t": "'\\t'", "\r": "'\\r'",
+                                        "\0": "'\\0'", "\x0b": "'\\v'", "\x0c": "'\\f'"}
+                            if c in _ESCAPED:
+                                return _ESCAPED[c]
                             if c == "'":
                                 return "'\\''"
                             elif c == "\\":

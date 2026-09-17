@@ -1,0 +1,45 @@
+#!/usr/bin/env ady2nim
+"""Test: `let rc: int = shell(stdin = text): cmd` really feeds the text.
+
+This is the one shell form that keeps the terminal and hands back only a
+status, and it used to drop its `stdin =` on the floor: Nim ran the command
+with the parent's stdin (`adascriptExec` took no input at all) and Python
+handed `input=` to `subprocess.call`, which has no such parameter and raised
+a TypeError. Either way the source said one thing and the program did
+another.
+
+Feeding a child that inherits the terminal has no pipe to write into, so Nim
+writes the text to a temporary file and redirects from it -- with the command
+braced first, so that a pipeline reads the text at its *first* stage rather
+than its last.
+
+Every case is a status, since nothing is captured: the timeout is there so a
+regression that lets the child read the real stdin fails rather than hangs.
+"""
+
+let text: str = "beta\nalpha\nbeta\n"
+
+# --- the text arrives ------------------------------------------------------
+let found: int = shell(stdin = text, timeout = 10000): grep -q alpha
+assert found == 0
+
+# --- ...and it is the only thing that arrives ------------------------------
+let missing: int = shell(stdin = text, timeout = 10000): grep -q zzz
+assert missing == 1
+
+# --- a pipeline reads it at the first stage, not the last -------------------
+let first: int = shell(stdin = text, timeout = 10000): sort | head -1 | grep -q '^alpha$'
+assert first == 0
+
+let lines: int = shell(stdin = text, timeout = 10000): sort -u | wc -l | grep -q '^2$'
+assert lines == 0
+
+# --- the status is the command's own, through the braces and the pipe ------
+let failed: int = shell(stdin = text, timeout = 10000): grep -q zzz | cat && false
+assert failed == 1
+
+# --- and the form without a stdin still behaves --------------------------
+let plain: int = shell: true
+assert plain == 0
+
+print "all shell stdin status tests passed"

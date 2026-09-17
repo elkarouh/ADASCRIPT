@@ -3649,8 +3649,23 @@ proc adascriptRun*(cmd: string, timeoutMs: int = 0, input: string = "",
 
 proc adascriptExec*(cmd: string, timeoutMs: int,
                     env: Table[string, string] = initTable[string, string](),
-                    shellPath: string = ""): int =
+                    shellPath: string = "", input: string = ""): int =
   ## Run cmd with the terminal inherited, killed after timeoutMs.
+  ##
+  ## `input` is the child's stdin.  The terminal is inherited whole, so there
+  ## is no pipe to write into: the text goes to a temporary file and the
+  ## command is redirected from it.  The command is braced first, so the
+  ## redirection reaches every stage of a pipeline rather than the last one.
+  var runCmd = cmd
+  var stdinFile = ""
+  if input.len > 0:
+    stdinFile = getTempDir() / ("adascript-stdin-" & $getCurrentProcessId() &
+                                "-" & $epochTime().int64 & ".txt")
+    writeFile(stdinFile, input)
+    runCmd = "{ " & cmd & "\\n} < " & quoteShell(stdinFile)
+  defer:
+    if stdinFile.len > 0:
+      removeFile(stdinFile)
   var envTable: StringTableRef = nil
   if env.len > 0:
     envTable = newStringTable(modeCaseSensitive)
@@ -3660,10 +3675,10 @@ proc adascriptExec*(cmd: string, timeoutMs: int,
       envTable[k] = v
   let p =
     if shellPath.len > 0:
-      startProcess(shellPath, args = @["-c", cmd], env = envTable,
+      startProcess(shellPath, args = @["-c", runCmd], env = envTable,
                    options = {poUsePath, poParentStreams})
     else:
-      startProcess(cmd, env = envTable, options = {poEvalCommand, poParentStreams})
+      startProcess(runCmd, env = envTable, options = {poEvalCommand, poParentStreams})
   let deadline = epochTime() + timeoutMs.float / 1000.0
   while true:
     let code = p.peekExitCode()
@@ -4271,7 +4286,7 @@ def to_nim(self, indent=0):
         # `let code: int = shell: cmd` -- execCmd inherits stdin/stdout/stderr,
         # so the child keeps the terminal (its pager, its colours), and returns
         # the exit code.  execCmdEx would capture both and lose the terminal.
-        if run_timeout or run_env or run_shell:
+        if run_timeout or run_env or run_shell or "stdin" in opts:
             _ensure_shell_run_helper()
             _exec_args = f", {opts['timeout']}" if "timeout" in opts else ", 0"
             if run_env:
@@ -4279,6 +4294,8 @@ def to_nim(self, indent=0):
             elif run_shell:
                 _exec_args += ", initTable[string, string]()"
             _exec_args += run_shell
+            if "stdin" in opts:
+                _exec_args += f", input = {opts['stdin']}"
             lines.append(f"{ind}{nim_kw} {target_name} = adascriptExec({cmd_ref}{_exec_args})")
         else:
             lines.append(f"{ind}{nim_kw} {target_name} = execCmd({cmd_ref})")

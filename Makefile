@@ -78,7 +78,10 @@ STANDALONE := \
     test_do_block.ady \
     test_stmt_modifier.ady \
     test_str_join.ady \
-    test_which.ady
+    test_which.ady \
+    test_shell_stdin_status.ady \
+    test_strip_chars.ady \
+    test_path_call.ady
 
 # -----------------------------------------------------------------------
 # Stdin tests — piped from a sample file

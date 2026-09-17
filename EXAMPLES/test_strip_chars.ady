@@ -1,0 +1,32 @@
+#!/usr/bin/env ady2nim
+"""Test: strip/lstrip/rstrip with a set of characters given as a literal.
+
+Nim's strip takes a set of chars, so the emitter builds one from the
+literal -- and it built it from the *source text* of the literal. `"\n"` is
+a backslash and an n there, so `rstrip("\n")` became `strip(chars = {'\\',
+'n'})`: it left the newline it was asked to remove and ate a trailing `n`
+off the text on the way past.
+
+Python is indifferent to all of this, so every case has to hold on either
+backend.
+"""
+
+let t: str = "abn\n"
+
+# --- an escape is one character, and not the two that spell it -------------
+assert t.rstrip("\n") == "abn"
+assert t.rstrip("n") == "abn\n"        # ...so a plain `n` strips nothing here
+assert "hi\r\n".rstrip("\r\n") == "hi"
+assert "\t\t hi \t".strip(" \t") == "hi"
+
+# --- a backslash stands for itself -----------------------------------------
+assert "a\\b".rstrip("\\") == "a\\b"
+assert "a\\".rstrip("\\") == "a"
+
+# --- the plain cases, which never went through an escape -------------------
+assert "xxhixx".strip("x") == "hi"
+assert "--hi--".lstrip("-") == "hi--"
+assert "--hi--".rstrip("-") == "--hi"
+assert "  hi  ".strip() == "hi"
+
+print "all strip-chars tests passed"

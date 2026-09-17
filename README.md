@@ -1717,6 +1717,17 @@ transpile-time error rather than a silently ignored option. When no `stdin`
 is given, a captured command sees EOF straight away rather than waiting on a
 terminal.
 
+An `int`-typed target takes it too:
+
+```python
+let rc: int = shell(stdin = pod_text()): pod2text | more -f
+```
+
+That form keeps the terminal, so there is no pipe to write into: the text
+goes to a temporary file and the command is redirected from it, braced first
+so a pipeline reads the text at its *first* stage. The file is removed when
+the command ends.
+
 ### Setting the child's environment
 
 `env = expr` takes a `{str}str` and **adds** to the environment the child

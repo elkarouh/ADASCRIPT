@@ -1,0 +1,18 @@
+#!/usr/bin/env ady2nim
+"""Test: `Path(...)` as a call, in a file that never annotates a Path.
+
+The import Path needs was pulled in by an *annotation* naming the type, so a
+file that only ever calls `Path(...)` -- `Path($0).name`, the usual way to
+get a program's own name -- compiled to Nim that said `undeclared
+identifier: 'Path'`.
+"""
+
+let p = Path("/usr/local/bin/tool.ady")
+assert str(p.name) == "tool.ady"
+assert str(p.parent) == "/usr/local/bin"
+
+# the call composes where its result is wanted, not only where it is bound
+assert str(Path("/a/b/c.txt").name) == "c.txt"
+assert str(Path($0).name) != ""
+
+print "all Path() call tests passed"

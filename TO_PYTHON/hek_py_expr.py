@@ -1266,6 +1266,12 @@ def to_py(self, prec=None):
                     result = helper
                     i += 1
                     continue
+            if i == 0 and result == "Path" and "Path" not in _own:
+                # `Path(s)` is a call, and the class it names was defined only
+                # when an *annotation* mentioned the type: a file that says
+                # `Path($0).name` and never declares a Path got a NameError.
+                from hek_py_declarations import _ensure_path_alias
+                _ensure_path_alias()
             if i == 0 and result == "ord":
                 helper = _ord_call(tr_str)
                 if helper is not None:

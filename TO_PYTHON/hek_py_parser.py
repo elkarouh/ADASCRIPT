@@ -2896,11 +2896,16 @@ def to_py(self, indent=0):
         # `let code: int = shell: cmd` -- the child keeps the terminal, and the
         # exit code comes back directly.  Nothing is captured, so no kwargs
         # beyond the shell itself.
-        call_kwargs = ", ".join(k for k in run_kwargs
-                                if not k.startswith(("capture_output", "text")))
-        lines.append(f"{ind}{target_name} = _subprocess.call({cmd_ref}, {call_kwargs})"
-                     if "timeout" not in opts else
-                     f"{ind}{target_name} = {runner}({cmd_ref}, {call_kwargs}).returncode")
+        call_args = [k for k in run_kwargs
+                     if not k.startswith(("capture_output", "text"))]
+        # `input=` is a run() keyword: call() has no such parameter and raises
+        # a TypeError on it, and the text has to be declared text.
+        if "stdin" in opts:
+            call_args.append("text=True")
+        call_kwargs = ", ".join(call_args)
+        lines.append(f"{ind}{target_name} = {runner}({cmd_ref}, {call_kwargs}).returncode"
+                     if "timeout" in opts or "stdin" in opts else
+                     f"{ind}{target_name} = _subprocess.call({cmd_ref}, {call_kwargs})")
         _check(target_name)
     elif kw == "shellSpawn":
         # Starts the command and carries on; the waiting is j.wait().
