@@ -163,7 +163,7 @@ finds nothing.
   kept), which would search the branches and nothing else; its own runs
   search the 165 ordinary builds, and its `#?? This is bizarre` comment sits
   beside that line.
-* The match is made by **perl**, as it is there. cc_pattern's answers are
+* Every cc_pattern match is made by **perl**, as it is there. cc_pattern's answers are
   perl regexps — `(?^:…)`, named groups and all — and `grep -E` is a
   different language: given one it warns and matches nothing, which reads as
   "no subsystem is a branch" and searches everything. With no perl on the

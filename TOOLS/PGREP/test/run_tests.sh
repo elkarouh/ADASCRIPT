@@ -58,6 +58,9 @@ done
 # \d and all, which is not what grep -E reads.
 mkdir -p "$WORK/bin" "$WORK/progs"
 cat > "$WORK/bin/Caux_functions" <<'EOF'
+# The closure helpers are functions here too, as they are on the real system.
+get_topmost_subsystems() { printf '%s\n' 'SUB OTHER'; }
+Psort() { read -r d; printf '%s\n' "$d"; }
 cc_pattern() {
   case "$1" in
     SYSTEM)              printf '%s\n' '(?^:(?:(?^:(?:[[:digit:][:upper:]_])))+)' ;;
@@ -118,6 +121,26 @@ check "-ppat filters on the path"  2 "$("$PGREP" -ppat deep -no-grep | grep -c '
 check "a .gz is never searched"    0 "$("$PGREP" -no-grep | grep -c '\.gz')"
 check "special_files are searched" 2 "$("$PGREP" -no-grep | grep -c 'special_files')"
 check "-basenames cuts the path"   6 "$("$PGREP" -basenames -no_colors remote | grep -c '^[a-z]*\.[a-z]*:')"
+
+# --- -closure, which resolves through the CM helpers -----------------------
+#
+# ALPHA is a SYSTEM, so it resolves through its topmost subsystem to
+# ALPHA/SUB.LATEST; Psort puts the closure in order. Recognising the name as
+# a SYSTEM is a cc_pattern match, and cc_pattern answers in perl: with
+# `grep -E` asking the question, no name is ever a SYSTEM, `-closure ALPHA`
+# resolves to the directory ALPHA, and Psort is handed something that is not
+# a build.
+CM_ROOT=$OT
+export CM_ROOT
+# A closure names its own builds, so the headers are -verbose's business.
+check "-closure resolves a SYSTEM"  1 "$("$PGREP" -closure ALPHA -verbose -no_colors remote 2>/dev/null | grep -c '^!=====')"
+check "...and searches it"          4 "$("$PGREP" -closure ALPHA -no_colors remote | grep -c ':.*remote')"
+check "-closure says the directory" 1 "$("$PGREP" -closure ALPHA -verbose -no_colors remote 2>/dev/null | grep -c '^Closure *: ALPHA.SUB.LATEST')"
+# A baseline ID is not a SYSTEM: its first dot is the directory separator.
+check "-closure takes a baseline"   4 "$("$PGREP" -closure ALPHA.SUB.LATEST -no_colors remote | grep -c ':.*remote')"
+# The branches are a closure's own business: -closure says which builds.
+check "-closure is not filtered"    1 "$("$PGREP" -closure ALPHA.SUB.TBO.LATEST -no_colors remote | grep -c 'in branch')"
+unset CM_ROOT
 
 # The helper as a program and no ksh to be found: the direct call is the
 # fallback, so a site whose helpers really are programs still works.

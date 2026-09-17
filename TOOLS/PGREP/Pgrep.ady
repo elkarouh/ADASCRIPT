@@ -398,6 +398,28 @@ def after_first(text: str, marker: str) -> str:
         return text
     return text[at + len(marker):]
 
+def cm_matches(text: str, what: str) -> bool:
+    """Does TEXT match the pattern cc_pattern gives for WHAT?
+
+    Perl, anchored at both ends, which is what `matches_pattern` in
+    Caux_functions does:
+
+        return $(perl -e "exit 1 if (\"$2\" !~ m{^$(cc_pattern $1)$})")
+
+    Not `grep -E`, which cannot read one of those patterns and answers no to
+    everything. Here that meant a SYSTEM was never recognised as one, so
+    -closure TACT was taken for a baseline ID and resolved to the directory
+    `TACT` rather than to TACT's topmost subsystem -- and Psort, handed a
+    directory that is not a build, had nothing to say.
+    """
+    let pattern: str = cm_run("cc_pattern " + what).strip()
+    if pattern == "":
+        die("cc_pattern " + what + " gave nothing. Is Caux_functions on your PATH?")
+    var one: []str = []
+    one.append(text)
+    let hits: []bool = perl_matching_lines(one, "^" + pattern + "$")
+    return hits[0]
+
 def matches_runtime(text: str, pattern: str) -> bool:
     """`text` against a pattern that is not known until the program runs.
 
@@ -457,7 +479,7 @@ def closure_dir(name: str) -> Path:
     wins when it names a baseline of that same system; a baseline ID is
     already a path with its first dot turned into a slash.
     """
-    if not matches_runtime(name, "^" + cm_run("cc_pattern SYSTEM").strip()):
+    if not cm_matches(name, "SYSTEM"):
         return Path(replace_first(name, ".", "/"))
     let topmost: str = cm_run("get_topmost_subsystems " + name).strip().split()[0]
     let prefix: str = name + "." + topmost + "."
