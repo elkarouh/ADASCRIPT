@@ -420,26 +420,64 @@ def matching_lines(lines: []str, pattern: str, fold_case: bool) -> []bool:
     A grep for each line is a process for each line, and the lists here are
     as long as the site has subsystems. `grep -n` numbers the lines it keeps,
     which is enough to say yes or no about each one without asking again.
+
+    This is for -ppat and -subsys, which the shell version matches with
+    `grep -Ei` too.
     """
-    var hits: []bool = []
-    for line in lines:
-        hits.append(False)
+    let numbers: str = capture_numbers(lines, "grep", pattern, fold_case)
+    return numbered_hits(numbers, lines'Length)
+
+def perl_matching_lines(lines: []str, pattern: str) -> []bool:
+    """The same, judged by perl.
+
+    cc_pattern's patterns are perl regexps and the shell version tests them
+    with perl. `grep -E` is a different language: given one of them it warns,
+    matches nothing, and every subsystem looks like a project branch -- which
+    is a search of everything or a search of nothing, depending on which way
+    the answer is read. Nothing said so, because no match is a valid answer.
+    """
+    let numbers: str = capture_numbers(lines, "perl", pattern, False)
+    return numbered_hits(numbers, lines'Length)
+
+def capture_numbers(lines: []str, engine: str, pattern: str, fold_case: bool) -> str:
+    """The 1-based numbers of the lines that match, one per line.
+
+    Both engines are asked the same way -- the list on stdin, the pattern as
+    an argument rather than inside the command text, since it is a regexp
+    full of the characters a shell also wants.
+    """
     if lines'Length == 0:
-        return hits
+        return ""
+    let text: str = "\n".join(lines) + "\n"
+    if engine == "perl":
+        # -s sets $pat from -pat=..., so the pattern needs no quoting inside
+        # the program; -l supplies the newline print would otherwise spell.
+        let r = shell(stdin = text): perl -s -l -n -e 'print $. if /^$pat$/' -- -pat={!pattern}
+        return r.output
     var flags: str = "-nE"
     if fold_case:
         flags = "-niE"
-    let text: str = "\n".join(lines) + "\n"
-    let r = shell(stdin = text): grep {flags} -- {!pattern}
-    for numbered in r.output.split("\n"):
+    let g = shell(stdin = text): grep {flags} -- {!pattern}
+    var out: []str = []
+    for numbered in g.output.split("\n"):
         continue if numbered == ""
         let at: int = numbered.find(":")
         continue if at < 0
-        # The slice goes into a name of its own: int() of one straight from
-        # the subscript is an int conversion on the Nim side, not a parse.
-        let counted: str = numbered[0:at]
+        out.append(numbered[0:at])
+    return "\n".join(out)
+
+def numbered_hits(numbers: str, count: Natural) -> []bool:
+    """A line number per line, turned into a yes or no for each of `count`."""
+    var hits: []bool = []
+    for i in range(count):
+        hits.append(False)
+    for line in numbers.split("\n"):
+        continue if line == ""
+        # Through a name of its own: int() straight off the loop variable is
+        # an int conversion on the Nim side rather than a parse.
+        let counted: str = line
         let idx: int = int(counted) - 1
-        if idx >= 0 and idx < hits'Length:
+        if idx >= 0 and idx < count:
             hits[idx] = True
     return hits
 
@@ -461,32 +499,41 @@ def ordinary_builds(dirs: []Path) -> []Path:
     where the shell version searches 165, a whole system again for each of
     its branches.
 
-    One readlink and one grep for the list, rather than two processes for
+    One readlink and one perl for the list, rather than two processes for
     each subsystem: at a few hundred subsystems that was the better part of a
     second before the first file was looked at.
     """
     if dirs'Length == 0:
         return dirs
+    if which("perl") is None:
+        stderr.writeLine(PROG + ": warning: no perl, so project branch builds "
+                         "cannot be told apart; searching them too, as -all does.")
+        return dirs
     let pattern: str = shell_capture("cc_pattern PROJECT_BASELINE_ID")
-    var paths: []str = []
-    for d in dirs:
-        paths.append(str(d))
-    let resolved = shell(stdin = "\n".join(paths) + "\n"): xargs -r -d '\n' readlink -m
+    # readlink takes the whole list; its output is one line per argument, in
+    # the order given, which is what lines the answers up with the dirs.
+    let resolved = shell: readlink -m {*dirs}
     let real: []str = resolved.output.split("\n")
 
     var baselines: []str = []
     for i in range(dirs'Length):
-        var line: str = paths[i]
+        var line: str = str(dirs[i])
         if i < real'Length and real[i] != "":
             line = real[i]
         let tail: str = replace_first(line, "/cm/ot/", "")
         baselines.append(replace_first(replace_first(tail, "/", "."), "!", "."))
 
-    let hits: []bool = matching_lines(baselines, "^" + pattern + "$", False)
+    let hits: []bool = perl_matching_lines(baselines, "^" + pattern + "$")
     var kept: []Path = []
     for i in range(dirs'Length):
         continue if not hits[i]
         kept.append(dirs[i])
+    if kept'Length == 0:
+        # Every subsystem a project branch is not an answer, it is a pattern
+        # that did not work. Saying so beats searching nothing in silence.
+        stderr.writeLine(PROG + ": warning: no subsystem matched the baseline "
+                         "pattern, so there is nothing to search. Use -all to "
+                         "search them all.")
     return kept
 
 # ---------------------------------------------------------------------------

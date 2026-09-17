@@ -15,8 +15,22 @@ The pipeline is the shell's rather than this program's on purpose. Reading
 the file list in to sort and filter it here reads better and costs twice
 the wall time: nothing can grep until every `find` has finished, and a
 `-ppat` compared in the program is a process per file rather than one
-`grep` for the list. What the program does with the results -- the header
-lines, the order, `-basenames` -- it does to text it already has.
+`grep` for the list.
+
+Each pipeline writes to a file of its own, and the program waits for one
+subsystem at a time, in order, printing each as it lands -- so results
+start appearing while the rest are still being searched. The others carry
+on meanwhile: they need nothing from this process until their turn, which
+is what a file buys over a pipe that has to be drained while it is written.
+
+Choosing the subsystems is two commands rather than two per subsystem: one
+`readlink` resolves the whole list and one `perl` says which baselines
+match, the line numbers giving the answer for each. The shell version runs
+a `readlink` and a `perl` for every directory, which at a few hundred
+subsystems is most of a second before the first file is looked at.
+
+`-verbose` says where the time went, on stderr: how long it took to start
+the searches, when each subsystem finished, and the total.
 
 ## Building
 
@@ -93,10 +107,19 @@ it builds and that a no-argument run prints the usage.
 
 ## Where it differs from the ksh original
 
-* The default filter skips project branch builds, which is what `-all` and
-  the usage text describe. The shell version's perl filter *keeps* only the
-  directories whose baseline matches `cc_pattern PROJECT_BASELINE_ID` — the
-  line its own `#?? This is bizarre` comment is about.
+* The project-branch filter is the shell's, not the documentation's. A
+  directory is kept when its baseline matches `cc_pattern
+  PROJECT_BASELINE_ID`, which is what the perl line does; the name says
+  project and what it selects is the opposite, and that is what the
+  `#?? This is bizarre` comment beside it is about. Reading it as its name
+  suggests searches every project branch as well — on one site, 200
+  subsystems against the shell version's 165.
+* That match is made by **perl**, as it is there. cc_pattern's patterns are
+  perl regexps, `(?:…)` and `\d` and all, and `grep -E` is a different
+  language: given one it warns and matches nothing, which reads as "every
+  subsystem is a project branch" — a search of everything or of nothing,
+  depending which way the answer is taken. With no perl on the PATH, Pgrep
+  says so and searches them all, as `-all` does.
 * `. trace`, `. cm_audit_logger` and `. Caux_functions` are gone. None is
   ever called by name; what they install is a ksh environment, and none of
   it has a meaning in a compiled program.
