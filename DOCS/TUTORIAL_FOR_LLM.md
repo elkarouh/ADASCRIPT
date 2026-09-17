@@ -785,6 +785,50 @@ score: float = r.json()['score']    # → r.json()["score"].to(float)
 
 ---
 
+## String Literals
+
+`"..."` and `'...'` both make a `str` — pick whichever avoids escaping the
+other quote. A single-character literal is a `char` only where a `char` is
+declared; the declared type decides.
+
+```adascript
+let double: str = "she said hello"
+let single: str = 'she said "hello"'
+let initial: char = 'x'
+let one_char: str = 'x'
+```
+
+| Form | Meaning | Python | Nim |
+|------|---------|--------|-----|
+| `"a"` / `'a'` | string | `"a"` / `'a'` | `"a"` |
+| `'x'` declared `char` | single character | `'x'` (a `str`) | `'x'` (a `char`) |
+| `"""…"""` | spans lines | `"""…"""` | `"…\n…"` |
+| `r"\d+"` | raw — backslashes survive | `r"\d+"` | `r"\d+"` |
+| `f"{x}"` | interpolation | `f"{x}"` | `fmt"{x}"` |
+
+**Adjacent literals concatenate**, as in Python and C — no operator, and
+nothing happens at run time. A piece may be a plain string or an f-string,
+and the kinds mix freely in one run:
+
+```adascript
+assert "ab" == "a" "b"
+assert f"x={n} " "then plain " f"and {n * 2}" == "x=42 then plain and 84"
+```
+
+Parentheses let a run break across lines, which is the usual reason to want
+it — a long message stays readable in the source as well as in the output:
+
+```adascript
+let report: str = (f"{n} item(s) processed, "
+                   "none rejected, "
+                   f"{n * 2} checks run")
+```
+
+Nim has no juxtaposition rule, so a run is emitted as a `&` chain
+(`fmt"…" & "…" & fmt"…"`); Python takes it verbatim.
+
+---
+
 ## Print Statement
 
 Python-2-style `print` without parentheses is supported (call form also works):

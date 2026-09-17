@@ -177,6 +177,7 @@ COMPILE_ONLY := \
     DOC/awk_snippets.ady \
     DOC/shell_snippets.ady \
     DOC/why_snippets.ady \
+    DOC/string_snippets.ady \
     DOC/awk_paragraph.ady
 
 ALL_COMPILE := \
@@ -379,7 +380,7 @@ test: compile
 	@# The documents' own snippets, so that what DOCS/*.md quotes is code
 	@# that ran rather than code that was written down. check-quotes below
 	@# is what ties each block to the file it came from.
-	@for f in DOC/awk_snippets.ady DOC/why_snippets.ady; do \
+	@for f in DOC/awk_snippets.ady DOC/why_snippets.ady DOC/string_snippets.ady; do \
 	    name=$${f%.ady}; \
 	    printf '  %-42s' "$$f"; \
 	    $(EXDIR)/$$name 2>&1 | grep -q "snippets ok" \

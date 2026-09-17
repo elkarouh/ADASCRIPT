@@ -283,7 +283,15 @@ dict_display = LBRACE_NODE + (dictcomp | dictmaker) + RBRACE
 set_display = LBRACE_NODE + (setcomp | setmaker) + RBRACE
 empty_set  = LBRACE + RBRACE           # {}   -> empty set
 empty_dict = LBRACE + COLON + RBRACE  # {:}  -> empty dict
-str_concat = STRING + STRING[1:]
+# Adjacent string literals concatenate, as in Python and C. A piece may be a
+# plain string or an f-string, and the two mix freely: the run is held together
+# by juxtaposition, not by what each piece happens to be. Keeping f-strings out
+# of this rule did not make them an error -- `fstring` matched the first piece
+# on its own and the rest of the run was left for the enclosing rule to trip
+# over, which silently dropped both the trailing pieces and, with them, the
+# assignment the run belonged to.
+_str_piece = fstring | STRING
+str_concat = _str_piece + _str_piece[1:]
 
 atom = (
     empty_paren
@@ -308,8 +316,8 @@ atom = (
     | regex_lit
     | IDENTIFIER
     | NUMBER
-    | fstring
     | str_concat
+    | fstring
     | STRING
 )
 
