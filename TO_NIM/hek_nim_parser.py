@@ -3554,17 +3554,42 @@ def _ensure_shell_lines_helper():
 
 
 _SHELL_RUN_HELPER = """\
+const adascriptChunk = 65536
+const adascriptMaxReads = 64        # 4 MiB a pass, then let the others run
+
+proc adascriptNap(round: int) =
+  ## Wait between passes over a child's pipes, and hardly at all at first.
+  ##
+  ## A flat 2 ms costs every command that much before it can be noticed to
+  ## have finished, and most commands a program runs finish in less than
+  ## that. The first passes yield instead, and the wait grows only once the
+  ## command has shown it is going to take a while.
+  if round < 32: sleep(0)
+  elif round < 64: sleep(1)
+  else: sleep(2)
+
 proc adascriptDrain(fd: cint, buf: var string): bool =
   ## Read what is available on FD without blocking; false once it is closed.
-  var chunk = newString(4096)
-  let n = read(fd, addr chunk[0], 4096)
-  if n > 0:
-    chunk.setLen(n)
-    buf.add(chunk)
-    return true
-  if n == 0:
-    return false
-  return errno == EAGAIN or errno == EWOULDBLOCK
+  ##
+  ## Everything available, not one chunk of it: the callers sleep between
+  ## passes, so a single read per pass caps a capture at a chunk per sleep --
+  ## a couple of megabytes a second -- however fast the child can write. The
+  ## read count is bounded so that one loud child cannot starve the others in
+  ## a waitAll.
+  var chunk = newString(adascriptChunk)
+  var reads = 0
+  while reads < adascriptMaxReads:
+    let n = read(fd, addr chunk[0], adascriptChunk)
+    if n > 0:
+      let start = buf.len
+      buf.setLen(start + n)
+      copyMem(addr buf[start], addr chunk[0], n)
+      reads += 1
+      continue
+    if n == 0:
+      return false
+    return errno == EAGAIN or errno == EWOULDBLOCK
+  return true
 
 proc adascriptRun*(cmd: string, timeoutMs: int = 0, input: string = "",
                    env: Table[string, string] = initTable[string, string](),
@@ -3621,6 +3646,7 @@ proc adascriptRun*(cmd: string, timeoutMs: int = 0, input: string = "",
     iOpen = false
     p.inputStream.close()
   var outBuf, errBuf = ""
+  var rounds = 0
   var oOpen, eOpen = true
   let deadline = epochTime() + timeoutMs.float / 1000.0
   var code = -1
@@ -3643,7 +3669,8 @@ proc adascriptRun*(cmd: string, timeoutMs: int = 0, input: string = "",
       discard p.waitForExit()
       code = 124
       break
-    sleep(2)
+    adascriptNap(rounds)
+    rounds += 1
   p.close()
   (outBuf, errBuf, code)
 
@@ -3680,6 +3707,7 @@ proc adascriptExec*(cmd: string, timeoutMs: int,
     else:
       startProcess(runCmd, env = envTable, options = {poEvalCommand, poParentStreams})
   let deadline = epochTime() + timeoutMs.float / 1000.0
+  var rounds = 0
   while true:
     let code = p.peekExitCode()
     if code != -1:
@@ -3690,7 +3718,8 @@ proc adascriptExec*(cmd: string, timeoutMs: int,
       discard p.waitForExit()
       p.close()
       return 124
-    sleep(2)\
+    adascriptNap(rounds)
+    rounds += 1\
 """
 
 
@@ -3875,8 +3904,10 @@ proc wait*(j: AdascriptJob, check: bool = false): tuple[output: string, stderr: 
   ##
   ## Calling it twice gives the same answer rather than hanging: the result
   ## is kept once the child has been reaped.
+  var rounds = 0
   while adascriptJobStep(j):
-    sleep(2)
+    adascriptNap(rounds)
+    rounds += 1
   result = (j.outBuf, j.errBuf, j.code)
   if check and j.code != 0:
     raise newException(OSError,
@@ -3907,13 +3938,15 @@ proc waitAll*(jobs: seq[AdascriptJob], check: bool = false): seq[tuple[output: s
   ## Every pipe is drained while the others are, so a job that outgrows its
   ## pipe buffer does not hold up the rest. Waiting for them one at a time
   ## in a loop would work too, and would stall exactly there.
+  var rounds = 0
   while true:
     var anyLive = false
     for j in jobs:
       if adascriptJobStep(j):
         anyLive = true
     if not anyLive: break
-    sleep(2)
+    adascriptNap(rounds)
+    rounds += 1
   result = @[]
   for j in jobs:
     result.add((j.outBuf, j.errBuf, j.code))

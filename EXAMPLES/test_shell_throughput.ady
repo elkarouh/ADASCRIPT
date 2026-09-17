@@ -1,0 +1,38 @@
+#!/usr/bin/env ady2nim
+"""Test: a capture reads a command's output as fast as it arrives.
+
+The Nim runner drains a child's pipes between naps, and it used to read one
+4 KiB chunk per nap of 2 ms: about two megabytes a second, whatever the
+child could write. Nothing was lost -- the output arrived in full, eventually
+-- so the only symptom was a program several times slower than the shell
+pipeline it replaced.
+
+Two things are asserted here: that the whole of a large output arrives, and
+that it arrives in a time the old behaviour could not have managed. Four
+megabytes took four seconds at 4 KiB a nap; the bound below is a second,
+which is twenty times what this now costs and still far under that.
+"""
+nimport time
+
+let LINES: int = 65536                  # ~4 MiB of "x" * 63 and a newline
+
+let start: float = time.time()
+let r = shell: yes "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" | head -n 65536
+let elapsed: float = time.time() - start
+
+assert r.code == 0
+assert r.output.split("\n")'Length == LINES + 1   # a trailing newline
+assert len(r.output) == LINES * 64
+assert elapsed < 1.0
+
+# The same for a spawned job, which shares the draining but not the waiting.
+let start2: float = time.time()
+let j: Job = shellSpawn: yes "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" | head -n 65536
+let out = j.wait()
+let elapsed2: float = time.time() - start2
+
+assert out.code == 0
+assert len(out.output) == LINES * 64
+assert elapsed2 < 1.0
+
+print "all shell throughput tests passed"

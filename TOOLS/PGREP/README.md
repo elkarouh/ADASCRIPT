@@ -8,9 +8,15 @@ wall time is the slowest subsystem's rather than the sum of all of them.
 
 It is a translation of a ~480-line ksh script, and it is here as the worked
 example of what that translation looks like: the option loop is a `case`
-over the argument, the background `find`/`grep` per subsystem is
-`shellSpawn` + `waitAll`, and the file list reaches `xargs` through
-`stdin =` rather than a command line that a large subsystem would overflow.
+over the argument, and each subsystem's `find | sort | grep -Ei | xargs
+grep` becomes one `shellSpawn`, with `waitAll` collecting them.
+
+The pipeline is the shell's rather than this program's on purpose. Reading
+the file list in to sort and filter it here reads better and costs twice
+the wall time: nothing can grep until every `find` has finished, and a
+`-ppat` compared in the program is a process per file rather than one
+`grep` for the list. What the program does with the results -- the header
+lines, the order, `-basenames` -- it does to text it already has.
 
 ## Building
 

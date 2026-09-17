@@ -434,45 +434,40 @@ def is_project_build(dir_path: Path, project_pattern: str) -> bool:
 # Searching one subsystem
 # ---------------------------------------------------------------------------
 
-def find_files(subsys: Path) -> Job:
-    """Start the file search for one subsystem; the Job carries the list."""
+def search_one(subsys: Path) -> Job:
+    """Everything one subsystem needs, as a single pipeline.
+
+    The stages are the ksh original's, and for its reason: grep starts on
+    the first paths while find is still walking the tree, and a file list
+    that runs to tens of thousands of lines never leaves the shell. Reading
+    the list in to filter and sort it here cost both -- nothing could grep
+    until every find had finished, and -ppat ran a grep per file.
+
+    `cat` stands in for a stage the options did not ask for, which is what
+    the shell version does too and what the pipeline costs when the option
+    is absent.
+    """
     let build: str = "build_" + $CM_ENV_ID
     var dirs: []Path = [subsys / build / "sources"]
     if -d (subsys / "sources" / "special_files"):
         dirs.append(subsys / build / "special_files")
     let pattern: str = opt.file_pattern
-    let finder: Job = shellSpawn: find {*dirs} -type f ! -name '*.gz' -name {!pattern} 2>/dev/null
-    return finder
 
-def keep_wanted(lines: []str) -> []Path:
-    """The files the options ask for: sorted when -sort, filtered when -ppat.
-
-    `find`'s output arrives as text, one path per line, and this is where it
-    stops being text: the blank last line goes, and what is left is a file.
-    """
-    var kept: []Path = []
-    for line in lines:
-        continue if line == ""
-        if opt.path_pattern != "" and not matches_runtime_i(line, opt.path_pattern):
-            continue
-        kept.append(Path(line))
+    var sorting: str = "cat"
     if opt.sort_output:
-        kept = sorted(kept)
-    return kept
+        sorting = "sort"
+    # The pattern reaches grep through the environment rather than through
+    # the command text: it is the caller's, and it is not ours to quote.
+    var filtering: str = "cat"
+    if opt.path_pattern != "":
+        filtering = 'grep -Ei -- "$PPAT"'
+    let stage_env: {str}str = {"PPAT": opt.path_pattern}
 
-def grep_files(files: []Path) -> Job:
-    """Start grep over a subsystem's files, feeding the list through xargs.
-
-    Through stdin rather than the command line: a subsystem can hold tens of
-    thousands of files, and the argument list has a limit that a file list
-    reaches long before a search does. The paths become text again to make
-    that list -- Nim has no `join` for a sequence of them.
-    """
-    var lines: []str = []
-    for f in files:
-        lines.append(str(f))
+    if not opt.use_grep:
+        let lister: Job = shellSpawn(env = stage_env): find {*dirs} -type f ! -name '*.gz' -name {!pattern} 2>/dev/null | {sorting} | {filtering}
+        return lister
     let params: []str = opt.grep_params
-    let searcher: Job = shellSpawn(stdin = "\n".join(lines) + "\n"): xargs -r grep {*params} --
+    let searcher: Job = shellSpawn(env = stage_env): find {*dirs} -type f ! -name '*.gz' -name {!pattern} 2>/dev/null | {sorting} | {filtering} | xargs -r grep {*params} --
     return searcher
 
 def strip_dirnames(text: str) -> str:
@@ -491,38 +486,18 @@ def header_for(subsys: Path) -> str:
 
 def search(subsystems: []Path):
     """Search every subsystem at once, and print them back in order."""
-    var finders: []Job = []
-    for s in subsystems:
-        finders.append(find_files(s))
-    let found: []RunResult = waitAll(finders)
+    var jobs: []Job = []
+    for subsys in subsystems:
+        jobs.append(search_one(subsys))
+    let results: []RunResult = waitAll(jobs)
 
-    var per_subsys: [][]Path = []
-    var greppers: []Job = []
-    for r in found:
-        let files: []Path = keep_wanted(r.output.split("\n"))
-        per_subsys.append(files)
-        if opt.use_grep and files'Length > 0:
-            greppers.append(grep_files(files))
-
-    var grep_out: []RunResult = []
-    if greppers'Length > 0:
-        grep_out = waitAll(greppers)
-
-    var g: Natural = 0
     for idx in range(len(subsystems)):
         let subsys: Path = subsystems[idx]
-        let files: []Path = per_subsys[idx]
+        let result: RunResult = results[idx]
         # Without a closure the search is long enough that showing where it
         # has got to is worth a line; with one, only -verbose asks for it.
         if opt.closure == "" or opt.verbose:
             print header_for(subsys)
-        if not opt.use_grep:
-            for f in files:
-                print f
-            continue
-        continue if files'Length == 0
-        let result: RunResult = grep_out[g]
-        g += 1
         # An unknown option, an unreadable file: grep says so on stderr, and
         # the job captured that rather than letting it reach the terminal.
         # Unprinted it is an empty result and a zero status, which is what a
@@ -532,7 +507,9 @@ def search(subsystems: []Path):
             stderr.writeLine(complaints)
         let text: str = result.output
         continue if text.strip() == ""
-        if opt.basenames:
+        # -basenames is about grep's `path:line:` prefixes; a listing keeps
+        # its paths, as it does in the shell version.
+        if opt.use_grep and opt.basenames:
             print strip_dirnames(text).rstrip("\n")
         else:
             print text.rstrip("\n")
