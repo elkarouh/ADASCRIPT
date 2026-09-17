@@ -341,14 +341,10 @@ class Options:
             self.grep_params.append("--color=always")
 
 
-let args: []str = $@
-if args'Length == 0:
-    print usage()
-    quit(0)
-
+# The object the searching procs below read. It holds the defaults from here
+# until the command line is read, which is the last thing this file does: the
+# declaration has to precede its readers, the parsing does not.
 var opt: Options = Options()
-opt.parse(args)
-opt.resolve()
 
 # ---------------------------------------------------------------------------
 # Where to search
@@ -534,6 +530,14 @@ def search(subsystems: []str):
 # ---------------------------------------------------------------------------
 # Run
 # ---------------------------------------------------------------------------
+
+let args: []str = $@
+if args'Length == 0:
+    print usage()
+    quit(0)
+
+opt.parse(args)
+opt.resolve()
 
 var targets: []str = []
 
