@@ -3558,15 +3558,37 @@ const adascriptChunk = 65536
 const adascriptMaxReads = 64        # 4 MiB a pass, then let the others run
 
 proc adascriptNap(round: int) =
-  ## Wait between passes over a child's pipes, and hardly at all at first.
-  ##
-  ## A flat 2 ms costs every command that much before it can be noticed to
-  ## have finished, and most commands a program runs finish in less than
-  ## that. The first passes yield instead, and the wait grows only once the
-  ## command has shown it is going to take a while.
+  ## Wait between passes when there is no pipe to wait on, and hardly at all
+  ## at first: a flat wait costs every command that much before it can be
+  ## noticed to have finished, and most commands finish in less than it.
   if round < 32: sleep(0)
   elif round < 64: sleep(1)
   else: sleep(2)
+
+proc adascriptWaitIO(readFds: seq[cint], writeFds: seq[cint], round: int) =
+  ## Sleep until one of these pipes can be read or written, or briefly.
+  ##
+  ## A timed nap between passes is wrong twice over: it waits when there is
+  ## already something to read, and -- much worse -- it lets a child that
+  ## produces steadily rather than in bursts hand over only what fits in one
+  ## read per nap. A command writing 400 KiB a few kilobytes at a time took
+  ## a nap for every one of them. poll() waits for the data itself, so a
+  ## pass happens exactly when there is something to do; the timeout is only
+  ## so that a child which exits without closing its pipes is still noticed.
+  if readFds.len == 0 and writeFds.len == 0:
+    adascriptNap(round)
+    return
+  var pfds = newSeq[TPollfd](readFds.len + writeFds.len)
+  var n = 0
+  for fd in readFds:
+    pfds[n].fd = fd
+    pfds[n].events = POLLIN
+    n += 1
+  for fd in writeFds:
+    pfds[n].fd = fd
+    pfds[n].events = POLLOUT
+    n += 1
+  discard poll(addr pfds[0], Tnfds(n), cint(20))
 
 proc adascriptDrain(fd: cint, buf: var string): bool =
   ## Read what is available on FD without blocking; false once it is closed.
@@ -3669,7 +3691,12 @@ proc adascriptRun*(cmd: string, timeoutMs: int = 0, input: string = "",
       discard p.waitForExit()
       code = 124
       break
-    adascriptNap(rounds)
+    var readFds: seq[cint] = @[]
+    var writeFds: seq[cint] = @[]
+    if oOpen: readFds.add(ofd)
+    if eOpen: readFds.add(efd)
+    if iOpen: writeFds.add(ifd)
+    adascriptWaitIO(readFds, writeFds, rounds)
     rounds += 1
   p.close()
   (outBuf, errBuf, code)
@@ -3899,6 +3926,14 @@ proc adascriptJobStep(j: AdascriptJob): bool =
     return false
   return true
 
+proc adascriptJobFds(j: AdascriptJob, readFds: var seq[cint],
+                     writeFds: var seq[cint]) =
+  ## The pipes this job is still using, for a poll to wait on.
+  if j.reaped: return
+  if j.oOpen: readFds.add(j.p.outputHandle.cint)
+  if j.eOpen: readFds.add(j.p.errorHandle.cint)
+  if j.iOpen: writeFds.add(j.p.inputHandle.cint)
+
 proc wait*(j: AdascriptJob, check: bool = false): tuple[output: string, stderr: string, code: int] =
   ## Block until the command finishes, then give back its result.
   ##
@@ -3906,7 +3941,10 @@ proc wait*(j: AdascriptJob, check: bool = false): tuple[output: string, stderr: 
   ## is kept once the child has been reaped.
   var rounds = 0
   while adascriptJobStep(j):
-    adascriptNap(rounds)
+    var readFds: seq[cint] = @[]
+    var writeFds: seq[cint] = @[]
+    adascriptJobFds(j, readFds, writeFds)
+    adascriptWaitIO(readFds, writeFds, rounds)
     rounds += 1
   result = (j.outBuf, j.errBuf, j.code)
   if check and j.code != 0:
@@ -3941,11 +3979,14 @@ proc waitAll*(jobs: seq[AdascriptJob], check: bool = false): seq[tuple[output: s
   var rounds = 0
   while true:
     var anyLive = false
+    var readFds: seq[cint] = @[]
+    var writeFds: seq[cint] = @[]
     for j in jobs:
       if adascriptJobStep(j):
         anyLive = true
+        adascriptJobFds(j, readFds, writeFds)
     if not anyLive: break
-    adascriptNap(rounds)
+    adascriptWaitIO(readFds, writeFds, rounds)
     rounds += 1
   result = @[]
   for j in jobs:
