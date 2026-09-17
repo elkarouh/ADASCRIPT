@@ -1510,6 +1510,67 @@ def run_tests() -> int:
         "  end Set;\n"
         "end P;\n"))
 
+    # 58. The 'is' closing a function header may sit on a line of its own, with
+    #     the expression body beside it or below it. The word to go by then
+    #     belongs to the line that opened the declaration, not to the 'is' line:
+    #     read literally, a standalone 'is' pushed a block frame, and an
+    #     expression function has no 'end' to close it.
+    cases.append((
+        "package body P is\n"
+        "function Stack_Top (S : Stack.T) return Position_T\n"
+        "is (Stack.Element (S, Stack.Length (S)));\n"
+        "function Stack_Base (S : Stack.T) return Position_T\n"
+        "is\n"
+        "(Stack.Element (S, 1));\n"
+        "procedure Q is\n"
+        "begin\n"
+        "null;\n"
+        "end Q;\n"
+        "end P;\n",
+
+        "package body P is\n"
+        "  function Stack_Top (S : Stack.T) return Position_T\n"
+        "  is (Stack.Element (S, Stack.Length (S)));\n"
+        "  function Stack_Base (S : Stack.T) return Position_T\n"
+        "  is\n"
+        "    (Stack.Element (S, 1));\n"
+        "  procedure Q is\n"
+        "  begin\n"
+        "    null;\n"
+        "  end Q;\n"
+        "end P;\n"))
+
+    # 59. The same standalone 'is' on a real body must still push its frame, and
+    #     a task type's standalone 'is' must be untouched by the function rule.
+    cases.append((
+        "package body P is\n"
+        "function F return Integer\n"
+        "is\n"
+        "R : Integer := 0;\n"
+        "begin\n"
+        "return R;\n"
+        "end F;\n"
+        "task type W (Flag : Boolean) with\n"
+        "Storage_Size => 64\n"
+        "is\n"
+        "entry E;\n"
+        "end W;\n"
+        "end P;\n",
+
+        "package body P is\n"
+        "  function F return Integer\n"
+        "  is\n"
+        "    R : Integer := 0;\n"
+        "  begin\n"
+        "    return R;\n"
+        "  end F;\n"
+        "  task type W (Flag : Boolean) with\n"
+        "    Storage_Size => 64\n"
+        "  is\n"
+        "    entry E;\n"
+        "  end W;\n"
+        "end P;\n"))
+
     for pair in cases:
         let src: str = pair[0]
         let want: str = pair[1]
