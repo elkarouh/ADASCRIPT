@@ -1335,6 +1335,54 @@ def run_tests() -> int:
         "  null;\n"
         "end P;\n"))
 
+    # 52. Regression: an expression function whose parameter list spans several
+    #     physical lines. The 'is' ending the header lands on the line that closes
+    #     the parameter list, so the header's leading word is no longer visible
+    #     there; that path used to push a PKG frame unconditionally. An expression
+    #     function has no 'end', so the frame never popped and every declaration
+    #     after it drifted one level deeper.
+    cases.append((
+        "package body P is\n"
+        "function Is_Valid_Char (The_Char         : in Character;\n"
+        "Allow_Underscore : in Boolean) return Boolean is\n"
+        "(Is_Upper (The_Char) or else (Allow_Underscore and The_Char = '_'));\n"
+        "procedure Q is\n"
+        "begin\n"
+        "null;\n"
+        "end Q;\n"
+        "end P;\n",
+
+        "package body P is\n"
+        "  function Is_Valid_Char (The_Char         : in Character;\n"
+        "                          Allow_Underscore : in Boolean) return Boolean is\n"
+        "    (Is_Upper (The_Char) or else (Allow_Underscore and The_Char = '_'));\n"
+        "  procedure Q is\n"
+        "  begin\n"
+        "    null;\n"
+        "  end Q;\n"
+        "end P;\n"))
+
+    # 53. The same multi-line header, but with a real body: the deferred push must
+    #     still happen, so 'begin'/'end' pair with the function as before.
+    cases.append((
+        "package body P is\n"
+        "function F (A : Integer;\n"
+        "B : Integer) return Integer is\n"
+        "R : Integer := 0;\n"
+        "begin\n"
+        "return R;\n"
+        "end F;\n"
+        "end P;\n",
+
+        "package body P is\n"
+        "  function F (A : Integer;\n"
+        "              B : Integer) return Integer is\n"
+        "    R : Integer := 0;\n"
+        "  begin\n"
+        "    return R;\n"
+        "  end F;\n"
+        "end P;\n"))
+
     for pair in cases:
         let src: str = pair[0]
         let want: str = pair[1]

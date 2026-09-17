@@ -369,7 +369,7 @@ already seen.
 
 ### The wire protocol
 
-The indenter's state is the `Indenter` object's 14 fields (the block stack, the
+The indenter's state is the `Indenter` object's 16 fields (the block stack, the
 paren stack, the continuation flags, the condition tracker — see `dump_state` in
 `ada_indent.ady`). Two flags expose it on the normal stdin → stdout pipe:
 
@@ -379,9 +379,9 @@ paren stack, the continuation flags, the condition tracker — see `dump_state` 
 
   ```
   package Foo is
-  ##STATE:stack=PKG|pd=0|ps=F|pi=F|cs=0|cb=0|cvb=0|ic=F|vb=0|psk=|pc=F|al=0|pnl=0|pnld=-1
+  ##STATE:stack=PKG|pd=0|ps=F|cf=F|pi=F|cs=0|cb=0|cvb=0|ic=F|vb=0|psk=|pc=F|al=0|pnl=0|pnld=-1|ppl=0
      procedure Bar;
-  ##STATE:stack=PKG|pd=0|ps=F|pi=F|cs=0|cb=0|cvb=0|ic=F|vb=1|psk=|pc=F|al=0|pnl=0|pnld=-1
+  ##STATE:stack=PKG|pd=0|ps=F|cf=F|pi=F|cs=0|cb=0|cvb=0|ic=F|vb=1|psk=|pc=F|al=0|pnl=0|pnld=-1|ppl=0
   ```
 
 - **`--state <blob>`** — initialise the indenter from a `<blob>` instead of from
