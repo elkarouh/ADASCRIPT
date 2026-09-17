@@ -136,6 +136,15 @@ export CM_ROOT
 check "-closure resolves a SYSTEM"  1 "$("$PGREP" -closure ALPHA -verbose -no_colors remote 2>/dev/null | grep -c '^!=====')"
 check "...and searches it"          4 "$("$PGREP" -closure ALPHA -no_colors remote | grep -c ':.*remote')"
 check "-closure says the directory" 1 "$("$PGREP" -closure ALPHA -verbose -no_colors remote 2>/dev/null | grep -c '^Closure *: ALPHA.SUB.LATEST')"
+# On a view context, a $CONTEXT_CM_BASELINE naming a baseline of the same
+# system wins over .LATEST -- and off one, it does not. The two resolve to
+# the same build here, which is why this is a check on the Closure line
+# rather than on what comes back.
+check "a view context wins"         1 \
+    "$(CONTEXT_CM_BASELINE=ALPHA.SUB.44.0.0.1 "$PGREP" -closure ALPHA -verbose -no_colors remote 2>/dev/null | grep -c '^Closure *: ALPHA.SUB.44.0.0.1')"
+check "...and another system's not" 1 \
+    "$(CONTEXT_CM_BASELINE=BETA.SUB.44.0.0.1 "$PGREP" -closure ALPHA -verbose -no_colors remote 2>/dev/null | grep -c '^Closure *: ALPHA.SUB.LATEST')"
+
 # A baseline ID is not a SYSTEM: its first dot is the directory separator.
 check "-closure takes a baseline"   4 "$("$PGREP" -closure ALPHA.SUB.LATEST -no_colors remote | grep -c ':.*remote')"
 # The branches are a closure's own business: -closure says which builds.
