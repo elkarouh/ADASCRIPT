@@ -57,6 +57,11 @@ Pgrep -? | -help | -html
 Pgrep [options] [--] <GREP_PARAMS | -no-grep>
 ```
 
+Its own grep arguments are `--line-number --with-filename
+--binary-files=without-match`: a CM tree holds generated binaries with text
+in them, and `Binary file … matches` in the middle of a search is noise
+rather than an answer.
+
 | | |
 |---|---|
 | `-closure <SYSTEM \| BASELINE_ID \| PROJECT_BASELINE_ID>` | search the closure of that system or baseline |

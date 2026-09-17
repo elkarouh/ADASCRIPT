@@ -258,7 +258,13 @@ def value_after(argv: []str, i: Natural, what: str) -> str:
 
 # What goes to grep before the caller's own arguments; also the measure of
 # whether the caller gave any, which is what says a search pattern is missing.
-let DEFAULT_GREP_PARAMS: []str = ["--line-number", "--with-filename"]
+#
+# --binary-files=without-match is the site's: a CM tree holds generated
+# binaries with text in them, and `Binary file ... matches` in the middle of
+# a search for a name is noise rather than an answer. The ksh version this
+# was translated from did not have it; the one installed on the site does.
+let DEFAULT_GREP_PARAMS: []str = ["--line-number", "--with-filename",
+                                  "--binary-files=without-match"]
 
 
 class Options:

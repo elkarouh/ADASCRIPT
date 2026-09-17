@@ -46,6 +46,9 @@ for sys in ALPHA BETA; do
     # find piped into a bare xargs splits it into two names that do not exist.
     echo "remote spaced"     > "$ORD/build_E1/sources/two words.txt"
     echo "remote in branch"  > "$PRJ/build_E1/sources/main.adb"
+    # A generated binary with the word in it: `Binary file ... matches` is
+    # noise in the middle of a search, so grep is told not to say it.
+    printf 'remote\000binary\n' > "$ORD/build_E1/sources/generated.dat"
     mkdir -p "$OT/$sys"
     ln -s "$ORD" "$OT/$sys/SUB.LATEST"
     ln -s "$PRJ" "$OT/$sys/SUB.TBO.LATEST"
@@ -116,11 +119,12 @@ check "-all finds the branch"      2 "$("$PGREP" -all -no_colors remote | grep -
 check "-subsys narrows"            1 "$("$PGREP" -subsys alpha -no_colors remote | grep -c '^!=====')"
 # The file lines, not the header lines: a header names the subsystem
 # directory, so it has a slash in it too.
-check "-no-grep lists files"       8 "$("$PGREP" -no-grep | grep -c '^/')"
+check "-no-grep lists files"      10 "$("$PGREP" -no-grep | grep -c '^/')"
 check "a name with a space is one" 2 "$("$PGREP" -no_colors remote | grep -c 'two words.txt:')"
 check "-ada takes only .ad?"       2 "$("$PGREP" -ada -no-grep | grep -c '\.adb$')"
 check "-ppat filters on the path"  2 "$("$PGREP" -ppat deep -no-grep | grep -c 'queue.ksh')"
 check "a .gz is never searched"    0 "$("$PGREP" -no-grep | grep -c '\.gz')"
+check "a binary match is not said" 0 "$("$PGREP" -no_colors remote | grep -c 'Binary file')"
 check "special_files are searched" 2 "$("$PGREP" -no-grep | grep -c 'special_files')"
 check "-basenames cuts the path"   6 "$("$PGREP" -basenames -no_colors remote | grep -c '^[a-z]*\.[a-z]*:')"
 
