@@ -204,11 +204,108 @@ def scan_parens(text: str, base_depth: Natural, base_col: Natural) -> [](int, in
 
 
 # ---------------------------------------------------------------------------
+# Construct names — the anchors an 'end' line is checked against.
+# ---------------------------------------------------------------------------
+
+# Keywords that qualify a declaration rather than name it. They are skipped on
+# the way to the name: 'package body Parent.Child is' names Parent.Child.
+const NAME_QUALIFIER: []str = ["package", "procedure", "function", "task",
+                                "protected", "entry", "type", "subtype",
+                                "generic", "overriding", "not", "separate",
+                                "body"]
+
+# The words that may open a named declaration. 'body' is absent on purpose: it
+# never leads a line, so a line starting with it is not a declaration head.
+const NAME_OPENER: []str = ["package", "procedure", "function", "task",
+                             "protected", "entry", "type", "subtype",
+                             "generic", "overriding", "not", "separate"]
+
+# 'end <kw>' names a construct KIND, not an instance, so it carries no name to
+# match a frame against.
+const END_KEYWORD: []str = ["if", "loop", "case", "record", "select", "return"]
+
+
+def lead_words(code_s: str) -> []str:
+    """The run of whole identifiers at the front of code_s, in order.
+
+    Scanning stops at the first character that is neither part of an identifier
+    nor a blank — '(', ':', ';' — so 'procedure P (A : Integer;' yields
+    ['procedure', 'P'] whether or not a space precedes the '('. A '.' counts as
+    part of the identifier: a child unit is written 'Parent.Child' in both its
+    declaration and its 'end', so the two match only if the dots survive here.
+    """
+    var i: Natural = 0
+    let n: Natural = len(code_s)
+    while i < n:
+        i = skip_space(code_s, i)
+        break if i >= n
+        break if not is_ident_ch(code_s[i]) and code_s[i] != '.'
+        var j: Natural = i
+        while j < n and (is_ident_ch(code_s[j]) or code_s[j] == '.'):
+            j += 1
+        result.append(code_s[i:j])
+        i = j
+
+
+def declared_name(code_s: str) -> str:
+    """The name a block-opening line gives its construct, or ''.
+
+    Two forms carry a name. A declaration names itself after its qualifiers
+    ('procedure P (', 'task body T is'), and a block or loop label names itself
+    with a trailing colon ('Outer : declare', 'Outer :' on its own line). Every
+    other line — 'begin', 'if X then', 'case Y is' — is unnamed, and an unnamed
+    frame is never used to contradict an 'end'.
+    """
+    let ws: []str = lead_words(code_s)
+    return "" if len(ws) == 0
+    if ws[0].lower() in NAME_OPENER:
+        var i: Natural = 0
+        while i < len(ws) and ws[i].lower() in NAME_QUALIFIER:
+            i += 1
+        return ws[i] if i < len(ws) else ""
+    # A label: one identifier, a ':', then either nothing (the label sits on its
+    # own line) or the construct it labels. 'X : Integer := 0;' has the same
+    # shape and is a variable, not a label, so the word after the colon has to
+    # be one that opens a block — otherwise every local declaration would be
+    # taken for a label and would misname the next frame.
+    let after: Natural = skip_space(code_s, len(ws[0]))
+    return "" if after >= len(code_s) or code_s[after] != ':'
+    return "" if after + 1 < len(code_s) and code_s[after + 1] == '='
+    let rest: str = code_s[after + 1:].strip()
+    if rest == "" or lead_ident(rest).lower() in ("declare", "begin", "for", "while", "loop"):
+        return ws[0]
+    return ""
+
+
+def end_name(code_s: str) -> str:
+    """The construct name an 'end' line closes, or ''.
+
+    'end Foo;' -> 'Foo'; 'end loop Outer;' -> 'Outer'; 'end;', 'end if;' and
+    'end record;' -> '', because those name a kind rather than an instance.
+    """
+    let ws: []str = lead_words(code_s)
+    return "" if len(ws) == 0 or ws[0].lower() != "end"
+    var i: Natural = 1
+    if i < len(ws) and ws[i].lower() in END_KEYWORD:
+        i += 1
+    return ws[i] if i < len(ws) else ""
+
+
+# ---------------------------------------------------------------------------
 # The indenter proper.
 # ---------------------------------------------------------------------------
 
 class Indenter:
     stack: []Block_T = []
+    frame_names: []str = []      # name of each open frame, '' when it has none;
+                                 # kept exactly in step with `stack` by _push/_pop
+    pending_label: str = ""      # a bare 'Outer :' label line awaiting its block
+    frame_name: str = ""         # the name declared by the logical line being read
+    spec_name: str = ""          # name of the deferred 'function ... is' header: the
+                                 # body arrives on a later line, which overwrites
+                                 # frame_name before the deferred push happens
+    lnum: Natural = 0            # physical line number, for diagnostics
+    warn: bool = True            # report 'end' lines that contradict the stack
     paren_depth: Natural = 0
     pending_spec: bool = False   # a 'function ... is' header whose body kind is not yet known
     cont_func: bool = False      # the declaration being continued started with 'function' — the
@@ -227,11 +324,58 @@ class Indenter:
     paren_prev_lead: Natural = 0         # actual lead column of the previous code line in this paren
                                          # (valid when paren_next_lead_depth == entry depth)
 
+    def _push_frame(self, kind: Block_T, name: str = ""):
+        """Open a frame. Every push goes through here so that `frame_names`
+        cannot drift out of step with `stack` — a drift would make an 'end'
+        match the wrong construct, which is worse than not matching at all."""
+        self.stack.append(kind)
+        self.frame_names.append(name)
+
+    def _pop_frame(self):
+        """Close the innermost frame, if there is one."""
+        if self.stack:
+            self.stack.pop()
+            self.frame_names.pop()
+
+    def _close_named(self, name: str) -> bool:
+        """Close frames up to and including the innermost one called `name`.
+
+        Returns False when no open frame carries that name, leaving the stack
+        untouched — the caller then falls back to closing one frame, which is
+        what a nameless 'end' does.
+
+        This is the indenter's one chance to notice that its stack has drifted
+        from the source. A frame that was opened in error (a construct parsed
+        as a block when it opens none) is never closed by an 'end' of its own,
+        so it would otherwise shift every following line to the end of the
+        file. Finding the name further down means exactly that: the frames
+        above it were never real, and dropping them re-grounds the stack on
+        the source instead of compounding the error.
+        """
+        var i: int = len(self.stack) - 1      # int: the scan runs down past 0
+        while i >= 0:
+            if self.frame_names[i].lower() == name.lower():
+                while len(self.stack) > i:
+                    self._pop_frame()
+                return True
+            i -= 1
+        return False
+
+    def _warn(self, msg: str):
+        """Report a desynchronisation on stderr, never on stdout: the indented
+        text is the output, and a formatter that pollutes it is unusable in a
+        pipe."""
+        if self.warn:
+            stderr.writeLine(f"ada_indent: line {self.lnum}: {msg}")
+
     def dump_state(self) -> str:
         """Serialize the full indenter state to a compact, opaque string."""
+        # 'KIND:name' per frame, name empty when the construct has none. The two
+        # travel as one field so a restored stack cannot come back with its names
+        # offset by one, which would silently mis-anchor every later 'end'.
         var stack_names: []str = []
-        for b in self.stack:
-            stack_names.append(str(b))
+        for i in range(len(self.stack)):
+            stack_names.append(str(self.stack[i]) + ":" + self.frame_names[i])
         var ps_parts: []str = []
         for t in self.paren_stack:
             ps_parts.append(str(t[0]) + ":" + str(t[1]) + ":" + str(t[2]))
@@ -240,6 +384,10 @@ class Indenter:
             "pd="    + str(self.paren_depth),
             "ps="    + ("T" if self.pending_spec    else "F"),
             "cf="    + ("T" if self.cont_func       else "F"),
+            "pl="    + self.pending_label,
+            "fn="    + self.frame_name,
+            "sn="    + self.spec_name,
+            "ln="    + str(self.lnum),
             "pi="    + ("T" if self.pending_inst    else "F"),
             "cs="    + str(self.cond_state),
             "cb="    + str(self.cond_base),
@@ -258,6 +406,11 @@ class Indenter:
     def load_state(self, s: str):
         """Restore indenter state from a string previously produced by dump_state."""
         self.stack               = []
+        self.frame_names         = []
+        self.pending_label       = ""
+        self.frame_name          = ""
+        self.spec_name           = ""
+        self.lnum                = 0
         self.paren_depth         = 0
         self.pending_spec        = False
         self.cont_func           = False
@@ -280,11 +433,19 @@ class Indenter:
             let val: str = part[eq + 1:]
             case key:
                 when "stack" if val != "":
-                     for name in val.split(","):
-                         self.stack.append(Block_T(name))
+                     for entry in val.split(","):
+                         let c: int = entry.find(":")   # int: -1 when absent
+                         if c < 0:
+                             self._push_frame(Block_T(entry))
+                         else:
+                             self._push_frame(Block_T(entry[:c]), entry[c + 1:])
                 when "pd": self.paren_depth = int(val)
                 when "ps": self.pending_spec = val == "T"
                 when "cf": self.cont_func = val == "T"
+                when "pl": self.pending_label = val
+                when "fn": self.frame_name = val
+                when "sn": self.spec_name = val
+                when "ln": self.lnum = int(val)
                 when "pi": self.pending_inst = val == "T"
                 when "cs": self.cond_state = int(val)
                 when "cb": self.cond_base = int(val)
@@ -316,6 +477,7 @@ class Indenter:
         # Ada's conventions for the library's generic stripper: '--' opens a
         # comment, '"' delimits a string, so a '--' inside one is not a
         # comment. Character literals and doubled quotes are not modelled.
+        self.lnum += 1
         let code: str = strip_line_comment(raw2, "--", '"')
         let code_s: str = code.strip()
         let emit_text: str = raw2.strip()
@@ -399,6 +561,16 @@ class Indenter:
         # expression-function deferral below still has to recognise the header.
         if cont == 0:
             self.cont_func = lw == "function"
+            # The name this logical line declares, remembered for the 'end' that
+            # will close it. A bare 'Outer :' label line declares a name but opens
+            # nothing, so the name waits for the declare/begin/for/while it labels.
+            let dn: str = declared_name(code_s)
+            if dn != "" and code_s.endswith(":"):
+                self.pending_label = dn
+                self.frame_name = ""
+            else:
+                self.frame_name = dn if dn != "" else self.pending_label
+                self.pending_label = ""
         var disp: int = len(self.stack)      # int: the 'end' cases take it to len-1, so -1
 
         # A 'type T is' that turns out to be an enum, derived, or other non-record
@@ -410,7 +582,7 @@ class Indenter:
         # Guard: do NOT pop if this line IS 'record' — let the keyword dispatch handle it.
         if not self.in_cont and self.paren_depth == 0 and self.stack and \
           self.stack[-1] == TYPE_HEADER and lw != "record" and not code_s.startswith("("):
-            self.stack.pop()
+            self._pop_frame()
             disp = len(self.stack)
 
         # An 'X is\nnew Y;' generic instantiation pushed a PKG for 'X is'. Once the
@@ -419,7 +591,7 @@ class Indenter:
         if self.pending_inst and not self.in_cont and self.paren_depth == 0:
             self.pending_inst = False
             if self.stack and self.stack[-1] == PKG:
-                self.stack.pop()
+                self._pop_frame()
                 disp = len(self.stack)
 
         # Resolve a deferred 'function ... is' header (set on the previous line).
@@ -437,7 +609,7 @@ class Indenter:
                 self._push_parens(emit_text, lead_e, entry_depth, self.paren_depth)
                 return " " * lead_e + emit_text
             else:
-                self.stack.append(PKG)
+                self._push_frame(PKG, self.spec_name)
                 disp = len(self.stack)
 
         # Inside an unclosed parenthesis the line is a continuation of an
@@ -605,7 +777,7 @@ class Indenter:
                     # A multi-line if/elsif condition closed its parens and
                     # reached 'then' on the same line: end it like cond_state.
                     if self.cond_state == 1:
-                        self.stack.append(IF)
+                        self._push_frame(IF)
                     self.cond_state = 0
                 else:
                     case plt:
@@ -617,16 +789,17 @@ class Indenter:
                             # 'end', so a frame pushed here would never be popped and
                             # every following line would drift one level deeper.
                             if lw == "case":
-                                self.stack.append(CASE)
+                                self._push_frame(CASE)
                             elif self.cont_func:
                                 self.pending_spec = True
+                                self.spec_name = self.frame_name
                             else:
-                                self.stack.append(PKG)
-                        when "then": self.stack.append(IF)
-                        when "loop": self.stack.append(LOOP)
-                        when "record" if lw != "null": self.stack.append(RECORD)
-                        when "select": self.stack.append(SELECT)
-                        when "do": self.stack.append(DO)
+                                self._push_frame(PKG, self.frame_name)
+                        when "then": self._push_frame(IF)
+                        when "loop": self._push_frame(LOOP, self.frame_name)
+                        when "record" if lw != "null": self._push_frame(RECORD)
+                        when "select": self._push_frame(SELECT)
+                        when "do": self._push_frame(DO)
                         when others: pass
             return " " * lead + emit_text
 
@@ -641,7 +814,7 @@ class Indenter:
             if last == "then" or lw == "then":
                 disp = self.cond_base
                 if self.cond_state == 1:
-                    self.stack.append(IF)
+                    self._push_frame(IF)
                 self.cond_state = 0
             elif is_term_continuation(code_s) and lw != "and" and lw != "or":
                 # A line that continues the previous term across the break (>=,
@@ -681,9 +854,31 @@ class Indenter:
         case lw:
             when "end":
                 while self.stack and self.stack[-1] == WHEN:
-                    self.stack.pop()
-                if self.stack:
-                    self.stack.pop()
+                    self._pop_frame()
+                # 'end Foo;' names the construct it closes, which is the only
+                # place the source states the block structure outright rather
+                # than leaving it to be inferred. Check the name against the
+                # frame being closed: when it names a frame further down, the
+                # frames above it were opened in error and are dropped here, so
+                # a mis-parse costs the lines up to this 'end' instead of every
+                # line to the end of the file.
+                let en: str = end_name(code_s)
+                let top_name: str = self.frame_names[-1] if self.stack else ""
+                let before: Natural = len(self.stack)
+                if en == "" or top_name.lower() == en.lower():
+                    self._pop_frame()                      # the ordinary, matching case
+                elif self._close_named(en):
+                    # _close_named popped the matching frame plus everything
+                    # above it; all but the match were never really open.
+                    # NB: one message, one f-string — the transpiler does not
+                    # concatenate adjacent string literals, it keeps the first.
+                    let stale: Natural = before - len(self.stack) - 1
+                    self._warn(f"'end {en}' closes an outer construct: dropped {stale} unclosed frame(s) to resynchronise")
+                elif top_name == "":
+                    self._pop_frame()                      # unnamed frame: nothing to contradict
+                else:
+                    self._warn(f"'end {en}' does not match the open '{top_name}'")
+                    self._pop_frame()
                 disp = len(self.stack)
                 # 'type T is' on its own line pushes TYPE_HEADER, then the
                 # following 'record' line pushes RECORD. 'end record' closes
@@ -691,7 +886,7 @@ class Indenter:
                 # AFTER this one resume at the enclosing scope level.
                 # disp is set first so 'end record' itself aligns with 'record'.
                 if last_word(code_s) == "record" and self.stack and self.stack[-1] == TYPE_HEADER:
-                    self.stack.pop()
+                    self._pop_frame()
 
             when "begin":
                 if self.stack and (self.stack[-1] == PKG or self.stack[-1] == DECLARE):
@@ -699,13 +894,13 @@ class Indenter:
                     self.stack[-1] = BLOCK
                 else:
                     disp = len(self.stack)
-                    self.stack.append(BLOCK)
+                    self._push_frame(BLOCK, self.frame_name)
 
             when "when":
                 if self.stack and self.stack[-1] == WHEN:
-                    self.stack.pop()
+                    self._pop_frame()
                 disp = len(self.stack)
-                self.stack.append(WHEN)
+                self._push_frame(WHEN)
 
             when "elsif":
                 disp = len(self.stack) - 1
@@ -720,7 +915,7 @@ class Indenter:
                 # (only 'end' and 'when' pop it). 'or'/'else' splitting the
                 # select must clear it first so they align with 'select'.
                 while self.stack and self.stack[-1] == WHEN:
-                    self.stack.pop()
+                    self._pop_frame()
                 if cont == 0:
                     disp = len(self.stack) - 1
 
@@ -749,17 +944,19 @@ class Indenter:
                             # it is a plain continuation declaration.
                             if lw == "function":
                                 self.pending_spec = True
+                                self.spec_name = self.frame_name
                             elif lw == "type":
-                                self.stack.append(TYPE_HEADER)
+                                self._push_frame(TYPE_HEADER, self.frame_name)
                             elif lw != "subtype":
-                                self.stack.append(CASE if lw == "case" else PKG)
-                        when "then": self.stack.append(IF)
-                        when "loop": self.stack.append(LOOP)
+                                self._push_frame(CASE if lw == "case" else PKG,
+                                           "" if lw == "case" else self.frame_name)
+                        when "then": self._push_frame(IF)
+                        when "loop": self._push_frame(LOOP, self.frame_name)
                         when "record" if lw != "null":
-                            self.stack.append(RECORD)
-                        when "select": self.stack.append(SELECT)
-                        when "do": self.stack.append(DO)
-                        when "declare": self.stack.append(DECLARE)
+                            self._push_frame(RECORD)
+                        when "select": self._push_frame(SELECT)
+                        when "do": self._push_frame(DO)
+                        when "declare": self._push_frame(DECLARE, self.frame_name)
                         when others: pass
                 if lw == "if" and last != "then":
                     self.cond_state = 1
@@ -841,6 +1038,9 @@ Options:
                       Consumed by emacs integration to enable incremental re-indentation.
   --state <data>      Restore the indenter from a previously-emitted state snapshot before processing
                       the first input line.  Must  precede the lines the snapshot refers to.
+  -q, --quiet         Suppress the stderr diagnostics reported when an 'end' line contradicts
+                      the block structure seen so far.  The indenting is unaffected: the same
+                      resynchronisation happens either way, it is just not reported.
 """
 
 def main() -> Natural:
@@ -857,6 +1057,8 @@ def main() -> Natural:
                 return 0
             when "--emit-state":
                 do_emit_state = True
+            when "-q" | "--quiet":
+                ind.warn = False
             when "--state":
                 if ai + 1 < $#:
                     ai += 1

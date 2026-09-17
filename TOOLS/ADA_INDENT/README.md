@@ -8,6 +8,39 @@ expressions, types, or semantics — only the keywords that **open**, **close**,
 or **split** an indented block. This document specifies that simplified grammar
 and how it drives the indenter.
 
+## Recovering from a mis-parse
+
+The block stack is inferred, so a construct parsed as opening a block when it
+opens none would otherwise shift every following line to the end of the file.
+`end` lines are used as anchors against that. Ada states the structure outright
+there — `end Foo;`, `end loop Outer;` — and the indenter matches that name
+against the frame it is about to close:
+
+- **It matches** (the overwhelmingly common case): close one frame, as before.
+- **It names a frame further down the stack**: the frames above that one were
+  never really open, so they are dropped and the stack is re-grounded on the
+  source. The damage stops at this `end` instead of running to EOF.
+- **It matches nothing, and the frame being closed has a name**: the stack has
+  drifted in a way that cannot be repaired from here. One frame is closed, as
+  before, and the mismatch is reported.
+
+`end;`, `end if;`, `end case;`, `end loop;`, `end record;`, `end select;` and
+`end return;` name a construct *kind* rather than an instance, so they carry no
+name to check and behave exactly as they always did. The same is true of any
+frame the indenter could not name — an unlabelled block — which is never used
+to contradict an `end`.
+
+Diagnostics go to **stderr**, never stdout, so a formatter pipe stays clean;
+`-q` / `--quiet` silences them. Silencing changes nothing about the indenting:
+the same resynchronisation happens either way.
+
+This bounds a mis-parse to the innermost enclosing *named* construct. It is not
+a full recovery: a bad frame in a package body's declarative part is only
+re-grounded at that package's own `end`, which may be the last line of the
+file. Containing it more tightly than that would mean trusting the input's
+existing indentation, which this tool deliberately ignores — see the fixpoint
+requirement in `test_ada_indent.ady`.
+
 ## Running
 
 Compile once (the shebang already encodes `-d:release --opt:speed`), then run
@@ -369,7 +402,7 @@ already seen.
 
 ### The wire protocol
 
-The indenter's state is the `Indenter` object's 16 fields (the block stack, the
+The indenter's state is the `Indenter` object's 21 fields (the block stack, the
 paren stack, the continuation flags, the condition tracker — see `dump_state` in
 `ada_indent.ady`). Two flags expose it on the normal stdin → stdout pipe:
 
@@ -379,9 +412,9 @@ paren stack, the continuation flags, the condition tracker — see `dump_state` 
 
   ```
   package Foo is
-  ##STATE:stack=PKG|pd=0|ps=F|cf=F|pi=F|cs=0|cb=0|cvb=0|ic=F|vb=0|psk=|pc=F|al=0|pnl=0|pnld=-1|ppl=0
+  ##STATE:stack=PKG:Foo|pd=0|ps=F|cf=F|pl=|fn=Foo|sn=|ln=1|pi=F|cs=0|cb=0|cvb=0|ic=F|vb=0|psk=|pc=F|al=0|pnl=0|pnld=-1|ppl=0
      procedure Bar;
-  ##STATE:stack=PKG|pd=0|ps=F|cf=F|pi=F|cs=0|cb=0|cvb=0|ic=F|vb=1|psk=|pc=F|al=0|pnl=0|pnld=-1|ppl=0
+  ##STATE:stack=PKG:Foo|pd=0|ps=F|cf=F|pl=|fn=Bar|sn=|ln=2|pi=F|cs=0|cb=0|cvb=0|ic=F|vb=1|psk=|pc=F|al=0|pnl=0|pnld=-1|ppl=0
   ```
 
 - **`--state <blob>`** — initialise the indenter from a `<blob>` instead of from

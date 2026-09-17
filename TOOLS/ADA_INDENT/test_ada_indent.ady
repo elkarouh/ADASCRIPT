@@ -1383,10 +1383,84 @@ def run_tests() -> int:
         "  end F;\n"
         "end P;\n"))
 
+    # 54. Resynchronisation: a frame that is opened but never closed by an 'end'
+    #     of its own (here 'procedure Leaked', whose body is missing) used to
+    #     shift every following line for the rest of the file. The enclosing
+    #     'end Outer;' names a construct further down the stack, which says the
+    #     frames above it were never real: they are dropped, and 'procedure
+    #     After' lands back at the correct level.
+    cases.append((
+        "package body P is\n"
+        "procedure Outer is\n"
+        "procedure Leaked is\n"
+        "begin\n"
+        "null;\n"
+        "end Outer;\n"
+        "procedure After is\n"
+        "begin\n"
+        "null;\n"
+        "end After;\n"
+        "end P;\n",
+
+        "package body P is\n"
+        "  procedure Outer is\n"
+        "    procedure Leaked is\n"
+        "    begin\n"
+        "      null;\n"
+        "  end Outer;\n"
+        "  procedure After is\n"
+        "  begin\n"
+        "    null;\n"
+        "  end After;\n"
+        "end P;\n"))
+
+    # 55. The anchors must not fire on well-formed code. Labelled blocks and
+    #     loops ('end loop Outer;', 'end Log;'), the keyword ends ('end case;',
+    #     'end if;') and a dotted child unit ('end Parent.Child;') all name
+    #     exactly the frame they close, so nothing is dropped and the whole
+    #     thing is a fixpoint.
+    cases.append((
+        "package body Parent.Child is\n"
+        "procedure P is\n"
+        "X : Integer := 0;\n"
+        "begin\n"
+        "Outer :\n"
+        "for I in 1 .. 10 loop\n"
+        "Inner : while X > 0 loop\n"
+        "X := X - 1;\n"
+        "end loop Inner;\n"
+        "end loop Outer;\n"
+        "case X is\n"
+        "when 1 =>\n"
+        "null;\n"
+        "end case;\n"
+        "end P;\n"
+        "end Parent.Child;\n",
+
+        "package body Parent.Child is\n"
+        "  procedure P is\n"
+        "    X : Integer := 0;\n"
+        "  begin\n"
+        "    Outer :\n"
+        "    for I in 1 .. 10 loop\n"
+        "      Inner : while X > 0 loop\n"
+        "        X := X - 1;\n"
+        "      end loop Inner;\n"
+        "    end loop Outer;\n"
+        "    case X is\n"
+        "      when 1 =>\n"
+        "        null;\n"
+        "    end case;\n"
+        "  end P;\n"
+        "end Parent.Child;\n"))
+
     for pair in cases:
         let src: str = pair[0]
         let want: str = pair[1]
         var ind: Indenter = Indenter()
+        # The cases that desynchronise on purpose report it on stderr; the table
+        # is checking the indentation they recover to, not the message.
+        ind.warn = False
         let got: str = "\n".join([ind.indent_line(line) for line in src.split("\n")])
         if got == want:
             passed += 1
