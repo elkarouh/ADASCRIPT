@@ -1,0 +1,540 @@
+#!/usr/bin/env ady2nim
+#ady2nim-args c -d:release
+"""Pgrep — grep the sources of a build closure, or of every subsystem's LATEST build.
+
+Two searches, one program:
+
+  (1) the closure of a system, a baseline ID or a project baseline ID
+  (2) the LATEST (or LATEST_GOOD) build of every subsystem
+
+Each subsystem is searched in a process of its own and the results are
+printed in subsystem order, so the wall time is the slowest subsystem's
+rather than the sum of all of them.
+
+The ksh original dot-sources `trace`, `cm_audit_logger` and
+`Caux_functions`. None of the three is ever called by name -- what they
+install is a ksh environment (traps, an ERR hook, the audit record a sourced
+library writes on its own), and none of it has a meaning in a compiled
+program. The CM helpers the script really uses -- `Psort`, `cc_pattern`,
+`get_topmost_subsystems` -- are run as commands, as they are there.
+"""
+
+nimport os
+
+# `$0` is the program name; a built copy can carry a leading dot.
+let PROG: str = Path($0).name.lstrip(".")
+let PADDING: str = "=" * 93
+
+def die(msg: str):
+    stderr.writeLine(PROG + ": " + msg)
+    quit(1)
+
+# ---------------------------------------------------------------------------
+# Help
+# ---------------------------------------------------------------------------
+
+def usage() -> str:
+    f"""Usage:
+  {PROG} -? | -help | -html
+  {PROG} [options] [--] <GREP_PARAMS | -no-grep>
+
+Options:
+  -closure <SYSTEM | BASELINE_ID | PROJECT_BASELINE_ID>
+                                   Search within the closure of a system, baseline, or project baseline.
+  -subsys <SUBSYS_BUILD_DIR_PATTERN>
+                                   Search for files on the subsystems with that pattern.
+  -ada                             Restrict search to ADA files (*.ad?).
+  -latest_good                     Search within the LATEST_GOOD builds instead of the default LATEST builds.
+  -fpat <FILE_PATTERN>             Filter files based on the specified filename pattern.
+  -ppat <PATH_PATTERN>             Filter files based on the specified path pattern.
+  -sort                            Sort the output results.
+  -verbose                         Enable detailed output, including subsystem baseline headers.
+  -no_colors                       Disable colored output (default: enabled for terminal, disabled for file output).
+  -basenames                       Display only file basenames (hide full paths for easier comparison).
+  -no-grep                         Skip content searching and only list matching files.
+  -all                             Include project branch builds when searching in the LATEST builds of all subsystems.
+
+Default Behavior:
+- If `-closure` is not provided, the script searches within the LATEST builds of all subsystems.
+- If you want to use the *extended regular expressions (ERE)* use the `-E` flag (as with grep).
+"""
+
+def pod_text() -> str:
+    """The manual page, in POD, for pod2text or pod2html to render."""
+    f"""=pod
+
+=head1 NAME
+
+{PROG}
+
+=head1 DESCRIPTION
+
+Grep in all files within the:
+
+(1) closure of a system or a baseline ID or a project baseline ID
+
+(2) LATEST builds for all subsystems.
+
+When grepping files within the closure of a system (1), the default behaviour is to search for files within the LATEST
+system build closure, but when used with the -latest_good option, it will search for files within the LATEST_GOOD system
+build closure.
+
+When grepping files within the LATEST builds for all subsystems (2), the default behaviour is to skip all project branch
+builds. Use the -all option if you don't want to skip the project branch builds, and use the -latest_good option if you
+want to search for files within the LATEST_GOOD builds.
+
+The -ada option will match the search to ADA files. Alternatively, you can have the same result using the -fpat option
+with the file pattern ".ad?".
+
+=head1 SYNOPSIS
+
+{usage()}
+
+=head2 Options
+
+=over 4
+
+=item B<-help>
+
+Print this message.
+
+=item B<-html>
+
+Print this help text in a browser.
+
+=item B<-basenames>
+
+Display basenames instead of full paths.
+
+=item B<-ada>
+
+Search all .ad? files.
+
+=item B<-all>
+
+Don't skip project branch builds when searching files within the LATEST builds for each subsystem. To search for files
+within the LATEST_GOOD builds use the -latest_good option.
+
+=item B<-closure E<lt>SYSTEM | BASELINE_ID E<gt>>
+
+Search for files within the closure of the topmost LATEST subsystem for SYSTEM or for BASELINE_ID.
+
+If you are not in a view context, the ${{CONTEXT_CM_BASELINE}} variable is not defined, and it will search for files
+within the closure of the topmost LATEST subsystem.
+
+To search for files within the LATEST_GOOD builds use the -latest_good option.
+
+=item B<-fpat E<lt>FILE_PATTERNE<gt>>
+
+File pattern, FILE_PATTERN, matches the filename for the file search.
+
+=item B<-latest_good>
+
+Search for files on the LATEST_GOOD builds. The default behaviour is to search for files on the LATEST builds.
+
+=item B<-no-grep>
+
+Don't grep the content of the files, list the files.
+
+=item B<-ppat E<lt>PATH_PATTERNE<gt>>
+
+Path pattern, PATH_PATTERN, matches the file pathname for the file search.
+
+=item B<-verbose>
+
+Show results with verbose output (=== header lines showing the subsystem baseline in which result are found).
+
+=item B<-no_colors>
+
+Show results without colors.
+
+=item B<-sort>
+
+Sort the files within the subsystems.
+
+=item B<-subsys E<lt>SUBSYS_BUILD_DIR_PATTERNE<gt>>
+
+Search for files on the subsystems with the <SUBSYS_BUILD_DIR_PATTERN> pattern.
+
+=back
+
+=head1 EXAMPLES
+
+To print help text:
+
+B<$ {PROG} -help>
+
+B<$ {PROG} -html>
+
+To search for the word "test" with grep option "-w" within the files of all the LATEST builds subsystem, including
+the projects:
+
+B<$ {PROG} -all -w test>
+
+To search for the word "remote" within the ADA files of the IPS LATEST_GOOD build closure:
+
+B<$ {PROG} -closure IFPS -latest_good -ada remote>
+
+To search for the word "remote" within the "*.ksh" files of the IPS LATEST_GOOD build closure:
+
+B<$ {PROG} -closure IFPS -latest_good -fpat "*.ksh" remote>
+
+To search for the word "remote" within the ADA files of the IFPS.IFPS_CONFIG.27.1.0.12 baseline ID build on a
+view context:
+
+B<$ Csetup -b IFPS.IFPS_CONFIG.27.1.0.12 view_search>
+
+B<$ {PROG} -closure IFPS -latest_good -ada remote>
+
+or, if you are not on a view context:
+
+B<$ {PROG} -closure IFPS.IFPS_CONFIG.27.1.0.12 -latest_good -ada remote>
+
+To search for the word "length" within files with the pattern name "*.ksh" and within paths with the pattern
+"*queue*" within the IFPS subsystem's closure, on the LATEST_GOOD builds. Additionally, it suppresses verbose output.
+
+B<$ {PROG} -closure IFPS -latest_good -fpat "*.ksh" -ppat "*queue*" -verbose length>
+
+To list the ada files of the TACT LATEST build closure with verbose output:
+
+B<$ {PROG} -ada -closure TACT -verbose -no-grep>
+
+To count the number files of the IFPS LATEST build closure:
+
+B<$ {PROG} -closure IFPS -no-grep | wc -l>
+
+=cut
+"""
+
+def print_help(as_html: bool):
+    """Render the POD, in a browser when asked and the terminal otherwise."""
+    let is_tty: int = shell: test -t 1
+    let browser: str = $BROWSER
+    if as_html and browser != "":
+        let page: str = "/tmp/" + PROG + "_help.html"
+        let html_rc: int = shell(stdin = pod_text()): pod2html --title={!PROG} > {!page}
+        let show_rc: int = shell: {browser} {!page}
+    elif is_tty == 0:
+        # A terminal gets it paged and coloured; a pipe gets it plain.
+        let cols: str = ${COLUMNS:-"80"}
+        let paged_rc: int = shell(stdin = pod_text()): pod2text --color --width {!cols} | more -f
+    else:
+        let plain_rc: int = shell(stdin = pod_text()): pod2text
+    quit(0)
+
+# ---------------------------------------------------------------------------
+# Options
+# ---------------------------------------------------------------------------
+
+var closure        : str  = ""
+var subsys_pattern : str  = ""
+var file_pattern   : str  = "*"
+var path_pattern   : str  = ""
+var good           : str  = ""      # "" or "_GOOD"
+var verbose        : bool = False
+var basenames      : bool = False
+var use_grep       : bool = True
+var skip_projects  : bool = True
+var ada            : bool = False
+var fpat_given     : bool = False
+var sort_output    : bool = False
+
+# Colours by default when stdout is a terminal, and never when it is a file.
+let stdout_is_tty: int = shell: test -t 1
+var with_colors: bool = stdout_is_tty == 0
+
+# What goes to grep. Everything after the options -- or after `--` -- is the
+# caller's, passed through untouched.
+var grep_params: []str = ["--line-number", "--with-filename"]
+let default_grep_params: Natural = grep_params'Length
+
+let args: []str = $@
+if args'Length == 0:
+    print usage()
+    quit(0)
+
+def value_after(argv: []str, i: Natural, opt: str) -> str:
+    """The argument after position i, or an error naming the option."""
+    if i + 1 >= argv'Length:
+        die(opt + " needs a value")
+    return argv[i + 1]
+
+var i: Natural = 0
+var in_grep_args: bool = False
+while i < args'Length:
+    let arg: str = args[i]
+    if in_grep_args:
+        # Past the options: the rest belongs to grep, `-` and all.
+        grep_params.append(arg)
+        i += 1
+        continue
+    # How many arguments this option takes: the shell version's `shift` count,
+    # and zero for the one that ends the options without being one.
+    var eaten: Natural = 1
+    case arg:
+        when "-?" | "-help":         print_help(False)
+        when "-ht" | "-html":        print_help(True)
+        when "-ada":
+            ada = True
+            file_pattern = "*.ad?"
+        when "-all":                 skip_projects = False
+        when "-latest_good":         good = "_GOOD"
+        when "-no-grep":             use_grep = False
+        when "-basenames":           basenames = True
+        when "-verbose":             verbose = True
+        when "-no_colors":           with_colors = False
+        when "-sort":                sort_output = True
+        when "-closure":
+            closure = value_after(args, i, arg)
+            eaten = 2
+        when "-fpat":
+            file_pattern = value_after(args, i, arg)
+            fpat_given = True
+            eaten = 2
+        when "-ppat":
+            path_pattern = value_after(args, i, arg)
+            eaten = 2
+        when "-subsys":
+            subsys_pattern = value_after(args, i, arg)
+            eaten = 2
+        when "--":
+            # The explicit end of the options.
+            in_grep_args = True
+        when others:
+            # Anything else is the search pattern: it belongs to grep, and it
+            # is not consumed here.
+            in_grep_args = True
+            eaten = 0
+    i += eaten
+
+# ---------------------------------------------------------------------------
+# What the options mean together
+# ---------------------------------------------------------------------------
+
+if use_grep and grep_params'Length == default_grep_params:
+    die("a search pattern must be defined. Use -no-grep if you want to list the files searched.")
+if not use_grep and grep_params'Length > default_grep_params:
+    stderr.writeLine(PROG + ": warning: the search pattern will be ignored since -no-grep is used.")
+if closure != "" and (subsys_pattern != "" or not skip_projects):
+    die("option -closure cannot be used with -all or -subsys")
+if ada and fpat_given:
+    die("-ada and -fpat cannot be used at the same time")
+
+if with_colors:
+    grep_params.append("--color=always")
+
+# ---------------------------------------------------------------------------
+# Where to search
+# ---------------------------------------------------------------------------
+
+def replace_first(text: str, old: str, new: str) -> str:
+    """TEXT with the first OLD replaced -- the shell's ${var/old/new}.
+
+    `replace` changes every occurrence on both backends, and a baseline ID
+    has more dots than the one that is a directory separator.
+    """
+    let at: int = text.find(old)
+    if at < 0:
+        return text
+    return text[0:at] + new + text[at + len(old):]
+
+def matches_runtime(text: str, pattern: str) -> bool:
+    """`text` against a pattern that is not known until the program runs.
+
+    A regex literal is a literal, so a pattern read from cc_pattern or from
+    an option cannot be one; grep's exit status is the whole answer.
+    """
+    let (_, rc) = shell(stdin = text + "\n"): grep -qE -- {!pattern}
+    return rc == 0
+
+def matches_runtime_i(text: str, pattern: str) -> bool:
+    """The same, ignoring case: what -ppat and -subsys are matched with."""
+    let (_, rc) = shell(stdin = text + "\n"): grep -qiE -- {!pattern}
+    return rc == 0
+
+def shell_capture(cmd: str) -> str:
+    """One line of output from a CM helper, which lives in the ksh environment."""
+    let r = shell: {cmd}
+    return r.output.strip()
+
+def closure_dir(name: str) -> str:
+    """The directory holding the closure named on the command line.
+
+    A SYSTEM resolves through its topmost subsystem, and the view context
+    wins when it names a baseline of that same system; a baseline ID is
+    already a path with its first dot turned into a slash.
+    """
+    if not matches_runtime(name, "^" + shell_capture("cc_pattern SYSTEM")):
+        return replace_first(name, ".", "/")
+    let topmost: str = shell_capture("get_topmost_subsystems " + name).split()[0]
+    let prefix: str = name + "." + topmost + "."
+    if $CONTEXT_CM_BASELINE.startswith(prefix):
+        return replace_first($CONTEXT_CM_BASELINE, ".", "/")
+    return name + "/" + topmost + ".LATEST" + good
+
+def all_subsystem_builds() -> []str:
+    """Every subsystem whose LATEST build has sources, less the project branches.
+
+    `ls` rather than a glob because the pattern spans two directory levels,
+    and the `[0-9].LATEST` exclusion is what keeps numbered project builds
+    out when -all is not given.
+    """
+    let build_dir: str = "build_" + $CM_ENV_ID
+    var out: []str = []
+    let listing: []str = shellLines: ls -1d /cm/ot/*/*[A-Z].LATEST{good}/{build_dir}/sources 2>/dev/null
+    for line in listing:
+        continue if line == /[0-9]\.LATEST/
+        out.append(line.replace("/" + build_dir + "/sources", ""))
+    return out
+
+def is_project_build(dir_path: str, project_pattern: str) -> bool:
+    """Is this directory a project branch build?
+
+    The baseline ID is the path under /cm/ot with its slash and its '!' turned
+    into dots -- ELD/GEO_MMI!INM_IO.9 reads as ELD.GEO_MMI.INM_IO.9 -- and the
+    pattern that says whether that is a project baseline comes from cc_pattern.
+
+    The caller skips what this says yes to, which is the documented default
+    and the opposite of what the shell version's perl filter does: there the
+    directory is *kept* when the baseline matches, which is the behaviour its
+    own "?? This is bizarre" comment is about.
+    """
+    let real: str = shell_capture("readlink -e " + dir_path)
+    let tail: str = replace_first(real, "/cm/ot/", "")
+    let baseline: str = replace_first(replace_first(tail, "/", "."), "!", ".")
+    return matches_runtime(baseline, "^" + project_pattern + "$")
+
+# ---------------------------------------------------------------------------
+# Searching one subsystem
+# ---------------------------------------------------------------------------
+
+def find_files(subsys: str) -> Job:
+    """Start the file search for one subsystem; the Job carries the list."""
+    let build: str = "build_" + $CM_ENV_ID
+    var dirs: []str = [subsys + "/" + build + "/sources"]
+    if -d (subsys + "/sources/special_files"):
+        dirs.append(subsys + "/" + build + "/special_files")
+    let finder: Job = shellSpawn: find {*dirs} -type f ! -name '*.gz' -name {!file_pattern} 2>/dev/null
+    return finder
+
+def keep_wanted(files: []str) -> []str:
+    """The files the options ask for: sorted when -sort, filtered when -ppat."""
+    var kept: []str = []
+    for f in files:
+        continue if f == ""
+        if path_pattern != "" and not matches_runtime_i(f, path_pattern):
+            continue
+        kept.append(f)
+    if sort_output:
+        kept = sorted(kept)
+    return kept
+
+def grep_files(files: []str) -> Job:
+    """Start grep over a subsystem's files, feeding the list through xargs.
+
+    Through stdin rather than the command line: a subsystem can hold tens of
+    thousands of files, and the argument list has a limit that a file list
+    reaches long before a search does.
+    """
+    let searcher: Job = shellSpawn(stdin = "\n".join(files) + "\n"): xargs -r grep {*grep_params} --
+    return searcher
+
+def strip_dirnames(text: str) -> str:
+    """`grep`'s `path/to/file:12:line` with the path cut back to the basename."""
+    var out: []str = []
+    for line in text.split("\n"):
+        var one: str = line
+        one = s/^[^:]*\///
+        out.append(one)
+    return "\n".join(out)
+
+def header_for(subsys: str) -> str:
+    """The `!===== SUBSYS ====...` line, padded to a constant width."""
+    let name: str = Path(subsys).name
+    return "!===== " + name + " " + PADDING[len(name):]
+
+def search(subsystems: []str):
+    """Search every subsystem at once, and print them back in order."""
+    var finders: []Job = []
+    for s in subsystems:
+        finders.append(find_files(s))
+    let found: []RunResult = waitAll(finders)
+
+    var per_subsys: [][]str = []
+    var greppers: []Job = []
+    for r in found:
+        let files: []str = keep_wanted(r.output.split("\n"))
+        per_subsys.append(files)
+        if use_grep and files'Length > 0:
+            greppers.append(grep_files(files))
+
+    var grep_out: []RunResult = []
+    if greppers'Length > 0:
+        grep_out = waitAll(greppers)
+
+    var g: Natural = 0
+    for idx in range(len(subsystems)):
+        let subsys: str = subsystems[idx]
+        let files: []str = per_subsys[idx]
+        # Without a closure the search is long enough that showing where it
+        # has got to is worth a line; with one, only -verbose asks for it.
+        if closure == "" or verbose:
+            print header_for(subsys)
+        if not use_grep:
+            for f in files:
+                print f
+            continue
+        continue if files'Length == 0
+        let text: str = grep_out[g].output
+        g += 1
+        continue if text.strip() == ""
+        if basenames:
+            print strip_dirnames(text).rstrip("\n")
+        else:
+            print text.rstrip("\n")
+
+# ---------------------------------------------------------------------------
+# Run
+# ---------------------------------------------------------------------------
+
+var targets: []str = []
+
+if closure != "":
+    let dir_name: str = closure_dir(closure)
+    if verbose:
+        print "Closure     : " + replace_first(dir_name, "/", ".")
+    # Psort orders the closure the way the CM tools do; the environment
+    # variable is read into a name first, since an interpolation is an
+    # expression and `$NAME` is not one inside it.
+    let cm_root: str = $CM_ROOT
+    let closure_path: str = cm_root + "/" + dir_name
+    let ordered: []str = shellLines: echo {!closure_path} | Psort
+    targets = ordered
+else:
+    targets = all_subsystem_builds()
+    if skip_projects:
+        let project_pattern: str = shell_capture("cc_pattern PROJECT_BASELINE_ID")
+        var kept: []str = []
+        for d in targets:
+            continue if is_project_build(d, project_pattern)
+            kept.append(d)
+        targets = kept
+    if subsys_pattern != "":
+        var matched: []str = []
+        for d in targets:
+            continue if not matches_runtime_i(d, subsys_pattern)
+            matched.append(d)
+        targets = matched
+    if verbose and subsys_pattern != "":
+        print "Subsys pattern: " + subsys_pattern
+
+if verbose:
+    print "ada option  : " + str(ada)
+    print "sort option : " + str(sort_output)
+    print "File pattern: " + file_pattern
+    if use_grep:
+        print "Grep params : " + " ".join(grep_params)
+    else:
+        print "Grep params : no grep"
+
+search(targets)

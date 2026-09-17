@@ -16,6 +16,7 @@ TMPDIR ?= /tmp
 TOOLDIR:= $(CURDIR)/TOOLS
 AIDIR  := $(TOOLDIR)/ADA_INDENT
 G1DIR  := $(TOOLDIR)/GIT1
+PGDIR  := $(TOOLDIR)/PGREP
 
 # Prepend choosenim's bin dir so Nim 2.x is used instead of any system Nim 1.x.
 export PATH := /root/.nimble/bin:$(HOME)/.nimble/bin:$(HOME)/Downloads:$(PATH)
@@ -228,7 +229,8 @@ endef
 # went unchecked in exactly the run that was meant to check everything.
 TOOL_PROGRAMS := \
     TOOLS/GIT1/git1.ady \
-    TOOLS/ADA_INDENT/ada_indent.ady
+    TOOLS/ADA_INDENT/ada_indent.ady \
+    TOOLS/PGREP/Pgrep.ady
 
 # -----------------------------------------------------------------------
 # compile — transpile + build everything
@@ -413,6 +415,11 @@ test: compile
 	@# subcommand creates, moves or deletes a repo in the working directory.
 	@printf '  %-42s' "TOOLS/GIT1/git1.ady (--version)"; \
 	    $(G1DIR)/git1 --version >/dev/null 2>&1 && echo OK || { echo FAIL; exit 1; }
+	@# Pgrep needs a CM environment -- $$CM_ROOT, the builds under /cm/ot and
+	@# the Psort / cc_pattern helpers -- which is not here. A no-argument run
+	@# is the part that holds anywhere: it prints its usage and stops.
+	@printf '  %-42s' "TOOLS/PGREP/Pgrep.ady (usage)"; \
+	    $(PGDIR)/Pgrep 2>/dev/null | grep -q '^Usage:' && echo OK || { echo FAIL; exit 1; }
 
 	@echo "=== Expect / shell examples (require bc) ==="
 	@for f in $(EXPECT_EXAMPLES); do \

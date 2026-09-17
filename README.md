@@ -2587,21 +2587,24 @@ def suggest(word: str) -> []str:
 
 [`TOOLS/`](TOOLS) holds the programs written in Adascript that are tools in
 their own right rather than examples of a language feature: each has a
-command set, a test suite, editor integrations and a README. They are also
-the language's own proof that it is worth using — both are the kind of
-program the README argues Adascript is for.
+command set and a README, and the first two have a test suite and editor
+integrations as well. They are also the language's own proof that it is
+worth using — all three are the kind of program the README argues Adascript
+is for.
 
 | | |
 |---|---|
 | [`TOOLS/ADA_INDENT/`](TOOLS/ADA_INDENT) | re-indents **Ada** source. Not a parser: indentation needs only the keywords that open, close or split a block, and [its README](TOOLS/ADA_INDENT/README.md) specifies that simplified grammar |
 | [`TOOLS/GIT1/`](TOOLS/GIT1) | version control for **one file at a time**: every tracked file gets its own private git repository, so many of them share a directory without seeing each other |
+| [`TOOLS/PGREP/`](TOOLS/PGREP) | greps the sources of a **CM build closure**, or of every subsystem's LATEST build, one process per subsystem. A translation of a ~480-line ksh script, and [its README](TOOLS/PGREP/README.md) says where it deliberately differs from it |
 
-Both build the same way any `.ady` file does, and `make test` builds and
-exercises both:
+They build the same way any `.ady` file does, and `make test` builds and
+exercises all three:
 
 ```bash
 ady2nim c TOOLS/ADA_INDENT/ada_indent.ady   # then: cat file.adb | ada_indent
 ady2nim c TOOLS/GIT1/git1.ady               # then: git1 init notes.txt
+ady2nim c TOOLS/PGREP/Pgrep.ady             # then: Pgrep -closure IFPS remote
 ```
 
 `ady2nim c` drops a symlink to the built binary beside the source, so
@@ -2610,8 +2613,9 @@ a rebuild — a link into `~/.cache/adascript/` does not, since the hash
 changes with the source.
 
 Each tool's own README is the reference: what it does, how it is invoked,
-and what it deliberately does not do — `git1` has no merge, and
-`ada_indent` has no semantic analysis.
+and what it deliberately does not do — `git1` has no merge, `ada_indent`
+has no semantic analysis, and `Pgrep` finds nothing without the CM
+environment it searches.
 
 ---
 
@@ -2619,7 +2623,7 @@ and what it deliberately does not do — `git1` has no merge, and
 
 Three separate things live under this heading, and it is worth keeping them
 apart: support for **writing Adascript**, and the editor integrations that
-belong to the two tools in [`TOOLS/`](TOOLS) — the **Ada indenter** and
+belong to two of the tools in [`TOOLS/`](TOOLS) — the **Ada indenter** and
 **git1** — which are editor support for something other than the language.
 
 ### Writing Adascript — [`LSP/`](LSP)
