@@ -630,7 +630,31 @@ def ordinary_builds(dirs: []Path) -> []Path:
 # Searching one subsystem
 # ---------------------------------------------------------------------------
 
-def search_one(subsys: Path, out_file: Path, err_file: Path) -> Job:
+def has_special_files(dirs: []Path) -> []bool:
+    """Which subsystems have a sources/special_files, in one `ls`.
+
+    A file test each is an NFS round trip each, and they were made in the
+    loop that starts the searches -- one at a time, before any of them could
+    run. At 165 subsystems that was most of a second in which nothing was
+    being searched. The shell version makes the same test inside each
+    background job, where they at least overlap.
+    """
+    var flags: []bool = []
+    for d in dirs:
+        flags.append(False)
+    if dirs'Length == 0:
+        return flags
+    var probes: []Path = []
+    for d in dirs:
+        probes.append(d / "sources" / "special_files")
+    let r = shell: ls -d {*probes} 2>/dev/null
+    let listed: str = "\n" + r.output + "\n"
+    for i in range(dirs'Length):
+        if listed.find("\n" + str(probes[i]) + "\n") >= 0:
+            flags[i] = True
+    return flags
+
+def search_one(subsys: Path, out_file: Path, err_file: Path, special: bool) -> Job:
     """Everything one subsystem needs, as a single pipeline into a file.
 
     The stages are the ksh original's, and for its reason: grep starts on
@@ -647,7 +671,7 @@ def search_one(subsys: Path, out_file: Path, err_file: Path) -> Job:
     """
     let build: str = "build_" + $CM_ENV_ID
     var dirs: []Path = [subsys / build / "sources"]
-    if -d (subsys / "sources" / "special_files"):
+    if special:
         dirs.append(subsys / build / "special_files")
     let pattern: str = opt.file_pattern
 
@@ -701,6 +725,7 @@ def search(subsystems: []Path):
     slowest one is, and a search that takes a minute shows its work.
     """
     let started: float = time.time()
+    let specials: []bool = has_special_files(subsystems)
     let tmp_dir: Path = Path(shell_capture("mktemp -d"))
     var jobs: []Job = []
     var outs: []Path = []
@@ -711,7 +736,7 @@ def search(subsystems: []Path):
         let err_file: Path = tmp_dir / (str(n) + ".err")
         outs.append(out_file)
         errs.append(err_file)
-        jobs.append(search_one(subsys, out_file, err_file))
+        jobs.append(search_one(subsys, out_file, err_file, specials[n]))
         n += 1
     report("started " + str(n) + " subsystem searches in", time.time() - started)
 
