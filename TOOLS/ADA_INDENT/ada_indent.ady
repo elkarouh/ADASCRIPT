@@ -277,6 +277,22 @@ def declared_name(code_s: str) -> str:
     return ""
 
 
+def lead_keyword(code_s: str) -> str:
+    """The lowercased keyword saying what a declaration declares, or ''.
+
+    '[not] overriding' is an indicator attached to a subprogram declaration,
+    not the declaration's own keyword, so a line can open with it and still be
+    a function. Skipping it is what lets the expression-function deferral see
+    'overriding function F ... is' for what it is; read literally, that line
+    begins with 'overriding' and so opens a block that nothing ever closes.
+    """
+    let ws: []str = lead_words(code_s)
+    var i: Natural = 0
+    while i < len(ws) and ws[i].lower() in ("not", "overriding"):
+        i += 1
+    return ws[i].lower() if i < len(ws) else ""
+
+
 def end_name(code_s: str) -> str:
     """The construct name an 'end' line closes, or ''.
 
@@ -560,7 +576,7 @@ class Indenter:
         # the header on a later line, where lw is a parameter name -- but the
         # expression-function deferral below still has to recognise the header.
         if cont == 0:
-            self.cont_func = lw == "function"
+            self.cont_func = lead_keyword(code_s) == "function"
             # The name this logical line declares, remembered for the 'end' that
             # will close it. A bare 'Outer :' label line declares a name but opens
             # nothing, so the name waits for the declare/begin/for/while it labels.
@@ -941,7 +957,7 @@ class Indenter:
                             # else ending in 'is' opens a block immediately.
                             # Exception: 'subtype T is' is not a block opener —
                             # it is a plain continuation declaration.
-                            if lw == "function":
+                            if lead_keyword(code_s) == "function":
                                 self.pending_spec = True
                                 self.spec_name = self.frame_name
                             elif lw == "type":
