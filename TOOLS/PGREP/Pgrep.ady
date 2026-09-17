@@ -241,40 +241,34 @@ class Options:
     `resolve`, which is a great deal easier to see when the state has a name
     and a scope.
     """
-    closure        : str       # -closure: the system or baseline to search
-    subsys_pattern : str       # -subsys
-    file_pattern   : str       # -fpat, or -ada's "*.ad?"
-    path_pattern   : str       # -ppat
-    good           : str       # -latest_good: "" or "_GOOD"
-    verbose        : bool
-    basenames      : bool
-    use_grep       : bool      # not -no-grep
-    skip_projects  : bool      # not -all
-    ada            : bool
-    fpat_given     : bool      # -fpat, which -ada may not also be
-    sort_output    : bool
-    with_colors    : bool
-    grep_params    : []str     # what goes to grep, the caller's part included
-    base_params    : Natural   # how many of those are ours, not the caller's
+    closure        : str  = ""      # -closure: the system or baseline to search
+    subsys_pattern : str  = ""      # -subsys
+    file_pattern   : str  = "*"     # -fpat, or -ada's "*.ad?"
+    path_pattern   : str  = ""      # -ppat
+    good           : str  = ""      # -latest_good: "" or "_GOOD"
+    verbose        : bool = False
+    basenames      : bool = False
+    use_grep       : bool = True    # not -no-grep
+    skip_projects  : bool = True    # not -all
+    ada            : bool = False
+    fpat_given     : bool = False   # -fpat, which -ada may not also be
+    sort_output    : bool = False
+    with_colors    : bool           # a terminal decides: see __init__
+    grep_params    : []str          # what goes to grep, the caller's part included
+    base_params    : Natural        # how many of those are ours, not the caller's
 
     def __init__(self):
-        self.closure        = ""
-        self.subsys_pattern = ""
-        self.file_pattern   = "*"
-        self.path_pattern   = ""
-        self.good           = ""
-        self.verbose        = False
-        self.basenames      = False
-        self.use_grep       = True
-        self.skip_projects  = True
-        self.ada            = False
-        self.fpat_given     = False
-        self.sort_output    = False
-        # Colours by default when stdout is a terminal, never when it is a file.
+        """What a declaration cannot say.
+
+        The scalars above default where they are declared. These three
+        cannot: the colours are a question put to the terminal, and the
+        grep parameters are a list, which a declared default would share
+        between objects on the Python backend rather than give to each.
+        """
         let stdout_is_tty: int = shell: test -t 1
-        self.with_colors    = stdout_is_tty == 0
-        self.grep_params    = ["--line-number", "--with-filename"]
-        self.base_params    = self.grep_params'Length
+        self.with_colors = stdout_is_tty == 0
+        self.grep_params = ["--line-number", "--with-filename"]
+        self.base_params = self.grep_params'Length
 
     def parse(self, argv: []str):
         """The command line, option by option."""
