@@ -416,11 +416,16 @@ test: compile
 	@# subcommand creates, moves or deletes a repo in the working directory.
 	@printf '  %-42s' "TOOLS/GIT1/git1.ady (--version)"; \
 	    $(G1DIR)/git1 --version >/dev/null 2>&1 && echo OK || { echo FAIL; exit 1; }
-	@# Pgrep needs a CM environment -- $$CM_ROOT, the builds under /cm/ot and
-	@# the Psort / cc_pattern helpers -- which is not here. A no-argument run
-	@# is the part that holds anywhere: it prints its usage and stops.
 	@printf '  %-42s' "TOOLS/PGREP/Pgrep.ady (usage)"; \
 	    $(PGDIR)/Pgrep 2>/dev/null | grep -q '^Usage:' && echo OK || { echo FAIL; exit 1; }
+
+	@# The all-subsystems path against a CM tree the test builds: $PGREP_CM_OT
+	@# points the program at it, and the cc_pattern it consults there answers
+	@# with a perl regexp, as the real one does. Three bugs hid in this path
+	@# in a row, each of them silent, because a filter that matches nothing
+	@# looks exactly like a site with nothing to search.
+	@echo "=== PGREP against a CM tree built for the test ==="
+	@$(PGDIR)/test/run_tests.sh $(PGDIR)/Pgrep
 
 	@echo "=== Expect / shell examples (require bc) ==="
 	@for f in $(EXPECT_EXAMPLES); do \

@@ -26,6 +26,18 @@ nimport time
 let PROG: str = Path($0).name.lstrip(".")
 let PADDING: str = "=" * 93
 
+# Where the subsystem builds are listed from. The shell version spells
+# /cm/ot; this reads an override first, so that the whole default path --
+# the one that picks the subsystems and filters them -- can be exercised by
+# a test rather than only on a site that has a /cm/ot of its own.
+let CM_OT: str = ${PGREP_CM_OT:-"/cm/ot"}
+
+# What a baseline ID follows in a *resolved* path, which is not the same
+# thing as the root above: a build is listed as /cm/ot/CUA/ADMIN.LATEST and
+# resolves to /auto/local_build/<host>/ssd1/cm/ot/CUA/ADMIN.44.0.0.A. The
+# marker is the site's own cm/ot, wherever the listing came from.
+let CM_MARKER: str = "/cm/ot/"
+
 def die(msg: str):
     stderr.writeLine(PROG + ": " + msg)
     quit(1)
@@ -361,6 +373,20 @@ def replace_first(text: str, old: str, new: str) -> str:
         return text
     return text[0:at] + new + text[at + len(old):]
 
+def after_first(text: str, marker: str) -> str:
+    """What follows the first MARKER -- the shell's ${var#*<marker>}.
+
+    Everything before it goes too, which is the whole point: a build resolves
+    to a path like /auto/local_build/dhws149/ssd1/cm/ot/CUA/ADMIN.44.0.0.A,
+    and the baseline ID is what comes after /cm/ot/. Removing the marker and
+    keeping the prefix leaves .auto.local_build... instead, which is not a
+    baseline ID and matches no pattern that describes one.
+    """
+    let at: int = text.find(marker)
+    if at < 0:
+        return text
+    return text[at + len(marker):]
+
 def matches_runtime(text: str, pattern: str) -> bool:
     """`text` against a pattern that is not known until the program runs.
 
@@ -408,7 +434,7 @@ def all_subsystem_builds() -> []Path:
     let build_dir: str = "build_" + $CM_ENV_ID
     let good: str = opt.good
     var out: []Path = []
-    let listing: []str = shellLines: ls -1d /cm/ot/*/*[A-Z].LATEST{good}/{build_dir}/sources 2>/dev/null
+    let listing: []str = shellLines: ls -1d {CM_OT}/*/*[A-Z].LATEST{good}/{build_dir}/sources 2>/dev/null
     for line in listing:
         continue if line == /[0-9]\.LATEST/
         out.append(Path(line.replace("/" + build_dir + "/sources", "")))
@@ -520,7 +546,7 @@ def ordinary_builds(dirs: []Path) -> []Path:
         var line: str = str(dirs[i])
         if i < real'Length and real[i] != "":
             line = real[i]
-        let tail: str = replace_first(line, "/cm/ot/", "")
+        let tail: str = after_first(line, CM_MARKER)
         baselines.append(replace_first(replace_first(tail, "/", "."), "!", "."))
 
     let hits: []bool = perl_matching_lines(baselines, "^" + pattern + "$")

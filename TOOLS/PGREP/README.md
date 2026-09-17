@@ -97,13 +97,27 @@ Everything Pgrep does not recognise itself is passed on untouched, so `-w`,
   status is grep's neither here nor in the ksh original: Pgrep exits 0
   whether or not anything matched.
 
+## The test
+
+`test/run_tests.sh` builds a CM tree of its own -- builds that live
+elsewhere and are reached through `/cm/ot` names, a project branch beside
+each ordinary build, a `cc_pattern` that answers with a perl regexp -- and
+runs the built binary against it. `$PGREP_CM_OT` is what lets it: the
+program lists its subsystems from there rather than from `/cm/ot`, so the
+path that picks the subsystems and filters them can be exercised on a
+machine that has no CM at all. `make test` runs it.
+
+It is here because three bugs hid in that path in a row, and every one of
+them came out as "no match", which is indistinguishable from a site with
+nothing to search.
+
 ## What it needs around it
 
 The CM environment: `$CM_ROOT`, `$CM_ENV_ID`, `$CONTEXT_CM_BASELINE`, the
-builds under `/cm/ot`, and the helpers `Psort`, `cc_pattern` and
-`get_topmost_subsystems` on the PATH. Without them it prints its usage and
-its diagnostics but finds nothing, which is why `make test` only checks that
-it builds and that a no-argument run prints the usage.
+builds under `/cm/ot` (or `$PGREP_CM_OT`), and the helpers `Psort`,
+`cc_pattern` and `get_topmost_subsystems` on the PATH, plus `perl` for the
+baseline pattern. Without them it prints its usage and its diagnostics but
+finds nothing.
 
 ## Where it differs from the ksh original
 
