@@ -427,6 +427,14 @@ test: compile
 	@# looks exactly like a site with nothing to search.
 	@echo "=== PGREP against a CM tree built for the test ==="
 	@$(PGDIR)/test/run_tests.sh $(PGDIR)/Pgrep
+	@# ...and the same checks against the Python transpilation, since the two
+	@# backends have to agree about every one of them.
+	@echo "=== PGREP, the same checks on the Python backend ==="
+	@$(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(PGDIR)/Pgrep.ady > $(PGDIR)/test/Pgrep_py.py
+	@printf '#!/bin/sh\nexec $(PYTHON) %s "$$@"\n' "$(PGDIR)/test/Pgrep_py.py" \
+	    > $(PGDIR)/test/pgrep_py && chmod +x $(PGDIR)/test/pgrep_py
+	@$(PGDIR)/test/run_tests.sh $(PGDIR)/test/pgrep_py
+	@rm -f $(PGDIR)/test/Pgrep_py.py $(PGDIR)/test/pgrep_py
 
 	@echo "=== Expect / shell examples (require bc) ==="
 	@for f in $(EXPECT_EXAMPLES); do \

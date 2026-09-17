@@ -24,19 +24,31 @@ trap 'rm -rf "$WORK"' EXIT INT TERM
 # as they are on a real site: the resolved path has a prefix before /cm/ot.
 REAL=$WORK/auto/local_build/ws/ssd1/cm/ot
 OT=$WORK/cm/ot
+# The two shapes that matter, as they resolve on the real system:
+#
+#   ordinary      ALPHA/SUB!44.0.0.1   ->  ALPHA.SUB.44.0.0.1
+#   project branch ALPHA/SUB!TBO.44    ->  ALPHA.SUB.TBO.44
+#
+# cc_pattern PROJECT_BASELINE_ID describes the second -- SYSTEM.SUBSYS with a
+# project name and a build counter after it -- so a match is a branch and a
+# branch is what a search without -all leaves out. The first has a version
+# where the project name would be and does not match.
 for sys in ALPHA BETA; do
-    mkdir -p "$REAL/$sys/SUB.44.0.0.A/build_E1/sources/deep"
-    mkdir -p "$REAL/$sys/SUB!TBO.44.0.0.A/build_E1/sources"
-    mkdir -p "$REAL/$sys/SUB.44.0.0.A/sources/special_files"
-    mkdir -p "$REAL/$sys/SUB.44.0.0.A/build_E1/special_files"
-    echo "the remote call"   > "$REAL/$sys/SUB.44.0.0.A/build_E1/sources/main.adb"
-    echo "a remote queue"    > "$REAL/$sys/SUB.44.0.0.A/build_E1/sources/deep/queue.ksh"
-    echo "remote extra"      > "$REAL/$sys/SUB.44.0.0.A/build_E1/special_files/extra.txt"
-    echo "remote compressed" | gzip > "$REAL/$sys/SUB.44.0.0.A/build_E1/sources/skip.gz"
-    echo "remote in branch"  > "$REAL/$sys/SUB!TBO.44.0.0.A/build_E1/sources/main.adb"
+    ORD=$REAL/$sys/SUB!44.0.0.1
+    PRJ=$REAL/$sys/SUB!TBO.44
+    mkdir -p "$ORD/build_E1/sources/deep" "$ORD/sources/special_files" \
+             "$ORD/build_E1/special_files" "$PRJ/build_E1/sources"
+    echo "the remote call"   > "$ORD/build_E1/sources/main.adb"
+    echo "a remote queue"    > "$ORD/build_E1/sources/deep/queue.ksh"
+    echo "remote extra"      > "$ORD/build_E1/special_files/extra.txt"
+    echo "remote compressed" | gzip > "$ORD/build_E1/sources/skip.gz"
+    # A name with a space in it: the file list is one path per line, and a
+    # find piped into a bare xargs splits it into two names that do not exist.
+    echo "remote spaced"     > "$ORD/build_E1/sources/two words.txt"
+    echo "remote in branch"  > "$PRJ/build_E1/sources/main.adb"
     mkdir -p "$OT/$sys"
-    ln -s "$REAL/$sys/SUB.44.0.0.A"      "$OT/$sys/SUB.LATEST"
-    ln -s "$REAL/$sys/SUB!TBO.44.0.0.A"  "$OT/$sys/SUB.TBO.LATEST"
+    ln -s "$ORD" "$OT/$sys/SUB.LATEST"
+    ln -s "$PRJ" "$OT/$sys/SUB.TBO.LATEST"
 done
 
 # The CM helpers, as they are on the real system: shell *functions* in a
@@ -48,8 +60,8 @@ mkdir -p "$WORK/bin" "$WORK/progs"
 cat > "$WORK/bin/Caux_functions" <<'EOF'
 cc_pattern() {
   case "$1" in
-    SYSTEM)              printf '%s\n' '[A-Z][A-Z0-9_]*' ;;
-    PROJECT_BASELINE_ID) printf '%s\n' '(?:[A-Z][A-Z0-9_]*)\.\w+\.\d+\.\d+\.\d+\.\w+' ;;
+    SYSTEM)              printf '%s\n' '(?^:(?:(?^:(?:[[:digit:][:upper:]_])))+)' ;;
+    PROJECT_BASELINE_ID) printf '%s\n' '(?^:(?^:(?:(?^:(?:[[:digit:][:upper:]_])))+)\.(?^:(?:(?^:(?:[[:digit:][:upper:]_])))+)\.(?^:(?<project_name_uc>(?:(?^:(?:[[:digit:][:upper:]_]))){1,20}))\.(?^:(?<build_counter>[[:digit:]]+)))' ;;
     *)                   printf '%s\n' '.*' ;;
   esac
 }
@@ -62,9 +74,10 @@ chmod +x "$WORK/bin/ksh"
 # The same helper as a program, for the site where it is one.
 cat > "$WORK/progs/cc_pattern" <<'EOF'
 #!/bin/sh
+# The same answers, from a program rather than a sourced function.
 case "$1" in
-  SYSTEM)              printf '%s\n' '[A-Z][A-Z0-9_]*' ;;
-  PROJECT_BASELINE_ID) printf '%s\n' '(?:[A-Z][A-Z0-9_]*)\.\w+\.\d+\.\d+\.\d+\.\w+' ;;
+  SYSTEM)              printf '%s\n' '(?^:(?:(?^:(?:[[:digit:][:upper:]_])))+)' ;;
+  PROJECT_BASELINE_ID) printf '%s\n' '(?^:(?^:(?:(?^:(?:[[:digit:][:upper:]_])))+)\.(?^:(?:(?^:(?:[[:digit:][:upper:]_])))+)\.(?^:(?<project_name_uc>(?:(?^:(?:[[:digit:][:upper:]_]))){1,20}))\.(?^:(?<build_counter>[[:digit:]]+)))' ;;
   *)                   printf '%s\n' '.*' ;;
 esac
 EOF
@@ -89,7 +102,7 @@ check() {
 
 # The project branches are dropped, so two subsystems and not four.
 check "subsystems searched"        2 "$("$PGREP" -no_colors remote | grep -c '^!=====')"
-check "matches found"              6 "$("$PGREP" -no_colors remote | grep -c ':.*remote')"
+check "matches found"              8 "$("$PGREP" -no_colors remote | grep -c ':.*remote')"
 check "the branch is not searched" 0 "$("$PGREP" -no_colors remote | grep -c 'in branch')"
 
 # -all brings them back.
@@ -98,7 +111,8 @@ check "-all finds the branch"      2 "$("$PGREP" -all -no_colors remote | grep -
 
 # The rest of the options, on the same tree.
 check "-subsys narrows"            1 "$("$PGREP" -subsys alpha -no_colors remote | grep -c '^!=====')"
-check "-no-grep lists files"       6 "$("$PGREP" -no-grep | grep -c '/')"
+check "-no-grep lists files"       8 "$("$PGREP" -no-grep | grep -c '/')"
+check "a name with a space is one" 2 "$("$PGREP" -no_colors remote | grep -c 'two words.txt:')"
 check "-ada takes only .ad?"       2 "$("$PGREP" -ada -no-grep | grep -c '\.adb$')"
 check "-ppat filters on the path"  2 "$("$PGREP" -ppat deep -no-grep | grep -c 'queue.ksh')"
 check "a .gz is never searched"    0 "$("$PGREP" -no-grep | grep -c '\.gz')"
@@ -124,11 +138,11 @@ check "...with a failing status"     1 "$status"
 cat > "$WORK/bin/Caux_functions" <<'EOF'
 cc_pattern() {
   case "$1" in
-    PROJECT_BASELINE_ID) printf '%s\n' 'NOTHING_MATCHES_THIS' ;;
+    PROJECT_BASELINE_ID) printf '%s\n' '.*' ;;
     *)                   printf '%s\n' '[A-Z][A-Z0-9_]*' ;;
   esac
 }
 EOF
-check "an empty filter says so"    1 "$("$PGREP" -no_colors remote 2>&1 >/dev/null | grep -c 'no subsystem matched')"
+check "all-branches says so"       1 "$("$PGREP" -no_colors remote 2>&1 >/dev/null | grep -c 'every subsystem looked like')"
 
 [ "$fails" -eq 0 ] || exit 1

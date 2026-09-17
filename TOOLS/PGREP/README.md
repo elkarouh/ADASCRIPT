@@ -147,19 +147,22 @@ finds nothing.
 
 ## Where it differs from the ksh original
 
-* The project-branch filter is the shell's, not the documentation's. A
-  directory is kept when its baseline matches `cc_pattern
-  PROJECT_BASELINE_ID`, which is what the perl line does; the name says
-  project and what it selects is the opposite, and that is what the
-  `#?? This is bizarre` comment beside it is about. Reading it as its name
-  suggests searches every project branch as well — on one site, 200
-  subsystems against the shell version's 165.
-* That match is made by **perl**, as it is there. cc_pattern's patterns are
-  perl regexps, `(?:…)` and `\d` and all, and `grep -E` is a different
-  language: given one it warns and matches nothing, which reads as "every
-  subsystem is a project branch" — a search of everything or of nothing,
-  depending which way the answer is taken. With no perl on the PATH, Pgrep
-  says so and searches them all, as `-all` does.
+* The project-branch filter drops what matches. `cc_pattern
+  PROJECT_BASELINE_ID` describes `SYSTEM.SUBSYS.<project_name>.<counter>`,
+  so a match *is* a branch build; an ordinary build carries a version there
+  — `ALM.ALM_CONFIG.28.0.0.4` — and does not match. The shell version's
+  perl line reads the other way (a match exits 0 and the directory is
+  kept), which would search the branches and nothing else; its own runs
+  search the 165 ordinary builds, and its `#?? This is bizarre` comment sits
+  beside that line.
+* The match is made by **perl**, as it is there. cc_pattern's answers are
+  perl regexps — `(?^:…)`, named groups and all — and `grep -E` is a
+  different language: given one it warns and matches nothing, which reads as
+  "no subsystem is a branch" and searches everything. With no perl on the
+  PATH, Pgrep says so and searches them all, as `-all` does.
+* The file list reaches `xargs` split on **lines**, not on whitespace, so a
+  source file with a space in its name is one file. In the shell version it
+  is two, and grep reports both halves missing.
 * `. trace`, `. cm_audit_logger` and `. Caux_functions` are gone. None is
   ever called by name; what they install is a ksh environment, and none of
   it has a meaning in a compiled program.

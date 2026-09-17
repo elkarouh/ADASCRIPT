@@ -557,19 +557,24 @@ def ordinary_builds(dirs: []Path) -> []Path:
     """The builds a search without -all wants: the project branches dropped.
 
     A baseline ID is the resolved path under /cm/ot with its slash and its
-    '!' turned into dots -- ELD/GEO_MMI!INM_IO.9 reads as ELD.GEO_MMI.INM_IO.9
-    -- and a directory is kept when that matches the pattern cc_pattern gives
-    for PROJECT_BASELINE_ID. Kept when it *matches*, which is what the shell
-    version's perl filter does:
+    '!' turned into dots -- CMA/MASTER!DEFIANT.27 reads as
+    CMA.MASTER.DEFIANT.27 -- and cc_pattern PROJECT_BASELINE_ID describes
+    exactly that shape:
+
+        SYSTEM . SUBSYSTEM . <project_name_uc> . <build_counter>
+
+    An ordinary build's baseline is a version rather than a project and a
+    count -- ALM.ALM_CONFIG.28.0.0.4 -- and does not match. So a match is a
+    project branch build, and a match is what is dropped.
+
+    The shell version's perl line reads the other way round
 
         if echo "${PROJECT_BASELINE_ID}" | perl -ne "exit 1 if ! /^${PAT}$/"
 
-    The name says project and the effect is the opposite -- a project branch
-    build is what does not match -- which is what the "?? This is bizarre"
-    comment beside it is about. Reading it as its name suggests and dropping
-    the matches instead searches every project branch as well: 200 subsystems
-    where the shell version searches 165, a whole system again for each of
-    its branches.
+    -- a match exits 0 and the directory is kept -- which would search the
+    branches and nothing else. It does not: its own runs search the 165
+    ordinary builds, which is the behaviour here, and which the "?? This is
+    bizarre" comment beside that line is about.
 
     One readlink and one perl for the list, rather than two processes for
     each subsystem: at a few hundred subsystems that was the better part of a
@@ -610,15 +615,15 @@ def ordinary_builds(dirs: []Path) -> []Path:
     let hits: []bool = perl_matching_lines(baselines, "^" + pattern + "$")
     var kept: []Path = []
     for i in range(dirs'Length):
-        continue if not hits[i]
+        continue if hits[i]                  # a match is a project branch
         kept.append(dirs[i])
     note("kept after the project-branch filter: " + str(kept'Length))
     if kept'Length == 0:
         # Every subsystem a project branch is not an answer, it is a pattern
         # that did not work. Saying so beats searching nothing in silence.
-        stderr.writeLine(PROG + ": warning: no subsystem matched the baseline "
-                         "pattern, so there is nothing to search. Use -all to "
-                         "search them all.")
+        stderr.writeLine(PROG + ": warning: every subsystem looked like a "
+                         "project branch build, so there is nothing to "
+                         "search. Use -all to search them all.")
     return kept
 
 # ---------------------------------------------------------------------------
@@ -671,7 +676,7 @@ def search_one(subsys: Path, out_file: Path, err_file: Path) -> Job:
         let lister: Job = shellSpawn(env = stage_env): ( find {*dirs} -type f ! -name '*.gz' -name {!pattern} 2>/dev/null | {sorting} | {filtering} ) > {!dest} 2> {!problems}
         return lister
     let params: []str = opt.grep_params
-    let searcher: Job = shellSpawn(env = stage_env): ( find {*dirs} -type f ! -name '*.gz' -name {!pattern} 2>/dev/null | {sorting} | {filtering} | xargs -r grep {*params} -- | {naming} ) > {!dest} 2> {!problems}
+    let searcher: Job = shellSpawn(env = stage_env): ( find {*dirs} -type f ! -name '*.gz' -name {!pattern} 2>/dev/null | {sorting} | {filtering} | xargs -r -d '\n' grep {*params} -- | {naming} ) > {!dest} 2> {!problems}
     return searcher
 
 def header_for(subsys: Path) -> str:
