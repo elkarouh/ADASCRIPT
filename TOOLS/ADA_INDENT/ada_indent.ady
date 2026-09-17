@@ -870,10 +870,9 @@ class Indenter:
                 elif self._close_named(en):
                     # _close_named popped the matching frame plus everything
                     # above it; all but the match were never really open.
-                    # NB: one message, one f-string — the transpiler does not
-                    # concatenate adjacent string literals, it keeps the first.
                     let stale: Natural = before - len(self.stack) - 1
-                    self._warn(f"'end {en}' closes an outer construct: dropped {stale} unclosed frame(s) to resynchronise")
+                    self._warn(f"'end {en}' closes an outer construct: "
+                               f"dropped {stale} unclosed frame(s) to resynchronise")
                 elif top_name == "":
                     self._pop_frame()                      # unnamed frame: nothing to contradict
                 else:

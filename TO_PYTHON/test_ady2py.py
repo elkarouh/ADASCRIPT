@@ -181,6 +181,17 @@ test("lambda no args", "f = lambda: 42\n")
 test("lambda one arg", "f = lambda x: x + 1\n")
 test("lambda multi", "f = lambda x, y: x + y\n")
 
+# Adjacent string literals concatenate by juxtaposition. A run may mix plain
+# strings and f-strings; keeping f-strings out of the rule used to leave the
+# tail of the run unparsed, which silently swallowed the assignment it was
+# part of rather than raising.
+test("adjacent strings", 'x = "a" "b"\n')
+test("adjacent fstrings", 'x = f"a{n}" f"b{n}"\n')
+test("adjacent fstring then string", 'x = f"a{n}" "b"\n')
+test("adjacent string then fstring", 'x = "a" f"b{n}"\n')
+test("adjacent mixed run", 'x = "a" f"b{n}" "c" f"d{n}"\n')
+test("adjacent fstrings parenthesised", 'x = (f"a{n}"\n     f"b{n}")\n')
+
 ###############################################################################
 # BUG CATEGORY A — Missing grammar rules
 ###############################################################################
