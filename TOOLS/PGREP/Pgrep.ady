@@ -29,6 +29,11 @@ def die(msg: str):
     stderr.writeLine(PROG + ": " + msg)
     quit(1)
 
+def stdout_is_tty() -> bool:
+    """Is our output a terminal, rather than a file or a pipe?"""
+    let rc: int = shell: test -t 1
+    return rc == 0
+
 # ---------------------------------------------------------------------------
 # Help
 # ---------------------------------------------------------------------------
@@ -208,13 +213,13 @@ B<$ {PROG} -closure IFPS -no-grep | wc -l>
 
 def print_help(as_html: bool):
     """Render the POD, in a browser when asked and the terminal otherwise."""
-    let is_tty: int = shell: test -t 1
+    let to_terminal: bool = stdout_is_tty()
     let browser: str = $BROWSER
     if as_html and browser != "":
         let page: Path = Path("/tmp") / (PROG + "_help.html")
         let html_rc: int = shell(stdin = pod_text()): pod2html --title={!PROG} > {!page}
         let show_rc: int = shell: {browser} {!page}
-    elif is_tty == 0:
+    elif to_terminal:
         # A terminal gets it paged and coloured; a pipe gets it plain.
         let cols: str = ${COLUMNS:-"80"}
         let paged_rc: int = shell(stdin = pod_text()): pod2text --color --width {!cols} | more -f
@@ -231,6 +236,11 @@ def value_after(argv: []str, i: Natural, what: str) -> str:
     if i + 1 >= argv'Length:
         die(what + " needs a value")
     return argv[i + 1]
+
+
+# What goes to grep before the caller's own arguments; also the measure of
+# whether the caller gave any, which is what says a search pattern is missing.
+let DEFAULT_GREP_PARAMS: []str = ["--line-number", "--with-filename"]
 
 
 class Options:
@@ -253,22 +263,8 @@ class Options:
     ada            : bool = False
     fpat_given     : bool = False   # -fpat, which -ada may not also be
     sort_output    : bool = False
-    with_colors    : bool           # a terminal decides: see __init__
-    grep_params    : []str          # what goes to grep, the caller's part included
-    base_params    : Natural        # how many of those are ours, not the caller's
-
-    def __init__(self):
-        """What a declaration cannot say.
-
-        The scalars above default where they are declared. These three
-        cannot: the colours are a question put to the terminal, and the
-        grep parameters are a list, which a declared default would share
-        between objects on the Python backend rather than give to each.
-        """
-        let stdout_is_tty: int = shell: test -t 1
-        self.with_colors = stdout_is_tty == 0
-        self.grep_params = ["--line-number", "--with-filename"]
-        self.base_params = self.grep_params'Length
+    with_colors    : bool = stdout_is_tty()          # -no_colors turns it off
+    grep_params    : []str = DEFAULT_GREP_PARAMS     # the caller's part is added
 
     def parse(self, argv: []str):
         """The command line, option by option."""
@@ -278,7 +274,10 @@ class Options:
             let arg: str = argv[i]
             if in_grep_args:
                 # Past the options: the rest belongs to grep, `-` and all.
-                self.grep_params.append(arg)
+                # A new list rather than an append: the declared default is
+                # one object, and on the Python backend appending to it would
+                # be appending to the default itself.
+                self.grep_params = self.grep_params + [arg]
                 i += 1
                 continue
             # How many arguments this option takes: the shell version's `shift`
@@ -323,16 +322,16 @@ class Options:
 
     def resolve(self):
         """What the options mean together, and what they may not mean at all."""
-        if self.use_grep and self.grep_params'Length == self.base_params:
+        if self.use_grep and self.grep_params'Length == DEFAULT_GREP_PARAMS'Length:
             die("a search pattern must be defined. Use -no-grep if you want to list the files searched.")
-        if not self.use_grep and self.grep_params'Length > self.base_params:
+        if not self.use_grep and self.grep_params'Length > DEFAULT_GREP_PARAMS'Length:
             stderr.writeLine(PROG + ": warning: the search pattern will be ignored since -no-grep is used.")
         if self.closure != "" and (self.subsys_pattern != "" or not self.skip_projects):
             die("option -closure cannot be used with -all or -subsys")
         if self.ada and self.fpat_given:
             die("-ada and -fpat cannot be used at the same time")
         if self.with_colors:
-            self.grep_params.append("--color=always")
+            self.grep_params = self.grep_params + ["--color=always"]
 
 
 # The object the searching procs below read. It holds the defaults from here
