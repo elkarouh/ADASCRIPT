@@ -29,8 +29,16 @@ match, the line numbers giving the answer for each. The shell version runs
 a `readlink` and a `perl` for every directory, which at a few hundred
 subsystems is most of a second before the first file is looked at.
 
+A stage the options did not ask for is left out of the pipeline rather than
+written as `cat`. The shell version spells them `cat`, and at a few hundred
+subsystems that is a few hundred processes copying the whole file list from
+one pipe to the next for nothing.
+
 `-verbose` says where the time went, on stderr: how long it took to start
-the searches, when each subsystem finished, and the total.
+the searches, when each subsystem was collected, and the total. The
+per-subsystem times are when this program got to that subsystem, not when
+the subsystem finished: they are waited for in order, so one that finished
+early is reported at the moment its turn came.
 
 ## Building
 

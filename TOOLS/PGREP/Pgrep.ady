@@ -651,19 +651,22 @@ def search_one(subsys: Path, out_file: Path, err_file: Path) -> Job:
         dirs.append(subsys / build / "special_files")
     let pattern: str = opt.file_pattern
 
-    var sorting: str = "cat"
+    # A stage the options did not ask for is left out of the pipeline rather
+    # than written as `cat`. The shell version spells them `cat`, and at a
+    # few hundred subsystems that is a few hundred processes, each copying
+    # the whole file list from one pipe into the next for nothing.
+    var stages: str = ""
     if opt.sort_output:
-        sorting = "sort"
+        stages = stages + " | sort"
     # The pattern reaches grep through the environment rather than through
     # the command text: it is the caller's, and it is not ours to quote.
-    var filtering: str = "cat"
     if opt.path_pattern != "":
-        filtering = 'grep -Ei -- "$PPAT"'
+        stages = stages + ' | grep -Ei -- "$PPAT"'
     # -basenames cuts the dirname off grep's `path/to/file:12:line`. The
     # [^:]*/ matches everything up to the last slash before the colon.
-    var naming: str = "cat"
+    var naming: str = ""
     if opt.basenames:
-        naming = "sed 's@[^:]*/@@'"
+        naming = " | sed 's@[^:]*/@@'"
     let stage_env: {str}str = {"PPAT": opt.path_pattern}
     let dest: str = str(out_file)
     let problems: str = str(err_file)
@@ -673,10 +676,10 @@ def search_one(subsys: Path, out_file: Path, err_file: Path) -> Job:
 
     if not opt.use_grep:
         # A listing keeps its paths whole, as it does in the shell version.
-        let lister: Job = shellSpawn(env = stage_env): ( find {*dirs} -type f ! -name '*.gz' -name {!pattern} 2>/dev/null | {sorting} | {filtering} ) > {!dest} 2> {!problems}
+        let lister: Job = shellSpawn(env = stage_env): ( find {*dirs} -type f ! -name '*.gz' -name {!pattern} 2>/dev/null{stages} ) > {!dest} 2> {!problems}
         return lister
     let params: []str = opt.grep_params
-    let searcher: Job = shellSpawn(env = stage_env): ( find {*dirs} -type f ! -name '*.gz' -name {!pattern} 2>/dev/null | {sorting} | {filtering} | xargs -r -d '\n' grep {*params} -- | {naming} ) > {!dest} 2> {!problems}
+    let searcher: Job = shellSpawn(env = stage_env): ( find {*dirs} -type f ! -name '*.gz' -name {!pattern} 2>/dev/null{stages} | xargs -r -d '\n' grep {*params} --{naming} ) > {!dest} 2> {!problems}
     return searcher
 
 def header_for(subsys: Path) -> str:
