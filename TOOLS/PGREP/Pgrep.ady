@@ -319,9 +319,15 @@ class Options:
                     in_grep_args = True
                     eaten = 0
             i += eaten
+        self.resolve()
 
     def resolve(self):
-        """What the options mean together, and what they may not mean at all."""
+        """What the options mean together, and what they may not mean at all.
+
+        The end of `parse`: an option is not done being read until it has
+        been read against the others, and nothing between the two calls
+        could have wanted the options half-read.
+        """
         if self.use_grep and self.grep_params'Length == DEFAULT_GREP_PARAMS'Length:
             die("a search pattern must be defined. Use -no-grep if you want to list the files searched.")
         if not self.use_grep and self.grep_params'Length > DEFAULT_GREP_PARAMS'Length:
@@ -541,7 +547,6 @@ if args'Length == 0:
     quit(0)
 
 opt.parse(args)
-opt.resolve()
 
 var targets: []Path = []
 
