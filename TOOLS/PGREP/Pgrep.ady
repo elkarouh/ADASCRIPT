@@ -211,7 +211,7 @@ def print_help(as_html: bool):
     let is_tty: int = shell: test -t 1
     let browser: str = $BROWSER
     if as_html and browser != "":
-        let page: str = "/tmp/" + PROG + "_help.html"
+        let page: Path = Path("/tmp") / (PROG + "_help.html")
         let html_rc: int = shell(stdin = pod_text()): pod2html --title={!PROG} > {!page}
         let show_rc: int = shell: {browser} {!page}
     elif is_tty == 0:
@@ -380,22 +380,25 @@ def shell_capture(cmd: str) -> str:
     let r = shell: {cmd}
     return r.output.strip()
 
-def closure_dir(name: str) -> str:
+def closure_dir(name: str) -> Path:
     """The directory holding the closure named on the command line.
+
+    The name is an identifier rather than a path -- a SYSTEM, a baseline ID
+    -- which is why it arrives as a str; what comes back is a directory.
 
     A SYSTEM resolves through its topmost subsystem, and the view context
     wins when it names a baseline of that same system; a baseline ID is
     already a path with its first dot turned into a slash.
     """
     if not matches_runtime(name, "^" + shell_capture("cc_pattern SYSTEM")):
-        return replace_first(name, ".", "/")
+        return Path(replace_first(name, ".", "/"))
     let topmost: str = shell_capture("get_topmost_subsystems " + name).split()[0]
     let prefix: str = name + "." + topmost + "."
     if $CONTEXT_CM_BASELINE.startswith(prefix):
-        return replace_first($CONTEXT_CM_BASELINE, ".", "/")
-    return name + "/" + topmost + ".LATEST" + opt.good
+        return Path(replace_first($CONTEXT_CM_BASELINE, ".", "/"))
+    return Path(name) / (topmost + ".LATEST" + opt.good)
 
-def all_subsystem_builds() -> []str:
+def all_subsystem_builds() -> []Path:
     """Every subsystem whose LATEST build has sources, less the project branches.
 
     `ls` rather than a glob because the pattern spans two directory levels,
@@ -404,14 +407,14 @@ def all_subsystem_builds() -> []str:
     """
     let build_dir: str = "build_" + $CM_ENV_ID
     let good: str = opt.good
-    var out: []str = []
+    var out: []Path = []
     let listing: []str = shellLines: ls -1d /cm/ot/*/*[A-Z].LATEST{good}/{build_dir}/sources 2>/dev/null
     for line in listing:
         continue if line == /[0-9]\.LATEST/
-        out.append(line.replace("/" + build_dir + "/sources", ""))
+        out.append(Path(line.replace("/" + build_dir + "/sources", "")))
     return out
 
-def is_project_build(dir_path: str, project_pattern: str) -> bool:
+def is_project_build(dir_path: Path, project_pattern: str) -> bool:
     """Is this directory a project branch build?
 
     The baseline ID is the path under /cm/ot with its slash and its '!' turned
@@ -423,7 +426,7 @@ def is_project_build(dir_path: str, project_pattern: str) -> bool:
     directory is *kept* when the baseline matches, which is the behaviour its
     own "?? This is bizarre" comment is about.
     """
-    let real: str = shell_capture("readlink -e " + dir_path)
+    let real: str = shell_capture("readlink -e " + str(dir_path))
     let tail: str = replace_first(real, "/cm/ot/", "")
     let baseline: str = replace_first(replace_first(tail, "/", "."), "!", ".")
     return matches_runtime(baseline, "^" + project_pattern + "$")
@@ -432,37 +435,45 @@ def is_project_build(dir_path: str, project_pattern: str) -> bool:
 # Searching one subsystem
 # ---------------------------------------------------------------------------
 
-def find_files(subsys: str) -> Job:
+def find_files(subsys: Path) -> Job:
     """Start the file search for one subsystem; the Job carries the list."""
     let build: str = "build_" + $CM_ENV_ID
-    var dirs: []str = [subsys + "/" + build + "/sources"]
-    if -d (subsys + "/sources/special_files"):
-        dirs.append(subsys + "/" + build + "/special_files")
+    var dirs: []Path = [subsys / build / "sources"]
+    if -d (subsys / "sources" / "special_files"):
+        dirs.append(subsys / build / "special_files")
     let pattern: str = opt.file_pattern
     let finder: Job = shellSpawn: find {*dirs} -type f ! -name '*.gz' -name {!pattern} 2>/dev/null
     return finder
 
-def keep_wanted(files: []str) -> []str:
-    """The files the options ask for: sorted when -sort, filtered when -ppat."""
-    var kept: []str = []
-    for f in files:
-        continue if f == ""
-        if opt.path_pattern != "" and not matches_runtime_i(f, opt.path_pattern):
+def keep_wanted(lines: []str) -> []Path:
+    """The files the options ask for: sorted when -sort, filtered when -ppat.
+
+    `find`'s output arrives as text, one path per line, and this is where it
+    stops being text: the blank last line goes, and what is left is a file.
+    """
+    var kept: []Path = []
+    for line in lines:
+        continue if line == ""
+        if opt.path_pattern != "" and not matches_runtime_i(line, opt.path_pattern):
             continue
-        kept.append(f)
+        kept.append(Path(line))
     if opt.sort_output:
         kept = sorted(kept)
     return kept
 
-def grep_files(files: []str) -> Job:
+def grep_files(files: []Path) -> Job:
     """Start grep over a subsystem's files, feeding the list through xargs.
 
     Through stdin rather than the command line: a subsystem can hold tens of
     thousands of files, and the argument list has a limit that a file list
-    reaches long before a search does.
+    reaches long before a search does. The paths become text again to make
+    that list -- Nim has no `join` for a sequence of them.
     """
+    var lines: []str = []
+    for f in files:
+        lines.append(str(f))
     let params: []str = opt.grep_params
-    let searcher: Job = shellSpawn(stdin = "\n".join(files) + "\n"): xargs -r grep {*params} --
+    let searcher: Job = shellSpawn(stdin = "\n".join(lines) + "\n"): xargs -r grep {*params} --
     return searcher
 
 def strip_dirnames(text: str) -> str:
@@ -474,22 +485,22 @@ def strip_dirnames(text: str) -> str:
         out.append(one)
     return "\n".join(out)
 
-def header_for(subsys: str) -> str:
+def header_for(subsys: Path) -> str:
     """The `!===== SUBSYS ====...` line, padded to a constant width."""
-    let name: str = Path(subsys).name
+    let name: str = str(subsys.name)
     return "!===== " + name + " " + PADDING[len(name):]
 
-def search(subsystems: []str):
+def search(subsystems: []Path):
     """Search every subsystem at once, and print them back in order."""
     var finders: []Job = []
     for s in subsystems:
         finders.append(find_files(s))
     let found: []RunResult = waitAll(finders)
 
-    var per_subsys: [][]str = []
+    var per_subsys: [][]Path = []
     var greppers: []Job = []
     for r in found:
-        let files: []str = keep_wanted(r.output.split("\n"))
+        let files: []Path = keep_wanted(r.output.split("\n"))
         per_subsys.append(files)
         if opt.use_grep and files'Length > 0:
             greppers.append(grep_files(files))
@@ -500,8 +511,8 @@ def search(subsystems: []str):
 
     var g: Natural = 0
     for idx in range(len(subsystems)):
-        let subsys: str = subsystems[idx]
-        let files: []str = per_subsys[idx]
+        let subsys: Path = subsystems[idx]
+        let files: []Path = per_subsys[idx]
         # Without a closure the search is long enough that showing where it
         # has got to is worth a line; with one, only -verbose asks for it.
         if opt.closure == "" or opt.verbose:
@@ -539,32 +550,33 @@ if args'Length == 0:
 opt.parse(args)
 opt.resolve()
 
-var targets: []str = []
+var targets: []Path = []
 
 if opt.closure != "":
-    let dir_name: str = closure_dir(opt.closure)
+    let dir_name: Path = closure_dir(opt.closure)
     if opt.verbose:
-        print "Closure     : " + replace_first(dir_name, "/", ".")
+        print "Closure     : " + replace_first(str(dir_name), "/", ".")
     # Psort orders the closure the way the CM tools do; the environment
     # variable is read into a name first, since an interpolation is an
     # expression and `$NAME` is not one inside it.
-    let cm_root: str = $CM_ROOT
-    let closure_path: str = cm_root + "/" + dir_name
+    let cm_root: Path = Path($CM_ROOT)
+    let closure_path: Path = cm_root / dir_name
     let ordered: []str = shellLines: echo {!closure_path} | Psort
-    targets = ordered
+    for line in ordered:
+        targets.append(Path(line))
 else:
     targets = all_subsystem_builds()
     if opt.skip_projects:
         let project_pattern: str = shell_capture("cc_pattern PROJECT_BASELINE_ID")
-        var kept: []str = []
+        var kept: []Path = []
         for d in targets:
             continue if is_project_build(d, project_pattern)
             kept.append(d)
         targets = kept
     if opt.subsys_pattern != "":
-        var matched: []str = []
+        var matched: []Path = []
         for d in targets:
-            continue if not matches_runtime_i(d, opt.subsys_pattern)
+            continue if not matches_runtime_i(str(d), opt.subsys_pattern)
             matched.append(d)
         targets = matched
     if opt.verbose and opt.subsys_pattern != "":
