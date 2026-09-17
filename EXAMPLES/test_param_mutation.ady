@@ -1,0 +1,76 @@
+#!/usr/bin/env ady2nim
+"""Test: a free function mutating a field of its own parameter, in place.
+
+The transpiler scans a function's own body for a mutation of one of its
+parameters -- a field assignment, a subscript assignment, `.append` and
+friends -- and marks that parameter `var` on the Nim side so the mutation
+reaches the caller. The scan looked for a plain `=` right after the field
+name, so `p.x = 1` was detected and `p.x += 1` was not: the compound
+operator sits between the field name and the `=`, and the pattern required
+them adjacent. `def bump(b): b.value += 1` failed to compile on Nim with
+"expression 'b.value' is immutable, not 'var'" -- a record with the same
+shape worked, because its one test case (test_ownership.ady) never used a
+compound operator either.
+
+This covers every shape the fix has to recognise: `+=`, `-=` and `*=`
+through a field and through a subscript, on both a `record` and a plain
+`class`, and confirms a real comparison (`==`) is never mistaken for one.
+"""
+
+type Counter_T is record:
+    total: int = 0
+
+
+class Box:
+    var value: int = 0
+
+
+def bump_field(c: Counter_T):
+    c.total += 1
+
+def scale_field(c: Counter_T):
+    c.total *= 2
+
+def bump_class_field(b: Box):
+    b.value += 1
+
+def shrink_class_field(b: Box):
+    b.value -= 3
+
+def bump_index(xs: []int, i: int):
+    xs[i] += 10
+
+def halve_index(xs: []int, i: int):
+    xs[i] -= 6
+
+def compares_equal(c: Counter_T) -> bool:
+    # A plain comparison must not be mistaken for an assignment: nothing
+    # here should turn `c` into a `var` parameter.
+    return c.total == 0
+
+
+var counter: Counter_T = Counter_T(total=1)
+bump_field(counter)
+assert counter.total == 2
+scale_field(counter)
+assert counter.total == 4
+
+var box: Box = Box()
+box.value = 10
+bump_class_field(box)
+assert box.value == 11
+shrink_class_field(box)
+assert box.value == 8
+
+var xs: []int = [1, 2, 3]
+bump_index(xs, 1)
+assert xs[1] == 12
+halve_index(xs, 1)
+assert xs[1] == 6
+
+let zero: Counter_T = Counter_T(total=0)
+assert compares_equal(zero)
+let one: Counter_T = Counter_T(total=1)
+assert not compares_equal(one)
+
+print "all parameter-mutation tests passed"

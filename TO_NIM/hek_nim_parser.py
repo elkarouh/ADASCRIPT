@@ -2680,8 +2680,11 @@ def _func_def_to_nim_inner(self, indent=0):
                 _anchor = rf"(?<![=(,.])\b{_re.escape(pname)}\b\s*"
                 # Mutating the object itself is visible to the caller in Python
                 # too, so the parameter genuinely has to be var.
+                # `param.field += x` and `param[i] += x` are in-place mutations
+                # too, and read the same as `= x` here: an optional compound
+                # operator before the `=`, ruled out from matching `==`.
                 _inplace = _re.search(
-                    _anchor + r"(\.add\(|\.append\(|\.extend\(|\.pop\(|\.clear\(|\.remove\(|\.sort\(|\.next\(|\.\w+\s*=(?!=)|\[.*\]\s*=(?!=)|[+\-*/]=)",
+                    _anchor + r"(\.add\(|\.append\(|\.extend\(|\.pop\(|\.clear\(|\.remove\(|\.sort\(|\.next\(|\.\w+\s*[+\-*/]?=(?!=)|\[.*\]\s*[+\-*/]?=(?!=)|[+\-*/]=)",
                     _scan)
                 # Rebinding the name (s = ...) is local to the function in
                 # Python and must not turn the parameter into an out-parameter;

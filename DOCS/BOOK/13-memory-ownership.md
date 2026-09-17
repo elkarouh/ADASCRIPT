@@ -7,11 +7,19 @@ value is freed when its owner's scope ends, with no collector and no pause.
 
 Adascript compiles to both, so it cannot pick one. What it offers instead is
 a small vocabulary — `own`, `lent`, `move`, `drop`, `with own` — for writing
-down what you already know about a value's lifetime. On Nim that writing-down
-guides ARC. On Python it is mostly stripped, because the GC does not need it.
+down what you already know about a value's lifetime, and one decorator,
+`@virtual`, that changes what a value *is*: copied on every assignment, or
+shared by every name that holds it. On Nim the vocabulary guides ARC, and
+`@virtual` is the difference between an `object` and a `ref object`. On
+Python most of the vocabulary is stripped, because the GC does not need
+it — but every composite is already a reference, which is the fact the
+rest of this chapter keeps coming back to.
 
-This chapter is about when each one is worth writing, and about the two
-places where the backends stop agreeing, which are the two you have to know.
+This chapter starts with what happens when you write nothing down at all —
+the default that decides whether assignment copies or shares, on a plain
+`record` or `class`, with no annotation in sight — and then covers the
+vocabulary for the cases the default gets wrong, and the three places where
+the backends stop agreeing, which are the ones you have to know.
 
 ## 13.1 The vocabulary, and what it actually emits
 
@@ -48,7 +56,106 @@ lifetime mistake impossible. What they do instead is make it *nameable*,
 which is most of the value in a language where the alternative is not
 thinking about it at all.
 
-## 13.2 A tour
+## 13.2 Value types, reference types, and Adascript's pointer
+
+Before deciding what to write down about a value's lifetime, it helps to
+know what happens when you write nothing down at all — because the two
+backends do not agree here either, and the disagreement has nothing to do
+with the five words above. It is about plain assignment.
+
+**On Nim, every composite is a value type unless you say otherwise:** a
+`record`, a plain `class`, a `[]T`, a `{}`. Assigning one, appending it to
+a collection, or passing it to a function copies it; two names never share
+one value unless you go out of your way to arrange it. **On Python, every
+composite is a reference:** assigning, appending, and passing all share the
+one object, whether you meant to or not. Chapter 8 §8.1 already shows the
+`[]T` case — "unlike Python, the Nim backend has value semantics for
+seqs" — and a `record` and a plain `class` follow the same rule. It is
+worth watching fail before it is worth being told:
+
+```python
+class Box:
+    var value: int = 0
+
+var boxes: []Box = []
+var a: Box = Box()
+a.value = 1
+boxes.append(a)
+a.value = 2
+print "boxes[0].value =", boxes[0].value
+```
+
+```
+Nim:    boxes[0].value = 1      # append copied the value that existed then
+Python: boxes[0].value = 2      # boxes[0] and a are the same object
+```
+
+Nothing here used `own`, `move`, or `drop` — this is what an ordinary
+`class` does with no annotation at all. It is also why the vocabulary in
+§13.1 is about avoiding a *copy*: on a value type there is no shared
+mutation to lose track of, because there was never any sharing.
+
+### `@virtual`: the one word that means "pointer" on both backends
+
+A `@virtual class` compiles to a Nim `ref object` (§9.4) — a
+heap-allocated, reference-counted handle — and a Python object was always
+one of those. Mark the same `Box` `@virtual` and the trap above closes, on
+both backends at once:
+
+```python
+@virtual
+class Box:
+    var value: int = 0
+```
+
+```
+Nim:    boxes[0].value = 2
+Python: boxes[0].value = 2
+```
+
+This is the only annotation in the language that changes what plain
+assignment *means*, rather than annotating intent around an assignment
+that behaves the same either way. Reach for it when:
+
+- **Several names, or a name and a collection, must see the same
+  mutations.** A cache entry looked up by id, a graph node reached from
+  several edges, a widget held by both its parent and an event queue.
+- **A free function mutates what you hand it through more than one call.**
+  A direct field assignment in a function's own body is enough for the
+  transpiler to make that one parameter a Nim `var` for you — the same
+  detection §9.2 describes for a method's `self`, generalised to any
+  parameter of any function. But it looks at one body at a time: write
+  `def bump(b): really_bump(b)` where `really_bump` does the assigning,
+  and `bump`'s own body contains no assignment for the heuristic to find,
+  so its `b` is never marked `var` — and Nim refuses to compile the call
+  to `really_bump`, on a `record` exactly as on a plain `class`. It is a
+  compile error, not a silent wrong answer, but it is one that stops
+  existing the moment `Box` is `@virtual`: a reference is mutable through
+  any handle, at any depth, and no parameter has to be inferred as
+  anything.
+- **Identity is the point, not the fields** — a linked list, a tree with
+  parent pointers, any structure where "the same node" has to mean the
+  same node rather than one that compares equal.
+- **Cross-module dynamic dispatch** — the reason §9.4 introduces the
+  decorator in the first place.
+
+The cost is real, and it sits on the Nim side: a `@virtual` value is always
+on the heap and always refcounted, where a plain `object` can live inline —
+on the stack, or embedded in whatever contains it — and costs nothing to
+tear down. That is the trade this section is about: a value type is cheap
+and private by default, and `@virtual` buys sharing at the price of an
+allocation. `lent` and `own` do not buy sharing; they buy back the "cheap"
+half of that trade on a value type that was never going to be shared in
+the first place — a `lent Frame_T` parameter reads a value that was never
+copied to begin with, which is a different problem from the one `@virtual`
+solves, and the two are not substitutes for each other.
+
+One combination is worth flagging before the next section shows why:
+`move` and `drop` on a `@virtual` value do not give you merely a different
+number on each backend, the way they do on a record. On Nim they leave the
+old name pointing at nothing, and reading it dereferences a null pointer.
+
+## 13.3 A tour
 
 `EXAMPLES/ownership_tour.ady` runs on both backends. A frame of samples,
 big enough that copying it would be a waste:
@@ -120,10 +227,11 @@ afterwards — not "should not be", *is not*: what it holds is undefined.
     print "big released early"
 ```
 
-## 13.3 The two places the backends disagree
+## 13.4 The two places the backends disagree
 
 Everything above prints the same on both backends. These two do not, and
-both involve reading a value that you have already given away.
+both involve reading a value that you have already given away — plus a
+third, sharper case, once the value in question is a `@virtual` one.
 
 ### Reading a moved-from value
 
@@ -173,9 +281,54 @@ next read is an error with a line number. Nim's `=wasMoved` leaves a zeroed
 value that reads as an empty buffer, silently, and a zero that means
 "destroyed" is indistinguishable from a zero that means zero.
 
-This asymmetry is the argument of the next section.
+### Reading a moved-from or dropped reference
 
-## 13.4 What to use, and when
+Do the same two things to a `@virtual` value and Nim stops being silently
+wrong — it crashes:
+
+```python
+@virtual
+class Box:
+    var value: int = 0
+
+own source: Box = Box()
+source.value = 42
+own target: Box = move(source)
+print f"moved-from reports {source.value}"
+```
+
+```
+Nim:    SIGSEGV: Illegal storage access. (Attempt to read from nil?)
+Python: moved-from reports 42
+```
+
+`move` on a reference sets the old name to `nil` rather than zeroing a
+buffer in place, so reading a field through it dereferences a null
+pointer. `drop` on a `@virtual` value crashes the same way, for the same
+reason. Python, meanwhile, is unaffected by which kind of value it is:
+`move` is still a plain alias and `drop` is still `del`, so a moved-from
+reference reads back its old contents and a dropped one raises
+`NameError` — exactly as a record would.
+
+So the risk is asymmetric in a way the record case is not: on a value
+type, a stale read is a wrong number on one backend and a correct one on
+the other; on a `@virtual` value, it is a wrong number on Python and a
+crash on Nim. `with own` closes this the same way it closes the record
+case — the name does not exist after the block, on either backend, so
+there is nothing left to dereference — and that is worth remembering
+precisely because bare `own` + `move`/`drop` is the one place in this
+chapter where the failure mode is not "wrong" but "down".
+
+This threefold asymmetry is the argument of the next section.
+
+## 13.5 What to use, and when
+
+The five forms below all assume the decision in §13.2 has already been
+made the ordinary way: the value is exclusively owned, a `record` or a
+plain `class`, and what is left to decide is how cheaply it can be lent,
+moved, or released. If what you actually need is for two names — or a
+name and a collection — to see the same mutations, that is not one of
+these five; it is `@virtual`, decided before any of them apply.
 
 In the order you should reach for them:
 
@@ -213,11 +366,12 @@ a promise to the caller that the copy will not happen, and a promise from the
 caller that they are done with it.
 
 **`move` last, and only where the source is about to go out of scope
-anyway.** It is the one form whose misuse is silent and backend-dependent. If
-what you want is "the value now lives over there", and the old name dies two
-lines later, `move` says so and saves the copy. If the old name lives on,
-you do not want `move`; you want to be sharing, which for a `class` (a Nim
-`ref object`) is what an ordinary assignment already does.
+anyway.** It is the one form whose misuse is silent and backend-dependent —
+and, on a `@virtual` value, not silent at all (§13.4). If what you want is
+"the value now lives over there", and the old name dies two lines later,
+`move` says so and saves the copy. If the old name lives on, you do not
+want `move`; you want to be sharing, which is a `@virtual class` (§13.2),
+where an ordinary assignment already does it.
 
 And the case for not writing any of them: **a value whose lifetime is
 obvious does not need an annotation.** A local that lives for six lines and
@@ -226,17 +380,20 @@ nothing written down. Ownership vocabulary is for the values where a reader
 would otherwise have to work it out — the big ones, the shared ones, the ones
 that escape.
 
-## 13.5 What this is not
+## 13.6 What this is not
 
 No borrow checker. Nothing verifies that a `lent` parameter is not stored,
 that a moved-from value is not read, or that two names do not both think they
 own one value. The annotations are checked for *syntax* and then mostly
 erased; the guarantees are Nim's ARC rules, and ARC trusts you.
 
-No shared ownership. There is no `Rc`/`Arc`/`shared_ptr` equivalent. When
-several owners are genuinely needed, use a `class` — on Nim that is a `ref
-object`, which is reference-counted, and reference semantics are what you
-wanted. Records are value types and get copied.
+No shared ownership among value types. A `record` or a plain `class` has
+exactly one owner, matching Nim's ARC, and there is no `Rc`/`Arc`/
+`shared_ptr` escape hatch for one. That is not a gap — needing several
+owners is not a defect in the value, it is a sign the value should have
+been a reference, which is what `@virtual` is for (§13.2): a Nim `ref
+object`, reference-counted, and on Python the ordinary reference semantics
+every object already has.
 
 No custom destructors from Adascript. `=destroy` can be written in Nim and
 reached through `nimraw:`, but there is no Adascript spelling for "run this
@@ -253,7 +410,7 @@ previous one's contract: the source is one program, and the parts of it that
 are about *when memory is released* are the parts where you have to know
 which backend you are compiling for.
 
-## 13.6 Reference
+## 13.7 Reference
 
 | Form | Means | Nim | Python | Misuse |
 |---|---|---|---|---|
@@ -263,11 +420,15 @@ which backend you are compiling for.
 | `move(x)` | transfer to a new owner | `move(x)` | alias | reading `x` — **differs per backend** |
 | `drop(x)` | destroy now | `=destroy` + `=wasMoved` | `del x` | reading `x` — **differs per backend** |
 | `with own x = e:` | lifetime is the block | `block:` | `try`/`finally` | reading `x` after — compile error on Nim |
+| `@virtual class` | every name shares one value | `ref object` | reference (the default) | `move`/`drop` then reading it — **crashes on Nim** |
 
 Rules of thumb, in one line each:
 
+- Decide sharing first: `@virtual` if several names must see the same
+  mutations, nothing if each should have its own copy.
 - `lent` on every big read-only parameter.
-- `with own` in preference to `drop`.
+- `with own` in preference to `drop` — doubly so on a `@virtual` value,
+  where the bare form does not just disagree across backends, it crashes.
 - `move` only when the source is dying anyway.
 - Nothing at all when the lifetime is obvious.
 - Never read a name after `move`, `drop`, or handing it to an `own` parameter.

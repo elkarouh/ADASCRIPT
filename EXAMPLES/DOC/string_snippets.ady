@@ -1,5 +1,5 @@
 #!/usr/bin/env ady2nim
-"""Every snippet quoted in DOCS/BOOK/02-types-and-declarations.md § 2.7.
+"""Every snippet quoted in DOCS/BOOK/02-types-and-declarations.md section 2.7.
 
 The string literal forms and the way adjacent ones join. `make test` runs
 it, so a document that claims one of these spellings works is claiming it
