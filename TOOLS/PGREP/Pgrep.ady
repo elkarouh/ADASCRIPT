@@ -343,6 +343,14 @@ class Options:
                     in_grep_args = True
                     eaten = 0
             i += eaten
+        if self.verbose:
+            print "ada option  : " + str(self.ada)
+            print "sort option : " + str(self.sort_output)
+            print "File pattern: " + self.file_pattern
+            if self.use_grep:
+                print "Grep params : " + " ".join(self.grep_params)
+            else:
+                print "Grep params : no grep"
         self.resolve()
 
     def resolve(self):
@@ -363,15 +371,9 @@ class Options:
         if self.with_colors:
             self.grep_params = self.grep_params + ["--color=always"]
 
-
-# The object the searching procs below read. It holds the defaults from here
-# until the command line is read, which is the last thing this file does: the
-# declaration has to precede its readers, the parsing does not.
-var opt: Options = Options()
-
-def note(what: str):
+def note(what: str, verbose: bool):
     """What the program decided, for -verbose. On stderr: it is not a result."""
-    if opt.verbose:
+    if verbose:
         stderr.writeLine(PROG + ": " + what)
 
 
@@ -409,7 +411,7 @@ def shell_capture(cmd: str) -> str:
     let r = shell: {cmd}
     return r.output.strip()
 
-def cm_run(what: str) -> str:
+def cm_run(what: str, verbose: bool) -> str:
     """What a CM helper answers: get_topmost_subsystems, Psort.
 
     These are ksh functions (get_topmost_subsystems) or Perl programs (Psort)
@@ -426,13 +428,13 @@ def cm_run(what: str) -> str:
         let r = shell: ksh -c {!program}
         if r.output.strip() != "":
             return r.output
-        note("nothing from ksh with Caux_functions sourced: " + what)
+        note("nothing from ksh with Caux_functions sourced: " + what, verbose)
     let direct = shell: {what}
     if direct.output.strip() == "":
         stderr.writeLine(PROG + ": warning: the CM helper answered nothing: " + what)
     return direct.output
 
-def closure_dir(name: str) -> Path:
+def closure_dir(name: str, good: str, verbose: bool) -> Path:
     """The directory holding the closure named on the command line.
 
     The name is an identifier rather than a path -- a SYSTEM, a baseline ID
@@ -446,13 +448,13 @@ def closure_dir(name: str) -> Path:
         # A baseline ID (TACT.TACT_CONFIG.30.0.0.128) always contains dots;
         # a plain system name (TACT, IFPS) never does.
         return Path(replace_first(name, ".", "/"))
-    let topmost: str = cm_run("get_topmost_subsystems " + name).strip().split()[0]
+    let topmost: str = cm_run("get_topmost_subsystems " + name, verbose).strip().split()[0]
     let prefix: str = name + "." + topmost + "."
     if $CONTEXT_CM_BASELINE.startswith(prefix):
         return Path(replace_first($CONTEXT_CM_BASELINE, ".", "/"))
-    return Path(name) / (topmost + ".LATEST" + opt.good)
+    return Path(name) / (topmost + ".LATEST" + good)
 
-def all_subsystem_builds() -> []Path:
+def all_subsystem_builds(good: str) -> []Path:
     """Every subsystem whose LATEST build has sources, less the project branches.
 
     `ls` rather than a glob because the pattern spans two directory levels,
@@ -460,7 +462,6 @@ def all_subsystem_builds() -> []Path:
     out when -all is not given.
     """
     let build_dir: str = "build_" + $CM_ENV_ID
-    let good: str = opt.good
     var out: []Path = []
     let listing: []str = shellLines: ls -1d {CM_OT}/*/*[A-Z].LATEST{good}/{build_dir}/sources 2>/dev/null
     for line in listing:
@@ -468,7 +469,7 @@ def all_subsystem_builds() -> []Path:
         out.append(Path(line.replace("/" + build_dir + "/sources", "")))
     return out
 
-def ordinary_builds(dirs: []Path) -> []Path:
+def ordinary_builds(dirs: []Path, verbose: bool) -> []Path:
     """The builds a search without -all wants: the project branches dropped.
 
     A baseline ID, after resolving the symlink and normalising
@@ -482,13 +483,13 @@ def ordinary_builds(dirs: []Path) -> []Path:
     """
     if dirs'Length == 0:
         return dirs
-    note("subsystems listed: " + str(dirs'Length))
+    note("subsystems listed: " + str(dirs'Length), verbose)
     # readlink takes the whole list; its output is one line per argument, in
     # the order given, which is what lines the answers up with the dirs.
     let resolved = shell: readlink -m {*dirs}
     let real: []str = resolved.output.split("\n")
     if real'Length > 0:
-        note("first resolved path: " + real[0])
+        note("first resolved path: " + real[0], verbose)
 
     var kept: []Path = []
     for i in range(dirs'Length):
@@ -498,11 +499,11 @@ def ordinary_builds(dirs: []Path) -> []Path:
         let tail: str = after_first(line, CM_MARKER)
         let baseline: str = replace_first(replace_first(tail, "/", "."), "!", ".")
         if i == 0:
-            note("first baseline: " + baseline)
+            note("first baseline: " + baseline, verbose)
         # Third component starts with a letter → project branch; digit → ordinary.
         continue if baseline == /^\w+\.\w+\.[A-Za-z]/
         kept.append(dirs[i])
-    note("kept after the project-branch filter: " + str(kept'Length))
+    note("kept after the project-branch filter: " + str(kept'Length), verbose)
     if kept'Length == 0:
         stderr.writeLine(PROG + ": warning: every subsystem looked like a "
                          "project branch build, so there is nothing to "
@@ -519,7 +520,7 @@ type SubsystemJob is tuple:
     out    : Path
     err    : Path
 
-def search_one(subsys: Path, tmp_dir: Path, n: Natural) -> SubsystemJob:
+def search_one(subsys: Path, tmp_dir: Path, n: Natural, opt: Options) -> SubsystemJob:
     """Everything one subsystem needs, as a single pipeline into a file.
 
     Returns a SubsystemJob with the running job plus the three paths the
@@ -594,11 +595,11 @@ def header_for(subsys: Path) -> str:
     """
     return "!===== " + str(subsys) + " " + PADDING
 
-def report(what: str, seconds: float):
+def report(what: str, seconds: float, verbose: bool):
     """Where the time went, for -verbose. On stderr: it is not a result."""
-    note(what + " " + str(seconds) + "s")
+    note(what + " " + str(seconds) + "s", verbose)
 
-def search(subsystems: []Path):
+def search(subsystems: []Path, opt: Options):
     """Search every subsystem at once, and print each one as it finishes.
 
     The waiting is one subsystem at a time, in order, and the others carry
@@ -611,15 +612,15 @@ def search(subsystems: []Path):
     let tmp_dir: Path = Path(shell_capture("mktemp -d"))
     var running_jobs: []SubsystemJob = []
     for n, subsys in enumerate(subsystems):
-        running_jobs.append(search_one(subsys, tmp_dir, n))
-    report("started " + str(running_jobs'Length) + " subsystem searches in", time.time() - started)
+        running_jobs.append(search_one(subsys, tmp_dir, n, opt))
+    report("started " + str(running_jobs'Length) + " subsystem searches in", time.time() - started, opt.verbose)
 
     for running_job in running_jobs:
         # The pipeline's own status says nothing a search wants to know --
         # grep reports 1 when a subsystem simply has no match -- so this is
         # the wait, not the answer. The answer is in the two files.
         let finished: RunResult = running_job.job.wait()
-        report(str(running_job.subsys.name) + " done at", time.time() - started)
+        report(str(running_job.subsys.name) + " done at", time.time() - started, opt.verbose)
         # Without a closure the search is long enough that showing where it
         # has got to is worth a line; with one, only -verbose asks for it.
         if opt.closure == "" or opt.verbose:
@@ -637,8 +638,38 @@ def search(subsystems: []Path):
 
     let cleanup: str = str(tmp_dir)
     let rc: int = shell: rm -rf {!cleanup}
-    report("total", time.time() - started)
+    report("total", time.time() - started, opt.verbose)
 
+def determine_targets(opt: Options) -> []Path:
+    var targets: []Path = []
+
+    if opt.closure != "":
+        let dir_name: Path = closure_dir(opt.closure, opt.good, opt.verbose)
+        if opt.verbose:
+            print "Closure     : " + replace_first(str(dir_name), "/", ".")
+        # Psort orders the closure the way the CM tools do; the environment
+        # variable is read into a name first, since an interpolation is an
+        # expression and `$NAME` is not one inside it.
+        let cm_root: Path = Path($CM_ROOT)
+        let closure_path: Path = cm_root / dir_name
+        let ordered: []str = cm_run("echo " + str(closure_path) + " | Psort", opt.verbose).split("\n")
+        for line in ordered:
+            continue if line == ""
+            targets.append(Path(line))
+    else:
+        targets = all_subsystem_builds(opt.good)
+        if opt.skip_projects:
+            targets = ordinary_builds(targets, opt.verbose)
+        if opt.subsys_pattern != "":
+            var matched: []Path = []
+            for d in targets:
+                let (_, rc) = shell(stdin = str(d) + "\n"): grep -qiE -- {opt.subsys_pattern}
+                continue if rc != 0
+                matched.append(d)
+            targets = matched
+        if opt.verbose and opt.subsys_pattern != "":
+            print "Subsys pattern: " + opt.subsys_pattern
+    return targets
 # ---------------------------------------------------------------------------
 # Run
 # ---------------------------------------------------------------------------
@@ -648,44 +679,12 @@ if args'Length == 0:
     print usage()
     quit(0)
 
+# The object the searching procs below read. It holds the defaults from here
+# until the command line is read, which is the last thing this file does: the
+# declaration has to precede its readers, the parsing does not.
+var opt: Options = Options()
 opt.parse(args)
 
-var targets: []Path = []
+let targets: []Path = determine_targets(opt)
 
-if opt.closure != "":
-    let dir_name: Path = closure_dir(opt.closure)
-    if opt.verbose:
-        print "Closure     : " + replace_first(str(dir_name), "/", ".")
-    # Psort orders the closure the way the CM tools do; the environment
-    # variable is read into a name first, since an interpolation is an
-    # expression and `$NAME` is not one inside it.
-    let cm_root: Path = Path($CM_ROOT)
-    let closure_path: Path = cm_root / dir_name
-    let ordered: []str = cm_run("echo " + str(closure_path) + " | Psort").split("\n")
-    for line in ordered:
-        continue if line == ""
-        targets.append(Path(line))
-else:
-    targets = all_subsystem_builds()
-    if opt.skip_projects:
-        targets = ordinary_builds(targets)
-    if opt.subsys_pattern != "":
-        var matched: []Path = []
-        for d in targets:
-            let (_, rc) = shell(stdin = str(d) + "\n"): grep -qiE -- {opt.subsys_pattern}
-            continue if rc != 0
-            matched.append(d)
-        targets = matched
-    if opt.verbose and opt.subsys_pattern != "":
-        print "Subsys pattern: " + opt.subsys_pattern
-
-if opt.verbose:
-    print "ada option  : " + str(opt.ada)
-    print "sort option : " + str(opt.sort_output)
-    print "File pattern: " + opt.file_pattern
-    if opt.use_grep:
-        print "Grep params : " + " ".join(opt.grep_params)
-    else:
-        print "Grep params : no grep"
-
-search(targets)
+search(targets, opt)
