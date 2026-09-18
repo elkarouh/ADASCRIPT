@@ -290,7 +290,7 @@ class Options:
     with_colors    : bool = stdout_is_tty()          # -no_colors turns it off
     grep_params    : []str = DEFAULT_GREP_PARAMS     # the caller's part is added
 
-    def parse(self, argv: []str):
+    def __init__(self, argv: []str):
         """The command line, option by option."""
         var i: Natural = 0
         var in_grep_args: bool = False
@@ -351,15 +351,7 @@ class Options:
                 print "Grep params : " + " ".join(self.grep_params)
             else:
                 print "Grep params : no grep"
-        self.resolve()
-
-    def resolve(self):
-        """What the options mean together, and what they may not mean at all.
-
-        The end of `parse`: an option is not done being read until it has
-        been read against the others, and nothing between the two calls
-        could have wanted the options half-read.
-        """
+        # Validate: options that are not done being read until read against each other.
         if self.use_grep and self.grep_params'Length == DEFAULT_GREP_PARAMS'Length:
             die("a search pattern must be defined. Use -no-grep if you want to list the files searched.")
         if not self.use_grep and self.grep_params'Length > DEFAULT_GREP_PARAMS'Length:
@@ -386,30 +378,19 @@ def replace_first(text: str, old: str, new: str) -> str:
 
     `replace` changes every occurrence on both backends, and a baseline ID
     has more dots than the one that is a directory separator.
+
+    replace_first("TACT.TACT_CONFIG.30.0", ".", "/") -> "TACT/TACT_CONFIG.30.0"
     """
-    let at: int = text.find(old)
-    if at < 0:
-        return text
-    return text[0:at] + new + text[at + len(old):]
+    return new.join(text.split(old, 1))
 
 def after_first(text: str, marker: str) -> str:
     """What follows the first MARKER -- the shell's ${var#*<marker>}.
 
-    Everything before it goes too, which is the whole point: a build resolves
-    to a path like /auto/local_build/dhws149/ssd1/cm/ot/CUA/ADMIN.44.0.0.A,
-    and the baseline ID is what comes after /cm/ot/. Removing the marker and
-    keeping the prefix leaves .auto.local_build... instead, which is not a
-    baseline ID and matches no pattern that describes one.
+    after_first("/auto/local_build/dhws149/cm/ot/CUA/ADMIN.44", "/cm/ot/")
+        -> "CUA/ADMIN.44"
     """
-    let at: int = text.find(marker)
-    if at < 0:
-        return text
-    return text[at + len(marker):]
+    return text.split(marker, 1)[-1]
 
-def shell_capture(cmd: str) -> str:
-    """One line of output from an ordinary command."""
-    let r = shell: {cmd}
-    return r.output.strip()
 
 def cm_run(what: str, verbose: bool) -> str:
     """What a CM helper answers: get_topmost_subsystems, Psort.
@@ -609,7 +590,8 @@ def search(subsystems: []Path, opt: Options):
     slowest one is, and a search that takes a minute shows its work.
     """
     let started: float = time.time()
-    let tmp_dir: Path = Path(shell_capture("mktemp -d"))
+    let mktemp_lines: []str = shellLines: mktemp -d
+    let tmp_dir: Path = Path(mktemp_lines[0])
     var running_jobs: []SubsystemJob = []
     for n, subsys in enumerate(subsystems):
         running_jobs.append(search_one(subsys, tmp_dir, n, opt))
@@ -679,11 +661,7 @@ if args'Length == 0:
     print usage()
     quit(0)
 
-# The object the searching procs below read. It holds the defaults from here
-# until the command line is read, which is the last thing this file does: the
-# declaration has to precede its readers, the parsing does not.
-var opt: Options = Options()
-opt.parse(args)
+let opt: Options = Options(args)
 
 let targets: []Path = determine_targets(opt)
 
