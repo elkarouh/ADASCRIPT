@@ -184,6 +184,29 @@ history of this file if the reasoning behind one of them is ever wanted.
       above the `case`, or between two `when` clauses, is fine -- it is only
       the position before the first clause, where a reader naturally puts the
       note explaining what the block dispatches on.
+- [ ] a single-line `when COND: stmt` body glues a following comment onto
+      the Nim `of` clause instead of leaving it where it is, when that
+      comment is the very next line after the case statement (at the same
+      or a shallower indent -- exiting the case, not another `when`).
+      Minimal repro:
+
+          case TOOL:
+              when GREP: stages = stages + "a"
+              when RG:   stages = stages + "b"
+          # a comment right after
+
+      compiles to `of RG    # a comment right after:`, which Nim rejects
+      ("expected: ':', but got: 'stages'") since the comment lands between
+      `of RG` and its colon. Writing the last `when`'s body on its own
+      indented line instead of inline avoids it -- confirmed the bug is
+      specific to the single-line `stmt_line` form, not the `case`
+      statement generally -- which is the workaround `TOOLS/PGREP/Pgrep.ady`
+      uses (the `-ppat` stage's `case GREP_TOOL:` in `search_one`). Found
+      while adding a `GREP_TOOL` enum there; `_block_inline_header_comment`
+      in `HPARSEC/hek_helpers.py`, called from `when_clause.to_nim` in
+      `TO_NIM/hek_nim_parser.py`, is where the trailing-comment lookup for
+      a compound header lives and is the likely place the wrong comment is
+      being picked up.
 - [ ] a user-defined scalar type is an alias, not a distinct type, so
       `type Velocity_T is float` documents a unit without enforcing it:
       `let d: Distance_T = v` over two float aliases compiles on both
