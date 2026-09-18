@@ -162,25 +162,25 @@ unset CM_ROOT
 check "helpers as programs, no ksh" 2 \
     "$(PATH=$WORK/progs:$BASE_PATH "$PGREP" -no_colors remote | grep -c '^!=====')"
 
-# Neither: the pattern cannot be had, and searching everything or nothing
-# would both be guesses. It says so and stops.
-check "no helper at all is an error" 1 \
-    "$(PATH=$BASE_PATH "$PGREP" -no_colors remote 2>&1 >/dev/null | grep -c 'gave nothing')"
-# `|| status=$?` rather than a substitution: with set -e a failing command
-# inside one takes the script with it, and an empty capture is not a status.
-status=0
-PATH=$BASE_PATH "$PGREP" -no_colors remote >/dev/null 2>&1 || status=$?
-check "...with a failing status"     1 "$status"
+# The project-branch filter is a literal regex on the resolved baseline now,
+# not a cc_pattern lookup -- the whole point of removing the ksh/perl
+# dependency from this path. So the default search needs no CM helper on
+# PATH at all, and still tells the branch apart correctly without one.
+check "no CM helper needed, subsystems searched" 2 \
+    "$(PATH=$BASE_PATH "$PGREP" -no_colors remote | grep -c '^!=====')"
+check "no CM helper needed, the branch is not searched" 0 \
+    "$(PATH=$BASE_PATH "$PGREP" -no_colors remote | grep -c 'in branch')"
 
-# A pattern that matches nothing is a broken filter, not an empty result.
-cat > "$WORK/bin/Caux_functions" <<'EOF'
-cc_pattern() {
-  case "$1" in
-    PROJECT_BASELINE_ID) printf '%s\n' '.*' ;;
-    *)                   printf '%s\n' '[A-Z][A-Z0-9_]*' ;;
-  esac
-}
-EOF
-check "all-branches says so"       1 "$("$PGREP" -no_colors remote 2>&1 >/dev/null | grep -c 'every subsystem looked like')"
+# A tree where every subsystem resolves to a project-branch-shaped baseline:
+# a broken filter here would search everything or nothing, and both are
+# guesses, so it says so instead. Its own tree, so the earlier counts above
+# are untouched.
+BRANCH_OT=$WORK/cm/ot_allbranches
+PRJ2=$REAL/GAMMA/SUB!TBO.44
+mkdir -p "$PRJ2/build_E1/sources" "$BRANCH_OT/GAMMA"
+echo "remote in branch" > "$PRJ2/build_E1/sources/main.adb"
+ln -s "$PRJ2" "$BRANCH_OT/GAMMA/SUB.TBO.LATEST"
+check "all-branches says so"       1 \
+    "$(PGREP_CM_OT=$BRANCH_OT "$PGREP" -no_colors remote 2>&1 >/dev/null | grep -c 'every subsystem looked like')"
 
 [ "$fails" -eq 0 ] || exit 1
