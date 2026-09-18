@@ -373,20 +373,20 @@ def note(what: str, verbose: bool):
 # Where to search
 # ---------------------------------------------------------------------------
 
-def replace_first(text: str, old: str, new: str) -> str:
+def replace_one(text: str, old: str, new: str) -> str:
     """TEXT with the first OLD replaced -- the shell's ${var/old/new}.
 
     `replace` changes every occurrence on both backends, and a baseline ID
     has more dots than the one that is a directory separator.
 
-    replace_first("TACT.TACT_CONFIG.30.0", ".", "/") -> "TACT/TACT_CONFIG.30.0"
+    replace_one("TACT.TACT_CONFIG.30.0", ".", "/") -> "TACT/TACT_CONFIG.30.0"
     """
     return new.join(text.split(old, 1))
 
-def after_first(text: str, marker: str) -> str:
+def after_marker(text: str, marker: str) -> str:
     """What follows the first MARKER -- the shell's ${var#*<marker>}.
 
-    after_first("/auto/local_build/dhws149/cm/ot/CUA/ADMIN.44", "/cm/ot/")
+    after_marker("/auto/local_build/dhws149/cm/ot/CUA/ADMIN.44", "/cm/ot/")
         -> "CUA/ADMIN.44"
     """
     return text.split(marker, 1)[-1]
@@ -428,11 +428,11 @@ def closure_dir(name: str, good: str, verbose: bool) -> Path:
     if "." in name:
         # A baseline ID (TACT.TACT_CONFIG.30.0.0.128) always contains dots;
         # a plain system name (TACT, IFPS) never does.
-        return Path(replace_first(name, ".", "/"))
+        return Path(replace_one(name, ".", "/"))
     let topmost: str = cm_run("get_topmost_subsystems " + name, verbose).strip().split()[0]
     let prefix: str = name + "." + topmost + "."
     if $CONTEXT_CM_BASELINE.startswith(prefix):
-        return Path(replace_first($CONTEXT_CM_BASELINE, ".", "/"))
+        return Path(replace_one($CONTEXT_CM_BASELINE, ".", "/"))
     return Path(name) / (topmost + ".LATEST" + good)
 
 def all_subsystem_builds(good: str) -> []Path:
@@ -477,8 +477,8 @@ def ordinary_builds(dirs: []Path, verbose: bool) -> []Path:
         var line: str = str(dirs[i])
         if i < real'Length and real[i] != "":
             line = real[i]
-        let tail: str = after_first(line, CM_MARKER)
-        let baseline: str = replace_first(replace_first(tail, "/", "."), "!", ".")
+        let tail: str = after_marker(line, CM_MARKER)
+        let baseline: str = replace_one(replace_one(tail, "/", "."), "!", ".")
         if i == 0:
             note("first baseline: " + baseline, verbose)
         # Third component starts with a letter → project branch; digit → ordinary.
@@ -628,7 +628,7 @@ def determine_targets(opt: Options) -> []Path:
     if opt.closure != "":
         let dir_name: Path = closure_dir(opt.closure, opt.good, opt.verbose)
         if opt.verbose:
-            print "Closure     : " + replace_first(str(dir_name), "/", ".")
+            print "Closure     : " + replace_one(str(dir_name), "/", ".")
         # Psort orders the closure the way the CM tools do; the environment
         # variable is read into a name first, since an interpolation is an
         # expression and `$NAME` is not one inside it.
