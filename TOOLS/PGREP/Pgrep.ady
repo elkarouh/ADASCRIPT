@@ -513,8 +513,18 @@ def ordinary_builds(dirs: []Path) -> []Path:
 # Searching one subsystem
 # ---------------------------------------------------------------------------
 
-def search_one(subsys: Path, out_file: Path, err_file: Path) -> Job:
+type SubsystemJob is tuple:
+    job    : Job
+    subsys : Path
+    out    : Path
+    err    : Path
+
+def search_one(subsys: Path, tmp_dir: Path, n: Natural) -> SubsystemJob:
     """Everything one subsystem needs, as a single pipeline into a file.
+
+    Returns a SubsystemJob with the running job plus the three paths the
+    caller needs to collect results. shellSpawn returns immediately -- the
+    job runs in the background -- so all four fields are available at once.
 
     The stages are the ksh original's, and for its reason: grep starts on
     the first paths while find is still walking the tree, and a file list
@@ -532,6 +542,8 @@ def search_one(subsys: Path, out_file: Path, err_file: Path) -> Job:
     skips whichever does not exist (2>/dev/null). This matches the ksh
     version and avoids a blocking pre-check before any jobs can start.
     """
+    let out_file: Path = tmp_dir / (str(n) + ".out")
+    let err_file: Path = tmp_dir / (str(n) + ".err")
     let build: str = "build_" + $CM_ENV_ID
     let dirs: []Path = [subsys / build / "sources", subsys / build / "special_files"]
     let pattern: str = opt.file_pattern
@@ -560,12 +572,11 @@ def search_one(subsys: Path, out_file: Path, err_file: Path) -> Job:
     # with something to say is grep, in the middle.
 
     if not opt.use_grep:
-        # A listing keeps its paths whole, as it does in the shell version.
         let lister: Job = shellSpawn(env = stage_env): ( find {*dirs} -type f ! -name '*.gz' -name {!pattern} 2>/dev/null{stages} ) > {!dest} 2> {!problems}
-        return lister
+        return (job: lister, subsys: subsys, out: out_file, err: err_file)
     let params: []str = opt.grep_params
     let searcher: Job = shellSpawn(env = stage_env): ( find {*dirs} -type f ! -name '*.gz' -name {!pattern} 2>/dev/null{stages} | xargs -r -d '\n' grep {*params} --{naming} ) > {!dest} 2> {!problems}
-    return searcher
+    return (job: searcher, subsys: subsys, out: out_file, err: err_file)
 
 def header_for(subsys: Path) -> str:
     """The `!===== SUBSYS ====...` line that separates one subsystem's hits.
@@ -598,38 +609,29 @@ def search(subsystems: []Path):
     """
     let started: float = time.time()
     let tmp_dir: Path = Path(shell_capture("mktemp -d"))
-    var jobs: []Job = []
-    var outs: []Path = []
-    var errs: []Path = []
-    var n: Natural = 0
-    for subsys in subsystems:
-        let out_file: Path = tmp_dir / (str(n) + ".out")
-        let err_file: Path = tmp_dir / (str(n) + ".err")
-        outs.append(out_file)
-        errs.append(err_file)
-        jobs.append(search_one(subsys, out_file, err_file))
-        n += 1
-    report("started " + str(n) + " subsystem searches in", time.time() - started)
+    var running_jobs: []SubsystemJob = []
+    for n, subsys in enumerate(subsystems):
+        running_jobs.append(search_one(subsys, tmp_dir, n))
+    report("started " + str(running_jobs'Length) + " subsystem searches in", time.time() - started)
 
-    for idx in range(len(subsystems)):
-        let subsys: Path = subsystems[idx]
+    for running_job in running_jobs:
         # The pipeline's own status says nothing a search wants to know --
         # grep reports 1 when a subsystem simply has no match -- so this is
         # the wait, not the answer. The answer is in the two files.
-        let finished: RunResult = jobs[idx].wait()
-        report(str(subsys.name) + " done at", time.time() - started)
+        let finished: RunResult = running_job.job.wait()
+        report(str(running_job.subsys.name) + " done at", time.time() - started)
         # Without a closure the search is long enough that showing where it
         # has got to is worth a line; with one, only -verbose asks for it.
         if opt.closure == "" or opt.verbose:
-            print header_for(subsys)
+            print header_for(running_job.subsys)
         # An unknown option, an unreadable file: grep says so on stderr, and
         # the pipeline put that in a file rather than letting it reach the
         # terminal out of order. Unprinted it is an empty result and a zero
         # status, which is what a mistyped grep argument looked like.
-        let complaints: str = readFile(str(errs[idx])).strip()
+        let complaints: str = readFile(str(running_job.err)).strip()
         if complaints != "":
             stderr.writeLine(complaints)
-        let text: str = readFile(str(outs[idx]))
+        let text: str = readFile(str(running_job.out))
         continue if text.strip() == ""
         print text.rstrip("\n")
 
