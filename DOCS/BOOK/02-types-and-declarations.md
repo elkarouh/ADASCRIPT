@@ -301,6 +301,94 @@ def align(length: Positive, s: str) -> str:
     return s.alignLeft(length)
 ```
 
+## 2.7 String literals
+
+The literal forms are Python's, and they mean what they do in Python. The
+quote character is not part of the type: `"..."` and `'...'` both make a
+`str`, so the one to reach for is whichever lets the other sit inside
+without an escape.
+
+```python
+# EXAMPLES/DOC/string_snippets.ady
+let double: str = "she said hello"
+let single: str = 'she said "hello"'
+```
+
+A `char` is its own type rather than a one-character `str`, and it is the
+**declared type** that decides which a single-character literal is — the
+same `'x'` is a `str` where a `str` is declared:
+
+```python
+# EXAMPLES/DOC/string_snippets.ady
+let initial: char = 'x'
+let one_char: str = 'x'
+```
+
+| Form | Meaning | Python output | Nim output |
+|------|---------|---------------|------------|
+| `"a"` / `'a'` | string | `"a"` / `'a'` | `"a"` |
+| `'x'` declared `char` | single character | `'x'` (a `str`) | `'x'` (a `char`) |
+| `"""…"""` | spans lines | `"""…"""` | `"…\n…"` |
+| `r"\d+"` | raw — backslashes survive | `r"\d+"` | `r"\d+"` |
+| `f"{x}"` | interpolation | `f"{x}"` | `fmt"{x}"` |
+
+Triple quotes span lines, and a raw string keeps its backslashes — which is
+what a regex wants, since otherwise `\d` would be an escape for the compiler
+to interpret rather than two characters to match with:
+
+```python
+# EXAMPLES/DOC/string_snippets.ady
+let banner: str = """first
+second"""
+```
+
+f-strings interpolate an expression, and a format spec after `:` aligns and
+pads exactly as in Python:
+
+```python
+# EXAMPLES/DOC/string_snippets.ady
+let n: Natural = 42
+assert f"n is {n}" == "n is 42"
+assert f"{n * 2}" == "84"
+# A format spec after ':' aligns and pads, as in Python.
+assert f"[{n:>5}]" == "[   42]"
+```
+
+### Adjacent literals join
+
+Writing two literals next to each other concatenates them, as in Python and
+C. There is no operator, and nothing happens at run time: the pieces are one
+literal by the time either backend sees them.
+
+```python
+# EXAMPLES/DOC/string_snippets.ady
+assert "ab" == "a" "b"
+```
+
+A piece may be an f-string, and the kinds mix freely within one run. What
+holds a run together is the juxtaposition, not what each piece happens to be:
+
+```python
+# EXAMPLES/DOC/string_snippets.ady
+assert f"x={n} " "then plain " f"and {n * 2}" == "x=42 then plain and 84"
+```
+
+The reason to want it is a long message that has to be readable in the source
+as well as in the output. Parentheses let the run break across lines, and each
+line stays inside the margin:
+
+```python
+# EXAMPLES/DOC/string_snippets.ady
+let report: str = (f"{n} item(s) processed, "
+                   "none rejected, "
+                   f"{n * 2} checks run")
+```
+
+Nim has no juxtaposition rule of its own, so the run is emitted as a `&`
+chain — `fmt"…" & "…" & fmt"…"`. Python takes it verbatim, since the rule is
+Python's to begin with. Either way the result is the same string, and the
+concatenation of the constant pieces costs nothing at run time.
+
 ---
 
 *Next: [Chapter 3 — Enums, Sets, and Tick Attributes](03-enums-sets-and-tick-attributes.md)*

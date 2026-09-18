@@ -211,7 +211,7 @@ class Indenter:
     stack: []Block_T = []
     paren_depth: Natural = 0
     pending_spec: bool = False   # a 'function ... is' header whose body kind is not yet known
-    cont_func: bool = False      # the declaration being continued started with 'function' — the
+    cont_func: bool = False      # the declaration being continued started with 'function' -- the
                                  # 'is' that ends its header may land on a later physical line
     pending_inst: bool = False   # an 'X is\nnew Y' generic instantiation PKG frame to pop when done
     cond_state: Natural = 0      # 1 = inside multi-line 'if' condition, 2 = 'elsif'

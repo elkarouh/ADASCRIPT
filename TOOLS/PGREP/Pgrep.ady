@@ -290,7 +290,7 @@ class Options:
     with_colors    : bool = stdout_is_tty()          # -no_colors turns it off
     grep_params    : []str = DEFAULT_GREP_PARAMS     # the caller's part is added
 
-    def parse(self, argv: []str):
+    def __init__(self, argv: []str):
         """The command line, option by option."""
         var i: Natural = 0
         var in_grep_args: bool = False
@@ -343,15 +343,15 @@ class Options:
                     in_grep_args = True
                     eaten = 0
             i += eaten
-        self.resolve()
-
-    def resolve(self):
-        """What the options mean together, and what they may not mean at all.
-
-        The end of `parse`: an option is not done being read until it has
-        been read against the others, and nothing between the two calls
-        could have wanted the options half-read.
-        """
+        if self.verbose:
+            print "ada option  : " + str(self.ada)
+            print "sort option : " + str(self.sort_output)
+            print "File pattern: " + self.file_pattern
+            if self.use_grep:
+                print "Grep params : " + " ".join(self.grep_params)
+            else:
+                print "Grep params : no grep"
+        # Validate: options that are not done being read until read against each other.
         if self.use_grep and self.grep_params'Length == DEFAULT_GREP_PARAMS'Length:
             die("a search pattern must be defined. Use -no-grep if you want to list the files searched.")
         if not self.use_grep and self.grep_params'Length > DEFAULT_GREP_PARAMS'Length:
@@ -363,15 +363,9 @@ class Options:
         if self.with_colors:
             self.grep_params = self.grep_params + ["--color=always"]
 
-
-# The object the searching procs below read. It holds the defaults from here
-# until the command line is read, which is the last thing this file does: the
-# declaration has to precede its readers, the parsing does not.
-var opt: Options = Options()
-
-def note(what: str):
+def note(what: str, verbose: bool):
     """What the program decided, for -verbose. On stderr: it is not a result."""
-    if opt.verbose:
+    if verbose:
         stderr.writeLine(PROG + ": " + what)
 
 
@@ -379,75 +373,22 @@ def note(what: str):
 # Where to search
 # ---------------------------------------------------------------------------
 
-def after_first(text: str, marker: str) -> str:
+def after_marker(text: str, marker: str) -> str:
     """What follows the first MARKER -- the shell's ${var#*<marker>}.
 
-    Everything before it goes too, which is the whole point: a build resolves
-    to a path like /auto/local_build/dhws149/ssd1/cm/ot/CUA/ADMIN.44.0.0.A,
-    and the baseline ID is what comes after /cm/ot/. Removing the marker and
-    keeping the prefix leaves .auto.local_build... instead, which is not a
-    baseline ID and matches no pattern that describes one.
+    after_marker("/auto/local_build/dhws149/cm/ot/CUA/ADMIN.44", "/cm/ot/")
+        -> "CUA/ADMIN.44"
     """
-    let at: int = text.find(marker)
-    if at < 0:
-        return text
-    return text[at + len(marker):]
+    return text.split(marker, 1)[-1]
 
-def cm_matches(text: str, what: str) -> bool:
-    """Does TEXT match the pattern cc_pattern gives for WHAT?
 
-    Perl, anchored at both ends, which is what `matches_pattern` in
-    Caux_functions does:
+def cm_run(what: str, verbose: bool) -> str:
+    """What a CM helper answers: get_topmost_subsystems, Psort.
 
-        return $(perl -e "exit 1 if (\"$2\" !~ m{^$(cc_pattern $1)$})")
-
-    Not `grep -E`, which cannot read one of those patterns and answers no to
-    everything. Here that meant a SYSTEM was never recognised as one, so
-    -closure TACT was taken for a baseline ID and resolved to the directory
-    `TACT` rather than to TACT's topmost subsystem -- and Psort, handed a
-    directory that is not a build, had nothing to say.
-    """
-    let pattern: str = cm_run("cc_pattern " + what).strip()
-    if pattern == "":
-        die("cc_pattern " + what + " gave nothing. Is Caux_functions on your PATH?")
-    var one: []str = []
-    one.append(text)
-    let hits: []bool = perl_matching_lines(one, "^" + pattern + "$")
-    return hits[0]
-
-def matches_runtime(text: str, pattern: str) -> bool:
-    """`text` against a pattern that is not known until the program runs.
-
-    A regex literal is a literal, so a pattern read from cc_pattern or from
-    an option cannot be one; grep's exit status is the whole answer.
-    """
-    let (_, rc) = shell(stdin = text + "\n"): grep -qE -- {!pattern}
-    return rc == 0
-
-def matches_runtime_i(text: str, pattern: str) -> bool:
-    """The same, ignoring case: what -ppat and -subsys are matched with."""
-    let (_, rc) = shell(stdin = text + "\n"): grep -qiE -- {!pattern}
-    return rc == 0
-
-def shell_capture(cmd: str) -> str:
-    """One line of output from an ordinary command."""
-    let r = shell: {cmd}
-    return r.output.strip()
-
-def cm_run(what: str) -> str:
-    """What a CM helper answers: cc_pattern, get_topmost_subsystems, Psort.
-
-    They are ksh functions from `Caux_functions`, which the original
-    dot-sources at the top of the file. Run as commands they do not exist,
-    and the shell says so on a stderr nobody reads: `cc_pattern
-    PROJECT_BASELINE_ID` came back empty, every baseline was tested against
-    `^$`, and nothing matched -- which was a search of every subsystem or of
-    none, depending which way that answer was taken.
-
-    So it is asked where the answer lives: a ksh, with the file sourced. If
-    there is no ksh, or the source fails, the command is tried directly, so
-    that a site where these are real programs still works; and a helper that
-    answers nothing at all says so rather than being taken at its silence.
+    These are ksh functions (get_topmost_subsystems) or Perl programs (Psort)
+    from the CM toolchain. ksh functions must be sourced from Caux_functions
+    first; if there is no ksh, or the source fails, the command is tried
+    directly, so that a site where these are real programs still works.
     """
     let ksh_path: ?Path = which("ksh")
     if ksh_path is not None:
@@ -458,13 +399,13 @@ def cm_run(what: str) -> str:
         let r = shell: ksh -c {!program}
         if r.output.strip() != "":
             return r.output
-        note("nothing from ksh with Caux_functions sourced: " + what)
+        note("nothing from ksh with Caux_functions sourced: " + what, verbose)
     let direct = shell: {what}
     if direct.output.strip() == "":
         stderr.writeLine(PROG + ": warning: the CM helper answered nothing: " + what)
     return direct.output
 
-def closure_dir(name: str) -> Path:
+def closure_dir(name: str, good: str, verbose: bool) -> Path:
     """The directory holding the closure named on the command line.
 
     The name is an identifier rather than a path -- a SYSTEM, a baseline ID
@@ -474,16 +415,18 @@ def closure_dir(name: str) -> Path:
     wins when it names a baseline of that same system; a baseline ID is
     already a path with its first dot turned into a slash.
     """
-    if not cm_matches(name, "SYSTEM"):
+    if "." in name:
+        # A baseline ID (TACT.TACT_CONFIG.30.0.0.128) always contains dots;
+        # a plain system name (TACT, IFPS) never does.
         return Path(f"{name/.//}")
-    let topmost: str = cm_run("get_topmost_subsystems " + name).strip().split()[0]
+    let topmost: str = cm_run("get_topmost_subsystems " + name, verbose).strip().split()[0]
     let prefix: str = name + "." + topmost + "."
     let baseline: str = $CONTEXT_CM_BASELINE
     if baseline.startswith(prefix):
         return Path(f"{baseline/.//}")
-    return Path(name) / (topmost + ".LATEST" + opt.good)
+    return Path(name) / (topmost + ".LATEST" + good)
 
-def all_subsystem_builds() -> []Path:
+def all_subsystem_builds(good: str) -> []Path:
     """Every subsystem whose LATEST build has sources, less the project branches.
 
     `ls` rather than a glob because the pattern spans two directory levels,
@@ -491,7 +434,6 @@ def all_subsystem_builds() -> []Path:
     out when -all is not given.
     """
     let build_dir: str = "build_" + $CM_ENV_ID
-    let good: str = opt.good
     var out: []Path = []
     let listing: []str = shellLines: ls -1d {CM_OT}/*/*[A-Z].LATEST{good}/{build_dir}/sources 2>/dev/null
     for line in listing:
@@ -499,147 +441,43 @@ def all_subsystem_builds() -> []Path:
         out.append(Path(line.replace("/" + build_dir + "/sources", "")))
     return out
 
-def matching_lines(lines: []str, pattern: str, fold_case: bool) -> []bool:
-    """Which of these lines match the pattern -- one grep for the whole list.
-
-    A grep for each line is a process for each line, and the lists here are
-    as long as the site has subsystems. `grep -n` numbers the lines it keeps,
-    which is enough to say yes or no about each one without asking again.
-
-    This is for -ppat and -subsys, which the shell version matches with
-    `grep -Ei` too.
-    """
-    let numbers: str = capture_numbers(lines, "grep", pattern, fold_case)
-    return numbered_hits(numbers, lines'Length)
-
-def perl_matching_lines(lines: []str, pattern: str) -> []bool:
-    """The same, judged by perl.
-
-    cc_pattern's patterns are perl regexps and the shell version tests them
-    with perl. `grep -E` is a different language: given one of them it warns,
-    matches nothing, and every subsystem looks like a project branch -- which
-    is a search of everything or a search of nothing, depending on which way
-    the answer is read. Nothing said so, because no match is a valid answer.
-    """
-    let numbers: str = capture_numbers(lines, "perl", pattern, False)
-    return numbered_hits(numbers, lines'Length)
-
-def capture_numbers(lines: []str, engine: str, pattern: str, fold_case: bool) -> str:
-    """The 1-based numbers of the lines that match, one per line.
-
-    Both engines are asked the same way -- the list on stdin, the pattern as
-    an argument rather than inside the command text, since it is a regexp
-    full of the characters a shell also wants.
-    """
-    if lines'Length == 0:
-        return ""
-    let text: str = "\n".join(lines) + "\n"
-    if engine == "perl":
-        # -s sets $pat from -pat=..., so the pattern needs no quoting inside
-        # the program; -l supplies the newline print would otherwise spell.
-        let r = shell(stdin = text): perl -s -l -n -e 'print $. if /^$pat$/' -- -pat={!pattern}
-        if r.code != 0:
-            # A pattern perl cannot compile leaves no output, which reads as
-            # "nothing matched" and is not the same thing at all.
-            stderr.writeLine(PROG + ": warning: perl could not use the pattern "
-                             "(status " + str(r.code) + "): " + r.stderr.strip())
-        return r.output
-    var flags: str = "-nE"
-    if fold_case:
-        flags = "-niE"
-    let g = shell(stdin = text): grep {flags} -- {!pattern}
-    var out: []str = []
-    for numbered in g.output.split("\n"):
-        continue if numbered == ""
-        let at: int = numbered.find(":")
-        continue if at < 0
-        out.append(numbered[0:at])
-    return "\n".join(out)
-
-def numbered_hits(numbers: str, count: Natural) -> []bool:
-    """A line number per line, turned into a yes or no for each of `count`."""
-    var hits: []bool = []
-    for i in range(count):
-        hits.append(False)
-    for line in numbers.split("\n"):
-        continue if line == ""
-        # Through a name of its own: int() straight off the loop variable is
-        # an int conversion on the Nim side rather than a parse.
-        let counted: str = line
-        let idx: int = int(counted) - 1
-        if idx >= 0 and idx < count:
-            hits[idx] = True
-    return hits
-
-def ordinary_builds(dirs: []Path) -> []Path:
+def ordinary_builds(dirs: []Path, verbose: bool) -> []Path:
     """The builds a search without -all wants: the project branches dropped.
 
-    A baseline ID is the resolved path under /cm/ot with its slash and its
-    '!' turned into dots -- CMA/MASTER!DEFIANT.27 reads as
-    CMA.MASTER.DEFIANT.27 -- and cc_pattern PROJECT_BASELINE_ID describes
-    exactly that shape:
+    A baseline ID, after resolving the symlink and normalising
+    SYSTEM/SUBSYSTEM!NAME.N → SYSTEM.SUBSYSTEM.NAME.N, has a third component
+    that is either a version major (digit: 28, 30) for an ordinary build, or
+    a project name (letter: DEFIANT, EKHASSAN) for a branch. The first
+    character of the third component is the tell.
 
-        SYSTEM . SUBSYSTEM . <project_name_uc> . <build_counter>
-
-    An ordinary build's baseline is a version rather than a project and a
-    count -- ALM.ALM_CONFIG.28.0.0.4 -- and does not match. So a match is a
-    project branch build, and a match is what is dropped.
-
-    The shell version's perl line reads the other way round
-
-        if echo "${PROJECT_BASELINE_ID}" | perl -ne "exit 1 if ! /^${PAT}$/"
-
-    -- a match exits 0 and the directory is kept -- which would search the
-    branches and nothing else. It does not: its own runs search the 165
-    ordinary builds, which is the behaviour here, and which the "?? This is
-    bizarre" comment beside that line is about.
-
-    One readlink and one perl for the list, rather than two processes for
-    each subsystem: at a few hundred subsystems that was the better part of a
-    second before the first file was looked at.
+    One readlink for the whole list; the match is then in-process with a
+    native regex literal -- no subprocess per subsystem or per list.
     """
     if dirs'Length == 0:
         return dirs
-    if which("perl") is None:
-        stderr.writeLine(PROG + ": warning: no perl, so project branch builds "
-                         "cannot be told apart; searching them too, as -all does.")
-        return dirs
-    note("subsystems listed: " + str(dirs'Length))
-    let pattern: str = cm_run("cc_pattern PROJECT_BASELINE_ID").strip()
-    note("baseline pattern: " + pattern)
-    if pattern == "":
-        # Without it there is no telling a project branch from an ordinary
-        # build, and guessing either way has been wrong in both directions.
-        die("cc_pattern PROJECT_BASELINE_ID gave nothing, so project branch "
-            "builds cannot be told apart. Is Caux_functions on your PATH? "
-            "Use -all to search every build instead.")
+    note("subsystems listed: " + str(dirs'Length), verbose)
     # readlink takes the whole list; its output is one line per argument, in
     # the order given, which is what lines the answers up with the dirs.
     let resolved = shell: readlink -m {*dirs}
     let real: []str = resolved.output.split("\n")
     if real'Length > 0:
-        note("first resolved path: " + real[0])
+        note("first resolved path: " + real[0], verbose)
 
-    var baselines: []str = []
+    var kept: []Path = []
     for i in range(dirs'Length):
         var line: str = str(dirs[i])
         if i < real'Length and real[i] != "":
             line = real[i]
-        let tail: str = after_first(line, CM_MARKER)
+        let tail: str = after_marker(line, CM_MARKER)
         let slashed: str = f"{tail/\//.}"
-        baselines.append(f"{slashed/!/.}")
-
-    if baselines'Length > 0:
-        note("first baseline: " + baselines[0])
-    let hits: []bool = perl_matching_lines(baselines, "^" + pattern + "$")
-    var kept: []Path = []
-    for i in range(dirs'Length):
-        continue if hits[i]                  # a match is a project branch
+        let baseline: str = f"{slashed/!/.}"
+        if i == 0:
+            note("first baseline: " + baseline, verbose)
+        # Third component starts with a letter → project branch; digit → ordinary.
+        continue if baseline == /^\w+\.\w+\.[A-Za-z]/
         kept.append(dirs[i])
-    note("kept after the project-branch filter: " + str(kept'Length))
+    note("kept after the project-branch filter: " + str(kept'Length), verbose)
     if kept'Length == 0:
-        # Every subsystem a project branch is not an answer, it is a pattern
-        # that did not work. Saying so beats searching nothing in silence.
         stderr.writeLine(PROG + ": warning: every subsystem looked like a "
                          "project branch build, so there is nothing to "
                          "search. Use -all to search them all.")
@@ -649,32 +487,18 @@ def ordinary_builds(dirs: []Path) -> []Path:
 # Searching one subsystem
 # ---------------------------------------------------------------------------
 
-def has_special_files(dirs: []Path) -> []bool:
-    """Which subsystems have a sources/special_files, in one `ls`.
+type SubsystemJob is tuple:
+    job    : Job
+    subsys : Path
+    out    : Path
+    err    : Path
 
-    A file test each is an NFS round trip each, and they were made in the
-    loop that starts the searches -- one at a time, before any of them could
-    run. At 165 subsystems that was most of a second in which nothing was
-    being searched. The shell version makes the same test inside each
-    background job, where they at least overlap.
-    """
-    var flags: []bool = []
-    for d in dirs:
-        flags.append(False)
-    if dirs'Length == 0:
-        return flags
-    var probes: []Path = []
-    for d in dirs:
-        probes.append(d / "sources" / "special_files")
-    let r = shell: ls -d {*probes} 2>/dev/null
-    let listed: str = "\n" + r.output + "\n"
-    for i in range(dirs'Length):
-        if listed.find("\n" + str(probes[i]) + "\n") >= 0:
-            flags[i] = True
-    return flags
-
-def search_one(subsys: Path, out_file: Path, err_file: Path, special: bool) -> Job:
+def search_one(subsys: Path, tmp_dir: Path, n: Natural, opt: Options) -> SubsystemJob:
     """Everything one subsystem needs, as a single pipeline into a file.
+
+    Returns a SubsystemJob with the running job plus the three paths the
+    caller needs to collect results. shellSpawn returns immediately -- the
+    job runs in the background -- so all four fields are available at once.
 
     The stages are the ksh original's, and for its reason: grep starts on
     the first paths while find is still walking the tree, and a file list
@@ -687,11 +511,15 @@ def search_one(subsys: Path, out_file: Path, err_file: Path, special: bool) -> J
     few hundred subsystems this process sits in the middle of every byte
     and polls every pipe to get it; a file lets each child write at its own
     speed and lets this one sleep until there is something to print.
+
+    Both sources and special_files are always passed to find; find silently
+    skips whichever does not exist (2>/dev/null). This matches the ksh
+    version and avoids a blocking pre-check before any jobs can start.
     """
+    let out_file: Path = tmp_dir / (str(n) + ".out")
+    let err_file: Path = tmp_dir / (str(n) + ".err")
     let build: str = "build_" + $CM_ENV_ID
-    var dirs: []Path = [subsys / build / "sources"]
-    if special:
-        dirs.append(subsys / build / "special_files")
+    let dirs: []Path = [subsys / build / "sources", subsys / build / "special_files"]
     let pattern: str = opt.file_pattern
 
     # A stage the options did not ask for is left out of the pipeline rather
@@ -718,12 +546,11 @@ def search_one(subsys: Path, out_file: Path, err_file: Path, special: bool) -> J
     # with something to say is grep, in the middle.
 
     if not opt.use_grep:
-        # A listing keeps its paths whole, as it does in the shell version.
         let lister: Job = shellSpawn(env = stage_env): ( find {*dirs} -type f ! -name '*.gz' -name {!pattern} 2>/dev/null{stages} ) > {!dest} 2> {!problems}
-        return lister
+        return (job: lister, subsys: subsys, out: out_file, err: err_file)
     let params: []str = opt.grep_params
     let searcher: Job = shellSpawn(env = stage_env): ( find {*dirs} -type f ! -name '*.gz' -name {!pattern} 2>/dev/null{stages} | xargs -r -d '\n' grep {*params} --{naming} ) > {!dest} 2> {!problems}
-    return searcher
+    return (job: searcher, subsys: subsys, out: out_file, err: err_file)
 
 def header_for(subsys: Path) -> str:
     """The `!===== SUBSYS ====...` line that separates one subsystem's hits.
@@ -741,11 +568,11 @@ def header_for(subsys: Path) -> str:
     """
     return "!===== " + str(subsys) + " " + PADDING
 
-def report(what: str, seconds: float):
+def report(what: str, seconds: float, verbose: bool):
     """Where the time went, for -verbose. On stderr: it is not a result."""
-    note(what + " " + str(seconds) + "s")
+    note(what + " " + str(seconds) + "s", verbose)
 
-def search(subsystems: []Path):
+def search(subsystems: []Path, opt: Options):
     """Search every subsystem at once, and print each one as it finishes.
 
     The waiting is one subsystem at a time, in order, and the others carry
@@ -755,47 +582,69 @@ def search(subsystems: []Path):
     slowest one is, and a search that takes a minute shows its work.
     """
     let started: float = time.time()
-    let specials: []bool = has_special_files(subsystems)
-    let tmp_dir: Path = Path(shell_capture("mktemp -d"))
-    var jobs: []Job = []
-    var outs: []Path = []
-    var errs: []Path = []
-    var n: Natural = 0
-    for subsys in subsystems:
-        let out_file: Path = tmp_dir / (str(n) + ".out")
-        let err_file: Path = tmp_dir / (str(n) + ".err")
-        outs.append(out_file)
-        errs.append(err_file)
-        jobs.append(search_one(subsys, out_file, err_file, specials[n]))
-        n += 1
-    report("started " + str(n) + " subsystem searches in", time.time() - started)
+    let mktemp_lines: []str = shellLines: mktemp -d
+    let tmp_dir: Path = Path(mktemp_lines[0])
+    var running_jobs: []SubsystemJob = []
+    for n, subsys in enumerate(subsystems):
+        running_jobs.append(search_one(subsys, tmp_dir, n, opt))
+    report("started " + str(running_jobs'Length) + " subsystem searches in", time.time() - started, opt.verbose)
 
-    for idx in range(len(subsystems)):
-        let subsys: Path = subsystems[idx]
+    for running_job in running_jobs:
         # The pipeline's own status says nothing a search wants to know --
         # grep reports 1 when a subsystem simply has no match -- so this is
         # the wait, not the answer. The answer is in the two files.
-        let finished: RunResult = jobs[idx].wait()
-        report(str(subsys.name) + " done at", time.time() - started)
+        let finished: RunResult = running_job.job.wait()
+        report(str(running_job.subsys.name) + " done at", time.time() - started, opt.verbose)
         # Without a closure the search is long enough that showing where it
         # has got to is worth a line; with one, only -verbose asks for it.
         if opt.closure == "" or opt.verbose:
-            print header_for(subsys)
+            print header_for(running_job.subsys)
         # An unknown option, an unreadable file: grep says so on stderr, and
         # the pipeline put that in a file rather than letting it reach the
         # terminal out of order. Unprinted it is an empty result and a zero
         # status, which is what a mistyped grep argument looked like.
-        let complaints: str = readFile(str(errs[idx])).strip()
+        let complaints: str = readFile(str(running_job.err)).strip()
         if complaints != "":
             stderr.writeLine(complaints)
-        let text: str = readFile(str(outs[idx]))
+        let text: str = readFile(str(running_job.out))
         continue if text.strip() == ""
         print text.rstrip("\n")
 
     let cleanup: str = str(tmp_dir)
     let rc: int = shell: rm -rf {!cleanup}
-    report("total", time.time() - started)
+    report("total", time.time() - started, opt.verbose)
 
+def determine_targets(opt: Options) -> []Path:
+    var targets: []Path = []
+
+    if opt.closure != "":
+        let dir_name: Path = closure_dir(opt.closure, opt.good, opt.verbose)
+        if opt.verbose:
+            let dir_str: str = str(dir_name)
+            print "Closure     : " + f"{dir_str/\//.}"
+        # Psort orders the closure the way the CM tools do; the environment
+        # variable is read into a name first, since an interpolation is an
+        # expression and `$NAME` is not one inside it.
+        let cm_root: Path = Path($CM_ROOT)
+        let closure_path: Path = cm_root / dir_name
+        let ordered: []str = cm_run("echo " + str(closure_path) + " | Psort", opt.verbose).split("\n")
+        for line in ordered:
+            continue if line == ""
+            targets.append(Path(line))
+    else:
+        targets = all_subsystem_builds(opt.good)
+        if opt.skip_projects:
+            targets = ordinary_builds(targets, opt.verbose)
+        if opt.subsys_pattern != "":
+            var matched: []Path = []
+            for d in targets:
+                let (_, rc) = shell(stdin = str(d) + "\n"): grep -qiE -- {opt.subsys_pattern}
+                continue if rc != 0
+                matched.append(d)
+            targets = matched
+        if opt.verbose and opt.subsys_pattern != "":
+            print "Subsys pattern: " + opt.subsys_pattern
+    return targets
 # ---------------------------------------------------------------------------
 # Run
 # ---------------------------------------------------------------------------
@@ -805,48 +654,8 @@ if args'Length == 0:
     print usage()
     quit(0)
 
-opt.parse(args)
+let opt: Options = Options(args)
 
-var targets: []Path = []
+let targets: []Path = determine_targets(opt)
 
-if opt.closure != "":
-    let dir_name: Path = closure_dir(opt.closure)
-    if opt.verbose:
-        let dir_str: str = str(dir_name)
-        print "Closure     : " + f"{dir_str/\//.}"
-    # Psort orders the closure the way the CM tools do; the environment
-    # variable is read into a name first, since an interpolation is an
-    # expression and `$NAME` is not one inside it.
-    let cm_root: Path = Path($CM_ROOT)
-    let closure_path: Path = cm_root / dir_name
-    let ordered: []str = cm_run("echo " + str(closure_path) + " | Psort").split("\n")
-    for line in ordered:
-        continue if line == ""
-        targets.append(Path(line))
-else:
-    targets = all_subsystem_builds()
-    if opt.skip_projects:
-        targets = ordinary_builds(targets)
-    if opt.subsys_pattern != "":
-        var names: []str = []
-        for d in targets:
-            names.append(str(d))
-        let hits: []bool = matching_lines(names, opt.subsys_pattern, True)
-        var matched: []Path = []
-        for i in range(targets'Length):
-            continue if not hits[i]
-            matched.append(targets[i])
-        targets = matched
-    if opt.verbose and opt.subsys_pattern != "":
-        print "Subsys pattern: " + opt.subsys_pattern
-
-if opt.verbose:
-    print "ada option  : " + str(opt.ada)
-    print "sort option : " + str(opt.sort_output)
-    print "File pattern: " + opt.file_pattern
-    if opt.use_grep:
-        print "Grep params : " + " ".join(opt.grep_params)
-    else:
-        print "Grep params : no grep"
-
-search(targets)
+search(targets, opt)
