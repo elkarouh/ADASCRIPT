@@ -256,15 +256,44 @@ def value_after(argv: []str, i: Natural, what: str) -> str:
     return argv[i + 1]
 
 
-# What goes to grep before the caller's own arguments; also the measure of
-# whether the caller gave any, which is what says a search pattern is missing.
-#
-# --binary-files=without-match is the site's: a CM tree holds generated
-# binaries with text in them, and `Binary file ... matches` in the middle of
-# a search for a name is noise rather than an answer. The ksh version this
-# was translated from did not have it; the one installed on the site does.
-let DEFAULT_GREP_PARAMS: []str = ["--line-number", "--with-filename",
-                                  "--binary-files=without-match"]
+type GrepTool_T is enum GREP, RG
+
+# Which content-search program the pipeline shells out to. RG (ripgrep)
+# skips binary files on its own -- no --binary-files flag exists for it --
+# and its default syntax already reads what grep needs -E for, so the two
+# tools take different default params and a different -ppat stage below.
+let GREP_TOOL: GrepTool_T = GREP
+
+def grep_tool_name() -> str:
+    case GREP_TOOL:
+        when GREP: "grep"
+        when RG:   "rg"
+
+def subsys_match_flags() -> str:
+    """Case-insensitive, extended-regex, quiet -- for the -subsys filter.
+
+    RG's default syntax is already what -E asks grep for, so it drops that
+    letter and keeps the rest.
+    """
+    case GREP_TOOL:
+        when GREP: "-qiE"
+        when RG:   "-qi"
+
+def default_grep_params() -> []str:
+    """What goes to grep before the caller's own arguments; also the measure of
+    whether the caller gave any, which is what says a search pattern is missing.
+
+    --binary-files=without-match is the site's: a CM tree holds generated
+    binaries with text in them, and `Binary file ... matches` in the middle of
+    a search for a name is noise rather than an answer. The ksh version this
+    was translated from did not have it; the one installed on the site does.
+    RG has no such flag and needs none -- it skips binary files by default.
+    """
+    case GREP_TOOL:
+        when GREP: ["--line-number", "--with-filename", "--binary-files=without-match"]
+        when RG:   ["--line-number", "--with-filename"]
+
+let DEFAULT_GREP_PARAMS: []str = default_grep_params()
 
 
 class Options:
@@ -521,10 +550,16 @@ def search_one(subsys: Path, tmp_dir: Path, n: Natural, opt: Options) -> Subsyst
     var stages: str = ""
     if opt.sort_output:
         stages = stages + " | sort"
-    # The pattern reaches grep through the environment rather than through
-    # the command text: it is the caller's, and it is not ours to quote.
+    # The pattern reaches the search tool through the environment rather
+    # than through the command text: it is the caller's, and it is not ours
+    # to quote. RG's default syntax already reads what grep needs -E for.
     if opt.path_pattern != "":
-        stages = stages + ' | grep -Ei -- "$PPAT"'
+        case GREP_TOOL:
+            when GREP:
+                stages = stages + ' | grep -Ei -- "$PPAT"'
+            when RG:
+                stages = stages + ' | rg -i -- "$PPAT"'
+
     # -basenames cuts the dirname off grep's `path/to/file:12:line`. The
     # [^:]*/ matches everything up to the last slash before the colon.
     var naming: str = ""
@@ -541,8 +576,36 @@ def search_one(subsys: Path, tmp_dir: Path, n: Natural, opt: Options) -> Subsyst
         let lister: Job = shellSpawn(env = stage_env): ( find {*dirs} -type f ! -name '*.gz' -name {!pattern} 2>/dev/null{stages} ) > {!dest} 2> {!problems}
         return (job: lister, subsys: subsys, out: out_file, err: err_file)
     let params: []str = opt.grep_params
-    let searcher: Job = shellSpawn(env = stage_env): ( find {*dirs} -type f ! -name '*.gz' -name {!pattern} 2>/dev/null{stages} | xargs -r -d '\n' grep {*params} --{naming} ) > {!dest} 2> {!problems}
-    return (job: searcher, subsys: subsys, out: out_file, err: err_file)
+
+    case GREP_TOOL:
+        when GREP:
+            let searcher: Job = shellSpawn(env = stage_env): ( find {*dirs} -type f ! -name '*.gz' -name {!pattern} 2>/dev/null{stages} | xargs -r -d '\n' grep {*params} --{naming} ) > {!dest} 2> {!problems}
+            return (job: searcher, subsys: subsys, out: out_file, err: err_file)
+        when RG:
+            # Fed explicit filenames the way GREP is (find | xargs), RG can
+            # only report "binary file matches" -- never skip one silently
+            # the way --binary-files=without-match does. That silence only
+            # happens when RG walks a directory itself, so it gets the
+            # directories directly, with -g standing in for find's -name
+            # filters, and only the ones that exist -- find's 2>/dev/null
+            # equivalent, since RG errors outright on a path that is not
+            # there rather than skipping it.
+            var live_dirs: []Path = []
+            for d in dirs:
+                if -d d:
+                    live_dirs.append(d)
+            # -ppat still means "the path", but there is no file list left
+            # to filter before the search -- RG's own traversal is what
+            # skips the binaries silently now. So it becomes a filter on
+            # RG's own path:line:text output instead, anchored before the
+            # first colon so it reads the path and not a line that happens
+            # to contain the pattern too.
+            var rg_stages: str = ""
+            if opt.path_pattern != "":
+                rg_stages = rg_stages + ' | rg -i -- "^[^:]*($PPAT)[^:]*:"'
+            let sort_extra: str = (" --sort path" if opt.sort_output else "")
+            let searcher: Job = shellSpawn(env = stage_env): ( rg{!sort_extra} {*params} -g '!*.gz' -g {!pattern} -- {*live_dirs}{rg_stages}{naming} ) > {!dest} 2> {!problems}
+            return (job: searcher, subsys: subsys, out: out_file, err: err_file)
 
 def header_for(subsys: Path) -> str:
     """The `!===== SUBSYS ====...` line that separates one subsystem's hits.
@@ -628,9 +691,11 @@ def determine_targets(opt: Options) -> []Path:
         if opt.skip_projects:
             targets = ordinary_builds(targets, opt.verbose)
         if opt.subsys_pattern != "":
+            let tool: str = grep_tool_name()
+            let flags: str = subsys_match_flags()
             var matched: []Path = []
             for d in targets:
-                let (_, rc) = shell(stdin = str(d) + "\n"): grep -qiE -- {opt.subsys_pattern}
+                let (_, rc) = shell(stdin = str(d) + "\n"): {!tool} {!flags} -- {opt.subsys_pattern}
                 continue if rc != 0
                 matched.append(d)
             targets = matched
