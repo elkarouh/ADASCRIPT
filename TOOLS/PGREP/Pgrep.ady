@@ -379,17 +379,6 @@ def note(what: str):
 # Where to search
 # ---------------------------------------------------------------------------
 
-def replace_first(text: str, old: str, new: str) -> str:
-    """TEXT with the first OLD replaced -- the shell's ${var/old/new}.
-
-    `replace` changes every occurrence on both backends, and a baseline ID
-    has more dots than the one that is a directory separator.
-    """
-    let at: int = text.find(old)
-    if at < 0:
-        return text
-    return text[0:at] + new + text[at + len(old):]
-
 def after_first(text: str, marker: str) -> str:
     """What follows the first MARKER -- the shell's ${var#*<marker>}.
 
@@ -486,11 +475,12 @@ def closure_dir(name: str) -> Path:
     already a path with its first dot turned into a slash.
     """
     if not cm_matches(name, "SYSTEM"):
-        return Path(replace_first(name, ".", "/"))
+        return Path(f"{name/.//}")
     let topmost: str = cm_run("get_topmost_subsystems " + name).strip().split()[0]
     let prefix: str = name + "." + topmost + "."
-    if $CONTEXT_CM_BASELINE.startswith(prefix):
-        return Path(replace_first($CONTEXT_CM_BASELINE, ".", "/"))
+    let baseline: str = $CONTEXT_CM_BASELINE
+    if baseline.startswith(prefix):
+        return Path(f"{baseline/.//}")
     return Path(name) / (topmost + ".LATEST" + opt.good)
 
 def all_subsystem_builds() -> []Path:
@@ -636,7 +626,8 @@ def ordinary_builds(dirs: []Path) -> []Path:
         if i < real'Length and real[i] != "":
             line = real[i]
         let tail: str = after_first(line, CM_MARKER)
-        baselines.append(replace_first(replace_first(tail, "/", "."), "!", "."))
+        let slashed: str = f"{tail/\//.}"
+        baselines.append(f"{slashed/!/.}")
 
     if baselines'Length > 0:
         note("first baseline: " + baselines[0])
@@ -821,7 +812,8 @@ var targets: []Path = []
 if opt.closure != "":
     let dir_name: Path = closure_dir(opt.closure)
     if opt.verbose:
-        print "Closure     : " + replace_first(str(dir_name), "/", ".")
+        let dir_str: str = str(dir_name)
+        print "Closure     : " + f"{dir_str/\//.}"
     # Psort orders the closure the way the CM tools do; the environment
     # variable is read into a name first, since an interpolation is an
     # expression and `$NAME` is not one inside it.
