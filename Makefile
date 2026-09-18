@@ -85,7 +85,8 @@ STANDALONE := \
     test_path_call.ady \
     test_shell_throughput.ady \
     test_shell_braces.ady \
-    test_param_mutation.ady
+    test_param_mutation.ady \
+    test_fstring_replace_sugar.ady
 
 # -----------------------------------------------------------------------
 # Stdin tests — piped from a sample file

@@ -207,6 +207,26 @@ def _ensure_which_helper():
         ParserState.nim_top_decls = decls
 
 
+_REPLACE_FIRST_HELPER = """\
+proc adascriptReplaceFirst(text: string, old: string, new: string): string =
+  ## `{name/old/new}` inside an f-string: TEXT with the first OLD replaced --
+  ## the shell's ${var/old/new}. strutils' replace() changes every
+  ## occurrence, which is a different operation with the same name.
+  let at = text.find(old)
+  if at < 0: return text
+  text[0 ..< at] & new & text[at + old.len .. ^1]
+"""
+
+
+def _ensure_replace_first_helper():
+    """Add adascriptReplaceFirst the first time {name/old/new} is used."""
+    ParserState.nim_imports.add("strutils")
+    decls = getattr(ParserState, 'nim_top_decls', [])
+    if not any("adascriptReplaceFirst" in d for d in decls):
+        decls.append(_REPLACE_FIRST_HELPER)
+        ParserState.nim_top_decls = decls
+
+
 _ZFILL_HELPER = """\
 proc adascriptZfill(s: string, width: int): string =
   ## Python's str.zfill: left-pad with '0' to `width`, keeping a leading sign
@@ -952,7 +972,7 @@ def to_nim(self, prec=None):
     # in Nim char literals, and escaping it would confuse the regex in _fix_when.
     if s == chr(39) + chr(34) + chr(39):
         return chr(39) + chr(34) + chr(39)
-    if s.startswith(chr(39)) and s.endswith(chr(39)) and len(s) > 2:
+    if s.startswith(chr(39)) and s.endswith(chr(39)) and len(s) >= 2:
         inner = s[1:-1]
         inner = inner.replace(chr(34), chr(92) + chr(34))
         s = chr(34) + inner + chr(34)
@@ -3105,6 +3125,13 @@ def _translate_stdlib_patterns(expr):
             and which_m.group(1).count("(") == which_m.group(1).count(")")):
         _ensure_which_helper()
         return f"adascriptWhich({which_m.group(1)})"
+
+    # adascriptReplaceFirst(...) -- synthesised only by the {name/old/new}
+    # f-string sugar (HPARSEC/hek_tokenize.py), never written by hand, so
+    # the call needs no shadow check: it just needs its helper declared.
+    if expr.startswith("adascriptReplaceFirst("):
+        _ensure_replace_first_helper()
+        return expr
 
     run_m = _re.match(r"^(run|runLines)\(", expr)
     if run_m and run_m.group(1) not in _own:

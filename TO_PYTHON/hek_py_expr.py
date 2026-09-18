@@ -965,6 +965,26 @@ def _which(_name):
 '''
 
 
+_REPLACE_FIRST_HELPER = '''\
+def adascriptReplaceFirst(text, old, new):
+    """`{name/old/new}` inside an f-string: text with the first old replaced
+    -- the shell's ${var/old/new}. str.replace(old, new, 1) already does
+    this on Python; the name matches the Nim backend's helper so a reader
+    checking one output against the other finds the same call in both.
+    """
+    return text.replace(old, new, 1)\
+'''
+
+
+def _ensure_replace_first_helper():
+    """Add adascriptReplaceFirst the first time {name/old/new} is used."""
+    from hek_parsec import ParserState
+    decls = getattr(ParserState, 'py_top_decls', [])
+    if not any("def adascriptReplaceFirst(" in d for d in decls):
+        decls.append(_REPLACE_FIRST_HELPER)
+        ParserState.py_top_decls = decls
+
+
 def _which_call(call_trailer):
     """`which(x)` -> `_which(x)`, or None if not that shape."""
     if not (call_trailer.startswith("(") and call_trailer.endswith(")")):
@@ -1266,6 +1286,13 @@ def to_py(self, prec=None):
                     result = helper
                     i += 1
                     continue
+            if i == 0 and result == "adascriptReplaceFirst" and tr_str.startswith("("):
+                # Synthesised only by the {name/old/new} f-string sugar --
+                # never written by hand, so there is no user proc to shadow.
+                _ensure_replace_first_helper()
+                result = "adascriptReplaceFirst" + tr_str
+                i += 1
+                continue
             if i == 0 and result == "Path" and "Path" not in _own:
                 # `Path(s)` is a call, and the class it names was defined only
                 # when an *annotation* mentioned the type: a file that says
