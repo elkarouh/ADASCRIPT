@@ -373,15 +373,6 @@ def note(what: str, verbose: bool):
 # Where to search
 # ---------------------------------------------------------------------------
 
-def after_marker(text: str, marker: str) -> str:
-    """What follows the first MARKER -- the shell's ${var#*<marker>}.
-
-    after_marker("/auto/local_build/dhws149/cm/ot/CUA/ADMIN.44", "/cm/ot/")
-        -> "CUA/ADMIN.44"
-    """
-    return text.split(marker, 1)[-1]
-
-
 def cm_run(what: str, verbose: bool) -> str:
     """What a CM helper answers: get_topmost_subsystems, Psort.
 
@@ -468,7 +459,8 @@ def ordinary_builds(dirs: []Path, verbose: bool) -> []Path:
         var line: str = str(dirs[i])
         if i < real'Length and real[i] != "":
             line = real[i]
-        let tail: str = after_marker(line, CM_MARKER)
+        # What follows the first CM_MARKER -- the shell's ${var#*<marker>}.
+        let tail: str = line.split(CM_MARKER, 1)[-1]
         let slashed: str = f"{tail/\//.}"
         let baseline: str = f"{slashed/!/.}"
         if i == 0:
