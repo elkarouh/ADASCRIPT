@@ -305,3 +305,22 @@ filter the empty lines after splitting input that might be empty.
 Everything else the outside session catalogued now compiles and runs the
 same on both backends; the probes are in the session log.
 ## Nim keyword as a tuple-unpacking target
+
+## char default value in function parameters
+
+A `char`-typed parameter with a default value emits `"x"` (Nim string)
+instead of `'x'` (Nim char) in the generated proc signature. Call-site
+coercion works — `greet('#')` correctly becomes `greet('#')` in Nim — but
+the default does not. Minimal reproducer:
+
+```adascript
+def hr(c: char = '#', length: int = 80):
+    print c * length
+```
+
+Generated Nim: `proc hr(c: char = "#", length: int = 80)` — fails with
+`type mismatch: got 'string' for '"#"' but expected 'char'`.
+
+Related: the `__init__` forward-reference bug (see `BUGS/init_calls_method.md`)
+also affects `char` defaults, since both are about the transpiler not
+applying coercions in parameter declarations.

@@ -27,6 +27,15 @@ writes on its own -- belongs to a ksh session rather than to a program.
 nimport os
 nimport time
 
+type GrepTool_T is enum GREP, RG
+
+# Which content-search program the pipeline shells out to. RG (ripgrep)
+# skips binary files on its own -- no --binary-files flag exists for it --
+# and its default syntax already reads what grep needs -E for, so the two
+# tools take different default params and a different -ppat stage below.
+
+const GREP_TOOL: GrepTool_T = RG
+
 # `$0` is the program name; a built copy can carry a leading dot.
 let PROG: str = Path($0).name.lstrip(".")
 let PADDING: str = "=" * 93
@@ -254,20 +263,6 @@ def value_after(argv: []str, i: Natural, what: str) -> str:
     if i + 1 >= argv'Length:
         die(what + " needs a value")
     return argv[i + 1]
-
-
-type GrepTool_T is enum GREP, RG
-
-# Which content-search program the pipeline shells out to. RG (ripgrep)
-# skips binary files on its own -- no --binary-files flag exists for it --
-# and its default syntax already reads what grep needs -E for, so the two
-# tools take different default params and a different -ppat stage below.
-let GREP_TOOL: GrepTool_T = GREP
-
-def grep_tool_name() -> str:
-    case GREP_TOOL:
-        when GREP: "grep"
-        when RG:   "rg"
 
 def subsys_match_flags() -> str:
     """Case-insensitive, extended-regex, quiet -- for the -subsys filter.
@@ -691,7 +686,7 @@ def determine_targets(opt: Options) -> []Path:
         if opt.skip_projects:
             targets = ordinary_builds(targets, opt.verbose)
         if opt.subsys_pattern != "":
-            let tool: str = grep_tool_name()
+            let tool: str = "rg" if GREP_TOOL==RG else "grep"
             let flags: str = subsys_match_flags()
             var matched: []Path = []
             for d in targets:

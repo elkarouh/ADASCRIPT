@@ -1,0 +1,546 @@
+#!/usr/bin/env ady2nim
+#ady2nim-args c -d:release
+"""Tcheck_tact — report the status of a TACT baseline build.
+
+Scans Tlog files for test results (crashed, failing, successful),
+replay status, gnatcheck/Padactl summary, and file changes.
+
+Translated from the ksh original in TOOL/COMMON_UTILS.
+"""
+
+nimport os
+nimport time
+
+let PROG: str = Path($0).name.lstrip(".")
+
+def die(msg: str):
+    stderr.writeLine(PROG + ": " + msg)
+    quit(1)
+
+# ---------------------------------------------------------------------------
+# ANSI color helpers
+# ---------------------------------------------------------------------------
+# The ksh version encodes colors as a spec string like "sWr" where:
+#   Style:   S=bold(1) D=dim(2) I=italic(3) U=underline(4) F=blink(5) N=overline(7) H=hidden(8) T=strike(9)
+#            s=bold(1) d=dim(2) i=italic(3) u=underline(4) f=blink(5) n=overline(7) h=hidden(8) t=strike(9)
+#   Fg:      K=black(30) R=red(31) G=green(32) Y=yellow(33) B=blue(34) M=magenta(35) C=cyan(36) W=white(37)
+#   Bg:      k=black(40) r=red(41) g=green(42) y=yellow(43) b=blue(44) m=magenta(45) c=cyan(46) w=white(47)
+
+let STYLE_CODES: {str}str = {
+    "S": "1", "D": "2", "I": "3", "U": "4", "F": "5", "N": "7", "H": "8", "T": "9",
+    "s": "1", "d": "2", "i": "3", "u": "4", "f": "5", "n": "7", "h": "8", "t": "9"
+}
+let FG_CODES: {str}str = {
+    "K": "30", "R": "31", "G": "32", "Y": "33", "B": "34", "M": "35", "C": "36", "W": "37"
+}
+let BG_CODES: {str}str = {
+    "k": "40", "r": "41", "g": "42", "y": "43", "b": "44", "m": "45", "c": "46", "w": "47"
+}
+let RESET: str = "\x1b[0m"
+
+def ansi_escape(spec: str) -> str:
+    """Turn a color spec like 'sWr' into an ANSI escape sequence."""
+    var codes: []str = []
+    for ch in spec:
+        let s: str = str(ch)
+        if s in STYLE_CODES:
+            codes.append(STYLE_CODES[s])
+        elif s in FG_CODES:
+            codes.append(FG_CODES[s])
+        elif s in BG_CODES:
+            codes.append(BG_CODES[s])
+    if codes'Length == 0:
+        return ""
+    return "\x1b[" + ";".join(codes) + "m"
+
+def cecho(spec: str, text: str, colored: bool):
+    """Print TEXT in the color given by SPEC, with a newline."""
+    if colored:
+        print ansi_escape(spec) + text + RESET
+    else:
+        print text
+
+def cechon(spec: str, text: str, colored: bool):
+    """Print TEXT in color, without a trailing newline."""
+    if colored:
+        stdout.write(ansi_escape(spec) + text + RESET)
+    else:
+        stdout.write(text)
+
+def hr(c: str, length: int = 80):
+    var line: str = ""
+    for i in range(length):
+        line = line + c
+    print line
+
+# ---------------------------------------------------------------------------
+# Build / subtype enums
+# ---------------------------------------------------------------------------
+
+type BuildSubtype is enum in_test, mono, assert, lo, hi, memcheck, with_secondary
+type BuildType is enum IP, OP, SIP
+
+def subtype_label(st: BuildSubtype) -> str:
+    """The file-system name for a subtype ('in' not 'in_test')."""
+    if st == in_test:
+        return "in"
+    return st'Image
+
+# ---------------------------------------------------------------------------
+# Tlog section parsing
+# ---------------------------------------------------------------------------
+
+let SECTION_PATTERNS: []str = [
+    "Crashed Tests",
+    "New tests failing",
+    "Tests that did not run",
+    "Tests still failing",
+    "Following tests are now successful",
+    "Following tests contain known failures",
+    "Errors in log files",
+    "Tlog summary"
+]
+
+# Sections whose non-blank lines are reported:
+# Crashed Tests, New tests failing, Tests that did not run,
+# Tests still failing, Following tests are now successful.
+let REPORTED_PATTERNS: []str = [
+    "Crashed Tests",
+    "New tests failing",
+    "Tests that did not run",
+    "Tests still failing",
+    "Following tests are now successful"
+]
+
+type Section is tuple:
+    pattern  : str
+    start    : int
+    end      : int
+
+def find_sections(filepath: Path) -> []Section:
+    """Find each SECTION_PATTERN's first occurrence and pair it with the next."""
+    let lines: []str = readFile(str(filepath)).split("\n")
+    # Collect (line_number, pattern) for each pattern's first occurrence.
+    # Two parallel lists: line numbers and their patterns.
+    var hit_lines: []int = []
+    var hit_pats: []str = []
+    for pattern in SECTION_PATTERNS:
+        for i in range(lines'Length):
+            if pattern in lines[i]:
+                hit_lines.append(i)
+                hit_pats.append(pattern)
+                break
+    # Sort by line number (insertion sort; at most 8 entries).
+    for i in range(1, hit_lines'Length):
+        let key_line: int = hit_lines[i]
+        let key_pat: str = hit_pats[i]
+        var j: int = i - 1
+        while j >= 0 and hit_lines[j] > key_line:
+            hit_lines[j + 1] = hit_lines[j]
+            hit_pats[j + 1] = hit_pats[j]
+            j -= 1
+        hit_lines[j + 1] = key_line
+        hit_pats[j + 1] = key_pat
+
+    var sections: []Section = []
+    for idx in range(hit_lines'Length - 1):
+        sections.append((pattern: hit_pats[idx], start: hit_lines[idx], end: hit_lines[idx + 1]))
+    return sections
+
+def non_blank_lines(text: []str, start: int, end: int) -> []str:
+    """Lines between start (exclusive) and end (exclusive) that are not blank."""
+    var out: []str = []
+    for i in range(start + 1, end):
+        continue if i >= text'Length
+        let line: str = text[i]
+        continue if line.strip() == ""
+        out.append(line)
+    return out
+
+def process_Tlog(filepath: Path, build_subtype: BuildSubtype, colored: bool):
+    """Parse a Tlog file and print a summary of test results.
+
+    Scans for section headers (Crashed Tests, New tests failing, etc.),
+    extracts the lines between consecutive headers, and prints them
+    with coloring and formatting matching the ksh version's output.
+    """
+    let all_lines: []str = readFile(str(filepath)).split("\n")
+    let sections: []Section = find_sections(filepath)
+
+    var at_least_one_failing: bool = False
+
+    for section in sections:
+        # Only report the sections the ksh version reports on.
+        var is_reported: bool = False
+        for rp in REPORTED_PATTERNS:
+            if section.pattern == rp:
+                is_reported = True
+                break
+        continue if not is_reported
+
+        let body: []str = non_blank_lines(all_lines, section.start, section.end)
+
+        if body'Length == 0:
+            cechon("Kw", section.pattern, colored)
+            print "  ==> None"
+            print ""
+            continue
+
+        # "Tests that did not run" is suppressed for mono builds.
+        if section.pattern == "Tests that did not run" and build_subtype == mono:
+            continue
+
+        at_least_one_failing = True
+        cecho("Kw", section.pattern, colored)
+
+        for line in body:
+            if section.pattern == "Tests that did not run":
+                print line
+            elif section.pattern == "Crashed Tests":
+                print "CRASHED TEST: " + line
+            elif "Worse" in line or "Better" in line or "Same" in line:
+                print line
+            else:
+                # A failing test line: extract the test name and #emacs: link.
+                let parts: []str = line.split()
+                let failed_test: str = parts[1] if parts'Length > 1 else line.strip()
+                stdout.write("\t")
+                cecho("sKy", failed_test, colored)
+                let emacs_at: int = line.find("#emacs")
+                if emacs_at >= 0:
+                    print line[emacs_at:]
+                else:
+                    print ""
+            print ""
+
+    if not at_least_one_failing:
+        print ""
+        cecho("Kw", ".............. ALL TESTS ARE SUCCESSFUL !!!!", colored)
+
+
+def echo_emacs(filepath: str, colored: bool):
+    """Print an #emacs: link for FILEPATH."""
+    cecho("sBw", "Look for details in:", colored)
+    print f"#emacs:(progn(find-file \"{filepath}\"))"
+
+# ---------------------------------------------------------------------------
+# Replay logs
+# ---------------------------------------------------------------------------
+
+type ReplayType is enum run_prequal, performance, simca, full_simca, oldest_date, all_autolink
+
+def replay_type_from(filename: str) -> ?ReplayType:
+    """Extract the replay type from a Treplay log filename.
+
+    Treplay_G!31.OP.L8_30.0.0.128_2026.09.16_22:01:59-performance.dt6Uo.log
+    -> third-from-last dot field: "16_22:01:59-performance"
+    -> after last hyphen: "performance"
+    """
+    let dot_parts: []str = filename.split(".")
+    if dot_parts'Length < 3:
+        return None
+    let field: str = dot_parts[-3]
+    let name: str = field.split("-")[-1]
+    try:
+        return ReplayType(name)
+    except:
+        return None
+
+def process_replay_logs(basedir: Path, full_baseline: str, cm_env_id: str,
+                        verbose: bool, colored: bool):
+    """Check the status of each replay type (successful / failed / running)."""
+    hr('#')
+    cecho("sWr", "REPLAYS", colored)
+    # Build the OP env id: IP → OP.
+    let op_env_id: str = cm_env_id.replace("IP", "OP")
+    let log_dir: str = str(basedir) + "/build_" + op_env_id + "/saved_logs"
+    let prefix: str = "Treplay_" + op_env_id + "_" + full_baseline
+
+    # List matching log files.
+    let listing: []str = shellLines: ls -d {log_dir}/{prefix}*.log 2>/dev/null
+
+    # Index by replay type name (str key because {ReplayType}str hits a transpiler bug with empty dict).
+    var type_to_file: {str}str = {"_sentinel": ""}
+    for filepath in listing:
+        continue if filepath == ""
+        let rtype: ?ReplayType = replay_type_from(filepath)
+        continue if rtype is None
+        let rt: ReplayType = rtype.get()
+        type_to_file[rt'Image] = filepath
+
+    var found_any: bool = False
+    for rtype in ReplayType:
+        let key: str = rtype'Image
+        continue if key not in type_to_file
+        let file: str = type_to_file[key]
+        found_any = True
+        let label: str = f"\"{key}\""
+        cechon("sWb", f"{label:<14} replay ", colored)
+
+        let content: str = readFile(file)
+        if "Executed UNINSTALL:" in content and "YES" in content.split("Executed UNINSTALL:")[-1].split("\n")[0]:
+            cecho("sWb", "==> WAS SUCCESSFUL", colored)
+        elif "Executed UNINSTALL:" in content and "NO" in content.split("Executed UNINSTALL:")[-1].split("\n")[0]:
+            cecho("sWr", "==> FAILED", colored)
+            echo_emacs(file, colored)
+            print ""
+            if verbose:
+                for line in content.split("\n"):
+                    continue if "ERROR_REPORT.SEVERE" not in line
+                    # Remove the long path before the basename.
+                    let basename_at: int = line.rfind("/")
+                    if basename_at >= 0:
+                        print line[basename_at + 1:]
+                    else:
+                        print line
+        elif "Waiting for this replay to be finished" not in content:
+            cecho("sWb", "---> WARNING: it looks like the replay hasn't started", colored)
+        else:
+            cecho("sWb", "IS STILL BUSY", colored)
+        hr('-')
+
+    if not found_any:
+        cecho("sWb", "WARNING: NO REPLAYS FOUND", colored)
+
+# ---------------------------------------------------------------------------
+# Build processing (test results per build)
+# ---------------------------------------------------------------------------
+
+let SKIP_BUILD_PATTERNS: []str = ["92", "94", "95", "98", "30"]
+
+def grep_force_trace_in_dir(dir: str, colored: bool):
+    """Grep for missing 'if Debug.Trace' guards in LO build logs."""
+    if not -d Path(dir):
+        cecho("sWb", "WARNING: '" + dir + "' does not exist!", colored)
+        return
+    cecho("sWb", "Grep in " + dir + " to detect missing 'if Debug.Trace (...) then' (100 first errors, no matches means no errors detected):", colored)
+    let r = shell: for f in {dir}/*_out_*; do [ -e "$f" ] && grep -H -n -B1 '!!! ERROR : FORCE_TRACE message above' "$f" | grep -v '^--[[:space:]]*$'; done 2>/dev/null | head -n 100
+    if r.output.strip() != "":
+        print r.output.rstrip("\n")
+
+def lo_build_checks(tacot_corico_latest: str, colored: bool):
+    """Check for FORCE_TRACE errors in LO build logs."""
+    let lo_logdir: str = tacot_corico_latest + "/work/logging-lo"
+    if -e Path(lo_logdir):
+        cecho("syB", "Doing lo-build checks in " + lo_logdir, colored)
+        grep_force_trace_in_dir(lo_logdir + "/LOGS", colored)
+        grep_force_trace_in_dir(lo_logdir + "/LOGS_others", colored)
+
+def extract_build_type(build_name: str) -> BuildType:
+    """Extract the build type (IP, OP, SIP) from a build directory name.
+
+    extract_build_type("build_G!31.IP.L8") -> IP
+    """
+    let parts: []str = build_name.split(".")
+    if parts'Length >= 2:
+        return BuildType(parts[-2])
+    die("cannot extract build type from: " + build_name)
+
+def show_tlog_if_present(build_name: str, subtype: BuildSubtype,
+                         tacot_corico_dir: str, file: str, colored: bool):
+    """Show a Tlog file's summary if it exists, or a 'not ready' message."""
+    let full_path: Path = Path(tacot_corico_dir) / "TACT_REGRESS_LOGS" / "LATEST" / file
+    let sl: str = subtype_label(subtype)
+
+    if -f full_path:
+        stdout.write("=======================================  ")
+        cechon("sWr", full_path.name, colored)
+        stdout.write(" ")
+        cechon("sWb", " (" + build_name + ")", colored)
+        print "  ======================================="
+        process_Tlog(full_path, subtype, colored)
+        print ""
+        return
+
+    var btype: BuildType
+    try:
+        btype = extract_build_type(build_name)
+    except:
+        return
+    case btype:
+        when IP:
+            return if subtype not in (in_test, mono)
+        when OP:
+            return if subtype not in (in_test, assert)
+        when others:
+            return
+    if "mrun" in file:
+        cecho("sWb", "\"" + btype'Image + " " + sl + " mrun\" build not ready yet", colored)
+    else:
+        cecho("sWb", "\"" + btype'Image + " " + sl + "\" build not ready yet", colored)
+
+def process_build(build_name: str, basedir: Path, colored: bool):
+    """Process all subtypes of a single build."""
+    cecho("usBy", "PROCESSING " + build_name + " ...", colored)
+    for subtype in BuildSubtype:
+        let sl: str = subtype_label(subtype)
+        let tacot_corico: str = str(basedir / build_name / "saved_logs" / "tacot_corico.LATEST")
+        show_tlog_if_present(build_name, subtype, tacot_corico,
+                             "Tlog-" + sl + ".log", colored)
+        if subtype == lo:
+            lo_build_checks(tacot_corico, colored)
+        let tacot_mrun: str = str(basedir / build_name / "saved_logs" / "tacot_corico_mrun.LATEST_GOOD")
+        show_tlog_if_present(build_name, subtype, tacot_mrun,
+                             "Tlog-mrun-" + sl + ".log", colored)
+
+def should_skip_build(build: str) -> bool:
+    for pat in SKIP_BUILD_PATTERNS:
+        if pat in build:
+            return True
+    return False
+
+# ---------------------------------------------------------------------------
+# Padactl / Gnatcheck
+# ---------------------------------------------------------------------------
+
+def process_gnatcheck(build: str, basedir: Path, colored: bool):
+    """Show the Padactl/CRC summary for a build (only meaningful for IP)."""
+    if "IP" not in build:
+        return
+    hr('#')
+    cecho("sWr", "Padactl", colored)
+    let padactl_file: Path = basedir / build / "saved_logs" / "Padactl.LATEST" / "Padactl.summary"
+    if -f padactl_file:
+        hr('-')
+        cecho("sWb", str(padactl_file), colored)
+        let r = shell: grep -A20 delta {padactl_file}
+        if r.output.strip() != "":
+            print r.output.rstrip("\n")
+        let r2 = shell: grep -A20 -i 'summary of last changes' {padactl_file}
+        if r2.output.strip() != "":
+            print r2.output.rstrip("\n")
+        echo_emacs(str(padactl_file), colored)
+    else:
+        cecho("sWb", "WARNING: No CRC summary file found!", colored)
+
+# ---------------------------------------------------------------------------
+# Check build closure and test programs
+# ---------------------------------------------------------------------------
+
+def process_run_test_programs_log(build: str, basedir: Path,
+                                  full_baseline: str, fast_mode: bool, colored: bool):
+    """Find or run check_run_test_programs_log and display its output."""
+    print ""
+    hr('#')
+    cecho("sWr", "Check build closure and test programs.", colored)
+    cecho("usBy", "CHECK RUN TEST PROGRAMS LOG FOR " + str(basedir / build) + " ...", colored)
+    let find_lines: []str = shellLines: find {basedir}/{build}/saved_logs/tacot_corico.LATEST/work -type f -name 'check_run_test_programs.log' -print -quit 2>/dev/null
+    var logfile: str = ""
+    if find_lines'Length > 0:
+        logfile = find_lines[0]
+
+    if logfile == "":
+        if fast_mode:
+            cecho("sWb", "check_run_test_programs_log not yet complete and we are in fast mode -> skip this check.", colored)
+        else:
+            cecho("sWb", "check_run_test_programs_log not yet complete -> execute the program manually. This can take some minutes (run with -f to disable the execution).", colored)
+            let build_subtype: str = build.replace("build_", "")
+            let rc: int = shell: cd /tmp && echo check_run_test_programs_log | Ccontext -b "TACT.TACT_CONFIG.{full_baseline}" -e "{build_subtype}" 2>&1
+    else:
+        let mktemp_lines: []str = shellLines: cfmu_mktemp
+        let full_report: str = mktemp_lines[0] if mktemp_lines'Length > 0 else "/tmp/tcheck_report.txt"
+        print "Full report is found in " + full_report + "."
+        print ""
+        let cp_rc: int = shell: cp {logfile} {full_report}
+        let filtered = shell: grep -v 'Running.*setup' {full_report} | grep -v 'Checking for errors' | grep -v 'No errors found in' | grep -v -E '^[0-9.]+:\s+\S+\s+INFORMATION:' | grep -E '\S'
+        if filtered.output.strip() != "":
+            print filtered.output.rstrip("\n")
+
+# ---------------------------------------------------------------------------
+# List all changes (placeholder — format has changed)
+# ---------------------------------------------------------------------------
+
+def list_all_changes(full_baseline: str, colored: bool):
+    hr('#')
+    cecho("sWr", "LIST OF CHANGES", colored)
+    print "listing all changes"
+
+# ---------------------------------------------------------------------------
+# Options
+# ---------------------------------------------------------------------------
+
+def usage():
+    print "  This script will report the status of a baseline build,"
+    print "  scan the size of replay_dirs of all baselines of the same branch."
+    print "  See how_to_tactdev for tips for buildmaster."
+    print f"  usage: {PROG} [-c] [-s] [-h] [-v] [-f] [<BASELINE>]"
+    print f"  Example: {PROG} -c 28.2.0.430"
+    print "Options:"
+    print "  -c           Show the coloured version."
+    print "  -s           Compute the sizes of replay dirs (no parameter expected for -s)."
+    print "  -h           Display this help message and exit."
+    print "  -f           Fast mode: skip run check_run_test_programs_log."
+    print "  -v           Enable the VERBOSE option (more info)."
+    print "  <BASELINE>   Required if -c or -v is specified, or if no options are given."
+    quit(1)
+
+class Options:
+    colored    : bool = False
+    compute_size : bool = False
+    verbose    : bool = False
+    fast_mode  : bool = False
+    baseline   : str  = ""
+
+    def __init__(self, argv: []str):
+        var i: Natural = 0
+        while i < argv'Length:
+            let arg: str = argv[i]
+            case arg:
+                when "-c":    self.colored = True
+                when "-s":    self.compute_size = True
+                when "-h":    usage()
+                when "-v":    self.verbose = True
+                when "-f":    self.fast_mode = True
+                when others:
+                    if arg.startswith("-"):
+                        stderr.writeLine("Invalid option: " + arg)
+                        usage()
+                    self.baseline = arg
+            i += 1
+        # Baseline is required unless -s is the only thing requested.
+        if (self.colored or self.verbose or not self.compute_size) and self.baseline == "":
+            stderr.writeLine("Error: <BASELINE> is required when -c or -v is specified, or when no options are given.")
+            usage()
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+if $CONTEXT_CM_BASELINE == "":
+    print "Please use this script in an emacs shell within a context"
+    usage()
+
+let args: []str = $@
+if args'Length == 0:
+    usage()
+
+let opt: Options = Options(args)
+
+if opt.compute_size:
+    # check_replay_dirs_size would go here.
+    print "check_replay_dirs_size: not yet translated"
+else:
+    let full_baseline: str = opt.baseline
+    let basedir: Path = Path("/cm/ot/TACT/TACT_CONFIG." + full_baseline)
+    if not -d basedir:
+        cecho("sWb", "DIR " + str(basedir) + " does not exist", opt.colored)
+        quit(1)
+
+    cecho("sWr", "AVAILABLE BUILDS for " + str(basedir) + ":", opt.colored)
+    let build_listing: []str = shellLines: ls -1d {basedir}/build_G!* 2>/dev/null
+    var available_builds: []str = []
+    for line in build_listing:
+        continue if line == ""
+        available_builds.append(Path(line).name)
+    for b in available_builds:
+        print b
+
+    hr('#')
+    cecho("sWr", "TESTS", opt.colored)
+    for b in available_builds:
+        continue if should_skip_build(b)
+        process_build(b, basedir, opt.colored)
+        process_gnatcheck(b, basedir, opt.colored)
+        process_run_test_programs_log(b, basedir, full_baseline, opt.fast_mode, opt.colored)
+    process_replay_logs(basedir, full_baseline, $CM_ENV_ID, opt.verbose, opt.colored)
+    list_all_changes(full_baseline, opt.colored)
