@@ -74,14 +74,13 @@ def hr(c: char = '#', length: int = 80):
 # Build / subtype enums
 # ---------------------------------------------------------------------------
 
-type BuildSubtype is enum in_test, mono, assert, lo, hi, memcheck, with_secondary
+type BuildSubtype is enum in_test, mono, assert_test, lo, hi, memcheck, with_secondary
 type BuildType is enum IP, OP, SIP
 
 def subtype_label(st: BuildSubtype) -> str:
     """The file-system name for a subtype ('in' not 'in_test')."""
-    if st == in_test:
-        return "in"
-    return st'Image
+    let name: str = st'Image
+    return name.replace("_test", "")
 
 # ---------------------------------------------------------------------------
 # Tlog section parsing
@@ -303,8 +302,6 @@ def process_replay_logs(basedir: Path, full_baseline: str, cm_env_id: str,
 # Build processing (test results per build)
 # ---------------------------------------------------------------------------
 
-let SKIP_BUILD_PATTERNS: []str = ["92", "94", "95", "98", "30"]
-
 def grep_force_trace_in_dir(dir: str, colored: bool):
     """Grep for missing 'if Debug.Trace' guards in LO build logs."""
     if not -d Path(dir):
@@ -358,7 +355,7 @@ def show_tlog_if_present(build_name: str, subtype: BuildSubtype,
         when IP:
             return if subtype not in (in_test, mono)
         when OP:
-            return if subtype not in (in_test, assert)
+            return if subtype not in (in_test, assert_test)
         when others:
             return
     if "mrun" in file:
@@ -380,11 +377,7 @@ def process_build(build_name: str, basedir: Path, colored: bool):
         show_tlog_if_present(build_name, subtype, tacot_mrun,
                              "Tlog-mrun-" + sl + ".log", colored)
 
-def should_skip_build(build: str) -> bool:
-    for pat in SKIP_BUILD_PATTERNS:
-        if pat in build:
-            return True
-    return False
+
 
 # ---------------------------------------------------------------------------
 # Padactl / Gnatcheck
@@ -499,6 +492,12 @@ class Options:
             stderr.writeLine("Error: <BASELINE> is required when -c or -v is specified, or when no options are given.")
             usage()
 
+def should_skip_build(build: str) -> bool:
+    let SKIP_BUILD_PATTERNS: []str = ["92", "94", "95", "98", "30"]
+    for pat in SKIP_BUILD_PATTERNS:
+        if pat in build:
+            return True
+    return False
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
