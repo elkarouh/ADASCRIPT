@@ -207,6 +207,18 @@ history of this file if the reasoning behind one of them is ever wanted.
       `TO_NIM/hek_nim_parser.py`, is where the trailing-comment lookup for
       a compound header lives and is the likely place the wrong comment is
       being picked up.
+- [ ] a `char` reached through a *field* is not recognised as one by the
+      comparison narrowing, so `r.fill == "."` over a `fill: char` fails on
+      Nim ("type mismatch", string against char) and passes on Python. A
+      char *variable* is fine, and so is `s[0]`, because
+      `_is_nim_char_expr` looks the expression up in the symbol table by
+      its whole spelling and a field access is not a name there. The `&`
+      case and the `*`/repeat() case both answer this by looking the last
+      dotted component up on its own; the same fallback in
+      `_is_nim_char_expr` would settle it, with the caveat that a field
+      name shared by two classes with different types could then narrow
+      the wrong way -- which is why it is written down rather than done
+      alongside the char-default fix.
 - [ ] a user-defined scalar type is an alias, not a distinct type, so
       `type Velocity_T is float` documents a unit without enforcing it:
       `let d: Distance_T = v` over two float aliases compiles on both
@@ -305,22 +317,3 @@ filter the empty lines after splitting input that might be empty.
 Everything else the outside session catalogued now compiles and runs the
 same on both backends; the probes are in the session log.
 ## Nim keyword as a tuple-unpacking target
-
-## char default value in function parameters
-
-A `char`-typed parameter with a default value emits `"x"` (Nim string)
-instead of `'x'` (Nim char) in the generated proc signature. Call-site
-coercion works — `greet('#')` correctly becomes `greet('#')` in Nim — but
-the default does not. Minimal reproducer:
-
-```adascript
-def hr(c: char = '#', length: int = 80):
-    print c * length
-```
-
-Generated Nim: `proc hr(c: char = "#", length: int = 80)` — fails with
-`type mismatch: got 'string' for '"#"' but expected 'char'`.
-
-Related: the `__init__` forward-reference bug (see `BUGS/init_calls_method.md`)
-also affects `char` defaults, since both are about the transpiler not
-applying coercions in parameter declarations.

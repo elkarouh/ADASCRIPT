@@ -857,6 +857,24 @@ def binop_to_nim(self, prec=None, my_prec=None):
             if nim_op == "*":
                 left_is_str  = result.startswith('"') or result.startswith("'")
                 right_is_str = right.startswith('"') or right.startswith("'")
+                if not (left_is_str or right_is_str):
+                    # A str or char *variable* repeats the way a literal does
+                    # -- Python's `s * n` -- and Nim has no `*` over a string
+                    # or a char at all, so it is the same rewrite reached
+                    # through the symbol table rather than through the
+                    # spelling. Without this only the literal form compiled,
+                    # and `c * width` over a parameter did not.
+                    def _repeatable(expr):
+                        sym = ParserState.symbol_table.lookup(expr)
+                        if not sym and "." in expr:
+                            # A field, looked up by its own name, the way the
+                            # `&` case above reads one: `self.fill * n`.
+                            sym = ParserState.symbol_table.lookup(
+                                expr.rsplit(".", 1)[-1])
+                        return sym and (sym.get("type") or "") in (
+                            "string", "str", "char")
+                    left_is_str  = _repeatable(result)
+                    right_is_str = _repeatable(right)
                 if left_is_str:
                     ParserState.nim_imports.add("strutils")
                     # Use char literal if possible (avoids nested quote issues in fmt strings)

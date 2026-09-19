@@ -2264,6 +2264,17 @@ def to_nim(self):
         if m:
             default = f" = none({m.group(1)})"
             ParserState.nim_imports.add("options")
+    # A char parameter's default is written `'z'` in Adascript and has been
+    # emitted as the one-character string that is, which Nim will not take
+    # for a char. Narrowed here for the same reason it is narrowed at a
+    # declaration, an assignment, a return and a call argument -- a string
+    # where Nim wants a char is always an error, so this can only turn a
+    # failure into what was written.
+    if nim_type == "char" and default.startswith(" = "):
+        from hek_nim_expr import _char_literal_arg
+        char_default = _char_literal_arg(default[3:])
+        if char_default is not None:
+            default = f" = {char_default}"
     ParserState.symbol_table.add(name, nim_type, "param")
     return f"{name}{annotation}{default}"
 
@@ -4837,6 +4848,15 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
                                     if _m:
                                         pdefault = f" = none({_m.group(1)})"
                                         ParserState.nim_imports.add("options")
+                                # A char default, narrowed the way param_plain
+                                # narrows it: this path builds a method's
+                                # parameters itself rather than going through
+                                # that one, so it needs the same rewrite.
+                                if ptype == "char" and pdefault.startswith(" = "):
+                                    from hek_nim_expr import _char_literal_arg
+                                    _cd = _char_literal_arg(pdefault[3:])
+                                    if _cd is not None:
+                                        pdefault = f" = {_cd}"
                                 params.append(f"{pname}: {ptype}{pdefault}")
                 elif st_name == "return_annotation":
                     ret_ann = st.to_nim()
@@ -4860,7 +4880,13 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
         parts = p.split(":")
         if len(parts) >= 2:
             pn = parts[0].strip()
-            pt = ":".join(parts[1:]).strip()
+            # The default is not part of the type: `c: char = '~'` was being
+            # recorded as the type `char = '~'`, which matches nothing, so
+            # every rewrite that asks the symbol table what a parameter is --
+            # `c * n` reaching for repeat(), among them -- missed a parameter
+            # that had one. The annotation stops at the first ` = `; a type
+            # never contains one.
+            pt = ":".join(parts[1:]).split(" = ", 1)[0].strip()
             ParserState.symbol_table.add(pn, pt, "param")
 
     # Extract body first so we can detect mutations

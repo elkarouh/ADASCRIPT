@@ -1,0 +1,79 @@
+#!/usr/bin/env ady2nim
+# test_char_default.ady — a char parameter default, and repeating a variable
+#
+#   ady2nim EXAMPLES/test_char_default.ady -r
+#   ady2py  EXAMPLES/test_char_default.ady -c
+#
+# Two failures the same reproducer used to hit on Nim, both of them a value
+# that is written one way in Adascript and has to be narrowed for Nim:
+#
+#   def hr(c: char = '#', length: int = 80):
+#       print c * length
+#
+# The default was emitted as the one-character string `'#'` is, giving
+# `proc hr(c: char = "#", ...)` -- "got 'string' ... but expected 'char'" --
+# because the declaration path narrowed an Option default and nothing else.
+# And `c * length` was left as a Nim `*` over a char, which does not exist:
+# the repeat() rewrite only fired on a string *literal*, never on a variable
+# of that type. Python is indifferent to both, so everything here has to
+# hold on either backend.
+
+# --- a char parameter default -----------------------------------------------
+def bar(c: char = '#', length: int = 3) -> str:
+    return c * length
+
+assert bar() == "###"
+assert bar('-') == "---"
+assert bar('=', 5) == "====="
+
+# an escape as the default, which is the other spelling the narrowing takes
+def tabbed(c: char = '\t') -> str:
+    return c + "x"
+
+assert tabbed() == "\tx"
+assert tabbed('.') == ".x"
+
+# a char default is not the only parameter it has to leave alone
+def mixed(name: str = "ada", sep: char = ':', n: int = 2) -> str:
+    return name + sep * n
+
+assert mixed() == "ada::"
+assert mixed("nim", '-') == "nim--"
+
+# --- repeating a variable rather than a literal ------------------------------
+let c: char = '*'
+let s: str = "ab"
+let n: int = 3
+
+assert c * n == "***"
+assert s * n == "ababab"
+assert n * c == "***"          # the other way round, as Python allows
+assert n * s == "ababab"
+
+# a literal still repeats, which is the path that always worked
+assert "x" * 4 == "xxxx"
+assert '#' * 2 == "##"
+
+# --- the same, on a method ---------------------------------------------------
+#
+# A method builds its parameters on its own path rather than through the one
+# a plain def takes, so it needed the same narrowing -- and it was recording
+# `c: char = '~'` in the symbol table with the default still attached, as the
+# type `char = '~'`, which matches nothing. That is why `c * n` in a method
+# body did not reach repeat() even once the signature was right.
+class Ruler:
+    fill : char = '.'
+
+    def draw(self, c: char = '~', n: int = 4) -> str:
+        return c * n
+
+    def padded(self, s: str, width: int = 6) -> str:
+        return s + self.fill * (width - s'Length)
+
+let r: Ruler = Ruler()
+assert r.draw() == "~~~~"
+assert r.draw('+') == "++++"
+assert r.draw('=', 2) == "=="
+assert r.padded("ab") == "ab...."     # the field reached through repeat()
+
+print "char default tests passed"
