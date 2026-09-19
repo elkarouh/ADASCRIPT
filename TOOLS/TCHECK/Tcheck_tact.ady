@@ -67,11 +67,8 @@ def cechon(spec: str, text: str, colored: bool):
     else:
         stdout.write(text)
 
-def hr(c: str, length: int = 80):
-    var line: str = ""
-    for i in range(length):
-        line = line + c
-    print line
+def hr(c: char = '#', length: int = 80):
+    print c * length
 
 # ---------------------------------------------------------------------------
 # Build / subtype enums
