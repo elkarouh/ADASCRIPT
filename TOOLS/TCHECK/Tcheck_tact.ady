@@ -242,61 +242,57 @@ def replay_type_from(filename: str) -> ?ReplayType:
     except:
         return None
 
-def process_replay_logs(basedir: Path, full_baseline: str, cm_env_id: str,
-                        verbose: bool, colored: bool):
-    """Check the status of each replay type (successful / failed / running)."""
-    hr('#')
-    cecho("sWr", "REPLAYS", colored)
-    # Build the OP env id: IP → OP.
+type Replay is tuple:
+    rtype : ReplayType
+    file  : str
+
+def find_available_replays(basedir: Path, full_baseline: str, cm_env_id: str) -> []Replay:
+    """Find replay log files, one per replay type, in canonical order."""
     let op_env_id: str = cm_env_id.replace("IP", "OP")
     let log_dir: str = str(basedir) + "/build_" + op_env_id + "/saved_logs"
     let prefix: str = "Treplay_" + op_env_id + "_" + full_baseline
-
-    # List matching log files.
     let listing: []str = shellLines: ls -d {log_dir}/{prefix}*.log 2>/dev/null
 
-    # Index by replay type name (str key because {ReplayType}str hits a transpiler bug with empty dict).
+    # Index by replay type name (str key — transpiler bug with non-str dict keys).
     var type_to_file: {str}str = {"_sentinel": ""}
     for filepath in listing:
         continue if filepath == ""
-        let rtype: ?ReplayType = replay_type_from(filepath)
-        continue if rtype is None
-        let rt: ReplayType = rtype.get()
-        type_to_file[rt'Image] = filepath
+        let rt: ?ReplayType = replay_type_from(filepath)
+        continue if rt is None
+        type_to_file[rt.get()'Image] = filepath
 
-    var found_any: bool = False
+    var result: []Replay = []
     for rtype in ReplayType:
         let key: str = rtype'Image
         continue if key not in type_to_file
-        let file: str = type_to_file[key]
-        found_any = True
-        let label: str = f"\"{key}\""
-        cechon("sWb", f"{label:<14} replay ", colored)
+        result.append((rtype: rtype, file: type_to_file[key]))
+    return result
 
-        let content: str = readFile(file)
-        if "Executed UNINSTALL:" in content and "YES" in content.split("Executed UNINSTALL:")[-1].split("\n")[0]:
-            cecho("sWb", "==> WAS SUCCESSFUL", colored)
-        elif "Executed UNINSTALL:" in content and "NO" in content.split("Executed UNINSTALL:")[-1].split("\n")[0]:
-            cecho("sWr", "==> FAILED", colored)
-            echo_emacs(file, colored)
-            print ""
-            if verbose:
-                for line in content.split("\n"):
-                    continue if "ERROR_REPORT.SEVERE" not in line
-                    # Remove the long path before the basename.
-                    let basename_at: int = line.rfind("/")
-                    if basename_at >= 0:
-                        print line[basename_at + 1:]
-                    else:
-                        print line
-        elif "Waiting for this replay to be finished" not in content:
-            cecho("sWb", "---> WARNING: it looks like the replay hasn't started", colored)
-        else:
-            cecho("sWb", "IS STILL BUSY", colored)
-        hr('-')
+def process_replay(replay: Replay, verbose: bool, colored: bool):
+    """Check the status of a single replay (successful / failed / running)."""
+    let label: str = f"\"{replay.rtype'Image}\""
+    cechon("sWb", f"{label:<14} replay ", colored)
 
-    if not found_any:
-        cecho("sWb", "WARNING: NO REPLAYS FOUND", colored)
+    let content: str = readFile(replay.file)
+    if "Executed UNINSTALL:" in content and "YES" in content.split("Executed UNINSTALL:")[-1].split("\n")[0]:
+        cecho("sWb", "==> WAS SUCCESSFUL", colored)
+    elif "Executed UNINSTALL:" in content and "NO" in content.split("Executed UNINSTALL:")[-1].split("\n")[0]:
+        cecho("sWr", "==> FAILED", colored)
+        echo_emacs(replay.file, colored)
+        print ""
+        if verbose:
+            for line in content.split("\n"):
+                continue if "ERROR_REPORT.SEVERE" not in line
+                let basename_at: int = line.rfind("/")
+                if basename_at >= 0:
+                    print line[basename_at + 1:]
+                else:
+                    print line
+    elif "Waiting for this replay to be finished" not in content:
+        cecho("sWb", "---> WARNING: it looks like the replay hasn't started", colored)
+    else:
+        cecho("sWb", "IS STILL BUSY", colored)
+    hr('-')
 
 # ---------------------------------------------------------------------------
 # Build processing (test results per build)
@@ -498,6 +494,17 @@ def should_skip_build(build: str) -> bool:
         if pat in build:
             return True
     return False
+
+def find_available_builds(basedir: Path) -> []str:
+    """List build_G!* directories under basedir, skipping builds that should not be checked."""
+    let listing: []str = shellLines: ls -1d {basedir}/build_G!* 2>/dev/null
+    var builds: []str = []
+    for line in listing:
+        continue if line == ""
+        let name: str = Path(line).name
+        continue if should_skip_build(name)
+        builds.append(name)
+    return builds
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -523,20 +530,21 @@ else:
         quit(1)
 
     cecho("sWr", "AVAILABLE BUILDS for " + str(basedir) + ":", opt.colored)
-    let build_listing: []str = shellLines: ls -1d {basedir}/build_G!* 2>/dev/null
-    var available_builds: []str = []
-    for line in build_listing:
-        continue if line == ""
-        available_builds.append(Path(line).name)
+    let available_builds: []str = find_available_builds(basedir)
     for b in available_builds:
         print b
 
     hr('#')
     cecho("sWr", "TESTS", opt.colored)
     for b in available_builds:
-        continue if should_skip_build(b)
         process_build(b, basedir, opt.colored)
         process_gnatcheck(b, basedir, opt.colored)
         process_run_test_programs_log(b, basedir, full_baseline, opt.fast_mode, opt.colored)
-    process_replay_logs(basedir, full_baseline, $CM_ENV_ID, opt.verbose, opt.colored)
+    hr('#')
+    cecho("sWr", "REPLAYS", opt.colored)
+    let available_replays: []Replay = find_available_replays(basedir, full_baseline, $CM_ENV_ID)
+    if available_replays'Length == 0:
+        cecho("sWb", "WARNING: NO REPLAYS FOUND", opt.colored)
+    for replay in available_replays:
+        process_replay(replay, opt.verbose, opt.colored)
     list_all_changes(full_baseline, opt.colored)
