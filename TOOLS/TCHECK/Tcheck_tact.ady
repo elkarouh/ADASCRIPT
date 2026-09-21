@@ -26,14 +26,10 @@ def die(msg: str):
 #   Fg:      K=black(30) R=red(31) G=green(32) Y=yellow(33) B=blue(34) M=magenta(35) C=cyan(36) W=white(37)
 #   Bg:      k=black(40) r=red(41) g=green(42) y=yellow(43) b=blue(44) m=magenta(45) c=cyan(46) w=white(47)
 
-let STYLE_CODES: {str}str = {
+let ANSI_CODES: {str}str = {
     "S": "1", "D": "2", "I": "3", "U": "4", "F": "5", "N": "7", "H": "8", "T": "9",
-    "s": "1", "d": "2", "i": "3", "u": "4", "f": "5", "n": "7", "h": "8", "t": "9"
-}
-let FG_CODES: {str}str = {
-    "K": "30", "R": "31", "G": "32", "Y": "33", "B": "34", "M": "35", "C": "36", "W": "37"
-}
-let BG_CODES: {str}str = {
+    "s": "1", "d": "2", "i": "3", "u": "4", "f": "5", "n": "7", "h": "8", "t": "9",
+    "K": "30", "R": "31", "G": "32", "Y": "33", "B": "34", "M": "35", "C": "36", "W": "37",
     "k": "40", "r": "41", "g": "42", "y": "43", "b": "44", "m": "45", "c": "46", "w": "47"
 }
 let RESET: str = "\x1b[0m"
@@ -44,12 +40,8 @@ def ansi_escape(spec: str) -> str:
     var codes: []str = []
     for ch in spec:
         let s: str = str(ch)
-        if s in STYLE_CODES:
-            codes.append(STYLE_CODES[s])
-        elif s in FG_CODES:
-            codes.append(FG_CODES[s])
-        elif s in BG_CODES:
-            codes.append(BG_CODES[s])
+        if s in ANSI_CODES:
+            codes.append(ANSI_CODES[s])
     if codes'Length == 0:
         return ""
     return "\x1b[" + ";".join(codes) + "m"
@@ -104,16 +96,7 @@ let SECTION_PATTERNS: []str = [
     "Tlog summary"
 ]
 
-# Sections whose non-blank lines are reported:
-# Crashed Tests, New tests failing, Tests that did not run,
-# Tests still failing, Following tests are now successful.
-let REPORTED_PATTERNS: []str = [
-    "Crashed Tests",
-    "New tests failing",
-    "Tests that did not run",
-    "Tests still failing",
-    "Following tests are now successful"
-]
+let REPORTED_PATTERNS: []str = SECTION_PATTERNS[:5] # only interested in the first 5 patterns.
 
 type Section is tuple:
     pattern  : str
@@ -121,44 +104,22 @@ type Section is tuple:
     end      : int
 
 def find_sections(filepath: Path) -> []Section:
-    """Find each SECTION_PATTERN's first occurrence and pair it with the next."""
+    """Find each SECTION_PATTERN's first occurrence, in file order."""
+    type Hit is tuple:
+        line : int
+        pat  : str    
     let lines: []str = readFile(str(filepath)).split("\n")
-    # Collect (line_number, pattern) for each pattern's first occurrence.
-    # Two parallel lists: line numbers and their patterns.
-    var hit_lines: []int = []
-    var hit_pats: []str = []
-    for pattern in SECTION_PATTERNS:
-        for i in range(lines'Length):
-            if pattern in lines[i]:
-                hit_lines.append(i)
-                hit_pats.append(pattern)
+    # Track which patterns have already been matched (first occurrence only).
+    var seen: {}str = {}
+    var hits: []Hit = []
+    for i, line in enumerate(lines):
+        for pattern in SECTION_PATTERNS:
+            if pattern in line and pattern not in seen:
+                hits.append((line: i, pat: pattern))
+                seen.add(pattern)
                 break
-    # Sort by line number (insertion sort; at most 8 entries).
-    for i in range(1, hit_lines'Length):
-        let key_line: int = hit_lines[i]
-        let key_pat: str = hit_pats[i]
-        var j: int = i - 1
-        while j >= 0 and hit_lines[j] > key_line:
-            hit_lines[j + 1] = hit_lines[j]
-            hit_pats[j + 1] = hit_pats[j]
-            j -= 1
-        hit_lines[j + 1] = key_line
-        hit_pats[j + 1] = key_pat
+    [(pattern: cur.pat, start: cur.line, end: nxt.line) for cur, nxt in zip(hits, hits[1:])]
 
-    var sections: []Section = []
-    for idx in range(hit_lines'Length - 1):
-        sections.append((pattern: hit_pats[idx], start: hit_lines[idx], end: hit_lines[idx + 1]))
-    return sections
-
-def non_blank_lines(text: []str, start: int, end: int) -> []str:
-    """Lines between start (exclusive) and end (exclusive) that are not blank."""
-    var out: []str = []
-    for i in range(start + 1, end):
-        continue if i >= text'Length
-        let line: str = text[i]
-        continue if line.strip() == ""
-        out.append(line)
-    return out
 
 def process_Tlog(filepath: Path, build_subtype: BuildSubtype):
     """Parse a Tlog file and print a summary of test results.
@@ -169,11 +130,13 @@ def process_Tlog(filepath: Path, build_subtype: BuildSubtype):
     """
     let all_lines: []str = readFile(str(filepath)).split("\n")
     let sections: []Section = find_sections(filepath)
+    def non_blank_lines(text: []str, start: int, end: int) -> []str:
+        """Lines between start (exclusive) and end (exclusive) that are not blank."""
+        [line for line in text[start + 1 : end] if line.strip() != ""]
 
     var at_least_one_failing: bool = False
 
     for section in sections:
-        # Only report the sections the ksh version reports on.
         var is_reported: bool = False
         for rp in REPORTED_PATTERNS:
             if section.pattern == rp:
@@ -221,7 +184,7 @@ def process_Tlog(filepath: Path, build_subtype: BuildSubtype):
         cecho("Kw", ".............. ALL TESTS ARE SUCCESSFUL !!!!")
 
 
-def echo_emacs(filepath: str):
+def echo_emacs(filepath: Path):
     """Print an #emacs: link for FILEPATH."""
     cecho("sBw", "Look for details in:")
     print f"#emacs:(progn(find-file \"{filepath}\"))"
@@ -236,22 +199,19 @@ def replay_type_from(filename: str) -> ?ReplayType:
     """Extract the replay type from a Treplay log filename.
 
     Treplay_G!31.OP.L8_30.0.0.128_2026.09.16_22:01:59-performance.dt6Uo.log
-    -> third-from-last dot field: "16_22:01:59-performance"
-    -> after last hyphen: "performance"
     """
-    let dot_parts: []str = filename.split(".")
-    if dot_parts'Length < 3:
-        return None
-    let field: str = dot_parts[-3]
-    let name: str = field.split("-")[-1]
-    try:
-        return ReplayType(name)
-    except:
-        return None
+    case filename:
+        when /run_prequal/:   return run_prequal
+        when /performance/:   return performance
+        when /full_simca/:    return full_simca
+        when /simca/:         return simca
+        when /oldest_date/:   return oldest_date
+        when /all_autolink/:  return all_autolink
+        when others:          return None
 
 type Replay is tuple:
     rtype : ReplayType
-    file  : str
+    file  : Path
 
 def find_replays_to_be_processed(basedir: Path, full_baseline: str, cm_env_id: str) -> []Replay:
     """Find replay log files, one per replay type, in canonical order."""
@@ -260,19 +220,18 @@ def find_replays_to_be_processed(basedir: Path, full_baseline: str, cm_env_id: s
     let prefix: str = "Treplay_" + op_env_id + "_" + full_baseline
     let listing: []str = shellLines: ls -d {log_dir}/{prefix}*.log 2>/dev/null
 
-    # Index by replay type name (str key — transpiler bug with non-str dict keys).
-    var type_to_file: {str}str = {"_sentinel": ""}
+    var type_to_file: {str}str = {:}
     for filepath in listing:
         continue if filepath == ""
         let rt: ?ReplayType = replay_type_from(filepath)
         continue if rt is None
-        type_to_file[rt.get()'Image] = filepath
+        type_to_file[rt'Image] = filepath
 
     var result: []Replay = []
     for rtype in ReplayType:
         let key: str = rtype'Image
         continue if key not in type_to_file
-        result.append((rtype: rtype, file: type_to_file[key]))
+        result.append((rtype: rtype, file: Path(type_to_file[key])))
     return result
 
 def process_replay(replay: Replay, verbose: bool):
@@ -280,7 +239,7 @@ def process_replay(replay: Replay, verbose: bool):
     let label: str = f"\"{replay.rtype'Image}\""
     cechon("sWb", f"{label:<14} replay ")
 
-    let content: str = readFile(replay.file)
+    let content: str = readFile(str(replay.file))
     if "Executed UNINSTALL:" in content and "YES" in content.split("Executed UNINSTALL:")[-1].split("\n")[0]:
         cecho("sWb", "==> WAS SUCCESSFUL")
     elif "Executed UNINSTALL:" in content and "NO" in content.split("Executed UNINSTALL:")[-1].split("\n")[0]:
@@ -328,26 +287,24 @@ def build_type_from(build_name: str) -> ?BuildType:
 
     build_type_from("build_G!31.IP.L8") -> IP
     """
-    let parts: []str = build_name.split(".")
-    if parts'Length < 2:
-        return None
-    try:
-        return BuildType(parts[-2])
-    except:
-        return None
+    case build_name:
+        when /\.IP\./:  return IP
+        when /\.OP\./:  return OP
+        when /\.SIP\./: return SIP
+        when others:    return None
 
 def tlog_filename(subtype: BuildSubtype, pass_: BuildPass) -> str:
     """The Tlog filename for a subtype and pass."""
     let sl: str = subtype_label(subtype)
-    if pass_ == mrun:
-        return "Tlog-mrun-" + sl + ".log"
-    return "Tlog-" + sl + ".log"
+    case pass_:
+        when normal: "Tlog-" + sl + ".log"
+        when mrun: "Tlog-mrun-" + sl + ".log"
 
 def tacot_dir(basedir: Path, build: Build, pass_: BuildPass) -> str:
     """The tacot_corico directory for a given pass."""
-    if pass_ == mrun:
-        return str(basedir / build.name / "saved_logs" / "tacot_corico_mrun.LATEST_GOOD")
-    return str(basedir / build.name / "saved_logs" / "tacot_corico.LATEST")
+    case pass_:
+        when normal: str(basedir / build.name / "saved_logs" / "tacot_corico.LATEST")
+        when mrun: str(basedir / build.name / "saved_logs" / "tacot_corico_mrun.LATEST_GOOD")
 
 def show_tlog_if_present(build: Build, subtype: BuildSubtype,
                          pass_: BuildPass, tacot_corico_dir: str):
@@ -382,10 +339,13 @@ def process_build_subtype(build: Build, subtype: BuildSubtype,
                           basedir: Path):
     """Process one subtype of a build, for both normal and mrun passes."""
     for pass_ in BuildPass:
+        if pass_ == mrun and (build.btype != IP or subtype != in_test):    
+            continue # we are only interested in "IP in" for the mrun pass
         let dir: str = tacot_dir(basedir, build, pass_)
         show_tlog_if_present(build, subtype, pass_, dir)
         if subtype == lo and pass_ == normal:
             lo_build_checks(dir)
+
 
 
 
@@ -407,7 +367,7 @@ def process_gnatcheck(ip_build: str, basedir: Path):
         let r2 = shell: grep -A20 -i 'summary of last changes' {padactl_file}
         if r2.output.strip() != "":
             print r2.output.rstrip("\n")
-        echo_emacs(str(padactl_file))
+        echo_emacs(padactl_file)
     else:
         cecho("sWb", "WARNING: No CRC summary file found!")
 
@@ -565,7 +525,7 @@ def find_builds_to_be_processed(basedir: Path) -> []Build:
         continue if should_skip_build(name)
         let bt: ?BuildType = build_type_from(name)
         continue if bt is None
-        builds.append((name: name, btype: bt.get()))
+        builds.append((name: name, btype: bt.get())) # auto-unwrap transpiler bug -> .get is necessary
     return builds
 # ---------------------------------------------------------------------------
 # Main
@@ -605,7 +565,7 @@ def show_header():
         print build.name
     cecho("sWr", "AVAILABLE REPLAYS for " + str(basedir) + ":")
     for replay in replays_to_be_processed:
-        print replay.rtype'Image + "  " + replay.file
+        print replay.rtype'Image + "  " + str(replay.file)
     if opt.list_only:
         quit(0)
     hr('#')
@@ -634,7 +594,7 @@ def show_replays():
         continue if detail != "" and replay.rtype'Image != detail
         process_replay(replay, opt.verbose)
 
-def show_ip_checks():
+def show_general_info():
     for b in builds_to_be_processed:
         if b.btype == IP:
             process_gnatcheck(b.name, basedir)
@@ -651,7 +611,7 @@ def run():
         when no_focus:
             show_header()
             show_builds()
-            show_ip_checks()
             show_replays()
+            show_general_info()
 
 run()
