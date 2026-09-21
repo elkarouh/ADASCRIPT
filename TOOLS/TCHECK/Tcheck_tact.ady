@@ -34,6 +34,7 @@ let ANSI_CODES: {str}str = {
 }
 let RESET: str = "\x1b[0m"
 var COLORED: bool = False
+var BATCH: bool = False
 
 def ansi_escape(spec: str) -> str:
     """Turn a color spec like 'sWr' into an ANSI escape sequence."""
@@ -70,10 +71,10 @@ def hr(c: char = '#', length: int = 80):
 type BuildSubtype is enum in_test, mono, assert_test, lo, hi, memcheck, with_secondary
 type BuildType is enum IP, OP, SIP
 type BuildPass is enum normal, mrun
-type FocusDomain is enum no_focus, focus_IP, focus_OP, focus_SIP, focus_replay
+type FocusDomain is enum no_focus, focus_IP, focus_OP, focus_SIP, focus_replay, focus_build_info
 
 type Build is tuple:
-    name  : str
+    name  : str # e.g. build_G!31.IP.L8
     btype : BuildType
 
 def subtype_label(st: BuildSubtype) -> str:
@@ -213,25 +214,21 @@ type Replay is tuple:
     rtype : ReplayType
     file  : Path
 
-def find_replays_to_be_processed(basedir: Path, full_baseline: str, cm_env_id: str) -> []Replay:
+def find_replays_to_be_processed(basedir: Path) -> []Replay:
     """Find replay log files, one per replay type, in canonical order."""
-    let op_env_id: str = cm_env_id.replace("IP", "OP")
-    let log_dir: str = str(basedir) + "/build_" + op_env_id + "/saved_logs"
-    let prefix: str = "Treplay_" + op_env_id + "_" + full_baseline
-    let listing: []str = shellLines: ls -d {log_dir}/{prefix}*.log 2>/dev/null
+    let listing: []str = shellLines: ls -d {basedir}/build_*OP*/saved_logs/Treplay_*.log 2>/dev/null
 
-    var type_to_file: {str}str = {:}
+    var type_to_file: [ReplayType]str
     for filepath in listing:
         continue if filepath == ""
         let rt: ?ReplayType = replay_type_from(filepath)
         continue if rt is None
-        type_to_file[rt'Image] = filepath
+        type_to_file[rt.get()] = filepath
 
     var result: []Replay = []
-    for rtype in ReplayType:
-        let key: str = rtype'Image
-        continue if key not in type_to_file
-        result.append((rtype: rtype, file: Path(type_to_file[key])))
+    for rtype, filepath in enumerate(type_to_file):
+        continue if filepath == ""
+        result.append((rtype: rtype, file: Path(filepath)))
     return result
 
 def process_replay(replay: Replay, verbose: bool):
@@ -274,14 +271,6 @@ def grep_force_trace_in_dir(dir: str):
     if r.output.strip() != "":
         print r.output.rstrip("\n")
 
-def lo_build_checks(tacot_corico_latest: str):
-    """Check for FORCE_TRACE errors in LO build logs."""
-    let lo_logdir: str = tacot_corico_latest + "/work/logging-lo"
-    if -e Path(lo_logdir):
-        cecho("syB", "Doing lo-build checks in " + lo_logdir)
-        grep_force_trace_in_dir(lo_logdir + "/LOGS")
-        grep_force_trace_in_dir(lo_logdir + "/LOGS_others")
-
 def build_type_from(build_name: str) -> ?BuildType:
     """Extract the build type (IP, OP, SIP) from a build directory name.
 
@@ -291,24 +280,17 @@ def build_type_from(build_name: str) -> ?BuildType:
         when /\.IP\./:  return IP
         when /\.OP\./:  return OP
         when /\.SIP\./: return SIP
-        when others:    return None
-
-def tlog_filename(subtype: BuildSubtype, pass_: BuildPass) -> str:
-    """The Tlog filename for a subtype and pass."""
-    let sl: str = subtype_label(subtype)
-    case pass_:
-        when normal: "Tlog-" + sl + ".log"
-        when mrun: "Tlog-mrun-" + sl + ".log"
-
-def tacot_dir(basedir: Path, build: Build, pass_: BuildPass) -> str:
-    """The tacot_corico directory for a given pass."""
-    case pass_:
-        when normal: str(basedir / build.name / "saved_logs" / "tacot_corico.LATEST")
-        when mrun: str(basedir / build.name / "saved_logs" / "tacot_corico_mrun.LATEST_GOOD")
+        when others:    return None # BUG, implicit return not possible with optional type.
 
 def show_tlog_if_present(build: Build, subtype: BuildSubtype,
                          pass_: BuildPass, tacot_corico_dir: str):
     """Show a Tlog file's summary if it exists, or a 'not ready' message."""
+    def tlog_filename(subtype: BuildSubtype, pass_: BuildPass) -> str:
+        """The Tlog filename for a subtype and pass."""
+        let sl: str = subtype_label(subtype)
+        case pass_:
+            when normal: "Tlog-" + sl + ".log"
+            when mrun: "Tlog-mrun-" + sl + ".log"    
     let file: str = tlog_filename(subtype, pass_)
     let full_path: Path = Path(tacot_corico_dir) / "TACT_REGRESS_LOGS" / "LATEST" / file
     let sl: str = subtype_label(subtype)
@@ -338,6 +320,18 @@ def show_tlog_if_present(build: Build, subtype: BuildSubtype,
 def process_build_subtype(build: Build, subtype: BuildSubtype,
                           basedir: Path):
     """Process one subtype of a build, for both normal and mrun passes."""
+    def tacot_dir(basedir: Path, build: Build, pass_: BuildPass) -> str:
+        """The tacot_corico directory for a given pass."""
+        case pass_:
+            when normal: str(basedir / build.name / "saved_logs" / "tacot_corico.LATEST")
+            when mrun: str(basedir / build.name / "saved_logs" / "tacot_corico_mrun.LATEST_GOOD")   
+    def lo_build_checks(tacot_corico_latest: str):
+        """Check for FORCE_TRACE errors in LO build logs."""
+        let lo_logdir: str = tacot_corico_latest + "/work/logging-lo"
+        if -e Path(lo_logdir):
+            cecho("syB", "Doing lo-build checks in " + lo_logdir)
+            grep_force_trace_in_dir(lo_logdir + "/LOGS")
+            grep_force_trace_in_dir(lo_logdir + "/LOGS_others")             
     for pass_ in BuildPass:
         if pass_ == mrun and (build.btype != IP or subtype != in_test):    
             continue # we are only interested in "IP in" for the mrun pass
@@ -345,9 +339,6 @@ def process_build_subtype(build: Build, subtype: BuildSubtype,
         show_tlog_if_present(build, subtype, pass_, dir)
         if subtype == lo and pass_ == normal:
             lo_build_checks(dir)
-
-
-
 
 # ---------------------------------------------------------------------------
 # Padactl / Gnatcheck
@@ -376,7 +367,7 @@ def process_gnatcheck(ip_build: str, basedir: Path):
 # ---------------------------------------------------------------------------
 
 def process_run_test_programs_log(ip_build: str, basedir: Path,
-                                  full_baseline: str, fast_mode: bool):
+                                  baseline: str, fast_mode: bool):
     """Find or run check_run_test_programs_log from the IP build."""
     print ""
     hr('#')
@@ -393,7 +384,7 @@ def process_run_test_programs_log(ip_build: str, basedir: Path,
         else:
             cecho("sWb", "check_run_test_programs_log not yet complete -> execute the program manually. This can take some minutes (run with -f to disable the execution).")
             let build_subtype: str = ip_build.replace("build_", "")
-            let rc: int = shell: cd /tmp && echo check_run_test_programs_log | Ccontext -b "TACT.TACT_CONFIG.{full_baseline}" -e "{build_subtype}" 2>&1
+            let rc: int = shell: cd /tmp && echo check_run_test_programs_log | Ccontext -b "TACT.TACT_CONFIG.{baseline}" -e "{build_subtype}" 2>&1
     else:
         let mktemp_lines: []str = shellLines: cfmu_mktemp
         let full_report: str = mktemp_lines[0] if mktemp_lines'Length > 0 else "/tmp/tcheck_report.txt"
@@ -408,7 +399,7 @@ def process_run_test_programs_log(ip_build: str, basedir: Path,
 # List all changes (placeholder — format has changed)
 # ---------------------------------------------------------------------------
 
-def list_all_changes(full_baseline: str):
+def list_all_changes(baseline: str):
     hr('#')
     cecho("sWr", "LIST OF CHANGES")
     print "listing all changes"
@@ -421,7 +412,7 @@ def usage():
     print "  This script will report the status of a baseline build,"
     print "  scan the size of replay_dirs of all baselines of the same branch."
     print "  See how_to_tactdev for tips for buildmaster."
-    print f"  usage: {PROG} [-c] [-s] [-h] [-v] [-f] [-l] [-focus <domain> [<detail>]] [<BASELINE>]"
+    print f"  usage: {PROG} [-c] [-s] [-h] [-v] [-f] [-l] [-batch] [-focus <domain> [<detail>]] [<BASELINE>]"
     print f"  Example: {PROG} -c 30.0.0.120"
     print f"  Example: {PROG} -focus IP mono 30.0.0.120"
     print f"  Example: {PROG} -focus replay run_prequal 30.0.0.120"
@@ -432,9 +423,10 @@ def usage():
     print "  -f           Fast mode: skip run check_run_test_programs_log."
     print "  -v           Enable the VERBOSE option (more info)."
     print "  -l           List available builds and replays for the baseline, then exit."
+    print "  -batch       Non-interactive: skip meld and emacs in troubleshoot mode."
     print "  -focus <domain> [<detail>]"
     print "               Focus on a specific domain and optionally a detail within it."
-    print "               domain: IP, OP, SIP, or replay"
+    print "               domain: IP, OP, SIP, replay, or build_info"
     print "               detail: a build subtype (in, mono, assert, ...) or a replay type"
     print "  <BASELINE>   Required if -c or -v is specified, or if no options are given."
     quit(1)
@@ -447,31 +439,34 @@ class Options:
     list_only    : bool = False
     focus_domain : FocusDomain = no_focus
     focus_detail : str  = ""
-    baseline     : str  = ""
+    batch        : bool = False
+    baseline     : str  = "" # e.g. 30.0.0.121
 
     def __init__(self, argv: []str):
         var i: Natural = 0
         while i < argv'Length:
             let arg: str = argv[i]
             case arg:
-                when "-c":    self.colored = True
-                when "-s":    self.compute_size = True
-                when "-h":    usage()
-                when "-v":    self.verbose = True
-                when "-f":    self.fast_mode = True
-                when "-l":    self.list_only = True
+                when "-c":     self.colored = True
+                when "-s":     self.compute_size = True
+                when "-h":     usage()
+                when "-v":     self.verbose = True
+                when "-f":     self.fast_mode = True
+                when "-l":     self.list_only = True
+                when "-batch": self.batch = True
                 when "-focus":
                     i += 1
                     if i >= argv'Length:
                         die("-focus requires at least one argument")
                     let domain_arg: str = argv[i]
                     case domain_arg:
-                        when "IP":     self.focus_domain = focus_IP
-                        when "OP":     self.focus_domain = focus_OP
-                        when "SIP":    self.focus_domain = focus_SIP
-                        when "replay": self.focus_domain = focus_replay
+                        when "IP":         self.focus_domain = focus_IP
+                        when "OP":         self.focus_domain = focus_OP
+                        when "SIP":        self.focus_domain = focus_SIP
+                        when "replay":     self.focus_domain = focus_replay
+                        when "build_info": self.focus_domain = focus_build_info
                         when others:
-                            die("invalid focus domain: " + domain_arg + " (expected IP, OP, SIP, or replay)")
+                            die("invalid focus domain: " + domain_arg + " (expected IP, OP, SIP, replay, build_info)")
                     # Peek at the next arg: if it doesn't start with '-'
                     # and isn't a baseline (digits+dots), it's the detail.
                     if i + 1 < argv'Length and not argv[i + 1].startswith("-"):
@@ -505,45 +500,41 @@ class Options:
                         let rt: ReplayType = ReplayType(self.focus_detail)
                     except:
                         die("invalid replay type: " + self.focus_detail)
+                when focus_build_info:
+                    die("-focus build_info takes no detail")
                 when no_focus:
                     die("-focus detail given without a domain")
 
-def should_skip_build(build: str) -> bool:
-    let SKIP_BUILD_PATTERNS: []str = ["92", "94", "95", "98", "30"]
-    for pat in SKIP_BUILD_PATTERNS:
-        if pat in build:
-            return True
-    return False
-
 def find_builds_to_be_processed(basedir: Path) -> []Build:
     """List build_G!* directories under basedir, returning name and type."""
+    let SKIP_BUILD_PATTERNS: []str = ["92", "94", "95", "98", "30"]    
     let listing: []str = shellLines: ls -1d {basedir}/build_G!* 2>/dev/null
     var builds: []Build = []
     for line in listing:
         continue if line == ""
-        let name: str = Path(line).name
-        continue if should_skip_build(name)
-        let bt: ?BuildType = build_type_from(name)
+        let basename: str = Path(line).name # e.g. build_G!31.IP.L8
+        continue if any(pat in basename for pat in SKIP_BUILD_PATTERNS)
+        let bt: ?BuildType = build_type_from(basename)
         continue if bt is None
-        builds.append((name: name, btype: bt.get())) # auto-unwrap transpiler bug -> .get is necessary
+        builds.append((name: basename, btype: bt.get())) # auto-unwrap transpiler bug -> .get is necessary
     return builds
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
 if $CONTEXT_CM_BASELINE == "":
-    print "Please use this script in an emacs shell within a context"
-    usage()
+    print "Please use this script within a context"
 
 let args: []str = $@
-if args'Length == 0:
+if $# == 0:
     usage()
 
 let opt: Options = Options(args)
 COLORED = opt.colored
+BATCH = opt.batch
 
-let full_baseline: str = opt.baseline
-let basedir: Path = Path("/cm/ot/TACT/TACT_CONFIG." + full_baseline)
+let baseline: str = opt.baseline
+let basedir: Path = Path("/cm/ot/TACT/TACT_CONFIG." + baseline)
 
 if opt.compute_size:
     # check_replay_dirs_size would go here.
@@ -555,7 +546,7 @@ if not -d basedir:
     quit(1)
 
 let builds_to_be_processed: []Build = find_builds_to_be_processed(basedir)
-let replays_to_be_processed: []Replay = find_replays_to_be_processed(basedir, full_baseline, $CM_ENV_ID)
+let replays_to_be_processed: []Replay = find_replays_to_be_processed(basedir)
 let focus: FocusDomain = opt.focus_domain
 let detail: str = opt.focus_detail
 
@@ -570,14 +561,14 @@ def show_header():
         quit(0)
     hr('#')
 
-def show_builds():
+def show_regression_tests():
     cecho("sWr", "TESTS")
     for build in builds_to_be_processed:
         case focus:
             when focus_IP:  continue if build.btype != IP
             when focus_OP:  continue if build.btype != OP
             when focus_SIP: continue if build.btype != SIP
-            when focus_replay: break # for the compiler, shouldnt happen.
+            when focus_replay | focus_build_info: break
             when no_focus:  pass
         cecho("usBy", "PROCESSING " + build.name + " ...")
         for subtype in BuildSubtype:
@@ -594,24 +585,274 @@ def show_replays():
         continue if detail != "" and replay.rtype'Image != detail
         process_replay(replay, opt.verbose)
 
-def show_general_info():
+def show_build_info():
     for b in builds_to_be_processed:
         if b.btype == IP:
             process_gnatcheck(b.name, basedir)
-            process_run_test_programs_log(b.name, basedir, full_baseline, opt.fast_mode)
+            process_run_test_programs_log(b.name, basedir, baseline, opt.fast_mode)
             break
-    list_all_changes(full_baseline)
+
+
+# ---------------------------------------------------------------------------
+# Troubleshoot helpers (from Ttroubleshoot — detailed prev-vs-current comparisons)
+# ---------------------------------------------------------------------------
+
+def previous_baseline_nr(bl: str) -> str:
+    let parts: []str = bl.split(".")
+    return ".".join(parts[0:-1]) + "." + str(int(parts[-1]) - 1)
+
+def saved_logs_dir(bl: str, btype: BuildType) -> str:
+    var env_id: str = $CM_ENV_ID
+    case btype:
+        when IP:  env_id = env_id.replace(".OP.", ".IP.")
+        when OP:  env_id = env_id.replace(".IP.", ".OP.")
+        when SIP: env_id = env_id.replace(".IP.", ".SIP.")
+    return str(basedir) + "/../TACT_CONFIG." + bl + "/build_" + env_id + "/saved_logs"
+
+def compute_baseline_prevdir(cur_dir: str) -> str:
+    let parts: []str = cur_dir.split("/")
+    var new_parts: []str = []
+    for part in parts:
+        if part.startswith("TACT_CONFIG."):
+            var config_parts: []str = part.split(".")
+            config_parts[-1] = str(int(config_parts[-1]) - 1)
+            new_parts.append(".".join(config_parts))
+        elif part.startswith("tacot_corico_"):
+            new_parts.append("tacot_corico.LATEST")
+        else:
+            new_parts.append(part)
+    return "/".join(new_parts)
+
+def grep_logfile(filepath: str, max_errors: Positive = 100) -> str:
+    let r = shell: ( rg -l analyze_core {filepath}; rg FATAL {filepath} | head -{max_errors}; rg 'SEVERE.*Description' {filepath} | head -{max_errors}; pyrg RAISED_EXCEPTION {filepath} | head -100; pyrg EDIFF_FILES {filepath} | head -100 ) 2>/dev/null
+    let output: str = r.output.strip()
+    if output != "":
+        print output
+    return output
+
+def find_core_dumps(dir: str):
+    let r = shell: fdcore {dir} 2>/dev/null
+    if r.output.strip() != "":
+        cecho("sWr", "CORE DUMPS:")
+        print r.output.rstrip("\n")
+
+def make_report(content: str, bl: str, report_name: str) -> str:
+    let rc0: int = shell: mkdir -p /tmp/reports
+    let report_file: str = "/tmp/reports/" + report_name + "_" + bl + ".txt"
+    writeFile(report_file, content)
+    let rc: int = shell: make_comparable.ksh {report_file} {bl} 2>/dev/null
+    return report_file
+
+def replay_dir_pattern(replay_type: str) -> str:
+    case replay_type:
+        when "performance": return "TAC_LO3"
+        when "prequal":     return "run_prequal"
+        when others:        return replay_type
+
+def get_replay_log_dir(build_dir: str, replay_type: str) -> str:
+    let dir_pat: str = replay_dir_pattern(replay_type)
+    var dir: str = build_dir
+    var attempts: int = 0
+    while attempts < 20:
+        let listing: []str = shellLines: ls -d {dir}/replay_dir*{dir_pat}*/work/logging/LOGS 2>/dev/null
+        if listing'Length > 0 and listing[0] != "":
+            return listing[0]
+        dir = compute_baseline_prevdir(dir)
+        stderr.writeLine(PROG + ": trying " + dir)
+        attempts += 1
+    return ""
+
+def scan_replay_dir_detailed(replay_log_dir: str, bl: str, replay_type: str) -> str:
+    if replay_log_dir == "":
+        cecho("sWb", "no replay log dir found")
+        return ""
+    cecho("usBy", "REPLAY DIR: " + replay_log_dir)
+    let replay_root: str = str(Path(replay_log_dir).parent.parent.parent)
+    find_core_dumps(replay_root)
+    var report: str = ""
+    let check_result: []str = shellLines: ls {replay_log_dir}/*check_logs.result.svlog 2>/dev/null
+    for f in check_result:
+        continue if f == ""
+        cecho("sWb", "check_logs.result.svlog:")
+        let content: str = readFile(f)
+        print content
+        report = report + content + "\n"
+    let check_run: []str = shellLines: ls {replay_log_dir}/*check_logs.run.svlog 2>/dev/null
+    for f in check_run:
+        continue if f == ""
+        cecho("sWb", "check_logs.run.svlog:")
+        let content: str = readFile(f)
+        print content
+        report = report + content + "\n"
+    return make_report(report, bl, f"replay-{replay_type}")
+
+def scan_regression_tests_detailed(build_dir: str, btype: BuildType, subtype: BuildSubtype, bl: str) -> str:
+    var dir: str = build_dir
+    case btype:
+        when IP: dir = dir.replace("OP", "IP")
+        when OP: dir = dir.replace("IP", "OP")
+        when others: pass
+    let sl: str = subtype_label(subtype)
+    var log_dir: str = ""
+    case subtype:
+        when mono:
+            log_dir = dir + "/tacot_corico.LATEST/work/logging-" + sl + "/LOGS_mono"
+        when others:
+            log_dir = dir + "/tacot_corico.LATEST/work/logging-" + sl + "/LOGS_others"
+    if not -d Path(log_dir):
+        cecho("sWb", "log dir does not exist: " + log_dir)
+        return ""
+    cecho("usBy", "scanning " + log_dir)
+    let tacot_root: str = str(Path(log_dir).parent.parent.parent)
+    find_core_dumps(tacot_root)
+    var report: str = ""
+    case subtype:
+        when mono:
+            let mono_out: str = log_dir + "/mono.out"
+            if -f Path(mono_out):
+                let hits: str = grep_logfile(mono_out)
+                report = hits
+        when others:
+            let out_files: []str = shellLines: ls {log_dir}/*1_out_01 2>/dev/null
+            for f in out_files:
+                continue if f == ""
+                hr("#")
+                cecho("sWb", Path(f).name)
+                hr("#")
+                let hits: str = grep_logfile(f)
+                if hits != "":
+                    report = report + "##### " + Path(f).name + " #####\n" + hits + "\n"
+    return make_report(report, bl, "regression_" + btype'Image + "_" + sl)
+
+def show_failed_tests(build_dir: str, btype: BuildType, subtype: BuildSubtype, n_baselines: int = 15) -> str:
+    var dir: str = build_dir
+    case btype:
+        when IP: dir = dir.replace("OP", "IP")
+        when OP: dir = dir.replace("IP", "OP")
+        when others: pass
+    var bl: str = ""
+    for part in dir.split("/"):
+        if part.startswith("TACT_CONFIG."):
+            bl = part.replace("TACT_CONFIG.", "")
+            break
+    let sl: str = subtype_label(subtype)
+    var ip_env: str = $CM_ENV_ID
+    var op_env: str = ip_env.replace(".IP.", ".OP.")
+    ip_env = ip_env.replace(".OP.", ".IP.")
+    var result: str = ""
+    for iteration in range(n_baselines):
+        let header: str = f"FAILED {btype'Image} REGRESSION TESTS logging-{sl} for BASELINE {bl}"
+        hr("-")
+        cecho("sWr", header)
+        result = result + header + "\n"
+        var env: str = ip_env
+        var suffix: str = "failed-in"
+        case subtype:
+            when mono:
+                env = ip_env
+                suffix = "failed-mono"
+            when in_test:
+                case btype:
+                    when IP:  env = ip_env
+                    when OP:  env = op_env
+                    when others: pass
+                suffix = "failed-in"
+            when assert_test:
+                env = op_env
+                suffix = "failed-assert"
+            when others: pass
+        let r = shell: nl /cm/ot/TACT/test_reports/TACT.TACT_CONFIG.{bl}-{env}*/general.results.{suffix} 2>/dev/null
+        if r.output.strip() != "":
+            print r.output.rstrip("\n")
+            result = result + r.output
+        bl = previous_baseline_nr(bl)
+    return result
+
+def make_comparable(logfile: str, bl: str) -> str:
+    """Normalize a log file for diffing: make_executable_output_comparable + make_comparable.ksh + test name normalization."""
+    let rc0: int = shell: mkdir -p /tmp/reports
+    let out_file: str = "/tmp/reports/" + bl + "_" + Path(logfile).name
+    let rc1: int = shell: make_executable_output_comparable {!logfile} -o {!out_file} 2>/dev/null
+    let rc2: int = shell: make_comparable.ksh {!out_file} {bl} 2>/dev/null
+    # Normalize test names so trivial renames don't show as diffs.
+    let rc3: int = shell: sd '[vb]1.el' 'test1.el' {!out_file}; sd '[vb]2.el' 'test2.el' {!out_file}; sd '[vb]3.el' 'test3.el' {!out_file}
+    return out_file
+
+def show_detailed_build_info():
+    let prev_baseline: str = previous_baseline_nr(baseline)
+    let cur_build: str = saved_logs_dir(baseline, IP).replace("/saved_logs", "")
+    let prev_build: str = saved_logs_dir(prev_baseline, IP).replace("/saved_logs", "")
+    let prev_log: str = prev_build + "/Csystem_build.log"
+    let cur_log: str = cur_build + "/Csystem_build.log"
+    cecho("sWr", "Compare Csystem_build.log:")
+    print "  prev: " + prev_log
+    print "  cur:  " + cur_log
+    let prev_normalized: str = make_comparable(prev_log, prev_baseline)
+    let cur_normalized: str = make_comparable(cur_log, baseline)
+    if not BATCH:
+        let rc: int = shell: meld {!prev_normalized} {!cur_normalized} &
+    else:
+        let rc: int = shell: diff {!prev_normalized} {!cur_normalized}
+
+def show_detailed_regression_tests():
+    if detail == "":
+        die("-focus IP/OP with detail required for troubleshoot mode")
+    var btype: BuildType = IP
+    case focus:
+        when focus_IP:  btype = IP
+        when focus_OP:  btype = OP
+        when others: pass
+    var subtype: BuildSubtype = in_test
+    for st in BuildSubtype:
+        if subtype_label(st) == detail:
+            subtype = st
+            break
+    let prev_baseline: str = previous_baseline_nr(baseline)
+    let cur_dir: str = saved_logs_dir(baseline, btype)
+    let prev_dir: str = saved_logs_dir(prev_baseline, btype)
+    let prev_report: str = scan_regression_tests_detailed(prev_dir, btype, subtype, prev_baseline)
+    let cur_report: str = scan_regression_tests_detailed(cur_dir, btype, subtype, baseline)
+    if prev_report != "" and cur_report != "" and not BATCH:
+        let meld_rc: int = shell: meld {prev_report} {cur_report} &
+    let failed_file: str = "/tmp/reports/failed_tests"
+    let failed_output: str = show_failed_tests(cur_dir, btype, subtype)
+    writeFile(failed_file, failed_output)
+    if not BATCH:
+        let emacs_rc: int = shell: emacs {!failed_file} &
+
+def show_detailed_replays():
+    if detail == "":
+        die("-focus replay with detail required for troubleshoot mode")
+    let replay_type: str = detail
+    let prev_baseline: str = previous_baseline_nr(baseline)
+    let cur_dir: str = saved_logs_dir(baseline, OP)
+    let prev_dir: str = saved_logs_dir(prev_baseline, OP)
+    let prev_log: str = get_replay_log_dir(prev_dir, replay_type)
+    let cur_log: str = get_replay_log_dir(cur_dir, replay_type)
+    let prev_report: str = scan_replay_dir_detailed(prev_log, prev_baseline, replay_type)
+    let cur_report: str = scan_replay_dir_detailed(cur_log, baseline, replay_type)
+    if prev_report != "" and cur_report != "" and not BATCH:
+        let meld_rc: int = shell: meld {prev_report} {cur_report} &
+
+# ---------------------------------------------------------------------------
+# Run
+# ---------------------------------------------------------------------------
 
 def run():
     case focus:
         when focus_replay:
             show_replays()
+            show_detailed_replays()
         when focus_IP | focus_OP | focus_SIP:
-            show_builds()
+            show_regression_tests()
+            show_detailed_regression_tests()
+        when focus_build_info:
+            show_build_info()
+            show_detailed_build_info()
         when no_focus:
             show_header()
-            show_builds()
+            show_regression_tests()
+            show_build_info()
             show_replays()
-            show_general_info()
-
+            list_all_changes(baseline)
 run()

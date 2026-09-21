@@ -329,9 +329,3 @@ print bt'Image                           # ok
 # These fail — auto-unwrap NOT applied:
 builds.append((name: name, btype: bt))   # error: got Option[BuildType], expected BuildType
 let btype: BuildType = bt                # error: same
-```
-
-Workaround: use `.get()` explicitly in tuple constructors and assignments.
-The book (Chapter 10.3) says any exit (`return`, `break`, `continue`) should
-establish the unwrap for everything that follows, so this is a transpiler gap.
-
