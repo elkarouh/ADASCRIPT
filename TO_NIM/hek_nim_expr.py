@@ -2284,6 +2284,29 @@ def to_nim(self, prec=None):
                 ParserState.nim_imports.add("sequtils")
                 return f"sum({arg}.mapIt(int(it))){rest}"
             return f"sum({arg}){rest}"
+        if raw_name in ("any", "all") and raw_name not in getattr(
+                ParserState, "user_top_level_procs", ()):
+            # Python's any()/all() over an iterable of bools. Neither spelling
+            # survives on Nim: `any` is a deprecated *type* there, so `any(xs)`
+            # reads as a conversion to it -- "illegal type conversion to
+            # 'any'" -- and `all` is not declared at all. sequtils' anyIt/allIt
+            # take the predicate the builtins leave implicit, `it` being each
+            # element, and agree on the empty sequence too: any(@[]) is false
+            # and all(@[]) is true, as in Python.
+            #
+            # A generator argument has already been collected into a seq by
+            # the time it arrives here -- `any(p for x in xs)` is
+            # `any(collect(for x in xs: p))` -- so the three spellings the
+            # source can use all reach this as one seq[bool].
+            call_node = self.nodes[1].nodes[0]
+            arg = _extract_call_arg(call_node)
+            rest = "".join(tr.to_nim() for tr in self.nodes[1].nodes[1:])
+            ParserState.nim_imports.add("sequtils")
+            # `.values()`/`.keys()` are iterators on Nim rather than seqs, and
+            # the It templates want something they can take twice.
+            if arg.endswith((".values()", ".keys()", ".items()")):
+                arg = f"toSeq({arg})"
+            return f"{raw_name}It({arg}, it){rest}"
         if raw_name == "log" and "log" not in getattr(
                 ParserState, "user_top_level_procs", ()):
             # `log(x)` is math.log, and Nim spells the one-argument form

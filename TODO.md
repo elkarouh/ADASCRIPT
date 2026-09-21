@@ -84,11 +84,6 @@ history of this file if the reasoning behind one of them is ever wanted.
       both sides; the lexical `os.path.join` rule is the easier one to
       match, but it means shadowing the `/` that std/paths exports.
       `git1.ady` sidesteps it by joining in two steps.
-- [ ] ady2nim: `any(xs)` and `all(xs)` over a `[]bool` do not translate. `any`
-      hits Nim's deprecated `any` *type* ("illegal type conversion to 'any'")
-      and `all` is simply undeclared; both work on the Python backend, so the
-      same source gives a working program on one and a compile error on the
-      other. `sequtils` has `anyIt`/`allIt` to map onto.
 - [ ] ady2nim: a value-returning call used as a statement gets `discard` inside
       a plain `def` but not inside a *method body* or at module level, so the
       same source compiles on Python and fails on Nim with "expression ... has
@@ -340,9 +335,3 @@ Workaround: use `.get()` explicitly in tuple constructors and assignments.
 The book (Chapter 10.3) says any exit (`return`, `break`, `continue`) should
 establish the unwrap for everything that follows, so this is a transpiler gap.
 
-## `any()` and `all()` with generator expressions
-
-`any(pred for x in xs)` and `any([pred for x in xs])` both fail with
-`illegal type conversion to 'any'` on the Nim backend. The Python builtins
-`any` and `all` are not mapped to Nim equivalents (`anyIt`, `allIt`, or a
-`sequtils` call). Workaround: use an explicit loop with early return.

@@ -1,0 +1,58 @@
+#!/usr/bin/env ady2nim
+# test_any_all.ady — any() and all() over an iterable of bools
+#
+#   ady2nim EXAMPLES/test_any_all.ady -r
+#   ady2py  EXAMPLES/test_any_all.ady -c
+#
+# Neither builtin survived on Nim. `any` is a deprecated *type* there, so
+# `any(xs)` read as a conversion to it -- "illegal type conversion to 'any'"
+# -- and `all` was not declared at all, while both worked on Python: the
+# same source gave a running program on one backend and a compile error on
+# the other. sequtils' anyIt/allIt take the predicate the builtins leave
+# implicit, and agree with Python on the empty sequence too.
+#
+# The three spellings the source can use arrive as one seq[bool], because a
+# generator argument is collected before it gets here.
+
+let xs: []int = [1, 5, 9]
+let flags: []bool = [False, True, False]
+
+# --- a plain seq of bools ---------------------------------------------------
+assert any(flags)
+assert not all(flags)
+assert all([True, True])
+assert not any([False, False])
+
+# --- a generator argument ---------------------------------------------------
+assert any(x > 4 for x in xs)
+assert all(x > 0 for x in xs)
+assert not any(x > 100 for x in xs)
+assert not all(x > 4 for x in xs)
+
+# --- the same, written as a list comprehension ------------------------------
+assert any([x > 4 for x in xs])
+assert all([x > 0 for x in xs])
+assert not any([x > 100 for x in xs])
+
+# --- the empty sequence, where the two disagree with each other -------------
+# any of nothing is false and all of nothing is true, on both backends.
+let empty: []bool = []
+assert not any(empty)
+assert all(empty)
+
+# --- a table's values, which are an iterator on Nim rather than a seq -------
+let d: {str}bool = {"a": True, "b": False}
+assert any(d.values())
+assert not all(d.values())
+
+let counts: {str}int = {"a": 1, "b": 5}
+assert any(v > 3 for v in counts.values())
+assert all(v > 0 for v in counts.values())
+
+# --- a short-circuit the predicate must not spoil ---------------------------
+# Every element is scanned on Nim, so the predicate has to stay total; this
+# is the shape that would divide by zero if it were not.
+let divisors: []int = [2, 1, 4]
+assert all(12 / d2 > 0 for d2 in divisors)
+
+print "any/all tests passed"

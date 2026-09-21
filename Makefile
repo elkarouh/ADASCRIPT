@@ -87,7 +87,8 @@ STANDALONE := \
     test_shell_braces.ady \
     test_param_mutation.ady \
     test_fstring_replace_sugar.ady \
-    test_char_default.ady
+    test_char_default.ady \
+    test_any_all.ady
 
 # -----------------------------------------------------------------------
 # Stdin tests — piped from a sample file
