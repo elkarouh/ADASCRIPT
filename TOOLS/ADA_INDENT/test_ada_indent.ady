@@ -2221,6 +2221,55 @@ def run_tests() -> int:
         "  end R;\n"
         "end P;\n"))
 
+    # 84. An if statement whose branches are each complete on their own line.
+    #     The opener's 'then' is mid-line and its ';' closes the branch, not the
+    #     statement, so nothing pushed the IF: every 'elsif', the 'else' and the
+    #     'end if;' then aligned one level out, and the 'end if;' popped the
+    #     enclosing block instead.
+    cases.append((
+        "function Code (Name : String) return String is\n"
+        "begin\n"
+        "if    Name = \"XCD Airport\" then return \"X\";\n"
+        "elsif Name = \"FL Scenario\" then return \"F\";\n"
+        "else return \"\";\n"
+        "end if;\n"
+        "end Code;\n",
+
+        "function Code (Name : String) return String is\n"
+        "begin\n"
+        "  if    Name = \"XCD Airport\" then return \"X\";\n"
+        "  elsif Name = \"FL Scenario\" then return \"F\";\n"
+        "  else return \"\";\n"
+        "  end if;\n"
+        "end Code;\n"))
+
+    # 85. Counting 'if' words must leave the three that open nothing alone: a
+    #     whole if statement on one line, an if-EXPRESSION inside parentheses,
+    #     and a condition that does not finish on its opening line -- that last
+    #     one belongs to the multi-line tracker, which pushes at its own 'then'.
+    cases.append((
+        "procedure P is\n"
+        "begin\n"
+        "if C then X; end if;\n"
+        "Y := (if A then B else C);\n"
+        "if Is_Set (A)\n"
+        "and then Is_Set (B)\n"
+        "then\n"
+        "Z;\n"
+        "end if;\n"
+        "end P;\n",
+
+        "procedure P is\n"
+        "begin\n"
+        "  if C then X; end if;\n"
+        "  Y := (if A then B else C);\n"
+        "  if Is_Set (A)\n"
+        "    and then Is_Set (B)\n"
+        "  then\n"
+        "    Z;\n"
+        "  end if;\n"
+        "end P;\n"))
+
     for pair in cases:
         let src: str = pair[0]
         let want: str = pair[1]
