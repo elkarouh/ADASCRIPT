@@ -2173,7 +2173,7 @@ def run_tests() -> int:
         "  Next_Decl : Integer;\n"
         "end P;\n"))
 
-    # 76. A derived type whose definition sits on the next line:
+    # 82. A derived type whose definition sits on the next line:
     #
     #         type Ref_Count_T is
     #         new Integer range -1 .. 9;
@@ -2199,7 +2199,7 @@ def run_tests() -> int:
         "  Offset : constant Storage_Offset := 8;\n"
         "end P;\n"))
 
-    # 77. The real generic instantiation must still clean up after itself: there
+    # 83. The real generic instantiation must still clean up after itself: there
     #     the PKG on top IS the one 'X is' pushed, and nothing popped a
     #     TYPE_HEADER on the way.
     cases.append((
