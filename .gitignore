@@ -28,6 +28,7 @@ TOOLS/PGREP/*_gen.py
 
 # Tcheck_tact, the same again.
 TOOLS/TCHECK/Tcheck_tact
+TOOLS/TCHECK/Ttroubleshoot
 TOOLS/TCHECK/*_gen.py
 
 # ady2nim drops a symlink to the built binary next to each source, so the

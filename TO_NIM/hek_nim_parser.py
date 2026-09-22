@@ -313,15 +313,37 @@ def note_option_guard(chunk, collected=None):
     where a wrapper script does all its work.
     """
     chunk_lines = [l for l in chunk.split("\n") if l.strip()]
-    if len(chunk_lines) < 2:
+    if not chunk_lines:
         return
     # A dotted path as well as a bare name: `if f.line is None: return`
     # proves f.line below it exactly as `if x is None: return` proves x.
-    m = re.match(r'^(\s*)if\s+([A-Za-z_]\w*(?:\.\w+)*(?:\[\d+\])?)\.isNone:\s*(?:#.*)?$',
+    #
+    # The exit may sit on the guard's own line, which is what the statement
+    # modifier `continue if x is None` emits. That spelling proved nothing
+    # until now, because this asked for the line to end at the colon: the
+    # tick path then read the optional itself rather than its value and
+    # `print bt'Image` came out `some(IP)` on Nim against `IP` on Python --
+    # compiling, and wrong, which is worse than the type error the same
+    # variable gave in a `let` or a tuple.
+    m = re.match(r'^(\s*)if\s+([A-Za-z_]\w*(?:\.\w+)*(?:\[\d+\])?)\.isNone:'
+                 r'\s*(.*?)\s*(?:#.*)?$',
                  chunk_lines[0])
     if not m:
         return
-    head_indent, name = m.group(1), m.group(2)
+    head_indent, name, inline_exit = m.group(1), m.group(2), m.group(3)
+    if inline_exit:
+        # The one-line form: what follows is the rest of the block rather
+        # than the guard's body, so neither the indent test nor the last
+        # line below applies -- this line alone says whether it leaves.
+        if not _leaves_the_block(inline_exit):
+            return
+        if not hasattr(ParserState, '_option_unwrap_vars'):
+            ParserState._option_unwrap_vars = set()
+        if name not in ParserState._option_unwrap_vars:
+            ParserState._option_unwrap_vars.add(name)
+            if collected is not None:
+                collected.append(name)
+        return
     # Comments are not statements: a note written under the guard -- which is
     # exactly where one gets written, explaining what the guard establishes --
     # was taken for the guard's last line, and a comment does not leave the
