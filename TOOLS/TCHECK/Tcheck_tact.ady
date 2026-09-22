@@ -223,7 +223,7 @@ def find_replays_to_be_processed(basedir: Path) -> []Replay:
         continue if filepath == ""
         let rt: ?ReplayType = replay_type_from(filepath)
         continue if rt is None
-        type_to_file[rt.get()] = filepath
+        type_to_file[rt] = filepath
 
     var result: []Replay = []
     for rtype, filepath in enumerate(type_to_file):
@@ -516,7 +516,7 @@ def find_builds_to_be_processed(basedir: Path) -> []Build:
         continue if any(pat in basename for pat in SKIP_BUILD_PATTERNS)
         let bt: ?BuildType = build_type_from(basename)
         continue if bt is None
-        builds.append((name: basename, btype: bt.get())) # auto-unwrap transpiler bug -> .get is necessary
+        builds.append((name: basename, btype: bt))
     return builds
 # ---------------------------------------------------------------------------
 # Main
