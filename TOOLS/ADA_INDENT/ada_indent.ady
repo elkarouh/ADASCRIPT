@@ -113,6 +113,21 @@ def last_word(code: str) -> str:
         i -= 1
     return tok[i:].lower()
 
+def ends_with_condition_then(code_s: str) -> bool:
+    """True if the line's final token is the 'then' that ENDS an if/elsif
+    condition, rather than the 'then' of the 'and then' connective.
+
+    'and then' is one operator. A condition broken after it continues on the
+    next line, so the line has not reached its 'then' at all -- but its last
+    word is 'then' all the same, and every place that asks 'does the condition
+    end here' was fooled by it: the tracker closed the condition early, and the
+    real 'then' further down then opened a second frame.
+    """
+    let parts: []str = code_s.strip().rstrip(";").split()
+    return False if len(parts) == 0 or parts[-1].lower() != "then"
+    return len(parts) < 2 or parts[-2].lower() != "and"
+
+
 def stmt_incomplete(code_s: str) -> bool:
     """True if a (comment-stripped) code line continues onto the next line.
 
@@ -815,7 +830,7 @@ class Indenter:
             # A line that closes back out of all parentheses and ends in a block
             # opener opens that block.
             if new_depth <= 0:
-                if self.cond_state > 0 and plt == "then":
+                if self.cond_state > 0 and ends_with_condition_then(code_s):
                     # A multi-line if/elsif condition closed its parens and
                     # reached 'then' on the same line: end it like cond_state.
                     if self.cond_state == 1:
@@ -846,7 +861,8 @@ class Indenter:
                             elif self.cont_kw != "subtype":
                                 self._push_frame(CASE if self.cont_kw == "case" else PKG,
                                            "" if self.cont_kw == "case" else self.frame_name)
-                        when "then": self._push_frame(IF)
+                        when "then" if ends_with_condition_then(code_s):
+                            self._push_frame(IF)
                         when "loop": self._push_frame(LOOP, self.frame_name)
                         when "record" if lw != "null": self._push_frame(RECORD)
                         when "select": self._push_frame(SELECT)
@@ -862,8 +878,7 @@ class Indenter:
         # the condition are recorded so the lines inside them are aligned by the
         # branch above.
         if self.cond_state > 0:
-            let last: str = last_word(code_s)
-            if last == "then" or lw == "then":
+            if ends_with_condition_then(code_s) or lw == "then":
                 disp = self.cond_base
                 if self.cond_state == 1:
                     self._push_frame(IF)
@@ -963,7 +978,8 @@ class Indenter:
                 # expression, not an opener.
                 if paren_delta(code) <= 0 and not code_s.endswith(";"):
                     case last_word(code_s):
-                        when "then": self._push_frame(IF)
+                        when "then" if ends_with_condition_then(code_s):
+                            self._push_frame(IF)
                         when "loop": self._push_frame(LOOP)
                         when "is": self._push_frame(CASE)
                         when "declare": self._push_frame(DECLARE)
@@ -974,8 +990,7 @@ class Indenter:
 
             when "elsif":
                 disp = len(self.stack) - 1
-                let last_e: str = last_word(code_s)
-                if last_e != "then" and stmt_incomplete(code_s):
+                if not ends_with_condition_then(code_s) and stmt_incomplete(code_s):
                     self.cond_state = 2
                     # max(0, ...): an 'elsif' with nothing open takes disp to -1,
                     # and these two are Natural, so the store itself would raise.
@@ -1040,7 +1055,8 @@ class Indenter:
                             elif self.cont_kw != "subtype":
                                 self._push_frame(CASE if self.cont_kw == "case" else PKG,
                                            "" if self.cont_kw == "case" else self.frame_name)
-                        when "then": self._push_frame(IF)
+                        when "then" if ends_with_condition_then(code_s):
+                            self._push_frame(IF)
                         when "loop": self._push_frame(LOOP, self.frame_name)
                         when "record" if lw != "null":
                             self._push_frame(RECORD)
@@ -1065,7 +1081,8 @@ class Indenter:
                 # ends with ';', so only a line that genuinely continues opens
                 # the condition tracker -- otherwise every following line is
                 # read as part of a condition that never closes.
-                if lw == "if" and last != "then" and stmt_incomplete(code_s):
+                if lw == "if" and not ends_with_condition_then(code_s) \
+                        and stmt_incomplete(code_s):
                     self.cond_state = 1
                     self.cond_base = disp
                     self.cond_value_base = disp

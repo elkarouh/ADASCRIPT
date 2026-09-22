@@ -2012,6 +2012,66 @@ def run_tests() -> int:
         "  end Log;\n"
         "end P;\n"))
 
+    # 76. A condition broken after 'and then'. That line's last word is 'then',
+    #     so the tracker took it for the 'then' that ends the condition: it
+    #     closed the condition early and pushed the IF there, and the real
+    #     'then' further down pushed a second one. Everything inside the block
+    #     sat a level too deep and each 'end if;' unwound one frame late.
+    cases.append((
+        "procedure P is\n"
+        "begin\n"
+        "if Force then\n"
+        "if (not Is_None (A)\n"
+        "and not Is_None (B))\n"
+        "and then -- no compare when either is None\n"
+        "Compare (A, B) /= Order.Equal\n"
+        "then\n"
+        "Set_Distance (C, A);\n"
+        "end if;\n"
+        "end if;\n"
+        "end P;\n",
+
+        "procedure P is\n"
+        "begin\n"
+        "  if Force then\n"
+        "    if (not Is_None (A)\n"
+        "          and not Is_None (B))\n"
+        "      and then -- no compare when either is None\n"
+        "      Compare (A, B) /= Order.Equal\n"
+        "    then\n"
+        "      Set_Distance (C, A);\n"
+        "    end if;\n"
+        "  end if;\n"
+        "end P;\n"))
+
+    # 77. A 'then' with anything else before it still ends the condition, on the
+    #     opener line and on a continuation, and 'and then' mid-line is not the
+    #     final token so it never had a say.
+    cases.append((
+        "procedure P is\n"
+        "begin\n"
+        "if A and then B then\n"
+        "X;\n"
+        "end if;\n"
+        "if C\n"
+        "and then D\n"
+        "then\n"
+        "Y;\n"
+        "end if;\n"
+        "end P;\n",
+
+        "procedure P is\n"
+        "begin\n"
+        "  if A and then B then\n"
+        "    X;\n"
+        "  end if;\n"
+        "  if C\n"
+        "    and then D\n"
+        "  then\n"
+        "    Y;\n"
+        "  end if;\n"
+        "end P;\n"))
+
     for pair in cases:
         let src: str = pair[0]
         let want: str = pair[1]
