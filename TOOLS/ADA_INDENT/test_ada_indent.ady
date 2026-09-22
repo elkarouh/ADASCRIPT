@@ -2126,7 +2126,7 @@ def run_tests() -> int:
         "  end if;\n"
         "end P;\n"))
 
-    # 74. A 'record' that opens its component list part-way along the line, with
+    # 80. A 'record' that opens its component list part-way along the line, with
     #     the first component already beside it. The dispatches key on a line's
     #     last word, which here belongs to that component, so nothing saw the
     #     opener: the components stayed at the type's level and the 'end record;'
@@ -2155,7 +2155,7 @@ def run_tests() -> int:
         "  end Q;\n"
         "end P;\n"))
 
-    # 75. Counting 'record' words must not disturb the three that open nothing:
+    # 81. Counting 'record' words must not disturb the three that open nothing:
     #     a null record, a whole record on one line, and the word inside a string
     #     literal. Each leaves the following declaration at the type's level.
     cases.append((

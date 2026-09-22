@@ -1128,7 +1128,7 @@ class Indenter:
                 # something else. Only when the opener is not the last word:
                 # there the dispatch has already handled it.
                 if last != "record" and record_delta(code) > 0:
-                    self.stack.append(RECORD)
+                    self._push_frame(RECORD)
                 # stmt_incomplete(): 'if C then X; end if;' on one line starts
                 # with 'if' and does not end with 'then', but it is a whole
                 # statement, not a condition still looking for its 'then'. It
