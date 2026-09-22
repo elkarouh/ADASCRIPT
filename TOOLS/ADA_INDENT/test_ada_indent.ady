@@ -1984,6 +1984,54 @@ def run_tests() -> int:
         "  Next_Decl : Integer;\n"
         "end P;\n"))
 
+    # 76. A derived type whose definition sits on the next line:
+    #
+    #         type Ref_Count_T is
+    #         new Integer range -1 .. 9;
+    #
+    #     The TYPE_HEADER for 'type ... is' is discarded on the 'new' line, as
+    #     a type that never reaches 'record' should be -- but the 'new' then
+    #     armed the generic-instantiation cleanup, which pops a PKG when the
+    #     statement ends. The PKG left on top is the enclosing package's, so
+    #     that was the frame taken, and every declaration after it fell out of
+    #     the package.
+    cases.append((
+        "package P is\n"
+        "type Ref_Count_T is\n"
+        "new Integer range -1 .. 9;\n"
+        "type T is private;\n"
+        "Offset : constant Storage_Offset := 8;\n"
+        "end P;\n",
+
+        "package P is\n"
+        "  type Ref_Count_T is\n"
+        "  new Integer range -1 .. 9;\n"
+        "  type T is private;\n"
+        "  Offset : constant Storage_Offset := 8;\n"
+        "end P;\n"))
+
+    # 77. The real generic instantiation must still clean up after itself: there
+    #     the PKG on top IS the one 'X is' pushed, and nothing popped a
+    #     TYPE_HEADER on the way.
+    cases.append((
+        "package body P is\n"
+        "package Inst is\n"
+        "new Gen (A => B);\n"
+        "procedure R is\n"
+        "begin\n"
+        "null;\n"
+        "end R;\n"
+        "end P;\n",
+
+        "package body P is\n"
+        "  package Inst is\n"
+        "    new Gen (A => B);\n"
+        "  procedure R is\n"
+        "  begin\n"
+        "    null;\n"
+        "  end R;\n"
+        "end P;\n"))
+
     for pair in cases:
         let src: str = pair[0]
         let want: str = pair[1]
