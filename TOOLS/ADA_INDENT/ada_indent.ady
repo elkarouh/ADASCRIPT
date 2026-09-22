@@ -131,6 +131,48 @@ def ends_with_condition_then(code_s: str) -> bool:
     return last_word(head[:len(head) - 4]) != "and"
 
 
+def code_words(code_s: str) -> []str:
+    """The identifier words of a line, with string and character literals
+    skipped whole so a keyword spelled inside one is not counted."""
+    var i: Natural = 0
+    let n: Natural = len(code_s)
+    while i < n:
+        if code_s[i] == '"':
+            i = skip_quoted(code_s, i, '"')
+        elif code_s[i] == '\'' and i + 2 < n and code_s[i + 2] == '\'':
+            i += 3
+        elif is_ident_ch(code_s[i]):
+            var j: Natural = i
+            while j < n and is_ident_ch(code_s[j]):
+                j += 1
+            result.append(code_s[i:j].lower())
+            i = j
+        else:
+            i += 1
+
+
+def record_delta(code_s: str) -> int:          # int: 'end record' makes it negative
+    """Net component lists the line opens: +1 for a 'record' that opens one,
+    -1 for the 'record' of an 'end record', and 0 for the 'null record' of a
+    type that has none.
+
+    The dispatches key on a line's LAST word, which is enough while the opener
+    is the last thing on it. 'type T is record Title : String_Ptr_T;' puts the
+    opener in the middle, with the first component already beside it, so the
+    last word belongs to that component and no dispatch ever sees the 'record'.
+    """
+    var delta: int = 0
+    var prev: str = ""
+    for w in code_words(code_s):
+        if w == "record":
+            if prev == "end":
+                delta -= 1
+            elif prev != "null":
+                delta += 1
+        prev = w
+    return delta
+
+
 def stmt_incomplete(code_s: str) -> bool:
     """True if a (comment-stripped) code line continues onto the next line.
 
@@ -1078,6 +1120,15 @@ class Indenter:
                             # its 'end X;' still matches.
                             self._push_frame(BLOCK, self.frame_name)
                         when others: pass
+                # A 'record' that opens a component list part-way along the line
+                # ('type T is record F : X;'). Outside the guard above, because
+                # such a line ends with the first component's ';' and so opens
+                # nothing by that rule -- yet the component list is open, and an
+                # 'end record;' below would otherwise pop a frame belonging to
+                # something else. Only when the opener is not the last word:
+                # there the dispatch has already handled it.
+                if last != "record" and record_delta(code) > 0:
+                    self.stack.append(RECORD)
                 # stmt_incomplete(): 'if C then X; end if;' on one line starts
                 # with 'if' and does not end with 'then', but it is a whole
                 # statement, not a condition still looking for its 'then'. It
