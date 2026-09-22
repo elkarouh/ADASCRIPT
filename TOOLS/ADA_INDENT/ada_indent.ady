@@ -91,10 +91,27 @@ def paren_delta(line: str) -> int:          # int: ')' without '(' makes it nega
     return depth
 
 def last_word(code: str) -> str:
-    """Lowercased final token, after dropping a trailing ';'. '' if empty."""
+    """Lowercased final token, after dropping a trailing ';'. '' if empty.
+
+    The token is cut back to its trailing identifier, so a keyword written hard
+    against the punctuation before it -- 'Ids_File : in out Text_IO.File_Type)is',
+    which Ada's free format allows -- comes back as 'is' and still reads as the
+    block opener it is. Without the cut the whole blob is the token, no frame is
+    pushed for the subprogram, and its declarative part indents as a continuation
+    of the parameter list instead.
+
+    A token not ending in an identifier character ('=>', 'Boolean)') is returned
+    whole, as before: the callers compare against keywords, so cutting those
+    would change nothing and only lose information.
+    """
     let parts: []str = code.strip().rstrip(";").split()
-    if len(parts) > 0:
-        result = parts[-1].lower()
+    return "" if len(parts) == 0
+    let tok: str = parts[-1]
+    return tok.lower() if not is_ident_ch(tok[len(tok) - 1])
+    var i: Natural = len(tok)
+    while i > 0 and is_ident_ch(tok[i - 1]):
+        i -= 1
+    return tok[i:].lower()
 
 def stmt_incomplete(code_s: str) -> bool:
     """True if a (comment-stripped) code line continues onto the next line.
