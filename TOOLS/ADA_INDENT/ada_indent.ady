@@ -1223,6 +1223,19 @@ class Indenter:
                     self.cond_base = disp
                     self.cond_value_base = disp
 
+        # An 'end if' the line reaches part-way along, after something the
+        # dispatch above has already claimed: 'else return Deactivated; end if;'
+        # is an 'else' line by its first word, so nothing popped the frame the
+        # 'end if' closes and everything after it stayed a level in. Outside the
+        # dispatch because the line's first word may be any of else/elsif/when,
+        # and skipped when it is 'end', which has its own arm and has popped
+        # already. disp is fixed by now, so this only moves the lines below.
+        if lw != "end" and if_delta(code) < 0:
+            while self.stack and self.stack[-1] == WHEN:
+                self.stack.pop()
+            if self.stack:
+                self.stack.pop()
+
         # A multi-line if/elsif condition is tracked by cond_state, not here, so
         # only flag a general statement continuation when not in that mode.
         self.in_cont = False if self.cond_state > 0 else stmt_incomplete(code_s)
