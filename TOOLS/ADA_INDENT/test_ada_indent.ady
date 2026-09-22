@@ -2124,6 +2124,60 @@ def run_tests() -> int:
         "  end Q;\n"
         "end P;\n"))
 
+    # 82. An 'end if' reached part-way along a line whose first word the
+    #     dispatch has already claimed: 'else return Deactivated; end if;' is an
+    #     'else' line, so nothing popped the frame its 'end if' closes. Inside a
+    #     case alternative that leaves the IF standing under the WHEN, and every
+    #     later arm, the 'end case;' and the subprogram's own 'end' came out a
+    #     level in.
+    cases.append((
+        "function F (Field : Column_T) return String is\n"
+        "begin\n"
+        "case Field is\n"
+        "when Activation_Column =>\n"
+        "if Measure.Data.Activation then return Activated;\n"
+        "else return Deactivated; end if;\n"
+        "when Source_Column =>\n"
+        "return \"Config\";\n"
+        "end case;\n"
+        "end F;\n",
+
+        "function F (Field : Column_T) return String is\n"
+        "begin\n"
+        "  case Field is\n"
+        "    when Activation_Column =>\n"
+        "      if Measure.Data.Activation then return Activated;\n"
+        "      else return Deactivated; end if;\n"
+        "    when Source_Column =>\n"
+        "      return \"Config\";\n"
+        "  end case;\n"
+        "end F;\n"))
+
+    # 83. The count must close nothing it should not: a whole if statement on
+    #     one line is balanced, an 'end if;' of its own has already been popped
+    #     by its dispatch, and neither a literal nor an if-expression counts.
+    #     Here the outer if must still be open at Next_Statement.
+    cases.append((
+        "procedure P is\n"
+        "begin\n"
+        "if Outer then Z;\n"
+        "if C then X; end if;\n"
+        "Msg := \"end if\";\n"
+        "Y := (if A then B else C);\n"
+        "Next_Statement;\n"
+        "end if;\n"
+        "end P;\n",
+
+        "procedure P is\n"
+        "begin\n"
+        "  if Outer then Z;\n"
+        "    if C then X; end if;\n"
+        "    Msg := \"end if\";\n"
+        "    Y := (if A then B else C);\n"
+        "    Next_Statement;\n"
+        "  end if;\n"
+        "end P;\n"))
+
     for pair in cases:
         let src: str = pair[0]
         let want: str = pair[1]
