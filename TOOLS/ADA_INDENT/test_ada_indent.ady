@@ -1678,7 +1678,7 @@ def run_tests() -> int:
         "  null;\n"
         "end Q;\n"))
 
-    # 58. A block opener written hard against the punctuation before it. Ada's
+    # 64. A block opener written hard against the punctuation before it. Ada's
     #     free format allows ')is' with no space, but the final token was cut on
     #     whitespace alone, so it came back as 'Text_IO.File_Type)is' and opened
     #     no frame: the declarative part then indented as a continuation of the
@@ -1705,7 +1705,7 @@ def run_tests() -> int:
         "  end Record_Usages;\n"
         "end P;\n"))
 
-    # 59. The cut must not invent keywords out of trailing identifiers. A token
+    # 65. The cut must not invent keywords out of trailing identifiers. A token
     #     ending in '_is' or carrying a tick is one word, not a keyword, and a
     #     token that does not end in an identifier character is left whole.
     cases.append((
