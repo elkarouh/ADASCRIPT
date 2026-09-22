@@ -749,7 +749,14 @@ class Indenter:
                             # else ending in 'is' opens a block immediately.
                             # Exception: 'subtype T is' is not a block opener -
                             # it is a plain continuation declaration.
-                            if lw == "function":
+                            # cont_func, not this line's own first word: a header
+                            # whose parameter list spans lines puts the 'is' on a
+                            # later line, where the first word is a parameter name
+                            # or 'return'. The word that says what is being
+                            # declared belongs to the line that opened it, and
+                            # cont_func carries it across the continuation. On a
+                            # single-line header both readings agree.
+                            if self.cont_func:
                                 self.pending_spec = True
                             elif lw == "type":
                                 self.stack.append(TYPE_HEADER)
