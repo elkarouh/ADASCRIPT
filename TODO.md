@@ -312,3 +312,23 @@ filter the empty lines after splitting input that might be empty.
 Everything else the outside session catalogued now compiles and runs the
 same on both backends; the probes are in the session log.
 ## Nim keyword as a tuple-unpacking target
+
+## `{!var}` quoting not supported in shell block form
+
+In single-line `shell:`, `{!var}` quotes the value as a single shell argument
+(`quoteShell`). In block form (`shell(join = ";"):` with indented lines),
+`{!var}` fails with `undeclared identifier: '!'`. Only `{var}` (unquoted
+interpolation) works in block lines.
+
+```adascript
+# Works:
+let rc: int = shell: sd 'a' 'b' {!out_file}
+
+# Fails:
+let rc: int = shell(join = ";"):
+    sd 'a' 'b' {!out_file}    # Error: undeclared identifier: '!'
+
+# Workaround — use {var} (safe when the path has no special characters):
+let rc: int = shell(join = ";"):
+    sd 'a' 'b' {out_file}
+```

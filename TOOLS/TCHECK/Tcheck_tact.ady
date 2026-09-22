@@ -906,7 +906,12 @@ def compute_baseline_prevdir(cur_dir: str) -> str:
     return "/".join(new_parts)
 
 def grep_logfile(filepath: str, max_errors: Positive = 100) -> str:
-    let r = shell: ( rg -l analyze_core {filepath}; rg FATAL {filepath} | head -{max_errors}; rg 'SEVERE.*Description' {filepath} | head -{max_errors}; pyrg RAISED_EXCEPTION {filepath} | head -100; pyrg EDIFF_FILES {filepath} | head -100 ) 2>/dev/null
+    let r = shell(join = ";"):
+        rg -l analyze_core {filepath} 2>/dev/null
+        rg FATAL {filepath} 2>/dev/null | head -{max_errors}
+        rg 'SEVERE.*Description' {filepath} 2>/dev/null | head -{max_errors}
+        pyrg RAISED_EXCEPTION {filepath} 2>/dev/null | head -100
+        pyrg EDIFF_FILES {filepath} 2>/dev/null | head -100
     let output: str = r.output.strip()
     if output != "":
         print output
@@ -1058,7 +1063,10 @@ def make_comparable(logfile: str, bl: str) -> str:
     let rc1: int = shell: make_executable_output_comparable {!logfile} -o {!out_file} 2>/dev/null
     let rc2: int = shell: make_comparable {!out_file} {bl} 2>/dev/null
     # Normalize test names so trivial renames don't show as diffs.
-    let rc3: int = shell: sd '[vb]1.el' 'test1.el' {!out_file}; sd '[vb]2.el' 'test2.el' {!out_file}; sd '[vb]3.el' 'test3.el' {!out_file}
+    let rc3: int = shell(join = ";"):
+        sd '[vb]1.el' 'test1.el' {out_file}
+        sd '[vb]2.el' 'test2.el' {out_file}
+        sd '[vb]3.el' 'test3.el' {out_file}
     return out_file
 
 def show_detailed_build_info():
