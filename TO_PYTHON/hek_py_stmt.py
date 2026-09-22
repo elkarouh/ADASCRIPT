@@ -261,6 +261,30 @@ def _reject_str_to_path(name, annotation, value):
         'explicit on both.')
 
 
+def _domain_expr(key, dom):
+    """How to iterate an `[O]T`'s domain in the generated Python, or None.
+
+    Nim gives `array[O, T]` a slot for every value of O, already zeroed, so
+    the Python side has to name the same values to fill the dict with. An
+    enum iterates itself; a named integer subrange is a range over the bounds
+    tick_types recorded; bool is its two values.
+
+    `str` is deliberately absent. `[str]T` is `array[char, T]` on Nim, which
+    rejects it outright -- "ordinal type expected; given: string" -- so there
+    is no Nim behaviour for a fill to match. A float range is not ordinal
+    either and cannot index an array on either backend.
+    """
+    if "members" in dom:
+        return key                       # an Enum class, iterable in order
+    if key == "bool":
+        return "(False, True)"
+    if "First" in dom and "Last" in dom and not dom.get("is_float_range"):
+        # The bounds as written, not the Python name of the type: a subrange
+        # renders as a plain `int` there and would not iterate.
+        return f"range({dom['First']}, {dom['Last']} + 1)"
+    return None
+
+
 def _zero_value(annotation):
     """The empty value for ANNOTATION, mirroring Nim's zero-initialisation.
 
@@ -305,16 +329,18 @@ def _zero_value(annotation):
                 depth -= 1
             elif _ch == "," and depth == 0:
                 _key, _elem = inner[:_i].strip(), inner[_i + 1:].strip()
-                # Only when both halves are known: the domain has to be an
-                # enum to iterate at all -- [3]int and [str]int reach here
-                # too -- and the element needs a zero worth filling with.
+                # Only when both halves are known: the domain has to be
+                # one _domain_expr can name -- [3]int and [str]int reach
+                # here too -- and the element needs a zero worth filling
+                # with.
                 # A nested [E][E]T is left alone rather than nesting two
                 # generators over the same loop name.
                 _dom = getattr(ParserState, "tick_types", {}).get(_key, {})
                 _ez = _zero_value(_elem)
-                if ("members" in _dom and _ez != "None"
+                _domain = _domain_expr(_key, _dom)
+                if (_domain is not None and _ez != "None"
                         and not _elem.startswith("_EnumArray[")):
-                    return f"_EnumArray((_m, {_ez}) for _m in {_key})"
+                    return f"_EnumArray((_m, {_ez}) for _m in {_domain})"
                 break
         return "_EnumArray()"
     for prefix, empty in (("_EnumArray[", "_EnumArray()"),

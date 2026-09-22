@@ -91,7 +91,8 @@ STANDALONE := \
     test_any_all.ady \
     test_option_guard_modifier.ady \
     test_init_calls_method.ady \
-    test_enum_array_enumerate.ady
+    test_enum_array_enumerate.ady \
+    test_enum_array_zero_fill.ady
 
 # -----------------------------------------------------------------------
 # Stdin tests — piped from a sample file

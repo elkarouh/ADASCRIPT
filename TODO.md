@@ -4,18 +4,19 @@ Open items only.  The write-ups for everything already fixed — 26 numbered
 bugs and the shell-syntax work — were removed once done; they are in the git
 history of this file if the reasoning behind one of them is ever wanted.
 
-- [ ] an `[E]T` whose domain is a *named subrange* is not zero-filled on
-      Python. `var box: [Digit_T]str` over `1 .. 3` is `array[Digit_T, str]`
-      on Nim -- three slots, all present -- and an empty `_EnumArray` here,
-      so only the indices actually assigned exist. Iteration then yields
-      two entries against Nim's three, and a read of an unassigned one
-      raises `KeyError` where Nim gives `""`. `_zero_value` fills the
-      domain only when `tick_types` has `members`, which enums have and
-      subranges (`{"First": lo, "Last": hi}`) do not; `range(lo, hi + 1)`
-      is the missing case, and `bool`/`char` domains reach `_EnumArray`
-      with no `tick_types` entry at all. Found while fixing `enumerate`
-      over the same family, which is correct now in the sense that it
-      reports whatever the domain holds -- this is what it holds.
+- [ ] a subrange with a negative bound does not declare on either backend.
+      `type Off_T is range -2 .. 1` emits `Off_T = range(<Filter object>,
+      1 + 1)` on Python -- a parser node reaches the output -- and a type
+      mismatch on Nim. The unary minus is not being folded into the literal
+      where the bounds are read, so both `tick_types` and the rendered alias
+      get it wrong. Loud on both sides rather than divergent, and a
+      non-negative subrange is unaffected.
+- [ ] `[str]T` is accepted on Python and rejected by Nim, which wants an
+      ordinal domain and says "ordinal type expected; given: string" for
+      `array[char, T]`. The Python side builds an `_EnumArray` that is never
+      filled (there is no finite domain to fill it from), so it behaves like
+      a plain dict. Either give it the 256 char slots Nim would have had the
+      domain been `char`, or reject it at transpile time with that message.
 - [ ] `p / ".."` is not the same path on the two backends. Nim's `joinPath`
       collapses the `..` as it joins, so `Path("/a/b") / ".." / "c"` is
       `/a/c`; pathlib keeps it, giving `/a/b/../c`. Both name the same
