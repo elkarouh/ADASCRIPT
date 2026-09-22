@@ -935,6 +935,24 @@ class Indenter:
                     self._pop_frame()
                 disp = len(self.stack)
                 self._push_frame(WHEN)
+                # The arm body may start on the same line as its '=>' and open a
+                # block of its own: 'when X => if C then', 'when X => for I in
+                # ... loop'. The WHEN frame is the alternative, not that block,
+                # so without a frame for it the block's own 'end' closes the
+                # alternative instead and every 'end' after it is one frame out.
+                # The same two guards as the statement-level dispatch: a line
+                # ending in ';' is a complete arm and opens nothing, and a
+                # trailing keyword inside an unclosed paren is part of an
+                # expression, not an opener.
+                if paren_delta(code) <= 0 and not code_s.endswith(";"):
+                    case last_word(code_s):
+                        when "then": self._push_frame(IF)
+                        when "loop": self._push_frame(LOOP)
+                        when "is": self._push_frame(CASE)
+                        when "declare": self._push_frame(DECLARE)
+                        when "select": self._push_frame(SELECT)
+                        when "do": self._push_frame(DO)
+                        when others: pass
 
             when "elsif":
                 disp = len(self.stack) - 1
