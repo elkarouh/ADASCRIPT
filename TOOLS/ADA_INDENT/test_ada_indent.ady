@@ -1623,6 +1623,61 @@ def run_tests() -> int:
         "  end if;\n"
         "end P;\n"))
 
+    # 62. An expression function whose parameter list closes on one line and
+    #     whose 'is' lands on the NEXT line, after the return type. That line
+    #     opens with 'return', so a deferral keyed on the line's own first word
+    #     missed it and pushed a block frame; an expression function has no
+    #     'end', so every following declaration sat one level too deep.
+    cases.append((
+        "function Get_Minimum_Delay\n"
+        "(Office : T;\n"
+        "Clock_Shift_Conditions : Departure.Clock_Shift_Conditions_T)\n"
+        "return Time.Duration_T is\n"
+        "(Minimum_Take_Off_Time (Office)\n"
+        "- Office.ETOT);\n"
+        "procedure Force_Inform is\n"
+        "begin\n"
+        "Print;\n"
+        "end Force_Inform;\n",
+
+        "function Get_Minimum_Delay\n"
+        "  (Office : T;\n"
+        "   Clock_Shift_Conditions : Departure.Clock_Shift_Conditions_T)\n"
+        "  return Time.Duration_T is\n"
+        "  (Minimum_Take_Off_Time (Office)\n"
+        "     - Office.ETOT);\n"
+        "procedure Force_Inform is\n"
+        "begin\n"
+        "  Print;\n"
+        "end Force_Inform;\n"))
+
+    # 63. The same shape with a real body: the deferred push must still happen,
+    #     so 'begin'/'end' pair with the function as before.
+    cases.append((
+        "function F\n"
+        "(A : Integer)\n"
+        "return Integer is\n"
+        "R : Integer := 0;\n"
+        "begin\n"
+        "return R;\n"
+        "end F;\n"
+        "procedure Q is\n"
+        "begin\n"
+        "null;\n"
+        "end Q;\n",
+
+        "function F\n"
+        "  (A : Integer)\n"
+        "  return Integer is\n"
+        "  R : Integer := 0;\n"
+        "begin\n"
+        "  return R;\n"
+        "end F;\n"
+        "procedure Q is\n"
+        "begin\n"
+        "  null;\n"
+        "end Q;\n"))
+
     for pair in cases:
         let src: str = pair[0]
         let want: str = pair[1]

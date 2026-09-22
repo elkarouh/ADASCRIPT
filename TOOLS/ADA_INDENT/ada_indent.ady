@@ -960,12 +960,15 @@ class Indenter:
                             # Exception: 'subtype T is' is not a block opener -
                             # it is a plain continuation declaration.
                             # cont_func, not this line's own first word: the
-                            # 'is' closing a function header can sit on a line
-                            # of its own ('function F return T' / 'is' / body),
-                            # and there the word to go by belongs to the line
-                            # that opened the declaration. On a single-line
-                            # header cont_func was set from that same line, so
-                            # the two readings agree.
+                            # 'is' closing a function header need not sit on the
+                            # line that opened it. A multi-line parameter list
+                            # puts it on a later line, where the first word is a
+                            # parameter name or 'return', and it can also stand
+                            # alone ('function F return T' / 'is' / body). The
+                            # word that says what is being declared belongs to
+                            # the line that opened the declaration, and cont_func
+                            # carries it across the continuation. On a
+                            # single-line header both readings agree.
                             if self.cont_func:
                                 self.pending_spec = True
                                 self.spec_name = self.frame_name
