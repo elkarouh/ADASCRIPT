@@ -243,6 +243,77 @@ def example5():
 Lowercase locals stay inside the enclosing proc. If a method needs to read
 it, shout it.
 
+## 9.7 Declaration order, and why the instance is `var`
+
+Python resolves names when a call runs; Nim resolves them where the call is
+written. The transpiler hides most of that, but four rules survive into
+Adascript. They matter as soon as a program grows a class that drives the
+whole run — a `Context` gathering what used to be globals, say — because
+that class then sits in the middle of a file full of helpers.
+
+**A method may call a sibling method defined below it.** The transpiler emits
+forward declarations for a class's own methods, so methods are mutually
+visible regardless of order. Write them in reading order:
+
+```python
+class Report:
+    var name: str
+
+    def __init__(self, name: str):
+        self.name = name
+
+    def run(self):
+        self.header()     # both defined further down — fine
+        self.body()
+
+    def header(self):
+        print f"{self.name} header"
+
+    def body(self):
+        print f"{self.name} body"
+```
+
+**A method may *not* call a free proc declared below the class.** Forward
+declarations cover methods, not module-level procs, so this is a hard error:
+
+```
+Error: undeclared identifier: 'helper'
+```
+
+The consequence is a file layout, not a workaround: **put the helper procs
+first, the class that uses them after, and the main block last.** Python is
+indifferent to the order, so a file arranged this way runs identically on
+both backends.
+
+**`__init__` may call free procs above it, but not a sibling method.** The
+generated `initT` / `newT` procs are emitted ahead of the other methods, so a
+`self.something()` inside `__init__` refers to a proc Nim has not seen yet
+(`BUGS/init_calls_method.md` has the details). Inline the body, or call the
+method on the instance right after construction:
+
+```python
+var r: Report = Report("demo")
+r.prepare()          # not from inside __init__
+```
+
+**An instance whose methods call sibling methods must be `var`.** Mutable
+`self` (§9.2) is inferred transitively: `run` calls `body`, `body` assigns a
+field, so `body` takes `self: var Report` and therefore so does `run`. A
+`let` binding then cannot receive it:
+
+```python
+let ctx: Context = Context(opt)
+ctx.run()        # Error: expression 'ctx' is immutable, not 'var'
+
+var ctx: Context = Context(opt)
+ctx.run()        # correct
+```
+
+Nothing about the class declares this, and the Python backend accepts either
+spelling, so the Nim compiler is where you find out. The rule of thumb is
+simpler than the inference: **if you call a method on it, declare it `var`.**
+
+
 ---
 
 *Next: [Chapter 10 — Optional Types and the Maybe Monad](10-optionals.md)*

@@ -494,6 +494,15 @@ class Circle(Shape):
         return 3.14159 * self.radius ** 2
 ```
 
+**Declaration order** — a method MAY call a sibling method defined below it (methods get forward declarations), but MAY NOT call a free proc declared below the class (`Error: undeclared identifier`). Lay the file out as: helper procs, then the class, then the main block. `__init__` may call free procs above it but NOT a sibling method (`BUGS/init_calls_method.md`) — inline the body or call the method on the instance after construction.
+
+**`var` instances** — mutable `self` is inferred transitively, so if any method reaches a field-mutating sibling, the instance must be `var`, not `let`:
+```adascript
+var ctx: Context = Context(opt)   # let → Error: expression 'ctx' is immutable, not 'var'
+ctx.run()
+```
+Only the Nim backend reports this. Rule of thumb: if you call a method on it, declare it `var`.
+
 **ALL_CAPS for shared state** — when a class is defined inside a function, local variables of the outer function aren't visible in Nim's hoisted methods. Declare shared variables with ALL_CAPS names; the transpiler hoists them to global scope.
 
 ---

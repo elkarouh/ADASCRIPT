@@ -1278,6 +1278,55 @@ class Counter:
         self.count += 1   # → proc increment(self: var Counter) in Nim
 ```
 
+### Declaration order, and `var` instances
+
+Nim resolves a name where the call is written, not when it runs. Four rules
+follow, and they decide how a file with a driver class is laid out.
+
+**A method may call a sibling method defined below it** — the transpiler
+emits forward declarations for a class's own methods:
+
+```python
+class Report:
+    var name: str
+
+    def __init__(self, name: str):
+        self.name = name
+
+    def run(self):
+        self.header()      # defined below — fine
+        self.body()
+
+    def header(self): print f"{self.name} header"
+    def body(self):   print f"{self.name} body"
+```
+
+**A method may not call a free proc declared below the class.** Forward
+declarations cover methods only, so this fails with
+`Error: undeclared identifier: 'helper'`. So order the file: **helper procs
+first, then the class that uses them, then the main block.** Python does not
+care about the order, so the same file runs on both backends.
+
+**`__init__` may call free procs above it, but not a sibling method** — the
+generated `initT` / `newT` come out ahead of the other methods
+(`BUGS/init_calls_method.md`). Inline the body, or call the method on the
+instance after construction.
+
+**An instance whose methods call sibling methods must be `var`.** Mutable
+`self` is inferred transitively: `run` calls `body`, `body` assigns a field,
+so both take `self: var Report`, and a `let` binding cannot receive it:
+
+```python
+let ctx: Context = Context(opt)
+ctx.run()     # Error: expression 'ctx' is immutable, not 'var'
+
+var ctx: Context = Context(opt)
+ctx.run()     # correct
+```
+
+The Python backend accepts either, so only Nim reports it. Rule of thumb: if
+you call a method on it, declare it `var`.
+
 ### Forwarding constructors
 
 When a subclass has no `__init__`, the transpiler automatically generates a
