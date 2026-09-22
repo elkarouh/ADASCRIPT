@@ -89,7 +89,8 @@ STANDALONE := \
     test_fstring_replace_sugar.ady \
     test_char_default.ady \
     test_any_all.ady \
-    test_option_guard_modifier.ady
+    test_option_guard_modifier.ady \
+    test_init_calls_method.ady
 
 # -----------------------------------------------------------------------
 # Stdin tests — piped from a sample file

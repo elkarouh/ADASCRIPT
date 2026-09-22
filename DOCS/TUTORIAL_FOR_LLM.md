@@ -494,7 +494,7 @@ class Circle(Shape):
         return 3.14159 * self.radius ** 2
 ```
 
-**Declaration order** — a method MAY call a sibling method defined below it (methods get forward declarations), but MAY NOT call a free proc declared below the class (`Error: undeclared identifier`). Lay the file out as: helper procs, then the class, then the main block. `__init__` may call free procs above it but NOT a sibling method (`BUGS/init_calls_method.md`) — inline the body or call the method on the instance after construction.
+**Declaration order** — a method MAY call a sibling method defined below it (methods get forward declarations), but MAY NOT call a free proc declared below the class (`Error: undeclared identifier`). Lay the file out as: helper procs, then the class, then the main block. `__init__` may call a sibling method as well (the forward declarations cover the `initT`/`newT` procs, which are emitted first).
 
 **`var` instances** — mutable `self` is inferred transitively, so if any method reaches a field-mutating sibling, the instance must be `var`, not `let`:
 ```adascript

@@ -541,8 +541,15 @@ def to_nim(self, indent=0, is_virtual=False, class_name=None, parent_name=None, 
         # methods that call each other out of source order (or in a cycle)
         # would otherwise fail to compile depending on which one Adascript
         # happened to write first.
+        #
+        # A single method needs one too: the init/new procs are emitted below,
+        # ahead of the method bodies, so an `__init__` calling the class's only
+        # other method would otherwise hit an undeclared routine -- or, worse,
+        # silently bind to a same-named proc from an import (`nimport os`
+        # brings `resolve(Path)` into scope, and `self.resolve()` picked it up
+        # as a type mismatch rather than an obvious error).
         fwd_lines = []
-        if len(other_methods) > 1:
+        if other_methods:
             for func_node_m, mname in other_methods:
                 fwd = _generate_method_decl(func_node_m, base_indent, class_name, parent_name, is_virtual_class, type_params)
                 if fwd:

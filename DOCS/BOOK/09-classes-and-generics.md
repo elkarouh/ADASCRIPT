@@ -285,16 +285,27 @@ first, the class that uses them after, and the main block last.** Python is
 indifferent to the order, so a file arranged this way runs identically on
 both backends.
 
-**`__init__` may call free procs above it, but not a sibling method.** The
-generated `initT` / `newT` procs are emitted ahead of the other methods, so a
-`self.something()` inside `__init__` refers to a proc Nim has not seen yet
-(`BUGS/init_calls_method.md` has the details). Inline the body, or call the
-method on the instance right after construction:
+**`__init__` may call a sibling method too.** The generated `initT` / `newT`
+procs are emitted ahead of the other method bodies, so this used to reach a
+proc Nim had not seen yet; the forward declarations now cover it:
 
 ```python
-var r: Report = Report("demo")
-r.prepare()          # not from inside __init__
+class Report:
+    var name: str
+
+    def __init__(self, name: str):
+        self.name = name
+        self.decorate()      # defined below, and called before it is emitted
+
+    def decorate(self):
+        self.name = f"[{self.name}]"
 ```
+
+The old failure was worth knowing because of its second form. With a proc of
+the same name in scope — `nimport os` brings `resolve(Path)` — a
+`self.resolve()` in `__init__` bound to *that* one and failed as a type
+mismatch, pointing nowhere near the class. If you meet either shape in older
+code, the forward declaration is the fix, not the inlining that used to be.
 
 **An instance whose methods call sibling methods must be `var`.** Mutable
 `self` (§9.2) is inferred transitively: `run` calls `body`, `body` assigns a

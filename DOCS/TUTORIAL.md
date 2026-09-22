@@ -1307,10 +1307,11 @@ declarations cover methods only, so this fails with
 first, then the class that uses them, then the main block.** Python does not
 care about the order, so the same file runs on both backends.
 
-**`__init__` may call free procs above it, but not a sibling method** — the
-generated `initT` / `newT` come out ahead of the other methods
-(`BUGS/init_calls_method.md`). Inline the body, or call the method on the
-instance after construction.
+**`__init__` may call a sibling method too** — the generated `initT` / `newT`
+come out ahead of the other method bodies, so this once reached an undeclared
+routine (or, with a same-named proc in scope such as `nimport os`'s
+`resolve(Path)`, silently bound to *that* one and failed as a type mismatch).
+The forward declarations cover it now.
 
 **An instance whose methods call sibling methods must be `var`.** Mutable
 `self` is inferred transitively: `run` calls `body`, `body` assigns a field,

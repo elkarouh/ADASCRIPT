@@ -4,6 +4,27 @@ Open items only.  The write-ups for everything already fixed — 26 numbered
 bugs and the shell-syntax work — were removed once done; they are in the git
 history of this file if the reasoning behind one of them is ever wanted.
 
+- [ ] `enumerate()` over an `[E]T` array yields the index, not the enum
+      member, on Python. `for rtype, f in enumerate(type_to_file)` where
+      `type_to_file: [ReplayType]Path` gives `ReplayType` members on Nim and
+      plain `int`s on Python, so a later `rtype'Image` raises
+      `AttributeError: 'int' object has no attribute 'name'`. It is a crash
+      on one backend against a working program on the other, which is the
+      worst shape a divergence takes. `TOOLS/TCHECK/Tcheck_tact.ady`'s
+      `find_replays` is the live instance: the Nim backend it ships on is
+      correct, and `ady2py` on the same file dies in `show_header`. The
+      `_EnumArray` helper already knows its key type, so its `__iter__`
+      (or the emitter's `enumerate` interception) should hand back members.
+      Same family as the `.keys()`/`.items()` gap below.
+- [ ] `p / ".."` is not the same path on the two backends. Nim's `joinPath`
+      collapses the `..` as it joins, so `Path("/a/b") / ".." / "c"` is
+      `/a/c`; pathlib keeps it, giving `/a/b/../c`. Both name the same
+      directory, so `-d` and `readFile` agree and only *printed* paths
+      differ -- which makes it easy to miss until a log or a diff report
+      shows two spellings. `.parent` agrees on both and is the spelling to
+      use (`saved_logs_dir` in `Tcheck_tact.ady` says so in its docstring).
+      Either normalise in the Python backend's `/` or reject a `".."`
+      component at transpile time with a pointer to `.parent`.
 - [ ] streaming stdin — deliberately not built; the deadlock case is already
       handled, so only the in-memory limit remains (see below)
 - [ ] `EXAMPLES/JOINTJS_DEMO/roi_glue.ady` crashes ady2py on `jsvar`, which the
