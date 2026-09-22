@@ -2072,7 +2072,7 @@ def run_tests() -> int:
         "  end if;\n"
         "end P;\n"))
 
-    # 72. The glued-punctuation family, for every opener that has a dedicated
+    # 78. The glued-punctuation family, for every opener that has a dedicated
     #     reader. last_word() cuts ')then' back to 'then', but a reader that
     #     splits on blanks of its own gets '(X)then' and sees no keyword -- which
     #     is how ends_with_condition_then() reintroduced the ')is' bug for
@@ -2105,7 +2105,7 @@ def run_tests() -> int:
         "  end loop;\n"
         "end P;\n"))
 
-    # 73. ...and the cut must not lose the 'and then' distinction it was taught
+    # 79. ...and the cut must not lose the 'and then' distinction it was taught
     #     alongside. Here the glued 'then' is a real terminator -- the word
     #     before it is '(B)', not 'and' -- so the line ends the condition and
     #     snaps back to the opener, as a terminating 'then' always does.
