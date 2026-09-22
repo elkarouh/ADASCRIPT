@@ -783,6 +783,16 @@ continue if line.startswith("#")
 break if depth < 0
 ```
 
+A modifier testing an optional establishes the auto-unwrap for everything
+after it, exactly as the indented guard does — the optional is a plain value
+from that line on, and writing `.get()` yourself would unwrap it twice:
+
+```python
+let bt: ?BuildType = build_type_from(name)
+continue if bt is None
+builds.append((name: name, btype: bt))   # bt is a plain BuildType here
+```
+
 Nothing else may: an assignment, a call, a `print` or a `raise` under an
 `if` modifier is a parse error. `x = 1 if c` opens exactly like the
 conditional expression `x = 1 if c else 2` and would only stop looking like
@@ -1268,6 +1278,56 @@ class Counter:
         self.count += 1   # → proc increment(self: var Counter) in Nim
 ```
 
+### Declaration order, and `var` instances
+
+Nim resolves a name where the call is written, not when it runs. Four rules
+follow, and they decide how a file with a driver class is laid out.
+
+**A method may call a sibling method defined below it** — the transpiler
+emits forward declarations for a class's own methods:
+
+```python
+class Report:
+    var name: str
+
+    def __init__(self, name: str):
+        self.name = name
+
+    def run(self):
+        self.header()      # defined below — fine
+        self.body()
+
+    def header(self): print f"{self.name} header"
+    def body(self):   print f"{self.name} body"
+```
+
+**A method may not call a free proc declared below the class.** Forward
+declarations cover methods only, so this fails with
+`Error: undeclared identifier: 'helper'`. So order the file: **helper procs
+first, then the class that uses them, then the main block.** Python does not
+care about the order, so the same file runs on both backends.
+
+**`__init__` may call a sibling method too** — the generated `initT` / `newT`
+come out ahead of the other method bodies, so this once reached an undeclared
+routine (or, with a same-named proc in scope such as `nimport os`'s
+`resolve(Path)`, silently bound to *that* one and failed as a type mismatch).
+The forward declarations cover it now.
+
+**An instance whose methods call sibling methods must be `var`.** Mutable
+`self` is inferred transitively: `run` calls `body`, `body` assigns a field,
+so both take `self: var Report`, and a `let` binding cannot receive it:
+
+```python
+let ctx: Context = Context(opt)
+ctx.run()     # Error: expression 'ctx' is immutable, not 'var'
+
+var ctx: Context = Context(opt)
+ctx.run()     # correct
+```
+
+The Python backend accepts either, so only Nim reports it. Rule of thumb: if
+you call a method on it, declare it `var`.
+
 ### Forwarding constructors
 
 When a subclass has no `__init__`, the transpiler automatically generates a
@@ -1428,6 +1488,23 @@ print(result.stderr)   # stderr as a string
 print(result.code)     # exit code as int
 ```
 
+The streams are captured **separately**: `.output` is stdout alone, what the
+command complained about is in `.stderr`, and neither reaches the terminal.
+A capturing form therefore needs no `2>/dev/null` — the error a failing
+command prints is already out of the way:
+
+```python
+let r = shell: rg FATAL {logfile}      # no redirect needed;
+                                       # rg's "No such file" is in r.stderr
+```
+
+`shellLines:` behaves the same — a failing command gives an empty `[]str`,
+not a list containing the error text.
+
+The forms that keep the terminal (`shell: cmd` on its own, and
+`let code: int = shell: cmd`) pass both streams straight through, so there
+a `2>/dev/null` still does what it says.
+
 ### Lines capture
 
 `shellLines` splits stdout into `[]str`, one element per line.  The
@@ -1487,6 +1564,33 @@ shell:
 ```
 
 This runs `echo hello && echo world`.
+
+`join` picks a different separator — `";"` runs every line regardless,
+`"|"` makes one pipeline. Mind what that does to error reporting: with
+`join = ";"` the `.code` you get back is the **last** command's, so a line
+that failed in the middle leaves no trace in it, and `check = true` has no
+non-zero status to catch either. Two ways to ask instead:
+
+```python
+# A scan, where coming up empty is normal and only a broken command speaks:
+let r = shell(join = ";"):
+    rg FATAL {log} | head -20
+    rg SEVERE {log} | head -20
+if r.stderr.strip() != "":
+    stderr.writeLine("scan: " + r.stderr.strip())
+
+# A sequence, where every step must succeed. pipefail is needed for any
+# line ending in a pipe, or the last command's 0 hides the failure:
+let s = shell(join = "&&", pipefail = true):
+    rg FATAL {log} | head -20
+    process-results
+print(s.code)
+```
+
+`grep` and `rg` exit 1 when they find *nothing* and 2 on a real error, so
+for a scan the status cannot tell "matched nothing" from "could not read
+the file" — `.stderr` can, and an `&&` chain would stop at the first
+pattern that matched nothing.
 
 **Interactive block** — when the block contains `send(...)` or `expect(...)`
 calls, the first line is treated as the command to spawn under a PTY, and

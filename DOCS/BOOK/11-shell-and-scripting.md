@@ -47,6 +47,31 @@ let (out, code) = shell: some-command
 let (out2, code2, err2) = shell: some-command
 ```
 
+The two streams are captured *separately*, which is worth knowing before
+writing any shell at all: `.output` is stdout and nothing else. What the
+command complains about is in `.stderr`, and it does not reach the terminal
+either. So a capturing form needs no `2>/dev/null`:
+
+```python
+# The redirect is noise here -- rg's "No such file" is already in
+# r.stderr, and a caller reading r.output never sees it.
+let r = shell(join = ";"):
+    rg FATAL {logfile}
+    rg 'SEVERE.*Description' {logfile} | head -100
+```
+
+`shellLines:` is the same: a command that fails gives an empty `[]str`
+rather than a list with the error message in it.
+
+The forms that *keep the terminal* are the ones where a redirect still
+means something — `shell: cmd` and `let code: int = shell: cmd` pass both
+streams straight through, so `2>/dev/null` there does what it says:
+
+```python
+shell: ls /maybe-missing 2>/dev/null          # silences it
+let rc: int = shell: make_comparable {f} 2>/dev/null
+```
+
 `shellLines:` splits stdout into `[]str`, one element per line. Combined
 with implicit return, a shell command becomes a typed function:
 
@@ -504,6 +529,56 @@ let top = shell(join = "|"):      # one pipeline
     uniq -c
     head -1
 ```
+
+### Telling whether a line in the block failed
+
+"Run them all regardless" has a consequence worth stating: with `join = ";"`
+the status you get back is the **last** command's, exactly as the shell
+defines it. A line that failed in the middle leaves no trace in `.code`:
+
+```python
+let r = shell(join = ";"):
+    grep FATAL /nonexistent/x.log     # fails
+    echo done
+print(r.code)                          # 0 — the failure is invisible here
+print(r.stderr)                        # grep: /nonexistent/x.log: No such file…
+```
+
+`check = true` does not help either, for the same reason: there is no
+non-zero status for it to catch.
+
+So there are two ways to ask, and which one is right depends on what the
+block is for:
+
+**`.stderr` is not empty** — the block is a *scan*, where some commands are
+expected to come up empty and only a broken one says anything:
+
+```python
+if r.stderr.strip() != "":
+    stderr.writeLine("scan: " + r.stderr.strip())
+```
+
+**`join = "&&"` with `pipefail = true`** — the block is a *sequence* where
+every step must succeed. `&&` stops at the first failure and gives you its
+status; `pipefail` is needed whenever a line ends in a pipe, since
+otherwise the last command in the pipeline reports and the failure vanishes
+(11.4):
+
+```python
+let r = shell(join = "&&", pipefail = true):
+    rg FATAL {log} | head -20         # without pipefail, head's 0 wins
+    process-results
+```
+
+One trap in choosing between them. `grep` and `rg` exit **1 when they find
+nothing** and **2 on a real error**, so for a scan the status cannot tell
+"matched nothing" from "could not read the file", while `.stderr` can —
+empty in the first case, a message in the second. That is why a `;` block
+of greps wants the `.stderr` test and not an `&&` chain, which would stop
+at the first pattern that happened to match nothing.
+
+If you need to know *which* line failed, give it its own `shell:` and read
+its `.code`.
 
 If the block contains `send(...)`/`expect(...)`, the first line is spawned
 under a **PTY** and the rest drives it — a built-in `expect(1)`. From

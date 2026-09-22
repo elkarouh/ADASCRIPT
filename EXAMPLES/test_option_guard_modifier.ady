@@ -1,0 +1,94 @@
+#!/usr/bin/env ady2nim
+# test_option_guard_modifier.ady — `continue if x is None` proves x present
+#
+#   ady2nim EXAMPLES/test_option_guard_modifier.ady -r
+#   ady2py  EXAMPLES/test_option_guard_modifier.ady -c
+#
+# A guard that leaves the block proves the optional has a value in
+# everything after it, and Nim has no flow typing, so the transpiler
+# records the name and unwraps it for the rest of the scope. That worked
+# for the block form
+#
+#     if bt is None:
+#         continue
+#
+# and not for the statement modifier `continue if bt is None`, which emits
+# the whole guard on one line. The recogniser asked for the line to end at
+# the colon, so the one-liner proved nothing -- and the two ways that went
+# wrong were not equally loud:
+#
+#   let btype: BuildType = bt     # type error, got Option[BuildType]
+#   print bt'Image                # compiled, and printed some(IP) on Nim
+#                                 # against IP on Python
+#
+# The second is the one worth a test: it is a silent disagreement between
+# the backends rather than a build that stops.
+
+type BuildType is enum IP, OP, SIP
+
+type Build is tuple:
+    name  : str
+    btype : BuildType
+
+def build_type_from(name: str) -> ?BuildType:
+    if "IP" in name:
+        return IP
+    if "OP" in name:
+        return OP
+    return None
+
+# --- `continue if` in a loop -------------------------------------------------
+var builds: []Build = []
+var labels: []str = []
+for name in ["aIP", "skip", "bOP", "none"]:
+    let bt: ?BuildType = build_type_from(name)
+    continue if bt is None
+    labels.append(bt'Image)                   # the silent one: not some(IP)
+    let btype: BuildType = bt                 # a plain assignment
+    builds.append((name: name, btype: bt))    # inside a tuple constructor
+    assert btype == bt
+
+assert labels'Length == 2
+assert labels[0] == "IP"
+assert labels[1] == "OP"
+assert builds'Length == 2
+assert builds[0].name == "aIP"
+assert builds[0].btype == IP
+assert builds[1].btype == OP
+
+# --- `return if` in a function ----------------------------------------------
+def label_of(name: str) -> str:
+    let bt: ?BuildType = build_type_from(name)
+    return "none" if bt is None
+    let btype: BuildType = bt
+    return btype'Image
+
+assert label_of("aIP") == "IP"
+assert label_of("bOP") == "OP"
+assert label_of("zzz") == "none"
+
+# --- the block form, which always worked and must keep working ---------------
+def label_block(name: str) -> str:
+    let bt: ?BuildType = build_type_from(name)
+    if bt is None:
+        return "none"
+    let btype: BuildType = bt
+    return btype'Image
+
+assert label_block("aIP") == "IP"
+assert label_block("zzz") == "none"
+
+# --- a guard proves nothing about a *different* optional ---------------------
+def two_optionals(a: str, b: str) -> str:
+    let x: ?BuildType = build_type_from(a)
+    return "no-x" if x is None
+    let y: ?BuildType = build_type_from(b)
+    # x is proven here and y is not; y needs its own guard.
+    return "no-y" if y is None
+    return x'Image + "/" + y'Image
+
+assert two_optionals("aIP", "bOP") == "IP/OP"
+assert two_optionals("zzz", "bOP") == "no-x"
+assert two_optionals("aIP", "zzz") == "no-y"
+
+print "option guard modifier tests passed"

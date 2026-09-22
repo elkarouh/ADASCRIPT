@@ -313,15 +313,37 @@ def note_option_guard(chunk, collected=None):
     where a wrapper script does all its work.
     """
     chunk_lines = [l for l in chunk.split("\n") if l.strip()]
-    if len(chunk_lines) < 2:
+    if not chunk_lines:
         return
     # A dotted path as well as a bare name: `if f.line is None: return`
     # proves f.line below it exactly as `if x is None: return` proves x.
-    m = re.match(r'^(\s*)if\s+([A-Za-z_]\w*(?:\.\w+)*(?:\[\d+\])?)\.isNone:\s*(?:#.*)?$',
+    #
+    # The exit may sit on the guard's own line, which is what the statement
+    # modifier `continue if x is None` emits. That spelling proved nothing
+    # until now, because this asked for the line to end at the colon: the
+    # tick path then read the optional itself rather than its value and
+    # `print bt'Image` came out `some(IP)` on Nim against `IP` on Python --
+    # compiling, and wrong, which is worse than the type error the same
+    # variable gave in a `let` or a tuple.
+    m = re.match(r'^(\s*)if\s+([A-Za-z_]\w*(?:\.\w+)*(?:\[\d+\])?)\.isNone:'
+                 r'\s*(.*?)\s*(?:#.*)?$',
                  chunk_lines[0])
     if not m:
         return
-    head_indent, name = m.group(1), m.group(2)
+    head_indent, name, inline_exit = m.group(1), m.group(2), m.group(3)
+    if inline_exit:
+        # The one-line form: what follows is the rest of the block rather
+        # than the guard's body, so neither the indent test nor the last
+        # line below applies -- this line alone says whether it leaves.
+        if not _leaves_the_block(inline_exit):
+            return
+        if not hasattr(ParserState, '_option_unwrap_vars'):
+            ParserState._option_unwrap_vars = set()
+        if name not in ParserState._option_unwrap_vars:
+            ParserState._option_unwrap_vars.add(name)
+            if collected is not None:
+                collected.append(name)
+        return
     # Comments are not statements: a note written under the guard -- which is
     # exactly where one gets written, explaining what the guard establishes --
     # was taken for the guard's last line, and a comment does not leave the
@@ -519,8 +541,15 @@ def to_nim(self, indent=0, is_virtual=False, class_name=None, parent_name=None, 
         # methods that call each other out of source order (or in a cycle)
         # would otherwise fail to compile depending on which one Adascript
         # happened to write first.
+        #
+        # A single method needs one too: the init/new procs are emitted below,
+        # ahead of the method bodies, so an `__init__` calling the class's only
+        # other method would otherwise hit an undeclared routine -- or, worse,
+        # silently bind to a same-named proc from an import (`nimport os`
+        # brings `resolve(Path)` into scope, and `self.resolve()` picked it up
+        # as a type mismatch rather than an obvious error).
         fwd_lines = []
-        if len(other_methods) > 1:
+        if other_methods:
             for func_node_m, mname in other_methods:
                 fwd = _generate_method_decl(func_node_m, base_indent, class_name, parent_name, is_virtual_class, type_params)
                 if fwd:
@@ -2264,6 +2293,17 @@ def to_nim(self):
         if m:
             default = f" = none({m.group(1)})"
             ParserState.nim_imports.add("options")
+    # A char parameter's default is written `'z'` in Adascript and has been
+    # emitted as the one-character string that is, which Nim will not take
+    # for a char. Narrowed here for the same reason it is narrowed at a
+    # declaration, an assignment, a return and a call argument -- a string
+    # where Nim wants a char is always an error, so this can only turn a
+    # failure into what was written.
+    if nim_type == "char" and default.startswith(" = "):
+        from hek_nim_expr import _char_literal_arg
+        char_default = _char_literal_arg(default[3:])
+        if char_default is not None:
+            default = f" = {char_default}"
     ParserState.symbol_table.add(name, nim_type, "param")
     return f"{name}{annotation}{default}"
 
@@ -4837,6 +4877,15 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
                                     if _m:
                                         pdefault = f" = none({_m.group(1)})"
                                         ParserState.nim_imports.add("options")
+                                # A char default, narrowed the way param_plain
+                                # narrows it: this path builds a method's
+                                # parameters itself rather than going through
+                                # that one, so it needs the same rewrite.
+                                if ptype == "char" and pdefault.startswith(" = "):
+                                    from hek_nim_expr import _char_literal_arg
+                                    _cd = _char_literal_arg(pdefault[3:])
+                                    if _cd is not None:
+                                        pdefault = f" = {_cd}"
                                 params.append(f"{pname}: {ptype}{pdefault}")
                 elif st_name == "return_annotation":
                     ret_ann = st.to_nim()
@@ -4860,7 +4909,13 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
         parts = p.split(":")
         if len(parts) >= 2:
             pn = parts[0].strip()
-            pt = ":".join(parts[1:]).strip()
+            # The default is not part of the type: `c: char = '~'` was being
+            # recorded as the type `char = '~'`, which matches nothing, so
+            # every rewrite that asks the symbol table what a parameter is --
+            # `c * n` reaching for repeat(), among them -- missed a parameter
+            # that had one. The annotation stops at the first ` = `; a type
+            # never contains one.
+            pt = ":".join(parts[1:]).split(" = ", 1)[0].strip()
             ParserState.symbol_table.add(pn, pt, "param")
 
     # Extract body first so we can detect mutations

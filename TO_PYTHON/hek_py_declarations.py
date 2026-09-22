@@ -325,11 +325,23 @@ class _EnumArray(dict):
     """
     __slots__ = ()
 
+    @staticmethod
+    def _ordinal(kv):
+        k = kv[0]
+        return getattr(k, "value", k)
+
     def __iter__(self):
-        def _ordinal(kv):
-            k = kv[0]
-            return getattr(k, "value", k)
-        return iter(v for _, v in sorted(self.items(), key=_ordinal))\
+        return iter(v for _, v in sorted(self.items(), key=_EnumArray._ordinal))
+
+    def _adascript_pairs(self):
+        """(key, value) over the domain, in order -- what Nim's pairs gives.
+
+        enumerate() is the only caller: the builtin would number the values
+        0, 1, 2 ... where `for m, v in enumerate(arr)` on Nim binds M to the
+        domain member. _enumerate finds this by name, so an [O]T need not be
+        a _EnumArray to answer it.
+        """
+        return iter(sorted(self.items(), key=_EnumArray._ordinal))\
 '''
 
 

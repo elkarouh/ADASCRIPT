@@ -1,0 +1,77 @@
+#!/usr/bin/env ady2nim
+# test_enum_array_zero_fill.ady — every [O]T has a slot per domain value
+#
+#   ady2nim EXAMPLES/test_enum_array_zero_fill.ady -r
+#   ady2py  EXAMPLES/test_enum_array_zero_fill.ady -c
+#
+# Nim's `array[O, T]` has a slot for every value of O, already zeroed. The
+# Python backend builds a dict, so it has to name those values to fill it
+# with -- and only knew how to for an enum domain. A named integer subrange
+# or bool got an empty one, so it held just the indices actually assigned:
+# iteration was short, and reading an unassigned slot raised KeyError where
+# Nim gives the zero value.
+#
+# `[str]T` is not exercised: that is `array[char, T]` on Nim, which rejects
+# it ("ordinal type expected; given: string"), so there is no behaviour for
+# the two backends to agree on.
+
+type Color is enum RED, GREEN, BLUE
+type Digit_T is range 1 .. 3
+
+# --- an enum domain, the case that always worked ---------------------------
+var by_color: [Color]int
+by_color[GREEN] = 5
+assert by_color[RED] == 0
+assert by_color[BLUE] == 0
+var n_color: int = 0
+for v in by_color:
+    n_color = n_color + 1
+assert n_color == 3
+
+# --- a named integer subrange ----------------------------------------------
+var by_digit: [Digit_T]str
+by_digit[2] = "two"
+assert by_digit[1] == ""
+assert by_digit[3] == ""
+var n_digit: int = 0
+for v in by_digit:
+    n_digit = n_digit + 1
+assert n_digit == 3
+# and the domain, not a running count, now that the slots are all there
+var keys: []str = []
+for d, v in enumerate(by_digit):
+    keys.append(str(d))
+assert keys == ["1", "2", "3"]
+
+# --- bool, whose two values are not in tick_types at all -------------------
+var by_flag: [bool]int
+by_flag[True] = 7
+assert by_flag[False] == 0
+var n_flag: int = 0
+for v in by_flag:
+    n_flag = n_flag + 1
+assert n_flag == 2
+
+# --- bounds that are a named constant rather than a literal ----------------
+const MAX: int = 3
+type Idx_T is range 1 .. MAX
+var by_idx: [Idx_T]int
+by_idx[2] = 9
+assert by_idx[1] == 0
+assert by_idx[3] == 0
+
+# --- a record element: the zero is a real object, one per slot --------------
+type Rec is record:
+    n: int = 0
+type Small_T is range 1 .. 2
+var by_rec: [Small_T]Rec
+assert by_rec[1].n == 0
+by_rec[1].n = 4
+assert by_rec[2].n == 0   # a fresh zero per slot, not one object shared
+
+# --- a seq element: likewise a fresh list per slot --------------------------
+var by_seq: [Small_T][]int
+assert by_seq[1]'Length == 0
+assert by_seq[2]'Length == 0
+
+print "enum-array zero-fill tests passed"

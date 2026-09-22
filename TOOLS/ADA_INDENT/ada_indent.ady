@@ -324,7 +324,7 @@ class Indenter:
     warn: bool = True            # report 'end' lines that contradict the stack
     paren_depth: Natural = 0
     pending_spec: bool = False   # a 'function ... is' header whose body kind is not yet known
-    cont_func: bool = False      # the declaration being continued started with 'function' - the
+    cont_func: bool = False      # the declaration being continued started with 'function' -- the
                                  # 'is' that ends its header may land on a later physical line
     pending_inst: bool = False   # an 'X is\nnew Y' generic instantiation PKG frame to pop when done
     cond_state: Natural = 0      # 1 = inside multi-line 'if' condition, 2 = 'elsif'
@@ -920,10 +920,12 @@ class Indenter:
             when "elsif":
                 disp = len(self.stack) - 1
                 let last_e: str = last_word(code_s)
-                if last_e != "then":
+                if last_e != "then" and stmt_incomplete(code_s):
                     self.cond_state = 2
-                    self.cond_base = disp
-                    self.cond_value_base = disp
+                    # max(0, ...): an 'elsif' with nothing open takes disp to -1,
+                    # and these two are Natural, so the store itself would raise.
+                    self.cond_base = max(0, disp)
+                    self.cond_value_base = max(0, disp)
 
             when "else" | "exception" | "or" | "private":
                 # A select alternative ends without popping the WHEN frame
@@ -980,7 +982,13 @@ class Indenter:
                         when "do": self._push_frame(DO)
                         when "declare": self._push_frame(DECLARE, self.frame_name)
                         when others: pass
-                if lw == "if" and last != "then":
+                # stmt_incomplete(): 'if C then X; end if;' on one line starts
+                # with 'if' and does not end with 'then', but it is a whole
+                # statement, not a condition still looking for its 'then'. It
+                # ends with ';', so only a line that genuinely continues opens
+                # the condition tracker -- otherwise every following line is
+                # read as part of a condition that never closes.
+                if lw == "if" and last != "then" and stmt_incomplete(code_s):
                     self.cond_state = 1
                     self.cond_base = disp
                     self.cond_value_base = disp
@@ -1008,7 +1016,12 @@ class Indenter:
         # leads a continuation line moves the start to that line (the value
         # begins after the ':=').
         if cont == 0:
-            self.value_base = disp
+            # max(0, ...): 'else' / 'exception' / 'or' / 'private' closing a
+            # block that was never opened takes disp to -1, and value_base is
+            # Natural, so the store itself would raise. A clamp is not a fix for
+            # a depth that went wrong -- it is the guarantee that no input, however
+            # malformed, takes the formatter down instead of indenting it.
+            self.value_base = max(0, disp)
         elif code_s.startswith(":="):
             self.value_base = disp + cont
 

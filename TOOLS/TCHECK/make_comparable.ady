@@ -1,0 +1,158 @@
+#!/usr/bin/env ady2nim
+#ady2nim-args c -d:release
+"""make_comparable — normalize a log file for side-by-side diffing.
+
+Replaces timestamps, PIDs, hex addresses, baselines, machine names, and
+other volatile content with fixed placeholders so that meld/diff shows
+only meaningful changes.
+
+Single-pass: reads the file once, applies all substitutions per line,
+writes once. Replaces the original make_comparable.ksh which ran ~30
+separate sd/pysd commands (30 full file rewrites).
+"""
+
+nimport os
+nimport nre
+
+let PROG: str = Path($0).name.lstrip(".")
+
+def die(msg: str):
+    stderr.writeLine(PROG + ": " + msg)
+    quit(1)
+
+# ---------------------------------------------------------------------------
+# Compiled regex patterns (compiled once, applied per line)
+# ---------------------------------------------------------------------------
+
+let RE_HEX           = nre.re(r"\b0[xX][0-9A-Fa-f]+\b")
+let RE_USER          = nre.re(r"(?:ekhassan|cmadm)")
+let RE_USER_DOT      = nre.re(r"<USER>\.\w*")
+let RE_PID_PROCESS   = nre.re(r"(?<=process\s\-\s)\d+")
+let RE_PID_PROCESS2  = nre.re(r"(?<=Process\s)\d+")
+let RE_PID_PID       = nre.re(r"(?<=pid\s)\d+")
+let RE_PID_PIDC      = nre.re(r"(?<=pid:\s)\d+")
+let RE_PID_PIDC2     = nre.re(r"(?<=PID:\s)\d+")
+let RE_PID_BOOL_T    = nre.re(r"(?<=true\.\d\s:\s)\d+")
+let RE_PID_BOOL_F    = nre.re(r"(?<=false\.\d\s:\s)\d+")
+let RE_MKTEMP_CM     = nre.re(r"(?<=cmadm\.)\w+")
+let RE_MKTEMP_MK     = nre.re(r"(?<=mktemp\.)\w+")
+let RE_HASH_NUM      = nre.re(r"(?<=\#)\d+")
+let RE_DATE_REAL     = nre.re(r"(?<=REAL\s:\s)(\d{2}/\d{2}/\d{2}(?:\s|\-)\d{2}:\d{2}:\d{2})")
+let RE_DATE_FROZEN   = nre.re(r"(\d{2}/\d{2}/\d{2}\-\d{2}:\d{2}:\d{2}\.\d{2}>\s)(?=<FROZEN)")
+let RE_DATE_ANGLE    = nre.re(r"<(\d{2}/\d{2}/\d{2}\-\d{2}:\d{2}:\d{2}\.\d{2}>)")
+let RE_DATE_MANGLED  = nre.re(r"\.(\d{2}\.\d{2}_\d{2}\.\d{2}\.\d{2})")
+let RE_LOGS_DATE     = nre.re(r"LOGS_\d{6}_\d{6}")
+let RE_6D_DOT_6D     = nre.re(r"\d{6}\.\d{6}")
+let RE_6D_LOG        = nre.re(r"\d{6}_\d{6}\.log")
+let RE_6D_SVLOG      = nre.re(r"\d{6}_\d{6}\.svlog")
+let RE_TIMESTAMP     = nre.re(r"\d{2}/\d{2}/\d{2}\-\d{2}:\d{2}:\d{2}")
+let RE_UTC_TS        = nre.re(r"UTC\s\d{2}/\d{2}/\d{2}\s\d{2}:\d{2}:\d{2}")
+let RE_UNIX_TIME     = nre.re(r"[a-zA-Z]{3}\s[a-zA-Z]{3}\s{1,2}\d{1,2}\s\d{2}:\d{2}:\d{2}\sUTC\s\d{,4}")
+let RE_MACHINE_DHWS  = nre.re(r"dhws\d+")
+let RE_MACHINE_DHDEV = nre.re(r"dhdevd\d+")
+let RE_FROM_ADDR     = nre.re(r"from:\s(?:\d|\.)+:\d+")
+let RE_IP_PORT       = nre.re(r"\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}:\d+\b")
+let RE_STACK_SIZE    = nre.re(r"(?<=Max_Secondary_Stack:\s)\d+")
+let RE_RATIO         = nre.re(r"(?<=RATIO\s:\s\s)0\.\d+")
+let RE_CORE          = nre.re(r"CORE!(?:\w|\.)+\b")
+let RE_BASELINE_PATH = nre.re(r".*/cm/ot/TACT/TACT_CONFIG![^:]*:")
+let RE_TASKMAIN      = nre.re(r"taskmain_task_\w+\b")
+let RE_TACT_ID       = nre.re(r"(?<=Tact_Id:\s)(\d+)")
+let RE_EL_FILE       = nre.re(r"(?<!FILE:)(?<!TEST:)\b[\w.!_-]+\.el\b")
+let RE_AUTO_PATH     = nre.re(r"(^/auto/local_build/(.*)/)(?=(.*)out_01:)")
+let RE_BASELINE      = nre.re(r"2[78]\.[02]\.0\.\d+")
+let RE_PMAKE         = nre.re(r"Pmake\.out.*")
+
+# ---------------------------------------------------------------------------
+# Apply all substitutions to a single line
+# ---------------------------------------------------------------------------
+
+def normalize(line: str, baseline: str, baseline_path_prefix: str) -> str:
+    """Apply all normalization substitutions to one line."""
+    var s: str = line
+    # Remove the baseline-specific path prefix (regex — path contains variable content).
+    s = nre.replace(s, RE_BASELINE_PATH, ":")
+    # Hex addresses.
+    s = nre.replace(s, RE_HEX, "<TRACE>")
+    # Users.
+    s = nre.replace(s, RE_USER, "<USER>")
+    s = nre.replace(s, RE_USER_DOT, "<USER>.xxxxx")
+    # PIDs.
+    s = nre.replace(s, RE_PID_PROCESS, "<PID>")
+    s = nre.replace(s, RE_PID_PROCESS2, "<PID>")
+    s = nre.replace(s, RE_PID_PID, "<PID>")
+    s = nre.replace(s, RE_PID_PIDC, "<PID>")
+    s = nre.replace(s, RE_PID_PIDC2, "<PID>")
+    s = nre.replace(s, RE_PID_BOOL_T, "<PID>")
+    s = nre.replace(s, RE_PID_BOOL_F, "<PID>")
+    # Temp paths.
+    s = nre.replace(s, RE_MKTEMP_CM, "<path>")
+    s = nre.replace(s, RE_MKTEMP_MK, "<path>")
+    # Numbers after #.
+    s = nre.replace(s, RE_HASH_NUM, "<number>")
+    # Dates and timestamps.
+    s = nre.replace(s, RE_DATE_REAL, "<date>")
+    s = nre.replace(s, RE_DATE_FROZEN, "<date>")
+    s = nre.replace(s, RE_DATE_ANGLE, "<date>")
+    s = nre.replace(s, RE_DATE_MANGLED, "<date_mangled>")
+    s = nre.replace(s, RE_LOGS_DATE, "LOGS_<date_mangled>")
+    s = nre.replace(s, RE_6D_DOT_6D, "LOGS_<date_mangled>")
+    s = nre.replace(s, RE_6D_LOG, "<date_mangled>.log")
+    s = nre.replace(s, RE_6D_SVLOG, "<date_mangled>.svlog")
+    s = nre.replace(s, RE_TIMESTAMP, "<timestamp>")
+    s = nre.replace(s, RE_UTC_TS, "<timestamp>")
+    s = nre.replace(s, RE_UNIX_TIME, "UNIX_TIME")
+    # Machines.
+    s = nre.replace(s, RE_MACHINE_DHWS, "<machine>")
+    s = nre.replace(s, RE_MACHINE_DHDEV, "<machine>")
+    s = nre.replace(s, RE_FROM_ADDR, "from <machine>")
+    s = nre.replace(s, RE_IP_PORT, "<ip_address>:<port>")
+    # Stack size.
+    s = nre.replace(s, RE_STACK_SIZE, "<stack size>")
+    # Ratio.
+    s = nre.replace(s, RE_RATIO, "<ratio>")
+    # CORE baseline.
+    s = nre.replace(s, RE_CORE, "CORE!<baseline>")
+    # Taskmain.
+    s = nre.replace(s, RE_TASKMAIN, "taskmain_task_<alpha>")
+    # Tact ID.
+    s = nre.replace(s, RE_TACT_ID, "<tact_id>")
+    # .el filenames.
+    s = nre.replace(s, RE_EL_FILE, "<tacot script filename>")
+    # /auto/local_build paths before out_01.
+    s = nre.replace(s, RE_AUTO_PATH, "")
+    # Baselines.
+    s = nre.replace(s, RE_BASELINE, "<baseline>")
+    # Pmake.
+    s = nre.replace(s, RE_PMAKE, "Pmake.out")
+    # Replay dir IDs.
+    s = s.replace("replay_dir-full_simca", "replay_dir-full_simca.<IDD>")
+    # Simple string replacements.
+    s = s.replace("..ERROR_REPORT.", "")
+    s = s.replace("SEVERE :", "SEVERE")
+    s = s.replace("/cm/local_build/TACTDEV_HOME/replay_dir/work/logging/LOGS_<date_mangled>/", "")
+    return s
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+let args: []str = $@
+if args'Length < 1:
+    die("usage: " + PROG + " <logfile> [<baseline>]")
+
+let logfile: str = args[0]
+let baseline: str = args[1] if args'Length > 1 else ""
+let baseline_path_prefix: str = ".*/cm/ot/TACT/TACT_CONFIG!" + baseline + ".*?:" if baseline != "" else ""
+
+if not -f Path(logfile):
+    die("file not found: " + logfile)
+
+stderr.writeLine(PROG + ": normalizing " + logfile)
+
+let content: str = readFile(logfile)
+var lines: []str = content.split("\n")
+var result: []str = []
+for line in lines:
+    result.append(normalize(line, baseline, baseline_path_prefix))
+writeFile(logfile, "\n".join(result))

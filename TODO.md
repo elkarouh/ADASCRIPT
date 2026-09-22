@@ -4,6 +4,28 @@ Open items only.  The write-ups for everything already fixed — 26 numbered
 bugs and the shell-syntax work — were removed once done; they are in the git
 history of this file if the reasoning behind one of them is ever wanted.
 
+- [ ] a subrange with a negative bound does not declare on either backend.
+      `type Off_T is range -2 .. 1` emits `Off_T = range(<Filter object>,
+      1 + 1)` on Python -- a parser node reaches the output -- and a type
+      mismatch on Nim. The unary minus is not being folded into the literal
+      where the bounds are read, so both `tick_types` and the rendered alias
+      get it wrong. Loud on both sides rather than divergent, and a
+      non-negative subrange is unaffected.
+- [ ] `[str]T` is accepted on Python and rejected by Nim, which wants an
+      ordinal domain and says "ordinal type expected; given: string" for
+      `array[char, T]`. The Python side builds an `_EnumArray` that is never
+      filled (there is no finite domain to fill it from), so it behaves like
+      a plain dict. Either give it the 256 char slots Nim would have had the
+      domain been `char`, or reject it at transpile time with that message.
+- [ ] `p / ".."` is not the same path on the two backends. Nim's `joinPath`
+      collapses the `..` as it joins, so `Path("/a/b") / ".." / "c"` is
+      `/a/c`; pathlib keeps it, giving `/a/b/../c`. Both name the same
+      directory, so `-d` and `readFile` agree and only *printed* paths
+      differ -- which makes it easy to miss until a log or a diff report
+      shows two spellings. `.parent` agrees on both and is the spelling to
+      use (`saved_logs_dir` in `Tcheck_tact.ady` says so in its docstring).
+      Either normalise in the Python backend's `/` or reject a `".."`
+      component at transpile time with a pointer to `.parent`.
 - [ ] streaming stdin — deliberately not built; the deadlock case is already
       handled, so only the in-memory limit remains (see below)
 - [ ] `EXAMPLES/JOINTJS_DEMO/roi_glue.ady` crashes ady2py on `jsvar`, which the
@@ -84,11 +106,6 @@ history of this file if the reasoning behind one of them is ever wanted.
       both sides; the lexical `os.path.join` rule is the easier one to
       match, but it means shadowing the `/` that std/paths exports.
       `git1.ady` sidesteps it by joining in two steps.
-- [ ] ady2nim: `any(xs)` and `all(xs)` over a `[]bool` do not translate. `any`
-      hits Nim's deprecated `any` *type* ("illegal type conversion to 'any'")
-      and `all` is simply undeclared; both work on the Python backend, so the
-      same source gives a working program on one and a compile error on the
-      other. `sequtils` has `anyIt`/`allIt` to map onto.
 - [ ] ady2nim: a value-returning call used as a statement gets `discard` inside
       a plain `def` but not inside a *method body* or at module level, so the
       same source compiles on Python and fails on Nim with "expression ... has
@@ -184,6 +201,53 @@ history of this file if the reasoning behind one of them is ever wanted.
       above the `case`, or between two `when` clauses, is fine -- it is only
       the position before the first clause, where a reader naturally puts the
       note explaining what the block dispatches on.
+- [ ] a single-line `when COND: stmt` body glues a following comment onto
+      the Nim `of` clause instead of leaving it where it is, when that
+      comment is the very next line after the case statement (at the same
+      or a shallower indent -- exiting the case, not another `when`).
+      Minimal repro:
+
+          case TOOL:
+              when GREP: stages = stages + "a"
+              when RG:   stages = stages + "b"
+          # a comment right after
+
+      compiles to `of RG    # a comment right after:`, which Nim rejects
+      ("expected: ':', but got: 'stages'") since the comment lands between
+      `of RG` and its colon. Writing the last `when`'s body on its own
+      indented line instead of inline avoids it -- confirmed the bug is
+      specific to the single-line `stmt_line` form, not the `case`
+      statement generally -- which is the workaround `TOOLS/PGREP/Pgrep.ady`
+      uses (the `-ppat` stage's `case GREP_TOOL:` in `search_one`). Found
+      while adding a `GREP_TOOL` enum there; `_block_inline_header_comment`
+      in `HPARSEC/hek_helpers.py`, called from `when_clause.to_nim` in
+      `TO_NIM/hek_nim_parser.py`, is where the trailing-comment lookup for
+      a compound header lives and is the likely place the wrong comment is
+      being picked up.
+- [ ] a `char` reached through a *field* is not recognised as one by the
+      comparison narrowing, so `r.fill == "."` over a `fill: char` fails on
+      Nim ("type mismatch", string against char) and passes on Python. A
+      char *variable* is fine, and so is `s[0]`, because
+      `_is_nim_char_expr` looks the expression up in the symbol table by
+      its whole spelling and a field access is not a name there. The `&`
+      case and the `*`/repeat() case both answer this by looking the last
+      dotted component up on its own; the same fallback in
+      `_is_nim_char_expr` would settle it, with the caveat that a field
+      name shared by two classes with different types could then narrow
+      the wrong way -- which is why it is written down rather than done
+      alongside the char-default fix.
+- [ ] implicit return does not work under a `?T` return type, so every
+      branch of an optional-returning function needs an explicit `return`.
+      Two different failures, depending on the branch. A value as the tail
+      expression is wrapped one level too deep -- `def f(s: str) -> ?BT`
+      ending in `when others: OP` gives "got 'Option[BT]' for 'some(OP)'
+      but expected 'BT'", because the case itself is typed `BT` and the
+      `some()` lands inside it. A bare `None` as the tail reaches Nim as
+      `nil`, where `isNil` is ambiguous between its `ptr T` and `ref T`
+      overloads. The `if/else` form fails the same way as the `case` one,
+      so it is the implicit return rather than the construct around it.
+      `TOOLS/TCHECK/Tcheck_tact.ady`'s `build_type_from` says so where it
+      spells out the returns it would otherwise leave implicit.
 - [ ] a user-defined scalar type is an alias, not a distinct type, so
       `type Velocity_T is float` documents a unit without enforcing it:
       `let d: Distance_T = v` over two float aliases compiles on both
@@ -282,3 +346,23 @@ filter the empty lines after splitting input that might be empty.
 Everything else the outside session catalogued now compiles and runs the
 same on both backends; the probes are in the session log.
 ## Nim keyword as a tuple-unpacking target
+
+## `{!var}` quoting not supported in shell block form
+
+In single-line `shell:`, `{!var}` quotes the value as a single shell argument
+(`quoteShell`). In block form (`shell(join = ";"):` with indented lines),
+`{!var}` fails with `undeclared identifier: '!'`. Only `{var}` (unquoted
+interpolation) works in block lines.
+
+```adascript
+# Works:
+let rc: int = shell: sd 'a' 'b' {!out_file}
+
+# Fails:
+let rc: int = shell(join = ";"):
+    sd 'a' 'b' {!out_file}    # Error: undeclared identifier: '!'
+
+# Workaround — use {var} (safe when the path has no special characters):
+let rc: int = shell(join = ";"):
+    sd 'a' 'b' {out_file}
+```

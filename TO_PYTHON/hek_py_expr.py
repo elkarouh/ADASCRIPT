@@ -896,6 +896,48 @@ def _file_helper_call(name, call_trailer):
     return f"_{'read' if name == 'readFile' else 'write'}_file{call_trailer}"
 
 
+# --- enumerate over an [O]T ------------------------------------------------
+#
+# `enumerate(xs)` is `xs.pairs` on Nim, which over an `array[O, T]` yields the
+# *domain* -- the enum member, or the subrange's own first index. Python's
+# builtin always counts 0, 1, 2 ..., so `for rtype, f in enumerate(type_to_file)`
+# bound RTYPE to an int there and to a ReplayType here, and the next
+# `rtype'Image` died with "'int' object has no attribute 'name'": a crash on one
+# backend against a working program on the other.
+#
+# The dispatch is on the value, not on the annotation, because the emitter
+# often cannot see the type -- a field, a call's return, a nested expression.
+# Asking for the method by name rather than isinstance keeps this helper
+# independent of _EnumArray, which is only defined when an [O]T is named.
+_ENUMERATE_HELPER = '''\
+def _enumerate(_seq, _start = 0):
+    """enumerate(), except that an [O]T yields its domain the way Nim does."""
+    _pairs = getattr(_seq, "_adascript_pairs", None)
+    if _pairs is not None and _start == 0:
+        return _pairs()
+    return enumerate(_seq, _start)\
+'''
+
+
+def _ensure_enumerate_helper():
+    """Inject the enumerate shim the first time enumerate() is seen."""
+    from hek_parsec import ParserState
+    decls = getattr(ParserState, 'py_top_decls', [])
+    if not any("def _enumerate(" in d for d in decls):
+        decls.append(_ENUMERATE_HELPER)
+        ParserState.py_top_decls = decls
+
+
+def _enumerate_call(call_trailer):
+    """`enumerate(args)` -> `_enumerate(args)`, or None if not that shape."""
+    if not (call_trailer.startswith("(") and call_trailer.endswith(")")):
+        return None
+    if not call_trailer[1:-1].strip():
+        return None
+    _ensure_enumerate_helper()
+    return f"_enumerate{call_trailer}"
+
+
 def _run_argv_call(name, call_trailer):
     """`run(argv, ...)` -> `_run_argv(argv, ...)`, or None if not that shape.
 
@@ -963,6 +1005,26 @@ def _which(_name):
     _found = _shutil.which(_name)
     return None if _found is None else Path(_found)\
 '''
+
+
+_REPLACE_FIRST_HELPER = '''\
+def adascriptReplaceFirst(text, old, new):
+    """`{name/old/new}` inside an f-string: text with the first old replaced
+    -- the shell's ${var/old/new}. str.replace(old, new, 1) already does
+    this on Python; the name matches the Nim backend's helper so a reader
+    checking one output against the other finds the same call in both.
+    """
+    return text.replace(old, new, 1)\
+'''
+
+
+def _ensure_replace_first_helper():
+    """Add adascriptReplaceFirst the first time {name/old/new} is used."""
+    from hek_parsec import ParserState
+    decls = getattr(ParserState, 'py_top_decls', [])
+    if not any("def adascriptReplaceFirst(" in d for d in decls):
+        decls.append(_REPLACE_FIRST_HELPER)
+        ParserState.py_top_decls = decls
 
 
 def _which_call(call_trailer):
@@ -1254,6 +1316,12 @@ def to_py(self, prec=None):
                     result = helper
                     i += 1
                     continue
+            if i == 0 and result == "enumerate" and "enumerate" not in _own:
+                helper = _enumerate_call(tr_str)
+                if helper is not None:
+                    result = helper
+                    i += 1
+                    continue
             if i == 0 and result == "have" and "have" not in _own:
                 helper = _have_call(tr_str)
                 if helper is not None:
@@ -1266,6 +1334,13 @@ def to_py(self, prec=None):
                     result = helper
                     i += 1
                     continue
+            if i == 0 and result == "adascriptReplaceFirst" and tr_str.startswith("("):
+                # Synthesised only by the {name/old/new} f-string sugar --
+                # never written by hand, so there is no user proc to shadow.
+                _ensure_replace_first_helper()
+                result = "adascriptReplaceFirst" + tr_str
+                i += 1
+                continue
             if i == 0 and result == "Path" and "Path" not in _own:
                 # `Path(s)` is a call, and the class it names was defined only
                 # when an *annotation* mentioned the type: a file that says

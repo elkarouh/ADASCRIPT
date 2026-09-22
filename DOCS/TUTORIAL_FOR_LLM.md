@@ -334,6 +334,15 @@ under an `if` modifier is a parse error -- `x = 1 if c` opens like the
 conditional expression `x = 1 if c else 2`. A modifier's `if` has no `else`,
 so `x = 1 if flag else 2` is still a ternary.
 
+A modifier testing an optional establishes the auto-unwrap for the rest of
+the scope, as the indented guard does. Use the plain name after it; an
+explicit `.get()` there unwraps twice and does not compile.
+```adascript
+let bt: ?BuildType = build_type_from(name)
+continue if bt is None
+builds.append((name: name, btype: bt))   # bt is a plain BuildType here
+```
+
 ### while
 ```adascript
 while queue:
@@ -485,6 +494,15 @@ class Circle(Shape):
         return 3.14159 * self.radius ** 2
 ```
 
+**Declaration order** — a method MAY call a sibling method defined below it (methods get forward declarations), but MAY NOT call a free proc declared below the class (`Error: undeclared identifier`). Lay the file out as: helper procs, then the class, then the main block. `__init__` may call a sibling method as well (the forward declarations cover the `initT`/`newT` procs, which are emitted first).
+
+**`var` instances** — mutable `self` is inferred transitively, so if any method reaches a field-mutating sibling, the instance must be `var`, not `let`:
+```adascript
+var ctx: Context = Context(opt)   # let → Error: expression 'ctx' is immutable, not 'var'
+ctx.run()
+```
+Only the Nim backend reports this. Rule of thumb: if you call a method on it, declare it `var`.
+
 **ALL_CAPS for shared state** — when a class is defined inside a function, local variables of the outer function aren't visible in Nim's hoisted methods. Declare shared variables with ALL_CAPS names; the transpiler hoists them to global scope.
 
 ---
@@ -552,6 +570,13 @@ def longest_path(self: Optimizer[S, D, C], start: S, end: S) -> (float, []D):
 
 Shell commands are first-class expressions.
 
+A capturing form keeps the two streams apart: `.output` is stdout alone,
+`.stderr` holds the rest, and neither reaches the terminal. So `2>/dev/null`
+is redundant in `shell:`/`shellLines:` that capture -- a failing command
+gives clean output and an empty `[]str`, not error text. It is NOT redundant
+in the forms that keep the terminal (`shell: cmd` alone, `let rc: int =
+shell: cmd`), which pass both streams through.
+
 ```adascript
 let result = shell: git status
 print(result.output)    # stdout as string
@@ -580,6 +605,19 @@ shell: rm -rf /tmp/build
 shell:
     echo hello
     echo world
+
+# join picks the separator: ";" runs all regardless, "|" makes one pipeline.
+# With ";" the .code is the LAST command's, so a mid-block failure is
+# invisible in it and check = true has nothing to catch. Test r.stderr for a
+# scan; use join = "&&" with pipefail = true for a must-all-succeed sequence
+# (pipefail is required for any line ending in a pipe, or the last command's
+# 0 hides the failure). grep/rg exit 1 for "found nothing" and 2 for a real
+# error, so a scan's status cannot tell those apart -- stderr can.
+let r = shell(join = ";"):
+    rg FATAL {log} | head -20
+    rg SEVERE {log} | head -20
+if r.stderr.strip() != "":
+    stderr.writeLine("scan: " + r.stderr.strip())
 
 # Interactive block (PTY expect/send)
 shell:

@@ -1,0 +1,32 @@
+#!/usr/bin/env ady2nim
+"""Test: `{name/old/new}` inside an f-string -- the shell's ${var/old/new}.
+
+Restricted to a dotted name immediately followed by `/` with no space, the
+same "no space" rule that keeps `s/pat/repl/` out of the way of ordinary
+division. Only the first occurrence of `old` is replaced; `old` may
+contain a backslash-escaped slash for a literal slash; `new` runs to the
+end of the expression. Plain division, spelled with spaces, is unaffected.
+"""
+let name: str = "CMA.MASTER.LATEST"
+assert f"{name/./,}" == "CMA,MASTER.LATEST"
+assert f"{name/MASTER/SLAVE}" == "CMA.SLAVE.LATEST"
+
+# no match -- the text comes back unchanged
+assert f"{name/NOPE/X}" == "CMA.MASTER.LATEST"
+
+# match at the very end of the string
+let tail: str = "foobar"
+assert f"{tail/bar/}" == "foo"
+assert f"{tail/bar/baz}" == "foobaz"
+
+# `old` containing an escaped literal slash
+let esc: str = "a/b"
+assert f"{esc/\/b/X}" == "aX"
+
+# an empty replacement deletes the match
+assert f"{name/./}" == "CMAMASTER.LATEST"
+
+# a real division, spelled with spaces, must still work
+let a: int = 10
+let b: int = 3
+assert f"{a / b}" == "3.3333333333333335"

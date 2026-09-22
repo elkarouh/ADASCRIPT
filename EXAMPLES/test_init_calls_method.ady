@@ -1,0 +1,80 @@
+#!/usr/bin/env ady2nim
+# test_init_calls_method.ady — __init__ calling a method of its own class
+#
+#   ady2nim EXAMPLES/test_init_calls_method.ady -r
+#   ady2py  EXAMPLES/test_init_calls_method.ady -c
+#
+# Valid Python that did not survive on Nim. The init/new procs are emitted
+# ahead of the method bodies, and forward declarations for those methods
+# were only produced when a class had *two or more* of them -- so a class
+# whose __init__ called its only other method compiled to a call with
+# nothing declared yet.
+#
+# Two failure modes, both here: with no same-named proc in scope the error
+# was "attempting to call undeclared routine"; with one in scope (nimport os
+# brings proc resolve(Path): Path) the call silently bound to it instead and
+# failed as a type mismatch, which points nowhere near the real cause.
+
+nimport os
+
+# --- the shadowing mode: resolve() also exists as os.resolve(Path) ----------
+class Config:
+    path : Path = Path(".")
+
+    def __init__(self, p: str):
+        self.path = Path(p)
+        self.resolve()          # the method below, not os.resolve
+
+    def resolve(self):
+        self.path = self.path / "extra"
+
+let c: Config = Config("/tmp")
+assert str(c.path) == "/tmp/extra"
+
+# --- the undeclared-routine mode: a lone method, no name in scope ----------
+class Report:
+    var name: str
+
+    def __init__(self, name: str):
+        self.name = name
+        self.decorate()
+
+    def decorate(self):
+        self.name = f"[{self.name}]"
+
+let r: Report = Report("demo")
+assert r.name == "[demo]"
+
+# --- a chain: __init__ -> a -> b, both defined below it --------------------
+class Chain:
+    var steps: []str
+
+    def __init__(self):
+        self.steps = []
+        self.first()
+
+    def first(self):
+        self.steps.append("first")
+        self.second()
+
+    def second(self):
+        self.steps.append("second")
+
+let ch: Chain = Chain()
+assert ch.steps == ["first", "second"]
+
+# --- the class still works when __init__ calls nothing ---------------------
+class Plain:
+    var n: int = 0
+
+    def __init__(self, n: int):
+        self.n = n
+
+    def double(self):
+        self.n *= 2
+
+var p: Plain = Plain(21)
+p.double()
+assert p.n == 42
+
+print "init-calls-method tests passed"

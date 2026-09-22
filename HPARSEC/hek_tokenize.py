@@ -268,6 +268,46 @@ def _make_tok(typ, string, start, end, line):
     return tkn.TokenInfo(exact, string, start, end, line)
 
 
+_FSTRING_REPLACE_NAME_RE = re.compile(r'[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*')
+
+
+def _fstring_replace_sugar(expr_text):
+    """Recognise `name/old/new` inside an f-string's `{}` -- the shell's
+    `${var/old/new}`, restricted to a dotted name so it stays a target
+    rather than an arbitrary expression.
+
+    The `/` has to sit right against the name, the same rule that keeps
+    `s/pat/repl/` out of the way of a division spelled the ordinary way
+    (`a / b`): a real division written with no spaces at all -- `a/b/c` --
+    is the one thing this shadows, and it does not appear once in this
+    tree's own f-strings. `old` may contain `\/` for a literal slash;
+    `new` runs to the end of the expression and needs no escaping.
+
+    Returns (name, old, new), or None when expr_text is not shaped this way.
+    """
+    m = _FSTRING_REPLACE_NAME_RE.match(expr_text)
+    if not m:
+        return None
+    name = m.group(0)
+    i = m.end()
+    if i >= len(expr_text) or expr_text[i] != '/':
+        return None
+    i += 1
+    old_start = i
+    while i < len(expr_text):
+        if expr_text[i] == '\\' and i + 1 < len(expr_text):
+            i += 2
+            continue
+        if expr_text[i] == '/':
+            break
+        i += 1
+    if i >= len(expr_text) or expr_text[i] != '/':
+        return None    # no second slash -- not this syntax, leave it alone
+    old_text = expr_text[old_start:i].replace('\\/', '/')
+    new_text = expr_text[i + 1:]
+    return name, old_text, new_text
+
+
 def _split_fstring(s_str, start_lc, end_lc, line_txt):
     """Split an f-string token into FSTRING_START/MIDDLE/END + OP tokens.
 
@@ -359,6 +399,13 @@ def _split_fstring(s_str, start_lc, end_lc, line_txt):
                     expr_text = text[:k]
                     spec_text = text[k+1:]
                     break
+            # `name/old/new` -- rewritten to a call before it is a division
+            # candidate at all, since the sugar is only ever meant here.
+            _sugar = _fstring_replace_sugar(expr_text)
+            if _sugar is not None:
+                _name, _old, _new = _sugar
+                expr_text = f"adascriptReplaceFirst({_name}, {_old!r}, {_new!r})"
+
             # Emit { expr_tokens [!conv] [:spec] }
             yield tkn.TokenInfo(_OP, '{', start_lc, start_lc, line_txt)
             for sub_tok in _lex_impl(expr_text + '\n'):

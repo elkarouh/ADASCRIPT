@@ -207,6 +207,26 @@ def _ensure_which_helper():
         ParserState.nim_top_decls = decls
 
 
+_REPLACE_FIRST_HELPER = """\
+proc adascriptReplaceFirst(text: string, old: string, new: string): string =
+  ## `{name/old/new}` inside an f-string: TEXT with the first OLD replaced --
+  ## the shell's ${var/old/new}. strutils' replace() changes every
+  ## occurrence, which is a different operation with the same name.
+  let at = text.find(old)
+  if at < 0: return text
+  text[0 ..< at] & new & text[at + old.len .. ^1]
+"""
+
+
+def _ensure_replace_first_helper():
+    """Add adascriptReplaceFirst the first time {name/old/new} is used."""
+    ParserState.nim_imports.add("strutils")
+    decls = getattr(ParserState, 'nim_top_decls', [])
+    if not any("adascriptReplaceFirst" in d for d in decls):
+        decls.append(_REPLACE_FIRST_HELPER)
+        ParserState.nim_top_decls = decls
+
+
 _ZFILL_HELPER = """\
 proc adascriptZfill(s: string, width: int): string =
   ## Python's str.zfill: left-pad with '0' to `width`, keeping a leading sign
@@ -837,6 +857,24 @@ def binop_to_nim(self, prec=None, my_prec=None):
             if nim_op == "*":
                 left_is_str  = result.startswith('"') or result.startswith("'")
                 right_is_str = right.startswith('"') or right.startswith("'")
+                if not (left_is_str or right_is_str):
+                    # A str or char *variable* repeats the way a literal does
+                    # -- Python's `s * n` -- and Nim has no `*` over a string
+                    # or a char at all, so it is the same rewrite reached
+                    # through the symbol table rather than through the
+                    # spelling. Without this only the literal form compiled,
+                    # and `c * width` over a parameter did not.
+                    def _repeatable(expr):
+                        sym = ParserState.symbol_table.lookup(expr)
+                        if not sym and "." in expr:
+                            # A field, looked up by its own name, the way the
+                            # `&` case above reads one: `self.fill * n`.
+                            sym = ParserState.symbol_table.lookup(
+                                expr.rsplit(".", 1)[-1])
+                        return sym and (sym.get("type") or "") in (
+                            "string", "str", "char")
+                    left_is_str  = _repeatable(result)
+                    right_is_str = _repeatable(right)
                 if left_is_str:
                     ParserState.nim_imports.add("strutils")
                     # Use char literal if possible (avoids nested quote issues in fmt strings)
@@ -952,7 +990,7 @@ def to_nim(self, prec=None):
     # in Nim char literals, and escaping it would confuse the regex in _fix_when.
     if s == chr(39) + chr(34) + chr(39):
         return chr(39) + chr(34) + chr(39)
-    if s.startswith(chr(39)) and s.endswith(chr(39)) and len(s) > 2:
+    if s.startswith(chr(39)) and s.endswith(chr(39)) and len(s) >= 2:
         inner = s[1:-1]
         inner = inner.replace(chr(34), chr(92) + chr(34))
         s = chr(34) + inner + chr(34)
@@ -2246,6 +2284,29 @@ def to_nim(self, prec=None):
                 ParserState.nim_imports.add("sequtils")
                 return f"sum({arg}.mapIt(int(it))){rest}"
             return f"sum({arg}){rest}"
+        if raw_name in ("any", "all") and raw_name not in getattr(
+                ParserState, "user_top_level_procs", ()):
+            # Python's any()/all() over an iterable of bools. Neither spelling
+            # survives on Nim: `any` is a deprecated *type* there, so `any(xs)`
+            # reads as a conversion to it -- "illegal type conversion to
+            # 'any'" -- and `all` is not declared at all. sequtils' anyIt/allIt
+            # take the predicate the builtins leave implicit, `it` being each
+            # element, and agree on the empty sequence too: any(@[]) is false
+            # and all(@[]) is true, as in Python.
+            #
+            # A generator argument has already been collected into a seq by
+            # the time it arrives here -- `any(p for x in xs)` is
+            # `any(collect(for x in xs: p))` -- so the three spellings the
+            # source can use all reach this as one seq[bool].
+            call_node = self.nodes[1].nodes[0]
+            arg = _extract_call_arg(call_node)
+            rest = "".join(tr.to_nim() for tr in self.nodes[1].nodes[1:])
+            ParserState.nim_imports.add("sequtils")
+            # `.values()`/`.keys()` are iterators on Nim rather than seqs, and
+            # the It templates want something they can take twice.
+            if arg.endswith((".values()", ".keys()", ".items()")):
+                arg = f"toSeq({arg})"
+            return f"{raw_name}It({arg}, it){rest}"
         if raw_name == "log" and "log" not in getattr(
                 ParserState, "user_top_level_procs", ()):
             # `log(x)` is math.log, and Nim spells the one-argument form
@@ -3105,6 +3166,13 @@ def _translate_stdlib_patterns(expr):
             and which_m.group(1).count("(") == which_m.group(1).count(")")):
         _ensure_which_helper()
         return f"adascriptWhich({which_m.group(1)})"
+
+    # adascriptReplaceFirst(...) -- synthesised only by the {name/old/new}
+    # f-string sugar (HPARSEC/hek_tokenize.py), never written by hand, so
+    # the call needs no shadow check: it just needs its helper declared.
+    if expr.startswith("adascriptReplaceFirst("):
+        _ensure_replace_first_helper()
+        return expr
 
     run_m = _re.match(r"^(run|runLines)\(", expr)
     if run_m and run_m.group(1) not in _own:

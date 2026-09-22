@@ -85,7 +85,14 @@ STANDALONE := \
     test_path_call.ady \
     test_shell_throughput.ady \
     test_shell_braces.ady \
-    test_param_mutation.ady
+    test_param_mutation.ady \
+    test_fstring_replace_sugar.ady \
+    test_char_default.ady \
+    test_any_all.ady \
+    test_option_guard_modifier.ady \
+    test_init_calls_method.ady \
+    test_enum_array_enumerate.ady \
+    test_enum_array_zero_fill.ady
 
 # -----------------------------------------------------------------------
 # Stdin tests — piped from a sample file
@@ -231,10 +238,19 @@ endef
 # module, and importing leaves no binary behind -- so after a clean the
 # three reported "SKIP (ada_indent not built)" and the editor integrations
 # went unchecked in exactly the run that was meant to check everything.
+#
+# The two TCHECK programs are here for the plainer reason: nothing was
+# asking them to compile, so a transpiler change that broke one broke it
+# silently. Tcheck_tact carried `bt.get()` as a workaround for a guard the
+# transpiler did not read, and when the guard started working the explicit
+# get became a second one -- `bt.get().getOrDefault()`, which does not
+# compile. The whole suite stayed green through it.
 TOOL_PROGRAMS := \
     TOOLS/GIT1/git1.ady \
     TOOLS/ADA_INDENT/ada_indent.ady \
-    TOOLS/PGREP/Pgrep.ady
+    TOOLS/PGREP/Pgrep.ady \
+    TOOLS/TCHECK/Tcheck_tact.ady \
+    TOOLS/TCHECK/Ttroubleshoot.ady
 
 # -----------------------------------------------------------------------
 # compile — transpile + build everything
