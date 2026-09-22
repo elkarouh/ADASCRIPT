@@ -530,6 +530,56 @@ let top = shell(join = "|"):      # one pipeline
     head -1
 ```
 
+### Telling whether a line in the block failed
+
+"Run them all regardless" has a consequence worth stating: with `join = ";"`
+the status you get back is the **last** command's, exactly as the shell
+defines it. A line that failed in the middle leaves no trace in `.code`:
+
+```python
+let r = shell(join = ";"):
+    grep FATAL /nonexistent/x.log     # fails
+    echo done
+print(r.code)                          # 0 — the failure is invisible here
+print(r.stderr)                        # grep: /nonexistent/x.log: No such file…
+```
+
+`check = true` does not help either, for the same reason: there is no
+non-zero status for it to catch.
+
+So there are two ways to ask, and which one is right depends on what the
+block is for:
+
+**`.stderr` is not empty** — the block is a *scan*, where some commands are
+expected to come up empty and only a broken one says anything:
+
+```python
+if r.stderr.strip() != "":
+    stderr.writeLine("scan: " + r.stderr.strip())
+```
+
+**`join = "&&"` with `pipefail = true`** — the block is a *sequence* where
+every step must succeed. `&&` stops at the first failure and gives you its
+status; `pipefail` is needed whenever a line ends in a pipe, since
+otherwise the last command in the pipeline reports and the failure vanishes
+(11.4):
+
+```python
+let r = shell(join = "&&", pipefail = true):
+    rg FATAL {log} | head -20         # without pipefail, head's 0 wins
+    process-results
+```
+
+One trap in choosing between them. `grep` and `rg` exit **1 when they find
+nothing** and **2 on a real error**, so for a scan the status cannot tell
+"matched nothing" from "could not read the file", while `.stderr` can —
+empty in the first case, a message in the second. That is why a `;` block
+of greps wants the `.stderr` test and not an `&&` chain, which would stop
+at the first pattern that happened to match nothing.
+
+If you need to know *which* line failed, give it its own `shell:` and read
+its `.code`.
+
 If the block contains `send(...)`/`expect(...)`, the first line is spawned
 under a **PTY** and the rest drives it — a built-in `expect(1)`. From
 `EXAMPLES/test_shell_block.ady`:

@@ -597,6 +597,19 @@ shell:
     echo hello
     echo world
 
+# join picks the separator: ";" runs all regardless, "|" makes one pipeline.
+# With ";" the .code is the LAST command's, so a mid-block failure is
+# invisible in it and check = true has nothing to catch. Test r.stderr for a
+# scan; use join = "&&" with pipefail = true for a must-all-succeed sequence
+# (pipefail is required for any line ending in a pipe, or the last command's
+# 0 hides the failure). grep/rg exit 1 for "found nothing" and 2 for a real
+# error, so a scan's status cannot tell those apart -- stderr can.
+let r = shell(join = ";"):
+    rg FATAL {log} | head -20
+    rg SEVERE {log} | head -20
+if r.stderr.strip() != "":
+    stderr.writeLine("scan: " + r.stderr.strip())
+
 # Interactive block (PTY expect/send)
 shell:
     bc -q

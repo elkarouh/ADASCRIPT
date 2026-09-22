@@ -1515,6 +1515,33 @@ shell:
 
 This runs `echo hello && echo world`.
 
+`join` picks a different separator — `";"` runs every line regardless,
+`"|"` makes one pipeline. Mind what that does to error reporting: with
+`join = ";"` the `.code` you get back is the **last** command's, so a line
+that failed in the middle leaves no trace in it, and `check = true` has no
+non-zero status to catch either. Two ways to ask instead:
+
+```python
+# A scan, where coming up empty is normal and only a broken command speaks:
+let r = shell(join = ";"):
+    rg FATAL {log} | head -20
+    rg SEVERE {log} | head -20
+if r.stderr.strip() != "":
+    stderr.writeLine("scan: " + r.stderr.strip())
+
+# A sequence, where every step must succeed. pipefail is needed for any
+# line ending in a pipe, or the last command's 0 hides the failure:
+let s = shell(join = "&&", pipefail = true):
+    rg FATAL {log} | head -20
+    process-results
+print(s.code)
+```
+
+`grep` and `rg` exit 1 when they find *nothing* and 2 on a real error, so
+for a scan the status cannot tell "matched nothing" from "could not read
+the file" — `.stderr` can, and an `&&` chain would stop at the first
+pattern that matched nothing.
+
 **Interactive block** — when the block contains `send(...)` or `expect(...)`
 calls, the first line is treated as the command to spawn under a PTY, and
 subsequent `send`/`expect` calls drive it. The transpiler emits calls to the
