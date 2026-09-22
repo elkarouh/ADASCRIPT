@@ -72,6 +72,7 @@ type BuildSubtype is enum in_test, mono, assert_test, lo, hi, memcheck, with_sec
 type BuildType is enum IP, OP, SIP
 type BuildPass is enum normal, mrun
 type FocusDomain is enum no_focus, focus_IP, focus_OP, focus_SIP, focus_replay, focus_build_info
+type ReplayType is enum run_prequal, performance, simca, full_simca, oldest_date, all_autolink
 
 type Build is tuple:
     name  : str # e.g. build_G!31.IP.L8
@@ -108,7 +109,7 @@ def find_sections(filepath: Path) -> []Section:
     """Find each SECTION_PATTERN's first occurrence, in file order."""
     type Hit is tuple:
         line : int
-        pat  : str    
+        pat  : str
     let lines: []str = readFile(str(filepath)).split("\n")
     # Track which patterns have already been matched (first occurrence only).
     var seen: {}str = {}
@@ -193,8 +194,6 @@ def echo_emacs(filepath: Path):
 # ---------------------------------------------------------------------------
 # Replay logs
 # ---------------------------------------------------------------------------
-
-type ReplayType is enum run_prequal, performance, simca, full_simca, oldest_date, all_autolink
 
 def replay_type_from(filename: str) -> ?ReplayType:
     """Extract the replay type from a Treplay log filename.
@@ -282,7 +281,7 @@ def build_type_from(build_name: str) -> ?BuildType:
         when /\.SIP\./: return SIP
         when others:    return None # BUG, implicit return not possible with optional type.
 
-def show_tlog_if_present(build: Build, subtype: BuildSubtype,
+def show_tlog_if_present(build: Build, subtype= BuildSubtype,
                          pass_: BuildPass, tacot_corico_dir: str):
     """Show a Tlog file's summary if it exists, or a 'not ready' message."""
     def tlog_filename(subtype: BuildSubtype, pass_: BuildPass) -> str:
@@ -290,7 +289,7 @@ def show_tlog_if_present(build: Build, subtype: BuildSubtype,
         let sl: str = subtype_label(subtype)
         case pass_:
             when normal: "Tlog-" + sl + ".log"
-            when mrun: "Tlog-mrun-" + sl + ".log"    
+            when mrun: "Tlog-mrun-" + sl + ".log"
     let file: str = tlog_filename(subtype, pass_)
     let full_path: Path = Path(tacot_corico_dir) / "TACT_REGRESS_LOGS" / "LATEST" / file
     let sl: str = subtype_label(subtype)
@@ -317,23 +316,23 @@ def show_tlog_if_present(build: Build, subtype: BuildSubtype,
     else:
         cecho("sWb", "\"" + build.btype'Image + " " + sl + "\" build not ready yet")
 
-def process_build_subtype(build: Build, subtype: BuildSubtype,
+def process_build_subtype(build: Build, subtype= BuildSubtype,
                           basedir: Path):
     """Process one subtype of a build, for both normal and mrun passes."""
     def tacot_dir(basedir: Path, build: Build, pass_: BuildPass) -> str:
         """The tacot_corico directory for a given pass."""
         case pass_:
             when normal: str(basedir / build.name / "saved_logs" / "tacot_corico.LATEST")
-            when mrun: str(basedir / build.name / "saved_logs" / "tacot_corico_mrun.LATEST_GOOD")   
+            when mrun: str(basedir / build.name / "saved_logs" / "tacot_corico_mrun.LATEST_GOOD")
     def lo_build_checks(tacot_corico_latest: str):
         """Check for FORCE_TRACE errors in LO build logs."""
         let lo_logdir: str = tacot_corico_latest + "/work/logging-lo"
         if -e Path(lo_logdir):
             cecho("syB", "Doing lo-build checks in " + lo_logdir)
             grep_force_trace_in_dir(lo_logdir + "/LOGS")
-            grep_force_trace_in_dir(lo_logdir + "/LOGS_others")             
+            grep_force_trace_in_dir(lo_logdir + "/LOGS_others")
     for pass_ in BuildPass:
-        if pass_ == mrun and (build.btype != IP or subtype != in_test):    
+        if pass_ == mrun and (build.btype != IP or subtype != in_test):
             continue # we are only interested in "IP in" for the mrun pass
         let dir: str = tacot_dir(basedir, build, pass_)
         show_tlog_if_present(build, subtype, pass_, dir)
@@ -431,16 +430,24 @@ def usage():
     print "  <BASELINE>   Required if -c or -v is specified, or if no options are given."
     quit(1)
 
+def parse_subtype(arg: str) -> BuildSubtype:
+    """Parse a subtype name from a command-line argument."""
+    for st in BuildSubtype:
+        if subtype_label(st) == arg:
+            return st
+    die("invalid subtype: " + arg)
+
 class Options:
     colored      : bool = False
     compute_size : bool = False
     verbose      : bool = False
     fast_mode    : bool = False
     list_only    : bool = False
-    focus_domain : FocusDomain = no_focus
-    focus_detail : str  = ""
-    batch        : bool = False
-    baseline     : str  = "" # e.g. 30.0.0.121
+    focus_domain  : FocusDomain  = no_focus
+    focus_subtype : BuildSubtype = in_test
+    focus_rtype   : ReplayType   = run_prequal
+    batch         : bool = False
+    baseline      : str  = "" # e.g. 30.0.0.121
 
     def __init__(self, argv: []str):
         var i: Natural = 0
@@ -459,21 +466,55 @@ class Options:
                     if i >= argv'Length:
                         die("-focus requires at least one argument")
                     let domain_arg: str = argv[i]
-                    case domain_arg:
-                        when "IP":         self.focus_domain = focus_IP
-                        when "OP":         self.focus_domain = focus_OP
-                        when "SIP":        self.focus_domain = focus_SIP
-                        when "replay":     self.focus_domain = focus_replay
-                        when "build_info": self.focus_domain = focus_build_info
-                        when others:
-                            die("invalid focus domain: " + domain_arg + " (expected IP, OP, SIP, replay, build_info)")
-                    # Peek at the next arg: if it doesn't start with '-'
-                    # and isn't a baseline (digits+dots), it's the detail.
+                    # Peek at the next arg for detail.
+                    var detail_arg: str = ""
                     if i + 1 < argv'Length and not argv[i + 1].startswith("-"):
                         let next: str = argv[i + 1]
                         if next != "" and not next[0].isdigit():
-                            self.focus_detail = next
+                            detail_arg = next
                             i += 1
+                    let IP_SUBTYPES: []str = ["in", "mono", "lo", "hi", "memcheck", "with_secondary"]
+                    let OP_SUBTYPES: []str = ["in", "assert"]
+                    let SIP_SUBTYPES: []str = ["in"]
+                    case domain_arg:
+                        when "IP":
+                            if detail_arg == "":
+                                self.focus_domain = focus_IP
+                            else:
+                                if detail_arg not in IP_SUBTYPES:
+                                    die("invalid subtype for IP: " + detail_arg)
+                                self.focus_domain = focus_IP
+                                self.focus_subtype = parse_subtype(detail_arg)
+                        when "OP":
+                            if detail_arg == "":
+                                self.focus_domain = focus_OP
+                            else:
+                                if detail_arg not in OP_SUBTYPES:
+                                    die("invalid subtype for OP: " + detail_arg + " (OP only has in, assert)")
+                                self.focus_domain = focus_OP
+                                self.focus_subtype = parse_subtype(detail_arg)
+                        when "SIP":
+                            if detail_arg == "":
+                                self.focus_domain = focus_SIP
+                            else:
+                                if detail_arg not in SIP_SUBTYPES:
+                                    die("invalid subtype for SIP: " + detail_arg)
+                                self.focus_domain = focus_SIP
+                                self.focus_subtype = parse_subtype(detail_arg)
+                        when "replay":
+                            if detail_arg == "":
+                                die("-focus replay requires a replay type")
+                            try:
+                                self.focus_domain = focus_replay
+                                self.focus_rtype = ReplayType(detail_arg)
+                            except:
+                                die("invalid replay type: " + detail_arg)
+                        when "build_info":
+                            if detail_arg != "":
+                                die("-focus build_info takes no detail")
+                            self.focus_domain = focus_build_info
+                        when others:
+                            die("invalid focus domain: " + domain_arg + " (expected IP, OP, SIP, replay, build_info)")
                 when others:
                     if arg.startswith("-"):
                         stderr.writeLine("Invalid option: " + arg)
@@ -483,31 +524,10 @@ class Options:
         if (self.colored or self.verbose or self.list_only or self.focus_domain != no_focus or not self.compute_size) and self.baseline == "":
             stderr.writeLine("Error: <BASELINE> is required.")
             usage()
-        # Validate focus detail against domain.
-        if self.focus_detail != "":
-            case self.focus_domain:
-                when focus_IP:
-                    if self.focus_detail not in ("in", "mono", "lo", "hi", "memcheck", "with_secondary"):
-                        die("invalid subtype for IP: " + self.focus_detail)
-                when focus_OP:
-                    if self.focus_detail not in ("in", "assert"):
-                        die("invalid subtype for OP: " + self.focus_detail + " (OP only has in, assert)")
-                when focus_SIP:
-                    if self.focus_detail not in ("in",):
-                        die("invalid subtype for SIP: " + self.focus_detail)
-                when focus_replay:
-                    try:
-                        let rt: ReplayType = ReplayType(self.focus_detail)
-                    except:
-                        die("invalid replay type: " + self.focus_detail)
-                when focus_build_info:
-                    die("-focus build_info takes no detail")
-                when no_focus:
-                    die("-focus detail given without a domain")
 
 def find_builds_to_be_processed(basedir: Path) -> []Build:
     """List build_G!* directories under basedir, returning name and type."""
-    let SKIP_BUILD_PATTERNS: []str = ["92", "94", "95", "98", "30"]    
+    let SKIP_BUILD_PATTERNS: []str = ["92", "94", "95", "98", "30"]
     let listing: []str = shellLines: ls -1d {basedir}/build_G!* 2>/dev/null
     var builds: []Build = []
     for line in listing:
@@ -547,8 +567,9 @@ if not -d basedir:
 
 let builds_to_be_processed: []Build = find_builds_to_be_processed(basedir)
 let replays_to_be_processed: []Replay = find_replays_to_be_processed(basedir)
-let focus: FocusDomain = opt.focus_domain
-let detail: str = opt.focus_detail
+let focus_domain: FocusDomain = opt.focus_domain
+let focus_subtype: BuildSubtype = opt.focus_subtype
+let focus_rtype: ReplayType = opt.focus_rtype
 
 def show_header():
     cecho("sWr", "AVAILABLE BUILDS for " + str(basedir) + ":")
@@ -564,7 +585,7 @@ def show_header():
 def show_regression_tests():
     cecho("sWr", "TESTS")
     for build in builds_to_be_processed:
-        case focus:
+        case focus_domain:
             when focus_IP:  continue if build.btype != IP
             when focus_OP:  continue if build.btype != OP
             when focus_SIP: continue if build.btype != SIP
@@ -572,7 +593,7 @@ def show_regression_tests():
             when no_focus:  pass
         cecho("usBy", "PROCESSING " + build.name + " ...")
         for subtype in BuildSubtype:
-            continue if detail != "" and subtype_label(subtype) != detail
+            continue if focus_domain in (focus_IP, focus_OP, focus_SIP) and subtype != focus_subtype
             stderr.writeLine(PROG + ": checking " + build.name + " / " + subtype_label(subtype))
             process_build_subtype(build, subtype, basedir)
 
@@ -582,7 +603,7 @@ def show_replays():
     if replays_to_be_processed'Length == 0:
         cecho("sWb", "WARNING: NO REPLAYS FOUND")
     for replay in replays_to_be_processed:
-        continue if detail != "" and replay.rtype'Image != detail
+        continue if focus_domain == focus_replay and replay.rtype != focus_rtype
         process_replay(replay, opt.verbose)
 
 def show_build_info():
@@ -686,7 +707,7 @@ def scan_replay_dir_detailed(replay_log_dir: str, bl: str, replay_type: str) -> 
         report = report + content + "\n"
     return make_report(report, bl, f"replay-{replay_type}")
 
-def scan_regression_tests_detailed(build_dir: str, btype: BuildType, subtype: BuildSubtype, bl: str) -> str:
+def scan_regression_tests_detailed(build_dir: str, btype: BuildType, subtype= BuildSubtype, bl: str) -> str:
     var dir: str = build_dir
     case btype:
         when IP: dir = dir.replace("OP", "IP")
@@ -724,7 +745,7 @@ def scan_regression_tests_detailed(build_dir: str, btype: BuildType, subtype: Bu
                     report = report + "##### " + Path(f).name + " #####\n" + hits + "\n"
     return make_report(report, bl, "regression_" + btype'Image + "_" + sl)
 
-def show_failed_tests(build_dir: str, btype: BuildType, subtype: BuildSubtype, n_baselines: int = 15) -> str:
+def show_failed_tests(build_dir: str, btype: BuildType, subtype= BuildSubtype, n_baselines: int = 15) -> str:
     var dir: str = build_dir
     case btype:
         when IP: dir = dir.replace("OP", "IP")
@@ -795,18 +816,12 @@ def show_detailed_build_info():
         let rc: int = shell: diff {!prev_normalized} {!cur_normalized}
 
 def show_detailed_regression_tests():
-    if detail == "":
-        die("-focus IP/OP with detail required for troubleshoot mode")
     var btype: BuildType = IP
-    case focus:
+    case focus_domain:
         when focus_IP:  btype = IP
         when focus_OP:  btype = OP
         when others: pass
-    var subtype: BuildSubtype = in_test
-    for st in BuildSubtype:
-        if subtype_label(st) == detail:
-            subtype = st
-            break
+    let subtype: BuildSubtype = focus_subtype
     let prev_baseline: str = previous_baseline_nr(baseline)
     let cur_dir: str = saved_logs_dir(baseline, btype)
     let prev_dir: str = saved_logs_dir(prev_baseline, btype)
@@ -818,12 +833,10 @@ def show_detailed_regression_tests():
     let failed_output: str = show_failed_tests(cur_dir, btype, subtype)
     writeFile(failed_file, failed_output)
     if not BATCH:
-        let emacs_rc: int = shell: emacs {!failed_file} &
+        let emacs_rc: int = shell: emacs -l /home/ekhassan/e.el {!failed_file} &
 
 def show_detailed_replays():
-    if detail == "":
-        die("-focus replay with detail required for troubleshoot mode")
-    let replay_type: str = detail
+    let replay_type: str = focus_rtype'Image
     let prev_baseline: str = previous_baseline_nr(baseline)
     let cur_dir: str = saved_logs_dir(baseline, OP)
     let prev_dir: str = saved_logs_dir(prev_baseline, OP)
@@ -839,7 +852,7 @@ def show_detailed_replays():
 # ---------------------------------------------------------------------------
 
 def run():
-    case focus:
+    case focus_domain:
         when focus_replay:
             show_replays()
             show_detailed_replays()
