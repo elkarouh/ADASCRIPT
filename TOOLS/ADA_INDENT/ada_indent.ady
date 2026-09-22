@@ -245,8 +245,11 @@ class Indenter:
     stack: []Block_T = []
     paren_depth: Natural = 0
     pending_spec: bool = False   # a 'function ... is' header whose body kind is not yet known
-    cont_func: bool = False      # the declaration being continued started with 'function' -- the
-                                 # 'is' that ends its header may land on a later physical line
+    cont_kw: str = ""            # the keyword that opened the declaration being continued:
+                                 # 'function', 'type', 'subtype', 'case', ... The 'is' ending a
+                                 # header may land on a later physical line, where the first word
+                                 # is a parameter name or 'return', so the question 'what is being
+                                 # declared here' is only answerable from the line that opened it
     pending_inst: bool = False   # an 'X is\nnew Y' generic instantiation PKG frame to pop when done
     cond_state: Natural = 0      # 1 = inside multi-line 'if' condition, 2 = 'elsif'
     cond_base: Natural = 0       # display depth of the opening if/elsif
@@ -273,7 +276,7 @@ class Indenter:
             "stack=" + ",".join(stack_names),
             "pd="    + str(self.paren_depth),
             "ps="    + ("T" if self.pending_spec    else "F"),
-            "cf="    + ("T" if self.cont_func       else "F"),
+            "ck="    + self.cont_kw,
             "pi="    + ("T" if self.pending_inst    else "F"),
             "cs="    + str(self.cond_state),
             "cb="    + str(self.cond_base),
@@ -294,7 +297,7 @@ class Indenter:
         self.stack               = []
         self.paren_depth         = 0
         self.pending_spec        = False
-        self.cont_func           = False
+        self.cont_kw             = ""
         self.pending_inst        = False
         self.cond_state          = 0
         self.cond_base           = 0
@@ -318,7 +321,7 @@ class Indenter:
                          self.stack.append(Block_T(name))
                 when "pd": self.paren_depth = int(val)
                 when "ps": self.pending_spec = val == "T"
-                when "cf": self.cont_func = val == "T"
+                when "ck": self.cont_kw = val
                 when "pi": self.pending_inst = val == "T"
                 when "cs": self.cond_state = int(val)
                 when "cb": self.cond_base = int(val)
@@ -432,7 +435,7 @@ class Indenter:
         # the header on a later line, where lw is a parameter name -- but the
         # expression-function deferral below still has to recognise the header.
         if cont == 0:
-            self.cont_func = lead_keyword(code_s) == "function"
+            self.cont_kw = lead_keyword(code_s)
         var disp: int = len(self.stack)      # int: the 'end' cases take it to len-1, so -1
 
         # A 'type T is' that turns out to be an enum, derived, or other non-record
@@ -652,12 +655,18 @@ class Indenter:
                             # single-line header does -- an expression function has no
                             # 'end', so a frame pushed here would never be popped and
                             # every following line would drift one level deeper.
-                            if lw == "case":
-                                self.stack.append(CASE)
-                            elif self.cont_func:
+                            # Same four cases as the statement-level dispatch
+                            # below, asked of the same word: a header closing its
+                            # parameter list here is still the declaration its
+                            # opening line named, and 'type T (D : X) is' must
+                            # pair with the 'record' under it, not open a PKG
+                            # frame that 'end record;' cannot close.
+                            if self.cont_kw == "function":
                                 self.pending_spec = True
-                            else:
-                                self.stack.append(PKG)
+                            elif self.cont_kw == "type":
+                                self.stack.append(TYPE_HEADER)
+                            elif self.cont_kw != "subtype":
+                                self.stack.append(CASE if self.cont_kw == "case" else PKG)
                         when "then": self.stack.append(IF)
                         when "loop": self.stack.append(LOOP)
                         when "record" if lw != "null": self.stack.append(RECORD)
@@ -811,19 +820,19 @@ class Indenter:
                             # else ending in 'is' opens a block immediately.
                             # Exception: 'subtype T is' is not a block opener -
                             # it is a plain continuation declaration.
-                            # cont_func, not this line's own first word: a header
+                            # cont_kw, not this line's own first word: a header
                             # whose parameter list spans lines puts the 'is' on a
                             # later line, where the first word is a parameter name
                             # or 'return'. The word that says what is being
                             # declared belongs to the line that opened it, and
-                            # cont_func carries it across the continuation. On a
+                            # cont_kw carries it across the continuation. On a
                             # single-line header both readings agree.
-                            if self.cont_func:
+                            if self.cont_kw == "function":
                                 self.pending_spec = True
-                            elif lw == "type":
+                            elif self.cont_kw == "type":
                                 self.stack.append(TYPE_HEADER)
-                            elif lw != "subtype":
-                                self.stack.append(CASE if lw == "case" else PKG)
+                            elif self.cont_kw != "subtype":
+                                self.stack.append(CASE if self.cont_kw == "case" else PKG)
                         when "then": self.stack.append(IF)
                         when "loop": self.stack.append(LOOP)
                         when "record" if lw != "null":

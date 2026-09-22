@@ -1722,6 +1722,58 @@ def run_tests() -> int:
         "  end case;\n"
         "end P;\n"))
 
+    # 66. A discriminated record whose header spans lines, so the 'is' lands on
+    #     the line that closes the discriminant list. That dispatch knew only
+    #     'function' and defaulted everything else to a PKG frame, so the type
+    #     opened a PKG instead of a TYPE_HEADER; 'end record;' pops the RECORD
+    #     and pairs away a TYPE_HEADER, not a PKG, so the frame stayed open and
+    #     every later declaration sat one level too deep.
+    cases.append((
+        "type File_Iterator_Record_T (Nr_Of_Criteria : Natural_T;\n"
+        "Nr_Of_Files    : Positive_T) is\n"
+        "record\n"
+        "Smallest_File : Natural_T := 0;\n"
+        "end record;\n"
+        "procedure Free is new Unchecked_Deallocation (A, B);\n",
+
+        "type File_Iterator_Record_T (Nr_Of_Criteria : Natural_T;\n"
+        "                             Nr_Of_Files    : Positive_T) is\n"
+        "  record\n"
+        "    Smallest_File : Natural_T := 0;\n"
+        "  end record;\n"
+        "procedure Free is new Unchecked_Deallocation (A, B);\n"))
+
+    # 67. The other three answers must survive the same split header: a subtype
+    #     opens nothing, a case opens a CASE, and a function still defers.
+    cases.append((
+        "package body P is\n"
+        "subtype Small_T is\n"
+        "Integer range 1 .. 10;\n"
+        "function Area (Shape : in T;\n"
+        "Scale : in Float) return Float is\n"
+        "(Shape.W * Shape.H * Scale);\n"
+        "procedure Q is\n"
+        "begin\n"
+        "case K is\n"
+        "when A => null;\n"
+        "end case;\n"
+        "end Q;\n"
+        "end P;\n",
+
+        "package body P is\n"
+        "  subtype Small_T is\n"
+        "    Integer range 1 .. 10;\n"
+        "  function Area (Shape : in T;\n"
+        "                 Scale : in Float) return Float is\n"
+        "    (Shape.W * Shape.H * Scale);\n"
+        "  procedure Q is\n"
+        "  begin\n"
+        "    case K is\n"
+        "      when A => null;\n"
+        "    end case;\n"
+        "  end Q;\n"
+        "end P;\n"))
+
     for pair in cases:
         let src: str = pair[0]
         let want: str = pair[1]
