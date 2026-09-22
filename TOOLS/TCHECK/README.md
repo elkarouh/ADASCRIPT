@@ -112,11 +112,11 @@ All three programs share these Adascript types, designed for an eventual merge:
 
 - `Psort` — CM tool for ordering build closures
 - `make_executable_output_comparable` — normalizes log output for comparison
-- `rg` (ripgrep) — fast log searching
+- `rg` (ripgrep) — fast version of grep, written in rust
+- `sd` — fast version of sed, written in rust
 - `pyrg` — Python regex wrapper for ripgrep patterns
 - `meld` — visual diff tool (interactive mode only)
-- `fdcore` — finds core dump files
-- `hcmp` — compare and normalize log files (replaced by `make_comparable` + `meld`)
+
 
 ## Building
 
