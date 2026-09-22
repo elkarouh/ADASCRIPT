@@ -1725,6 +1725,64 @@ def run_tests() -> int:
         "  end if;\n"
         "end P;\n"))
 
+    # 66. '[not] overriding' again, in the cascade shape the report showed:
+    #     consecutive expression functions each a level deeper than the last.
+    #     that says what is being declared is the one after it. Read literally,
+    #     'overriding function F ... is' begins with 'overriding', missed the
+    #     expression-function deferral, and opened a block nothing ever closes.
+    #     Consecutive ones then cascade, each a level deeper than the last.
+    cases.append((
+        "package body P is\n"
+        "overriding function Impact_Is_Editable (A : in T) return Boolean is\n"
+        "(A.Operation in Create_Slot | Force_CTO);\n"
+        "not overriding function Eq (L : in T;\n"
+        "R : in T) return Boolean is\n"
+        "(L.Id = R.Id);\n"
+        "procedure Q is\n"
+        "begin\n"
+        "null;\n"
+        "end Q;\n"
+        "end P;\n",
+
+        "package body P is\n"
+        "  overriding function Impact_Is_Editable (A : in T) return Boolean is\n"
+        "    (A.Operation in Create_Slot | Force_CTO);\n"
+        "  not overriding function Eq (L : in T;\n"
+        "                              R : in T) return Boolean is\n"
+        "    (L.Id = R.Id);\n"
+        "  procedure Q is\n"
+        "  begin\n"
+        "    null;\n"
+        "  end Q;\n"
+        "end P;\n"))
+
+    # 67. The indicator must not swallow a real body: an 'overriding' subprogram
+    #     with a begin/end still pushes its frame.
+    cases.append((
+        "package body P is\n"
+        "overriding function F return Integer is\n"
+        "R : Integer := 0;\n"
+        "begin\n"
+        "return R;\n"
+        "end F;\n"
+        "overriding procedure Set (X : in T) is\n"
+        "begin\n"
+        "null;\n"
+        "end Set;\n"
+        "end P;\n",
+
+        "package body P is\n"
+        "  overriding function F return Integer is\n"
+        "    R : Integer := 0;\n"
+        "  begin\n"
+        "    return R;\n"
+        "  end F;\n"
+        "  overriding procedure Set (X : in T) is\n"
+        "  begin\n"
+        "    null;\n"
+        "  end Set;\n"
+        "end P;\n"))
+
     for pair in cases:
         let src: str = pair[0]
         let want: str = pair[1]
