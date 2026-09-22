@@ -113,6 +113,23 @@ def last_word(code: str) -> str:
         i -= 1
     return tok[i:].lower()
 
+def lead_keyword(code_s: str) -> str:
+    """The lowercased keyword saying what a declaration declares, or ''.
+
+    '[not] overriding' is an indicator attached to a subprogram declaration,
+    not the declaration's own keyword, so a line can open with it and still be
+    a function. Skipping it is what lets the expression-function deferral see
+    'overriding function F ... is' for what it is; read literally, that line
+    begins with 'overriding' and so opens a block that nothing ever closes.
+    """
+    var rest: str = code_s.strip()
+    var w: str = lead_ident(rest).lower()
+    while w == "not" or w == "overriding":
+        rest = rest[len(w):].strip()
+        w = lead_ident(rest).lower()
+    return w
+
+
 def stmt_incomplete(code_s: str) -> bool:
     """True if a (comment-stripped) code line continues onto the next line.
 
@@ -415,7 +432,7 @@ class Indenter:
         # the header on a later line, where lw is a parameter name -- but the
         # expression-function deferral below still has to recognise the header.
         if cont == 0:
-            self.cont_func = lw == "function"
+            self.cont_func = lead_keyword(code_s) == "function"
         var disp: int = len(self.stack)      # int: the 'end' cases take it to len-1, so -1
 
         # A 'type T is' that turns out to be an enum, derived, or other non-record
