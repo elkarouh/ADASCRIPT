@@ -1937,6 +1937,53 @@ def run_tests() -> int:
         "  end if;\n"
         "end P;\n"))
 
+    # 74. A 'record' that opens its component list part-way along the line, with
+    #     the first component already beside it. The dispatches key on a line's
+    #     last word, which here belongs to that component, so nothing saw the
+    #     opener: the components stayed at the type's level and the 'end record;'
+    #     below popped a frame belonging to something else -- taking the package
+    #     with it, so every declaration after the type collapsed too.
+    cases.append((
+        "package body P is\n"
+        "type Criteria_Info_T is record Title  : String_Ptr_T;\n"
+        "First  : T;\n"
+        "Column : Column_T;\n"
+        "end record;\n"
+        "procedure Q is\n"
+        "begin\n"
+        "null;\n"
+        "end Q;\n"
+        "end P;\n",
+
+        "package body P is\n"
+        "  type Criteria_Info_T is record Title  : String_Ptr_T;\n"
+        "    First  : T;\n"
+        "    Column : Column_T;\n"
+        "  end record;\n"
+        "  procedure Q is\n"
+        "  begin\n"
+        "    null;\n"
+        "  end Q;\n"
+        "end P;\n"))
+
+    # 75. Counting 'record' words must not disturb the three that open nothing:
+    #     a null record, a whole record on one line, and the word inside a string
+    #     literal. Each leaves the following declaration at the type's level.
+    cases.append((
+        "package body P is\n"
+        "type A is null record;\n"
+        "type B is record F : Integer; end record;\n"
+        "Msg : constant String := \"end record here\";\n"
+        "Next_Decl : Integer;\n"
+        "end P;\n",
+
+        "package body P is\n"
+        "  type A is null record;\n"
+        "  type B is record F : Integer; end record;\n"
+        "  Msg : constant String := \"end record here\";\n"
+        "  Next_Decl : Integer;\n"
+        "end P;\n"))
+
     for pair in cases:
         let src: str = pair[0]
         let want: str = pair[1]
