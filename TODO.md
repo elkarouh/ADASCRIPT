@@ -4,18 +4,18 @@ Open items only.  The write-ups for everything already fixed — 26 numbered
 bugs and the shell-syntax work — were removed once done; they are in the git
 history of this file if the reasoning behind one of them is ever wanted.
 
-- [ ] `enumerate()` over an `[E]T` array yields the index, not the enum
-      member, on Python. `for rtype, f in enumerate(type_to_file)` where
-      `type_to_file: [ReplayType]Path` gives `ReplayType` members on Nim and
-      plain `int`s on Python, so a later `rtype'Image` raises
-      `AttributeError: 'int' object has no attribute 'name'`. It is a crash
-      on one backend against a working program on the other, which is the
-      worst shape a divergence takes. `TOOLS/TCHECK/Tcheck_tact.ady`'s
-      `find_replays` is the live instance: the Nim backend it ships on is
-      correct, and `ady2py` on the same file dies in `show_header`. The
-      `_EnumArray` helper already knows its key type, so its `__iter__`
-      (or the emitter's `enumerate` interception) should hand back members.
-      Same family as the `.keys()`/`.items()` gap below.
+- [ ] an `[E]T` whose domain is a *named subrange* is not zero-filled on
+      Python. `var box: [Digit_T]str` over `1 .. 3` is `array[Digit_T, str]`
+      on Nim -- three slots, all present -- and an empty `_EnumArray` here,
+      so only the indices actually assigned exist. Iteration then yields
+      two entries against Nim's three, and a read of an unassigned one
+      raises `KeyError` where Nim gives `""`. `_zero_value` fills the
+      domain only when `tick_types` has `members`, which enums have and
+      subranges (`{"First": lo, "Last": hi}`) do not; `range(lo, hi + 1)`
+      is the missing case, and `bool`/`char` domains reach `_EnumArray`
+      with no `tick_types` entry at all. Found while fixing `enumerate`
+      over the same family, which is correct now in the sense that it
+      reports whatever the domain holds -- this is what it holds.
 - [ ] `p / ".."` is not the same path on the two backends. Nim's `joinPath`
       collapses the `..` as it joins, so `Path("/a/b") / ".." / "c"` is
       `/a/c`; pathlib keeps it, giving `/a/b/../c`. Both name the same

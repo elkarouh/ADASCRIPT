@@ -1,0 +1,61 @@
+#!/usr/bin/env ady2nim
+# test_enum_array_enumerate.ady — enumerate() over an [E]T yields the domain
+#
+#   ady2nim EXAMPLES/test_enum_array_enumerate.ady -r
+#   ady2py  EXAMPLES/test_enum_array_enumerate.ady -c
+#
+# `enumerate(xs)` is `xs.pairs` on Nim. Over an `array[E, T]` that yields the
+# enum member, while Python's builtin counted 0, 1, 2 ... regardless -- so
+# `for c, v in enumerate(by_color)` bound C to a Color on one backend and to
+# an int on the other, and the next `c'Image` died there with
+# "'int' object has no attribute 'name'". A crash on one backend against a
+# working program on the other, which is the worst shape a divergence takes.
+#
+# Both halves matter: an [E]T yields its members, and everything else still
+# counts from zero.
+
+type Color is enum RED, GREEN, BLUE
+
+# --- the domain, not a running count ---------------------------------------
+var by_color: [Color]str
+by_color[RED] = "r"
+by_color[BLUE] = "b"
+
+var seen: []str = []
+for c, v in enumerate(by_color):
+    seen.append(c'Image + "=" + v)
+# Every member has a slot, in domain order -- GREEN was never assigned and is
+# still there, holding the zero value.
+assert seen == ["RED=r", "GREEN=", "BLUE=b"]
+
+# --- the member is the enum, so enum operations work on it -----------------
+for c, v in enumerate(by_color):
+    continue if c != BLUE
+    assert v == "b"
+    assert c'Image == "BLUE"
+
+# --- an [E]int, the counting shape ------------------------------------------
+var tally: [Color]int
+tally[GREEN] = 7
+var total: int = 0
+var last: Color = RED
+for c, n in enumerate(tally):
+    total = total + n
+    last = c
+assert total == 7
+assert last == BLUE
+
+# --- a plain seq still counts from zero -------------------------------------
+let xs: []str = ["a", "b", "c"]
+var pairs: []str = []
+for i, v in enumerate(xs):
+    pairs.append(str(i) + v)
+assert pairs == ["0a", "1b", "2c"]
+
+# --- and so does a seq built by an expression -------------------------------
+var n_seen: int = 0
+for i, v in enumerate(xs[1:]):
+    n_seen = n_seen + i
+assert n_seen == 1
+
+print "enum-array enumerate tests passed"
