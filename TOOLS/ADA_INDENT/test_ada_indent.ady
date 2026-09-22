@@ -1783,7 +1783,7 @@ def run_tests() -> int:
         "  end Set;\n"
         "end P;\n"))
 
-    # 62. Complete one-liners whose final token is a block keyword. last_word()
+    # 68. Complete one-liners whose final token is a block keyword. last_word()
     #     drops the trailing ';', so 'type T is null record;' ended in 'record'
     #     and 'for I in 1 .. 3 loop Put (I); end loop;' ended in 'loop' -- each
     #     opened a frame no 'end' would ever close, and everything after it
@@ -1814,7 +1814,7 @@ def run_tests() -> int:
         "  end Q;\n"
         "end P;\n"))
 
-    # 63. The guard keys on the trailing ';', not on stmt_incomplete(), which
+    # 69. The guard keys on the trailing ';', not on stmt_incomplete(), which
     #     asks a different question and is False for every block opener. The
     #     openers carry no ';' and must still push.
     cases.append((
