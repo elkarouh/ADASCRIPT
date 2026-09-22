@@ -285,7 +285,7 @@ type Replay is tuple:
 
 def find_replays_to_be_processed(basedir: Path) -> []Replay:
     """Find replay log files, one per replay type, in canonical order."""
-    let listing: []str = shellLines: ls -d {basedir}/build_*OP*/saved_logs/Treplay_*.log 2>/dev/null
+    let listing: []str = shellLines: ls -d {basedir}/build_*OP*/saved_logs/Treplay_*.log
 
     var type_to_file: [ReplayType]str
     for filepath in listing:
@@ -336,7 +336,7 @@ def grep_force_trace_in_dir(dir: str):
         cecho("sWb", "WARNING: '" + dir + "' does not exist!")
         return
     cecho("sWb", "Grep in " + dir + " to detect missing 'if Debug.Trace (...) then' (100 first errors, no matches means no errors detected):")
-    let r = shell: for f in {dir}/*_out_*; do [ -e "$f" ] && grep -H -n -B1 '!!! ERROR : FORCE_TRACE message above' "$f" | grep -v '^--[[:space:]]*$'; done 2>/dev/null | head -n 100
+    let r = shell: for f in {dir}/*_out_*; do [ -e "$f" ] && grep -H -n -B1 '!!! ERROR : FORCE_TRACE message above' "$f" | grep -v '^--[[:space:]]*$'; done | head -n 100
     if r.output.strip() != "":
         print r.output.rstrip("\n")
 
@@ -444,7 +444,7 @@ def process_run_test_programs_log(ip_build: str, basedir: Path,
     hr('#')
     cecho("sWr", "Check build closure and test programs.")
     cecho("usBy", "CHECK RUN TEST PROGRAMS LOG FOR " + str(basedir / ip_build) + " ...")
-    let find_lines: []str = shellLines: find {basedir}/{ip_build}/saved_logs/tacot_corico.LATEST/work -type f -name 'check_run_test_programs.log' -print -quit 2>/dev/null
+    let find_lines: []str = shellLines: find {basedir}/{ip_build}/saved_logs/tacot_corico.LATEST/work -type f -name 'check_run_test_programs.log' -print -quit
     var logfile: str = ""
     if find_lines'Length > 0:
         logfile = find_lines[0]
@@ -606,7 +606,7 @@ class Options:
 def find_builds_to_be_processed(basedir: Path) -> []Build:
     """List build_G!* directories under basedir, returning name and type."""
     let SKIP_BUILD_PATTERNS: []str = ["92", "94", "95", "98", "30"]
-    let listing: []str = shellLines: ls -1d {basedir}/build_G!* 2>/dev/null
+    let listing: []str = shellLines: ls -1d {basedir}/build_G!*
     var builds: []Build = []
     for line in listing:
         continue if line == ""
@@ -833,7 +833,7 @@ def check_replay_dirs_size():
     """Scan replay directories for disk usage and deletion advice."""
     hr('-')
     cecho("sWr", "COMPUTE SIZE OF REPLAY DIRS")
-    let listing: []str = shellLines: ls -d /cm/ot/TACT/TACT_CONFIG![0-9]*/build_G!*OP*/saved_logs/replay_dir* 2>/dev/null
+    let listing: []str = shellLines: ls -d /cm/ot/TACT/TACT_CONFIG![0-9]*/build_G!*OP*/saved_logs/replay_dir*
     var total_size: float = 0.0
     for replay_dir in listing:
         continue if replay_dir == ""
@@ -842,7 +842,7 @@ def check_replay_dirs_size():
         let dir_basename: str = Path(replay_dir).name
         let replay_type: str = dir_basename.split("-")[-1].split(".")[0] if "-" in dir_basename else dir_basename
         # Get size.
-        let du_r = shell: du --max-depth=0 -ch {!replay_dir} 2>/dev/null | head -n1
+        let du_r = shell: du --max-depth=0 -ch {!replay_dir} | head -n1
         let size_line: str = du_r.output.strip()
         let size_str: str = size_line.split()[0] if size_line != "" else "0"
         cecho("sBy", replay_dir + " ==> " + size_str)
@@ -851,12 +851,12 @@ def check_replay_dirs_size():
         let num_size: float = float(size_str[0:-1])
         # Find the replay log to check if it terminated.
         let saved_logs: str = str(Path(replay_dir).parent)
-        let log_listing: []str = shellLines: ls {saved_logs}/Treplay*{replay_type}*log 2>/dev/null
+        let log_listing: []str = shellLines: ls {saved_logs}/Treplay*{replay_type}*log
         var replay_logfile: str = ""
         if log_listing'Length > 0 and log_listing[0] != "":
             replay_logfile = log_listing[0]
         else:
-            let find_r: []str = shellLines: find {replay_dir} -type f -name "*replay_day.log" 2>/dev/null
+            let find_r: []str = shellLines: find {replay_dir} -type f -name "*replay_day.log"
             if find_r'Length > 0:
                 replay_logfile = find_r[0]
         if replay_logfile != "" and "Replay terminated" in readFile(replay_logfile):
@@ -923,7 +923,7 @@ def grep_logfile(filepath: str, max_errors: Positive = 100) -> str:
 
 def find_core_dumps(dir: str):
     # find core files bigger than 600MB
-    let r = shell: fd -l --size +600M core {dir} 2>/dev/null
+    let r = shell: fd -l --size +600M core {dir}
     if r.output.strip() != "":
         cecho("sWr", "CORE DUMPS:")
         print r.output.rstrip("\n")
@@ -946,7 +946,7 @@ def get_replay_log_dir(build_dir: str, replay_type: str) -> str:
     var dir: str = build_dir
     var attempts: int = 0
     while attempts < 20:
-        let listing: []str = shellLines: ls -d {dir}/replay_dir*{dir_pat}*/work/logging/LOGS 2>/dev/null
+        let listing: []str = shellLines: ls -d {dir}/replay_dir*{dir_pat}*/work/logging/LOGS
         if listing'Length > 0 and listing[0] != "":
             return listing[0]
         dir = compute_baseline_prevdir(dir)
@@ -962,14 +962,14 @@ def scan_replay_dir_detailed(replay_log_dir: str, bl: str, replay_type: str) -> 
     let replay_root: str = str(Path(replay_log_dir).parent.parent.parent)
     find_core_dumps(replay_root)
     var report: str = ""
-    let check_result: []str = shellLines: ls {replay_log_dir}/*check_logs.result.svlog 2>/dev/null
+    let check_result: []str = shellLines: ls {replay_log_dir}/*check_logs.result.svlog
     for f in check_result:
         continue if f == ""
         cecho("sWb", "check_logs.result.svlog:")
         let content: str = readFile(f)
         print content
         report = report + content + "\n"
-    let check_run: []str = shellLines: ls {replay_log_dir}/*check_logs.run.svlog 2>/dev/null
+    let check_run: []str = shellLines: ls {replay_log_dir}/*check_logs.run.svlog
     for f in check_run:
         continue if f == ""
         cecho("sWb", "check_logs.run.svlog:")
@@ -1005,7 +1005,7 @@ def scan_regression_tests_detailed(build_dir: str, btype: BuildType, subtype= Bu
                 let hits: str = grep_logfile(mono_out)
                 report = hits
         when others:
-            let out_files: []str = shellLines: ls {log_dir}/*1_out_01 2>/dev/null
+            let out_files: []str = shellLines: ls {log_dir}/*1_out_01
             for f in out_files:
                 continue if f == ""
                 hr("#")
@@ -1053,7 +1053,7 @@ def show_failed_tests(build_dir: str, btype: BuildType, subtype= BuildSubtype, n
                 env = op_env
                 suffix = "failed-assert"
             when others: pass
-        let r = shell: nl /cm/ot/TACT/test_reports/TACT.TACT_CONFIG.{bl}-{env}*/general.results.{suffix} 2>/dev/null
+        let r = shell: nl /cm/ot/TACT/test_reports/TACT.TACT_CONFIG.{bl}-{env}*/general.results.{suffix}
         if r.output.strip() != "":
             print r.output.rstrip("\n")
             result = result + r.output

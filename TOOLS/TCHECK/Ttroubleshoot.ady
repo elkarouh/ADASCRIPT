@@ -153,7 +153,7 @@ def grep_logfile(filepath: str, max_errors: Positive = 100) -> str:
 
 def find_core_dumps(dir: str):
     """Find core files larger than 600M in a directory."""
-    let r = shell: fdcore {dir} 2>/dev/null
+    let r = shell: fdcore {dir}
     if r.output.strip() != "":
         cecho("sWr", "CORE DUMPS:")
         print r.output.rstrip("\n")
@@ -172,7 +172,7 @@ def process_system_build_log(subsystem: str, build_name: str):
         return
     stdout.write("\t")
     print "processing " + file
-    let r = shell: grep -E '(SEVERE|FATAL) : Error' {file} 2>/dev/null
+    let r = shell: grep -E '(SEVERE|FATAL) : Error' {file}
     if r.output.strip() != "":
         var seen: {}str = {}
         for line in r.output.split("\n"):
@@ -194,13 +194,13 @@ def process_run_test_programs(subsystem: str, build_name: str):
         return
     stdout.write("\t")
     print "processing " + file
-    let r = shell: grep -o -P '(?<=Test statistics : )[1-9][0-9]* failed.*' {file} 2>/dev/null
+    let r = shell: grep -o -P '(?<=Test statistics : )[1-9][0-9]* failed.*' {file}
     if r.output.strip() != "":
         stdout.write("\t\t-->   ")
         print r.output.strip()
         stdout.write("\t\t-->   ")
         echo_emacs(file)
-        let fatals = shell: grep -E 'FATAL : Error' {file} 2>/dev/null
+        let fatals = shell: grep -E 'FATAL : Error' {file}
         if fatals.output.strip() != "":
             var seen: {}str = {}
             for line in fatals.output.split("\n"):
@@ -218,7 +218,7 @@ def check_build_closure(baseline: str):
         return
     cecho("sWr", "CHECK BUILD CLOSURE")
     let subsystems: []str = shellLines: echo {basedir} | Psort
-    let build_listing: []str = shellLines: ls -1d {basedir}/build_G!* 2>/dev/null
+    let build_listing: []str = shellLines: ls -1d {basedir}/build_G!*
     var builds: []str = []
     for line in build_listing:
         continue if line == ""
@@ -248,7 +248,7 @@ def get_replay_log_dir(build_dir: str, replay_type: str) -> str:
     var dir: str = build_dir
     var attempts: int = 0
     while attempts < 20:
-        let listing: []str = shellLines: ls -d {dir}/replay_dir*{dir_pat}*/work/logging/LOGS 2>/dev/null
+        let listing: []str = shellLines: ls -d {dir}/replay_dir*{dir_pat}*/work/logging/LOGS
         if listing'Length > 0 and listing[0] != "":
             return listing[0]
         dir = compute_baseline_prevdir(dir)
@@ -267,14 +267,14 @@ def scan_replay_dir(replay_log_dir: str, baseline: str, replay_type: str) -> str
     find_core_dumps(replay_root)
     # Collect report content.
     var report: str = ""
-    let check_result: []str = shellLines: ls {replay_log_dir}/*check_logs.result.svlog 2>/dev/null
+    let check_result: []str = shellLines: ls {replay_log_dir}/*check_logs.result.svlog
     for f in check_result:
         continue if f == ""
         cecho("sWb", "check_logs.result.svlog:")
         let content: str = readFile(f)
         print content
         report = report + content + "\n"
-    let check_run: []str = shellLines: ls {replay_log_dir}/*check_logs.run.svlog 2>/dev/null
+    let check_run: []str = shellLines: ls {replay_log_dir}/*check_logs.run.svlog
     for f in check_run:
         continue if f == ""
         cecho("sWb", "check_logs.run.svlog:")
@@ -320,7 +320,7 @@ def scan_regression_tests(build_dir: str, btype: BuildType, subtype: BuildSubtyp
                 let hits: str = grep_logfile(mono_out)
                 report = hits
         when others:
-            let out_files: []str = shellLines: ls {log_dir}/*1_out_01 2>/dev/null
+            let out_files: []str = shellLines: ls {log_dir}/*1_out_01
             for f in out_files:
                 continue if f == ""
                 hr("#")
@@ -371,7 +371,7 @@ def show_failed_tests(build_dir: str, btype: BuildType, subtype: BuildSubtype, n
                 env = op_env
                 suffix = "failed-assert"
             when others: pass
-        let r = shell: nl /cm/ot/TACT/test_reports/TACT.TACT_CONFIG.{baseline}-{env}*/general.results.{suffix} 2>/dev/null
+        let r = shell: nl /cm/ot/TACT/test_reports/TACT.TACT_CONFIG.{baseline}-{env}*/general.results.{suffix}
         if r.output.strip() != "":
             print r.output.rstrip("\n")
             result = result + r.output
