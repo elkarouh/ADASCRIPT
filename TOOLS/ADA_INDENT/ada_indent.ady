@@ -149,20 +149,32 @@ def ends_with_condition_then(code_s: str) -> bool:
 
 
 def code_words(code_s: str) -> []str:
-    """The identifier words of a line, with string and character literals
-    skipped whole so a keyword spelled inside one is not counted."""
+    """The identifier words of a line at the TOP level, with string and
+    character literals skipped whole and anything inside parentheses left out.
+
+    Both exclusions keep a keyword from being counted where it is not one: not
+    in a literal, and not inside a parenthesis, where 'if' and 'case' begin an
+    EXPRESSION -- '(if A then B else C)' opens no block and has no 'end'."""
     var i: Natural = 0
+    var depth: Natural = 0
     let n: Natural = len(code_s)
     while i < n:
         if code_s[i] == '"':
             i = skip_quoted(code_s, i, '"')
         elif code_s[i] == '\'' and i + 2 < n and code_s[i + 2] == '\'':
             i += 3
+        elif code_s[i] == '(':
+            depth += 1
+            i += 1
+        elif code_s[i] == ')':
+            depth = max(0, depth - 1)
+            i += 1
         elif is_ident_ch(code_s[i]):
             var j: Natural = i
             while j < n and is_ident_ch(code_s[j]):
                 j += 1
-            result.append(code_s[i:j].lower())
+            if depth == 0:
+                result.append(code_s[i:j].lower())
             i = j
         else:
             i += 1
@@ -185,6 +197,44 @@ def record_delta(code_s: str) -> int:          # int: 'end record' makes it nega
             if prev == "end":
                 delta -= 1
             elif prev != "null":
+                delta += 1
+        prev = w
+    return delta
+
+
+def has_condition_then(code_s: str) -> bool:
+    """True if a top-level 'then' on this line ends a condition.
+
+    The 'then' of an 'and then' is a connective and ends nothing, and one
+    inside parentheses belongs to an if-EXPRESSION. What remains marks a line
+    on which an if statement's condition is complete -- so the statement is
+    open from here, whatever else the line goes on to say.
+    """
+    var prev: str = ""
+    for w in code_words(code_s):
+        if w == "then" and prev != "and":
+            return True
+        prev = w
+    return False
+
+
+def if_delta(code_s: str) -> int:               # int: 'end if' makes it negative
+    """Net if statements the line opens: +1 for each 'if' that starts one, -1
+    for the 'if' of an 'end if'.
+
+    A branch complete on its own line -- 'if C then return "X";' -- still opens
+    the statement, because the elsif/else/end below belong to it. The trailing
+    ';' is the branch's, not the statement's, and the 'then' sits in the middle
+    of the line where no dispatch on the last word can see it. 'elsif' is its
+    own word and never counts: the frame it continues is already open.
+    """
+    var delta: int = 0
+    var prev: str = ""
+    for w in code_words(code_s):
+        if w == "if":
+            if prev == "end":
+                delta -= 1
+            else:
                 delta += 1
         prev = w
     return delta
@@ -937,6 +987,18 @@ class Indenter:
                 # there the dispatch has already handled it.
                 if last != "record" and record_delta(code) > 0:
                     self.stack.append(RECORD)
+                # The same for an if statement whose first branch is complete on
+                # the opening line ('if C then return "X";'): its 'then' is
+                # mid-line and its ';' closes the branch, not the statement, so
+                # neither the dispatch nor the ';' rule sees the opener.
+                # Two lines are not this: one ending in the condition's own
+                # 'then', which the dispatch above has already pushed for, and
+                # one where the condition does not finish at all -- a multi-line
+                # condition belongs to the tracker, which pushes when its 'then'
+                # finally arrives.
+                if not ends_with_condition_then(code_s) \
+                        and has_condition_then(code) and if_delta(code) > 0:
+                    self.stack.append(IF)
                 # stmt_incomplete(): 'if C then X; end if;' on one line starts
                 # with 'if' and does not end with 'then', but it is a whole
                 # statement, not a condition still looking for its 'then'. It
