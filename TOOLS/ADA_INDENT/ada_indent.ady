@@ -144,7 +144,13 @@ def stmt_incomplete(code_s: str) -> bool:
     # line as a plain continuation, with no matching 'end'.
     return True if lt == "is" and lw == "subtype"
     # Block openers, plus the '[not] overriding' indicator on its own line.
-    return lt not in ("is", "then", "loop", "record", "select", "do", "overriding")
+    # 'begin' and 'declare' belong here for the same reason as the rest: a line
+    # ENDING in one is a complete opener, so the next line is the block's first
+    # statement rather than a continuation of this one. The bare-keyword test
+    # above catches them only when they stand alone, which misses
+    # 'procedure X (...) is begin' and 'Outer : declare'.
+    return lt not in ("is", "then", "loop", "record", "select", "do",
+                      "overriding", "begin", "declare")
 
 
 def starts_with_operator(code_s: str) -> bool:
@@ -845,6 +851,7 @@ class Indenter:
                         when "record" if lw != "null": self._push_frame(RECORD)
                         when "select": self._push_frame(SELECT)
                         when "do": self._push_frame(DO)
+                        when "begin": self._push_frame(BLOCK)   # 'when X => begin'
                         when others: pass
             return " " * lead + emit_text
 
@@ -962,6 +969,7 @@ class Indenter:
                         when "declare": self._push_frame(DECLARE)
                         when "select": self._push_frame(SELECT)
                         when "do": self._push_frame(DO)
+                        when "begin": self._push_frame(BLOCK, self.frame_name)  # ') is begin'
                         when others: pass
 
             when "elsif":
@@ -1039,6 +1047,17 @@ class Indenter:
                         when "select": self._push_frame(SELECT)
                         when "do": self._push_frame(DO)
                         when "declare": self._push_frame(DECLARE, self.frame_name)
+                        when "begin":
+                            # 'procedure X (...) is begin' puts the header and
+                            # the start of the statement part on one line.
+                            # Spelled over two lines the 'is' pushes a frame and
+                            # the 'begin' turns it into the statement part -- one
+                            # frame either way, so push it here. A line that
+                            # *starts* with 'begin' never reaches this dispatch:
+                            # it is handled above, converting the frame already
+                            # open. The frame carries the declaration's name, so
+                            # its 'end X;' still matches.
+                            self._push_frame(BLOCK, self.frame_name)
                         when others: pass
                 # stmt_incomplete(): 'if C then X; end if;' on one line starts
                 # with 'if' and does not end with 'then', but it is a whole

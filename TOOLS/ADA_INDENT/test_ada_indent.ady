@@ -1963,6 +1963,55 @@ def run_tests() -> int:
         "  end Q;\n"
         "end P;\n"))
 
+    # 74. 'procedure X (...) is begin' -- header and the start of the statement
+    #     part on one line. Ugly, but legal, and the stack must not care: the
+    #     dispatch had no arm for a trailing 'begin', so neither the 'is' nor
+    #     the 'begin' opened anything and the subprogram's 'end' closed its
+    #     parent instead. stmt_incomplete() also read the line as unfinished,
+    #     which put the first body line at the continuation column.
+    cases.append((
+        "function Outer (Args : Reader.T) return Boolean is\n"
+        "procedure Report (Message : String) is begin\n"
+        "IO.Report_Error\n"
+        "(Trace,\n"
+        "\"Response: \" & Message);\n"
+        "end Report;\n"
+        "begin\n"
+        "return True;\n"
+        "end Outer;\n",
+
+        "function Outer (Args : Reader.T) return Boolean is\n"
+        "  procedure Report (Message : String) is begin\n"
+        "    IO.Report_Error\n"
+        "      (Trace,\n"
+        "       \"Response: \" & Message);\n"
+        "  end Report;\n"
+        "begin\n"
+        "  return True;\n"
+        "end Outer;\n"))
+
+    # 75. The same for a trailing 'declare': a line ending in one is a complete
+    #     opener, so the block's first declaration is a statement rather than a
+    #     continuation of the label line.
+    cases.append((
+        "procedure P is\n"
+        "begin\n"
+        "Log : declare\n"
+        "Y : Integer;\n"
+        "begin\n"
+        "null;\n"
+        "end Log;\n"
+        "end P;\n",
+
+        "procedure P is\n"
+        "begin\n"
+        "  Log : declare\n"
+        "    Y : Integer;\n"
+        "  begin\n"
+        "    null;\n"
+        "  end Log;\n"
+        "end P;\n"))
+
     for pair in cases:
         let src: str = pair[0]
         let want: str = pair[1]
