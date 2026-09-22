@@ -312,20 +312,3 @@ filter the empty lines after splitting input that might be empty.
 Everything else the outside session catalogued now compiles and runs the
 same on both backends; the probes are in the session log.
 ## Nim keyword as a tuple-unpacking target
-
-## Auto-unwrap incomplete after `continue if is None`
-
-After `continue if x is None`, the transpiler auto-unwraps `x` for tick
-attributes (`x'Image` → `$(x.get())`) but **not** inside tuple constructors
-or `let` assignments:
-
-```adascript
-let bt: ?BuildType = build_type_from(name)
-continue if bt is None
-# These work — auto-unwrap applied:
-type_to_file[bt'Image] = filepath       # ok: $(bt.get())
-print bt'Image                           # ok
-
-# These fail — auto-unwrap NOT applied:
-builds.append((name: name, btype: bt))   # error: got Option[BuildType], expected BuildType
-let btype: BuildType = bt                # error: same
