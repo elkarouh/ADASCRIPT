@@ -783,6 +783,16 @@ continue if line.startswith("#")
 break if depth < 0
 ```
 
+A modifier testing an optional establishes the auto-unwrap for everything
+after it, exactly as the indented guard does — the optional is a plain value
+from that line on, and writing `.get()` yourself would unwrap it twice:
+
+```python
+let bt: ?BuildType = build_type_from(name)
+continue if bt is None
+builds.append((name: name, btype: bt))   # bt is a plain BuildType here
+```
+
 Nothing else may: an assignment, a call, a `print` or a `raise` under an
 `if` modifier is a parse error. `x = 1 if c` opens exactly like the
 conditional expression `x = 1 if c else 2` and would only stop looking like

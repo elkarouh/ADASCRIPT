@@ -207,7 +207,32 @@ proc bump(raw: string): Option[int] =
 Any exit works — `return`, `break`, `continue`, `raise`, `quit` — as long as
 the guard body leaves the block and has no `else`.
 
-Calling `.get()` yourself is not wrong, just noise. Prefer the plain name.
+The guard may be written as a statement modifier, which is the same thing on
+one line and reads best in a loop:
+
+```python
+for name in listing:
+    let bt: ?BuildType = build_type_from(name)
+    continue if bt is None
+    builds.append((name: name, btype: bt))   # bt is a plain BuildType here
+```
+
+What the guard establishes holds everywhere after it, not only in the
+positions that look like tests: a `let`, a tuple constructor, a subscript and
+a tick attribute all take the plain name.
+
+Do **not** write `.get()` yourself after a guard. The name already *is* the
+value there, so the call lands on the unwrapped value rather than on the
+optional, and Adascript reads `.get()` on a non-optional as a table lookup —
+`bt.get()` becomes `bt.get().getOrDefault()` in Nim, which does not compile:
+
+```python
+continue if bt is None
+builds.append((name: name, btype: bt.get()))   # wrong: a second unwrap
+```
+
+Outside a guard `.get()` is still the explicit unwrap, and still means what
+it says.
 
 ## 10.4 Defaults, truthiness, and the walrus
 

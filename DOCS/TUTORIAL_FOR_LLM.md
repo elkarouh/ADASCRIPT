@@ -334,6 +334,15 @@ under an `if` modifier is a parse error -- `x = 1 if c` opens like the
 conditional expression `x = 1 if c else 2`. A modifier's `if` has no `else`,
 so `x = 1 if flag else 2` is still a ternary.
 
+A modifier testing an optional establishes the auto-unwrap for the rest of
+the scope, as the indented guard does. Use the plain name after it; an
+explicit `.get()` there unwraps twice and does not compile.
+```adascript
+let bt: ?BuildType = build_type_from(name)
+continue if bt is None
+builds.append((name: name, btype: bt))   # bt is a plain BuildType here
+```
+
 ### while
 ```adascript
 while queue:
