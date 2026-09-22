@@ -1383,6 +1383,58 @@ def run_tests() -> int:
         "  end F;\n"
         "end P;\n"))
 
+    # 54. A complete one-line 'if C then X; end if;'. It starts with 'if' and
+    #     does not end with 'then', which is how an unterminated condition is
+    #     recognised -- but it is a whole statement, and reading it as a
+    #     condition latched the condition tracker on for the rest of the file:
+    #     every later line indented as a condition continuation, 'exception'
+    #     and 'end' stopped snapping back, and on a real 2192-line source that
+    #     ran the display depth down until a bare 'exception' hit depth 0 and
+    #     crashed with a RangeDefect.
+    cases.append((
+        "procedure P is\n"
+        "begin\n"
+        "if Length (L) = 0 then return; end if;\n"
+        "Measure.Create (X);\n"
+        "if A then B; elsif C then D; end if;\n"
+        "Measure.Create (Y);\n"
+        "exception\n"
+        "when others =>\n"
+        "raise;\n"
+        "end P;\n",
+
+        "procedure P is\n"
+        "begin\n"
+        "  if Length (L) = 0 then return; end if;\n"
+        "  Measure.Create (X);\n"
+        "  if A then B; elsif C then D; end if;\n"
+        "  Measure.Create (Y);\n"
+        "exception\n"
+        "  when others =>\n"
+        "    raise;\n"
+        "end P;\n"))
+
+    # 55. A multi-line condition must still open the tracker -- the guard above
+    #     keys on the line continuing, not on the absence of 'then'.
+    cases.append((
+        "procedure P is\n"
+        "begin\n"
+        "if A = 1\n"
+        "and then B = 2\n"
+        "then\n"
+        "null;\n"
+        "end if;\n"
+        "end P;\n",
+
+        "procedure P is\n"
+        "begin\n"
+        "  if A = 1\n"
+        "    and then B = 2\n"
+        "  then\n"
+        "    null;\n"
+        "  end if;\n"
+        "end P;\n"))
+
     for pair in cases:
         let src: str = pair[0]
         let want: str = pair[1]
