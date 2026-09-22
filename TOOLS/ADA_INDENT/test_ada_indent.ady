@@ -1678,6 +1678,53 @@ def run_tests() -> int:
         "  null;\n"
         "end Q;\n"))
 
+    # 58. A block opener written hard against the punctuation before it. Ada's
+    #     free format allows ')is' with no space, but the final token was cut on
+    #     whitespace alone, so it came back as 'Text_IO.File_Type)is' and opened
+    #     no frame: the declarative part then indented as a continuation of the
+    #     parameter list, which put the first declaration at the continuation
+    #     column and dropped every later one to the enclosing level.
+    cases.append((
+        "package body P is\n"
+        "procedure Record_Usages (The_Flight : Flight.T;\n"
+        "Ids_File   : in out Text_IO.File_Type)is\n"
+        "The_Profile : Curtain.Profile.T;\n"
+        "Query       : Env_Query.T;\n"
+        "begin\n"
+        "null;\n"
+        "end Record_Usages;\n"
+        "end P;\n",
+
+        "package body P is\n"
+        "  procedure Record_Usages (The_Flight : Flight.T;\n"
+        "                           Ids_File   : in out Text_IO.File_Type)is\n"
+        "    The_Profile : Curtain.Profile.T;\n"
+        "    Query       : Env_Query.T;\n"
+        "  begin\n"
+        "    null;\n"
+        "  end Record_Usages;\n"
+        "end P;\n"))
+
+    # 59. The cut must not invent keywords out of trailing identifiers. A token
+    #     ending in '_is' or carrying a tick is one word, not a keyword, and a
+    #     token that does not end in an identifier character is left whole.
+    cases.append((
+        "procedure P is\n"
+        "begin\n"
+        "X := Compute (Y'Image);\n"
+        "if Flag_Is then\n"
+        "Put (Item'Image);\n"
+        "end if;\n"
+        "end P;\n",
+
+        "procedure P is\n"
+        "begin\n"
+        "  X := Compute (Y'Image);\n"
+        "  if Flag_Is then\n"
+        "    Put (Item'Image);\n"
+        "  end if;\n"
+        "end P;\n"))
+
     for pair in cases:
         let src: str = pair[0]
         let want: str = pair[1]
