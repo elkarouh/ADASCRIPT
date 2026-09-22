@@ -140,9 +140,12 @@ def ends_with_condition_then(code_s: str) -> bool:
     end here' was fooled by it: the tracker closed the condition early, and the
     real 'then' further down then opened a second frame.
     """
-    let parts: []str = code_s.strip().rstrip(";").split()
-    return False if len(parts) == 0 or parts[-1].lower() != "then"
-    return len(parts) < 2 or parts[-2].lower() != "and"
+    return False if last_word(code_s) != "then"
+    # The word before that 'then', cut the way last_word() cuts: splitting on
+    # blanks alone would miss the 'then' in ')then', which Ada's free format
+    # allows and which real sources write -- the whole point of that cut.
+    let head: str = code_s.strip().rstrip(";").strip()
+    return last_word(head[:len(head) - 4]) != "and"
 
 
 def stmt_incomplete(code_s: str) -> bool:

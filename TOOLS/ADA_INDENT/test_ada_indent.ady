@@ -1883,6 +1883,60 @@ def run_tests() -> int:
         "  end if;\n"
         "end P;\n"))
 
+    # 72. The glued-punctuation family, for every opener that has a dedicated
+    #     reader. last_word() cuts ')then' back to 'then', but a reader that
+    #     splits on blanks of its own gets '(X)then' and sees no keyword -- which
+    #     is how ends_with_condition_then() reintroduced the ')is' bug for
+    #     ')then' after that cut had already fixed it. Anything asking 'does this
+    #     line end in <keyword>' has to ask it through last_word().
+    cases.append((
+        "procedure P is\n"
+        "begin\n"
+        "if Debug.Trace (FRA_Visited_Trace)then\n"
+        "Report (A);\n"
+        "end if;\n"
+        "for I in Each (List)loop\n"
+        "Report (I);\n"
+        "end loop;\n"
+        "while Check (X)loop\n"
+        "Step;\n"
+        "end loop;\n"
+        "end P;\n",
+
+        "procedure P is\n"
+        "begin\n"
+        "  if Debug.Trace (FRA_Visited_Trace)then\n"
+        "    Report (A);\n"
+        "  end if;\n"
+        "  for I in Each (List)loop\n"
+        "    Report (I);\n"
+        "  end loop;\n"
+        "  while Check (X)loop\n"
+        "    Step;\n"
+        "  end loop;\n"
+        "end P;\n"))
+
+    # 73. ...and the cut must not lose the 'and then' distinction it was taught
+    #     alongside. Here the glued 'then' is a real terminator -- the word
+    #     before it is '(B)', not 'and' -- so the line ends the condition and
+    #     snaps back to the opener, as a terminating 'then' always does.
+    cases.append((
+        "procedure P is\n"
+        "begin\n"
+        "if Is_Set (A)\n"
+        "and then Is_Set (B)then\n"
+        "X;\n"
+        "end if;\n"
+        "end P;\n",
+
+        "procedure P is\n"
+        "begin\n"
+        "  if Is_Set (A)\n"
+        "  and then Is_Set (B)then\n"
+        "    X;\n"
+        "  end if;\n"
+        "end P;\n"))
+
     for pair in cases:
         let src: str = pair[0]
         let want: str = pair[1]
