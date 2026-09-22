@@ -812,7 +812,9 @@ class Indenter:
                     if self.cond_state == 1:
                         self._push_frame(IF)
                     self.cond_state = 0
-                else:
+                elif not code_s.endswith(";"):
+                    # As below: a line ending in ';' is complete and opens
+                    # nothing, even when it closes its parentheses on the way.
                     case plt:
                         when "is":
                             # A 'function ... is' header whose parameter list spanned
@@ -967,7 +969,15 @@ class Indenter:
                 # as ':= (case X is' or ':= (if C then' - so it must NOT push a
                 # block frame (which would shift every following line).
                 let opens_paren: bool = paren_delta(code) > 0
-                if not opens_paren:
+                # A line ending in ';' is a whole declaration or statement and
+                # opens nothing, however it ends. last_word() drops that ';', so
+                # a complete one-liner whose final token is a block keyword --
+                # 'type T is null record;', 'for I in 1 .. 3 loop Put (I); end
+                # loop;' -- otherwise pushed a frame that no 'end' would ever
+                # close, and everything after it drifted one level deeper.
+                # (stmt_incomplete() is a different question: it asks whether the
+                # NEXT line continues this one, and is False for 'package X is'.)
+                if not opens_paren and not code_s.endswith(";"):
                     case last:
                         when "is":
                             # A 'function ... is' header may be a real body or an
