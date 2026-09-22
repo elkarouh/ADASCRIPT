@@ -2313,7 +2313,7 @@ def run_tests() -> int:
         "  end Q;\n"
         "end P;\n"))
 
-    # 82. An 'end if' reached part-way along a line whose first word the
+    # 88. An 'end if' reached part-way along a line whose first word the
     #     dispatch has already claimed: 'else return Deactivated; end if;' is an
     #     'else' line, so nothing popped the frame its 'end if' closes. Inside a
     #     case alternative that leaves the IF standing under the WHEN, and every
@@ -2342,7 +2342,7 @@ def run_tests() -> int:
         "  end case;\n"
         "end F;\n"))
 
-    # 83. The count must close nothing it should not: a whole if statement on
+    # 89. The count must close nothing it should not: a whole if statement on
     #     one line is balanced, an 'end if;' of its own has already been popped
     #     by its dispatch, and neither a literal nor an if-expression counts.
     #     Here the outer if must still be open at Next_Statement.

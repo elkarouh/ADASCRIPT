@@ -1232,9 +1232,8 @@ class Indenter:
         # already. disp is fixed by now, so this only moves the lines below.
         if lw != "end" and if_delta(code) < 0:
             while self.stack and self.stack[-1] == WHEN:
-                self.stack.pop()
-            if self.stack:
-                self.stack.pop()
+                self._pop_frame()
+            self._pop_frame()
 
         # A multi-line if/elsif condition is tracked by cond_state, not here, so
         # only flag a general statement continuation when not in that mode.
