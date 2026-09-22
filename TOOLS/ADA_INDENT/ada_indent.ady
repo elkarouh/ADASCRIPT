@@ -674,6 +674,12 @@ class Indenter:
                 self.frame_name = dn if dn != "" else self.pending_label
                 self.pending_label = ""
         var disp: int = len(self.stack)      # int: the 'end' cases take it to len-1, so -1
+        # Whether the stale-TYPE_HEADER pop below fired on this line. A 'new' that
+        # follows a 'type T is' continues a DERIVED TYPE, not a generic
+        # instantiation, and the frame it belongs to has just been discarded --
+        # so the PKG now on top is somebody else's and must not be marked for
+        # removal. Without this the enclosing package's frame was the one taken.
+        var popped_type_header: bool = False
 
         # A 'type T is' that turns out to be an enum, derived, or other non-record
         # type pushed TYPE_HEADER waiting for 'record'. When the declaration finishes
@@ -686,6 +692,7 @@ class Indenter:
           self.stack[-1] == TYPE_HEADER and lw != "record" and not code_s.startswith("("):
             self._pop_frame()
             disp = len(self.stack)
+            popped_type_header = True
 
         # An 'X is\nnew Y;' generic instantiation pushed a PKG for 'X is'. Once the
         # 'new' statement finishes (no open parens, no continuation), pop it so the
@@ -1055,7 +1062,8 @@ class Indenter:
                 # 'package/procedure X is\nnew Y' is a generic instantiation.
                 # The PKG pushed for 'X is' has no body; mark it for removal once
                 # the 'new' statement ends (paren closes, no continuation left).
-                if lw == "new" and cont == 0 and self.stack and self.stack[-1] == PKG:
+                if lw == "new" and cont == 0 and not popped_type_header \
+                        and self.stack and self.stack[-1] == PKG:
                     self.pending_inst = True
                 disp = len(self.stack)
                 let last: str = last_word(code_s)
