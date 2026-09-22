@@ -2270,6 +2270,49 @@ def run_tests() -> int:
         "  end if;\n"
         "end P;\n"))
 
+    # 86. 'private' has two jobs, and the dispatch knew only one. As the section
+    #     splitter of a package spec it stands alone on its line and aligns with
+    #     the 'package'. As the privacy indicator of a library unit it qualifies
+    #     a declaration -- 'private package P is' -- which still has to open its
+    #     own frame; taking it for the splitter opened nothing, so the whole
+    #     package body stayed at the file's level.
+    cases.append((
+        "private package Regulation.Iflight is\n"
+        "Base_Unit_Name : constant String := \"REGULATION.IFLIGHT\";\n"
+        "type T is private;\n"
+        "private\n"
+        "type T is new Integer;\n"
+        "end Regulation.Iflight;\n",
+
+        "private package Regulation.Iflight is\n"
+        "  Base_Unit_Name : constant String := \"REGULATION.IFLIGHT\";\n"
+        "  type T is private;\n"
+        "private\n"
+        "  type T is new Integer;\n"
+        "end Regulation.Iflight;\n"))
+
+    # 87. The indicator must not hide what is being declared either, exactly as
+    #     'overriding' must not: a private expression function still defers, so
+    #     it opens no frame and the declaration after it keeps its level.
+    cases.append((
+        "package body P is\n"
+        "private function F (A : in T) return Boolean is\n"
+        "(A.X > 0);\n"
+        "procedure Q is\n"
+        "begin\n"
+        "null;\n"
+        "end Q;\n"
+        "end P;\n",
+
+        "package body P is\n"
+        "  private function F (A : in T) return Boolean is\n"
+        "    (A.X > 0);\n"
+        "  procedure Q is\n"
+        "  begin\n"
+        "    null;\n"
+        "  end Q;\n"
+        "end P;\n"))
+
     for pair in cases:
         let src: str = pair[0]
         let want: str = pair[1]

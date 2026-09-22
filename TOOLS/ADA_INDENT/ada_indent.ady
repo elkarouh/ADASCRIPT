@@ -413,15 +413,19 @@ def declared_name(code_s: str) -> str:
 def lead_keyword(code_s: str) -> str:
     """The lowercased keyword saying what a declaration declares, or ''.
 
-    '[not] overriding' is an indicator attached to a subprogram declaration,
-    not the declaration's own keyword, so a line can open with it and still be
-    a function. Skipping it is what lets the expression-function deferral see
-    'overriding function F ... is' for what it is; read literally, that line
-    begins with 'overriding' and so opens a block that nothing ever closes.
+    '[not] overriding' and the 'private' of a private library unit are
+    indicators attached to a declaration, not the declaration's own keyword, so
+    a line can open with one and still be a function. Skipping them is what
+    lets the expression-function deferral see 'overriding function F ... is'
+    for what it is; read literally, that line begins with 'overriding' and so
+    opens a block that nothing ever closes.
+
+    The bare 'private' that splits a package spec never reaches here: it is
+    handled as a splitter, and has no declaration after it to name.
     """
     let ws: []str = lead_words(code_s)
     var i: Natural = 0
-    while i < len(ws) and ws[i].lower() in ("not", "overriding"):
+    while i < len(ws) and ws[i].lower() in ("not", "overriding", "private"):
         i += 1
     return ws[i].lower() if i < len(ws) else ""
 
@@ -1099,7 +1103,15 @@ class Indenter:
                     self.cond_base = max(0, disp)
                     self.cond_value_base = max(0, disp)
 
-            when "else" | "exception" | "or" | "private":
+            when "else" | "exception" | "or" | "private" if lw != "private" \
+                    or code_s.lower() == "private":
+                # 'private' reaches here only as the section splitter of a
+                # package spec, which stands alone on its line. As the privacy
+                # indicator of a library unit -- 'private package P is',
+                # 'private function F ... is' -- it qualifies a declaration that
+                # has to open its own frame, so those lines fall through to the
+                # dispatch below instead.
+                #
                 # A select alternative ends without popping the WHEN frame
                 # (only 'end' and 'when' pop it). 'or'/'else' splitting the
                 # select must clear it first so they align with 'select'.
