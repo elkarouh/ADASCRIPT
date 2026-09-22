@@ -214,6 +214,18 @@ history of this file if the reasoning behind one of them is ever wanted.
       name shared by two classes with different types could then narrow
       the wrong way -- which is why it is written down rather than done
       alongside the char-default fix.
+- [ ] implicit return does not work under a `?T` return type, so every
+      branch of an optional-returning function needs an explicit `return`.
+      Two different failures, depending on the branch. A value as the tail
+      expression is wrapped one level too deep -- `def f(s: str) -> ?BT`
+      ending in `when others: OP` gives "got 'Option[BT]' for 'some(OP)'
+      but expected 'BT'", because the case itself is typed `BT` and the
+      `some()` lands inside it. A bare `None` as the tail reaches Nim as
+      `nil`, where `isNil` is ambiguous between its `ptr T` and `ref T`
+      overloads. The `if/else` form fails the same way as the `case` one,
+      so it is the implicit return rather than the construct around it.
+      `TOOLS/TCHECK/Tcheck_tact.ady`'s `build_type_from` says so where it
+      spells out the returns it would otherwise leave implicit.
 - [ ] a user-defined scalar type is an alias, not a distinct type, so
       `type Velocity_T is float` documents a unit without enforcing it:
       `let d: Distance_T = v` over two float aliases compiles on both

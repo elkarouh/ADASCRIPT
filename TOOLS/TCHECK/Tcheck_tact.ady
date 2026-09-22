@@ -36,6 +36,9 @@ let RESET: str = "\x1b[0m"
 var COLORED: bool = False
 var BATCH: bool = False
 var ONLY_NEW: bool = False
+# Set by any Tlog that reports a new or crashed test; read once at the end
+# to decide the exit status.
+var HAS_NEW_FAILURES: bool = False
 
 def ansi_escape(spec: str) -> str:
     """Turn a color spec like 'sWr' into an ANSI escape sequence."""
@@ -78,6 +81,24 @@ type ReplayType is enum run_prequal, performance, simca, full_simca, oldest_date
 type Build is tuple:
     name  : str # e.g. build_G!31.IP.L8
     btype : BuildType
+
+type Replay is tuple:
+    rtype : ReplayType
+    file  : Path
+
+type Context is record:
+    baseline      : str
+    basedir       : Path
+    builds        : []Build
+    replays       : []Replay
+    focus_domain  : FocusDomain  = no_focus
+    focus_subtype : BuildSubtype = in_test
+    focus_rtype   : ReplayType   = run_prequal
+    verbose       : bool = False
+    fast_mode     : bool = False
+    list_only     : bool = False
+    compute_size  : bool = False
+    exit_code     : bool = False
 
 def subtype_label(st: BuildSubtype) -> str:
     """The file-system name for a subtype ('in' not 'in_test')."""
@@ -279,11 +300,7 @@ def replay_type_from(filename: str) -> ?ReplayType:
         when /all_autolink/:  return all_autolink
         when others:          return None
 
-type Replay is tuple:
-    rtype : ReplayType
-    file  : Path
-
-def find_replays_to_be_processed(basedir: Path) -> []Replay:
+def find_replays(basedir: Path) -> []Replay:
     """Find replay log files, one per replay type, in canonical order."""
     let listing: []str = shellLines: ls -d {basedir}/build_*OP*/saved_logs/Treplay_*.log
 
@@ -345,11 +362,15 @@ def build_type_from(build_name: str) -> ?BuildType:
 
     build_type_from("build_G!31.IP.L8") -> IP
     """
+    # Explicit `return` on every branch: a tail expression does not work
+    # under a `?T` return type, whichever branch it is on -- a value comes
+    # out `some(IP)` where the case is typed `BT`, and a bare `None` reaches
+    # Nim as `nil` and makes isNil ambiguous. Written up in TODO.md.
     case build_name:
         when /\.IP\./:  return IP
         when /\.OP\./:  return OP
         when /\.SIP\./: return SIP
-        when others:    return None # BUG, implicit return not possible with optional type.
+        when others:    return None
 
 def tlog_filename(subtype: BuildSubtype, pass_: BuildPass) -> str:
     """The Tlog filename for a subtype and pass."""
@@ -358,7 +379,7 @@ def tlog_filename(subtype: BuildSubtype, pass_: BuildPass) -> str:
         when normal: "Tlog-" + sl + ".log"
         when mrun: "Tlog-mrun-" + sl + ".log"
 
-def show_tlog_if_present(build: Build, subtype= BuildSubtype,
+def show_tlog_if_present(build: Build, subtype: BuildSubtype,
                          pass_: BuildPass, tacot_corico_dir: str):
     """Show a Tlog file's summary if it exists, or a 'not ready' message."""
     let file: str = tlog_filename(subtype, pass_)
@@ -393,7 +414,7 @@ def tacot_dir(basedir: Path, build: Build, pass_: BuildPass) -> str:
         when normal: str(basedir / build.name / "saved_logs" / "tacot_corico.LATEST")
         when mrun: str(basedir / build.name / "saved_logs" / "tacot_corico_mrun.LATEST_GOOD")
 
-def process_build_subtype(build: Build, subtype= BuildSubtype,
+def process_build_subtype(build: Build, subtype: BuildSubtype,
                           basedir: Path):
     """Process one subtype of a build, for both normal and mrun passes."""
     def lo_build_checks(tacot_corico_latest: str):
@@ -603,7 +624,7 @@ class Options:
             stderr.writeLine("Error: <BASELINE> is required.")
             usage()
 
-def find_builds_to_be_processed(basedir: Path) -> []Build:
+def find_builds(basedir: Path) -> []Build:
     """List build_G!* directories under basedir, returning name and type."""
     let SKIP_BUILD_PATTERNS: []str = ["92", "94", "95", "98", "30"]
     let listing: []str = shellLines: ls -1d {basedir}/build_G!*
@@ -639,27 +660,38 @@ if not -d basedir:
     cecho("sWb", "DIR " + str(basedir) + " does not exist")
     quit(1)
 
-let builds_to_be_processed: []Build = find_builds_to_be_processed(basedir)
-let replays_to_be_processed: []Replay = find_replays_to_be_processed(basedir)
-let focus_domain: FocusDomain = opt.focus_domain
-let focus_subtype: BuildSubtype = opt.focus_subtype
-let focus_rtype: ReplayType = opt.focus_rtype
+let builds: []Build = find_builds(basedir)
+let replays: []Replay = find_replays(basedir)
 
-def show_header():
-    cecho("sWr", "AVAILABLE BUILDS for " + str(basedir) + ":")
-    for build in builds_to_be_processed:
+var ctx: Context
+ctx.baseline = baseline
+ctx.basedir = basedir
+ctx.builds = builds
+ctx.replays = replays
+ctx.focus_domain = opt.focus_domain
+ctx.focus_subtype = opt.focus_subtype
+ctx.focus_rtype = opt.focus_rtype
+ctx.verbose = opt.verbose
+ctx.fast_mode = opt.fast_mode
+ctx.list_only = opt.list_only
+ctx.compute_size = opt.compute_size
+ctx.exit_code = opt.exit_code
+
+def show_header(ctx: Context):
+    cecho("sWr", "AVAILABLE BUILDS for " + str(ctx.basedir) + ":")
+    for build in ctx.builds:
         print build.name
-    cecho("sWr", "AVAILABLE REPLAYS for " + str(basedir) + ":")
-    for replay in replays_to_be_processed:
+    cecho("sWr", "AVAILABLE REPLAYS for " + str(ctx.basedir) + ":")
+    for replay in ctx.replays:
         print replay.rtype'Image + "  " + str(replay.file)
-    if opt.list_only:
+    if ctx.list_only:
         quit(0)
     hr('#')
 
-def show_regression_tests():
+def show_regression_tests(ctx: Context):
     cecho("sWr", "TESTS")
-    for build in builds_to_be_processed:
-        case focus_domain:
+    for build in ctx.builds:
+        case ctx.focus_domain:
             when focus_IP:  continue if build.btype != IP
             when focus_OP:  continue if build.btype != OP
             when focus_SIP: continue if build.btype != SIP
@@ -667,24 +699,24 @@ def show_regression_tests():
             when no_focus:  pass
         cecho("usBy", "PROCESSING " + build.name + " ...")
         for subtype in BuildSubtype:
-            continue if focus_domain in (focus_IP, focus_OP, focus_SIP) and subtype != focus_subtype
+            continue if ctx.focus_domain in (focus_IP, focus_OP, focus_SIP) and subtype != ctx.focus_subtype
             stderr.writeLine(PROG + ": checking " + build.name + " / " + subtype_label(subtype))
-            process_build_subtype(build, subtype, basedir)
+            process_build_subtype(build, subtype, ctx.basedir)
 
-def show_replays():
+def show_replays(ctx: Context):
     hr('#')
     cecho("sWr", "REPLAYS")
-    if replays_to_be_processed'Length == 0:
+    if ctx.replays'Length == 0:
         cecho("sWb", "WARNING: NO REPLAYS FOUND")
-    for replay in replays_to_be_processed:
-        continue if focus_domain == focus_replay and replay.rtype != focus_rtype
-        process_replay(replay, opt.verbose)
+    for replay in ctx.replays:
+        continue if ctx.focus_domain == focus_replay and replay.rtype != ctx.focus_rtype
+        process_replay(replay, ctx.verbose)
 
-def show_build_info():
-    for b in builds_to_be_processed:
+def show_build_info(ctx: Context):
+    for b in ctx.builds:
         if b.btype == IP:
-            process_gnatcheck(b.name, basedir)
-            process_run_test_programs_log(b.name, basedir, baseline, opt.fast_mode)
+            process_gnatcheck(b.name, ctx.basedir)
+            process_run_test_programs_log(b.name, ctx.basedir, ctx.baseline, ctx.fast_mode)
             break
 
 
@@ -700,7 +732,6 @@ def previous_baseline_nr(bl: str) -> str:
 # Summary dashboard, new-failures diff, history, replay size
 # ---------------------------------------------------------------------------
 
-var HAS_NEW_FAILURES: bool = False
 
 type BuildSummary is tuple:
     build_name : str
@@ -710,7 +741,7 @@ type BuildSummary is tuple:
     total_crash: int
     all_ok     : bool
 
-def collect_build_summary(build: Build, basedir: Path) -> BuildSummary:
+def collect_build_summary(ctx: Context, build: Build) -> BuildSummary:
     """Collect test result counts across all subtypes for one build."""
     var total_new: int = 0
     var total_still: int = 0
@@ -720,7 +751,7 @@ def collect_build_summary(build: Build, basedir: Path) -> BuildSummary:
         for pass_ in BuildPass:
             let sl: str = subtype_label(subtype)
             let file: str = tlog_filename(subtype, pass_)
-            let dir: str = tacot_dir(basedir, build, pass_)
+            let dir: str = tacot_dir(ctx.basedir, build, pass_)
             let full_path: Path = Path(dir) / "TACT_REGRESS_LOGS" / "LATEST" / file
             if -f full_path:
                 let r: TlogResult = parse_Tlog(full_path, subtype)
@@ -733,12 +764,12 @@ def collect_build_summary(build: Build, basedir: Path) -> BuildSummary:
             total_new: total_new, total_still: total_still,
             total_crash: total_crash, all_ok: all_ok)
 
-def show_summary():
-    """Print a one-screen summary of the baseline health."""
+def show_summary(ctx: Context):
+    """Print a one-screen summary of the ctx.baseline health."""
     hr('#')
-    cecho("sWr", f"SUMMARY for BASELINE {baseline}")
-    for build in builds_to_be_processed:
-        let s: BuildSummary = collect_build_summary(build, basedir)
+    cecho("sWr", f"SUMMARY for BASELINE {ctx.baseline}")
+    for build in ctx.builds:
+        let s: BuildSummary = collect_build_summary(ctx, build)
         var status: str = ""
         if s.all_ok:
             status = "OK"
@@ -763,7 +794,7 @@ def show_summary():
     var replay_ok: int = 0
     var replay_fail: int = 0
     var replay_busy: int = 0
-    for replay in replays_to_be_processed:
+    for replay in ctx.replays:
         let content: str = readFile(str(replay.file))
         if "Executed UNINSTALL:" in content and "YES" in content.split("Executed UNINSTALL:")[-1].split("\n")[0]:
             replay_ok += 1
@@ -788,18 +819,18 @@ def get_failed_test_names(filepath: Path, subtype: BuildSubtype) -> []str:
         names.append(extract_test_name(line))
     return names
 
-def show_new_failures():
-    """Show tests that are new failures compared to the previous baseline."""
-    let prev_bl: str = previous_baseline_nr(baseline)
+def show_new_failures(ctx: Context):
+    """Show tests that are new failures compared to the previous ctx.baseline."""
+    let prev_bl: str = previous_baseline_nr(ctx.baseline)
     let prev_basedir: Path = Path("/cm/ot/TACT/TACT_CONFIG." + prev_bl)
     hr('-')
     cecho("sWr", f"NEW FAILURES vs {prev_bl}")
     var found_any: bool = False
-    for build in builds_to_be_processed:
+    for build in ctx.builds:
         for subtype in BuildSubtype:
             let sl: str = subtype_label(subtype)
             let file: str = tlog_filename(subtype, normal)
-            let cur_path: Path = Path(tacot_dir(basedir, build, normal)) / "TACT_REGRESS_LOGS" / "LATEST" / file
+            let cur_path: Path = Path(tacot_dir(ctx.basedir, build, normal)) / "TACT_REGRESS_LOGS" / "LATEST" / file
             let prev_path: Path = Path(tacot_dir(prev_basedir, build, normal)) / "TACT_REGRESS_LOGS" / "LATEST" / file
             if not -f cur_path:
                 continue
@@ -816,17 +847,17 @@ def show_new_failures():
     if not found_any:
         cecho("sKg", "  No new failures compared to " + prev_bl)
 
-def write_history(baseline: str):
+def write_history(ctx: Context):
     """Append a one-line summary to ~/.tcheck_history."""
     let history_file: str = $HOME + "/.tcheck_history"
     var total_new: int = 0
     var total_fail: int = 0
-    for build in builds_to_be_processed:
-        let s: BuildSummary = collect_build_summary(build, basedir)
+    for build in ctx.builds:
+        let s: BuildSummary = collect_build_summary(ctx, build)
         total_new = total_new + s.total_new
         total_fail = total_fail + s.total_still + s.total_crash
     let timestamp: str = str(int(time.time()))
-    let line: str = f"{baseline} | {total_new} new, {total_fail} total failing | {timestamp}\n"
+    let line: str = f"{ctx.baseline} | {total_new} new, {total_fail} total failing | {timestamp}\n"
     let rc: int = shell: echo {!line} >> {!history_file}
 
 def check_replay_dirs_size():
@@ -883,7 +914,12 @@ def check_replay_dirs_size():
 # ---------------------------------------------------------------------------
 
 
-def saved_logs_dir(bl: str, btype: BuildType) -> str:
+def saved_logs_dir(basedir: Path, bl: str, btype: BuildType) -> str:
+    """The saved_logs directory of BL's build of BTYPE, as a sibling of BASEDIR.
+
+    BL is any baseline of the same branch, not necessarily the one BASEDIR
+    names -- the detailed views below reach for the previous one this way.
+    """
     var env_id: str = $CM_ENV_ID
     case btype:
         when IP:  env_id = env_id.replace(".OP.", ".IP.")
@@ -978,7 +1014,7 @@ def scan_replay_dir_detailed(replay_log_dir: str, bl: str, replay_type: str) -> 
         report = report + content + "\n"
     return make_report(report, bl, f"replay-{replay_type}")
 
-def scan_regression_tests_detailed(build_dir: str, btype: BuildType, subtype= BuildSubtype, bl: str) -> str:
+def scan_regression_tests_detailed(build_dir: str, btype: BuildType, subtype: BuildSubtype, bl: str) -> str:
     var dir: str = build_dir
     case btype:
         when IP: dir = dir.replace("OP", "IP")
@@ -1008,15 +1044,15 @@ def scan_regression_tests_detailed(build_dir: str, btype: BuildType, subtype= Bu
             let out_files: []str = shellLines: ls {log_dir}/*1_out_01
             for f in out_files:
                 continue if f == ""
-                hr("#")
+                hr('#')
                 cecho("sWb", Path(f).name)
-                hr("#")
+                hr('#')
                 let hits: str = grep_logfile(f)
                 if hits != "":
                     report = report + "##### " + Path(f).name + " #####\n" + hits + "\n"
     return make_report(report, bl, "regression_" + btype'Image + "_" + sl)
 
-def show_failed_tests(build_dir: str, btype: BuildType, subtype= BuildSubtype, n_baselines: int = 15) -> str:
+def show_failed_tests(build_dir: str, btype: BuildType, subtype: BuildSubtype, n_baselines: int = 15) -> str:
     var dir: str = build_dir
     case btype:
         when IP: dir = dir.replace("OP", "IP")
@@ -1034,7 +1070,7 @@ def show_failed_tests(build_dir: str, btype: BuildType, subtype= BuildSubtype, n
     var result: str = ""
     for iteration in range(n_baselines):
         let header: str = f"FAILED {btype'Image} REGRESSION TESTS logging-{sl} for BASELINE {bl}"
-        hr("-")
+        hr('-')
         cecho("sWr", header)
         result = result + header + "\n"
         var env: str = ip_env
@@ -1073,34 +1109,34 @@ def make_comparable(logfile: str, bl: str) -> str:
         sd '[vb]3.el' 'test3.el' {out_file}
     return out_file
 
-def show_detailed_build_info():
-    let prev_baseline: str = previous_baseline_nr(baseline)
-    let cur_build: str = saved_logs_dir(baseline, IP).replace("/saved_logs", "")
-    let prev_build: str = saved_logs_dir(prev_baseline, IP).replace("/saved_logs", "")
+def show_detailed_build_info(ctx: Context):
+    let prev_baseline: str = previous_baseline_nr(ctx.baseline)
+    let cur_build: str = saved_logs_dir(ctx.basedir, ctx.baseline, IP).replace("/saved_logs", "")
+    let prev_build: str = saved_logs_dir(ctx.basedir, prev_baseline, IP).replace("/saved_logs", "")
     let prev_log: str = prev_build + "/Csystem_build.log"
     let cur_log: str = cur_build + "/Csystem_build.log"
     cecho("sWr", "Compare Csystem_build.log:")
     print "  prev: " + prev_log
     print "  cur:  " + cur_log
     let prev_normalized: str = make_comparable(prev_log, prev_baseline)
-    let cur_normalized: str = make_comparable(cur_log, baseline)
+    let cur_normalized: str = make_comparable(cur_log, ctx.baseline)
     if not BATCH:
         let rc: int = shell: meld {!prev_normalized} {!cur_normalized} &
     else:
         let rc: int = shell: diff {!prev_normalized} {!cur_normalized}
 
-def show_detailed_regression_tests():
+def show_detailed_regression_tests(ctx: Context):
     var btype: BuildType = IP
-    case focus_domain:
+    case ctx.focus_domain:
         when focus_IP:  btype = IP
         when focus_OP:  btype = OP
         when others: pass
-    let subtype: BuildSubtype = focus_subtype
-    let prev_baseline: str = previous_baseline_nr(baseline)
-    let cur_dir: str = saved_logs_dir(baseline, btype)
-    let prev_dir: str = saved_logs_dir(prev_baseline, btype)
+    let subtype: BuildSubtype = ctx.focus_subtype
+    let prev_baseline: str = previous_baseline_nr(ctx.baseline)
+    let cur_dir: str = saved_logs_dir(ctx.basedir, ctx.baseline, btype)
+    let prev_dir: str = saved_logs_dir(ctx.basedir, prev_baseline, btype)
     let prev_report: str = scan_regression_tests_detailed(prev_dir, btype, subtype, prev_baseline)
-    let cur_report: str = scan_regression_tests_detailed(cur_dir, btype, subtype, baseline)
+    let cur_report: str = scan_regression_tests_detailed(cur_dir, btype, subtype, ctx.baseline)
     if prev_report != "" and cur_report != "" and not BATCH:
         let meld_rc: int = shell: meld {prev_report} {cur_report} &
     let failed_file: str = "/tmp/reports/failed_tests"
@@ -1109,15 +1145,15 @@ def show_detailed_regression_tests():
     if not BATCH:
         let emacs_rc: int = shell: emacs -l /home/ekhassan/e.el {!failed_file} &
 
-def show_detailed_replays():
-    let replay_type: str = focus_rtype'Image
-    let prev_baseline: str = previous_baseline_nr(baseline)
-    let cur_dir: str = saved_logs_dir(baseline, OP)
-    let prev_dir: str = saved_logs_dir(prev_baseline, OP)
+def show_detailed_replays(ctx: Context):
+    let replay_type: str = ctx.focus_rtype'Image
+    let prev_baseline: str = previous_baseline_nr(ctx.baseline)
+    let cur_dir: str = saved_logs_dir(ctx.basedir, ctx.baseline, OP)
+    let prev_dir: str = saved_logs_dir(ctx.basedir, prev_baseline, OP)
     let prev_log: str = get_replay_log_dir(prev_dir, replay_type)
     let cur_log: str = get_replay_log_dir(cur_dir, replay_type)
     let prev_report: str = scan_replay_dir_detailed(prev_log, prev_baseline, replay_type)
-    let cur_report: str = scan_replay_dir_detailed(cur_log, baseline, replay_type)
+    let cur_report: str = scan_replay_dir_detailed(cur_log, ctx.baseline, replay_type)
     if prev_report != "" and cur_report != "" and not BATCH:
         let meld_rc: int = shell: meld {prev_report} {cur_report} &
 
@@ -1125,30 +1161,30 @@ def show_detailed_replays():
 # Run
 # ---------------------------------------------------------------------------
 
-def run():
-    if opt.compute_size:
+def run(ctx: Context):
+    if ctx.compute_size:
         check_replay_dirs_size()
         quit(0)
-    case focus_domain:
+    case ctx.focus_domain:
         when focus_replay:
-            show_replays()
-            show_detailed_replays()
+            show_replays(ctx)
+            show_detailed_replays(ctx)
         when focus_IP | focus_OP | focus_SIP:
-            show_regression_tests()
-            show_detailed_regression_tests()
+            show_regression_tests(ctx)
+            show_detailed_regression_tests(ctx)
         when focus_build_info:
-            show_build_info()
-            show_detailed_build_info()
+            show_build_info(ctx)
+            show_detailed_build_info(ctx)
         when no_focus:
-            show_summary()
-            show_new_failures()
-            show_header()
-            show_regression_tests()
-            show_build_info()
-            show_replays()
-            list_all_changes(baseline)
-    write_history(baseline)
-    if opt.exit_code and HAS_NEW_FAILURES:
+            show_summary(ctx)
+            show_new_failures(ctx)
+            show_header(ctx)
+            show_regression_tests(ctx)
+            show_build_info(ctx)
+            show_replays(ctx)
+            list_all_changes(ctx.baseline)
+    write_history(ctx)
+    if ctx.exit_code and HAS_NEW_FAILURES:
         quit(1)
 
-run()
+run(ctx)
