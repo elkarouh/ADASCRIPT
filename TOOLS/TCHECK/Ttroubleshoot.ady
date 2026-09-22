@@ -137,7 +137,15 @@ def compute_baseline_prevdir(cur_dir: str) -> str:
 
 def grep_logfile(filepath: str, max_errors: Positive = 100) -> str:
     """Grep a log file for key error patterns. Prints and returns the matches (max 100 lines per pattern)."""
-    let r = shell: ( rg -l analyze_core {filepath}; rg FATAL {filepath} | head -{max_errors}; rg 'SEVERE.*Description' {filepath} | head -{max_errors}; pyrg RAISED_EXCEPTION {filepath} | head -100; pyrg EDIFF_FILES {filepath} | head -100 ) 2>/dev/null
+    # The subshell was there to carry one `2>/dev/null` for the group; a
+    # capturing shell keeps the streams apart on its own, so neither is
+    # needed and the block form says the same thing in five lines.
+    let r = shell(join = ";"):
+        rg -l analyze_core {filepath}
+        rg FATAL {filepath} | head -{max_errors}
+        rg 'SEVERE.*Description' {filepath} | head -{max_errors}
+        pyrg RAISED_EXCEPTION {filepath} | head -100
+        pyrg EDIFF_FILES {filepath} | head -100
     let output: str = r.output.strip()
     if output != "":
         print output

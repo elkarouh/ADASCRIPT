@@ -906,12 +906,16 @@ def compute_baseline_prevdir(cur_dir: str) -> str:
     return "/".join(new_parts)
 
 def grep_logfile(filepath: str, max_errors: Positive = 100) -> str:
+    # No `2>/dev/null` on any of these: a capturing shell keeps the two
+    # streams apart, so what rg says about a file it cannot read is in
+    # r.stderr and never in r.output. A missing log is the ordinary case
+    # here, which is why the redirect was on every line to begin with.
     let r = shell(join = ";"):
-        rg -l analyze_core {filepath} 2>/dev/null
-        rg FATAL {filepath} 2>/dev/null | head -{max_errors}
-        rg 'SEVERE.*Description' {filepath} 2>/dev/null | head -{max_errors}
-        pyrg RAISED_EXCEPTION {filepath} 2>/dev/null | head -100
-        pyrg EDIFF_FILES {filepath} 2>/dev/null | head -100
+        rg -l analyze_core {filepath}
+        rg FATAL {filepath} | head -{max_errors}
+        rg 'SEVERE.*Description' {filepath} | head -{max_errors}
+        pyrg RAISED_EXCEPTION {filepath} | head -100
+        pyrg EDIFF_FILES {filepath} | head -100
     let output: str = r.output.strip()
     if output != "":
         print output

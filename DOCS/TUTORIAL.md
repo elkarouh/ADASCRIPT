@@ -1438,6 +1438,23 @@ print(result.stderr)   # stderr as a string
 print(result.code)     # exit code as int
 ```
 
+The streams are captured **separately**: `.output` is stdout alone, what the
+command complained about is in `.stderr`, and neither reaches the terminal.
+A capturing form therefore needs no `2>/dev/null` — the error a failing
+command prints is already out of the way:
+
+```python
+let r = shell: rg FATAL {logfile}      # no redirect needed;
+                                       # rg's "No such file" is in r.stderr
+```
+
+`shellLines:` behaves the same — a failing command gives an empty `[]str`,
+not a list containing the error text.
+
+The forms that keep the terminal (`shell: cmd` on its own, and
+`let code: int = shell: cmd`) pass both streams straight through, so there
+a `2>/dev/null` still does what it says.
+
 ### Lines capture
 
 `shellLines` splits stdout into `[]str`, one element per line.  The

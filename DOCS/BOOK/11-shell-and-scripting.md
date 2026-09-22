@@ -47,6 +47,31 @@ let (out, code) = shell: some-command
 let (out2, code2, err2) = shell: some-command
 ```
 
+The two streams are captured *separately*, which is worth knowing before
+writing any shell at all: `.output` is stdout and nothing else. What the
+command complains about is in `.stderr`, and it does not reach the terminal
+either. So a capturing form needs no `2>/dev/null`:
+
+```python
+# The redirect is noise here -- rg's "No such file" is already in
+# r.stderr, and a caller reading r.output never sees it.
+let r = shell(join = ";"):
+    rg FATAL {logfile}
+    rg 'SEVERE.*Description' {logfile} | head -100
+```
+
+`shellLines:` is the same: a command that fails gives an empty `[]str`
+rather than a list with the error message in it.
+
+The forms that *keep the terminal* are the ones where a redirect still
+means something — `shell: cmd` and `let code: int = shell: cmd` pass both
+streams straight through, so `2>/dev/null` there does what it says:
+
+```python
+shell: ls /maybe-missing 2>/dev/null          # silences it
+let rc: int = shell: make_comparable {f} 2>/dev/null
+```
+
 `shellLines:` splits stdout into `[]str`, one element per line. Combined
 with implicit return, a shell command becomes a typed function:
 

@@ -561,6 +561,13 @@ def longest_path(self: Optimizer[S, D, C], start: S, end: S) -> (float, []D):
 
 Shell commands are first-class expressions.
 
+A capturing form keeps the two streams apart: `.output` is stdout alone,
+`.stderr` holds the rest, and neither reaches the terminal. So `2>/dev/null`
+is redundant in `shell:`/`shellLines:` that capture -- a failing command
+gives clean output and an empty `[]str`, not error text. It is NOT redundant
+in the forms that keep the terminal (`shell: cmd` alone, `let rc: int =
+shell: cmd`), which pass both streams through.
+
 ```adascript
 let result = shell: git status
 print(result.output)    # stdout as string
