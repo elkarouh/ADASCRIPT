@@ -1,0 +1,51 @@
+#!/usr/bin/env ady2nim
+"""Test: a case guard containing 'or', in a program with no imports.
+
+Nim's case/of takes no guard, so a guarded arm is emitted as an if/elif
+chain whose condition is `<pattern test> and <guard>`. Nim's `and` binds
+tighter than `or`, and the guard was spliced in bare, so
+
+    when "x" if a == 0 or b == 0:
+
+became `w == "x" and a == 0 or b == 0` -- true for ANY subject whenever
+b == 0, which sent unrelated values into the arm without a word. A guard
+with a top-level 'or' is now parenthesised.
+
+The second half is about the program's shape: it imports nothing, and it
+ends in quit() with a computed status, which the transpiler rewrites to an
+adascriptExit helper it declares on demand. Helper declarations were only
+emitted by the code that inserts the import line, so a program without
+imports called a helper that was never declared and failed to compile.
+"""
+
+def classify(w: str, a: int, b: int) -> str:
+    case w:
+        when "x" if a == 0 or b == 0:
+            return "x-guarded"
+        when "y" | "z" if a == 1 or b == 1:
+            return "yz-guarded"
+        when "t" if not (a == 1) or b == 2:
+            return "t-guarded"
+        when others:
+            return "other"
+
+var failures: int = 0
+
+def check(got: str, want: str):
+    if got != want:
+        print "FAIL: got " + got + ", want " + want    # no f-string: that would import strformat
+        failures += 1
+
+check(classify("x", 0, 5), "x-guarded")
+check(classify("x", 5, 0), "x-guarded")
+check(classify("x", 5, 5), "other")
+check(classify("q", 5, 0), "other")        # the case the bare guard got wrong
+check(classify("z", 7, 1), "yz-guarded")
+check(classify("q", 7, 1), "other")        # likewise
+check(classify("t", 1, 1), "other")
+check(classify("t", 0, 1), "t-guarded")
+check(classify("q", 0, 1), "other")
+
+if failures == 0:
+    print "all case-guard tests passed"
+quit(failures)

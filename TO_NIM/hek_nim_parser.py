@@ -1937,7 +1937,7 @@ def _regex_chain_nim(branches, subject, indent):
         else:
             cond = _literal_cond_nim(subject, pat_nim)
         if guard_node is not None:
-            cond = f"{cond} and {guard_node.nodes[0].to_nim()}"
+            cond = f"{cond} and {_bind_guard(guard_node.nodes[0].to_nim())}"
         result += f"\n{_ind(indent)}{keyword} {cond}:{hc}\n{body}"
         keyword = "elif"
     return result.lstrip("\n")
@@ -1981,6 +1981,39 @@ def _guarded_chain_nim(branches, subject, indent):
     return result.lstrip("\n")
 
 
+def _bind_guard(cond):
+    """Parenthesise a guard that is about to be and-ed onto its pattern test,
+    when it needs it.
+
+    The branch condition is `<pattern test> and <guard>`, and Nim's `and`
+    binds tighter than `or`/`xor`, so `when "x" if a or b:` came out as
+    `w == "x" and a or b` -- true for every subject whenever `b` held, which
+    silently sends unrelated values into the arm. Only a guard with a
+    top-level `or`/`xor` is wrapped, so every other guard renders exactly as
+    before (the Option-guard scan splits these conditions on " and ").
+    """
+    depth = 0
+    quote = None
+    i = 0
+    while i < len(cond):
+        c = cond[i]
+        if quote:
+            if c == "\\":
+                i += 1
+            elif c == quote:
+                quote = None
+        elif c in "\"'":
+            quote = c
+        elif c in "([{":
+            depth += 1
+        elif c in ")]}":
+            depth -= 1
+        elif depth == 0 and (cond.startswith(" or ", i) or cond.startswith(" xor ", i)):
+            return "(" + cond + ")"
+        i += 1
+    return cond
+
+
 def _guard_cond_nim(guard_node, lets):
     """Render a branch guard with its pattern captures substituted in.
 
@@ -1998,7 +2031,7 @@ def _guard_cond_nim(guard_node, lets):
             continue
         name, expr = m.group(1), m.group(2)
         cond = _re_g.sub(r'\b' + _re_g.escape(name) + r'\b', "(" + expr + ")", cond)
-    return cond
+    return _bind_guard(cond)
 
 
 def _case_branches(case_node):

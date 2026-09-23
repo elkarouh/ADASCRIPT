@@ -596,9 +596,13 @@ def translate(code, export_symbols=False):
     else:
         output = flat
 
-    # Insert collected Nim imports at the top (after any leading comments)
-    if ParserState.nim_imports:
-        import_line = "import " + ", ".join(sorted(ParserState.nim_imports))
+    # Insert collected Nim imports at the top (after any leading comments),
+    # followed by the pragmas, helper declarations and init statements the
+    # translation asked for. Those do not depend on there being an import: a
+    # program with none still needs, say, the adascriptExit helper that its
+    # `quit(main())` was rewritten to call, and it used to be left out.
+    if ParserState.nim_imports or ParserState.nim_pragmas or \
+            getattr(ParserState, 'nim_top_decls', []) or ParserState.nim_init_stmts:
         # Find the first non-comment, non-blank line
         insert_pos = 0
         for i, line in enumerate(output):
@@ -606,8 +610,10 @@ def translate(code, export_symbols=False):
             if stripped and not stripped.startswith("#"):
                 insert_pos = i
                 break
-        output.insert(insert_pos, import_line)
-        extra_offset = 1
+        extra_offset = 0
+        if ParserState.nim_imports:
+            output.insert(insert_pos, "import " + ", ".join(sorted(ParserState.nim_imports)))
+            extra_offset = 1
         if ParserState.nim_pragmas:
             pragma_lines = [f"{{.{p}.}}" for p in sorted(ParserState.nim_pragmas)]
             for j, pl in enumerate(pragma_lines):
