@@ -760,6 +760,65 @@ class Indenter:
                 when "uh" if val != "": self.unopened_heads = val.split(",")
                 when others: pass
 
+    def _open_trailing(self, code_s: str, lw: str):
+        """Open the block that the line's last word opens, if any.
+
+        The one place that knows which trailing keyword opens which frame. It is
+        asked from three places - an ordinary statement or declaration line, a
+        line that closes the last open parenthesis ('... Y : T) is'), and a
+        case/handler arm whose body starts beside its arrow ('when X => if C
+        then') - which differ only in when they may ask. Three copies of the
+        answer had drifted apart before (')is' on a type, ')then', 'when X =>
+        begin' each worked in one and not another), so they share this one.
+
+        A line ending in ';' is a whole declaration or statement and opens
+        nothing, however it ends: last_word() drops that ';', so a complete
+        one-liner whose final token is a block keyword - 'type T is null
+        record;', 'for I in 1 .. 3 loop Put (I); end loop;' - would otherwise
+        push a frame that no 'end' ever closes.
+        """
+        return if code_s.endswith(";")
+        case last_word(code_s):
+            when "is":
+                # What 'is' opens depends on what is being declared, which the
+                # line that OPENED the declaration says: a header whose
+                # parameter list spans lines puts its 'is' on a later line,
+                # where the first word is a parameter name or 'return'. cont_kw
+                # carries that opening keyword across the continuation.
+                #  - function: a real body or an expression function - defer the
+                #    decision to the next line (pending_spec), since an
+                #    expression function has no 'end' to pop a frame with.
+                #  - type: TYPE_HEADER, to pair with the 'record' under it.
+                #  - subtype: nothing; the rest of the declaration follows.
+                #  - case, or an arm body 'when X => case Y is': CASE.
+                #  - anything else (package, procedure, task, ...): PKG.
+                if self.cont_kw == "function":
+                    self.pending_spec = True
+                    self.spec_name = self.frame_name     # the body's push comes later
+                elif self.cont_kw == "type":
+                    self._push_frame(TYPE_HEADER, self.frame_name)
+                elif self.cont_kw != "subtype":
+                    if self.cont_kw in ("case", "when"):
+                        self._push_frame(CASE)
+                    else:
+                        self._push_frame(PKG, self.frame_name)
+            when "then" if ends_with_condition_then(code_s):
+                self._push_frame(IF)
+            when "loop": self._push_frame(LOOP, self.frame_name)
+            when "record" if lw != "null": self._push_frame(RECORD)
+            when "select": self._push_frame(SELECT)
+            when "do": self._push_frame(DO)
+            when "declare": self._push_frame(DECLARE, self.frame_name)
+            when "begin":
+                # 'procedure X (...) is begin' puts the header and the start of
+                # the statement part on one line. Spelled over two lines the
+                # 'is' pushes a frame and the 'begin' turns it into the
+                # statement part - one frame either way, so push it here. A line
+                # that STARTS with 'begin' never gets here: it converts the
+                # frame already open instead.
+                self._push_frame(BLOCK, self.frame_name)
+            when others: pass
+
     def _push_parens(self, text: str, base_col: Natural, base_depth: Natural, new_depth: Natural):
         """Record parentheses opened on this line and drop any now closed."""
         for opener in scan_parens(text, base_depth, base_col):
@@ -1070,7 +1129,6 @@ class Indenter:
                                 lead = max(lead, self.paren_prev_lead + INDENT_WIDTH)
                             was_cont = True
             let new_depth: int = self.paren_depth + paren_delta(code)  # int: delta may be negative
-            let plt: str = last_word(code_s)
             self.in_cont = stmt_incomplete(code_s)
             # Track whether this line ended without a comma: if so, a '(' opening
             # the next line is the argument list of the expression here (not a new
@@ -1123,39 +1181,8 @@ class Indenter:
                     if self.cond_state == 1:
                         self._push_frame(IF)
                     self.cond_state = 0
-                elif not code_s.endswith(";"):
-                    # As below: a line ending in ';' is complete and opens
-                    # nothing, even when it closes its parentheses on the way.
-                    case plt:
-                        when "is":
-                            # A 'function ... is' header whose parameter list spanned
-                            # several lines ends here. Its body may be a real one or a
-                            # parenthesised expression, so defer the push exactly as a
-                            # single-line header does -- an expression function has no
-                            # 'end', so a frame pushed here would never be popped and
-                            # every following line would drift one level deeper.
-                            # Same four cases as the statement-level dispatch
-                            # below, asked of the same word: a header closing its
-                            # parameter list here is still the declaration its
-                            # opening line named, and 'type T (D : X) is' must
-                            # pair with the 'record' under it, not open a PKG
-                            # frame that 'end record;' cannot close.
-                            if self.cont_kw == "function":
-                                self.pending_spec = True
-                                self.spec_name = self.frame_name
-                            elif self.cont_kw == "type":
-                                self._push_frame(TYPE_HEADER, self.frame_name)
-                            elif self.cont_kw != "subtype":
-                                self._push_frame(CASE if self.cont_kw == "case" else PKG,
-                                           "" if self.cont_kw == "case" else self.frame_name)
-                        when "then" if ends_with_condition_then(code_s):
-                            self._push_frame(IF)
-                        when "loop": self._push_frame(LOOP, self.frame_name)
-                        when "record" if lw != "null": self._push_frame(RECORD)
-                        when "select": self._push_frame(SELECT)
-                        when "do": self._push_frame(DO)
-                        when "begin": self._push_frame(BLOCK)   # 'when X => begin'
-                        when others: pass
+                else:
+                    self._open_trailing(code_s, lw)
             return " " * lead + emit_text
 
         # Multi-line if/elsif condition (outside any parenthesis): continuation
@@ -1303,21 +1330,10 @@ class Indenter:
                     # ... loop'. The WHEN frame is the alternative, not that block,
                     # so without a frame for it the block's own 'end' closes the
                     # alternative instead and every 'end' after it is one frame out.
-                    # The same two guards as the statement-level dispatch: a line
-                    # ending in ';' is a complete arm and opens nothing, and a
-                    # trailing keyword inside an unclosed paren is part of an
-                    # expression, not an opener.
-                    if paren_delta(code) <= 0 and not code_s.endswith(";"):
-                        case last_word(code_s):
-                            when "then" if ends_with_condition_then(code_s):
-                                self._push_frame(IF)
-                            when "loop": self._push_frame(LOOP)
-                            when "is": self._push_frame(CASE)
-                            when "declare": self._push_frame(DECLARE)
-                            when "select": self._push_frame(SELECT)
-                            when "do": self._push_frame(DO)
-                            when "begin": self._push_frame(BLOCK, self.frame_name)  # ') is begin'
-                            when others: pass
+                    # As at statement level, a trailing keyword inside an unclosed
+                    # paren is part of an expression, not an opener.
+                    if paren_delta(code) <= 0:
+                        self._open_trailing(code_s, lw)
                 else:
                     self._warn("'when' outside a case, select or exception handler: "
                                "no alternative opened")
@@ -1369,62 +1385,8 @@ class Indenter:
                 # keyword is inside that parenthesis - part of an expression such
                 # as ':= (case X is' or ':= (if C then' - so it must NOT push a
                 # block frame (which would shift every following line).
-                let opens_paren: bool = paren_delta(code) > 0
-                # A line ending in ';' is a whole declaration or statement and
-                # opens nothing, however it ends. last_word() drops that ';', so
-                # a complete one-liner whose final token is a block keyword --
-                # 'type T is null record;', 'for I in 1 .. 3 loop Put (I); end
-                # loop;' -- otherwise pushed a frame that no 'end' would ever
-                # close, and everything after it drifted one level deeper.
-                # (stmt_incomplete() is a different question: it asks whether the
-                # NEXT line continues this one, and is False for 'package X is'.)
-                if not opens_paren and not code_s.endswith(";"):
-                    case last:
-                        when "is":
-                            # A 'function ... is' header may be a real body or an
-                            # expression function; defer the decision to the next
-                            # line (see pending_spec handling above). Everything
-                            # else ending in 'is' opens a block immediately.
-                            # Exception: 'subtype T is' is not a block opener -
-                            # it is a plain continuation declaration.
-                            # cont_kw, not this line's own first word: the 'is'
-                            # closing a header need not sit on the line that
-                            # opened it. A multi-line parameter list puts it on a
-                            # later line, where the first word is a parameter name
-                            # or 'return', and it can also stand alone
-                            # ('function F return T' / 'is' / body). The word that
-                            # says what is being declared belongs to the line that
-                            # opened the declaration, and cont_kw carries it
-                            # across the continuation. On a
-                            # single-line header both readings agree.
-                            if self.cont_kw == "function":
-                                self.pending_spec = True
-                                self.spec_name = self.frame_name
-                            elif self.cont_kw == "type":
-                                self._push_frame(TYPE_HEADER, self.frame_name)
-                            elif self.cont_kw != "subtype":
-                                self._push_frame(CASE if self.cont_kw == "case" else PKG,
-                                           "" if self.cont_kw == "case" else self.frame_name)
-                        when "then" if ends_with_condition_then(code_s):
-                            self._push_frame(IF)
-                        when "loop": self._push_frame(LOOP, self.frame_name)
-                        when "record" if lw != "null":
-                            self._push_frame(RECORD)
-                        when "select": self._push_frame(SELECT)
-                        when "do": self._push_frame(DO)
-                        when "declare": self._push_frame(DECLARE, self.frame_name)
-                        when "begin":
-                            # 'procedure X (...) is begin' puts the header and
-                            # the start of the statement part on one line.
-                            # Spelled over two lines the 'is' pushes a frame and
-                            # the 'begin' turns it into the statement part -- one
-                            # frame either way, so push it here. A line that
-                            # *starts* with 'begin' never reaches this dispatch:
-                            # it is handled above, converting the frame already
-                            # open. The frame carries the declaration's name, so
-                            # its 'end X;' still matches.
-                            self._push_frame(BLOCK, self.frame_name)
-                        when others: pass
+                if paren_delta(code) <= 0:
+                    self._open_trailing(code_s, lw)
                 # A 'record' that opens a component list part-way along the line
                 # ('type T is record F : X;'). Outside the guard above, because
                 # such a line ends with the first component's ';' and so opens
