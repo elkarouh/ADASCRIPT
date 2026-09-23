@@ -5,27 +5,36 @@
 Reads lines shaped <file>:<line_no>[<info>] (e.g. piped from `grep -n`) and
 answers, per line, WHO (user) last touched it, WHEN (date), and WHY (the
 software-change ticket the commit belongs to) -- plus the blamed source
-text and any trailing <info> carried on the input line.
+text and any trailing <info> carried on the input line. Typical use: pipe
+the output of a source-code search through Tblame to see who to ask about
+each hit.
 
-Translated from the ksh/zsh original (Tblame.ksh). Two behavioural changes
-from the original, both deliberate:
+Flow, once options and columns are parsed:
 
-  - One `git blame` process per DISTINCT (repository, revision, file) is
-    run instead of one per input line. Each call requests every needed
-    line in that file with repeated `-L n,n` flags and results are matched
-    back to requesters by the line number git itself reports for each
-    block -- git sorts and deduplicates -L ranges internally, so results
-    cannot be matched back by request order or count.
+  1. Read every input line (from stdin, or from named files given after a
+     bare `-`, in which case each file's own lines are numbered and fed
+     through the same path as stdin). Classify and resolve each one --
+     which repository, revision and file it names -- without blaming yet.
+     A line matching neither recognised path shape is buffered as
+     pass-through text (or dropped, under `-filter_unmatched`) and later
+     printed just ahead of the next line that *does* resolve.
 
-  - The `- FILENAME...` form reads the named files directly instead of
-    piping `grep -n` output back into a fresh copy of the program; the
-    observable output is identical, but it avoids depending on how the
-    running program resolves its own path on a given site.
+  2. Group the resolved lines by (repository, revision, file) and blame
+     each group exactly once: a single `git blame` call per group asks
+     for every needed line in that file via repeated `-L n,n` flags, and
+     the per-line results are matched back to their requesters by the
+     line number git itself reports for each porcelain block -- git sorts
+     and deduplicates -L ranges internally, so results cannot be matched
+     back by the order or count of the flags sent.
 
-The ksh original's `-alternate`/environment-variable fallback checked
-`NM_REPOSITORY_ALTERNATE` in code while its own `-help` text advertised a
-different, unused name (`BLAME_NM_REPO`) -- fixed here so the help text
-matches what the option actually reads.
+  3. Walk the input lines again in their original order, drop anything
+     older than `-since`, and build one output row per surviving line:
+     each requested column (date, user, sc ticket, blamed text, ...) is
+     computed from that line's blame result.
+
+  4. Print the rows, padding every column to its widest value except
+     "reference" and "reference_blame", which are prefixed with "| "
+     instead.
 """
 
 let PROG: str = Path($0).name
