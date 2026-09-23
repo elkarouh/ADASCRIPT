@@ -607,6 +607,10 @@ class Indenter:
     in_cont: bool = False        # previous line was an unterminated statement/declaration
     value_base: Natural = 0      # display level where the current statement's value expression starts
     last_lead: Natural = 0       # indent column of the last code line
+    kept_comment: bool = False   # the last line was a comment kept at its hand-placed
+                                 # column (not state: read by indent_lines right away)
+    keep_states: bool = False    # indent_lines records dump_state() after every line
+    states: []str = []           # ...here, for --emit-state
     ref_orig: []int = []         # per paren depth: the input column of the last code
     ref_new: []int = []          # line that started at that depth, and its output
                                  # column - what a hand-placed comment is kept relative to
@@ -976,6 +980,7 @@ class Indenter:
     def indent_line(self, line: str) -> str:
         """Process one raw line and return it re-indented."""
         let depth: Natural = self.paren_depth           # the depth the line starts at
+        self.kept_comment = False
         var res: str = self.indent_raw(line)
         let code_s: str = strip_line_comment(line, "--", '"').strip()
         let orig: int = input_column(line)
@@ -1010,6 +1015,7 @@ class Indenter:
                 let kept: Natural = max(0, self.ref_new[depth] + rel)
                 let text: str = res.lstrip()
                 res = " " * kept + text
+                self.kept_comment = True
         # A declaration that ends in ';' at the outer level is complete without
         # a body - a spec, a renaming, an instantiation, an expression function
         # - so its head is not one waiting for a frame.
@@ -1017,6 +1023,61 @@ class Indenter:
                 strip_line_comment(line, "--", '"').rstrip().endswith(";"):
             self._forget_head(self.frame_name)
         res
+
+    def indent_lines(self, lines: []str) -> []str:
+        """Re-indent a sequence of lines, with one code line of lookahead.
+
+        indent_line places a comment line when it reads it, before the code
+        after it is known, so it gives a comment the column of the block it
+        stands in. A comment that opens a paragraph - after a blank line, and
+        leading straight into a code line - introduces that line instead, and
+        where that line steps out of the block ('when', 'else', 'end',
+        'begin', ...) it belongs at that line's column, not the block's:
+
+                  return X;
+                end if;
+
+                -- Below: nothing to do for the other units.
+              when For_FPL_Origin_Unit =>
+
+        So such a run of comment lines is held until its code line is placed,
+        and when that line starts a new alternative or branch - 'when',
+        'elsif', 'else', 'or', 'exception', 'then abort' - the run takes its
+        column. Before an 'end' (or 'begin', or a plain statement) the run
+        keeps the block's column: there it is typically a note on, or code
+        commented out of, the body it ends. A run followed by another blank
+        line stands alone and keeps its own placement; so does a comment kept
+        at its hand-placed column (see indent_line). Comment lines change no
+        state, so the lines still come out in order, one per input line.
+        """
+        var out: []str = []
+        var pending: []int = []          # comment lines waiting for their code line
+        var after_blank: bool = True     # the file's first comments open a paragraph too
+        for line in lines:
+            let res: str = self.indent_line(line)
+            if self.keep_states:
+                self.states.append(self.dump_state())
+            let text: str = line.strip()
+            if text == "":
+                pending = []             # a blank line: the run stands alone
+                after_blank = True
+            elif strip_line_comment(line, "--", '"').strip() == "":
+                if after_blank and not self.kept_comment:
+                    pending.append(len(out))
+                else:
+                    pending = []
+                    after_blank = False
+            else:
+                let lw: str = lead_ident(text).lower()
+                if lw in ("when", "elsif", "else", "or", "exception") or is_then_abort(text):
+                    let col: Natural = len(res) - len(res.lstrip())
+                    for k in pending:
+                        let body: str = out[k].lstrip()
+                        out[k] = " " * col + body
+                pending = []
+                after_blank = False
+            out.append(res)
+        out
 
     def indent_raw(self, line: str) -> str:
         """indent_line proper: re-indent one raw line."""
@@ -1784,10 +1845,18 @@ def main() -> Natural:
         ai += 1
 
     let f: File = (open(file_arg) if file_arg != "" else stdin)
+    var lines: []str = []
     for line in f.lines:
-        print ind.indent_line(line)
+        lines.append(line)
+    # Whole input first: a comment opening a paragraph takes the column of the
+    # code line after it (see indent_lines), so it cannot be printed before
+    # that line has been read.
+    ind.keep_states = do_emit_state
+    let outs: []str = ind.indent_lines(lines)
+    for i in range(len(outs)):
+        print outs[i]
         if do_emit_state:
-            print "##STATE:" + ind.dump_state()
+            print "##STATE:" + ind.states[i]
 
 if __name__ == "__main__":
     quit(main())

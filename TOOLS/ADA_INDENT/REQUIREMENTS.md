@@ -211,6 +211,20 @@ association, say - is placed deliberately deeper, and is kept there:
 - Every other comment line is re-indented by 7.1-7.4. A flattened file, or one
   written with a different indent width, is therefore still indented in full.
 
+### 7.6 A comment paragraph introduces the line after it
+
+A run of comment lines that follows a blank line and leads straight into a
+code line introduces that line. When that line starts a new alternative or
+branch (`when`, `elsif`, `else`, `or`, `exception`, `then abort`), the run
+takes that line's column, not the column of the block it follows. Before `end`,
+`begin` or a plain statement, the run keeps the block's column, where it is
+typically a note on the body it ends. A run followed by another blank line
+stands alone. Hand-placed comments (7.5) keep their place.
+
+This needs the next code line, so it applies when whole input is indented
+(the command line, `format-all`). An editor indenting one line at a time
+places such a comment by 7.1-7.4 until the region is re-indented.
+
 ---
 
 ## 8. Named associations and `=>`
