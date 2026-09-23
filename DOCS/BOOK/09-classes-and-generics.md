@@ -307,10 +307,10 @@ the same name in scope — `nimport os` brings `resolve(Path)` — a
 mismatch, pointing nowhere near the class. If you meet either shape in older
 code, the forward declaration is the fix, not the inlining that used to be.
 
-**An instance whose methods call sibling methods must be `var`.** Mutable
-`self` (§9.2) is inferred transitively: `run` calls `body`, `body` assigns a
-field, so `body` takes `self: var Report` and therefore so does `run`. A
-`let` binding then cannot receive it:
+**An instance whose methods reach a write must be `var`.** Mutable `self`
+(§9.2) is inferred transitively: `run` calls `body`, `body` assigns a field,
+so `body` takes `self: var Report` and therefore so does `run`. A `let`
+binding then cannot receive it:
 
 ```python
 let report: Report = Report(opt)
@@ -320,9 +320,18 @@ var report: Report = Report(opt)
 report.run()     # correct
 ```
 
-Nothing about the class declares this, and the Python backend accepts either
-spelling, so the Nim compiler is where you find out. The rule of thumb is
-simpler than the inference: **if you call a method on it, declare it `var`.**
+The other half of the rule matters as much: a method that only reads keeps a
+plain `self`, even when it calls other methods that only read. An accessor
+built on an accessor — `tlog_path` calling `tacot_dir` calling `saved_logs` in
+`Tcheck_tact` — works on a `let`, a loop variable and a parameter alike.
+Where the transpiler cannot tell — a method called *on a field*, or `self`
+handed to another routine — it assumes a write.
+
+Nothing about the class declares any of this, and the Python backend accepts
+either spelling, so the Nim compiler is where you find out. The rule of thumb
+is simpler than the inference: **if you call a method on it, declare it
+`var`** — that always works, and a `let` is a bonus the read-only methods
+allow.
 
 
 ---

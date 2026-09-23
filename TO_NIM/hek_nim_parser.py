@@ -548,6 +548,32 @@ def to_nim(self, indent=0, is_virtual=False, class_name=None, parent_name=None, 
         # silently bind to a same-named proc from an import (`nimport os`
         # brings `resolve(Path)` into scope, and `self.resolve()` picked it up
         # as a type mismatch rather than an obvious error).
+        # Which methods are pure, decided before any signature is written --
+        # the forward declarations below carry `var` too, and must agree
+        # with the definitions. One pass over every method collects what
+        # each body does to self; a method is impure if it may write, or
+        # calls a sibling that is. Least fixpoint, so methods that only call
+        # each other (or themselves) and never write stay pure.
+        _saved_purity = (getattr(ParserState, "_class_siblings", set()),
+                         getattr(ParserState, "_pure_methods", set()))
+        ParserState._class_siblings = {m for _, m in other_methods}
+        ParserState._pure_methods = set()
+        if other_methods and not is_virtual_class:
+            ParserState._mutation_probe = {}
+            for func_node_m, mname in other_methods:
+                _generate_method_decl(func_node_m, base_indent, class_name, parent_name, is_virtual_class, type_params)
+            _evidence = ParserState._mutation_probe
+            ParserState._mutation_probe = None
+            _impure = {m for m, (may_mutate, _) in _evidence.items() if may_mutate}
+            _changed = True
+            while _changed:
+                _changed = False
+                for m, (_, calls) in _evidence.items():
+                    if m not in _impure and (calls & _impure or calls - set(_evidence)):
+                        _impure.add(m)
+                        _changed = True
+            ParserState._pure_methods = set(_evidence) - _impure
+
         fwd_lines = []
         if other_methods:
             for func_node_m, mname in other_methods:
@@ -619,6 +645,7 @@ def to_nim(self, indent=0, is_virtual=False, class_name=None, parent_name=None, 
         if not result_lines:
             result_lines.append(_ind(indent) + "discard")
         ParserState._current_class_name = None
+        ParserState._class_siblings, ParserState._pure_methods = _saved_purity
         for _gname in _guard_unwrapped:
             ParserState._option_unwrap_vars.discard(_gname)
         return "\n".join(result_lines)
@@ -3257,6 +3284,11 @@ def to_nim(self, indent=0):
     import re as _re
     field_lines = [l for l in body.split("\n") if l.strip() and _re.match(r"\s+\w+:", l) and not l.strip().startswith("proc ") and not l.strip().startswith("method ")]
     fields_text = "\n".join(field_lines)
+    # The class name as a whole word. A substring test took `Build` to be
+    # self-referential because a field was typed `BuildType`, and made it a
+    # ref object -- while the constructor, generated earlier from the exact
+    # AST check above, did not allocate, so the first field write in initX
+    # dereferenced nil at run time.
     needs_ref = is_virtual or (name and name in fields_text)
     ref_keyword = "ref " if needs_ref else ""
     _exp = "*" if getattr(ParserState, 'export_symbols', False) and indent == 0 else ""
@@ -4996,7 +5028,49 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
                 if m.group(1) not in _READONLY_METHODS:
                     return True
             return False
-        if not is_virtual and class_name and _body_has_self_mutation(_body_no_comments):
+
+        # The rule above counts every call to a sibling method as a mutation,
+        # so an accessor that calls another accessor took `var self` and could
+        # not be used on a `let`, a loop variable or a parameter. The class
+        # emitter now runs every method through here once first, collecting
+        # what the body does to self, and works out which methods are pure:
+        # no write, nothing that might write in place, and calls only to pure
+        # siblings. Those alone skip the promotion below. It never adds a
+        # `var`; every other method keeps exactly the answer it had.
+        _siblings = getattr(ParserState, "_class_siblings", ())
+        def _purity_evidence(body_text):
+            """(may_mutate, sibling_calls) for the pure-method fixpoint."""
+            may_mutate = bool(
+                _re.search(r"self\.\w+\s*(\.add\(|\.append\(|\.extend\(|\.pop\(|\.clear\(|\.remove\(|\.sort\(|\[.*\]\s*=(?!=)|[+\-*/]=|=(?!=))", body_text)
+                or _re.search(r"self\.\w+(?:\[[^\]]*\]|\.\w+)+\s*[+\-*/]?=(?!=)", body_text))
+            sibling_calls = set()
+            for m in _re.finditer(r'self\.(\w+)\s*\(', body_text):
+                callee = m.group(1)
+                if callee in _READONLY_METHODS:
+                    continue
+                if callee in _siblings:
+                    sibling_calls.add(callee)
+                else:
+                    may_mutate = True
+            # Writes the rules above cannot see, so no demotion past them: a
+            # method on a field (`self.tbl.del(k)` changes the table), and
+            # self or a field handed to a call that may take it as `var`.
+            for m in _re.finditer(r'self(?:\.\w+|\[[^\]]*\])+\.(\w+)\s*\(', body_text):
+                if m.group(1) not in _READONLY_METHODS:
+                    may_mutate = True
+            # A call's paren follows a name (`inc(self.n)`); a grouping paren
+            # does not, and the emitter wraps a returned expression in one --
+            # `return (self.base() / "x")` passes self to nothing.
+            if _re.search(r'(?:[\w\])]\(|,)\s*self\b', body_text):
+                may_mutate = True
+            return may_mutate, sibling_calls
+
+        _probe = getattr(ParserState, "_mutation_probe", None)
+        if _probe is not None and name:
+            _probe[name] = _purity_evidence(_body_no_comments)
+        _pure = getattr(ParserState, "_pure_methods", ())
+        if (not is_virtual and class_name and name not in _pure
+                and _body_has_self_mutation(_body_no_comments)):
             params = [
                 f"self: var {class_name}{type_params}" if p.startswith(f"self: {class_name}") else p
                 for p in params

@@ -1267,7 +1267,8 @@ class AwkProcessor(AwkBase):
 
 For plain (non-`@virtual`) classes, the transpiler automatically detects
 whether a method mutates `self` — via field assignment (`+=`, `=`), `.add()`,
-indexed assignment, or any `self.method()` call — and emits
+indexed assignment, or a call to a method that does, directly or through
+another — and emits
 `self: var ClassName` in the generated Nim. No decorator or annotation needed:
 
 ```python
@@ -1313,9 +1314,9 @@ routine (or, with a same-named proc in scope such as `nimport os`'s
 `resolve(Path)`, silently bound to *that* one and failed as a type mismatch).
 The forward declarations cover it now.
 
-**An instance whose methods call sibling methods must be `var`.** Mutable
-`self` is inferred transitively: `run` calls `body`, `body` assigns a field,
-so both take `self: var Report`, and a `let` binding cannot receive it:
+**An instance whose methods reach a write must be `var`.** Mutable `self` is
+inferred transitively: `run` calls `body`, `body` assigns a field, so both
+take `self: var Report`, and a `let` binding cannot receive it:
 
 ```python
 let report: Report = Report(opt)
@@ -1325,8 +1326,11 @@ var report: Report = Report(opt)
 report.run()  # correct
 ```
 
-The Python backend accepts either, so only Nim reports it. Rule of thumb: if
-you call a method on it, declare it `var`.
+A method that only reads keeps a plain `self` even when it calls other
+readers, so it works on a `let`, a loop variable or a parameter. Where the
+transpiler cannot tell — a method called on a field, `self` passed to another
+routine — it assumes a write. The Python backend accepts either, so only Nim
+reports it. Rule of thumb: if you call a method on it, declare it `var`.
 
 ### Forwarding constructors
 
@@ -2687,7 +2691,7 @@ through the same ground in more detail.
 | Statement modifier                | `return False if s == ""` (return/break/continue) |
 | Generator functions               | `def f(): ... yield value`               |
 | Field with inline default         | `var x: int = 0` inside class body       |
-| Mutable self (auto-detected)      | any `self.field =` / `self.method()`     |
+| Mutable self (auto-detected)      | `self.field =`, or a call reaching one   |
 | Cross-module inheritable class    | `@virtual class C: ...`                  |
 | Generic class                     | `class C[S, D, C]: ...`                  |
 | Nim-only import                   | `nimport module`                         |
