@@ -20,22 +20,43 @@ against the frame it is about to close:
 - **It names a frame further down the stack**: the frames above that one were
   never really open, so they are dropped and the stack is re-grounded on the
   source. The damage stops at this `end` instead of running to EOF.
-- **It matches nothing, and the frame being closed has a name**: the stack has
-  drifted in a way that cannot be repaired from here. One frame is closed, as
-  before, and the mismatch is reported.
+- **It names a frame that an earlier nameless `end;` already closed**: that
+  `end;` was stray. The stack returns to the depth it left, and nothing more is
+  closed.
+- **It names a header that never opened its frame** (a mangled
+  `procedure P (...) is (`): nothing is closed, since the frame on top belongs
+  to an enclosing construct.
+- **It matches nothing else, and the frame being closed has a name**: most
+  likely a misspelt name. One frame is closed, as before, and the mismatch is
+  reported.
 
-`end;`, `end if;`, `end case;`, `end loop;`, `end record;`, `end select;` and
-`end return;` name a construct *kind* rather than an instance, so they carry no
-name to check and behave exactly as they always did. The same is true of any
-frame the indenter could not name — an unlabelled block — which is never used
-to contradict an `end`.
+`end if;`, `end loop;`, `end case;`, `end record;`, `end select;` and
+`end return;` name a construct *kind*. They close the nearest open frame of
+that kind within the current body, dropping any unclosed frames above it. When
+there is none, the closer is stray and closes nothing. A bare `end;` carries no
+name and closes one frame.
+
+Other resynchronisation points:
+
+- A line starting with a word that cannot occur inside an expression (`begin`,
+  `end`, `procedure`, `function`, `package`, `pragma`, `type`, `declare`, ...)
+  ends an unclosed `(` or an `if` condition still waiting for `then`. A
+  condition line ending in `;` also ends the condition.
+- A `when` opens an alternative only inside a `case`, a `select` or an exception
+  handler. Anywhere else it opens nothing, so it cannot leave a frame that is
+  never closed.
+
+With these rules, a single invalid edit (a deleted, duplicated or truncated
+line, a stray `begin`/`end if`/`if`, an unclosed or extra parenthesis) changes
+the indentation of about 9% of the lines after it on average, against 48% on
+master. `regress/invalid_recovery.adb` is the regression fixture.
 
 Diagnostics go to **stderr**, never stdout, so a formatter pipe stays clean;
 `-q` / `--quiet` silences them. Silencing changes nothing about the indenting:
 the same resynchronisation happens either way.
 
 This bounds a mis-parse to the innermost enclosing *named* construct. It is not
-a full recovery: a bad frame in a package body's declarative part is only
+a full recovery: a stray `end;` that closes a package body, or a bad frame in a package body's declarative part is only
 re-grounded at that package's own `end`, which may be the last line of the
 file. Containing it more tightly than that would mean trusting the input's
 existing indentation, which this tool deliberately ignores — see the fixpoint
@@ -64,6 +85,15 @@ against a table of messy-input → canonical-output cases:
 ```bash
 ady2nim TOOLS/ADA_INDENT/test_ada_indent.ady -r    # compile if stale, run all cases
 ```
+
+It also re-indents a set of correctly indented files and requires each one to
+come back unchanged, both as it is and from a copy with all leading whitespace
+stripped: the golden sample `ada_indent_sample_test.adb` (one block per
+numbered requirement) and the fixtures in `regress/`, which hold valid but
+awkward code that once threw the indenter off (several closers on one line,
+statement labels, generic formal parts, `then abort`, glued punctuation,
+keywords inside literals and comments). To add a fixture, indent it by hand,
+put it in `regress/` and list it in `FIXTURES` in `test_ada_indent.ady`.
 
 The core (the `Indenter` class plus the lexical helpers) is pure Adascript and
 transpiles to both Python and Nim.

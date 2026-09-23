@@ -27,6 +27,7 @@ type Block_T is enum:
     RECORD       # record  ... end record
     SELECT       # select ... end select
     DO           # accept ... do  /  return ... do  (extended return)
+    GENERIC      # 'generic' - its formal part, closed by the unit it introduces
 
 # Scanner state for string-literal tracking inside a single line.
 type Str_State_T is enum:
@@ -223,6 +224,42 @@ def if_delta(code_s: str) -> int:               # int: 'end if' makes it negativ
     return delta
 
 
+def unmatched_ends(code_s: str) -> Natural:
+    """How many 'end's on the line close something opened on an EARLIER line.
+
+    Each top-level opener on the line is paired with the next 'end' after it;
+    what is left over closes outer frames. 'end if; end loop;' closes two,
+    'null; end loop; end if;' closes two, 'if B then null; end if;' closes
+    none, and 'procedure P is begin null; end P;' closes none. A unit head's
+    'is' opens (as in 'package P is end P;'), but so does its 'begin' where
+    there is one, and both answer to the same 'end' - so only the innermost
+    open is paired and the rest simply stay open, which is harmless: this
+    counts closers, not openers.
+    """
+    var open_: Natural = 0
+    var prev: str = ""
+    let head: bool = lead_keyword(code_s) in ("package", "procedure", "function",
+                                              "task", "protected", "entry")
+    for w in code_words(code_s):
+        if w == "end":
+            if open_ > 0:
+                open_ -= 1
+            else:
+                result += 1
+        elif prev != "end" and w in ("if", "loop", "case", "select", "begin", "do"):
+            open_ += 1
+        elif w == "record" and prev != "end" and prev != "null":
+            open_ += 1
+        elif w == "is" and head and open_ == 0:
+            open_ += 1
+        prev = w
+
+
+def is_then_abort(code_s: str) -> bool:
+    """True for the 'then abort' line splitting an asynchronous select."""
+    " ".join(code_s.lower().split()) == "then abort"
+
+
 def stmt_incomplete(code_s: str) -> bool:
     """True if a (comment-stripped) code line continues onto the next line.
 
@@ -237,7 +274,9 @@ def stmt_incomplete(code_s: str) -> bool:
     # which is a complete prefix - the labelled construct on the next line stays
     # at the label's level rather than indenting as a continuation. (':=' ends in
     # '=', not ':', so an unfinished assignment is unaffected.)
-    return False if code_s == "" or code_s.endswith((";", "=>", ":"))
+    # A '<<Label>>' statement label is complete as well: '>>' is no operator,
+    # so nothing continues after it.
+    return False if code_s == "" or code_s.endswith((";", "=>", ":", ">>"))
     let lw: str = lead_ident(code_s).lower()
     # 'separate (Parent)' is a complete compilation-unit prefix despite content.
     return False if lw == "separate"
@@ -247,8 +286,9 @@ def stmt_incomplete(code_s: str) -> bool:
     # if-EXPRESSION continues the surrounding statement and must NOT be mistaken
     # for a complete statement-level 'else'.
     if code_s.lower() == lw and lw in ("begin", "declare", "else", "exception",
-            "or", "private", "select"):
+            "or", "private", "select", "generic"):
         return False
+    return False if is_then_abort(code_s)
     let lt: str = last_word(code_s)
     # 'subtype T is' is not a block opener - the type name follows on the next
     # line as a plain continuation, with no matching 'end'.
@@ -881,6 +921,14 @@ class Indenter:
             disp = len(self.stack)
             popped_type_header = True
 
+        # The formal part of a generic ends where the unit it parameterises
+        # begins. Formals are 'type', 'with procedure', 'with package', object
+        # declarations - none starts with one of these three words.
+        if cont == 0 and self.stack and self.stack[-1] == GENERIC and \
+                lw in ("package", "procedure", "function"):
+            self._pop_frame()
+            disp = len(self.stack)
+
         # An 'X is\nnew Y;' generic instantiation pushed a PKG for 'X is'. Once the
         # 'new' statement finishes (no open parens, no continuation), pop it so the
         # next declaration or 'begin' aligns at the correct enclosing scope level.
@@ -1283,14 +1331,21 @@ class Indenter:
                     self.cond_base = max(0, disp)
                     self.cond_value_base = max(0, disp)
 
-            when "else" | "exception" | "or" | "private" if lw != "private" \
-                    or code_s.lower() == "private":
+            when "generic" if code_s.lower() == "generic":
+                self._push_frame(GENERIC)
+
+            when "else" | "exception" | "or" | "private" | "then" if \
+                    (lw != "private" or code_s.lower() == "private") and \
+                    (lw != "then" or is_then_abort(code_s)):
                 # 'private' reaches here only as the section splitter of a
                 # package spec, which stands alone on its line. As the privacy
                 # indicator of a library unit -- 'private package P is',
                 # 'private function F ... is' -- it qualifies a declaration that
                 # has to open its own frame, so those lines fall through to the
                 # dispatch below instead.
+                #
+                # 'then abort' splits an asynchronous select the same way,
+                # between its triggering and its abortable part.
                 #
                 # A select alternative ends without popping the WHEN frame
                 # (only 'end' and 'when' pop it). 'or'/'else' splitting the
@@ -1388,9 +1443,12 @@ class Indenter:
                 # one where the condition does not finish at all -- a multi-line
                 # condition belongs to the tracker, which pushes when its 'then'
                 # finally arrives.
-                if not ends_with_condition_then(code_s) \
-                        and has_condition_then(code) and if_delta(code) > 0:
-                    self._push_frame(IF)
+                # 'if A then if B then' opens two, the trailing one pushed above.
+                if has_condition_then(code):
+                    var extra_ifs: int = if_delta(code) - (1 if ends_with_condition_then(code_s) else 0)
+                    while extra_ifs > 0:
+                        self._push_frame(IF)
+                        extra_ifs -= 1
                 # stmt_incomplete(): 'if C then X; end if;' on one line starts
                 # with 'if' and does not end with 'then', but it is a whole
                 # statement, not a condition still looking for its 'then'. It
@@ -1403,17 +1461,18 @@ class Indenter:
                     self.cond_base = disp
                     self.cond_value_base = disp
 
-        # An 'end if' the line reaches part-way along, after something the
-        # dispatch above has already claimed: 'else return Deactivated; end if;'
-        # is an 'else' line by its first word, so nothing popped the frame the
-        # 'end if' closes and everything after it stayed a level in. Outside the
-        # dispatch because the line's first word may be any of else/elsif/when,
-        # and skipped when it is 'end', which has its own arm and has popped
-        # already. disp is fixed by now, so this only moves the lines below.
-        if lw != "end" and if_delta(code) < 0:
+        # 'end's the line reaches part-way along, after something the dispatch
+        # above has already claimed: 'else return Deactivated; end if;' is an
+        # 'else' line by its first word, and 'end if; end loop;' is one 'end'
+        # line to the dispatch, which closes one frame. The rest close theirs
+        # here. A leading 'end' has its own arm and has popped already. disp is
+        # fixed by now, so this only moves the lines below.
+        var extra_ends: int = unmatched_ends(code_s) - (1 if lw == "end" else 0)
+        while extra_ends > 0:
             while self.stack and self.stack[-1] == WHEN:
                 self._pop_frame()
             self._pop_frame()
+            extra_ends -= 1
 
         # A multi-line if/elsif condition is tracked by cond_state, not here, so
         # only flag a general statement continuation when not in that mode.
