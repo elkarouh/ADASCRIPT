@@ -1445,7 +1445,13 @@ class Indenter:
                     # deeper than a record under a plain 'is'. Give it the same
                     # frame pair 'type T is' + 'record' gets: TYPE_HEADER under
                     # the RECORD, both closed by 'end record'.
-                    if cont > 0 and last_word(code_s) == "record" and lw != "null" \
+                    # Only a line that STARTS with the record's own words: one
+                    # that merely ends in 'record' - '(D : X) is record', a
+                    # discriminant part closing the header - has its record
+                    # opened by the 'is', exactly as on a one-line header, and
+                    # its components belong one level past the 'type'.
+                    if cont > 0 and last_word(code_s) == "record" \
+                            and lw in ("record", "with", "limited", "tagged", "abstract") \
                             and not code_s.endswith(";") \
                             and not (self.stack and self.stack[-1] == TYPE_HEADER):
                         self._push_frame(TYPE_HEADER, self.frame_name)
