@@ -175,6 +175,14 @@ it are comment lines preceded by a blank line or the start of the buffer."
           (when (bobp) (setq opens t)))
         (when (and first
                    (or opens (looking-at "[ \t]*$")))
+          (unless opens
+            ;; A blank line separates the paragraph from whatever precedes
+            ;; it; pull it into the region too. ada-indent-line put it
+            ;; there before the paragraph's column was known and may have
+            ;; left it with stray leading whitespace, which
+            ;; ada-indent-region's one-shot pass over the widened region
+            ;; -- like a full-buffer reindent -- blanks back out.
+            (setq first (point)))
           (ada-indent-region first
                              (progn (goto-char (point-min))
                                     (forward-line code-line)
