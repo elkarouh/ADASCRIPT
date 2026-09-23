@@ -36,7 +36,7 @@
 This is the reference: whatever the binary says is the right answer."
   (with-temp-buffer
     (insert text)
-    (call-process-region (point-min) (point-max) ada-indent-program t t nil)
+    (call-process-region (point-min) (point-max) ada-indent-program t '(t nil) nil)
     (buffer-string)))
 
 (defmacro test-ada-indent--with-buffer (text &rest body)
@@ -135,17 +135,28 @@ second -- must land in the same place as one cold pass."
     (should (equal warm cold))))
 
 (ert-deftest ada-indent-cache-survives-reindenting-its-own-line ()
-  "Re-whitespacing the cache line does not invalidate the cache.
-This is why the invalidation test is strict `<' and not `<='.  With `<=',
-`indent-line-to' would wipe the cache on the very edit that sets it."
+  "Reindenting the cache line through this package keeps the cache.
+`ada-indent-line' computes line N's state, caches it, and then rewrites
+line N's indentation -- an edit at the cache point.  If that edit cleared
+the cache it would be gone the moment it was set.  (The messy input is
+unindented, so the rewrite really changes the line.)"
   (test-ada-indent--with-buffer test-ada-indent--messy
     (test-ada-indent--goto-line 5)
     (ada-indent-line)
     (should ada-indent--state)
-    (let ((lnum ada-indent--state-lnum))
-      (test-ada-indent--goto-line lnum)
-      (indent-line-to 8)
-      (should ada-indent--state))))
+    (should (= ada-indent--state-lnum 5))))
+
+(ert-deftest ada-indent-cache-drops-on-an-edit-of-its-own-line ()
+  "Editing the text of the cache line clears the cache.
+The state after line N was computed from line N as it was; typing on it
+and then indenting line N+1 must not reuse that state."
+  (test-ada-indent--with-buffer test-ada-indent--messy
+    (test-ada-indent--goto-line 5)
+    (ada-indent-line)
+    (should ada-indent--state)
+    (end-of-line)
+    (insert " -- edited")
+    (should-not ada-indent--state)))
 
 (ert-deftest ada-indent-cache-drops-on-an-edit-above-it ()
   "Editing above the cache point clears it, so stale state cannot be reused."
@@ -156,6 +167,66 @@ This is why the invalidation test is strict `<' and not `<='.  With `<=',
     (test-ada-indent--goto-line 2)
     (insert "   --  a new line above the cache point\n")
     (should-not ada-indent--state)))
+
+;; A comment after a blank line belongs to the code line after it and takes
+;; its column (REQUIREMENTS 7.6), which the binary sees in one pass over the
+;; file.  Indenting a line at a time, the comment comes before its code line
+;; exists; `ada-indent--reindent-comment-paragraph' fixes it up once the code
+;; line is indented, so line-by-line and whole-file must agree.
+(defconst test-ada-indent--paragraphs
+  (concat "procedure P is\n"
+          "Count : Natural := 0;\n"
+          "\n"
+          "-- a note on the declarations: stays with them\n"
+          "begin\n"
+          "case K is\n"
+          "when A =>\n"
+          "null;\n"
+          "\n"
+          "-- introduces the next alternative\n"
+          "-- (two lines)\n"
+          "when others =>\n"
+          "null;\n"
+          "end case;\n"
+          "\n"
+          "Count := 1;\n"
+          "\n"
+          "-- a note on the body: stays with it\n"
+          "end P;\n")
+  "Comment paragraphs before `when' (moves), `begin' and `end' (stay), and a
+blank line followed straight by code.")
+
+(defun test-ada-indent--blank-lines-emptied (text)
+  "TEXT with every whitespace-only line made empty."
+  (replace-regexp-in-string "^[ \t]+$" "" text))
+
+(ert-deftest ada-indent-line-by-line-places-comment-paragraphs ()
+  "TAB on every line, top to bottom, lands where the binary puts the file.
+Blank lines are compared as blank: TAB on an empty line indents it on
+purpose, so that typing starts at the right column."
+  (let ((want (test-ada-indent--via-binary test-ada-indent--paragraphs)))
+    (test-ada-indent--with-buffer test-ada-indent--paragraphs
+      (goto-char (point-min))
+      (while (not (eobp))
+        (ada-indent-line)
+        (forward-line 1))
+      (should (equal (test-ada-indent--blank-lines-emptied (buffer-string))
+                     want)))))
+
+(ert-deftest ada-indent-typing-with-ret-leaves-blank-lines-empty ()
+  "Typing a file line by line with RET gives what the binary gives.
+RET on an empty line -- the second of two RETs -- leaves the line it quits
+empty, the way `newline-and-indent' does, rather than indented but blank."
+  (let ((want (test-ada-indent--via-binary test-ada-indent--paragraphs)))
+    (with-temp-buffer
+      (ada-indent-mode 1)
+      (dolist (line (butlast (split-string test-ada-indent--paragraphs "\n")))
+        (insert line)
+        (ada-newline-and-indent))
+      ;; The last RET leaves an indented empty line at the end; the binary's
+      ;; output ends with the newline after 'end P;'.
+      (delete-region (line-beginning-position) (point-max))
+      (should (equal (buffer-string) want)))))
 
 (provide 'test-ada-indent)
 ;;; test-ada-indent.el ends here

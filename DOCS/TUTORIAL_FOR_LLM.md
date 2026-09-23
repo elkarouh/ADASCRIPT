@@ -590,7 +590,7 @@ for line in lines:
     print(line)
 
 # Variable interpolation — simple names and function calls
-let branch = "main"
+let branch: str = "main"
 let r = shell: git log --oneline {branch}
 shell: mkdir -p -- {!os.path.join(d, "subdir")}
 

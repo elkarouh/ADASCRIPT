@@ -596,9 +596,13 @@ def translate(code, export_symbols=False):
     else:
         output = flat
 
-    # Insert collected Nim imports at the top (after any leading comments)
-    if ParserState.nim_imports:
-        import_line = "import " + ", ".join(sorted(ParserState.nim_imports))
+    # Insert collected Nim imports at the top (after any leading comments),
+    # followed by the pragmas, helper declarations and init statements the
+    # translation asked for. Those do not depend on there being an import: a
+    # program with none still needs, say, the adascriptExit helper that its
+    # `quit(main())` was rewritten to call, and it used to be left out.
+    if ParserState.nim_imports or ParserState.nim_pragmas or \
+            getattr(ParserState, 'nim_top_decls', []) or ParserState.nim_init_stmts:
         # Find the first non-comment, non-blank line
         insert_pos = 0
         for i, line in enumerate(output):
@@ -606,8 +610,10 @@ def translate(code, export_symbols=False):
             if stripped and not stripped.startswith("#"):
                 insert_pos = i
                 break
-        output.insert(insert_pos, import_line)
-        extra_offset = 1
+        extra_offset = 0
+        if ParserState.nim_imports:
+            output.insert(insert_pos, "import " + ", ".join(sorted(ParserState.nim_imports)))
+            extra_offset = 1
         if ParserState.nim_pragmas:
             pragma_lines = [f"{{.{p}.}}" for p in sorted(ParserState.nim_pragmas)]
             for j, pl in enumerate(pragma_lines):
@@ -1240,7 +1246,27 @@ def run_tests():
          "assigns to the environment, which is read-only"),
         ('$1 = "x"\n',
          "assigns to an argument, which is read-only"),
+        # Two words side by side inside parentheses are no expression. The
+        # sequence combinator's backtracking used to resume after the tokens
+        # an abandoned alternative had consumed, so '(a b)' came out as '(b)'
+        # and '(col div 8 + 1)' -- 'div' is no Adascript operator -- as
+        # '(8 + 1)', silently.
+        ("let y: int = (a b)\n", "Parse error"),
+        ("let c: int = 13\nlet a: int = (c div 8 + 1) * 8\n", "Parse error"),
+        # Adascript is explicitly typed: a declaration without its type is
+        # refused, by name, rather than silently losing its keyword (which is
+        # what the backtracking bug above used to make of it).
+        ('let p = Path("/x")\n', "'let p = ...' has no type"),
+        ("var n = 3\n", "'var n = ...' has no type"),
     ]
+    # ...except a shell command's output, whose type the command fixes.
+    try:
+        translate("let r = shell: echo hi\nprint r\n")
+        print("  PASS: 'let r = shell: ...' may leave its type out")
+        passed += 1
+    except SyntaxError as e:
+        print(f"  FAIL: 'let r = shell: ...' was refused: {e}")
+        failed += 1
     for code, want in error_tests:
         label = code.splitlines()[-1]
         try:

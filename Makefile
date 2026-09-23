@@ -17,6 +17,7 @@ TOOLDIR:= $(CURDIR)/TOOLS
 AIDIR  := $(TOOLDIR)/ADA_INDENT
 G1DIR  := $(TOOLDIR)/GIT1
 PGDIR  := $(TOOLDIR)/PGREP
+TBDIR  := $(TOOLDIR)/TBLAME
 
 # Prepend choosenim's bin dir so Nim 2.x is used instead of any system Nim 1.x.
 export PATH := /root/.nimble/bin:$(HOME)/.nimble/bin:$(HOME)/Downloads:$(PATH)
@@ -92,7 +93,8 @@ STANDALONE := \
     test_option_guard_modifier.ady \
     test_init_calls_method.ady \
     test_enum_array_enumerate.ady \
-    test_enum_array_zero_fill.ady
+    test_enum_array_zero_fill.ady \
+    test_case_guard_or.ady
 
 # -----------------------------------------------------------------------
 # Stdin tests — piped from a sample file
@@ -250,7 +252,8 @@ TOOL_PROGRAMS := \
     TOOLS/ADA_INDENT/ada_indent.ady \
     TOOLS/PGREP/Pgrep.ady \
     TOOLS/TCHECK/Tcheck_tact.ady \
-    TOOLS/TCHECK/Ttroubleshoot.ady
+    TOOLS/TCHECK/Ttroubleshoot.ady \
+    TOOLS/TBLAME/Tblame.ady
 
 # -----------------------------------------------------------------------
 # compile — transpile + build everything
@@ -454,6 +457,20 @@ test: compile
 	@$(PGDIR)/test/run_tests.sh $(PGDIR)/test/pgrep_py
 	@rm -f $(PGDIR)/test/Pgrep_py.py $(PGDIR)/test/pgrep_py
 
+	@# Tblame against a throwaway git repo the test builds, standing in for
+	@# an NM workspace: both the workspace-path and the /cm/ot/ context-path
+	@# branches, batching, since/filter_unmatched, and reading files
+	@# directly for "- FILENAME".
+	@echo "=== Tblame against a git repo built for the test ==="
+	@$(TBDIR)/test/run_tests.sh $(TBDIR)/Tblame
+	@# ...and the same checks against the Python transpilation.
+	@echo "=== Tblame, the same checks on the Python backend ==="
+	@$(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(TBDIR)/Tblame.ady > $(TBDIR)/test/Tblame_py.py
+	@printf '#!/bin/sh\nexec $(PYTHON) %s "$$@"\n' "$(TBDIR)/test/Tblame_py.py" \
+	    > $(TBDIR)/test/tblame_py && chmod +x $(TBDIR)/test/tblame_py
+	@$(TBDIR)/test/run_tests.sh $(TBDIR)/test/tblame_py
+	@rm -f $(TBDIR)/test/Tblame_py.py $(TBDIR)/test/tblame_py
+
 	@echo "=== Expect / shell examples (require bc) ==="
 	@for f in $(EXPECT_EXAMPLES); do \
 	    name=$${f%.ady}; \
@@ -491,6 +508,18 @@ test: compile
 	@# sit in TOOLS/ADA_INDENT/ pointing into a cache that the next `make clean`
 	@# empties, so the link outlives what it points at.
 	@for f in $(ADA_INDENT_TESTS); do rm -f $(AIDIR)/$${f%.ady}; done
+
+	@# Metamorphic check: the golden sample and regress/valid_*.adb, each
+	@# re-laid-out (keywords moved to the next line, bodies pulled up beside
+	@# their 'then', case and spacing changed, ...) must keep every untouched
+	@# line at its column. It drives the ada_indent binary built above.
+	@printf '  %-42s' "metamorphic_check.py"; \
+	    out=$$($(PYTHON) $(AIDIR)/metamorphic_check.py --bin $(AIDIR)/ada_indent 2>&1); rc=$$?; \
+	    if [ $$rc -eq 0 ] && printf '%s' "$$out" | grep -q ' 0 failed'; then \
+	        echo OK; \
+	    else \
+	        echo FAIL; printf '%s\n' "$$out" | tail -20; exit 1; \
+	    fi
 
 	@# Each editor integration drives the ada_indent binary itself, so each
 	@# harness needs the built binary plus its own editor. None of node,

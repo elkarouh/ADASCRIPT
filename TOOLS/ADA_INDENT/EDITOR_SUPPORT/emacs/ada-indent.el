@@ -5,18 +5,16 @@
 ;;
 ;; The mode activates automatically for any buffer in `ada-mode' or
 ;; `ada-ts-mode'.  It wires up:
-;;   RET / C-m  — reindent current line, insert newline, indent new line
-;;   TAB        — reindent current line
-;;   typing a bare dedenting keyword (end, else, when, …) snaps the
+;;   RET / C-m  - reindent current line, insert newline, indent new line
+;;   TAB        - reindent current line
+;;   typing a bare dedenting keyword (end, else, when, ...) snaps the
 ;;                line left on the final character, no extra TAB needed.
 ;;
 ;; Prerequisites:
-;;   - `ada_indent' binary must be on PATH (compile from ada_indent.ady once
-;;     with `ady2nim TOOLS/ADA_INDENT/ada_indent.ady', then symlink the result onto
-;;     your PATH, e.g. ~/.local/bin/ada_indent).
+;;   - `ada_indent' binary must be on PATH
 ;;
 ;; Performance:
-;;   ada_indent is stateful — it normally replays every line above the cursor.
+;;   ada_indent is stateful - it normally replays every line above the cursor.
 ;;   This file maintains a per-buffer state cache so consecutive edits only
 ;;   process the lines between the last cache point and the cursor (O(distance)
 ;;   per keypress instead of O(file size)).  The cache is automatically
@@ -48,38 +46,54 @@ Set by `ada-indent--column' after each successful indent call.")
 (defvar-local ada-indent--state-lnum 0
   "Buffer line number after which `ada-indent--state' was captured.")
 
-(defun ada-indent--invalidate-cache (beg _end)
-  "Clear the state cache when a buffer change falls before the cache point.
+(defvar ada-indent--reindenting nil
+  "Non-nil while this package rewrites a line's indentation itself.
+See `ada-indent--invalidate-cache'.")
 
-Uses strict `<' rather than `<=': the state captured after line N is derived
-from lines 1..N and is unaffected by changes to line N itself (the indenter
-strips leading whitespace before analysis, so rewriting a line's indentation
-does not change the logical content the state machine saw).  Using `<=' would
-cause `indent-line-to' — which changes the current line's whitespace — to
-wipe the cache immediately after it is set, making it useless."
-  (when ada-indent--state
-    (when (< (line-number-at-pos beg) ada-indent--state-lnum)
+(defun ada-indent--indent-to (column)
+  "Indent the current line to COLUMN without invalidating the state cache."
+  (let ((ada-indent--reindenting t))
+    (indent-line-to column)))
+
+(defun ada-indent--invalidate-cache (beg _end)
+  "Clear the state cache when a buffer change falls on or before the cache point.
+
+The state captured after line N is derived from lines 1..N, so an edit to
+any of them - line N included - makes it stale: typing on line N and then
+pressing TAB on line N+1 must not reuse the state of the old line N.  The
+one change that must not clear it is this package's own reindentation of
+line N right after computing its state (`ada-indent--indent-to'), which
+would otherwise wipe the cache as soon as it is set."
+  (when (and ada-indent--state (not ada-indent--reindenting))
+    (when (<= (line-number-at-pos beg) ada-indent--state-lnum)
       (setq-local ada-indent--state     nil
                   ada-indent--state-lnum 0))))
 
 ;; ---------------------------------------------------------------------------
 ;; Core: ask ada_indent what column the current line belongs at
 ;; ---------------------------------------------------------------------------
-
 (defun ada-indent--column ()
   "Return the column `ada_indent' assigns to the current line.
 
 Pipes the buffer text from the last cache point (or the beginning of the
 buffer) through the current line into `ada-indent-program', reads back the
 indented output, caches the returned state, and returns the column of the
-last output line."
+last output line.
+
+The state is cached only for non-blank lines.  A blank line is sent to the
+indenter as the probe token \"x\" (so the answer is the enclosing block's
+indent, not column 0), but the state the indenter returns is then the state
+*after that phantom token*, not the state after a real blank line.  Caching
+it makes the next line be analysed as if it followed a statement and yields
+the wrong indent - e.g. RET at the start of \"package body P is\" leaves a
+cache pointing at the empty line it created, and the package body line is
+then indented as a continuation.  Leaving the cache alone forces the blank
+line to be replayed as blank on the next call."
   (let* ((bol   (line-beginning-position))
          (cur   (buffer-substring-no-properties bol (line-end-position)))
-         ;; Blank line: probe with a neutral token so ada_indent returns the
-         ;; enclosing block's indent rather than column 0.
-         (probe (if (string-blank-p cur) "x" cur))
+         (blank (string-blank-p cur))
+         (probe (if blank "x" cur))
          (lnum  (line-number-at-pos bol))
-         ;; Use the cache when it was captured before this line.
          (use-cache (and ada-indent--state
                          (> ada-indent--state-lnum 0)
                          (< ada-indent--state-lnum lnum)))
@@ -91,14 +105,18 @@ last output line."
                         (point-min)))
          (input    (concat (buffer-substring-no-properties input-start bol) probe))
          (cmd-args (if use-cache
-                       (list "--state" ada-indent--state "--emit-state")
-                     (list "--emit-state")))
+                       (list "-q" "--state" ada-indent--state "--emit-state")
+                     (list "-q" "--emit-state")))
+         ;; Destination (t nil): stdout into the buffer, stderr discarded.
+         ;; With plain t, stderr is mixed into the output, and a diagnostic
+         ;; line would be read as an indented source line (-q asks for none,
+         ;; this makes sure).
          (out      (with-temp-buffer
                      (insert input)
                      (apply #'call-process-region
                             (point-min) (point-max)
                             ada-indent-program
-                            t t nil
+                            t '(t nil) nil
                             cmd-args)
                      (buffer-string)))
          (all-lines   (split-string out "\n" t))
@@ -107,7 +125,9 @@ last output line."
          (last-state  (car (last state-lines)))
          (last        (car (last code-lines))))
     ;; Cache the state at the current line so the next call can skip ahead.
-    (when last-state
+    ;; Skip this for blank lines: the state we have is after the probe token,
+    ;; not after a real blank line.  See the docstring.
+    (when (and last-state (not blank))
       (setq-local ada-indent--state      (substring last-state 8)
                   ada-indent--state-lnum lnum))
     (if last
@@ -121,7 +141,52 @@ last output line."
 (defun ada-indent-line ()
   "Indent the current line using `ada-indent-program'."
   (interactive)
-  (indent-line-to (ada-indent--column)))
+  (ada-indent--indent-to (ada-indent--column))
+  (ada-indent--reindent-comment-paragraph))
+
+(defun ada-indent--reindent-comment-paragraph ()
+  "Reindent the comment paragraph right above the current line, if any.
+
+A comment that follows a blank line belongs to the code line after it and
+takes its column (REQUIREMENTS 7.6) -- e.g. a note introducing the next
+`when' of a case.  Indenting a line at a time, the comment is placed before
+that code line exists, so it gets the column of the block it stands in.
+Once the code line is there, this reindents the paragraph together with it
+in one `ada-indent-region' pass, where ada_indent sees the code line after
+the comments and applies the rule, its exceptions (`end', `begin', a lone
+`)') and hand-placed comments itself.
+
+Does nothing unless the current line is code and the lines directly above
+it are comment lines preceded by a blank line or the start of the buffer."
+  (save-excursion
+    (beginning-of-line)
+    (unless (looking-at "[ \t]*\\(--\\|$\\)")
+      (let ((code-line (line-number-at-pos))
+            (first nil)
+            (opens nil))
+        ;; Walk up over the comment lines directly above.
+        (while (and (not opens)
+                    (if (= (forward-line -1) 0)
+                        t
+                      (setq opens (and first t))    ; reached the buffer start
+                      nil)
+                    (looking-at "[ \t]*--"))
+          (setq first (point))
+          (when (bobp) (setq opens t)))
+        (when (and first
+                   (or opens (looking-at "[ \t]*$")))
+          (unless opens
+            ;; A blank line separates the paragraph from whatever precedes
+            ;; it; pull it into the region too. ada-indent-line put it
+            ;; there before the paragraph's column was known and may have
+            ;; left it with stray leading whitespace, which
+            ;; ada-indent-region's one-shot pass over the widened region
+            ;; -- like a full-buffer reindent -- blanks back out.
+            (setq first (point)))
+          (ada-indent-region first
+                             (progn (goto-char (point-min))
+                                    (forward-line code-line)
+                                    (point))))))))
 
 (defun ada-indent-region (start end)
   "Reindent every line of the region START..END with `ada-indent-program'.
@@ -129,12 +194,12 @@ last output line."
 Installed as `indent-region-function', so `indent-region' (\\[indent-region])
 and any command that reindents a region (including reindenting the whole
 buffer) go through it.  Runs ada_indent ONCE over the buffer prefix plus the
-region — reusing the per-buffer state cache for the prefix when available —
+region - reusing the per-buffer state cache for the prefix when available -
 and applies the resulting indentation to each region line.  Lines above the
 region are used only to establish the indenter's block state; they are not
 modified."
   (let* ((first-line (line-number-at-pos start))
-         ;; A line is in the region when its start is before END — the same
+         ;; A line is in the region when its start is before END - the same
          ;; rule the built-in `indent-region' uses, so a region ending at the
          ;; very beginning of a line does not pull that line in.
          (last-line  (save-excursion
@@ -157,13 +222,16 @@ modified."
                        (point)))
          (input      (buffer-substring-no-properties input-beg input-end))
          (cmd-args   (if use-cache
-                         (list "--state" ada-indent--state "--emit-state")
-                       (list "--emit-state")))
+                         (list "-q" "--state" ada-indent--state "--emit-state")
+                       (list "-q" "--emit-state")))
+         ;; stderr discarded, as in `ada-indent--column': one diagnostic line
+         ;; in the output would shift every region line onto its neighbour's
+         ;; indentation.
          (out        (with-temp-buffer
                        (insert input)
                        (apply #'call-process-region
                               (point-min) (point-max)
-                              ada-indent-program t t nil cmd-args)
+                              ada-indent-program t '(t nil) nil cmd-args)
                        (buffer-string)))
          (all-lines   (split-string out "\n"))
          ;; ##STATE: lines are interleaved after each code line; keep code lines
@@ -178,8 +246,8 @@ modified."
         (while (<= ln last-line)
           (let ((out-line (nth (- ln start-line) code-lines)))
             (when out-line
-              (indent-line-to (- (length out-line)
-                                 (length (string-trim-left out-line))))))
+              (ada-indent--indent-to (- (length out-line)
+                                        (length (string-trim-left out-line))))))
           (forward-line 1)
           (setq ln (1+ ln)))))
     ;; Advance the cache to the last line we processed.
@@ -204,15 +272,34 @@ selection in one pass."
 (defun ada-newline-and-indent ()
   "Reindent the current line, insert a newline, then indent the new line.
 
-`indent-line-to' internally calls `back-to-indentation', which moves point
-to the start of the line's text.  The `save-excursion' keeps point at the
-original position so `newline' splits the line correctly (after the cursor,
-not at the line start)."
+The reindent of the line being left runs *after* `newline', so a mid-line
+RET - which truncates that line - reindents the truncated text rather than
+the original.  The `save-excursion' around the previous-line reindent keeps
+point on the new line.
+
+A line left blank - the first of two RETs, or RET on a line that TAB
+indented - is emptied instead, as `newline-and-indent' does: its
+indentation was only there to start typing at, and ada_indent itself
+never puts whitespace on a blank line."
   (interactive)
-  (save-excursion
-    (indent-line-to (ada-indent--column)))  ; fix the line being left
-  (newline)
-  (indent-line-to (ada-indent--column)))    ; indent the new line
+  (let ((splits (not (eolp))))
+    (newline)
+    ;; A content-splitting RET changes the logical content of the line the
+    ;; cache checkpoint refers to (it is no longer just a whitespace rewrite),
+    ;; so the cached state is stale.  Force a fresh replay.
+    (when splits
+      (setq-local ada-indent--state      nil
+                  ada-indent--state-lnum 0))
+    ;; Reindent the (possibly truncated) previous line, or empty it if blank.
+    (save-excursion
+      (forward-line -1)
+      (if (looking-at "[ \t]*$")
+          (let ((ada-indent--reindenting t))   ; whitespace only: state unchanged
+            (delete-horizontal-space))
+        (ada-indent--indent-to (ada-indent--column))
+        (ada-indent--reindent-comment-paragraph)))
+    ;; Reindent the new line.
+    (ada-indent--indent-to (ada-indent--column))))
 
 (defun ada-indent--post-insert ()
   "Snap the current line left when it becomes a bare dedenting keyword.
@@ -226,7 +313,8 @@ character of the keyword with no extra keypress."
                     "begin" "is" "then" "private" "limited"
                     "record" "loop" "do" "select"))
       (save-excursion
-        (indent-line-to (ada-indent--column))))))
+        (ada-indent--indent-to (ada-indent--column))
+        (ada-indent--reindent-comment-paragraph)))))
 
 ;; ---------------------------------------------------------------------------
 ;; Minor mode

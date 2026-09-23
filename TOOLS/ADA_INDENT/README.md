@@ -8,6 +8,149 @@ expressions, types, or semantics — only the keywords that **open**, **close**,
 or **split** an indented block. This document specifies that simplified grammar
 and how it drives the indenter.
 
+## Recovering from a mis-parse
+
+The block stack is inferred, so a construct parsed as opening a block when it
+opens none would otherwise shift every following line to the end of the file.
+`end` lines are used as anchors against that. Ada states the structure outright
+there — `end Foo;`, `end loop Outer;` — and the indenter matches that name
+against the frame it is about to close:
+
+- **It matches** (the overwhelmingly common case): close one frame, as before.
+- **It names a frame further down the stack**: the frames above that one were
+  never really open, so they are dropped and the stack is re-grounded on the
+  source. The damage stops at this `end` instead of running to EOF.
+- **It names a frame that an earlier nameless `end;` already closed**: that
+  `end;` was stray. The stack returns to the depth it left, and nothing more is
+  closed.
+- **It names a header that never opened its frame** (a mangled
+  `procedure P (...) is (`): nothing is closed, since the frame on top belongs
+  to an enclosing construct.
+- **It matches nothing else, and the frame being closed has a name**: most
+  likely a misspelt name. One frame is closed, as before, and the mismatch is
+  reported.
+
+`end if;`, `end loop;`, `end case;`, `end record;`, `end select;` and
+`end return;` name a construct *kind*. They close the nearest open frame of
+that kind within the current body, dropping any unclosed frames above it. When
+there is none, the closer is stray and closes nothing. A bare `end;` carries no
+name and closes one frame.
+
+Other resynchronisation points:
+
+- A line starting with a word that cannot occur inside an expression (`begin`,
+  `end`, `procedure`, `function`, `package`, `pragma`, `type`, `declare`, ...)
+  ends an unclosed `(` or an `if` condition still waiting for `then`. A
+  condition line ending in `;` also ends the condition.
+- A `when` opens an alternative only inside a `case`, a `select` or an exception
+  handler. Anywhere else it opens nothing, so it cannot leave a frame that is
+  never closed.
+
+With these rules, a single invalid edit (a deleted, duplicated or truncated
+line, a stray `begin`/`end if`/`if`, an unclosed or extra parenthesis) changes
+the indentation of about 9% of the lines after it on average, against 48%
+without them. `regress/invalid_recovery.adb` is the regression fixture.
+
+Diagnostics go to **stderr**, never stdout, so a formatter pipe stays clean;
+`-q` / `--quiet` silences them. Silencing changes nothing about the indenting:
+the same resynchronisation happens either way.
+
+This bounds a mis-parse to the innermost enclosing *named* construct. It is not
+a full recovery: a stray `end;` that closes a package body, or a bad frame in a package body's declarative part is only
+re-grounded at that package's own `end`, which may be the last line of the
+file. Containing it more tightly than that would mean trusting the input's
+existing indentation, which this tool deliberately ignores — see the fixpoint
+requirement in `test_ada_indent.ady`.
+
+## How comments are indented
+
+A comment-only line has no syntax of its own, so its column cannot be derived
+from the grammar the way a code line's is. It has to come from the code it is
+about, and the indenter decides which code that is from the layout the author
+chose. Trailing comments (after code on the same line) are never moved relative
+to their code: only a line's leading whitespace ever changes. The rules below,
+specified in `REQUIREMENTS.md` §7, are for comment-only lines.
+
+**1. A comment belongs to the line before it.** It is indented as a line
+following that one would be: inside the block the line opens, at the item
+column inside a parenthesised list, at the continuation column between the
+lines of a split statement.
+
+```ada
+   begin
+      -- initialise the counters          (inside the block 'begin' opens)
+      Count := 0;
+```
+
+*Why:* comments are usually written in place, next to the code they explain.
+Placing a comment where the next line would start also keeps a comment between
+two continuation lines from breaking the statement visually. The indenter treats
+such comments as transparent, so the lines around them are indented as if the
+comments were not there.
+
+**2. After a blank line, a comment belongs to the line after it,** and takes
+that line's column. It makes a difference only where that line steps out of the
+block, as in `when`, `elsif`, `else` or `exception`:
+
+```ada
+            return X;
+         end if;
+
+         -- Below: nothing specific for the origin unit.     (not at 'end if' level)
+      when For_FPL_Origin_Unit =>
+```
+
+*Why:* a blank line ends a paragraph, and a comment that opens the next one
+introduces what follows. The blank line is the author's own statement of which
+way the comment faces, so the indenter follows it. It is also easy to control:
+to keep a comment with the code above, leave out the blank line.
+
+**3. Except before `end ...`, `begin` or a lone `)`**: there the comment stays
+with the block it ends.
+
+```ada
+      return Equal_Data (Left_Ref, Right_Ref);
+
+      -- return (Left_Ref.Baseline = Right_Ref.Baseline ...  (commented-out code
+      --    or else Equal_Data (Left_Ref, Right_Ref);         stays in the body)
+   end Equal_Data;
+```
+
+*Why:* those lines carry no meaning a comment could be about. A comment before
+them is a note on, or code commented out of, the body or the declarations they
+close.
+
+**4. A deliberately placed comment keeps its place.** A comment indented more
+than one level deeper than rule 1 would put it (and deeper than the code line
+above it) keeps its offset from that code line. When that line is re-indented,
+the comment moves with it.
+
+```ada
+         Variant => Count.Create_Variant (Option => Options (Set),
+                                          Include_Temporary_Proposals => False),
+                    -- PQI does not take invisible flights into account.
+         Input_Flows => Selection_Flows,
+```
+
+*Why:* a note written *under* what it documents, like a value in an argument
+list, is an alignment the author chose, and the rules above cannot reconstruct
+it. The "more than one level deeper" threshold keeps this from getting in the
+way of re-indenting. A file whose indentation has been stripped, or one written
+with a different indent width, is still re-indented in full.
+
+**5. Inside a parenthesised list**, a comment after the last item (no comma
+follows it) or after a complete `X => Y` association sits at the item column,
+like the `)` that closes the list. Only after a line that ends in an operator
+(`&`, `+`, `and then`, ...) does it take the deeper continuation column,
+because only there is the expression certain to go on.
+
+**Editors.** Rule 2 needs the line after the comment, so it applies when whole
+input is indented: the command line, `format-all`, a region re-indent. When an
+editor indents one line at a time, the comment is placed before that line
+exists. The Emacs integration catches up: once the code line is indented, it
+re-indents the paragraph above it together with it. Other editors place such a
+comment by rule 1 until the region is re-indented.
+
 ## Running
 
 Compile once (the shebang already encodes `-d:release --opt:speed`), then run
@@ -31,6 +174,65 @@ against a table of messy-input → canonical-output cases:
 ```bash
 ady2nim TOOLS/ADA_INDENT/test_ada_indent.ady -r    # compile if stale, run all cases
 ```
+
+It also re-indents a set of correctly indented files and requires each one to
+come back unchanged, both as it is and from a copy with all leading whitespace
+stripped: the golden sample `ada_indent_sample_test.adb` (one block per
+numbered requirement) and the fixtures in `regress/`, which hold valid but
+awkward code that once threw the indenter off (several closers on one line,
+statement labels, generic formal parts, `then abort`, glued punctuation,
+keywords inside literals and comments). To add a fixture, indent it by hand,
+put it in `regress/` and list it in `FIXTURES` in `test_ada_indent.ady`.
+
+### Metamorphic check
+
+`metamorphic_check.py` re-lays-out the golden sample and every
+`regress/valid_*.adb` in ways Ada allows, re-indents the result, and requires
+every line it did not touch to keep its column. The file's own indentation is
+the oracle, so no expected output is written by hand and every place a
+transform fits gets tried:
+
+- **in-line** — keywords upper/lower-cased, punctuation glued (`)is`) or spread,
+  tabs between words, trailing comments and extra comment or blank lines,
+  leading whitespace stripped or randomised;
+- **layout**, one place at a time — the statement below a `then`/`else`/`loop`
+  pulled up beside it, `then` moved to its own line under its `if`, `exit …
+  when C;` split before `when`, and a subprogram's `is` moved to its own line.
+
+`make test` runs it after the unit tests. By hand:
+
+```bash
+TOOLS/ADA_INDENT/metamorphic_check.py                     # the fixtures
+TOOLS/ADA_INDENT/metamorphic_check.py some_file.adb ...   # any correctly indented file
+```
+
+A failure names the file, the place transformed, and the line that moved.
+
+### Checking a whole code base
+
+The tests only cover the layouts someone thought to write down. Real code has
+many more, and `check_ada_tree.py` runs the indenter over a tree of Ada sources
+to find the ones it gets wrong:
+
+```bash
+ady2nim c TOOLS/ADA_INDENT/ada_indent.ady          # builds, and links ada_indent here
+TOOLS/ADA_INDENT/check_ada_tree.py ~/src/my_project   # every .adb/.ads/.ada below it
+```
+
+Code that compiles gives three checks that need no idea of the right
+indentation, and any hit is an indenter bug:
+
+- **warnings** — each resynchronisation the indenter reports on stderr. On
+  code that compiles there is nothing to recover from.
+- **unstable** — re-indenting the output must not change it.
+- **damaged** — the output must hold the same lines, with only their leading
+  whitespace changed.
+
+Each is printed as `file:line: …`, and the exit status is 1 if there is any.
+The summary also counts the lines the indenter would *move*: that is style,
+not necessarily a bug, but `--moved` lists them, and a run of moved lines in a
+well-kept file is worth a look. `--bin`, `--max` and `--jobs` are described in
+`--help`.
 
 The core (the `Indenter` class plus the lexical helpers) is pure Adascript and
 transpiles to both Python and Nim.
@@ -249,35 +451,6 @@ Typing a bare dedenting keyword (`end`, `else`, `elsif`, `when`, `exception`,
 `begin`, `is`, `then`, …) snaps the line left on the final keystroke of the
 keyword — no extra `TAB` needed.
 
-For *continuous* reformatting as you edit anywhere in the line — not just on
-newline — enable aggressive mode. It uses
-[`aggressive-indent-mode`](https://github.com/Malabarba/aggressive-indent-mode)
-under the hood, which reindents the surrounding lines after every change.
-
-**With `ada-indent.el`** (recommended): install `aggressive-indent` from MELPA,
-then either set the custom variable before loading the mode:
-
-```elisp
-(setq ada-indent-aggressive t)  ; before (require 'ada-indent)
-```
-
-or toggle it interactively in any Ada buffer:
-
-```
-M-x ada-indent-toggle-aggressive
-```
-
-**Without `ada-indent.el`**: add the hook manually:
-
-```elisp
-(add-hook 'ada-mode-hook #'aggressive-indent-mode)
-```
-
-In either case, the state cache keeps each reindent to O(lines since last edit)
-work rather than O(file size), so aggressive mode is practical on
-small-to-medium files. On very large files prefer the default RET-only
-indentation and `format-all` on save.
-
 ### Reindent a region or the whole buffer
 
 `ada-indent.el` installs `ada-indent-region` as Emacs'
@@ -299,9 +472,8 @@ region, only the region itself is sent to `ada_indent`.
 > **Ready-made package.** The whole snippet above is also shipped as
 > [`ada-indent.el`](./EDITOR_SUPPORT/emacs/ada-indent.el) in
 > `EDITOR_SUPPORT/emacs/`. Put that directory on your `load-path` and `(require 'ada-indent)` — no need to paste the elisp into
-> your init file. It adds a `defcustom ada-indent-program` (the binary path),
-> `defcustom ada-indent-aggressive` (enable aggressive mode globally), and
-> only activates when that binary is found on `PATH`.
+> your init file. It adds a `defcustom ada-indent-program` (the binary path)
+> and only activates when that binary is found on `PATH`.
 
 ## Vim / Neovim integration
 
@@ -332,17 +504,6 @@ Vim indent action is routed through it:
 The plugin also sets `autoindent`, `expandtab`, `shiftwidth=2` and
 `softtabstop=2` to match `ada_indent`'s 2-space, spaces-only output.
 
-### Aggressive mode (Vim)
-
-Off by default. For continuous reindent-as-you-type — reindenting the current
-line after every change, the counterpart of `aggressive-indent-mode` — set
-
-```vim
-let g:ada_indent_aggressive = 1   " before the Ada buffer is opened
-```
-
-or toggle it per buffer with `:AdaIndentToggleAggressive`.
-
 ### Performance (Vim)
 
 `ada-indent.vim` keeps the same per-buffer state cache as the Emacs version,
@@ -369,7 +530,7 @@ already seen.
 
 ### The wire protocol
 
-The indenter's state is the `Indenter` object's 16 fields (the block stack, the
+The indenter's state is the `Indenter` object's 21 fields (the block stack, the
 paren stack, the continuation flags, the condition tracker — see `dump_state` in
 `ada_indent.ady`). Two flags expose it on the normal stdin → stdout pipe:
 
@@ -379,9 +540,9 @@ paren stack, the continuation flags, the condition tracker — see `dump_state` 
 
   ```
   package Foo is
-  ##STATE:stack=PKG|pd=0|ps=F|cf=F|pi=F|cs=0|cb=0|cvb=0|ic=F|vb=0|psk=|pc=F|al=0|pnl=0|pnld=-1|ppl=0
+  ##STATE:stack=PKG:Foo|pd=0|ps=F|cf=F|pl=|fn=Foo|sn=|ln=1|pi=F|cs=0|cb=0|cvb=0|ic=F|vb=0|psk=|pc=F|al=0|pnl=0|pnld=-1|ppl=0
      procedure Bar;
-  ##STATE:stack=PKG|pd=0|ps=F|cf=F|pi=F|cs=0|cb=0|cvb=0|ic=F|vb=1|psk=|pc=F|al=0|pnl=0|pnld=-1|ppl=0
+  ##STATE:stack=PKG:Foo|pd=0|ps=F|cf=F|pl=|fn=Bar|sn=|ln=2|pi=F|cs=0|cb=0|cvb=0|ic=F|vb=1|psk=|pc=F|al=0|pnl=0|pnld=-1|ppl=0
   ```
 
 - **`--state <blob>`** — initialise the indenter from a `<blob>` instead of from
@@ -423,27 +584,26 @@ On each call to `ada-indent--column` (the function behind `RET`/`TAB`):
 A checkpoint for line *K* is only valid if lines *1..K* have not changed.
 The mode installs `ada-indent--invalidate-cache` on `before-change-functions`.
 
-The condition is **strict `<`**, not `<=`:
+Any change on or above line *K* clears it -- the condition is `<=`:
 
 ```
-(< (line-number-at-pos beg) ada-indent--state-lnum)
+(<= (line-number-at-pos beg) ada-indent--state-lnum)
 ```
 
-The state after line *K* is computed from the *logical content* of lines
-*1..K* — the indenter strips leading whitespace before analysis. So rewriting
-line *K*'s indentation (which is exactly what `indent-line-to` does on the
-very line we just cached) does **not** invalidate the state. Using `<=` would
-cause every `indent-line-to` call to clear the cache the instant it was set,
-making it useless. With `<`:
+with one exemption: the package's own reindentation. Computing line *K*'s
+column caches the state after *K*, and the very next thing that happens is
+`indent-line-to` rewriting line *K*'s indentation -- an edit at the cache point
+that must not wipe the cache it just set. Those rewrites go through
+`ada-indent--indent-to`, which binds `ada-indent--reindenting` so the
+invalidation hook lets them pass. So:
 
-- Edit on line *K* (the cached line) — indentation fix or continued typing: **cache kept** ✓
-- Edit on lines *K+1, K+2, …* — forward typing: **cache kept** ✓
-- Edit on lines *1..K−1* — going back and changing earlier code: **cache cleared** ✓
+- Our own reindent of line *K*: **cache kept** ✓
+- Edit on lines *K+1, K+2, …* -- forward typing: **cache kept** ✓
+- Any other edit on lines *1..K* -- typing on line *K* itself, or going back
+  to change earlier code: **cache cleared** ✓
 
-The net effect: steady-state forward editing (the common case in both normal
-and `aggressive-indent` modes) keeps the cache alive across every keystroke.
-Only a backwards jump that edits above the cache point pays the one-time
-full-prefix rescan.
+Steady-state forward editing keeps the cache alive across every keystroke;
+only an edit at or above the cache point pays a one-time full-prefix rescan.
 
 The net effect: steady-state editing costs one short `ada_indent` invocation
 over just the handful of lines since your last keystroke, regardless of how large

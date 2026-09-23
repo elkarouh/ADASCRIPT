@@ -342,13 +342,13 @@ package body Regression_Tests is
     end if;
   end Test_19;
 
-  -- -- Req 38 '|' choice continuation at arm-body level -------------------------
+  -- -- Req 38 '|' choice continuation one level past the arm body ---------------
 
   procedure Test_21 is
   begin
     case X is
       when Action_1 | Action_15
-        | Action_16 | Action_43 =>
+          | Action_16 | Action_43 =>
         Do_It;
     end case;
   end Test_21;

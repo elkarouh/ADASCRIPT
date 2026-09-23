@@ -91,10 +91,9 @@ either, so the loop is written once:
 <!-- from: TOOLS/ADA_INDENT/ada_indent.ady -->
 ```python
 let f: File = (open(file_arg) if file_arg != "" else stdin)
+var lines: []str = []
 for line in f.lines:
-    print ind.indent_line(line)
-    if do_emit_state:
-        print "##STATE:" + ind.dump_state()
+    lines.append(line)
 ```
 
 `.lines` strips the newline, which is what `$0` does and what you wanted.

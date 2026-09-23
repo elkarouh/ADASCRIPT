@@ -28,7 +28,7 @@ assert elapsed < 1.0
 # The same for a spawned job, which shares the draining but not the waiting.
 let start2: float = time.time()
 let j: Job = shellSpawn: yes "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" | head -n 65536
-let out = j.wait()
+let out: RunResult = j.wait()
 let elapsed2: float = time.time() - start2
 
 assert out.code == 0

@@ -190,6 +190,46 @@ decl_ann_assign_stmt = decl_keyword + IDENTIFIER + V_COLON + type_annotation + (
 # decl_tuple_unpack: let (x, y) = expr
 decl_tuple_unpack = decl_keyword + paren_group + V_EQUAL + _expressions
 
+
+# decl_untyped: let x = expr  (no annotation) -- refused
+# Adascript is explicitly typed: a declaration names its type. The one
+# exception is a shell command's output, `let r = shell: ...`, whose type the
+# command fixes (str unless declared otherwise); shell_target_scalar in
+# ady_compound_stmt takes that form, so this rule steps aside for it.
+# There was never a rule for the untyped form, but it used to parse by
+# accident -- `let` read as a name, abandoned, and a backtracking bug in the
+# sequence combinator resuming after it -- so `let x = e` silently lost its
+# keyword and became `x = e`. With that bug gone it would be a bare parse
+# error at the `let`; this rule says what is wrong instead.
+from hek_parsec import Parser as _Parser, apply_parsing_context as _parsing_context
+
+_SHELL_WORDS = ("shell", "shellLines", "shellExec", "shellSpawn")
+
+
+class decl_untyped(_Parser):
+    @_parsing_context
+    def parse(cls, token_stream):
+        start = token_stream.mark()
+        kw_tok = token_stream.get_new_token()
+        token_stream.reset(start)
+        if not decl_keyword.parse(token_stream):
+            return False
+        name_tok = token_stream.get_new_token()
+        token_stream.reset(start)
+        decl_keyword.parse(token_stream)
+        if not (IDENTIFIER.parse(token_stream) and V_EQUAL.parse(token_stream)):
+            token_stream.reset(start)
+            return False
+        value_tok = token_stream.get_new_token()
+        token_stream.reset(start)
+        if value_tok is not None and getattr(value_tok, "string", "") in _SHELL_WORDS:
+            return False
+        kw, name = kw_tok.string, name_tok.string
+        raise SyntaxError(
+            f"line {kw_tok.start[0]}: '{kw} {name} = ...' has no type. Adascript is "
+            f"explicitly typed: write '{kw} {name}: <type> = ...'. Only a shell "
+            f"command's output may leave it out.")
+
 # --- own declaration: own IDENTIFIER ':' type_annotation ['=' expression] ---
 # Unique owner; auto-freed at scope end (Nim ARC; Python GC)
 own_stmt = literal("own") + IDENTIFIER + V_COLON + type_annotation + (V_EQUAL + expression)[:]
@@ -319,6 +359,7 @@ simple_stmt = (
     own_stmt
     | decl_tuple_unpack
     | decl_ann_assign_stmt
+    | decl_untyped
     | ann_assign_stmt
     | aug_assign_stmt
     | subst_stmt
