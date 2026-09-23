@@ -324,6 +324,16 @@ def stmt_incomplete(code_s: str) -> bool:
                       "overriding", "begin", "declare")
 
 
+def ends_with_operator(code_s: str) -> bool:
+    """True if a (comment-stripped) line ends in a binary operator - a symbol
+    (& + - * / = < > |) or a word operator (and, or, xor, and then, or else,
+    in, mod, rem) - so its expression certainly continues on the next line."""
+    let t: str = code_s.rstrip()
+    return False if t == ""
+    return True if t[-1] in "&+-*/=<>|"
+    last_word(t) in ("and", "or", "xor", "then", "else", "in", "mod", "rem", "not")
+
+
 def starts_with_operator(code_s: str) -> bool:
     """True if the line begins with a binary/assignment operator - either a
     symbol (:=, =>, =, &, +, -, *, /, <, >, |, ..) or a word operator
@@ -1344,10 +1354,17 @@ class Indenter:
                 # Complete named association ('X => Y') in a plain paren: next is
                 # a fresh item at the item column (not an operator continuation).
                 self.paren_next_lead = acol
-            elif entry_top_kind != IF_EXPR and self.paren_cont and not was_cont:
+            elif entry_top_kind != IF_EXPR and self.paren_cont and not was_cont \
+                    and (entry_top_kind != PLAIN or ends_with_operator(code_s)):
                 # Unfinished non-continuation item (arm-body head or plain item):
                 # anticipate the operator continuation that follows, one level
-                # deeper. '(if' structural lines are excluded.
+                # deeper. '(if' structural lines are excluded. In a plain list a
+                # line ending in a whole operand - a name, a literal, a ')' - may
+                # as well be the last item ('Arrival_Band' before a ');' on its
+                # own line), so a comment after it stays at the item column, as
+                # after 'X => Y'; only a line ending in an operator certainly
+                # continues. An arm body's head line ('when A => First_Cond')
+                # keeps the anticipation: its continuation is the norm (Req 49).
                 self.paren_next_lead = lead + INDENT_WIDTH
             else:
                 # Already a continuation, or kind-1 structural, or closed item:

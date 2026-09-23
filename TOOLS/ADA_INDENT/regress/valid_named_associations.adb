@@ -28,6 +28,20 @@ package body Associations is
           | FAAS_Updates_T => False,
         Capacity_Updates_T | Sector_Update => True);
 
+  -- Comments among the items of an enumeration, including after the last
+  -- item (no comma): they stay at the item column, like the ');' below.
+  type Segment_CDR_T is
+    (None,
+     --%   <li> None available
+     Gap,
+     CDR_2, -- No longer used operationally
+     CDR_3,
+     --%   <li> CDR3
+     Arrival_Band
+     --%   <li> Arrival_Band
+     -- Terminal procedure categories
+     );
+
   procedure Call is
   begin
     Put (Item  =>
