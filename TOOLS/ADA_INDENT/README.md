@@ -32,6 +32,15 @@ against a table of messy-input → canonical-output cases:
 ady2nim TOOLS/ADA_INDENT/test_ada_indent.ady -r    # compile if stale, run all cases
 ```
 
+It also re-indents a set of correctly indented files and requires each one to
+come back unchanged, both as it is and from a copy with all leading whitespace
+stripped: the golden sample `ada_indent_sample_test.adb` (one block per
+numbered requirement) and the fixtures in `regress/`, which hold valid but
+awkward code that once threw the indenter off (several closers on one line,
+statement labels, generic formal parts, `then abort`, glued punctuation,
+keywords inside literals and comments). To add a fixture, indent it by hand,
+put it in `regress/` and list it in `FIXTURES` in `test_ada_indent.ady`.
+
 The core (the `Indenter` class plus the lexical helpers) is pure Adascript and
 transpiles to both Python and Nim.
 
