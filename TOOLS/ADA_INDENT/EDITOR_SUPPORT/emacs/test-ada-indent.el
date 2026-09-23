@@ -189,18 +189,43 @@ and then indenting line N+1 must not reuse that state."
           "null;\n"
           "end case;\n"
           "\n"
+          "Count := 1;\n"
+          "\n"
           "-- a note on the body: stays with it\n"
           "end P;\n")
-  "Comment paragraphs before `when' (moves), `begin' and `end' (stay).")
+  "Comment paragraphs before `when' (moves), `begin' and `end' (stay), and a
+blank line followed straight by code.")
+
+(defun test-ada-indent--blank-lines-emptied (text)
+  "TEXT with every whitespace-only line made empty."
+  (replace-regexp-in-string "^[ \t]+$" "" text))
 
 (ert-deftest ada-indent-line-by-line-places-comment-paragraphs ()
-  "TAB on every line, top to bottom, lands where the binary puts the file."
+  "TAB on every line, top to bottom, lands where the binary puts the file.
+Blank lines are compared as blank: TAB on an empty line indents it on
+purpose, so that typing starts at the right column."
   (let ((want (test-ada-indent--via-binary test-ada-indent--paragraphs)))
     (test-ada-indent--with-buffer test-ada-indent--paragraphs
       (goto-char (point-min))
       (while (not (eobp))
         (ada-indent-line)
         (forward-line 1))
+      (should (equal (test-ada-indent--blank-lines-emptied (buffer-string))
+                     want)))))
+
+(ert-deftest ada-indent-typing-with-ret-leaves-blank-lines-empty ()
+  "Typing a file line by line with RET gives what the binary gives.
+RET on an empty line -- the second of two RETs -- leaves the line it quits
+empty, the way `newline-and-indent' does, rather than indented but blank."
+  (let ((want (test-ada-indent--via-binary test-ada-indent--paragraphs)))
+    (with-temp-buffer
+      (ada-indent-mode 1)
+      (dolist (line (butlast (split-string test-ada-indent--paragraphs "\n")))
+        (insert line)
+        (ada-newline-and-indent))
+      ;; The last RET leaves an indented empty line at the end; the binary's
+      ;; output ends with the newline after 'end P;'.
+      (delete-region (line-beginning-position) (point-max))
       (should (equal (buffer-string) want)))))
 
 (provide 'test-ada-indent)

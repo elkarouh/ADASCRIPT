@@ -275,7 +275,12 @@ selection in one pass."
 The reindent of the line being left runs *after* `newline', so a mid-line
 RET - which truncates that line - reindents the truncated text rather than
 the original.  The `save-excursion' around the previous-line reindent keeps
-point on the new line."
+point on the new line.
+
+A line left blank - the first of two RETs, or RET on a line that TAB
+indented - is emptied instead, as `newline-and-indent' does: its
+indentation was only there to start typing at, and ada_indent itself
+never puts whitespace on a blank line."
   (interactive)
   (let ((splits (not (eolp))))
     (newline)
@@ -285,11 +290,14 @@ point on the new line."
     (when splits
       (setq-local ada-indent--state      nil
                   ada-indent--state-lnum 0))
-    ;; Reindent the (possibly truncated) previous line.
+    ;; Reindent the (possibly truncated) previous line, or empty it if blank.
     (save-excursion
       (forward-line -1)
-      (ada-indent--indent-to (ada-indent--column))
-      (ada-indent--reindent-comment-paragraph))
+      (if (looking-at "[ \t]*$")
+          (let ((ada-indent--reindenting t))   ; whitespace only: state unchanged
+            (delete-horizontal-space))
+        (ada-indent--indent-to (ada-indent--column))
+        (ada-indent--reindent-comment-paragraph)))
     ;; Reindent the new line.
     (ada-indent--indent-to (ada-indent--column))))
 
