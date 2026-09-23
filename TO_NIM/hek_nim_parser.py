@@ -3289,7 +3289,7 @@ def to_nim(self, indent=0):
     # ref object -- while the constructor, generated earlier from the exact
     # AST check above, did not allocate, so the first field write in initX
     # dereferenced nil at run time.
-    needs_ref = is_virtual or (name and name in fields_text)
+    needs_ref = is_virtual or bool(name and _re.search(rf"\b{_re.escape(name)}\b", fields_text))
     ref_keyword = "ref " if needs_ref else ""
     _exp = "*" if getattr(ParserState, 'export_symbols', False) and indent == 0 else ""
     ParserState.symbol_table.pop_scope()

@@ -4,6 +4,19 @@ Open items only.  The write-ups for everything already fixed — 26 numbered
 bugs and the shell-syntax work — were removed once done; they are in the git
 history of this file if the reasoning behind one of them is ever wanted.
 
+- [ ] whether a class is a `ref object` on Nim is decided twice, and the two
+      can disagree. An exact check over the field declarations runs first
+      and the constructor follows it (`new(result)` or not); a search of the
+      *emitted* field text runs after the body is generated and the type
+      follows that. Where the second says ref and the first did not, the
+      type is `ref object` and `newX` never allocates, so the first field
+      write in `initX` dereferences nil -- a SIGSEGV at run time, not a
+      compile error. The known way in was a substring match (`Build` found
+      inside `BuildType`), now a whole-word match; nothing else in the repo
+      disagrees today. The robust fix is one source of truth: decide once,
+      before the body, or have the late check regenerate the constructor.
+      `hek_nim_parser.py`, the `needs_ref` line and the `_has_self_ref`
+      pre-check above it.
 - [ ] a subrange with a negative bound does not declare on either backend.
       `type Off_T is range -2 .. 1` emits `Off_T = range(<Filter object>,
       1 + 1)` on Python -- a parser node reaches the output -- and a type
