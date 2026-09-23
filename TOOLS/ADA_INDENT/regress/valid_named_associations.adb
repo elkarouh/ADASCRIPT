@@ -1,7 +1,8 @@
 -- Regression fixture for ada_indent (fixpoint, also from flattened input).
 -- Named associations whose value spills past '=>' onto the next line, where
 -- that value is itself a parenthesised case expression: the item after it
--- must return to the item column.
+-- must return to the item column. Also a choice list wrapped inside an
+-- aggregate, whose '|' lines go one level past the item column.
 package body Associations is
 
   function Optimal return Distance.T is
@@ -18,6 +19,14 @@ package body Associations is
            when Side.First => Level_Cap,
            when Side.Last  =>
              Obj.Bound (Start_Side).Level_At (Info_Kind.Restriction_FL))));
+
+  -- A choice list wrapped inside an aggregate: the '|' lines continue the
+  -- association one level past its item column (a decision, not an accident).
+  Validate_Of_Type : constant array (Measure_Type.T) of Boolean
+    := (Regulation_Measure | Regulation_Subperiod | Flow_Measure
+          | Address_Measure | CDM_Measure
+          | FAAS_Updates_T => False,
+        Capacity_Updates_T | Sector_Update => True);
 
   procedure Call is
   begin
