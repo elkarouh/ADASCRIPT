@@ -71,6 +71,21 @@ package body Torture is
     begin
       Busy := True;
     end Seize;
+
+    entry Wait (Requests : Request_List_T;
+                Index    : out Index_T)
+      when True is -- the barrier on its own line, a comment after 'is'
+      Oldest : Length_T := 0;
+    begin
+      Scan:
+      for I in Index_T loop
+        if Pool (I).Requests = Requests then
+          Index := I;
+          return;
+        end if;
+      end loop Scan;
+      requeue Retry;
+    end Wait;
   end Lock;
 
   function Build return Rec is

@@ -1313,7 +1313,12 @@ class Indenter:
                     disp = len(self.stack)
                     self._push_frame(BLOCK, self.frame_name)
 
-            when "when":
+            when "when" if self.cont_kw != "entry":
+                # (An entry body's barrier - 'entry E (...)' with 'when C is' on
+                # a continuation line - is a guard, not an alternative. It
+                # belongs to the header, and its trailing 'is' opens the body,
+                # so it goes the ordinary way below, where cont_kw still says
+                # 'entry'.)
                 if self.stack and self.stack[-1] == WHEN:
                     self._pop_frame()
                 disp = len(self.stack)

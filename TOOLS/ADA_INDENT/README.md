@@ -48,8 +48,8 @@ Other resynchronisation points:
 
 With these rules, a single invalid edit (a deleted, duplicated or truncated
 line, a stray `begin`/`end if`/`if`, an unclosed or extra parenthesis) changes
-the indentation of about 9% of the lines after it on average, against 48% on
-master. `regress/invalid_recovery.adb` is the regression fixture.
+the indentation of about 9% of the lines after it on average, against 48%
+without them. `regress/invalid_recovery.adb` is the regression fixture.
 
 Diagnostics go to **stderr**, never stdout, so a formatter pipe stays clean;
 `-q` / `--quiet` silences them. Silencing changes nothing about the indenting:
