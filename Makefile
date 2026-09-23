@@ -17,6 +17,7 @@ TOOLDIR:= $(CURDIR)/TOOLS
 AIDIR  := $(TOOLDIR)/ADA_INDENT
 G1DIR  := $(TOOLDIR)/GIT1
 PGDIR  := $(TOOLDIR)/PGREP
+TBDIR  := $(TOOLDIR)/TBLAME
 
 # Prepend choosenim's bin dir so Nim 2.x is used instead of any system Nim 1.x.
 export PATH := /root/.nimble/bin:$(HOME)/.nimble/bin:$(HOME)/Downloads:$(PATH)
@@ -251,7 +252,8 @@ TOOL_PROGRAMS := \
     TOOLS/ADA_INDENT/ada_indent.ady \
     TOOLS/PGREP/Pgrep.ady \
     TOOLS/TCHECK/Tcheck_tact.ady \
-    TOOLS/TCHECK/Ttroubleshoot.ady
+    TOOLS/TCHECK/Ttroubleshoot.ady \
+    TOOLS/TBLAME/Tblame.ady
 
 # -----------------------------------------------------------------------
 # compile — transpile + build everything
@@ -454,6 +456,20 @@ test: compile
 	    > $(PGDIR)/test/pgrep_py && chmod +x $(PGDIR)/test/pgrep_py
 	@$(PGDIR)/test/run_tests.sh $(PGDIR)/test/pgrep_py
 	@rm -f $(PGDIR)/test/Pgrep_py.py $(PGDIR)/test/pgrep_py
+
+	@# Tblame against a throwaway git repo the test builds, standing in for
+	@# an NM workspace: both the workspace-path and the /cm/ot/ context-path
+	@# branches, batching, since/filter_unmatched, and reading files
+	@# directly for "- FILENAME".
+	@echo "=== Tblame against a git repo built for the test ==="
+	@$(TBDIR)/test/run_tests.sh $(TBDIR)/Tblame
+	@# ...and the same checks against the Python transpilation.
+	@echo "=== Tblame, the same checks on the Python backend ==="
+	@$(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(TBDIR)/Tblame.ady > $(TBDIR)/test/Tblame_py.py
+	@printf '#!/bin/sh\nexec $(PYTHON) %s "$$@"\n' "$(TBDIR)/test/Tblame_py.py" \
+	    > $(TBDIR)/test/tblame_py && chmod +x $(TBDIR)/test/tblame_py
+	@$(TBDIR)/test/run_tests.sh $(TBDIR)/test/tblame_py
+	@rm -f $(TBDIR)/test/Tblame_py.py $(TBDIR)/test/tblame_py
 
 	@echo "=== Expect / shell examples (require bc) ==="
 	@for f in $(EXPECT_EXAMPLES); do \
