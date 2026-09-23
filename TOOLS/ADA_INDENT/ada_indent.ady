@@ -1439,6 +1439,16 @@ class Indenter:
                 # as ':= (case X is' or ':= (if C then' - so it must NOT push a
                 # block frame (which would shift every following line).
                 if paren_delta(code) <= 0:
+                    # A 'record' continuing a type declaration - 'type T is new
+                    # X with' or 'type T is tagged' with 'record' below - stands
+                    # one continuation level in, so its components go one level
+                    # deeper than a record under a plain 'is'. Give it the same
+                    # frame pair 'type T is' + 'record' gets: TYPE_HEADER under
+                    # the RECORD, both closed by 'end record'.
+                    if cont > 0 and last_word(code_s) == "record" and lw != "null" \
+                            and not code_s.endswith(";") \
+                            and not (self.stack and self.stack[-1] == TYPE_HEADER):
+                        self._push_frame(TYPE_HEADER, self.frame_name)
                     self._open_trailing(code_s, lw)
                 # A 'record' that opens a component list part-way along the line
                 # ('type T is record F : X;'). Outside the guard above, because

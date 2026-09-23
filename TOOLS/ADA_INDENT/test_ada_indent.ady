@@ -27,6 +27,7 @@ const FIXTURES: []str = ["ada_indent_sample_test.adb",
                          "regress/valid_aspects_quantified.adb",
                          "regress/valid_named_associations.adb",
                          "regress/valid_exit_entry_conditions.adb",
+                         "regress/valid_record_forms.adb",
                          "regress/invalid_recovery.adb"]
 
 
