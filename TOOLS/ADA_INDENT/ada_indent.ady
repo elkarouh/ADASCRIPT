@@ -563,9 +563,10 @@ class Indenter:
     cond_value_base: Natural = 0 # display level of the line holding the current condition term
     in_cont: bool = False        # previous line was an unterminated statement/declaration
     value_base: Natural = 0      # display level where the current statement's value expression starts
-    aspect_col: int = -1         # column of an aspect's value that spilled past its '=>'
-                                 # ('with Static_Predicate =>' + value on the next line),
-                                 # -1 when none is open
+    spill_col: int = -1          # column for the continuation lines of a sub-expression
+                                 # that began on a continuation line: an aspect's value
+                                 # spilled past its '=>' ('with Static_Predicate =>'), or
+                                 # an exit/entry condition on its own 'when' line. -1: none
     paren_stack: [](int, int, Paren_Kind_T) = []  # (paren_level, align_col, kind) for every open '('
     paren_cont: bool = False    # prev line within plain paren ended without ',' (arg-list continuation)
     arrow_level: Natural = 0    # innermost paren level with an active '=>' named-value spill (0 = none)
@@ -718,7 +719,7 @@ class Indenter:
             "cvb="   + str(self.cond_value_base),
             "ic="    + ("T" if self.in_cont         else "F"),
             "vb="    + str(self.value_base),
-            "ac="    + str(self.aspect_col),
+            "sc="    + str(self.spill_col),
             "psk="   + ";".join(ps_parts),
             "pc="    + ("T" if self.paren_cont      else "F"),
             "al="    + str(self.arrow_level),
@@ -747,7 +748,7 @@ class Indenter:
         self.cond_value_base     = 0
         self.in_cont             = False
         self.value_base          = 0
-        self.aspect_col          = -1
+        self.spill_col          = -1
         self.paren_stack         = []
         self.paren_cont          = False
         self.arrow_level         = 0
@@ -780,7 +781,7 @@ class Indenter:
                 when "cvb": self.cond_value_base = int(val)
                 when "ic": self.in_cont = val == "T"
                 when "vb": self.value_base = int(val)
-                when "ac": self.aspect_col = int(val)
+                when "sc": self.spill_col = int(val)
                 when "psk" if val != "":
                     for entry in val.split(";"):
                         let ep: []str = entry.split(":")
@@ -940,8 +941,8 @@ class Indenter:
             if self.cond_state > 0:
                 let clvl: Positive = max(self.cond_value_base, self.cond_base + 1)
                 return " " * (max(0, clvl) * INDENT_WIDTH) + emit_text
-            if self.in_cont and self.aspect_col >= 0:
-                return " " * self.aspect_col + emit_text
+            if self.in_cont and self.spill_col >= 0:
+                return " " * self.spill_col + emit_text
             if self.in_cont:
                 return " " * (max(0, self.value_base + 1) * INDENT_WIDTH) + emit_text
             # After a deferred 'function ... is' header the next instruction is
@@ -1219,7 +1220,7 @@ class Indenter:
             # A line that closes back out of all parentheses and ends in a block
             # opener opens that block.
             if new_depth <= 0 and (code_s.endswith(",") or not self.in_cont):
-                self.aspect_col = -1         # the aspect's value ends here
+                self.spill_col = -1         # the aspect's value ends here
             if new_depth <= 0:
                 if self.cond_state > 0 and ends_with_condition_then(code_s):
                     # A multi-line if/elsif condition closed its parens and
@@ -1359,12 +1360,11 @@ class Indenter:
                     disp = len(self.stack)
                     self._push_frame(BLOCK, self.frame_name)
 
-            when "when" if self.cont_kw != "entry":
-                # (An entry body's barrier - 'entry E (...)' with 'when C is' on
-                # a continuation line - is a guard, not an alternative. It
-                # belongs to the header, and its trailing 'is' opens the body,
-                # so it goes the ordinary way below, where cont_kw still says
-                # 'entry'.)
+            when "when" if (cont == 0 or (self.cont_kw != "entry" and self.cont_kw != "exit")):
+                # (A 'when' continuing an 'exit Name' or an entry header -
+                # 'entry E (...)' then 'when C is' - is a condition, not an
+                # alternative. It goes the ordinary way below, where the
+                # barrier's trailing 'is' opens the entry body.)
                 if self.stack and self.stack[-1] == WHEN:
                     self._pop_frame()
                 disp = len(self.stack)
@@ -1553,15 +1553,25 @@ class Indenter:
         # case alternative's by the 'when' - on this line, or on the line that
         # opened a choice list continued here ('| B =>'). A ',' starts the next
         # aspect and a ';' ends the declaration; either ends the value.
-        if self.aspect_col >= 0 and cont > 0:
-            lead_n = self.aspect_col
+        #
+        # The same holds for a condition on its own 'when' line continuing an
+        # 'exit Name' or an entry header: 'and then ...' below it continues
+        # that condition, so it sits one level past the 'when' (spill_col is
+        # then the 'when' line's own column, set below).
+        if self.spill_col >= 0 and cont > 0:
+            lead_n = self.spill_col
             if is_term_continuation(code_s) or code_s.startswith("|"):
                 lead_n += INDENT_WIDTH
         if cont == 0 or code_s.endswith(",") or not self.in_cont:
-            self.aspect_col = -1
+            self.spill_col = -1
+        if cont > 0 and lw == "when" and self.in_cont:
+            # The condition's head is the 'when' line itself (unlike an aspect,
+            # whose value starts on the NEXT line), so its continuations - an
+            # 'and then' is a term continuation - land one level past it.
+            self.spill_col = lead_n
         if self.paren_depth == 0 and code_s.endswith("=>") and self.cont_kw != "when" \
                 and "when" not in code_words(code_s):
-            self.aspect_col = lead_n + INDENT_WIDTH
+            self.spill_col = lead_n + INDENT_WIDTH
             self.in_cont = True
         # As in the cond_state branch: this line is outside any paren at entry, so
         # any paren it opens is fresh. Invalidate paren_next_lead so a comment in
