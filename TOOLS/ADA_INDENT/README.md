@@ -362,35 +362,6 @@ Typing a bare dedenting keyword (`end`, `else`, `elsif`, `when`, `exception`,
 `begin`, `is`, `then`, …) snaps the line left on the final keystroke of the
 keyword — no extra `TAB` needed.
 
-For *continuous* reformatting as you edit anywhere in the line — not just on
-newline — enable aggressive mode. It uses
-[`aggressive-indent-mode`](https://github.com/Malabarba/aggressive-indent-mode)
-under the hood, which reindents the surrounding lines after every change.
-
-**With `ada-indent.el`** (recommended): install `aggressive-indent` from MELPA,
-then either set the custom variable before loading the mode:
-
-```elisp
-(setq ada-indent-aggressive t)  ; before (require 'ada-indent)
-```
-
-or toggle it interactively in any Ada buffer:
-
-```
-M-x ada-indent-toggle-aggressive
-```
-
-**Without `ada-indent.el`**: add the hook manually:
-
-```elisp
-(add-hook 'ada-mode-hook #'aggressive-indent-mode)
-```
-
-In either case, the state cache keeps each reindent to O(lines since last edit)
-work rather than O(file size), so aggressive mode is practical on
-small-to-medium files. On very large files prefer the default RET-only
-indentation and `format-all` on save.
-
 ### Reindent a region or the whole buffer
 
 `ada-indent.el` installs `ada-indent-region` as Emacs'
@@ -412,9 +383,8 @@ region, only the region itself is sent to `ada_indent`.
 > **Ready-made package.** The whole snippet above is also shipped as
 > [`ada-indent.el`](./EDITOR_SUPPORT/emacs/ada-indent.el) in
 > `EDITOR_SUPPORT/emacs/`. Put that directory on your `load-path` and `(require 'ada-indent)` — no need to paste the elisp into
-> your init file. It adds a `defcustom ada-indent-program` (the binary path),
-> `defcustom ada-indent-aggressive` (enable aggressive mode globally), and
-> only activates when that binary is found on `PATH`.
+> your init file. It adds a `defcustom ada-indent-program` (the binary path)
+> and only activates when that binary is found on `PATH`.
 
 ## Vim / Neovim integration
 
@@ -444,17 +414,6 @@ Vim indent action is routed through it:
 
 The plugin also sets `autoindent`, `expandtab`, `shiftwidth=2` and
 `softtabstop=2` to match `ada_indent`'s 2-space, spaces-only output.
-
-### Aggressive mode (Vim)
-
-Off by default. For continuous reindent-as-you-type — reindenting the current
-line after every change, the counterpart of `aggressive-indent-mode` — set
-
-```vim
-let g:ada_indent_aggressive = 1   " before the Ada buffer is opened
-```
-
-or toggle it per buffer with `:AdaIndentToggleAggressive`.
 
 ### Performance (Vim)
 
@@ -536,27 +495,26 @@ On each call to `ada-indent--column` (the function behind `RET`/`TAB`):
 A checkpoint for line *K* is only valid if lines *1..K* have not changed.
 The mode installs `ada-indent--invalidate-cache` on `before-change-functions`.
 
-The condition is **strict `<`**, not `<=`:
+Any change on or above line *K* clears it -- the condition is `<=`:
 
 ```
-(< (line-number-at-pos beg) ada-indent--state-lnum)
+(<= (line-number-at-pos beg) ada-indent--state-lnum)
 ```
 
-The state after line *K* is computed from the *logical content* of lines
-*1..K* — the indenter strips leading whitespace before analysis. So rewriting
-line *K*'s indentation (which is exactly what `indent-line-to` does on the
-very line we just cached) does **not** invalidate the state. Using `<=` would
-cause every `indent-line-to` call to clear the cache the instant it was set,
-making it useless. With `<`:
+with one exemption: the package's own reindentation. Computing line *K*'s
+column caches the state after *K*, and the very next thing that happens is
+`indent-line-to` rewriting line *K*'s indentation -- an edit at the cache point
+that must not wipe the cache it just set. Those rewrites go through
+`ada-indent--indent-to`, which binds `ada-indent--reindenting` so the
+invalidation hook lets them pass. So:
 
-- Edit on line *K* (the cached line) — indentation fix or continued typing: **cache kept** ✓
-- Edit on lines *K+1, K+2, …* — forward typing: **cache kept** ✓
-- Edit on lines *1..K−1* — going back and changing earlier code: **cache cleared** ✓
+- Our own reindent of line *K*: **cache kept** ✓
+- Edit on lines *K+1, K+2, …* -- forward typing: **cache kept** ✓
+- Any other edit on lines *1..K* -- typing on line *K* itself, or going back
+  to change earlier code: **cache cleared** ✓
 
-The net effect: steady-state forward editing (the common case in both normal
-and `aggressive-indent` modes) keeps the cache alive across every keystroke.
-Only a backwards jump that edits above the cache point pays the one-time
-full-prefix rescan.
+Steady-state forward editing keeps the cache alive across every keystroke;
+only an edit at or above the cache point pays a one-time full-prefix rescan.
 
 The net effect: steady-state editing costs one short `ada_indent` invocation
 over just the handful of lines since your last keystroke, regardless of how large
