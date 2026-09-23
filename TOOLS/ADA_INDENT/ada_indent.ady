@@ -563,6 +563,9 @@ class Indenter:
     cond_value_base: Natural = 0 # display level of the line holding the current condition term
     in_cont: bool = False        # previous line was an unterminated statement/declaration
     value_base: Natural = 0      # display level where the current statement's value expression starts
+    last_lead: Natural = 0       # indent column of the last code line
+    last_ends_name: bool = False # ...and whether it ended in a name (a call's
+                                 # argument list may open the next line)
     spill_col: int = -1          # column for the continuation lines of a sub-expression
                                  # that began on a continuation line: an aspect's value
                                  # spilled past its '=>' ('with Static_Predicate =>'), or
@@ -720,6 +723,8 @@ class Indenter:
             "ic="    + ("T" if self.in_cont         else "F"),
             "vb="    + str(self.value_base),
             "sc="    + str(self.spill_col),
+            "ll="    + str(self.last_lead),
+            "len="   + ("T" if self.last_ends_name else "F"),
             "psk="   + ";".join(ps_parts),
             "pc="    + ("T" if self.paren_cont      else "F"),
             "al="    + str(self.arrow_level),
@@ -749,6 +754,8 @@ class Indenter:
         self.in_cont             = False
         self.value_base          = 0
         self.spill_col          = -1
+        self.last_lead          = 0
+        self.last_ends_name     = False
         self.paren_stack         = []
         self.paren_cont          = False
         self.arrow_level         = 0
@@ -782,6 +789,8 @@ class Indenter:
                 when "ic": self.in_cont = val == "T"
                 when "vb": self.value_base = int(val)
                 when "sc": self.spill_col = int(val)
+                when "ll": self.last_lead = int(val)
+                when "len": self.last_ends_name = val == "T"
                 when "psk" if val != "":
                     for entry in val.split(";"):
                         let ep: []str = entry.split(":")
@@ -865,6 +874,10 @@ class Indenter:
     def indent_line(self, line: str) -> str:
         """Process one raw line and return it re-indented."""
         let out: str = self.indent_raw(line)
+        let code_s: str = strip_line_comment(line, "--", '"').strip()
+        if code_s != "":
+            self.last_lead = len(out) - len(out.lstrip())
+            self.last_ends_name = is_ident_ch(code_s[-1])
         # A declaration that ends in ';' at the outer level is complete without
         # a body - a spec, a renaming, an instantiation, an expression function
         # - so its head is not one waiting for a frame.
@@ -1549,6 +1562,13 @@ class Indenter:
         # _push_parens so the inner items align to this line's '('.
         if cont > 0 and is_term_continuation(code_s):
             lead_n = max(0, self.value_base + 1) * INDENT_WIDTH
+            # An argument list opening this line belongs to the call whose name
+            # ends the line above, so it nests one level past THAT line - which
+            # is deeper than value_base when the call sits on a continuation of
+            # its own ('and then not F' then '(Args)'). Past value_base alone it
+            # lined up with that 'and then', as if it were a third operand.
+            if code_s.startswith("(") and self.last_ends_name:
+                lead_n = max(lead_n, self.last_lead + INDENT_WIDTH)
         # A '|' continuation extends a 'when' choice list or a membership test.
         # It aligns at the arm-body level (disp, one indent width above 'when'),
         # which is the GNAT style: '|' and the arm body share the same column.
