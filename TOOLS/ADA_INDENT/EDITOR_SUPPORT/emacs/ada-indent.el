@@ -141,7 +141,44 @@ line to be replayed as blank on the next call."
 (defun ada-indent-line ()
   "Indent the current line using `ada-indent-program'."
   (interactive)
-  (ada-indent--indent-to (ada-indent--column)))
+  (ada-indent--indent-to (ada-indent--column))
+  (ada-indent--reindent-comment-paragraph))
+
+(defun ada-indent--reindent-comment-paragraph ()
+  "Reindent the comment paragraph right above the current line, if any.
+
+A comment that follows a blank line belongs to the code line after it and
+takes its column (REQUIREMENTS 7.6) -- e.g. a note introducing the next
+`when' of a case.  Indenting a line at a time, the comment is placed before
+that code line exists, so it gets the column of the block it stands in.
+Once the code line is there, this reindents the paragraph together with it
+in one `ada-indent-region' pass, where ada_indent sees the code line after
+the comments and applies the rule, its exceptions (`end', `begin', a lone
+`)') and hand-placed comments itself.
+
+Does nothing unless the current line is code and the lines directly above
+it are comment lines preceded by a blank line or the start of the buffer."
+  (save-excursion
+    (beginning-of-line)
+    (unless (looking-at "[ \t]*\\(--\\|$\\)")
+      (let ((code-line (line-number-at-pos))
+            (first nil)
+            (opens nil))
+        ;; Walk up over the comment lines directly above.
+        (while (and (not opens)
+                    (if (= (forward-line -1) 0)
+                        t
+                      (setq opens (and first t))    ; reached the buffer start
+                      nil)
+                    (looking-at "[ \t]*--"))
+          (setq first (point))
+          (when (bobp) (setq opens t)))
+        (when (and first
+                   (or opens (looking-at "[ \t]*$")))
+          (ada-indent-region first
+                             (progn (goto-char (point-min))
+                                    (forward-line code-line)
+                                    (point))))))))
 
 (defun ada-indent-region (start end)
   "Reindent every line of the region START..END with `ada-indent-program'.
@@ -243,7 +280,8 @@ point on the new line."
     ;; Reindent the (possibly truncated) previous line.
     (save-excursion
       (forward-line -1)
-      (ada-indent--indent-to (ada-indent--column)))
+      (ada-indent--indent-to (ada-indent--column))
+      (ada-indent--reindent-comment-paragraph))
     ;; Reindent the new line.
     (ada-indent--indent-to (ada-indent--column))))
 
@@ -259,7 +297,8 @@ character of the keyword with no extra keypress."
                     "begin" "is" "then" "private" "limited"
                     "record" "loop" "do" "select"))
       (save-excursion
-        (ada-indent--indent-to (ada-indent--column))))))
+        (ada-indent--indent-to (ada-indent--column))
+        (ada-indent--reindent-comment-paragraph)))))
 
 ;; ---------------------------------------------------------------------------
 ;; Minor mode

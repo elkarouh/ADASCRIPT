@@ -227,8 +227,12 @@ A run followed by another blank line stands alone. Hand-placed comments (7.5)
 keep their place.
 
 This needs the next code line, so it applies when whole input is indented
-(the command line, `format-all`). An editor indenting one line at a time
-places such a comment by 7.1-7.4 until the region is re-indented.
+(the command line, `format-all`, a region re-indent). Indenting one line at a
+time, the comment is placed before its code line exists. The Emacs
+integration catches up: once that code line is indented (TAB, RET, or a
+keyword such as `when` snapping into place), it re-indents the paragraph and
+the line together. Other editors place such a comment by 7.1-7.4 until the
+region is re-indented.
 
 ---
 

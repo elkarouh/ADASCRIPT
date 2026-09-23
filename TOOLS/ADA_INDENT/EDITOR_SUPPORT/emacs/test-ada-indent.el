@@ -168,5 +168,40 @@ and then indenting line N+1 must not reuse that state."
     (insert "   --  a new line above the cache point\n")
     (should-not ada-indent--state)))
 
+;; A comment after a blank line belongs to the code line after it and takes
+;; its column (REQUIREMENTS 7.6), which the binary sees in one pass over the
+;; file.  Indenting a line at a time, the comment comes before its code line
+;; exists; `ada-indent--reindent-comment-paragraph' fixes it up once the code
+;; line is indented, so line-by-line and whole-file must agree.
+(defconst test-ada-indent--paragraphs
+  (concat "procedure P is\n"
+          "Count : Natural := 0;\n"
+          "\n"
+          "-- a note on the declarations: stays with them\n"
+          "begin\n"
+          "case K is\n"
+          "when A =>\n"
+          "null;\n"
+          "\n"
+          "-- introduces the next alternative\n"
+          "-- (two lines)\n"
+          "when others =>\n"
+          "null;\n"
+          "end case;\n"
+          "\n"
+          "-- a note on the body: stays with it\n"
+          "end P;\n")
+  "Comment paragraphs before `when' (moves), `begin' and `end' (stay).")
+
+(ert-deftest ada-indent-line-by-line-places-comment-paragraphs ()
+  "TAB on every line, top to bottom, lands where the binary puts the file."
+  (let ((want (test-ada-indent--via-binary test-ada-indent--paragraphs)))
+    (test-ada-indent--with-buffer test-ada-indent--paragraphs
+      (goto-char (point-min))
+      (while (not (eobp))
+        (ada-indent-line)
+        (forward-line 1))
+      (should (equal (buffer-string) want)))))
+
 (provide 'test-ada-indent)
 ;;; test-ada-indent.el ends here
