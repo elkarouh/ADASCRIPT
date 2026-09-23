@@ -1031,8 +1031,8 @@ class Indenter:
         after it is known, so it gives a comment the column of the block it
         stands in. A comment that opens a paragraph - after a blank line, and
         leading straight into a code line - introduces that line instead, and
-        where that line steps out of the block ('when', 'else', 'begin', ...)
-        it belongs at that line's column, not the block's:
+        where that line steps out of the block ('when', 'elsif', 'else',
+        'exception', ...) it belongs at that line's column, not the block's:
 
                   return X;
                 end if;
@@ -1043,10 +1043,10 @@ class Indenter:
         The rule: a comment belongs to the line before it, unless a blank
         line precedes it - then it belongs to the line after it, and such a
         run of comment lines is held until that code line is placed and then
-        takes its column. Except when that line is a closer - 'end ...' or a
-        lone ')' - which carries no meaning a comment could be about: the run
-        stays with the block it ends (notes on the body, code commented out
-        of it). A run followed by another blank line stands alone and keeps
+        takes its column. Except when that line carries no meaning a comment
+        could be about - 'end ...', 'begin', a lone ')': the run stays with
+        the block it ends (notes on the body or the declarations, code
+        commented out of them). A run followed by another blank line stands alone and keeps
         its own placement; so does a comment kept at its hand-placed column
         (see indent_line). Comment lines change no state, so the lines still
         come out in order, one per input line.
@@ -1069,7 +1069,7 @@ class Indenter:
                     pending = []
                     after_blank = False
             else:
-                if lead_ident(text).lower() != "end" and not text.startswith(")"):
+                if lead_ident(text).lower() not in ("end", "begin") and not text.startswith(")"):
                     let col: Natural = len(res) - len(res.lstrip())
                     for k in pending:
                         let body: str = out[k].lstrip()

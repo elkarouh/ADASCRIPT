@@ -218,10 +218,11 @@ that one would be (inside a block the line opens, e.g. after `begin` or
 `then`), by 7.1-7.4. When a blank line precedes it, it belongs to the line
 after it instead, and a run of such comment lines takes that code line's
 column. That matters where the line steps out of the block: `when`, `elsif`,
-`else`, `exception`, `begin`, ... .
+`else`, `exception`, ... .
 
-Exception: a closer (`end ...`, or a `)` alone on its line) carries no meaning a
-comment could be about, so a comment before it stays with the block it ends.
+Exception: `end ...`, `begin` and a `)` alone on its line carry no meaning a
+comment could be about, so a comment before one of them stays with the block
+it ends (the body before `end`, the declarations before `begin`).
 A run followed by another blank line stands alone. Hand-placed comments (7.5)
 keep their place.
 
