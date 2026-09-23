@@ -1632,6 +1632,13 @@ def _dataclass_defaults(field_lines):
         if zero in factories:
             ParserState.nim_imports.add("from dataclasses import dataclass, field")
             out.append(f"{pad}{fname}: {ann} = field(default_factory={factories[zero]})")
+        elif zero.startswith("_EnumArray"):
+            # An [O]T field's zero value is an _EnumArray -- itself a dict
+            # under the hood, and mutable-shared exactly like a bare list or
+            # dict zero above, just not spelled "[]"/"{}" so `factories`
+            # never matches it. Same fix, same reason.
+            ParserState.nim_imports.add("from dataclasses import dataclass, field")
+            out.append(f"{pad}{fname}: {ann} = field(default_factory=lambda: {zero})")
         else:
             out.append(f"{pad}{fname}: {ann} = {zero}")
     return out

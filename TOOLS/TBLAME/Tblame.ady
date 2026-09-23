@@ -1,0 +1,679 @@
+#!/usr/bin/env ady2nim
+#ady2nim-args c -d:release
+"""Tblame — batch WHO/WHEN/WHY git-blame lookups for grep-style input.
+
+Reads lines shaped <file>:<line_no>[<info>] (e.g. piped from `grep -n`) and
+answers, per line, WHO (user) last touched it, WHEN (date), and WHY (the
+software-change ticket the commit belongs to) -- plus the blamed source
+text and any trailing <info> carried on the input line.
+
+Translated from the ksh/zsh original (Tblame.ksh). Two behavioural changes
+from the original, both deliberate:
+
+  - One `git blame` process per DISTINCT (repository, revision, file) is
+    run instead of one per input line. Each call requests every needed
+    line in that file with repeated `-L n,n` flags and results are matched
+    back to requesters by the line number git itself reports for each
+    block -- git sorts and deduplicates -L ranges internally, so results
+    cannot be matched back by request order or count.
+
+  - The `- FILENAME...` form reads the named files directly instead of
+    piping `grep -n` output back into a fresh copy of the program; the
+    observable output is identical, but it avoids depending on how the
+    running program resolves its own path on a given site.
+
+The ksh original's `-alternate`/environment-variable fallback checked
+`NM_REPOSITORY_ALTERNATE` in code while its own `-help` text advertised a
+different, unused name (`BLAME_NM_REPO`) -- fixed here so the help text
+matches what the option actually reads.
+"""
+
+let PROG: str = Path($0).name
+
+def die(msg: str):
+    stderr.writeLine(PROG + ": " + msg)
+    quit(1)
+
+def warn(msg: str):
+    stderr.writeLine(PROG + ": " + msg)
+
+var SHOW_DEBUG: bool = False
+
+def debug_log(msg: str):
+    if SHOW_DEBUG:
+        stderr.writeLine(PROG + ": " + msg)
+
+# ---------------------------------------------------------------------------
+# Output columns
+# ---------------------------------------------------------------------------
+
+type OutputColumn is enum Col_Checksum, Col_Date, Col_User, Col_ScFirst, Col_ScHint, Col_ScAll, Col_FileOriginal, Col_FileName, Col_FileWorkspace, Col_Reference, Col_ReferenceBlame
+
+let COLUMN_NAME: [OutputColumn]str = [
+    Col_Checksum:       "checksum",
+    Col_Date:           "date",
+    Col_User:           "user",
+    Col_ScFirst:        "sc_first",
+    Col_ScHint:         "sc_hint",
+    Col_ScAll:          "sc_all",
+    Col_FileOriginal:   "file_original",
+    Col_FileName:       "file_name",
+    Col_FileWorkspace:  "file_workspace",
+    Col_Reference:      "reference",
+    Col_ReferenceBlame: "reference_blame",
+]
+
+let COLUMN_HELP: [OutputColumn]str = [
+    Col_Checksum:       "A CRC checksum of the line and filename.",
+    Col_Date:           "The date which the line was last modified",
+    Col_User:           "The user that made the change",
+    Col_ScFirst:        'The first software change associated with the change. No guarantee that it is the "best" one.',
+    Col_ScHint:         "Same as sc_first but with a hint if more exist.",
+    Col_ScAll:          "All software changes associated with the change. There can be many, making it difficult to display.",
+    Col_FileOriginal:   "Provide the same path as supplied to stdin in the output",
+    Col_FileName:       "The file name only",
+    Col_FileWorkspace:  "The path to the file in the workspace, relative to the NM repo dir.",
+    Col_Reference:      "The reference content trailing the file and line number, from stdin.",
+    Col_ReferenceBlame: "The line in the source file which the git blame references, from git blame.",
+]
+
+let DEFAULT_COLUMNS: []OutputColumn = [Col_Date, Col_ScHint, Col_User, Col_FileWorkspace, Col_ReferenceBlame]
+
+def column_from_name(name: str) -> OutputColumn:
+    """The column whose CLI spelling is NAME, or die with the same message
+    the ksh original used for an unknown column."""
+    for c in OutputColumn:
+        if COLUMN_NAME[c] == name:
+            return c
+    die("Invalid column specifier " + name)
+
+# ---------------------------------------------------------------------------
+# Types
+# ---------------------------------------------------------------------------
+
+type LineKind is enum LK_Ok, LK_Unmatched, LK_Skipped
+
+type LineInfo is record:
+    # path passed to `git blame`
+    gitfilepath:  str
+    # path exactly as it appeared on the input line
+    origfilepath: str
+    nmroot:       str
+    # specific_subsystem: nmroot/system/subsystem
+    repo:         str
+    # "" means "blame the working tree / HEAD"
+    revision:     str
+    line_no:      int
+    # free-text after the line number, from stdin
+    trailing:     str
+    kind:         LineKind = LK_Skipped
+
+type MatchResult is record:
+    matched:   bool = False
+    system:    str = ""
+    subsystem: str = ""
+    filepath:  str = ""
+    line_no:   int = 0
+    trailing:  str = ""
+
+type GroupInfo is record:
+    repo:     str
+    revision: str
+    file:     str
+
+type BlameData is record:
+    found:       bool = False
+    committer:   str = ""
+    author_time: int = 0
+    summary:     str = ""
+    line_text:   str = ""
+
+type Row is record:
+    values: [OutputColumn]str
+    preceding_unmatched: str = ""
+
+# ---------------------------------------------------------------------------
+# Global lookup state, built in one pass and consumed in the next
+# ---------------------------------------------------------------------------
+
+var CONTEXT_REVISION_CACHE: {str}str = {:}   # "system/subsystem.baseline" -> git revision
+
+var GROUPS:      {str}GroupInfo = {:}   # group key -> (repo, revision, file)
+var GROUP_LINES: {str}[]int     = {:}   # group key -> unique line numbers to blame, in first-seen order
+var LINE_OWNERS: {str}[]int     = {:}   # "<group key><SEP><line_no>" -> input-line indices that asked for it
+var BLAME:       {int}BlameData = {:}   # input-line index -> its blame result, once Pass 2 has run
+
+def group_key(repo: str, revision: str, file: str) -> str:
+    """A unique, stable key for one (repo, revision, file) blame target.
+
+    Never parsed back apart -- GROUPS/GROUP_LINES already hold the
+    components -- so any separator that keeps the triple unique is fine.
+    """
+    return repo + "\x01" + revision + "\x01" + file
+
+def line_key(gkey: str, line_no: int) -> str:
+    return gkey + "\x02" + str(line_no)
+
+def register_group(info: LineInfo, idx: int):
+    """Record that input line IDX needs INFO.line_no blamed in INFO's
+    (repo, revision, file), growing the group's unique-line list only the
+    first time that exact line is asked for."""
+    let gkey: str = group_key(info.repo, info.revision, info.gitfilepath)
+    if gkey not in GROUPS:
+        var g: GroupInfo
+        g.repo = info.repo
+        g.revision = info.revision
+        g.file = info.gitfilepath
+        GROUPS[gkey] = g
+        GROUP_LINES[gkey] = []
+    let lkey: str = line_key(gkey, info.line_no)
+    if lkey not in LINE_OWNERS:
+        GROUP_LINES[gkey].append(info.line_no)
+        LINE_OWNERS[lkey] = [idx]
+    else:
+        LINE_OWNERS[lkey].append(idx)
+
+# ---------------------------------------------------------------------------
+# Small string helpers
+# ---------------------------------------------------------------------------
+
+def strip_after(path: str, marker: str) -> str:
+    """Everything before the first occurrence of MARKER, or PATH unchanged."""
+    let at: int = path.find(marker)
+    if at >= 0:
+        return path[:at]
+    return path
+
+def strip_prefix(s: str, prefix: str) -> str:
+    if s.startswith(prefix):
+        return s[len(prefix):]
+    return s
+
+# ---------------------------------------------------------------------------
+# NM/CM site tools, wrapped as opaque external programs
+# ---------------------------------------------------------------------------
+# Psort and where_workspace are site-specific NM tooling, not part of
+# Adascript or of any tested environment here -- ported structurally from
+# the ksh original and not exercised end-to-end in this sandbox.
+
+def add_alternate(nmroot: str, alternate: str):
+    """Register ALTERNATE as a git alternate-object-store for NMROOT's
+    repository, unless it is already listed there."""
+    let alt_file: Path = Path(nmroot) / ".git" / "objects" / "info" / "alternates"
+    var already_listed: bool = False
+    if -f alt_file:
+        let r = shell: grep -qxF -- {!alternate} {alt_file}
+        already_listed = (r.code == 0)
+    if not already_listed:
+        shell: echo {!alternate} >> {alt_file}
+
+def where_workspace(cmpath: str) -> (str, int):
+    """Resolve a /cm/ot/... context path to its workspace-relative path.
+
+    Returns (path, exit_code); exit_code 2 means "the subsystem is not
+    checked out", matching the ksh original's convention for this tool.
+    """
+    let r = shell: where_workspace {!cmpath}
+    return (r.output.strip(), r.code)
+
+def revision_of_context_file(cmpath_in: str, nmroot: str) -> str:
+    """Resolve a /cm/ot/... context path to the git revision it names,
+    via Psort and a small cache keyed by "system/subsystem.baseline".
+
+    The ksh original computed a "workspace/..." ref form from the baseline
+    (lower-cased, underscores to dashes) but then called `git rev-parse`
+    with the raw baseline string, never the computed ref -- that
+    computation had no effect on the result, so it is not carried over
+    here; `git rev-parse` is called with the baseline exactly as the
+    original's actual behaviour (not its unused local variable) did.
+    """
+    var cmpath: str = strip_after(cmpath_in, "/build_")
+    cmpath = strip_after(cmpath, "/sources")
+    if cmpath != /\/cm\/ot\/(?P<system>\w+)\/(?P<subsystem>\w+)[!\.](?P<baseline>[^\/]+)/:
+        return ""
+    let system: str = $+{system}
+    let subsystem: str = $+{subsystem}
+    let baseline: str = $+{baseline}
+    let key: str = system + "/" + subsystem + "." + baseline.lower()
+    if key not in CONTEXT_REVISION_CACHE:
+        let forward  = shell(stdin = cmpath): Psort
+        let backward = shell(stdin = cmpath): Psort -reverse -backward
+        var seen: {}str = {}
+        for candidate in (forward.output + "\n" + backward.output).split("\n"):
+            continue if candidate == ""
+            continue if candidate in seen
+            seen.add(candidate)
+            continue if not (baseline.lower() in candidate.lower() or candidate == /!\d+/)
+            continue if candidate != /\/cm\/ot\/(?P<system>\w+)\/(?P<subsystem>\w+)[!\.](?P<baseline>[^\/]+)/
+            let sys2: str = $+{system}
+            let sub2: str = $+{subsystem}
+            let bl2:  str = $+{baseline}
+            let repo_dir: str = nmroot + "/" + sys2 + "/" + sub2
+            let repo_git: Path = Path(repo_dir) / ".git"
+            if not -r repo_git:
+                debug_log("Not populating revision for " + sys2 + "/" + sub2 + " because it isn't checked out.")
+                continue
+            let r = shell: git -C {repo_dir} rev-parse {bl2}
+            if r.code == 0:
+                # Cached under the lower-cased baseline, matching `key`
+                # above -- the ksh original built this same cache entry
+                # with the baseline's raw case, so a mixed-case baseline
+                # (e.g. an NM build id like "G!31.IP.L8") always missed the
+                # cache it had just filled and silently fell back to
+                # blaming HEAD instead of the resolved revision.
+                CONTEXT_REVISION_CACHE[sys2 + "/" + sub2 + "." + bl2.lower()] = r.output.strip()
+            else:
+                warn("Could not determine revision for " + repo_dir + " " + bl2)
+    return CONTEXT_REVISION_CACHE.get(key, "")
+
+# ---------------------------------------------------------------------------
+# Input-line matching
+# ---------------------------------------------------------------------------
+# Two path shapes are recognised, matching the ksh original exactly:
+#
+#   /NM/<system>/<subsystem>/<subdir+file>:<line>[:<trailing>]
+#     -- an absolute workspace path; blamed in place, no revision needed.
+#
+#   /cm/ot/<system>/<subsystem>!<baseline>/.../<subdir+file>:<line>[:<trailing>]
+#     -- a build-context path; the workspace-relative file and the
+#        baseline's git revision must be resolved first.
+
+def match_workspace_path(line: str) -> MatchResult:
+    var m: MatchResult
+    if line == /\/NM\/(?P<system>\w+)\/(?P<subsystem>\w+)\/(?P<filepath>[^:]+):(?P<lineno>[0-9]+):?(?P<trailing>.*)$/:
+        m.matched = True
+        m.system = $+{system}
+        m.subsystem = $+{subsystem}
+        m.filepath = $+{filepath}
+        m.line_no = int($+{lineno})
+        m.trailing = $+{trailing}
+    return m
+
+def match_context_path(line: str) -> MatchResult:
+    var m: MatchResult
+    if line == /\/cm\/ot\/(?P<system>\w+)\/(?P<subsystem>\w+)[!\.][^\/]+\/[^\/]+\/(?P<filepath>[^:]+):(?P<lineno>[0-9]+):?(?P<trailing>.*)$/:
+        m.matched = True
+        m.system = $+{system}
+        m.subsystem = $+{subsystem}
+        m.filepath = $+{filepath}
+        m.line_no = int($+{lineno})
+        m.trailing = $+{trailing}
+    return m
+
+def resolve_line(raw: str, alternate: str, show_unmatched: bool) -> LineInfo:
+    """Classify one input line and, for a recognised path, resolve which
+    file/revision/repo it blames against. Registers it into a blame group
+    when it does; never calls git blame itself (that is Pass 2's job)."""
+    var info: LineInfo
+    let colon_at: int = raw.find(":")
+
+    let m1: MatchResult = match_workspace_path(raw)
+    if m1.matched:
+        info.kind = LK_Ok
+        info.gitfilepath = raw[:colon_at]
+        info.origfilepath = info.gitfilepath
+        info.nmroot = $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY
+        if alternate != "":
+            add_alternate(info.nmroot, alternate)
+        info.revision = ""
+        info.repo = info.nmroot + "/" + m1.system + "/" + m1.subsystem
+        info.line_no = m1.line_no
+        info.trailing = m1.trailing
+        return info
+
+    let m2: MatchResult = match_context_path(raw)
+    if m2.matched:
+        let cmpath: str = raw[:colon_at]
+        info.origfilepath = cmpath
+        if alternate != "":
+            info.kind = LK_Ok
+            info.gitfilepath = m2.filepath
+            info.nmroot = alternate
+            info.repo = alternate + "/" + m2.system + "/" + m2.subsystem
+            info.revision = revision_of_context_file(cmpath, alternate)
+            info.line_no = m2.line_no
+            info.trailing = m2.trailing
+        elif $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY != "":
+            let (ws_path, ws_code) = where_workspace(cmpath)
+            if ws_code == 0:
+                info.kind = LK_Ok
+                info.gitfilepath = ws_path
+                info.nmroot = $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY
+                info.repo = info.nmroot + "/" + m2.system + "/" + m2.subsystem
+                info.revision = revision_of_context_file(cmpath, info.nmroot)
+                info.line_no = m2.line_no
+                info.trailing = m2.trailing
+            elif ws_code == 2:
+                info.kind = LK_Skipped
+                debug_log("Could not find the file " + cmpath + " in the workspace, the subsystem is not checked out.")
+            else:
+                info.kind = LK_Skipped
+                warn("Below line looks like it contains a context path but it could not be found in the workspace.")
+                warn(raw)
+        else:
+            info.kind = LK_Skipped
+        return info
+
+    if show_unmatched:
+        info.kind = LK_Unmatched
+        debug_log("Unmatched:")
+        debug_log(raw)
+    else:
+        info.kind = LK_Skipped
+        debug_log("Skipped " + raw)
+    return info
+
+# ---------------------------------------------------------------------------
+# Column values
+# ---------------------------------------------------------------------------
+
+def line_checksum(line: str) -> str:
+    let stripped: str = line.replace(" ", "")
+    debug_log(f"CKSUM:[{stripped}]")
+    let r = shell(stdin = stripped): cksum
+    let parts: []str = r.output.split()
+    if len(parts) == 0:
+        return "0000000000"
+    return f"{int(parts[0]):010d}"
+
+def sc_first_value(tickets: []str) -> str:
+    if len(tickets) > 0:
+        return tickets[0]
+    return "<no-sc>"
+
+def sc_hint_value(tickets: []str) -> str:
+    if len(tickets) == 0:
+        return "<no-sc>"
+    if len(tickets) > 1:
+        return tickets[0] + f"(+{len(tickets) - 1})"
+    return tickets[0]
+
+def sc_all_value(tickets: []str) -> str:
+    if len(tickets) > 0:
+        return ",".join(tickets)
+    return "<no-sc>"
+
+def compute_value(col: OutputColumn, raw_line: str, info: LineInfo, bd: BlameData, tickets: []str) -> str:
+    case col:
+        when Col_Checksum:
+            return line_checksum(raw_line)
+        when Col_Date:
+            let r = shell: date --date="@{bd.author_time}" +%Y.%m.%d
+            return r.output.strip()
+        when Col_User:
+            return bd.committer
+        when Col_ScHint:
+            return sc_hint_value(tickets)
+        when Col_ScFirst:
+            return sc_first_value(tickets)
+        when Col_ScAll:
+            return sc_all_value(tickets)
+        when Col_FileOriginal:
+            return info.origfilepath + ":" + str(info.line_no)
+        when Col_FileName:
+            return Path(info.gitfilepath).name + ":" + str(info.line_no)
+        when Col_FileWorkspace:
+            return strip_prefix(info.gitfilepath, info.nmroot + "/") + ":" + str(info.line_no)
+        when Col_Reference:
+            return info.trailing
+        when Col_ReferenceBlame:
+            return bd.line_text
+
+def build_row(raw_line: str, info: LineInfo, bd: BlameData, columns: []OutputColumn, preceding: str) -> Row:
+    var row: Row
+    row.preceding_unmatched = preceding
+    let tickets: []str = bd.summary == /SC-\d+/g
+    for col in columns:
+        row.values[col] = compute_value(col, raw_line, info, bd, tickets)
+    return row
+
+# ---------------------------------------------------------------------------
+# Pass 2 — blame each distinct (repo, revision, file) once
+# ---------------------------------------------------------------------------
+# git-blame's porcelain output omits a commit's metadata (author, committer,
+# summary, ...) once that commit has already appeared earlier in the same
+# invocation, so a small per-group cache reconstructs it for every line.
+# Results are matched back to requesters by the line number git itself
+# reports in each block's header, never by the position or count of the
+# -L flags that were sent -- see the module docstring.
+
+def blame_group(gkey: str, g: GroupInfo, lines_needed: []int):
+    var args: []str = ["-P", "-C", g.repo, "blame"]
+    if g.revision != "":
+        args.append(g.revision)
+    args.append("-p")
+    args.append("-t")
+    for ln in lines_needed:
+        args.append("-L")
+        args.append(f"{ln},{ln}")
+    args.append("--")
+    args.append(g.file)
+    let porcelain: []str = shellLines: git {*args}
+
+    var cache_committer:    {str}str = {:}
+    var cache_author_time:  {str}int = {:}
+    var cache_summary:      {str}str = {:}
+    var cur_hash: str = ""
+    var cur_line_no: int = 0
+
+    for pline in porcelain:
+        if pline.startswith("\t"):
+            let lkey: str = line_key(gkey, cur_line_no)
+            for idx in LINE_OWNERS.get(lkey, []):
+                var bd: BlameData
+                bd.found = True
+                bd.committer = cache_committer.get(cur_hash, "")
+                bd.author_time = cache_author_time.get(cur_hash, 0)
+                bd.summary = cache_summary.get(cur_hash, "")
+                bd.line_text = pline[1:]
+                BLAME[idx] = bd
+        elif pline.startswith("committer "):
+            cache_committer[cur_hash] = pline[len("committer "):]
+        elif pline.startswith("author-time "):
+            cache_author_time[cur_hash] = int(pline[len("author-time "):])
+        elif pline.startswith("summary "):
+            cache_summary[cur_hash] = pline[len("summary "):]
+        else:
+            let tokens: []str = pline.split()
+            if len(tokens) > 0 and tokens[0] == /^[0-9a-f]{40}$/:
+                cur_hash = tokens[0]
+                cur_line_no = int(tokens[2])
+
+# ---------------------------------------------------------------------------
+# Reading input
+# ---------------------------------------------------------------------------
+
+def read_files_as_lines(paths: []str) -> []str:
+    """Synthesize the same "<file>:<lineno>:<content>" shape the ksh
+    original produced by piping `grep --line-number --with-filename -e
+    '.*'` over the named files back into itself -- reading them directly
+    instead avoids depending on how this program resolves its own path."""
+    var out: []str = []
+    for p in paths:
+        let f: File = open(p)
+        var n: int = 0
+        for content_line in f.lines:
+            n += 1
+            out.append(p + ":" + str(n) + ":" + content_line)
+    return out
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
+def usage():
+    stderr.writeLine(f"""
+{PROG} [OPTIONS...] [COLUMN_NAME...] [- FILENAME...]
+  Retrieve history data by transforming input in format:
+
+    <file>:<line_no>[<info>]
+
+  into (by default):
+
+    <date> <user> <first_sc> <file>:<line_no> | <info>
+
+  In other words, find out WHO (user) did WHAT (info/line_no), WHEN (date) and WHY (sc)
+
+OPTIONS
+
+  -filter_unmatched
+    Input lines that do not match the pattern <file>:<line_no> are not forwarded to stdout.
+
+  -alternate <NM repository root>
+    Use an alternative NM repository root to lookup the history. This can be used to prevent
+    slow lookups on the default shallow-cloned repositories used in NM. The target repository
+    does not need to be a workspace, it can be a recursively cloned NM repo. Regardless of
+    whether the target repository is a workspace or not, it needs to be kept up-to-date
+    with the latest baselines to ensure the queries succeed.
+
+    Alternatively the environment variable NM_REPOSITORY_ALTERNATE can be used to define it.
+
+  -since <epoch>
+    Do not show lines committed before <epoch>.
+
+  -source
+    Recognised for compatibility with the ksh original (which could be dot-sourced to expose
+    its functions for testing without running); this build just exits.
+
+COLUMNS
+""")
+    for c in OutputColumn:
+        stderr.writeLine(f"  {COLUMN_NAME[c]}\n    {COLUMN_HELP[c]}\n")
+
+class Options:
+    show_debug:     bool = False
+    show_unmatched: bool = True
+    since_epoch:    int  = 0
+    alternate:      str  = ""
+    columns:        []OutputColumn = []
+    filepaths:      []str = []
+
+    def __init__(self, argv: []str):
+        var i: int = 0
+        while i < len(argv):
+            let a: str = argv[i]
+            case a:
+                when "-debug":            self.show_debug = True
+                when "-filter_unmatched": self.show_unmatched = False
+                when "-help" | "-h":
+                    usage()
+                    quit(0)
+                when "-alternate":
+                    i += 1
+                    if i >= len(argv):
+                        die("-alternate requires an argument")
+                    self.alternate = argv[i]
+                when "-since":
+                    i += 1
+                    if i >= len(argv):
+                        die("-since requires an argument")
+                    self.since_epoch = int(argv[i])
+                when "-source":
+                    quit(0)
+                when "-":
+                    break
+                when others:
+                    if a.startswith("-"):
+                        die("Unrecognised option " + a)
+                    break
+            i += 1
+
+        while i < len(argv):
+            if argv[i] == "-":
+                i += 1
+                break
+            self.columns.append(column_from_name(argv[i]))
+            i += 1
+
+        while i < len(argv):
+            if not -f argv[i]:
+                die("File does not exist: " + argv[i])
+            self.filepaths.append(argv[i])
+            i += 1
+
+        if len(self.columns) == 0:
+            self.columns = DEFAULT_COLUMNS
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+let argv: []str = $@
+let opt: Options = Options(argv)
+SHOW_DEBUG = opt.show_debug
+
+var alternate: str = opt.alternate
+if alternate == "" and $NM_REPOSITORY_ALTERNATE != "":
+    alternate = $NM_REPOSITORY_ALTERNATE
+if alternate != "":
+    let alt_git: Path = Path(alternate) / ".git"
+    if not -r alt_git:
+        die(f"An alternate was defined at {alternate} but it is not readable.")
+    debug_log(f"Using repository alternate at {alternate}")
+
+var raw_lines: []str = []
+if len(opt.filepaths) > 0:
+    raw_lines = read_files_as_lines(opt.filepaths)
+else:
+    for line in stdin.lines:
+        raw_lines.append(line)
+
+# --- Pass 1: classify and resolve every input line, without blaming yet.
+#     Lines that need blaming are grouped by (repo, revision, file) so
+#     Pass 2 can blame each file once instead of once per line.
+var infos: []LineInfo = []
+for idx in range(len(raw_lines)):
+    let info: LineInfo = resolve_line(raw_lines[idx], alternate, opt.show_unmatched)
+    infos.append(info)
+    if info.kind == LK_Ok:
+        register_group(info, idx)
+
+# --- Pass 2: blame each distinct (repo, revision, file) exactly once.
+for gkey in GROUPS.keys():
+    blame_group(gkey, GROUPS[gkey], GROUP_LINES[gkey])
+
+# --- Pass 3: walk the input lines again in original order, applying the
+#     since-filter and building one Row per successfully blamed line.
+#     A run of unmatched lines is buffered and attached to the next row
+#     that follows it; a run with no row after it (e.g. trailing unmatched
+#     input) is never printed, matching the ksh original.
+var rows: []Row = []
+var pending_unmatched: str = ""
+for idx in range(len(raw_lines)):
+    let info: LineInfo = infos[idx]
+    case info.kind:
+        when LK_Unmatched:
+            pending_unmatched = pending_unmatched + raw_lines[idx] + "\n"
+        when LK_Skipped:
+            pass
+        when LK_Ok:
+            if idx not in BLAME:
+                warn(f"Could not retrieve blame data for input line '{raw_lines[idx]}'")
+                continue
+            let bd: BlameData = BLAME[idx]
+            if bd.author_time > 0 and bd.author_time < opt.since_epoch:
+                debug_log(f"Skipped {info.gitfilepath} (too old).")
+                continue
+            rows.append(build_row(raw_lines[idx], info, bd, opt.columns, pending_unmatched))
+            pending_unmatched = ""
+
+# --- Output: pad every column to its widest value, except "reference"
+#     and "reference_blame" which are prefixed with "| " instead.
+var widths: [OutputColumn]int
+for row in rows:
+    for c in opt.columns:
+        let w: int = len(row.values[c])
+        if w > widths[c]:
+            widths[c] = w
+
+for row in rows:
+    if row.preceding_unmatched != "":
+        print(row.preceding_unmatched)
+    var parts: []str = []
+    for c in opt.columns:
+        let v: str = row.values[c]
+        if c == Col_Reference or c == Col_ReferenceBlame:
+            parts.append("| " + v)
+        else:
+            parts.append(v.ljust(widths[c]))
+    print(" ".join(parts))
