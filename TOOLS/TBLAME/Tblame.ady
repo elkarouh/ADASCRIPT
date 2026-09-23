@@ -95,13 +95,13 @@ type LineKind is enum LK_Ok, LK_Unmatched, LK_Skipped
 
 type LineInfo is record:
     # path passed to `git blame`
-    gitfilepath:  str
+    gitfilepath:  Path
     # path exactly as it appeared on the input line
-    origfilepath: str
-    nmroot:       str
+    origfilepath: Path
+    nmroot:       Path
     # specific_subsystem: nmroot/system/subsystem
-    repo:         str
-    # "" means "blame the working tree / HEAD"
+    repo:         Path
+    # "" means "blame the working tree / HEAD" -- a git ref, not a path
     revision:     str
     line_no:      int
     # free-text after the line number, from stdin
@@ -112,14 +112,14 @@ type MatchResult is record:
     matched:   bool = False
     system:    str = ""
     subsystem: str = ""
-    filepath:  str = ""
+    filepath:  Path = Path("")
     line_no:   int = 0
     trailing:  str = ""
 
 type GroupInfo is record:
-    repo:     str
+    repo:     Path
     revision: str
-    file:     str
+    file:     Path
 
 type BlameData is record:
     found:       bool = False
@@ -143,13 +143,13 @@ var GROUP_LINES: {str}[]int     = {:}   # group key -> unique line numbers to bl
 var LINE_OWNERS: {str}[]int     = {:}   # "<group key><SEP><line_no>" -> input-line indices that asked for it
 var BLAME:       {int}BlameData = {:}   # input-line index -> its blame result, once Pass 2 has run
 
-def group_key(repo: str, revision: str, file: str) -> str:
+def group_key(repo: Path, revision: str, file: Path) -> str:
     """A unique, stable key for one (repo, revision, file) blame target.
 
     Never parsed back apart -- GROUPS/GROUP_LINES already hold the
     components -- so any separator that keeps the triple unique is fine.
     """
-    return repo + "\x01" + revision + "\x01" + file
+    return str(repo) + "\x01" + revision + "\x01" + str(file)
 
 def line_key(gkey: str, line_no: int) -> str:
     return gkey + "\x02" + str(line_no)
@@ -196,10 +196,10 @@ def strip_prefix(s: str, prefix: str) -> str:
 # Adascript or of any tested environment here -- ported structurally from
 # the ksh original and not exercised end-to-end in this sandbox.
 
-def add_alternate(nmroot: str, alternate: str):
+def add_alternate(nmroot: Path, alternate: Path):
     """Register ALTERNATE as a git alternate-object-store for NMROOT's
     repository, unless it is already listed there."""
-    let alt_file: Path = Path(nmroot) / ".git" / "objects" / "info" / "alternates"
+    let alt_file: Path = nmroot / ".git" / "objects" / "info" / "alternates"
     var already_listed: bool = False
     if -f alt_file:
         let r = shell: grep -qxF -- {!alternate} {alt_file}
@@ -207,16 +207,16 @@ def add_alternate(nmroot: str, alternate: str):
     if not already_listed:
         shell: echo {!alternate} >> {alt_file}
 
-def where_workspace(cmpath: str) -> (str, int):
+def where_workspace(cmpath: str) -> (Path, int):
     """Resolve a /cm/ot/... context path to its workspace-relative path.
 
     Returns (path, exit_code); exit_code 2 means "the subsystem is not
     checked out", matching the ksh original's convention for this tool.
     """
     let r = shell: where_workspace {!cmpath}
-    return (r.output.strip(), r.code)
+    return (Path(r.output.strip()), r.code)
 
-def revision_of_context_file(cmpath_in: str, nmroot: str) -> str:
+def revision_of_context_file(cmpath_in: str, nmroot: Path) -> str:
     """Resolve a /cm/ot/... context path to the git revision it names,
     via Psort and a small cache keyed by "system/subsystem.baseline".
 
@@ -248,8 +248,8 @@ def revision_of_context_file(cmpath_in: str, nmroot: str) -> str:
             let sys2: str = $+{system}
             let sub2: str = $+{subsystem}
             let bl2:  str = $+{baseline}
-            let repo_dir: str = nmroot + "/" + sys2 + "/" + sub2
-            let repo_git: Path = Path(repo_dir) / ".git"
+            let repo_dir: Path = nmroot / sys2 / sub2
+            let repo_git: Path = repo_dir / ".git"
             if not -r repo_git:
                 debug_log("Not populating revision for " + sys2 + "/" + sub2 + " because it isn't checked out.")
                 continue
@@ -284,7 +284,7 @@ def match_workspace_path(line: str) -> MatchResult:
         m.matched = True
         m.system = $+{system}
         m.subsystem = $+{subsystem}
-        m.filepath = $+{filepath}
+        m.filepath = Path($+{filepath})
         m.line_no = int($+{lineno})
         m.trailing = $+{trailing}
     return m
@@ -295,12 +295,12 @@ def match_context_path(line: str) -> MatchResult:
         m.matched = True
         m.system = $+{system}
         m.subsystem = $+{subsystem}
-        m.filepath = $+{filepath}
+        m.filepath = Path($+{filepath})
         m.line_no = int($+{lineno})
         m.trailing = $+{trailing}
     return m
 
-def resolve_line(raw: str, alternate: str, show_unmatched: bool) -> LineInfo:
+def resolve_line(raw: str, alternate: Path, show_unmatched: bool) -> LineInfo:
     """Classify one input line and, for a recognised path, resolve which
     file/revision/repo it blames against. Registers it into a blame group
     when it does; never calls git blame itself (that is Pass 2's job)."""
@@ -310,13 +310,13 @@ def resolve_line(raw: str, alternate: str, show_unmatched: bool) -> LineInfo:
     let m1: MatchResult = match_workspace_path(raw)
     if m1.matched:
         info.kind = LK_Ok
-        info.gitfilepath = raw[:colon_at]
+        info.gitfilepath = Path(raw[:colon_at])
         info.origfilepath = info.gitfilepath
-        info.nmroot = $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY
+        info.nmroot = Path($CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY)
         if alternate != "":
             add_alternate(info.nmroot, alternate)
         info.revision = ""
-        info.repo = info.nmroot + "/" + m1.system + "/" + m1.subsystem
+        info.repo = info.nmroot / m1.system / m1.subsystem
         info.line_no = m1.line_no
         info.trailing = m1.trailing
         return info
@@ -324,12 +324,12 @@ def resolve_line(raw: str, alternate: str, show_unmatched: bool) -> LineInfo:
     let m2: MatchResult = match_context_path(raw)
     if m2.matched:
         let cmpath: str = raw[:colon_at]
-        info.origfilepath = cmpath
+        info.origfilepath = Path(cmpath)
         if alternate != "":
             info.kind = LK_Ok
             info.gitfilepath = m2.filepath
             info.nmroot = alternate
-            info.repo = alternate + "/" + m2.system + "/" + m2.subsystem
+            info.repo = alternate / m2.system / m2.subsystem
             info.revision = revision_of_context_file(cmpath, alternate)
             info.line_no = m2.line_no
             info.trailing = m2.trailing
@@ -338,8 +338,8 @@ def resolve_line(raw: str, alternate: str, show_unmatched: bool) -> LineInfo:
             if ws_code == 0:
                 info.kind = LK_Ok
                 info.gitfilepath = ws_path
-                info.nmroot = $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY
-                info.repo = info.nmroot + "/" + m2.system + "/" + m2.subsystem
+                info.nmroot = Path($CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY)
+                info.repo = info.nmroot / m2.system / m2.subsystem
                 info.revision = revision_of_context_file(cmpath, info.nmroot)
                 info.line_no = m2.line_no
                 info.trailing = m2.trailing
@@ -409,11 +409,11 @@ def compute_value(col: OutputColumn, raw_line: str, info: LineInfo, bd: BlameDat
         when Col_ScAll:
             return sc_all_value(tickets)
         when Col_FileOriginal:
-            return info.origfilepath + ":" + str(info.line_no)
+            return str(info.origfilepath) + ":" + str(info.line_no)
         when Col_FileName:
-            return Path(info.gitfilepath).name + ":" + str(info.line_no)
+            return info.gitfilepath.name + ":" + str(info.line_no)
         when Col_FileWorkspace:
-            return strip_prefix(info.gitfilepath, info.nmroot + "/") + ":" + str(info.line_no)
+            return strip_prefix(str(info.gitfilepath), str(info.nmroot) + "/") + ":" + str(info.line_no)
         when Col_Reference:
             return info.trailing
         when Col_ReferenceBlame:
@@ -438,7 +438,7 @@ def build_row(raw_line: str, info: LineInfo, bd: BlameData, columns: []OutputCol
 # -L flags that were sent -- see the module docstring.
 
 def blame_group(gkey: str, g: GroupInfo, lines_needed: []int):
-    var args: []str = ["-P", "-C", g.repo, "blame"]
+    var args: []str = ["-P", "-C", str(g.repo), "blame"]
     if g.revision != "":
         args.append(g.revision)
     args.append("-p")
@@ -447,7 +447,7 @@ def blame_group(gkey: str, g: GroupInfo, lines_needed: []int):
         args.append("-L")
         args.append(f"{ln},{ln}")
     args.append("--")
-    args.append(g.file)
+    args.append(str(g.file))
     let porcelain: []str = shellLines: git {*args}
 
     var cache_committer:    {str}str = {:}
@@ -483,7 +483,7 @@ def blame_group(gkey: str, g: GroupInfo, lines_needed: []int):
 # Reading input
 # ---------------------------------------------------------------------------
 
-def read_files_as_lines(paths: []str) -> []str:
+def read_files_as_lines(paths: []Path) -> []str:
     """Synthesize the same "<file>:<lineno>:<content>" shape the ksh
     original produced by piping `grep --line-number --with-filename -e
     '.*'` over the named files back into itself -- reading them directly
@@ -494,7 +494,7 @@ def read_files_as_lines(paths: []str) -> []str:
         var n: int = 0
         for content_line in f.lines:
             n += 1
-            out.append(p + ":" + str(n) + ":" + content_line)
+            out.append(str(p) + ":" + str(n) + ":" + content_line)
     return out
 
 # ---------------------------------------------------------------------------
@@ -544,9 +544,9 @@ class Options:
     show_debug:     bool = False
     show_unmatched: bool = True
     since_epoch:    int  = 0
-    alternate:      str  = ""
+    alternate:      Path = Path("")
     columns:        []OutputColumn = []
-    filepaths:      []str = []
+    filepaths:      []Path = []
 
     def __init__(self, argv: []str):
         var i: int = 0
@@ -562,7 +562,7 @@ class Options:
                     i += 1
                     if i >= len(argv):
                         die("-alternate requires an argument")
-                    self.alternate = argv[i]
+                    self.alternate = Path(argv[i])
                 when "-since":
                     i += 1
                     if i >= len(argv):
@@ -588,7 +588,7 @@ class Options:
         while i < len(argv):
             if not -f argv[i]:
                 die("File does not exist: " + argv[i])
-            self.filepaths.append(argv[i])
+            self.filepaths.append(Path(argv[i]))
             i += 1
 
         if len(self.columns) == 0:
@@ -602,11 +602,11 @@ let argv: []str = $@
 let opt: Options = Options(argv)
 SHOW_DEBUG = opt.show_debug
 
-var alternate: str = opt.alternate
+var alternate: Path = opt.alternate
 if alternate == "" and $NM_REPOSITORY_ALTERNATE != "":
-    alternate = $NM_REPOSITORY_ALTERNATE
+    alternate = Path($NM_REPOSITORY_ALTERNATE)
 if alternate != "":
-    let alt_git: Path = Path(alternate) / ".git"
+    let alt_git: Path = alternate / ".git"
     if not -r alt_git:
         die(f"An alternate was defined at {alternate} but it is not readable.")
     debug_log(f"Using repository alternate at {alternate}")
