@@ -1,7 +1,7 @@
 # Session hand-off — ADASCRIPT
 
-Written 2026-09-23, last updated after the Context split. Everything below
-was true at master `30f566b`.
+Written 2026-09-23, last updated after the Build class. Everything below
+was true at master `2cbbb15`.
 
 This file lives on the branch `claude/gifted-fermi-a8awtc` only, deliberately:
 it is session scaffolding, not project content, and master stays clean. Delete
@@ -15,9 +15,9 @@ it when the thread is picked up and finished.
 |---|---|
 | Repo | `https://github.com/elkarouh/ADASCRIPT` |
 | Working branch | `claude/gifted-fermi-a8awtc` |
-| master | `30f566b` |
+| master | `2cbbb15` |
 | Session branch | master, merged in, plus this file |
-| Tests | `make test` green — 263 checks, 0 failures |
+| Tests | `make test` green — 267 checks, 0 failures |
 
 **One trap:** the *local* `master` branch is stale (`88626b1`). Pushes never
 went through it. Do not `git checkout master` and assume it is current —
@@ -52,9 +52,11 @@ Oldest first. `ed08db4` was the starting point.
 | `64f932f` | This file (branch only) |
 | `1aa1ab6` | Transpiler: a method's parameters are named the way a function's are (`pass_`, `end`) |
 | `30f566b` | `Tcheck_tact`: split the `Context` bag into `Options`, `Baseline` and `Report` |
+| `1177eb3` | Transpiler: a method that only reads keeps a plain `self` (transitive `var` inference) |
+| `b84ec2c` | Transpiler: a field typed `FooBar` no longer makes class `Foo` a `ref object` (was a run-time nil crash) |
+| `2cbbb15` | `Tcheck_tact`: `Build` class; no whole-path `OP`/`IP` rewrite |
 
-The last two are master's SHAs; on the branch they are `e275b26` and
-`3db8661`. Every transpiler fix has a regression test in `EXAMPLES/`,
+The last five are master's SHAs; on the branch they differ (cherry-picked). Every transpiler fix has a regression test in `EXAMPLES/`,
 registered in the Makefile's `STANDALONE` list.
 
 ### The shape of `Tcheck_tact` now
@@ -62,7 +64,8 @@ registered in the Makefile's `STANDALONE` list.
 | Class | Meaning | Where in the file |
 |---|---|---|
 | `Options` | what was asked for; parses argv | middle |
-| `Baseline` | which baseline: `nr`, `dir`, `previous()`, `saved_logs_dir(btype)`, `tacot_dir(build, pass_)` | near the top — free functions below call its methods |
+| `Baseline` | which baseline: `nr`, `dir`, `previous()`, `saved_logs_dir(btype)` | near the top — free functions below call its methods |
+| `Build` | one build of one baseline: `name`, `btype`, `baseline`, `dir`; `saved_logs()`, `tacot_dir(pass_)`, `tlog_path(subtype, pass_)`, `in_baseline(other)` | right after `Baseline` and `tlog_filename` |
 | `Report` | one report on one baseline: holds `opt`, `cur`, `builds`, `replays`; the `show_*` methods and `run()` | bottom — its methods call most helpers |
 
 `Baseline` deliberately lists nothing, so `previous()` is free and cannot fail.
@@ -222,15 +225,14 @@ fixing it, written up at the top of `TODO.md`):
   name the same directory so only *printed* paths differ, which makes it easy to
   miss. `.parent` agrees on both and is the spelling to prefer.
 
-**Possible next steps on `Tcheck_tact`**, discussed but not done:
+**Not done, noticed on the way:**
 
-- A `Build` class carrying its own directory: several free functions still take
-  a `(build, dir)` pair.
-- `scan_regression_tests_detailed` still does `dir.replace("OP", "IP")` on the
-  whole path. It is a no-op on real paths now, because callers pass
-  `saved_logs_dir(btype)`, but it would mangle any install path containing
-  "IP" or "OP". It shows up on the scratchpad fixture, where `ADASCRIPT`
-  becomes `ADASCROPT`, identically before and after the split.
+- `TOOLS/TCHECK/Ttroubleshoot.ady` has the same whole-path
+  `dir.replace("OP", "IP")` that was removed from `Tcheck_tact` (lines ~294
+  and ~338). Harmless on real TACT paths, wrong on any other.
+- `TODO.md` now opens with the ref-object hazard: whether a class is a `ref`
+  is decided by two checks that can disagree, and a disagreement is a run-time
+  nil crash. The known trigger is fixed; the structure is not.
 
 `TODO.md` has 34 open items; the three above are entries 1–3. The convention has
 been "fix the latest bug in TODO.md", i.e. work from the top.
