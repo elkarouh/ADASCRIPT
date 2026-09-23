@@ -1184,6 +1184,13 @@ class Indenter:
                     self.arrow_level = 0
             if self.arrow_level > 0 and self.paren_depth < self.arrow_level:
                 self.arrow_level = 0
+            # A ',' back at the spilled association's own paren level ends it,
+            # whichever paren the line started in: 'when B => V),' closes a
+            # '(case' that was the value of 'Start_FL =>', and the next item
+            # returns to the item column.
+            if self.arrow_level > 0 and self.paren_depth == self.arrow_level \
+                    and code_s.endswith(","):
+                self.arrow_level = 0
             # Compute where the next code line in this paren will land, for use by
             # any comment that follows before it arrives.
             let complete_assoc: bool = "=>" in code_s and not code_s.endswith("=>")
