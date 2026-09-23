@@ -4888,7 +4888,14 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
                                 if star_str:
                                     params.append(star_str)
                                 continue
-                            pname = str(param_node.nodes[0].nodes[0])
+                            # The name as the body will spell it: IDENTIFIER's
+                            # own rendering strips a trailing underscore
+                            # (`pass_` -> `pass`, which Nim requires) and
+                            # escapes a Nim keyword (`end` -> `\`end\``).
+                            # param_plain does the same for a free function;
+                            # the raw token here left a method's signature
+                            # naming a parameter its body did not use.
+                            pname = param_node.nodes[0].to_nim()
                             ptype = "auto"
                             pdefault = ""
                             for pn in param_node.nodes[1:]:

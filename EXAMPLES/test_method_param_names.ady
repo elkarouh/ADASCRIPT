@@ -1,0 +1,49 @@
+#!/usr/bin/env ady2nim
+# test_method_param_names.ady — a method's parameter named like a free function's
+#
+#   ady2nim EXAMPLES/test_method_param_names.ady -r
+#   ady2py  EXAMPLES/test_method_param_names.ady -c
+#
+# Two spellings Nim will not take as they stand: a trailing underscore
+# (`pass_`, the usual way round a Python keyword) and a Nim keyword (`end`).
+# A free function had both rewritten -- `pass_` to `pass`, `end` to `end`
+# in backquotes -- because its parameters are rendered the way every other
+# identifier is. A method's were copied from the raw token instead, so the
+# signature said `pass_: BuildPass` while the body, rendered the usual way,
+# said `pass`: "invalid token: trailing underscore", or "'end' is a keyword
+# and cannot be used as a parameter name". The same parameter was fine the
+# moment the function moved out of the class.
+
+type BuildPass is enum normal, mrun
+
+def label_of(pass_: BuildPass) -> str:
+    return pass_'Image
+
+class Walker:
+    var n: int = 0
+
+    # --- a trailing underscore ----------------------------------------------
+    def label(self, pass_: BuildPass) -> str:
+        return pass_'Image
+
+    # --- a Nim keyword ------------------------------------------------------
+    def span(self, start: int, end: int) -> int:
+        return end - start
+
+    # --- an underscore that strips *to* a keyword ---------------------------
+    def bump(self, type_: int):
+        self.n = self.n + type_
+
+    # --- a method calling a sibling with such a parameter -------------------
+    def both(self, pass_: BuildPass) -> str:
+        return self.label(pass_) + "/" + label_of(pass_)
+
+var w: Walker = Walker()
+assert w.label(mrun) == "mrun"
+assert w.span(3, 10) == 7
+w.bump(4)
+w.bump(1)
+assert w.n == 5   # still detected as mutating self, so `var` is honoured
+assert w.both(normal) == "normal/normal"
+
+print "method parameter name tests passed"
