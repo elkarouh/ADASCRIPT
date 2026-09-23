@@ -248,7 +248,7 @@ it, shout it.
 Python resolves names when a call runs; Nim resolves them where the call is
 written. The transpiler hides most of that, but four rules survive into
 Adascript. They matter as soon as a program grows a class that drives the
-whole run — a `Context` gathering what used to be globals, say — because
+whole run — a `Report` holding the options and the data it reports on, say — because
 that class then sits in the middle of a file full of helpers.
 
 **A method may call a sibling method defined below it.** The transpiler emits
@@ -313,11 +313,11 @@ field, so `body` takes `self: var Report` and therefore so does `run`. A
 `let` binding then cannot receive it:
 
 ```python
-let ctx: Context = Context(opt)
-ctx.run()        # Error: expression 'ctx' is immutable, not 'var'
+let report: Report = Report(opt)
+report.run()     # Error: expression 'report' is immutable, not 'var'
 
-var ctx: Context = Context(opt)
-ctx.run()        # correct
+var report: Report = Report(opt)
+report.run()     # correct
 ```
 
 Nothing about the class declares this, and the Python backend accepts either

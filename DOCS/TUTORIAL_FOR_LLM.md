@@ -498,8 +498,8 @@ class Circle(Shape):
 
 **`var` instances** — mutable `self` is inferred transitively, so if any method reaches a field-mutating sibling, the instance must be `var`, not `let`:
 ```adascript
-var ctx: Context = Context(opt)   # let → Error: expression 'ctx' is immutable, not 'var'
-ctx.run()
+var report: Report = Report(opt)   # let → Error: expression 'report' is immutable, not 'var'
+report.run()
 ```
 Only the Nim backend reports this. Rule of thumb: if you call a method on it, declare it `var`.
 
