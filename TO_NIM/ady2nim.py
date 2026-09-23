@@ -1246,6 +1246,13 @@ def run_tests():
          "assigns to the environment, which is read-only"),
         ('$1 = "x"\n',
          "assigns to an argument, which is read-only"),
+        # Two words side by side inside parentheses are no expression. The
+        # sequence combinator's backtracking used to resume after the tokens
+        # an abandoned alternative had consumed, so '(a b)' came out as '(b)'
+        # and '(col div 8 + 1)' -- 'div' is no Adascript operator -- as
+        # '(8 + 1)', silently.
+        ("let y: int = (a b)\n", "Parse error"),
+        ("let c: int = 13\nlet a: int = (c div 8 + 1) * 8\n", "Parse error"),
     ]
     for code, want in error_tests:
         label = code.splitlines()[-1]

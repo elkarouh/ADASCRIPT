@@ -497,9 +497,18 @@ def sequence(p1, p2):
             if (
                 p.__name__ == "Choice_Parser"
             ):  # a choice parser, we have to implement backtracking
+                # Every alternative starts where the choice does. An alternative
+                # that matched and was then abandoned, because the rest of the
+                # sequence failed after it, has moved the stream on; without the
+                # reset the next alternative started after the tokens it had
+                # consumed, and those tokens were silently dropped: in
+                # '(a b)' the paren group's `expressions` took `a`, the ')'
+                # failed on `b`, and the retry parsed '(b)'.
+                start = token_stream.mark()
                 for i in range(
                     len(p.parsers)
                 ):  # look at the alternatives in the choice parser
+                    token_stream.reset(start)
                     if not (m := p.parse(token_stream, i)):
                         continue  # backtrack
                     ast, token_stream = m
