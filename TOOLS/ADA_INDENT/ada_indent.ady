@@ -342,6 +342,30 @@ def is_term_continuation(code_s: str) -> bool:
         return True
     return w != "xor"
 
+def body_follows_arrow(text: str) -> bool:
+    """True if `text` - what follows a '(for' - reaches that expression's own
+    '=>' and has more code after it on the same line.
+
+    '(for some X of Y => P' starts its predicate beside the arrow, so a line
+    continuing it continues P, exactly as in a plain parenthesis. With the arrow
+    at the end of the line the predicate starts on the next line, one level in,
+    and its continuations one level further (see FOR_EXPR in indent_line).
+    """
+    var depth: int = 0                      # int: goes to -1 at the closing ')'
+    for k, ch in code_positions(text):
+        case ch:
+            when '(': depth += 1
+            when ')':
+                return False if depth == 0
+                depth -= 1
+            when '=':
+                if depth == 0 and k + 1 < len(text) and text[k + 1] == '>':
+                    let rest: str = text[k + 2:].strip()
+                    return rest != "" and not rest.startswith("--")
+            when others: pass
+    False
+
+
 def scan_parens(text: str, base_depth: Natural, base_col: Natural) -> [](int, int, Paren_Kind_T):
     """Find every '(' opened in a line and how its continuations should align.
 
@@ -370,9 +394,14 @@ def scan_parens(text: str, base_depth: Natural, base_col: Natural) -> [](int, in
             # one level in -- and no keyword either, so it is PLAIN.
             let j: Natural = skip_ch(text, i + 1, ' ')
             let kw: str = lead_ident(text[j:]).lower()
+            var kind: Paren_Kind_T = PAREN_KIND.get(kw, PLAIN)
+            # A '(for' whose predicate starts beside its arrow is continued like
+            # a plain parenthesis (the alignment column is the same: the 'for').
+            if kind == FOR_EXPR and body_follows_arrow(text[i + 1:]):
+                kind = PLAIN
             openers.append((depth,
                             base_col + (j if j < n else INDENT_WIDTH),
-                            PAREN_KIND.get(kw, PLAIN)))
+                            kind))
     return openers
 
 
@@ -534,6 +563,9 @@ class Indenter:
     cond_value_base: Natural = 0 # display level of the line holding the current condition term
     in_cont: bool = False        # previous line was an unterminated statement/declaration
     value_base: Natural = 0      # display level where the current statement's value expression starts
+    aspect_col: int = -1         # column of an aspect's value that spilled past its '=>'
+                                 # ('with Static_Predicate =>' + value on the next line),
+                                 # -1 when none is open
     paren_stack: [](int, int, Paren_Kind_T) = []  # (paren_level, align_col, kind) for every open '('
     paren_cont: bool = False    # prev line within plain paren ended without ',' (arg-list continuation)
     arrow_level: Natural = 0    # innermost paren level with an active '=>' named-value spill (0 = none)
@@ -686,6 +718,7 @@ class Indenter:
             "cvb="   + str(self.cond_value_base),
             "ic="    + ("T" if self.in_cont         else "F"),
             "vb="    + str(self.value_base),
+            "ac="    + str(self.aspect_col),
             "psk="   + ";".join(ps_parts),
             "pc="    + ("T" if self.paren_cont      else "F"),
             "al="    + str(self.arrow_level),
@@ -714,6 +747,7 @@ class Indenter:
         self.cond_value_base     = 0
         self.in_cont             = False
         self.value_base          = 0
+        self.aspect_col          = -1
         self.paren_stack         = []
         self.paren_cont          = False
         self.arrow_level         = 0
@@ -746,6 +780,7 @@ class Indenter:
                 when "cvb": self.cond_value_base = int(val)
                 when "ic": self.in_cont = val == "T"
                 when "vb": self.value_base = int(val)
+                when "ac": self.aspect_col = int(val)
                 when "psk" if val != "":
                     for entry in val.split(";"):
                         let ep: []str = entry.split(":")
@@ -905,6 +940,8 @@ class Indenter:
             if self.cond_state > 0:
                 let clvl: Positive = max(self.cond_value_base, self.cond_base + 1)
                 return " " * (max(0, clvl) * INDENT_WIDTH) + emit_text
+            if self.in_cont and self.aspect_col >= 0:
+                return " " * self.aspect_col + emit_text
             if self.in_cont:
                 return " " * (max(0, self.value_base + 1) * INDENT_WIDTH) + emit_text
             # After a deferred 'function ... is' header the next instruction is
@@ -1174,6 +1211,8 @@ class Indenter:
             self._push_parens(emit_text, lead, entry_depth, self.paren_depth)
             # A line that closes back out of all parentheses and ends in a block
             # opener opens that block.
+            if new_depth <= 0 and (code_s.endswith(",") or not self.in_cont):
+                self.aspect_col = -1         # the aspect's value ends here
             if new_depth <= 0:
                 if self.cond_state > 0 and ends_with_condition_then(code_s):
                     # A multi-line if/elsif condition closed its parens and
@@ -1500,6 +1539,23 @@ class Indenter:
             lead_n = max(0, disp) * INDENT_WIDTH
         if lw == "is" and cont > 0 and lead_ident(code_s[2:]).lower() != "new":
             lead_n = max(0, disp) * INDENT_WIDTH
+        # An aspect whose value spilled past its arrow ('with Static_Predicate
+        # =>' with the predicate on the next line): the value sits one level
+        # past the aspect, and its own continuation lines ('and ...', '& ...',
+        # '| ...') one level past the value. The arrow is told apart from a
+        # case alternative's by the 'when' - on this line, or on the line that
+        # opened a choice list continued here ('| B =>'). A ',' starts the next
+        # aspect and a ';' ends the declaration; either ends the value.
+        if self.aspect_col >= 0 and cont > 0:
+            lead_n = self.aspect_col
+            if is_term_continuation(code_s) or code_s.startswith("|"):
+                lead_n += INDENT_WIDTH
+        if cont == 0 or code_s.endswith(",") or not self.in_cont:
+            self.aspect_col = -1
+        if self.paren_depth == 0 and code_s.endswith("=>") and self.cont_kw != "when" \
+                and "when" not in code_words(code_s):
+            self.aspect_col = lead_n + INDENT_WIDTH
+            self.in_cont = True
         # As in the cond_state branch: this line is outside any paren at entry, so
         # any paren it opens is fresh. Invalidate paren_next_lead so a comment in
         # that paren uses the kind-aware fallback, not a stale sibling lead.
