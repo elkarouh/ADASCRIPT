@@ -1,7 +1,8 @@
 -- Regression fixture for ada_indent (fixpoint, also from flattened input).
--- A comment paragraph (after a blank line, straight before its code line)
--- introduces that line: before a new alternative or branch it takes that
--- line's column. Before 'end' or a plain statement it keeps the block's.
+-- A comment belongs to the line before it, unless a blank line precedes it:
+-- then it belongs to the line after it and takes that line's column. Except
+-- before a closer ('end ...', a lone ')'), which carries no meaning of its
+-- own: there the comment stays with the block it ends.
 package body Paragraphs is
 
   function Image (Extended : Extended_T; Kind : Kind_T) return String is
@@ -40,6 +41,9 @@ package body Paragraphs is
   end Image;
 
   procedure Q is
+    Count : Natural := 0;
+
+  -- The statements: one step after the other.
   begin
     Step_One;
 
@@ -48,5 +52,14 @@ package body Paragraphs is
 
     -- A trailing note on the body, kept at its column before 'end'.
   end Q;
+
+  procedure Call is
+  begin
+    Put (Item  => 1,
+         Width => 2
+
+         -- a note on the arguments, kept before the lone ')'
+         );
+  end Call;
 
 end Paragraphs;

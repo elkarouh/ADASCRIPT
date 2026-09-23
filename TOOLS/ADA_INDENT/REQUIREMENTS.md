@@ -211,15 +211,19 @@ association, say - is placed deliberately deeper, and is kept there:
 - Every other comment line is re-indented by 7.1-7.4. A flattened file, or one
   written with a different indent width, is therefore still indented in full.
 
-### 7.6 A comment paragraph introduces the line after it
+### 7.6 Which line a comment belongs to
 
-A run of comment lines that follows a blank line and leads straight into a
-code line introduces that line. When that line starts a new alternative or
-branch (`when`, `elsif`, `else`, `or`, `exception`, `then abort`), the run
-takes that line's column, not the column of the block it follows. Before `end`,
-`begin` or a plain statement, the run keeps the block's column, where it is
-typically a note on the body it ends. A run followed by another blank line
-stands alone. Hand-placed comments (7.5) keep their place.
+A comment belongs to the line before it: it is indented as a line following
+that one would be (inside a block the line opens, e.g. after `begin` or
+`then`), by 7.1-7.4. When a blank line precedes it, it belongs to the line
+after it instead, and a run of such comment lines takes that code line's
+column. That matters where the line steps out of the block: `when`, `elsif`,
+`else`, `exception`, `begin`, ... .
+
+Exception: a closer (`end ...`, or a `)` alone on its line) carries no meaning a
+comment could be about, so a comment before it stays with the block it ends.
+A run followed by another blank line stands alone. Hand-placed comments (7.5)
+keep their place.
 
 This needs the next code line, so it applies when whole input is indented
 (the command line, `format-all`). An editor indenting one line at a time
