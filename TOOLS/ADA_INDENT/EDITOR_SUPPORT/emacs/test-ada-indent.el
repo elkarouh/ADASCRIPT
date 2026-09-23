@@ -36,7 +36,7 @@
 This is the reference: whatever the binary says is the right answer."
   (with-temp-buffer
     (insert text)
-    (call-process-region (point-min) (point-max) ada-indent-program t t nil)
+    (call-process-region (point-min) (point-max) ada-indent-program t '(t nil) nil)
     (buffer-string)))
 
 (defmacro test-ada-indent--with-buffer (text &rest body)
@@ -135,17 +135,28 @@ second -- must land in the same place as one cold pass."
     (should (equal warm cold))))
 
 (ert-deftest ada-indent-cache-survives-reindenting-its-own-line ()
-  "Re-whitespacing the cache line does not invalidate the cache.
-This is why the invalidation test is strict `<' and not `<='.  With `<=',
-`indent-line-to' would wipe the cache on the very edit that sets it."
+  "Reindenting the cache line through this package keeps the cache.
+`ada-indent-line' computes line N's state, caches it, and then rewrites
+line N's indentation -- an edit at the cache point.  If that edit cleared
+the cache it would be gone the moment it was set.  (The messy input is
+unindented, so the rewrite really changes the line.)"
   (test-ada-indent--with-buffer test-ada-indent--messy
     (test-ada-indent--goto-line 5)
     (ada-indent-line)
     (should ada-indent--state)
-    (let ((lnum ada-indent--state-lnum))
-      (test-ada-indent--goto-line lnum)
-      (indent-line-to 8)
-      (should ada-indent--state))))
+    (should (= ada-indent--state-lnum 5))))
+
+(ert-deftest ada-indent-cache-drops-on-an-edit-of-its-own-line ()
+  "Editing the text of the cache line clears the cache.
+The state after line N was computed from line N as it was; typing on it
+and then indenting line N+1 must not reuse that state."
+  (test-ada-indent--with-buffer test-ada-indent--messy
+    (test-ada-indent--goto-line 5)
+    (ada-indent-line)
+    (should ada-indent--state)
+    (end-of-line)
+    (insert " -- edited")
+    (should-not ada-indent--state)))
 
 (ert-deftest ada-indent-cache-drops-on-an-edit-above-it ()
   "Editing above the cache point clears it, so stale state cannot be reused."

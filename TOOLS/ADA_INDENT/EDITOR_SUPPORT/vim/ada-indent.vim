@@ -75,11 +75,13 @@ function! s:RunIndent(lnum) abort
 
   if l:use_cache
     let l:cmd = g:ada_indent_program
-          \ . ' --state ' . shellescape(b:ada_indent_state)
+          \ . ' -q --state ' . shellescape(b:ada_indent_state)
           \ . ' --emit-state'
   else
-    let l:cmd = g:ada_indent_program . ' --emit-state'
+    let l:cmd = g:ada_indent_program . ' -q --emit-state'
   endif
+  " -q: system() merges stderr into the output (shellredir), and a diagnostic
+  " line there would be read as an indented source line.
 
   let l:out = system(l:cmd, l:input)
   if v:shell_error != 0
