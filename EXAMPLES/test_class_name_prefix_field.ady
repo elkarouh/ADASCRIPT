@@ -1,0 +1,45 @@
+#!/usr/bin/env ady2nim
+# test_class_name_prefix_field.ady — a field whose type starts with the class name
+#
+#   ady2nim EXAMPLES/test_class_name_prefix_field.ady -r
+#   ady2py  EXAMPLES/test_class_name_prefix_field.ady -c
+#
+# A class that mentions itself in a field (a tree's `children: []Node`) has to
+# be a `ref object` on Nim. Two checks decided that: an exact one over the
+# field declarations, which the constructor follows, and a text search of
+# the emitted fields, which the type follows. The text search matched a
+# substring, so `class Build` with a field typed `BuildType` became a
+# `ref object` -- whose constructor, following the exact check, never
+# allocated. Built with its constructor, it crashed on the first field write:
+# "SIGSEGV: Illegal storage access. (Attempt to read from nil?)".
+#
+# Surfaced by TOOLS/TCHECK/Tcheck_tact.ady, which has exactly that class.
+
+type BuildType is enum IP, OP, SIP
+
+# --- the class name is only a prefix of a field's type ---------------------
+class Build:
+    var name  : str       = ""
+    var btype : BuildType = IP
+
+    def __init__(self, name: str, btype: BuildType):
+        self.name = name
+        self.btype = btype
+
+    def label(self) -> str:
+        return self.name + ":" + self.btype'Image
+
+let b: Build = Build("build_G!31.OP.L8", OP)
+assert b.name == "build_G!31.OP.L8"
+assert b.btype == OP
+assert b.label() == "build_G!31.OP.L8:OP"
+
+# --- and a list of them, the shape the tool builds -------------------------
+var builds: []Build = [Build("a", IP), Build("b", SIP)]
+assert builds[1].label() == "b:SIP"
+
+# A class that genuinely names itself in a field still becomes a ref object:
+# phonecode.ady's TrieNode is the standing test for that. It is not repeated
+# here because ady2py cannot yet evaluate such an annotation (TODO.md).
+
+print "class name prefix field tests passed"
