@@ -1,6 +1,7 @@
 # Session hand-off — ADASCRIPT
 
-Written 2026-09-23. Everything below was true at commit `0a24fae`.
+Written 2026-09-23, last updated after the Context split. Everything below
+was true at master `30f566b`.
 
 This file lives on the branch `claude/gifted-fermi-a8awtc` only, deliberately:
 it is session scaffolding, not project content, and master stays clean. Delete
@@ -14,15 +15,28 @@ it when the thread is picked up and finished.
 |---|---|
 | Repo | `https://github.com/elkarouh/ADASCRIPT` |
 | Working branch | `claude/gifted-fermi-a8awtc` |
-| HEAD | `0a24fae` |
-| Pushed to | `origin/master` **and** `origin/claude/gifted-fermi-a8awtc` (identical, except this file) |
-| Tests | `make test` green — 231 checks, 0 failures |
+| master | `30f566b` |
+| Session branch | master, merged in, plus this file |
+| Tests | `make test` green — 263 checks, 0 failures |
 
-**One trap:** the *local* `master` branch is stale (`88626b1`, 41 behind). Every
-push this session went through `git push -u origin HEAD:master` from the working
-branch, which is why local `master` never moved. Do not `git checkout master`
-and assume it is current — `git fetch origin master` first, or just keep working
-on the session branch as before.
+**One trap:** the *local* `master` branch is stale (`88626b1`). Pushes never
+went through it. Do not `git checkout master` and assume it is current —
+`git fetch origin master` first, or just keep working on the session branch.
+
+**How master gets pushed now.** This file is on the session branch only, so
+`git push origin HEAD:master` from the branch would put it on master. Instead:
+
+```sh
+git fetch origin master
+git checkout -b to-master origin/master
+git cherry-pick <the new commits>
+git diff --stat to-master claude/gifted-fermi-a8awtc   # expect only HANDOFF.md
+git push origin to-master:master
+git checkout claude/gifted-fermi-a8awtc && git branch -D to-master
+```
+
+So the same change has one SHA on master and another on the branch. Before
+this file existed, pushes were a plain `HEAD:master`; that stopped with it.
 
 ### Commits made this session
 
@@ -35,9 +49,25 @@ Oldest first. `ed08db4` was the starting point.
 | `a0efaa8` | Transpiler: `__init__` may call a sibling method. Plus `Tcheck_tact` paths typed as `Path` |
 | `18b0c48` | Transpiler: `enumerate()` over an `[O]T` yields its domain on Python, as on Nim |
 | `0a24fae` | Transpiler: zero-fill an `[O]T` over a subrange or `bool` domain |
+| `64f932f` | This file (branch only) |
+| `1aa1ab6` | Transpiler: a method's parameters are named the way a function's are (`pass_`, `end`) |
+| `30f566b` | `Tcheck_tact`: split the `Context` bag into `Options`, `Baseline` and `Report` |
 
-The last three are all transpiler fixes with regression tests in `EXAMPLES/`,
+The last two are master's SHAs; on the branch they are `e275b26` and
+`3db8661`. Every transpiler fix has a regression test in `EXAMPLES/`,
 registered in the Makefile's `STANDALONE` list.
+
+### The shape of `Tcheck_tact` now
+
+| Class | Meaning | Where in the file |
+|---|---|---|
+| `Options` | what was asked for; parses argv | middle |
+| `Baseline` | which baseline: `nr`, `dir`, `previous()`, `saved_logs_dir(btype)`, `tacot_dir(build, pass_)` | near the top — free functions below call its methods |
+| `Report` | one report on one baseline: holds `opt`, `cur`, `builds`, `replays`; the `show_*` methods and `run()` | bottom — its methods call most helpers |
+
+`Baseline` deliberately lists nothing, so `previous()` is free and cannot fail.
+The globals `COLORED`, `BATCH`, `ONLY_NEW`, `HAS_NEW_FAILURES` stay global by
+the author's choice; do not thread them through.
 
 ---
 
@@ -192,6 +222,16 @@ fixing it, written up at the top of `TODO.md`):
   name the same directory so only *printed* paths differ, which makes it easy to
   miss. `.parent` agrees on both and is the spelling to prefer.
 
+**Possible next steps on `Tcheck_tact`**, discussed but not done:
+
+- A `Build` class carrying its own directory: several free functions still take
+  a `(build, dir)` pair.
+- `scan_regression_tests_detailed` still does `dir.replace("OP", "IP")` on the
+  whole path. It is a no-op on real paths now, because callers pass
+  `saved_logs_dir(btype)`, but it would mangle any install path containing
+  "IP" or "OP". It shows up on the scratchpad fixture, where `ADASCRIPT`
+  becomes `ADASCROPT`, identically before and after the split.
+
 `TODO.md` has 34 open items; the three above are entries 1–3. The convention has
 been "fix the latest bug in TODO.md", i.e. work from the top.
 
@@ -228,8 +268,9 @@ been "fix the latest bug in TODO.md", i.e. work from the top.
 2. `TODO.md` — the top three entries are this session's leftovers.
 3. `DOCS/BOOK/09-classes-and-generics.md` §9.7 — the class/method rules, written
    this session and the most recently verified prose in the book.
-4. `TOOLS/TCHECK/Tcheck_tact.ady` — the largest real program, and the one all
-   three transpiler fixes were driven by.
+4. `TOOLS/TCHECK/Tcheck_tact.ady` — the largest real program, and the one most
+   of this session's transpiler fixes were driven by. Read `Baseline` and
+   `Report` first; the free functions between them are what they call.
 
 Note: `CLAUDE.md` tells you to read `memory/project_adascript_language.md` when
 Adascript is mentioned. **That file does not exist in the repo** — the
