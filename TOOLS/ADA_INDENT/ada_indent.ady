@@ -974,8 +974,12 @@ class Indenter:
         elif self.in_cont and lead_ident(code_s).lower() in RESYNC_WORD:
             self.in_cont = False       # the previous line lacked its ';'
         # A condition line never ends in ';': an 'if' that reaches one without
-        # its 'then' is over, and this line is the first of its body.
-        elif self.cond_state > 0 and self.paren_depth == 0 and code_s.endswith(";"):
+        # its 'then' is over, and this line is the first of its body. A line
+        # that holds the 'then' is not this, whatever follows it: 'then return
+        # X;' finishes the condition and starts the body on one line, and the
+        # tracker below has to see that 'then' to align it with its 'if'.
+        elif self.cond_state > 0 and self.paren_depth == 0 and code_s.endswith(";") \
+                and lead_ident(code_s).lower() != "then" and not has_condition_then(code):
             self._resync_expression("'if' condition ended without 'then'")
 
         let entry_depth: Natural = self.paren_depth
