@@ -2428,6 +2428,28 @@ def run_tests() -> int:
         "     B => 2);\n"
         "end P;\n"))
 
+    # 91. The same when the only line before the comment at its depth is the
+    #     one that opens the parenthesis with its first item ('(V => Make
+    #     (...),'): that line is the comment's reference too.
+    cases.append((
+        "procedure P is\n"
+        "begin\n"
+        "    Call\n"
+        "      (V => Make (X => 1,\n"
+        "                  Y => 2),\n"
+        "                   -- about Make: stays under its arguments\n"
+        "       B => 2);\n"
+        "end P;\n",
+
+        "procedure P is\n"
+        "begin\n"
+        "  Call\n"
+        "    (V => Make (X => 1,\n"
+        "                Y => 2),\n"
+        "                 -- about Make: stays under its arguments\n"
+        "     B => 2);\n"
+        "end P;\n"))
+
     for pair in cases:
         let src: str = pair[0]
         let want: str = pair[1]

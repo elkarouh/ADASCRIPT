@@ -62,6 +62,95 @@ file. Containing it more tightly than that would mean trusting the input's
 existing indentation, which this tool deliberately ignores — see the fixpoint
 requirement in `test_ada_indent.ady`.
 
+## How comments are indented
+
+A comment-only line has no syntax of its own, so its column cannot be derived
+from the grammar the way a code line's is. It has to come from the code it is
+about, and the indenter decides which code that is from the layout the author
+chose. Trailing comments (after code on the same line) are never moved relative
+to their code: only a line's leading whitespace ever changes. The rules below,
+specified in `REQUIREMENTS.md` §7, are for comment-only lines.
+
+**1. A comment belongs to the line before it.** It is indented as a line
+following that one would be: inside the block the line opens, at the item
+column inside a parenthesised list, at the continuation column between the
+lines of a split statement.
+
+```ada
+   begin
+      -- initialise the counters          (inside the block 'begin' opens)
+      Count := 0;
+```
+
+*Why:* comments are usually written in place, next to the code they explain.
+Placing a comment where the next line would start also keeps a comment between
+two continuation lines from breaking the statement visually. The indenter treats
+such comments as transparent, so the lines around them are indented as if the
+comments were not there.
+
+**2. After a blank line, a comment belongs to the line after it,** and takes
+that line's column. It makes a difference only where that line steps out of the
+block, as in `when`, `elsif`, `else` or `exception`:
+
+```ada
+            return X;
+         end if;
+
+         -- Below: nothing specific for the origin unit.     (not at 'end if' level)
+      when For_FPL_Origin_Unit =>
+```
+
+*Why:* a blank line ends a paragraph, and a comment that opens the next one
+introduces what follows. The blank line is the author's own statement of which
+way the comment faces, so the indenter follows it. It is also easy to control:
+to keep a comment with the code above, leave out the blank line.
+
+**3. Except before `end ...`, `begin` or a lone `)`**: there the comment stays
+with the block it ends.
+
+```ada
+      return Equal_Data (Left_Ref, Right_Ref);
+
+      -- return (Left_Ref.Baseline = Right_Ref.Baseline ...  (commented-out code
+      --    or else Equal_Data (Left_Ref, Right_Ref);         stays in the body)
+   end Equal_Data;
+```
+
+*Why:* those lines carry no meaning a comment could be about. A comment before
+them is a note on, or code commented out of, the body or the declarations they
+close.
+
+**4. A deliberately placed comment keeps its place.** A comment indented more
+than one level deeper than rule 1 would put it (and deeper than the code line
+above it) keeps its offset from that code line. When that line is re-indented,
+the comment moves with it.
+
+```ada
+         Variant => Count.Create_Variant (Option => Options (Set),
+                                          Include_Temporary_Proposals => False),
+                    -- PQI does not take invisible flights into account.
+         Input_Flows => Selection_Flows,
+```
+
+*Why:* a note written *under* what it documents, like a value in an argument
+list, is an alignment the author chose, and the rules above cannot reconstruct
+it. The "more than one level deeper" threshold keeps this from getting in the
+way of re-indenting. A file whose indentation has been stripped, or one written
+with a different indent width, is still re-indented in full.
+
+**5. Inside a parenthesised list**, a comment after the last item (no comma
+follows it) or after a complete `X => Y` association sits at the item column,
+like the `)` that closes the list. Only after a line that ends in an operator
+(`&`, `+`, `and then`, ...) does it take the deeper continuation column,
+because only there is the expression certain to go on.
+
+**Editors.** Rule 2 needs the line after the comment, so it applies when whole
+input is indented: the command line, `format-all`, a region re-indent. When an
+editor indents one line at a time, the comment is placed before that line
+exists. The Emacs integration catches up: once the code line is indented, it
+re-indents the paragraph above it together with it. Other editors place such a
+comment by rule 1 until the region is re-indented.
+
 ## Running
 
 Compile once (the shebang already encodes `-d:release --opt:speed`), then run

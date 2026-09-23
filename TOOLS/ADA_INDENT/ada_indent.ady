@@ -997,6 +997,12 @@ class Indenter:
                 self.ref_new.append(-1)
             self.ref_orig.append(orig)
             self.ref_new.append(self.last_lead)
+            # A line that opens parentheses holds their first items too
+            # ('(Variant => F (X,' on one line): it is also the reference for
+            # the depths it opens, until a line starting at one of them comes.
+            while len(self.ref_orig) <= self.paren_depth:
+                self.ref_orig.append(orig)
+                self.ref_new.append(self.last_lead)
         elif line.strip() != "" and depth < len(self.ref_orig) and self.ref_orig[depth] >= 0:
             # A comment placed deliberately deeper than the indenter would put
             # it - a note under the value it explains, say - keeps its place
