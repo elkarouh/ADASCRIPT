@@ -595,8 +595,8 @@ def run_tests() -> int:
         "end P;\n"))
 
     # 21. A 'when' choice list split before its '=>': the '|' continuation
-    #     aligns at the arm-body level (one indent width above 'when'), matching
-    #     GNAT style where '|' and the arm body share the same column.
+    #     goes one level past the arm body, so it cannot be read as the
+    #     alternative's first statement.
     cases.append((
         "procedure P is\n"
         "begin\n"
@@ -611,7 +611,7 @@ def run_tests() -> int:
         "begin\n"
         "  case X is\n"
         "    when Action_1 | Action_15\n"
-        "      | Action_16 | Action_43 =>\n"
+        "        | Action_16 | Action_43 =>\n"
         "      Do_It;\n"
         "  end case;\n"
         "end P;\n"))

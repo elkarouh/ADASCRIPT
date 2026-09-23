@@ -38,12 +38,15 @@ package body Aspects is
   begin
     case X is
       when 1
-        | 2 =>
+          | 2 =>
         null;
       when others =>
         null;
     end case;
   exception
+    when Constraint_Error
+        | Program_Error =>
+      null;
     when E : others =>
       null;
   end R;
