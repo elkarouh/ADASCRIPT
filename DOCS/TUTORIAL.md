@@ -1318,11 +1318,11 @@ The forward declarations cover it now.
 so both take `self: var Report`, and a `let` binding cannot receive it:
 
 ```python
-let ctx: Context = Context(opt)
-ctx.run()     # Error: expression 'ctx' is immutable, not 'var'
+let report: Report = Report(opt)
+report.run()  # Error: expression 'report' is immutable, not 'var'
 
-var ctx: Context = Context(opt)
-ctx.run()     # correct
+var report: Report = Report(opt)
+report.run()  # correct
 ```
 
 The Python backend accepts either, so only Nim reports it. Rule of thumb: if
