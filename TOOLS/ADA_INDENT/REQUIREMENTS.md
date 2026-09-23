@@ -195,6 +195,22 @@ A comment in the declarative region (before `begin`) is indented at the
 declaration level. A comment between the function header and the first
 declaration is indented one level inside the subprogram.
 
+### 7.5 Hand-placed comments keep their place
+
+The rules above give a comment line the column of the code it documents,
+which is right for a comment written above that code. A comment written
+*under* what it documents - a note placed beneath the value of an
+association, say - is placed deliberately deeper, and is kept there:
+
+- A comment line that is more than one indentation level deeper than the
+  column 7.1-7.4 would give it, and deeper than the last code line at its
+  paren depth, keeps its offset from that code line. Both are measured in
+  the input as it arrives.
+- When that code line is re-indented, the comment moves by the same amount,
+  so its alignment with the code survives.
+- Every other comment line is re-indented by 7.1-7.4. A flattened file, or one
+  written with a different indent width, is therefore still indented in full.
+
 ---
 
 ## 8. Named associations and `=>`

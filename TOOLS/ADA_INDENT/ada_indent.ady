@@ -462,6 +462,18 @@ const RESYNC_WORD: []str = ["begin", "end", "declare", "exception", "package",
                              "generic", "separate", "select"]
 
 
+def input_column(line: str) -> int:
+    """The column a line's first non-blank character has in the input, with
+    tabs to the next multiple of 8."""
+    var col: int = 0
+    for c in line:
+        case c:
+            when ' ': col += 1
+            when '\t': col += 8 - col % 8
+            when others: return col
+    col
+
+
 def lead_words(code_s: str) -> []str:
     """The run of whole identifiers at the front of code_s, in order.
 
@@ -585,6 +597,9 @@ class Indenter:
     in_cont: bool = False        # previous line was an unterminated statement/declaration
     value_base: Natural = 0      # display level where the current statement's value expression starts
     last_lead: Natural = 0       # indent column of the last code line
+    ref_orig: []int = []         # per paren depth: the input column of the last code
+    ref_new: []int = []          # line that started at that depth, and its output
+                                 # column - what a hand-placed comment is kept relative to
     last_ends_name: bool = False # ...and whether it ended in a name (a call's
                                  # argument list may open the next line)
     spill_col: int = -1          # column for the continuation lines of a sub-expression
@@ -745,6 +760,8 @@ class Indenter:
             "vb="    + str(self.value_base),
             "sc="    + str(self.spill_col),
             "ll="    + str(self.last_lead),
+            "ro="    + ",".join([str(x) for x in self.ref_orig]),
+            "rn="    + ",".join([str(x) for x in self.ref_new]),
             "len="   + ("T" if self.last_ends_name else "F"),
             "psk="   + ";".join(ps_parts),
             "pc="    + ("T" if self.paren_cont      else "F"),
@@ -776,6 +793,8 @@ class Indenter:
         self.value_base          = 0
         self.spill_col          = -1
         self.last_lead          = 0
+        self.ref_orig           = []
+        self.ref_new            = []
         self.last_ends_name     = False
         self.paren_stack         = []
         self.paren_cont          = False
@@ -811,6 +830,14 @@ class Indenter:
                 when "vb": self.value_base = int(val)
                 when "sc": self.spill_col = int(val)
                 when "ll": self.last_lead = int(val)
+                when "ro" if val != "":
+                    for x in val.split(","):
+                        let xs: str = x
+                        self.ref_orig.append(int(xs))
+                when "rn" if val != "":
+                    for x in val.split(","):
+                        let xs: str = x
+                        self.ref_new.append(int(xs))
                 when "len": self.last_ends_name = val == "T"
                 when "psk" if val != "":
                     for entry in val.split(";"):
@@ -938,18 +965,48 @@ class Indenter:
 
     def indent_line(self, line: str) -> str:
         """Process one raw line and return it re-indented."""
-        let out: str = self.indent_raw(line)
+        let depth: Natural = self.paren_depth           # the depth the line starts at
+        var res: str = self.indent_raw(line)
         let code_s: str = strip_line_comment(line, "--", '"').strip()
+        let orig: int = input_column(line)
         if code_s != "":
-            self.last_lead = len(out) - len(out.lstrip())
+            self.last_lead = len(res) - len(res.lstrip())
             self.last_ends_name = is_ident_ch(code_s[-1])
+            # Remember where this line was and where it went, as the reference
+            # for comments at its depth; deeper references are stale now.
+            while len(self.ref_orig) > depth:
+                self.ref_orig.pop()
+                self.ref_new.pop()
+            while len(self.ref_orig) < depth:
+                self.ref_orig.append(-1)
+                self.ref_new.append(-1)
+            self.ref_orig.append(orig)
+            self.ref_new.append(self.last_lead)
+        elif line.strip() != "" and depth < len(self.ref_orig) and self.ref_orig[depth] >= 0:
+            # A comment placed deliberately deeper than the indenter would put
+            # it - a note under the value it explains, say - keeps its place
+            # relative to the code line above it at its depth: when that line
+            # moves, the comment moves with it. 'Deliberately' is more than one
+            # indentation level deeper than the default, both measured from
+            # that line, so a flattened file, or one written with another
+            # indent width, is still re-indented in full. (And deeper than that
+            # line in the input itself: after a continuation line the indenter
+            # has pushed right, a flattened comment would otherwise count as
+            # 'deeper than the default' and follow it.)
+            let dflt: int = len(res) - len(res.lstrip())
+            let rel: int = orig - self.ref_orig[depth]
+            let one_level: int = INDENT_WIDTH
+            if rel > 0 and rel > dflt - self.ref_new[depth] + one_level:
+                let kept: Natural = max(0, self.ref_new[depth] + rel)
+                let text: str = res.lstrip()
+                res = " " * kept + text
         # A declaration that ends in ';' at the outer level is complete without
         # a body - a spec, a renaming, an instantiation, an expression function
         # - so its head is not one waiting for a frame.
         if self.paren_depth == 0 and self.frame_name != "" and \
                 strip_line_comment(line, "--", '"').rstrip().endswith(";"):
             self._forget_head(self.frame_name)
-        out
+        res
 
     def indent_raw(self, line: str) -> str:
         """indent_line proper: re-indent one raw line."""

@@ -2397,6 +2397,34 @@ def run_tests() -> int:
         "  end if;\n"
         "end P;\n"))
 
+    # 90. A comment placed deliberately deeper than the indenter would put it
+    #     (more than one level) keeps its offset from the code line above it
+    #     at its paren depth, and moves with that line: here the whole call
+    #     arrives two columns too deep and the note under 'Make (...)' follows
+    #     it. A comment at the default column is re-indented as ever.
+    cases.append((
+        "procedure P is\n"
+        "begin\n"
+        "    Call\n"
+        "      (A => 1,\n"
+        "       V => Make (X => 1,\n"
+        "                  Y => 2),\n"
+        "                   -- about Make: stays under its arguments\n"
+        "       -- about B\n"
+        "       B => 2);\n"
+        "end P;\n",
+
+        "procedure P is\n"
+        "begin\n"
+        "  Call\n"
+        "    (A => 1,\n"
+        "     V => Make (X => 1,\n"
+        "                Y => 2),\n"
+        "                 -- about Make: stays under its arguments\n"
+        "     -- about B\n"
+        "     B => 2);\n"
+        "end P;\n"))
+
     for pair in cases:
         let src: str = pair[0]
         let want: str = pair[1]
