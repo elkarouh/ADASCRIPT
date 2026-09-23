@@ -357,6 +357,20 @@ const NAME_OPENER: []str = ["package", "procedure", "function", "task",
 # match a frame against.
 const END_KEYWORD: []str = ["if", "loop", "case", "record", "select", "return"]
 
+# Words that can never appear inside an expression or a condition, so a line
+# that starts with one begins a new statement or declaration whatever state the
+# previous lines left behind. They are the resynchronisation points for an
+# unclosed '(' or an 'if' whose 'then' never came: without them that state is
+# never cleared, and every line to the end of the file is read as part of one
+# endless expression. Words that DO occur inside expressions are left out on
+# purpose - 'if', 'case', 'for', 'else', 'elsif', 'when', 'return', 'raise',
+# 'with', 'null', 'new', 'not' - as is 'is', which continues a header.
+const RESYNC_WORD: []str = ["begin", "end", "declare", "exception", "package",
+                             "procedure", "function", "pragma", "type",
+                             "subtype", "use", "loop", "while", "exit", "goto",
+                             "delay", "accept", "entry", "task", "protected",
+                             "generic", "separate", "select"]
+
 
 def lead_words(code_s: str) -> []str:
     """The run of whole identifiers at the front of code_s, in order.
@@ -452,6 +466,14 @@ class Indenter:
     stack: []Block_T = []
     frame_names: []str = []      # name of each open frame, '' when it has none;
                                  # kept exactly in step with `stack` by _push/_pop
+    closed_names: []str = []     # named frames closed by a nameless 'end' (most recent
+                                 # last): an 'end X;' naming one of them finds X already
+                                 # gone because an earlier 'end' was stray, not because
+                                 # the frame on top is misnamed - see the 'end' arm
+    unopened_heads: []str = []   # declaration heads that have neither opened a frame
+                                 # nor ended in ';' (a spec): an 'end X;' for one of
+                                 # them closes a head that was mangled, and must not
+                                 # close the frame around it (see the 'end' arm)
     pending_label: str = ""      # a bare 'Outer :' label line awaiting its block
     frame_name: str = ""         # the name declared by the logical line being read
     spec_name: str = ""          # name of the deferred 'function ... is' header: the
@@ -486,6 +508,16 @@ class Indenter:
         match the wrong construct, which is worse than not matching at all."""
         self.stack.append(kind)
         self.frame_names.append(name)
+        if name != "":
+            self._forget_head(name)
+
+    def _forget_head(self, name: str):
+        """Drop `name` from unopened_heads, if it is there."""
+        var kept: []str = []
+        for h in self.unopened_heads:
+            if h != name.lower():
+                kept.append(h)
+        self.unopened_heads = kept
 
     def _pop_frame(self):
         """Close the innermost frame, if there is one."""
@@ -517,6 +549,68 @@ class Indenter:
             i -= 1
         return False
 
+    def _closed_depth(self, name: str) -> int:
+        """The stack depth a nameless 'end' left when it closed the frame called
+        `name` (see closed_names), or -1 when no such frame was closed."""
+        var i: int = len(self.closed_names) - 1   # int: the scan runs down past 0
+        while i >= 0:
+            let nd: []str = self.closed_names[i].split(":")
+            if nd[0] == name.lower():
+                return int(nd[1])
+            i -= 1
+        -1
+
+    def _close_kind(self, kind: Block_T, word: str):
+        """Close the innermost open frame of `kind` - an 'end if', 'end loop',
+        ... names the kind of construct it closes, so it can only close one of
+        that kind.
+
+        The search stops at the body it is in (a package, a type, or a named
+        block, which is how a subprogram body is kept): a closer never reaches
+        through a body boundary to match a construct outside it. Frames it has
+        to step over to reach the match were never closed and are dropped with
+        it. When there is no match the closer is stray and closes nothing, which
+        keeps a single extra 'end if;' from shifting the rest of the file one
+        level out.
+        """
+        var i: int = len(self.stack) - 1      # int: the scan runs down past 0
+        while i >= 0:
+            if self.stack[i] == kind:
+                var dropped: Natural = 0
+                for j in range(i + 1, len(self.stack)):
+                    if self.stack[j] != WHEN:
+                        dropped += 1
+                while len(self.stack) > i:
+                    self._pop_frame()
+                if dropped > 0:
+                    self._warn(f"'end {word}' closes an outer '{word}': "
+                               f"dropped {dropped} unclosed frame(s) to resynchronise")
+                return
+            if self.stack[i] == PKG or self.stack[i] == TYPE_HEADER or \
+                    ((self.stack[i] == BLOCK or self.stack[i] == DECLARE) and self.frame_names[i] != ""):
+                break
+            i -= 1
+        self._warn(f"'end {word}' has no open '{word}' to close: ignored")
+
+    def _resync_expression(self, why: str):
+        """Abandon an expression or condition that never finished.
+
+        Called on a line that cannot continue one (see RESYNC_WORD). An 'if'
+        that was still looking for its 'then' is taken to have opened its
+        statement anyway, since its body and 'end if' will follow and must pair
+        with a frame.
+        """
+        self._warn(why)
+        if self.cond_state == 1:
+            self._push_frame(IF)
+        self.cond_state = 0
+        self.paren_depth = 0
+        self.paren_stack = []
+        self.paren_cont = False
+        self.arrow_level = 0
+        self.paren_next_lead_depth = -1
+        self.in_cont = False
+
     def _warn(self, msg: str):
         """Report a desynchronisation on stderr, never on stdout: the indented
         text is the output, and a formatter that pollutes it is unusable in a
@@ -537,6 +631,8 @@ class Indenter:
             ps_parts.append(str(t[0]) + ":" + str(t[1]) + ":" + str(t[2]))
         var parts: []str = [
             "stack=" + ",".join(stack_names),
+            "cn="    + ",".join(self.closed_names),
+            "uh="    + ",".join(self.unopened_heads),
             "pd="    + str(self.paren_depth),
             "ps="    + ("T" if self.pending_spec    else "F"),
             "ck="    + self.cont_kw,
@@ -563,6 +659,8 @@ class Indenter:
         """Restore indenter state from a string previously produced by dump_state."""
         self.stack               = []
         self.frame_names         = []
+        self.closed_names        = []
+        self.unopened_heads      = []
         self.pending_label       = ""
         self.frame_name          = ""
         self.spec_name           = ""
@@ -618,6 +716,8 @@ class Indenter:
                 when "pnl": self.paren_next_lead = int(val)
                 when "pnld": self.paren_next_lead_depth = int(val)
                 when "ppl": self.paren_prev_lead = int(val)
+                when "cn" if val != "": self.closed_names = val.split(",")
+                when "uh" if val != "": self.unopened_heads = val.split(",")
                 when others: pass
 
     def _push_parens(self, text: str, base_col: Natural, base_depth: Natural, new_depth: Natural):
@@ -629,6 +729,17 @@ class Indenter:
 
     def indent_line(self, line: str) -> str:
         """Process one raw line and return it re-indented."""
+        let out: str = self.indent_raw(line)
+        # A declaration that ends in ';' at the outer level is complete without
+        # a body - a spec, a renaming, an instantiation, an expression function
+        # - so its head is not one waiting for a frame.
+        if self.paren_depth == 0 and self.frame_name != "" and \
+                strip_line_comment(line, "--", '"').rstrip().endswith(";"):
+            self._forget_head(self.frame_name)
+        out
+
+    def indent_raw(self, line: str) -> str:
+        """indent_line proper: re-indent one raw line."""
         let raw2: str = line.rstrip()
         # Ada's conventions for the library's generic stripper: '--' opens a
         # comment, '"' delimits a string, so a '--' inside one is not a
@@ -703,6 +814,20 @@ class Indenter:
             let blvl: Natural = len(self.stack) + (1 if self.pending_spec else 0)
             return " " * (max(0, blvl) * INDENT_WIDTH) + emit_text
 
+        # A line that cannot be part of an expression ends whatever expression
+        # or condition the previous lines left open.
+        if (self.paren_depth > 0 or self.cond_state > 0) and \
+                lead_ident(code_s).lower() in RESYNC_WORD:
+            self._resync_expression(f"'{lead_ident(code_s)}' inside an unfinished "
+                                    + ("parenthesis" if self.paren_depth > 0 else "'if' condition")
+                                    + ": state reset")
+        elif self.in_cont and lead_ident(code_s).lower() in RESYNC_WORD:
+            self.in_cont = False       # the previous line lacked its ';'
+        # A condition line never ends in ';': an 'if' that reaches one without
+        # its 'then' is over, and this line is the first of its body.
+        elif self.cond_state > 0 and self.paren_depth == 0 and code_s.endswith(";"):
+            self._resync_expression("'if' condition ended without 'then'")
+
         let entry_depth: Natural = self.paren_depth
         # When we are outside all parens, clear the plain-paren continuation flag
         # and the named-value spill state so stale paren context does not leak.
@@ -721,6 +846,14 @@ class Indenter:
             # will close it. A bare 'Outer :' label line declares a name but opens
             # nothing, so the name waits for the declare/begin/for/while it labels.
             let dn: str = declared_name(code_s)
+            # Only heads whose construct ends in 'end <name>;' - not types, whose
+            # 'end' is 'end record'. The entry goes as soon as the head opens
+            # its frame (_push_frame) or turns out to be a spec (indent_line).
+            if dn != "" and self.cont_kw != "type" and self.cont_kw != "subtype":
+                self._forget_head(dn)
+                self.unopened_heads.append(dn.lower())
+                if len(self.unopened_heads) > 8:
+                    self.unopened_heads = self.unopened_heads[1:]
             if dn != "" and code_s.endswith(":"):
                 self.pending_label = dn
                 self.frame_name = ""
@@ -1036,18 +1169,55 @@ class Indenter:
                 # a mis-parse costs the lines up to this 'end' instead of every
                 # line to the end of the file.
                 let en: str = end_name(code_s)
+                let ews: []str = lead_words(code_s)
+                let ekw: str = ews[1].lower() if len(ews) > 1 and ews[1].lower() in END_KEYWORD else ""
                 let top_name: str = self.frame_names[-1] if self.stack else ""
                 let before: Natural = len(self.stack)
-                if en == "" or top_name.lower() == en.lower():
-                    self._pop_frame()                      # the ordinary, matching case
+                if ekw != "":
+                    # 'end if', 'end loop', ...: the kind is stated, so match
+                    # on it (a loop label, if any, is only a check on the kind).
+                    case ekw:
+                        when "if": self._close_kind(IF, ekw)
+                        when "loop": self._close_kind(LOOP, ekw)
+                        when "case": self._close_kind(CASE, ekw)
+                        when "record": self._close_kind(RECORD, ekw)
+                        when "select": self._close_kind(SELECT, ekw)
+                        when others: self._close_kind(DO, ekw)    # 'end return'
+                elif en == "" or top_name.lower() == en.lower():
+                    # the ordinary, matching case. A nameless 'end' closing a
+                    # named frame is remembered: if it was stray, the frame's
+                    # own 'end X;' arrives later and must not close another.
+                    if en == "" and top_name != "":
+                        self.closed_names.append(top_name.lower() + ":" + str(len(self.stack) - 1))
+                        if len(self.closed_names) > 8:
+                            self.closed_names = self.closed_names[1:]
+                    self._pop_frame()
                 elif self._close_named(en):
                     # _close_named popped the matching frame plus everything
                     # above it; all but the match were never really open.
                     let stale: Natural = before - len(self.stack) - 1
                     self._warn(f"'end {en}' closes an outer construct: "
                                f"dropped {stale} unclosed frame(s) to resynchronise")
+                elif self._closed_depth(en) >= 0:
+                    # X is not open because a nameless 'end' already closed it:
+                    # that one was stray, and closing another frame here would
+                    # carry its error on to the end of the file. Return to the
+                    # depth that 'end' left, which is where X's end belongs;
+                    # anything opened since belonged to X and is closed with it.
+                    let depth: Natural = self._closed_depth(en)
+                    while len(self.stack) > depth:
+                        self._pop_frame()
+                    self._warn(f"'end {en}' closes a construct an earlier 'end' "
+                               "already closed")
                 elif top_name == "":
                     self._pop_frame()                      # unnamed frame: nothing to contradict
+                elif en.lower() in self.unopened_heads:
+                    # X was declared a few lines up but has no frame, so its
+                    # head never opened one (a mangled header). The frame on
+                    # top is some outer construct that this 'end' must leave
+                    # open.
+                    self._warn(f"'end {en}' closes '{en}', whose header opened "
+                               "no block: ignored")
                 else:
                     self._warn(f"'end {en}' does not match the open '{top_name}'")
                     self._pop_frame()
@@ -1072,27 +1242,37 @@ class Indenter:
                 if self.stack and self.stack[-1] == WHEN:
                     self._pop_frame()
                 disp = len(self.stack)
-                self._push_frame(WHEN)
-                # The arm body may start on the same line as its '=>' and open a
-                # block of its own: 'when X => if C then', 'when X => for I in
-                # ... loop'. The WHEN frame is the alternative, not that block,
-                # so without a frame for it the block's own 'end' closes the
-                # alternative instead and every 'end' after it is one frame out.
-                # The same two guards as the statement-level dispatch: a line
-                # ending in ';' is a complete arm and opens nothing, and a
-                # trailing keyword inside an unclosed paren is part of an
-                # expression, not an opener.
-                if paren_delta(code) <= 0 and not code_s.endswith(";"):
-                    case last_word(code_s):
-                        when "then" if ends_with_condition_then(code_s):
-                            self._push_frame(IF)
-                        when "loop": self._push_frame(LOOP)
-                        when "is": self._push_frame(CASE)
-                        when "declare": self._push_frame(DECLARE)
-                        when "select": self._push_frame(SELECT)
-                        when "do": self._push_frame(DO)
-                        when "begin": self._push_frame(BLOCK, self.frame_name)  # ') is begin'
-                        when others: pass
+                # An alternative belongs to a case statement, a select or an
+                # exception handler (whose frame is the BLOCK of its 'begin').
+                # Anywhere else the 'when' is left over from a construct that
+                # lost its opener - a case expression whose '(' was never
+                # closed, say - and a WHEN frame for it would never be popped.
+                if self.stack and (self.stack[-1] == CASE or self.stack[-1] == SELECT
+                                   or self.stack[-1] == BLOCK):
+                    self._push_frame(WHEN)
+                    # The arm body may start on the same line as its '=>' and open a
+                    # block of its own: 'when X => if C then', 'when X => for I in
+                    # ... loop'. The WHEN frame is the alternative, not that block,
+                    # so without a frame for it the block's own 'end' closes the
+                    # alternative instead and every 'end' after it is one frame out.
+                    # The same two guards as the statement-level dispatch: a line
+                    # ending in ';' is a complete arm and opens nothing, and a
+                    # trailing keyword inside an unclosed paren is part of an
+                    # expression, not an opener.
+                    if paren_delta(code) <= 0 and not code_s.endswith(";"):
+                        case last_word(code_s):
+                            when "then" if ends_with_condition_then(code_s):
+                                self._push_frame(IF)
+                            when "loop": self._push_frame(LOOP)
+                            when "is": self._push_frame(CASE)
+                            when "declare": self._push_frame(DECLARE)
+                            when "select": self._push_frame(SELECT)
+                            when "do": self._push_frame(DO)
+                            when "begin": self._push_frame(BLOCK, self.frame_name)  # ') is begin'
+                            when others: pass
+                else:
+                    self._warn("'when' outside a case, select or exception handler: "
+                               "no alternative opened")
 
             when "elsif":
                 disp = len(self.stack) - 1
