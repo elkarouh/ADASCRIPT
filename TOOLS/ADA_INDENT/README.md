@@ -95,6 +95,32 @@ statement labels, generic formal parts, `then abort`, glued punctuation,
 keywords inside literals and comments). To add a fixture, indent it by hand,
 put it in `regress/` and list it in `FIXTURES` in `test_ada_indent.ady`.
 
+### Checking a whole code base
+
+The tests only cover the layouts someone thought to write down. Real code has
+many more, and `check_ada_tree.py` runs the indenter over a tree of Ada sources
+to find the ones it gets wrong:
+
+```bash
+ady2nim c TOOLS/ADA_INDENT/ada_indent.ady          # builds, and links ada_indent here
+TOOLS/ADA_INDENT/check_ada_tree.py ~/src/my_project   # every .adb/.ads/.ada below it
+```
+
+Code that compiles gives three checks that need no idea of the right
+indentation, and any hit is an indenter bug:
+
+- **warnings** — each resynchronisation the indenter reports on stderr. On
+  code that compiles there is nothing to recover from.
+- **unstable** — re-indenting the output must not change it.
+- **damaged** — the output must hold the same lines, with only their leading
+  whitespace changed.
+
+Each is printed as `file:line: …`, and the exit status is 1 if there is any.
+The summary also counts the lines the indenter would *move*: that is style,
+not necessarily a bug, but `--moved` lists them, and a run of moved lines in a
+well-kept file is worth a look. `--bin`, `--max` and `--jobs` are described in
+`--help`.
+
 The core (the `Indenter` class plus the lexical helpers) is pure Adascript and
 transpiles to both Python and Nim.
 
