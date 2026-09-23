@@ -95,7 +95,8 @@ STANDALONE := \
     test_enum_array_enumerate.ady \
     test_enum_array_zero_fill.ady \
     test_case_guard_or.ady \
-    test_method_param_names.ady
+    test_method_param_names.ady \
+    test_pure_method_self.ady
 
 # -----------------------------------------------------------------------
 # Stdin tests — piped from a sample file

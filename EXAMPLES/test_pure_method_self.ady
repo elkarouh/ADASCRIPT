@@ -1,0 +1,72 @@
+#!/usr/bin/env ady2nim
+# test_pure_method_self.ady — an accessor that calls an accessor stays read-only
+#
+#   ady2nim EXAMPLES/test_pure_method_self.ady -r
+#   ady2py  EXAMPLES/test_pure_method_self.ady -c
+#
+# Nim needs `self: var T` on a method that changes self, and ady2nim infers
+# it. The inference counted *every* call to a sibling method as a change, so
+# a method that only read fields and called another method that only read
+# fields took `var self` too -- and could then not be called on a `let`, a
+# loop variable or a parameter: "expression 'a' is immutable, not 'var'".
+# The book (sections 9.2, 9.7) already described the rule as it is now:
+# `var` for a method that writes, or calls a sibling that does.
+#
+# It only ever removes a `var` that was not needed. A method that may write,
+# including in ways the inference cannot see directly (a method called on a
+# field, self handed to another routine), keeps whatever it had before.
+
+class Acc:
+    var root : str = "/r"
+    var hits : int = 0
+    var seen : []str = []
+
+    # --- pure: reads, or calls only what reads ------------------------------
+    def base(self) -> str:
+        return self.root + "/base"
+    def sub(self, leaf: str) -> str:
+        return self.base() + "/" + leaf
+    def deep(self, leaf: str) -> str:
+        return self.sub(leaf) + "!"
+
+    # --- mutual recursion with no write anywhere is still pure --------------
+    def ping(self, n: int) -> int:
+        if n <= 0:
+            return 0
+        return self.pong(n - 1) + 1
+    def pong(self, n: int) -> int:
+        return self.ping(n)
+
+    # --- impure: writes, or reaches something that does ---------------------
+    def touch(self):
+        self.hits = self.hits + 1
+    def via_touch(self) -> str:
+        self.touch()
+        return self.base()
+    def note(self, s: str):
+        self.seen.append(s)
+    def via_note(self) -> int:
+        self.note(self.base())
+        return self.seen'Length
+
+def through_param(a: Acc) -> str:          # a parameter cannot be var
+    return a.deep("p")
+
+let a: Acc = Acc()                         # a let cannot either
+assert a.base() == "/r/base"
+assert a.sub("x") == "/r/base/x"
+assert a.deep("x") == "/r/base/x!"
+assert a.ping(3) == 3
+assert through_param(a) == "/r/base/p!"
+var total: int = 0
+for q in [a, a]:                           # nor a loop variable
+    total = total + q.deep("y")'Length
+assert total == 2 * a.deep("y")'Length
+
+var b: Acc = Acc()                         # the impure ones still work, on a var
+assert b.via_touch() == "/r/base"
+assert b.hits == 1
+assert b.via_note() == 1
+assert b.seen == ["/r/base"]
+
+print "pure method self tests passed"
