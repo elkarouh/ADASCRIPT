@@ -7,9 +7,9 @@ get a program's own name -- compiled to Nim that said `undeclared
 identifier: 'Path'`.
 """
 
-let p = Path("/usr/local/bin/tool.ady")
-assert str(p.name) == "tool.ady"
-assert str(p.parent) == "/usr/local/bin"
+let tool: str = "/usr/local/bin/tool.ady"
+assert str(Path(tool).name) == "tool.ady"
+assert str(Path(tool).parent) == "/usr/local/bin"
 
 # the call composes where its result is wanted, not only where it is bound
 assert str(Path("/a/b/c.txt").name) == "c.txt"

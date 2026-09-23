@@ -191,35 +191,44 @@ decl_ann_assign_stmt = decl_keyword + IDENTIFIER + V_COLON + type_annotation + (
 decl_tuple_unpack = decl_keyword + paren_group + V_EQUAL + _expressions
 
 
-# decl_untyped: let x = expr  (no annotation)
-# There was never a rule for this. It parsed by accident: `expressions` took
-# the bare word `let` as a name, the end of line expected after it failed on
-# `x`, and a backtracking bug in the sequence combinator retried the other
-# statement forms from `x` instead of from `let` -- so `let x = e` came out as
-# the assignment `x = e`, the keyword silently gone. With the combinator fixed
-# that path is closed, so the meaning it had is written down here instead: the
-# keyword is dropped and the rest is the plain assignment, node for node, which
-# keeps every program that relied on it translating exactly as before.
+# decl_untyped: let x = expr  (no annotation) -- refused
+# Adascript is explicitly typed: a declaration names its type. The one
+# exception is a shell command's output, `let r = shell: ...`, whose type the
+# command fixes (str unless declared otherwise); shell_target_scalar in
+# ady_compound_stmt takes that form, so this rule steps aside for it.
+# There was never a rule for the untyped form, but it used to parse by
+# accident -- `let` read as a name, abandoned, and a backtracking bug in the
+# sequence combinator resuming after it -- so `let x = e` silently lost its
+# keyword and became `x = e`. With that bug gone it would be a bare parse
+# error at the `let`; this rule says what is wrong instead.
 from hek_parsec import Parser as _Parser, apply_parsing_context as _parsing_context
+
+_SHELL_WORDS = ("shell", "shellLines", "shellExec", "shellSpawn")
 
 
 class decl_untyped(_Parser):
     @_parsing_context
     def parse(cls, token_stream):
         start = token_stream.mark()
+        kw_tok = token_stream.get_new_token()
+        token_stream.reset(start)
         if not decl_keyword.parse(token_stream):
             return False
-        after_kw = token_stream.mark()
-        # Only 'let NAME = ...': the annotated and tuple forms have rules of
-        # their own, tried first.
+        name_tok = token_stream.get_new_token()
+        token_stream.reset(start)
+        decl_keyword.parse(token_stream)
         if not (IDENTIFIER.parse(token_stream) and V_EQUAL.parse(token_stream)):
             token_stream.reset(start)
             return False
-        token_stream.reset(after_kw)
-        if m := assign_stmt.parse(token_stream):
-            return m
+        value_tok = token_stream.get_new_token()
         token_stream.reset(start)
-        return False
+        if value_tok is not None and getattr(value_tok, "string", "") in _SHELL_WORDS:
+            return False
+        kw, name = kw_tok.string, name_tok.string
+        raise SyntaxError(
+            f"line {kw_tok.start[0]}: '{kw} {name} = ...' has no type. Adascript is "
+            f"explicitly typed: write '{kw} {name}: <type> = ...'. Only a shell "
+            f"command's output may leave it out.")
 
 # --- own declaration: own IDENTIFIER ':' type_annotation ['=' expression] ---
 # Unique owner; auto-freed at scope end (Nim ARC; Python GC)

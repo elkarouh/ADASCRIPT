@@ -1630,7 +1630,7 @@ Function calls and other complex expressions also work inside `{}` — the
 transpiler hoists them to temp variables automatically:
 
 ```python
-let name = "world"
+let name: str = "world"
 let result = shell: echo hello {name}
 
 shell: mkdir -p -- {!os.path.join(d, "subdir")}
@@ -1993,7 +1993,7 @@ let j: Job = shellSpawn: make -j8
 while j.running():          # never blocks
     print "still building"
 let r: RunResult = j.wait() # blocks; .output, .stderr, .code
-let r2 = j.wait(check = true)   # raises if it failed
+let r2: RunResult = j.wait(check = true)   # raises if it failed
 j.kill()                    # SIGTERM, reported as 143; safe to call twice
 print j.pid
 ```

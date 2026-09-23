@@ -363,7 +363,7 @@ let j2: Job = shellSpawn: make -j8
 while j2.running():            # never blocks
     print("still building")
 let r7: RunResult = j2.wait()  # blocks
-let r8 = j2.wait(check = true) # raises if it failed
+let r8: RunResult = j2.wait(check = true) # raises if it failed
 j2.kill()                      # SIGTERM, reported as 143
 ```
 

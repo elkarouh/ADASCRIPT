@@ -1253,7 +1253,20 @@ def run_tests():
         # '(8 + 1)', silently.
         ("let y: int = (a b)\n", "Parse error"),
         ("let c: int = 13\nlet a: int = (c div 8 + 1) * 8\n", "Parse error"),
+        # Adascript is explicitly typed: a declaration without its type is
+        # refused, by name, rather than silently losing its keyword (which is
+        # what the backtracking bug above used to make of it).
+        ('let p = Path("/x")\n', "'let p = ...' has no type"),
+        ("var n = 3\n", "'var n = ...' has no type"),
     ]
+    # ...except a shell command's output, whose type the command fixes.
+    try:
+        translate("let r = shell: echo hi\nprint r\n")
+        print("  PASS: 'let r = shell: ...' may leave its type out")
+        passed += 1
+    except SyntaxError as e:
+        print(f"  FAIL: 'let r = shell: ...' was refused: {e}")
+        failed += 1
     for code, want in error_tests:
         label = code.splitlines()[-1]
         try:

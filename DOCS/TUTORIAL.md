@@ -1528,7 +1528,7 @@ calls and other complex expressions also work inside `{}` — the transpiler
 hoists them to temp variables automatically:
 
 ```python
-let branch = "main"
+let branch: str = "main"
 let result = shell: git log --oneline {branch}
 
 shell: mkdir -p -- {!os.path.join(d, "subdir")}
