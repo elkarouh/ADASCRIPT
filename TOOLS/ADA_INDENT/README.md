@@ -95,6 +95,30 @@ statement labels, generic formal parts, `then abort`, glued punctuation,
 keywords inside literals and comments). To add a fixture, indent it by hand,
 put it in `regress/` and list it in `FIXTURES` in `test_ada_indent.ady`.
 
+### Metamorphic check
+
+`metamorphic_check.py` re-lays-out the golden sample and every
+`regress/valid_*.adb` in ways Ada allows, re-indents the result, and requires
+every line it did not touch to keep its column. The file's own indentation is
+the oracle, so no expected output is written by hand and every place a
+transform fits gets tried:
+
+- **in-line** — keywords upper/lower-cased, punctuation glued (`)is`) or spread,
+  tabs between words, trailing comments and extra comment or blank lines,
+  leading whitespace stripped or randomised;
+- **layout**, one place at a time — the statement below a `then`/`else`/`loop`
+  pulled up beside it, `then` moved to its own line under its `if`, `exit …
+  when C;` split before `when`, and a subprogram's `is` moved to its own line.
+
+`make test` runs it after the unit tests. By hand:
+
+```bash
+TOOLS/ADA_INDENT/metamorphic_check.py                     # the fixtures
+TOOLS/ADA_INDENT/metamorphic_check.py some_file.adb ...   # any correctly indented file
+```
+
+A failure names the file, the place transformed, and the line that moved.
+
 ### Checking a whole code base
 
 The tests only cover the layouts someone thought to write down. Real code has

@@ -202,6 +202,27 @@ def has_condition_then(code_s: str) -> bool:
     return False
 
 
+def loop_delta(code_s: str) -> int:             # int: 'end loop' makes it negative
+    """Net loops the line opens: +1 for each 'loop' that starts one, -1 for
+    the 'loop' of an 'end loop'.
+
+    'for I in A loop X := F (I);' opens a loop whose body continues below,
+    but it ends in ';' - the ';' of the first statement, not of the loop - so
+    neither the dispatch on the last word nor the ';' rule sees the opener.
+    'for I in A loop X; end loop;' nets to zero and opens nothing.
+    """
+    var delta: int = 0
+    var prev: str = ""
+    for w in code_words(code_s):
+        if w == "loop":
+            if prev == "end":
+                delta -= 1
+            else:
+                delta += 1
+        prev = w
+    return delta
+
+
 def if_delta(code_s: str) -> int:               # int: 'end if' makes it negative
     """Net if statements the line opens: +1 for each 'if' that starts one, -1
     for the 'if' of an 'end if'.
@@ -864,6 +885,50 @@ class Indenter:
                 self._push_frame(BLOCK, self.frame_name)
             when others: pass
 
+    def _open_midline(self, code: str, code_s: str, lw: str):
+        """Open the blocks a line opens part-way along, beyond the one its last
+        word opened (see _open_trailing): a 'record', 'loop' or 'if' whose body
+        starts beside it on the same line. Asked by ordinary lines and by case
+        alternatives alike - 'when X => if C then return Y;' opens an if too.
+        """
+        let last: str = last_word(code_s)
+        # A 'record' that opens a component list part-way along the line
+        # ('type T is record F : X;'). Outside the guard above, because
+        # such a line ends with the first component's ';' and so opens
+        # nothing by that rule -- yet the component list is open, and an
+        # 'end record;' below would otherwise pop a frame belonging to
+        # something else. Only when the opener is not the last word:
+        # there the dispatch has already handled it.
+        if last != "record" and record_delta(code) > 0:
+            self._push_frame(RECORD)
+        # Likewise a loop whose body starts beside its 'loop'.
+        if last != "loop":
+            var extra_loops: int = loop_delta(code)
+            while extra_loops > 0:
+                self._push_frame(LOOP)
+                extra_loops -= 1
+        # The same for an if statement whose first branch is complete on
+        # the opening line ('if C then return "X";'): its 'then' is
+        # mid-line and its ';' closes the branch, not the statement, so
+        # neither the dispatch nor the ';' rule sees the opener.
+        # Two lines are not this: one ending in the condition's own
+        # 'then', which the dispatch above has already pushed for, and
+        # one where the condition does not finish at all -- a multi-line
+        # condition belongs to the tracker, which pushes when its 'then'
+        # finally arrives.
+        # 'if A then if B then' opens two, the trailing one pushed above.
+        # 'if A then if B' opens one here: the last 'if' is still
+        # looking for its 'then', and the condition tracker started
+        # below pushes its frame when that 'then' arrives.
+        if has_condition_then(code):
+            let tracked: bool = lw == "if" and not ends_with_condition_then(code_s) \
+                and stmt_incomplete(code_s)
+            var extra_ifs: int = if_delta(code) - (1 if ends_with_condition_then(code_s) else 0) \
+                - (1 if tracked else 0)
+            while extra_ifs > 0:
+                self._push_frame(IF)
+                extra_ifs -= 1
+
     def _push_parens(self, text: str, base_col: Natural, base_depth: Natural, new_depth: Natural):
         """Record parentheses opened on this line and drop any now closed."""
         for opener in scan_parens(text, base_depth, base_col):
@@ -1404,6 +1469,7 @@ class Indenter:
                     # paren is part of an expression, not an opener.
                     if paren_delta(code) <= 0:
                         self._open_trailing(code_s, lw)
+                        self._open_midline(code, code_s, lw)
                 else:
                     self._warn("'when' outside a case, select or exception handler: "
                                "no alternative opened")
@@ -1449,7 +1515,6 @@ class Indenter:
                         and self.stack and self.stack[-1] == PKG:
                     self.pending_inst = True
                 disp = len(self.stack)
-                let last: str = last_word(code_s)
                 # A trailing block keyword opens a block only when it sits at the
                 # top level of the line. If the line ends with a net-open '(' the
                 # keyword is inside that parenthesis - part of an expression such
@@ -1473,30 +1538,7 @@ class Indenter:
                             and not (self.stack and self.stack[-1] == TYPE_HEADER):
                         self._push_frame(TYPE_HEADER, self.frame_name)
                     self._open_trailing(code_s, lw)
-                # A 'record' that opens a component list part-way along the line
-                # ('type T is record F : X;'). Outside the guard above, because
-                # such a line ends with the first component's ';' and so opens
-                # nothing by that rule -- yet the component list is open, and an
-                # 'end record;' below would otherwise pop a frame belonging to
-                # something else. Only when the opener is not the last word:
-                # there the dispatch has already handled it.
-                if last != "record" and record_delta(code) > 0:
-                    self._push_frame(RECORD)
-                # The same for an if statement whose first branch is complete on
-                # the opening line ('if C then return "X";'): its 'then' is
-                # mid-line and its ';' closes the branch, not the statement, so
-                # neither the dispatch nor the ';' rule sees the opener.
-                # Two lines are not this: one ending in the condition's own
-                # 'then', which the dispatch above has already pushed for, and
-                # one where the condition does not finish at all -- a multi-line
-                # condition belongs to the tracker, which pushes when its 'then'
-                # finally arrives.
-                # 'if A then if B then' opens two, the trailing one pushed above.
-                if has_condition_then(code):
-                    var extra_ifs: int = if_delta(code) - (1 if ends_with_condition_then(code_s) else 0)
-                    while extra_ifs > 0:
-                        self._push_frame(IF)
-                        extra_ifs -= 1
+                self._open_midline(code, code_s, lw)
                 # stmt_incomplete(): 'if C then X; end if;' on one line starts
                 # with 'if' and does not end with 'then', but it is a whole
                 # statement, not a condition still looking for its 'then'. It

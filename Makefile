@@ -493,6 +493,18 @@ test: compile
 	@# empties, so the link outlives what it points at.
 	@for f in $(ADA_INDENT_TESTS); do rm -f $(AIDIR)/$${f%.ady}; done
 
+	@# Metamorphic check: the golden sample and regress/valid_*.adb, each
+	@# re-laid-out (keywords moved to the next line, bodies pulled up beside
+	@# their 'then', case and spacing changed, ...) must keep every untouched
+	@# line at its column. It drives the ada_indent binary built above.
+	@printf '  %-42s' "metamorphic_check.py"; \
+	    out=$$($(PYTHON) $(AIDIR)/metamorphic_check.py --bin $(AIDIR)/ada_indent 2>&1); rc=$$?; \
+	    if [ $$rc -eq 0 ] && printf '%s' "$$out" | grep -q ' 0 failed'; then \
+	        echo OK; \
+	    else \
+	        echo FAIL; printf '%s\n' "$$out" | tail -20; exit 1; \
+	    fi
+
 	@# Each editor integration drives the ada_indent binary itself, so each
 	@# harness needs the built binary plus its own editor. None of node,
 	@# emacs or vim is otherwise a dependency of this repo, so every one of
