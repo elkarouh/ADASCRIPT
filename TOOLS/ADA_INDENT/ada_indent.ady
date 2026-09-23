@@ -1323,12 +1323,14 @@ class Indenter:
                     self._pop_frame()
                 disp = len(self.stack)
                 # An alternative belongs to a case statement, a select or an
-                # exception handler (whose frame is the BLOCK of its 'begin').
+                # exception handler. A handler's frame is the BLOCK of its
+                # 'begin', or the DO of an extended return or an accept - both
+                # 'return R : T do' and 'accept E do' may end in 'exception'.
                 # Anywhere else the 'when' is left over from a construct that
                 # lost its opener - a case expression whose '(' was never
                 # closed, say - and a WHEN frame for it would never be popped.
                 if self.stack and (self.stack[-1] == CASE or self.stack[-1] == SELECT
-                                   or self.stack[-1] == BLOCK):
+                                   or self.stack[-1] == BLOCK or self.stack[-1] == DO):
                     self._push_frame(WHEN)
                     # The arm body may start on the same line as its '=>' and open a
                     # block of its own: 'when X => if C then', 'when X => for I in

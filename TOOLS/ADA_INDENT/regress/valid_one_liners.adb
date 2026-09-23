@@ -58,6 +58,9 @@ package body Torture is
     select
       accept Start do
         null;
+      exception
+        when others =>
+          null;
       end Start;
     or
       delay 1.0;
@@ -92,6 +95,10 @@ package body Torture is
   begin
     return R : Rec do
       R.X := 1;
+    exception
+      when others =>
+        R.X := 0;
+        raise;
     end return;
   end Build;
 
