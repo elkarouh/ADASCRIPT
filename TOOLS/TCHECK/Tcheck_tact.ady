@@ -29,8 +29,11 @@ let ANSI_CODES: {char}str = {
 
 var COLORED: bool = True
 var BATCH: bool = False
-# -meld without -batch: the list of changes links its diffs to meld, not ediff
-var MELD: bool = False
+# -tool NAME: the visual diff tool -- meld, kompare, kdiff3, ... With it
+# (and not -batch) the list of changes links its diffs to NAME rather than
+# to Emacs ediff; troubleshoot mode compares with it, meld when none is
+# given. "" when none is.
+var DIFF_TOOL: str = ""
 var ONLY_NEW: bool = False
 # Set by any Tlog that reports a new or crashed test; read once at the end
 # to decide the exit status.
@@ -739,7 +742,7 @@ def newest(dir: Path, pattern: str) -> Path:
 
 # The DIFF and NET DIFF lines are #emacs: links, clickable in an Emacs
 # buffer like the report's own: side by side in Emacs (vc-version-ediff),
-# or under -meld in meld, started without an output buffer.
+# or under -tool in that tool, started without an output buffer.
 
 def elisp_string(text: str) -> str:
     """TEXT as an Emacs Lisp string literal."""
@@ -760,11 +763,17 @@ def split_file(fc: FileChange) -> (str, str):
     return ("", fc.file) if len(parts) < 3
     (f"{nm_root()}/{parts[0]}/{parts[1]}", "/".join(parts[2:]))
 
-def emacs_meld(fc: FileChange, rev1: str, rev2: str) -> str:
-    """A link starting meld on FC's file between REV1 and REV2."""
+def troubleshoot_tool() -> str:
+    """What troubleshoot mode compares two files with: the -tool diff tool,
+    or meld."""
+    DIFF_TOOL if DIFF_TOOL != "" else "meld"
+
+def emacs_difftool(fc: FileChange, rev1: str, rev2: str) -> str:
+    """A link starting the -tool diff tool on FC's file between REV1 and
+    REV2, through git difftool."""
     let (sub, rest) = split_file(fc)
     let where: str = f"-C {sub} " if sub != "" else ""
-    let command: str = f"git {where}difftool -y -t meld {rev1} {rev2} -- {rest}"
+    let command: str = f"git {where}difftool -y -t {DIFF_TOOL} {rev1} {rev2} -- {rest}"
     f"#emacs:(call-process-shell-command {elisp_string(command)} nil 0)"
 
 def emacs_ediff(fc: FileChange, rev1: str, rev2: str) -> str:
@@ -778,7 +787,7 @@ def emacs_ediff(fc: FileChange, rev1: str, rev2: str) -> str:
     f"#emacs:(vc-version-ediff (list {file}) {elisp_string(rev1)} {elisp_string(rev2)})"
 
 def diff_link(fc: FileChange, rev1: str, rev2: str) -> str:
-    emacs_meld(fc, rev1, rev2) if MELD else emacs_ediff(fc, rev1, rev2)
+    emacs_difftool(fc, rev1, rev2) if DIFF_TOOL != "" else emacs_ediff(fc, rev1, rev2)
 
 def diff_links(fc: FileChange) -> []str:
     """One link per commit: the file in the commit's parent and in the commit."""
@@ -892,9 +901,13 @@ def usage():
     print "  -f           Fast mode: skip run check_run_test_programs_log."
     print "  -v           Enable the VERBOSE option (more info)."
     print "  -l           List available builds and replays for the baseline, then exit."
-    print "  -batch       Non-interactive: skip meld and emacs in troubleshoot mode."
-    print "  -meld        In the list of changes, make the diff links open meld"
-    print "               (git difftool -t meld) rather than Emacs ediff; not with -batch."
+    print "  -batch       Non-interactive: no diff tool and no emacs in troubleshoot mode,"
+    print "               and Emacs ediff links in the list of changes whatever -tool says."
+    print "  -tool <name> The visual diff tool: meld, kompare, kdiff3, ... In the list of"
+    print "               changes the diff links open it (git difftool -t <name>) rather"
+    print "               than Emacs ediff; troubleshoot mode compares with it (meld"
+    print "               when no -tool is given)."
+    print "  -meld        Same as -tool meld; kept for older scripts."
     print "  -only-new    Show only new failures and regressions."
     print "  -exit-code   Exit with non-zero status if new failures are found."
     print "  -focus <domain> [<detail>]"
@@ -921,7 +934,7 @@ class Options:
     focus_subtype : BuildSubtype = in_test
     focus_rtype   : ReplayType   = run_prequal
     batch         : bool = False
-    meld          : bool = False
+    tool          : str  = "" # -tool: the visual diff tool
     only_new      : bool = False
     exit_code     : bool = False
     baseline      : str  = "" # e.g. 30.0.0.121
@@ -939,7 +952,13 @@ class Options:
                 when "-f":     self.fast_mode = True
                 when "-l":     self.list_only = True
                 when "-batch":     self.batch = True
-                when "-meld":      self.meld = True
+                when "-tool":
+                    i += 1
+                    die("-tool requires the name of a diff tool, e.g. -tool meld") if i >= argv'Length
+                    self.tool = argv[i]
+                    # it goes into a shell command: a tool's name, not a command line
+                    die(f"-tool: not a diff tool's name: {self.tool}") if self.tool != /^[A-Za-z0-9_.+-]+$/
+                when "-meld":      self.tool = "meld"
                 when "-only-new":  self.only_new = True
                 when "-exit-code": self.exit_code = True
                 when "-focus":
@@ -1451,7 +1470,8 @@ class Report:
         let prev_normalized: Path = make_comparable(prev_log, prev.nr)
         let cur_normalized: Path = make_comparable(cur_log, self.cur.nr)
         if not BATCH:
-            let rc: int = shell: meld {!prev_normalized} {!cur_normalized} &
+            let tool: str = troubleshoot_tool()
+            let rc: int = shell: {!tool} {!prev_normalized} {!cur_normalized} &
         else:
             let rc: int = shell: diff {!prev_normalized} {!cur_normalized}
 
@@ -1466,7 +1486,8 @@ class Report:
         let prev_report: Path = scan_regression_tests_detailed(prev, btype, subtype)
         let cur_report: Path = scan_regression_tests_detailed(self.cur, btype, subtype)
         if prev_report != "" and cur_report != "" and not BATCH:
-            let meld_rc: int = shell: meld {prev_report} {cur_report} &
+            let tool: str = troubleshoot_tool()
+            let tool_rc: int = shell: {!tool} {!prev_report} {!cur_report} &
         let failed_file: Path = Path("/tmp/reports") / "failed_tests"
         let failed_output: str = show_failed_tests(self.cur, btype, subtype)
         writeFile(failed_file, failed_output)
@@ -1481,7 +1502,8 @@ class Report:
         let prev_report: Path = scan_replay_dir_detailed(prev_log, prev.nr, replay_type)
         let cur_report: Path = scan_replay_dir_detailed(cur_log, self.cur.nr, replay_type)
         if prev_report != "" and cur_report != "" and not BATCH:
-            let meld_rc: int = shell: meld {prev_report} {cur_report} &
+            let tool: str = troubleshoot_tool()
+            let tool_rc: int = shell: {!tool} {!prev_report} {!cur_report} &
 
     def run(self):
         if self.opt.compute_size:
@@ -1527,7 +1549,7 @@ if $CONTEXT_CM_BASELINE == "":
 let opt: Options = Options(args)
 COLORED = opt.colored
 BATCH = opt.batch
-MELD = opt.meld and not opt.batch
+DIFF_TOOL = "" if opt.batch else opt.tool
 ONLY_NEW = opt.only_new
 
 var report: Report = Report(opt)

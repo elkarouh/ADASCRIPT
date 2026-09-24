@@ -98,17 +98,21 @@ check "says what DIFF and NET DIFF need"         1 "$(printf '%s\n' "$OUT" | gre
 ESC=$(printf '\033')
 check "coloured by default"                      1 "$("$TCHECK" -focus changes 30.0.0.9 | grep -c "^${ESC}\[.*LIST OF CHANGES" || true)"
 check "-no-color: no escapes at all"             0 "$(printf '%s\n' "$OUT" | grep -c "$ESC" || true)"
-MELD_OUT=$("$TCHECK" -no-color -meld -focus changes 30.0.0.9)
-meld_entry() { printf '%s\n' "$MELD_OUT" | awk -v u="$1" -v f="$2" '
+TOOL_OUT=$("$TCHECK" -no-color -tool kompare -focus changes 30.0.0.9)
+tool_entry() { printf '%s\n' "$TOOL_OUT" | awk -v u="$1" -v f="$2" '
     /^=====/ { in_u = index($0, "user " u " ") > 0 }
     /^-----/ { on = 0 } /^FILE / { on = in_u && index($0, f) > 0 } on'; }
-check "-meld: one meld per commit"               'DIFF        : #emacs:(call-process-shell-command "git -C /nm/TACT/UIF difftool -y -t meld c3fb81031^ c3fb81031 -- sources/b.adb" nil 0)
-DIFF        : #emacs:(call-process-shell-command "git -C /nm/TACT/UIF difftool -y -t meld 13e00da4a^ 13e00da4a -- sources/b.adb" nil 0)
-DIFF        : #emacs:(call-process-shell-command "git -C /nm/TACT/UIF difftool -y -t meld bc399bc5f^ bc399bc5f -- sources/b.adb" nil 0)' \
-    "$(meld_entry alice b.adb | grep '^DIFF')"
-check "-meld: the net diff in meld too"          'NET DIFF    : #emacs:(call-process-shell-command "git -C /nm/TACT/UIF difftool -y -t meld 30.0.0.129 30.0.0.130 -- sources/b.adb" nil 0)' \
-    "$(meld_entry alice b.adb | grep '^NET DIFF')"
-check "-meld -batch: the Emacs ediff links"         "$OUT" "$("$TCHECK" -no-color -meld -batch -focus changes 30.0.0.9)"
+check "-tool: the tool per commit"               'DIFF        : #emacs:(call-process-shell-command "git -C /nm/TACT/UIF difftool -y -t kompare c3fb81031^ c3fb81031 -- sources/b.adb" nil 0)
+DIFF        : #emacs:(call-process-shell-command "git -C /nm/TACT/UIF difftool -y -t kompare 13e00da4a^ 13e00da4a -- sources/b.adb" nil 0)
+DIFF        : #emacs:(call-process-shell-command "git -C /nm/TACT/UIF difftool -y -t kompare bc399bc5f^ bc399bc5f -- sources/b.adb" nil 0)' \
+    "$(tool_entry alice b.adb | grep '^DIFF')"
+check "-tool: the net diff in the tool too"      'NET DIFF    : #emacs:(call-process-shell-command "git -C /nm/TACT/UIF difftool -y -t kompare 30.0.0.129 30.0.0.130 -- sources/b.adb" nil 0)' \
+    "$(tool_entry alice b.adb | grep '^NET DIFF')"
+check "-meld is -tool meld"                      "$("$TCHECK" -no-color -tool meld -focus changes 30.0.0.9)" \
+    "$("$TCHECK" -no-color -meld -focus changes 30.0.0.9)"
+check "-tool -batch: the Emacs ediff links"      "$OUT" "$("$TCHECK" -no-color -tool kompare -batch -focus changes 30.0.0.9)"
+check "-tool without a name: says so"            1 "$("$TCHECK" -no-color -focus changes 30.0.0.9 -tool 2>&1 | grep -c 'requires the name of a diff tool' || true)"
+check "-tool with a command line: refused"       1 "$("$TCHECK" -no-color -tool 'meld;rm' -focus changes 30.0.0.9 2>&1 | grep -c "not a diff tool's name: meld;rm" || true)"
 check "ends with the report's emacs link"        1 "$(printf '%s\n' "$OUT" | grep -c 'find-file ".*CFMUTEST.CFMUTEST_CONFIG.30.0.0.8.changes_report"')"
 
 # --- when there is nothing to report on, it says so ----------------------

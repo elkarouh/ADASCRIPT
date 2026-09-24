@@ -61,17 +61,18 @@ branch's:
 NET DIFF    : #emacs:(vc-version-ediff (list "/…/NM/IFPS/CUA_IDL/sources/fpl-utilities.ads") "30.0.0.122" "30.0.0.123")
 ```
 
-With `-meld` (and not `-batch`) the same links open meld instead, started
-in the background so Emacs does not wait on it:
+With `-tool NAME` (and not `-batch`) the same links open that diff tool
+instead -- `meld`, `kompare`, `kdiff3`, anything `git difftool -t` knows --
+started in the background so Emacs does not wait on it. `-tool kompare`:
 
 ```
-DIFF        : #emacs:(call-process-shell-command "git -C /…/NM/IFPS/CUA_IDL difftool -y -t meld 1bd19222^ 1bd19222 -- sources/fpl-utilities.ads" nil 0)
-NET DIFF    : #emacs:(call-process-shell-command "git -C /…/NM/IFPS/CUA_IDL difftool -y -t meld 30.0.0.122 30.0.0.123 -- sources/fpl-utilities.ads" nil 0)
+DIFF        : #emacs:(call-process-shell-command "git -C /…/NM/IFPS/CUA_IDL difftool -y -t kompare 1bd19222^ 1bd19222 -- sources/fpl-utilities.ads" nil 0)
+NET DIFF    : #emacs:(call-process-shell-command "git -C /…/NM/IFPS/CUA_IDL difftool -y -t kompare 30.0.0.122 30.0.0.123 -- sources/fpl-utilities.ads" nil 0)
 ```
 
 With `$CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY` unset, the links name the
 variable instead, for Emacs to expand (`substitute-in-file-name`, or the
-shell for meld).
+shell for the diff tool).
 
 The path's `<system>/<subsystem>` is a submodule of the NM workspace
 (`$CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY`), where the commits are -- checked
@@ -99,8 +100,9 @@ which is what `test/run_changes_tests.sh` does.
 | `-f` | Fast mode: skip slow check_run_test_programs_log |
 | `-v` | Verbose output |
 | `-l` | List available builds and replays, then exit |
-| `-batch` | Non-interactive: skip meld and emacs |
-| `-meld` | In the list of changes, make the DIFF and NET DIFF links open meld (`git difftool -y -t meld`) rather than ediff; ignored with `-batch` |
+| `-batch` | Non-interactive: no diff tool and no emacs; the list of changes keeps its ediff links whatever `-tool` says |
+| `-tool NAME` | The visual diff tool: `meld`, `kompare`, `kdiff3`, ... The list of changes' DIFF and NET DIFF links open it (`git difftool -y -t NAME`) rather than ediff, and troubleshoot mode compares with it -- `meld` when no `-tool` is given |
+| `-meld` | Same as `-tool meld`; kept for older scripts |
 | `-only-new` | Show only new failures and regressions |
 | `-exit-code` | Exit with non-zero status if new failures found |
 
@@ -158,7 +160,7 @@ All three programs share these Adascript types, designed for an eventual merge:
 - `rg` (ripgrep) — fast version of grep, written in rust
 - `sd` — fast version of sed, written in rust
 - `pyrg` — Python regex wrapper for ripgrep patterns
-- `meld` — visual diff tool (interactive mode only)
+- a visual diff tool (interactive mode only) — `meld` unless `-tool` names another
 
 
 ## Building
