@@ -240,9 +240,8 @@ def format_dates(epochs: []Epoch) -> {Epoch}DateStamp:
     let stamps: str = "\n".join(["@" + str(e) for e in wanted]) + "\n"
     let r = shell(stdin = stamps): date -f - +%Y.%m.%d
     let lines: []str = r.output.split("\n")
-    for i in range(len(wanted)):
-        if i < len(lines):
-            out[wanted[i]] = lines[i]
+    for e, day in zip(wanted, lines):
+        out[e] = day
     return out
 
 # ---------------------------------------------------------------------------
@@ -520,8 +519,8 @@ class Report:
     def print_all(self):
         if Col_Date in self.columns:
             let dates: {Epoch}DateStamp = format_dates(self.epochs)
-            for i in range(len(self.values)):
-                self.values[i][Col_Date] = dates.get(self.epochs[i], "")
+            for i, epoch in enumerate(self.epochs):
+                self.values[i][Col_Date] = dates.get(epoch, "")
 
         var widths: [OutputColumn]int
         for row in self.values:
@@ -529,15 +528,15 @@ class Report:
                 if len(row[c]) > widths[c]:
                     widths[c] = len(row[c])
 
-        for i in range(len(self.values)):
+        for i, row in enumerate(self.values):
             for line in self.before[i]:
                 print(line)
             var parts: []str = []
             for c in self.columns:
                 if c == Col_Reference or c == Col_ReferenceBlame:
-                    parts.append("| " + self.values[i][c])
+                    parts.append("| " + row[c])
                 else:
-                    parts.append(self.values[i][c].ljust(widths[c]))
+                    parts.append(row[c].ljust(widths[c]))
             print(" ".join(parts))
         for line in self.pending:
             print(line)
@@ -687,14 +686,13 @@ for raw in opt.input_lines():
     hits.append(resolver.resolve(raw))
 
 var batch: BlameBatch = BlameBatch()
-for idx in range(len(hits)):
-    if hits[idx].kind == HK_Blame:
-        batch.add(idx, hits[idx])
+for idx, hit in enumerate(hits):
+    if hit.kind == HK_Blame:
+        batch.add(idx, hit)
 batch.run()
 
 var report: Report = Report(opt.columns, opt.since_epoch)
-for idx in range(len(hits)):
-    let hit: Hit = hits[idx]
+for idx, hit in enumerate(hits):
     case hit.kind:
         when HK_Passthrough:
             report.pass_through(hit.raw)

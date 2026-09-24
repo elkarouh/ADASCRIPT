@@ -72,13 +72,13 @@ def fixpoint(name: str) -> int:
     for flatten in [False, True]:
         let got: []str = reindent(text, flatten)
         var bad: int = 0
-        for i in range(len(want)):
-            if got[i] != want[i]:
+        for i, wanted in enumerate(want):
+            if got[i] != wanted:
                 bad += 1
                 if bad == 1:
                     let how: str = "flattened " if flatten else ""
                     print f"FAIL: {how}{name} is not a fixpoint, first difference at line {i + 1}"
-                    print f"  want |{want[i]}|"
+                    print f"  want |{wanted}|"
                     print f"  got  |{got[i]}|"
         if bad > 0:
             print f"  {bad} lines differ in total"

@@ -750,8 +750,8 @@ class Indenter:
         # travel as one field so a restored stack cannot come back with its names
         # offset by one, which would silently mis-anchor every later 'end'.
         var stack_names: []str = []
-        for i in range(len(self.stack)):
-            stack_names.append(str(self.stack[i]) + ":" + self.frame_names[i])
+        for i, kind in enumerate(self.stack):
+            stack_names.append(str(kind) + ":" + self.frame_names[i])
         var ps_parts: []str = []
         for t in self.paren_stack:
             ps_parts.append(str(t[0]) + ":" + str(t[1]) + ":" + str(t[2]))
@@ -1859,8 +1859,8 @@ def main() -> Natural:
     # that line has been read.
     ind.keep_states = do_emit_state
     let outs: []str = ind.indent_lines(lines)
-    for i in range(len(outs)):
-        print outs[i]
+    for i, out in enumerate(outs):
+        print out
         if do_emit_state:
             print "##STATE:" + ind.states[i]
 
