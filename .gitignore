@@ -34,6 +34,9 @@ TOOLS/TCHECK/*_gen.py
 # Tblame, the same again.
 TOOLS/TBLAME/Tblame
 TOOLS/TBLAME/*_gen.py
+# Tdiff, likewise.
+TOOLS/TDIFF/Tdiff
+TOOLS/TDIFF/*_gen.py
 
 # ady2nim drops a symlink to the built binary next to each source, so the
 # bundled libraries leave one behind whenever they are compiled. They point

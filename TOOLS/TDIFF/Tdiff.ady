@@ -1,0 +1,347 @@
+#!/usr/bin/env ady2nim
+#ady2nim-args c -d:release
+"""Tdiff — what changed in an NM superproject between two revisions.
+
+The NM workspace is a superproject whose submodules are the subsystems,
+<system>/<subsystem>. Tdiff finds the submodules that differ between two
+revisions and lists what changed in them, in one of two forms:
+
+  - the changed lines (the default), one per line as
+    <file>:<line_no>:<text> -- Tblame's input, so `Tdiff | Tblame` says
+    who wrote each line that changed, and under which SC ticket;
+  - the commits (`-commits`): one row per commit between the two revisions,
+    per submodule, with its date, SC ticket, committer and summary.
+
+A revision is one of three things, and means a commit in each submodule:
+
+  - the checkout (no argument): the commit each checked-out submodule has
+    checked out;
+  - a superproject commit (HEAD^, HEAD~5, a SHA): the commit it records for
+    each submodule -- every superproject commit is a workspace baseline;
+  - an NM baseline (30.0.0.124): that tag, inside each checked-out
+    submodule.
+
+With no argument Tdiff compares HEAD^ with the checkout: the last baseline
+delivered and what is checked out now. `Tdiff REV1` compares REV1 with the
+checkout, and `Tdiff REV1 REV2` two revisions.
+
+Flow:
+
+  1. Superproject lists the submodules HEAD records, and resolves each
+     revision to a commit per submodule: one `git ls-tree` for a
+     superproject commit, one `git rev-parse` per checked-out submodule
+     otherwise.
+  2. The submodules whose commits differ are the changes. Only checked-out
+     submodules can be looked into; changed ones that are not are named
+     once, on stderr.
+  3. One `git diff -U0` (or `git log`) per changed submodule, run in
+     parallel, gives the lines (or the commits). Against the checkout the
+     diff is taken against the working tree, which is what Tblame blames,
+     so the line numbers are the ones it will look up.
+"""
+
+# ---------------------------------------------------------------------------
+# What flows between the stages
+# ---------------------------------------------------------------------------
+
+# a submodule's path in the superproject: "<system>/<subsystem>"
+type SubmodulePath is str
+# a commit's 40-hex-digit SHA-1
+type CommitHash is str
+# a 1-based line number within a file
+type LineNo is int
+
+type RevKind is enum RK_Checkout, RK_Superproject, RK_Baseline
+
+type Rev is record:
+    # as given on the command line; "" for the checkout
+    name:   str = ""
+    kind:   RevKind = RK_Checkout
+    # the superproject commit, for RK_Superproject
+    commit: CommitHash = ""
+
+type Change is record:
+    path: SubmodulePath = ""
+    old:  CommitHash = ""
+    new:  CommitHash = ""
+    # the new side is the checkout: diff against the working tree
+    to_checkout: bool = False
+
+# at most this many git processes at once
+const MAX_JOBS: int = 16
+
+def run_git_all(commands: [][]str) -> []RunResult:
+    """Each argument list run as `git ...`, MAX_JOBS at a time; the results
+    in the order of COMMANDS."""
+    var results: []RunResult = []
+    var start: int = 0
+    while start < len(commands):
+        var jobs: []Job = []
+        for argv in commands[start:min(start + MAX_JOBS, len(commands))]:
+            let j: Job = shellSpawn: git {*argv}
+            jobs.append(j)
+        for r in waitAll(jobs):
+            results.append(r)
+        start += MAX_JOBS
+    return results
+
+def describe(rev: Rev) -> str:
+    return "the checkout" if rev.kind == RK_Checkout else rev.name
+
+# ---------------------------------------------------------------------------
+# Stage 1: the superproject, and what a revision means in each submodule
+# ---------------------------------------------------------------------------
+
+def gitlink(line: str) -> (SubmodulePath, CommitHash):
+    """A submodule's path and commit from a `git ls-tree` line, or ("", "")
+    when the line is not a submodule."""
+    return ("", "") if line != /^160000 commit (?P<sha>[0-9a-f]{40})\t(?P<path>.+)$/
+    ($+{path}, $+{sha})
+
+class Superproject:
+    """The NM superproject: its submodules, and the commit a revision names
+    in each of them."""
+    root:  Path = Path("")
+    # every submodule HEAD records, in tree order
+    paths: []SubmodulePath = []
+
+    def __init__(self, root: Path):
+        self.root = root
+        let r = shell: git -C {!root} ls-tree -r HEAD
+        if r.code != 0:
+            die(f"{root} is not a git repository")
+        for line in r.output.split("\n"):
+            let (path, sha) = gitlink(line)
+            if path != "":
+                self.paths.append(path)
+
+    def recorded(self, commit: str) -> {SubmodulePath}CommitHash:
+        """The commit superproject commit COMMIT records for each submodule."""
+        var out: {SubmodulePath}CommitHash = {:}
+        let r = shell: git -C {!self.root} ls-tree -r {!commit}
+        for line in r.output.split("\n"):
+            let (path, sha) = gitlink(line)
+            if path != "":
+                out[path] = sha
+        out
+
+    def checked_out(self, path: SubmodulePath) -> bool:
+        -e (self.root / path / ".git")
+
+    def resolve(self, name: str) -> Rev:
+        """NAME as a revision: the checkout when empty, else a superproject
+        commit if the superproject knows it, else a baseline tag."""
+        var rev: Rev
+        rev.name = name
+        return rev if name == ""
+        # a plain string: in a shell line, {commit} would be interpolated
+        let spec: str = name + "^{commit}"
+        let r = shell: git -C {!self.root} rev-parse --verify -q {!spec}
+        if r.code == 0:
+            rev.kind = RK_Superproject
+            rev.commit = r.output.strip()
+        else:
+            rev.kind = RK_Baseline
+        rev
+
+    def commits(self, rev: Rev) -> {SubmodulePath}CommitHash:
+        """The commit REV names in each submodule it names one in."""
+        return self.recorded(rev.commit) if rev.kind == RK_Superproject
+        # A submodule that is not checked out has no checkout of its own:
+        # what HEAD records stands in, so a change to it is still seen (and
+        # named as not checked out) rather than silently missed.
+        var out: {SubmodulePath}CommitHash = {:}
+        if rev.kind == RK_Checkout:
+            out = self.recorded("HEAD")
+        let spec: str = "HEAD" if rev.kind == RK_Checkout else rev.name + "^{commit}"
+        let here: []SubmodulePath = [p for p in self.paths if self.checked_out(p)]
+        let commands: [][]str = [["-C", str(self.root / p), "rev-parse", "--verify", "-q", spec] for p in here]
+        for p, r in zip(here, run_git_all(commands)):
+            if r.code == 0:
+                out[p] = r.output.strip()
+        if rev.kind == RK_Baseline and len(out) == 0:
+            die(f"no checked-out submodule has a baseline or commit named {rev.name} (tags not fetched? try: git -C <submodule> fetch --tags)")
+        out
+
+    def changes(self, rev1: Rev, rev2: Rev) -> []Change:
+        """The submodules whose commit differs between REV1 and REV2, in
+        tree order; the changed ones not checked out are named on stderr."""
+        let before: {SubmodulePath}CommitHash = self.commits(rev1)
+        let after:  {SubmodulePath}CommitHash = self.commits(rev2)
+        var out: []Change = []
+        var unseen: []SubmodulePath = []
+        for path in self.paths:
+            continue if path not in before or path not in after
+            continue if before[path] == after[path]
+            if not self.checked_out(path):
+                unseen.append(path)
+                continue
+            out.append(Change(path = path, old = before[path], new = after[path],
+                              to_checkout = rev2.kind == RK_Checkout))
+        if len(unseen) > 0:
+            warn(f"{len(unseen)} changed submodule(s) not checked out, not listed: {', '.join(unseen)}")
+        out
+
+# ---------------------------------------------------------------------------
+# Stage 2a: the changed lines
+# ---------------------------------------------------------------------------
+
+def added_lines(repo: Path, diff: []str) -> []str:
+    """Each line a `git diff -U0` adds, as "<file>:<line_no>:<text>" with
+    <file> under REPO. A deleted file adds none. Headers are only read
+    between "diff --git" and the first hunk, so an added line that happens
+    to start with "++ " is still a line."""
+    var out: []str = []
+    var file: Path = Path("")
+    var in_header: bool = False
+    var line_no: LineNo = 0
+    for l in diff:
+        if l.startswith("diff --git "):
+            in_header = True
+            file = Path("")
+        elif in_header and l.startswith("+++ "):
+            let name: str = l[4:]
+            if name != "/dev/null":
+                file = repo / (name[2:] if name.startswith("b/") else name)
+        elif l == /^@@ -\d+(?:,\d+)? \+(?P<start>\d+)(?:,\d+)? @@/:
+            in_header = False
+            line_no = int($+{start})
+        elif not in_header and l.startswith("+") and file != "":
+            out.append(f"{file}:{line_no}:{l[1:]}")
+            line_no += 1
+    out
+
+def diff_command(sp: Superproject, c: Change) -> []str:
+    var argv: []str = ["-c", "core.quotePath=false", "-C", str(sp.root / c.path),
+                       "diff", "-U0", "--no-color", "--no-ext-diff", c.old]
+    if not c.to_checkout:
+        argv.append(c.new)
+    argv
+
+def cannot(sp: Superproject, c: Change, r: RunResult):
+    """Say why a submodule could not be looked into -- most often, a commit
+    its checkout was never fetched."""
+    let why: str = r.stderr.strip().split("\n")[0]
+    warn(f"{c.path}: cannot compare {c.old[:12]} with {c.new[:12]}: {why} (not fetched? try: git -C {sp.root / c.path} fetch)")
+
+def print_lines(sp: Superproject, changes: []Change):
+    let commands: [][]str = [diff_command(sp, c) for c in changes]
+    for c, r in zip(changes, run_git_all(commands)):
+        if r.code != 0:
+            cannot(sp, c, r)
+            continue
+        for line in added_lines(sp.root / c.path, r.output.split("\n")):
+            print(line)
+
+# ---------------------------------------------------------------------------
+# Stage 2b: the commits
+# ---------------------------------------------------------------------------
+
+def sc_hint(summary: str) -> str:
+    """The first SC ticket a summary names, with a count of the others."""
+    let tickets: []str = summary == /SC-\d+/g
+    return "<no-sc>" if len(tickets) == 0
+    return tickets[0] if len(tickets) == 1
+    f"{tickets[0]}(+{len(tickets) - 1})"
+
+def print_commits(sp: Superproject, changes: []Change):
+    let commands: [][]str = [["-C", str(sp.root / c.path), "log", "--no-merges",
+                              "--date=format:%Y.%m.%d", "--format=%h%x09%ad%x09%cn%x09%s",
+                              c.old + ".." + c.new] for c in changes]
+    var rows: [][]str = []
+    for c, r in zip(changes, run_git_all(commands)):
+        if r.code != 0:
+            cannot(sp, c, r)
+            continue
+        for line in r.output.split("\n"):
+            let f: []str = line.split("\t")
+            continue if len(f) < 4
+            rows.append([f[0], f[1], sc_hint(f[3]), f[2], c.path, "| " + f[3]])
+    var widths: []int = [0, 0, 0, 0, 0, 0]
+    for row in rows:
+        for i, cell in enumerate(row):
+            widths[i] = max(widths[i], len(cell))
+    for row in rows:
+        # the summary is last, and not padded
+        let cells: []str = [cell.ljust(widths[i]) for i, cell in enumerate(row[:5])]
+        print(" ".join(cells) + " " + row[5])
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
+def usage():
+    stderr.writeLine(f"""
+{PROG} [-commits] [-root DIR] [REV1 [REV2]]
+  List what changed in the NM superproject between REV1 and REV2.
+
+  REV1 defaults to HEAD^, the previous workspace baseline delivered; REV2
+  to the checkout. A revision is a superproject commit (HEAD^, HEAD~5, a
+  SHA) or an NM baseline (30.0.0.124), which is a tag in each submodule.
+
+  By default, prints each line REV2 adds or changes as
+  <file>:<line_no>:<text>, so that
+
+    {PROG} | Tblame
+
+  says who wrote each one. Tblame blames the checkout, so leave REV2 out
+  for that. Deleted lines are not listed; -commits names who deleted them.
+
+OPTIONS
+  -commits
+    List the commits instead: hash, date, SC ticket, committer, submodule
+    and summary, one per line.
+
+  -root DIR
+    The superproject. Defaults to $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY.
+""")
+
+class Options:
+    """What was asked for on the command line and in the environment."""
+    commits: bool = False
+    root:    Path = Path("")
+    revs:    []str = []
+
+    def __init__(self, argv: []str):
+        var i: int = 0
+        while i < len(argv):
+            let a: str = argv[i]
+            case a:
+                when "-commits": self.commits = True
+                when "-help" | "-h":
+                    usage()
+                    quit(0)
+                when "-root":
+                    i += 1
+                    if i >= len(argv):
+                        die("-root requires an argument")
+                    self.root = Path(argv[i])
+                when others:
+                    if a.startswith("-"):
+                        die("Unrecognised option " + a)
+                    self.revs.append(a)
+            i += 1
+        if len(self.revs) > 2:
+            die("at most two revisions")
+        if self.root == "":
+            if $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY == "":
+                die("no superproject: set CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY or use -root")
+            self.root = Path($CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY)
+        # absolute, so the lines name files Tblame can find from anywhere
+        self.root = Path(os.path.abspath(str(self.root)))
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+let opt: Options = Options($@)
+let sp: Superproject = Superproject(opt.root)
+let rev1: Rev = sp.resolve(opt.revs[0] if len(opt.revs) > 0 else "HEAD^")
+let rev2: Rev = sp.resolve(opt.revs[1] if len(opt.revs) > 1 else "")
+let found: []Change = sp.changes(rev1, rev2)
+if opt.commits:
+    print_commits(sp, found)
+else:
+    if rev2.kind != RK_Checkout:
+        warn(f"line numbers are {describe(rev2)}'s; Tblame blames the checkout, so its answers match only where that is what is checked out")
+    print_lines(sp, found)

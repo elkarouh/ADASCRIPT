@@ -18,6 +18,7 @@ AIDIR  := $(TOOLDIR)/ADA_INDENT
 G1DIR  := $(TOOLDIR)/GIT1
 PGDIR  := $(TOOLDIR)/PGREP
 TBDIR  := $(TOOLDIR)/TBLAME
+TDDIR  := $(TOOLDIR)/TDIFF
 
 # Prepend choosenim's bin dir so Nim 2.x is used instead of any system Nim 1.x.
 export PATH := /root/.nimble/bin:$(HOME)/.nimble/bin:$(HOME)/Downloads:$(PATH)
@@ -265,7 +266,8 @@ TOOL_PROGRAMS := \
     TOOLS/PGREP/Pgrep.ady \
     TOOLS/TCHECK/Tcheck_tact.ady \
     TOOLS/TCHECK/Ttroubleshoot.ady \
-    TOOLS/TBLAME/Tblame.ady
+    TOOLS/TBLAME/Tblame.ady \
+    TOOLS/TDIFF/Tdiff.ady
 
 # -----------------------------------------------------------------------
 # compile — transpile + build everything
@@ -504,6 +506,21 @@ test: compile
 	    > $(TBDIR)/test/tblame_py && chmod +x $(TBDIR)/test/tblame_py
 	@$(TBDIR)/test/run_tests.sh $(TBDIR)/test/tblame_py
 	@rm -f $(TBDIR)/test/Tblame_py.py $(TBDIR)/test/tblame_py
+
+	@# Tdiff against a superproject the test builds: four submodules, two
+	@# workspace baselines, NM baseline tags inside each submodule -- and
+	@# piped into Tblame, built the same way.
+	@echo "=== Tdiff against a superproject built for the test ==="
+	@$(TDDIR)/test/run_tests.sh $(TDDIR)/Tdiff $(TBDIR)/Tblame
+	@echo "=== Tdiff, the same checks on the Python backend ==="
+	@$(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(TDDIR)/Tdiff.ady > $(TDDIR)/test/Tdiff_py.py
+	@$(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(TBDIR)/Tblame.ady > $(TDDIR)/test/Tblame_py.py
+	@printf '#!/bin/sh\nexec $(PYTHON) %s "$$@"\n' "$(TDDIR)/test/Tdiff_py.py" \
+	    > $(TDDIR)/test/tdiff_py && chmod +x $(TDDIR)/test/tdiff_py
+	@printf '#!/bin/sh\nexec $(PYTHON) %s "$$@"\n' "$(TDDIR)/test/Tblame_py.py" \
+	    > $(TDDIR)/test/tblame_py && chmod +x $(TDDIR)/test/tblame_py
+	@$(TDDIR)/test/run_tests.sh $(TDDIR)/test/tdiff_py $(TDDIR)/test/tblame_py
+	@rm -f $(TDDIR)/test/Tdiff_py.py $(TDDIR)/test/tdiff_py $(TDDIR)/test/Tblame_py.py $(TDDIR)/test/tblame_py
 
 	@echo "=== Expect / shell examples (require bc) ==="
 	@for f in $(EXPECT_EXAMPLES); do \
