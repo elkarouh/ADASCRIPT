@@ -155,6 +155,14 @@ printf '%s\n' "/cm/ot/sysA/subA!TESTBASELINE/build_E1/sources/fileA.txt:2:cm inf
 CM_OUT=$("$TBLAME" -alternate "$NM" user reference_blame < "$CM_INPUT")
 check "context path resolves the tagged revision" "Alice A | line2" "$CM_OUT"
 
+# --- a context path whose baseline is not a tag in the repo --------------
+# What a checkout made without its tags looks like. The line is still
+# blamed (against the working tree), and the warning says what to try.
+printf '%s\n' "/cm/ot/sysA/subA!NOSUCHTAG/build_E1/sources/fileA.txt:2:x" > "$CM_INPUT"
+"$TBLAME" -alternate "$NM" user < "$CM_INPUT" > "$WORK/notag.out" 2> "$WORK/notag.err"
+check "unknown baseline: says to fetch the tags" 1 "$(grep -c 'Could not determine revision.*fetch --tags' "$WORK/notag.err")"
+check "unknown baseline: still blamed"          "Alice A" "$(cat "$WORK/notag.out")"
+
 # --- a context path whose subsystem is not checked out -------------------
 # sysB/subB has no repo under the alternate root. Asking whether
 # "<root>/sysB/subB/.git" is readable must answer "no" and move on, as the

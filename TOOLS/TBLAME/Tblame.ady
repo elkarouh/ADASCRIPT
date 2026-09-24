@@ -366,7 +366,8 @@ class Resolver:
                 if r.code == 0:
                     self.revisions[baseline_key(sys2, sub2, bl2)] = r.output.strip()
                 else:
-                    warn("Could not determine revision for " + repo_dir + " " + bl2)
+                    # Seen in practice: a checkout made without the tags.
+                    warn(f"Could not determine revision for {repo_dir} {bl2} (tags not fetched? try: git -C {repo_dir} fetch --tags)")
         return self.revisions.get(key, "")
 
 # ---------------------------------------------------------------------------
