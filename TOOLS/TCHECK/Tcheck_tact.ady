@@ -719,6 +719,9 @@ def newest(dir: Path, pattern: str) -> Path:
     let found: []str = shellLines: ls -dt {!dir}/{pattern} 2>/dev/null | head -n 1
     Path(found[0]) if len(found) > 0 else Path("")
 
+def emacs_cmd (cmd: str) -> str:
+    f"(async-shell-command \"{cmd}\")"
+
 def git_in_submodule(fc: FileChange, args: str) -> str:
     """`git -C <submodule> ARGS -- <path in it>` for FC's file. The report's
     path is <system>/<subsystem>/<rest>, and <system>/<subsystem> is a
@@ -727,8 +730,8 @@ def git_in_submodule(fc: FileChange, args: str) -> str:
     var root: str = $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY
     if root == "":
         root = "$CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY"
-    return f"git {args} -- {fc.file}" if len(parts) < 3
-    f"git -C {root}/{parts[0]}/{parts[1]} {args} -- {'/'.join(parts[2:])}"
+    return emacs_cmd (f"git {args} -- {fc.file}") if len(parts) < 3
+    emacs_cmd (f"git -C {root}/{parts[0]}/{parts[1]} {args} -- {'/'.join(parts[2:])}")
 
 def diff_commands(fc: FileChange) -> []str:
     """Each of FC's commits, with its own diff of the file: one `git show`
