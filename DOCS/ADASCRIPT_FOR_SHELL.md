@@ -161,6 +161,23 @@ let anyway = shell(join = ";"):
 assert anyway.output.strip() == "still here"
 ```
 
+Telling the user about a problem is `echo "${0##*/}: ..." >&2`, plus
+`exit 1` when it's fatal. Every script writes those lines, and most of them
+wrap them in a `die` function. In Adascript they are built in:
+
+<!-- from: EXAMPLES/DOC/shell_snippets.ady -->
+```python
+if $# > 9:
+    die("too many arguments")          # "<prog>: too many arguments" on stderr, exit 1
+if $# == 0:
+    warn("no arguments, nothing to do")  # "<prog>: ..." on stderr, and on we go
+let usage: str = f"usage: {PROG} FILE..."
+```
+
+`PROG` is `${0##*/}`, and means the same on both backends. `die(msg, code = 2)`
+exits with a status of your choosing. A script that defines its own `die`,
+`warn` or `PROG` keeps it.
+
 ---
 
 ## 4. Reading output, instead of `while read`
@@ -694,6 +711,9 @@ that have to be updated in step by hand.
 | `[ -f "$p" ]`, `[ -d "$p" ]` | `-f p`, `-d p` — unchanged |
 | `command -v foo >/dev/null` | `which("foo") is not None` |
 | `p=$(command -v foo)` | `which("foo")`, a `?Path` |
+| `echo "${0##*/}: msg" >&2; exit 1` | `die("msg")` |
+| `echo "${0##*/}: msg" >&2` | `warn("msg")` |
+| `${0##*/}` | `PROG` |
 | `$1`, `$#`, `$@` | `$1`, `$#`, `$@` |
 | `$HOME` | `$HOME` |
 | `${VAR:-default}` | `${VAR:-default}` |

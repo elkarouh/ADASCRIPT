@@ -1,0 +1,23 @@
+#!/usr/bin/env ady2nim
+"""Test: a program's own die(), warn() and PROG win over the builtins.
+
+c500.ady's die() prints "error on line N: ..." to stdout; test_which.ady's
+names itself. A builtin that captured either would change what they print.
+"""
+
+let PROG: str = "own-name"
+
+var said: []str = []
+
+def die(msg: str) -> bool:
+    said.append("die " + msg)
+    return False
+
+def warn(msg: str):
+    said.append("warn " + msg)
+
+warn("one")
+assert not die("two")
+assert said == ["warn one", "die two"]
+assert PROG == "own-name"
+print "own die/warn/PROG ok"

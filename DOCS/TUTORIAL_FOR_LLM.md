@@ -727,9 +727,19 @@ if a -nt b:      # a newer than b
 if a -ot b:      # a older than b
 
 if not -f dict_file:
-    print("Error: file not found")
-    quit(1)
+    die(f"{dict_file}: not found")
 ```
+
+**Messages and exit — `die`, `warn`, `PROG` (built in, no import):**
+```adascript
+warn("no config, using defaults")         # stderr: "<prog>: no config, using defaults"
+die("cannot read " + str(p))              # stderr: "<prog>: cannot read ...", exit 1
+die(f"bad option {arg}", code = 2)        # same, exit 2
+print(f"usage: {PROG} [-v] FILE")         # PROG: the program's name
+```
+- `PROG` is the name the program was invoked as, with no directory. It drops a leading `.` (ady2nim runs a cached `.name` binary) and a trailing `_gen.py` / `.py` (ady2py), so both backends print the same name. Nim reads it from `paramStr(0)`, so symlinks aren't resolved.
+- `die` never returns (Nim `{.noreturn.}`), so a function may end in `die(...)` with no `return` after it.
+- **Don't** write `let PROG = Path($0).name...` or your own `def die` / `def warn` for this. A module's own top-level `def die` / `def warn` or `let/var/const PROG` still takes precedence over the built-in (e.g. `c500.ady`'s `die` prints to stdout). The helpers are emitted only when used.
 
 ---
 
@@ -1376,6 +1386,9 @@ for s in Stage_T'First .. Stage_T'Last:
 | Pipeline reports first failure | `shell(pipefail = true): a \| b` |
 | Block join | `shell(join = ";"):` (`&&` default, `;`, `\|`, `\|\|`) |
 | Where is a program? | `which("git")` -> `?Path` (`have()` is deprecated) |
+| Fail with a message | `die("msg")` / `die("msg", code = 2)`: `<prog>: msg` on stderr, exit |
+| Warn and carry on | `warn("msg")`: `<prog>: msg` on stderr |
+| Program name | `PROG` (predeclared; no `let PROG = ...` needed) |
 | Path join | `let p: Path = root / "sub"` (Path is a str subclass/distinct) |
 | Path <-> str | `Path(s)` / `str(p)`; a bare `p = s` is refused on both backends |
 | Read a file or stdin | `let f: File = (open(p) if p != "" else stdin)`; `File` is `typing.TextIO` on Python |

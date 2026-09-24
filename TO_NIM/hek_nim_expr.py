@@ -238,6 +238,88 @@ def _ensure_which_helper():
         ParserState.nim_top_decls = decls
 
 
+_PROGNAME_HELPER = """\
+proc adascriptProgName(): string =
+  ## The name the program was invoked as, for its messages: `PROG`, and the
+  ## prefix die() and warn() write. paramStr(0) rather than getAppFilename,
+  ## which resolves symlinks -- a tool installed as a link is known by the
+  ## link's name. Leading dots go: ady2nim runs a cached `.name` binary.
+  result = paramStr(0).extractFilename()
+  while result.len > 0 and result[0] == '.':
+    result = result[1 .. ^1]
+"""
+
+
+def _ensure_progname_helper():
+    """Add adascriptProgName the first time PROG, die() or warn() is used."""
+    ParserState.nim_imports.add("os")
+    decls = getattr(ParserState, 'nim_top_decls', [])
+    if not any("proc adascriptProgName" in d for d in decls):
+        decls.append(_PROGNAME_HELPER)
+        ParserState.nim_top_decls = decls
+
+
+def ensure_prog_global():
+    """Declare `PROG` -- the program's name -- for a module that uses it
+    without declaring its own."""
+    _ensure_progname_helper()
+    decls = ParserState.nim_top_decls
+    if "let PROG = adascriptProgName()" not in decls:
+        decls.append("let PROG = adascriptProgName()")
+    ParserState.symbol_table.add("PROG", "string", "let")
+
+
+_DIE_HELPER = """\
+proc adascriptDie(msg: string, code: int = 1) {.noreturn.} =
+  ## `die(msg)`: "<program>: <msg>" on stderr, then exit with CODE.
+  ## noreturn, so a proc that ends in die() needs no return after it.
+  stderr.writeLine(adascriptProgName() & ": " & msg)
+  quit(code)
+"""
+
+_WARN_HELPER = """\
+proc adascriptWarn(msg: string) =
+  ## `warn(msg)`: "<program>: <msg>" on stderr, and carry on.
+  stderr.writeLine(adascriptProgName() & ": " & msg)
+"""
+
+
+def _ensure_die_warn_helper(name):
+    """Add adascriptDie or adascriptWarn the first time die()/warn() is used."""
+    _ensure_progname_helper()
+    helper, proc = ((_DIE_HELPER, "proc adascriptDie") if name == "die"
+                    else (_WARN_HELPER, "proc adascriptWarn"))
+    decls = ParserState.nim_top_decls
+    if not any(proc in d for d in decls):
+        decls.append(helper)
+
+
+def _whole_call_args(expr, name):
+    """The argument text of `name(...)` when EXPR is exactly that one call,
+    else None -- so `die(a) or f(b)` is not taken for a call to die."""
+    if not expr.startswith(name + "("):
+        return None
+    depth, quote, escaped = 0, "", False
+    for i, ch in enumerate(expr[len(name):], start=len(name)):
+        if quote:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == quote:
+                quote = ""
+            continue
+        if ch in "\"'":
+            quote = ch
+        elif ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+            if depth == 0:
+                return expr[len(name) + 1:i] if i == len(expr) - 1 else None
+    return None
+
+
 _REPLACE_FIRST_HELPER = """\
 proc adascriptReplaceFirst(text: string, old: string, new: string): string =
   ## `{name/old/new}` inside an f-string: TEXT with the first OLD replaced --
@@ -3216,6 +3298,17 @@ def _translate_stdlib_patterns(expr):
             and which_m.group(1).count("(") == which_m.group(1).count(")")):
         _ensure_which_helper()
         return f"adascriptWhich({which_m.group(1)})"
+
+    # die(msg[, code]) / warn(msg) -- "<program>: msg" on stderr, the helper
+    # nearly every shell-style tool wrote for itself. Renamed on the way out
+    # so a nimport'ed module's own die cannot make the call ambiguous.
+    for _name, _proc in (("die", "adascriptDie"), ("warn", "adascriptWarn")):
+        if _name in _own:
+            continue
+        _args = _whole_call_args(expr, _name)
+        if _args is not None and _args.strip():
+            _ensure_die_warn_helper(_name)
+            return f"{_proc}({_args})"
 
     # adascriptReplaceFirst(...) -- synthesised only by the {name/old/new}
     # f-string sugar (HPARSEC/hek_tokenize.py), never written by hand, so

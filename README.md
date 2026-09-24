@@ -1927,6 +1927,23 @@ Python's own iteration keeps the newline and Nim's drops it, so the trailer
 is what makes the two agree. `open()` returns a `File`; on the Python target
 the annotation becomes `typing.TextIO`.
 
+### Messages and exit: `die`, `warn`, `PROG`
+
+Built in, with no import, and emitted only into programs that use them:
+
+```python
+warn("no config, using defaults")      # "<prog>: no config, using defaults" on stderr
+die("cannot read " + str(p))           # the same, then exit 1
+die(f"bad option {arg}", code = 2)     # ...exit 2
+print(f"usage: {PROG} [-v] FILE")
+```
+
+`PROG` is the name the program was invoked as, like `${0##*/}`. A leading
+`.` from ady2nim's cached binary is dropped, and so is a `_gen.py` / `.py`
+from ady2py, so both backends print the same name. `die` never returns, so a
+function can end in it. A program's own top-level `def die`, `def warn` or
+`let PROG` takes precedence over the built-in.
+
 ### Where is this program?
 
 ```python

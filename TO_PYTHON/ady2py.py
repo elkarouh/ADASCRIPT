@@ -292,6 +292,12 @@ def translate(code):
     import re as _re_udef
     _PS_udef.user_top_level_procs = set(
         _re_udef.findall(r'^def\s+([A-Za-z_]\w*)\s*[\(\[]', code, _re_udef.M))
+    # PROG, the program's name, is predeclared for a module that uses it and
+    # does not declare its own -- as on the Nim backend.
+    if (_re_udef.search(r'\bPROG\b', code)
+            and not _re_udef.search(r'^(let|var|const)\s+PROG\b', code, _re_udef.M)):
+        from hek_py_expr import ensure_prog_global
+        ensure_prog_global()
 
     output = []
 

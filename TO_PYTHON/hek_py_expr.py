@@ -1046,6 +1046,74 @@ def _which_call(call_trailer):
     return "_which" + call_trailer
 
 
+_PROGNAME_HELPER = '''\
+def _adascript_progname():
+    """The name the program was invoked as, for its messages: PROG, and the
+    prefix die() and warn() write. The build's decorations come off, so
+    both backends say the same: ady2nim runs a cached `.name` binary, and
+    `ady2py -c name.ady` runs name_gen.py.
+    """
+    import os as _os
+    import sys as _sys
+    _name = _os.path.basename(_sys.argv[0]).lstrip(".")
+    for _suffix in ("_gen.py", ".py"):
+        if _name.endswith(_suffix):
+            return _name[:-len(_suffix)]
+    return _name\
+'''
+
+_DIE_HELPER = '''\
+def _die(msg, code = 1):
+    """die(msg): "<program>: <msg>" on stderr, then exit with CODE."""
+    import sys as _sys
+    print(_adascript_progname() + ": " + msg, file=_sys.stderr)
+    _sys.exit(code)\
+'''
+
+_WARN_HELPER = '''\
+def _warn(msg):
+    """warn(msg): "<program>: <msg>" on stderr, and carry on."""
+    import sys as _sys
+    print(_adascript_progname() + ": " + msg, file=_sys.stderr)\
+'''
+
+
+def _ensure_progname_helper():
+    """Add _adascript_progname the first time PROG, die() or warn() is used."""
+    from hek_parsec import ParserState
+    decls = getattr(ParserState, 'py_top_decls', [])
+    if not any("def _adascript_progname(" in d for d in decls):
+        decls.append(_PROGNAME_HELPER)
+        ParserState.py_top_decls = decls
+
+
+def ensure_prog_global():
+    """Declare PROG -- the program's name -- for a module that uses it
+    without declaring its own."""
+    from hek_parsec import ParserState
+    _ensure_progname_helper()
+    decls = ParserState.py_top_decls
+    if "PROG = _adascript_progname()" not in decls:
+        decls.append("PROG = _adascript_progname()")
+
+
+def _die_warn_call(name, call_trailer):
+    """`die(...)` -> `_die(...)`, `warn(...)` -> `_warn(...)`, or None if
+    not that shape. The nearly universal helper of a shell-style tool."""
+    if not (call_trailer.startswith("(") and call_trailer.endswith(")")):
+        return None
+    if not call_trailer[1:-1].strip():
+        return None
+    from hek_parsec import ParserState
+    _ensure_progname_helper()
+    helper, marker = ((_DIE_HELPER, "def _die(") if name == "die"
+                      else (_WARN_HELPER, "def _warn("))
+    decls = ParserState.py_top_decls
+    if not any(marker in d for d in decls):
+        decls.append(helper)
+    return "_" + name + call_trailer
+
+
 _ENUM_RANGE_HELPER = '''\
 def _ada_enum_range(_lo, _hi, _inclusive=True):
     """The members from _lo to _hi, the way Nim's `lo .. hi` walks an enum.
@@ -1325,6 +1393,12 @@ def to_py(self, prec=None):
                     continue
             if i == 0 and result == "have" and "have" not in _own:
                 helper = _have_call(tr_str)
+                if helper is not None:
+                    result = helper
+                    i += 1
+                    continue
+            if i == 0 and result in ("die", "warn") and result not in _own:
+                helper = _die_warn_call(result, tr_str)
                 if helper is not None:
                     result = helper
                     i += 1

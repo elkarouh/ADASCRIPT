@@ -1,0 +1,31 @@
+#!/usr/bin/env ady2nim
+"""Test: die(), warn() and PROG are built in.
+
+Nearly every shell-style tool began with the same lines: PROG from $0, and a
+die() and warn() that write "<program>: <msg>" to stderr. They are builtins
+now, needing no import, and emitted only when a program uses them.
+
+Run by `make test` on both backends, which checks what reaches stderr and
+the exit status:
+
+    test_die_warn: a warning, and on we go
+    test_die_warn: n must be positive, got -1
+    exit status 3, nothing on stdout
+"""
+
+# PROG is the name the program was invoked as, with the build's decorations
+# taken off: ady2nim runs a cached ".test_die_warn", ady2py -c runs
+# test_die_warn_gen.py.
+assert PROG == "test_die_warn"
+
+warn("a warning, and on we go")
+
+# die() does not return, so a function may end in it on either backend.
+def positive(n: int) -> int:
+    if n > 0:
+        return n
+    die(f"n must be positive, got {n}", code = 3)
+
+assert positive(2) == 2
+positive(-1)
+print "not reached"

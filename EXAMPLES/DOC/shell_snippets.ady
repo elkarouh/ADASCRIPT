@@ -77,6 +77,14 @@ for l in shellIter: printf 'a\nb\nc\n'
     seen += 1
 assert seen == 3
 
+# --- telling the user: die and warn, instead of echo >&2 and exit 1 ------
+if $# > 9:
+    die("too many arguments")          # "<prog>: too many arguments" on stderr, exit 1
+if $# == 0:
+    warn("no arguments, nothing to do")  # "<prog>: ..." on stderr, and on we go
+let usage: str = f"usage: {PROG} FILE..."
+assert usage.startswith("usage: shell_snippets")
+
 # --- parallel, instead of & and wait -------------------------------------
 var jobs: []Job = []
 for n in ["1", "2", "3"]:

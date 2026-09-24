@@ -1808,6 +1808,59 @@ if src -nt dest:     # src is newer than dest
 | `a -nt b`   | a is newer than b             |
 | `a -ot b`   | a is older than b             |
 
+### Messages and exit: `die`, `warn` and `PROG`
+
+Almost every script needs the same three things: its own name, a way to
+report a problem and carry on, and a way to report one and stop. They are
+built in, and need no import:
+
+```python
+if not -f dict_file:
+    die(f"{dict_file} not found")           # "<prog>: ... not found" on stderr, exit 1
+
+if $# > 2:
+    warn("extra arguments ignored")        # "<prog>: extra arguments ignored" on stderr
+
+if mode not in ["fast", "full"]:
+    die(f"unknown mode {mode}", code = 2)  # the same, with exit status 2
+
+print(f"usage: {PROG} <dict_file> <phone_file>")
+```
+
+- **`PROG`** is the name the program was invoked as, without its directory,
+  like `${0##*/}` in the shell. Both backends give the same answer: a
+  leading `.` is dropped (ady2nim runs a cached `.name` binary), and so is a
+  trailing `_gen.py` or `.py` (ady2py). A program installed as a symlink is
+  known by the link's name.
+- **`warn(msg)`** writes `PROG + ": " + msg` to stderr.
+- **`die(msg, code = 1)`** does the same, then exits with `code`. It never
+  returns, so a function may end in `die(...)`:
+
+  ```python
+  def positive(n: int) -> int:
+      if n > 0:
+          return n
+      die(f"n must be positive, got {n}", code = 3)
+  ```
+
+Before these were built in, every tool started with the same lines:
+
+```python
+let PROG: str = Path($0).name.lstrip(".")
+
+def die(msg: str):
+    stderr.writeLine(PROG + ": " + msg)
+    quit(1)
+```
+
+Such copies drift. One tool forgot the `.lstrip(".")` and signed its
+messages `.Tblame:` whenever it ran through its `#!` line. Don't write them
+any more. A program that means something else by these names can still
+define them: its own top-level `def die`, `def warn` or `let PROG` takes
+precedence over the built-in. `EXAMPLES/c500.ady`, for example, has a `die`
+that reports a line number on stdout. The helpers are only emitted into
+programs that use them.
+
 ---
 
 ## 17. Nim-Only Imports
@@ -2819,6 +2872,9 @@ through the same ground in more detail.
 | Pipeline reports first failure    | `shell(pipefail = true): a | b`         |
 | Block joined with something else  | `shell(join = ";"):` / `"|"` / `"||"`   |
 | Where is a program?               | `which("git")` -> `?Path`                |
+| Fail with a message               | `die("msg")`, `die("msg", code = 2)`     |
+| Warn and carry on                 | `warn("msg")`                            |
+| The program's name                | `PROG`, predeclared                      |
 | Path join                         | `let p: Path = root / "sub" / name`     |
 | Path <-> str                      | `Path(s)` / `str(p)`; a bare `p = s` is refused |
 | Read a file or stdin              | `let f: File = (open(p) if p != "" else stdin)` |

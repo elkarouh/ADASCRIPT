@@ -362,6 +362,13 @@ def translate(code, export_symbols=False):
         _re_udef.findall(r'^def\s+([A-Za-z_]\w*)\s*[\(\[]', code, _re_udef.M))
 
     ParserState.symbol_table.push_scope("module")
+    # PROG, the program's name, is predeclared for a module that uses it and
+    # does not declare its own. From the source text, so an f-string's
+    # {PROG} counts; a mention in a comment only costs an unused let.
+    if (_re_udef.search(r'\bPROG\b', code)
+            and not _re_udef.search(r'^(let|var|const)\s+PROG\b', code, _re_udef.M)):
+        from hek_nim_expr import ensure_prog_global
+        ensure_prog_global()
     output = []
 
     def emit_richnl(richnl):

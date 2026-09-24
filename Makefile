@@ -101,7 +101,8 @@ STANDALONE := \
     test_record_name_prefix_field.ady \
     test_file_test_access.ady \
     test_enumerate_start.ady \
-    test_field_subscript_empty_dict.ady
+    test_field_subscript_empty_dict.ady \
+    test_die_warn_own.ady
 
 # -----------------------------------------------------------------------
 # Stdin tests — piped from a sample file
@@ -195,7 +196,8 @@ COMPILE_ONLY := \
     DOC/why_snippets.ady \
     DOC/string_snippets.ady \
     DOC/type_snippets.ady \
-    DOC/awk_paragraph.ady
+    DOC/awk_paragraph.ady \
+    test_die_warn.ady
 
 ALL_COMPILE := \
     $(LIBS) \
@@ -323,6 +325,28 @@ test: compile
 	    printf '  %-42s' "$$f"; \
 	    $(EXDIR)/$$name >/dev/null 2>&1 && echo OK || { echo FAIL; exit 1; }; \
 	done
+
+	@# die() and warn() end a run on purpose, so they are checked from
+	@# outside: what reaches stderr, that nothing reaches stdout, and the
+	@# exit status die() was given -- on both backends.
+	@echo "=== die / warn / PROG builtins, both backends ==="
+	@printf 'test_die_warn: a warning, and on we go\ntest_die_warn: n must be positive, got -1\n' \
+	    > $(TMPDIR)/ady_die_warn.want
+	@printf '  %-42s' "test_die_warn.ady (nim)"; \
+	    $(EXDIR)/test_die_warn > $(TMPDIR)/ady_die_warn.out 2> $(TMPDIR)/ady_die_warn.err; \
+	    rc=$$?; [ $$rc -eq 3 ] && [ ! -s $(TMPDIR)/ady_die_warn.out ] \
+	        && cmp -s $(TMPDIR)/ady_die_warn.err $(TMPDIR)/ady_die_warn.want \
+	        && echo OK || { echo "FAIL (rc=$$rc)"; cat $(TMPDIR)/ady_die_warn.err; exit 1; }
+	@$(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(EXDIR)/test_die_warn.ady > $(TMPDIR)/test_die_warn.py
+	@printf '  %-42s' "test_die_warn.ady (python)"; \
+	    $(PYTHON) $(TMPDIR)/test_die_warn.py > $(TMPDIR)/ady_die_warn.out 2> $(TMPDIR)/ady_die_warn.err; \
+	    rc=$$?; [ $$rc -eq 3 ] && [ ! -s $(TMPDIR)/ady_die_warn.out ] \
+	        && cmp -s $(TMPDIR)/ady_die_warn.err $(TMPDIR)/ady_die_warn.want \
+	        && echo OK || { echo "FAIL (rc=$$rc)"; cat $(TMPDIR)/ady_die_warn.err; exit 1; }
+	@$(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(EXDIR)/test_die_warn_own.ady > $(TMPDIR)/test_die_warn_own.py
+	@printf '  %-42s' "test_die_warn_own.ady (python)"; \
+	    $(PYTHON) $(TMPDIR)/test_die_warn_own.py >/dev/null 2>&1 && echo OK || { echo FAIL; exit 1; }
+	@rm -f $(TMPDIR)/ady_die_warn.* $(TMPDIR)/test_die_warn.py $(TMPDIR)/test_die_warn_own.py
 
 	@echo "=== Stdin examples (piped from test_awk_sample.txt) ==="
 	@for f in $(STDIN_EXAMPLES); do \
