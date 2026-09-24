@@ -105,6 +105,8 @@ type LineNo is int
 type HitIndex is int
 # a commit's 40-hex-digit SHA-1
 type CommitHash is str
+# what git rev-parse resolved a baseline to; "" means the working tree
+type Revision is str
 # "<repo>\x01<revision>\x01<file>": which Target a Hit names
 type TargetKey is str
 
@@ -115,8 +117,7 @@ type Hit is record:
     # revision and file git blame is to be asked about.
     raw:      str
     repo:     Path
-    # a git ref; "" means the working tree
-    revision: str
+    revision: Revision
     file:     Path
     nmroot:   Path
     # the path exactly as written on the input line
@@ -135,7 +136,7 @@ type Blame is record:
 type Target is record:
     # one file at one revision in one repository: what one git blame covers
     repo:     Path
-    revision: str
+    revision: Revision
     file:     Path
 
 # ---------------------------------------------------------------------------
@@ -400,8 +401,8 @@ class Resolver:
     workspace:       Path = Path("")
     alternate:       Path = Path("")
     show_unmatched:  bool = True
-    # "system/subsystem.baseline" (baseline lower-cased) -> git revision
-    revisions:       {str}str = {:}
+    # keyed by "system/subsystem.baseline", the baseline lower-cased
+    revisions:       {str}Revision = {:}
     alternate_added: bool = False
 
     def __init__(self, workspace: Path, alternate: Path, show_unmatched: bool):
@@ -487,7 +488,7 @@ class Resolver:
         hit.revision = self.revision_of(written, hit.nmroot)
         return hit
 
-    def revision_of(self, cmpath_in: str, nmroot: Path) -> str:
+    def revision_of(self, cmpath_in: str, nmroot: Path) -> Revision:
         """The git revision a /cm/ot/... path's baseline names, "" if none.
 
         Psort lists the baseline's related context paths; each whose
