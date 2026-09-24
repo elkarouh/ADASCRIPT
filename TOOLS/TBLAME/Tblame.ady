@@ -142,19 +142,15 @@ type Target is record:
 def strip_after(s: str, marker: str) -> str:
     """Everything before the first occurrence of MARKER, or S unchanged."""
     let at: int = s.find(marker)
-    if at >= 0:
-        return s[:at]
-    return s
+    return s[:at] if at >= 0 else s
 
 def baseline_key(system: str, subsystem: str, baseline: Baseline) -> BaselineKey:
     """What a baseline's Revision is cached under. Built here and only here,
     so the store and the lookup cannot disagree on case again."""
-    return system + "/" + subsystem + "." + baseline.lower()
+    system + "/" + subsystem + "." + baseline.lower()
 
 def strip_prefix(s: str, prefix: str) -> str:
-    if s.startswith(prefix):
-        return s[len(prefix):]
-    return s
+    s[len(prefix):] if s.startswith(prefix) else s
 
 # ---------------------------------------------------------------------------
 # NM/CM site tools, wrapped as opaque external programs
@@ -190,45 +186,31 @@ def line_checksum(line: str) -> str:
     debug_log(f"CKSUM:[{stripped}]")
     let r = shell(stdin = stripped): cksum
     let parts: []str = r.output.split()
-    if len(parts) == 0:
-        return "0000000000"
-    return f"{int(parts[0]):010d}"
+    "0000000000" if len(parts) == 0 else f"{int(parts[0]):010d}"
 
 def sc_value(col: OutputColumn, tickets: []str) -> str:
     """sc_first, sc_hint or sc_all, from the SC tickets a commit names."""
-    if len(tickets) == 0:
-        return "<no-sc>"
+    return "<no-sc>" if len(tickets) == 0
     case col:
-        when Col_ScAll:
-            return ",".join(tickets)
+        when Col_ScAll: ",".join(tickets)
         when Col_ScHint:
             return tickets[0] if len(tickets) == 1
             return f"{tickets[0]}(+{len(tickets) - 1})"
-        when others:
-            return tickets[0]
+        when others: tickets[0]
 
 def column_value(col: OutputColumn, hit: Hit, b: Blame, tickets: []str) -> str:
     """The value of every column but Col_Date, which Report fills in all at
     once (see format_dates)."""
     case col:
-        when Col_Checksum:
-            return line_checksum(hit.raw)
-        when Col_User:
-            return b.committer
-        when Col_ScFirst | Col_ScHint | Col_ScAll:
-            return sc_value(col, tickets)
-        when Col_FileOriginal:
-            return str(hit.orig) + ":" + str(hit.line_no)
-        when Col_FileName:
-            return hit.file.name + ":" + str(hit.line_no)
-        when Col_FileWorkspace:
-            return strip_prefix(str(hit.file), str(hit.nmroot) + "/") + ":" + str(hit.line_no)
-        when Col_Reference:
-            return hit.trailing
-        when Col_ReferenceBlame:
-            return b.text
-        when others:
-            return ""
+        when Col_Checksum: line_checksum(hit.raw)
+        when Col_User: b.committer
+        when Col_ScFirst | Col_ScHint | Col_ScAll: sc_value(col, tickets)
+        when Col_FileOriginal: str(hit.orig) + ":" + str(hit.line_no)
+        when Col_FileName: hit.file.name + ":" + str(hit.line_no)
+        when Col_FileWorkspace: strip_prefix(str(hit.file), str(hit.nmroot) + "/") + ":" + str(hit.line_no)
+        when Col_Reference: hit.trailing
+        when Col_ReferenceBlame: b.text
+        when others: ""
 
 def format_dates(epochs: []Epoch) -> {Epoch}DateStamp:
     """YYYY.MM.DD for each epoch, from a single `date` process.
@@ -243,7 +225,7 @@ def format_dates(epochs: []Epoch) -> {Epoch}DateStamp:
     let wanted: []Epoch = list(set(epochs))
     let stamps: str = "\n".join(["@" + str(e) for e in wanted]) + "\n"
     let days: []DateStamp = shellLines(stdin = stamps): date -f - +%Y.%m.%d
-    return {e: day for e, day in zip(wanted, days)}
+    {e: day for e, day in zip(wanted, days)}
 
 # ---------------------------------------------------------------------------
 # Stage 1: what each input line names
