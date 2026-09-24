@@ -50,16 +50,27 @@ REVIEWED BY : dpt, gru, wao on 260922.151702
 DIFF        : git -C /…/NM/TACT/UIF show c3fb81031 -- sources/query_mgr_task-direct_control_functions.adb
 ```
 
+`DIFF` shows each commit in turn, with its own diff of the file. With more
+than one commit there is also `NET DIFF`, what the component's baseline did
+to the file as a whole, between the tags of its section's "Differences
+between" line -- everybody's commits, not only this branch's:
+
+```
+NET DIFF    : git -C /…/NM/IFPS/CUA_IDL diff 30.0.0.122 30.0.0.123 -- sources/fpl-utilities.ads
+```
+
 The path's `<system>/<subsystem>` is a submodule of the NM workspace
 (`$CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY`), where the commits are -- checked
 out and fetched there, `git show` gives the diff. A review is shown where the
 report records one: on the change's own line, or on the merge of the
 change's own commit.
-- A change is credited to the nearest `<user>.<branch>` merged above it in
-  its section. Integration merges (`testadm`, any `...adm`) and baseline
-  syncs (`CFMUTEST.CFMUTEST_CONFIG.<nr>`) are nobody's branch. Where a
-  section merges several people's branches this is a guess -- the report
-  says no more.
+- A change is credited to a `<user>.<branch>` merged above it in its
+  section; integration merges (`testadm`, any `...adm`) and baseline syncs
+  (`CFMUTEST.CFMUTEST_CONFIG.<nr>`) are nobody's branch. Each branch's
+  merge lists its tickets: the change goes to the one branch whose tickets
+  cover all of the change's, else to the one that shares any, else -- none
+  or several, `RELATED_CHANGES=" "` among them -- to the nearest branch.
+  The report says no more than that about who made a change.
 - Changes with only an integration merge above them are listed apart.
 
 `TCHECK_CM_OT` stands in for `/cm/ot`, to run against a copy of the tree --

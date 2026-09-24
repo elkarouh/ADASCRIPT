@@ -576,6 +576,10 @@ type FileChange is record:
     tickets: []str = []
     # "<reviewers> on <date>", once per review the report gives them
     reviews: []str = []
+    # the component's baselines the change lies between, as tags in its
+    # submodule: "Differences between IFPS.CUA_IDL.30.0.0.122 and ...123"
+    from_baseline: str = ""
+    to_baseline:   str = ""
 
 type ChangeList is record:
     # in the order each first appears
@@ -615,12 +619,33 @@ def review_of(line: str) -> str:
     let text: str = $+{by}.strip() + " on " + $+{date}.strip()
     text if ok == "yes" else text + " (review-ok: " + ok + ")"
 
+def credit(tickets: []str, names: []BranchName, branch_tickets: [][]str, nearest: BranchName) -> BranchName:
+    """The branch a change with TICKETS is credited to, among the user
+    branches NAMES merged above it in its section, each with the tickets its
+    merge lists: the one whose tickets cover all of the change's, else the
+    one that shares any with it, else -- none or several -- NEAREST."""
+    return nearest if len(tickets) == 0
+    let covering: []BranchName = [n for n, ts in zip(names, branch_tickets) if all([t in ts for t in tickets])]
+    return covering[0] if len(covering) == 1
+    let sharing: []BranchName = [n for n, ts in zip(names, branch_tickets) if any([t in ts for t in tickets])]
+    return sharing[0] if len(sharing) == 1
+    nearest
+
+def baseline_nr(component: str) -> str:
+    """The baseline number of "IFPS.CUA_IDL.30.0.0.122": 30.0.0.122."""
+    ".".join(component.split(".")[2:])
+
 def read_changes(report: Path) -> ChangeList:
-    """The changes REPORT lists, each credited to the nearest user branch
-    merged above it in its section; one entry per branch, file and kind of
+    """The changes REPORT lists, each credited to a user branch merged above
+    it in its section (see credit); one entry per branch, file and kind of
     change, with every commit that made it."""
     var out: ChangeList
     var branch: BranchName = ""
+    # the user branches merged so far in this section, and their tickets
+    var section_names: []BranchName = []
+    var section_tickets: [][]str = []
+    var from_baseline: str = ""
+    var to_baseline: str = ""
     # "<branch>\x01<kind>\x01<file>" -> index in out.files[branch]
     var seen: {str}int = {:}
     # a merge's review, for the change its own commit makes: the merge line
@@ -632,16 +657,28 @@ def read_changes(report: Path) -> ChangeList:
         if stripped.startswith("====="):
             # a new section: nothing merged yet
             branch = ""
+            section_names = []
+            section_tickets = []
+            if stripped == /^===== Differences between (?P<a>\S+) and (?P<b>\S+)/:
+                let a: str = $+{a}
+                let b: str = $+{b}
+                from_baseline = baseline_nr(a)
+                to_baseline = baseline_nr(b)
         elif stripped == /^Merge from <- (?P<sha>\S+) (?P<name>\S+)/:
             # bound first: the calls below match regexes of their own
             let merge_sha: CommitHash = $+{sha}
             let source: str = $+{name}
+            var merge_tickets: []str = []
+            if stripped == /RELATED_CHANGES="(?P<sc>[^"]*)"/:
+                merge_tickets = $+{sc}.split()
             let merge_review: str = review_of(stripped)
             if merge_review != "":
                 merge_reviews[merge_sha] = merge_review
             let merged: BranchName = user_branch(source)
             if merged != "":
                 branch = merged
+                section_names.append(merged)
+                section_tickets.append(merge_tickets)
             elif source.split(".")[0].endswith("adm"):
                 # an integration merge: what follows is nobody's yet
                 branch = ""
@@ -657,30 +694,33 @@ def read_changes(report: Path) -> ChangeList:
             if review == "" and sha in merge_reviews:
                 review = merge_reviews[sha]
             let reviews: []str = [review] if review != "" else []
-            if branch == "":
+            let owner: BranchName = credit(tickets, section_names, section_tickets, branch)
+            if owner == "":
                 out.unattributed.append(FileChange(kind = kind, file = file, commits = [sha],
-                                                   tickets = tickets, reviews = reviews))
+                                                   tickets = tickets, reviews = reviews,
+                                                   from_baseline = from_baseline, to_baseline = to_baseline))
                 continue
-            let who: Committer = committer_of(branch)
+            let who: Committer = committer_of(owner)
             if who not in out.branches:
                 out.committers.append(who)
                 out.branches[who] = []
-            if branch not in out.files:
-                out.branches[who].append(branch)
-                out.files[branch] = []
-            let key: str = branch + "\x01" + kind'Image + "\x01" + file
+            if owner not in out.files:
+                out.branches[who].append(owner)
+                out.files[owner] = []
+            let key: str = owner + "\x01" + kind'Image + "\x01" + file
             if key not in seen:
-                seen[key] = len(out.files[branch])
-                out.files[branch].append(FileChange(kind = kind, file = file))
+                seen[key] = len(out.files[owner])
+                out.files[owner].append(FileChange(kind = kind, file = file,
+                                                   from_baseline = from_baseline, to_baseline = to_baseline))
             let i: int = seen[key]
-            if sha not in out.files[branch][i].commits:
-                out.files[branch][i].commits.append(sha)
+            if sha not in out.files[owner][i].commits:
+                out.files[owner][i].commits.append(sha)
             for t in tickets:
-                if t not in out.files[branch][i].tickets:
-                    out.files[branch][i].tickets.append(t)
+                if t not in out.files[owner][i].tickets:
+                    out.files[owner][i].tickets.append(t)
             for r in reviews:
-                if r not in out.files[branch][i].reviews:
-                    out.files[branch][i].reviews.append(r)
+                if r not in out.files[owner][i].reviews:
+                    out.files[owner][i].reviews.append(r)
     out
 
 def echo_ediff(a: Path, b: Path):
@@ -692,18 +732,24 @@ def newest(dir: Path, pattern: str) -> Path:
     let found: []str = shellLines: ls -dt {!dir}/{pattern} 2>/dev/null | head -n 1
     Path(found[0]) if len(found) > 0 else Path("")
 
-def diff_command(fc: FileChange) -> str:
-    """The git command showing FC's commits for its file. The report's path
-    is <system>/<subsystem>/<rest>, and <system>/<subsystem> is a submodule
-    of the NM workspace, where the commits are."""
+def git_in_submodule(fc: FileChange, args: str) -> str:
+    """`git -C <submodule> ARGS -- <path in it>` for FC's file. The report's
+    path is <system>/<subsystem>/<rest>, and <system>/<subsystem> is a
+    submodule of the NM workspace, where the commits and tags are."""
     let parts: []str = fc.file.split("/")
     var root: str = $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY
     if root == "":
         root = "$CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY"
-    return f"git show {' '.join(fc.commits)} -- {fc.file}" if len(parts) < 3
-    let sub: str = parts[0] + "/" + parts[1]
-    let rest: str = "/".join(parts[2:])
-    f"git -C {root}/{sub} show {' '.join(fc.commits)} -- {rest}"
+    return f"git {args} -- {fc.file}" if len(parts) < 3
+    f"git -C {root}/{parts[0]}/{parts[1]} {args} -- {'/'.join(parts[2:])}"
+
+def diff_command(fc: FileChange) -> str:
+    """Each of FC's commits, with its own diff of the file."""
+    git_in_submodule(fc, "show " + " ".join(fc.commits))
+
+def net_diff_command(fc: FileChange) -> str:
+    """What the component's baseline did to the file, all commits together."""
+    git_in_submodule(fc, f"diff {fc.from_baseline} {fc.to_baseline}")
 
 def display_file(fc: FileChange):
     """FILE <KIND>: <dir>/<base>.<extension>, the base and extension in
@@ -724,6 +770,8 @@ def display_file(fc: FileChange):
     for r in fc.reviews:
         print "REVIEWED BY : " + r
     print "DIFF        : " + diff_command(fc)
+    if len(fc.commits) > 1 and fc.from_baseline != "" and fc.to_baseline != "":
+        print "NET DIFF    : " + net_diff_command(fc)
 
 def display_branch_info(branch: BranchName, reference: str):
     """The branch the changes came from, and its view build next to the

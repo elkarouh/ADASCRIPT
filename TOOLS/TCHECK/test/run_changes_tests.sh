@@ -80,6 +80,13 @@ check "the git command for the diff, every commit" \
 check "...naming the variable when it is unset"  \
     'DIFF        : git -C $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY/TACT/UIF show 33340af6c -- sources/b.adb' \
     "$(CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY= "$TCHECK" -focus changes 30.0.0.9 | awk '/user bob /{on=1} on' | grep -m1 '^DIFF')"
+check "a ticket only one branch lists wins over nearest" "FILE CHANGED: TACT/UIF/sources/d.adb" \
+    "$(section alice | grep '^FILE .*d\.adb$')"
+check "...and so is not bob's"                   0 "$(section bob | grep -c 'd\.adb' || true)"
+check "the net diff between the component's baselines" \
+    'NET DIFF    : git -C /nm/TACT/UIF diff 30.0.0.129 30.0.0.130 -- sources/b.adb' \
+    "$(entry alice b.adb | grep '^NET DIFF')"
+check "...only where there are several commits"  0 "$(entry bob b.adb | grep -c '^NET DIFF' || true)"
 check "ends with the report's emacs link"        1 "$(printf '%s\n' "$OUT" | grep -c 'find-file ".*CFMUTEST.CFMUTEST_CONFIG.30.0.0.8.changes_report"')"
 
 # --- when there is nothing to report on, it says so ----------------------

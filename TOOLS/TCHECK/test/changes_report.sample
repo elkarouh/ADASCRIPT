@@ -23,6 +23,7 @@
       Merge from <- 4f82e11db CFMUTEST.CFMUTEST_CONFIG.30.0.0.6 
       changed 33340af6c:TACT/UIF/sources/b.adb RELATED_CHANGES="SC-1 " review-ok: no; reviewed-by: carol, dave; review-date: 260923.101010;
       added   44440af6c:TACT/UIF/sources/c.ads RELATED_CHANGES="SC-1 " 
+      changed 55550af6c:TACT/UIF/sources/d.adb RELATED_CHANGES="SC-2 " 
 ===== UIF Software Changes Report
       SC_1   CR_1   Fix b
 
