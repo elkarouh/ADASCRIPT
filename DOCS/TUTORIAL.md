@@ -195,6 +195,113 @@ var counts:  {str}int = {:}    # empty dict  → Python: {}   Nim: initTable[...
 var visited: {}str    = {}     # empty set   → Python: set() Nim: initHashSet[...]()
 ```
 
+### Name the type, not its representation
+
+Bare `int`, `float` and `str` are discouraged wherever the value means
+something more specific than "a number" or "some text". They say how a value
+is stored, not what it is. Give it a named type instead:
+
+```python
+# bare: what goes in, what comes out?
+def format_dates_bare(epochs: []int) -> {int}str:
+
+# named: the signature is the documentation
+# seconds since 1970-01-01 UTC
+type Epoch is int
+# an Epoch as the date column prints it: YYYY.MM.DD
+type DateStamp is str
+
+def format_dates(epochs: []Epoch) -> {Epoch}DateStamp:
+```
+
+Why:
+
+- **The signature explains itself.** `[]int -> {int}str` could be anything;
+  `[]Epoch -> {Epoch}DateStamp` can only be one thing. A reader, a reviewer
+  and a grep for `Epoch` all find the meaning without opening the body.
+- **Nested containers become readable.** `{str}[]int` says nothing about
+  what is keyed by what. `{TargetKey}{LineNo}[]HitIndex` reads as "for each
+  target, for each line, the hits that asked for it". Naming the parts often
+  shows a better shape, too. Here, one table keyed by glued strings like
+  `"<target>\x02<line>"` became a table per target, keyed by line:
+
+  ```python
+  var owners_bare: {str}[]int = {:}                  # keyed by "<target>\x02<line>"
+  var owners: {TargetKey}{LineNo}[]HitIndex = {:}   # the hits that asked for each line
+  ```
+
+- **The unit or format is written down once.** The comment on
+  `type Epoch is int` says "seconds since 1970, UTC" for every use, instead
+  of a comment at each field and parameter, or none.
+- **The representation can change in one place.** If `Epoch` has to become
+  a `float`, only its declaration changes.
+- **It costs nothing.** A named scalar type is a plain alias on both
+  backends (`type Epoch = int` on Nim, `Epoch = int` on Python), so no
+  conversion is needed in or out:
+
+  ```python
+  let e: Epoch = 1700000000
+  let n: int = e + 1
+  ```
+
+A bare type is still right when the value only counts or indexes and means
+nothing more: a length, a column width, a string offset, a loop index, text
+that is just text.
+
+```python
+var widths: []int = []
+for s in ["ab", "abc"]:
+    widths.append(len(s))
+```
+
+A rule of thumb: if you would write a comment next to a declaration to say
+what its `int` or `str` holds, name the type and put the comment there.
+
+Both naming styles appear in the examples: a `_T` suffix (`Velocity_T`,
+`Node_T`) and a plain name (`Epoch`, `LineNo`). Pick one per program.
+
+### `distinct` types (planned)
+
+A named type is an alias. It documents the meaning but does not enforce it,
+so mixing up two of them still compiles:
+
+```python
+type Velocity_T is float     # knots
+type Distance_T is float     # nautical miles
+
+let v: Velocity_T = 250.0
+let d: Distance_T = v        # compiles on both backends: an alias, not a type
+```
+
+A `distinct` type would close that gap. It is **not available yet**:
+`type Velocity_T is distinct float` is a parse error today. The planned
+design, tracked in `TODO.md`, is:
+
+- `type Velocity_T is distinct float` declares a new type with `float`'s
+  representation that is not interchangeable with `float` or with any other
+  distinct type.
+- `Velocity_T(x)` converts into it and `float(v)` converts out, both
+  explicitly. Assigning a bare `float`, or a `Distance_T`, is an error on
+  both backends.
+
+Once it exists, use `distinct` where a mix-up would be a bug the compiler
+should catch: units (metres vs feet, knots vs km/h), and IDs of different
+things that share a representation (a user ID vs an order ID, both `int`).
+Keep a plain alias where the point is readability, and the value is meant
+to mix freely with its base type (an `Epoch` added to a number of seconds).
+
+Until then, these already enforce a distinction:
+
+- An **enum** is its own type.
+- A **subrange** (`type Age is 0 .. 150`) is checked against its bounds, on
+  Nim only. On Python it is a plain `int`.
+- A **record** is nominal.
+- `?T` is not `T`.
+- `Path` is a distinct string: `let p: Path = s` is an error, and `Path(s)`
+  is how you convert.
+
+`DOCS/WHY_ADASCRIPT.md` makes the longer argument for naming types.
+
 ---
 
 ## 3. Variable Declarations

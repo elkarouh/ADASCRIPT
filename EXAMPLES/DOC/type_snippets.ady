@@ -1,0 +1,63 @@
+#!/usr/bin/env ady2nim
+"""Every snippet quoted in the "named types" sections of DOCS/TUTORIAL.md
+and DOCS/TUTORIAL_FOR_LLM.md. `make test` runs it.
+"""
+
+# --- bare: the signature says nothing about what goes in or out ------------
+def format_dates_bare(epochs: []int) -> {int}str:
+    var out: {int}str = {:}
+    for e in epochs:
+        out[e] = "1970.01.01"
+    return out
+
+# --- named: the same function, and now the signature is the documentation --
+# seconds since 1970-01-01 UTC
+type Epoch is int
+# an Epoch as the date column prints it: YYYY.MM.DD
+type DateStamp is str
+
+def format_dates(epochs: []Epoch) -> {Epoch}DateStamp:
+    var out: {Epoch}DateStamp = {:}
+    for e in epochs:
+        out[e] = "1970.01.01"
+    return out
+
+# --- a mapping of mappings says what is keyed by what ----------------------
+# a 1-based line number within a file
+type LineNo is int
+# a line's position in the input
+type HitIndex is int
+# "<repo>\x01<revision>\x01<file>": one git blame run
+type TargetKey is str
+
+var owners_bare: {str}[]int = {:}                  # keyed by "<target>\x02<line>"
+var owners: {TargetKey}{LineNo}[]HitIndex = {:}   # the hits that asked for each line
+
+# --- a named type is an alias: no conversion in or out ---------------------
+let e: Epoch = 1700000000
+let n: int = e + 1
+let stamps: {Epoch}DateStamp = format_dates([e, e])
+assert len(stamps) == 1
+assert n == 1700000001
+assert len(format_dates_bare([0])) == 1
+
+# --- bare is right when the int only counts --------------------------------
+var widths: []int = []
+for s in ["ab", "abc"]:
+    widths.append(len(s))
+assert widths == [2, 3]
+
+# --- ...and it is also why an alias does not stop a mix-up -----------------
+type Velocity_T is float     # knots
+type Distance_T is float     # nautical miles
+
+let v: Velocity_T = 250.0
+let d: Distance_T = v        # compiles on both backends: an alias, not a type
+assert d == 250.0
+
+owners["t"] = {:}
+owners["t"][7] = [0]
+owners_bare["t\x027"] = [0]
+assert owners["t"][7] == owners_bare["t\x027"]
+
+print "type snippets ok"

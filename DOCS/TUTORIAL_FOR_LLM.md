@@ -94,6 +94,54 @@ var visited: {}str    = {}     # empty set   → Python: set() Nim: initHashSet(
 
 **Open arrays** (`[*]T`) are only valid in parameter/return annotations, not variable declarations. They accept both `[]T` (seq) and `[N]T` (fixed array) at call sites.
 
+### Named types, not bare ones
+
+**Rule:** don't use bare `int` / `float` / `str` for a value that means something specific. Declare a named type and put the unit or format in a comment on its declaration.
+
+```adascript
+# discouraged: what goes in, what comes out?
+def format_dates(epochs: []int) -> {int}str:
+
+# preferred
+# seconds since 1970-01-01 UTC
+type Epoch is int
+# an Epoch as the date column prints it: YYYY.MM.DD
+type DateStamp is str
+def format_dates(epochs: []Epoch) -> {Epoch}DateStamp:
+
+# nested containers: say what is keyed by what
+var owners: {TargetKey}{LineNo}[]HitIndex = {:}   # not {str}[]int keyed by "<target>\x02<line>"
+```
+
+**Rationale:**
+- The signature documents itself, and `grep Epoch` finds every use.
+- Nested containers become readable, and often better shaped. Glued string keys give way to a nested mapping.
+- The unit or format is written once, on the type.
+- The representation can change in one place.
+- There is no cost: a named scalar type is a plain alias on both backends (Nim `type Epoch = int`, Python `Epoch = int`), so `let n: int = e + 1` needs no conversion.
+
+**Keep bare types for** values that only count or index: lengths, widths, string offsets, loop indices, and text that is just text. Rule of thumb: if the declaration would need a comment saying what the `int` holds, name the type instead.
+
+Both naming styles exist in the examples, `Velocity_T` and `Epoch`; be consistent within one program. The snippets are in `EXAMPLES/DOC/type_snippets.ady`.
+
+### `distinct` (planned, NOT yet available)
+
+A named type is an alias: it documents, it does not enforce. `let d: Distance_T = v` with `v: Velocity_T` compiles when both are `float` aliases.
+
+`type Velocity_T is distinct float` is **a parse error today**; don't emit it. The planned design is in `TODO.md`:
+- the type is not interchangeable with its base or with another distinct type;
+- `Velocity_T(x)` converts in and `float(v)` converts out, explicitly;
+- mixing is an error on both backends.
+
+When it lands, use it for units and for IDs of different entities that share a representation. Keep aliases for values meant to mix with their base.
+
+Enforcement available today:
+- enums are their own types;
+- subranges are bounds-checked, on Nim only;
+- records are nominal;
+- `?T` is not `T`;
+- `Path` is a distinct string, so `let p: Path = s` is an error; write `Path(s)`.
+
 ---
 
 ## Variable Declarations
@@ -1370,6 +1418,7 @@ for s in Stage_T'First .. Stage_T'Last:
 ## Known Limitations
 
 - **Comments on a `case` header** — blank lines and inline comments survive into the output, inside `def`, `class`, `for`, `while`, `if`, fields and method bodies alike. Two placements do not, on both backends: a comment on the `case` line itself is dropped, and one on a `type ... is enum` line is relocated to the last generated member.
+- **No `distinct` types yet**: `type X is distinct T` is a parse error. A named type is an alias, so two aliases of `float` mix freely. Only `Path`, enums, records and `?T` are enforced as distinct; subranges are bounds-checked on Nim only.
 - **Ticks do not chain** — `Stage_T'First'Image` is a parse error; bind the intermediate value first. Ticks on field accesses and subscripts are fine.
 - **Case subject must be structural** — `case state:` where `state` is a tuple variable emits Nim's native `case`, which rejects non-ordinal selectors. Destructure with `let (a, b) = state` first, then `case (a, b):`.
 - **Global parser state** — `ParserState` is a class-level singleton; call `ParserState.reset()` between independent parse runs. Thread-unsafe for concurrent parses.
