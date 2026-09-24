@@ -232,6 +232,48 @@ class decl_untyped(_Parser):
             f"explicitly typed: write '{kw} {name}: <type> = ...'. Only a shell "
             f"command's output may leave it out.")
 
+# A module declares each type once. Declared twice, the Python backend let
+# the second silently win, and the Nim one merged both into a type section
+# that lost the second's header ("invalid indentation", pointing at the
+# generated file). Module-level names only: those are the ones that clash.
+import re as _re_dup
+
+_TYPE_DECL = _re_dup.compile(r"(?:type|class)\s+([A-Za-z_]\w*)\b")
+
+
+def check_duplicate_types(code):
+    """Refuse a module that declares the same type name twice at its top
+    level (`type X ...`, `class X ...`). Text inside triple-quoted strings
+    -- docstrings -- is not code and is skipped."""
+    seen = {}
+    in_string = None
+    for n, line in enumerate(code.splitlines(), 1):
+        if in_string is None and line and not line[0].isspace():
+            m = _TYPE_DECL.match(line)
+            if m:
+                name = m.group(1)
+                if name in seen:
+                    raise SyntaxError(
+                        f"line {n}: type '{name}' is already declared, at line "
+                        f"{seen[name]}. A module declares each type once: give "
+                        f"one of them another name.")
+                seen[name] = n
+        # track triple-quoted strings opened and closed on this line
+        i = 0
+        while True:
+            if in_string is None:
+                hits = [(line.find(q, i), q) for q in ('"""', "'''")]
+                hits = [(k, q) for k, q in hits if k >= 0]
+                if not hits:
+                    break
+                k, q = min(hits)
+                in_string, i = q, k + 3
+            else:
+                k = line.find(in_string, i)
+                if k < 0:
+                    break
+                in_string, i = None, k + 3
+
 # --- own declaration: own IDENTIFIER ':' type_annotation ['=' expression] ---
 # Unique owner; auto-freed at scope end (Nim ARC; Python GC)
 own_stmt = literal("own") + IDENTIFIER + V_COLON + type_annotation + (V_EQUAL + expression)[:]

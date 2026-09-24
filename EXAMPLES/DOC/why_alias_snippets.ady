@@ -1,0 +1,18 @@
+#!/usr/bin/env ady2nim
+"""The "What is not yet true" snippet of DOCS/WHY_ADASCRIPT.md: a scalar
+type alias is documentation, not enforcement.
+
+Apart from why_snippets.ady because it declares Velocity_T as the
+document shows it here, which that file already declares for its record,
+and a module declares each type once. `make test` runs it, and
+DOCS/check_quotes.py checks the document against it.
+"""
+
+type Velocity_T is float
+type Distance_T is float
+
+let v: Velocity_T = 250.0
+let d: Distance_T = v        # compiles today, on both backends
+assert d == 250.0
+
+print "why alias snippets ok"

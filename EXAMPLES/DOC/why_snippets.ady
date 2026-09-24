@@ -39,11 +39,8 @@ for cs in ["AFR22", "BAW117"]:
 for phase in Flight_Phase_T:
     print f"{phase'Image:<8} {by_phase[phase]'Length}"
 
-# --- the "not yet true" section: an alias does not enforce ------------------
-type Distance_T is float
-let v: Velocity_T = 250.0
-let d: Distance_T = v        # compiles today, on both backends
-assert d == 250.0
+# --- the "not yet true" section is why_alias_snippets.ady: it declares its
+# own Velocity_T, as the document shows it, and a module declares a type once.
 
 # --- the notation, one line per shape --------------------------------------
 type Sector_T is enum NORTH, CENTRE, SOUTH
@@ -73,7 +70,6 @@ assert bysector[CENTRE][0] == "BA117" and bysector[NORTH]'Length == 0
 assert nested["a"]["b"] == 1
 
 # --- the signatures the document argues from -------------------------------
-type Velocity_T is float
 type Distance_T is float
 type Duration_T is float
 

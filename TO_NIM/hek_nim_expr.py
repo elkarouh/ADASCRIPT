@@ -2545,8 +2545,13 @@ def to_nim(self, prec=None):
                 continue
             if type(tr).__name__ == "attr_trailer":
                 method_name = tr.nodes[0].to_nim()
-                method_name = _translate_method(result, method_name)
                 next_tr = trailer_list[i + 1] if i + 1 < len(trailer_list) else None
+                # Only a call is a method: a record field that shares a
+                # Python method's name -- `r.index[k]`, `r.get`, `r.lower`
+                # -- is read as it is, not renamed to find / getOrDefault /
+                # toLowerAscii.
+                if next_tr is not None and type(next_tr).__name__ == "call_trailer":
+                    method_name = _translate_method(result, method_name)
                 # `chars.append(c)` where chars is []str and c is a char --
                 # which is what iterating or indexing a string gives here,
                 # and a one-character string on Python. Adding a char to a

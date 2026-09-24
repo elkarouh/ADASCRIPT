@@ -279,7 +279,7 @@ were done first.
 An advocacy document that overclaims is worth less than no document, so:
 **a scalar type alias is documentation, not enforcement.**
 
-<!-- from: EXAMPLES/DOC/why_snippets.ady -->
+<!-- from: EXAMPLES/DOC/why_alias_snippets.ady -->
 ```python
 type Velocity_T is float
 type Distance_T is float

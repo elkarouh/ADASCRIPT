@@ -1,0 +1,33 @@
+#!/usr/bin/env ady2nim
+"""Test: a record field named like a Python method is read as a field.
+
+On Nim, `.index`, `.get`, `.lower` and their kin are renamed to what Nim
+calls the method -- `find`, `getOrDefault`, `toLowerAscii`. That rename was
+applied to every `.name` of the kind, call or not, so a record with a
+field `index` came out as `r.find[k] = i` ("undeclared field: 'find'").
+Only a call is a method; a field keeps its name. The calls are still
+renamed.
+"""
+
+type Entry_T is record:
+    index: {str}int = {:}
+    get: int = 0
+    lower: str = ""
+    items: []str = []
+
+var e: Entry_T
+e.index["a"] = 1
+e.get = 2
+e.lower = "x"
+e.items.append("y")
+assert e.index["a"] == 1 and len(e.index) == 1
+assert e.get == 2 and e.lower == "x" and e.items == ["y"]
+
+# the methods of the same names are still translated
+let xs: []int = [5, 6]
+assert xs.index(6) == 1
+let t: {str}int = {"k": 3}
+assert t.get("k", 0) == 3 and t.get("none", 0) == 0
+assert "ABC".lower() == "abc"
+
+print "all method-named field tests passed"

@@ -135,6 +135,7 @@ def _py_reset():
 def parse_module(code):
     """Parse a full module. Comments are embedded in the parse tree via RichNL."""
     from hek_parsec import ParserState
+    check_duplicate_types(code)
     ParserState.reset()
     _py_reset()
     stream = Input(code)

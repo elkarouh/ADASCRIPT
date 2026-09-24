@@ -107,6 +107,7 @@ def _nim_reset():
 def parse_module(code):
     """Parse a full module. Comments are embedded in the parse tree via RichNL."""
     from hek_parsec import ParserState
+    check_duplicate_types(code)
     ParserState.reset()
     _nim_reset()
     ParserState.proc_param_types_full.update(_nimport_param_types_full)
@@ -1265,6 +1266,12 @@ def run_tests():
         # what the backtracking bug above used to make of it).
         ('let p = Path("/x")\n', "'let p = ...' has no type"),
         ("var n = 3\n", "'var n = ...' has no type"),
+        # A type declared twice: the Nim type section lost the second one's
+        # header, and nim pointed at the generated file.
+        ("type A_T is int\ntype A_T is record:\n    x: int = 0\n",
+         "type 'A_T' is already declared, at line 1"),
+        ("class A:\n    var x: int = 0\n\ntype A is enum P, Q\n",
+         "type 'A' is already declared, at line 1"),
     ]
     # ...except a shell command's output, whose type the command fixes.
     try:

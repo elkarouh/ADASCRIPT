@@ -115,7 +115,8 @@ STANDALONE := \
     test_shell_backslash.ady \
     test_shell_keyword_target.ady \
     test_char_table_literal.ady \
-    test_param_nested_mutation.ady
+    test_param_nested_mutation.ady \
+    test_method_named_field.ady
 
 # -----------------------------------------------------------------------
 # Stdin tests — piped from a sample file
@@ -207,6 +208,7 @@ COMPILE_ONLY := \
     DOC/awk_snippets.ady \
     DOC/shell_snippets.ady \
     DOC/why_snippets.ady \
+    DOC/why_alias_snippets.ady \
     DOC/string_snippets.ady \
     DOC/type_snippets.ady \
     DOC/awk_paragraph.ady \
@@ -362,6 +364,20 @@ test: compile
 	    $(PYTHON) $(TMPDIR)/test_die_warn_own.py >/dev/null 2>&1 && echo OK || { echo FAIL; exit 1; }
 	@rm -f $(TMPDIR)/ady_die_warn.* $(TMPDIR)/test_die_warn.py $(TMPDIR)/test_die_warn_own.py
 
+	@# A type declared twice is refused on both backends, naming the first.
+	@echo "=== a type declared twice, both backends ==="
+	@printf 'type A is int\n"""\ntype B is int\n"""\ntype B is int\nclass A:\n    var x: int = 0\n' \
+	    > $(TMPDIR)/ady_dup_type.ady
+	@for tr in TO_NIM/ady2nim.py TO_PYTHON/ady2py.py; do \
+	    printf '  %-42s' "duplicate type ($$tr)"; \
+	    if $(PYTHON) $(CURDIR)/$$tr $(TMPDIR)/ady_dup_type.ady > $(TMPDIR)/ady_dup_type.out 2>&1; then \
+	        echo "FAIL (accepted)"; exit 1; \
+	    fi; \
+	    grep -q "line 6: type 'A' is already declared, at line 1" $(TMPDIR)/ady_dup_type.out \
+	        && echo OK || { echo FAIL; cat $(TMPDIR)/ady_dup_type.out; exit 1; }; \
+	done
+	@rm -f $(TMPDIR)/ady_dup_type.ady $(TMPDIR)/ady_dup_type.out
+
 	@# A bare print is an empty line on both backends: compared from outside.
 	@echo "=== bare print, both backends ==="
 	@printf 'a\n\nb\n\n\nc\n' > $(TMPDIR)/ady_print_bare.want
@@ -456,7 +472,7 @@ test: compile
 	@# The documents' own snippets, so that what DOCS/*.md quotes is code
 	@# that ran rather than code that was written down. check-quotes below
 	@# is what ties each block to the file it came from.
-	@for f in DOC/awk_snippets.ady DOC/why_snippets.ady DOC/string_snippets.ady DOC/type_snippets.ady; do \
+	@for f in DOC/awk_snippets.ady DOC/why_snippets.ady DOC/why_alias_snippets.ady DOC/string_snippets.ady DOC/type_snippets.ady; do \
 	    name=$${f%.ady}; \
 	    printf '  %-42s' "$$f"; \
 	    $(EXDIR)/$$name 2>&1 | grep -q "snippets ok" \
