@@ -2209,6 +2209,12 @@ def to_nim(self):
     return f'{lhs} = {lhs}.{_fn}({srx_pat}, "{repl}")'
 
 
+@method(print_bare)
+def to_nim(self):
+    """print_bare: a bare 'print' -> an empty line."""
+    return 'echo ""'
+
+
 @method(print_stmt)
 def to_nim(self):
     """print_stmt: 'print' star_expressions -> Nim: echo star_expressions

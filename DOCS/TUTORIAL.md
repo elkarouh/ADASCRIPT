@@ -2928,6 +2928,7 @@ through the same ground in more detail.
 | Regex in case/when                | `when /pat/:`                            |
 | File comparison                   | `a -nt b`, `a -ot b`                     |
 | Python 2-style print              | `print "text"` or `print expr, expr`    |
+| An empty line                     | `print` on its own                      |
 | Owned variable declaration        | `own x: T = expr`                        |
 | Borrow type annotation            | `lent T` (param type)                    |
 | Ownership-transfer type annotation| `own T` (param type)                     |

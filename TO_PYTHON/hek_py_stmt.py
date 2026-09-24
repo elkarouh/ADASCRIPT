@@ -1100,6 +1100,12 @@ def to_py(self):
     return f"{lhs} = _re_mod.sub(r'{safe_pat}', r'{safe_repl}', {lhs})"
 
 
+@method(print_bare)
+def to_py(self):
+    """print_bare: a bare 'print' -> an empty line."""
+    return 'print()'
+
+
 @method(print_stmt)
 def to_py(self):
     """print_stmt: 'print' star_expressions -> Python: print(star_expressions)

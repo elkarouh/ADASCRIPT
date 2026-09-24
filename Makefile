@@ -209,7 +209,8 @@ COMPILE_ONLY := \
     DOC/string_snippets.ady \
     DOC/type_snippets.ady \
     DOC/awk_paragraph.ady \
-    test_die_warn.ady
+    test_die_warn.ady \
+    test_print_bare.ady
 
 ALL_COMPILE := \
     $(LIBS) \
@@ -359,6 +360,17 @@ test: compile
 	@printf '  %-42s' "test_die_warn_own.ady (python)"; \
 	    $(PYTHON) $(TMPDIR)/test_die_warn_own.py >/dev/null 2>&1 && echo OK || { echo FAIL; exit 1; }
 	@rm -f $(TMPDIR)/ady_die_warn.* $(TMPDIR)/test_die_warn.py $(TMPDIR)/test_die_warn_own.py
+
+	@# A bare print is an empty line on both backends: compared from outside.
+	@echo "=== bare print, both backends ==="
+	@printf 'a\n\nb\n\n\nc\n' > $(TMPDIR)/ady_print_bare.want
+	@printf '  %-42s' "test_print_bare.ady (nim)"; \
+	    $(EXDIR)/test_print_bare | cmp -s - $(TMPDIR)/ady_print_bare.want \
+	        && echo OK || { echo FAIL; exit 1; }
+	@printf '  %-42s' "test_print_bare.ady (python)"; \
+	    $(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(EXDIR)/test_print_bare.ady | $(PYTHON) - \
+	        | cmp -s - $(TMPDIR)/ady_print_bare.want && echo OK || { echo FAIL; exit 1; }
+	@rm -f $(TMPDIR)/ady_print_bare.want
 
 	@echo "=== Stdin examples (piped from test_awk_sample.txt) ==="
 	@for f in $(STDIN_EXAMPLES); do \

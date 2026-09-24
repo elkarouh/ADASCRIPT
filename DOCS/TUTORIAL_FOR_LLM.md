@@ -940,9 +940,10 @@ print "hello"
 print f"result: {value}"
 print "x =", x
 print("also valid")
+print                      # an empty line
 ```
 
-Nim output: `echo(...)`. Python output: `print(...)`.
+Nim output: `echo(...)`. Python output: `print(...)`. A bare `print` is `echo ""` / `print()`.
 
 ---
 

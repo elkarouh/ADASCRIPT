@@ -134,6 +134,7 @@ from_nim_abs = fw("from_nim_abs")
 from_pyimport = fw("from_pyimport")
 pyimport_stmt = fw("pyimport_stmt")
 print_stmt = fw("print_stmt")
+print_bare = fw("print_bare")
 enum_def = fw("enum_def")
 subrange_def = fw("subrange_def")
 subrange_array_type = fw("subrange_array_type")
@@ -318,6 +319,10 @@ subst_stmt = primary + ignore(V_EQUAL) + SUBST
 # ~LPAREN ensures print(...) is NOT captured here — it falls through to the
 # expressions fallback and is treated as a normal print() function call.
 print_stmt = ikw("print") + ~LPAREN + _star_expressions
+# A bare `print`, nothing after it on the line: an empty line. Without this
+# it was the expression `print` -- Python evaluated the function and printed
+# nothing, while Nim's bare `echo` printed a newline.
+print_bare = ikw("print") + ~~(NEWLINE | SEMICOLON)
 
 # --- type alias (3.12+) / enum ---
 # type_alias_params: [T] or [T, U] etc. (generic type parameters)
@@ -384,6 +389,7 @@ simple_stmt = (
     | type_stmt
     | yield_expr
     | print_stmt
+    | print_bare
     | expressions
 )
 

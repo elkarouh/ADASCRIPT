@@ -1,0 +1,24 @@
+#!/usr/bin/env ady2nim
+"""Test: a bare `print` prints an empty line, on both backends.
+
+It used to be the expression `print`: the Python backend evaluated the
+function and printed nothing, while Nim's bare `echo` printed a newline.
+`make test` compares what this prints on both backends:
+
+    a
+    (empty)
+    b
+    (empty)
+    (empty)
+    c
+"""
+
+def f():
+    stdout.write("a")
+    print
+
+f()
+print
+print "b"
+print  # with a comment
+print; print "c"
