@@ -1,0 +1,29 @@
+
+WARNING: The closure of the build:/cm/ot/CFMUTEST/CFMUTEST_CONFIG!30.0.0.7/build_G!31.IP.L8 contains errors.
+
+===== Differences between CFMUTEST.CFMUTEST_CONFIG.30.0.0.7 and CFMUTEST.CFMUTEST_CONFIG.30.0.0.8
+      +++++ Dependency changed to TACT.TACT_CONFIG.30.0.0.4
+                     <- Merged from branch: /main/CFMUTEST.CFMUTEST_CONFIG.30.0.0.7.testadm.integration/1 
+===== Differences between TACT.TACT_CONFIG.30.0.0.3 and TACT.TACT_CONFIG.30.0.0.4
+      changed /cm/vobs/t1/TACT/TACT_CONFIG/doc/a.doc@@/main/5 RELATED_CHANGES="SC_1 " #emacs:(ediff-files "/cm/vobs/t1/TACT/TACT_CONFIG/doc/a.doc@@/main/4" "/cm/vobs/t1/TACT/TACT_CONFIG/doc/a.doc@@/main/5")
+                     <- Merged from branch: /main/TACT.TACT_CONFIG.30.0.0.3.tactadm.integration/1 
+      changed /cm/vobs/t1/TACT/TACT_CONFIG/sources/b.adb@@/main/9 RELATED_CHANGES="SC_2 " #emacs:(ediff-files "/cm/vobs/t1/TACT/TACT_CONFIG/sources/b.adb@@/main/8" "/cm/vobs/t1/TACT/TACT_CONFIG/sources/b.adb@@/main/9")
+                     <- Merged from branch: /main/TACT.TACT_CONFIG.30.0.0.3.tactadm.integration/1 
+                     <- Merged from branch: /main/TACT.TACT_CONFIG.30.0.0.3.alice.fix_b/1 REVIEWED_BY_bob REVIEW_OK="Yes"
+                     <- Merged from branch: /main/TACT.TACT_CONFIG.30.0.0.3.alice.fix_b/2 REVIEWED_BY_bob REVIEW_OK="Yes"
+                     <- Merged from branch: /main/TACT.TACT_CONFIG.30.0.0.3.bob.also_b/1 
+      changed /cm/vobs/t1/TACT/TACT_CONFIG/sources@@/main/78 RELATED_CHANGES="SC_2 "
+                     <- Merged from branch: /main/TACT.TACT_CONFIG.30.0.0.3.carol.dirs/1 
+      SC_2   CR_9   Fix b
+===== Differences between IFPS.FLIGHT_CONFIG.30.0.0.5 and IFPS.FLIGHT_CONFIG.30.0.0.6
+      added /cm/vobs/i1/IFPS/CUA_IDL/sources/new_thing.ads@@/main/1 RELATED_CHANGES="SC_3 SC_4 "
+                     <- Merged from branch: /main/IFPS.FLIGHT_CONFIG.30.0.0.5.carol.new_i/1 
+      added /cm/vobs/p1/TOOL/COMMON_UTILS/sources/ksh/tool.ksh@@/main/1 RELATED_CHANGES="SC_5 "
+                     <- Merged from branch: /main/TOOL.COMMON_UTILS.30.0.0.2.dave.tools/1 
+      changed /cm/vobs/i1/IFPS/CUA_IDL/sources/Makefile@@/main/3 RELATED_CHANGES="SC_3 " #emacs:(ediff-files "/cm/vobs/i1/IFPS/CUA_IDL/sources/Makefile@@/main/2" "/cm/vobs/i1/IFPS/CUA_IDL/sources/Makefile@@/main/3")
+                     <- Merged from branch: /main/IFPS.FLIGHT_CONFIG.30.0.0.5.ifpsadm.integration/1 
+                     <- Merged from branch: /main/IFPS.FLIGHT_CONFIG.30.0.0.5.carol.new_i/1 
+      removed /cm/vobs/i1/IFPS/CUA_IDL/sources/old_thing.ads@@/main/2 
+      removed /cm/vobs/i1/IFPS/CUA_IDL/sources/old_thing.adb@@/main/1 
+===== CUA_IDL Software Changes Report
+      SC_3   CR_7   New thing

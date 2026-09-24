@@ -17,11 +17,27 @@ Tcheck_tact [-c] [-s] [-f] [-v] [-l] [-batch] [-only-new] [-exit-code]
 ```
 
 **Modes:**
-- No focus: full report (summary + tests + build info + replays)
+- No focus: full report (summary + tests + build info + replays + changes)
 - `-focus IP in`: only IP integration tests
 - `-focus OP assert`: only OP assert tests
 - `-focus replay run_prequal`: only the run_prequal replay
 - `-focus build_info`: only Padactl and check_run_test_programs
+- `-focus changes`: only the list of changes, by committer (below)
+
+**The list of changes.** The CFMUTEST baseline built on the TACT baseline
+(`Psort -b` answers it, e.g. `CFMUTEST_CONFIG!30.0.0.105`) has a changes
+report, `/cm/ot/CFMUTEST/baseline_reports/CFMUTEST.CFMUTEST_CONFIG.<nr>.changes_report`.
+It is regrouped by committer: for each file changed, added or removed, the
+emacs ediff link (for a change), the view it was merged from, and that view's
+build next to the reference baseline's, with the ediff between their failures.
+- A change is credited to every committer who merged it from a view that
+  is not an integration one (`ifpsadm`, `eldadm`, `tactadm`, `TOOL.COMMON`),
+  once each. Only the `<- Merged from branch:` lines directly after an
+  element count, so a changed directory's merges are nobody's file.
+- Removals come with no view in the report, and are listed apart at the end.
+
+`TCHECK_CM_OT` stands in for `/cm/ot`, to run against a copy of the tree --
+which is what `test/run_changes_tests.sh` does.
 
 **Options:**
 | Option | Description |
@@ -97,7 +113,7 @@ All three programs share these Adascript types, designed for an eventual merge:
 | `ReplayType` | `run_prequal, performance, simca, full_simca, oldest_date, all_autolink` |
 | `Build` | Named tuple: `(name: str, btype: BuildType)` |
 | `Replay` | Named tuple: `(rtype: ReplayType, file: Path)` |
-| `FocusDomain` | `no_focus, focus_IP, focus_OP, focus_SIP, focus_replay, focus_build_info` |
+| `FocusDomain` | `no_focus, focus_IP, focus_OP, focus_SIP, focus_replay, focus_build_info, focus_changes` |
 | `TlogResult` | Record with parsed test result lists (crashed, new_failing, still_fail, etc.) |
 
 ## Output Features

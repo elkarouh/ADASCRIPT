@@ -19,6 +19,7 @@ G1DIR  := $(TOOLDIR)/GIT1
 PGDIR  := $(TOOLDIR)/PGREP
 TBDIR  := $(TOOLDIR)/TBLAME
 TDDIR  := $(TOOLDIR)/TDIFF
+TCDIR  := $(TOOLDIR)/TCHECK
 
 # Prepend choosenim's bin dir so Nim 2.x is used instead of any system Nim 1.x.
 export PATH := /root/.nimble/bin:$(HOME)/.nimble/bin:$(HOME)/Downloads:$(PATH)
@@ -526,6 +527,17 @@ test: compile
 	    > $(TDDIR)/test/tblame_py && chmod +x $(TDDIR)/test/tblame_py
 	@$(TDDIR)/test/run_tests.sh $(TDDIR)/test/tdiff_py $(TDDIR)/test/tblame_py
 	@rm -f $(TDDIR)/test/Tdiff_py.py $(TDDIR)/test/tdiff_py $(TDDIR)/test/Tblame_py.py $(TDDIR)/test/tblame_py
+
+	@# Tcheck_tact -focus changes against a CM tree the test builds: a TACT
+	@# baseline, the CFMUTEST changes report Psort points it at, a view build.
+	@echo "=== Tcheck_tact -focus changes against a CM tree built for the test ==="
+	@$(TCDIR)/test/run_changes_tests.sh $(TCDIR)/Tcheck_tact
+	@echo "=== Tcheck_tact -focus changes, the same checks on the Python backend ==="
+	@$(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(TCDIR)/Tcheck_tact.ady > $(TCDIR)/test/Tcheck_tact_py.py
+	@printf '#!/bin/sh\nexec $(PYTHON) %s "$$@"\n' "$(TCDIR)/test/Tcheck_tact_py.py" \
+	    > $(TCDIR)/test/tcheck_py && chmod +x $(TCDIR)/test/tcheck_py
+	@$(TCDIR)/test/run_changes_tests.sh $(TCDIR)/test/tcheck_py
+	@rm -f $(TCDIR)/test/Tcheck_tact_py.py $(TCDIR)/test/tcheck_py
 
 	@echo "=== Expect / shell examples (require bc) ==="
 	@for f in $(EXPECT_EXAMPLES); do \

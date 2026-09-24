@@ -69,7 +69,7 @@ def hr(c: char = '#', length: int = 80):
 type BuildSubtype is enum in_test, mono, assert_test, lo, hi, memcheck, with_secondary
 type BuildType is enum IP, OP, SIP
 type BuildPass is enum normal, mrun
-type FocusDomain is enum no_focus, focus_IP, focus_OP, focus_SIP, focus_replay, focus_build_info
+type FocusDomain is enum no_focus, focus_IP, focus_OP, focus_SIP, focus_replay, focus_build_info, focus_changes
 type ReplayType is enum run_prequal, performance, simca, full_simca, oldest_date, all_autolink
 
 type Replay is tuple:
@@ -80,7 +80,9 @@ type Replay is tuple:
 # Baselines
 # ---------------------------------------------------------------------------
 
-let TACT_ROOT: Path = Path("/cm/ot/TACT")
+# The CM tree; overridable so the program can be run against a copy of one.
+let CM_OT: Path = Path(${TCHECK_CM_OT:-"/cm/ot"})
+let TACT_ROOT: Path = CM_OT / "TACT"
 
 class Baseline:
     """One TACT baseline: its number and the directory holding its builds.
@@ -536,13 +538,192 @@ def process_run_test_programs_log(build: Build, fast_mode: bool):
             print filtered.output.rstrip("\n")
 
 # ---------------------------------------------------------------------------
-# List all changes (placeholder — format has changed)
+# List all changes: who committed what, per the CFMUTEST changes report
 # ---------------------------------------------------------------------------
+#
+# A TACT baseline is tested by a CFMUTEST baseline, and each CFMUTEST
+# baseline has a changes report: every element changed, added or removed
+# since the previous one, each followed by the branch (the view) it was
+# merged from. The report is grouped here by the view's owner, the
+# committer, so each can see their own changes with the diff to look at
+# and the view build that tested them.
+
+let CFMUTEST_ROOT: Path = CM_OT / "CFMUTEST"
+# Merges from these are integration bookkeeping, not anybody's change.
+let INTEGRATION_MARKERS: []str = ["ifpsadm", "eldadm", "tactadm", "TOOL.COMMON"]
+
+# a view as the report names it: <baseline>.<committer>.<view>/<n>[ <review>]
+type ViewName is str
+type Committer is str
+
+type ChangeKind is enum CHANGED, ADDED, DELETED
+
+type FileChange is record:
+    kind: ChangeKind = CHANGED
+    # the element's path, without its @@ version
+    file: str = ""
+    # CHANGED only: the #emacs:(ediff-files ...) link between the two versions
+    diff: str = ""
+    view: ViewName = ""
+
+def cfmu_baseline_of(tact_nr: str) -> str:
+    """The CFMUTEST baseline built on TACT baseline TACT_NR -- what
+    `Psort -b` answers first for it -- or "" when it answers nothing."""
+    # A CM path for Psort, not a file: /cm/ot whatever TCHECK_CM_OT says.
+    let tact: str = "/cm/ot/TACT/TACT_CONFIG." + tact_nr + "\n"
+    let answers: []str = shellLines(stdin = tact): Psort -b
+    return "" if len(answers) == 0
+    return "" if answers[0] != /CFMUTEST_CONFIG[!.](?P<nr>[^\/\s]+)$/
+    $+{nr}
+
+def committer_of(view: ViewName) -> Committer:
+    """The committer a view belongs to: its second-to-last dotted field."""
+    let fields: []str = view.split(".")
+    fields[-2] if len(fields) >= 2 else ""
+
+type ChangeList is record:
+    # in the order each committer first appears
+    committers:   []Committer = []
+    by_committer: {Committer}[]FileChange = {:}
+    # removals the report names no view for
+    unattributed: []FileChange = []
+
+def read_changes(report: Path) -> ChangeList:
+    """The changes REPORT lists, grouped by committer.
+
+    Each changed, added or removed element is followed directly by the
+    views it was merged from, "<- Merged from branch: /main/<view>". Every
+    committer whose view is not an integration one is credited with it,
+    once. Any other line ends the element's merges -- a changed directory,
+    a dependency, a section heading -- so they are never credited to it.
+    A removal is followed by no view at all, so removals are kept apart.
+    """
+    var out: ChangeList
+    var cur: FileChange
+    var pending: bool = False
+    var merges: int = 0
+    var credited: {}Committer = {}
+    let f: File = open(report)
+    for line in f.lines:
+        let stripped: str = line.strip()
+        if stripped.startswith("<- Merged from branch:"):
+            continue if not pending
+            merges += 1
+            continue if any([m in line for m in INTEGRATION_MARKERS])
+            let view: ViewName = line.split("/main/")[-1].strip()
+            let who: Committer = committer_of(view)
+            continue if who in credited
+            credited.add(who)
+            if who not in out.by_committer:
+                out.committers.append(who)
+                out.by_committer[who] = []
+            out.by_committer[who].append(FileChange(kind = cur.kind, file = cur.file,
+                                                    diff = cur.diff, view = view))
+            continue
+        continue if stripped == ""
+        # Any other line settles the element before it.
+        if pending and merges == 0 and cur.kind == DELETED:
+            out.unattributed.append(cur)
+        pending = False
+        if stripped.startswith("changed") and "ediff" in line:
+            # A changed directory carries no ediff, and is not listed.
+            let diff: str = "#emacs:" + line.split("#emacs:")[-1]
+            cur = FileChange(kind = CHANGED, diff = diff)
+            if diff == /"(?P<path>[^"@]+)@@/:
+                cur.file = $+{path}
+        elif stripped.startswith("added ") or stripped.startswith("deleted ") or stripped.startswith("removed "):
+            # "added <path>@@/main/1 RELATED_CHANGES=..." -- the path alone
+            let words: []str = stripped.split(" ", 1)
+            cur = FileChange(kind = ADDED if words[0] == "added" else DELETED,
+                             file = words[1].split("@@")[0].strip())
+        else:
+            continue
+        pending = True
+        merges = 0
+        credited = {}
+    if pending and merges == 0 and cur.kind == DELETED:
+        out.unattributed.append(cur)
+    out
+
+def echo_ediff(a: Path, b: Path):
+    print f"(ediff-files \"{a}\" \"{b}\")"
+
+def newest(dir: Path, pattern: str) -> Path:
+    """The most recently modified entry of DIR matching the glob PATTERN,
+    or Path("") when none does."""
+    let found: []str = shellLines: ls -dt {!dir}/{pattern} 2>/dev/null | head -n 1
+    Path(found[0]) if len(found) > 0 else Path("")
+
+def display_file(fc: FileChange):
+    """FILE <KIND>: <dir>/<base>.<extension>, the base and extension in color."""
+    let p: Path = Path(fc.file)
+    let name: str = p.name
+    let dot: int = name.rfind(".")
+    stdout.write(f"FILE {fc.kind'Image}: {p.parent}/")
+    if dot > 0:
+        cechon("Ky", name[:dot])
+        stdout.write(".")
+        cecho("Wb", name[dot + 1:])
+    else:
+        cecho("Ky", name)
+
+def display_view_info(view: ViewName):
+    """The view a change was merged from, and the view build that tested it
+    next to the reference baseline's, with the ediff between their failures."""
+    let fields: []str = view.split(".")
+    let part1: str = ".".join(fields[:-2])
+    let committer: Committer = committer_of(view)
+    let rest: str = fields[-1]
+    let viewshort: str = rest.split("/")[0]
+    let reference: str = ".".join(part1.split(".")[:6])
+    stdout.write(f"FROM VIEW   : {part1}.")
+    cechon("Wb", committer)
+    stdout.write(".")
+    cecho("Ky", rest)
+    let reports: Path = TACT_ROOT / "test_reports"
+    let view_build: Path = newest(reports, f"TACT.TACT_CONFIG.{committer.upper()}.{viewshort.upper()}-G!31.*")
+    let ref_build: Path = newest(reports, f"{reference}-G!31.*")
+    if view_build == "":
+        print "NO VIEW BUILD FOUND FOR THIS VIEW"
+    else:
+        print f"VIEW BUILD DIR: {view_build}"
+        print f"REFERENCE BASELINE DIR: {ref_build}"
+        echo_ediff(ref_build / "general.results.failed-in", view_build / "general.results.failed-in")
 
 def list_all_changes(baseline: str):
+    """The changes in the CFMUTEST baseline built on TACT BASELINE, by
+    committer."""
     hr('#')
     cecho("sWr", "LIST OF CHANGES")
-    print "listing all changes"
+    let cfmu: str = cfmu_baseline_of(baseline)
+    if cfmu == "":
+        cecho("sWb", f"WARNING: Psort -b names no CFMUTEST baseline for TACT_CONFIG.{baseline}")
+        return
+    let report: Path = CFMUTEST_ROOT / "baseline_reports" / f"CFMUTEST.CFMUTEST_CONFIG.{cfmu}.changes_report"
+    if not -r report:
+        cecho("sWb", f"WARNING: no changes report for CFMUTEST_CONFIG {cfmu}: {report}")
+        return
+    let changes: ChangeList = read_changes(report)
+    for who in changes.committers:
+        stdout.write("===================================== Files committed by user ")
+        cechon("Wb", who)
+        print " ====================================="
+        for fc in changes.by_committer[who]:
+            print "---------------------------------"
+            display_file(fc)
+            if fc.kind == CHANGED:
+                print "DIFF        :" + fc.diff
+            display_view_info(fc.view)
+        print ""
+        print ""
+    if len(changes.unattributed) > 0:
+        print "===================================== Files removed, no view recorded ====================================="
+        for fc in changes.unattributed:
+            display_file(fc)
+        print ""
+    print ""
+    echo_emacs(report)
+    print ""
 
 # ---------------------------------------------------------------------------
 # Options
@@ -568,7 +749,7 @@ def usage():
     print "  -exit-code   Exit with non-zero status if new failures are found."
     print "  -focus <domain> [<detail>]"
     print "               Focus on a specific domain and optionally a detail within it."
-    print "               domain: IP, OP, SIP, replay, or build_info"
+    print "               domain: IP, OP, SIP, replay, build_info, or changes"
     print "               detail: a build subtype (in, mono, assert, ...) or a replay type"
     print "  <BASELINE>   Required if -c or -v is specified, or if no options are given."
     quit(1)
@@ -660,8 +841,11 @@ class Options:
                             if detail_arg != "":
                                 die("-focus build_info takes no detail")
                             self.focus_domain = focus_build_info
+                        when "changes":
+                            die("-focus changes takes no detail") if detail_arg != ""
+                            self.focus_domain = focus_changes
                         when others:
-                            die("invalid focus domain: " + domain_arg + " (expected IP, OP, SIP, replay, build_info)")
+                            die("invalid focus domain: " + domain_arg + " (expected IP, OP, SIP, replay, build_info, changes)")
                 when others:
                     if arg.startswith("-"):
                         stderr.writeLine("Invalid option: " + arg)
@@ -978,7 +1162,7 @@ class Report:
                 when focus_IP:  continue if build.btype != IP
                 when focus_OP:  continue if build.btype != OP
                 when focus_SIP: continue if build.btype != SIP
-                when focus_replay | focus_build_info: break
+                when focus_replay | focus_build_info | focus_changes: break
                 when no_focus:  pass
             cecho("usBy", "PROCESSING " + build.name + " ...")
             for subtype in BuildSubtype:
@@ -1162,6 +1346,8 @@ class Report:
             when focus_IP | focus_OP | focus_SIP:
                 self.show_regression_tests()
                 self.show_detailed_regression_tests()
+            when focus_changes:
+                list_all_changes(self.cur.nr)
             when focus_build_info:
                 self.show_build_info()
                 self.show_detailed_build_info()
