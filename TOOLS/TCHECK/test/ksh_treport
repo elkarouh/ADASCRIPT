@@ -1,0 +1,12 @@
+#!/bin/sh
+# Treport.ksh under Tcheck_tact's arguments, for
+# run_changes_tests.sh: the same checks, with -focus changes dropped.
+HERE=$(cd "$(dirname "$0")" && pwd)
+focus=""
+for a in "$@"; do
+    shift
+    if [ "$a" = "-focus" ]; then focus=1; continue; fi
+    if [ -n "$focus" ]; then focus=""; [ "$a" = changes ] && continue; fi
+    set -- "$@" "$a"
+done
+exec ksh "$HERE/../Treport.ksh" "$@"

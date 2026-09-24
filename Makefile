@@ -588,6 +588,11 @@ test: compile
 	    > $(TCDIR)/test/tcheck_py && chmod +x $(TCDIR)/test/tcheck_py
 	@$(TCDIR)/test/run_changes_tests.sh $(TCDIR)/test/tcheck_py
 	@rm -f $(TCDIR)/test/Tcheck_tact_py.py $(TCDIR)/test/tcheck_py
+	@# Treport.ksh, the standalone ksh translation: the same checks
+	@echo "=== Treport.ksh, the same checks (ksh) ==="
+	@if command -v ksh >/dev/null 2>&1; then \
+	    $(TCDIR)/test/run_changes_tests.sh $(TCDIR)/test/ksh_treport; \
+	else echo "  SKIP (no ksh)"; fi
 
 	@echo "=== Expect / shell examples (require bc) ==="
 	@for f in $(EXPECT_EXAMPLES); do \

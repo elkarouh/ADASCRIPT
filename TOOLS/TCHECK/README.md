@@ -116,6 +116,23 @@ Tcheck_tact -s                     # disk usage of replay dirs
 Tcheck_tact -l 30.0.0.128          # list builds and replays
 ```
 
+### Treport.ksh
+
+Tcheck_tact's list of changes (`-focus changes`) as a standalone ksh93
+script, for where the Adascript build is not at hand. Same output, same
+attribution, same links, same options for it:
+
+```
+Treport.ksh [-no-color] [-tool NAME | -meld] [-batch] BASELINE
+Treport.ksh -tool kompare 30.0.0.132
+```
+
+It reads the same environment (`TCHECK_CM_OT`,
+`CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY`) and needs `Psort` on the PATH.
+`make test` runs Tcheck_tact's changes tests (`test/run_changes_tests.sh`)
+against it too, so the two cannot drift apart; with the output identical,
+a change to one is a change to both.
+
 ### make_comparable
 
 Normalize a log file for side-by-side diffing. Replaces timestamps, PIDs,
@@ -178,3 +195,5 @@ ady2nim c -d:release make_comparable.ady -o make_comparable
   `-focus` modes (`-focus IP in`, `-focus replay performance`,
   `-focus build_info`, ...); the separate Ttroubleshoot program is gone.
 - `make_comparable.ady` — translated from `make_comparable.ksh`
+- `Treport.ksh` — `list_all_changes` of `Tcheck_tact.ady`, translated
+  back to ksh
