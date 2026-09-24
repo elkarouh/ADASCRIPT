@@ -20,11 +20,11 @@ nimport time
 #   Fg:      K=black(30) R=red(31) G=green(32) Y=yellow(33) B=blue(34) M=magenta(35) C=cyan(36) W=white(37)
 #   Bg:      k=black(40) r=red(41) g=green(42) y=yellow(43) b=blue(44) m=magenta(45) c=cyan(46) w=white(47)
 
-let ANSI_CODES: {str}str = {
-    "S": "1", "D": "2", "I": "3", "U": "4", "F": "5", "N": "7", "H": "8", "T": "9",
-    "s": "1", "d": "2", "i": "3", "u": "4", "f": "5", "n": "7", "h": "8", "t": "9",
-    "K": "30", "R": "31", "G": "32", "Y": "33", "B": "34", "M": "35", "C": "36", "W": "37",
-    "k": "40", "r": "41", "g": "42", "y": "43", "b": "44", "m": "45", "c": "46", "w": "47"
+let ANSI_CODES: {char}str = {
+    'S': "1", 'D': "2", 'I': "3", 'U': "4", 'F': "5", 'N': "7", 'H': "8", 'T': "9",
+    's': "1", 'd': "2", 'i': "3", 'u': "4", 'f': "5", 'n': "7", 'h': "8", 't': "9",
+    'K': "30", 'R': "31", 'G': "32", 'Y': "33", 'B': "34", 'M': "35", 'C': "36", 'W': "37",
+    'k': "40", 'r': "41", 'g': "42", 'y': "43", 'b': "44", 'm': "45", 'c': "46", 'w': "47"
 }
 let RESET: str = "\x1b[0m"
 var COLORED: bool = True
@@ -36,13 +36,7 @@ var HAS_NEW_FAILURES: bool = False
 
 def ansi_escape(spec: str) -> str:
     """Turn a color spec like 'sWr' into an ANSI escape sequence."""
-    var codes: []str = []
-    for ch in spec:
-        let s: str = str(ch)
-        if s in ANSI_CODES:
-            codes.append(ANSI_CODES[s])
-    if codes'Length == 0:
-        return ""
+    let codes: []str = [ANSI_CODES[ch] for ch in spec if ch in ANSI_CODES]
     return "\x1b[" + ";".join(codes) + "m"
 
 def cecho(spec: str, text: str):
