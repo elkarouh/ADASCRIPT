@@ -1,5 +1,5 @@
 nimport strutils, sequtils
-import os
+nimport os
 
 type Color is enum RED, GREEN, BLUE
 

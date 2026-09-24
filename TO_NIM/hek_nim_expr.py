@@ -259,6 +259,31 @@ def _ensure_progname_helper():
         ParserState.nim_top_decls = decls
 
 
+_ARGV0_HELPER = """\
+proc adascriptArgv0(): string =
+  ## `$0`: the program's path as it was invoked, as Python's sys.argv[0]
+  ## is. Not getAppFilename, which resolves symlinks -- ady2nim's build is
+  ## a link into its cache, and an installed tool is often a link too, so
+  ## `Path($0).resolve().parent` would name the wrong directory. Invoked
+  ## through PATH, argv[0] is a bare name: PATH gives its path, the link
+  ## again rather than the file behind it.
+  result = paramStr(0)
+  if '/' notin result:
+    let found = findExe(result, followSymlinks = false)
+    if found.len > 0:
+      result = found
+"""
+
+
+def _ensure_argv0_helper():
+    """Add adascriptArgv0 the first time `$0` is used."""
+    ParserState.nim_imports.add("os")
+    decls = getattr(ParserState, 'nim_top_decls', [])
+    if not any("proc adascriptArgv0" in d for d in decls):
+        decls.append(_ARGV0_HELPER)
+        ParserState.nim_top_decls = decls
+
+
 def ensure_prog_global():
     """Declare `PROG` -- the program's name -- for a module that uses it
     without declaring its own."""
@@ -3649,7 +3674,9 @@ def to_nim(self, prec=None):
     name = raw.string if hasattr(raw, 'string') else str(raw)
     ParserState.nim_imports.add("os")
     if name == "0":
-        return "getAppFilename().extractFilename()"
+        # the program's path, as Python's sys.argv[0] is; PROG is its name
+        _ensure_argv0_helper()
+        return "adascriptArgv0()"
     if name == "#":
         return "paramCount()"
     if name == "@":

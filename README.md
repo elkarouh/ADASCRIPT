@@ -1276,8 +1276,9 @@ Imported names arrive **unqualified** — after `nimport geometry`,
 `distance(a, b)` is in scope. `geometry.distance(a, b)` is accepted too and
 compiles to the same call.
 
-Plain `import geometry` is rejected: `import` is reserved for Python modules,
-`pyimport` for Python packages via nimpy.
+Plain `import geometry` is rejected on the Nim side, as an error naming both
+alternatives: `nimport` for Nim modules and `.ady` files, `pyimport` for
+Python packages via nimpy.
 
 ### How a name is resolved
 
@@ -1944,7 +1945,9 @@ die(f"bad option {arg}", code = 2)     # ...exit 2
 print(f"usage: {PROG} [-v] FILE")
 ```
 
-`PROG` is the name the program was invoked as, like `${0##*/}`. A leading
+`PROG` is the name the program was invoked as, like `${0##*/}`; `$0` is
+its path as invoked, on both backends -- a link is not followed, and a
+program started through `PATH` gets the path `PATH` found it at. A leading
 `.` from ady2nim's cached binary is dropped, and so is a `_gen.py` / `.py`
 from ady2py, so both backends print the same name. `die` never returns, so a
 function can end in it. A program's own top-level `def die`, `def warn` or

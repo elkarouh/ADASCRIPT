@@ -1557,11 +1557,12 @@ def to_nim(self):
                     and seq.nodes[0].nodes[0] == "."):
                 parts.append(seq.nodes[1].to_nim())
     module = ".".join(parts)
-    import sys as _sys_imp
-    print(f"Error: 'import {module}' is not allowed. "
-          f"Use 'nimport {module}' for Nim/stdlib modules or "
-          f"'pyimport {module}' for Python packages.", file=_sys_imp.stderr)
-    return None
+    # An error, not a warning: printed and carried on from, the line was
+    # dropped and the run went on to fail -- or not -- somewhere else.
+    raise SyntaxError(
+        f"'import {module}' is not allowed. "
+        f"Use 'nimport {module}' for Nim/stdlib modules or "
+        f"'pyimport {module}' for Python packages.")
 
 
 def _emit_pyimport(module, alias=None):

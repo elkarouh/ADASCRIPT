@@ -364,6 +364,25 @@ test: compile
 	    $(PYTHON) $(TMPDIR)/test_die_warn_own.py >/dev/null 2>&1 && echo OK || { echo FAIL; exit 1; }
 	@rm -f $(TMPDIR)/ady_die_warn.* $(TMPDIR)/test_die_warn.py $(TMPDIR)/test_die_warn_own.py
 
+	@# $0 is the program's path on both backends -- PROG is its name.
+	@echo "=== \$$0 is the program's path, both backends ==="
+	@printf 'let source: Path = Path($$0).parent / "ady_dollar0.ady"\nassert -f source\nprint "ok"\n' \
+	    > $(TMPDIR)/ady_dollar0.ady
+	@printf '  %-42s' "\$$0 (nim)"; \
+	    cd $(TMPDIR) && XDG_CACHE_HOME=$(TMPDIR)/ady_dollar0_cache $(ADY2NIM) c ady_dollar0.ady >/dev/null 2>&1 \
+	    && cd / && $(TMPDIR)/ady_dollar0 2>&1 | grep -qx ok && echo OK || { echo FAIL; exit 1; }
+	@printf '  %-42s' "\$$0 (python)"; \
+	    $(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(TMPDIR)/ady_dollar0.ady > $(TMPDIR)/ady_dollar0_py.py \
+	    && cd / && $(PYTHON) $(TMPDIR)/ady_dollar0_py.py 2>&1 | grep -qx ok && echo OK || { echo FAIL; exit 1; }
+	@rm -rf $(TMPDIR)/ady_dollar0.ady $(TMPDIR)/ady_dollar0 $(TMPDIR)/ady_dollar0_py.py $(TMPDIR)/ady_dollar0_cache
+
+	@# The transpiler's own tests: translations and the errors it must raise.
+	@echo "=== ady2nim --test ==="
+	@printf '  %-42s' "ady2nim.py --test"; \
+	    $(ADY2NIM) --test > $(TMPDIR)/ady2nim_selftest.out 2>&1 \
+	    && echo OK || { echo FAIL; grep -v PASS $(TMPDIR)/ady2nim_selftest.out; exit 1; }
+	@rm -f $(TMPDIR)/ady2nim_selftest.out
+
 	@# A type declared twice is refused on both backends, naming the first.
 	@echo "=== a type declared twice, both backends ==="
 	@printf 'type A is int\n"""\ntype B is int\n"""\ntype B is int\nclass A:\n    var x: int = 0\n' \

@@ -952,13 +952,15 @@ def run_tests():
             "x //= 2\n",
             "x = x div 2\n",
         ),
+        # `from X import Y`: a module with a Nim counterpart comes in
+        # natively, any other through nimpy.
         (
-            "import os\n",
-            'import os\n',
+            "from math import log\n",
+            "import math\n",
         ),
         (
             "from os import path\n",
-            'import os\n',
+            'import nimpy\nlet path = pyImport("os").path\n',
         ),
         (
             "pass\n",
@@ -1047,10 +1049,6 @@ def run_tests():
         ),
         # --- mixed programs ---
         (
-            "import os\ndef main():\n    return os\n",
-            'import os\nproc main() =\n    return os\n',
-        ),
-        (
             "x = 1\nif x:\n    y = 2\n",
             "var x = 1\nif x:\n    var y = 2\n",
         ),
@@ -1069,7 +1067,8 @@ def run_tests():
         ),
         (
             "class Foo:\n    def bar(self):\n        pass\n",
-            "type Foo = object of RootObj\nproc newFoo*(): Foo =\n    result = Foo()\nproc bar(self: Foo) =\n    discard\n",
+            # forward-declared, so methods may call each other in any order
+            "type Foo = object of RootObj\nproc bar(self: Foo)\nproc newFoo*(): Foo =\n    result = Foo()\nproc bar(self: Foo) =\n    discard\n",
         ),
         # --- expressions in statements ---
         (
@@ -1125,7 +1124,9 @@ def run_tests():
         # --- bashisms ---
         (
             "$0\n",
-            "import os\ngetAppFilename()\n",
+            # the path as invoked, as sys.argv[0] is -- not getAppFilename,
+            # which resolves the link ady2nim's build is
+            "import os\n" + __import__("hek_nim_expr")._ARGV0_HELPER + "\nadascriptArgv0()\n",
         ),
         (
             "$1\n",
@@ -1266,6 +1267,10 @@ def run_tests():
         # what the backtracking bug above used to make of it).
         ('let p = Path("/x")\n', "'let p = ...' has no type"),
         ("var n = 3\n", "'var n = ...' has no type"),
+        # Plain import is refused: nimport or pyimport say which world the
+        # module comes from. It used to be printed and carried on from.
+        ("import os\n", "'import os' is not allowed. Use 'nimport os'"),
+        ("import numpy as np\n", "Use 'nimport numpy' for Nim/stdlib modules or 'pyimport numpy'"),
         # A type declared twice: the Nim type section lost the second one's
         # header, and nim pointed at the generated file.
         ("type A_T is int\ntype A_T is record:\n    x: int = 0\n",
