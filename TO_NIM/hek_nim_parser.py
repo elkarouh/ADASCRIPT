@@ -5041,6 +5041,10 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
         # siblings. Those alone skip the promotion below. It never adds a
         # `var`; every other method keeps exactly the answer it had.
         _siblings = getattr(ParserState, "_class_siblings", ())
+        _BY_VALUE_HELPERS = {
+            'quoteShell', 'adascriptExists', 'adascriptAccess', 'fileExists',
+            'dirExists', 'symlinkExists', 'getFileSize', 'len', 'Path',
+        }
         def _purity_evidence(body_text):
             """(may_mutate, sibling_calls) for the pure-method fixpoint."""
             may_mutate = bool(
@@ -5063,8 +5067,16 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
                     may_mutate = True
             # A call's paren follows a name (`inc(self.n)`); a grouping paren
             # does not, and the emitter wraps a returned expression in one --
-            # `return (self.base() / "x")` passes self to nothing.
-            if _re.search(r'(?:[\w\])]\(|,)\s*self\b', body_text):
+            # `return (self.base() / "x")` passes self to nothing. Nor do the
+            # helpers the emitter itself wraps a value in, which all take it
+            # by value: `{!self.root}` in a shell line is quoteShell(self.root)
+            # and `-e self.root / p` is adascriptExists(...), and counting
+            # those made every method that did either take `var self`, and
+            # every caller of it too.
+            for m in _re.finditer(r'(\w+)\(\s*self\b', body_text):
+                if m.group(1) not in _BY_VALUE_HELPERS:
+                    may_mutate = True
+            if _re.search(r'(?:[\])]\(|,)\s*self\b', body_text):
                 may_mutate = True
             return may_mutate, sibling_calls
 

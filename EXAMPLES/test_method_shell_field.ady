@@ -1,0 +1,35 @@
+#!/usr/bin/env ady2nim
+"""Test: a method that puts a field into a shell line, or tests a path built
+from one, does not need a mutable self.
+
+`{!self.root}` in a shell line is emitted as quoteShell(self.root), and
+`-e self.root / p` as adascriptExists(...). Both helpers take the value, but
+any `name(self...` counted as handing self to a call that might change it:
+the method, and every method calling it, took `var self` on Nim, and none
+of them could be called on a `let` -- "expression 'x' is immutable".
+"""
+
+class Tree:
+    root: Path = Path("/tmp")
+
+    def __init__(self, root: Path):
+        self.root = root
+
+    def has(self, name: str) -> bool:
+        -e (self.root / name)
+
+    def listing(self) -> str:
+        let r = shell: ls -d {!self.root}
+        r.output.strip()
+
+    def both(self, name: str) -> str:
+        """Calls the two above: pure too."""
+        let verb: str = "has" if self.has(name) else "lacks"
+        f"{self.listing()} {verb} {name}"
+
+let t: Tree = Tree(Path("/tmp"))
+assert t.has(".")
+assert not t.has("no-such-file-here")
+assert t.listing() == "/tmp"
+assert t.both(".") == "/tmp has ."
+print "all shell-field method tests passed"
