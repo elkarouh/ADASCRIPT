@@ -29,7 +29,8 @@ Flow, once the Options are parsed:
      `-since`, and prints one row per Hit: each requested column (date,
      user, sc ticket, blamed text, ...) padded to its widest value, except
      "reference" and "reference_blame", which are prefixed with "| ".
-     Pass-through lines print just ahead of the row that follows them.
+     Pass-through lines keep their place among the rows, those after the
+     last row included.
 """
 
 let PROG: str = Path($0).name
@@ -164,51 +165,6 @@ def where_workspace(cmpath: str) -> (Path, int):
     """
     let r = shell: where_workspace {!cmpath}
     return (Path(r.output.strip()), r.code)
-
-# ---------------------------------------------------------------------------
-# Path shapes
-# ---------------------------------------------------------------------------
-#
-#   /NM/<system>/<subsystem>/<subdir+file>:<line>[:<trailing>]
-#     -- an absolute workspace path; blamed in place, no revision needed.
-#
-#   /cm/ot/<system>/<subsystem>!<baseline>/<build_X>/<subdir+file>:<line>[:<trailing>]
-#     -- a build-context path; the workspace file and the baseline's git
-#        revision have to be resolved first.
-
-type PathShape is enum NoShape, WorkspacePath, ContextPath
-
-type PathMatch is record:
-    system:    str = ""
-    subsystem: str = ""
-    # the path as written: everything before the first ':'
-    written:   str = ""
-    # the subdir+file part, relative to the subsystem
-    filepath:  Path = Path("")
-    line_no:   int = 0
-    trailing:  str = ""
-    shape:     PathShape = NoShape
-
-def match_path(line: str) -> PathMatch:
-    var m: PathMatch
-    if line == /\/NM\/(?P<system>\w+)\/(?P<subsystem>\w+)\/(?P<filepath>[^:]+):(?P<lineno>[0-9]+):?(?P<trailing>.*)$/:
-        m.shape = WorkspacePath
-        m.system = $+{system}
-        m.subsystem = $+{subsystem}
-        m.filepath = Path($+{filepath})
-        m.line_no = int($+{lineno})
-        m.trailing = $+{trailing}
-    elif line == /\/cm\/ot\/(?P<system>\w+)\/(?P<subsystem>\w+)[!\.][^\/]+\/[^\/]+\/(?P<filepath>[^:]+):(?P<lineno>[0-9]+):?(?P<trailing>.*)$/:
-        m.shape = ContextPath
-        m.system = $+{system}
-        m.subsystem = $+{subsystem}
-        m.filepath = Path($+{filepath})
-        m.line_no = int($+{lineno})
-        m.trailing = $+{trailing}
-    else:
-        return m
-    m.written = line[:line.find(":")]
-    return m
 
 # ---------------------------------------------------------------------------
 # Column values
@@ -442,13 +398,23 @@ class Resolver:
         self.show_unmatched = show_unmatched
 
     def resolve(self, raw: str) -> Hit:
-        let m: PathMatch = match_path(raw)
-        case m.shape:
-            when WorkspacePath:
-                return self.workspace_hit(raw, m)
-            when ContextPath:
-                return self.context_hit(raw, m)
-            when NoShape:
+        """What an input line names. Two path shapes are known:
+
+          /NM/<system>/<subsystem>/<subdir+file>:<line>[:<trailing>]
+            -- an absolute workspace path; blamed in place, no revision
+               needed.
+          /cm/ot/<system>/<subsystem>!<baseline>/<build_X>/<subdir+file>:<line>[:<trailing>]
+            -- a build-context path; the workspace file and the baseline's
+               git revision have to be resolved first.
+
+        Anything else is passed through, or dropped under -filter_unmatched.
+        """
+        case raw:
+            when /\/NM\/(?P<system>\w+)\/(?P<subsystem>\w+)\/[^:]+:(?P<lineno>[0-9]+):?(?P<trailing>.*)$/:
+                return self.workspace_hit(raw, $+{system}, $+{subsystem}, int($+{lineno}), $+{trailing})
+            when /\/cm\/ot\/(?P<system>\w+)\/(?P<subsystem>\w+)[!\.][^\/]+\/[^\/]+\/(?P<filepath>[^:]+):(?P<lineno>[0-9]+):?(?P<trailing>.*)$/:
+                return self.context_hit(raw, $+{system}, $+{subsystem}, Path($+{filepath}), int($+{lineno}), $+{trailing})
+            when others:
                 var hit: Hit
                 hit.raw = raw
                 if self.show_unmatched:
@@ -459,7 +425,7 @@ class Resolver:
                     debug_log("Skipped " + raw)
                 return hit
 
-    def workspace_hit(self, raw: str, m: PathMatch) -> Hit:
+    def workspace_hit(self, raw: str, system: str, subsystem: str, line_no: int, trailing: str) -> Hit:
         """A /NM/... line: the file as written, in the workspace."""
         if self.alternate != "" and not self.alternate_added:
             # Once per run: the workspace, and so the file it writes, is
@@ -469,30 +435,32 @@ class Resolver:
         var hit: Hit
         hit.raw = raw
         hit.kind = HK_Blame
-        hit.file = Path(m.written)
+        hit.file = Path(raw[:raw.find(":")])
         hit.orig = hit.file
         hit.nmroot = self.workspace
-        hit.repo = self.workspace / m.system / m.subsystem
+        hit.repo = self.workspace / system / subsystem
         hit.revision = ""
-        hit.line_no = m.line_no
-        hit.trailing = m.trailing
+        hit.line_no = line_no
+        hit.trailing = trailing
         return hit
 
-    def context_hit(self, raw: str, m: PathMatch) -> Hit:
+    def context_hit(self, raw: str, system: str, subsystem: str, filepath: Path, line_no: int, trailing: str) -> Hit:
         """A /cm/ot/... line: blamed in the alternate when there is one,
-        else in the workspace -- at the revision its baseline names."""
+        else in the workspace -- at the revision its baseline names.
+        FILEPATH is the subdir+file part, relative to the subsystem."""
+        let written: str = raw[:raw.find(":")]
         var hit: Hit
         hit.raw = raw
-        hit.orig = Path(m.written)
-        hit.line_no = m.line_no
-        hit.trailing = m.trailing
+        hit.orig = Path(written)
+        hit.line_no = line_no
+        hit.trailing = trailing
         if self.alternate != "":
             hit.nmroot = self.alternate
-            hit.file = m.filepath
+            hit.file = filepath
         elif self.workspace != "":
-            let (ws_path, ws_code) = where_workspace(m.written)
+            let (ws_path, ws_code) = where_workspace(written)
             if ws_code == 2:
-                debug_log("Could not find the file " + m.written + " in the workspace, the subsystem is not checked out.")
+                debug_log("Could not find the file " + written + " in the workspace, the subsystem is not checked out.")
                 return hit
             if ws_code != 0:
                 warn("Below line looks like it contains a context path but it could not be found in the workspace.")
@@ -503,8 +471,8 @@ class Resolver:
         else:
             return hit
         hit.kind = HK_Blame
-        hit.repo = hit.nmroot / m.system / m.subsystem
-        hit.revision = self.revision_of(m.written, hit.nmroot)
+        hit.repo = hit.nmroot / system / subsystem
+        hit.revision = self.revision_of(written, hit.nmroot)
         return hit
 
     def revision_of(self, cmpath_in: str, nmroot: Path) -> str:
@@ -646,23 +614,24 @@ class BlameBatch:
 class Report:
     """The rows to print, in input order, and the lines passed through.
 
-    A pass-through line prints just ahead of the next row; one with no row
-    after it is not printed.
+    A pass-through line keeps its place: it prints just ahead of the next
+    row, or after the last row when none follows it.
     """
     columns:  []OutputColumn = []
     since:    int = 0
     # one entry per row, all the same length
     values:   [][OutputColumn]str = []
     epochs:   []int = []
-    before:   []str = []
-    pending:  str = ""
+    # the pass-through lines to print ahead of each row
+    before:   [][]str = []
+    pending:  []str = []
 
     def __init__(self, columns: []OutputColumn, since: int):
         self.columns = columns
         self.since = since
 
     def pass_through(self, raw: str):
-        self.pending = self.pending + raw + "\n"
+        self.pending.append(raw)
 
     def add(self, hit: Hit, b: Blame):
         if b.author_time > 0 and b.author_time < self.since:
@@ -675,7 +644,7 @@ class Report:
         self.values.append(row)
         self.epochs.append(b.author_time)
         self.before.append(self.pending)
-        self.pending = ""
+        self.pending = []
 
     def print_all(self):
         if Col_Date in self.columns:
@@ -690,8 +659,8 @@ class Report:
                     widths[c] = len(row[c])
 
         for i in range(len(self.values)):
-            if self.before[i] != "":
-                print(self.before[i])
+            for line in self.before[i]:
+                print(line)
             var parts: []str = []
             for c in self.columns:
                 if c == Col_Reference or c == Col_ReferenceBlame:
@@ -699,6 +668,8 @@ class Report:
                 else:
                     parts.append(self.values[i][c].ljust(widths[c]))
             print(" ".join(parts))
+        for line in self.pending:
+            print(line)
 
 # ---------------------------------------------------------------------------
 # Main

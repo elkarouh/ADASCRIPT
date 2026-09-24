@@ -90,27 +90,35 @@ $NM/sysA/subA/fileA.txt:2:info B again (duplicate line+file)
 $NM/sysA/subA/fileA.txt:4:info D
 this line does not match anything
 $NM/sysA/subA/fileB.txt:2:info X
+trailing text after the last hit
 EOF
 
 # --- workspace-path branch, default columns ------------------------------
 # line1 is unchanged since the first commit (Alice); line2/line4 are Bob's
-# second commit; the unmatched line is buffered and printed right before
-# the row that follows it; fileB's line 2 carries three SC tickets.
+# second commit; the unmatched line is printed where it stood, between the
+# rows around it; fileB's line 2 carries three SC tickets.
 OUT=$("$TBLAME" < "$INPUT")
 check "line1 -> first commit's author"       "Alice A" "$(printf '%s\n' "$OUT" | sed -n '1p' | awk '{print $3, $4}')"
 check "line2 -> second commit's author"      "Bob B"   "$(printf '%s\n' "$OUT" | sed -n '2p' | awk '{print $3, $4}')"
 check "duplicate line request, same result"  "$(printf '%s\n' "$OUT" | sed -n '2p')" "$(printf '%s\n' "$OUT" | sed -n '3p')"
 check "line4, same commit as line2 (cache)"  "Bob B"   "$(printf '%s\n' "$OUT" | sed -n '4p' | awk '{print $3, $4}')"
-check "unmatched line passed through"        1 "$(printf '%s\n' "$OUT" | grep -c '^this line does not match anything$')"
-check "multi-ticket sc_hint shows the count" "SC-2001(+2)" "$(printf '%s\n' "$OUT" | sed -n '7p' | awk '{print $2}')"
+check "multi-ticket sc_hint shows the count" "SC-2001(+2)" "$(printf '%s\n' "$OUT" | grep 'x2$' | awk '{print $2}')"
+
+# --- pass-through lines keep their place and add nothing ------------------
+# The ksh original printed a blank line after each run of them, and never
+# printed a run that came after the last hit.
+check "unmatched line passed through, in place" "this line does not match anything" "$(printf '%s\n' "$OUT" | sed -n '5p')"
+check "...and the next row follows directly"    "x2" "$(printf '%s\n' "$OUT" | sed -n '6p' | awk '{print $NF}')"
+check "trailing unmatched line printed"         "trailing text after the last hit" "$(printf '%s\n' "$OUT" | sed -n '7p')"
+check "no blank lines, nothing else"            "7 0" "$(printf '%s\n' "$OUT" | wc -l | tr -d ' ') $(printf '%s\n' "$OUT" | grep -c '^$')"
 
 # --- full column set: the ksh original's sc_hint/output-array name
 #     collision crashed here (see the module docstring); Adascript has no
 #     such collision to hit.
 FULL="checksum date user sc_hint sc_first sc_all file_original file_name file_workspace reference reference_blame"
 FULL_OUT=$("$TBLAME" $FULL < "$INPUT")
-check "full column set doesn't crash"        6 "$(printf '%s\n' "$FULL_OUT" | grep -c '.')"
-check "sc_all lists every ticket"            "SC-2001,SC-2002,SC-2003" "$(printf '%s\n' "$FULL_OUT" | sed -n '7p' | grep -o 'SC-2001,SC-2002,SC-2003')"
+check "full column set doesn't crash"        5 "$(printf '%s\n' "$FULL_OUT" | grep -c ' | ')"
+check "sc_all lists every ticket"            "SC-2001,SC-2002,SC-2003" "$(printf '%s\n' "$FULL_OUT" | grep 'x2$' | grep -o 'SC-2001,SC-2002,SC-2003')"
 
 # --- -filter_unmatched drops the pass-through line -----------------------
 check "-filter_unmatched drops it" 0 \

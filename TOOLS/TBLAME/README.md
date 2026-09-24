@@ -46,6 +46,11 @@ cost far more than the blaming itself.
 observable output, no dependency on how the program resolves its own path
 on a given site.
 
+**Pass-through lines keep their place and add nothing.** The original
+printed a blank line after each run of unmatched lines, and never printed
+a run that came after the last hit (with no hit at all, it printed
+nothing). Here each one prints exactly once, where it stood in the input.
+
 ## Structure
 
 | Class | What it owns |
