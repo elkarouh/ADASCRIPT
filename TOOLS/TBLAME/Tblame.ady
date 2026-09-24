@@ -228,12 +228,9 @@ def format_dates(epochs: []Epoch) -> {Epoch}DateStamp:
     of what blaming each file once saves: a thousand hits spread over a
     handful of commits still started a thousand processes.
     """
-    var wanted: []Epoch = []
-    var seen: {}Epoch = {}
-    for e in epochs:
-        if e not in seen:
-            seen.add(e)
-            wanted.append(e)
+    # each epoch once; in any order, as long as the same list is written to
+    # date and zipped with what it prints back
+    let wanted: []Epoch = list(set(epochs))
     if len(wanted) == 0:
         return {:}
     let stamps: str = "\n".join(["@" + str(e) for e in wanted]) + "\n"
