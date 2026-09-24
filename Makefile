@@ -97,7 +97,8 @@ STANDALONE := \
     test_case_guard_or.ady \
     test_method_param_names.ady \
     test_pure_method_self.ady \
-    test_class_name_prefix_field.ady
+    test_class_name_prefix_field.ady \
+    test_file_test_access.ady
 
 # -----------------------------------------------------------------------
 # Stdin tests — piped from a sample file

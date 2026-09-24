@@ -1,0 +1,29 @@
+#!/usr/bin/env ady2nim
+"""Test: `-r`, `-w` and `-x` answer false for a path that is not there.
+
+The shell's `[[ -r path ]]` and Python's os.access both return false for a
+missing path. The Nim backend emitted `fpUserRead in getFilePermissions(p)`,
+and getFilePermissions raises OSError on a missing path -- so a program that
+merely *asked* whether a repository was checked out (Tblame's
+`-r <repo>/.git`) died with "No such file or directory" instead of taking
+the "not checked out" branch. It also read the owner's permission bits
+rather than asking whether this process may read the path.
+"""
+
+let missing: Path = Path("/nonexistent/adascript/test") / ".git"
+assert not -r missing
+assert not -w missing
+assert not -x missing
+
+# ...and a string path, not only a Path
+assert not -r "/nonexistent/adascript/test/file"
+
+# a path that is there still answers true
+let here: Path = Path("/tmp") / "adascript_test_file_test_access.txt"
+writeFile(here, "x\n")
+assert -r here
+assert -w here
+assert -r "/tmp"
+assert -x "/tmp"
+
+print "all -r/-w/-x access tests passed"

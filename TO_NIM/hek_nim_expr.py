@@ -137,6 +137,37 @@ proc adascriptExists*(path: string): bool =
   fileExists(path) or dirExists(path)\
 """
 
+_ACCESS_HELPER = """\
+proc adascriptAccess*(path: string, mode: cint): bool =
+  ## `-r`/`-w`/`-x`: can this process read/write/execute the path? The shell
+  ## and Python's os.access both answer with access(2), so a path that is not
+  ## there is simply false. getFilePermissions raised on it instead, and read
+  ## the owner's bits rather than asking about the current user.
+  when defined(posix):
+    proc cAccess(p: cstring, m: cint): cint {.importc: "access", header: "<unistd.h>".}
+    cAccess(path.cstring, mode) == 0
+  else:
+    try:
+      let perms = getFilePermissions(path)
+      if mode == 4: fpUserRead in perms
+      elif mode == 2: fpUserWrite in perms
+      else: fpUserExec in perms
+    except OSError:
+      false\
+"""
+
+_ACCESS_MODE = {"r": 4, "w": 2, "x": 1}   # R_OK, W_OK, X_OK
+
+
+def _ensure_access_helper():
+    """Add the adascriptAccess helper the first time -r, -w or -x is seen."""
+    ParserState.nim_imports.add("os")
+    decls = getattr(ParserState, 'nim_top_decls', [])
+    if not any("adascriptAccess" in d for d in decls):
+        decls.append(_ACCESS_HELPER)
+        ParserState.nim_top_decls = decls
+
+
 def _ensure_exists_helper():
     """Add the adascriptExists helper the first time -e or os.path.exists is seen."""
     ParserState.nim_imports.add("os")
@@ -3383,9 +3414,9 @@ _BASH_FILE_TEST_NIM = {
     "f": ("fileExists",        "os"),   # -f: regular file
     "d": ("dirExists",         "os"),   # -d: directory
     "L": ("symlinkExists",     "os"),   # -L: symbolic link
-    "r": ("(fpUserRead  in getFilePermissions", "os"),   # -r: readable
-    "w": ("(fpUserWrite in getFilePermissions", "os"),   # -w: writable
-    "x": ("(fpUserExec  in getFilePermissions", "os"),   # -x: executable
+    "r": ("adascriptAccess",   "os"),   # -r: readable   (access(2))
+    "w": ("adascriptAccess",   "os"),   # -w: writable   (access(2))
+    "x": ("adascriptAccess",   "os"),   # -x: executable (access(2))
     "s": ("(getFileSize(",     "os"),   # -s: exists and non-empty
     "c": ("(pcDevice  == getFileInfo(",  "os"),  # -c: char device
     "b": ("(pcDir     == getFileInfo(",  "os"),  # -b: block device (approx)
@@ -3401,7 +3432,7 @@ def to_nim(self, prec=None):
     -f     -> fileExists(path)
     -d     -> dirExists(path)
     -L     -> symlinkExists(path)
-    -r/-w/-x -> fpUserRead/Write/Exec in getFilePermissions(path)
+    -r/-w/-x -> adascriptAccess(path, R_OK/W_OK/X_OK)   (access(2), like os.access)
     -s     -> fileExists(path) and getFileSize(path) > 0
     -nt/-ot handled in comparison via BASH_CMP
     """
@@ -3417,12 +3448,9 @@ def to_nim(self, prec=None):
         return f"dirExists({path})"
     elif flag == "L":
         return f"symlinkExists({path})"
-    elif flag == "r":
-        return f"(fpUserRead in getFilePermissions({path}))"
-    elif flag == "w":
-        return f"(fpUserWrite in getFilePermissions({path}))"
-    elif flag == "x":
-        return f"(fpUserExec in getFilePermissions({path}))"
+    elif flag in _ACCESS_MODE:
+        _ensure_access_helper()
+        return f"adascriptAccess({path}, {_ACCESS_MODE[flag]})"
     elif flag == "s":
         # getFileSize raises on a path that is not there; -s answers false.
         return f"(fileExists({path}) and getFileSize({path}) > 0)"

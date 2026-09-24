@@ -142,6 +142,21 @@ printf '%s\n' "/cm/ot/sysA/subA!TESTBASELINE/build_E1/sources/fileA.txt:2:cm inf
 CM_OUT=$("$TBLAME" -alternate "$NM" user reference_blame < "$CM_INPUT")
 check "context path resolves the tagged revision" "Alice A | line2" "$CM_OUT"
 
+# --- a context path whose subsystem is not checked out -------------------
+# sysB/subB has no repo under the alternate root. Asking whether
+# "<root>/sysB/subB/.git" is readable must answer "no" and move on, as the
+# ksh original's [[ -r ... ]] does -- not die with "No such file or
+# directory", which the Nim build did when -r went through
+# getFilePermissions.
+printf '%s\n' "/cm/ot/sysB/subB!TESTBASELINE/build_E1/sources/f.txt:1:x" > "$CM_INPUT"
+set +e
+"$TBLAME" -alternate "$NM" user < "$CM_INPUT" > "$WORK/nocheckout.out" 2> "$WORK/nocheckout.err"
+rc=$?
+set -e
+check "missing subsystem: exits cleanly"   0 "$rc"
+check "missing subsystem: no crash"        0 "$(grep -c 'unhandled exception\|Traceback' "$WORK/nocheckout.err")"
+check "missing subsystem: says it, once"   1 "$(grep -c 'Could not retrieve blame data' "$WORK/nocheckout.err")"
+
 echo
 if [ "$fails" -eq 0 ]; then
     echo "All checks passed."
