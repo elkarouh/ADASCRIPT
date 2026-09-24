@@ -2204,7 +2204,26 @@ def to_nim(self, prec=None):
             return "0 ..< 0"
         if raw_name == "enumerate":
             call_node = self.nodes[1].nodes[0]
-            arg = _extract_call_arg(call_node)
+            args = _extract_call_args(call_node)
+            arg = args[0] if args else ""
+            # `.pairs` is only there on a container, and it counts from 0:
+            # `enumerate(f.lines)` emitted `f.lines.pairs`, which Nim has no
+            # such field for, and `enumerate(xs, 1)` pasted the start into
+            # the for header as `xs, 1.pairs`. std/enumerate's for-loop macro
+            # takes both an iterator and a start. `.pairs` stays for the plain
+            # container, where an [E]T yields its members, not a count.
+            _file_sym = ParserState.symbol_table.lookup(arg)
+            if _file_sym and _file_sym.get("type") == "File":
+                arg = f"{arg}.lines"
+            _is_iter = _re_mod_pfx.search(r"\.(lines|keys|values|items)(\(\))?$", arg) is not None
+            # A start of 0 is no start: Python's _enumerate yields an [E]T's
+            # members then too.
+            start = _re_mod_pfx.sub(r"^start\s*[=:]\s*", "", args[1]) if len(args) == 2 else "0"
+            if start != "0" or _is_iter:
+                ParserState.nim_imports.add("std/enumerate")
+                if start != "0":
+                    return f"enumerate({start}, {arg})"
+                return f"enumerate({arg})"
             return f"{_paren_if_compound(arg)}.pairs"
         if raw_name == "input":
             call_node = self.nodes[1].nodes[0]

@@ -1,0 +1,61 @@
+#!/usr/bin/env ady2nim
+"""Test: enumerate() with a start, and over an iterator such as f.lines.
+
+The Nim backend emitted `enumerate(x)` as `x.pairs`, which is only there on
+a container and always counts from 0:
+  - `enumerate(f.lines)` became `f.lines.pairs`, "undeclared field: 'pairs'";
+  - `enumerate(xs, 1)` put the start into the for header as `xs, 1.pairs`,
+    which does not parse.
+Both now go through std/enumerate, which takes an iterator and a start.
+A plain `enumerate(xs)` is still `xs.pairs`, so an [E]T keeps yielding its
+members (see test_enum_array_enumerate.ady).
+"""
+
+let path: Path = Path("/tmp") / "adascript_test_enumerate_start.txt"
+writeFile(path, "a\nb\nc\n")
+
+# --- over a file's lines, counting from 1 ---------------------------------
+var numbered: []str = []
+let f: File = open(path)
+for n, line in enumerate(f.lines, 1):
+    numbered.append(str(n) + ":" + line)
+assert numbered == ["1:a", "2:b", "3:c"]
+
+# --- over a file's lines, from 0 ------------------------------------------
+var from_zero: []str = []
+let g: File = open(path)
+for n, line in enumerate(g.lines):
+    from_zero.append(str(n) + ":" + line)
+assert from_zero == ["0:a", "1:b", "2:c"]
+
+# --- over a list, the start positional and as a keyword -------------------
+let xs: []str = ["p", "q"]
+var seen: []str = []
+for i, x in enumerate(xs, 5):
+    seen.append(str(i) + x)
+for i, x in enumerate(xs, start = 1):
+    seen.append(str(i) + x)
+assert seen == ["5p", "6q", "1p", "2q"]
+
+# --- ...and without one, still from 0 -------------------------------------
+var plain: []str = []
+for i, x in enumerate(xs):
+    plain.append(str(i) + x)
+assert plain == ["0p", "1q"]
+
+# --- an [E]T with a start counts, as Python's builtin does ----------------
+type Shade is enum LIGHT, DARK
+var by_shade: [Shade]str
+by_shade[DARK] = "d"
+var counted: []str = []
+for i, v in enumerate(by_shade, 1):
+    counted.append(str(i) + "=" + v)
+assert counted == ["1=", "2=d"]
+
+# ...while a start of 0 is no start: the members, on both backends
+var members: []str = []
+for s, v in enumerate(by_shade, 0):
+    members.append(s'Image + "=" + v)
+assert members == ["LIGHT=", "DARK=d"]
+
+print "all enumerate start/iterator tests passed"

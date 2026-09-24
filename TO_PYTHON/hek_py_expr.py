@@ -909,13 +909,14 @@ def _file_helper_call(name, call_trailer):
 # often cannot see the type -- a field, a call's return, a nested expression.
 # Asking for the method by name rather than isinstance keeps this helper
 # independent of _EnumArray, which is only defined when an [O]T is named.
+# The start parameter is spelled as the builtin's, so `start = 1` works.
 _ENUMERATE_HELPER = '''\
-def _enumerate(_seq, _start = 0):
+def _enumerate(_seq, start = 0):
     """enumerate(), except that an [O]T yields its domain the way Nim does."""
     _pairs = getattr(_seq, "_adascript_pairs", None)
-    if _pairs is not None and _start == 0:
+    if _pairs is not None and start == 0:
         return _pairs()
-    return enumerate(_seq, _start)\
+    return enumerate(_seq, start)\
 '''
 
 
