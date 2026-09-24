@@ -39,14 +39,11 @@ def ansi_escape(spec: str) -> str:
     let codes: []str = [ANSI_CODES[ch] for ch in spec if ch in ANSI_CODES]
     return "\x1b[" + ";".join(codes) + "m" if codes else ""
 
-def cechon(spec: str, text: str):
+def puts(spec: str, text: str, NEWLINE: bool = False):
     """Print TEXT in the color given by SPEC, without a trailing newline."""
     stdout.write(ansi_escape(spec) + text + RESET if COLORED else text)
-
-def cecho(spec: str, text: str):
-    """Print TEXT in the color given by SPEC, with a newline."""
-    cechon(spec, text)
-    print
+    if NEWLINE:
+        print
 
 def hr(c: char = '#', length: int = 80):
     print c * length
@@ -255,15 +252,15 @@ def print_Tlog(result: TlogResult, build_subtype: BuildSubtype, only_new: bool =
     # New tests failing.
     if result.new_failing'Length == 0:
         if not only_new:
-            cechon("Kw", "New tests failing")
+            puts("Kw", "New tests failing")
             print "  ==> None"
             print
     else:
         at_least_one_failing = True
-        cecho("Kw", "New tests failing")
+        puts("Kw", "New tests failing", NEWLINE=True)
         for line in result.new_failing:
             stdout.write("\t")
-            cecho("sKy", extract_test_name(line))
+            puts("sKy", extract_test_name(line), NEWLINE=True)
             let emacs_at: int = line.find("#emacs")
             if emacs_at >= 0:
                 print line[emacs_at:]
@@ -274,7 +271,7 @@ def print_Tlog(result: TlogResult, build_subtype: BuildSubtype, only_new: bool =
     # Crashed Tests.
     if result.crashed'Length > 0:
         at_least_one_failing = True
-        cecho("Kw", "Crashed Tests")
+        puts("Kw", "Crashed Tests", NEWLINE=True)
         for line in result.crashed:
             print "CRASHED TEST: " + line
             print
@@ -282,18 +279,18 @@ def print_Tlog(result: TlogResult, build_subtype: BuildSubtype, only_new: bool =
     # Tests still failing.
     if result.still_fail'Length == 0:
         if not only_new:
-            cechon("Kw", "Tests still failing")
+            puts("Kw", "Tests still failing")
             print "  ==> None"
             print
     elif not only_new:
         at_least_one_failing = True
-        cecho("Kw", "Tests still failing")
+        puts("Kw", "Tests still failing", NEWLINE=True)
         for line in result.still_fail:
             if "Worse" in line or "Better" in line or "Same" in line:
                 print line
             else:
                 stdout.write("\t")
-                cecho("sKy", extract_test_name(line))
+                puts("sKy", extract_test_name(line), NEWLINE=True)
                 let emacs_at: int = line.find("#emacs")
                 if emacs_at >= 0:
                     print line[emacs_at:]
@@ -304,7 +301,7 @@ def print_Tlog(result: TlogResult, build_subtype: BuildSubtype, only_new: bool =
     # Tests that did not run.
     if result.not_run'Length > 0 and not only_new:
         at_least_one_failing = True
-        cecho("Kw", "Tests that did not run")
+        puts("Kw", "Tests that did not run", NEWLINE=True)
         for line in result.not_run:
             print line
             print
@@ -312,18 +309,18 @@ def print_Tlog(result: TlogResult, build_subtype: BuildSubtype, only_new: bool =
     # Following tests are now successful.
     if result.now_ok'Length == 0:
         if not only_new:
-            cechon("Kw", "Following tests are now successful")
+            puts("Kw", "Following tests are now successful")
             print "  ==> None"
             print
     elif not only_new:
-        cecho("Kw", "Following tests are now successful")
+        puts("Kw", "Following tests are now successful", NEWLINE=True)
         for line in result.now_ok:
             print line
             print
 
     if not at_least_one_failing and not only_new:
         print
-        cecho("Kw", ".............. ALL TESTS ARE SUCCESSFUL !!!!")
+        puts("Kw", ".............. ALL TESTS ARE SUCCESSFUL !!!!", NEWLINE=True)
 
 def process_Tlog(filepath: Path, build_subtype: BuildSubtype):
     """Parse and print a Tlog file (backward-compatible wrapper)."""
@@ -334,7 +331,7 @@ def process_Tlog(filepath: Path, build_subtype: BuildSubtype):
 
 def echo_emacs(filepath: Path):
     """Print an #emacs: link for FILEPATH."""
-    cecho("sBw", "Look for details in:")
+    puts("sBw", "Look for details in:", NEWLINE=True)
     print f"#emacs:(progn(find-file \"{filepath}\"))"
 
 # ---------------------------------------------------------------------------
@@ -375,13 +372,13 @@ def find_replays(basedir: Path) -> []Replay:
 def process_replay(replay: Replay, verbose: bool):
     """Check the status of a single replay (successful / failed / running)."""
     let label: str = f"\"{replay.rtype'Image}\""
-    cechon("sWb", f"{label:<14} replay ")
+    puts("sWb", f"{label:<14} replay ")
 
     let content: str = readFile(replay.file)
     if "Executed UNINSTALL:" in content and "YES" in content.split("Executed UNINSTALL:")[-1].split("\n")[0]:
-        cecho("sWb", "==> WAS SUCCESSFUL")
+        puts("sWb", "==> WAS SUCCESSFUL", NEWLINE=True)
     elif "Executed UNINSTALL:" in content and "NO" in content.split("Executed UNINSTALL:")[-1].split("\n")[0]:
-        cecho("sWr", "==> FAILED")
+        puts("sWr", "==> FAILED", NEWLINE=True)
         echo_emacs(replay.file)
         print
         if verbose:
@@ -393,9 +390,9 @@ def process_replay(replay: Replay, verbose: bool):
                 else:
                     print line
     elif "Waiting for this replay to be finished" not in content:
-        cecho("sWb", "---> WARNING: it looks like the replay hasn't started")
+        puts("sWb", "---> WARNING: it looks like the replay hasn't started", NEWLINE=True)
     else:
-        cecho("sWb", "IS STILL BUSY")
+        puts("sWb", "IS STILL BUSY", NEWLINE=True)
     hr('-')
 
 # ---------------------------------------------------------------------------
@@ -405,9 +402,9 @@ def process_replay(replay: Replay, verbose: bool):
 def grep_force_trace_in_dir(dir: Path):
     """Grep for missing 'if Debug.Trace' guards in LO build logs."""
     if not -d dir:
-        cecho("sWb", "WARNING: '" + dir + "' does not exist!")
+        puts("sWb", "WARNING: '" + dir + "' does not exist!", NEWLINE=True)
         return
-    cecho("sWb", "Grep in " + dir + " to detect missing 'if Debug.Trace (...) then' (100 first errors, no matches means no errors detected):")
+    puts("sWb", "Grep in " + dir + " to detect missing 'if Debug.Trace (...) then' (100 first errors, no matches means no errors detected):", NEWLINE=True)
     let r = shell: for f in {dir}/*_out_*; do [ -e "$f" ] && grep -H -n -B1 '!!! ERROR : FORCE_TRACE message above' "$f" | grep -v '^--[[:space:]]*$'; done | head -n 100
     if r.output.strip() != "":
         print r.output.rstrip("\n")
@@ -434,9 +431,9 @@ def show_tlog_if_present(build: Build, subtype: BuildSubtype, pass_: BuildPass):
 
     if -f full_path:
         stdout.write("=======================================  ")
-        cechon("sWr", full_path.name)
+        puts("sWr", full_path.name)
         stdout.write(" ")
-        cechon("sWb", " (" + build.name + ")")
+        puts("sWb", " (" + build.name + ")")
         print "  ======================================="
         process_Tlog(full_path, subtype)
         print
@@ -450,9 +447,9 @@ def show_tlog_if_present(build: Build, subtype: BuildSubtype, pass_: BuildPass):
         when others:
             return
     if pass_ == mrun:
-        cecho("sWb", "\"" + build.btype'Image + " " + sl + " mrun\" build not ready yet")
+        puts("sWb", "\"" + build.btype'Image + " " + sl + " mrun\" build not ready yet", NEWLINE=True)
     else:
-        cecho("sWb", "\"" + build.btype'Image + " " + sl + "\" build not ready yet")
+        puts("sWb", "\"" + build.btype'Image + " " + sl + "\" build not ready yet", NEWLINE=True)
 
 def process_build_subtype(build: Build, subtype: BuildSubtype):
     """Process one subtype of a build, for both normal and mrun passes."""
@@ -460,7 +457,7 @@ def process_build_subtype(build: Build, subtype: BuildSubtype):
         """Check for FORCE_TRACE errors in LO build logs."""
         let lo_logdir: Path = tacot_corico_latest / "work" / "logging-lo"
         if -e lo_logdir:
-            cecho("syB", "Doing lo-build checks in " + lo_logdir)
+            puts("syB", "Doing lo-build checks in " + lo_logdir, NEWLINE=True)
             grep_force_trace_in_dir(lo_logdir / "LOGS")
             grep_force_trace_in_dir(lo_logdir / "LOGS_others")
     for pass_ in BuildPass:
@@ -477,11 +474,11 @@ def process_build_subtype(build: Build, subtype: BuildSubtype):
 def process_gnatcheck(build: Build):
     """Show the Padactl/CRC summary from the IP build."""
     hr('#')
-    cecho("sWr", "Padactl")
+    puts("sWr", "Padactl", NEWLINE=True)
     let padactl_file: Path = build.saved_logs() / "Padactl.LATEST" / "Padactl.summary"
     if -f padactl_file:
         hr('-')
-        cecho("sWb", str(padactl_file))
+        puts("sWb", str(padactl_file), NEWLINE=True)
         let r = shell: grep -A20 delta {padactl_file}
         if r.output.strip() != "":
             print r.output.rstrip("\n")
@@ -490,7 +487,7 @@ def process_gnatcheck(build: Build):
             print r2.output.rstrip("\n")
         echo_emacs(padactl_file)
     else:
-        cecho("sWb", "WARNING: No CRC summary file found!")
+        puts("sWb", "WARNING: No CRC summary file found!", NEWLINE=True)
 
 # ---------------------------------------------------------------------------
 # Check build closure and test programs
@@ -502,8 +499,8 @@ def process_run_test_programs_log(build: Build, fast_mode: bool):
     let work: Path = build.tacot_dir(normal) / "work"
     print
     hr('#')
-    cecho("sWr", "Check build closure and test programs.")
-    cecho("usBy", "CHECK RUN TEST PROGRAMS LOG FOR " + str(build.dir) + " ...")
+    puts("sWr", "Check build closure and test programs.", NEWLINE=True)
+    puts("usBy", "CHECK RUN TEST PROGRAMS LOG FOR " + str(build.dir) + " ...", NEWLINE=True)
     let find_lines: []str = shellLines: find {work} -type f -name 'check_run_test_programs.log' -print -quit
     var logfile: Path = Path("")
     if find_lines'Length > 0:
@@ -511,9 +508,9 @@ def process_run_test_programs_log(build: Build, fast_mode: bool):
 
     if logfile == "":
         if fast_mode:
-            cecho("sWb", "check_run_test_programs_log not yet complete and we are in fast mode -> skip this check.")
+            puts("sWb", "check_run_test_programs_log not yet complete and we are in fast mode -> skip this check.", NEWLINE=True)
         else:
-            cecho("sWb", "check_run_test_programs_log not yet complete -> execute the program manually. This can take some minutes (run with -f to disable the execution).")
+            puts("sWb", "check_run_test_programs_log not yet complete -> execute the program manually. This can take some minutes (run with -f to disable the execution).", NEWLINE=True)
             let build_subtype: str = build.name.replace("build_", "")
             let rc: int = shell: cd /tmp && echo check_run_test_programs_log | Ccontext -b "TACT.TACT_CONFIG.{baseline}" -e "{build_subtype}" 2>&1
     else:
@@ -748,11 +745,11 @@ def display_file(fc: FileChange):
     let dot: int = name.rfind(".")
     stdout.write(f"FILE {fc.kind'Image}: {p.parent}/")
     if dot > 0:
-        cechon("Ky", name[:dot])
+        puts("Ky", name[:dot])
         stdout.write(".")
-        cecho("Wb", name[dot + 1:])
+        puts("Wb", name[dot + 1:], NEWLINE=True)
     else:
-        cecho("Ky", name)
+        puts("Ky", name, NEWLINE=True)
     print "COMMITS     : " + " ".join(fc.commits)
     if len(fc.tickets) > 0:
         print "TICKETS     : " + " ".join(fc.tickets)
@@ -768,9 +765,9 @@ def display_branch_info(branch: BranchName, reference: str):
     let who: Committer = committer_of(branch)
     let name: str = branch[len(who) + 1:]
     stdout.write("FROM BRANCH : ")
-    cechon("Wb", who)
+    puts("Wb", who)
     stdout.write(".")
-    cecho("Ky", name)
+    puts("Ky", name, NEWLINE=True)
     let reports: Path = TACT_ROOT / "test_reports"
     let view_build: Path = newest(reports, f"TACT.TACT_CONFIG.{who.upper()}.{name.upper()}-G!31.*")
     let ref_build: Path = newest(reports, f"{reference}-G!31.*")
@@ -785,14 +782,14 @@ def list_all_changes(baseline: str):
     """The changes in the CFMUTEST baseline built on TACT BASELINE, by
     committer and branch."""
     hr('#')
-    cecho("sWr", "LIST OF CHANGES")
+    puts("sWr", "LIST OF CHANGES", NEWLINE=True)
     let cfmu: str = cfmu_baseline_of(baseline)
     if cfmu == "":
-        cecho("sWb", f"WARNING: Psort -b names no CFMUTEST baseline for TACT_CONFIG.{baseline}")
+        puts("sWb", f"WARNING: Psort -b names no CFMUTEST baseline for TACT_CONFIG.{baseline}", NEWLINE=True)
         return
     let report: Path = CFMUTEST_ROOT / "baseline_reports" / f"CFMUTEST.CFMUTEST_CONFIG.{cfmu}.changes_report"
     if not -r report:
-        cecho("sWb", f"WARNING: no changes report for CFMUTEST_CONFIG {cfmu}: {report}")
+        puts("sWb", f"WARNING: no changes report for CFMUTEST_CONFIG {cfmu}: {report}", NEWLINE=True)
         return
     # a branch's build is compared with the baseline before this one
     let reference: str = "TACT.TACT_CONFIG." + Baseline(baseline).previous().nr
@@ -804,7 +801,7 @@ def list_all_changes(baseline: str):
     print
     for who in changes.committers:
         stdout.write("===================================== Files committed by user ")
-        cechon("Wb", who)
+        puts("Wb", who)
         print " ====================================="
         for branch in changes.branches[who]:
             print "---------------------------------"
@@ -991,7 +988,7 @@ def get_failed_test_names(filepath: Path, subtype: BuildSubtype) -> []str:
 def check_replay_dirs_size():
     """Scan replay directories for disk usage and deletion advice."""
     hr('-')
-    cecho("sWr", "COMPUTE SIZE OF REPLAY DIRS")
+    puts("sWr", "COMPUTE SIZE OF REPLAY DIRS", NEWLINE=True)
     let listing: []str = shellLines: ls -d {TACT_ROOT}/TACT_CONFIG![0-9]*/build_G!*OP*/saved_logs/replay_dir*
     var total_size: float = 0.0
     for replay_dir in listing:
@@ -1004,7 +1001,7 @@ def check_replay_dirs_size():
         let du_r = shell: du --max-depth=0 -ch {!replay_dir} | head -n1
         let size_line: str = du_r.output.strip()
         let size_str: str = size_line.split()[0] if size_line != "" else "0"
-        cecho("sBy", replay_dir + " ==> " + size_str)
+        puts("sBy", replay_dir + " ==> " + size_str, NEWLINE=True)
         # Only count sizes in GB.
         continue if not size_str.endswith("G")
         let num_size: float = float(size_str[0:-1])
@@ -1030,11 +1027,11 @@ def check_replay_dirs_size():
                 print "\tNo tactdev_remove found, use:"
                 print "\t\trm -fr " + replay_dir
         else:
-            cecho("sfBy", "\tTHIS REPLAY IS STILL RUNNING")
+            puts("sfBy", "\tTHIS REPLAY IS STILL RUNNING", NEWLINE=True)
             print "\tTo delete it, use the vncviewer from dhdevd01:99 and run:"
             print "\t\tTcleanup_old_replay_users -kill_replay"
     print
-    cecho("Wb", f"TOTAL SIZE for FAILED REPLAYS is {total_size:.2f}G")
+    puts("Wb", f"TOTAL SIZE for FAILED REPLAYS is {total_size:.2f}G", NEWLINE=True)
     hr('#')
 
 # ---------------------------------------------------------------------------
@@ -1061,7 +1058,7 @@ def find_core_dumps(dir: Path):
     # find core files bigger than 600MB
     let r = shell: fd -l --size +600M core {dir}
     if r.output.strip() != "":
-        cecho("sWr", "CORE DUMPS:")
+        puts("sWr", "CORE DUMPS:", NEWLINE=True)
         print r.output.rstrip("\n")
 
 def make_report(content: str, bl: str, report_name: str) -> Path:
@@ -1098,23 +1095,23 @@ def get_replay_log_dir(start: Baseline, replay_type: str) -> Path:
 
 def scan_replay_dir_detailed(replay_log_dir: Path, bl: str, replay_type: str) -> Path:
     if replay_log_dir == "":
-        cecho("sWb", "no replay log dir found")
+        puts("sWb", "no replay log dir found", NEWLINE=True)
         return Path("")
-    cecho("usBy", "REPLAY DIR: " + replay_log_dir)
+    puts("usBy", "REPLAY DIR: " + replay_log_dir, NEWLINE=True)
     let replay_root: Path = replay_log_dir.parent.parent.parent
     find_core_dumps(replay_root)
     var report: str = ""
     let check_result: []str = shellLines: ls {replay_log_dir}/*check_logs.result.svlog
     for f in check_result:
         continue if f == ""
-        cecho("sWb", "check_logs.result.svlog:")
+        puts("sWb", "check_logs.result.svlog:", NEWLINE=True)
         let content: str = readFile(f)
         print content
         report = report + content + "\n"
     let check_run: []str = shellLines: ls {replay_log_dir}/*check_logs.run.svlog
     for f in check_run:
         continue if f == ""
-        cecho("sWb", "check_logs.run.svlog:")
+        puts("sWb", "check_logs.run.svlog:", NEWLINE=True)
         let content: str = readFile(f)
         print content
         report = report + content + "\n"
@@ -1134,9 +1131,9 @@ def scan_regression_tests_detailed(bl: Baseline, btype: BuildType, subtype: Buil
         when others:
             log_dir = work / "LOGS_others"
     if not -d log_dir:
-        cecho("sWb", "log dir does not exist: " + log_dir)
+        puts("sWb", "log dir does not exist: " + log_dir, NEWLINE=True)
         return Path("")
-    cecho("usBy", "scanning " + log_dir)
+    puts("usBy", "scanning " + log_dir, NEWLINE=True)
     let tacot_root: Path = log_dir.parent.parent.parent
     find_core_dumps(tacot_root)
     var report: str = ""
@@ -1151,7 +1148,7 @@ def scan_regression_tests_detailed(bl: Baseline, btype: BuildType, subtype: Buil
             for f in out_files:
                 continue if f == ""
                 hr('#')
-                cecho("sWb", Path(f).name)
+                puts("sWb", Path(f).name, NEWLINE=True)
                 hr('#')
                 let hits: str = grep_logfile(Path(f))
                 if hits != "":
@@ -1169,7 +1166,7 @@ def show_failed_tests(start: Baseline, btype: BuildType, subtype: BuildSubtype, 
         let bl: str = baseline.nr
         let header: str = f"FAILED {btype'Image} REGRESSION TESTS logging-{sl} for BASELINE {bl}"
         hr('-')
-        cecho("sWr", header)
+        puts("sWr", header, NEWLINE=True)
         result = result + header + "\n"
         var env: str = ip_env
         var suffix: str = "failed-in"
@@ -1234,16 +1231,16 @@ class Report:
         self.opt = opt
         self.cur = Baseline(opt.baseline)
         if not -d self.cur.dir:
-            cecho("sWb", "DIR " + str(self.cur.dir) + " does not exist")
+            puts("sWb", "DIR " + str(self.cur.dir) + " does not exist", NEWLINE=True)
             quit(1)
         self.builds = find_builds(self.cur)
         self.replays = find_replays(self.cur.dir)
 
     def show_header(self):
-        cecho("sWr", "AVAILABLE BUILDS for " + str(self.cur.dir) + ":")
+        puts("sWr", "AVAILABLE BUILDS for " + str(self.cur.dir) + ":", NEWLINE=True)
         for build in self.builds:
             print build.name
-        cecho("sWr", "AVAILABLE REPLAYS for " + str(self.cur.dir) + ":")
+        puts("sWr", "AVAILABLE REPLAYS for " + str(self.cur.dir) + ":", NEWLINE=True)
         for replay in self.replays:
             print replay.rtype'Image + "  " + str(replay.file)
         if self.opt.list_only:
@@ -1251,7 +1248,7 @@ class Report:
         hr('#')
 
     def show_regression_tests(self):
-        cecho("sWr", "TESTS")
+        puts("sWr", "TESTS", NEWLINE=True)
         for build in self.builds:
             case self.opt.focus_domain:
                 when focus_IP:  continue if build.btype != IP
@@ -1259,7 +1256,7 @@ class Report:
                 when focus_SIP: continue if build.btype != SIP
                 when focus_replay | focus_build_info | focus_changes: break
                 when no_focus:  pass
-            cecho("usBy", "PROCESSING " + build.name + " ...")
+            puts("usBy", "PROCESSING " + build.name + " ...", NEWLINE=True)
             for subtype in BuildSubtype:
                 continue if self.opt.focus_domain in (focus_IP, focus_OP, focus_SIP) and subtype != self.opt.focus_subtype
                 stderr.writeLine(PROG + ": checking " + build.name + " / " + subtype_label(subtype))
@@ -1267,9 +1264,9 @@ class Report:
 
     def show_replays(self):
         hr('#')
-        cecho("sWr", "REPLAYS")
+        puts("sWr", "REPLAYS", NEWLINE=True)
         if self.replays'Length == 0:
-            cecho("sWb", "WARNING: NO REPLAYS FOUND")
+            puts("sWb", "WARNING: NO REPLAYS FOUND", NEWLINE=True)
         for replay in self.replays:
             continue if self.opt.focus_domain == focus_replay and replay.rtype != self.opt.focus_rtype
             process_replay(replay, self.opt.verbose)
@@ -1304,7 +1301,7 @@ class Report:
     def show_summary(self):
         """Print a one-screen summary of the baseline's health."""
         hr('#')
-        cecho("sWr", f"SUMMARY for BASELINE {self.cur.nr}")
+        puts("sWr", f"SUMMARY for BASELINE {self.cur.nr}", NEWLINE=True)
         for build in self.builds:
             let s: BuildSummary = self.collect_build_summary(build)
             var status: str = ""
@@ -1320,13 +1317,13 @@ class Report:
                 if s.total_still > 0:
                     parts.append(str(s.total_still) + " still failing")
                 status = ", ".join(parts)
-            cechon("sWb", f"  {s.btype'Image:<4}")
+            puts("sWb", f"  {s.btype'Image:<4}")
             if s.all_ok:
-                cecho("sKg", " " + status)
+                puts("sKg", " " + status, NEWLINE=True)
             elif s.total_new > 0 or s.total_crash > 0:
-                cecho("sWr", " " + status)
+                puts("sWr", " " + status, NEWLINE=True)
             else:
-                cecho("sKy", " " + status)
+                puts("sKy", " " + status, NEWLINE=True)
         # Replays.
         var replay_ok: int = 0
         var replay_fail: int = 0
@@ -1339,11 +1336,11 @@ class Report:
                 replay_fail += 1
             else:
                 replay_busy += 1
-        cechon("sWb", "  Replays: ")
+        puts("sWb", "  Replays: ")
         if replay_fail > 0:
-            cecho("sWr", f"{replay_ok} ok, {replay_fail} FAILED, {replay_busy} running")
+            puts("sWr", f"{replay_ok} ok, {replay_fail} FAILED, {replay_busy} running", NEWLINE=True)
         else:
-            cecho("sKg", f"{replay_ok} ok, {replay_busy} running")
+            puts("sKg", f"{replay_ok} ok, {replay_busy} running", NEWLINE=True)
         hr('#')
 
     def show_new_failures(self):
@@ -1351,7 +1348,7 @@ class Report:
         let prev: Baseline = self.cur.previous()
         let prev_bl: str = prev.nr
         hr('-')
-        cecho("sWr", f"NEW FAILURES vs {prev_bl}")
+        puts("sWr", f"NEW FAILURES vs {prev_bl}", NEWLINE=True)
         var found_any: bool = False
         for build in self.builds:
             for subtype in BuildSubtype:
@@ -1369,9 +1366,9 @@ class Report:
                     if name not in prev_names:
                         found_any = True
                         HAS_NEW_FAILURES = True
-                        cecho("sWr", f"  NEW: {build.btype'Image} {sl} {name}")
+                        puts("sWr", f"  NEW: {build.btype'Image} {sl} {name}", NEWLINE=True)
         if not found_any:
-            cecho("sKg", "  No new failures compared to " + prev_bl)
+            puts("sKg", "  No new failures compared to " + prev_bl, NEWLINE=True)
 
     def write_history(self):
         """Append a one-line summary to ~/.tcheck_history."""
@@ -1392,7 +1389,7 @@ class Report:
         let prev_build: Path = prev.saved_logs_dir(IP).parent
         let prev_log: Path = prev_build / "Csystem_build.log"
         let cur_log: Path = cur_build / "Csystem_build.log"
-        cecho("sWr", "Compare Csystem_build.log:")
+        puts("sWr", "Compare Csystem_build.log:", NEWLINE=True)
         print "  prev: " + prev_log
         print "  cur:  " + cur_log
         let prev_normalized: Path = make_comparable(prev_log, prev.nr)
