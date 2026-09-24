@@ -40,7 +40,21 @@ commits changed, added or removed.
 It is regrouped by committer and branch: for each branch, its view build
 (`TACT.TACT_CONFIG.<USER>.<BRANCH>-G!31.*`) next to the previous TACT
 baseline's, with the ediff between their failures; for each file, one entry
-with every commit that touched it and their SC tickets.
+with every commit that touched it, their SC tickets, their reviews, and the
+command that shows the diff:
+
+```
+FILE CHANGED: TACT/UIF/sources/query_mgr_task-direct_control_functions.adb
+COMMITS     : c3fb81031
+REVIEWED BY : dpt, gru, wao on 260922.151702
+DIFF        : git -C /…/NM/TACT/UIF show c3fb81031 -- sources/query_mgr_task-direct_control_functions.adb
+```
+
+The path's `<system>/<subsystem>` is a submodule of the NM workspace
+(`$CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY`), where the commits are -- checked
+out and fetched there, `git show` gives the diff. A review is shown where the
+report records one: on the change's own line, or on the merge of the
+change's own commit.
 - A change is credited to the nearest `<user>.<branch>` merged above it in
   its section. Integration merges (`testadm`, any `...adm`) and baseline
   syncs (`CFMUTEST.CFMUTEST_CONFIG.<nr>`) are nobody's branch. Where a

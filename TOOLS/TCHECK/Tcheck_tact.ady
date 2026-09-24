@@ -574,6 +574,8 @@ type FileChange is record:
     commits: []CommitHash = []
     # the SC tickets those commits name
     tickets: []str = []
+    # "<reviewers> on <date>", once per review the report gives them
+    reviews: []str = []
 
 type ChangeList is record:
     # in the order each first appears
@@ -605,6 +607,14 @@ def user_branch(name: str) -> BranchName:
 def committer_of(branch: BranchName) -> Committer:
     branch.split(".")[0]
 
+def review_of(line: str) -> str:
+    """The review a report line records -- "dpt, gru on 260922.151702",
+    with "(review-ok: no)" after it unless it was ok -- or ""."""
+    return "" if line != /review-ok: (?P<ok>\w+); reviewed-by: (?P<by>[^;]*); review-date: (?P<date>[^;]*);/
+    let ok: str = $+{ok}
+    let text: str = $+{by}.strip() + " on " + $+{date}.strip()
+    text if ok == "yes" else text + " (review-ok: " + ok + ")"
+
 def read_changes(report: Path) -> ChangeList:
     """The changes REPORT lists, each credited to the nearest user branch
     merged above it in its section; one entry per branch, file and kind of
@@ -613,15 +623,22 @@ def read_changes(report: Path) -> ChangeList:
     var branch: BranchName = ""
     # "<branch>\x01<kind>\x01<file>" -> index in out.files[branch]
     var seen: {str}int = {:}
+    # a merge's review, for the change its own commit makes: the merge line
+    # and the change line then carry the same sha
+    var merge_reviews: {CommitHash}str = {:}
     let f: File = open(report)
     for line in f.lines:
         let stripped: str = line.strip()
         if stripped.startswith("====="):
             # a new section: nothing merged yet
             branch = ""
-        elif stripped == /^Merge from <- \S+ (?P<name>\S+)/:
-            # bound first: user_branch's own match would replace the capture
+        elif stripped == /^Merge from <- (?P<sha>\S+) (?P<name>\S+)/:
+            # bound first: the calls below match regexes of their own
+            let merge_sha: CommitHash = $+{sha}
             let source: str = $+{name}
+            let merge_review: str = review_of(stripped)
+            if merge_review != "":
+                merge_reviews[merge_sha] = merge_review
             let merged: BranchName = user_branch(source)
             if merged != "":
                 branch = merged
@@ -636,8 +653,13 @@ def read_changes(report: Path) -> ChangeList:
             var tickets: []str = []
             if stripped == /RELATED_CHANGES="(?P<sc>[^"]*)"/:
                 tickets = $+{sc}.split()
+            var review: str = review_of(stripped)
+            if review == "" and sha in merge_reviews:
+                review = merge_reviews[sha]
+            let reviews: []str = [review] if review != "" else []
             if branch == "":
-                out.unattributed.append(FileChange(kind = kind, file = file, commits = [sha], tickets = tickets))
+                out.unattributed.append(FileChange(kind = kind, file = file, commits = [sha],
+                                                   tickets = tickets, reviews = reviews))
                 continue
             let who: Committer = committer_of(branch)
             if who not in out.branches:
@@ -656,6 +678,9 @@ def read_changes(report: Path) -> ChangeList:
             for t in tickets:
                 if t not in out.files[branch][i].tickets:
                     out.files[branch][i].tickets.append(t)
+            for r in reviews:
+                if r not in out.files[branch][i].reviews:
+                    out.files[branch][i].reviews.append(r)
     out
 
 def echo_ediff(a: Path, b: Path):
@@ -666,6 +691,19 @@ def newest(dir: Path, pattern: str) -> Path:
     or Path("") when none does."""
     let found: []str = shellLines: ls -dt {!dir}/{pattern} 2>/dev/null | head -n 1
     Path(found[0]) if len(found) > 0 else Path("")
+
+def diff_command(fc: FileChange) -> str:
+    """The git command showing FC's commits for its file. The report's path
+    is <system>/<subsystem>/<rest>, and <system>/<subsystem> is a submodule
+    of the NM workspace, where the commits are."""
+    let parts: []str = fc.file.split("/")
+    var root: str = $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY
+    if root == "":
+        root = "$CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY"
+    return f"git show {' '.join(fc.commits)} -- {fc.file}" if len(parts) < 3
+    let sub: str = parts[0] + "/" + parts[1]
+    let rest: str = "/".join(parts[2:])
+    f"git -C {root}/{sub} show {' '.join(fc.commits)} -- {rest}"
 
 def display_file(fc: FileChange):
     """FILE <KIND>: <dir>/<base>.<extension>, the base and extension in
@@ -683,6 +721,9 @@ def display_file(fc: FileChange):
     print "COMMITS     : " + " ".join(fc.commits)
     if len(fc.tickets) > 0:
         print "TICKETS     : " + " ".join(fc.tickets)
+    for r in fc.reviews:
+        print "REVIEWED BY : " + r
+    print "DIFF        : " + diff_command(fc)
 
 def display_branch_info(branch: BranchName, reference: str):
     """The branch the changes came from, and its view build next to the

@@ -29,7 +29,8 @@ chmod +x "$WORK/bin/Psort"
 PATH=$WORK/bin:$PATH
 TCHECK_CM_OT=$OT
 CONTEXT_CM_BASELINE=x
-export PATH TCHECK_CM_OT CONTEXT_CM_BASELINE
+CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY=/nm
+export PATH TCHECK_CM_OT CONTEXT_CM_BASELINE CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY
 
 fails=0
 check() {
@@ -68,6 +69,17 @@ check "...with the ediff between their failures" 1 "$(section alice | grep -c '^
 check "bob's branch has no build"                1 "$(section bob | grep -c '^NO VIEW BUILD FOUND FOR THIS BRANCH$')"
 check "under an integration merge only: listed apart" "FILE DELETED: IFPS/OPIF_LIB/sources/Pmake.out" \
     "$(printf '%s\n' "$OUT" | sed -n '/no branch merged above them/,/^$/p' | grep '^FILE')"
+check "a review on the merge of the change's own commit" "REVIEWED BY : bob on 260922.151702" \
+    "$(entry alice b.adb | grep '^REVIEWED BY')"
+check "a review that was not ok says so"         "REVIEWED BY : carol, dave on 260923.101010 (review-ok: no)" \
+    "$(entry bob b.adb | grep '^REVIEWED BY')"
+check "no review in the report, none shown"      0 "$(entry bob c.ads | grep -c '^REVIEWED BY' || true)"
+check "the git command for the diff, every commit" \
+    'DIFF        : git -C /nm/TACT/UIF show c3fb81031 13e00da4a bc399bc5f -- sources/b.adb' \
+    "$(entry alice b.adb | grep '^DIFF')"
+check "...naming the variable when it is unset"  \
+    'DIFF        : git -C $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY/TACT/UIF show 33340af6c -- sources/b.adb' \
+    "$(CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY= "$TCHECK" -focus changes 30.0.0.9 | awk '/user bob /{on=1} on' | grep -m1 '^DIFF')"
 check "ends with the report's emacs link"        1 "$(printf '%s\n' "$OUT" | grep -c 'find-file ".*CFMUTEST.CFMUTEST_CONFIG.30.0.0.8.changes_report"')"
 
 # --- when there is nothing to report on, it says so ----------------------

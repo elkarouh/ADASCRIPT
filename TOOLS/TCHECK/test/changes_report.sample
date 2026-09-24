@@ -16,12 +16,12 @@
       Merge from <- 6627849d2 testadm.integration_30 RELATED_CHANGES="SC-1 SC-2 " 
       Merge from <- a2721a86a alice.fix_b RELATED_CHANGES="SC-1 SC-2 " 
       Merge from <- c3fb81031 CFMUTEST.CFMUTEST_CONFIG.30.0.0.6 review-ok: yes; reviewed-by: bob; review-date: 260922.151702;
-      changed c3fb81031:TACT/UIF/sources/b.adb RELATED_CHANGES=" " review-ok: yes; reviewed-by: bob; review-date: 260922.151702;
+      changed c3fb81031:TACT/UIF/sources/b.adb RELATED_CHANGES=" " 
       changed 13e00da4a:TACT/UIF/sources/b.adb RELATED_CHANGES="SC-2 " 
       changed bc399bc5f:TACT/UIF/sources/b.adb RELATED_CHANGES="SC-2 " 
       Merge from <- d508f73af bob.also_b RELATED_CHANGES="SC-1 " 
       Merge from <- 4f82e11db CFMUTEST.CFMUTEST_CONFIG.30.0.0.6 
-      changed 33340af6c:TACT/UIF/sources/b.adb RELATED_CHANGES="SC-1 " 
+      changed 33340af6c:TACT/UIF/sources/b.adb RELATED_CHANGES="SC-1 " review-ok: no; reviewed-by: carol, dave; review-date: 260923.101010;
       added   44440af6c:TACT/UIF/sources/c.ads RELATED_CHANGES="SC-1 " 
 ===== UIF Software Changes Report
       SC_1   CR_1   Fix b
