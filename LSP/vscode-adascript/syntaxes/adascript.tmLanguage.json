@@ -5,6 +5,8 @@
   "fileTypes": ["ady"],
   "patterns": [
     { "include": "#comment" },
+    { "include": "#substitution" },
+    { "include": "#regex-literal" },
     { "include": "#string-triple-double" },
     { "include": "#string-triple-single" },
     { "include": "#string-double" },
@@ -26,6 +28,30 @@
     "comment": {
       "match": "#.*$",
       "name": "comment.line.number-sign.adascript"
+    },
+
+    "regex-literal": {
+      "comment": "/pattern/flags. Where a / starts one rather than a division is the tokenizer's rule (HPARSEC/hek_tokenize.py): after an operator or an opening bracket, or after one of a few keywords -- a lookbehind here, allowing two spaces -- and never at // or /=. Before the strings, so that a quote inside it, /x=\"(.*)\"/, is part of the regex and opens no string.",
+      "match": "(?<=[=(\\[,:;+\\-*%|&^~!<>]|[=(\\[,:;+\\-*%|&^~!<>]\\s|[=(\\[,:;+\\-*%|&^~!<>]\\s\\s|\\breturn\\s|\\bif\\s|\\belif\\s|\\bwhile\\s|\\band\\s|\\bor\\s|\\bnot\\s|\\bin\\s|\\bprint\\s|\\byield\\s|\\blambda\\s|\\bcase\\s|\\bwhen\\s|\\breturn\\s\\s|\\bif\\s\\s|\\belif\\s\\s|\\bwhile\\s\\s|\\band\\s\\s|\\bor\\s\\s|\\bnot\\s\\s|\\bin\\s\\s|\\bprint\\s\\s|\\byield\\s\\s|\\blambda\\s\\s|\\bcase\\s\\s|\\bwhen\\s\\s)(/)(?![/=])((?:[^/\\\\\\n]|\\\\.)*)(/)([imsxg]*)",
+      "name": "string.regexp.adascript",
+      "captures": {
+        "1": { "name": "punctuation.definition.string.begin.adascript" },
+        "3": { "name": "punctuation.definition.string.end.adascript" },
+        "4": { "name": "storage.modifier.adascript" }
+      }
+    },
+
+    "substitution": {
+      "comment": "s/pattern/replacement/flags: the s right against the /.",
+      "match": "\\b(s)(/)((?:[^/\\\\\\n]|\\\\.)*)(/)((?:[^/\\\\\\n]|\\\\.)*)(/)([imsxg]*)",
+      "name": "string.regexp.substitution.adascript",
+      "captures": {
+        "1": { "name": "keyword.operator.substitution.adascript" },
+        "2": { "name": "punctuation.definition.string.begin.adascript" },
+        "4": { "name": "punctuation.separator.adascript" },
+        "6": { "name": "punctuation.definition.string.end.adascript" },
+        "7": { "name": "storage.modifier.adascript" }
+      }
     },
 
     "string-triple-double": {

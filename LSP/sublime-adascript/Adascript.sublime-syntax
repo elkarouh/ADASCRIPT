@@ -15,6 +15,11 @@ contexts:
     # only when outside a string context (push-based strings handle that).
     - include: comment
 
+    # Regex literals before strings: a quote inside one, /x="(.*)"/, is part
+    # of the regex and opens no string.
+    - include: substitution
+    - include: regex-literal
+
     # Strings: triple-quoted before single-line to prevent early termination.
     - include: f-string-triple-double
     - include: f-string-triple-single
@@ -50,6 +55,32 @@ contexts:
   comment:
     - match: '#.*$'
       scope: comment.line.number-sign.adascript
+
+  # ---------------------------------------------------------------------------
+  # Regex literals: /pattern/flags and s/pattern/replacement/flags
+  # Where a / starts one rather than a division is the tokenizer's rule
+  # (HPARSEC/hek_tokenize.py): after an operator or an opening bracket, or
+  # after one of a few keywords -- a lookbehind here, allowing two spaces --
+  # and never at // or /=. The same patterns as the VS Code grammar's.
+  # ---------------------------------------------------------------------------
+
+  regex-literal:
+    - match: '(?<=[=(\[,:;+\-*%|&^~!<>]|[=(\[,:;+\-*%|&^~!<>]\s|[=(\[,:;+\-*%|&^~!<>]\s\s|\breturn\s|\bif\s|\belif\s|\bwhile\s|\band\s|\bor\s|\bnot\s|\bin\s|\bprint\s|\byield\s|\blambda\s|\bcase\s|\bwhen\s|\breturn\s\s|\bif\s\s|\belif\s\s|\bwhile\s\s|\band\s\s|\bor\s\s|\bnot\s\s|\bin\s\s|\bprint\s\s|\byield\s\s|\blambda\s\s|\bcase\s\s|\bwhen\s\s)(/)(?![/=])((?:[^/\\\n]|\\.)*)(/)([imsxg]*)'
+      scope: string.regexp.adascript
+      captures:
+        1: punctuation.definition.string.begin.adascript
+        3: punctuation.definition.string.end.adascript
+        4: storage.modifier.adascript
+
+  substitution:
+    - match: '\b(s)(/)((?:[^/\\\n]|\\.)*)(/)((?:[^/\\\n]|\\.)*)(/)([imsxg]*)'
+      scope: string.regexp.substitution.adascript
+      captures:
+        1: keyword.operator.substitution.adascript
+        2: punctuation.definition.string.begin.adascript
+        4: punctuation.separator.adascript
+        6: punctuation.definition.string.end.adascript
+        7: storage.modifier.adascript
 
   # ---------------------------------------------------------------------------
   # String escape sequences (shared by all string contexts)

@@ -13,6 +13,7 @@
 ;; Derived from `nim-mode', this mode adds:
 ;;   - Syntax highlighting for type declarations, tick attributes, and Ada keywords
 ;;   - Single-quote strings and f-strings (Python-style, not native to Nim)
+;;   - Regex literals, /pattern/ and s/pattern/replacement/, as strings
 ;;   - eglot integration (Emacs 29+ built-in LSP client) — zero extra packages
 ;;   - lsp-mode integration (opt-in, see `adascript-lsp-mode-auto-enable')
 ;;
@@ -245,7 +246,7 @@ or add `(add-hook \\='adascript-mode-hook \\=#\\='eglot-ensure)' to your init."
 
 (defvar adascript-mode-syntax-table
   (let ((st (make-syntax-table nim-mode-syntax-table)))
-    ;; ' is punctuation by default; `adascript--propertize-quotes' promotes
+    ;; ' is punctuation by default; `adascript--propertize-quote-at' promotes
     ;; the pairs that actually delimit a string.  Doing it the other way
     ;; round — string delimiter by default, demoted for tick attributes —
     ;; means every apostrophe in prose ("the command's output" in a
@@ -309,32 +310,111 @@ keeps `the command's output' inside a docstring from opening a string."
               (t (forward-char 1))))
       found)))
 
-(defun adascript--propertize-quotes (start end)
-  "Mark the apostrophes between START and END that really delimit strings.
+(defun adascript--propertize-quote-at (pos)
+  "Mark the apostrophe at POS, and its partner, if they really delimit a string.
 
 An apostrophe in Adascript is either a Python string delimiter
 \(\\='hello\\=') or Ada's attribute tick (Stage_T\\='First).  The syntax
 table calls it punctuation, so only genuine string delimiters need a
 property here.  An apostrophe is left as punctuation when it follows a
 name or a closing bracket (a tick attribute), when it is already inside
-a string or comment, or when it has no partner on the same line.
+a string or comment, or when it has no partner on the same line."
+  (unless (nth 8 (save-excursion (syntax-ppss pos)))
+    (unless (and (> pos (point-min))
+                 (or (memq (char-syntax (char-before pos)) '(?w ?_))
+                     ;; (1 .. i)'choose — a tick after a closing bracket.
+                     (memq (char-before pos) '(?\) ?\]))))
+      (let ((close (adascript--quote-closes-on-line pos)))
+        (when close
+          (put-text-property pos (1+ pos)
+                             'syntax-table (string-to-syntax "\""))
+          (put-text-property close (1+ close)
+                             'syntax-table (string-to-syntax "\""))
+          ;; a syntax property is no buffer change: say so, or the
+          ;; syntax-ppss calls after this one answer from a stale cache
+          (syntax-ppss-flush-cache pos)
+          (goto-char (1+ close)))))))
 
-Runs after nim-mode's syntax-propertize."
+;; Regex literals: /pattern/flags and s/pattern/replacement/flags.  The
+;; syntax table knows nothing of them, so a quote inside one --
+;; /RELATED_CHANGES="(?P<sc>[^"]*)"/ -- opened a string that ran on to the
+;; end of the buffer.  Where a slash starts one is the tokenizer's rule
+;; (HPARSEC/hek_tokenize.py): after an operator or an opening bracket, at the
+;; start of a line, or after one of a few keywords -- never at // or /=.
+
+(defconst adascript--regex-start-keywords
+  '("return" "if" "elif" "while" "and" "or" "not" "in"
+    "print" "yield" "lambda" "case" "when")
+  "Keywords after which a slash starts a regex literal, not a division.")
+
+(defun adascript--regex-can-start-p (pos)
+  "Non-nil if a slash at POS starts a regex literal rather than dividing."
+  (save-excursion
+    (goto-char pos)
+    (skip-chars-backward " \t" (line-beginning-position))
+    (cond ((bolp) t)
+          ((memq (char-before) '(?= ?\( ?\[ ?, ?: ?\; ?+ ?- ?* ?% ?| ?& ?^ ?~ ?! ?< ?>))
+           t)
+          ((memq (char-syntax (char-before)) '(?w ?_))
+           (let ((end (point)))
+             (skip-syntax-backward "w_")
+             (member (buffer-substring-no-properties (point) end)
+                     adascript--regex-start-keywords))))))
+
+(defun adascript--regex-part-end (pos)
+  "End of the regex part that starts after the slash at POS: the position of
+the slash that closes it, or nil when the line ends first."
+  (save-excursion
+    (goto-char (1+ pos))
+    (let ((eol (line-end-position))
+          (found nil))
+      (while (and (not found) (< (point) eol))
+        (cond ((eq (char-after) ?\\) (forward-char 2))
+              ((eq (char-after) ?/) (setq found (point)))
+              (t (forward-char 1))))
+      found)))
+
+(defun adascript--fence-regex (open close)
+  "Make the slashes at OPEN and CLOSE the fences of one string."
+  (remove-text-properties open (1+ close) '(syntax-table nil))
+  (put-text-property open (1+ open) 'syntax-table (string-to-syntax "|"))
+  (put-text-property close (1+ close) 'syntax-table (string-to-syntax "|"))
+  (syntax-ppss-flush-cache open)
+  (goto-char (1+ close)))
+
+(defun adascript--propertize-regex-at (pos)
+  "Mark the regex literal whose opening slash is at POS, if it is one."
+  (unless (or (nth 8 (save-excursion (syntax-ppss pos)))
+              (memq (char-after (1+ pos)) '(?/ ?=))
+              (and (> pos (point-min)) (eq (char-before pos) ?/))
+              ;; #!/usr/bin/env ady2nim
+              (save-excursion (goto-char (line-beginning-position))
+                              (looking-at-p "#!")))
+    (cond
+     ;; s/pattern/replacement/flags -- the s right against the slash
+     ((and (> pos (point-min))
+           (eq (char-before pos) ?s)
+           (not (memq (char-syntax (or (char-before (1- pos)) ?\s)) '(?w ?_))))
+      (let* ((mid (adascript--regex-part-end pos))
+             (close (and mid (adascript--regex-part-end mid))))
+        (when close
+          (adascript--fence-regex pos close))))
+     ((adascript--regex-can-start-p pos)
+      (let ((close (adascript--regex-part-end pos)))
+        (when close
+          (adascript--fence-regex pos close)))))))
+
+(defun adascript--propertize-strings (start end)
+  "Mark the apostrophe strings and the regex literals between START and END.
+One pass, left to right, as the tokenizer reads: a slash inside an
+apostrophe string starts no regex, and an apostrophe inside a regex
+opens no string.  Runs after nim-mode's syntax-propertize."
   (goto-char start)
-  (while (search-forward "'" end t)
+  (while (re-search-forward "[/']" end t)
     (let ((pos (1- (point))))
-      (unless (nth 8 (save-excursion (syntax-ppss pos)))
-        (unless (and (> pos (point-min))
-                     (or (memq (char-syntax (char-before pos)) '(?w ?_))
-                         ;; (1 .. i)'choose — a tick after a closing bracket.
-                         (memq (char-before pos) '(?\) ?\]))))
-          (let ((close (adascript--quote-closes-on-line pos)))
-            (when close
-              (put-text-property pos (1+ pos)
-                                 'syntax-table (string-to-syntax "\""))
-              (put-text-property close (1+ close)
-                                 'syntax-table (string-to-syntax "\""))
-              (goto-char (1+ close)))))))))
+      (if (eq (char-after pos) ?')
+          (adascript--propertize-quote-at pos)
+        (adascript--propertize-regex-at pos)))))
 
 ;; ---------------------------------------------------------------------------
 ;; Mode definition
@@ -370,14 +450,14 @@ via eglot or lsp-mode.
   (font-lock-add-keywords nil adascript-font-lock-keywords 'set)
   (setq-local comment-start "# ")
   (setq-local comment-start-skip "#+\\s-*")
-  ;; Run nim-mode's syntax-propertize first, then repair the two things it
-  ;; gets wrong for Adascript: escaped quotes and apostrophes.
+  ;; Run nim-mode's syntax-propertize first, then repair what it gets wrong
+  ;; for Adascript: regex literals, escaped quotes and apostrophes.
   (let ((nim-spf syntax-propertize-function))
     (setq-local syntax-propertize-function
                 (lambda (start end)
                   (when nim-spf (funcall nim-spf start end))
                   (adascript--restore-escaped-quotes start end)
-                  (adascript--propertize-quotes start end))))
+                  (adascript--propertize-strings start end))))
   ;; Force re-propertization since nim-mode may have already run
   ;; syntax-propertize during mode setup.
   (setq-local syntax-propertize--done (point-min))

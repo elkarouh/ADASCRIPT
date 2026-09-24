@@ -101,5 +101,6 @@ nor the language server -- which is why it does not live here.
 ## Notes
 
 - `'` is punctuation in the syntax table, so `Color'First` is not mis-lexed as the start of a string and an apostrophe in prose — `the command's output` inside a docstring — cannot open one either. `syntax-propertize` then promotes just the pairs that really delimit a string, so `'hello'` is still highlighted as one.
+- Regex literals (`/x="(.*)"/`) and substitutions (`s/a/b/g`) are strings to the syntax table, so a quote inside one opens no string. A slash starts one where the transpiler's tokenizer says it does — after an operator, an opening bracket or a keyword such as `if` or `when`, never at `//` or `/=` — so a division stays a division. Apostrophe strings and regexes are marked in one left-to-right pass, as the tokenizer reads them.
 - Escaped quotes inside a prefixed string (`f"... \"x\" ..."`) are repaired after `nim-mode` runs: Nim reads `ident"..."` as a raw string literal where a backslash is not an escape, which would otherwise end the string early and invert the highlighting of the rest of the buffer.
 - The mode derives from `nim-mode`, so its navigation commands work in `.ady` files.

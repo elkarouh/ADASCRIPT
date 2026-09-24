@@ -62,6 +62,7 @@ will be available.
 | Comments | `# this is a comment` |
 | Triple-quoted strings | `"""docstring"""`, `'''alt'''` |
 | F-strings with interpolation | `f"value is {x + 1}"` |
+| Regex literals and substitutions | `line == /x="(.*)"/`, `s/\s+/ /g` — a quote inside one opens no string |
 | Type declarations | `type Color is enum RED, GREEN, BLUE` |
 | Tick attributes | `Color'First`, `s'Length` |
 | Storage modifiers | `var`, `let`, `const` |

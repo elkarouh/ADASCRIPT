@@ -4,7 +4,7 @@ Language support for [Adascript](https://github.com/elkarouh/adascript) (`.ady` 
 
 ## Features
 
-- **Syntax highlighting** — type declarations, tick attributes (`Color'First`), Ada/Python keywords, decorators, built-ins
+- **Syntax highlighting** — type declarations, tick attributes (`Color'First`), regex literals, Ada/Python keywords, decorators, built-ins
 - **Diagnostics** — parse errors underlined in real time as you type
 - **Hover** — enum type info (members, `First`/`Last`), symbol types
 - **Completion** — tick-attribute suggestions (`EnumType'`), enum member access (`EnumType.`), prefix-filtered type and symbol names
@@ -74,6 +74,7 @@ The grammar (`source.adascript`) covers:
 | Block enum | `type Color is enum:` |
 | Record / tuple | `type Point is record:` |
 | Tick attribute | `Color'First`, `State'Last` |
+| Regex literal / substitution | `line == /x="(.*)"/`, `s/\s+/ /g` — a quote inside one opens no string |
 | Ada keywords | `type`, `is`, `enum`, `record`, `tuple`, `when` |
 | Python keywords | `def`, `class`, `if`, `for`, `match`, … |
 | Decorators | `@method(Foo)` |
