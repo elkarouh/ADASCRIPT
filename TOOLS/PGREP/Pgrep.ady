@@ -36,8 +36,6 @@ type GrepTool_T is enum GREP, RG
 
 const GREP_TOOL: GrepTool_T = RG
 
-# `$0` is the program name; a built copy can carry a leading dot.
-let PROG: str = Path($0).name.lstrip(".")
 let PADDING: str = "=" * 93
 
 # Where the subsystem builds are listed from. The shell version spells
@@ -51,10 +49,6 @@ let CM_OT: str = ${PGREP_CM_OT:-"/cm/ot"}
 # resolves to /auto/local_build/<host>/ssd1/cm/ot/CUA/ADMIN.44.0.0.A. The
 # marker is the site's own cm/ot, wherever the listing came from.
 let CM_MARKER: str = "/cm/ot/"
-
-def die(msg: str):
-    stderr.writeLine(PROG + ": " + msg)
-    quit(1)
 
 def stdout_is_tty() -> bool:
     """Is our output a terminal, rather than a file or a pipe?"""

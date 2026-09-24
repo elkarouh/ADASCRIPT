@@ -33,15 +33,6 @@ Flow, once the Options are parsed:
      last row included.
 """
 
-let PROG: str = Path($0).name
-
-def die(msg: str):
-    stderr.writeLine(PROG + ": " + msg)
-    quit(1)
-
-def warn(msg: str):
-    stderr.writeLine(PROG + ": " + msg)
-
 var SHOW_DEBUG: bool = False
 
 def debug_log(msg: str):

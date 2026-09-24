@@ -11,12 +11,6 @@ Translated from the ksh original in TOOL/COMMON_UTILS.
 nimport os
 nimport time
 
-let PROG: str = Path($0).name.lstrip(".")
-
-def die(msg: str):
-    stderr.writeLine(PROG + ": " + msg)
-    quit(1)
-
 # ---------------------------------------------------------------------------
 # ANSI color helpers
 # ---------------------------------------------------------------------------

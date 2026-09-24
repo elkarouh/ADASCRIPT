@@ -14,12 +14,6 @@ separate sd/pysd commands (30 full file rewrites).
 nimport os
 nimport nre
 
-let PROG: str = Path($0).name.lstrip(".")
-
-def die(msg: str):
-    stderr.writeLine(PROG + ": " + msg)
-    quit(1)
-
 # ---------------------------------------------------------------------------
 # Compiled regex patterns (compiled once, applied per line)
 # ---------------------------------------------------------------------------

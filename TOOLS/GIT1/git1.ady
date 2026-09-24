@@ -8,14 +8,6 @@ grouped under a single ".git1" container in the file's directory.
 
 const VERSION:   str = "3.0"
 const CONTAINER: str = ".git1"
-let PROG:   str = Path($0).name.lstrip(".")
-
-def die(msg: str):
-    stderr.writeLine(f"{PROG}: {msg}")
-    quit(1)
-
-def warn(msg: str):
-    stderr.writeLine(f"{PROG}: {msg}")
 
 def confirm(question: str) -> bool:
     var reply: str = ""

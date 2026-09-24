@@ -11,12 +11,6 @@ Tcheck_tact.ady for an eventual merge.
 
 nimport os
 
-let PROG: str = Path($0).name.lstrip(".")
-
-def die(msg: str):
-    stderr.writeLine(PROG + ": " + msg)
-    quit(1)
-
 # ---------------------------------------------------------------------------
 # ANSI color helpers (shared with Tcheck_tact)
 # ---------------------------------------------------------------------------
