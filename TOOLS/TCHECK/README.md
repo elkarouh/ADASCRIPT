@@ -99,32 +99,6 @@ Tcheck_tact -s                     # disk usage of replay dirs
 Tcheck_tact -l 30.0.0.128          # list builds and replays
 ```
 
-### Ttroubleshoot
-
-Compare a baseline against its predecessor — scan regression test logs,
-replay logs, and build closure logs side by side.
-
-```
-Ttroubleshoot <mode> [options] [<BASELINE>]
-```
-
-**Modes:**
-| Mode | Description |
-|---|---|
-| `build_info` | Compare Csystem_build.log and check build closure |
-| `ip <subtype>` | Troubleshoot IP regression tests (in, mono) |
-| `op <subtype>` | Troubleshoot OP regression tests (in, assert) |
-| `replay <type>` | Troubleshoot replays (prequal, performance, simca, full_simca) |
-
-If `BASELINE` is omitted, it's derived from `$CONTEXT_CM_BASELINE`.
-
-**Examples:**
-```bash
-Ttroubleshoot build_info 30.0.0.128
-Ttroubleshoot ip in 30.0.0.128
-Ttroubleshoot replay performance 30.0.0.128
-```
-
 ### make_comparable
 
 Normalize a log file for side-by-side diffing. Replaces timestamps, PIDs,
@@ -177,12 +151,13 @@ All three programs share these Adascript types, designed for an eventual merge:
 ```bash
 cd TOOLS/TCHECK
 ady2nim c -d:release Tcheck_tact.ady -o Tcheck_tact
-ady2nim c -d:release Ttroubleshoot.ady -o Ttroubleshoot
 ady2nim c -d:release make_comparable.ady -o make_comparable
 ```
 
 ## Origin
 
 - `Tcheck_tact.ady` — translated from `Tcheck_tact.ksh` (TOOL/COMMON_UTILS)
-- `Ttroubleshoot.ady` — translated from `hek-troubleshoot.sh`
+- `hek-troubleshoot.sh`'s prev-vs-current comparisons are Tcheck_tact's
+  `-focus` modes (`-focus IP in`, `-focus replay performance`,
+  `-focus build_info`, ...); the separate Ttroubleshoot program is gone.
 - `make_comparable.ady` — translated from `make_comparable.ksh`

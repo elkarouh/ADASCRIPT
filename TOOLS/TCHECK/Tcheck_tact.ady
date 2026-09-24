@@ -37,21 +37,16 @@ var HAS_NEW_FAILURES: bool = False
 def ansi_escape(spec: str) -> str:
     """Turn a color spec like 'sWr' into an ANSI escape sequence."""
     let codes: []str = [ANSI_CODES[ch] for ch in spec if ch in ANSI_CODES]
-    return "\x1b[" + ";".join(codes) + "m"
+    return "\x1b[" + ";".join(codes) + "m" if codes else ""
+
+def cechon(spec: str, text: str):
+    """Print TEXT in the color given by SPEC, without a trailing newline."""
+    stdout.write(ansi_escape(spec) + text + RESET if COLORED else text)
 
 def cecho(spec: str, text: str):
     """Print TEXT in the color given by SPEC, with a newline."""
-    if COLORED:
-        print ansi_escape(spec) + text + RESET
-    else:
-        print text
-
-def cechon(spec: str, text: str):
-    """Print TEXT in color, without a trailing newline."""
-    if COLORED:
-        stdout.write(ansi_escape(spec) + text + RESET)
-    else:
-        stdout.write(text)
+    cechon(spec, text)
+    print ""
 
 def hr(c: char = '#', length: int = 80):
     print c * length
@@ -1043,7 +1038,7 @@ def check_replay_dirs_size():
     hr('#')
 
 # ---------------------------------------------------------------------------
-# Troubleshoot helpers (from Ttroubleshoot — detailed prev-vs-current comparisons)
+# Troubleshoot helpers (from hek-troubleshoot.sh -- detailed prev-vs-current comparisons)
 # ---------------------------------------------------------------------------
 
 def grep_logfile(filepath: Path, max_errors: Positive = 100) -> str:
