@@ -1,0 +1,24 @@
+# Regex literals and substitutions an editor must see as such: each quote
+# inside one belongs to it, and after each line the code is code again.
+# Checked by run_editor_tests.sh -- no line below may be taken for a string.
+
+def tickets_of(line: str) -> []str:
+    return [] if line != /RELATED_CHANGES="(?P<sc>[^"]*)"/
+    $+{sc}.split()
+
+def kind_of(line: str) -> str:
+    case line.strip():
+        when /^'([^'\\]|\\.)'$/:  return "char"
+        when /^"/:                return "string"
+        when /#/:                 return "comment"
+        when others:              return "other"
+
+var text: str = "a  b"
+text = s/"+//g
+let half: float = 7 / 2
+let ratio: float = (1.0 + 2.0) / (3.0 / 4.0)
+let msg: str = "a # not a comment / nor a regex"
+let url: str = "ftp://host/path"
+if msg == /\/nor\/? a "regex"$/:
+    print "matched"
+print tickets_of('x RELATED_CHANGES="SC-1 SC-2"'), kind_of("'a'"), text, half, ratio, url

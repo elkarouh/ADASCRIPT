@@ -1,0 +1,9 @@
+{
+  "name": "adascript-editor-tests",
+  "private": true,
+  "description": "What run_editor_tests.sh needs to run the VS Code grammar as VS Code does.",
+  "devDependencies": {
+    "vscode-oniguruma": "^2.0.1",
+    "vscode-textmate": "^9.3.2"
+  }
+}

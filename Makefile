@@ -650,6 +650,14 @@ test: compile
 	@# Each suite was mutation-checked when written: breaking the blank-line
 	@# probe, the dedent-keyword list, or the cache's "strictly above" guard
 	@# makes the relevant tests fail rather than pass.
+	@# The editors' highlighting of regex literals against the transpiler's
+	@# tokenizer: VS Code and Emacs must see a regex exactly where it does,
+	@# over every .ady here, and no quote inside one may open a string.
+	@# SKIPs, saying what to install, without node's vscode-textmate or
+	@# emacs's nim-mode.
+	@echo "=== Editor highlighting of regex literals ==="
+	@PYTHON=$(PYTHON) sh $(CURDIR)/LSP/test/run_editor_tests.sh
+
 	@echo "=== ADA_INDENT editor support ==="
 	@printf '  %-42s' "vs_code/test_extension.js"; \
 	    if ! command -v node >/dev/null 2>&1; then echo "SKIP (no node)"; \

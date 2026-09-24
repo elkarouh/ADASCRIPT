@@ -374,12 +374,33 @@ the slash that closes it, or nil when the line ends first."
               (t (forward-char 1))))
       found)))
 
+(defvar-local adascript--nim-syntax-propertize nil
+  "nim-mode's `syntax-propertize-function', which adascript-mode's wraps.")
+
+(defvar adascript--propertize-end nil
+  "The end of the region `adascript--propertize-strings' is marking.")
+
 (defun adascript--fence-regex (open close)
-  "Make the slashes at OPEN and CLOSE the fences of one string."
+  "Make the slashes at OPEN and CLOSE the fences of one string.
+
+nim-mode's syntax-propertize has already run, knowing nothing of regexes:
+a quote or a # inside one -- s/\"+//g -- was a string or a comment to it,
+and so was everything it marked after that, the other way round.  When the
+regex holds one, its marks from the regex on are cleared and nim-mode
+reads that part again, now with the regex a string."
   (remove-text-properties open (1+ close) '(syntax-table nil))
   (put-text-property open (1+ open) 'syntax-table (string-to-syntax "|"))
   (put-text-property close (1+ close) 'syntax-table (string-to-syntax "|"))
   (syntax-ppss-flush-cache open)
+  (let ((end adascript--propertize-end))
+    (when (and end (< (1+ close) end)
+               (save-excursion (goto-char open) (re-search-forward "[\"'#]" close t)))
+      (remove-text-properties (1+ close) end '(syntax-table nil))
+      (syntax-ppss-flush-cache (1+ close))
+      (save-excursion
+        (when adascript--nim-syntax-propertize
+          (funcall adascript--nim-syntax-propertize (1+ close) end))
+        (adascript--restore-escaped-quotes (1+ close) end))))
   (goto-char (1+ close)))
 
 (defun adascript--propertize-regex-at (pos)
@@ -409,12 +430,13 @@ the slash that closes it, or nil when the line ends first."
 One pass, left to right, as the tokenizer reads: a slash inside an
 apostrophe string starts no regex, and an apostrophe inside a regex
 opens no string.  Runs after nim-mode's syntax-propertize."
-  (goto-char start)
-  (while (re-search-forward "[/']" end t)
-    (let ((pos (1- (point))))
-      (if (eq (char-after pos) ?')
-          (adascript--propertize-quote-at pos)
-        (adascript--propertize-regex-at pos)))))
+  (let ((adascript--propertize-end end))
+    (goto-char start)
+    (while (re-search-forward "[/']" end t)
+      (let ((pos (1- (point))))
+        (if (eq (char-after pos) ?')
+            (adascript--propertize-quote-at pos)
+          (adascript--propertize-regex-at pos))))))
 
 ;; ---------------------------------------------------------------------------
 ;; Mode definition
@@ -451,13 +473,14 @@ via eglot or lsp-mode.
   (setq-local comment-start "# ")
   (setq-local comment-start-skip "#+\\s-*")
   ;; Run nim-mode's syntax-propertize first, then repair what it gets wrong
-  ;; for Adascript: regex literals, escaped quotes and apostrophes.
-  (let ((nim-spf syntax-propertize-function))
-    (setq-local syntax-propertize-function
-                (lambda (start end)
-                  (when nim-spf (funcall nim-spf start end))
-                  (adascript--restore-escaped-quotes start end)
-                  (adascript--propertize-strings start end))))
+  ;; for Adascript: escaped quotes, regex literals and apostrophes.
+  (setq-local adascript--nim-syntax-propertize syntax-propertize-function)
+  (setq-local syntax-propertize-function
+              (lambda (start end)
+                (when adascript--nim-syntax-propertize
+                  (funcall adascript--nim-syntax-propertize start end))
+                (adascript--restore-escaped-quotes start end)
+                (adascript--propertize-strings start end)))
   ;; Force re-propertization since nim-mode may have already run
   ;; syntax-propertize during mode setup.
   (setq-local syntax-propertize--done (point-min))
