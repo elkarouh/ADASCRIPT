@@ -36,10 +36,29 @@ order or count of the `-L` flags sent — git sorts and deduplicates `-L`
 ranges internally, so request order/count cannot be relied on. Measured
 on a 31-line/1-file test input: 31 `git` invocations collapse to 1.
 
+**All dates are formatted by one `date` process** (`date -f -`), not one
+per output row. Measured on a 300-hit input over six commits: 300 `date`
+processes and 1.19 s become 1 process and 0.02 s -- formatting dates had
+cost far more than the blaming itself.
+
 **`- FILENAME...` reads the named files directly** instead of piping
 `grep -n` output back into a fresh copy of the running program. Same
 observable output, no dependency on how the program resolves its own path
 on a given site.
+
+## Structure
+
+| Class | What it owns |
+|---|---|
+| `Options` | what was asked for: flags, columns, files, the alternate (with its env fallback and readability check) |
+| `Resolver` | what this site's paths mean: the two path shapes, the workspace root, the alternate (registered once), and the revision each baseline resolves to (cached) |
+| `BlameBatch` | blaming each (repository, revision, file) once and handing each input line its result |
+| `Report` | the rows in input order, pass-through lines, the `-since` filter, column widths and printing |
+
+`Hit` (one input line, resolved), `Blame` (one line's result) and `Target`
+(one file at one revision) are the records passed between them. Hits are
+known to `BlameBatch` by input index, not by reference, since classes and
+records are value types on the Nim backend.
 
 ## Bugs found in the ksh original while translating
 

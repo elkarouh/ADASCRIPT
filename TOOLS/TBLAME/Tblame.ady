@@ -9,32 +9,27 @@ text and any trailing <info> carried on the input line. Typical use: pipe
 the output of a source-code search through Tblame to see who to ask about
 each hit.
 
-Flow, once options and columns are parsed:
+Flow, once the Options are parsed:
 
-  1. Read every input line (from stdin, or from named files given after a
-     bare `-`, in which case each file's own lines are numbered and fed
-     through the same path as stdin). Classify and resolve each one --
-     which repository, revision and file it names -- without blaming yet.
-     A line matching neither recognised path shape is buffered as
-     pass-through text (or dropped, under `-filter_unmatched`) and later
-     printed just ahead of the next line that *does* resolve.
+  1. Resolver turns every input line into a Hit: which repository,
+     revision and file it names, or that it names none. A line naming
+     none is passed through to the output (or dropped, under
+     `-filter_unmatched`); the Resolver knows the two path shapes this
+     site uses and caches the revision each baseline resolves to.
 
-  2. Group the resolved lines by (repository, revision, file) and blame
-     each group exactly once: a single `git blame` call per group asks
-     for every needed line in that file via repeated `-L n,n` flags, and
-     the per-line results are matched back to their requesters by the
-     line number git itself reports for each porcelain block -- git sorts
-     and deduplicates -L ranges internally, so results cannot be matched
-     back by the order or count of the flags sent.
+  2. BlameBatch groups the Hits by (repository, revision, file) and blames
+     each group exactly once: one `git blame` per file asks for every line
+     needed there via repeated `-L n,n` flags, and each result is matched
+     back to the Hits that asked for it by the line number git itself
+     reports in the porcelain block -- git sorts and deduplicates -L
+     ranges, so results cannot be matched back by the order or count of
+     the flags sent.
 
-  3. Walk the input lines again in their original order, drop anything
-     older than `-since`, and build one output row per surviving line:
-     each requested column (date, user, sc ticket, blamed text, ...) is
-     computed from that line's blame result.
-
-  4. Print the rows, padding every column to its widest value except
-     "reference" and "reference_blame", which are prefixed with "| "
-     instead.
+  3. Report takes the Hits back in input order, drops those older than
+     `-since`, and prints one row per Hit: each requested column (date,
+     user, sc ticket, blamed text, ...) padded to its widest value, except
+     "reference" and "reference_blame", which are prefixed with "| ".
+     Pass-through lines print just ahead of the row that follows them.
 """
 
 let PROG: str = Path($0).name
@@ -89,109 +84,56 @@ let COLUMN_HELP: [OutputColumn]str = [
 let DEFAULT_COLUMNS: []OutputColumn = [Col_Date, Col_ScHint, Col_User, Col_FileWorkspace, Col_ReferenceBlame]
 
 def column_from_name(name: str) -> OutputColumn:
-    """The column whose CLI spelling is NAME, or die with the same message
-    the ksh original used for an unknown column."""
+    """The column whose CLI spelling is NAME, or die saying it is not one."""
     for c in OutputColumn:
         if COLUMN_NAME[c] == name:
             return c
     die("Invalid column specifier " + name)
 
 # ---------------------------------------------------------------------------
-# Types
+# What flows between the stages
 # ---------------------------------------------------------------------------
 
-type LineKind is enum LK_Ok, LK_Unmatched, LK_Skipped
+type HitKind is enum HK_Blame, HK_Passthrough, HK_Drop
 
-type LineInfo is record:
-    # path passed to `git blame`
-    gitfilepath:  Path
-    # path exactly as it appeared on the input line
-    origfilepath: Path
-    nmroot:       Path
-    # specific_subsystem: nmroot/system/subsystem
-    repo:         Path
-    # "" means "blame the working tree / HEAD" -- a git ref, not a path
-    revision:     str
-    line_no:      int
-    # free-text after the line number, from stdin
-    trailing:     str
-    kind:         LineKind = LK_Skipped
+type Hit is record:
+    # One input line: what it says, and -- for HK_Blame -- the repository,
+    # revision and file git blame is to be asked about.
+    raw:      str
+    repo:     Path
+    # a git ref; "" means the working tree
+    revision: str
+    file:     Path
+    nmroot:   Path
+    # the path exactly as written on the input line
+    orig:     Path
+    line_no:  int
+    # free text after the line number
+    trailing: str
+    kind:     HitKind = HK_Drop
 
-type MatchResult is record:
-    matched:   bool = False
-    system:    str = ""
-    subsystem: str = ""
-    filepath:  Path = Path("")
-    line_no:   int = 0
-    trailing:  str = ""
+type Blame is record:
+    committer:   str = ""
+    author_time: int = 0
+    summary:     str = ""
+    text:        str = ""
 
-type GroupInfo is record:
+type Target is record:
+    # one file at one revision in one repository: what one git blame covers
     repo:     Path
     revision: str
     file:     Path
 
-type BlameData is record:
-    found:       bool = False
-    committer:   str = ""
-    author_time: int = 0
-    summary:     str = ""
-    line_text:   str = ""
-
-type Row is record:
-    values: [OutputColumn]str
-    preceding_unmatched: str = ""
-
 # ---------------------------------------------------------------------------
-# Global lookup state, built in one pass and consumed in the next
+# Small helpers
 # ---------------------------------------------------------------------------
 
-var CONTEXT_REVISION_CACHE: {str}str = {:}   # "system/subsystem.baseline" -> git revision
-
-var GROUPS:      {str}GroupInfo = {:}   # group key -> (repo, revision, file)
-var GROUP_LINES: {str}[]int     = {:}   # group key -> unique line numbers to blame, in first-seen order
-var LINE_OWNERS: {str}[]int     = {:}   # "<group key><SEP><line_no>" -> input-line indices that asked for it
-var BLAME:       {int}BlameData = {:}   # input-line index -> its blame result, once Pass 2 has run
-
-def group_key(repo: Path, revision: str, file: Path) -> str:
-    """A unique, stable key for one (repo, revision, file) blame target.
-
-    Never parsed back apart -- GROUPS/GROUP_LINES already hold the
-    components -- so any separator that keeps the triple unique is fine.
-    """
-    return str(repo) + "\x01" + revision + "\x01" + str(file)
-
-def line_key(gkey: str, line_no: int) -> str:
-    return gkey + "\x02" + str(line_no)
-
-def register_group(info: LineInfo, idx: int):
-    """Record that input line IDX needs INFO.line_no blamed in INFO's
-    (repo, revision, file), growing the group's unique-line list only the
-    first time that exact line is asked for."""
-    let gkey: str = group_key(info.repo, info.revision, info.gitfilepath)
-    if gkey not in GROUPS:
-        var g: GroupInfo
-        g.repo = info.repo
-        g.revision = info.revision
-        g.file = info.gitfilepath
-        GROUPS[gkey] = g
-        GROUP_LINES[gkey] = []
-    let lkey: str = line_key(gkey, info.line_no)
-    if lkey not in LINE_OWNERS:
-        GROUP_LINES[gkey].append(info.line_no)
-        LINE_OWNERS[lkey] = [idx]
-    else:
-        LINE_OWNERS[lkey].append(idx)
-
-# ---------------------------------------------------------------------------
-# Small string helpers
-# ---------------------------------------------------------------------------
-
-def strip_after(path: str, marker: str) -> str:
-    """Everything before the first occurrence of MARKER, or PATH unchanged."""
-    let at: int = path.find(marker)
+def strip_after(s: str, marker: str) -> str:
+    """Everything before the first occurrence of MARKER, or S unchanged."""
+    let at: int = s.find(marker)
     if at >= 0:
-        return path[:at]
-    return path
+        return s[:at]
+    return s
 
 def strip_prefix(s: str, prefix: str) -> str:
     if s.startswith(prefix):
@@ -201,12 +143,10 @@ def strip_prefix(s: str, prefix: str) -> str:
 # ---------------------------------------------------------------------------
 # NM/CM site tools, wrapped as opaque external programs
 # ---------------------------------------------------------------------------
-# Psort and where_workspace are site-specific NM tooling, not part of
-# Adascript or of any tested environment here -- ported structurally from
-# the ksh original and not exercised end-to-end in this sandbox.
+# Psort and where_workspace are site-specific NM tooling.
 
 def add_alternate(nmroot: Path, alternate: Path):
-    """Register ALTERNATE as a git alternate-object-store for NMROOT's
+    """Register ALTERNATE as a git alternate object store for NMROOT's
     repository, unless it is already listed there."""
     let alt_file: Path = nmroot / ".git" / "objects" / "info" / "alternates"
     var already_listed: bool = False
@@ -217,160 +157,58 @@ def add_alternate(nmroot: Path, alternate: Path):
         shell: echo {!alternate} >> {alt_file}
 
 def where_workspace(cmpath: str) -> (Path, int):
-    """Resolve a /cm/ot/... context path to its workspace-relative path.
+    """Resolve a /cm/ot/... context path to its workspace path.
 
     Returns (path, exit_code); exit_code 2 means "the subsystem is not
-    checked out", matching the ksh original's convention for this tool.
+    checked out".
     """
     let r = shell: where_workspace {!cmpath}
     return (Path(r.output.strip()), r.code)
 
-def revision_of_context_file(cmpath_in: str, nmroot: Path) -> str:
-    """Resolve a /cm/ot/... context path to the git revision it names,
-    via Psort and a small cache keyed by "system/subsystem.baseline".
-
-    The ksh original computed a "workspace/..." ref form from the baseline
-    (lower-cased, underscores to dashes) but then called `git rev-parse`
-    with the raw baseline string, never the computed ref -- that
-    computation had no effect on the result, so it is not carried over
-    here; `git rev-parse` is called with the baseline exactly as the
-    original's actual behaviour (not its unused local variable) did.
-    """
-    var cmpath: str = strip_after(cmpath_in, "/build_")
-    cmpath = strip_after(cmpath, "/sources")
-    if cmpath != /\/cm\/ot\/(?P<system>\w+)\/(?P<subsystem>\w+)[!\.](?P<baseline>[^\/]+)/:
-        return ""
-    let system: str = $+{system}
-    let subsystem: str = $+{subsystem}
-    let baseline: str = $+{baseline}
-    let key: str = system + "/" + subsystem + "." + baseline.lower()
-    if key not in CONTEXT_REVISION_CACHE:
-        let forward  = shell(stdin = cmpath): Psort
-        let backward = shell(stdin = cmpath): Psort -reverse -backward
-        var seen: {}str = {}
-        for candidate in (forward.output + "\n" + backward.output).split("\n"):
-            continue if candidate == ""
-            continue if candidate in seen
-            seen.add(candidate)
-            continue if not (baseline.lower() in candidate.lower() or candidate == /!\d+/)
-            continue if candidate != /\/cm\/ot\/(?P<system>\w+)\/(?P<subsystem>\w+)[!\.](?P<baseline>[^\/]+)/
-            let sys2: str = $+{system}
-            let sub2: str = $+{subsystem}
-            let bl2:  str = $+{baseline}
-            let repo_dir: Path = nmroot / sys2 / sub2
-            let repo_git: Path = repo_dir / ".git"
-            if not -r repo_git:
-                debug_log("Not populating revision for " + sys2 + "/" + sub2 + " because it isn't checked out.")
-                continue
-            let r = shell: git -C {repo_dir} rev-parse {bl2}
-            if r.code == 0:
-                # Cached under the lower-cased baseline, matching `key`
-                # above -- the ksh original built this same cache entry
-                # with the baseline's raw case, so a mixed-case baseline
-                # (e.g. an NM build id like "G!31.IP.L8") always missed the
-                # cache it had just filled and silently fell back to
-                # blaming HEAD instead of the resolved revision.
-                CONTEXT_REVISION_CACHE[sys2 + "/" + sub2 + "." + bl2.lower()] = r.output.strip()
-            else:
-                warn("Could not determine revision for " + repo_dir + " " + bl2)
-    return CONTEXT_REVISION_CACHE.get(key, "")
-
 # ---------------------------------------------------------------------------
-# Input-line matching
+# Path shapes
 # ---------------------------------------------------------------------------
-# Two path shapes are recognised, matching the ksh original exactly:
 #
 #   /NM/<system>/<subsystem>/<subdir+file>:<line>[:<trailing>]
 #     -- an absolute workspace path; blamed in place, no revision needed.
 #
-#   /cm/ot/<system>/<subsystem>!<baseline>/.../<subdir+file>:<line>[:<trailing>]
-#     -- a build-context path; the workspace-relative file and the
-#        baseline's git revision must be resolved first.
+#   /cm/ot/<system>/<subsystem>!<baseline>/<build_X>/<subdir+file>:<line>[:<trailing>]
+#     -- a build-context path; the workspace file and the baseline's git
+#        revision have to be resolved first.
 
-def match_workspace_path(line: str) -> MatchResult:
-    var m: MatchResult
+type PathShape is enum NoShape, WorkspacePath, ContextPath
+
+type PathMatch is record:
+    system:    str = ""
+    subsystem: str = ""
+    # the path as written: everything before the first ':'
+    written:   str = ""
+    # the subdir+file part, relative to the subsystem
+    filepath:  Path = Path("")
+    line_no:   int = 0
+    trailing:  str = ""
+    shape:     PathShape = NoShape
+
+def match_path(line: str) -> PathMatch:
+    var m: PathMatch
     if line == /\/NM\/(?P<system>\w+)\/(?P<subsystem>\w+)\/(?P<filepath>[^:]+):(?P<lineno>[0-9]+):?(?P<trailing>.*)$/:
-        m.matched = True
+        m.shape = WorkspacePath
         m.system = $+{system}
         m.subsystem = $+{subsystem}
         m.filepath = Path($+{filepath})
         m.line_no = int($+{lineno})
         m.trailing = $+{trailing}
-    return m
-
-def match_context_path(line: str) -> MatchResult:
-    var m: MatchResult
-    if line == /\/cm\/ot\/(?P<system>\w+)\/(?P<subsystem>\w+)[!\.][^\/]+\/[^\/]+\/(?P<filepath>[^:]+):(?P<lineno>[0-9]+):?(?P<trailing>.*)$/:
-        m.matched = True
+    elif line == /\/cm\/ot\/(?P<system>\w+)\/(?P<subsystem>\w+)[!\.][^\/]+\/[^\/]+\/(?P<filepath>[^:]+):(?P<lineno>[0-9]+):?(?P<trailing>.*)$/:
+        m.shape = ContextPath
         m.system = $+{system}
         m.subsystem = $+{subsystem}
         m.filepath = Path($+{filepath})
         m.line_no = int($+{lineno})
         m.trailing = $+{trailing}
-    return m
-
-def resolve_line(raw: str, alternate: Path, show_unmatched: bool) -> LineInfo:
-    """Classify one input line and, for a recognised path, resolve which
-    file/revision/repo it blames against. Registers it into a blame group
-    when it does; never calls git blame itself (that is Pass 2's job)."""
-    var info: LineInfo
-    let colon_at: int = raw.find(":")
-
-    let m1: MatchResult = match_workspace_path(raw)
-    if m1.matched:
-        info.kind = LK_Ok
-        info.gitfilepath = Path(raw[:colon_at])
-        info.origfilepath = info.gitfilepath
-        info.nmroot = Path($CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY)
-        if alternate != "":
-            add_alternate(info.nmroot, alternate)
-        info.revision = ""
-        info.repo = info.nmroot / m1.system / m1.subsystem
-        info.line_no = m1.line_no
-        info.trailing = m1.trailing
-        return info
-
-    let m2: MatchResult = match_context_path(raw)
-    if m2.matched:
-        let cmpath: str = raw[:colon_at]
-        info.origfilepath = Path(cmpath)
-        if alternate != "":
-            info.kind = LK_Ok
-            info.gitfilepath = m2.filepath
-            info.nmroot = alternate
-            info.repo = alternate / m2.system / m2.subsystem
-            info.revision = revision_of_context_file(cmpath, alternate)
-            info.line_no = m2.line_no
-            info.trailing = m2.trailing
-        elif $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY != "":
-            let (ws_path, ws_code) = where_workspace(cmpath)
-            if ws_code == 0:
-                info.kind = LK_Ok
-                info.gitfilepath = ws_path
-                info.nmroot = Path($CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY)
-                info.repo = info.nmroot / m2.system / m2.subsystem
-                info.revision = revision_of_context_file(cmpath, info.nmroot)
-                info.line_no = m2.line_no
-                info.trailing = m2.trailing
-            elif ws_code == 2:
-                info.kind = LK_Skipped
-                debug_log("Could not find the file " + cmpath + " in the workspace, the subsystem is not checked out.")
-            else:
-                info.kind = LK_Skipped
-                warn("Below line looks like it contains a context path but it could not be found in the workspace.")
-                warn(raw)
-        else:
-            info.kind = LK_Skipped
-        return info
-
-    if show_unmatched:
-        info.kind = LK_Unmatched
-        debug_log("Unmatched:")
-        debug_log(raw)
     else:
-        info.kind = LK_Skipped
-        debug_log("Skipped " + raw)
-    return info
+        return m
+    m.written = line[:line.find(":")]
+    return m
 
 # ---------------------------------------------------------------------------
 # Column values
@@ -385,118 +223,75 @@ def line_checksum(line: str) -> str:
         return "0000000000"
     return f"{int(parts[0]):010d}"
 
-def sc_first_value(tickets: []str) -> str:
-    if len(tickets) > 0:
-        return tickets[0]
-    return "<no-sc>"
-
-def sc_hint_value(tickets: []str) -> str:
+def sc_value(col: OutputColumn, tickets: []str) -> str:
+    """sc_first, sc_hint or sc_all, from the SC tickets a commit names."""
     if len(tickets) == 0:
         return "<no-sc>"
-    if len(tickets) > 1:
-        return tickets[0] + f"(+{len(tickets) - 1})"
-    return tickets[0]
+    case col:
+        when Col_ScAll:
+            return ",".join(tickets)
+        when Col_ScHint:
+            if len(tickets) > 1:
+                return tickets[0] + f"(+{len(tickets) - 1})"
+            return tickets[0]
+        when others:
+            return tickets[0]
 
-def sc_all_value(tickets: []str) -> str:
-    if len(tickets) > 0:
-        return ",".join(tickets)
-    return "<no-sc>"
-
-def compute_value(col: OutputColumn, raw_line: str, info: LineInfo, bd: BlameData, tickets: []str) -> str:
+def column_value(col: OutputColumn, hit: Hit, b: Blame, tickets: []str) -> str:
+    """The value of every column but Col_Date, which Report fills in all at
+    once (see format_dates)."""
     case col:
         when Col_Checksum:
-            return line_checksum(raw_line)
-        when Col_Date:
-            let r = shell: date --date="@{bd.author_time}" +%Y.%m.%d
-            return r.output.strip()
+            return line_checksum(hit.raw)
         when Col_User:
-            return bd.committer
-        when Col_ScHint:
-            return sc_hint_value(tickets)
-        when Col_ScFirst:
-            return sc_first_value(tickets)
-        when Col_ScAll:
-            return sc_all_value(tickets)
+            return b.committer
+        when Col_ScFirst | Col_ScHint | Col_ScAll:
+            return sc_value(col, tickets)
         when Col_FileOriginal:
-            return str(info.origfilepath) + ":" + str(info.line_no)
+            return str(hit.orig) + ":" + str(hit.line_no)
         when Col_FileName:
-            return info.gitfilepath.name + ":" + str(info.line_no)
+            return hit.file.name + ":" + str(hit.line_no)
         when Col_FileWorkspace:
-            return strip_prefix(str(info.gitfilepath), str(info.nmroot) + "/") + ":" + str(info.line_no)
+            return strip_prefix(str(hit.file), str(hit.nmroot) + "/") + ":" + str(hit.line_no)
         when Col_Reference:
-            return info.trailing
+            return hit.trailing
         when Col_ReferenceBlame:
-            return bd.line_text
+            return b.text
+        when others:
+            return ""
 
-def build_row(raw_line: str, info: LineInfo, bd: BlameData, columns: []OutputColumn, preceding: str) -> Row:
-    var row: Row
-    row.preceding_unmatched = preceding
-    let tickets: []str = bd.summary == /SC-\d+/g
-    for col in columns:
-        row.values[col] = compute_value(col, raw_line, info, bd, tickets)
-    return row
+def format_dates(epochs: []int) -> {int}str:
+    """YYYY.MM.DD for each epoch, from a single `date` process.
 
-# ---------------------------------------------------------------------------
-# Pass 2 — blame each distinct (repo, revision, file) once
-# ---------------------------------------------------------------------------
-# git-blame's porcelain output omits a commit's metadata (author, committer,
-# summary, ...) once that commit has already appeared earlier in the same
-# invocation, so a small per-group cache reconstructs it for every line.
-# Results are matched back to requesters by the line number git itself
-# reports in each block's header, never by the position or count of the
-# -L flags that were sent -- see the module docstring.
-
-def blame_group(gkey: str, g: GroupInfo, lines_needed: []int):
-    var args: []str = ["-P", "-C", str(g.repo), "blame"]
-    if g.revision != "":
-        args.append(g.revision)
-    args.append("-p")
-    args.append("-t")
-    for ln in lines_needed:
-        args.append("-L")
-        args.append(f"{ln},{ln}")
-    args.append("--")
-    args.append(str(g.file))
-    let porcelain: []str = shellLines: git {*args}
-
-    var cache_committer:    {str}str = {:}
-    var cache_author_time:  {str}int = {:}
-    var cache_summary:      {str}str = {:}
-    var cur_hash: str = ""
-    var cur_line_no: int = 0
-
-    for pline in porcelain:
-        if pline.startswith("\t"):
-            let lkey: str = line_key(gkey, cur_line_no)
-            for idx in LINE_OWNERS.get(lkey, []):
-                var bd: BlameData
-                bd.found = True
-                bd.committer = cache_committer.get(cur_hash, "")
-                bd.author_time = cache_author_time.get(cur_hash, 0)
-                bd.summary = cache_summary.get(cur_hash, "")
-                bd.line_text = pline[1:]
-                BLAME[idx] = bd
-        elif pline.startswith("committer "):
-            cache_committer[cur_hash] = pline[len("committer "):]
-        elif pline.startswith("author-time "):
-            cache_author_time[cur_hash] = int(pline[len("author-time "):])
-        elif pline.startswith("summary "):
-            cache_summary[cur_hash] = pline[len("summary "):]
-        else:
-            let tokens: []str = pline.split()
-            if len(tokens) > 0 and tokens[0] == /^[0-9a-f]{40}$/:
-                cur_hash = tokens[0]
-                cur_line_no = int(tokens[2])
+    A row per `date` call was one process per output line, which undid most
+    of what blaming each file once saves: a thousand hits spread over a
+    handful of commits still started a thousand processes.
+    """
+    var wanted: []int = []
+    var seen: {}int = {}
+    for e in epochs:
+        if e not in seen:
+            seen.add(e)
+            wanted.append(e)
+    var out: {int}str = {:}
+    if len(wanted) == 0:
+        return out
+    let stamps: str = "\n".join(["@" + str(e) for e in wanted]) + "\n"
+    let r = shell(stdin = stamps): date -f - +%Y.%m.%d
+    let lines: []str = r.output.split("\n")
+    for i in range(len(wanted)):
+        if i < len(lines):
+            out[wanted[i]] = lines[i]
+    return out
 
 # ---------------------------------------------------------------------------
-# Reading input
+# Input
 # ---------------------------------------------------------------------------
 
 def read_files_as_lines(paths: []Path) -> []str:
-    """Synthesize the same "<file>:<lineno>:<content>" shape the ksh
-    original produced by piping `grep --line-number --with-filename -e
-    '.*'` over the named files back into itself -- reading them directly
-    instead avoids depending on how this program resolves its own path."""
+    """Each line of each file as "<file>:<lineno>:<content>" -- the shape
+    `grep --line-number --with-filename -e '.*'` gives, which is what the
+    rest of the program reads from stdin."""
     var out: []str = []
     for p in paths:
         let f: File = open(p)
@@ -550,6 +345,7 @@ COLUMNS
         stderr.writeLine(f"  {COLUMN_NAME[c]}\n    {COLUMN_HELP[c]}\n")
 
 class Options:
+    """What was asked for on the command line and in the environment."""
     show_debug:     bool = False
     show_unmatched: bool = True
     since_epoch:    int  = 0
@@ -603,86 +399,335 @@ class Options:
         if len(self.columns) == 0:
             self.columns = DEFAULT_COLUMNS
 
+        # Before the alternate check below, which logs under -debug.
+        SHOW_DEBUG = self.show_debug
+        if self.alternate == "" and $NM_REPOSITORY_ALTERNATE != "":
+            self.alternate = Path($NM_REPOSITORY_ALTERNATE)
+        if self.alternate != "":
+            let alt_git: Path = self.alternate / ".git"
+            if not -r alt_git:
+                die(f"An alternate was defined at {self.alternate} but it is not readable.")
+            debug_log(f"Using repository alternate at {self.alternate}")
+
+    def input_lines(self) -> []str:
+        """The named files' lines, or stdin's when no file was named."""
+        if len(self.filepaths) > 0:
+            return read_files_as_lines(self.filepaths)
+        var lines: []str = []
+        for line in stdin.lines:
+            lines.append(line)
+        return lines
+
+# ---------------------------------------------------------------------------
+# Stage 1: what each input line names
+# ---------------------------------------------------------------------------
+
+class Resolver:
+    """What this site's paths mean: turns an input line into a Hit.
+
+    Holds the workspace root, the optional alternate repository, and the
+    revision each context-path baseline resolves to, so Psort and
+    rev-parse run once per baseline rather than once per line.
+    """
+    workspace:       Path = Path("")
+    alternate:       Path = Path("")
+    show_unmatched:  bool = True
+    # "system/subsystem.baseline" (baseline lower-cased) -> git revision
+    revisions:       {str}str = {:}
+    alternate_added: bool = False
+
+    def __init__(self, workspace: Path, alternate: Path, show_unmatched: bool):
+        self.workspace = workspace
+        self.alternate = alternate
+        self.show_unmatched = show_unmatched
+
+    def resolve(self, raw: str) -> Hit:
+        let m: PathMatch = match_path(raw)
+        case m.shape:
+            when WorkspacePath:
+                return self.workspace_hit(raw, m)
+            when ContextPath:
+                return self.context_hit(raw, m)
+            when NoShape:
+                var hit: Hit
+                hit.raw = raw
+                if self.show_unmatched:
+                    hit.kind = HK_Passthrough
+                    debug_log("Unmatched:")
+                    debug_log(raw)
+                else:
+                    debug_log("Skipped " + raw)
+                return hit
+
+    def workspace_hit(self, raw: str, m: PathMatch) -> Hit:
+        """A /NM/... line: the file as written, in the workspace."""
+        if self.alternate != "" and not self.alternate_added:
+            # Once per run: the workspace, and so the file it writes, is
+            # the same for every workspace-path line.
+            add_alternate(self.workspace, self.alternate)
+            self.alternate_added = True
+        var hit: Hit
+        hit.raw = raw
+        hit.kind = HK_Blame
+        hit.file = Path(m.written)
+        hit.orig = hit.file
+        hit.nmroot = self.workspace
+        hit.repo = self.workspace / m.system / m.subsystem
+        hit.revision = ""
+        hit.line_no = m.line_no
+        hit.trailing = m.trailing
+        return hit
+
+    def context_hit(self, raw: str, m: PathMatch) -> Hit:
+        """A /cm/ot/... line: blamed in the alternate when there is one,
+        else in the workspace -- at the revision its baseline names."""
+        var hit: Hit
+        hit.raw = raw
+        hit.orig = Path(m.written)
+        hit.line_no = m.line_no
+        hit.trailing = m.trailing
+        if self.alternate != "":
+            hit.nmroot = self.alternate
+            hit.file = m.filepath
+        elif self.workspace != "":
+            let (ws_path, ws_code) = where_workspace(m.written)
+            if ws_code == 2:
+                debug_log("Could not find the file " + m.written + " in the workspace, the subsystem is not checked out.")
+                return hit
+            if ws_code != 0:
+                warn("Below line looks like it contains a context path but it could not be found in the workspace.")
+                warn(raw)
+                return hit
+            hit.nmroot = self.workspace
+            hit.file = ws_path
+        else:
+            return hit
+        hit.kind = HK_Blame
+        hit.repo = hit.nmroot / m.system / m.subsystem
+        hit.revision = self.revision_of(m.written, hit.nmroot)
+        return hit
+
+    def revision_of(self, cmpath_in: str, nmroot: Path) -> str:
+        """The git revision a /cm/ot/... path's baseline names, "" if none.
+
+        Psort lists the baseline's related context paths; each whose
+        subsystem is checked out under NMROOT is resolved with rev-parse
+        and cached under its lower-cased baseline, which is also what the
+        lookup uses -- so a mixed-case baseline (an NM build id like
+        "G!31.IP.L8") finds the entry it has just filled.
+        """
+        var cmpath: str = strip_after(cmpath_in, "/build_")
+        cmpath = strip_after(cmpath, "/sources")
+        if cmpath != /\/cm\/ot\/(?P<system>\w+)\/(?P<subsystem>\w+)[!\.](?P<baseline>[^\/]+)/:
+            return ""
+        let system: str = $+{system}
+        let subsystem: str = $+{subsystem}
+        let baseline: str = $+{baseline}
+        let key: str = system + "/" + subsystem + "." + baseline.lower()
+        if key not in self.revisions:
+            let forward  = shell(stdin = cmpath): Psort
+            let backward = shell(stdin = cmpath): Psort -reverse -backward
+            var seen: {}str = {}
+            for candidate in (forward.output + "\n" + backward.output).split("\n"):
+                continue if candidate == ""
+                continue if candidate in seen
+                seen.add(candidate)
+                continue if not (baseline.lower() in candidate.lower() or candidate == /!\d+/)
+                continue if candidate != /\/cm\/ot\/(?P<system>\w+)\/(?P<subsystem>\w+)[!\.](?P<baseline>[^\/]+)/
+                let sys2: str = $+{system}
+                let sub2: str = $+{subsystem}
+                let bl2:  str = $+{baseline}
+                let repo_dir: Path = nmroot / sys2 / sub2
+                let repo_git: Path = repo_dir / ".git"
+                if not -r repo_git:
+                    debug_log("Not populating revision for " + sys2 + "/" + sub2 + " because it isn't checked out.")
+                    continue
+                let r = shell: git -C {repo_dir} rev-parse {bl2}
+                if r.code == 0:
+                    self.revisions[sys2 + "/" + sub2 + "." + bl2.lower()] = r.output.strip()
+                else:
+                    warn("Could not determine revision for " + repo_dir + " " + bl2)
+        return self.revisions.get(key, "")
+
+# ---------------------------------------------------------------------------
+# Stage 2: blame each file once
+# ---------------------------------------------------------------------------
+
+class BlameBatch:
+    """Every blame this run needs, grouped so that each file is blamed once.
+
+    Hits are known by their index in the input; the Target a Hit names and
+    the line it wants are all BlameBatch needs from it. git-blame's
+    porcelain output gives a commit's metadata (committer, author-time,
+    summary) only the first time that commit appears in one invocation, so
+    blame_target keeps it per commit for the lines that come later.
+    """
+    targets: {str}Target = {:}
+    # target key -> the distinct line numbers wanted there, first-seen order
+    lines:   {str}[]int = {:}
+    # "<target key>\x02<line>" -> indices of the hits that asked for it
+    owners:  {str}[]int = {:}
+    # hit index -> its blame
+    results: {int}Blame = {:}
+
+    def __init__(self):
+        pass
+
+    def add(self, idx: int, hit: Hit):
+        let key: str = str(hit.repo) + "\x01" + hit.revision + "\x01" + str(hit.file)
+        if key not in self.targets:
+            var t: Target
+            t.repo = hit.repo
+            t.revision = hit.revision
+            t.file = hit.file
+            self.targets[key] = t
+            self.lines[key] = []
+        let lkey: str = key + "\x02" + str(hit.line_no)
+        if lkey not in self.owners:
+            self.lines[key].append(hit.line_no)
+            self.owners[lkey] = [idx]
+        else:
+            self.owners[lkey].append(idx)
+
+    def run(self):
+        for key in self.targets.keys():
+            self.blame_target(key)
+
+    def has(self, idx: int) -> bool:
+        return idx in self.results
+
+    def blame_of(self, idx: int) -> Blame:
+        return self.results[idx]
+
+    def blame_target(self, key: str):
+        let t: Target = self.targets[key]
+        var args: []str = ["-P", "-C", str(t.repo), "blame"]
+        if t.revision != "":
+            args.append(t.revision)
+        args.append("-p")
+        args.append("-t")
+        for ln in self.lines[key]:
+            args.append("-L")
+            args.append(f"{ln},{ln}")
+        args.append("--")
+        args.append(str(t.file))
+        let porcelain: []str = shellLines: git {*args}
+
+        var committer:   {str}str = {:}
+        var author_time: {str}int = {:}
+        var summary:     {str}str = {:}
+        var cur_hash: str = ""
+        var cur_line_no: int = 0
+        for pline in porcelain:
+            if pline.startswith("\t"):
+                var b: Blame
+                b.committer = committer.get(cur_hash, "")
+                b.author_time = author_time.get(cur_hash, 0)
+                b.summary = summary.get(cur_hash, "")
+                b.text = pline[1:]
+                for idx in self.owners.get(key + "\x02" + str(cur_line_no), []):
+                    self.results[idx] = b
+            elif pline.startswith("committer "):
+                committer[cur_hash] = pline[len("committer "):]
+            elif pline.startswith("author-time "):
+                author_time[cur_hash] = int(pline[len("author-time "):])
+            elif pline.startswith("summary "):
+                summary[cur_hash] = pline[len("summary "):]
+            else:
+                let tokens: []str = pline.split()
+                if len(tokens) > 2 and tokens[0] == /^[0-9a-f]{40}$/:
+                    cur_hash = tokens[0]
+                    cur_line_no = int(tokens[2])
+
+# ---------------------------------------------------------------------------
+# Stage 3: the report
+# ---------------------------------------------------------------------------
+
+class Report:
+    """The rows to print, in input order, and the lines passed through.
+
+    A pass-through line prints just ahead of the next row; one with no row
+    after it is not printed.
+    """
+    columns:  []OutputColumn = []
+    since:    int = 0
+    # one entry per row, all the same length
+    values:   [][OutputColumn]str = []
+    epochs:   []int = []
+    before:   []str = []
+    pending:  str = ""
+
+    def __init__(self, columns: []OutputColumn, since: int):
+        self.columns = columns
+        self.since = since
+
+    def pass_through(self, raw: str):
+        self.pending = self.pending + raw + "\n"
+
+    def add(self, hit: Hit, b: Blame):
+        if b.author_time > 0 and b.author_time < self.since:
+            debug_log(f"Skipped {hit.file} (too old).")
+            return
+        let tickets: []str = b.summary == /SC-\d+/g
+        var row: [OutputColumn]str
+        for col in self.columns:
+            row[col] = column_value(col, hit, b, tickets)
+        self.values.append(row)
+        self.epochs.append(b.author_time)
+        self.before.append(self.pending)
+        self.pending = ""
+
+    def print_all(self):
+        if Col_Date in self.columns:
+            let dates: {int}str = format_dates(self.epochs)
+            for i in range(len(self.values)):
+                self.values[i][Col_Date] = dates.get(self.epochs[i], "")
+
+        var widths: [OutputColumn]int
+        for row in self.values:
+            for c in self.columns:
+                if len(row[c]) > widths[c]:
+                    widths[c] = len(row[c])
+
+        for i in range(len(self.values)):
+            if self.before[i] != "":
+                print(self.before[i])
+            var parts: []str = []
+            for c in self.columns:
+                if c == Col_Reference or c == Col_ReferenceBlame:
+                    parts.append("| " + self.values[i][c])
+                else:
+                    parts.append(self.values[i][c].ljust(widths[c]))
+            print(" ".join(parts))
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
-let argv: []str = $@
-let opt: Options = Options(argv)
-SHOW_DEBUG = opt.show_debug
+let opt: Options = Options($@)
 
-var alternate: Path = opt.alternate
-if alternate == "" and $NM_REPOSITORY_ALTERNATE != "":
-    alternate = Path($NM_REPOSITORY_ALTERNATE)
-if alternate != "":
-    let alt_git: Path = alternate / ".git"
-    if not -r alt_git:
-        die(f"An alternate was defined at {alternate} but it is not readable.")
-    debug_log(f"Using repository alternate at {alternate}")
+var resolver: Resolver = Resolver(Path($CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY), opt.alternate, opt.show_unmatched)
+var hits: []Hit = []
+for raw in opt.input_lines():
+    hits.append(resolver.resolve(raw))
 
-var raw_lines: []str = []
-if len(opt.filepaths) > 0:
-    raw_lines = read_files_as_lines(opt.filepaths)
-else:
-    for line in stdin.lines:
-        raw_lines.append(line)
+var batch: BlameBatch = BlameBatch()
+for idx in range(len(hits)):
+    if hits[idx].kind == HK_Blame:
+        batch.add(idx, hits[idx])
+batch.run()
 
-# --- Pass 1: classify and resolve every input line, without blaming yet.
-#     Lines that need blaming are grouped by (repo, revision, file) so
-#     Pass 2 can blame each file once instead of once per line.
-var infos: []LineInfo = []
-for idx in range(len(raw_lines)):
-    let info: LineInfo = resolve_line(raw_lines[idx], alternate, opt.show_unmatched)
-    infos.append(info)
-    if info.kind == LK_Ok:
-        register_group(info, idx)
-
-# --- Pass 2: blame each distinct (repo, revision, file) exactly once.
-for gkey in GROUPS.keys():
-    blame_group(gkey, GROUPS[gkey], GROUP_LINES[gkey])
-
-# --- Pass 3: walk the input lines again in original order, applying the
-#     since-filter and building one Row per successfully blamed line.
-#     A run of unmatched lines is buffered and attached to the next row
-#     that follows it; a run with no row after it (e.g. trailing unmatched
-#     input) is never printed, matching the ksh original.
-var rows: []Row = []
-var pending_unmatched: str = ""
-for idx in range(len(raw_lines)):
-    let info: LineInfo = infos[idx]
-    case info.kind:
-        when LK_Unmatched:
-            pending_unmatched = pending_unmatched + raw_lines[idx] + "\n"
-        when LK_Skipped:
+var report: Report = Report(opt.columns, opt.since_epoch)
+for idx in range(len(hits)):
+    let hit: Hit = hits[idx]
+    case hit.kind:
+        when HK_Passthrough:
+            report.pass_through(hit.raw)
+        when HK_Drop:
             pass
-        when LK_Ok:
-            if idx not in BLAME:
-                warn(f"Could not retrieve blame data for input line '{raw_lines[idx]}'")
+        when HK_Blame:
+            if not batch.has(idx):
+                warn(f"Could not retrieve blame data for input line '{hit.raw}'")
                 continue
-            let bd: BlameData = BLAME[idx]
-            if bd.author_time > 0 and bd.author_time < opt.since_epoch:
-                debug_log(f"Skipped {info.gitfilepath} (too old).")
-                continue
-            rows.append(build_row(raw_lines[idx], info, bd, opt.columns, pending_unmatched))
-            pending_unmatched = ""
-
-# --- Output: pad every column to its widest value, except "reference"
-#     and "reference_blame" which are prefixed with "| " instead.
-var widths: [OutputColumn]int
-for row in rows:
-    for c in opt.columns:
-        let w: int = len(row.values[c])
-        if w > widths[c]:
-            widths[c] = w
-
-for row in rows:
-    if row.preceding_unmatched != "":
-        print(row.preceding_unmatched)
-    var parts: []str = []
-    for c in opt.columns:
-        let v: str = row.values[c]
-        if c == Col_Reference or c == Col_ReferenceBlame:
-            parts.append("| " + v)
-        else:
-            parts.append(v.ljust(widths[c]))
-    print(" ".join(parts))
+            report.add(hit, batch.blame_of(idx))
+report.print_all()
