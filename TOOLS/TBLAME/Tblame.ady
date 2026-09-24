@@ -234,15 +234,11 @@ def format_dates(epochs: []Epoch) -> {Epoch}DateStamp:
         if e not in seen:
             seen.add(e)
             wanted.append(e)
-    var out: {Epoch}DateStamp = {:}
     if len(wanted) == 0:
-        return out
+        return {:}
     let stamps: str = "\n".join(["@" + str(e) for e in wanted]) + "\n"
-    let r = shell(stdin = stamps): date -f - +%Y.%m.%d
-    let lines: []str = r.output.split("\n")
-    for e, day in zip(wanted, lines):
-        out[e] = day
-    return out
+    let days: []DateStamp = shellLines(stdin = stamps): date -f - +%Y.%m.%d
+    return {e: day for e, day in zip(wanted, days)}
 
 # ---------------------------------------------------------------------------
 # Stage 1: what each input line names
