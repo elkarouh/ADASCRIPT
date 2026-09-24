@@ -588,21 +588,18 @@ class Options:
                     quit(0)
                 when "-alternate":
                     i += 1
-                    if i >= len(argv):
-                        die("-alternate requires an argument")
+                    die("-alternate requires an argument") if i >= len(argv)
                     self.alternate = Path(argv[i])
                 when "-since":
                     i += 1
-                    if i >= len(argv):
-                        die("-since requires an argument")
+                    die("-since requires an argument") if i >= len(argv)
                     self.since_epoch = int(argv[i])
                 when "-source":
                     quit(0)
                 when "-":
                     break
                 when others:
-                    if a.startswith("-"):
-                        die("Unrecognised option " + a)
+                    die("Unrecognised option " + a) if a.startswith("-")
                     break
             i += 1
 
@@ -614,8 +611,7 @@ class Options:
             i += 1
 
         while i < len(argv):
-            if not -f argv[i]:
-                die("File does not exist: " + argv[i])
+            die("File does not exist: " + argv[i]) if not -f argv[i]
             self.filepaths.append(Path(argv[i]))
             i += 1
 
@@ -627,9 +623,7 @@ class Options:
         if self.alternate == "" and $NM_REPOSITORY_ALTERNATE != "":
             self.alternate = Path($NM_REPOSITORY_ALTERNATE)
         if self.alternate != "":
-            let alt_git: Path = self.alternate / ".git"
-            if not -r alt_git:
-                die(f"An alternate was defined at {self.alternate} but it is not readable.")
+            die(f"An alternate was defined at {self.alternate} but it is not readable.") if not -r (self.alternate / ".git")
             debug_log(f"Using repository alternate at {self.alternate}")
 
     def input_lines(self) -> []str:
