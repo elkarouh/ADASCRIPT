@@ -806,8 +806,7 @@ class Options:
                 when "-exit-code": self.exit_code = True
                 when "-focus":
                     i += 1
-                    if i >= argv'Length:
-                        die("-focus requires at least one argument")
+                    die("-focus requires at least one argument") if i >= argv'Length
                     let domain_arg: str = argv[i]
                     # Peek at the next arg for detail.
                     var detail_arg: str = ""
@@ -824,37 +823,32 @@ class Options:
                             if detail_arg == "":
                                 self.focus_domain = focus_IP
                             else:
-                                if detail_arg not in IP_SUBTYPES:
-                                    die("invalid subtype for IP: " + detail_arg)
+                                die("invalid subtype for IP: " + detail_arg) if detail_arg not in IP_SUBTYPES
                                 self.focus_domain = focus_IP
                                 self.focus_subtype = parse_subtype(detail_arg)
                         when "OP":
                             if detail_arg == "":
                                 self.focus_domain = focus_OP
                             else:
-                                if detail_arg not in OP_SUBTYPES:
-                                    die("invalid subtype for OP: " + detail_arg + " (OP only has in, assert)")
+                                die("invalid subtype for OP: " + detail_arg + " (OP only has in, assert)") if detail_arg not in OP_SUBTYPES
                                 self.focus_domain = focus_OP
                                 self.focus_subtype = parse_subtype(detail_arg)
                         when "SIP":
                             if detail_arg == "":
                                 self.focus_domain = focus_SIP
                             else:
-                                if detail_arg not in SIP_SUBTYPES:
-                                    die("invalid subtype for SIP: " + detail_arg)
+                                die("invalid subtype for SIP: " + detail_arg) if detail_arg not in SIP_SUBTYPES
                                 self.focus_domain = focus_SIP
                                 self.focus_subtype = parse_subtype(detail_arg)
                         when "replay":
-                            if detail_arg == "":
-                                die("-focus replay requires a replay type")
+                            die("-focus replay requires a replay type") if detail_arg == ""
                             try:
                                 self.focus_domain = focus_replay
                                 self.focus_rtype = ReplayType(detail_arg)
                             except:
                                 die("invalid replay type: " + detail_arg)
                         when "build_info":
-                            if detail_arg != "":
-                                die("-focus build_info takes no detail")
+                            die("-focus build_info takes no detail") if detail_arg != ""
                             self.focus_domain = focus_build_info
                         when "changes":
                             die("-focus changes takes no detail") if detail_arg != ""
