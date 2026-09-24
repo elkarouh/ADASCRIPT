@@ -246,139 +246,6 @@ def format_dates(epochs: []Epoch) -> {Epoch}DateStamp:
     return out
 
 # ---------------------------------------------------------------------------
-# CLI
-# ---------------------------------------------------------------------------
-
-def usage():
-    stderr.writeLine(f"""
-{PROG} [OPTIONS...] [COLUMN_NAME...] [- FILENAME...]
-  Retrieve history data by transforming input in format:
-
-    <file>:<line_no>[<info>]
-
-  into (by default):
-
-    <date> <user> <first_sc> <file>:<line_no> | <info>
-
-  In other words, find out WHO (user) did WHAT (info/line_no), WHEN (date) and WHY (sc)
-
-OPTIONS
-
-  -filter_unmatched
-    Input lines that do not match the pattern <file>:<line_no> are not forwarded to stdout.
-
-  -alternate <NM repository root>
-    Use an alternative NM repository root to lookup the history. This can be used to prevent
-    slow lookups on the default shallow-cloned repositories used in NM. The target repository
-    does not need to be a workspace, it can be a recursively cloned NM repo. Regardless of
-    whether the target repository is a workspace or not, it needs to be kept up-to-date
-    with the latest baselines to ensure the queries succeed.
-
-    Alternatively the environment variable NM_REPOSITORY_ALTERNATE can be used to define it.
-
-  -since <epoch>
-    Do not show lines committed before <epoch>.
-
-  -source
-    Recognised for compatibility with the ksh original (which could be dot-sourced to expose
-    its functions for testing without running); this build just exits.
-
-COLUMNS
-""")
-    for c in OutputColumn:
-        stderr.writeLine(f"  {COLUMN_NAME[c]}\n    {COLUMN_HELP[c]}\n")
-
-class Options:
-    """What was asked for on the command line and in the environment."""
-    show_debug:     bool = False
-    show_unmatched: bool = True
-    since_epoch:    Epoch = 0
-    alternate:      Path = Path("")
-    columns:        []OutputColumn = []
-    filepaths:      []Path = []
-
-    def __init__(self, argv: []str):
-        var i: int = 0
-        while i < len(argv):
-            let a: str = argv[i]
-            case a:
-                when "-debug":            self.show_debug = True
-                when "-filter_unmatched": self.show_unmatched = False
-                when "-help" | "-h":
-                    usage()
-                    quit(0)
-                when "-alternate":
-                    i += 1
-                    if i >= len(argv):
-                        die("-alternate requires an argument")
-                    self.alternate = Path(argv[i])
-                when "-since":
-                    i += 1
-                    if i >= len(argv):
-                        die("-since requires an argument")
-                    self.since_epoch = int(argv[i])
-                when "-source":
-                    quit(0)
-                when "-":
-                    break
-                when others:
-                    if a.startswith("-"):
-                        die("Unrecognised option " + a)
-                    break
-            i += 1
-
-        while i < len(argv):
-            if argv[i] == "-":
-                i += 1
-                break
-            self.columns.append(column_from_name(argv[i]))
-            i += 1
-
-        while i < len(argv):
-            if not -f argv[i]:
-                die("File does not exist: " + argv[i])
-            self.filepaths.append(Path(argv[i]))
-            i += 1
-
-        if len(self.columns) == 0:
-            self.columns = DEFAULT_COLUMNS
-
-        # Before the alternate check below, which logs under -debug.
-        SHOW_DEBUG = self.show_debug
-        if self.alternate == "" and $NM_REPOSITORY_ALTERNATE != "":
-            self.alternate = Path($NM_REPOSITORY_ALTERNATE)
-        if self.alternate != "":
-            let alt_git: Path = self.alternate / ".git"
-            if not -r alt_git:
-                die(f"An alternate was defined at {self.alternate} but it is not readable.")
-            debug_log(f"Using repository alternate at {self.alternate}")
-
-    def input_lines(self) -> []str:
-        """The named files' lines, or stdin's when no file was named."""
-
-        def read_files_as_lines(paths: []Path) -> []str:
-            """Each line of each file as "<file>:<lineno>:<content>" -- the
-            shape `grep --line-number --with-filename -e '.*'` gives, which
-            is what the rest of the program reads from stdin.
-
-            <file> is made absolute: only /NM/... and /cm/ot/... paths are
-            known, so a name given relative to the current directory would
-            match neither. Symlinks are left as written, so a workspace
-            reached through one keeps its /NM/... form.
-            """
-            var out: []str = []
-            for p in paths:
-                let name: str = os.path.abspath(str(p))
-                let f: File = open(p)
-                for n, content_line in enumerate(f.lines, 1):
-                    out.append(name + ":" + str(n) + ":" + content_line)
-            return out
-
-        if len(self.filepaths) > 0:
-            return read_files_as_lines(self.filepaths)
-        return [line for line in stdin.lines]
-
-# ---------------------------------------------------------------------------
 # Stage 1: what each input line names
 # ---------------------------------------------------------------------------
 
@@ -674,6 +541,139 @@ class Report:
             print(" ".join(parts))
         for line in self.pending:
             print(line)
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
+def usage():
+    stderr.writeLine(f"""
+{PROG} [OPTIONS...] [COLUMN_NAME...] [- FILENAME...]
+  Retrieve history data by transforming input in format:
+
+    <file>:<line_no>[<info>]
+
+  into (by default):
+
+    <date> <user> <first_sc> <file>:<line_no> | <info>
+
+  In other words, find out WHO (user) did WHAT (info/line_no), WHEN (date) and WHY (sc)
+
+OPTIONS
+
+  -filter_unmatched
+    Input lines that do not match the pattern <file>:<line_no> are not forwarded to stdout.
+
+  -alternate <NM repository root>
+    Use an alternative NM repository root to lookup the history. This can be used to prevent
+    slow lookups on the default shallow-cloned repositories used in NM. The target repository
+    does not need to be a workspace, it can be a recursively cloned NM repo. Regardless of
+    whether the target repository is a workspace or not, it needs to be kept up-to-date
+    with the latest baselines to ensure the queries succeed.
+
+    Alternatively the environment variable NM_REPOSITORY_ALTERNATE can be used to define it.
+
+  -since <epoch>
+    Do not show lines committed before <epoch>.
+
+  -source
+    Recognised for compatibility with the ksh original (which could be dot-sourced to expose
+    its functions for testing without running); this build just exits.
+
+COLUMNS
+""")
+    for c in OutputColumn:
+        stderr.writeLine(f"  {COLUMN_NAME[c]}\n    {COLUMN_HELP[c]}\n")
+
+class Options:
+    """What was asked for on the command line and in the environment."""
+    show_debug:     bool = False
+    show_unmatched: bool = True
+    since_epoch:    Epoch = 0
+    alternate:      Path = Path("")
+    columns:        []OutputColumn = []
+    filepaths:      []Path = []
+
+    def __init__(self, argv: []str):
+        var i: int = 0
+        while i < len(argv):
+            let a: str = argv[i]
+            case a:
+                when "-debug":            self.show_debug = True
+                when "-filter_unmatched": self.show_unmatched = False
+                when "-help" | "-h":
+                    usage()
+                    quit(0)
+                when "-alternate":
+                    i += 1
+                    if i >= len(argv):
+                        die("-alternate requires an argument")
+                    self.alternate = Path(argv[i])
+                when "-since":
+                    i += 1
+                    if i >= len(argv):
+                        die("-since requires an argument")
+                    self.since_epoch = int(argv[i])
+                when "-source":
+                    quit(0)
+                when "-":
+                    break
+                when others:
+                    if a.startswith("-"):
+                        die("Unrecognised option " + a)
+                    break
+            i += 1
+
+        while i < len(argv):
+            if argv[i] == "-":
+                i += 1
+                break
+            self.columns.append(column_from_name(argv[i]))
+            i += 1
+
+        while i < len(argv):
+            if not -f argv[i]:
+                die("File does not exist: " + argv[i])
+            self.filepaths.append(Path(argv[i]))
+            i += 1
+
+        if len(self.columns) == 0:
+            self.columns = DEFAULT_COLUMNS
+
+        # Before the alternate check below, which logs under -debug.
+        SHOW_DEBUG = self.show_debug
+        if self.alternate == "" and $NM_REPOSITORY_ALTERNATE != "":
+            self.alternate = Path($NM_REPOSITORY_ALTERNATE)
+        if self.alternate != "":
+            let alt_git: Path = self.alternate / ".git"
+            if not -r alt_git:
+                die(f"An alternate was defined at {self.alternate} but it is not readable.")
+            debug_log(f"Using repository alternate at {self.alternate}")
+
+    def input_lines(self) -> []str:
+        """The named files' lines, or stdin's when no file was named."""
+
+        def read_files_as_lines(paths: []Path) -> []str:
+            """Each line of each file as "<file>:<lineno>:<content>" -- the
+            shape `grep --line-number --with-filename -e '.*'` gives, which
+            is what the rest of the program reads from stdin.
+
+            <file> is made absolute: only /NM/... and /cm/ot/... paths are
+            known, so a name given relative to the current directory would
+            match neither. Symlinks are left as written, so a workspace
+            reached through one keeps its /NM/... form.
+            """
+            var out: []str = []
+            for p in paths:
+                let name: str = os.path.abspath(str(p))
+                let f: File = open(p)
+                for n, content_line in enumerate(f.lines, 1):
+                    out.append(name + ":" + str(n) + ":" + content_line)
+            return out
+
+        if len(self.filepaths) > 0:
+            return read_files_as_lines(self.filepaths)
+        return [line for line in stdin.lines]
 
 # ---------------------------------------------------------------------------
 # Main
