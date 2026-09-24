@@ -108,8 +108,7 @@ class Superproject:
     def __init__(self, root: Path):
         self.root = root
         let r = shell: git -C {!root} ls-tree -r HEAD
-        if r.code != 0:
-            die(f"{root} is not a git repository")
+        die(f"{root} is not a git repository") if r.code != 0
         for line in r.output.split("\n"):
             let (path, sha) = gitlink(line)
             if path != "":
@@ -134,9 +133,7 @@ class Superproject:
         var rev: Rev
         rev.name = name
         return rev if name == ""
-        # a plain string: in a shell line, {commit} would be interpolated
-        let spec: str = name + "^{commit}"
-        let r = shell: git -C {!self.root} rev-parse --verify -q {!spec}
+        let r = shell: git -C {!self.root} rev-parse --verify -q {!name}^{commit}
         if r.code == 0:
             rev.kind = RK_Superproject
             rev.commit = r.output.strip()
@@ -159,8 +156,7 @@ class Superproject:
         for p, r in zip(here, run_git_all(commands)):
             if r.code == 0:
                 out[p] = r.output.strip()
-        if rev.kind == RK_Baseline and len(out) == 0:
-            die(f"no checked-out submodule has a baseline or commit named {rev.name} (tags not fetched? try: git -C <submodule> fetch --tags)")
+        die(f"no checked-out submodule has a baseline or commit named {rev.name} (tags not fetched? try: git -C <submodule> fetch --tags)") if rev.kind == RK_Baseline and len(out) == 0
         out
 
     def changes(self, rev1: Rev, rev2: Rev) -> []Change:
@@ -202,7 +198,7 @@ def added_lines(repo: Path, diff: []str) -> []str:
         elif in_header and l.startswith("+++ "):
             let name: str = l[4:]
             if name != "/dev/null":
-                file = repo / (name[2:] if name.startswith("b/") else name)
+                file = repo / name.removeprefix("b/")
         elif l == /^@@ -\d+(?:,\d+)? \+(?P<start>\d+)(?:,\d+)? @@/:
             in_header = False
             line_no = int($+{start})
@@ -313,19 +309,15 @@ class Options:
                     quit(0)
                 when "-root":
                     i += 1
-                    if i >= len(argv):
-                        die("-root requires an argument")
+                    die("-root requires an argument") if i >= len(argv)
                     self.root = Path(argv[i])
                 when others:
-                    if a.startswith("-"):
-                        die("Unrecognised option " + a)
+                    die("Unrecognised option " + a) if a.startswith("-")
                     self.revs.append(a)
             i += 1
-        if len(self.revs) > 2:
-            die("at most two revisions")
+        die("at most two revisions") if len(self.revs) > 2
         if self.root == "":
-            if $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY == "":
-                die("no superproject: set CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY or use -root")
+            die("no superproject: set CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY or use -root") if $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY == ""
             self.root = Path($CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY)
         # absolute, so the lines name files Tblame can find from anywhere
         self.root = Path(os.path.abspath(str(self.root)))
