@@ -1664,6 +1664,14 @@ is written twice, `{{` and `}}`:
 let c = shell: git -C {!repo} rev-parse {!tag}^{commit}   # also X^{}, @{u}, HEAD@{1}
 ```
 
+Backslashes are the shell's too: a shell line is not an Adascript string,
+so `\b`, `\t` and `\s` reach the command exactly as written, on both
+backends.
+
+```python
+let n = shell(stdin = words): grep -c '\bcat\b'
+```
+
 ### Options
 
 ```python

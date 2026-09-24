@@ -4461,6 +4461,9 @@ def to_nim(self, indent=0):
         if checked:
             lines.append(f"{ind}adascriptCheck({cmd_ref}, {code_expr})")
 
+    # The name as Nim spells it: `let block = shell: ...` needs `block`
+    # escaped, as a declaration does. The symbol table keeps the plain name.
+    _tgt = _nim_ident(target_name) if target_name else target_name
     if kw == "shellExec" and (target_name or target_tuple):
         raise SyntaxError(
             "shellExec: replaces the process and never returns, so it "
@@ -4495,11 +4498,11 @@ def to_nim(self, indent=0):
             _exec_args += run_shell
             if "stdin" in opts:
                 _exec_args += f", input = {opts['stdin']}"
-            lines.append(f"{ind}{nim_kw} {target_name} = adascriptExec({cmd_ref}{_exec_args})")
+            lines.append(f"{ind}{nim_kw} {_tgt} = adascriptExec({cmd_ref}{_exec_args})")
         else:
-            lines.append(f"{ind}{nim_kw} {target_name} = execCmd({cmd_ref})")
+            lines.append(f"{ind}{nim_kw} {_tgt} = execCmd({cmd_ref})")
         ParserState.symbol_table.add(target_name, "int", nim_kw)
-        _check(target_name)
+        _check(_tgt)
     elif kw == "shellSpawn":
         # Starts the command and carries on; the waiting is j.wait().
         # cwd has already been folded into the command as a `cd <dir> &&`
@@ -4512,7 +4515,7 @@ def to_nim(self, indent=0):
             _sp_args.append(f"input = {opts['stdin']}")
         if run_shell:
             _sp_args.append('shellPath = "/bin/bash"')
-        lines.append(f"{ind}{nim_kw} {target_name} = "
+        lines.append(f"{ind}{nim_kw} {_tgt} = "
                      f"adascriptSpawn({', '.join(_sp_args)})")
         ParserState.symbol_table.add(target_name, "AdascriptJob", nim_kw)
     elif target_name:
@@ -4521,19 +4524,19 @@ def to_nim(self, indent=0):
             _ensure_shell_run_helper()
             if checked:
                 lines.append(f"{ind}let {exec_tmp} = adascriptRun({cmd_ref}{run_timeout})")
-                lines.append(f"{ind}{nim_kw} {target_name} = adascriptShellLines({exec_tmp}.output)")
+                lines.append(f"{ind}{nim_kw} {_tgt} = adascriptShellLines({exec_tmp}.output)")
                 _check(f"{exec_tmp}.code")
             else:
                 # Inline directly — no temp needed
-                lines.append(f"{ind}{nim_kw} {target_name} = adascriptShellLines(adascriptRun({cmd_ref}{run_timeout}).output)")
+                lines.append(f"{ind}{nim_kw} {_tgt} = adascriptShellLines(adascriptRun({cmd_ref}{run_timeout}).output)")
             ParserState.symbol_table.add(target_name, "seq[string]", nim_kw)
         else:
             _ensure_shell_run_helper()
-            lines.append(f"{ind}{nim_kw} {target_name} = adascriptRun({cmd_ref}{run_timeout})")
+            lines.append(f"{ind}{nim_kw} {_tgt} = adascriptRun({cmd_ref}{run_timeout})")
             # Register as shell_result so _nim_truthiness can resolve
             # field access like result.output -> result.output.len > 0
             ParserState.symbol_table.add(target_name, "shell_result", nim_kw)
-            _check(f"{target_name}.code")
+            _check(f"{_tgt}.code")
     elif kw == "shellExec":
         # Replaces the process: nothing after it runs.
         _ensure_shell_replace_helper()

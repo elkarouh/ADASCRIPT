@@ -111,7 +111,9 @@ STANDALONE := \
     test_str_removeprefix.ady \
     test_shell_revision_braces.ady \
     test_exit_modifier.ady \
-    test_regex_quote.ady
+    test_regex_quote.ady \
+    test_shell_backslash.ady \
+    test_shell_keyword_target.ady
 
 # -----------------------------------------------------------------------
 # Stdin tests — piped from a sample file

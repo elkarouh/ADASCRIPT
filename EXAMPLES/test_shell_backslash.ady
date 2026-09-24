@@ -1,0 +1,41 @@
+#!/usr/bin/env ady2nim
+"""Test: a backslash in a shell line reaches the shell as written.
+
+The Nim backend emits a shell line as a triple-quoted literal, which Nim
+does not unescape. The Python backend emitted a plain one, which Python
+does: `\\b` in a grep pattern became a backspace, `\\t` a tab before the
+shell saw it, and `\\s` drew a SyntaxWarning. Its literal is raw now.
+"""
+
+let words: str = "concat\ncat\ndog cat\n"
+
+# \b: a word boundary to grep, a backspace to an unraw Python string
+let wb = shell(stdin = words): grep -c '\bcat\b'
+assert wb.output.strip() == "2"
+
+# \t: two characters for printf's %s to print as they are
+let tab = shell: printf '%s' 'a\tb'
+assert tab.output == "a\\tb"
+
+# \s and \. in patterns
+let ws = shell(stdin = "a  b\n"): sed -E 's/\s+/_/'
+assert ws.output == "a_b\n"
+let dot = shell: echo a.b.c | sed 's/\./-/g'
+assert dot.output == "a-b-c\n"
+
+# an interpolating line keeps its backslashes too
+let tag: str = "v1"
+let mixed = shell: printf '%s' '\t{tag}'
+assert mixed.output == "\\tv1"
+
+# ...and the other forms
+let lines: []str = shellLines: printf '%s\n' 'x\ty'
+assert lines == ["x\\ty"]
+for l in shellIter: printf '%s\n' '\d+'
+    assert l == "\\d+"
+let joined = shell:
+    printf '%s' '\n'
+    printf '%s' '\s'
+assert joined.output == "\\n\\s"
+
+print "all shell-backslash tests passed"

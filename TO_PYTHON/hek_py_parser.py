@@ -2519,13 +2519,18 @@ def _py_shell_literal(cmd, needs_fstring):
     quotes.  A body that ends in `"` or contains `\"\"\"` runs into it --
     `echo "end"` would emit four quotes in a row and not parse -- so those
     fall back to a `"`-delimited literal with backslashes and quotes escaped,
-    the same guard the Nim backend applies.
+    the same guard the Nim backend applies. Either way a backslash is the
+    shell's, not Python's.
     """
     prefix = "f" if needs_fstring else ""
     if needs_fstring:
         cmd = _escape_revision_braces(cmd)
-    if '"""' not in cmd and not cmd.endswith('"'):
-        return f'{prefix}"""{cmd}"""'
+    # Raw, so a backslash reaches the shell as written -- as it does on Nim,
+    # whose triple-quoted literals are raw. Without the `r`, `\b` in a grep
+    # pattern became a backspace, `\t` a tab, and `\s` a SyntaxWarning. A
+    # raw literal cannot end in a backslash, so that case falls back too.
+    if '"""' not in cmd and not cmd.endswith('"') and not cmd.endswith("\\"):
+        return f'r{prefix}"""{cmd}"""'
     escaped = cmd.replace("\\", "\\\\").replace('"', '\\"')
     return f'{prefix}"{escaped}"'
 

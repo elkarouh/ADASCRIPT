@@ -1,0 +1,16 @@
+#!/usr/bin/env ady2nim
+"""Test: a shell statement's target may be a Nim keyword.
+
+A declaration escapes a name Nim reserves -- `let block: int` becomes
+let `block` -- but the shell statement wrote its target as it was spelt,
+and `let block = shell: ...` did not compile on Nim.
+"""
+
+let block = shell: echo hi
+assert block.output == "hi\n"
+let out: []str = shellLines: printf 'a\nb\n'
+assert out == ["a", "b"]
+let mixin: int = shell: true
+assert mixin == 0
+
+print "all shell keyword-target tests passed"

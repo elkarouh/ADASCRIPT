@@ -647,6 +647,7 @@ shell: mkdir -p -- {!os.path.join(d, "subdir")}
 # git's revision braces are never interpolated: a { right after ^ or @
 let c = shell: git -C {!repo} rev-parse {!tag}^{commit}   # also X^{}, @{u}, HEAD@{1}
 # any other literal brace in an interpolating line: double it, {{ and }}
+# backslashes reach the shell as written, on both backends: grep '\bcat\b'
 
 # Options
 let r = shell(cwd = "/tmp"): pwd
