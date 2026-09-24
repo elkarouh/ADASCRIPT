@@ -96,8 +96,13 @@ type LineNo is int
 type HitIndex is int
 # a commit's 40-hex-digit SHA-1
 type CommitHash is str
+# an NM baseline as a context path names it, e.g. "G!31.IP.L8"
+type Baseline is str
 # what git rev-parse resolved a baseline to; "" means the working tree
 type Revision is str
+# "<system>/<subsystem>.<baseline>", the baseline lower-cased: what a
+# Revision is cached under
+type BaselineKey is str
 # "<repo>\x01<revision>\x01<file>": which Target a Hit names
 type TargetKey is str
 
@@ -140,6 +145,11 @@ def strip_after(s: str, marker: str) -> str:
     if at >= 0:
         return s[:at]
     return s
+
+def baseline_key(system: str, subsystem: str, baseline: Baseline) -> BaselineKey:
+    """What a baseline's Revision is cached under. Built here and only here,
+    so the store and the lookup cannot disagree on case again."""
+    return system + "/" + subsystem + "." + baseline.lower()
 
 def strip_prefix(s: str, prefix: str) -> str:
     if s.startswith(prefix):
@@ -228,11 +238,10 @@ def format_dates(epochs: []Epoch) -> {Epoch}DateStamp:
     of what blaming each file once saves: a thousand hits spread over a
     handful of commits still started a thousand processes.
     """
+    return {:} if len(epochs) == 0
     # each epoch once; in any order, as long as the same list is written to
     # date and zipped with what it prints back
     let wanted: []Epoch = list(set(epochs))
-    if len(wanted) == 0:
-        return {:}
     let stamps: str = "\n".join(["@" + str(e) for e in wanted]) + "\n"
     let days: []DateStamp = shellLines(stdin = stamps): date -f - +%Y.%m.%d
     return {e: day for e, day in zip(wanted, days)}
@@ -251,8 +260,7 @@ class Resolver:
     workspace:       Path = Path("")
     alternate:       Path = Path("")
     show_unmatched:  bool = True
-    # keyed by "system/subsystem.baseline", the baseline lower-cased
-    revisions:       {str}Revision = {:}
+    revisions:       {BaselineKey}Revision = {:}
     alternate_added: bool = False
 
     def __init__(self, workspace: Path, alternate: Path, show_unmatched: bool):
@@ -353,8 +361,8 @@ class Resolver:
             return ""
         let system: str = $+{system}
         let subsystem: str = $+{subsystem}
-        let baseline: str = $+{baseline}
-        let key: str = system + "/" + subsystem + "." + baseline.lower()
+        let baseline: Baseline = $+{baseline}
+        let key: BaselineKey = baseline_key(system, subsystem, baseline)
         if key not in self.revisions:
             let forward  = shell(stdin = cmpath): Psort
             let backward = shell(stdin = cmpath): Psort -reverse -backward
@@ -367,7 +375,7 @@ class Resolver:
                 continue if candidate != /\/cm\/ot\/(?P<system>\w+)\/(?P<subsystem>\w+)[!\.](?P<baseline>[^\/]+)/
                 let sys2: str = $+{system}
                 let sub2: str = $+{subsystem}
-                let bl2:  str = $+{baseline}
+                let bl2:  Baseline = $+{baseline}
                 let repo_dir: Path = nmroot / sys2 / sub2
                 let repo_git: Path = repo_dir / ".git"
                 if not -r repo_git:
@@ -375,7 +383,7 @@ class Resolver:
                     continue
                 let r = shell: git -C {repo_dir} rev-parse {bl2}
                 if r.code == 0:
-                    self.revisions[sys2 + "/" + sub2 + "." + bl2.lower()] = r.output.strip()
+                    self.revisions[baseline_key(sys2, sub2, bl2)] = r.output.strip()
                 else:
                     warn("Could not determine revision for " + repo_dir + " " + bl2)
         return self.revisions.get(key, "")
