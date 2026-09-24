@@ -1,0 +1,70 @@
+#!/usr/bin/env ady2nim
+"""Test: a free function mutating what a field or an element of its
+parameter holds.
+
+The scan that marks a mutated parameter `var` on the Nim side (see
+test_param_mutation.ady) recognised a mutation of the parameter itself
+(`p.add(x)`), of one of its fields (`p.n = 1`) or of one of its elements
+(`p[i] = 1`), but not one level further in: `p.items.add(x)`,
+`p.position[k] = i`, `p.groups[k][i].members.add(x)`. Such a function kept a
+by-value parameter and Nim refused the call -- "type mismatch ... var
+seq" -- though the same body in a method worked, since the check on `self`
+already looked further in. Tcheck_tact's add_change, filling a ChangeList,
+was the first to need it.
+
+A function that only reads through fields and elements must still take its
+parameter by value: it is called on `let`s here.
+"""
+
+type Group_T is record:
+    members: []str = []
+
+type Registry_T is record:
+    names: []str = []
+    position: {str}int = {:}
+    groups: {str}[]Group_T = {:}
+    total: int = 0
+
+def register(r: Registry_T, name: str):
+    r.names.append(name)
+    r.position[name] = len(r.names) - 1
+
+def join_group(r: Registry_T, group: str, name: str):
+    if group not in r.groups:
+        r.groups[group] = [Group_T()]
+    r.groups[group][0].members.append(name)
+
+def count_members(r: Registry_T, group: str):
+    r.groups[group][0].members.extend(["counted"])
+
+def recount(r: Registry_T):
+    r.total += len(r.names)
+
+def first_name(r: Registry_T) -> str:
+    # reads only: must not become `var`
+    return r.names[0] if len(r.names) > 0 else ""
+
+def members_of(r: Registry_T, group: str) -> int:
+    # reads only, through a subscript and a field
+    return len(r.groups[group][0].members) if group in r.groups else 0
+
+
+var reg: Registry_T
+register(reg, "alice")
+register(reg, "bob")
+assert reg.names == ["alice", "bob"]
+assert reg.position["bob"] == 1
+join_group(reg, "ada", "alice")
+join_group(reg, "ada", "bob")
+assert reg.groups["ada"][0].members == ["alice", "bob"]
+count_members(reg, "ada")
+assert len(reg.groups["ada"][0].members) == 3
+recount(reg)
+assert reg.total == 2
+
+let frozen: Registry_T = reg
+assert first_name(frozen) == "alice"
+assert members_of(frozen, "ada") == 3
+assert members_of(frozen, "none") == 0
+
+print "all nested parameter-mutation tests passed"

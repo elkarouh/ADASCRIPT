@@ -114,7 +114,8 @@ STANDALONE := \
     test_regex_quote.ady \
     test_shell_backslash.ady \
     test_shell_keyword_target.ady \
-    test_char_table_literal.ady
+    test_char_table_literal.ady \
+    test_param_nested_mutation.ady
 
 # -----------------------------------------------------------------------
 # Stdin tests — piped from a sample file

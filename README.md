@@ -1084,7 +1084,9 @@ def append_to(xs: []int):
 
 The Nim backend infers this: a rebound parameter is shadowed by a mutable
 local (`var s = s`), while one that is mutated in place becomes a `var`
-parameter (`xs: var seq[int]`). No annotation is needed either way.
+parameter (`xs: var seq[int]`) -- in place includes what a field or an
+element holds, as in `r.names.append(x)` or `r.groups[k][i].members.append(x)`.
+No annotation is needed either way.
 
 ### Generic functions
 

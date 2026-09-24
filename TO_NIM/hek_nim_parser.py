@@ -2786,6 +2786,15 @@ def _func_def_to_nim_inner(self, indent=0):
                 _inplace = _re.search(
                     _anchor + r"(\.add\(|\.append\(|\.extend\(|\.pop\(|\.clear\(|\.remove\(|\.sort\(|\.next\(|\.\w+\s*[+\-*/]?=(?!=)|\[.*\]\s*[+\-*/]?=(?!=)|[+\-*/]=)",
                     _scan)
+                # ...and so is mutating what a field or an element holds, as
+                # the `self` check below allows: `p.items.add(x)`,
+                # `p.index[k] = i`, `p.files[k][i].commits.add(c)`. Without
+                # this the parameter kept its by-value type and Nim refused
+                # the call.
+                if not _inplace:
+                    _inplace = _re.search(
+                        _anchor + r"(?:\.\w+|\[[^\]\n]*\])+\s*(?:\.(?:add|append|extend|pop|clear|remove|sort|del|incl|excl)\(|[+\-*/]?=(?!=))",
+                        _scan)
                 # Rebinding the name (s = ...) is local to the function in
                 # Python and must not turn the parameter into an out-parameter;
                 # shadow it with a mutable local instead.
@@ -2794,7 +2803,8 @@ def _func_def_to_nim_inner(self, indent=0):
                     # Ref class params don't need 'var' — refs are inherently mutable
                     _ptype_str = (p.split(": ", 1)[1] if ": " in p else "").split("=")[0].strip()
                     _ptype_sym = ParserState.symbol_table.lookup(_ptype_str)
-                    _is_ref_param = _ptype_sym and _ptype_sym.get("kind") == "ref_class"
+                    _is_ref_param = ((_ptype_sym and _ptype_sym.get("kind") == "ref_class")
+                                     or _ptype_str in getattr(ParserState, "ref_records", ()))
                     if " = " in p:
                         _shadow_vars.append(pname)
                     elif not p.startswith("var ") and ": " in p and not _is_ref_param:
@@ -3570,6 +3580,11 @@ def to_nim(self, indent=0):
     fields_text = "\n".join(fields)
     is_self_ref = nim_kind == "object" and bool(name and re.search(rf"\b{re.escape(name)}\b", fields_text))
     ref_keyword = "ref " if is_self_ref else ""
+    if is_self_ref:
+        # a ref, so already mutable through: a parameter of it never needs var
+        if not hasattr(ParserState, 'ref_records'):
+            ParserState.ref_records = set()
+        ParserState.ref_records.add(name)
     result = f"{_ind(indent)}type {name}{_exp}{params} = {ref_keyword}{nim_kind}\n" + "\n".join(fields)
     # Emit an init proc for record (object) types that have field defaults,
     # since Nim object fields don't support inline default values.
