@@ -44,7 +44,9 @@ cost far more than the blaming itself.
 **`- FILENAME...` reads the named files directly** instead of piping
 `grep -n` output back into a fresh copy of the running program. Same
 observable output, no dependency on how the program resolves its own path
-on a given site.
+on a given site. Each name is also made absolute first (symlinks left as written): as
+given, a relative `- foo.c` names neither an `/NM/` nor a `/cm/ot/` path,
+and the original passed every one of its lines through unblamed.
 
 **Pass-through lines keep their place and add nothing.** The original
 printed a blank line after each run of unmatched lines, and never printed

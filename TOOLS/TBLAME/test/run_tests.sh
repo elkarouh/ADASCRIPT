@@ -137,6 +137,11 @@ check "-since drops the earlier ones" 0 \
 # --- "- FILENAME": read files directly instead of stdin -----------------
 check "- FILENAME reads the file's own lines" 4 \
     "$("$TBLAME" reference_blame - "$REPO/fileA.txt" | grep -c '| line')"
+# ...and a name relative to the current directory is made absolute first:
+# as given, "fileA.txt" is neither an /NM/ nor a /cm/ot/ path, and every
+# line would be passed through unblamed.
+check "- FILENAME, relative to the cwd" 4 \
+    "$(cd "$REPO" && "$TBLAME" reference_blame - fileA.txt | grep -c '| line')"
 
 # --- context path (/cm/ot/...) through -alternate + a git tag -----------
 # TESTBASELINE was tagged on the FIRST commit, before line 2 became
