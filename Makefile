@@ -113,7 +113,8 @@ STANDALONE := \
     test_exit_modifier.ady \
     test_regex_quote.ady \
     test_shell_backslash.ady \
-    test_shell_keyword_target.ady
+    test_shell_keyword_target.ady \
+    test_char_table_literal.ady
 
 # -----------------------------------------------------------------------
 # Stdin tests — piped from a sample file

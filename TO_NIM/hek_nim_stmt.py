@@ -458,7 +458,61 @@ def _coerce_string_to_char(value, annotation):
         if any(l is None for l in lits):
             return value
         return "@[" + ", ".join(lits) + "]"
+    # {char}V, {K}char: the keys or the values of a table literal, the same
+    # way -- `{'s': "1"}` declared {char}str reached Nim as {"s": "1"}, a
+    # Table[string, string], and was refused where Table[char, string] was.
+    import re as _re_cs
+    _tm = _re_cs.match(r"^Table\[(.+)\]$", ann)
+    if _tm:
+        kv = _split_top_level_commas(_tm.group(1))
+        if len(kv) != 2:
+            return value
+        key_char = kv[0].strip() == "char"
+        val_char = kv[1].strip() == "char"
+        v = (value or "").strip()
+        if not (key_char or val_char) or not (v.startswith("{") and v.endswith("}.toTable")):
+            return value
+        inner = v[1:-len("}.toTable")].strip()
+        if not inner:
+            return value
+        pairs = []
+        for item in _split_top_level_commas(inner):
+            k, sep, val = _split_top_level_colon(item)
+            if not sep:
+                return value
+            if key_char:
+                k = _char_literal_arg(k)
+            if val_char:
+                val = _char_literal_arg(val)
+            if k is None or val is None:
+                return value
+            pairs.append(f"{k}: {val}")
+        return "{" + ", ".join(pairs) + "}.toTable"
     return value
+
+
+def _split_top_level_colon(text):
+    """TEXT split at its first colon outside brackets and string literals:
+    (key, ":", value) stripped, or (text, "", "") when there is none."""
+    depth, quote, escaped = 0, "", False
+    for i, ch in enumerate(text):
+        if quote:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == quote:
+                quote = ""
+            continue
+        if ch in "\"'":
+            quote = ch
+        elif ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+        elif ch == ":" and depth == 0:
+            return text[:i].strip(), ":", text[i + 1:].strip()
+    return text, "", ""
 
 
 def _coerce_scalar_value(value, annotation):

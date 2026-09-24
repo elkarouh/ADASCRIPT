@@ -862,7 +862,12 @@ def _is_nim_char_expr(expr):
     if ".." in index:          # a slice: s[a..b], s[a..<b], s[a..^b]
         return False
     base_sym = ParserState.symbol_table.lookup(m.group(1))
-    return bool(base_sym) and (base_sym.get("type") or "") in ("string", "str")
+    base_type = ((base_sym.get("type") or "") if base_sym else "").replace(" ", "")
+    if base_type in ("string", "str", "seq[char]"):
+        return True
+    # A lookup in a table of chars, {K}char: `initials["bob"] == 'b'` compared
+    # a char with the string "b" when only strings were known to hold them.
+    return base_type.startswith("Table[") and base_type.endswith(",char]")
 
 
 def _nim_type_of(expr_str):
@@ -1246,7 +1251,8 @@ def _char_subscript(base_name, rendered):
     """
     sym = ParserState.symbol_table.lookup(base_name) if base_name else None
     typ = (sym.get("type") or "") if isinstance(sym, dict) else ""
-    if not typ.replace(" ", "").startswith("array[char,"):
+    # ...and a table keyed by char, {char}V: `swap['x']` looked up "x".
+    if not typ.replace(" ", "").startswith(("array[char,", "Table[char,")):
         return rendered
     import re as _re_ci
     # One character, or one escape sequence -- "\\" and "\n" are a single

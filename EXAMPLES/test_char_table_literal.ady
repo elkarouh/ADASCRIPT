@@ -1,0 +1,28 @@
+#!/usr/bin/env ady2nim
+"""Test: character keys and values in a dict literal.
+
+A one-character literal becomes a char wherever a char is declared, and a
+table's keys or values were not among those places: {'s': "1"} declared
+{char}str reached Nim as {"s": "1"}, a Table[string, string], and did not
+compile. Tcheck_tact's colour codes are such a table, looked up by each
+character of a spec like "sWr".
+
+Using one had the same gap twice over: `swap['x']` looked up the string
+"x", and `initials["bob"] == 'b'` compared a char with the string "b".
+"""
+
+let codes: {char}str = {'s': "1", 'W': "37", 'r': "41"}
+var parts: []str = []
+for ch in "sWr":
+    if ch in codes:
+        parts.append(codes[ch])
+assert ";".join(parts) == "1;37;41"
+
+let initials: {str}char = {"alice": 'a', "bob": 'b'}
+assert initials["bob"] == 'b'
+
+var swap: {char}char = {'a': 'b'}
+swap = {'x': 'y', 'y': 'x'}
+assert swap['x'] == 'y' and swap['y'] == 'x'
+
+print "all char-table literal tests passed"
