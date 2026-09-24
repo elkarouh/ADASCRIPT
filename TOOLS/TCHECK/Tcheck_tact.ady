@@ -103,12 +103,12 @@ class Baseline:
             when IP:  env_id = env_id.replace(".OP.", ".IP.")
             when OP:  env_id = env_id.replace(".IP.", ".OP.")
             when SIP: env_id = env_id.replace(".IP.", ".SIP.")
-        return self.dir / ("build_" + env_id) / "saved_logs"
+        self.dir / ("build_" + env_id) / "saved_logs"
 
 def subtype_label(st: BuildSubtype) -> str:
     """The file-system name for a subtype ('in' not 'in_test')."""
     let name: str = st'Image
-    return name.replace("_test", "")
+    name.replace("_test", "")
 
 def tlog_filename(subtype: BuildSubtype, pass_: BuildPass) -> str:
     """The Tlog filename for a subtype and pass."""
@@ -139,17 +139,17 @@ class Build:
         self.dir = baseline.dir / name
 
     def saved_logs(self) -> Path:
-        return self.dir / "saved_logs"
+        self.dir / "saved_logs"
 
     def tacot_dir(self, pass_: BuildPass) -> Path:
         """The tacot_corico directory for a given pass."""
         case pass_:
-            when normal: return self.saved_logs() / "tacot_corico.LATEST"
-            when mrun:   return self.saved_logs() / "tacot_corico_mrun.LATEST_GOOD"
+            when normal: self.saved_logs() / "tacot_corico.LATEST"
+            when mrun:   self.saved_logs() / "tacot_corico_mrun.LATEST_GOOD"
 
     def tlog_path(self, subtype: BuildSubtype, pass_: BuildPass) -> Path:
         """Where the Tlog of SUBTYPE for PASS_ is, whether or not it exists yet."""
-        return self.tacot_dir(pass_) / "TACT_REGRESS_LOGS" / "LATEST" / tlog_filename(subtype, pass_)
+        self.tacot_dir(pass_) / "TACT_REGRESS_LOGS" / "LATEST" / tlog_filename(subtype, pass_)
 
     def in_baseline(self, other: Baseline) -> Build:
         """The build of the same name in OTHER.
@@ -241,9 +241,7 @@ def parse_Tlog(filepath: Path, build_subtype: BuildSubtype) -> TlogResult:
 def extract_test_name(line: str) -> str:
     """Extract the test name from a Tlog line (second whitespace-separated field)."""
     let parts: []str = line.split()
-    if parts'Length > 1:
-        return parts[1]
-    return line.strip()
+    return parts[1] if parts'Length > 1 else line.strip()
 
 def print_Tlog(result: TlogResult, build_subtype: BuildSubtype, only_new: bool = False):
     """Print a TlogResult with coloring matching the ksh version."""
@@ -592,7 +590,7 @@ def user_branch(name: str) -> BranchName:
     return "" if name == /^[A-Z][A-Z0-9_]*\.[A-Z0-9_]+\.\d/
     return "" if "." not in name
     return "" if name.split(".")[0].endswith("adm")
-    name
+    return name
 
 def committer_of(branch: BranchName) -> Committer:
     branch.split(".")[0]
@@ -1460,13 +1458,14 @@ class Report:
 # Main
 # ---------------------------------------------------------------------------
 
-if $CONTEXT_CM_BASELINE == "":
-    print "Please use this script within a context"
-
 let args: []str = $@
 if $# == 0:
     usage()
 
+if $CONTEXT_CM_BASELINE == "":
+    print "Please use this script within a context"
+    quit(1)
+    
 let opt: Options = Options(args)
 COLORED = opt.colored
 BATCH = opt.batch
