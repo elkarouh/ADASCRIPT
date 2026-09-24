@@ -29,7 +29,7 @@ let ANSI_CODES: {char}str = {
 
 var COLORED: bool = True
 var BATCH: bool = False
-# -meld without -batch: the list of changes links its diffs to meld, not ediff
+# -meld without -batch: the list of changes gives meld commands for its diffs
 var MELD: bool = False
 var ONLY_NEW: bool = False
 # Set by any Tlog that reports a new or crashed test; read once at the end
@@ -719,56 +719,31 @@ def newest(dir: Path, pattern: str) -> Path:
     let found: []str = shellLines: ls -dt {!dir}/{pattern} 2>/dev/null | head -n 1
     Path(found[0]) if len(found) > 0 else Path("")
 
-# The DIFF and NET DIFF lines are #emacs: links, clickable in an Emacs
-# buffer like the report's own: side by side in Emacs (vc-version-ediff),
-# or under -meld in meld, started without an output buffer.
+def emacs_cmd (cmd: str) -> str:
+    f"(async-shell-command \"{cmd}\")"
 
-def elisp_string(text: str) -> str:
-    """TEXT as an Emacs Lisp string literal."""
-    "\"" + text.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
-
-def nm_root() -> str:
-    """The NM workspace, or the variable naming it when it is unset -- the
-    shell expands that in a command, and Emacs through
-    substitute-in-file-name."""
-    let root: str = $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY
-    root if root != "" else "$CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY"
-
-def split_file(fc: FileChange) -> (str, str):
-    """FC's submodule and its path inside it: the report's path is
-    <system>/<subsystem>/<rest>, and <system>/<subsystem> is a submodule of
-    the NM workspace, where the commits and tags are."""
+def git_in_submodule(fc: FileChange, args: str) -> str:
+    """`git -C <submodule> ARGS -- <path in it>` for FC's file. The report's
+    path is <system>/<subsystem>/<rest>, and <system>/<subsystem> is a
+    submodule of the NM workspace, where the commits and tags are."""
     let parts: []str = fc.file.split("/")
-    return ("", fc.file) if len(parts) < 3
-    (f"{nm_root()}/{parts[0]}/{parts[1]}", "/".join(parts[2:]))
+    var root: str = $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY
+    if root == "":
+        root = "$CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY"
+    return emacs_cmd (f"git {args} -- {fc.file}") if len(parts) < 3
+    emacs_cmd (f"git -C {root}/{parts[0]}/{parts[1]} {args} -- {'/'.join(parts[2:])}")
 
-def emacs_meld(fc: FileChange, rev1: str, rev2: str) -> str:
-    """A link starting meld on FC's file between REV1 and REV2."""
-    let (sub, rest) = split_file(fc)
-    let where: str = f"-C {sub} " if sub != "" else ""
-    let command: str = f"git {where}difftool -y -t meld {rev1} {rev2} -- {rest}"
-    f"#emacs:(call-process-shell-command {elisp_string(command)} nil 0)"
+def diff_commands(fc: FileChange) -> []str:
+    """Each of FC's commits, with its own diff of the file: one `git show`
+    for them all, or under -meld one meld per commit -- meld shows one pair
+    of versions at a time, the commit's parent and the commit."""
+    return [git_in_submodule(fc, f"difftool -y -t meld {c}^ {c}") for c in fc.commits] if MELD
+    [git_in_submodule(fc, "show " + " ".join(fc.commits))]
 
-def emacs_ediff(fc: FileChange, rev1: str, rev2: str) -> str:
-    """A link comparing FC's file between REV1 and REV2 side by side in
-    Emacs, through its own git support."""
-    let (sub, rest) = split_file(fc)
-    let path: str = f"{sub}/{rest}" if sub != "" else rest
-    var file: str = elisp_string(path)
-    if "$" in path:
-        file = f"(substitute-in-file-name {file})"
-    f"#emacs:(vc-version-ediff (list {file}) {elisp_string(rev1)} {elisp_string(rev2)})"
-
-def diff_link(fc: FileChange, rev1: str, rev2: str) -> str:
-    emacs_meld(fc, rev1, rev2) if MELD else emacs_ediff(fc, rev1, rev2)
-
-def diff_links(fc: FileChange) -> []str:
-    """One link per commit: the file in the commit's parent and in the commit."""
-    [diff_link(fc, c + "^", c) for c in fc.commits]
-
-def net_diff_link(fc: FileChange) -> str:
+def net_diff_command(fc: FileChange) -> str:
     """What the component's baseline did to the file, all commits together."""
-    diff_link(fc, fc.from_baseline, fc.to_baseline)
+    let tool: str = "difftool -y -t meld" if MELD else "diff"
+    git_in_submodule(fc, f"{tool} {fc.from_baseline} {fc.to_baseline}")
 
 def display_file(fc: FileChange):
     """FILE <KIND>: <dir>/<base>.<extension>, the base and extension in
@@ -788,10 +763,10 @@ def display_file(fc: FileChange):
         print "TICKETS     : " + " ".join(fc.tickets)
     for r in fc.reviews:
         print "REVIEWED BY : " + r
-    for command in diff_links(fc):
+    for command in diff_commands(fc):
         print "DIFF        : " + command
     if len(fc.commits) > 1 and fc.from_baseline != "" and fc.to_baseline != "":
-        print "NET DIFF    : " + net_diff_link(fc)
+        print "NET DIFF    : " + net_diff_command(fc)
 
 def display_branch_info(branch: BranchName, reference: str):
     """The branch the changes came from, and its view build next to the
@@ -875,8 +850,8 @@ def usage():
     print "  -v           Enable the VERBOSE option (more info)."
     print "  -l           List available builds and replays for the baseline, then exit."
     print "  -batch       Non-interactive: skip meld and emacs in troubleshoot mode."
-    print "  -meld        In the list of changes, make the diff links open meld"
-    print "               (git difftool -t meld) rather than Emacs ediff; not with -batch."
+    print "  -meld        In the list of changes, give each diff as a meld command"
+    print "               (git difftool -t meld) rather than git show / git diff; not with -batch."
     print "  -only-new    Show only new failures and regressions."
     print "  -exit-code   Exit with non-zero status if new failures are found."
     print "  -focus <domain> [<detail>]"

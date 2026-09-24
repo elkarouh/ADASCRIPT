@@ -75,19 +75,17 @@ check "a review on the merge of the change's own commit" "REVIEWED BY : bob on 2
 check "a review that was not ok says so"         "REVIEWED BY : carol, dave on 260923.101010 (review-ok: no)" \
     "$(entry bob b.adb | grep '^REVIEWED BY')"
 check "no review in the report, none shown"      0 "$(entry bob c.ads | grep -c '^REVIEWED BY' || true)"
-check "an ediff link per commit" \
-    'DIFF        : #emacs:(vc-version-ediff (list "/nm/TACT/UIF/sources/b.adb") "c3fb81031^" "c3fb81031")
-DIFF        : #emacs:(vc-version-ediff (list "/nm/TACT/UIF/sources/b.adb") "13e00da4a^" "13e00da4a")
-DIFF        : #emacs:(vc-version-ediff (list "/nm/TACT/UIF/sources/b.adb") "bc399bc5f^" "bc399bc5f")' \
+check "the git command for the diff, every commit" \
+    'DIFF        : git -C /nm/TACT/UIF show c3fb81031 13e00da4a bc399bc5f -- sources/b.adb' \
     "$(entry alice b.adb | grep '^DIFF')"
 check "...naming the variable when it is unset"  \
-    'DIFF        : #emacs:(vc-version-ediff (list (substitute-in-file-name "$CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY/TACT/UIF/sources/b.adb")) "33340af6c^" "33340af6c")' \
+    'DIFF        : git -C $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY/TACT/UIF show 33340af6c -- sources/b.adb' \
     "$(CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY= "$TCHECK" -no-color -focus changes 30.0.0.9 | awk '/user bob /{on=1} on' | grep -m1 '^DIFF')"
 check "a ticket only one branch lists wins over nearest" "FILE CHANGED: TACT/UIF/sources/d.adb" \
     "$(section alice | grep '^FILE .*d\.adb$')"
 check "...and so is not bob's"                   0 "$(section bob | grep -c 'd\.adb' || true)"
 check "the net diff between the component's baselines" \
-    'NET DIFF    : #emacs:(vc-version-ediff (list "/nm/TACT/UIF/sources/b.adb") "30.0.0.129" "30.0.0.130")' \
+    'NET DIFF    : git -C /nm/TACT/UIF diff 30.0.0.129 30.0.0.130 -- sources/b.adb' \
     "$(entry alice b.adb | grep '^NET DIFF')"
 check "...only where there are several commits"  0 "$(entry bob b.adb | grep -c '^NET DIFF' || true)"
 check "says what DIFF and NET DIFF need"         1 "$(printf '%s\n' "$OUT" | grep -c 'fetch --tags$')"
@@ -98,13 +96,13 @@ MELD_OUT=$("$TCHECK" -no-color -meld -focus changes 30.0.0.9)
 meld_entry() { printf '%s\n' "$MELD_OUT" | awk -v u="$1" -v f="$2" '
     /^=====/ { in_u = index($0, "user " u " ") > 0 }
     /^-----/ { on = 0 } /^FILE / { on = in_u && index($0, f) > 0 } on'; }
-check "-meld: one meld per commit"               'DIFF        : #emacs:(call-process-shell-command "git -C /nm/TACT/UIF difftool -y -t meld c3fb81031^ c3fb81031 -- sources/b.adb" nil 0)
-DIFF        : #emacs:(call-process-shell-command "git -C /nm/TACT/UIF difftool -y -t meld 13e00da4a^ 13e00da4a -- sources/b.adb" nil 0)
-DIFF        : #emacs:(call-process-shell-command "git -C /nm/TACT/UIF difftool -y -t meld bc399bc5f^ bc399bc5f -- sources/b.adb" nil 0)' \
+check "-meld: one meld per commit"               'DIFF        : git -C /nm/TACT/UIF difftool -y -t meld c3fb81031^ c3fb81031 -- sources/b.adb
+DIFF        : git -C /nm/TACT/UIF difftool -y -t meld 13e00da4a^ 13e00da4a -- sources/b.adb
+DIFF        : git -C /nm/TACT/UIF difftool -y -t meld bc399bc5f^ bc399bc5f -- sources/b.adb' \
     "$(meld_entry alice b.adb | grep '^DIFF')"
-check "-meld: the net diff in meld too"          'NET DIFF    : #emacs:(call-process-shell-command "git -C /nm/TACT/UIF difftool -y -t meld 30.0.0.129 30.0.0.130 -- sources/b.adb" nil 0)' \
+check "-meld: the net diff in meld too"          'NET DIFF    : git -C /nm/TACT/UIF difftool -y -t meld 30.0.0.129 30.0.0.130 -- sources/b.adb' \
     "$(meld_entry alice b.adb | grep '^NET DIFF')"
-check "-meld -batch: the Emacs ediff links"         "$OUT" "$("$TCHECK" -no-color -meld -batch -focus changes 30.0.0.9)"
+check "-meld -batch: the plain commands"         "$OUT" "$("$TCHECK" -no-color -meld -batch -focus changes 30.0.0.9)"
 check "ends with the report's emacs link"        1 "$(printf '%s\n' "$OUT" | grep -c 'find-file ".*CFMUTEST.CFMUTEST_CONFIG.30.0.0.8.changes_report"')"
 
 # --- when there is nothing to report on, it says so ----------------------
