@@ -40,37 +40,42 @@ commits changed, added or removed.
 It is regrouped by committer and branch: for each branch, its view build
 (`TACT.TACT_CONFIG.<USER>.<BRANCH>-G!31.*`) next to the previous TACT
 baseline's, with the ediff between their failures; for each file, one entry
-with every commit that touched it, their SC tickets, their reviews, and the
-command that shows the diff:
+with every commit that touched it, their SC tickets, their reviews, and
+`#emacs:` links to its diffs, clickable in an Emacs buffer like the report's
+other links:
 
 ```
 FILE CHANGED: TACT/UIF/sources/query_mgr_task-direct_control_functions.adb
 COMMITS     : c3fb81031
 REVIEWED BY : dpt, gru, wao on 260922.151702
-DIFF        : git -C /…/NM/TACT/UIF show c3fb81031 -- sources/query_mgr_task-direct_control_functions.adb
+DIFF        : #emacs:(vc-version-ediff (list "/…/NM/TACT/UIF/sources/query_mgr_task-direct_control_functions.adb") "c3fb81031^" "c3fb81031")
 ```
 
-`DIFF` shows each commit in turn, with its own diff of the file. With more
-than one commit there is also `NET DIFF`, what the component's baseline did
-to the file as a whole, between the tags of its section's "Differences
-between" line -- everybody's commits, not only this branch's:
+`DIFF` is one link per commit, the file before and after it, side by side
+in ediff. With more than one commit there is also `NET DIFF`, what the
+component's baseline did to the file as a whole, between the tags of its
+section's "Differences between" line -- everybody's commits, not only this
+branch's:
 
 ```
-NET DIFF    : git -C /…/NM/IFPS/CUA_IDL diff 30.0.0.122 30.0.0.123 -- sources/fpl-utilities.ads
+NET DIFF    : #emacs:(vc-version-ediff (list "/…/NM/IFPS/CUA_IDL/sources/fpl-utilities.ads") "30.0.0.122" "30.0.0.123")
 ```
 
-With `-meld` (and not `-batch`) both open in meld instead -- one DIFF line
-per commit, since meld shows one pair of versions at a time:
+With `-meld` (and not `-batch`) the same links open meld instead, started
+in the background so Emacs does not wait on it:
 
 ```
-DIFF        : git -C /…/NM/IFPS/CUA_IDL difftool -y -t meld 1bd19222^ 1bd19222 -- sources/fpl-utilities.ads
-DIFF        : git -C /…/NM/IFPS/CUA_IDL difftool -y -t meld dd085d0a^ dd085d0a -- sources/fpl-utilities.ads
-NET DIFF    : git -C /…/NM/IFPS/CUA_IDL difftool -y -t meld 30.0.0.122 30.0.0.123 -- sources/fpl-utilities.ads
+DIFF        : #emacs:(call-process-shell-command "git -C /…/NM/IFPS/CUA_IDL difftool -y -t meld 1bd19222^ 1bd19222 -- sources/fpl-utilities.ads" nil 0)
+NET DIFF    : #emacs:(call-process-shell-command "git -C /…/NM/IFPS/CUA_IDL difftool -y -t meld 30.0.0.122 30.0.0.123 -- sources/fpl-utilities.ads" nil 0)
 ```
+
+With `$CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY` unset, the links name the
+variable instead, for Emacs to expand (`substitute-in-file-name`, or the
+shell for meld).
 
 The path's `<system>/<subsystem>` is a submodule of the NM workspace
 (`$CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY`), where the commits are -- checked
-out and fetched there, `git show` gives the diff. The list says so once, at
+out and fetched there, the links work. The list says so once, at
 its top, with the commands: `submodule update --init` and `fetch --tags`. A review is shown where the
 report records one: on the change's own line, or on the merge of the
 change's own commit.
@@ -95,7 +100,7 @@ which is what `test/run_changes_tests.sh` does.
 | `-v` | Verbose output |
 | `-l` | List available builds and replays, then exit |
 | `-batch` | Non-interactive: skip meld and emacs |
-| `-meld` | In the list of changes, give DIFF and NET DIFF as meld commands (`git difftool -y -t meld`); ignored with `-batch` |
+| `-meld` | In the list of changes, make the DIFF and NET DIFF links open meld (`git difftool -y -t meld`) rather than ediff; ignored with `-batch` |
 | `-only-new` | Show only new failures and regressions |
 | `-exit-code` | Exit with non-zero status if new failures found |
 
