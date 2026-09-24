@@ -577,14 +577,16 @@ type ChangeList is record:
     unattributed: []FileChange = []
 
 def cfmu_baseline_of(tact_nr: str) -> str:
-    """The CFMUTEST baseline built on TACT baseline TACT_NR -- what
-    `Psort -b` answers first for it -- or "" when it answers nothing."""
+    """The CFMUTEST baseline built on TACT baseline TACT_NR -- the first
+    CFMUTEST_CONFIG among what `Psort -b` answers for it -- or "" when
+    there is none. Psort -b lists every build on it: the views built on it
+    (their own paths) first, then the baselines, the TACT one itself too."""
     # A CM path for Psort, not a file: /cm/ot whatever TCHECK_CM_OT says.
-    let tact: str = "/cm/ot/TACT/TACT_CONFIG." + tact_nr + "\n"
-    let answers: []str = shellLines(stdin = tact): Psort -b
-    return "" if len(answers) == 0
-    return "" if answers[0] != /CFMUTEST_CONFIG[!.](?P<nr>[^\/\s]+)$/
-    $+{nr}
+    let tact: str = "/cm/ot/TACT/TACT_CONFIG." + tact_nr
+    for answer in shellIter: echo {!tact} | Psort -b
+        if answer == /\/CFMUTEST\/CFMUTEST_CONFIG[!.](?P<nr>[^\/\s]+)$/:
+            return $+{nr}
+    ""
 
 def user_branch(name: str) -> BranchName:
     """NAME, a merge's source, when it is somebody's branch; "" when it is

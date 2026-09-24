@@ -18,12 +18,16 @@ cp "$HERE/changes_report.sample" "$OT/CFMUTEST/baseline_reports/CFMUTEST.CFMUTES
 mkdir -p "$OT/TACT/test_reports/TACT.TACT_CONFIG.ALICE.FIX_B-G!31.IP.L8" \
          "$OT/TACT/test_reports/TACT.TACT_CONFIG.30.0.0.8-G!31.IP.L8"
 
-# Psort -b answers the CFMUTEST baseline built on the TACT one it is fed.
+# Psort -b answers what is built on the TACT baseline it is fed, as the real
+# one does: people's views first, then the baselines -- the TACT one too.
 cat > "$WORK/bin/Psort" <<'PSORT'
 #!/bin/sh
 read -r tact
 [ "$1" = "-b" ] && [ "$tact" = "/cm/ot/TACT/TACT_CONFIG.30.0.0.9" ] || exit 1
+echo "/auto/local_build/dhws026/disk1/alice/cm/alice.fix_b"
+echo "/auto/local_build/dhws054/disk1/bob/cm/bob.clear_status_3"
 echo "/cm/ot/CFMUTEST/CFMUTEST_CONFIG!30.0.0.8"
+echo "/cm/ot/TACT/TACT_CONFIG!30.0.0.9"
 PSORT
 chmod +x "$WORK/bin/Psort"
 PATH=$WORK/bin:$PATH

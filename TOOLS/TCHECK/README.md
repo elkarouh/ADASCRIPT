@@ -25,7 +25,7 @@ Tcheck_tact [-no-color] [-s] [-f] [-v] [-l] [-batch] [-only-new] [-exit-code]
 - `-focus changes`: only the list of changes, by committer (below)
 
 **The list of changes.** The CFMUTEST baseline built on the TACT baseline
-(`Psort -b` answers it, e.g. `CFMUTEST_CONFIG!30.0.0.105`) has a changes
+(the `CFMUTEST_CONFIG!<nr>` line among the builds `Psort -b` lists) has a changes
 report, `/cm/ot/CFMUTEST/baseline_reports/CFMUTEST.CFMUTEST_CONFIG.<nr>.changes_report`:
 per component, the merges since the previous baseline and the files their
 commits changed, added or removed.
