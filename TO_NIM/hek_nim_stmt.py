@@ -89,6 +89,35 @@ _PY_MODULE_FUNC_TO_NIM = {}
 
 
 # --- visible tokens ---
+
+def _split_top_level_commas(text):
+    """TEXT split on the commas that are not inside (), [], {} or a string
+    literal: the elements of a tuple, not the arguments of a call in one."""
+    parts, cur, depth, quote, escaped = [], [], 0, "", False
+    for ch in text:
+        if quote:
+            cur.append(ch)
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == quote:
+                quote = ""
+            continue
+        if ch in "\"'":
+            quote = ch
+        elif ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+        elif ch == "," and depth == 0:
+            parts.append("".join(cur))
+            cur = []
+            continue
+        cur.append(ch)
+    parts.append("".join(cur))
+    return parts
+
 @method(augop)
 def to_nim(self):
     """augop: '+=' | '-=' | '*=' | '/=' | '%=' | '&=' | '|=' | '^=' | '<<=' | '>>=' | '**=' | '//='"""
@@ -160,10 +189,13 @@ def to_nim(self):
     # Tuple assignment to existing lvalues: a[i], a[j] = a[j], a[i]
     # If every target is a subscript or already-declared name (not a new decl),
     # emit swap() for the two-element swap pattern or temp-var expansion otherwise.
-    if "," in lhs and not lhs.startswith("(") and len(parts) == 2:
+    # Only a comma outside brackets, parens and strings separates targets:
+    # `m[f(a, b)] = v` is one target, and was emitted as `let (m[f(a, b)]) =`.
+    _lhs_targets = _split_top_level_commas(lhs)
+    if len(_lhs_targets) > 1 and not lhs.startswith("(") and len(parts) == 2:
         import re as _re_ta
-        targets = [t.strip() for t in lhs.split(",")]
-        rhs_parts = [r.strip() for r in parts[1].split(",")]
+        targets = [t.strip() for t in _lhs_targets]
+        rhs_parts = [r.strip() for r in _split_top_level_commas(parts[1])]
         _is_lvalue = lambda s: ("[" in s or "." in s or
                                 bool(ParserState.symbol_table.lookup(s.strip())))
         all_lvalues = all(_is_lvalue(t) for t in targets)
@@ -172,13 +204,13 @@ def to_nim(self):
             if (len(targets) == 2 and len(rhs_parts) == 2
                     and targets[0] == rhs_parts[1] and targets[1] == rhs_parts[0]):
                 return f"swap({targets[0]}, {targets[1]})"
-            # General case: use temps to avoid aliasing
-            lines = []
-            for k, r in enumerate(rhs_parts):
-                lines.append(f"let _t{k} = {r}")
-            for k, t in enumerate(targets):
-                lines.append(f"{t} = _t{k}")
-            return "\n".join(lines)
+            # General case: Nim's own tuple assignment, which evaluates the
+            # whole right side first, so a target read there is not clobbered.
+            # (Temporaries named _t0, _t1 were emitted here, and Nim does not
+            # allow an identifier to start with an underscore.)
+            _rhs = (f"({', '.join(rhs_parts)})" if len(rhs_parts) > 1
+                    else rhs_parts[0])
+            return f"({', '.join(targets)}) = {_rhs}"
         # All targets are new names — declare with let
         tgt_str = ", ".join(targets)
         return f"let ({tgt_str}) = {parts[1]}"

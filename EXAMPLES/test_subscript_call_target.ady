@@ -1,0 +1,56 @@
+#!/usr/bin/env ady2nim
+"""Test: an assignment target whose subscript holds a call with several
+arguments, `m[key(a, b)] = v`.
+
+The Nim backend took any comma in a target for a tuple assignment, so the
+commas between key()'s arguments made it `let (m[key(a, b)]) = v`, which
+does not parse. Only a comma outside brackets separates targets.
+"""
+
+def key(system: str, subsystem: str) -> str:
+    return system + "/" + subsystem
+
+var m: {str}int = {:}
+m[key("a", "b")] = 1
+m[key("a", "c")] = m[key("a", "b")] + 1
+assert m["a/b"] == 1
+assert m["a/c"] == 2
+
+class Cache:
+    by_key: {str}str = {:}
+
+    def __init__(self):
+        pass
+
+    def put(self, s: str, t: str, v: str):
+        self.by_key[key(s, t)] = v
+
+var c: Cache = Cache()
+c.put("x", "y", "z")
+assert c.by_key["x/y"] == "z"
+
+# the tuple forms still work: a swap...
+var xs: []int = [1, 2]
+xs[0], xs[1] = xs[1], xs[0]
+assert xs == [2, 1]
+
+# ...and existing names, from values that are calls themselves
+var p: str = ""
+var q: int = 0
+p, q = key("s", "t"), len(key("u", "v"))
+assert p == "s/t"
+assert q == 3
+
+# ...a right side that reads a target: all of it is evaluated first
+var a: int = 1
+var b: int = 2
+a, b = b, a + b
+assert a == 2 and b == 3
+
+# ...and a call that returns the tuple
+def pair() -> (str, int):
+    return ("w", 7)
+p, q = pair()
+assert p == "w" and q == 7
+
+print "all subscript-call target tests passed"
