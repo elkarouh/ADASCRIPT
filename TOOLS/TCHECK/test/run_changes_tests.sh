@@ -14,9 +14,9 @@ trap 'rm -rf "$WORK"' EXIT INT TERM
 OT=$WORK/cm/ot
 mkdir -p "$OT/TACT/TACT_CONFIG.30.0.0.9" "$OT/TACT/TACT_CONFIG.30.0.0.8" "$OT/CFMUTEST/baseline_reports" "$WORK/bin"
 cp "$HERE/changes_report.sample" "$OT/CFMUTEST/baseline_reports/CFMUTEST.CFMUTEST_CONFIG.30.0.0.8.changes_report"
-# alice's view was built; nobody else's
+# alice's branch was built, against the baseline before this one; bob's was not
 mkdir -p "$OT/TACT/test_reports/TACT.TACT_CONFIG.ALICE.FIX_B-G!31.IP.L8" \
-         "$OT/TACT/test_reports/TACT.TACT_CONFIG.30.0.0.3-G!31.IP.L8"
+         "$OT/TACT/test_reports/TACT.TACT_CONFIG.30.0.0.8-G!31.IP.L8"
 
 # Psort -b answers the CFMUTEST baseline built on the TACT one it is fed.
 cat > "$WORK/bin/Psort" <<'PSORT'
@@ -47,29 +47,27 @@ users() { printf '%s\n' "$OUT" | sed -n 's/^=* Files committed by user \([^ ]*\)
 section() {  # the lines under one user's heading
     printf '%s\n' "$OUT" | awk -v u="$1" '/^=====/ { on = index($0, "user " u " ") > 0; next } on'
 }
+entry() {  # the FILE line naming $2 in user $1's section, and the lines under it
+    section "$1" | awk -v f="$2" '/^-----/ { on = 0 } /^FILE / { on = index($0, f) > 0 } on'
+}
 
-check "committers, in order of first appearance" "alice bob carol " "$(users)"
-check "integration-only change not listed"       0 "$(printf '%s\n' "$OUT" | grep -c 'a.doc' || true)"
-check "changed directory not listed"             0 "$(printf '%s\n' "$OUT" | grep -c 'TACT_CONFIG/sources/$' || true)"
-check "alice: one entry for b, not one per version" 1 "$(section alice | grep -c '^FILE CHANGED: .*/b\.adb$')"
-check "bob credited with b too"                  1 "$(section bob | grep -c '^FILE CHANGED: .*/b\.adb$')"
-check "the diff shown for a changed file"        'DIFF        :#emacs:(ediff-files "/cm/vobs/t1/TACT/TACT_CONFIG/sources/b.adb@@/main/8" "/cm/vobs/t1/TACT/TACT_CONFIG/sources/b.adb@@/main/9")' \
-    "$(section alice | grep '^DIFF')"
-check "the view it came from"                    'FROM VIEW   : TACT.TACT_CONFIG.30.0.0.3.alice.fix_b/1 REVIEWED_BY_bob REVIEW_OK="Yes"' \
-    "$(section alice | grep '^FROM VIEW')"
-check "alice's view build, found"                1 "$(section alice | grep -c '^VIEW BUILD DIR: .*TACT.TACT_CONFIG.ALICE.FIX_B-G!31.IP.L8$')"
-check "...next to the reference baseline's"     1 "$(section alice | grep -c '^REFERENCE BASELINE DIR: .*TACT.TACT_CONFIG.30.0.0.3-G!31.IP.L8$')"
-check "...with the ediff between their failures" 1 "$(section alice | grep -c '^(ediff-files ".*30.0.0.3-G!31.IP.L8/general.results.failed-in" ".*FIX_B-G!31.IP.L8/general.results.failed-in")$')"
-check "bob's view has no build"                  1 "$(section bob | grep -c '^NO VIEW BUILD FOUND FOR THIS VIEW$')"
-check "an added file: its path, not its version" "FILE ADDED: /cm/vobs/i1/IFPS/CUA_IDL/sources/new_thing.ads" \
-    "$(section carol | grep '^FILE ADDED')"
-check "carol: added and changed, no DIFF for added" "FILE ADDED FILE CHANGED DIFF" \
-    "$(section carol | grep -o '^FILE [A-Z]*\|^DIFF' | tr '\n' ' ' | sed 's/ $//')"
-check "TOOL.COMMON merges are integration ones"  0 "$(printf '%s\n' "$OUT" | grep -c 'tool.ksh' || true)"
-check "a changed directory's merges credit nobody" 0 "$(section carol | grep -c 'b\.adb' || true)"
-check "removals, with no view, listed apart"     "FILE DELETED: /cm/vobs/i1/IFPS/CUA_IDL/sources/old_thing.ads
-FILE DELETED: /cm/vobs/i1/IFPS/CUA_IDL/sources/old_thing.adb" \
-    "$(printf '%s\n' "$OUT" | sed -n '/no view recorded/,/^$/p' | grep '^FILE')"
+check "committers, in order of first appearance" "carol alice bob " "$(users)"
+check "a change under its branch's merge"        "FILE CHANGED: CFMUTEST/CFMUTEST_CONFIG/special_files/mail_list" \
+    "$(section carol | grep '^FILE')"
+check "baseline syncs are nobody's branch"       1 "$(entry alice b.adb | grep -c '^COMMITS     : c3fb81031 13e00da4a bc399bc5f$')"
+check "one entry per file, every commit in it"   1 "$(section alice | grep -c '^FILE CHANGED: TACT/UIF/sources/b.adb$')"
+check "its tickets, once each"                   "TICKETS     : SC-2" "$(entry alice b.adb | grep '^TICKETS')"
+check "the nearest branch wins: bob's b.adb"     "COMMITS     : 33340af6c" "$(entry bob b.adb | grep '^COMMITS')"
+check "...and bob's added file"                  "FILE ADDED: TACT/UIF/sources/c.ads" "$(section bob | grep '^FILE ADDED')"
+check "a branch merged in two sections, once"    1 "$(section alice | grep -c '^FROM BRANCH : alice.fix_b$')"
+check "removed and added, by path"               "FILE DELETED: IFPS/OPIF_LIB/sources/old_thing.ads
+FILE ADDED: IFPS/OPIF_LIB/sources/new_thing.ads" "$(section alice | grep '^FILE DELETED\|^FILE ADDED')"
+check "alice's branch build, found"              1 "$(section alice | grep -c '^VIEW BUILD DIR: .*TACT.TACT_CONFIG.ALICE.FIX_B-G!31.IP.L8$')"
+check "...next to the previous baseline's"       1 "$(section alice | grep -c '^REFERENCE BASELINE DIR: .*TACT.TACT_CONFIG.30.0.0.8-G!31.IP.L8$')"
+check "...with the ediff between their failures" 1 "$(section alice | grep -c '^(ediff-files ".*30.0.0.8-G!31.IP.L8/general.results.failed-in" ".*FIX_B-G!31.IP.L8/general.results.failed-in")$')"
+check "bob's branch has no build"                1 "$(section bob | grep -c '^NO VIEW BUILD FOUND FOR THIS BRANCH$')"
+check "under an integration merge only: listed apart" "FILE DELETED: IFPS/OPIF_LIB/sources/Pmake.out" \
+    "$(printf '%s\n' "$OUT" | sed -n '/no branch merged above them/,/^$/p' | grep '^FILE')"
 check "ends with the report's emacs link"        1 "$(printf '%s\n' "$OUT" | grep -c 'find-file ".*CFMUTEST.CFMUTEST_CONFIG.30.0.0.8.changes_report"')"
 
 # --- when there is nothing to report on, it says so ----------------------

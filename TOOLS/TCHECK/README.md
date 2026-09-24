@@ -26,15 +26,27 @@ Tcheck_tact [-c] [-s] [-f] [-v] [-l] [-batch] [-only-new] [-exit-code]
 
 **The list of changes.** The CFMUTEST baseline built on the TACT baseline
 (`Psort -b` answers it, e.g. `CFMUTEST_CONFIG!30.0.0.105`) has a changes
-report, `/cm/ot/CFMUTEST/baseline_reports/CFMUTEST.CFMUTEST_CONFIG.<nr>.changes_report`.
-It is regrouped by committer: for each file changed, added or removed, the
-emacs ediff link (for a change), the view it was merged from, and that view's
-build next to the reference baseline's, with the ediff between their failures.
-- A change is credited to every committer who merged it from a view that
-  is not an integration one (`ifpsadm`, `eldadm`, `tactadm`, `TOOL.COMMON`),
-  once each. Only the `<- Merged from branch:` lines directly after an
-  element count, so a changed directory's merges are nobody's file.
-- Removals come with no view in the report, and are listed apart at the end.
+report, `/cm/ot/CFMUTEST/baseline_reports/CFMUTEST.CFMUTEST_CONFIG.<nr>.changes_report`:
+per component, the merges since the previous baseline and the files their
+commits changed, added or removed.
+
+```
+===== Differences between TACT.UIF.30.0.0.129 and TACT.UIF.30.0.0.130
+      Merge from <- 6627849d2 testadm.integration_30 RELATED_CHANGES="SC-133991 SC-134249 "
+      Merge from <- a2721a86a acicek.transmit_esb RELATED_CHANGES="SC-133991 SC-134249 "
+      changed 13e00da4a:TACT/UIF/sources/mono_process_display.adb RELATED_CHANGES="SC-134249 "
+```
+
+It is regrouped by committer and branch: for each branch, its view build
+(`TACT.TACT_CONFIG.<USER>.<BRANCH>-G!31.*`) next to the previous TACT
+baseline's, with the ediff between their failures; for each file, one entry
+with every commit that touched it and their SC tickets.
+- A change is credited to the nearest `<user>.<branch>` merged above it in
+  its section. Integration merges (`testadm`, any `...adm`) and baseline
+  syncs (`CFMUTEST.CFMUTEST_CONFIG.<nr>`) are nobody's branch. Where a
+  section merges several people's branches this is a guess -- the report
+  says no more.
+- Changes with only an integration merge above them are listed apart.
 
 `TCHECK_CM_OT` stands in for `/cm/ot`, to run against a copy of the tree --
 which is what `test/run_changes_tests.sh` does.
