@@ -95,6 +95,19 @@ def column_from_name(name: str) -> OutputColumn:
 # What flows between the stages
 # ---------------------------------------------------------------------------
 
+# seconds since 1970-01-01 UTC, as git blame's author-time gives it
+type Epoch is int
+# an Epoch as the date column prints it: YYYY.MM.DD
+type DateStamp is str
+# a 1-based line number within a file
+type LineNo is int
+# a Hit's position in the input
+type HitIndex is int
+# a commit's 40-hex-digit SHA-1
+type CommitHash is str
+# "<repo>\x01<revision>\x01<file>": which Target a Hit names
+type TargetKey is str
+
 type HitKind is enum HK_Blame, HK_Passthrough, HK_Drop
 
 type Hit is record:
@@ -108,14 +121,14 @@ type Hit is record:
     nmroot:   Path
     # the path exactly as written on the input line
     orig:     Path
-    line_no:  int
+    line_no:  LineNo
     # free text after the line number
     trailing: str
     kind:     HitKind = HK_Drop
 
 type Blame is record:
     committer:   str = ""
-    author_time: int = 0
+    author_time: Epoch = 0
     summary:     str = ""
     text:        str = ""
 
@@ -216,20 +229,20 @@ def column_value(col: OutputColumn, hit: Hit, b: Blame, tickets: []str) -> str:
         when others:
             return ""
 
-def format_dates(epochs: []int) -> {int}str:
+def format_dates(epochs: []Epoch) -> {Epoch}DateStamp:
     """YYYY.MM.DD for each epoch, from a single `date` process.
 
     A row per `date` call was one process per output line, which undid most
     of what blaming each file once saves: a thousand hits spread over a
     handful of commits still started a thousand processes.
     """
-    var wanted: []int = []
-    var seen: {}int = {}
+    var wanted: []Epoch = []
+    var seen: {}Epoch = {}
     for e in epochs:
         if e not in seen:
             seen.add(e)
             wanted.append(e)
-    var out: {int}str = {:}
+    var out: {Epoch}DateStamp = {:}
     if len(wanted) == 0:
         return out
     let stamps: str = "\n".join(["@" + str(e) for e in wanted]) + "\n"
@@ -287,7 +300,7 @@ class Options:
     """What was asked for on the command line and in the environment."""
     show_debug:     bool = False
     show_unmatched: bool = True
-    since_epoch:    int  = 0
+    since_epoch:    Epoch = 0
     alternate:      Path = Path("")
     columns:        []OutputColumn = []
     filepaths:      []Path = []
@@ -424,7 +437,7 @@ class Resolver:
                     debug_log("Skipped " + raw)
                 return hit
 
-    def workspace_hit(self, raw: str, system: str, subsystem: str, line_no: int, trailing: str) -> Hit:
+    def workspace_hit(self, raw: str, system: str, subsystem: str, line_no: LineNo, trailing: str) -> Hit:
         """A /NM/... line: the file as written, in the workspace."""
         if self.alternate != "" and not self.alternate_added:
             # Once per run: the workspace, and so the file it writes, is
@@ -443,7 +456,7 @@ class Resolver:
         hit.trailing = trailing
         return hit
 
-    def context_hit(self, raw: str, system: str, subsystem: str, filepath: Path, line_no: int, trailing: str) -> Hit:
+    def context_hit(self, raw: str, system: str, subsystem: str, filepath: Path, line_no: LineNo, trailing: str) -> Hit:
         """A /cm/ot/... line: blamed in the alternate when there is one,
         else in the workspace -- at the revision its baseline names.
         FILEPATH is the subdir+file part, relative to the subsystem."""
@@ -529,19 +542,18 @@ class BlameBatch:
     summary) only the first time that commit appears in one invocation, so
     blame_target keeps it per commit for the lines that come later.
     """
-    targets: {str}Target = {:}
-    # target key -> the distinct line numbers wanted there, first-seen order
-    lines:   {str}[]int = {:}
-    # "<target key>\x02<line>" -> indices of the hits that asked for it
-    owners:  {str}[]int = {:}
-    # hit index -> its blame
-    results: {int}Blame = {:}
+    targets: {TargetKey}Target = {:}
+    # the distinct lines wanted in each target, first-seen order
+    lines:   {TargetKey}[]LineNo = {:}
+    # the hits that asked for each line of each target
+    owners:  {TargetKey}{LineNo}[]HitIndex = {:}
+    results: {HitIndex}Blame = {:}
 
     def __init__(self):
         pass
 
-    def add(self, idx: int, hit: Hit):
-        let key: str = str(hit.repo) + "\x01" + hit.revision + "\x01" + str(hit.file)
+    def add(self, idx: HitIndex, hit: Hit):
+        let key: TargetKey = str(hit.repo) + "\x01" + hit.revision + "\x01" + str(hit.file)
         if key not in self.targets:
             var t: Target
             t.repo = hit.repo
@@ -549,24 +561,24 @@ class BlameBatch:
             t.file = hit.file
             self.targets[key] = t
             self.lines[key] = []
-        let lkey: str = key + "\x02" + str(hit.line_no)
-        if lkey not in self.owners:
+            self.owners[key] = {:}
+        if hit.line_no not in self.owners[key]:
             self.lines[key].append(hit.line_no)
-            self.owners[lkey] = [idx]
+            self.owners[key][hit.line_no] = [idx]
         else:
-            self.owners[lkey].append(idx)
+            self.owners[key][hit.line_no].append(idx)
 
     def run(self):
         for key in self.targets.keys():
             self.blame_target(key)
 
-    def has(self, idx: int) -> bool:
+    def has(self, idx: HitIndex) -> bool:
         return idx in self.results
 
-    def blame_of(self, idx: int) -> Blame:
+    def blame_of(self, idx: HitIndex) -> Blame:
         return self.results[idx]
 
-    def blame_target(self, key: str):
+    def blame_target(self, key: TargetKey):
         let t: Target = self.targets[key]
         var args: []str = ["-P", "-C", str(t.repo), "blame"]
         if t.revision != "":
@@ -580,11 +592,12 @@ class BlameBatch:
         args.append(str(t.file))
         let porcelain: []str = shellLines: git {*args}
 
-        var committer:   {str}str = {:}
-        var author_time: {str}int = {:}
-        var summary:     {str}str = {:}
-        var cur_hash: str = ""
-        var cur_line_no: int = 0
+        let owners: {LineNo}[]HitIndex = self.owners[key]
+        var committer:   {CommitHash}str = {:}
+        var author_time: {CommitHash}Epoch = {:}
+        var summary:     {CommitHash}str = {:}
+        var cur_hash: CommitHash = ""
+        var cur_line_no: LineNo = 0
         for pline in porcelain:
             if pline.startswith("\t"):
                 var b: Blame
@@ -592,7 +605,7 @@ class BlameBatch:
                 b.author_time = author_time.get(cur_hash, 0)
                 b.summary = summary.get(cur_hash, "")
                 b.text = pline[1:]
-                for idx in self.owners.get(key + "\x02" + str(cur_line_no), []):
+                for idx in owners.get(cur_line_no, []):
                     self.results[idx] = b
             elif pline.startswith("committer "):
                 committer[cur_hash] = pline[len("committer "):]
@@ -617,15 +630,15 @@ class Report:
     row, or after the last row when none follows it.
     """
     columns:  []OutputColumn = []
-    since:    int = 0
+    since:    Epoch = 0
     # one entry per row, all the same length
     values:   [][OutputColumn]str = []
-    epochs:   []int = []
+    epochs:   []Epoch = []
     # the pass-through lines to print ahead of each row
     before:   [][]str = []
     pending:  []str = []
 
-    def __init__(self, columns: []OutputColumn, since: int):
+    def __init__(self, columns: []OutputColumn, since: Epoch):
         self.columns = columns
         self.since = since
 
@@ -647,7 +660,7 @@ class Report:
 
     def print_all(self):
         if Col_Date in self.columns:
-            let dates: {int}str = format_dates(self.epochs)
+            let dates: {Epoch}DateStamp = format_dates(self.epochs)
             for i in range(len(self.values)):
                 self.values[i][Col_Date] = dates.get(self.epochs[i], "")
 
