@@ -27,7 +27,7 @@ let ANSI_CODES: {str}str = {
     "k": "40", "r": "41", "g": "42", "y": "43", "b": "44", "m": "45", "c": "46", "w": "47"
 }
 let RESET: str = "\x1b[0m"
-var COLORED: bool = False
+var COLORED: bool = True
 var BATCH: bool = False
 var ONLY_NEW: bool = False
 # Set by any Tlog that reports a new or crashed test; read once at the end
@@ -808,6 +808,11 @@ def list_all_changes(baseline: str):
     # a branch's build is compared with the baseline before this one
     let reference: str = "TACT.TACT_CONFIG." + Baseline(baseline).previous().nr
     let changes: ChangeList = read_changes(report)
+    print "DIFF and NET DIFF run in the file's submodule of the NM workspace, which must be"
+    print "checked out, with the commits and the baseline tags fetched:"
+    print "    git -C $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY submodule update --init <system>/<subsystem>"
+    print "    git -C $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY/<system>/<subsystem> fetch --tags"
+    print ""
     for who in changes.committers:
         stdout.write("===================================== Files committed by user ")
         cechon("Wb", who)
@@ -842,7 +847,8 @@ def usage():
     print f"  Example: {PROG} -focus IP mono 30.0.0.120"
     print f"  Example: {PROG} -focus replay run_prequal 30.0.0.120"
     print "Options:"
-    print "  -c           Show the coloured version."
+    print "  -no-color    Plain output, without ANSI colours (colour is the default)."
+    print "  -c           Coloured output; the default, kept for older scripts."
     print "  -s           Compute the sizes of replay dirs (no parameter expected for -s)."
     print "  -h           Display this help message and exit."
     print "  -f           Fast mode: skip run check_run_test_programs_log."
@@ -866,7 +872,7 @@ def parse_subtype(arg: str) -> BuildSubtype:
     die("invalid subtype: " + arg)
 
 class Options:
-    colored      : bool = False
+    colored      : bool = True
     compute_size : bool = False
     verbose      : bool = False
     fast_mode    : bool = False
@@ -885,6 +891,7 @@ class Options:
             let arg: str = argv[i]
             case arg:
                 when "-c":     self.colored = True
+                when "-no-color":  self.colored = False
                 when "-s":     self.compute_size = True
                 when "-h":     usage()
                 when "-v":     self.verbose = True
@@ -950,7 +957,8 @@ class Options:
                         usage()
                     self.baseline = arg
             i += 1
-        if (self.colored or self.verbose or self.list_only or self.focus_domain != no_focus or not self.compute_size) and self.baseline == "":
+        # Colour says nothing about which baseline: -s alone needs none.
+        if (self.verbose or self.list_only or self.focus_domain != no_focus or not self.compute_size) and self.baseline == "":
             stderr.writeLine("Error: <BASELINE> is required.")
             usage()
 

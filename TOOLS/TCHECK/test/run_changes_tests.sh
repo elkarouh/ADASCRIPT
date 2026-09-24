@@ -43,7 +43,8 @@ check() {
     fi
 }
 
-OUT=$("$TCHECK" -focus changes 30.0.0.9)
+# plain: the checks read the text, not the colours
+OUT=$("$TCHECK" -no-color -focus changes 30.0.0.9)
 users() { printf '%s\n' "$OUT" | sed -n 's/^=* Files committed by user \([^ ]*\) =*$/\1/p' | tr '\n' ' '; }
 section() {  # the lines under one user's heading
     printf '%s\n' "$OUT" | awk -v u="$1" '/^=====/ { on = index($0, "user " u " ") > 0; next } on'
@@ -79,7 +80,7 @@ check "the git command for the diff, every commit" \
     "$(entry alice b.adb | grep '^DIFF')"
 check "...naming the variable when it is unset"  \
     'DIFF        : git -C $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY/TACT/UIF show 33340af6c -- sources/b.adb' \
-    "$(CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY= "$TCHECK" -focus changes 30.0.0.9 | awk '/user bob /{on=1} on' | grep -m1 '^DIFF')"
+    "$(CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY= "$TCHECK" -no-color -focus changes 30.0.0.9 | awk '/user bob /{on=1} on' | grep -m1 '^DIFF')"
 check "a ticket only one branch lists wins over nearest" "FILE CHANGED: TACT/UIF/sources/d.adb" \
     "$(section alice | grep '^FILE .*d\.adb$')"
 check "...and so is not bob's"                   0 "$(section bob | grep -c 'd\.adb' || true)"
@@ -87,6 +88,10 @@ check "the net diff between the component's baselines" \
     'NET DIFF    : git -C /nm/TACT/UIF diff 30.0.0.129 30.0.0.130 -- sources/b.adb' \
     "$(entry alice b.adb | grep '^NET DIFF')"
 check "...only where there are several commits"  0 "$(entry bob b.adb | grep -c '^NET DIFF' || true)"
+check "says what DIFF and NET DIFF need"         1 "$(printf '%s\n' "$OUT" | grep -c 'fetch --tags$')"
+ESC=$(printf '\033')
+check "coloured by default"                      1 "$("$TCHECK" -focus changes 30.0.0.9 | grep -c "^${ESC}\[.*LIST OF CHANGES" || true)"
+check "-no-color: no escapes at all"             0 "$(printf '%s\n' "$OUT" | grep -c "$ESC" || true)"
 check "ends with the report's emacs link"        1 "$(printf '%s\n' "$OUT" | grep -c 'find-file ".*CFMUTEST.CFMUTEST_CONFIG.30.0.0.8.changes_report"')"
 
 # --- when there is nothing to report on, it says so ----------------------

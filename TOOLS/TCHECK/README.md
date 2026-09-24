@@ -12,7 +12,7 @@ Report the status of a baseline build: regression test results, replay status,
 Padactl/CRC summary, and build closure.
 
 ```
-Tcheck_tact [-c] [-s] [-f] [-v] [-l] [-batch] [-only-new] [-exit-code]
+Tcheck_tact [-no-color] [-s] [-f] [-v] [-l] [-batch] [-only-new] [-exit-code]
             [-focus <domain> [<detail>]] <BASELINE>
 ```
 
@@ -61,7 +61,8 @@ NET DIFF    : git -C /…/NM/IFPS/CUA_IDL diff 30.0.0.122 30.0.0.123 -- sources/
 
 The path's `<system>/<subsystem>` is a submodule of the NM workspace
 (`$CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY`), where the commits are -- checked
-out and fetched there, `git show` gives the diff. A review is shown where the
+out and fetched there, `git show` gives the diff. The list says so once, at
+its top, with the commands: `submodule update --init` and `fetch --tags`. A review is shown where the
 report records one: on the change's own line, or on the merge of the
 change's own commit.
 - A change is credited to a `<user>.<branch>` merged above it in its
@@ -79,7 +80,7 @@ which is what `test/run_changes_tests.sh` does.
 **Options:**
 | Option | Description |
 |---|---|
-| `-c` | Colored output |
+| `-no-color` | Plain output, without ANSI colours; colour is the default (`-c` is still accepted) |
 | `-s` | Compute replay dir sizes (disk usage report) |
 | `-f` | Fast mode: skip slow check_run_test_programs_log |
 | `-v` | Verbose output |
@@ -90,7 +91,7 @@ which is what `test/run_changes_tests.sh` does.
 
 **Examples:**
 ```bash
-Tcheck_tact -c 30.0.0.128          # full colored report
+Tcheck_tact 30.0.0.128             # full report, coloured
 Tcheck_tact -f -batch 30.0.0.128   # fast, non-interactive
 Tcheck_tact -exit-code 30.0.0.128  # CI mode: exit 1 on new failures
 Tcheck_tact -only-new 30.0.0.128   # show only regressions
