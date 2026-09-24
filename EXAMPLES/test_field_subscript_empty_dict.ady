@@ -1,0 +1,41 @@
+#!/usr/bin/env ady2nim
+"""Test: `self.f[k] = {:}` into a field holding a dict of dicts.
+
+An empty `{:}` becomes Nim's initTable(), which needs its key and value
+types spelled out. They were found for `d[k] = {:}` by looking `d` up, but
+not for a field, `self.f[k]` or `obj.f[k]`: a bare initTable() was emitted,
+and Nim stopped with "cannot instantiate: 'A'".
+"""
+
+type LineNo is int
+type HitIndex is int
+
+class Owners:
+    by_key: {str}{LineNo}[]HitIndex = {:}
+
+    def __init__(self):
+        pass
+
+    def add(self, key: str, ln: LineNo, idx: HitIndex):
+        if key not in self.by_key:
+            self.by_key[key] = {:}
+        if ln not in self.by_key[key]:
+            self.by_key[key][ln] = []
+        self.by_key[key][ln].append(idx)
+
+var o: Owners = Owners()
+o.add("a", 7, 0)
+o.add("a", 7, 1)
+o.add("a", 9, 2)
+o.add("b", 7, 3)
+assert o.by_key["a"][7] == [0, 1]
+assert o.by_key["a"][9] == [2]
+assert o.by_key["b"][7] == [3]
+
+# ...and through a variable rather than self
+o.by_key["c"] = {:}
+assert len(o.by_key["c"]) == 0
+o.by_key["c"][1] = [5]
+assert o.by_key["c"][1] == [5]
+
+print "all field-subscript empty-dict tests passed"

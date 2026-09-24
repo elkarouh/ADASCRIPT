@@ -258,6 +258,17 @@ def to_nim(self):
                     _vm = _re_tb.match(r"Table\[[^,]+,\s*(.+)\]$", _btype)
                     if _vm:
                         sym = {"type": _vm.group(1).strip()}
+        # ...and a field's: self.owners[k] = {:}. The base is no bare name,
+        # so the lookup above missed it and a bare initTable() was emitted,
+        # which Nim cannot instantiate.
+        if not sym:
+            _field_m = _re_tb.match(r'^(\w+\.\w+)\[', lhs)
+            if _field_m:
+                from hek_nim_expr import _nim_expr_type
+                _btype = _nim_expr_type(_field_m.group(1)) or ""
+                _vm = _re_tb.match(r"Table\[[^,]+,\s*(.+)\]$", _btype)
+                if _vm:
+                    sym = {"type": _vm.group(1).strip()}
         if sym:
             stype = sym.get("type") or ""
             m = _re_tb.match(r"Table\[([^,]+),\s*(.+)\]$", stype)

@@ -100,7 +100,8 @@ STANDALONE := \
     test_class_name_prefix_field.ady \
     test_record_name_prefix_field.ady \
     test_file_test_access.ady \
-    test_enumerate_start.ady
+    test_enumerate_start.ady \
+    test_field_subscript_empty_dict.ady
 
 # -----------------------------------------------------------------------
 # Stdin tests — piped from a sample file
