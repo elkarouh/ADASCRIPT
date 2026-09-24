@@ -1,0 +1,28 @@
+#!/usr/bin/env ady2nim
+"""Test: a double quote in a regex literal, first or anywhere.
+
+The Nim backend put a regex in a raw string, escaping `"` by doubling it
+as a raw string does. A pattern starting with a quote then opened with
+three quotes in a row, and Nim read the start of a triple-quoted string: /"(?P<path>[^"@]+)@@/
+did not compile. A quote is written \\x22 now, which PCRE reads as a quote
+anywhere, character classes included.
+"""
+
+let line: str = '(ediff-files "/a/b.doc@@/main/4" "/a/b.doc@@/main/5")'
+
+# first character a quote, and a quote inside a character class
+if line == /"(?P<path>[^"@]+)@@/:
+    assert $+{path} == "/a/b.doc"
+else:
+    assert False
+
+# a quote in the middle
+assert line == /files "\//
+assert line != /files '/
+
+# all matches
+let quoted: []str = line == /"[^"]*"/g
+assert len(quoted) == 2
+assert quoted[1] == "\"/a/b.doc@@/main/5\""
+
+print "all regex-quote tests passed"

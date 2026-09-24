@@ -1599,7 +1599,11 @@ def to_nim(self, prec=None):
     ParserState.nim_imports.add("nre")
     s = self.node          # e.g. "/hello\\d+/ig"
     last_slash = s.rfind("/")
-    pattern = s[1:last_slash].replace('"', '""')   # Nim raw-string: embed " as ""
+    # A quote goes in as the escape \x22, which PCRE reads as a quote
+    # everywhere, character classes included. Doubling it -- the raw
+    # string's own escape -- broke a pattern that starts with one:
+    # /"(.*)"/ opened as re""" and Nim read a triple-quoted string.
+    pattern = s[1:last_slash].replace('"', r'\x22')
     flags = s[last_slash + 1:].replace('g', '')
     if flags:
         return f're"(?{flags}){pattern}"'
@@ -4098,7 +4102,7 @@ def to_nim(self, prec=None):
                     _pat, _flags = _rinfo
                     _has_g = 'g' in _flags
                     _nim_flags = _flags.replace('g', '')
-                    _esc = _pat.replace('"', '""')   # Nim raw-string: embed " as ""
+                    _esc = _pat.replace('"', r'\x22')   # see regex_lit's to_nim
                     if _has_g:
                         # std/re.findAll (nre.findAll has quadratic blowup)
                         _ensure_nimatch_helper()
