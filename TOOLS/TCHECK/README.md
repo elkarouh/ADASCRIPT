@@ -59,6 +59,15 @@ between" line -- everybody's commits, not only this branch's:
 NET DIFF    : git -C /…/NM/IFPS/CUA_IDL diff 30.0.0.122 30.0.0.123 -- sources/fpl-utilities.ads
 ```
 
+With `-meld` (and not `-batch`) both open in meld instead -- one DIFF line
+per commit, since meld shows one pair of versions at a time:
+
+```
+DIFF        : git -C /…/NM/IFPS/CUA_IDL difftool -y -t meld 1bd19222^ 1bd19222 -- sources/fpl-utilities.ads
+DIFF        : git -C /…/NM/IFPS/CUA_IDL difftool -y -t meld dd085d0a^ dd085d0a -- sources/fpl-utilities.ads
+NET DIFF    : git -C /…/NM/IFPS/CUA_IDL difftool -y -t meld 30.0.0.122 30.0.0.123 -- sources/fpl-utilities.ads
+```
+
 The path's `<system>/<subsystem>` is a submodule of the NM workspace
 (`$CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY`), where the commits are -- checked
 out and fetched there, `git show` gives the diff. The list says so once, at
@@ -86,6 +95,7 @@ which is what `test/run_changes_tests.sh` does.
 | `-v` | Verbose output |
 | `-l` | List available builds and replays, then exit |
 | `-batch` | Non-interactive: skip meld and emacs |
+| `-meld` | In the list of changes, give DIFF and NET DIFF as meld commands (`git difftool -y -t meld`); ignored with `-batch` |
 | `-only-new` | Show only new failures and regressions |
 | `-exit-code` | Exit with non-zero status if new failures found |
 

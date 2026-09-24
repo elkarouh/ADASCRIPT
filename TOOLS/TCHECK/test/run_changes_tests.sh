@@ -92,6 +92,17 @@ check "says what DIFF and NET DIFF need"         1 "$(printf '%s\n' "$OUT" | gre
 ESC=$(printf '\033')
 check "coloured by default"                      1 "$("$TCHECK" -focus changes 30.0.0.9 | grep -c "^${ESC}\[.*LIST OF CHANGES" || true)"
 check "-no-color: no escapes at all"             0 "$(printf '%s\n' "$OUT" | grep -c "$ESC" || true)"
+MELD_OUT=$("$TCHECK" -no-color -meld -focus changes 30.0.0.9)
+meld_entry() { printf '%s\n' "$MELD_OUT" | awk -v u="$1" -v f="$2" '
+    /^=====/ { in_u = index($0, "user " u " ") > 0 }
+    /^-----/ { on = 0 } /^FILE / { on = in_u && index($0, f) > 0 } on'; }
+check "-meld: one meld per commit"               'DIFF        : git -C /nm/TACT/UIF difftool -y -t meld c3fb81031^ c3fb81031 -- sources/b.adb
+DIFF        : git -C /nm/TACT/UIF difftool -y -t meld 13e00da4a^ 13e00da4a -- sources/b.adb
+DIFF        : git -C /nm/TACT/UIF difftool -y -t meld bc399bc5f^ bc399bc5f -- sources/b.adb' \
+    "$(meld_entry alice b.adb | grep '^DIFF')"
+check "-meld: the net diff in meld too"          'NET DIFF    : git -C /nm/TACT/UIF difftool -y -t meld 30.0.0.129 30.0.0.130 -- sources/b.adb' \
+    "$(meld_entry alice b.adb | grep '^NET DIFF')"
+check "-meld -batch: the plain commands"         "$OUT" "$("$TCHECK" -no-color -meld -batch -focus changes 30.0.0.9)"
 check "ends with the report's emacs link"        1 "$(printf '%s\n' "$OUT" | grep -c 'find-file ".*CFMUTEST.CFMUTEST_CONFIG.30.0.0.8.changes_report"')"
 
 # --- when there is nothing to report on, it says so ----------------------

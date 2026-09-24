@@ -29,6 +29,8 @@ let ANSI_CODES: {char}str = {
 
 var COLORED: bool = True
 var BATCH: bool = False
+# -meld without -batch: the list of changes gives meld commands for its diffs
+var MELD: bool = False
 var ONLY_NEW: bool = False
 # Set by any Tlog that reports a new or crashed test; read once at the end
 # to decide the exit status.
@@ -728,13 +730,17 @@ def git_in_submodule(fc: FileChange, args: str) -> str:
     return f"git {args} -- {fc.file}" if len(parts) < 3
     f"git -C {root}/{parts[0]}/{parts[1]} {args} -- {'/'.join(parts[2:])}"
 
-def diff_command(fc: FileChange) -> str:
-    """Each of FC's commits, with its own diff of the file."""
-    git_in_submodule(fc, "show " + " ".join(fc.commits))
+def diff_commands(fc: FileChange) -> []str:
+    """Each of FC's commits, with its own diff of the file: one `git show`
+    for them all, or under -meld one meld per commit -- meld shows one pair
+    of versions at a time, the commit's parent and the commit."""
+    return [git_in_submodule(fc, f"difftool -y -t meld {c}^ {c}") for c in fc.commits] if MELD
+    [git_in_submodule(fc, "show " + " ".join(fc.commits))]
 
 def net_diff_command(fc: FileChange) -> str:
     """What the component's baseline did to the file, all commits together."""
-    git_in_submodule(fc, f"diff {fc.from_baseline} {fc.to_baseline}")
+    let tool: str = "difftool -y -t meld" if MELD else "diff"
+    git_in_submodule(fc, f"{tool} {fc.from_baseline} {fc.to_baseline}")
 
 def display_file(fc: FileChange):
     """FILE <KIND>: <dir>/<base>.<extension>, the base and extension in
@@ -754,7 +760,8 @@ def display_file(fc: FileChange):
         print "TICKETS     : " + " ".join(fc.tickets)
     for r in fc.reviews:
         print "REVIEWED BY : " + r
-    print "DIFF        : " + diff_command(fc)
+    for command in diff_commands(fc):
+        print "DIFF        : " + command
     if len(fc.commits) > 1 and fc.from_baseline != "" and fc.to_baseline != "":
         print "NET DIFF    : " + net_diff_command(fc)
 
@@ -840,6 +847,8 @@ def usage():
     print "  -v           Enable the VERBOSE option (more info)."
     print "  -l           List available builds and replays for the baseline, then exit."
     print "  -batch       Non-interactive: skip meld and emacs in troubleshoot mode."
+    print "  -meld        In the list of changes, give each diff as a meld command"
+    print "               (git difftool -t meld) rather than git show / git diff; not with -batch."
     print "  -only-new    Show only new failures and regressions."
     print "  -exit-code   Exit with non-zero status if new failures are found."
     print "  -focus <domain> [<detail>]"
@@ -866,6 +875,7 @@ class Options:
     focus_subtype : BuildSubtype = in_test
     focus_rtype   : ReplayType   = run_prequal
     batch         : bool = False
+    meld          : bool = False
     only_new      : bool = False
     exit_code     : bool = False
     baseline      : str  = "" # e.g. 30.0.0.121
@@ -883,6 +893,7 @@ class Options:
                 when "-f":     self.fast_mode = True
                 when "-l":     self.list_only = True
                 when "-batch":     self.batch = True
+                when "-meld":      self.meld = True
                 when "-only-new":  self.only_new = True
                 when "-exit-code": self.exit_code = True
                 when "-focus":
@@ -1470,6 +1481,7 @@ if $CONTEXT_CM_BASELINE == "":
 let opt: Options = Options(args)
 COLORED = opt.colored
 BATCH = opt.batch
+MELD = opt.meld and not opt.batch
 ONLY_NEW = opt.only_new
 
 var report: Report = Report(opt)
