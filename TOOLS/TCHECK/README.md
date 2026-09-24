@@ -129,8 +129,11 @@ Treport.ksh -tool kompare 30.0.0.132
 
 It reads the same environment (`TCHECK_CM_OT`,
 `CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY`) and needs `Psort` on the PATH.
+It runs under ksh93 and under zsh in ksh emulation (a `/bin/ksh` that is
+zsh, or plain zsh, which it switches to ksh emulation), and prints its
+colours with the original Tcheck_tact.ksh's `cecho`/`cechon`.
 `make test` runs Tcheck_tact's changes tests (`test/run_changes_tests.sh`)
-against it too, so the two cannot drift apart; with the output identical,
+against it too, under both shells, so the two cannot drift apart; with the output identical,
 a change to one is a change to both.
 
 ### make_comparable

@@ -589,10 +589,18 @@ test: compile
 	@$(TCDIR)/test/run_changes_tests.sh $(TCDIR)/test/tcheck_py
 	@rm -f $(TCDIR)/test/Tcheck_tact_py.py $(TCDIR)/test/tcheck_py
 	@# Treport.ksh, the standalone ksh translation: the same checks
-	@echo "=== Treport.ksh, the same checks (ksh) ==="
-	@if command -v ksh >/dev/null 2>&1; then \
+	@# Under ksh93, and under zsh in ksh emulation -- zsh run as ksh, which
+	@# is what /bin/ksh is on some machines.
+	@echo "=== Treport.ksh, the same checks (ksh93) ==="
+	@if command -v ksh >/dev/null 2>&1 && ksh -c '[ -z "$$ZSH_VERSION" ]' 2>/dev/null; then \
 	    $(TCDIR)/test/run_changes_tests.sh $(TCDIR)/test/ksh_treport; \
-	else echo "  SKIP (no ksh)"; fi
+	else echo "  SKIP (no ksh93)"; fi
+	@echo "=== Treport.ksh, the same checks (zsh as ksh) ==="
+	@if command -v zsh >/dev/null 2>&1; then \
+	    d=$$(mktemp -d) && ln -s "$$(command -v zsh)" $$d/ksh && \
+	    KSH=$$d/ksh $(TCDIR)/test/run_changes_tests.sh $(TCDIR)/test/ksh_treport; \
+	    rc=$$?; rm -rf $$d; [ $$rc -eq 0 ]; \
+	else echo "  SKIP (no zsh)"; fi
 
 	@echo "=== Expect / shell examples (require bc) ==="
 	@for f in $(EXPECT_EXAMPLES); do \

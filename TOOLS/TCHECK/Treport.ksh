@@ -33,6 +33,11 @@
 # Environment: TCHECK_CM_OT, the CM tree (default /cm/ot);
 # CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY, the NM workspace.
 
+# Portable across ksh93 and zsh in ksh emulation -- a /bin/ksh that is zsh:
+# no .sh.match (a regex only says whether a line matches; the fields come
+# out with ${x#...}, ${x%%...} and set --), no ${s:i:1}.
+[ -n "$ZSH_VERSION" ] && emulate ksh
+
 set -o noglob     # tickets, commits and paths are words, never patterns
 
 PROG=${0##*/}
@@ -40,7 +45,7 @@ CM_OT=${TCHECK_CM_OT:-/cm/ot}
 TACT_ROOT=$CM_OT/TACT
 CFMUTEST_ROOT=$CM_OT/CFMUTEST
 
-COLORED=1
+COLORED=true
 BATCH=0
 DIFF_TOOL=""      # -tool NAME; "" for Emacs ediff links
 BASELINE=""
@@ -65,43 +70,13 @@ function die {
 }
 
 # ---------------------------------------------------------------------------
-# Output: colour specs as Tcheck_tact's -- 'sWr' is bold, white on red
-#   Attr: S/s=bold D/d=dim I/i=italic U/u=underline F/f=blink N/n=reverse
-#         H/h=hidden T/t=strike
-#   Fg:   K R G Y B M C W (black red green yellow blue magenta cyan white)
-#   Bg:   k r g y b m c w
+# Output: cecho/cechon, the original Tcheck_tact.ksh's, defined once the
+# options are read (see Main). Colour specs: 'sWr' is bold, white on red
+#   s d i u f n h t: bold dim italic underline blink reverse hidden strike
+#                    (upper case: the same, off)
+#   K R G Y B M C W: foreground black red green yellow blue magenta cyan white
+#   k r g y b m c w: background, the same colours
 # ---------------------------------------------------------------------------
-
-ESC=$'\033'
-
-function ansi_escape {          # SPEC -> REPLY, the escape sequence or ""
-    typeset spec=$1 codes="" c code
-    typeset -i i
-    for ((i = 0; i < ${#spec}; i++)); do
-        c=${spec:i:1}
-        case $c in
-        S|s) code=1 ;;  D|d) code=2 ;;  I|i) code=3 ;;  U|u) code=4 ;;
-        F|f) code=5 ;;  N|n) code=7 ;;  H|h) code=8 ;;  T|t) code=9 ;;
-        K) code=30 ;; R) code=31 ;; G) code=32 ;; Y) code=33 ;;
-        B) code=34 ;; M) code=35 ;; C) code=36 ;; W) code=37 ;;
-        k) code=40 ;; r) code=41 ;; g) code=42 ;; y) code=43 ;;
-        b) code=44 ;; m) code=45 ;; c) code=46 ;; w) code=47 ;;
-        *) continue ;;
-        esac
-        codes=${codes:+$codes;}$code
-    done
-    REPLY=${codes:+$ESC[${codes}m}
-}
-
-function puts {                 # SPEC TEXT [nl]: TEXT in colour
-    if ((COLORED)); then
-        ansi_escape "$1"
-        printf '%s%s%s' "$REPLY" "$2" "$ESC[0m"
-    else
-        printf '%s' "$2"
-    fi
-    [[ $3 == nl ]] && print
-}
 
 function hr {
     print -r -- "################################################################################"
@@ -109,8 +84,9 @@ function hr {
 
 function trim {                 # TEXT -> REPLY, without surrounding blanks
     typeset s=$1
-    s=${s##+([[:space:]])}
-    REPLY=${s%%+([[:space:]])}
+    while [[ $s == [[:space:]]* ]]; do s=${s#?}; done
+    while [[ $s == *[[:space:]] ]]; do s=${s%?}; done
+    REPLY=$s
 }
 
 # ---------------------------------------------------------------------------
@@ -121,12 +97,12 @@ function cfmu_baseline_of {     # TACT_NR -> REPLY, the CFMUTEST baseline or ""
     # A CM path for Psort, not a file: /cm/ot whatever TCHECK_CM_OT says.
     # Psort -b lists every build on it: the views built on it first, then
     # the baselines -- the TACT one too.
-    typeset answer re='/CFMUTEST/CFMUTEST_CONFIG[!.]([^/[:space:]]+)$'
+    typeset answer re='/CFMUTEST/CFMUTEST_CONFIG[!.][^/[:space:]]+$'
     REPLY=""
     print -r -- "/cm/ot/TACT/TACT_CONFIG.$1" | Psort -b 2>/dev/null |
     while read -r answer; do
         if [[ $answer =~ $re ]]; then
-            print -r -- "${.sh.match[1]}"
+            print -r -- "${answer##*/CFMUTEST_CONFIG[.\!]}"
             break
         fi
     done | read -r REPLY
@@ -142,11 +118,13 @@ function user_branch {          # NAME -> REPLY: NAME if somebody's branch, else
 }
 
 function review_of {            # LINE -> REPLY: "dpt, gru on 260922.151702" or ""
-    typeset re='review-ok: ([[:alnum:]_]+); reviewed-by: ([^;]*); review-date: ([^;]*);'
-    typeset ok by date
+    typeset re='review-ok: [[:alnum:]_]+; reviewed-by: [^;]*; review-date: [^;]*;'
+    typeset ok by date rest
     REPLY=""
     [[ $1 =~ $re ]] || return
-    ok=${.sh.match[1]} by=${.sh.match[2]} date=${.sh.match[3]}
+    rest=${1#*review-ok: };     ok=${rest%%;*}
+    rest=${rest#*reviewed-by: }; by=${rest%%;*}
+    rest=${rest#*review-date: }; date=${rest%%;*}
     trim "$by";   by=$REPLY
     trim "$date"; date=$REPLY
     REPLY="$by on $date"
@@ -154,10 +132,11 @@ function review_of {            # LINE -> REPLY: "dpt, gru on 260922.151702" or 
 }
 
 function tickets_of {           # LINE -> REPLY: its RELATED_CHANGES tickets
-    typeset re='RELATED_CHANGES="([^"]*)"'
+    typeset re='RELATED_CHANGES="[^"]*"' q='"'
     REPLY=""
     [[ $1 =~ $re ]] || return
-    set -- ${.sh.match[1]}
+    typeset rest=${1#*RELATED_CHANGES=$q}
+    set -- ${rest%%$q*}
     REPLY=$*
 }
 
@@ -169,8 +148,7 @@ typeset -i S_n=0
 
 function new_section {
     S_branch="" S_n=0
-    unset S_names S_tix
-    typeset -a S_names S_tix
+    S_names=() S_tix=()
 }
 
 function credit {               # TICKETS NEAREST -> REPLY, the branch credited
@@ -223,22 +201,20 @@ function add_to_entry {         # I SHA TICKETS REVIEW
 
 function read_changes {         # REPORT
     typeset line sha source merged verb kind file tickets review owner who key
-    typeset re_diff='^===== Differences between ([^[:space:]]+) and ([^[:space:]]+)'
-    typeset re_merge='^Merge from <- ([^[:space:]]+) ([^[:space:]]+)'
-    typeset re_change='^(changed|added|removed|deleted)[[:space:]]+([0-9a-f]+):([^[:space:]]+)'
+    typeset re_diff='^===== Differences between [^[:space:]]+ and [^[:space:]]+'
+    typeset re_merge='^Merge from <- [^[:space:]]+ [^[:space:]]+'
+    typeset re_change='^(changed|added|removed|deleted)[[:space:]]+[0-9a-f]+:[^[:space:]]+'
     while read -r line; do      # read strips the line's surrounding blanks
-        # Captures are bound first: the functions called match regexes of
-        # their own.
         if [[ $line =~ $re_diff ]]; then
-            S_from=${.sh.match[1]} S_to=${.sh.match[2]}
-            # "IFPS.CUA_IDL.30.0.0.122" -> 30.0.0.122 -- after both are
-            # bound: ${x#pattern} resets .sh.match too
-            S_from=${S_from#*.*.} S_to=${S_to#*.*.}
+            set -- $line        # ===== Differences between A and B
+            # "IFPS.CUA_IDL.30.0.0.122" -> 30.0.0.122
+            S_from=${4#*.*.} S_to=${6#*.*.}
             new_section
         elif [[ $line == =====* ]]; then
             new_section         # the baselines are the last ones named
         elif [[ $line =~ $re_merge ]]; then
-            sha=${.sh.match[1]} source=${.sh.match[2]}
+            set -- $line        # Merge from <- SHA SOURCE ...
+            sha=$4 source=$5
             review_of "$line"
             [[ -n $REPLY ]] && MERGE_REVIEWS[$sha]=$REPLY
             user_branch "$source"; merged=$REPLY
@@ -251,7 +227,8 @@ function read_changes {         # REPORT
                 S_branch=""     # an integration merge: what follows is nobody's yet
             fi
         elif [[ $line =~ $re_change ]]; then
-            verb=${.sh.match[1]} sha=${.sh.match[2]} file=${.sh.match[3]}
+            set -- $line        # VERB SHA:FILE ...
+            verb=$1 sha=${2%%:*} file=${2#*:}
             case $verb in
             changed) kind=CHANGED ;;
             added)   kind=ADDED ;;
@@ -340,11 +317,11 @@ function display_file {         # I: FILE <KIND>: <dir>/<base>.<ext>, commits, .
     fi
     printf 'FILE %s: %s/' "${E_kind[i]}" "$parent"
     if [[ $name == *.* && -n ${name%.*} ]]; then
-        puts Ky "${name%.*}"
+        cechon Ky "${name%.*}"
         printf '.'
-        puts Wb "${name##*.}" nl
+        cecho Wb "${name##*.}"
     else
-        puts Ky "$name" nl
+        cecho Ky "$name"
     fi
     print -r -- "COMMITS     : ${E_commits[i]}"
     [[ -n ${E_tickets[i]} ]] && print -r -- "TICKETS     : ${E_tickets[i]}"
@@ -366,17 +343,27 @@ function display_file {         # I: FILE <KIND>: <dir>/<base>.<ext>, commits, .
 
 function newest {               # DIR PATTERN -> REPLY: newest match, or ""
     set +o noglob
-    REPLY=$(ls -dt "$1"/$2 2>/dev/null | head -n 1)
+    # stderr closed in the subshell: zsh reports an unmatched pattern itself
+    REPLY=$(exec 2>/dev/null; ls -dt "$1"/$2 | head -n 1)
     set -o noglob
+}
+
+function echo_ediff {           # A B: the Emacs ediff of two files
+    print -r -- "(ediff-files \"$1\" \"$2\")"
+}
+
+function echo_emacs {           # FILE: an #emacs: link opening it
+    cecho sBw "Look for details in:"
+    print -r -- "#emacs:(progn(find-file \"$1\"))"
 }
 
 function display_branch_info {  # BRANCH REFERENCE
     typeset who=${1%%.*} name=${1#*.} view ref
     typeset -u WHO=$who NAME=$name
     printf 'FROM BRANCH : '
-    puts Wb "$who"
+    cechon Wb "$who"
     printf '.'
-    puts Ky "$name" nl
+    cecho Ky "$name"
     newest "$TACT_ROOT/test_reports" "TACT.TACT_CONFIG.$WHO.$NAME-G!31.*"; view=$REPLY
     newest "$TACT_ROOT/test_reports" "$2-G!31.*"; ref=$REPLY
     if [[ -z $view ]]; then
@@ -384,22 +371,22 @@ function display_branch_info {  # BRANCH REFERENCE
     else
         print -r -- "VIEW BUILD DIR: $view"
         print -r -- "REFERENCE BASELINE DIR: $ref"
-        print -r -- "(ediff-files \"${ref:+$ref/}general.results.failed-in\" \"$view/general.results.failed-in\")"
+        echo_ediff "${ref:+$ref/}general.results.failed-in" "$view/general.results.failed-in"
     fi
 }
 
 function list_all_changes {     # BASELINE
     typeset cfmu report reference who branch i
     hr
-    puts sWr "LIST OF CHANGES" nl
+    cecho sWr "LIST OF CHANGES"
     cfmu_baseline_of "$1"; cfmu=$REPLY
     if [[ -z $cfmu ]]; then
-        puts sWb "WARNING: Psort -b names no CFMUTEST baseline for TACT_CONFIG.$1" nl
+        cecho sWb "WARNING: Psort -b names no CFMUTEST baseline for TACT_CONFIG.$1"
         return 1
     fi
     report=$CFMUTEST_ROOT/baseline_reports/CFMUTEST.CFMUTEST_CONFIG.$cfmu.changes_report
     if [[ ! -r $report ]]; then
-        puts sWb "WARNING: no changes report for CFMUTEST_CONFIG $cfmu: $report" nl
+        cecho sWb "WARNING: no changes report for CFMUTEST_CONFIG $cfmu: $report"
         return 1
     fi
     # a branch's build is compared with the baseline before this one
@@ -412,7 +399,7 @@ function list_all_changes {     # BASELINE
     print
     for who in "${COMMITTERS[@]}"; do
         printf '%s' "===================================== Files committed by user "
-        puts Wb "$who"
+        cechon Wb "$who"
         print -r -- " ====================================="
         for branch in ${BRANCHES[$who]}; do
             print -r -- "---------------------------------"
@@ -433,8 +420,7 @@ function list_all_changes {     # BASELINE
         print
     fi
     print
-    puts sBw "Look for details in:" nl
-    print -r -- "#emacs:(progn(find-file \"$report\"))"
+    echo_emacs "$report"
     print
 }
 
@@ -444,8 +430,8 @@ function list_all_changes {     # BASELINE
 
 while (($# > 0)); do
     case $1 in
-    -no-color) COLORED=0 ;;
-    -c)        COLORED=1 ;;
+    -no-color) COLORED=false ;;
+    -c)        COLORED=true ;;
     -batch)    BATCH=1 ;;
     -meld)     DIFF_TOOL=meld ;;
     -tool)
@@ -464,5 +450,16 @@ done
 [[ -n $BASELINE ]] || usage
 [[ $BASELINE == +([0-9]).+([0-9.]) ]] || die "not a baseline number: $BASELINE"
 ((BATCH)) && DIFF_TOOL=""
+
+# some utilities -- the original Tcheck_tact.ksh's, \033 for its \e: echo -e
+# and printf '%b' understand \e in zsh, not in ksh93, and \033 in both
+if "${COLORED}"; then
+  function c { printf "$1" | sed 's/\(.\)/\1;/g;s/\([SDIUFNHT]\)/2\1/g;s/\([KRGYBMCW]\)/3\1/g;s/\([krgybmcw]\)/4\1/g;y/SDIUFNHTsdiufnhtKRGYBMCWkrgybmcw/12345789123457890123456701234567/;s/^\(.*\);$/\\033[\1m/g'; }
+  function cecho { echo -e "$(c $1)$2\033[0m"; }
+  function cechon { echo -n -e "$(c $1)$2\033[0m"; } # same as cecho but no newline
+else
+  function cecho  { echo    "$2"; }
+  function cechon { echo -n "$2"; }
+fi
 
 list_all_changes "$BASELINE"

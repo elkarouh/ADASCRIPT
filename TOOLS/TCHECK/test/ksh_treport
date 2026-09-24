@@ -1,6 +1,7 @@
 #!/bin/sh
 # Treport.ksh under Tcheck_tact's arguments, for
 # run_changes_tests.sh: the same checks, with -focus changes dropped.
+# KSH names the shell: ksh93, or zsh in ksh emulation (a ksh that is zsh).
 HERE=$(cd "$(dirname "$0")" && pwd)
 focus=""
 for a in "$@"; do
@@ -9,4 +10,4 @@ for a in "$@"; do
     if [ -n "$focus" ]; then focus=""; [ "$a" = changes ] && continue; fi
     set -- "$@" "$a"
 done
-exec ksh "$HERE/../Treport.ksh" "$@"
+exec ${KSH:-ksh} "$HERE/../Treport.ksh" "$@"
