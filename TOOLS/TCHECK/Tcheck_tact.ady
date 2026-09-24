@@ -46,7 +46,7 @@ def cechon(spec: str, text: str):
 def cecho(spec: str, text: str):
     """Print TEXT in the color given by SPEC, with a newline."""
     cechon(spec, text)
-    print ""
+    print
 
 def hr(c: char = '#', length: int = 80):
     print c * length
@@ -257,7 +257,7 @@ def print_Tlog(result: TlogResult, build_subtype: BuildSubtype, only_new: bool =
         if not only_new:
             cechon("Kw", "New tests failing")
             print "  ==> None"
-            print ""
+            print
     else:
         at_least_one_failing = True
         cecho("Kw", "New tests failing")
@@ -268,8 +268,8 @@ def print_Tlog(result: TlogResult, build_subtype: BuildSubtype, only_new: bool =
             if emacs_at >= 0:
                 print line[emacs_at:]
             else:
-                print ""
-            print ""
+                print
+            print
 
     # Crashed Tests.
     if result.crashed'Length > 0:
@@ -277,14 +277,14 @@ def print_Tlog(result: TlogResult, build_subtype: BuildSubtype, only_new: bool =
         cecho("Kw", "Crashed Tests")
         for line in result.crashed:
             print "CRASHED TEST: " + line
-            print ""
+            print
 
     # Tests still failing.
     if result.still_fail'Length == 0:
         if not only_new:
             cechon("Kw", "Tests still failing")
             print "  ==> None"
-            print ""
+            print
     elif not only_new:
         at_least_one_failing = True
         cecho("Kw", "Tests still failing")
@@ -298,8 +298,8 @@ def print_Tlog(result: TlogResult, build_subtype: BuildSubtype, only_new: bool =
                 if emacs_at >= 0:
                     print line[emacs_at:]
                 else:
-                    print ""
-            print ""
+                    print
+            print
 
     # Tests that did not run.
     if result.not_run'Length > 0 and not only_new:
@@ -307,22 +307,22 @@ def print_Tlog(result: TlogResult, build_subtype: BuildSubtype, only_new: bool =
         cecho("Kw", "Tests that did not run")
         for line in result.not_run:
             print line
-            print ""
+            print
 
     # Following tests are now successful.
     if result.now_ok'Length == 0:
         if not only_new:
             cechon("Kw", "Following tests are now successful")
             print "  ==> None"
-            print ""
+            print
     elif not only_new:
         cecho("Kw", "Following tests are now successful")
         for line in result.now_ok:
             print line
-            print ""
+            print
 
     if not at_least_one_failing and not only_new:
-        print ""
+        print
         cecho("Kw", ".............. ALL TESTS ARE SUCCESSFUL !!!!")
 
 def process_Tlog(filepath: Path, build_subtype: BuildSubtype):
@@ -383,7 +383,7 @@ def process_replay(replay: Replay, verbose: bool):
     elif "Executed UNINSTALL:" in content and "NO" in content.split("Executed UNINSTALL:")[-1].split("\n")[0]:
         cecho("sWr", "==> FAILED")
         echo_emacs(replay.file)
-        print ""
+        print
         if verbose:
             for line in content.split("\n"):
                 continue if "ERROR_REPORT.SEVERE" not in line
@@ -439,7 +439,7 @@ def show_tlog_if_present(build: Build, subtype: BuildSubtype, pass_: BuildPass):
         cechon("sWb", " (" + build.name + ")")
         print "  ======================================="
         process_Tlog(full_path, subtype)
-        print ""
+        print
         return
 
     case build.btype:
@@ -500,7 +500,7 @@ def process_run_test_programs_log(build: Build, fast_mode: bool):
     """Find or run check_run_test_programs_log from the IP build."""
     let baseline: str = build.baseline.nr
     let work: Path = build.tacot_dir(normal) / "work"
-    print ""
+    print
     hr('#')
     cecho("sWr", "Check build closure and test programs.")
     cecho("usBy", "CHECK RUN TEST PROGRAMS LOG FOR " + str(build.dir) + " ...")
@@ -520,7 +520,7 @@ def process_run_test_programs_log(build: Build, fast_mode: bool):
         let mktemp_lines: []str = shellLines: cfmu_mktemp
         let full_report: Path = Path(mktemp_lines[0]) if mktemp_lines'Length > 0 else Path("/tmp/tcheck_report.txt")
         print "Full report is found in " + full_report + "."
-        print ""
+        print
         let cp_rc: int = shell: cp {logfile} {full_report}
         let filtered = shell: grep -v 'Running.*setup' {full_report} | grep -v 'Checking for errors' | grep -v 'No errors found in' | grep -v -E '^[0-9.]+:\s+\S+\s+INFORMATION:' | grep -E '\S'
         if filtered.output.strip() != "":
@@ -801,7 +801,7 @@ def list_all_changes(baseline: str):
     print "checked out, with the commits and the baseline tags fetched:"
     print "    git -C $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY submodule update --init <system>/<subsystem>"
     print "    git -C $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY/<system>/<subsystem> fetch --tags"
-    print ""
+    print
     for who in changes.committers:
         stdout.write("===================================== Files committed by user ")
         cechon("Wb", who)
@@ -812,16 +812,16 @@ def list_all_changes(baseline: str):
             for fc in changes.files[branch]:
                 print "---------------------------------"
                 display_file(fc)
-        print ""
-        print ""
+        print
+        print
     if len(changes.unattributed) > 0:
         print "===================================== Files with no branch merged above them ====================================="
         for fc in changes.unattributed:
             display_file(fc)
-        print ""
-    print ""
+        print
+    print
     echo_emacs(report)
-    print ""
+    print
 
 # ---------------------------------------------------------------------------
 # Options
@@ -1033,7 +1033,7 @@ def check_replay_dirs_size():
             cecho("sfBy", "\tTHIS REPLAY IS STILL RUNNING")
             print "\tTo delete it, use the vncviewer from dhdevd01:99 and run:"
             print "\t\tTcleanup_old_replay_users -kill_replay"
-    print ""
+    print
     cecho("Wb", f"TOTAL SIZE for FAILED REPLAYS is {total_size:.2f}G")
     hr('#')
 
