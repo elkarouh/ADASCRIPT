@@ -202,9 +202,8 @@ def sc_value(col: OutputColumn, tickets: []str) -> str:
         when Col_ScAll:
             return ",".join(tickets)
         when Col_ScHint:
-            if len(tickets) > 1:
-                return tickets[0] + f"(+{len(tickets) - 1})"
-            return tickets[0]
+            return tickets[0] if len(tickets) == 1
+            return f"{tickets[0]}(+{len(tickets) - 1})"
         when others:
             return tickets[0]
 
