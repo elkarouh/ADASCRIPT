@@ -1,0 +1,39 @@
+#!/usr/bin/env ady2nim
+# test_record_name_prefix_field.ady — a record field whose type starts with the record's name
+#
+#   ady2nim EXAMPLES/test_record_name_prefix_field.ady -r
+#   ady2py  EXAMPLES/test_record_name_prefix_field.ady -c
+#
+# The record counterpart of test_class_name_prefix_field.ady. A record that
+# names itself in a field has to be a `ref object` on Nim, and the check for
+# that was a substring search of the emitted fields -- so `record Hit` with a
+# field typed `HitKind` became a `ref object`. Its generated initHit() then
+# wrote the default through a nil ref:
+# "SIGSEGV: Illegal storage access. (Attempt to read from nil?)".
+#
+# The class fix did not reach records, which go through their own emitter.
+# Surfaced by TOOLS/TBLAME/Tblame.ady, which has exactly that record.
+
+type HitKind is enum HK_Blame, HK_Passthrough, HK_Drop
+
+# --- the record name is only a prefix of a field's type --------------------
+type Hit is record:
+    raw:     str
+    line_no: int
+    kind:    HitKind = HK_Drop
+
+var h: Hit
+assert h.kind == HK_Drop
+h.raw = "/NM/sysA/subA/f.adb:12:x"
+h.line_no = 12
+h.kind = HK_Blame
+assert h.raw == "/NM/sysA/subA/f.adb:12:x"
+assert h.line_no == 12
+assert h.kind == HK_Blame
+
+# --- and a list of them, the shape the tool builds -------------------------
+var hits: []Hit = [h, h]
+assert len(hits) == 2
+assert hits[1].line_no == 12
+
+print "record name prefix field tests passed"

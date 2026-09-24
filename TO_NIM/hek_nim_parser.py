@@ -3563,9 +3563,12 @@ def to_nim(self, indent=0):
         if not hasattr(ParserState, 'object_field_order'):
             ParserState.object_field_order = {}
         ParserState.object_field_order[name] = field_names
-    # Detect self-referential record fields -> emit ref object so Nim can handle recursive types
+    # Detect self-referential record fields -> emit ref object so Nim can handle recursive types.
+    # A whole-word match, as for classes: a substring made `record Hit` with a
+    # field typed `HitKind` a ref object, and initHit() then wrote a field
+    # through nil (SIGSEGV).
     fields_text = "\n".join(fields)
-    is_self_ref = nim_kind == "object" and name and name in fields_text
+    is_self_ref = nim_kind == "object" and bool(name and re.search(rf"\b{re.escape(name)}\b", fields_text))
     ref_keyword = "ref " if is_self_ref else ""
     result = f"{_ind(indent)}type {name}{_exp}{params} = {ref_keyword}{nim_kind}\n" + "\n".join(fields)
     # Emit an init proc for record (object) types that have field defaults,

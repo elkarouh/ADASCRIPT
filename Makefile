@@ -98,6 +98,7 @@ STANDALONE := \
     test_method_param_names.ady \
     test_pure_method_self.ady \
     test_class_name_prefix_field.ady \
+    test_record_name_prefix_field.ady \
     test_file_test_access.ady
 
 # -----------------------------------------------------------------------
