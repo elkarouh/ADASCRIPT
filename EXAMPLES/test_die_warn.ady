@@ -20,11 +20,11 @@ assert PROG == "test_die_warn"
 
 warn("a warning, and on we go")
 
-# die() does not return, so a function may end in it on either backend.
+# die() does not return, so a function may end in it on either backend --
+# and, like return, it takes an `if` modifier.
 def positive(n: int) -> int:
-    if n > 0:
-        return n
-    die(f"n must be positive, got {n}", code = 3)
+    die(f"n must be positive, got {n}", code = 3) if n <= 0
+    n
 
 assert positive(2) == 2
 positive(-1)

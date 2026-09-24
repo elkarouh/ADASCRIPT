@@ -147,6 +147,7 @@ type_block_stmt = fw("type_block_stmt")
 simple_stmt = fw("simple_stmt")
 return_bare_if = fw("return_bare_if")
 modifier_body = fw("modifier_body")
+exit_call = fw("exit_call")
 modifier_if_stmt = fw("modifier_if_stmt")
 stmt_head = fw("stmt_head")
 stmt_line = fw("stmt_line")
@@ -410,7 +411,12 @@ simple_stmt = (
 # leaving `q` where the modifier expected the keyword. `~~` is a positive
 # lookahead (the negation of a negation) and consumes nothing.
 return_bare_if = return_bare + ~~I_IF
-modifier_body = return_bare_if | return_val | break_stmt | continue_stmt
+# `die(...)` and `quit(...)` leave too -- the program, rather than the
+# function -- so they are guard clauses in the same sense: `die("no input")
+# if not found`. Only these two names: a call to anything else under an
+# `if` modifier is still the conditional expression missing its `else`.
+exit_call = ~~(literal("die") | literal("quit")) + primary
+modifier_body = return_bare_if | return_val | break_stmt | continue_stmt | exit_call
 modifier_if_stmt = modifier_body + I_IF + disjunction + ~I_ELSE
 
 # --- stmt_line: semicolon-separated statements on one line ---

@@ -1,0 +1,42 @@
+#!/usr/bin/env ady2nim
+"""Test: `+` on the result of a method call is a string (or seq) `&` on Nim
+when the method says it returns one.
+
+Inside a class, `self.listing() + "x"` had no evidence that listing()
+returns a string except its own annotation, and the Nim backend did not
+look there: the `+` stayed numeric, and Nim has no `+` for strings.
+"""
+
+class Tree:
+    root: str = "/tmp"
+
+    def __init__(self, root: str):
+        self.root = root
+
+    def listing(self) -> str:
+        self.root
+
+    def names(self) -> []str:
+        ["a"]
+
+    def both(self, name: str) -> str:
+        self.listing() + (" has " if len(name) > 0 else " lacks ") + name
+
+    def more(self) -> []str:
+        self.names() + ["b"]
+
+    def later(self) -> str:
+        self.suffix() + "!"
+
+    def suffix(self) -> str:
+        "end"
+
+def top() -> str:
+    "t"
+
+let t: Tree = Tree("/tmp")
+assert t.both("x") == "/tmp has x"
+assert t.more() == ["a", "b"]
+assert t.later() == "end!"
+assert top() + "op" == "top"
+print "all method-result concatenation tests passed"

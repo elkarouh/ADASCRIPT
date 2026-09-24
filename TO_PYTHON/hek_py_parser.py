@@ -2121,10 +2121,7 @@ def _extract_shell_body(body_st):
         parts.append(tok.string)
 
     cmd = "".join(parts)
-    needs_fstring = any(
-        tok.type == _tkn.OP and tok.string in ("{", "}")
-        for tok in tokens
-    )
+    needs_fstring = _has_interp_brace(tokens)
     if not needs_fstring:
         # A {name} inside quotes is an interpolation too, and the tokenizer
         # cannot see it: the whole quoted run arrives as one STRING token
@@ -2147,7 +2144,37 @@ def _extract_shell_body(body_st):
 # {name}, {!name} and {*name} -- an identifier, optionally with the quoting or
 # splatting mark. Deliberately not `{anything}`: a shell block is full of
 # braces that are the command's own.
-_QUOTED_INTERP = _re.compile(r"\{[!*]?[A-Za-z_][A-Za-z0-9_.]*\}")
+_QUOTED_INTERP = _re.compile(r"(?<![\^@])\{[!*]?[A-Za-z_][A-Za-z0-9_.]*\}")
+
+# A brace right after `^` or `@` is git's revision syntax -- X^{commit},
+# X^{}, @{u}, HEAD@{1} -- and never an interpolation. `rev-parse {!x}^{commit}`
+# interpolated `commit`, which named no variable.
+_REVISION_BRACES = _re.compile(r"(?<=[\^@])\{([^{}]*)\}")
+
+
+def _has_interp_brace(tokens):
+    """True when a bare { or } among TOKENS asks for interpolation -- any
+    but the braces of a git revision suffix."""
+    import tokenize as _tkn
+    revision_open = 0
+    for i, tok in enumerate(tokens):
+        if tok.type != _tkn.OP or tok.string not in ("{", "}"):
+            continue
+        if (tok.string == "{" and i > 0 and tokens[i - 1].end == tok.start
+                and tokens[i - 1].string.endswith(("^", "@"))):
+            revision_open += 1
+            continue
+        if tok.string == "}" and revision_open:
+            revision_open -= 1
+            continue
+        return True
+    return False
+
+
+def _escape_revision_braces(cmd):
+    """CMD with each git revision suffix's braces doubled, for a command that
+    is a format string: they stay braces rather than naming a variable."""
+    return _REVISION_BRACES.sub(r"{{\1}}", cmd)
 
 
 def _collect_identifiers_from_paren(node):
@@ -2245,10 +2272,7 @@ def _tokens_to_string(tokens):
                     parts.append(" ")
         parts.append(tok.string)
     cmd = "".join(parts)
-    needs_fstring = any(
-        tok.type == _tknmod.OP and tok.string in ("{", "}")
-        for tok in tokens
-    )
+    needs_fstring = _has_interp_brace(tokens)
     return cmd, needs_fstring
 
 
@@ -2498,6 +2522,8 @@ def _py_shell_literal(cmd, needs_fstring):
     the same guard the Nim backend applies.
     """
     prefix = "f" if needs_fstring else ""
+    if needs_fstring:
+        cmd = _escape_revision_braces(cmd)
     if '"""' not in cmd and not cmd.endswith('"'):
         return f'{prefix}"""{cmd}"""'
     escaped = cmd.replace("\\", "\\\\").replace('"', '\\"')

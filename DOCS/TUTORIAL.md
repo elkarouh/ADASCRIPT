@@ -868,10 +868,11 @@ elif x < 10: print("5<=x<10")
 else: print("x>=10")
 ```
 
-### Statement modifier: `return` / `break` / `continue` if cond
+### Statement modifier: `return` / `break` / `continue` / `die` / `quit` if cond
 
-Those three statements can carry their own `if`, and run only when the
-condition holds. The guard clause reads exit-first:
+Those three statements, and a call to `die` or `quit`, can carry their own
+`if`, and run only when the condition holds. The guard clause reads
+exit-first:
 
 ```python
 def is_term_continuation(code_s: str) -> bool:
@@ -890,6 +891,15 @@ continue if line.startswith("#")
 break if depth < 0
 ```
 
+`die` and `quit` leave too -- the program rather than the function -- so
+they are guards in the same sense:
+
+```python
+die(f"no such file: {p}") if not -f p
+die("bad option " + a, code = 2) if a.startswith("-")
+quit(0) if len(todo) == 0
+```
+
 A modifier testing an optional establishes the auto-unwrap for everything
 after it, exactly as the indented guard does — the optional is a plain value
 from that line on, and writing `.get()` yourself would unwrap it twice:
@@ -900,8 +910,8 @@ continue if bt is None
 builds.append((name: name, btype: bt))   # bt is a plain BuildType here
 ```
 
-Nothing else may: an assignment, a call, a `print` or a `raise` under an
-`if` modifier is a parse error. `x = 1 if c` opens exactly like the
+Nothing else may: an assignment, any other call, a `print` or a `raise`
+under an `if` modifier is a parse error. `x = 1 if c` opens exactly like the
 conditional expression `x = 1 if c else 2` and would only stop looking like
 one at the end of the line.
 
@@ -1643,6 +1653,15 @@ let branch: str = "main"
 let result = shell: git log --oneline {branch}
 
 shell: mkdir -p -- {!os.path.join(d, "subdir")}
+```
+
+Braces that belong to the command stay braces. A `{` right after `^` or `@`
+is git's revision syntax and is never an interpolation, whatever else the
+line interpolates. Any other literal brace in a line that also interpolates
+is written twice, `{{` and `}}`:
+
+```python
+let c = shell: git -C {!repo} rev-parse {!tag}^{commit}   # also X^{}, @{u}, HEAD@{1}
 ```
 
 ### Options
@@ -2848,7 +2867,7 @@ through the same ground in more detail.
 | Enum-indexed array literal        | `[KEY: value, ...]`                      |
 | Pattern matching                  | `case x: when P: ... when others: ...`  |
 | Inline suite (single-stmt body)   | `if x>0: f()`, `while c: g()`, `when P: h()` |
-| Statement modifier                | `return False if s == ""` (return/break/continue) |
+| Statement modifier                | `return False if s == ""` (return/break/continue/die/quit) |
 | Generator functions               | `def f(): ... yield value`               |
 | Field with inline default         | `var x: int = 0` inside class body       |
 | Mutable self (auto-detected)      | `self.field =`, or a call reaching one   |

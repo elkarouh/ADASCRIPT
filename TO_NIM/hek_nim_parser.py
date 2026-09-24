@@ -4180,6 +4180,9 @@ def to_nim(self, indent=0):
     if needs_fstring:
         ParserState.nim_imports.add("strformat")
     q = '"""'
+    if needs_fstring:
+        from hek_py_parser import _escape_revision_braces
+        cmd = _escape_revision_braces(cmd)
     cmd_str = (f"fmt{q}{cmd}{q}" if needs_fstring else f"{q}{cmd}{q}")
     iter_args = ""
     if "env" in opts:
@@ -4334,6 +4337,15 @@ def to_nim(self, indent=0):
             cmd_parts = [t for (k, t, _f) in block_lines if k == "cmd"]
             cmd = _shell_block_join(opts).join(cmd_parts)
             needs_fstring = any(f for (k, _t, f) in block_lines if k == "cmd")
+            # The {!x} / {*xs} rewrite above saw only the inline command,
+            # which a block does not have: `{!repo}` in a block line reached
+            # fmt as it was written, and Nim read `!` as an identifier.
+            cmd, _quoted = _apply_shell_quoting(
+                cmd, "quoteShell({expr})",
+                'mapIt({expr}, quoteShell(it)).join(\" \")')
+            if _quoted:
+                needs_fstring = True
+                ParserState.nim_imports.update({"osproc", "sequtils", "strutils"})
 
     cmd = _apply_pipefail(cmd, opts)
 
@@ -4413,6 +4425,8 @@ def to_nim(self, indent=0):
     if needs_fstring:
         q = '"""'
         ParserState.nim_imports.add("strformat")
+        from hek_py_parser import _escape_revision_braces
+        cmd = _escape_revision_braces(cmd)
         cmd_str = f"fmt{q}{cmd}{q}"
     else:
         q = '"""'

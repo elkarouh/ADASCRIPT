@@ -1121,9 +1121,16 @@ def to_py(self):
     return self.nodes[0].to_py()
 
 
+@method(exit_call)
+def to_py(self, indent=0):
+    """exit_call: `die(...)` or `quit(...)` standing before an `if` modifier;
+    the call is emitted as any other call, builtin rewrite included."""
+    return self.nodes[0].to_py()
+
+
 @method(modifier_if_stmt)
 def to_py(self, indent=0):
-    """modifier_if_stmt: ('return'|'break'|'continue') 'if' disjunction
+    """modifier_if_stmt: ('return'|'break'|'continue'|die()|quit()) 'if' disjunction
 
     -> Python: `if cond: <stmt>`, the one-line form both backends emit rather
     than a two-line block: stmt_line hands a statement a single indent and

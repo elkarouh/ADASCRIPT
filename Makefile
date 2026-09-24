@@ -105,7 +105,11 @@ STANDALONE := \
     test_field_subscript_empty_dict.ady \
     test_die_warn_own.ady \
     test_subscript_call_target.ady \
-    test_method_shell_field.ady
+    test_method_shell_field.ady \
+    test_method_result_concat.ady \
+    test_str_removeprefix.ady \
+    test_shell_revision_braces.ady \
+    test_exit_modifier.ady
 
 # -----------------------------------------------------------------------
 # Stdin tests — piped from a sample file

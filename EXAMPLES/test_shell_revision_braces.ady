@@ -1,0 +1,45 @@
+#!/usr/bin/env ady2nim
+"""Test: git's revision braces in a shell line stay braces.
+
+`X^{commit}`, `X^{}`, `@{u}` and `HEAD@{1}` are git syntax. A shell line
+turns `{name}` into an interpolation, so `rev-parse {!tag}^{commit}` looked
+up a variable called `commit`. A brace right after `^` or `@` is now never
+an interpolation, whatever else the line interpolates.
+
+Also: `{!x}` in an indented shell block, which the Nim backend passed to
+fmt unquoted -- Nim read the `!` as an identifier.
+"""
+
+let repo: str = "/tmp/adascript_test_revision_braces"
+let tag: str = "v1"
+shell: rm -rf {!repo} && git init -q {!repo} && git -C {!repo} -c user.name=a -c user.email=a@b commit -q --allow-empty -m one && git -C {!repo} tag v1
+
+# interpolation elsewhere in the line: the braces after ^ stay git's
+let a = shell: git -C {!repo} rev-parse {!tag}^{commit}
+assert a.code == 0 and len(a.output.strip()) == 40
+# no interpolation at all
+let b = shell: git -C /tmp/adascript_test_revision_braces rev-parse v1^{commit}
+assert b.output == a.output
+# ^{} and ^{tree}, quoted and bare, and @{...}
+let c = shell: git -C {!repo} rev-parse 'v1^{}' v1^{tree}
+assert c.code == 0
+let d = shell: git -C {!repo} log -1 --format=%H HEAD@{0}
+assert d.output == a.output
+# an option that makes the command a format string by itself
+let e = shell(cwd = repo): git rev-parse v1^{commit}
+assert e.output == a.output
+# the other shell forms
+let lines: []str = shellLines: git -C {!repo} rev-parse {!tag}^{commit}
+assert len(lines) == 1
+for l in shellIter: git -C {!repo} rev-parse {!tag}^{commit}
+    assert len(l) == 40
+let f = shell:
+    git -C {!repo} rev-parse {!tag}^{commit}
+    echo {!tag}
+assert f.output == a.output + "v1\n"
+# ordinary interpolation is unaffected
+let g = shell: echo {tag}
+assert g.output.strip() == "v1"
+
+shell: rm -rf {!repo}
+print "all revision-brace tests passed"

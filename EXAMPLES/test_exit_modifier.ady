@@ -1,0 +1,29 @@
+#!/usr/bin/env ady2nim
+"""Test: `die(...) if cond` and `quit(...) if cond`, the statement modifier
+for the two calls that leave the program.
+
+A guard that exits is the same guard whether it leaves the function
+(`return`) or the program (`die`). Only these two calls take the modifier:
+any other call followed by `if` still reads as a conditional expression
+missing its `else`. test_die_warn.ady checks a taken `die(...) if` from
+outside, on both backends; here the untaken ones, and that a ternary
+starting with a call is still a ternary.
+"""
+
+def half(n: int) -> int:
+    die(f"odd: {n}") if n % 2 != 0
+    die("negative", code = 2) if n < 0
+    n // 2
+
+assert half(8) == 4
+
+let xs: []int = [1, 2]
+quit(1) if len(xs) == 0
+
+# a call, then `if ... else`: still a conditional expression
+def dies(n: int) -> int:
+    n
+let diet: int = dies(3) if len(xs) > 1 else 0
+assert diet == 3
+
+print "all exit-modifier tests passed"

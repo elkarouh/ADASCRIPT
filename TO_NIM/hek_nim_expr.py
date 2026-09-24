@@ -395,6 +395,28 @@ def _ensure_zfill_helper():
         ParserState.nim_top_decls = decls
 
 
+_AFFIX_HELPER = """\
+proc adascriptRemovePrefix(s: string, prefix: string): string =
+  ## Python's str.removeprefix: S without PREFIX when it starts with it, else
+  ## S. strutils' removePrefix does the same in place, so it needs a `var`
+  ## string -- and `name.removeprefix("b/")` on a `let` did not compile.
+  if prefix.len > 0 and s.startsWith(prefix): s[prefix.len .. ^1] else: s
+
+proc adascriptRemoveSuffix(s: string, suffix: string): string =
+  ## Python's str.removesuffix, the same way round.
+  if suffix.len > 0 and s.endsWith(suffix): s[0 ..< s.len - suffix.len] else: s
+"""
+
+
+def _ensure_affix_helper():
+    """Add the removeprefix/removesuffix helpers the first time either is used."""
+    ParserState.nim_imports.add("strutils")          # startsWith / endsWith
+    decls = getattr(ParserState, 'nim_top_decls', [])
+    if not any("adascriptRemovePrefix" in d for d in decls):
+        decls.append(_AFFIX_HELPER)
+        ParserState.nim_top_decls = decls
+
+
 def _ensure_nimatch_helper():
     """Add the nimatch helper to nim_top_decls the first time =~ or !~ is used."""
     ParserState.nim_imports.update({"nre", "tables", "sequtils", "options"})
@@ -944,6 +966,20 @@ def binop_to_nim(self, prec=None, my_prec=None):
                     _fsym = ParserState.symbol_table.lookup(_field)
                     if _fsym and (_fsym.get("type") or "") in ("string", "str"):
                         right_is_str = True
+                # A call whose declared return type is a string or a seq:
+                # `self.listing() + "x"` inside the class, where the
+                # method's own annotation is the only evidence of what it
+                # returns. Without it the `+` stayed numeric and Nim found
+                # no `+` for two strings.
+                if not (left_is_seq or right_is_seq or left_is_str or right_is_str):
+                    for _side in (result, right):
+                        if not _side.rstrip().endswith(")"):
+                            continue
+                        _st = _nim_expr_type(_side) or ""
+                        if _st in ("string", "str"):
+                            left_is_str = True
+                        elif _st.startswith("seq["):
+                            left_is_seq = True
                 if not (left_is_seq or right_is_seq or left_is_str or right_is_str):
                     # Check symbol table for seq/string-typed variables
                     lsym = ParserState.symbol_table.lookup(result)
@@ -1824,6 +1860,8 @@ _PY_UNIVERSAL_METHOD_TO_NIM = {
     "ljust": "alignLeft",
     "rjust": "align",       # strutils spells right-align `align`
     "zfill": "adascriptZfill",
+    "removeprefix": "adascriptRemovePrefix",
+    "removesuffix": "adascriptRemoveSuffix",
     "isalpha": "isAlphaAscii",
     "isalnum": "isAlphaNumeric",
     "isdigit": "adascriptIsDigit",
@@ -1909,6 +1947,8 @@ def _translate_method(obj_name, method_name):
         ParserState.nim_imports.add("strutils")
     if nim_method == "adascriptZfill":
         _ensure_zfill_helper()
+    if nim_method in ("adascriptRemovePrefix", "adascriptRemoveSuffix"):
+        _ensure_affix_helper()
     if nim_method == "adascriptIsDigit":
         _ensure_isdigit_helper()
     return nim_method
@@ -2238,6 +2278,8 @@ def to_nim(self, prec=None):
                             ParserState.nim_imports.add("strutils")
                         if _nim_meth == "adascriptZfill":
                             _ensure_zfill_helper()
+                        if _nim_meth in ("adascriptRemovePrefix", "adascriptRemoveSuffix"):
+                            _ensure_affix_helper()
                         rest = "." + _nim_meth + rest[_m_meth.end() - 1:]
                 return f"(${arg}){rest}"
             return "$" + arg

@@ -1,0 +1,27 @@
+#!/usr/bin/env ady2nim
+"""Test: str.removeprefix / str.removesuffix on both backends.
+
+Nim's names are style-insensitive, so `s.removeprefix(p)` reached
+strutils' removePrefix -- which changes a `var` string in place and
+returns nothing -- and did not compile on a `let` or on any expression.
+They are Python's non-mutating versions now.
+"""
+
+let name: str = "b/src/x.c"
+assert name.removeprefix("b/") == "src/x.c"
+assert name.removeprefix("a/") == name
+assert name.removesuffix(".c") == "b/src/x"
+assert name.removesuffix(".h") == name
+assert "abc".removeprefix("") == "abc"
+assert str(42).removesuffix("2") == "4"
+def strip_b(s: str) -> str:
+    s.removeprefix("b/")
+assert strip_b("b/y") == "y"
+class P:
+    p: str = "b/q"
+    def __init__(self):
+        pass
+    def rel(self) -> str:
+        self.p.removeprefix("b/")
+assert P().rel() == "q"
+print "all removeprefix/removesuffix tests passed"

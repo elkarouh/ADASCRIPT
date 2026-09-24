@@ -2192,9 +2192,16 @@ def to_nim(self):
     return self.nodes[0].to_nim()
 
 
+@method(exit_call)
+def to_nim(self, indent=0):
+    """exit_call: `die(...)` or `quit(...)` standing before an `if` modifier;
+    the call is emitted as any other call, builtin rewrite included."""
+    return self.nodes[0].to_nim()
+
+
 @method(modifier_if_stmt)
 def to_nim(self, indent=0):
-    """modifier_if_stmt: ('return'|'break'|'continue') 'if' disjunction
+    """modifier_if_stmt: ('return'|'break'|'continue'|die()|quit()) 'if' disjunction
 
     -> Nim: `if cond: <stmt>`, one line rather than a two-line block, as on
     the Python side: stmt_line re-indents every line after the first to the

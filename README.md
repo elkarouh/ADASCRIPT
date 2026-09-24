@@ -747,8 +747,9 @@ case state:              # ✗ plain variable — emits Nim `case`, fails at com
 
 ## Statement Modifier
 
-`return`, `break` and `continue` can carry their own `if`, Perl- and
-Ruby-style: the statement runs only when the condition holds. It is the
+`return`, `break` and `continue` -- and a call to `die` or `quit` -- can
+carry their own `if`, Perl- and Ruby-style: the statement runs only when the
+condition holds. It is the
 guard clause written the way it reads -- the exit first, the reason for it
 after.
 
@@ -786,8 +787,11 @@ continue if line.startswith("#") or line.strip() == ""
 break if depth < 0
 ```
 
-**Those three statements and no others.** An assignment, a call, a `print`,
-a `raise` -- none of them may carry a modifier, and the parser rejects the
+`die(msg) if not found` and `quit(0) if done` are guards in the same sense:
+they leave the program rather than the function.
+
+**Those statements and no others.** An assignment, any other call, a
+`print`, a `raise` -- none of them may carry a modifier, and the parser rejects the
 line rather than emit it. The modifier is for the guard clause, where the
 statement leaves the block it is in and the condition is the reason it left.
 `x = 1 if c` would open exactly like the conditional expression

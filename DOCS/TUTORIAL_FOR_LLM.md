@@ -367,18 +367,20 @@ else: print("x>=10")
 ```
 
 ### Statement modifier
-`return`, `break` and `continue` may carry their own `if` (Perl/Ruby style)
-and run only when the condition holds. Emits the one-line `if cond: stmt` on
-both backends.
+`return`, `break`, `continue`, and a call to `die` or `quit`, may carry
+their own `if` (Perl/Ruby style) and run only when the condition holds. Emits
+the one-line `if cond: stmt` on both backends.
 ```adascript
 return False if code_s == ""
 return True if code_s.startswith("(")
 return if quiet
 continue if line.startswith("#")
 break if depth < 0
+die(f"no such file: {p}") if not -f p
+quit(0) if len(todo) == 0
 ```
-NO other statement may take one: an assignment, a call, a `print`, a `raise`
-under an `if` modifier is a parse error -- `x = 1 if c` opens like the
+NO other statement may take one: an assignment, any other call, a `print`, a
+`raise` under an `if` modifier is a parse error -- `x = 1 if c` opens like the
 conditional expression `x = 1 if c else 2`. A modifier's `if` has no `else`,
 so `x = 1 if flag else 2` is still a ternary.
 
@@ -641,6 +643,10 @@ for line in lines:
 let branch: str = "main"
 let r = shell: git log --oneline {branch}
 shell: mkdir -p -- {!os.path.join(d, "subdir")}
+
+# git's revision braces are never interpolated: a { right after ^ or @
+let c = shell: git -C {!repo} rev-parse {!tag}^{commit}   # also X^{}, @{u}, HEAD@{1}
+# any other literal brace in an interpolating line: double it, {{ and }}
 
 # Options
 let r = shell(cwd = "/tmp"): pwd
