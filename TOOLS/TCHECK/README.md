@@ -129,7 +129,16 @@ shell for the diff tool).
 The path's `<system>/<subsystem>` is a submodule of the NM workspace
 (`$CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY`), where the commits are -- checked
 out and fetched there, the links work. The list says so once, at
-its top, with the commands: `submodule update --init` and `fetch --tags`. A review is shown where the
+its top, with the commands: `submodule update --init` and `fetch --tags`.
+
+A file whose submodule is not checked out -- or is checked out sparsely,
+without that file -- gets a `CHECKOUT` link first, which runs `Tcheckout` on it:
+
+```
+CHECKOUT    : #emacs:(async-shell-command "Tcheckout -root /…/NM TACT/UIF/sources/b.adb")
+```
+
+A review is shown where the
 report records one: on the change's own line, or on the merge of the
 change's own commit.
 - A change is credited to a `<user>.<branch>` merged above it in its
@@ -190,6 +199,37 @@ colours with the original Tcheck_tact.ksh's `cecho`/`cechon`.
 against it too, under both shells, so the two cannot drift apart; with the output identical,
 a change to one is a change to both.
 
+### Tcheckout
+
+Checks out one file of an NM submodule that is not checked out, and only
+that file -- what the list of changes' `CHECKOUT` links run, so that the
+file's `DIFF` and `NET DIFF` links work:
+
+```
+Tcheckout [-root DIR] <system>/<subsystem>/<path>
+Tcheckout TACT/UIF/sources/b.adb
+```
+
+The workspace is `-root`, or `$CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY`. The
+submodule is registered (`git submodule init`), cloned into the workspace's
+`.git/modules/<name>` as `git submodule` would, but without its files'
+contents (`--filter=blob:none`: git fetches a version only when a diff reads
+it), then checked out at the commit the superproject records, sparsely: this
+file alone. A submodule checked out sparsely gets the file added; one checked
+out in full is never moved. `git submodule status`, `update` and `deinit`
+treat the result as any other submodule. Needs git 2.25 or later.
+
+It clones from the submodule's URL. To clone from another server -- a local
+Bitbucket mirror, say -- have git rewrite the URL, once:
+
+```
+git config --global url.https://bitbucket.eurocontrol.int/scm/.insteadOf <the URLs' common prefix>
+```
+
+A server that does not filter gives a full clone (git warns "filtering not
+recognized by server"): slower, the same result. `make test` runs
+`test/run_checkout_tests.sh`, against repositories it builds.
+
 ### make_comparable
 
 Normalize a log file for side-by-side diffing. Replaces timestamps, PIDs,
@@ -241,7 +281,8 @@ All three programs share these Adascript types, designed for an eventual merge:
 
 `make compile` (or `make test`) at the top of the repository builds both,
 leaving `Tcheck_tact` and `make_comparable` here; Tcheck_tact runs
-`make_comparable` by name, so put this directory on the PATH. By hand:
+`make_comparable` by name, and its CHECKOUT links `Tcheckout`, so put this
+directory on the PATH. By hand:
 
 ```bash
 cd TOOLS/TCHECK

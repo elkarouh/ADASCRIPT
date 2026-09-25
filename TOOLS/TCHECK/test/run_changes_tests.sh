@@ -106,6 +106,26 @@ check "the net diff between the component's baselines" \
     "$(entry alice b.adb | grep '^NET DIFF')"
 check "...only where there are several commits"  0 "$(entry bob b.adb | grep -c '^NET DIFF' || true)"
 check "says what DIFF and NET DIFF need"         1 "$(printf '%s\n' "$OUT" | grep -c 'fetch --tags$')"
+check "a CHECKOUT link: the submodule is not there" \
+    'CHECKOUT    : #emacs:(async-shell-command "Tcheckout -root /nm TACT/UIF/sources/b.adb")' \
+    "$(entry bob b.adb | grep '^CHECKOUT')"
+check "...before the diffs"                      "CHECKOUT DIFF" \
+    "$(entry bob b.adb | sed -n 's/^\(CHECKOUT\|DIFF\) .*/\1/p' | tr '\n' ' ' | sed 's/ $//')"
+check "...none when the workspace is not known"  0 \
+    "$(CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY= "$TCHECK" -no-color -focus changes 30.0.0.9 | grep -c '^CHECKOUT' || true)"
+# a workspace with TACT/UIF checked out in full, IFPS/OPIF_LIB sparsely
+NM=$WORK/nm
+git init -q "$NM/TACT/UIF" && mkdir -p "$NM/TACT/UIF/sources" && : > "$NM/TACT/UIF/sources/b.adb"
+git init -q "$NM/IFPS/OPIF_LIB" && git -C "$NM/IFPS/OPIF_LIB" config core.sparseCheckout true
+NMOUT=$(CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY=$NM "$TCHECK" -no-color -focus changes 30.0.0.9 | sed "s|$NM|NM|g")
+nm_entry() { printf '%s\n' "$NMOUT" | awk -v u="$1" '/^=====/ { on = index($0, "user " u " ") > 0; next } on' |
+             awk -v f="$2" '/^-----/ { on = 0 } /^FILE / { on = index($0, f) > 0 } on'; }
+check "...none for a file checked out"           0 "$(nm_entry bob b.adb | grep -c '^CHECKOUT' || true)"
+check "...none for a file a full checkout lacks"   0 "$(nm_entry bob c.ads | grep -c '^CHECKOUT' || true)"
+check "...one for a file a sparse checkout lacks" \
+    'CHECKOUT    : #emacs:(async-shell-command "Tcheckout -root NM IFPS/OPIF_LIB/sources/new_thing.ads")' \
+    "$(nm_entry alice new_thing.ads | grep '^CHECKOUT')"
+check "...none for a deleted file"               0 "$(nm_entry alice old_thing.ads | grep -c '^CHECKOUT' || true)"
 ESC=$(printf '\033')
 check "coloured by default"                      1 "$("$TCHECK" -focus changes 30.0.0.9 | grep -c "^${ESC}\[.*LIST OF CHANGES" || true)"
 check "-no-color: no escapes at all"             0 "$(printf '%s\n' "$OUT" | grep -c "$ESC" || true)"

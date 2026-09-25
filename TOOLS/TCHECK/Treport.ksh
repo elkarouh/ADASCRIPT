@@ -315,6 +315,24 @@ function diff_link {            # FILE REV1 REV2 -> REPLY, the #emacs: link
     fi
 }
 
+function checkout_link {        # FILE KIND -> REPLY: the #emacs: link running
+    # Tcheckout on FILE -- which checks it out alone, so its diff links work
+    # -- when its submodule is not checked out, or is sparsely without it;
+    # "" otherwise, and when the NM workspace is not known
+    typeset root=${CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY:-}
+    REPLY=""
+    [[ -n $root ]] || return 0
+    split_file "$1"
+    [[ -n $SUB ]] || return 0
+    if [[ -e $SUB/.git ]]; then
+        [[ $2 == DELETED || -e $SUB/$REST ]] && return 0
+        # missing from a checkout: only a sparse one can take it in
+        [[ $(git -C "$SUB" config --bool core.sparseCheckout 2>/dev/null) == true ]] || return 0
+    fi
+    elisp_string "Tcheckout -root $root $1"
+    REPLY="#emacs:(async-shell-command $REPLY)"
+}
+
 # ---------------------------------------------------------------------------
 # Display
 # ---------------------------------------------------------------------------
@@ -340,6 +358,8 @@ function display_file {         # I: FILE <KIND>: <dir>/<base>.<ext>, commits, .
             print -r -- "REVIEWED BY : $r"
         done
     fi
+    checkout_link "$file" "${E_kind[i]}"
+    [[ -n $REPLY ]] && print -r -- "CHECKOUT    : $REPLY"
     for c in ${E_commits[i]}; do
         diff_link "$file" "$c^" "$c"
         print -r -- "DIFF        : $REPLY"
@@ -635,6 +655,9 @@ function list_detailed_changes { # BASELINE: each file, its commits, ..., diffs
     print -r -- "checked out, with the commits and the baseline tags fetched:"
     print -r -- '    git -C $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY submodule update --init <system>/<subsystem>'
     print -r -- '    git -C $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY/<system>/<subsystem> fetch --tags'
+    print -r -- "A file whose submodule is not checked out has a CHECKOUT link: it checks out"
+    print -r -- "that file alone (Tcheckout), with the submodule's history, its contents fetched"
+    print -r -- "as the diffs need them."
     print
     for who in "${COMMITTERS[@]}"; do
         printf '%s' "===================================== Files committed by user "

@@ -1,0 +1,116 @@
+#!/bin/sh
+# Tcheckout -- check out one file of an NM submodule that is not checked out,
+# and only that file: what Tcheck_tact's CHECKOUT links run, so that the
+# file's DIFF and NET DIFF links work.
+#
+#   Tcheckout [-root DIR] <system>/<subsystem>/<path>
+#
+# The file's submodule, <system>/<subsystem>, of the NM workspace (-root, or
+# $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY):
+#
+# - not checked out: registered (git submodule init), cloned without its
+#   files' contents (--filter=blob:none: git fetches a version only when
+#   something reads it) and without a checkout, then checked out at the
+#   commit the superproject records -- this file alone (sparse checkout).
+# - checked out sparsely, without this file: the file is added.
+# - checked out with this file: nothing to do.
+#
+# It never moves a checked-out submodule to another commit.
+#
+# The clone uses the URL git has for the submodule -- .gitmodules, or
+# submodule.<name>.url in the workspace's .git/config -- and whatever
+# `url.<base>.insteadOf` rewrites it to: that is how to clone from another
+# server. A server that does not filter (git warns "filtering not
+# recognized by server") gives a full clone: slower, the same result.
+#
+# Needs git 2.25 or later (sparse-checkout).
+
+PROG=${0##*/}
+die() { echo "$PROG: $*" >&2; exit 1; }
+
+root=${CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY:-}
+while [ $# -gt 0 ]; do
+    case $1 in
+    -root) [ $# -gt 1 ] || die "-root requires a directory"; root=$2; shift 2 ;;
+    -h|-help|--help) sed -n '2,25s/^# \{0,1\}//p' "$0"; exit 0 ;;
+    -*) die "unknown option: $1" ;;
+    *) break ;;
+    esac
+done
+[ $# -eq 1 ] || die "usage: $PROG [-root DIR] <system>/<subsystem>/<path>"
+[ -n "$root" ] || die "no NM workspace: set CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY or give -root"
+git -C "$root" rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "not a git work tree: $root"
+
+target=$1
+case $target in
+*/*/*) ;;
+*) die "not <system>/<subsystem>/<path>: $target" ;;
+esac
+system=${target%%/*}; rest=${target#*/}
+sub=$system/${rest%%/*}; file=${rest#*/}
+work=$root/$sub
+
+# the submodule's name: the one whose path is SUB, in .gitmodules
+name=$(git -C "$root" config -f .gitmodules --get-regexp '^submodule\..*\.path$' 2>/dev/null |
+       awk -v p="$sub" '$2 == p { n = $1; sub(/^submodule\./, "", n); sub(/\.path$/, "", n); print n; exit }')
+[ -n "$name" ] || die "$sub is not a submodule of $root"
+
+if git -C "$work" rev-parse --show-toplevel 2>/dev/null | grep -qx "$(cd "$work" 2>/dev/null && pwd -P)"; then
+    # checked out already
+    if [ -e "$work/$file" ]; then
+        echo "$PROG: $target is checked out already"
+        exit 0
+    fi
+    if [ "$(git -C "$work" config --bool core.sparseCheckout)" = true ]; then
+        echo "$PROG: adding $file to the sparse checkout of $sub"
+        git -C "$work" sparse-checkout add "/$file" || die "could not add $file to $sub"
+        exit 0
+    fi
+    die "$sub is checked out, without $file: not at a commit that has it -- not moved"
+fi
+
+# the commit the superproject records for SUB
+commit=$(git -C "$root" ls-tree HEAD -- "$sub" | awk '$2 == "commit" { print $3 }')
+[ -n "$commit" ] || die "the superproject records no commit for $sub"
+
+git -C "$root" submodule init -- "$sub" >/dev/null || die "could not register $sub"
+url=$(git -C "$root" config "submodule.$name.url")
+[ -n "$url" ] || die "no URL for submodule $name"
+gitdir=$(git -C "$root" rev-parse --absolute-git-dir)/modules/$name
+
+mkdir -p "$work" || die "could not create $work"
+# nothing of anyone's in it to lose: the forced checkout below is safe
+[ -z "$(ls -A "$work" 2>/dev/null)" ] || die "$work is not empty: not checking out into it"
+if [ -d "$gitdir" ]; then
+    # cloned once, then deinitialised: its repository is still there
+    echo "$PROG: reusing $gitdir"
+    printf 'gitdir: %s\n' "$gitdir" > "$work/.git"
+else
+    echo "$PROG: cloning $sub from $url (no contents until needed)"
+    rmdir "$work"
+    mkdir -p "${gitdir%/*}" || die "could not create ${gitdir%/*}"
+    git clone --filter=blob:none --no-checkout --separate-git-dir="$gitdir" "$url" "$work" ||
+        die "could not clone $url"
+fi
+# where the work tree is, from the repository -- relative, as git submodule
+# writes it: .git/modules/<name> back up to the workspace, then down to SUB
+up=../..
+rest_of_name=$name
+while :; do
+    up=$up/..
+    case $rest_of_name in */*) rest_of_name=${rest_of_name#*/} ;; *) break ;; esac
+done
+git -C "$work" config core.worktree "$up/$sub"
+# this file alone, then the recorded commit, fetched if it is not there yet
+git -C "$work" sparse-checkout set --no-cone "/$file" || die "could not set up the sparse checkout"
+# sparse-checkout moves core.worktree to the work tree's own config
+# (config.worktree); git submodule reads and unsets it in the repository's
+# config -- where it goes back
+git config -f "$gitdir/config.worktree" --unset core.worktree 2>/dev/null
+git config -f "$gitdir/config" core.worktree "$up/$sub"
+git -C "$work" cat-file -e "$commit^{commit}" 2>/dev/null || git -C "$work" fetch --tags origin ||
+    die "could not fetch $sub"
+# forced: a deinitialised submodule's index still lists the files its
+# emptied directory lacks, which a plain checkout keeps as deletions
+git -C "$work" -c advice.detachedHead=false checkout -q -f "$commit" || die "could not check out $commit in $sub"
+echo "$PROG: $target checked out ($sub at ${commit%"${commit#????????}"}, this file only)"
