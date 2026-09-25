@@ -147,6 +147,11 @@ check "...his branches not built"                "NO VIEW BUILD FOUND FOR THESE 
   bob.also_b" "$(printf '%s\n' "$BOB" | sed -n '/^NO VIEW BUILD FOUND FOR THESE BRANCHES$/,/^$/p' | grep .)"
 check "...his section alone"                     "bob" "$(printf '%s\n' "$BOB" | sed -n 's/^=* Files committed by user \([^ ]*\) =*$/\1/p')"
 check "...and no one's changes"                  0 "$(printf '%s\n' "$BOB" | grep -c 'Files with no branch merged above them' || true)"
+check "-user bob: the same as -focus changes bob" "$BOB" "$("$TCHECK" -no-color -user bob 30.0.0.9)"
+if "$TCHECK" -h 2>&1 | grep -q -- '-focus'; then     # Tcheck_tact, not Treport.ksh
+    check "-user with another focus: refused"     1 "$("$TCHECK" -no-color -focus IP -user bob 30.0.0.9 2>&1 | grep -c 'shows the changes: not with -focus IP' || true)"
+    check "-user and another committer: refused" 1 "$("$TCHECK" -no-color -focus changes alice -user bob 30.0.0.9 2>&1 | grep -c 'one committer only' || true)"
+fi
 check "an unknown committer: says so, and who"   "No changes by zed; by: carol, alice, bob, dave" \
     "$("$TCHECK" -no-color -focus changes zed 30.0.0.9 | grep '^No changes by')"
 check "...with no list of changes"               0 "$("$TCHECK" -no-color -focus changes zed 30.0.0.9 | grep -c '^LIST OF CHANGES$' || true)"

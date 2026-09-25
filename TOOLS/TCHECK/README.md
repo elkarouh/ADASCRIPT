@@ -24,9 +24,9 @@ Tcheck_tact [-no-color] [-s] [-f] [-v] [-l] [-batch] [-only-new] [-exit-code]
 - `-focus replay run_prequal`: only the run_prequal replay
 - `-focus build_info`: only Padactl and check_run_test_programs
 - `-focus changes`: only the list of changes, by committer (below)
-- `-focus changes alice`: only alice's changes -- her line of the summary,
-  her branches, her files; the newly failed tests stay, the whole
-  baseline's. A name nobody committed under says so, and who did.
+- `-focus changes alice`, or `-user alice`: only alice's changes -- her line
+  of the summary, her branches, her files; the newly failed tests stay, the
+  whole baseline's. A name nobody committed under says so, and who did.
 
 Each focus shows its overview first, then the details -- the detailed test
 comparison, the replay diffs, the build logs side by side, each file's
@@ -157,6 +157,7 @@ which is what `test/run_changes_tests.sh` does.
 | `-meld` | Same as `-tool meld`; kept for older scripts |
 | `-only-new` | Show only new failures and regressions |
 | `-short` | With `-focus`, only the overview: no details (for changes, the files per committer by type) |
+| `-user NAME` | Only committer NAME's changes: the same as `-focus changes NAME` |
 | `-exit-code` | Exit with non-zero status if new failures found |
 
 **Examples:**

@@ -1083,7 +1083,7 @@ def usage():
     print f"  Example: {PROG} -c 30.0.0.120"
     print f"  Example: {PROG} -focus IP mono 30.0.0.120"
     print f"  Example: {PROG} -focus replay run_prequal 30.0.0.120"
-    print f"  Example: {PROG} -focus changes alice -short 30.0.0.120"
+    print f"  Example: {PROG} -user alice -short 30.0.0.120      (-focus changes alice)"
     print "Options:"
     print "  -no-color    Plain output, without ANSI colours (colour is the default)."
     print "  -c           Coloured output; the default, kept for older scripts."
@@ -1108,6 +1108,7 @@ def usage():
     print "               or for changes a committer: -focus changes alice, only alice's."
     print "  -short       With -focus, leave out the detailed part: for changes, the files"
     print "               per committer by type, without the list of each file's changes."
+    print "  -user <name> Only the changes of committer <name>: -focus changes <name>."
     print "  <BASELINE>   Required if -c or -v is specified, or if no options are given."
     quit(1)
 
@@ -1137,6 +1138,7 @@ class Options:
 
     def __init__(self, argv: []str):
         var i: Natural = 0
+        var user: str = "" # -user: see after the loop
         while i < argv'Length:
             let arg: str = argv[i]
             case arg:
@@ -1157,6 +1159,11 @@ class Options:
                 when "-meld":      self.tool = "meld"
                 when "-only-new":  self.only_new = True
                 when "-short":     self.short = True
+                when "-user":
+                    # -user alice: -focus changes alice, anywhere on the line
+                    i += 1
+                    die("-user requires a committer's name, e.g. -user alice") if i >= argv'Length
+                    user = argv[i]
                 when "-exit-code": self.exit_code = True
                 when "-focus":
                     i += 1
@@ -1216,6 +1223,13 @@ class Options:
                         usage()
                     self.baseline = arg
             i += 1
+        if user != "":
+            let image: str = self.focus_domain'Image
+            let domain: str = image.removeprefix("focus_")
+            die(f"-user shows the changes: not with -focus {domain}") if self.focus_domain not in [no_focus, focus_changes]
+            die(f"-user {user} and -focus changes {self.focus_user}: one committer only") if self.focus_user not in ["", user]
+            self.focus_domain = focus_changes
+            self.focus_user = user
         # Colour says nothing about which baseline: -s alone needs none.
         if (self.verbose or self.list_only or self.focus_domain != no_focus or not self.compute_size) and self.baseline == "":
             stderr.writeLine("Error: <BASELINE> is required.")
