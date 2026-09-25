@@ -57,7 +57,7 @@ entry() {  # the FILE line naming $2 in user $1's section, and the lines under i
     section "$1" | awk -v f="$2" '/^-----/ { on = 0 } /^FILE / { on = index($0, f) > 0 } on'
 }
 
-check "committers, in order of first appearance" "carol alice bob " "$(users)"
+check "committers, in order of first appearance" "carol alice bob dave " "$(users)"
 check "a change under its branch's merge"        "FILE CHANGED: CFMUTEST/CFMUTEST_CONFIG/special_files/mail_list" \
     "$(section carol | grep '^FILE')"
 check "baseline syncs are nobody's branch"       1 "$(entry alice b.adb | grep -c '^COMMITS     : c3fb81031 13e00da4a bc399bc5f$')"
@@ -114,11 +114,12 @@ check "-tool -batch: the Emacs ediff links"      "$OUT" "$("$TCHECK" -no-color -
 check "-tool without a name: says so"            1 "$("$TCHECK" -no-color -focus changes 30.0.0.9 -tool 2>&1 | grep -c 'requires the name of a diff tool' || true)"
 check "-tool with a command line: refused"       1 "$("$TCHECK" -no-color -tool 'meld;rm' -focus changes 30.0.0.9 2>&1 | grep -c "not a diff tool's name: meld;rm" || true)"
 SHORT=$("$TCHECK" -no-color -focus changes -short 30.0.0.9)
-check "the files per committer, by type"         "CHANGES BY COMMITTER
-carol        1 file : 1 (no extension)
-alice        4 files: 2 adb, 2 ads
-bob          2 files: 1 adb, 1 ads
-(no branch)  1 file : 1 out" "$(printf '%s\n' "$SHORT" | sed -n '/^CHANGES BY COMMITTER$/,/^$/p' | grep .)"
+check "the files per committer, by type, most first" "CHANGES BY COMMITTER
+dave         10 files: 8 txt, 2 html
+alice         4 files: 2 adb, 2 ads
+bob           2 files: 1 adb, 1 ads
+carol         1 file : 1 (no extension)
+(no branch)   1 file : 1 out" "$(printf '%s\n' "$SHORT" | sed -n '/^CHANGES BY COMMITTER$/,/^$/p' | grep .)"
 check "-short: not each file's changes"          0 "$(printf '%s\n' "$SHORT" | grep -c '^LIST OF CHANGES$\|^FILE ' || true)"
 check "without -short: the summary, then the list" "CHANGES BY COMMITTER
 LIST OF CHANGES" "$(printf '%s\n' "$OUT" | grep '^CHANGES BY COMMITTER$\|^LIST OF CHANGES$')"

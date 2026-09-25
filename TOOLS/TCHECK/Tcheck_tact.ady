@@ -839,16 +839,18 @@ def display_branch_info(branch: BranchName, reference: str):
         print f"REFERENCE BASELINE DIR: {ref_build}"
         echo_ediff(ref_build / "general.results.failed-in", view_build / "general.results.failed-in")
 
-def changes_report(baseline: str) -> Path:
+def changes_report(baseline: str, warn: bool = True) -> Path:
     """The changes report of the CFMUTEST baseline built on TACT BASELINE,
-    or Path("") after a warning saying why there is none."""
+    or Path("") -- after a warning saying why there is none, if WARN."""
     let cfmu: str = cfmu_baseline_of(baseline)
     if cfmu == "":
-        puts("sWb", f"WARNING: Psort -b names no CFMUTEST baseline for TACT_CONFIG.{baseline}", NEWLINE=True)
+        if warn:
+            puts("sWb", f"WARNING: Psort -b names no CFMUTEST baseline for TACT_CONFIG.{baseline}", NEWLINE=True)
         return Path("")
     let report: Path = CFMUTEST_ROOT / "baseline_reports" / f"CFMUTEST.CFMUTEST_CONFIG.{cfmu}.changes_report"
     if not -r report:
-        puts("sWb", f"WARNING: no changes report for CFMUTEST_CONFIG {cfmu}: {report}", NEWLINE=True)
+        if warn:
+            puts("sWb", f"WARNING: no changes report for CFMUTEST_CONFIG {cfmu}: {report}", NEWLINE=True)
         return Path("")
     report
 
@@ -862,52 +864,64 @@ def extension_of(file: str) -> str:
 def extension_label(ext: str) -> str:
     ext if ext != "" else "(no extension)"
 
-def files_by_type(changes: []FileChange) -> str:
-    """"4 files: 2 adb, 2 ads" -- how many files CHANGES touch, and how
-    many of each extension, the commonest first. A file changed, added or
-    deleted more than once is one file."""
+def files_of(changes: []FileChange) -> []str:
+    """The files CHANGES touch, each once: a file changed, added or deleted
+    more than once is one file."""
     var files: []str = []
-    var counts: {str}int = {:}
     for fc in changes:
         if fc.file not in files:
             files.append(fc.file)
-            let ext: str = extension_of(fc.file)
-            counts[ext] = counts.get(ext, 0) + 1
-    let order: [](int, str) = sorted([(-n, ext) for ext, n in counts.items()])
-    let by_type: []str = [f"{-n} {extension_label(ext)}" for n, ext in order]
-    let noun: str = "file " if len(files) == 1 else "files"
-    f"{len(files)} {noun}: " + ", ".join(by_type)
+    files
 
-def list_changes(baseline: str) -> bool:
-    """By committer, how many files the CFMUTEST baseline built on TACT
-    BASELINE changed, and how many of each type (extension); False when
-    there is no changes report to read."""
+def files_by_type(files: []str) -> str:
+    """"2 adb, 2 ads" -- how many of FILES have each extension, the
+    commonest first."""
+    var counts: {str}int = {:}
+    for file in files:
+        let ext: str = extension_of(file)
+        counts[ext] = counts.get(ext, 0) + 1
+    let order: [](int, str) = sorted([(-n, ext) for ext, n in counts.items()])
+    ", ".join([f"{-n} {extension_label(ext)}" for n, ext in order])
+
+def list_changes(baseline: str):
+    """By committer, the most first, how many files the CFMUTEST baseline
+    built on TACT BASELINE changed, and how many of each type (extension)."""
     hr('#')
     puts("sWr", "CHANGES BY COMMITTER", NEWLINE=True)
     let report: Path = changes_report(baseline)
-    return False if report == ""
+    return if report == ""
     let changes: ChangeList = read_changes(report)
-    var width: int = len("(no branch)") if len(changes.unattributed) > 0 else 0
-    for who in changes.committers:
-        width = max(width, len(who))
+    var files: {Committer}[]str = {:}
     for who in changes.committers:
         var theirs: []FileChange = []
         for branch in changes.branches[who]:
             theirs.extend(changes.files[branch])
+        files[who] = files_of(theirs)
+    let unattributed: []str = files_of(changes.unattributed)
+    # the most files first; as they first appear in the report when as many
+    let order: [](int, int, Committer) = sorted([(-len(files[who]), i, who) for i, who in enumerate(changes.committers)])
+    var width: int = len("(no branch)") if len(unattributed) > 0 else 0
+    var count_width: int = len(str(len(unattributed)))
+    for who in changes.committers:
+        width = max(width, len(who))
+        count_width = max(count_width, len(str(len(files[who]))))
+    for n, i, who in order:
+        let noun: str = "file " if -n == 1 else "files"
         puts("Wb", who)
-        print " " * (width - len(who)) + "  " + files_by_type(theirs)
-    if len(changes.unattributed) > 0:
-        print "(no branch)".ljust(width) + "  " + files_by_type(changes.unattributed)
+        print " " * (width - len(who)) + f"  {str(-n).rjust(count_width)} {noun}: " + files_by_type(files[who])
+    if len(unattributed) > 0:
+        let noun: str = "file " if len(unattributed) == 1 else "files"
+        print "(no branch)".ljust(width) + f"  {str(len(unattributed)).rjust(count_width)} {noun}: " + files_by_type(unattributed)
     print
-    True
 
 def list_detailed_changes(baseline: str):
     """The changes in the CFMUTEST baseline built on TACT BASELINE, by
-    committer and branch: each file, its commits, tickets, reviews and diffs."""
+    committer and branch: each file, its commits, tickets, reviews and diffs.
+    Nothing when there is no changes report: list_changes has said why."""
+    let report: Path = changes_report(baseline, warn=False)
+    return if report == ""
     hr('#')
     puts("sWr", "LIST OF CHANGES", NEWLINE=True)
-    let report: Path = changes_report(baseline)
-    return if report == ""
     # a branch's build is compared with the baseline before this one
     let reference: str = "TACT.TACT_CONFIG." + Baseline(baseline).previous().nr
     let changes: ChangeList = read_changes(report)
@@ -1580,7 +1594,8 @@ class Report:
                 if not self.opt.short:
                     self.show_detailed_regression_tests()
             when focus_changes:
-                if list_changes(self.cur.nr) and not self.opt.short:
+                list_changes(self.cur.nr)
+                if not self.opt.short:
                     list_detailed_changes(self.cur.nr)
             when focus_build_info:
                 self.show_build_info()

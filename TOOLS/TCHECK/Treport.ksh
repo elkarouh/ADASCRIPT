@@ -399,15 +399,15 @@ function extension_of {         # FILE -> REPLY: after its name's last dot, or "
     [[ $name == *.* && -n ${name%.*} ]] && REPLY=${name##*.}
 }
 
-function files_by_type {        # ENTRY... -> REPLY: "4 files: 2 adb, 2 ads"
+function files_by_type {        # ENTRY... -> COUNT, its files; REPLY "2 adb, 2 ads"
     # a file changed, added or deleted more than once is one file; the
     # commonest extension first, then by name
     typeset files=" " exts="" by_type="" i f n e tab=$'\t' nl=$'\n'
-    typeset -i count=0
+    COUNT=0
     for i in "$@"; do
         f=${E_file[i]}
         [[ $files == *" $f "* ]] && continue
-        files="$files$f " count=count+1
+        files="$files$f " COUNT=$((COUNT + 1))
         extension_of "$f"
         exts=$exts$REPLY$nl
     done
@@ -417,37 +417,56 @@ function files_by_type {        # ENTRY... -> REPLY: "4 files: 2 adb, 2 ads"
     while IFS=$tab read -r n e; do
         by_type=${by_type:+$by_type, }"$n ${e:-(no extension)}"
     done
-    if ((count == 1)); then REPLY="1 file : $by_type"
-    else REPLY="$count files: $by_type"
-    fi
+    REPLY=$by_type
+}
+
+function count_line {           # COUNT WIDTH TYPES: "  4 files: 2 adb, 2 ads"
+    typeset noun=files
+    (($1 == 1)) && noun="file "
+    printf '  %*s %s: %s\n' "$2" "$1" "$noun" "$3"
 }
 
 REPORT=""                       # the changes report, once list_changes found it
 
-function list_changes {         # BASELINE: by committer, their files by type
-    typeset who branch entries
-    typeset -i width=0
+function list_changes {         # BASELINE: by committer, the most first, their files by type
+    typeset who branch entries line
+    typeset -i width=0 count_width=0 k
+    typeset -a counts types
     hr
     cecho sWr "CHANGES BY COMMITTER"
     changes_report "$1" || return 1
     REPORT=$REPLY
     read_changes "$REPORT"
-    [[ -n $UNATTRIBUTED ]] && width=${#UNATTRIBUTED_LABEL}
-    for who in "${COMMITTERS[@]}"; do
-        ((${#who} > width)) && width=${#who}
-    done
-    for who in "${COMMITTERS[@]}"; do
+    for ((k = 0; k < ${#COMMITTERS[@]}; k++)); do
+        who=${COMMITTERS[k]}
         entries=""
         for branch in ${BRANCHES[$who]}; do
             entries="$entries ${ENTRIES[$branch]}"
         done
         files_by_type $entries
-        cechon Wb "$who"
-        printf '%*s  %s\n' $((width - ${#who})) "" "$REPLY"
+        counts[k]=$COUNT types[k]=$REPLY
+        ((${#who} > width)) && width=${#who}
+        ((${#COUNT} > count_width)) && count_width=${#COUNT}
     done
     if [[ -n $UNATTRIBUTED ]]; then
         files_by_type $UNATTRIBUTED
-        printf '%-*s  %s\n' $width "$UNATTRIBUTED_LABEL" "$REPLY"
+        typeset unattributed_count=$COUNT unattributed_types=$REPLY
+        ((${#UNATTRIBUTED_LABEL} > width)) && width=${#UNATTRIBUTED_LABEL}
+        ((${#COUNT} > count_width)) && count_width=${#COUNT}
+    fi
+    # the most files first; as they first appear in the report when as many
+    for ((k = 0; k < ${#COMMITTERS[@]}; k++)); do
+        print -r -- "${counts[k]} $k"
+    done | sort -k1,1nr -k2,2n | while read -r line; do
+        k=${line#* }
+        who=${COMMITTERS[k]}
+        cechon Wb "$who"
+        printf '%*s' $((width - ${#who})) ""
+        count_line "${counts[k]}" $count_width "${types[k]}"
+    done
+    if [[ -n $UNATTRIBUTED ]]; then
+        printf '%-*s' $width "$UNATTRIBUTED_LABEL"
+        count_line "$unattributed_count" $count_width "$unattributed_types"
     fi
     print
 }

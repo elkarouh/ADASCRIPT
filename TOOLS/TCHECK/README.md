@@ -43,14 +43,16 @@ commits changed, added or removed.
       changed 13e00da4a:TACT/UIF/sources/mono_process_display.adb RELATED_CHANGES="SC-134249 "
 ```
 
-It is regrouped by committer. First, how many files each committed, and
-how many of each type -- a file changed or re-added twice is one file:
+It is regrouped by committer. First, how many files each committed, the
+most first, and how many of each type -- a file changed or re-added twice
+is one file; the type is what follows the last dot of its name:
 
 ```
 CHANGES BY COMMITTER
-acicek       4 files: 2 adb, 2 ads
-wao          1 file : 1 gpr
-(no branch)  1 file : 1 out
+acicek       50 files: 23 adb, 21 ads, 2 idl, 1 el, 1 out, 1 ssm, 1 unfiltered
+ehristea     27 files: 13 adb, 11 ads, 3 idl
+bss           1 file : 1 (no extension)
+(no branch)   1 file : 1 out
 ```
 
 Then, unless `-short`, each branch: its view build

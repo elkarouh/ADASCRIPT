@@ -36,4 +36,19 @@
 ===== OPIF_LIB Software Changes Report
       SC_3   CR_7   New thing
 
+===== Differences between TACT.DOC.30.0.0.1 and TACT.DOC.30.0.0.2
+      Merge from <- d0c0d0c0 dave.user_guide RELATED_CHANGES="SC-9 " 
+      added   d0c00000:TACT/DOC/doc/chapter1.txt RELATED_CHANGES="SC-9 " 
+      added   d0c00001:TACT/DOC/doc/chapter2.txt RELATED_CHANGES="SC-9 " 
+      added   d0c00002:TACT/DOC/doc/chapter3.txt RELATED_CHANGES="SC-9 " 
+      added   d0c00003:TACT/DOC/doc/chapter4.txt RELATED_CHANGES="SC-9 " 
+      added   d0c00004:TACT/DOC/doc/chapter5.txt RELATED_CHANGES="SC-9 " 
+      added   d0c00005:TACT/DOC/doc/chapter6.txt RELATED_CHANGES="SC-9 " 
+      added   d0c00006:TACT/DOC/doc/chapter7.txt RELATED_CHANGES="SC-9 " 
+      added   d0c00007:TACT/DOC/doc/chapter8.txt RELATED_CHANGES="SC-9 " 
+      added   d0c00008:TACT/DOC/doc/index.html RELATED_CHANGES="SC-9 " 
+      added   d0c00009:TACT/DOC/doc/toc.html RELATED_CHANGES="SC-9 " 
+===== DOC Software Changes Report
+      SC_9   CR_9   User guide
+
 This report is saved in /cm/ot/CFMUTEST/baseline_reports/CFMUTEST.CFMUTEST_CONFIG.30.0.0.8.changes_report
