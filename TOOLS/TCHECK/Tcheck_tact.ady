@@ -1185,11 +1185,10 @@ def get_failed_test_names(filepath: Path, subtype: BuildSubtype) -> []str:
     """The tests a Tlog's new_failing + crashed sections name."""
     let r: TlogResult = parse_Tlog(filepath, subtype)
     var names: []str = []
-    for section in [r.new_failing, r.crashed]:
-        for line in section:
-            let name: str = extract_test_name(line)
-            if is_test_name(name):
-                names.append(name)
+    for line in r.new_failing + r.crashed:
+        let name: str = extract_test_name(line)
+        if is_test_name(name):
+            names.append(name)
     return names
 
 def check_replay_dirs_size():
