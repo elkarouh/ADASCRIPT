@@ -187,22 +187,33 @@ type Section is tuple:
     start    : int
     end      : int
 
+def is_section_header(line: str) -> bool:
+    """Whether LINE opens a section of a Tlog -- every one does, with a row
+    of dots: " .............. New tests failing : nb = 3"."""
+    line.strip().startswith("..............")
+
 def find_sections(filepath: Path) -> []Section:
-    """Find each SECTION_PATTERN's first occurrence, in file order."""
-    type Hit is tuple:
-        line : int
-        pat  : str
+    """Each SECTION_PATTERN's first section, in file order: from its header
+    to the next header, whichever section that one opens, or to the end.
+
+    A Tlog has more sections than SECTION_PATTERNS names -- mrun failing,
+    Check build of ..., tests removed, known assert failures -- and a
+    section ran on to the next one it named, taking an unnamed one's lines
+    for its own: a WARNING line's "Tlog:" and a header's "mrun" or "Check"
+    were new failures. A pattern is looked for in headers only, for the
+    same reason: a line of text may mention a section."""
     let lines: []str = readFile(filepath).split("\n")
-    # Track which patterns have already been matched (first occurrence only).
+    let headers: []int = [i for i, line in enumerate(lines) if is_section_header(line)]
     var seen: {}str = {}
-    var hits: []Hit = []
-    for i, line in enumerate(lines):
+    var sections: []Section = []
+    for k, start in enumerate(headers):
+        let end: int = headers[k + 1] if k + 1 < len(headers) else len(lines)
         for pattern in SECTION_PATTERNS:
-            if pattern in line and pattern not in seen:
-                hits.append((line: i, pat: pattern))
+            if pattern in lines[start] and pattern not in seen:
+                sections.append((pattern: pattern, start: start, end: end))
                 seen.add(pattern)
                 break
-    [(pattern: cur.pat, start: cur.line, end: nxt.line) for cur, nxt in zip(hits, hits[1:])]
+    sections
 
 type TlogResult is record:
     crashed    : []str

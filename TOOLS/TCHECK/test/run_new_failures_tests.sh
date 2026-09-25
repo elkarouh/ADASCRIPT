@@ -13,50 +13,70 @@ WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT INT TERM
 
 OT=$WORK/cm/ot
-# tlog BASELINE BUILD SUBTYPE: a Tlog, its sections from stdin
+# tlog BASELINE BUILD SUBTYPE CRASHED FAILING: a Tlog as Tlog writes one --
+# its sections each under a row of dots, those Tcheck_tact reads among
+# others it does not -- with the CRASHED and FAILING tests (space-separated
+# names) in their sections.
 tlog() {
     d="$OT/TACT/TACT_CONFIG.$1/build_G!31.$2.L8/saved_logs/tacot_corico.LATEST/TACT_REGRESS_LOGS/LATEST"
+    bl=$1 sub=$3
     mkdir -p "$d"
-    cat > "$d/Tlog-$3.log"
+    {
+        echo "========================================================================================"
+        echo " HEAVYTEST  : $3"
+        echo " TACT_CONFIG: $1"
+        echo "260910.171934: Tlog: INFO: Starting: Tlog -d /logs/logging-$3 -w"
+        echo
+        set -- $4 "|" $5
+        n=0; for t; do [ "$t" = "|" ] && break; n=$((n + 1)); done
+        echo " .............. Crashed Tests : nb = $n"
+        echo
+        for t; do shift; [ "$t" = "|" ] && break; echo "CRASHED $t  signal 11 #emacs:(find-file \"/logs/$t\")"; done
+        echo
+        echo " .............. mrun failing (from separate Tlog) : nb = 0"
+        echo
+        echo " .............. Check build of TACT.TACT_CONFIG : nb = 2"
+        echo
+        echo "260910.172150: Tlog: WARNING: Check potential errors below in section #emacs:(search-forward \"Check build of TACT.TACT_CONFIG\")"
+        echo
+        echo " .............. New tests failing : nb = $#"
+        echo
+        for t; do echo "FAILED $t   $bl   ok:9    nok:1    #emacs:(progn(find-file \"/logs/out\")(narrow-to-test \"$t\"))"; done
+        [ $# -gt 0 ] && echo "[...] all $# lines in file \"new_failing.txt\" #emacs:(find-file \"/logs/new_failing.txt\")"
+        echo
+        echo " .............. Tests still failing : nb = 0"
+        echo
+        echo "Worse : nb = 0"
+        echo "Same : nb = 0"
+        echo "Better : nb = 0"
+        echo
+        echo " .............. Following tests are now successful (maybe they are new) : nb = 0"
+        echo
+        echo " .............. Following tests contain known failures : nb = 1"
+        echo
+        echo "KNOWN NORMAL FAILURE: test_known.el  a known failure increased of 1"
+        echo "[...] all 1 lines in file \"known_errors_file.txt\" #emacs:(find-file \"/logs/known.txt\")"
+        echo
+        echo " .............. Errors in log files."
+        echo
+        echo " .............. Tlog summary."
+        echo
+        echo "TLOG SUMMARY: FAILING=1(+1) NOK=1(+1) KNOWN=1 KNOWN_ASSRT=0 SUCCESS=10/100"
+        echo "260910.172352: Tlog: INFO: Tlog end"
+    } > "$d/Tlog-$sub.log"
 }
 # 30.0.0.9: alpha newly fails in IP in and mono, gamma crashed, beta still
 # fails as it did in 30.0.0.8, and delta fails in an OP build that had no
-# Tlog before. The sections also hold lines naming no test -- their second
-# word is mrun, Check, Tlog:, all: a test is an .el file.
-tlog 30.0.0.9 IP in <<'TLOG'
-Crashed Tests
-  CRASH test_gamma.el      signal 11
-  ==> mrun had crashed too
-New tests failing
-  FAIL  test_alpha.el      diff
-  FAIL  test_beta.el       diff
-  --> Check the logs of the failing tests
-  In Tlog: /cm/ot/TACT/TACT_CONFIG.30.0.0.9/some.log
-  ==> all 2 listed
-Tests still failing
-Tlog summary
-TLOG
-tlog 30.0.0.9 IP mono <<'TLOG'
-New tests failing
-  FAIL  test_alpha.el      diff
-Tlog summary
-TLOG
-tlog 30.0.0.9 OP assert <<'TLOG'
-New tests failing
-  FAIL  test_delta.el      assertion
-Tlog summary
-TLOG
-tlog 30.0.0.8 IP in <<'TLOG'
-New tests failing
-  FAIL  test_beta.el       diff
-Tlog summary
-TLOG
+# Tlog before. Around them, the lines of the sections Tcheck_tact does not
+# read, and those in its own that name no test, whose second words --
+# mrun, Check, Tlog:, all -- were once listed as new failures.
+tlog 30.0.0.9 IP in test_gamma.el "test_alpha.el test_beta.el"
+tlog 30.0.0.9 IP mono "" test_alpha.el
+tlog 30.0.0.9 OP assert "" test_delta.el
+tlog 30.0.0.8 IP in "" test_beta.el
 # 30.0.0.10: the same failures as 30.0.0.9 -- nothing new
-for sub in in mono; do
-    d="build_G!31.IP.L8/saved_logs/tacot_corico.LATEST/TACT_REGRESS_LOGS/LATEST"
-    mkdir -p "$OT/TACT/TACT_CONFIG.30.0.0.10/$d"
-    cp "$OT/TACT/TACT_CONFIG.30.0.0.9/$d/Tlog-$sub.log" "$OT/TACT/TACT_CONFIG.30.0.0.10/$d/"
-done
+tlog 30.0.0.10 IP in test_gamma.el "test_alpha.el test_beta.el"
+tlog 30.0.0.10 IP mono "" test_alpha.el
 
 TCHECK_CM_OT=$OT
 CONTEXT_CM_BASELINE=x
