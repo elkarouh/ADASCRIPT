@@ -15,7 +15,9 @@ OT=$WORK/cm/ot
 mkdir -p "$OT/TACT/TACT_CONFIG.30.0.0.9" "$OT/TACT/TACT_CONFIG.30.0.0.8" "$OT/CFMUTEST/baseline_reports" "$WORK/bin"
 cp "$HERE/changes_report.sample" "$OT/CFMUTEST/baseline_reports/CFMUTEST.CFMUTEST_CONFIG.30.0.0.8.changes_report"
 # alice's branch was built, against the baseline before this one; bob's was not
-# alice's branch is built and tested, carol's built only, bob's neither
+# alice's branch is built and tested, carol's built only, bob's neither;
+# the reference baseline's build is the one its reports are named after
+mkdir -p "$OT/TACT/TACT_CONFIG.30.0.0.8/build_G!31.IP.L8" "$OT/TACT/TACT_CONFIG.30.0.0.8/build_G!31.OP.L8"
 mkdir -p "$OT/TACT/TACT_CONFIG.ALICE.FIX_B/build_default_Linux" \
          "$OT/TACT/TACT_CONFIG.CAROL.MAILING_LIST/build_default_Linux"
 mkdir -p "$OT/TACT/test_reports/TACT.TACT_CONFIG.ALICE.FIX_B-G!31.IP.L8" \
@@ -72,6 +74,8 @@ check "a branch merged in two sections, once"    1 "$(section alice | grep -c '^
 check "removed and added, by path"               "FILE DELETED: IFPS/OPIF_LIB/sources/old_thing.ads
 FILE ADDED: IFPS/OPIF_LIB/sources/new_thing.ads" "$(section alice | grep '^FILE DELETED\|^FILE ADDED')"
 check "alice's branch build, found"              1 "$(section alice | grep -c '^VIEW BUILD DIR: .*/TACT/TACT_CONFIG.ALICE.FIX_B/build_default_Linux$')"
+check "the reference baseline's build, beside it" "REFERENCE BUILD DIR: $OT/TACT/TACT_CONFIG.30.0.0.8/build_G!31.IP.L8" "$(section alice | grep '^REFERENCE BUILD')"
+check "...shown with no test reports too"        1 "$(section bob | grep -c '^REFERENCE BUILD DIR: .*/TACT_CONFIG.30.0.0.8/build_G!31.IP.L8$')"
 check "...and her test reports"                  1 "$(section alice | grep -c '^VIEW TEST REPORTS DIR: .*/test_reports/TACT.TACT_CONFIG.ALICE.FIX_B-G!31.IP.L8$')"
 check "...next to the previous baseline's"       1 "$(section alice | grep -c '^REFERENCE BASELINE DIR: .*TACT.TACT_CONFIG.30.0.0.8-G!31.IP.L8$')"
 check "...with the ediff between their failures" 1 "$(section alice | grep -c '^(ediff-files ".*30.0.0.8-G!31.IP.L8/general.results.failed-in" ".*FIX_B-G!31.IP.L8/general.results.failed-in")$')"
@@ -131,6 +135,9 @@ check "-short: not each file's changes"          0 "$(printf '%s\n' "$SHORT" | g
 check "without -short: the summary, then the list" "CHANGES BY COMMITTER
 LIST OF CHANGES" "$(printf '%s\n' "$OUT" | grep '^CHANGES BY COMMITTER$\|^LIST OF CHANGES$')"
 check "no CFMUTEST baseline: said once, no list" 1 "$("$TCHECK" -no-color -focus changes 30.0.0.8 2>&1 | grep -c 'WARNING\|LIST OF CHANGES' || true)"
+mv "$OT/TACT/TACT_CONFIG.30.0.0.8/build_G!31.IP.L8" "$OT/TACT/gone"
+check "no reference build: says so, each branch" 4 "$("$TCHECK" -no-color -focus changes 30.0.0.9 | grep -c '^NO REFERENCE BUILD FOUND$')"
+mv "$OT/TACT/gone" "$OT/TACT/TACT_CONFIG.30.0.0.8/build_G!31.IP.L8"
 check "ends with the report's emacs link"        1 "$(printf '%s\n' "$OUT" | grep -c 'find-file ".*CFMUTEST.CFMUTEST_CONFIG.30.0.0.8.changes_report"')"
 
 # --- when there is nothing to report on, it says so ----------------------

@@ -831,12 +831,27 @@ def display_file(fc: FileChange):
     if len(fc.commits) > 1 and fc.from_baseline != "" and fc.to_baseline != "":
         print "NET DIFF    : " + net_diff_link(fc)
 
+def reference_build(reference: str, ref_reports: Path) -> Path:
+    """The build of REFERENCE -- "TACT.TACT_CONFIG.30.0.0.132" -- its test
+    reports REF_REPORTS were made from: they are named after it,
+    TACT.TACT_CONFIG.30.0.0.132-G!31.IP.L8-<host>-<date> for
+    TACT_CONFIG.30.0.0.132/build_G!31.IP.L8. Without reports, its newest
+    build_G!31.* build. Path("") when that directory does not exist."""
+    let baseline_dir: Path = TACT_ROOT / reference.removeprefix("TACT.")
+    var build: Path = Path("")
+    if ref_reports != "":
+        let tag: str = Path(ref_reports).name.removeprefix(reference + "-").split("-")[0]
+        build = baseline_dir / ("build_" + tag)
+    else:
+        build = newest(baseline_dir, "build_G!31.*")
+    build if build != "" and -d build else Path("")
+
 def display_branch_info(branch: BranchName, reference: str):
     """The branch the changes came from: its view build -- the build of
-    TACT_CONFIG.<USER>.<BRANCH>, e.g. build_default_Linux -- and its test
-    reports next to the REFERENCE baseline's, with the ediff between their
-    failures. Each said to be missing when it is: a branch may be built
-    and its tests not yet run."""
+    TACT_CONFIG.<USER>.<BRANCH>, e.g. build_default_Linux -- and the
+    REFERENCE baseline's build; its test reports next to the reference
+    baseline's, with the ediff between their failures. Each said to be
+    missing when it is: a branch may be built and its tests not yet run."""
     let who: Committer = committer_of(branch)
     let name: str = branch[len(who) + 1:]
     stdout.write("FROM BRANCH : ")
@@ -851,6 +866,11 @@ def display_branch_info(branch: BranchName, reference: str):
     let reports: Path = TACT_ROOT / "test_reports"
     let view_reports: Path = newest(reports, f"TACT.TACT_CONFIG.{who.upper()}.{name.upper()}-G!31.*")
     let ref_reports: Path = newest(reports, f"{reference}-G!31.*")
+    let ref_build: Path = reference_build(reference, ref_reports)
+    if ref_build == "":
+        print "NO REFERENCE BUILD FOUND"
+    else:
+        print f"REFERENCE BUILD DIR: {ref_build}"
     if view_reports == "":
         print "NO TEST REPORTS FOUND FOR THIS BRANCH"
     else:

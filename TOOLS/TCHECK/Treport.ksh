@@ -378,6 +378,21 @@ function display_branch_info {  # BRANCH REFERENCE
     # its test reports, next to the reference baseline's
     newest "$TACT_ROOT/test_reports" "TACT.TACT_CONFIG.$WHO.$NAME-G!31.*"; view=$REPLY
     newest "$TACT_ROOT/test_reports" "$2-G!31.*"; ref=$REPLY
+    # the reference baseline's build: the one its test reports are named
+    # after -- ...30.0.0.132-G!31.IP.L8-<host>-<date> for build_G!31.IP.L8 --
+    # or without reports its newest build_G!31.*
+    typeset tag ref_build=""
+    if [[ -n $ref ]]; then
+        tag=${ref##*/}; tag=${tag#"$2"-}; tag=${tag%%-*}
+        ref_build=$TACT_ROOT/${2#TACT.}/build_$tag
+    else
+        newest "$TACT_ROOT/${2#TACT.}" "build_G!31.*"; ref_build=$REPLY
+    fi
+    if [[ -n $ref_build && -d $ref_build ]]; then
+        print -r -- "REFERENCE BUILD DIR: $ref_build"
+    else
+        print -r -- "NO REFERENCE BUILD FOUND"
+    fi
     if [[ -z $view ]]; then
         print -r -- "NO TEST REPORTS FOUND FOR THIS BRANCH"
     else
