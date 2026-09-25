@@ -412,6 +412,37 @@ type Person is record:
 **Python output:** `@dataclass class Person: …`  
 **Nim output:** `type Person = object`
 
+### Copied on Nim, shared on Python
+
+A record is a **value** on the Nim backend and a **reference** on the Python
+one. Assigning it to another name, appending it to a collection, passing it
+to a function or storing it in another object's field copies it on Nim; on
+Python all of those share the one object. The difference shows as soon as
+the value is changed through one name and read through another:
+
+```python
+type Pos_T is record:
+    x: int = 0
+
+var a: Pos_T = Pos_T()
+var b: Pos_T = a        # Nim: a copy of a.  Python: a itself.
+b.x = 5
+print a.x               # Nim: 0   Python: 5
+```
+
+A plain `class` and a `[]T` follow the same rule. To get one answer on both
+backends:
+
+- **Do not change a value that another name also holds.** Build what you
+  need and hand it over, or change it before anyone else has it. Most
+  programs already work this way.
+- **Make the copy yourself** when you need an independent value:
+  `var b: Pos_T = Pos_T(x=a.x)` is a new record on both backends.
+- **Make it shared on both** when several names must see the same changes:
+  a `@virtual class` is a reference on Nim too (see §13).
+
+Chapter 13 §13.2 of the book has the full account.
+
 ### Discriminated (variant) records
 
 When the set of fields depends on a tag, use Ada-style discriminated records.
@@ -1543,6 +1574,11 @@ class Optimizer[S, D, C]:
 
 When used with `nimport` (see §17), the base class's `.nim` is compiled as a
 library and subclasses in the importing file dispatch dynamically at runtime.
+
+`@virtual` also changes what assignment does on Nim: a `ref object` is shared
+by every name that holds it, as every object is on Python. A plain class is
+copied on assignment on Nim and shared on Python (see §6, "Copied on Nim,
+shared on Python"); a `@virtual` one is shared on both.
 
 ---
 

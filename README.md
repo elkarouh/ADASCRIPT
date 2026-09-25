@@ -2828,6 +2828,14 @@ one, but nothing can be declared, passed or returned as bytes. `u"..."` is
 dropped too, being a no-op since Python 3; an `r` in the prefix survives, so
 `br"\d"` is `r"\d"`.
 
+**Assignment copies on Nim, shares on Python** — a `record`, a plain `class`
+and a `[]T` are values on the Nim backend and references on the Python one.
+Assigning one to another name, appending it to a collection or passing it to
+a function copies it on Nim and shares it on Python, so a change made through
+one name is seen through the other on Python only. A `@virtual class` is
+shared on both. `DOCS/TUTORIAL.md` §6 and the book's chapter 13 §13.2 show
+the difference and how to write code that behaves the same on both.
+
 **Exhaustiveness is a Nim-build property** — a `case` block is checked for
 completeness only when the Nim backend can make it a native `case`: an
 ordinal subject whose branches are all constants. A string subject is not
