@@ -4,6 +4,8 @@
 # file's DIFF and NET DIFF links work.
 #
 #   Tcheckout [-root DIR] <system>/<subsystem>/<path>
+#   Tcheckout [-root DIR] -u <system>/<subsystem>/<path>
+#   Tcheckout [-root DIR] -l [<system>/<subsystem>]
 #
 # The file's submodule, <system>/<subsystem>, of the NM workspace (-root, or
 # $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY):
@@ -16,6 +18,15 @@
 # - checked out with this file: nothing to do.
 #
 # It never moves a checked-out submodule to another commit.
+#
+# -u takes the file out again: out of the sparse checkout, or, the last of
+# its submodule's, the submodule too (git submodule deinit) -- its clone
+# stays in .git/modules/<name>, for the next checkout (rm -rf it to free the
+# space). Not a file with changes of yours, nor a submodule checked out in
+# full.
+#
+# -l lists the files checked out so, one <system>/<subsystem>/<path> a
+# line: all the workspace's, or the submodule's given.
 #
 # The clone uses the URL git has for the submodule -- .gitmodules, or
 # submodule.<name>.url in the workspace's .git/config; a relative one
@@ -30,17 +41,51 @@ PROG=${0##*/}
 die() { echo "$PROG: $*" >&2; exit 1; }
 
 root=${CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY:-}
+mode=checkout
 while [ $# -gt 0 ]; do
     case $1 in
     -root) [ $# -gt 1 ] || die "-root requires a directory"; root=$2; shift 2 ;;
-    -h|-help|--help) sed -n '2,27s/^# \{0,1\}//p' "$0"; exit 0 ;;
+    -u) mode=uncheckout; shift ;;
+    -l) mode=list; shift ;;
+    -h|-help|--help) sed -n '2,/^$/s/^# \{0,1\}//p' "$0"; exit 0 ;;
     -*) die "unknown option: $1" ;;
     *) break ;;
     esac
 done
-[ $# -eq 1 ] || die "usage: $PROG [-root DIR] <system>/<subsystem>/<path>"
 [ -n "$root" ] || die "no NM workspace: set CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY or give -root"
 git -C "$root" rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "not a git work tree: $root"
+
+submodule_paths() {     # the workspace's submodules: NAME PATH a line
+    git -C "$root" config -f .gitmodules --get-regexp '^submodule\..*\.path$' 2>/dev/null |
+        awk '{ n = $1; sub(/^submodule\./, "", n); sub(/\.path$/, "", n); print n, $2 }'
+}
+checked_out() {         # DIR: whether DIR is a checked-out submodule's top
+    git -C "$1" rev-parse --show-toplevel 2>/dev/null | grep -qx "$(cd "$1" 2>/dev/null && pwd -P)"
+}
+sparse() {              # DIR: whether its checkout is sparse
+    [ "$(git -C "$1" config --bool core.sparseCheckout)" = true ]
+}
+keep_worktree_in_config() {     # DIR: core.worktree where git submodule has it
+    # sparse-checkout moves core.worktree to the work tree's own config
+    # (config.worktree); git submodule reads and unsets it in the
+    # repository's config -- where it goes back
+    _gitdir=$(git -C "$1" rev-parse --absolute-git-dir)
+    _wt=$(git config -f "$_gitdir/config.worktree" core.worktree) || return 0
+    git config -f "$_gitdir/config.worktree" --unset core.worktree
+    git config -f "$_gitdir/config" core.worktree "$_wt"
+}
+
+if [ $mode = list ]; then
+    [ $# -le 1 ] || die "usage: $PROG [-root DIR] -l [<system>/<subsystem>]"
+    only=${1%/}
+    submodule_paths | while read -r name path; do
+        [ -z "$only" ] || [ "$path" = "$only" ] || continue
+        checked_out "$root/$path" && sparse "$root/$path" || continue
+        git -C "$root/$path" sparse-checkout list | sed "s|^/*|$path/|"
+    done
+    exit 0
+fi
+[ $# -eq 1 ] || die "usage: $PROG [-root DIR] [-u] <system>/<subsystem>/<path>"
 
 target=$1
 case $target in
@@ -53,19 +98,38 @@ sub=$system/${rest%%/*}; file=${rest#*/}
 work=$root/$sub
 
 # the submodule's name: the one whose path is SUB, in .gitmodules
-name=$(git -C "$root" config -f .gitmodules --get-regexp '^submodule\..*\.path$' 2>/dev/null |
-       awk -v p="$sub" '$2 == p { n = $1; sub(/^submodule\./, "", n); sub(/\.path$/, "", n); print n; exit }')
+name=$(submodule_paths | awk -v p="$sub" '$2 == p { print $1; exit }')
 [ -n "$name" ] || die "$sub is not a submodule of $root"
 
-if git -C "$work" rev-parse --show-toplevel 2>/dev/null | grep -qx "$(cd "$work" 2>/dev/null && pwd -P)"; then
+if [ $mode = uncheckout ]; then
+    checked_out "$work" || die "$sub is not checked out"
+    sparse "$work" || die "$sub is checked out in full, not by $PROG: not touching it"
+    git -C "$work" sparse-checkout list | grep -qxF "/$file" || die "$target is not checked out"
+    [ -z "$(git -C "$work" status --porcelain -- "$file")" ] ||
+        die "$target has changes: not taken out"
+    others=$(git -C "$work" sparse-checkout list | grep -vxF "/$file")
+    if [ -n "$others" ]; then
+        printf '%s\n' "$others" | git -C "$work" sparse-checkout set --no-cone --stdin ||
+            die "could not take $file out of $sub"
+        keep_worktree_in_config "$work"
+        echo "$PROG: $target taken out"
+    else
+        git -C "$root" submodule deinit -q -- "$sub" || die "could not deinitialise $sub"
+        echo "$PROG: $target taken out -- $sub's last: deinitialised, its clone kept in $(git -C "$root" rev-parse --absolute-git-dir)/modules/$name"
+    fi
+    exit 0
+fi
+
+if checked_out "$work"; then
     # checked out already
     if [ -e "$work/$file" ]; then
         echo "$PROG: $target is checked out already"
         exit 0
     fi
-    if [ "$(git -C "$work" config --bool core.sparseCheckout)" = true ]; then
+    if sparse "$work"; then
         echo "$PROG: adding $file to the sparse checkout of $sub"
         git -C "$work" sparse-checkout add "/$file" || die "could not add $file to $sub"
+        keep_worktree_in_config "$work"
         exit 0
     fi
     die "$sub is checked out, without $file: not at a commit that has it -- not moved"
@@ -105,11 +169,7 @@ done
 git -C "$work" config core.worktree "$up/$sub"
 # this file alone, then the recorded commit, fetched if it is not there yet
 git -C "$work" sparse-checkout set --no-cone "/$file" || die "could not set up the sparse checkout"
-# sparse-checkout moves core.worktree to the work tree's own config
-# (config.worktree); git submodule reads and unsets it in the repository's
-# config -- where it goes back
-git config -f "$gitdir/config.worktree" --unset core.worktree 2>/dev/null
-git config -f "$gitdir/config" core.worktree "$up/$sub"
+keep_worktree_in_config "$work"
 git -C "$work" cat-file -e "$commit^{commit}" 2>/dev/null || git -C "$work" fetch --tags origin ||
     die "could not fetch $sub"
 # forced: a deinitialised submodule's index still lists the files its

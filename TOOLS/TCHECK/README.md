@@ -207,6 +207,8 @@ file's `DIFF` and `NET DIFF` links work:
 
 ```
 Tcheckout [-root DIR] <system>/<subsystem>/<path>
+Tcheckout [-root DIR] -u <system>/<subsystem>/<path>
+Tcheckout [-root DIR] -l [<system>/<subsystem>]
 Tcheckout TACT/UIF/sources/b.adb
 ```
 
@@ -218,6 +220,13 @@ it), then checked out at the commit the superproject records, sparsely: this
 file alone. A submodule checked out sparsely gets the file added; one checked
 out in full is never moved. `git submodule status`, `update` and `deinit`
 treat the result as any other submodule. Needs git 2.25 or later.
+
+`-u` takes a file out again. The last file of its submodule takes the
+submodule out too (`git submodule deinit`), keeping its clone in
+`.git/modules/<name>` for the next checkout (`rm -rf` it to free the space).
+It refuses a file with changes of yours, and a submodule checked out in full.
+`-l` lists the files checked out, one `<system>/<subsystem>/<path>` a line --
+what `-u` takes: all the workspace's, or one submodule's.
 
 It clones from the submodule's URL. NM's `.gitmodules` gives most of them
 relative to the workspace's own (`../tact.uif.git`): they resolve against the

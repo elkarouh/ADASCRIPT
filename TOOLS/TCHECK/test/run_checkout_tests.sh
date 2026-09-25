@@ -30,10 +30,18 @@ git -C "$up" commit -qam two && git -C "$up" tag 30.0.0.2
 git -C "$up" config uploadpack.allowFilter true
 git -C "$up" config uploadpack.allowAnySHA1InWant true
 
-# the superproject, recording it at 30.0.0.2; the workspace, without it
+# another submodule, to check out in full
+lib=$WORK/scm/nm/ifps.opif_lib.git
+git init -q "$lib"
+printf 'x\n' > "$lib/x.ads"
+git -C "$lib" add . && git -C "$lib" commit -qm one
+
+# the superproject, recording them, TACT/UIF at 30.0.0.2; the workspace,
+# without them
 nm=$WORK/scm/nm/nm.git
 git init -q "$nm"
 git -C "$nm" submodule add -q --name TACT.UIF ../tact.uif.git TACT/UIF
+git -C "$nm" submodule add -q --name IFPS.OPIF_LIB ../ifps.opif_lib.git IFPS/OPIF_LIB
 git -C "$nm" commit -qm "Baseline workspace"
 ws=$WORK/ws
 git clone -q "file://$nm" "$ws"
@@ -77,6 +85,38 @@ set -e
 check "not a submodule: refused"                     "1 1" "$rc $(printf '%s\n' "$out" | grep -c 'IFPS/NONE is not a submodule')"
 rc=0; out=$("$TCHECKOUT" -root "$ws" TACT/UIF/ 2>&1) || rc=$?
 check "a submodule, not a file: refused"             "1 1" "$rc $(printf '%s\n' "$out" | grep -c 'not a file: TACT/UIF/')"
+
+# -l and -u: the files checked out, and out again
+git -C "$ws" submodule update -q --init IFPS/OPIF_LIB      # in full: not Tcheckout's
+"$TCHECKOUT" -root "$ws" TACT/UIF/sources/a.adb >/dev/null 2>&1
+check "-l: the files checked out"                    "TACT/UIF/sources/b.adb TACT/UIF/sources/a.adb" \
+    "$("$TCHECKOUT" -root "$ws" -l | tr '\n' ' ' | sed 's/ $//')"
+check "...a submodule's"                             "TACT/UIF/sources/b.adb TACT/UIF/sources/a.adb" \
+    "$("$TCHECKOUT" -root "$ws" -l TACT/UIF/ | tr '\n' ' ' | sed 's/ $//')"
+check "...none of another's"                         "" "$("$TCHECKOUT" -root "$ws" -l IFPS/OPIF_LIB)"
+out=$("$TCHECKOUT" -root "$ws" -u TACT/UIF/sources/a.adb 2>&1) || { echo "$out"; exit 1; }
+check "-u: the file taken out"                       "no b 2" "$([ -e "$sub/sources/a.adb" ] && echo yes || echo no) $(cat "$sub/sources/b.adb")"
+check "...off the list"                              "TACT/UIF/sources/b.adb" "$("$TCHECKOUT" -root "$ws" -l)"
+check "...the submodule clean"                       "" "$(git -C "$sub" status --porcelain)"
+rc=0; out=$("$TCHECKOUT" -root "$ws" -u TACT/UIF/sources/a.adb 2>&1) || rc=$?
+check "...not twice"                                 "1 1" "$rc $(printf '%s\n' "$out" | grep -c 'a.adb is not checked out')"
+printf 'mine\n' >> "$sub/sources/b.adb"
+rc=0; out=$("$TCHECKOUT" -root "$ws" -u TACT/UIF/sources/b.adb 2>&1) || rc=$?
+check "...nor a file with changes"                   "1 1 yes" \
+    "$rc $(printf '%s\n' "$out" | grep -c 'has changes') $(grep -q mine "$sub/sources/b.adb" && echo yes)"
+git -C "$sub" checkout -q -- sources/b.adb
+out=$("$TCHECKOUT" -root "$ws" -u TACT/UIF/sources/b.adb 2>&1) || { echo "$out"; exit 1; }
+check "the last: the submodule deinitialised"        "" "$(ls -A "$sub")"
+check "...its clone kept"                            "1 yes" \
+    "$(printf '%s\n' "$out" | grep -c 'clone kept') $([ -d "$ws/.git/modules/TACT.UIF" ] && echo yes)"
+check "...git sees it not initialised"               "-" "$(git -C "$ws" submodule status TACT/UIF | cut -c1)"
+check "...nothing listed"                            "" "$("$TCHECKOUT" -root "$ws" -l)"
+out=$("$TCHECKOUT" -root "$ws" TACT/UIF/sources/a.adb 2>&1) || { echo "$out"; exit 1; }
+check "...checked out again: that file alone"        "reused a 2 no" \
+    "$(printf '%s\n' "$out" | grep -q reusing && echo reused) $(cat "$sub/sources/a.adb") $([ -e "$sub/sources/b.adb" ] && echo yes || echo no)"
+rc=0; out=$("$TCHECKOUT" -root "$ws" -u IFPS/OPIF_LIB/x.ads 2>&1) || rc=$?
+check "-u: not a submodule checked out in full"      "1 1 x" \
+    "$rc $(printf '%s\n' "$out" | grep -c 'checked out in full') $(cat "$ws/IFPS/OPIF_LIB/x.ads")"
 
 echo
 if [ $fails -eq 0 ]; then echo "All checks passed."; else echo "$fails check(s) FAILED."; exit 1; fi
