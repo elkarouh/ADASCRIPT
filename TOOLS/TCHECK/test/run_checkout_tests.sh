@@ -2,7 +2,7 @@
 # Tcheckout against real repositories built here: an upstream submodule
 # (TACT/UIF: two files over two tagged baselines, filtering allowed), a
 # superproject recording it, and a workspace cloned from that without its
-# submodules -- the case Tcheck_tact's CHECKOUT links are for.
+# submodules -- the case Tcheck_tact's diff links check the file out for.
 set -e
 
 TCHECKOUT=${1:-../Tcheckout}
@@ -117,6 +117,20 @@ check "...checked out again: that file alone"        "reused a 2 no" \
 rc=0; out=$("$TCHECKOUT" -root "$ws" -u IFPS/OPIF_LIB/x.ads 2>&1) || rc=$?
 check "-u: not a submodule checked out in full"      "1 1 x" \
     "$rc $(printf '%s\n' "$out" | grep -c 'checked out in full') $(cat "$ws/IFPS/OPIF_LIB/x.ads")"
+
+# a DIFF link, as Tcheck_tact writes it for a submodule not checked out,
+# evaluated by Emacs: the file checked out, then its versions compared
+if command -v emacs >/dev/null 2>&1; then
+    git -C "$ws" submodule deinit -q -f TACT/UIF
+    f=$sub/sources/b.adb
+    link="(when (eql 0 (shell-command \"Tcheckout -root $ws TACT/UIF/sources/b.adb\")) (vc-version-ediff (list \"$f\") \"30.0.0.1\" \"30.0.0.2\"))"
+    shown='(dolist (n (sort (mapcar (function buffer-name) (buffer-list)) (function string<))) (when (string-match "b[.]adb[.]~" n) (with-current-buffer n (message "SHOWN %s=%s" n (string-trim (buffer-string))))))'
+    got=$(cd / && PATH=$(dirname "$TCHECKOUT"):$PATH emacs --batch -Q --eval "(progn (require 'vc) $link $shown)" 2>&1 |
+          sed -n 's/^SHOWN //p' | tr '\n' ' ')
+    check "a DIFF link, in Emacs: checked out, compared" "b.adb.~30.0.0.1~=b 1 b.adb.~30.0.0.2~=b 2 " "$got"
+else
+    echo "  SKIP a DIFF link in Emacs (no emacs)"
+fi
 
 echo
 if [ $fails -eq 0 ]; then echo "All checks passed."; else echo "$fails check(s) FAILED."; exit 1; fi

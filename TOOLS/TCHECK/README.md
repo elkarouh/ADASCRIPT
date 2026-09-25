@@ -127,16 +127,17 @@ variable instead, for Emacs to expand (`substitute-in-file-name`, or the
 shell for the diff tool).
 
 The path's `<system>/<subsystem>` is a submodule of the NM workspace
-(`$CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY`), where the commits are -- checked
-out and fetched there, the links work. The list says so once, at
-its top, with the commands: `submodule update --init` and `fetch --tags`.
-
-A file whose submodule is not checked out -- or is checked out sparsely,
-without that file -- gets a `CHECKOUT` link first, which runs `Tcheckout` on it:
+(`$CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY`), where the commits are. Where it
+is not checked out -- or is checked out sparsely, without that file -- the
+links check the file out first, alone, with `Tcheckout`, and compare only
+once that worked:
 
 ```
-CHECKOUT    : #emacs:(async-shell-command "Tcheckout -root /…/NM TACT/UIF/sources/b.adb")
+DIFF        : #emacs:(when (eql 0 (shell-command "Tcheckout -root /…/NM TACT/UIF/sources/b.adb")) (vc-version-ediff (list "/…/NM/TACT/UIF/sources/b.adb") "c3fb81031^" "c3fb81031"))
 ```
+
+A submodule checked out already needs the commits and the baseline tags
+fetched (`fetch --tags`); the list says so once, at its top.
 
 A review is shown where the
 report records one: on the change's own line, or on the merge of the
@@ -202,8 +203,8 @@ a change to one is a change to both.
 ### Tcheckout
 
 Checks out one file of an NM submodule that is not checked out, and only
-that file -- what the list of changes' `CHECKOUT` links run, so that the
-file's `DIFF` and `NET DIFF` links work:
+that file -- what the list of changes' `DIFF` and `NET DIFF` links run
+first, where the file's submodule is not checked out:
 
 ```
 Tcheckout [-root DIR] <system>/<subsystem>/<path>
@@ -296,7 +297,7 @@ All three programs share these Adascript types, designed for an eventual merge:
 
 `make compile` (or `make test`) at the top of the repository builds both,
 leaving `Tcheck_tact` and `make_comparable` here; Tcheck_tact runs
-`make_comparable` by name, and its CHECKOUT links `Tcheckout`, so put this
+`make_comparable` by name, and its diff links `Tcheckout`, so put this
 directory on the PATH. By hand:
 
 ```bash

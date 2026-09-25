@@ -798,13 +798,18 @@ def emacs_ediff(fc: FileChange, rev1: str, rev2: str) -> str:
     f"#emacs:(vc-version-ediff (list {file}) {elisp_string(rev1)} {elisp_string(rev2)})"
 
 def diff_link(fc: FileChange, rev1: str, rev2: str) -> str:
-    emacs_difftool(fc, rev1, rev2) if DIFF_TOOL != "" else emacs_ediff(fc, rev1, rev2)
+    """The link comparing FC's file between REV1 and REV2 -- checking it
+    out first when it needs to be."""
+    let link: str = emacs_difftool(fc, rev1, rev2) if DIFF_TOOL != "" else emacs_ediff(fc, rev1, rev2)
+    let checkout: str = checkout_command(fc)
+    return link if checkout == ""
+    let form: str = link.removeprefix("#emacs:")
+    f"#emacs:(when (eql 0 (shell-command {elisp_string(checkout)})) {form})"
 
-def checkout_link(fc: FileChange) -> str:
-    """A link running Tcheckout on FC's file -- which checks it out alone,
-    so its DIFF and NET DIFF links work -- when its submodule is not
-    checked out, or is sparsely without it; "" otherwise, and when the NM
-    workspace is not known."""
+def checkout_command(fc: FileChange) -> str:
+    """The Tcheckout command checking FC's file out alone, for the diffs,
+    when its submodule is not checked out, or is sparsely without it; ""
+    otherwise, and when the NM workspace is not known."""
     let root: str = $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY
     return "" if root == ""
     let (sub, rest) = split_file(fc)
@@ -816,8 +821,7 @@ def checkout_link(fc: FileChange) -> str:
         # missing from a checkout: only a sparse one can take it in
         let sparse = shell: git -C {!sub} config --bool core.sparseCheckout 2>/dev/null
         return "" if sparse.output.strip() != "true"
-    let command: str = f"Tcheckout -root {root} {fc.file}"
-    f"#emacs:(async-shell-command {elisp_string(command)})"
+    f"Tcheckout -root {root} {fc.file}"
 
 def diff_links(fc: FileChange) -> []str:
     """One link per commit: the file in the commit's parent and in the commit."""
@@ -845,9 +849,6 @@ def display_file(fc: FileChange):
         print "TICKETS     : " + " ".join(fc.tickets)
     for r in fc.reviews:
         print "REVIEWED BY : " + r
-    let checkout: str = checkout_link(fc)
-    if checkout != "":
-        print "CHECKOUT    : " + checkout
     for command in diff_links(fc):
         print "DIFF        : " + command
     if len(fc.commits) > 1 and fc.from_baseline != "" and fc.to_baseline != "":
@@ -1067,13 +1068,11 @@ def list_detailed_changes(baseline: str, user: Committer):
     puts("sWr", "LIST OF CHANGES", NEWLINE=True)
     # a branch's build is compared with the baseline before this one
     let reference: str = "TACT.TACT_CONFIG." + Baseline(baseline).previous().nr
-    print "DIFF and NET DIFF run in the file's submodule of the NM workspace, which must be"
-    print "checked out, with the commits and the baseline tags fetched:"
-    print "    git -C $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY submodule update --init <system>/<subsystem>"
+    print "DIFF and NET DIFF run in the file's submodule of the NM workspace. Where that is"
+    print "not checked out, they check the file out first, alone (Tcheckout): the submodule's"
+    print "history, its contents fetched as the diffs need them. A submodule checked out"
+    print "already needs the commits and the baseline tags fetched:"
     print "    git -C $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY/<system>/<subsystem> fetch --tags"
-    print "A file whose submodule is not checked out has a CHECKOUT link: it checks out"
-    print "that file alone (Tcheckout), with the submodule's history, its contents fetched"
-    print "as the diffs need them."
     print
     for who in changes.committers:
         stdout.write("===================================== Files committed by user ")

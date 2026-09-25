@@ -61,6 +61,9 @@ section() {  # the lines under one user's heading
 entry() {  # the FILE line naming $2 in user $1's section, and the lines under it
     section "$1" | awk -v f="$2" '/^-----/ { on = 0 } /^FILE / { on = index($0, f) > 0 } on'
 }
+unwrap() {  # the diff links without the checkout before them (/nm is not there)
+    sed 's/(when (eql 0 (shell-command "[^"]*")) \(.*\))$/\1/'
+}
 
 check "committers, in order of first appearance" "carol alice bob dave " "$(users)"
 check "a change under its branch's merge"        "FILE CHANGED: CFMUTEST/CFMUTEST_CONFIG/special_files/mail_list" \
@@ -94,7 +97,7 @@ check "an ediff link per commit" \
     'DIFF        : #emacs:(vc-version-ediff (list "/nm/TACT/UIF/sources/b.adb") "c3fb81031^" "c3fb81031")
 DIFF        : #emacs:(vc-version-ediff (list "/nm/TACT/UIF/sources/b.adb") "13e00da4a^" "13e00da4a")
 DIFF        : #emacs:(vc-version-ediff (list "/nm/TACT/UIF/sources/b.adb") "bc399bc5f^" "bc399bc5f")' \
-    "$(entry alice b.adb | grep '^DIFF')"
+    "$(entry alice b.adb | grep '^DIFF' | unwrap)"
 check "...naming the variable when it is unset"  \
     'DIFF        : #emacs:(vc-version-ediff (list (substitute-in-file-name "$CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY/TACT/UIF/sources/b.adb")) "33340af6c^" "33340af6c")' \
     "$(CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY= "$TCHECK" -no-color -focus changes 30.0.0.9 | awk '/user bob /{on=1} on' | grep -m1 '^DIFF')"
@@ -103,16 +106,20 @@ check "a ticket only one branch lists wins over nearest" "FILE CHANGED: TACT/UIF
 check "...and so is not bob's"                   0 "$(section bob | grep -c 'd\.adb' || true)"
 check "the net diff between the component's baselines" \
     'NET DIFF    : #emacs:(vc-version-ediff (list "/nm/TACT/UIF/sources/b.adb") "30.0.0.129" "30.0.0.130")' \
-    "$(entry alice b.adb | grep '^NET DIFF')"
+    "$(entry alice b.adb | grep '^NET DIFF' | unwrap)"
 check "...only where there are several commits"  0 "$(entry bob b.adb | grep -c '^NET DIFF' || true)"
 check "says what DIFF and NET DIFF need"         1 "$(printf '%s\n' "$OUT" | grep -c 'fetch --tags$')"
-check "a CHECKOUT link: the submodule is not there" \
-    'CHECKOUT    : #emacs:(async-shell-command "Tcheckout -root /nm TACT/UIF/sources/b.adb")' \
-    "$(entry bob b.adb | grep '^CHECKOUT')"
-check "...before the diffs"                      "CHECKOUT DIFF" \
-    "$(entry bob b.adb | sed -n 's/^\(CHECKOUT\|DIFF\) .*/\1/p' | tr '\n' ' ' | sed 's/ $//')"
-check "...none when the workspace is not known"  0 \
-    "$(CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY= "$TCHECK" -no-color -focus changes 30.0.0.9 | grep -c '^CHECKOUT' || true)"
+E='#emacs:(when (eql 0 (shell-command "Tcheckout -root'
+check "the diffs check the file out: not there"  \
+    "DIFF        : $E /nm TACT/UIF/sources/b.adb\")) (vc-version-ediff (list \"/nm/TACT/UIF/sources/b.adb\") \"33340af6c^\" \"33340af6c\"))" \
+    "$(entry bob b.adb | grep '^DIFF')"
+check "...the net diff too"                      1 "$(entry alice b.adb | grep -c "^NET DIFF    : $E /nm TACT/UIF/sources/b.adb\")) (vc-version-ediff ")"
+check "...with -tool too" \
+    "DIFF        : $E /nm TACT/UIF/sources/b.adb\")) (call-process-shell-command \"git -C /nm/TACT/UIF difftool -y -t kompare 33340af6c^ 33340af6c -- sources/b.adb\" nil 0))" \
+    "$("$TCHECK" -no-color -tool kompare -focus changes 30.0.0.9 | awk '/user bob /{on=1} on' | grep -m1 '^DIFF')"
+check "...no CHECKOUT line of their own"         0 "$(printf '%s\n' "$OUT" | grep -c '^CHECKOUT' || true)"
+check "...not when the workspace is not known"   0 \
+    "$(CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY= "$TCHECK" -no-color -focus changes 30.0.0.9 | grep -c 'shell-command "Tcheckout' || true)"
 # a workspace with TACT/UIF checked out in full, IFPS/OPIF_LIB sparsely
 NM=$WORK/nm
 git init -q "$NM/TACT/UIF" && mkdir -p "$NM/TACT/UIF/sources" && : > "$NM/TACT/UIF/sources/b.adb"
@@ -120,12 +127,12 @@ git init -q "$NM/IFPS/OPIF_LIB" && git -C "$NM/IFPS/OPIF_LIB" config core.sparse
 NMOUT=$(CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY=$NM "$TCHECK" -no-color -focus changes 30.0.0.9 | sed "s|$NM|NM|g")
 nm_entry() { printf '%s\n' "$NMOUT" | awk -v u="$1" '/^=====/ { on = index($0, "user " u " ") > 0; next } on' |
              awk -v f="$2" '/^-----/ { on = 0 } /^FILE / { on = index($0, f) > 0 } on'; }
-check "...none for a file checked out"           0 "$(nm_entry bob b.adb | grep -c '^CHECKOUT' || true)"
-check "...none for a file a full checkout lacks"   0 "$(nm_entry bob c.ads | grep -c '^CHECKOUT' || true)"
-check "...one for a file a sparse checkout lacks" \
-    'CHECKOUT    : #emacs:(async-shell-command "Tcheckout -root NM IFPS/OPIF_LIB/sources/new_thing.ads")' \
-    "$(nm_entry alice new_thing.ads | grep '^CHECKOUT')"
-check "...none for a deleted file"               0 "$(nm_entry alice old_thing.ads | grep -c '^CHECKOUT' || true)"
+check "...not for a file checked out"            0 "$(nm_entry bob b.adb | grep -c 'Tcheckout' || true)"
+check "...nor for a file a full checkout lacks"  0 "$(nm_entry bob c.ads | grep -c 'Tcheckout' || true)"
+check "...but for one a sparse checkout lacks" \
+    "DIFF        : $E NM IFPS/OPIF_LIB/sources/new_thing.ads\")) (vc-version-ediff (list \"NM/IFPS/OPIF_LIB/sources/new_thing.ads\")" \
+    "$(nm_entry alice new_thing.ads | grep -m1 '^DIFF' | sed 's/ "[^"]*" "[^"]*"))$//')"
+check "...not for a deleted file"                0 "$(nm_entry alice old_thing.ads | grep -c 'Tcheckout' || true)"
 ESC=$(printf '\033')
 check "coloured by default"                      1 "$("$TCHECK" -focus changes 30.0.0.9 | grep -c "^${ESC}\[.*LIST OF CHANGES" || true)"
 check "-no-color: no escapes at all"             0 "$(printf '%s\n' "$OUT" | grep -c "$ESC" || true)"
@@ -136,9 +143,9 @@ tool_entry() { printf '%s\n' "$TOOL_OUT" | awk -v u="$1" -v f="$2" '
 check "-tool: the tool per commit"               'DIFF        : #emacs:(call-process-shell-command "git -C /nm/TACT/UIF difftool -y -t kompare c3fb81031^ c3fb81031 -- sources/b.adb" nil 0)
 DIFF        : #emacs:(call-process-shell-command "git -C /nm/TACT/UIF difftool -y -t kompare 13e00da4a^ 13e00da4a -- sources/b.adb" nil 0)
 DIFF        : #emacs:(call-process-shell-command "git -C /nm/TACT/UIF difftool -y -t kompare bc399bc5f^ bc399bc5f -- sources/b.adb" nil 0)' \
-    "$(tool_entry alice b.adb | grep '^DIFF')"
+    "$(tool_entry alice b.adb | grep '^DIFF' | unwrap)"
 check "-tool: the net diff in the tool too"      'NET DIFF    : #emacs:(call-process-shell-command "git -C /nm/TACT/UIF difftool -y -t kompare 30.0.0.129 30.0.0.130 -- sources/b.adb" nil 0)' \
-    "$(tool_entry alice b.adb | grep '^NET DIFF')"
+    "$(tool_entry alice b.adb | grep '^NET DIFF' | unwrap)"
 check "-meld is -tool meld"                      "$("$TCHECK" -no-color -tool meld -focus changes 30.0.0.9)" \
     "$("$TCHECK" -no-color -meld -focus changes 30.0.0.9)"
 check "-tool -batch: the Emacs ediff links"      "$OUT" "$("$TCHECK" -no-color -tool kompare -batch -focus changes 30.0.0.9)"

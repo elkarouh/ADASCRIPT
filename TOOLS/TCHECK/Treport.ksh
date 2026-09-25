@@ -299,8 +299,9 @@ function split_file {           # FILE -> SUB REST: its submodule, the path in i
     fi
 }
 
-function diff_link {            # FILE REV1 REV2 -> REPLY, the #emacs: link
-    typeset file
+function diff_link {            # FILE REV1 REV2 KIND -> REPLY, the #emacs: link,
+    # checking the file out first when it needs to be
+    typeset file link
     split_file "$1"
     if [[ -n $DIFF_TOOL ]]; then
         elisp_string "git ${SUB:+-C $SUB }difftool -y -t $DIFF_TOOL $2 $3 -- $REST"
@@ -313,12 +314,17 @@ function diff_link {            # FILE REV1 REV2 -> REPLY, the #emacs: link
         elisp_string "$3"
         REPLY="#emacs:(vc-version-ediff (list $file) $rev1 $REPLY)"
     fi
+    link=${REPLY#'#emacs:'}
+    checkout_command "$1" "$4"
+    [[ -z $REPLY ]] && { REPLY="#emacs:$link"; return 0; }
+    elisp_string "$REPLY"
+    REPLY="#emacs:(when (eql 0 (shell-command $REPLY)) $link)"
 }
 
-function checkout_link {        # FILE KIND -> REPLY: the #emacs: link running
-    # Tcheckout on FILE -- which checks it out alone, so its diff links work
-    # -- when its submodule is not checked out, or is sparsely without it;
-    # "" otherwise, and when the NM workspace is not known
+function checkout_command {     # FILE KIND -> REPLY: the Tcheckout command
+    # checking FILE out alone, for the diffs, when its submodule is not
+    # checked out, or is sparsely without it; "" otherwise, and when the NM
+    # workspace is not known
     typeset root=${CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY:-}
     REPLY=""
     [[ -n $root ]] || return 0
@@ -329,8 +335,7 @@ function checkout_link {        # FILE KIND -> REPLY: the #emacs: link running
         # missing from a checkout: only a sparse one can take it in
         [[ $(git -C "$SUB" config --bool core.sparseCheckout 2>/dev/null) == true ]] || return 0
     fi
-    elisp_string "Tcheckout -root $root $1"
-    REPLY="#emacs:(async-shell-command $REPLY)"
+    REPLY="Tcheckout -root $root $1"
 }
 
 # ---------------------------------------------------------------------------
@@ -358,15 +363,13 @@ function display_file {         # I: FILE <KIND>: <dir>/<base>.<ext>, commits, .
             print -r -- "REVIEWED BY : $r"
         done
     fi
-    checkout_link "$file" "${E_kind[i]}"
-    [[ -n $REPLY ]] && print -r -- "CHECKOUT    : $REPLY"
     for c in ${E_commits[i]}; do
-        diff_link "$file" "$c^" "$c"
+        diff_link "$file" "$c^" "$c" "${E_kind[i]}"
         print -r -- "DIFF        : $REPLY"
     done
     set -- ${E_commits[i]}
     if (($# > 1)) && [[ -n ${E_from[i]} && -n ${E_to[i]} ]]; then
-        diff_link "$file" "${E_from[i]}" "${E_to[i]}"
+        diff_link "$file" "${E_from[i]}" "${E_to[i]}" "${E_kind[i]}"
         print -r -- "NET DIFF    : $REPLY"
     fi
 }
@@ -651,13 +654,11 @@ function list_detailed_changes { # BASELINE: each file, its commits, ..., diffs
     cecho sWr "LIST OF CHANGES"
     # a branch's build is compared with the baseline before this one
     reference=TACT.TACT_CONFIG.${1%.*}.$(( ${1##*.} - 1 ))
-    print -r -- "DIFF and NET DIFF run in the file's submodule of the NM workspace, which must be"
-    print -r -- "checked out, with the commits and the baseline tags fetched:"
-    print -r -- '    git -C $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY submodule update --init <system>/<subsystem>'
+    print -r -- "DIFF and NET DIFF run in the file's submodule of the NM workspace. Where that is"
+    print -r -- "not checked out, they check the file out first, alone (Tcheckout): the submodule's"
+    print -r -- "history, its contents fetched as the diffs need them. A submodule checked out"
+    print -r -- "already needs the commits and the baseline tags fetched:"
     print -r -- '    git -C $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY/<system>/<subsystem> fetch --tags'
-    print -r -- "A file whose submodule is not checked out has a CHECKOUT link: it checks out"
-    print -r -- "that file alone (Tcheckout), with the submodule's history, its contents fetched"
-    print -r -- "as the diffs need them."
     print
     for who in "${COMMITTERS[@]}"; do
         printf '%s' "===================================== Files committed by user "

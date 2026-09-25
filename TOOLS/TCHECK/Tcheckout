@@ -1,7 +1,7 @@
 #!/bin/sh
 # Tcheckout -- check out one file of an NM submodule that is not checked out,
-# and only that file: what Tcheck_tact's CHECKOUT links run, so that the
-# file's DIFF and NET DIFF links work.
+# and only that file: what Tcheck_tact's DIFF and NET DIFF links run first
+# where the file's submodule is not checked out.
 #
 #   Tcheckout [-root DIR] <system>/<subsystem>/<path>
 #   Tcheckout [-root DIR] -u <system>/<subsystem>/<path>
