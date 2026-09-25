@@ -1,13 +1,21 @@
 #!/bin/sh
 # Treport.ksh under Tcheck_tact's arguments, for
-# run_changes_tests.sh: the same checks, with -focus changes dropped.
+# run_changes_tests.sh: the same checks. -focus changes is dropped, and its
+# detail, a committer, becomes -user: -focus changes alice is -user alice.
 # KSH names the shell: ksh93, or zsh in ksh emulation (a ksh that is zsh).
 HERE=$(cd "$(dirname "$0")" && pwd)
 focus=""
 for a in "$@"; do
     shift
-    if [ "$a" = "-focus" ]; then focus=1; continue; fi
-    if [ -n "$focus" ]; then focus=""; [ "$a" = changes ] && continue; fi
+    if [ "$a" = "-focus" ]; then focus=domain; continue; fi
+    if [ "$focus" = domain ]; then focus=detail; [ "$a" = changes ] && continue; fi
+    if [ "$focus" = detail ]; then
+        focus=""
+        case $a in
+        -*|[0-9]*) ;;                                   # an option, the baseline
+        *) set -- "$@" -user "$a"; continue ;;          # the committer
+        esac
+    fi
     set -- "$@" "$a"
 done
 exec ${KSH:-ksh} "$HERE/../Treport.ksh" "$@"

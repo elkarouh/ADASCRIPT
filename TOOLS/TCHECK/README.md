@@ -176,7 +176,7 @@ script, for where the Adascript build is not at hand. Same output, same
 attribution, same links, same options for it:
 
 ```
-Treport.ksh [-no-color] [-tool NAME | -meld] [-batch] [-short] BASELINE [USER]
+Treport.ksh [-no-color] [-tool NAME | -meld] [-batch] [-short] [-user NAME] BASELINE
 Treport.ksh -tool kompare 30.0.0.132
 ```
 
