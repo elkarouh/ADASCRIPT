@@ -170,7 +170,6 @@ answers.
 Because the Nim backend is a first-class citizen, a handful of Nim spellings
 are valid Adascript, and the examples mix them freely with the Python ones:
 
-- `&` concatenates strings (`sa & str(b)` in `sudoku.ady`) alongside `+`;
 - Nim stdlib procs arrive via `nimport`: `alignLeft` (`lv.ady`), `readFile`
   / `writeFile` (`spell.ady`, `fsel.ady`), `getCurrentDir` / `setCurrentDir`
   (`fsel.ady`), `getHomeDir` (`lv.ady`), `sortedByIt` (`lv.ady`):
@@ -182,6 +181,16 @@ are valid Adascript, and the examples mix them freely with the Python ones:
 - `quit(1)` is the portable exit (mapped to `sys.exit(1)` in Python);
 - `echo`-style formatting concerns disappear behind f-strings, which compile
   to `fmt"..."`.
+
+One Nim spelling does not carry over: `&` to join strings. It is Nim's
+concatenation but Python's bitwise-and, so on the Python backend it raises
+("unsupported operand type(s) for &: 'str' and 'str'"). Write `+`, which the
+Nim backend rewrites to `&`, or, for literals, put them next to each other:
+
+```python
+let ddl: str = ("CREATE TABLE a (x INTEGER);"
+                "CREATE TABLE b (y TEXT);")
+```
 
 Style advice drawn from the examples: prefer the Python spelling where both
 exist (it keeps the file runnable-in-your-head for Python readers), and
