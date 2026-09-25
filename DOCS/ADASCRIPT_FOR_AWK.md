@@ -368,7 +368,7 @@ counts[classify("warn: hot")] += 1
 assert counts[WARN] == 1
 
 for s in Severity_T:                  # every member, in declaration order
-    print f"  {s'Image:<5} {counts[s]}"
+    print f"  {s:<5} {counts[s]}"
 ```
 
 `counts["WANR"]` is not a subtle bug that shows up as a zero in a report six
@@ -1044,7 +1044,7 @@ over the *other* list:
 <!-- from: EXAMPLES/awk_logscan.ady -->
 ```python
 for s in Severity_T:
-    print f"  {s'Image:<5} {self.counts[s]}"
+    print f"  {s:<5} {self.counts[s]}"
 for t in self.traces:
     print f"  trace   {t.lines} line(s) under {t.under} -- {t.failure}"
 ```

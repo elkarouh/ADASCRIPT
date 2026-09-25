@@ -386,7 +386,7 @@ def find_replays(basedir: Path) -> []Replay:
 
 def process_replay(replay: Replay, verbose: bool):
     """Check the status of a single replay (successful / failed / running)."""
-    let label: str = f"\"{replay.rtype'Image}\""
+    let label: str = f"\"{replay.rtype}\""
     puts("sWb", f"{label:<14} replay ")
 
     let content: str = readFile(replay.file)
@@ -844,7 +844,7 @@ def display_file(fc: FileChange):
     let p: Path = Path(fc.file)
     let name: str = p.name
     let dot: int = name.rfind(".")
-    stdout.write(f"FILE {fc.kind'Image}: {p.parent}/")
+    stdout.write(f"FILE {fc.kind}: {p.parent}/")
     if dot > 0:
         puts("Ky", name[:dot])
         stdout.write(".")
@@ -1500,7 +1500,7 @@ def show_failed_tests(start: Baseline, btype: BuildType, subtype: BuildSubtype, 
     var result: str = ""
     for iteration in range(n_baselines):
         let bl: str = baseline.nr
-        let header: str = f"FAILED {btype'Image} REGRESSION TESTS logging-{sl} for BASELINE {bl}"
+        let header: str = f"FAILED {btype} REGRESSION TESTS logging-{sl} for BASELINE {bl}"
         hr('-')
         puts("sWr", header, NEWLINE=True)
         result = result + header + "\n"
@@ -1653,7 +1653,7 @@ class Report:
                 if s.total_still > 0:
                     parts.append(str(s.total_still) + " still failing")
                 status = ", ".join(parts)
-            puts("sWb", f"  {s.btype'Image:<4}")
+            puts("sWb", f"  {s.btype:<4}")
             if s.all_ok:
                 puts("sKg", " " + status, NEWLINE=True)
             elif s.total_new > 0 or s.total_crash > 0:
@@ -1686,7 +1686,7 @@ class Report:
             for subtype in BuildSubtype:
                 let path: Path = build.tlog_path(subtype, normal)
                 if -f path:
-                    found.append((build: f"{build.btype'Image} {subtype_label(subtype)}", subtype: subtype, path: path))
+                    found.append((build: f"{build.btype} {subtype_label(subtype)}", subtype: subtype, path: path))
         found
 
     def new_failures(self) -> []NewFailure:

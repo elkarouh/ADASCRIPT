@@ -394,7 +394,7 @@ a category:
 <!-- from: EXAMPLES/sh_janitor.ady -->
 ```python
 for a in Action_T:
-    print f"  {a'Image:<8} {counts[a]:>2} file(s), {bytes[a]:>4} bytes"
+    print f"  {a:<8} {counts[a]:>2} file(s), {bytes[a]:>4} bytes"
 ```
 
 **A record instead of parallel arrays.** Shell's answer to a table is

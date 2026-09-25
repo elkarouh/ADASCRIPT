@@ -37,7 +37,7 @@ for cs in ["AFR22", "BAW117"]:
         watched.add(a.callsign)
 
 for phase in Flight_Phase_T:
-    print f"{phase'Image:<8} {by_phase[phase]'Length}"
+    print f"{phase:<8} {by_phase[phase]'Length}"
 
 # --- the "not yet true" section is why_alias_snippets.ady: it declares its
 # own Velocity_T, as the document shows it, and a module declares a type once.

@@ -78,7 +78,7 @@ counts[classify("warn: hot")] += 1
 assert counts[WARN] == 1
 
 for s in Severity_T:                  # every member, in declaration order
-    print f"  {s'Image:<5} {counts[s]}"
+    print f"  {s:<5} {counts[s]}"
 # --- fields ---------------------------------------------------------------
 let F: []str = line.split()
 assert F'Length == 6

@@ -137,10 +137,10 @@ class LogScan(AwkBase):
         # The running totals, already answered.
         print ""
         for s in Severity_T:
-            print f"  {s'Image:<5} {self.counts[s]}"
+            print f"  {s:<5} {self.counts[s]}"
         print ""
         for k in Status_T:
-            print f"  {k'Image:<13} {self.by_status[k]}"
+            print f"  {k:<13} {self.by_status[k]}"
 
         # Post-processing: the questions no running total can answer, because
         # they need every record in hand before any of them has an answer.

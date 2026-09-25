@@ -101,7 +101,7 @@ def main() -> int:
 
     print f"--- sh_janitor {dir} ---"
     for a in Action_T:
-        print f"  {a'Image:<8} {counts[a]:>2} file(s), {bytes[a]:>4} bytes"
+        print f"  {a:<8} {counts[a]:>2} file(s), {bytes[a]:>4} bytes"
     print f"  {failed} failure(s)"
     return 1 if failed > 0 else 0
 

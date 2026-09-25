@@ -177,11 +177,11 @@ this line has no equals sign
     print f"--- config_check {path} ---"
     for f in findings:
         counts[f.level] += 1
-        print f"  {f.level'Image:<7} {where(f):<8} {f.key:<10} {f.text}"
+        print f"  {f.level:<7} {where(f):<8} {f.key:<10} {f.text}"
 
     print ""
     for lv in Level_T:
-        print f"  {lv'Image:<7} {counts[lv]}"
+        print f"  {lv:<7} {counts[lv]}"
     return 1 if counts[ERROR] > 0 else 0
 
 

@@ -263,7 +263,7 @@ for cs in ["AFR22", "BAW117"]:
         watched.add(a.callsign)
 
 for phase in Flight_Phase_T:
-    print f"{phase'Image:<8} {by_phase[phase]'Length}"
+    print f"{phase:<8} {by_phase[phase]'Length}"
 ```
 
 There is no plumbing in it. `by_phase[a.phase]` works because the phase *is*

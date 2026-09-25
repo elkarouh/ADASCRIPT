@@ -900,7 +900,7 @@ def print_timetable(data: JsonNode, result_json: str):
         print("=" * 54)
         var header: str = " " * 8
         for d in DAYS:
-            header = header + f"{d'Image:>10}"
+            header = header + f"{d:>10}"
         print(header)
         for sl in 1..MAX_SLOTS:
             var row: str = f"Slot {sl}  "
