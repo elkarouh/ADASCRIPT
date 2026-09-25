@@ -1,0 +1,42 @@
+#!/usr/bin/env ady2nim
+"""Test: `run([...])` and `runLines([...])` standing alone, for what they do.
+
+A call whose value is not used needs `discard` in front of it on Nim. The
+Nim backend adds one for a proc it has seen declared, but `run` and
+`runLines` are built in -- emitted as runtime helpers the source never
+declares -- so a bare `run(["rmdir", d])` came out without it and did not
+compile. Their value is still a value where it is wanted: assigned, or the
+last expression of a function that returns it.
+"""
+
+let d: str = "/tmp/ady_run_discard_test"
+run(["rm", "-rf", d])
+run(["mkdir", "-p", d + "/sub"], cwd = "/")
+runLines(["ls", d])
+
+def make_marker(dir: str):
+    run(["touch", dir + "/marker"])
+
+class Tidier:
+    var dir: str
+
+    def __init__(self, dir: str):
+        self.dir = dir
+
+    def tidy(self):
+        run(["rm", "-f", self.dir + "/marker"])
+
+def listing(dir: str) -> []str:
+    runLines(["ls", dir])
+
+def status(dir: str) -> RunResult:
+    run(["test", "-d", dir])
+
+make_marker(d)
+assert listing(d) == ["marker", "sub"]
+var t: Tidier = Tidier(d)
+t.tidy()
+assert listing(d) == ["sub"]
+assert status(d).code == 0 and status(d + "/none").code != 0
+run(["rm", "-rf", d])
+print "run-discard tests passed"

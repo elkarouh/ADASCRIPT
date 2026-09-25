@@ -140,6 +140,17 @@ def _strip_generic(name):
     return name[:idx] if idx >= 0 else name
 
 
+# The runtime helpers a built-in call is emitted as, and what each returns.
+# A user proc's return type is in ParserState.proc_return_types; these are
+# never declared in the source, so a `run([...])` standing alone -- run for
+# what it does, its RunResult not wanted -- came out without the discard Nim
+# insists on, and did not compile.
+_NIM_VALUE_HELPERS = {
+    "adascriptRunArgv":      "RunResult",     # run([...])
+    "adascriptRunArgvLines": "seq[string]",   # runLines([...])
+}
+
+
 def _add_call_discards(lines):
     """Put `discard` on a call statement whose value nim would insist be used.
 
@@ -159,8 +170,10 @@ def _add_call_discards(lines):
     _disc_lines = []
     for _ln in lines:
         _stripped = _ln.lstrip()
-        # Skip lines that contain an assignment (=) at top level — those are not bare calls
-        _has_assign = bool(_re_disc_blk.search(r'(?<![=!<>])=(?!=)', _stripped))
+        # Skip lines that assign -- those are not bare calls. At top level
+        # only: an `=` inside the call is a named argument (`run([...], cwd
+        # = d)`), and the call is still bare.
+        _has_assign = _has_toplevel_assignment(_stripped)
         if (_stripped and not _has_assign and
                 not _stripped.startswith(('var ', 'let ', 'const ', 'discard ', 'return ',
                                            'if ', 'while ', 'for ', 'result ', 'echo ',
@@ -198,6 +211,8 @@ def _add_call_discards(lines):
                 _dname = _df.group(1)
                 if _dname in _proc_rtypes_blk:
                     _dret = _proc_rtypes_blk[_dname]
+                elif _dname in _NIM_VALUE_HELPERS:
+                    _dret = _NIM_VALUE_HELPERS[_dname]
             elif _dm and _whole_call(_stripped, _dm):
                 _drecv = _dm.group(1)
                 _dname = _dm.group(2)
