@@ -58,18 +58,24 @@ repository from the cache.
 
 Needs git 2.25 or later (sparse-checkout)."""
 
-const DEFAULT_NM_URL: str = "https://mirror-cma.bitbucket.cfmu.corp.eurocontrol.int/scm/nm"
+type Mode_T    is enum CHECKOUT, UNCHECKOUT, UNCHECKOUT_ALL, LIST
+type Rev_T     is str    # a revision git knows: a commit, a tag, c3fb81031^
+type Sub_T     is str    # <system>/<subsystem>: a submodule, or a cache's repository
+type Target_T  is str    # <system>/<subsystem>/<path>: a file, as the links name it
+type System_T  is str    # <system>: TACT
+type InSub_T   is str    # a file's path in its submodule: sources/b.adb
+type Name_T    is str    # a submodule's name in .gitmodules: TACT.UIF
+type Url_T     is str    # a repository's URL
+type Reason_T  is str    # why something was not done; "" when it was
+type Pattern_T is str    # a sparse-checkout pattern: /sources/b.adb
 
-type Mode_T   is enum CHECKOUT, UNCHECKOUT, UNCHECKOUT_ALL, LIST
-type Rev_T    is str    # a revision git knows: a commit, a tag, c3fb81031^
-type Sub_T    is str    # <system>/<subsystem>: a submodule, or a cache's repository
-type Target_T is str    # <system>/<subsystem>/<path>: a file, as the links name it
+const DEFAULT_NM_URL: Url_T = "https://mirror-cma.bitbucket.cfmu.corp.eurocontrol.int/scm/nm"
 
 type File_T is record:
     target: Target_T = ""    # TACT/UIF/sources/b.adb
-    system: str      = ""    # TACT
+    system: System_T = ""    # TACT
     sub:    Sub_T    = ""    # TACT/UIF
-    file:   str      = ""    # sources/b.adb, in the submodule
+    file:   InSub_T  = ""    # sources/b.adb
 
 def parse_target(target: Target_T) -> File_T:
     die(f"not a file: {target}") if target.endswith("/")
@@ -97,7 +103,7 @@ def checked_out(dir: Path) -> bool:
     -d dir and git_out(dir, ["rev-parse", "--show-toplevel"]) == str(dir.resolve())
 def sparse(dir: Path) -> bool:
     git_out(dir, ["config", "--bool", "core.sparseCheckout"]) == "true"
-def sparse_list(dir: Path) -> []str:
+def sparse_list(dir: Path) -> []Pattern_T:
     [line for line in git_out(dir, ["sparse-checkout", "list"]).splitlines() if line != ""]
 def files_in(dir: Path, sub: Sub_T) -> []Target_T:
     [sub + "/" + pattern.lstrip("/") for pattern in sparse_list(dir)]
@@ -114,13 +120,13 @@ def keep_worktree_in_config(dir: Path):
         run(["git", "config", "-f", moved, "--unset", "core.worktree"])
         run(["git", "config", "-f", str(gitdir / "config"), "core.worktree", worktree.output.strip()])
 
-def take_out(work: Path, f: File_T) -> (str, bool):
+def take_out(work: Path, f: File_T) -> (Reason_T, bool):
     """F out of WORK's sparse checkout, unless it is the last file there --
     which the caller takes out with the rest: (why not, or ""; the last)."""
-    let patterns: []str = sparse_list(work)
+    let patterns: []Pattern_T = sparse_list(work)
     return (f"{f.target} is not checked out", False) if "/" + f.file not in patterns
     return (f"{f.target} has changes: not taken out", False) if git_out(work, ["status", "--porcelain", "--", f.file]) != ""
-    let others: []str = [p for p in patterns if p != "/" + f.file]
+    let others: []Pattern_T = [p for p in patterns if p != "/" + f.file]
     return ("", True) if others == []
     let r: RunResult = run(["git", "-C", str(work), "sparse-checkout", "set", "--no-cone", "--stdin"],
                            stdin = "\n".join(others) + "\n")
@@ -141,12 +147,12 @@ class Workspace_T:
     def __init__(self, root: Path):
         self.root = root
 
-    def submodules(self) -> [](str, Sub_T):
+    def submodules(self) -> [](Name_T, Sub_T):
         """Each submodule's name and path, from .gitmodules."""
         let listing: str = git_out(self.root, ["config", "-f", ".gitmodules", "--get-regexp", "^submodule\\..*\\.path$"])
         [(l.split()[0].removeprefix("submodule.").removesuffix(".path"), l.split()[1]) for l in listing.splitlines() if len(l.split()) == 2]
 
-    def name_of(self, sub: Sub_T) -> str:
+    def name_of(self, sub: Sub_T) -> Name_T:
         for name, path in self.submodules():
             return name if path == sub
         return ""
@@ -159,9 +165,9 @@ class Workspace_T:
                 files = files + files_in(dir, path)
         return files
 
-    def uncheckout(self, f: File_T) -> str:
+    def uncheckout(self, f: File_T) -> Reason_T:
         let work: Path = self.root / f.sub
-        let name: str = self.name_of(f.sub)
+        let name: Name_T = self.name_of(f.sub)
         return f"{f.sub} is not a submodule of {self.root}" if name == ""
         return f"{f.sub} is not checked out" if not checked_out(work)
         return f"{f.sub} is checked out in full, not by {PROG}: not touching it" if not sparse(work)
@@ -174,7 +180,7 @@ class Workspace_T:
 
     def checkout(self, f: File_T):
         let work: Path = self.root / f.sub
-        let name: str = self.name_of(f.sub)
+        let name: Name_T = self.name_of(f.sub)
         die(f"{f.sub} is not a submodule of {self.root}") if name == ""
         if checked_out(work):
             if -e (work / f.file):
@@ -188,11 +194,11 @@ class Workspace_T:
             return
 
         # the commit the superproject records for SUB
-        let commits: []str = [l.split()[2] for l in git_out(self.root, ["ls-tree", "HEAD", "--", f.sub]).splitlines() if l.split()[1] == "commit"]
+        let commits: []Rev_T = [l.split()[2] for l in git_out(self.root, ["ls-tree", "HEAD", "--", f.sub]).splitlines() if l.split()[1] == "commit"]
         die(f"the superproject records no commit for {f.sub}") if commits == []
-        let commit: str = commits[0]
+        let commit: Rev_T = commits[0]
         git_or_die(self.root, ["submodule", "--quiet", "init", "--", f.sub], f"could not register {f.sub}")
-        let url: str = git_out(self.root, ["config", "submodule." + name + ".url"])
+        let url: Url_T = git_out(self.root, ["config", "submodule." + name + ".url"])
         die(f"no URL for submodule {name}") if url == ""
         let gitdir: Path = Path(git_out(self.root, ["rev-parse", "--absolute-git-dir"])) / "modules" / name
 
@@ -235,7 +241,7 @@ class Cache_T:
                 files = files + files_in(repo, sub)
         return files
 
-    def uncheckout(self, f: File_T) -> str:
+    def uncheckout(self, f: File_T) -> Reason_T:
         let work: Path = self.dir / f.sub
         return f"{f.sub} is not in the cache {self.dir}" if not -e (work / ".git")
         let (why, last) = take_out(work, f)
@@ -247,8 +253,8 @@ class Cache_T:
 
     def checkout(self, f: File_T, revs: []Rev_T):
         let work: Path = self.dir / f.sub
-        let base: str = $TCHECK_NM_URL if $TCHECK_NM_URL != "" else DEFAULT_NM_URL
-        let url: str = base + "/" + f.sub.replace("/", ".").lower() + ".git"
+        let base: Url_T = $TCHECK_NM_URL if $TCHECK_NM_URL != "" else DEFAULT_NM_URL
+        let url: Url_T = base + "/" + f.sub.replace("/", ".").lower() + ".git"
         let fresh: bool = not -e (work / ".git")
         if fresh:
             work.mkdir()
@@ -327,7 +333,7 @@ def the_file() -> File_T:
     die(f"usage: {PROG} [{where}] [-u] <system>/<subsystem>/<path>") if len(rest) != 1
     parse_target(rest[0])
 
-def uncheckout(f: File_T) -> str:
+def uncheckout(f: File_T) -> Reason_T:
     cached.uncheckout(f) if cache != "" else workspace.uncheckout(f)
 
 case mode:
@@ -338,12 +344,12 @@ case mode:
         let files: []Target_T = checked_out_files("-u -all")
         if files == []:
             print f"{PROG}: nothing checked out"
-        let failures: []str = [why for why in [uncheckout(parse_target(t)) for t in files] if why != ""]
+        let failures: []Reason_T = [why for why in [uncheckout(parse_target(t)) for t in files] if why != ""]
         for why in failures:
             warn(why)
         quit(1 if failures != [] else 0)
     when UNCHECKOUT:
-        let why: str = uncheckout(the_file())
+        let why: Reason_T = uncheckout(the_file())
         die(why) if why != ""
     when CHECKOUT:
         if cache != "":
