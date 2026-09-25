@@ -1,7 +1,10 @@
 #!/bin/sh
-# Tcheckout -- check out one file of an NM submodule that is not checked out,
-# and only that file: what Tcheck_tact's DIFF and NET DIFF links run first
-# where the file's submodule is not checked out.
+# Tcheckout.ksh -- check out one file of an NM submodule that is not checked
+# out, and only that file: what Tcheck_tact's DIFF and NET DIFF links run
+# first where the file's submodule is not checked out. Tcheckout.ady is the
+# Adascript version, with the same options and messages; this one is for
+# where the Adascript build is not at hand (link it as Tcheckout, the name
+# the links run).
 #
 #   Tcheckout [-root DIR] <system>/<subsystem>/<path>
 #   Tcheckout [-root DIR] -u <system>/<subsystem>/<path>
@@ -255,7 +258,7 @@ fi
 commit=$(git -C "$root" ls-tree HEAD -- "$sub" | awk '$2 == "commit" { print $3 }')
 [ -n "$commit" ] || die "the superproject records no commit for $sub"
 
-git -C "$root" submodule init -- "$sub" >/dev/null || die "could not register $sub"
+git -C "$root" submodule --quiet init -- "$sub" || die "could not register $sub"
 url=$(git -C "$root" config "submodule.$name.url")
 [ -n "$url" ] || die "no URL for submodule $name"
 gitdir=$(git -C "$root" rev-parse --absolute-git-dir)/modules/$name

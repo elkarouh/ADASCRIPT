@@ -281,6 +281,7 @@ TOOL_PROGRAMS := \
     TOOLS/PGREP/Pgrep.ady \
     TOOLS/TCHECK/Tcheck_tact.ady \
     TOOLS/TCHECK/make_comparable.ady \
+    TOOLS/TCHECK/Tcheckout.ady \
     TOOLS/TBLAME/Tblame.ady \
     TOOLS/TDIFF/Tdiff.ady
 
@@ -658,8 +659,17 @@ test: compile
 	    KSH=$$d/ksh NO_EXIT_CODE=1 $(TCDIR)/test/run_new_failures_tests.sh $(TCDIR)/test/ksh_treport; \
 	    rc=$$?; rm -rf $$d; [ $$rc -eq 0 ]; \
 	else echo "  SKIP (no zsh)"; fi
+	@# Tcheckout.ady, on both backends, and Tcheckout.ksh: the same checks.
 	@echo "=== Tcheckout: one file of a submodule not checked out ==="
 	@$(TCDIR)/test/run_checkout_tests.sh $(TCDIR)/Tcheckout
+	@echo "=== Tcheckout, the same checks on the Python backend ==="
+	@$(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(TCDIR)/Tcheckout.ady > $(TCDIR)/test/Tcheckout_py.py
+	@printf '#!/bin/sh\nexec $(PYTHON) %s "$$@"\n' "$(TCDIR)/test/Tcheckout_py.py" \
+	    > $(TCDIR)/test/tcheckout_py && chmod +x $(TCDIR)/test/tcheckout_py
+	@$(TCDIR)/test/run_checkout_tests.sh $(TCDIR)/test/tcheckout_py
+	@rm -f $(TCDIR)/test/Tcheckout_py.py $(TCDIR)/test/tcheckout_py
+	@echo "=== Tcheckout.ksh, the same checks ==="
+	@$(TCDIR)/test/run_checkout_tests.sh $(TCDIR)/Tcheckout.ksh
 
 	@echo "=== Expect / shell examples (require bc) ==="
 	@for f in $(EXPECT_EXAMPLES); do \

@@ -212,7 +212,12 @@ a change to one is a change to both.
 
 Checks out one file of an NM submodule that is not checked out, and only
 that file -- what the list of changes' `DIFF` and `NET DIFF` links run
-first, where the file's submodule is not checked out:
+first, where the file's submodule is not checked out. `Tcheckout.ady` is
+built to `Tcheckout`, the name the links run; `Tcheckout.ksh` is the same
+program in shell, for where the Adascript build is not at hand -- link it
+as `Tcheckout` there. The two take the same options and print the same
+messages, and `make test` runs `test/run_checkout_tests.sh` against both
+(the Adascript one on both backends):
 
 ```
 Tcheckout [-root DIR] <system>/<subsystem>/<path>
@@ -328,15 +333,16 @@ All three programs share these Adascript types, designed for an eventual merge:
 
 ## Building
 
-`make compile` (or `make test`) at the top of the repository builds both,
-leaving `Tcheck_tact` and `make_comparable` here; Tcheck_tact runs
-`make_comparable` by name, and its diff links `Tcheckout`, so put this
+`make compile` (or `make test`) at the top of the repository builds them,
+leaving `Tcheck_tact`, `make_comparable` and `Tcheckout` here; Tcheck_tact
+runs `make_comparable` by name, and its diff links `Tcheckout`, so put this
 directory on the PATH. By hand:
 
 ```bash
 cd TOOLS/TCHECK
 ady2nim c Tcheck_tact.ady
 ady2nim c make_comparable.ady
+ady2nim c Tcheckout.ady
 ```
 
 ## Origin
@@ -348,3 +354,4 @@ ady2nim c make_comparable.ady
 - `make_comparable.ady` — translated from `make_comparable.ksh`
 - `Treport.ksh` — `list_changes` and `list_detailed_changes` of `Tcheck_tact.ady`, translated
   back to ksh
+- `Tcheckout.ady` — translated from `Tcheckout.ksh`

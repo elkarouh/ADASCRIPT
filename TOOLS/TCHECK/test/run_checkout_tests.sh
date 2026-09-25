@@ -1,5 +1,6 @@
 #!/bin/sh
-# Tcheckout against real repositories built here: an upstream submodule
+# Tcheckout -- the Adascript build, or Tcheckout.ksh, whichever is given --
+# against real repositories built here: an upstream submodule
 # (TACT/UIF: two files over two tagged baselines, filtering allowed), a
 # superproject recording it, and a workspace cloned from that without its
 # submodules -- the case Tcheck_tact's diff links check the file out for.
@@ -11,6 +12,8 @@ command -v git >/dev/null 2>&1 || { echo "SKIP (no git)"; exit 0; }
 
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT INT TERM
+# the diff links run it by name: `Tcheckout`, this one
+mkdir "$WORK/bin" && ln -s "$TCHECKOUT" "$WORK/bin/Tcheckout"
 export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
 export GIT_CONFIG_NOSYSTEM=1 HOME=$WORK        # no one's git configuration but this
 git config --global init.defaultBranch main
@@ -138,7 +141,7 @@ if command -v emacs >/dev/null 2>&1; then
     f=$sub/sources/b.adb
     link="(when (eql 0 (shell-command \"Tcheckout -root $ws TACT/UIF/sources/b.adb\")) (vc-version-ediff (list \"$f\") \"30.0.0.1\" \"30.0.0.2\"))"
     shown='(dolist (n (sort (mapcar (function buffer-name) (buffer-list)) (function string<))) (when (string-match "b[.]adb[.]~" n) (with-current-buffer n (message "SHOWN %s=%s" n (string-trim (buffer-string))))))'
-    got=$(cd / && PATH=$(dirname "$TCHECKOUT"):$PATH emacs --batch -Q --eval "(progn (require 'vc) $link $shown)" 2>&1 |
+    got=$(cd / && PATH=$WORK/bin:$PATH emacs --batch -Q --eval "(progn (require 'vc) $link $shown)" 2>&1 |
           sed -n 's/^SHOWN //p' | tr '\n' ' ')
     check "a DIFF link, in Emacs: checked out, compared" "b.adb.~30.0.0.1~=b 1 b.adb.~30.0.0.2~=b 2 " "$got"
 else
@@ -193,7 +196,7 @@ if command -v emacs >/dev/null 2>&1; then
     rm -rf "$C"
     f=$csub/sources/b.adb
     link="(when (eql 0 (shell-command \"Tcheckout -cache $C -rev 30.0.0.3 -rev 30.0.0.2 TACT/UIF/sources/b.adb\")) (vc-version-ediff (list \"$f\") \"30.0.0.2\" \"30.0.0.3\"))"
-    got=$(cd / && PATH=$(dirname "$TCHECKOUT"):$PATH emacs --batch -Q --eval "(progn (require 'vc) $link $shown)" 2>&1 |
+    got=$(cd / && PATH=$WORK/bin:$PATH emacs --batch -Q --eval "(progn (require 'vc) $link $shown)" 2>&1 |
           sed -n 's/^SHOWN //p' | tr '\n' ' ')
     check "...a DIFF link, in Emacs: cloned, compared"   "b.adb.~30.0.0.2~=b 2 b.adb.~30.0.0.3~=b 3 " "$got"
 fi
