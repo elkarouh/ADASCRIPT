@@ -361,6 +361,12 @@ function echo_emacs {           # FILE: an #emacs: link opening it
     print -r -- "#emacs:(progn(find-file \"$1\"))"
 }
 
+function view_build_of {        # BRANCH -> REPLY: its view build, or ""
+    typeset who=${1%%.*} name=${1#*.}
+    typeset -u WHO=$who NAME=$name
+    newest "$TACT_ROOT/TACT_CONFIG.$WHO.$NAME" "build_*"
+}
+
 function display_branch_info {  # BRANCH REFERENCE
     typeset who=${1%%.*} name=${1#*.} view ref
     typeset -u WHO=$who NAME=$name
@@ -369,7 +375,7 @@ function display_branch_info {  # BRANCH REFERENCE
     printf '.'
     cecho Ky "$name"
     # the view build: the build of TACT_CONFIG.<USER>.<BRANCH>
-    newest "$TACT_ROOT/TACT_CONFIG.$WHO.$NAME" "build_*"; view=$REPLY
+    view_build_of "$1"; view=$REPLY
     if [[ -z $view ]]; then
         print -r -- "NO VIEW BUILD FOUND FOR THIS BRANCH"
     else
@@ -492,6 +498,24 @@ function list_changes {         # BASELINE: by committer, the most first, their 
         count_line "$unattributed_count" $count_width "$unattributed_types"
     fi
     print
+    # the branches not built yet, in the order of the table
+    typeset unbuilt=""
+    for ((k = 0; k < ${#COMMITTERS[@]}; k++)); do
+        print -r -- "${counts[k]} $k"
+    done | sort -k1,1nr -k2,2n | while read -r line; do
+        k=${line#* }
+        for branch in ${BRANCHES[${COMMITTERS[k]}]}; do
+            view_build_of "$branch"
+            [[ -z $REPLY ]] && unbuilt="$unbuilt $branch"
+        done
+    done
+    if [[ -n $unbuilt ]]; then
+        cecho sWb "NO VIEW BUILD FOUND FOR THESE BRANCHES"
+        for branch in $unbuilt; do
+            print -r -- "  $branch"
+        done
+        print
+    fi
 }
 UNATTRIBUTED_LABEL="(no branch)"
 

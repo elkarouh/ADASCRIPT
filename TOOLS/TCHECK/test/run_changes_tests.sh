@@ -131,6 +131,9 @@ alice         4 files: 2 adb, 2 ads
 bob           2 files: 1 adb, 1 ads
 carol         1 file : 1 (no extension)
 (no branch)   1 file : 1 out" "$(printf '%s\n' "$SHORT" | sed -n '/^CHANGES BY COMMITTER$/,/^$/p' | grep .)"
+check "then the branches with no view build"     "NO VIEW BUILD FOUND FOR THESE BRANCHES
+  dave.user_guide
+  bob.also_b" "$(printf '%s\n' "$SHORT" | sed -n '/^NO VIEW BUILD FOUND FOR THESE BRANCHES$/,/^$/p' | grep .)"
 check "-short: not each file's changes"          0 "$(printf '%s\n' "$SHORT" | grep -c '^LIST OF CHANGES$\|^FILE ' || true)"
 check "without -short: the summary, then the list" "CHANGES BY COMMITTER
 LIST OF CHANGES" "$(printf '%s\n' "$OUT" | grep '^CHANGES BY COMMITTER$\|^LIST OF CHANGES$')"

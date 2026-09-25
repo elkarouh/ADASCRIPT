@@ -831,6 +831,13 @@ def display_file(fc: FileChange):
     if len(fc.commits) > 1 and fc.from_baseline != "" and fc.to_baseline != "":
         print "NET DIFF    : " + net_diff_link(fc)
 
+def view_build_of(branch: BranchName) -> Path:
+    """BRANCH's view build -- the newest build_* of TACT_CONFIG.<USER>.<BRANCH>,
+    e.g. build_default_Linux -- or Path("") when it has none."""
+    let who: Committer = committer_of(branch)
+    let name: str = branch[len(who) + 1:]
+    newest(TACT_ROOT / f"TACT_CONFIG.{who.upper()}.{name.upper()}", "build_*")
+
 def reference_build(reference: str, ref_reports: Path) -> Path:
     """The build of REFERENCE -- "TACT.TACT_CONFIG.30.0.0.132" -- its test
     reports REF_REPORTS were made from: they are named after it,
@@ -858,7 +865,7 @@ def display_branch_info(branch: BranchName, reference: str):
     puts("Wb", who)
     stdout.write(".")
     puts("Ky", name, NEWLINE=True)
-    let view_build: Path = newest(TACT_ROOT / f"TACT_CONFIG.{who.upper()}.{name.upper()}", "build_*")
+    let view_build: Path = view_build_of(branch)
     if view_build == "":
         print "NO VIEW BUILD FOUND FOR THIS BRANCH"
     else:
@@ -924,7 +931,8 @@ def files_by_type(files: []str) -> str:
 
 def list_files_by_committer(report: Path):
     """By committer, the most first, how many files REPORT's changes touch,
-    and how many of each type (extension)."""
+    and how many of each type (extension); then the branches with no view
+    build, if any."""
     let changes: ChangeList = read_changes(report)
     var files: {Committer}[]str = {:}
     for who in changes.committers:
@@ -948,6 +956,17 @@ def list_files_by_committer(report: Path):
         let noun: str = "file " if len(unattributed) == 1 else "files"
         print "(no branch)".ljust(width) + f"  {str(len(unattributed)).rjust(count_width)} {noun}: " + files_by_type(unattributed)
     print
+    # the branches not built yet, in the order of the table
+    var unbuilt: []BranchName = []
+    for n, i, who in order:
+        for branch in changes.branches[who]:
+            if view_build_of(branch) == "":
+                unbuilt.append(branch)
+    if len(unbuilt) > 0:
+        puts("sWb", "NO VIEW BUILD FOUND FOR THESE BRANCHES", NEWLINE=True)
+        for branch in unbuilt:
+            print "  " + branch
+        print
 
 # A test failing -- newly, or crashed -- in one of the baseline's builds
 # that did not fail in the previous baseline's: see Report.new_failures.

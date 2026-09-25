@@ -55,6 +55,14 @@ bss           1 file : 1 (no extension)
 (no branch)   1 file : 1 out
 ```
 
+Then the branches not built yet, if any -- no `build_*` under
+`/cm/ot/TACT/TACT_CONFIG.<USER>.<BRANCH>`:
+
+```
+NO VIEW BUILD FOUND FOR THESE BRANCHES
+  ehristea.flight_list_fix
+```
+
 Then the tests newly failing -- new or crashed in one of the baseline's
 builds, and not failing in the previous baseline's -- each once, with the
 build type and subtype(s) it fails in:
