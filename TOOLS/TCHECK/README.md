@@ -204,10 +204,14 @@ All three programs share these Adascript types, designed for an eventual merge:
 
 ## Building
 
+`make compile` (or `make test`) at the top of the repository builds both,
+leaving `Tcheck_tact` and `make_comparable` here; Tcheck_tact runs
+`make_comparable` by name, so put this directory on the PATH. By hand:
+
 ```bash
 cd TOOLS/TCHECK
-ady2nim c -d:release Tcheck_tact.ady -o Tcheck_tact
-ady2nim c -d:release make_comparable.ady -o make_comparable
+ady2nim c Tcheck_tact.ady
+ady2nim c make_comparable.ady
 ```
 
 ## Origin

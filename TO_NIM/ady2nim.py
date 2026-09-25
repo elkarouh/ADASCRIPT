@@ -1903,7 +1903,19 @@ def main(argv=None):
              for f in _files
              if f.endswith(".nim") and f not in _BUNDLED_NIMS),
             default=0)
-        need_compile = need_transpile or (exe_mtime < max(nim_mtime, _dep_nim_max_mtime))
+        # ...but a change to one of them has to rebuild what uses it, or the
+        # binary keeps the old code: a program importing stdlib's Counter_T
+        # went on printing the old total() after stdlib.nim changed, "up to
+        # date", until `make clean`. Their sources in STDLIB/ are what
+        # count, not the copies: those keep the source's mtime, and a
+        # source edited since the exe was built is newer than it.
+        _bundled_src_mtime = max(
+            (os.path.getmtime(os.path.join(_stdlib_dir, f))
+             for f in _BUNDLED_NIMS
+             if os.path.exists(os.path.join(_stdlib_dir, f))),
+            default=0)
+        need_compile = need_transpile or (
+            exe_mtime < max(nim_mtime, _dep_nim_max_mtime, _bundled_src_mtime))
 
         def _make_symlink():
             if produces_binary and ady_file:

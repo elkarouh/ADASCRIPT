@@ -278,6 +278,7 @@ TOOL_PROGRAMS := \
     TOOLS/ADA_INDENT/ada_indent.ady \
     TOOLS/PGREP/Pgrep.ady \
     TOOLS/TCHECK/Tcheck_tact.ady \
+    TOOLS/TCHECK/make_comparable.ady \
     TOOLS/TBLAME/Tblame.ady \
     TOOLS/TDIFF/Tdiff.ady
 
@@ -375,6 +376,27 @@ test: compile
 	    $(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(TMPDIR)/ady_dollar0.ady > $(TMPDIR)/ady_dollar0_py.py \
 	    && cd / && $(PYTHON) $(TMPDIR)/ady_dollar0_py.py 2>&1 | grep -qx ok && echo OK || { echo FAIL; exit 1; }
 	@rm -rf $(TMPDIR)/ady_dollar0.ady $(TMPDIR)/ady_dollar0 $(TMPDIR)/ady_dollar0_py.py $(TMPDIR)/ady_dollar0_cache
+
+	@# A change to a bundled support file -- TO_NIM/STDLIB/stdlib.nim -- has
+	@# to rebuild the programs using it: ady2nim used to call them up to date
+	@# and keep the old code until `make clean`. On a copy of the transpiler,
+	@# whose stdlib.nim can be edited, with a cache of its own.
+	@echo "=== a changed stdlib.nim rebuilds what uses it ==="
+	@printf '  %-42s' "stdlib.nim edited after a build"; \
+	    d=$$(mktemp -d); \
+	    cp -r $(CURDIR)/TO_NIM $(CURDIR)/TO_PYTHON $(CURDIR)/ADASCRIPT_GRAMMAR $(CURDIR)/HPARSEC $$d/ && \
+	    mkdir $$d/src && \
+	    printf 'from stdlib import Counter_T\nlet c: Counter_T[str] = Counter_T(["a", "b", "a"])\nprint c.total()\n' > $$d/src/cnt.ady && \
+	    XDG_CACHE_HOME=$$d/cache $(PYTHON) $$d/TO_NIM/ady2nim.py c $$d/src/cnt.ady >/dev/null 2>&1 && \
+	    before=$$($$d/src/cnt) && sleep 1 && \
+	    $(PYTHON) -c 'import sys; p = sys.argv[1]; s = open(p).read(); \
+	        old = "  for v in c.values: result += v\n"; assert old in s; \
+	        open(p, "w").write(s.replace(old, old + "  result += 100\n"))' $$d/TO_NIM/STDLIB/stdlib.nim && \
+	    XDG_CACHE_HOME=$$d/cache $(PYTHON) $$d/TO_NIM/ady2nim.py c $$d/src/cnt.ady >/dev/null 2>&1 && \
+	    after=$$($$d/src/cnt); \
+	    rm -rf $$d; \
+	    if [ "$$before" = 3 ] && [ "$$after" = 103 ]; then echo OK; \
+	    else echo "FAIL (before: $$before, after the edit: $$after, want 3 then 103)"; exit 1; fi
 
 	@# The transpiler's own tests: translations and the errors it must raise.
 	@echo "=== ady2nim --test ==="
@@ -588,6 +610,15 @@ test: compile
 	    > $(TCDIR)/test/tcheck_py && chmod +x $(TCDIR)/test/tcheck_py
 	@$(TCDIR)/test/run_changes_tests.sh $(TCDIR)/test/tcheck_py
 	@rm -f $(TCDIR)/test/Tcheck_tact_py.py $(TCDIR)/test/tcheck_py
+	@# make_comparable, which Tcheck_tact runs on the logs it compares:
+	@# the volatile parts replaced, in place.
+	@echo "=== make_comparable ==="
+	@printf '  %-42s' "make_comparable (pid, hex address)"; \
+	    f=$$(mktemp) && printf 'started pid 4242\ncrash at 0x7ffd1234\n' > $$f && \
+	    $(TCDIR)/make_comparable $$f 30.0.0.1 2>/dev/null && \
+	    got=$$(cat $$f); rm -f $$f; \
+	    if [ "$$got" = "$$(printf 'started pid <PID>\ncrash at <TRACE>')" ]; then echo OK; \
+	    else echo "FAIL: $$got"; exit 1; fi
 	@# Treport.ksh, the standalone ksh translation: the same checks
 	@# Under ksh93, and under zsh in ksh emulation -- zsh run as ksh, which
 	@# is what /bin/ksh is on some machines.

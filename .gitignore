@@ -28,6 +28,7 @@ TOOLS/PGREP/*_gen.py
 
 # Tcheck_tact, the same again.
 TOOLS/TCHECK/Tcheck_tact
+TOOLS/TCHECK/make_comparable
 TOOLS/TCHECK/*_gen.py
 
 # Tblame, the same again.
