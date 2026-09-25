@@ -98,8 +98,7 @@ seen; mark it; relax every edge out of it. A signature and fourteen lines,
 and not one of them is there for the language rather than for the
 algorithm. That is what executable pseudocode was supposed to mean. The
 book's chapter 1 §1.4 sets it beside the same program in idiomatic Python,
-line by line — and notes that, `PriorityQueue` being a Nim library, this
-file runs on the Nim backend only for now.
+line by line.
 
 ### Implicit typing is a bad idea
 
