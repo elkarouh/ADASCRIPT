@@ -132,7 +132,7 @@ if [ -n "$cache" ]; then
         others=$(git -C "$work" sparse-checkout list | grep -vxF "/$file")
         if [ -n "$others" ]; then
             printf '%s\n' "$others" | git -C "$work" sparse-checkout set --no-cone --stdin ||
-                die "could not take $file out of $work"
+                die "could not take $file out of $sub"
             echo "$PROG: $target taken out"
         else
             rm -rf "$work" || die "could not remove $work"
