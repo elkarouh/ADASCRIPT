@@ -277,6 +277,19 @@ history of this file if the reasoning behind one of them is ever wanted.
       passing the annotation down to its elements. `[E][]T` is fine, so it
       is the set literal specifically.
 - [ ] `.map()` / `.and_then()` rewriting on `?T` (Feature 2)
+- [ ] **For discussion, not to implement yet:** a statement modifier on more
+      than the guards. Today only `return`, `break`, `continue`, `die(...)`
+      and `quit(...)` may carry a trailing `if` (README, "Statement
+      Modifier", says why). Writing `Tcheckout.ady` asked for it three
+      times -- `warn(msg) if msg != ""`, `x = y if c`, a call run only when
+      needed -- each now a two-line `if` block. The case against: an
+      assignment with a trailing `if` reads like the conditional expression
+      `x = y if c else z` until the end of the line; any call could hide its
+      condition off to the right; and the rule "a modifier means the block
+      is left" would be gone. The goal is readability, not terseness, so
+      the default answer is no -- unless a narrower rule (a `warn`, say, as
+      the guard's non-leaving sibling) turns out to read as well as the
+      guards do.
 
 ---
 

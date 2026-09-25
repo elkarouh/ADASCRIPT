@@ -60,7 +60,7 @@ Needs git 2.25 or later (sparse-checkout)."""
 
 const DEFAULT_NM_URL: str = "https://mirror-cma.bitbucket.cfmu.corp.eurocontrol.int/scm/nm"
 
-type Mode_T   is enum CHECKOUT, UNCHECKOUT, LIST
+type Mode_T   is enum CHECKOUT, UNCHECKOUT, UNCHECKOUT_ALL, LIST
 type Rev_T    is str    # a revision git knows: a commit, a tag, c3fb81031^
 type Sub_T    is str    # <system>/<subsystem>: a submodule, or a cache's repository
 type Target_T is str    # <system>/<subsystem>/<path>: a file, as the links name it
@@ -312,31 +312,39 @@ var workspace: Workspace_T = Workspace_T(root)
 var cached: Cache_T = Cache_T(cache)
 let where: str = ("-cache DIR" if cache != "" else "-root DIR")
 die("-all goes with -u") if all and mode != UNCHECKOUT
+if all: mode = UNCHECKOUT_ALL
 
-def uncheckout(t: Target_T) -> str:
-    cached.uncheckout(parse_target(t)) if cache != "" else workspace.uncheckout(parse_target(t))
-
-if mode == LIST or all:
-    die(f"usage: {PROG} [{where}] {'-u -all' if all else '-l'} [<system>/<subsystem>]") if len(rest) > 1
+def checked_out_files(option: str) -> []Target_T:
+    """What -l and -u -all were asked about: every file, or one submodule's."""
+    die(f"usage: {PROG} [{where}] {option} [<system>/<subsystem>]") if len(rest) > 1
     let only: Sub_T = rest[0].rstrip("/") if len(rest) == 1 else ""
-    let files: []Target_T = (cached.checked_out_files(only) if cache != "" else workspace.checked_out_files(only))
-    if mode == LIST:
-        for f in files:
-            print f
-    elif files == []:
-        print f"{PROG}: nothing checked out"
-    else:
-        let failures: []str = [why for why in [uncheckout(t) for t in files] if why != ""]
+    cached.checked_out_files(only) if cache != "" else workspace.checked_out_files(only)
+
+def the_file() -> File_T:
+    """The one file a checkout or -u was given."""
+    die(f"usage: {PROG} [{where}] [-u] <system>/<subsystem>/<path>") if len(rest) != 1
+    parse_target(rest[0])
+
+def uncheckout(f: File_T) -> str:
+    cached.uncheckout(f) if cache != "" else workspace.uncheckout(f)
+
+case mode:
+    when LIST:
+        for t in checked_out_files("-l"):
+            print t
+    when UNCHECKOUT_ALL:
+        let files: []Target_T = checked_out_files("-u -all")
+        if files == []:
+            print f"{PROG}: nothing checked out"
+        let failures: []str = [why for why in [uncheckout(parse_target(t)) for t in files] if why != ""]
         for why in failures:
             warn(why)
         quit(1 if failures != [] else 0)
-    quit(0)
-
-die(f"usage: {PROG} [{where}] [-u] <system>/<subsystem>/<path>") if len(rest) != 1
-if mode == UNCHECKOUT:
-    let why: str = uncheckout(rest[0])
-    die(why) if why != ""
-elif cache != "":
-    cached.checkout(parse_target(rest[0]), revs)
-else:
-    workspace.checkout(parse_target(rest[0]))
+    when UNCHECKOUT:
+        let why: str = uncheckout(the_file())
+        die(why) if why != ""
+    when CHECKOUT:
+        if cache != "":
+            cached.checkout(the_file(), revs)
+        else:
+            workspace.checkout(the_file())
