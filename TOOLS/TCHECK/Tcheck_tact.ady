@@ -832,23 +832,31 @@ def display_file(fc: FileChange):
         print "NET DIFF    : " + net_diff_link(fc)
 
 def display_branch_info(branch: BranchName, reference: str):
-    """The branch the changes came from, and its view build next to the
-    REFERENCE baseline's, with the ediff between their failures."""
+    """The branch the changes came from: its view build -- the build of
+    TACT_CONFIG.<USER>.<BRANCH>, e.g. build_default_Linux -- and its test
+    reports next to the REFERENCE baseline's, with the ediff between their
+    failures. Each said to be missing when it is: a branch may be built
+    and its tests not yet run."""
     let who: Committer = committer_of(branch)
     let name: str = branch[len(who) + 1:]
     stdout.write("FROM BRANCH : ")
     puts("Wb", who)
     stdout.write(".")
     puts("Ky", name, NEWLINE=True)
-    let reports: Path = TACT_ROOT / "test_reports"
-    let view_build: Path = newest(reports, f"TACT.TACT_CONFIG.{who.upper()}.{name.upper()}-G!31.*")
-    let ref_build: Path = newest(reports, f"{reference}-G!31.*")
+    let view_build: Path = newest(TACT_ROOT / f"TACT_CONFIG.{who.upper()}.{name.upper()}", "build_*")
     if view_build == "":
         print "NO VIEW BUILD FOUND FOR THIS BRANCH"
     else:
         print f"VIEW BUILD DIR: {view_build}"
-        print f"REFERENCE BASELINE DIR: {ref_build}"
-        echo_ediff(ref_build / "general.results.failed-in", view_build / "general.results.failed-in")
+    let reports: Path = TACT_ROOT / "test_reports"
+    let view_reports: Path = newest(reports, f"TACT.TACT_CONFIG.{who.upper()}.{name.upper()}-G!31.*")
+    let ref_reports: Path = newest(reports, f"{reference}-G!31.*")
+    if view_reports == "":
+        print "NO TEST REPORTS FOUND FOR THIS BRANCH"
+    else:
+        print f"VIEW TEST REPORTS DIR: {view_reports}"
+        print f"REFERENCE BASELINE DIR: {ref_reports}"
+        echo_ediff(ref_reports / "general.results.failed-in", view_reports / "general.results.failed-in")
 
 def changes_report(baseline: str, warn: bool = True) -> Path:
     """The changes report of the CFMUTEST baseline built on TACT BASELINE,

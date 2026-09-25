@@ -368,12 +368,20 @@ function display_branch_info {  # BRANCH REFERENCE
     cechon Wb "$who"
     printf '.'
     cecho Ky "$name"
-    newest "$TACT_ROOT/test_reports" "TACT.TACT_CONFIG.$WHO.$NAME-G!31.*"; view=$REPLY
-    newest "$TACT_ROOT/test_reports" "$2-G!31.*"; ref=$REPLY
+    # the view build: the build of TACT_CONFIG.<USER>.<BRANCH>
+    newest "$TACT_ROOT/TACT_CONFIG.$WHO.$NAME" "build_*"; view=$REPLY
     if [[ -z $view ]]; then
         print -r -- "NO VIEW BUILD FOUND FOR THIS BRANCH"
     else
         print -r -- "VIEW BUILD DIR: $view"
+    fi
+    # its test reports, next to the reference baseline's
+    newest "$TACT_ROOT/test_reports" "TACT.TACT_CONFIG.$WHO.$NAME-G!31.*"; view=$REPLY
+    newest "$TACT_ROOT/test_reports" "$2-G!31.*"; ref=$REPLY
+    if [[ -z $view ]]; then
+        print -r -- "NO TEST REPORTS FOUND FOR THIS BRANCH"
+    else
+        print -r -- "VIEW TEST REPORTS DIR: $view"
         print -r -- "REFERENCE BASELINE DIR: $ref"
         echo_ediff "${ref:+$ref/}general.results.failed-in" "$view/general.results.failed-in"
     fi

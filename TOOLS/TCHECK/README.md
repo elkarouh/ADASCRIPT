@@ -67,8 +67,10 @@ NEWLY FAILED TESTS vs 30.0.0.131
 ```
 
 Then, unless `-short`, each branch: its view build
-(`TACT.TACT_CONFIG.<USER>.<BRANCH>-G!31.*`) next to the previous TACT
-baseline's, with the ediff between their failures; for each file, one entry
+(`/cm/ot/TACT/TACT_CONFIG.<USER>.<BRANCH>/build_*`, e.g. `build_default_Linux`),
+and its test reports (`test_reports/TACT.TACT_CONFIG.<USER>.<BRANCH>-G!31.*`)
+next to the previous TACT baseline's, with the ediff between their failures --
+each said to be missing when it is; for each file, one entry
 with every commit that touched it, their SC tickets, their reviews, and
 `#emacs:` links to its diffs, clickable in an Emacs buffer like the report's
 other links:

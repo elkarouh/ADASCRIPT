@@ -15,6 +15,9 @@ OT=$WORK/cm/ot
 mkdir -p "$OT/TACT/TACT_CONFIG.30.0.0.9" "$OT/TACT/TACT_CONFIG.30.0.0.8" "$OT/CFMUTEST/baseline_reports" "$WORK/bin"
 cp "$HERE/changes_report.sample" "$OT/CFMUTEST/baseline_reports/CFMUTEST.CFMUTEST_CONFIG.30.0.0.8.changes_report"
 # alice's branch was built, against the baseline before this one; bob's was not
+# alice's branch is built and tested, carol's built only, bob's neither
+mkdir -p "$OT/TACT/TACT_CONFIG.ALICE.FIX_B/build_default_Linux" \
+         "$OT/TACT/TACT_CONFIG.CAROL.MAILING_LIST/build_default_Linux"
 mkdir -p "$OT/TACT/test_reports/TACT.TACT_CONFIG.ALICE.FIX_B-G!31.IP.L8" \
          "$OT/TACT/test_reports/TACT.TACT_CONFIG.30.0.0.8-G!31.IP.L8"
 
@@ -68,10 +71,14 @@ check "...and bob's added file"                  "FILE ADDED: TACT/UIF/sources/c
 check "a branch merged in two sections, once"    1 "$(section alice | grep -c '^FROM BRANCH : alice.fix_b$')"
 check "removed and added, by path"               "FILE DELETED: IFPS/OPIF_LIB/sources/old_thing.ads
 FILE ADDED: IFPS/OPIF_LIB/sources/new_thing.ads" "$(section alice | grep '^FILE DELETED\|^FILE ADDED')"
-check "alice's branch build, found"              1 "$(section alice | grep -c '^VIEW BUILD DIR: .*TACT.TACT_CONFIG.ALICE.FIX_B-G!31.IP.L8$')"
+check "alice's branch build, found"              1 "$(section alice | grep -c '^VIEW BUILD DIR: .*/TACT/TACT_CONFIG.ALICE.FIX_B/build_default_Linux$')"
+check "...and her test reports"                  1 "$(section alice | grep -c '^VIEW TEST REPORTS DIR: .*/test_reports/TACT.TACT_CONFIG.ALICE.FIX_B-G!31.IP.L8$')"
 check "...next to the previous baseline's"       1 "$(section alice | grep -c '^REFERENCE BASELINE DIR: .*TACT.TACT_CONFIG.30.0.0.8-G!31.IP.L8$')"
 check "...with the ediff between their failures" 1 "$(section alice | grep -c '^(ediff-files ".*30.0.0.8-G!31.IP.L8/general.results.failed-in" ".*FIX_B-G!31.IP.L8/general.results.failed-in")$')"
 check "bob's branch has no build"                1 "$(section bob | grep -c '^NO VIEW BUILD FOUND FOR THIS BRANCH$')"
+check "...and no test reports"                   1 "$(section bob | grep -c '^NO TEST REPORTS FOUND FOR THIS BRANCH$')"
+check "carol's is built, not yet tested"         "VIEW BUILD DIR: $OT/TACT/TACT_CONFIG.CAROL.MAILING_LIST/build_default_Linux
+NO TEST REPORTS FOUND FOR THIS BRANCH" "$(section carol | grep '^VIEW\|^NO ')"
 check "under an integration merge only: listed apart" "FILE DELETED: IFPS/OPIF_LIB/sources/Pmake.out" \
     "$(printf '%s\n' "$OUT" | sed -n '/no branch merged above them/,/^$/p' | grep '^FILE')"
 check "a review on the merge of the change's own commit" "REVIEWED BY : bob on 260922.151702" \
