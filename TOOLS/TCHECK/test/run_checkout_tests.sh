@@ -75,6 +75,8 @@ set +e
 out=$("$TCHECKOUT" -root "$ws" IFPS/NONE/x.adb 2>&1); rc=$?
 set -e
 check "not a submodule: refused"                     "1 1" "$rc $(printf '%s\n' "$out" | grep -c 'IFPS/NONE is not a submodule')"
+rc=0; out=$("$TCHECKOUT" -root "$ws" TACT/UIF/ 2>&1) || rc=$?
+check "a submodule, not a file: refused"             "1 1" "$rc $(printf '%s\n' "$out" | grep -c 'not a file: TACT/UIF/')"
 
 echo
 if [ $fails -eq 0 ]; then echo "All checks passed."; else echo "$fails check(s) FAILED."; exit 1; fi

@@ -44,6 +44,7 @@ git -C "$root" rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "not a git
 
 target=$1
 case $target in
+*/) die "not a file: $target" ;;
 */*/*) ;;
 *) die "not <system>/<subsystem>/<path>: $target" ;;
 esac
