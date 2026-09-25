@@ -16,8 +16,11 @@ export GIT_CONFIG_NOSYSTEM=1 HOME=$WORK        # no one's git configuration but 
 git config --global init.defaultBranch main
 git config --global protocol.file.allow always  # submodules from local paths
 
+# laid out as NM's: the repositories side by side on the server, the
+# submodules named <SYSTEM>.<SUBSYSTEM>, with URLs relative to the
+# superproject's (../tact.uif.git)
 # the submodule upstream: a.adb and b.adb, both changed in 30.0.0.2
-up=$WORK/up/UIF
+up=$WORK/scm/nm/tact.uif.git
 git init -q "$up"
 mkdir "$up/sources"
 printf 'a 1\n' > "$up/sources/a.adb"; printf 'b 1\n' > "$up/sources/b.adb"
@@ -28,9 +31,9 @@ git -C "$up" config uploadpack.allowFilter true
 git -C "$up" config uploadpack.allowAnySHA1InWant true
 
 # the superproject, recording it at 30.0.0.2; the workspace, without it
-nm=$WORK/up/NM
+nm=$WORK/scm/nm/nm.git
 git init -q "$nm"
-git -C "$nm" submodule add -q "file://$up" TACT/UIF
+git -C "$nm" submodule add -q --name TACT.UIF ../tact.uif.git TACT/UIF
 git -C "$nm" commit -qm "Baseline workspace"
 ws=$WORK/ws
 git clone -q "file://$nm" "$ws"
@@ -49,8 +52,9 @@ out=$("$TCHECKOUT" -root "$ws" TACT/UIF/sources/b.adb 2>&1) || { echo "$out"; ex
 check "the file, checked out"                        "b 2" "$(cat "$sub/sources/b.adb")"
 check "...alone"                                     no "$([ -e "$sub/sources/a.adb" ] && echo yes || echo no)"
 check "...at the commit the superproject records"    "$recorded" "$(git -C "$sub" rev-parse HEAD)"
+check "...from the relative URL, resolved"          "file://$up" "$(git -C "$sub" remote get-url origin)"
 check "...cloned without the files' contents"        blob:none "$(git -C "$sub" config remote.origin.partialclonefilter)"
-check "...its repository where git keeps submodules" "$(git -C "$ws" rev-parse --absolute-git-dir)/modules/TACT/UIF" \
+check "...its repository where git keeps submodules" "$(git -C "$ws" rev-parse --absolute-git-dir)/modules/TACT.UIF" \
     "$(git -C "$sub" rev-parse --absolute-git-dir)"
 check "git sees the submodule initialised"           "$recorded TACT/UIF" "$(git -C "$ws" submodule status TACT/UIF | awk '{ print $1, $2 }' | tr -d ' +-' | sed 's/TACT/ TACT/')"
 check "...the other files' contents not fetched"    yes "$(git -C "$sub" rev-list --objects --missing=print --all | grep -q '^?' && echo yes || echo no)"

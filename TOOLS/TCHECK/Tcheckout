@@ -18,9 +18,10 @@
 # It never moves a checked-out submodule to another commit.
 #
 # The clone uses the URL git has for the submodule -- .gitmodules, or
-# submodule.<name>.url in the workspace's .git/config -- and whatever
-# `url.<base>.insteadOf` rewrites it to: that is how to clone from another
-# server. A server that does not filter (git warns "filtering not
+# submodule.<name>.url in the workspace's .git/config; a relative one
+# (../tact.uif.git) resolved against the workspace's own remote -- and
+# whatever `url.<base>.insteadOf` rewrites it to: that is how to clone from
+# another server. A server that does not filter (git warns "filtering not
 # recognized by server") gives a full clone: slower, the same result.
 #
 # Needs git 2.25 or later (sparse-checkout).
@@ -32,7 +33,7 @@ root=${CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY:-}
 while [ $# -gt 0 ]; do
     case $1 in
     -root) [ $# -gt 1 ] || die "-root requires a directory"; root=$2; shift 2 ;;
-    -h|-help|--help) sed -n '2,25s/^# \{0,1\}//p' "$0"; exit 0 ;;
+    -h|-help|--help) sed -n '2,27s/^# \{0,1\}//p' "$0"; exit 0 ;;
     -*) die "unknown option: $1" ;;
     *) break ;;
     esac

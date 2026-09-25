@@ -219,11 +219,17 @@ file alone. A submodule checked out sparsely gets the file added; one checked
 out in full is never moved. `git submodule status`, `update` and `deinit`
 treat the result as any other submodule. Needs git 2.25 or later.
 
-It clones from the submodule's URL. To clone from another server -- a local
-Bitbucket mirror, say -- have git rewrite the URL, once:
+It clones from the submodule's URL. NM's `.gitmodules` gives most of them
+relative to the workspace's own (`../tact.uif.git`): they resolve against the
+URL the workspace was cloned from (`git -C $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY
+remote get-url origin`) -- a workspace cloned from the mirror,
+`https://mirror-cma.bitbucket.cfmu.corp.eurocontrol.int/scm/nm/nm`, clones
+them from `.../scm/nm/tact.uif.git` there. The few given in full
+(BROKER, NIP) come from `https://bitbucket.eurocontrol.int/scm/nm/`. Nothing
+to set; to clone from another server, have git rewrite the URLs, once:
 
 ```
-git config --global url.https://bitbucket.eurocontrol.int/scm/.insteadOf <the URLs' common prefix>
+git config --global url.<the other server's prefix>.insteadOf https://bitbucket.eurocontrol.int/scm/nm/
 ```
 
 A server that does not filter gives a full clone (git warns "filtering not
