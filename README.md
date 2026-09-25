@@ -663,8 +663,15 @@ for s in Stage_T'First .. Stage_T'Last:
 
 ## Case / When Statements
 
-Pattern matching with Ada/Nim-inspired syntax. All standard pattern kinds
-are supported: literals, captures, wildcards, OR-patterns, ranges,
+Pattern matching with Ada/Nim-inspired syntax, and the preferred way to
+choose among the values of one subject: prefer `case` to an `if` / `elif` /
+`else` chain that tests the same variable in every condition. The subject
+is named once, the branches read as a table, and over an enum with constant
+branches the Nim build rejects a `case` that misses a member -- so adding
+one finds every dispatch that has to learn about it. Keep `if` for
+conditions that test different things.
+
+All standard pattern kinds are supported: literals, captures, wildcards, OR-patterns, ranges,
 sequences, class patterns, `as` bindings and guards. (Mapping patterns are
 not — see [Known Limitations](#known-limitations).)
 

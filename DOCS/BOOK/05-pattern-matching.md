@@ -709,10 +709,14 @@ own branch.
 Both spellings compile to the same code, so the choice is about who reads the
 file.
 
-Reach for a `case` block over an `if`/`elif` chain when the subject is an
-enum and the branches are constants: that is the one shape where Nim proves
-the dispatch is total, and the proof is the whole reason the construct earns
-its keep.
+Prefer a `case` block to an `if`/`elif`/`else` chain whenever the branches
+test one subject against different values. The subject is named once rather
+than in every condition, and the branches read as a table of the
+alternatives. When the subject is an enum and the branches are constants it
+earns more than readability: Nim proves the dispatch is total, so adding a
+member to the enum turns every `case` that misses it into a compile error,
+where an `if` chain would send the new value quietly into its `else`. Keep
+`if` for conditions that test different things.
 
 ```python
 # Adascript style for the enum dispatch

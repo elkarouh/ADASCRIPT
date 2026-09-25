@@ -983,6 +983,33 @@ while n > 0: n -= 1
 Pattern matching is written `case x:` with `when pat:` branches, and
 `when others:` for everything not named. It is the only spelling.
 
+**Prefer `case` to an `if` / `elif` / `else` chain** whenever the branches
+test one subject against different values. The subject is named once, at
+the top, instead of in every condition; the branches line up as a table of
+the alternatives; and when the subject is an enum and the branches are
+constants, the Nim build proves the dispatch is total — add a member to the
+enum and every `case` over it that misses the new one stops compiling,
+where an `if` chain would quietly fall into its `else`:
+
+```python
+# rather than
+if mode == LIST:
+    list_files()
+elif mode == UNCHECKOUT:
+    take_out()
+else:
+    check_out()
+
+# write
+case mode:
+    when LIST:       list_files()
+    when UNCHECKOUT: take_out()
+    when CHECKOUT:   check_out()
+```
+
+Keep `if` for conditions that test different things — `if cache != "" and
+-d dir:` is not a choice among the values of anything.
+
 The Python output is a `match/case` statement. The Nim output differs only
 when patterns require desugaring (structural, guards, tuple subjects). For a
 full reference see
