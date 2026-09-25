@@ -610,6 +610,13 @@ test: compile
 	    > $(TCDIR)/test/tcheck_py && chmod +x $(TCDIR)/test/tcheck_py
 	@$(TCDIR)/test/run_changes_tests.sh $(TCDIR)/test/tcheck_py
 	@rm -f $(TCDIR)/test/Tcheck_tact_py.py $(TCDIR)/test/tcheck_py
+	@echo "=== Tcheck_tact -focus changes: the newly failed tests, both backends ==="
+	@$(TCDIR)/test/run_new_failures_tests.sh $(TCDIR)/Tcheck_tact
+	@$(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(TCDIR)/Tcheck_tact.ady > $(TCDIR)/test/Tcheck_tact_py.py
+	@printf '#!/bin/sh\nexec $(PYTHON) %s "$$@"\n' "$(TCDIR)/test/Tcheck_tact_py.py" \
+	    > $(TCDIR)/test/tcheck_py && chmod +x $(TCDIR)/test/tcheck_py
+	@$(TCDIR)/test/run_new_failures_tests.sh $(TCDIR)/test/tcheck_py
+	@rm -f $(TCDIR)/test/Tcheck_tact_py.py $(TCDIR)/test/tcheck_py
 	@# make_comparable, which Tcheck_tact runs on the logs it compares:
 	@# the volatile parts replaced, in place.
 	@echo "=== make_comparable ==="

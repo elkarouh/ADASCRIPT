@@ -55,6 +55,17 @@ bss           1 file : 1 (no extension)
 (no branch)   1 file : 1 out
 ```
 
+Then the tests newly failing -- new or crashed in one of the baseline's
+builds, and not failing in the previous baseline's -- each once, with the
+build type and subtype(s) it fails in:
+
+```
+NEWLY FAILED TESTS vs 30.0.0.131
+  test_alpha  IP in, IP mono
+  test_gamma  IP in
+  test_delta  OP assert
+```
+
 Then, unless `-short`, each branch: its view build
 (`TACT.TACT_CONFIG.<USER>.<BRANCH>-G!31.*`) next to the previous TACT
 baseline's, with the ediff between their failures; for each file, one entry

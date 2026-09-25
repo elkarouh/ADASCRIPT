@@ -883,13 +883,9 @@ def files_by_type(files: []str) -> str:
     let order: [](int, str) = sorted([(-n, ext) for ext, n in counts.items()])
     ", ".join([f"{-n} {extension_label(ext)}" for n, ext in order])
 
-def list_changes(baseline: str):
-    """By committer, the most first, how many files the CFMUTEST baseline
-    built on TACT BASELINE changed, and how many of each type (extension)."""
-    hr('#')
-    puts("sWr", "CHANGES BY COMMITTER", NEWLINE=True)
-    let report: Path = changes_report(baseline)
-    return if report == ""
+def list_files_by_committer(report: Path):
+    """By committer, the most first, how many files REPORT's changes touch,
+    and how many of each type (extension)."""
     let changes: ChangeList = read_changes(report)
     var files: {Committer}[]str = {:}
     for who in changes.committers:
@@ -913,6 +909,49 @@ def list_changes(baseline: str):
         let noun: str = "file " if len(unattributed) == 1 else "files"
         print "(no branch)".ljust(width) + f"  {str(len(unattributed)).rjust(count_width)} {noun}: " + files_by_type(unattributed)
     print
+
+# A test failing -- newly, or crashed -- in one of the baseline's builds
+# that did not fail in the previous baseline's: see Report.new_failures.
+type NewFailure is tuple:
+    build: str # the build type and subtype it fails in: "IP in", "OP assert"
+    test:  str
+
+def list_new_failures(prev_nr: str, failures: []NewFailure):
+    """Each test of FAILURES once, with the build(s) it newly fails in."""
+    puts("sWr", f"NEWLY FAILED TESTS vs {prev_nr}", NEWLINE=True)
+    if len(failures) == 0:
+        puts("sKg", f"  No new failures compared to {prev_nr}", NEWLINE=True)
+        print
+        return
+    var tests: []str = []
+    var builds: {str}[]str = {:}
+    for f in failures:
+        if f.test not in builds:
+            tests.append(f.test)
+            builds[f.test] = []
+        if f.build not in builds[f.test]:
+            builds[f.test].append(f.build)
+    var width: int = 0
+    for test in tests:
+        width = max(width, len(test))
+    for test in tests:
+        stdout.write("  ")
+        puts("sWr", test)
+        print " " * (width - len(test)) + "  " + ", ".join(builds[test])
+    print
+
+def list_changes(baseline: str, failures: []NewFailure):
+    """What changed in TACT BASELINE and what broke: by committer, the files
+    the CFMUTEST baseline built on it changed, by type; then FAILURES, the
+    tests newly failing, each with the build(s) it fails in."""
+    hr('#')
+    puts("sWr", "CHANGES BY COMMITTER", NEWLINE=True)
+    let report: Path = changes_report(baseline)
+    if report != "":
+        list_files_by_committer(report)
+    else:
+        print # after the warning
+    list_new_failures(Baseline(baseline).previous().nr, failures)
 
 def list_detailed_changes(baseline: str):
     """The changes in the CFMUTEST baseline built on TACT BASELINE, by
@@ -1492,31 +1531,37 @@ class Report:
             puts("sKg", f"{replay_ok} ok, {replay_busy} running", NEWLINE=True)
         hr('#')
 
-    def show_new_failures(self):
-        """Show tests that are new failures compared to the previous baseline."""
+    def new_failures(self) -> []NewFailure:
+        """The tests failing -- newly, or crashed -- in this baseline's
+        builds that did not fail in the previous baseline's, with the build
+        type and subtype each fails in; in build, subtype, Tlog order."""
         let prev: Baseline = self.cur.previous()
-        let prev_bl: str = prev.nr
-        hr('-')
-        puts("sWr", f"NEW FAILURES vs {prev_bl}", NEWLINE=True)
-        var found_any: bool = False
+        var found: []NewFailure = []
         for build in self.builds:
             for subtype in BuildSubtype:
-                let sl: str = subtype_label(subtype)
                 let cur_path: Path = build.tlog_path(subtype, normal)
+                continue if not -f cur_path
                 let prev_path: Path = build.in_baseline(prev).tlog_path(subtype, normal)
-                if not -f cur_path:
-                    continue
-                let cur_names: []str = get_failed_test_names(cur_path, subtype)
                 var prev_names: {}str = {}
                 if -f prev_path:
                     for n in get_failed_test_names(prev_path, subtype):
                         prev_names.add(n)
-                for name in cur_names:
+                for name in get_failed_test_names(cur_path, subtype):
                     if name not in prev_names:
-                        found_any = True
-                        HAS_NEW_FAILURES = True
-                        puts("sWr", f"  NEW: {build.btype'Image} {sl} {name}", NEWLINE=True)
-        if not found_any:
+                        found.append((build: f"{build.btype'Image} {subtype_label(subtype)}", test: name))
+        if len(found) > 0:
+            HAS_NEW_FAILURES = True
+        found
+
+    def show_new_failures(self):
+        """Show tests that are new failures compared to the previous baseline."""
+        let prev_bl: str = self.cur.previous().nr
+        hr('-')
+        puts("sWr", f"NEW FAILURES vs {prev_bl}", NEWLINE=True)
+        let failures: []NewFailure = self.new_failures()
+        for f in failures:
+            puts("sWr", f"  NEW: {f.build} {f.test}", NEWLINE=True)
+        if len(failures) == 0:
             puts("sKg", "  No new failures compared to " + prev_bl, NEWLINE=True)
 
     def write_history(self):
@@ -1594,7 +1639,7 @@ class Report:
                 if not self.opt.short:
                     self.show_detailed_regression_tests()
             when focus_changes:
-                list_changes(self.cur.nr)
+                list_changes(self.cur.nr, self.new_failures())
                 if not self.opt.short:
                     list_detailed_changes(self.cur.nr)
             when focus_build_info:
@@ -1608,7 +1653,7 @@ class Report:
                 self.show_regression_tests()
                 self.show_build_info()
                 self.show_replays()
-                list_changes(self.cur.nr)
+                list_changes(self.cur.nr, self.new_failures())
         self.write_history()
         if self.opt.exit_code and HAS_NEW_FAILURES:
             quit(1)
