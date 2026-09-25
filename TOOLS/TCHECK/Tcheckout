@@ -5,9 +5,11 @@
 #
 #   Tcheckout [-root DIR] <system>/<subsystem>/<path>
 #   Tcheckout [-root DIR] -u <system>/<subsystem>/<path>
+#   Tcheckout [-root DIR] -u -all [<system>/<subsystem>]
 #   Tcheckout [-root DIR] -l [<system>/<subsystem>]
 #   Tcheckout [-cache DIR] [-rev REV]... <system>/<subsystem>/<path>
 #   Tcheckout [-cache DIR] -u <system>/<subsystem>/<path>
+#   Tcheckout [-cache DIR] -u -all [<system>/<subsystem>]
 #   Tcheckout [-cache DIR] -l [<system>/<subsystem>]
 #
 # The file's submodule, <system>/<subsystem>, of the NM workspace (-root, or
@@ -27,6 +29,9 @@
 # stays in .git/modules/<name>, for the next checkout (rm -rf it to free the
 # space). Not a file with changes of yours, nor a submodule checked out in
 # full.
+#
+# -u -all takes out every file -l lists: all the workspace's, or the
+# submodule's given; those with changes stay, and it says so.
 #
 # -l lists the files checked out so, one <system>/<subsystem>/<path> a
 # line: all the workspace's, or the submodule's given.
@@ -56,12 +61,13 @@ PROG=${0##*/}
 die() { echo "$PROG: $*" >&2; exit 1; }
 
 root=${CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY:-}
-mode=checkout cache="" revs=""
+mode=checkout cache="" revs="" all=""
 while [ $# -gt 0 ]; do
     case $1 in
     -root) [ $# -gt 1 ] || die "-root requires a directory"; root=$2; shift 2 ;;
     -u) mode=uncheckout; shift ;;
     -l) mode=list; shift ;;
+    -all) all=1; shift ;;
     -cache) [ $# -gt 1 ] || die "-cache requires a directory"; cache=$2; shift 2 ;;
     -rev) [ $# -gt 1 ] || die "-rev requires a revision"; revs="$revs $2"; shift 2 ;;
     -h|-help|--help) sed -n '2,/^$/s/^# \{0,1\}//p' "$0"; exit 0 ;;
@@ -82,6 +88,24 @@ parse_target() {        # <system>/<subsystem>/<path> -> target system sub file
 }
 
 [ -n "$cache" ] || [ -n "$root" ] || cache=${TCHECK_NM_CACHE:-$HOME/Downloads/.cache/tcheck/NM}
+
+if [ -n "$all" ]; then
+    # every file -l lists, taken out one by one: the others still, when one
+    # cannot be
+    [ $mode = uncheckout ] || die "-all goes with -u"
+    [ $# -le 1 ] || die "usage: $PROG [-root DIR | -cache DIR] -u -all [<system>/<subsystem>]"
+    if [ -n "$cache" ]; then where=-cache dir=$cache; else where=-root dir=$root; fi
+    files=$("$0" $where "$dir" -l ${1:+"$1"}) || exit 1
+    [ -n "$files" ] || { echo "$PROG: nothing checked out"; exit 0; }
+    printf '%s\n' "$files" | {
+        rc=0
+        while read -r f; do
+            "$0" $where "$dir" -u "$f" || rc=1
+        done
+        exit $rc
+    }
+    exit
+fi
 if [ -n "$cache" ]; then
     if [ $mode = list ]; then
         [ $# -le 1 ] || die "usage: $PROG [-cache DIR] -l [<system>/<subsystem>]"

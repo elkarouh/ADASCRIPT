@@ -1830,10 +1830,6 @@ let args: []str = $@
 if $# == 0:
     usage()
 
-if $CONTEXT_CM_BASELINE == "":
-    print "Please use this script within a context"
-    quit(1)
-
 let opt: Options = Options(args)
 COLORED = opt.colored
 BATCH = opt.batch

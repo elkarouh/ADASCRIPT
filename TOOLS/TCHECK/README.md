@@ -217,6 +217,7 @@ first, where the file's submodule is not checked out:
 ```
 Tcheckout [-root DIR] <system>/<subsystem>/<path>
 Tcheckout [-root DIR] -u <system>/<subsystem>/<path>
+Tcheckout [-root DIR] -u -all [<system>/<subsystem>]
 Tcheckout [-root DIR] -l [<system>/<subsystem>]
 Tcheckout TACT/UIF/sources/b.adb
 ```
@@ -234,6 +235,8 @@ treat the result as any other submodule. Needs git 2.25 or later.
 submodule out too (`git submodule deinit`), keeping its clone in
 `.git/modules/<name>` for the next checkout (`rm -rf` it to free the space).
 It refuses a file with changes of yours, and a submodule checked out in full.
+`-u -all` takes out every file checked out -- all the workspace's, or one
+submodule's -- but those with changes, which it names.
 `-l` lists the files checked out, one `<system>/<subsystem>/<path>` a line --
 what `-u` takes: all the workspace's, or one submodule's.
 
@@ -259,6 +262,7 @@ outside one:
 ```
 Tcheckout [-cache DIR] [-rev REV]... <system>/<subsystem>/<path>
 Tcheckout [-cache DIR] -u <system>/<subsystem>/<path>
+Tcheckout [-cache DIR] -u -all [<system>/<subsystem>]
 Tcheckout [-cache DIR] -l [<system>/<subsystem>]
 ```
 

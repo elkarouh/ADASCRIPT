@@ -84,9 +84,8 @@ tlog 30.0.0.10 IP in 30.0.0.9 "" ""
 tlog 30.0.0.10 IP mono 30.0.0.9 "" ""
 
 TCHECK_CM_OT=$OT
-CONTEXT_CM_BASELINE=x
 HOME=$WORK            # Tcheck_tact appends to ~/.tcheck_history
-export TCHECK_CM_OT CONTEXT_CM_BASELINE HOME
+export TCHECK_CM_OT HOME
 
 fails=0
 check() {

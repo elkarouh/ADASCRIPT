@@ -117,11 +117,24 @@ check "...checked out again: that file alone"        "reused a 2 no" \
 rc=0; out=$("$TCHECKOUT" -root "$ws" -u IFPS/OPIF_LIB/x.ads 2>&1) || rc=$?
 check "-u: not a submodule checked out in full"      "1 1 x" \
     "$rc $(printf '%s\n' "$out" | grep -c 'checked out in full') $(cat "$ws/IFPS/OPIF_LIB/x.ads")"
+"$TCHECKOUT" -root "$ws" TACT/UIF/sources/b.adb >/dev/null 2>&1
+printf 'mine\n' >> "$sub/sources/b.adb"
+rc=0; out=$("$TCHECKOUT" -root "$ws" -u -all 2>&1) || rc=$?
+check "-u -all: every file but one with changes"     "1 1 TACT/UIF/sources/b.adb" \
+    "$rc $(printf '%s\n' "$out" | grep -c 'b.adb has changes') $("$TCHECKOUT" -root "$ws" -l)"
+git -C "$sub" checkout -q -- sources/b.adb
+"$TCHECKOUT" -root "$ws" TACT/UIF/sources/a.adb >/dev/null 2>&1
+out=$("$TCHECKOUT" -root "$ws" -u -all TACT/UIF 2>&1) || { echo "$out"; exit 1; }
+check "...a submodule's: all out, it deinitialised"  "0 " "$(printf '%s\n' "$out" | grep -c 'has changes') $(ls -A "$sub")"
+check "...the one checked out in full untouched"     "x" "$(cat "$ws/IFPS/OPIF_LIB/x.ads")"
+check "...nothing left: says so"                     1 "$("$TCHECKOUT" -root "$ws" -u -all 2>&1 | grep -c 'nothing checked out')"
+rc=0; out=$("$TCHECKOUT" -root "$ws" -all 2>&1) || rc=$?
+check "-all without -u: refused"                     "1 1" "$rc $(printf '%s\n' "$out" | grep -c 'goes with -u')"
 
 # a DIFF link, as Tcheck_tact writes it for a submodule not checked out,
 # evaluated by Emacs: the file checked out, then its versions compared
 if command -v emacs >/dev/null 2>&1; then
-    git -C "$ws" submodule deinit -q -f TACT/UIF
+    [ ! -e "$sub/.git" ] || git -C "$ws" submodule deinit -q -f TACT/UIF
     f=$sub/sources/b.adb
     link="(when (eql 0 (shell-command \"Tcheckout -root $ws TACT/UIF/sources/b.adb\")) (vc-version-ediff (list \"$f\") \"30.0.0.1\" \"30.0.0.2\"))"
     shown='(dolist (n (sort (mapcar (function buffer-name) (buffer-list)) (function string<))) (when (string-match "b[.]adb[.]~" n) (with-current-buffer n (message "SHOWN %s=%s" n (string-trim (buffer-string))))))'
@@ -172,6 +185,10 @@ git -C "$csub" checkout -q -- sources/b.adb
 "$TCHECKOUT" -cache "$C" -u TACT/UIF/sources/b.adb >/dev/null 2>&1
 out=$("$TCHECKOUT" -cache "$C" -u TACT/UIF/sources/c.adb 2>&1) || { echo "$out"; exit 1; }
 check "...the last: the clone removed"               "1 " "$(printf '%s\n' "$out" | grep -c 'clone removed') $(ls -A "$C")"
+"$TCHECKOUT" -cache "$C" -rev 30.0.0.3 TACT/UIF/sources/a.adb >/dev/null 2>&1
+"$TCHECKOUT" -cache "$C" -rev 30.0.0.3 TACT/UIF/sources/c.adb >/dev/null 2>&1
+out=$(cd / && CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY= TCHECK_NM_CACHE=$C "$TCHECKOUT" -u -all 2>&1) || { echo "$out"; exit 1; }
+check "...-u -all: the cache emptied"                "2 " "$(printf '%s\n' "$out" | grep -c 'taken out') $(ls -A "$C")"
 if command -v emacs >/dev/null 2>&1; then
     rm -rf "$C"
     f=$csub/sources/b.adb
