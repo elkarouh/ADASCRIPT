@@ -92,6 +92,22 @@ and the data structure itself, with nothing to build. The queue holds the
 same `Neighbour_T` the edges are made of, so an edge and a queue entry are
 one type, not two descriptions of the same pair.
 
+The initialisation is one line, and it is the sentence you would say —
+"every node starts at infinity, except the start, which starts at zero":
+
+`distances: {Node_T}Distance_T = {node: (0.0 if node==start else Inf) for node in graph}`
+
+That is Dijkstra's whole initialisation phase, written as a mapping
+comprehension, and its result is typed: the keys are `Node_T`, the values
+`Distance_T`, and the Nim compiler checks both. Comprehensions are Python's
+gift; a typed one that a compiler checks is rare. In most statically typed
+languages the same line is a pipeline of calls — in Rust,
+`graph.keys().map(|&n| (n, if n == start { 0.0 } else { f64::INFINITY })).collect()`;
+in Java, a stream ending in `Collectors.toMap` — or it is a loop over the
+nodes with the special case fixed up after it, and the fix-up is where the
+bug lives. Here the special case is the conditional inside the
+comprehension, so there is no afterwards.
+
 The function is the algorithm and nothing else. Every node starts at
 infinity except the start; take the nearest node; skip it if it has been
 seen; mark it; relax every edge out of it. A signature and fourteen lines,
