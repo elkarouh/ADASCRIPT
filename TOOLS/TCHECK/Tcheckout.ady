@@ -78,42 +78,43 @@ def parse_target(target: Target_T) -> File_T:
     File_T(target=target, system=parts[0], sub=parts[0] + "/" + parts[1], file="/".join(parts[2:]))
 
 # --- git, and what it says about a directory --------------------------------
-def git(where: str, args: []str) -> RunResult:
-    run(["git", "-C", where] + args)
-def git_ok(where: str, args: []str) -> bool:
+def git(where: Path, args: []str) -> RunResult:
+    run(["git", "-C", str(where)] + args)
+def git_ok(where: Path, args: []str) -> bool:
     git(where, args).code == 0
-def git_out(where: str, args: []str) -> str:
+def git_out(where: Path, args: []str) -> str:
     git(where, args).output.strip()
 
-def git_or_die(where: str, args: []str, message: str):
+def git_or_die(where: Path, args: []str, message: str):
     let r: RunResult = git(where, args)
     if r.code != 0:
         if r.stderr.strip() != "":
             warn(r.stderr.strip())
         die(message)
 
-def checked_out(dir: str) -> bool:
+def checked_out(dir: Path) -> bool:
     """DIR is the top of a work tree of its own, not a directory of the workspace."""
-    -d dir and git_out(dir, ["rev-parse", "--show-toplevel"]) == str(Path(dir).resolve())
-def sparse(dir: str) -> bool:
+    -d dir and git_out(dir, ["rev-parse", "--show-toplevel"]) == str(dir.resolve())
+def sparse(dir: Path) -> bool:
     git_out(dir, ["config", "--bool", "core.sparseCheckout"]) == "true"
-def sparse_list(dir: str) -> []str:
+def sparse_list(dir: Path) -> []str:
     [line for line in git_out(dir, ["sparse-checkout", "list"]).splitlines() if line != ""]
-def files_in(dir: str, sub: Sub_T) -> []Target_T:
+def files_in(dir: Path, sub: Sub_T) -> []Target_T:
     [sub + "/" + pattern.lstrip("/") for pattern in sparse_list(dir)]
-def empty_dir(dir: str) -> bool:
-    runLines(["ls", "-A", dir]) == []
+def empty_dir(dir: Path) -> bool:
+    runLines(["ls", "-A", str(dir)]) == []
 
-def keep_worktree_in_config(dir: str):
+def keep_worktree_in_config(dir: Path):
     """sparse-checkout moves core.worktree to config.worktree; git submodule
     reads and unsets it in the repository's config -- where it goes back."""
-    let gitdir: str = git_out(dir, ["rev-parse", "--absolute-git-dir"])
-    let worktree: RunResult = run(["git", "config", "-f", gitdir + "/config.worktree", "core.worktree"])
+    let gitdir: Path = Path(git_out(dir, ["rev-parse", "--absolute-git-dir"]))
+    let moved: str = str(gitdir / "config.worktree")
+    let worktree: RunResult = run(["git", "config", "-f", moved, "core.worktree"])
     if worktree.code == 0:
-        run(["git", "config", "-f", gitdir + "/config.worktree", "--unset", "core.worktree"])
-        run(["git", "config", "-f", gitdir + "/config", "core.worktree", worktree.output.strip()])
+        run(["git", "config", "-f", moved, "--unset", "core.worktree"])
+        run(["git", "config", "-f", str(gitdir / "config"), "core.worktree", worktree.output.strip()])
 
-def take_out(work: str, f: File_T) -> (str, bool):
+def take_out(work: Path, f: File_T) -> (str, bool):
     """F out of WORK's sparse checkout, unless it is the last file there --
     which the caller takes out with the rest: (why not, or ""; the last)."""
     let patterns: []str = sparse_list(work)
@@ -121,23 +122,23 @@ def take_out(work: str, f: File_T) -> (str, bool):
     return (f"{f.target} has changes: not taken out", False) if git_out(work, ["status", "--porcelain", "--", f.file]) != ""
     let others: []str = [p for p in patterns if p != "/" + f.file]
     return ("", True) if others == []
-    let r: RunResult = run(["git", "-C", work, "sparse-checkout", "set", "--no-cone", "--stdin"],
+    let r: RunResult = run(["git", "-C", str(work), "sparse-checkout", "set", "--no-cone", "--stdin"],
                            stdin = "\n".join(others) + "\n")
     return (f"could not take {f.file} out of {f.sub}", False) if r.code != 0
     keep_worktree_in_config(work)
     print f"{PROG}: {f.target} taken out"
     ("", False)
 
-def check_out_or_die(work: str, rev: Rev_T):
+def check_out_or_die(work: Path, rev: Rev_T):
     # forced: a deinitialised submodule's index still lists the files its
     # emptied directory lacks, which a plain checkout keeps as deletions
     git_or_die(work, ["-c", "advice.detachedHead=false", "checkout", "-q", "-f", rev], f"could not check out {rev} in {work}")
 
 # --- the workspace -----------------------------------------------------------
 class Workspace_T:
-    var root: str
+    var root: Path
 
-    def __init__(self, root: str):
+    def __init__(self, root: Path):
         self.root = root
 
     def submodules(self) -> [](str, Sub_T):
@@ -153,13 +154,13 @@ class Workspace_T:
     def checked_out_files(self, only: Sub_T) -> []Target_T:
         var files: []Target_T = []
         for name, path in self.submodules():
-            let dir: str = self.root + "/" + path
+            let dir: Path = self.root / path
             if (only == "" or path == only) and checked_out(dir) and sparse(dir):
                 files = files + files_in(dir, path)
         return files
 
     def uncheckout(self, f: File_T) -> str:
-        let work: str = self.root + "/" + f.sub
+        let work: Path = self.root / f.sub
         let name: str = self.name_of(f.sub)
         return f"{f.sub} is not a submodule of {self.root}" if name == ""
         return f"{f.sub} is not checked out" if not checked_out(work)
@@ -167,16 +168,16 @@ class Workspace_T:
         let (why, last) = take_out(work, f)
         return why if why != "" or not last
         return f"could not deinitialise {f.sub}" if not git_ok(self.root, ["submodule", "deinit", "-q", "--", f.sub])
-        let gitdir: str = git_out(self.root, ["rev-parse", "--absolute-git-dir"])
-        print f"{PROG}: {f.target} taken out -- {f.sub}'s last: deinitialised, its clone kept in {gitdir}/modules/{name}"
+        let clone: Path = Path(git_out(self.root, ["rev-parse", "--absolute-git-dir"])) / "modules" / name
+        print f"{PROG}: {f.target} taken out -- {f.sub}'s last: deinitialised, its clone kept in {clone}"
         return ""
 
     def checkout(self, f: File_T):
-        let work: str = self.root + "/" + f.sub
+        let work: Path = self.root / f.sub
         let name: str = self.name_of(f.sub)
         die(f"{f.sub} is not a submodule of {self.root}") if name == ""
         if checked_out(work):
-            if -e (work + "/" + f.file):
+            if -e (work / f.file):
                 print f"{PROG}: {f.target} is checked out already"
             elif sparse(work):
                 print f"{PROG}: adding {f.file} to the sparse checkout of {f.sub}"
@@ -193,9 +194,9 @@ class Workspace_T:
         git_or_die(self.root, ["submodule", "--quiet", "init", "--", f.sub], f"could not register {f.sub}")
         let url: str = git_out(self.root, ["config", "submodule." + name + ".url"])
         die(f"no URL for submodule {name}") if url == ""
-        let gitdir: str = git_out(self.root, ["rev-parse", "--absolute-git-dir"]) + "/modules/" + name
+        let gitdir: Path = Path(git_out(self.root, ["rev-parse", "--absolute-git-dir"])) / "modules" / name
 
-        Path(work).mkdir()
+        work.mkdir()
         # nothing of anyone's in it to lose: the forced checkout is safe
         die(f"{work} is not empty: not checking out into it") if not empty_dir(work)
         if -d gitdir:
@@ -203,8 +204,8 @@ class Workspace_T:
             shell: printf 'gitdir: %s\n' {!gitdir} > {!work}/.git
         else:
             print f"{PROG}: cloning {f.sub} from {url} (no contents until needed)"
-            run(["rmdir", work])
-            Path(gitdir).parent.mkdir()
+            run(["rmdir", str(work)])
+            gitdir.parent.mkdir()
             let rc: int = shell: git clone --filter=blob:none --no-checkout --separate-git-dir={!gitdir} {!url} {!work}
             die(f"could not clone {url}") if rc != 0
         # the work tree, from the repository -- relative, as git submodule
@@ -220,36 +221,37 @@ class Workspace_T:
 
 # --- the cache, for no workspace at all ----------------------------------------
 class Cache_T:
-    var dir: str
+    var dir: Path
 
-    def __init__(self, dir: str):
+    def __init__(self, dir: Path):
         self.dir = dir
 
     def checked_out_files(self, only: Sub_T) -> []Target_T:
         var files: []Target_T = []
-        for repo in sorted(runLines(["find", self.dir, "-mindepth", "2", "-maxdepth", "2", "-type", "d"])):
-            let sub: Sub_T = repo.removeprefix(self.dir + "/")
-            if -e (repo + "/.git") and (only == "" or sub == only):
+        for found in sorted(runLines(["find", str(self.dir), "-mindepth", "2", "-maxdepth", "2", "-type", "d"])):
+            let repo: Path = Path(found)
+            let sub: Sub_T = found.removeprefix(str(self.dir) + "/")
+            if -e (repo / ".git") and (only == "" or sub == only):
                 files = files + files_in(repo, sub)
         return files
 
     def uncheckout(self, f: File_T) -> str:
-        let work: str = self.dir + "/" + f.sub
-        return f"{f.sub} is not in the cache {self.dir}" if not -e (work + "/.git")
+        let work: Path = self.dir / f.sub
+        return f"{f.sub} is not in the cache {self.dir}" if not -e (work / ".git")
         let (why, last) = take_out(work, f)
         return why if why != "" or not last
-        return f"could not remove {work}" if run(["rm", "-rf", work]).code != 0
-        run(["rmdir", self.dir + "/" + f.system])   # the system's, if it was its last
+        return f"could not remove {work}" if run(["rm", "-rf", str(work)]).code != 0
+        run(["rmdir", str(self.dir / f.system)])   # the system's, if it was its last
         print f"{PROG}: {f.target} taken out -- {f.sub}'s last: its clone removed from {self.dir}"
         return ""
 
     def checkout(self, f: File_T, revs: []Rev_T):
-        let work: str = self.dir + "/" + f.sub
+        let work: Path = self.dir / f.sub
         let base: str = $TCHECK_NM_URL if $TCHECK_NM_URL != "" else DEFAULT_NM_URL
         let url: str = base + "/" + f.sub.replace("/", ".").lower() + ".git"
-        let fresh: bool = not -e (work + "/.git")
+        let fresh: bool = not -e (work / ".git")
         if fresh:
-            Path(work).mkdir()
+            work.mkdir()
             die(f"{work} is not empty: not cloning into it") if not empty_dir(work)
             print f"{PROG}: cloning {url} into {work} (no contents until needed)"
             let rc: int = shell: git clone -q --filter=blob:none --no-checkout {!url} {!work}
@@ -274,8 +276,8 @@ class Cache_T:
 
 # --- main ----------------------------------------------------------------------
 let argv: []str = $@
-var root: str = $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY
-var cache: str = ""
+var root: Path = Path($CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY)
+var cache: Path = Path("")
 var mode: Mode_T = CHECKOUT
 var all: bool = False
 var revs: []Rev_T = []
@@ -290,8 +292,8 @@ var i: int = 0
 while i < len(argv):
     let arg: str = argv[i]
     case arg:
-        when "-root":  root = value_of(i, "a directory")
-        when "-cache": cache = value_of(i, "a directory")
+        when "-root":  root = Path(value_of(i, "a directory"))
+        when "-cache": cache = Path(value_of(i, "a directory"))
         when "-rev":   revs.append(value_of(i, "a revision"))
         when "-u":     mode = UNCHECKOUT
         when "-l":     mode = LIST
@@ -306,7 +308,7 @@ while i < len(argv):
     i += (2 if arg in ["-root", "-cache", "-rev"] else 1)
 
 if cache == "" and root == "":
-    cache = $TCHECK_NM_CACHE if $TCHECK_NM_CACHE != "" else $HOME + "/Downloads/.cache/tcheck/NM"
+    cache = Path($TCHECK_NM_CACHE) if $TCHECK_NM_CACHE != "" else Path($HOME) / "Downloads" / ".cache" / "tcheck" / "NM"
 die(f"not a git work tree: {root}") if cache == "" and not git_ok(root, ["rev-parse", "--is-inside-work-tree"])
 var workspace: Workspace_T = Workspace_T(root)
 var cached: Cache_T = Cache_T(cache)
