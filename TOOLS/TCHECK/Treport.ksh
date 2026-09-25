@@ -1,7 +1,8 @@
 #!/bin/ksh
 # Treport.ksh -- the changes in the CFMUTEST baseline built on a
-# TACT baseline, by committer: how many files of each type, then -- unless
-# -short -- each file's commits, tickets, reviews and diffs.
+# TACT baseline, by committer: how many files of each type, the branches
+# not built yet, the tests its Tlogs report newly failing or crashed, then
+# -- unless -short -- each file's commits, tickets, reviews and diffs.
 #
 # A standalone translation of Tcheck_tact's list_changes and
 # list_detailed_changes (Tcheck_tact -focus changes [-short]), for ksh93
@@ -455,6 +456,94 @@ function count_line {           # COUNT WIDTH TYPES: "  4 files: 2 adb, 2 ads"
     printf '  %*s %s: %s\n' "$2" "$1" "$noun" "$3"
 }
 
+# ---------------------------------------------------------------------------
+# The newly failed tests: what the baseline's Tlogs report under "New tests
+# failing" and "Crashed Tests", as they report them -- new against each
+# Tlog's own reference baseline -- each once, with the builds it fails in.
+# ---------------------------------------------------------------------------
+
+SUBTYPES="in mono assert lo hi memcheck with_secondary"
+
+function tlog_failures {        # TLOG: "REF\t<its reference>", then "T\t<test>"
+    # A section runs from its header -- a row of dots -- to the next one;
+    # the first of each name counts. A test is the second word of a line,
+    # an .el file: the sections hold other lines too. New failures first,
+    # then the crashed.
+    awk '
+    /^[ \t]*\.\.\.\.\.\.\.\.\.\.\.\.\.\./ {
+        sec = ""
+        if (index($0, "Crashed Tests") && !seen_crashed) { seen_crashed = 1; sec = "crashed" }
+        else if (index($0, "New tests failing") && !seen_new) { seen_new = 1; sec = "new" }
+        next
+    }
+    ref == "" && match($0, /Actual reference baseline[ \t]*:[ \t]*/) {
+        rest = substr($0, RSTART + RLENGTH); split(rest, w, /[ \t]+/); ref = w[1]
+    }
+    sec != "" && NF > 0 {
+        name = NF > 1 ? $2 : $1
+        if (name ~ /\.el$/) {
+            if (sec == "new") new_[++n_new] = name; else crashed[++n_crashed] = name
+        }
+    }
+    END {
+        printf "REF\t%s\n", ref
+        for (i = 1; i <= n_new; i++) printf "T\t%s\n", new_[i]
+        for (i = 1; i <= n_crashed; i++) printf "T\t%s\n", crashed[i]
+    }' "$1"
+}
+
+function list_new_failures {    # BASELINE
+    typeset build name type sub tlog kind value against="" vs="" tab=$'\t'
+    typeset tests="" test
+    typeset -A where
+    typeset -i width=0
+    set +o noglob
+    for build in "$TACT_ROOT/TACT_CONFIG.$1"/build_G!*; do
+        [[ -d $build ]] || continue
+        name=${build##*/}
+        # as Tcheck_tact: not these builds, and IP, OP or SIP ones only
+        [[ $name == *92* || $name == *94* || $name == *95* || $name == *98* || $name == *30* ]] && continue
+        case $name in
+        *.IP.*)  type=IP ;;
+        *.OP.*)  type=OP ;;
+        *.SIP.*) type=SIP ;;
+        *)       continue ;;
+        esac
+        for sub in $SUBTYPES; do
+            tlog=$build/saved_logs/tacot_corico.LATEST/TACT_REGRESS_LOGS/LATEST/Tlog-$sub.log
+            [[ -f $tlog ]] || continue
+            # the loop, last in the pipeline, runs in this shell: ksh93 and zsh
+            tlog_failures "$tlog" | while IFS=$tab read -r kind value; do
+                if [[ $kind == REF ]]; then
+                    [[ -n $value && ", $against, " != *", $value, "* ]] && against=${against:+$against, }$value
+                    continue
+                fi
+                if [[ -z ${where[$value]+set} ]]; then
+                    tests="$tests $value"
+                    where[$value]="$type $sub"
+                    ((${#value} > width)) && width=${#value}
+                elif [[ ", ${where[$value]}, " != *", $type $sub, "* ]]; then
+                    where[$value]="${where[$value]}, $type $sub"
+                fi
+            done
+        done
+    done
+    set -o noglob
+    [[ -n $against ]] && vs=" vs $against"
+    cecho sWr "NEWLY FAILED TESTS$vs"
+    if [[ -z $tests ]]; then
+        cecho sKg "  No new failures${against:+ compared to $against}"
+        print
+        return
+    fi
+    for test in $tests; do
+        printf '  '
+        cechon sWr "$test"
+        printf '%*s  %s\n' $((width - ${#test})) "" "${where[$test]}"
+    done
+    print
+}
+
 REPORT=""                       # the changes report, once list_changes found it
 
 function list_changes {         # BASELINE: by committer, the most first, their files by type
@@ -465,7 +554,11 @@ function list_changes {         # BASELINE: by committer, the most first, their 
     typeset -a counts types
     hr
     cecho sWr "CHANGES BY COMMITTER"
-    changes_report "$1" || return 1
+    if ! changes_report "$1"; then
+        print                   # after the warning
+        list_new_failures "$1"
+        return 1
+    fi
     REPORT=$REPLY
     read_changes "$REPORT"
     for ((k = 0; k < ${#COMMITTERS[@]}; k++)); do
@@ -508,6 +601,7 @@ function list_changes {         # BASELINE: by committer, the most first, their 
         done
         print
     fi
+    list_new_failures "$1"
 }
 
 function list_detailed_changes { # BASELINE: each file, its commits, ..., diffs

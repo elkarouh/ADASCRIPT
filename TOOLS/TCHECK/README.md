@@ -66,16 +66,20 @@ NO VIEW BUILD FOUND FOR THESE BRANCHES
   ehristea.flight_list_fix
 ```
 
-Then the tests newly failing -- new or crashed in one of the baseline's
-builds, and not failing in the previous baseline's -- each once, with the
+Then the tests newly failing, as the Tlogs report them -- each Tlog's "New
+tests failing" and "Crashed Tests", new against that Tlog's own reference
+baseline (its "Actual reference baseline" line) -- each once, with the
 build type and subtype(s) it fails in:
 
 ```
 NEWLY FAILED TESTS vs 30.0.0.131
-  test_alpha  IP in, IP mono
-  test_gamma  IP in
-  test_delta  OP assert
+  test_alpha.el  IP in, IP mono
+  test_gamma.el  IP in
+  test_delta.el  OP assert
 ```
+
+The previous baseline is not looked at here: comparing with it is for the
+detailed views, where the causes are looked for. Treport.ksh shows the same.
 
 Then, unless `-short`, each branch: its view build
 (`/cm/ot/TACT/TACT_CONFIG.<USER>.<BRANCH>/build_*`, e.g. `build_default_Linux`),

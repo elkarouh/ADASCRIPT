@@ -965,17 +965,26 @@ def list_files_by_committer(report: Path):
             print "  " + branch
         print
 
-# A test failing -- newly, or crashed -- in one of the baseline's builds
-# that did not fail in the previous baseline's: see Report.new_failures.
+# A test one of the baseline's Tlogs reports newly failing or crashed:
+# see Report.new_failures.
 type NewFailure is tuple:
     build: str # the build type and subtype it fails in: "IP in", "OP assert"
     test:  str
 
-def list_new_failures(prev_nr: str, failures: []NewFailure):
-    """Each test of FAILURES once, with the build(s) it newly fails in."""
-    puts("sWr", f"NEWLY FAILED TESTS vs {prev_nr}", NEWLINE=True)
+# One of a baseline's Tlogs: see Report.tlogs.
+type TlogAt is tuple:
+    build:   str # the build type and subtype: "IP in"
+    subtype: BuildSubtype
+    path:    Path
+
+def list_new_failures(against: str, failures: []NewFailure):
+    """Each test of FAILURES once, with the build(s) it newly fails in;
+    AGAINST, the baselines the Tlogs compared with, or ""."""
+    let vs: str = f" vs {against}" if against != "" else ""
+    puts("sWr", f"NEWLY FAILED TESTS{vs}", NEWLINE=True)
     if len(failures) == 0:
-        puts("sKg", f"  No new failures compared to {prev_nr}", NEWLINE=True)
+        let compared: str = f" compared to {against}" if against != "" else ""
+        puts("sKg", f"  No new failures{compared}", NEWLINE=True)
         print
         return
     var tests: []str = []
@@ -995,10 +1004,11 @@ def list_new_failures(prev_nr: str, failures: []NewFailure):
         print " " * (width - len(test)) + "  " + ", ".join(builds[test])
     print
 
-def list_changes(baseline: str, failures: []NewFailure):
+def list_changes(baseline: str, failures: []NewFailure, against: str):
     """What changed in TACT BASELINE and what broke: by committer, the files
     the CFMUTEST baseline built on it changed, by type; then FAILURES, the
-    tests newly failing, each with the build(s) it fails in."""
+    tests its Tlogs report newly failing or crashed, each with the build(s)
+    it fails in -- new against AGAINST, the Tlogs' reference baselines."""
     hr('#')
     puts("sWr", "CHANGES BY COMMITTER", NEWLINE=True)
     let report: Path = changes_report(baseline)
@@ -1006,7 +1016,7 @@ def list_changes(baseline: str, failures: []NewFailure):
         list_files_by_committer(report)
     else:
         print # after the warning
-    list_new_failures(Baseline(baseline).previous().nr, failures)
+    list_new_failures(against, failures)
 
 def list_detailed_changes(baseline: str):
     """The changes in the CFMUTEST baseline built on TACT BASELINE, by
@@ -1224,6 +1234,15 @@ def is_test_name(name: str) -> bool:
     the log, an mrun line -- whose second word (all, Check, Tlog:, mrun) is
     no test."""
     name.endswith(".el")
+
+def tlog_reference(filepath: Path) -> str:
+    """The baseline a Tlog compared its build with -- what its new failures
+    are new against: "Tlog: INFO: Actual reference baseline    : 30.0.0.120".
+    "" when it does not say."""
+    for line in readFile(filepath).split("\n"):
+        if line == /Actual reference baseline\s*:\s*(?P<ref>\S+)/:
+            return $+{ref}
+    ""
 
 def get_failed_test_names(filepath: Path, subtype: BuildSubtype) -> []str:
     """The tests a Tlog's new_failing + crashed sections name."""
@@ -1593,38 +1612,53 @@ class Report:
             puts("sKg", f"{replay_ok} ok, {replay_busy} running", NEWLINE=True)
         hr('#')
 
-    def new_failures(self) -> []NewFailure:
-        """The tests failing -- newly, or crashed -- in this baseline's
-        builds that did not fail in the previous baseline's, with the build
-        type and subtype each fails in; in build, subtype, Tlog order."""
-        let prev: Baseline = self.cur.previous()
-        var found: []NewFailure = []
+    def tlogs(self) -> []TlogAt:
+        """This baseline's Tlogs, one per build and subtype that has one."""
+        var found: []TlogAt = []
         for build in self.builds:
             for subtype in BuildSubtype:
-                let cur_path: Path = build.tlog_path(subtype, normal)
-                continue if not -f cur_path
-                let prev_path: Path = build.in_baseline(prev).tlog_path(subtype, normal)
-                var prev_names: {}str = {}
-                if -f prev_path:
-                    for n in get_failed_test_names(prev_path, subtype):
-                        prev_names.add(n)
-                for name in get_failed_test_names(cur_path, subtype):
-                    if name not in prev_names:
-                        found.append((build: f"{build.btype'Image} {subtype_label(subtype)}", test: name))
+                let path: Path = build.tlog_path(subtype, normal)
+                if -f path:
+                    found.append((build: f"{build.btype'Image} {subtype_label(subtype)}", subtype: subtype, path: path))
+        found
+
+    def new_failures(self) -> []NewFailure:
+        """The tests this baseline's Tlogs report newly failing or crashed,
+        as they report them -- new against each Tlog's own reference
+        baseline -- with the build type and subtype each fails in; in build,
+        subtype, Tlog order. Comparing with the previous baseline is for the
+        detailed views, where the causes are looked for."""
+        var found: []NewFailure = []
+        for t in self.tlogs():
+            for name in get_failed_test_names(t.path, t.subtype):
+                found.append((build: t.build, test: name))
         if len(found) > 0:
             HAS_NEW_FAILURES = True
         found
 
+    def tlog_references(self) -> str:
+        """The baselines this baseline's Tlogs compared with, each once, as
+        they come: "30.0.0.131", or "30.0.0.131, 30.0.0.129" when a build
+        was compared with an older one; "" when none says."""
+        var refs: []str = []
+        for t in self.tlogs():
+            let ref: str = tlog_reference(t.path)
+            if ref != "" and ref not in refs:
+                refs.append(ref)
+        ", ".join(refs)
+
     def show_new_failures(self):
-        """Show tests that are new failures compared to the previous baseline."""
-        let prev_bl: str = self.cur.previous().nr
+        """Show the tests the Tlogs report newly failing or crashed."""
+        let against: str = self.tlog_references()
+        let vs: str = f" vs {against}" if against != "" else ""
         hr('-')
-        puts("sWr", f"NEW FAILURES vs {prev_bl}", NEWLINE=True)
+        puts("sWr", f"NEW FAILURES{vs}", NEWLINE=True)
         let failures: []NewFailure = self.new_failures()
         for f in failures:
             puts("sWr", f"  NEW: {f.build} {f.test}", NEWLINE=True)
         if len(failures) == 0:
-            puts("sKg", "  No new failures compared to " + prev_bl, NEWLINE=True)
+            let compared: str = f" compared to {against}" if against != "" else ""
+            puts("sKg", f"  No new failures{compared}", NEWLINE=True)
 
     def write_history(self):
         """Append a one-line summary to ~/.tcheck_history."""
@@ -1701,7 +1735,7 @@ class Report:
                 if not self.opt.short:
                     self.show_detailed_regression_tests()
             when focus_changes:
-                list_changes(self.cur.nr, self.new_failures())
+                list_changes(self.cur.nr, self.new_failures(), self.tlog_references())
                 if not self.opt.short:
                     list_detailed_changes(self.cur.nr)
             when focus_build_info:
@@ -1715,7 +1749,7 @@ class Report:
                 self.show_regression_tests()
                 self.show_build_info()
                 self.show_replays()
-                list_changes(self.cur.nr, self.new_failures())
+                list_changes(self.cur.nr, self.new_failures(), self.tlog_references())
         self.write_history()
         if self.opt.exit_code and HAS_NEW_FAILURES:
             quit(1)

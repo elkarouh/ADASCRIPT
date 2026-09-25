@@ -1,8 +1,9 @@
 #!/bin/sh
-# Tcheck_tact -focus changes: the newly failed tests, each once, with the
-# build type and subtype(s) it fails in -- against a CM tree built here:
-# two baselines' IP and OP builds and their Tlogs. Tcheck_tact only;
-# Treport.ksh lists the changes alone.
+# Tcheck_tact -focus changes: the tests the Tlogs report newly failing or
+# crashed, each once, with the build type and subtype(s) it fails in --
+# against a CM tree built here: IP and OP builds and their Tlogs. Run on
+# Treport.ksh too (through test/ksh_treport), with NO_EXIT_CODE=1: it has
+# no -exit-code.
 set -e
 
 TCHECK=${1:-../Tcheck_tact}
@@ -13,21 +14,23 @@ WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT INT TERM
 
 OT=$WORK/cm/ot
-# tlog BASELINE BUILD SUBTYPE CRASHED FAILING: a Tlog as Tlog writes one --
-# its sections each under a row of dots, those Tcheck_tact reads among
-# others it does not -- with the CRASHED and FAILING tests (space-separated
-# names) in their sections.
+# tlog BASELINE BUILD SUBTYPE REFERENCE CRASHED FAILING: a Tlog as Tlog
+# writes one -- its sections each under a row of dots, those Tcheck_tact
+# reads among others it does not -- comparing with REFERENCE, with the
+# CRASHED and FAILING tests (space-separated names) in their sections.
 tlog() {
     d="$OT/TACT/TACT_CONFIG.$1/build_G!31.$2.L8/saved_logs/tacot_corico.LATEST/TACT_REGRESS_LOGS/LATEST"
-    bl=$1 sub=$3
+    bl=$1 sub=$3 ref=$4
+    shift
     mkdir -p "$d"
     {
         echo "========================================================================================"
-        echo " HEAVYTEST  : $3"
-        echo " TACT_CONFIG: $1"
-        echo "260910.171934: Tlog: INFO: Starting: Tlog -d /logs/logging-$3 -w"
+        echo " HEAVYTEST  : $sub"
+        echo " TACT_CONFIG: $bl"
+        echo "260910.171934: Tlog: INFO: Starting: Tlog -d /logs/logging-$sub -w"
+        echo "260910.171945: Tlog: INFO: Actual reference baseline    : $ref   #emacs: (cfmu-ediff-to-tlog \"/logs/Tlog-$sub.log\")"
         echo
-        set -- $4 "|" $5
+        set -- $4 "|" $5    # CRASHED | FAILING
         n=0; for t; do [ "$t" = "|" ] && break; n=$((n + 1)); done
         echo " .............. Crashed Tests : nb = $n"
         echo
@@ -65,18 +68,20 @@ tlog() {
         echo "260910.172352: Tlog: INFO: Tlog end"
     } > "$d/Tlog-$sub.log"
 }
-# 30.0.0.9: alpha newly fails in IP in and mono, gamma crashed, beta still
-# fails as it did in 30.0.0.8, and delta fails in an OP build that had no
-# Tlog before. Around them, the lines of the sections Tcheck_tact does not
-# read, and those in its own that name no test, whose second words --
-# mrun, Check, Tlog:, all -- were once listed as new failures.
-tlog 30.0.0.9 IP in test_gamma.el "test_alpha.el test_beta.el"
-tlog 30.0.0.9 IP mono "" test_alpha.el
-tlog 30.0.0.9 OP assert "" test_delta.el
-tlog 30.0.0.8 IP in "" test_beta.el
-# 30.0.0.10: the same failures as 30.0.0.9 -- nothing new
-tlog 30.0.0.10 IP in test_gamma.el "test_alpha.el test_beta.el"
-tlog 30.0.0.10 IP mono "" test_alpha.el
+# 30.0.0.9: alpha newly fails in IP in and mono, beta in IP in, gamma
+# crashed there, and delta fails in an OP build its Tlog compared with an
+# older baseline. beta failed in 30.0.0.8 too: listed all the same -- the
+# Tlogs say what is new. Around them, the lines of the sections
+# Tcheck_tact does not read, and those in its own that name no test,
+# whose second words -- mrun, Check, Tlog:, all -- were once listed as
+# new failures.
+tlog 30.0.0.9 IP in 30.0.0.8 test_gamma.el "test_alpha.el test_beta.el"
+tlog 30.0.0.9 IP mono 30.0.0.8 "" test_alpha.el
+tlog 30.0.0.9 OP assert 30.0.0.7 "" test_delta.el
+tlog 30.0.0.8 IP in 30.0.0.7 "" test_beta.el
+# 30.0.0.10: nothing new
+tlog 30.0.0.10 IP in 30.0.0.9 "" ""
+tlog 30.0.0.10 IP mono 30.0.0.9 "" ""
 
 TCHECK_CM_OT=$OT
 CONTEXT_CM_BASELINE=x
@@ -98,18 +103,21 @@ section() {
     "$TCHECK" -no-color "$@" 2>/dev/null | sed -n '/^NEWLY FAILED TESTS/,/^$/p' | grep . || true
 }
 
-check "each test once, with its builds; tests only" "NEWLY FAILED TESTS vs 30.0.0.8
+check "each test once, with its builds; tests only" "NEWLY FAILED TESTS vs 30.0.0.8, 30.0.0.7
   test_alpha.el  IP in, IP mono
+  test_beta.el   IP in
   test_gamma.el  IP in
   test_delta.el  OP assert" "$(section -focus changes 30.0.0.9)"
 check "-short keeps it"                          "$(section -focus changes 30.0.0.9)" "$(section -focus changes -short 30.0.0.9)"
-check "none new: says so"                        "NEWLY FAILED TESTS vs 30.0.0.9
+check "none new: says so, against the Tlogs' reference" "NEWLY FAILED TESTS vs 30.0.0.9
   No new failures compared to 30.0.0.9" "$(section -focus changes -short 30.0.0.10)"
-set +e
-"$TCHECK" -no-color -exit-code -focus changes -short 30.0.0.9 >/dev/null 2>&1; rc_new=$?
-"$TCHECK" -no-color -exit-code -focus changes -short 30.0.0.10 >/dev/null 2>&1; rc_none=$?
-set -e
-check "-exit-code: 1 with new failures, 0 without" "1 0" "$rc_new $rc_none"
+if [ -z "$NO_EXIT_CODE" ]; then
+    set +e
+    "$TCHECK" -no-color -exit-code -focus changes -short 30.0.0.9 >/dev/null 2>&1; rc_new=$?
+    "$TCHECK" -no-color -exit-code -focus changes -short 30.0.0.10 >/dev/null 2>&1; rc_none=$?
+    set -e
+    check "-exit-code: 1 with new failures, 0 without" "1 0" "$rc_new $rc_none"
+fi
 
 echo
 if [ $fails -eq 0 ]; then echo "All checks passed."; else echo "$fails check(s) FAILED."; exit 1; fi

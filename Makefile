@@ -611,7 +611,7 @@ test: compile
 	    > $(TCDIR)/test/tcheck_py && chmod +x $(TCDIR)/test/tcheck_py
 	@$(TCDIR)/test/run_changes_tests.sh $(TCDIR)/test/tcheck_py
 	@rm -f $(TCDIR)/test/Tcheck_tact_py.py $(TCDIR)/test/tcheck_py
-	@echo "=== Tcheck_tact -focus changes: the newly failed tests, both backends ==="
+	@echo "=== Tcheck_tact -focus changes: the tests the Tlogs report failing, both backends ==="
 	@$(TCDIR)/test/run_new_failures_tests.sh $(TCDIR)/Tcheck_tact
 	@$(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(TCDIR)/Tcheck_tact.ady > $(TCDIR)/test/Tcheck_tact_py.py
 	@printf '#!/bin/sh\nexec $(PYTHON) %s "$$@"\n' "$(TCDIR)/test/Tcheck_tact_py.py" \
@@ -630,14 +630,18 @@ test: compile
 	@# Treport.ksh, the standalone ksh translation: the same checks
 	@# Under ksh93, and under zsh in ksh emulation -- zsh run as ksh, which
 	@# is what /bin/ksh is on some machines.
+	@# The changes tests and the new-failures ones -- bar -exit-code, which
+	@# Treport.ksh has not.
 	@echo "=== Treport.ksh, the same checks (ksh93) ==="
 	@if command -v ksh >/dev/null 2>&1 && ksh -c '[ -z "$$ZSH_VERSION" ]' 2>/dev/null; then \
-	    $(TCDIR)/test/run_changes_tests.sh $(TCDIR)/test/ksh_treport; \
+	    $(TCDIR)/test/run_changes_tests.sh $(TCDIR)/test/ksh_treport && \
+	    NO_EXIT_CODE=1 $(TCDIR)/test/run_new_failures_tests.sh $(TCDIR)/test/ksh_treport; \
 	else echo "  SKIP (no ksh93)"; fi
 	@echo "=== Treport.ksh, the same checks (zsh as ksh) ==="
 	@if command -v zsh >/dev/null 2>&1; then \
 	    d=$$(mktemp -d) && ln -s "$$(command -v zsh)" $$d/ksh && \
-	    KSH=$$d/ksh $(TCDIR)/test/run_changes_tests.sh $(TCDIR)/test/ksh_treport; \
+	    KSH=$$d/ksh $(TCDIR)/test/run_changes_tests.sh $(TCDIR)/test/ksh_treport && \
+	    KSH=$$d/ksh NO_EXIT_CODE=1 $(TCDIR)/test/run_new_failures_tests.sh $(TCDIR)/test/ksh_treport; \
 	    rc=$$?; rm -rf $$d; [ $$rc -eq 0 ]; \
 	else echo "  SKIP (no zsh)"; fi
 
