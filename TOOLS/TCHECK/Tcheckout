@@ -6,6 +6,7 @@
 #   Tcheckout [-root DIR] <system>/<subsystem>/<path>
 #   Tcheckout [-root DIR] -u <system>/<subsystem>/<path>
 #   Tcheckout [-root DIR] -l [<system>/<subsystem>]
+#   Tcheckout -cache DIR [-rev REV]... <system>/<subsystem>/<path>
 #
 # The file's submodule, <system>/<subsystem>, of the NM workspace (-root, or
 # $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY):
@@ -35,23 +36,88 @@
 # another server. A server that does not filter (git warns "filtering not
 # recognized by server") gives a full clone: slower, the same result.
 #
+# -cache: no workspace -- the diff links of a report made outside one. The
+# file's repository is cloned alone, from Bitbucket, into DIR/<system>/
+# <subsystem> -- without its files' contents, as above -- the file checked
+# out at the first REV that has it; the REVs, those the diffs compare, are
+# fetched when missing: the cache keeps up with Bitbucket. The repository
+# is $TCHECK_NM_URL/<system>.<subsystem>.git, in lower case; TCHECK_NM_URL
+# defaults to https://mirror-cma.bitbucket.cfmu.corp.eurocontrol.int/scm/nm.
+# rm -rf DIR, or part of it, to free the space.
+#
 # Needs git 2.25 or later (sparse-checkout).
 
 PROG=${0##*/}
 die() { echo "$PROG: $*" >&2; exit 1; }
 
 root=${CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY:-}
-mode=checkout
+mode=checkout cache="" revs=""
 while [ $# -gt 0 ]; do
     case $1 in
     -root) [ $# -gt 1 ] || die "-root requires a directory"; root=$2; shift 2 ;;
     -u) mode=uncheckout; shift ;;
     -l) mode=list; shift ;;
+    -cache) [ $# -gt 1 ] || die "-cache requires a directory"; cache=$2; shift 2 ;;
+    -rev) [ $# -gt 1 ] || die "-rev requires a revision"; revs="$revs $2"; shift 2 ;;
     -h|-help|--help) sed -n '2,/^$/s/^# \{0,1\}//p' "$0"; exit 0 ;;
     -*) die "unknown option: $1" ;;
     *) break ;;
     esac
 done
+
+parse_target() {        # <system>/<subsystem>/<path> -> target system sub file
+    target=$1
+    case $target in
+    */) die "not a file: $target" ;;
+    */*/*) ;;
+    *) die "not <system>/<subsystem>/<path>: $target" ;;
+    esac
+    system=${target%%/*}; rest=${target#*/}
+    sub=$system/${rest%%/*}; file=${rest#*/}
+}
+
+if [ -n "$cache" ]; then
+    [ $mode = checkout ] || die "-u and -l are for a workspace; rm -rf the cache's repositories instead"
+    [ $# -eq 1 ] || die "usage: $PROG -cache DIR [-rev REV]... <system>/<subsystem>/<path>"
+    parse_target "$1"
+    work=$cache/$sub
+    url=${TCHECK_NM_URL:-https://mirror-cma.bitbucket.cfmu.corp.eurocontrol.int/scm/nm}/$(printf '%s' "$system.${sub#*/}" | tr 'A-Z' 'a-z').git
+    fresh=""
+    if [ ! -e "$work/.git" ]; then
+        mkdir -p "$work" || die "could not create $work"
+        [ -z "$(ls -A "$work")" ] || die "$work is not empty: not cloning into it"
+        echo "$PROG: cloning $url into $work (no contents until needed)"
+        git clone -q --filter=blob:none --no-checkout "$url" "$work" || die "could not clone $url"
+        git -C "$work" sparse-checkout set --no-cone "/$file" || die "could not set up the sparse checkout"
+        fresh=1
+    fi
+    # the revisions compared, fetched when missing
+    for rev in $revs; do
+        git -C "$work" rev-parse -q --verify "$rev^{commit}" >/dev/null && continue
+        echo "$PROG: fetching $sub, for $rev"
+        git -C "$work" fetch -q --tags origin || die "could not fetch $url"
+        break
+    done
+    for rev in $revs; do
+        git -C "$work" rev-parse -q --verify "$rev^{commit}" >/dev/null || die "no $rev in $url"
+    done
+    git -C "$work" sparse-checkout list | grep -qxF "/$file" ||
+        git -C "$work" sparse-checkout add "/$file" || die "could not add $file to $work"
+    # the file, known to git: in HEAD, else at the first revision that has it
+    if [ -z "$fresh" ] && git -C "$work" cat-file -e "HEAD:$file" 2>/dev/null; then
+        exit 0
+    fi
+    at=""
+    for rev in $revs; do
+        git -C "$work" cat-file -e "$rev:$file" 2>/dev/null && { at=$rev; break; }
+    done
+    [ -n "$at" ] || at=$(git -C "$work" rev-parse -q --verify origin/HEAD) || at=""
+    [ -n "$at" ] || die "$file is at none of:$revs"
+    git -C "$work" -c advice.detachedHead=false checkout -q -f "$at" || die "could not check out $at in $work"
+    echo "$PROG: $target checked out in $cache (at $at)"
+    exit 0
+fi
+
 [ -n "$root" ] || die "no NM workspace: set CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY or give -root"
 git -C "$root" rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "not a git work tree: $root"
 
@@ -87,14 +153,7 @@ if [ $mode = list ]; then
 fi
 [ $# -eq 1 ] || die "usage: $PROG [-root DIR] [-u] <system>/<subsystem>/<path>"
 
-target=$1
-case $target in
-*/) die "not a file: $target" ;;
-*/*/*) ;;
-*) die "not <system>/<subsystem>/<path>: $target" ;;
-esac
-system=${target%%/*}; rest=${target#*/}
-sub=$system/${rest%%/*}; file=${rest#*/}
+parse_target "$1"
 work=$root/$sub
 
 # the submodule's name: the one whose path is SUB, in .gitmodules

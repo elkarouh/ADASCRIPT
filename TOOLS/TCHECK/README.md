@@ -122,9 +122,16 @@ DIFF        : #emacs:(call-process-shell-command "git -C /…/NM/IFPS/CUA_IDL di
 NET DIFF    : #emacs:(call-process-shell-command "git -C /…/NM/IFPS/CUA_IDL difftool -y -t kompare 30.0.0.122 30.0.0.123 -- sources/fpl-utilities.ads" nil 0)
 ```
 
-With `$CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY` unset, the links name the
-variable instead, for Emacs to expand (`substitute-in-file-name`, or the
-shell for the diff tool).
+Without a workspace (`$CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY` unset), the
+links work in a cache instead, `$TCHECK_NM_CACHE` (default
+`~/.cache/tcheck/NM`): the first click clones the file's repository from
+Bitbucket into it, without its files' contents, and every click fetches the
+commits and tags compared when the cache lacks them -- it keeps up with
+Bitbucket:
+
+```
+DIFF        : #emacs:(when (eql 0 (shell-command "Tcheckout -cache /home/me/.cache/tcheck/NM -rev c3fb81031 -rev c3fb81031^ TACT/UIF/sources/b.adb")) (vc-version-ediff (list "/home/me/.cache/tcheck/NM/TACT/UIF/sources/b.adb") "c3fb81031^" "c3fb81031"))
+```
 
 The path's `<system>/<subsystem>` is a submodule of the NM workspace
 (`$CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY`), where the commits are. Where it
@@ -192,7 +199,8 @@ Treport.ksh -tool kompare 30.0.0.132
 ```
 
 It reads the same environment (`TCHECK_CM_OT`,
-`CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY`) and needs `Psort` on the PATH.
+`CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY`, `TCHECK_NM_CACHE`) and needs `Psort`
+on the PATH.
 It runs under ksh93 and under zsh in ksh emulation (a `/bin/ksh` that is
 zsh, or plain zsh, which it switches to ksh emulation), and prints its
 colours with the original Tcheck_tact.ksh's `cecho`/`cechon`.
@@ -243,7 +251,22 @@ git config --global url.<the other server's prefix>.insteadOf https://bitbucket.
 ```
 
 A server that does not filter gives a full clone (git warns "filtering not
-recognized by server"): slower, the same result. `make test` runs
+recognized by server"): slower, the same result.
+
+`-cache DIR` is for no workspace at all -- the diff links of a report made
+outside one:
+
+```
+Tcheckout -cache DIR [-rev REV]... <system>/<subsystem>/<path>
+```
+
+The file's repository, `$TCHECK_NM_URL/<system>.<subsystem>.git` in lower
+case (`TCHECK_NM_URL` defaults to
+`https://mirror-cma.bitbucket.cfmu.corp.eurocontrol.int/scm/nm`), is cloned
+alone into `DIR/<system>/<subsystem>`, as above, and the file checked out
+at the first `REV` that has it. The `REV`s -- what the diff compares -- are
+fetched when the clone lacks them. `rm -rf` the cache, or part of it, to
+free the space. `make test` runs
 `test/run_checkout_tests.sh`, against repositories it builds.
 
 ### make_comparable

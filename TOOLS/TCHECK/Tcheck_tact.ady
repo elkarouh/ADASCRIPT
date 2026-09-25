@@ -759,12 +759,17 @@ def elisp_string(text: str) -> str:
     """TEXT as an Emacs Lisp string literal."""
     "\"" + text.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
 
+def nm_cache() -> str:
+    """Where the diff links clone NM's repositories, from Bitbucket, when
+    there is no workspace: $TCHECK_NM_CACHE, or ~/.cache/tcheck/NM."""
+    let cache: str = $TCHECK_NM_CACHE
+    let home: str = $HOME
+    cache if cache != "" else f"{home}/.cache/tcheck/NM"
+
 def nm_root() -> str:
-    """The NM workspace, or the variable naming it when it is unset -- the
-    shell expands that in a command, and Emacs through
-    substitute-in-file-name."""
+    """The NM workspace, or, without one, the cache standing in for it."""
     let root: str = $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY
-    root if root != "" else "$CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY"
+    root if root != "" else nm_cache()
 
 def split_file(fc: FileChange) -> (str, str):
     """FC's submodule and its path inside it: the report's path is
@@ -801,19 +806,21 @@ def diff_link(fc: FileChange, rev1: str, rev2: str) -> str:
     """The link comparing FC's file between REV1 and REV2 -- checking it
     out first when it needs to be."""
     let link: str = emacs_difftool(fc, rev1, rev2) if DIFF_TOOL != "" else emacs_ediff(fc, rev1, rev2)
-    let checkout: str = checkout_command(fc)
+    let checkout: str = checkout_command(fc, rev1, rev2)
     return link if checkout == ""
     let form: str = link.removeprefix("#emacs:")
     f"#emacs:(when (eql 0 (shell-command {elisp_string(checkout)})) {form})"
 
-def checkout_command(fc: FileChange) -> str:
-    """The Tcheckout command checking FC's file out alone, for the diffs,
-    when its submodule is not checked out, or is sparsely without it; ""
-    otherwise, and when the NM workspace is not known."""
-    let root: str = $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY
-    return "" if root == ""
+def checkout_command(fc: FileChange, rev1: str, rev2: str) -> str:
+    """The Tcheckout command checking FC's file out alone, for its diff
+    between REV1 and REV2: in the NM workspace when its submodule is not
+    checked out, or is sparsely without it -- "" otherwise; without a
+    workspace, always, in the cache -- which fetches REV1 and REV2 when it
+    lacks them."""
     let (sub, rest) = split_file(fc)
     return "" if sub == ""
+    let root: str = $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY
+    return f"Tcheckout -cache {nm_cache()} -rev {rev2} -rev {rev1} {fc.file}" if root == ""
     let git_link: str = f"{sub}/.git"
     let path: str = f"{sub}/{rest}"
     if -e git_link:
@@ -1073,6 +1080,9 @@ def list_detailed_changes(baseline: str, user: Committer):
     print "history, its contents fetched as the diffs need them. A submodule checked out"
     print "already needs the commits and the baseline tags fetched:"
     print "    git -C $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY/<system>/<subsystem> fetch --tags"
+    print "Without a workspace (CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY unset), they clone the"
+    print "file's repository from Bitbucket into $TCHECK_NM_CACHE (~/.cache/tcheck/NM), and"
+    print "fetch there what it lacks."
     print
     for who in changes.committers:
         stdout.write("===================================== Files committed by user ")

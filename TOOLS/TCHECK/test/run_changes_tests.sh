@@ -98,9 +98,9 @@ check "an ediff link per commit" \
 DIFF        : #emacs:(vc-version-ediff (list "/nm/TACT/UIF/sources/b.adb") "13e00da4a^" "13e00da4a")
 DIFF        : #emacs:(vc-version-ediff (list "/nm/TACT/UIF/sources/b.adb") "bc399bc5f^" "bc399bc5f")' \
     "$(entry alice b.adb | grep '^DIFF' | unwrap)"
-check "...naming the variable when it is unset"  \
-    'DIFF        : #emacs:(vc-version-ediff (list (substitute-in-file-name "$CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY/TACT/UIF/sources/b.adb")) "33340af6c^" "33340af6c")' \
-    "$(CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY= "$TCHECK" -no-color -focus changes 30.0.0.9 | awk '/user bob /{on=1} on' | grep -m1 '^DIFF')"
+check "no workspace: a clone from Bitbucket, in ~/.cache" \
+    'DIFF        : #emacs:(when (eql 0 (shell-command "Tcheckout -cache HOME/.cache/tcheck/NM -rev 33340af6c -rev 33340af6c^ TACT/UIF/sources/b.adb")) (vc-version-ediff (list "HOME/.cache/tcheck/NM/TACT/UIF/sources/b.adb") "33340af6c^" "33340af6c"))' \
+    "$(CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY= HOME=$WORK "$TCHECK" -no-color -focus changes 30.0.0.9 | awk '/user bob /{on=1} on' | grep -m1 '^DIFF' | sed "s|$WORK|HOME|g")"
 check "a ticket only one branch lists wins over nearest" "FILE CHANGED: TACT/UIF/sources/d.adb" \
     "$(section alice | grep '^FILE .*d\.adb$')"
 check "...and so is not bob's"                   0 "$(section bob | grep -c 'd\.adb' || true)"
@@ -118,8 +118,9 @@ check "...with -tool too" \
     "DIFF        : $E /nm TACT/UIF/sources/b.adb\")) (call-process-shell-command \"git -C /nm/TACT/UIF difftool -y -t kompare 33340af6c^ 33340af6c -- sources/b.adb\" nil 0))" \
     "$("$TCHECK" -no-color -tool kompare -focus changes 30.0.0.9 | awk '/user bob /{on=1} on' | grep -m1 '^DIFF')"
 check "...no CHECKOUT line of their own"         0 "$(printf '%s\n' "$OUT" | grep -c '^CHECKOUT' || true)"
-check "...not when the workspace is not known"   0 \
-    "$(CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY= "$TCHECK" -no-color -focus changes 30.0.0.9 | grep -c 'shell-command "Tcheckout' || true)"
+check "...in TCHECK_NM_CACHE, when set; the net diff's baselines" \
+    'NET DIFF    : #emacs:(when (eql 0 (shell-command "Tcheckout -cache /c -rev 30.0.0.130 -rev 30.0.0.129 TACT/UIF/sources/b.adb")) (vc-version-ediff (list "/c/TACT/UIF/sources/b.adb") "30.0.0.129" "30.0.0.130"))' \
+    "$(CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY= TCHECK_NM_CACHE=/c "$TCHECK" -no-color -focus changes 30.0.0.9 | awk '/user alice /{on=1} on' | grep -m1 '^NET DIFF')"
 # a workspace with TACT/UIF checked out in full, IFPS/OPIF_LIB sparsely
 NM=$WORK/nm
 git init -q "$NM/TACT/UIF" && mkdir -p "$NM/TACT/UIF/sources" && : > "$NM/TACT/UIF/sources/b.adb"

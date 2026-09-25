@@ -34,10 +34,13 @@
 # Each file's DIFF lines (one per commit) and NET DIFF line (the whole
 # baseline's change to it) are #emacs: links: Emacs ediff, or with -tool
 # NAME that diff tool through git difftool. They run in the file's
-# submodule of $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY.
+# submodule of $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY, checking the file out
+# first when it is not (Tcheckout); without a workspace, in a clone of its
+# repository from Bitbucket, in $TCHECK_NM_CACHE.
 #
 # Environment: TCHECK_CM_OT, the CM tree (default /cm/ot);
-# CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY, the NM workspace.
+# CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY, the NM workspace; TCHECK_NM_CACHE,
+# where to clone without one (default ~/.cache/tcheck/NM).
 
 # Portable across ksh93 and zsh in ksh emulation -- a /bin/ksh that is zsh:
 # no .sh.match (a regex only says whether a line matches; the fields come
@@ -286,11 +289,16 @@ function elisp_string {         # TEXT -> REPLY, as an Emacs Lisp string literal
     REPLY="\"$s\""
 }
 
+function nm_cache {             # -> REPLY: where the diff links clone NM's
+    # repositories, from Bitbucket, when there is no workspace
+    REPLY=${TCHECK_NM_CACHE:-$HOME/.cache/tcheck/NM}
+}
+
 function split_file {           # FILE -> SUB REST: its submodule, the path in it
-    # <system>/<subsystem> is a submodule of the NM workspace; the variable
-    # names it when unset -- the shell expands that, and Emacs through
-    # substitute-in-file-name.
-    typeset root=${CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY:-'$CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY'}
+    # <system>/<subsystem> is a submodule of the NM workspace -- or, without
+    # one, a repository of the cache standing in for it
+    nm_cache
+    typeset root=${CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY:-$REPLY}
     if [[ $1 == */*/* ]]; then
         typeset system=${1%%/*} rest=${1#*/}
         SUB=$root/$system/${rest%%/*} REST=${rest#*/}
@@ -315,21 +323,26 @@ function diff_link {            # FILE REV1 REV2 KIND -> REPLY, the #emacs: link
         REPLY="#emacs:(vc-version-ediff (list $file) $rev1 $REPLY)"
     fi
     link=${REPLY#'#emacs:'}
-    checkout_command "$1" "$4"
+    checkout_command "$1" "$4" "$2" "$3"
     [[ -z $REPLY ]] && { REPLY="#emacs:$link"; return 0; }
     elisp_string "$REPLY"
     REPLY="#emacs:(when (eql 0 (shell-command $REPLY)) $link)"
 }
 
-function checkout_command {     # FILE KIND -> REPLY: the Tcheckout command
-    # checking FILE out alone, for the diffs, when its submodule is not
-    # checked out, or is sparsely without it; "" otherwise, and when the NM
-    # workspace is not known
+function checkout_command {     # FILE KIND REV1 REV2 -> REPLY: the Tcheckout
+    # command checking FILE out alone, for its diff between REV1 and REV2:
+    # in the NM workspace when its submodule is not checked out, or is
+    # sparsely without it -- "" otherwise; without a workspace, always, in
+    # the cache -- which fetches REV1 and REV2 when it lacks them
     typeset root=${CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY:-}
-    REPLY=""
-    [[ -n $root ]] || return 0
     split_file "$1"
+    REPLY=""
     [[ -n $SUB ]] || return 0
+    if [[ -z $root ]]; then
+        nm_cache
+        REPLY="Tcheckout -cache $REPLY -rev $4 -rev $3 $1"
+        return 0
+    fi
     if [[ -e $SUB/.git ]]; then
         [[ $2 == DELETED || -e $SUB/$REST ]] && return 0
         # missing from a checkout: only a sparse one can take it in
@@ -659,6 +672,9 @@ function list_detailed_changes { # BASELINE: each file, its commits, ..., diffs
     print -r -- "history, its contents fetched as the diffs need them. A submodule checked out"
     print -r -- "already needs the commits and the baseline tags fetched:"
     print -r -- '    git -C $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY/<system>/<subsystem> fetch --tags'
+    print -r -- "Without a workspace (CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY unset), they clone the"
+    print -r -- "file's repository from Bitbucket into \$TCHECK_NM_CACHE (~/.cache/tcheck/NM), and"
+    print -r -- "fetch there what it lacks."
     print
     for who in "${COMMITTERS[@]}"; do
         printf '%s' "===================================== Files committed by user "

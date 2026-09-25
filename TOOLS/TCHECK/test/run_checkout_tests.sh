@@ -132,5 +132,38 @@ else
     echo "  SKIP a DIFF link in Emacs (no emacs)"
 fi
 
+# -cache: no workspace -- the repository cloned alone, from "Bitbucket"
+export TCHECK_NM_URL=file://$WORK/scm/nm
+C=$WORK/cache
+csub=$C/TACT/UIF
+out=$("$TCHECKOUT" -cache "$C" -rev 30.0.0.2 -rev 30.0.0.1 TACT/UIF/sources/b.adb 2>&1) || { echo "$out"; exit 1; }
+check "-cache: the file, checked out"                "b 2 no" "$(cat "$csub/sources/b.adb") $([ -e "$csub/sources/a.adb" ] && echo yes || echo no)"
+check "...cloned from TCHECK_NM_URL, lower case"     "file://$up" "$(git -C "$csub" remote get-url origin)"
+check "...without the files' contents"               blob:none "$(git -C "$csub" config remote.origin.partialclonefilter)"
+check "...at the first revision given"               "$(git -C "$up" rev-parse 30.0.0.2)" "$(git -C "$csub" rev-parse HEAD)"
+printf 'b 3\n' > "$up/sources/b.adb"; printf 'c 3\n' > "$up/sources/c.adb"
+git -C "$up" add . && git -C "$up" commit -qm three && git -C "$up" tag 30.0.0.3
+out=$("$TCHECKOUT" -cache "$C" -rev 30.0.0.3 -rev 30.0.0.2 TACT/UIF/sources/b.adb 2>&1) || { echo "$out"; exit 1; }
+check "...a revision it lacks: fetched"              "$(git -C "$up" rev-parse 30.0.0.3)" "$(git -C "$csub" rev-parse 30.0.0.3 2>&1)"
+check "...the checkout not moved for it"             "$(git -C "$up" rev-parse 30.0.0.2)" "$(git -C "$csub" rev-parse HEAD)"
+check "...the diff to it works"                      "+b 3" "$(git -C "$csub" diff 30.0.0.2 30.0.0.3 -- sources/b.adb | grep '^+b')"
+out=$("$TCHECKOUT" -cache "$C" -rev 30.0.0.2 -rev 30.0.0.1 TACT/UIF/sources/a.adb 2>&1) || { echo "$out"; exit 1; }
+check "...another file: added"                       "a 2 b 2" "$(cat "$csub/sources/a.adb" "$csub/sources/b.adb" | tr '\n' ' ' | sed 's/ $//')"
+out=$("$TCHECKOUT" -cache "$C" -rev 30.0.0.3 -rev 30.0.0.2 TACT/UIF/sources/c.adb 2>&1) || { echo "$out"; exit 1; }
+check "...one only a newer revision has: moved there" "c 3 $(git -C "$up" rev-parse 30.0.0.3)" "$(cat "$csub/sources/c.adb") $(git -C "$csub" rev-parse HEAD)"
+check "...the others still there"                    "a 2 b 3" "$(cat "$csub/sources/a.adb" "$csub/sources/b.adb" | tr '\n' ' ' | sed 's/ $//')"
+rc=0; out=$("$TCHECKOUT" -cache "$C" -rev 30.0.0.9 TACT/UIF/sources/b.adb 2>&1) || rc=$?
+check "...a revision Bitbucket lacks: said so"       "1 1" "$rc $(printf '%s\n' "$out" | grep -c 'no 30.0.0.9 in')"
+rc=0; out=$("$TCHECKOUT" -cache "$C" -u TACT/UIF/sources/b.adb 2>&1) || rc=$?
+check "...not -u"                                    "1 1" "$rc $(printf '%s\n' "$out" | grep -c 'for a workspace')"
+if command -v emacs >/dev/null 2>&1; then
+    rm -rf "$C"
+    f=$csub/sources/b.adb
+    link="(when (eql 0 (shell-command \"Tcheckout -cache $C -rev 30.0.0.3 -rev 30.0.0.2 TACT/UIF/sources/b.adb\")) (vc-version-ediff (list \"$f\") \"30.0.0.2\" \"30.0.0.3\"))"
+    got=$(cd / && PATH=$(dirname "$TCHECKOUT"):$PATH emacs --batch -Q --eval "(progn (require 'vc) $link $shown)" 2>&1 |
+          sed -n 's/^SHOWN //p' | tr '\n' ' ')
+    check "...a DIFF link, in Emacs: cloned, compared"   "b.adb.~30.0.0.2~=b 2 b.adb.~30.0.0.3~=b 3 " "$got"
+fi
+
 echo
 if [ $fails -eq 0 ]; then echo "All checks passed."; else echo "$fails check(s) FAILED."; exit 1; fi
