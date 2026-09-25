@@ -929,12 +929,24 @@ def files_by_type(files: []str) -> str:
     let order: [](int, str) = sorted([(-n, ext) for ext, n in counts.items()])
     ", ".join([f"{-n} {extension_label(ext)}" for n, ext in order])
 
-def list_files_by_committer(report: Path):
+def only_by(changes: ChangeList, user: Committer) -> ChangeList:
+    """CHANGES, only USER's when USER is not "": the changes credited to
+    no branch are nobody's, and go too."""
+    return changes if user == ""
+    let committers: []Committer = [user] if user in changes.committers else []
+    ChangeList(committers = committers, branches = changes.branches, files = changes.files, unattributed = [])
+
+def list_files_by_committer(report: Path, user: Committer):
     """By committer, the most first, how many files REPORT's changes touch,
     and how many of each type (extension); then the branches with no view
     build, if any. A change no branch is credited with is left out: the
-    detailed listing lists it."""
-    let changes: ChangeList = read_changes(report)
+    detailed listing lists it. Only USER's, when USER is not ""."""
+    let all: ChangeList = read_changes(report)
+    if user != "" and user not in all.committers:
+        puts("sWb", f"No changes by {user}; by: " + ", ".join(all.committers), NEWLINE=True)
+        print
+        return
+    let changes: ChangeList = only_by(all, user)
     var files: {Committer}[]str = {:}
     for who in changes.committers:
         var theirs: []FileChange = []
@@ -1004,31 +1016,35 @@ def list_new_failures(against: str, failures: []NewFailure):
         print " " * (width - len(test)) + "  " + ", ".join(builds[test])
     print
 
-def list_changes(baseline: str, failures: []NewFailure, against: str):
-    """What changed in TACT BASELINE and what broke: by committer, the files
-    the CFMUTEST baseline built on it changed, by type; then FAILURES, the
-    tests its Tlogs report newly failing or crashed, each with the build(s)
-    it fails in -- new against AGAINST, the Tlogs' reference baselines."""
+def list_changes(baseline: str, failures: []NewFailure, against: str, user: Committer):
+    """What changed in TACT BASELINE and what broke: by committer -- only
+    USER, when not "" -- the files the CFMUTEST baseline built on it
+    changed, by type; then FAILURES, the tests its Tlogs report newly
+    failing or crashed, each with the build(s) it fails in -- new against
+    AGAINST, the Tlogs' reference baselines. The failures are the whole
+    baseline's, whoever's changes caused them."""
     hr('#')
     puts("sWr", "CHANGES BY COMMITTER", NEWLINE=True)
     let report: Path = changes_report(baseline)
     if report != "":
-        list_files_by_committer(report)
+        list_files_by_committer(report, user)
     else:
         print # after the warning
     list_new_failures(against, failures)
 
-def list_detailed_changes(baseline: str):
+def list_detailed_changes(baseline: str, user: Committer):
     """The changes in the CFMUTEST baseline built on TACT BASELINE, by
-    committer and branch: each file, its commits, tickets, reviews and diffs.
-    Nothing when there is no changes report: list_changes has said why."""
+    committer and branch -- only USER's, when not "": each file, its
+    commits, tickets, reviews and diffs. Nothing when there is no changes
+    report, or no change by USER: list_changes has said why."""
     let report: Path = changes_report(baseline, warn=False)
     return if report == ""
+    let changes: ChangeList = only_by(read_changes(report), user)
+    return if user != "" and len(changes.committers) == 0
     hr('#')
     puts("sWr", "LIST OF CHANGES", NEWLINE=True)
     # a branch's build is compared with the baseline before this one
     let reference: str = "TACT.TACT_CONFIG." + Baseline(baseline).previous().nr
-    let changes: ChangeList = read_changes(report)
     print "DIFF and NET DIFF run in the file's submodule of the NM workspace, which must be"
     print "checked out, with the commits and the baseline tags fetched:"
     print "    git -C $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY submodule update --init <system>/<subsystem>"
@@ -1067,6 +1083,7 @@ def usage():
     print f"  Example: {PROG} -c 30.0.0.120"
     print f"  Example: {PROG} -focus IP mono 30.0.0.120"
     print f"  Example: {PROG} -focus replay run_prequal 30.0.0.120"
+    print f"  Example: {PROG} -focus changes alice -short 30.0.0.120"
     print "Options:"
     print "  -no-color    Plain output, without ANSI colours (colour is the default)."
     print "  -c           Coloured output; the default, kept for older scripts."
@@ -1087,7 +1104,8 @@ def usage():
     print "  -focus <domain> [<detail>]"
     print "               Focus on a specific domain and optionally a detail within it."
     print "               domain: IP, OP, SIP, replay, build_info, or changes"
-    print "               detail: a build subtype (in, mono, assert, ...) or a replay type"
+    print "               detail: a build subtype (in, mono, assert, ...), a replay type,"
+    print "               or for changes a committer: -focus changes alice, only alice's."
     print "  -short       With -focus, leave out the detailed part: for changes, the files"
     print "               per committer by type, without the list of each file's changes."
     print "  <BASELINE>   Required if -c or -v is specified, or if no options are given."
@@ -1109,6 +1127,7 @@ class Options:
     focus_domain  : FocusDomain  = no_focus
     focus_subtype : BuildSubtype = in_test
     focus_rtype   : ReplayType   = run_prequal
+    focus_user    : str          = "" # -focus changes <user>: only theirs
     batch         : bool = False
     tool          : str  = "" # -tool: the visual diff tool
     only_new      : bool = False
@@ -1186,8 +1205,9 @@ class Options:
                             die("-focus build_info takes no detail") if detail_arg != ""
                             self.focus_domain = focus_build_info
                         when "changes":
-                            die("-focus changes takes no detail") if detail_arg != ""
+                            # the detail, if any, is a committer: -focus changes alice
                             self.focus_domain = focus_changes
+                            self.focus_user = detail_arg
                         when others:
                             die("invalid focus domain: " + domain_arg + " (expected IP, OP, SIP, replay, build_info, changes)")
                 when others:
@@ -1735,9 +1755,9 @@ class Report:
                 if not self.opt.short:
                     self.show_detailed_regression_tests()
             when focus_changes:
-                list_changes(self.cur.nr, self.new_failures(), self.tlog_references())
+                list_changes(self.cur.nr, self.new_failures(), self.tlog_references(), self.opt.focus_user)
                 if not self.opt.short:
-                    list_detailed_changes(self.cur.nr)
+                    list_detailed_changes(self.cur.nr, self.opt.focus_user)
             when focus_build_info:
                 self.show_build_info()
                 if not self.opt.short:
@@ -1749,7 +1769,7 @@ class Report:
                 self.show_regression_tests()
                 self.show_build_info()
                 self.show_replays()
-                list_changes(self.cur.nr, self.new_failures(), self.tlog_references())
+                list_changes(self.cur.nr, self.new_failures(), self.tlog_references(), "")
         self.write_history()
         if self.opt.exit_code and HAS_NEW_FAILURES:
             quit(1)

@@ -9,7 +9,10 @@
 # and zsh as ksh, with the same output: `make test` runs Tcheck_tact's own
 # changes tests (test/run_changes_tests.sh) against it.
 #
-#   Treport.ksh [-no-color] [-tool NAME | -meld] [-batch] [-short] BASELINE
+#   Treport.ksh [-no-color] [-tool NAME | -meld] [-batch] [-short] BASELINE [USER]
+#
+# With USER -- a committer, as the report names them: alice -- only their
+# changes (Tcheck_tact -focus changes alice).
 #
 # BASELINE is a TACT baseline number, e.g. 30.0.0.132. `Psort -b` names
 # the CFMUTEST baseline built on it, and that baseline's changes report,
@@ -51,11 +54,13 @@ CFMUTEST_ROOT=$CM_OT/CFMUTEST
 COLORED=true
 BATCH=0
 SHORT=0           # -short: the files per committer by type, not each file's changes
+USER_ONLY=""      # USER: only this committer's changes
 DIFF_TOOL=""      # -tool NAME; "" for Emacs ediff links
 BASELINE=""
 
 function usage {
-    print -r -- "usage: $PROG [-no-color] [-tool NAME | -meld] [-batch] [-short] BASELINE"
+    print -r -- "usage: $PROG [-no-color] [-tool NAME | -meld] [-batch] [-short] BASELINE [USER]"
+    print -r -- "  With USER, a committer (alice), only their changes."
     print -r -- "  The changes in the CFMUTEST baseline built on TACT baseline BASELINE"
     print -r -- "  (e.g. 30.0.0.132), by committer and branch."
     print -r -- "  -no-color    Plain output, without ANSI colours (colour is the default)."
@@ -561,6 +566,20 @@ function list_changes {         # BASELINE: by committer, the most first, their 
     fi
     REPORT=$REPLY
     read_changes "$REPORT"
+    if [[ -n $USER_ONLY ]]; then
+        # only theirs: the changes credited to no branch are nobody's
+        typeset all
+        all=$(IFS=,; print -r -- "${COMMITTERS[*]}")
+        UNATTRIBUTED=""
+        if [[ -z ${BRANCHES[$USER_ONLY]+set} ]]; then
+            COMMITTERS=()
+            cecho sWb "No changes by $USER_ONLY; by: ${all//,/, }"
+            print
+            list_new_failures "$1"
+            return
+        fi
+        COMMITTERS=("$USER_ONLY")
+    fi
     for ((k = 0; k < ${#COMMITTERS[@]}; k++)); do
         who=${COMMITTERS[k]}
         entries=""
@@ -606,6 +625,8 @@ function list_changes {         # BASELINE: by committer, the most first, their 
 
 function list_detailed_changes { # BASELINE: each file, its commits, ..., diffs
     typeset reference who branch i report=$REPORT
+    # no change by -- USER: list_changes has said so
+    [[ -n $USER_ONLY && ${#COMMITTERS[@]} -eq 0 ]] && return
     hr
     cecho sWr "LIST OF CHANGES"
     # a branch's build is compared with the baseline before this one
@@ -661,8 +682,11 @@ while (($# > 0)); do
         DIFF_TOOL=$1 ;;
     -h|-help|--help) usage ;;
     -*)        die "unknown option: $1" ;;
-    *)         [[ -z $BASELINE ]] || die "one baseline only: $BASELINE and $1"
+    +([0-9]).+([0-9.]))
+               [[ -z $BASELINE ]] || die "one baseline only: $BASELINE and $1"
                BASELINE=$1 ;;
+    *)         [[ -z $USER_ONLY ]] || die "one committer only: $USER_ONLY and $1"
+               USER_ONLY=$1 ;;
     esac
     shift
 done

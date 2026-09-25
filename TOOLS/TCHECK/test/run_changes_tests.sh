@@ -140,6 +140,16 @@ check "no CFMUTEST baseline: said once, no list" 1 "$("$TCHECK" -no-color -focus
 mv "$OT/TACT/TACT_CONFIG.30.0.0.8/build_G!31.IP.L8" "$OT/TACT/gone"
 check "no reference build: says so, each branch" 4 "$("$TCHECK" -no-color -focus changes 30.0.0.9 | grep -c '^NO REFERENCE BUILD FOUND$')"
 mv "$OT/TACT/gone" "$OT/TACT/TACT_CONFIG.30.0.0.8/build_G!31.IP.L8"
+BOB=$("$TCHECK" -no-color -focus changes bob 30.0.0.9)
+check "-focus changes bob: bob's files by type"   "CHANGES BY COMMITTER
+bob  2 files: 1 adb, 1 ads" "$(printf '%s\n' "$BOB" | sed -n '/^CHANGES BY COMMITTER$/,/^$/p' | grep .)"
+check "...his branches not built"                "NO VIEW BUILD FOUND FOR THESE BRANCHES
+  bob.also_b" "$(printf '%s\n' "$BOB" | sed -n '/^NO VIEW BUILD FOUND FOR THESE BRANCHES$/,/^$/p' | grep .)"
+check "...his section alone"                     "bob" "$(printf '%s\n' "$BOB" | sed -n 's/^=* Files committed by user \([^ ]*\) =*$/\1/p')"
+check "...and no one's changes"                  0 "$(printf '%s\n' "$BOB" | grep -c 'Files with no branch merged above them' || true)"
+check "an unknown committer: says so, and who"   "No changes by zed; by: carol, alice, bob, dave" \
+    "$("$TCHECK" -no-color -focus changes zed 30.0.0.9 | grep '^No changes by')"
+check "...with no list of changes"               0 "$("$TCHECK" -no-color -focus changes zed 30.0.0.9 | grep -c '^LIST OF CHANGES$' || true)"
 check "ends with the report's emacs link"        1 "$(printf '%s\n' "$OUT" | grep -c 'find-file ".*CFMUTEST.CFMUTEST_CONFIG.30.0.0.8.changes_report"')"
 
 # --- when there is nothing to report on, it says so ----------------------

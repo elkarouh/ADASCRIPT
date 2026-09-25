@@ -24,6 +24,9 @@ Tcheck_tact [-no-color] [-s] [-f] [-v] [-l] [-batch] [-only-new] [-exit-code]
 - `-focus replay run_prequal`: only the run_prequal replay
 - `-focus build_info`: only Padactl and check_run_test_programs
 - `-focus changes`: only the list of changes, by committer (below)
+- `-focus changes alice`: only alice's changes -- her line of the summary,
+  her branches, her files; the newly failed tests stay, the whole
+  baseline's. A name nobody committed under says so, and who did.
 
 Each focus shows its overview first, then the details -- the detailed test
 comparison, the replay diffs, the build logs side by side, each file's
@@ -173,7 +176,7 @@ script, for where the Adascript build is not at hand. Same output, same
 attribution, same links, same options for it:
 
 ```
-Treport.ksh [-no-color] [-tool NAME | -meld] [-batch] [-short] BASELINE
+Treport.ksh [-no-color] [-tool NAME | -meld] [-batch] [-short] BASELINE [USER]
 Treport.ksh -tool kompare 30.0.0.132
 ```
 
