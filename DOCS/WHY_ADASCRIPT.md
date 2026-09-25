@@ -166,6 +166,21 @@ var ceiling : [Flight_Phase_T]Altitude_T = [CLIMB: 41000, CRUISE: 41000,
                                             DESCENT: 41000, HOLD: 24000]
 ```
 
+Each of those lines is a relation between concepts of step 1, and each one
+answers the same three questions: which way does it go, how many are at the
+far end, and does order matter?
+
+- `fleet` goes from a callsign to *the* aircraft that has it. One way only:
+  a callsign finds an aircraft, and nothing finds an aircraft by its speed.
+  The fleet has no order worth keeping, so it is a plain mapping.
+- `by_phase` goes from a phase to the callsigns in it. Many at the far end,
+  so a list of them; and one entry for every phase, all of them, in phase
+  order.
+- `watched` is a set, which is a mapping too: from a callsign to in or
+  out, and that is all anyone asks of it.
+- `ceiling` goes from a phase to exactly one altitude, and every phase has
+  one.
+
 Four lines, and the shape of the whole program is decided. A reader who has
 seen those four lines knows what can be asked of this code and what cannot.
 
@@ -178,18 +193,55 @@ already made and visible.
 
 ## The notation
 
-Step 2 is why Adascript has a notation of its own for collections. Every
-container is written as a **prefix on the element type**, so the declaration
-reads left to right as a sentence:
+Step 2 is why Adascript has a notation of its own for collections. It is
+built from the answers to two questions, the same two that step 2 asks of
+every group of things in the model.
+
+**Does the order mean something?** Square brackets `[…]` if it does — the
+waypoints of a route, the phases of a flight. Braces `{…}` if it does not —
+the aircraft being watched, the fleet by callsign.
+
+**Is it keyed?** Nothing between the brackets: a **collection**, some T's.
+A type between them: a **mapping**, from that type to the one after the
+brackets.
+
+Two questions, four answers, and each is a structure you already know:
+
+|                | ordered `[…]`                        | unordered `{…}`            |
+|----------------|--------------------------------------|----------------------------|
+| **collection** | `[]T` — a list of T                  | `{}T` — a set of T         |
+| **mapping**    | `[E]T` — one T for each member of E  | `{K}V` — a mapping from K to V |
+
+An ordered mapping needs a key with an order to index by — an enumeration,
+`bool`, a character, an integer range — so `[E]T` has a slot for every
+member of `E`, in declaration order, and cannot lack one. An unordered
+mapping takes any hashable key and holds only the keys put in it. That is the whole
+difference between `ceiling` and `fleet` above, and the notation makes you
+choose.
+
+Mappings are the heart of it, because a model is its concepts *and the
+relations between them*, and nearly every relation is a mapping: callsign to
+aircraft, phase to callsigns, phase to ceiling. Writing a relation as a
+mapping type puts the answers of step 2 in the declaration — the direction
+is the order of the two types, how many are at the far end is the element
+type (one `Aircraft_T`, or a `[]Callsign_T`), and whether every key is there
+is the choice of brackets. Solving the problem is then walking those
+relations one lookup at a time, and each lookup's type says what comes out.
+
+The collections are mappings too, seen from the side: a list maps its
+positions to its elements, and a set maps its elements to in-or-out. That is
+why `xs[i]` and `x in s` are both lookups, and why a set cannot hold the
+same element twice — a key is present or absent, there is no third state.
+
+Two more forms sit outside the grid, as neither holds many of anything:
 
 | Written | Read as |
 |---------|---------|
-| `[]T` | a list of T |
-| `{K}V` | a mapping from K to V |
-| `{}T` | a set of T |
-| `[E]T` | one T for each member of the enum E |
 | `?T` | a T, possibly absent |
 | `Fix_T is tuple:` | a named tuple, fields by name |
+
+The four containers and `?T` are written as a **prefix on the element
+type**, so a declaration reads left to right as a sentence:
 
 <!-- from: EXAMPLES/DOC/why_snippets.ady -->
 ```python
@@ -236,10 +288,10 @@ all — and a type annotation nobody writes is worth nothing.
 
 I make no claim that every sigil here is unprecedented; Go writes a slice
 `[]T` and a map `map[K]V`, and anyone designing in this space will land near
-`[]T` eventually. What is Adascript's own is the *family*: that the set, the
-enum-indexed array and the optional join the list and the mapping under one
-rule, that the rule is "container first, element after, no brackets to
-balance", and that they stack. I did not take it from another language,
+`[]T` eventually. What is Adascript's own is the *family*: that the list, the set, the
+enum-indexed array and the mapping are the four answers to two questions,
+that the optional joins them under the same rule — "container first,
+element after, no brackets to balance" — and that they stack. I did not take it from another language,
 because I could not find one that had it.
 
 `[E]T` in particular is the one I would not give up. An array indexed by an
@@ -266,11 +318,14 @@ for phase in Flight_Phase_T:
     print f"{phase:<8} {by_phase[phase]'Length}"
 ```
 
-There is no plumbing in it. `by_phase[a.phase]` works because the phase *is*
-an index; `for phase in Flight_Phase_T` walks the domain in declaration order
-and cannot miss a member; `ceiling[a.phase]` is a table lookup that cannot be
-misspelled. None of that is clever. It is what happens when step 1 and step 2
-were done first.
+There is no plumbing in it. Each line walks a relation declared in step 2:
+from a callsign to its aircraft (`fleet[cs]`), from its phase to the
+callsigns in that phase (`by_phase[a.phase]`) and to that phase's ceiling
+(`ceiling[a.phase]`). `by_phase[a.phase]` works because the phase *is* an
+index; `for phase in Flight_Phase_T` walks the domain in declaration order
+and cannot miss a member; `ceiling[a.phase]` is a table lookup that cannot
+be misspelled. None of that is clever. It is what happens when step 1 and
+step 2 were done first.
 
 ---
 
