@@ -1,0 +1,38 @@
+#!/usr/bin/env ady2nim
+"""Test: `+` joining two list fields is list concatenation on Nim too.
+
+The Nim backend turns `+` into `&` when it can tell an operand is a seq --
+a list literal, a comprehension, a variable of a list type. A field was
+told apart only when it held a string, so `r.new_failing + r.crashed`
+(two list fields of a record, Tcheck_tact's failed tests) stayed `+`, and
+Nim has no `+` for two seqs. A field's type now comes from its record's
+declaration. Number fields keep `+`.
+"""
+
+type Result_T is record:
+    failing: []str = []
+    crashed: []str = []
+    passed:  int = 0
+    run:     int = 0
+
+def failed(r: Result_T) -> []str:
+    return r.failing + r.crashed
+
+let r: Result_T = Result_T(failing = ["a.el", "b.el"], crashed = ["c.el"], passed = 5, run = 8)
+assert failed(r) == ["a.el", "b.el", "c.el"]
+assert len(r.failing + r.crashed) == 3
+
+var seen: []str = []
+for name in r.crashed + r.failing:
+    seen.append(name)
+assert seen == ["c.el", "a.el", "b.el"]
+
+# a list field and a list variable, either way round, as before
+let extra: []str = ["d.el"]
+assert r.failing + extra == ["a.el", "b.el", "d.el"]
+assert extra + r.crashed == ["d.el", "c.el"]
+
+# numbers stay numbers
+assert r.passed + r.run == 13
+
+print "all seq-field concatenation tests passed"

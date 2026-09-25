@@ -498,6 +498,25 @@ def _unescape_str_literal(text):
     return "".join(out)
 
 
+def _field_type(expr):
+    """The Nim type of EXPR when it reads a field -- `r.items`, `self.xs` --
+    or "": the object's declared field type when the object's own type is
+    known, else whatever the field's name is known as."""
+    if "." not in expr:
+        return ""
+    base, field = expr.rsplit(".", 1)
+    if not field.isidentifier():
+        return ""
+    import re as _re_ft
+    _bsym = ParserState.symbol_table.lookup(base.strip())
+    _btype = _re_ft.sub(r"^var\s+", "", (_bsym.get("type") or "") if isinstance(_bsym, dict) else "")
+    _ftype = ParserState.class_field_types.get(_btype, {}).get(field) if _btype else None
+    if not _ftype:
+        _fsym = ParserState.symbol_table.lookup(field)
+        _ftype = (_fsym.get("type") or "") if isinstance(_fsym, dict) else ""
+    return _ftype or ""
+
+
 def _nim_expr_type(expr):
     """Infer the Nim type of an already-emitted expression string.
 
@@ -996,6 +1015,15 @@ def binop_to_nim(self, prec=None, my_prec=None):
                     _fsym = ParserState.symbol_table.lookup(_field)
                     if _fsym and (_fsym.get("type") or "") in ("string", "str"):
                         right_is_str = True
+                # A field holding a seq: `r.new_failing + r.crashed`. Its
+                # type is the object's declared field type when the object
+                # is known -- a parameter, a local -- else the field's own
+                # name looked up, as for a string field above. Without it
+                # two seq fields kept Nim's `+`, which has no seq overload;
+                # one seq variable on either side already gave `&`.
+                if not (left_is_seq or right_is_seq or left_is_str or right_is_str):
+                    left_is_seq = _field_type(result).startswith("seq[")
+                    right_is_seq = _field_type(right).startswith("seq[")
                 # A call whose declared return type is a string or a seq:
                 # `self.listing() + "x"` inside the class, where the
                 # method's own annotation is the only evidence of what it
