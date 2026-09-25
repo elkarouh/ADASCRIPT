@@ -12,12 +12,36 @@ type Callsign_T     is str
 type Altitude_T     is Natural        # feet
 type Velocity_T     is float          # knots
 type Flight_Phase_T is enum CLIMB, CRUISE, DESCENT, HOLD
+type Latitude_T     is float          # degrees, north positive
+type Longitude_T    is float          # degrees, east positive
+
+type Fix_T is tuple:
+    lat: Latitude_T
+    lon: Longitude_T
 
 type Aircraft_T is record:
     callsign: Callsign_T     = ""
     phase:    Flight_Phase_T = CLIMB
     altitude: Altitude_T     = 0
     speed:    Velocity_T     = 0.0
+
+class Flight_T:
+    var aircraft: Aircraft_T
+    var route:    []Fix_T
+
+    def __init__(self, aircraft: Aircraft_T):
+        self.aircraft = aircraft
+        self.route = []
+
+    def report(self, position: Fix_T):     # a position report
+        self.route.append(position)
+
+    def climb(self, to: Altitude_T):
+        self.aircraft.altitude = to
+        self.aircraft.phase = CLIMB
+
+    def above(self, ceiling: Altitude_T) -> bool:
+        return self.aircraft.altitude > ceiling
 
 var fleet   : {Callsign_T}Aircraft_T     = {:}   # every aircraft, by callsign
 var by_phase: [Flight_Phase_T][]Callsign_T       # who is in each phase
@@ -39,15 +63,17 @@ for cs in ["AFR22", "BAW117"]:
 for phase in Flight_Phase_T:
     print f"{phase:<8} {by_phase[phase]'Length}"
 
+var flight: Flight_T = Flight_T(fleet["BAW117"])
+flight.report((lat: 51.47, lon: -0.46))
+flight.climb(39000)
+assert flight.route'Length == 1 and flight.aircraft.phase == CLIMB
+assert not flight.above(ceiling[CRUISE]) and flight.above(ceiling[HOLD])
+
 # --- the "not yet true" section is why_alias_snippets.ady: it declares its
 # own Velocity_T, as the document shows it, and a module declares a type once.
 
 # --- the notation, one line per shape --------------------------------------
 type Sector_T is enum NORTH, CENTRE, SOUTH
-
-type Fix_T is tuple:
-    lat: float
-    lon: float
 
 let xs   : []int              = [1, 2, 3]                 # a list of
 let m    : {str}int           = {"a": 1}                  # a mapping from .. to

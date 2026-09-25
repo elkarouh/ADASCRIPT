@@ -127,10 +127,16 @@ Three steps, in order, before writing any code that *does* anything.
 
 ### 1. Name the concepts of the problem domain
 
-Types and classes, one per concept. Enumerations for anything with a closed
-set of values — a phase of flight, a message kind, a state. Records for
-anything with parts. Names ending `_T` so a reader can see at a glance what is
-a type.
+One type per concept, with a name ending `_T` so a reader can see at a
+glance what is a type. The types come in a progression, from a single value
+to a thing with behaviour, and a concept moves up it only as far as it
+needs to.
+
+**A single value: a named type, not a bare one.** `float` says how a value
+is stored; `Velocity_T` says what it is, as argued above. So a quantity of
+the domain is never a bare `int`, `float` or `str`: it gets a name of its
+own, and its unit is written once, next to that name. A closed set of
+values — a phase of flight, a message kind, a state — is an enumeration.
 
 <!-- from: EXAMPLES/DOC/why_snippets.ady -->
 ```python
@@ -138,7 +144,31 @@ type Callsign_T     is str
 type Altitude_T     is Natural        # feet
 type Velocity_T     is float          # knots
 type Flight_Phase_T is enum CLIMB, CRUISE, DESCENT, HOLD
+type Latitude_T     is float          # degrees, north positive
+type Longitude_T    is float          # degrees, east positive
+```
 
+A bare type is still right for a value that only counts or indexes and
+means nothing more: a length, a loop index, text that is just text.
+
+**A few values that go together: a tuple.** A position is a latitude and a
+longitude — always both, passed around whole, and equal to another when both
+parts are. A named tuple says exactly that, and names the parts:
+
+<!-- from: EXAMPLES/DOC/why_snippets.ady -->
+```python
+type Fix_T is tuple:
+    lat: Latitude_T
+    lon: Longitude_T
+```
+
+**A thing whose parts change: a record.** An aircraft has more parts, each
+with a sensible starting value, and they change over its life: it climbs, it
+changes phase. A record holds them, each field one of the named types
+above:
+
+<!-- from: EXAMPLES/DOC/why_snippets.ady -->
+```python
 type Aircraft_T is record:
     callsign: Callsign_T     = ""
     phase:    Flight_Phase_T = CLIMB
@@ -146,7 +176,37 @@ type Aircraft_T is record:
     speed:    Velocity_T     = 0.0
 ```
 
-Four lines of vocabulary and a record, and the layer has a boundary.
+**A thing with behaviour: a class.** Once there are operations that belong
+to the data — the ways a flight's state may change, the questions asked of
+it — a class groups the data with every method that acts on it. There is
+then one place to read what can be done with a flight, and one place to
+change it; the rest of the program goes through those methods instead of
+reaching into the fields.
+
+<!-- from: EXAMPLES/DOC/why_snippets.ady -->
+```python
+class Flight_T:
+    var aircraft: Aircraft_T
+    var route:    []Fix_T
+
+    def __init__(self, aircraft: Aircraft_T):
+        self.aircraft = aircraft
+        self.route = []
+
+    def report(self, position: Fix_T):     # a position report
+        self.route.append(position)
+
+    def climb(self, to: Altitude_T):
+        self.aircraft.altitude = to
+        self.aircraft.phase = CLIMB
+
+    def above(self, ceiling: Altitude_T) -> bool:
+        return self.aircraft.altitude > ceiling
+```
+
+Six lines of vocabulary, a tuple, a record and a class, and the layer has a
+boundary: every value in it says what it is, and every operation on a
+flight is in one place.
 
 ### 2. Name the collections and the mappings
 
