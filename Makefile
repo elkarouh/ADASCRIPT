@@ -379,6 +379,19 @@ test: compile
 	    && cd / && $(PYTHON) $(TMPDIR)/ady_dollar0_py.py 2>&1 | grep -qx ok && echo OK || { echo FAIL; exit 1; }
 	@rm -rf $(TMPDIR)/ady_dollar0.ady $(TMPDIR)/ady_dollar0 $(TMPDIR)/ady_dollar0_py.py $(TMPDIR)/ady_dollar0_cache
 
+	@# Output cut short -- `prog | head` -- ends a Nim program quietly, with
+	@# status 141 as SIGPIPE ends a C one: no "Broken pipe" stack trace.
+	@echo "=== Output cut short: no Broken pipe trace (nim) ==="
+	@printf 'for i in range(100000):\n    stdout.write(f"line {i}\\n")\nraise RuntimeError("other")\n' \
+	    > $(TMPDIR)/ady_pipe.ady
+	@printf '  %-42s' "prog | head -1"; \
+	    cd $(TMPDIR) && XDG_CACHE_HOME=$(TMPDIR)/ady_pipe_cache $(ADY2NIM) c ady_pipe.ady >/dev/null 2>&1 \
+	    && { ./ady_pipe 2>ady_pipe.err; echo $$? > ady_pipe.rc; } | head -1 >/dev/null \
+	    && [ "$$(cat ady_pipe.rc)" = 141 ] && [ ! -s ady_pipe.err ] && echo OK || { echo FAIL; exit 1; }
+	@printf '  %-42s' "...another error still reported"; \
+	    cd $(TMPDIR) && ./ady_pipe 2>&1 >/dev/null | grep -q 'unhandled exception: other' && echo OK || { echo FAIL; exit 1; }
+	@rm -rf $(TMPDIR)/ady_pipe.ady $(TMPDIR)/ady_pipe $(TMPDIR)/ady_pipe.err $(TMPDIR)/ady_pipe.rc $(TMPDIR)/ady_pipe_cache
+
 	@# A change to a bundled support file -- TO_NIM/STDLIB/stdlib.nim -- has
 	@# to rebuild the programs using it: ady2nim used to call them up to date
 	@# and keep the old code until `make clean`. On a copy of the transpiler,

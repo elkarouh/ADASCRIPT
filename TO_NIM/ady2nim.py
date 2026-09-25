@@ -1308,6 +1308,30 @@ def run_tests():
     return failed
 
 
+# Prepended to a program's Nim when it is built. Nim ignores SIGPIPE, so
+# output cut short -- `prog | head` -- makes the next write raise IOError
+# ("errno: 32 `Broken pipe`"), which ended the program with a stack trace.
+# It now ends quietly, as SIGPIPE ends a C program: exit status 141. Only an
+# error nothing caught: a program can still catch IOError on its own pipes.
+_BROKEN_PIPE_HOOK = """\
+when defined(posix) and not defined(js):
+  proc adascriptExitNow(code: cint) {.importc: "_exit", header: "<unistd.h>", noreturn.}
+  proc adascriptBrokenPipe(e: ref Exception) {.nimcall, tags: [], gcsafe, raises: [].} =
+    # compared a character at a time: a slice of e.msg, here, quietly ends
+    # the hook before the comparison
+    const epipe = "errno: 32 "
+    if e of IOError and e.msg.len >= epipe.len:
+      for i in 0 ..< epipe.len:
+        if e.msg[i] != epipe[i]: return
+      adascriptExitNow(141)
+  unhandledExceptionHook = adascriptBrokenPipe
+"""
+
+def _with_runtime(nim_output):
+    """NIM_OUTPUT, a program's Nim, as it is built: with _BROKEN_PIPE_HOOK."""
+    return _BROKEN_PIPE_HOOK + nim_output
+
+
 def main(argv=None):
     """Entry point with nim-style argument parsing.
 
@@ -1785,7 +1809,7 @@ def main(argv=None):
                 nim_output
             )
             with open(nim_file, "w", encoding="utf-8") as f:
-                f.write(nim_output)
+                f.write(_with_runtime(nim_output))
             # Refresh mtime after write so tier-2 comparison is accurate
             nim_mtime = os.path.getmtime(nim_file)
             print(f"# transpiled → {nim_file}", file=sys.stderr)
@@ -2003,7 +2027,7 @@ def main(argv=None):
             cache_dir, nim_file, _exe, _nc = _cache_paths(ady_file)
             os.makedirs(cache_dir, exist_ok=True)
             with open(nim_file, "w", encoding="utf-8") as f:
-                f.write(nim_output)
+                f.write(_with_runtime(nim_output))
             print(f"# transpiled → {nim_file}", file=sys.stderr)
         else:
             print(nim_output, end="")
