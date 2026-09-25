@@ -1,6 +1,6 @@
 # Adascript
 
-Adascript is a statically-typed superset of Python 3 that steals the best
+Adascript is a statically-typed language built on Python 3 that steals the best
 features from many languages: **Ada** (enums, variant records, tick attributes,
 subranges), **Nim** (compile target, type system, performance), **Perl** and
 **AWK** (first-class regex literals `/pat/flags`, `$+N` captures, `s/pat/repl/`
@@ -21,8 +21,10 @@ work, refactoring, and some of the more difficult feature implementations, so
 the project does include some AI-assisted code and writing. That said, the
 overall design, review, and ongoing maintenance of the project are handled by me.
 
-Every valid Python 3 file is also valid Adascript. The extra features are purely
-additive: left-to-right type annotations, Ada-style enums and variant records,
+Most Python 3 code is valid Adascript as it stands. The exception is `import`:
+Adascript asks where a module comes from -- `pyimport os` for a Python package,
+`nimport os` for a Nim module -- and the Nim backend rejects a plain `import os`.
+The rest is additive: left-to-right type annotations, Ada-style enums and variant records,
 tick attributes, range expressions, `case/when` pattern matching, Perl/AWK-style
 regex literals, and first-class shell command integration.
 

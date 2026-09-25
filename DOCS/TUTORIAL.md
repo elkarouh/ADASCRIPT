@@ -1,11 +1,13 @@
 # Adascript Tutorial
 
-Adascript is a statically-typed superset of Python 3 that steals the best
+Adascript is a statically-typed language built on Python 3 that steals the best
 features from many languages: **Ada** (enums, variant records, tick attributes,
 subranges), **Nim** (compile target and type system), **Perl** and **AWK**
 (first-class regex literals `/pat/flags`, `$+N` captures, substitution), and
-**Bash** (`$1`/`$#`/`$@`, file-test operators, `shell:` blocks). Every valid
-Python 3 file is also valid Adascript — the extra features are purely additive.
+**Bash** (`$1`/`$#`/`$@`, file-test operators, `shell:` blocks). Most Python 3
+code is valid Adascript as it stands; the exception is `import`, which has to
+say where a module comes from — `pyimport os` for a Python package, `nimport
+os` for a Nim module — as the Nim backend rejects a plain `import os`.
 You write one source file; both ecosystems get idiomatic, efficient output.
 
 ```

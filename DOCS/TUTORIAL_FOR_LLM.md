@@ -2,7 +2,7 @@
 
 ## What is Adascript?
 
-Adascript (`.ady` files) is a statically-typed superset of Python 3. Every valid Python 3 file is valid Adascript. It transpiles to both **Python 3** and **Nim**. Features are purely additive — you write one source file and target either ecosystem.
+Adascript (`.ady` files) is a statically-typed language built on Python 3. Most Python 3 code is valid Adascript as it stands; the exception is `import`: write `pyimport X` for a Python package and `nimport X` for a Nim module — the Nim backend rejects a plain `import X`. It transpiles to both **Python 3** and **Nim** — you write one source file and target either ecosystem.
 
 ```
 source.ady  ──▶  python3 TO_PYTHON/ady2py.py source.ady  ──▶  Python 3

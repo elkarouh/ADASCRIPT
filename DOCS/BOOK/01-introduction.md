@@ -7,8 +7,10 @@ looking for a language that offers expressive types, a large ecosystem, good
 performance, *and* good developer experience — and concluded that no single
 language delivers all four. Adascript's answer is to steal:
 
-- from **Python** — the entire surface syntax. Every valid Python 3 file is
-  also a valid Adascript file; all extensions are purely additive.
+- from **Python** — the surface syntax. Most Python 3 code is valid
+  Adascript as it stands; the exception is `import`, which says where a
+  module comes from (`pyimport os`, `nimport os`), as the Nim backend
+  rejects a plain `import os`.
 - from **Ada** (and Pascal before it) — enumeration types that work as array
   indexes and loop ranges, variant records, subrange types, and tick
   attributes like `Door_T'First` and `state'Next`.
@@ -190,7 +192,7 @@ there is no afterwards.
 **`for node in graph` means what it says.** A `{K}V` is an unordered mapping
 and iterating one yields its keys, so that phrase reads "for each node in
 the graph" — and the same line is a valid dict comprehension in Python,
-which is what a superset buys.
+which is what building on Python buys.
 
 **The loop body is the algorithm, line for line.** Pop the nearest unvisited
 node; skip it if already visited; mark it; relax each edge out of it. There
@@ -200,11 +202,11 @@ only line that is not the algorithm is the `#!` on the first.
 
 ### The same program in Python
 
-Adascript is a superset, so it can never say *less* than Python — every
-Python program is already an Adascript one. The interesting question is
-whether the additions let you say the same thing more directly. Here is the
-same algorithm written in idiomatic Python 3, checked to produce the same
-distances:
+Adascript is built on Python, so it seldom says *less* than Python — a
+Python program is, its imports aside, already an Adascript one. The
+interesting question is whether the additions let you say the same thing
+more directly. Here is the same algorithm written in idiomatic Python 3,
+checked to produce the same distances:
 
 ```python
 #!/usr/bin/env python3

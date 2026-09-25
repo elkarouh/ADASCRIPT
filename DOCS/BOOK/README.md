@@ -2,7 +2,7 @@
 
 *One source, two targets: type-safe scripting from Python to Nim.*
 
-Adascript is a statically-typed superset of Python 3 that borrows the best
+Adascript is a statically-typed language built on Python 3 that borrows the best
 ideas of Ada, Nim, Perl, AWK and Bash, and transpiles the result to both
 Python 3 and Nim. This book teaches the language from the ground up. Every
 concept is illustrated with **real, runnable code from the `EXAMPLES/`
