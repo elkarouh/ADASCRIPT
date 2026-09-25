@@ -113,6 +113,16 @@ check "-meld is -tool meld"                      "$("$TCHECK" -no-color -tool me
 check "-tool -batch: the Emacs ediff links"      "$OUT" "$("$TCHECK" -no-color -tool kompare -batch -focus changes 30.0.0.9)"
 check "-tool without a name: says so"            1 "$("$TCHECK" -no-color -focus changes 30.0.0.9 -tool 2>&1 | grep -c 'requires the name of a diff tool' || true)"
 check "-tool with a command line: refused"       1 "$("$TCHECK" -no-color -tool 'meld;rm' -focus changes 30.0.0.9 2>&1 | grep -c "not a diff tool's name: meld;rm" || true)"
+SHORT=$("$TCHECK" -no-color -focus changes -short 30.0.0.9)
+check "the files per committer, by type"         "CHANGES BY COMMITTER
+carol        1 file : 1 (no extension)
+alice        4 files: 2 adb, 2 ads
+bob          2 files: 1 adb, 1 ads
+(no branch)  1 file : 1 out" "$(printf '%s\n' "$SHORT" | sed -n '/^CHANGES BY COMMITTER$/,/^$/p' | grep .)"
+check "-short: not each file's changes"          0 "$(printf '%s\n' "$SHORT" | grep -c '^LIST OF CHANGES$\|^FILE ' || true)"
+check "without -short: the summary, then the list" "CHANGES BY COMMITTER
+LIST OF CHANGES" "$(printf '%s\n' "$OUT" | grep '^CHANGES BY COMMITTER$\|^LIST OF CHANGES$')"
+check "no CFMUTEST baseline: said once, no list" 1 "$("$TCHECK" -no-color -focus changes 30.0.0.8 2>&1 | grep -c 'WARNING\|LIST OF CHANGES' || true)"
 check "ends with the report's emacs link"        1 "$(printf '%s\n' "$OUT" | grep -c 'find-file ".*CFMUTEST.CFMUTEST_CONFIG.30.0.0.8.changes_report"')"
 
 # --- when there is nothing to report on, it says so ----------------------

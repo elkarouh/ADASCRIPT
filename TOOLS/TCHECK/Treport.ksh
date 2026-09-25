@@ -1,12 +1,14 @@
 #!/bin/ksh
 # Treport.ksh -- the changes in the CFMUTEST baseline built on a
-# TACT baseline, by committer and branch.
+# TACT baseline, by committer: how many files of each type, then -- unless
+# -short -- each file's commits, tickets, reviews and diffs.
 #
-# A standalone translation of Tcheck_tact's list_all_changes (Tcheck_tact
-# -focus changes), for ksh93, with the same output: `make test` runs
-# Tcheck_tact's own changes tests (test/run_changes_tests.sh) against it.
+# A standalone translation of Tcheck_tact's list_changes and
+# list_detailed_changes (Tcheck_tact -focus changes [-short]), for ksh93
+# and zsh as ksh, with the same output: `make test` runs Tcheck_tact's own
+# changes tests (test/run_changes_tests.sh) against it.
 #
-#   Treport.ksh [-no-color] [-tool NAME | -meld] [-batch] BASELINE
+#   Treport.ksh [-no-color] [-tool NAME | -meld] [-batch] [-short] BASELINE
 #
 # BASELINE is a TACT baseline number, e.g. 30.0.0.132. `Psort -b` names
 # the CFMUTEST baseline built on it, and that baseline's changes report,
@@ -47,11 +49,12 @@ CFMUTEST_ROOT=$CM_OT/CFMUTEST
 
 COLORED=true
 BATCH=0
+SHORT=0           # -short: the files per committer by type, not each file's changes
 DIFF_TOOL=""      # -tool NAME; "" for Emacs ediff links
 BASELINE=""
 
 function usage {
-    print -r -- "usage: $PROG [-no-color] [-tool NAME | -meld] [-batch] BASELINE"
+    print -r -- "usage: $PROG [-no-color] [-tool NAME | -meld] [-batch] [-short] BASELINE"
     print -r -- "  The changes in the CFMUTEST baseline built on TACT baseline BASELINE"
     print -r -- "  (e.g. 30.0.0.132), by committer and branch."
     print -r -- "  -no-color    Plain output, without ANSI colours (colour is the default)."
@@ -60,6 +63,7 @@ function usage {
     print -r -- "               kdiff3, ... (git difftool -t NAME) -- rather than Emacs ediff."
     print -r -- "  -meld        Same as -tool meld."
     print -r -- "  -batch       Emacs ediff links whatever -tool says."
+    print -r -- "  -short       Only the files per committer by type, not each file's changes."
     print -r -- "  -h           This help."
     exit 1
 }
@@ -375,23 +379,86 @@ function display_branch_info {  # BRANCH REFERENCE
     fi
 }
 
-function list_all_changes {     # BASELINE
-    typeset cfmu report reference who branch i
-    hr
-    cecho sWr "LIST OF CHANGES"
+function changes_report {       # BASELINE -> REPLY: its changes report, or ""
+    typeset cfmu                # after a warning saying why there is none
     cfmu_baseline_of "$1"; cfmu=$REPLY
     if [[ -z $cfmu ]]; then
         cecho sWb "WARNING: Psort -b names no CFMUTEST baseline for TACT_CONFIG.$1"
-        return 1
+        REPLY=""; return 1
     fi
-    report=$CFMUTEST_ROOT/baseline_reports/CFMUTEST.CFMUTEST_CONFIG.$cfmu.changes_report
-    if [[ ! -r $report ]]; then
-        cecho sWb "WARNING: no changes report for CFMUTEST_CONFIG $cfmu: $report"
-        return 1
+    REPLY=$CFMUTEST_ROOT/baseline_reports/CFMUTEST.CFMUTEST_CONFIG.$cfmu.changes_report
+    if [[ ! -r $REPLY ]]; then
+        cecho sWb "WARNING: no changes report for CFMUTEST_CONFIG $cfmu: $REPLY"
+        REPLY=""; return 1
     fi
+}
+
+function extension_of {         # FILE -> REPLY: after its name's last dot, or ""
+    typeset name=${1##*/}
+    REPLY=""
+    [[ $name == *.* && -n ${name%.*} ]] && REPLY=${name##*.}
+}
+
+function files_by_type {        # ENTRY... -> REPLY: "4 files: 2 adb, 2 ads"
+    # a file changed, added or deleted more than once is one file; the
+    # commonest extension first, then by name
+    typeset files=" " exts="" by_type="" i f n e tab=$'\t' nl=$'\n'
+    typeset -i count=0
+    for i in "$@"; do
+        f=${E_file[i]}
+        [[ $files == *" $f "* ]] && continue
+        files="$files$f " count=count+1
+        extension_of "$f"
+        exts=$exts$REPLY$nl
+    done
+    printf '%s' "$exts" |
+    awk '{ n[$0]++ } END { for (e in n) printf "%d\t%s\n", n[e], e }' |
+    LC_ALL=C sort -t "$tab" -k1,1nr -k2,2 |
+    while IFS=$tab read -r n e; do
+        by_type=${by_type:+$by_type, }"$n ${e:-(no extension)}"
+    done
+    if ((count == 1)); then REPLY="1 file : $by_type"
+    else REPLY="$count files: $by_type"
+    fi
+}
+
+REPORT=""                       # the changes report, once list_changes found it
+
+function list_changes {         # BASELINE: by committer, their files by type
+    typeset who branch entries
+    typeset -i width=0
+    hr
+    cecho sWr "CHANGES BY COMMITTER"
+    changes_report "$1" || return 1
+    REPORT=$REPLY
+    read_changes "$REPORT"
+    [[ -n $UNATTRIBUTED ]] && width=${#UNATTRIBUTED_LABEL}
+    for who in "${COMMITTERS[@]}"; do
+        ((${#who} > width)) && width=${#who}
+    done
+    for who in "${COMMITTERS[@]}"; do
+        entries=""
+        for branch in ${BRANCHES[$who]}; do
+            entries="$entries ${ENTRIES[$branch]}"
+        done
+        files_by_type $entries
+        cechon Wb "$who"
+        printf '%*s  %s\n' $((width - ${#who})) "" "$REPLY"
+    done
+    if [[ -n $UNATTRIBUTED ]]; then
+        files_by_type $UNATTRIBUTED
+        printf '%-*s  %s\n' $width "$UNATTRIBUTED_LABEL" "$REPLY"
+    fi
+    print
+}
+UNATTRIBUTED_LABEL="(no branch)"
+
+function list_detailed_changes { # BASELINE: each file, its commits, ..., diffs
+    typeset reference who branch i report=$REPORT
+    hr
+    cecho sWr "LIST OF CHANGES"
     # a branch's build is compared with the baseline before this one
     reference=TACT.TACT_CONFIG.${1%.*}.$(( ${1##*.} - 1 ))
-    read_changes "$report"
     print -r -- "DIFF and NET DIFF run in the file's submodule of the NM workspace, which must be"
     print -r -- "checked out, with the commits and the baseline tags fetched:"
     print -r -- '    git -C $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY submodule update --init <system>/<subsystem>'
@@ -433,6 +500,7 @@ while (($# > 0)); do
     -no-color) COLORED=false ;;
     -c)        COLORED=true ;;
     -batch)    BATCH=1 ;;
+    -short)    SHORT=1 ;;
     -meld)     DIFF_TOOL=meld ;;
     -tool)
         (($# > 1)) || die "-tool requires the name of a diff tool, e.g. -tool meld"
@@ -462,4 +530,6 @@ else
   function cechon { echo -n "$2"; }
 fi
 
-list_all_changes "$BASELINE"
+# the files per committer by type, then -- unless -short -- each file's changes
+list_changes "$BASELINE" || exit 1
+((SHORT)) || list_detailed_changes "$BASELINE"

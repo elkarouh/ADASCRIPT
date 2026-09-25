@@ -17,12 +17,18 @@ Tcheck_tact [-no-color] [-s] [-f] [-v] [-l] [-batch] [-only-new] [-exit-code]
 ```
 
 **Modes:**
-- No focus: full report (summary + tests + build info + replays + changes)
+- No focus: full report (summary + tests + build info + replays + the
+  files per committer by type)
 - `-focus IP in`: only IP integration tests
 - `-focus OP assert`: only OP assert tests
 - `-focus replay run_prequal`: only the run_prequal replay
 - `-focus build_info`: only Padactl and check_run_test_programs
 - `-focus changes`: only the list of changes, by committer (below)
+
+Each focus shows its overview first, then the details -- the detailed test
+comparison, the replay diffs, the build logs side by side, each file's
+changes. `-short` leaves the details out: `-focus changes -short` is just
+the files per committer by type.
 
 **The list of changes.** The CFMUTEST baseline built on the TACT baseline
 (the `CFMUTEST_CONFIG!<nr>` line among the builds `Psort -b` lists) has a changes
@@ -37,7 +43,17 @@ commits changed, added or removed.
       changed 13e00da4a:TACT/UIF/sources/mono_process_display.adb RELATED_CHANGES="SC-134249 "
 ```
 
-It is regrouped by committer and branch: for each branch, its view build
+It is regrouped by committer. First, how many files each committed, and
+how many of each type -- a file changed or re-added twice is one file:
+
+```
+CHANGES BY COMMITTER
+acicek       4 files: 2 adb, 2 ads
+wao          1 file : 1 gpr
+(no branch)  1 file : 1 out
+```
+
+Then, unless `-short`, each branch: its view build
 (`TACT.TACT_CONFIG.<USER>.<BRANCH>-G!31.*`) next to the previous TACT
 baseline's, with the ediff between their failures; for each file, one entry
 with every commit that touched it, their SC tickets, their reviews, and
@@ -104,6 +120,7 @@ which is what `test/run_changes_tests.sh` does.
 | `-tool NAME` | The visual diff tool: `meld`, `kompare`, `kdiff3`, ... The list of changes' DIFF and NET DIFF links open it (`git difftool -y -t NAME`) rather than ediff, and troubleshoot mode compares with it -- `meld` when no `-tool` is given |
 | `-meld` | Same as `-tool meld`; kept for older scripts |
 | `-only-new` | Show only new failures and regressions |
+| `-short` | With `-focus`, only the overview: no details (for changes, the files per committer by type) |
 | `-exit-code` | Exit with non-zero status if new failures found |
 
 **Examples:**
@@ -118,12 +135,12 @@ Tcheck_tact -l 30.0.0.128          # list builds and replays
 
 ### Treport.ksh
 
-Tcheck_tact's list of changes (`-focus changes`) as a standalone ksh93
+Tcheck_tact's list of changes (`-focus changes [-short]`) as a standalone ksh93
 script, for where the Adascript build is not at hand. Same output, same
 attribution, same links, same options for it:
 
 ```
-Treport.ksh [-no-color] [-tool NAME | -meld] [-batch] BASELINE
+Treport.ksh [-no-color] [-tool NAME | -meld] [-batch] [-short] BASELINE
 Treport.ksh -tool kompare 30.0.0.132
 ```
 
@@ -198,5 +215,5 @@ ady2nim c -d:release make_comparable.ady -o make_comparable
   `-focus` modes (`-focus IP in`, `-focus replay performance`,
   `-focus build_info`, ...); the separate Ttroubleshoot program is gone.
 - `make_comparable.ady` — translated from `make_comparable.ksh`
-- `Treport.ksh` — `list_all_changes` of `Tcheck_tact.ady`, translated
+- `Treport.ksh` — `list_changes` and `list_detailed_changes` of `Tcheck_tact.ady`, translated
   back to ksh

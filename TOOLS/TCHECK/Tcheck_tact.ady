@@ -839,19 +839,75 @@ def display_branch_info(branch: BranchName, reference: str):
         print f"REFERENCE BASELINE DIR: {ref_build}"
         echo_ediff(ref_build / "general.results.failed-in", view_build / "general.results.failed-in")
 
-def list_all_changes(baseline: str):
-    """The changes in the CFMUTEST baseline built on TACT BASELINE, by
-    committer and branch."""
-    hr('#')
-    puts("sWr", "LIST OF CHANGES", NEWLINE=True)
+def changes_report(baseline: str) -> Path:
+    """The changes report of the CFMUTEST baseline built on TACT BASELINE,
+    or Path("") after a warning saying why there is none."""
     let cfmu: str = cfmu_baseline_of(baseline)
     if cfmu == "":
         puts("sWb", f"WARNING: Psort -b names no CFMUTEST baseline for TACT_CONFIG.{baseline}", NEWLINE=True)
-        return
+        return Path("")
     let report: Path = CFMUTEST_ROOT / "baseline_reports" / f"CFMUTEST.CFMUTEST_CONFIG.{cfmu}.changes_report"
     if not -r report:
         puts("sWb", f"WARNING: no changes report for CFMUTEST_CONFIG {cfmu}: {report}", NEWLINE=True)
-        return
+        return Path("")
+    report
+
+def extension_of(file: str) -> str:
+    """FILE's extension, as display_file splits it: after the last dot of
+    its name, when that dot does not start it; "" when there is none."""
+    let name: str = Path(file).name
+    let dot: int = name.rfind(".")
+    name[dot + 1:] if dot > 0 else ""
+
+def extension_label(ext: str) -> str:
+    ext if ext != "" else "(no extension)"
+
+def files_by_type(changes: []FileChange) -> str:
+    """"4 files: 2 adb, 2 ads" -- how many files CHANGES touch, and how
+    many of each extension, the commonest first. A file changed, added or
+    deleted more than once is one file."""
+    var files: []str = []
+    var counts: {str}int = {:}
+    for fc in changes:
+        if fc.file not in files:
+            files.append(fc.file)
+            let ext: str = extension_of(fc.file)
+            counts[ext] = counts.get(ext, 0) + 1
+    let order: [](int, str) = sorted([(-n, ext) for ext, n in counts.items()])
+    let by_type: []str = [f"{-n} {extension_label(ext)}" for n, ext in order]
+    let noun: str = "file " if len(files) == 1 else "files"
+    f"{len(files)} {noun}: " + ", ".join(by_type)
+
+def list_changes(baseline: str) -> bool:
+    """By committer, how many files the CFMUTEST baseline built on TACT
+    BASELINE changed, and how many of each type (extension); False when
+    there is no changes report to read."""
+    hr('#')
+    puts("sWr", "CHANGES BY COMMITTER", NEWLINE=True)
+    let report: Path = changes_report(baseline)
+    return False if report == ""
+    let changes: ChangeList = read_changes(report)
+    var width: int = len("(no branch)") if len(changes.unattributed) > 0 else 0
+    for who in changes.committers:
+        width = max(width, len(who))
+    for who in changes.committers:
+        var theirs: []FileChange = []
+        for branch in changes.branches[who]:
+            theirs.extend(changes.files[branch])
+        puts("Wb", who)
+        print " " * (width - len(who)) + "  " + files_by_type(theirs)
+    if len(changes.unattributed) > 0:
+        print "(no branch)".ljust(width) + "  " + files_by_type(changes.unattributed)
+    print
+    True
+
+def list_detailed_changes(baseline: str):
+    """The changes in the CFMUTEST baseline built on TACT BASELINE, by
+    committer and branch: each file, its commits, tickets, reviews and diffs."""
+    hr('#')
+    puts("sWr", "LIST OF CHANGES", NEWLINE=True)
+    let report: Path = changes_report(baseline)
+    return if report == ""
     # a branch's build is compared with the baseline before this one
     let reference: str = "TACT.TACT_CONFIG." + Baseline(baseline).previous().nr
     let changes: ChangeList = read_changes(report)
@@ -889,7 +945,7 @@ def usage():
     print "  This script will report the status of a baseline build,"
     print "  scan the size of replay_dirs of all baselines of the same branch."
     print "  See how_to_tactdev for tips for buildmaster."
-    print f"  usage: {PROG} [-c] [-s] [-h] [-v] [-f] [-l] [-batch] [-focus <domain> [<detail>]] [<BASELINE>]"
+    print f"  usage: {PROG} [-c] [-s] [-h] [-v] [-f] [-l] [-batch] [-focus <domain> [<detail>] [-short]] [<BASELINE>]"
     print f"  Example: {PROG} -c 30.0.0.120"
     print f"  Example: {PROG} -focus IP mono 30.0.0.120"
     print f"  Example: {PROG} -focus replay run_prequal 30.0.0.120"
@@ -914,6 +970,8 @@ def usage():
     print "               Focus on a specific domain and optionally a detail within it."
     print "               domain: IP, OP, SIP, replay, build_info, or changes"
     print "               detail: a build subtype (in, mono, assert, ...) or a replay type"
+    print "  -short       With -focus, leave out the detailed part: for changes, the files"
+    print "               per committer by type, without the list of each file's changes."
     print "  <BASELINE>   Required if -c or -v is specified, or if no options are given."
     quit(1)
 
@@ -936,6 +994,7 @@ class Options:
     batch         : bool = False
     tool          : str  = "" # -tool: the visual diff tool
     only_new      : bool = False
+    short         : bool = False # -short: -focus without the detailed part
     exit_code     : bool = False
     baseline      : str  = "" # e.g. 30.0.0.121
 
@@ -960,6 +1019,7 @@ class Options:
                     die(f"-tool: not a diff tool's name: {self.tool}") if self.tool != /^[A-Za-z0-9_.+-]+$/
                 when "-meld":      self.tool = "meld"
                 when "-only-new":  self.only_new = True
+                when "-short":     self.short = True
                 when "-exit-code": self.exit_code = True
                 when "-focus":
                     i += 1
@@ -1509,18 +1569,23 @@ class Report:
         if self.opt.compute_size:
             check_replay_dirs_size()
             quit(0)
+        # -short: what each focus shows first, without its details
         case self.opt.focus_domain:
             when focus_replay:
                 self.show_replays()
-                self.show_detailed_replays()
+                if not self.opt.short:
+                    self.show_detailed_replays()
             when focus_IP | focus_OP | focus_SIP:
                 self.show_regression_tests()
-                self.show_detailed_regression_tests()
+                if not self.opt.short:
+                    self.show_detailed_regression_tests()
             when focus_changes:
-                list_all_changes(self.cur.nr)
+                if list_changes(self.cur.nr) and not self.opt.short:
+                    list_detailed_changes(self.cur.nr)
             when focus_build_info:
                 self.show_build_info()
-                self.show_detailed_build_info()
+                if not self.opt.short:
+                    self.show_detailed_build_info()
             when no_focus:
                 self.show_summary()
                 self.show_new_failures()
@@ -1528,7 +1593,7 @@ class Report:
                 self.show_regression_tests()
                 self.show_build_info()
                 self.show_replays()
-                list_all_changes(self.cur.nr)
+                list_changes(self.cur.nr)
         self.write_history()
         if self.opt.exit_code and HAS_NEW_FAILURES:
             quit(1)
