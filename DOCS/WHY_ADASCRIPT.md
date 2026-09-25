@@ -43,6 +43,64 @@ morning is somebody reading. A language that is short to *write* and hard to
 This is why I care about notation. Not because terse is good — because a form
 that a reader can take in without decoding it is good.
 
+### Executable pseudocode, for real this time
+
+Python was sold as executable pseudocode, and on a slide it is. Then the
+program meets a real problem. The priority queue turns out to be `heapq`, a
+module of functions over a list, so the code says `heapq.heappush(queue, …)`
+where the pseudocode said "push". The enumeration has to be an `IntEnum`, or
+the heap dies comparing two nodes that tie on distance. Its members have to
+be written `Node_T.A` or copied into globals first. And the graph's type is
+`dict[Node_T, list[Neighbour_T]]`, an annotation nothing checks, so most
+people leave it out and the reader is left to guess what `graph[node]`
+holds. Each of those is small. Together they are why the Python version of
+an algorithm is rarely the one in the textbook.
+
+Here is Dijkstra's shortest paths in Adascript, types and all:
+
+<!-- from: EXAMPLES/dijkstra.ady -->
+```python
+from stdlib nimport PriorityQueue
+type Node_T is enum A, B, C, D
+type Distance_T is float
+type Neighbour_T is tuple:
+    distance: Distance_T
+    neighbor: Node_T
+type Graph_T is {Node_T}[]Neighbour_T
+
+def dijkstra(graph : Graph_T, start: Node_T) -> {Node_T}Distance_T:
+    distances: {Node_T}Distance_T = {node: (0.0 if node==start else Inf) for node in graph}
+    var visited : {}Node_T
+    queue : PriorityQueue[Neighbour_T] = [(0.0, start)]
+    while queue:
+        current_dist, node = queue.pop()
+        if node in visited:
+            continue
+        visited.add(node)
+        for dist, neighbor in graph[node]:
+            let new_dist: Distance_T = current_dist + dist
+            if new_dist < distances[neighbor]:
+                distances[neighbor] = new_dist
+                queue.push((new_dist, neighbor))
+    return distances
+```
+
+The graph is declared in one line. `type Graph_T is {Node_T}[]Neighbour_T`
+reads "for each node, a list of its neighbours, each with the distance to
+it" — the textbook definition of a weighted digraph as an adjacency list,
+and the data structure itself, with nothing to build. The queue holds the
+same `Neighbour_T` the edges are made of, so an edge and a queue entry are
+one type, not two descriptions of the same pair.
+
+The function is the algorithm and nothing else. Every node starts at
+infinity except the start; take the nearest node; skip it if it has been
+seen; mark it; relax every edge out of it. A signature and fourteen lines,
+and not one of them is there for the language rather than for the
+algorithm. That is what executable pseudocode was supposed to mean. The
+book's chapter 1 §1.4 sets it beside the same program in idiomatic Python,
+line by line — and notes that, `PriorityQueue` being a Nim library, this
+file runs on the Nim backend only for now.
+
 ### Implicit typing is a bad idea
 
 Not "static typing is good" — that argument is over. Implicit typing is
