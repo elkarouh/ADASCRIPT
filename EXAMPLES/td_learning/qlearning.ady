@@ -105,12 +105,12 @@ def print_policy(qtable: lent QTable_T):
         var line: str = "  "
         for c in Col_T:
             let s: Coord_T = (r, c)
-            if s == GOAL:      line &= "G "
-            elif s == START:   line &= "S "
-            elif is_cliff(s):  line &= "C "
+            if s == GOAL:      line += "G "
+            elif s == START:   line += "S "
+            elif is_cliff(s):  line += "C "
             else:
                 let qrow: [Action_T]Reward_T = qtable[s]
-                line &= arrows[Action_T(qrow.maxIndex)] & " "
+                line += arrows[Action_T(qrow.maxIndex)] + " "
         print line
     print "  (Q-Learning learns the cliff-edge path; SARSA stays one row above)"
 

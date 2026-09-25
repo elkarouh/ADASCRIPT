@@ -120,14 +120,14 @@ def print_policy():
     var header: str = "    "
     for j in Cars_T:
         let jj: int = j
-        header &= f"{jj:3}"
+        header += f"{jj:3}"
     print header
     for i in Cars_T:
         let ii: int = i
         var line: str = f"{ii:3}:"
         for j in Cars_T:
             let a: int = policy[i][j]
-            line &= f"{a:3}"
+            line += f"{a:3}"
         print line
 
 print_policy()

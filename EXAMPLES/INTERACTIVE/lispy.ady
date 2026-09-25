@@ -158,7 +158,7 @@ def tokenize(s: str) -> []str:
         elif is_space_ch(c):
             i += 1
         elif c == '(' or c == ')' or c == '\'' or c == '`':
-            tokens.append("" & c)
+            tokens.append(str(c))
             i += 1
         elif c == ',':
             if i + 1 < n and s[i + 1] == '@':
