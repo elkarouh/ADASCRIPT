@@ -1,0 +1,32 @@
+#!/usr/bin/env ady2nim
+"""Test: a method, an index or a slice after 'Image applies to the image.
+
+`c'Image` is Nim's `$(c)`, and Nim's `$` takes all that follows it:
+`$(c).toLowerAscii()` is `$` of the call, which then gets the enum for its
+argument -- "type mismatch", as Tcheck_tact's
+`self.focus_domain'Image.removeprefix("focus_")` got. The image is
+parenthesised when anything follows it; alone, it stays `$(c)`, and
+`c'Image + "x"` still joins two strings.
+"""
+
+type Phase_T is enum PHASE_CLIMB, PHASE_CRUISE
+
+type Flight_T is record:
+    phase: Phase_T = PHASE_CLIMB
+
+let p: Phase_T = PHASE_CRUISE
+let f: Flight_T = Flight_T(phase = PHASE_CLIMB)
+
+assert p'Image.lower() == "phase_cruise"
+assert p'Image.removeprefix("PHASE_") == "CRUISE"
+assert f.phase'Image.lower() == "phase_climb"
+assert p'Image[0:5] == "PHASE"
+assert p'Image.split("_")[1] == "CRUISE"
+assert len(p'Image) == 12
+
+# alone, and joined: as before
+let name: str = p'Image
+assert name == "PHASE_CRUISE"
+assert p'Image + "!" == "PHASE_CRUISE!"
+
+print "all 'Image method tests passed"

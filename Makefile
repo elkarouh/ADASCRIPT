@@ -117,7 +117,8 @@ STANDALONE := \
     test_char_table_literal.ady \
     test_param_nested_mutation.ady \
     test_method_named_field.ady \
-    test_seq_field_concat.ady
+    test_seq_field_concat.ady \
+    test_image_method.ady
 
 # -----------------------------------------------------------------------
 # Stdin tests — piped from a sample file

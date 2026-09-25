@@ -2595,6 +2595,13 @@ def to_nim(self, prec=None):
             if type(tr).__name__ == "tick_trailer":
                 tick_attr = tr.nodes[0].to_nim() if hasattr(tr.nodes[0], 'to_nim') else tr.nodes[0]
                 result = _emit_tick_attr(result, "", tick_attr)
+                # `c'Image.lower()`, `c'Image[0:3]`: Nim's `$` takes all that
+                # follows it -- `$(c).toLowerAscii()` is `$` of the call, with
+                # the enum for its argument -- so the image is parenthesised
+                # when anything follows it. Alone it stays `$(c)`, which the
+                # string checks (`c'Image + "x"` is `&`) read by its `$`.
+                if tick_attr == "Image" and i + 1 < len(trailer_list):
+                    result = f"({result})"
                 continue
             if type(tr).__name__ == "attr_trailer":
                 method_name = tr.nodes[0].to_nim()
