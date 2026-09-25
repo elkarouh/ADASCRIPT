@@ -285,7 +285,7 @@ def _domain_expr(key, dom):
     return None
 
 
-def _zero_value(annotation):
+def _zero_value(annotation, _depth=0):
     """The empty value for ANNOTATION, mirroring Nim's zero-initialisation.
 
     A bare `x: T` binds nothing in Python, so a declaration written without an
@@ -314,6 +314,10 @@ def _zero_value(annotation):
                "Path": 'Path("")'}
     if ann in scalars:
         return scalars[ann]
+    # another name for a type -- `type Reward_T is float` -- zeroes as it
+    _target = getattr(ParserState, "py_type_aliases", {}).get(ann)
+    if _target and _target != ann:
+        return _zero_value(_target, _depth)
     # [E]T: Nim's array[E, T] has a slot per member, already zeroed, so
     # `var counts: [Phase_T]Natural` counts from the first += on either
     # backend. An empty _EnumArray raised KeyError on the first read here.
@@ -333,14 +337,15 @@ def _zero_value(annotation):
                 # one _domain_expr can name -- [3]int and [str]int reach
                 # here too -- and the element needs a zero worth filling
                 # with.
-                # A nested [E][E]T is left alone rather than nesting two
-                # generators over the same loop name.
+                # A nested [E][F]T nests the generators, each over a loop
+                # name of its own; one that cannot be filled whole -- its
+                # element has no zero -- is left empty, as before.
                 _dom = getattr(ParserState, "tick_types", {}).get(_key, {})
-                _ez = _zero_value(_elem)
+                _ez = _zero_value(_elem, _depth + 1)
                 _domain = _domain_expr(_key, _dom)
-                if (_domain is not None and _ez != "None"
-                        and not _elem.startswith("_EnumArray[")):
-                    return f"_EnumArray((_m, {_ez}) for _m in {_domain})"
+                if (_domain is not None and _ez not in ("None", "_EnumArray()")):
+                    _m = f"_m{_depth}" if _depth else "_m"
+                    return f"_EnumArray(({_m}, {_ez}) for {_m} in {_domain})"
                 break
         return "_EnumArray()"
     for prefix, empty in (("_EnumArray[", "_EnumArray()"),
@@ -1037,6 +1042,7 @@ def to_py(self, indent=0):
         lo = str(rhs.nodes[2].node)
         hi = str(rhs.nodes[4].node)  # [float, range, lo, range_op, hi]
         ParserState.tick_types[name] = {"First": lo, "Last": hi, "is_float_range": True}
+        _note_alias(name, "float")
         return f"{_ind(indent)}{name} = float  # range {lo} .. {hi}"
     if rhs_type == 'int_range_def':
         sr = rhs.nodes[2]  # the subrange_def inside (nodes[0]=int, nodes[1]=range)
@@ -1061,7 +1067,17 @@ def to_py(self, indent=0):
         member_names = [m.strip() for m in members[len("enum "):].split(",")]
         return _emit_enum_py(name, member_names, indent)
     value = rhs.to_py()
+    _note_alias(name, value)
     return f"{_ind(indent)}{name} = {value}"
+
+
+def _note_alias(name, value):
+    """Remember that NAME is another name for the type VALUE -- `type Reward_T
+    is float` -- so that _zero_value zeroes it as that type."""
+    aliases = getattr(ParserState, "py_type_aliases", None)
+    if aliases is None:
+        aliases = ParserState.py_type_aliases = {}
+    aliases[name] = value
 
 
 

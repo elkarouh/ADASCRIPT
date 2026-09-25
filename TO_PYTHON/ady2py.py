@@ -125,6 +125,7 @@ def _py_reset():
     ParserState.nim_imports = set()   # stores Python import lines (historical naming)
     ParserState.tick_types = {}
     ParserState.record_types = set()
+    ParserState.py_type_aliases = {}
     ParserState.py_top_decls = []
     # Marks are held by id(), which the allocator reuses once a parse tree is
     # collected, so they must not outlive the module that set them.

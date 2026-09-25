@@ -74,4 +74,26 @@ var by_seq: [Small_T][]int
 assert by_seq[1]'Length == 0
 assert by_seq[2]'Length == 0
 
+# --- an array of arrays: every inner array filled too ------------------------
+# (jacks.ady's `var policy: [Cars_T][Cars_T]int`: the outer one was left
+# empty, as nesting the fill needs a loop name per level)
+var grid: [Small_T][Color]int
+assert grid[2][BLUE] == 0
+grid[1][RED] = 3
+assert grid[2][RED] == 0   # a fresh inner array per slot
+var n_grid: int = 0
+for row in grid:
+    for v in row:
+        n_grid = n_grid + 1
+assert n_grid == 6
+
+# --- an element named by an alias: zeroed as the type it names --------------
+# (jacks.ady's `var value: [Cars_T][Cars_T]Reward_T`, Reward_T is float)
+type Reward_T is float
+type Prob_T is float range 0.0 .. 1.0
+var by_reward: [Small_T]Reward_T
+var by_prob: [Small_T][Small_T]Prob_T
+assert by_reward[2] == 0.0
+assert by_prob[2][1] == 0.0
+
 print "enum-array zero-fill tests passed"
