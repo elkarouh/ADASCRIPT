@@ -1224,8 +1224,7 @@ class Options:
                     self.baseline = arg
             i += 1
         if user != "":
-            let image: str = self.focus_domain'Image
-            let domain: str = image.removeprefix("focus_")
+            let domain: str = self.focus_domain'Image.removeprefix("focus_")
             die(f"-user shows the changes: not with -focus {domain}") if self.focus_domain not in [no_focus, focus_changes]
             die(f"-user {user} and -focus changes {self.focus_user}: one committer only") if self.focus_user not in ["", user]
             self.focus_domain = focus_changes
