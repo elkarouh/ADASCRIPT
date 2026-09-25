@@ -1163,14 +1163,22 @@ type BuildSummary is tuple:
     total_crash: int
     all_ok     : bool
 
+def is_test_name(name: str) -> bool:
+    """Whether NAME, a Tlog line's second word, names a test: a test is an
+    .el file. The sections hold other lines too -- a remark, a pointer to
+    the log, an mrun line -- whose second word (all, Check, Tlog:, mrun) is
+    no test."""
+    name.endswith(".el")
+
 def get_failed_test_names(filepath: Path, subtype: BuildSubtype) -> []str:
-    """Extract just the test names from a Tlog's new_failing + crashed sections."""
+    """The tests a Tlog's new_failing + crashed sections name."""
     let r: TlogResult = parse_Tlog(filepath, subtype)
     var names: []str = []
-    for line in r.new_failing:
-        names.append(extract_test_name(line))
-    for line in r.crashed:
-        names.append(extract_test_name(line))
+    for section in [r.new_failing, r.crashed]:
+        for line in section:
+            let name: str = extract_test_name(line)
+            if is_test_name(name):
+                names.append(name)
     return names
 
 def check_replay_dirs_size():

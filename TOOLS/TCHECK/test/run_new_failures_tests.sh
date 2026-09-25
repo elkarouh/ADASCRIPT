@@ -21,29 +21,34 @@ tlog() {
 }
 # 30.0.0.9: alpha newly fails in IP in and mono, gamma crashed, beta still
 # fails as it did in 30.0.0.8, and delta fails in an OP build that had no
-# Tlog before.
+# Tlog before. The sections also hold lines naming no test -- their second
+# word is mrun, Check, Tlog:, all: a test is an .el file.
 tlog 30.0.0.9 IP in <<'TLOG'
 Crashed Tests
-  CRASH test_gamma      signal 11
+  CRASH test_gamma.el      signal 11
+  ==> mrun had crashed too
 New tests failing
-  FAIL  test_alpha      diff
-  FAIL  test_beta       diff
+  FAIL  test_alpha.el      diff
+  FAIL  test_beta.el       diff
+  --> Check the logs of the failing tests
+  In Tlog: /cm/ot/TACT/TACT_CONFIG.30.0.0.9/some.log
+  ==> all 2 listed
 Tests still failing
 Tlog summary
 TLOG
 tlog 30.0.0.9 IP mono <<'TLOG'
 New tests failing
-  FAIL  test_alpha      diff
+  FAIL  test_alpha.el      diff
 Tlog summary
 TLOG
 tlog 30.0.0.9 OP assert <<'TLOG'
 New tests failing
-  FAIL  test_delta      assertion
+  FAIL  test_delta.el      assertion
 Tlog summary
 TLOG
 tlog 30.0.0.8 IP in <<'TLOG'
 New tests failing
-  FAIL  test_beta       diff
+  FAIL  test_beta.el       diff
 Tlog summary
 TLOG
 # 30.0.0.10: the same failures as 30.0.0.9 -- nothing new
@@ -73,10 +78,10 @@ section() {
     "$TCHECK" -no-color "$@" 2>/dev/null | sed -n '/^NEWLY FAILED TESTS/,/^$/p' | grep . || true
 }
 
-check "each test once, with the builds it fails in" "NEWLY FAILED TESTS vs 30.0.0.8
-  test_alpha  IP in, IP mono
-  test_gamma  IP in
-  test_delta  OP assert" "$(section -focus changes 30.0.0.9)"
+check "each test once, with its builds; tests only" "NEWLY FAILED TESTS vs 30.0.0.8
+  test_alpha.el  IP in, IP mono
+  test_gamma.el  IP in
+  test_delta.el  OP assert" "$(section -focus changes 30.0.0.9)"
 check "-short keeps it"                          "$(section -focus changes 30.0.0.9)" "$(section -focus changes -short 30.0.0.9)"
 check "none new: says so"                        "NEWLY FAILED TESTS vs 30.0.0.9
   No new failures compared to 30.0.0.9" "$(section -focus changes -short 30.0.0.10)"
