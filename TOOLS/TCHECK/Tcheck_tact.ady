@@ -63,6 +63,8 @@ type BuildType is enum IP, OP, SIP
 type BuildPass is enum normal, mrun
 type FocusDomain is enum no_focus, focus_IP, focus_OP, focus_SIP, focus_replay, focus_build_info, focus_changes
 type ReplayType is enum run_prequal, performance, simca, full_simca, oldest_date, all_autolink
+# what a replay's log says of it
+type ReplayStatus is enum succeeded, failed, not_started, busy
 
 type Replay is tuple:
     rtype : ReplayType
@@ -384,30 +386,41 @@ def find_replays(basedir: Path) -> []Replay:
         result.append((rtype: rtype, file: filepath))
     return result
 
+def replay_status(content: str) -> ReplayStatus:
+    """What a replay's log, CONTENT, says of it: the verdict of its UNINSTALL
+    step when it has one, else whether it has started."""
+    if "Executed UNINSTALL:" in content:
+        let verdict: str = content.split("Executed UNINSTALL:")[-1].split("\n")[0]
+        return succeeded if "YES" in verdict
+        return failed if "NO" in verdict
+    return busy if "Waiting for this replay to be finished" in content
+    not_started
+
 def process_replay(replay: Replay, verbose: bool):
     """Check the status of a single replay (successful / failed / running)."""
     let label: str = f"\"{replay.rtype}\""
     puts("sWb", f"{label:<14} replay ")
 
     let content: str = readFile(replay.file)
-    if "Executed UNINSTALL:" in content and "YES" in content.split("Executed UNINSTALL:")[-1].split("\n")[0]:
-        puts("sWb", "==> WAS SUCCESSFUL", NEWLINE=True)
-    elif "Executed UNINSTALL:" in content and "NO" in content.split("Executed UNINSTALL:")[-1].split("\n")[0]:
-        puts("sWr", "==> FAILED", NEWLINE=True)
-        echo_emacs(replay.file)
-        print
-        if verbose:
-            for line in content.split("\n"):
-                continue if "ERROR_REPORT.SEVERE" not in line
-                let basename_at: int = line.rfind("/")
-                if basename_at >= 0:
-                    print line[basename_at + 1:]
-                else:
-                    print line
-    elif "Waiting for this replay to be finished" not in content:
-        puts("sWb", "---> WARNING: it looks like the replay hasn't started", NEWLINE=True)
-    else:
-        puts("sWb", "IS STILL BUSY", NEWLINE=True)
+    case replay_status(content):
+        when succeeded:
+            puts("sWb", "==> WAS SUCCESSFUL", NEWLINE=True)
+        when failed:
+            puts("sWr", "==> FAILED", NEWLINE=True)
+            echo_emacs(replay.file)
+            print
+            if verbose:
+                for line in content.split("\n"):
+                    continue if "ERROR_REPORT.SEVERE" not in line
+                    let basename_at: int = line.rfind("/")
+                    if basename_at >= 0:
+                        print line[basename_at + 1:]
+                    else:
+                        print line
+        when not_started:
+            puts("sWb", "---> WARNING: it looks like the replay hasn't started", NEWLINE=True)
+        when busy:
+            puts("sWb", "IS STILL BUSY", NEWLINE=True)
     hr('-')
 
 # ---------------------------------------------------------------------------
@@ -461,10 +474,9 @@ def show_tlog_if_present(build: Build, subtype: BuildSubtype, pass_: BuildPass):
             return if subtype not in (in_test, assert_test)
         when others:
             return
-    if pass_ == mrun:
-        puts("sWb", "\"" + build.btype'Image + " " + sl + " mrun\" build not ready yet", NEWLINE=True)
-    else:
-        puts("sWb", "\"" + build.btype'Image + " " + sl + "\" build not ready yet", NEWLINE=True)
+    case pass_:
+        when normal: puts("sWb", f"\"{build.btype} {sl}\" build not ready yet", NEWLINE=True)
+        when mrun:   puts("sWb", f"\"{build.btype} {sl} mrun\" build not ready yet", NEWLINE=True)
 
 def process_build_subtype(build: Build, subtype: BuildSubtype):
     """Process one subtype of a build, for both normal and mrun passes."""
@@ -1665,13 +1677,10 @@ class Report:
         var replay_fail: int = 0
         var replay_busy: int = 0
         for replay in self.replays:
-            let content: str = readFile(replay.file)
-            if "Executed UNINSTALL:" in content and "YES" in content.split("Executed UNINSTALL:")[-1].split("\n")[0]:
-                replay_ok += 1
-            elif "Executed UNINSTALL:" in content and "NO" in content.split("Executed UNINSTALL:")[-1].split("\n")[0]:
-                replay_fail += 1
-            else:
-                replay_busy += 1
+            case replay_status(readFile(replay.file)):
+                when succeeded:          replay_ok += 1
+                when failed:             replay_fail += 1
+                when not_started | busy: replay_busy += 1
         puts("sWb", "  Replays: ")
         if replay_fail > 0:
             puts("sWr", f"{replay_ok} ok, {replay_fail} FAILED, {replay_busy} running", NEWLINE=True)
