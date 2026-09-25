@@ -30,69 +30,69 @@ def get_cpu_secs() -> float:
     cpuTime()
 
 const DDL: str = (
-    "CREATE TABLE IF NOT EXISTS problems (name TEXT PRIMARY KEY);" &
-    "CREATE TABLE IF NOT EXISTS classes (" &
-    " problem TEXT NOT NULL REFERENCES problems(name) ON DELETE CASCADE," &
-    " name TEXT NOT NULL, size INTEGER NOT NULL DEFAULT 0," &
-    " PRIMARY KEY (problem, name));" &
-    "CREATE TABLE IF NOT EXISTS subjects (" &
-    " problem TEXT NOT NULL REFERENCES problems(name) ON DELETE CASCADE," &
-    " name TEXT NOT NULL, PRIMARY KEY (problem, name));" &
-    "CREATE TABLE IF NOT EXISTS teachers (" &
-    " problem TEXT NOT NULL REFERENCES problems(name) ON DELETE CASCADE," &
-    " name TEXT NOT NULL, PRIMARY KEY (problem, name));" &
-    "CREATE TABLE IF NOT EXISTS rooms (" &
-    " problem TEXT NOT NULL REFERENCES problems(name) ON DELETE CASCADE," &
-    " name TEXT NOT NULL, capacity INTEGER NOT NULL DEFAULT 0," &
-    " room_type TEXT NOT NULL DEFAULT 'standard'," &
-    " PRIMARY KEY (problem, name));" &
-    "CREATE TABLE IF NOT EXISTS requirements (" &
-    " problem TEXT NOT NULL REFERENCES problems(name) ON DELETE CASCADE," &
-    " class TEXT NOT NULL, subject TEXT NOT NULL, periods INTEGER NOT NULL DEFAULT 0," &
-    " PRIMARY KEY (problem, class, subject));" &
-    "CREATE TABLE IF NOT EXISTS can_teach (" &
-    " problem TEXT NOT NULL REFERENCES problems(name) ON DELETE CASCADE," &
-    " teacher TEXT NOT NULL, subject TEXT NOT NULL," &
-    " PRIMARY KEY (problem, teacher, subject));" &
-    "CREATE TABLE IF NOT EXISTS subject_room_type (" &
-    " problem TEXT NOT NULL REFERENCES problems(name) ON DELETE CASCADE," &
-    " subject TEXT NOT NULL, room_type TEXT NOT NULL DEFAULT 'standard'," &
-    " PRIMARY KEY (problem, subject));" &
-    "CREATE TABLE IF NOT EXISTS hard_constraints (" &
-    " problem TEXT NOT NULL PRIMARY KEY REFERENCES problems(name) ON DELETE CASCADE," &
-    " max_consecutive_same_subj INTEGER NOT NULL DEFAULT 2," &
-    " max_teacher_periods_day INTEGER NOT NULL DEFAULT 4);" &
-    "CREATE TABLE IF NOT EXISTS soft_constraints (" &
-    " problem TEXT NOT NULL PRIMARY KEY REFERENCES problems(name) ON DELETE CASCADE," &
-    " weight_class_holes INTEGER NOT NULL DEFAULT 1," &
-    " weight_avoid_first_slot INTEGER NOT NULL DEFAULT 2," &
-    " weight_avoid_last_slot INTEGER NOT NULL DEFAULT 1," &
-    " weight_teacher_spread INTEGER NOT NULL DEFAULT 1," &
-    " weight_subject_daily_spread INTEGER NOT NULL DEFAULT 2," &
-    " weight_heavy_morning INTEGER NOT NULL DEFAULT 3," &
-    " morning_threshold INTEGER NOT NULL DEFAULT 4," &
-    " weight_teacher_slot_pref INTEGER NOT NULL DEFAULT 2);" &
-    "CREATE TABLE IF NOT EXISTS heavy_subjects (" &
-    " problem TEXT NOT NULL REFERENCES problems(name) ON DELETE CASCADE," &
-    " subject TEXT NOT NULL, PRIMARY KEY (problem, subject));" &
-    "CREATE TABLE IF NOT EXISTS teacher_slot_pref (" &
-    " problem TEXT NOT NULL REFERENCES problems(name) ON DELETE CASCADE," &
-    " teacher TEXT NOT NULL, day TEXT NOT NULL, slot INTEGER NOT NULL," &
-    " pref TEXT NOT NULL DEFAULT 'avoid'," &
+    "CREATE TABLE IF NOT EXISTS problems (name TEXT PRIMARY KEY);"
+    "CREATE TABLE IF NOT EXISTS classes ("
+    " problem TEXT NOT NULL REFERENCES problems(name) ON DELETE CASCADE,"
+    " name TEXT NOT NULL, size INTEGER NOT NULL DEFAULT 0,"
+    " PRIMARY KEY (problem, name));"
+    "CREATE TABLE IF NOT EXISTS subjects ("
+    " problem TEXT NOT NULL REFERENCES problems(name) ON DELETE CASCADE,"
+    " name TEXT NOT NULL, PRIMARY KEY (problem, name));"
+    "CREATE TABLE IF NOT EXISTS teachers ("
+    " problem TEXT NOT NULL REFERENCES problems(name) ON DELETE CASCADE,"
+    " name TEXT NOT NULL, PRIMARY KEY (problem, name));"
+    "CREATE TABLE IF NOT EXISTS rooms ("
+    " problem TEXT NOT NULL REFERENCES problems(name) ON DELETE CASCADE,"
+    " name TEXT NOT NULL, capacity INTEGER NOT NULL DEFAULT 0,"
+    " room_type TEXT NOT NULL DEFAULT 'standard',"
+    " PRIMARY KEY (problem, name));"
+    "CREATE TABLE IF NOT EXISTS requirements ("
+    " problem TEXT NOT NULL REFERENCES problems(name) ON DELETE CASCADE,"
+    " class TEXT NOT NULL, subject TEXT NOT NULL, periods INTEGER NOT NULL DEFAULT 0,"
+    " PRIMARY KEY (problem, class, subject));"
+    "CREATE TABLE IF NOT EXISTS can_teach ("
+    " problem TEXT NOT NULL REFERENCES problems(name) ON DELETE CASCADE,"
+    " teacher TEXT NOT NULL, subject TEXT NOT NULL,"
+    " PRIMARY KEY (problem, teacher, subject));"
+    "CREATE TABLE IF NOT EXISTS subject_room_type ("
+    " problem TEXT NOT NULL REFERENCES problems(name) ON DELETE CASCADE,"
+    " subject TEXT NOT NULL, room_type TEXT NOT NULL DEFAULT 'standard',"
+    " PRIMARY KEY (problem, subject));"
+    "CREATE TABLE IF NOT EXISTS hard_constraints ("
+    " problem TEXT NOT NULL PRIMARY KEY REFERENCES problems(name) ON DELETE CASCADE,"
+    " max_consecutive_same_subj INTEGER NOT NULL DEFAULT 2,"
+    " max_teacher_periods_day INTEGER NOT NULL DEFAULT 4);"
+    "CREATE TABLE IF NOT EXISTS soft_constraints ("
+    " problem TEXT NOT NULL PRIMARY KEY REFERENCES problems(name) ON DELETE CASCADE,"
+    " weight_class_holes INTEGER NOT NULL DEFAULT 1,"
+    " weight_avoid_first_slot INTEGER NOT NULL DEFAULT 2,"
+    " weight_avoid_last_slot INTEGER NOT NULL DEFAULT 1,"
+    " weight_teacher_spread INTEGER NOT NULL DEFAULT 1,"
+    " weight_subject_daily_spread INTEGER NOT NULL DEFAULT 2,"
+    " weight_heavy_morning INTEGER NOT NULL DEFAULT 3,"
+    " morning_threshold INTEGER NOT NULL DEFAULT 4,"
+    " weight_teacher_slot_pref INTEGER NOT NULL DEFAULT 2);"
+    "CREATE TABLE IF NOT EXISTS heavy_subjects ("
+    " problem TEXT NOT NULL REFERENCES problems(name) ON DELETE CASCADE,"
+    " subject TEXT NOT NULL, PRIMARY KEY (problem, subject));"
+    "CREATE TABLE IF NOT EXISTS teacher_slot_pref ("
+    " problem TEXT NOT NULL REFERENCES problems(name) ON DELETE CASCADE,"
+    " teacher TEXT NOT NULL, day TEXT NOT NULL, slot INTEGER NOT NULL,"
+    " pref TEXT NOT NULL DEFAULT 'avoid',"
     " PRIMARY KEY (problem, teacher, day, slot))"
 )
 
 const DEFAULT_PROBLEM: str = (
-    "{\"classes\":[{\"name\":\"Year7A\",\"size\":30},{\"name\":\"Year7B\",\"size\":28},{\"name\":\"Year8A\",\"size\":30},{\"name\":\"Year8B\",\"size\":27},{\"name\":\"Year9A\",\"size\":29},{\"name\":\"Year9B\",\"size\":26}]," &
-    "\"subjects\":[\"Math\",\"English\",\"Science\",\"History\",\"Geography\",\"French\",\"PE\",\"Art\"]," &
-    "\"teachers\":[\"Adams\",\"Brown\",\"Clarke\",\"Davies\",\"Evans\",\"Foster\",\"Green\",\"Harris\",\"Ito\",\"Jones\"]," &
-    "\"rooms\":[{\"name\":\"R01\",\"capacity\":32,\"room_type\":\"standard\"},{\"name\":\"R02\",\"capacity\":32,\"room_type\":\"standard\"},{\"name\":\"R03\",\"capacity\":32,\"room_type\":\"standard\"},{\"name\":\"R04\",\"capacity\":32,\"room_type\":\"standard\"},{\"name\":\"Lab1\",\"capacity\":30,\"room_type\":\"lab\"},{\"name\":\"Lab2\",\"capacity\":30,\"room_type\":\"lab\"},{\"name\":\"Gym\",\"capacity\":60,\"room_type\":\"gym\"},{\"name\":\"ArtRm\",\"capacity\":32,\"room_type\":\"art\"}]," &
-    "\"requirements\":{\"Year7A\":{\"Math\":4,\"English\":4,\"Science\":3,\"History\":2,\"Geography\":2,\"French\":2,\"PE\":2,\"Art\":1},\"Year7B\":{\"Math\":4,\"English\":4,\"Science\":3,\"History\":2,\"Geography\":2,\"French\":2,\"PE\":2,\"Art\":1},\"Year8A\":{\"Math\":4,\"English\":4,\"Science\":3,\"History\":2,\"Geography\":2,\"French\":2,\"PE\":2,\"Art\":1},\"Year8B\":{\"Math\":4,\"English\":4,\"Science\":3,\"History\":2,\"Geography\":2,\"French\":2,\"PE\":2,\"Art\":1},\"Year9A\":{\"Math\":4,\"English\":4,\"Science\":3,\"History\":2,\"Geography\":2,\"French\":2,\"PE\":2,\"Art\":1},\"Year9B\":{\"Math\":4,\"English\":4,\"Science\":3,\"History\":2,\"Geography\":2,\"French\":2,\"PE\":2,\"Art\":1}}," &
-    "\"can_teach\":{\"Adams\":[\"Math\"],\"Brown\":[\"English\",\"History\"],\"Clarke\":[\"Math\",\"French\"],\"Davies\":[\"Science\",\"Geography\"],\"Evans\":[\"English\",\"Art\"],\"Foster\":[\"History\",\"Geography\"],\"Green\":[\"Science\"],\"Harris\":[\"PE\"],\"Ito\":[\"French\",\"Art\"],\"Jones\":[\"English\",\"PE\"]}," &
-    "\"subject_room_type\":{\"Science\":\"lab\",\"PE\":\"gym\",\"Art\":\"art\"}," &
-    "\"teacher_slot_pref\":[]," &
-    "\"hard_constraints\":{\"max_consecutive_same_subj\":2,\"max_teacher_periods_day\":4}," &
-    "\"soft_constraints\":{\"weight_class_holes\":1,\"weight_avoid_first_slot\":2,\"weight_avoid_last_slot\":1,\"weight_teacher_spread\":1,\"weight_subject_daily_spread\":2,\"weight_heavy_morning\":3,\"morning_threshold\":4,\"weight_teacher_slot_pref\":2}," &
+    "{\"classes\":[{\"name\":\"Year7A\",\"size\":30},{\"name\":\"Year7B\",\"size\":28},{\"name\":\"Year8A\",\"size\":30},{\"name\":\"Year8B\",\"size\":27},{\"name\":\"Year9A\",\"size\":29},{\"name\":\"Year9B\",\"size\":26}],"
+    "\"subjects\":[\"Math\",\"English\",\"Science\",\"History\",\"Geography\",\"French\",\"PE\",\"Art\"],"
+    "\"teachers\":[\"Adams\",\"Brown\",\"Clarke\",\"Davies\",\"Evans\",\"Foster\",\"Green\",\"Harris\",\"Ito\",\"Jones\"],"
+    "\"rooms\":[{\"name\":\"R01\",\"capacity\":32,\"room_type\":\"standard\"},{\"name\":\"R02\",\"capacity\":32,\"room_type\":\"standard\"},{\"name\":\"R03\",\"capacity\":32,\"room_type\":\"standard\"},{\"name\":\"R04\",\"capacity\":32,\"room_type\":\"standard\"},{\"name\":\"Lab1\",\"capacity\":30,\"room_type\":\"lab\"},{\"name\":\"Lab2\",\"capacity\":30,\"room_type\":\"lab\"},{\"name\":\"Gym\",\"capacity\":60,\"room_type\":\"gym\"},{\"name\":\"ArtRm\",\"capacity\":32,\"room_type\":\"art\"}],"
+    "\"requirements\":{\"Year7A\":{\"Math\":4,\"English\":4,\"Science\":3,\"History\":2,\"Geography\":2,\"French\":2,\"PE\":2,\"Art\":1},\"Year7B\":{\"Math\":4,\"English\":4,\"Science\":3,\"History\":2,\"Geography\":2,\"French\":2,\"PE\":2,\"Art\":1},\"Year8A\":{\"Math\":4,\"English\":4,\"Science\":3,\"History\":2,\"Geography\":2,\"French\":2,\"PE\":2,\"Art\":1},\"Year8B\":{\"Math\":4,\"English\":4,\"Science\":3,\"History\":2,\"Geography\":2,\"French\":2,\"PE\":2,\"Art\":1},\"Year9A\":{\"Math\":4,\"English\":4,\"Science\":3,\"History\":2,\"Geography\":2,\"French\":2,\"PE\":2,\"Art\":1},\"Year9B\":{\"Math\":4,\"English\":4,\"Science\":3,\"History\":2,\"Geography\":2,\"French\":2,\"PE\":2,\"Art\":1}},"
+    "\"can_teach\":{\"Adams\":[\"Math\"],\"Brown\":[\"English\",\"History\"],\"Clarke\":[\"Math\",\"French\"],\"Davies\":[\"Science\",\"Geography\"],\"Evans\":[\"English\",\"Art\"],\"Foster\":[\"History\",\"Geography\"],\"Green\":[\"Science\"],\"Harris\":[\"PE\"],\"Ito\":[\"French\",\"Art\"],\"Jones\":[\"English\",\"PE\"]},"
+    "\"subject_room_type\":{\"Science\":\"lab\",\"PE\":\"gym\",\"Art\":\"art\"},"
+    "\"teacher_slot_pref\":[],"
+    "\"hard_constraints\":{\"max_consecutive_same_subj\":2,\"max_teacher_periods_day\":4},"
+    "\"soft_constraints\":{\"weight_class_holes\":1,\"weight_avoid_first_slot\":2,\"weight_avoid_last_slot\":1,\"weight_teacher_spread\":1,\"weight_subject_daily_spread\":2,\"weight_heavy_morning\":3,\"morning_threshold\":4,\"weight_teacher_slot_pref\":2},"
     "\"heavy_subjects\":[]}"
 )
 
