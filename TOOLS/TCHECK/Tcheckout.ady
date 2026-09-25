@@ -98,10 +98,6 @@ def parse_target(target: Target_T) -> File_T:
 def git(where: str, args: []str) -> RunResult:
     run(["git", "-C", where] + args)
 
-def run_for_effect(argv: []str):
-    """Run ARGV for what it does; whether it worked is not the question."""
-    let r: RunResult = run(argv)
-
 def git_ok(where: str, args: []str) -> bool:
     git(where, args).code == 0
 
@@ -141,8 +137,8 @@ def keep_worktree_in_config(dir: str):
     let gitdir: str = git_out(dir, ["rev-parse", "--absolute-git-dir"])
     let worktree: RunResult = run(["git", "config", "-f", gitdir + "/config.worktree", "core.worktree"])
     if worktree.code == 0:
-        run_for_effect(["git", "config", "-f", gitdir + "/config.worktree", "--unset", "core.worktree"])
-        run_for_effect(["git", "config", "-f", gitdir + "/config", "core.worktree", worktree.output.strip()])
+        run(["git", "config", "-f", gitdir + "/config.worktree", "--unset", "core.worktree"])
+        run(["git", "config", "-f", gitdir + "/config", "core.worktree", worktree.output.strip()])
 
 def set_sparse(dir: str, patterns: []str) -> bool:
     """The sparse checkout of DIR made exactly PATTERNS."""
@@ -250,7 +246,7 @@ class Workspace_T:
             shell: printf 'gitdir: %s\n' {!gitdir} > {!work}/.git
         else:
             print f"{PROG}: cloning {f.sub} from {url} (no contents until needed)"
-            run_for_effect(["rmdir", work])
+            run(["rmdir", work])
             Path(gitdir).parent.mkdir()
             let rc: int = shell: git clone --filter=blob:none --no-checkout --separate-git-dir={!gitdir} {!url} {!work}
             die(f"could not clone {url}") if rc != 0
@@ -258,7 +254,7 @@ class Workspace_T:
         # submodule writes it: .git/modules/<name> back up to the workspace,
         # then down to SUB
         let up: str = "../.." + "/.." * (name.count("/") + 1)
-        run_for_effect(["git", "-C", work, "config", "core.worktree", up + "/" + f.sub])
+        git(work, ["config", "core.worktree", up + "/" + f.sub])
         # this file alone, then the recorded commit, fetched if it is not
         # there yet
         git_or_die(work, ["sparse-checkout", "set", "--no-cone", "/" + f.file], "could not set up the sparse checkout")
@@ -306,7 +302,7 @@ class Cache_T:
             print f"{PROG}: {f.target} taken out"
         else:
             return f"could not remove {work}" if run(["rm", "-rf", work]).code != 0
-            run_for_effect(["rmdir", self.dir + "/" + f.system])   # the system's, if it was its last
+            run(["rmdir", self.dir + "/" + f.system])   # the system's, if it was its last
             print f"{PROG}: {f.target} taken out -- {f.sub}'s last: its clone removed from {self.dir}"
         return ""
 
