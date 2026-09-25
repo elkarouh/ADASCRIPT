@@ -932,7 +932,8 @@ def files_by_type(files: []str) -> str:
 def list_files_by_committer(report: Path):
     """By committer, the most first, how many files REPORT's changes touch,
     and how many of each type (extension); then the branches with no view
-    build, if any."""
+    build, if any. A change no branch is credited with is left out: the
+    detailed listing lists it."""
     let changes: ChangeList = read_changes(report)
     var files: {Committer}[]str = {:}
     for who in changes.committers:
@@ -940,11 +941,10 @@ def list_files_by_committer(report: Path):
         for branch in changes.branches[who]:
             theirs.extend(changes.files[branch])
         files[who] = files_of(theirs)
-    let unattributed: []str = files_of(changes.unattributed)
     # the most files first; as they first appear in the report when as many
     let order: [](int, int, Committer) = sorted([(-len(files[who]), i, who) for i, who in enumerate(changes.committers)])
-    var width: int = len("(no branch)") if len(unattributed) > 0 else 0
-    var count_width: int = len(str(len(unattributed)))
+    var width: int = 0
+    var count_width: int = 0
     for who in changes.committers:
         width = max(width, len(who))
         count_width = max(count_width, len(str(len(files[who]))))
@@ -952,9 +952,6 @@ def list_files_by_committer(report: Path):
         let noun: str = "file " if -n == 1 else "files"
         puts("Wb", who)
         print " " * (width - len(who)) + f"  {str(-n).rjust(count_width)} {noun}: " + files_by_type(files[who])
-    if len(unattributed) > 0:
-        let noun: str = "file " if len(unattributed) == 1 else "files"
-        print "(no branch)".ljust(width) + f"  {str(len(unattributed)).rjust(count_width)} {noun}: " + files_by_type(unattributed)
     print
     # the branches not built yet, in the order of the table
     var unbuilt: []BranchName = []

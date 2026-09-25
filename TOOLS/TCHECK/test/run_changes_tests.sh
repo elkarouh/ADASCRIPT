@@ -126,11 +126,10 @@ check "-tool without a name: says so"            1 "$("$TCHECK" -no-color -focus
 check "-tool with a command line: refused"       1 "$("$TCHECK" -no-color -tool 'meld;rm' -focus changes 30.0.0.9 2>&1 | grep -c "not a diff tool's name: meld;rm" || true)"
 SHORT=$("$TCHECK" -no-color -focus changes -short 30.0.0.9)
 check "the files per committer, by type, most first" "CHANGES BY COMMITTER
-dave         10 files: 8 txt, 2 html
-alice         4 files: 2 adb, 2 ads
-bob           2 files: 1 adb, 1 ads
-carol         1 file : 1 (no extension)
-(no branch)   1 file : 1 out" "$(printf '%s\n' "$SHORT" | sed -n '/^CHANGES BY COMMITTER$/,/^$/p' | grep .)"
+dave   10 files: 8 txt, 2 html
+alice   4 files: 2 adb, 2 ads
+bob     2 files: 1 adb, 1 ads
+carol   1 file : 1 (no extension)" "$(printf '%s\n' "$SHORT" | sed -n '/^CHANGES BY COMMITTER$/,/^$/p' | grep .)"
 check "then the branches with no view build"     "NO VIEW BUILD FOUND FOR THESE BRANCHES
   dave.user_guide
   bob.also_b" "$(printf '%s\n' "$SHORT" | sed -n '/^NO VIEW BUILD FOUND FOR THESE BRANCHES$/,/^$/p' | grep .)"

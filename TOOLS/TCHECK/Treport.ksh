@@ -458,6 +458,8 @@ function count_line {           # COUNT WIDTH TYPES: "  4 files: 2 adb, 2 ads"
 REPORT=""                       # the changes report, once list_changes found it
 
 function list_changes {         # BASELINE: by committer, the most first, their files by type
+    # (a change no branch is credited with is left out: the detailed
+    # listing lists it)
     typeset who branch entries line
     typeset -i width=0 count_width=0 k
     typeset -a counts types
@@ -477,12 +479,6 @@ function list_changes {         # BASELINE: by committer, the most first, their 
         ((${#who} > width)) && width=${#who}
         ((${#COUNT} > count_width)) && count_width=${#COUNT}
     done
-    if [[ -n $UNATTRIBUTED ]]; then
-        files_by_type $UNATTRIBUTED
-        typeset unattributed_count=$COUNT unattributed_types=$REPLY
-        ((${#UNATTRIBUTED_LABEL} > width)) && width=${#UNATTRIBUTED_LABEL}
-        ((${#COUNT} > count_width)) && count_width=${#COUNT}
-    fi
     # the most files first; as they first appear in the report when as many
     for ((k = 0; k < ${#COMMITTERS[@]}; k++)); do
         print -r -- "${counts[k]} $k"
@@ -493,10 +489,6 @@ function list_changes {         # BASELINE: by committer, the most first, their 
         printf '%*s' $((width - ${#who})) ""
         count_line "${counts[k]}" $count_width "${types[k]}"
     done
-    if [[ -n $UNATTRIBUTED ]]; then
-        printf '%-*s' $width "$UNATTRIBUTED_LABEL"
-        count_line "$unattributed_count" $count_width "$unattributed_types"
-    fi
     print
     # the branches not built yet, in the order of the table
     typeset unbuilt=""
@@ -517,7 +509,6 @@ function list_changes {         # BASELINE: by committer, the most first, their 
         print
     fi
 }
-UNATTRIBUTED_LABEL="(no branch)"
 
 function list_detailed_changes { # BASELINE: each file, its commits, ..., diffs
     typeset reference who branch i report=$REPORT

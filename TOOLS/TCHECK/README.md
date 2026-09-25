@@ -52,8 +52,11 @@ CHANGES BY COMMITTER
 acicek       50 files: 23 adb, 21 ads, 2 idl, 1 el, 1 out, 1 ssm, 1 unfiltered
 ehristea     27 files: 13 adb, 11 ads, 3 idl
 bss           1 file : 1 (no extension)
-(no branch)   1 file : 1 out
 ```
+
+A change no user branch is credited with -- only integration merges or
+baseline syncs above it -- is not counted here; the detailed listing
+lists it, under "Files with no branch merged above them".
 
 Then the branches not built yet, if any -- no `build_*` under
 `/cm/ot/TACT/TACT_CONFIG.<USER>.<BRANCH>`:
