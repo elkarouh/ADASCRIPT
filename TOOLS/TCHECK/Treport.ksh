@@ -40,7 +40,7 @@
 #
 # Environment: TCHECK_CM_OT, the CM tree (default /cm/ot);
 # CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY, the NM workspace; TCHECK_NM_CACHE,
-# where to clone without one (default ~/.cache/tcheck/NM).
+# where to clone without one (default ~/Downloads/.cache/tcheck/NM).
 
 # Portable across ksh93 and zsh in ksh emulation -- a /bin/ksh that is zsh:
 # no .sh.match (a regex only says whether a line matches; the fields come
@@ -291,7 +291,7 @@ function elisp_string {         # TEXT -> REPLY, as an Emacs Lisp string literal
 
 function nm_cache {             # -> REPLY: where the diff links clone NM's
     # repositories, from Bitbucket, when there is no workspace
-    REPLY=${TCHECK_NM_CACHE:-$HOME/.cache/tcheck/NM}
+    REPLY=${TCHECK_NM_CACHE:-$HOME/Downloads/.cache/tcheck/NM}
 }
 
 function split_file {           # FILE -> SUB REST: its submodule, the path in it
@@ -673,8 +673,8 @@ function list_detailed_changes { # BASELINE: each file, its commits, ..., diffs
     print -r -- "already needs the commits and the baseline tags fetched:"
     print -r -- '    git -C $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY/<system>/<subsystem> fetch --tags'
     print -r -- "Without a workspace (CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY unset), they clone the"
-    print -r -- "file's repository from Bitbucket into \$TCHECK_NM_CACHE (~/.cache/tcheck/NM), and"
-    print -r -- "fetch there what it lacks."
+    print -r -- "file's repository from Bitbucket into \$TCHECK_NM_CACHE (default"
+    print -r -- "~/Downloads/.cache/tcheck/NM), and fetch there what it lacks."
     print
     for who in "${COMMITTERS[@]}"; do
         printf '%s' "===================================== Files committed by user "

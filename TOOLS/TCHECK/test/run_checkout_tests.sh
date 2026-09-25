@@ -154,8 +154,24 @@ check "...one only a newer revision has: moved there" "c 3 $(git -C "$up" rev-pa
 check "...the others still there"                    "a 2 b 3" "$(cat "$csub/sources/a.adb" "$csub/sources/b.adb" | tr '\n' ' ' | sed 's/ $//')"
 rc=0; out=$("$TCHECKOUT" -cache "$C" -rev 30.0.0.9 TACT/UIF/sources/b.adb 2>&1) || rc=$?
 check "...a revision Bitbucket lacks: said so"       "1 1" "$rc $(printf '%s\n' "$out" | grep -c 'no 30.0.0.9 in')"
+check "...-l: the files in the cache"                "TACT/UIF/sources/b.adb TACT/UIF/sources/a.adb TACT/UIF/sources/c.adb" \
+    "$("$TCHECKOUT" -cache "$C" -l | tr '\n' ' ' | sed 's/ $//')"
+check "...no workspace: the cache by default" "TACT/UIF/sources/b.adb TACT/UIF/sources/a.adb TACT/UIF/sources/c.adb" \
+    "$(cd / && CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY= TCHECK_NM_CACHE=$C "$TCHECKOUT" -l | tr '\n' ' ' | sed 's/ $//')"
+check "...~/Downloads/.cache/tcheck/NM without it"   "$WORK/Downloads/.cache/tcheck/NM/TACT/UIF" \
+    "$(cd / && CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY= "$TCHECKOUT" -rev 30.0.0.2 TACT/UIF/sources/a.adb >/dev/null 2>&1; ls -d "$WORK"/Downloads/.cache/tcheck/NM/*/*)"
+out=$("$TCHECKOUT" -cache "$C" -u TACT/UIF/sources/a.adb 2>&1) || { echo "$out"; exit 1; }
+check "...-u: the file taken out"                    "no TACT/UIF/sources/b.adb TACT/UIF/sources/c.adb" \
+    "$([ -e "$csub/sources/a.adb" ] && echo yes || echo no) $("$TCHECKOUT" -cache "$C" -l | tr '\n' ' ' | sed 's/ $//')"
+rc=0; out=$("$TCHECKOUT" -cache "$C" -u TACT/UIF/sources/a.adb 2>&1) || rc=$?
+check "...not twice"                                 "1 1" "$rc $(printf '%s\n' "$out" | grep -c 'a.adb is not checked out')"
+printf 'mine\n' >> "$csub/sources/b.adb"
 rc=0; out=$("$TCHECKOUT" -cache "$C" -u TACT/UIF/sources/b.adb 2>&1) || rc=$?
-check "...not -u"                                    "1 1" "$rc $(printf '%s\n' "$out" | grep -c 'for a workspace')"
+check "...nor a file with changes"                   "1 1" "$rc $(printf '%s\n' "$out" | grep -c 'has changes')"
+git -C "$csub" checkout -q -- sources/b.adb
+"$TCHECKOUT" -cache "$C" -u TACT/UIF/sources/b.adb >/dev/null 2>&1
+out=$("$TCHECKOUT" -cache "$C" -u TACT/UIF/sources/c.adb 2>&1) || { echo "$out"; exit 1; }
+check "...the last: the clone removed"               "1 " "$(printf '%s\n' "$out" | grep -c 'clone removed') $(ls -A "$C")"
 if command -v emacs >/dev/null 2>&1; then
     rm -rf "$C"
     f=$csub/sources/b.adb

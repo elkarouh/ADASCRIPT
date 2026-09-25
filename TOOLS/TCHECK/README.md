@@ -124,13 +124,13 @@ NET DIFF    : #emacs:(call-process-shell-command "git -C /…/NM/IFPS/CUA_IDL di
 
 Without a workspace (`$CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY` unset), the
 links work in a cache instead, `$TCHECK_NM_CACHE` (default
-`~/.cache/tcheck/NM`): the first click clones the file's repository from
-Bitbucket into it, without its files' contents, and every click fetches the
+`~/Downloads/.cache/tcheck/NM`): the first click clones the file's
+repository from Bitbucket into it, without its files' contents, and every click fetches the
 commits and tags compared when the cache lacks them -- it keeps up with
 Bitbucket:
 
 ```
-DIFF        : #emacs:(when (eql 0 (shell-command "Tcheckout -cache /home/me/.cache/tcheck/NM -rev c3fb81031 -rev c3fb81031^ TACT/UIF/sources/b.adb")) (vc-version-ediff (list "/home/me/.cache/tcheck/NM/TACT/UIF/sources/b.adb") "c3fb81031^" "c3fb81031"))
+DIFF        : #emacs:(when (eql 0 (shell-command "Tcheckout -cache /home/me/Downloads/.cache/tcheck/NM -rev c3fb81031 -rev c3fb81031^ TACT/UIF/sources/b.adb")) (vc-version-ediff (list "/home/me/Downloads/.cache/tcheck/NM/TACT/UIF/sources/b.adb") "c3fb81031^" "c3fb81031"))
 ```
 
 The path's `<system>/<subsystem>` is a submodule of the NM workspace
@@ -257,7 +257,9 @@ recognized by server"): slower, the same result.
 outside one:
 
 ```
-Tcheckout -cache DIR [-rev REV]... <system>/<subsystem>/<path>
+Tcheckout [-cache DIR] [-rev REV]... <system>/<subsystem>/<path>
+Tcheckout [-cache DIR] -u <system>/<subsystem>/<path>
+Tcheckout [-cache DIR] -l [<system>/<subsystem>]
 ```
 
 The file's repository, `$TCHECK_NM_URL/<system>.<subsystem>.git` in lower
@@ -265,8 +267,12 @@ case (`TCHECK_NM_URL` defaults to
 `https://mirror-cma.bitbucket.cfmu.corp.eurocontrol.int/scm/nm`), is cloned
 alone into `DIR/<system>/<subsystem>`, as above, and the file checked out
 at the first `REV` that has it. The `REV`s -- what the diff compares -- are
-fetched when the clone lacks them. `rm -rf` the cache, or part of it, to
-free the space. `make test` runs
+fetched when the clone lacks them. Without a workspace, `-cache` is the
+default: `$TCHECK_NM_CACHE`, or `~/Downloads/.cache/tcheck/NM`.
+
+`-l` and `-u` work on the cache too (`Tcheckout -l` outside a workspace
+lists it); `-u` of a repository's last file removes the repository from the
+cache. `make test` runs
 `test/run_checkout_tests.sh`, against repositories it builds.
 
 ### make_comparable

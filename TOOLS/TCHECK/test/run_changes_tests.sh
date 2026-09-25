@@ -98,8 +98,8 @@ check "an ediff link per commit" \
 DIFF        : #emacs:(vc-version-ediff (list "/nm/TACT/UIF/sources/b.adb") "13e00da4a^" "13e00da4a")
 DIFF        : #emacs:(vc-version-ediff (list "/nm/TACT/UIF/sources/b.adb") "bc399bc5f^" "bc399bc5f")' \
     "$(entry alice b.adb | grep '^DIFF' | unwrap)"
-check "no workspace: a clone from Bitbucket, in ~/.cache" \
-    'DIFF        : #emacs:(when (eql 0 (shell-command "Tcheckout -cache HOME/.cache/tcheck/NM -rev 33340af6c -rev 33340af6c^ TACT/UIF/sources/b.adb")) (vc-version-ediff (list "HOME/.cache/tcheck/NM/TACT/UIF/sources/b.adb") "33340af6c^" "33340af6c"))' \
+check "no workspace: a clone from Bitbucket, in ~/Downloads" \
+    'DIFF        : #emacs:(when (eql 0 (shell-command "Tcheckout -cache HOME/Downloads/.cache/tcheck/NM -rev 33340af6c -rev 33340af6c^ TACT/UIF/sources/b.adb")) (vc-version-ediff (list "HOME/Downloads/.cache/tcheck/NM/TACT/UIF/sources/b.adb") "33340af6c^" "33340af6c"))' \
     "$(CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY= HOME=$WORK "$TCHECK" -no-color -focus changes 30.0.0.9 | awk '/user bob /{on=1} on' | grep -m1 '^DIFF' | sed "s|$WORK|HOME|g")"
 check "a ticket only one branch lists wins over nearest" "FILE CHANGED: TACT/UIF/sources/d.adb" \
     "$(section alice | grep '^FILE .*d\.adb$')"

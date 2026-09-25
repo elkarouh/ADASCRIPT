@@ -761,10 +761,10 @@ def elisp_string(text: str) -> str:
 
 def nm_cache() -> str:
     """Where the diff links clone NM's repositories, from Bitbucket, when
-    there is no workspace: $TCHECK_NM_CACHE, or ~/.cache/tcheck/NM."""
+    there is no workspace: $TCHECK_NM_CACHE, or ~/Downloads/.cache/tcheck/NM."""
     let cache: str = $TCHECK_NM_CACHE
     let home: str = $HOME
-    cache if cache != "" else f"{home}/.cache/tcheck/NM"
+    cache if cache != "" else f"{home}/Downloads/.cache/tcheck/NM"
 
 def nm_root() -> str:
     """The NM workspace, or, without one, the cache standing in for it."""
@@ -1081,8 +1081,8 @@ def list_detailed_changes(baseline: str, user: Committer):
     print "already needs the commits and the baseline tags fetched:"
     print "    git -C $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY/<system>/<subsystem> fetch --tags"
     print "Without a workspace (CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY unset), they clone the"
-    print "file's repository from Bitbucket into $TCHECK_NM_CACHE (~/.cache/tcheck/NM), and"
-    print "fetch there what it lacks."
+    print "file's repository from Bitbucket into $TCHECK_NM_CACHE (default"
+    print "~/Downloads/.cache/tcheck/NM), and fetch there what it lacks."
     print
     for who in changes.committers:
         stdout.write("===================================== Files committed by user ")

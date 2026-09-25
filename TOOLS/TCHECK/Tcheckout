@@ -6,7 +6,9 @@
 #   Tcheckout [-root DIR] <system>/<subsystem>/<path>
 #   Tcheckout [-root DIR] -u <system>/<subsystem>/<path>
 #   Tcheckout [-root DIR] -l [<system>/<subsystem>]
-#   Tcheckout -cache DIR [-rev REV]... <system>/<subsystem>/<path>
+#   Tcheckout [-cache DIR] [-rev REV]... <system>/<subsystem>/<path>
+#   Tcheckout [-cache DIR] -u <system>/<subsystem>/<path>
+#   Tcheckout [-cache DIR] -l [<system>/<subsystem>]
 #
 # The file's submodule, <system>/<subsystem>, of the NM workspace (-root, or
 # $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY):
@@ -36,14 +38,17 @@
 # another server. A server that does not filter (git warns "filtering not
 # recognized by server") gives a full clone: slower, the same result.
 #
-# -cache: no workspace -- the diff links of a report made outside one. The
-# file's repository is cloned alone, from Bitbucket, into DIR/<system>/
-# <subsystem> -- without its files' contents, as above -- the file checked
-# out at the first REV that has it; the REVs, those the diffs compare, are
-# fetched when missing: the cache keeps up with Bitbucket. The repository
-# is $TCHECK_NM_URL/<system>.<subsystem>.git, in lower case; TCHECK_NM_URL
-# defaults to https://mirror-cma.bitbucket.cfmu.corp.eurocontrol.int/scm/nm.
-# rm -rf DIR, or part of it, to free the space.
+# -cache: no workspace -- the diff links of a report made outside one; the
+# cache is DIR, else, with no workspace either, $TCHECK_NM_CACHE (default
+# ~/Downloads/.cache/tcheck/NM). The file's repository is cloned alone, from
+# Bitbucket, into DIR/<system>/<subsystem> -- without its files' contents,
+# as above -- the file checked out at the first REV that has it; the REVs,
+# those the diffs compare, are fetched when missing: the cache keeps up
+# with Bitbucket. The repository is $TCHECK_NM_URL/<system>.<subsystem>.git,
+# in lower case; TCHECK_NM_URL defaults to
+# https://mirror-cma.bitbucket.cfmu.corp.eurocontrol.int/scm/nm.
+# -l and -u work there too; -u of a repository's last file removes the
+# repository from the cache.
 #
 # Needs git 2.25 or later (sparse-checkout).
 
@@ -76,11 +81,39 @@ parse_target() {        # <system>/<subsystem>/<path> -> target system sub file
     sub=$system/${rest%%/*}; file=${rest#*/}
 }
 
+[ -n "$cache" ] || [ -n "$root" ] || cache=${TCHECK_NM_CACHE:-$HOME/Downloads/.cache/tcheck/NM}
 if [ -n "$cache" ]; then
-    [ $mode = checkout ] || die "-u and -l are for a workspace; rm -rf the cache's repositories instead"
-    [ $# -eq 1 ] || die "usage: $PROG -cache DIR [-rev REV]... <system>/<subsystem>/<path>"
+    if [ $mode = list ]; then
+        [ $# -le 1 ] || die "usage: $PROG [-cache DIR] -l [<system>/<subsystem>]"
+        only=${1%/}
+        for repo in "$cache"/*/*; do
+            [ -e "$repo/.git" ] || continue
+            path=${repo#"$cache"/}
+            [ -z "$only" ] || [ "$path" = "$only" ] || continue
+            git -C "$repo" sparse-checkout list | sed "s|^/*|$path/|"
+        done
+        exit 0
+    fi
+    [ $# -eq 1 ] || die "usage: $PROG [-cache DIR] [-u | -rev REV...] <system>/<subsystem>/<path>"
     parse_target "$1"
     work=$cache/$sub
+    if [ $mode = uncheckout ]; then
+        [ -e "$work/.git" ] || die "$sub is not in the cache $cache"
+        git -C "$work" sparse-checkout list | grep -qxF "/$file" || die "$target is not checked out"
+        [ -z "$(git -C "$work" status --porcelain -- "$file")" ] ||
+            die "$target has changes: not taken out"
+        others=$(git -C "$work" sparse-checkout list | grep -vxF "/$file")
+        if [ -n "$others" ]; then
+            printf '%s\n' "$others" | git -C "$work" sparse-checkout set --no-cone --stdin ||
+                die "could not take $file out of $work"
+            echo "$PROG: $target taken out"
+        else
+            rm -rf "$work" || die "could not remove $work"
+            rmdir "$cache/$system" 2>/dev/null
+            echo "$PROG: $target taken out -- $sub's last: its clone removed from $cache"
+        fi
+        exit 0
+    fi
     url=${TCHECK_NM_URL:-https://mirror-cma.bitbucket.cfmu.corp.eurocontrol.int/scm/nm}/$(printf '%s' "$system.${sub#*/}" | tr 'A-Z' 'a-z').git
     fresh=""
     if [ ! -e "$work/.git" ]; then
