@@ -150,7 +150,11 @@ class Workspace_T:
     def submodules(self) -> [](Name_T, Sub_T):
         """Each submodule's name and path, from .gitmodules."""
         let listing: str = git_out(self.root, ["config", "-f", ".gitmodules", "--get-regexp", "^submodule\\..*\\.path$"])
-        [(l.split()[0].removeprefix("submodule.").removesuffix(".path"), l.split()[1]) for l in listing.splitlines() if len(l.split()) == 2]
+        var found: [](Name_T, Sub_T) = []
+        for line in listing.splitlines():     # submodule.TACT.UIF.path TACT/UIF
+            let (key, path) = line.split(" ", 1)
+            found.append((key.removeprefix("submodule.").removesuffix(".path"), path))
+        return found
 
     def name_of(self, sub: Sub_T) -> Name_T:
         for name, path in self.submodules():
@@ -193,10 +197,11 @@ class Workspace_T:
                 die(f"{f.sub} is checked out, without {f.file}: not at a commit that has it -- not moved")
             return
 
-        # the commit the superproject records for SUB
-        let commits: []Rev_T = [l.split()[2] for l in git_out(self.root, ["ls-tree", "HEAD", "--", f.sub]).splitlines() if l.split()[1] == "commit"]
-        die(f"the superproject records no commit for {f.sub}") if commits == []
-        let commit: Rev_T = commits[0]
+        # the commit the superproject records for SUB: "160000 commit <sha>\t<path>"
+        let entry: str = git_out(self.root, ["ls-tree", "HEAD", "--", f.sub])
+        die(f"the superproject records no commit for {f.sub}") if entry == ""
+        let (mode, kind, commit, path) = entry.split()
+        die(f"the superproject records no commit for {f.sub}") if kind != "commit"
         git_or_die(self.root, ["submodule", "--quiet", "init", "--", f.sub], f"could not register {f.sub}")
         let url: Url_T = git_out(self.root, ["config", "submodule." + name + ".url"])
         die(f"no URL for submodule {name}") if url == ""
