@@ -614,6 +614,14 @@ def to_nim(self, indent=0, is_virtual=False, class_name=None, parent_name=None, 
                     # Skip forward declarations for iterators and templates (Nim doesn't support them)
                     if sig.lstrip().startswith(("iterator ", "template ")):
                         continue
+                    # Only an operator is declared here, always: Nim calls
+                    # one with no call in sight -- `$` in echo and fmt, `<`
+                    # in sort -- so its first use cannot be found in the
+                    # text. Any other method is declared ahead of its first
+                    # caller, and only when there is one above it, by
+                    # _declare_before_use in ady2nim.
+                    if not sig.split(None, 1)[1].lstrip().startswith("`"):
+                        continue
                     fwd_lines.append(sig)
         if fwd_lines and _generic_ctx:
             ind0 = _ind(base_indent)

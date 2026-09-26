@@ -251,9 +251,10 @@ and one rule about `var` survives into Adascript. They matter as soon as a progr
 whole run — a `Report` holding the options and the data it reports on, say — because
 that class then sits in the middle of a file full of helpers.
 
-**A method may call a sibling method defined below it.** The transpiler emits
-forward declarations for a class's own methods, so methods are mutually
-visible regardless of order. Write them in reading order:
+**A method may call a sibling method defined below it.** The transpiler
+declares a method ahead of its first caller -- only when something calls it
+early -- so methods are mutually visible regardless of order. Write them in
+reading order:
 
 ```python
 class Report:

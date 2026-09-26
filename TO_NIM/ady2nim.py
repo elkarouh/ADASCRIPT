@@ -340,8 +340,8 @@ import re as _re_order
 _TOP_TYPE = _re_order.compile(r'^type\b')
 _TOP_CONST = _re_order.compile(r'^const\s+(\w+)')
 _TOP_ROUTINE = _re_order.compile(r'^(proc|func|method|iterator|template|macro|converter)\s')
-_DECLARABLE = _re_order.compile(r'^(?:proc|func)\s+(\w+)\*?\s*[\[(]')
-_CALLED = _re_order.compile(r'\b([A-Za-z_]\w*)\s*\(')
+_DECLARABLE = _re_order.compile(r'^(?:proc|func|method)\s+(\w+)\*?\s*[\[(]')
+_CALLED = _re_order.compile(r'(?:\b(\w+)\s*)?(\.\s*)?\b([A-Za-z_]\w*)\s*\(')
 _IDENT = _re_order.compile(r'\b[A-Za-z_]\w*\b')
 _HEADER_END = _re_order.compile(r'^(.*\S)\s+=(\s+#.*)?$')
 
@@ -366,6 +366,91 @@ def _top_level_extent(lines, i):
     return j
 
 
+def _code_only(line):
+    """LINE with what is not code blanked: string contents -- except the
+    {...} of a fmt string, which is code -- and a trailing comment."""
+    out, i, n = [], 0, len(line)
+    while i < n:
+        ch = line[i]
+        if ch == '#':
+            break
+        if ch == "'" and i + 2 < n and line[i + 2] == "'":
+            out.append("' '")                       # a char literal
+            i += 3
+            continue
+        if ch == '"':
+            fmt = line[max(0, i - 3):i] == 'fmt' or line[i - 1:i] == '&'
+            j, depth, kept = i + 1, 0, []
+            while j < n and not (line[j] == '"' and depth == 0):
+                c = line[j]
+                if c == '\\':
+                    j += 2
+                    continue
+                if fmt and c == '{':
+                    depth += 1
+                elif fmt and c == '}' and depth:
+                    depth -= 1
+                    kept.append(' ')
+                elif depth:
+                    kept.append(c)
+                j += 1
+            out.append('"' + ''.join(kept) + '"')
+            i = j + 1
+            continue
+        out.append(ch)
+        i += 1
+    return ''.join(out)
+
+
+def _arguments(text, open_at):
+    """How many arguments the call whose '(' is at OPEN_AT passes."""
+    depth, count, empty = 0, 0, True
+    for ch in text[open_at:]:
+        if ch in '([{':
+            depth += 1
+            if depth == 1:
+                continue
+        elif ch in ')]}':
+            depth -= 1
+            if depth == 0:
+                break
+        if depth == 1 and ch == ',':
+            count += 1
+        elif not ch.isspace():
+            empty = False
+    return 0 if empty else count + 1
+
+
+def _arity(sig):
+    """(fewest, most) arguments SIG, a routine header, takes."""
+    start = sig.find('(')
+    depth, parts, cur = 0, [], ''
+    for ch in sig[start + 1:]:
+        if ch in '([{':
+            depth += 1
+        elif ch in ')]}':
+            if depth == 0:
+                break
+            depth -= 1
+        if ch == ',' and depth == 0:
+            parts.append(cur)
+            cur = ''
+        else:
+            cur += ch
+    if cur.strip():
+        parts.append(cur)
+    if any('varargs[' in p for p in parts):
+        return 0, 10 ** 6
+    fewest = sum(1 for p in parts if '=' not in p)
+    return fewest, len(parts)
+
+
+def _first_param_type(sig):
+    """The type of SIG's first parameter, without `var`: its receiver."""
+    m = _re_order.search(r'\(\s*\w+\s*:\s*(?:var\s+)?([\w.]+)', sig)
+    return m.group(1) if m else ''
+
+
 def _declare_before_use(lines):
     """LINES, the Nim module, rearranged so that nothing depends on the
     order the Adascript source defined things in.
@@ -388,6 +473,11 @@ def _declare_before_use(lines):
     emitter's, for methods) is dropped, since Nim rejects a second one.
     Iterators, templates and macros cannot be declared ahead in Nim, so
     those still come before their first use.
+
+    Only what is needed is declared. A call is matched to a definition by
+    name and number of arguments, and `x.name(...)` to x's class when the
+    caller says what it is -- self, a parameter, a declared local; string
+    contents and comments are not calls, though a fmt string's {...} is.
     """
     # -- types ------------------------------------------------------------
     consts = {}
@@ -456,12 +546,27 @@ def _declare_before_use(lines):
     # the earliest routine calling each definition from above it
     earliest = {}        # (def index) -> caller header index
     for head, stop in routines:
-        called = set()
+        # what the caller's own names are: its parameters, its declared locals
+        known = {m.group(1): m.group(2) for m in _re_order.finditer(
+            r'\b(\w+)\s*:\s*(?:var\s+)?([A-Za-z_][\w.]*)', '\n'.join(lines[head:stop]))}
         for ln in lines[head + 1:stop]:
-            called.update(_CALLED.findall(ln))
-        for name in called:
-            for at, sig in defs.get(name, ()):
-                if at > head and head < earliest.get(at, at):
+            code = _code_only(ln)
+            for m in _CALLED.finditer(code):
+                word, dot, name = m.group(1), m.group(2), m.group(3)
+                if name not in defs:
+                    continue
+                # `x.name(a)` passes x too; x's class, when the caller says it
+                receiver = word if dot else None
+                given = _arguments(code, m.end() - 1) + (1 if dot else 0)
+                receiver_type = known.get(receiver) if receiver else None
+                for at, sig in defs[name]:
+                    if at <= head or head >= earliest.get(at, at):
+                        continue
+                    fewest, most = _arity(sig)
+                    if not fewest <= given <= most:
+                        continue
+                    if receiver_type and _first_param_type(sig) != receiver_type:
+                        continue
                     earliest[at] = head
     tops = {}            # top-level let/var/const name -> line
     for i, ln in enumerate(lines):
@@ -487,7 +592,12 @@ def _declare_before_use(lines):
                     where = _top_level_extent(lines, tops[ident])
             if where > caller:
                 continue
-            insert.setdefault(where, []).append(sig)
+            if _re_order.match(r'^\w+\s+\w+\*?\s*\[', sig):
+                # a generic one: Nim warns that declaring those is deprecated
+                insert.setdefault(where, []).extend(
+                    ['{.push warning[Deprecated]: off.}', sig, '{.pop.}'])
+            else:
+                insert.setdefault(where, []).append(sig)
             drop.update(d for d in declared.get(key, ()) if d > caller)
     if not insert:
         return lines
@@ -1156,8 +1266,17 @@ def run_tests():
         ),
         (
             "class Foo:\n    def bar(self):\n        pass\n",
-            # forward-declared, so methods may call each other in any order
-            "type Foo = object of RootObj\nproc bar(self: Foo)\nproc newFoo*(): Foo =\n    result = Foo()\nproc bar(self: Foo) =\n    discard\n",
+            # nothing calls bar before it is defined: no forward declaration
+            "type Foo = object of RootObj\nproc newFoo*(): Foo =\n    result = Foo()\nproc bar(self: Foo) =\n    discard\n",
+        ),
+        (
+            "class Foo:\n    def run(self) -> int:\n        return self.helper() + 1\n"
+            "    def helper(self) -> int:\n        return 1\n",
+            # run calls helper, defined after it: helper is declared, once,
+            # ahead of run -- and nothing else is
+            "type Foo = object of RootObj\nproc newFoo*(): Foo =\n    result = Foo()\n"
+            "proc helper(self: Foo): int\nproc run(self: Foo): int =\n    return self.helper() + 1\n"
+            "proc helper(self: Foo): int =\n    return 1\n",
         ),
         # --- expressions in statements ---
         (
@@ -1275,13 +1394,10 @@ def run_tests():
         "emit(2)\n",
         "proc emit(x: int): int =\n    return x + 1\n\n"
         "type Box = object of RootObj\n    n: int\n\n"
-        # Every method is forward-declared ahead of the class body, so one
-        # may call a sibling defined after it. Pinned here because the
-        # discard cases below it are what this fixture is really about, and
-        # they would be read as regressions if the header drifted silently.
-        "proc bump(self: var Box): int\n"
-        "proc run(self: var Box)\n"
-        "proc tail(self: Box): int\n"
+        # No method is called above its definition, so none is declared
+        # ahead. Pinned here because the discard cases below it are what
+        # this fixture is really about, and they would be read as
+        # regressions if the header drifted silently.
         "proc newBox*(): Box =\n    result = Box()\n    result.n = 0\n"
         "proc bump(self: var Box): int =\n    self.n += 1\n    return self.n\n"
         "proc run(self: var Box) =\n    discard self.bump()\n"

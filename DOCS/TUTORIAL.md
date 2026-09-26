@@ -1500,7 +1500,8 @@ transpiler makes up for that, so declaration order does not matter. Only the
 last rule below, about `var`, survives into Adascript.
 
 **A method may call a sibling method defined below it** — the transpiler
-emits forward declarations for a class's own methods:
+declares the sibling ahead of its first caller (and declares nothing that
+is not called early):
 
 ```python
 class Report:
