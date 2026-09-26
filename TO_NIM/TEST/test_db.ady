@@ -4,7 +4,7 @@
 
 nimport db
 
-var conn: DB_T = DB_T(":memory:")
+var conn: DB = DB(":memory:")
 
 conn.exec("CREATE TABLE items (id INT, name TEXT, score REAL)")
 conn.exec("INSERT INTO items VALUES (?, ?, ?)", ["1", "alpha", "9.5"])

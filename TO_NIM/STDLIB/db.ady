@@ -5,7 +5,7 @@ db — thin SQLite wrapper for AdaScript programs.
 Usage:
     nimport db
 
-    var conn: DB_T = DB_T("myfile.db")
+    var conn: DB = DB("myfile.db")
 
     conn.exec("CREATE TABLE IF NOT EXISTS t (id INT, name TEXT)")
     conn.exec("INSERT INTO t VALUES (?, ?)", ["1", "hello"])
@@ -20,7 +20,7 @@ Usage:
 
 API
 ---
-    DB_T(path)                         open a database at `path` (":memory:" for in-memory)
+    DB(path)                         open a database at `path` (":memory:" for in-memory)
     conn.close()
     conn.exec(sql, params=[])          run INSERT / UPDATE / DELETE / DDL
     conn.rows(sql, params=[])  -> [][]str   all result rows (fully buffered)
@@ -33,7 +33,7 @@ params is a []str; use str() to convert numbers before passing.
 nimport db_sqlite
 
 
-class DB_T:
+class DB:
     var conn: DbConn
 
     def __init__(self, path: str):

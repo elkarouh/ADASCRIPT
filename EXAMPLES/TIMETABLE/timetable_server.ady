@@ -51,7 +51,7 @@ for arg in $@:
 
 # ── DB init ───────────────────────────────────────────────────────────────────
 
-var conn: DB_T = DB_T(db_path)
+var conn: DB = DB(db_path)
 db_init(conn)
 
 # Seed DEFAULT problem if missing

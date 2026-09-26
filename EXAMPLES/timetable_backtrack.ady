@@ -82,7 +82,7 @@ if db_path == "":
         print("")
     data = parseJson(DEFAULT_PROBLEM)
 else:
-    var conn: DB_T = DB_T(db_path)
+    var conn: DB = DB(db_path)
     db_init(conn)
     var p: str = problem_name
     var loaded: str = db_load(conn, p)

@@ -100,18 +100,18 @@ const DEFAULT_PROBLEM: str = (
 # DB helpers
 # ============================================================
 
-def db_init(conn: DB_T):
+def db_init(conn: DB):
     for stmt in DDL.split(";"):
         let s: str = stmt.strip()
         if len(s) > 0:
             conn.exec(s)
 
 
-def db_list(conn: DB_T) -> []str:
+def db_list(conn: DB) -> []str:
     return [row[0] for row in conn.rows("SELECT name FROM problems ORDER BY name")]
 
 
-def db_load(conn: DB_T, name: str) -> str:
+def db_load(conn: DB, name: str) -> str:
     let check: str = conn.value("SELECT name FROM problems WHERE name=?", [name])
     if check == "":
         return "{\"error\":\"Problem not found: " + name + "\"}"
@@ -214,7 +214,7 @@ def _jint(node: JsonNode, key: str, default_val: int = 0) -> int:
     return node[key].getInt(default_val)
 
 
-def db_save(conn: DB_T, name: str, data: JsonNode):
+def db_save(conn: DB, name: str, data: JsonNode):
     conn.exec("DELETE FROM problems WHERE name=?", [name])
     conn.exec("INSERT INTO problems(name) VALUES (?)", [name])
 
@@ -283,7 +283,7 @@ def db_save(conn: DB_T, name: str, data: JsonNode):
                  entry["slot"].getInt()'Image, entry["pref"].getStr()])
 
 
-def db_delete(conn: DB_T, name: str):
+def db_delete(conn: DB, name: str):
     conn.exec("DELETE FROM problems WHERE name=?", [name])
 
 
