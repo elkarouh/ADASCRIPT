@@ -119,8 +119,8 @@ class Baseline:
         self.dir = TACT_ROOT / ("TACT_CONFIG." + nr)
 
     def previous(self) -> Baseline:
-        let parts: []str = self.nr.split(".")
-        return Baseline(".".join(parts[0:-1]) + "." + str(int(parts[-1]) - 1))
+        let (head, tail) = self.nr.rsplit(".", 1)
+        return Baseline(f"{head}.{int(tail) - 1}")
 
     def saved_logs_dir(self, btype: BuildType) -> Path:
         """The saved_logs directory of this baseline's build of BTYPE."""
