@@ -1,5 +1,6 @@
 ## stdlib.nim -- Nim support types for HPython transpiled code
-## Provides: AnyType/ANY sentinel, FifoQueue, LifoQueue, PriorityQueue, Counter
+## Provides: AnyType/ANY sentinel, FifoQueue, LifoQueue, PriorityQueue, Counter,
+##           Result
 
 import std/deques
 import hashes
@@ -129,3 +130,57 @@ proc newLifoQueueWith*[T](first: T): LifoQueue[T] =
 converter toBool*[T](q: PriorityQueue[T]): bool = q.data.len > 0
 converter toBool*[T](q: FifoQueue[T]): bool = q.data.len > 0
 converter toBool*[T](q: LifoQueue[T]): bool = q.data.len > 0
+
+# ---------------------------------------------------------------------------
+# Result[T, E] -- a value, or the reason there is none (Adascript's
+# `Result[T, E]`). Ok is the zero value, so a `Result[None, E]` proc that
+# falls off its end has succeeded, as a plain proc does. The transpiler
+# writes the constructors with their type: `Result[int, string].ok(v)`.
+# ---------------------------------------------------------------------------
+type Result*[T, E] = object
+  case adaIsErr: bool
+  of false: adaVal: T
+  of true: adaErr: E
+
+proc ok*[T, E](R: typedesc[Result[T, E]]; v: T): Result[T, E] =
+  Result[T, E](adaIsErr: false, adaVal: v)
+proc ok*[E](R: typedesc[Result[void, E]]): Result[void, E] =
+  Result[void, E](adaIsErr: false)
+proc err*[T, E](R: typedesc[Result[T, E]]; e: E): Result[T, E] =
+  Result[T, E](adaIsErr: true, adaErr: e)
+
+proc is_ok*[T, E](r: Result[T, E]): bool = not r.adaIsErr
+proc is_err*[T, E](r: Result[T, E]): bool = r.adaIsErr
+
+proc value*[T, E](r: Result[T, E]): T =
+  ## The value of an Ok. Asking an Err for one is a bug, not a failure to
+  ## handle, so it raises the way Python's backend does.
+  if r.adaIsErr:
+    when compiles($r.adaErr):
+      raise newException(ValueError, "value of an Err: " & $r.adaErr)
+    else:
+      raise newException(ValueError, "value of an Err")
+  r.adaVal
+
+proc error*[T, E](r: Result[T, E]): E =
+  if not r.adaIsErr:
+    raise newException(ValueError, "error of an Ok")
+  r.adaErr
+
+proc value_or*[T, E](r: Result[T, E]; default: T): T =
+  if r.adaIsErr: default else: r.adaVal
+
+proc `==`*[T, E](a, b: Result[T, E]): bool =
+  ## Nim derives no == for a variant object; this is Python's __eq__.
+  if a.adaIsErr != b.adaIsErr: return false
+  if a.adaIsErr: return a.adaErr == b.adaErr
+  when T is void: true
+  else: a.adaVal == b.adaVal
+
+proc `$`*[T, E](r: Result[T, E]): string =
+  if r.adaIsErr:
+    when compiles($r.adaErr): "Err(" & $r.adaErr & ")" else: "Err"
+  else:
+    when T is void: "Ok()"
+    else:
+      when compiles($r.adaVal): "Ok(" & $r.adaVal & ")" else: "Ok"

@@ -909,54 +909,77 @@ def to_nim(self, indent=0):
     return result
 
 
-# --- do block (monadic Maybe bind) ---
-@method(do_stmt)
-def to_nim(self, indent=0):
-    """do_stmt: 'do' ':' NEWLINE INDENT (IDENTIFIER '<-' expression NL)+ DEDENT
+# --- do block (monadic bind over ?T or Result[T, E]) ---
+def _do_lines(do_node):
+    """The steps of a do: block, in order, as (name, expr_node): NAME is the
+    bound identifier of `x <- expr`, or None for a bare step `expr`.
 
-    Monadic bind block for ?T chains.  Each bind step `x <- expr`:
-      1. Evaluates expr (must return Option[T])
-      2. Short-circuits to return none(R) from the enclosing function if None
-      3. Binds the unwrapped value to x as a plain let variable
-
-    After the block all bound names are plain (non-Option) and in scope.
-
-    Node structure (inside the Several_Times of bind lines):
-      seq.nodes[0]  = _do_bind_stmt result:
-          .nodes[0] = IDENTIFIER (bind target name)
-          .nodes[1] = Sequence_Parser([]) — empty _LEFT_ARROW artifact
-          .nodes[2] = expression (the Option-returning call)
-      seq.nodes[1]  = NEWLINE node
-    """
-    import re as _re_do
-    ParserState.nim_imports.add("options")
-    ret_ann = getattr(ParserState, '_current_return_type', '')
-    _m_opt = _re_do.search(r'Option\[(.+)\]', ret_ann)
-    inner_ret = _m_opt.group(1) if _m_opt else None
-    ind = _ind(indent)
-    lines = []
-    for node in self.nodes:
+    Each line of the Several_Times is (do_bind | do_step) + NEWLINE + NL*;
+    the alternative comes through unnamed, so it is told by its shape: a
+    bind is a Sequence_Parser of IDENTIFIER, the empty arrow and the
+    expression, a step is the expression node itself."""
+    steps = []
+    for node in do_node.nodes:
         if type(node).__name__ != "Several_Times":
             continue
         for seq in node.nodes:
-            # seq is the flattened (_do_bind_stmt + NEWLINE + NL[:]) sequence.
-            # After post_process (None filtering), layout is:
-            #   seq.nodes[0] = IDENTIFIER (bind target)
-            #   seq.nodes[1] = Sequence_Parser([]) — empty _LEFT_ARROW artifact
-            #   seq.nodes[2] = expression (the Option-returning call)
-            #   seq.nodes[3] = NEWLINE (or NL) node
-            if not hasattr(seq, "nodes") or len(seq.nodes) < 3:
+            if not getattr(seq, "nodes", None):
                 continue
-            name = seq.nodes[0].to_nim()
-            expr = seq.nodes[2].to_nim()
-            tmp = f"adado{name[0].upper()}{name[1:]}"
-            ParserState.symbol_table.add(name, "auto", "let")
-            lines.append(f"{ind}let {tmp} = {expr}")
-            if inner_ret:
-                lines.append(f"{ind}if {tmp}.isNone: return none({inner_ret})")
+            line = seq.nodes[0]
+            parts = getattr(line, "nodes", None) or []
+            if (type(line).__name__ == "Sequence_Parser" and len(parts) == 3
+                    and type(parts[0]).__name__ == "IDENTIFIER"):
+                steps.append((parts[0].nodes[0], parts[2]))
+            else:
+                steps.append((None, line))
+    return steps
+
+
+@method(do_stmt)
+def to_nim(self, indent=0):
+    """do_stmt: 'do' ':' NEWLINE INDENT ((IDENTIFIER '<-')? expression NL)+ DEDENT
+
+    Monadic bind block. In a routine returning Option[R] each step is a ?T:
+    `x <- expr` evaluates it, returns none(R) from the routine if it is
+    None, and binds the unwrapped value to x as a plain let. In a routine
+    returning Result[R, E] each step is a Result: an Err is returned as the
+    routine's own Err, unchanged, and an Ok's value is bound. A bare step
+    `expr` is checked the same way and binds nothing -- the shape of a
+    Result[None, E], a step that can only fail.
+
+    After the block all bound names are plain (non-Option) and in scope.
+    """
+    import re as _re_do
+    ret_ann = getattr(ParserState, '_current_return_type', '').lstrip(": ").strip()
+    ind = _ind(indent)
+    lines = []
+    for i, (name, expr_node) in enumerate(_do_lines(self)):
+        expr = expr_node.to_nim()
+        tmp = (f"adado{name[0].upper()}{name[1:]}" if name
+               else f"adadoStep{ParserState.nim_do_steps}")
+        if not name:
+            ParserState.nim_do_steps = ParserState.nim_do_steps + 1
+        lines.append(f"{ind}let {tmp} = {expr}")
+        if ret_ann.startswith("Result["):
+            ParserState.nim_imports.add("stdlib")
+            lines.append(f"{ind}if {tmp}.is_err: return {ret_ann}.err({tmp}.error)")
+            if name:
+                lines.append(f"{ind}let {name} = {tmp}.value")
+        else:
+            if hek_nim_expr._expr_is_result(expr):
+                raise SyntaxError(
+                    f"do: step '{expr}' is a Result; a routine binding one "
+                    f"must return a Result too, to pass its Err on")
+            ParserState.nim_imports.add("options")
+            _m_opt = _re_do.search(r'Option\[(.+)\]', ret_ann)
+            if _m_opt:
+                lines.append(f"{ind}if {tmp}.isNone: return none({_m_opt.group(1)})")
             else:
                 lines.append(f"{ind}if {tmp}.isNone: return")
-            lines.append(f"{ind}let {name} = {tmp}.get()")
+            if name:
+                lines.append(f"{ind}let {name} = {tmp}.get()")
+        if name:
+            ParserState.symbol_table.add(name, "auto", "let")
     return "\n".join(lines)
 
 

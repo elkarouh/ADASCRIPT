@@ -81,6 +81,9 @@ def to_py(self):
         _t = ParserState.symbol_table.lookup(parts[0])
         if isinstance(_t, dict) and (_t.get("type") or "") == "Path":
             _reject_str_to_path(parts[0], "Path", parts[-1])
+        if (len(parts) == 2 and isinstance(_t, dict)
+                and (_t.get("type") or "").startswith("Result[")):
+            parts[1] = _py_result_wrap(parts[1])
     return " = ".join(parts)
 
 
@@ -359,6 +362,52 @@ def _zero_value(annotation, _depth=0):
     return "None"
 
 
+def _py_result_wrap(value):
+    """VALUE as a Result: `Ok(...)`/`Err(...)` as written, anything else
+    through Ok(), which passes a Result on unchanged -- so a call of a
+    routine returning one, from this module or another, is never wrapped
+    twice."""
+    v = value.strip()
+    for ctor in ("Ok(", "Err("):
+        if v.startswith(ctor) and v.endswith(")"):
+            depth = 0
+            for i, ch in enumerate(v[len(ctor) - 1:]):
+                depth += ch in "([{"
+                depth -= ch in ")]}"
+                if depth == 0:
+                    if i == len(v) - len(ctor):
+                        return v
+                    break
+    if v == "None":
+        return "Ok()"
+    # A call of a routine this module declares `-> Result[...]` is one.
+    import re as _re_rw
+    _call = _re_rw.match(r"^([A-Za-z_]\w*)\(.*\)$", v, _re_rw.DOTALL)
+    if _call and _call.group(1) in getattr(ParserState, "result_procs", set()):
+        return v
+    _sym = ParserState.symbol_table.lookup(v)
+    if isinstance(_sym, dict) and (_sym.get("type") or "").startswith("Result["):
+        return v
+    return f"Ok({v})"
+
+
+def _result_zero(annotation):
+    """A Result declared without a value holds Ok of its value type's zero,
+    as it does on Nim: `var r: Result[int, str]` is Ok(0)."""
+    inner = annotation[len("Result["):-1]
+    depth = 0
+    for i, ch in enumerate(inner):
+        depth += ch in "([{"
+        depth -= ch in ")]}"
+        if ch == "," and depth == 0:
+            inner = inner[:i]
+            break
+    inner = inner.strip()
+    if inner == "None":
+        return "Ok()"
+    return f"Ok({_zero_value(inner)})"
+
+
 @method(decl_ann_assign_stmt)
 def to_py(self):
     """decl_ann_assign_stmt: decl_keyword IDENTIFIER ':' type_annotation ('=' expression)?"""
@@ -385,9 +434,13 @@ def to_py(self):
                 _reject_str_to_path(name, annotation, value)
                 value = _wrap_seq_for_enum_array(value, annotation)
                 value = _wrap_list_for_queue(value, annotation)
+                if annotation.startswith("Result["):
+                    value = _py_result_wrap(value)
                 result += f" = {value}"
                 has_value = True
-    if not has_value:
+    if not has_value and annotation.startswith("Result["):
+        result += f" = {_result_zero(annotation)}"
+    elif not has_value:
         zero = _zero_value(annotation)
         if not (CLASS_BODY_DEPTH and zero in _MUTABLE_ZEROS):
             result += f" = {zero}"
@@ -421,13 +474,20 @@ def to_py(self):
 
 @method(return_val)
 def to_py(self):
-    """return_val: 'return' expressions"""
-    return f"return {self.nodes[0].to_py()}"
+    """return_val: 'return' expressions; in a routine returning a Result,
+    `return v` is Ok(v) and `return Err(e)` is as written."""
+    val = self.nodes[0].to_py()
+    if getattr(ParserState, "_py_return_type", "").startswith("Result["):
+        return f"return {_py_result_wrap(val)}"
+    return f"return {val}"
 
 
 @method(return_bare)
 def to_py(self):
-    """return_bare: 'return'"""
+    """return_bare: 'return' -- Ok() in a routine returning a Result, as the
+    zero-valued result is on Nim."""
+    if getattr(ParserState, "_py_return_type", "").startswith("Result["):
+        return "return Ok()"
     return "return"
 
 

@@ -174,6 +174,18 @@ def to_nim(self, prec=None):
     return result
 
 
+@method(result_type)
+def to_nim(self, prec=None):
+    """result_type: 'Result' '[' type_annotation ',' type_annotation ']'
+    -> Nim: stdlib.nim's Result[T, E]; Result[None, E], a step that can only
+    fail, is Result[void, E]."""
+    ParserState.nim_imports.add("stdlib")
+    value = self.nodes[1].to_nim()
+    if value in ("nil", "void", "None"):
+        value = "void"
+    return f"Result[{value}, {self.nodes[2].to_nim()}]"
+
+
 @method(seq_type)
 def to_nim(self, prec=None):
     """seq_type: '[]' type_annotation -> Nim: seq[T]"""

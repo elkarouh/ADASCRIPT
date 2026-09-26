@@ -182,6 +182,66 @@ def to_py(self, indent=0):
 
 
 # --- while ---
+# --- do block (monadic bind over ?T or Result[T, E]) ---
+def _do_lines(do_node):
+    """The steps of a do: block, in order, as (name, expr_node): NAME is the
+    bound identifier of `x <- expr`, or None for a bare step `expr`. (The
+    Nim backend's twin; see hek_nim_parser._do_lines.)"""
+    steps = []
+    for node in do_node.nodes:
+        if type(node).__name__ != "Several_Times":
+            continue
+        for seq in node.nodes:
+            if not getattr(seq, "nodes", None):
+                continue
+            line = seq.nodes[0]
+            parts = getattr(line, "nodes", None) or []
+            if (type(line).__name__ == "Sequence_Parser" and len(parts) == 3
+                    and type(parts[0]).__name__ == "IDENTIFIER"):
+                steps.append((parts[0].nodes[0], parts[2]))
+            else:
+                steps.append((None, line))
+    return steps
+
+
+@method(do_stmt)
+def to_py(self, indent=0):
+    """do_stmt: 'do' ':' NEWLINE INDENT ((IDENTIFIER '<-')? expression NL)+ DEDENT
+
+    In a routine returning a Result each step is a Result, and an Err is
+    returned as it is; otherwise each step is a ?T and None returns None.
+    `x <- expr` then binds the value; a bare `expr` is only checked.
+    """
+    import re as _re_do
+    ret = getattr(ParserState, "_py_return_type", "")
+    is_result = ret.startswith("Result[")
+    ind = _ind(indent)
+    lines = []
+    for name, expr_node in _do_lines(self):
+        expr = expr_node.to_py()
+        if is_result:
+            tmp = f"_ado_{name}" if name else "_ado_step"
+            lines.append(f"{ind}{tmp} = {expr}")
+            lines.append(f"{ind}if {tmp}.is_err:")
+            lines.append(f"{ind}{INDENT_STR}return {tmp}")
+            if name:
+                lines.append(f"{ind}{name} = {tmp}.value")
+            continue
+        _call = _re_do.match(r"^([A-Za-z_]\w*)\(", expr.strip())
+        if _call and _call.group(1) in getattr(ParserState, "result_procs", set()):
+            raise SyntaxError(
+                f"do: step '{expr}' is a Result; a routine binding one "
+                f"must return a Result too, to pass its Err on")
+        leave = "return None" if ret else "return"
+        if name:
+            lines.append(f"{ind}{name} = {expr}")
+            lines.append(f"{ind}if {name} is None:")
+        else:
+            lines.append(f"{ind}if {expr} is None:")
+        lines.append(f"{ind}{INDENT_STR}{leave}")
+    return "\n".join(lines)
+
+
 @method(while_stmt)
 def to_py(self, indent=0):
     """while_stmt: 'while' named_expression ':' suite ('else' ':' block)?"""
@@ -1410,10 +1470,26 @@ def to_py(self, indent=0):
         _mark_implicit_returns(_block_last_stmt(block_node))
     _outer_class_depth = _stmt.CLASS_BODY_DEPTH
     _stmt.CLASS_BODY_DEPTH = 0
+    # What `return` returns, for the Result wrapping of return statements.
+    _outer_ret = getattr(ParserState, "_py_return_type", "")
+    _ret_bare = ret_ann.strip()
+    ParserState._py_return_type = (_ret_bare[2:].strip()
+                                   if _ret_bare.startswith("->") else _ret_bare)
+    _is_result = ParserState._py_return_type.startswith("Result[")
     try:
         body = block_node.to_py(indent + 1) if block_node else ""
     finally:
         _stmt.CLASS_BODY_DEPTH = _outer_class_depth
+        ParserState._py_return_type = _outer_ret
+    # Falling off the end of a routine returning a Result is Ok -- the
+    # zero value on Nim -- and not Python's None.
+    if _is_result and body.strip():
+        _last = body.rstrip().splitlines()[-1]
+        _body_ind = _ind(indent + 1)
+        if not (_last.startswith(_body_ind)
+                and not _last[len(_body_ind):][:1].isspace()
+                and _last.strip().startswith(("return", "raise"))):
+            body = body.rstrip("\n") + f"\n{_ind(indent + 1)}return Ok()\n"
     # Implicit return: mark the statements that carry the function's value, so
     # the body renders with the keyword already in place.
     # Skip for -> None functions (they don't return a value)

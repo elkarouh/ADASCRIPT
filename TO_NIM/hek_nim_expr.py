@@ -477,6 +477,66 @@ _STRING_RETURNING_CALLS = ("adascriptEnvOr(", "getEnv(", "paramStr(",
 _OPTION_RETURNING_CALLS = ("adascriptEnvOpt(", "adascriptWhich(")
 
 
+def _ctor_arg(val, name):
+    """The argument text of VAL when VAL is exactly the call NAME(...),
+    else None: `Err(e)` -> "e", `Ok()` -> "", `Err(a).b` -> None."""
+    val = val.strip()
+    if not (val.startswith(name + "(") and val.endswith(")")):
+        return None
+    depth = 0
+    for i, ch in enumerate(val[len(name):]):
+        if ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+            if depth == 0 and i != len(val) - len(name) - 1:
+                return None
+    return val[len(name) + 1:-1].strip()
+
+
+def _expr_is_result(expr_str):
+    """True when EXPR_STR is already a Result: a Result-typed name, or a call
+    of a routine declared `-> Result[...]` -- in this file (the pre-scan in
+    ady2nim's translate() knows those defined further down) or in one it
+    nimports."""
+    import re as _re
+    expr_str = expr_str.strip()
+    sym = ParserState.symbol_table.lookup(expr_str)
+    if sym and (sym.get("type") or "").startswith("Result["):
+        return True
+    if expr_str.endswith(")"):
+        _mc = (_re.match(r'^([A-Za-z_]\w*)\(', expr_str)
+               or _re.match(r'^.+\.([A-Za-z_]\w*)\(', expr_str))
+        if _mc and _ctor_arg(expr_str, _mc.group(1)) is not None:
+            _name = _mc.group(1)
+            if _name in getattr(ParserState, "result_procs", set()):
+                return True
+            _rt = getattr(ParserState, "proc_return_types", {}).get(_name, "")
+            if _rt.startswith("Result["):
+                return True
+    return False
+
+
+def _result_wrap(val, rtype):
+    """VAL as a value of the Result type RTYPE (its Nim spelling):
+    `Err(e)` -> RTYPE.err(e), `Ok(v)` -> RTYPE.ok(v), a Result already
+    -> itself, anything else -> RTYPE.ok(val). You never write the type on
+    a constructor; this is where it comes from."""
+    ParserState.nim_imports.add("stdlib")
+    _void = rtype.startswith("Result[void,")
+    _e = _ctor_arg(val, "Err")
+    if _e is not None:
+        return f"{rtype}.err({_e})"
+    _o = _ctor_arg(val, "Ok")
+    if _o is not None:
+        return f"{rtype}.ok({_o})" if _o else f"{rtype}.ok()"
+    if val.strip() == "nil" and _void:
+        return f"{rtype}.ok()"
+    if _expr_is_result(val):
+        return val
+    return f"{rtype}.ok()" if _void else f"{rtype}.ok({val})"
+
+
 def _unescape_str_literal(text):
     """The characters a source-level string literal stands for.
 

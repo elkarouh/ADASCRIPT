@@ -86,6 +86,7 @@ STANDALONE := \
     PROJECT/dispatch.ady \
     PROJECT/test_geometry.ady \
     test_do_block.ady \
+    test_result.ady \
     test_stmt_modifier.ady \
     test_str_join.ady \
     test_which.ady \
@@ -482,6 +483,19 @@ test: compile
 	@printf '  %-42s' "test_case_trailing_comment.ady"; \
 	    $(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(EXDIR)/test_case_trailing_comment.ady | $(PYTHON) - \
 	    | grep -qx 'test_case_trailing_comment: ok' && echo OK || { echo FAIL; exit 1; }
+
+	@# do: and Result[T, E] say the same on both backends: the Python one
+	@# used to drop a do: block altogether, leaving its names unbound.
+	@echo "=== do: and Result, both backends ==="
+	@for t in test_do_block test_result; do \
+	    printf '  %-42s' "$$t.ady (python = nim)"; \
+	    $(EXDIR)/$$t > $(TMPDIR)/ady_$$t.nim.out 2>&1 || { echo "FAIL (nim)"; exit 1; }; \
+	    $(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(EXDIR)/$$t.ady > $(TMPDIR)/ady_$$t.py \
+	        && $(PYTHON) $(TMPDIR)/ady_$$t.py > $(TMPDIR)/ady_$$t.py.out 2>&1 \
+	        && cmp -s $(TMPDIR)/ady_$$t.nim.out $(TMPDIR)/ady_$$t.py.out \
+	        && echo OK || { echo FAIL; diff $(TMPDIR)/ady_$$t.nim.out $(TMPDIR)/ady_$$t.py.out; exit 1; }; \
+	    rm -f $(TMPDIR)/ady_$$t.nim.out $(TMPDIR)/ady_$$t.py $(TMPDIR)/ady_$$t.py.out; \
+	done
 
 	@echo "=== Stdin examples (piped from test_awk_sample.txt) ==="
 	@for f in $(STDIN_EXAMPLES); do \

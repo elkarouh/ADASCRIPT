@@ -308,6 +308,7 @@ singleton_tuple_type = fw("singleton_tuple_type")
 empty_tuple_type = fw("empty_tuple_type")
 primitive_type = fw("primitive_type")
 type_name = fw("type_name")
+result_type = fw("result_type")
 lent_type = fw("lent_type")
 own_param_type = fw("own_param_type")
 
@@ -334,6 +335,12 @@ type_name = filt(
     ),
     _primary
 )
+
+# --- Result[T, E]: a value, or the reason there is none ---
+# Its own rule rather than a type_name, whose subscript is an expression:
+# both arguments are types here, so `Result[[]int, []str]` reads as one.
+result_type = (filt(lambda s: s == "Result", IDENTIFIER)
+               + LBRACKET + type_annotation + COMMA + type_annotation + RBRACKET)
 
 # --- Tuple types ---
 # (int, str, float)  -> tuple[int, str, float]
@@ -395,6 +402,7 @@ basic_type = (
     | set_type
     | tuple_type
     | primitive_type
+    | result_type
     | type_name
 )
 

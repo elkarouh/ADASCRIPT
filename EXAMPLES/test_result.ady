@@ -1,0 +1,135 @@
+#!/usr/bin/env ady2nim
+"""Test: Result[T, E] -- railway-oriented error handling.
+
+A Result is a value or the reason there is none. `return v` in a routine
+returning one is Ok, `return Err(e)` the error track, and a `do:` block
+chains steps, returning the first Err as it is. `Result[None, E]` is a step
+that can only fail: falling off its end is Ok.
+
+The output is compared between the two backends by `make test`, so every
+line printed here must read the same on both.
+"""
+
+# ─── the error type: why a step failed, with what it needs to say so ────────
+
+type ErrKind_T is enum BAD_NUMBER, DIVIDE_BY_ZERO, NOT_POSITIVE
+
+type Failure_T is record:
+    kind:   ErrKind_T
+    detail: str
+
+def fail(kind: ErrKind_T, detail: str) -> Failure_T:
+    return Failure_T(kind=kind, detail=detail)
+
+# ─── switch functions: one input, two tracks out ────────────────────────────
+
+def read_number(s: str) -> Result[int, Failure_T]:
+    if len(s) == 0:
+        return Err(fail(BAD_NUMBER, "empty"))
+    for c in s:
+        if not (c >= '0' and c <= '9'):
+            return Err(fail(BAD_NUMBER, f"'{s}' is not a number"))
+    return int(s)
+
+def divide(a: int, b: int) -> Result[int, Failure_T]:
+    if b == 0:
+        return Err(fail(DIVIDE_BY_ZERO, f"{a} / 0"))
+    return a // b
+
+def check_positive(n: int) -> Result[None, Failure_T]:
+    """A step with nothing to return: it can only fail."""
+    if n <= 0:
+        return Err(fail(NOT_POSITIVE, f"got {n}"))
+
+# ─── test 1: the do: block -- bind steps and a bare one ─────────────────────
+
+def ratio(raw_a: str, raw_b: str) -> Result[int, Failure_T]:
+    do:
+        a <- read_number(raw_a)
+        b <- read_number(raw_b)
+        q <- divide(a, b)
+        check_positive(q)
+    return q
+
+def describe(r: Result[int, Failure_T]) -> str:
+    if r.is_ok:
+        return f"ok {r.value}"
+    let e: Failure_T = r.error
+    case e.kind:
+        when BAD_NUMBER:     return f"bad number: {e.detail}"
+        when DIVIDE_BY_ZERO: return f"divide by zero: {e.detail}"
+        when NOT_POSITIVE:   return f"not positive: {e.detail}"
+
+print describe(ratio("20", "4"))
+print describe(ratio("2x", "4"))     # first step fails
+print describe(ratio("20", "0"))     # middle step fails
+print describe(ratio("0", "4"))      # the bare step fails
+assert ratio("20", "4") == ratio("40", "8")
+print "test1 OK"
+
+# ─── test 2: a Result passed on, from a routine defined further down ───────
+
+def ratio_or_fail(raw_a: str, raw_b: str) -> Result[int, Failure_T]:
+    return checked_ratio(raw_a, raw_b)    # a Result already: not wrapped again
+
+def checked_ratio(raw_a: str, raw_b: str) -> Result[int, Failure_T]:
+    return ratio(raw_a, raw_b)
+
+assert ratio_or_fail("9", "3").value == 3
+assert ratio_or_fail("9", "").is_err
+print "test2 OK"
+
+# ─── test 3: Result[None, E] -- bare return and falling off the end are Ok ─
+
+def validate(n: int) -> Result[None, str]:
+    if n == 0:
+        return                           # Ok
+    if n < 0:
+        return Err("negative")
+    print f"validated {n}"               # ...and falls off the end: Ok
+
+assert validate(0).is_ok
+assert validate(5).is_ok
+assert validate(-1).error == "negative"
+print validate(0)
+print validate(-1)
+print "test3 OK"
+
+# ─── test 4: declarations, assignment, value_or ────────────────────────────
+
+var r: Result[int, str] = 7              # a plain value is Ok
+assert r.is_ok and r.value == 7
+r = Err("gone")
+assert r.is_err
+assert r.value_or(-1) == -1
+r = Ok(3)
+assert r.value_or(-1) == 3
+var zero: Result[int, str]               # no value: Ok of the zero
+assert zero.is_ok and zero.value == 0
+print r
+print "test4 OK"
+
+# ─── test 5: collecting every failure instead of stopping at the first ─────
+
+def parse_all(tokens: []str) -> Result[[]int, []str]:
+    """Validation that reports every bad token, not only the first one."""
+    var good: []int = []
+    var bad: []str = []
+    for t in tokens:
+        let p: Result[int, Failure_T] = read_number(t)
+        if p.is_ok:
+            good.append(p.value)
+        else:
+            bad.append(p.error.detail)
+    if len(bad) > 0:
+        return Err(bad)
+    return good
+
+assert parse_all(["1", "2", "3"]).value == [1, 2, 3]
+let errs: []str = parse_all(["1", "x", "", "4"]).error
+assert len(errs) == 2
+print errs[0]
+print errs[1]
+print "test5 OK"
+
+print "all Result tests passed"

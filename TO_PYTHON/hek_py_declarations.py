@@ -231,6 +231,87 @@ class Path(str):
 # without becoming a pathlib.Path, which is what the note above rules out.
 
 
+_RESULT_ALIAS = '''\
+class Result:
+    """Result[T, E]: a value, or the reason there is none.
+
+    Boxed on both sides, so `is_ok`, `value`, `error` and `value_or` are
+    the same calls here as on Nim, where it is stdlib.nim's variant object.
+    """
+    __slots__ = ("_is_err", "_v")
+
+    def __init__(self, is_err, v):
+        self._is_err = is_err
+        self._v = v
+
+    def __class_getitem__(cls, _params):
+        return cls
+
+    @property
+    def is_ok(self):
+        return not self._is_err
+
+    @property
+    def is_err(self):
+        return self._is_err
+
+    @property
+    def value(self):
+        # Asking an Err for its value is a bug, not a failure to handle.
+        if self._is_err:
+            raise ValueError(f"value of an Err: {self._v}")
+        return self._v
+
+    @property
+    def error(self):
+        if not self._is_err:
+            raise ValueError("error of an Ok")
+        return self._v
+
+    def value_or(self, default):
+        return default if self._is_err else self._v
+
+    def __eq__(self, other):
+        return (_is_result(other) and self._is_err == other._is_err
+                and self._v == other._v)
+
+    def __hash__(self):
+        return hash((self._is_err, self._v))
+
+    def __str__(self):
+        if self._is_err:
+            return f"Err({self._v})"
+        return "Ok()" if self._v is None else f"Ok({self._v})"
+
+    __repr__ = __str__
+
+
+def _is_result(v):
+    # By name: every module that names Result defines the class, so one
+    # from an imported module is another class of the same name.
+    return type(v).__name__ == "Result" and hasattr(v, "_is_err")
+
+
+def Ok(v=None):
+    # A Result already is passed on as it is: `return f(x)` in a routine
+    # returning a Result wraps its value, and f's is one.
+    return v if _is_result(v) else Result(False, v)
+
+
+def Err(e):
+    return Result(True, e)\
+'''
+
+
+def _ensure_result_alias():
+    """Define Result, Ok and Err the first time Result[T, E] is named."""
+    from hek_parsec import ParserState
+    decls = getattr(ParserState, 'py_top_decls', [])
+    if not any("class Result:" in d for d in decls):
+        decls.append(_RESULT_ALIAS)
+        ParserState.py_top_decls = decls
+
+
 def _ensure_path_alias():
     """Define Path the first time an annotation names it."""
     from hek_parsec import ParserState
@@ -289,6 +370,15 @@ def to_py(self, prec=None):
         _ensure_spawn_helper()
         return "_Job"
     return name
+
+
+@method(result_type)
+def to_py(self, prec=None):
+    """result_type: 'Result' '[' type_annotation ',' type_annotation ']'
+    -> Python: Result[T, E], the class _RESULT_ALIAS defines. Annotations
+    are not evaluated, so the arguments are there for the reader."""
+    _ensure_result_alias()
+    return f"Result[{self.nodes[1].to_py()}, {self.nodes[2].to_py()}]"
 
 
 @method(seq_type)

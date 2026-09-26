@@ -94,6 +94,7 @@ def _nim_reset():
     ParserState.nim_pragmas = set()
     ParserState.nim_init_stmts = []
     ParserState.nim_top_decls = []   # helper proc/type declarations inserted after imports
+    ParserState.nim_do_steps = 0     # numbers the temporaries of bare do: steps
     ParserState.tick_types = {}
     ParserState.class_field_types = {}
     ParserState.proc_param_types = {}
@@ -655,6 +656,13 @@ def translate(code, export_symbols=False):
     (ParserState._ref_classes,
      ParserState._all_class_methods,
      ParserState._all_class_parents) = _prescan_classes(stmts)
+    # Routines declared `-> Result[...]`, wherever they are in the file: a
+    # call of one is a Result already, and `return f(x)` passes it on rather
+    # than wrapping it in a second one -- even when f is defined below.
+    import re as _re_rp
+    ParserState.result_procs = set(_re_rp.findall(
+        r"^[ \t]*def[ \t]+(\w+)[ \t]*\((?:[^()]|\([^()]*\))*\)\s*->\s*Result\[",
+        code, _re_rp.MULTILINE))
     # Merge ref classes from nimport'd deps so subclasses of cross-file base
     # classes are also emitted as ref object.
     ParserState._ref_classes.update(_nimport_ref_classes)
@@ -1471,6 +1479,38 @@ def run_tests():
     # pairs above cannot express.  A tick the emitter does not know used to
     # fall through to `expr.attr`, so a typo -- or the pre-rename 'Choice --
     # reached nim and failed there as "undeclared field" in generated code.
+    # Result[T, E]: `return v` is Ok, `return Err(e)` the error track, each
+    # typed from the signature; Result[None, E] is Result[void, E], whose
+    # zero value -- falling off the end -- is Ok.
+    tests.append((
+        'def f(s: str) -> Result[int, str]:\n    if s == "":\n'
+        '        return Err("empty")\n    return len(s)\n',
+        'import stdlib\nproc f(s: string): Result[int, string] =\n'
+        '    if s == "":\n        return Result[int, string].err("empty")\n'
+        '    return Result[int, string].ok(len(s))\n',
+    ))
+    tests.append((
+        'def g(n: int) -> Result[None, str]:\n    if n < 0:\n'
+        '        return Err("negative")\n',
+        'import stdlib\nproc g(n: int): Result[void, string] =\n'
+        '    if n < 0:\n        return Result[void, string].err("negative")\n',
+    ))
+    # do: over Results: an Err is the routine's own, a bare step is checked.
+    tests.append((
+        'def f(s: str) -> Result[int, str]:\n    return len(s)\n\n'
+        'def h(a: str) -> Result[int, str]:\n    do:\n        x <- f(a)\n'
+        '        f(a)\n    return x\n',
+        'import stdlib\nproc f(s: string): Result[int, string] =\n'
+        '    return Result[int, string].ok(len(s))\n\n'
+        'proc h(a: string): Result[int, string] =\n'
+        '    let adadoX = f(a)\n'
+        '    if adadoX.is_err: return Result[int, string].err(adadoX.error)\n'
+        '    let x = adadoX.value\n'
+        '    let adadoStep0 = f(a)\n'
+        '    if adadoStep0.is_err: return Result[int, string].err(adadoStep0.error)\n'
+        '    return Result[int, string].ok(x)\n',
+    ))
+
     error_tests = [
         ("type C_T is enum A, B\nlet v: C_T = A\nprint v'Bogus\n",
          "unknown tick attribute 'Bogus'"),
@@ -1511,6 +1551,10 @@ def run_tests():
          "type 'A_T' is already declared, at line 1"),
         ("class A:\n    var x: int = 0\n\ntype A is enum P, Q\n",
          "type 'A' is already declared, at line 1"),
+        # A Result bound in a routine that cannot return its Err.
+        ("def f(s: str) -> Result[int, str]:\n    return len(s)\n\n"
+         "def h(a: str) -> ?int:\n    do:\n        x <- f(a)\n    return x\n",
+         "a routine binding one must return a Result too"),
     ]
     # ...except a shell command's output, whose type the command fixes.
     try:

@@ -283,6 +283,14 @@ def translate(code):
 
     stmts, leading, trailing = parse_module(code)
 
+    # Routines declared `-> Result[...]`, wherever they are in the file: a
+    # call of one is a Result already, and needs no Ok() around it.
+    import re as _re_rp
+    from hek_parsec import ParserState as _PS_rp
+    _PS_rp.result_procs = set(_re_rp.findall(
+        r"^[ \t]*def[ \t]+(\w+)[ \t]*\((?:[^()]|\([^()]*\))*\)\s*->\s*Result\[",
+        code, _re_rp.MULTILINE))
+
     # Which names live at module level has to be known before the first
     # function is emitted, since a function may assign one declared below it.
     register_module_globals(stmts)

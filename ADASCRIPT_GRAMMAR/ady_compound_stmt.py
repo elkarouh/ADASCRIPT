@@ -126,8 +126,10 @@ async_with_stmt = fw("async_with_stmt")
 # when used with '+' in grammar rules below (see ParserMeta.__add__).
 _star_expressions = fw("star_expressions")
 
-# do block (monadic Maybe bind)
+# do block (monadic bind, over ?T or Result[T, E])
 do_stmt = fw("do_stmt")
+do_bind = fw("do_bind")
+do_step = fw("do_step")
 
 # Top-level
 compound_stmt = fw("compound_stmt")
@@ -401,20 +403,24 @@ async_with_stmt = (
 )
 
 # ---------------------------------------------------------------------------
-# do block (monadic Maybe bind)
+# do block (monadic bind, over ?T or Result[T, E])
 #
 # Syntax:
 #   do:
-#       x <- expr    # bind x to the Option[T] result of expr
-#       y <- f(x)    # short-circuits to none(R) if any step is None
+#       x <- expr    # bind x to the value of expr, a ?T or a Result[T, E]
+#       y <- f(x)    # short-circuits the enclosing routine on None / Err
+#       g(y)         # a bare step: a Result[None, E], checked, no value
 #
 # '<-' is the bind arrow, tokenized as OP('<') OP('-') consecutively.
 # Each bind step desugars to:
 #   let adadoX = expr; if adadoX.isNone: return none(R); let x = adadoX.get()
+# or, in a routine returning Result[R, E], to a return of the Err unchanged.
 # After the do block all bound names are plain (non-Option) variables.
 # ---------------------------------------------------------------------------
 _LEFT_ARROW = ignore(expect(tkn.OP, "<")) + ignore(expect(tkn.OP, "-"))
-_do_bind_stmt = IDENTIFIER + _LEFT_ARROW + expression
+do_bind = IDENTIFIER + _LEFT_ARROW + expression
+do_step = expression
+_do_bind_stmt = do_bind | do_step
 do_stmt = ikw("do") + COLON + NEWLINE + NL[:] + INDENT + NL[:] + (_do_bind_stmt + NEWLINE + NL[:])[1:] + DEDENT
 
 # ---------------------------------------------------------------------------
