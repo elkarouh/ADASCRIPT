@@ -97,3 +97,30 @@ def troubleshoot_tool() -> Tool_T:
     """What troubleshoot mode compares two files with: the -tool diff tool,
     or meld."""
     DIFF_TOOL if DIFF_TOOL != "" else "meld"
+
+# ---------------------------------------------------------------------------
+# Tests: ady2nim -r LIBS/tcheck_common.ady
+# ---------------------------------------------------------------------------
+
+if __name__ == "__main__":
+    # a color spec: its letters' codes in order, an unknown letter skipped
+    assert ansi_escape("SWr") == "\x1b[1;37;41m"
+    assert ansi_escape("Kx") == "\x1b[30m"
+    assert ansi_escape("") == ""
+
+    # troubleshoot mode compares with the -tool diff tool, else meld
+    assert troubleshoot_tool() == "meld"
+    DIFF_TOOL = "kompare"
+    assert troubleshoot_tool() == "kompare"
+    DIFF_TOOL = ""
+
+    # newest: the latest entry matching the glob; Path("") when none does
+    let dir: Path = Path(run(["mktemp", "-d", "-t", "tcheck_common.XXXXXX"]).output.strip())
+    run(["touch", "-d", "2026-01-01", str(dir / "build_old")])
+    run(["touch", "-d", "2026-02-01", str(dir / "build_new")])
+    run(["touch", str(dir / "other")])
+    assert newest(dir, "build_*") == dir / "build_new"
+    assert newest(dir, "none_*") == Path("")
+    run(["rm", "-rf", str(dir)])
+
+    print "tcheck_common: all tests passed"
