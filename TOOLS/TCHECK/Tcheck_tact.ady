@@ -12,6 +12,26 @@ nimport os
 nimport time
 
 # ---------------------------------------------------------------------------
+# The domain's values, named for what they are rather than how they are held
+# ---------------------------------------------------------------------------
+type BaselineNr_T   is str   # a baseline's number: 30.0.0.132
+type BaselineName_T is str   # a baseline's full name: TACT.TACT_CONFIG.30.0.0.131, IFPS.CUA_IDL.30.0.0.122
+type BuildName_T    is str   # a build's directory: build_G!31.IP.L8
+type BuildLabel_T   is str   # a build type and subtype, as the report shows them: "IP in"
+type TestName_T     is str   # a regression test: env_updates_prior_stop.1.el
+type Ticket_T       is str   # an SC ticket: SC-134300
+type Review_T       is str   # "dpt, gru on 260922.151702", "(review-ok: no)" after it if not ok
+type NmFile_T       is str   # <system>/<subsystem>/<path>: a file, as the changes report names it
+type InSub_T        is str   # a file's path in its submodule: sources/b.adb
+type Extension_T    is str   # a file's extension, without the dot: adb; "" for none
+type Rev_T          is str   # a git revision: c3fb81031^, a baseline's tag
+type Link_T         is str   # an #emacs: link, clickable in the report's buffer
+type Command_T      is str   # a shell command line
+type Glob_T         is str   # a file-name pattern: build_G!31.*
+type ColorSpec_T    is str   # a colour, as the ksh original spelled it: sWr
+type Tool_T         is str   # a visual diff tool: meld, kompare
+
+# ---------------------------------------------------------------------------
 # ANSI color helpers
 # ---------------------------------------------------------------------------
 # The ksh version encodes colors as a spec string like "sWr" where:
@@ -33,18 +53,18 @@ var BATCH: bool = False
 # (and not -batch) the list of changes links its diffs to NAME rather than
 # to Emacs ediff; troubleshoot mode compares with it, meld when none is
 # given. "" when none is.
-var DIFF_TOOL: str = ""
+var DIFF_TOOL: Tool_T = ""
 var ONLY_NEW: bool = False
 # Set by any Tlog that reports a new or crashed test; read once at the end
 # to decide the exit status.
 var HAS_NEW_FAILURES: bool = False
 
-def ansi_escape(spec: str) -> str:
+def ansi_escape(spec: ColorSpec_T) -> str:
     """Turn a color spec like 'sWr' into an ANSI escape sequence."""
     let codes: []str = [ANSI_CODES[ch] for ch in spec if ch in ANSI_CODES]
     return "\x1b[" + ";".join(codes) + "m" if codes else ""
 
-def puts(spec: str, text: str, NEWLINE: bool = False):
+def puts(spec: ColorSpec_T, text: str, NEWLINE: bool = False):
     """Print TEXT in the color given by SPEC, without a trailing newline."""
     const RESET: str = "\x1b[0m"
     stdout.write(ansi_escape(spec) + text + RESET if COLORED else text)
@@ -93,10 +113,10 @@ class Baseline:
     its methods, and a function may not call a method of a class defined
     after it.
     """
-    nr  : str  = "" # e.g. 30.0.0.121
-    dir : Path = Path("")
+    nr  : BaselineNr_T = "" # e.g. 30.0.0.121
+    dir : Path         = Path("")
 
-    def __init__(self, nr: str):
+    def __init__(self, nr: BaselineNr_T):
         self.nr = nr
         self.dir = TACT_ROOT / ("TACT_CONFIG." + nr)
 
@@ -135,12 +155,12 @@ class Build:
     After Baseline, which it holds, and after tlog_filename, which a
     method may not call if it were defined below.
     """
-    name     : str       = "" # e.g. build_G!31.IP.L8
-    btype    : BuildType = IP
+    name     : BuildName_T = "" # e.g. build_G!31.IP.L8
+    btype    : BuildType   = IP
     baseline : Baseline
-    dir      : Path      = Path("")
+    dir      : Path        = Path("")
 
-    def __init__(self, name: str, btype: BuildType, baseline: Baseline):
+    def __init__(self, name: BuildName_T, btype: BuildType, baseline: Baseline):
         self.name = name
         self.btype = btype
         self.baseline = baseline
@@ -257,7 +277,7 @@ def parse_Tlog(filepath: Path, build_subtype: BuildSubtype) -> TlogResult:
     result.all_ok = result.crashed'Length == 0 and result.new_failing'Length == 0 and result.still_fail'Length == 0
     return result
 
-def extract_test_name(line: str) -> str:
+def extract_test_name(line: str) -> TestName_T:
     """Extract the test name from a Tlog line (second whitespace-separated field)."""
     let parts: []str = line.split()
     return parts[1] if parts'Length > 1 else line.strip()
@@ -355,12 +375,12 @@ def echo_emacs(filepath: Path):
 # Replay logs
 # ---------------------------------------------------------------------------
 
-def replay_type_from(filename: str) -> ?ReplayType:
-    """Extract the replay type from a Treplay log filename.
+def replay_type_from(file: Path) -> ?ReplayType:
+    """Extract the replay type from a Treplay log's name.
 
     Treplay_G!31.OP.L8_30.0.0.128_2026.09.16_22:01:59-performance.dt6Uo.log
     """
-    case filename:
+    case file.name:
         when /run_prequal/:   return run_prequal
         when /performance/:   return performance
         when /full_simca/:    return full_simca
@@ -374,11 +394,12 @@ def find_replays(basedir: Path) -> []Replay:
     let listing: []str = shellLines: ls -d {basedir}/build_*OP*/saved_logs/Treplay_*.log
 
     var type_to_file: [ReplayType]Path
-    for filepath in listing:
-        continue if filepath == ""
-        let rt: ?ReplayType = replay_type_from(filepath)
+    for found in listing:
+        continue if found == ""
+        let log: Path = Path(found)
+        let rt: ?ReplayType = replay_type_from(log)
         continue if rt is None
-        type_to_file[rt] = Path(filepath)
+        type_to_file[rt] = log
 
     var result: []Replay = []
     for rtype, filepath in enumerate(type_to_file):
@@ -437,7 +458,7 @@ def grep_force_trace_in_dir(dir: Path):
     if r.output.strip() != "":
         print r.output.rstrip("\n")
 
-def build_type_from(build_name: str) -> ?BuildType:
+def build_type_from(build_name: BuildName_T) -> ?BuildType:
     """Extract the build type (IP, OP, SIP) from a build directory name.
 
     build_type_from("build_G!31.IP.L8") -> IP
@@ -522,7 +543,7 @@ def process_gnatcheck(build: Build):
 
 def process_run_test_programs_log(build: Build, fast_mode: bool):
     """Find or run check_run_test_programs_log from the IP build."""
-    let baseline: str = build.baseline.nr
+    let baseline: BaselineNr_T = build.baseline.nr
     let work: Path = build.tacot_dir(normal) / "work"
     print
     hr('#')
@@ -582,17 +603,17 @@ type ChangeKind is enum CHANGED, ADDED, DELETED
 type FileChange is record:
     kind:    ChangeKind = CHANGED
     # the path in the report: <system>/<subsystem>/...
-    file:    str = ""
+    file:    NmFile_T = ""
     # every commit of the branch that touched it, in report order
     commits: []CommitHash = []
     # the SC tickets those commits name
-    tickets: []str = []
+    tickets: []Ticket_T = []
     # "<reviewers> on <date>", once per review the report gives them
-    reviews: []str = []
+    reviews: []Review_T = []
     # the component's baselines the change lies between, as tags in its
     # submodule: "Differences between IFPS.CUA_IDL.30.0.0.122 and ...123"
-    from_baseline: str = ""
-    to_baseline:   str = ""
+    from_baseline: BaselineNr_T = ""
+    to_baseline:   BaselineNr_T = ""
 
 type ChangeList is record:
     # in the order each first appears
@@ -602,19 +623,19 @@ type ChangeList is record:
     # changes with no user branch above them in their section
     unattributed: []FileChange = []
 
-def cfmu_baseline_of(tact_nr: str) -> str:
+def cfmu_baseline_of(tact_nr: BaselineNr_T) -> BaselineNr_T:
     """The CFMUTEST baseline built on TACT baseline TACT_NR -- the first
     CFMUTEST_CONFIG among what `Psort -b` answers for it -- or "" when
     there is none. Psort -b lists every build on it: the views built on it
     (their own paths) first, then the baselines, the TACT one itself too."""
     # A CM path for Psort, not a file: /cm/ot whatever TCHECK_CM_OT says.
-    let tact: str = "/cm/ot/TACT/TACT_CONFIG." + tact_nr
+    let tact: Path = Path("/cm/ot/TACT") / ("TACT_CONFIG." + tact_nr)
     for answer in shellIter: echo {!tact} | Psort -b
         if answer == /\/CFMUTEST\/CFMUTEST_CONFIG[!.](?P<nr>[^\/\s]+)$/:
             return $+{nr}
     ""
 
-def user_branch(name: str) -> BranchName:
+def user_branch(name: BranchName) -> BranchName:
     """NAME, a merge's source, when it is somebody's branch; "" when it is
     an integration merge (testadm.integration_30, any ...adm) or a baseline
     sync (CFMUTEST.CFMUTEST_CONFIG.30.0.0.104)."""
@@ -626,7 +647,7 @@ def user_branch(name: str) -> BranchName:
 def committer_of(branch: BranchName) -> Committer:
     branch.split(".")[0]
 
-def review_of(line: str) -> str:
+def review_of(line: str) -> Review_T:
     """The review a report line records -- "dpt, gru on 260922.151702",
     with "(review-ok: no)" after it unless it was ok -- or ""."""
     return "" if line != /review-ok: (?P<ok>\w+); reviewed-by: (?P<by>[^;]*); review-date: (?P<date>[^;]*);/
@@ -634,7 +655,7 @@ def review_of(line: str) -> str:
     let text: str = $+{by}.strip() + " on " + $+{date}.strip()
     text if ok == "yes" else text + " (review-ok: " + ok + ")"
 
-def credit(tickets: []str, names: []BranchName, branch_tickets: [][]str, nearest: BranchName) -> BranchName:
+def credit(tickets: []Ticket_T, names: []BranchName, branch_tickets: [][]Ticket_T, nearest: BranchName) -> BranchName:
     """The branch a change with TICKETS is credited to, among the user
     branches NAMES merged above it in its section, each with the tickets its
     merge lists: the one whose tickets cover all of the change's, else the
@@ -646,7 +667,7 @@ def credit(tickets: []str, names: []BranchName, branch_tickets: [][]str, nearest
     return sharing[0] if len(sharing) == 1
     nearest
 
-def baseline_nr(component: str) -> str:
+def baseline_nr(component: BaselineName_T) -> BaselineNr_T:
     """The baseline number of "IFPS.CUA_IDL.30.0.0.122": 30.0.0.122."""
     ".".join(component.split(".")[2:])
 
@@ -656,14 +677,14 @@ let CHANGE_KINDS: {str}ChangeKind = {"changed": CHANGED, "added": ADDED, "remove
 # What read_changes knows of the section it is in: one per component.
 type ReportSection is record:
     # its baselines: "Differences between IFPS.CUA_IDL.30.0.0.122 and ...123"
-    from_baseline: str = ""
-    to_baseline:   str = ""
+    from_baseline: BaselineNr_T = ""
+    to_baseline:   BaselineNr_T = ""
     # the branch merged last, nearest above the changes that follow;
     # "" after an integration merge
     branch:        BranchName = ""
     # the user branches merged so far, and the tickets each merge lists
     names:         []BranchName = []
-    tickets:       [][]str = []
+    tickets:       [][]Ticket_T = []
 
 def add_change(changes: ChangeList, seen: {str}int, owner: BranchName, fc: FileChange):
     """FC, credited to OWNER: a new entry, or its commits, tickets and
@@ -692,7 +713,7 @@ def add_change(changes: ChangeList, seen: {str}int, owner: BranchName, fc: FileC
         if r not in changes.files[owner][i].reviews:
             changes.files[owner][i].reviews.append(r)
 
-def tickets_of(line: str) -> []str:
+def tickets_of(line: str) -> []Ticket_T:
     """The SC tickets a report line lists in RELATED_CHANGES="...", if any."""
     return [] if line != /RELATED_CHANGES="(?P<sc>[^"]*)"/
     $+{sc}.split()
@@ -706,23 +727,23 @@ def read_changes(report: Path) -> ChangeList:
     var seen: {str}int = {:}
     # a merge's review, for the change its own commit makes: the merge line
     # and the change line then carry the same sha
-    var merge_reviews: {CommitHash}str = {:}
+    var merge_reviews: {CommitHash}Review_T = {:}
     let f: File = open(report)
     for line in f.lines:
         # Captures are bound first: the calls in each branch match regexes
         # of their own.
         case line.strip():
             when /^===== Differences between (?P<a>\S+) and (?P<b>\S+)/:
-                let a: str = $+{a}
-                let b: str = $+{b}
+                let a: BaselineName_T = $+{a}
+                let b: BaselineName_T = $+{b}
                 section = ReportSection(from_baseline = baseline_nr(a), to_baseline = baseline_nr(b))
             when /^=====/:
                 # nothing merged yet; the baselines are the last ones named
                 section = ReportSection(from_baseline = section.from_baseline, to_baseline = section.to_baseline)
             when /^Merge from <- (?P<sha>\S+) (?P<name>\S+)/:
                 let merge_sha: CommitHash = $+{sha}
-                let source: str = $+{name}
-                let review: str = review_of(line)
+                let source: BranchName = $+{name}
+                let review: Review_T = review_of(line)
                 if review != "":
                     merge_reviews[merge_sha] = review
                 let merged: BranchName = user_branch(source)
@@ -736,8 +757,8 @@ def read_changes(report: Path) -> ChangeList:
             when /^(?P<verb>changed|added|removed|deleted)\s+(?P<sha>[0-9a-f]+):(?P<file>\S+)/:
                 let verb: str = $+{verb}
                 let sha: CommitHash = $+{sha}
-                let file: str = $+{file}
-                var review: str = review_of(line)
+                let file: NmFile_T = $+{file}
+                var review: Review_T = review_of(line)
                 if review == "" and sha in merge_reviews:
                     review = merge_reviews[sha]
                 let fc: FileChange = FileChange(kind = CHANGE_KINDS[verb], file = file, commits = [sha],
@@ -757,7 +778,7 @@ def read_changes(report: Path) -> ChangeList:
 def echo_ediff(a: Path, b: Path):
     print f"(ediff-files \"{a}\" \"{b}\")"
 
-def newest(dir: Path, pattern: str) -> Path:
+def newest(dir: Path, pattern: Glob_T) -> Path:
     """The most recently modified entry of DIR matching the glob PATTERN,
     or Path("") when none does."""
     let found: []str = shellLines: ls -dt {!dir}/{pattern} 2>/dev/null | head -n 1
@@ -771,59 +792,58 @@ def elisp_string(text: str) -> str:
     """TEXT as an Emacs Lisp string literal."""
     "\"" + text.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
 
-def nm_cache() -> str:
+def nm_cache() -> Path:
     """Where the diff links clone NM's repositories, from Bitbucket, when
     there is no workspace: $TCHECK_NM_CACHE, or ~/Downloads/.cache/tcheck/NM."""
-    let cache: str = $TCHECK_NM_CACHE
-    let home: str = $HOME
-    cache if cache != "" else f"{home}/Downloads/.cache/tcheck/NM"
+    return Path($TCHECK_NM_CACHE) if $TCHECK_NM_CACHE != ""
+    Path($HOME) / "Downloads" / ".cache" / "tcheck" / "NM"
 
-def nm_root() -> str:
+def nm_root() -> Path:
     """The NM workspace, or, without one, the cache standing in for it."""
-    let root: str = $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY
-    root if root != "" else nm_cache()
+    return Path($CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY) if $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY != ""
+    nm_cache()
 
-def split_file(fc: FileChange) -> (str, str):
+def split_file(fc: FileChange) -> (Path, InSub_T):
     """FC's submodule and its path inside it: the report's path is
     <system>/<subsystem>/<rest>, and <system>/<subsystem> is a submodule of
     the NM workspace, where the commits and tags are."""
     let parts: []str = fc.file.split("/")
-    return ("", fc.file) if len(parts) < 3
-    (f"{nm_root()}/{parts[0]}/{parts[1]}", "/".join(parts[2:]))
+    return (Path(""), fc.file) if len(parts) < 3
+    (nm_root() / parts[0] / parts[1], "/".join(parts[2:]))
 
-def troubleshoot_tool() -> str:
+def troubleshoot_tool() -> Tool_T:
     """What troubleshoot mode compares two files with: the -tool diff tool,
     or meld."""
     DIFF_TOOL if DIFF_TOOL != "" else "meld"
 
-def emacs_difftool(fc: FileChange, rev1: str, rev2: str) -> str:
+def emacs_difftool(fc: FileChange, rev1: Rev_T, rev2: Rev_T) -> Link_T:
     """A link starting the -tool diff tool on FC's file between REV1 and
     REV2, through git difftool."""
     let (sub, rest) = split_file(fc)
     let where: str = f"-C {sub} " if sub != "" else ""
-    let command: str = f"git {where}difftool -y -t {DIFF_TOOL} {rev1} {rev2} -- {rest}"
+    let command: Command_T = f"git {where}difftool -y -t {DIFF_TOOL} {rev1} {rev2} -- {rest}"
     f"#emacs:(call-process-shell-command {elisp_string(command)} nil 0)"
 
-def emacs_ediff(fc: FileChange, rev1: str, rev2: str) -> str:
+def emacs_ediff(fc: FileChange, rev1: Rev_T, rev2: Rev_T) -> Link_T:
     """A link comparing FC's file between REV1 and REV2 side by side in
     Emacs, through its own git support."""
     let (sub, rest) = split_file(fc)
-    let path: str = f"{sub}/{rest}" if sub != "" else rest
-    var file: str = elisp_string(path)
+    let path: Path = sub / rest if sub != "" else Path(rest)
+    var file: str = elisp_string(str(path))
     if "$" in path:
         file = f"(substitute-in-file-name {file})"
     f"#emacs:(vc-version-ediff (list {file}) {elisp_string(rev1)} {elisp_string(rev2)})"
 
-def diff_link(fc: FileChange, rev1: str, rev2: str) -> str:
+def diff_link(fc: FileChange, rev1: Rev_T, rev2: Rev_T) -> Link_T:
     """The link comparing FC's file between REV1 and REV2 -- checking it
     out first when it needs to be."""
-    let link: str = emacs_difftool(fc, rev1, rev2) if DIFF_TOOL != "" else emacs_ediff(fc, rev1, rev2)
-    let checkout: str = checkout_command(fc, rev1, rev2)
+    let link: Link_T = emacs_difftool(fc, rev1, rev2) if DIFF_TOOL != "" else emacs_ediff(fc, rev1, rev2)
+    let checkout: Command_T = checkout_command(fc, rev1, rev2)
     return link if checkout == ""
     let form: str = link.removeprefix("#emacs:")
     f"#emacs:(when (eql 0 (shell-command {elisp_string(checkout)})) {form})"
 
-def checkout_command(fc: FileChange, rev1: str, rev2: str) -> str:
+def checkout_command(fc: FileChange, rev1: Rev_T, rev2: Rev_T) -> Command_T:
     """The Tcheckout command checking FC's file out alone, for its diff
     between REV1 and REV2: in the NM workspace when its submodule is not
     checked out, or is sparsely without it -- "" otherwise; without a
@@ -833,8 +853,8 @@ def checkout_command(fc: FileChange, rev1: str, rev2: str) -> str:
     return "" if sub == ""
     let root: str = $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY
     return f"Tcheckout -cache {nm_cache()} -rev {rev2} -rev {rev1} {fc.file}" if root == ""
-    let git_link: str = f"{sub}/.git"
-    let path: str = f"{sub}/{rest}"
+    let git_link: Path = sub / ".git"
+    let path: Path = sub / rest
     if -e git_link:
         return "" if fc.kind == DELETED or -e path
         # missing from a checkout: only a sparse one can take it in
@@ -842,11 +862,11 @@ def checkout_command(fc: FileChange, rev1: str, rev2: str) -> str:
         return "" if sparse.output.strip() != "true"
     f"Tcheckout -root {root} {fc.file}"
 
-def diff_links(fc: FileChange) -> []str:
+def diff_links(fc: FileChange) -> []Link_T:
     """One link per commit: the file in the commit's parent and in the commit."""
     [diff_link(fc, c + "^", c) for c in fc.commits]
 
-def net_diff_link(fc: FileChange) -> str:
+def net_diff_link(fc: FileChange) -> Link_T:
     """What the component's baseline did to the file, all commits together."""
     diff_link(fc, fc.from_baseline, fc.to_baseline)
 
@@ -880,7 +900,7 @@ def view_build_of(branch: BranchName) -> Path:
     let name: str = branch[len(who) + 1:]
     newest(TACT_ROOT / f"TACT_CONFIG.{who.upper()}.{name.upper()}", "build_*")
 
-def reference_build(reference: str, ref_reports: Path) -> Path:
+def reference_build(reference: BaselineName_T, ref_reports: Path) -> Path:
     """The build of REFERENCE -- "TACT.TACT_CONFIG.30.0.0.132" -- its test
     reports REF_REPORTS were made from: they are named after it,
     TACT.TACT_CONFIG.30.0.0.132-G!31.IP.L8-<host>-<date> for
@@ -889,13 +909,13 @@ def reference_build(reference: str, ref_reports: Path) -> Path:
     let baseline_dir: Path = TACT_ROOT / reference.removeprefix("TACT.")
     var build: Path = Path("")
     if ref_reports != "":
-        let tag: str = Path(ref_reports).name.removeprefix(reference + "-").split("-")[0]
+        let tag: str = ref_reports.name.removeprefix(reference + "-").split("-")[0]
         build = baseline_dir / ("build_" + tag)
     else:
         build = newest(baseline_dir, "build_G!31.*")
     build if build != "" and -d build else Path("")
 
-def display_branch_info(branch: BranchName, reference: str):
+def display_branch_info(branch: BranchName, reference: BaselineName_T):
     """The branch the changes came from: its view build -- the build of
     TACT_CONFIG.<USER>.<BRANCH>, e.g. build_default_Linux -- and the
     REFERENCE baseline's build; its test reports next to the reference
@@ -927,10 +947,10 @@ def display_branch_info(branch: BranchName, reference: str):
         print f"REFERENCE BASELINE DIR: {ref_reports}"
         echo_ediff(ref_reports / "general.results.failed-in", view_reports / "general.results.failed-in")
 
-def changes_report(baseline: str, warn: bool = True) -> Path:
+def changes_report(baseline: BaselineNr_T, warn: bool = True) -> Path:
     """The changes report of the CFMUTEST baseline built on TACT BASELINE,
     or Path("") -- after a warning saying why there is none, if WARN."""
-    let cfmu: str = cfmu_baseline_of(baseline)
+    let cfmu: BaselineNr_T = cfmu_baseline_of(baseline)
     if cfmu == "":
         if warn:
             puts("sWb", f"WARNING: Psort -b names no CFMUTEST baseline for TACT_CONFIG.{baseline}", NEWLINE=True)
@@ -942,33 +962,33 @@ def changes_report(baseline: str, warn: bool = True) -> Path:
         return Path("")
     report
 
-def extension_of(file: str) -> str:
+def extension_of(file: NmFile_T) -> Extension_T:
     """FILE's extension, as display_file splits it: after the last dot of
     its name, when that dot does not start it; "" when there is none."""
     let name: str = Path(file).name
     let dot: int = name.rfind(".")
     name[dot + 1:] if dot > 0 else ""
 
-def extension_label(ext: str) -> str:
+def extension_label(ext: Extension_T) -> str:
     ext if ext != "" else "(no extension)"
 
-def files_of(changes: []FileChange) -> []str:
+def files_of(changes: []FileChange) -> []NmFile_T:
     """The files CHANGES touch, each once: a file changed, added or deleted
     more than once is one file."""
-    var files: []str = []
+    var files: []NmFile_T = []
     for fc in changes:
         if fc.file not in files:
             files.append(fc.file)
     files
 
-def files_by_type(files: []str) -> str:
+def files_by_type(files: []NmFile_T) -> str:
     """"2 adb, 2 ads" -- how many of FILES have each extension, the
     commonest first."""
-    var counts: {str}int = {:}
+    var counts: {Extension_T}int = {:}
     for file in files:
-        let ext: str = extension_of(file)
+        let ext: Extension_T = extension_of(file)
         counts[ext] = counts.get(ext, 0) + 1
-    let order: [](int, str) = sorted([(-n, ext) for ext, n in counts.items()])
+    let order: [](int, Extension_T) = sorted([(-n, ext) for ext, n in counts.items()])
     ", ".join([f"{-n} {extension_label(ext)}" for n, ext in order])
 
 def only_by(changes: ChangeList, user: Committer) -> ChangeList:
@@ -989,7 +1009,7 @@ def list_files_by_committer(report: Path, user: Committer):
         print
         return
     let changes: ChangeList = only_by(all, user)
-    var files: {Committer}[]str = {:}
+    var files: {Committer}[]NmFile_T = {:}
     for who in changes.committers:
         var theirs: []FileChange = []
         for branch in changes.branches[who]:
@@ -1022,12 +1042,12 @@ def list_files_by_committer(report: Path, user: Committer):
 # A test one of the baseline's Tlogs reports newly failing or crashed:
 # see Report.new_failures.
 type NewFailure is tuple:
-    build: str # the build type and subtype it fails in: "IP in", "OP assert"
-    test:  str
+    build: BuildLabel_T # the build type and subtype it fails in: "IP in", "OP assert"
+    test:  TestName_T
 
 # One of a baseline's Tlogs: see Report.tlogs.
 type TlogAt is tuple:
-    build:   str # the build type and subtype: "IP in"
+    build:   BuildLabel_T # the build type and subtype: "IP in"
     subtype: BuildSubtype
     path:    Path
 
@@ -1041,8 +1061,8 @@ def list_new_failures(against: str, failures: []NewFailure):
         puts("sKg", f"  No new failures{compared}", NEWLINE=True)
         print
         return
-    var tests: []str = []
-    var builds: {str}[]str = {:}
+    var tests: []TestName_T = []
+    var builds: {TestName_T}[]BuildLabel_T = {:}
     for f in failures:
         if f.test not in builds:
             tests.append(f.test)
@@ -1058,7 +1078,7 @@ def list_new_failures(against: str, failures: []NewFailure):
         print " " * (width - len(test)) + "  " + ", ".join(builds[test])
     print
 
-def list_changes(baseline: str, failures: []NewFailure, against: str, user: Committer):
+def list_changes(baseline: BaselineNr_T, failures: []NewFailure, against: str, user: Committer):
     """What changed in TACT BASELINE and what broke: by committer -- only
     USER, when not "" -- the files the CFMUTEST baseline built on it
     changed, by type; then FAILURES, the tests its Tlogs report newly
@@ -1074,7 +1094,7 @@ def list_changes(baseline: str, failures: []NewFailure, against: str, user: Comm
         print # after the warning
     list_new_failures(against, failures)
 
-def list_detailed_changes(baseline: str, user: Committer):
+def list_detailed_changes(baseline: BaselineNr_T, user: Committer):
     """The changes in the CFMUTEST baseline built on TACT BASELINE, by
     committer and branch -- only USER's, when not "": each file, its
     commits, tickets, reviews and diffs. Nothing when there is no changes
@@ -1086,7 +1106,7 @@ def list_detailed_changes(baseline: str, user: Committer):
     hr('#')
     puts("sWr", "LIST OF CHANGES", NEWLINE=True)
     # a branch's build is compared with the baseline before this one
-    let reference: str = "TACT.TACT_CONFIG." + Baseline(baseline).previous().nr
+    let reference: BaselineName_T = "TACT.TACT_CONFIG." + Baseline(baseline).previous().nr
     print "DIFF and NET DIFF run in the file's submodule of the NM workspace. Where that is"
     print "not checked out, they check the file out first, alone (Tcheckout): the submodule's"
     print "history, its contents fetched as the diffs need them. A submodule checked out"
@@ -1174,17 +1194,17 @@ class Options:
     focus_domain  : FocusDomain  = no_focus
     focus_subtype : BuildSubtype = in_test
     focus_rtype   : ReplayType   = run_prequal
-    focus_user    : str          = "" # -focus changes <user>: only theirs
+    focus_user    : Committer    = "" # -focus changes <user>: only theirs
     batch         : bool = False
-    tool          : str  = "" # -tool: the visual diff tool
+    tool          : Tool_T = "" # -tool: the visual diff tool
     only_new      : bool = False
     short         : bool = False # -short: -focus without the detailed part
     exit_code     : bool = False
-    baseline      : str  = "" # e.g. 30.0.0.121
+    baseline      : BaselineNr_T = "" # e.g. 30.0.0.121
 
     def __init__(self, argv: []str):
         var i: Natural = 0
-        var user: str = "" # -user: see after the loop
+        var user: Committer = "" # -user: see after the loop
         while i < argv'Length:
             let arg: str = argv[i]
             case arg:
@@ -1300,21 +1320,21 @@ def find_builds(bl: Baseline) -> []Build:
 # ---------------------------------------------------------------------------
 
 type BuildSummary is tuple:
-    build_name : str
+    build_name : BuildName_T
     btype      : BuildType
     total_new  : int
     total_still: int
     total_crash: int
     all_ok     : bool
 
-def is_test_name(name: str) -> bool:
+def is_test_name(name: TestName_T) -> bool:
     """Whether NAME, a Tlog line's second word, names a test: a test is an
     .el file. The sections hold other lines too -- a remark, a pointer to
     the log, an mrun line -- whose second word (all, Check, Tlog:, mrun) is
     no test."""
     name.endswith(".el")
 
-def tlog_reference(filepath: Path) -> str:
+def tlog_reference(filepath: Path) -> BaselineNr_T:
     """The baseline a Tlog compared its build with -- what its new failures
     are new against: "Tlog: INFO: Actual reference baseline    : 30.0.0.120".
     "" when it does not say."""
@@ -1323,12 +1343,12 @@ def tlog_reference(filepath: Path) -> str:
             return $+{ref}
     ""
 
-def get_failed_test_names(filepath: Path, subtype: BuildSubtype) -> []str:
+def get_failed_test_names(filepath: Path, subtype: BuildSubtype) -> []TestName_T:
     """The tests a Tlog's new_failing + crashed sections name."""
     let r: TlogResult = parse_Tlog(filepath, subtype)
-    var names: []str = []
+    var names: []TestName_T = []
     for line in r.new_failing + r.crashed:
-        let name: str = extract_test_name(line)
+        let name: TestName_T = extract_test_name(line)
         if is_test_name(name):
             names.append(name)
     return names
@@ -1339,22 +1359,23 @@ def check_replay_dirs_size():
     puts("sWr", "COMPUTE SIZE OF REPLAY DIRS", NEWLINE=True)
     let listing: []str = shellLines: ls -d {TACT_ROOT}/TACT_CONFIG![0-9]*/build_G!*OP*/saved_logs/replay_dir*
     var total_size: float = 0.0
-    for replay_dir in listing:
-        continue if replay_dir == ""
+    for found in listing:
+        continue if found == ""
+        let replay_dir: Path = Path(found)
         hr('-')
         # Extract replay type from dir name.
-        let dir_basename: str = Path(replay_dir).name
+        let dir_basename: str = replay_dir.name
         let replay_type: str = dir_basename.split("-")[-1].split(".")[0] if "-" in dir_basename else dir_basename
         # Get size.
         let du_r = shell: du --max-depth=0 -ch {!replay_dir} | head -n1
         let size_line: str = du_r.output.strip()
         let size_str: str = size_line.split()[0] if size_line != "" else "0"
-        puts("sBy", replay_dir + " ==> " + size_str, NEWLINE=True)
+        puts("sBy", f"{replay_dir} ==> {size_str}", NEWLINE=True)
         # Only count sizes in GB.
         continue if not size_str.endswith("G")
         let num_size: float = float(size_str[0:-1])
         # Find the replay log to check if it terminated.
-        let saved_logs: Path = Path(replay_dir).parent
+        let saved_logs: Path = replay_dir.parent
         let log_listing: []str = shellLines: ls {saved_logs}/Treplay*{replay_type}*log
         var replay_logfile: Path = Path("")
         if log_listing'Length > 0 and log_listing[0] != "":
@@ -1368,12 +1389,12 @@ def check_replay_dirs_size():
             print "\tTO DELETE THIS FAILED REPLAY, 'su cmadm' and then"
             # Check for tactdev_remove script.
             let the_baseline: str = str(saved_logs).split("!")[1].split("/")[0] if "!" in saved_logs else ""
-            let remove_cmd: Path = Path(replay_dir) / "tact" / the_baseline / "tactdev_remove"
+            let remove_cmd: Path = replay_dir / "tact" / the_baseline / "tactdev_remove"
             if -f remove_cmd:
                 print "\t\t" + remove_cmd
             else:
                 print "\tNo tactdev_remove found, use:"
-                print "\t\trm -fr " + replay_dir
+                print f"\t\trm -fr {replay_dir}"
         else:
             puts("sfBy", "\tTHIS REPLAY IS STILL RUNNING", NEWLINE=True)
             print "\tTo delete it, use the vncviewer from dhdevd01:99 and run:"
@@ -1409,25 +1430,25 @@ def find_core_dumps(dir: Path):
         puts("sWr", "CORE DUMPS:", NEWLINE=True)
         print r.output.rstrip("\n")
 
-def make_report(content: str, bl: str, report_name: str) -> Path:
+def make_report(content: str, bl: BaselineNr_T, report_name: str) -> Path:
     let rc0: int = shell: mkdir -p /tmp/reports
     let report_file: Path = Path("/tmp/reports") / (report_name + "_" + bl + ".txt")
     writeFile(report_file, content)
     let rc: int = shell: make_comparable {report_file} {bl} 2>/dev/null
     return report_file
 
-def replay_dir_pattern(replay_type: str) -> str:
-    case replay_type:
-        when "performance": return "TAC_LO3"
-        when "prequal":     return "run_prequal"
-        when others:        return replay_type
+def replay_dir_pattern(rtype: ReplayType) -> Glob_T:
+    """What the replay directories of RTYPE have in their names."""
+    case rtype:
+        when performance: return "TAC_LO3"
+        when others:      return rtype'Image
 
-def get_replay_log_dir(start: Baseline, replay_type: str) -> Path:
+def get_replay_log_dir(start: Baseline, rtype: ReplayType) -> Path:
     """The newest replay log dir of REPLAY_TYPE, from START backwards.
 
     Replays run on the OP build, so that is the saved_logs searched.
     """
-    let dir_pat: str = replay_dir_pattern(replay_type)
+    let dir_pat: Glob_T = replay_dir_pattern(rtype)
     var bl: Baseline = start
     var dir: Path = bl.saved_logs_dir(OP)
     var attempts: int = 0
@@ -1441,7 +1462,7 @@ def get_replay_log_dir(start: Baseline, replay_type: str) -> Path:
         attempts += 1
     return Path("")
 
-def scan_replay_dir_detailed(replay_log_dir: Path, bl: str, replay_type: str) -> Path:
+def scan_replay_dir_detailed(replay_log_dir: Path, bl: BaselineNr_T, rtype: ReplayType) -> Path:
     if replay_log_dir == "":
         puts("sWb", "no replay log dir found", NEWLINE=True)
         return Path("")
@@ -1453,17 +1474,17 @@ def scan_replay_dir_detailed(replay_log_dir: Path, bl: str, replay_type: str) ->
     for f in check_result:
         continue if f == ""
         puts("sWb", "check_logs.result.svlog:", NEWLINE=True)
-        let content: str = readFile(f)
+        let content: str = readFile(Path(f))
         print content
         report = report + content + "\n"
     let check_run: []str = shellLines: ls {replay_log_dir}/*check_logs.run.svlog
     for f in check_run:
         continue if f == ""
         puts("sWb", "check_logs.run.svlog:", NEWLINE=True)
-        let content: str = readFile(f)
+        let content: str = readFile(Path(f))
         print content
         report = report + content + "\n"
-    return make_report(report, bl, f"replay-{replay_type}")
+    return make_report(report, bl, f"replay-{rtype}")
 
 def scan_regression_tests_detailed(bl: Baseline, btype: BuildType, subtype: BuildSubtype) -> Path:
     # saved_logs_dir(btype) is already the BTYPE build. This used to rewrite
@@ -1511,7 +1532,7 @@ def show_failed_tests(start: Baseline, btype: BuildType, subtype: BuildSubtype, 
     ip_env = ip_env.replace(".OP.", ".IP.")
     var result: str = ""
     for iteration in range(n_baselines):
-        let bl: str = baseline.nr
+        let bl: BaselineNr_T = baseline.nr
         let header: str = f"FAILED {btype} REGRESSION TESTS logging-{sl} for BASELINE {bl}"
         hr('-')
         puts("sWr", header, NEWLINE=True)
@@ -1539,7 +1560,7 @@ def show_failed_tests(start: Baseline, btype: BuildType, subtype: BuildSubtype, 
         baseline = baseline.previous()
     return result
 
-def make_comparable(logfile: Path, bl: str) -> Path:
+def make_comparable(logfile: Path, bl: BaselineNr_T) -> Path:
     """Normalize a log file for diffing: make_executable_output_comparable + make_comparable + test name normalization."""
     let rc0: int = shell: mkdir -p /tmp/reports
     let out_file: Path = Path("/tmp/reports") / (bl + "_" + logfile.name)
@@ -1761,7 +1782,7 @@ class Report:
         let prev_normalized: Path = make_comparable(prev_log, prev.nr)
         let cur_normalized: Path = make_comparable(cur_log, self.cur.nr)
         if not BATCH:
-            let tool: str = troubleshoot_tool()
+            let tool: Tool_T = troubleshoot_tool()
             let rc: int = shell: {!tool} {!prev_normalized} {!cur_normalized} &
         else:
             let rc: int = shell: diff {!prev_normalized} {!cur_normalized}
@@ -1777,7 +1798,7 @@ class Report:
         let prev_report: Path = scan_regression_tests_detailed(prev, btype, subtype)
         let cur_report: Path = scan_regression_tests_detailed(self.cur, btype, subtype)
         if prev_report != "" and cur_report != "" and not BATCH:
-            let tool: str = troubleshoot_tool()
+            let tool: Tool_T = troubleshoot_tool()
             let tool_rc: int = shell: {!tool} {!prev_report} {!cur_report} &
         let failed_file: Path = Path("/tmp/reports") / "failed_tests"
         let failed_output: str = show_failed_tests(self.cur, btype, subtype)
@@ -1786,14 +1807,14 @@ class Report:
             let emacs_rc: int = shell: emacs -l /home/ekhassan/e.el {!failed_file} &
 
     def show_detailed_replays(self):
-        let replay_type: str = self.opt.focus_rtype'Image
+        let rtype: ReplayType = self.opt.focus_rtype
         let prev: Baseline = self.cur.previous()
-        let prev_log: Path = get_replay_log_dir(prev, replay_type)
-        let cur_log: Path = get_replay_log_dir(self.cur, replay_type)
-        let prev_report: Path = scan_replay_dir_detailed(prev_log, prev.nr, replay_type)
-        let cur_report: Path = scan_replay_dir_detailed(cur_log, self.cur.nr, replay_type)
+        let prev_log: Path = get_replay_log_dir(prev, rtype)
+        let cur_log: Path = get_replay_log_dir(self.cur, rtype)
+        let prev_report: Path = scan_replay_dir_detailed(prev_log, prev.nr, rtype)
+        let cur_report: Path = scan_replay_dir_detailed(cur_log, self.cur.nr, rtype)
         if prev_report != "" and cur_report != "" and not BATCH:
-            let tool: str = troubleshoot_tool()
+            let tool: Tool_T = troubleshoot_tool()
             let tool_rc: int = shell: {!tool} {!prev_report} {!cur_report} &
 
     def run(self):
