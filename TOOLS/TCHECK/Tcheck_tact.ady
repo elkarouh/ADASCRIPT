@@ -233,11 +233,12 @@ def parse_Tlog(filepath: Path, build_subtype: BuildSubtype) -> TlogResult:
     var seen: {}Section = {}
     var section: Section = UNREPORTED
     for line in filepath.lines:
+        continue if line.strip() == ""
         if is_section_header(line):
             let named: Section = section_of(line)
             section = UNREPORTED if named in seen else named
             seen.add(named)
-        elif line.strip() != "":
+        else:
             case section:
                 when CRASHED:
                     result.crashed.append(line)
