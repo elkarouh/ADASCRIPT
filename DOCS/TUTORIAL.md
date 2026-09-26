@@ -262,6 +262,41 @@ what its `int` or `str` holds, name the type and put the comment there.
 Both naming styles appear in the examples: a `_T` suffix (`Velocity_T`,
 `Node_T`) and a plain name (`Epoch`, `LineNo`). Pick one per program.
 
+### A place on disk is a `Path`
+
+The same rule, for its commonest case: a directory or a file is a `Path`,
+not a `str` joined with `"/"`. Make it one where it enters the program —
+from an argument, an environment variable, a line of `ls` output — and
+join with `/`:
+
+```python
+# rather than
+let work: str = root + "/" + sub
+if -e (work + "/.git"): ...
+
+# write
+let work: Path = Path(root) / sub
+if -e (work / ".git"): ...
+```
+
+Why:
+
+- **The signature says it is a place.** `def checked_out(dir: Path)` cannot
+  be read as taking a name, a pattern or a line of text.
+- **A string cannot slip in by mistake.** `Path` is a distinct type, so
+  `let p: Path = s` does not compile; `Path(s)` is how you mean it.
+- **There is no slash to get wrong.** No doubled or missing `/`, and
+  `.parent`, `.name`, `.resolve()`, `.mkdir()` and the file tests are there
+  when you need them.
+
+What stays a `str` is what is not a place on this disk: a relative path as
+another tool reports it (a file in a changes report, a sparse-checkout
+pattern), a URL, a value handed to a program that resolves it itself. Where
+an API takes strings, convert at the call: `run(["rmdir", str(work)])`.
+Go up with `.parent` rather than `/ ".."`, which the two backends print
+differently (see `TODO.md`). The README's "Paths: `Path` and `/`" has the
+operations.
+
 ### `distinct` types (planned)
 
 A named type is an alias. It documents the meaning but does not enforce it,

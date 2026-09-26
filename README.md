@@ -1881,6 +1881,14 @@ let cdir: Path = root / ".git1"
 let repo: Path = cdir / name / "HEAD"
 ```
 
+Use it for every place on disk: a directory or file is a `Path` from where
+it enters the program -- an argument, an environment variable, a line of
+`ls` output -- rather than a `str` joined with `"/"`, and a function that
+takes one says `dir: Path`. What stays a `str` is what is not a place on
+this disk: a URL, a path as another tool reports it, a value a program
+resolves itself. `DOCS/TUTORIAL.md` ("A place on disk is a `Path`") gives
+the reasons.
+
 `Path` is *a string that also joins*, not a separate world: it goes wherever
 a `str` goes — file tests, `readFile`, shell interpolation, a `str`
 parameter, a dict key, `.upper()`. The other direction is not automatic and

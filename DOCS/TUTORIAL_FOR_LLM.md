@@ -142,6 +142,8 @@ Enforcement available today:
 - `?T` is not `T`;
 - `Path` is a distinct string, so `let p: Path = s` is an error; write `Path(s)`.
 
+Style: every place on disk is a `Path`, joined with `/` (`Path(root) / sub / ".git"`), never a `str` joined with `"/"`; parameters that are directories or files are typed `Path`. Keep `str` for what is not a place on this disk (a URL, a path as another tool reports it, a git config value); convert with `str(p)` where an API takes strings, e.g. `run(["rmdir", str(work)])`. Go up with `.parent`, not `/ ".."`.
+
 ---
 
 ## Variable Declarations

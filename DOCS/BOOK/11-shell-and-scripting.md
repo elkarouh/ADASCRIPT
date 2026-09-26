@@ -264,6 +264,32 @@ if which("git") is None:
 `have("git")` is the older spelling of the same lookup with the path thrown
 away. It is deprecated — it still works, and warns.
 
+### Places are `Path`s
+
+A shell script's paths are strings glued with `/`, and so are most Python
+scripts'. Adascript's rule is that a directory or a file is a `Path` from
+the moment it enters the program, and is joined with the `/` operator:
+
+```python
+let work: Path = Path(root) / sub
+work.mkdir()
+if -e (work / ".git"):
+    print f"{work.name} under {work.parent}"
+
+def checked_out(dir: Path) -> bool:
+    -e (dir / ".git")
+```
+
+The parameter's type says the function wants a place, not a name or a line
+of text; a `str` cannot be passed for it by accident, since `Path` is a
+distinct type (`Path(s)` converts); and there is no doubled or missing
+slash to get wrong. A `Path` goes wherever a `str` goes — file tests,
+`readFile`, `{!work}` in a shell line — and `str(work)` hands it to an API
+that takes strings, like `run([...])`. What stays a `str` is what is not a
+place on this disk: a URL, a relative path as another tool reports it, a
+value a program resolves itself. `TOOLS/TCHECK/Tcheckout.ady` is written
+this way throughout.
+
 `phonecode.ady`'s argument handling shows the whole kit in six lines:
 
 ```python
