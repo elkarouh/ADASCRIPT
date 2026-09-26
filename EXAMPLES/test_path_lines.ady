@@ -9,7 +9,8 @@ early. readFile(p).split("\\n") yields one line more, an empty one, after a
 final newline -- which is why .lines is the way.
 """
 
-let p: Path = Path("/tmp/ady_path_lines_test.txt")
+# a file of its own each run: a fixed name in /tmp may be another user's
+let p: Path = Path(run(["mktemp", "-t", "ady_path_lines.XXXXXX"]).output.strip())
 writeFile(p, "alpha\nreference baseline : 30.0.0.120\ngamma\n")
 
 var n: int = 0

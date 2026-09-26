@@ -47,7 +47,7 @@ def main() -> int:
 
     def build_fixture() -> Path:
         """A deterministic work directory, spaces in the names included."""
-        let d: Path = Path("/tmp/ady_janitor")
+        let d: Path = Path(${TMPDIR:-"/tmp"}) / "ady_janitor"
         shell: rm -rf {!d}
         d.mkdir()
         writeFile(str(d / "app.log"),            "x" * 200)

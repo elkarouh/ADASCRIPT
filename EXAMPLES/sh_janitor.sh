@@ -24,7 +24,7 @@ set -u
 BIG_ENOUGH=64          # bytes; a real one would say 10 MB
 
 build_fixture() {
-    local d=/tmp/sh_janitor_sh
+    local d=${TMPDIR:-/tmp}/sh_janitor_sh
     rm -rf "$d"
     mkdir -p "$d"
     printf 'x%.0s' $(seq 200) > "$d/app.log"

@@ -152,15 +152,15 @@ def check(path: Path) -> []Finding_T:
 
 def main() -> int:
     def build_fixture() -> Path:
-        let d: Path = Path("/tmp/ady_config_check")
+        let d: Path = Path(${TMPDIR:-"/tmp"}) / "ady_config_check"
         shell: rm -rf {!d}
         (d / "logs").mkdir()
-        writeFile(str(d / "app.conf"), """# a configuration with one of everything
+        writeFile(str(d / "app.conf"), f"""# a configuration with one of everything
 verbose = yes
 workers = 200
 workers = 8
 mode    = reckless
-log_dir = /tmp/ady_config_check/logs
+log_dir = {d}/logs
 colour  = blue
 this line has no equals sign
 """)

@@ -10,15 +10,16 @@ Also: `{!x}` in an indented shell block, which the Nim backend passed to
 fmt unquoted -- Nim read the `!` as an identifier.
 """
 
-let repo: str = "/tmp/adascript_test_revision_braces"
+# a directory of its own each run: a fixed one in /tmp may be another user's
+let repo: str = run(["mktemp", "-d", "-t", "adascript_test_revision_braces.XXXXXX"]).output.strip()
 let tag: str = "v1"
-shell: rm -rf {!repo} && git init -q {!repo} && git -C {!repo} -c user.name=a -c user.email=a@b commit -q --allow-empty -m one && git -C {!repo} tag v1
+shell: git init -q {!repo} && git -C {!repo} -c user.name=a -c user.email=a@b commit -q --allow-empty -m one && git -C {!repo} tag v1
 
 # interpolation elsewhere in the line: the braces after ^ stay git's
 let a = shell: git -C {!repo} rev-parse {!tag}^{commit}
 assert a.code == 0 and len(a.output.strip()) == 40
-# no interpolation at all
-let b = shell: git -C /tmp/adascript_test_revision_braces rev-parse v1^{commit}
+# no interpolation at all: the line is run in the repository
+let b = shell(cwd = repo): git rev-parse v1^{commit}
 assert b.output == a.output
 # ^{} and ^{tree}, quoted and bare, and @{...}
 let c = shell: git -C {!repo} rev-parse 'v1^{}' v1^{tree}

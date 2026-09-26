@@ -9,8 +9,9 @@ compile. Their value is still a value where it is wanted: assigned, or the
 last expression of a function that returns it.
 """
 
-let d: str = "/tmp/ady_run_discard_test"
-run(["rm", "-rf", d])
+# a directory of its own each run: a fixed one in /tmp may be another
+# user's, left there by their run, and not this one's to empty
+let d: str = run(["mktemp", "-d", "-t", "ady_run_discard.XXXXXX"]).output.strip()
 run(["mkdir", "-p", d + "/sub"], cwd = "/")
 runLines(["ls", d])
 

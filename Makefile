@@ -12,7 +12,13 @@ PYTHON := $(shell command -v python3.12 2>/dev/null || command -v python3.14)
 export PYTHONPATH := $(HOME)/Downloads/hparsec:$(PYTHONPATH)
 ADY2NIM := $(PYTHON) $(CURDIR)/TO_NIM/ady2nim.py
 EXDIR  := $(CURDIR)/EXAMPLES
-TMPDIR ?= /tmp
+# Scratch space: each user's own. Two people running the tests on one
+# machine must not meet in /tmp, where the other's files are not theirs to
+# overwrite -- a test found the first one's and failed. Exported, so the
+# examples' fixtures go there too.
+TMPDIR ?= /tmp/adascript-test-$(shell id -un)
+export TMPDIR
+$(shell mkdir -p $(TMPDIR))
 TOOLDIR:= $(CURDIR)/TOOLS
 AIDIR  := $(TOOLDIR)/ADA_INDENT
 G1DIR  := $(TOOLDIR)/GIT1
@@ -490,11 +496,11 @@ test: compile
 	           exit 1; }; \
 	done
 	@# sh_janitor is the worked example in DOCS/ADASCRIPT_FOR_SHELL.md. It
-	@# builds its own fixture under /tmp, so the report is the same every
+	@# builds its own fixture under $$TMPDIR, so the report is the same every
 	@# run -- and the filename with a space in it is the point of the check.
 	@printf '  %-42s' "sh_janitor.ady"; \
 	    $(EXDIR)/sh_janitor >/dev/null 2>&1 \
-	        && test -f "/tmp/ady_janitor/quiet service.log.gz" \
+	        && test -f "$(TMPDIR)/ady_janitor/quiet service.log.gz" \
 	        && echo OK || { echo FAIL; exit 1; }
 	@# config_check reports findings and exits 1 when any of them is an
 	@# error, which is the point -- so the check is on what it printed.
@@ -513,7 +519,7 @@ test: compile
 	        && echo OK || { echo FAIL; exit 1; }
 	@# The same checker in awk, kept next to it: same schema, same findings,
 	@# same bytes. Runs after config_check, which is what writes the fixture.
-	@for input in /tmp/ady_config_check/app.conf $(EXDIR)/config_check_other.conf; do \
+	@for input in $(TMPDIR)/ady_config_check/app.conf $(EXDIR)/config_check_other.conf; do \
 	    name=$$(basename $$input .conf); name=$${name#config_check_}; \
 	    printf '  %-42s' "config_check.awk == .ady ($$name)"; \
 	    awk -f $(EXDIR)/config_check.awk $$input > $(TMPDIR)/ady_cfg_awk.out 2>&1; \
@@ -531,8 +537,8 @@ test: compile
 	    $(EXDIR)/sh_janitor.sh > $(TMPDIR)/ady_janitor_sh.out 2>&1; \
 	    test $$? -eq 0 \
 	        && grep -q "COMPRESS  2 file(s)" $(TMPDIR)/ady_janitor_sh.out \
-	        && test -f "/tmp/sh_janitor_sh/quiet service.log" \
-	        && test -f "/tmp/sh_janitor_sh/editor backup~" \
+	        && test -f "$(TMPDIR)/sh_janitor_sh/quiet service.log" \
+	        && test -f "$(TMPDIR)/sh_janitor_sh/editor backup~" \
 	        && echo OK || { echo FAIL; cat $(TMPDIR)/ady_janitor_sh.out; exit 1; }
 	@# The documents' own snippets, so that what DOCS/*.md quotes is code
 	@# that ran rather than code that was written down. check-quotes below

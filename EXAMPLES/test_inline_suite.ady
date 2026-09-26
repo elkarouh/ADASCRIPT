@@ -122,8 +122,10 @@ assert Path(".").name == ""               # "." names no file
 assert Path("..").name == ".."
 
 # mkdir() is mkdir -p on both backends: parents made, already-there is fine.
-let sandbox: Path = Path("/tmp/adascript_path_test")
-shell: rm -rf -- {!sandbox}
+# a directory of its own each run: a fixed one in /tmp may be another user's
+# (made by the shell: this file defines a `run` of its own)
+let made = shell: mktemp -d -t adascript_path_test.XXXXXX
+let sandbox: Path = Path(made.output.strip())
 let deep: Path = sandbox / "x" / "y"
 deep.mkdir()
 deep.mkdir()
