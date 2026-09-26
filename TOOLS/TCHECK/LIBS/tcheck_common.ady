@@ -83,6 +83,18 @@ type Replay is tuple:
     rtype : ReplayType
     file  : Path
 
+def subtype_label(st: BuildSubtype) -> str:
+    """The file-system name for a subtype ('in' not 'in_test')."""
+    let name: str = st'Image
+    name.replace("_test", "")
+
+def parse_subtype(arg: str) -> BuildSubtype:
+    """Parse a subtype name from a command-line argument."""
+    for st in BuildSubtype:
+        if subtype_label(st) == arg:
+            return st
+    die("invalid subtype: " + arg)
+
 # ---------------------------------------------------------------------------
 # Helpers used throughout
 # ---------------------------------------------------------------------------
@@ -107,6 +119,13 @@ if __name__ == "__main__":
     assert ansi_escape("SWr") == "\x1b[1;37;41m"
     assert ansi_escape("Kx") == "\x1b[30m"
     assert ansi_escape("") == ""
+
+    # a subtype by its name on disk and on the command line: 'in', not 'in_test'
+    assert subtype_label(in_test) == "in"
+    assert subtype_label(assert_test) == "assert"
+    assert subtype_label(mono) == "mono"
+    for st in BuildSubtype:
+        assert parse_subtype(subtype_label(st)) == st
 
     # troubleshoot mode compares with the -tool diff tool, else meld
     assert troubleshoot_tool() == "meld"

@@ -17,11 +17,6 @@ nimport tcheck_common
 let CM_OT: Path = Path(${TCHECK_CM_OT:-"/cm/ot"})
 let TACT_ROOT: Path = CM_OT / "TACT"
 
-def subtype_label(st: BuildSubtype) -> str:
-    """The file-system name for a subtype ('in' not 'in_test')."""
-    let name: str = st'Image
-    name.replace("_test", "")
-
 def tlog_filename(subtype: BuildSubtype, pass_: BuildPass) -> str:
     """The Tlog filename for a subtype and pass."""
     let sl: str = subtype_label(subtype)
@@ -603,6 +598,124 @@ def process_replay(replay: Replay, verbose: bool):
     ReplayLog(replay.file).show(verbose)
     hr('-')
 
+def check_replay_dirs_size():
+    """Scan replay directories for disk usage and deletion advice."""
+    hr('-')
+    puts("SWr", "COMPUTE SIZE OF REPLAY DIRS", NEWLINE=True)
+    let listing: []str = shellLines: ls -d {TACT_ROOT}/TACT_CONFIG![0-9]*/build_G!*OP*/saved_logs/replay_dir*
+    var total_size: float = 0.0
+    for found in listing:
+        continue if found == ""
+        let replay_dir: Path = Path(found)
+        hr('-')
+        # Extract replay type from dir name.
+        let dir_basename: str = replay_dir.name
+        let replay_type: str = dir_basename.split("-")[-1].split(".")[0] if "-" in dir_basename else dir_basename
+        # Get size.
+        let du_r = shell: du --max-depth=0 -ch {!replay_dir} | head -n1
+        let size_line: str = du_r.output.strip()
+        let size_str: str = size_line.split()[0] if size_line != "" else "0"
+        puts("SBy", f"{replay_dir} ==> {size_str}", NEWLINE=True)
+        # Only count sizes in GB.
+        continue if not size_str.endswith("G")
+        let num_size: float = float(size_str[0:-1])
+        # Find the replay log to check if it terminated.
+        let saved_logs: Path = replay_dir.parent
+        let log_listing: []str = shellLines: ls {saved_logs}/Treplay*{replay_type}*log
+        var replay_logfile: Path = Path("")
+        if log_listing'Length > 0 and log_listing[0] != "":
+            replay_logfile = Path(log_listing[0])
+        else:
+            let find_r: []str = shellLines: find {replay_dir} -type f -name "*replay_day.log"
+            if find_r'Length > 0:
+                replay_logfile = Path(find_r[0])
+        if replay_logfile != "" and ReplayLog(replay_logfile).terminated:
+            total_size = total_size + num_size
+            print "\tTO DELETE THIS FAILED REPLAY, 'su cmadm' and then"
+            # Check for tactdev_remove script.
+            let the_baseline: str = str(saved_logs).split("!")[1].split("/")[0] if "!" in saved_logs else ""
+            let remove_cmd: Path = replay_dir / "tact" / the_baseline / "tactdev_remove"
+            if -f remove_cmd:
+                print "\t\t" + remove_cmd
+            else:
+                print "\tNo tactdev_remove found, use:"
+                print f"\t\trm -fr {replay_dir}"
+        else:
+            puts("SFBy", "\tTHIS REPLAY IS STILL RUNNING", NEWLINE=True)
+            print "\tTo delete it, use the vncviewer from dhdevd01:99 and run:"
+            print "\t\tTcleanup_old_replay_users -kill_replay"
+    print
+    puts("Wb", f"TOTAL SIZE for FAILED REPLAYS is {total_size:.2f}G", NEWLINE=True)
+    hr('#')
+
+def scan_replay_dir_detailed(replay_log_dir: Path, bl: BaselineNr_T, rtype: ReplayType) -> Path:
+    if replay_log_dir == "":
+        puts("SWb", "no replay log dir found", NEWLINE=True)
+        return Path("")
+    puts("USBy", "REPLAY DIR: " + replay_log_dir, NEWLINE=True)
+    let replay_root: Path = replay_log_dir.parent.parent.parent
+    find_core_dumps(replay_root)
+    var report: str = ""
+    let check_result: []str = shellLines: ls {replay_log_dir}/*check_logs.result.svlog
+    for f in check_result:
+        continue if f == ""
+        puts("SWb", "check_logs.result.svlog:", NEWLINE=True)
+        let content: str = readFile(Path(f))
+        print content
+        report = report + content + "\n"
+    let check_run: []str = shellLines: ls {replay_log_dir}/*check_logs.run.svlog
+    for f in check_run:
+        continue if f == ""
+        puts("SWb", "check_logs.run.svlog:", NEWLINE=True)
+        let content: str = readFile(Path(f))
+        print content
+        report = report + content + "\n"
+    return make_report(report, bl, f"replay-{rtype}")
+
+# ---------------------------------------------------------------------------
+# Csystem log
+# ---------------------------------------------------------------------------
+
+def make_comparable(logfile: Path, bl: BaselineNr_T) -> Path:
+    """Normalize a log file for diffing: make_executable_output_comparable + make_comparable + test name normalization."""
+    let rc0: int = shell: mkdir -p /tmp/reports
+    let out_file: Path = Path("/tmp/reports") / (bl + "_" + logfile.name)
+    let rc1: int = shell: make_executable_output_comparable {!logfile} -o {!out_file} 2>/dev/null
+    let rc2: int = shell: make_comparable {!out_file} {bl} 2>/dev/null
+    # Normalize test names so trivial renames don't show as diffs.
+    let rc3: int = shell(join = ";"):
+        sd '[vb]1.el' 'test1.el' {out_file}
+        sd '[vb]2.el' 'test2.el' {out_file}
+        sd '[vb]3.el' 'test3.el' {out_file}
+    return out_file
+
+class CsystemLog:
+    """A baseline's Csystem_build.log, the log of its IP build. For now it
+    is compared as text, normalized so that what always differs --
+    timestamps, pids, paths -- does not show; the place for a closer look,
+    by what it builds and what fails, when one is wanted."""
+    file    : Path
+    baseline: BaselineNr_T
+
+    def __init__(self, baseline: Baseline):
+        self.file = baseline.saved_logs_dir(IP).parent / "Csystem_build.log"
+        self.baseline = baseline.nr
+
+    def comparable(self) -> Path:
+        """A normalized copy of the log, under /tmp/reports."""
+        make_comparable(self.file, self.baseline)
+
+    def compare_with(self, older: CsystemLog):
+        """How this log differs from OLDER's: in the troubleshoot tool, or
+        as a diff in batch mode."""
+        let before: Path = older.comparable()
+        let after: Path = self.comparable()
+        if BATCH:
+            let rc: int = shell: diff {!before} {!after}
+        else:
+            let tool: Tool_T = troubleshoot_tool()
+            let rc: int = shell: {!tool} {!before} {!after} &
+
 # ---------------------------------------------------------------------------
 # Build processing (test results per build)
 # ---------------------------------------------------------------------------
@@ -674,8 +787,6 @@ if __name__ == "__main__":
     let PERFORMANCE: str = "Treplay_G31.OP.L8_30.0.0.133_2026.09.23_213146-performance.MOJ0V.log"
 
     # --- names on disk ------------------------------------------------------
-    assert subtype_label(in_test) == "in"
-    assert subtype_label(assert_test) == "assert"
     assert tlog_filename(mono, normal) == "Tlog-mono.log"
     assert tlog_filename(in_test, mrun) == "Tlog-mrun-in.log"
     assert baseline_nr("IFPS.CUA_IDL.30.0.0.122") == "30.0.0.122"
