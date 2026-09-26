@@ -1951,6 +1951,19 @@ Python's own iteration keeps the newline and Nim's drops it, so the trailer
 is what makes the two agree. `open()` returns a `File`; on the Python target
 the annotation becomes `typing.TextIO`.
 
+A `Path` has `.lines` too, and it is the way to read a file line by line:
+the file is opened, read a line at a time, and closed when the loop ends —
+or is left early, by `return` or `break`:
+
+```python
+for line in log.lines:
+    return $+{ref} if line == /reference baseline\s*:\s*(?P<ref>\S+)/
+```
+
+Not `readFile(log).split("\n")`, which reads the whole file first and
+yields one more line, an empty one, after a final newline; and not an
+`open()` whose `File` nothing closes.
+
 ### Messages and exit: `die`, `warn`, `PROG`
 
 Built in, with no import, and emitted only into programs that use them:

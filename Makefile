@@ -120,7 +120,8 @@ STANDALONE := \
     test_seq_field_concat.ady \
     test_image_method.ady \
     test_run_discard.ady \
-    test_split_unpack.ady
+    test_split_unpack.ady \
+    test_path_lines.ady
 
 # -----------------------------------------------------------------------
 # Stdin tests — piped from a sample file

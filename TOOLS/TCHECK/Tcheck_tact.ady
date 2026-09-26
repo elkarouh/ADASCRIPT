@@ -729,8 +729,7 @@ def read_changes(report: Path) -> ChangeList:
     # a merge's review, for the change its own commit makes: the merge line
     # and the change line then carry the same sha
     var merge_reviews: {CommitHash}Review_T = {:}
-    let f: File = open(report)
-    for line in f.lines:
+    for line in report.lines:
         # Captures are bound first: the calls in each branch match regexes
         # of their own.
         case line.strip():
@@ -1339,7 +1338,7 @@ def tlog_reference(filepath: Path) -> BaselineNr_T:
     """The baseline a Tlog compared its build with -- what its new failures
     are new against: "Tlog: INFO: Actual reference baseline    : 30.0.0.120".
     "" when it does not say."""
-    for line in readFile(filepath).split("\n"):
+    for line in filepath.lines:
         if line == /Actual reference baseline\s*:\s*(?P<ref>\S+)/:
             return $+{ref}
     ""

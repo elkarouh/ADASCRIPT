@@ -1,0 +1,28 @@
+#!/usr/bin/env ady2nim
+"""Test: a Path's .lines -- a file read line by line, by its name.
+
+`for line in p.lines:` opens the file, yields each line without its
+terminator and closes it; on Nim it is lines(filename), on Python a helper
+that opens it (a Path is a str there, and its own iteration would spell
+the name one character at a time). A return from inside the loop leaves it
+early. readFile(p).split("\\n") yields one line more, an empty one, after a
+final newline -- which is why .lines is the way.
+"""
+
+let p: Path = Path("/tmp/ady_path_lines_test.txt")
+writeFile(p, "alpha\nreference baseline : 30.0.0.120\ngamma\n")
+
+var n: int = 0
+for line in p.lines:
+    n += 1
+assert n == 3
+assert readFile(p).split("\n")'Length == 4    # the extra, empty one
+
+def reference_of(log: Path) -> str:
+    for line in log.lines:
+        return $+{ref} if line == /reference baseline\s*:\s*(?P<ref>\S+)/
+    ""
+assert reference_of(p) == "30.0.0.120"
+
+run(["rm", "-f", str(p)])
+print "path-lines tests passed"

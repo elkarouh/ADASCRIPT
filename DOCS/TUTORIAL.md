@@ -3006,6 +3006,7 @@ through the same ground in more detail.
 | Path <-> str                      | `Path(s)` / `str(p)`; a bare `p = s` is refused |
 | Read a file or stdin              | `let f: File = (open(p) if p != "" else stdin)` |
 | Lines without the newline         | `for line in f.lines:` -- same on both backends |
+| A file's lines, by its `Path`     | `for line in p.lines:` -- opened, read and closed for you |
 | Character literal                 | `let c: char = '\t'`; narrowed wherever a char is declared |
 | Path split                        | `p.parent` -> Path, `p.name` -> str     |
 | Path mkdir                        | `p.mkdir()` -- mkdir -p                 |

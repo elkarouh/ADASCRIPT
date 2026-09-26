@@ -1403,6 +1403,7 @@ for s in Stage_T'First .. Stage_T'Last:
 | Path <-> str | `Path(s)` / `str(p)`; a bare `p = s` is refused on both backends |
 | Read a file or stdin | `let f: File = (open(p) if p != "" else stdin)`; `File` is `typing.TextIO` on Python |
 | Lines without the newline | `for line in f.lines:` -- the trailer strips it on both backends |
+| A file's lines, by its `Path` | `for line in p.lines:` -- opens, reads and closes the file; prefer it to `readFile(p).split("\n")` |
 | Character literal | `let c: char = '\t'`; narrowed in every position a char is declared (let/var, assignment, return, implicit return, `[]char` element, `{char}V` key, `{K}char` value, record field, argument) |
 | Path split | `p.parent` -> Path, `p.name` -> str (pathlib rules, not os.path) |
 | Path mkdir | `p.mkdir()` = mkdir -p (parents, exist_ok) |
