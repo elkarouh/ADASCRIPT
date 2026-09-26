@@ -50,6 +50,12 @@ TO_NIM/STDLIB/iters
 # so jointjs leaves a .js symlink rather than an extensionless one.
 TO_NIM/STDLIB/jointjs.js
 
+# The tests' builds, likewise: ady2nim leaves a symlink to the binary next
+# to each test it compiles, and nim a binary next to a .nim. Everything in
+# TO_NIM/TEST without an extension is one of those.
+TO_NIM/TEST/*
+!TO_NIM/TEST/*.*
+
 # Obsolete/deprecated code
 OBSOLETE/
 
