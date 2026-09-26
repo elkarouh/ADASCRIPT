@@ -189,51 +189,33 @@ class Build:
 # Tlog section parsing
 # ---------------------------------------------------------------------------
 
-let SECTION_PATTERNS: []str = [
-    "Crashed Tests",
-    "New tests failing",
-    "Tests that did not run",
-    "Tests still failing",
-    "Following tests are now successful",
-    "Following tests contain known failures",
-    "Errors in log files",
-    "Tlog summary"
+# The sections of a Tlog that are reported, by the words of their header.
+# A Tlog has more -- known failures, errors in log files, mrun failing,
+# Check build of ..., the summary -- and every header ends the section
+# before it, reported or not: a section running on into the next would take
+# its lines for its own (a WARNING line's "Tlog:", a header's "mrun" or
+# "Check" were new failures).
+type Section is enum CRASHED, NEW_FAILING, NOT_RUN, STILL_FAILING, NOW_OK, UNREPORTED
+
+let SECTION_HEADERS: [](Section, str) = [
+    (CRASHED,       "Crashed Tests"),
+    (NEW_FAILING,   "New tests failing"),
+    (NOT_RUN,       "Tests that did not run"),
+    (STILL_FAILING, "Tests still failing"),
+    (NOW_OK,        "Following tests are now successful")
 ]
-
-let REPORTED_PATTERNS: []str = SECTION_PATTERNS[:5] # only interested in the first 5 patterns.
-
-type Section is tuple:
-    pattern  : str
-    start    : int
-    end      : int
 
 def is_section_header(line: str) -> bool:
     """Whether LINE opens a section of a Tlog -- every one does, with a row
     of dots: " .............. New tests failing : nb = 3"."""
     line.strip().startswith("..............")
 
-def find_sections(lines: []str) -> []Section:
-    """Each SECTION_PATTERN's first section in a Tlog's LINES, in file order:
-    from its header to the next header, whichever section that one opens, or
-    to the end.
-
-    A Tlog has more sections than SECTION_PATTERNS names -- mrun failing,
-    Check build of ..., tests removed, known assert failures -- and a
-    section ran on to the next one it named, taking an unnamed one's lines
-    for its own: a WARNING line's "Tlog:" and a header's "mrun" or "Check"
-    were new failures. A pattern is looked for in headers only, for the
-    same reason: a line of text may mention a section."""
-    let headers: []int = [i for i, line in enumerate(lines) if is_section_header(line)]
-    var seen: {}str = {}
-    var sections: []Section = []
-    for k, start in enumerate(headers):
-        let end: int = headers[k + 1] if k + 1 < len(headers) else len(lines)
-        for pattern in SECTION_PATTERNS:
-            if pattern in lines[start] and pattern not in seen:
-                sections.append((pattern: pattern, start: start, end: end))
-                seen.add(pattern)
-                break
-    sections
+def section_of(header: str) -> Section:
+    """The section HEADER opens. Its words are looked for in headers only: a
+    line of text may mention a section."""
+    for section, words in SECTION_HEADERS:
+        return section if words in header
+    return UNREPORTED
 
 type TlogResult is record:
     crashed    : []str
@@ -244,34 +226,32 @@ type TlogResult is record:
     all_ok     : bool = True
 
 def parse_Tlog(filepath: Path, build_subtype: BuildSubtype) -> TlogResult:
-    """Parse a Tlog file and return structured results."""
-    let all_lines: []str = [line for line in filepath.lines]
-    let sections: []Section = find_sections(all_lines)
-    def non_blank_lines(text: []str, start: int, end: int) -> []str:
-        [line for line in text[start + 1 : end] if line.strip() != ""]
+    """The reported sections of a Tlog, read in one pass: each non-blank
+    line goes to the section the last header opened. Only the first section
+    of a name counts; a later one is skipped like an unreported one."""
     var result: TlogResult
-    for section in sections:
-        var is_reported: bool = False
-        for rp in REPORTED_PATTERNS:
-            if section.pattern == rp:
-                is_reported = True
-                break
-        continue if not is_reported
-        let body: []str = non_blank_lines(all_lines, section.start, section.end)
-        if section.pattern == "Tests that did not run" and build_subtype == mono:
-            continue
-        case section.pattern:
-            when "Crashed Tests":
-                result.crashed = body
-            when "New tests failing":
-                result.new_failing = body
-            when "Tests that did not run":
-                result.not_run = body
-            when "Tests still failing":
-                result.still_fail = body
-            when "Following tests are now successful":
-                result.now_ok = body
-            when others: pass
+    var seen: {}Section = {}
+    var section: Section = UNREPORTED
+    for line in filepath.lines:
+        if is_section_header(line):
+            let named: Section = section_of(line)
+            section = UNREPORTED if named in seen else named
+            seen.add(named)
+        elif line.strip() != "":
+            case section:
+                when CRASHED:
+                    result.crashed.append(line)
+                when NEW_FAILING:
+                    result.new_failing.append(line)
+                when NOT_RUN:
+                    if build_subtype != mono:
+                        result.not_run.append(line)
+                when STILL_FAILING:
+                    result.still_fail.append(line)
+                when NOW_OK:
+                    result.now_ok.append(line)
+                when UNREPORTED:
+                    pass
     result.all_ok = result.crashed'Length == 0 and result.new_failing'Length == 0 and result.still_fail'Length == 0
     return result
 
