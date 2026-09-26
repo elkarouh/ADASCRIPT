@@ -217,94 +217,81 @@ def section_of(header: str) -> Section:
         return section if words in header
     return UNREPORTED
 
-type TlogResult is record:
-    crashed    : []str
-    new_failing: []str
-    not_run    : []str
-    still_fail : []str
-    now_ok     : []str
-    all_ok     : bool = True
-
-def parse_Tlog(filepath: Path, build_subtype: BuildSubtype) -> TlogResult:
-    """The reported sections of a Tlog, read in one pass: each non-blank
-    line goes to the section the last header opened. Only the first section
-    of a name counts; a later one is skipped like an unreported one."""
-    var result: TlogResult
-    var seen: {}Section = {}
-    var section: Section = UNREPORTED
-    for line in filepath.lines:
-        continue if line.strip() == ""
-        if is_section_header(line):
-            let named: Section = section_of(line)
-            section = UNREPORTED if named in seen else named
-            seen.add(named)
-        else:
-            case section:
-                when CRASHED:
-                    result.crashed.append(line)
-                when NEW_FAILING:
-                    result.new_failing.append(line)
-                when NOT_RUN:
-                    if build_subtype != mono:
-                        result.not_run.append(line)
-                when STILL_FAILING:
-                    result.still_fail.append(line)
-                when NOW_OK:
-                    result.now_ok.append(line)
-                when UNREPORTED:
-                    pass
-    result.all_ok = result.crashed'Length == 0 and result.new_failing'Length == 0 and result.still_fail'Length == 0
-    return result
-
 def extract_test_name(line: str) -> TestName_T:
     """Extract the test name from a Tlog line (second whitespace-separated field)."""
     let parts: []str = line.split()
     return parts[1] if parts'Length > 1 else line.strip()
 
-def print_Tlog(result: TlogResult, build_subtype: BuildSubtype, only_new: bool = False):
-    """Print a TlogResult with coloring matching the ksh version."""
-    var at_least_one_failing: bool = False
+def is_test_name(name: TestName_T) -> bool:
+    """Whether NAME, a Tlog line's second word, names a test: a test is an
+    .el file. The sections hold other lines too -- a remark, a pointer to
+    the log, an mrun line -- whose second word (all, Check, Tlog:, mrun) is
+    no test."""
+    name.endswith(".el")
 
-    # New tests failing.
-    if result.new_failing'Length == 0:
-        if not only_new:
-            puts("Kw", "New tests failing")
-            print "  ==> None"
-            print
-    else:
-        at_least_one_failing = True
-        puts("Kw", "New tests failing", NEWLINE=True)
-        for line in result.new_failing:
-            stdout.write("\t")
-            puts("SKy", extract_test_name(line), NEWLINE=True)
-            let emacs_at: int = line.find("#emacs")
-            if emacs_at >= 0:
-                print line[emacs_at:]
+class Tlog:
+    """A Tlog's reported sections: the lines of each, as the Tlog wrote them."""
+    crashed    : []str
+    new_failing: []str
+    not_run    : []str
+    still_fail : []str
+    now_ok     : []str
+
+    def __init__(self, filepath: Path, build_subtype: BuildSubtype):
+        """Read FILEPATH in one pass: each non-blank line goes to the section
+        the last header opened. Only the first section of a name counts; a
+        later one is skipped like an unreported one. A mono build's tests that
+        did not run are not reported."""
+        # Each Tlog its own lists: on Python a class-level [] would be one
+        # list shared by every instance.
+        self.crashed = []
+        self.new_failing = []
+        self.not_run = []
+        self.still_fail = []
+        self.now_ok = []
+        var seen: {}Section = {}
+        var section: Section = UNREPORTED
+        for line in filepath.lines:
+            continue if line.strip() == ""
+            if is_section_header(line):
+                let named: Section = section_of(line)
+                section = UNREPORTED if named in seen else named
+                seen.add(named)
             else:
+                case section:
+                    when CRASHED:
+                        self.crashed.append(line)
+                    when NEW_FAILING:
+                        self.new_failing.append(line)
+                    when NOT_RUN:
+                        if build_subtype != mono:
+                            self.not_run.append(line)
+                    when STILL_FAILING:
+                        self.still_fail.append(line)
+                    when NOW_OK:
+                        self.now_ok.append(line)
+                    when UNREPORTED:
+                        pass
+
+    def all_ok(self) -> bool:
+        """Whether nothing crashed, newly failed or still fails."""
+        self.crashed'Length == 0 and self.new_failing'Length == 0 and self.still_fail'Length == 0
+
+    def show(self, only_new: bool = False):
+        """Print the sections, coloured as the ksh version does; ONLY_NEW
+        leaves out all but the new failures and crashes."""
+        var at_least_one_failing: bool = False
+
+        # New tests failing.
+        if self.new_failing'Length == 0:
+            if not only_new:
+                puts("Kw", "New tests failing")
+                print "  ==> None"
                 print
-            print
-
-    # Crashed Tests.
-    if result.crashed'Length > 0:
-        at_least_one_failing = True
-        puts("Kw", "Crashed Tests", NEWLINE=True)
-        for line in result.crashed:
-            print "CRASHED TEST: " + line
-            print
-
-    # Tests still failing.
-    if result.still_fail'Length == 0:
-        if not only_new:
-            puts("Kw", "Tests still failing")
-            print "  ==> None"
-            print
-    elif not only_new:
-        at_least_one_failing = True
-        puts("Kw", "Tests still failing", NEWLINE=True)
-        for line in result.still_fail:
-            if "Worse" in line or "Better" in line or "Same" in line:
-                print line
-            else:
+        else:
+            at_least_one_failing = True
+            puts("Kw", "New tests failing", NEWLINE=True)
+            for line in self.new_failing:
                 stdout.write("\t")
                 puts("SKy", extract_test_name(line), NEWLINE=True)
                 let emacs_at: int = line.find("#emacs")
@@ -312,37 +299,76 @@ def print_Tlog(result: TlogResult, build_subtype: BuildSubtype, only_new: bool =
                     print line[emacs_at:]
                 else:
                     print
-            print
+                print
 
-    # Tests that did not run.
-    if result.not_run'Length > 0 and not only_new:
-        at_least_one_failing = True
-        puts("Kw", "Tests that did not run", NEWLINE=True)
-        for line in result.not_run:
-            print line
-            print
+        # Crashed Tests.
+        if self.crashed'Length > 0:
+            at_least_one_failing = True
+            puts("Kw", "Crashed Tests", NEWLINE=True)
+            for line in self.crashed:
+                print "CRASHED TEST: " + line
+                print
 
-    # Following tests are now successful.
-    if result.now_ok'Length == 0:
-        if not only_new:
-            puts("Kw", "Following tests are now successful")
-            print "  ==> None"
-            print
-    elif not only_new:
-        puts("Kw", "Following tests are now successful", NEWLINE=True)
-        for line in result.now_ok:
-            print line
-            print
+        # Tests still failing.
+        if self.still_fail'Length == 0:
+            if not only_new:
+                puts("Kw", "Tests still failing")
+                print "  ==> None"
+                print
+        elif not only_new:
+            at_least_one_failing = True
+            puts("Kw", "Tests still failing", NEWLINE=True)
+            for line in self.still_fail:
+                if "Worse" in line or "Better" in line or "Same" in line:
+                    print line
+                else:
+                    stdout.write("\t")
+                    puts("SKy", extract_test_name(line), NEWLINE=True)
+                    let emacs_at: int = line.find("#emacs")
+                    if emacs_at >= 0:
+                        print line[emacs_at:]
+                    else:
+                        print
+                print
 
-    if not at_least_one_failing and not only_new:
-        print
-        puts("Kw", ".............. ALL TESTS ARE SUCCESSFUL !!!!", NEWLINE=True)
+        # Tests that did not run.
+        if self.not_run'Length > 0 and not only_new:
+            at_least_one_failing = True
+            puts("Kw", "Tests that did not run", NEWLINE=True)
+            for line in self.not_run:
+                print line
+                print
+
+        # Following tests are now successful.
+        if self.now_ok'Length == 0:
+            if not only_new:
+                puts("Kw", "Following tests are now successful")
+                print "  ==> None"
+                print
+        elif not only_new:
+            puts("Kw", "Following tests are now successful", NEWLINE=True)
+            for line in self.now_ok:
+                print line
+                print
+
+        if not at_least_one_failing and not only_new:
+            print
+            puts("Kw", ".............. ALL TESTS ARE SUCCESSFUL !!!!", NEWLINE=True)
+
+    def failed_test_names(self) -> []TestName_T:
+        """The tests the new_failing and crashed sections name."""
+        var names: []TestName_T = []
+        for line in self.new_failing + self.crashed:
+            let name: TestName_T = extract_test_name(line)
+            if is_test_name(name):
+                names.append(name)
+        return names
 
 def process_Tlog(filepath: Path, build_subtype: BuildSubtype):
     """Parse and print a Tlog file (backward-compatible wrapper)."""
-    let result: TlogResult = parse_Tlog(filepath, build_subtype)
-    print_Tlog(result, build_subtype, ONLY_NEW)
-    if result.new_failing'Length > 0 or result.crashed'Length > 0:
+    let tlog: Tlog = Tlog(filepath, build_subtype)
+    tlog.show(ONLY_NEW)
+    if tlog.new_failing'Length > 0 or tlog.crashed'Length > 0:
         HAS_NEW_FAILURES = True
 
 def echo_emacs(filepath: Path):
@@ -1308,13 +1334,6 @@ type BuildSummary is tuple:
     total_crash: int
     all_ok     : bool
 
-def is_test_name(name: TestName_T) -> bool:
-    """Whether NAME, a Tlog line's second word, names a test: a test is an
-    .el file. The sections hold other lines too -- a remark, a pointer to
-    the log, an mrun line -- whose second word (all, Check, Tlog:, mrun) is
-    no test."""
-    name.endswith(".el")
-
 def tlog_reference(filepath: Path) -> BaselineNr_T:
     """The baseline a Tlog compared its build with -- what its new failures
     are new against: "Tlog: INFO: Actual reference baseline    : 30.0.0.120".
@@ -1323,16 +1342,6 @@ def tlog_reference(filepath: Path) -> BaselineNr_T:
         if line == /Actual reference baseline\s*:\s*(?P<ref>\S+)/:
             return $+{ref}
     ""
-
-def get_failed_test_names(filepath: Path, subtype: BuildSubtype) -> []TestName_T:
-    """The tests a Tlog's new_failing + crashed sections name."""
-    let r: TlogResult = parse_Tlog(filepath, subtype)
-    var names: []TestName_T = []
-    for line in r.new_failing + r.crashed:
-        let name: TestName_T = extract_test_name(line)
-        if is_test_name(name):
-            names.append(name)
-    return names
 
 def check_replay_dirs_size():
     """Scan replay directories for disk usage and deletion advice."""
@@ -1638,11 +1647,11 @@ class Report:
             for pass_ in BuildPass:
                 let full_path: Path = build.tlog_path(subtype, pass_)
                 if -f full_path:
-                    let r: TlogResult = parse_Tlog(full_path, subtype)
-                    total_new = total_new + r.new_failing'Length
-                    total_still = total_still + r.still_fail'Length
-                    total_crash = total_crash + r.crashed'Length
-                    if not r.all_ok:
+                    let tlog: Tlog = Tlog(full_path, subtype)
+                    total_new = total_new + tlog.new_failing'Length
+                    total_still = total_still + tlog.still_fail'Length
+                    total_crash = total_crash + tlog.crashed'Length
+                    if not tlog.all_ok():
                         all_ok = False
         return (build_name: build.name, btype: build.btype,
                 total_new: total_new, total_still: total_still,
@@ -1708,7 +1717,7 @@ class Report:
         detailed views, where the causes are looked for."""
         var found: []NewFailure = []
         for t in self.tlogs():
-            for name in get_failed_test_names(t.path, t.subtype):
+            for name in Tlog(t.path, t.subtype).failed_test_names():
                 found.append((build: t.build, test: name))
         if len(found) > 0:
             HAS_NEW_FAILURES = True
