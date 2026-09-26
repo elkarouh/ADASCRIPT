@@ -1820,7 +1820,10 @@ class Report:
         if prev_report != "" and cur_report != "" and not BATCH:
             let tool: Tool_T = troubleshoot_tool()
             let tool_rc: int = shell: {!tool} {!prev_report} {!cur_report} &
-        let failed_file: Path = Path("/tmp/reports") / "failed_tests"
+        # made here as well: the scans only make it when they find logs
+        let reports: Path = Path("/tmp/reports")
+        reports.mkdir()
+        let failed_file: Path = reports / "failed_tests"
         let failed_output: str = self.cur.show_failed_tests(btype, subtype)
         writeFile(failed_file, failed_output)
         if not BATCH:
