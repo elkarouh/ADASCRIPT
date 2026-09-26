@@ -638,6 +638,14 @@ test: compile
 	@# backend cannot follow a nimport.
 	@echo "=== Tcheck_tact -focus changes: the tests the Tlogs report failing ==="
 	@$(TCDIR)/test/run_new_failures_tests.sh $(TCDIR)/Tcheck_tact
+	@# Each of Tcheck_tact's modules carries its own tests, under
+	@# `if __name__ == "__main__"`: built alone, the module runs them.
+	@echo "=== Tcheck_tact's modules, their own tests ==="
+	@for m in tcheck_common; do \
+	    printf '  %-42s' "LIBS/$$m.ady"; \
+	    $(ADY2NIM) c $(TCDIR)/LIBS/$$m.ady >/dev/null 2>&1 \
+	        && $(TCDIR)/LIBS/$$m >/dev/null 2>&1 && echo OK || { echo FAIL; exit 1; }; \
+	done
 	@# make_comparable, which Tcheck_tact runs on the logs it compares:
 	@# the volatile parts replaced, in place.
 	@echo "=== make_comparable ==="

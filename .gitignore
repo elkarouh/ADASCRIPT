@@ -56,6 +56,10 @@ TO_NIM/STDLIB/jointjs.js
 TO_NIM/TEST/*
 !TO_NIM/TEST/*.*
 
+# Tcheck_tact's modules, built alone to run their own tests
+TOOLS/TCHECK/LIBS/*
+!TOOLS/TCHECK/LIBS/*.ady
+
 # Obsolete/deprecated code
 OBSOLETE/
 
