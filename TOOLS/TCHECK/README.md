@@ -12,15 +12,26 @@ Report the status of a baseline build: regression test results, replay status,
 Padactl/CRC summary, and build closure.
 
 Its source is split into modules, laid out as `EXAMPLES/PROJECT` is:
-`Tcheck_tact.ady` (the options, the report, the main block) nimports
-`LIBS/tcheck_common` (named types, colored output, settings), `LIBS/baselines`
-(a baseline: its builds, Tlogs and replays) and `LIBS/changes_report` (who
-changed what). Build it as before, `ady2nim c Tcheck_tact.ady`. A nimport is
-Nim-only, so Tcheck_tact is a Nim program.
+`Tcheck_tact.ady` (the options, the report, the main block) nimports, one
+module per thing it reads:
+
+| Module                | Holds                                                        |
+|-----------------------|--------------------------------------------------------------|
+| `LIBS/tcheck_common`  | named types, colored output, settings, the CM tree, build enums |
+| `LIBS/tlog`           | a Tlog: its sections, the tests it reports newly failing     |
+| `LIBS/replays`        | the replays: their types, their Treplay logs, their dirs     |
+| `LIBS/baselines`      | a baseline and its builds, which read their Tlogs            |
+| `LIBS/csystem_log`    | a baseline's Csystem_build.log, and comparing two            |
+| `LIBS/changes_report` | who changed what, per the CFMUTEST changes report            |
+
+`tcheck_common` is the leaf; `baselines` builds on `tlog` and `replays`,
+and `csystem_log` and `changes_report` on `baselines`. Build it as before,
+`ady2nim c Tcheck_tact.ady`. A nimport is Nim-only, so Tcheck_tact is a
+Nim program.
 
 Each module carries its own tests, under `if __name__ == "__main__"`: built
-alone (`ady2nim c LIBS/baselines.ady && LIBS/baselines`) it runs them, and
-`make test` does so for all three. They read real files from
+alone (`ady2nim c LIBS/tlog.ady && LIBS/tlog`) it runs them, and
+`make test` does so for all six. They read real files from
 `test/samples/`: a Tlog, two replay logs (trimmed to the lines that matter)
 and a CFMUTEST changes report.
 

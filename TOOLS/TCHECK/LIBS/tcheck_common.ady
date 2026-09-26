@@ -1,7 +1,8 @@
 """
 tcheck_common — what every part of Tcheck_tact uses: the domain's named
-types, colored output, the settings the command line gives, and the build
-and replay enums. A leaf: it nimports nothing of Tcheck_tact's.
+types, colored output, the settings the command line gives, the CM tree,
+the build enums, and the helpers several modules share. A leaf: it
+nimports nothing of Tcheck_tact's.
 """
 
 nimport os
@@ -52,6 +53,10 @@ var ONLY_NEW: bool = False
 # read once at the end (Report.found_new_failures) for the exit status.
 var HAS_NEW_FAILURES: bool = False
 
+# The CM tree; overridable so the program can be run against a copy of one.
+let CM_OT: Path = Path(${TCHECK_CM_OT:-"/cm/ot"})
+let TACT_ROOT: Path = CM_OT / "TACT"
+
 def ansi_escape(spec: ColorSpec_T) -> str:
     """Turn a color spec like 'sWr' into an ANSI escape sequence."""
     let codes: []str = [ANSI_CODES[ch] for ch in spec if ch in ANSI_CODES]
@@ -74,14 +79,6 @@ def hr(c: char = '#', length: int = 80):
 type BuildSubtype is enum in_test, mono, assert_test, lo, hi, memcheck, with_secondary
 type BuildType is enum IP, OP, SIP
 type BuildPass is enum normal, mrun
-type FocusDomain is enum no_focus, focus_IP, focus_OP, focus_SIP, focus_replay, focus_build_info, focus_changes
-type ReplayType is enum run_prequal, performance, simca, full_simca, oldest_date, all_autolink
-# what a replay's log says of it
-type ReplayStatus is enum succeeded, failed, not_started, busy
-
-type Replay is tuple:
-    rtype : ReplayType
-    file  : Path
 
 def subtype_label(st: BuildSubtype) -> str:
     """The file-system name for a subtype ('in' not 'in_test')."""
@@ -109,6 +106,25 @@ def troubleshoot_tool() -> Tool_T:
     """What troubleshoot mode compares two files with: the -tool diff tool,
     or meld."""
     DIFF_TOOL if DIFF_TOOL != "" else "meld"
+
+def echo_emacs(filepath: Path):
+    """Print an #emacs: link for FILEPATH."""
+    puts("SBw", "Look for details in:", NEWLINE=True)
+    print f"#emacs:(progn(find-file \"{filepath}\"))"
+
+def find_core_dumps(dir: Path):
+    # find core files bigger than 600MB
+    let r = shell: fd -l --size +600M core {dir}
+    if r.output.strip() != "":
+        puts("SWr", "CORE DUMPS:", NEWLINE=True)
+        print r.output.rstrip("\n")
+
+def make_report(content: str, bl: BaselineNr_T, report_name: str) -> Path:
+    let rc0: int = shell: mkdir -p /tmp/reports
+    let report_file: Path = Path("/tmp/reports") / (report_name + "_" + bl + ".txt")
+    writeFile(report_file, content)
+    let rc: int = shell: make_comparable {report_file} {bl} 2>/dev/null
+    return report_file
 
 # ---------------------------------------------------------------------------
 # Tests: ady2nim -r LIBS/tcheck_common.ady

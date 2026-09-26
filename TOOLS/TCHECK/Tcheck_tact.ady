@@ -9,8 +9,11 @@ Translated from the ksh original in TOOL/COMMON_UTILS.
 
     TOOLS/TCHECK/
         Tcheck_tact.ady           <- this file: the options, the report, main
-        LIBS/tcheck_common.ady    <- leaf: named types, colored output, settings
-        LIBS/baselines.ady        <- a baseline: its builds, Tlogs, replays, Csystem log
+        LIBS/tcheck_common.ady    <- leaf: named types, colored output, settings, the CM tree
+        LIBS/tlog.ady             <- a Tlog: its sections, the tests newly failing
+        LIBS/replays.ady          <- the replays: their types, their logs, their dirs
+        LIBS/baselines.ady        <- a baseline and its builds, which read their Tlogs
+        LIBS/csystem_log.ady      <- a baseline's Csystem_build.log, compared
         LIBS/changes_report.ady   <- who changed what: the CFMUTEST changes report
 
 The modules are nimported by their path relative to this file (LIBS/...),
@@ -21,7 +24,10 @@ program: the Python backend cannot follow one.
 nimport os
 nimport time
 nimport LIBS/tcheck_common
+nimport LIBS/tlog
+nimport LIBS/replays
 nimport LIBS/baselines
+nimport LIBS/csystem_log
 nimport LIBS/changes_report
 
 # ---------------------------------------------------------------------------
@@ -64,6 +70,9 @@ def usage():
     print "  -user <name> Only the changes of committer <name>: -focus changes <name>."
     print "  <BASELINE>   Required if -c or -v is specified, or if no options are given."
     quit(1)
+
+# what -focus narrows the report to
+type FocusDomain is enum no_focus, focus_IP, focus_OP, focus_SIP, focus_replay, focus_build_info, focus_changes
 
 class Options:
     colored      : bool = True

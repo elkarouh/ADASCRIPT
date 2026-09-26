@@ -1,0 +1,284 @@
+"""
+tlog — a Tlog, the log of a build's regression tests: the sections it
+reports, and the tests it names newly failing.
+
+Depends on `tcheck_common`, a sibling inside LIBS/, nimported by its bare
+name.
+"""
+
+nimport os
+nimport tcheck_common
+
+# ---------------------------------------------------------------------------
+# Tlog section parsing
+# ---------------------------------------------------------------------------
+
+# The sections of a Tlog that are reported, by the words of their header.
+# A Tlog has more -- known failures, errors in log files, mrun failing,
+# Check build of ..., the summary -- and every header ends the section
+# before it, reported or not: a section running on into the next would take
+# its lines for its own (a WARNING line's "Tlog:", a header's "mrun" or
+# "Check" were new failures).
+type Section is enum CRASHED, NEW_FAILING, NOT_RUN, STILL_FAILING, NOW_OK, UNREPORTED
+
+let SECTION_HEADERS: [](Section, str) = [
+    (CRASHED,       "Crashed Tests"),
+    (NEW_FAILING,   "New tests failing"),
+    (NOT_RUN,       "Tests that did not run"),
+    (STILL_FAILING, "Tests still failing"),
+    (NOW_OK,        "Following tests are now successful")
+]
+
+def is_section_header(line: str) -> bool:
+    """Whether LINE opens a section of a Tlog -- every one does, with a row
+    of dots: " .............. New tests failing : nb = 3"."""
+    line.strip().startswith("..............")
+
+def section_of(header: str) -> Section:
+    """The section HEADER opens. Its words are looked for in headers only: a
+    line of text may mention a section."""
+    for section, words in SECTION_HEADERS:
+        return section if words in header
+    return UNREPORTED
+
+def extract_test_name(line: str) -> TestName_T:
+    """Extract the test name from a Tlog line (second whitespace-separated field)."""
+    let parts: []str = line.split()
+    return parts[1] if parts'Length > 1 else line.strip()
+
+def is_test_name(name: TestName_T) -> bool:
+    """Whether NAME, a Tlog line's second word, names a test: a test is an
+    .el file. The sections hold other lines too -- a remark, a pointer to
+    the log, an mrun line -- whose second word (all, Check, Tlog:, mrun) is
+    no test."""
+    name.endswith(".el")
+
+def tlog_filename(subtype: BuildSubtype, pass_: BuildPass) -> str:
+    """The Tlog filename for a subtype and pass."""
+    let sl: str = subtype_label(subtype)
+    case pass_:
+        when normal: "Tlog-" + sl + ".log"
+        when mrun: "Tlog-mrun-" + sl + ".log"
+
+class Tlog:
+    """A Tlog's reported sections: the lines of each, as the Tlog wrote them."""
+    file       : Path
+    subtype    : BuildSubtype
+    build_pass : BuildPass
+    crashed    : []str
+    new_failing: []str
+    not_run    : []str
+    still_fail : []str
+    now_ok     : []str
+    # the baseline the Tlog compared its build with, what its new failures
+    # are new against: "Tlog: INFO: Actual reference baseline    : 30.0.0.120",
+    # or, when it is not the one expected, "Tlog: WARNING: ACTUAL reference
+    # baseline : 30.0.0.131 !!!"; "" when it does not say
+    reference  : BaselineNr_T
+
+    def __init__(self, filepath: Path, subtype: BuildSubtype, build_pass: BuildPass = normal):
+        """Read FILEPATH, the Tlog of SUBTYPE for BUILD_PASS, in one pass: each
+        non-blank line goes to the section the last header opened. Only the
+        first section of a name counts; a later one is skipped like an
+        unreported one. A mono build's tests that did not run are not
+        reported."""
+        self.file = filepath
+        self.subtype = subtype
+        self.build_pass = build_pass
+        var seen: {}Section = {}
+        var section: Section = UNREPORTED
+        for line in filepath.lines:
+            continue if line.strip() == ""
+            if self.reference == "" and line == /(?i)actual reference baseline\s*:\s*(?P<ref>\S+)/:
+                self.reference = $+{ref}
+            if is_section_header(line):
+                let named: Section = section_of(line)
+                section = UNREPORTED if named in seen else named
+                seen.add(named)
+            else:
+                case section:
+                    when CRASHED:
+                        self.crashed.append(line)
+                    when NEW_FAILING:
+                        self.new_failing.append(line)
+                    when NOT_RUN:
+                        if subtype != mono:
+                            self.not_run.append(line)
+                    when STILL_FAILING:
+                        self.still_fail.append(line)
+                    when NOW_OK:
+                        self.now_ok.append(line)
+                    when UNREPORTED:
+                        pass
+
+    def all_ok(self) -> bool:
+        """Whether nothing crashed, newly failed or still fails."""
+        self.crashed'Length == 0 and self.new_failing'Length == 0 and self.still_fail'Length == 0
+
+    def show(self, only_new: bool = False):
+        """Print the sections, coloured as the ksh version does; ONLY_NEW
+        leaves out all but the new failures and crashes."""
+        var at_least_one_failing: bool = False
+
+        # New tests failing.
+        if self.new_failing'Length == 0:
+            if not only_new:
+                puts("Kw", "New tests failing")
+                print "  ==> None"
+                print
+        else:
+            at_least_one_failing = True
+            puts("Kw", "New tests failing", NEWLINE=True)
+            for line in self.new_failing:
+                stdout.write("\t")
+                puts("SKy", extract_test_name(line), NEWLINE=True)
+                let emacs_at: int = line.find("#emacs")
+                if emacs_at >= 0:
+                    print line[emacs_at:]
+                else:
+                    print
+                print
+
+        # Crashed Tests.
+        if self.crashed'Length > 0:
+            at_least_one_failing = True
+            puts("Kw", "Crashed Tests", NEWLINE=True)
+            for line in self.crashed:
+                print "CRASHED TEST: " + line
+                print
+
+        # Tests still failing.
+        if self.still_fail'Length == 0:
+            if not only_new:
+                puts("Kw", "Tests still failing")
+                print "  ==> None"
+                print
+        elif not only_new:
+            at_least_one_failing = True
+            puts("Kw", "Tests still failing", NEWLINE=True)
+            for line in self.still_fail:
+                if "Worse" in line or "Better" in line or "Same" in line:
+                    print line
+                else:
+                    stdout.write("\t")
+                    puts("SKy", extract_test_name(line), NEWLINE=True)
+                    let emacs_at: int = line.find("#emacs")
+                    if emacs_at >= 0:
+                        print line[emacs_at:]
+                    else:
+                        print
+                print
+
+        # Tests that did not run.
+        if self.not_run'Length > 0 and not only_new:
+            at_least_one_failing = True
+            puts("Kw", "Tests that did not run", NEWLINE=True)
+            for line in self.not_run:
+                print line
+                print
+
+        # Following tests are now successful.
+        if self.now_ok'Length == 0:
+            if not only_new:
+                puts("Kw", "Following tests are now successful")
+                print "  ==> None"
+                print
+        elif not only_new:
+            puts("Kw", "Following tests are now successful", NEWLINE=True)
+            for line in self.now_ok:
+                print line
+                print
+
+        if not at_least_one_failing and not only_new:
+            print
+            puts("Kw", ".............. ALL TESTS ARE SUCCESSFUL !!!!", NEWLINE=True)
+
+    def failed_test_names(self) -> []TestName_T:
+        """The tests the new_failing and crashed sections name."""
+        var names: []TestName_T = []
+        for line in self.new_failing + self.crashed:
+            let name: TestName_T = extract_test_name(line)
+            if is_test_name(name):
+                names.append(name)
+        return names
+
+# ---------------------------------------------------------------------------
+# New failures, as the Tlogs report them
+# ---------------------------------------------------------------------------
+
+# A test one of the baseline's Tlogs reports newly failing or crashed:
+# see Report.new_failures.
+type NewFailure is tuple:
+    build: BuildLabel_T # the build type and subtype it fails in: "IP in", "OP assert"
+    test:  TestName_T
+
+def list_new_failures(against: str, failures: []NewFailure):
+    """Each test of FAILURES once, with the build(s) it newly fails in;
+    AGAINST, the baselines the Tlogs compared with, or ""."""
+    let vs: str = f" vs {against}" if against != "" else ""
+    puts("SWr", f"NEWLY FAILED TESTS{vs}", NEWLINE=True)
+    if len(failures) == 0:
+        let compared: str = f" compared to {against}" if against != "" else ""
+        puts("SKg", f"  No new failures{compared}", NEWLINE=True)
+        print
+        return
+    var tests: []TestName_T = []
+    var builds: {TestName_T}[]BuildLabel_T = {:}
+    for f in failures:
+        if f.test not in builds:
+            tests.append(f.test)
+            builds[f.test] = []
+        if f.build not in builds[f.test]:
+            builds[f.test].append(f.build)
+    var width: int = 0
+    for test in tests:
+        width = max(width, len(test))
+    for test in tests:
+        stdout.write("  ")
+        puts("SWr", test)
+        print " " * (width - len(test)) + "  " + ", ".join(builds[test])
+    print
+
+# ---------------------------------------------------------------------------
+# Tests: ady2nim c LIBS/tlog.ady && LIBS/tlog
+# The real Tlog is in test/samples, beside LIBS/.
+# ---------------------------------------------------------------------------
+
+if __name__ == "__main__":
+    let samples: Path = Path($0).parent.parent / "test" / "samples"
+    let tmp: Path = Path(run(["mktemp", "-d", "-t", "tlog.XXXXXX"]).output.strip())
+
+    # --- its name on disk ----------------------------------------------------
+    assert tlog_filename(mono, normal) == "Tlog-mono.log"
+    assert tlog_filename(in_test, mrun) == "Tlog-mrun-in.log"
+
+    # --- a Tlog: the real one -----------------------------------------------
+    let real: Tlog = Tlog(samples / "Tlog-in.log", in_test)
+    # "WARNING: ACTUAL reference baseline : 30.0.0.131 !!!" -- not the one expected
+    assert real.reference == "30.0.0.131"
+    assert len(real.new_failing) == 1 and real.new_failing[0].startswith("FAILED test_an2_fltgen_aro_id.el ")
+    assert real.failed_test_names() == ["test_an2_fltgen_aro_id.el"]
+    assert len(real.crashed) == 0 and len(real.not_run) == 0
+    # still failing: the Worse / Same / Better lines come with the tests
+    assert len(real.still_fail) == 6
+    assert real.still_fail[0] == "Worse : nb = 1" and real.still_fail[5] == "Better : nb = 0"
+    assert [line.split()[1] for line in real.now_ok] == ["test_an2_concerned_aro_anu_list.el", "test_aro_transmit_via_esb.el", "test_fullsysonly_secondary_forced_switch.el"]
+    assert not real.all_ok()
+
+    # what the real one has none of: a mono build, a section repeated
+    let other: Path = tmp / "Tlog-mono.log"
+    writeFile(other, "\n".join([
+        "Tlog: INFO: Actual reference baseline    : 30.0.0.120",
+        " .............. Tests that did not run : nb = 1",
+        "NOTRUN test_n.el",
+        " .............. New tests failing : nb = 1",
+        "FAILED test_a.el",
+        " .............. New tests failing again",
+        "FAILED test_dup.el"]) + "\n")
+    assert Tlog(other, in_test).reference == "30.0.0.120"
+    assert Tlog(other, in_test).not_run == ["NOTRUN test_n.el"]
+    assert len(Tlog(other, mono).not_run) == 0           # a mono build's are not reported
+    assert Tlog(other, in_test).new_failing == ["FAILED test_a.el"]   # the first section of a name
+
+    run(["rm", "-rf", str(tmp)])
+    print "tlog: all tests passed"

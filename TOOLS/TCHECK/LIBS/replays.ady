@@ -1,0 +1,220 @@
+"""
+replays — a baseline's replays: their types, what their Treplay logs say,
+and the replay directories they leave on disk.
+
+Depends on `tcheck_common`, a sibling inside LIBS/, nimported by its bare
+name.
+"""
+
+nimport os
+nimport tcheck_common
+
+type ReplayType is enum run_prequal, performance, simca, full_simca, oldest_date, all_autolink
+# what a replay's log says of it
+type ReplayStatus is enum succeeded, failed, not_started, busy
+
+type Replay is tuple:
+    rtype : ReplayType
+    file  : Path
+
+def replay_type_from(file: Path) -> ?ReplayType:
+    """Extract the replay type from a Treplay log's name.
+
+    Treplay_G!31.OP.L8_30.0.0.128_2026.09.16_22:01:59-performance.dt6Uo.log
+    """
+    case file.name:
+        when /run_prequal/:   return run_prequal
+        when /performance/:   return performance
+        when /full_simca/:    return full_simca
+        when /simca/:         return simca
+        when /oldest_date/:   return oldest_date
+        when /all_autolink/:  return all_autolink
+        when others:          return None
+
+def replay_dir_pattern(rtype: ReplayType) -> Glob_T:
+    """What the replay directories of RTYPE have in their names."""
+    case rtype:
+        when performance: return "TAC_LO3"
+        when others:      return rtype'Image
+
+# ---------------------------------------------------------------------------
+# Replay logs
+# ---------------------------------------------------------------------------
+
+class ReplayLog:
+    """What a Treplay log says of its replay, read in one pass."""
+    file         : Path
+    status       : ReplayStatus
+    severe_errors: []str   # its ERROR_REPORT.SEVERE lines
+    terminated   : bool    # whether it says "Replay terminated"
+
+    def __init__(self, file: Path):
+        """The verdict is that of the last UNINSTALL step when it has one;
+        else the log is waiting for the replay to end, or has not started."""
+        self.file = file
+        var verdict: str = ""        # the rest of the last UNINSTALL line
+        var waiting: bool = False
+        for line in file.lines:
+            if "Executed UNINSTALL:" in line:
+                let (_, after) = line.rsplit("Executed UNINSTALL:", 1)
+                verdict = after
+            if "Waiting for this replay to be finished" in line:
+                waiting = True
+            if "ERROR_REPORT.SEVERE" in line:
+                self.severe_errors.append(line)
+            if "Replay terminated" in line:
+                self.terminated = True
+        if "YES" in verdict:
+            self.status = succeeded
+        elif "NO" in verdict:
+            self.status = failed
+        elif waiting:
+            self.status = busy
+        else:
+            self.status = not_started
+
+    def show(self, verbose: bool):
+        """The verdict, with a link to the log when the replay failed, and
+        with VERBOSE its severe errors, each from its file's name on."""
+        case self.status:
+            when succeeded:
+                puts("SWb", "==> WAS SUCCESSFUL", NEWLINE=True)
+            when failed:
+                puts("SWr", "==> FAILED", NEWLINE=True)
+                echo_emacs(self.file)
+                print
+                if verbose:
+                    for line in self.severe_errors:
+                        let basename_at: int = line.rfind("/")
+                        if basename_at >= 0:
+                            print line[basename_at + 1:]
+                        else:
+                            print line
+            when not_started:
+                puts("SWb", "---> WARNING: it looks like the replay hasn't started", NEWLINE=True)
+            when busy:
+                puts("SWb", "IS STILL BUSY", NEWLINE=True)
+
+def process_replay(replay: Replay, verbose: bool):
+    """Check the status of a single replay (successful / failed / running)."""
+    let label: str = f"\"{replay.rtype}\""
+    puts("SWb", f"{label:<14} replay ")
+    ReplayLog(replay.file).show(verbose)
+    hr('-')
+
+def check_replay_dirs_size():
+    """Scan replay directories for disk usage and deletion advice."""
+    hr('-')
+    puts("SWr", "COMPUTE SIZE OF REPLAY DIRS", NEWLINE=True)
+    let listing: []str = shellLines: ls -d {TACT_ROOT}/TACT_CONFIG![0-9]*/build_G!*OP*/saved_logs/replay_dir*
+    var total_size: float = 0.0
+    for found in listing:
+        continue if found == ""
+        let replay_dir: Path = Path(found)
+        hr('-')
+        # Extract replay type from dir name.
+        let dir_basename: str = replay_dir.name
+        let replay_type: str = dir_basename.split("-")[-1].split(".")[0] if "-" in dir_basename else dir_basename
+        # Get size.
+        let du_r = shell: du --max-depth=0 -ch {!replay_dir} | head -n1
+        let size_line: str = du_r.output.strip()
+        let size_str: str = size_line.split()[0] if size_line != "" else "0"
+        puts("SBy", f"{replay_dir} ==> {size_str}", NEWLINE=True)
+        # Only count sizes in GB.
+        continue if not size_str.endswith("G")
+        let num_size: float = float(size_str[0:-1])
+        # Find the replay log to check if it terminated.
+        let saved_logs: Path = replay_dir.parent
+        let log_listing: []str = shellLines: ls {saved_logs}/Treplay*{replay_type}*log
+        var replay_logfile: Path = Path("")
+        if log_listing'Length > 0 and log_listing[0] != "":
+            replay_logfile = Path(log_listing[0])
+        else:
+            let find_r: []str = shellLines: find {replay_dir} -type f -name "*replay_day.log"
+            if find_r'Length > 0:
+                replay_logfile = Path(find_r[0])
+        if replay_logfile != "" and ReplayLog(replay_logfile).terminated:
+            total_size = total_size + num_size
+            print "\tTO DELETE THIS FAILED REPLAY, 'su cmadm' and then"
+            # Check for tactdev_remove script.
+            let the_baseline: str = str(saved_logs).split("!")[1].split("/")[0] if "!" in saved_logs else ""
+            let remove_cmd: Path = replay_dir / "tact" / the_baseline / "tactdev_remove"
+            if -f remove_cmd:
+                print "\t\t" + remove_cmd
+            else:
+                print "\tNo tactdev_remove found, use:"
+                print f"\t\trm -fr {replay_dir}"
+        else:
+            puts("SFBy", "\tTHIS REPLAY IS STILL RUNNING", NEWLINE=True)
+            print "\tTo delete it, use the vncviewer from dhdevd01:99 and run:"
+            print "\t\tTcleanup_old_replay_users -kill_replay"
+    print
+    puts("Wb", f"TOTAL SIZE for FAILED REPLAYS is {total_size:.2f}G", NEWLINE=True)
+    hr('#')
+
+def scan_replay_dir_detailed(replay_log_dir: Path, bl: BaselineNr_T, rtype: ReplayType) -> Path:
+    if replay_log_dir == "":
+        puts("SWb", "no replay log dir found", NEWLINE=True)
+        return Path("")
+    puts("USBy", "REPLAY DIR: " + replay_log_dir, NEWLINE=True)
+    let replay_root: Path = replay_log_dir.parent.parent.parent
+    find_core_dumps(replay_root)
+    var report: str = ""
+    let check_result: []str = shellLines: ls {replay_log_dir}/*check_logs.result.svlog
+    for f in check_result:
+        continue if f == ""
+        puts("SWb", "check_logs.result.svlog:", NEWLINE=True)
+        let content: str = readFile(Path(f))
+        print content
+        report = report + content + "\n"
+    let check_run: []str = shellLines: ls {replay_log_dir}/*check_logs.run.svlog
+    for f in check_run:
+        continue if f == ""
+        puts("SWb", "check_logs.run.svlog:", NEWLINE=True)
+        let content: str = readFile(Path(f))
+        print content
+        report = report + content + "\n"
+    return make_report(report, bl, f"replay-{rtype}")
+
+# ---------------------------------------------------------------------------
+# Tests: ady2nim c LIBS/replays.ady && LIBS/replays
+# The real replay logs are in test/samples, beside LIBS/.
+# ---------------------------------------------------------------------------
+
+if __name__ == "__main__":
+    let samples: Path = Path($0).parent.parent / "test" / "samples"
+    let tmp: Path = Path(run(["mktemp", "-d", "-t", "replays.XXXXXX"]).output.strip())
+    let PREQUAL: str = "Treplay_G31.OP.L8_30.0.0.133_2026.09.23_213300-run_prequal.NJrqM.log"
+    let PERFORMANCE: str = "Treplay_G31.OP.L8_30.0.0.133_2026.09.23_213146-performance.MOJ0V.log"
+
+    # --- a replay's type, from its log's name ---------------------------------
+    def replay_type(name: str) -> str:
+        let rt: ?ReplayType = replay_type_from(Path(name))
+        return "none" if rt is None
+        return f"{rt}"
+    assert replay_type(PREQUAL) == "run_prequal"
+    assert replay_type("Treplay_x-full_simca.ab.log") == "full_simca"   # not simca
+    assert replay_type("Treplay_x-other.log") == "none"
+
+    # --- replay logs: the real ones -----------------------------------------
+    let prequal: ReplayLog = ReplayLog(samples / PREQUAL)
+    assert prequal.status == failed            # "Executed UNINSTALL:        NO"
+    assert not prequal.terminated
+    let perf: ReplayLog = ReplayLog(samples / PERFORMANCE)
+    assert perf.status == failed               # waited for, and terminated, but NO
+    assert perf.terminated
+    assert len(perf.severe_errors) == 4
+    assert "TACOT variable not of type STRING_TYPE" in perf.severe_errors[0]
+
+    # the verdicts the samples do not show
+    def replay_log(lines: []str) -> ReplayLog:
+        let file: Path = tmp / "Treplay_x.log"
+        writeFile(file, "\n".join(lines) + "\n")
+        return ReplayLog(file)
+    # the last UNINSTALL step decides
+    assert replay_log(["Executed UNINSTALL:        NO", "Executed UNINSTALL:        YES"]).status == succeeded
+    assert replay_log(["replay_day: INFORMATION: Waiting for this replay to be finished ..."]).status == busy
+    assert replay_log(["nothing yet"]).status == not_started
+
+    run(["rm", "-rf", str(tmp)])
+    print "replays: all tests passed"

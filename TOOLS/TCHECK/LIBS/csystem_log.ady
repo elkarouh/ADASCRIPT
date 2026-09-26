@@ -1,0 +1,63 @@
+"""
+csystem_log — a baseline's Csystem_build.log, the log of its IP build, and
+comparing it with another's.
+
+Depends on `tcheck_common` and `baselines`, siblings inside LIBS/,
+nimported by their bare names.
+"""
+
+nimport os
+nimport tcheck_common
+nimport baselines
+
+def make_comparable(logfile: Path, bl: BaselineNr_T) -> Path:
+    """Normalize a log file for diffing: make_executable_output_comparable + make_comparable + test name normalization."""
+    let rc0: int = shell: mkdir -p /tmp/reports
+    let out_file: Path = Path("/tmp/reports") / (bl + "_" + logfile.name)
+    let rc1: int = shell: make_executable_output_comparable {!logfile} -o {!out_file} 2>/dev/null
+    let rc2: int = shell: make_comparable {!out_file} {bl} 2>/dev/null
+    # Normalize test names so trivial renames don't show as diffs.
+    let rc3: int = shell(join = ";"):
+        sd '[vb]1.el' 'test1.el' {out_file}
+        sd '[vb]2.el' 'test2.el' {out_file}
+        sd '[vb]3.el' 'test3.el' {out_file}
+    return out_file
+
+class CsystemLog:
+    """A baseline's Csystem_build.log, the log of its IP build. For now it
+    is compared as text, normalized so that what always differs --
+    timestamps, pids, paths -- does not show; the place for a closer look,
+    by what it builds and what fails, when one is wanted."""
+    file    : Path
+    baseline: BaselineNr_T
+
+    def __init__(self, baseline: Baseline):
+        self.file = baseline.saved_logs_dir(IP).parent / "Csystem_build.log"
+        self.baseline = baseline.nr
+
+    def comparable(self) -> Path:
+        """A normalized copy of the log, under /tmp/reports."""
+        make_comparable(self.file, self.baseline)
+
+    def compare_with(self, older: CsystemLog):
+        """How this log differs from OLDER's: in the troubleshoot tool, or
+        as a diff in batch mode."""
+        let before: Path = older.comparable()
+        let after: Path = self.comparable()
+        if BATCH:
+            let rc: int = shell: diff {!before} {!after}
+        else:
+            let tool: Tool_T = troubleshoot_tool()
+            let rc: int = shell: {!tool} {!before} {!after} &
+
+# ---------------------------------------------------------------------------
+# Tests: ady2nim c LIBS/csystem_log.ady && LIBS/csystem_log
+# ---------------------------------------------------------------------------
+
+if __name__ == "__main__":
+    # a baseline's log: beside its IP build's directory
+    let log: CsystemLog = CsystemLog(Baseline("30.0.0.133"))
+    assert log.file.name == "Csystem_build.log"
+    assert log.file.parent.parent == TACT_ROOT / "TACT_CONFIG.30.0.0.133"
+    assert log.baseline == "30.0.0.133"
+    print "csystem_log: all tests passed"

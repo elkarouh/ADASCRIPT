@@ -8,6 +8,7 @@ by their bare names.
 
 nimport os
 nimport tcheck_common
+nimport tlog
 nimport baselines
 
 # ---------------------------------------------------------------------------
@@ -179,6 +180,11 @@ class FileChange:
             print "DIFF        : " + command
         if len(self.commits) > 1 and self.from_baseline != "" and self.to_baseline != "":
             print "NET DIFF    : " + self.net_diff_link()
+
+def baseline_nr(component: BaselineName_T) -> BaselineNr_T:
+    """The baseline number of "IFPS.CUA_IDL.30.0.0.122": 30.0.0.122."""
+    let (system, subsystem, nr) = component.split(".", 2)
+    nr
 
 def cfmu_baseline_of(tact_nr: BaselineNr_T) -> BaselineNr_T:
     """The CFMUTEST baseline built on TACT baseline TACT_NR -- the first
@@ -481,38 +487,6 @@ def list_files_by_committer(report: Path, user: Committer):
             print "  " + branch
         print
 
-# A test one of the baseline's Tlogs reports newly failing or crashed:
-# see Report.new_failures.
-type NewFailure is tuple:
-    build: BuildLabel_T # the build type and subtype it fails in: "IP in", "OP assert"
-    test:  TestName_T
-
-def list_new_failures(against: str, failures: []NewFailure):
-    """Each test of FAILURES once, with the build(s) it newly fails in;
-    AGAINST, the baselines the Tlogs compared with, or ""."""
-    let vs: str = f" vs {against}" if against != "" else ""
-    puts("SWr", f"NEWLY FAILED TESTS{vs}", NEWLINE=True)
-    if len(failures) == 0:
-        let compared: str = f" compared to {against}" if against != "" else ""
-        puts("SKg", f"  No new failures{compared}", NEWLINE=True)
-        print
-        return
-    var tests: []TestName_T = []
-    var builds: {TestName_T}[]BuildLabel_T = {:}
-    for f in failures:
-        if f.test not in builds:
-            tests.append(f.test)
-            builds[f.test] = []
-        if f.build not in builds[f.test]:
-            builds[f.test].append(f.build)
-    var width: int = 0
-    for test in tests:
-        width = max(width, len(test))
-    for test in tests:
-        stdout.write("  ")
-        puts("SWr", test)
-        print " " * (width - len(test)) + "  " + ", ".join(builds[test])
-    print
 
 def list_changes(baseline: BaselineNr_T, failures: []NewFailure, against: str, user: Committer):
     """What changed in TACT BASELINE and what broke: by committer -- only
@@ -581,6 +555,9 @@ def list_detailed_changes(baseline: BaselineNr_T, user: Committer):
 
 if __name__ == "__main__":
     let samples: Path = Path($0).parent.parent / "test" / "samples"
+
+    # --- a baseline's number, from its full name ----------------------------
+    assert baseline_nr("IFPS.CUA_IDL.30.0.0.122") == "30.0.0.122"
 
     # --- branch names -------------------------------------------------------
     assert committer_of("acicek.transmit_esb") == "acicek"
