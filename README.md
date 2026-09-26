@@ -1367,6 +1367,12 @@ let spare: Vehicle_T = Vehicle_T("van-9", (x: 2.0, y: 2.0), 6.0)
 var d:     Depot     = Depot("Central", base)       # -> newDepot("Central", base)
 ```
 
+What else the module's own translation learned travels with it too: which
+names are enums (so `Energy_T("ELECTRIC")` in the importer is a parse of
+the name), the types of its globals and type aliases, the routines that
+never return (a `die`-like helper), its iterators, and which of its procs take
+nothing as `var`.
+
 Inheritance works across files as well: a `@virtual` base class in one module
 and a subclass in another (that is `EXAMPLES/test_awk.ady` over the bundled
 `awk.ady`), including the inherited constructor.

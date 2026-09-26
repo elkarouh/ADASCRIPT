@@ -13,6 +13,10 @@ type Vehicle_T is record:
     fuel:     float
 
 
+# what a vehicle runs on
+type Energy_T is enum DIESEL, PETROL, ELECTRIC
+
+
 class Depot:
     var name:     str
     var position: Point_T

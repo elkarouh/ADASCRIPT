@@ -39,4 +39,10 @@ print "out of range:", stranded
 
 assert len(stranded) == 1
 assert stranded[0] == "truck-2"
+
+# An enum declared in lib/fleet.ady, made from its name here: that is
+# parseEnum on Nim, which the importer can only know if what the module
+# declared crosses the boundary with it.
+let energy: Energy_T = Energy_T("ELECTRIC")
+assert energy == ELECTRIC
 print "all PROJECT checks passed"

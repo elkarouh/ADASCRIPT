@@ -59,6 +59,18 @@ _nimport_param_types: dict = {}
 _nimport_object_field_order: dict = {}
 _nimport_tuple_field_order: dict = {}
 
+# What else a dependency's own translation knew that an importer's needs:
+# its enums (`ReplayType(s)` is parseEnum only if ReplayType is known to be
+# one), its classes' field types, the routines that never return, its
+# iterators and context managers, the procs taking nothing as `var` -- and
+# its module-level names with their types: globals and type aliases. Each is
+# (ParserState attribute, merged into the importer's at its reset).
+_NIMPORT_CARRIED = ("tick_types", "class_field_types", "noreturn_procs",
+                    "iterator_names", "contextmanager_funcs",
+                    "by_value_procs", "var_param_procs")
+_nimport_carried: dict = {}
+_nimport_module_symbols: dict = {}
+
 
 def _nim_reset():
     """Initialise all Nim-backend fields on ParserState.
@@ -124,6 +136,11 @@ def parse_module(code):
     # wins: the local declaration overwrites the entry while parsing.
     ParserState.object_field_order.update(_nimport_object_field_order)
     ParserState.tuple_field_order.update(_nimport_tuple_field_order)
+    for _attr, _known in _nimport_carried.items():
+        getattr(ParserState, _attr).update(_known)
+    for _name, _info in _nimport_module_symbols.items():
+        if not ParserState.symbol_table.lookup(_name):
+            ParserState.symbol_table.add(_name, _info.get("type"), _info.get("kind", "var"))
     # Register class names from nimport'd deps so ClassName(args) → newClassName(args)
     for _cls in _nimport_class_names:
         if not ParserState.symbol_table.lookup(_cls):
@@ -706,7 +723,9 @@ def translate(code, export_symbols=False):
     for richnl in trailing:
         emit_richnl(richnl)
 
-    ParserState.symbol_table.pop_scope()
+    # kept, for a module's importers: its names, and what each is
+    _module_scope = ParserState.symbol_table.pop_scope()
+    ParserState.module_symbols = _module_scope["symbols"] if _module_scope else {}
 
     # Deduplicate import lines (e.g., import sys + import os both -> import os)
     seen_imports = set()
@@ -1983,6 +2002,11 @@ def main(argv=None):
                     getattr(_PS_pre, "object_field_order", {}))
                 _nimport_tuple_field_order.update(
                     getattr(_PS_pre, "tuple_field_order", {}))
+                for _attr in _NIMPORT_CARRIED:
+                    _known = getattr(_PS_pre, _attr, None)
+                    if _known:
+                        _nimport_carried.setdefault(_attr, type(_known)()).update(_known)
+                _nimport_module_symbols.update(getattr(_PS_pre, "module_symbols", {}))
                 _enqueue_prepass(_ppcode, _ppdir)
             except Exception:
                 pass  # errors will surface properly during the full dep transpile
