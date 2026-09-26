@@ -144,9 +144,8 @@ class Build:
     to join by hand -- the saved_logs, tacot_corico and Tlog paths were
     each spelled out at every place that needed one.
 
-    Before Baseline, which lists its builds, so it holds the baseline's
-    number rather than the baseline; after tlog_filename, which a method
-    may not call if it were defined below.
+    It holds its baseline's number, all it needs of the baseline; the
+    Baseline lists its builds.
     """
     name       : BuildName_T  = "" # e.g. build_G!31.IP.L8
     btype      : BuildType    = IP
@@ -172,6 +171,96 @@ class Build:
         """Where the Tlog of SUBTYPE for PASS_ is, whether or not it exists yet."""
         self.tacot_dir(pass_) / "TACT_REGRESS_LOGS" / "LATEST" / tlog_filename(subtype, pass_)
 
+    def process_subtype(self, subtype: BuildSubtype):
+        """Process one subtype of the build, for both normal and mrun passes."""
+        def lo_build_checks(tacot_corico_latest: Path):
+            """Check for FORCE_TRACE errors in LO build logs."""
+            let lo_logdir: Path = tacot_corico_latest / "work" / "logging-lo"
+            if -e lo_logdir:
+                puts("SyB", "Doing lo-build checks in " + lo_logdir, NEWLINE=True)
+                grep_force_trace_in_dir(lo_logdir / "LOGS")
+                grep_force_trace_in_dir(lo_logdir / "LOGS_others")
+        for pass_ in BuildPass:
+            if pass_ == mrun and (self.btype != IP or subtype != in_test):
+                continue # we are only interested in "IP in" for the mrun pass
+            self.show_tlog(subtype, pass_)
+            if subtype == lo and pass_ == normal:
+                lo_build_checks(self.tacot_dir(pass_))
+
+    def show_tlog(self, subtype: BuildSubtype, pass_: BuildPass):
+        """Show a Tlog file's summary if it exists, or a 'not ready' message."""
+        let full_path: Path = self.tlog_path(subtype, pass_)
+        let sl: str = subtype_label(subtype)
+
+        if -f full_path:
+            stdout.write("=======================================  ")
+            puts("SWr", full_path.name)
+            stdout.write(" ")
+            puts("SWb", " (" + self.name + ")")
+            print "  ======================================="
+            process_Tlog(full_path, subtype)
+            print
+            return
+
+        case self.btype:
+            when IP:
+                return if subtype not in (in_test, mono)
+            when OP:
+                return if subtype not in (in_test, assert_test)
+            when others:
+                return
+        case pass_:
+            when normal: puts("SWb", f"\"{self.btype} {sl}\" build not ready yet", NEWLINE=True)
+            when mrun:   puts("SWb", f"\"{self.btype} {sl} mrun\" build not ready yet", NEWLINE=True)
+
+    def show_padactl(self):
+        """Show the Padactl/CRC summary from the IP self."""
+        hr('#')
+        puts("SWr", "Padactl", NEWLINE=True)
+        let padactl_file: Path = self.saved_logs() / "Padactl.LATEST" / "Padactl.summary"
+        if -f padactl_file:
+            hr('-')
+            puts("SWb", str(padactl_file), NEWLINE=True)
+            let r = shell: grep -A20 delta {padactl_file}
+            if r.output.strip() != "":
+                print r.output.rstrip("\n")
+            let r2 = shell: grep -A20 -i 'summary of last changes' {padactl_file}
+            if r2.output.strip() != "":
+                print r2.output.rstrip("\n")
+            echo_emacs(padactl_file)
+        else:
+            puts("SWb", "WARNING: No CRC summary file found!", NEWLINE=True)
+
+    def check_test_programs(self, fast_mode: bool):
+        """Find or run check_run_test_programs_log from the IP self."""
+        let baseline: BaselineNr_T = self.baseline_nr
+        let work: Path = self.tacot_dir(normal) / "work"
+        print
+        hr('#')
+        puts("SWr", "Check build closure and test programs.", NEWLINE=True)
+        puts("USBy", "CHECK RUN TEST PROGRAMS LOG FOR " + str(self.dir) + " ...", NEWLINE=True)
+        let find_lines: []str = shellLines: find {work} -type f -name 'check_run_test_programs.log' -print -quit
+        var logfile: Path = Path("")
+        if find_lines'Length > 0:
+            logfile = Path(find_lines[0])
+
+        if logfile == "":
+            if fast_mode:
+                puts("SWb", "check_run_test_programs_log not yet complete and we are in fast mode -> skip this check.", NEWLINE=True)
+            else:
+                puts("SWb", "check_run_test_programs_log not yet complete -> execute the program manually. This can take some minutes (run with -f to disable the execution).", NEWLINE=True)
+                let build_subtype: str = self.name.replace("build_", "")
+                let rc: int = shell: cd /tmp && echo check_run_test_programs_log | Ccontext -b "TACT.TACT_CONFIG.{baseline}" -e "{build_subtype}" 2>&1
+        else:
+            let mktemp_lines: []str = shellLines: cfmu_mktemp
+            let full_report: Path = Path(mktemp_lines[0]) if mktemp_lines'Length > 0 else Path("/tmp/tcheck_report.txt")
+            print "Full report is found in " + full_report + "."
+            print
+            let cp_rc: int = shell: cp {logfile} {full_report}
+            let filtered = shell: grep -v 'Running.*setup' {full_report} | grep -v 'Checking for errors' | grep -v 'No errors found in' | grep -v -E '^[0-9.]+:\s+\S+\s+INFORMATION:' | grep -E '\S'
+            if filtered.output.strip() != "":
+                print filtered.output.rstrip("\n")
+
 class Baseline:
     """One TACT baseline: its number and the directory holding its builds.
 
@@ -183,9 +272,6 @@ class Baseline:
     and find_replays(): creating one lists nothing, so `previous()` costs
     nothing and cannot fail on a baseline whose directory is gone.
 
-    Up here rather than beside Report because free functions below call
-    its methods, and a function may not call a method of a class defined
-    after it.
     """
     nr     : BaselineNr_T = "" # e.g. 30.0.0.121
     dir    : Path         = Path("")
@@ -242,6 +328,103 @@ class Baseline:
         for rtype, filepath in enumerate(type_to_file):
             continue if filepath == ""
             self.replays.append((rtype: rtype, file: filepath))
+
+    def replay_log_dir(self, rtype: ReplayType) -> Path:
+        """The newest replay log dir of RTYPE, from this baseline backwards.
+
+        Replays run on the OP build, so that is the saved_logs searched.
+        """
+        let dir_pat: Glob_T = replay_dir_pattern(rtype)
+        var bl: Baseline = self
+        var dir: Path = bl.saved_logs_dir(OP)
+        var attempts: int = 0
+        while attempts < 20:
+            let listing: []str = shellLines: ls -d {dir}/replay_dir*{dir_pat}*/work/logging/LOGS
+            if listing'Length > 0 and listing[0] != "":
+                return Path(listing[0])
+            bl = bl.previous()
+            dir = bl.saved_logs_dir(OP)
+            stderr.writeLine(PROG + ": trying " + dir)
+            attempts += 1
+        return Path("")
+
+    def scan_regression_tests(self, btype: BuildType, subtype: BuildSubtype) -> Path:
+        """Scan the logs of the BTYPE build's SUBTYPE regression tests for errors
+        and core dumps; the report, normalized for diffing."""
+        # saved_logs_dir(btype) is already the BTYPE build. This used to rewrite
+        # "OP" to "IP" (or back) across the whole path string as well, which was
+        # a no-op on a real TACT path and mangled any other: a checkout under
+        # .../ADASCRIPT/... came out as .../ADASCROPT/... for an OP scan.
+        let sl: str = subtype_label(subtype)
+        var log_dir: Path = Path("")
+        let work: Path = self.saved_logs_dir(btype) / "tacot_corico.LATEST" / "work" / ("logging-" + sl)
+        case subtype:
+            when mono:
+                log_dir = work / "LOGS_mono"
+            when others:
+                log_dir = work / "LOGS_others"
+        if not -d log_dir:
+            puts("SWb", "log dir does not exist: " + log_dir, NEWLINE=True)
+            return Path("")
+        puts("USBy", "scanning " + log_dir, NEWLINE=True)
+        let tacot_root: Path = log_dir.parent.parent.parent
+        find_core_dumps(tacot_root)
+        var report: str = ""
+        case subtype:
+            when mono:
+                let mono_out: Path = log_dir / "mono.out"
+                if -f mono_out:
+                    let hits: str = grep_logfile(mono_out)
+                    report = hits
+            when others:
+                let out_files: []str = shellLines: ls {log_dir}/*1_out_01
+                for f in out_files:
+                    continue if f == ""
+                    hr('#')
+                    puts("SWb", Path(f).name, NEWLINE=True)
+                    hr('#')
+                    let hits: str = grep_logfile(Path(f))
+                    if hits != "":
+                        report = report + "##### " + Path(f).name + " #####\n" + hits + "\n"
+        return make_report(report, self.nr, "regression_" + btype'Image + "_" + sl)
+
+    def show_failed_tests(self, btype: BuildType, subtype: BuildSubtype, n_baselines: int = 15) -> str:
+        """The BTYPE SUBTYPE tests failing in this baseline and the N_BASELINES - 1
+        before it, printed and returned."""
+        var baseline: Baseline = self
+        let sl: str = subtype_label(subtype)
+        var ip_env: str = $CM_ENV_ID
+        var op_env: str = ip_env.replace(".IP.", ".OP.")
+        ip_env = ip_env.replace(".OP.", ".IP.")
+        var result: str = ""
+        for iteration in range(n_baselines):
+            let bl: BaselineNr_T = baseline.nr
+            let header: str = f"FAILED {btype} REGRESSION TESTS logging-{sl} for BASELINE {bl}"
+            hr('-')
+            puts("SWr", header, NEWLINE=True)
+            result = result + header + "\n"
+            var env: str = ip_env
+            var suffix: str = "failed-in"
+            case subtype:
+                when mono:
+                    env = ip_env
+                    suffix = "failed-mono"
+                when in_test:
+                    case btype:
+                        when IP:  env = ip_env
+                        when OP:  env = op_env
+                        when others: pass
+                    suffix = "failed-in"
+                when assert_test:
+                    env = op_env
+                    suffix = "failed-assert"
+                when others: pass
+            let r = shell: nl {TACT_ROOT}/test_reports/TACT.TACT_CONFIG.{bl}-{env}*/general.results.{suffix}
+            if r.output.strip() != "":
+                print r.output.rstrip("\n")
+                result = result + r.output
+            baseline = baseline.previous()
+        return result
 
 # ---------------------------------------------------------------------------
 # Tlog section parsing
@@ -512,104 +695,6 @@ def grep_force_trace_in_dir(dir: Path):
     if r.output.strip() != "":
         print r.output.rstrip("\n")
 
-def show_tlog_if_present(build: Build, subtype: BuildSubtype, pass_: BuildPass):
-    """Show a Tlog file's summary if it exists, or a 'not ready' message."""
-    let full_path: Path = build.tlog_path(subtype, pass_)
-    let sl: str = subtype_label(subtype)
-
-    if -f full_path:
-        stdout.write("=======================================  ")
-        puts("SWr", full_path.name)
-        stdout.write(" ")
-        puts("SWb", " (" + build.name + ")")
-        print "  ======================================="
-        process_Tlog(full_path, subtype)
-        print
-        return
-
-    case build.btype:
-        when IP:
-            return if subtype not in (in_test, mono)
-        when OP:
-            return if subtype not in (in_test, assert_test)
-        when others:
-            return
-    case pass_:
-        when normal: puts("SWb", f"\"{build.btype} {sl}\" build not ready yet", NEWLINE=True)
-        when mrun:   puts("SWb", f"\"{build.btype} {sl} mrun\" build not ready yet", NEWLINE=True)
-
-def process_build_subtype(build: Build, subtype: BuildSubtype):
-    """Process one subtype of a build, for both normal and mrun passes."""
-    def lo_build_checks(tacot_corico_latest: Path):
-        """Check for FORCE_TRACE errors in LO build logs."""
-        let lo_logdir: Path = tacot_corico_latest / "work" / "logging-lo"
-        if -e lo_logdir:
-            puts("SyB", "Doing lo-build checks in " + lo_logdir, NEWLINE=True)
-            grep_force_trace_in_dir(lo_logdir / "LOGS")
-            grep_force_trace_in_dir(lo_logdir / "LOGS_others")
-    for pass_ in BuildPass:
-        if pass_ == mrun and (build.btype != IP or subtype != in_test):
-            continue # we are only interested in "IP in" for the mrun pass
-        show_tlog_if_present(build, subtype, pass_)
-        if subtype == lo and pass_ == normal:
-            lo_build_checks(build.tacot_dir(pass_))
-
-# ---------------------------------------------------------------------------
-# Padactl / Gnatcheck
-# ---------------------------------------------------------------------------
-
-def process_gnatcheck(build: Build):
-    """Show the Padactl/CRC summary from the IP build."""
-    hr('#')
-    puts("SWr", "Padactl", NEWLINE=True)
-    let padactl_file: Path = build.saved_logs() / "Padactl.LATEST" / "Padactl.summary"
-    if -f padactl_file:
-        hr('-')
-        puts("SWb", str(padactl_file), NEWLINE=True)
-        let r = shell: grep -A20 delta {padactl_file}
-        if r.output.strip() != "":
-            print r.output.rstrip("\n")
-        let r2 = shell: grep -A20 -i 'summary of last changes' {padactl_file}
-        if r2.output.strip() != "":
-            print r2.output.rstrip("\n")
-        echo_emacs(padactl_file)
-    else:
-        puts("SWb", "WARNING: No CRC summary file found!", NEWLINE=True)
-
-# ---------------------------------------------------------------------------
-# Check build closure and test programs
-# ---------------------------------------------------------------------------
-
-def process_run_test_programs_log(build: Build, fast_mode: bool):
-    """Find or run check_run_test_programs_log from the IP build."""
-    let baseline: BaselineNr_T = build.baseline_nr
-    let work: Path = build.tacot_dir(normal) / "work"
-    print
-    hr('#')
-    puts("SWr", "Check build closure and test programs.", NEWLINE=True)
-    puts("USBy", "CHECK RUN TEST PROGRAMS LOG FOR " + str(build.dir) + " ...", NEWLINE=True)
-    let find_lines: []str = shellLines: find {work} -type f -name 'check_run_test_programs.log' -print -quit
-    var logfile: Path = Path("")
-    if find_lines'Length > 0:
-        logfile = Path(find_lines[0])
-
-    if logfile == "":
-        if fast_mode:
-            puts("SWb", "check_run_test_programs_log not yet complete and we are in fast mode -> skip this check.", NEWLINE=True)
-        else:
-            puts("SWb", "check_run_test_programs_log not yet complete -> execute the program manually. This can take some minutes (run with -f to disable the execution).", NEWLINE=True)
-            let build_subtype: str = build.name.replace("build_", "")
-            let rc: int = shell: cd /tmp && echo check_run_test_programs_log | Ccontext -b "TACT.TACT_CONFIG.{baseline}" -e "{build_subtype}" 2>&1
-    else:
-        let mktemp_lines: []str = shellLines: cfmu_mktemp
-        let full_report: Path = Path(mktemp_lines[0]) if mktemp_lines'Length > 0 else Path("/tmp/tcheck_report.txt")
-        print "Full report is found in " + full_report + "."
-        print
-        let cp_rc: int = shell: cp {logfile} {full_report}
-        let filtered = shell: grep -v 'Running.*setup' {full_report} | grep -v 'Checking for errors' | grep -v 'No errors found in' | grep -v -E '^[0-9.]+:\s+\S+\s+INFORMATION:' | grep -E '\S'
-        if filtered.output.strip() != "":
-            print filtered.output.rstrip("\n")
-
 # ---------------------------------------------------------------------------
 # List all changes: who committed what, per the CFMUTEST changes report
 # ---------------------------------------------------------------------------
@@ -812,18 +897,6 @@ def review_of(line: str) -> Review_T:
     let text: str = $+{by}.strip() + " on " + $+{date}.strip()
     text if ok == "yes" else text + " (review-ok: " + ok + ")"
 
-def credit(tickets: []Ticket_T, names: []BranchName, branch_tickets: [][]Ticket_T, nearest: BranchName) -> BranchName:
-    """The branch a change with TICKETS is credited to, among the user
-    branches NAMES merged above it in its section, each with the tickets its
-    merge lists: the one whose tickets cover all of the change's, else the
-    one that shares any with it, else -- none or several -- NEAREST."""
-    return nearest if len(tickets) == 0
-    let covering: []BranchName = [n for n, ts in zip(names, branch_tickets) if all([t in ts for t in tickets])]
-    return covering[0] if len(covering) == 1
-    let sharing: []BranchName = [n for n, ts in zip(names, branch_tickets) if any([t in ts for t in tickets])]
-    return sharing[0] if len(sharing) == 1
-    nearest
-
 def baseline_nr(component: BaselineName_T) -> BaselineNr_T:
     """The baseline number of "IFPS.CUA_IDL.30.0.0.122": 30.0.0.122."""
     let (system, subsystem, nr) = component.split(".", 2)
@@ -834,16 +907,32 @@ let CHANGE_KINDS: {str}ChangeKind = {"changed": CHANGED, "added": ADDED, "remove
 
 # What a ChangesReport, being read, knows of the section it is in: one per
 # component.
-type ReportSection is record:
+class ReportSection:
     # its baselines: "Differences between IFPS.CUA_IDL.30.0.0.122 and ...123"
-    from_baseline: BaselineNr_T = ""
-    to_baseline:   BaselineNr_T = ""
+    from_baseline: BaselineNr_T
+    to_baseline:   BaselineNr_T
     # the branch merged last, nearest above the changes that follow;
     # "" after an integration merge
-    branch:        BranchName = ""
+    branch:        BranchName
     # the user branches merged so far, and the tickets each merge lists
-    names:         []BranchName = []
-    tickets:       [][]Ticket_T = []
+    names:         []BranchName
+    tickets:       [][]Ticket_T
+
+    def __init__(self, from_baseline: BaselineNr_T, to_baseline: BaselineNr_T):
+        self.from_baseline = from_baseline
+        self.to_baseline = to_baseline
+
+    def credit(self, tickets: []Ticket_T) -> BranchName:
+        """The branch a change with TICKETS is credited to, among the user
+        branches merged above it: the one whose merge lists all of the
+        change's tickets, else the one that lists any of them, else -- none
+        or several -- the nearest."""
+        return self.branch if len(tickets) == 0
+        let covering: []BranchName = [n for n, ts in zip(self.names, self.tickets) if all([t in ts for t in tickets])]
+        return covering[0] if len(covering) == 1
+        let sharing: []BranchName = [n for n, ts in zip(self.names, self.tickets) if any([t in ts for t in tickets])]
+        return sharing[0] if len(sharing) == 1
+        self.branch
 
 def tickets_of(line: str) -> []Ticket_T:
     """The SC tickets a report line lists in RELATED_CHANGES="...", if any."""
@@ -852,7 +941,7 @@ def tickets_of(line: str) -> []Ticket_T:
 
 class ChangesReport:
     """A CFMUTEST changes report: the changes it lists, each credited to a
-    user branch merged above it in its section (see credit); one entry per
+    user branch merged above it in its section (see ReportSection.credit); one entry per
     branch, file and kind of change, with every commit that made it."""
     # in the order each first appears
     committers  : []Committer
@@ -863,7 +952,7 @@ class ChangesReport:
 
     def __init__(self, report: Path):
         """Read REPORT, section by section."""
-        var section: ReportSection
+        var section: ReportSection = ReportSection("", "")
         var seen: {str}int = {:}
         # a merge's review, for the change its own commit makes: the merge line
         # and the change line then carry the same sha
@@ -875,10 +964,10 @@ class ChangesReport:
                 when /^===== Differences between (?P<a>\S+) and (?P<b>\S+)/:
                     let a: BaselineName_T = $+{a}
                     let b: BaselineName_T = $+{b}
-                    section = ReportSection(from_baseline = baseline_nr(a), to_baseline = baseline_nr(b))
+                    section = ReportSection(baseline_nr(a), baseline_nr(b))
                 when /^=====/:
                     # nothing merged yet; the baselines are the last ones named
-                    section = ReportSection(from_baseline = section.from_baseline, to_baseline = section.to_baseline)
+                    section = ReportSection(section.from_baseline, section.to_baseline)
                 when /^Merge from <- (?P<sha>\S+) (?P<name>\S+)/:
                     let merge_sha: CommitHash = $+{sha}
                     let source: BranchName = $+{name}
@@ -905,7 +994,7 @@ class ChangesReport:
                     fc.tickets = tickets_of(line)
                     if review != "":
                         fc.reviews.append(review)
-                    let owner: BranchName = credit(fc.tickets, section.names, section.tickets, section.branch)
+                    let owner: BranchName = section.credit(fc.tickets)
                     if owner == "":
                         self.unattributed.append(fc)
                     else:
@@ -1454,25 +1543,6 @@ def replay_dir_pattern(rtype: ReplayType) -> Glob_T:
         when performance: return "TAC_LO3"
         when others:      return rtype'Image
 
-def get_replay_log_dir(start: Baseline, rtype: ReplayType) -> Path:
-    """The newest replay log dir of REPLAY_TYPE, from START backwards.
-
-    Replays run on the OP build, so that is the saved_logs searched.
-    """
-    let dir_pat: Glob_T = replay_dir_pattern(rtype)
-    var bl: Baseline = start
-    var dir: Path = bl.saved_logs_dir(OP)
-    var attempts: int = 0
-    while attempts < 20:
-        let listing: []str = shellLines: ls -d {dir}/replay_dir*{dir_pat}*/work/logging/LOGS
-        if listing'Length > 0 and listing[0] != "":
-            return Path(listing[0])
-        bl = bl.previous()
-        dir = bl.saved_logs_dir(OP)
-        stderr.writeLine(PROG + ": trying " + dir)
-        attempts += 1
-    return Path("")
-
 def scan_replay_dir_detailed(replay_log_dir: Path, bl: BaselineNr_T, rtype: ReplayType) -> Path:
     if replay_log_dir == "":
         puts("SWb", "no replay log dir found", NEWLINE=True)
@@ -1496,80 +1566,6 @@ def scan_replay_dir_detailed(replay_log_dir: Path, bl: BaselineNr_T, rtype: Repl
         print content
         report = report + content + "\n"
     return make_report(report, bl, f"replay-{rtype}")
-
-def scan_regression_tests_detailed(bl: Baseline, btype: BuildType, subtype: BuildSubtype) -> Path:
-    # saved_logs_dir(btype) is already the BTYPE build. This used to rewrite
-    # "OP" to "IP" (or back) across the whole path string as well, which was
-    # a no-op on a real TACT path and mangled any other: a checkout under
-    # .../ADASCRIPT/... came out as .../ADASCROPT/... for an OP scan.
-    let sl: str = subtype_label(subtype)
-    var log_dir: Path = Path("")
-    let work: Path = bl.saved_logs_dir(btype) / "tacot_corico.LATEST" / "work" / ("logging-" + sl)
-    case subtype:
-        when mono:
-            log_dir = work / "LOGS_mono"
-        when others:
-            log_dir = work / "LOGS_others"
-    if not -d log_dir:
-        puts("SWb", "log dir does not exist: " + log_dir, NEWLINE=True)
-        return Path("")
-    puts("USBy", "scanning " + log_dir, NEWLINE=True)
-    let tacot_root: Path = log_dir.parent.parent.parent
-    find_core_dumps(tacot_root)
-    var report: str = ""
-    case subtype:
-        when mono:
-            let mono_out: Path = log_dir / "mono.out"
-            if -f mono_out:
-                let hits: str = grep_logfile(mono_out)
-                report = hits
-        when others:
-            let out_files: []str = shellLines: ls {log_dir}/*1_out_01
-            for f in out_files:
-                continue if f == ""
-                hr('#')
-                puts("SWb", Path(f).name, NEWLINE=True)
-                hr('#')
-                let hits: str = grep_logfile(Path(f))
-                if hits != "":
-                    report = report + "##### " + Path(f).name + " #####\n" + hits + "\n"
-    return make_report(report, bl.nr, "regression_" + btype'Image + "_" + sl)
-
-def show_failed_tests(start: Baseline, btype: BuildType, subtype: BuildSubtype, n_baselines: int = 15) -> str:
-    var baseline: Baseline = start
-    let sl: str = subtype_label(subtype)
-    var ip_env: str = $CM_ENV_ID
-    var op_env: str = ip_env.replace(".IP.", ".OP.")
-    ip_env = ip_env.replace(".OP.", ".IP.")
-    var result: str = ""
-    for iteration in range(n_baselines):
-        let bl: BaselineNr_T = baseline.nr
-        let header: str = f"FAILED {btype} REGRESSION TESTS logging-{sl} for BASELINE {bl}"
-        hr('-')
-        puts("SWr", header, NEWLINE=True)
-        result = result + header + "\n"
-        var env: str = ip_env
-        var suffix: str = "failed-in"
-        case subtype:
-            when mono:
-                env = ip_env
-                suffix = "failed-mono"
-            when in_test:
-                case btype:
-                    when IP:  env = ip_env
-                    when OP:  env = op_env
-                    when others: pass
-                suffix = "failed-in"
-            when assert_test:
-                env = op_env
-                suffix = "failed-assert"
-            when others: pass
-        let r = shell: nl {TACT_ROOT}/test_reports/TACT.TACT_CONFIG.{bl}-{env}*/general.results.{suffix}
-        if r.output.strip() != "":
-            print r.output.rstrip("\n")
-            result = result + r.output
-        baseline = baseline.previous()
-    return result
 
 def make_comparable(logfile: Path, bl: BaselineNr_T) -> Path:
     """Normalize a log file for diffing: make_executable_output_comparable + make_comparable + test name normalization."""
@@ -1625,9 +1621,6 @@ class Report:
     disk (its builds and replays, which the Baseline lists) -- and a
     Report holds exactly those.
 
-    The class sits this far down the file because a method may call a
-    sibling method defined below it but not a free function, and these
-    call most of the helpers above.
     """
     opt     : Options
     cur     : Baseline
@@ -1665,7 +1658,7 @@ class Report:
             for subtype in BuildSubtype:
                 continue if self.opt.focus_domain in (focus_IP, focus_OP, focus_SIP) and subtype != self.opt.focus_subtype
                 stderr.writeLine(PROG + ": checking " + build.name + " / " + subtype_label(subtype))
-                process_build_subtype(build, subtype)
+                build.process_subtype(subtype)
 
     def show_replays(self):
         hr('#')
@@ -1679,8 +1672,8 @@ class Report:
     def show_build_info(self):
         for b in self.cur.builds:
             if b.btype == IP:
-                process_gnatcheck(b)
-                process_run_test_programs_log(b, self.opt.fast_mode)
+                b.show_padactl()
+                b.check_test_programs(self.opt.fast_mode)
                 break
 
     def collect_build_summary(self, build: Build) -> BuildSummary:
@@ -1822,13 +1815,13 @@ class Report:
             when others: pass
         let subtype: BuildSubtype = self.opt.focus_subtype
         let prev: Baseline = self.cur.previous()
-        let prev_report: Path = scan_regression_tests_detailed(prev, btype, subtype)
-        let cur_report: Path = scan_regression_tests_detailed(self.cur, btype, subtype)
+        let prev_report: Path = prev.scan_regression_tests(btype, subtype)
+        let cur_report: Path = self.cur.scan_regression_tests(btype, subtype)
         if prev_report != "" and cur_report != "" and not BATCH:
             let tool: Tool_T = troubleshoot_tool()
             let tool_rc: int = shell: {!tool} {!prev_report} {!cur_report} &
         let failed_file: Path = Path("/tmp/reports") / "failed_tests"
-        let failed_output: str = show_failed_tests(self.cur, btype, subtype)
+        let failed_output: str = self.cur.show_failed_tests(btype, subtype)
         writeFile(failed_file, failed_output)
         if not BATCH:
             let emacs_rc: int = shell: emacs -l /home/ekhassan/e.el {!failed_file} &
@@ -1836,8 +1829,8 @@ class Report:
     def show_detailed_replays(self):
         let rtype: ReplayType = self.opt.focus_rtype
         let prev: Baseline = self.cur.previous()
-        let prev_log: Path = get_replay_log_dir(prev, rtype)
-        let cur_log: Path = get_replay_log_dir(self.cur, rtype)
+        let prev_log: Path = prev.replay_log_dir(rtype)
+        let cur_log: Path = self.cur.replay_log_dir(rtype)
         let prev_report: Path = scan_replay_dir_detailed(prev_log, prev.nr, rtype)
         let cur_report: Path = scan_replay_dir_detailed(cur_log, self.cur.nr, rtype)
         if prev_report != "" and cur_report != "" and not BATCH:
