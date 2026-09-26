@@ -28,7 +28,15 @@ tlog() {
         echo " HEAVYTEST  : $sub"
         echo " TACT_CONFIG: $bl"
         echo "260910.171934: Tlog: INFO: Starting: Tlog -d /logs/logging-$sub -w"
-        echo "260910.171945: Tlog: INFO: Actual reference baseline    : $ref   #emacs: (cfmu-ediff-to-tlog \"/logs/Tlog-$sub.log\")"
+        # compared with the baseline before, as expected; or, as a real
+        # Tlog says it when not, in capitals after a WARNING
+        expected=${bl%.*}.$(( ${bl##*.} - 1 ))
+        if [ "$ref" = "$expected" ]; then
+            echo "260910.171945: Tlog: INFO: Actual reference baseline    : $ref   #emacs: (cfmu-ediff-to-tlog \"/logs/Tlog-$sub.log\")"
+        else
+            echo "260910.171945: Tlog: INFO: EXPECTED reference baseline  : $expected   #emacs: (cfmu-ediff-to-tlog \"/logs/Tlog-$sub.log\")"
+            echo "260910.171945: Tlog: WARNING: ACTUAL reference baseline : $ref !!!   #emacs: (cfmu-ediff-to-tlog \"/logs/Tlog-$sub.log\")"
+        fi
         echo
         set -- $4 "|" $5    # CRASHED | FAILING
         n=0; for t; do [ "$t" = "|" ] && break; n=$((n + 1)); done

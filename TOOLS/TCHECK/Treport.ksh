@@ -517,7 +517,8 @@ function tlog_failures {        # TLOG: "REF\t<its reference>", then "T\t<test>"
         else if (index($0, "New tests failing") && !seen_new) { seen_new = 1; sec = "new" }
         next
     }
-    ref == "" && match($0, /Actual reference baseline[ \t]*:[ \t]*/) {
+    # "Actual ...", or "ACTUAL ..." after a WARNING when it is not the one expected
+    ref == "" && match(tolower($0), /actual reference baseline[ \t]*:[ \t]*/) {
         rest = substr($0, RSTART + RLENGTH); split(rest, w, /[ \t]+/); ref = w[1]
     }
     sec != "" && NF > 0 {

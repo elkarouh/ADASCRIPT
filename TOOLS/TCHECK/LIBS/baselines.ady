@@ -399,8 +399,9 @@ class Tlog:
     still_fail : []str
     now_ok     : []str
     # the baseline the Tlog compared its build with, what its new failures
-    # are new against: "Tlog: INFO: Actual reference baseline    : 30.0.0.120";
-    # "" when it does not say
+    # are new against: "Tlog: INFO: Actual reference baseline    : 30.0.0.120",
+    # or, when it is not the one expected, "Tlog: WARNING: ACTUAL reference
+    # baseline : 30.0.0.131 !!!"; "" when it does not say
     reference  : BaselineNr_T
 
     def __init__(self, filepath: Path, build_subtype: BuildSubtype):
@@ -412,7 +413,7 @@ class Tlog:
         var section: Section = UNREPORTED
         for line in filepath.lines:
             continue if line.strip() == ""
-            if self.reference == "" and line == /Actual reference baseline\s*:\s*(?P<ref>\S+)/:
+            if self.reference == "" and line == /(?i)actual reference baseline\s*:\s*(?P<ref>\S+)/:
                 self.reference = $+{ref}
             if is_section_header(line):
                 let named: Section = section_of(line)
