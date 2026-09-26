@@ -39,6 +39,25 @@ class Log:
 class Tagged(Log):
     extra: []int = [1, 2]
 
+class Depot:
+    """Its __init__ sets the fields itself, first thing: they are not set
+    to their zero before as well, the list made twice. `note` reads a
+    field before its own line sets it, so that one keeps its zero first."""
+    name:     str
+    vehicles: []str
+    fuel_of:  {str}float
+    notes:    []str
+    opened:   []str
+
+    def __init__(self, name: str):
+        self.name     = name
+        self.vehicles = []
+        self.note("opened")
+        self.opened = ["opened"]
+
+    def note(self, what: str):
+        self.notes.append(f"{what} after {self.opened'Length}")
+
 # a bare field has its zero, and a list of its own
 var a: Bag = Bag()
 var b: Bag = Bag()
@@ -65,4 +84,12 @@ let t2: Tagged = Tagged("four")
 t1.extra.append(3)
 assert t2.lines == ["four"]
 assert t2.extra == [1, 2]
+
+# fields __init__ sets itself, and one it reads through a method first
+var d1: Depot = Depot("north")
+let d2: Depot = Depot("south")
+d1.vehicles.append("van")
+d1.fuel_of["van"] = 4.0
+assert d2.vehicles'Length == 0 and d2.fuel_of'Length == 0
+assert d2.notes == ["opened after 0"] and d2.opened == ["opened"]
 print "ok"

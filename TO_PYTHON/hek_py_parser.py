@@ -1864,6 +1864,23 @@ def _per_instance_fields(body, indent):
                 if closed:
                     break
             break
+    # A field __init__ sets itself before anything can read it needs no
+    # default first: `self.xs = []` twice was the result. Only the run of
+    # plain field assignments __init__ opens with counts -- their values
+    # not reading self -- as a method call or super().__init__() after it
+    # may read a field before a later line sets it.
+    set_first = set()
+    plain_set = _re_pif.compile(r"^self\.([A-Za-z_]\w*)\s*(?::[^=]+)?=\s*(.+)$")
+    for line in lines[at:]:
+        if line.strip() == "" or line.strip().startswith("#"):
+            continue
+        if not line.startswith(body_pad) or line[len(body_pad):len(body_pad) + 1].isspace():
+            break       # the end of __init__, or a line of a longer statement
+        m = plain_set.match(line[len(body_pad):])
+        if not m or not _balanced(m.group(2)) or _re_pif.search(r"\bself\b", m.group(2)):
+            break
+        set_first.add(m.group(1))
+    inits = [stmt for stmt in inits if stmt.split(" = ", 1)[0][len("self."):] not in set_first]
     lines[at:at] = [body_pad + stmt for stmt in inits]
     return "\n".join(lines)
 

@@ -462,6 +462,19 @@ test: compile
 	        | cmp -s - $(TMPDIR)/ady_print_bare.want && echo OK || { echo FAIL; exit 1; }
 	@rm -f $(TMPDIR)/ady_print_bare.want
 
+	@# Each instance has fields of its own on Python too, set once: a field
+	@# its __init__ sets first thing is not set to its zero before.
+	@echo "=== class fields per instance (python) ==="
+	@$(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(EXDIR)/test_class_fields_per_instance.ady \
+	    > $(TMPDIR)/test_class_fields_per_instance.py
+	@printf '  %-42s' "test_class_fields_per_instance.ady"; \
+	    $(PYTHON) $(TMPDIR)/test_class_fields_per_instance.py | grep -qx ok && echo OK || { echo FAIL; exit 1; }
+	@printf '  %-42s' "...a field __init__ sets is set once"; \
+	    [ "$$(grep -c 'self.vehicles = \[\]' $(TMPDIR)/test_class_fields_per_instance.py)" = 1 ] \
+	    && [ "$$(grep -c 'self.opened = ' $(TMPDIR)/test_class_fields_per_instance.py)" = 2 ] \
+	    && echo OK || { echo FAIL; exit 1; }
+	@rm -f $(TMPDIR)/test_class_fields_per_instance.py
+
 	@echo "=== Stdin examples (piped from test_awk_sample.txt) ==="
 	@for f in $(STDIN_EXAMPLES); do \
 	    name=$${f%.ady}; \
