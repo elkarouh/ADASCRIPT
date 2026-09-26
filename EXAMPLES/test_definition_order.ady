@@ -1,0 +1,67 @@
+#!/usr/bin/env ady2nim
+"""Test: definition order does not matter.
+
+In Adascript, as in Python, a function may call one defined below it and a
+class may use a class defined below it. Nim wants each declared before use,
+and the Nim backend used to follow the source's order, so a method could
+neither name a class defined further down nor call a free function that
+was; the source had to be ordered by hand. The backend now gathers every
+type into one section and declares a routine ahead of its first caller.
+On Python, annotations are no longer evaluated where they are written.
+"""
+
+type Name_T is str
+
+class Shelf:
+    """Uses Book, defined below: in a field, a signature and a call."""
+    books: []Book
+    label: Name_T
+
+    def __init__(self, label: Name_T):
+        self.label = label
+        self.books = [Book("a", self.label), Book("b", self.label)]
+
+    def titles(self) -> []Name_T:
+        [b.title for b in self.books]
+
+    def show(self) -> str:
+        """A method named as one of Book's."""
+        shelf_line(self.label, len(self.books))
+
+    def first(self) -> Book:
+        self.books[0]
+
+class Book:
+    title: Name_T
+    shelf: Name_T
+
+    def __init__(self, title: Name_T, shelf: Name_T):
+        self.title = title
+        self.shelf = shelf
+
+    def show(self) -> str:
+        book_line(self.title, where(self))
+
+def shelf_line(label: Name_T, n: int) -> str:
+    f"{label}: {n} books"
+
+def book_line(title: Name_T, at: Path = Path("")) -> str:
+    """A default with parentheses in it."""
+    f"{title} at {at}"
+
+def where(b: Book) -> Path:
+    Path("/shelves") / b.shelf
+
+var log: []str = []
+
+def note(line: str):
+    """Returns nothing."""
+    log.append(line)
+
+let s: Shelf = Shelf("s1")
+assert s.titles() == ["a", "b"]
+assert s.show() == "s1: 2 books"
+assert s.first().show() == "a at /shelves/s1"
+note(s.show())
+assert log == ["s1: 2 books"]
+print "ok"

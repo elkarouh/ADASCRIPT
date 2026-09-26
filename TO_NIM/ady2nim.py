@@ -335,6 +335,171 @@ def _prescan_classes(stmts):
     return ref_classes, all_methods, hierarchy
 
 
+import re as _re_order
+
+_TOP_TYPE = _re_order.compile(r'^type\b')
+_TOP_CONST = _re_order.compile(r'^const\s+(\w+)')
+_TOP_ROUTINE = _re_order.compile(r'^(proc|func|method|iterator|template|macro|converter)\s')
+_DECLARABLE = _re_order.compile(r'^(?:proc|func)\s+(\w+)\*?\s*[\[(]')
+_CALLED = _re_order.compile(r'\b([A-Za-z_]\w*)\s*\(')
+_IDENT = _re_order.compile(r'\b[A-Za-z_]\w*\b')
+_HEADER_END = _re_order.compile(r'^(.*\S)\s+=(\s+#.*)?$')
+
+
+def _top_level_extent(lines, i):
+    """The index past the top-level construct starting at LINES[i]: its
+    indented lines, blank ones included when more indented ones follow."""
+    j = i + 1
+    while j < len(lines):
+        if lines[j][:1] in (' ', '\t'):
+            j += 1
+        elif lines[j].strip() == '':
+            k = j
+            while k < len(lines) and lines[k].strip() == '':
+                k += 1
+            if k < len(lines) and lines[k][:1] in (' ', '\t'):
+                j = k
+            else:
+                break
+        else:
+            break
+    return j
+
+
+def _declare_before_use(lines):
+    """LINES, the Nim module, rearranged so that nothing depends on the
+    order the Adascript source defined things in.
+
+    Nim wants a type declared before any signature names it, and a routine
+    before any body calls it; Adascript, like Python, does not care. So a
+    class's method could not name a class defined below it, nor call a free
+    function defined below it, and the source had to be ordered by hand --
+    helpers above the classes that call them, classes above the functions
+    that use them -- with notes in docstrings saying why.
+
+    Types: every top-level type block is gathered into one `type` section,
+    where the first of them was, in their order; Nim lets the declarations
+    of one section refer to each other. A block that uses a constant
+    defined after that point stays where it was.
+
+    Routines: a proc or func called in a routine's body above its own
+    definition is declared there first, as Nim would have had it written --
+    unless it is already, and a later identical declaration (the class
+    emitter's, for methods) is dropped, since Nim rejects a second one.
+    Iterators, templates and macros cannot be declared ahead in Nim, so
+    those still come before their first use.
+    """
+    # -- types ------------------------------------------------------------
+    consts = {}
+    for i, ln in enumerate(lines):
+        m = _TOP_CONST.match(ln)
+        if m:
+            consts.setdefault(m.group(1), i)
+    blocks = []          # (start, end)
+    i = 0
+    while i < len(lines):
+        if _TOP_TYPE.match(lines[i]):
+            j = _top_level_extent(lines, i)
+            blocks.append((i, j))
+            i = j
+        else:
+            i += 1
+    if len(blocks) > 1:
+        first = blocks[0][0]
+        moved, kept_names = [], set()
+        for start, stop in blocks:
+            text = '\n'.join(lines[start:stop])
+            names = set(_IDENT.findall(text))
+            late_const = any(first < consts[n] < start for n in names if n in consts)
+            if late_const or names & kept_names:
+                # stays: and so does anything naming what it declares
+                kept_names |= {m.group(1) for m in _re_order.finditer(r'^\s*(?:type\s+)?(\w+)\*?\s*(?:\[[^\]]*\])?\s*=', text, _re_order.M)}
+                continue
+            moved.append((start, stop))
+        if len(moved) > 1:
+            section = ['type']
+            for start, stop in moved:
+                head = lines[start]
+                if head.strip() == 'type':
+                    section.extend(lines[start + 1:stop])      # already a section
+                else:
+                    section.append('  ' + head[len('type'):].lstrip())
+                    section.extend(('  ' + ln) if ln.strip() else ln for ln in lines[start + 1:stop])
+            drop = set()
+            for start, stop in moved:
+                drop.update(range(start, stop))
+            at = moved[0][0]
+            rebuilt = []
+            for i, ln in enumerate(lines):
+                if i == at:
+                    rebuilt.extend(section)
+                if i not in drop:
+                    rebuilt.append(ln)
+            lines = rebuilt
+
+    # -- routines ---------------------------------------------------------
+    routines = []        # (header index, body end)
+    defs = {}            # name -> [(header index, signature)]
+    declared = {}        # normalized signature -> [line indices of bare declarations]
+    norm = lambda sig: ' '.join(sig.split())
+    for i, ln in enumerate(lines):
+        if not _TOP_ROUTINE.match(ln):
+            continue
+        hm = _HEADER_END.match(ln)
+        if hm:
+            routines.append((i, _top_level_extent(lines, i)))
+            dm = _DECLARABLE.match(ln)
+            if dm:
+                defs.setdefault(dm.group(1), []).append((i, hm.group(1)))
+        elif _DECLARABLE.match(ln):
+            declared.setdefault(norm(ln), []).append(i)
+    # the earliest routine calling each definition from above it
+    earliest = {}        # (def index) -> caller header index
+    for head, stop in routines:
+        called = set()
+        for ln in lines[head + 1:stop]:
+            called.update(_CALLED.findall(ln))
+        for name in called:
+            for at, sig in defs.get(name, ()):
+                if at > head and head < earliest.get(at, at):
+                    earliest[at] = head
+    tops = {}            # top-level let/var/const name -> line
+    for i, ln in enumerate(lines):
+        m = _re_order.match(r'^(?:let|var|const)\s+(\w+)', ln)
+        if m:
+            tops.setdefault(m.group(1), i)
+    insert = {}          # line index -> [declarations]
+    drop = set()
+    for name, entries in defs.items():
+        for at, sig in entries:
+            caller = earliest.get(at)
+            if caller is None:
+                continue
+            key = norm(sig)
+            before = [d for d in declared.get(key, ()) if d < caller]
+            if before:
+                continue
+            # a default naming a global has to follow the global
+            where = caller
+            params = sig[sig.find('('):]
+            for ident in _IDENT.findall(params):
+                if ident in tops and tops[ident] >= where:
+                    where = _top_level_extent(lines, tops[ident])
+            if where > caller:
+                continue
+            insert.setdefault(where, []).append(sig)
+            drop.update(d for d in declared.get(key, ()) if d > caller)
+    if not insert:
+        return lines
+    out = []
+    for i, ln in enumerate(lines):
+        if i in insert:
+            out.extend(insert[i])
+        if i not in drop:
+            out.append(ln)
+    return out
+
+
 def translate(code, export_symbols=False):
     """Parse Python source and translate to Nim via to_nim().
 
@@ -356,6 +521,13 @@ def translate(code, export_symbols=False):
     # Merge ref classes from nimport'd deps so subclasses of cross-file base
     # classes are also emitted as ref object.
     ParserState._ref_classes.update(_nimport_ref_classes)
+    # Every class of the module is known from the start, so that a call to
+    # one defined further down is a constructor call too: `Part(...)` in a
+    # method of a class above Part was emitted as a bare call of the type.
+    # (Definition order does not matter; see _declare_before_use.)
+    for _cls in ParserState._all_class_parents:
+        if not ParserState.symbol_table.lookup(_cls):
+            ParserState.symbol_table.add(_cls, _cls, "class")
 
     # The names this module defines at top level. A builtin call rewrite must
     # not capture a call to one of them: lispy.ady defines its own `run`, and
@@ -517,96 +689,9 @@ def translate(code, export_symbols=False):
         return result
     output = _merge_type_blocks('\n'.join(output).split('\n'))
 
-    # Auto-insert forward declarations for mutually-recursive procs.
-    # Pass 1: scan all lines, record every proc definition and its signature.
-    # Pass 2: for each proc body, collect which other procs it calls.
-    # Pass 3: detect cycles; for each cycle, insert a {.forward.} decl before
-    #         the first proc in the cycle (i.e. the one that calls a not-yet-defined proc).
-    import re as _re_fwd
-    _PROC_HDR = _re_fwd.compile(r'^proc (\w+)\*?(\[.*?\])?\(([^)]*)\)\s*:\s*(.+?)\s*=\s*$')
-    _CALL_RE  = _re_fwd.compile(r'\b(\w+)\s*\(')
-
-    # Flatten output to lines for scanning
-    flat = '\n'.join(output).split('\n')
-
-    # Collect proc definitions: name -> (line_index, signature_string)
-    proc_defs = {}   # name -> (line_idx, full_sig)   e.g. "proc foo(x: int): bool"
-    proc_order = []  # names in definition order
-    i = 0
-    while i < len(flat):
-        m = _PROC_HDR.match(flat[i])
-        if m and flat[i].endswith('='):
-            pname = m.group(1)
-            sig = flat[i][:-1].rstrip()   # strip trailing '='
-            if pname not in proc_defs:
-                proc_defs[pname] = (i, sig)
-                proc_order.append(pname)
-        i += 1
-
-    # Collect call graph: proc -> set of procs it calls (only known procs)
-    # For each proc, scan its body (indented lines after the header)
-    call_graph = {name: set() for name in proc_defs}
-    for name, (line_idx, _sig) in proc_defs.items():
-        j = line_idx + 1
-        while j < len(flat) and (flat[j].startswith(' ') or flat[j].startswith('\t') or flat[j] == ''):
-            for cm in _CALL_RE.finditer(flat[j]):
-                callee = cm.group(1)
-                if callee in proc_defs and callee != name:
-                    call_graph[name].add(callee)
-            j += 1
-
-    # Find procs that need a forward decl: any proc B that is called by some proc A
-    # defined earlier (A's line < B's line).  Nim requires B to be declared before A's body.
-    # We insert a {.forward.} stub for B immediately before B's definition so that the
-    # stub appears before every caller.  That is sufficient: Nim only needs the stub to
-    # precede the first call site, but inserting it before the definition is always safe
-    # and avoids having to find the earliest caller.
-    fwd_needed = set()  # proc names that need a {.forward.} decl
-    for name in proc_order:
-        a_line = proc_defs[name][0]
-        for callee in call_graph[name]:
-            b_line = proc_defs[callee][0]
-            if b_line > a_line:
-                # A (earlier) calls B (later) — B needs a forward decl
-                fwd_needed.add(callee)
-
-    if fwd_needed:
-        # Build set of proc names that already have a bare forward declaration in the file
-        # (a line matching `proc name(...)` WITHOUT trailing `=`).
-        _FWD_BARE = _re_fwd.compile(r'^proc (\w+)\*?[\[(]')
-        _already_fwd = set()
-        for ln in flat:
-            stripped = ln.strip()
-            if stripped.startswith("proc ") and not stripped.endswith("=") and "=" not in stripped:
-                _m_bare = _FWD_BARE.match(stripped)
-                if _m_bare:
-                    _already_fwd.add(_m_bare.group(1))
-
-        # For each proc needing a forward decl, find the line index of the earliest
-        # caller (a proc defined before it that calls it).  Insert the stub there.
-        # fwd_insert[line_idx] = list of forward-decl strings to insert before that line.
-        fwd_insert = {}
-        for callee in fwd_needed:
-            if callee in _already_fwd:
-                continue  # already has a forward declaration — don't duplicate it
-            callee_line = proc_defs[callee][0]
-            earliest = callee_line  # default: before own definition
-            for caller in proc_order:
-                caller_line = proc_defs[caller][0]
-                if caller_line < callee_line and callee in call_graph[caller]:
-                    if caller_line < earliest:
-                        earliest = caller_line
-            sig = proc_defs[callee][1]   # bare signature, no '=' — Nim 2.x forward decl
-            fwd_insert.setdefault(earliest, []).append(sig)
-
-        new_lines = []
-        for idx, ln in enumerate(flat):
-            if idx in fwd_insert:
-                new_lines.extend(fwd_insert[idx])
-            new_lines.append(ln)
-        output = new_lines
-    else:
-        output = flat
+    # Definition order does not matter in Adascript, as in Python; it does in
+    # Nim. One pass makes it not matter there either -- see _declare_before_use.
+    output = _declare_before_use('\n'.join(output).split('\n'))
 
     # Insert collected Nim imports at the top (after any leading comments),
     # followed by the pragmas, helper declarations and init statements the

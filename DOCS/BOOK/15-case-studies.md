@@ -34,8 +34,8 @@ lambdas, `apply` and `map`. The language features it stresses:
   (§4.3) — the single type through which every interpreter value flows;
 - **sequence patterns** to recognise special forms (§5.6) — the eval loop is
   essentially one big `case x.items:`;
-- `# nimraw:` **forward declarations** for the mutually recursive
-  eval/apply pair (§8.3);
+- the mutually recursive eval/apply pair, written in either order
+  (§8.3);
 - free functions taking `self: Val_T`, called method-style via UFCS —
   the trick that keeps a Nim-compatible design Pythonic to read.
 

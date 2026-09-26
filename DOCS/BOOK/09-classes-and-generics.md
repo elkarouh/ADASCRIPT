@@ -246,8 +246,8 @@ it, shout it.
 ## 9.7 Declaration order, and why the instance is `var`
 
 Python resolves names when a call runs; Nim resolves them where the call is
-written. The transpiler hides most of that, but four rules survive into
-Adascript. They matter as soon as a program grows a class that drives the
+written. The transpiler hides that -- declaration order does not matter --
+and one rule about `var` survives into Adascript. They matter as soon as a program grows a class that drives the
 whole run — a `Report` holding the options and the data it reports on, say — because
 that class then sits in the middle of a file full of helpers.
 
@@ -273,17 +273,12 @@ class Report:
         print f"{self.name} body"
 ```
 
-**A method may *not* call a free proc declared below the class.** Forward
-declarations cover methods, not module-level procs, so this is a hard error:
-
-```
-Error: undeclared identifier: 'helper'
-```
-
-The consequence is a file layout, not a workaround: **put the helper procs
-first, the class that uses them after, and the main block last.** Python is
-indifferent to the order, so a file arranged this way runs identically on
-both backends.
+**A method may call a free function, or use a class, defined below it.**
+Every routine called before its definition is declared ahead of its first
+caller, and every type goes into one `type` section, where Nim lets them
+refer to each other. So a file is laid out for its reader, not for the
+compiler: the class that drives the run first, say, and the helpers it
+calls after. Python was always indifferent to the order.
 
 **`__init__` may call a sibling method too.** The generated `initT` / `newT`
 procs are emitted ahead of the other method bodies, so this used to reach a

@@ -144,7 +144,8 @@ to keep numpy/matplotlib access while the core logic compiles natively.
 ## 12.3 Raw Nim and per-file flags
 
 - `# nimraw: <code>` — emit a line verbatim into Nim output, invisible to
-  Python. Main use: forward declarations for mutual recursion (§8.3).
+  Python, for Nim with no Adascript spelling, such as a pragma. Forward
+  declarations are not needed: definition order does not matter (§8.3).
 - `#ady2nim-args c -d:release` on line 2 — per-file Nim compiler options.
   Several examples pin zig as the C compiler this way
   (`#ady2nim-args c --cc:clang --clang.exe:zigcc --clang.linkerexe:zigcc`).

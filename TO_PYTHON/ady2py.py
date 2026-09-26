@@ -342,17 +342,22 @@ def translate(code):
     from hek_parsec import ParserState
     _add_stdlib_module_imports(output)
     _drop_type_applications(output)
-    if ParserState.nim_imports:
-        # Find the first non-comment, non-blank line
-        insert_pos = 0
-        for i, line in enumerate(output):
-            stripped = line.strip()
-            if stripped and not stripped.startswith("#"):
-                insert_pos = i
-                break
-        for imp in sorted(ParserState.nim_imports):
-            output.insert(insert_pos, imp)
-            insert_pos += 1
+    # Annotations are not evaluated where they are written, so one may name
+    # a class defined further down -- `def builds(self) -> list[Build]` in a
+    # class above Build raised NameError. Definition order does not matter
+    # in Adascript; a call is resolved when it runs, and now so is this.
+    ParserState.nim_imports.add("from __future__ import annotations")
+    # Find the first non-comment, non-blank line
+    insert_pos = 0
+    for i, line in enumerate(output):
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#"):
+            insert_pos = i
+            break
+    # the __future__ import first: Python allows nothing ahead of it
+    for imp in sorted(ParserState.nim_imports, key=lambda imp: (not imp.startswith("from __future__"), imp)):
+        output.insert(insert_pos, imp)
+        insert_pos += 1
 
     # Inject py_top_decls (e.g. _pymatch helper) right after imports
     py_top_decls = getattr(ParserState, 'py_top_decls', [])

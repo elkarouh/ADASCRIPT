@@ -71,16 +71,15 @@ by the Python transpiler:
 |-----------|---------|
 | `#ady2nim-args c -d:release` | Per-file Nim compiler flags (second line only) |
 | `nimport strutils, sequtils` | Import a Nim module without a Python equivalent |
-| `# nimraw: <code>` | Emit a raw Nim line verbatim (e.g. forward declarations) |
+| `# nimraw: <code>` | Emit a raw Nim line verbatim (e.g. a pragma) |
 
-`# nimraw:` is mainly useful for **forward declarations** of mutually
-recursive functions, which AdaScript does not otherwise support:
+`# nimraw:` is for Nim with no Adascript spelling, such as a pragma. It is
+not needed for forward declarations: definition order does not matter, so
+mutually recursive functions are written as they are in Python:
 
 ```python
-# nimraw: proc b(x: int): int   # forward declaration
 def a(x: int) -> int:
-    return b(x - 1)             # calls b before b is defined
-
+    return b(x - 1)             # b is defined below -- fine
 def b(x: int) -> int:
     if x <= 0: return 0
     return a(x - 1)
@@ -1496,8 +1495,9 @@ class Counter:
 
 ### Declaration order, and `var` instances
 
-Nim resolves a name where the call is written, not when it runs. Four rules
-follow, and they decide how a file with a driver class is laid out.
+Nim resolves a name where the call is written, not when it runs; the
+transpiler makes up for that, so declaration order does not matter. Only the
+last rule below, about `var`, survives into Adascript.
 
 **A method may call a sibling method defined below it** — the transpiler
 emits forward declarations for a class's own methods:
@@ -1517,11 +1517,11 @@ class Report:
     def body(self):   print f"{self.name} body"
 ```
 
-**A method may not call a free proc declared below the class.** Forward
-declarations cover methods only, so this fails with
-`Error: undeclared identifier: 'helper'`. So order the file: **helper procs
-first, then the class that uses them, then the main block.** Python does not
-care about the order, so the same file runs on both backends.
+**A method may call a free function, or use a class, defined below it** --
+and a function may call one defined below it. Every routine called before
+its definition is declared ahead of its first caller, and every type goes
+into one `type` section, so the file can be laid out for the reader: the
+driver class first, say, and the helpers after.
 
 **`__init__` may call a sibling method too** — the generated `initT` / `newT`
 come out ahead of the other method bodies, so this once reached an undeclared
@@ -1543,8 +1543,8 @@ report.run()  # correct
 
 A method that only reads keeps a plain `self` even when it calls other
 readers, so it works on a `let`, a loop variable or a parameter. Where the
-transpiler cannot tell — a method called on a field, `self` passed to another
-routine — it assumes a write. The Python backend accepts either, so only Nim
+transpiler cannot tell — a method called on a field, `self` passed to a
+routine from outside the program — it assumes a write. The Python backend accepts either, so only Nim
 reports it. Rule of thumb: if you call a method on it, declare it `var`.
 
 ### Forwarding constructors

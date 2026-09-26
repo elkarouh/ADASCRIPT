@@ -546,7 +546,7 @@ class Circle(Shape):
         return 3.14159 * self.radius ** 2
 ```
 
-**Declaration order** — a method MAY call a sibling method defined below it (methods get forward declarations), but MAY NOT call a free proc declared below the class (`Error: undeclared identifier`). Lay the file out as: helper procs, then the class, then the main block. `__init__` may call a sibling method as well (the forward declarations cover the `initT`/`newT` procs, which are emitted first).
+**Declaration order** — does not matter, as in Python: a function, method or `__init__` MAY call a function or method defined below it, and a class MAY use a class defined below it (in a field, a signature or a constructor call). The Nim backend forward-declares every routine called before its definition and puts all types in one `type` section.
 
 **`var` instances** — mutable `self` is inferred transitively, so if any method reaches a field-mutating sibling, the instance must be `var`, not `let`:
 ```adascript
@@ -832,15 +832,7 @@ libraries live). No match -> the name goes to Nim untouched, which is why
 - Build the whole graph with `ady2nim c -r <entry>.ady`; `ady2nim -t` transpiles it and stops.
 - **ady2py has no module resolution**: `nimport` is stripped to a comment and each file is translated alone, so a multi-module program is a Nim program. Dual-backend code stays in one file.
 
-**`# nimraw: <code>`** — raw Nim line verbatim, stripped from Python. Mainly for forward declarations of mutually recursive functions:
-```adascript
-# nimraw: proc b(x: int): int
-def a(x: int) -> int:
-    return b(x - 1)
-def b(x: int) -> int:
-    if x <= 0: return 0
-    return a(x - 1)
-```
+**`# nimraw: <code>`** — raw Nim line verbatim, stripped from Python, for Nim with no Adascript spelling (a pragma: `# nimraw: {.push overflowChecks: off.}`). NOT needed for forward declarations: mutually recursive functions are written as in Python.
 
 ---
 

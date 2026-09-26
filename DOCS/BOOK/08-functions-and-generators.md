@@ -125,25 +125,26 @@ def __and__(self, other: Region) -> Region:
     Region(both)
 ```
 
-## 8.3 Mutual recursion and forward declarations
+## 8.3 Mutual recursion, and definition order
 
-Nim requires declaration before use; Adascript has no forward-declaration
-syntax. The escape hatch is a `# nimraw:` comment, which passes its payload
-verbatim to the Nim output (and is invisible to Python):
+Nim requires declaration before use; Adascript, like Python, does not. A
+function may call one defined further down, so mutually recursive functions
+are written as they are in Python:
 
 ```python
-# nimraw: proc scheme_eval(x: Val, eid: int): Val   # forward decl
 def scheme_apply(proc_val: Val, args: []Val) -> Val:
     ...
-    return scheme_eval(...)
+    return scheme_eval(...)     # defined below -- fine
 
 def scheme_eval(x: Val, eid: int) -> Val:
     ...
     return scheme_apply(...)
 ```
 
-This is exactly the shape of a Scheme interpreter's eval/apply loop, and
-`lispy.ady` is where the feature earns its keep.
+The Nim backend declares each routine ahead of its first caller, which is
+what a Nim programmer writes by hand. This is exactly the shape of a Scheme
+interpreter's eval/apply loop, and `lispy.ady` has it. The same holds for
+classes: one may use a class defined below it (§9.7).
 
 ## 8.4 Generators
 

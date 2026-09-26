@@ -1424,20 +1424,21 @@ The `.ady` files in `TO_NIM/STDLIB/` are installed into the build cache, so
 ## Raw Nim Injection
 
 A comment of the form `# nimraw: <code>` is passed through verbatim to the
-Nim output and stripped from Python output. This is mainly useful for Nim
-**forward declarations** when two functions are mutually recursive and
-AdaScript has no forward-declaration syntax:
+Nim output and stripped from Python output, for Nim that has no Adascript
+spelling -- a pragma, say:
 
 ```python
-# nimraw: proc scheme_eval(x: Val, eid: int): Val   # forward decl
-def scheme_apply(proc_val: Val, args: []Val) -> Val:
-    ...
-    return scheme_eval(...)   # calls the forward-declared proc
-
-def scheme_eval(x: Val, eid: int) -> Val:
-    ...
-    return scheme_apply(...)
+# nimraw: {.push overflowChecks: off.}
+def hash_step(h: int, c: int) -> int:
+    return h * 31 + c
+# nimraw: {.pop.}
 ```
+
+Forward declarations are not needed. Definition order does not matter, as in
+Python: a function may call one defined further down -- two mutually
+recursive functions included -- and a class may use a class defined below
+it. The Nim backend declares each routine ahead of its first caller and puts
+every type in one `type` section.
 
 The transpiler replaces each `# nimraw:` line with the raw code that follows
 the prefix, leaving Python output unaffected (Python ignores the comment).
