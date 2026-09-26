@@ -236,6 +236,10 @@ class Tlog:
     not_run    : []str
     still_fail : []str
     now_ok     : []str
+    # the baseline the Tlog compared its build with, what its new failures
+    # are new against: "Tlog: INFO: Actual reference baseline    : 30.0.0.120";
+    # "" when it does not say
+    reference  : BaselineNr_T
 
     def __init__(self, filepath: Path, build_subtype: BuildSubtype):
         """Read FILEPATH in one pass: each non-blank line goes to the section
@@ -246,6 +250,8 @@ class Tlog:
         var section: Section = UNREPORTED
         for line in filepath.lines:
             continue if line.strip() == ""
+            if self.reference == "" and line == /Actual reference baseline\s*:\s*(?P<ref>\S+)/:
+                self.reference = $+{ref}
             if is_section_header(line):
                 let named: Section = section_of(line)
                 section = UNREPORTED if named in seen else named
@@ -405,43 +411,65 @@ def find_replays(basedir: Path) -> []Replay:
         result.append((rtype: rtype, file: filepath))
     return result
 
-def replay_status(content: str) -> ReplayStatus:
-    """What a replay's log, CONTENT, says of it: the verdict of its UNINSTALL
-    step when it has one, else whether it has started."""
-    if "Executed UNINSTALL:" in content:
-        # the rest of the line of its last UNINSTALL step
-        let (_, after) = content.rsplit("Executed UNINSTALL:", 1)
-        let verdict: str = after.split("\n")[0]
-        return succeeded if "YES" in verdict
-        return failed if "NO" in verdict
-    return busy if "Waiting for this replay to be finished" in content
-    not_started
+class ReplayLog:
+    """What a Treplay log says of its replay, read in one pass."""
+    file         : Path
+    status       : ReplayStatus
+    severe_errors: []str   # its ERROR_REPORT.SEVERE lines
+    terminated   : bool    # whether it says "Replay terminated"
+
+    def __init__(self, file: Path):
+        """The verdict is that of the last UNINSTALL step when it has one;
+        else the log is waiting for the replay to end, or has not started."""
+        self.file = file
+        var verdict: str = ""        # the rest of the last UNINSTALL line
+        var waiting: bool = False
+        for line in file.lines:
+            if "Executed UNINSTALL:" in line:
+                let (_, after) = line.rsplit("Executed UNINSTALL:", 1)
+                verdict = after
+            if "Waiting for this replay to be finished" in line:
+                waiting = True
+            if "ERROR_REPORT.SEVERE" in line:
+                self.severe_errors.append(line)
+            if "Replay terminated" in line:
+                self.terminated = True
+        if "YES" in verdict:
+            self.status = succeeded
+        elif "NO" in verdict:
+            self.status = failed
+        elif waiting:
+            self.status = busy
+        else:
+            self.status = not_started
+
+    def show(self, verbose: bool):
+        """The verdict, with a link to the log when the replay failed, and
+        with VERBOSE its severe errors, each from its file's name on."""
+        case self.status:
+            when succeeded:
+                puts("SWb", "==> WAS SUCCESSFUL", NEWLINE=True)
+            when failed:
+                puts("SWr", "==> FAILED", NEWLINE=True)
+                echo_emacs(self.file)
+                print
+                if verbose:
+                    for line in self.severe_errors:
+                        let basename_at: int = line.rfind("/")
+                        if basename_at >= 0:
+                            print line[basename_at + 1:]
+                        else:
+                            print line
+            when not_started:
+                puts("SWb", "---> WARNING: it looks like the replay hasn't started", NEWLINE=True)
+            when busy:
+                puts("SWb", "IS STILL BUSY", NEWLINE=True)
 
 def process_replay(replay: Replay, verbose: bool):
     """Check the status of a single replay (successful / failed / running)."""
     let label: str = f"\"{replay.rtype}\""
     puts("SWb", f"{label:<14} replay ")
-
-    let content: str = readFile(replay.file)
-    case replay_status(content):
-        when succeeded:
-            puts("SWb", "==> WAS SUCCESSFUL", NEWLINE=True)
-        when failed:
-            puts("SWr", "==> FAILED", NEWLINE=True)
-            echo_emacs(replay.file)
-            print
-            if verbose:
-                for line in content.split("\n"):
-                    continue if "ERROR_REPORT.SEVERE" not in line
-                    let basename_at: int = line.rfind("/")
-                    if basename_at >= 0:
-                        print line[basename_at + 1:]
-                    else:
-                        print line
-        when not_started:
-            puts("SWb", "---> WARNING: it looks like the replay hasn't started", NEWLINE=True)
-        when busy:
-            puts("SWb", "IS STILL BUSY", NEWLINE=True)
+    ReplayLog(replay.file).show(verbose)
     hr('-')
 
 # ---------------------------------------------------------------------------
@@ -1327,15 +1355,6 @@ type BuildSummary is tuple:
     total_crash: int
     all_ok     : bool
 
-def tlog_reference(filepath: Path) -> BaselineNr_T:
-    """The baseline a Tlog compared its build with -- what its new failures
-    are new against: "Tlog: INFO: Actual reference baseline    : 30.0.0.120".
-    "" when it does not say."""
-    for line in filepath.lines:
-        if line == /Actual reference baseline\s*:\s*(?P<ref>\S+)/:
-            return $+{ref}
-    ""
-
 def check_replay_dirs_size():
     """Scan replay directories for disk usage and deletion advice."""
     hr('-')
@@ -1367,7 +1386,7 @@ def check_replay_dirs_size():
             let find_r: []str = shellLines: find {replay_dir} -type f -name "*replay_day.log"
             if find_r'Length > 0:
                 replay_logfile = Path(find_r[0])
-        if replay_logfile != "" and "Replay terminated" in readFile(replay_logfile):
+        if replay_logfile != "" and ReplayLog(replay_logfile).terminated:
             total_size = total_size + num_size
             print "\tTO DELETE THIS FAILED REPLAY, 'su cmadm' and then"
             # Check for tactdev_remove script.
@@ -1681,7 +1700,7 @@ class Report:
         var replay_fail: int = 0
         var replay_busy: int = 0
         for replay in self.replays:
-            case replay_status(readFile(replay.file)):
+            case ReplayLog(replay.file).status:
                 when succeeded:          replay_ok += 1
                 when failed:             replay_fail += 1
                 when not_started | busy: replay_busy += 1
@@ -1722,7 +1741,7 @@ class Report:
         was compared with an older one; "" when none says."""
         var refs: []str = []
         for t in self.tlogs():
-            let ref: str = tlog_reference(t.path)
+            let ref: BaselineNr_T = Tlog(t.path, t.subtype).reference
             if ref != "" and ref not in refs:
                 refs.append(ref)
         ", ".join(refs)
