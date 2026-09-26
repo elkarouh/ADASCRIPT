@@ -340,22 +340,22 @@ def note_option_guard(chunk, collected=None):
     # `print bt'Image` came out `some(IP)` on Nim against `IP` on Python --
     # compiling, and wrong, which is worse than the type error the same
     # variable gave in a `let` or a tuple.
-    m = re.match(r'^(\s*)if\s+([A-Za-z_]\w*(?:\.\w+)*(?:\[\d+\])?)\.isNone:'
+    m = re.match(r'^(\s*)if\s+([A-Za-z_]\w*(?:\.\w+)*(?:\[\d+\])?)\.(isNone|is_err|is_ok):'
                  r'\s*(.*?)\s*(?:#.*)?$',
                  chunk_lines[0])
     if not m:
         return
-    head_indent, name, inline_exit = m.group(1), m.group(2), m.group(3)
+    head_indent, name, inline_exit = m.group(1), m.group(2), m.group(4)
+    # What the rest of the block reads NAME as: an Option's value, or the
+    # side of a Result the guard did not leave on.
+    _suffix = hek_nim_expr._NARROW_IN_ELSE[m.group(3)]
     if inline_exit:
         # The one-line form: what follows is the rest of the block rather
         # than the guard's body, so neither the indent test nor the last
         # line below applies -- this line alone says whether it leaves.
         if not _leaves_the_block(inline_exit):
             return
-        if not hasattr(ParserState, '_option_unwrap_vars'):
-            ParserState._option_unwrap_vars = set()
-        if name not in ParserState._option_unwrap_vars:
-            ParserState._option_unwrap_vars.add(name)
+        if hek_nim_expr._narrow_add(name, _suffix):
             if collected is not None:
                 collected.append(name)
         return
@@ -373,10 +373,7 @@ def note_option_guard(chunk, collected=None):
             return
     if not _leaves_the_block(rest[-1]):
         return
-    if not hasattr(ParserState, '_option_unwrap_vars'):
-        ParserState._option_unwrap_vars = set()
-    if name not in ParserState._option_unwrap_vars:
-        ParserState._option_unwrap_vars.add(name)
+    if hek_nim_expr._narrow_add(name, _suffix):
         if collected is not None:
             collected.append(name)
 
@@ -684,14 +681,14 @@ def to_nim(self, indent=0, is_virtual=False, class_name=None, parent_name=None, 
         ParserState._current_class_name = None
         ParserState._class_siblings, ParserState._pure_methods = _saved_purity
         for _gname in _guard_unwrapped:
-            ParserState._option_unwrap_vars.discard(_gname)
+            hek_nim_expr._narrow_drop(_gname)
         return "\n".join(result_lines)
 
     # For non-class blocks, if empty emit discard
     if not lines:
         return _ind(indent) + "discard"
     for _gname in _guard_unwrapped:
-        ParserState._option_unwrap_vars.discard(_gname)
+        hek_nim_expr._narrow_drop(_gname)
     return "\n".join(_add_call_discards(lines))
 
 
@@ -706,6 +703,23 @@ def to_nim(self, indent=0):
 
 
 # --- if / elif / else ---
+def _proved_in_body(cond):
+    """(name, suffix) for each name COND proves inside its own body: an
+    `and` chain proves every conjunct, anything with an `or` nothing. A
+    `?T`'s isSome reads it as its value, a Result's is_ok as its value and
+    is_err as its error."""
+    import re as _re_pb
+    if " or " in cond:
+        return []
+    proved = []
+    for _part in cond.split(" and "):
+        _m = _re_pb.match(r'^\(?\s*(\w+(?:\.\w+)*(?:\[\d+\])?)\.(isSome|is_ok|is_err)\s*\)?$',
+                          _part.strip())
+        if _m:
+            proved.append((_m.group(1), hek_nim_expr._NARROW_IN_BODY[_m.group(2)]))
+    return proved
+
+
 @method(elif_clause)
 def to_nim(self, indent=0):
     """elif_clause: 'elif' expression ':' block -> Nim: 'elif cond:\n  body'"""
@@ -717,24 +731,13 @@ def to_nim(self, indent=0):
     # use(x)` read the field off the Option.  An `and` chain proves every
     # conjunct; an `or` proves nothing.
     import re as _re_if
-    _unwrap_vars = []
-    if " or " not in cond:
-        for _part in cond.split(" and "):
-            _m_some = _re_if.match(r'^\(?\s*(\w+(?:\.\w+)*(?:\[\d+\])?)\.isSome\s*\)?$',
-                                   _part.strip())
-            if _m_some:
-                _unwrap_vars.append(_m_some.group(1))
-    if _unwrap_vars and not hasattr(ParserState, '_option_unwrap_vars'):
-        ParserState._option_unwrap_vars = set()
-    _newly = [v for v in _unwrap_vars
-              if v not in getattr(ParserState, '_option_unwrap_vars', set())]
-    for _v in _newly:
-        ParserState._option_unwrap_vars.add(_v)
+    _newly = [v for v, sfx in _proved_in_body(cond)
+              if hek_nim_expr._narrow_add(v, sfx)]
     try:
         body = self.nodes[1].to_nim(indent + 1)
     finally:
         for _v in _newly:
-            ParserState._option_unwrap_vars.discard(_v)
+            hek_nim_expr._narrow_drop(_v)
     return f"{_ind(indent)}elif {cond}:{hc}\n{body}"
 
 
@@ -820,36 +823,22 @@ def to_nim(self, indent=0):
     # Detect x.isSome guards — auto-unwrap those names in the if body.  An
     # `and` chain proves every one of its conjuncts, so `if a.isSome and
     # b.isSome:` unwraps both; anything else (an `or`, a call) proves nothing.
-    _unwrap_vars = []
-    if " or " not in cond:
-        for _part in cond.split(" and "):
-            _m_some = _re_if.match(r'^\(?\s*(\w+(?:\.\w+)*(?:\[\d+\])?)\.isSome\s*\)?$',
-                                   _part.strip())
-            if _m_some:
-                _unwrap_vars.append(_m_some.group(1))
-    if _unwrap_vars and not hasattr(ParserState, '_option_unwrap_vars'):
-        ParserState._option_unwrap_vars = set()
-    _newly_unwrapped = [v for v in _unwrap_vars
-                        if v not in getattr(ParserState, '_option_unwrap_vars', set())]
-    for _v in _newly_unwrapped:
-        ParserState._option_unwrap_vars.add(_v)
+    _newly_unwrapped = [v for v, sfx in _proved_in_body(cond)
+                        if hek_nim_expr._narrow_add(v, sfx)]
     body = self.nodes[1].to_nim(indent + 1)
     for _v in _newly_unwrapped:
-        ParserState._option_unwrap_vars.discard(_v)
+        hek_nim_expr._narrow_drop(_v)
     result = f"{_hoist}{_ind(indent)}if {cond}:{hc}\n{body}"
 
     # The mirror of the guard above: `if x is None:` proves nothing in its
     # own body, and proves x has a value in *every* clause after it -- the
     # else, and any elif, which is only reached when the isNone was false.
     # Without this, the else branch read the field off the Option.
-    _m_none = _re_if.match(r'^\(?\s*(\w+(?:\.\w+)*(?:\[\d+\])?)\.isNone\s*\)?$', cond.strip())
+    _m_none = _re_if.match(r'^\(?\s*(\w+(?:\.\w+)*(?:\[\d+\])?)\.(isNone|is_err|is_ok)\s*\)?$', cond.strip())
     _else_unwrapped = []
     if _m_none:
-        if not hasattr(ParserState, '_option_unwrap_vars'):
-            ParserState._option_unwrap_vars = set()
         _n = _m_none.group(1)
-        if _n not in ParserState._option_unwrap_vars:
-            ParserState._option_unwrap_vars.add(_n)
+        if hek_nim_expr._narrow_add(_n, hek_nim_expr._NARROW_IN_ELSE[_m_none.group(2)]):
             _else_unwrapped.append(_n)
     try:
         for node in self.nodes[2:]:
@@ -867,7 +856,7 @@ def to_nim(self, indent=0):
                         result += "\n" + _ind(indent) + clause.to_nim()
     finally:
         for _v in _else_unwrapped:
-            ParserState._option_unwrap_vars.discard(_v)
+            hek_nim_expr._narrow_drop(_v)
     return result
 
 
@@ -968,8 +957,8 @@ def to_nim(self, indent=0):
         else:
             if hek_nim_expr._expr_is_result(expr):
                 raise SyntaxError(
-                    f"do: step '{expr}' is a Result; a routine binding one "
-                    f"must return a Result too, to pass its Err on")
+                    f"do: step '{expr}' returns a `T | E`; a routine binding "
+                    f"one must return a `T | E` too, to pass its failure on")
             ParserState.nim_imports.add("options")
             _m_opt = _re_do.search(r'Option\[(.+)\]', ret_ann)
             if _m_opt:

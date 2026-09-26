@@ -308,6 +308,18 @@ def _union_sides(node, emit):
     return parts
 
 
+def _nim_kind(nim_type):
+    """What a value of NIM_TYPE is at run time on the Python backend: a
+    parameterised type by its constructor, a Path by string, which it is
+    there."""
+    t = nim_type.strip()
+    if t.startswith("("):
+        return "tuple"
+    if "[" in t:
+        t = t[:t.index("[")]
+    return {"Path": "string", "openArray": "seq", "HashSet": "set"}.get(t, t)
+
+
 @method(union_type)
 def to_nim(self, prec=None):
     """union_type: T '|' E -> Nim: stdlib.nim's Result[T, E]. `None | E`, a
@@ -317,6 +329,14 @@ def to_nim(self, prec=None):
     if error in ("nil", "void", "None"):
         ParserState.nim_imports.add("options")
         return f"Option[{value}]"
+    # The Python backend holds the T or the E itself and tells them apart
+    # by class, so the two sides have to be different kinds of value there
+    # -- and so here, or one program would mean two things.
+    if value not in ("nil", "void", "None") and _nim_kind(value) == _nim_kind(error):
+        raise SyntaxError(
+            f"'{value} | {error}': the two sides must be different kinds of "
+            f"value, or nothing can tell which one was returned -- make the "
+            f"failure a record")
     ParserState.nim_imports.add("stdlib")
     if value in ("nil", "void", "None"):
         value = "void"

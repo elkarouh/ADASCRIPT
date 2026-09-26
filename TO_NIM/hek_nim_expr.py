@@ -477,64 +477,188 @@ _STRING_RETURNING_CALLS = ("adascriptEnvOr(", "getEnv(", "paramStr(",
 _OPTION_RETURNING_CALLS = ("adascriptEnvOpt(", "adascriptWhich(")
 
 
-def _ctor_arg(val, name):
-    """The argument text of VAL when VAL is exactly the call NAME(...),
-    else None: `Err(e)` -> "e", `Ok()` -> "", `Err(a).b` -> None."""
-    val = val.strip()
-    if not (val.startswith(name + "(") and val.endswith(")")):
+def _split_result(rtype):
+    """(T, E) of the Nim type "Result[T, E]", or None for any other type."""
+    rtype = (rtype or "").strip()
+    if not (rtype.startswith("Result[") and rtype.endswith("]")):
         return None
-    depth = 0
-    for i, ch in enumerate(val[len(name):]):
+    inner, depth = rtype[len("Result["):-1], 0
+    for i, ch in enumerate(inner):
         if ch in "([{":
             depth += 1
         elif ch in ")]}":
             depth -= 1
-            if depth == 0 and i != len(val) - len(name) - 1:
-                return None
-    return val[len(name) + 1:-1].strip()
+        elif ch == "," and depth == 0:
+            return inner[:i].strip(), inner[i + 1:].strip()
+    return None
 
 
-def _expr_is_result(expr_str):
-    """True when EXPR_STR is already a Result: a Result-typed name, or a call
-    of a routine declared `-> Result[...]` -- in this file (the pre-scan in
-    ady2nim's translate() knows those defined further down) or in one it
-    nimports."""
+def _proc_ret_nim(name):
+    """The Nim return type of routine NAME: from proc_return_types once it
+    has been emitted, else from the pre-scan of every `def` in the file
+    (ady2nim's translate()), so that a routine defined further down is
+    known too."""
+    _rt = getattr(ParserState, "proc_return_types", {}).get(name, "")
+    if _rt:
+        return _rt
+    _cache = getattr(ParserState, "ady_return_types_nim", None)
+    if _cache is None:
+        _cache = ParserState.ady_return_types_nim = {}
+    if name not in _cache:
+        _cache[name] = ""
+        _text = getattr(ParserState, "ady_return_types", {}).get(name)
+        if _text:
+            try:
+                from ady_declarations import parse_type
+                _ast = parse_type(_text)
+                if _ast is not None:
+                    _cache[name] = _ast.to_nim()
+            except Exception:
+                pass
+    return _cache[name]
+
+
+def _result_type_of(expr_str):
+    """The Nim Result type of EXPR_STR -- a name declared `T | E`, or a call
+    of a routine returning one -- or "" when it is not a Result."""
     import re as _re
     expr_str = expr_str.strip()
     sym = ParserState.symbol_table.lookup(expr_str)
     if sym and (sym.get("type") or "").startswith("Result["):
-        return True
-    if expr_str.endswith(")"):
-        _mc = (_re.match(r'^([A-Za-z_]\w*)\(', expr_str)
-               or _re.match(r'^.+\.([A-Za-z_]\w*)\(', expr_str))
-        if _mc and _ctor_arg(expr_str, _mc.group(1)) is not None:
-            _name = _mc.group(1)
-            if _name in getattr(ParserState, "result_procs", set()):
-                return True
-            _rt = getattr(ParserState, "proc_return_types", {}).get(_name, "")
-            if _rt.startswith("Result["):
-                return True
-    return False
+        return sym.get("type")
+    _mc = (_re.match(r'^([A-Za-z_]\w*)\((.*)\)$', expr_str, _re.S)
+           or _re.match(r'^.+\.([A-Za-z_]\w*)\((.*)\)$', expr_str, _re.S))
+    if _mc and _balanced(_mc.group(2)):
+        _rt = _proc_ret_nim(_mc.group(1))
+        if _rt.startswith("Result["):
+            return _rt
+    return ""
+
+
+def _balanced(text):
+    depth = 0
+    for ch in text:
+        depth += ch in "([{"
+        depth -= ch in ")]}"
+        if depth < 0:
+            return False
+    return depth == 0
+
+
+def _expr_is_result(expr_str):
+    """True when EXPR_STR is a Result (a `T | E`) already."""
+    return bool(_result_type_of(expr_str))
+
+
+def _value_nim_type(val):
+    """Best effort at the Nim type of an emitted value expression, for
+    telling which side of a `T | E` it is on. None when unknown."""
+    import re as _re
+    v = val.strip()
+    if _re.fullmatch(r"-?\d+", v):
+        return "int"
+    if _re.fullmatch(r"-?\d+\.\d*(e-?\d+)?", v):
+        return "float"
+    if v in ("true", "false"):
+        return "bool"
+    if _expr_is_string(v):
+        return "string"
+    for _tname, _info in getattr(ParserState, "tick_types", {}).items():
+        if v in (_info.get("members") or ()):
+            return _tname
+    _t = _nim_expr_type(v)
+    if _t:
+        return _t
+    _mc = _re.match(r'^([A-Za-z_]\w*)\((.*)\)$', v, _re.S)
+    if _mc and _balanced(_mc.group(2)):
+        _name = _mc.group(1)
+        _rt = _proc_ret_nim(_name)
+        if _rt:
+            return _rt
+        # A constructor: a record or class named directly, or a ref class's
+        # newX -- its type is its name.
+        if _name[:1].isupper():
+            return _name
+        if _name.startswith("new") and _name[3:4].isupper():
+            return _name[3:]
+    return None
 
 
 def _result_wrap(val, rtype):
-    """VAL as a value of the Result type RTYPE (its Nim spelling):
-    `Err(e)` -> RTYPE.err(e), `Ok(v)` -> RTYPE.ok(v), a Result already
-    -> itself, anything else -> RTYPE.ok(val). You never write the type on
-    a constructor; this is where it comes from."""
+    """VAL as a value of the Result type RTYPE ("Result[T, E]"): which side
+    it goes on is decided by its type -- an E is the error, anything else
+    the value. A Result already is itself. You never write a constructor;
+    this is where it comes from."""
     ParserState.nim_imports.add("stdlib")
-    _void = rtype.startswith("Result[void,")
-    _e = _ctor_arg(val, "Err")
-    if _e is not None:
-        return f"{rtype}.err({_e})"
-    _o = _ctor_arg(val, "Ok")
-    if _o is not None:
-        return f"{rtype}.ok({_o})" if _o else f"{rtype}.ok()"
-    if val.strip() == "nil" and _void:
-        return f"{rtype}.ok()"
-    if _expr_is_result(val):
+    _sides = _split_result(rtype)
+    if _sides is None or _expr_is_result(val):
         return val
+    value_t, error_t = _sides
+    _void = value_t == "void"
+    if val.strip() == "nil":
+        if _void:
+            return f"{rtype}.ok()"
+        raise SyntaxError(
+            f"None is neither side of {value_t} | {error_t}: return a "
+            f"{value_t} or a {error_t}")
+    _t = _value_nim_type(val)
+    if _t == error_t or (_void and _t != "void"):
+        return f"{rtype}.err({val})"
     return f"{rtype}.ok()" if _void else f"{rtype}.ok({val})"
+
+
+def _result_is_test(chain, right, negated):
+    """`x is T` / `x is E` on a Result x: its is_ok / is_err, or None when
+    X is not a Result. RIGHT is the emitted type name ("nil" for None)."""
+    _rt = _result_type_of(chain)
+    _sides = _split_result(_rt)
+    if not _sides:
+        return None
+    value_t, error_t = _sides
+    if right == error_t:
+        test = "is_err"
+    elif right == value_t or (right == "nil" and value_t == "void"):
+        test = "is_ok"
+    else:
+        raise SyntaxError(
+            f"'{chain} is {right}': {chain} is a {value_t} or a {error_t}")
+    if negated:
+        test = "is_ok" if test == "is_err" else "is_err"
+    ParserState.nim_imports.add("stdlib")
+    return f"{chain}.{test}"
+
+
+# Narrowing: what a proved name reads as. A `?T` is its .get(); a Result
+# is its value or its error, depending on which test proved it.
+_NARROW_IN_BODY = {"isSome": ".get()", "is_ok": ".value", "is_err": ".error"}
+_NARROW_IN_ELSE = {"isNone": ".get()", "is_err": ".value", "is_ok": ".error"}
+
+
+def _narrow_add(name, suffix):
+    """Read NAME as NAME+SUFFIX from here on; False when it already was."""
+    _vars = getattr(ParserState, "_option_unwrap_vars", None)
+    if _vars is None:
+        _vars = ParserState._option_unwrap_vars = set()
+    if name in _vars:
+        return False
+    _vars.add(name)
+    if suffix != ".get()":
+        _sfx = getattr(ParserState, "_unwrap_suffix", None)
+        if _sfx is None:
+            _sfx = ParserState._unwrap_suffix = {}
+        _sfx[name] = suffix
+    else:
+        ParserState.nim_imports.add("options")
+    return True
+
+
+def _narrow_drop(name):
+    getattr(ParserState, "_option_unwrap_vars", set()).discard(name)
+    getattr(ParserState, "_unwrap_suffix", {}).pop(name, None)
+
+
+def _narrow_suffix(name):
+    return getattr(ParserState, "_unwrap_suffix", {}).get(name, ".get()")
 
 
 def _unescape_str_literal(text):
@@ -2223,12 +2347,17 @@ def to_nim(self, prec=None):
     _has_trailers = (len(self.nodes) > 1 and hasattr(self.nodes[1], "nodes")
                      and self.nodes[1].nodes)
     if raw_name in _unwrap_vars and not _has_trailers:
-        ParserState.nim_imports.add("options")
-        return f"{result}.get()"
+        _sfx = _narrow_suffix(raw_name)
+        if _sfx == ".get()":
+            ParserState.nim_imports.add("options")
+        return f"{result}{_sfx}"
     if raw_name in _unwrap_vars and _has_trailers:
         # Insert .get() before the trailers: nxt.content -> nxt.get().content
-        ParserState.nim_imports.add("options")
-        result = f"{result}.get()"
+        # (or a Result's .value / .error, whichever side was proved)
+        _sfx = _narrow_suffix(raw_name)
+        if _sfx == ".get()":
+            ParserState.nim_imports.add("options")
+        result = f"{result}{_sfx}"
     # If this is a call to a known class name, add 'new' prefix for Nim constructor
     has_call = (len(self.nodes) > 1 and hasattr(self.nodes[1], "nodes")
                 and self.nodes[1].nodes
@@ -2923,13 +3052,13 @@ def to_nim(self, prec=None):
         for _pth in sorted(_paths, key=len, reverse=True):
             if result == _pth:
                 ParserState.nim_imports.add("options")
-                return f"{_pth}.get()"
+                return f"{_pth}{_narrow_suffix(_pth)}"
             # The narrowed thing can be a prefix of what is being read:
             # `if b[1] is not None:` proves b[1], and the body says
             # `b[1].a`. The .get() belongs between the two.
             if result.startswith(_pth + ".") or result.startswith(_pth + "["):
                 ParserState.nim_imports.add("options")
-                return f"{_pth}.get()" + result[len(_pth):]
+                return f"{_pth}{_narrow_suffix(_pth)}" + result[len(_pth):]
     return result
 
 
@@ -4290,6 +4419,12 @@ def to_nim(self, prec=None):
                 _call = f"contains({right}, {chain})"
                 chain = f"not {_call}" if nim_op == "notin" else _call
                 continue
+            # `r is Failure_T` on a `T | E`: which side it holds.
+            if nim_op in ("is", "isnot"):
+                _rtest = _result_is_test(chain, right, nim_op == "isnot")
+                if _rtest is not None:
+                    chain = _rtest
+                    continue
             # Option-aware: x is/== None -> x.isNone, x is not/!= None -> x.isSome
             if right == "nil" and nim_op in ("isnot", "is", "==", "!="):
                 is_option = _expr_is_option(chain)
@@ -4401,9 +4536,8 @@ def to_nim(self, prec=None):
     _added = []
 
     def _note_proved(piece):
-        _m = _re_dis.match(r"^([A-Za-z_]\w*(?:\.\w+)*(?:\[\d+\])?)\.isSome$", str(piece).strip())
-        if _m and _m.group(1) not in _vars:
-            _vars.add(_m.group(1))
+        _m = _re_dis.match(r"^([A-Za-z_]\w*(?:\.\w+)*(?:\[\d+\])?)\.(isSome|is_ok|is_err)$", str(piece).strip())
+        if _m and _narrow_add(_m.group(1), _NARROW_IN_BODY[_m.group(2)]):
             _added.append(_m.group(1))
 
     try:
@@ -4416,7 +4550,7 @@ def to_nim(self, prec=None):
             result = f"{result} and {right}"
     finally:
         for _n in _added:
-            _vars.discard(_n)
+            _narrow_drop(_n)
 
     if prec is not None and PREC_OR < prec:
         return f"({result})"
@@ -4458,27 +4592,24 @@ def to_nim(self, prec=None):
     # emitter about it, which is all this does.
     import re as _re_cond
     cond = _nim_truthiness(self.nodes[1].to_nim())
-    _m_narrow = _re_cond.match(r"^([A-Za-z_]\w*(?:\.\w+)*(?:\[\d+\])?)\.(isSome|isNone)$", cond.strip())
+    _m_narrow = _re_cond.match(r"^([A-Za-z_]\w*(?:\.\w+)*(?:\[\d+\])?)\.(isSome|isNone|is_ok|is_err)$", cond.strip())
     _narrowed = _m_narrow.group(1) if _m_narrow else None
+    _test = _m_narrow.group(2) if _m_narrow else None
     # isSome narrows the value branch, isNone the else branch -- the branch
-    # reached when the name is known to hold something.
-    _in_value = _narrowed if (_m_narrow and _m_narrow.group(2) == "isSome") else None
-    _in_alt = _narrowed if (_m_narrow and _m_narrow.group(2) == "isNone") else None
+    # reached when the name is known to hold something. A Result's test
+    # narrows both branches, one to its value and one to its error.
+    _in_value = (_narrowed, _NARROW_IN_BODY[_test]) if _test in _NARROW_IN_BODY else None
+    _in_alt = (_narrowed, _NARROW_IN_ELSE[_test]) if _test in _NARROW_IN_ELSE else None
 
-    def _emit_narrowed(node, name):
-        if name is None:
+    def _emit_narrowed(node, narrow):
+        if narrow is None:
             return node.to_nim()
-        _vars = getattr(ParserState, "_option_unwrap_vars", None)
-        if _vars is None:
-            _vars = set()
-            ParserState._option_unwrap_vars = _vars
-        _added = name not in _vars
-        _vars.add(name)
+        _added = _narrow_add(*narrow)
         try:
             return node.to_nim()
         finally:
             if _added:
-                _vars.discard(name)
+                _narrow_drop(narrow[0])
 
     value = _emit_narrowed(self.nodes[0], _in_value)
     alt = _emit_narrowed(self.nodes[2], _in_alt)

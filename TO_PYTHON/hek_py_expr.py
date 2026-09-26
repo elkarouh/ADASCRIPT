@@ -1928,10 +1928,29 @@ def to_py(self, prec=None):
                         chain = f"not {_call}" if op == "!=" else _call
                     continue
             right = seq.nodes[1].to_py(operand_prec)
+            # `r is Failure_T`: a type on the right asks which side of a
+            # `T | E` r holds -- its class, since the value is unboxed.
+            if op in ("is", "is not") and _names_a_type(right):
+                from hek_py_declarations import _ensure_is_a_helper
+                _ensure_is_a_helper()
+                _test = f"_is_a({chain}, {right})"
+                chain = f"not {_test}" if op == "is not" else _test
+                continue
             chain += f" {op} {right}"
     if prec is not None and PREC_CMP < prec:
         return f"({chain})"
     return chain
+
+
+_PY_TYPE_WORDS = {"int", "str", "float", "bool", "bytes", "Path"}
+
+
+def _names_a_type(text):
+    """True when TEXT, the right of an `is`, is a type rather than a value:
+    a primitive, or a type or class this module declares."""
+    from hek_parsec import ParserState
+    t = text.strip()
+    return t in _PY_TYPE_WORDS or t in getattr(ParserState, "py_type_names", ())
 
 
 # --- inversion ---

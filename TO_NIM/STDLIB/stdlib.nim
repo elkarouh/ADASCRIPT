@@ -132,10 +132,11 @@ converter toBool*[T](q: FifoQueue[T]): bool = q.data.len > 0
 converter toBool*[T](q: LifoQueue[T]): bool = q.data.len > 0
 
 # ---------------------------------------------------------------------------
-# Result[T, E] -- a value, or the reason there is none (Adascript's
-# `Result[T, E]`). Ok is the zero value, so a `Result[None, E]` proc that
+# Result[T, E] -- Adascript's `T | E`: a T, or the E that says why there is
+# none. Ok is the zero value, so a `None | E` proc (Result[void, E]) that
 # falls off its end has succeeded, as a plain proc does. The transpiler
-# writes the constructors with their type: `Result[int, string].ok(v)`.
+# writes the constructors with their type: `Result[int, string].ok(v)`,
+# and reads a narrowed name as its .value or .error.
 # ---------------------------------------------------------------------------
 type Result*[T, E] = object
   case adaIsErr: bool
@@ -178,9 +179,11 @@ proc `==`*[T, E](a, b: Result[T, E]): bool =
   else: a.adaVal == b.adaVal
 
 proc `$`*[T, E](r: Result[T, E]): string =
+  ## What it holds, as Python prints the same value: a `T | E` there is
+  ## just the T or the E, unboxed. Ok of nothing is None.
   if r.adaIsErr:
-    when compiles($r.adaErr): "Err(" & $r.adaErr & ")" else: "Err"
+    when compiles($r.adaErr): $r.adaErr else: "Err"
   else:
-    when T is void: "Ok()"
+    when T is void: "None"
     else:
-      when compiles($r.adaVal): "Ok(" & $r.adaVal & ")" else: "Ok"
+      when compiles($r.adaVal): $r.adaVal else: "Ok"

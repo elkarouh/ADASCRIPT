@@ -95,6 +95,7 @@ def _nim_reset():
     ParserState.nim_init_stmts = []
     ParserState.nim_top_decls = []   # helper proc/type declarations inserted after imports
     ParserState.nim_do_steps = 0     # numbers the temporaries of bare do: steps
+    ParserState._unwrap_suffix = {}  # narrowed name -> .value / .error (a Result's side)
     ParserState.tick_types = {}
     ParserState.class_field_types = {}
     ParserState.proc_param_types = {}
@@ -656,16 +657,18 @@ def translate(code, export_symbols=False):
     (ParserState._ref_classes,
      ParserState._all_class_methods,
      ParserState._all_class_parents) = _prescan_classes(stmts)
-    # Routines declared `-> T | E` (a Result), wherever they are in the file: a
-    # call of one is a Result already, and `return f(x)` passes it on rather
-    # than wrapping it in a second one -- even when f is defined below.
+    # Every routine's return annotation, wherever it is in the file: which
+    # side of a `T | E` a returned call is on, and whether a call is a
+    # Result already, has to be known for routines defined further down.
     import re as _re_rp
-    ParserState.result_procs = set(
-        _m.group(1) for _m in _re_rp.finditer(
+    ParserState.ady_return_types = {
+        _m.group(1): _m.group(2) for _m in _re_rp.finditer(
             r"^[ \t]*def[ \t]+(\w+)[ \t]*\((?:[^()]|\([^()]*\))*\)\s*->\s*"
-            r"([^\n#]*?)\s*:[ \t]*(?:#.*)?$", code, _re_rp.MULTILINE)
-        if "|" in _m.group(2)
-        and _m.group(2).rsplit("|", 1)[1].strip() != "None")
+            r"([^\n#]*?)\s*:[ \t]*(?:#.*)?$", code, _re_rp.MULTILINE)}
+    ParserState.ady_return_types_nim = {}
+    ParserState.result_procs = {
+        _n for _n, _t in ParserState.ady_return_types.items()
+        if "|" in _t and _t.rsplit("|", 1)[1].strip() != "None"}
     # Merge ref classes from nimport'd deps so subclasses of cross-file base
     # classes are also emitted as ref object.
     ParserState._ref_classes.update(_nimport_ref_classes)
@@ -1482,19 +1485,19 @@ def run_tests():
     # pairs above cannot express.  A tick the emitter does not know used to
     # fall through to `expr.attr`, so a typo -- or the pre-rename 'Choice --
     # reached nim and failed there as "undeclared field" in generated code.
-    # A Result, `T | E`: `return v` is Ok, `return Err(e)` the error track, each
-    # typed from the signature; `None | E` is Result[void, E], whose
+    # `T | E`: what is returned goes on the side its type says -- a str
+    # here is the failure -- each constructor typed from the signature; `None | E` is Result[void, E], whose
     # zero value -- falling off the end -- is Ok.
     tests.append((
         'def f(s: str) -> int | str:\n    if s == "":\n'
-        '        return Err("empty")\n    return len(s)\n',
+        '        return "empty"\n    return len(s)\n',
         'import stdlib\nproc f(s: string): Result[int, string] =\n'
         '    if s == "":\n        return Result[int, string].err("empty")\n'
         '    return Result[int, string].ok(len(s))\n',
     ))
     tests.append((
         'def g(n: int) -> None | str:\n    if n < 0:\n'
-        '        return Err("negative")\n',
+        '        return "negative"\n',
         'import stdlib\nproc g(n: int): Result[void, string] =\n'
         '    if n < 0:\n        return Result[void, string].err("negative")\n',
     ))
@@ -1512,6 +1515,15 @@ def run_tests():
         '    let adadoStep0 = f(a)\n'
         '    if adadoStep0.is_err: return Result[int, string].err(adadoStep0.error)\n'
         '    return Result[int, string].ok(x)\n',
+    ))
+
+    # `r is E` asks which side r holds, and narrows it as `x is None` does:
+    # past a guard that leaves, r is its value.
+    tests.append((
+        'def d(r: int | str) -> int:\n    if r is str:\n        return 0\n'
+        '    return r\n',
+        'import stdlib\nproc d(r: Result[int, string]): int =\n'
+        '    if r.is_err:\n        return 0\n    return r.value\n',
     ))
 
     error_tests = [
@@ -1554,10 +1566,13 @@ def run_tests():
          "type 'A_T' is already declared, at line 1"),
         ("class A:\n    var x: int = 0\n\ntype A is enum P, Q\n",
          "type 'A' is already declared, at line 1"),
-        # A Result bound in a routine that cannot return its Err.
+        # A `T | E` bound in a routine that cannot return its failure.
         ("def f(s: str) -> int | str:\n    return len(s)\n\n"
          "def h(a: str) -> ?int:\n    do:\n        x <- f(a)\n    return x\n",
-         "a routine binding one must return a Result too"),
+         "must return a `T | E` too, to pass its failure on"),
+        # Two sides that are the same kind of value cannot be told apart.
+        ("var x: []int | []str\n",
+         "the two sides must be different kinds of value"),
     ]
     # ...except a shell command's output, whose type the command fixes.
     try:

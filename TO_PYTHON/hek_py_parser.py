@@ -208,30 +208,32 @@ def _do_lines(do_node):
 def to_py(self, indent=0):
     """do_stmt: 'do' ':' NEWLINE INDENT ((IDENTIFIER '<-')? expression NL)+ DEDENT
 
-    In a routine returning a Result each step is a Result, and an Err is
-    returned as it is; otherwise each step is a ?T and None returns None.
+    In a routine returning a `T | E` each step is one too, and a failure
+    is returned as it is; otherwise each step is a ?T and None returns None.
     `x <- expr` then binds the value; a bare `expr` is only checked.
     """
     import re as _re_do
+    from hek_py_declarations import split_either, _ensure_is_a_helper
     ret = getattr(ParserState, "_py_return_type", "")
-    is_result = ret.startswith("Result[")
+    sides = split_either(ret)
     ind = _ind(indent)
     lines = []
     for name, expr_node in _do_lines(self):
         expr = expr_node.to_py()
-        if is_result:
-            tmp = f"_ado_{name}" if name else "_ado_step"
+        if sides is not None:
+            # A step's value is its T or its E, unboxed: a failure is
+            # returned as it is, a value bound as it is.
+            _ensure_is_a_helper()
+            tmp = name or "_ado_step"
             lines.append(f"{ind}{tmp} = {expr}")
-            lines.append(f"{ind}if {tmp}.is_err:")
+            lines.append(f"{ind}if _is_a({tmp}, {sides[1]}):")
             lines.append(f"{ind}{INDENT_STR}return {tmp}")
-            if name:
-                lines.append(f"{ind}{name} = {tmp}.value")
             continue
         _call = _re_do.match(r"^([A-Za-z_]\w*)\(", expr.strip())
         if _call and _call.group(1) in getattr(ParserState, "result_procs", set()):
             raise SyntaxError(
-                f"do: step '{expr}' is a Result; a routine binding one "
-                f"must return a Result too, to pass its Err on")
+                f"do: step '{expr}' returns a `T | E`; a routine binding "
+                f"one must return a `T | E` too, to pass its failure on")
         leave = "return None" if ret else "return"
         if name:
             lines.append(f"{ind}{name} = {expr}")
@@ -1475,21 +1477,11 @@ def to_py(self, indent=0):
     _ret_bare = ret_ann.strip()
     ParserState._py_return_type = (_ret_bare[2:].strip()
                                    if _ret_bare.startswith("->") else _ret_bare)
-    _is_result = ParserState._py_return_type.startswith("Result[")
     try:
         body = block_node.to_py(indent + 1) if block_node else ""
     finally:
         _stmt.CLASS_BODY_DEPTH = _outer_class_depth
         ParserState._py_return_type = _outer_ret
-    # Falling off the end of a routine returning a Result is Ok -- the
-    # zero value on Nim -- and not Python's None.
-    if _is_result and body.strip():
-        _last = body.rstrip().splitlines()[-1]
-        _body_ind = _ind(indent + 1)
-        if not (_last.startswith(_body_ind)
-                and not _last[len(_body_ind):][:1].isspace()
-                and _last.strip().startswith(("return", "raise"))):
-            body = body.rstrip("\n") + f"\n{_ind(indent + 1)}return Ok()\n"
     # Implicit return: mark the statements that carry the function's value, so
     # the body renders with the keyword already in place.
     # Skip for -> None functions (they don't return a value)
@@ -1659,6 +1651,21 @@ def _extract_py_fields(block_node, indent=1):
     return lines
 
 
+def _split_trailing_comment(text):
+    """(code, comment) of TEXT: a `#` outside a string literal starts the
+    comment; comment is "" when there is none."""
+    quote = None
+    for i, ch in enumerate(text):
+        if quote:
+            if ch == quote:
+                quote = None
+        elif ch in "\"'":
+            quote = ch
+        elif ch == "#":
+            return text[:i].rstrip(), text[i:]
+    return text, ""
+
+
 def _dataclass_defaults(field_lines):
     """Give every defaultless field a default, mirroring Nim's zero value.
 
@@ -1691,6 +1698,14 @@ def _dataclass_defaults(field_lines):
             out.append(line)
             continue
         pad, fname, rest = m.groups()
+        # A trailing comment is set aside and put back at the end: left in
+        # `rest`, the default went in *after* it -- `detail: str  # why = None`
+        # -- commented out, and the next defaultless field killed the module.
+        rest, comment = _split_trailing_comment(rest)
+        if comment:
+            _done = _dataclass_defaults([f"{pad}{fname}: {rest}"])
+            out.append(f"{_done[0]}  {comment}")
+            continue
 
         if "=" in rest:
             ann, _, written = rest.partition("=")

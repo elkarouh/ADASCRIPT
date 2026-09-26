@@ -283,10 +283,12 @@ def translate(code):
 
     stmts, leading, trailing = parse_module(code)
 
-    # Routines declared `-> T | E` (a Result), wherever they are in the file: a
-    # call of one is a Result already, and needs no Ok() around it.
+    # The types this module declares, for `x is SomeType`; and the routines
+    # declared `-> T | E`, for refusing one as a ?T step in a do: block.
     import re as _re_rp
     from hek_parsec import ParserState as _PS_rp
+    _PS_rp.py_type_names = set(_re_rp.findall(
+        r"^[ \t]*(?:type|class)[ \t]+([A-Za-z_]\w*)", code, _re_rp.MULTILINE))
     _PS_rp.result_procs = set(
         _m.group(1) for _m in _re_rp.finditer(
             r"^[ \t]*def[ \t]+(\w+)[ \t]*\((?:[^()]|\([^()]*\))*\)\s*->\s*"

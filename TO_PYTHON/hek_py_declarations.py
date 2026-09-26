@@ -231,85 +231,52 @@ class Path(str):
 # without becoming a pathlib.Path, which is what the note above rules out.
 
 
-_RESULT_ALIAS = '''\
-class Result:
-    """Result[T, E]: a value, or the reason there is none.
-
-    Boxed on both sides, so `is_ok`, `value`, `error` and `value_or` are
-    the same calls here as on Nim, where it is stdlib.nim's variant object.
-    """
-    __slots__ = ("_is_err", "_v")
-
-    def __init__(self, is_err, v):
-        self._is_err = is_err
-        self._v = v
-
-    def __class_getitem__(cls, _params):
-        return cls
-
-    @property
-    def is_ok(self):
-        return not self._is_err
-
-    @property
-    def is_err(self):
-        return self._is_err
-
-    @property
-    def value(self):
-        # Asking an Err for its value is a bug, not a failure to handle.
-        if self._is_err:
-            raise ValueError(f"value of an Err: {self._v}")
-        return self._v
-
-    @property
-    def error(self):
-        if not self._is_err:
-            raise ValueError("error of an Ok")
-        return self._v
-
-    def value_or(self, default):
-        return default if self._is_err else self._v
-
-    def __eq__(self, other):
-        return (_is_result(other) and self._is_err == other._is_err
-                and self._v == other._v)
-
-    def __hash__(self):
-        return hash((self._is_err, self._v))
-
-    def __str__(self):
-        if self._is_err:
-            return f"Err({self._v})"
-        return "Ok()" if self._v is None else f"Ok({self._v})"
-
-    __repr__ = __str__
-
-
-def _is_result(v):
-    # By name: every module that names Result defines the class, so one
-    # from an imported module is another class of the same name.
-    return type(v).__name__ == "Result" and hasattr(v, "_is_err")
-
-
-def Ok(v=None):
-    # A Result already is passed on as it is: `return f(x)` in a routine
-    # returning a Result wraps its value, and f's is one.
-    return v if _is_result(v) else Result(False, v)
-
-
-def Err(e):
-    return Result(True, e)\
+_IS_A_HELPER = '''\
+def _is_a(v, t):
+    """`v is T`, T a type: which side of a `T | E` v holds. isinstance, but
+    a parameterised alias -- `type Names_T is []str` -- asks its origin."""
+    return isinstance(v, getattr(t, "__origin__", None) or t)\
 '''
 
 
-def _ensure_result_alias():
-    """Define Result, Ok and Err the first time Result[T, E] is named."""
+def _ensure_is_a_helper():
+    """Define _is_a the first time `x is SomeType` is written."""
     from hek_parsec import ParserState
     decls = getattr(ParserState, 'py_top_decls', [])
-    if not any("class Result:" in d for d in decls):
-        decls.append(_RESULT_ALIAS)
+    if not any("def _is_a(" in d for d in decls):
+        decls.append(_IS_A_HELPER)
         ParserState.py_top_decls = decls
+
+
+def split_either(annotation):
+    """(T, E) of a Python annotation "T | E" -- a routine's or a variable's
+    `T | E` -- or None: not a union, or `T | None`, which is ?T."""
+    depth, parts, cur = 0, [], []
+    for ch in annotation:
+        if ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+        if ch == "|" and depth == 0:
+            parts.append("".join(cur).strip())
+            cur = []
+        else:
+            cur.append(ch)
+    parts.append("".join(cur).strip())
+    if len(parts) != 2 or parts[1] == "None":
+        return None
+    return parts[0], parts[1]
+
+
+def _runtime_kind(py_type):
+    """What a value of PY_TYPE is at run time, for telling the two sides of
+    a `T | E` apart: its class, a parameterised one by its origin, and a
+    Path by str, which it is."""
+    t = py_type.strip()
+    if "[" in t:
+        t = t[:t.index("[")]
+    return {"Path": "str", "Sequence": "list"}.get(t, t)
+
 
 
 def _ensure_path_alias():
@@ -542,21 +509,24 @@ def to_py(self, prec=None):
 
 @method(union_type)
 def to_py(self, prec=None):
-    """union_type: T '|' E -> Python: Result[T, E], the class _RESULT_ALIAS
-    defines (annotations are not evaluated; the arguments are for the
-    reader). `T | None` is Python's own spelling of ?T and stays one."""
+    """union_type: T '|' E -> Python: the union itself. A `T | E` value is
+    just the T or the E, unboxed, so the two must be told apart by their
+    class at run time; `T | None` is Python's own spelling of ?T."""
     parts = [self.nodes[0].to_py()]
     for seq in self.nodes[1].nodes:
         if hasattr(seq, "nodes") and seq.nodes:
             parts.append(seq.nodes[0].to_py())
     if len(parts) != 2:
         raise SyntaxError(
-            f"'{' | '.join(parts)}': a Result has two sides, the value's "
-            f"type and the error's -- name a record or an enum for the error")
-    if parts[1] == "None":
-        return f"{parts[0]} | None"
-    _ensure_result_alias()
-    return f"Result[{parts[0]}, {parts[1]}]"
+            f"'{' | '.join(parts)}': a routine returns one thing or the "
+            f"other -- two sides, the value's type and the failure's")
+    if parts[1] != "None" and parts[0] != "None":
+        if _runtime_kind(parts[0]) == _runtime_kind(parts[1]):
+            raise SyntaxError(
+                f"'{parts[0]} | {parts[1]}': the two sides must be different "
+                f"kinds of value, or nothing can tell which one was returned "
+                f"-- make the failure a record")
+    return f"{parts[0]} | {parts[1]}"
 
 
 
