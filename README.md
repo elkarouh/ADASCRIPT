@@ -1935,6 +1935,10 @@ stricter default.
 One wrinkle: a file test takes a primary, so a join inside one needs
 parentheses — `-f (gitdir / "HEAD")`.
 
+Reading one is `.lines`: `for line in p.lines:` opens the file, yields its
+lines without their newlines, and closes it when the loop ends, however it
+ends. It is the way to read a file line by line; the next section says why.
+
 ### Reading a file or standard input: `File`
 
 `File` is the type a file handle has, and `stdin` is one, so a program that

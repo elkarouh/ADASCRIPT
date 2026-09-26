@@ -97,6 +97,9 @@ for line in f.lines:
 ```
 
 `.lines` strips the newline, which is what `$0` does and what you wanted.
+A `Path` has `.lines` too: when the input is always a file, `for line in
+Path(file_arg).lines:` opens it, reads it and closes it, with no `File` in
+sight.
 
 ### The AwkBase form
 

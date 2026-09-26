@@ -442,8 +442,11 @@ generic parameters; on Python they become PEP 695 type parameters.
 - `for key, val in mapping.items():` and `for i, x in enumerate(xs):` work as
   in Python.
 - `stdin.lines` iterates standard input (see `average_line.ady`,
-  `awk_example.ady`).
-- File iteration uses the familiar `with`:
+  `awk_example.ady`), and `p.lines` the file a `Path` names: opened, read a
+  line at a time without the newlines, and closed when the loop ends. It is
+  the way to read a file's lines.
+- Python's `with` works too, and keeps each line's newline on the Python
+  backend, hence the `strip()`:
 
   ```python
   # phonecode.ady

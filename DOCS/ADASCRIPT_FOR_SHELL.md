@@ -289,7 +289,10 @@ log.parent.mkdir()                  # mkdir -p: parents made, existing is fine
 ```
 
 `Path` is a string that also joins, so it goes wherever a `str` goes — a file
-test, `readFile`, shell interpolation, a dict key. The other direction is
+test, `readFile`, shell interpolation, a dict key. It also reads itself:
+`for line in log.lines:` is `while read -r line; do ...; done < "$log"`,
+without the `-r` to forget or the `IFS` to set, and the file closed when the
+loop ends. The other direction is
 deliberate: `Path(s)` to make one, `str(p)` to go back, and a bare `p = s` is
 an error on both backends.
 
@@ -698,6 +701,7 @@ that have to be updated in step by hand.
 | `a && b && c` | an indented `shell:` block |
 | `a; b; c` | `shell(join = ";"):` block |
 | `while read -r l; do …; done < <(cmd)` | `for l in shellIter: cmd` |
+| `while read -r l; do …; done < "$file"` | `for l in Path(file).lines:` |
 | `cmd & … wait` | `let j: Job = shellSpawn: cmd` … `waitAll(jobs)` |
 | `$!` | `j.pid` |
 | `kill $!` | `j.kill()` |

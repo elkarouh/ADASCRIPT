@@ -283,7 +283,9 @@ def checked_out(dir: Path) -> bool:
 The parameter's type says the function wants a place, not a name or a line
 of text; a `str` cannot be passed for it by accident, since `Path` is a
 distinct type (`Path(s)` converts); and there is no doubled or missing
-slash to get wrong. A `Path` goes wherever a `str` goes — file tests,
+slash to get wrong. `for line in work.lines:` reads the file it names, a
+line at a time, and closes it when the loop ends. A `Path` goes wherever a
+`str` goes — file tests,
 `readFile`, `{!work}` in a shell line — and `str(work)` hands it to an API
 that takes strings, like `run([...])`. What stays a `str` is what is not a
 place on this disk: a URL, a relative path as another tool reports it, a

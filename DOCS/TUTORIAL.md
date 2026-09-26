@@ -288,6 +288,9 @@ Why:
 - **There is no slash to get wrong.** No doubled or missing `/`, and
   `.parent`, `.name`, `.resolve()`, `.mkdir()` and the file tests are there
   when you need them.
+- **It reads itself.** `for line in p.lines:` opens the file, yields its
+  lines without their newlines and closes it -- no `open()`, no
+  `readFile(p).split("\n")`.
 
 What stays a `str` is what is not a place on this disk: a relative path as
 another tool reports it (a file in a changes report, a sparse-checkout
