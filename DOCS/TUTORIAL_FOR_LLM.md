@@ -122,7 +122,7 @@ var owners: {TargetKey}{LineNo}[]HitIndex = {:}   # not {str}[]int keyed by "<ta
 
 **Keep bare types for** values that only count or index: lengths, widths, string offsets, loop indices, and text that is just text. Rule of thumb: if the declaration would need a comment saying what the `int` holds, name the type instead.
 
-Both naming styles exist in the examples, `Velocity_T` and `Epoch`; be consistent within one program. The snippets are in `EXAMPLES/DOC/type_snippets.ady`.
+Both naming styles exist in the examples, `Velocity_T` and `Epoch`; be consistent within one program. A class NEVER ends in `_T`, in either style: name it for the thing it is (`Report`, `Flight`). The snippets are in `EXAMPLES/DOC/type_snippets.ady`.
 
 ### `distinct` (planned, NOT yet available)
 

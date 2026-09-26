@@ -311,11 +311,11 @@ class Lexer:
 
 
 # ---------------------------------------------------------------------------
-# CType_T: represents a C type (base name, pointer level, optional array size).
+# CType: represents a C type (base name, pointer level, optional array size).
 # load_ins / store_ins use case/when to select the WebAssembly memory instruction.
 # ---------------------------------------------------------------------------
 
-class CType_T:
+class CType:
     typename: str
     pointer_level: int
     array_size: ?int
@@ -344,16 +344,16 @@ class CType_T:
     def is_arr(self) -> bool:
         return self.array_size is not None
 
-    def less_ptr(self) -> CType_T:
+    def less_ptr(self) -> CType:
         assert self.is_ptr(), f"bug: not a pointer: {self}"
-        return CType_T(self.typename, self.pointer_level - 1, self.array_size)
+        return CType(self.typename, self.pointer_level - 1, self.array_size)
 
-    def more_ptr(self) -> CType_T:
-        return CType_T(self.typename, self.pointer_level + 1, self.array_size)
+    def more_ptr(self) -> CType:
+        return CType(self.typename, self.pointer_level + 1, self.array_size)
 
-    def as_non_array(self) -> CType_T:
+    def as_non_array(self) -> CType:
         assert self.is_arr(), f"bug: not an array: {self}"
-        return CType_T(self.typename, self.pointer_level, None)
+        return CType(self.typename, self.pointer_level, None)
 
     def _mem_ins_size(self) -> int:
         return self.as_non_array().sizeof() if self.is_arr() else self.sizeof()
@@ -377,17 +377,17 @@ class CType_T:
         return f"{self.typename}{'*' * self.pointer_level}{arr}"
 
 
-typedefs: {str}CType_T = {:}
+typedefs: {str}CType = {:}
 
 
-def parse_type_and_name(lexer: Lexer, prev_t: ?str = None) -> (CType_T, Token_T):
+def parse_type_and_name(lexer: Lexer, prev_t: ?str = None) -> (CType, Token_T):
     t: str = prev_t or lexer.next(TK_TYPE).content
-    var ctype: CType_T
+    var ctype: CType
     if t in typedefs:
-        base: CType_T = typedefs[t]
-        ctype = CType_T(base.typename, base.pointer_level, base.array_size, lexer.line)
+        base: CType = typedefs[t]
+        ctype = CType(base.typename, base.pointer_level, base.array_size, lexer.line)
     else:
-        ctype = CType_T(t, 0, None, lexer.line)
+        ctype = CType(t, 0, None, lexer.line)
     while lexer.try_next(TK_STAR):
         ctype.pointer_level += 1
     varname: Token_T = lexer.next(TK_NAME)
@@ -403,7 +403,7 @@ def parse_type_and_name(lexer: Lexer, prev_t: ?str = None) -> (CType_T, Token_T)
 
 type FrameVar_T is record:
     name:         str
-    ctype:        CType_T
+    ctype:        CType
     local_offset: int
     is_parameter: bool
 
@@ -420,7 +420,7 @@ class StackFrame:
         self.frame_size   = 0
         self.frame_offset = (parent.frame_offset + parent.frame_size) if parent else 0
 
-    def add_var(self, name: str, ctype: CType_T, is_parameter: bool = False) -> None:
+    def add_var(self, name: str, ctype: CType, is_parameter: bool = False) -> None:
         self.variables[name] = FrameVar_T(
             name=name, ctype=ctype,
             local_offset=self.frame_size,
@@ -456,7 +456,7 @@ def emit_return(frame: StackFrame) -> None:
 
 type ExprMeta_T is record:
     is_place: bool
-    ctype:    CType_T
+    ctype:    CType
 
 
 def load_result(em: ExprMeta_T) -> ExprMeta_T:
@@ -465,7 +465,7 @@ def load_result(em: ExprMeta_T) -> ExprMeta_T:
     return ExprMeta_T(is_place=False, ctype=em.ctype)
 
 
-def mask_to_sizeof(t: CType_T) -> None:
+def mask_to_sizeof(t: CType) -> None:
     if not (t.is_arr() or t.sizeof() == 4):
         mask: int = (1 << (8 * t.sizeof() - 1)) - 1
         emit(f"i32.const {mask}")
@@ -483,18 +483,18 @@ def expression(lexer: Lexer, frame: StackFrame) -> ExprMeta_T:
             when TK_INTCONST:
                 tok: Token_T = lexer.next()
                 emit(f"i32.const {tok.content}")
-                return ExprMeta_T(is_place=False, ctype=CType_T("int"))
+                return ExprMeta_T(is_place=False, ctype=CType("int"))
             when TK_CHARCONST:
                 tok: Token_T = lexer.next()
                 emit(f"i32.const {ord(parse_c_char(tok.content)[0])}")
-                return ExprMeta_T(is_place=False, ctype=CType_T("int"))
+                return ExprMeta_T(is_place=False, ctype=CType("int"))
             when TK_STRCONST:
                 tok: Token_T = lexer.next()
                 var s: str = parse_c_str(tok.content)
                 while nxt := lexer.try_next(TK_STRCONST):
                     s = s + parse_c_str(nxt.content)
                 emit(f"i32.const {str_pool.add(s)}")
-                return ExprMeta_T(is_place=False, ctype=CType_T("char", pointer_level=1))
+                return ExprMeta_T(is_place=False, ctype=CType("char", pointer_level=1))
             when TK_LPAREN:
                 lexer.next()
                 meta: ExprMeta_T = expression(lexer, frame)
@@ -510,7 +510,7 @@ def expression(lexer: Lexer, frame: StackFrame) -> ExprMeta_T:
                                 break
                     lexer.next(TK_RPAREN)
                     emit(f"call ${varname.content}")
-                    return ExprMeta_T(is_place=False, ctype=CType_T("int"))
+                    return ExprMeta_T(is_place=False, ctype=CType("int"))
                 else:
                     var_slot, offset = frame.get_var_and_offset(varname.content)
                     emit(f"global.get $__stack_pointer ;; load {varname.content}")
@@ -522,11 +522,11 @@ def expression(lexer: Lexer, frame: StackFrame) -> ExprMeta_T:
         lhs: ExprMeta_T = value()
         if lexer.try_next(TK_LBRACKET):
             lhs = load_result(lhs)
-            l_type: CType_T = lhs.ctype
+            l_type: CType = lhs.ctype
             if not (l_type.is_arr() or l_type.is_ptr()):
                 msg: str = f"not an array or pointer: {lhs.ctype}"
                 die(msg, lexer.line)
-            el_type: CType_T = l_type.as_non_array() if l_type.is_arr() else l_type.less_ptr()
+            el_type: CType = l_type.as_non_array() if l_type.is_arr() else l_type.less_ptr()
             load_result(expression(lexer, frame))
             lexer.next(TK_RBRACKET)
             emit(f"i32.const {el_type.sizeof()}")
@@ -577,7 +577,7 @@ def expression(lexer: Lexer, frame: StackFrame) -> ExprMeta_T:
     def makeop(
         higher: [(,)]ExprMeta_T,
         ops:    {TokKind_T}str,
-        rtype:  ?CType_T = None,
+        rtype:  ?CType = None,
     ) -> [(,)]ExprMeta_T:
         def op() -> ExprMeta_T:
             lhs: ExprMeta_T = higher()
@@ -602,9 +602,9 @@ def expression(lexer: Lexer, frame: StackFrame) -> ExprMeta_T:
         lhs = load_result(lhs)
         op_tok: Token_T  = lexer.next()
         rhs: ExprMeta_T  = load_result(plusminus())
-        lhs_t: CType_T   = lhs.ctype
-        rhs_t: CType_T   = rhs.ctype
-        var res_t: CType_T = lhs.ctype
+        lhs_t: CType   = lhs.ctype
+        rhs_t: CType   = rhs.ctype
+        var res_t: CType = lhs.ctype
         if lhs.ctype.pointer_level == rhs.ctype.pointer_level:
             pass
         elif lhs.ctype.is_ptr() and rhs.ctype.is_ptr():
@@ -622,16 +622,16 @@ def expression(lexer: Lexer, frame: StackFrame) -> ExprMeta_T:
         if op_tok.kind == TK_MINUS and lhs_t.is_ptr() and rhs_t.is_ptr():
             emit(f"i32.const {rhs.ctype.less_ptr().sizeof()}")
             emit("i32.div_s")
-            res_t = CType_T("int")
+            res_t = CType("int")
         mask_to_sizeof(res_t)
         return ExprMeta_T(is_place=False, ctype=res_t)
 
     shlr:   [(,)]ExprMeta_T = makeop(plusminus, {TK_LSHIFT: "i32.shl", TK_RSHIFT: "i32.shr_s"})
     cmplg:  [(,)]ExprMeta_T = makeop(
         shlr, {TK_LT: "i32.lt_s", TK_GT: "i32.gt_s", TK_LE: "i32.le_s", TK_GE: "i32.ge_s"},
-        CType_T("int"),
+        CType("int"),
     )
-    cmpe:   [(,)]ExprMeta_T = makeop(cmplg, {TK_EQEQ: "i32.eq", TK_NE: "i32.ne"}, CType_T("int"))
+    cmpe:   [(,)]ExprMeta_T = makeop(cmplg, {TK_EQEQ: "i32.eq", TK_NE: "i32.ne"}, CType("int"))
     bitand: [(,)]ExprMeta_T = makeop(cmpe,   {TK_AMP: "i32.and"})
     bitor:  [(,)]ExprMeta_T = makeop(bitand, {TK_PIPE: "i32.or"})
     bitxor: [(,)]ExprMeta_T = makeop(bitor,  {TK_CARET: "i32.xor"})

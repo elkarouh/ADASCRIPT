@@ -14,7 +14,7 @@ nimport awk
 # A row is filled in over several records, and it is in the table from the
 # moment it is opened, so it has to be a reference rather than a value.
 @virtual
-class Build_T:
+class Build:
     """One build's worth of the table: a row, gathered over several records."""
     var user:       str = ""
     var host:       str = ""
@@ -37,8 +37,8 @@ class ShowBuilds(AwkBase):
     # opening the next one is all it takes to finish the current one -- except
     # for the very first, which is a scratch row: a record arriving before any
     # build belongs to none, and writing it there is how it gets dropped.
-    var builds       : []Build_T = []
-    var current_build: Build_T   = Build_T()
+    var builds       : []Build = []
+    var current_build: Build   = Build()
 
     # transient state
     var valgrind     : bool  = False
@@ -48,12 +48,12 @@ class ShowBuilds(AwkBase):
 
     def start(self):
         self.builds        = []
-        self.current_build = Build_T()
+        self.current_build = Build()
         self.current_time  = time.time()
 
     def _open_build(self) -> None:
         """Start a new row, add it to the table, and make it the current one."""
-        self.current_build = Build_T()
+        self.current_build = Build()
         self.builds.append(self.current_build)
 
     def _stuck_note(self, file_mod: float, hours: int, label: str) -> str:
@@ -65,7 +65,7 @@ class ShowBuilds(AwkBase):
 
     def _showing(self, F: []str) -> None:
         """`Showing ...` — the log file and its timestamp for the current row."""
-        let b:        Build_T = self.current_build
+        let b:        Build = self.current_build
         let log_file: str     = F[11]
         let file_mod: float   = float(F[12])
         b.day  = F[9]
@@ -103,7 +103,7 @@ class ShowBuilds(AwkBase):
             self.current_build.host      = host
             self.current_build.test_mode = "REGRESS"
 
-        let b: Build_T = self.current_build
+        let b: Build = self.current_build
         b.build      = F[1]
         b.version    = (F[2] if self.NF >= 2 else "")
         b.load_sched = (F[3] if self.NF >= 3 else "")

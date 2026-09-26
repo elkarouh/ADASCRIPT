@@ -200,10 +200,11 @@ Three steps, in order, before writing any code that *does* anything.
 
 ### 1. Name the concepts of the problem domain
 
-One type per concept, with a name ending `_T` so a reader can see at a
-glance what is a type. The types come in a progression, from a single value
-to a thing with behaviour, and a concept moves up it only as far as it
-needs to.
+One type per concept. A named type -- an alias, an enumeration, a tuple, a
+record -- has a name ending `_T`, so a reader can see at a glance what is a
+type; a class does not: it is named for the thing it is, `Flight`. The types
+come in a progression, from a single value to a thing with behaviour, and a
+concept moves up it only as far as it needs to.
 
 **A single value: a named type, not a bare one.** `float` says how a value
 is stored; `Velocity_T` says what it is, as argued above. So a quantity of
@@ -258,7 +259,7 @@ reaching into the fields.
 
 <!-- from: EXAMPLES/DOC/why_snippets.ady -->
 ```python
-class Flight_T:
+class Flight:
     var aircraft: Aircraft_T
     var route:    []Fix_T
 

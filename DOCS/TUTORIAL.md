@@ -259,7 +259,9 @@ A rule of thumb: if you would write a comment next to a declaration to say
 what its `int` or `str` holds, name the type and put the comment there.
 
 Both naming styles appear in the examples: a `_T` suffix (`Velocity_T`,
-`Node_T`) and a plain name (`Epoch`, `LineNo`). Pick one per program.
+`Node_T`) and a plain name (`Epoch`, `LineNo`). Pick one per program. A class
+never takes the suffix, whichever style: it is named for the thing it is --
+`Report`, `Baseline`, `Flight`.
 
 ### A place on disk is a `Path`
 
