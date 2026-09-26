@@ -1371,7 +1371,12 @@ What else the module's own translation learned travels with it too: which
 names are enums (so `Energy_T("ELECTRIC")` in the importer is a parse of
 the name), the types of its globals and type aliases, the routines that
 never return (a `die`-like helper), its iterators, and which of its procs take
-nothing as `var`.
+nothing as `var`. So do the standard modules behind its containers and
+strings (`tables`, `sets`, `deques`, `heapqueue`, `options`, `strutils`,
+`sequtils`, `std/paths`): Nim's imports are not transitive, so an importer
+asking `"van-7" in d.fuel_of` of a module's table needs `tables` as much as
+the module did, and gets it without a `nimport tables` of its own. Its other
+imports stay its own -- `times` would bring a `Days` that is `DAYS` to Nim.
 
 Inheritance works across files as well: a `@virtual` base class in one module
 and a subclass in another (that is `EXAMPLES/test_awk.ady` over the bundled

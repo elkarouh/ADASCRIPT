@@ -21,6 +21,7 @@ class Depot:
     var name:     str
     var position: Point_T
     var vehicles: []Vehicle_T
+    var fuel_of:  {str}float     # each vehicle's fuel, by its name
 
     def __init__(self, name: str, position: Point_T):
         self.name     = name
@@ -29,6 +30,7 @@ class Depot:
 
     def add(self, name: str, position: Point_T, fuel: float) -> None:
         self.vehicles.append(Vehicle_T(name, position, fuel))
+        self.fuel_of[name] = fuel
 
     def out_of_range(self, km_per_litre: float) -> []str:
         """Vehicles that cannot make it home on the fuel they carry."""

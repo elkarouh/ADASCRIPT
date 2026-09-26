@@ -70,6 +70,15 @@ _NIMPORT_CARRIED = ("tick_types", "class_field_types", "noreturn_procs",
                     "by_value_procs", "var_param_procs")
 _nimport_carried: dict = {}
 _nimport_module_symbols: dict = {}
+# The Nim standard modules a dependency's translation imported. An importer
+# using the dependency's tables or strings needs them as much -- `x in
+# report.files` is tables' contains, `"a" in fc.file` strutils' -- and Nim
+# imports are not transitive. Only the modules of the containers and
+# strings a dependency's types hold travel: the others bring names that can
+# clash with the importer's -- times' `Days` is its `DAYS` to Nim.
+_nimport_std_imports: set = set()
+_CARRIED_STD_IMPORTS = {"tables", "sets", "deques", "heapqueue", "options",
+                        "strutils", "sequtils", "std/paths"}
 
 
 def _nim_reset():
@@ -138,6 +147,7 @@ def parse_module(code):
     ParserState.tuple_field_order.update(_nimport_tuple_field_order)
     for _attr, _known in _nimport_carried.items():
         getattr(ParserState, _attr).update(_known)
+    ParserState.nim_imports.update(_nimport_std_imports)
     for _name, _info in _nimport_module_symbols.items():
         if not ParserState.symbol_table.lookup(_name):
             ParserState.symbol_table.add(_name, _info.get("type"), _info.get("kind", "var"))
@@ -2007,6 +2017,8 @@ def main(argv=None):
                     if _known:
                         _nimport_carried.setdefault(_attr, type(_known)()).update(_known)
                 _nimport_module_symbols.update(getattr(_PS_pre, "module_symbols", {}))
+                _nimport_std_imports.update(
+                    getattr(_PS_pre, "nim_imports", set()) & _CARRIED_STD_IMPORTS)
                 _enqueue_prepass(_ppcode, _ppdir)
             except Exception:
                 pass  # errors will surface properly during the full dep transpile

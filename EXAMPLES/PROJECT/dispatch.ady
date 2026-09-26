@@ -45,4 +45,10 @@ assert stranded[0] == "truck-2"
 # declared crosses the boundary with it.
 let energy: Energy_T = Energy_T("ELECTRIC")
 assert energy == ELECTRIC
+
+# A table held by a class of lib/fleet.ady, asked here: `in` and `[]` on it
+# are Nim's tables module, which only the module used to import -- Nim's
+# imports are not transitive, so the importer gets the module's too.
+assert "van-7" in d.fuel_of and "van-9" not in d.fuel_of
+assert d.fuel_of["truck-2"] == 4.0
 print "all PROJECT checks passed"
