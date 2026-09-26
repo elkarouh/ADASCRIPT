@@ -7,28 +7,20 @@ var completedTests: {}str  ## All completed tests (persistent)
 var intervalTests: {}str   ## Tests since last 5-min summary
 
 def getTestStatusLines() -> []str:
-  "Run show_tests_status and return output as lines."
+  """Run show_tests_status and return output as lines."""
   shellLines: show_tests_status -raw
 
 def parseRunningTest(lines: []str) -> str:
-  "Extract the currently running test name from status lines."
-  result : str = ""
-  for i, line in enumerate(lines):
-    if line.strip() == "RUNNING:":
-      if i + 1 < len(lines):
-        test : str = lines[i + 1].strip()
-        while test.startswith("-"):
-          test = test[1:]
-        while test.endswith("-"):
-          test = test[0:-1]
-        test = test.strip()
-        if len(test) > 0:
-          result = test
-      break
-  result
+  """The test on the line after RUNNING:, without the dashes around it; empty when none."""
+  var afterRunning : bool = False
+  for line in lines:
+    if afterRunning:
+      return line.strip().strip("-").strip()
+    afterRunning = line.strip() == "RUNNING:"
+  ""
 
 def parseCompletedTests(lines: []str) -> []str:
-  "Extract all completed test names from status lines."
+  """Extract all completed test names from status lines."""
   result : []str = []
   let prefix : str = "SUCCESS:"
   for line in lines:
@@ -41,12 +33,12 @@ def parseCompletedTests(lines: []str) -> []str:
   result
 
 def parseStatusSummary(lines: []str) -> []str:
-  "Extract the status summary lines (last 5 lines)."
+  """Extract the status summary lines (last 5 lines)."""
   let startIdx : Natural = max(0, len(lines) - 5)
   lines[startIdx:]
 
 def formatTime() -> str:
-  "Return current time as HH:MM:SS string."
+  """Return current time as HH:MM:SS string."""
   now().format("HH:mm:ss")
 
 # Main program

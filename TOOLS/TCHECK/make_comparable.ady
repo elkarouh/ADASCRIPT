@@ -135,18 +135,19 @@ let args: []str = $@
 if args'Length < 1:
     die("usage: " + PROG + " <logfile> [<baseline>]")
 
-let logfile: str = args[0]
+let logfile: Path = Path(args[0])
 let baseline: str = args[1] if args'Length > 1 else ""
 let baseline_path_prefix: str = ".*/cm/ot/TACT/TACT_CONFIG!" + baseline + ".*?:" if baseline != "" else ""
 
-if not -f Path(logfile):
-    die("file not found: " + logfile)
+if not -f logfile:
+    die(f"file not found: {logfile}")
 
-stderr.writeLine(PROG + ": normalizing " + logfile)
+stderr.writeLine(f"{PROG}: normalizing {logfile}")
 
+# Read whole, since it is written back in place; split rather than .lines,
+# so that the join gives back the final newline.
 let content: str = readFile(logfile)
-var lines: []str = content.split("\n")
 var result: []str = []
-for line in lines:
+for line in content.split("\n"):
     result.append(normalize(line, baseline, baseline_path_prefix))
 writeFile(logfile, "\n".join(result))
