@@ -575,6 +575,7 @@ def to_nim(self, indent=0, is_virtual=False, class_name=None, parent_name=None, 
         ParserState._pure_methods = set()
         if other_methods and not is_virtual_class:
             ParserState._mutation_probe = {}
+            ParserState._probe_var_params = set()
             for func_node_m, mname in other_methods:
                 _generate_method_decl(func_node_m, base_indent, class_name, parent_name, is_virtual_class, type_params)
             _evidence = ParserState._mutation_probe
@@ -587,12 +588,15 @@ def to_nim(self, indent=0, is_virtual=False, class_name=None, parent_name=None, 
             # self either -- counting it impure gave `var self` to every
             # accessor that called it, which then could not be used on a
             # `let`.
-            _impure = {m for m, (may_mutate, _, promotable) in _evidence.items()
-                       if may_mutate and promotable}
+            # A sibling handed self's fields is harmless unless it takes one
+            # of its parameters as `var` -- which the probe noted as well.
+            _var_param_methods = ParserState._probe_var_params
+            _impure = {m for m, (may_mutate, _, promotable, arg_calls) in _evidence.items()
+                       if promotable and (may_mutate or arg_calls & _var_param_methods)}
             _changed = True
             while _changed:
                 _changed = False
-                for m, (_, calls, promotable) in _evidence.items():
+                for m, (_, calls, promotable, _) in _evidence.items():
                     if (m not in _impure and promotable
                             and (calls & _impure or calls - set(_evidence))):
                         _impure.add(m)
@@ -5190,21 +5194,27 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
             # a call to one is set aside first: its name is not counted, and
             # nor is a `, self` among its own arguments. Anything nested in
             # those arguments is still looked at.
+            # A sibling method is set aside the same way; whether it takes a
+            # parameter as `var` is only known once every method has been
+            # through here, so the fixpoint weighs that, from arg_calls.
             _by_value = (_BY_VALUE_HELPERS
                          | (getattr(ParserState, "by_value_procs", set())
                             - getattr(ParserState, "var_param_procs", set())))
-            text = _by_value_calls_neutralised(body_text, _by_value)
+            text = _by_value_calls_neutralised(body_text, _by_value | set(_siblings))
+            arg_calls = {m.group(1) for m in _re.finditer(r'\b(\w+)\(', body_text)
+                         if m.group(1) in _siblings}
+            _by_value = _by_value | set(_siblings)
             for m in _re.finditer(r'(\w+)\(\s*self\b', text):
                 if m.group(1) not in _by_value:
                     may_mutate = True
             if _re.search(r'(?:[\])]\(|,)\s*self\b', text):
                 may_mutate = True
-            return may_mutate, sibling_calls
+            return may_mutate, sibling_calls, arg_calls
 
         _probe = getattr(ParserState, "_mutation_probe", None)
         if _probe is not None and name:
-            _probe[name] = (*_purity_evidence(_body_no_comments),
-                            _body_has_self_mutation(_body_no_comments))
+            _may, _calls, _arg_calls = _purity_evidence(_body_no_comments)
+            _probe[name] = (_may, _calls, _body_has_self_mutation(_body_no_comments), _arg_calls)
         _pure = getattr(ParserState, "_pure_methods", ())
         if (not is_virtual and class_name and name not in _pure
                 and _body_has_self_mutation(_body_no_comments)):
@@ -5226,6 +5236,8 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
                     p = parts[0] + ": var " + parts[1]
             new_params.append(p)
         params = new_params
+        if _probe is not None and name and any(": var " in p for p in params[1:]):
+            ParserState._probe_var_params.add(name)
         if _shadow_vars:
             _sv_indent = " " * (4 * (indent + 1))
             for sv in _shadow_vars:

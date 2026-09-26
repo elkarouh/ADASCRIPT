@@ -7,8 +7,9 @@ hands a field to a proc -- `shout(self.name, self.times)` -- was taken to
 change self, since the proc might take its argument as `var`, and so was
 every method calling it; none of them could then be called on a `let`
 ("expression is immutable, not 'var'"). A method that keeps a plain self
-cannot change its caller's self, and a proc of this program whose
-parameters are none of them `var` changes nothing it is handed.
+cannot change its caller's self, and a proc of this program -- or a
+method of the class -- whose parameters are none of them `var` changes
+nothing it is handed.
 """
 
 type Name_T is str
@@ -44,13 +45,30 @@ class Greeter:
         """...and so does a method calling it."""
         self.say(self.loud())
 
+    def pair(self, first: str, second: str) -> str:
+        first + "/" + second
+
+    def own_pair(self) -> str:
+        """Its own fields handed to a sibling that only reads them."""
+        self.pair(self.name, self.name)
+
+    def append_to(self, what: str, into: []str):
+        """Changes INTO, which is `var` on Nim..."""
+        into.append(what)
+
+    def note(self):
+        """...so handing it a field of self changes self."""
+        self.append_to("noted", self.said)
+
 let a: Greeter = Greeter("a")
 let b: Greeter = Greeter("b")
 assert b.greet(a) == "A!2 and B!2"
 assert a.loud() == "A!2"
+assert a.own_pair() == "a/a"
 
 var c: Greeter = Greeter("c")
 c.say_loud()
 c.say("hi")
-assert c.said == ["C!2", "hi"]
+c.note()
+assert c.said == ["C!2", "hi", "noted"]
 print "ok"

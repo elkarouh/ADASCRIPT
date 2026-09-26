@@ -1225,8 +1225,8 @@ class Counter:
 ```
 
 A method that only reads -- calling other reading methods, or handing
-fields to a function of the program that takes nothing as `var` -- keeps
-a plain `self`, so it can be called on a `let`.
+fields to a function or method of the program that takes nothing as
+`var` -- keeps a plain `self`, so it can be called on a `let`.
 
 `@virtual` is only needed when subclasses live in a **different file** (module)
 from their base class — it makes Nim use `ref object` for dynamic dispatch
