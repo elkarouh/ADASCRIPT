@@ -295,10 +295,10 @@ history of this file if the reasoning behind one of them is ever wanted.
 
 ## Monad support improvements (high ROI)
 
-### `Result[T, E]` -- what is left
+### `T | E` (Result) -- what is left
 
-`Result[T, E]` is built in (book 10.12, `EXAMPLES/test_result.ady`):
-typed wrapping of `return v` / `return Err(e)`, `Result[None, E]`, and
+`T | E` is built in (book 10.12, `EXAMPLES/test_result.ady`):
+typed wrapping of `return v` / `return Err(e)`, `None | E`, and
 `do:` over Results with bare steps. Not yet:
 
 - [ ] a `?T` step inside a Result chain: `x <- lookup(k) else Err(e)`,

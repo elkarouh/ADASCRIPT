@@ -174,18 +174,6 @@ def to_nim(self, prec=None):
     return result
 
 
-@method(result_type)
-def to_nim(self, prec=None):
-    """result_type: 'Result' '[' type_annotation ',' type_annotation ']'
-    -> Nim: stdlib.nim's Result[T, E]; Result[None, E], a step that can only
-    fail, is Result[void, E]."""
-    ParserState.nim_imports.add("stdlib")
-    value = self.nodes[1].to_nim()
-    if value in ("nil", "void", "None"):
-        value = "void"
-    return f"Result[{value}, {self.nodes[2].to_nim()}]"
-
-
 @method(seq_type)
 def to_nim(self, prec=None):
     """seq_type: '[]' type_annotation -> Nim: seq[T]"""
@@ -307,16 +295,32 @@ def to_nim(self, prec=None):
     return f"Option[{inner}]"
 
 
+def _union_sides(node, emit):
+    """The two sides of `T | E`, emitted; a SyntaxError for any other count."""
+    parts = [emit(node.nodes[0])]
+    for seq in node.nodes[1].nodes:
+        if hasattr(seq, "nodes") and seq.nodes:
+            parts.append(emit(seq.nodes[0]))
+    if len(parts) != 2:
+        raise SyntaxError(
+            f"'{' | '.join(parts)}': a Result has two sides, the value's "
+            f"type and the error's -- name a record or an enum for the error")
+    return parts
+
+
 @method(union_type)
 def to_nim(self, prec=None):
-    """union_type: maybe_optional ('|' maybe_optional)+ -> Nim: best-effort 'T | U' (Nim uses object variants instead)"""
-    # Nim doesn't have union types directly; emit as a comment-annotated first type
-    parts = [self.nodes[0].to_nim()]
-    st = self.nodes[1]
-    for seq in st.nodes:
-        if hasattr(seq, "nodes") and seq.nodes:
-            parts.append(seq.nodes[0].to_nim())
-    return " | ".join(parts)  # best-effort; Nim uses object variants instead
+    """union_type: T '|' E -> Nim: stdlib.nim's Result[T, E]. `None | E`, a
+    step that can only fail, is Result[void, E]; `T | None` is Python's
+    spelling of ?T and stays Option[T]."""
+    value, error = _union_sides(self, lambda n: n.to_nim())
+    if error in ("nil", "void", "None"):
+        ParserState.nim_imports.add("options")
+        return f"Option[{value}]"
+    ParserState.nim_imports.add("stdlib")
+    if value in ("nil", "void", "None"):
+        value = "void"
+    return f"Result[{value}, {error}]"
 
 
 @method(lent_type)

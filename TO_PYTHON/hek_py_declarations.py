@@ -372,15 +372,6 @@ def to_py(self, prec=None):
     return name
 
 
-@method(result_type)
-def to_py(self, prec=None):
-    """result_type: 'Result' '[' type_annotation ',' type_annotation ']'
-    -> Python: Result[T, E], the class _RESULT_ALIAS defines. Annotations
-    are not evaluated, so the arguments are there for the reader."""
-    _ensure_result_alias()
-    return f"Result[{self.nodes[1].to_py()}, {self.nodes[2].to_py()}]"
-
-
 @method(seq_type)
 def to_py(self, prec=None):
     """seq_type: '[]' type_annotation -> Nim: seq[T]"""
@@ -551,14 +542,21 @@ def to_py(self, prec=None):
 
 @method(union_type)
 def to_py(self, prec=None):
-    """union_type: maybe_optional ('|' maybe_optional)+ -> Nim: best-effort 'T | U' (Nim uses object variants instead)"""
-    # nodes[0] is first maybe_optional, nodes[1] is Several_Times of (VBAR + maybe_optional)
+    """union_type: T '|' E -> Python: Result[T, E], the class _RESULT_ALIAS
+    defines (annotations are not evaluated; the arguments are for the
+    reader). `T | None` is Python's own spelling of ?T and stays one."""
     parts = [self.nodes[0].to_py()]
-    st = self.nodes[1]
-    for seq in st.nodes:
+    for seq in self.nodes[1].nodes:
         if hasattr(seq, "nodes") and seq.nodes:
             parts.append(seq.nodes[0].to_py())
-    return " | ".join(parts)
+    if len(parts) != 2:
+        raise SyntaxError(
+            f"'{' | '.join(parts)}': a Result has two sides, the value's "
+            f"type and the error's -- name a record or an enum for the error")
+    if parts[1] == "None":
+        return f"{parts[0]} | None"
+    _ensure_result_alias()
+    return f"Result[{parts[0]}, {parts[1]}]"
 
 
 

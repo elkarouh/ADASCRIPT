@@ -1,9 +1,9 @@
 #!/usr/bin/env ady2nim
-"""Test: Result[T, E] -- railway-oriented error handling.
+"""Test: `T | E`, a Result -- railway-oriented error handling.
 
 A Result is a value or the reason there is none. `return v` in a routine
 returning one is Ok, `return Err(e)` the error track, and a `do:` block
-chains steps, returning the first Err as it is. `Result[None, E]` is a step
+chains steps, returning the first Err as it is. `None | E` is a step
 that can only fail: falling off its end is Ok.
 
 The output is compared between the two backends by `make test`, so every
@@ -23,7 +23,7 @@ def fail(kind: ErrKind_T, detail: str) -> Failure_T:
 
 # ─── switch functions: one input, two tracks out ────────────────────────────
 
-def read_number(s: str) -> Result[int, Failure_T]:
+def read_number(s: str) -> int | Failure_T:
     if len(s) == 0:
         return Err(fail(BAD_NUMBER, "empty"))
     for c in s:
@@ -31,19 +31,19 @@ def read_number(s: str) -> Result[int, Failure_T]:
             return Err(fail(BAD_NUMBER, f"'{s}' is not a number"))
     return int(s)
 
-def divide(a: int, b: int) -> Result[int, Failure_T]:
+def divide(a: int, b: int) -> int | Failure_T:
     if b == 0:
         return Err(fail(DIVIDE_BY_ZERO, f"{a} / 0"))
     return a // b
 
-def check_positive(n: int) -> Result[None, Failure_T]:
+def check_positive(n: int) -> None | Failure_T:
     """A step with nothing to return: it can only fail."""
     if n <= 0:
         return Err(fail(NOT_POSITIVE, f"got {n}"))
 
 # ─── test 1: the do: block -- bind steps and a bare one ─────────────────────
 
-def ratio(raw_a: str, raw_b: str) -> Result[int, Failure_T]:
+def ratio(raw_a: str, raw_b: str) -> int | Failure_T:
     do:
         a <- read_number(raw_a)
         b <- read_number(raw_b)
@@ -51,7 +51,7 @@ def ratio(raw_a: str, raw_b: str) -> Result[int, Failure_T]:
         check_positive(q)
     return q
 
-def describe(r: Result[int, Failure_T]) -> str:
+def describe(r: int | Failure_T) -> str:
     if r.is_ok:
         return f"ok {r.value}"
     let e: Failure_T = r.error
@@ -69,19 +69,19 @@ print "test1 OK"
 
 # ─── test 2: a Result passed on, from a routine defined further down ───────
 
-def ratio_or_fail(raw_a: str, raw_b: str) -> Result[int, Failure_T]:
+def ratio_or_fail(raw_a: str, raw_b: str) -> int | Failure_T:
     return checked_ratio(raw_a, raw_b)    # a Result already: not wrapped again
 
-def checked_ratio(raw_a: str, raw_b: str) -> Result[int, Failure_T]:
+def checked_ratio(raw_a: str, raw_b: str) -> int | Failure_T:
     return ratio(raw_a, raw_b)
 
 assert ratio_or_fail("9", "3").value == 3
 assert ratio_or_fail("9", "").is_err
 print "test2 OK"
 
-# ─── test 3: Result[None, E] -- bare return and falling off the end are Ok ─
+# ─── test 3: None | E -- bare return and falling off the end are Ok ─
 
-def validate(n: int) -> Result[None, str]:
+def validate(n: int) -> None | str:
     if n == 0:
         return                           # Ok
     if n < 0:
@@ -97,26 +97,26 @@ print "test3 OK"
 
 # ─── test 4: declarations, assignment, value_or ────────────────────────────
 
-var r: Result[int, str] = 7              # a plain value is Ok
+var r: int | str = 7                     # a plain value is Ok
 assert r.is_ok and r.value == 7
 r = Err("gone")
 assert r.is_err
 assert r.value_or(-1) == -1
 r = Ok(3)
 assert r.value_or(-1) == 3
-var zero: Result[int, str]               # no value: Ok of the zero
+var zero: int | str                      # no value: Ok of the zero
 assert zero.is_ok and zero.value == 0
 print r
 print "test4 OK"
 
 # ─── test 5: collecting every failure instead of stopping at the first ─────
 
-def parse_all(tokens: []str) -> Result[[]int, []str]:
+def parse_all(tokens: []str) -> []int | []str:
     """Validation that reports every bad token, not only the first one."""
     var good: []int = []
     var bad: []str = []
     for t in tokens:
-        let p: Result[int, Failure_T] = read_number(t)
+        let p: int | Failure_T = read_number(t)
         if p.is_ok:
             good.append(p.value)
         else:

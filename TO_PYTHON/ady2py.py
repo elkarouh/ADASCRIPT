@@ -283,13 +283,16 @@ def translate(code):
 
     stmts, leading, trailing = parse_module(code)
 
-    # Routines declared `-> Result[...]`, wherever they are in the file: a
+    # Routines declared `-> T | E` (a Result), wherever they are in the file: a
     # call of one is a Result already, and needs no Ok() around it.
     import re as _re_rp
     from hek_parsec import ParserState as _PS_rp
-    _PS_rp.result_procs = set(_re_rp.findall(
-        r"^[ \t]*def[ \t]+(\w+)[ \t]*\((?:[^()]|\([^()]*\))*\)\s*->\s*Result\[",
-        code, _re_rp.MULTILINE))
+    _PS_rp.result_procs = set(
+        _m.group(1) for _m in _re_rp.finditer(
+            r"^[ \t]*def[ \t]+(\w+)[ \t]*\((?:[^()]|\([^()]*\))*\)\s*->\s*"
+            r"([^\n#]*?)\s*:[ \t]*(?:#.*)?$", code, _re_rp.MULTILINE)
+        if "|" in _m.group(2)
+        and _m.group(2).rsplit("|", 1)[1].strip() != "None")
 
     # Which names live at module level has to be known before the first
     # function is emitted, since a function may assign one declared below it.

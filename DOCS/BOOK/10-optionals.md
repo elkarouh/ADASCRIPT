@@ -14,7 +14,7 @@ machinery. You never write `some()`, `none()`, `.get()`, `.isSome` or
 The first half of this chapter is the type: how to declare it, test it, and
 get the value out. The second half (10.8 onward) is what `?T` *is* — the
 Maybe monad — and the shapes that fall out of that: bind chains, the `do:`
-block, fmap, traverse, and `Result[T, E]`, the sibling for when "nothing" is
+block, fmap, traverse, and `T | E`, the sibling for when "nothing" is
 not a good enough answer.
 
 ## 10.1 Declaring optionals
@@ -523,7 +523,7 @@ The rules are short:
 - bindings are plain `let`s of type `T`, in scope for the rest of the
   function.
 
-The same block chains `Result[T, E]` steps, in a function that returns a
+The same block chains `T | E` steps, in a function that returns a
 Result; 10.12 has the details. A line without `x <-` is a *bare step*: it
 is checked like any other and binds nothing.
 
@@ -567,20 +567,25 @@ for t in tokens:
         loose.append(v)
 ```
 
-## 10.12 When "nothing" is not enough: `Result[T, E]`
+## 10.12 When "nothing" is not enough: `T | E`
 
 `?T` records absence but not its reason. When the caller needs the reason —
 validation, I/O, a shell command that failed, anything a user will read —
-return a `Result[T, E]`: a value of type `T`, or an error of type `E`. This
+return a `T | E` — a *Result*: the function returns either a `T` or an `E`. This
 is the Either monad, and the style it gives is *railway-oriented
 programming*: every step runs on a success track, and the first failure
 switches to an error track that carries the reason unchanged to whoever
 decides what to do about it.
 
 ```
-Result[T, E]   ──▶  Python:  Result[T, E]   (a small class the program defines)
-               ──▶  Nim:     Result[T, E]   (stdlib.nim's variant object)
+T | E   ──▶  Python:  Result[T, E]   (a small class the program defines)
+        ──▶  Nim:     Result[T, E]   (stdlib.nim's variant object)
 ```
+
+`T | None` is not a Result: it keeps Python's meaning, `?T`. A union of
+three or more types is refused, and in an element position — `[]T`,
+`{K}V`, `[N]T` — a type never takes a `|`, so `[]int | []str` is a Result
+of two lists.
 
 `E` is any type. An enum is enough to say *which* failure; a record says
 what it needs to report it. `EXAMPLES/test_result.ady` is the spec:
@@ -598,7 +603,7 @@ returning a Result, `return v` is Ok and `return Err(e)` is the error track;
 the transpiler takes the types from the signature, so you never write them:
 
 ```python
-def read_number(s: str) -> Result[int, Failure_T]:
+def read_number(s: str) -> int | Failure_T:
     if len(s) == 0:
         return Err(fail(BAD_NUMBER, "empty"))
     for c in s:
@@ -616,16 +621,16 @@ proc read_number(s: string): Result[int, Failure_T] =
 ```
 
 Returning a value that is a Result already — a call of another function
-declared `-> Result[...]`, wherever it is defined — passes it on rather than
+declared `-> T | E`, wherever it is defined — passes it on rather than
 wrapping it twice. `Ok(v)` and `Err(e)` also work in an annotated `let` or
 `var`, and in an assignment to one; a plain value there is Ok too.
 
-**A step that can only fail.** `Result[None, E]` has no value to return.
+**A step that can only fail.** `None | E` has no value to return.
 A bare `return`, and falling off the end, are Ok — as a plain function's
 are on Nim, where it is `Result[void, E]`:
 
 ```python
-def check_positive(n: int) -> Result[None, Failure_T]:
+def check_positive(n: int) -> None | Failure_T:
     """A step with nothing to return: it can only fail."""
     if n <= 0:
         return Err(fail(NOT_POSITIVE, f"got {n}"))
@@ -634,10 +639,10 @@ def check_positive(n: int) -> Result[None, Failure_T]:
 **Chaining.** The `do:` block of 10.10 works the same way in a function
 that returns a Result: `x <- step` binds the value of an Ok, or returns the
 Err from the whole function, as it is. A bare step — here the
-`Result[None, E]` one — is checked and binds nothing:
+`None | E` one — is checked and binds nothing:
 
 ```python
-def ratio(raw_a: str, raw_b: str) -> Result[int, Failure_T]:
+def ratio(raw_a: str, raw_b: str) -> int | Failure_T:
     do:
         a <- read_number(raw_a)
         b <- read_number(raw_b)
@@ -657,7 +662,7 @@ failure to handle). A `case` over the error's kind is exhaustive, so a new
 kind of failure that nobody reports is a compile error:
 
 ```python
-def describe(r: Result[int, Failure_T]) -> str:
+def describe(r: int | Failure_T) -> str:
     if r.is_ok:
         return f"ok {r.value}"
     let e: Failure_T = r.error
@@ -677,12 +682,12 @@ every bad field at once. That is not a bind chain and should not look like
 one — collect the errors, as 10.11 collects successes:
 
 ```python
-def parse_all(tokens: []str) -> Result[[]int, []str]:
+def parse_all(tokens: []str) -> []int | []str:
     """Validation that reports every bad token, not only the first one."""
     var good: []int = []
     var bad: []str = []
     for t in tokens:
-        let p: Result[int, Failure_T] = read_number(t)
+        let p: int | Failure_T = read_number(t)
         if p.is_ok:
             good.append(p.value)
         else:
@@ -694,7 +699,7 @@ def parse_all(tokens: []str) -> Result[[]int, []str]:
 
 **Which to use.**
 
-| | `?T` (Maybe) | `Result[T, E]` (Either) |
+| | `?T` (Maybe) | `T \| E` (Either) |
 |---|---|---|
 | Why it failed | not recorded | the `E` value |
 | Wrapping on return | automatic | automatic |
@@ -753,11 +758,11 @@ know; `?int` is one the compiler enforces.
 | `$?NAME` | `os.environ.get("NAME")` | `adascriptEnvOpt("NAME")` — an `Option[string]` |
 | `?RefClass` | `RefClass \| None` | `RefClass` (nil-able) |
 | `do: x <- f()` | guard chain | `if …isNone: return none(R)` per step |
-| `Result[T, E]` | `Result[T, E]` (defined in the program) | `Result[T, E]` (stdlib.nim) |
-| `Result[None, E]` | `Result[None, E]` | `Result[void, E]` |
-| `return v` (in `-> Result[T, E]`) | `return Ok(v)` | `return Result[T, E].ok(v)` |
+| `T \| E` | `Result[T, E]` (defined in the program) | `Result[T, E]` (stdlib.nim) |
+| `None \| E` | `Result[None, E]` | `Result[void, E]` |
+| `return v` (in `-> T \| E`) | `return Ok(v)` | `return Result[T, E].ok(v)` |
 | `return Err(e)` | unchanged | `return Result[T, E].err(e)` |
-| `do: x <- f()` (in `-> Result`) | `if t.is_err: return t` per step | `if t.is_err: return R.err(t.error)` per step |
+| `do: x <- f()` (in `-> T \| E`) | `if t.is_err: return t` per step | `if t.is_err: return R.err(t.error)` per step |
 | `r.is_ok`, `r.is_err`, `r.value`, `r.error`, `r.value_or(d)` | unchanged | unchanged |
 
 ---

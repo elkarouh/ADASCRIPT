@@ -308,7 +308,7 @@ singleton_tuple_type = fw("singleton_tuple_type")
 empty_tuple_type = fw("empty_tuple_type")
 primitive_type = fw("primitive_type")
 type_name = fw("type_name")
-result_type = fw("result_type")
+elem_type = fw("elem_type")
 lent_type = fw("lent_type")
 own_param_type = fw("own_param_type")
 
@@ -336,12 +336,6 @@ type_name = filt(
     _primary
 )
 
-# --- Result[T, E]: a value, or the reason there is none ---
-# Its own rule rather than a type_name, whose subscript is an expression:
-# both arguments are types here, so `Result[[]int, []str]` reads as one.
-result_type = (filt(lambda s: s == "Result", IDENTIFIER)
-               + LBRACKET + type_annotation + COMMA + type_annotation + RBRACKET)
-
 # --- Tuple types ---
 # (int, str, float)  -> tuple[int, str, float]
 # (int,)             -> tuple[int]
@@ -356,34 +350,34 @@ tuple_type = empty_tuple_type | singleton_tuple_type | multi_tuple_type
 
 # --- Container types ---
 # []int             -> list[int]
-seq_type = LBRACKET + RBRACKET + type_annotation
+seq_type = LBRACKET + RBRACKET + elem_type
 
 # [5]int            -> tuple[int, ...]
-array_type = LBRACKET + INTEGER + RBRACKET + type_annotation
+array_type = LBRACKET + INTEGER + RBRACKET + elem_type
 
 # [*]int            -> Sequence[int]  (unconstrained/open array)
-openarray_type = LBRACKET + SSTAR + RBRACKET + type_annotation
+openarray_type = LBRACKET + SSTAR + RBRACKET + elem_type
 
 # [EnumType]int      -> array[EnumType, int]  (enum-indexed array)
 # Also accepts primitive ordinal types like char as array index
-enum_array_type = LBRACKET + (type_name | primitive_type) + RBRACKET + type_annotation
+enum_array_type = LBRACKET + (type_name | primitive_type) + RBRACKET + elem_type
 
 # {str}int          -> dict[str, int]
-dict_type = LBRACE + type_annotation + RBRACE + type_annotation
+dict_type = LBRACE + type_annotation + RBRACE + elem_type
 
 # {}int             -> set[int]
-set_type = LBRACE + RBRACE + type_annotation
+set_type = LBRACE + RBRACE + elem_type
 
 # [(int, str)]bool  -> Callable[[int, str], bool]
-callable_type = LBRACKET + tuple_type + RBRACKET + type_annotation
+callable_type = LBRACKET + tuple_type + RBRACKET + elem_type
 
 # --- Ownership type modifiers ---
 # lent T  — borrow annotation (caller keeps ownership); maps to Nim's 'lent T'
 # own T   — ownership transfer annotation; maps to Nim's 'sink T'
 # These must appear BEFORE basic_type so they take priority when 'lent'/'own'
 # are used as type prefixes in function parameter or return annotations.
-lent_type = ikw("lent") + type_annotation
-own_param_type = ikw("own") + type_annotation
+lent_type = ikw("lent") + elem_type
+own_param_type = ikw("own") + elem_type
 
 # --- basic_type: a non-union, non-optional type ---
 # Order matters: try container/callable before primitive/name (both start differently)
@@ -402,7 +396,6 @@ basic_type = (
     | set_type
     | tuple_type
     | primitive_type
-    | result_type
     | type_name
 )
 
@@ -410,11 +403,19 @@ basic_type = (
 optional_type = QUESTION + basic_type
 maybe_optional = optional_type | basic_type
 
-# --- Union: int | str -> int | str ---
+# --- Result: int | Failure_T -> a value, or the reason there is none ---
+# Two sides, the value's type on the left and the error's on the right;
+# `None | E` is a step that can only fail, and `T | None` keeps Python's
+# meaning, ?T. (The rule is still called union_type: it is the `|`.)
 union_type = maybe_optional + (VBAR + maybe_optional)[1:]
 
 # --- type_annotation: union or single type, with expression fallback ---
 type_annotation = union_type | maybe_optional | expression
+
+# --- elem_type: a type in an element position, `[]T`, `{K}V`, `[N]T`... ---
+# Never a union: `[]int | []str` is a Result of two lists, not a list of
+# Results. Parenthesise nothing; a list of Results has to be named.
+elem_type = maybe_optional | expression
 
 ###############################################################################
 def parse_type(source_code):

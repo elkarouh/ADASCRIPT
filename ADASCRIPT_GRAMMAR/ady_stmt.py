@@ -65,7 +65,7 @@ from hek_parsec import (
     shift,
 )
 from ady_expr import *  # noqa: F403 — need all fw() names in namespace
-from ady_declarations import type_annotation
+from ady_declarations import type_annotation, elem_type
 
 ###############################################################################
 # Tokens not in hek_parsec
@@ -385,10 +385,11 @@ float_range_def = literal("float") + literal("range") + NUMBER + (RANGE_EXCL_OP 
 int_range_def = fw("int_range_def")
 int_range_def = literal("int") + literal("range") + subrange_def
 # [lo..hi]T  ->  array[lo..hi, T]  (subrange-indexed array)
-subrange_array_type = LBRACKET + subrange_def + RBRACKET + type_annotation
+subrange_array_type = LBRACKET + subrange_def + RBRACKET + elem_type
 # Allow subrange_def as a type_annotation (e.g. in tuple fields: stage: 1 .. 5)
 # Insert before the expression fallback (last element in type_annotation.parsers)
 type_annotation.parsers.insert(0, subrange_def)
+elem_type.parsers.insert(0, subrange_def)
 # Allow [lo..hi]T as a type_annotation; insert before enum_array_type (position 2:
 # after seq_type and callable_type, both of which also start with '[')
 from ady_declarations import basic_type as _basic_type
