@@ -643,14 +643,6 @@ type FileChange is record:
     from_baseline: BaselineNr_T = ""
     to_baseline:   BaselineNr_T = ""
 
-type ChangeList is record:
-    # in the order each first appears
-    committers: []Committer = []
-    branches:   {Committer}[]BranchName = {:}
-    files:      {BranchName}[]FileChange = {:}
-    # changes with no user branch above them in their section
-    unattributed: []FileChange = []
-
 def cfmu_baseline_of(tact_nr: BaselineNr_T) -> BaselineNr_T:
     """The CFMUTEST baseline built on TACT baseline TACT_NR -- the first
     CFMUTEST_CONFIG among what `Psort -b` answers for it -- or "" when
@@ -703,7 +695,8 @@ def baseline_nr(component: BaselineName_T) -> BaselineNr_T:
 # the report's verbs for a change
 let CHANGE_KINDS: {str}ChangeKind = {"changed": CHANGED, "added": ADDED, "removed": DELETED, "deleted": DELETED}
 
-# What read_changes knows of the section it is in: one per component.
+# What a ChangesReport, being read, knows of the section it is in: one per
+# component.
 type ReportSection is record:
     # its baselines: "Differences between IFPS.CUA_IDL.30.0.0.122 and ...123"
     from_baseline: BaselineNr_T = ""
@@ -715,93 +708,107 @@ type ReportSection is record:
     names:         []BranchName = []
     tickets:       [][]Ticket_T = []
 
-def add_change(changes: ChangeList, seen: {str}int, owner: BranchName, fc: FileChange):
-    """FC, credited to OWNER: a new entry, or its commits, tickets and
-    reviews added to OWNER's entry for the same file and kind of change.
-    SEEN maps "<branch>\x01<kind>\x01<file>" to that entry's index."""
-    let who: Committer = committer_of(owner)
-    if who not in changes.branches:
-        changes.committers.append(who)
-        changes.branches[who] = []
-    if owner not in changes.files:
-        changes.branches[who].append(owner)
-        changes.files[owner] = []
-    let key: str = owner + "\x01" + fc.kind'Image + "\x01" + fc.file
-    if key not in seen:
-        seen[key] = len(changes.files[owner])
-        changes.files[owner].append(FileChange(kind = fc.kind, file = fc.file,
-                                               from_baseline = fc.from_baseline, to_baseline = fc.to_baseline))
-    let i: int = seen[key]
-    for c in fc.commits:
-        if c not in changes.files[owner][i].commits:
-            changes.files[owner][i].commits.append(c)
-    for t in fc.tickets:
-        if t not in changes.files[owner][i].tickets:
-            changes.files[owner][i].tickets.append(t)
-    for r in fc.reviews:
-        if r not in changes.files[owner][i].reviews:
-            changes.files[owner][i].reviews.append(r)
-
 def tickets_of(line: str) -> []Ticket_T:
     """The SC tickets a report line lists in RELATED_CHANGES="...", if any."""
     return [] if line != /RELATED_CHANGES="(?P<sc>[^"]*)"/
     $+{sc}.split()
 
-def read_changes(report: Path) -> ChangeList:
-    """The changes REPORT lists, each credited to a user branch merged above
-    it in its section (see credit); one entry per branch, file and kind of
-    change, with every commit that made it."""
-    var out: ChangeList
-    var section: ReportSection
-    var seen: {str}int = {:}
-    # a merge's review, for the change its own commit makes: the merge line
-    # and the change line then carry the same sha
-    var merge_reviews: {CommitHash}Review_T = {:}
-    for line in report.lines:
-        # Captures are bound first: the calls in each branch match regexes
-        # of their own.
-        case line.strip():
-            when /^===== Differences between (?P<a>\S+) and (?P<b>\S+)/:
-                let a: BaselineName_T = $+{a}
-                let b: BaselineName_T = $+{b}
-                section = ReportSection(from_baseline = baseline_nr(a), to_baseline = baseline_nr(b))
-            when /^=====/:
-                # nothing merged yet; the baselines are the last ones named
-                section = ReportSection(from_baseline = section.from_baseline, to_baseline = section.to_baseline)
-            when /^Merge from <- (?P<sha>\S+) (?P<name>\S+)/:
-                let merge_sha: CommitHash = $+{sha}
-                let source: BranchName = $+{name}
-                let review: Review_T = review_of(line)
-                if review != "":
-                    merge_reviews[merge_sha] = review
-                let merged: BranchName = user_branch(source)
-                if merged != "":
-                    section.branch = merged
-                    section.names.append(merged)
-                    section.tickets.append(tickets_of(line))
-                elif committer_of(source).endswith("adm"):
-                    # an integration merge: what follows is nobody's yet
-                    section.branch = ""
-            when /^(?P<verb>changed|added|removed|deleted)\s+(?P<sha>[0-9a-f]+):(?P<file>\S+)/:
-                let verb: str = $+{verb}
-                let sha: CommitHash = $+{sha}
-                let file: NmFile_T = $+{file}
-                var review: Review_T = review_of(line)
-                if review == "" and sha in merge_reviews:
-                    review = merge_reviews[sha]
-                let fc: FileChange = FileChange(kind = CHANGE_KINDS[verb], file = file, commits = [sha],
-                                                tickets = tickets_of(line),
-                                                reviews = [review] if review != "" else [],
-                                                from_baseline = section.from_baseline,
-                                                to_baseline = section.to_baseline)
-                let owner: BranchName = credit(fc.tickets, section.names, section.tickets, section.branch)
-                if owner == "":
-                    out.unattributed.append(fc)
-                else:
-                    add_change(out, seen, owner, fc)
-            when others:
-                pass
-    out
+class ChangesReport:
+    """A CFMUTEST changes report: the changes it lists, each credited to a
+    user branch merged above it in its section (see credit); one entry per
+    branch, file and kind of change, with every commit that made it."""
+    # in the order each first appears
+    committers  : []Committer
+    branches    : {Committer}[]BranchName
+    files       : {BranchName}[]FileChange
+    # changes with no user branch above them in their section
+    unattributed: []FileChange
+
+    def __init__(self, report: Path):
+        """Read REPORT, section by section."""
+        var section: ReportSection
+        var seen: {str}int = {:}
+        # a merge's review, for the change its own commit makes: the merge line
+        # and the change line then carry the same sha
+        var merge_reviews: {CommitHash}Review_T = {:}
+        for line in report.lines:
+            # Captures are bound first: the calls in each branch match regexes
+            # of their own.
+            case line.strip():
+                when /^===== Differences between (?P<a>\S+) and (?P<b>\S+)/:
+                    let a: BaselineName_T = $+{a}
+                    let b: BaselineName_T = $+{b}
+                    section = ReportSection(from_baseline = baseline_nr(a), to_baseline = baseline_nr(b))
+                when /^=====/:
+                    # nothing merged yet; the baselines are the last ones named
+                    section = ReportSection(from_baseline = section.from_baseline, to_baseline = section.to_baseline)
+                when /^Merge from <- (?P<sha>\S+) (?P<name>\S+)/:
+                    let merge_sha: CommitHash = $+{sha}
+                    let source: BranchName = $+{name}
+                    let review: Review_T = review_of(line)
+                    if review != "":
+                        merge_reviews[merge_sha] = review
+                    let merged: BranchName = user_branch(source)
+                    if merged != "":
+                        section.branch = merged
+                        section.names.append(merged)
+                        section.tickets.append(tickets_of(line))
+                    elif committer_of(source).endswith("adm"):
+                        # an integration merge: what follows is nobody's yet
+                        section.branch = ""
+                when /^(?P<verb>changed|added|removed|deleted)\s+(?P<sha>[0-9a-f]+):(?P<file>\S+)/:
+                    let verb: str = $+{verb}
+                    let sha: CommitHash = $+{sha}
+                    let file: NmFile_T = $+{file}
+                    var review: Review_T = review_of(line)
+                    if review == "" and sha in merge_reviews:
+                        review = merge_reviews[sha]
+                    let fc: FileChange = FileChange(kind = CHANGE_KINDS[verb], file = file, commits = [sha],
+                                                    tickets = tickets_of(line),
+                                                    reviews = [review] if review != "" else [],
+                                                    from_baseline = section.from_baseline,
+                                                    to_baseline = section.to_baseline)
+                    let owner: BranchName = credit(fc.tickets, section.names, section.tickets, section.branch)
+                    if owner == "":
+                        self.unattributed.append(fc)
+                    else:
+                        self.add(seen, owner, fc)
+                when others:
+                    pass
+
+    def add(self, seen: {str}int, owner: BranchName, fc: FileChange):
+        """FC, credited to OWNER: a new entry, or its commits, tickets and
+        reviews added to OWNER's entry for the same file and kind of change.
+        SEEN maps "<branch>\x01<kind>\x01<file>" to that entry's index."""
+        let who: Committer = committer_of(owner)
+        if who not in self.branches:
+            self.committers.append(who)
+            self.branches[who] = []
+        if owner not in self.files:
+            self.branches[who].append(owner)
+            self.files[owner] = []
+        let key: str = owner + "\x01" + fc.kind'Image + "\x01" + fc.file
+        if key not in seen:
+            seen[key] = len(self.files[owner])
+            self.files[owner].append(FileChange(kind = fc.kind, file = fc.file,
+                                                from_baseline = fc.from_baseline, to_baseline = fc.to_baseline))
+        let i: int = seen[key]
+        for c in fc.commits:
+            if c not in self.files[owner][i].commits:
+                self.files[owner][i].commits.append(c)
+        for t in fc.tickets:
+            if t not in self.files[owner][i].tickets:
+                self.files[owner][i].tickets.append(t)
+        for r in fc.reviews:
+            if r not in self.files[owner][i].reviews:
+                self.files[owner][i].reviews.append(r)
+
+    def keep_only(self, user: Committer):
+        """Only USER's changes from now on, when USER is not "": the changes
+        credited to no branch are nobody's, and go too."""
+        return if user == ""
+        self.committers = [user] if user in self.committers else []
+        self.unattributed = []
 
 def echo_ediff(a: Path, b: Path):
     print f"(ediff-files \"{a}\" \"{b}\")"
@@ -1019,24 +1026,17 @@ def files_by_type(files: []NmFile_T) -> str:
     let order: [](int, Extension_T) = sorted([(-n, ext) for ext, n in counts.items()])
     ", ".join([f"{-n} {extension_label(ext)}" for n, ext in order])
 
-def only_by(changes: ChangeList, user: Committer) -> ChangeList:
-    """CHANGES, only USER's when USER is not "": the changes credited to
-    no branch are nobody's, and go too."""
-    return changes if user == ""
-    let committers: []Committer = [user] if user in changes.committers else []
-    ChangeList(committers = committers, branches = changes.branches, files = changes.files, unattributed = [])
-
 def list_files_by_committer(report: Path, user: Committer):
     """By committer, the most first, how many files REPORT's changes touch,
     and how many of each type (extension); then the branches with no view
     build, if any. A change no branch is credited with is left out: the
     detailed listing lists it. Only USER's, when USER is not ""."""
-    let all: ChangeList = read_changes(report)
-    if user != "" and user not in all.committers:
-        puts("SWb", f"No changes by {user}; by: " + ", ".join(all.committers), NEWLINE=True)
+    var changes: ChangesReport = ChangesReport(report)
+    if user != "" and user not in changes.committers:
+        puts("SWb", f"No changes by {user}; by: " + ", ".join(changes.committers), NEWLINE=True)
         print
         return
-    let changes: ChangeList = only_by(all, user)
+    changes.keep_only(user)
     var files: {Committer}[]NmFile_T = {:}
     for who in changes.committers:
         var theirs: []FileChange = []
@@ -1129,7 +1129,8 @@ def list_detailed_changes(baseline: BaselineNr_T, user: Committer):
     report, or no change by USER: list_changes has said why."""
     let report: Path = changes_report(baseline, warn=False)
     return if report == ""
-    let changes: ChangeList = only_by(read_changes(report), user)
+    var changes: ChangesReport = ChangesReport(report)
+    changes.keep_only(user)
     return if user != "" and len(changes.committers) == 0
     hr('#')
     puts("SWr", "LIST OF CHANGES", NEWLINE=True)
