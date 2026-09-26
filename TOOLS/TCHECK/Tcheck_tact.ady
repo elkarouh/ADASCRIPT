@@ -28,21 +28,19 @@ type Rev_T          is str   # a git revision: c3fb81031^, a baseline's tag
 type Link_T         is str   # an #emacs: link, clickable in the report's buffer
 type Command_T      is str   # a shell command line
 type Glob_T         is str   # a file-name pattern: build_G!31.*
-type ColorSpec_T    is str   # a colour, as the ksh original spelled it: sWr
+type ColorSpec_T    is str   # a colour, as the ksh original spelled it: SWr
 type Tool_T         is str   # a visual diff tool: meld, kompare
 
 # ---------------------------------------------------------------------------
 # ANSI color helpers
 # ---------------------------------------------------------------------------
-# The ksh version encodes colors as a spec string like "sWr" where:
+# The ksh version encodes colors as a spec string like "SWr" where:
 #   Style:   S=bold(1) D=dim(2) I=italic(3) U=underline(4) F=blink(5) N=overline(7) H=hidden(8) T=strike(9)
-#            s=bold(1) d=dim(2) i=italic(3) u=underline(4) f=blink(5) n=overline(7) h=hidden(8) t=strike(9)
 #   Fg:      K=black(30) R=red(31) G=green(32) Y=yellow(33) B=blue(34) M=magenta(35) C=cyan(36) W=white(37)
 #   Bg:      k=black(40) r=red(41) g=green(42) y=yellow(43) b=blue(44) m=magenta(45) c=cyan(46) w=white(47)
 
 let ANSI_CODES: {char}str = {
     'S': "1", 'D': "2", 'I': "3", 'U': "4", 'F': "5", 'N': "7", 'H': "8", 'T': "9",
-    's': "1", 'd': "2", 'i': "3", 'u': "4", 'f': "5", 'n': "7", 'h': "8", 't': "9",
     'K': "30", 'R': "31", 'G': "32", 'Y': "33", 'B': "34", 'M': "35", 'C': "36", 'W': "37",
     'k': "40", 'r': "41", 'g': "42", 'y': "43", 'b': "44", 'm': "45", 'c': "46", 'w': "47"
 }
@@ -297,7 +295,7 @@ def print_Tlog(result: TlogResult, build_subtype: BuildSubtype, only_new: bool =
         puts("Kw", "New tests failing", NEWLINE=True)
         for line in result.new_failing:
             stdout.write("\t")
-            puts("sKy", extract_test_name(line), NEWLINE=True)
+            puts("SKy", extract_test_name(line), NEWLINE=True)
             let emacs_at: int = line.find("#emacs")
             if emacs_at >= 0:
                 print line[emacs_at:]
@@ -327,7 +325,7 @@ def print_Tlog(result: TlogResult, build_subtype: BuildSubtype, only_new: bool =
                 print line
             else:
                 stdout.write("\t")
-                puts("sKy", extract_test_name(line), NEWLINE=True)
+                puts("SKy", extract_test_name(line), NEWLINE=True)
                 let emacs_at: int = line.find("#emacs")
                 if emacs_at >= 0:
                     print line[emacs_at:]
@@ -368,7 +366,7 @@ def process_Tlog(filepath: Path, build_subtype: BuildSubtype):
 
 def echo_emacs(filepath: Path):
     """Print an #emacs: link for FILEPATH."""
-    puts("sBw", "Look for details in:", NEWLINE=True)
+    puts("SBw", "Look for details in:", NEWLINE=True)
     print f"#emacs:(progn(find-file \"{filepath}\"))"
 
 # ---------------------------------------------------------------------------
@@ -420,14 +418,14 @@ def replay_status(content: str) -> ReplayStatus:
 def process_replay(replay: Replay, verbose: bool):
     """Check the status of a single replay (successful / failed / running)."""
     let label: str = f"\"{replay.rtype}\""
-    puts("sWb", f"{label:<14} replay ")
+    puts("SWb", f"{label:<14} replay ")
 
     let content: str = readFile(replay.file)
     case replay_status(content):
         when succeeded:
-            puts("sWb", "==> WAS SUCCESSFUL", NEWLINE=True)
+            puts("SWb", "==> WAS SUCCESSFUL", NEWLINE=True)
         when failed:
-            puts("sWr", "==> FAILED", NEWLINE=True)
+            puts("SWr", "==> FAILED", NEWLINE=True)
             echo_emacs(replay.file)
             print
             if verbose:
@@ -439,9 +437,9 @@ def process_replay(replay: Replay, verbose: bool):
                     else:
                         print line
         when not_started:
-            puts("sWb", "---> WARNING: it looks like the replay hasn't started", NEWLINE=True)
+            puts("SWb", "---> WARNING: it looks like the replay hasn't started", NEWLINE=True)
         when busy:
-            puts("sWb", "IS STILL BUSY", NEWLINE=True)
+            puts("SWb", "IS STILL BUSY", NEWLINE=True)
     hr('-')
 
 # ---------------------------------------------------------------------------
@@ -451,9 +449,9 @@ def process_replay(replay: Replay, verbose: bool):
 def grep_force_trace_in_dir(dir: Path):
     """Grep for missing 'if Debug.Trace' guards in LO build logs."""
     if not -d dir:
-        puts("sWb", "WARNING: '" + dir + "' does not exist!", NEWLINE=True)
+        puts("SWb", "WARNING: '" + dir + "' does not exist!", NEWLINE=True)
         return
-    puts("sWb", "Grep in " + dir + " to detect missing 'if Debug.Trace (...) then' (100 first errors, no matches means no errors detected):", NEWLINE=True)
+    puts("SWb", "Grep in " + dir + " to detect missing 'if Debug.Trace (...) then' (100 first errors, no matches means no errors detected):", NEWLINE=True)
     let r = shell: for f in {dir}/*_out_*; do [ -e "$f" ] && grep -H -n -B1 '!!! ERROR : FORCE_TRACE message above' "$f" | grep -v '^--[[:space:]]*$'; done | head -n 100
     if r.output.strip() != "":
         print r.output.rstrip("\n")
@@ -480,9 +478,9 @@ def show_tlog_if_present(build: Build, subtype: BuildSubtype, pass_: BuildPass):
 
     if -f full_path:
         stdout.write("=======================================  ")
-        puts("sWr", full_path.name)
+        puts("SWr", full_path.name)
         stdout.write(" ")
-        puts("sWb", " (" + build.name + ")")
+        puts("SWb", " (" + build.name + ")")
         print "  ======================================="
         process_Tlog(full_path, subtype)
         print
@@ -496,8 +494,8 @@ def show_tlog_if_present(build: Build, subtype: BuildSubtype, pass_: BuildPass):
         when others:
             return
     case pass_:
-        when normal: puts("sWb", f"\"{build.btype} {sl}\" build not ready yet", NEWLINE=True)
-        when mrun:   puts("sWb", f"\"{build.btype} {sl} mrun\" build not ready yet", NEWLINE=True)
+        when normal: puts("SWb", f"\"{build.btype} {sl}\" build not ready yet", NEWLINE=True)
+        when mrun:   puts("SWb", f"\"{build.btype} {sl} mrun\" build not ready yet", NEWLINE=True)
 
 def process_build_subtype(build: Build, subtype: BuildSubtype):
     """Process one subtype of a build, for both normal and mrun passes."""
@@ -505,7 +503,7 @@ def process_build_subtype(build: Build, subtype: BuildSubtype):
         """Check for FORCE_TRACE errors in LO build logs."""
         let lo_logdir: Path = tacot_corico_latest / "work" / "logging-lo"
         if -e lo_logdir:
-            puts("syB", "Doing lo-build checks in " + lo_logdir, NEWLINE=True)
+            puts("SyB", "Doing lo-build checks in " + lo_logdir, NEWLINE=True)
             grep_force_trace_in_dir(lo_logdir / "LOGS")
             grep_force_trace_in_dir(lo_logdir / "LOGS_others")
     for pass_ in BuildPass:
@@ -522,11 +520,11 @@ def process_build_subtype(build: Build, subtype: BuildSubtype):
 def process_gnatcheck(build: Build):
     """Show the Padactl/CRC summary from the IP build."""
     hr('#')
-    puts("sWr", "Padactl", NEWLINE=True)
+    puts("SWr", "Padactl", NEWLINE=True)
     let padactl_file: Path = build.saved_logs() / "Padactl.LATEST" / "Padactl.summary"
     if -f padactl_file:
         hr('-')
-        puts("sWb", str(padactl_file), NEWLINE=True)
+        puts("SWb", str(padactl_file), NEWLINE=True)
         let r = shell: grep -A20 delta {padactl_file}
         if r.output.strip() != "":
             print r.output.rstrip("\n")
@@ -535,7 +533,7 @@ def process_gnatcheck(build: Build):
             print r2.output.rstrip("\n")
         echo_emacs(padactl_file)
     else:
-        puts("sWb", "WARNING: No CRC summary file found!", NEWLINE=True)
+        puts("SWb", "WARNING: No CRC summary file found!", NEWLINE=True)
 
 # ---------------------------------------------------------------------------
 # Check build closure and test programs
@@ -547,8 +545,8 @@ def process_run_test_programs_log(build: Build, fast_mode: bool):
     let work: Path = build.tacot_dir(normal) / "work"
     print
     hr('#')
-    puts("sWr", "Check build closure and test programs.", NEWLINE=True)
-    puts("usBy", "CHECK RUN TEST PROGRAMS LOG FOR " + str(build.dir) + " ...", NEWLINE=True)
+    puts("SWr", "Check build closure and test programs.", NEWLINE=True)
+    puts("USBy", "CHECK RUN TEST PROGRAMS LOG FOR " + str(build.dir) + " ...", NEWLINE=True)
     let find_lines: []str = shellLines: find {work} -type f -name 'check_run_test_programs.log' -print -quit
     var logfile: Path = Path("")
     if find_lines'Length > 0:
@@ -556,9 +554,9 @@ def process_run_test_programs_log(build: Build, fast_mode: bool):
 
     if logfile == "":
         if fast_mode:
-            puts("sWb", "check_run_test_programs_log not yet complete and we are in fast mode -> skip this check.", NEWLINE=True)
+            puts("SWb", "check_run_test_programs_log not yet complete and we are in fast mode -> skip this check.", NEWLINE=True)
         else:
-            puts("sWb", "check_run_test_programs_log not yet complete -> execute the program manually. This can take some minutes (run with -f to disable the execution).", NEWLINE=True)
+            puts("SWb", "check_run_test_programs_log not yet complete -> execute the program manually. This can take some minutes (run with -f to disable the execution).", NEWLINE=True)
             let build_subtype: str = build.name.replace("build_", "")
             let rc: int = shell: cd /tmp && echo check_run_test_programs_log | Ccontext -b "TACT.TACT_CONFIG.{baseline}" -e "{build_subtype}" 2>&1
     else:
@@ -953,12 +951,12 @@ def changes_report(baseline: BaselineNr_T, warn: bool = True) -> Path:
     let cfmu: BaselineNr_T = cfmu_baseline_of(baseline)
     if cfmu == "":
         if warn:
-            puts("sWb", f"WARNING: Psort -b names no CFMUTEST baseline for TACT_CONFIG.{baseline}", NEWLINE=True)
+            puts("SWb", f"WARNING: Psort -b names no CFMUTEST baseline for TACT_CONFIG.{baseline}", NEWLINE=True)
         return Path("")
     let report: Path = CFMUTEST_ROOT / "baseline_reports" / f"CFMUTEST.CFMUTEST_CONFIG.{cfmu}.changes_report"
     if not -r report:
         if warn:
-            puts("sWb", f"WARNING: no changes report for CFMUTEST_CONFIG {cfmu}: {report}", NEWLINE=True)
+            puts("SWb", f"WARNING: no changes report for CFMUTEST_CONFIG {cfmu}: {report}", NEWLINE=True)
         return Path("")
     report
 
@@ -1005,7 +1003,7 @@ def list_files_by_committer(report: Path, user: Committer):
     detailed listing lists it. Only USER's, when USER is not ""."""
     let all: ChangeList = read_changes(report)
     if user != "" and user not in all.committers:
-        puts("sWb", f"No changes by {user}; by: " + ", ".join(all.committers), NEWLINE=True)
+        puts("SWb", f"No changes by {user}; by: " + ", ".join(all.committers), NEWLINE=True)
         print
         return
     let changes: ChangeList = only_by(all, user)
@@ -1034,7 +1032,7 @@ def list_files_by_committer(report: Path, user: Committer):
             if view_build_of(branch) == "":
                 unbuilt.append(branch)
     if len(unbuilt) > 0:
-        puts("sWb", "NO VIEW BUILD FOUND FOR THESE BRANCHES", NEWLINE=True)
+        puts("SWb", "NO VIEW BUILD FOUND FOR THESE BRANCHES", NEWLINE=True)
         for branch in unbuilt:
             print "  " + branch
         print
@@ -1055,10 +1053,10 @@ def list_new_failures(against: str, failures: []NewFailure):
     """Each test of FAILURES once, with the build(s) it newly fails in;
     AGAINST, the baselines the Tlogs compared with, or ""."""
     let vs: str = f" vs {against}" if against != "" else ""
-    puts("sWr", f"NEWLY FAILED TESTS{vs}", NEWLINE=True)
+    puts("SWr", f"NEWLY FAILED TESTS{vs}", NEWLINE=True)
     if len(failures) == 0:
         let compared: str = f" compared to {against}" if against != "" else ""
-        puts("sKg", f"  No new failures{compared}", NEWLINE=True)
+        puts("SKg", f"  No new failures{compared}", NEWLINE=True)
         print
         return
     var tests: []TestName_T = []
@@ -1074,7 +1072,7 @@ def list_new_failures(against: str, failures: []NewFailure):
         width = max(width, len(test))
     for test in tests:
         stdout.write("  ")
-        puts("sWr", test)
+        puts("SWr", test)
         print " " * (width - len(test)) + "  " + ", ".join(builds[test])
     print
 
@@ -1086,7 +1084,7 @@ def list_changes(baseline: BaselineNr_T, failures: []NewFailure, against: str, u
     AGAINST, the Tlogs' reference baselines. The failures are the whole
     baseline's, whoever's changes caused them."""
     hr('#')
-    puts("sWr", "CHANGES BY COMMITTER", NEWLINE=True)
+    puts("SWr", "CHANGES BY COMMITTER", NEWLINE=True)
     let report: Path = changes_report(baseline)
     if report != "":
         list_files_by_committer(report, user)
@@ -1104,7 +1102,7 @@ def list_detailed_changes(baseline: BaselineNr_T, user: Committer):
     let changes: ChangeList = only_by(read_changes(report), user)
     return if user != "" and len(changes.committers) == 0
     hr('#')
-    puts("sWr", "LIST OF CHANGES", NEWLINE=True)
+    puts("SWr", "LIST OF CHANGES", NEWLINE=True)
     # a branch's build is compared with the baseline before this one
     let reference: BaselineName_T = "TACT.TACT_CONFIG." + Baseline(baseline).previous().nr
     print "DIFF and NET DIFF run in the file's submodule of the NM workspace. Where that is"
@@ -1356,7 +1354,7 @@ def get_failed_test_names(filepath: Path, subtype: BuildSubtype) -> []TestName_T
 def check_replay_dirs_size():
     """Scan replay directories for disk usage and deletion advice."""
     hr('-')
-    puts("sWr", "COMPUTE SIZE OF REPLAY DIRS", NEWLINE=True)
+    puts("SWr", "COMPUTE SIZE OF REPLAY DIRS", NEWLINE=True)
     let listing: []str = shellLines: ls -d {TACT_ROOT}/TACT_CONFIG![0-9]*/build_G!*OP*/saved_logs/replay_dir*
     var total_size: float = 0.0
     for found in listing:
@@ -1370,7 +1368,7 @@ def check_replay_dirs_size():
         let du_r = shell: du --max-depth=0 -ch {!replay_dir} | head -n1
         let size_line: str = du_r.output.strip()
         let size_str: str = size_line.split()[0] if size_line != "" else "0"
-        puts("sBy", f"{replay_dir} ==> {size_str}", NEWLINE=True)
+        puts("SBy", f"{replay_dir} ==> {size_str}", NEWLINE=True)
         # Only count sizes in GB.
         continue if not size_str.endswith("G")
         let num_size: float = float(size_str[0:-1])
@@ -1396,7 +1394,7 @@ def check_replay_dirs_size():
                 print "\tNo tactdev_remove found, use:"
                 print f"\t\trm -fr {replay_dir}"
         else:
-            puts("sfBy", "\tTHIS REPLAY IS STILL RUNNING", NEWLINE=True)
+            puts("SFBy", "\tTHIS REPLAY IS STILL RUNNING", NEWLINE=True)
             print "\tTo delete it, use the vncviewer from dhdevd01:99 and run:"
             print "\t\tTcleanup_old_replay_users -kill_replay"
     print
@@ -1427,7 +1425,7 @@ def find_core_dumps(dir: Path):
     # find core files bigger than 600MB
     let r = shell: fd -l --size +600M core {dir}
     if r.output.strip() != "":
-        puts("sWr", "CORE DUMPS:", NEWLINE=True)
+        puts("SWr", "CORE DUMPS:", NEWLINE=True)
         print r.output.rstrip("\n")
 
 def make_report(content: str, bl: BaselineNr_T, report_name: str) -> Path:
@@ -1464,23 +1462,23 @@ def get_replay_log_dir(start: Baseline, rtype: ReplayType) -> Path:
 
 def scan_replay_dir_detailed(replay_log_dir: Path, bl: BaselineNr_T, rtype: ReplayType) -> Path:
     if replay_log_dir == "":
-        puts("sWb", "no replay log dir found", NEWLINE=True)
+        puts("SWb", "no replay log dir found", NEWLINE=True)
         return Path("")
-    puts("usBy", "REPLAY DIR: " + replay_log_dir, NEWLINE=True)
+    puts("USBy", "REPLAY DIR: " + replay_log_dir, NEWLINE=True)
     let replay_root: Path = replay_log_dir.parent.parent.parent
     find_core_dumps(replay_root)
     var report: str = ""
     let check_result: []str = shellLines: ls {replay_log_dir}/*check_logs.result.svlog
     for f in check_result:
         continue if f == ""
-        puts("sWb", "check_logs.result.svlog:", NEWLINE=True)
+        puts("SWb", "check_logs.result.svlog:", NEWLINE=True)
         let content: str = readFile(Path(f))
         print content
         report = report + content + "\n"
     let check_run: []str = shellLines: ls {replay_log_dir}/*check_logs.run.svlog
     for f in check_run:
         continue if f == ""
-        puts("sWb", "check_logs.run.svlog:", NEWLINE=True)
+        puts("SWb", "check_logs.run.svlog:", NEWLINE=True)
         let content: str = readFile(Path(f))
         print content
         report = report + content + "\n"
@@ -1500,9 +1498,9 @@ def scan_regression_tests_detailed(bl: Baseline, btype: BuildType, subtype: Buil
         when others:
             log_dir = work / "LOGS_others"
     if not -d log_dir:
-        puts("sWb", "log dir does not exist: " + log_dir, NEWLINE=True)
+        puts("SWb", "log dir does not exist: " + log_dir, NEWLINE=True)
         return Path("")
-    puts("usBy", "scanning " + log_dir, NEWLINE=True)
+    puts("USBy", "scanning " + log_dir, NEWLINE=True)
     let tacot_root: Path = log_dir.parent.parent.parent
     find_core_dumps(tacot_root)
     var report: str = ""
@@ -1517,7 +1515,7 @@ def scan_regression_tests_detailed(bl: Baseline, btype: BuildType, subtype: Buil
             for f in out_files:
                 continue if f == ""
                 hr('#')
-                puts("sWb", Path(f).name, NEWLINE=True)
+                puts("SWb", Path(f).name, NEWLINE=True)
                 hr('#')
                 let hits: str = grep_logfile(Path(f))
                 if hits != "":
@@ -1535,7 +1533,7 @@ def show_failed_tests(start: Baseline, btype: BuildType, subtype: BuildSubtype, 
         let bl: BaselineNr_T = baseline.nr
         let header: str = f"FAILED {btype} REGRESSION TESTS logging-{sl} for BASELINE {bl}"
         hr('-')
-        puts("sWr", header, NEWLINE=True)
+        puts("SWr", header, NEWLINE=True)
         result = result + header + "\n"
         var env: str = ip_env
         var suffix: str = "failed-in"
@@ -1600,16 +1598,16 @@ class Report:
         self.opt = opt
         self.cur = Baseline(opt.baseline)
         if not -d self.cur.dir:
-            puts("sWb", "DIR " + str(self.cur.dir) + " does not exist", NEWLINE=True)
+            puts("SWb", "DIR " + str(self.cur.dir) + " does not exist", NEWLINE=True)
             quit(1)
         self.builds = find_builds(self.cur)
         self.replays = find_replays(self.cur.dir)
 
     def show_header(self):
-        puts("sWr", "AVAILABLE BUILDS for " + str(self.cur.dir) + ":", NEWLINE=True)
+        puts("SWr", "AVAILABLE BUILDS for " + str(self.cur.dir) + ":", NEWLINE=True)
         for build in self.builds:
             print build.name
-        puts("sWr", "AVAILABLE REPLAYS for " + str(self.cur.dir) + ":", NEWLINE=True)
+        puts("SWr", "AVAILABLE REPLAYS for " + str(self.cur.dir) + ":", NEWLINE=True)
         for replay in self.replays:
             print replay.rtype'Image + "  " + str(replay.file)
         if self.opt.list_only:
@@ -1617,7 +1615,7 @@ class Report:
         hr('#')
 
     def show_regression_tests(self):
-        puts("sWr", "TESTS", NEWLINE=True)
+        puts("SWr", "TESTS", NEWLINE=True)
         for build in self.builds:
             case self.opt.focus_domain:
                 when focus_IP:  continue if build.btype != IP
@@ -1625,7 +1623,7 @@ class Report:
                 when focus_SIP: continue if build.btype != SIP
                 when focus_replay | focus_build_info | focus_changes: break
                 when no_focus:  pass
-            puts("usBy", "PROCESSING " + build.name + " ...", NEWLINE=True)
+            puts("USBy", "PROCESSING " + build.name + " ...", NEWLINE=True)
             for subtype in BuildSubtype:
                 continue if self.opt.focus_domain in (focus_IP, focus_OP, focus_SIP) and subtype != self.opt.focus_subtype
                 stderr.writeLine(PROG + ": checking " + build.name + " / " + subtype_label(subtype))
@@ -1633,9 +1631,9 @@ class Report:
 
     def show_replays(self):
         hr('#')
-        puts("sWr", "REPLAYS", NEWLINE=True)
+        puts("SWr", "REPLAYS", NEWLINE=True)
         if self.replays'Length == 0:
-            puts("sWb", "WARNING: NO REPLAYS FOUND", NEWLINE=True)
+            puts("SWb", "WARNING: NO REPLAYS FOUND", NEWLINE=True)
         for replay in self.replays:
             continue if self.opt.focus_domain == focus_replay and replay.rtype != self.opt.focus_rtype
             process_replay(replay, self.opt.verbose)
@@ -1670,7 +1668,7 @@ class Report:
     def show_summary(self):
         """Print a one-screen summary of the baseline's health."""
         hr('#')
-        puts("sWr", f"SUMMARY for BASELINE {self.cur.nr}", NEWLINE=True)
+        puts("SWr", f"SUMMARY for BASELINE {self.cur.nr}", NEWLINE=True)
         for build in self.builds:
             let s: BuildSummary = self.collect_build_summary(build)
             var status: str = ""
@@ -1686,13 +1684,13 @@ class Report:
                 if s.total_still > 0:
                     parts.append(str(s.total_still) + " still failing")
                 status = ", ".join(parts)
-            puts("sWb", f"  {s.btype:<4}")
+            puts("SWb", f"  {s.btype:<4}")
             if s.all_ok:
-                puts("sKg", " " + status, NEWLINE=True)
+                puts("SKg", " " + status, NEWLINE=True)
             elif s.total_new > 0 or s.total_crash > 0:
-                puts("sWr", " " + status, NEWLINE=True)
+                puts("SWr", " " + status, NEWLINE=True)
             else:
-                puts("sKy", " " + status, NEWLINE=True)
+                puts("SKy", " " + status, NEWLINE=True)
         # Replays.
         var replay_ok: int = 0
         var replay_fail: int = 0
@@ -1702,11 +1700,11 @@ class Report:
                 when succeeded:          replay_ok += 1
                 when failed:             replay_fail += 1
                 when not_started | busy: replay_busy += 1
-        puts("sWb", "  Replays: ")
+        puts("SWb", "  Replays: ")
         if replay_fail > 0:
-            puts("sWr", f"{replay_ok} ok, {replay_fail} FAILED, {replay_busy} running", NEWLINE=True)
+            puts("SWr", f"{replay_ok} ok, {replay_fail} FAILED, {replay_busy} running", NEWLINE=True)
         else:
-            puts("sKg", f"{replay_ok} ok, {replay_busy} running", NEWLINE=True)
+            puts("SKg", f"{replay_ok} ok, {replay_busy} running", NEWLINE=True)
         hr('#')
 
     def tlogs(self) -> []TlogAt:
@@ -1749,13 +1747,13 @@ class Report:
         let against: str = self.tlog_references()
         let vs: str = f" vs {against}" if against != "" else ""
         hr('-')
-        puts("sWr", f"NEW FAILURES{vs}", NEWLINE=True)
+        puts("SWr", f"NEW FAILURES{vs}", NEWLINE=True)
         let failures: []NewFailure = self.new_failures()
         for f in failures:
-            puts("sWr", f"  NEW: {f.build} {f.test}", NEWLINE=True)
+            puts("SWr", f"  NEW: {f.build} {f.test}", NEWLINE=True)
         if len(failures) == 0:
             let compared: str = f" compared to {against}" if against != "" else ""
-            puts("sKg", f"  No new failures{compared}", NEWLINE=True)
+            puts("SKg", f"  No new failures{compared}", NEWLINE=True)
 
     def write_history(self):
         """Append a one-line summary to ~/.tcheck_history."""
@@ -1776,7 +1774,7 @@ class Report:
         let prev_build: Path = prev.saved_logs_dir(IP).parent
         let prev_log: Path = prev_build / "Csystem_build.log"
         let cur_log: Path = cur_build / "Csystem_build.log"
-        puts("sWr", "Compare Csystem_build.log:", NEWLINE=True)
+        puts("SWr", "Compare Csystem_build.log:", NEWLINE=True)
         print "  prev: " + prev_log
         print "  cur:  " + cur_log
         let prev_normalized: Path = make_comparable(prev_log, prev.nr)
