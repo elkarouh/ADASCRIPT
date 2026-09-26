@@ -3139,9 +3139,11 @@ def _func_def_to_nim_inner(self, indent=0):
     # Escape Nim keywords that aren't already backtick-wrapped (dunders get their own escaping)
     if not nim_name.startswith("`"):
         nim_name = _nim_ident(nim_name)
-    if keyword == "proc" and indent == 0 and name:
+    if keyword == "proc" and name:
         # A method that hands a field to this proc cannot change it through
-        # the call when no parameter is `var` (see _purity_evidence).
+        # the call when no parameter is `var` (see _purity_evidence). A
+        # nested proc counts too: it is emitted before the body around it
+        # is looked at.
         _takes_var = bool(_re_gp.search(r'(?:^|[(,;])\s*[\w`, ]+:\s*var\b', params))
         (ParserState.var_param_procs if _takes_var
          else ParserState.by_value_procs).add(name)
