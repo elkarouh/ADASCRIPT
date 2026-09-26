@@ -409,7 +409,9 @@ def replay_status(content: str) -> ReplayStatus:
     """What a replay's log, CONTENT, says of it: the verdict of its UNINSTALL
     step when it has one, else whether it has started."""
     if "Executed UNINSTALL:" in content:
-        let verdict: str = content.split("Executed UNINSTALL:")[-1].split("\n")[0]
+        # the rest of the line of its last UNINSTALL step
+        let (_, after) = content.rsplit("Executed UNINSTALL:", 1)
+        let verdict: str = after.split("\n")[0]
         return succeeded if "YES" in verdict
         return failed if "NO" in verdict
     return busy if "Waiting for this replay to be finished" in content
@@ -633,17 +635,17 @@ def cfmu_baseline_of(tact_nr: BaselineNr_T) -> BaselineNr_T:
             return $+{nr}
     ""
 
+def committer_of(branch: BranchName) -> Committer:
+    branch.split(".")[0]
+
 def user_branch(name: BranchName) -> BranchName:
     """NAME, a merge's source, when it is somebody's branch; "" when it is
     an integration merge (testadm.integration_30, any ...adm) or a baseline
     sync (CFMUTEST.CFMUTEST_CONFIG.30.0.0.104)."""
     return "" if name == /^[A-Z][A-Z0-9_]*\.[A-Z0-9_]+\.\d/
     return "" if "." not in name
-    return "" if name.split(".")[0].endswith("adm")
+    return "" if committer_of(name).endswith("adm")
     return name
-
-def committer_of(branch: BranchName) -> Committer:
-    branch.split(".")[0]
 
 def review_of(line: str) -> Review_T:
     """The review a report line records -- "dpt, gru on 260922.151702",
@@ -667,7 +669,8 @@ def credit(tickets: []Ticket_T, names: []BranchName, branch_tickets: [][]Ticket_
 
 def baseline_nr(component: BaselineName_T) -> BaselineNr_T:
     """The baseline number of "IFPS.CUA_IDL.30.0.0.122": 30.0.0.122."""
-    ".".join(component.split(".")[2:])
+    let (system, subsystem, nr) = component.split(".", 2)
+    nr
 
 # the report's verbs for a change
 let CHANGE_KINDS: {str}ChangeKind = {"changed": CHANGED, "added": ADDED, "removed": DELETED, "deleted": DELETED}
@@ -749,7 +752,7 @@ def read_changes(report: Path) -> ChangeList:
                     section.branch = merged
                     section.names.append(merged)
                     section.tickets.append(tickets_of(line))
-                elif source.split(".")[0].endswith("adm"):
+                elif committer_of(source).endswith("adm"):
                     # an integration merge: what follows is nobody's yet
                     section.branch = ""
             when /^(?P<verb>changed|added|removed|deleted)\s+(?P<sha>[0-9a-f]+):(?P<file>\S+)/:
