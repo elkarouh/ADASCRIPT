@@ -193,6 +193,19 @@ type BuildSummary is tuple:
     total_crash: int
     all_ok     : bool
 
+def build_summary(build: Build) -> BuildSummary:
+    """BUILD's line: its Tlogs' counts, all subtypes and passes together."""
+    var total_new: int = 0
+    var total_still: int = 0
+    var total_crash: int = 0
+    for tlog in build.tlogs:
+        total_new += tlog.new_failing'Length
+        total_still += tlog.still_fail'Length
+        total_crash += tlog.crashed'Length
+    return (build_name: build.name, btype: build.btype,
+            total_new: total_new, total_still: total_still,
+            total_crash: total_crash, all_ok: all(tlog.all_ok() for tlog in build.tlogs))
+
 class Report:
     """A report on one baseline, shaped by the command-line options.
 
@@ -203,8 +216,12 @@ class Report:
     Report holds exactly those.
 
     """
-    opt     : Options
-    cur     : Baseline
+    opt            : Options
+    cur            : Baseline
+    # from the builds' Tlogs, each read once, by its Build
+    summaries      : []BuildSummary # a line per build for the summary
+    new_failures   : []NewFailure   # the tests they report newly failing or crashed
+    tlog_references: str            # the baselines they compared with
 
     def __init__(self, opt: Options):
         self.opt = opt
@@ -214,6 +231,9 @@ class Report:
             quit(1)
         self.cur.find_builds()
         self.cur.find_replays()
+        self.summaries = [build_summary(build) for build in self.cur.builds]
+        self.new_failures = self.collect_new_failures()
+        self.tlog_references = self.collect_tlog_references()
 
     def show_header(self):
         puts("SWr", "AVAILABLE BUILDS for " + str(self.cur.dir) + ":", NEWLINE=True)
@@ -257,32 +277,11 @@ class Report:
                 b.check_test_programs(self.opt.fast_mode)
                 break
 
-    def collect_build_summary(self, build: Build) -> BuildSummary:
-        """Collect test result counts across all subtypes for one build."""
-        var total_new: int = 0
-        var total_still: int = 0
-        var total_crash: int = 0
-        var all_ok: bool = True
-        for subtype in BuildSubtype:
-            for pass_ in BuildPass:
-                let full_path: Path = build.tlog_path(subtype, pass_)
-                if -f full_path:
-                    let tlog: Tlog = Tlog(full_path, subtype)
-                    total_new = total_new + tlog.new_failing'Length
-                    total_still = total_still + tlog.still_fail'Length
-                    total_crash = total_crash + tlog.crashed'Length
-                    if not tlog.all_ok():
-                        all_ok = False
-        return (build_name: build.name, btype: build.btype,
-                total_new: total_new, total_still: total_still,
-                total_crash: total_crash, all_ok: all_ok)
-
     def show_summary(self):
         """Print a one-screen summary of the baseline's health."""
         hr('#')
         puts("SWr", f"SUMMARY for BASELINE {self.cur.nr}", NEWLINE=True)
-        for build in self.cur.builds:
-            let s: BuildSummary = self.collect_build_summary(build)
+        for s in self.summaries:
             var status: str = ""
             if s.all_ok:
                 status = "OK"
@@ -292,7 +291,6 @@ class Report:
                     parts.append(str(s.total_crash) + " crashed")
                 if s.total_new > 0:
                     parts.append(str(s.total_new) + " new")
-                    HAS_NEW_FAILURES = True
                 if s.total_still > 0:
                     parts.append(str(s.total_still) + " still failing")
                 status = ", ".join(parts)
@@ -319,51 +317,42 @@ class Report:
             puts("SKg", f"{replay_ok} ok, {replay_busy} running", NEWLINE=True)
         hr('#')
 
-    def tlogs(self) -> []TlogAt:
-        """This baseline's Tlogs, one per build and subtype that has one."""
-        var found: []TlogAt = []
-        for build in self.cur.builds:
-            for subtype in BuildSubtype:
-                let path: Path = build.tlog_path(subtype, normal)
-                if -f path:
-                    found.append((build: f"{build.btype} {subtype_label(subtype)}", subtype: subtype, path: path))
-        found
-
-    def new_failures(self) -> []NewFailure:
+    def collect_new_failures(self) -> []NewFailure:
         """The tests this baseline's Tlogs report newly failing or crashed,
         as they report them -- new against each Tlog's own reference
         baseline -- with the build type and subtype each fails in; in build,
         subtype, Tlog order. Comparing with the previous baseline is for the
         detailed views, where the causes are looked for."""
         var found: []NewFailure = []
-        for t in self.tlogs():
-            for name in Tlog(t.path, t.subtype).failed_test_names():
-                found.append((build: t.build, test: name))
-        if len(found) > 0:
-            HAS_NEW_FAILURES = True
+        for build in self.cur.builds:
+            for t in build.tlogs:
+                continue if t.build_pass != normal
+                let label: BuildLabel_T = f"{build.btype} {subtype_label(t.subtype)}"
+                for name in t.failed_test_names():
+                    found.append((build: label, test: name))
         found
 
-    def tlog_references(self) -> str:
+    def collect_tlog_references(self) -> str:
         """The baselines this baseline's Tlogs compared with, each once, as
         they come: "30.0.0.131", or "30.0.0.131, 30.0.0.129" when a build
         was compared with an older one; "" when none says."""
         var refs: []str = []
-        for t in self.tlogs():
-            let ref: BaselineNr_T = Tlog(t.path, t.subtype).reference
-            if ref != "" and ref not in refs:
-                refs.append(ref)
+        for build in self.cur.builds:
+            for t in build.tlogs:
+                continue if t.build_pass != normal
+                if t.reference != "" and t.reference not in refs:
+                    refs.append(t.reference)
         ", ".join(refs)
 
     def show_new_failures(self):
         """Show the tests the Tlogs report newly failing or crashed."""
-        let against: str = self.tlog_references()
+        let against: str = self.tlog_references
         let vs: str = f" vs {against}" if against != "" else ""
         hr('-')
         puts("SWr", f"NEW FAILURES{vs}", NEWLINE=True)
-        let failures: []NewFailure = self.new_failures()
-        for f in failures:
+        for f in self.new_failures:
             puts("SWr", f"  NEW: {f.build} {f.test}", NEWLINE=True)
-        if len(failures) == 0:
+        if len(self.new_failures) == 0:
             let compared: str = f" compared to {against}" if against != "" else ""
             puts("SKg", f"  No new failures{compared}", NEWLINE=True)
 
@@ -372,8 +361,7 @@ class Report:
         let history_file: Path = Path($HOME) / ".tcheck_history"
         var total_new: int = 0
         var total_fail: int = 0
-        for build in self.cur.builds:
-            let s: BuildSummary = self.collect_build_summary(build)
+        for s in self.summaries:
             total_new = total_new + s.total_new
             total_fail = total_fail + s.total_still + s.total_crash
         let timestamp: str = str(int(time.time()))
@@ -436,7 +424,7 @@ class Report:
                 if not self.opt.short:
                     self.show_detailed_regression_tests()
             when focus_changes:
-                list_changes(self.cur.nr, self.new_failures(), self.tlog_references(), self.opt.focus_user)
+                list_changes(self.cur.nr, self.new_failures, self.tlog_references, self.opt.focus_user)
                 if not self.opt.short:
                     list_detailed_changes(self.cur.nr, self.opt.focus_user)
             when focus_build_info:
@@ -450,10 +438,19 @@ class Report:
                 self.show_regression_tests()
                 self.show_build_info()
                 self.show_replays()
-                list_changes(self.cur.nr, self.new_failures(), self.tlog_references(), "")
+                list_changes(self.cur.nr, self.new_failures, self.tlog_references, "")
         self.write_history()
-        if self.opt.exit_code and HAS_NEW_FAILURES:
+        if self.opt.exit_code and self.found_new_failures():
             quit(1)
+
+    def found_new_failures(self) -> bool:
+        """Whether the Tlogs this run looked at report new failures: those
+        -focus IP, OP or SIP showed, or, with no focus or -focus changes,
+        all of them; with the other focuses, none were looked at."""
+        case self.opt.focus_domain:
+            when focus_IP | focus_OP | focus_SIP: HAS_NEW_FAILURES   # set as they are shown
+            when no_focus | focus_changes:        HAS_NEW_FAILURES or self.new_failures'Length > 0
+            when focus_replay | focus_build_info: False
 
 
 # ---------------------------------------------------------------------------

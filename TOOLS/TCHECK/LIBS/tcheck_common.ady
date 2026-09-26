@@ -48,8 +48,8 @@ var BATCH: bool = False
 # given. "" when none is.
 var DIFF_TOOL: Tool_T = ""
 var ONLY_NEW: bool = False
-# Set by any Tlog that reports a new or crashed test; read once at the end
-# to decide the exit status.
+# Set by Build.show_tlog when a Tlog it shows reports a new or crashed test;
+# read once at the end (Report.found_new_failures) for the exit status.
 var HAS_NEW_FAILURES: bool = False
 
 def ansi_escape(spec: ColorSpec_T) -> str:

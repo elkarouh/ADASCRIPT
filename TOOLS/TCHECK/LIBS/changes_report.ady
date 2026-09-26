@@ -487,12 +487,6 @@ type NewFailure is tuple:
     build: BuildLabel_T # the build type and subtype it fails in: "IP in", "OP assert"
     test:  TestName_T
 
-# One of a baseline's Tlogs: see Report.tlogs.
-type TlogAt is tuple:
-    build:   BuildLabel_T # the build type and subtype: "IP in"
-    subtype: BuildSubtype
-    path:    Path
-
 def list_new_failures(against: str, failures: []NewFailure):
     """Each test of FAILURES once, with the build(s) it newly fails in;
     AGAINST, the baselines the Tlogs compared with, or ""."""

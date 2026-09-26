@@ -67,12 +67,26 @@ class Build:
     btype      : BuildType    = IP
     baseline_nr: BaselineNr_T = "" # the baseline it is a build of
     dir        : Path         = Path("")
+    # the Tlogs it has, each read once, here: by subtype, and for each the
+    # normal pass's before the mrun's
+    tlogs      : []Tlog
 
     def __init__(self, name: BuildName_T, btype: BuildType, baseline_nr: BaselineNr_T, baseline_dir: Path):
         self.name = name
         self.btype = btype
         self.baseline_nr = baseline_nr
         self.dir = baseline_dir / name
+        for subtype in BuildSubtype:
+            for pass_ in BuildPass:
+                let path: Path = self.tlog_path(subtype, pass_)
+                if -f path:
+                    self.tlogs.append(Tlog(path, subtype, pass_))
+
+    def tlog(self, subtype: BuildSubtype, pass_: BuildPass) -> ?Tlog:
+        """Its Tlog of SUBTYPE for PASS_, if it has one."""
+        for t in self.tlogs:
+            return t if t.subtype == subtype and t.build_pass == pass_
+        return None
 
     def saved_logs(self) -> Path:
         self.dir / "saved_logs"
@@ -104,17 +118,21 @@ class Build:
                 lo_build_checks(self.tacot_dir(pass_))
 
     def show_tlog(self, subtype: BuildSubtype, pass_: BuildPass):
-        """Show a Tlog file's summary if it exists, or a 'not ready' message."""
-        let full_path: Path = self.tlog_path(subtype, pass_)
+        """Show the Tlog of SUBTYPE for PASS_ if there is one, or a 'not
+        ready' message."""
         let sl: str = subtype_label(subtype)
 
-        if -f full_path:
+        let found: ?Tlog = self.tlog(subtype, pass_)
+        if found is not None:
+            let tlog: Tlog = found
             stdout.write("=======================================  ")
-            puts("SWr", full_path.name)
+            puts("SWr", tlog.file.name)
             stdout.write(" ")
             puts("SWb", " (" + self.name + ")")
             print "  ======================================="
-            process_Tlog(full_path, subtype)
+            tlog.show(ONLY_NEW)
+            if tlog.new_failing'Length > 0 or tlog.crashed'Length > 0:
+                HAS_NEW_FAILURES = True
             print
             return
 
@@ -388,6 +406,9 @@ def is_test_name(name: TestName_T) -> bool:
 
 class Tlog:
     """A Tlog's reported sections: the lines of each, as the Tlog wrote them."""
+    file       : Path
+    subtype    : BuildSubtype
+    build_pass : BuildPass
     crashed    : []str
     new_failing: []str
     not_run    : []str
@@ -399,11 +420,15 @@ class Tlog:
     # baseline : 30.0.0.131 !!!"; "" when it does not say
     reference  : BaselineNr_T
 
-    def __init__(self, filepath: Path, build_subtype: BuildSubtype):
-        """Read FILEPATH in one pass: each non-blank line goes to the section
-        the last header opened. Only the first section of a name counts; a
-        later one is skipped like an unreported one. A mono build's tests that
-        did not run are not reported."""
+    def __init__(self, filepath: Path, subtype: BuildSubtype, build_pass: BuildPass = normal):
+        """Read FILEPATH, the Tlog of SUBTYPE for BUILD_PASS, in one pass: each
+        non-blank line goes to the section the last header opened. Only the
+        first section of a name counts; a later one is skipped like an
+        unreported one. A mono build's tests that did not run are not
+        reported."""
+        self.file = filepath
+        self.subtype = subtype
+        self.build_pass = build_pass
         var seen: {}Section = {}
         var section: Section = UNREPORTED
         for line in filepath.lines:
@@ -421,7 +446,7 @@ class Tlog:
                     when NEW_FAILING:
                         self.new_failing.append(line)
                     when NOT_RUN:
-                        if build_subtype != mono:
+                        if subtype != mono:
                             self.not_run.append(line)
                     when STILL_FAILING:
                         self.still_fail.append(line)
@@ -520,13 +545,6 @@ class Tlog:
             if is_test_name(name):
                 names.append(name)
         return names
-
-def process_Tlog(filepath: Path, build_subtype: BuildSubtype):
-    """Parse and print a Tlog file (backward-compatible wrapper)."""
-    let tlog: Tlog = Tlog(filepath, build_subtype)
-    tlog.show(ONLY_NEW)
-    if tlog.new_failing'Length > 0 or tlog.crashed'Length > 0:
-        HAS_NEW_FAILURES = True
 
 def echo_emacs(filepath: Path):
     """Print an #emacs: link for FILEPATH."""
@@ -817,27 +835,37 @@ if __name__ == "__main__":
     here.dir = tmp / "TACT_CONFIG.30.0.0.133"
     for name in ["build_G!31.IP.L8", "build_G!31.OP.L8", "build_G!92.IP.L8", "build_default_Linux"]:
         (here.dir / name / "saved_logs").mkdir()
+    # the IP build has a Tlog, of 'in' for the normal pass
+    let ip_tlog: Path = here.dir / "build_G!31.IP.L8" / "saved_logs" / "tacot_corico.LATEST" / "TACT_REGRESS_LOGS" / "LATEST" / "Tlog-in.log"
+    ip_tlog.parent.mkdir()
+    run(["cp", str(samples / "Tlog-in.log"), str(ip_tlog)])
     here.find_builds()
     assert [b.name for b in here.builds] == ["build_G!31.IP.L8", "build_G!31.OP.L8"]
     assert here.builds[1].btype == OP and here.builds[1].baseline_nr == "30.0.0.133"
-    assert here.builds[0].tlog_path(in_test, normal) == here.dir / "build_G!31.IP.L8" / "saved_logs" / "tacot_corico.LATEST" / "TACT_REGRESS_LOGS" / "LATEST" / "Tlog-in.log"
+    assert here.builds[0].tlog_path(in_test, normal) == ip_tlog
+    # read when the build is found, and asked of it after
+    assert [t.file for t in here.builds[0].tlogs] == [ip_tlog]
+    assert len(here.builds[1].tlogs) == 0
+    let in_tlog: ?Tlog = here.builds[0].tlog(in_test, normal)
+    assert in_tlog is not None and in_tlog.reference == "30.0.0.131"
+    assert here.builds[0].tlog(in_test, mrun) is None and here.builds[0].tlog(mono, normal) is None
     for name in [PERFORMANCE, PREQUAL]:
         run(["cp", str(samples / name), str(here.dir / "build_G!31.OP.L8" / "saved_logs")])
     here.find_replays()
     assert [r.rtype for r in here.replays] == [run_prequal, performance]   # in canonical order
 
     # --- a Tlog: the real one -----------------------------------------------
-    let tlog: Tlog = Tlog(samples / "Tlog-in.log", in_test)
+    let real: Tlog = Tlog(samples / "Tlog-in.log", in_test)
     # "WARNING: ACTUAL reference baseline : 30.0.0.131 !!!" -- not the one expected
-    assert tlog.reference == "30.0.0.131"
-    assert len(tlog.new_failing) == 1 and tlog.new_failing[0].startswith("FAILED test_an2_fltgen_aro_id.el ")
-    assert tlog.failed_test_names() == ["test_an2_fltgen_aro_id.el"]
-    assert len(tlog.crashed) == 0 and len(tlog.not_run) == 0
+    assert real.reference == "30.0.0.131"
+    assert len(real.new_failing) == 1 and real.new_failing[0].startswith("FAILED test_an2_fltgen_aro_id.el ")
+    assert real.failed_test_names() == ["test_an2_fltgen_aro_id.el"]
+    assert len(real.crashed) == 0 and len(real.not_run) == 0
     # still failing: the Worse / Same / Better lines come with the tests
-    assert len(tlog.still_fail) == 6
-    assert tlog.still_fail[0] == "Worse : nb = 1" and tlog.still_fail[5] == "Better : nb = 0"
-    assert [line.split()[1] for line in tlog.now_ok] == ["test_an2_concerned_aro_anu_list.el", "test_aro_transmit_via_esb.el", "test_fullsysonly_secondary_forced_switch.el"]
-    assert not tlog.all_ok()
+    assert len(real.still_fail) == 6
+    assert real.still_fail[0] == "Worse : nb = 1" and real.still_fail[5] == "Better : nb = 0"
+    assert [line.split()[1] for line in real.now_ok] == ["test_an2_concerned_aro_anu_list.el", "test_aro_transmit_via_esb.el", "test_fullsysonly_secondary_forced_switch.el"]
+    assert not real.all_ok()
 
     # what the real one has none of: a mono build, a section repeated
     let other: Path = tmp / "Tlog-mono.log"
