@@ -19,6 +19,8 @@
 | Ordinal-keyed mapping | `[O]T` — `O` an enum, `bool`, `char`, or a subrange |
 | Dict / set / enum-indexed array | `{K}V` / `{}T` / `[E]T` |
 | Optional | `?T` |
+| Failure type | `type F is failure record:` + fields |
+| Value or failure | `T \| F` — test with `r is F`, chain with `do:` |
 | Function type | `[(T, U)]R` |
 | Empty dict / empty set | `{:}` / `{}` |
 | Inclusive / exclusive range | `lo .. hi` / `lo ..< hi` |

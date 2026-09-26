@@ -249,33 +249,19 @@ def _ensure_is_a_helper():
 
 
 def split_either(annotation):
-    """(T, E) of a Python annotation "T | E" -- a routine's or a variable's
-    `T | E` -- or None: not a union, or `T | None`, which is ?T."""
-    depth, parts, cur = 0, [], []
-    for ch in annotation:
-        if ch in "([{":
-            depth += 1
-        elif ch in ")]}":
-            depth -= 1
-        if ch == "|" and depth == 0:
-            parts.append("".join(cur).strip())
-            cur = []
-        else:
-            cur.append(ch)
-    parts.append("".join(cur).strip())
-    if len(parts) != 2 or parts[1] == "None":
+    """(T, F) of a Python annotation that is a `T | F`, F a failure type,
+    or None for any other annotation -- ?T's `T | None` included."""
+    from hek_parsec import ParserState
+    from ady_stmt import split_top_level_bar
+    parts = split_top_level_bar(annotation)
+    if len(parts) != 2:
         return None
-    return parts[0], parts[1]
-
-
-def _runtime_kind(py_type):
-    """What a value of PY_TYPE is at run time, for telling the two sides of
-    a `T | E` apart: its class, a parameterised one by its origin, and a
-    Path by str, which it is."""
-    t = py_type.strip()
-    if "[" in t:
-        t = t[:t.index("[")]
-    return {"Path": "str", "Sequence": "list"}.get(t, t)
+    failures = getattr(ParserState, "failure_types", set())
+    if parts[1] in failures and parts[0] not in failures:
+        return parts[0], parts[1]
+    if parts[0] in failures and parts[1] not in failures:
+        return parts[1], parts[0]
+    return None
 
 
 
@@ -509,23 +495,17 @@ def to_py(self, prec=None):
 
 @method(union_type)
 def to_py(self, prec=None):
-    """union_type: T '|' E -> Python: the union itself. A `T | E` value is
-    just the T or the E, unboxed, so the two must be told apart by their
-    class at run time; `T | None` is Python's own spelling of ?T."""
+    """union_type: A '|' B -> Python: the union as written. A `T | F`, F a
+    failure type, holds the T or the F itself, unboxed -- `r is F` tells
+    them apart by class, which is why a failure is a record of its own;
+    `T | None` is Python's own spelling of ?T."""
+    from ady_stmt import either_sides
+    from hek_parsec import ParserState
     parts = [self.nodes[0].to_py()]
     for seq in self.nodes[1].nodes:
         if hasattr(seq, "nodes") and seq.nodes:
             parts.append(seq.nodes[0].to_py())
-    if len(parts) != 2:
-        raise SyntaxError(
-            f"'{' | '.join(parts)}': a routine returns one thing or the "
-            f"other -- two sides, the value's type and the failure's")
-    if parts[1] != "None" and parts[0] != "None":
-        if _runtime_kind(parts[0]) == _runtime_kind(parts[1]):
-            raise SyntaxError(
-                f"'{parts[0]} | {parts[1]}': the two sides must be different "
-                f"kinds of value, or nothing can tell which one was returned "
-                f"-- make the failure a record")
+    either_sides(parts, getattr(ParserState, "failure_types", set()))
     return f"{parts[0]} | {parts[1]}"
 
 

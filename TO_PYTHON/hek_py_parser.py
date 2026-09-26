@@ -232,8 +232,8 @@ def to_py(self, indent=0):
         _call = _re_do.match(r"^([A-Za-z_]\w*)\(", expr.strip())
         if _call and _call.group(1) in getattr(ParserState, "result_procs", set()):
             raise SyntaxError(
-                f"do: step '{expr}' returns a `T | E`; a routine binding "
-                f"one must return a `T | E` too, to pass its failure on")
+                f"do: step '{expr}' returns a `T | F`; a routine binding "
+                f"one must return a `T | F` too, to pass its failure on")
         leave = "return None" if ret else "return"
         if name:
             lines.append(f"{ind}{name} = {expr}")

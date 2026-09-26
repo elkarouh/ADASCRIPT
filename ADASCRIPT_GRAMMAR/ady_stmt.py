@@ -241,6 +241,90 @@ import re as _re_dup
 _TYPE_DECL = _re_dup.compile(r"(?:type|class)\s+([A-Za-z_]\w*)\b")
 
 
+_FAILURE_DECL = _re_dup.compile(
+    r"^[ \t]*type[ \t]+([A-Za-z_]\w*)\b[^\n]*?[ \t](?:is|=)[ \t]+failure[ \t]+(\w+)",
+    _re_dup.MULTILINE)
+
+
+def scan_failure_types(code):
+    """The failure types CODE declares -- `type X is failure record:` --
+    which make X the failure side of any `T | X`. A record only: a failure
+    has to say what went wrong, and on the Python backend it has to be a
+    class of its own for `r is X` to tell it from the value."""
+    names = set()
+    for m in _FAILURE_DECL.finditer(code):
+        if m.group(2) != "record":
+            raise SyntaxError(
+                f"type '{m.group(1)}': only a record can be a failure type "
+                f"-- `type {m.group(1)} is failure record:`")
+        names.add(m.group(1))
+    return names
+
+
+_RETURN_DECL = _re_dup.compile(
+    r"^[ \t]*def[ \t]+(\w+)[ \t]*\((?:[^()]|\([^()]*\))*\)\s*->\s*"
+    r"([^\n#]*?)\s*:[ \t]*(?:#.*)?$", _re_dup.MULTILINE)
+
+
+def scan_return_types(code):
+    """Every `def`'s return annotation, as written, by routine name."""
+    return {m.group(1): m.group(2) for m in _RETURN_DECL.finditer(code)}
+
+
+def split_top_level_bar(text):
+    """TEXT split at each `|` outside brackets, each side stripped."""
+    depth, parts, cur = 0, [], []
+    for ch in text:
+        if ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+        if ch == "|" and depth == 0:
+            parts.append("".join(cur).strip())
+            cur = []
+        else:
+            cur.append(ch)
+    parts.append("".join(cur).strip())
+    return parts
+
+
+def either_sides(parts, failure_types):
+    """What the two sides of a `|` type mean: ("either", value, failure),
+    ("optional", value, None) for `T | None` in either order, or a
+    SyntaxError. Order does not matter: the failure side is the one whose
+    type is declared `failure`."""
+    shown = " | ".join(parts)
+    if len(parts) != 2:
+        raise SyntaxError(
+            f"'{shown}': a routine returns its value or a failure -- two "
+            f"sides, one of them a failure type")
+    a, b = parts
+    fa, fb = a in failure_types, b in failure_types
+    if fa and fb:
+        raise SyntaxError(f"'{shown}': both sides are failure types")
+    if fa:
+        return ("either", b, a)
+    if fb:
+        return ("either", a, b)
+    if b == "None" or a == "None":
+        return ("optional", a if b == "None" else b, None)
+    raise SyntaxError(
+        f"'{shown}': one side must be a failure type, declared "
+        f"`type X is failure record:` -- for a value that may be absent, "
+        f"write ?T")
+
+
+def either_procs(return_types, failure_types):
+    """The routines among RETURN_TYPES that return `T | F`, F a failure."""
+    out = set()
+    for name, text in return_types.items():
+        parts = split_top_level_bar(text)
+        if len(parts) == 2 and (parts[0] in failure_types
+                                or parts[1] in failure_types):
+            out.add(name)
+    return out
+
+
 def check_duplicate_types(code):
     """Refuse a module that declares the same type name twice at its top
     level (`type X ...`, `class X ...`). Text inside triple-quoted strings

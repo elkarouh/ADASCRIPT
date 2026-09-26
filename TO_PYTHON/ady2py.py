@@ -281,20 +281,20 @@ def translate(code):
     if not code.strip():
         return code
 
+    from ady_stmt import scan_failure_types, scan_return_types, either_procs
+    _failures = scan_failure_types(code)   # before the parse: see ady2nim
     stmts, leading, trailing = parse_module(code)
 
-    # The types this module declares, for `x is SomeType`; and the routines
-    # declared `-> T | E`, for refusing one as a ?T step in a do: block.
+    # The types this module declares, for `x is SomeType`; its failure
+    # types, which say which side of a `|` is the failure; and the routines
+    # returning `T | F`, for refusing one as a ?T step in a do: block.
     import re as _re_rp
     from hek_parsec import ParserState as _PS_rp
     _PS_rp.py_type_names = set(_re_rp.findall(
         r"^[ \t]*(?:type|class)[ \t]+([A-Za-z_]\w*)", code, _re_rp.MULTILINE))
-    _PS_rp.result_procs = set(
-        _m.group(1) for _m in _re_rp.finditer(
-            r"^[ \t]*def[ \t]+(\w+)[ \t]*\((?:[^()]|\([^()]*\))*\)\s*->\s*"
-            r"([^\n#]*?)\s*:[ \t]*(?:#.*)?$", code, _re_rp.MULTILINE)
-        if "|" in _m.group(2)
-        and _m.group(2).rsplit("|", 1)[1].strip() != "None")
+    _PS_rp.failure_types = _failures
+    _PS_rp.result_procs = either_procs(scan_return_types(code),
+                                       _PS_rp.failure_types)
 
     # Which names live at module level has to be known before the first
     # function is emitted, since a function may assign one declared below it.

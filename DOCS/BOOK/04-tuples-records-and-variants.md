@@ -112,6 +112,12 @@ type Env_T is record:
     outer:    Env_T
 ```
 
+A record declared `failure` — `type Failure_T is failure record:` — is an
+ordinary record that can also be the failure side of a function's return
+type, `-> int | Failure_T`: the function returns either an int or a
+Failure_T saying why there is none. Section 10.12 is how to write code in
+that style.
+
 ## 4.3 Variant records — the discriminated union
 
 When a type is "one of several shapes", Ada and Nim use a record whose field

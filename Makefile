@@ -503,7 +503,17 @@ test: compile
 
 	@# do: and `T | E` say the same on both backends: the Python one
 	@# used to drop a do: block altogether, leaving its names unbound.
-	@echo "=== do: and T | E, both backends ==="
+	@echo "=== do: and T | F, both backends ==="
+	@printf 'var x: int | str\n' > $(TMPDIR)/ady_no_failure.ady
+	@for tr in TO_NIM/ady2nim.py TO_PYTHON/ady2py.py; do \
+	    printf '  %-42s' "no failure side ($$(basename $$tr .py))"; \
+	    if $(PYTHON) $(CURDIR)/$$tr $(TMPDIR)/ady_no_failure.ady > $(TMPDIR)/ady_no_failure.out 2>&1; then \
+	        echo "FAIL (accepted)"; exit 1; \
+	    fi; \
+	    grep -q "one side must be a failure type" $(TMPDIR)/ady_no_failure.out \
+	        && echo OK || { echo FAIL; cat $(TMPDIR)/ady_no_failure.out; exit 1; }; \
+	done
+	@rm -f $(TMPDIR)/ady_no_failure.ady $(TMPDIR)/ady_no_failure.out
 	@for t in test_do_block test_result; do \
 	    printf '  %-42s' "$$t.ady (python = nim)"; \
 	    $(EXDIR)/$$t > $(TMPDIR)/ady_$$t.nim.out 2>&1 || { echo "FAIL (nim)"; exit 1; }; \

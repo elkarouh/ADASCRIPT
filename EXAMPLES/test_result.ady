@@ -1,12 +1,14 @@
 #!/usr/bin/env ady2nim
-"""Test: `T | E` -- a routine that returns either a T or an E.
+"""Test: `T | F` -- a routine that returns either a T or a failure F.
 
+A failure type is a record declared `type F is failure record:`. Then
 `-> int | Failure_T` returns an int, or a Failure_T saying why there is
-none. What is returned goes on the side its type says; `r is Failure_T`
-asks which side r holds, and the test narrows r as `x is None` narrows a
-?T: past `if r is Failure_T: return ...`, r is the int. A `do:` block
-chains steps, returning the first failure as it is. `None | E` is a step
-that can only fail: falling off its end is success.
+none -- in either order, since the declaration, not the position, says
+which side is the failure. What is returned goes on the side its type
+says; `r is Failure_T` asks which side r holds, and the test narrows r as
+`x is None` narrows a ?T: past `if r is Failure_T: return ...`, r is the
+int. A `do:` block chains steps, returning the first failure as it is.
+`None | F` is a step that can only fail: falling off its end is success.
 
 The output is compared between the two backends by `make test`, so every
 line printed here must read the same on both.
@@ -16,7 +18,7 @@ line printed here must read the same on both.
 
 type ErrKind_T is enum BAD_NUMBER, DIVIDE_BY_ZERO, NOT_POSITIVE
 
-type Failure_T is record:
+type Failure_T is failure record:
     kind:   ErrKind_T    # which failure
     detail: str          # what it needs to say so
 
@@ -84,38 +86,55 @@ print "test2 OK"
 
 # ─── test 3: None | E -- bare return and falling off the end succeed ───────
 
-def validate(n: int) -> None | str:
+def validate(n: int) -> None | Failure_T:
     if n == 0:
         return                           # success
     if n < 0:
-        return "negative"                # a str: the failure side
+        return fail(NOT_POSITIVE, "negative")   # a Failure_T: the failure
     print f"validated {n}"               # ...and falls off the end: success
 
 assert validate(0) is None
-assert validate(5) is None
-let v: None | str = validate(-1)
-if v is str:
-    print f"refused: {v}"
+assert validate(5) is not Failure_T
+let v: None | Failure_T = validate(-1)
+if v is Failure_T:
+    print f"refused: {v.detail}"
 print "test3 OK"
 
 # ─── test 4: declarations and assignment take the side of their value ──────
 
-var r: int | str = 7                     # an int: the value side
-assert r is int
-r = "gone"                               # a str: the failure side
+var r: str | Failure_T = "seven"         # a str: the value side
 assert r is str
-r = 3
-if r is int:
-    assert r + 1 == 4
-var zero: int | str                      # no value: the value side's zero
+r = fail(BAD_NUMBER, "gone")             # a Failure_T: the failure side
+assert r is Failure_T
+r = "three"
+if r is str:
+    assert r + "!" == "three!"
+var zero: int | Failure_T                # no value: the value side's zero
 if zero is int:
     assert zero == 0
 print r
 print "test4 OK"
 
-# ─── test 5: collecting every failure instead of stopping at the first ─────
+# ─── test 5: the order of the sides does not matter ─────────────────────────
 
-type Problems_T is record:
+def halve(n: int) -> Failure_T | int:    # the failure written first
+    if n % 2 == 1:
+        return fail(BAD_NUMBER, f"{n} is odd")
+    return n // 2
+
+def quarter(n: int) -> int | Failure_T:
+    do:
+        h <- halve(n)                    # the int, or return the failure
+        q <- halve(h)
+    return q
+
+print describe(quarter(12))
+print describe(quarter(6))
+print "test5 OK"
+
+# ─── test 6: collecting every failure instead of stopping at the first ─────
+
+type Problems_T is failure record:
     bad: []str
 
 def parse_all(tokens: []str) -> []int | Problems_T:
@@ -140,6 +159,6 @@ if some_bad is Problems_T:
     assert len(some_bad.bad) == 2
     print some_bad.bad[0]
     print some_bad.bad[1]
-print "test5 OK"
+print "test6 OK"
 
-print "all T | E tests passed"
+print "all T | F tests passed"

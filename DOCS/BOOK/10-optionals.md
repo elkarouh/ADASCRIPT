@@ -14,8 +14,8 @@ machinery. You never write `some()`, `none()`, `.get()`, `.isSome` or
 The first half of this chapter is the type: how to declare it, test it, and
 get the value out. The second half (10.8 onward) is what `?T` *is* — the
 Maybe monad — and the shapes that fall out of that: bind chains, the `do:`
-block, fmap, traverse, and `T | E`, the sibling for when "nothing" is
-not a good enough answer.
+block, fmap, traverse, and `T | F` — a value or a *failure* — the sibling
+for when "nothing" is not a good enough answer.
 
 ## 10.1 Declaring optionals
 
@@ -523,8 +523,8 @@ The rules are short:
 - bindings are plain `let`s of type `T`, in scope for the rest of the
   function.
 
-The same block chains `T | E` steps, in a function that returns a
-Result; 10.12 has the details. A line without `x <-` is a *bare step*: it
+The same block chains `T | F` steps, F a failure type, in a function
+that returns one; 10.12 has the details. A line without `x <-` is a *bare step*: it
 is checked like any other and binds nothing.
 
 Three spellings of one pattern, then:
@@ -567,38 +567,58 @@ for t in tokens:
         loose.append(v)
 ```
 
-## 10.12 When "nothing" is not enough: `T | E`
+## 10.12 When "nothing" is not enough: failures
 
 `?T` records absence but not its reason. When the caller needs the reason —
 validation, I/O, a shell command that failed, anything a user will read —
-declare the function `-> T | E`: it returns *either* a `T` or an `E`, the
-value or the failure that says why there is none. This is the Either monad,
-and the style it gives is *railway-oriented programming*: every step runs on
-the value track, and the first failure switches to the other one, carrying
-its reason unchanged to whoever decides what to do about it.
+the function returns **either** its value **or** a failure that says why
+there is none:
 
-```
-T | E   ──▶  Python:  T | E          (the value itself, the T or the E)
-        ──▶  Nim:     Result[T, E]   (stdlib.nim's variant object)
+```python
+def read_number(s: str) -> int | Failure_T:
 ```
 
-`E` is any type — an enum is enough to say *which* failure, a record says
-what it needs to report it — with one rule: the two sides must be different
-kinds of value, since on Python nothing but its class says which one a value
-is. `[]int | []str` is refused; make the failure a record. `T | None` is not
-this at all: it keeps Python's meaning, `?T`. `EXAMPLES/test_result.ady` is
-the spec:
+This is railway-oriented programming. Every step runs on the value track,
+and the first failure switches to the failure track and rides it, unchanged,
+to the one place that decides what to tell the user. Code in this style has
+five parts, in this order.
+
+```
+int | Failure_T   ──▶  Python:  int | Failure_T   (the int or the Failure_T itself)
+                  ──▶  Nim:     Result[int, Failure_T]   (stdlib.nim's variant object)
+```
+
+### 1. Declare what a failure looks like
+
+A failure is a record declared `failure`. An enum says *which* failure; the
+fields say what the report needs. One failure type is usually enough for a
+whole program. `EXAMPLES/test_result.ady`:
 
 ```python
 type ErrKind_T is enum BAD_NUMBER, DIVIDE_BY_ZERO, NOT_POSITIVE
 
-type Failure_T is record:
+type Failure_T is failure record:
     kind:   ErrKind_T    # which failure
     detail: str          # what it needs to say so
+
+def fail(kind: ErrKind_T, detail: str) -> Failure_T:
+    return Failure_T(kind=kind, detail=detail)
 ```
 
-**Returning.** What is returned goes on the side its type says. There is
-nothing to wrap: return the int, or return the failure.
+The word `failure` is what makes the `|` mean *value or failure*. `int |
+Failure_T` and `Failure_T | int` are the same type: the declaration, not the
+position, says which side is the failure. A `|` with no failure side is
+refused, and so is one whose two sides both are — `int | str` is not a type
+Adascript has. (`T | None` is the one exception: it keeps Python's meaning,
+`?T`.) Only a record can be a failure: it has to say what went wrong, and on
+the Python backend it has to be a class of its own, since that is all that
+tells it from the value.
+
+### 2. Return the value, or return a failure
+
+Declare the function `-> T | Failure_T` and return whichever applies. There
+is nothing to wrap: a value whose type is the failure type is the failure,
+anything else is the value.
 
 ```python
 def read_number(s: str) -> int | Failure_T:
@@ -610,35 +630,31 @@ def read_number(s: str) -> int | Failure_T:
     return int(s)
 ```
 
-```nim
-proc read_number(s: string): Result[int, Failure_T] =
-    if len(s) == 0:
-        return Result[int, Failure_T].err(fail(BAD_NUMBER, "empty"))
-    ...
-    return Result[int, Failure_T].ok(s.parseInt())
-```
-
-A value whose type is `E` is the failure; anything else is the value. A call
-of another function returning the same `T | E` — wherever it is defined —
-is passed on as it is. The same goes for an annotated `let` or `var`, and an
-assignment to one: `var r: int | str = 7` holds an int, and `r = "gone"`
-then holds the str.
-
-**A step that can only fail.** `None | E` has no value to return. A bare
-`return`, and falling off the end, are success:
+A step that changes something and has nothing to give back returns
+`None | Failure_T`. A bare `return`, and falling off the end, are success.
+From `EXAMPLES/rsync_time_machine.ady`, where a local `mkdir` reports its own
+exit status and a remote one goes through `run_checked`:
 
 ```python
-def check_positive(n: int) -> None | Failure_T:
-    """A step with nothing to return: it can only fail."""
-    if n <= 0:
-        return fail(NOT_POSITIVE, f"got {n}")
+def mkdir_p(path: Path, ssh: ?SSH = None) -> None | Failure_T:
+    if ssh is None:
+        let r = shell: mkdir -p -- {!path}
+        return checked(r, f"mkdir -p -- '{path}'")
+    do:
+        run_checked(f"mkdir -p -- '{path}'", ssh)
 ```
 
-**Asking which.** `r is Failure_T` asks which side `r` holds, and it narrows
-`r` exactly as `x is None` narrows a `?T` (10.3): inside the test `r` is the
-failure, and past a guard that leaves — or in the `else` — it is the value.
-A `case` over the failure's kind is exhaustive, so a new kind nobody reports
-is a compile error:
+Returning a call of another function with the same `T | Failure_T` passes
+its result on as it is — the `return checked(...)` above. Declarations and
+assignments work the same way: `var r: str | Failure_T = "seven"` holds a
+str, and `r = fail(BAD_NUMBER, "gone")` then holds the failure.
+
+### 3. Test before you use
+
+The value cannot be used straight away, because it might be the failure.
+Ask with `is`. The test *narrows* the name, exactly as `x is None` narrows a
+`?T` (10.3): inside the test it is the failure, and past a guard that leaves
+— or in the `else` — it is the value, with nothing to unwrap.
 
 ```python
 def describe(r: int | Failure_T) -> str:
@@ -650,13 +666,16 @@ def describe(r: int | Failure_T) -> str:
     return f"ok {r}"                        # r is the int from here on
 ```
 
-`r is not Failure_T`, `r is int` and, for `None | E`, `r is None` ask the
-same question from the other side. Printed, the value is what it holds.
+`r is not Failure_T` asks the other way round, `r is int` names the value
+side, and for a `None | Failure_T`, `r is None` means it succeeded. Using the
+value with no test at all is a compile error on Nim, as it is for `?T`.
 
-**Chaining.** The `do:` block of 10.10 works the same way in a function
-returning a `T | E`: `x <- step` binds the step's value, or returns its
-failure from the whole function, as it is. A bare step — here the
-`None | E` one — is checked and binds nothing:
+### 4. Pass failures on with `do:`
+
+Most functions that call fallible ones should not handle the failure — only
+pass it up. That is the `do:` block of 10.10: `x <- step` binds the step's
+value, or returns its failure from the whole function, as it is. A line
+without `x <-` is a step with no value, checked and nothing else:
 
 ```python
 def ratio(raw_a: str, raw_b: str) -> int | Failure_T:
@@ -668,16 +687,57 @@ def ratio(raw_a: str, raw_b: str) -> int | Failure_T:
     return q
 ```
 
-The steps all fail with the function's own `E`. A `T | E` step in a function
-that returns `?T`, or nothing, is refused, since there is nowhere for its
-failure to go.
-
-**Every failure, not the first.** A `do:` block stops at the first failure,
-which is right for a pipeline and wrong for validation, where the user wants
-every bad field at once. That is not a bind chain and should not look like
-one — collect the failures, as 10.11 collects successes:
+The function containing a `do:` must itself return `... | Failure_T` —
+that is where a failure goes — and its steps must fail with the same
+failure type. A `T | Failure_T` step in a function returning `?T`, or
+nothing, is refused. A chain of steps that must all succeed, in order, is
+one `do:` block; `rsync_time_machine.ady` ends a backup with one, so that its
+lock file is removed only once the `latest` link is in place:
 
 ```python
+    do:
+        rm_file(dest_f / "latest", dest_is_ssh(ssh))
+        ln_s(Path(dest.name), dest_f / "latest", dest_is_ssh(ssh))
+        rm_file(inprogress_file, ssh)
+```
+
+### 5. Report once, at the top
+
+Low-level functions only *return* failures. One place at the top of the
+program decides what to print and which exit status to give. A `case` over
+the failure's kind is exhaustive, so a new kind of failure that nobody
+reports is a compile error rather than a silent gap:
+
+```python
+def report(f: Failure_T) -> None:
+    """What went wrong, said once, here, for every step that can fail."""
+    case f.kind:
+        when CMD_FAILED:
+            log(f"Command failed: {f.detail}", ERROR)
+            if f.stderr:
+                log(f.stderr, ERROR)
+        ...
+
+def main() -> None:
+    ...
+    let outcome: None | Failure_T = backup(...)
+    if outcome is Failure_T:
+        report(outcome)
+        quit(1)
+```
+
+### Every failure, not the first
+
+A `do:` block stops at the first failure — right for a pipeline, wrong for
+validation, where the user wants every bad field at once. That is not a
+bind chain and should not look like one: collect the failures in a loop, as
+10.11 collects successes, and return them together in a failure of their
+own:
+
+```python
+type Problems_T is failure record:
+    bad: []str
+
 def parse_all(tokens: []str) -> []int | Problems_T:
     """Validation that reports every bad token, not only the first one."""
     var good: []int = []
@@ -693,22 +753,37 @@ def parse_all(tokens: []str) -> []int | Problems_T:
     return good
 ```
 
+### Rules of thumb
+
+| Situation | Write |
+|---|---|
+| Something may be absent, and nobody needs to know why | `?T`, tested with `is None` |
+| The caller needs to know *why* it failed | `T \| Failure_T` |
+| A step that only changes something | `None \| Failure_T` |
+| Passing a failure upward | a `do:` block, `x <- f()` |
+| Deciding what the user sees, and the exit status | once, at the top: `case` over the kind |
+| A bug that should never happen | `raise` or `die` — not a failure |
+| A query command — `find`, `test -e`, `ps \| grep` | not a failure: its exit status is its answer |
+
+The transpiler refuses:
+
+- a `|` with no failure side (`int | str`), or with two (`A_T | B_T`);
+- `failure` on anything but a record;
+- more than two sides (`int | str | Failure_T`);
+- a `T | Failure_T` step in the `do:` block of a function that cannot return
+  the failure.
+
 **Which to use.**
 
-| | `?T` (Maybe) | `T \| E` (Either) |
+| | `?T` (Maybe) | `T \| F` (Either) |
 |---|---|---|
-| Why it failed | not recorded | the `E` value |
+| Why it failed | not recorded | the failure value |
 | Returning | the value, or `None` | the value, or the failure |
-| Asking | `x is None` | `r is E` |
+| Asking | `x is None` | `r is F` |
 | Narrowing after a guard | yes | yes |
 | `do:` chains | yes | yes |
 | `or`-default, walrus | yes | no |
 | Ideal for | lookup, find, parse | validation, I/O, anything reported to a user |
-
-And the rule that goes with it: not every function should return a `T | E`.
-A failure the caller can do something about is one; a broken invariant is
-still an exception, or `die`. Convert at the boundaries — failures as values
-inside the program, one decision about reporting and exit codes at its edge.
 
 ## 10.13 When *not* to use `?T`
 
@@ -756,12 +831,13 @@ know; `?int` is one the compiler enforces.
 | `$?NAME` | `os.environ.get("NAME")` | `adascriptEnvOpt("NAME")` — an `Option[string]` |
 | `?RefClass` | `RefClass \| None` | `RefClass` (nil-able) |
 | `do: x <- f()` | guard chain | `if …isNone: return none(R)` per step |
-| `T \| E` | `T \| E` | `Result[T, E]` (stdlib.nim) |
-| `None \| E` | `None \| E` | `Result[void, E]` |
-| `return v` (in `-> T \| E`) | unchanged | `return Result[T, E].ok(v)`, or `.err(v)` when v is an E |
-| `r is E` / `r is not E` | `_is_a(r, E)` (an isinstance) | `r.is_err` / `r.is_ok` |
-| `r` after `if r is E: return` | unchanged | `r.value` |
-| `do: x <- f()` (in `-> T \| E`) | `if _is_a(x, E): return x` per step | `if t.is_err: return R.err(t.error)` per step |
+| `type F is failure record:` | a dataclass | an object |
+| `T \| F` (F a failure) | `T \| F` | `Result[T, F]` (stdlib.nim), either order |
+| `None \| F` | `None \| F` | `Result[void, F]` |
+| `return v` (in `-> T \| F`) | unchanged | `return Result[T, F].ok(v)`, or `.err(v)` when v is an F |
+| `r is F` / `r is not F` | `_is_a(r, F)` (an isinstance) | `r.is_err` / `r.is_ok` |
+| `r` after `if r is F: return` | unchanged | `r.value` |
+| `do: x <- f()` (in `-> T \| F`) | `if _is_a(x, F): return x` per step | `if t.is_err: return R.err(t.error)` per step |
 
 ---
 

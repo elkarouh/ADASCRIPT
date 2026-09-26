@@ -49,7 +49,7 @@ the missing type system are what change.
 | 7 | [Regular Expressions as a Language Feature](07-regex.md) | `test_regex.ady`, `awk_example.ady`, `spell.ady` |
 | 8 | [Functions, Closures, and Generators](08-functions-and-generators.md) | `phonecode.ady`, `shortest_path.ady`, `spell.ady` |
 | 9 | [Classes, Generics, and Inheritance](09-classes-and-generics.md) | `phonecode.ady`, `lv.ady`, `shortest_path.ady`, `test_awk.ady` |
-| 10 | [Optional Types and the Maybe Monad](10-optionals.md) | `graph.ady`, `phonecode.ady`, `test_do_block.ady` |
+| 10 | [Optional Types and the Maybe Monad](10-optionals.md) | `graph.ady`, `phonecode.ady`, `test_do_block.ady`, `test_result.ady`, `rsync_time_machine.ady` |
 | 11 | [Shell Integration: Adascript as a Better Bash](11-shell-and-scripting.md) | `fsel.ady`, `sv.ady`, `show_status.ady`, `test_shell_block.ady` |
 | 12 | [Living on Two Backends](12-two-backends.md) | `test_ownership.ady`, `rsync_time_machine.ady`, `shortest_path.ady` |
 | 13 | [Memory Ownership](13-memory-ownership.md) | `ownership_tour.ady`, `qlearning.ady` |

@@ -295,52 +295,24 @@ def to_nim(self, prec=None):
     return f"Option[{inner}]"
 
 
-def _union_sides(node, emit):
-    """The two sides of `T | E`, emitted; a SyntaxError for any other count."""
-    parts = [emit(node.nodes[0])]
-    for seq in node.nodes[1].nodes:
-        if hasattr(seq, "nodes") and seq.nodes:
-            parts.append(emit(seq.nodes[0]))
-    if len(parts) != 2:
-        raise SyntaxError(
-            f"'{' | '.join(parts)}': a Result has two sides, the value's "
-            f"type and the error's -- name a record or an enum for the error")
-    return parts
-
-
-def _nim_kind(nim_type):
-    """What a value of NIM_TYPE is at run time on the Python backend: a
-    parameterised type by its constructor, a Path by string, which it is
-    there."""
-    t = nim_type.strip()
-    if t.startswith("("):
-        return "tuple"
-    if "[" in t:
-        t = t[:t.index("[")]
-    return {"Path": "string", "openArray": "seq", "HashSet": "set"}.get(t, t)
-
-
 @method(union_type)
 def to_nim(self, prec=None):
-    """union_type: T '|' E -> Nim: stdlib.nim's Result[T, E]. `None | E`, a
-    step that can only fail, is Result[void, E]; `T | None` is Python's
-    spelling of ?T and stays Option[T]."""
-    value, error = _union_sides(self, lambda n: n.to_nim())
-    if error in ("nil", "void", "None"):
+    """union_type: A '|' B -> Nim. With one side a failure type (`type F is
+    failure record:`), stdlib.nim's Result[T, F] whichever order the two
+    are written in -- Result[void, F] when T is None. `T | None` is ?T."""
+    from ady_stmt import either_sides
+    parts = [self.nodes[0].to_nim()]
+    for seq in self.nodes[1].nodes:
+        if hasattr(seq, "nodes") and seq.nodes:
+            parts.append(seq.nodes[0].to_nim())
+    parts = ["None" if p in ("nil", "void") else p for p in parts]
+    kind, value, failure = either_sides(
+        parts, getattr(ParserState, "failure_types", set()))
+    if kind == "optional":
         ParserState.nim_imports.add("options")
         return f"Option[{value}]"
-    # The Python backend holds the T or the E itself and tells them apart
-    # by class, so the two sides have to be different kinds of value there
-    # -- and so here, or one program would mean two things.
-    if value not in ("nil", "void", "None") and _nim_kind(value) == _nim_kind(error):
-        raise SyntaxError(
-            f"'{value} | {error}': the two sides must be different kinds of "
-            f"value, or nothing can tell which one was returned -- make the "
-            f"failure a record")
     ParserState.nim_imports.add("stdlib")
-    if value in ("nil", "void", "None"):
-        value = "void"
-    return f"Result[{value}, {error}]"
+    return f"Result[{'void' if value == 'None' else value}, {failure}]"
 
 
 @method(lent_type)

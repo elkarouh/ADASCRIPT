@@ -295,26 +295,26 @@ history of this file if the reasoning behind one of them is ever wanted.
 
 ## Monad support improvements (high ROI)
 
-### `T | E` -- what is left
+### `T | F` (value or failure) -- what is left
 
-`T | E` is built in (book 10.12, `EXAMPLES/test_result.ady`): a routine
-returns either a T or an E, the side chosen by the returned value's type;
-`r is E` asks which and narrows; `None | E`; `do:` over them with bare
-steps. Not yet:
+`T | F`, F a record declared `type F is failure record:`, is built in
+(book 10.12, `EXAMPLES/test_result.ady`, `rsync_time_machine.ady`): a
+routine returns either a T or an F, in either order; `r is F` asks which
+and narrows; `None | F`; `do:` over them with bare steps. Not yet:
 
 - [ ] `case r:` with `when Failure_T:` / `when int:` arms -- today it is
       `if r is Failure_T:`.
-- [ ] a `?T` step inside a `T | E` chain: `x <- lookup(k) else fail(...)`,
+- [ ] a `?T` step inside a `T | F` chain: `x <- lookup(k) else fail(...)`,
       the failure to use when the optional is absent. Today the step has
       to be converted by hand first.
-- [ ] Nim: a `T | E` passed as an *argument* whose value is a plain T or E
-      -- `f(3)` where f takes `int | str`. The constructor is typed from a
+- [ ] Nim: a `T | F` passed as an *argument* whose value is a plain T or E
+      -- `f(3)` where f takes `int | Failure_T`. The constructor is typed from a
       return, a declaration or an assignment; an argument is none of those.
 - [ ] which side a returned value is on is read from its type; a value the
       Nim backend cannot type goes on the value side, and Nim's own type
       check then catches a failure put there by mistake.
-- [ ] an adapter from exceptions at the boundary, and a `T | E` form of
-      `shell:`, whose exit status and stderr are the obvious E.
+- [ ] an adapter from exceptions at the boundary, and a `T | F` form of
+      `shell:`, whose exit status and stderr are the obvious F.
 
 ### Feature 2 — `.map()` and `.and_then()` method rewriting on `?T`
 

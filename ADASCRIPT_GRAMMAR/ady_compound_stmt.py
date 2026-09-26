@@ -380,7 +380,10 @@ variant_case = ikw("case") + IDENTIFIER + ikw("is") + NEWLINE + INDENT + NL[:] +
 discrim_record_def = literal("record") + COLON + NEWLINE + INDENT + NL[:] + variant_case + NL[:] + DEDENT
 
 # type_block_stmt: type NAME [(discrim)]? (=|is) (tuple|discrim_record|record): block
-type_block_stmt = ikw("type") + IDENTIFIER + discrim_param[:] + type_alias_params[:] + (V_EQUAL | ikw("is")) + (tuple_def | discrim_record_def | record_def | enum_block_def)
+# `type X is failure record:` declares a failure type: the side of a
+# `T | X` that a do: block returns on. The word leaves no node; which types
+# are failures is read from the source by scan_failure_types (ady_stmt).
+type_block_stmt = ikw("type") + IDENTIFIER + discrim_param[:] + type_alias_params[:] + (V_EQUAL | ikw("is")) + ikw("failure")[:] + (tuple_def | discrim_record_def | record_def | enum_block_def)
 
 # --- Class definition ---
 # class_args uses the same argument grammar as call_trailer so that

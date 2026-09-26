@@ -67,7 +67,7 @@ _nimport_tuple_field_order: dict = {}
 # (ParserState attribute, merged into the importer's at its reset).
 _NIMPORT_CARRIED = ("tick_types", "class_field_types", "noreturn_procs",
                     "iterator_names", "contextmanager_funcs",
-                    "by_value_procs", "var_param_procs")
+                    "by_value_procs", "var_param_procs", "failure_types")
 _nimport_carried: dict = {}
 _nimport_module_symbols: dict = {}
 # The Nim standard modules a dependency's translation imported. An importer
@@ -649,6 +649,10 @@ def translate(code, export_symbols=False):
         return code
 
     from hek_parsec import ParserState
+    # Before the parse, so that `failure` on anything but a record is
+    # reported as that rather than as the parse error it also is.
+    from ady_stmt import scan_failure_types, scan_return_types, either_procs
+    _failures = scan_failure_types(code)
     stmts, leading, trailing = parse_module(code)  # reset() is called inside
     ParserState.export_symbols = export_symbols     # set after reset so it isn't cleared
 
@@ -658,17 +662,16 @@ def translate(code, export_symbols=False):
      ParserState._all_class_methods,
      ParserState._all_class_parents) = _prescan_classes(stmts)
     # Every routine's return annotation, wherever it is in the file: which
-    # side of a `T | E` a returned call is on, and whether a call is a
-    # Result already, has to be known for routines defined further down.
-    import re as _re_rp
-    ParserState.ady_return_types = {
-        _m.group(1): _m.group(2) for _m in _re_rp.finditer(
-            r"^[ \t]*def[ \t]+(\w+)[ \t]*\((?:[^()]|\([^()]*\))*\)\s*->\s*"
-            r"([^\n#]*?)\s*:[ \t]*(?:#.*)?$", code, _re_rp.MULTILINE)}
+    # side of a `T | E` a returned call is on, and whether a call is one
+    # already, has to be known for routines defined further down. And the
+    # failure types -- this module's and those of the modules it nimports --
+    # which say which side of a `|` is the failure.
+    ParserState.failure_types = (_failures
+                                 | _nimport_carried.get("failure_types", set()))
+    ParserState.ady_return_types = scan_return_types(code)
     ParserState.ady_return_types_nim = {}
-    ParserState.result_procs = {
-        _n for _n, _t in ParserState.ady_return_types.items()
-        if "|" in _t and _t.rsplit("|", 1)[1].strip() != "None"}
+    ParserState.result_procs = either_procs(ParserState.ady_return_types,
+                                            ParserState.failure_types)
     # Merge ref classes from nimport'd deps so subclasses of cross-file base
     # classes are also emitted as ref object.
     ParserState._ref_classes.update(_nimport_ref_classes)
@@ -1458,6 +1461,30 @@ def run_tests():
         "w = xs.pop()\ndiscard xs.pop()\n",
     ))
 
+    # `T | F`, F declared `failure`: what is returned goes on the side its
+    # type says, each constructor typed from the signature.
+    tests.append((
+        'type Bad_T is failure record:\n    why: str\n\ndef f(s: str) -> int | Bad_T:\n    if s == "":\n        return Bad_T(why="empty")\n    return len(s)\n',
+        'import stdlib\ntype Bad_T = object\n    why: string\nproc f(s: string): Result[int, Bad_T] =\n    if s == "":\n        return Result[int, Bad_T].err(Bad_T(why: "empty"))\n    return Result[int, Bad_T].ok(len(s))\n',
+    ))
+    # `None | F` is Result[void, F], whose zero value -- falling off the end
+    # -- is success.
+    tests.append((
+        'type Bad_T is failure record:\n    why: str\n\ndef g(n: int) -> None | Bad_T:\n    if n < 0:\n        return Bad_T(why="negative")\n',
+        'import stdlib\ntype Bad_T = object\n    why: string\nproc g(n: int): Result[void, Bad_T] =\n    if n < 0:\n        return Result[void, Bad_T].err(Bad_T(why: "negative"))\n',
+    ))
+    # do: over them: a failure is the routine's own, a bare step is checked.
+    tests.append((
+        'type Bad_T is failure record:\n    why: str\n\ndef f(s: str) -> int | Bad_T:\n    return len(s)\n\ndef h(a: str) -> int | Bad_T:\n    do:\n        x <- f(a)\n        f(a)\n    return x\n',
+        'import stdlib\ntype Bad_T = object\n    why: string\nproc f(s: string): Result[int, Bad_T] =\n    return Result[int, Bad_T].ok(len(s))\n\nproc h(a: string): Result[int, Bad_T] =\n    let adadoX = f(a)\n    if adadoX.is_err: return Result[int, Bad_T].err(adadoX.error)\n    let x = adadoX.value\n    let adadoStep0 = f(a)\n    if adadoStep0.is_err: return Result[int, Bad_T].err(adadoStep0.error)\n    return Result[int, Bad_T].ok(x)\n',
+    ))
+    # `r is F` asks which side r holds and narrows it as `x is None` does;
+    # the failure side is the declared one, whichever order is written.
+    tests.append((
+        'type Bad_T is failure record:\n    why: str\n\ndef d(r: Bad_T | int) -> int:\n    if r is Bad_T:\n        return 0\n    return r\n',
+        'import stdlib\ntype Bad_T = object\n    why: string\nproc d(r: Result[int, Bad_T]): int =\n    if r.is_err:\n        return 0\n    return r.value\n',
+    ))
+
     passed = failed = 0
     for code, expected in tests:
         try:
@@ -1485,47 +1512,6 @@ def run_tests():
     # pairs above cannot express.  A tick the emitter does not know used to
     # fall through to `expr.attr`, so a typo -- or the pre-rename 'Choice --
     # reached nim and failed there as "undeclared field" in generated code.
-    # `T | E`: what is returned goes on the side its type says -- a str
-    # here is the failure -- each constructor typed from the signature; `None | E` is Result[void, E], whose
-    # zero value -- falling off the end -- is Ok.
-    tests.append((
-        'def f(s: str) -> int | str:\n    if s == "":\n'
-        '        return "empty"\n    return len(s)\n',
-        'import stdlib\nproc f(s: string): Result[int, string] =\n'
-        '    if s == "":\n        return Result[int, string].err("empty")\n'
-        '    return Result[int, string].ok(len(s))\n',
-    ))
-    tests.append((
-        'def g(n: int) -> None | str:\n    if n < 0:\n'
-        '        return "negative"\n',
-        'import stdlib\nproc g(n: int): Result[void, string] =\n'
-        '    if n < 0:\n        return Result[void, string].err("negative")\n',
-    ))
-    # do: over Results: an Err is the routine's own, a bare step is checked.
-    tests.append((
-        'def f(s: str) -> int | str:\n    return len(s)\n\n'
-        'def h(a: str) -> int | str:\n    do:\n        x <- f(a)\n'
-        '        f(a)\n    return x\n',
-        'import stdlib\nproc f(s: string): Result[int, string] =\n'
-        '    return Result[int, string].ok(len(s))\n\n'
-        'proc h(a: string): Result[int, string] =\n'
-        '    let adadoX = f(a)\n'
-        '    if adadoX.is_err: return Result[int, string].err(adadoX.error)\n'
-        '    let x = adadoX.value\n'
-        '    let adadoStep0 = f(a)\n'
-        '    if adadoStep0.is_err: return Result[int, string].err(adadoStep0.error)\n'
-        '    return Result[int, string].ok(x)\n',
-    ))
-
-    # `r is E` asks which side r holds, and narrows it as `x is None` does:
-    # past a guard that leaves, r is its value.
-    tests.append((
-        'def d(r: int | str) -> int:\n    if r is str:\n        return 0\n'
-        '    return r\n',
-        'import stdlib\nproc d(r: Result[int, string]): int =\n'
-        '    if r.is_err:\n        return 0\n    return r.value\n',
-    ))
-
     error_tests = [
         ("type C_T is enum A, B\nlet v: C_T = A\nprint v'Bogus\n",
          "unknown tick attribute 'Bogus'"),
@@ -1566,13 +1552,21 @@ def run_tests():
          "type 'A_T' is already declared, at line 1"),
         ("class A:\n    var x: int = 0\n\ntype A is enum P, Q\n",
          "type 'A' is already declared, at line 1"),
-        # A `T | E` bound in a routine that cannot return its failure.
-        ("def f(s: str) -> int | str:\n    return len(s)\n\n"
+        # A `T | F` bound in a routine that cannot return its failure.
+        ("type Bad_T is failure record:\n    why: str\n\n"
+         "def f(s: str) -> int | Bad_T:\n    return len(s)\n\n"
          "def h(a: str) -> ?int:\n    do:\n        x <- f(a)\n    return x\n",
-         "must return a `T | E` too, to pass its failure on"),
-        # Two sides that are the same kind of value cannot be told apart.
-        ("var x: []int | []str\n",
-         "the two sides must be different kinds of value"),
+         "must return a `T | F` too, to pass its failure on"),
+        # A `|` with no failure side is not a union of two values.
+        ("var x: int | str\n",
+         "one side must be a failure type"),
+        ("type A_T is failure record:\n    a: int\n"
+         "type B_T is failure record:\n    b: int\n"
+         "var x: A_T | B_T\n",
+         "both sides are failure types"),
+        # Only a record can be one.
+        ("type Oops_T is failure enum A, B\n",
+         "only a record can be a failure type"),
     ]
     # ...except a shell command's output, whose type the command fixes.
     try:

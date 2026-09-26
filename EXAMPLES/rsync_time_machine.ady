@@ -81,7 +81,7 @@ type Color_T    is enum green, magenta, yellow, red, orange, no_color
 # is the one place that reports a Failure_T and picks the exit status.
 type ErrKind_T is enum CMD_FAILED, NOT_A_BACKUP_DEST, SOURCE_MISSING, STILL_RUNNING, NO_SPACE, BAD_ARGUMENTS
 
-type Failure_T is record:
+type Failure_T is failure record:
     kind:   ErrKind_T
     detail: str    # the command that failed, the path at fault, or what went wrong
     stderr: str    # what a failed command said; "" for any other failure

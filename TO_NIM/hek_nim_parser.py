@@ -957,8 +957,8 @@ def to_nim(self, indent=0):
         else:
             if hek_nim_expr._expr_is_result(expr):
                 raise SyntaxError(
-                    f"do: step '{expr}' returns a `T | E`; a routine binding "
-                    f"one must return a `T | E` too, to pass its failure on")
+                    f"do: step '{expr}' returns a `T | F`; a routine binding "
+                    f"one must return a `T | F` too, to pass its failure on")
             ParserState.nim_imports.add("options")
             _m_opt = _re_do.search(r'Option\[(.+)\]', ret_ann)
             if _m_opt:
