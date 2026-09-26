@@ -212,9 +212,10 @@ def is_section_header(line: str) -> bool:
     of dots: " .............. New tests failing : nb = 3"."""
     line.strip().startswith("..............")
 
-def find_sections(filepath: Path) -> []Section:
-    """Each SECTION_PATTERN's first section, in file order: from its header
-    to the next header, whichever section that one opens, or to the end.
+def find_sections(lines: []str) -> []Section:
+    """Each SECTION_PATTERN's first section in a Tlog's LINES, in file order:
+    from its header to the next header, whichever section that one opens, or
+    to the end.
 
     A Tlog has more sections than SECTION_PATTERNS names -- mrun failing,
     Check build of ..., tests removed, known assert failures -- and a
@@ -222,7 +223,6 @@ def find_sections(filepath: Path) -> []Section:
     for its own: a WARNING line's "Tlog:" and a header's "mrun" or "Check"
     were new failures. A pattern is looked for in headers only, for the
     same reason: a line of text may mention a section."""
-    let lines: []str = readFile(filepath).split("\n")
     let headers: []int = [i for i, line in enumerate(lines) if is_section_header(line)]
     var seen: {}str = {}
     var sections: []Section = []
@@ -245,8 +245,8 @@ type TlogResult is record:
 
 def parse_Tlog(filepath: Path, build_subtype: BuildSubtype) -> TlogResult:
     """Parse a Tlog file and return structured results."""
-    let all_lines: []str = readFile(filepath).split("\n")
-    let sections: []Section = find_sections(filepath)
+    let all_lines: []str = [line for line in filepath.lines]
+    let sections: []Section = find_sections(all_lines)
     def non_blank_lines(text: []str, start: int, end: int) -> []str:
         [line for line in text[start + 1 : end] if line.strip() != ""]
     var result: TlogResult
