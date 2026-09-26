@@ -123,7 +123,8 @@ STANDALONE := \
     test_split_unpack.ady \
     test_path_lines.ady \
     test_in_loop_var.ady \
-    test_docstring_oneline.ady
+    test_docstring_oneline.ady \
+    test_class_fields_per_instance.ady
 
 # -----------------------------------------------------------------------
 # Stdin tests — piped from a sample file

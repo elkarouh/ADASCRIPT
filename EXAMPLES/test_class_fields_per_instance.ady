@@ -1,0 +1,68 @@
+#!/usr/bin/env ady2nim
+"""Test: each instance of a class has fields of its own, on both backends.
+
+Nim builds every object with its fields at their zero, or at their default
+evaluated afresh. A Python class body is evaluated once, so the Python
+backend used to leave a bare field unset -- AttributeError on first use --
+and share a field written `= []` between every instance, each appending
+to the same list. Fields are now set per instance at the start of
+__init__, or in one made for the purpose.
+"""
+
+type Name_T is str
+
+type Point is record:
+    x: int
+    y: int
+
+class Bag:
+    """No __init__ of its own.
+
+    Note: a docstring line shaped like a field is not one."""
+    items: []Name_T
+    count: int
+    seen: {Name_T}int
+    where: Point
+    label: str = "bag"
+
+class Log:
+    lines: []str = []
+    tags: {}str = {}
+    home: Path = Path("/tmp")
+
+    def __init__(self,
+                 first: str):
+        """A signature over two lines, then a docstring."""
+        self.lines.append(first)
+        self.tags.add(first)
+
+class Tagged(Log):
+    extra: []int = [1, 2]
+
+# a bare field has its zero, and a list of its own
+var a: Bag = Bag()
+var b: Bag = Bag()
+a.items.append("x")
+a.seen["x"] = 1
+a.where.x = 3
+a.count += 1
+assert b.items'Length == 0
+assert b.seen'Length == 0
+assert b.where.x == 0
+assert b.count == 0
+assert a.label == "bag"
+
+# a default written `= []` is evaluated for each instance
+let l1: Log = Log("one")
+let l2: Log = Log("two")
+assert l2.lines == ["two"]
+assert l2.tags'Length == 1
+assert l1.home == Path("/tmp")
+
+# a subclass: the base's __init__ still runs, and its own field is its own
+var t1: Tagged = Tagged("three")
+let t2: Tagged = Tagged("four")
+t1.extra.append(3)
+assert t2.lines == ["four"]
+assert t2.extra == [1, 2]
+print "ok"

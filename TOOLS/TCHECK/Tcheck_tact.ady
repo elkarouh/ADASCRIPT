@@ -242,13 +242,6 @@ class Tlog:
         the last header opened. Only the first section of a name counts; a
         later one is skipped like an unreported one. A mono build's tests that
         did not run are not reported."""
-        # Each Tlog its own lists: on Python a class-level [] would be one
-        # list shared by every instance.
-        self.crashed = []
-        self.new_failing = []
-        self.not_run = []
-        self.still_fail = []
-        self.now_ok = []
         var seen: {}Section = {}
         var section: Section = UNREPORTED
         for line in filepath.lines:

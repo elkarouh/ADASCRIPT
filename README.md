@@ -1193,7 +1193,9 @@ class TrieNode:
 
 Field declarations can carry inline defaults. The transpiler injects them into
 the generated constructor automatically, so `__init__` only needs to set
-fields that differ per instance:
+fields that differ per instance. Every instance gets fields of its own, on
+both backends: a field without a default starts at its zero, and a list,
+table or object default is made afresh for each instance, never shared:
 
 ```python
 class AwkProcessor(AwkBase):

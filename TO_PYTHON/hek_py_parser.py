@@ -1788,6 +1788,86 @@ def to_py(self, indent=0):
 
 
 
+def _balanced(text):
+    """Whether TEXT closes every bracket it opens."""
+    depth = 0
+    for ch in text:
+        if ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+    return depth == 0
+
+
+def _per_instance_fields(body, indent):
+    """BODY, a rendered class body, with each instance given its own fields.
+
+    Nim builds every object with its fields at their zero, or at their
+    default evaluated afresh, so no two instances share one. A Python class
+    body is evaluated once: a field left bare -- `n: int` is plain Python
+    there, and a mutable zero is kept out of the class body, see
+    _zero_value() -- raised AttributeError on first use, and one written
+    `= []` was a single list every instance appended to. Such fields are set on `self` at the start of `__init__`,
+    or in an `__init__` made for the purpose, which hands its arguments on
+    to the base class. The class-level lines stay: a field with an
+    immutable default needs nothing more, and one read through the class
+    still finds a value.
+    """
+    import re as _re_pif
+    import hek_py_stmt
+    pad = _ind(indent + 1)
+    field_re = _re_pif.compile(r"^" + _re_pif.escape(pad) + r"([A-Za-z_]\w*)\s*:\s*(.+?)(?:\s+=\s+(.+))?$")
+    lines = body.split("\n")
+    inits = []            # "self.name = value"
+    init_at = None        # index of the class's own `def __init__` line
+    in_string = False
+    for i, line in enumerate(lines):
+        quotes = line.count('"""') + line.count("'''")
+        if in_string or not line.startswith(pad) or line[len(pad):len(pad) + 1].isspace():
+            in_string = in_string != (quotes % 2 == 1)
+            continue
+        if quotes % 2 == 1:
+            in_string = True
+            continue
+        if line.startswith(pad + "def __init__("):
+            init_at = i
+            continue
+        m = field_re.match(line)
+        if not m:
+            continue
+        name, ann, written = m.group(1), m.group(2), m.group(3)
+        if written is None:
+            inits.append(f"self.{name} = {hek_py_stmt._zero_value(ann)}")
+        elif not _balanced(ann) or not _balanced(written):
+            continue      # spans lines; left as it is
+        elif written[:1] in "[{" or _re_pif.match(r"^[A-Za-z_][\w.]*\(", written):
+            inits.append(f"self.{name} = {written}")
+    if not inits:
+        return body
+    body_pad = _ind(indent + 2)
+    if init_at is None:
+        made = [f"{pad}def __init__(self, *args, **kwargs):",
+                f"{body_pad}super().__init__(*args, **kwargs)"]
+        made += [body_pad + stmt for stmt in inits]
+        return body.rstrip("\n") + "\n\n" + "\n".join(made) + "\n"
+    # after the signature, which may span lines, and the docstring
+    at = init_at
+    while not lines[at].rstrip().endswith(":") or not _balanced("\n".join(lines[init_at:at + 1])):
+        at += 1
+    at += 1
+    first = lines[at].strip() if at < len(lines) else ""
+    for q in ('"""', "'''"):
+        if first.startswith(q):
+            while at < len(lines):
+                closed = lines[at].count(q) >= (2 if lines[at].strip().startswith(q) else 1)
+                at += 1
+                if closed:
+                    break
+            break
+    lines[at:at] = [body_pad + stmt for stmt in inits]
+    return "\n".join(lines)
+
+
 # --- Class definition ---
 @method(class_def)
 def to_py(self, indent=0):
@@ -1849,6 +1929,8 @@ def to_py(self, indent=0):
     finally:
         _stmt.CLASS_BODY_DEPTH = _outer_class_depth
         _pyexpr.DEFINING_CLASS = _outer_defining
+    if "dataclass" not in decos:        # a dataclass makes its own __init__
+        body = _per_instance_fields(body, indent)
     return f"{decos}{_ind(indent)}class {name}{type_params}{bases}:{hc}\n{body}"
 
 
