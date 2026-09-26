@@ -212,7 +212,8 @@ ADA_INDENT_TESTS := \
 #   tsp.ady         — matplotlib not installed by default (pyimport)
 #   lv.ady          — requires clv shell utility
 #   lolcate/lolcate.ady — integration test (requires fd + rg)
-#   rsync_time_machine.ady — needs rsync to run, so compile-only here
+#   rsync_time_machine.ady — run by rsync_time_machine_test.sh below,
+#                            when rsync is installed
 # -----------------------------------------------------------------------
 COMPILE_ONLY := \
     tsp.ady \
@@ -484,9 +485,25 @@ test: compile
 	    $(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(EXDIR)/test_case_trailing_comment.ady | $(PYTHON) - \
 	    | grep -qx 'test_case_trailing_comment: ok' && echo OK || { echo FAIL; exit 1; }
 
-	@# do: and Result[T, E] say the same on both backends: the Python one
+	@# rsync_time_machine against real folders, when rsync is there: a step
+	@# that fails stops the run, and a full disk expires the oldest backup.
+	@echo "=== rsync_time_machine, both backends ==="
+	@if command -v rsync >/dev/null 2>&1; then \
+	    printf '  %-42s\n' "rsync_time_machine (nim)"; \
+	    $(EXDIR)/rsync_time_machine_test.sh $(TMPDIR)/ady_rtm_nim $(EXDIR)/rsync_time_machine \
+	        || { echo FAIL; exit 1; }; \
+	    $(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(EXDIR)/rsync_time_machine.ady > $(TMPDIR)/ady_rtm.py || exit 1; \
+	    printf '  %-42s\n' "rsync_time_machine (python)"; \
+	    $(EXDIR)/rsync_time_machine_test.sh $(TMPDIR)/ady_rtm_py $(PYTHON) $(TMPDIR)/ady_rtm.py \
+	        || { echo FAIL; exit 1; }; \
+	    rm -f $(TMPDIR)/ady_rtm.py; \
+	else \
+	    printf '  %-42s%s\n' "rsync_time_machine" "skipped (no rsync)"; \
+	fi
+
+	@# do: and `T | E` say the same on both backends: the Python one
 	@# used to drop a do: block altogether, leaving its names unbound.
-	@echo "=== do: and Result, both backends ==="
+	@echo "=== do: and T | E, both backends ==="
 	@for t in test_do_block test_result; do \
 	    printf '  %-42s' "$$t.ady (python = nim)"; \
 	    $(EXDIR)/$$t > $(TMPDIR)/ady_$$t.nim.out 2>&1 || { echo "FAIL (nim)"; exit 1; }; \

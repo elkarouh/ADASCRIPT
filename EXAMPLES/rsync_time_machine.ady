@@ -24,6 +24,12 @@ this reaches for the language.
     epoch by arithmetic rather than by strptime, because `date -d` is GNU
     and `date -j -f` is BSD. The Nim build therefore needs neither nimpy nor
     libpython, which is what lets `make test` compile it.
+  - Failures are values. Every step that changes something -- a mkdir, an
+    rm, the `latest` link, the lock file -- returns `T | Failure_T`, the
+    steps are chained in `do:` blocks, and main() alone decides what to
+    print and which status to exit with. The original ignored the exit
+    status of all of those, so a failed `ln -s` still ended in "success"
+    with no `latest` link at all, and called exit() from a dozen places.
 """
 
 # No pyimports. What the Python originals were here for -- the clock, the
@@ -71,6 +77,19 @@ type ResolvedPaths is tuple:
 type LogLevel_T is enum INFO, WARNING, ERROR
 type Color_T    is enum green, magenta, yellow, red, orange, no_color
 
+# Why a run stopped. A step that can fail returns `T | Failure_T`; main()
+# is the one place that reports a Failure_T and picks the exit status.
+type ErrKind_T is enum CMD_FAILED, NOT_A_BACKUP_DEST, SOURCE_MISSING, STILL_RUNNING, NO_SPACE, BAD_ARGUMENTS
+
+type Failure_T is record:
+    kind:   ErrKind_T
+    detail: str    # the command that failed, the path at fault, or what went wrong
+    stderr: str    # what a failed command said; "" for any other failure
+    fix:    str    # a command that would fix it; "" when there is none
+
+def failure(kind: ErrKind_T, detail: str, stderr: str = "", fix: str = "") -> Failure_T:
+    return Failure_T(kind=kind, detail=detail, stderr=stderr, fix=fix)
+
 # ---------------------------------------------------------------------------
 # ANSI styling
 # ---------------------------------------------------------------------------
@@ -105,12 +124,6 @@ def log(message: str, level: LogLevel_T = INFO) -> None:
         when INFO:
             print f"{prefix}: {message}"
 
-def log_cmd(message: str, level: LogLevel_T = INFO, ssh: ?SSH = None) -> None:
-    if ssh is not None:
-        log(f"{ssh.cmd} '{message}'", level)
-    else:
-        log(message, level)
-
 # ---------------------------------------------------------------------------
 # Shell helpers — Adascript shell: integration
 #
@@ -137,6 +150,21 @@ def run_cmd(cmd: str, ssh: ?SSH = None) -> CmdResult:
         log(f"Command exit code: {style(str(r.code), red, bold=True)}", ERROR)
     return (stdout: r.output, stderr: r.stderr, returncode: r.code)
 
+# run_cmd answers questions -- `find`, `test -e`, `ps | grep` -- whose
+# non-zero status is an answer, not a failure. A command that *changes*
+# something goes through one of these two instead: its failure stops the run.
+
+def run_checked(cmd: str, ssh: ?SSH = None) -> str | Failure_T:
+    let r: CmdResult = run_cmd(cmd, ssh)
+    if r.returncode != 0:
+        return failure(CMD_FAILED, cmd, r.stderr.strip())
+    return r.stdout
+
+def checked(r: RunResult, cmd: str) -> None | Failure_T:
+    """A local shell: step's status, as run_checked has it for a remote one."""
+    if r.code != 0:
+        return failure(CMD_FAILED, cmd, r.stderr.strip())
+
 def find_cmd(path: Path, ssh: ?SSH = None, maxdepth: ?int = None) -> str:
     if ssh is None:
         if maxdepth is not None:
@@ -149,34 +177,40 @@ def find_cmd(path: Path, ssh: ?SSH = None, maxdepth: ?int = None) -> str:
         cmd = cmd + f" -maxdepth {maxdepth}"
     return run_cmd(cmd, ssh).stdout
 
-def get_absolute_path(path: Path, ssh: ?SSH = None) -> Path:
+def get_absolute_path(path: Path, ssh: ?SSH = None) -> Path | Failure_T:
     if ssh is None:
         return path.resolve()   # native resolve -- absolute, symlinks expanded, no subprocess
-    return Path(run_cmd(f"cd '{path}' && pwd", ssh).stdout)
+    do:
+        abs_path <- run_checked(f"cd '{path}' && pwd", ssh)
+    return Path(abs_path.strip())
 
-def mkdir_p(path: Path, ssh: ?SSH = None) -> None:
+def mkdir_p(path: Path, ssh: ?SSH = None) -> None | Failure_T:
     if ssh is None:
-        shell: mkdir -p -- {!path}
-        return
-    run_cmd(f"mkdir -p -- '{path}'", ssh)
+        let r = shell: mkdir -p -- {!path}
+        return checked(r, f"mkdir -p -- '{path}'")
+    do:
+        run_checked(f"mkdir -p -- '{path}'", ssh)
 
-def rm_file(path: Path, ssh: ?SSH = None) -> None:
+def rm_file(path: Path, ssh: ?SSH = None) -> None | Failure_T:
     if ssh is None:
-        shell: rm -f -- {!path}
-        return
-    run_cmd(f"rm -f -- '{path}'", ssh)
+        let r = shell: rm -f -- {!path}
+        return checked(r, f"rm -f -- '{path}'")
+    do:
+        run_checked(f"rm -f -- '{path}'", ssh)
 
-def rm_dir(path: Path, ssh: ?SSH = None) -> None:
+def rm_dir(path: Path, ssh: ?SSH = None) -> None | Failure_T:
     if ssh is None:
-        shell: rm -rf -- {!path}
-        return
-    run_cmd(f"rm -rf -- '{path}'", ssh)
+        let r = shell: rm -rf -- {!path}
+        return checked(r, f"rm -rf -- '{path}'")
+    do:
+        run_checked(f"rm -rf -- '{path}'", ssh)
 
-def ln_s(src: Path, dest: Path, ssh: ?SSH = None) -> None:
+def ln_s(src: Path, dest: Path, ssh: ?SSH = None) -> None | Failure_T:
     if ssh is None:
-        shell: ln -s -- {!src} {!dest}
-        return
-    run_cmd(f"ln -s -- '{src}' '{dest}'", ssh)
+        let r = shell: ln -s -- {!src} {!dest}
+        return checked(r, f"ln -s -- '{src}' '{dest}'")
+    do:
+        run_checked(f"ln -s -- '{src}' '{dest}'", ssh)
 
 def test_file_exists(path: Path, ssh: ?SSH = None) -> bool:
     if ssh is None:
@@ -379,20 +413,20 @@ def find_backups(dest_folder: Path, ssh: ?SSH = None) -> []Path:
 # Backup expiration
 # ---------------------------------------------------------------------------
 
-def expire_backup(backup_path: Path, ssh: ?SSH) -> None:
+def expire_backup(backup_path: Path, ssh: ?SSH) -> None | Failure_T:
     let parent_dir: Path = backup_path.parent
     if find_backup_marker(parent_dir, ssh) is None:
-        log(f"{backup_path} is not on a backup destination - aborting.", ERROR)
-        quit(1)
+        return failure(NOT_A_BACKUP_DEST, str(parent_dir))
     log(f"Expiring {backup_path}", INFO)
-    rm_dir(backup_path, ssh)
+    do:
+        rm_dir(backup_path, ssh)
 
 def expire_backups(
     dest_folder:         Path,
     expiration_strategy: str,
     backup_to_keep:      Path,
     ssh:                 ?SSH,
-) -> None:
+) -> None | Failure_T:
     let current_timestamp: int = now_epoch()
     var last_kept_timestamp: int = 9999999999
     let backups: []Path = find_backups(dest_folder, ssh)
@@ -432,7 +466,8 @@ def expire_backups(
 
             if backup_timestamp <= cut_off_timestamp:
                 if cut_off_interval_days == 0:
-                    expire_backup(backup_dir, ssh)
+                    do:
+                        expire_backup(backup_dir, ssh)
                     break
 
                 let last_kept_days: int = last_kept_timestamp // 86400
@@ -440,7 +475,8 @@ def expire_backups(
                 let interval_days: int = backup_days - last_kept_days
 
                 if interval_days < cut_off_interval_days:
-                    expire_backup(backup_dir, ssh)
+                    do:
+                        expire_backup(backup_dir, ssh)
                     break
 
                 last_kept_timestamp = backup_timestamp
@@ -450,27 +486,24 @@ def expire_backups(
 # Destination checks
 # ---------------------------------------------------------------------------
 
-def check_dest_is_backup_folder(dest_folder: Path, ssh: ?SSH) -> None:
+def check_dest_is_backup_folder(dest_folder: Path, ssh: ?SSH) -> None | Failure_T:
     if find_backup_marker(dest_folder, ssh) is None:
         let marker: Path = backup_marker_path(dest_folder)
-        log(style("Safety check failed - the destination does not appear to be a backup folder or drive (marker file not found).", yellow), INFO)
-        log(style("If it is indeed a backup folder — you may add the marker file by running the following command:", yellow), INFO)
-        log_cmd(
-            style(f'mkdir -p -- "{dest_folder}" ; touch "{marker}"', green, bold=True),
-            INFO,
-            ssh,
-        )
-        quit(1)
+        var fix: str = f'mkdir -p -- "{dest_folder}" ; touch "{marker}"'
+        if ssh is not None:
+            fix = f"{ssh.cmd} '{fix}'"
+        return failure(NOT_A_BACKUP_DEST, str(dest_folder), fix=fix)
 
 # ---------------------------------------------------------------------------
 # rsync helpers
 # ---------------------------------------------------------------------------
 
-def get_link_dest_option(previous_dest: ?Path, ssh: ?SSH) -> str:
+def get_link_dest_option(previous_dest: ?Path, ssh: ?SSH) -> str | Failure_T:
     if previous_dest is None:
         log("No previous backup - creating new one.", INFO)
         return ""
-    let abs_prev: Path = get_absolute_path(previous_dest, ssh)
+    do:
+        abs_prev <- get_absolute_path(previous_dest, ssh)
     var full_prev: str = str(abs_prev)
     if ssh is not None:
         full_prev = f"{ssh.dest_folder_prefix}{abs_prev}"
@@ -519,7 +552,7 @@ def get_rsync_flags(
 # PID / lock helpers
 # ---------------------------------------------------------------------------
 
-def exit_if_pid_running(running_pid: str, ssh: ?SSH = None) -> None:
+def check_not_running(running_pid: str, ssh: ?SSH = None) -> None | Failure_T:
     # running_pid is a PID rendered as text (read back out of a lock file),
     # not a path -- stays str
     # `uname -s` in place of sys.platform: Linux, Darwin, NetBSD,
@@ -532,8 +565,7 @@ def exit_if_pid_running(running_pid: str, ssh: ?SSH = None) -> None:
         cmd = f"procps -wwfo cmd -p {running_pid} --no-headers | grep '{APPNAME}'"
         let cmd_result: CmdResult = run_cmd(cmd, ssh)
         if cmd_result.returncode == 0:
-            log(f"Previous backup task is still active - aborting (command: {cmd_result.stdout}).", ERROR)
-            quit(1)
+            return failure(STILL_RUNNING, cmd_result.stdout.strip())
     else:
         var ps_flags: str = "-p"
         if platform.startswith("netbsd"):
@@ -541,8 +573,7 @@ def exit_if_pid_running(running_pid: str, ssh: ?SSH = None) -> None:
         cmd = f"ps {ps_flags} {running_pid} -o 'command' | grep '{APPNAME}'"
         let check_result: CmdResult = run_cmd(cmd)
         if check_result.stdout:
-            log("Previous backup task is still active - aborting.", ERROR)
-            quit(1)
+            return failure(STILL_RUNNING, check_result.stdout.strip())
 
 def handle_still_running_or_failed_or_interrupted_backup(
     inprogress_file: Path,
@@ -551,22 +582,25 @@ def handle_still_running_or_failed_or_interrupted_backup(
     dest_folder:     Path,
     previous_dest:   ?Path,
     ssh:             ?SSH,
-) -> None:
+) -> None | Failure_T:
     let marker_hit: str = find_cmd(inprogress_file, ssh)
     if not marker_hit:
         return
 
     let running_pid: str = run_cmd(f"cat {inprogress_file}", ssh).stdout
-    exit_if_pid_running(running_pid, ssh)
+    do:
+        check_not_running(running_pid, ssh)
 
     if previous_dest is not None:
         var prefix: str = ""
         if ssh is not None:
             prefix = ssh.dest_folder_prefix
         log(f"{prefix}{inprogress_file} already exists - the previous backup failed or was interrupted. Backup will resume from there.", INFO)
-        run_cmd(f"mv -- {previous_dest} {dest}", ssh)
+        do:
+            run_checked(f"mv -- {previous_dest} {dest}", ssh)
 
-    run_cmd(f"echo {mypid} > {inprogress_file}", ssh)
+    do:
+        run_checked(f"echo {mypid} > {inprogress_file}", ssh)
 
 # ---------------------------------------------------------------------------
 # Space / error handling
@@ -577,7 +611,7 @@ def deal_with_no_space_left(
     dest_folder: Path,
     ssh:         ?SSH,
     auto_expire: bool,
-) -> bool:
+) -> bool | Failure_T:
     var log_data: str = ""
     with open(log_file) as f:
         log_data = f.read()
@@ -586,19 +620,22 @@ def deal_with_no_space_left(
         return False
 
     if not auto_expire:
-        log("No space left on device, and automatic purging of old backups is disabled.", ERROR)
-        quit(1)
+        return failure(NO_SPACE, "No space left on device, and automatic purging of old backups is disabled.")
 
     log("No space left on device - removing oldest backup and resuming.", WARNING)
     let backups: []Path = find_backups(dest_folder, ssh)
     if len(backups) <= 1:
-        log("No space left on device, and no old backup to delete.", ERROR)
-        quit(1)
+        return failure(NO_SPACE, "No space left on device, and no old backup to delete.")
 
-    expire_backup(sorted(backups)[-1], ssh)
+    # The oldest is the first in date order. find_backups() lists them
+    # newest first, and this used to re-sort them oldest first and take the
+    # *last* -- the newest, which is the backup in progress: it was deleted
+    # instead, freeing nothing, and the run retried into the same full disk.
+    do:
+        expire_backup(sorted(backups)[0], ssh)
     return True
 
-def check_rsync_errors(log_file: Path, auto_delete_log: bool) -> None:
+def check_rsync_errors(log_file: Path, auto_delete_log: bool) -> None | Failure_T:
     var log_data: str = ""
     with open(log_file) as f:
         log_data = f.read()
@@ -609,7 +646,8 @@ def check_rsync_errors(log_file: Path, auto_delete_log: bool) -> None:
     else:
         log(style("Backup completed without errors.", magenta), INFO)
         if auto_delete_log:
-            rm_file(log_file)   # log_file is always local -- reuse the local fast path directly
+            do:
+                rm_file(log_file)   # log_file is always local -- reuse the local fast path directly
 
 # ---------------------------------------------------------------------------
 # SSH input validation
@@ -622,7 +660,7 @@ def handle_ssh(
     id_rsa:         ?Path,
     exclusion_file: ?Path,
     allow_host_only: bool,
-) -> ResolvedPaths:
+) -> ResolvedPaths | Failure_T:
     var ssh: ?SSH = parse_ssh(
         src_folder, dest_folder, ssh_port, id_rsa, allow_host_only,
     )
@@ -642,16 +680,14 @@ def handle_ssh(
     src  = src.rstrip("/")  if src  != "/" else src
 
     if not src or not dest:
-        log("Source and destination folder cannot be empty.", ERROR)
-        quit(1)
+        return failure(BAD_ARGUMENTS, "Source and destination folder cannot be empty.")
 
     var has_quote: bool = "'" in src or "'" in dest
     if exclusion_file is not None:
         if "'" in str(exclusion_file):
             has_quote = True
     if has_quote:
-        log("Source and destination directories may not contain single quote characters.", ERROR)
-        quit(1)
+        return failure(BAD_ARGUMENTS, "Source and destination directories may not contain single quote characters.")
 
     # now that any "user@host:" prefix is gone, these really are paths
     let handled: ResolvedPaths = (src: Path(src), dest: Path(dest), ssh: ssh)
@@ -673,7 +709,7 @@ def start_backup(
     ssh:               ?SSH,
     id_rsa:            ?Path,
     now:               str,
-) -> Path:
+) -> Path | Failure_T:
     let log_file: Path = log_dir / f"{now}.log"
 
     var src: str = str(src_folder)
@@ -712,7 +748,16 @@ def start_backup(
     log(style("Running command:", bold=True), INFO)
     log(style(cmd, green), INFO)
 
-    run_cmd(f"echo {mypid} > {inprogress_file}", ssh)
+    # Every attempt of one run writes the same log, and rsync appends to it:
+    # the "No space left" of the attempt before was still in there, so each
+    # retry took it for its own and expired another backup -- all of them,
+    # in the end, even once rsync had room. Each attempt starts a fresh log.
+    do:
+        rm_file(log_file)
+        run_checked(f"echo {mypid} > {inprogress_file}", ssh)
+    # rsync's own status is not checked: running out of space is one of its
+    # failures, and the log is where deal_with_no_space_left() and
+    # check_rsync_errors() read what happened and what to do about it.
     run_cmd(cmd)
     return log_file
 
@@ -731,19 +776,20 @@ def backup(
     rsync_get_flags:     bool,
     allow_host_only:     bool,
     dry_run:             bool,
-) -> None:
-    let resolved: ResolvedPaths = handle_ssh(
-        src_folder, dest_folder, port, id_rsa, exclusion_file, allow_host_only,
-    )
+) -> None | Failure_T:
+    do:
+        resolved <- handle_ssh(
+            src_folder, dest_folder, port, id_rsa, exclusion_file, allow_host_only,
+        )
     let src:    Path = resolved.src
     let dest_f: Path = resolved.dest
     let ssh:    ?SSH = resolved.ssh
 
     if not test_file_exists(src, ssh):
-        log(f"Source folder '{src}' does not exist - aborting.", ERROR)
-        quit(1)
+        return failure(SOURCE_MISSING, str(src))
 
-    check_dest_is_backup_folder(dest_f, dest_is_ssh(ssh))
+    do:
+        check_dest_is_backup_folder(dest_f, dest_is_ssh(ssh))
 
     let now:  str  = now_str()
     let dest: Path = dest_f / now
@@ -762,9 +808,10 @@ def backup(
         log(f"Creating log folder in '{log_dir}'...", INFO)
         log_dir.mkdir()   # native mkdir -p, log_dir is always local
 
-    handle_still_running_or_failed_or_interrupted_backup(
-        inprogress_file, mypid, dest, dest_f, previous_dest, ssh,
-    )
+    do:
+        handle_still_running_or_failed_or_interrupted_backup(
+            inprogress_file, mypid, dest, dest_f, previous_dest, ssh,
+        )
 
     var rsync_flags: []str = get_rsync_flags(src, dest_f, rsync_set_flags, rsync_append_flags, ssh)
 
@@ -779,11 +826,12 @@ def backup(
 
     if rsync_get_flags:
         log(f"Rsync flags:\n{style(' '.join(rsync_flags), yellow, bold=True)}", INFO)
-        quit(0)
+        return
 
     var log_file: Path = Path("")
     for _ in 0 ..< 100:
-        let link_dest: str = get_link_dest_option(previous_dest, ssh)
+        do:
+            link_dest <- get_link_dest_option(previous_dest, ssh)
 
         let dest_marker: str = find_cmd(dest, ssh, 0)
         if not dest_marker:
@@ -792,34 +840,63 @@ def backup(
                 dest_prefix = ssh.cmd
             let full_dest: str = style(f"{dest_prefix}{dest}", bold=True)
             log(f"Creating destination {full_dest}", INFO)
-            mkdir_p(dest, ssh)
+            do:
+                mkdir_p(dest, ssh)
 
-        expire_backups(dest_f, expiration_strategy, previous_dest or dest, ssh)
-
-        log_file = start_backup(
-            src, dest, exclusion_file, inprogress_file,
-            link_dest, rsync_flags, log_dir, mypid, ssh, id_rsa, now,
-        )
-
-        let retry: bool = deal_with_no_space_left(log_file, dest_f, ssh, auto_expire)
+        # Bound under names of their own, not log_file: a do: binding is a
+        # new name, and this one has to outlive the loop.
+        do:
+            expire_backups(dest_f, expiration_strategy, previous_dest or dest, ssh)
+            this_log <- start_backup(
+                src, dest, exclusion_file, inprogress_file,
+                link_dest, rsync_flags, log_dir, mypid, ssh, id_rsa, now,
+            )
+            retry <- deal_with_no_space_left(this_log, dest_f, ssh, auto_expire)
+        log_file = this_log
         if not retry:
             break
 
-    check_rsync_errors(log_file, auto_delete_log)
+    do:
+        check_rsync_errors(log_file, auto_delete_log)
 
     if dry_run:
-        rm_dir(dest, ssh)
-        rm_file(inprogress_file, ssh)
+        do:
+            rm_dir(dest, ssh)
+            rm_file(inprogress_file, ssh)
         log("Dry run complete - no backup was saved.", INFO)
         return
 
-    rm_file(dest_f / "latest", dest_is_ssh(ssh))
-    ln_s(Path(dest.name), dest_f / "latest", dest_is_ssh(ssh))
-    rm_file(inprogress_file, ssh)
+    # One railway: the lock is released only once `latest` points at this
+    # backup. If the link fails, the lock stays, and the next run finds an
+    # interrupted backup to resume rather than a finished one with no link.
+    do:
+        rm_file(dest_f / "latest", dest_is_ssh(ssh))
+        ln_s(Path(dest.name), dest_f / "latest", dest_is_ssh(ssh))
+        rm_file(inprogress_file, ssh)
 
 # ---------------------------------------------------------------------------
 # Argument parsing and entry point
 # ---------------------------------------------------------------------------
+
+def report(f: Failure_T) -> None:
+    """What went wrong, said once, here, for every step that can fail."""
+    case f.kind:
+        when CMD_FAILED:
+            log(f"Command failed: {f.detail}", ERROR)
+            if f.stderr:
+                log(f.stderr, ERROR)
+        when NOT_A_BACKUP_DEST:
+            log(style(f"Safety check failed - {f.detail} does not appear to be a backup folder or drive (marker file not found).", yellow), INFO)
+            log(style("If it is indeed a backup folder — you may add the marker file by running the following command:", yellow), INFO)
+            log(style(f.fix, green, bold=True), INFO)
+        when SOURCE_MISSING:
+            log(f"Source folder '{f.detail}' does not exist - aborting.", ERROR)
+        when STILL_RUNNING:
+            log(f"Previous backup task is still active - aborting (command: {f.detail}).", ERROR)
+        when NO_SPACE:
+            log(f.detail, ERROR)
+        when BAD_ARGUMENTS:
+            log(f.detail, ERROR)
 
 def print_usage() -> None:
     print(f"Usage: {$0} [options] SRC DEST [EXCLUSION_FILE]")
@@ -955,11 +1032,14 @@ def main() -> None:
         let raw: Path = Path(exclusion_file_arg)
         exclusion_file = raw if str(raw).startswith("/") else Path($PWD) / raw
 
-    backup(
+    let outcome: None | Failure_T = backup(
         src_folder, dest_folder, exclusion_file, log_dir, auto_delete_log,
         strategy, not no_auto_expire, port, id_rsa,
         rsync_set_flags, rsync_append_flags, rsync_get_flags,
         allow_host_only, dry_run,
     )
+    if outcome is Failure_T:
+        report(outcome)
+        quit(1)
 
 main()
