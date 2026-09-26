@@ -1,0 +1,536 @@
+===== Reporting on the closures of CFMUTEST.CFMUTEST_CONFIG.30.0.0.104 and CFMUTEST.CFMUTEST_CONFIG.30.0.0.105
+
+===== Querying CFMUTEST.CFMUTEST_CONFIG.30.0.0.104 CFMUTEST.CFMUTEST_CONFIG.30.0.0.105
+===== Differences between CFMUTEST.CFMUTEST_CONFIG.30.0.0.104 and CFMUTEST.CFMUTEST_CONFIG.30.0.0.105
+      Merge from <- 887ca8ef testadm.integration_30 RELATED_CHANGES="SC-134300 " 
+      Merge from <- 15d9c042 bss.CFMUTEST_MAILING_LIST RELATED_CHANGES="SC-134300 " 
+      changed c7036cd0:CFMUTEST/CFMUTEST_CONFIG/special_files/baseline_report_mail_list RELATED_CHANGES="SC-134300 " 
+===== CFMUTEST_CONFIG Software Changes Report
+      SC_134300              CR_059719             baseline_report_mail_list: try and receive baseline mails 
+
+===== Querying TACT.TACT_CONFIG.30.0.0.131 TACT.TACT_CONFIG.30.0.0.132
+===== Differences between TACT.TACT_CONFIG.30.0.0.131 and TACT.TACT_CONFIG.30.0.0.132
+      Merge from <- 56cefb1f4 testadm.integration_30 RELATED_CHANGES=" " 
+      +++++ Dependency changed to ELD.ELD_CONFIG.30.0.0.130
+      +++++ Dependency changed to TACT.SVISION.30.0.0.83
+      +++++ Dependency changed to TACT.TACOT_SCR.30.0.0.118
+      +++++ Dependency changed to TACT.UIF.30.0.0.130
+      +++++ Dependency changed to TACT.UNAS_SYS.30.0.0.110
+===== TACT_CONFIG Software Changes Report
+
+===== Querying TACT.UNAS_SYS.30.0.0.109 TACT.UNAS_SYS.30.0.0.110
+===== Differences between TACT.UNAS_SYS.30.0.0.109 and TACT.UNAS_SYS.30.0.0.110
+      Merge from <- 48277395 testadm.integration_30 RELATED_CHANGES=" " 
+      +++++ Dependency changed to TACT.UNAS.30.0.0.110
+===== UNAS_SYS Software Changes Report
+
+===== Querying TACT.UIF.30.0.0.129 TACT.UIF.30.0.0.130
+===== Differences between TACT.UIF.30.0.0.129 and TACT.UIF.30.0.0.130
+      Merge from <- 6627849d2 testadm.integration_30 RELATED_CHANGES="SC-133991 SC-134249 " 
+      Merge from <- a2721a86a acicek.transmit_esb RELATED_CHANGES="SC-133991 SC-134249 " 
+      Merge from <- c3fb81031 CFMUTEST.CFMUTEST_CONFIG.30.0.0.104 review-ok: yes; reviewed-by: dpt, gru, wao; review-date: 260922.151702;
+      changed c3fb81031:TACT/UIF/sources/query_mgr_task-direct_control_functions.adb RELATED_CHANGES=" " review-ok: yes; reviewed-by: dpt, gru, wao; review-date: 260922.151702;
+      Merge from <- d508f73af vhw.casa_reg_amend2 RELATED_CHANGES="SC-133991 " 
+      Merge from <- 4f82e11db CFMUTEST.CFMUTEST_CONFIG.30.0.0.104 review-ok: yes; reviewed-by: eliitiai, pdcorrei; review-date: 260922.132208;
+      Merge from <- f4112a889 CFMUTEST.CFMUTEST_CONFIG.30.0.0.104 
+      changed 33340af6c:TACT/UIF/sources/regulation_list_display-internal.adb RELATED_CHANGES="SC-133991 " 
+      Merge from <- 7c31a0834 CFMUTEST.CFMUTEST_CONFIG.30.0.0.103 review-ok: yes; reviewed-by: ehristea, hij; review-date: 260921.160836;
+      Merge from <- 91c575d2e CFMUTEST.CFMUTEST_CONFIG.30.0.0.102 
+      changed 13e00da4a:TACT/UIF/sources/mono_process_display.adb RELATED_CHANGES="SC-134249 " 
+      changed 13e00da4a:TACT/UIF/sources/query_mgr_task-corba_flight_plan_messages.ads RELATED_CHANGES="SC-134249 " 
+      changed 13e00da4a:TACT/UIF/sources/query_mgr_task-direct_control_functions.adb RELATED_CHANGES="SC-134249 " 
+      changed bc399bc5f:TACT/UIF/sources/mono_process_display.adb RELATED_CHANGES="SC-134249 " 
+      changed bc399bc5f:TACT/UIF/sources/query_mgr_task-corba_flight_plan_messages.adb RELATED_CHANGES="SC-134249 " 
+      changed bc399bc5f:TACT/UIF/sources/query_mgr_task-corba_flight_plan_messages.ads RELATED_CHANGES="SC-134249 " 
+      changed bc399bc5f:TACT/UIF/sources/query_mgr_task-direct_control_functions.adb RELATED_CHANGES="SC-134249 " 
+===== UIF Software Changes Report
+      SC_133991                         I2_138010  CCAMS performance issues 
+      SC_134249              CR_059873             Adapt TransmitFpd/Efpm/Text for ARO 
+
+===== Querying TACT.CORE.30.0.0.127 TACT.CORE.30.0.0.128
+===== Differences between TACT.CORE.30.0.0.127 and TACT.CORE.30.0.0.128
+      Merge from <- 1837cc345 testadm.integration_30 RELATED_CHANGES="SC-134199 SC-134203 SC-133991 SC-134249 " 
+      Merge from <- e7dcbd622 acicek.transmit_esb RELATED_CHANGES="SC-134199 SC-134203 SC-133991 SC-134249 " 
+      Merge from <- 42cb2f6c5 CFMUTEST.CFMUTEST_CONFIG.30.0.0.104 review-ok: yes; reviewed-by: dpt, gru, wao; review-date: 260922.151702;
+      changed 42cb2f6c5:TACT/CORE/sources/corba_flight_plan_message_indication.adb RELATED_CHANGES=" " review-ok: yes; reviewed-by: dpt, gru, wao; review-date: 260922.151702;
+      Merge from <- 885d6abd7 vhw.casa_reg_amend2 RELATED_CHANGES="SC-134199 SC-134203 SC-133991 " 
+      Merge from <- 08abdad78 CFMUTEST.CFMUTEST_CONFIG.30.0.0.104 review-ok: yes; reviewed-by: eliitiai, pdcorrei; review-date: 260922.132208;
+      changed 08abdad78:TACT/CORE/sources/regulation-iflight.adb RELATED_CHANGES=" " review-ok: yes; reviewed-by: eliitiai, pdcorrei; review-date: 260922.132208;
+      changed 08abdad78:TACT/CORE/sources/regulation_decision.ads RELATED_CHANGES=" " review-ok: yes; reviewed-by: eliitiai, pdcorrei; review-date: 260922.132208;
+      Merge from <- 16d22d240 CFMUTEST.CFMUTEST_CONFIG.30.0.0.104 
+      Merge from <- cabd9e4a9 CFMUTEST.CFMUTEST_CONFIG.30.0.0.104 
+      Merge from <- 5ad94176d sei.prio_factor_30 RELATED_CHANGES="SC-134199 SC-134203 " 
+      changed f8c6fce45:TACT/CORE/sources/regulation-iregulation.ads RELATED_CHANGES="SC-134203 " 
+      Merge from <- d14d4ee4d jsainz.error_fix RELATED_CHANGES="SC-134199 " 
+      changed 367e66ad6:TACT/CORE/sources/flight-tdf-esb-flight_data.adb RELATED_CHANGES="SC-134199 " 
+      Merge from <- 4ae94fa76 CFMUTEST.CFMUTEST_CONFIG.30.0.0.104 
+      changed bef5b68fc:TACT/CORE/sources/regulation-flight_data.adb RELATED_CHANGES="SC-134203 " 
+      changed bef5b68fc:TACT/CORE/sources/regulation-iregulation.adb RELATED_CHANGES="SC-134203 " 
+      changed bef5b68fc:TACT/CORE/sources/regulation-iregulation.ads RELATED_CHANGES="SC-134203 " 
+      changed d82d54beb:TACT/CORE/sources/regulation-event.adb RELATED_CHANGES="SC-133991 " 
+      changed d82d54beb:TACT/CORE/sources/regulation-flight_data.adb RELATED_CHANGES="SC-133991 " 
+      changed d82d54beb:TACT/CORE/sources/regulation-iflight.adb RELATED_CHANGES="SC-133991 " 
+      changed d82d54beb:TACT/CORE/sources/regulation-iflight.ads RELATED_CHANGES="SC-133991 " 
+      changed d82d54beb:TACT/CORE/sources/regulation-iregulation.adb RELATED_CHANGES="SC-133991 " 
+      changed d82d54beb:TACT/CORE/sources/regulation-iregulation.ads RELATED_CHANGES="SC-133991 " 
+      changed d82d54beb:TACT/CORE/sources/regulation-slot.adb RELATED_CHANGES="SC-133991 " 
+      changed d82d54beb:TACT/CORE/sources/regulation-toplevel.adb RELATED_CHANGES="SC-133991 " 
+      changed d82d54beb:TACT/CORE/sources/regulation-toplevel.ads RELATED_CHANGES="SC-133991 " 
+      changed d82d54beb:TACT/CORE/sources/regulation_decision.adb RELATED_CHANGES="SC-133991 " 
+      changed d82d54beb:TACT/CORE/sources/regulation_decision.ads RELATED_CHANGES="SC-133991 " 
+      changed 204d66fd0:TACT/CORE/sources/corba_flight_plan_message_indication.adb RELATED_CHANGES="SC-134249 " review-ok: yes; reviewed-by: ehristea, hij; review-date: 260921.160836;
+      changed f3fc72a1d:TACT/CORE/sources/corba_flight_plan_message_indication.adb RELATED_CHANGES="SC-134249 " 
+      Merge from <- 81f5348dd CFMUTEST.CFMUTEST_CONFIG.30.0.0.103 
+      changed 3693943c6:TACT/CORE/sources/regulation-flight_data.adb RELATED_CHANGES="SC-134203 " 
+      Merge from <- e8a79bb90 CFMUTEST.CFMUTEST_CONFIG.30.0.0.103 
+      Merge from <- 28a219d1b CFMUTEST.CFMUTEST_CONFIG.30.0.0.102 
+      changed 417a05507:TACT/CORE/sources/corba_flight_plan_message_indication.adb RELATED_CHANGES="SC-134249 " 
+      changed 417a05507:TACT/CORE/sources/corba_flight_plan_message_indication.ads RELATED_CHANGES="SC-134249 " 
+===== CORE Software Changes Report
+      SC_133991                         I2_138010  CCAMS performance issues 
+      SC_134199              CR_059906             Initial Flight Rule should be a cheap field 
+      SC_134203                         I2_138110  The prioritized processing in regulation-flight_data should take the regulation note factor into account 
+      SC_134249              CR_059873             Adapt TransmitFpd/Efpm/Text for ARO 
+
+===== Querying TACT.ENV.30.0.0.123 TACT.ENV.30.0.0.124
+===== Differences between TACT.ENV.30.0.0.123 and TACT.ENV.30.0.0.124
+      Merge from <- 2e721900 testadm.integration_30 RELATED_CHANGES=" " 
+      +++++ Dependency changed to ELD.GEO_FLIGHT.30.0.0.123
+      +++++ Dependency changed to TACT.TACT_UNAS.30.0.0.110
+===== ENV Software Changes Report
+
+===== Querying TACT.TACT_UNAS.30.0.0.109 TACT.TACT_UNAS.30.0.0.110
+===== Differences between TACT.TACT_UNAS.30.0.0.109 and TACT.TACT_UNAS.30.0.0.110
+      Merge from <- 7e22128c testadm.integration_30 RELATED_CHANGES="SC-134249 " 
+      Merge from <- 0f192521 acicek.transmit_esb RELATED_CHANGES="SC-134249 " 
+      Merge from <- 3a35ad01 CFMUTEST.CFMUTEST_CONFIG.30.0.0.104 review-ok: yes; reviewed-by: dpt, gru, wao; review-date: 260922.151702;
+      Merge from <- 5f636d9c CFMUTEST.CFMUTEST_CONFIG.30.0.0.103 review-ok: yes; reviewed-by: ehristea, hij; review-date: 260921.160836;
+      Merge from <- feefb892 CFMUTEST.CFMUTEST_CONFIG.30.0.0.102 
+      changed b41755e2:TACT/TACT_UNAS/sources/corba_flight_plan_messages.ads RELATED_CHANGES="SC-134249 " 
+      changed b41755e2:TACT/TACT_UNAS/sources/query_reply_message.adb RELATED_CHANGES="SC-134249 " 
+      changed b41755e2:TACT/TACT_UNAS/sources/query_reply_message.ads RELATED_CHANGES="SC-134249 " 
+===== TACT_UNAS Software Changes Report
+      SC_134249              CR_059873             Adapt TransmitFpd/Efpm/Text for ARO 
+
+===== Querying TACT.UNAS.30.0.0.109 TACT.UNAS.30.0.0.110
+===== Differences between TACT.UNAS.30.0.0.109 and TACT.UNAS.30.0.0.110
+      Merge from <- 1b69778 testadm.integration_30 RELATED_CHANGES=" " 
+      +++++ Dependency changed to ELD.GEO_ENV.30.0.0.111
+===== UNAS Software Changes Report
+
+===== Querying TACT.BASIC.30.0.0.87 TACT.BASIC.30.0.0.88
+===== Differences between TACT.BASIC.30.0.0.87 and TACT.BASIC.30.0.0.88
+      Merge from <- a906b123 testadm.integration_30 RELATED_CHANGES=" " 
+      +++++ Dependency changed to TOOL.COMM.30.0.0.87
+===== BASIC Software Changes Report
+
+===== Querying TACT.SVISION.30.0.0.82 TACT.SVISION.30.0.0.83
+===== Differences between TACT.SVISION.30.0.0.82 and TACT.SVISION.30.0.0.83
+      Merge from <- 1d690254 testadm.integration_30 RELATED_CHANGES="SC-134294 " 
+      Merge from <- ba7c45a0 mea.qh_report RELATED_CHANGES="SC-134294 " 
+      Merge from <- 51d4f925 CFMUTEST.CFMUTEST_CONFIG.30.0.0.104 
+      changed 3d172a4a:TACT/SVISION/sources/show_query_handlers.ksh RELATED_CHANGES="SC-134294 " 
+      changed 9c8ef28d:TACT/SVISION/sources/show_query_handlers.ksh RELATED_CHANGES="SC-134294 " 
+      changed ebbf02e5:TACT/SVISION/sources/show_query_handlers.ksh RELATED_CHANGES="SC-134294 " review-ok: yes; reviewed-by: bss; review-date: 260922.075248;
+===== SVISION Software Changes Report
+      SC_134294              CR_059756             improve show_query_handlers, show connection information. 
+
+===== Querying IFPS.FLIGHT_CONFIG.30.0.0.130 IFPS.FLIGHT_CONFIG.30.0.0.131
+===== Differences between IFPS.FLIGHT_CONFIG.30.0.0.130 and IFPS.FLIGHT_CONFIG.30.0.0.131
+      Merge from <- 25fe27387 testadm.integration_30 RELATED_CHANGES=" " 
+      +++++ Dependency changed to IFPS.FPL_CONFIG.30.0.0.131
+      +++++ Dependency changed to MMS.MMS_CONFIG.30.0.0.118
+===== FLIGHT_CONFIG Software Changes Report
+
+===== Querying MMS.MMS_CONFIG.30.0.0.117 MMS.MMS_CONFIG.30.0.0.118
+===== Differences between MMS.MMS_CONFIG.30.0.0.117 and MMS.MMS_CONFIG.30.0.0.118
+      Merge from <- 22209fe5 testadm.integration_30 RELATED_CHANGES=" " 
+      +++++ Dependency changed to MMS.MASTER.30.0.0.87
+      +++++ Dependency changed to TOOL.COMMON_CONFIG.30.0.0.103
+===== MMS_CONFIG Software Changes Report
+
+===== Querying MMS.MASTER.30.0.0.86 MMS.MASTER.30.0.0.87
+===== Differences between MMS.MASTER.30.0.0.86 and MMS.MASTER.30.0.0.87
+      Merge from <- 31b0ed50 testadm.integration_30 RELATED_CHANGES=" " 
+      +++++ Dependency changed to TOOL.COMM.30.0.0.87
+===== MASTER Software Changes Report
+
+===== Querying IFPS.FPL_CONFIG.30.0.0.130 IFPS.FPL_CONFIG.30.0.0.131
+===== Differences between IFPS.FPL_CONFIG.30.0.0.130 and IFPS.FPL_CONFIG.30.0.0.131
+      Merge from <- 62bc0be1 testadm.integration_30 RELATED_CHANGES=" " 
+      +++++ Dependency changed to ELD.ELD_CONFIG.30.0.0.130
+      +++++ Dependency changed to IFPS.TESTING.30.0.0.130
+      +++++ Dependency changed to TOOL.COMMON_CONFIG.30.0.0.103
+===== FPL_CONFIG Software Changes Report
+
+===== Querying IFPS.TESTING.30.0.0.129 IFPS.TESTING.30.0.0.130
+===== Differences between IFPS.TESTING.30.0.0.129 and IFPS.TESTING.30.0.0.130
+      Merge from <- bed6ba3a testadm.integration_30 RELATED_CHANGES=" " 
+      +++++ Dependency changed to IFPS.FAAS.30.0.0.126
+      +++++ Dependency changed to IFPS.TEST_DATA.30.0.0.76
+      +++++ Dependency changed to TOOL.COMMON_CONFIG.30.0.0.103
+===== TESTING Software Changes Report
+
+===== Querying IFPS.FAAS.30.0.0.125 IFPS.FAAS.30.0.0.126
+===== Differences between IFPS.FAAS.30.0.0.125 and IFPS.FAAS.30.0.0.126
+      Merge from <- e4652025 testadm.integration_30 RELATED_CHANGES=" " 
+      +++++ Dependency changed to IFPS.OPIF_LIB.30.0.0.126
+===== FAAS Software Changes Report
+
+===== Querying IFPS.OPIF_LIB.30.0.0.125 IFPS.OPIF_LIB.30.0.0.126
+===== Differences between IFPS.OPIF_LIB.30.0.0.125 and IFPS.OPIF_LIB.30.0.0.126
+      Merge from <- c9601a76 testadm.integration_30 RELATED_CHANGES="SC-134249 " 
+      Merge from <- 364ada20 acicek.transmit_esb RELATED_CHANGES="SC-134249 " 
+      removed c08d2ec7:IFPS/OPIF_LIB/sources/Pmake.out RELATED_CHANGES="SC-134249 " 
+      removed c08d2ec7:IFPS/OPIF_LIB/sources/Pmake.out.unfiltered RELATED_CHANGES="SC-134249 " 
+      changed c08d2ec7:IFPS/OPIF_LIB/sources/fplmanager-implementation-transmit.adb RELATED_CHANGES="SC-134249 " 
+      Merge from <- 91966522 CFMUTEST.CFMUTEST_CONFIG.30.0.0.104 review-ok: yes; reviewed-by: dpt, gru, wao; review-date: 260922.151702;
+      changed 91966522:IFPS/OPIF_LIB/sources/fplmanager-implementation-transmit.adb RELATED_CHANGES=" " review-ok: yes; reviewed-by: dpt, gru, wao; review-date: 260922.151702;
+      Merge from <- 3dbed47a CFMUTEST.CFMUTEST_CONFIG.30.0.0.104 
+      changed 95e0fe5c:IFPS/OPIF_LIB/sources/fplmanager-implementation-test-services-do_transmit_efpm.ads RELATED_CHANGES="SC-134249 " review-ok: yes; reviewed-by: ehristea, hij; review-date: 260921.160836;
+      changed 95e0fe5c:IFPS/OPIF_LIB/sources/fplmanager-implementation-test-services-do_transmit_fpd.ads RELATED_CHANGES="SC-134249 " review-ok: yes; reviewed-by: ehristea, hij; review-date: 260921.160836;
+      changed 95e0fe5c:IFPS/OPIF_LIB/sources/fplmanager-implementation-test-services-do_transmit_text.ads RELATED_CHANGES="SC-134249 " review-ok: yes; reviewed-by: ehristea, hij; review-date: 260921.160836;
+      changed 95e0fe5c:IFPS/OPIF_LIB/sources/fplmanager-implementation-transmit.adb RELATED_CHANGES="SC-134249 " review-ok: yes; reviewed-by: ehristea, hij; review-date: 260921.160836;
+      Merge from <- a3931e1d CFMUTEST.CFMUTEST_CONFIG.30.0.0.103 
+      changed dab5e707:IFPS/OPIF_LIB/sources/fplmanager-implementation-test-services-do_transmit_fpd.adb RELATED_CHANGES="SC-134249 " 
+      changed dab5e707:IFPS/OPIF_LIB/sources/fplmanager-implementation-transmit.adb RELATED_CHANGES="SC-134249 " 
+      changed dab5e707:IFPS/OPIF_LIB/sources/fplmanager-implementation-transmit.ads RELATED_CHANGES="SC-134249 " 
+      Merge from <- 1a86745c CFMUTEST.CFMUTEST_CONFIG.30.0.0.102 
+      added   a88abac6:IFPS/OPIF_LIB/sources/Pmake.out RELATED_CHANGES="SC-134249 " 
+      added   a88abac6:IFPS/OPIF_LIB/sources/Pmake.out.unfiltered RELATED_CHANGES="SC-134249 " 
+      changed a88abac6:IFPS/OPIF_LIB/sources/fplmanager-implementation-processing-check.adb RELATED_CHANGES="SC-134249 " 
+      changed a88abac6:IFPS/OPIF_LIB/sources/fplmanager-implementation-transmit.adb RELATED_CHANGES="SC-134249 " 
+      changed a88abac6:IFPS/OPIF_LIB/sources/fplmanager-implementation-transmit.ads RELATED_CHANGES="SC-134249 " 
+      removed a88abac6:IFPS/OPIF_LIB/sources/fplmanager-implementation-utilities.adb RELATED_CHANGES="SC-134249 " 
+      removed a88abac6:IFPS/OPIF_LIB/sources/fplmanager-implementation-utilities.ads RELATED_CHANGES="SC-134249 " 
+      Merge from <- 1cfa8751 CFMUTEST.CFMUTEST_CONFIG.30.0.0.100 
+      changed 0482aa91:IFPS/OPIF_LIB/sources/fplmanager-implementation-transmit.adb RELATED_CHANGES="SC-134249 " 
+      Merge from <- 76fbc2ec CFMUTEST.CFMUTEST_CONFIG.30.0.0.99 
+      changed 6ef962df:IFPS/OPIF_LIB/sources/fplmanager-implementation-test-services-do_transmit_efpm.adb RELATED_CHANGES=" " 
+      changed 6ef962df:IFPS/OPIF_LIB/sources/fplmanager-implementation-test-services-do_transmit_efpm.ads RELATED_CHANGES=" " 
+      changed 6ef962df:IFPS/OPIF_LIB/sources/fplmanager-implementation-test-services-do_transmit_fpd.adb RELATED_CHANGES=" " 
+      changed 6ef962df:IFPS/OPIF_LIB/sources/fplmanager-implementation-test-services-do_transmit_fpd.ads RELATED_CHANGES=" " 
+      changed 6ef962df:IFPS/OPIF_LIB/sources/fplmanager-implementation-test-services-do_transmit_text.adb RELATED_CHANGES=" " 
+      changed 6ef962df:IFPS/OPIF_LIB/sources/fplmanager-implementation-test-services-do_transmit_text.ads RELATED_CHANGES=" " 
+      changed 6ef962df:IFPS/OPIF_LIB/sources/fplmanager-implementation-transmit.adb RELATED_CHANGES=" " 
+      changed 6ef962df:IFPS/OPIF_LIB/sources/fplmanager-implementation-transmit.ads RELATED_CHANGES=" " 
+      changed 6ef962df:IFPS/OPIF_LIB/sources/fplmanager-implementation.adb RELATED_CHANGES=" " 
+      changed 6ef962df:IFPS/OPIF_LIB/sources/fplmanager-implementation.ads RELATED_CHANGES=" " 
+      Merge from <- a2d7ff63 CFMUTEST.CFMUTEST_CONFIG.30.0.0.97 
+      changed 38315608:IFPS/OPIF_LIB/sources/fplmanager-implementation-test-services-do_transmit_efpm.adb RELATED_CHANGES=" " 
+      changed 38315608:IFPS/OPIF_LIB/sources/fplmanager-implementation-test-services-do_transmit_fpd.adb RELATED_CHANGES=" " 
+      changed 38315608:IFPS/OPIF_LIB/sources/fplmanager-implementation-test-services-do_transmit_text.adb RELATED_CHANGES=" " 
+      changed 38315608:IFPS/OPIF_LIB/sources/fplmanager-implementation-transmit.adb RELATED_CHANGES=" " 
+      changed 54d4a6cb:IFPS/OPIF_LIB/sources/fplmanager-implementation-transmit.adb RELATED_CHANGES="SC-134249 " 
+      Merge from <- 7eb2f135 CFMUTEST.CFMUTEST_CONFIG.30.0.0.96 
+      changed ad610ddb:IFPS/OPIF_LIB/sources/fplmanager-implementation-test-services-do_transmit_efpm.adb RELATED_CHANGES=" " 
+      changed ad610ddb:IFPS/OPIF_LIB/sources/fplmanager-implementation-transmit.adb RELATED_CHANGES=" " 
+      changed ad610ddb:IFPS/OPIF_LIB/sources/fplmanager-implementation-transmit.ads RELATED_CHANGES=" " 
+      changed ad610ddb:IFPS/OPIF_LIB/sources/fplmanager-implementation.adb RELATED_CHANGES=" " 
+      changed ad610ddb:IFPS/OPIF_LIB/sources/fplmanager-implementation.ads RELATED_CHANGES=" " 
+      Merge from <- c53caa72 CFMUTEST.CFMUTEST_CONFIG.30.0.0.93 
+      changed b968889f:IFPS/OPIF_LIB/sources/fplmanager-implementation-transmit.adb RELATED_CHANGES=" " 
+      changed b968889f:IFPS/OPIF_LIB/sources/fplmanager-implementation.adb RELATED_CHANGES=" " 
+      changed b968889f:IFPS/OPIF_LIB/sources/fplmanager-implementation.ads RELATED_CHANGES=" " 
+===== OPIF_LIB Software Changes Report
+      SC_134249              CR_059873             Adapt TransmitFpd/Efpm/Text for ARO 
+
+===== Querying IFPS.IFPS_LIB.30.0.0.125 IFPS.IFPS_LIB.30.0.0.126
+===== Differences between IFPS.IFPS_LIB.30.0.0.125 and IFPS.IFPS_LIB.30.0.0.126
+      Merge from <- 136c727b testadm.integration_30 RELATED_CHANGES="SC-134249 SC-134284 " 
+      Merge from <- 93db1bae acicek.transmit_esb RELATED_CHANGES="SC-134249 SC-134284 " 
+      changed e02e27db:IFPS/IFPS_LIB/sources/distribution-facade-aro.adb RELATED_CHANGES="SC-134249 " 
+      changed cfc319b3:IFPS/IFPS_LIB/sources/distribution-facade-aro.adb RELATED_CHANGES="SC-134249 " 
+      changed cfc319b3:IFPS/IFPS_LIB/sources/distribution-facade-aro.ads RELATED_CHANGES="SC-134249 " 
+      changed cfc319b3:IFPS/IFPS_LIB/sources/fpl-internal.adb RELATED_CHANGES="SC-134249 " 
+      Merge from <- 0246c862 CFMUTEST.CFMUTEST_CONFIG.30.0.0.104 review-ok: yes; reviewed-by: dpt, gru, wao; review-date: 260922.151702;
+      changed 0246c862:IFPS/IFPS_LIB/sources/distribution-facade-aro.adb RELATED_CHANGES=" " review-ok: yes; reviewed-by: dpt, gru, wao; review-date: 260922.151702;
+      changed 0246c862:IFPS/IFPS_LIB/sources/distribution-facade-aro.ads RELATED_CHANGES=" " review-ok: yes; reviewed-by: dpt, gru, wao; review-date: 260922.151702;
+      changed 0246c862:IFPS/IFPS_LIB/sources/distribution-facade.adb RELATED_CHANGES=" " review-ok: yes; reviewed-by: dpt, gru, wao; review-date: 260922.151702;
+      changed 0246c862:IFPS/IFPS_LIB/sources/distribution-facade.ads RELATED_CHANGES=" " review-ok: yes; reviewed-by: dpt, gru, wao; review-date: 260922.151702;
+      changed 0246c862:IFPS/IFPS_LIB/sources/fpl-internal.adb RELATED_CHANGES=" " review-ok: yes; reviewed-by: dpt, gru, wao; review-date: 260922.151702;
+      changed 0246c862:IFPS/IFPS_LIB/sources/fpl-internal.ads RELATED_CHANGES=" " review-ok: yes; reviewed-by: dpt, gru, wao; review-date: 260922.151702;
+      changed 0246c862:IFPS/IFPS_LIB/sources/fplmanager-utilities-internal.adb RELATED_CHANGES=" " review-ok: yes; reviewed-by: dpt, gru, wao; review-date: 260922.151702;
+      changed 0246c862:IFPS/IFPS_LIB/sources/fplmanager-utilities-internal.ads RELATED_CHANGES=" " review-ok: yes; reviewed-by: dpt, gru, wao; review-date: 260922.151702;
+      changed 0246c862:IFPS/IFPS_LIB/sources/fplmanager-utilities.adb RELATED_CHANGES=" " review-ok: yes; reviewed-by: dpt, gru, wao; review-date: 260922.151702;
+      Merge from <- a0be5acf ehristea.aro_client_preferences RELATED_CHANGES="SC-134284 " 
+      Merge from <- 7c439cb6 CFMUTEST.CFMUTEST_CONFIG.30.0.0.104 
+      Merge from <- 0b9d1b54 CFMUTEST.CFMUTEST_CONFIG.30.0.0.104 
+      changed d15ab222:IFPS/IFPS_LIB/sources/distribution-facade-aro.adb RELATED_CHANGES="SC-134249 " review-ok: yes; reviewed-by: ehristea, hij; review-date: 260921.160836;
+      changed d15ab222:IFPS/IFPS_LIB/sources/distribution-facade-aro.ads RELATED_CHANGES="SC-134249 " review-ok: yes; reviewed-by: ehristea, hij; review-date: 260921.160836;
+      changed d15ab222:IFPS/IFPS_LIB/sources/distribution-facade.adb RELATED_CHANGES="SC-134249 " review-ok: yes; reviewed-by: ehristea, hij; review-date: 260921.160836;
+      changed d15ab222:IFPS/IFPS_LIB/sources/fplmanager-utilities.adb RELATED_CHANGES="SC-134249 " review-ok: yes; reviewed-by: ehristea, hij; review-date: 260921.160836;
+      changed 514b1d93:IFPS/IFPS_LIB/sources/distribution-facade.adb RELATED_CHANGES="SC-134249 " 
+      changed 514b1d93:IFPS/IFPS_LIB/sources/fpl-internal.adb RELATED_CHANGES="SC-134249 " 
+      changed 514b1d93:IFPS/IFPS_LIB/sources/fpl-internal.ads RELATED_CHANGES="SC-134249 " 
+      changed 514b1d93:IFPS/IFPS_LIB/sources/fplmanager-utilities-internal.ads RELATED_CHANGES="SC-134249 " 
+      changed 514b1d93:IFPS/IFPS_LIB/sources/fplmanager-utilities.adb RELATED_CHANGES="SC-134249 " 
+      changed 514b1d93:IFPS/IFPS_LIB/sources/fplmanager-utilities.ads RELATED_CHANGES="SC-134249 " 
+      Merge from <- 8c4393d3 CFMUTEST.CFMUTEST_CONFIG.30.0.0.103 
+      changed d317cc64:IFPS/IFPS_LIB/sources/distribution-facade-aro.adb RELATED_CHANGES="SC-134249 " 
+      changed d317cc64:IFPS/IFPS_LIB/sources/fpl-internal.adb RELATED_CHANGES="SC-134249 " 
+      changed d317cc64:IFPS/IFPS_LIB/sources/fpl-internal.ads RELATED_CHANGES="SC-134249 " 
+      changed d317cc64:IFPS/IFPS_LIB/sources/fplmanager-utilities-editor_processing_functions.ads RELATED_CHANGES="SC-134249 " 
+      changed d317cc64:IFPS/IFPS_LIB/sources/fplmanager-utilities-internal.adb RELATED_CHANGES="SC-134249 " 
+      changed d317cc64:IFPS/IFPS_LIB/sources/fplmanager-utilities-internal.ads RELATED_CHANGES="SC-134249 " 
+      changed d317cc64:IFPS/IFPS_LIB/sources/fplmanager-utilities.adb RELATED_CHANGES="SC-134249 " 
+      Merge from <- edb6555e CFMUTEST.CFMUTEST_CONFIG.30.0.0.102 
+      changed 209e524c:IFPS/IFPS_LIB/sources/fplmanager-utilities.adb RELATED_CHANGES="SC-134249 " 
+      changed 209e524c:IFPS/IFPS_LIB/sources/fplmanager-utilities.ads RELATED_CHANGES="SC-134249 " 
+      Merge from <- 9993d212 CFMUTEST.CFMUTEST_CONFIG.30.0.0.102 review-ok: yes; reviewed-by: alv; review-date: 260918.150112;
+      changed 9993d212:IFPS/IFPS_LIB/sources/fpd-assign_defaults.adb RELATED_CHANGES=" " review-ok: yes; reviewed-by: alv; review-date: 260918.150112;
+      Merge from <- dd18d43d CFMUTEST.CFMUTEST_CONFIG.30.0.0.102 review-ok: yes; reviewed-by: clp; review-date: 260918.132420;
+      changed 743f275a:IFPS/IFPS_LIB/sources/aro_processing_preferences.ads RELATED_CHANGES="SC-134284 " 
+      Merge from <- f9998a92 CFMUTEST.CFMUTEST_CONFIG.30.0.0.101 
+      changed ce6791a2:IFPS/IFPS_LIB/sources/aro_processing_preferences.adb RELATED_CHANGES="SC-134284 " 
+      changed ce6791a2:IFPS/IFPS_LIB/sources/aro_processing_preferences.ads RELATED_CHANGES="SC-134284 " 
+      changed ce6791a2:IFPS/IFPS_LIB/sources/check_flight_data_components.adb RELATED_CHANGES="SC-134284 " 
+      changed ce6791a2:IFPS/IFPS_LIB/sources/check_flight_data_components.ads RELATED_CHANGES="SC-134284 " 
+      changed ce6791a2:IFPS/IFPS_LIB/sources/fpd-assign_defaults.adb RELATED_CHANGES="SC-134284 " 
+      changed ce6791a2:IFPS/IFPS_LIB/sources/fpl-processing_preferences.adb RELATED_CHANGES="SC-134284 " 
+      Merge from <- 5f228e46 CFMUTEST.CFMUTEST_CONFIG.30.0.0.100 
+      changed 89a61bbb:IFPS/IFPS_LIB/sources/distribution-facade-aro.adb RELATED_CHANGES="SC-134249 " 
+      changed 89a61bbb:IFPS/IFPS_LIB/sources/distribution-facade-aro.ads RELATED_CHANGES="SC-134249 " 
+      changed 89a61bbb:IFPS/IFPS_LIB/sources/distribution-facade.adb RELATED_CHANGES="SC-134249 " 
+      changed 89a61bbb:IFPS/IFPS_LIB/sources/distribution-facade.ads RELATED_CHANGES="SC-134249 " 
+      added   d20beae7:IFPS/IFPS_LIB/sources/distribution-facade-aro.adb RELATED_CHANGES="SC-134249 " 
+      added   d20beae7:IFPS/IFPS_LIB/sources/distribution-facade-aro.ads RELATED_CHANGES="SC-134249 " 
+      changed d20beae7:IFPS/IFPS_LIB/sources/distribution-facade.adb RELATED_CHANGES="SC-134249 " 
+      changed d20beae7:IFPS/IFPS_LIB/sources/distribution-facade.ads RELATED_CHANGES="SC-134249 " 
+      Merge from <- d41c0a06 CFMUTEST.CFMUTEST_CONFIG.30.0.0.99 
+      Merge from <- 015dae51 CFMUTEST.CFMUTEST_CONFIG.30.0.0.97 
+      changed 2d880a15:IFPS/IFPS_LIB/sources/fpl-internal.adb RELATED_CHANGES=" " 
+      changed 2d880a15:IFPS/IFPS_LIB/sources/fpl-internal.ads RELATED_CHANGES=" " 
+      changed 481e476f:IFPS/IFPS_LIB/sources/b2bdefs-common_utilities.adb RELATED_CHANGES="SC-134249 " 
+      changed 481e476f:IFPS/IFPS_LIB/sources/b2bdefs-common_utilities.ads RELATED_CHANGES="SC-134249 " 
+      changed 481e476f:IFPS/IFPS_LIB/sources/fpl-internal.adb RELATED_CHANGES="SC-134249 " 
+      changed 481e476f:IFPS/IFPS_LIB/sources/fpl-internal.ads RELATED_CHANGES="SC-134249 " 
+      Merge from <- a8ed2b26 CFMUTEST.CFMUTEST_CONFIG.30.0.0.96 
+      changed f2b31b84:IFPS/IFPS_LIB/sources/b2bdefs-common_utilities.adb RELATED_CHANGES=" " 
+      Merge from <- df9b0907 CFMUTEST.CFMUTEST_CONFIG.30.0.0.93 
+      changed c6a93ac2:IFPS/IFPS_LIB/sources/b2bdefs-common_utilities.adb RELATED_CHANGES=" " 
+      changed c6a93ac2:IFPS/IFPS_LIB/sources/b2bdefs-common_utilities.ads RELATED_CHANGES=" " 
+===== IFPS_LIB Software Changes Report
+      SC_134249              CR_059873             Adapt TransmitFpd/Efpm/Text for ARO 
+      SC_134284              CR_059871             Add manual client preferences override to FplDefs.idl 
+
+===== Querying IFPS.SYS_LIB.30.0.0.123 IFPS.SYS_LIB.30.0.0.124
+===== Differences between IFPS.SYS_LIB.30.0.0.123 and IFPS.SYS_LIB.30.0.0.124
+      Merge from <- ab399058 testadm.integration_30 RELATED_CHANGES=" " 
+      +++++ Dependency changed to IFPS.ENV_LIB.30.0.0.123
+===== SYS_LIB Software Changes Report
+
+===== Querying IFPS.ENV_LIB.30.0.0.122 IFPS.ENV_LIB.30.0.0.123
+===== Differences between IFPS.ENV_LIB.30.0.0.122 and IFPS.ENV_LIB.30.0.0.123
+      Merge from <- 3156886f testadm.integration_30 RELATED_CHANGES=" " 
+      +++++ Dependency changed to IFPS.BASIC_LIB.30.0.0.123
+===== ENV_LIB Software Changes Report
+
+===== Querying IFPS.CUA_IDL.30.0.0.122 IFPS.CUA_IDL.30.0.0.123
+===== Differences between IFPS.CUA_IDL.30.0.0.122 and IFPS.CUA_IDL.30.0.0.123
+      Merge from <- 4960a798 testadm.integration_30 RELATED_CHANGES="SC-134284 SC-134249 " 
+      Merge from <- 060c609a acicek.transmit_esb RELATED_CHANGES="SC-134284 SC-134249 " 
+      Merge from <- 7ef9b572 CFMUTEST.CFMUTEST_CONFIG.30.0.0.104 review-ok: yes; reviewed-by: dpt, gru, wao; review-date: 260922.151702;
+      changed 7ef9b572:IFPS/CUA_IDL/sources/FplDefs.idl RELATED_CHANGES=" " review-ok: yes; reviewed-by: dpt, gru, wao; review-date: 260922.151702;
+      changed 7ef9b572:IFPS/CUA_IDL/sources/bsc-utilities.adb RELATED_CHANGES=" " review-ok: yes; reviewed-by: dpt, gru, wao; review-date: 260922.151702;
+      Merge from <- 4affea3e ehristea.aro_client_preferences RELATED_CHANGES="SC-134284 " 
+      Merge from <- 4ac44773 CFMUTEST.CFMUTEST_CONFIG.30.0.0.104 
+      Merge from <- d253a5d2 CFMUTEST.CFMUTEST_CONFIG.30.0.0.104 
+      Merge from <- acd36cb0 CFMUTEST.CFMUTEST_CONFIG.30.0.0.103 review-ok: yes; reviewed-by: ehristea, hij; review-date: 260921.160836;
+      Merge from <- af4cb39e CFMUTEST.CFMUTEST_CONFIG.30.0.0.102 
+      changed 1bd19222:IFPS/CUA_IDL/sources/fpl-utilities.adb RELATED_CHANGES="SC-134249 " 
+      changed 1bd19222:IFPS/CUA_IDL/sources/fpl-utilities.ads RELATED_CHANGES="SC-134249 " 
+      Merge from <- b86abdfd CFMUTEST.CFMUTEST_CONFIG.30.0.0.102 review-ok: yes; reviewed-by: alv; review-date: 260918.150112;
+      changed 779b1e17:IFPS/CUA_IDL/sources/fpl-test.ads RELATED_CHANGES="SC-134284 " 
+      changed 0245f0a2:IFPS/CUA_IDL/sources/fpl-utilities.adb RELATED_CHANGES="SC-134284 " 
+      changed 0245f0a2:IFPS/CUA_IDL/sources/fpl-utilities.ads RELATED_CHANGES="SC-134284 " 
+      changed f055e905:IFPS/CUA_IDL/sources/fpl-test-extract.adb RELATED_CHANGES="SC-134284 " 
+      changed f055e905:IFPS/CUA_IDL/sources/fpl-test.ads RELATED_CHANGES="SC-134284 " 
+      changed c98f8fea:IFPS/CUA_IDL/sources/FplDefs.idl RELATED_CHANGES="SC-134284 " 
+      changed c98f8fea:IFPS/CUA_IDL/sources/fpl-test-extract.adb RELATED_CHANGES="SC-134284 " 
+      Merge from <- bb70b37d CFMUTEST.CFMUTEST_CONFIG.30.0.0.101 
+      changed 43600454:IFPS/CUA_IDL/sources/FplDefs.idl RELATED_CHANGES="SC-134284 " 
+      changed 43600454:IFPS/CUA_IDL/sources/fpl-test-extract.adb RELATED_CHANGES="SC-134284 " 
+      changed 43600454:IFPS/CUA_IDL/sources/fpl-test-transfer.adb RELATED_CHANGES="SC-134284 " 
+      changed 43600454:IFPS/CUA_IDL/sources/fpl-test.ads RELATED_CHANGES="SC-134284 " 
+      changed 43600454:IFPS/CUA_IDL/sources/fpl-utilities.adb RELATED_CHANGES="SC-134284 " 
+      changed 43600454:IFPS/CUA_IDL/sources/fpl-utilities.ads RELATED_CHANGES="SC-134284 " 
+      Merge from <- 4a2d7208 CFMUTEST.CFMUTEST_CONFIG.30.0.0.100 
+      changed f36df723:IFPS/CUA_IDL/sources/FplManager.idl RELATED_CHANGES="SC-134249 " 
+      Merge from <- 5b980018 CFMUTEST.CFMUTEST_CONFIG.30.0.0.99 
+      changed bbc377ce:IFPS/CUA_IDL/sources/FplDefs.idl RELATED_CHANGES=" " 
+      changed bbc377ce:IFPS/CUA_IDL/sources/FplManager.idl RELATED_CHANGES=" " 
+      changed bbc377ce:IFPS/CUA_IDL/sources/fpl-test.ads RELATED_CHANGES=" " 
+      Merge from <- 4ad46372 CFMUTEST.CFMUTEST_CONFIG.30.0.0.97 
+      changed 892afe92:IFPS/CUA_IDL/sources/fpl-tdf-aftn_priority.ads RELATED_CHANGES=" " 
+      changed 892afe92:IFPS/CUA_IDL/sources/fpl-transfer.adb RELATED_CHANGES=" " 
+      changed 892afe92:IFPS/CUA_IDL/sources/fpl-utilities.adb RELATED_CHANGES=" " 
+      changed 7f062b6d:IFPS/CUA_IDL/sources/esb-aro_briefing_box_message.adb RELATED_CHANGES="SC-134249 " 
+      changed 7f062b6d:IFPS/CUA_IDL/sources/fpl-tdf-aftn_priority.ads RELATED_CHANGES="SC-134249 " 
+      changed 7f062b6d:IFPS/CUA_IDL/sources/fpl-transfer.adb RELATED_CHANGES="SC-134249 " 
+      changed 7f062b6d:IFPS/CUA_IDL/sources/fpl-utilities.adb RELATED_CHANGES="SC-134249 " 
+      changed dd085d0a:IFPS/CUA_IDL/sources/b2bdefs-utilities.adb RELATED_CHANGES="SC-134249 " 
+      changed dd085d0a:IFPS/CUA_IDL/sources/b2bdefs-utilities.ads RELATED_CHANGES="SC-134249 " 
+      changed dd085d0a:IFPS/CUA_IDL/sources/esb-aro_briefing_box_message-tdf.ads RELATED_CHANGES="SC-134249 " 
+      changed dd085d0a:IFPS/CUA_IDL/sources/esb-aro_briefing_box_message.adb RELATED_CHANGES="SC-134249 " 
+      changed dd085d0a:IFPS/CUA_IDL/sources/fpl-utilities.adb RELATED_CHANGES="SC-134249 " 
+      changed dd085d0a:IFPS/CUA_IDL/sources/fpl-utilities.ads RELATED_CHANGES="SC-134249 " 
+      Merge from <- f3c8cf33 CFMUTEST.CFMUTEST_CONFIG.30.0.0.96 
+      changed 3b0ac051:IFPS/CUA_IDL/sources/B2BDefs.idl RELATED_CHANGES=" " 
+      changed 3b0ac051:IFPS/CUA_IDL/sources/FplDefs.idl RELATED_CHANGES=" " 
+      changed 3b0ac051:IFPS/CUA_IDL/sources/FplManager.idl RELATED_CHANGES=" " 
+      changed 3b0ac051:IFPS/CUA_IDL/sources/b2bdefs-transfer.ads RELATED_CHANGES=" " 
+      changed 3b0ac051:IFPS/CUA_IDL/sources/esb-aro_briefing_box_message.adb RELATED_CHANGES=" " 
+      changed 3b0ac051:IFPS/CUA_IDL/sources/esb-aro_briefing_box_message.ads RELATED_CHANGES=" " 
+      changed 3b0ac051:IFPS/CUA_IDL/sources/fpl-tdf-aftn_priority.ads RELATED_CHANGES=" " 
+      changed 3b0ac051:IFPS/CUA_IDL/sources/fpl-transfer.adb RELATED_CHANGES=" " 
+      changed 3b0ac051:IFPS/CUA_IDL/sources/fpl-transfer.ads RELATED_CHANGES=" " 
+      changed bb63856a:IFPS/CUA_IDL/sources/b2bdefs-utilities.adb RELATED_CHANGES=" " 
+      changed bb63856a:IFPS/CUA_IDL/sources/b2bdefs-utilities.ads RELATED_CHANGES=" " 
+      changed bb63856a:IFPS/CUA_IDL/sources/bsc-utilities.adb RELATED_CHANGES=" " 
+      Merge from <- e7237577 CFMUTEST.CFMUTEST_CONFIG.30.0.0.92 
+      changed a38871db:IFPS/CUA_IDL/sources/B2BDefs.idl RELATED_CHANGES=" " 
+      changed a38871db:IFPS/CUA_IDL/sources/FplManager.idl RELATED_CHANGES=" " 
+===== CUA_IDL Software Changes Report
+      SC_134249              CR_059873             Adapt TransmitFpd/Efpm/Text for ARO 
+      SC_134284              CR_059871             Add manual client preferences override to FplDefs.idl 
+
+===== Querying IFPS.BASIC_LIB.30.0.0.122 IFPS.BASIC_LIB.30.0.0.123
+===== Differences between IFPS.BASIC_LIB.30.0.0.122 and IFPS.BASIC_LIB.30.0.0.123
+      Merge from <- 9a01eda2 testadm.integration_30 RELATED_CHANGES=" " 
+      +++++ Dependency changed to ELD.GEO_FLIGHT.30.0.0.123
+===== BASIC_LIB Software Changes Report
+
+===== Querying ELD.ELD_CONFIG.30.0.0.129 ELD.ELD_CONFIG.30.0.0.130
+===== Differences between ELD.ELD_CONFIG.30.0.0.129 and ELD.ELD_CONFIG.30.0.0.130
+      Merge from <- 127ea6c14 testadm.integration_30 RELATED_CHANGES=" " 
+      +++++ Dependency changed to ELD.GEO_MMI.30.0.0.124
+      +++++ Dependency changed to TOOL.COMMON_CONFIG.30.0.0.103
+===== ELD_CONFIG Software Changes Report
+
+===== Querying TOOL.COMMON_CONFIG.30.0.0.102 TOOL.COMMON_CONFIG.30.0.0.103
+===== Differences between TOOL.COMMON_CONFIG.30.0.0.102 and TOOL.COMMON_CONFIG.30.0.0.103
+      Merge from <- 8cbb7d506 testadm.integration_30 RELATED_CHANGES="SC-134290 SC-130787 SC-129584 " 
+      Merge from <- a4d7633e5 rhd.force_option RELATED_CHANGES="SC-134290 SC-130787 SC-129584 " 
+      Merge from <- beda814e1 CFMUTEST.CFMUTEST_CONFIG.30.0.0.104 
+      changed da44c661f:TOOL/COMMON_CONFIG/sources/dbt/periodic_task.dbt RELATED_CHANGES="SC-129584 " 
+===== COMMON_CONFIG Software Changes Report
+      SC_129584              CR_054434             Implement OLDI for Network TBO Solution 3 
+      SC_130787              CR_054222             chaining: add a new option to recreate a tape and load it 
+      SC_134290              CR_059719             TACT automation vnc port on deployment 
+
+===== Querying TOOL.COMMON_UTILS.30.0.0.92 TOOL.COMMON_UTILS.30.0.0.93
+===== Differences between TOOL.COMMON_UTILS.30.0.0.92 and TOOL.COMMON_UTILS.30.0.0.93
+      Merge from <- fc433d6f testadm.integration_30 RELATED_CHANGES=" " 
+===== COMMON_UTILS Software Changes Report
+
+===== Querying ELD.GEO_MMI.30.0.0.123 ELD.GEO_MMI.30.0.0.124
+===== Differences between ELD.GEO_MMI.30.0.0.123 and ELD.GEO_MMI.30.0.0.124
+      Merge from <- f7e454ed testadm.integration_30 RELATED_CHANGES=" " 
+      +++++ Dependency changed to ELD.GEO_FLIGHT.30.0.0.123
+      +++++ Dependency changed to TOOL.MOTIF.30.0.0.80
+===== GEO_MMI Software Changes Report
+
+===== Querying TOOL.MOTIF.30.0.0.79 TOOL.MOTIF.30.0.0.80
+===== Differences between TOOL.MOTIF.30.0.0.79 and TOOL.MOTIF.30.0.0.80
+      Merge from <- ac2df14d testadm.integration_30 RELATED_CHANGES=" " 
+      +++++ Dependency changed to TOOL.ADA_BASIC.30.0.0.80
+===== MOTIF Software Changes Report
+
+===== Querying ELD.GEO_FLIGHT.30.0.0.122 ELD.GEO_FLIGHT.30.0.0.123
+===== Differences between ELD.GEO_FLIGHT.30.0.0.122 and ELD.GEO_FLIGHT.30.0.0.123
+      Merge from <- 7d7cb8e3 testadm.integration_30 RELATED_CHANGES=" " 
+      +++++ Dependency changed to ELD.GEO_ENV.30.0.0.111
+===== GEO_FLIGHT Software Changes Report
+
+===== Querying ELD.GEO_ENV.30.0.0.110 ELD.GEO_ENV.30.0.0.111
+===== Differences between ELD.GEO_ENV.30.0.0.110 and ELD.GEO_ENV.30.0.0.111
+      Merge from <- b81dd4af testadm.integration_30 RELATED_CHANGES=" " 
+      +++++ Dependency changed to ELD.DOM.30.0.0.21
+      +++++ Dependency changed to TOOL.COMM.30.0.0.87
+===== GEO_ENV Software Changes Report
+
+===== Querying TOOL.COMM.30.0.0.86 TOOL.COMM.30.0.0.87
+===== Differences between TOOL.COMM.30.0.0.86 and TOOL.COMM.30.0.0.87
+      Merge from <- b18fb1e6 testadm.integration_30 RELATED_CHANGES=" " 
+      +++++ Dependency changed to TOOL.ADA_BASIC.30.0.0.80
+===== COMM Software Changes Report
+
+===== Querying TOOL.ADA_BASIC.30.0.0.79 TOOL.ADA_BASIC.30.0.0.80
+===== Differences between TOOL.ADA_BASIC.30.0.0.79 and TOOL.ADA_BASIC.30.0.0.80
+      Merge from <- ba444686 testadm.integration_30 RELATED_CHANGES=" " 
+      +++++ Dependency changed to TOOL.ORACLE.30.0.0.80
+===== ADA_BASIC Software Changes Report
+
+===== Querying TOOL.ORACLE.30.0.0.79 TOOL.ORACLE.30.0.0.80
+===== Differences between TOOL.ORACLE.30.0.0.79 and TOOL.ORACLE.30.0.0.80
+      Merge from <- f262b8db testadm.integration_30 RELATED_CHANGES=" " 
+      +++++ Dependency changed to TOOL.ADA_PRIM.30.0.0.80
+===== ORACLE Software Changes Report
+
+===== Querying TOOL.ADA_PRIM.30.0.0.79 TOOL.ADA_PRIM.30.0.0.80
+===== Differences between TOOL.ADA_PRIM.30.0.0.79 and TOOL.ADA_PRIM.30.0.0.80
+      Merge from <- 818a08df testadm.integration_30 RELATED_CHANGES=" " 
+===== ADA_PRIM Software Changes Report
+
+===== Querying ELD.DOM.30.0.0.20 ELD.DOM.30.0.0.21
+===== Differences between ELD.DOM.30.0.0.20 and ELD.DOM.30.0.0.21
+      Merge from <- a64b089 testadm.integration_30 RELATED_CHANGES="SC-134293 " 
+      Merge from <- 26afcbb mea.cmp_dom_dbs_01 RELATED_CHANGES="SC-134293 " 
+      changed d186ed7:ELD/DOM/sources/compare_dom_dbs.ksh RELATED_CHANGES="SC-134293 " review-ok: yes; reviewed-by: bss; review-date: 260922.074959;
+===== DOM Software Changes Report
+      SC_134293              CR_059756             [TACT_Migr] update compare_dom_dbs (remove IFPS_AERODROME_GROUP) 
+
+===== Querying CFMUTEST.TEST_DATA.30.0.0.95 CFMUTEST.TEST_DATA.30.0.0.96
+===== Differences between CFMUTEST.TEST_DATA.30.0.0.95 and CFMUTEST.TEST_DATA.30.0.0.96
+      Merge from <- 693b201d testadm.integration_30 RELATED_CHANGES=" " 
+      +++++ Dependency changed to IFPS.TEST_DATA.30.0.0.76
+      +++++ Dependency changed to TACT.TACOT_SCR.30.0.0.118
+===== TEST_DATA Software Changes Report
+
+===== Querying TACT.TACOT_SCR.30.0.0.117 TACT.TACOT_SCR.30.0.0.118
+===== Differences between TACT.TACOT_SCR.30.0.0.117 and TACT.TACOT_SCR.30.0.0.118
+      Merge from <- 1a8aee798 testadm.integration_30 RELATED_CHANGES="SC-134203 SC-133991 SC-133361 " 
+      Merge from <- d3d7c1076 eliitiai.FSWITCH RELATED_CHANGES="SC-134203 SC-133991 SC-133361 " 
+      Merge from <- 8450a8f1f vhw.casa_reg_amend2 RELATED_CHANGES="SC-134203 SC-133991 " 
+      Merge from <- a6badaac6 CFMUTEST.CFMUTEST_CONFIG.30.0.0.104 review-ok: yes; reviewed-by: eliitiai, pdcorrei; review-date: 260922.132208;
+      changed 83da29ec0:TACT/TACOT_SCR/sources/an2/an2_mcp.templ.gif RELATED_CHANGES="SC-133991 " 
+      changed 83da29ec0:TACT/TACOT_SCR/sources/behav/behav_manual_suspension.2.templ RELATED_CHANGES="SC-133991 " 
+      changed 83da29ec0:TACT/TACOT_SCR/sources/casa/casa_cancel_unshift_inside_reg.1.templ RELATED_CHANGES="SC-133991 " 
+      changed 83da29ec0:TACT/TACOT_SCR/sources/casa/casa_cancel_unshift_inside_reg.2.templ RELATED_CHANGES="SC-133991 " 
+      changed 83da29ec0:TACT/TACOT_SCR/sources/casa/casa_cancel_unshift_inside_reg.3.templ RELATED_CHANGES="SC-133991 " 
+      changed 83da29ec0:TACT/TACOT_SCR/sources/casa/casa_delay_conf_cherry_pick.no_reexempt_button.templ.gif RELATED_CHANGES="SC-133991 " 
+      changed 83da29ec0:TACT/TACOT_SCR/sources/casa/casa_delay_conf_cherry_pick.reexempt_button.templ.gif RELATED_CHANGES="SC-133991 " 
+      changed 83da29ec0:TACT/TACOT_SCR/sources/casa/test_casa_slot_list_delay.reglistdisplay.templ RELATED_CHANGES="SC-133991 " 
+      changed 83da29ec0:TACT/TACOT_SCR/sources/mmi/ifps_flightlist_full_ft.templ RELATED_CHANGES="SC-133991 " 
+      changed 83da29ec0:TACT/TACOT_SCR/sources/mmi/mmi_excl_reg_flag.templ.gif RELATED_CHANGES="SC-133991 " 
+      Merge from <- 3eac12309 sei.prio_factor_30 RELATED_CHANGES="SC-134203 " 
+      changed f4e90da2c:TACT/TACOT_SCR/sources/fullsysonly/test_fullsysonly_secondary_forced_switch.el RELATED_CHANGES="SC-133361 " 
+      Merge from <- fdfabb650 CFMUTEST.CFMUTEST_CONFIG.30.0.0.104 
+      changed 4246de1a6:TACT/TACOT_SCR/sources/casa/test_casa_reg_avoidance_priority.el RELATED_CHANGES="SC-134203 " 
+      Merge from <- 6c18bd2a7 CFMUTEST.CFMUTEST_CONFIG.30.0.0.103 
+      changed 7dc284c77:TACT/TACOT_SCR/sources/casa/test_casa_reg_avoidance_priority.el RELATED_CHANGES="SC-134203 " review-ok: yes; reviewed-by: vhw; review-date: 260908.100924;
+===== TACOT_SCR Software Changes Report
+      SC_133361              CR_059756             General technical changes 
+      SC_133991                         I2_138010  CCAMS performance issues 
+      SC_134203                         I2_138110  The prioritized processing in regulation-flight_data should take the regulation note factor into account 
+
+===== Querying IFPS.TEST_DATA.30.0.0.75 IFPS.TEST_DATA.30.0.0.76
+===== Differences between IFPS.TEST_DATA.30.0.0.75 and IFPS.TEST_DATA.30.0.0.76
+      Merge from <- c03ef4c9 testadm.integration_30 RELATED_CHANGES="SC-134249 " 
+      Merge from <- 9190c559 acicek.transmit_esb RELATED_CHANGES="SC-134249 " 
+      added   0ee9ffa2:IFPS/TEST_DATA/sources/ssm/AFTNPriority.ssm RELATED_CHANGES="SC-134249 " review-ok: yes; reviewed-by: dpt, gru, wao; review-date: 260922.151702;
+      changed 840dac44:IFPS/TEST_DATA/sources/aro/test_aro_transmit_via_esb.el RELATED_CHANGES="SC-134249 " review-ok: yes; reviewed-by: ehristea, hij; review-date: 260921.160836;
+      changed bdfd873e:IFPS/TEST_DATA/sources/aro/test_aro_transmit_via_esb.el RELATED_CHANGES="SC-134249 " 
+      Merge from <- 7cd2b403 CFMUTEST.CFMUTEST_CONFIG.30.0.0.103 
+      Merge from <- 12425162 CFMUTEST.CFMUTEST_CONFIG.30.0.0.102 
+      changed da94d563:IFPS/TEST_DATA/sources/aro/test_aro_transmit_via_esb.el RELATED_CHANGES="SC-134249 " 
+      changed 93fdee7b:IFPS/TEST_DATA/sources/aro/test_aro_transmit_via_esb.el RELATED_CHANGES="SC-134249 " 
+      added   8d35add8:IFPS/TEST_DATA/sources/aro/test_aro_transmit_via_esb.el RELATED_CHANGES="SC-134249 " 
+      Merge from <- f80fd2c3 CFMUTEST.CFMUTEST_CONFIG.30.0.0.99 
+===== TEST_DATA Software Changes Report
+      SC_134249              CR_059873             Adapt TransmitFpd/Efpm/Text for ARO 
+
+
+
+This report is saved in /cm/ot/CFMUTEST/baseline_reports/CFMUTEST.CFMUTEST_CONFIG.30.0.0.105.changes_report

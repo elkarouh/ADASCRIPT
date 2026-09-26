@@ -579,3 +579,78 @@ def list_detailed_changes(baseline: BaselineNr_T, user: Committer):
     print
     echo_emacs(report)
     print
+
+# ---------------------------------------------------------------------------
+# Tests: ady2nim c LIBS/changes_report.ady && LIBS/changes_report
+# The real changes report is in test/samples, beside LIBS/.
+# ---------------------------------------------------------------------------
+
+if __name__ == "__main__":
+    let samples: Path = Path($0).parent.parent / "test" / "samples"
+
+    # --- branch names -------------------------------------------------------
+    assert committer_of("acicek.transmit_esb") == "acicek"
+    assert user_branch("acicek.transmit_esb") == "acicek.transmit_esb"
+    assert user_branch("testadm.integration_30") == ""               # an integration merge
+    assert user_branch("CFMUTEST.CFMUTEST_CONFIG.30.0.0.104") == ""  # a baseline sync
+
+    # --- what a report line records -----------------------------------------
+    assert review_of("Merge from <- c3fb81031 CFMUTEST.CFMUTEST_CONFIG.30.0.0.104 review-ok: yes; reviewed-by: dpt, gru, wao; review-date: 260922.151702;") == "dpt, gru, wao on 260922.151702"
+    assert review_of("x review-ok: no; reviewed-by: bss; review-date: 260922.075248;") == "bss on 260922.075248 (review-ok: no)"
+    assert review_of('changed 13e00da4a:TACT/UIF/sources/b.adb RELATED_CHANGES="SC-134249 " ') == ""
+    assert tickets_of('Merge from <- 6627849d2 testadm.integration_30 RELATED_CHANGES="SC-133991 SC-134249 " ') == ["SC-133991", "SC-134249"]
+    assert len(tickets_of('changed 42cb2f6c5:TACT/CORE/sources/x.adb RELATED_CHANGES=" " ')) == 0
+
+    # --- crediting a change, by the tickets the merges above it list --------
+    var section: ReportSection = ReportSection("30.0.0.129", "30.0.0.130")
+    section.names = ["acicek.transmit_esb", "vhw.casa_reg_amend2"]
+    section.tickets = [["SC-133991", "SC-134249"], ["SC-133991"]]
+    section.branch = "vhw.casa_reg_amend2"
+    assert section.credit([]) == "vhw.casa_reg_amend2"                     # no ticket: the nearest
+    assert section.credit(["SC-134249"]) == "acicek.transmit_esb"          # one merge lists it
+    assert section.credit(["SC-133991"]) == "vhw.casa_reg_amend2"          # both do: the nearest
+    assert section.credit(["SC-134249", "SC-1"]) == "acicek.transmit_esb"  # one lists some of them
+
+    # --- the real report ----------------------------------------------------
+    var report: ChangesReport = ChangesReport(samples / "CFMUTEST.CFMUTEST_CONFIG.30.0.0.105.changes_report")
+    # committers as they first appear; baseline syncs and testadm are nobody
+    assert report.committers == ["bss", "acicek", "vhw", "sei", "jsainz", "mea", "ehristea", "rhd", "eliitiai"]
+    assert report.branches["mea"] == ["mea.qh_report", "mea.cmp_dom_dbs_01"]
+    assert len(report.unattributed) == 0
+
+    # one entry per branch, file and kind of change: three commits in one,
+    # with the review of the sync merge carrying its first commit
+    let direct: []FileChange = [fc for fc in report.files["acicek.transmit_esb"] if fc.file == "TACT/UIF/sources/query_mgr_task-direct_control_functions.adb"]
+    assert len(direct) == 1
+    assert direct[0].commits == ["c3fb81031", "13e00da4a", "bc399bc5f"]
+    assert direct[0].tickets == ["SC-134249"]
+    assert direct[0].reviews == ["dpt, gru, wao on 260922.151702"]
+    assert direct[0].from_baseline == "30.0.0.129" and direct[0].to_baseline == "30.0.0.130"
+
+    # removed, and added again: two entries
+    assert [fc.kind for fc in report.files["acicek.transmit_esb"] if fc.file == "IFPS/OPIF_LIB/sources/Pmake.out"] == [DELETED, ADDED]
+
+    # a ticket both merges above list: the nearest's (vhw's, after eliitiai's)
+    assert "TACT/TACOT_SCR/sources/an2/an2_mcp.templ.gif" in files_of(report.files["vhw.casa_reg_amend2"])
+
+    report.keep_only("mea")
+    assert report.committers == ["mea"]
+
+    # --- files by type ------------------------------------------------------
+    assert extension_of("TACT/UIF/sources/b.adb") == "adb"
+    assert extension_of("TACT/UIF/.profile") == ""
+    assert extension_of("TACT/UIF/Makefile") == ""
+    assert files_by_type(["x/a.adb", "x/b.adb", "x/c.ads", "x/Makefile"]) == "2 adb, 1 (no extension), 1 ads"
+
+    # --- a file change taking in another ------------------------------------
+    var first: FileChange = FileChange(CHANGED, "TACT/UIF/sources/b.adb", "30.0.0.129", "30.0.0.130")
+    first.commits = ["c1"]
+    var later: FileChange = FileChange(CHANGED, "TACT/UIF/sources/b.adb", "30.0.0.129", "30.0.0.130")
+    later.commits = ["c1", "c2"]
+    later.tickets = ["SC-1"]
+    first.absorb(later)
+    assert first.commits == ["c1", "c2"] and first.tickets == ["SC-1"]
+
+    assert elisp_string('a "b" \\c') == '"a \\"b\\" \\\\c"'
+
+    print "changes_report: all tests passed"

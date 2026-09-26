@@ -1,0 +1,253 @@
+========================================================================================================================
+ HEAVYTEST  : in
+ TACT_CONFIG: 30.0.0.133
+========================================================================================================================
+260924.094413: Tlog: INFO: Starting: Tlog -d /cm/build32/cm/ot/TACT/TACT_CONFIG!30.0.0.133/build_G!31.IP.L8/saved_logs/tacot_corico_2026.09.23_21.24.20/work/logging-in -w
+260924.094413: Tlog: INFO: TLOG_TRACE_LOG file "tlog_trace.log" #emacs:(find-file "/cm/build32/cm/ot/TACT/TACT_CONFIG!30.0.0.133/build_G!31.IP.L8/saved_logs/tacot_corico_2026.09.23_21.24.20/scratch/Tlog_temp_cmadm_TACT_2026-09-24T09:44:13_wWIC4p/tlog_trace.log")
+260924.094435: Tlog: INFO: SAVED_LOGS_DIR dir "saved_logs/" #emacs:(dired "/cm/ot/TACT/TACT_CONFIG!30.0.0.133/build_G!31.IP.L8/saved_logs")
+260924.094436: Tlog: INFO: Expected failed file   : /cm/build32/cm/ot/TACT/TACT_CONFIG!30.0.0.133/build_G!31.IP.L8/saved_logs/tacot_corico_2026.09.23_21.24.20/scratch/Tlog_temp_cmadm_TACT_2026-09-24T09:44:13_wWIC4p/reference_general.results
+260924.094436: Tlog: INFO: Produced from BASELINE : TACT.TACT_CONFIG.30.0.0.131
+260924.094437: Tlog: INFO: We found a valid LOG dir: see the tlog_trace.log for the exact log dirs used.
+260924.094437: Tlog: INFO: Still in a TACT installation, I found DATA_FILES: dir "data_files/" #emacs:(dired "/cm/build32/cm/ot/TACT/TACT_CONFIG!30.0.0.133/build_G!31.IP.L8/saved_logs/tacot_corico_2026.09.23_21.24.20/tact/30.0.0.133/data_files")
+260924.094437: Tlog: INFO: Tests executed by tacot_corico: Use existing file "test_list__to_verify_by_Tlog.txt" #emacs:(find-file "/cm/build32/cm/ot/TACT/TACT_CONFIG!30.0.0.133/build_G!31.IP.L8/saved_logs/tacot_corico_2026.09.23_21.24.20/tact/30.0.0.133/data_files/test_list__to_verify_by_Tlog.txt")
+260924.094437: Tlog: INFO: List of all tests: Use existing file "regression_tests_TACT_list.tsv" #emacs:(find-file "/cm/build32/cm/ot/TACT/TACT_CONFIG!30.0.0.133/build_G!31.IP.L8/saved_logs/tacot_corico_2026.09.23_21.24.20/tact/30.0.0.133/data_files/regression_tests_TACT_list.tsv")
+260924.094444: Tlog: INFO: Build baseline               : 30.0.0.133
+260924.094444: Tlog: INFO: EXPECTED reference baseline  : 30.0.0.132   #emacs: (cfmu-ediff-to-tlog "/cm/ot/TACT/TACT_CONFIG!30.0.0.132/build_G!31.IP.L8/saved_logs/tacot_corico.LATEST/TACT_REGRESS_LOGS/LATEST/Tlog-in.log")
+260924.094444: Tlog: WARNING: ACTUAL reference baseline : 30.0.0.131 !!!   #emacs: (cfmu-ediff-to-tlog "/cm/ot/TACT/TACT_CONFIG!30.0.0.131/build_G!31.IP.L8/saved_logs/tacot_corico.LATEST/TACT_REGRESS_LOGS/LATEST/Tlog-in.log")
+260924.094444: Tlog: WARNING: Results for the EXPECTED baseline not FOUND/OK. Please note that all comparisons below are made with a likely irrelevant baseline. !!!
+
+260924.094518: Tlog: INFORMATION: groups_without_secondary=/cm/build32/cm/ot/TACT/TACOT_SCR!30.0.0.119/sources/sources/general/groups_without_secondary.txt
+Tests results per group :
+---------------------------------------------------------------------------------------------
+ System    Category     Group                          Secondary         Success Fail Exists
+---------------------------------------------------------------------------------------------
+ tact      others        activation_monitoring                                38    0     38
+ tact      others        addr                                                 26    0     26
+ tact      others        an2                                  no             112    1    113 !!!!!
+ tact      others        anm                                                   1    0      1
+ tact      others        aowir                                                62    0     62
+ tact      others        archive                              no              24    1     25 !!!!!
+ tact      others        atfm                                                  3    0      3
+ tact      others        behav                                               646    0    646
+ tact      others        casa                                 no             254    0    254
+ tact      others        ccams                                no             255    0    255
+ tact      others        cdm                                                 221    0    221
+ tact      others        correl                                               42    0     42
+ tact      others        count                                                23    0     23
+ tact      others        crashcasa                            no              51    0     51
+ tact      others        cwir                                 no              65    0     65
+ tact      others        distribution                                         36    0     36
+ tact      others        elastic                                               9    0      9
+ tact      others        env                                                  10    0     10
+ tact      others        etact                                no             369    0    369
+ tact      others        fim                                                  68    0     68
+ tact      others        fullsysonly                          no              72    0     72
+ tact      others        general                                               1    0      1
+ tact      others        hot_replay                                           28    0     28
+ tact      others        inm                                  no              40    0     40
+ tact      others        launch                                               11    1     12 !!!!!
+ tact      others        logging                                               8    0      8
+ tact      others        matching                                             38    0     38
+ tact      others        meteo                                                13    0     13
+ tact      others        mmi                                  no             141    0    141
+ tact      others        predict                              no              26    0     26
+ tact      others        prequal                                               3    0      3
+ tact      others        prof_check                                           25    0     25
+ tact      others        profile                                             152    0    152
+ tact      others        regact                                              102    0    102
+ tact      others        rerouting                            no              95    0     95
+ tact      others        restriction                                          79    0     79
+ tact      others        robot                                no              24    0     24
+ tact      others        route_output                                         27    0     27
+ tact      others        routing                                               2    0      2
+ tact      others        scenario                             no              24    0     24
+ tact      others        simul                                no              66    0     66
+ tact      others        t2d                                                  25    0     25
+ tact      others        tacotify                                             31    0     31
+ tact      others        wir                                                   1    0      1
+ tact      others        xcdincasa                                            18    0     18
+ tact      others        zurb_am                                              33    0     33
+ tact      others        zurb_casa                                           155    0    155
+ tact      others        zurb_etact                                          193    0    193
+ tact      others        zurb_flt_mod                                        163    0    163
+ tact      others        zurb_foip                                            28    0     28
+ tact      others        zurb_hr                                              20    0     20
+ tact      others        zurb_intrf                                          140    0    140
+ tact      others        zurb_wind                                             2    0      2
+
+ ifps      others        aro                                                  10    0     10
+ ifps      others        corba_b2b                            no              84    0     84
+ ifps      others        corba_flightplanvalidator                             8    0      8
+ ifps      others        corba_manager                        no              63    0     63
+ ifps      others        event_processing                                      5    0      5
+ ifps      others        faas                                 no             105    0    105
+ ifps      others        fpl_processing                                       66    0     66
+ ifps      others        ifps_chmi                            no              20    0     20
+ ifps      others        ifps_func_rxmsg_irqs_proc                             2    0      2
+ ifps      others        ifps_message                                         91    0     91
+ ifps      others        ifps_profile                                         11    0     11
+ ifps      others        ifps_replay                                           1    0      1
+ ifps      others        route                                no              72    0     72
+ ifps      others        rxmsg                                no             149    0    149
+ ifps      others        system                                                7    0      7
+
+ tact      others        mrun                                 no               0    0      2 -   !!!!! Separate Tlog result not found.
+
+ tact      an1           an1                                  no              49    0     49
+ tact      simca         simca                                no             177    0    177
+ tact      simca_reload  simca_reload                         no             158    0    158
+
+ tact      multi_phase   reload                               no               3    0      3
+ tact      multi_phase   restart                              no              15    1     16 !!!!!
+
+Total:
+------------------------------------------------
+      EXISTS      :  5203
+      RUN         :  5201
+      PASSED      :  5197
+      FAILED      :     4
+
+Beware that each test executed in N modes is considered as N different tests.
+Beware of the following results: mrun tests are executed separately.
+  file "Tlog-mrun-in.log" #emacs:(find-file "/cm/ot/TACT/TACT_CONFIG!30.0.0.133/build_G!31.IP.L8/saved_logs/tacot_corico_mrun.LATEST_GOOD/TACT_REGRESS_LOGS/LATEST/Tlog-mrun-in.log")
+
+Tests results per category :
+----------------------------
+         others :  4796 success on  4799
+            an1 :    49 success on    49
+          simca :   177 success on   177
+   simca_reload :   158 success on   158
+    multi_phase :    18 success on    19
+
+260924.094518: Tlog: INFO: Build baseline               : 30.0.0.133
+260924.094518: Tlog: INFO: EXPECTED reference baseline  : 30.0.0.132   #emacs: (cfmu-ediff-to-tlog "/cm/ot/TACT/TACT_CONFIG!30.0.0.132/build_G!31.IP.L8/saved_logs/tacot_corico.LATEST/TACT_REGRESS_LOGS/LATEST/Tlog-in.log")
+260924.094518: Tlog: WARNING: ACTUAL reference baseline : 30.0.0.131 !!!   #emacs: (cfmu-ediff-to-tlog "/cm/ot/TACT/TACT_CONFIG!30.0.0.131/build_G!31.IP.L8/saved_logs/tacot_corico.LATEST/TACT_REGRESS_LOGS/LATEST/Tlog-in.log")
+260924.094518: Tlog: WARNING: Results for the EXPECTED baseline not FOUND/OK. Please note that all comparisons below are made with a likely irrelevant baseline. !!!
+
+
+ .............. mrun failing (from separate Tlog) : nb = 999999999
+
+FAILED Check mrun Tlog results: file "Tlog-mrun-in.log" #emacs:(find-file "/cm/ot/TACT/TACT_CONFIG!30.0.0.133/build_G!31.IP.L8/saved_logs/tacot_corico_mrun.LATEST_GOOD/TACT_REGRESS_LOGS/LATEST/Tlog-mrun-in.log")
+
+
+ .............. Check build of TACT.TACT_CONFIG : nb = 27
+
+260924.094612: Tlog: WARNING: Check potential errors below in section #emacs:(search-forward "Check build of TACT.TACT_CONFIG")
+
+
+ .............. New tests failing : nb = 1
+
+FAILED test_an2_fltgen_aro_id.el 30.0.0.133   ok:38   nok:10   #emacs:(progn(find-file "/cm/build32/cm/ot/TACT/TACT_CONFIG!30.0.0.133/build_G!31.IP.L8/saved_logs/tacot_corico_2026.09.23_21.24.20/work/logging-in/LOGS_others/tacot1_out_01")(narrow-to-test "test_an2_fltgen_aro_id.el"))
+
+
+ .............. Tests still failing : nb = 3
+
+Worse : nb = 1
+FAILED test_restart_terminate_reg_xcd_susp_regul_after_restart.el 30.0.0.121   ok:  42 nok: 355 Delta_nok:  +14 #emacs:(progn(find-file "/cm/build32/cm/ot/TACT/TACT_CONFIG!30.0.0.133/build_G!31.IP.L8/saved_logs/tacot_corico_2026.09.23_21.24.20/work/logging-in/LOGS_test_restart_terminate_reg_xcd_susp_regul_after_restart-last_multiphase_test/tacot1_out_01")(narrow-to-test "test_restart_terminate_reg_xcd_susp_regul_after_restart.el"))
+
+Same : nb = 2
+FAILED test_archive_flights_measures_oplog.el                     30.0.0.129   ok:  44 nok:   2 Delta_nok:    0 #emacs:(progn(find-file "/cm/build32/cm/ot/TACT/TACT_CONFIG!30.0.0.133/build_G!31.IP.L8/saved_logs/tacot_corico_2026.09.23_21.24.20/work/logging-in/LOGS_others/tacot1_out_01")(narrow-to-test "test_archive_flights_measures_oplog.el"))
+FAILED test_launch_new_warnings.el                                30.0.0.121   ok:   9 nok:   1 Delta_nok:    0 #emacs:(progn(find-file "/cm/build32/cm/ot/TACT/TACT_CONFIG!30.0.0.133/build_G!31.IP.L8/saved_logs/tacot_corico_2026.09.23_21.24.20/work/logging-in/LOGS_others/tacot1_out_01")(narrow-to-test "test_launch_new_warnings.el"))
+
+Better : nb = 0
+
+
+ .............. Following tests are now successful (maybe they are new) : nb = 3
+
+SUCCESS test_an2_concerned_aro_anu_list.el          30.0.0.133   ok:26   nok:0    
+SUCCESS test_aro_transmit_via_esb.el                30.0.0.133   ok:13   nok:0    
+SUCCESS test_fullsysonly_secondary_forced_switch.el 30.0.0.133   ok:86   nok:0    
+
+
+
+ .............. Following tests contain known failures : nb = 33
+
+KNOWN NORMAL FAILURE: test_activation_monitoring_dla_after_shift.el  for more detail, look at incident I2 40795 increased of 2 
+KNOWN NORMAL FAILURE: test_an2_ehelpdesk.el  accepting the slot extension request fails because it pushes the flight outside the regulation increased of 1 
+KNOWN NORMAL FAILURE: test_an2_version_and_error_handling.el  failing test without expected template increased of 2 
+KNOWN NORMAL FAILURE: test_archive_crash.el  Cleanup of AME database; archive_extract fails 2 times increased of 2 
+KNOWN NORMAL FAILURE: test_behav.e23.s4.20.el  for more detail, look at incident I2 4249 proposed unsolved increased of 2 
+KNOWN NORMAL FAILURE: test_behav_confirm_i2_038136.el  a failed validation (flight status is ATC_Activated) related to the Confirm manual action for flight GOPE1 is counted as a failure (as expected) increased of 1 
+KNOWN NORMAL FAILURE: test_behav_manual_suspension_v_flights.2.el  Wrong NID, de-exemption does not show the resulting CTOT in the after column. To be fixed in 28.0 increased of 1 
+KNOWN NORMAL FAILURE: test_casa_check_regulation_id.el  A normal failure: We dont allow the creation of regulations with wrong Id any longer increased of 1 
+KNOWN NORMAL FAILURE: test_casa_delay_conf_man_confirmation_rejected.el  Not possible to confirm (flight status is Terminated) for flight NWA50, counted as a failure (as expected) increased of 1 
+KNOWN NORMAL FAILURE: test_ccams_unskipped_ccams_area_entry.el  ??>> IBARANDA Holding time is not applied here, why? increased of 1 
+[...] all 33 lines in file "known_errors_file.txt" #emacs:(find-file "/cm/build32/cm/ot/TACT/TACT_CONFIG!30.0.0.133/build_G!31.IP.L8/saved_logs/tacot_corico_2026.09.23_21.24.20/scratch/Tlog_temp_cmadm_TACT_2026-09-24T09:44:13_wWIC4p/known_errors_file.txt")
+
+
+
+ .............. Following tests contain known assert failures : nb = 50
+
+KNOWN ASSERT FAILURE: env_updates_prior_stop.1.el  Curtain Query Validation increased of 5 
+KNOWN ASSERT FAILURE: firstset_prior_stop.2.el  FPD status: SUSPENDED not equivalent to Flight status FILED. Problem under investigation. increased of 2 
+KNOWN ASSERT FAILURE: gen_firstset_prior_stop.4.el  FPD status: SUSPENDED not equivalent to Flight status FILED. Problem under investigation. increased of 2 
+KNOWN ASSERT FAILURE: test_an2_ehelpdesk.el  accepting the slot extension request fails because it pushes the flight outside the regulation increased of 1 
+KNOWN ASSERT FAILURE: test_an2_ehelpdesk.slot_swap.el  assertion failure generated by show_error dialog increased of 1 
+KNOWN ASSERT FAILURE: test_behav.e22.s2.4.el  OpLog interface_error generated because flight AFR0643 is not known by CASA (hence the recorded assertion failure) increased of 1 
+KNOWN ASSERT FAILURE: test_behav.e22.s4.4.el  OpLog interface_error generated because flight AFR0643 is not known by CASA (hence the recorded assertion failure) increased of 1 
+KNOWN ASSERT FAILURE: test_behav.e22.s6.4.el  OpLog interface_error generated because flight SAB370 is not known by CASA (hence the recorded assertion failure) increased of 1 
+KNOWN ASSERT FAILURE: test_casa_ctot_in_past.el  Assertion failure: the new CTOT: 08:40 must be at least 0 minutes in the future increased of 1 
+KNOWN ASSERT FAILURE: test_casa_force_cto_ato_in_regul_eto_outside.el  Force CTO rejection causes an assertion failure increased of 1 
+[...] all 50 lines in file "known_assert_errors_file.txt" #emacs:(find-file "/cm/build32/cm/ot/TACT/TACT_CONFIG!30.0.0.133/build_G!31.IP.L8/saved_logs/tacot_corico_2026.09.23_21.24.20/scratch/Tlog_temp_cmadm_TACT_2026-09-24T09:44:13_wWIC4p/known_assert_errors_file.txt")
+
+
+
+ .............. Tests that are removed : nb = 56
+
+an1_pas1.el
+an1_pas10.el
+an1_pas10000m1024.el
+an1_pas10000m4096.el
+an1_pas10000m8192.el
+an1_pas1000m4096.el
+an1_pas11.el
+an1_pas12.el
+an1_pas13.el
+an1_pas14.el
+[...] all 56 lines in file "test_not_exists_anymore.txt" #emacs:(find-file "/cm/build32/cm/ot/TACT/TACT_CONFIG!30.0.0.133/build_G!31.IP.L8/saved_logs/tacot_corico_2026.09.23_21.24.20/work/logging-in/test_not_exists_anymore.txt")
+ File general.results contains the cumulative failures and successes of all existing tests
+ .........................................................................................
+
+
+ .............. Errors in log files.
+
+260924.094756: Tlog: SEVERE: Expecting to always find file: /cm/build32/cm/ot/TACT/TACT_CONFIG!30.0.0.133/build_G!31.IP.L8/saved_logs/tacot_corico/*REGRESS_LOGS/LATEST/regress_tactdev_test.tracing
+
+
+ .............. Check build of TACT.TACT_CONFIG : nb = 27
+
+260924.094756: Tlog: INFORMATION: From complete file "Ccheck_build_closure.log" #emacs:(find-file "/cm/build32/cm/ot/TACT/TACT_CONFIG!30.0.0.133/build_G!31.IP.L8/saved_logs/tacot_corico_2026.09.23_21.24.20/scratch/Tlog_temp_cmadm_TACT_2026-09-24T09:44:13_wWIC4p/Ccheck_build_closure.log")
+260924.094756: Tlog: INFORMATION: (Following potential errors are maybe NOT listed by test_restart_terminate_reg_xcd_susp_regul_after_restart.el.)
+===== Checking for errors in /cm/build32/cm/ot/TACT/TACT_CONFIG!30.0.0.133/build_G!31.IP.L8/Csystem_build.log
+===== No errors found in /cm/build32/cm/ot/TACT/TACT_CONFIG!30.0.0.133/build_G!31.IP.L8/Csystem_build.log
+
+===== Checking for errors in /cm/build32/cm/ot/TACT/TACT_CONFIG!30.0.0.133/build_G!31.IP.L8/run_test_programs.log
+260923.212233: check_new_ksh_style_errors: SEVERE: The ksh style scanner sees differences with the previous baseline check of TACOT_SCR scripts see (find-file "/cm/ot/TACT/TACT_CONFIG!30.0.0.133/build_G!31.IP.L8/user_output/KSH_STYLE_SCANNER/TACOT_SCR.DIFF.STABLE_CHECKS")
+260923.212233: check_new_ksh_style_errors: SEVERE: To view emacs diff use C-x C-e after the first closing parenthesis
+260923.212233: check_new_ksh_style_errors: SEVERE: (ediff-files "/cm/ot/TACT/TACOT_SCR.30.0.0.119/build_G.31.IP.L8/sources/test/new_TACOT_SCR_style_errors_test.BASELINE.RESULT.STABLE_CHECKS.txt" "/cm/ot/TACT/TACT_CONFIG!30.0.0.133/build_G!31.IP.L8/user_output/KSH_STYLE_SCANNER/TACOT_SCR.RESULT.STABLE_CHECKS.29218")
+260923.212233: check_new_ksh_style_errors: SEVERE: 
+260923.212233: check_new_ksh_style_errors: SEVERE: To confirm this difference in the VOB execute : (shell-command "TARGET=$(where_workspace -c /cm/ot/TACT/TACOT_SCR.30.0.0.119/build_G.31.IP.L8/sources/test/new_TACOT_SCR_style_errors_test.BASELINE.RESULT.STABLE_CHECKS.txt);cp /cm/ot/TACT/TACT_CONFIG!30.0.0.133/build_G!31.IP.L8/user_output/KSH_STYLE_SCANNER/TACOT_SCR.RESULT.STABLE_CHECKS.29218 ${TARGET};")
+260923.212233: check_new_ksh_style_errors: SEVERE: To view the style scanner output with line numbers : (find-file "/cm/ot/TACT/TACT_CONFIG!30.0.0.133/build_G!31.IP.L8/user_output/KSH_STYLE_SCANNER/TACOT_SCR.RESULT.STABLE_CHECKS.ORIG.29218")
+[...] all 35 lines in file "check_build_closure_result" #emacs:(find-file "/cm/build32/cm/ot/TACT/TACT_CONFIG!30.0.0.133/build_G!31.IP.L8/saved_logs/tacot_corico_2026.09.23_21.24.20/scratch/Tlog_temp_cmadm_TACT_2026-09-24T09:44:13_wWIC4p/check_build_closure_result")
+
+
+ .............. Tlog summary.
+
+Legend:
+- FAILING=x(+y) : x = total number of failing tests
+                  y = new failures (new failing tests + old failing tests that are worse)
+- /new=x        : x = total number of new failing tests (did not fail in reference build)
+- /worse=x      : x = total number of still failing tests that are worse (with more failed checks)
+- NOK=x(y)      : x = total number of failed checks
+                  y = difference in the number of failed checks (compared with reference)
+- KNOWN=x       : x = total number of tests with one or more known failures
+- KNOWN_ASSRT=x : x = total number of tests with one or more known assert failures
+- SUCCESS=x/y   : x = total number of successful tests
+                  y = total number of successful checks in all executed tests
+
+TLOG SUMMARY: FAILING=4(+2)/new=1/worse=1 NOK=370(+24) KNOWN=33 KNOWN_ASSRT=50 SUCCESS=5279/299878
+Local Variables:
+  truncate-lines: t
+End:
+260924.094812: Tlog: INFO: Tlog end
+========================================================================================================================

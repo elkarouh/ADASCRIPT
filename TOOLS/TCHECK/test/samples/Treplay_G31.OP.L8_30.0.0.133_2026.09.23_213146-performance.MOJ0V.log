@@ -1,0 +1,62 @@
++ [[ dhtacd04 == dhtacd* ]]
++ [[ cmadm != cmadm ]]
++ MUTEX=/home/cmadm/tact/Treplay.dhtacd04.mutex 
+BASELINE_NR=30.0.0.133
+CM_ENV_ID=G!31.OP.L8
+APPLICATION_INSTANCE_KEY=TAC_LO3
+ORA_INSTANCE=ORA_LOH
+REPLAY_DATE=20251126
+REPLAY_PARAMS= -ops -process_ESB_files remove -gen_oplog_stats -deterministic -check_auto_load -pgqual_at_replay_end -archive -cua_instance CUA_OPA -cua_start 20251126140000 -cua_end 20251126150000 -nr_of_days 2 -assert_mode none -warm_up_city_pair_stats light -take_dump_at 20251126_140000 -run_each_dump_for_1_hour_in_valgrind callgrind -grrt
+TACTDEV_PARAMS= -nr_profilers 8 -nr_counters 1 -no_vnc_viewer
+UNINSTALL=YES
+POST_REPLAY_SCRIPT_NAME=
+REPLAY_HOME=/cm/local_build/TACTDEV_HOME/replay_dir
+260923.213708: Treplay.locked: INFORMATION: # script used : /cm/ot/TACT/TACT_CONFIG!30.0.0.133/build_G!31.OP.L8/exe/Treplay.locked
+260923.213708: Treplay.locked: INFORMATION: ###########################################################
+260923.213708: Treplay.locked: INFORMATION: Calling: tactdev -version 30.0.0.133 -set_home /cm/local_build/TACTDEV_HOME/replay_dir -instance TAC_LO3 -ora_instance ORA_LOH -ops_like   -nr_profilers 8 -nr_counters 1 -no_vnc_viewer
+260923.224317: uconfig: INFORMATION: uconfig successful, log in #emacs:(find-file "/cm/local_build/TACTDEV_HOME/replay_dir/work/logging/LOGS/uconfig.260923_224316.svlog")
+
+260923.224317: replay_day: INFORMATION: Replay was started in full network mode.
+  called from emacs:(progn (find-file "/cm/build32/cm/ot/TACT/SVISION!30.0.0.83/sources/sources/replay_day.ksh") (goto-line 5415))
+  called from emacs:(progn (find-file "/cm/build32/cm/ot/TACT/SVISION!30.0.0.83/sources/sources/replay_day.ksh") (goto-line 5488))
+  called from emacs:(progn (find-file "/cm/build32/cm/ot/TACT/SVISION!30.0.0.83/sources/sources/replay_day.ksh") (goto-line 7946))
+260923.224317: replay_day: INFORMATION: Waiting for this replay to be finished ...
+  called from emacs:(progn (find-file "/cm/build32/cm/ot/TACT/SVISION!30.0.0.83/sources/sources/replay_day.ksh") (goto-line 5416))
+  called from emacs:(progn (find-file "/cm/build32/cm/ot/TACT/SVISION!30.0.0.83/sources/sources/replay_day.ksh") (goto-line 5488))
+  called from emacs:(progn (find-file "/cm/build32/cm/ot/TACT/SVISION!30.0.0.83/sources/sources/replay_day.ksh") (goto-line 7946))
+260923.224317: replay_day: INFORMATION: Replaying script: #emacs:(find-file "./replay.el")
+260923.224317: replay_day: INFORMATION: (0 replay(s) remaining after this one.)
+
+260924.124032: replay_day: INFORMATION: Replay terminated.
+  called from emacs:(progn (find-file "/cm/build32/cm/ot/TACT/SVISION!30.0.0.83/sources/sources/replay_day.ksh") (goto-line 5498))
+  called from emacs:(progn (find-file "/cm/build32/cm/ot/TACT/SVISION!30.0.0.83/sources/sources/replay_day.ksh") (goto-line 7946))
+260924.125118: replay_day: INFORMATION: Waiting for this replay to be finished ...
+  called from emacs:(progn (find-file "/cm/build32/cm/ot/TACT/SVISION!30.0.0.83/sources/sources/replay_day.ksh") (goto-line 5416))
+/cm/local_build/TACTDEV_HOME/replay_dir/work/logging/LOGS_260924_125044/tacot1_out_01:..ERROR_REPORT.WARNING : Error            : Severity:WARNING 25/11/25 23:47:25 (FROZEN_SHARED), REAL : 26/09/24 00:40:09 (UTC) FPD_Id_From_Access_Keys cannot determine FPD_ID
+/cm/local_build/TACTDEV_HOME/replay_dir/work/logging/LOGS_260924_125044/tacot1_out_01:..ERROR_REPORT.WARNING : Description      : Expecting length 1 for matching FPDs, found: 0 list:(Length => 0, Elements => ())
+/cm/local_build/TACTDEV_HOME/replay_dir/work/logging/LOGS_260924_125044/core.45186.26_09_24-00:42:52.19.logs:..ERROR_REPORT.SEVERE : Error            : Severity:SEVERE (ASSERTION_FAILURE) 25/11/26 00:00:32 (FROZEN_SHARED), REAL : 26/09/24 00:42:51 (UTC) TACOT variable not of type STRING_TYPE, operation aborted
+/cm/local_build/TACTDEV_HOME/replay_dir/work/logging/LOGS_260924_125044/core.45186.26_09_24-00:42:52.19.logs:..ERROR_REPORT.SEVERE : Description      : Variable the_efpm_group_id_AUA763 has type UNDEFINED_TYPE
+/cm/local_build/TACTDEV_HOME/replay_dir/work/logging/LOGS_260924_125044/core.45186.26_09_24-00:42:52.19.logs:..ERROR_REPORT.SEVERE : Error            : Severity:SEVERE 25/11/26 00:00:32 (FROZEN_SHARED), REAL : 26/09/24 00:42:51 (UTC) UNKNOWN ASSERTION FAILURES
+/cm/local_build/TACTDEV_HOME/replay_dir/work/logging/LOGS_260924_125044/core.45186.26_09_24-00:42:52.19.logs:..ERROR_REPORT.SEVERE : Description      : CHECK FAILED :  1 assertion failures happened during the above service. Result without considering assertions:FALSE
+260925.040550: Treplay.locked: INFORMATION:   Dump: ora_loh.envb.oradp.tar.xz
+260925.040550: Treplay.locked: INFORMATION:   Dump: ora_loh.envdyn.oradp.tar.xz
+260925.040551: Treplay.locked: INFORMATION:   Dump: shared_area.tar.gz
+260925.040556: Treplay.locked: INFORMATION: not removing installation, the replay FAILED.
+260925.040556: Treplay.locked: INFORMATION: Moving TAC_LO3 replay LOGS directory.
+260925.040556: Treplay.locked: INFORMATION:   '/cm/local_build/TACTDEV_HOME/replay_dir' to '/cm/ot/TACT/TACT_CONFIG!30.0.0.133/build_G!31.OP.L8/saved_logs/replay_dir.TAC_LO3.2026.09.25_04:05:56'
+260925.042231: Treplay.locked: INFORMATION: REPLAY_FINISHED_COUNT:      3  (expected: 3)
+260925.042231: Treplay.locked: INFORMATION: return_code of replay_day : 1
+260925.042231: Treplay.locked: INFORMATION: NR_COREDUMPS:               8875
+260925.042231: Treplay.locked: INFORMATION: NR_QUERY_LEAKS:             0
+260925.042231: Treplay.locked: INFORMATION: NR_ABNORMAL_MSGS:           0
+260925.042231: Treplay.locked: INFORMATION: NR_FILE_NOT_FOUND :         0
+260925.042231: Treplay.locked: INFORMATION: Requested UNINSTALL:        NO
+260925.042231: Treplay.locked: INFORMATION: LOGS_FOUND:                 YES
+260925.042231: Treplay.locked: INFORMATION: Executed UNINSTALL:        NO
+#-#for regress_tactdev_test.common#-# REPLAY_FINISHED_COUNT:3 EXPECTED_REPLAY_FINISHED_COUNT:3 REPLAY_RC:1 NR_COREDUMPS:8875 NR_QUERY_LEAKS:0 NR_ABNORMAL_MSGS:0 NR_FILE_NOT_FOUND:0 REQ_UNINSTALL:NO LOGS_FOUND:YES EXEC_INSTALL:NO
+260925.042231: Treplay.locked: INFORMATION: Generating html report
+260925.042231: Treplay.locked: INFORMATION: Cleanup data (Treplay_G!*.log) in /cm/ot/TACT/test_reports older than 732 days.
+260925.042244: Treplay.locked: INFORMATION: Cleanup data (prequal_results*.txt) in /cm/ot/TACT/test_reports older than 732 days.
+260925.042435: Treplay.locked: INFORMATION: Treplay.locked finished
+260925.042435: locked: INFORMATION: Unlocked lockfile /cm/local_build/Treplay.ORA_LOH.mutex
+260925.042525: locked: INFORMATION: Unlocked lockfile /home/cmadm/tact/Treplay.dhtacd04.mutex

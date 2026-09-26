@@ -18,6 +18,12 @@ Its source is split into modules, laid out as `EXAMPLES/PROJECT` is:
 changed what). Build it as before, `ady2nim c Tcheck_tact.ady`. A nimport is
 Nim-only, so Tcheck_tact is a Nim program.
 
+Each module carries its own tests, under `if __name__ == "__main__"`: built
+alone (`ady2nim c LIBS/baselines.ady && LIBS/baselines`) it runs them, and
+`make test` does so for all three. They read real files from
+`test/samples/`: a Tlog, two replay logs (trimmed to the lines that matter)
+and a CFMUTEST changes report.
+
 ```
 Tcheck_tact [-no-color] [-s] [-f] [-v] [-l] [-batch] [-only-new] [-exit-code]
             [-focus <domain> [<detail>]] <BASELINE>

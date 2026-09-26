@@ -641,7 +641,7 @@ test: compile
 	@# Each of Tcheck_tact's modules carries its own tests, under
 	@# `if __name__ == "__main__"`: built alone, the module runs them.
 	@echo "=== Tcheck_tact's modules, their own tests ==="
-	@for m in tcheck_common; do \
+	@for m in tcheck_common baselines changes_report; do \
 	    printf '  %-42s' "LIBS/$$m.ady"; \
 	    $(ADY2NIM) c $(TCDIR)/LIBS/$$m.ady >/dev/null 2>&1 \
 	        && $(TCDIR)/LIBS/$$m >/dev/null 2>&1 && echo OK || { echo FAIL; exit 1; }; \

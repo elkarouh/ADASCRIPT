@@ -661,3 +661,107 @@ def replay_dir_pattern(rtype: ReplayType) -> Glob_T:
     case rtype:
         when performance: return "TAC_LO3"
         when others:      return rtype'Image
+
+# ---------------------------------------------------------------------------
+# Tests: ady2nim c LIBS/baselines.ady && LIBS/baselines
+# The real Tlog and replay logs are in test/samples, beside LIBS/.
+# ---------------------------------------------------------------------------
+
+if __name__ == "__main__":
+    let samples: Path = Path($0).parent.parent / "test" / "samples"
+    let tmp: Path = Path(run(["mktemp", "-d", "-t", "baselines.XXXXXX"]).output.strip())
+    let PREQUAL: str = "Treplay_G31.OP.L8_30.0.0.133_2026.09.23_213300-run_prequal.NJrqM.log"
+    let PERFORMANCE: str = "Treplay_G31.OP.L8_30.0.0.133_2026.09.23_213146-performance.MOJ0V.log"
+
+    # --- names on disk ------------------------------------------------------
+    assert subtype_label(in_test) == "in"
+    assert subtype_label(assert_test) == "assert"
+    assert tlog_filename(mono, normal) == "Tlog-mono.log"
+    assert tlog_filename(in_test, mrun) == "Tlog-mrun-in.log"
+    assert baseline_nr("IFPS.CUA_IDL.30.0.0.122") == "30.0.0.122"
+
+    def build_type(name: BuildName_T) -> str:
+        let bt: ?BuildType = build_type_from(name)
+        return "none" if bt is None
+        return f"{bt}"
+    assert build_type("build_G!31.IP.L8") == "IP"
+    assert build_type("build_G!31.OP.L8") == "OP"
+    assert build_type("build_default_Linux") == "none"
+
+    def replay_type(name: str) -> str:
+        let rt: ?ReplayType = replay_type_from(Path(name))
+        return "none" if rt is None
+        return f"{rt}"
+    assert replay_type(PREQUAL) == "run_prequal"
+    assert replay_type("Treplay_x-full_simca.ab.log") == "full_simca"   # not simca
+    assert replay_type("Treplay_x-other.log") == "none"
+
+    # --- a baseline, and what it holds --------------------------------------
+    let bl: Baseline = Baseline("30.0.0.133")
+    assert bl.previous().nr == "30.0.0.132"
+    assert bl.dir == TACT_ROOT / "TACT_CONFIG.30.0.0.133"
+
+    # its builds and replays, in a baseline directory made here
+    var here: Baseline = Baseline("30.0.0.133")
+    here.dir = tmp / "TACT_CONFIG.30.0.0.133"
+    for name in ["build_G!31.IP.L8", "build_G!31.OP.L8", "build_G!92.IP.L8", "build_default_Linux"]:
+        (here.dir / name / "saved_logs").mkdir()
+    here.find_builds()
+    assert [b.name for b in here.builds] == ["build_G!31.IP.L8", "build_G!31.OP.L8"]
+    assert here.builds[1].btype == OP and here.builds[1].baseline_nr == "30.0.0.133"
+    assert here.builds[0].tlog_path(in_test, normal) == here.dir / "build_G!31.IP.L8" / "saved_logs" / "tacot_corico.LATEST" / "TACT_REGRESS_LOGS" / "LATEST" / "Tlog-in.log"
+    for name in [PERFORMANCE, PREQUAL]:
+        run(["cp", str(samples / name), str(here.dir / "build_G!31.OP.L8" / "saved_logs")])
+    here.find_replays()
+    assert [r.rtype for r in here.replays] == [run_prequal, performance]   # in canonical order
+
+    # --- a Tlog: the real one -----------------------------------------------
+    let tlog: Tlog = Tlog(samples / "Tlog-in.log", in_test)
+    # "WARNING: ACTUAL reference baseline : 30.0.0.131 !!!" -- not the one expected
+    assert tlog.reference == "30.0.0.131"
+    assert len(tlog.new_failing) == 1 and tlog.new_failing[0].startswith("FAILED test_an2_fltgen_aro_id.el ")
+    assert tlog.failed_test_names() == ["test_an2_fltgen_aro_id.el"]
+    assert len(tlog.crashed) == 0 and len(tlog.not_run) == 0
+    # still failing: the Worse / Same / Better lines come with the tests
+    assert len(tlog.still_fail) == 6
+    assert tlog.still_fail[0] == "Worse : nb = 1" and tlog.still_fail[5] == "Better : nb = 0"
+    assert [line.split()[1] for line in tlog.now_ok] == ["test_an2_concerned_aro_anu_list.el", "test_aro_transmit_via_esb.el", "test_fullsysonly_secondary_forced_switch.el"]
+    assert not tlog.all_ok()
+
+    # what the real one has none of: a mono build, a section repeated
+    let other: Path = tmp / "Tlog-mono.log"
+    writeFile(other, "\n".join([
+        "Tlog: INFO: Actual reference baseline    : 30.0.0.120",
+        " .............. Tests that did not run : nb = 1",
+        "NOTRUN test_n.el",
+        " .............. New tests failing : nb = 1",
+        "FAILED test_a.el",
+        " .............. New tests failing again",
+        "FAILED test_dup.el"]) + "\n")
+    assert Tlog(other, in_test).reference == "30.0.0.120"
+    assert Tlog(other, in_test).not_run == ["NOTRUN test_n.el"]
+    assert len(Tlog(other, mono).not_run) == 0           # a mono build's are not reported
+    assert Tlog(other, in_test).new_failing == ["FAILED test_a.el"]   # the first section of a name
+
+    # --- replay logs: the real ones -----------------------------------------
+    let prequal: ReplayLog = ReplayLog(samples / PREQUAL)
+    assert prequal.status == failed            # "Executed UNINSTALL:        NO"
+    assert not prequal.terminated
+    let perf: ReplayLog = ReplayLog(samples / PERFORMANCE)
+    assert perf.status == failed               # waited for, and terminated, but NO
+    assert perf.terminated
+    assert len(perf.severe_errors) == 4
+    assert "TACOT variable not of type STRING_TYPE" in perf.severe_errors[0]
+
+    # the verdicts the samples do not show
+    def replay_log(lines: []str) -> ReplayLog:
+        let file: Path = tmp / "Treplay_x.log"
+        writeFile(file, "\n".join(lines) + "\n")
+        return ReplayLog(file)
+    # the last UNINSTALL step decides
+    assert replay_log(["Executed UNINSTALL:        NO", "Executed UNINSTALL:        YES"]).status == succeeded
+    assert replay_log(["replay_day: INFORMATION: Waiting for this replay to be finished ..."]).status == busy
+    assert replay_log(["nothing yet"]).status == not_started
+
+    run(["rm", "-rf", str(tmp)])
+    print "baselines: all tests passed"

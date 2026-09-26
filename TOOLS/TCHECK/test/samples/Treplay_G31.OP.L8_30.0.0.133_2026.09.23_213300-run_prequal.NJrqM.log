@@ -1,0 +1,41 @@
+# 260925.135458 Exiting : with return code 0 from script /cm/ot/ORA/DB_TOOLS!30.0.0.8/build_G!31.OP.L8/exe/zexpdp.
+260925.135458: ora_data_pump: INFORMATION: Call success.
+UIF_ADL=/cm/ot/TACT/UIF!30.0.0.131/build_G!31.OP.L8/ada/adl
+UIF_REVISION=30.0.0.131
+UNAS_ADL=/cm/ot/TACT/UNAS!30.0.0.111/build_G!31.OP.L8/ada/adl
+UNAS_EXECUTABLE=/cm/ot/TOOL/UNAS!30.0.0.111/build_G!31.OP.L8/exe
+UNAS_REVISION=30.0.0.111
+UNAS_SYS_ADL=/cm/ot/TACT/UNAS_SYS!30.0.0.111/build_G!31.OP.L8/ada/adl
+UNAS_SYS_REVISION=30.0.0.111
+UNINSTALL=YES
+UNIX95=1
+USER=cmadm
+USER_UUID=415
+USE_REAL_FTPS=-use_real_ftps
+USE_VNC=true
+260925.135636: Treplay.locked: INFORMATION:   Save valgrind callgrind/massif output to /cm/build32/cm/ot/TACT/TACT_CONFIG!30.0.0.133/build_G!31.OP.L8/saved_logs/replay_dir-run_prequal.JpAfK/tmp/cmadm.ite4Po
+260925.135636: Treplay.locked: INFORMATION:   Save sar output to /cm/build32/cm/ot/TACT/TACT_CONFIG!30.0.0.133/build_G!31.OP.L8/saved_logs/replay_dir-run_prequal.JpAfK/tmp/cmadm.ite4Po
+260925.135639: Treplay.locked: INFORMATION:   Save callgrind out and perf files to /cm/build32/cm/ot/TACT/TACT_CONFIG!30.0.0.133/build_G!31.OP.L8/saved_logs/replay_dir-run_prequal.JpAfK/tmp/cmadm.ite4Po
+260925.135639: Treplay.locked: INFORMATION:   Save PGQUAL files to /cm/build32/cm/ot/TACT/TACT_CONFIG!30.0.0.133/build_G!31.OP.L8/saved_logs/replay_dir-run_prequal.JpAfK/tmp/cmadm.ite4Po
+260925.135640: Treplay.locked: INFORMATION:   Save grrt out and perf files to /cm/build32/cm/ot/TACT/TACT_CONFIG!30.0.0.133/build_G!31.OP.L8/saved_logs/replay_dir-run_prequal.JpAfK/tmp/cmadm.ite4Po
+260925.135640: Treplay.locked: INFORMATION:   Create archive /cm/ot/TACT/TACT_CONFIG!30.0.0.133/build_G!31.OP.L8/saved_logs/Treplay_G!31.OP.L8_30.0.0.133-replay_dir-run_prequal.JpAfK-saved_info.tar.gz having content of /cm/build32/cm/ot/TACT/TACT_CONFIG!30.0.0.133/build_G!31.OP.L8/saved_logs/replay_dir-run_prequal.JpAfK/tmp/cmadm.ite4Po
+260925.135646: Treplay.locked: INFORMATION: not removing installation, the replay FAILED.
+260925.135646: Treplay.locked: INFORMATION: REPLAY_FINISHED_COUNT:      1  (expected: 1)
+260925.135646: Treplay.locked: INFORMATION: return_code of replay_day : 1
+260925.135646: Treplay.locked: INFORMATION: NR_FAILING_PREQUAL_TACOTIFY:    0
+260925.135646: Treplay.locked: INFORMATION: NR_SUCCESSFUL_PREQUAL_TACOTIFY: 1
+260925.135646: Treplay.locked: INFORMATION: NR_COREDUMPS:               2699
+260925.135646: Treplay.locked: INFORMATION: NR_QUERY_LEAKS:             0
+260925.135646: Treplay.locked: INFORMATION: NR_ABNORMAL_MSGS:           0
+260925.135646: Treplay.locked: INFORMATION: NR_FILE_NOT_FOUND :         0
+260925.135646: Treplay.locked: INFORMATION: Requested UNINSTALL:        NO
+260925.135646: Treplay.locked: INFORMATION: LOGS_FOUND:                 YES
+260925.135646: Treplay.locked: INFORMATION: Executed UNINSTALL:        NO
+#-#for regress_tactdev_test.common#-# REPLAY_FINISHED_COUNT:1 EXPECTED_REPLAY_FINISHED_COUNT:1 REPLAY_RC:1 NR_FAILING_PREQUAL_TACOTIFY:0 NR_SUCCESSFUL_PREQUAL_TACOTIFY:1 NR_COREDUMPS:2699 NR_QUERY_LEAKS:0 NR_ABNORMAL_MSGS:0 NR_FILE_NOT_FOUND:0 REQ_UNINSTALL:NO LOGS_FOUND:YES EXEC_INSTALL:NO
+260925.135646: Treplay.locked: INFORMATION: Generating html report
+260925.135646: Treplay.locked: INFORMATION: Cleanup data (Treplay_G!*.log) in /cm/ot/TACT/test_reports older than 732 days.
+260925.135707: Treplay.locked: INFORMATION: Cleanup data (prequal_results*.txt) in /cm/ot/TACT/test_reports older than 732 days.
+260925.135708: Treplay.locked: INFORMATION: Cleanup data (prequal_results*.txt) in /cm/ot/TACT/test_reports older than 732 days.
+260925.140229: build_report_html_index_page.locked: SEVERE: get_build_color: Read unknown line: test_restart_terminate_reg_xcd_susp_regul_after_restart.el
+260925.140238: Treplay.locked: INFORMATION: Treplay.locked finished
+260925.140238: locked: INFORMATION: Unlocked lockfile /cm/local_build/Treplay.ORA_LOF.mutex
