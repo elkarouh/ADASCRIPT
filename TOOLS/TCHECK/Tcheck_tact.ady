@@ -628,20 +628,146 @@ type CommitHash is str
 
 type ChangeKind is enum CHANGED, ADDED, DELETED
 
-type FileChange is record:
-    kind:    ChangeKind = CHANGED
+# The DIFF and NET DIFF lines are #emacs: links, clickable in an Emacs
+# buffer like the report's own: side by side in Emacs (vc-version-ediff),
+# or under -tool in that tool, started without an output buffer.
+
+def elisp_string(text: str) -> str:
+    """TEXT as an Emacs Lisp string literal."""
+    "\"" + text.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+
+def nm_cache() -> Path:
+    """Where the diff links clone NM's repositories, from Bitbucket, when
+    there is no workspace: $TCHECK_NM_CACHE, or ~/Downloads/.cache/tcheck/NM."""
+    return Path($TCHECK_NM_CACHE) if $TCHECK_NM_CACHE != ""
+    Path($HOME) / "Downloads" / ".cache" / "tcheck" / "NM"
+
+def nm_root() -> Path:
+    """The NM workspace, or, without one, the cache standing in for it."""
+    return Path($CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY) if $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY != ""
+    nm_cache()
+
+class FileChange:
+    """A file a branch changed, added or deleted, as the changes report
+    lists it: its kind of change, the commits that made it and what they
+    say of it; and how to look at it -- the DIFF and NET DIFF links."""
+    kind:    ChangeKind
     # the path in the report: <system>/<subsystem>/...
-    file:    NmFile_T = ""
+    file:    NmFile_T
     # every commit of the branch that touched it, in report order
-    commits: []CommitHash = []
+    commits: []CommitHash
     # the SC tickets those commits name
-    tickets: []Ticket_T = []
+    tickets: []Ticket_T
     # "<reviewers> on <date>", once per review the report gives them
-    reviews: []Review_T = []
+    reviews: []Review_T
     # the component's baselines the change lies between, as tags in its
     # submodule: "Differences between IFPS.CUA_IDL.30.0.0.122 and ...123"
-    from_baseline: BaselineNr_T = ""
-    to_baseline:   BaselineNr_T = ""
+    from_baseline: BaselineNr_T
+    to_baseline:   BaselineNr_T
+
+    def __init__(self, kind: ChangeKind, file: NmFile_T, from_baseline: BaselineNr_T, to_baseline: BaselineNr_T):
+        """The change, before any commit, ticket or review is added to it."""
+        self.kind = kind
+        self.file = file
+        self.from_baseline = from_baseline
+        self.to_baseline = to_baseline
+
+    def absorb(self, other: FileChange):
+        """OTHER's commits, tickets and reviews, each that is not here yet."""
+        for c in other.commits:
+            if c not in self.commits:
+                self.commits.append(c)
+        for t in other.tickets:
+            if t not in self.tickets:
+                self.tickets.append(t)
+        for r in other.reviews:
+            if r not in self.reviews:
+                self.reviews.append(r)
+
+    def submodule_path(self) -> (Path, InSub_T):
+        """The submodule and its path inside it: the report's path is
+        <system>/<subsystem>/<rest>, and <system>/<subsystem> is a submodule of
+        the NM workspace, where the commits and tags are."""
+        let parts: []str = self.file.split("/")
+        return (Path(""), self.file) if len(parts) < 3
+        (nm_root() / parts[0] / parts[1], "/".join(parts[2:]))
+
+    def emacs_difftool(self, rev1: Rev_T, rev2: Rev_T) -> Link_T:
+        """A link starting the -tool diff tool on the file between REV1 and
+        REV2, through git difftool."""
+        let (sub, rest) = self.submodule_path()
+        let where: str = f"-C {sub} " if sub != "" else ""
+        let command: Command_T = f"git {where}difftool -y -t {DIFF_TOOL} {rev1} {rev2} -- {rest}"
+        f"#emacs:(call-process-shell-command {elisp_string(command)} nil 0)"
+
+    def emacs_ediff(self, rev1: Rev_T, rev2: Rev_T) -> Link_T:
+        """A link comparing the file between REV1 and REV2 side by side in
+        Emacs, through its own git support."""
+        let (sub, rest) = self.submodule_path()
+        let path: Path = sub / rest if sub != "" else Path(rest)
+        var file: str = elisp_string(str(path))
+        if "$" in path:
+            file = f"(substitute-in-file-name {file})"
+        f"#emacs:(vc-version-ediff (list {file}) {elisp_string(rev1)} {elisp_string(rev2)})"
+
+    def diff_link(self, rev1: Rev_T, rev2: Rev_T) -> Link_T:
+        """The link comparing the file between REV1 and REV2 -- checking it
+        out first when it needs to be."""
+        let link: Link_T = self.emacs_difftool(rev1, rev2) if DIFF_TOOL != "" else self.emacs_ediff(rev1, rev2)
+        let checkout: Command_T = self.checkout_command(rev1, rev2)
+        return link if checkout == ""
+        let form: str = link.removeprefix("#emacs:")
+        f"#emacs:(when (eql 0 (shell-command {elisp_string(checkout)})) {form})"
+
+    def checkout_command(self, rev1: Rev_T, rev2: Rev_T) -> Command_T:
+        """The Tcheckout command checking the file out alone, for its diff
+        between REV1 and REV2: in the NM workspace when its submodule is not
+        checked out, or is sparsely without it -- "" otherwise; without a
+        workspace, always, in the cache -- which fetches REV1 and REV2 when it
+        lacks them."""
+        let (sub, rest) = self.submodule_path()
+        return "" if sub == ""
+        let root: str = $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY
+        return f"Tcheckout -cache {nm_cache()} -rev {rev2} -rev {rev1} {self.file}" if root == ""
+        let git_link: Path = sub / ".git"
+        let path: Path = sub / rest
+        if -e git_link:
+            return "" if self.kind == DELETED or -e path
+            # missing from a checkout: only a sparse one can take it in
+            let sparse = shell: git -C {!sub} config --bool core.sparseCheckout 2>/dev/null
+            return "" if sparse.output.strip() != "true"
+        f"Tcheckout -root {root} {self.file}"
+
+    def diff_links(self) -> []Link_T:
+        """One link per commit: the file in the commit's parent and in the commit."""
+        [self.diff_link(c + "^", c) for c in self.commits]
+
+    def net_diff_link(self) -> Link_T:
+        """What the component's baseline did to the file, all commits together."""
+        self.diff_link(self.from_baseline, self.to_baseline)
+
+    def display(self):
+        """FILE <KIND>: <dir>/<base>.<extension>, the base and extension in
+        color; then the commits that made the change and their tickets."""
+        let p: Path = Path(self.file)
+        let name: str = p.name
+        let dot: int = name.rfind(".")
+        stdout.write(f"FILE {self.kind}: {p.parent}/")
+        if dot > 0:
+            puts("Ky", name[:dot])
+            stdout.write(".")
+            puts("Wb", name[dot + 1:], NEWLINE=True)
+        else:
+            puts("Ky", name, NEWLINE=True)
+        print "COMMITS     : " + " ".join(self.commits)
+        if len(self.tickets) > 0:
+            print "TICKETS     : " + " ".join(self.tickets)
+        for r in self.reviews:
+            print "REVIEWED BY : " + r
+        for command in self.diff_links():
+            print "DIFF        : " + command
+        if len(self.commits) > 1 and self.from_baseline != "" and self.to_baseline != "":
+            print "NET DIFF    : " + self.net_diff_link()
 
 def cfmu_baseline_of(tact_nr: BaselineNr_T) -> BaselineNr_T:
     """The CFMUTEST baseline built on TACT baseline TACT_NR -- the first
@@ -763,11 +889,11 @@ class ChangesReport:
                     var review: Review_T = review_of(line)
                     if review == "" and sha in merge_reviews:
                         review = merge_reviews[sha]
-                    let fc: FileChange = FileChange(kind = CHANGE_KINDS[verb], file = file, commits = [sha],
-                                                    tickets = tickets_of(line),
-                                                    reviews = [review] if review != "" else [],
-                                                    from_baseline = section.from_baseline,
-                                                    to_baseline = section.to_baseline)
+                    var fc: FileChange = FileChange(CHANGE_KINDS[verb], file, section.from_baseline, section.to_baseline)
+                    fc.commits.append(sha)
+                    fc.tickets = tickets_of(line)
+                    if review != "":
+                        fc.reviews.append(review)
                     let owner: BranchName = credit(fc.tickets, section.names, section.tickets, section.branch)
                     if owner == "":
                         self.unattributed.append(fc)
@@ -778,7 +904,7 @@ class ChangesReport:
 
     def add(self, seen: {str}int, owner: BranchName, fc: FileChange):
         """FC, credited to OWNER: a new entry, or its commits, tickets and
-        reviews added to OWNER's entry for the same file and kind of change.
+        reviews absorbed by OWNER's entry for the same file and kind of change.
         SEEN maps "<branch>\x01<kind>\x01<file>" to that entry's index."""
         let who: Committer = committer_of(owner)
         if who not in self.branches:
@@ -790,18 +916,8 @@ class ChangesReport:
         let key: str = owner + "\x01" + fc.kind'Image + "\x01" + fc.file
         if key not in seen:
             seen[key] = len(self.files[owner])
-            self.files[owner].append(FileChange(kind = fc.kind, file = fc.file,
-                                                from_baseline = fc.from_baseline, to_baseline = fc.to_baseline))
-        let i: int = seen[key]
-        for c in fc.commits:
-            if c not in self.files[owner][i].commits:
-                self.files[owner][i].commits.append(c)
-        for t in fc.tickets:
-            if t not in self.files[owner][i].tickets:
-                self.files[owner][i].tickets.append(t)
-        for r in fc.reviews:
-            if r not in self.files[owner][i].reviews:
-                self.files[owner][i].reviews.append(r)
+            self.files[owner].append(FileChange(fc.kind, fc.file, fc.from_baseline, fc.to_baseline))
+        self.files[owner][seen[key]].absorb(fc)
 
     def keep_only(self, user: Committer):
         """Only USER's changes from now on, when USER is not "": the changes
@@ -819,114 +935,10 @@ def newest(dir: Path, pattern: Glob_T) -> Path:
     let found: []str = shellLines: ls -dt {!dir}/{pattern} 2>/dev/null | head -n 1
     Path(found[0]) if len(found) > 0 else Path("")
 
-# The DIFF and NET DIFF lines are #emacs: links, clickable in an Emacs
-# buffer like the report's own: side by side in Emacs (vc-version-ediff),
-# or under -tool in that tool, started without an output buffer.
-
-def elisp_string(text: str) -> str:
-    """TEXT as an Emacs Lisp string literal."""
-    "\"" + text.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
-
-def nm_cache() -> Path:
-    """Where the diff links clone NM's repositories, from Bitbucket, when
-    there is no workspace: $TCHECK_NM_CACHE, or ~/Downloads/.cache/tcheck/NM."""
-    return Path($TCHECK_NM_CACHE) if $TCHECK_NM_CACHE != ""
-    Path($HOME) / "Downloads" / ".cache" / "tcheck" / "NM"
-
-def nm_root() -> Path:
-    """The NM workspace, or, without one, the cache standing in for it."""
-    return Path($CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY) if $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY != ""
-    nm_cache()
-
-def split_file(fc: FileChange) -> (Path, InSub_T):
-    """FC's submodule and its path inside it: the report's path is
-    <system>/<subsystem>/<rest>, and <system>/<subsystem> is a submodule of
-    the NM workspace, where the commits and tags are."""
-    let parts: []str = fc.file.split("/")
-    return (Path(""), fc.file) if len(parts) < 3
-    (nm_root() / parts[0] / parts[1], "/".join(parts[2:]))
-
 def troubleshoot_tool() -> Tool_T:
     """What troubleshoot mode compares two files with: the -tool diff tool,
     or meld."""
     DIFF_TOOL if DIFF_TOOL != "" else "meld"
-
-def emacs_difftool(fc: FileChange, rev1: Rev_T, rev2: Rev_T) -> Link_T:
-    """A link starting the -tool diff tool on FC's file between REV1 and
-    REV2, through git difftool."""
-    let (sub, rest) = split_file(fc)
-    let where: str = f"-C {sub} " if sub != "" else ""
-    let command: Command_T = f"git {where}difftool -y -t {DIFF_TOOL} {rev1} {rev2} -- {rest}"
-    f"#emacs:(call-process-shell-command {elisp_string(command)} nil 0)"
-
-def emacs_ediff(fc: FileChange, rev1: Rev_T, rev2: Rev_T) -> Link_T:
-    """A link comparing FC's file between REV1 and REV2 side by side in
-    Emacs, through its own git support."""
-    let (sub, rest) = split_file(fc)
-    let path: Path = sub / rest if sub != "" else Path(rest)
-    var file: str = elisp_string(str(path))
-    if "$" in path:
-        file = f"(substitute-in-file-name {file})"
-    f"#emacs:(vc-version-ediff (list {file}) {elisp_string(rev1)} {elisp_string(rev2)})"
-
-def diff_link(fc: FileChange, rev1: Rev_T, rev2: Rev_T) -> Link_T:
-    """The link comparing FC's file between REV1 and REV2 -- checking it
-    out first when it needs to be."""
-    let link: Link_T = emacs_difftool(fc, rev1, rev2) if DIFF_TOOL != "" else emacs_ediff(fc, rev1, rev2)
-    let checkout: Command_T = checkout_command(fc, rev1, rev2)
-    return link if checkout == ""
-    let form: str = link.removeprefix("#emacs:")
-    f"#emacs:(when (eql 0 (shell-command {elisp_string(checkout)})) {form})"
-
-def checkout_command(fc: FileChange, rev1: Rev_T, rev2: Rev_T) -> Command_T:
-    """The Tcheckout command checking FC's file out alone, for its diff
-    between REV1 and REV2: in the NM workspace when its submodule is not
-    checked out, or is sparsely without it -- "" otherwise; without a
-    workspace, always, in the cache -- which fetches REV1 and REV2 when it
-    lacks them."""
-    let (sub, rest) = split_file(fc)
-    return "" if sub == ""
-    let root: str = $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY
-    return f"Tcheckout -cache {nm_cache()} -rev {rev2} -rev {rev1} {fc.file}" if root == ""
-    let git_link: Path = sub / ".git"
-    let path: Path = sub / rest
-    if -e git_link:
-        return "" if fc.kind == DELETED or -e path
-        # missing from a checkout: only a sparse one can take it in
-        let sparse = shell: git -C {!sub} config --bool core.sparseCheckout 2>/dev/null
-        return "" if sparse.output.strip() != "true"
-    f"Tcheckout -root {root} {fc.file}"
-
-def diff_links(fc: FileChange) -> []Link_T:
-    """One link per commit: the file in the commit's parent and in the commit."""
-    [diff_link(fc, c + "^", c) for c in fc.commits]
-
-def net_diff_link(fc: FileChange) -> Link_T:
-    """What the component's baseline did to the file, all commits together."""
-    diff_link(fc, fc.from_baseline, fc.to_baseline)
-
-def display_file(fc: FileChange):
-    """FILE <KIND>: <dir>/<base>.<extension>, the base and extension in
-    color; then the commits that made the change and their tickets."""
-    let p: Path = Path(fc.file)
-    let name: str = p.name
-    let dot: int = name.rfind(".")
-    stdout.write(f"FILE {fc.kind}: {p.parent}/")
-    if dot > 0:
-        puts("Ky", name[:dot])
-        stdout.write(".")
-        puts("Wb", name[dot + 1:], NEWLINE=True)
-    else:
-        puts("Ky", name, NEWLINE=True)
-    print "COMMITS     : " + " ".join(fc.commits)
-    if len(fc.tickets) > 0:
-        print "TICKETS     : " + " ".join(fc.tickets)
-    for r in fc.reviews:
-        print "REVIEWED BY : " + r
-    for command in diff_links(fc):
-        print "DIFF        : " + command
-    if len(fc.commits) > 1 and fc.from_baseline != "" and fc.to_baseline != "":
-        print "NET DIFF    : " + net_diff_link(fc)
 
 def view_build_of(branch: BranchName) -> Path:
     """BRANCH's view build -- the newest build_* of TACT_CONFIG.<USER>.<BRANCH>,
@@ -998,7 +1010,7 @@ def changes_report(baseline: BaselineNr_T, warn: bool = True) -> Path:
     report
 
 def extension_of(file: NmFile_T) -> Extension_T:
-    """FILE's extension, as display_file splits it: after the last dot of
+    """FILE's extension, as FileChange.display splits it: after the last dot of
     its name, when that dot does not start it; "" when there is none."""
     let name: str = Path(file).name
     let dot: int = name.rfind(".")
@@ -1154,13 +1166,13 @@ def list_detailed_changes(baseline: BaselineNr_T, user: Committer):
             display_branch_info(branch, reference)
             for fc in changes.files[branch]:
                 print "---------------------------------"
-                display_file(fc)
+                fc.display()
         print
         print
     if len(changes.unattributed) > 0:
         print "===================================== Files with no branch merged above them ====================================="
         for fc in changes.unattributed:
-            display_file(fc)
+            fc.display()
         print
     print
     echo_emacs(report)
