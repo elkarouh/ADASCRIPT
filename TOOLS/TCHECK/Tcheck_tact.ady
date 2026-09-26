@@ -123,6 +123,20 @@ def build_type_from(build_name: BuildName_T) -> ?BuildType:
         when /\.SIP\./: return SIP
         when others:    return None
 
+def replay_type_from(file: Path) -> ?ReplayType:
+    """Extract the replay type from a Treplay log's name.
+
+    Treplay_G!31.OP.L8_30.0.0.128_2026.09.16_22:01:59-performance.dt6Uo.log
+    """
+    case file.name:
+        when /run_prequal/:   return run_prequal
+        when /performance/:   return performance
+        when /full_simca/:    return full_simca
+        when /simca/:         return simca
+        when /oldest_date/:   return oldest_date
+        when /all_autolink/:  return all_autolink
+        when others:          return None
+
 class Build:
     """One build of one baseline, e.g. build_G!31.IP.L8 of 30.0.0.121.
 
@@ -165,9 +179,9 @@ class Baseline:
     before it, and that is `bl.previous()` -- the number arithmetic and
     the directory it implies were rebuilt by hand at every call site.
 
-    Its builds are listed only when asked, by find_builds(): creating
-    one lists nothing, so `previous()` costs nothing and cannot fail on a
-    baseline whose directory is gone.
+    Its builds and replays are listed only when asked, by find_builds()
+    and find_replays(): creating one lists nothing, so `previous()` costs
+    nothing and cannot fail on a baseline whose directory is gone.
 
     Up here rather than beside Report because free functions below call
     its methods, and a function may not call a method of a class defined
@@ -176,6 +190,7 @@ class Baseline:
     nr     : BaselineNr_T = "" # e.g. 30.0.0.121
     dir    : Path         = Path("")
     builds : []Build            # its build_G!* builds, once find_builds() has run
+    replays: []Replay           # its replays' logs, once find_replays() has run
 
     def __init__(self, nr: BaselineNr_T):
         self.nr = nr
@@ -208,6 +223,25 @@ class Baseline:
             let bt: ?BuildType = build_type_from(basename)
             continue if bt is None
             self.builds.append(Build(basename, bt, self.nr, self.dir))
+
+    def find_replays(self):
+        """List the replays' logs into replays, one per replay type, in
+        canonical order."""
+        let basedir: Path = self.dir
+        let listing: []str = shellLines: ls -d {basedir}/build_*OP*/saved_logs/Treplay_*.log
+
+        var type_to_file: [ReplayType]Path
+        for found in listing:
+            continue if found == ""
+            let log: Path = Path(found)
+            let rt: ?ReplayType = replay_type_from(log)
+            continue if rt is None
+            type_to_file[rt] = log
+
+        self.replays = []
+        for rtype, filepath in enumerate(type_to_file):
+            continue if filepath == ""
+            self.replays.append((rtype: rtype, file: filepath))
 
 # ---------------------------------------------------------------------------
 # Tlog section parsing
@@ -402,38 +436,6 @@ def echo_emacs(filepath: Path):
 # ---------------------------------------------------------------------------
 # Replay logs
 # ---------------------------------------------------------------------------
-
-def replay_type_from(file: Path) -> ?ReplayType:
-    """Extract the replay type from a Treplay log's name.
-
-    Treplay_G!31.OP.L8_30.0.0.128_2026.09.16_22:01:59-performance.dt6Uo.log
-    """
-    case file.name:
-        when /run_prequal/:   return run_prequal
-        when /performance/:   return performance
-        when /full_simca/:    return full_simca
-        when /simca/:         return simca
-        when /oldest_date/:   return oldest_date
-        when /all_autolink/:  return all_autolink
-        when others:          return None
-
-def find_replays(basedir: Path) -> []Replay:
-    """Find replay log files, one per replay type, in canonical order."""
-    let listing: []str = shellLines: ls -d {basedir}/build_*OP*/saved_logs/Treplay_*.log
-
-    var type_to_file: [ReplayType]Path
-    for found in listing:
-        continue if found == ""
-        let log: Path = Path(found)
-        let rt: ?ReplayType = replay_type_from(log)
-        continue if rt is None
-        type_to_file[rt] = log
-
-    var result: []Replay = []
-    for rtype, filepath in enumerate(type_to_file):
-        continue if filepath == ""
-        result.append((rtype: rtype, file: filepath))
-    return result
 
 class ReplayLog:
     """What a Treplay log says of its replay, read in one pass."""
@@ -1620,8 +1622,8 @@ class Report:
     The report functions were free functions taking a context; they are
     methods now. What they need is three things -- what was asked for
     (Options), which baseline (Baseline), and what that baseline holds on
-    disk (its builds, which the Baseline lists, and its replays, listed
-    once here) -- and a Report holds exactly those.
+    disk (its builds and replays, which the Baseline lists) -- and a
+    Report holds exactly those.
 
     The class sits this far down the file because a method may call a
     sibling method defined below it but not a free function, and these
@@ -1629,7 +1631,6 @@ class Report:
     """
     opt     : Options
     cur     : Baseline
-    replays : []Replay = []
 
     def __init__(self, opt: Options):
         self.opt = opt
@@ -1638,14 +1639,14 @@ class Report:
             puts("SWb", "DIR " + str(self.cur.dir) + " does not exist", NEWLINE=True)
             quit(1)
         self.cur.find_builds()
-        self.replays = find_replays(self.cur.dir)
+        self.cur.find_replays()
 
     def show_header(self):
         puts("SWr", "AVAILABLE BUILDS for " + str(self.cur.dir) + ":", NEWLINE=True)
         for build in self.cur.builds:
             print build.name
         puts("SWr", "AVAILABLE REPLAYS for " + str(self.cur.dir) + ":", NEWLINE=True)
-        for replay in self.replays:
+        for replay in self.cur.replays:
             print replay.rtype'Image + "  " + str(replay.file)
         if self.opt.list_only:
             quit(0)
@@ -1669,9 +1670,9 @@ class Report:
     def show_replays(self):
         hr('#')
         puts("SWr", "REPLAYS", NEWLINE=True)
-        if self.replays'Length == 0:
+        if self.cur.replays'Length == 0:
             puts("SWb", "WARNING: NO REPLAYS FOUND", NEWLINE=True)
-        for replay in self.replays:
+        for replay in self.cur.replays:
             continue if self.opt.focus_domain == focus_replay and replay.rtype != self.opt.focus_rtype
             process_replay(replay, self.opt.verbose)
 
@@ -1732,7 +1733,7 @@ class Report:
         var replay_ok: int = 0
         var replay_fail: int = 0
         var replay_busy: int = 0
-        for replay in self.replays:
+        for replay in self.cur.replays:
             case ReplayLog(replay.file).status:
                 when succeeded:          replay_ok += 1
                 when failed:             replay_fail += 1
