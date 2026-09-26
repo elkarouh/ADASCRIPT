@@ -122,7 +122,8 @@ STANDALONE := \
     test_run_discard.ady \
     test_split_unpack.ady \
     test_path_lines.ady \
-    test_in_loop_var.ady
+    test_in_loop_var.ady \
+    test_docstring_oneline.ady
 
 # -----------------------------------------------------------------------
 # Stdin tests — piped from a sample file

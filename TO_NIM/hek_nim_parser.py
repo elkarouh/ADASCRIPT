@@ -2609,6 +2609,7 @@ def _func_def_to_nim_inner(self, indent=0):
 
     # Store return type so return_stmt can use it for Option wrapping
     ParserState._current_return_type = ret_ann  # e.g. ': seq[seq[string]]'
+    _mark_docstring(block_node, ret_ann)
     # Record method return type for type inference (e.g. conn.rows() -> seq[seq[string]])
     if ret_ann and name:
         _cls_ctx = getattr(ParserState, "_current_class_name", None)
@@ -3217,6 +3218,7 @@ def to_nim(self, indent=0):
         elif tname == "block":
             block_node = node
 
+    _mark_docstring(block_node)
     # Infer virtual from class hierarchy or explicit @virtual decorator
     is_virtual = has_virtual_deco or name in getattr(ParserState, "_ref_classes", set())
 
@@ -4630,6 +4632,51 @@ def _lone_string_node(node):
     return node
 
 
+def _body_statements(block_node):
+    """The statements of a def or class body, in order: what each line of
+    the block parses to, without its trailing newlines and comments."""
+    stmts = []
+    for node in getattr(block_node, "nodes", None) or []:
+        if type(node).__name__ != "Several_Times":
+            continue
+        for seq in node.nodes:
+            kids = (seq.nodes if type(seq).__name__ == "Sequence_Parser"
+                    else [seq])
+            for child in kids:
+                if child is None or type(child).__name__ in ("Several_Times", "RichNL"):
+                    continue
+                stmts.append(child)
+                break
+    return stmts
+
+
+def _mark_docstring(block_node, ret_ann=""):
+    """Mark a def or class body's opening string as its docstring.
+
+    A triple-quoted string alone on a line is a docstring wherever it is
+    (stmt_line turns it into `##`); a one-line "..." is one only here, as the
+    first statement of a body -- Python's own rule. Nim rejects a string
+    left unused, so without this it did not compile. The exception is a
+    body that is nothing but that string in a proc returning a value -- a
+    string, a char, an alias of either: there it is the value returned.
+    """
+    stmts = _body_statements(block_node)
+    if not stmts:
+        return
+    first = stmts[0]
+    while type(first).__name__ == "statement" and len(first.nodes) == 1:
+        first = first.nodes[0]
+    if type(first).__name__ != "stmt_line" or not first.nodes:
+        return
+    if type(first.nodes[0]).__name__ != "expressions":
+        return
+    if _lone_string_node(first.nodes[0]) is None:
+        return
+    if len(stmts) == 1 and ret_ann.lstrip(": ").strip() not in ("", "void", "None", "unit"):
+        return
+    first._docstring = True
+
+
 @method(stmt_line)
 def to_nim(self, indent=0):
     """stmt_line: simple_stmt NL -> Nim: simple statement line"""
@@ -4648,7 +4695,7 @@ def to_nim(self, indent=0):
                  if self.nodes and type(self.nodes[0]).__name__ == "expressions"
                  else None)
     if _str_node is not None:
-        _doc = nim_doc_comment(_str_node.node)
+        _doc = nim_doc_comment(_str_node.node, getattr(self, "_docstring", False))
         if _doc is not None:
             return chr(10).join(_ind(indent) + ln for ln in _doc.splitlines())
 
@@ -5018,6 +5065,7 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
 
     # Store return type so return_stmt can use it for Option wrapping
     ParserState._current_return_type = ret_ann  # e.g. ': seq[seq[string]]'
+    _mark_docstring(block_node, ret_ann)
     # Record method return type for type inference (e.g. conn.rows() -> seq[seq[string]])
     if ret_ann and name:
         if not hasattr(ParserState, "proc_return_types"):

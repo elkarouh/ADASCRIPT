@@ -1,0 +1,43 @@
+#!/usr/bin/env ady2nim
+# test_docstring_oneline.ady -- a one-line "..." docstring, as Python has it
+#
+# A string alone on the first line of a def or class body is its docstring,
+# however it is quoted. The Nim backend only knew the triple-quoted kind: a
+# one-line "..." was left as a bare string, which Nim rejects as a value
+# not used, so the program did not compile. A string that is the whole body
+# of a function returning one is still the value returned.
+
+type Name_T is str
+
+def names() -> []Name_T:
+    "The names, in order."
+    return ["a", "b"]
+
+def greet(name: Name_T) -> str:
+    'A greeting for NAME, with a "quote" in its docstring.'
+    let hello: str = "hello " + name
+    hello
+
+def fixed() -> str:
+    "the value, not a docstring"
+
+def raw_doc() -> int:
+    r"A raw one: \d+ stays as written."
+    42
+
+class Counter:
+    "A count that only goes up."
+    n: int = 0
+
+    def bump(self):
+        "One more."
+        self.n += 1
+
+assert names() == ["a", "b"]
+assert greet("x") == "hello x"
+assert fixed() == "the value, not a docstring"
+assert raw_doc() == 42
+var c: Counter = Counter()
+c.bump()
+assert c.n == 1
+print "ok"

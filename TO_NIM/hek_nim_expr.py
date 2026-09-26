@@ -1265,16 +1265,21 @@ def nim_string_literal(value):
     return "".join(out)
 
 
-def nim_doc_comment(text):
+def nim_doc_comment(text, docstring_position=False):
     """The Nim `##` doc comment for a Python docstring, or None.
 
-    `text` is the literal as written. Only a triple-quoted one becomes a
-    comment; anything else is a value and the caller emits it normally.
+    `text` is the literal as written. A triple-quoted one becomes a comment
+    wherever it stands alone; a one-line one only in DOCSTRING_POSITION, the
+    start of a def or class body. Anything else is a value and the caller
+    emits it normally.
     """
     text = strip_bytes_unicode_prefix(text)   # as in STRING
-    if not (text.startswith(chr(34) * 3) or text.startswith(chr(39) * 3)):
+    if text.startswith(chr(34) * 3) or text.startswith(chr(39) * 3):
+        inner = text[3:-3]
+    elif docstring_position and text.lstrip("rR")[:1] in (chr(34), chr(39)):
+        inner = _ast.literal_eval(text)
+    else:
         return None
-    inner = text[3:-3]
     return chr(10).join('## ' + line.strip() for line in inner.strip().splitlines())
 
 
