@@ -1,0 +1,41 @@
+#!/usr/bin/env ady2nim
+"""Test: .items() on a table reached through an index -- `logs[p]`, a
+table in an enum-indexed array.
+
+`.items()` on a table is Nim's `pairs()`, which the transpiler knew only
+when the table was a name or a field: `b.logs[p].items()` stayed
+`items()`, and Nim has no items() yielding a table's pairs.
+"""
+
+type Subtype   is enum in_test, mono
+type BuildPass is enum normal, mrun
+
+class Log:
+    var n: int
+    def __init__(self, n: int):
+        self.n = n
+
+class Build:
+    var logs: [BuildPass]{Subtype}Log     # the logs of each pass, by subtype
+
+    def __init__(self):
+        for p in BuildPass:
+            for s in Subtype:
+                if s == mono or p == normal:
+                    self.logs[p][s] = Log(ord(s) + 10 * ord(p))
+
+    def total(self, p: BuildPass) -> int:
+        """Through self, inside a method."""
+        var sum: int = 0
+        for s, log in self.logs[p].items():
+            sum += log.n
+        sum
+
+let b: Build = Build()
+var seen: []str = []
+for p in BuildPass:
+    for s, log in b.logs[p].items():
+        seen.append(f"{p} {s} {log.n}")
+assert seen == ["normal in_test 0", "normal mono 1", "mrun mono 11"]
+assert b.total(normal) == 1 and b.total(mrun) == 11
+print "test_indexed_table_items: ok"

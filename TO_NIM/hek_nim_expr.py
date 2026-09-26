@@ -555,6 +555,10 @@ def _nim_expr_type(expr):
         tm = _re.match(r"Table\[[^,]+,\s*(.+)\]$", t)
         if tm:
             return tm.group(1).strip()
+        # array[E, T][e] -> T: an enum-indexed array, `[Pass]{Sub}Log`
+        am = _re.match(r"array\[[^,\[\]]+,\s*(.+)\]$", t)
+        if am:
+            return am.group(1).strip()
         return None
 
     def _resolve(s):
@@ -1975,6 +1979,13 @@ def _translate_method(obj_name, method_name):
         # Fallback: look up field name directly in symbol table
         if sym is None:
             sym = ParserState.symbol_table.lookup(field)
+    # A chain the two above do not take apart -- a subscripted field,
+    # `b.logs[p]` -- the expression resolver does: without it `.items()`
+    # on a table in an enum-indexed array stayed `items`, not `pairs`.
+    if sym is None:
+        _chain_type = _nim_expr_type(obj_name)
+        if _chain_type:
+            sym = {"type": _chain_type}
     if sym:
         type_str = sym.get("type", "") or ""
         for prefix, mappings in _PY_METHOD_TO_NIM.items():

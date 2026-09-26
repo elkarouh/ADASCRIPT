@@ -1,0 +1,23 @@
+#!/usr/bin/env ady2nim
+"""Test: a constructor parameter named with a trailing underscore.
+
+`pass_` and `type_` keep a Python keyword out of the way, and Nim, which
+forbids a trailing underscore, spells them `pass` and `typet`. newLog's
+signature did, but it forwarded the names as written, `initLog(result,
+pass_, type_)`, and Nim refused them.
+"""
+
+type BuildPass is enum normal, mrun
+
+class Log:
+    var build_pass: BuildPass
+    var kind:       int
+
+    def __init__(self, pass_: BuildPass = normal, type_: int = 0):
+        self.build_pass = pass_
+        self.kind = type_
+
+let mrun_log: Log = Log(mrun, 2)
+assert mrun_log.build_pass == mrun and mrun_log.kind == 2
+assert Log().build_pass == normal and Log().kind == 0
+print "test_ctor_trailing_underscore: ok"

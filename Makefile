@@ -132,7 +132,9 @@ STANDALONE := \
     test_docstring_oneline.ady \
     test_class_fields_per_instance.ady \
     test_pure_method_calls.ady \
-    test_definition_order.ady
+    test_definition_order.ady \
+    test_ctor_trailing_underscore.ady \
+    test_indexed_table_items.ady
 
 # -----------------------------------------------------------------------
 # Stdin tests — piped from a sample file

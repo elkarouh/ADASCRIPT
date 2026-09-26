@@ -4903,8 +4903,11 @@ def _generate_init_new(func_node, indent, class_name, parent_name, is_virtual=Tr
                 if pname == "self":
                     continue
                 # Use param_plain.to_nim() to get name: type = default
-                param_strs.append(param_node.to_nim())
-                param_names.append(pname)
+                param_str = param_node.to_nim()
+                param_strs.append(param_str)
+                # newX forwards the name as the signature spells it: `pass_`
+                # is `pass` there, Nim forbidding a trailing underscore
+                param_names.append(param_str.split(":")[0].strip())
 
     params_str = ", ".join(param_strs)
 
