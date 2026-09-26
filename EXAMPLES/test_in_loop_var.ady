@@ -1,0 +1,30 @@
+#!/usr/bin/env ady2nim
+"""Test: `"x" in v` where v is a loop variable of enumerate or .items().
+
+The unpacked names get the element type (int and the element of a list;
+the key and the value of a dict), so a substring test on a string one is a
+contains() on Nim -- and nothing else in this file uses strutils, so the
+import has to follow from that alone.
+"""
+
+type Line_T is str
+
+let lines: []Line_T = ["a", "baseline x", "c"]
+
+let idx: []int = [i for i, line in enumerate(lines) if "baseline" in line]
+assert idx == [1]
+
+var found: []int = []
+for i, line in enumerate(lines):
+    if "c" in line:
+        found.append(i)
+assert found == [2]
+
+let d: {str}str = {"k": "value", "m": "other"}
+var keys: []str = []
+for k, v in d.items():
+    if "al" in v:
+        keys.append(k)
+assert keys == ["k"]
+
+print "ok"

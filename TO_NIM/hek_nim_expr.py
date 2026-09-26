@@ -4779,6 +4779,42 @@ def register_loop_var_types(target, iterable):
         # Tuple-destructured loop: register each variable from the iterator's return type.
         # iterable may be a call like 'pairwise(...)'; look up the callee's return type.
         import re as _re_tfor
+        _var_names = [v.strip().strip("()") for v in target.strip("()").split(",")]
+        # enumerate(xs) is xs.pairs: an index, then an element; a Table's
+        # pairs are its keys and values. Without this `line` in
+        # `for i, line in enumerate(lines)` was of no known type, and
+        # `"x" in line` was left as Nim's bare `in`, which needs strutils
+        # for a string -- imported or not, depending on the rest of the file.
+        _pairs_m = _re_tfor.match(r'^(.+)\.pairs(?:\(\))?$', iterable.strip())
+        if _pairs_m and len(_var_names) == 2:
+            _over = _pairs_m.group(1)
+            _over_sym = ParserState.symbol_table.lookup(_over)
+            _over_type = ((_over_sym.get("type") or "") if _over_sym else "") or _nim_expr_type(_over) or ""
+            _seq_m = _re_tfor.match(r'^(?:seq|openArray)\[(.+)\]$', _over_type)
+            _tab_m = _re_tfor.match(r'^(?:Ordered)?Table\[(.+)\]$', _over_type)
+            _pair_types = None
+            if _seq_m:
+                _pair_types = ["int", _seq_m.group(1)]
+            elif _tab_m:
+                # K, V: the comma outside any brackets of their own
+                _kv, _depth, _start = [], 0, 0
+                _txt = _tab_m.group(1)
+                for _ix, _ch in enumerate(_txt):
+                    if _ch in "[(":
+                        _depth += 1
+                    elif _ch in "])":
+                        _depth -= 1
+                    elif _ch == "," and _depth == 0:
+                        _kv.append(_txt[_start:_ix])
+                        _start = _ix + 1
+                _kv.append(_txt[_start:])
+                if len(_kv) == 2:
+                    _pair_types = [_kv[0].strip(), _kv[1].strip()]
+            if _pair_types:
+                for _vn, _vt in zip(_var_names, _pair_types):
+                    if _vn and _vn != "_":
+                        ParserState.symbol_table.add(_vn, _vt, "let")
+                return
         _callee_m = _re_tfor.match(r'^(\w+)\(', iterable.strip())
         if _callee_m:
             _callee = _callee_m.group(1)
@@ -4787,7 +4823,6 @@ def register_loop_var_types(target, iterable):
                 # Strip outer parens: '(char, char)' -> 'char, char'
                 _inner = _ret.strip().lstrip("(").rstrip(")")
                 _elem_types = [t.strip() for t in _inner.split(",")]
-                _var_names = [v.strip().strip("()") for v in target.strip("()").split(",")]
                 for _vn, _vt in zip(_var_names, _elem_types):
                     if _vn:
                         ParserState.symbol_table.add(_vn, _vt, "let")
