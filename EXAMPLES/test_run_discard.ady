@@ -31,7 +31,8 @@ def listing(dir: str) -> []str:
     runLines(["ls", dir])
 
 def status(dir: str) -> RunResult:
-    run(["test", "-d", dir])
+    # the shell's own test: the first `test` in PATH may be another program
+    run(["sh", "-c", 'test -d "$1"', "sh", dir])
 
 make_marker(d)
 assert listing(d) == ["marker", "sub"]
