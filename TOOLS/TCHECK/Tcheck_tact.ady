@@ -1575,6 +1575,33 @@ def make_comparable(logfile: Path, bl: BaselineNr_T) -> Path:
         sd '[vb]3.el' 'test3.el' {out_file}
     return out_file
 
+class CsystemLog:
+    """A baseline's Csystem_build.log, the log of its IP build. For now it
+    is compared as text, normalized so that what always differs --
+    timestamps, pids, paths -- does not show; the place for a closer look,
+    by what it builds and what fails, when one is wanted."""
+    file    : Path
+    baseline: BaselineNr_T
+
+    def __init__(self, baseline: Baseline):
+        self.file = baseline.saved_logs_dir(IP).parent / "Csystem_build.log"
+        self.baseline = baseline.nr
+
+    def comparable(self) -> Path:
+        """A normalized copy of the log, under /tmp/reports."""
+        make_comparable(self.file, self.baseline)
+
+    def compare_with(self, older: CsystemLog):
+        """How this log differs from OLDER's: in the troubleshoot tool, or
+        as a diff in batch mode."""
+        let before: Path = older.comparable()
+        let after: Path = self.comparable()
+        if BATCH:
+            let rc: int = shell: diff {!before} {!after}
+        else:
+            let tool: Tool_T = troubleshoot_tool()
+            let rc: int = shell: {!tool} {!before} {!after} &
+
 # ---------------------------------------------------------------------------
 # The run itself
 # ---------------------------------------------------------------------------
@@ -1773,21 +1800,12 @@ class Report:
         let rc: int = shell: echo {!line} >> {!history_file}
 
     def show_detailed_build_info(self):
-        let prev: Baseline = self.cur.previous()
-        let cur_build: Path = self.cur.saved_logs_dir(IP).parent
-        let prev_build: Path = prev.saved_logs_dir(IP).parent
-        let prev_log: Path = prev_build / "Csystem_build.log"
-        let cur_log: Path = cur_build / "Csystem_build.log"
+        let prev: CsystemLog = CsystemLog(self.cur.previous())
+        var cur: CsystemLog = CsystemLog(self.cur)
         puts("SWr", "Compare Csystem_build.log:", NEWLINE=True)
-        print "  prev: " + prev_log
-        print "  cur:  " + cur_log
-        let prev_normalized: Path = make_comparable(prev_log, prev.nr)
-        let cur_normalized: Path = make_comparable(cur_log, self.cur.nr)
-        if not BATCH:
-            let tool: Tool_T = troubleshoot_tool()
-            let rc: int = shell: {!tool} {!prev_normalized} {!cur_normalized} &
-        else:
-            let rc: int = shell: diff {!prev_normalized} {!cur_normalized}
+        print f"  prev: {prev.file}"
+        print f"  cur:  {cur.file}"
+        cur.compare_with(prev)
 
     def show_detailed_regression_tests(self):
         var btype: BuildType = IP
