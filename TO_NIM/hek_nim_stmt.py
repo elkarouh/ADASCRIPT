@@ -1323,7 +1323,7 @@ def _note_split_parts(value, names):
     """NAMES, unpacked from VALUE: strings, when it is a split -- so that
     `int(tail)` parses one rather than converting it."""
     import re as _re_np
-    if _re_np.search(r"\.r?split\(", value):
+    if _re_np.search(r"\.(?:r?split|splitWhitespace)\(", value):
         for _n in names:
             _n = _n.strip()
             if _re_np.fullmatch(r"[A-Za-z]\w*", _n):
@@ -1331,14 +1331,15 @@ def _note_split_parts(value, names):
 
 
 def _unpackable(value, count):
-    """VALUE, to unpack into COUNT names: as it is, unless it is a `split` or
-    `rsplit` call -- a seq on Nim, which only a tuple unpacks. `let (head,
+    """VALUE, to unpack into COUNT names: as it is, unless it is a `split`
+    (`splitWhitespace` when it has no separator) or `rsplit` call -- a seq on
+    Nim, which only a tuple unpacks. `let (head,
     tail) = nr.rsplit(".", 1)` is Python's way to take a string apart, and
     came out as the same line, which Nim rejects. The seq is bound once and
     its elements made the tuple; a list with fewer elements than names
     raises IndexDefect, as Python's ValueError."""
     import re as _re_up
-    if count < 2 or not _re_up.search(r"\.r?split\([^()]*(?:\([^()]*\)[^()]*)*\)$", value.strip()):
+    if count < 2 or not _re_up.search(r"\.(?:r?split|splitWhitespace)\([^()]*(?:\([^()]*\)[^()]*)*\)$", value.strip()):
         return value
     ParserState._unpack_counter = getattr(ParserState, "_unpack_counter", 0) + 1
     tmp = f"adascriptParts{ParserState._unpack_counter}"

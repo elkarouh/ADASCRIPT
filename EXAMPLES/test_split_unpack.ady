@@ -27,4 +27,12 @@ var right: str = ""
 left, right = "x:y".split(":")
 assert left + right == "xy"
 
+# on whitespace: split() with no separator
+let (mode, kind, sha, path) = "160000 commit abc123\tTACT/UIF".split()
+assert kind == "commit" and sha == "abc123" and path == "TACT/UIF"
+
+# a part not wanted: _
+let (_, after) = "a: 1: 2".rsplit(": ", 1)
+assert after == "2"
+
 print "split-unpack tests passed"
