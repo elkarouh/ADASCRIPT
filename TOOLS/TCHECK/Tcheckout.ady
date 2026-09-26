@@ -140,8 +140,28 @@ def check_out_or_die(work: Path, rev: Rev_T):
     # emptied directory lacks, which a plain checkout keeps as deletions
     git_or_die(work, ["-c", "advice.detachedHead=false", "checkout", "-q", "-f", rev], f"could not check out {rev} in {work}")
 
+# --- where files are checked out: the workspace, or the cache -----------------
+@virtual
+class Checkouts:
+    """Where files are checked out: the NM workspace's submodules, or, with
+    no workspace, a cache of repositories cloned alone. The main block picks
+    one; what it asks of it is the same."""
+
+    def checked_out_files(self, only: Sub_T) -> []Target_T:
+        """The files checked out alone, one <system>/<subsystem>/<path> each:
+        all of them, or ONLY's, a submodule, when it is not ""."""
+        []
+
+    def uncheckout(self, f: File_T) -> Reason_T:
+        """F taken out again: "", or why it was not."""
+        ""
+
+    def checkout(self, f: File_T, revs: []Rev_T):
+        """F checked out; REVS are the revisions its diffs compare."""
+        pass
+
 # --- the workspace -----------------------------------------------------------
-class Workspace_T:
+class Workspace(Checkouts):
     var root: Path
 
     def __init__(self, root: Path):
@@ -182,7 +202,8 @@ class Workspace_T:
         print f"{PROG}: {f.target} taken out -- {f.sub}'s last: deinitialised, its clone kept in {clone}"
         return ""
 
-    def checkout(self, f: File_T):
+    def checkout(self, f: File_T, revs: []Rev_T):
+        """At the commit the superproject records: REVS do not matter here."""
         let work: Path = self.root / f.sub
         let name: Name_T = self.name_of(f.sub)
         die(f"{f.sub} is not a submodule of {self.root}") if name == ""
@@ -231,7 +252,7 @@ class Workspace_T:
         print f"{PROG}: {f.target} checked out ({f.sub} at {commit[:8]}, this file only)"
 
 # --- the cache, for no workspace at all ----------------------------------------
-class Cache_T:
+class Cache(Checkouts):
     var dir: Path
 
     def __init__(self, dir: Path):
@@ -321,8 +342,11 @@ while i < len(argv):
 if cache == "" and root == "":
     cache = Path($TCHECK_NM_CACHE) if $TCHECK_NM_CACHE != "" else Path($HOME) / "Downloads" / ".cache" / "tcheck" / "NM"
 die(f"not a git work tree: {root}") if cache == "" and not git_ok(root, ["rev-parse", "--is-inside-work-tree"])
-let workspace: Workspace_T = Workspace_T(root)
-let cached: Cache_T = Cache_T(cache)
+var checkouts: Checkouts
+if cache != "":
+    checkouts = Cache(cache)
+else:
+    checkouts = Workspace(root)
 let where: str = ("-cache DIR" if cache != "" else "-root DIR")
 die("-all goes with -u") if all and mode != UNCHECKOUT
 if all: mode = UNCHECKOUT_ALL
@@ -331,15 +355,12 @@ def checked_out_files(option: str) -> []Target_T:
     """What -l and -u -all were asked about: every file, or one submodule's."""
     die(f"usage: {PROG} [{where}] {option} [<system>/<subsystem>]") if len(rest) > 1
     let only: Sub_T = rest[0].rstrip("/") if len(rest) == 1 else ""
-    cached.checked_out_files(only) if cache != "" else workspace.checked_out_files(only)
+    checkouts.checked_out_files(only)
 
 def the_file() -> File_T:
     """The one file a checkout or -u was given."""
     die(f"usage: {PROG} [{where}] [-u] <system>/<subsystem>/<path>") if len(rest) != 1
     parse_target(rest[0])
-
-def uncheckout(f: File_T) -> Reason_T:
-    cached.uncheckout(f) if cache != "" else workspace.uncheckout(f)
 
 case mode:
     when LIST:
@@ -349,15 +370,12 @@ case mode:
         let files: []Target_T = checked_out_files("-u -all")
         if files == []:
             print f"{PROG}: nothing checked out"
-        let failures: []Reason_T = [why for why in [uncheckout(parse_target(t)) for t in files] if why != ""]
+        let failures: []Reason_T = [why for why in [checkouts.uncheckout(parse_target(t)) for t in files] if why != ""]
         for why in failures:
             warn(why)
         quit(1 if failures != [] else 0)
     when UNCHECKOUT:
-        let why: Reason_T = uncheckout(the_file())
+        let why: Reason_T = checkouts.uncheckout(the_file())
         die(why) if why != ""
     when CHECKOUT:
-        if cache != "":
-            cached.checkout(the_file(), revs)
-        else:
-            workspace.checkout(the_file())
+        checkouts.checkout(the_file(), revs)
