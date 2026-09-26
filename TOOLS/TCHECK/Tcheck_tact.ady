@@ -1801,7 +1801,7 @@ class Report:
 
     def show_detailed_build_info(self):
         let prev: CsystemLog = CsystemLog(self.cur.previous())
-        var cur: CsystemLog = CsystemLog(self.cur)
+        let cur: CsystemLog = CsystemLog(self.cur)
         puts("SWr", "Compare Csystem_build.log:", NEWLINE=True)
         print f"  prev: {prev.file}"
         print f"  cur:  {cur.file}"

@@ -321,8 +321,8 @@ while i < len(argv):
 if cache == "" and root == "":
     cache = Path($TCHECK_NM_CACHE) if $TCHECK_NM_CACHE != "" else Path($HOME) / "Downloads" / ".cache" / "tcheck" / "NM"
 die(f"not a git work tree: {root}") if cache == "" and not git_ok(root, ["rev-parse", "--is-inside-work-tree"])
-var workspace: Workspace_T = Workspace_T(root)
-var cached: Cache_T = Cache_T(cache)
+let workspace: Workspace_T = Workspace_T(root)
+let cached: Cache_T = Cache_T(cache)
 let where: str = ("-cache DIR" if cache != "" else "-root DIR")
 die("-all goes with -u") if all and mode != UNCHECKOUT
 if all: mode = UNCHECKOUT_ALL

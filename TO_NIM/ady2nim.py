@@ -80,6 +80,10 @@ def _nim_reset():
     ParserState.tuple_field_order = {}
     ParserState.object_field_order = {}
     ParserState.nim_proc_names = set()  # names of locally-defined procs/funcs
+    # top-level procs by whether any parameter is `var`; a name in the first
+    # and not the second takes every argument by value (see _purity_evidence)
+    ParserState.by_value_procs = set()
+    ParserState.var_param_procs = set()
     ParserState.class_names = set()     # all class names defined in this translation unit
     ParserState._current_lhs_type = ""  # annotation of current assignment LHS (set by stmt handlers)
     ParserState.proc_return_types = {}  # method/proc name -> return type string

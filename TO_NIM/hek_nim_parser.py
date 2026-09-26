@@ -579,12 +579,22 @@ def to_nim(self, indent=0, is_virtual=False, class_name=None, parent_name=None, 
                 _generate_method_decl(func_node_m, base_indent, class_name, parent_name, is_virtual_class, type_params)
             _evidence = ParserState._mutation_probe
             ParserState._mutation_probe = None
-            _impure = {m for m, (may_mutate, _) in _evidence.items() if may_mutate}
+            # Impure means the method ends up with `var self`, which takes
+            # both: something that may write, and the textual sign the
+            # signature is promoted on (a field written, a method called on
+            # self). A method without that sign keeps a plain self whatever
+            # it hands self to, so calling it cannot change the caller's
+            # self either -- counting it impure gave `var self` to every
+            # accessor that called it, which then could not be used on a
+            # `let`.
+            _impure = {m for m, (may_mutate, _, promotable) in _evidence.items()
+                       if may_mutate and promotable}
             _changed = True
             while _changed:
                 _changed = False
-                for m, (_, calls) in _evidence.items():
-                    if m not in _impure and (calls & _impure or calls - set(_evidence)):
+                for m, (_, calls, promotable) in _evidence.items():
+                    if (m not in _impure and promotable
+                            and (calls & _impure or calls - set(_evidence))):
                         _impure.add(m)
                         _changed = True
             ParserState._pure_methods = set(_evidence) - _impure
@@ -3125,6 +3135,12 @@ def _func_def_to_nim_inner(self, indent=0):
     # Escape Nim keywords that aren't already backtick-wrapped (dunders get their own escaping)
     if not nim_name.startswith("`"):
         nim_name = _nim_ident(nim_name)
+    if keyword == "proc" and indent == 0 and name:
+        # A method that hands a field to this proc cannot change it through
+        # the call when no parameter is `var` (see _purity_evidence).
+        _takes_var = bool(_re_gp.search(r'(?:^|[(,;])\s*[\w`, ]+:\s*var\b', params))
+        (ParserState.var_param_procs if _takes_var
+         else ParserState.by_value_procs).add(name)
     return f"{decos}{_ind(indent)}{keyword} {nim_name}{_exp}{_generic_params}({params}){ret_ann}{_pragmas} ={hc}\n{body}"
 
 
@@ -5168,16 +5184,27 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
             # and `-e self.root / p` is adascriptExists(...), and counting
             # those made every method that did either take `var self`, and
             # every caller of it too.
-            for m in _re.finditer(r'(\w+)\(\s*self\b', body_text):
-                if m.group(1) not in _BY_VALUE_HELPERS:
+            #
+            # A proc of this program whose parameters are none of them `var`
+            # takes self by value as well -- `git_ok(self.root, args)` -- so
+            # a call to one is set aside first: its name is not counted, and
+            # nor is a `, self` among its own arguments. Anything nested in
+            # those arguments is still looked at.
+            _by_value = (_BY_VALUE_HELPERS
+                         | (getattr(ParserState, "by_value_procs", set())
+                            - getattr(ParserState, "var_param_procs", set())))
+            text = _by_value_calls_neutralised(body_text, _by_value)
+            for m in _re.finditer(r'(\w+)\(\s*self\b', text):
+                if m.group(1) not in _by_value:
                     may_mutate = True
-            if _re.search(r'(?:[\])]\(|,)\s*self\b', body_text):
+            if _re.search(r'(?:[\])]\(|,)\s*self\b', text):
                 may_mutate = True
             return may_mutate, sibling_calls
 
         _probe = getattr(ParserState, "_mutation_probe", None)
         if _probe is not None and name:
-            _probe[name] = _purity_evidence(_body_no_comments)
+            _probe[name] = (*_purity_evidence(_body_no_comments),
+                            _body_has_self_mutation(_body_no_comments))
         _pure = getattr(ParserState, "_pure_methods", ())
         if (not is_virtual and class_name and name not in _pure
                 and _body_has_self_mutation(_body_no_comments)):
@@ -5298,6 +5325,31 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
     ParserState.symbol_table.pop_scope()
     ParserState._current_return_type = ""
     return lines
+
+
+def _by_value_calls_neutralised(text, by_value):
+    """TEXT with the argument commas of each call to a BY_VALUE proc made
+    semicolons, so that `, self` among that call's own arguments no longer
+    reads as self handed to something that may take it as `var`. The call's
+    name stays, for the caller to skip; a call nested in the arguments keeps
+    its commas unless it is by-value too."""
+    import re as _re_bv
+    chars = list(text)
+    for m in _re_bv.finditer(r'\b(\w+)\(', text):
+        if m.group(1) not in by_value:
+            continue
+        depth = 0
+        for i in range(m.end() - 1, len(text)):
+            ch = text[i]
+            if ch in "([{":
+                depth += 1
+            elif ch in ")]}":
+                depth -= 1
+                if depth == 0:
+                    break
+            elif ch == "," and depth == 1:
+                chars[i] = ";"
+    return "".join(chars)
 
 
 def _extract_block_body(block_node, indent, is_init_body=False):

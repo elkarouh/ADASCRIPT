@@ -124,7 +124,8 @@ STANDALONE := \
     test_path_lines.ady \
     test_in_loop_var.ady \
     test_docstring_oneline.ady \
-    test_class_fields_per_instance.ady
+    test_class_fields_per_instance.ady \
+    test_pure_method_calls.ady
 
 # -----------------------------------------------------------------------
 # Stdin tests — piped from a sample file

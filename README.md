@@ -1212,9 +1212,9 @@ class AwkProcessor(AwkBase):
 ### Mutable self in non-virtual classes
 
 For plain (non-`@virtual`) classes, the transpiler automatically detects
-whether a method mutates `self` (field assignment, `+=`, `.add()`, or any
-`self.method()` call) and emits `self: var ClassName` in the generated Nim.
-No annotation is needed:
+whether a method mutates `self` (field assignment, `+=`, `.add()`, or a
+call to a method that does) and emits `self: var ClassName` in the
+generated Nim. No annotation is needed:
 
 ```python
 class Counter:
@@ -1223,6 +1223,10 @@ class Counter:
     def increment(self):
         self.count += 1   # transpiler emits: proc increment(self: var Counter)
 ```
+
+A method that only reads -- calling other reading methods, or handing
+fields to a function of the program that takes nothing as `var` -- keeps
+a plain `self`, so it can be called on a `let`.
 
 `@virtual` is only needed when subclasses live in a **different file** (module)
 from their base class — it makes Nim use `ref object` for dynamic dispatch

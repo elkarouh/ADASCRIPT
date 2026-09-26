@@ -1,0 +1,56 @@
+#!/usr/bin/env ady2nim
+"""Test: a method that only reads self can be called on a `let`, on Nim.
+
+A non-virtual class's method takes `var self` on Nim when it may change
+self. The test for that counted too much: a method calling a sibling that
+hands a field to a proc -- `shout(self.name, self.times)` -- was taken to
+change self, since the proc might take its argument as `var`, and so was
+every method calling it; none of them could then be called on a `let`
+("expression is immutable, not 'var'"). A method that keeps a plain self
+cannot change its caller's self, and a proc of this program whose
+parameters are none of them `var` changes nothing it is handed.
+"""
+
+type Name_T is str
+
+def shout(n: Name_T, times: int) -> str:
+    n.upper() + "!" + str(times)
+
+def both(a: str, b: str) -> str:
+    a + " and " + b
+
+class Greeter:
+    name : Name_T
+    times: int
+    said : []str
+
+    def __init__(self, name: Name_T):
+        self.name = name
+        self.times = 2
+
+    def loud(self) -> str:
+        """A field handed to a by-value proc."""
+        shout(self.name, self.times)
+
+    def greet(self, other: Greeter) -> str:
+        """Calls to a reading sibling, and a by-value proc over both."""
+        both(other.loud(), self.loud())
+
+    def say(self, what: str):
+        """Changes self..."""
+        self.said.append(what)
+
+    def say_loud(self):
+        """...and so does a method calling it."""
+        self.say(self.loud())
+
+let a: Greeter = Greeter("a")
+let b: Greeter = Greeter("b")
+assert b.greet(a) == "A!2 and B!2"
+assert a.loud() == "A!2"
+
+var c: Greeter = Greeter("c")
+c.say_loud()
+c.say("hi")
+assert c.said == ["C!2", "hi"]
+print "ok"
