@@ -11,6 +11,13 @@ with new features added during the translation.
 Report the status of a baseline build: regression test results, replay status,
 Padactl/CRC summary, and build closure.
 
+Its source is split into modules, laid out as `EXAMPLES/PROJECT` is:
+`Tcheck_tact.ady` (the options, the report, the main block) nimports
+`LIBS/tcheck_common` (named types, colored output, settings), `LIBS/baselines`
+(a baseline: its builds, Tlogs and replays) and `LIBS/changes_report` (who
+changed what). Build it as before, `ady2nim c Tcheck_tact.ady`. A nimport is
+Nim-only, so Tcheck_tact is a Nim program.
+
 ```
 Tcheck_tact [-no-color] [-s] [-f] [-v] [-l] [-batch] [-only-new] [-exit-code]
             [-focus <domain> [<detail>]] <BASELINE>

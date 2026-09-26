@@ -1,0 +1,581 @@
+"""
+changes_report — who changed what in a baseline, per the CFMUTEST changes
+report, and the tests its Tlogs report newly failing.
+
+Depends on `tcheck_common` and `baselines`, siblings inside LIBS/, nimported
+by their bare names.
+"""
+
+nimport os
+nimport tcheck_common
+nimport baselines
+
+# ---------------------------------------------------------------------------
+# List all changes: who committed what, per the CFMUTEST changes report
+# ---------------------------------------------------------------------------
+#
+# A TACT baseline is tested by a CFMUTEST baseline, and each CFMUTEST
+# baseline has a changes report: for each component, the merges since the
+# previous baseline and the files their commits changed, added or removed.
+#
+#   ===== Differences between TACT.UIF.30.0.0.129 and TACT.UIF.30.0.0.130
+#         Merge from <- 6627849d2 testadm.integration_30 RELATED_CHANGES="SC-1 SC-2 "
+#         Merge from <- a2721a86a acicek.transmit_esb RELATED_CHANGES="SC-1 SC-2 "
+#         Merge from <- c3fb81031 CFMUTEST.CFMUTEST_CONFIG.30.0.0.104 review-ok: yes; ...
+#         changed c3fb81031:TACT/UIF/sources/query_mgr_task.adb RELATED_CHANGES=" " ...
+#
+# A change is credited to the nearest user branch merged above it in its
+# section -- <user>.<branch> -- skipping integration merges (testadm, and
+# any other ...adm) and baseline syncs (CFMUTEST.CFMUTEST_CONFIG.<nr>).
+# Where a section merges several people's branches that is a guess, and
+# the only one the report allows.
+
+let CFMUTEST_ROOT: Path = CM_OT / "CFMUTEST"
+
+# a user branch as the report names it: <user>.<branch>
+type BranchName is str
+type Committer is str
+type CommitHash is str
+
+type ChangeKind is enum CHANGED, ADDED, DELETED
+
+# The DIFF and NET DIFF lines are #emacs: links, clickable in an Emacs
+# buffer like the report's own: side by side in Emacs (vc-version-ediff),
+# or under -tool in that tool, started without an output buffer.
+
+def elisp_string(text: str) -> str:
+    """TEXT as an Emacs Lisp string literal."""
+    "\"" + text.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+
+def nm_cache() -> Path:
+    """Where the diff links clone NM's repositories, from Bitbucket, when
+    there is no workspace: $TCHECK_NM_CACHE, or ~/Downloads/.cache/tcheck/NM."""
+    return Path($TCHECK_NM_CACHE) if $TCHECK_NM_CACHE != ""
+    Path($HOME) / "Downloads" / ".cache" / "tcheck" / "NM"
+
+def nm_root() -> Path:
+    """The NM workspace, or, without one, the cache standing in for it."""
+    return Path($CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY) if $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY != ""
+    nm_cache()
+
+class FileChange:
+    """A file a branch changed, added or deleted, as the changes report
+    lists it: its kind of change, the commits that made it and what they
+    say of it; and how to look at it -- the DIFF and NET DIFF links."""
+    kind:    ChangeKind
+    # the path in the report: <system>/<subsystem>/...
+    file:    NmFile_T
+    # every commit of the branch that touched it, in report order
+    commits: []CommitHash
+    # the SC tickets those commits name
+    tickets: []Ticket_T
+    # "<reviewers> on <date>", once per review the report gives them
+    reviews: []Review_T
+    # the component's baselines the change lies between, as tags in its
+    # submodule: "Differences between IFPS.CUA_IDL.30.0.0.122 and ...123"
+    from_baseline: BaselineNr_T
+    to_baseline:   BaselineNr_T
+
+    def __init__(self, kind: ChangeKind, file: NmFile_T, from_baseline: BaselineNr_T, to_baseline: BaselineNr_T):
+        """The change, before any commit, ticket or review is added to it."""
+        self.kind = kind
+        self.file = file
+        self.from_baseline = from_baseline
+        self.to_baseline = to_baseline
+
+    def absorb(self, other: FileChange):
+        """OTHER's commits, tickets and reviews, each that is not here yet."""
+        for c in other.commits:
+            if c not in self.commits:
+                self.commits.append(c)
+        for t in other.tickets:
+            if t not in self.tickets:
+                self.tickets.append(t)
+        for r in other.reviews:
+            if r not in self.reviews:
+                self.reviews.append(r)
+
+    def submodule_path(self) -> (Path, InSub_T):
+        """The submodule and its path inside it: the report's path is
+        <system>/<subsystem>/<rest>, and <system>/<subsystem> is a submodule of
+        the NM workspace, where the commits and tags are."""
+        let parts: []str = self.file.split("/")
+        return (Path(""), self.file) if len(parts) < 3
+        (nm_root() / parts[0] / parts[1], "/".join(parts[2:]))
+
+    def emacs_difftool(self, rev1: Rev_T, rev2: Rev_T) -> Link_T:
+        """A link starting the -tool diff tool on the file between REV1 and
+        REV2, through git difftool."""
+        let (sub, rest) = self.submodule_path()
+        let where: str = f"-C {sub} " if sub != "" else ""
+        let command: Command_T = f"git {where}difftool -y -t {DIFF_TOOL} {rev1} {rev2} -- {rest}"
+        f"#emacs:(call-process-shell-command {elisp_string(command)} nil 0)"
+
+    def emacs_ediff(self, rev1: Rev_T, rev2: Rev_T) -> Link_T:
+        """A link comparing the file between REV1 and REV2 side by side in
+        Emacs, through its own git support."""
+        let (sub, rest) = self.submodule_path()
+        let path: Path = sub / rest if sub != "" else Path(rest)
+        var file: str = elisp_string(str(path))
+        if "$" in path:
+            file = f"(substitute-in-file-name {file})"
+        f"#emacs:(vc-version-ediff (list {file}) {elisp_string(rev1)} {elisp_string(rev2)})"
+
+    def diff_link(self, rev1: Rev_T, rev2: Rev_T) -> Link_T:
+        """The link comparing the file between REV1 and REV2 -- checking it
+        out first when it needs to be."""
+        let link: Link_T = self.emacs_difftool(rev1, rev2) if DIFF_TOOL != "" else self.emacs_ediff(rev1, rev2)
+        let checkout: Command_T = self.checkout_command(rev1, rev2)
+        return link if checkout == ""
+        let form: str = link.removeprefix("#emacs:")
+        f"#emacs:(when (eql 0 (shell-command {elisp_string(checkout)})) {form})"
+
+    def checkout_command(self, rev1: Rev_T, rev2: Rev_T) -> Command_T:
+        """The Tcheckout command checking the file out alone, for its diff
+        between REV1 and REV2: in the NM workspace when its submodule is not
+        checked out, or is sparsely without it -- "" otherwise; without a
+        workspace, always, in the cache -- which fetches REV1 and REV2 when it
+        lacks them."""
+        let (sub, rest) = self.submodule_path()
+        return "" if sub == ""
+        let root: str = $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY
+        return f"Tcheckout -cache {nm_cache()} -rev {rev2} -rev {rev1} {self.file}" if root == ""
+        let git_link: Path = sub / ".git"
+        let path: Path = sub / rest
+        if -e git_link:
+            return "" if self.kind == DELETED or -e path
+            # missing from a checkout: only a sparse one can take it in
+            let sparse = shell: git -C {!sub} config --bool core.sparseCheckout 2>/dev/null
+            return "" if sparse.output.strip() != "true"
+        f"Tcheckout -root {root} {self.file}"
+
+    def diff_links(self) -> []Link_T:
+        """One link per commit: the file in the commit's parent and in the commit."""
+        [self.diff_link(c + "^", c) for c in self.commits]
+
+    def net_diff_link(self) -> Link_T:
+        """What the component's baseline did to the file, all commits together."""
+        self.diff_link(self.from_baseline, self.to_baseline)
+
+    def display(self):
+        """FILE <KIND>: <dir>/<base>.<extension>, the base and extension in
+        color; then the commits that made the change and their tickets."""
+        let p: Path = Path(self.file)
+        let name: str = p.name
+        let dot: int = name.rfind(".")
+        stdout.write(f"FILE {self.kind}: {p.parent}/")
+        if dot > 0:
+            puts("Ky", name[:dot])
+            stdout.write(".")
+            puts("Wb", name[dot + 1:], NEWLINE=True)
+        else:
+            puts("Ky", name, NEWLINE=True)
+        print "COMMITS     : " + " ".join(self.commits)
+        if len(self.tickets) > 0:
+            print "TICKETS     : " + " ".join(self.tickets)
+        for r in self.reviews:
+            print "REVIEWED BY : " + r
+        for command in self.diff_links():
+            print "DIFF        : " + command
+        if len(self.commits) > 1 and self.from_baseline != "" and self.to_baseline != "":
+            print "NET DIFF    : " + self.net_diff_link()
+
+def cfmu_baseline_of(tact_nr: BaselineNr_T) -> BaselineNr_T:
+    """The CFMUTEST baseline built on TACT baseline TACT_NR -- the first
+    CFMUTEST_CONFIG among what `Psort -b` answers for it -- or "" when
+    there is none. Psort -b lists every build on it: the views built on it
+    (their own paths) first, then the baselines, the TACT one itself too."""
+    # A CM path for Psort, not a file: /cm/ot whatever TCHECK_CM_OT says.
+    let tact: Path = Path("/cm/ot/TACT") / ("TACT_CONFIG." + tact_nr)
+    for answer in shellIter: echo {!tact} | Psort -b
+        if answer == /\/CFMUTEST\/CFMUTEST_CONFIG[!.](?P<nr>[^\/\s]+)$/:
+            return $+{nr}
+    ""
+
+def committer_of(branch: BranchName) -> Committer:
+    branch.split(".")[0]
+
+def user_branch(name: BranchName) -> BranchName:
+    """NAME, a merge's source, when it is somebody's branch; "" when it is
+    an integration merge (testadm.integration_30, any ...adm) or a baseline
+    sync (CFMUTEST.CFMUTEST_CONFIG.30.0.0.104)."""
+    return "" if name == /^[A-Z][A-Z0-9_]*\.[A-Z0-9_]+\.\d/
+    return "" if "." not in name
+    return "" if committer_of(name).endswith("adm")
+    return name
+
+def review_of(line: str) -> Review_T:
+    """The review a report line records -- "dpt, gru on 260922.151702",
+    with "(review-ok: no)" after it unless it was ok -- or ""."""
+    return "" if line != /review-ok: (?P<ok>\w+); reviewed-by: (?P<by>[^;]*); review-date: (?P<date>[^;]*);/
+    let ok: str = $+{ok}
+    let text: str = $+{by}.strip() + " on " + $+{date}.strip()
+    text if ok == "yes" else text + " (review-ok: " + ok + ")"
+
+
+# the report's verbs for a change
+let CHANGE_KINDS: {str}ChangeKind = {"changed": CHANGED, "added": ADDED, "removed": DELETED, "deleted": DELETED}
+
+# What a ChangesReport, being read, knows of the section it is in: one per
+# component.
+class ReportSection:
+    # its baselines: "Differences between IFPS.CUA_IDL.30.0.0.122 and ...123"
+    from_baseline: BaselineNr_T
+    to_baseline:   BaselineNr_T
+    # the branch merged last, nearest above the changes that follow;
+    # "" after an integration merge
+    branch:        BranchName
+    # the user branches merged so far, and the tickets each merge lists
+    names:         []BranchName
+    tickets:       [][]Ticket_T
+
+    def __init__(self, from_baseline: BaselineNr_T, to_baseline: BaselineNr_T):
+        self.from_baseline = from_baseline
+        self.to_baseline = to_baseline
+
+    def credit(self, tickets: []Ticket_T) -> BranchName:
+        """The branch a change with TICKETS is credited to, among the user
+        branches merged above it: the one whose merge lists all of the
+        change's tickets, else the one that lists any of them, else -- none
+        or several -- the nearest."""
+        return self.branch if len(tickets) == 0
+        let covering: []BranchName = [n for n, ts in zip(self.names, self.tickets) if all([t in ts for t in tickets])]
+        return covering[0] if len(covering) == 1
+        let sharing: []BranchName = [n for n, ts in zip(self.names, self.tickets) if any([t in ts for t in tickets])]
+        return sharing[0] if len(sharing) == 1
+        self.branch
+
+def tickets_of(line: str) -> []Ticket_T:
+    """The SC tickets a report line lists in RELATED_CHANGES="...", if any."""
+    return [] if line != /RELATED_CHANGES="(?P<sc>[^"]*)"/
+    $+{sc}.split()
+
+class ChangesReport:
+    """A CFMUTEST changes report: the changes it lists, each credited to a
+    user branch merged above it in its section (see ReportSection.credit); one entry per
+    branch, file and kind of change, with every commit that made it."""
+    # in the order each first appears
+    committers  : []Committer
+    branches    : {Committer}[]BranchName
+    files       : {BranchName}[]FileChange
+    # changes with no user branch above them in their section
+    unattributed: []FileChange
+
+    def __init__(self, report: Path):
+        """Read REPORT, section by section."""
+        var section: ReportSection = ReportSection("", "")
+        var seen: {str}int = {:}
+        # a merge's review, for the change its own commit makes: the merge line
+        # and the change line then carry the same sha
+        var merge_reviews: {CommitHash}Review_T = {:}
+        for line in report.lines:
+            # Captures are bound first: the calls in each branch match regexes
+            # of their own.
+            case line.strip():
+                when /^===== Differences between (?P<a>\S+) and (?P<b>\S+)/:
+                    let a: BaselineName_T = $+{a}
+                    let b: BaselineName_T = $+{b}
+                    section = ReportSection(baseline_nr(a), baseline_nr(b))
+                when /^=====/:
+                    # nothing merged yet; the baselines are the last ones named
+                    section = ReportSection(section.from_baseline, section.to_baseline)
+                when /^Merge from <- (?P<sha>\S+) (?P<name>\S+)/:
+                    let merge_sha: CommitHash = $+{sha}
+                    let source: BranchName = $+{name}
+                    let review: Review_T = review_of(line)
+                    if review != "":
+                        merge_reviews[merge_sha] = review
+                    let merged: BranchName = user_branch(source)
+                    if merged != "":
+                        section.branch = merged
+                        section.names.append(merged)
+                        section.tickets.append(tickets_of(line))
+                    elif committer_of(source).endswith("adm"):
+                        # an integration merge: what follows is nobody's yet
+                        section.branch = ""
+                when /^(?P<verb>changed|added|removed|deleted)\s+(?P<sha>[0-9a-f]+):(?P<file>\S+)/:
+                    let verb: str = $+{verb}
+                    let sha: CommitHash = $+{sha}
+                    let file: NmFile_T = $+{file}
+                    var review: Review_T = review_of(line)
+                    if review == "" and sha in merge_reviews:
+                        review = merge_reviews[sha]
+                    var fc: FileChange = FileChange(CHANGE_KINDS[verb], file, section.from_baseline, section.to_baseline)
+                    fc.commits.append(sha)
+                    fc.tickets = tickets_of(line)
+                    if review != "":
+                        fc.reviews.append(review)
+                    let owner: BranchName = section.credit(fc.tickets)
+                    if owner == "":
+                        self.unattributed.append(fc)
+                    else:
+                        self.add(seen, owner, fc)
+                when others:
+                    pass
+
+    def add(self, seen: {str}int, owner: BranchName, fc: FileChange):
+        """FC, credited to OWNER: a new entry, or its commits, tickets and
+        reviews absorbed by OWNER's entry for the same file and kind of change.
+        SEEN maps "<branch>\x01<kind>\x01<file>" to that entry's index."""
+        let who: Committer = committer_of(owner)
+        if who not in self.branches:
+            self.committers.append(who)
+            self.branches[who] = []
+        if owner not in self.files:
+            self.branches[who].append(owner)
+            self.files[owner] = []
+        let key: str = owner + "\x01" + fc.kind'Image + "\x01" + fc.file
+        if key not in seen:
+            seen[key] = len(self.files[owner])
+            self.files[owner].append(FileChange(fc.kind, fc.file, fc.from_baseline, fc.to_baseline))
+        self.files[owner][seen[key]].absorb(fc)
+
+    def keep_only(self, user: Committer):
+        """Only USER's changes from now on, when USER is not "": the changes
+        credited to no branch are nobody's, and go too."""
+        return if user == ""
+        self.committers = [user] if user in self.committers else []
+        self.unattributed = []
+
+def echo_ediff(a: Path, b: Path):
+    print f"(ediff-files \"{a}\" \"{b}\")"
+
+
+
+def view_build_of(branch: BranchName) -> Path:
+    """BRANCH's view build -- the newest build_* of TACT_CONFIG.<USER>.<BRANCH>,
+    e.g. build_default_Linux -- or Path("") when it has none."""
+    let who: Committer = committer_of(branch)
+    let name: str = branch[len(who) + 1:]
+    newest(TACT_ROOT / f"TACT_CONFIG.{who.upper()}.{name.upper()}", "build_*")
+
+def reference_build(reference: BaselineName_T, ref_reports: Path) -> Path:
+    """The build of REFERENCE -- "TACT.TACT_CONFIG.30.0.0.132" -- its test
+    reports REF_REPORTS were made from: they are named after it,
+    TACT.TACT_CONFIG.30.0.0.132-G!31.IP.L8-<host>-<date> for
+    TACT_CONFIG.30.0.0.132/build_G!31.IP.L8. Without reports, its newest
+    build_G!31.* build. Path("") when that directory does not exist."""
+    let baseline_dir: Path = TACT_ROOT / reference.removeprefix("TACT.")
+    var build: Path = Path("")
+    if ref_reports != "":
+        let tag: str = ref_reports.name.removeprefix(reference + "-").split("-")[0]
+        build = baseline_dir / ("build_" + tag)
+    else:
+        build = newest(baseline_dir, "build_G!31.*")
+    build if build != "" and -d build else Path("")
+
+def display_branch_info(branch: BranchName, reference: BaselineName_T):
+    """The branch the changes came from: its view build -- the build of
+    TACT_CONFIG.<USER>.<BRANCH>, e.g. build_default_Linux -- and the
+    REFERENCE baseline's build; its test reports next to the reference
+    baseline's, with the ediff between their failures. Each said to be
+    missing when it is: a branch may be built and its tests not yet run."""
+    let who: Committer = committer_of(branch)
+    let name: str = branch[len(who) + 1:]
+    stdout.write("FROM BRANCH : ")
+    puts("Wb", who)
+    stdout.write(".")
+    puts("Ky", name, NEWLINE=True)
+    let view_build: Path = view_build_of(branch)
+    if view_build == "":
+        print "NO VIEW BUILD FOUND FOR THIS BRANCH"
+    else:
+        print f"VIEW BUILD DIR: {view_build}"
+    let reports: Path = TACT_ROOT / "test_reports"
+    let view_reports: Path = newest(reports, f"TACT.TACT_CONFIG.{who.upper()}.{name.upper()}-G!31.*")
+    let ref_reports: Path = newest(reports, f"{reference}-G!31.*")
+    let ref_build: Path = reference_build(reference, ref_reports)
+    if ref_build == "":
+        print "NO REFERENCE BUILD FOUND"
+    else:
+        print f"REFERENCE BUILD DIR: {ref_build}"
+    if view_reports == "":
+        print "NO TEST REPORTS FOUND FOR THIS BRANCH"
+    else:
+        print f"VIEW TEST REPORTS DIR: {view_reports}"
+        print f"REFERENCE BASELINE DIR: {ref_reports}"
+        echo_ediff(ref_reports / "general.results.failed-in", view_reports / "general.results.failed-in")
+
+def changes_report(baseline: BaselineNr_T, warn: bool = True) -> Path:
+    """The changes report of the CFMUTEST baseline built on TACT BASELINE,
+    or Path("") -- after a warning saying why there is none, if WARN."""
+    let cfmu: BaselineNr_T = cfmu_baseline_of(baseline)
+    if cfmu == "":
+        if warn:
+            puts("SWb", f"WARNING: Psort -b names no CFMUTEST baseline for TACT_CONFIG.{baseline}", NEWLINE=True)
+        return Path("")
+    let report: Path = CFMUTEST_ROOT / "baseline_reports" / f"CFMUTEST.CFMUTEST_CONFIG.{cfmu}.changes_report"
+    if not -r report:
+        if warn:
+            puts("SWb", f"WARNING: no changes report for CFMUTEST_CONFIG {cfmu}: {report}", NEWLINE=True)
+        return Path("")
+    report
+
+def extension_of(file: NmFile_T) -> Extension_T:
+    """FILE's extension, as FileChange.display splits it: after the last dot of
+    its name, when that dot does not start it; "" when there is none."""
+    let name: str = Path(file).name
+    let dot: int = name.rfind(".")
+    name[dot + 1:] if dot > 0 else ""
+
+def extension_label(ext: Extension_T) -> str:
+    ext if ext != "" else "(no extension)"
+
+def files_of(changes: []FileChange) -> []NmFile_T:
+    """The files CHANGES touch, each once: a file changed, added or deleted
+    more than once is one file."""
+    var files: []NmFile_T = []
+    for fc in changes:
+        if fc.file not in files:
+            files.append(fc.file)
+    files
+
+def files_by_type(files: []NmFile_T) -> str:
+    """"2 adb, 2 ads" -- how many of FILES have each extension, the
+    commonest first."""
+    var counts: {Extension_T}int = {:}
+    for file in files:
+        let ext: Extension_T = extension_of(file)
+        counts[ext] = counts.get(ext, 0) + 1
+    let order: [](int, Extension_T) = sorted([(-n, ext) for ext, n in counts.items()])
+    ", ".join([f"{-n} {extension_label(ext)}" for n, ext in order])
+
+def list_files_by_committer(report: Path, user: Committer):
+    """By committer, the most first, how many files REPORT's changes touch,
+    and how many of each type (extension); then the branches with no view
+    build, if any. A change no branch is credited with is left out: the
+    detailed listing lists it. Only USER's, when USER is not ""."""
+    var changes: ChangesReport = ChangesReport(report)
+    if user != "" and user not in changes.committers:
+        puts("SWb", f"No changes by {user}; by: " + ", ".join(changes.committers), NEWLINE=True)
+        print
+        return
+    changes.keep_only(user)
+    var files: {Committer}[]NmFile_T = {:}
+    for who in changes.committers:
+        var theirs: []FileChange = []
+        for branch in changes.branches[who]:
+            theirs.extend(changes.files[branch])
+        files[who] = files_of(theirs)
+    # the most files first; as they first appear in the report when as many
+    let order: [](int, int, Committer) = sorted([(-len(files[who]), i, who) for i, who in enumerate(changes.committers)])
+    var width: int = 0
+    var count_width: int = 0
+    for who in changes.committers:
+        width = max(width, len(who))
+        count_width = max(count_width, len(str(len(files[who]))))
+    for n, i, who in order:
+        let noun: str = "file " if -n == 1 else "files"
+        puts("Wb", who)
+        print " " * (width - len(who)) + f"  {str(-n).rjust(count_width)} {noun}: " + files_by_type(files[who])
+    print
+    # the branches not built yet, in the order of the table
+    var unbuilt: []BranchName = []
+    for n, i, who in order:
+        for branch in changes.branches[who]:
+            if view_build_of(branch) == "":
+                unbuilt.append(branch)
+    if len(unbuilt) > 0:
+        puts("SWb", "NO VIEW BUILD FOUND FOR THESE BRANCHES", NEWLINE=True)
+        for branch in unbuilt:
+            print "  " + branch
+        print
+
+# A test one of the baseline's Tlogs reports newly failing or crashed:
+# see Report.new_failures.
+type NewFailure is tuple:
+    build: BuildLabel_T # the build type and subtype it fails in: "IP in", "OP assert"
+    test:  TestName_T
+
+# One of a baseline's Tlogs: see Report.tlogs.
+type TlogAt is tuple:
+    build:   BuildLabel_T # the build type and subtype: "IP in"
+    subtype: BuildSubtype
+    path:    Path
+
+def list_new_failures(against: str, failures: []NewFailure):
+    """Each test of FAILURES once, with the build(s) it newly fails in;
+    AGAINST, the baselines the Tlogs compared with, or ""."""
+    let vs: str = f" vs {against}" if against != "" else ""
+    puts("SWr", f"NEWLY FAILED TESTS{vs}", NEWLINE=True)
+    if len(failures) == 0:
+        let compared: str = f" compared to {against}" if against != "" else ""
+        puts("SKg", f"  No new failures{compared}", NEWLINE=True)
+        print
+        return
+    var tests: []TestName_T = []
+    var builds: {TestName_T}[]BuildLabel_T = {:}
+    for f in failures:
+        if f.test not in builds:
+            tests.append(f.test)
+            builds[f.test] = []
+        if f.build not in builds[f.test]:
+            builds[f.test].append(f.build)
+    var width: int = 0
+    for test in tests:
+        width = max(width, len(test))
+    for test in tests:
+        stdout.write("  ")
+        puts("SWr", test)
+        print " " * (width - len(test)) + "  " + ", ".join(builds[test])
+    print
+
+def list_changes(baseline: BaselineNr_T, failures: []NewFailure, against: str, user: Committer):
+    """What changed in TACT BASELINE and what broke: by committer -- only
+    USER, when not "" -- the files the CFMUTEST baseline built on it
+    changed, by type; then FAILURES, the tests its Tlogs report newly
+    failing or crashed, each with the build(s) it fails in -- new against
+    AGAINST, the Tlogs' reference baselines. The failures are the whole
+    baseline's, whoever's changes caused them."""
+    hr('#')
+    puts("SWr", "CHANGES BY COMMITTER", NEWLINE=True)
+    let report: Path = changes_report(baseline)
+    if report != "":
+        list_files_by_committer(report, user)
+    else:
+        print # after the warning
+    list_new_failures(against, failures)
+
+def list_detailed_changes(baseline: BaselineNr_T, user: Committer):
+    """The changes in the CFMUTEST baseline built on TACT BASELINE, by
+    committer and branch -- only USER's, when not "": each file, its
+    commits, tickets, reviews and diffs. Nothing when there is no changes
+    report, or no change by USER: list_changes has said why."""
+    let report: Path = changes_report(baseline, warn=False)
+    return if report == ""
+    var changes: ChangesReport = ChangesReport(report)
+    changes.keep_only(user)
+    return if user != "" and len(changes.committers) == 0
+    hr('#')
+    puts("SWr", "LIST OF CHANGES", NEWLINE=True)
+    # a branch's build is compared with the baseline before this one
+    let reference: BaselineName_T = "TACT.TACT_CONFIG." + Baseline(baseline).previous().nr
+    print "DIFF and NET DIFF run in the file's submodule of the NM workspace. Where that is"
+    print "not checked out, they check the file out first, alone (Tcheckout): the submodule's"
+    print "history, its contents fetched as the diffs need them. A submodule checked out"
+    print "already needs the commits and the baseline tags fetched:"
+    print "    git -C $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY/<system>/<subsystem> fetch --tags"
+    print "Without a workspace (CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY unset), they clone the"
+    print "file's repository from Bitbucket into $TCHECK_NM_CACHE (default"
+    print "~/Downloads/.cache/tcheck/NM), and fetch there what it lacks."
+    print
+    for who in changes.committers:
+        stdout.write("===================================== Files committed by user ")
+        puts("Wb", who)
+        print " ====================================="
+        for branch in changes.branches[who]:
+            print "---------------------------------"
+            display_branch_info(branch, reference)
+            for fc in changes.files[branch]:
+                print "---------------------------------"
+                fc.display()
+        print
+        print
+    if len(changes.unattributed) > 0:
+        print "===================================== Files with no branch merged above them ====================================="
+        for fc in changes.unattributed:
+            fc.display()
+        print
+    print
+    echo_emacs(report)
+    print

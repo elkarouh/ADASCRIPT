@@ -1,0 +1,99 @@
+"""
+tcheck_common — what every part of Tcheck_tact uses: the domain's named
+types, colored output, the settings the command line gives, and the build
+and replay enums. A leaf: it nimports nothing of Tcheck_tact's.
+"""
+
+nimport os
+
+# ---------------------------------------------------------------------------
+# The domain's values, named for what they are rather than how they are held
+# ---------------------------------------------------------------------------
+type BaselineNr_T   is str   # a baseline's number: 30.0.0.132
+type BaselineName_T is str   # a baseline's full name: TACT.TACT_CONFIG.30.0.0.131, IFPS.CUA_IDL.30.0.0.122
+type BuildName_T    is str   # a build's directory: build_G!31.IP.L8
+type BuildLabel_T   is str   # a build type and subtype, as the report shows them: "IP in"
+type TestName_T     is str   # a regression test: env_updates_prior_stop.1.el
+type Ticket_T       is str   # an SC ticket: SC-134300
+type Review_T       is str   # "dpt, gru on 260922.151702", "(review-ok: no)" after it if not ok
+type NmFile_T       is str   # <system>/<subsystem>/<path>: a file, as the changes report names it
+type InSub_T        is str   # a file's path in its submodule: sources/b.adb
+type Extension_T    is str   # a file's extension, without the dot: adb; "" for none
+type Rev_T          is str   # a git revision: c3fb81031^, a baseline's tag
+type Link_T         is str   # an #emacs: link, clickable in the report's buffer
+type Command_T      is str   # a shell command line
+type Glob_T         is str   # a file-name pattern: build_G!31.*
+type ColorSpec_T    is str   # a colour, as the ksh original spelled it: SWr
+type Tool_T         is str   # a visual diff tool: meld, kompare
+
+# ---------------------------------------------------------------------------
+# ANSI color helpers
+# ---------------------------------------------------------------------------
+# The ksh version encodes colors as a spec string like "SWr" where:
+#   Style:   S=bold(1) D=dim(2) I=italic(3) U=underline(4) F=blink(5) N=overline(7) H=hidden(8) T=strike(9)
+#   Fg:      K=black(30) R=red(31) G=green(32) Y=yellow(33) B=blue(34) M=magenta(35) C=cyan(36) W=white(37)
+#   Bg:      k=black(40) r=red(41) g=green(42) y=yellow(43) b=blue(44) m=magenta(45) c=cyan(46) w=white(47)
+
+let ANSI_CODES: {char}str = {
+    'S': "1", 'D': "2", 'I': "3", 'U': "4", 'F': "5", 'N': "7", 'H': "8", 'T': "9",
+    'K': "30", 'R': "31", 'G': "32", 'Y': "33", 'B': "34", 'M': "35", 'C': "36", 'W': "37",
+    'k': "40", 'r': "41", 'g': "42", 'y': "43", 'b': "44", 'm': "45", 'c': "46", 'w': "47"
+}
+
+var COLORED: bool = True
+var BATCH: bool = False
+# -tool NAME: the visual diff tool -- meld, kompare, kdiff3, ... With it
+# (and not -batch) the list of changes links its diffs to NAME rather than
+# to Emacs ediff; troubleshoot mode compares with it, meld when none is
+# given. "" when none is.
+var DIFF_TOOL: Tool_T = ""
+var ONLY_NEW: bool = False
+# Set by any Tlog that reports a new or crashed test; read once at the end
+# to decide the exit status.
+var HAS_NEW_FAILURES: bool = False
+
+def ansi_escape(spec: ColorSpec_T) -> str:
+    """Turn a color spec like 'sWr' into an ANSI escape sequence."""
+    let codes: []str = [ANSI_CODES[ch] for ch in spec if ch in ANSI_CODES]
+    return "\x1b[" + ";".join(codes) + "m" if codes else ""
+
+def puts(spec: ColorSpec_T, text: str, NEWLINE: bool = False):
+    """Print TEXT in the color given by SPEC, without a trailing newline."""
+    const RESET: str = "\x1b[0m"
+    stdout.write(ansi_escape(spec) + text + RESET if COLORED else text)
+    if NEWLINE:
+        print
+
+def hr(c: char = '#', length: int = 80):
+    print c * length
+
+# ---------------------------------------------------------------------------
+# Build / subtype enums
+# ---------------------------------------------------------------------------
+
+type BuildSubtype is enum in_test, mono, assert_test, lo, hi, memcheck, with_secondary
+type BuildType is enum IP, OP, SIP
+type BuildPass is enum normal, mrun
+type FocusDomain is enum no_focus, focus_IP, focus_OP, focus_SIP, focus_replay, focus_build_info, focus_changes
+type ReplayType is enum run_prequal, performance, simca, full_simca, oldest_date, all_autolink
+# what a replay's log says of it
+type ReplayStatus is enum succeeded, failed, not_started, busy
+
+type Replay is tuple:
+    rtype : ReplayType
+    file  : Path
+
+# ---------------------------------------------------------------------------
+# Helpers used throughout
+# ---------------------------------------------------------------------------
+
+def newest(dir: Path, pattern: Glob_T) -> Path:
+    """The most recently modified entry of DIR matching the glob PATTERN,
+    or Path("") when none does."""
+    let found: []str = shellLines: ls -dt {!dir}/{pattern} 2>/dev/null | head -n 1
+    Path(found[0]) if len(found) > 0 else Path("")
+
+def troubleshoot_tool() -> Tool_T:
+    """What troubleshoot mode compares two files with: the -tool diff tool,
+    or meld."""
+    DIFF_TOOL if DIFF_TOOL != "" else "meld"
