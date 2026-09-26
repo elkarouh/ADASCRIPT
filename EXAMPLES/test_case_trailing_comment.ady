@@ -1,0 +1,42 @@
+#!/usr/bin/env ady2nim
+"""Test: a comment block after a case whose last branch is on one line.
+
+`when mrun: "m"` ends its statement on its own line, so the lines after it
+up to the dedent -- here the comment block before the next def -- were
+parsed into that branch, after its body, and read as its guard: the last
+comment line was printed in the branch's head, `of mrun# ...:` in Nim and
+`case P.mrun# ...:` in Python, and neither compiled. They are printed
+after the case now, as a branch written as a block prints them.
+"""
+
+type BuildPass is enum normal, mrun
+
+def name_of(p: BuildPass) -> str:
+    case p:
+        when normal: "Tlog-in.log"
+        when mrun: "Tlog-mrun-in.log"
+
+# The comment block that was taken in,
+# on two lines.
+def guarded(n: int, strict: bool) -> str:
+    case n:
+        when 0 if strict: "zero, strictly"
+        when 0: "zero"
+        when others: "other"
+
+# after a `when others:` on one line
+def kind_of(name: str) -> str:
+    case name:
+        when /\.IP\./: "IP"
+        when /\.OP\./: "OP"
+        when others: "none"
+
+# after a regex case, a chain of ifs on Python
+def last() -> int:
+    1
+
+assert name_of(normal) == "Tlog-in.log" and name_of(mrun) == "Tlog-mrun-in.log"
+assert guarded(0, True) == "zero, strictly" and guarded(0, False) == "zero" and guarded(3, True) == "other"
+assert kind_of("build_G!31.OP.L8") == "OP" and kind_of("build_x") == "none"
+assert last() == 1
+print "test_case_trailing_comment: ok"

@@ -945,16 +945,38 @@ def _tuple_pattern_to_py(node):
     return "(" + ", ".join(p for p in parts if p) + ")"
 
 
+def _case_trailing_lines(several):
+    """The comment and blank lines of the NL[:] after a case's last branch.
+
+    A one-line branch -- `when mrun: "m"` -- ends its statement on its own
+    line, so what follows it up to the dedent -- a comment block before the
+    next def -- is parsed into the branch, after its body. A block branch
+    keeps those lines in its block and prints them after its body; these
+    are printed there too.
+    """
+    lines = []
+    for nl in several.nodes:
+        got = _richnl_lines(nl)
+        if got is not None:
+            lines.extend(got)
+    return lines
+
+
 def _case_from_seq(seq, indent):
-    """Reconstruct a case clause from a flattened Sequence_Parser [pattern, guard?, body]."""
+    """Reconstruct a case clause from a flattened Sequence_Parser [pattern, guard?, body, NLs?]."""
     pat = ""
     guard = ""
     block_node = None
+    trailing = []
     pat_seen = False
     for child in seq.nodes:
         tname = type(child).__name__
         if tname in ("block", "stmt_line"):
             block_node = child
+        elif tname == "Several_Times" and block_node is not None:
+            # after the body: the NL[:] after the last branch, not a guard --
+            # its last comment line was printed as one, `case P.mrun# ...:`
+            trailing = _case_trailing_lines(child)
         elif tname == "Several_Times":
             for inner in child.nodes:
                 if hasattr(inner, "to_py"):
@@ -969,6 +991,8 @@ def _case_from_seq(seq, indent):
             pat_seen = True
     hc = _block_inline_header_comment(block_node) if block_node else ""
     body = _suite_to_py(block_node, indent + 1) if block_node else ""
+    if trailing:
+        body = body.rstrip("\n") + "\n" + "\n".join(trailing)
     return f"{_ind(indent)}case {pat}{guard}:{hc}\n{body}"
 
 

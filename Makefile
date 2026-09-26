@@ -134,7 +134,8 @@ STANDALONE := \
     test_pure_method_calls.ady \
     test_definition_order.ady \
     test_ctor_trailing_underscore.ady \
-    test_indexed_table_items.ady
+    test_indexed_table_items.ady \
+    test_case_trailing_comment.ady
 
 # -----------------------------------------------------------------------
 # Stdin tests — piped from a sample file
@@ -474,6 +475,13 @@ test: compile
 	    && [ "$$(grep -c 'self.opened = ' $(TMPDIR)/test_class_fields_per_instance.py)" = 2 ] \
 	    && echo OK || { echo FAIL; exit 1; }
 	@rm -f $(TMPDIR)/test_class_fields_per_instance.py
+
+	@# A comment block after a case whose last branch is on one line stays
+	@# a comment after it, rather than landing in that branch's head.
+	@echo "=== a comment after a one-line case branch (python) ==="
+	@printf '  %-42s' "test_case_trailing_comment.ady"; \
+	    $(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(EXDIR)/test_case_trailing_comment.ady | $(PYTHON) - \
+	    | grep -qx 'test_case_trailing_comment: ok' && echo OK || { echo FAIL; exit 1; }
 
 	@echo "=== Stdin examples (piped from test_awk_sample.txt) ==="
 	@for f in $(STDIN_EXAMPLES); do \

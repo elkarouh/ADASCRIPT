@@ -2328,14 +2328,27 @@ def to_nim(self, indent=0):
 
 
 def _case_from_seq_nim(seq, indent):
+    """A case branch from its flattened Sequence_Parser [pattern, guard?, body, NLs?].
+
+    A one-line last branch -- `when mrun: "m"` -- also holds the NL[:] after
+    it, up to the dedent: a comment block before the next proc. Taken for a
+    guard, its last line was printed in the branch's head, `of mrun# ...:`.
+    Printed after the body instead, as a block branch prints its own.
+    """
     pat = ""
     guard = ""
     block_node = None
+    trailing = []
     pat_seen = False
     for child in seq.nodes:
         tname = type(child).__name__
         if tname in ("block", "stmt_line"):
             block_node = child
+        elif tname == "Several_Times" and block_node is not None:
+            for nl in child.nodes:
+                got = _richnl_lines(nl)
+                if got is not None:
+                    trailing.extend(got)
         elif tname == "Several_Times":
             for inner in child.nodes:
                 if hasattr(inner, "to_nim"):
@@ -2347,6 +2360,8 @@ def _case_from_seq_nim(seq, indent):
             pat_seen = True
     hc = _block_inline_header_comment(block_node) if block_node else ""
     body = block_node.to_nim(indent + 1) if block_node else ""
+    if trailing:
+        body = body.rstrip("\n") + "\n" + "\n".join(trailing)
     prefix = "else" if pat == "others" else f"of {pat}"
     return f"{_ind(indent)}{prefix}{guard}:{hc}\n{body}"
 
