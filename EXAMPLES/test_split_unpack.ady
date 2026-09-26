@@ -1,0 +1,30 @@
+#!/usr/bin/env ady2nim
+"""Test: a split unpacked into names, Python's way to take a string apart.
+
+`let (head, tail) = nr.rsplit(".", 1)` came out on Nim as the same line,
+which Nim rejects: a split is a seq there, and only a tuple unpacks. It is
+bound once and its elements made the tuple now -- in a declaration, in a
+bare assignment to new names or to declared ones -- and the names are
+known to be strings, so `int(tail)` parses rather than converts. rsplit
+needed strutils imported, which only split had.
+"""
+
+let nr: str = "30.0.0.132"
+let (head, tail) = nr.rsplit(".", 1)
+assert head == "30.0.0" and tail == "132"
+assert f"{head}.{int(tail) - 1}" == "30.0.0.131"
+
+def swap_sides(s: str) -> str:
+    let (key, value) = s.split("=", 1)
+    return value + "=" + key
+assert swap_sides("a=b=c") == "b=c=a"
+
+first, rest = "one two three".split(" ", 1)
+assert first == "one" and rest == "two three"
+
+var left: str = ""
+var right: str = ""
+left, right = "x:y".split(":")
+assert left + right == "xy"
+
+print "split-unpack tests passed"

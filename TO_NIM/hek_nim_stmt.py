@@ -209,11 +209,12 @@ def to_nim(self):
             # (Temporaries named _t0, _t1 were emitted here, and Nim does not
             # allow an identifier to start with an underscore.)
             _rhs = (f"({', '.join(rhs_parts)})" if len(rhs_parts) > 1
-                    else rhs_parts[0])
+                    else _unpackable(rhs_parts[0], len(targets)))
             return f"({', '.join(targets)}) = {_rhs}"
         # All targets are new names — declare with let
         tgt_str = ", ".join(targets)
-        return f"let ({tgt_str}) = {parts[1]}"
+        _note_split_parts(parts[1], targets)
+        return f"let ({tgt_str}) = {_unpackable(parts[1], len(targets))}"
     if "." in lhs or "[" in lhs:
         prefix = ""
     elif ParserState.symbol_table.lookup(lhs):
@@ -1318,13 +1319,42 @@ def to_nim(self):
 
 
 # --- return ---
+def _note_split_parts(value, names):
+    """NAMES, unpacked from VALUE: strings, when it is a split -- so that
+    `int(tail)` parses one rather than converting it."""
+    import re as _re_np
+    if _re_np.search(r"\.r?split\(", value):
+        for _n in names:
+            _n = _n.strip()
+            if _re_np.fullmatch(r"[A-Za-z]\w*", _n):
+                ParserState.symbol_table.add(_n, "string", "let")
+
+
+def _unpackable(value, count):
+    """VALUE, to unpack into COUNT names: as it is, unless it is a `split` or
+    `rsplit` call -- a seq on Nim, which only a tuple unpacks. `let (head,
+    tail) = nr.rsplit(".", 1)` is Python's way to take a string apart, and
+    came out as the same line, which Nim rejects. The seq is bound once and
+    its elements made the tuple; a list with fewer elements than names
+    raises IndexDefect, as Python's ValueError."""
+    import re as _re_up
+    if count < 2 or not _re_up.search(r"\.r?split\([^()]*(?:\([^()]*\)[^()]*)*\)$", value.strip()):
+        return value
+    ParserState._unpack_counter = getattr(ParserState, "_unpack_counter", 0) + 1
+    tmp = f"adascriptParts{ParserState._unpack_counter}"
+    elems = ", ".join(f"{tmp}[{i}]" for i in range(count))
+    return f"(let {tmp} = {value.strip()}; ({elems}))"
+
+
 @method(decl_tuple_unpack)
 def to_nim(self):
     """decl_tuple_unpack: let/var/const (x, y) = expr -> Nim let/var (x, y) = expr"""
     kw = str(self.nodes[0].node)  # var/let/const
     targets = self.nodes[1].to_nim()  # paren_group
     value = self.nodes[3].to_nim()  # expression (nodes[2] is V_EQUAL)
-    return f"{kw} {targets} = {value}"
+    names = _split_top_level_commas(targets.strip()[1:-1]) if targets.strip().startswith("(") else [targets]
+    _note_split_parts(value, names)
+    return f"{kw} {targets} = {_unpackable(value, len(names))}"
 
 @method(return_val)
 def to_nim(self):

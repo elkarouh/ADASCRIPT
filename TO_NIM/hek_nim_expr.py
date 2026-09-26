@@ -1903,7 +1903,7 @@ def to_nim(self, prec=None):
     return self.nodes[0].to_nim()
 
 
-_STRUTILS_METHODS = {"toLowerAscii", "toUpperAscii", "strip", "startsWith", "endsWith", "splitLines", "parseInt", "split", "join", "replace", "find", "alignLeft", "align",
+_STRUTILS_METHODS = {"toLowerAscii", "toUpperAscii", "strip", "startsWith", "endsWith", "splitLines", "parseInt", "split", "rsplit", "join", "replace", "find", "alignLeft", "align",
                      "isAlphaAscii", "isAlphaNumeric", "isDigit", "isSpaceAscii", "isLowerAscii", "isUpperAscii"}
 
 # Universal method mappings that apply regardless of receiver type
