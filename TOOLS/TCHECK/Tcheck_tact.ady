@@ -96,6 +96,68 @@ type Replay is tuple:
 let CM_OT: Path = Path(${TCHECK_CM_OT:-"/cm/ot"})
 let TACT_ROOT: Path = CM_OT / "TACT"
 
+def subtype_label(st: BuildSubtype) -> str:
+    """The file-system name for a subtype ('in' not 'in_test')."""
+    let name: str = st'Image
+    name.replace("_test", "")
+
+def tlog_filename(subtype: BuildSubtype, pass_: BuildPass) -> str:
+    """The Tlog filename for a subtype and pass."""
+    let sl: str = subtype_label(subtype)
+    case pass_:
+        when normal: "Tlog-" + sl + ".log"
+        when mrun: "Tlog-mrun-" + sl + ".log"
+
+def build_type_from(build_name: BuildName_T) -> ?BuildType:
+    """Extract the build type (IP, OP, SIP) from a build directory name.
+
+    build_type_from("build_G!31.IP.L8") -> IP
+    """
+    # Explicit `return` on every branch: a tail expression does not work
+    # under a `?T` return type, whichever branch it is on -- a value comes
+    # out `some(IP)` where the case is typed `BT`, and a bare `None` reaches
+    # Nim as `nil` and makes isNil ambiguous. Written up in TODO.md.
+    case build_name:
+        when /\.IP\./:  return IP
+        when /\.OP\./:  return OP
+        when /\.SIP\./: return SIP
+        when others:    return None
+
+class Build:
+    """One build of one baseline, e.g. build_G!31.IP.L8 of 30.0.0.121.
+
+    It knows where it lives, so nothing is handed a build and a directory
+    to join by hand -- the saved_logs, tacot_corico and Tlog paths were
+    each spelled out at every place that needed one.
+
+    Before Baseline, which lists its builds, so it holds the baseline's
+    number rather than the baseline; after tlog_filename, which a method
+    may not call if it were defined below.
+    """
+    name       : BuildName_T  = "" # e.g. build_G!31.IP.L8
+    btype      : BuildType    = IP
+    baseline_nr: BaselineNr_T = "" # the baseline it is a build of
+    dir        : Path         = Path("")
+
+    def __init__(self, name: BuildName_T, btype: BuildType, baseline_nr: BaselineNr_T, baseline_dir: Path):
+        self.name = name
+        self.btype = btype
+        self.baseline_nr = baseline_nr
+        self.dir = baseline_dir / name
+
+    def saved_logs(self) -> Path:
+        self.dir / "saved_logs"
+
+    def tacot_dir(self, pass_: BuildPass) -> Path:
+        """The tacot_corico directory for a given pass."""
+        case pass_:
+            when normal: self.saved_logs() / "tacot_corico.LATEST"
+            when mrun:   self.saved_logs() / "tacot_corico_mrun.LATEST_GOOD"
+
+    def tlog_path(self, subtype: BuildSubtype, pass_: BuildPass) -> Path:
+        """Where the Tlog of SUBTYPE for PASS_ is, whether or not it exists yet."""
+        self.tacot_dir(pass_) / "TACT_REGRESS_LOGS" / "LATEST" / tlog_filename(subtype, pass_)
+
 class Baseline:
     """One TACT baseline: its number and the directory holding its builds.
 
@@ -103,16 +165,17 @@ class Baseline:
     before it, and that is `bl.previous()` -- the number arithmetic and
     the directory it implies were rebuilt by hand at every call site.
 
-    Deliberately cheap: it lists nothing, so `previous()` costs nothing
-    and cannot fail on a baseline whose directory is gone. The builds and
-    replays of the baseline being reported on belong to the Report.
+    Its builds are listed only when asked, by find_builds(): creating
+    one lists nothing, so `previous()` costs nothing and cannot fail on a
+    baseline whose directory is gone.
 
     Up here rather than beside Report because free functions below call
     its methods, and a function may not call a method of a class defined
     after it.
     """
-    nr  : BaselineNr_T = "" # e.g. 30.0.0.121
-    dir : Path         = Path("")
+    nr     : BaselineNr_T = "" # e.g. 30.0.0.121
+    dir    : Path         = Path("")
+    builds : []Build            # its build_G!* builds, once find_builds() has run
 
     def __init__(self, nr: BaselineNr_T):
         self.nr = nr
@@ -131,59 +194,20 @@ class Baseline:
             when SIP: env_id = env_id.replace(".IP.", ".SIP.")
         self.dir / ("build_" + env_id) / "saved_logs"
 
-def subtype_label(st: BuildSubtype) -> str:
-    """The file-system name for a subtype ('in' not 'in_test')."""
-    let name: str = st'Image
-    name.replace("_test", "")
-
-def tlog_filename(subtype: BuildSubtype, pass_: BuildPass) -> str:
-    """The Tlog filename for a subtype and pass."""
-    let sl: str = subtype_label(subtype)
-    case pass_:
-        when normal: "Tlog-" + sl + ".log"
-        when mrun: "Tlog-mrun-" + sl + ".log"
-
-class Build:
-    """One build of one baseline, e.g. build_G!31.IP.L8 of 30.0.0.121.
-
-    It knows where it lives, so nothing is handed a build and a directory
-    to join by hand -- the saved_logs, tacot_corico and Tlog paths were
-    each spelled out at every place that needed one.
-
-    After Baseline, which it holds, and after tlog_filename, which a
-    method may not call if it were defined below.
-    """
-    name     : BuildName_T = "" # e.g. build_G!31.IP.L8
-    btype    : BuildType   = IP
-    baseline : Baseline
-    dir      : Path        = Path("")
-
-    def __init__(self, name: BuildName_T, btype: BuildType, baseline: Baseline):
-        self.name = name
-        self.btype = btype
-        self.baseline = baseline
-        self.dir = baseline.dir / name
-
-    def saved_logs(self) -> Path:
-        self.dir / "saved_logs"
-
-    def tacot_dir(self, pass_: BuildPass) -> Path:
-        """The tacot_corico directory for a given pass."""
-        case pass_:
-            when normal: self.saved_logs() / "tacot_corico.LATEST"
-            when mrun:   self.saved_logs() / "tacot_corico_mrun.LATEST_GOOD"
-
-    def tlog_path(self, subtype: BuildSubtype, pass_: BuildPass) -> Path:
-        """Where the Tlog of SUBTYPE for PASS_ is, whether or not it exists yet."""
-        self.tacot_dir(pass_) / "TACT_REGRESS_LOGS" / "LATEST" / tlog_filename(subtype, pass_)
-
-    def in_baseline(self, other: Baseline) -> Build:
-        """The build of the same name in OTHER.
-
-        What the new-failures diff compares against: the previous baseline
-        is never listed, only asked where this build's logs would be.
-        """
-        return Build(self.name, self.btype, other)
+    def find_builds(self):
+        """List the baseline's build_G!* directories into builds, as the
+        builds they are."""
+        let SKIP_BUILD_PATTERNS: []str = ["92", "94", "95", "98", "30"]
+        let basedir: Path = self.dir
+        let listing: []str = shellLines: ls -1d {basedir}/build_G!*
+        self.builds = []
+        for line in listing:
+            continue if line == ""
+            let basename: str = Path(line).name # e.g. build_G!31.IP.L8
+            continue if any(pat in basename for pat in SKIP_BUILD_PATTERNS)
+            let bt: ?BuildType = build_type_from(basename)
+            continue if bt is None
+            self.builds.append(Build(basename, bt, self.nr, self.dir))
 
 # ---------------------------------------------------------------------------
 # Tlog section parsing
@@ -486,21 +510,6 @@ def grep_force_trace_in_dir(dir: Path):
     if r.output.strip() != "":
         print r.output.rstrip("\n")
 
-def build_type_from(build_name: BuildName_T) -> ?BuildType:
-    """Extract the build type (IP, OP, SIP) from a build directory name.
-
-    build_type_from("build_G!31.IP.L8") -> IP
-    """
-    # Explicit `return` on every branch: a tail expression does not work
-    # under a `?T` return type, whichever branch it is on -- a value comes
-    # out `some(IP)` where the case is typed `BT`, and a bare `None` reaches
-    # Nim as `nil` and makes isNil ambiguous. Written up in TODO.md.
-    case build_name:
-        when /\.IP\./:  return IP
-        when /\.OP\./:  return OP
-        when /\.SIP\./: return SIP
-        when others:    return None
-
 def show_tlog_if_present(build: Build, subtype: BuildSubtype, pass_: BuildPass):
     """Show a Tlog file's summary if it exists, or a 'not ready' message."""
     let full_path: Path = build.tlog_path(subtype, pass_)
@@ -571,7 +580,7 @@ def process_gnatcheck(build: Build):
 
 def process_run_test_programs_log(build: Build, fast_mode: bool):
     """Find or run check_run_test_programs_log from the IP build."""
-    let baseline: BaselineNr_T = build.baseline.nr
+    let baseline: BaselineNr_T = build.baseline_nr
     let work: Path = build.tacot_dir(normal) / "work"
     print
     hr('#')
@@ -1341,21 +1350,6 @@ class Options:
             stderr.writeLine("Error: <BASELINE> is required.")
             usage()
 
-def find_builds(bl: Baseline) -> []Build:
-    """List BL's build_G!* directories, as the builds they are."""
-    let SKIP_BUILD_PATTERNS: []str = ["92", "94", "95", "98", "30"]
-    let basedir: Path = bl.dir
-    let listing: []str = shellLines: ls -1d {basedir}/build_G!*
-    var builds: []Build = []
-    for line in listing:
-        continue if line == ""
-        let basename: str = Path(line).name # e.g. build_G!31.IP.L8
-        continue if any(pat in basename for pat in SKIP_BUILD_PATTERNS)
-        let bt: ?BuildType = build_type_from(basename)
-        continue if bt is None
-        builds.append(Build(basename, bt, bl))
-    return builds
-
 # ---------------------------------------------------------------------------
 # Pieces the summary and the new-failures diff are built from
 # ---------------------------------------------------------------------------
@@ -1626,8 +1620,8 @@ class Report:
     The report functions were free functions taking a context; they are
     methods now. What they need is three things -- what was asked for
     (Options), which baseline (Baseline), and what that baseline holds on
-    disk (its builds and replays, listed once here) -- and a Report holds
-    exactly those.
+    disk (its builds, which the Baseline lists, and its replays, listed
+    once here) -- and a Report holds exactly those.
 
     The class sits this far down the file because a method may call a
     sibling method defined below it but not a free function, and these
@@ -1635,7 +1629,6 @@ class Report:
     """
     opt     : Options
     cur     : Baseline
-    builds  : []Build = []
     replays : []Replay = []
 
     def __init__(self, opt: Options):
@@ -1644,12 +1637,12 @@ class Report:
         if not -d self.cur.dir:
             puts("SWb", "DIR " + str(self.cur.dir) + " does not exist", NEWLINE=True)
             quit(1)
-        self.builds = find_builds(self.cur)
+        self.cur.find_builds()
         self.replays = find_replays(self.cur.dir)
 
     def show_header(self):
         puts("SWr", "AVAILABLE BUILDS for " + str(self.cur.dir) + ":", NEWLINE=True)
-        for build in self.builds:
+        for build in self.cur.builds:
             print build.name
         puts("SWr", "AVAILABLE REPLAYS for " + str(self.cur.dir) + ":", NEWLINE=True)
         for replay in self.replays:
@@ -1660,7 +1653,7 @@ class Report:
 
     def show_regression_tests(self):
         puts("SWr", "TESTS", NEWLINE=True)
-        for build in self.builds:
+        for build in self.cur.builds:
             case self.opt.focus_domain:
                 when focus_IP:  continue if build.btype != IP
                 when focus_OP:  continue if build.btype != OP
@@ -1683,7 +1676,7 @@ class Report:
             process_replay(replay, self.opt.verbose)
 
     def show_build_info(self):
-        for b in self.builds:
+        for b in self.cur.builds:
             if b.btype == IP:
                 process_gnatcheck(b)
                 process_run_test_programs_log(b, self.opt.fast_mode)
@@ -1713,7 +1706,7 @@ class Report:
         """Print a one-screen summary of the baseline's health."""
         hr('#')
         puts("SWr", f"SUMMARY for BASELINE {self.cur.nr}", NEWLINE=True)
-        for build in self.builds:
+        for build in self.cur.builds:
             let s: BuildSummary = self.collect_build_summary(build)
             var status: str = ""
             if s.all_ok:
@@ -1754,7 +1747,7 @@ class Report:
     def tlogs(self) -> []TlogAt:
         """This baseline's Tlogs, one per build and subtype that has one."""
         var found: []TlogAt = []
-        for build in self.builds:
+        for build in self.cur.builds:
             for subtype in BuildSubtype:
                 let path: Path = build.tlog_path(subtype, normal)
                 if -f path:
@@ -1804,7 +1797,7 @@ class Report:
         let history_file: Path = Path($HOME) / ".tcheck_history"
         var total_new: int = 0
         var total_fail: int = 0
-        for build in self.builds:
+        for build in self.cur.builds:
             let s: BuildSummary = self.collect_build_summary(build)
             total_new = total_new + s.total_new
             total_fail = total_fail + s.total_still + s.total_crash
