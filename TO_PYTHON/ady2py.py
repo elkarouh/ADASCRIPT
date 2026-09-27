@@ -292,8 +292,10 @@ def translate(code):
     from hek_parsec import ParserState as _PS_rp
     _PS_rp.py_type_names = set(_re_rp.findall(
         r"^[ \t]*(?:type|class)[ \t]+([A-Za-z_]\w*)", code, _re_rp.MULTILINE))
-    _PS_rp.failure_types = _failures
-    _PS_rp.result_procs = either_procs(scan_return_types(code),
+    _PS_rp.failure_types = _failures | {"ShellFailure_T"}
+    _PS_rp.py_type_names.add("ShellFailure_T")
+    _PS_rp.ady_return_types = scan_return_types(code)
+    _PS_rp.result_procs = either_procs(_PS_rp.ady_return_types,
                                        _PS_rp.failure_types)
 
     # Which names live at module level has to be known before the first

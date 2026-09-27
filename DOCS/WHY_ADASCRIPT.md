@@ -601,8 +601,6 @@ What is still missing:
   backend cannot work the type out it assumes the value side, and Nim's
   own type check then refuses a failure put there by mistake — correct,
   but the message names the generated code rather than the line.
-- `case r:` with `when Failure_T:` arms is not there yet; it is written
-  `if r is Failure_T:`. It is in `TODO.md`.
 
 ---
 

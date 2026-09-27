@@ -21,6 +21,7 @@
 | Optional | `?T` |
 | Failure type | `type F is failure record:` + fields |
 | Value or failure | `T \| F` — test with `r is F`, chain with `do:` |
+| A command's output or its failure | `let o: str \| ShellFailure_T = shell: cmd` |
 | Function type | `[(T, U)]R` |
 | Empty dict / empty set | `{:}` / `{}` |
 | Inclusive / exclusive range | `lo .. hi` / `lo ..< hi` |

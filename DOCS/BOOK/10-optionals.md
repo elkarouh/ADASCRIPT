@@ -675,6 +675,24 @@ def describe(r: int | Failure_T) -> str:
 side, and for a `None | Failure_T`, `r is None` means it succeeded. Using the
 value with no test at all is a compile error on Nim, as it is for `?T`.
 
+When both sides need code of their own, a `case` says it more directly: a
+`when` names a side, the name is that side inside the branch, and the case
+must cover both — or say `when others:` — so a forgotten side does not
+compile:
+
+```python
+def sign_of(raw: str) -> str:
+    let n: int | Failure_T = read_number(raw)
+    case n:
+        when Failure_T:
+            return f"no sign: {n.detail}"   # n is the failure here
+        when int:
+            return "zero" if n == 0 else "positive"   # and the int here
+```
+
+The subject is a name — bind a call with `let` first — and a branch cannot
+carry a guard: test inside it instead.
+
 ### 4. Pass failures on with `do:`
 
 Most functions that call fallible ones should not handle the failure — only
@@ -693,9 +711,31 @@ def ratio(raw_a: str, raw_b: str) -> int | Failure_T:
 ```
 
 The function containing a `do:` must itself return `... | Failure_T` —
-that is where a failure goes — and its steps must fail with the same
-failure type. A `T | Failure_T` step in a function returning `?T`, or
-nothing, is refused. A chain of steps that must all succeed, in order, is
+that is where a failure goes. A `T | Failure_T` step in a function returning
+`?T`, or nothing, is refused.
+
+A step that fails some other way — a `?T` that may be absent, a function
+with a different failure type, a shell command — ends in `else`, followed by
+the failure to return in its place. Inside the `else`, the step's name is
+the step's own failure, just as a test narrows it. From `test_result.ady`:
+
+```python
+def shout(words: {str}str, key: str) -> str | Failure_T:
+    do:
+        w <- find_word(words, key) else fail(BAD_NUMBER, f"no word for {key}")
+        out <- shell: echo {w} | tr a-z A-Z else cmd_failed(out)
+        shell: test -n "{w}" else fail(NOT_POSITIVE, "an empty word")
+    return out.strip()
+```
+
+The first step is a `?str`: absence alone is no failure, so without the
+`else` the step is refused. The second and third are shell commands, which
+fail with the built-in `ShellFailure_T` (see *Shell commands* below): the
+`else` turns that into this program's `Failure_T` — `cmd_failed(out)`
+reads the failed command's details off `out`. A step whose failure type is
+the function's own needs no `else`; any other is refused without one. In a
+`do:` step a shell command ends at `else`: a command that needs the word
+quotes it. A chain of steps that must all succeed, in order, is
 one `do:` block; `rsync_time_machine.ady` ends a backup with one, so that its
 lock file is removed only once the `latest` link is in place:
 
@@ -729,6 +769,45 @@ def main() -> None:
     if outcome is Failure_T:
         report(outcome)
         quit(1)
+```
+
+### Shell commands
+
+A shell command fails too — with the built-in failure record
+`ShellFailure_T`, whose fields are the `command` that ran, the exit `code`
+and its `stderr`. Declare the target's type and a `shell:` statement gives
+you the output or the failure, instead of a result you have to remember to
+check:
+
+```python
+let hi: str | ShellFailure_T = shell: echo hi
+if hi is str:
+    print f"said {hi.strip()}"
+let oops: str | ShellFailure_T = shell: echo oops >&2; exit 3
+if oops is ShellFailure_T:
+    print f"exit {oops.code}, stderr {oops.stderr.strip()}"
+let quiet: None | ShellFailure_T = shell: true
+```
+
+`str` is the output, `[]str` its lines (`shellLines:`), `None` nothing — a
+command run only for what it does. Every `shell:` option still applies. In
+a `do:` block, `out <- shell: cmd` binds the output and a bare `shell: cmd`
+is a step; in a function whose own failure type is `ShellFailure_T` they
+need no `else`. A program with its own failure type converts once, in one
+small function, and names it in each step's `else` —
+`rsync_time_machine.ady`:
+
+```python
+def cmd_failed(f: ShellFailure_T) -> Failure_T:
+    """A local command's failure -- the built-in ShellFailure_T a shell:
+    step fails with -- as this program's: the `else` of the steps below."""
+    return failure(CMD_FAILED, f.command, f.stderr.strip())
+
+def mkdir_p(path: Path, ssh: ?SSH = None) -> None | Failure_T:
+    if ssh is None:
+        do:
+            r <- shell: mkdir -p -- {!path} else cmd_failed(r)
+        return
 ```
 
 ### Every failure, not the first
@@ -774,6 +853,11 @@ The transpiler refuses:
 
 - a failure dropped: a call returning `T | Failure_T` standing alone as a
   statement, its result taken by nobody;
+- a `do:` step that fails some other way — a `?T`, another failure type, a
+  shell command in a function that is not `... | ShellFailure_T` — without
+  an `else` saying what failure it becomes;
+- a `case` over a `T | Failure_T` that covers only one side and has no
+  `when others:`;
 - a `|` with no failure side (`int | str`), or with two (`A_T | B_T`);
 - `failure` on anything but a record;
 - more than two sides (`int | str | Failure_T`);
@@ -844,6 +928,9 @@ know; `?int` is one the compiler enforces.
 | `return v` (in `-> T \| F`) | unchanged | `return Result[T, F].ok(v)`, or `.err(v)` when v is an F |
 | `r is F` / `r is not F` | `_is_a(r, F)` (an isinstance) | `r.is_err` / `r.is_ok` |
 | `r` after `if r is F: return` | unchanged | `r.value` |
+| `case r:` / `when F:` / `when T:` | `if _is_a(r, F):` / `elif not _is_a(r, F):` | `if r.is_err:` / `elif r.is_ok:` |
+| `let o: str \| ShellFailure_T = shell: cmd` | the output, or `ShellFailure_T(command, code, stderr)` | `Result[string, ShellFailure_T]` |
+| `do: x <- step else e` | `if _is_a(x, F2): return e` | `if t.is_err: (let x = t.error) return R.err(e)` |
 | `do: x <- f()` (in `-> T \| F`) | `if _is_a(x, F): return x` per step | `if t.is_err: return R.err(t.error)` per step |
 
 ---

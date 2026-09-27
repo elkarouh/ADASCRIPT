@@ -161,6 +161,8 @@ def to_nim(self, prec=None):
             if node.nodes[0] == "Path":
                 _ensure_path_helper()
             return mapped
+        if node.nodes[0] == "ShellFailure_T":
+            ParserState.nim_imports.add("stdlib")   # it lives in stdlib.nim
     result = node.to_nim()
     # Append any trailing nodes (e.g. generic params [T] from subscript trailers)
     for extra in self.nodes[1:]:

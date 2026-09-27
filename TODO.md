@@ -300,22 +300,18 @@ history of this file if the reasoning behind one of them is ever wanted.
 `T | F`, F a record declared `type F is failure record:`, is built in
 (book 10.12, `EXAMPLES/test_result.ady`, `rsync_time_machine.ady`): a
 routine returns either a T or an F, in either order; `r is F` asks which
-and narrows; `None | F`; `do:` over them with bare steps; a dropped
-failure (a bare call nobody takes the result of) is refused. Not yet:
+and narrows, as does `case r:` with a `when` per side; `None | F`;
+`do:` over them with bare steps, shell steps and `else`; the built-in
+`ShellFailure_T` of a typed `shell:`; a dropped failure is refused. Not yet:
 
-- [ ] `case r:` with `when Failure_T:` / `when int:` arms -- today it is
-      `if r is Failure_T:`.
-- [ ] a `?T` step inside a `T | F` chain: `x <- lookup(k) else fail(...)`,
-      the failure to use when the optional is absent. Today the step has
-      to be converted by hand first.
 - [ ] Nim: a `T | F` passed as an *argument* whose value is a plain T or E
       -- `f(3)` where f takes `int | Failure_T`. The constructor is typed from a
       return, a declaration or an assignment; an argument is none of those.
 - [ ] which side a returned value is on is read from its type; a value the
       Nim backend cannot type goes on the value side, and Nim's own type
       check then catches a failure put there by mistake.
-- [ ] an adapter from exceptions at the boundary, and a `T | F` form of
-      `shell:`, whose exit status and stderr are the obvious F.
+- [ ] an adapter from exceptions at the boundary: a `T | F` from a call
+      that raises.
 
 ### Feature 2 — `.map()` and `.and_then()` method rewriting on `?T`
 

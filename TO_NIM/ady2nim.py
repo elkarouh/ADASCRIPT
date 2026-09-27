@@ -670,7 +670,7 @@ def translate(code, export_symbols=False):
     # already, has to be known for routines defined further down. And the
     # failure types -- this module's and those of the modules it nimports --
     # which say which side of a `|` is the failure.
-    ParserState.failure_types = (_failures
+    ParserState.failure_types = (_failures | {"ShellFailure_T"}
                                  | _nimport_carried.get("failure_types", set()))
     ParserState.ady_return_types = scan_return_types(code)
     ParserState.ady_return_types_nim = {}
@@ -1571,6 +1571,20 @@ def run_tests():
         # Only a record can be one.
         ("type Oops_T is failure enum A, B\n",
          "only a record can be a failure type"),
+        # A shell step fails with a ShellFailure_T: another failure type
+        # needs `else` to say what it becomes -- as a ?T step does.
+        ("type Bad_T is failure record:\n    why: str\n\n"
+         "def a() -> None | Bad_T:\n    do:\n        shell: true\n",
+         "fails with a ShellFailure_T, not the routine's Bad_T"),
+        ("type Bad_T is failure record:\n    why: str\n\n"
+         "def look() -> ?str:\n    return None\n\n"
+         "def b() -> str | Bad_T:\n    do:\n        v <- look()\n    return v\n",
+         "is a ?T: say which failure its absence is, with `else`"),
+        # A case over a `T | F` covers both sides, or says others.
+        ("type Bad_T is failure record:\n    why: str\n\n"
+         "def f() -> int | Bad_T:\n    return 1\n\n"
+         "let h: int | Bad_T = f()\ncase h:\n    when Bad_T:\n        print \"b\"\n",
+         "must cover both sides"),
         # A failure nobody takes is refused: a bare call returning `T | F`.
         ("type Bad_T is failure record:\n    why: str\n\n"
          "def step(n: int) -> None | Bad_T:\n    if n < 0:\n"

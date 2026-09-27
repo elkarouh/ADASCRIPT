@@ -248,6 +248,27 @@ def _ensure_is_a_helper():
         ParserState.py_top_decls = decls
 
 
+_SHELL_FAILURE_CLASS = '''\
+@_dataclass
+class ShellFailure_T:
+    \"\"\"The built-in failure of a shell command: what ran, the status it
+    ended with, and what it said on stderr.\"\"\"
+    command: str = ""
+    code: int = 0
+    stderr: str = ""\
+'''
+
+
+def _ensure_shell_failure():
+    """Define ShellFailure_T the first time it is named or produced."""
+    from hek_parsec import ParserState
+    ParserState.nim_imports.add("from dataclasses import dataclass as _dataclass")
+    decls = getattr(ParserState, 'py_top_decls', [])
+    if not any("class ShellFailure_T:" in d for d in decls):
+        decls.append(_SHELL_FAILURE_CLASS)
+        ParserState.py_top_decls = decls
+
+
 def split_either(annotation):
     """(T, F) of a Python annotation that is a `T | F`, F a failure type,
     or None for any other annotation -- ?T's `T | None` included."""
@@ -306,6 +327,8 @@ def to_py(self, prec=None):
         _ensure_run_result_alias()
     elif name == "Path":
         _ensure_path_alias()
+    elif name == "ShellFailure_T":
+        _ensure_shell_failure()
     elif name == "File":
         # Nim's File is what open() returns and what stdin/stdout/stderr are,
         # so one variable can hold either -- `(open(p) if p else stdin)` is

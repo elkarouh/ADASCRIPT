@@ -182,11 +182,17 @@ def to_py(self, indent=0):
 
 
 # --- while ---
-# --- do block (monadic bind over ?T or Result[T, E]) ---
+# --- do block (monadic bind over ?T or T | F) ---
 def _do_lines(do_node):
-    """The steps of a do: block, in order, as (name, expr_node): NAME is the
-    bound identifier of `x <- expr`, or None for a bare step `expr`. (The
-    Nim backend's twin; see hek_nim_parser._do_lines.)"""
+    """The steps of a do: block, in order, as (name, value, else_node,
+    is_shell): NAME is the identifier `x <- ...` binds, or None for a bare
+    step; VALUE the expression or shell-command node; ELSE_NODE the
+    expression after `else`, or None. Shared by both backends.
+
+    Each line is (do_bind | do_step) + NEWLINE + NL*, and the alternative
+    comes through unnamed, so it is told by its shape: a bind starts with
+    an IDENTIFIER and the empty arrow; an `else` is a trailing
+    Several_Times; a shell command is a sequence led by its keyword."""
     steps = []
     for node in do_node.nodes:
         if type(node).__name__ != "Several_Times":
@@ -195,52 +201,140 @@ def _do_lines(do_node):
             if not getattr(seq, "nodes", None):
                 continue
             line = seq.nodes[0]
-            parts = getattr(line, "nodes", None) or []
-            if (type(line).__name__ == "Sequence_Parser" and len(parts) == 3
-                    and type(parts[0]).__name__ == "IDENTIFIER"):
-                steps.append((parts[0].nodes[0], parts[2]))
-            else:
-                steps.append((None, line))
+            parts = list(getattr(line, "nodes", None) or [])
+            if type(line).__name__ != "Sequence_Parser" or not parts:
+                steps.append((None, line, None, False))
+                continue
+            name = None
+            if (len(parts) >= 3 and type(parts[0]).__name__ == "IDENTIFIER"
+                    and type(parts[1]).__name__ == "Sequence_Parser"
+                    and not getattr(parts[1], "nodes", None)):
+                name = parts[0].nodes[0]
+                parts = parts[2:]
+            else_node = None
+            if len(parts) >= 2 and type(parts[-1]).__name__ == "Several_Times":
+                _e = parts[-1].nodes[0] if parts[-1].nodes else None
+                if (_e is not None and type(_e).__name__ == "Sequence_Parser"
+                        and len(getattr(_e, "nodes", None) or []) == 1):
+                    _e = _e.nodes[0]
+                else_node = _e
+                parts = parts[:-1]
+            value = parts[0]
+            is_shell = _is_shell_value(value)
+            steps.append((name, value, else_node, is_shell))
     return steps
+
+
+def _is_shell_value(node):
+    """True when NODE is a do: step's shell command: a sequence led by the
+    shell keyword."""
+    kids = getattr(node, "nodes", None) or []
+    return bool(kids) and type(kids[0]).__name__.startswith("Literal_shell")
+
+
+def _do_shell_kind(node, bound):
+    """What a do: step's shell command yields: its output ("str"), its
+    lines ("lines", shellLines) or nothing ("None") when nothing is bound."""
+    kw = getattr(node.nodes[0], "node", "shell")
+    if kw not in ("shell", "shellLines"):
+        raise SyntaxError(f"a do: step runs `shell:` or `shellLines:`, not `{kw}:`")
+    if kw == "shellLines":
+        return "lines"
+    return "str" if bound else "None"
+
+
+def _py_step_kind(expr):
+    """What a do: step's call is, read from its routine's declared return
+    type: ("optional", None), ("either", its failure type), or (None, None)
+    when the routine is not one this module declares."""
+    from ady_stmt import split_top_level_bar
+    import re as _re_sk
+    _m = _re_sk.match(r"^(?:[A-Za-z_]\w*\.)*([A-Za-z_]\w*)\(", expr.strip())
+    if not _m:
+        return None, None
+    text = getattr(ParserState, "ady_return_types", {}).get(_m.group(1))
+    if not text:
+        return None, None
+    if text.strip().startswith("?"):
+        return "optional", None
+    parts = split_top_level_bar(text)
+    failures = getattr(ParserState, "failure_types", set())
+    if len(parts) == 2:
+        if parts[1] in failures:
+            return "either", parts[1]
+        if parts[0] in failures:
+            return "either", parts[0]
+        if "None" in parts:
+            return "optional", None
+    return None, None
 
 
 @method(do_stmt)
 def to_py(self, indent=0):
-    """do_stmt: 'do' ':' NEWLINE INDENT ((IDENTIFIER '<-')? expression NL)+ DEDENT
+    """do_stmt: 'do' ':' NEWLINE INDENT ((IDENTIFIER '<-')? (expression |
+    shell) ('else' expression)? NL)+ DEDENT
 
-    In a routine returning a `T | E` each step is one too, and a failure
-    is returned as it is; otherwise each step is a ?T and None returns None.
-    `x <- expr` then binds the value; a bare `expr` is only checked.
+    In a routine returning a `T | F`, each step is a `T2 | F2`, a ?T or a
+    shell command: its value is bound, and its failure returned -- as it
+    is when F2 is F, or as the `else` expression says, inside which the
+    bound name is the step's failure. A ?T step needs an `else`: absence
+    alone is no failure. Otherwise, in a routine returning ?T, each step is
+    a ?T and None returns None. A bare step binds nothing.
     """
-    import re as _re_do
     from hek_py_declarations import split_either, _ensure_is_a_helper
+    import re as _re_do
     ret = getattr(ParserState, "_py_return_type", "")
     sides = split_either(ret)
     ind = _ind(indent)
     lines = []
-    for name, expr_node in _do_lines(self):
-        expr = expr_node.to_py()
-        if sides is not None:
-            # A step's value is its T or its E, unboxed: a failure is
-            # returned as it is, a value bound as it is.
-            _ensure_is_a_helper()
-            tmp = name or "_ado_step"
-            lines.append(f"{ind}{tmp} = {expr}")
-            lines.append(f"{ind}if _is_a({tmp}, {sides[1]}):")
-            lines.append(f"{ind}{INDENT_STR}return {tmp}")
+    for name, value, else_node, is_shell in _do_lines(self):
+        if sides is None:
+            if is_shell or else_node is not None:
+                raise SyntaxError(
+                    "a do: step with a shell command or an `else` fails with "
+                    "a failure: the routine must return a `T | F`")
+            expr = value.to_py()
+            _call = _re_do.match(r"^([A-Za-z_]\w*)\(", expr.strip())
+            if _call and _call.group(1) in getattr(ParserState, "result_procs", set()):
+                raise SyntaxError(
+                    f"do: step '{expr}' returns a `T | F`; a routine binding "
+                    f"one must return a `T | F` too, to pass its failure on")
+            leave = "return None" if ret else "return"
+            if name:
+                lines.append(f"{ind}{name} = {expr}")
+                lines.append(f"{ind}if {name} is None:")
+            else:
+                lines.append(f"{ind}if {expr} is None:")
+            lines.append(f"{ind}{INDENT_STR}{leave}")
             continue
-        _call = _re_do.match(r"^([A-Za-z_]\w*)\(", expr.strip())
-        if _call and _call.group(1) in getattr(ParserState, "result_procs", set()):
-            raise SyntaxError(
-                f"do: step '{expr}' returns a `T | F`; a routine binding "
-                f"one must return a `T | F` too, to pass its failure on")
-        leave = "return None" if ret else "return"
-        if name:
-            lines.append(f"{ind}{name} = {expr}")
-            lines.append(f"{ind}if {name} is None:")
+        _ensure_is_a_helper()
+        routine_failure = sides[1]
+        tmp = name or "_ado_step"
+        if is_shell:
+            value._either_target = (tmp, _do_shell_kind(value, bool(name)))
+            lines.append(shell_stmt.to_py(value, indent))
+            kind, step_failure, shown = "either", "ShellFailure_T", "`shell:`"
         else:
-            lines.append(f"{ind}if {expr} is None:")
-        lines.append(f"{ind}{INDENT_STR}{leave}")
+            expr = value.to_py()
+            lines.append(f"{ind}{tmp} = {expr}")
+            kind, step_failure = _py_step_kind(expr)
+            step_failure = step_failure or routine_failure
+            shown = f"'{expr}'"
+        if kind == "optional":
+            if else_node is None:
+                raise SyntaxError(
+                    f"do: step {shown} is a ?T: say which failure its "
+                    f"absence is, with `else`")
+            lines.append(f"{ind}if {tmp} is None:")
+            lines.append(f"{ind}{INDENT_STR}return {else_node.to_py()}")
+            continue
+        if else_node is None and step_failure != routine_failure:
+            raise SyntaxError(
+                f"do: step {shown} fails with a {step_failure}, not the "
+                f"routine's {routine_failure}: convert it with `else`")
+        lines.append(f"{ind}if _is_a({tmp}, {step_failure}):")
+        _back = else_node.to_py() if else_node is not None else tmp
+        lines.append(f"{ind}{INDENT_STR}return {_back}")
     return "\n".join(lines)
 
 
@@ -961,10 +1055,62 @@ def _pattern_chain_to_py(case_node, subject, indent):
     return result.lstrip("\n")
 
 
+def _either_sides_of_py(subject):
+    """(T, F) when SUBJECT is a name declared `T | F`, else None."""
+    from hek_py_declarations import split_either
+    sym = ParserState.symbol_table.lookup(subject.strip())
+    ann = (sym.get("type") or "") if isinstance(sym, dict) else ""
+    return split_either(ann) if ann else None
+
+
+def _either_case_to_py(case_node, subject, sides, indent):
+    """`case r:` over a `T | F` (see the Nim backend's _either_case_to_nim):
+    an if/elif chain on r's class; the value is unboxed, so the narrowing
+    is simply r."""
+    from hek_py_declarations import _ensure_is_a_helper
+    value_t, failure_t = sides
+    out, covered, keyword = [], set(), "if"
+    for pat_node, block_node, guard_node in _extract_branches_py(case_node):
+        pat = (pat_node.to_py() if hasattr(pat_node, "to_py") else str(pat_node)).strip()
+        if guard_node is not None:
+            raise SyntaxError(
+                f"case over a `T | F`: `when {pat}` cannot carry a guard -- "
+                f"test inside the branch")
+        if pat in ("others", "_"):
+            head = f"{_ind(indent)}else:"
+            covered.update({"ok", "err"})
+        else:
+            if pat == failure_t:
+                side, cond = "err", f"_is_a({subject}, {failure_t})"
+            elif pat == value_t:
+                side = "ok"
+                cond = (f"{subject} is None" if pat == "None"
+                        else f"not _is_a({subject}, {failure_t})")
+            else:
+                raise SyntaxError(
+                    f"case {subject}: `when {pat}` is neither side of "
+                    f"its `T | F`")
+            _ensure_is_a_helper()
+            covered.add(side)
+            head = f"{_ind(indent)}{keyword} {cond}:"
+            keyword = "elif"
+        body = block_node.to_py(indent + 1) if block_node else _ind(indent + 1) + "pass"
+        out.append(f"{head}\n{body}")
+    if covered != {"ok", "err"}:
+        raise SyntaxError(
+            f"case over the `T | F` {subject} must cover both sides -- the "
+            f"value and the failure -- or say `when others:`")
+    return "\n".join(out)
+
+
 @method(case_stmt)
 def to_py(self, indent=0):
     """case_stmt: 'case' expression ':' when_clause+ — Adascript case/when"""
     subject = self.nodes[0].to_py()
+
+    _either = _either_sides_of_py(subject)
+    if _either is not None:
+        return _either_case_to_py(self, subject, _either, indent)
 
     if _needs_chain_py(self):
         return _pattern_chain_to_py(self, subject, indent)
@@ -2920,6 +3066,55 @@ def _parse_for_shell_stmt(node, render=None):
     return target, cmd, needs_fstring, body_node, opts
 
 
+def _shell_either_spec(node, render):
+    """What a shell command's value or failure holds, or None when the
+    command is not one: "str" (its output), "lines" (its output lines) or
+    "None" (nothing -- it can only fail), with ShellFailure_T the failure.
+
+    Asked for two ways: a `do:` step sets `node._either_target`; a
+    statement says it in its target's type, `let out: str | ShellFailure_T
+    = shell: cmd`. RENDER is the calling backend's emitter for a type. Any
+    other failure type is refused: a command fails with a ShellFailure_T,
+    and a do: step's `else` is how it becomes another.
+    """
+    _given = getattr(node, "_either_target", None)
+    if _given is not None:
+        return _given[1]
+    target = node.nodes[0] if getattr(node, "nodes", None) else None
+    union = None
+    stack = [target] if target is not None else []
+    while stack:
+        cur = stack.pop()
+        if type(cur).__name__ == "union_type":
+            union = cur
+            break
+        stack.extend(getattr(cur, "nodes", None) or [])
+    if union is None:
+        return None
+    from ady_stmt import either_sides
+    parts = [render(union.nodes[0])]
+    for seq in union.nodes[1].nodes:
+        if hasattr(seq, "nodes") and seq.nodes:
+            parts.append(render(seq.nodes[0]))
+    parts = ["None" if p in ("nil", "void") else p for p in parts]
+    kind, value, failure = either_sides(
+        parts, getattr(ParserState, "failure_types", set()))
+    if kind != "either":
+        return None
+    if failure != "ShellFailure_T":
+        raise SyntaxError(
+            f"a shell command fails with a ShellFailure_T, not a {failure}: "
+            f"take it as `... | ShellFailure_T`, or convert it in a do: "
+            f"step with `else`")
+    kinds = {"str": "str", "string": "str", "None": "None",
+             "list[str]": "lines", "seq[string]": "lines"}
+    if value not in kinds:
+        raise SyntaxError(
+            f"a shell command's value is its output -- str, []str or None "
+            f"-- not {value}")
+    return kinds[value]
+
+
 def _parse_shell_stmt(node, render=None):
     """Decompose a shell_stmt AST node into its logical parts.
 
@@ -2952,8 +3147,11 @@ def _parse_shell_stmt(node, render=None):
             kw_idx = i
             break
 
-    # Optional assignment target sits before the keyword
+    # Optional assignment target sits before the keyword -- or is given by a
+    # do: step, which names a temporary for the command's value or failure.
     target_kw = target_name = target_tuple = target_ann = None
+    if getattr(node, "_either_target", None) is not None:
+        target_kw, target_name = "let", node._either_target[0]
     if kw_idx > 0:
         target_st = nodes[0]
         if hasattr(target_st, "nodes") and target_st.nodes:
@@ -3156,6 +3354,24 @@ def to_py(self, indent=0):
         if checked:
             lines.append(f"{ind}_check_shell({cmd_ref}, {code_expr})")
 
+    _either = (_shell_either_spec(self, lambda n: n.to_py())
+               if target_name else None)
+    if _either is not None:
+        # `let out: str | ShellFailure_T = shell: cmd`: the output, or the
+        # failure -- the command, its status and its stderr. The command
+        # string is bound once: it is run and named in the failure, and it
+        # may be an f-string with side effects.
+        from hek_py_declarations import _ensure_shell_failure
+        _ensure_shell_failure()
+        if not checked:
+            lines.append(f"{ind}_cmd = {cmd_str}")
+        lines.append(f"{ind}_r = {runner}(_cmd, {kwargs_str})")
+        _value = {"str": "_r.stdout", "None": "None",
+                  "lines": "_r.stdout.splitlines()"}[_either]
+        lines.append(
+            f"{ind}{target_name} = {_value} if _r.returncode == 0 else "
+            f"ShellFailure_T(command=_cmd, code=_r.returncode, stderr=_r.stderr)")
+        return "\n".join(lines)
     if target_tuple:
         # let (out, code) = shell: cmd        — 2-element
         # let (out, code, _) = shell: cmd     — 3-element

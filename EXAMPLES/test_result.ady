@@ -63,6 +63,11 @@ def describe(r: int | Failure_T) -> str:
             when NOT_POSITIVE:   return f"not positive: {r.detail}"
     return f"ok {r}"                        # r is the int from here on
 
+def describe_text(r: str | Failure_T) -> str:
+    if r is Failure_T:
+        return f"failed: {r.detail}"
+    return f"ok {r}"
+
 print describe(ratio("20", "4"))
 print describe(ratio("2x", "4"))     # first step fails
 print describe(ratio("20", "0"))     # middle step fails
@@ -160,5 +165,55 @@ if some_bad is Problems_T:
     print some_bad.bad[0]
     print some_bad.bad[1]
 print "test6 OK"
+
+# ─── test 7: case over a T | F, a branch per side ─────────────────────────
+
+def sign_of(raw: str) -> str:
+    let n: int | Failure_T = read_number(raw)
+    case n:
+        when Failure_T:
+            return f"no sign: {n.detail}"   # n is the failure here
+        when int:
+            return "zero" if n == 0 else "positive"   # and the int here
+
+print sign_of("0")
+print sign_of("12")
+print sign_of("-3")
+print "test7 OK"
+
+# ─── test 8: shell commands fail with the built-in ShellFailure_T ──────────
+
+let hi: str | ShellFailure_T = shell: echo hi
+if hi is str:
+    print f"said {hi.strip()}"
+let oops: str | ShellFailure_T = shell: echo oops >&2; exit 3
+if oops is ShellFailure_T:
+    print f"exit {oops.code}, stderr {oops.stderr.strip()}"
+let quiet: None | ShellFailure_T = shell: true
+assert quiet is None
+print "test8 OK"
+
+# ─── test 9: do: steps -- a shell command, and `else` for another failure ──
+
+def cmd_failed(f: ShellFailure_T) -> Failure_T:
+    return fail(BAD_NUMBER, f"`{f.command}` exited {f.code}")
+
+def find_word(words: {str}str, key: str) -> ?str:
+    if key in words:
+        return words[key]
+    return None
+
+def shout(words: {str}str, key: str) -> str | Failure_T:
+    do:
+        w <- find_word(words, key) else fail(BAD_NUMBER, f"no word for {key}")
+        out <- shell: echo {w} | tr a-z A-Z else cmd_failed(out)
+        shell: test -n "{w}" else fail(NOT_POSITIVE, "an empty word")
+    return out.strip()
+
+let words: {str}str = {"g": "greetings", "e": ""}
+print describe_text(shout(words, "g"))
+print describe_text(shout(words, "x"))
+print describe_text(shout(words, "e"))
+print "test9 OK"
 
 print "all T | F tests passed"

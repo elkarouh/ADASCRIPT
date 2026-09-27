@@ -898,76 +898,108 @@ def to_nim(self, indent=0):
     return result
 
 
-# --- do block (monadic bind over ?T or Result[T, E]) ---
-def _do_lines(do_node):
-    """The steps of a do: block, in order, as (name, expr_node): NAME is the
-    bound identifier of `x <- expr`, or None for a bare step `expr`.
-
-    Each line of the Several_Times is (do_bind | do_step) + NEWLINE + NL*;
-    the alternative comes through unnamed, so it is told by its shape: a
-    bind is a Sequence_Parser of IDENTIFIER, the empty arrow and the
-    expression, a step is the expression node itself."""
-    steps = []
-    for node in do_node.nodes:
-        if type(node).__name__ != "Several_Times":
-            continue
-        for seq in node.nodes:
-            if not getattr(seq, "nodes", None):
-                continue
-            line = seq.nodes[0]
-            parts = getattr(line, "nodes", None) or []
-            if (type(line).__name__ == "Sequence_Parser" and len(parts) == 3
-                    and type(parts[0]).__name__ == "IDENTIFIER"):
-                steps.append((parts[0].nodes[0], parts[2]))
-            else:
-                steps.append((None, line))
-    return steps
+# --- do block (monadic bind over ?T or T | F) ---
+def _py_backend():
+    """hek_py_parser, whose grammar-neutral helpers this backend shares."""
+    import os as _os, sys as _sys
+    _to_py_dir = _os.path.join(_os.path.dirname(__file__), '..', 'TO_PYTHON')
+    if _to_py_dir not in _sys.path:
+        _sys.path.insert(0, _to_py_dir)
+    import hek_py_parser
+    return hek_py_parser
 
 
 @method(do_stmt)
 def to_nim(self, indent=0):
-    """do_stmt: 'do' ':' NEWLINE INDENT ((IDENTIFIER '<-')? expression NL)+ DEDENT
+    """do_stmt: 'do' ':' NEWLINE INDENT ((IDENTIFIER '<-')? (expression |
+    shell) ('else' expression)? NL)+ DEDENT
 
-    Monadic bind block. In a routine returning Option[R] each step is a ?T:
-    `x <- expr` evaluates it, returns none(R) from the routine if it is
-    None, and binds the unwrapped value to x as a plain let. In a routine
-    returning Result[R, E] each step is a Result: an Err is returned as the
-    routine's own Err, unchanged, and an Ok's value is bound. A bare step
-    `expr` is checked the same way and binds nothing -- the shape of a
-    Result[None, E], a step that can only fail.
-
-    After the block all bound names are plain (non-Option) and in scope.
+    In a routine returning a `T | F` (Result[T, F]), each step is a
+    Result, a ?T or a shell command: an Ok's value is bound, and a failure
+    returned -- as it is when its type is F, or as the `else` expression
+    says, inside which the bound name is the step's failure. A ?T step
+    needs an `else`: absence alone is no failure. In a routine returning
+    Option[R], each step is a ?T and None returns none(R). A bare step
+    binds nothing. After the block all bound names are plain values.
     """
     import re as _re_do
+    _pyb = _py_backend()
     ret_ann = getattr(ParserState, '_current_return_type', '').lstrip(": ").strip()
+    _sides = hek_nim_expr._split_result(ret_ann)
     ind = _ind(indent)
+    ind1 = _ind(indent + 1)
     lines = []
-    for i, (name, expr_node) in enumerate(_do_lines(self)):
-        expr = expr_node.to_nim()
-        tmp = (f"adado{name[0].upper()}{name[1:]}" if name
-               else f"adadoStep{ParserState.nim_do_steps}")
-        if not name:
-            ParserState.nim_do_steps = ParserState.nim_do_steps + 1
-        lines.append(f"{ind}let {tmp} = {expr}")
-        if ret_ann.startswith("Result["):
-            ParserState.nim_imports.add("stdlib")
-            lines.append(f"{ind}if {tmp}.is_err: return {ret_ann}.err({tmp}.error)")
-            if name:
-                lines.append(f"{ind}let {name} = {tmp}.value")
+    for name, value, else_node, is_shell in _pyb._do_lines(self):
+        if name:
+            tmp = f"adado{name[0].upper()}{name[1:]}"
         else:
+            tmp = f"adadoStep{ParserState.nim_do_steps}"
+            ParserState.nim_do_steps = ParserState.nim_do_steps + 1
+        if _sides is None:
+            if is_shell or else_node is not None:
+                raise SyntaxError(
+                    "a do: step with a shell command or an `else` fails with "
+                    "a failure: the routine must return a `T | F`")
+            expr = value.to_nim()
             if hek_nim_expr._expr_is_result(expr):
                 raise SyntaxError(
                     f"do: step '{expr}' returns a `T | F`; a routine binding "
                     f"one must return a `T | F` too, to pass its failure on")
             ParserState.nim_imports.add("options")
+            lines.append(f"{ind}let {tmp} = {expr}")
             _m_opt = _re_do.search(r'Option\[(.+)\]', ret_ann)
             if _m_opt:
                 lines.append(f"{ind}if {tmp}.isNone: return none({_m_opt.group(1)})")
             else:
                 lines.append(f"{ind}if {tmp}.isNone: return")
             if name:
-                lines.append(f"{ind}let {name} = {tmp}.get()")
-        if name:
+                lines.append(f"{ind}let {_nim_ident(name)} = {tmp}.get()")
+                ParserState.symbol_table.add(name, "auto", "let")
+            continue
+
+        ParserState.nim_imports.add("stdlib")
+        routine_failure = _sides[1]
+        if is_shell:
+            value._either_target = (tmp, _pyb._do_shell_kind(value, bool(name)))
+            lines.append(_pyb.shell_stmt.to_nim(value, indent))
+            step_type = ParserState.symbol_table.lookup(tmp)
+            step_type = (step_type or {}).get("type", "") or ""
+            shown = "`shell:`"
+            is_opt = False
+        else:
+            expr = value.to_nim()
+            lines.append(f"{ind}let {tmp} = {expr}")
+            step_type = hek_nim_expr._result_type_of(expr)
+            is_opt = not step_type and hek_nim_expr._expr_is_option(expr)
+            shown = f"'{expr}'"
+        if is_opt:
+            if else_node is None:
+                raise SyntaxError(
+                    f"do: step {shown} is a ?T: say which failure its "
+                    f"absence is, with `else`")
+            ParserState.nim_imports.add("options")
+            lines.append(f"{ind}if {tmp}.isNone:")
+            lines.append(f"{ind1}return {ret_ann}.err({else_node.to_nim()})")
+            if name:
+                lines.append(f"{ind}let {_nim_ident(name)} = {tmp}.get()")
+                ParserState.symbol_table.add(name, "auto", "let")
+            continue
+        _step_sides = hek_nim_expr._split_result(step_type)
+        step_failure = _step_sides[1] if _step_sides else routine_failure
+        if else_node is None:
+            if step_failure != routine_failure:
+                raise SyntaxError(
+                    f"do: step {shown} fails with a {step_failure}, not the "
+                    f"routine's {routine_failure}: convert it with `else`")
+            lines.append(f"{ind}if {tmp}.is_err: return {ret_ann}.err({tmp}.error)")
+        else:
+            lines.append(f"{ind}if {tmp}.is_err:")
+            if name:
+                # Inside the else, the name is the step's failure.
+                lines.append(f"{ind1}let {_nim_ident(name)} = {tmp}.error")
+            lines.append(f"{ind1}return {ret_ann}.err({else_node.to_nim()})")
+        if name and not (_step_sides and _step_sides[0] == "void"):
+            lines.append(f"{ind}let {_nim_ident(name)} = {tmp}.value")
             ParserState.symbol_table.add(name, "auto", "let")
     return "\n".join(lines)
 
@@ -2200,11 +2232,66 @@ def _require_catch_all(subject, case_node):
         "none of them would do nothing at all.")
 
 
+def _either_case_to_nim(case_node, subject, rtype, indent):
+    """`case r:` over a `T | F`: each `when` names a side -- `when
+    Failure_T:`, `when int:`, `when None:` for a `None | F` -- or is `when
+    others:`, and r is narrowed to that side in its branch, as `r is F`
+    narrows it. Both sides, or others, must be there: the case is as
+    exhaustive as one over an enum."""
+    from hek_nim_declarations import _PY_TO_NIM
+    value_t, failure_t = hek_nim_expr._split_result(rtype)
+    if not re.fullmatch(r"[A-Za-z_]\w*", subject.strip()):
+        raise SyntaxError(
+            f"case over the `T | F` '{subject}' takes a name, so that each "
+            f"branch can use it as its side: bind it with `let` first")
+    out, covered, keyword = [], set(), "if"
+    for pat_node, block_node, guard_node in _extract_branches(case_node):
+        shown = (pat_node.to_nim() if hasattr(pat_node, "to_nim") else str(pat_node)).strip()
+        pat = _PY_TO_NIM.get(shown, shown)
+        shown = "None" if shown == "nil" else shown
+        if guard_node is not None:
+            raise SyntaxError(
+                f"case over a `T | F`: `when {shown}` cannot carry a guard -- "
+                f"test inside the branch")
+        if pat in ("others", "_"):
+            head, narrow = f"{_ind(indent)}else:", None
+            covered.update({"ok", "err"})
+        else:
+            if pat == failure_t:
+                test, narrow, side = "is_err", ".error", "err"
+            elif pat == value_t or (pat == "nil" and value_t == "void"):
+                test, narrow, side = "is_ok", ".value", "ok"
+            else:
+                raise SyntaxError(
+                    f"case {subject}: `when {shown}` is neither side of "
+                    f"its `T | F`")
+            covered.add(side)
+            head = f"{_ind(indent)}{keyword} {subject}.{test}:"
+            keyword = "elif"
+        _added = narrow is not None and hek_nim_expr._narrow_add(subject, narrow)
+        try:
+            body = block_node.to_nim(indent + 1) if block_node else _ind(indent + 1) + "discard"
+        finally:
+            if _added:
+                hek_nim_expr._narrow_drop(subject)
+        hc = _block_inline_header_comment(block_node) if block_node else ""
+        out.append(f"{head}{hc}\n{body}")
+    if covered != {"ok", "err"}:
+        raise SyntaxError(
+            f"case over the `T | F` {subject} must cover both sides -- the "
+            f"value and the failure -- or say `when others:`")
+    ParserState.nim_imports.add("stdlib")
+    return "\n".join(out)
+
+
 @method(case_stmt)
 def to_nim(self, indent=0):
     """match -> Nim case statement; desugars tuple patterns to if/elif."""
     import re as _re
     subject = self.nodes[0].to_nim()
+    _either_rt = hek_nim_expr._result_type_of(subject)
+    if _either_rt:
+        return _either_case_to_nim(self, subject, _either_rt, indent)
     _require_catch_all(subject, self)
 
     # Detect tuple subject: (a, b, ...) — desugar to if/elif
@@ -4559,6 +4646,33 @@ def to_nim(self, indent=0):
             "shellExec: replaces the process and never returns, so it "
             "cannot be assigned — write it as a statement")
 
+    from hek_py_parser import _shell_either_spec
+    _either = (_shell_either_spec(self, lambda n: n.to_nim())
+               if target_name else None)
+    if _either is not None:
+        # `let out: str | ShellFailure_T = shell: cmd`: the output, or the
+        # failure -- the command, its status and its stderr (stdlib.nim).
+        ParserState.nim_imports.add("stdlib")
+        _ensure_shell_run_helper()
+        _rtype = {"str": "Result[string, ShellFailure_T]",
+                  "None": "Result[void, ShellFailure_T]",
+                  "lines": "Result[seq[string], ShellFailure_T]"}[_either]
+        if not checked:
+            cmd_var = f"shellCmd{_exec_count}"
+            lines.append(f"{ind}let {cmd_var} = {cmd_str}")
+        else:
+            cmd_var = cmd_ref
+        lines.append(f"{ind}let {exec_tmp} = adascriptRun({cmd_var}{run_timeout})")
+        if _either == "lines":
+            _ensure_shell_lines_helper()
+        _ok = {"str": f".ok({exec_tmp}.output)", "None": ".ok()",
+               "lines": f".ok(adascriptShellLines({exec_tmp}.output))"}[_either]
+        lines.append(
+            f"{ind}{nim_kw} {_tgt} = (if {exec_tmp}.code == 0: {_rtype}{_ok} "
+            f"else: {_rtype}.err(ShellFailure_T(command: {cmd_var}, "
+            f"code: {exec_tmp}.code, stderr: {exec_tmp}.stderr)))")
+        ParserState.symbol_table.add(target_name, _rtype, nim_kw)
+        return "\n".join(_shell_hoists + lines)
     if target_tuple:
         # let (out, code) = shell: cmd            — 2-element
         # let (out, code, err) = shell: cmd       — 3-element

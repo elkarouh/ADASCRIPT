@@ -152,7 +152,8 @@ def run_cmd(cmd: str, ssh: ?SSH = None) -> CmdResult:
 
 # run_cmd answers questions -- `find`, `test -e`, `ps | grep` -- whose
 # non-zero status is an answer, not a failure. A command that *changes*
-# something goes through one of these two instead: its failure stops the run.
+# something is a do: step instead -- a local shell: step, or run_checked for
+# a remote one -- and its failure stops the run.
 
 def run_checked(cmd: str, ssh: ?SSH = None) -> str | Failure_T:
     let r: CmdResult = run_cmd(cmd, ssh)
@@ -160,10 +161,10 @@ def run_checked(cmd: str, ssh: ?SSH = None) -> str | Failure_T:
         return failure(CMD_FAILED, cmd, r.stderr.strip())
     return r.stdout
 
-def checked(r: RunResult, cmd: str) -> None | Failure_T:
-    """A local shell: step's status, as run_checked has it for a remote one."""
-    if r.code != 0:
-        return failure(CMD_FAILED, cmd, r.stderr.strip())
+def cmd_failed(f: ShellFailure_T) -> Failure_T:
+    """A local command's failure -- the built-in ShellFailure_T a shell:
+    step fails with -- as this program's: the `else` of the steps below."""
+    return failure(CMD_FAILED, f.command, f.stderr.strip())
 
 def find_cmd(path: Path, ssh: ?SSH = None, maxdepth: ?int = None) -> str:
     if ssh is None:
@@ -186,29 +187,33 @@ def get_absolute_path(path: Path, ssh: ?SSH = None) -> Path | Failure_T:
 
 def mkdir_p(path: Path, ssh: ?SSH = None) -> None | Failure_T:
     if ssh is None:
-        let r = shell: mkdir -p -- {!path}
-        return checked(r, f"mkdir -p -- '{path}'")
+        do:
+            r <- shell: mkdir -p -- {!path} else cmd_failed(r)
+        return
     do:
         run_checked(f"mkdir -p -- '{path}'", ssh)
 
 def rm_file(path: Path, ssh: ?SSH = None) -> None | Failure_T:
     if ssh is None:
-        let r = shell: rm -f -- {!path}
-        return checked(r, f"rm -f -- '{path}'")
+        do:
+            r <- shell: rm -f -- {!path} else cmd_failed(r)
+        return
     do:
         run_checked(f"rm -f -- '{path}'", ssh)
 
 def rm_dir(path: Path, ssh: ?SSH = None) -> None | Failure_T:
     if ssh is None:
-        let r = shell: rm -rf -- {!path}
-        return checked(r, f"rm -rf -- '{path}'")
+        do:
+            r <- shell: rm -rf -- {!path} else cmd_failed(r)
+        return
     do:
         run_checked(f"rm -rf -- '{path}'", ssh)
 
 def ln_s(src: Path, dest: Path, ssh: ?SSH = None) -> None | Failure_T:
     if ssh is None:
-        let r = shell: ln -s -- {!src} {!dest}
-        return checked(r, f"ln -s -- '{src}' '{dest}'")
+        do:
+            r <- shell: ln -s -- {!src} {!dest} else cmd_failed(r)
+        return
     do:
         run_checked(f"ln -s -- '{src}' '{dest}'", ssh)
 

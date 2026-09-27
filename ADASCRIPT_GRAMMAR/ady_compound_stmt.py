@@ -130,6 +130,8 @@ _star_expressions = fw("star_expressions")
 do_stmt = fw("do_stmt")
 do_bind = fw("do_bind")
 do_step = fw("do_step")
+do_shell = fw("do_shell")
+do_else = fw("do_else")
 
 # Top-level
 compound_stmt = fw("compound_stmt")
@@ -420,11 +422,7 @@ async_with_stmt = (
 # or, in a routine returning Result[R, E], to a return of the Err unchanged.
 # After the do block all bound names are plain (non-Option) variables.
 # ---------------------------------------------------------------------------
-_LEFT_ARROW = ignore(expect(tkn.OP, "<")) + ignore(expect(tkn.OP, "-"))
-do_bind = IDENTIFIER + _LEFT_ARROW + expression
-do_step = expression
-_do_bind_stmt = do_bind | do_step
-do_stmt = ikw("do") + COLON + NEWLINE + NL[:] + INDENT + NL[:] + (_do_bind_stmt + NEWLINE + NL[:])[1:] + DEDENT
+# (the rules follow the shell statement's, whose pieces a do: step uses)
 
 # ---------------------------------------------------------------------------
 # Shell statement
@@ -486,6 +484,27 @@ shell_stmt = (
     shell_target[:] + shell_kw + shell_opts[:] + COLON
     + (shell_block | shell_inline_body)
 )
+
+# --- do: steps (see "do block" above) ---
+# A step is `x <- step`, or a bare `step`: an expression, or a shell command
+# -- `out <- shell: git status` -- whose failure is a ShellFailure_T. Either
+# may end in `else EXPR`: the failure to return when the step fails, the
+# step's own failure being, inside EXPR, the name it binds. A command in a
+# do: step therefore ends at a bare `else`; a command that needs the word
+# quotes it.
+_LEFT_ARROW = ignore(expect(tkn.OP, "<")) + ignore(expect(tkn.OP, "-"))
+_do_shell_token = filt(
+    lambda tok: (getattr(tok, "type", 0) not in _SHELL_STOP
+                 and not (getattr(tok, "type", 0) == _tkn_sh.NAME
+                          and getattr(tok, "string", "") == "else")),
+    shift,
+)
+do_shell = shell_kw + shell_opts[:] + COLON + _do_shell_token[1:]
+do_else = ikw("else") + expression
+do_bind = IDENTIFIER + _LEFT_ARROW + (do_shell | expression) + do_else[:]
+do_step = (do_shell | expression) + do_else[:]
+_do_bind_stmt = do_bind | do_step
+do_stmt = ikw("do") + COLON + NEWLINE + NL[:] + INDENT + NL[:] + (_do_bind_stmt + NEWLINE + NL[:])[1:] + DEDENT
 
 # Streaming form: for line in shellIter: cmd
 #     <body>

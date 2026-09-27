@@ -509,9 +509,15 @@ test: compile
 	@printf 'var x: int | str\n' > $(TMPDIR)/ady_refuse_1.ady
 	@printf 'type Bad_T is failure record:\n    why: str\n\ndef step(n: int) -> None | Bad_T:\n    if n < 0:\n        return Bad_T(why="neg")\n\ndef run() -> None:\n    step(-1)\n' \
 	    > $(TMPDIR)/ady_refuse_2.ady
+	@printf 'type Bad_T is failure record:\n    why: str\n\ndef a() -> None | Bad_T:\n    do:\n        shell: true\n' \
+	    > $(TMPDIR)/ady_refuse_3.ady
+	@printf 'type Bad_T is failure record:\n    why: str\n\ndef f() -> int | Bad_T:\n    return 1\n\nlet h: int | Bad_T = f()\ncase h:\n    when Bad_T:\n        print "b"\n' \
+	    > $(TMPDIR)/ady_refuse_4.ady
 	@for tr in TO_NIM/ady2nim.py TO_PYTHON/ady2py.py; do \
 	    for c in "1:no failure side:one side must be a failure type" \
-	             "2:a dropped failure:drops a failure"; do \
+	             "2:a dropped failure:drops a failure" \
+	             "3:a shell failure unconverted:convert it with" \
+	             "4:a case missing a side:must cover both sides"; do \
 	        n=$${c%%:*}; rest=$${c#*:}; what=$${rest%%:*}; want=$${rest#*:}; \
 	        printf '  %-42s' "$$what ($$(basename $$tr .py))"; \
 	        if $(PYTHON) $(CURDIR)/$$tr $(TMPDIR)/ady_refuse_$$n.ady > $(TMPDIR)/ady_refuse.out 2>&1; then \
@@ -521,7 +527,7 @@ test: compile
 	            && echo OK || { echo FAIL; cat $(TMPDIR)/ady_refuse.out; exit 1; }; \
 	    done; \
 	done
-	@rm -f $(TMPDIR)/ady_refuse_1.ady $(TMPDIR)/ady_refuse_2.ady $(TMPDIR)/ady_refuse.out
+	@rm -f $(TMPDIR)/ady_refuse_[1-4].ady $(TMPDIR)/ady_refuse.out
 	@for t in test_do_block test_result; do \
 	    printf '  %-42s' "$$t.ady (python = nim)"; \
 	    $(EXDIR)/$$t > $(TMPDIR)/ady_$$t.nim.out 2>&1 || { echo "FAIL (nim)"; exit 1; }; \

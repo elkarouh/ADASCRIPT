@@ -144,6 +144,13 @@ This is one character per site rather than a habit to remember, which is the
 point — but it is still a habit. §11.6 shows the form that removes the
 question entirely.
 
+A command that can fail can also say so in its target's type. `let out:
+str | ShellFailure_T = shell: cmd` holds the output when the command
+succeeds and a `ShellFailure_T` — the command, its exit code and its
+stderr — when it does not; `r is ShellFailure_T` asks which. Chained in a
+`do:` block, a failing command stops the chain. Chapter 10.12 (*Shell
+commands*) has the whole of it.
+
 ## 11.4 Options
 
 Options go in parentheses before the colon:

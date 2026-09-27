@@ -1,6 +1,6 @@
 ## stdlib.nim -- Nim support types for HPython transpiled code
 ## Provides: AnyType/ANY sentinel, FifoQueue, LifoQueue, PriorityQueue, Counter,
-##           Result
+##           Result, ShellFailure_T
 
 import std/deques
 import hashes
@@ -187,3 +187,13 @@ proc `$`*[T, E](r: Result[T, E]): string =
     when T is void: "None"
     else:
       when compiles($r.adaVal): $r.adaVal else: "Ok"
+
+# ---------------------------------------------------------------------------
+# ShellFailure_T -- the built-in failure of a shell command: what ran, the
+# status it ended with, and what it said on stderr. `let out: str |
+# ShellFailure_T = shell: cmd` holds the output, or this.
+# ---------------------------------------------------------------------------
+type ShellFailure_T* = object
+  command*: string
+  code*: int
+  stderr*: string
