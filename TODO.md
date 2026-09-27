@@ -4,6 +4,24 @@ Open items only.  The write-ups for everything already fixed — 26 numbered
 bugs and the shell-syntax work — were removed once done; they are in the git
 history of this file if the reasoning behind one of them is ever wanted.
 
+- [ ] general function decorators on Nim. Today the Nim backend knows five
+      annotations (`@contextmanager`, `@virtual`, `@proc`, `@export`,
+      `@used`) and refuses any other decorator, while Python passes every
+      one through. `@d` on `def f` means `f = d(f)`, which Nim can express:
+      emit the proc under a hidden name and bind `let f = d(fHidden)` -- a
+      closure, so `d` must take and return a proc type (`[(int,)]int`).
+      That covers wrappers written in Adascript (`@twice`, timing,
+      memoizing). Not covered, having no Nim counterpart: `@property`,
+      `@staticmethod`, `@classmethod`, `@functools.*` -- those stay
+      Python-only, and keep their refusal. Open questions: a decorator on a
+      method (self), one taking arguments (`@retry(3)`), and several
+      stacked. Test on both backends, as test_union does.
+- [ ] a class named after a Nim keyword does not build on Nim: `class Out:`
+      emits `proc new`Out`*()`, the constructor's name pasted onto the
+      backticked type name, which nim rejects ("invalid indentation"). The
+      constructor has to be named from the bare name -- `newOut` -- wherever
+      it is declared and called.
+
 - [ ] whether a class is a `ref object` on Nim is decided twice, and the two
       can disagree. An exact check over the field declarations runs first
       and the constructor follows it (`new(result)` or not); a search of the

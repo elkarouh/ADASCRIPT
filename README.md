@@ -3061,6 +3061,14 @@ one name is seen through the other on Python only. A `@virtual class` is
 shared on both. `DOCS/TUTORIAL.md` §6 and the book's chapter 13 §13.2 show
 the difference and how to write code that behaves the same on both.
 
+**Decorators are Python-only** — Nim has no decorators. The Nim backend
+reads five annotations written as decorators — `@contextmanager` (the
+routine becomes a template, used with `with`), `@virtual` (a class shared by
+reference), `@proc` (a method emitted as a plain proc), `@export` and
+`@used` — and refuses any other, saying so. On the Python backend every
+decorator passes through: `@property`, `@functools.cache`, one of your own.
+A program meant for both backends keeps to the five.
+
 **Exhaustiveness is a Nim-build property** — a `case` block is checked for
 completeness only when the Nim backend can make it a native `case`: an
 ordinal subject whose branches are all constants. A string subject is not

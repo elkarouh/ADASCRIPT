@@ -2641,11 +2641,33 @@ def to_nim(self):
 
 
 # --- Decorators ---
+# The decorators the Nim backend understands. Each is an annotation the
+# transpiler acts on, not a function applied to the one below it: Nim has
+# no decorators, and anything else used to be emitted as `@name` in front
+# of the proc -- code nim rejects, with an error that did not say why.
+NIM_DECORATORS = {
+    "contextmanager": "the routine becomes a Nim template, used with `with`",
+    "contextlib.contextmanager": "the same",
+    "virtual": "the class becomes a `ref object of RootObj`",
+    "proc": "the method is emitted as a plain proc, not a Nim method",
+    "export": "the routine is exported: `name*`",
+    "used": "the {.used.} pragma: no unused-routine warning",
+}
+
+
 @method(decorator)
 def to_nim(self, indent=0):
-    """decorator: '@' dotted_name ['(' arguments? ')'] NL -> Nim: pragmas where known (e.g. @property, @staticmethod); others kept as comments"""
-    # Nim uses pragmas {.decorator.} — keep @ syntax as best-effort
-    return f"{_ind(indent)}@{self.nodes[0].to_nim()}"
+    """decorator: '@' dotted_name ['(' arguments? ')'] NL -> Nim: the
+    annotations in NIM_DECORATORS, which the definition below reads; any
+    other is refused."""
+    text = self.nodes[0].to_nim()
+    if text.replace("`", "") not in NIM_DECORATORS:
+        raise SyntaxError(
+            f"@{text}: Nim has no decorators, and the Nim backend knows only "
+            f"the annotations @contextmanager, @virtual, @proc, @export and "
+            f"@used -- write what the decorator would do as ordinary calls, "
+            f"or keep this program on the Python backend")
+    return f"{_ind(indent)}@{text}"
 
 
 @method(decorators)
@@ -2878,7 +2900,14 @@ def _func_def_to_nim_inner(self, indent=0):
         ParserState.proc_param_types[name] = _ptypes
     ParserState.symbol_table.push_scope(name or "<func>")
     hc = _block_inline_header_comment(block_node) if block_node else ""
-    body = block_node.to_nim(indent + 1) if block_node else ""
+    # A @contextmanager is a Nim template, where fmt cannot see the
+    # parameters or the locals: hek_nim_expr._fmt_in_template
+    _was_tpl = getattr(ParserState, "_nim_in_template", False)
+    ParserState._nim_in_template = _is_fn_cm
+    try:
+        body = block_node.to_nim(indent + 1) if block_node else ""
+    finally:
+        ParserState._nim_in_template = _was_tpl
     ParserState.symbol_table.pop_scope()
     body = _bind_user_result(body, ret_ann)
     # A proc that always leaves -- a `die` ending in quit(1) -- so that a
@@ -5399,7 +5428,13 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
     # Extract body first so we can detect mutations
     body_lines = []
     if block_node:
-        body_lines = _extract_block_body(block_node, indent + 1)
+        # a @contextmanager method is a template too: see func_def
+        _was_tpl = getattr(ParserState, "_nim_in_template", False)
+        ParserState._nim_in_template = is_contextmanager
+        try:
+            body_lines = _extract_block_body(block_node, indent + 1)
+        finally:
+            ParserState._nim_in_template = _was_tpl
 
     # Add var to params that are mutated in body
     body_text = "\n".join(body_lines)

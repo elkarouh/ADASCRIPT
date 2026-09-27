@@ -2041,7 +2041,75 @@ def to_nim(self, prec=None):
             result = 'fmt"""' + inner + '"""'
         else:
             result = 'fmt"' + inner + '"'
+    if getattr(ParserState, "_nim_in_template", False):
+        result = _fmt_in_template(result)
     return result
+
+
+def _fmt_in_template(fmt_str):
+    """FMT_STR, a fmt"..." literal inside a template -- a @contextmanager --
+    made to see what the template sees.
+
+    fmt reads `{name}` out of the string where the template is *used*: a
+    template's parameters are substituted only where they appear as code,
+    and its locals are renamed for hygiene, so neither is there --
+    "undeclared identifier: 'name'". Each interpolated expression is bound
+    to a temporary first, as code, which the template does resolve; the
+    temporary is {.inject.}ed so fmt can find it by name, inside a block so
+    that it goes no further.
+    """
+    is_triple = fmt_str.startswith('fmt"""')
+    q = '"""' if is_triple else '"'
+    inner = fmt_str[3 + len(q):-len(q)]
+    out, binds, i, n = [], [], 0, len(inner)
+    while i < n:
+        ch = inner[i]
+        if inner.startswith("{{", i) or inner.startswith("}}", i):
+            out.append(inner[i:i + 2])
+            i += 2
+            continue
+        if ch != "{":
+            out.append(ch)
+            i += 1
+            continue
+        depth, j, quote = 1, i + 1, ""
+        while j < n and depth:
+            c = inner[j]
+            if quote:
+                if c == quote:
+                    quote = ""
+            elif c in "\"'":
+                quote = c
+            elif c in "([{":
+                depth += 1
+            elif c in ")]}":
+                depth -= 1
+            j += 1
+        body = inner[i + 1:j - 1]
+        # the expression ends at a top-level ':' -- a format spec follows
+        d, cut, quote = 0, len(body), ""
+        for k, c in enumerate(body):
+            if quote:
+                if c == quote:
+                    quote = ""
+            elif c in "\"'":
+                quote = c
+            elif c in "([{":
+                d += 1
+            elif c in ")]}":
+                d -= 1
+            elif c == ":" and d == 0:
+                cut = k
+                break
+        expr, spec = body[:cut].strip(), body[cut:]
+        tmp = f"adaFmt{getattr(ParserState, '_fmt_tpl_count', 0)}"
+        ParserState._fmt_tpl_count = getattr(ParserState, "_fmt_tpl_count", 0) + 1
+        binds.append(f"let {tmp} {{.inject.}} = {expr}")
+        out.append("{" + tmp + spec + "}")
+        i = j
+    if not binds:
+        return fmt_str
+    return f"(block: ({'; '.join(binds)}; fmt{q}{''.join(out)}{q}))"
 
 
 # --- str_concat ---

@@ -1288,8 +1288,8 @@ def run_tests():
             "type Foo = ref object of Bar\nproc newFoo*(): Foo =\n    new(result)\n",
         ),
         (
-            "@dec\ndef f():\n    pass\n",
-            "@dec\nproc f() =\n    discard\n",
+            "@used\ndef f():\n    pass\n",
+            "proc f() {.used.} =\n    discard\n",
         ),
         (
             "async def f():\n    pass\n",
@@ -1606,6 +1606,10 @@ def run_tests():
         # the declaration is the old spelling, and says what the new one is.
         ("type Oops_T is failure record:\n    why: str\n",
          "marked where it is the failure of a union: `int | !Oops_T`"),
+        # Nim has no decorators: one it does not know as an annotation used
+        # to be emitted as `@dec`, in front of the proc, and nim refused it.
+        ("@dec\ndef f():\n    pass\n",
+         "@dec: Nim has no decorators"),
         # A failure anywhere is marked everywhere: unmarked, a reader would
         # take it for a value the do: block binds.
         ("type Bad_T is record:\n    why: str\n\n"

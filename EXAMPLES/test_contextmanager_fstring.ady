@@ -1,0 +1,39 @@
+#!/usr/bin/env ady2nim
+"""Test: f-strings inside a @contextmanager.
+
+On Nim a @contextmanager is a template, and fmt read `{name}` where the
+template is used: a parameter is substituted only where it appears as code,
+and a local is renamed for hygiene, so neither was found -- "undeclared
+identifier". Parameters, locals, `self` and format specs all have to reach
+the string. The output is compared between the backends.
+"""
+
+@contextmanager
+def tagged(name: str):
+    let edge: str = "--"
+    print f"{edge} <{name}>"
+    yield
+    print f"{edge} </{name}>"
+
+class Report:
+    var depth: int = 0
+
+    @contextmanager
+    def section(self, title: str):
+        print f"{'  ' * self.depth}[{title}] {self.depth:>3}"
+        self.depth += 1
+        yield
+        self.depth -= 1
+        print f"{'  ' * self.depth}[/{title}]"
+
+let name: str = "outer"                   # the caller's own `name`, untouched
+with tagged("p"):
+    print f"inside, {name}"
+with tagged("q"):
+    print "again"
+
+var r: Report = Report()
+with r.section("a"):
+    with r.section("b"):
+        print "leaf"
+print "all contextmanager f-string tests passed"
