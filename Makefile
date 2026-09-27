@@ -235,6 +235,11 @@ COMPILE_ONLY := \
     test_die_warn.ady \
     test_print_bare.ady
 
+# Run on both backends and their output compared, below: the Nim run there
+# is the one they get, so the self-contained loop leaves them out.
+BOTH_BACKENDS_COMPARED := test_do_block test_result test_optional_spelling \
+    test_union test_case_ranges test_contextmanager_fstring
+
 ALL_COMPILE := \
     $(LIBS) \
     $(STANDALONE) \
@@ -247,15 +252,14 @@ ALL_COMPILE := \
     $(COMPILE_ONLY)
 
 # -----------------------------------------------------------------------
-# _compile_one — internal helper: compile a single file, print OK/FAIL.
-# On failure, re-run and show the error lines, then abort.
+# _compile_one — internal helper: compile a single file, silently when it
+# builds: each file is listed where it is run, and a second line for its
+# compilation only doubled the report. On failure, name the file, re-run
+# and show the error lines, then abort.
 # -----------------------------------------------------------------------
 define compile_one
-	printf '  %-42s' "$(1)"; \
-	if $(ADY2NIM) c $(EXDIR)/$(1) >/dev/null 2>&1; then \
-	    echo OK; \
-	else \
-	    echo FAIL; \
+	if ! $(ADY2NIM) c $(EXDIR)/$(1) >/dev/null 2>&1; then \
+	    printf '  %-42s%s\n' "$(1)" FAIL; \
 	    $(ADY2NIM) c $(EXDIR)/$(1) 2>&1 | grep -E 'Error:' | head -5; \
 	    exit 1; \
 	fi
@@ -267,11 +271,8 @@ endef
 # root, so the tool keeps its README and its editor integration beside it.
 # -----------------------------------------------------------------------
 define compile_one_tool
-	printf '  %-42s' "$(1)"; \
-	if $(ADY2NIM) c $(CURDIR)/$(1) >/dev/null 2>&1; then \
-	    echo OK; \
-	else \
-	    echo FAIL; \
+	if ! $(ADY2NIM) c $(CURDIR)/$(1) >/dev/null 2>&1; then \
+	    printf '  %-42s%s\n' "$(1)" FAIL; \
 	    $(ADY2NIM) c $(CURDIR)/$(1) 2>&1 | grep -E 'Error:' | head -5; \
 	    exit 1; \
 	fi
@@ -355,8 +356,10 @@ check-quotes:
 compile: lint-emitters check-quotes
 	@echo "=== Compiling $(words $(ALL_COMPILE)) examples ==="
 	@$(foreach f,$(ALL_COMPILE),$(call compile_one,$(f));)
+	@printf '  %-42s%s\n' "all $(words $(ALL_COMPILE))" OK
 	@echo "=== Compiling $(words $(TOOL_PROGRAMS)) tools ==="
 	@$(foreach t,$(TOOL_PROGRAMS),$(call compile_one_tool,$(t));)
+	@printf '  %-42s%s\n' "all $(words $(TOOL_PROGRAMS))" OK
 	@echo "=== Compile step complete ==="
 
 # -----------------------------------------------------------------------
@@ -366,7 +369,7 @@ test: compile
 	@echo ""
 
 	@echo "=== Self-contained examples ==="
-	@for f in $(STANDALONE); do \
+	@for f in $(filter-out $(addsuffix .ady,$(BOTH_BACKENDS_COMPARED)),$(STANDALONE)); do \
 	    name=$${f%.ady}; \
 	    printf '  %-42s' "$$f"; \
 	    $(EXDIR)/$$name >/dev/null 2>&1 && echo OK || { echo FAIL; exit 1; }; \
@@ -477,7 +480,7 @@ test: compile
 	@echo "=== class fields per instance (python) ==="
 	@$(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(EXDIR)/test_class_fields_per_instance.ady \
 	    > $(TMPDIR)/test_class_fields_per_instance.py
-	@printf '  %-42s' "test_class_fields_per_instance.ady"; \
+	@printf '  %-42s' "test_class_fields_per_instance.ady (python)"; \
 	    $(PYTHON) $(TMPDIR)/test_class_fields_per_instance.py | grep -qx ok && echo OK || { echo FAIL; exit 1; }
 	@printf '  %-42s' "...a field __init__ sets is set once"; \
 	    [ "$$(grep -c 'self.vehicles = \[\]' $(TMPDIR)/test_class_fields_per_instance.py)" = 1 ] \
@@ -488,7 +491,7 @@ test: compile
 	@# A comment block after a case whose last branch is on one line stays
 	@# a comment after it, rather than landing in that branch's head.
 	@echo "=== a comment after a one-line case branch (python) ==="
-	@printf '  %-42s' "test_case_trailing_comment.ady"; \
+	@printf '  %-42s' "test_case_trailing_comment.ady (python)"; \
 	    $(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(EXDIR)/test_case_trailing_comment.ady | $(PYTHON) - \
 	    | grep -qx 'test_case_trailing_comment: ok' && echo OK || { echo FAIL; exit 1; }
 
@@ -554,7 +557,7 @@ test: compile
 	    done; \
 	done
 	@rm -f $(TMPDIR)/ady_refuse_[1-8].ady $(TMPDIR)/ady_refuse.out
-	@for t in test_do_block test_result test_optional_spelling test_union test_case_ranges test_contextmanager_fstring; do \
+	@for t in $(BOTH_BACKENDS_COMPARED); do \
 	    printf '  %-42s' "$$t.ady (python = nim)"; \
 	    $(EXDIR)/$$t > $(TMPDIR)/ady_$$t.nim.out 2>&1 || { echo "FAIL (nim)"; exit 1; }; \
 	    $(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(EXDIR)/$$t.ady > $(TMPDIR)/ady_$$t.py \
@@ -576,6 +579,13 @@ test: compile
 	@printf '  %-42s' "CFMU/Tstatus_monitor.ady"; \
 	    $(EXDIR)/CFMU/Tstatus_monitor < $(EXDIR)/CFMU/tstatus_sample.txt >/dev/null 2>&1 \
 	        && echo OK || { echo FAIL; exit 1; }
+	@# Vcheck takes a log file rather than stdin; a path that exists is used
+	@# as-is, which is what makes it runnable here.
+	@printf '  %-42s' "CFMU/Vcheck_coded_flight.ady"; \
+	    $(EXDIR)/CFMU/Vcheck_coded_flight $(EXDIR)/CFMU/vcheck_sample.txt >/dev/null 2>&1 \
+	        && echo OK || { echo FAIL; exit 1; }
+
+	@echo "=== Examples fed their own samples, against their awk / sh twins ==="
 	@# awk_logscan is the worked example in DOCS/ADASCRIPT_FOR_AWK.md, so the
 	@# check is on its output, not its exit status: the report is what the
 	@# document quotes.
@@ -644,6 +654,7 @@ test: compile
 	        && test -f "$(TMPDIR)/sh_janitor_sh/quiet service.log" \
 	        && test -f "$(TMPDIR)/sh_janitor_sh/editor backup~" \
 	        && echo OK || { echo FAIL; cat $(TMPDIR)/ady_janitor_sh.out; exit 1; }
+	@echo "=== The documents' snippets ==="
 	@# The documents' own snippets, so that what DOCS/*.md quotes is code
 	@# that ran rather than code that was written down. check-quotes below
 	@# is what ties each block to the file it came from.
@@ -659,12 +670,8 @@ test: compile
 	@printf '  %-42s' "DOC/awk_paragraph.ady"; \
 	    $(EXDIR)/DOC/awk_paragraph < $(EXDIR)/DOC/awk_paragraph_sample.txt 2>&1 \
 	        | grep -q "record 3: NF=4" && echo OK || { echo FAIL; exit 1; }
-	@# Vcheck takes a log file rather than stdin; a path that exists is used
-	@# as-is, which is what makes it runnable here.
-	@printf '  %-42s' "CFMU/Vcheck_coded_flight.ady"; \
-	    $(EXDIR)/CFMU/Vcheck_coded_flight $(EXDIR)/CFMU/vcheck_sample.txt >/dev/null 2>&1 \
-	        && echo OK || { echo FAIL; exit 1; }
 
+	@echo "=== lispy's self-test ==="
 	@# lispy checks itself before it offers a prompt, so an empty stdin runs
 	@# the whole suite and then leaves at EOF. It went unbuilt for a long
 	@# while without anyone noticing, which is the argument for it being here.
