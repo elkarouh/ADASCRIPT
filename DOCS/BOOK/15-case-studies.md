@@ -27,7 +27,7 @@ What it teaches:
 
 ## 13.2 `INTERACTIVE/lispy.ady` — a Scheme interpreter (~1,200 lines)
 
-Norvig's `lis.py`, grown to cover `quasiquote`, `cond`, `let`, variadic
+Norvig's `lis.py` (the original is beside it, `INTERACTIVE/lispy.py`), grown to cover `quasiquote`, `cond`, `let`, variadic
 lambdas, `apply` and `map`. The language features it stresses:
 
 - the flat **variant record** `Val_T` with a `Val_Kind_T` discriminant

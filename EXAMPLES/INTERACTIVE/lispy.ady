@@ -5,7 +5,8 @@ Supports: numbers, symbols, booleans, if, define, set!, lambda, quote,
 begin, and, or, cond, let, quasiquote, apply, map, and all standard
 arithmetic/comparison procedures.
 
-Reference: https://norvig.com/lispy.html
+Reference: https://norvig.com/lispy.html -- the original, lispy.py, is
+beside this file.
 """
 
 nimport math
