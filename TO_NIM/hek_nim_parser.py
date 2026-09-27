@@ -950,6 +950,13 @@ def to_nim(self, indent=0):
                     "a do: step with a shell command or an `else` fails with "
                     "a failure: the routine must return a `T | !F`")
             expr = value.to_nim()
+            # A plain union is no ?T: `int | Failure_T` without its `!` --
+            # in the step's routine and in this one -- would otherwise be
+            # read as one.
+            if hek_nim_expr._union_type_of(expr).startswith("OneOf"):
+                raise SyntaxError(
+                    f"do: step '{expr}' is a plain union: nothing in it is a "
+                    f"failure to pass on -- if one member is, mark it `!`")
             if hek_nim_expr._expr_is_result(expr):
                 raise SyntaxError(
                     f"do: step '{expr}' returns a `T | !F`; a routine binding "
@@ -981,7 +988,7 @@ def to_nim(self, indent=0):
             if hek_nim_expr._union_type_of(expr).startswith("OneOf"):
                 raise SyntaxError(
                     f"do: step {shown} is a plain union: nothing in it is a "
-                    f"failure to pass on")
+                    f"failure to pass on -- if one member is, mark it `!`")
             lines.append(f"{ind}let {tmp} = {expr}")
             step_type = hek_nim_expr._result_type_of(expr)
             is_opt = not step_type and hek_nim_expr._expr_is_option(expr)

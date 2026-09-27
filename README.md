@@ -1758,6 +1758,14 @@ some other way without an `else`, and a `case` that leaves a member out.
 A failure union may have several value members: `int | str | !Failure_T`. With `None` in place of a failure, the `|` is `?T`: `?T` is
 shorthand for `T | None`.
 
+**Forgetting the `!`.** Once a type is marked `!` anywhere, a union that
+mentions it unmarked is refused, so the usual slip does not build. A type
+marked nowhere is no failure: `int | Failure_T` is then a plain union of
+two values, a dropped call to it goes unnoticed, and a `do:` step on it is
+refused. And `None | Failure_T` without the mark is `?Failure_T` -- an
+optional, which anyone may ignore: nothing refuses dropping it. Book
+chapter 10.12, *Forgetting the `!`*, has the details.
+
 On Python the value is the T or the F itself; on Nim it is stdlib.nim's
 `Result[T, F]`, and `r` reads as its `.value` or `.error` where a test has
 narrowed it. The whole of it is in the book, chapter 10.12;

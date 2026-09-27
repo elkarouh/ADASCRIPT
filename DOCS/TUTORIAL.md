@@ -781,6 +781,12 @@ else:
 `when Failure_T:` / `when int:` gives a branch per side. Book chapter 10.12
 has the whole of it.
 
+Do not forget the `!`: without it, nothing says Failure_T is a failure.
+Marked in another union, the type is refused unmarked, so that slip does
+not build; marked nowhere, `int | Failure_T` is an ordinary union of two
+values, whose failure can be dropped unnoticed -- and `None | Failure_T`
+is `?Failure_T`, an optional. Book 10.12, *Forgetting the `!`*.
+
 ---
 
 ## 8. Subranges

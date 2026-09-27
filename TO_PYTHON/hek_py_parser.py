@@ -294,6 +294,13 @@ def to_py(self, indent=0):
                     "a do: step with a shell command or an `else` fails with "
                     "a failure: the routine must return a `T | !F`")
             expr = value.to_py()
+            # A plain union is no ?T: `int | Failure_T` without its `!` --
+            # in the step's routine and in this one -- would otherwise be
+            # read as one, and its Failure_T bound as the value.
+            if _py_step_kind(expr)[0] == "plain":
+                raise SyntaxError(
+                    f"do: step '{expr}' is a plain union: nothing in it is a "
+                    f"failure to pass on -- if one member is, mark it `!`")
             _call = _re_do.match(r"^([A-Za-z_]\w*)\(", expr.strip())
             if _call and _call.group(1) in getattr(ParserState, "result_procs", set()):
                 raise SyntaxError(
@@ -323,7 +330,7 @@ def to_py(self, indent=0):
         if kind == "plain":
             raise SyntaxError(
                 f"do: step {shown} is a plain union: nothing in it is a "
-                f"failure to pass on")
+                f"failure to pass on -- if one member is, mark it `!`")
         if kind == "optional":
             if else_node is None:
                 raise SyntaxError(

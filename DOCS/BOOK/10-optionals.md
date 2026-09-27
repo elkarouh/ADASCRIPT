@@ -636,6 +636,55 @@ not a failure.) Only a record can be a failure: it has to say what went wrong, a
 the Python backend it has to be a class of its own, since that is all that
 tells it from the value.
 
+### Forgetting the `!`
+
+The `!` is the only thing that makes a record a failure, so leaving it out
+changes what the type means. What happens depends on where it is missing.
+
+**Marked somewhere else, missing here.** Once `Failure_T` is marked `!` in
+one union, the transpiler knows it is a failure, and refuses every union
+that mentions it without the mark:
+
+```text
+'int | Failure_T': Failure_T is a failure type -- mark it `!Failure_T`,
+which shows the member a do: block passes on
+```
+
+This is the common case, and the harmless one: the program does not
+build until the mark is there.
+
+**Missing everywhere.** If no union in the program marks `Failure_T`,
+nothing says it is a failure, and `int | Failure_T` is a *plain union*
+(4.4): an int or a Failure_T, two values of equal standing. It still
+builds, and `return Failure_T(...)` still returns one — but the protection
+is gone:
+
+- a `do:` step on it is refused, since there is nothing to pass on —
+  the message ends *if one member is, mark it `!`*;
+- a call whose result nobody takes is **not** refused: the failure is
+  dropped without a word;
+- a caller that uses the result without testing it gets an error that
+  says nothing about failures — a type mismatch from Nim, a `TypeError`
+  from Python *when it runs*.
+
+**Missing from `None | Failure_T`.** This is the one to watch. `None |
+Failure_T` without the mark is not a failure at all: `None` with one other
+type is `?T` (10.1), so it reads as `?Failure_T` — *maybe* a Failure_T.
+A function declared that way returns its failure as an optional value,
+and optional values may be ignored:
+
+```python
+def check(n: int) -> None | Failure_T:      # meant: None | !Failure_T
+    return Failure_T(message="negative") if n < 0
+
+check(-1)             # accepted: the failure is dropped
+print "went on"       # and the program goes on
+```
+
+Nothing refuses it, on either backend, unless `Failure_T` is marked `!`
+somewhere else in the program — which is one more reason to give a
+program a single failure type (step 1), used, and marked, everywhere.
+
 ### 2. Return the value, or return a failure
 
 Declare the function `-> T | !Failure_T` and return whichever applies. There
@@ -893,7 +942,9 @@ The transpiler refuses:
 - a failure type left unmarked in a union (`int | Failure_T`, where
   Failure_T is marked `!` elsewhere) — it would read as a value;
 - a `T | !Failure_T` step in the `do:` block of a function that cannot return
-  the failure.
+  the failure;
+- a `do:` step on a plain union (`int | Failure_T` with the `!` forgotten
+  everywhere): nothing in it is a failure to pass on.
 
 **Which to use.**
 
