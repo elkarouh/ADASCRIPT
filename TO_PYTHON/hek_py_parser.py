@@ -1408,6 +1408,14 @@ def _is_docstring_line(stmt):
     return text.startswith(chr(34) * 3) or text.startswith(chr(39) * 3)
 
 
+def _returns_nothing(ret_ann):
+    """RET_ANN, a rendered `-> T`, returns no value: `-> None`. A `?T`,
+    `-> T | None`, returns its T, and so has an implicit return like any
+    other; so does `None | F`, whose tail may be a call passing a failure
+    on."""
+    return ret_ann.strip().removeprefix("->").strip() == "None"
+
+
 def _mark_implicit_returns(stmt, depth=0):
     """Mark the statements whose value is the function's implicit return.
 
@@ -1618,7 +1626,7 @@ def to_py(self, indent=0):
     # A function body is an ordinary scope even inside a class, so a local
     # declared without a value does get its zero here.
     import hek_py_stmt as _stmt
-    if ret_ann and not ret_ann.strip().endswith("None"):
+    if ret_ann and not _returns_nothing(ret_ann):
         _mark_implicit_returns(_block_last_stmt(block_node))
     _outer_class_depth = _stmt.CLASS_BODY_DEPTH
     _stmt.CLASS_BODY_DEPTH = 0
@@ -1635,7 +1643,7 @@ def to_py(self, indent=0):
     # Implicit return: mark the statements that carry the function's value, so
     # the body renders with the keyword already in place.
     # Skip for -> None functions (they don't return a value)
-    is_none_return = ret_ann.strip().endswith("None")
+    is_none_return = _returns_nothing(ret_ann)
     # Implicit result variable (mirrors Nim): if the body uses `result`,
     # inject a zero-value initialiser after any leading docstring, and
     # append `return result` unless the body already ends with a return.
@@ -1752,7 +1760,7 @@ def to_py(self, indent=0):
     # A function body is an ordinary scope even inside a class, so a local
     # declared without a value does get its zero here.
     import hek_py_stmt as _stmt
-    if ret_ann and not ret_ann.strip().endswith("None"):
+    if ret_ann and not _returns_nothing(ret_ann):
         _mark_implicit_returns(_block_last_stmt(block_node))
     _outer_class_depth = _stmt.CLASS_BODY_DEPTH
     _stmt.CLASS_BODY_DEPTH = 0
@@ -1763,7 +1771,7 @@ def to_py(self, indent=0):
     # Implicit return: mark the statements that carry the function's value, so
     # the body renders with the keyword already in place.
     # Skip for -> None functions (they don't return a value)
-    is_none_return = ret_ann.strip().endswith("None")
+    is_none_return = _returns_nothing(ret_ann)
     return f"{decos}{_ind(indent)}async def {name}({params}){ret_ann}:{hc}\n{body}"
 
 

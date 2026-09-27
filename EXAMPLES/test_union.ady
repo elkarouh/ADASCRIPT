@@ -145,6 +145,21 @@ if s1 is Failure_T:
 let s2: bool | Failure_T = small(3)
 die(s2.detail) if s2 is Failure_T  # the guard's own call reads the failure
 print "small" if s2 else "large"
+
+def first_even(xs: []int) -> ?int:
+    for x in xs:
+        return x if x % 2 == 0
+    return None
+
+def even_of(xs: []int) -> ?int:
+    first_even(xs)                 # already the ?int: returned as it is
+
+let e: ?int = even_of([3, 8])
+print e if e is not None else -1
+let word: str | Failure_T = "two words"
+if word is str:
+    let said: str | ShellFailure_T = shell: printf '%s|' {!word}    # the str, one argument
+    print said if said is str else "failed"
 print "test6 OK"
 
 print "all union tests passed"

@@ -254,7 +254,7 @@ class Baseline:
             continue if filepath == ""
             self.replays.append((rtype: rtype, file: filepath))
 
-    def replay_log_dir(self, rtype: ReplayType) -> Path:
+    def replay_log_dir(self, rtype: ReplayType) -> Path | Failure_T:
         """The newest replay log dir of RTYPE, from this baseline backwards.
 
         Replays run on the OP build, so that is the saved_logs searched.
@@ -271,9 +271,9 @@ class Baseline:
             dir = bl.saved_logs_dir(OP)
             stderr.writeLine(PROG + ": trying " + dir)
             attempts += 1
-        return Path("")
+        return Failure_T(message="no replay log dir found")
 
-    def scan_regression_tests(self, btype: BuildType, subtype: BuildSubtype) -> Path:
+    def scan_regression_tests(self, btype: BuildType, subtype: BuildSubtype) -> Path | Failure_T:
         """Scan the logs of the BTYPE build's SUBTYPE regression tests for errors
         and core dumps; the report, normalized for diffing."""
         # saved_logs_dir(btype) is already the BTYPE build. This used to rewrite
@@ -288,9 +288,7 @@ class Baseline:
                 log_dir = work / "LOGS_mono"
             when others:
                 log_dir = work / "LOGS_others"
-        if not -d log_dir:
-            puts("SWb", "log dir does not exist: " + log_dir, NEWLINE=True)
-            return Path("")
+        return Failure_T(message="log dir does not exist: " + log_dir) if not -d log_dir
         puts("USBy", "scanning " + log_dir, NEWLINE=True)
         let tacot_root: Path = log_dir.parent.parent.parent
         find_core_dumps(tacot_root)
@@ -415,6 +413,12 @@ if __name__ == "__main__":
         run(["cp", str(samples / name), str(here.dir / "build_G!31.OP.L8" / "saved_logs")])
     here.find_replays()
     assert [r.rtype for r in here.replays] == [run_prequal, performance]   # in canonical order
+
+    # what is not there: why, rather than an empty path
+    let scanned: Path | Failure_T = here.scan_regression_tests(IP, mono)
+    assert scanned is Failure_T and scanned.message.startswith("log dir does not exist: ")
+    let replay_dir: Path | Failure_T = here.replay_log_dir(performance)
+    assert replay_dir is Failure_T and replay_dir.message == "no replay log dir found"
 
     run(["rm", "-rf", str(tmp)])
     print "baselines: all tests passed"

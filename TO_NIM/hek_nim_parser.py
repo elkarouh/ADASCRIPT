@@ -2715,6 +2715,21 @@ def _bind_user_result(body, ret_ann):
     return "\n".join(out)
 
 
+def _narrow_shell_expr(expr):
+    """EXPR, the source text of a shell line's `{...}`, with each name that
+    an enclosing test has narrowed read as it is narrowed -- the text never
+    goes through the name emitter, where that happens for an expression."""
+    import re as _re_ns
+    _vars = getattr(ParserState, "_option_unwrap_vars", None)
+    if not _vars:
+        return expr
+    def _one(m):
+        if m.group(1) not in _vars:
+            return m.group(0)
+        return m.group(1) + hek_nim_expr._narrow_suffix(m.group(1))
+    return _re_ns.sub(r'(?<![\w.])([A-Za-z_]\w*)(?![\w(])', _one, expr)
+
+
 def _wrap_union_tail(body, ret_ann):
     """BODY, a routine's Nim body returning the union RET_ANN, with its
     trailing value made the member it is, as `return v` does. Only a
@@ -2941,6 +2956,11 @@ def _func_def_to_nim_inner(self, indent=0):
                 if not _is_stmt and not _last_o_s.startswith("some(") and not _last_o_s.startswith("none("):
                     _sym_o = ParserState.symbol_table.lookup(_last_o_s.split("(")[0].split(".")[0].split("[")[0].strip())
                     _sym_type_o = (_sym_o.get("type", "") if isinstance(_sym_o, dict) else "") if _sym_o else ""
+                    # a call to a routine that already returns an Option,
+                    # here or in a nimported module, is the value itself
+                    _call_o = _re_opt.match(r'^([A-Za-z_]\w*)\(', _last_o_s)
+                    if _call_o and (hek_nim_expr._proc_ret_nim(_call_o.group(1)) or "").startswith("Option["):
+                        _sym_type_o = "Option["
                     if not _sym_type_o.startswith("Option["):
                         _indent_o = _last_o[:len(_last_o) - len(_last_o_s)]
                         _blines_o[_idx_o] = f"{_indent_o}some({_last_o_s})"
@@ -4639,8 +4659,12 @@ def to_nim(self, indent=0):
         _hoist_count = getattr(ParserState, "_shell_hoist_count", 0)
         def _hoist_complex(m):
             nonlocal _hoist_count
-            expr = m.group(1)
+            # a name narrowed here reads as what it holds, as it does in
+            # an expression: `{!r}` under `if r is Path:` is r's Path
+            expr = _narrow_shell_expr(m.group(1))
             if '(' not in expr and '[' not in expr:
+                if expr != m.group(1):
+                    return "{" + expr + "}"
                 return m.group(0)
             tmp = f"shArg{_hoist_count}"
             _hoist_count += 1

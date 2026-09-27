@@ -7,6 +7,11 @@ nimports nothing of Tcheck_tact's.
 
 nimport os
 
+# Why something the report looks for is not there: a log directory, a
+# changes report. The report goes on without it, having said so.
+type Failure_T is failure record:
+    message: str
+
 # ---------------------------------------------------------------------------
 # The domain's values, named for what they are rather than how they are held
 # ---------------------------------------------------------------------------
@@ -96,11 +101,19 @@ def parse_subtype(arg: str) -> BuildSubtype:
 # Helpers used throughout
 # ---------------------------------------------------------------------------
 
-def newest(dir: Path, pattern: Glob_T) -> Path:
+def newest(dir: Path, pattern: Glob_T) -> ?Path:
     """The most recently modified entry of DIR matching the glob PATTERN,
-    or Path("") when none does."""
+    if any does."""
     let found: []str = shellLines: ls -dt {!dir}/{pattern} 2>/dev/null | head -n 1
-    Path(found[0]) if len(found) > 0 else Path("")
+    return None if len(found) == 0 or found[0] == ""
+    Path(found[0])
+
+def warned(r: Path | Failure_T) -> Path | Failure_T:
+    """R, its failure said first: what is missing is shown where it was
+    looked for, and the report goes on without it."""
+    if r is Failure_T:
+        puts("SWb", r.message, NEWLINE=True)
+    return r
 
 def troubleshoot_tool() -> Tool_T:
     """What troubleshoot mode compares two files with: the -tool diff tool,
@@ -149,13 +162,14 @@ if __name__ == "__main__":
     assert troubleshoot_tool() == "kompare"
     DIFF_TOOL = ""
 
-    # newest: the latest entry matching the glob; Path("") when none does
+    # newest: the latest entry matching the glob; None when none does
     let dir: Path = Path(run(["mktemp", "-d", "-t", "tcheck_common.XXXXXX"]).output.strip())
     run(["touch", "-d", "2026-01-01", str(dir / "build_old")])
     run(["touch", "-d", "2026-02-01", str(dir / "build_new")])
     run(["touch", str(dir / "other")])
-    assert newest(dir, "build_*") == dir / "build_new"
-    assert newest(dir, "none_*") == Path("")
+    let latest: ?Path = newest(dir, "build_*")
+    assert latest is not None and latest == dir / "build_new"
+    assert newest(dir, "none_*") is None
     run(["rm", "-rf", str(dir)])
 
     print "tcheck_common: all tests passed"

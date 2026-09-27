@@ -348,27 +348,29 @@ def echo_ediff(a: Path, b: Path):
 
 
 
-def view_build_of(branch: BranchName) -> Path:
+def view_build_of(branch: BranchName) -> ?Path:
     """BRANCH's view build -- the newest build_* of TACT_CONFIG.<USER>.<BRANCH>,
-    e.g. build_default_Linux -- or Path("") when it has none."""
+    e.g. build_default_Linux -- if it has one."""
     let who: Committer = committer_of(branch)
     let name: str = branch[len(who) + 1:]
     newest(TACT_ROOT / f"TACT_CONFIG.{who.upper()}.{name.upper()}", "build_*")
 
-def reference_build(reference: BaselineName_T, ref_reports: Path) -> Path:
+def reference_build(reference: BaselineName_T, ref_reports: ?Path) -> ?Path:
     """The build of REFERENCE -- "TACT.TACT_CONFIG.30.0.0.132" -- its test
     reports REF_REPORTS were made from: they are named after it,
     TACT.TACT_CONFIG.30.0.0.132-G!31.IP.L8-<host>-<date> for
     TACT_CONFIG.30.0.0.132/build_G!31.IP.L8. Without reports, its newest
-    build_G!31.* build. Path("") when that directory does not exist."""
+    build_G!31.* build. None when that directory does not exist."""
     let baseline_dir: Path = TACT_ROOT / reference.removeprefix("TACT.")
-    var build: Path = Path("")
-    if ref_reports != "":
+    var build: ?Path = None
+    if ref_reports is not None:
         let tag: str = ref_reports.name.removeprefix(reference + "-").split("-")[0]
         build = baseline_dir / ("build_" + tag)
     else:
         build = newest(baseline_dir, "build_G!31.*")
-    build if build != "" and -d build else Path("")
+    return None if build is None
+    return None if not -d build
+    return build
 
 def display_branch_info(branch: BranchName, reference: BaselineName_T):
     """The branch the changes came from: its view build -- the build of
@@ -382,40 +384,37 @@ def display_branch_info(branch: BranchName, reference: BaselineName_T):
     puts("Wb", who)
     stdout.write(".")
     puts("Ky", name, NEWLINE=True)
-    let view_build: Path = view_build_of(branch)
-    if view_build == "":
+    let view_build: ?Path = view_build_of(branch)
+    if view_build is None:
         print "NO VIEW BUILD FOUND FOR THIS BRANCH"
     else:
         print f"VIEW BUILD DIR: {view_build}"
     let reports: Path = TACT_ROOT / "test_reports"
-    let view_reports: Path = newest(reports, f"TACT.TACT_CONFIG.{who.upper()}.{name.upper()}-G!31.*")
-    let ref_reports: Path = newest(reports, f"{reference}-G!31.*")
-    let ref_build: Path = reference_build(reference, ref_reports)
-    if ref_build == "":
+    let view_reports: ?Path = newest(reports, f"TACT.TACT_CONFIG.{who.upper()}.{name.upper()}-G!31.*")
+    let ref_reports: ?Path = newest(reports, f"{reference}-G!31.*")
+    let ref_build: ?Path = reference_build(reference, ref_reports)
+    if ref_build is None:
         print "NO REFERENCE BUILD FOUND"
     else:
         print f"REFERENCE BUILD DIR: {ref_build}"
-    if view_reports == "":
+    if view_reports is None:
         print "NO TEST REPORTS FOUND FOR THIS BRANCH"
     else:
         print f"VIEW TEST REPORTS DIR: {view_reports}"
-        print f"REFERENCE BASELINE DIR: {ref_reports}"
-        echo_ediff(ref_reports / "general.results.failed-in", view_reports / "general.results.failed-in")
+        if ref_reports is None:
+            print "NO TEST REPORTS FOUND FOR THE REFERENCE BASELINE"
+        else:
+            print f"REFERENCE BASELINE DIR: {ref_reports}"
+            echo_ediff(ref_reports / "general.results.failed-in", view_reports / "general.results.failed-in")
 
-def changes_report(baseline: BaselineNr_T, warn: bool = True) -> Path:
+def changes_report(baseline: BaselineNr_T) -> Path | Failure_T:
     """The changes report of the CFMUTEST baseline built on TACT BASELINE,
-    or Path("") -- after a warning saying why there is none, if WARN."""
+    or why there is none."""
     let cfmu: BaselineNr_T = cfmu_baseline_of(baseline)
-    if cfmu == "":
-        if warn:
-            puts("SWb", f"WARNING: Psort -b names no CFMUTEST baseline for TACT_CONFIG.{baseline}", NEWLINE=True)
-        return Path("")
+    return Failure_T(message=f"WARNING: Psort -b names no CFMUTEST baseline for TACT_CONFIG.{baseline}") if cfmu == ""
     let report: Path = CFMUTEST_ROOT / "baseline_reports" / f"CFMUTEST.CFMUTEST_CONFIG.{cfmu}.changes_report"
-    if not -r report:
-        if warn:
-            puts("SWb", f"WARNING: no changes report for CFMUTEST_CONFIG {cfmu}: {report}", NEWLINE=True)
-        return Path("")
-    report
+    return Failure_T(message=f"WARNING: no changes report for CFMUTEST_CONFIG {cfmu}: {report}") if not -r report
+    return report
 
 def extension_of(file: NmFile_T) -> Extension_T:
     """FILE's extension, as FileChange.display splits it: after the last dot of
@@ -479,7 +478,7 @@ def list_files_by_committer(report: Path, user: Committer):
     var unbuilt: []BranchName = []
     for n, i, who in order:
         for branch in changes.branches[who]:
-            if view_build_of(branch) == "":
+            if view_build_of(branch) is None:
                 unbuilt.append(branch)
     if len(unbuilt) > 0:
         puts("SWb", "NO VIEW BUILD FOUND FOR THESE BRANCHES", NEWLINE=True)
@@ -497,8 +496,8 @@ def list_changes(baseline: BaselineNr_T, failures: []NewFailure, against: str, u
     baseline's, whoever's changes caused them."""
     hr('#')
     puts("SWr", "CHANGES BY COMMITTER", NEWLINE=True)
-    let report: Path = changes_report(baseline)
-    if report != "":
+    let report: Path | Failure_T = warned(changes_report(baseline))
+    if report is Path:
         list_files_by_committer(report, user)
     else:
         print # after the warning
@@ -509,8 +508,8 @@ def list_detailed_changes(baseline: BaselineNr_T, user: Committer):
     committer and branch -- only USER's, when not "": each file, its
     commits, tickets, reviews and diffs. Nothing when there is no changes
     report, or no change by USER: list_changes has said why."""
-    let report: Path = changes_report(baseline, warn=False)
-    return if report == ""
+    let report: Path | Failure_T = changes_report(baseline)
+    return if report is Failure_T
     var changes: ChangesReport = ChangesReport(report)
     changes.keep_only(user)
     return if user != "" and len(changes.committers) == 0
