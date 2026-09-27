@@ -100,7 +100,7 @@ case n:
 is refused:
 
 ```text
-case: 34 is covered by two branches -- `when 34 | 92` and `when 32 .. 126`; ...
+case: 34 is covered by two branches -- `when 34` and `when 32 .. 126`; ...
 ```
 
 With overlap, a branch means what it says only because of where it sits:
