@@ -1971,6 +1971,16 @@ def _literal_cond_nim(subject, pat_nim):
     alts = _split_toplevel_commas(pat_nim)
     if len(alts) > 1:
         return " or ".join(_literal_cond_nim(subject, a) for a in alts)
+    # A range, `when '0'..'7':` -- rendered `lo .. hi` -- is a membership
+    # test, not an equality: `c == "0" .. "7"` compared a char with a slice
+    # of strings.
+    _lo, _sep, _hi = pat_nim.partition(" .. ")
+    if _sep and _lo.strip() and _hi.strip():
+        _lo, _hi = _lo.strip(), _hi.strip()
+        if _subject_is_char(subject):
+            from hek_nim_expr import _str_to_char_lit
+            _lo, _hi = _str_to_char_lit(_lo), _str_to_char_lit(_hi)
+        return f"{subject} in {_lo} .. {_hi}"
     if _subject_is_char(subject):
         from hek_nim_expr import _str_to_char_lit
         pat_nim = _str_to_char_lit(pat_nim)

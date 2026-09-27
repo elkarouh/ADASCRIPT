@@ -29,25 +29,27 @@ def decode_escape(s: str, i: int) -> ?Escape_T:
     if i + 1 >= len(s):
         return Escape_T("\\", 1)                  # trailing backslash, kept as written
     let c: char = s[i+1]
-    if c in SIMPLE_ESCAPES:
-        return Escape_T(SIMPLE_ESCAPES[c], 2)
-    if c == 'x':                                  # \xN, \xNN
-        var v: int = 0
-        var j: int = i + 2
-        while j < len(s) and j < i + 4 and s[j:j+1].lower() in HEX_DIGITS:
-            v = v * 16 + HEX_DIGITS.find(s[j:j+1].lower())
-            j = j + 1
-        if j == i + 2:
-            return None                           # \x with no digit
-        return Escape_T(str(chr(v)), j - i)
-    if c in OCTAL_DIGITS:                         # \N, \NN, \NNN
-        var v: int = 0
-        var j: int = i + 1
-        while j < len(s) and j < i + 4 and s[j:j+1] in OCTAL_DIGITS:
-            v = v * 8 + OCTAL_DIGITS.find(s[j:j+1])
-            j = j + 1
-        return Escape_T(str(chr(v)), j - i)
-    return None
+    case c:
+        when 'x':                                 # \xN, \xNN
+            var v: int = 0
+            var j: int = i + 2
+            while j < len(s) and j < i + 4 and s[j:j+1].lower() in HEX_DIGITS:
+                v = v * 16 + HEX_DIGITS.find(s[j:j+1].lower())
+                j = j + 1
+            if j == i + 2:
+                return None                       # \x with no digit
+            return Escape_T(str(chr(v)), j - i)
+        when '0'..'7':                            # \N, \NN, \NNN
+            var v: int = 0
+            var j: int = i + 1
+            while j < len(s) and j < i + 4 and s[j:j+1] in OCTAL_DIGITS:
+                v = v * 8 + OCTAL_DIGITS.find(s[j:j+1])
+                j = j + 1
+            return Escape_T(str(chr(v)), j - i)
+        when _ if c in SIMPLE_ESCAPES:            # \n, \t, \\, ...
+            return Escape_T(SIMPLE_ESCAPES[c], 2)
+        when others:
+            return None
 
 
 def parse_c_char(tok: str) -> str:
@@ -604,19 +606,23 @@ def expression(lexer: Lexer, frame: StackFrame) -> ExprMeta_T:
         lhs_t: CType   = lhs.ctype
         rhs_t: CType   = rhs.ctype
         var res_t: CType = lhs.ctype
-        if lhs.ctype.pointer_level == rhs.ctype.pointer_level:
-            pass
-        elif lhs.ctype.is_ptr() and rhs.ctype.is_ptr():
-            die(f"cannot {op_tok.content} {lhs.ctype} and {rhs.ctype}")
-        elif lhs.ctype.is_ptr() and not rhs.ctype.is_ptr():
-            emit(f"i32.const {lhs.ctype.less_ptr().sizeof()}")
-            emit("i32.mul")
-        elif not lhs.ctype.is_ptr() and rhs.ctype.is_ptr():
-            res_t = rhs.ctype
-            emit("call $__swap_i32")
-            emit(f"i32.const {rhs.ctype.less_ptr().sizeof()}")
-            emit("i32.mul")
-            emit("call $__swap_i32")
+        # C's pointer arithmetic: an int added to a pointer counts elements,
+        # so it is scaled by the element's size first.
+        case (lhs_t.is_ptr(), rhs_t.is_ptr()):
+            when (False, False):                  # int +- int
+                pass
+            when (True, True):                    # ptr - ptr, of one type
+                if lhs_t.pointer_level != rhs_t.pointer_level:
+                    die(f"cannot {op_tok.content} {lhs_t} and {rhs_t}")
+            when (True, False):                   # ptr +- int
+                emit(f"i32.const {lhs_t.less_ptr().sizeof()}")
+                emit("i32.mul")
+            when (False, True):                   # int + ptr: the int is under it
+                res_t = rhs_t
+                emit("call $__swap_i32")
+                emit(f"i32.const {rhs_t.less_ptr().sizeof()}")
+                emit("i32.mul")
+                emit("call $__swap_i32")
         emit("i32.add" if op_tok.kind == TK_PLUS else "i32.sub")
         if op_tok.kind == TK_MINUS and lhs_t.is_ptr() and rhs_t.is_ptr():
             emit(f"i32.const {rhs.ctype.less_ptr().sizeof()}")

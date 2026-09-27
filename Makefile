@@ -90,6 +90,7 @@ STANDALONE := \
     test_result.ady \
     test_optional_spelling.ady \
     test_union.ady \
+    test_case_ranges.ady \
     test_stmt_modifier.ady \
     test_str_join.ady \
     test_which.ady \
@@ -540,7 +541,7 @@ test: compile
 	    done; \
 	done
 	@rm -f $(TMPDIR)/ady_refuse_[1-7].ady $(TMPDIR)/ady_refuse.out
-	@for t in test_do_block test_result test_optional_spelling test_union; do \
+	@for t in test_do_block test_result test_optional_spelling test_union test_case_ranges; do \
 	    printf '  %-42s' "$$t.ady (python = nim)"; \
 	    $(EXDIR)/$$t > $(TMPDIR)/ady_$$t.nim.out 2>&1 || { echo "FAIL (nim)"; exit 1; }; \
 	    $(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(EXDIR)/$$t.ady > $(TMPDIR)/ady_$$t.py \

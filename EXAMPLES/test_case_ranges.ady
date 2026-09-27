@@ -1,0 +1,36 @@
+#!/usr/bin/env ady2nim
+"""Test: ranges in a case -- alone, among alternatives, and beside a guard.
+
+A guard turns the case into an if-chain on Nim, where a range is a
+membership test (`c in '0'..'7'`), not an equality; Python has no range
+pattern at all, and a range among `a | b` alternatives needs the same
+lowering as one alone. The output is compared between the backends.
+"""
+
+const NAMED: {char}str = {'n': "newline", 't': "tab"}
+
+def kind(c: char) -> str:
+    case c:
+        when 'x': return "hex"
+        when '0'..'7': return "octal"
+        when _ if c in NAMED: return NAMED[c]
+        when others: return "other"
+
+def printable(n: int) -> str:
+    case n:
+        when 32..33 | 35..91 | 93..126: return "as is"
+        when others: return "escaped"
+
+def sides(a: bool, b: bool) -> str:
+    case (a, b):
+        when (True, True): return "both"
+        when (True, False): return "left"
+        when (False, True): return "right"
+        when others: return "neither"
+
+for c in "x07nt9":
+    print kind(c)
+for n in [65, 34, 92, 10, 126]:
+    print printable(n)
+print sides(True, False), sides(False, False)
+print "all case range tests passed"

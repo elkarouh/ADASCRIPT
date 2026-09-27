@@ -999,8 +999,10 @@ def _pat_regex_info_py(pat_node):
 
 
 def _needs_chain_py(case_node):
-    """True when a branch pattern has no Python match spelling (regex, range)."""
+    """True when a branch pattern has no Python match spelling (regex, range
+    -- alone, or among the alternatives of `a | b`)."""
     return any(_pat_regex_info_py(p) is not None or _pat_range_info_py(p) is not None
+               or (type(p).__name__ == "pattern_or" and " .. " in p.to_py())
                for p, _, _ in _extract_branches_py(case_node))
 
 
@@ -1058,7 +1060,13 @@ def _pattern_chain_to_py(case_node, subject, indent):
             # is a bitwise or of two strings, which raises. In this chain each
             # alternative needs its own comparison.
             _alts = [a.strip() for a in pat_py.split(" | ")] if " | " in pat_py else [pat_py]
-            cond = " or ".join(f"{subject} == {a}" for a in _alts)
+
+            def _alt_cond(a):
+                lo, sep, hi = a.partition(" .. ")    # a range among them
+                if sep:
+                    return f"{lo.strip()} <= {subject} <= {hi.strip()}"
+                return f"{subject} == {a}"
+            cond = " or ".join(_alt_cond(a) for a in _alts)
         if guard_node is not None:
             cond = f"{cond} and {guard_node.nodes[0].to_py()}"
         result += f"\n{_ind(indent)}{keyword} {cond}:{hc}\n{body}"
