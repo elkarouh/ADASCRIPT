@@ -1695,11 +1695,32 @@ type Failure_T is failure record:
     kind:   ErrKind_T    # which failure
     detail: str          # what it needs to say so
 
+def fail(kind: ErrKind_T, detail: str) -> Failure_T:
+    """A Failure_T -- a helper, so that each failure is one short line."""
+    return Failure_T(kind=kind, detail=detail)
+
 def read_number(s: str) -> int | Failure_T:
     if len(s) == 0:
         return fail(BAD_NUMBER, "empty")      # a Failure_T: the failure
+    for c in s:
+        if not (c >= '0' and c <= '9'):
+            return fail(BAD_NUMBER, f"'{s}' is not a number")
     return int(s)                             # anything else: the value
+
+def divide(a: int, b: int) -> int | Failure_T:
+    if b == 0:
+        return fail(DIVIDE_BY_ZERO, f"{a} / 0")
+    return a // b
+
+def check_positive(n: int) -> None | Failure_T:
+    """A step with nothing to return: it can only fail."""
+    if n <= 0:
+        return fail(NOT_POSITIVE, f"got {n}")
 ```
+
+`fail` is an ordinary function, not part of the language: a failure is a
+record, and returning one is returning the record. `None | Failure_T` is a
+step that can only fail; falling off its end is success.
 
 | You write | It means |
 |---|---|
@@ -1710,6 +1731,9 @@ def read_number(s: str) -> int | Failure_T:
 | `do:` / `x <- step else e` | a step that fails some other way -- a `?T`, another failure type, a shell command -- returns `e` instead; inside `e`, `x` is the step's own failure |
 | `let o: str \| ShellFailure_T = shell: cmd` | a command's output, or the built-in `ShellFailure_T` (`command`, `code`, `stderr`) |
 
+The functions above chain in a `do:` block, which stops at the first
+failure and returns it; the caller then asks which it got:
+
 ```python
 def ratio(raw_a: str, raw_b: str) -> int | Failure_T:
     do:
@@ -1718,6 +1742,14 @@ def ratio(raw_a: str, raw_b: str) -> int | Failure_T:
         q <- divide(a, b)
         check_positive(q)          # a `None | Failure_T` step: checked, binds nothing
     return q
+
+for pair in [("20", "4"), ("20", "0"), ("x", "4")]:
+    let r: int | Failure_T = ratio(pair[0], pair[1])
+    case r:
+        when int:
+            print f"ratio {r}"                   # r is the int here
+        when Failure_T:
+            print f"failed: {r.detail}"          # and the failure here
 ```
 
 The transpiler refuses a union with two failure members, a failure dropped
@@ -1846,15 +1878,24 @@ let quiet: None | ShellFailure_T = shell: true
 
 In a `do:` block a command is a step -- `out <- shell: cmd`, or a bare
 `shell: cmd` -- and a failing one stops the chain. A program with a failure
-type of its own converts with `else`, in which the step's name is the
-failed command:
+type of its own says once how a command's failure becomes one, and names
+that after `else`; inside the `else`, the step's name is the failed
+command:
 
 ```python
-def mkdir_p(path: Path, ssh: ?SSH = None) -> None | Failure_T:
-    if ssh is None:
-        do:
-            r <- shell: mkdir -p -- {!path} else cmd_failed(r)
-        return
+type Failure_T is failure record:
+    detail: str
+
+def cmd_failed(f: ShellFailure_T) -> Failure_T:
+    return Failure_T(detail=f"`{f.command}` exited {f.code}: {f.stderr.strip()}")
+
+def make_dir(path: Path) -> None | Failure_T:
+    do:
+        r <- shell: mkdir -p -- {!path} else cmd_failed(r)
+
+let made: None | Failure_T = make_dir(Path("/proc/no-such-dir"))
+if made is Failure_T:
+    print made.detail
 ```
 
 In a `do:` step, a command ends at a bare `else`. See [Failures as

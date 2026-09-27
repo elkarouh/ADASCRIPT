@@ -196,6 +196,8 @@ def mkdir_p(path: Path, ssh: ?SSH = None) -> None | Failure_T:
         return
 ```
 
+(`failure(CMD_FAILED, ...)` is that program's own small function building
+its `Failure_T` record, and `CMD_FAILED` one of its kinds of failure.)
 `rsync_time_machine.ady` is written this way throughout, and the book's
 chapter 10.12 has the whole of it: failure types, `case` over a result, and
 why a failure cannot be dropped.

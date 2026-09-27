@@ -53,6 +53,11 @@ print "test3 OK"
 
 # ─── test 4: several values and a failure ──────────────────────────────────
 
+# A failure type: an ordinary record, and the word `failure` marks it as the
+# failure member of any union it is in. `int | str | Failure_T` below is
+# therefore a value-or-failure -- an int or a str, or the reason there is
+# neither -- which a do: block passes on; without the word, it would be a
+# plain union of three.
 type Failure_T is failure record:
     detail: str
 

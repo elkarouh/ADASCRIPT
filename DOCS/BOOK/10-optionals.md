@@ -647,7 +647,15 @@ def read_number(s: str) -> int | Failure_T:
         if not (c >= '0' and c <= '9'):
             return fail(BAD_NUMBER, f"'{s}' is not a number")
     return int(s)
+
+def divide(a: int, b: int) -> int | Failure_T:
+    if b == 0:
+        return fail(DIVIDE_BY_ZERO, f"{a} / 0")
+    return a // b
 ```
+
+`fail`, from step 1, is an ordinary function that builds the record: a
+failure is returned like any other value.
 
 A step that changes something and has nothing to give back returns
 `None | Failure_T`. A bare `return`, and falling off the end, are success.
