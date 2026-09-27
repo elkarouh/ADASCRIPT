@@ -1489,6 +1489,13 @@ def run_tests():
         'import stdlib\ntype Bad_T = object\n    why: string\nproc d(r: Result[int, Bad_T]): int =\n    if r.is_err:\n        return 0\n    return r.value\n',
     ))
 
+    # `x = None` on an optional -- `?T` or `T | None`, one type -- is
+    # none(T): nil is no Option[T], and Nim refused the assignment.
+    tests.append((
+        "var c: int | None = 5\nc = None\n",
+        "import options\nvar c: Option[int] = some[int](5)\nc = none(int)\n",
+    ))
+
     passed = failed = 0
     for code, expected in tests:
         try:

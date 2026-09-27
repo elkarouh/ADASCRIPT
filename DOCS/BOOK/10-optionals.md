@@ -11,6 +11,24 @@ machinery. You never write `some()`, `none()`, `.get()`, `.isSome` or
      ──▶  Nim:     Option[T]
 ```
 
+`?T` is shorthand for `T | None` — "a `T`, or nothing", said the way Python
+says it. The two spellings are one type, and `None | T` is the same type
+again: everything in this chapter holds for all three.
+`EXAMPLES/test_optional_spelling.ady` runs them side by side:
+
+```python
+def half(n: int) -> int | None:
+    if n % 2 == 1:
+        return None
+    return n // 2
+
+let b: ?int = half(7)
+```
+
+`?T` is the short one, and the one this book uses. The long one shows what
+the type *is*: the same `|` that, with a failure type in place of `None`,
+means a value or a failure (10.12).
+
 The first half of this chapter is the type: how to declare it, test it, and
 get the value out. The second half (10.8 onward) is what `?T` *is* — the
 Maybe monad — and the shapes that fall out of that: bind chains, the `do:`
@@ -609,8 +627,9 @@ The word `failure` is what makes the `|` mean *value or failure*. `int |
 Failure_T` and `Failure_T | int` are the same type: the declaration, not the
 position, says which side is the failure. A `|` with no failure side is
 refused, and so is one whose two sides both are — `int | str` is not a type
-Adascript has. (`T | None` is the one exception: it keeps Python's meaning,
-`?T`.) Only a record can be a failure: it has to say what went wrong, and on
+Adascript has. (`T | None` is the one exception: it is `?T` written out —
+`?T` is its shorthand — so `None` there means absence, not a failure.) Only
+a record can be a failure: it has to say what went wrong, and on
 the Python backend it has to be a class of its own, since that is all that
 tells it from the value.
 
@@ -904,7 +923,7 @@ know; `?int` is one the compiler enforces.
 
 | Adascript | Python | Nim |
 |---|---|---|
-| `?T` | `T \| None` | `Option[T]` |
+| `?T` (shorthand for `T \| None`) | `T \| None` | `Option[T]` |
 | `var x: ?T = None` | `x: T \| None = None` | `var x: Option[T] = none(T)` |
 | `x = value` (x is `?T`) | `x = value` | `x = some(value)` |
 | `return value` (in `-> ?T`) | `return value` | `return some(value)` |

@@ -1,0 +1,40 @@
+#!/usr/bin/env ady2nim
+"""Test: `?T` is shorthand for `T | None`.
+
+The two spellings are one type, `None | T` too: a return wraps the same,
+`is None` narrows the same, `or` defaults the same, a do: block chains
+them the same -- and `x = None` makes either absent again. The output is
+compared between the backends by `make test`.
+"""
+
+def half(n: int) -> int | None:
+    if n % 2 == 1:
+        return None
+    return n // 2
+
+def third(n: int) -> None | int:
+    if n % 3 != 0:
+        return None
+    return n // 3
+
+def sixth_twice(n: int) -> ?int:
+    do:
+        h <- half(n)
+        t <- third(h)
+    return t * 2
+
+let a: int | None = half(8)
+if a is not None:
+    print a + 1                 # a is the int here
+let b: ?int = half(7)
+print b or -1
+print sixth_twice(12) or -1
+print sixth_twice(8) or -1
+
+var c: int | None = 5
+c = None                        # absent again
+print c or 0
+var d: ?int = 5
+d = None
+assert d is None
+print "all ?T / T | None tests passed"

@@ -87,6 +87,7 @@ STANDALONE := \
     PROJECT/test_geometry.ady \
     test_do_block.ady \
     test_result.ady \
+    test_optional_spelling.ady \
     test_stmt_modifier.ady \
     test_str_join.ady \
     test_which.ady \
@@ -528,7 +529,7 @@ test: compile
 	    done; \
 	done
 	@rm -f $(TMPDIR)/ady_refuse_[1-4].ady $(TMPDIR)/ady_refuse.out
-	@for t in test_do_block test_result; do \
+	@for t in test_do_block test_result test_optional_spelling; do \
 	    printf '  %-42s' "$$t.ady (python = nim)"; \
 	    $(EXDIR)/$$t > $(TMPDIR)/ady_$$t.nim.out 2>&1 || { echo "FAIL (nim)"; exit 1; }; \
 	    $(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(EXDIR)/$$t.ady > $(TMPDIR)/ady_$$t.py \

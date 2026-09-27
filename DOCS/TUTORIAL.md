@@ -719,6 +719,8 @@ Python and raises there.
 
 ### Optional values `?T`
 
+`?T` is shorthand for `T | None`: `?str` and `str | None` are one type.
+
 ```python
 def find_exact_word(self, digits: []Digit_T) -> ?str:
     ...

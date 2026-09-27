@@ -342,7 +342,14 @@ def to_nim(self):
                 _rhs_type2 = (_rhs_sym2.get("type") or "") if _rhs_sym2 else ""
                 _rhs_is_option = (_rhs_type2.startswith("Option[")
                                   or hek_nim_expr._expr_is_option(rhs))
-                if not _is_regex_call and rhs not in ("nil",) and not rhs.startswith("some(") and not rhs.startswith("none(") and not _rhs_is_option:
+                if rhs == "nil":
+                    # `x = None` on an optional: absent again. Left as nil,
+                    # Nim refused it -- nil is no Option[T].
+                    _m = _re_opt2.search(r"Option\[(.+)\]", stype)
+                    if _m:
+                        parts[1] = f"none({_m.group(1)})"
+                        ParserState.nim_imports.add("options")
+                elif not _is_regex_call and not rhs.startswith("some(") and not rhs.startswith("none(") and not _rhs_is_option:
                     _m = _re_opt2.search(r"Option\[(.+)\]", stype)
                     if _m:
                         parts[1] = f"some({rhs})"

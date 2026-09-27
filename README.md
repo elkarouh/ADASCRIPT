@@ -384,9 +384,14 @@ shape assumes — not because it fails to be a mapping.
 | `{K}V`         | `dict[K, V]`              | `Table[K, V]`                  |
 | `{}T`          | `set[T]`                  | `HashSet[T]` or `set[T]`       |
 | `?T`           | `T \| None`               | `Option[T]`                    |
+| `T \| None`     | `T \| None`               | `Option[T]` -- the same as `?T` |
 | `T \| F`        | `T \| F`                  | `Result[T, F]` (F a failure)   |
 | `(T, U)`       | `tuple[T, U]`             | `(T, U)`                       |
 | `[(T, U)]R`    | `Callable[[T, U], R]`     | `proc(a0: T, a1: U): R`        |
+
+`?T` is shorthand for `T | None`: one type, spelled either way (or `None | T`).
+`T | F`, with F a failure record in place of `None`, is a value or a failure
+-- see [Failures as Values](#failures-as-values-t--f).
 
 `?T` and `(T, U)` are not containers and stand outside the scheme. `[(T, U)]R`
 stands outside it too, but not for the same reason — it is a mapping, as
@@ -1686,7 +1691,8 @@ def ratio(raw_a: str, raw_b: str) -> int | Failure_T:
 The transpiler refuses a `|` with no failure side (`int | str`) or with two,
 a failure dropped (a bare call whose `T | F` result nobody takes), a `do:`
 step that fails some other way without an `else`, and a `case` that covers
-one side only. `T | None` keeps Python's meaning: `?T`.
+one side only. With `None` in place of a failure, the `|` is `?T`: `?T` is
+shorthand for `T | None`.
 
 On Python the value is the T or the F itself; on Nim it is stdlib.nim's
 `Result[T, F]`, and `r` reads as its `.value` or `.error` where a test has
