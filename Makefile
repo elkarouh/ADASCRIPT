@@ -671,7 +671,9 @@ test: compile
 	    $(EXDIR)/DOC/awk_paragraph < $(EXDIR)/DOC/awk_paragraph_sample.txt 2>&1 \
 	        | grep -q "record 3: NF=4" && echo OK || { echo FAIL; exit 1; }
 
-	@echo "=== lispy's self-test ==="
+	@# The INTERACTIVE programs want a terminal; lispy is the one that can be
+	@# run without one.
+	@echo "=== INTERACTIVE examples ==="
 	@# lispy checks itself before it offers a prompt, so an empty stdin runs
 	@# the whole suite and then leaves at EOF. It went unbuilt for a long
 	@# while without anyone noticing, which is the argument for it being here.
