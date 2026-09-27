@@ -34,16 +34,16 @@ def decode_escape(s: str, i: int) -> ?Escape_T:
     if c == 'x':                                  # \xN, \xNN
         var v: int = 0
         var j: int = i + 2
-        while j < len(s) and j < i + 4 and HEX_DIGITS.find(s[j:j+1].lower()) >= 0:
+        while j < len(s) and j < i + 4 and s[j:j+1].lower() in HEX_DIGITS:
             v = v * 16 + HEX_DIGITS.find(s[j:j+1].lower())
             j = j + 1
         if j == i + 2:
             return None                           # \x with no digit
         return Escape_T(str(chr(v)), j - i)
-    if OCTAL_DIGITS.find(c) >= 0:                 # \N, \NN, \NNN
+    if c in OCTAL_DIGITS:                         # \N, \NN, \NNN
         var v: int = 0
         var j: int = i + 1
-        while j < len(s) and j < i + 4 and OCTAL_DIGITS.find(s[j:j+1]) >= 0:
+        while j < len(s) and j < i + 4 and s[j:j+1] in OCTAL_DIGITS:
             v = v * 8 + OCTAL_DIGITS.find(s[j:j+1])
             j = j + 1
         return Escape_T(str(chr(v)), j - i)
