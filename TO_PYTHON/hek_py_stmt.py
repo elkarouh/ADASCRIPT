@@ -1231,6 +1231,17 @@ def to_py(self, indent=0):
 
     parts = [_placed(self.nodes[0])]
     newline_node = None
+    # A call returning `T | F` whose result nobody takes drops its failure --
+    # unless it stands last in a routine, where it is the routine's value.
+    if (type(self.nodes[0]).__name__ == "expressions"
+            and id(self) not in RETURN_NODES):
+        from ady_stmt import refuse_dropped_failure
+        from hek_parsec import ParserState as _PS_df
+        import re as _re_df
+        def _is_either_call(text):
+            _m = _re_df.match(r"^(?:[A-Za-z_]\w*\.)*([A-Za-z_]\w*)\(", text)
+            return bool(_m) and _m.group(1) in getattr(_PS_df, "result_procs", set())
+        refuse_dropped_failure(parts[0], _is_either_call)
 
     for node in self.nodes[1:]:
         # Check if this node wraps a RichNL (NEWLINE token preserved as node)

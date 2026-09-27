@@ -645,7 +645,12 @@ def mkdir_p(path: Path, ssh: ?SSH = None) -> None | Failure_T:
 ```
 
 Returning a call of another function with the same `T | Failure_T` passes
-its result on as it is — the `return checked(...)` above. Declarations and
+its result on as it is — the `return checked(...)` above. What a call to
+such a function may not do is stand alone as a statement: `mkdir_p(dest)`
+on a line of its own would throw its failure away, and it does not compile.
+Its result has to be taken — by a `do:` step (4 below), a `let` and a test
+(3), or a `return`. The one exception is a call standing last in a function
+that returns the same `T | Failure_T`: that call *is* the function's value. Declarations and
 assignments work the same way: `var r: str | Failure_T = "seven"` holds a
 str, and `r = fail(BAD_NUMBER, "gone")` then holds the failure.
 
@@ -767,6 +772,8 @@ def parse_all(tokens: []str) -> []int | Problems_T:
 
 The transpiler refuses:
 
+- a failure dropped: a call returning `T | Failure_T` standing alone as a
+  statement, its result taken by nobody;
 - a `|` with no failure side (`int | str`), or with two (`A_T | B_T`);
 - `failure` on anything but a record;
 - more than two sides (`int | str | Failure_T`);

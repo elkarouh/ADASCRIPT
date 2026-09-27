@@ -96,6 +96,10 @@ def _nim_reset():
     ParserState.nim_top_decls = []   # helper proc/type declarations inserted after imports
     ParserState.nim_do_steps = 0     # numbers the temporaries of bare do: steps
     ParserState._unwrap_suffix = {}  # narrowed name -> .value / .error (a Result's side)
+    # the tail statements _mark_either_tail records, by id()
+    _py_stmt_reset = sys.modules.get("hek_py_stmt")
+    if _py_stmt_reset is not None:
+        _py_stmt_reset.RETURN_NODES.clear()
     ParserState.tick_types = {}
     ParserState.class_field_types = {}
     ParserState.proc_param_types = {}
@@ -1567,6 +1571,12 @@ def run_tests():
         # Only a record can be one.
         ("type Oops_T is failure enum A, B\n",
          "only a record can be a failure type"),
+        # A failure nobody takes is refused: a bare call returning `T | F`.
+        ("type Bad_T is failure record:\n    why: str\n\n"
+         "def step(n: int) -> None | Bad_T:\n    if n < 0:\n"
+         "        return Bad_T(why=\"negative\")\n\n"
+         "def run() -> None:\n    step(-1)\n    print \"on\"\n",
+         "'step(-1)' drops a failure"),
     ]
     # ...except a shell command's output, whose type the command fixes.
     try:

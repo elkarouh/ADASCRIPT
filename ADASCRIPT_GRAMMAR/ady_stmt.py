@@ -325,6 +325,30 @@ def either_procs(return_types, failure_types):
     return out
 
 
+def refuse_dropped_failure(stmt_text, is_either_call):
+    """Refuse STMT_TEXT, an emitted expression statement, when it is nothing
+    but a call of a routine returning `T | F`: its failure would go unseen.
+    IS_EITHER_CALL(text) says whether a call returns one -- each backend
+    knows its own calls. Taking the result is what a do: step, a test or a
+    `return` are for; dropping it silently is the bug the type exists to
+    stop, so it is not a spelling the language has."""
+    import re as _re_df
+    text = stmt_text.strip()
+    m = _re_df.match(r"^(?:[A-Za-z_]\w*\.)*([A-Za-z_]\w*)\(", text)
+    if not m or not text.endswith(")"):
+        return
+    depth = 0
+    for i, ch in enumerate(text[m.end() - 1:]):
+        depth += ch in "([{"
+        depth -= ch in ")]}"
+        if depth == 0 and i != len(text) - m.end():
+            return          # the call is only part of the statement
+    if is_either_call(text):
+        raise SyntaxError(
+            f"'{text}' drops a failure: take its result -- a do: step, a "
+            f"`let` and a test, or `return` it -- or it goes unseen")
+
+
 def check_duplicate_types(code):
     """Refuse a module that declares the same type name twice at its top
     level (`type X ...`, `class X ...`). Text inside triple-quoted strings

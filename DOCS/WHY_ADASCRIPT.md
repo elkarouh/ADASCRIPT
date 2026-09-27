@@ -279,9 +279,10 @@ three bugs that `make test`, which only compiled it, had never seen:
   was read again after every attempt, successful or not. With the first
   bug fixed, it went on to expire every backup there was.
 
-The first bug is the kind a signature exposes: once `ln_s` said
-`-> None | Failure_T`, every call to it had to be read with the question
-"and if it fails?", and the answer — a `do:` step — is on the page. The
+The first bug is the kind the signature now prevents: once `ln_s` says
+`-> None | Failure_T`, it cannot be called and its failure thrown away. A
+bare `ln_s(...)` as a statement does not compile, on either backend —
+the result has to be taken, by a `do:` step, a test or a `return`. The
 other two came to light because failures had become values a test could
 look at. `EXAMPLES/rsync_time_machine_test.sh` now runs
 the tool against real folders, with a disk that fills up; the old version
@@ -587,15 +588,12 @@ type because it was built as one. Letting a user-defined scalar say the same
 thing — `type Velocity_T is distinct float` — is the next thing on the list,
 and it is in `TODO.md`.
 
-Failures as values (`T | Failure_T`) are enforced on the Nim backend in one
-direction — a value is not usable as the value until a test or a `do:` step
-has said it is not the failure — but not yet in the other, and there is more
-still missing:
+Failures as values (`T | Failure_T`) are enforced in both directions: a
+failure cannot be dropped — a bare call whose result nobody takes is
+refused, on both backends — and on the Nim backend a value is not usable as
+the value until a test or a `do:` step has said it is not the failure.
+What is still missing:
 
-- Nothing yet stops a failure being dropped. A bare call `step(x)` to a
-  function returning `None | Failure_T`, whose failure nobody looks at,
-  compiles and carries on, on both backends. Refusing it, as Zig refuses an
-  ignored error, is the obvious next rule, and it is in `TODO.md`.
 - The check that the value was tested is Nim's type check. On the Python
   backend an untested failure used as a value fails when that line runs,
   not before; building the same source for Nim is what catches it first.

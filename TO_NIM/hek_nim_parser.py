@@ -2659,6 +2659,7 @@ def _func_def_to_nim_inner(self, indent=0):
     # Store return type so return_stmt can use it for Option wrapping
     ParserState._current_return_type = ret_ann  # e.g. ': seq[seq[string]]'
     _mark_docstring(block_node, ret_ann)
+    _mark_either_tail(block_node, ret_ann)
     # Record method return type for type inference (e.g. conn.rows() -> seq[seq[string]])
     if ret_ann and name:
         _cls_ctx = getattr(ParserState, "_current_class_name", None)
@@ -4734,6 +4735,22 @@ def _mark_docstring(block_node, ret_ann=""):
     first._docstring = True
 
 
+def _mark_either_tail(block_node, ret_ann):
+    """In a routine returning `T | F`, a bare call standing last is the
+    routine's value, not a dropped failure: mark it, with the Python
+    backend's own rule for which statements those are (hek_py_stmt's
+    RETURN_NODES, which nothing else reads in this process)."""
+    if block_node is None or not ret_ann.lstrip(": ").startswith("Result["):
+        return
+    import os as _os, sys as _sys
+    _to_py_dir = _os.path.join(_os.path.dirname(__file__), '..', 'TO_PYTHON')
+    if _to_py_dir not in _sys.path:
+        _sys.path.insert(0, _to_py_dir)
+    from hek_py_parser import _mark_implicit_returns
+    from hek_helpers import _block_last_stmt as _last
+    _mark_implicit_returns(_last(block_node))
+
+
 @method(stmt_line)
 def to_nim(self, indent=0):
     """stmt_line: simple_stmt NL -> Nim: simple statement line"""
@@ -4758,6 +4775,7 @@ def to_nim(self, indent=0):
 
     parts = []
     newline_node = None
+    _bare_expr = bool(self.nodes) and type(self.nodes[0]).__name__ == "expressions"
 
     for node in self.nodes:
         tname = type(node).__name__
@@ -4793,6 +4811,12 @@ def to_nim(self, indent=0):
         parts = [_ind(indent) + self.nodes[0].to_nim()]
 
     result = "; ".join(p.strip() for p in parts if p.strip())
+    # A call returning `T | F` whose result nobody takes drops its failure.
+    if _bare_expr and len([p for p in parts if p.strip()]) == 1:
+        _py_stmt = __import__("sys").modules.get("hek_py_stmt")
+        if _py_stmt is None or id(self) not in _py_stmt.RETURN_NODES:
+            from ady_stmt import refuse_dropped_failure
+            refuse_dropped_failure(result, hek_nim_expr._expr_is_result)
     # PyObject method call as statement: wrap with discard so Nim doesn't
     # complain about an unused expression from nimpy callMethodAux.
     # Skip when inside a returning function — the expression may be the implicit return value.
@@ -5126,6 +5150,7 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
     # Store return type so return_stmt can use it for Option wrapping
     ParserState._current_return_type = ret_ann  # e.g. ': seq[seq[string]]'
     _mark_docstring(block_node, ret_ann)
+    _mark_either_tail(block_node, ret_ann)
     # Record method return type for type inference (e.g. conn.rows() -> seq[seq[string]])
     if ret_ann and name:
         if not hasattr(ParserState, "proc_return_types"):

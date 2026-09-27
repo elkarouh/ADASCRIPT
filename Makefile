@@ -504,16 +504,24 @@ test: compile
 	@# do: and `T | E` say the same on both backends: the Python one
 	@# used to drop a do: block altogether, leaving its names unbound.
 	@echo "=== do: and T | F, both backends ==="
-	@printf 'var x: int | str\n' > $(TMPDIR)/ady_no_failure.ady
+	@# Refused on both backends: a | with no failure side, and a failure
+	@# nobody takes -- a bare call whose `T | F` result is thrown away.
+	@printf 'var x: int | str\n' > $(TMPDIR)/ady_refuse_1.ady
+	@printf 'type Bad_T is failure record:\n    why: str\n\ndef step(n: int) -> None | Bad_T:\n    if n < 0:\n        return Bad_T(why="neg")\n\ndef run() -> None:\n    step(-1)\n' \
+	    > $(TMPDIR)/ady_refuse_2.ady
 	@for tr in TO_NIM/ady2nim.py TO_PYTHON/ady2py.py; do \
-	    printf '  %-42s' "no failure side ($$(basename $$tr .py))"; \
-	    if $(PYTHON) $(CURDIR)/$$tr $(TMPDIR)/ady_no_failure.ady > $(TMPDIR)/ady_no_failure.out 2>&1; then \
-	        echo "FAIL (accepted)"; exit 1; \
-	    fi; \
-	    grep -q "one side must be a failure type" $(TMPDIR)/ady_no_failure.out \
-	        && echo OK || { echo FAIL; cat $(TMPDIR)/ady_no_failure.out; exit 1; }; \
+	    for c in "1:no failure side:one side must be a failure type" \
+	             "2:a dropped failure:drops a failure"; do \
+	        n=$${c%%:*}; rest=$${c#*:}; what=$${rest%%:*}; want=$${rest#*:}; \
+	        printf '  %-42s' "$$what ($$(basename $$tr .py))"; \
+	        if $(PYTHON) $(CURDIR)/$$tr $(TMPDIR)/ady_refuse_$$n.ady > $(TMPDIR)/ady_refuse.out 2>&1; then \
+	            echo "FAIL (accepted)"; exit 1; \
+	        fi; \
+	        grep -q "$$want" $(TMPDIR)/ady_refuse.out \
+	            && echo OK || { echo FAIL; cat $(TMPDIR)/ady_refuse.out; exit 1; }; \
+	    done; \
 	done
-	@rm -f $(TMPDIR)/ady_no_failure.ady $(TMPDIR)/ady_no_failure.out
+	@rm -f $(TMPDIR)/ady_refuse_1.ady $(TMPDIR)/ady_refuse_2.ady $(TMPDIR)/ady_refuse.out
 	@for t in test_do_block test_result; do \
 	    printf '  %-42s' "$$t.ady (python = nim)"; \
 	    $(EXDIR)/$$t > $(TMPDIR)/ady_$$t.nim.out 2>&1 || { echo "FAIL (nim)"; exit 1; }; \

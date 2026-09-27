@@ -300,12 +300,9 @@ history of this file if the reasoning behind one of them is ever wanted.
 `T | F`, F a record declared `type F is failure record:`, is built in
 (book 10.12, `EXAMPLES/test_result.ady`, `rsync_time_machine.ady`): a
 routine returns either a T or an F, in either order; `r is F` asks which
-and narrows; `None | F`; `do:` over them with bare steps. Not yet:
+and narrows; `None | F`; `do:` over them with bare steps; a dropped
+failure (a bare call nobody takes the result of) is refused. Not yet:
 
-- [ ] refuse a dropped failure: a bare call `step(x)` to a routine returning
-      `T | F` compiles (Nim gets an automatic `discard`) and its failure
-      goes unseen. Refuse it on both backends, as Zig refuses an ignored
-      error; `do:` and a test are the ways to take the result.
 - [ ] `case r:` with `when Failure_T:` / `when int:` arms -- today it is
       `if r is Failure_T:`.
 - [ ] a `?T` step inside a `T | F` chain: `x <- lookup(k) else fail(...)`,
