@@ -62,6 +62,7 @@ source.ady
 - [Raw Nim Injection](#raw-nim-injection)
 - [Python Interoperability](#python-interoperability)
 - [Print Statement](#print-statement)
+- [Failures as Values: `T | F`](#failures-as-values-t--f)
 - [Shell Statements](#shell-statements)
 - [Bash Variables](#bash-variables)
 - [Callable objects and pipe operator](#callable-objects-and-pipe-operator)
@@ -383,6 +384,7 @@ shape assumes — not because it fails to be a mapping.
 | `{K}V`         | `dict[K, V]`              | `Table[K, V]`                  |
 | `{}T`          | `set[T]`                  | `HashSet[T]` or `set[T]`       |
 | `?T`           | `T \| None`               | `Option[T]`                    |
+| `T \| F`        | `T \| F`                  | `Result[T, F]` (F a failure)   |
 | `(T, U)`       | `tuple[T, U]`             | `(T, U)`                       |
 | `[(T, U)]R`    | `Callable[[T, U], R]`     | `proc(a0: T, a1: U): R`        |
 
@@ -1642,6 +1644,58 @@ intercepts `print` when it is *not* immediately followed by `(`.
 
 ---
 
+## Failures as Values: `T | F`
+
+A function that can fail says so in its return type: `-> int | Failure_T`
+returns an int, or a failure saying why there is none. A failure is a
+record declared as one; the declaration, not the order of the two sides,
+says which side is the failure.
+
+```python
+type ErrKind_T is enum BAD_NUMBER, DIVIDE_BY_ZERO, NOT_POSITIVE
+
+type Failure_T is failure record:
+    kind:   ErrKind_T    # which failure
+    detail: str          # what it needs to say so
+
+def read_number(s: str) -> int | Failure_T:
+    if len(s) == 0:
+        return fail(BAD_NUMBER, "empty")      # a Failure_T: the failure
+    return int(s)                             # anything else: the value
+```
+
+| You write | It means |
+|---|---|
+| `r is Failure_T` / `r is int` | which side r holds -- and r is narrowed to it, as `x is None` narrows a `?T` |
+| `case r:` / `when Failure_T:` / `when int:` | a branch per side; both sides, or `when others:` |
+| `None \| Failure_T` | a step that can only fail; falling off the end is success |
+| `do:` / `x <- step` | bind the value, or return the failure from the whole function |
+| `do:` / `x <- step else e` | a step that fails some other way -- a `?T`, another failure type, a shell command -- returns `e` instead; inside `e`, `x` is the step's own failure |
+| `let o: str \| ShellFailure_T = shell: cmd` | a command's output, or the built-in `ShellFailure_T` (`command`, `code`, `stderr`) |
+
+```python
+def ratio(raw_a: str, raw_b: str) -> int | Failure_T:
+    do:
+        a <- read_number(raw_a)
+        b <- read_number(raw_b)
+        q <- divide(a, b)
+        check_positive(q)          # a `None | Failure_T` step: checked, binds nothing
+    return q
+```
+
+The transpiler refuses a `|` with no failure side (`int | str`) or with two,
+a failure dropped (a bare call whose `T | F` result nobody takes), a `do:`
+step that fails some other way without an `else`, and a `case` that covers
+one side only. `T | None` keeps Python's meaning: `?T`.
+
+On Python the value is the T or the F itself; on Nim it is stdlib.nim's
+`Result[T, F]`, and `r` reads as its `.value` or `.error` where a test has
+narrowed it. The whole of it is in the book, chapter 10.12;
+`EXAMPLES/test_result.ady` is the spec, and `EXAMPLES/rsync_time_machine.ady`
+a full-size program written this way.
+
+---
+
 ## Shell Statements
 
 Adascript has first-class syntax for running shell commands. The `shell` and
@@ -1735,6 +1789,38 @@ except:
 
 It works with every form: bare, capture, tuple, `shellLines:` and an
 `int`-typed target.
+
+### A command's output, or its failure: `ShellFailure_T`
+
+`check = true` ends the program; a `T | ShellFailure_T` target hands the
+failure back instead. The command holds its output when it succeeds, and
+the built-in failure record `ShellFailure_T` -- `command`, `code`,
+`stderr` -- when it does not. `str` is the output, `[]str` its lines
+(`shellLines:`), `None` nothing:
+
+```python
+let hi: str | ShellFailure_T = shell: echo hi
+let oops: str | ShellFailure_T = shell: echo oops >&2; exit 3
+if oops is ShellFailure_T:
+    print f"exit {oops.code}, stderr {oops.stderr.strip()}"
+let quiet: None | ShellFailure_T = shell: true
+```
+
+In a `do:` block a command is a step -- `out <- shell: cmd`, or a bare
+`shell: cmd` -- and a failing one stops the chain. A program with a failure
+type of its own converts with `else`, in which the step's name is the
+failed command:
+
+```python
+def mkdir_p(path: Path, ssh: ?SSH = None) -> None | Failure_T:
+    if ssh is None:
+        do:
+            r <- shell: mkdir -p -- {!path} else cmd_failed(r)
+        return
+```
+
+In a `do:` step, a command ends at a bare `else`. See [Failures as
+Values](#failures-as-values-t--f).
 
 ### Feeding a command's input
 

@@ -727,6 +727,35 @@ def find_exact_word(self, digits: []Digit_T) -> ?str:
     return None
 ```
 
+### Value or failure `T | F`
+
+When the caller needs to know *why* there is no value, return a failure
+instead of `None`. A failure is a record declared `failure`; the function
+returns either its value or one of those, and `is` tells them apart:
+
+```python
+type ErrKind_T is enum BAD_NUMBER, TOO_BIG
+
+type Failure_T is failure record:
+    kind:   ErrKind_T    # which failure
+    detail: str          # what it needs to say so
+
+def read_number(s: str) -> int | Failure_T:
+    if len(s) == 0:
+        return Failure_T(kind=BAD_NUMBER, detail="empty")
+    return int(s)
+
+let n: int | Failure_T = read_number("42")
+if n is Failure_T:
+    print n.detail           # n is the failure here
+else:
+    print n + 1              # and the int here
+```
+
+`do:` chains such steps and passes the first failure on; `case n:` with
+`when Failure_T:` / `when int:` gives a branch per side. Book chapter 10.12
+has the whole of it.
+
 ---
 
 ## 8. Subranges
@@ -1785,6 +1814,20 @@ let result = shell(cwd = "/tmp"):          pwd
 let result = shell(timeout = 5000):        slow-command
 let result = shell(cwd = src, timeout = 3000): make all
 ```
+
+### A command's output, or its failure
+
+Typed `T | ShellFailure_T`, a command holds its output, or the built-in
+failure record `ShellFailure_T` (`command`, `code`, `stderr`):
+
+```python
+let oops: str | ShellFailure_T = shell: echo oops >&2; exit 3
+if oops is ShellFailure_T:
+    print f"exit {oops.code}, stderr {oops.stderr.strip()}"
+```
+
+In a `do:` block, `out <- shell: cmd` is a step that stops the chain when
+the command fails — see *Value or failure `T | F`* above.
 
 ### Discarding output
 
