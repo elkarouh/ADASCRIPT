@@ -189,8 +189,103 @@ knots or metres per second?", there is one place to look and one place to
 change.
 
 That is the argument, and it holds even when the type is only a name — which
-brings me to the one thing in this document that is not yet finished, and
-which I will come back to at the end.
+brings me to what in this document is not yet finished, and which I will
+come back to at the end.
+
+### A failure belongs in the signature
+
+A signature that says `-> Path` is telling half the truth when the function
+can fail. C returns an error code nothing obliges anyone to check. The shell sets `$?` and
+moves on. Python and Ada raise an exception that appears nowhere in the
+signature, so the reader has to know the body to know the contract. In
+every case the failure is real and the page does not show it.
+
+Adascript lets the return type say both halves: `-> Path | Failure_T`,
+*either* a path *or* the failure that says why there is none. A failure is
+a type like any other — a record, declared as one:
+
+<!-- from: EXAMPLES/rsync_time_machine.ady -->
+```python
+type ErrKind_T is enum CMD_FAILED, NOT_A_BACKUP_DEST, SOURCE_MISSING, STILL_RUNNING, NO_SPACE, BAD_ARGUMENTS
+
+type Failure_T is failure record:
+    kind:   ErrKind_T
+    detail: str    # the command that failed, the path at fault, or what went wrong
+    stderr: str    # what a failed command said; "" for any other failure
+    fix:    str    # a command that would fix it; "" when there is none
+```
+
+A function returns its value or a failure, and there is nothing to wrap —
+the type of what is returned says which it is:
+
+<!-- from: EXAMPLES/rsync_time_machine.ady -->
+```python
+def run_checked(cmd: str, ssh: ?SSH = None) -> str | Failure_T:
+    let r: CmdResult = run_cmd(cmd, ssh)
+    if r.returncode != 0:
+        return failure(CMD_FAILED, cmd, r.stderr.strip())
+    return r.stdout
+```
+
+A chain of steps that must all succeed is written as a chain, and the
+first failure leaves the function with its reason intact. Nothing in it is
+error-handling code; the `do:` block is the error handling:
+
+<!-- from: EXAMPLES/rsync_time_machine.ady -->
+```python
+    # One railway: the lock is released only once `latest` points at this
+    # backup. If the link fails, the lock stays, and the next run finds an
+    # interrupted backup to resume rather than a finished one with no link.
+    do:
+        rm_file(dest_f / "latest", dest_is_ssh(ssh))
+        ln_s(Path(dest.name), dest_f / "latest", dest_is_ssh(ssh))
+        rm_file(inprogress_file, ssh)
+```
+
+And one place, at the top, decides what the user is told and which status
+the program exits with. `outcome is Failure_T` asks which of the two it
+holds; a `case` over the failure's kind inside `report` is exhaustive, so a
+new kind of failure nobody reports does not compile:
+
+<!-- from: EXAMPLES/rsync_time_machine.ady -->
+```python
+    let outcome: None | Failure_T = backup(
+        ...
+    )
+    if outcome is Failure_T:
+        report(outcome)
+        quit(1)
+```
+
+This is railway-oriented programming — Scott Wlaschin's name for it — and it
+is not new: F#'s and Rust's `Result` and Zig's error unions all do it. What the notation adds is
+that it costs nothing to write. The test narrows the name — past
+`if r is Failure_T: return`, `r` *is* the path, with nothing to unwrap —
+and the same source runs on both backends.
+
+The case for it is not a theory. `rsync_time_machine.ady` is a port of a
+real backup tool, and it ignored the exit status of every command that
+changed something. Rewritten this way, it gave up
+three bugs that `make test`, which only compiled it, had never seen:
+
+- A failed `ln -s latest` was ignored: the lock was removed and the run
+  reported success, with no `latest` link at all. It now fails, names the
+  command and what it printed, and keeps the lock so the next run resumes.
+- On a full disk it was meant to expire the oldest backup and retry. It
+  expired the newest — the one in progress — freed nothing, retried a
+  hundred times and exited 0, with `latest` pointing at a directory it had
+  just deleted.
+- Every retry reused one log, and rsync appends: the first "No space left"
+  was read again after every attempt, successful or not. With the first
+  bug fixed, it went on to expire every backup there was.
+
+The first bug is the kind a signature exposes: once `ln_s` said
+`-> None | Failure_T`, every call to it had to be read with the question
+"and if it fails?", and the answer — a `do:` step — is on the page. The
+other two came to light because failures had become values a test could
+look at. `EXAMPLES/rsync_time_machine_test.sh` now runs
+the tool against real folders, with a disk that fills up; the old version
+fails six of its fifteen checks.
 
 ---
 
@@ -491,6 +586,25 @@ That last one is the proof that the machinery exists. `Path` is a distinct
 type because it was built as one. Letting a user-defined scalar say the same
 thing — `type Velocity_T is distinct float` — is the next thing on the list,
 and it is in `TODO.md`.
+
+Failures as values (`T | Failure_T`) are enforced on the Nim backend in one
+direction — a value is not usable as the value until a test or a `do:` step
+has said it is not the failure — but not yet in the other, and there is more
+still missing:
+
+- Nothing yet stops a failure being dropped. A bare call `step(x)` to a
+  function returning `None | Failure_T`, whose failure nobody looks at,
+  compiles and carries on, on both backends. Refusing it, as Zig refuses an
+  ignored error, is the obvious next rule, and it is in `TODO.md`.
+- The check that the value was tested is Nim's type check. On the Python
+  backend an untested failure used as a value fails when that line runs,
+  not before; building the same source for Nim is what catches it first.
+- Which side a returned value is on is read from its type. Where the Nim
+  backend cannot work the type out it assumes the value side, and Nim's
+  own type check then refuses a failure put there by mistake — correct,
+  but the message names the generated code rather than the line.
+- `case r:` with `when Failure_T:` arms is not there yet; it is written
+  `if r is Failure_T:`. It is in `TODO.md`.
 
 ---
 
