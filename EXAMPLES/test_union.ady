@@ -1,0 +1,111 @@
+#!/usr/bin/env ady2nim
+"""Test: unions -- a value that is one of several types.
+
+`int | float` holds an int or a float; which one, the value itself says.
+What is assigned or returned becomes the member its type names; `x is int`
+asks which member x holds and narrows x to it, and `case x:` gives a branch
+per member -- every member, or `when others:`. With a failure record among
+the members the union is a value-or-failure, and do: passes the failure on;
+`T | None` is `?T`. The output is compared between the backends.
+"""
+
+# ─── test 1: a plain union, and a case over it ─────────────────────────────
+
+def compute(n: int) -> int | float:
+    if n % 2 == 0:
+        return n // 2              # an int
+    return n / 2                   # a float
+
+for n in [4, 5]:
+    let x: int | float = compute(n)
+    case x:
+        when int:
+            print f"int {x + 1}"
+        when float:
+            print f"float {x * 2.0}"
+print "test1 OK"
+
+# ─── test 2: `is` narrows, in the test and in its else ─────────────────────
+
+let h: int | float = compute(7)
+if h is int:
+    print "an int"
+else:
+    print f"a float, {h}"          # the other member: h is the float here
+print "test2 OK"
+
+# ─── test 3: three members; assignment picks the member ────────────────────
+
+var y: int | str | float = "hello"
+print y
+y = 3
+if y is int:
+    print y + 1
+y = 1.5
+case y:
+    when str:
+        print "a str"
+    when others:
+        print f"not a str: {y}"
+var z: int | float                 # no value: the first member's zero
+print z
+print "test3 OK"
+
+# ─── test 4: several values and a failure ──────────────────────────────────
+
+type Failure_T is failure record:
+    detail: str
+
+def parse(s: str) -> int | str | Failure_T:
+    if len(s) == 0:
+        return Failure_T(detail="empty")
+    for c in s:
+        if not (c >= '0' and c <= '9'):
+            return s               # a str
+    return int(s)                  # an int
+
+def describe(r: int | str | Failure_T) -> str:
+    case r:
+        when int:
+            return f"number {r + 1}"
+        when str:
+            return f"word {r}"
+        when Failure_T:
+            return f"failed: {r.detail}"
+
+def twice(s: str) -> int | str | Failure_T:
+    do:
+        v <- parse(s)              # v is the int | str
+    if v is int:
+        return v * 2
+    return v
+
+for s in ["41", "abc", ""]:
+    print describe(parse(s))
+    let t: int | str | Failure_T = twice(s)
+    if t is Failure_T:
+        print "twice failed"
+    else:
+        print t
+print "test4 OK"
+
+# ─── test 5: a union with a name of its own ────────────────────────────────
+
+type Number_T is int | float
+
+def halve(n: int) -> Number_T:
+    if n % 2 == 0:
+        return n // 2
+    return n / 2
+
+let q: Number_T = halve(9)
+case q:
+    when int:
+        print f"whole {q}"
+    when float:
+        print f"half {q}"
+var maybe: ?Number_T = None        # a named union can be optional too
+assert maybe is None
+print "test5 OK"
+
+print "all union tests passed"

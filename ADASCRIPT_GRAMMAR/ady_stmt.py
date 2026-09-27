@@ -288,30 +288,88 @@ def split_top_level_bar(text):
     return parts
 
 
-def either_sides(parts, failure_types):
-    """What the two sides of a `|` type mean: ("either", value, failure),
-    ("optional", value, None) for `T | None` in either order, or a
-    SyntaxError. Order does not matter: the failure side is the one whose
-    type is declared `failure`."""
+def _runtime_kind(t):
+    """What a value of the type spelled T is at run time on the Python
+    backend, where a union holds the value itself and only its class says
+    which member it is. Takes either backend's spelling of the type."""
+    t = t.strip()
+    if t.startswith("("):
+        return "tuple"
+    base = t.split("[", 1)[0].strip()
+    return {"string": "str", "Path": "str", "seq": "list", "Sequence": "list",
+            "openArray": "list", "Table": "dict", "HashSet": "set",
+            "bool": "int",   # a bool is an int to Python
+            }.get(base, base)
+
+
+def classify_union(parts, failure_types):
+    """What the members of a `|` type make it: a dict with KIND --
+    "optional" (`T | None`, ?T written out), "either" (a value or a
+    failure: one member is a failure type) or "plain" (one of the members)
+    -- VALUES, the members that are not the failure, and FAILURE, the
+    failure type or None. The order of the members does not matter.
+
+    Refused: two failure types; None in anything but `T | None` or
+    `None | F`; the same member twice; two members nothing can tell apart
+    at run time -- on Python the value is the member itself, and its class
+    is all that says which one it is."""
     shown = " | ".join(parts)
-    if len(parts) != 2:
+    failures = [p for p in parts if p in failure_types]
+    if len(failures) > 1:
         raise SyntaxError(
-            f"'{shown}': a routine returns its value or a failure -- two "
-            f"sides, one of them a failure type")
-    a, b = parts
-    fa, fb = a in failure_types, b in failure_types
-    if fa and fb:
-        raise SyntaxError(f"'{shown}': both sides are failure types")
-    if fa:
-        return ("either", b, a)
-    if fb:
-        return ("either", a, b)
-    if b == "None" or a == "None":
-        return ("optional", a if b == "None" else b, None)
-    raise SyntaxError(
-        f"'{shown}': one side must be a failure type, declared "
-        f"`type X is failure record:` -- for a value that may be absent, "
-        f"write ?T")
+            f"'{shown}': a union has at most one failure member -- a do: "
+            f"step could not tell which of {', '.join(failures)} to pass on")
+    failure = failures[0] if failures else None
+    values = [p for p in parts if p not in failure_types]
+    nones = values.count("None")
+    if nones:
+        if len(parts) != 2 or nones > 1:
+            raise SyntaxError(
+                f"'{shown}': None goes with one other type -- `T | None`, "
+                f"which is ?T, or `None | F`, a step that can only fail. For "
+                f"an optional union, declare the union as a type and write ?Name")
+        if failure is None:
+            return {"kind": "optional", "values": [p for p in parts if p != "None"],
+                    "failure": None}
+        return {"kind": "either", "values": ["None"], "failure": failure}
+    if len(set(values)) != len(values):
+        raise SyntaxError(f"'{shown}': a member is there twice")
+    kinds = {}
+    for v in values:
+        k = _runtime_kind(v)
+        if k in kinds:
+            raise SyntaxError(
+                f"'{shown}': {kinds[k]} and {v} cannot be told apart at run "
+                f"time -- make one of them a record of its own")
+        kinds[k] = v
+    return {"kind": "either" if failure else "plain", "values": values,
+            "failure": failure}
+
+
+def either_sides(parts, failure_types):
+    """The two-sided view of a `|` type some callers still take:
+    ("either", value, failure) with VALUE the value members joined by
+    ` | `, ("optional", value, None), or ("plain", members joined, None)."""
+    u = classify_union(parts, failure_types)
+    return (u["kind"], " | ".join(u["values"]), u["failure"])
+
+
+_ALIAS_DECL = _re_dup.compile(
+    r"^[ \t]*type[ \t]+([A-Za-z_]\w*)[ \t]+(?:is|=)[ \t]+([^\n#]+?)[ \t]*(?:#.*)?$",
+    _re_dup.MULTILINE)
+
+
+def scan_union_aliases(code):
+    """The union types CODE names -- `type Num_T is int | float` -- as
+    {name: its union, as written}. A backend reads a name that is one as
+    the union itself, so that `x is int`, `case x:` and the choice of a
+    member work the same on `Num_T` as on `int | float`."""
+    out = {}
+    for m in _ALIAS_DECL.finditer(code):
+        rhs = m.group(2).strip()
+        if len(split_top_level_bar(rhs)) >= 2:
+            out[m.group(1)] = rhs
+    return out
 
 
 def either_procs(return_types, failure_types):
@@ -319,8 +377,7 @@ def either_procs(return_types, failure_types):
     out = set()
     for name, text in return_types.items():
         parts = split_top_level_bar(text)
-        if len(parts) == 2 and (parts[0] in failure_types
-                                or parts[1] in failure_types):
+        if len(parts) >= 2 and any(p in failure_types for p in parts):
             out.add(name)
     return out
 

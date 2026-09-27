@@ -1,6 +1,6 @@
 ## stdlib.nim -- Nim support types for HPython transpiled code
 ## Provides: AnyType/ANY sentinel, FifoQueue, LifoQueue, PriorityQueue, Counter,
-##           Result, ShellFailure_T
+##           Result, ShellFailure_T, OneOf2..OneOf6
 
 import std/deques
 import hashes
@@ -197,3 +197,253 @@ type ShellFailure_T* = object
   command*: string
   code*: int
   stderr*: string
+
+# ---------------------------------------------------------------------------
+# OneOf2..OneOf6 -- Adascript's plain union, `int | float | str`: one of its
+# members, which member told by `which`. The transpiler writes the
+# constructors with their type -- `OneOf2[int, float].of1(2.5)` -- tests a
+# member with `is_m1` and reads it with `m1` once a test has narrowed it.
+# Member 0 is the zero value, as a plain variable's is. A union with a
+# failure member is a Result whose value is one of these: `is_v1` / `v1`.
+# (Generated, one block per arity.)
+# ---------------------------------------------------------------------------
+
+type OneOf2*[T0, T1] = object
+  case adaWhich: range[0..1]
+  of 0: adaM0: T0
+  of 1: adaM1: T1
+proc of0*[T0, T1](U: typedesc[OneOf2[T0, T1]]; v: T0): OneOf2[T0, T1] = OneOf2[T0, T1](adaWhich: 0, adaM0: v)
+proc is_m0*[T0, T1](u: OneOf2[T0, T1]): bool = u.adaWhich == 0
+proc m0*[T0, T1](u: OneOf2[T0, T1]): T0 =
+  if u.adaWhich != 0: raise newException(ValueError, "member 0 of a union holding member " & $u.adaWhich)
+  u.adaM0
+proc is_v0*[T0, T1, Err](r: Result[OneOf2[T0, T1], Err]): bool = not r.adaIsErr and r.adaVal.adaWhich == 0
+proc v0*[T0, T1, Err](r: Result[OneOf2[T0, T1], Err]): T0 = r.value.m0
+proc of1*[T0, T1](U: typedesc[OneOf2[T0, T1]]; v: T1): OneOf2[T0, T1] = OneOf2[T0, T1](adaWhich: 1, adaM1: v)
+proc is_m1*[T0, T1](u: OneOf2[T0, T1]): bool = u.adaWhich == 1
+proc m1*[T0, T1](u: OneOf2[T0, T1]): T1 =
+  if u.adaWhich != 1: raise newException(ValueError, "member 1 of a union holding member " & $u.adaWhich)
+  u.adaM1
+proc is_v1*[T0, T1, Err](r: Result[OneOf2[T0, T1], Err]): bool = not r.adaIsErr and r.adaVal.adaWhich == 1
+proc v1*[T0, T1, Err](r: Result[OneOf2[T0, T1], Err]): T1 = r.value.m1
+proc `$`*[T0, T1](u: OneOf2[T0, T1]): string =
+  case u.adaWhich
+  of 0: (when compiles($u.adaM0): $u.adaM0 else: "member 0")
+  of 1: (when compiles($u.adaM1): $u.adaM1 else: "member 1")
+proc `==`*[T0, T1](a, b: OneOf2[T0, T1]): bool =
+  if a.adaWhich != b.adaWhich: return false
+  case a.adaWhich
+  of 0: a.adaM0 == b.adaM0
+  of 1: a.adaM1 == b.adaM1
+
+type OneOf3*[T0, T1, T2] = object
+  case adaWhich: range[0..2]
+  of 0: adaM0: T0
+  of 1: adaM1: T1
+  of 2: adaM2: T2
+proc of0*[T0, T1, T2](U: typedesc[OneOf3[T0, T1, T2]]; v: T0): OneOf3[T0, T1, T2] = OneOf3[T0, T1, T2](adaWhich: 0, adaM0: v)
+proc is_m0*[T0, T1, T2](u: OneOf3[T0, T1, T2]): bool = u.adaWhich == 0
+proc m0*[T0, T1, T2](u: OneOf3[T0, T1, T2]): T0 =
+  if u.adaWhich != 0: raise newException(ValueError, "member 0 of a union holding member " & $u.adaWhich)
+  u.adaM0
+proc is_v0*[T0, T1, T2, Err](r: Result[OneOf3[T0, T1, T2], Err]): bool = not r.adaIsErr and r.adaVal.adaWhich == 0
+proc v0*[T0, T1, T2, Err](r: Result[OneOf3[T0, T1, T2], Err]): T0 = r.value.m0
+proc of1*[T0, T1, T2](U: typedesc[OneOf3[T0, T1, T2]]; v: T1): OneOf3[T0, T1, T2] = OneOf3[T0, T1, T2](adaWhich: 1, adaM1: v)
+proc is_m1*[T0, T1, T2](u: OneOf3[T0, T1, T2]): bool = u.adaWhich == 1
+proc m1*[T0, T1, T2](u: OneOf3[T0, T1, T2]): T1 =
+  if u.adaWhich != 1: raise newException(ValueError, "member 1 of a union holding member " & $u.adaWhich)
+  u.adaM1
+proc is_v1*[T0, T1, T2, Err](r: Result[OneOf3[T0, T1, T2], Err]): bool = not r.adaIsErr and r.adaVal.adaWhich == 1
+proc v1*[T0, T1, T2, Err](r: Result[OneOf3[T0, T1, T2], Err]): T1 = r.value.m1
+proc of2*[T0, T1, T2](U: typedesc[OneOf3[T0, T1, T2]]; v: T2): OneOf3[T0, T1, T2] = OneOf3[T0, T1, T2](adaWhich: 2, adaM2: v)
+proc is_m2*[T0, T1, T2](u: OneOf3[T0, T1, T2]): bool = u.adaWhich == 2
+proc m2*[T0, T1, T2](u: OneOf3[T0, T1, T2]): T2 =
+  if u.adaWhich != 2: raise newException(ValueError, "member 2 of a union holding member " & $u.adaWhich)
+  u.adaM2
+proc is_v2*[T0, T1, T2, Err](r: Result[OneOf3[T0, T1, T2], Err]): bool = not r.adaIsErr and r.adaVal.adaWhich == 2
+proc v2*[T0, T1, T2, Err](r: Result[OneOf3[T0, T1, T2], Err]): T2 = r.value.m2
+proc `$`*[T0, T1, T2](u: OneOf3[T0, T1, T2]): string =
+  case u.adaWhich
+  of 0: (when compiles($u.adaM0): $u.adaM0 else: "member 0")
+  of 1: (when compiles($u.adaM1): $u.adaM1 else: "member 1")
+  of 2: (when compiles($u.adaM2): $u.adaM2 else: "member 2")
+proc `==`*[T0, T1, T2](a, b: OneOf3[T0, T1, T2]): bool =
+  if a.adaWhich != b.adaWhich: return false
+  case a.adaWhich
+  of 0: a.adaM0 == b.adaM0
+  of 1: a.adaM1 == b.adaM1
+  of 2: a.adaM2 == b.adaM2
+
+type OneOf4*[T0, T1, T2, T3] = object
+  case adaWhich: range[0..3]
+  of 0: adaM0: T0
+  of 1: adaM1: T1
+  of 2: adaM2: T2
+  of 3: adaM3: T3
+proc of0*[T0, T1, T2, T3](U: typedesc[OneOf4[T0, T1, T2, T3]]; v: T0): OneOf4[T0, T1, T2, T3] = OneOf4[T0, T1, T2, T3](adaWhich: 0, adaM0: v)
+proc is_m0*[T0, T1, T2, T3](u: OneOf4[T0, T1, T2, T3]): bool = u.adaWhich == 0
+proc m0*[T0, T1, T2, T3](u: OneOf4[T0, T1, T2, T3]): T0 =
+  if u.adaWhich != 0: raise newException(ValueError, "member 0 of a union holding member " & $u.adaWhich)
+  u.adaM0
+proc is_v0*[T0, T1, T2, T3, Err](r: Result[OneOf4[T0, T1, T2, T3], Err]): bool = not r.adaIsErr and r.adaVal.adaWhich == 0
+proc v0*[T0, T1, T2, T3, Err](r: Result[OneOf4[T0, T1, T2, T3], Err]): T0 = r.value.m0
+proc of1*[T0, T1, T2, T3](U: typedesc[OneOf4[T0, T1, T2, T3]]; v: T1): OneOf4[T0, T1, T2, T3] = OneOf4[T0, T1, T2, T3](adaWhich: 1, adaM1: v)
+proc is_m1*[T0, T1, T2, T3](u: OneOf4[T0, T1, T2, T3]): bool = u.adaWhich == 1
+proc m1*[T0, T1, T2, T3](u: OneOf4[T0, T1, T2, T3]): T1 =
+  if u.adaWhich != 1: raise newException(ValueError, "member 1 of a union holding member " & $u.adaWhich)
+  u.adaM1
+proc is_v1*[T0, T1, T2, T3, Err](r: Result[OneOf4[T0, T1, T2, T3], Err]): bool = not r.adaIsErr and r.adaVal.adaWhich == 1
+proc v1*[T0, T1, T2, T3, Err](r: Result[OneOf4[T0, T1, T2, T3], Err]): T1 = r.value.m1
+proc of2*[T0, T1, T2, T3](U: typedesc[OneOf4[T0, T1, T2, T3]]; v: T2): OneOf4[T0, T1, T2, T3] = OneOf4[T0, T1, T2, T3](adaWhich: 2, adaM2: v)
+proc is_m2*[T0, T1, T2, T3](u: OneOf4[T0, T1, T2, T3]): bool = u.adaWhich == 2
+proc m2*[T0, T1, T2, T3](u: OneOf4[T0, T1, T2, T3]): T2 =
+  if u.adaWhich != 2: raise newException(ValueError, "member 2 of a union holding member " & $u.adaWhich)
+  u.adaM2
+proc is_v2*[T0, T1, T2, T3, Err](r: Result[OneOf4[T0, T1, T2, T3], Err]): bool = not r.adaIsErr and r.adaVal.adaWhich == 2
+proc v2*[T0, T1, T2, T3, Err](r: Result[OneOf4[T0, T1, T2, T3], Err]): T2 = r.value.m2
+proc of3*[T0, T1, T2, T3](U: typedesc[OneOf4[T0, T1, T2, T3]]; v: T3): OneOf4[T0, T1, T2, T3] = OneOf4[T0, T1, T2, T3](adaWhich: 3, adaM3: v)
+proc is_m3*[T0, T1, T2, T3](u: OneOf4[T0, T1, T2, T3]): bool = u.adaWhich == 3
+proc m3*[T0, T1, T2, T3](u: OneOf4[T0, T1, T2, T3]): T3 =
+  if u.adaWhich != 3: raise newException(ValueError, "member 3 of a union holding member " & $u.adaWhich)
+  u.adaM3
+proc is_v3*[T0, T1, T2, T3, Err](r: Result[OneOf4[T0, T1, T2, T3], Err]): bool = not r.adaIsErr and r.adaVal.adaWhich == 3
+proc v3*[T0, T1, T2, T3, Err](r: Result[OneOf4[T0, T1, T2, T3], Err]): T3 = r.value.m3
+proc `$`*[T0, T1, T2, T3](u: OneOf4[T0, T1, T2, T3]): string =
+  case u.adaWhich
+  of 0: (when compiles($u.adaM0): $u.adaM0 else: "member 0")
+  of 1: (when compiles($u.adaM1): $u.adaM1 else: "member 1")
+  of 2: (when compiles($u.adaM2): $u.adaM2 else: "member 2")
+  of 3: (when compiles($u.adaM3): $u.adaM3 else: "member 3")
+proc `==`*[T0, T1, T2, T3](a, b: OneOf4[T0, T1, T2, T3]): bool =
+  if a.adaWhich != b.adaWhich: return false
+  case a.adaWhich
+  of 0: a.adaM0 == b.adaM0
+  of 1: a.adaM1 == b.adaM1
+  of 2: a.adaM2 == b.adaM2
+  of 3: a.adaM3 == b.adaM3
+
+type OneOf5*[T0, T1, T2, T3, T4] = object
+  case adaWhich: range[0..4]
+  of 0: adaM0: T0
+  of 1: adaM1: T1
+  of 2: adaM2: T2
+  of 3: adaM3: T3
+  of 4: adaM4: T4
+proc of0*[T0, T1, T2, T3, T4](U: typedesc[OneOf5[T0, T1, T2, T3, T4]]; v: T0): OneOf5[T0, T1, T2, T3, T4] = OneOf5[T0, T1, T2, T3, T4](adaWhich: 0, adaM0: v)
+proc is_m0*[T0, T1, T2, T3, T4](u: OneOf5[T0, T1, T2, T3, T4]): bool = u.adaWhich == 0
+proc m0*[T0, T1, T2, T3, T4](u: OneOf5[T0, T1, T2, T3, T4]): T0 =
+  if u.adaWhich != 0: raise newException(ValueError, "member 0 of a union holding member " & $u.adaWhich)
+  u.adaM0
+proc is_v0*[T0, T1, T2, T3, T4, Err](r: Result[OneOf5[T0, T1, T2, T3, T4], Err]): bool = not r.adaIsErr and r.adaVal.adaWhich == 0
+proc v0*[T0, T1, T2, T3, T4, Err](r: Result[OneOf5[T0, T1, T2, T3, T4], Err]): T0 = r.value.m0
+proc of1*[T0, T1, T2, T3, T4](U: typedesc[OneOf5[T0, T1, T2, T3, T4]]; v: T1): OneOf5[T0, T1, T2, T3, T4] = OneOf5[T0, T1, T2, T3, T4](adaWhich: 1, adaM1: v)
+proc is_m1*[T0, T1, T2, T3, T4](u: OneOf5[T0, T1, T2, T3, T4]): bool = u.adaWhich == 1
+proc m1*[T0, T1, T2, T3, T4](u: OneOf5[T0, T1, T2, T3, T4]): T1 =
+  if u.adaWhich != 1: raise newException(ValueError, "member 1 of a union holding member " & $u.adaWhich)
+  u.adaM1
+proc is_v1*[T0, T1, T2, T3, T4, Err](r: Result[OneOf5[T0, T1, T2, T3, T4], Err]): bool = not r.adaIsErr and r.adaVal.adaWhich == 1
+proc v1*[T0, T1, T2, T3, T4, Err](r: Result[OneOf5[T0, T1, T2, T3, T4], Err]): T1 = r.value.m1
+proc of2*[T0, T1, T2, T3, T4](U: typedesc[OneOf5[T0, T1, T2, T3, T4]]; v: T2): OneOf5[T0, T1, T2, T3, T4] = OneOf5[T0, T1, T2, T3, T4](adaWhich: 2, adaM2: v)
+proc is_m2*[T0, T1, T2, T3, T4](u: OneOf5[T0, T1, T2, T3, T4]): bool = u.adaWhich == 2
+proc m2*[T0, T1, T2, T3, T4](u: OneOf5[T0, T1, T2, T3, T4]): T2 =
+  if u.adaWhich != 2: raise newException(ValueError, "member 2 of a union holding member " & $u.adaWhich)
+  u.adaM2
+proc is_v2*[T0, T1, T2, T3, T4, Err](r: Result[OneOf5[T0, T1, T2, T3, T4], Err]): bool = not r.adaIsErr and r.adaVal.adaWhich == 2
+proc v2*[T0, T1, T2, T3, T4, Err](r: Result[OneOf5[T0, T1, T2, T3, T4], Err]): T2 = r.value.m2
+proc of3*[T0, T1, T2, T3, T4](U: typedesc[OneOf5[T0, T1, T2, T3, T4]]; v: T3): OneOf5[T0, T1, T2, T3, T4] = OneOf5[T0, T1, T2, T3, T4](adaWhich: 3, adaM3: v)
+proc is_m3*[T0, T1, T2, T3, T4](u: OneOf5[T0, T1, T2, T3, T4]): bool = u.adaWhich == 3
+proc m3*[T0, T1, T2, T3, T4](u: OneOf5[T0, T1, T2, T3, T4]): T3 =
+  if u.adaWhich != 3: raise newException(ValueError, "member 3 of a union holding member " & $u.adaWhich)
+  u.adaM3
+proc is_v3*[T0, T1, T2, T3, T4, Err](r: Result[OneOf5[T0, T1, T2, T3, T4], Err]): bool = not r.adaIsErr and r.adaVal.adaWhich == 3
+proc v3*[T0, T1, T2, T3, T4, Err](r: Result[OneOf5[T0, T1, T2, T3, T4], Err]): T3 = r.value.m3
+proc of4*[T0, T1, T2, T3, T4](U: typedesc[OneOf5[T0, T1, T2, T3, T4]]; v: T4): OneOf5[T0, T1, T2, T3, T4] = OneOf5[T0, T1, T2, T3, T4](adaWhich: 4, adaM4: v)
+proc is_m4*[T0, T1, T2, T3, T4](u: OneOf5[T0, T1, T2, T3, T4]): bool = u.adaWhich == 4
+proc m4*[T0, T1, T2, T3, T4](u: OneOf5[T0, T1, T2, T3, T4]): T4 =
+  if u.adaWhich != 4: raise newException(ValueError, "member 4 of a union holding member " & $u.adaWhich)
+  u.adaM4
+proc is_v4*[T0, T1, T2, T3, T4, Err](r: Result[OneOf5[T0, T1, T2, T3, T4], Err]): bool = not r.adaIsErr and r.adaVal.adaWhich == 4
+proc v4*[T0, T1, T2, T3, T4, Err](r: Result[OneOf5[T0, T1, T2, T3, T4], Err]): T4 = r.value.m4
+proc `$`*[T0, T1, T2, T3, T4](u: OneOf5[T0, T1, T2, T3, T4]): string =
+  case u.adaWhich
+  of 0: (when compiles($u.adaM0): $u.adaM0 else: "member 0")
+  of 1: (when compiles($u.adaM1): $u.adaM1 else: "member 1")
+  of 2: (when compiles($u.adaM2): $u.adaM2 else: "member 2")
+  of 3: (when compiles($u.adaM3): $u.adaM3 else: "member 3")
+  of 4: (when compiles($u.adaM4): $u.adaM4 else: "member 4")
+proc `==`*[T0, T1, T2, T3, T4](a, b: OneOf5[T0, T1, T2, T3, T4]): bool =
+  if a.adaWhich != b.adaWhich: return false
+  case a.adaWhich
+  of 0: a.adaM0 == b.adaM0
+  of 1: a.adaM1 == b.adaM1
+  of 2: a.adaM2 == b.adaM2
+  of 3: a.adaM3 == b.adaM3
+  of 4: a.adaM4 == b.adaM4
+
+type OneOf6*[T0, T1, T2, T3, T4, T5] = object
+  case adaWhich: range[0..5]
+  of 0: adaM0: T0
+  of 1: adaM1: T1
+  of 2: adaM2: T2
+  of 3: adaM3: T3
+  of 4: adaM4: T4
+  of 5: adaM5: T5
+proc of0*[T0, T1, T2, T3, T4, T5](U: typedesc[OneOf6[T0, T1, T2, T3, T4, T5]]; v: T0): OneOf6[T0, T1, T2, T3, T4, T5] = OneOf6[T0, T1, T2, T3, T4, T5](adaWhich: 0, adaM0: v)
+proc is_m0*[T0, T1, T2, T3, T4, T5](u: OneOf6[T0, T1, T2, T3, T4, T5]): bool = u.adaWhich == 0
+proc m0*[T0, T1, T2, T3, T4, T5](u: OneOf6[T0, T1, T2, T3, T4, T5]): T0 =
+  if u.adaWhich != 0: raise newException(ValueError, "member 0 of a union holding member " & $u.adaWhich)
+  u.adaM0
+proc is_v0*[T0, T1, T2, T3, T4, T5, Err](r: Result[OneOf6[T0, T1, T2, T3, T4, T5], Err]): bool = not r.adaIsErr and r.adaVal.adaWhich == 0
+proc v0*[T0, T1, T2, T3, T4, T5, Err](r: Result[OneOf6[T0, T1, T2, T3, T4, T5], Err]): T0 = r.value.m0
+proc of1*[T0, T1, T2, T3, T4, T5](U: typedesc[OneOf6[T0, T1, T2, T3, T4, T5]]; v: T1): OneOf6[T0, T1, T2, T3, T4, T5] = OneOf6[T0, T1, T2, T3, T4, T5](adaWhich: 1, adaM1: v)
+proc is_m1*[T0, T1, T2, T3, T4, T5](u: OneOf6[T0, T1, T2, T3, T4, T5]): bool = u.adaWhich == 1
+proc m1*[T0, T1, T2, T3, T4, T5](u: OneOf6[T0, T1, T2, T3, T4, T5]): T1 =
+  if u.adaWhich != 1: raise newException(ValueError, "member 1 of a union holding member " & $u.adaWhich)
+  u.adaM1
+proc is_v1*[T0, T1, T2, T3, T4, T5, Err](r: Result[OneOf6[T0, T1, T2, T3, T4, T5], Err]): bool = not r.adaIsErr and r.adaVal.adaWhich == 1
+proc v1*[T0, T1, T2, T3, T4, T5, Err](r: Result[OneOf6[T0, T1, T2, T3, T4, T5], Err]): T1 = r.value.m1
+proc of2*[T0, T1, T2, T3, T4, T5](U: typedesc[OneOf6[T0, T1, T2, T3, T4, T5]]; v: T2): OneOf6[T0, T1, T2, T3, T4, T5] = OneOf6[T0, T1, T2, T3, T4, T5](adaWhich: 2, adaM2: v)
+proc is_m2*[T0, T1, T2, T3, T4, T5](u: OneOf6[T0, T1, T2, T3, T4, T5]): bool = u.adaWhich == 2
+proc m2*[T0, T1, T2, T3, T4, T5](u: OneOf6[T0, T1, T2, T3, T4, T5]): T2 =
+  if u.adaWhich != 2: raise newException(ValueError, "member 2 of a union holding member " & $u.adaWhich)
+  u.adaM2
+proc is_v2*[T0, T1, T2, T3, T4, T5, Err](r: Result[OneOf6[T0, T1, T2, T3, T4, T5], Err]): bool = not r.adaIsErr and r.adaVal.adaWhich == 2
+proc v2*[T0, T1, T2, T3, T4, T5, Err](r: Result[OneOf6[T0, T1, T2, T3, T4, T5], Err]): T2 = r.value.m2
+proc of3*[T0, T1, T2, T3, T4, T5](U: typedesc[OneOf6[T0, T1, T2, T3, T4, T5]]; v: T3): OneOf6[T0, T1, T2, T3, T4, T5] = OneOf6[T0, T1, T2, T3, T4, T5](adaWhich: 3, adaM3: v)
+proc is_m3*[T0, T1, T2, T3, T4, T5](u: OneOf6[T0, T1, T2, T3, T4, T5]): bool = u.adaWhich == 3
+proc m3*[T0, T1, T2, T3, T4, T5](u: OneOf6[T0, T1, T2, T3, T4, T5]): T3 =
+  if u.adaWhich != 3: raise newException(ValueError, "member 3 of a union holding member " & $u.adaWhich)
+  u.adaM3
+proc is_v3*[T0, T1, T2, T3, T4, T5, Err](r: Result[OneOf6[T0, T1, T2, T3, T4, T5], Err]): bool = not r.adaIsErr and r.adaVal.adaWhich == 3
+proc v3*[T0, T1, T2, T3, T4, T5, Err](r: Result[OneOf6[T0, T1, T2, T3, T4, T5], Err]): T3 = r.value.m3
+proc of4*[T0, T1, T2, T3, T4, T5](U: typedesc[OneOf6[T0, T1, T2, T3, T4, T5]]; v: T4): OneOf6[T0, T1, T2, T3, T4, T5] = OneOf6[T0, T1, T2, T3, T4, T5](adaWhich: 4, adaM4: v)
+proc is_m4*[T0, T1, T2, T3, T4, T5](u: OneOf6[T0, T1, T2, T3, T4, T5]): bool = u.adaWhich == 4
+proc m4*[T0, T1, T2, T3, T4, T5](u: OneOf6[T0, T1, T2, T3, T4, T5]): T4 =
+  if u.adaWhich != 4: raise newException(ValueError, "member 4 of a union holding member " & $u.adaWhich)
+  u.adaM4
+proc is_v4*[T0, T1, T2, T3, T4, T5, Err](r: Result[OneOf6[T0, T1, T2, T3, T4, T5], Err]): bool = not r.adaIsErr and r.adaVal.adaWhich == 4
+proc v4*[T0, T1, T2, T3, T4, T5, Err](r: Result[OneOf6[T0, T1, T2, T3, T4, T5], Err]): T4 = r.value.m4
+proc of5*[T0, T1, T2, T3, T4, T5](U: typedesc[OneOf6[T0, T1, T2, T3, T4, T5]]; v: T5): OneOf6[T0, T1, T2, T3, T4, T5] = OneOf6[T0, T1, T2, T3, T4, T5](adaWhich: 5, adaM5: v)
+proc is_m5*[T0, T1, T2, T3, T4, T5](u: OneOf6[T0, T1, T2, T3, T4, T5]): bool = u.adaWhich == 5
+proc m5*[T0, T1, T2, T3, T4, T5](u: OneOf6[T0, T1, T2, T3, T4, T5]): T5 =
+  if u.adaWhich != 5: raise newException(ValueError, "member 5 of a union holding member " & $u.adaWhich)
+  u.adaM5
+proc is_v5*[T0, T1, T2, T3, T4, T5, Err](r: Result[OneOf6[T0, T1, T2, T3, T4, T5], Err]): bool = not r.adaIsErr and r.adaVal.adaWhich == 5
+proc v5*[T0, T1, T2, T3, T4, T5, Err](r: Result[OneOf6[T0, T1, T2, T3, T4, T5], Err]): T5 = r.value.m5
+proc `$`*[T0, T1, T2, T3, T4, T5](u: OneOf6[T0, T1, T2, T3, T4, T5]): string =
+  case u.adaWhich
+  of 0: (when compiles($u.adaM0): $u.adaM0 else: "member 0")
+  of 1: (when compiles($u.adaM1): $u.adaM1 else: "member 1")
+  of 2: (when compiles($u.adaM2): $u.adaM2 else: "member 2")
+  of 3: (when compiles($u.adaM3): $u.adaM3 else: "member 3")
+  of 4: (when compiles($u.adaM4): $u.adaM4 else: "member 4")
+  of 5: (when compiles($u.adaM5): $u.adaM5 else: "member 5")
+proc `==`*[T0, T1, T2, T3, T4, T5](a, b: OneOf6[T0, T1, T2, T3, T4, T5]): bool =
+  if a.adaWhich != b.adaWhich: return false
+  case a.adaWhich
+  of 0: a.adaM0 == b.adaM0
+  of 1: a.adaM1 == b.adaM1
+  of 2: a.adaM2 == b.adaM2
+  of 3: a.adaM3 == b.adaM3
+  of 4: a.adaM4 == b.adaM4
+  of 5: a.adaM5 == b.adaM5

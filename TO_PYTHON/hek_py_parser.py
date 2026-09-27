@@ -259,13 +259,13 @@ def _py_step_kind(expr):
         return "optional", None
     parts = split_top_level_bar(text)
     failures = getattr(ParserState, "failure_types", set())
-    if len(parts) == 2:
-        if parts[1] in failures:
-            return "either", parts[1]
-        if parts[0] in failures:
-            return "either", parts[0]
-        if "None" in parts:
-            return "optional", None
+    _f = [p for p in parts if p in failures]
+    if len(parts) >= 2 and _f:
+        return "either", _f[0]
+    if len(parts) == 2 and "None" in parts:
+        return "optional", None
+    if len(parts) >= 2:
+        return "plain", None
     return None, None
 
 
@@ -320,6 +320,10 @@ def to_py(self, indent=0):
             kind, step_failure = _py_step_kind(expr)
             step_failure = step_failure or routine_failure
             shown = f"'{expr}'"
+        if kind == "plain":
+            raise SyntaxError(
+                f"do: step {shown} is a plain union: nothing in it is a "
+                f"failure to pass on")
         if kind == "optional":
             if else_node is None:
                 raise SyntaxError(
@@ -1055,51 +1059,51 @@ def _pattern_chain_to_py(case_node, subject, indent):
     return result.lstrip("\n")
 
 
-def _either_sides_of_py(subject):
-    """(T, F) when SUBJECT is a name declared `T | F`, else None."""
-    from hek_py_declarations import split_either
+def _union_of_py(subject):
+    """The union (hek_py_declarations.union_of) SUBJECT, a name, is declared
+    as -- plain, or with a failure member -- else None."""
+    from hek_py_declarations import union_of
     sym = ParserState.symbol_table.lookup(subject.strip())
     ann = (sym.get("type") or "") if isinstance(sym, dict) else ""
-    return split_either(ann) if ann else None
+    u = union_of(ann) if ann else None
+    return u if u is not None and u["kind"] in ("plain", "either") else None
 
 
-def _either_case_to_py(case_node, subject, sides, indent):
-    """`case r:` over a `T | F` (see the Nim backend's _either_case_to_nim):
-    an if/elif chain on r's class; the value is unboxed, so the narrowing
-    is simply r."""
+def _either_case_to_py(case_node, subject, u, indent):
+    """`case x:` over a union (see the Nim backend's _either_case_to_nim):
+    an if/elif chain on x's class; the value is the member itself, so the
+    narrowing is simply x."""
     from hek_py_declarations import _ensure_is_a_helper
-    value_t, failure_t = sides
+    values, failure = u["values"], u["failure"]
+    members = values + ([failure] if failure else [])
+    shown_all = " | ".join(members)
     out, covered, keyword = [], set(), "if"
     for pat_node, block_node, guard_node in _extract_branches_py(case_node):
         pat = (pat_node.to_py() if hasattr(pat_node, "to_py") else str(pat_node)).strip()
         if guard_node is not None:
             raise SyntaxError(
-                f"case over a `T | F`: `when {pat}` cannot carry a guard -- "
+                f"case over a union: `when {pat}` cannot carry a guard -- "
                 f"test inside the branch")
         if pat in ("others", "_"):
             head = f"{_ind(indent)}else:"
-            covered.update({"ok", "err"})
+            covered.update(members)
         else:
-            if pat == failure_t:
-                side, cond = "err", f"_is_a({subject}, {failure_t})"
-            elif pat == value_t:
-                side = "ok"
-                cond = (f"{subject} is None" if pat == "None"
-                        else f"not _is_a({subject}, {failure_t})")
-            else:
+            if pat not in members:
                 raise SyntaxError(
-                    f"case {subject}: `when {pat}` is neither side of "
-                    f"its `T | F`")
+                    f"case {subject}: `when {pat}` is no member of {shown_all}")
+            cond = (f"{subject} is None" if pat == "None"
+                    else f"_is_a({subject}, {pat})")
             _ensure_is_a_helper()
-            covered.add(side)
+            covered.add(pat)
             head = f"{_ind(indent)}{keyword} {cond}:"
             keyword = "elif"
         body = block_node.to_py(indent + 1) if block_node else _ind(indent + 1) + "pass"
         out.append(f"{head}\n{body}")
-    if covered != {"ok", "err"}:
+    missing = [m for m in members if m not in covered]
+    if missing:
         raise SyntaxError(
-            f"case over the `T | F` {subject} must cover both sides -- the "
-            f"value and the failure -- or say `when others:`")
+            f"case over the union {subject} ({shown_all}) must cover every "
+            f"member -- {', '.join(missing)} is missing -- or say `when others:`")
     return "\n".join(out)
 
 
@@ -1108,9 +1112,9 @@ def to_py(self, indent=0):
     """case_stmt: 'case' expression ':' when_clause+ — Adascript case/when"""
     subject = self.nodes[0].to_py()
 
-    _either = _either_sides_of_py(subject)
-    if _either is not None:
-        return _either_case_to_py(self, subject, _either, indent)
+    _union = _union_of_py(subject)
+    if _union is not None:
+        return _either_case_to_py(self, subject, _union, indent)
 
     if _needs_chain_py(self):
         return _pattern_chain_to_py(self, subject, indent)

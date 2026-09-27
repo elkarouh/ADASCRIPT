@@ -62,6 +62,7 @@ source.ady
 - [Raw Nim Injection](#raw-nim-injection)
 - [Python Interoperability](#python-interoperability)
 - [Print Statement](#print-statement)
+- [Unions: `A | B`](#unions-a--b)
 - [Failures as Values: `T | F`](#failures-as-values-t--f)
 - [Shell Statements](#shell-statements)
 - [Bash Variables](#bash-variables)
@@ -385,6 +386,7 @@ shape assumes — not because it fails to be a mapping.
 | `{}T`          | `set[T]`                  | `HashSet[T]` or `set[T]`       |
 | `?T`           | `T \| None`               | `Option[T]`                    |
 | `T \| None`     | `T \| None`               | `Option[T]` -- the same as `?T` |
+| `A \| B`        | `A \| B`                  | `OneOf2[A, B]` (a union)       |
 | `T \| F`        | `T \| F`                  | `Result[T, F]` (F a failure)   |
 | `(T, U)`       | `tuple[T, U]`             | `(T, U)`                       |
 | `[(T, U)]R`    | `Callable[[T, U], R]`     | `proc(a0: T, a1: U): R`        |
@@ -1649,6 +1651,36 @@ intercepts `print` when it is *not* immediately followed by `(`.
 
 ---
 
+## Unions: `A | B`
+
+A union holds one of its members, and the value says which. What is
+assigned or returned becomes the member its type names; `x is int` asks
+which member x holds and narrows x to it; `case x:` gives a branch per
+member, and must name them all or say `when others:`.
+
+```python
+def compute(n: int) -> int | float:
+    if n % 2 == 0:
+        return n // 2              # an int
+    return n / 2                   # a float
+
+let x: int | float = compute(5)
+case x:
+    when int:
+        print f"int {x + 1}"       # x is the int here
+    when float:
+        print f"float {x * 2.0}"   # and the float here
+```
+
+Any number of members, and a union can be named: `type Number_T is int |
+float`. The members must be told apart at run time -- `[]int | []str` and
+`int | bool` are refused. `T | None` is `?T`, and a union with a failure
+member is a value-or-failure (next section). Python holds the member
+itself; Nim holds stdlib.nim's `OneOf2[A, B]`. The book's section 4.4 has
+the whole of it; `EXAMPLES/test_union.ady` is the spec.
+
+---
+
 ## Failures as Values: `T | F`
 
 A function that can fail says so in its return type: `-> int | Failure_T`
@@ -1672,7 +1704,7 @@ def read_number(s: str) -> int | Failure_T:
 | You write | It means |
 |---|---|
 | `r is Failure_T` / `r is int` | which side r holds -- and r is narrowed to it, as `x is None` narrows a `?T` |
-| `case r:` / `when Failure_T:` / `when int:` | a branch per side; both sides, or `when others:` |
+| `case r:` / `when Failure_T:` / `when int:` | a branch per member; all of them, or `when others:` |
 | `None \| Failure_T` | a step that can only fail; falling off the end is success |
 | `do:` / `x <- step` | bind the value, or return the failure from the whole function |
 | `do:` / `x <- step else e` | a step that fails some other way -- a `?T`, another failure type, a shell command -- returns `e` instead; inside `e`, `x` is the step's own failure |
@@ -1688,10 +1720,10 @@ def ratio(raw_a: str, raw_b: str) -> int | Failure_T:
     return q
 ```
 
-The transpiler refuses a `|` with no failure side (`int | str`) or with two,
-a failure dropped (a bare call whose `T | F` result nobody takes), a `do:`
-step that fails some other way without an `else`, and a `case` that covers
-one side only. With `None` in place of a failure, the `|` is `?T`: `?T` is
+The transpiler refuses a union with two failure members, a failure dropped
+(a bare call whose `T | F` result nobody takes), a `do:` step that fails
+some other way without an `else`, and a `case` that leaves a member out.
+A failure union may have several value members: `int | str | Failure_T`. With `None` in place of a failure, the `|` is `?T`: `?T` is
 shorthand for `T | None`.
 
 On Python the value is the T or the F itself; on Nim it is stdlib.nim's

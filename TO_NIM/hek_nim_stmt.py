@@ -311,7 +311,7 @@ def to_nim(self):
     if len(parts) == 2 and prefix == "":
         _rsym = ParserState.symbol_table.lookup(lhs)
         _rtype = (_rsym.get("type") or "") if _rsym else ""
-        if _rtype.startswith("Result["):
+        if _rtype.startswith(("Result[", "OneOf")):
             parts[1] = hek_nim_expr._result_wrap(parts[1], _rtype)
     # Option[T] assignment: if LHS is known Option[T] and RHS is not some()/none()/nil,
     # wrap RHS in some(...)
@@ -997,7 +997,7 @@ def to_nim(self):
                     if _is_pyobj_base:
                         value = f"{value}.to({annotation})"
                 # Result[T, E] = Ok(v) / Err(e) / a plain value
-                if value and annotation.startswith("Result["):
+                if value and annotation.startswith(("Result[", "OneOf")):
                     value = hek_nim_expr._result_wrap(value, annotation)
                 # Option[T] = None -> none(T)
                 elif value == "nil" and annotation.startswith("Option["):
@@ -1256,7 +1256,7 @@ def to_nim(self):
                     if _is_pyobj_base:
                         value = f"{value}.to({annotation})"
                 # Result[T, E] = Ok(v) / Err(e) / a plain value
-                if value and annotation.startswith("Result["):
+                if value and annotation.startswith(("Result[", "OneOf")):
                     value = hek_nim_expr._result_wrap(value, annotation)
                 # Option[T] = None -> none(T)
                 elif value == "nil" and annotation.startswith("Option["):
@@ -1389,7 +1389,7 @@ def to_nim(self):
     _rt_bare = ret_type.lstrip(": ").strip()
     # In a `-> Result[T, E]` routine, `return v` is Ok and `return Err(e)`
     # the error track; the constructor's type comes from the signature.
-    if _rt_bare.startswith("Result["):
+    if _rt_bare.startswith(("Result[", "OneOf")):
         return f"return {hek_nim_expr._result_wrap(val, _rt_bare)}"
     if (_rt_bare.startswith("(") and _rt_bare.endswith(")")
             and "Option[" in _rt_bare and val.strip().startswith("(")

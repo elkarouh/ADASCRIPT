@@ -519,20 +519,10 @@ def _proc_ret_nim(name):
 
 
 def _result_type_of(expr_str):
-    """The Nim Result type of EXPR_STR -- a name declared `T | E`, or a call
+    """The Nim Result type of EXPR_STR -- a name declared `T | F`, or a call
     of a routine returning one -- or "" when it is not a Result."""
-    import re as _re
-    expr_str = expr_str.strip()
-    sym = ParserState.symbol_table.lookup(expr_str)
-    if sym and (sym.get("type") or "").startswith("Result["):
-        return sym.get("type")
-    _mc = (_re.match(r'^([A-Za-z_]\w*)\((.*)\)$', expr_str, _re.S)
-           or _re.match(r'^.+\.([A-Za-z_]\w*)\((.*)\)$', expr_str, _re.S))
-    if _mc and _balanced(_mc.group(2)):
-        _rt = _proc_ret_nim(_mc.group(1))
-        if _rt.startswith("Result["):
-            return _rt
-    return ""
+    _t = _union_type_of(expr_str)
+    return _t if _t.startswith("Result[") else ""
 
 
 def _balanced(text):
@@ -569,7 +559,40 @@ def _value_nim_type(val):
     _t = _nim_expr_type(v)
     if _t:
         return _t
+    # A narrowed name: a union's member, a Result's value or error, an
+    # Option's value -- the type the narrowing says it is.
+    _mn = _re.match(r'^([A-Za-z_]\w*)\.(?:(m|v)(\d)|(value|error)|(get)\(\))$', v)
+    if _mn:
+        _base_t = (ParserState.symbol_table.lookup(_mn.group(1)) or {}).get("type") or ""
+        _ui = _union_info(_base_t)
+        if _ui and _mn.group(2) and int(_mn.group(3)) < len(_ui["values"]):
+            return _ui["values"][int(_mn.group(3))]
+        if _ui and _mn.group(4) == "value" and not _ui["multi"]:
+            return _ui["values"][0]
+        if _ui and _mn.group(4) == "error":
+            return _ui["failure"]
+        _om = _re.match(r"^Option\[(.+)\]$", _base_t)
+        if _om and _mn.group(5):
+            return _om.group(1)
+    _arith = _arith_nim_type(v)
+    if _arith:
+        return _arith
     _mc = _re.match(r'^([A-Za-z_]\w*)\((.*)\)$', v, _re.S)
+    _conv = {"float": "float", "toFloat": "float", "int": "int", "toInt": "int",
+             "parseInt": "int", "parseFloat": "float", "len": "int", "ord": "int",
+             "chr": "char", "abs": None, "min": None, "max": None}
+    if _mc and _balanced(_mc.group(2)) and _mc.group(1) in _conv:
+        _ct = _conv[_mc.group(1)]
+        if _ct is None:     # the type of its first argument
+            _args = _split_args(_mc.group(2))
+            _ct = _value_nim_type(_args[0]) if _args and _args[0] else None
+        if _ct:
+            return _ct
+    # The same conversions called as methods -- `int(s)` is `s.parseInt()`.
+    _mm = _re.match(r'^.+\.(parseInt|parseFloat|toFloat|toInt|len)(?:\(\))?$', v)
+    if _mm:
+        return {"parseInt": "int", "toInt": "int", "len": "int",
+                "parseFloat": "float", "toFloat": "float"}[_mm.group(1)]
     if _mc and _balanced(_mc.group(2)):
         _name = _mc.group(1)
         _rt = _proc_ret_nim(_name)
@@ -584,54 +607,200 @@ def _value_nim_type(val):
     return None
 
 
+def _split_args(inner):
+    """INNER, a generic argument list, split at its top-level commas."""
+    out, depth, cur = [], 0, []
+    for ch in inner:
+        if ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+        if ch == "," and depth == 0:
+            out.append("".join(cur).strip())
+            cur = []
+        else:
+            cur.append(ch)
+    out.append("".join(cur).strip())
+    return out
+
+
+def _union_info(t):
+    """What the Nim type T is as an Adascript union, or None: KIND "plain"
+    (OneOfN[...]) or "either" (Result[T, F]); VALUES, the value members --
+    several when a Result's value is itself a OneOfN, ["void"] for None | F;
+    FAILURE, the failure type or None; MULTI, whether a Result holds a
+    OneOfN; TYPE, T itself."""
+    import re as _re
+    t = (t or "").strip()
+    m = _re.match(r"^OneOf\d\[(.*)\]$", t)
+    if m:
+        return {"kind": "plain", "values": _split_args(m.group(1)),
+                "failure": None, "multi": False, "type": t}
+    sides = _split_result(t)
+    if not sides:
+        return None
+    value_t, failure_t = sides
+    m = _re.match(r"^OneOf\d\[(.*)\]$", value_t)
+    if m:
+        return {"kind": "either", "values": _split_args(m.group(1)),
+                "failure": failure_t, "multi": True, "type": t}
+    return {"kind": "either", "values": [value_t], "failure": failure_t,
+            "multi": False, "type": t}
+
+
+def _union_type_of(expr_str):
+    """The Nim union type -- OneOfN or Result -- of EXPR_STR, a name or a
+    call, or ""."""
+    import re as _re
+    expr_str = expr_str.strip()
+    sym = ParserState.symbol_table.lookup(expr_str)
+    _t = (sym.get("type") or "") if sym else ""
+    if _t.startswith(("Result[", "OneOf")):
+        return _t
+    _mc = (_re.match(r'^([A-Za-z_]\w*)\((.*)\)$', expr_str, _re.S)
+           or _re.match(r'^.+\.([A-Za-z_]\w*)\((.*)\)$', expr_str, _re.S))
+    if _mc and _balanced(_mc.group(2)):
+        _rt = _proc_ret_nim(_mc.group(1))
+        if _rt.startswith(("Result[", "OneOf")):
+            return _rt
+    return ""
+
+
+def _arith_nim_type(v):
+    """The Nim type of an arithmetic expression, from its operator and its
+    operands: `div` and `mod` are int, `/` is float, `+ - *` are float when
+    either side is and int when both are. None when it cannot be told."""
+    import re as _re
+    v = v.strip()
+    while v.startswith("(") and v.endswith(")") and _balanced(v[1:-1]):
+        v = v[1:-1].strip()
+    depth, last = 0, None
+    i = 0
+    while i < len(v):
+        ch = v[i]
+        if ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+        elif depth == 0:
+            for op in (" div ", " mod ", " + ", " - ", " * ", " / "):
+                if v.startswith(op, i):
+                    last = (i, op)
+        i += 1
+    if last is None:
+        return None
+    i, op = last
+    left, right = v[:i], v[i + len(op):]
+    if op in (" div ", " mod "):
+        return "int"
+    if op == " / ":
+        return "float"
+    lt, rt = _value_nim_type(left), _value_nim_type(right)
+    if "float" in (lt, rt):
+        return "float"
+    if lt == rt == "int":
+        return "int"
+    if lt == rt == "string" and op == " + ":
+        return "string"
+    return None
+
+
 def _result_wrap(val, rtype):
-    """VAL as a value of the Result type RTYPE ("Result[T, E]"): which side
-    it goes on is decided by its type -- an E is the error, anything else
-    the value. A Result already is itself. You never write a constructor;
-    this is where it comes from."""
+    """VAL as a value of the union type RTYPE -- a Result or a OneOfN, its
+    Nim spelling. The member is chosen by VAL's type: a failure is the
+    Result's error, a member type that member; a value of the union type
+    already is itself. You never write a constructor; this is where it
+    comes from. A Result with one value member keeps its old rule: a value
+    whose type cannot be told goes on the value side, where Nim's own type
+    check catches a failure put there by mistake."""
     ParserState.nim_imports.add("stdlib")
-    _sides = _split_result(rtype)
-    if _sides is None or _expr_is_result(val):
+    info = _union_info(rtype)
+    if info is None:
         return val
-    value_t, error_t = _sides
-    _void = value_t == "void"
+    _ut = _union_type_of(val)
+    if _ut and _ut.replace(" ", "") == rtype.replace(" ", ""):
+        return val
+    if info["kind"] == "either" and not info["multi"] and _expr_is_result(val):
+        return val
+    values, failure = info["values"], info["failure"]
+    _void = values == ["void"]
     if val.strip() == "nil":
         if _void:
             return f"{rtype}.ok()"
         raise SyntaxError(
-            f"None is neither side of {value_t} | {error_t}: return a "
-            f"{value_t} or a {error_t}")
+            f"None is not a member of {' | '.join(values + ([failure] if failure else []))}")
     _t = _value_nim_type(val)
-    if _t == error_t or (_void and _t != "void"):
+    if failure and (_t == failure or (_void and _t != "void")):
         return f"{rtype}.err({val})"
-    return f"{rtype}.ok()" if _void else f"{rtype}.ok({val})"
+    if info["kind"] == "either" and not info["multi"]:
+        return f"{rtype}.ok()" if _void else f"{rtype}.ok({val})"
+    if info["multi"] and _t and _t.replace(" ", "") == _split_result(rtype)[0].replace(" ", ""):
+        return f"{rtype}.ok({val})"     # the value members' union, whole
+    if _t in values:
+        i = values.index(_t)
+        if info["kind"] == "plain":
+            return f"{rtype}.of{i}({val})"
+        _inner = f"OneOf{len(values)}[{', '.join(values)}]"
+        return f"{rtype}.ok({_inner}.of{i}({val}))"
+    raise SyntaxError(
+        f"cannot tell which member of {' | '.join(values)} '{val}' is"
+        + (f" (it is a {_t})" if _t else "")
+        + " -- bind it first to a `let` of one member's type")
 
 
 def _result_is_test(chain, right, negated):
-    """`x is T` / `x is E` on a Result x: its is_ok / is_err, or None when
-    X is not a Result. RIGHT is the emitted type name ("nil" for None)."""
-    _rt = _result_type_of(chain)
-    _sides = _split_result(_rt)
-    if not _sides:
+    """`x is T` on a union x: the test for the member T names -- is_m<i> on
+    a OneOfN, is_v<i> / is_ok on a Result's value, is_err on its failure --
+    or None when x is not a union. RIGHT is the emitted type ("nil" for
+    None)."""
+    _ut = _union_type_of(chain)
+    info = _union_info(_ut)
+    if info is None:
         return None
-    value_t, error_t = _sides
-    if right == error_t:
+    values, failure = info["values"], info["failure"]
+    if failure and right == failure:
         test = "is_err"
-    elif right == value_t or (right == "nil" and value_t == "void"):
-        test = "is_ok"
+    elif right in values or (right == "nil" and values == ["void"]):
+        i = values.index(right) if right in values else 0
+        test = (f"is_m{i}" if info["kind"] == "plain"
+                else f"is_v{i}" if info["multi"] else "is_ok")
     else:
-        raise SyntaxError(
-            f"'{chain} is {right}': {chain} is a {value_t} or a {error_t}")
-    if negated:
-        test = "is_ok" if test == "is_err" else "is_err"
+        shown = " | ".join(values + ([failure] if failure else []))
+        raise SyntaxError(f"'{chain} is {right}': {chain} is a {shown}")
     ParserState.nim_imports.add("stdlib")
+    if negated:
+        if test in ("is_err", "is_ok"):
+            return f"{chain}.{'is_ok' if test == 'is_err' else 'is_err'}"
+        return f"not {chain}.{test}"
     return f"{chain}.{test}"
 
 
 # Narrowing: what a proved name reads as. A `?T` is its .get(); a Result
-# is its value or its error, depending on which test proved it.
+# is its value or its error, depending on which test proved it; a union
+# member is its m<i> / v<i>.
 _NARROW_IN_BODY = {"isSome": ".get()", "is_ok": ".value", "is_err": ".error"}
 _NARROW_IN_ELSE = {"isNone": ".get()", "is_err": ".value", "is_ok": ".error"}
+NARROW_TESTS = r"isSome|isNone|is_ok|is_err|is_m\d|is_v\d"
+
+
+def narrow_suffix(name, test, in_body):
+    """How NAME reads where TEST (one of NARROW_TESTS) is known true
+    (IN_BODY) or known false; None when that proves nothing."""
+    import re as _re
+    if in_body:
+        if test in _NARROW_IN_BODY:
+            return _NARROW_IN_BODY[test]
+        m = _re.match(r"is_([mv])(\d)$", test)
+        return f".{m.group(1)}{m.group(2)}" if m else None
+    info = _union_info(_union_type_of(name))
+    if test == "is_err" and info and info["multi"]:
+        return None                 # several values: no one member is left
+    if test in _NARROW_IN_ELSE:
+        return _NARROW_IN_ELSE[test]
+    m = _re.match(r"is_m(\d)$", test)
+    if m and info and info["kind"] == "plain" and len(info["values"]) == 2:
+        return f".m{1 - int(m.group(1))}"   # the other one
+    return None
 
 
 def _narrow_add(name, suffix):
@@ -4536,8 +4705,9 @@ def to_nim(self, prec=None):
     _added = []
 
     def _note_proved(piece):
-        _m = _re_dis.match(r"^([A-Za-z_]\w*(?:\.\w+)*(?:\[\d+\])?)\.(isSome|is_ok|is_err)$", str(piece).strip())
-        if _m and _narrow_add(_m.group(1), _NARROW_IN_BODY[_m.group(2)]):
+        _m = _re_dis.match(r"^([A-Za-z_]\w*(?:\.\w+)*(?:\[\d+\])?)\.(" + NARROW_TESTS + r")$", str(piece).strip())
+        _sfx = narrow_suffix(_m.group(1), _m.group(2), True) if _m else None
+        if _sfx and _narrow_add(_m.group(1), _sfx):
             _added.append(_m.group(1))
 
     try:
@@ -4592,14 +4762,16 @@ def to_nim(self, prec=None):
     # emitter about it, which is all this does.
     import re as _re_cond
     cond = _nim_truthiness(self.nodes[1].to_nim())
-    _m_narrow = _re_cond.match(r"^([A-Za-z_]\w*(?:\.\w+)*(?:\[\d+\])?)\.(isSome|isNone|is_ok|is_err)$", cond.strip())
+    _m_narrow = _re_cond.match(r"^([A-Za-z_]\w*(?:\.\w+)*(?:\[\d+\])?)\.(" + NARROW_TESTS + r")$", cond.strip())
     _narrowed = _m_narrow.group(1) if _m_narrow else None
     _test = _m_narrow.group(2) if _m_narrow else None
     # isSome narrows the value branch, isNone the else branch -- the branch
-    # reached when the name is known to hold something. A Result's test
-    # narrows both branches, one to its value and one to its error.
-    _in_value = (_narrowed, _NARROW_IN_BODY[_test]) if _test in _NARROW_IN_BODY else None
-    _in_alt = (_narrowed, _NARROW_IN_ELSE[_test]) if _test in _NARROW_IN_ELSE else None
+    # reached when the name is known to hold something. A union's test
+    # narrows both branches where it can: to the member, and to the rest.
+    _sv = narrow_suffix(_narrowed, _test, True) if _test else None
+    _sa = narrow_suffix(_narrowed, _test, False) if _test else None
+    _in_value = (_narrowed, _sv) if _sv else None
+    _in_alt = (_narrowed, _sa) if _sa else None
 
     def _emit_narrowed(node, narrow):
         if narrow is None:

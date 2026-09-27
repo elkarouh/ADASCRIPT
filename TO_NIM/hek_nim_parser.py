@@ -340,15 +340,18 @@ def note_option_guard(chunk, collected=None):
     # `print bt'Image` came out `some(IP)` on Nim against `IP` on Python --
     # compiling, and wrong, which is worse than the type error the same
     # variable gave in a `let` or a tuple.
-    m = re.match(r'^(\s*)if\s+([A-Za-z_]\w*(?:\.\w+)*(?:\[\d+\])?)\.(isNone|is_err|is_ok):'
+    m = re.match(r'^(\s*)if\s+([A-Za-z_]\w*(?:\.\w+)*(?:\[\d+\])?)\.('
+                 + hek_nim_expr.NARROW_TESTS + r'):'
                  r'\s*(.*?)\s*(?:#.*)?$',
                  chunk_lines[0])
     if not m:
         return
     head_indent, name, inline_exit = m.group(1), m.group(2), m.group(4)
     # What the rest of the block reads NAME as: an Option's value, or the
-    # side of a Result the guard did not leave on.
-    _suffix = hek_nim_expr._NARROW_IN_ELSE[m.group(3)]
+    # member of a union the guard did not leave on.
+    _suffix = hek_nim_expr.narrow_suffix(name, m.group(3), False)
+    if _suffix is None:
+        return
     if inline_exit:
         # The one-line form: what follows is the rest of the block rather
         # than the guard's body, so neither the indent test nor the last
@@ -713,10 +716,12 @@ def _proved_in_body(cond):
         return []
     proved = []
     for _part in cond.split(" and "):
-        _m = _re_pb.match(r'^\(?\s*(\w+(?:\.\w+)*(?:\[\d+\])?)\.(isSome|is_ok|is_err)\s*\)?$',
+        _m = _re_pb.match(r'^\(?\s*(\w+(?:\.\w+)*(?:\[\d+\])?)\.('
+                          + hek_nim_expr.NARROW_TESTS + r')\s*\)?$',
                           _part.strip())
-        if _m:
-            proved.append((_m.group(1), hek_nim_expr._NARROW_IN_BODY[_m.group(2)]))
+        _sfx = hek_nim_expr.narrow_suffix(_m.group(1), _m.group(2), True) if _m else None
+        if _sfx:
+            proved.append((_m.group(1), _sfx))
     return proved
 
 
@@ -834,11 +839,13 @@ def to_nim(self, indent=0):
     # own body, and proves x has a value in *every* clause after it -- the
     # else, and any elif, which is only reached when the isNone was false.
     # Without this, the else branch read the field off the Option.
-    _m_none = _re_if.match(r'^\(?\s*(\w+(?:\.\w+)*(?:\[\d+\])?)\.(isNone|is_err|is_ok)\s*\)?$', cond.strip())
+    _m_none = _re_if.match(r'^\(?\s*(\w+(?:\.\w+)*(?:\[\d+\])?)\.('
+                           + hek_nim_expr.NARROW_TESTS + r')\s*\)?$', cond.strip())
     _else_unwrapped = []
     if _m_none:
         _n = _m_none.group(1)
-        if hek_nim_expr._narrow_add(_n, hek_nim_expr._NARROW_IN_ELSE[_m_none.group(2)]):
+        _sfx = hek_nim_expr.narrow_suffix(_n, _m_none.group(2), False)
+        if _sfx and hek_nim_expr._narrow_add(_n, _sfx):
             _else_unwrapped.append(_n)
     try:
         for node in self.nodes[2:]:
@@ -968,10 +975,14 @@ def to_nim(self, indent=0):
             is_opt = False
         else:
             expr = value.to_nim()
+            shown = f"'{expr}'"
+            if hek_nim_expr._union_type_of(expr).startswith("OneOf"):
+                raise SyntaxError(
+                    f"do: step {shown} is a plain union: nothing in it is a "
+                    f"failure to pass on")
             lines.append(f"{ind}let {tmp} = {expr}")
             step_type = hek_nim_expr._result_type_of(expr)
             is_opt = not step_type and hek_nim_expr._expr_is_option(expr)
-            shown = f"'{expr}'"
         if is_opt:
             if else_node is None:
                 raise SyntaxError(
@@ -1000,7 +1011,11 @@ def to_nim(self, indent=0):
             lines.append(f"{ind1}return {ret_ann}.err({else_node.to_nim()})")
         if name and not (_step_sides and _step_sides[0] == "void"):
             lines.append(f"{ind}let {_nim_ident(name)} = {tmp}.value")
-            ParserState.symbol_table.add(name, "auto", "let")
+            # A value that is itself a union (`int | str | F`) is known as
+            # one, so that `x is int` and `case x:` work on it.
+            _vt = _step_sides[0] if _step_sides else ""
+            ParserState.symbol_table.add(
+                name, _vt if _vt.startswith("OneOf") else "auto", "let")
     return "\n".join(lines)
 
 
@@ -2233,17 +2248,20 @@ def _require_catch_all(subject, case_node):
 
 
 def _either_case_to_nim(case_node, subject, rtype, indent):
-    """`case r:` over a `T | F`: each `when` names a side -- `when
-    Failure_T:`, `when int:`, `when None:` for a `None | F` -- or is `when
-    others:`, and r is narrowed to that side in its branch, as `r is F`
-    narrows it. Both sides, or others, must be there: the case is as
+    """`case x:` over a union: each `when` names a member -- `when int:`,
+    `when Failure_T:`, `when None:` for a `None | F` -- or is `when
+    others:`, and x is narrowed to that member in its branch, as `x is T`
+    narrows it. Every member, or others, must be there: the case is as
     exhaustive as one over an enum."""
     from hek_nim_declarations import _PY_TO_NIM
-    value_t, failure_t = hek_nim_expr._split_result(rtype)
+    info = hek_nim_expr._union_info(rtype)
+    values, failure = info["values"], info["failure"]
+    members = values + ([failure] if failure else [])
+    shown_all = " | ".join("None" if m == "void" else m for m in members)
     if not re.fullmatch(r"[A-Za-z_]\w*", subject.strip()):
         raise SyntaxError(
-            f"case over the `T | F` '{subject}' takes a name, so that each "
-            f"branch can use it as its side: bind it with `let` first")
+            f"case over the union '{subject}' takes a name, so that each "
+            f"branch can use it as its member: bind it with `let` first")
     out, covered, keyword = [], set(), "if"
     for pat_node, block_node, guard_node in _extract_branches(case_node):
         shown = (pat_node.to_nim() if hasattr(pat_node, "to_nim") else str(pat_node)).strip()
@@ -2251,21 +2269,29 @@ def _either_case_to_nim(case_node, subject, rtype, indent):
         shown = "None" if shown == "nil" else shown
         if guard_node is not None:
             raise SyntaxError(
-                f"case over a `T | F`: `when {shown}` cannot carry a guard -- "
+                f"case over a union: `when {shown}` cannot carry a guard -- "
                 f"test inside the branch")
         if pat in ("others", "_"):
             head, narrow = f"{_ind(indent)}else:", None
-            covered.update({"ok", "err"})
+            covered.update(members)
         else:
-            if pat == failure_t:
-                test, narrow, side = "is_err", ".error", "err"
-            elif pat == value_t or (pat == "nil" and value_t == "void"):
-                test, narrow, side = "is_ok", ".value", "ok"
-            else:
+            if pat == "nil" and values == ["void"]:
+                pat = "void"
+            if pat not in members:
                 raise SyntaxError(
-                    f"case {subject}: `when {shown}` is neither side of "
-                    f"its `T | F`")
-            covered.add(side)
+                    f"case {subject}: `when {shown}` is no member of {shown_all}")
+            if pat == failure:
+                test = "is_err"
+            elif info["kind"] == "plain":
+                test = f"is_m{values.index(pat)}"
+            elif info["multi"]:
+                test = f"is_v{values.index(pat)}"
+            else:
+                test = "is_ok"
+            narrow = hek_nim_expr.narrow_suffix(subject, test, True)
+            if pat == "void":
+                narrow = None
+            covered.add(pat)
             head = f"{_ind(indent)}{keyword} {subject}.{test}:"
             keyword = "elif"
         _added = narrow is not None and hek_nim_expr._narrow_add(subject, narrow)
@@ -2276,10 +2302,12 @@ def _either_case_to_nim(case_node, subject, rtype, indent):
                 hek_nim_expr._narrow_drop(subject)
         hc = _block_inline_header_comment(block_node) if block_node else ""
         out.append(f"{head}{hc}\n{body}")
-    if covered != {"ok", "err"}:
+    missing = [m for m in members if m not in covered]
+    if missing:
         raise SyntaxError(
-            f"case over the `T | F` {subject} must cover both sides -- the "
-            f"value and the failure -- or say `when others:`")
+            f"case over the union {subject} ({shown_all}) must cover every "
+            f"member -- {', '.join('None' if m == 'void' else m for m in missing)} "
+            f"is missing -- or say `when others:`")
     ParserState.nim_imports.add("stdlib")
     return "\n".join(out)
 
@@ -2289,7 +2317,7 @@ def to_nim(self, indent=0):
     """match -> Nim case statement; desugars tuple patterns to if/elif."""
     import re as _re
     subject = self.nodes[0].to_nim()
-    _either_rt = hek_nim_expr._result_type_of(subject)
+    _either_rt = hek_nim_expr._union_type_of(subject)
     if _either_rt:
         return _either_case_to_nim(self, subject, _either_rt, indent)
     _require_catch_all(subject, self)

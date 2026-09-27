@@ -673,6 +673,9 @@ def translate(code, export_symbols=False):
     ParserState.failure_types = (_failures | {"ShellFailure_T"}
                                  | _nimport_carried.get("failure_types", set()))
     ParserState.ady_return_types = scan_return_types(code)
+    from ady_stmt import scan_union_aliases
+    ParserState.union_aliases = scan_union_aliases(code)
+    ParserState.union_aliases_nim = {}
     ParserState.ady_return_types_nim = {}
     ParserState.result_procs = either_procs(ParserState.ady_return_types,
                                             ParserState.failure_types)
@@ -1496,6 +1499,13 @@ def run_tests():
         "import options\nvar c: Option[int] = some[int](5)\nc = none(int)\n",
     ))
 
+    # A plain union is stdlib.nim's OneOfN; what is returned becomes the
+    # member its type names, and a case over it narrows each branch.
+    tests.append((
+        'def f(n: int) -> int | float:\n    if n > 0:\n        return n\n    return 0.5\n\nlet x: int | float = f(1)\ncase x:\n    when int:\n        print x + 1\n    when float:\n        print x\n',
+        'import stdlib\nproc f(n: int): OneOf2[int, float] =\n    if n > 0:\n        return OneOf2[int, float].of0(n)\n    return OneOf2[int, float].of1(0.5)\n\nlet x: OneOf2[int, float] = f(1)\nif x.is_m0:\n    echo(x.m0 + 1)\nelif x.is_m1:\n    echo(x.m1)\n',
+    ))
+
     passed = failed = 0
     for code, expected in tests:
         try:
@@ -1568,13 +1578,20 @@ def run_tests():
          "def f(s: str) -> int | Bad_T:\n    return len(s)\n\n"
          "def h(a: str) -> ?int:\n    do:\n        x <- f(a)\n    return x\n",
          "must return a `T | F` too, to pass its failure on"),
-        # A `|` with no failure side is not a union of two values.
-        ("var x: int | str\n",
-         "one side must be a failure type"),
+        # A union's members must be told apart at run time: on Python the
+        # value is the member itself, and its class all that says which.
+        ("var x: []int | []str\n",
+         "cannot be told apart at run time"),
+        ("var x: int | bool\n",
+         "cannot be told apart at run time"),
+        # At most one failure member: a do: step passes on one kind.
         ("type A_T is failure record:\n    a: int\n"
          "type B_T is failure record:\n    b: int\n"
          "var x: A_T | B_T\n",
-         "both sides are failure types"),
+         "at most one failure member"),
+        # None goes with one other type.
+        ("var x: int | str | None\n",
+         "None goes with one other type"),
         # Only a record can be one.
         ("type Oops_T is failure enum A, B\n",
          "only a record can be a failure type"),
@@ -1591,7 +1608,7 @@ def run_tests():
         ("type Bad_T is failure record:\n    why: str\n\n"
          "def f() -> int | Bad_T:\n    return 1\n\n"
          "let h: int | Bad_T = f()\ncase h:\n    when Bad_T:\n        print \"b\"\n",
-         "must cover both sides"),
+         "must cover every member"),
         # A failure nobody takes is refused: a bare call returning `T | F`.
         ("type Bad_T is failure record:\n    why: str\n\n"
          "def step(n: int) -> None | Bad_T:\n    if n < 0:\n"

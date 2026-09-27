@@ -150,6 +150,24 @@ def _ensure_path_helper():
         ParserState.nim_top_decls = decls
 
 
+def _union_alias_nim(name):
+    """The Nim union a name declared `type X is A | B` stands for, or None.
+    Read as the union itself -- OneOf2[A, B] -- so that everything that
+    works on a written-out union works on its name."""
+    aliases = getattr(ParserState, "union_aliases", {})
+    if name not in aliases:
+        return None
+    cache = getattr(ParserState, "union_aliases_nim", None)
+    if cache is None:
+        cache = ParserState.union_aliases_nim = {}
+    if name not in cache:
+        cache[name] = None            # a union naming itself stops here
+        from ady_declarations import parse_type
+        _ast = parse_type(aliases[name])
+        cache[name] = _ast.to_nim() if _ast is not None else None
+    return cache[name]
+
+
 @method(type_name)
 def to_nim(self, prec=None):
     """type_name: IDENTIFIER (type alias or user-defined type) -> Nim: mapped via _PY_TO_NIM if known"""
@@ -163,6 +181,9 @@ def to_nim(self, prec=None):
             return mapped
         if node.nodes[0] == "ShellFailure_T":
             ParserState.nim_imports.add("stdlib")   # it lives in stdlib.nim
+        _alias = _union_alias_nim(node.nodes[0])
+        if _alias and len(self.nodes) == 1:
+            return _alias
     result = node.to_nim()
     # Append any trailing nodes (e.g. generic params [T] from subscript trailers)
     for extra in self.nodes[1:]:
@@ -297,24 +318,39 @@ def to_nim(self, prec=None):
     return f"Option[{inner}]"
 
 
+def _nim_union_type(values):
+    """OneOfN[...] of the Nim spellings of a union's members."""
+    if len(values) > 6:
+        raise SyntaxError(
+            f"a union of {len(values)} members: six at most -- group some "
+            f"of them in a record")
+    return f"OneOf{len(values)}[{', '.join(values)}]"
+
+
 @method(union_type)
 def to_nim(self, prec=None):
-    """union_type: A '|' B -> Nim. With one side a failure type (`type F is
-    failure record:`), stdlib.nim's Result[T, F] whichever order the two
-    are written in -- Result[void, F] when T is None. `T | None` is ?T."""
-    from ady_stmt import either_sides
+    """union_type: A '|' B ('|' C)* -> Nim. A plain union is stdlib.nim's
+    OneOfN[...] -- `int | float` is OneOf2[int, float]. With a failure
+    member it is Result[T, F], whichever order the members are written in:
+    Result[void, F] when T is None, Result[OneOfN[...], F] for several
+    value members. `T | None` is ?T, Option[T]."""
+    from ady_stmt import classify_union
     parts = [self.nodes[0].to_nim()]
     for seq in self.nodes[1].nodes:
         if hasattr(seq, "nodes") and seq.nodes:
             parts.append(seq.nodes[0].to_nim())
     parts = ["None" if p in ("nil", "void") else p for p in parts]
-    kind, value, failure = either_sides(
-        parts, getattr(ParserState, "failure_types", set()))
-    if kind == "optional":
+    u = classify_union(parts, getattr(ParserState, "failure_types", set()))
+    if u["kind"] == "optional":
         ParserState.nim_imports.add("options")
-        return f"Option[{value}]"
+        return f"Option[{u['values'][0]}]"
     ParserState.nim_imports.add("stdlib")
-    return f"Result[{'void' if value == 'None' else value}, {failure}]"
+    if u["kind"] == "plain":
+        return _nim_union_type(u["values"])
+    values = u["values"]
+    value = ("void" if values == ["None"] else
+             values[0] if len(values) == 1 else _nim_union_type(values))
+    return f"Result[{value}, {u['failure']}]"
 
 
 @method(lent_type)

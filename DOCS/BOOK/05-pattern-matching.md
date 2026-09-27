@@ -11,7 +11,7 @@ case tok:
         die(f"unexpected {tok}")
 ```
 
-`when` is the same word a variant record uses for its arms (§4.4), so one
+`when` is the same word a variant record uses for its arms (§4.3), so one
 keyword means "arm of a discriminated choice" everywhere in the language.
 
 ## What is checked, and what is not

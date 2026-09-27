@@ -360,13 +360,16 @@ def _zero_value(annotation, _depth=0):
 
 
 def _either_zero(annotation):
-    """The value a `T | E` declared without one holds: the zero of its
-    value side, as on Nim; None when the value side is None."""
-    from hek_py_declarations import split_either
-    sides = split_either(annotation)
-    if sides is None:
+    """The value a union declared without one holds: the zero of its first
+    value member, as on Nim -- `var r: int | Failure_T` and `var x: int |
+    float` are both 0; None when that member is None. None (the Python
+    object) when ANNOTATION is no such union."""
+    from hek_py_declarations import union_of
+    u = union_of(annotation)
+    if u is None or u["kind"] not in ("plain", "either"):
         return None
-    return "None" if sides[0] == "None" else _zero_value(sides[0])
+    first = u["values"][0]
+    return "None" if first == "None" else _zero_value(first)
 
 
 @method(decl_ann_assign_stmt)

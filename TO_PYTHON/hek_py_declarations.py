@@ -269,21 +269,29 @@ def _ensure_shell_failure():
         ParserState.py_top_decls = decls
 
 
+def union_of(annotation):
+    """The classification (ady_stmt.classify_union) of a Python annotation
+    that is a `|` type, or None for any other annotation."""
+    from hek_parsec import ParserState
+    from ady_stmt import split_top_level_bar, classify_union
+    parts = split_top_level_bar(annotation)
+    if len(parts) < 2:
+        return None
+    try:
+        return classify_union(parts, getattr(ParserState, "failure_types", set()))
+    except SyntaxError:
+        return None
+
+
 def split_either(annotation):
     """(T, F) of a Python annotation that is a `T | F`, F a failure type,
-    or None for any other annotation -- ?T's `T | None` included."""
-    from hek_parsec import ParserState
-    from ady_stmt import split_top_level_bar
-    parts = split_top_level_bar(annotation)
-    if len(parts) != 2:
+    or None for any other annotation -- ?T's `T | None` and a plain union
+    included. T is the value members, joined by ` | ` when there are
+    several."""
+    u = union_of(annotation)
+    if u is None or u["kind"] != "either":
         return None
-    failures = getattr(ParserState, "failure_types", set())
-    if parts[1] in failures and parts[0] not in failures:
-        return parts[0], parts[1]
-    if parts[0] in failures and parts[1] not in failures:
-        return parts[1], parts[0]
-    return None
-
+    return " | ".join(u["values"]), u["failure"]
 
 
 def _ensure_path_alias():
@@ -317,10 +325,31 @@ def _ensure_run_result_alias():
         ParserState.py_top_decls = decls
 
 
+def _union_alias_py(name):
+    """The union a name declared `type X is A | B` stands for, as Python
+    writes it, or None: read as the union itself wherever it annotates."""
+    from hek_parsec import ParserState
+    aliases = getattr(ParserState, "union_aliases", {})
+    if name not in aliases:
+        return None
+    cache = getattr(ParserState, "union_aliases_py", None)
+    if cache is None:
+        cache = ParserState.union_aliases_py = {}
+    if name not in cache:
+        cache[name] = None
+        from ady_declarations import parse_type
+        _ast = parse_type(aliases[name])
+        cache[name] = _ast.to_py() if _ast is not None else None
+    return cache[name]
+
+
 @method(type_name)
 def to_py(self, prec=None):
     """type_name: IDENTIFIER (type alias or user-defined type) -> Nim: mapped via _PY_TO_NIM if known"""
     name = self.nodes[0].to_py()  # delegate to primary expression node
+    _alias = _union_alias_py(name)
+    if _alias:
+        return _alias
     if name in ("Natural", "Positive"):
         _ensure_subtype_aliases()
     elif name == "RunResult":
@@ -518,18 +547,22 @@ def to_py(self, prec=None):
 
 @method(union_type)
 def to_py(self, prec=None):
-    """union_type: A '|' B -> Python: the union as written. A `T | F`, F a
-    failure type, holds the T or the F itself, unboxed -- `r is F` tells
-    them apart by class, which is why a failure is a record of its own;
+    """union_type: A '|' B ('|' C)* -> Python: the union as written. It holds
+    the member itself, unboxed -- `x is int` asks its class, which is why
+    the members must be told apart by class (ady_stmt.classify_union).
     `T | None` is Python's own spelling of ?T."""
-    from ady_stmt import either_sides
+    from ady_stmt import classify_union
     from hek_parsec import ParserState
     parts = [self.nodes[0].to_py()]
     for seq in self.nodes[1].nodes:
         if hasattr(seq, "nodes") and seq.nodes:
             parts.append(seq.nodes[0].to_py())
-    either_sides(parts, getattr(ParserState, "failure_types", set()))
-    return f"{parts[0]} | {parts[1]}"
+    u = classify_union(parts, getattr(ParserState, "failure_types", set()))
+    if u["kind"] == "plain" and len(parts) > 6:
+        raise SyntaxError(
+            f"a union of {len(parts)} members: six at most -- group some "
+            f"of them in a record")
+    return " | ".join(parts)
 
 
 

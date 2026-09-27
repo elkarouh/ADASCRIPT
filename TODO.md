@@ -302,11 +302,16 @@ history of this file if the reasoning behind one of them is ever wanted.
 routine returns either a T or an F, in either order; `r is F` asks which
 and narrows, as does `case r:` with a `when` per side; `None | F`;
 `do:` over them with bare steps, shell steps and `else`; the built-in
-`ShellFailure_T` of a typed `shell:`; a dropped failure is refused. Not yet:
+`ShellFailure_T` of a typed `shell:`; a dropped failure is refused. Plain
+unions (`int | float`, book 4.4, `EXAMPLES/test_union.ady`) share all of
+it but do:. Not yet:
 
 - [ ] Nim: a `T | F` passed as an *argument* whose value is a plain T or E
       -- `f(3)` where f takes `int | Failure_T`. The constructor is typed from a
       return, a declaration or an assignment; an argument is none of those.
+- [ ] a union of more than six members (stdlib.nim's OneOf2..OneOf6), and
+      an optional union written out, `int | float | None`: today that is
+      `?Number_T`, the union named first.
 - [ ] which side a returned value is on is read from its type; a value the
       Nim backend cannot type goes on the value side, and Nim's own type
       check then catches a failure put there by mistake.

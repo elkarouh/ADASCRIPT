@@ -623,13 +623,13 @@ def fail(kind: ErrKind_T, detail: str) -> Failure_T:
     return Failure_T(kind=kind, detail=detail)
 ```
 
-The word `failure` is what makes the `|` mean *value or failure*. `int |
+`int | Failure_T` is a *union* (4.4) — a value that is one of its members —
+and the word `failure` is what makes it a value-or-failure. `int |
 Failure_T` and `Failure_T | int` are the same type: the declaration, not the
-position, says which side is the failure. A `|` with no failure side is
-refused, and so is one whose two sides both are — `int | str` is not a type
-Adascript has. (`T | None` is the one exception: it is `?T` written out —
-`?T` is its shorthand — so `None` there means absence, not a failure.) Only
-a record can be a failure: it has to say what went wrong, and on
+position, says which member is the failure. A union has at most one; any
+number of value members may go with it — `int | str | Failure_T`. (`T | None`
+is `?T` written out — `?T` is its shorthand — so `None` there means absence,
+not a failure.) Only a record can be a failure: it has to say what went wrong, and on
 the Python backend it has to be a class of its own, since that is all that
 tells it from the value.
 
@@ -695,9 +695,9 @@ side, and for a `None | Failure_T`, `r is None` means it succeeded. Using the
 value with no test at all is a compile error on Nim, as it is for `?T`.
 
 When both sides need code of their own, a `case` says it more directly: a
-`when` names a side, the name is that side inside the branch, and the case
-must cover both — or say `when others:` — so a forgotten side does not
-compile:
+`when` names a member, the name is that member inside the branch, and the
+case must cover every member — or say `when others:` — so a forgotten one
+does not compile:
 
 ```python
 def sign_of(raw: str) -> str:
@@ -875,11 +875,10 @@ The transpiler refuses:
 - a `do:` step that fails some other way — a `?T`, another failure type, a
   shell command in a function that is not `... | ShellFailure_T` — without
   an `else` saying what failure it becomes;
-- a `case` over a `T | Failure_T` that covers only one side and has no
-  `when others:`;
-- a `|` with no failure side (`int | str`), or with two (`A_T | B_T`);
+- a `case` over a union that leaves a member out and has no `when others:`;
+- a union with two failure members (`A_T | B_T`), or with members nothing
+  can tell apart at run time (`[]int | []str`, 4.4);
 - `failure` on anything but a record;
-- more than two sides (`int | str | Failure_T`);
 - a `T | Failure_T` step in the `do:` block of a function that cannot return
   the failure.
 

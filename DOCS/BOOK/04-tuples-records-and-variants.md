@@ -184,7 +184,61 @@ def is_true(self: Val_T) -> bool:
             True
 ```
 
-## 4.4 Type aliases
+## 4.4 Unions — one of several types
+
+A variant record names its shapes and gives each its fields. When the shapes
+are types that already exist, a *union* says the same thing in one line:
+`int | float` holds an int or a float, and the value itself says which.
+`EXAMPLES/test_union.ady` is the spec:
+
+```python
+def compute(n: int) -> int | float:
+    if n % 2 == 0:
+        return n // 2              # an int
+    return n / 2                   # a float
+
+for n in [4, 5]:
+    let x: int | float = compute(n)
+    case x:
+        when int:
+            print f"int {x + 1}"
+        when float:
+            print f"float {x * 2.0}"
+```
+
+What is assigned or returned becomes the member its type names — there is
+nothing to wrap. `case x:` gives a branch per member, and inside each branch
+`x` *is* that member: `x + 1` is int arithmetic, `x * 2.0` float. The case
+must name every member or say `when others:`, as one over an enum must.
+`x is int` asks the same question in an `if`, and narrows `x` the same way —
+in the `else` of a two-member union, to the other one:
+
+```python
+let h: int | float = compute(7)
+if h is int:
+    print "an int"
+else:
+    print f"a float, {h}"          # the other member: h is the float here
+```
+
+A union can have any number of members — `int | str | float` — and a name of
+its own, which then means exactly what it names:
+
+```python
+type Number_T is int | float
+```
+
+Two members of one union must be things a running program can tell apart:
+on the Python backend the value *is* the member, and its class is all that
+says which, so `[]int | []str` is refused, and so is `int | bool` (a bool is
+an int to Python). Make one of them a record of its own. Nim holds a union
+as stdlib.nim's `OneOf2[int, float]`, a variant object much like 4.3's.
+
+Two members are special. `T | None` is `?T` — Chapter 10 — and a member that
+is a *failure* record makes the union a value-or-failure, which a `do:` block
+can chain (10.12). A union has at most one failure member.
+
+## 4.5 Type aliases
 
 The humblest `type` declaration is an alias, and the examples use them
 liberally to give domain names to structural types:
@@ -201,13 +255,14 @@ Aliases cost nothing on either backend and pay for themselves the first time
 a signature like `def dijkstra(graph: Graph_T, start: Node_T)` replaces a
 nest of raw braces.
 
-## 4.5 Choosing between them
+## 4.6 Choosing between them
 
 | You need | Use |
 |----------|-----|
 | A small immutable value: a point, a queue entry, a (state, cost) pair | named tuple |
 | Mutable fields, defaults, piecemeal construction | record |
 | "One of N shapes" with per-shape fields, checked in Nim | variant record |
+| A value that is one of a few existing types | union, `int \| float` |
 | A domain name for an existing structure | alias |
 
 A practical note from the examples: search/DP state must be **hashable and

@@ -729,6 +729,28 @@ def find_exact_word(self, digits: []Digit_T) -> ?str:
     return None
 ```
 
+### Unions `A | B`
+
+A union holds one of its members; `case` gives a branch per member, and the
+name is that member inside it:
+
+```python
+def compute(n: int) -> int | float:
+    if n % 2 == 0:
+        return n // 2
+    return n / 2
+
+let x: int | float = compute(5)
+case x:
+    when int:
+        print f"int {x + 1}"
+    when float:
+        print f"float {x * 2.0}"
+```
+
+`x is int` asks the same in an `if`. `?T` is the union `T | None`, and a
+union with a failure record among its members is a value-or-failure:
+
 ### Value or failure `T | F`
 
 When the caller needs to know *why* there is no value, return a failure

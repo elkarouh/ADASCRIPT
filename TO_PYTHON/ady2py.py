@@ -295,6 +295,9 @@ def translate(code):
     _PS_rp.failure_types = _failures | {"ShellFailure_T"}
     _PS_rp.py_type_names.add("ShellFailure_T")
     _PS_rp.ady_return_types = scan_return_types(code)
+    from ady_stmt import scan_union_aliases
+    _PS_rp.union_aliases = scan_union_aliases(code)
+    _PS_rp.union_aliases_py = {}
     _PS_rp.result_procs = either_procs(_PS_rp.ady_return_types,
                                        _PS_rp.failure_types)
 
