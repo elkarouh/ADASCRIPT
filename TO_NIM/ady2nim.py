@@ -1433,6 +1433,16 @@ def run_tests():
         ),
     ]
 
+    # A {char}V literal whose keys include '"' -- emitted as a char already,
+    # since a string cannot hold it unescaped -- keeps every key a char: the
+    # one char among strings used to make the whole table fall back to
+    # string keys, a Table[string, string] where Table[char, string] was
+    # declared.
+    tests.append((
+        'const E: {char}str = {\'a\': "x", \'"\': "q"}\n',
+        'import tables\nconst E: Table[char, string] = {\'a\': "x", \'"\': "q"}.toTable\n',
+    ))
+
     # A non-void call standing alone as a statement needs `discard`, in all
     # three places a statement can sit -- a proc body, a method body, and
     # module level. Only the first was covered; the other two emitted the call

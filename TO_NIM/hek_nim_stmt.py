@@ -455,7 +455,16 @@ def _coerce_string_to_char(value, annotation):
     written. `seq[char]` gets the same treatment element by element, since
     `let cs: []char = ['a', 'b']` has exactly the same problem.
     """
-    from hek_nim_expr import _char_literal_arg
+    from hek_nim_expr import _char_literal_arg as _cla
+
+    def _char_literal_arg(x):
+        # one already a char -- '"', which a string cannot hold unescaped,
+        # is emitted as one -- stays as it is, rather than making the whole
+        # literal fall back to strings
+        x = (x or "").strip()
+        if len(x) >= 3 and x[0] == x[-1] == "'":
+            return x
+        return _cla(x)
     ann = (annotation or "").strip()
     if ann == "char":
         lit = _char_literal_arg(value)

@@ -9,9 +9,9 @@ const PAGE_SIZE : int = 65536
 # C escape sequences.  The lexer accepts everything C defines -- the named
 # escapes, \NNN octal and \xNN hex -- so the decoder has to handle the same
 # set, in one place both literal forms share.
-const SIMPLE_ESCAPES : {str}str = {
-    "a": "\a", "b": "\b", "f": "\f", "n": "\n", "r": "\r", "t": "\t",
-    "v": "\v", "\\": "\\", "'": "'", "\"": "\"", "?": "?"}
+const SIMPLE_ESCAPES : {char}str = {
+    'a': "\a", 'b': "\b", 'f': "\f", 'n': "\n", 'r': "\r", 't': "\t",
+    'v': "\v", '\\': "\\", '\'': "'", '"': "\"", '?': "?"}
 const HEX_DIGITS   : str = "0123456789abcdef"
 const OCTAL_DIGITS : str = "01234567"
 
@@ -21,25 +21,24 @@ type Escape_T is record:
     size: int     # source characters it spans, backslash included
 
 
-def decode_escape(s: str, i: int) -> Escape_T:
-    """Decode the escape whose backslash sits at s[i].
-
-    size 0 means "not an escape this compiler knows"; the two literal forms
-    disagree about those, so each decides for itself what to do with one.
+def decode_escape(s: str, i: int) -> ?Escape_T:
+    """Decode the escape whose backslash sits at s[i]; None when it is not
+    an escape this compiler knows. The two literal forms disagree about
+    those, so each decides for itself what to do with one.
     """
     if i + 1 >= len(s):
         return Escape_T("\\", 1)                  # trailing backslash, kept as written
-    let c: str = s[i+1:i+2]
+    let c: char = s[i+1]
     if c in SIMPLE_ESCAPES:
         return Escape_T(SIMPLE_ESCAPES[c], 2)
-    if c == "x":                                  # \xN, \xNN
+    if c == 'x':                                  # \xN, \xNN
         var v: int = 0
         var j: int = i + 2
         while j < len(s) and j < i + 4 and HEX_DIGITS.find(s[j:j+1].lower()) >= 0:
             v = v * 16 + HEX_DIGITS.find(s[j:j+1].lower())
             j = j + 1
         if j == i + 2:
-            return Escape_T("", 0)                # \x with no digit
+            return None                           # \x with no digit
         return Escape_T(str(chr(v)), j - i)
     if OCTAL_DIGITS.find(c) >= 0:                 # \N, \NN, \NNN
         var v: int = 0
@@ -48,7 +47,7 @@ def decode_escape(s: str, i: int) -> Escape_T:
             v = v * 8 + OCTAL_DIGITS.find(s[j:j+1])
             j = j + 1
         return Escape_T(str(chr(v)), j - i)
-    return Escape_T("", 0)
+    return None
 
 
 def parse_c_char(tok: str) -> str:
@@ -57,9 +56,9 @@ def parse_c_char(tok: str) -> str:
     case inner:
         when "":  "\0"
         when _ if inner.startswith("\\"):
-            let e: Escape_T = decode_escape(inner, 0)
+            let e: ?Escape_T = decode_escape(inner, 0)
             # An escape this compiler does not know loses its backslash.
-            e.text if e.size > 0 else inner[1:2]
+            e.text if e is not None else inner[1:2]
         when others:   inner[0:1]
 
 
@@ -69,8 +68,8 @@ def parse_c_str(tok: str) -> str:
     var buf: str = ""
     var i: int = 0
     while i < len(inner):
-        let e: Escape_T = decode_escape(inner, i) if inner[i:i+1] == "\\" else Escape_T("", 0)
-        if e.size > 0:
+        let e: ?Escape_T = decode_escape(inner, i) if inner[i:i+1] == "\\" else None
+        if e is not None:
             buf = buf + e.text
             i = i + e.size
         else:
