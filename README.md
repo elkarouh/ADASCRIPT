@@ -63,7 +63,7 @@ source.ady
 - [Python Interoperability](#python-interoperability)
 - [Print Statement](#print-statement)
 - [Unions: `A | B`](#unions-a--b)
-- [Failures as Values: `T | F`](#failures-as-values-t--f)
+- [Failures as Values: `T | !F`](#failures-as-values-t--f)
 - [Shell Statements](#shell-statements)
 - [Bash Variables](#bash-variables)
 - [Callable objects and pipe operator](#callable-objects-and-pipe-operator)
@@ -387,12 +387,12 @@ shape assumes — not because it fails to be a mapping.
 | `?T`           | `T \| None`               | `Option[T]`                    |
 | `T \| None`     | `T \| None`               | `Option[T]` -- the same as `?T` |
 | `A \| B`        | `A \| B`                  | `OneOf2[A, B]` (a union)       |
-| `T \| F`        | `T \| F`                  | `Result[T, F]` (F a failure)   |
+| `T \| !F`       | `T \| F`                  | `Result[T, F]` (F a failure)   |
 | `(T, U)`       | `tuple[T, U]`             | `(T, U)`                       |
 | `[(T, U)]R`    | `Callable[[T, U], R]`     | `proc(a0: T, a1: U): R`        |
 
 `?T` is shorthand for `T | None`: one type, spelled either way (or `None | T`).
-`T | F`, with F a failure record in place of `None`, is a value or a failure
+`T | !F`, with F a record marked `!` in place of `None`, is a value or a failure
 -- see [Failures as Values](#failures-as-values-t--f).
 
 `?T` and `(T, U)` are not containers and stand outside the scheme. `[(T, U)]R`
@@ -1681,17 +1681,17 @@ the whole of it; `EXAMPLES/test_union.ady` is the spec.
 
 ---
 
-## Failures as Values: `T | F`
+## Failures as Values: `T | !F`
 
-A function that can fail says so in its return type: `-> int | Failure_T`
-returns an int, or a failure saying why there is none. A failure is a
-record declared as one; the declaration, not the order of the two sides,
-says which side is the failure.
+A function that can fail says so in its return type: `-> int | !Failure_T`
+returns an int, or a failure saying why there is none. A failure is an
+ordinary record; the `!` in front of it, not the order of the sides, says
+which side is the failure -- the one a `do:` block passes on.
 
 ```python
 type ErrKind_T is enum BAD_NUMBER, DIVIDE_BY_ZERO, NOT_POSITIVE
 
-type Failure_T is failure record:
+type Failure_T is record:
     kind:   ErrKind_T    # which failure
     detail: str          # what it needs to say so
 
@@ -1699,7 +1699,7 @@ def fail(kind: ErrKind_T, detail: str) -> Failure_T:
     """A Failure_T -- a helper, so that each failure is one short line."""
     return Failure_T(kind=kind, detail=detail)
 
-def read_number(s: str) -> int | Failure_T:
+def read_number(s: str) -> int | !Failure_T:
     if len(s) == 0:
         return fail(BAD_NUMBER, "empty")      # a Failure_T: the failure
     for c in s:
@@ -1707,44 +1707,44 @@ def read_number(s: str) -> int | Failure_T:
             return fail(BAD_NUMBER, f"'{s}' is not a number")
     return int(s)                             # anything else: the value
 
-def divide(a: int, b: int) -> int | Failure_T:
+def divide(a: int, b: int) -> int | !Failure_T:
     if b == 0:
         return fail(DIVIDE_BY_ZERO, f"{a} / 0")
     return a // b
 
-def check_positive(n: int) -> None | Failure_T:
+def check_positive(n: int) -> None | !Failure_T:
     """A step with nothing to return: it can only fail."""
     if n <= 0:
         return fail(NOT_POSITIVE, f"got {n}")
 ```
 
 `fail` is an ordinary function, not part of the language: a failure is a
-record, and returning one is returning the record. `None | Failure_T` is a
+record, and returning one is returning the record. `None | !Failure_T` is a
 step that can only fail; falling off its end is success.
 
 | You write | It means |
 |---|---|
 | `r is Failure_T` / `r is int` | which side r holds -- and r is narrowed to it, as `x is None` narrows a `?T` |
 | `case r:` / `when Failure_T:` / `when int:` | a branch per member; all of them, or `when others:` |
-| `None \| Failure_T` | a step that can only fail; falling off the end is success |
+| `None \| !Failure_T` | a step that can only fail; falling off the end is success |
 | `do:` / `x <- step` | bind the value, or return the failure from the whole function |
 | `do:` / `x <- step else e` | a step that fails some other way -- a `?T`, another failure type, a shell command -- returns `e` instead; inside `e`, `x` is the step's own failure |
-| `let o: str \| ShellFailure_T = shell: cmd` | a command's output, or the built-in `ShellFailure_T` (`command`, `code`, `stderr`) |
+| `let o: str \| !ShellFailure_T = shell: cmd` | a command's output, or the built-in `ShellFailure_T` (`command`, `code`, `stderr`) |
 
 The functions above chain in a `do:` block, which stops at the first
 failure and returns it; the caller then asks which it got:
 
 ```python
-def ratio(raw_a: str, raw_b: str) -> int | Failure_T:
+def ratio(raw_a: str, raw_b: str) -> int | !Failure_T:
     do:
         a <- read_number(raw_a)
         b <- read_number(raw_b)
         q <- divide(a, b)
-        check_positive(q)          # a `None | Failure_T` step: checked, binds nothing
+        check_positive(q)          # a `None | !Failure_T` step: checked, binds nothing
     return q
 
 for pair in [("20", "4"), ("20", "0"), ("x", "4")]:
-    let r: int | Failure_T = ratio(pair[0], pair[1])
+    let r: int | !Failure_T = ratio(pair[0], pair[1])
     case r:
         when int:
             print f"ratio {r}"                   # r is the int here
@@ -1753,9 +1753,9 @@ for pair in [("20", "4"), ("20", "0"), ("x", "4")]:
 ```
 
 The transpiler refuses a union with two failure members, a failure dropped
-(a bare call whose `T | F` result nobody takes), a `do:` step that fails
+(a bare call whose `T | !F` result nobody takes), a `do:` step that fails
 some other way without an `else`, and a `case` that leaves a member out.
-A failure union may have several value members: `int | str | Failure_T`. With `None` in place of a failure, the `|` is `?T`: `?T` is
+A failure union may have several value members: `int | str | !Failure_T`. With `None` in place of a failure, the `|` is `?T`: `?T` is
 shorthand for `T | None`.
 
 On Python the value is the T or the F itself; on Nim it is stdlib.nim's
@@ -1862,18 +1862,18 @@ It works with every form: bare, capture, tuple, `shellLines:` and an
 
 ### A command's output, or its failure: `ShellFailure_T`
 
-`check = true` ends the program; a `T | ShellFailure_T` target hands the
+`check = true` ends the program; a `T | !ShellFailure_T` target hands the
 failure back instead. The command holds its output when it succeeds, and
 the built-in failure record `ShellFailure_T` -- `command`, `code`,
 `stderr` -- when it does not. `str` is the output, `[]str` its lines
 (`shellLines:`), `None` nothing:
 
 ```python
-let hi: str | ShellFailure_T = shell: echo hi
-let oops: str | ShellFailure_T = shell: echo oops >&2; exit 3
+let hi: str | !ShellFailure_T = shell: echo hi
+let oops: str | !ShellFailure_T = shell: echo oops >&2; exit 3
 if oops is ShellFailure_T:
     print f"exit {oops.code}, stderr {oops.stderr.strip()}"
-let quiet: None | ShellFailure_T = shell: true
+let quiet: None | !ShellFailure_T = shell: true
 ```
 
 In a `do:` block a command is a step -- `out <- shell: cmd`, or a bare
@@ -1883,17 +1883,17 @@ that after `else`; inside the `else`, the step's name is the failed
 command:
 
 ```python
-type Failure_T is failure record:
+type Failure_T is record:
     detail: str
 
 def cmd_failed(f: ShellFailure_T) -> Failure_T:
     return Failure_T(detail=f"`{f.command}` exited {f.code}: {f.stderr.strip()}")
 
-def make_dir(path: Path) -> None | Failure_T:
+def make_dir(path: Path) -> None | !Failure_T:
     do:
         r <- shell: mkdir -p -- {!path} else cmd_failed(r)
 
-let made: None | Failure_T = make_dir(Path("/proc/no-such-dir"))
+let made: None | !Failure_T = make_dir(Path("/proc/no-such-dir"))
 if made is Failure_T:
     print made.detail
 ```

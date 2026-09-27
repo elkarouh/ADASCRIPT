@@ -58,7 +58,7 @@ type LineNo is int
 type RevKind is enum RK_Checkout, RK_Superproject, RK_Baseline
 
 # why the run cannot go on: returned up the stages, said once by main
-type Failure_T is failure record:
+type Failure_T is record:
     message: str
 
 type Rev is record:
@@ -144,7 +144,7 @@ class Superproject:
             rev.kind = RK_Baseline
         rev
 
-    def commits(self, rev: Rev) -> {SubmodulePath}CommitHash | Failure_T:
+    def commits(self, rev: Rev) -> {SubmodulePath}CommitHash | !Failure_T:
         """The commit REV names in each submodule it names one in -- or,
         for a baseline no checked-out submodule has, the failure."""
         return self.recorded(rev.commit) if rev.kind == RK_Superproject
@@ -164,7 +164,7 @@ class Superproject:
             return Failure_T(message=f"no checked-out submodule has a baseline or commit named {rev.name} (tags not fetched? try: git -C <submodule> fetch --tags)")
         return out
 
-    def changes(self, rev1: Rev, rev2: Rev) -> []Change | Failure_T:
+    def changes(self, rev1: Rev, rev2: Rev) -> []Change | !Failure_T:
         """The submodules whose commit differs between REV1 and REV2, in
         tree order; the changed ones not checked out are named on stderr."""
         do:
@@ -184,7 +184,7 @@ class Superproject:
             warn(f"{len(unseen)} changed submodule(s) not checked out, not listed: {', '.join(unseen)}")
         return out
 
-def open_superproject(root: Path) -> Superproject | Failure_T:
+def open_superproject(root: Path) -> Superproject | !Failure_T:
     """The superproject at ROOT, with the submodules HEAD records -- or
     the failure, when ROOT is no git repository."""
     let r = shell: git -C {!root} ls-tree -r HEAD
@@ -345,7 +345,7 @@ class Options:
 # Main
 # ---------------------------------------------------------------------------
 
-def run(opt: Options) -> None | Failure_T:
+def run(opt: Options) -> None | !Failure_T:
     """Stages 1 and 2: the first failure ends them, and comes back."""
     do:
         sp <- open_superproject(opt.root)
@@ -360,6 +360,6 @@ def run(opt: Options) -> None | Failure_T:
             warn(f"line numbers are {describe(rev2)}'s; Tblame blames the checkout, so its answers match only where that is what is checked out")
         print_lines(sp, found)
 
-let outcome: None | Failure_T = run(Options($@))
+let outcome: None | !Failure_T = run(Options($@))
 if outcome is Failure_T:
     die(outcome.message)

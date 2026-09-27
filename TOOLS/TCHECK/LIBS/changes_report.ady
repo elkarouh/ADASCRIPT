@@ -407,7 +407,7 @@ def display_branch_info(branch: BranchName, reference: BaselineName_T):
             print f"REFERENCE BASELINE DIR: {ref_reports}"
             echo_ediff(ref_reports / "general.results.failed-in", view_reports / "general.results.failed-in")
 
-def changes_report(baseline: BaselineNr_T) -> Path | Failure_T:
+def changes_report(baseline: BaselineNr_T) -> Path | !Failure_T:
     """The changes report of the CFMUTEST baseline built on TACT BASELINE,
     or why there is none."""
     let cfmu: BaselineNr_T = cfmu_baseline_of(baseline)
@@ -496,7 +496,7 @@ def list_changes(baseline: BaselineNr_T, failures: []NewFailure, against: str, u
     baseline's, whoever's changes caused them."""
     hr('#')
     puts("SWr", "CHANGES BY COMMITTER", NEWLINE=True)
-    let report: Path | Failure_T = warned(changes_report(baseline))
+    let report: Path | !Failure_T = warned(changes_report(baseline))
     if report is Path:
         list_files_by_committer(report, user)
     else:
@@ -508,7 +508,7 @@ def list_detailed_changes(baseline: BaselineNr_T, user: Committer):
     committer and branch -- only USER's, when not "": each file, its
     commits, tickets, reviews and diffs. Nothing when there is no changes
     report, or no change by USER: list_changes has said why."""
-    let report: Path | Failure_T = changes_report(baseline)
+    let report: Path | !Failure_T = changes_report(baseline)
     return if report is Failure_T
     var changes: ChangesReport = ChangesReport(report)
     changes.keep_only(user)

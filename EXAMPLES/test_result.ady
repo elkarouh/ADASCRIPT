@@ -1,14 +1,14 @@
 #!/usr/bin/env ady2nim
-"""Test: `T | F` -- a routine that returns either a T or a failure F.
+"""Test: `T | !F` -- a routine that returns either a T or a failure F.
 
-A failure type is a record declared `type F is failure record:`. Then
-`-> int | Failure_T` returns an int, or a Failure_T saying why there is
-none -- in either order, since the declaration, not the position, says
-which side is the failure. What is returned goes on the side its type
+A failure type is an ordinary record, `type F is record:`; the `!` in
+`-> int | !Failure_T` marks it as the failure: an int, or a Failure_T saying
+why there is none -- in either order, since the mark, not the position,
+says which side is the failure. What is returned goes on the side its type
 says; `r is Failure_T` asks which side r holds, and the test narrows r as
 `x is None` narrows a ?T: past `if r is Failure_T: return ...`, r is the
 int. A `do:` block chains steps, returning the first failure as it is.
-`None | F` is a step that can only fail: falling off its end is success.
+`None | !F` is a step that can only fail: falling off its end is success.
 
 The output is compared between the two backends by `make test`, so every
 line printed here must read the same on both.
@@ -18,7 +18,7 @@ line printed here must read the same on both.
 
 type ErrKind_T is enum BAD_NUMBER, DIVIDE_BY_ZERO, NOT_POSITIVE
 
-type Failure_T is failure record:
+type Failure_T is record:
     kind:   ErrKind_T    # which failure
     detail: str          # what it needs to say so
 
@@ -27,7 +27,7 @@ def fail(kind: ErrKind_T, detail: str) -> Failure_T:
 
 # ─── switch functions: one input, two tracks out ────────────────────────────
 
-def read_number(s: str) -> int | Failure_T:
+def read_number(s: str) -> int | !Failure_T:
     if len(s) == 0:
         return fail(BAD_NUMBER, "empty")
     for c in s:
@@ -35,19 +35,19 @@ def read_number(s: str) -> int | Failure_T:
             return fail(BAD_NUMBER, f"'{s}' is not a number")
     return int(s)
 
-def divide(a: int, b: int) -> int | Failure_T:
+def divide(a: int, b: int) -> int | !Failure_T:
     if b == 0:
         return fail(DIVIDE_BY_ZERO, f"{a} / 0")
     return a // b
 
-def check_positive(n: int) -> None | Failure_T:
+def check_positive(n: int) -> None | !Failure_T:
     """A step with nothing to return: it can only fail."""
     if n <= 0:
         return fail(NOT_POSITIVE, f"got {n}")
 
 # ─── test 1: the do: block -- bind steps and a bare one ─────────────────────
 
-def ratio(raw_a: str, raw_b: str) -> int | Failure_T:
+def ratio(raw_a: str, raw_b: str) -> int | !Failure_T:
     do:
         a <- read_number(raw_a)
         b <- read_number(raw_b)
@@ -55,7 +55,7 @@ def ratio(raw_a: str, raw_b: str) -> int | Failure_T:
         check_positive(q)
     return q
 
-def describe(r: int | Failure_T) -> str:
+def describe(r: int | !Failure_T) -> str:
     if r is Failure_T:
         case r.kind:
             when BAD_NUMBER:     return f"bad number: {r.detail}"
@@ -63,7 +63,7 @@ def describe(r: int | Failure_T) -> str:
             when NOT_POSITIVE:   return f"not positive: {r.detail}"
     return f"ok {r}"                        # r is the int from here on
 
-def describe_text(r: str | Failure_T) -> str:
+def describe_text(r: str | !Failure_T) -> str:
     if r is Failure_T:
         return f"failed: {r.detail}"
     return f"ok {r}"
@@ -76,13 +76,13 @@ print "test1 OK"
 
 # ─── test 2: a result passed on, from a routine defined further down ───────
 
-def ratio_or_fail(raw_a: str, raw_b: str) -> int | Failure_T:
+def ratio_or_fail(raw_a: str, raw_b: str) -> int | !Failure_T:
     return checked_ratio(raw_a, raw_b)    # passed on as it is
 
-def checked_ratio(raw_a: str, raw_b: str) -> int | Failure_T:
+def checked_ratio(raw_a: str, raw_b: str) -> int | !Failure_T:
     return ratio(raw_a, raw_b)
 
-let three: int | Failure_T = ratio_or_fail("9", "3")
+let three: int | !Failure_T = ratio_or_fail("9", "3")
 if three is not Failure_T:
     assert three == 3
     print f"three is {three + 0}"
@@ -91,7 +91,7 @@ print "test2 OK"
 
 # ─── test 3: None | E -- bare return and falling off the end succeed ───────
 
-def validate(n: int) -> None | Failure_T:
+def validate(n: int) -> None | !Failure_T:
     if n == 0:
         return                           # success
     if n < 0:
@@ -100,21 +100,21 @@ def validate(n: int) -> None | Failure_T:
 
 assert validate(0) is None
 assert validate(5) is not Failure_T
-let v: None | Failure_T = validate(-1)
+let v: None | !Failure_T = validate(-1)
 if v is Failure_T:
     print f"refused: {v.detail}"
 print "test3 OK"
 
 # ─── test 4: declarations and assignment take the side of their value ──────
 
-var r: str | Failure_T = "seven"         # a str: the value side
+var r: str | !Failure_T = "seven"         # a str: the value side
 assert r is str
 r = fail(BAD_NUMBER, "gone")             # a Failure_T: the failure side
 assert r is Failure_T
 r = "three"
 if r is str:
     assert r + "!" == "three!"
-var zero: int | Failure_T                # no value: the value side's zero
+var zero: int | !Failure_T                # no value: the value side's zero
 if zero is int:
     assert zero == 0
 print r
@@ -122,12 +122,12 @@ print "test4 OK"
 
 # ─── test 5: the order of the sides does not matter ─────────────────────────
 
-def halve(n: int) -> Failure_T | int:    # the failure written first
+def halve(n: int) -> !Failure_T | int:    # the failure written first
     if n % 2 == 1:
         return fail(BAD_NUMBER, f"{n} is odd")
     return n // 2
 
-def quarter(n: int) -> int | Failure_T:
+def quarter(n: int) -> int | !Failure_T:
     do:
         h <- halve(n)                    # the int, or return the failure
         q <- halve(h)
@@ -139,15 +139,15 @@ print "test5 OK"
 
 # ─── test 6: collecting every failure instead of stopping at the first ─────
 
-type Problems_T is failure record:
+type Problems_T is record:
     bad: []str
 
-def parse_all(tokens: []str) -> []int | Problems_T:
+def parse_all(tokens: []str) -> []int | !Problems_T:
     """Validation that reports every bad token, not only the first one."""
     var good: []int = []
     var bad: []str = []
     for t in tokens:
-        let p: int | Failure_T = read_number(t)
+        let p: int | !Failure_T = read_number(t)
         if p is Failure_T:
             bad.append(p.detail)
         else:
@@ -156,20 +156,20 @@ def parse_all(tokens: []str) -> []int | Problems_T:
         return Problems_T(bad=bad)
     return good
 
-let all_good: []int | Problems_T = parse_all(["1", "2", "3"])
+let all_good: []int | !Problems_T = parse_all(["1", "2", "3"])
 if all_good is not Problems_T:
     assert all_good == [1, 2, 3]
-let some_bad: []int | Problems_T = parse_all(["1", "x", "", "4"])
+let some_bad: []int | !Problems_T = parse_all(["1", "x", "", "4"])
 if some_bad is Problems_T:
     assert len(some_bad.bad) == 2
     print some_bad.bad[0]
     print some_bad.bad[1]
 print "test6 OK"
 
-# ─── test 7: case over a T | F, a branch per side ─────────────────────────
+# ─── test 7: case over a T | !F, a branch per side ─────────────────────────
 
 def sign_of(raw: str) -> str:
-    let n: int | Failure_T = read_number(raw)
+    let n: int | !Failure_T = read_number(raw)
     case n:
         when Failure_T:
             return f"no sign: {n.detail}"   # n is the failure here
@@ -183,13 +183,13 @@ print "test7 OK"
 
 # ─── test 8: shell commands fail with the built-in ShellFailure_T ──────────
 
-let hi: str | ShellFailure_T = shell: echo hi
+let hi: str | !ShellFailure_T = shell: echo hi
 if hi is str:
     print f"said {hi.strip()}"
-let oops: str | ShellFailure_T = shell: echo oops >&2; exit 3
+let oops: str | !ShellFailure_T = shell: echo oops >&2; exit 3
 if oops is ShellFailure_T:
     print f"exit {oops.code}, stderr {oops.stderr.strip()}"
-let quiet: None | ShellFailure_T = shell: true
+let quiet: None | !ShellFailure_T = shell: true
 assert quiet is None
 print "test8 OK"
 
@@ -203,7 +203,7 @@ def find_word(words: {str}str, key: str) -> ?str:
         return words[key]
     return None
 
-def shout(words: {str}str, key: str) -> str | Failure_T:
+def shout(words: {str}str, key: str) -> str | !Failure_T:
     do:
         w <- find_word(words, key) else fail(BAD_NUMBER, f"no word for {key}")
         out <- shell: echo {w} | tr a-z A-Z else cmd_failed(out)
@@ -216,4 +216,4 @@ print describe_text(shout(words, "x"))
 print describe_text(shout(words, "e"))
 print "test9 OK"
 
-print "all T | F tests passed"
+print "all T | !F tests passed"

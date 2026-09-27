@@ -182,7 +182,7 @@ def to_py(self, indent=0):
 
 
 # --- while ---
-# --- do block (monadic bind over ?T or T | F) ---
+# --- do block (monadic bind over ?T or T | !F) ---
 def _do_lines(do_node):
     """The steps of a do: block, in order, as (name, value, else_node,
     is_shell): NAME is the identifier `x <- ...` binds, or None for a bare
@@ -274,7 +274,7 @@ def to_py(self, indent=0):
     """do_stmt: 'do' ':' NEWLINE INDENT ((IDENTIFIER '<-')? (expression |
     shell) ('else' expression)? NL)+ DEDENT
 
-    In a routine returning a `T | F`, each step is a `T2 | F2`, a ?T or a
+    In a routine returning a `T | !F`, each step is a `T2 | !F2`, a ?T or a
     shell command: its value is bound, and its failure returned -- as it
     is when F2 is F, or as the `else` expression says, inside which the
     bound name is the step's failure. A ?T step needs an `else`: absence
@@ -292,13 +292,13 @@ def to_py(self, indent=0):
             if is_shell or else_node is not None:
                 raise SyntaxError(
                     "a do: step with a shell command or an `else` fails with "
-                    "a failure: the routine must return a `T | F`")
+                    "a failure: the routine must return a `T | !F`")
             expr = value.to_py()
             _call = _re_do.match(r"^([A-Za-z_]\w*)\(", expr.strip())
             if _call and _call.group(1) in getattr(ParserState, "result_procs", set()):
                 raise SyntaxError(
-                    f"do: step '{expr}' returns a `T | F`; a routine binding "
-                    f"one must return a `T | F` too, to pass its failure on")
+                    f"do: step '{expr}' returns a `T | !F`; a routine binding "
+                    f"one must return a `T | !F` too, to pass its failure on")
             leave = "return None" if ret else "return"
             if name:
                 lines.append(f"{ind}{name} = {expr}")
@@ -1411,7 +1411,7 @@ def _is_docstring_line(stmt):
 def _returns_nothing(ret_ann):
     """RET_ANN, a rendered `-> T`, returns no value: `-> None`. A `?T`,
     `-> T | None`, returns its T, and so has an implicit return like any
-    other; so does `None | F`, whose tail may be a call passing a failure
+    other; so does `None | !F`, whose tail may be a call passing a failure
     on."""
     return ret_ann.strip().removeprefix("->").strip() == "None"
 
@@ -3084,7 +3084,7 @@ def _shell_either_spec(node, render):
     "None" (nothing -- it can only fail), with ShellFailure_T the failure.
 
     Asked for two ways: a `do:` step sets `node._either_target`; a
-    statement says it in its target's type, `let out: str | ShellFailure_T
+    statement says it in its target's type, `let out: str | !ShellFailure_T
     = shell: cmd`. RENDER is the calling backend's emitter for a type. Any
     other failure type is refused: a command fails with a ShellFailure_T,
     and a do: step's `else` is how it becomes another.
@@ -3104,19 +3104,20 @@ def _shell_either_spec(node, render):
     if union is None:
         return None
     from ady_stmt import either_sides
-    parts = [render(union.nodes[0])]
-    for seq in union.nodes[1].nodes:
-        if hasattr(seq, "nodes") and seq.nodes:
-            parts.append(render(seq.nodes[0]))
+    from ady_stmt import check_failure_marks
+    members = [union.nodes[0]] + [seq.nodes[0] for seq in union.nodes[1].nodes
+                                  if hasattr(seq, "nodes") and seq.nodes]
+    parts = [render(m) for m in members]
+    marked = [type(m).__name__ == "failure_member" for m in members]
     parts = ["None" if p in ("nil", "void") else p for p in parts]
-    kind, value, failure = either_sides(
-        parts, getattr(ParserState, "failure_types", set()))
+    kind, value, failure = either_sides(parts, check_failure_marks(
+        parts, marked, getattr(ParserState, "failure_types", set())))
     if kind != "either":
         return None
     if failure != "ShellFailure_T":
         raise SyntaxError(
             f"a shell command fails with a ShellFailure_T, not a {failure}: "
-            f"take it as `... | ShellFailure_T`, or convert it in a do: "
+            f"take it as `... | !ShellFailure_T`, or convert it in a do: "
             f"step with `else`")
     kinds = {"str": "str", "string": "str", "None": "None",
              "list[str]": "lines", "seq[string]": "lines"}
@@ -3369,7 +3370,7 @@ def to_py(self, indent=0):
     _either = (_shell_either_spec(self, lambda n: n.to_py())
                if target_name else None)
     if _either is not None:
-        # `let out: str | ShellFailure_T = shell: cmd`: the output, or the
+        # `let out: str | !ShellFailure_T = shell: cmd`: the output, or the
         # failure -- the command, its status and its stderr. The command
         # string is bound once: it is run and named in the failure, and it
         # may be an f-string with side effects.

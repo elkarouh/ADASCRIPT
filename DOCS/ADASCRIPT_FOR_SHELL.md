@@ -164,16 +164,16 @@ assert anyway.output.strip() == "still here"
 `$?` has a second problem: it is gone by the next command, so every script
 that cares copies it somewhere, and every script that forgets does not. A
 command can instead *return* its failure. Give the target a
-`T | ShellFailure_T` type and it holds the output when the command
+`T | !ShellFailure_T` type and it holds the output when the command
 succeeds, and the built-in failure record — the command, its status, its
 stderr — when it does not; `is` asks which:
 
 <!-- from: EXAMPLES/test_result.ady -->
 ```python
-let oops: str | ShellFailure_T = shell: echo oops >&2; exit 3
+let oops: str | !ShellFailure_T = shell: echo oops >&2; exit 3
 if oops is ShellFailure_T:
     print f"exit {oops.code}, stderr {oops.stderr.strip()}"
-let quiet: None | ShellFailure_T = shell: true
+let quiet: None | !ShellFailure_T = shell: true
 ```
 
 Steps that must all succeed, in order, are a `do:` block, and the first
@@ -189,7 +189,7 @@ def cmd_failed(f: ShellFailure_T) -> Failure_T:
     step fails with -- as this program's: the `else` of the steps below."""
     return failure(CMD_FAILED, f.command, f.stderr.strip())
 
-def mkdir_p(path: Path, ssh: ?SSH = None) -> None | Failure_T:
+def mkdir_p(path: Path, ssh: ?SSH = None) -> None | !Failure_T:
     if ssh is None:
         do:
             r <- shell: mkdir -p -- {!path} else cmd_failed(r)

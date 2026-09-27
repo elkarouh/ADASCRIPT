@@ -1468,27 +1468,27 @@ def run_tests():
         "w = xs.pop()\ndiscard xs.pop()\n",
     ))
 
-    # `T | F`, F declared `failure`: what is returned goes on the side its
+    # `T | !F`, F marked the failure: what is returned goes on the side its
     # type says, each constructor typed from the signature.
     tests.append((
-        'type Bad_T is failure record:\n    why: str\n\ndef f(s: str) -> int | Bad_T:\n    if s == "":\n        return Bad_T(why="empty")\n    return len(s)\n',
+        'type Bad_T is record:\n    why: str\n\ndef f(s: str) -> int | !Bad_T:\n    if s == "":\n        return Bad_T(why="empty")\n    return len(s)\n',
         'import stdlib\ntype Bad_T = object\n    why: string\nproc f(s: string): Result[int, Bad_T] =\n    if s == "":\n        return Result[int, Bad_T].err(Bad_T(why: "empty"))\n    return Result[int, Bad_T].ok(len(s))\n',
     ))
-    # `None | F` is Result[void, F], whose zero value -- falling off the end
+    # `None | !F` is Result[void, F], whose zero value -- falling off the end
     # -- is success.
     tests.append((
-        'type Bad_T is failure record:\n    why: str\n\ndef g(n: int) -> None | Bad_T:\n    if n < 0:\n        return Bad_T(why="negative")\n',
+        'type Bad_T is record:\n    why: str\n\ndef g(n: int) -> None | !Bad_T:\n    if n < 0:\n        return Bad_T(why="negative")\n',
         'import stdlib\ntype Bad_T = object\n    why: string\nproc g(n: int): Result[void, Bad_T] =\n    if n < 0:\n        return Result[void, Bad_T].err(Bad_T(why: "negative"))\n',
     ))
     # do: over them: a failure is the routine's own, a bare step is checked.
     tests.append((
-        'type Bad_T is failure record:\n    why: str\n\ndef f(s: str) -> int | Bad_T:\n    return len(s)\n\ndef h(a: str) -> int | Bad_T:\n    do:\n        x <- f(a)\n        f(a)\n    return x\n',
+        'type Bad_T is record:\n    why: str\n\ndef f(s: str) -> int | !Bad_T:\n    return len(s)\n\ndef h(a: str) -> int | !Bad_T:\n    do:\n        x <- f(a)\n        f(a)\n    return x\n',
         'import stdlib\ntype Bad_T = object\n    why: string\nproc f(s: string): Result[int, Bad_T] =\n    return Result[int, Bad_T].ok(len(s))\n\nproc h(a: string): Result[int, Bad_T] =\n    let adadoX = f(a)\n    if adadoX.is_err: return Result[int, Bad_T].err(adadoX.error)\n    let x = adadoX.value\n    let adadoStep0 = f(a)\n    if adadoStep0.is_err: return Result[int, Bad_T].err(adadoStep0.error)\n    return Result[int, Bad_T].ok(x)\n',
     ))
     # `r is F` asks which side r holds and narrows it as `x is None` does;
     # the failure side is the declared one, whichever order is written.
     tests.append((
-        'type Bad_T is failure record:\n    why: str\n\ndef d(r: Bad_T | int) -> int:\n    if r is Bad_T:\n        return 0\n    return r\n',
+        'type Bad_T is record:\n    why: str\n\ndef d(r: !Bad_T | int) -> int:\n    if r is Bad_T:\n        return 0\n    return r\n',
         'import stdlib\ntype Bad_T = object\n    why: string\nproc d(r: Result[int, Bad_T]): int =\n    if r.is_err:\n        return 0\n    return r.value\n',
     ))
 
@@ -1573,11 +1573,11 @@ def run_tests():
          "type 'A_T' is already declared, at line 1"),
         ("class A:\n    var x: int = 0\n\ntype A is enum P, Q\n",
          "type 'A' is already declared, at line 1"),
-        # A `T | F` bound in a routine that cannot return its failure.
-        ("type Bad_T is failure record:\n    why: str\n\n"
-         "def f(s: str) -> int | Bad_T:\n    return len(s)\n\n"
+        # A `T | !F` bound in a routine that cannot return its failure.
+        ("type Bad_T is record:\n    why: str\n\n"
+         "def f(s: str) -> int | !Bad_T:\n    return len(s)\n\n"
          "def h(a: str) -> ?int:\n    do:\n        x <- f(a)\n    return x\n",
-         "must return a `T | F` too, to pass its failure on"),
+         "must return a `T | !F` too, to pass its failure on"),
         # A union's members must be told apart at run time: on Python the
         # value is the member itself, and its class all that says which.
         ("var x: []int | []str\n",
@@ -1585,33 +1585,39 @@ def run_tests():
         ("var x: int | bool\n",
          "cannot be told apart at run time"),
         # At most one failure member: a do: step passes on one kind.
-        ("type A_T is failure record:\n    a: int\n"
-         "type B_T is failure record:\n    b: int\n"
-         "var x: A_T | B_T\n",
+        ("type A_T is record:\n    a: int\n"
+         "type B_T is record:\n    b: int\n"
+         "var x: !A_T | !B_T\n",
          "at most one failure member"),
         # None goes with one other type.
         ("var x: int | str | None\n",
          "None goes with one other type"),
-        # Only a record can be one.
-        ("type Oops_T is failure enum A, B\n",
-         "only a record can be a failure type"),
+        # The failure is marked where the union is written: `failure` on
+        # the declaration is the old spelling, and says what the new one is.
+        ("type Oops_T is failure record:\n    why: str\n",
+         "marked where it is the failure of a union: `int | !Oops_T`"),
+        # A failure anywhere is marked everywhere: unmarked, a reader would
+        # take it for a value the do: block binds.
+        ("type Bad_T is record:\n    why: str\n\n"
+         "var x: int | !Bad_T\nvar y: str | Bad_T\n",
+         "Bad_T is a failure type -- mark it `!Bad_T`"),
         # A shell step fails with a ShellFailure_T: another failure type
         # needs `else` to say what it becomes -- as a ?T step does.
-        ("type Bad_T is failure record:\n    why: str\n\n"
-         "def a() -> None | Bad_T:\n    do:\n        shell: true\n",
+        ("type Bad_T is record:\n    why: str\n\n"
+         "def a() -> None | !Bad_T:\n    do:\n        shell: true\n",
          "fails with a ShellFailure_T, not the routine's Bad_T"),
-        ("type Bad_T is failure record:\n    why: str\n\n"
+        ("type Bad_T is record:\n    why: str\n\n"
          "def look() -> ?str:\n    return None\n\n"
-         "def b() -> str | Bad_T:\n    do:\n        v <- look()\n    return v\n",
+         "def b() -> str | !Bad_T:\n    do:\n        v <- look()\n    return v\n",
          "is a ?T: say which failure its absence is, with `else`"),
-        # A case over a `T | F` covers both sides, or says others.
-        ("type Bad_T is failure record:\n    why: str\n\n"
-         "def f() -> int | Bad_T:\n    return 1\n\n"
-         "let h: int | Bad_T = f()\ncase h:\n    when Bad_T:\n        print \"b\"\n",
+        # A case over a `T | !F` covers both sides, or says others.
+        ("type Bad_T is record:\n    why: str\n\n"
+         "def f() -> int | !Bad_T:\n    return 1\n\n"
+         "let h: int | !Bad_T = f()\ncase h:\n    when Bad_T:\n        print \"b\"\n",
          "must cover every member"),
-        # A failure nobody takes is refused: a bare call returning `T | F`.
-        ("type Bad_T is failure record:\n    why: str\n\n"
-         "def step(n: int) -> None | Bad_T:\n    if n < 0:\n"
+        # A failure nobody takes is refused: a bare call returning `T | !F`.
+        ("type Bad_T is record:\n    why: str\n\n"
+         "def step(n: int) -> None | !Bad_T:\n    if n < 0:\n"
          "        return Bad_T(why=\"negative\")\n\n"
          "def run() -> None:\n    step(-1)\n    print \"on\"\n",
          "'step(-1)' drops a failure"),

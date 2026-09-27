@@ -907,7 +907,7 @@ def to_nim(self, indent=0):
     return result
 
 
-# --- do block (monadic bind over ?T or T | F) ---
+# --- do block (monadic bind over ?T or T | !F) ---
 def _py_backend():
     """hek_py_parser, whose grammar-neutral helpers this backend shares."""
     import os as _os, sys as _sys
@@ -923,7 +923,7 @@ def to_nim(self, indent=0):
     """do_stmt: 'do' ':' NEWLINE INDENT ((IDENTIFIER '<-')? (expression |
     shell) ('else' expression)? NL)+ DEDENT
 
-    In a routine returning a `T | F` (Result[T, F]), each step is a
+    In a routine returning a `T | !F` (Result[T, F]), each step is a
     Result, a ?T or a shell command: an Ok's value is bound, and a failure
     returned -- as it is when its type is F, or as the `else` expression
     says, inside which the bound name is the step's failure. A ?T step
@@ -948,12 +948,12 @@ def to_nim(self, indent=0):
             if is_shell or else_node is not None:
                 raise SyntaxError(
                     "a do: step with a shell command or an `else` fails with "
-                    "a failure: the routine must return a `T | F`")
+                    "a failure: the routine must return a `T | !F`")
             expr = value.to_nim()
             if hek_nim_expr._expr_is_result(expr):
                 raise SyntaxError(
-                    f"do: step '{expr}' returns a `T | F`; a routine binding "
-                    f"one must return a `T | F` too, to pass its failure on")
+                    f"do: step '{expr}' returns a `T | !F`; a routine binding "
+                    f"one must return a `T | !F` too, to pass its failure on")
             ParserState.nim_imports.add("options")
             lines.append(f"{ind}let {tmp} = {expr}")
             _m_opt = _re_do.search(r'Option\[(.+)\]', ret_ann)
@@ -1013,7 +1013,7 @@ def to_nim(self, indent=0):
             lines.append(f"{ind1}return {ret_ann}.err({else_node.to_nim()})")
         if name and not (_step_sides and _step_sides[0] == "void"):
             lines.append(f"{ind}let {_nim_ident(name)} = {tmp}.value")
-            # A value that is itself a union (`int | str | F`) is known as
+            # A value that is itself a union (`int | str | !F`) is known as
             # one, so that `x is int` and `case x:` work on it.
             _vt = _step_sides[0] if _step_sides else ""
             ParserState.symbol_table.add(
@@ -2251,7 +2251,7 @@ def _require_catch_all(subject, case_node):
 
 def _either_case_to_nim(case_node, subject, rtype, indent):
     """`case x:` over a union: each `when` names a member -- `when int:`,
-    `when Failure_T:`, `when None:` for a `None | F` -- or is `when
+    `when Failure_T:`, `when None:` for a `None | !F` -- or is `when
     others:`, and x is narrowed to that member in its branch, as `x is T`
     narrows it. Every member, or others, must be there: the case is as
     exhaustive as one over an enum."""
@@ -4738,7 +4738,7 @@ def to_nim(self, indent=0):
     _either = (_shell_either_spec(self, lambda n: n.to_nim())
                if target_name else None)
     if _either is not None:
-        # `let out: str | ShellFailure_T = shell: cmd`: the output, or the
+        # `let out: str | !ShellFailure_T = shell: cmd`: the output, or the
         # failure -- the command, its status and its stderr (stdlib.nim).
         ParserState.nim_imports.add("stdlib")
         _ensure_shell_run_helper()
@@ -4938,7 +4938,7 @@ def _mark_docstring(block_node, ret_ann=""):
 
 
 def _mark_either_tail(block_node, ret_ann):
-    """In a routine returning `T | F`, a bare call standing last is the
+    """In a routine returning `T | !F`, a bare call standing last is the
     routine's value, not a dropped failure: mark it, with the Python
     backend's own rule for which statements those are (hek_py_stmt's
     RETURN_NODES, which nothing else reads in this process)."""
@@ -5013,7 +5013,7 @@ def to_nim(self, indent=0):
         parts = [_ind(indent) + self.nodes[0].to_nim()]
 
     result = "; ".join(p.strip() for p in parts if p.strip())
-    # A call returning `T | F` whose result nobody takes drops its failure.
+    # A call returning `T | !F` whose result nobody takes drops its failure.
     if _bare_expr and len([p for p in parts if p.strip()]) == 1:
         _py_stmt = __import__("sys").modules.get("hek_py_stmt")
         if _py_stmt is None or id(self) not in _py_stmt.RETURN_NODES:

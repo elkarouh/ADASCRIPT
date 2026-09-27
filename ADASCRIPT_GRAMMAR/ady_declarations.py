@@ -285,6 +285,7 @@ from ady_expr import expression, ikw
 ###############################################################################
 
 QUESTION = ignore(expect(tkn.OP, "?"))
+EXCLAIM = ignore(expect(tkn.OP, "!"))
 
 ###############################################################################
 # Forward declarations
@@ -403,11 +404,15 @@ basic_type = (
 optional_type = QUESTION + basic_type
 maybe_optional = optional_type | basic_type
 
-# --- Result: int | Failure_T -> a value, or the reason there is none ---
-# Two sides, the value's type on the left and the error's on the right;
-# `None | E` is a step that can only fail, and `T | None` keeps Python's
-# meaning, ?T. (The rule is still called union_type: it is the `|`.)
-union_type = maybe_optional + (VBAR + maybe_optional)[1:]
+# --- a union: int | float, and int | !Failure_T -------------------------
+# `!` marks the failure member: `int | !Failure_T` is an int, or the reason
+# there is none, which a do: block passes on. At most one, anywhere in the
+# union; `None | !F` is a step that can only fail, and `T | None` keeps
+# Python's meaning, ?T. A type marked `!` in one union is a failure in
+# every union it is in, and is marked in each (ady_stmt.check_failure_marks).
+failure_member = EXCLAIM + basic_type
+union_member = failure_member | maybe_optional
+union_type = union_member + (VBAR + union_member)[1:]
 
 # --- type_annotation: union or single type, with expression fallback ---
 type_annotation = union_type | maybe_optional | expression

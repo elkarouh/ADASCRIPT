@@ -241,24 +241,47 @@ import re as _re_dup
 _TYPE_DECL = _re_dup.compile(r"(?:type|class)\s+([A-Za-z_]\w*)\b")
 
 
-_FAILURE_DECL = _re_dup.compile(
-    r"^[ \t]*type[ \t]+([A-Za-z_]\w*)\b[^\n]*?[ \t](?:is|=)[ \t]+failure[ \t]+(\w+)",
+_OLD_FAILURE_DECL = _re_dup.compile(
+    r"^[ \t]*type[ \t]+([A-Za-z_]\w*)\b[^\n]*?[ \t](?:is|=)[ \t]+failure[ \t]+\w+",
     _re_dup.MULTILINE)
+
+# `!X` beside a `|`: X marked as a union's failure member. The `|` is what
+# tells it from a shell line's `{!x}` and from `!=`.
+_FAILURE_MARK = _re_dup.compile(
+    r"\|[ \t]*!([A-Za-z_]\w*)|(?<![\w{!=<>])!([A-Za-z_]\w*)[ \t]*\|")
 
 
 def scan_failure_types(code):
-    """The failure types CODE declares -- `type X is failure record:` --
-    which make X the failure side of any `T | X`. A record only: a failure
-    has to say what went wrong, and on the Python backend it has to be a
-    class of its own for `r is X` to tell it from the value."""
-    names = set()
-    for m in _FAILURE_DECL.finditer(code):
-        if m.group(2) != "record":
+    """The failure types CODE uses: each X marked `!X` in a union, `int |
+    !X`, which makes X the failure side of every union it is in."""
+    m = _OLD_FAILURE_DECL.search(code)
+    if m:
+        raise SyntaxError(
+            f"type '{m.group(1)}': a failure type is an ordinary record now -- "
+            f"`type {m.group(1)} is record:` -- marked where it is the failure "
+            f"of a union: `int | !{m.group(1)}`")
+    return {a or b for a, b in _FAILURE_MARK.findall(code)}
+
+
+def check_failure_marks(parts, marked, failure_types):
+    """The failure types of a union whose members are PARTS, MARKED[i] when
+    part i was written `!T`: FAILURE_TYPES and the ones marked here. A type
+    that is a failure anywhere is marked in every union it is in -- the `!`
+    is what shows the reader which member a do: block passes on -- so an
+    unmarked one is refused."""
+    for p, m in zip(parts, marked):
+        if m and (not (p[:1].isupper() and p.replace("_", "").isalnum())
+                  or _runtime_kind(p) != p):
             raise SyntaxError(
-                f"type '{m.group(1)}': only a record can be a failure type "
-                f"-- `type {m.group(1)} is failure record:`")
-        names.add(m.group(1))
-    return names
+                f"'!{p}': only a record can be a failure -- it has to say what "
+                f"went wrong, and on Python be a class of its own to be told "
+                f"from the value")
+        if p in failure_types and not m:
+            shown = " | ".join(("!" if mk else "") + q for q, mk in zip(parts, marked))
+            raise SyntaxError(
+                f"'{shown}': {p} is a failure type -- mark it `!{p}`, "
+                f"which shows the member a do: block passes on")
+    return set(failure_types) | {p for p, m in zip(parts, marked) if m}
 
 
 _RETURN_DECL = _re_dup.compile(
@@ -285,7 +308,8 @@ def split_top_level_bar(text):
         else:
             cur.append(ch)
     parts.append("".join(cur).strip())
-    return parts
+    # the `!` of a failure member is not part of its type
+    return [p[1:].strip() if p.startswith("!") else p for p in parts]
 
 
 def _runtime_kind(t):
@@ -310,7 +334,7 @@ def classify_union(parts, failure_types):
     failure type or None. The order of the members does not matter.
 
     Refused: two failure types; None in anything but `T | None` or
-    `None | F`; the same member twice; two members nothing can tell apart
+    `None | !F`; the same member twice; two members nothing can tell apart
     at run time -- on Python the value is the member itself, and its class
     is all that says which one it is."""
     shown = " | ".join(parts)
@@ -326,7 +350,7 @@ def classify_union(parts, failure_types):
         if len(parts) != 2 or nones > 1:
             raise SyntaxError(
                 f"'{shown}': None goes with one other type -- `T | None`, "
-                f"which is ?T, or `None | F`, a step that can only fail. For "
+                f"which is ?T, or `None | !F`, a step that can only fail. For "
                 f"an optional union, declare the union as a type and write ?Name")
         if failure is None:
             return {"kind": "optional", "values": [p for p in parts if p != "None"],
@@ -373,7 +397,7 @@ def scan_union_aliases(code):
 
 
 def either_procs(return_types, failure_types):
-    """The routines among RETURN_TYPES that return `T | F`, F a failure."""
+    """The routines among RETURN_TYPES that return `T | !F`, F a failure."""
     out = set()
     for name, text in return_types.items():
         parts = split_top_level_bar(text)
@@ -384,7 +408,7 @@ def either_procs(return_types, failure_types):
 
 def refuse_dropped_failure(stmt_text, is_either_call):
     """Refuse STMT_TEXT, an emitted expression statement, when it is nothing
-    but a call of a routine returning `T | F`: its failure would go unseen.
+    but a call of a routine returning `T | !F`: its failure would go unseen.
     IS_EITHER_CALL(text) says whether a call returns one -- each backend
     knows its own calls. Taking the result is what a do: step, a test or a
     `return` are for; dropping it silently is the bug the type exists to

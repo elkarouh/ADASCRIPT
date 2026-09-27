@@ -168,11 +168,11 @@ def add_alternate(nmroot: Path, alternate: Path):
     if not already_listed:
         shell: echo {!alternate} >> {alt_file}
 
-def where_workspace(cmpath: str) -> Path | ShellFailure_T:
+def where_workspace(cmpath: str) -> Path | !ShellFailure_T:
     """Resolve a /cm/ot/... context path to its workspace path -- or the
     command's failure, whose code 2 means "the subsystem is not checked
     out"."""
-    let out: str | ShellFailure_T = shell: where_workspace {!cmpath}
+    let out: str | !ShellFailure_T = shell: where_workspace {!cmpath}
     if out is ShellFailure_T:
         return out
     return Path(out.strip())
@@ -310,7 +310,7 @@ class Resolver:
             hit.nmroot = self.alternate
             hit.file = filepath
         elif self.workspace != "":
-            let ws: Path | ShellFailure_T = where_workspace(written)
+            let ws: Path | !ShellFailure_T = where_workspace(written)
             if ws is ShellFailure_T:
                 if ws.code == 2:
                     debug_log("Could not find the file " + written + " in the workspace, the subsystem is not checked out.")

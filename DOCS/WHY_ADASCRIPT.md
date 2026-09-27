@@ -200,15 +200,16 @@ moves on. Python and Ada raise an exception that appears nowhere in the
 signature, so the reader has to know the body to know the contract. In
 every case the failure is real and the page does not show it.
 
-Adascript lets the return type say both halves: `-> Path | Failure_T`,
-*either* a path *or* the failure that says why there is none. A failure is
-a type like any other — a record, declared as one:
+Adascript lets the return type say both halves: `-> Path | !Failure_T`,
+*either* a path *or* the failure that says why there is none; the `!`
+marks which is which. A failure is a type like any other — an ordinary
+record:
 
 <!-- from: EXAMPLES/rsync_time_machine.ady -->
 ```python
 type ErrKind_T is enum CMD_FAILED, NOT_A_BACKUP_DEST, SOURCE_MISSING, STILL_RUNNING, NO_SPACE, BAD_ARGUMENTS
 
-type Failure_T is failure record:
+type Failure_T is record:
     kind:   ErrKind_T
     detail: str    # the command that failed, the path at fault, or what went wrong
     stderr: str    # what a failed command said; "" for any other failure
@@ -220,7 +221,7 @@ the type of what is returned says which it is:
 
 <!-- from: EXAMPLES/rsync_time_machine.ady -->
 ```python
-def run_checked(cmd: str, ssh: ?SSH = None) -> str | Failure_T:
+def run_checked(cmd: str, ssh: ?SSH = None) -> str | !Failure_T:
     let r: CmdResult = run_cmd(cmd, ssh)
     if r.returncode != 0:
         return failure(CMD_FAILED, cmd, r.stderr.strip())
@@ -249,7 +250,7 @@ new kind of failure nobody reports does not compile:
 
 <!-- from: EXAMPLES/rsync_time_machine.ady -->
 ```python
-    let outcome: None | Failure_T = backup(
+    let outcome: None | !Failure_T = backup(
         ...
     )
     if outcome is Failure_T:
@@ -280,7 +281,7 @@ three bugs that `make test`, which only compiled it, had never seen:
   bug fixed, it went on to expire every backup there was.
 
 The first bug is the kind the signature now prevents: once `ln_s` says
-`-> None | Failure_T`, it cannot be called and its failure thrown away. A
+`-> None | !Failure_T`, it cannot be called and its failure thrown away. A
 bare `ln_s(...)` as a statement does not compile, on either backend —
 the result has to be taken, by a `do:` step, a test or a `return`. The
 other two came to light because failures had become values a test could
@@ -588,7 +589,7 @@ type because it was built as one. Letting a user-defined scalar say the same
 thing — `type Velocity_T is distinct float` — is the next thing on the list,
 and it is in `TODO.md`.
 
-Failures as values (`T | Failure_T`) are enforced in both directions: a
+Failures as values (`T | !Failure_T`) are enforced in both directions: a
 failure cannot be dropped — a bare call whose result nobody takes is
 refused, on both backends — and on the Nim backend a value is not usable as
 the value until a test or a `do:` step has said it is not the failure.

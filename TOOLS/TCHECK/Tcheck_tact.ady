@@ -393,8 +393,8 @@ class Report:
             when others: pass
         let subtype: BuildSubtype = self.opt.focus_subtype
         let prev: Baseline = self.cur.previous()
-        let prev_report: Path | Failure_T = warned(prev.scan_regression_tests(btype, subtype))
-        let cur_report: Path | Failure_T = warned(self.cur.scan_regression_tests(btype, subtype))
+        let prev_report: Path | !Failure_T = warned(prev.scan_regression_tests(btype, subtype))
+        let cur_report: Path | !Failure_T = warned(self.cur.scan_regression_tests(btype, subtype))
         if prev_report is Path and cur_report is Path and not BATCH:
             let tool: Tool_T = troubleshoot_tool()
             let tool_rc: int = shell: {!tool} {!prev_report} {!cur_report} &
@@ -410,10 +410,10 @@ class Report:
     def show_detailed_replays(self):
         let rtype: ReplayType = self.opt.focus_rtype
         let prev: Baseline = self.cur.previous()
-        let prev_log: Path | Failure_T = prev.replay_log_dir(rtype)
-        let cur_log: Path | Failure_T = self.cur.replay_log_dir(rtype)
-        let prev_report: Path | Failure_T = warned(scan_replay_dir_detailed(prev_log, prev.nr, rtype))
-        let cur_report: Path | Failure_T = warned(scan_replay_dir_detailed(cur_log, self.cur.nr, rtype))
+        let prev_log: Path | !Failure_T = prev.replay_log_dir(rtype)
+        let cur_log: Path | !Failure_T = self.cur.replay_log_dir(rtype)
+        let prev_report: Path | !Failure_T = warned(scan_replay_dir_detailed(prev_log, prev.nr, rtype))
+        let cur_report: Path | !Failure_T = warned(scan_replay_dir_detailed(cur_log, self.cur.nr, rtype))
         if prev_report is Path and cur_report is Path and not BATCH:
             let tool: Tool_T = troubleshoot_tool()
             let tool_rc: int = shell: {!tool} {!prev_report} {!cur_report} &

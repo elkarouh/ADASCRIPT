@@ -361,7 +361,7 @@ def _zero_value(annotation, _depth=0):
 
 def _either_zero(annotation):
     """The value a union declared without one holds: the zero of its first
-    value member, as on Nim -- `var r: int | Failure_T` and `var x: int |
+    value member, as on Nim -- `var r: int | !Failure_T` and `var x: int |
     float` are both 0; None when that member is None. None (the Python
     object) when ANNOTATION is no such union."""
     from hek_py_declarations import union_of
@@ -1234,7 +1234,7 @@ def to_py(self, indent=0):
 
     parts = [_placed(self.nodes[0])]
     newline_node = None
-    # A call returning `T | F` whose result nobody takes drops its failure --
+    # A call returning `T | !F` whose result nobody takes drops its failure --
     # unless it stands last in a routine, where it is the routine's value.
     if (type(self.nodes[0]).__name__ == "expressions"
             and id(self) not in RETURN_NODES):

@@ -25,7 +25,7 @@ this reaches for the language.
     and `date -j -f` is BSD. The Nim build therefore needs neither nimpy nor
     libpython, which is what lets `make test` compile it.
   - Failures are values. Every step that changes something -- a mkdir, an
-    rm, the `latest` link, the lock file -- returns `T | Failure_T`, the
+    rm, the `latest` link, the lock file -- returns `T | !Failure_T`, the
     steps are chained in `do:` blocks, and main() alone decides what to
     print and which status to exit with. The original ignored the exit
     status of all of those, so a failed `ln -s` still ended in "success"
@@ -77,11 +77,11 @@ type ResolvedPaths is tuple:
 type LogLevel_T is enum INFO, WARNING, ERROR
 type Color_T    is enum green, magenta, yellow, red, orange, no_color
 
-# Why a run stopped. A step that can fail returns `T | Failure_T`; main()
+# Why a run stopped. A step that can fail returns `T | !Failure_T`; main()
 # is the one place that reports a Failure_T and picks the exit status.
 type ErrKind_T is enum CMD_FAILED, NOT_A_BACKUP_DEST, SOURCE_MISSING, STILL_RUNNING, NO_SPACE, BAD_ARGUMENTS
 
-type Failure_T is failure record:
+type Failure_T is record:
     kind:   ErrKind_T
     detail: str    # the command that failed, the path at fault, or what went wrong
     stderr: str    # what a failed command said; "" for any other failure
@@ -155,7 +155,7 @@ def run_cmd(cmd: str, ssh: ?SSH = None) -> CmdResult:
 # something is a do: step instead -- a local shell: step, or run_checked for
 # a remote one -- and its failure stops the run.
 
-def run_checked(cmd: str, ssh: ?SSH = None) -> str | Failure_T:
+def run_checked(cmd: str, ssh: ?SSH = None) -> str | !Failure_T:
     let r: CmdResult = run_cmd(cmd, ssh)
     if r.returncode != 0:
         return failure(CMD_FAILED, cmd, r.stderr.strip())
@@ -178,14 +178,14 @@ def find_cmd(path: Path, ssh: ?SSH = None, maxdepth: ?int = None) -> str:
         cmd = cmd + f" -maxdepth {maxdepth}"
     return run_cmd(cmd, ssh).stdout
 
-def get_absolute_path(path: Path, ssh: ?SSH = None) -> Path | Failure_T:
+def get_absolute_path(path: Path, ssh: ?SSH = None) -> Path | !Failure_T:
     if ssh is None:
         return path.resolve()   # native resolve -- absolute, symlinks expanded, no subprocess
     do:
         abs_path <- run_checked(f"cd '{path}' && pwd", ssh)
     return Path(abs_path.strip())
 
-def mkdir_p(path: Path, ssh: ?SSH = None) -> None | Failure_T:
+def mkdir_p(path: Path, ssh: ?SSH = None) -> None | !Failure_T:
     if ssh is None:
         do:
             r <- shell: mkdir -p -- {!path} else cmd_failed(r)
@@ -193,7 +193,7 @@ def mkdir_p(path: Path, ssh: ?SSH = None) -> None | Failure_T:
     do:
         run_checked(f"mkdir -p -- '{path}'", ssh)
 
-def rm_file(path: Path, ssh: ?SSH = None) -> None | Failure_T:
+def rm_file(path: Path, ssh: ?SSH = None) -> None | !Failure_T:
     if ssh is None:
         do:
             r <- shell: rm -f -- {!path} else cmd_failed(r)
@@ -201,7 +201,7 @@ def rm_file(path: Path, ssh: ?SSH = None) -> None | Failure_T:
     do:
         run_checked(f"rm -f -- '{path}'", ssh)
 
-def rm_dir(path: Path, ssh: ?SSH = None) -> None | Failure_T:
+def rm_dir(path: Path, ssh: ?SSH = None) -> None | !Failure_T:
     if ssh is None:
         do:
             r <- shell: rm -rf -- {!path} else cmd_failed(r)
@@ -209,7 +209,7 @@ def rm_dir(path: Path, ssh: ?SSH = None) -> None | Failure_T:
     do:
         run_checked(f"rm -rf -- '{path}'", ssh)
 
-def ln_s(src: Path, dest: Path, ssh: ?SSH = None) -> None | Failure_T:
+def ln_s(src: Path, dest: Path, ssh: ?SSH = None) -> None | !Failure_T:
     if ssh is None:
         do:
             r <- shell: ln -s -- {!src} {!dest} else cmd_failed(r)
@@ -418,7 +418,7 @@ def find_backups(dest_folder: Path, ssh: ?SSH = None) -> []Path:
 # Backup expiration
 # ---------------------------------------------------------------------------
 
-def expire_backup(backup_path: Path, ssh: ?SSH) -> None | Failure_T:
+def expire_backup(backup_path: Path, ssh: ?SSH) -> None | !Failure_T:
     let parent_dir: Path = backup_path.parent
     if find_backup_marker(parent_dir, ssh) is None:
         return failure(NOT_A_BACKUP_DEST, str(parent_dir))
@@ -431,7 +431,7 @@ def expire_backups(
     expiration_strategy: str,
     backup_to_keep:      Path,
     ssh:                 ?SSH,
-) -> None | Failure_T:
+) -> None | !Failure_T:
     let current_timestamp: int = now_epoch()
     var last_kept_timestamp: int = 9999999999
     let backups: []Path = find_backups(dest_folder, ssh)
@@ -491,7 +491,7 @@ def expire_backups(
 # Destination checks
 # ---------------------------------------------------------------------------
 
-def check_dest_is_backup_folder(dest_folder: Path, ssh: ?SSH) -> None | Failure_T:
+def check_dest_is_backup_folder(dest_folder: Path, ssh: ?SSH) -> None | !Failure_T:
     if find_backup_marker(dest_folder, ssh) is None:
         let marker: Path = backup_marker_path(dest_folder)
         var fix: str = f'mkdir -p -- "{dest_folder}" ; touch "{marker}"'
@@ -503,7 +503,7 @@ def check_dest_is_backup_folder(dest_folder: Path, ssh: ?SSH) -> None | Failure_
 # rsync helpers
 # ---------------------------------------------------------------------------
 
-def get_link_dest_option(previous_dest: ?Path, ssh: ?SSH) -> str | Failure_T:
+def get_link_dest_option(previous_dest: ?Path, ssh: ?SSH) -> str | !Failure_T:
     if previous_dest is None:
         log("No previous backup - creating new one.", INFO)
         return ""
@@ -557,7 +557,7 @@ def get_rsync_flags(
 # PID / lock helpers
 # ---------------------------------------------------------------------------
 
-def check_not_running(running_pid: str, ssh: ?SSH = None) -> None | Failure_T:
+def check_not_running(running_pid: str, ssh: ?SSH = None) -> None | !Failure_T:
     # running_pid is a PID rendered as text (read back out of a lock file),
     # not a path -- stays str
     # `uname -s` in place of sys.platform: Linux, Darwin, NetBSD,
@@ -587,7 +587,7 @@ def handle_still_running_or_failed_or_interrupted_backup(
     dest_folder:     Path,
     previous_dest:   ?Path,
     ssh:             ?SSH,
-) -> None | Failure_T:
+) -> None | !Failure_T:
     let marker_hit: str = find_cmd(inprogress_file, ssh)
     if not marker_hit:
         return
@@ -616,7 +616,7 @@ def deal_with_no_space_left(
     dest_folder: Path,
     ssh:         ?SSH,
     auto_expire: bool,
-) -> bool | Failure_T:
+) -> bool | !Failure_T:
     var log_data: str = ""
     with open(log_file) as f:
         log_data = f.read()
@@ -640,7 +640,7 @@ def deal_with_no_space_left(
         expire_backup(sorted(backups)[0], ssh)
     return True
 
-def check_rsync_errors(log_file: Path, auto_delete_log: bool) -> None | Failure_T:
+def check_rsync_errors(log_file: Path, auto_delete_log: bool) -> None | !Failure_T:
     var log_data: str = ""
     with open(log_file) as f:
         log_data = f.read()
@@ -665,7 +665,7 @@ def handle_ssh(
     id_rsa:         ?Path,
     exclusion_file: ?Path,
     allow_host_only: bool,
-) -> ResolvedPaths | Failure_T:
+) -> ResolvedPaths | !Failure_T:
     var ssh: ?SSH = parse_ssh(
         src_folder, dest_folder, ssh_port, id_rsa, allow_host_only,
     )
@@ -714,7 +714,7 @@ def start_backup(
     ssh:               ?SSH,
     id_rsa:            ?Path,
     now:               str,
-) -> Path | Failure_T:
+) -> Path | !Failure_T:
     let log_file: Path = log_dir / f"{now}.log"
 
     var src: str = str(src_folder)
@@ -781,7 +781,7 @@ def backup(
     rsync_get_flags:     bool,
     allow_host_only:     bool,
     dry_run:             bool,
-) -> None | Failure_T:
+) -> None | !Failure_T:
     do:
         resolved <- handle_ssh(
             src_folder, dest_folder, port, id_rsa, exclusion_file, allow_host_only,
@@ -1037,7 +1037,7 @@ def main() -> None:
         let raw: Path = Path(exclusion_file_arg)
         exclusion_file = raw if str(raw).startswith("/") else Path($PWD) / raw
 
-    let outcome: None | Failure_T = backup(
+    let outcome: None | !Failure_T = backup(
         src_folder, dest_folder, exclusion_file, log_dir, auto_delete_log,
         strategy, not no_auto_expire, port, id_rsa,
         rsync_set_flags, rsync_append_flags, rsync_get_flags,

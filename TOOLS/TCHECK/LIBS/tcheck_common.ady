@@ -9,7 +9,7 @@ nimport os
 
 # Why something the report looks for is not there: a log directory, a
 # changes report. The report goes on without it, having said so.
-type Failure_T is failure record:
+type Failure_T is record:
     message: str
 
 # ---------------------------------------------------------------------------
@@ -108,7 +108,7 @@ def newest(dir: Path, pattern: Glob_T) -> ?Path:
     return None if len(found) == 0 or found[0] == ""
     Path(found[0])
 
-def warned(r: Path | Failure_T) -> Path | Failure_T:
+def warned(r: Path | !Failure_T) -> Path | !Failure_T:
     """R, its failure said first: what is missing is shown where it was
     looked for, and the report goes on without it."""
     if r is Failure_T:

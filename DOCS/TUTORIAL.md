@@ -749,27 +749,28 @@ case x:
 ```
 
 `x is int` asks the same in an `if`. `?T` is the union `T | None`, and a
-union with a failure record among its members is a value-or-failure:
+union with a member marked `!` -- a failure -- is a value-or-failure:
 
-### Value or failure `T | F`
+### Value or failure `T | !F`
 
 When the caller needs to know *why* there is no value, return a failure
-instead of `None`. A failure is a record declared `failure`; the function
-returns either its value or one of those, and `is` tells them apart:
+instead of `None`. A failure is an ordinary record, marked `!` in the
+return type; the function returns either its value or one of those, and
+`is` tells them apart:
 
 ```python
 type ErrKind_T is enum BAD_NUMBER, TOO_BIG
 
-type Failure_T is failure record:
+type Failure_T is record:
     kind:   ErrKind_T    # which failure
     detail: str          # what it needs to say so
 
-def read_number(s: str) -> int | Failure_T:
+def read_number(s: str) -> int | !Failure_T:
     if len(s) == 0:
         return Failure_T(kind=BAD_NUMBER, detail="empty")
     return int(s)
 
-let n: int | Failure_T = read_number("42")
+let n: int | !Failure_T = read_number("42")
 if n is Failure_T:
     print n.detail           # n is the failure here
 else:
@@ -1841,17 +1842,17 @@ let result = shell(cwd = src, timeout = 3000): make all
 
 ### A command's output, or its failure
 
-Typed `T | ShellFailure_T`, a command holds its output, or the built-in
+Typed `T | !ShellFailure_T`, a command holds its output, or the built-in
 failure record `ShellFailure_T` (`command`, `code`, `stderr`):
 
 ```python
-let oops: str | ShellFailure_T = shell: echo oops >&2; exit 3
+let oops: str | !ShellFailure_T = shell: echo oops >&2; exit 3
 if oops is ShellFailure_T:
     print f"exit {oops.code}, stderr {oops.stderr.strip()}"
 ```
 
 In a `do:` block, `out <- shell: cmd` is a step that stops the chain when
-the command fails — see *Value or failure `T | F`* above.
+the command fails — see *Value or failure `T | !F`* above.
 
 ### Discarding output
 

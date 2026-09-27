@@ -284,7 +284,7 @@ def union_of(annotation):
 
 
 def split_either(annotation):
-    """(T, F) of a Python annotation that is a `T | F`, F a failure type,
+    """(T, F) of a Python annotation that is a `T | !F`, F a failure type,
     or None for any other annotation -- ?T's `T | None` and a plain union
     included. T is the value members, joined by ` | ` when there are
     several."""
@@ -551,13 +551,14 @@ def to_py(self, prec=None):
     the member itself, unboxed -- `x is int` asks its class, which is why
     the members must be told apart by class (ady_stmt.classify_union).
     `T | None` is Python's own spelling of ?T."""
-    from ady_stmt import classify_union
+    from ady_stmt import classify_union, check_failure_marks
     from hek_parsec import ParserState
-    parts = [self.nodes[0].to_py()]
-    for seq in self.nodes[1].nodes:
-        if hasattr(seq, "nodes") and seq.nodes:
-            parts.append(seq.nodes[0].to_py())
-    u = classify_union(parts, getattr(ParserState, "failure_types", set()))
+    members = [self.nodes[0]] + [seq.nodes[0] for seq in self.nodes[1].nodes
+                                 if hasattr(seq, "nodes") and seq.nodes]
+    parts = [m.to_py() for m in members]
+    marked = [type(m).__name__ == "failure_member" for m in members]
+    u = classify_union(parts, check_failure_marks(
+        parts, marked, getattr(ParserState, "failure_types", set())))
     if u["kind"] == "plain" and len(parts) > 6:
         raise SyntaxError(
             f"a union of {len(parts)} members: six at most -- group some "
@@ -566,6 +567,13 @@ def to_py(self, prec=None):
 
 
 
+
+
+@method(failure_member)
+def to_py(self, prec=None):
+    """failure_member: '!' T -> Python: T. The union holds the failure
+    itself; the mark only says which member it is."""
+    return self.nodes[0].to_py()
 
 
 @method(lent_type)

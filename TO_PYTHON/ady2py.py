@@ -287,7 +287,7 @@ def translate(code):
 
     # The types this module declares, for `x is SomeType`; its failure
     # types, which say which side of a `|` is the failure; and the routines
-    # returning `T | F`, for refusing one as a ?T step in a do: block.
+    # returning `T | !F`, for refusing one as a ?T step in a do: block.
     import re as _re_rp
     from hek_parsec import ParserState as _PS_rp
     _PS_rp.py_type_names = set(_re_rp.findall(

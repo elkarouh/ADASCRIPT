@@ -295,19 +295,19 @@ history of this file if the reasoning behind one of them is ever wanted.
 
 ## Monad support improvements (high ROI)
 
-### `T | F` (value or failure) -- what is left
+### `T | !F` (value or failure) -- what is left
 
-`T | F`, F a record declared `type F is failure record:`, is built in
+`T | !F`, F an ordinary record marked `!` in the union, is built in
 (book 10.12, `EXAMPLES/test_result.ady`, `rsync_time_machine.ady`): a
 routine returns either a T or an F, in either order; `r is F` asks which
-and narrows, as does `case r:` with a `when` per side; `None | F`;
+and narrows, as does `case r:` with a `when` per side; `None | !F`;
 `do:` over them with bare steps, shell steps and `else`; the built-in
 `ShellFailure_T` of a typed `shell:`; a dropped failure is refused. Plain
 unions (`int | float`, book 4.4, `EXAMPLES/test_union.ady`) share all of
 it but do:. Not yet:
 
-- [ ] Nim: a `T | F` passed as an *argument* whose value is a plain T or E
-      -- `f(3)` where f takes `int | Failure_T`. The constructor is typed from a
+- [ ] Nim: a `T | !F` passed as an *argument* whose value is a plain T or E
+      -- `f(3)` where f takes `int | !Failure_T`. The constructor is typed from a
       return, a declaration or an assignment; an argument is none of those.
 - [ ] a union of more than six members (stdlib.nim's OneOf2..OneOf6), and
       an optional union written out, `int | float | None`: today that is
@@ -315,7 +315,7 @@ it but do:. Not yet:
 - [ ] which side a returned value is on is read from its type; a value the
       Nim backend cannot type goes on the value side, and Nim's own type
       check then catches a failure put there by mistake.
-- [ ] an adapter from exceptions at the boundary: a `T | F` from a call
+- [ ] an adapter from exceptions at the boundary: a `T | !F` from a call
       that raises.
 
 ### Feature 2 — `.map()` and `.and_then()` method rewriting on `?T`

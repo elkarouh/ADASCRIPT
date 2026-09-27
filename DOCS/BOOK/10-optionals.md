@@ -32,7 +32,7 @@ means a value or a failure (10.12).
 The first half of this chapter is the type: how to declare it, test it, and
 get the value out. The second half (10.8 onward) is what `?T` *is* — the
 Maybe monad — and the shapes that fall out of that: bind chains, the `do:`
-block, fmap, traverse, and `T | F` — a value or a *failure* — the sibling
+block, fmap, traverse, and `T | !F` — a value or a *failure* — the sibling
 for when "nothing" is not a good enough answer.
 
 ## 10.1 Declaring optionals
@@ -541,7 +541,7 @@ The rules are short:
 - bindings are plain `let`s of type `T`, in scope for the rest of the
   function.
 
-The same block chains `T | F` steps, F a failure type, in a function
+The same block chains `T | !F` steps, F a failure type, in a function
 that returns one; 10.12 has the details. A line without `x <-` is a *bare step*: it
 is checked like any other and binds nothing.
 
@@ -593,7 +593,7 @@ the function returns **either** its value **or** a failure that says why
 there is none:
 
 ```python
-def read_number(s: str) -> int | Failure_T:
+def read_number(s: str) -> int | !Failure_T:
 ```
 
 This is railway-oriented programming. Every step runs on the value track,
@@ -602,20 +602,20 @@ to the one place that decides what to tell the user. Code in this style has
 five parts, in this order.
 
 ```
-int | Failure_T   ──▶  Python:  int | Failure_T   (the int or the Failure_T itself)
+int | !Failure_T   ──▶  Python:  int | Failure_T    (the int or the Failure_T itself)
                   ──▶  Nim:     Result[int, Failure_T]   (stdlib.nim's variant object)
 ```
 
 ### 1. Declare what a failure looks like
 
-A failure is a record declared `failure`. An enum says *which* failure; the
+A failure is an ordinary record. An enum says *which* failure; the
 fields say what the report needs. One failure type is usually enough for a
 whole program. `EXAMPLES/test_result.ady`:
 
 ```python
 type ErrKind_T is enum BAD_NUMBER, DIVIDE_BY_ZERO, NOT_POSITIVE
 
-type Failure_T is failure record:
+type Failure_T is record:
     kind:   ErrKind_T    # which failure
     detail: str          # what it needs to say so
 
@@ -623,11 +623,14 @@ def fail(kind: ErrKind_T, detail: str) -> Failure_T:
     return Failure_T(kind=kind, detail=detail)
 ```
 
-`int | Failure_T` is a *union* (4.4) — a value that is one of its members —
-and the word `failure` is what makes it a value-or-failure. `int |
-Failure_T` and `Failure_T | int` are the same type: the declaration, not the
-position, says which member is the failure. A union has at most one; any
-number of value members may go with it — `int | str | Failure_T`. (`T | None`
+`int | !Failure_T` is a *union* (4.4) — a value that is one of its members —
+and the `!` is what makes it a value-or-failure: it marks the member a
+`do:` block passes on, where the reader sees it. `int | !Failure_T` and
+`!Failure_T | int` are the same type: the mark, not the position, says
+which member is the failure. A type marked `!` in one union is marked in
+every union it is in — unmarked, it is refused, since it would read as a
+value. A union has at most one failure; any
+number of value members may go with it — `int | str | !Failure_T`. (`T | None`
 is `?T` written out — `?T` is its shorthand — so `None` there means absence,
 not a failure.) Only a record can be a failure: it has to say what went wrong, and on
 the Python backend it has to be a class of its own, since that is all that
@@ -635,12 +638,12 @@ tells it from the value.
 
 ### 2. Return the value, or return a failure
 
-Declare the function `-> T | Failure_T` and return whichever applies. There
+Declare the function `-> T | !Failure_T` and return whichever applies. There
 is nothing to wrap: a value whose type is the failure type is the failure,
 anything else is the value.
 
 ```python
-def read_number(s: str) -> int | Failure_T:
+def read_number(s: str) -> int | !Failure_T:
     if len(s) == 0:
         return fail(BAD_NUMBER, "empty")
     for c in s:
@@ -648,7 +651,7 @@ def read_number(s: str) -> int | Failure_T:
             return fail(BAD_NUMBER, f"'{s}' is not a number")
     return int(s)
 
-def divide(a: int, b: int) -> int | Failure_T:
+def divide(a: int, b: int) -> int | !Failure_T:
     if b == 0:
         return fail(DIVIDE_BY_ZERO, f"{a} / 0")
     return a // b
@@ -658,12 +661,12 @@ def divide(a: int, b: int) -> int | Failure_T:
 failure is returned like any other value.
 
 A step that changes something and has nothing to give back returns
-`None | Failure_T`. A bare `return`, and falling off the end, are success.
+`None | !Failure_T`. A bare `return`, and falling off the end, are success.
 From `EXAMPLES/rsync_time_machine.ady`, where a local `mkdir` reports its own
 exit status and a remote one goes through `run_checked`:
 
 ```python
-def mkdir_p(path: Path, ssh: ?SSH = None) -> None | Failure_T:
+def mkdir_p(path: Path, ssh: ?SSH = None) -> None | !Failure_T:
     if ssh is None:
         let r = shell: mkdir -p -- {!path}
         return checked(r, f"mkdir -p -- '{path}'")
@@ -671,14 +674,14 @@ def mkdir_p(path: Path, ssh: ?SSH = None) -> None | Failure_T:
         run_checked(f"mkdir -p -- '{path}'", ssh)
 ```
 
-Returning a call of another function with the same `T | Failure_T` passes
+Returning a call of another function with the same `T | !Failure_T` passes
 its result on as it is — the `return checked(...)` above. What a call to
 such a function may not do is stand alone as a statement: `mkdir_p(dest)`
 on a line of its own would throw its failure away, and it does not compile.
 Its result has to be taken — by a `do:` step (4 below), a `let` and a test
 (3), or a `return`. The one exception is a call standing last in a function
-that returns the same `T | Failure_T`: that call *is* the function's value. Declarations and
-assignments work the same way: `var r: str | Failure_T = "seven"` holds a
+that returns the same `T | !Failure_T`: that call *is* the function's value. Declarations and
+assignments work the same way: `var r: str | !Failure_T = "seven"` holds a
 str, and `r = fail(BAD_NUMBER, "gone")` then holds the failure.
 
 ### 3. Test before you use
@@ -689,7 +692,7 @@ Ask with `is`. The test *narrows* the name, exactly as `x is None` narrows a
 — or in the `else` — it is the value, with nothing to unwrap.
 
 ```python
-def describe(r: int | Failure_T) -> str:
+def describe(r: int | !Failure_T) -> str:
     if r is Failure_T:
         case r.kind:
             when BAD_NUMBER:     return f"bad number: {r.detail}"
@@ -699,7 +702,7 @@ def describe(r: int | Failure_T) -> str:
 ```
 
 `r is not Failure_T` asks the other way round, `r is int` names the value
-side, and for a `None | Failure_T`, `r is None` means it succeeded. Using the
+side, and for a `None | !Failure_T`, `r is None` means it succeeded. Using the
 value with no test at all is a compile error on Nim, as it is for `?T`.
 
 When both sides need code of their own, a `case` says it more directly: a
@@ -709,7 +712,7 @@ does not compile:
 
 ```python
 def sign_of(raw: str) -> str:
-    let n: int | Failure_T = read_number(raw)
+    let n: int | !Failure_T = read_number(raw)
     case n:
         when Failure_T:
             return f"no sign: {n.detail}"   # n is the failure here
@@ -728,7 +731,7 @@ value, or returns its failure from the whole function, as it is. A line
 without `x <-` is a step with no value, checked and nothing else:
 
 ```python
-def ratio(raw_a: str, raw_b: str) -> int | Failure_T:
+def ratio(raw_a: str, raw_b: str) -> int | !Failure_T:
     do:
         a <- read_number(raw_a)
         b <- read_number(raw_b)
@@ -737,8 +740,8 @@ def ratio(raw_a: str, raw_b: str) -> int | Failure_T:
     return q
 ```
 
-The function containing a `do:` must itself return `... | Failure_T` —
-that is where a failure goes. A `T | Failure_T` step in a function returning
+The function containing a `do:` must itself return `... | !Failure_T` —
+that is where a failure goes. A `T | !Failure_T` step in a function returning
 `?T`, or nothing, is refused.
 
 A step that fails some other way — a `?T` that may be absent, a function
@@ -747,7 +750,7 @@ the failure to return in its place. Inside the `else`, the step's name is
 the step's own failure, just as a test narrows it. From `test_result.ady`:
 
 ```python
-def shout(words: {str}str, key: str) -> str | Failure_T:
+def shout(words: {str}str, key: str) -> str | !Failure_T:
     do:
         w <- find_word(words, key) else fail(BAD_NUMBER, f"no word for {key}")
         out <- shell: echo {w} | tr a-z A-Z else cmd_failed(out)
@@ -792,7 +795,7 @@ def report(f: Failure_T) -> None:
 
 def main() -> None:
     ...
-    let outcome: None | Failure_T = backup(...)
+    let outcome: None | !Failure_T = backup(...)
     if outcome is Failure_T:
         report(outcome)
         quit(1)
@@ -807,13 +810,13 @@ you the output or the failure, instead of a result you have to remember to
 check:
 
 ```python
-let hi: str | ShellFailure_T = shell: echo hi
+let hi: str | !ShellFailure_T = shell: echo hi
 if hi is str:
     print f"said {hi.strip()}"
-let oops: str | ShellFailure_T = shell: echo oops >&2; exit 3
+let oops: str | !ShellFailure_T = shell: echo oops >&2; exit 3
 if oops is ShellFailure_T:
     print f"exit {oops.code}, stderr {oops.stderr.strip()}"
-let quiet: None | ShellFailure_T = shell: true
+let quiet: None | !ShellFailure_T = shell: true
 ```
 
 `str` is the output, `[]str` its lines (`shellLines:`), `None` nothing — a
@@ -830,7 +833,7 @@ def cmd_failed(f: ShellFailure_T) -> Failure_T:
     step fails with -- as this program's: the `else` of the steps below."""
     return failure(CMD_FAILED, f.command, f.stderr.strip())
 
-def mkdir_p(path: Path, ssh: ?SSH = None) -> None | Failure_T:
+def mkdir_p(path: Path, ssh: ?SSH = None) -> None | !Failure_T:
     if ssh is None:
         do:
             r <- shell: mkdir -p -- {!path} else cmd_failed(r)
@@ -846,15 +849,15 @@ bind chain and should not look like one: collect the failures in a loop, as
 own:
 
 ```python
-type Problems_T is failure record:
+type Problems_T is record:
     bad: []str
 
-def parse_all(tokens: []str) -> []int | Problems_T:
+def parse_all(tokens: []str) -> []int | !Problems_T:
     """Validation that reports every bad token, not only the first one."""
     var good: []int = []
     var bad: []str = []
     for t in tokens:
-        let p: int | Failure_T = read_number(t)
+        let p: int | !Failure_T = read_number(t)
         if p is Failure_T:
             bad.append(p.detail)
         else:
@@ -869,8 +872,8 @@ def parse_all(tokens: []str) -> []int | Problems_T:
 | Situation | Write |
 |---|---|
 | Something may be absent, and nobody needs to know why | `?T`, tested with `is None` |
-| The caller needs to know *why* it failed | `T \| Failure_T` |
-| A step that only changes something | `None \| Failure_T` |
+| The caller needs to know *why* it failed | `T \| !Failure_T` |
+| A step that only changes something | `None \| !Failure_T` |
 | Passing a failure upward | a `do:` block, `x <- f()` |
 | Deciding what the user sees, and the exit status | once, at the top: `case` over the kind |
 | A bug that should never happen | `raise` or `die` — not a failure |
@@ -878,21 +881,23 @@ def parse_all(tokens: []str) -> []int | Problems_T:
 
 The transpiler refuses:
 
-- a failure dropped: a call returning `T | Failure_T` standing alone as a
+- a failure dropped: a call returning `T | !Failure_T` standing alone as a
   statement, its result taken by nobody;
 - a `do:` step that fails some other way — a `?T`, another failure type, a
-  shell command in a function that is not `... | ShellFailure_T` — without
+  shell command in a function that is not `... | !ShellFailure_T` — without
   an `else` saying what failure it becomes;
 - a `case` over a union that leaves a member out and has no `when others:`;
-- a union with two failure members (`A_T | B_T`), or with members nothing
+- a union with two failure members (`!A_T | !B_T`), or with members nothing
   can tell apart at run time (`[]int | []str`, 4.4);
-- `failure` on anything but a record;
-- a `T | Failure_T` step in the `do:` block of a function that cannot return
+- `!` on anything but a record (`int | !str`);
+- a failure type left unmarked in a union (`int | Failure_T`, where
+  Failure_T is marked `!` elsewhere) — it would read as a value;
+- a `T | !Failure_T` step in the `do:` block of a function that cannot return
   the failure.
 
 **Which to use.**
 
-| | `?T` (Maybe) | `T \| F` (Either) |
+| | `?T` (Maybe) | `T \| !F` (Either) |
 |---|---|---|
 | Why it failed | not recorded | the failure value |
 | Returning | the value, or `None` | the value, or the failure |
@@ -948,16 +953,16 @@ know; `?int` is one the compiler enforces.
 | `$?NAME` | `os.environ.get("NAME")` | `adascriptEnvOpt("NAME")` — an `Option[string]` |
 | `?RefClass` | `RefClass \| None` | `RefClass` (nil-able) |
 | `do: x <- f()` | guard chain | `if …isNone: return none(R)` per step |
-| `type F is failure record:` | a dataclass | an object |
-| `T \| F` (F a failure) | `T \| F` | `Result[T, F]` (stdlib.nim), either order |
-| `None \| F` | `None \| F` | `Result[void, F]` |
-| `return v` (in `-> T \| F`) | unchanged | `return Result[T, F].ok(v)`, or `.err(v)` when v is an F |
+| `type F is record:` (a failure where marked `!F`) | a dataclass | an object |
+| `T \| !F` (F a failure) | `T \| F` | `Result[T, F]` (stdlib.nim), either order |
+| `None \| !F` | `None \| F` | `Result[void, F]` |
+| `return v` (in `-> T \| !F`) | unchanged | `return Result[T, F].ok(v)`, or `.err(v)` when v is an F |
 | `r is F` / `r is not F` | `_is_a(r, F)` (an isinstance) | `r.is_err` / `r.is_ok` |
 | `r` after `if r is F: return` | unchanged | `r.value` |
 | `case r:` / `when F:` / `when T:` | `if _is_a(r, F):` / `elif not _is_a(r, F):` | `if r.is_err:` / `elif r.is_ok:` |
-| `let o: str \| ShellFailure_T = shell: cmd` | the output, or `ShellFailure_T(command, code, stderr)` | `Result[string, ShellFailure_T]` |
+| `let o: str \| !ShellFailure_T = shell: cmd` | the output, or `ShellFailure_T(command, code, stderr)` | `Result[string, ShellFailure_T]` |
 | `do: x <- step else e` | `if _is_a(x, F2): return e` | `if t.is_err: (let x = t.error) return R.err(e)` |
-| `do: x <- f()` (in `-> T \| F`) | `if _is_a(x, F): return x` per step | `if t.is_err: return R.err(t.error)` per step |
+| `do: x <- f()` (in `-> T \| !F`) | `if _is_a(x, F): return x` per step | `if t.is_err: return R.err(t.error)` per step |
 
 ---
 

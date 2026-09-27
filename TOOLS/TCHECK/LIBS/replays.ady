@@ -152,7 +152,7 @@ def check_replay_dirs_size():
     puts("Wb", f"TOTAL SIZE for FAILED REPLAYS is {total_size:.2f}G", NEWLINE=True)
     hr('#')
 
-def scan_replay_dir_detailed(log_dir: Path | Failure_T, bl: BaselineNr_T, rtype: ReplayType) -> Path | Failure_T:
+def scan_replay_dir_detailed(log_dir: Path | !Failure_T, bl: BaselineNr_T, rtype: ReplayType) -> Path | !Failure_T:
     """The replay logs in LOG_DIR, when it was found, scanned: the report."""
     do:
         replay_log_dir <- log_dir

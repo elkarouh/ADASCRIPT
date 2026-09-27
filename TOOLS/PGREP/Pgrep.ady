@@ -383,7 +383,7 @@ class Options:
 
 # Why there is nothing to search: returned from where it is found out, and
 # said once, when the targets are asked for.
-type Failure_T is failure record:
+type Failure_T is record:
     message: str
 
 def note(what: str, verbose: bool):
@@ -396,7 +396,7 @@ def note(what: str, verbose: bool):
 # Where to search
 # ---------------------------------------------------------------------------
 
-def cm_run(what: str, verbose: bool) -> str | Failure_T:
+def cm_run(what: str, verbose: bool) -> str | !Failure_T:
     """What a CM helper answers: get_topmost_subsystems, Psort -- or the
     failure, when it answers nothing: every caller needs an answer, and
     without one there is nothing it could search.
@@ -421,7 +421,7 @@ def cm_run(what: str, verbose: bool) -> str | Failure_T:
         return Failure_T(message="the CM helper answered nothing: " + what)
     return direct.output
 
-def closure_dir(name: str, good: str, verbose: bool) -> Path | Failure_T:
+def closure_dir(name: str, good: str, verbose: bool) -> Path | !Failure_T:
     """The directory holding the closure named on the command line.
 
     The name is an identifier rather than a path -- a SYSTEM, a baseline ID
@@ -667,7 +667,7 @@ def search(subsystems: []Path, opt: Options):
     let rc: int = shell: rm -rf {!cleanup}
     report("total", time.time() - started, opt.verbose)
 
-def determine_targets(opt: Options) -> []Path | Failure_T:
+def determine_targets(opt: Options) -> []Path | !Failure_T:
     var targets: []Path = []
 
     if opt.closure != "":
@@ -714,7 +714,7 @@ if args'Length == 0:
 
 let opt: Options = Options(args)
 
-let targets: []Path | Failure_T = determine_targets(opt)
+let targets: []Path | !Failure_T = determine_targets(opt)
 if targets is Failure_T:
     die(targets.message)
 

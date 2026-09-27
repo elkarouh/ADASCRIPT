@@ -519,7 +519,7 @@ def _proc_ret_nim(name):
 
 
 def _result_type_of(expr_str):
-    """The Nim Result type of EXPR_STR -- a name declared `T | F`, or a call
+    """The Nim Result type of EXPR_STR -- a name declared `T | !F`, or a call
     of a routine returning one -- or "" when it is not a Result."""
     _t = _union_type_of(expr_str)
     return _t if _t.startswith("Result[") else ""

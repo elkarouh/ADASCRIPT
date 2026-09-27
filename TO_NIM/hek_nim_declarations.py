@@ -334,13 +334,14 @@ def to_nim(self, prec=None):
     member it is Result[T, F], whichever order the members are written in:
     Result[void, F] when T is None, Result[OneOfN[...], F] for several
     value members. `T | None` is ?T, Option[T]."""
-    from ady_stmt import classify_union
-    parts = [self.nodes[0].to_nim()]
-    for seq in self.nodes[1].nodes:
-        if hasattr(seq, "nodes") and seq.nodes:
-            parts.append(seq.nodes[0].to_nim())
+    from ady_stmt import classify_union, check_failure_marks
+    members = [self.nodes[0]] + [seq.nodes[0] for seq in self.nodes[1].nodes
+                                 if hasattr(seq, "nodes") and seq.nodes]
+    parts = [m.to_nim() for m in members]
+    marked = [type(m).__name__ == "failure_member" for m in members]
     parts = ["None" if p in ("nil", "void") else p for p in parts]
-    u = classify_union(parts, getattr(ParserState, "failure_types", set()))
+    u = classify_union(parts, check_failure_marks(
+        parts, marked, getattr(ParserState, "failure_types", set())))
     if u["kind"] == "optional":
         ParserState.nim_imports.add("options")
         return f"Option[{u['values'][0]}]"
@@ -351,6 +352,13 @@ def to_nim(self, prec=None):
     value = ("void" if values == ["None"] else
              values[0] if len(values) == 1 else _nim_union_type(values))
     return f"Result[{value}, {u['failure']}]"
+
+
+@method(failure_member)
+def to_nim(self, prec=None):
+    """failure_member: '!' T -> Nim: T. The mark is read by union_type,
+    which makes the member the Result's error."""
+    return self.nodes[0].to_nim()
 
 
 @method(lent_type)

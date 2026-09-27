@@ -4,8 +4,8 @@
 `int | float` holds an int or a float; which one, the value itself says.
 What is assigned or returned becomes the member its type names; `x is int`
 asks which member x holds and narrows x to it, and `case x:` gives a branch
-per member -- every member, or `when others:`. With a failure record among
-the members the union is a value-or-failure, and do: passes the failure on;
+per member -- every member, or `when others:`. With a member marked `!`, a
+failure, the union is a value-or-failure, and do: passes the failure on;
 `T | None` is `?T`. The output is compared between the backends.
 """
 
@@ -53,15 +53,15 @@ print "test3 OK"
 
 # ─── test 4: several values and a failure ──────────────────────────────────
 
-# A failure type: an ordinary record, and the word `failure` marks it as the
-# failure member of any union it is in. `int | str | Failure_T` below is
-# therefore a value-or-failure -- an int or a str, or the reason there is
-# neither -- which a do: block passes on; without the word, it would be a
-# plain union of three.
-type Failure_T is failure record:
+# A failure type: an ordinary record, and the `!` marks it as the failure
+# member of the union. `int | str | !Failure_T` below is therefore a
+# value-or-failure -- an int or a str, or the reason there is neither --
+# which a do: block passes on; without the `!`, it would be a plain union
+# of three.
+type Failure_T is record:
     detail: str
 
-def parse(s: str) -> int | str | Failure_T:
+def parse(s: str) -> int | str | !Failure_T:
     if len(s) == 0:
         return Failure_T(detail="empty")
     for c in s:
@@ -69,7 +69,7 @@ def parse(s: str) -> int | str | Failure_T:
             return s               # a str
     return int(s)                  # an int
 
-def describe(r: int | str | Failure_T) -> str:
+def describe(r: int | str | !Failure_T) -> str:
     case r:
         when int:
             return f"number {r + 1}"
@@ -78,7 +78,7 @@ def describe(r: int | str | Failure_T) -> str:
         when Failure_T:
             return f"failed: {r.detail}"
 
-def twice(s: str) -> int | str | Failure_T:
+def twice(s: str) -> int | str | !Failure_T:
     do:
         v <- parse(s)              # v is the int | str
     if v is int:
@@ -87,7 +87,7 @@ def twice(s: str) -> int | str | Failure_T:
 
 for s in ["41", "abc", ""]:
     print describe(parse(s))
-    let t: int | str | Failure_T = twice(s)
+    let t: int | str | !Failure_T = twice(s)
     if t is Failure_T:
         print "twice failed"
     else:
@@ -121,28 +121,28 @@ class Counter:
     def __init__(self, limit: int):
         self.limit = limit
 
-    def take(self, n: int) -> int | Failure_T:
+    def take(self, n: int) -> int | !Failure_T:
         # the field read inside the failure leaves self as it is: a `let`
         # receiver still calls this
         return Failure_T(detail="over " + str(self.limit)) if n > self.limit
         n
 
-def small(n: int) -> bool | Failure_T:
+def small(n: int) -> bool | !Failure_T:
     return Failure_T(detail="negative: " + str(n)) if n < 0
     n < 10                         # the tail value is the bool member
 
 let counter: Counter = Counter(5)
-let out: int | Failure_T = counter.take(3)     # a name Nim reserves
+let out: int | !Failure_T = counter.take(3)     # a name Nim reserves
 if out is Failure_T:
     die(out.detail)                # leaves: out is the int after this
 print out + 1
-let over: int | Failure_T = counter.take(9)
+let over: int | !Failure_T = counter.take(9)
 print over.detail if over is Failure_T else "?"
-let s1: bool | Failure_T = small(-1)
+let s1: bool | !Failure_T = small(-1)
 die("expected a failure") if s1 is not Failure_T
 if s1 is Failure_T:
     print s1.detail
-let s2: bool | Failure_T = small(3)
+let s2: bool | !Failure_T = small(3)
 die(s2.detail) if s2 is Failure_T  # the guard's own call reads the failure
 print "small" if s2 else "large"
 
@@ -156,9 +156,9 @@ def even_of(xs: []int) -> ?int:
 
 let e: ?int = even_of([3, 8])
 print e if e is not None else -1
-let word: str | Failure_T = "two words"
+let word: str | !Failure_T = "two words"
 if word is str:
-    let said: str | ShellFailure_T = shell: printf '%s|' {!word}    # the str, one argument
+    let said: str | !ShellFailure_T = shell: printf '%s|' {!word}    # the str, one argument
     print said if said is str else "failed"
 print "test6 OK"
 

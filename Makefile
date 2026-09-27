@@ -507,20 +507,25 @@ test: compile
 	@# used to drop a do: block altogether, leaving its names unbound.
 	@echo "=== unions, T | F and do:, both backends ==="
 	@# Refused on both backends: union members nothing can tell apart, a
-	@# failure nobody takes -- a bare call whose `T | F` result is thrown
+	@# failure nobody takes -- a bare call whose `T | !F` result is thrown
 	@# away -- a shell failure left unconverted, a case missing a side.
 	@printf 'var x: []int | []str\n' > $(TMPDIR)/ady_refuse_1.ady
-	@printf 'type Bad_T is failure record:\n    why: str\n\ndef step(n: int) -> None | Bad_T:\n    if n < 0:\n        return Bad_T(why="neg")\n\ndef run() -> None:\n    step(-1)\n' \
+	@printf 'type Bad_T is record:\n    why: str\n\ndef step(n: int) -> None | !Bad_T:\n    if n < 0:\n        return Bad_T(why="neg")\n\ndef run() -> None:\n    step(-1)\n' \
 	    > $(TMPDIR)/ady_refuse_2.ady
-	@printf 'type Bad_T is failure record:\n    why: str\n\ndef a() -> None | Bad_T:\n    do:\n        shell: true\n' \
+	@printf 'type Bad_T is record:\n    why: str\n\ndef a() -> None | !Bad_T:\n    do:\n        shell: true\n' \
 	    > $(TMPDIR)/ady_refuse_3.ady
-	@printf 'type Bad_T is failure record:\n    why: str\n\ndef f() -> int | Bad_T:\n    return 1\n\nlet h: int | Bad_T = f()\ncase h:\n    when Bad_T:\n        print "b"\n' \
+	@printf 'type Bad_T is record:\n    why: str\n\ndef f() -> int | !Bad_T:\n    return 1\n\nlet h: int | !Bad_T = f()\ncase h:\n    when Bad_T:\n        print "b"\n' \
 	    > $(TMPDIR)/ady_refuse_4.ady
+	@printf 'type Bad_T is record:\n    why: str\n\nvar x: int | !Bad_T\nvar y: str | Bad_T\n' \
+	    > $(TMPDIR)/ady_refuse_5.ady
+	@printf 'type Bad_T is failure record:\n    why: str\n' > $(TMPDIR)/ady_refuse_6.ady
 	@for tr in TO_NIM/ady2nim.py TO_PYTHON/ady2py.py; do \
 	    for c in "1:members no one can tell apart:cannot be told apart" \
 	             "2:a dropped failure:drops a failure" \
 	             "3:a shell failure unconverted:convert it with" \
-	             "4:a case missing a member:must cover every member"; do \
+	             "4:a case missing a member:must cover every member" \
+	             "5:a failure left unmarked:mark it \`!Bad_T\`" \
+	             "6:the old failure record:an ordinary record now"; do \
 	        n=$${c%%:*}; rest=$${c#*:}; what=$${rest%%:*}; want=$${rest#*:}; \
 	        printf '  %-42s' "$$what ($$(basename $$tr .py))"; \
 	        if $(PYTHON) $(CURDIR)/$$tr $(TMPDIR)/ady_refuse_$$n.ady > $(TMPDIR)/ady_refuse.out 2>&1; then \
@@ -530,7 +535,7 @@ test: compile
 	            && echo OK || { echo FAIL; cat $(TMPDIR)/ady_refuse.out; exit 1; }; \
 	    done; \
 	done
-	@rm -f $(TMPDIR)/ady_refuse_[1-4].ady $(TMPDIR)/ady_refuse.out
+	@rm -f $(TMPDIR)/ady_refuse_[1-6].ady $(TMPDIR)/ady_refuse.out
 	@for t in test_do_block test_result test_optional_spelling test_union; do \
 	    printf '  %-42s' "$$t.ady (python = nim)"; \
 	    $(EXDIR)/$$t > $(TMPDIR)/ady_$$t.nim.out 2>&1 || { echo "FAIL (nim)"; exit 1; }; \
