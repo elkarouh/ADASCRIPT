@@ -2336,6 +2336,10 @@ def to_nim(self, indent=0):
     """match -> Nim case statement; desugars tuple patterns to if/elif."""
     import re as _re
     subject = self.nodes[0].to_nim()
+    from ady_stmt import refuse_overlapping_labels
+    refuse_overlapping_labels([
+        (p.to_nim() if hasattr(p, "to_nim") else str(p), g is not None)
+        for p, _b, g in _extract_branches(self)])
     _either_rt = hek_nim_expr._union_type_of(subject)
     if _either_rt:
         return _either_case_to_nim(self, subject, _either_rt, indent)

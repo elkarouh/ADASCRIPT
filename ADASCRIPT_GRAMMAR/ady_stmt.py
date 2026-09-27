@@ -697,3 +697,106 @@ def parse_stmt_line(code):
 ###############################################################################
 
 
+
+
+# ---------------------------------------------------------------------------
+# A case's labels do not overlap
+# ---------------------------------------------------------------------------
+# As in Ada, each value a case can see belongs to one branch: `when 34 | 92:`
+# then `when 32..126:` covers 34 twice, and which branch it takes would
+# depend on the order they are written in. Nim refused it ("duplicate case
+# label") and Python took the first, so the two backends disagreed; both
+# refuse it now, with the value named. A guarded branch is left out -- its
+# guard is what decides -- as are patterns that are not plain values.
+
+def _split_label_alternatives(text):
+    """TEXT, a rendered pattern, split at its top-level `,` (Nim) or `|`
+    (Python) -- outside brackets and quotes."""
+    parts, cur, depth, quote, esc = [], [], 0, "", False
+    for ch in text:
+        if quote:
+            cur.append(ch)
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == quote:
+                quote = ""
+            continue
+        if ch in "'\"":
+            quote = ch
+        elif ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+        elif ch in ",|" and depth == 0:
+            parts.append("".join(cur).strip())
+            cur = []
+            continue
+        cur.append(ch)
+    parts.append("".join(cur).strip())
+    return [p for p in parts if p]
+
+
+def _label_value(text):
+    """TEXT, one rendered label, as (domain, lo, hi) -- an int or a
+    character range, or a single string or name -- or None when it is not
+    a plain value."""
+    import ast as _ast
+    t = text.strip()
+
+    def point(x):
+        x = x.strip()
+        if _re_dup.fullmatch(r"-?\d+", x):
+            return ("int", int(x))
+        if len(x) >= 2 and x[0] == x[-1] and x[0] in "'\"":
+            try:
+                s = _ast.literal_eval(x)
+            except (ValueError, SyntaxError):
+                return None
+            return ("chr", ord(s)) if isinstance(s, str) and len(s) == 1 else ("str", s)
+        if _re_dup.fullmatch(r"[A-Za-z_][\w.]*", x) and x not in ("_", "others"):
+            return ("name", x)
+        return None
+    lo, sep, hi = t.partition("..")
+    if sep:
+        a, b = point(lo), point(hi)
+        if a and b and a[0] == b[0] and a[0] in ("int", "chr"):
+            return (a[0], a[1], b[1])
+        return None
+    p = point(t)
+    if p is None:
+        return None
+    return (p[0], p[1], p[1])
+
+
+def refuse_overlapping_labels(branches):
+    """BRANCHES: (rendered pattern, guarded) per branch of a case, in order.
+    Raises SyntaxError at the first value two unguarded branches both
+    cover."""
+    seen = []                                  # (domain, lo, hi, label text)
+    for text, guarded in branches:
+        if guarded:
+            continue
+        for alt in _split_label_alternatives(text):
+            v = _label_value(alt)
+            if v is None:
+                continue
+            dom, lo, hi = v
+            for d2, lo2, hi2, alt2 in seen:
+                if d2 != dom:
+                    continue
+                if dom in ("int", "chr"):
+                    if max(lo, lo2) > min(hi, hi2):
+                        continue
+                    first = max(lo, lo2)
+                    shown = repr(chr(first)) if dom == "chr" else str(first)
+                elif lo != lo2:
+                    continue
+                else:
+                    shown = alt
+                raise SyntaxError(
+                    f"case: {shown} is covered by two branches -- `when "
+                    f"{alt2}` and `when {alt}`; each value belongs to one "
+                    f"branch, so that their order does not matter")
+            seen.append((dom, lo, hi, alt))

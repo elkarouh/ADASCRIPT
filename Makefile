@@ -523,6 +523,8 @@ test: compile
 	@printf 'type Bad_T is failure record:\n    why: str\n' > $(TMPDIR)/ady_refuse_6.ady
 	@printf 'type Bad_T is record:\n    why: str\n\ndef f(s: str) -> int | Bad_T:\n    return len(s)\n\ndef g(s: str) -> int | Bad_T:\n    do:\n        n <- f(s)\n    return f(s)\n' \
 	    > $(TMPDIR)/ady_refuse_7.ady
+	@printf 'def f(n: int) -> str:\n    case n:\n        when 34 | 92: return "esc"\n        when 32..126: return "lit"\n        when others: return "esc"\n' \
+	    > $(TMPDIR)/ady_refuse_8.ady
 	@for tr in TO_NIM/ady2nim.py TO_PYTHON/ady2py.py; do \
 	    for c in "1:members no one can tell apart:cannot be told apart" \
 	             "2:a dropped failure:drops a failure" \
@@ -530,7 +532,8 @@ test: compile
 	             "4:a case missing a member:must cover every member" \
 	             "5:a failure left unmarked:mark it \`!Bad_T\`" \
 	             "6:the old failure record:an ordinary record now" \
-	             "7:a do step on a union with no !:if one member is, mark it"; do \
+	             "7:a do step on a union with no !:if one member is, mark it" \
+	             "8:overlapping case labels:34 is covered by two branches"; do \
 	        n=$${c%%:*}; rest=$${c#*:}; what=$${rest%%:*}; want=$${rest#*:}; \
 	        printf '  %-42s' "$$what ($$(basename $$tr .py))"; \
 	        if $(PYTHON) $(CURDIR)/$$tr $(TMPDIR)/ady_refuse_$$n.ady > $(TMPDIR)/ady_refuse.out 2>&1; then \
@@ -540,7 +543,7 @@ test: compile
 	            && echo OK || { echo FAIL; cat $(TMPDIR)/ady_refuse.out; exit 1; }; \
 	    done; \
 	done
-	@rm -f $(TMPDIR)/ady_refuse_[1-7].ady $(TMPDIR)/ady_refuse.out
+	@rm -f $(TMPDIR)/ady_refuse_[1-8].ady $(TMPDIR)/ady_refuse.out
 	@for t in test_do_block test_result test_optional_spelling test_union test_case_ranges; do \
 	    printf '  %-42s' "$$t.ady (python = nim)"; \
 	    $(EXDIR)/$$t > $(TMPDIR)/ady_$$t.nim.out 2>&1 || { echo "FAIL (nim)"; exit 1; }; \

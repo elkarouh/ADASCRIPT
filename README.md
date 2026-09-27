@@ -686,7 +686,9 @@ not — see [Known Limitations](#known-limitations).)
 
 A block Nim cannot check for completeness has to carry `when others:` — that
 means a block with a guarded branch, or with a string subject. `when others`
-may not itself be guarded. See
+may not itself be guarded. As in Ada, no value may be covered by two
+unguarded branches (`when 34:` then `when 32 .. 126:` is refused), so the
+order of the branches never changes what a block does. See
 [The Adascript Book, Chapter 5](DOCS/BOOK/05-pattern-matching.md) for the
 complete pattern reference and for what exhaustiveness does and does not
 cover, and [DOCS/TUTORIAL.md](DOCS/TUTORIAL.md#11-control-flow).

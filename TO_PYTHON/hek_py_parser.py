@@ -1126,6 +1126,10 @@ def _either_case_to_py(case_node, subject, u, indent):
 def to_py(self, indent=0):
     """case_stmt: 'case' expression ':' when_clause+ — Adascript case/when"""
     subject = self.nodes[0].to_py()
+    from ady_stmt import refuse_overlapping_labels
+    refuse_overlapping_labels([
+        (p.to_py() if hasattr(p, "to_py") else str(p), g is not None)
+        for p, _b, g in _extract_branches_py(self)])
 
     _union = _union_of_py(subject)
     if _union is not None:

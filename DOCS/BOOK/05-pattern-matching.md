@@ -84,6 +84,32 @@ condition should pre-empt the patterns below it.
 property of the Nim build, so a block `ady2py` accepts and runs can still be
 refused by `ady2nim`. Build with both before believing a block is complete.
 
+**Overlap is checked on both.** As in Ada, each value belongs to one
+branch: two unguarded branches may not cover the same value, whether as
+literals, as alternatives or as ranges. The specific-first style that
+Python's `match` allows,
+
+```python
+case n:
+    when 34 | 92:        # '"' and '\\' are escaped...
+        escape(n)
+    when 32 .. 126:      # ...though this range covers them too
+        keep(n)
+```
+
+is refused:
+
+```text
+case: 34 is covered by two branches -- `when 34 | 92` and `when 32 .. 126`; ...
+```
+
+With overlap, a branch means what it says only because of where it sits:
+move it, and the program changes without a word. Say what each branch
+covers instead -- `when 32 .. 33 | 35 .. 91 | 93 .. 126:` -- or put the
+exception in a guard, which is a condition and is allowed to come first.
+(Nim always refused this, as a "duplicate case label"; Python took the
+first branch that matched, so the two backends disagreed.)
+
 ## How a block is lowered
 
 On the Python backend a block becomes a `match`/`case` statement, except when
