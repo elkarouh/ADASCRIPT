@@ -381,6 +381,11 @@ class Options:
         if self.with_colors:
             self.grep_params = self.grep_params + ["--color=always"]
 
+# Why there is nothing to search: returned from where it is found out, and
+# said once, when the targets are asked for.
+type Failure_T is failure record:
+    message: str
+
 def note(what: str, verbose: bool):
     """What the program decided, for -verbose. On stderr: it is not a result."""
     if verbose:
@@ -391,8 +396,10 @@ def note(what: str, verbose: bool):
 # Where to search
 # ---------------------------------------------------------------------------
 
-def cm_run(what: str, verbose: bool) -> str:
-    """What a CM helper answers: get_topmost_subsystems, Psort.
+def cm_run(what: str, verbose: bool) -> str | Failure_T:
+    """What a CM helper answers: get_topmost_subsystems, Psort -- or the
+    failure, when it answers nothing: every caller needs an answer, and
+    without one there is nothing it could search.
 
     These are ksh functions (get_topmost_subsystems) or Perl programs (Psort)
     from the CM toolchain. ksh functions must be sourced from Caux_functions
@@ -411,10 +418,10 @@ def cm_run(what: str, verbose: bool) -> str:
         note("nothing from ksh with Caux_functions sourced: " + what, verbose)
     let direct = shell: {what}
     if direct.output.strip() == "":
-        stderr.writeLine(PROG + ": warning: the CM helper answered nothing: " + what)
+        return Failure_T(message="the CM helper answered nothing: " + what)
     return direct.output
 
-def closure_dir(name: str, good: str, verbose: bool) -> Path:
+def closure_dir(name: str, good: str, verbose: bool) -> Path | Failure_T:
     """The directory holding the closure named on the command line.
 
     The name is an identifier rather than a path -- a SYSTEM, a baseline ID
@@ -428,7 +435,9 @@ def closure_dir(name: str, good: str, verbose: bool) -> Path:
         # A baseline ID (TACT.TACT_CONFIG.30.0.0.128) always contains dots;
         # a plain system name (TACT, IFPS) never does.
         return Path(f"{name/.//}")
-    let topmost: str = cm_run("get_topmost_subsystems " + name, verbose).strip().split()[0]
+    do:
+        answer <- cm_run("get_topmost_subsystems " + name, verbose)
+    let topmost: str = answer.strip().split()[0]
     let prefix: str = name + "." + topmost + "."
     let baseline: str = $CONTEXT_CM_BASELINE
     if baseline.startswith(prefix):
@@ -658,11 +667,12 @@ def search(subsystems: []Path, opt: Options):
     let rc: int = shell: rm -rf {!cleanup}
     report("total", time.time() - started, opt.verbose)
 
-def determine_targets(opt: Options) -> []Path:
+def determine_targets(opt: Options) -> []Path | Failure_T:
     var targets: []Path = []
 
     if opt.closure != "":
-        let dir_name: Path = closure_dir(opt.closure, opt.good, opt.verbose)
+        do:
+            dir_name <- closure_dir(opt.closure, opt.good, opt.verbose)
         if opt.verbose:
             let dir_str: str = str(dir_name)
             print "Closure     : " + f"{dir_str/\//.}"
@@ -671,7 +681,9 @@ def determine_targets(opt: Options) -> []Path:
         # expression and `$NAME` is not one inside it.
         let cm_root: Path = Path($CM_ROOT)
         let closure_path: Path = cm_root / dir_name
-        let ordered: []str = cm_run("echo " + str(closure_path) + " | Psort", opt.verbose).split("\n")
+        do:
+            sorted_closure <- cm_run("echo " + str(closure_path) + " | Psort", opt.verbose)
+        let ordered: []str = sorted_closure.split("\n")
         for line in ordered:
             continue if line == ""
             targets.append(Path(line))
@@ -702,6 +714,8 @@ if args'Length == 0:
 
 let opt: Options = Options(args)
 
-let targets: []Path = determine_targets(opt)
+let targets: []Path | Failure_T = determine_targets(opt)
+if targets is Failure_T:
+    die(targets.message)
 
 search(targets, opt)

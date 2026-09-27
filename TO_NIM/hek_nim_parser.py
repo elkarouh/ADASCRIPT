@@ -312,7 +312,9 @@ def _leaves_the_block(last_line):
         return True
     import re as _re_lb
     call = _re_lb.match(r'^(?:discard\s+)?([A-Za-z_]\w*)\(', stripped)
-    return bool(call) and call.group(1) in getattr(ParserState, "noreturn_procs", set())
+    # adascriptDie is the built-in die(): noreturn like a program's own.
+    return bool(call) and (call.group(1) == "adascriptDie"
+                           or call.group(1) in getattr(ParserState, "noreturn_procs", set()))
 
 
 def note_option_guard(chunk, collected=None):
@@ -340,7 +342,7 @@ def note_option_guard(chunk, collected=None):
     # `print bt'Image` came out `some(IP)` on Nim against `IP` on Python --
     # compiling, and wrong, which is worse than the type error the same
     # variable gave in a `let` or a tuple.
-    m = re.match(r'^(\s*)if\s+([A-Za-z_]\w*(?:\.\w+)*(?:\[\d+\])?)\.('
+    m = re.match(r'^(\s*)if\s+(' + hek_nim_expr.NARROW_NAME + r')\.('
                  + hek_nim_expr.NARROW_TESTS + r'):'
                  r'\s*(.*?)\s*(?:#.*)?$',
                  chunk_lines[0])
@@ -716,7 +718,7 @@ def _proved_in_body(cond):
         return []
     proved = []
     for _part in cond.split(" and "):
-        _m = _re_pb.match(r'^\(?\s*(\w+(?:\.\w+)*(?:\[\d+\])?)\.('
+        _m = _re_pb.match(r'^\(?\s*(' + hek_nim_expr.NARROW_NAME + r')\.('
                           + hek_nim_expr.NARROW_TESTS + r')\s*\)?$',
                           _part.strip())
         _sfx = hek_nim_expr.narrow_suffix(_m.group(1), _m.group(2), True) if _m else None
@@ -839,7 +841,7 @@ def to_nim(self, indent=0):
     # own body, and proves x has a value in *every* clause after it -- the
     # else, and any elif, which is only reached when the isNone was false.
     # Without this, the else branch read the field off the Option.
-    _m_none = _re_if.match(r'^\(?\s*(\w+(?:\.\w+)*(?:\[\d+\])?)\.('
+    _m_none = _re_if.match(r'^\(?\s*(' + hek_nim_expr.NARROW_NAME + r')\.('
                            + hek_nim_expr.NARROW_TESTS + r')\s*\)?$', cond.strip())
     _else_unwrapped = []
     if _m_none:
@@ -2713,6 +2715,36 @@ def _bind_user_result(body, ret_ann):
     return "\n".join(out)
 
 
+def _wrap_union_tail(body, ret_ann):
+    """BODY, a routine's Nim body returning the union RET_ANN, with its
+    trailing value made the member it is, as `return v` does. Only a
+    one-line expression at the body's own level whose type is known: a
+    trailing statement (a void call) returns nothing and is left alone."""
+    import re as _re_un
+    _nim_ret_u = ret_ann.lstrip(": ").strip()
+    if not _nim_ret_u.startswith(("Result[", "OneOf")):
+        return body
+    _bl_u = body.rstrip().splitlines()
+    _ix_u = len(_bl_u) - 1
+    while _ix_u >= 0 and (_bl_u[_ix_u].lstrip().startswith("#") or _bl_u[_ix_u].strip() == ""):
+        _ix_u -= 1
+    if _ix_u < 0:
+        return body
+    _base_u = min(len(l) - len(l.lstrip()) for l in _bl_u if l.strip())
+    _ln_u = _bl_u[_ix_u]
+    _ex_u = _ln_u.lstrip()
+    _balanced = all(_ex_u.count(a) == _ex_u.count(b) for a, b in ("()", "[]", "{}"))
+    if (len(_ln_u) - len(_ex_u) != _base_u or not _balanced or _ex_u.endswith(":")
+            or _re_un.match(r'^(var|let|const|result|return|if|elif|else|for|while|case|of|discard|raise|try|except|finally|block|when|echo|quit)\b', _ex_u)
+            or _re_un.search(r'(?<![=!<>])=(?!=)', _ex_u)):
+        return body
+    _t_u = hek_nim_expr._value_nim_type(_ex_u)
+    if not _t_u or _t_u == "void":
+        return body
+    _bl_u[_ix_u] = _ln_u[:len(_ln_u) - len(_ex_u)] + hek_nim_expr._result_wrap(_ex_u, _nim_ret_u)
+    return chr(10).join(_bl_u) + chr(10)
+
+
 @method(func_def)
 def to_nim(self, indent=0):
     """def f(a: int) -> str:  ->  proc f(a: int): string ="""
@@ -2913,6 +2945,10 @@ def _func_def_to_nim_inner(self, indent=0):
                         _indent_o = _last_o[:len(_last_o) - len(_last_o_s)]
                         _blines_o[_idx_o] = f"{_indent_o}some({_last_o_s})"
                         body = chr(10).join(_blines_o) + chr(10)
+    # Implicit return in a union-typed function: the trailing value becomes
+    # its member, as `return v` does.
+    if ret_ann and body:
+        body = _wrap_union_tail(body, ret_ann)
     _shadow_vars = []
     # Add var to params that are mutated in body (assigned to, .add called, or any method call)
     if params and body:
@@ -5366,6 +5402,10 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
         _BY_VALUE_HELPERS = {
             'quoteShell', 'adascriptExists', 'adascriptAccess', 'fileExists',
             'dirExists', 'symlinkExists', 'getFileSize', 'len', 'Path',
+            # the constructors a returned union is wrapped in -- stdlib.nim's
+            # Result.ok / .err, OneOfN.of<i> -- and Option's some: each takes
+            # its value by value, so `return self.x` does not make self var
+            'ok', 'err', 'some', 'of0', 'of1', 'of2', 'of3', 'of4', 'of5',
         }
         def _purity_evidence(body_text):
             """(may_mutate, sibling_calls) for the pure-method fixpoint."""
@@ -5531,6 +5571,10 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
             if _m_stripped.startswith("discard "):
                 _m_pad = _m_last[:len(_m_last) - len(_m_stripped)]
                 _mbody[_m_idx] = _m_pad + _m_stripped[len("discard "):]
+        _m_text = "\n".join(_mbody)
+        _m_wrapped = _wrap_union_tail(_m_text, ret_ann)
+        if _m_wrapped.rstrip("\n") != _m_text.rstrip("\n"):
+            _mbody = _m_wrapped.rstrip("\n").split("\n")
     lines.extend(_mbody)
     # Register param types for call-site Option[T] some() coercion (_wrap_option_args)
     if nim_name and params:

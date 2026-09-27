@@ -38,6 +38,10 @@ Flow:
      parallel, gives the lines (or the commits). Against the checkout the
      diff is taken against the working tree, which is what Tblame blames,
      so the line numbers are the ones it will look up.
+
+What stops the run -- no superproject, a baseline no submodule has -- is
+a Failure_T returned up the stages and said once, at the end; what only
+spoils one submodule is a warning, and the rest go on.
 """
 
 # ---------------------------------------------------------------------------
@@ -52,6 +56,10 @@ type CommitHash is str
 type LineNo is int
 
 type RevKind is enum RK_Checkout, RK_Superproject, RK_Baseline
+
+# why the run cannot go on: returned up the stages, said once by main
+type Failure_T is failure record:
+    message: str
 
 type Rev is record:
     # as given on the command line; "" for the checkout
@@ -100,19 +108,14 @@ def gitlink(line: str) -> (SubmodulePath, CommitHash):
 
 class Superproject:
     """The NM superproject: its submodules, and the commit a revision names
-    in each of them."""
+    in each of them. open_superproject makes one."""
     root:  Path = Path("")
     # every submodule HEAD records, in tree order
     paths: []SubmodulePath = []
 
-    def __init__(self, root: Path):
+    def __init__(self, root: Path, paths: []SubmodulePath):
         self.root = root
-        let r = shell: git -C {!root} ls-tree -r HEAD
-        die(f"{root} is not a git repository") if r.code != 0
-        for line in r.output.split("\n"):
-            let (path, sha) = gitlink(line)
-            if path != "":
-                self.paths.append(path)
+        self.paths = paths
 
     def recorded(self, commit: str) -> {SubmodulePath}CommitHash:
         """The commit superproject commit COMMIT records for each submodule."""
@@ -141,8 +144,9 @@ class Superproject:
             rev.kind = RK_Baseline
         rev
 
-    def commits(self, rev: Rev) -> {SubmodulePath}CommitHash:
-        """The commit REV names in each submodule it names one in."""
+    def commits(self, rev: Rev) -> {SubmodulePath}CommitHash | Failure_T:
+        """The commit REV names in each submodule it names one in -- or,
+        for a baseline no checked-out submodule has, the failure."""
         return self.recorded(rev.commit) if rev.kind == RK_Superproject
         # A submodule that is not checked out has no checkout of its own:
         # what HEAD records stands in, so a change to it is still seen (and
@@ -156,14 +160,16 @@ class Superproject:
         for p, r in zip(here, run_git_all(commands)):
             if r.code == 0:
                 out[p] = r.output.strip()
-        die(f"no checked-out submodule has a baseline or commit named {rev.name} (tags not fetched? try: git -C <submodule> fetch --tags)") if rev.kind == RK_Baseline and len(out) == 0
-        out
+        if rev.kind == RK_Baseline and len(out) == 0:
+            return Failure_T(message=f"no checked-out submodule has a baseline or commit named {rev.name} (tags not fetched? try: git -C <submodule> fetch --tags)")
+        return out
 
-    def changes(self, rev1: Rev, rev2: Rev) -> []Change:
+    def changes(self, rev1: Rev, rev2: Rev) -> []Change | Failure_T:
         """The submodules whose commit differs between REV1 and REV2, in
         tree order; the changed ones not checked out are named on stderr."""
-        let before: {SubmodulePath}CommitHash = self.commits(rev1)
-        let after:  {SubmodulePath}CommitHash = self.commits(rev2)
+        do:
+            before <- self.commits(rev1)
+            after  <- self.commits(rev2)
         var out: []Change = []
         var unseen: []SubmodulePath = []
         for path in self.paths:
@@ -176,7 +182,20 @@ class Superproject:
                               to_checkout = rev2.kind == RK_Checkout))
         if len(unseen) > 0:
             warn(f"{len(unseen)} changed submodule(s) not checked out, not listed: {', '.join(unseen)}")
-        out
+        return out
+
+def open_superproject(root: Path) -> Superproject | Failure_T:
+    """The superproject at ROOT, with the submodules HEAD records -- or
+    the failure, when ROOT is no git repository."""
+    let r = shell: git -C {!root} ls-tree -r HEAD
+    if r.code != 0:
+        return Failure_T(message=f"{root} is not a git repository")
+    var paths: []SubmodulePath = []
+    for line in r.output.split("\n"):
+        let (path, sha) = gitlink(line)
+        if path != "":
+            paths.append(path)
+    return Superproject(root, paths)
 
 # ---------------------------------------------------------------------------
 # Stage 2a: the changed lines
@@ -326,14 +345,21 @@ class Options:
 # Main
 # ---------------------------------------------------------------------------
 
-let opt: Options = Options($@)
-let sp: Superproject = Superproject(opt.root)
-let rev1: Rev = sp.resolve(opt.revs[0] if len(opt.revs) > 0 else "HEAD^")
-let rev2: Rev = sp.resolve(opt.revs[1] if len(opt.revs) > 1 else "")
-let found: []Change = sp.changes(rev1, rev2)
-if opt.commits:
-    print_commits(sp, found)
-else:
-    if rev2.kind != RK_Checkout:
-        warn(f"line numbers are {describe(rev2)}'s; Tblame blames the checkout, so its answers match only where that is what is checked out")
-    print_lines(sp, found)
+def run(opt: Options) -> None | Failure_T:
+    """Stages 1 and 2: the first failure ends them, and comes back."""
+    do:
+        sp <- open_superproject(opt.root)
+    let rev1: Rev = sp.resolve(opt.revs[0] if len(opt.revs) > 0 else "HEAD^")
+    let rev2: Rev = sp.resolve(opt.revs[1] if len(opt.revs) > 1 else "")
+    do:
+        found <- sp.changes(rev1, rev2)
+    if opt.commits:
+        print_commits(sp, found)
+    else:
+        if rev2.kind != RK_Checkout:
+            warn(f"line numbers are {describe(rev2)}'s; Tblame blames the checkout, so its answers match only where that is what is checked out")
+        print_lines(sp, found)
+
+let outcome: None | Failure_T = run(Options($@))
+if outcome is Failure_T:
+    die(outcome.message)

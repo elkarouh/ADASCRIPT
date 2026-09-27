@@ -551,6 +551,19 @@ def _value_nim_type(val):
         return "float"
     if v in ("true", "false"):
         return "bool"
+    # A whole expression that is one call is what the call returns -- a
+    # constructor's type is its name -- whatever its arguments are: a string
+    # concatenated inside `Failure_T(message: "a" & b)` makes no string of it.
+    _whole = _re.match(r'^([A-Za-z_]\w*)\((.*)\)$', v, _re.S)
+    if _whole and _balanced(_whole.group(2)):
+        _name = _whole.group(1)
+        _rt = _proc_ret_nim(_name)
+        if _rt:
+            return _rt
+        if _name[:1].isupper() and _name not in ("Path",):
+            return _name
+        if _name.startswith("new") and _name[3:4].isupper():
+            return _name[3:]
     if _expr_is_string(v):
         return "string"
     for _tname, _info in getattr(ParserState, "tick_types", {}).items():
@@ -561,9 +574,9 @@ def _value_nim_type(val):
         return _t
     # A narrowed name: a union's member, a Result's value or error, an
     # Option's value -- the type the narrowing says it is.
-    _mn = _re.match(r'^([A-Za-z_]\w*)\.(?:(m|v)(\d)|(value|error)|(get)\(\))$', v)
+    _mn = _re.match(r'^(`?[A-Za-z_]\w*`?)\.(?:(m|v)(\d)|(value|error)|(get)\(\))$', v)
     if _mn:
-        _base_t = (ParserState.symbol_table.lookup(_mn.group(1)) or {}).get("type") or ""
+        _base_t = (ParserState.symbol_table.lookup(_mn.group(1).strip("`")) or {}).get("type") or ""
         _ui = _union_info(_base_t)
         if _ui and _mn.group(2) and int(_mn.group(3)) < len(_ui["values"]):
             return _ui["values"][int(_mn.group(3))]
@@ -577,6 +590,26 @@ def _value_nim_type(val):
     _arith = _arith_nim_type(v)
     if _arith:
         return _arith
+    # A comparison, a membership test or a boolean connective at the top
+    # level -- outside any bracket or string -- is a bool.
+    _top, _depth, _quote = [], 0, None
+    for _ch in v:
+        if _quote:
+            if _ch == _quote:
+                _quote = None
+            continue
+        if _ch in "\"'":
+            _quote = _ch
+        elif _ch in "([{":
+            _depth += 1
+        elif _ch in ")]}":
+            _depth -= 1
+        elif _depth == 0:
+            _top.append(_ch)
+            continue
+        _top.append(" ")
+    if _re.search(r" (==|!=|<=|>=|<|>|in|notin|and|or|is|isnot) |^not ", "".join(_top)):
+        return "bool"
     _mc = _re.match(r'^([A-Za-z_]\w*)\((.*)\)$', v, _re.S)
     _conv = {"float": "float", "toFloat": "float", "int": "int", "toInt": "int",
              "parseInt": "int", "parseFloat": "float", "len": "int", "ord": "int",
@@ -653,7 +686,9 @@ def _union_type_of(expr_str):
     call, or ""."""
     import re as _re
     expr_str = expr_str.strip()
-    sym = ParserState.symbol_table.lookup(expr_str)
+    # a name Nim reserves is declared in its backticks, and read either way
+    sym = (ParserState.symbol_table.lookup(expr_str.strip("`"))
+           or ParserState.symbol_table.lookup("`" + expr_str.strip("`") + "`"))
     _t = (sym.get("type") or "") if sym else ""
     if _t.startswith(("Result[", "OneOf")):
         return _t
@@ -753,6 +788,13 @@ def _result_is_test(chain, right, negated):
     a OneOfN, is_v<i> / is_ok on a Result's value, is_err on its failure --
     or None when x is not a union. RIGHT is the emitted type ("nil" for
     None)."""
+    import re as _re
+    # A name already narrowed is tested whole: `r is F` again after a guard
+    # proved it, where r reads as r.error, asks r, not its failure.
+    _nm = _re.match(r"^(" + NARROW_NAME + r")(\.get\(\)|\.value|\.error|\.[mv]\d)$", chain)
+    if (_nm and _nm.group(1) in getattr(ParserState, "_option_unwrap_vars", ())
+            and _narrow_suffix(_nm.group(1)) == _nm.group(2)):
+        chain = _nm.group(1)
     _ut = _union_type_of(chain)
     info = _union_info(_ut)
     if info is None:
@@ -781,6 +823,9 @@ def _result_is_test(chain, right, negated):
 _NARROW_IN_BODY = {"isSome": ".get()", "is_ok": ".value", "is_err": ".error"}
 _NARROW_IN_ELSE = {"isNone": ".get()", "is_err": ".value", "is_ok": ".error"}
 NARROW_TESTS = r"isSome|isNone|is_ok|is_err|is_m\d|is_v\d"
+# The name a test is on: a plain name, a field path, an index -- or a Nim
+# keyword in backticks, which is how a variable named `out` is spelled.
+NARROW_NAME = r"`?[A-Za-z_]\w*`?(?:\.\w+)*(?:\[\d+\])?"
 
 
 def narrow_suffix(name, test, in_body):
@@ -4705,7 +4750,7 @@ def to_nim(self, prec=None):
     _added = []
 
     def _note_proved(piece):
-        _m = _re_dis.match(r"^([A-Za-z_]\w*(?:\.\w+)*(?:\[\d+\])?)\.(" + NARROW_TESTS + r")$", str(piece).strip())
+        _m = _re_dis.match(r"^(" + NARROW_NAME + r")\.(" + NARROW_TESTS + r")$", str(piece).strip())
         _sfx = narrow_suffix(_m.group(1), _m.group(2), True) if _m else None
         if _sfx and _narrow_add(_m.group(1), _sfx):
             _added.append(_m.group(1))
@@ -4762,7 +4807,7 @@ def to_nim(self, prec=None):
     # emitter about it, which is all this does.
     import re as _re_cond
     cond = _nim_truthiness(self.nodes[1].to_nim())
-    _m_narrow = _re_cond.match(r"^([A-Za-z_]\w*(?:\.\w+)*(?:\[\d+\])?)\.(" + NARROW_TESTS + r")$", cond.strip())
+    _m_narrow = _re_cond.match(r"^(" + NARROW_NAME + r")\.(" + NARROW_TESTS + r")$", cond.strip())
     _narrowed = _m_narrow.group(1) if _m_narrow else None
     _test = _m_narrow.group(2) if _m_narrow else None
     # isSome narrows the value branch, isNone the else branch -- the branch

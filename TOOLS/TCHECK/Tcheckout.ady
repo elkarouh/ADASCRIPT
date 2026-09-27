@@ -66,10 +66,12 @@ type System_T  is str    # <system>: TACT
 type InSub_T   is str    # a file's path in its submodule: sources/b.adb
 type Name_T    is str    # a submodule's name in .gitmodules: TACT.UIF
 type Url_T     is str    # a repository's URL
-type Reason_T  is str    # why something was not done; "" when it was
 type Pattern_T is str    # a sparse-checkout pattern: /sources/b.adb
 
 const DEFAULT_NM_URL: Url_T = "https://mirror-cma.bitbucket.cfmu.corp.eurocontrol.int/scm/nm"
+
+type Failure_T is failure record:
+    message: str             # why something was not done
 
 type File_T is record:
     target: Target_T = ""    # TACT/UIF/sources/b.adb
@@ -91,12 +93,13 @@ def git_ok(where: Path, args: []str) -> bool:
 def git_out(where: Path, args: []str) -> str:
     git(where, args).output.strip()
 
-def git_or_die(where: Path, args: []str, message: str):
+def git_checked(where: Path, args: []str, message: str) -> None | Failure_T:
+    """git ARGS, run in WHERE; MESSAGE when it fails, what git said warned."""
     let r: RunResult = git(where, args)
     if r.code != 0:
         if r.stderr.strip() != "":
             warn(r.stderr.strip())
-        die(message)
+        return Failure_T(message=message)
 
 def checked_out(dir: Path) -> bool:
     """DIR is the top of a work tree of its own, not a directory of the workspace."""
@@ -120,25 +123,25 @@ def keep_worktree_in_config(dir: Path):
         run(["git", "config", "-f", moved, "--unset", "core.worktree"])
         run(["git", "config", "-f", str(gitdir / "config"), "core.worktree", worktree.output.strip()])
 
-def take_out(work: Path, f: File_T) -> (Reason_T, bool):
+def take_out(work: Path, f: File_T) -> bool | Failure_T:
     """F out of WORK's sparse checkout, unless it is the last file there --
-    which the caller takes out with the rest: (why not, or ""; the last)."""
+    which the caller takes out with the rest: whether it is the last."""
     let patterns: []Pattern_T = sparse_list(work)
-    return (f"{f.target} is not checked out", False) if "/" + f.file not in patterns
-    return (f"{f.target} has changes: not taken out", False) if git_out(work, ["status", "--porcelain", "--", f.file]) != ""
+    return Failure_T(message=f"{f.target} is not checked out") if "/" + f.file not in patterns
+    return Failure_T(message=f"{f.target} has changes: not taken out") if git_out(work, ["status", "--porcelain", "--", f.file]) != ""
     let others: []Pattern_T = [p for p in patterns if p != "/" + f.file]
-    return ("", True) if others == []
+    return True if others == []
     let r: RunResult = run(["git", "-C", str(work), "sparse-checkout", "set", "--no-cone", "--stdin"],
                            stdin = "\n".join(others) + "\n")
-    return (f"could not take {f.file} out of {f.sub}", False) if r.code != 0
+    return Failure_T(message=f"could not take {f.file} out of {f.sub}") if r.code != 0
     keep_worktree_in_config(work)
     print f"{PROG}: {f.target} taken out"
-    ("", False)
+    False
 
-def check_out_or_die(work: Path, rev: Rev_T):
+def check_out(work: Path, rev: Rev_T) -> None | Failure_T:
     # forced: a deinitialised submodule's index still lists the files its
     # emptied directory lacks, which a plain checkout keeps as deletions
-    git_or_die(work, ["-c", "advice.detachedHead=false", "checkout", "-q", "-f", rev], f"could not check out {rev} in {work}")
+    git_checked(work, ["-c", "advice.detachedHead=false", "checkout", "-q", "-f", rev], f"could not check out {rev} in {work}")
 
 # --- where files are checked out: the workspace, or the cache -----------------
 @virtual
@@ -152,13 +155,13 @@ class Checkouts:
         all of them, or ONLY's, a submodule, when it is not ""."""
         []
 
-    def uncheckout(self, f: File_T) -> Reason_T:
-        """F taken out again: "", or why it was not."""
-        ""
+    def uncheckout(self, f: File_T) -> None | Failure_T:
+        """F taken out again, or why it was not."""
+        return
 
-    def checkout(self, f: File_T, revs: []Rev_T):
+    def checkout(self, f: File_T, revs: []Rev_T) -> None | Failure_T:
         """F checked out; REVS are the revisions its diffs compare."""
-        pass
+        return
 
 # --- the workspace -----------------------------------------------------------
 class Workspace(Checkouts):
@@ -189,48 +192,50 @@ class Workspace(Checkouts):
                 files = files + files_in(dir, path)
         return files
 
-    def uncheckout(self, f: File_T) -> Reason_T:
+    def uncheckout(self, f: File_T) -> None | Failure_T:
         let work: Path = self.root / f.sub
         let name: Name_T = self.name_of(f.sub)
-        return f"{f.sub} is not a submodule of {self.root}" if name == ""
-        return f"{f.sub} is not checked out" if not checked_out(work)
-        return f"{f.sub} is checked out in full, not by {PROG}: not touching it" if not sparse(work)
-        let (why, last) = take_out(work, f)
-        return why if why != "" or not last
-        return f"could not deinitialise {f.sub}" if not git_ok(self.root, ["submodule", "deinit", "-q", "--", f.sub])
+        return Failure_T(message=f"{f.sub} is not a submodule of {self.root}") if name == ""
+        return Failure_T(message=f"{f.sub} is not checked out") if not checked_out(work)
+        return Failure_T(message=f"{f.sub} is checked out in full, not by {PROG}: not touching it") if not sparse(work)
+        do:
+            last <- take_out(work, f)
+        return if not last
+        return Failure_T(message=f"could not deinitialise {f.sub}") if not git_ok(self.root, ["submodule", "deinit", "-q", "--", f.sub])
         let clone: Path = Path(git_out(self.root, ["rev-parse", "--absolute-git-dir"])) / "modules" / name
         print f"{PROG}: {f.target} taken out -- {f.sub}'s last: deinitialised, its clone kept in {clone}"
-        return ""
 
-    def checkout(self, f: File_T, revs: []Rev_T):
+    def checkout(self, f: File_T, revs: []Rev_T) -> None | Failure_T:
         """At the commit the superproject records: REVS do not matter here."""
         let work: Path = self.root / f.sub
         let name: Name_T = self.name_of(f.sub)
-        die(f"{f.sub} is not a submodule of {self.root}") if name == ""
+        return Failure_T(message=f"{f.sub} is not a submodule of {self.root}") if name == ""
         if checked_out(work):
             if -e (work / f.file):
                 print f"{PROG}: {f.target} is checked out already"
             elif sparse(work):
                 print f"{PROG}: adding {f.file} to the sparse checkout of {f.sub}"
-                git_or_die(work, ["sparse-checkout", "add", "/" + f.file], f"could not add {f.file} to {f.sub}")
+                do:
+                    git_checked(work, ["sparse-checkout", "add", "/" + f.file], f"could not add {f.file} to {f.sub}")
                 keep_worktree_in_config(work)
             else:
-                die(f"{f.sub} is checked out, without {f.file}: not at a commit that has it -- not moved")
+                return Failure_T(message=f"{f.sub} is checked out, without {f.file}: not at a commit that has it -- not moved")
             return
 
         # the commit the superproject records for SUB: "160000 commit <sha>\t<path>"
         let entry: str = git_out(self.root, ["ls-tree", "HEAD", "--", f.sub])
-        die(f"the superproject records no commit for {f.sub}") if entry == ""
+        return Failure_T(message=f"the superproject records no commit for {f.sub}") if entry == ""
         let (mode, kind, commit, path) = entry.split()
-        die(f"the superproject records no commit for {f.sub}") if kind != "commit"
-        git_or_die(self.root, ["submodule", "--quiet", "init", "--", f.sub], f"could not register {f.sub}")
+        return Failure_T(message=f"the superproject records no commit for {f.sub}") if kind != "commit"
+        do:
+            git_checked(self.root, ["submodule", "--quiet", "init", "--", f.sub], f"could not register {f.sub}")
         let url: Url_T = git_out(self.root, ["config", "submodule." + name + ".url"])
-        die(f"no URL for submodule {name}") if url == ""
+        return Failure_T(message=f"no URL for submodule {name}") if url == ""
         let gitdir: Path = Path(git_out(self.root, ["rev-parse", "--absolute-git-dir"])) / "modules" / name
 
         work.mkdir()
         # nothing of anyone's in it to lose: the forced checkout is safe
-        die(f"{work} is not empty: not checking out into it") if not empty_dir(work)
+        return Failure_T(message=f"{work} is not empty: not checking out into it") if not empty_dir(work)
         if -d gitdir:
             print f"{PROG}: reusing {gitdir}"     # cloned once, then deinitialised
             shell: printf 'gitdir: %s\n' {!gitdir} > {!work}/.git
@@ -239,16 +244,18 @@ class Workspace(Checkouts):
             run(["rmdir", str(work)])
             gitdir.parent.mkdir()
             let rc: int = shell: git clone --filter=blob:none --no-checkout --separate-git-dir={!gitdir} {!url} {!work}
-            die(f"could not clone {url}") if rc != 0
+            return Failure_T(message=f"could not clone {url}") if rc != 0
         # the work tree, from the repository -- relative, as git submodule
         # writes it: .git/modules/<name> back up to the workspace, down to SUB
         git(work, ["config", "core.worktree", "../.." + "/.." * (name.count("/") + 1) + "/" + f.sub])
-        git_or_die(work, ["sparse-checkout", "set", "--no-cone", "/" + f.file], "could not set up the sparse checkout")
+        do:
+            git_checked(work, ["sparse-checkout", "set", "--no-cone", "/" + f.file], "could not set up the sparse checkout")
         keep_worktree_in_config(work)
         if not git_ok(work, ["cat-file", "-e", commit + "^{commit}"]):
             let rc: int = shell: git -C {!work} fetch --tags origin
-            die(f"could not fetch {f.sub}") if rc != 0
-        check_out_or_die(work, commit)
+            return Failure_T(message=f"could not fetch {f.sub}") if rc != 0
+        do:
+            check_out(work, commit)
         print f"{PROG}: {f.target} checked out ({f.sub} at {commit[:8]}, this file only)"
 
 # --- the cache, for no workspace at all ----------------------------------------
@@ -267,43 +274,47 @@ class Cache(Checkouts):
                 files = files + files_in(repo, sub)
         return files
 
-    def uncheckout(self, f: File_T) -> Reason_T:
+    def uncheckout(self, f: File_T) -> None | Failure_T:
         let work: Path = self.dir / f.sub
-        return f"{f.sub} is not in the cache {self.dir}" if not -e (work / ".git")
-        let (why, last) = take_out(work, f)
-        return why if why != "" or not last
-        return f"could not remove {work}" if run(["rm", "-rf", str(work)]).code != 0
+        return Failure_T(message=f"{f.sub} is not in the cache {self.dir}") if not -e (work / ".git")
+        do:
+            last <- take_out(work, f)
+        return if not last
+        return Failure_T(message=f"could not remove {work}") if run(["rm", "-rf", str(work)]).code != 0
         run(["rmdir", str(self.dir / f.system)])   # the system's, if it was its last
         print f"{PROG}: {f.target} taken out -- {f.sub}'s last: its clone removed from {self.dir}"
-        return ""
 
-    def checkout(self, f: File_T, revs: []Rev_T):
+    def checkout(self, f: File_T, revs: []Rev_T) -> None | Failure_T:
         let work: Path = self.dir / f.sub
         let base: Url_T = $TCHECK_NM_URL if $TCHECK_NM_URL != "" else DEFAULT_NM_URL
         let url: Url_T = base + "/" + f.sub.replace("/", ".").lower() + ".git"
         let fresh: bool = not -e (work / ".git")
         if fresh:
             work.mkdir()
-            die(f"{work} is not empty: not cloning into it") if not empty_dir(work)
+            return Failure_T(message=f"{work} is not empty: not cloning into it") if not empty_dir(work)
             print f"{PROG}: cloning {url} into {work} (no contents until needed)"
             let rc: int = shell: git clone -q --filter=blob:none --no-checkout {!url} {!work}
-            die(f"could not clone {url}") if rc != 0
-            git_or_die(work, ["sparse-checkout", "set", "--no-cone", "/" + f.file], "could not set up the sparse checkout")
+            return Failure_T(message=f"could not clone {url}") if rc != 0
+            do:
+                git_checked(work, ["sparse-checkout", "set", "--no-cone", "/" + f.file], "could not set up the sparse checkout")
         # the revisions compared, fetched when missing
         let missing: []Rev_T = [rev for rev in revs if not git_ok(work, ["rev-parse", "-q", "--verify", rev + "^{commit}"])]
         if missing != []:
             print f"{PROG}: fetching {f.sub}, for {missing[0]}"
-            git_or_die(work, ["fetch", "-q", "--tags", "origin"], f"could not fetch {url}")
+            do:
+                git_checked(work, ["fetch", "-q", "--tags", "origin"], f"could not fetch {url}")
         for rev in missing:
-            die(f"no {rev} in {url}") if not git_ok(work, ["rev-parse", "-q", "--verify", rev + "^{commit}"])
+            return Failure_T(message=f"no {rev} in {url}") if not git_ok(work, ["rev-parse", "-q", "--verify", rev + "^{commit}"])
         if "/" + f.file not in sparse_list(work):
-            git_or_die(work, ["sparse-checkout", "add", "/" + f.file], f"could not add {f.file} to {work}")
+            do:
+                git_checked(work, ["sparse-checkout", "add", "/" + f.file], f"could not add {f.file} to {work}")
         # the file, known to git: in HEAD, else at the first revision that has it
         return if not fresh and git_ok(work, ["cat-file", "-e", "HEAD:" + f.file])
         let having: []Rev_T = [rev for rev in revs if git_ok(work, ["cat-file", "-e", rev + ":" + f.file])]
         let at: Rev_T = having[0] if having != [] else git_out(work, ["rev-parse", "-q", "--verify", "origin/HEAD"])
-        die(f"{f.file} is at none of:" + "".join([" " + r for r in revs])) if at == ""
-        check_out_or_die(work, at)
+        return Failure_T(message=f"{f.file} is at none of:" + "".join([" " + r for r in revs])) if at == ""
+        do:
+            check_out(work, at)
         print f"{PROG}: {f.target} checked out in {self.dir} (at {at})"
 
 # --- main ----------------------------------------------------------------------
@@ -370,12 +381,16 @@ case mode:
         let files: []Target_T = checked_out_files("-u -all")
         if files == []:
             print f"{PROG}: nothing checked out"
-        let failures: []Reason_T = [why for why in [checkouts.uncheckout(parse_target(t)) for t in files] if why != ""]
-        for why in failures:
-            warn(why)
-        quit(1 if failures != [] else 0)
+        var failed: bool = False
+        for t in files:
+            let outcome: None | Failure_T = checkouts.uncheckout(parse_target(t))
+            if outcome is Failure_T:
+                warn(outcome.message)
+                failed = True
+        quit(1 if failed else 0)
     when UNCHECKOUT:
-        let why: Reason_T = checkouts.uncheckout(the_file())
-        die(why) if why != ""
+        let outcome: None | Failure_T = checkouts.uncheckout(the_file())
+        die(outcome.message) if outcome is Failure_T
     when CHECKOUT:
-        checkouts.checkout(the_file(), revs)
+        let outcome: None | Failure_T = checkouts.checkout(the_file(), revs)
+        die(outcome.message) if outcome is Failure_T

@@ -168,14 +168,14 @@ def add_alternate(nmroot: Path, alternate: Path):
     if not already_listed:
         shell: echo {!alternate} >> {alt_file}
 
-def where_workspace(cmpath: str) -> (Path, int):
-    """Resolve a /cm/ot/... context path to its workspace path.
-
-    Returns (path, exit_code); exit_code 2 means "the subsystem is not
-    checked out".
-    """
-    let r = shell: where_workspace {!cmpath}
-    return (Path(r.output.strip()), r.code)
+def where_workspace(cmpath: str) -> Path | ShellFailure_T:
+    """Resolve a /cm/ot/... context path to its workspace path -- or the
+    command's failure, whose code 2 means "the subsystem is not checked
+    out"."""
+    let out: str | ShellFailure_T = shell: where_workspace {!cmpath}
+    if out is ShellFailure_T:
+        return out
+    return Path(out.strip())
 
 # ---------------------------------------------------------------------------
 # Column values
@@ -310,16 +310,16 @@ class Resolver:
             hit.nmroot = self.alternate
             hit.file = filepath
         elif self.workspace != "":
-            let (ws_path, ws_code) = where_workspace(written)
-            if ws_code == 2:
-                debug_log("Could not find the file " + written + " in the workspace, the subsystem is not checked out.")
-                return hit
-            if ws_code != 0:
-                warn("Below line looks like it contains a context path but it could not be found in the workspace.")
-                warn(raw)
+            let ws: Path | ShellFailure_T = where_workspace(written)
+            if ws is ShellFailure_T:
+                if ws.code == 2:
+                    debug_log("Could not find the file " + written + " in the workspace, the subsystem is not checked out.")
+                else:
+                    warn("Below line looks like it contains a context path but it could not be found in the workspace.")
+                    warn(raw)
                 return hit
             hit.nmroot = self.workspace
-            hit.file = ws_path
+            hit.file = ws              # the path, past the test
         else:
             return hit
         hit.kind = HK_Blame

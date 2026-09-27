@@ -113,4 +113,38 @@ var maybe: ?Number_T = None        # a named union can be optional too
 assert maybe is None
 print "test5 OK"
 
+# ─── test 6: what the tools lean on ────────────────────────────────────────
+
+class Counter:
+    var limit: int
+
+    def __init__(self, limit: int):
+        self.limit = limit
+
+    def take(self, n: int) -> int | Failure_T:
+        # the field read inside the failure leaves self as it is: a `let`
+        # receiver still calls this
+        return Failure_T(detail="over " + str(self.limit)) if n > self.limit
+        n
+
+def small(n: int) -> bool | Failure_T:
+    return Failure_T(detail="negative: " + str(n)) if n < 0
+    n < 10                         # the tail value is the bool member
+
+let counter: Counter = Counter(5)
+let out: int | Failure_T = counter.take(3)     # a name Nim reserves
+if out is Failure_T:
+    die(out.detail)                # leaves: out is the int after this
+print out + 1
+let over: int | Failure_T = counter.take(9)
+print over.detail if over is Failure_T else "?"
+let s1: bool | Failure_T = small(-1)
+die("expected a failure") if s1 is not Failure_T
+if s1 is Failure_T:
+    print s1.detail
+let s2: bool | Failure_T = small(3)
+die(s2.detail) if s2 is Failure_T  # the guard's own call reads the failure
+print "small" if s2 else "large"
+print "test6 OK"
+
 print "all union tests passed"

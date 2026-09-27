@@ -2330,7 +2330,24 @@ def to_nim(self, indent=0):
     import hek_nim_expr
     body, cond = self.nodes[0], self.nodes[1]
     cond_nim = hek_nim_expr._nim_truthiness(cond.to_nim())
-    return f"{_ind(indent)}if {cond_nim}: {body.to_nim().strip()}"
+    # The body is the condition's own branch, so it narrows as an `if`
+    # block's does: `die(r.message) if r is Failure_T` reads r's failure.
+    # An `and` chain proves every conjunct; an `or` proves nothing.
+    import re as _re_mod
+    _added = []
+    if " or " not in cond_nim:
+        for _part in cond_nim.split(" and "):
+            _m = _re_mod.match(r'^\(?\s*(' + hek_nim_expr.NARROW_NAME + r')\.('
+                               + hek_nim_expr.NARROW_TESTS + r')\s*\)?$', _part.strip())
+            _sfx = hek_nim_expr.narrow_suffix(_m.group(1), _m.group(2), True) if _m else None
+            if _sfx and hek_nim_expr._narrow_add(_m.group(1), _sfx):
+                _added.append(_m.group(1))
+    try:
+        body_nim = body.to_nim().strip()
+    finally:
+        for _n in _added:
+            hek_nim_expr._narrow_drop(_n)
+    return f"{_ind(indent)}if {cond_nim}: {body_nim}"
 
 
 # --- simple_stmt ---
