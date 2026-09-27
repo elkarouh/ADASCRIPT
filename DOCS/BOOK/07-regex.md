@@ -150,7 +150,7 @@ whole block desugars to a match-test chain on both backends.
 
 ## 7.7 A worked example: config-file parsing without a parser
 
-`EXAMPLES/lolcate/lolcate.ady` (a port of the lolcate-rs file indexer) keeps
+`TOOLS/LOLCATE/lolcate.ady` (a port of the lolcate-rs file indexer) keeps
 its per-database configuration in a line-based text format — section headers
 like `dirs:` and `ignores:` followed by entries. The header comment calls it
 "no external parser needed": a `for line in ...` loop, a couple of match

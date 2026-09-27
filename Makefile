@@ -26,6 +26,7 @@ PGDIR  := $(TOOLDIR)/PGREP
 TBDIR  := $(TOOLDIR)/TBLAME
 TDDIR  := $(TOOLDIR)/TDIFF
 TCDIR  := $(TOOLDIR)/TCHECK
+RTDIR  := $(TOOLDIR)/RSYNC_TIME_MACHINE
 
 # Prepend choosenim's bin dir so Nim 2.x is used instead of any system Nim 1.x.
 export PATH := /root/.nimble/bin:$(HOME)/.nimble/bin:$(HOME)/Downloads:$(PATH)
@@ -213,15 +214,10 @@ ADA_INDENT_TESTS := \
 # Skipped at runtime (compiled only):
 #   tsp.ady         — matplotlib not installed by default (pyimport)
 #   lv.ady          — requires clv shell utility
-#   lolcate/lolcate.ady — integration test (requires fd + rg)
-#   rsync_time_machine.ady — run by rsync_time_machine_test.sh below,
-#                            when rsync is installed
 # -----------------------------------------------------------------------
 COMPILE_ONLY := \
     tsp.ady \
     lv.ady \
-    lolcate/lolcate.ady \
-    rsync_time_machine.ady \
     dp/jacks.ady \
     INTERACTIVE/lispy.ady \
     awk_logscan.ady \
@@ -296,6 +292,9 @@ endef
 # transpiler did not read, and when the guard started working the explicit
 # get became a second one -- `bt.get().getOrDefault()`, which does not
 # compile. The whole suite stayed green through it.
+#
+# rsync_time_machine is also run, by its test script below, when rsync is
+# installed; lolcate is compiled only (running it needs fd and rg).
 TOOL_PROGRAMS := \
     TOOLS/GIT1/git1.ady \
     TOOLS/ADA_INDENT/ada_indent.ady \
@@ -304,7 +303,9 @@ TOOL_PROGRAMS := \
     TOOLS/TCHECK/make_comparable.ady \
     TOOLS/TCHECK/Tcheckout.ady \
     TOOLS/TBLAME/Tblame.ady \
-    TOOLS/TDIFF/Tdiff.ady
+    TOOLS/TDIFF/Tdiff.ady \
+    TOOLS/RSYNC_TIME_MACHINE/rsync_time_machine.ady \
+    TOOLS/LOLCATE/lolcate.ady
 
 # -----------------------------------------------------------------------
 # compile — transpile + build everything
@@ -492,11 +493,11 @@ test: compile
 	@echo "=== rsync_time_machine, both backends ==="
 	@if command -v rsync >/dev/null 2>&1; then \
 	    printf '  %-42s\n' "rsync_time_machine (nim)"; \
-	    $(EXDIR)/rsync_time_machine_test.sh $(TMPDIR)/ady_rtm_nim $(EXDIR)/rsync_time_machine \
+	    $(RTDIR)/test/rsync_time_machine_test.sh $(TMPDIR)/ady_rtm_nim $(RTDIR)/rsync_time_machine \
 	        || { echo FAIL; exit 1; }; \
-	    $(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(EXDIR)/rsync_time_machine.ady > $(TMPDIR)/ady_rtm.py || exit 1; \
+	    $(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(RTDIR)/rsync_time_machine.ady > $(TMPDIR)/ady_rtm.py || exit 1; \
 	    printf '  %-42s\n' "rsync_time_machine (python)"; \
-	    $(EXDIR)/rsync_time_machine_test.sh $(TMPDIR)/ady_rtm_py $(PYTHON) $(TMPDIR)/ady_rtm.py \
+	    $(RTDIR)/test/rsync_time_machine_test.sh $(TMPDIR)/ady_rtm_py $(PYTHON) $(TMPDIR)/ady_rtm.py \
 	        || { echo FAIL; exit 1; }; \
 	    rm -f $(TMPDIR)/ady_rtm.py; \
 	else \

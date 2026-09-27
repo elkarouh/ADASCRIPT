@@ -711,7 +711,7 @@ failure is returned like any other value.
 
 A step that changes something and has nothing to give back returns
 `None | !Failure_T`. A bare `return`, and falling off the end, are success.
-From `EXAMPLES/rsync_time_machine.ady`, where a local `mkdir` reports its own
+From `TOOLS/RSYNC_TIME_MACHINE/rsync_time_machine.ady`, where a local `mkdir` reports its own
 exit status and a remote one goes through `run_checked`:
 
 ```python

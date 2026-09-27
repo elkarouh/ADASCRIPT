@@ -55,7 +55,7 @@ What it costs on the Nim side is a real dependency: the build needs nimpy on
 the Nim path, the binary links against libpython, it has to find a matching
 interpreter at run time, and the bridge prints a `Testing libpython: ...`
 line on stdout before the program says anything of its own.
-`EXAMPLES/rsync_time_machine.ady` used to open with five `pyimport`s —
+`TOOLS/RSYNC_TIME_MACHINE/rsync_time_machine.ady` used to open with five `pyimport`s —
 `os`, `sys`, `time`, `signal`, `datetime` — and for that it sat outside
 every list in the Makefile, neither compiled nor run. Every one of the five
 had a one-line answer:

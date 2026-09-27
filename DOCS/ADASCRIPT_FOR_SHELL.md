@@ -182,7 +182,7 @@ failure handed back to its caller rather than ending the script. A program
 with its own failure type says once how a command's failure becomes one,
 and each step names it after `else`:
 
-<!-- from: EXAMPLES/rsync_time_machine.ady -->
+<!-- from: TOOLS/RSYNC_TIME_MACHINE/rsync_time_machine.ady -->
 ```python
 def cmd_failed(f: ShellFailure_T) -> Failure_T:
     """A local command's failure -- the built-in ShellFailure_T a shell:
@@ -546,7 +546,7 @@ is unset in most containers; `id -un` answers anyway:
 already have* into an epoch is where the shell answer stops being portable:
 `date -d` is GNU, and `date -j -f` is BSD. If a program has to do that —
 comparing backup directories by age, say — the arithmetic is a dozen lines
-and runs anywhere. `EXAMPLES/rsync_time_machine.ady` has it as
+and runs anywhere. `TOOLS/RSYNC_TIME_MACHINE/rsync_time_machine.ady` has it as
 `days_from_civil`, and dropping its five `pyimport`s for that plus the table
 above is what let it into `make test`: the Nim build no longer needs nimpy
 at all.

@@ -205,7 +205,7 @@ Adascript lets the return type say both halves: `-> Path | !Failure_T`,
 marks which is which. A failure is a type like any other — an ordinary
 record:
 
-<!-- from: EXAMPLES/rsync_time_machine.ady -->
+<!-- from: TOOLS/RSYNC_TIME_MACHINE/rsync_time_machine.ady -->
 ```python
 type ErrKind_T is enum CMD_FAILED, NOT_A_BACKUP_DEST, SOURCE_MISSING, STILL_RUNNING, NO_SPACE, BAD_ARGUMENTS
 
@@ -219,7 +219,7 @@ type Failure_T is record:
 A function returns its value or a failure, and there is nothing to wrap —
 the type of what is returned says which it is:
 
-<!-- from: EXAMPLES/rsync_time_machine.ady -->
+<!-- from: TOOLS/RSYNC_TIME_MACHINE/rsync_time_machine.ady -->
 ```python
 def run_checked(cmd: str, ssh: ?SSH = None) -> str | !Failure_T:
     let r: CmdResult = run_cmd(cmd, ssh)
@@ -232,7 +232,7 @@ A chain of steps that must all succeed is written as a chain, and the
 first failure leaves the function with its reason intact. Nothing in it is
 error-handling code; the `do:` block is the error handling:
 
-<!-- from: EXAMPLES/rsync_time_machine.ady -->
+<!-- from: TOOLS/RSYNC_TIME_MACHINE/rsync_time_machine.ady -->
 ```python
     # One railway: the lock is released only once `latest` points at this
     # backup. If the link fails, the lock stays, and the next run finds an
@@ -248,7 +248,7 @@ the program exits with. `outcome is Failure_T` asks which of the two it
 holds; a `case` over the failure's kind inside `report` is exhaustive, so a
 new kind of failure nobody reports does not compile:
 
-<!-- from: EXAMPLES/rsync_time_machine.ady -->
+<!-- from: TOOLS/RSYNC_TIME_MACHINE/rsync_time_machine.ady -->
 ```python
     let outcome: None | !Failure_T = backup(
         ...
@@ -285,7 +285,7 @@ The first bug is the kind the signature now prevents: once `ln_s` says
 bare `ln_s(...)` as a statement does not compile, on either backend —
 the result has to be taken, by a `do:` step, a test or a `return`. The
 other two came to light because failures had become values a test could
-look at. `EXAMPLES/rsync_time_machine_test.sh` now runs
+look at. `TOOLS/RSYNC_TIME_MACHINE/test/rsync_time_machine_test.sh` now runs
 the tool against real folders, with a disk that fills up; the old version
 fails six of its fifteen checks.
 

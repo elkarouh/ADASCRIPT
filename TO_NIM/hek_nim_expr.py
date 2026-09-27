@@ -3997,7 +3997,7 @@ def _translate_stdlib_patterns(expr):
     # Ahead of rule 7, whose `sorted\((.+)\)` would otherwise swallow the
     # keyword argument into the sequence expression and emit
     # `xs, reverse = true.sorted` -- which is not valid Nim, and is what
-    # EXAMPLES/rsync_time_machine.ady has been failing to compile on for
+    # TOOLS/RSYNC_TIME_MACHINE/rsync_time_machine.ady has been failing to compile on for
     # as long as it has had a `reverse=True` in it.
     _sorted_rev = _re.match(
         r'^sorted\((.+),\s*reverse\s*=\s*(True|true|False|false)\)$', expr, _re.DOTALL)

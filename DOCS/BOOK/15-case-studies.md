@@ -96,7 +96,7 @@ Porting advice embedded in it: keep the original's function structure, type
 the data at the boundaries first (`SSH`, backup-folder records), and let
 `shell:` interpolation replace string-building.
 
-## 13.6 `lolcate/lolcate.ady` — a small database tool (~400 lines)
+## 13.6 `lolcate.ady` — a small database tool (~400 lines)
 
 A port of lolcate-rs: named file-index databases under
 `~/.local/share/lolcate-ady/`, a line-based config format, and subcommands

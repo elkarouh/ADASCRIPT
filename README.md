@@ -1769,7 +1769,7 @@ chapter 10.12, *Forgetting the `!`*, has the details.
 On Python the value is the T or the F itself; on Nim it is stdlib.nim's
 `Result[T, F]`, and `r` reads as its `.value` or `.error` where a test has
 narrowed it. The whole of it is in the book, chapter 10.12;
-`EXAMPLES/test_result.ady` is the spec, and `EXAMPLES/rsync_time_machine.ady`
+`EXAMPLES/test_result.ady` is the spec, and `TOOLS/RSYNC_TIME_MACHINE/rsync_time_machine.ady`
 a full-size program written this way.
 
 ---

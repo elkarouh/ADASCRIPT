@@ -38,6 +38,11 @@ TOOLS/TBLAME/*_gen.py
 # Tdiff, likewise.
 TOOLS/TDIFF/Tdiff
 TOOLS/TDIFF/*_gen.py
+# rsync_time_machine and lolcate, likewise.
+TOOLS/RSYNC_TIME_MACHINE/rsync_time_machine
+TOOLS/RSYNC_TIME_MACHINE/*_gen.py
+TOOLS/LOLCATE/lolcate
+TOOLS/LOLCATE/*_gen.py
 
 # ady2nim drops a symlink to the built binary next to each source, so the
 # bundled libraries leave one behind whenever they are compiled. They point
