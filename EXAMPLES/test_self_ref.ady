@@ -12,7 +12,7 @@
 #   lookahead_ref: Lexer | None
 #                  ^^^^^ NameError: name 'Lexer' is not defined
 #
-# Nim has no such rule and needed nothing. EXAMPLES/c500.ady is the corpus
+# Nim has no such rule and needed nothing. TOOLS/C500/c500.ady is the corpus
 # file that hit it, in all three shapes below.
 
 class Node:

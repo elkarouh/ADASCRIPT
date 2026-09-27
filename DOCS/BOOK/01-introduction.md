@@ -341,11 +341,9 @@ this book:
 | Operations research / RL | `dp/jacks.ady`, `td_learning/qlearning.ady`, `td_learning/sarsa.ady`, `timetable_*.ady` |
 | An interpreter | `INTERACTIVE/lispy.ady` — a full Scheme interpreter |
 | Text processing | `awk_example.ady`, `test_awk.ady`, `test_regex.ady`, `average_line.ady` |
-| System tools | `geo_server.ady`; the full-size ones live under `TOOLS/`: `rsync_time_machine.ady`, `lolcate.ady`, `git1.ady` |
-| Interactive shell tools | `INTERACTIVE/fsel.ady`, `INTERACTIVE/sv.ady`, `INTERACTIVE/show_status.ady`, `INTERACTIVE/lv.ady`* |
+| System tools | `geo_server.ady`; the full-size ones live under `TOOLS/`: `rsync_time_machine.ady`, `lolcate.ady`, `git1.ady`, `lv.ady`, and `c500.ady`, a C to WebAssembly compiler |
+| Interactive shell tools | `INTERACTIVE/fsel.ady`, `INTERACTIVE/sv.ady`, `INTERACTIVE/show_status.ady` |
 | Feature exercises | `openarray_demo.ady`, `test_iters.ady`, `test_do_block.ady`, `test_ownership.ady`, `test_shell_block.ady`, `test_expect.ady`, `argparse.ady` |
-
-\* `lv.ady` lives at the top of `EXAMPLES/`.
 
 By the end of the book you will have read substantial parts of all of them.
 

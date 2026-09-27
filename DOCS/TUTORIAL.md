@@ -2064,7 +2064,7 @@ Such copies drift. One tool forgot the `.lstrip(".")` and signed its
 messages `.Tblame:` whenever it ran through its `#!` line. Don't write them
 any more. A program that means something else by these names can still
 define them: its own top-level `def die`, `def warn` or `let PROG` takes
-precedence over the built-in. `EXAMPLES/c500.ady`, for example, has a `die`
+precedence over the built-in. `TOOLS/C500/c500.ady`, for example, has a `die`
 that reports a line number on stdout. The helpers are only emitted into
 programs that use them.
 

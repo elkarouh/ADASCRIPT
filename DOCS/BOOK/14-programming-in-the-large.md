@@ -398,8 +398,8 @@ So the rule is blunt, and it is the reason this chapter privileges Nim:
 > **A program split across modules is a Nim-backend program.** Code that must
 > run on both backends stays in one file.
 
-That is less restrictive than it sounds. The single-file programs in
-`EXAMPLES/` — `lispy.ady`, `c500.ady`, `tsp.ady` — run on both backends
+That is less restrictive than it sounds. The single-file programs —
+`lispy.ady` and `tsp.ady` in `EXAMPLES/`, `c500.ady` in `TOOLS/` — run on both backends
 because they are single files; the multi-module projects (`CFMU/`,
 `TIMETABLE/`, `JOINTJS_DEMO/`, `PROJECT/`) are Nim programs, and the Python
 backend is where you check a *module's* semantics one file at a time.

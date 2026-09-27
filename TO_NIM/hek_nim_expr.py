@@ -1291,7 +1291,7 @@ def _is_nim_char_expr(expr):
     `s[i]` on a string is a char, but `s[i..<j]` is a *string*.  The test used
     to be `^(\w+)\[`, which cannot tell those apart -- nor `s[0] + t` from a
     subscript at all, since it never checked that the bracket closed the
-    expression.  `inner[i..<i + 1] != "\\"` in EXAMPLES/c500.ady had its
+    expression.  `inner[i..<i + 1] != "\\"` in TOOLS/C500/c500.ady had its
     literal turned into a char by it, and that file has never compiled on nim.
     """
     import re as _re_ce

@@ -27,6 +27,7 @@ TBDIR  := $(TOOLDIR)/TBLAME
 TDDIR  := $(TOOLDIR)/TDIFF
 TCDIR  := $(TOOLDIR)/TCHECK
 RTDIR  := $(TOOLDIR)/RSYNC_TIME_MACHINE
+C5DIR  := $(TOOLDIR)/C500
 
 # Prepend choosenim's bin dir so Nim 2.x is used instead of any system Nim 1.x.
 export PATH := /root/.nimble/bin:$(HOME)/.nimble/bin:$(HOME)/Downloads:$(PATH)
@@ -214,11 +215,9 @@ ADA_INDENT_TESTS := \
 # -----------------------------------------------------------------------
 # Skipped at runtime (compiled only):
 #   tsp.ady         — matplotlib not installed by default (pyimport)
-#   lv.ady          — requires clv shell utility
 # -----------------------------------------------------------------------
 COMPILE_ONLY := \
     tsp.ady \
-    lv.ady \
     dp/jacks.ady \
     INTERACTIVE/lispy.ady \
     awk_logscan.ady \
@@ -295,7 +294,8 @@ endef
 # compile. The whole suite stayed green through it.
 #
 # rsync_time_machine is also run, by its test script below, when rsync is
-# installed; lolcate is compiled only (running it needs fd and rg).
+# installed; c500 by its own, on both backends; lolcate and lv are
+# compiled only (running them needs fd and rg, and clv).
 TOOL_PROGRAMS := \
     TOOLS/GIT1/git1.ady \
     TOOLS/ADA_INDENT/ada_indent.ady \
@@ -306,7 +306,9 @@ TOOL_PROGRAMS := \
     TOOLS/TBLAME/Tblame.ady \
     TOOLS/TDIFF/Tdiff.ady \
     TOOLS/RSYNC_TIME_MACHINE/rsync_time_machine.ady \
-    TOOLS/LOLCATE/lolcate.ady
+    TOOLS/LOLCATE/lolcate.ady \
+    TOOLS/C500/c500.ady \
+    TOOLS/LV/lv.ady
 
 # -----------------------------------------------------------------------
 # compile — transpile + build everything
@@ -504,6 +506,13 @@ test: compile
 	else \
 	    printf '  %-42s%s\n' "rsync_time_machine" "skipped (no rsync)"; \
 	fi
+	@# c500, the C to WebAssembly compiler: the module it emits for each
+	@# C program in its test/, the same from both backends.
+	@echo "=== c500, both backends ==="
+	@$(C5DIR)/test/run_c500_tests.sh $(C5DIR)/c500 || exit 1
+	@$(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(C5DIR)/c500.ady > $(TMPDIR)/ady_c500.py || exit 1
+	@$(C5DIR)/test/run_c500_tests.sh $(PYTHON) $(TMPDIR)/ady_c500.py || exit 1
+	@rm -f $(TMPDIR)/ady_c500.py
 
 	@# do: and `T | E` say the same on both backends: the Python one
 	@# used to drop a do: block altogether, leaving its names unbound.

@@ -553,7 +553,7 @@ def run_tests():
         # --- a class body cannot name the class it is defining ---
         # Python evaluates an annotation where it is written, and the class
         # does not exist until its body ends, so these have to be forward
-        # references. EXAMPLES/c500.ady could not be imported without this.
+        # references. TOOLS/C500/c500.ady could not be imported without this.
         (
             "class Node:\n    nxt: ?Node\n",
             'class Node:\n    nxt: "Node | None"\n',

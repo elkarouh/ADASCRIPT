@@ -62,7 +62,7 @@ class Counter:
 ## 9.3 Dunder operators: callable objects and pipes
 
 Python operator methods translate to Nim operators. The showpiece is
-`EXAMPLES/lv.ady`, which builds ANSI terminal styling from a class with
+`TOOLS/LV/lv.ady`, which builds ANSI terminal styling from a class with
 `__call__` and `__ror__`:
 
 ```python

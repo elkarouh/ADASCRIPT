@@ -11,7 +11,7 @@
 #
 #   inner[i..<i + 1] != '\\'   # Error: type mismatch, string vs char
 #
-# That is EXAMPLES/c500.ady's parse_c_str, and it kept the whole file from
+# That is TOOLS/C500/c500.ady's parse_c_str, and it kept the whole file from
 # compiling. Python is indifferent to the distinction, so every assertion
 # here has to hold on either backend.
 

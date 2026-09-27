@@ -14,7 +14,7 @@ type Digit_T is enum D0, D1, D2, D3, D4, D5, D6, D7, D8, D9
 ```
 
 Both `is` and `=` are accepted. Multi-line bodies with per-member comments
-work too — `EXAMPLES/lv.ady` documents a workflow state machine this way:
+work too — `TOOLS/LV/lv.ady` documents a workflow state machine this way:
 
 ```python
 type State = enum:

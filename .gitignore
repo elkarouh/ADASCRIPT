@@ -43,6 +43,11 @@ TOOLS/RSYNC_TIME_MACHINE/rsync_time_machine
 TOOLS/RSYNC_TIME_MACHINE/*_gen.py
 TOOLS/LOLCATE/lolcate
 TOOLS/LOLCATE/*_gen.py
+# c500 and lv, likewise.
+TOOLS/C500/c500
+TOOLS/C500/*_gen.py
+TOOLS/LV/lv
+TOOLS/LV/*_gen.py
 
 # ady2nim drops a symlink to the built binary next to each source, so the
 # bundled libraries leave one behind whenever they are compiled. They point
