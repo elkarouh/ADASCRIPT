@@ -417,7 +417,11 @@ if __name__ == "__main__":
     # what is not there: why, rather than an empty path
     let scanned: Path | !Failure_T = here.scan_regression_tests(IP, mono)
     assert scanned is Failure_T and scanned.message.startswith("log dir does not exist: ")
-    let replay_dir: Path | !Failure_T = here.replay_log_dir(performance)
+    # replay_log_dir looks back through the baselines before this one, in
+    # the CM tree: asked of 30.0.0.133, it finds 30.0.0.132's replays on a
+    # machine that has them. Asked of a baseline no CM tree holds.
+    let nowhere: Baseline = Baseline("0.0.0.20")
+    let replay_dir: Path | !Failure_T = nowhere.replay_log_dir(performance)
     assert replay_dir is Failure_T and replay_dir.message == "no replay log dir found"
 
     run(["rm", "-rf", str(tmp)])
