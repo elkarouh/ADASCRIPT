@@ -24,6 +24,13 @@ history of this file if the reasoning behind one of them is ever wanted.
       from a call's result type. Worked around in
       TOOLS/TCHECK/LIBS/baselines.ady (`diff_summaries`) with two typed
       locals.
+- [ ] `s.split()` of a string with leading whitespace differs between the
+      backends. `"    ./c.ksh  gone".split()[0]` is `"./c.ksh"` on Python,
+      which drops the empty fields, and `""` on Nim, whose strutils `split`
+      keeps an empty field for each leading separator. Map a bare `split()`
+      to `splitWhitespace()`. Worked around in
+      TOOLS/TCHECK/LIBS/baselines.ady (`script_of`, `marked`) with
+      `.strip().split(" ")[0]`.
 - [ ] a class named after a Nim keyword does not build on Nim: `class Out:`
       emits `proc new`Out`*()`, the constructor's name pasted onto the
       backticked type name, which nim rejects ("invalid indentation"). The

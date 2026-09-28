@@ -148,19 +148,21 @@ cat > "$OT/CFMUTEST/baseline_reports/CFMUTEST.CFMUTEST_CONFIG.30.0.0.105.changes
 ===== Differences between TACT.TACT_CONFIG.30.0.0.134 and TACT.TACT_CONFIG.30.0.0.135
       Merge from <- 1234abcd alice.fix_env RELATED_CHANGES="SC-1 "
       changed 5678ef01:TACT/TACT_CONFIG/sources/regression_testing.ksh RELATED_CHANGES="SC-1 " review-ok: yes; reviewed-by: bob; review-date: 260925.101010;
+      Merge from <- 2345bcde carol.new_ops RELATED_CHANGES="SC-2 "
+      changed 9abc0123:TACT/TACT_CONFIG/sources/find_current_ops.ksh RELATED_CHANGES="SC-2 "
 REPORT
 info=$("$TCHECK" -no-color -f -focus build_info 30.0.0.135 2>/dev/null)
-check "build_info: who changed each script, per the report" \
+check "build_info: who broke or fixed each script, per the report" \
     "  7 ksh style differences with the previous baseline:
       ./sources/find_current_ops.ksh  new used not defined: CFMU_REGRESS_TEST_FTPS_DIR
-        not in the changes report
+        broken by carol.new_ops: 9abc0123 SC-2
       ./sources/regression_testing.ksh  new used not defined: CM_HOST PERL_VERSION; gone defined not used: OLD_WORK_DIR
         changed by alice.fix_env: 5678ef01 SC-1, reviewed by bob on 260925.101010" \
     "$(style)"
 check "build_info: and in the summary diffed with the previous one's" "  + 7 ksh style differences with the previous baseline:
   +   TACT_CONFIG VAR_CHECK
   +     ./sources/find_current_ops.ksh  new used not defined: CFMU_REGRESS_TEST_FTPS_DIR
-  +       not in the changes report
+  +       broken by carol.new_ops: 9abc0123 SC-2
   +     ./sources/regression_testing.ksh  new used not defined: CM_HOST PERL_VERSION; gone defined not used: OLD_WORK_DIR
   +       changed by alice.fix_env: 5678ef01 SC-1, reviewed by bob on 260925.101010
   - 6 ksh style differences with the previous baseline:

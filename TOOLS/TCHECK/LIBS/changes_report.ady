@@ -350,15 +350,17 @@ def component_path(file: NmFile_T) -> str:
     "/".join(file.split("/")[1:])
 
 def change_line(fc: FileChange, branch: BranchName) -> str:
-    """FC, one line: its kind, the branch it is credited to, its commits,
-    its tickets and its reviews."""
-    let kind: str = f"{fc.kind}"
+    """FC, one line: the branch it is credited to, its commits, its
+    tickets and its reviews; "(added)" or "(deleted)" when the file was."""
     let by: str = branch if branch != "" else "no user branch"
-    var line: str = kind.lower() + " by " + by + ": " + " ".join(fc.commits)
+    var line: str = by + ": " + " ".join(fc.commits)
     if len(fc.tickets) > 0:
         line = line + " " + " ".join(fc.tickets)
     for r in fc.reviews:
         line = line + ", reviewed by " + r
+    if fc.kind != CHANGED:
+        let kind: str = f"{fc.kind}"
+        line = line + " (" + kind.lower() + ")"
     line
 
 def changes_by_file(report: Path) -> {str}[]str:
@@ -639,7 +641,7 @@ if __name__ == "__main__":
     assert component_path("TACT/SVISION/sources/show_query_handlers.ksh") == "SVISION/sources/show_query_handlers.ksh"
     let by_file: {str}[]str = changes_by_file(samples / "CFMUTEST.CFMUTEST_CONFIG.30.0.0.105.changes_report")
     assert by_file["SVISION/sources/show_query_handlers.ksh"] == [
-        "changed by mea.qh_report: 3d172a4a 9c8ef28d ebbf02e5 SC-134294, reviewed by bss on 260922.075248"]
+        "mea.qh_report: 3d172a4a 9c8ef28d ebbf02e5 SC-134294, reviewed by bss on 260922.075248"]
     assert "COMMON_CONFIG/sources/regression_testing.ksh" not in by_file
 
     # removed, and added again: two entries

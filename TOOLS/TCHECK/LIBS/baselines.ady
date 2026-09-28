@@ -97,12 +97,36 @@ def masked(line: str) -> str:
     out = s/\d+\.\d+\.\d+\.\d+/<nr>/g
     out
 
-def diff_summaries(before: []str, after: []str) -> []str:
+def diff_summaries(before: []str, after: []str, changes: {str}[]str) -> []str:
     """How summary AFTER differs from BEFORE: its lines BEFORE has not,
-    "+ ", then BEFORE's lines it has not, "- "."""
-    let added: []str = marked(after, before, "+ ")
-    let removed: []str = marked(before, after, "- ")
+    "+ ", then BEFORE's lines it has not, "- "; under a script, who broke
+    or fixed it, per CHANGES, AFTER's baseline's (see attribution): a
+    script gone from the summary since was fixed."""
+    let added: []str = marked(after, before, "+ ", changes)
+    let removed: []str = marked(before, after, "- ", changes)
     added + removed
+
+def verdict(broke: bool, fixed: bool) -> str:
+    """What changing a script did to its findings: "broken by" when it has
+    new ones, "fixed by" when some are gone, "changed by" when both."""
+    return "changed by" if broke and fixed
+    return "broken by" if broke
+    "fixed by"
+
+def attribution(changes: {str}[]str, component: str, script: str, verb: str) -> []str:
+    """Who changed SCRIPT of COMPONENT, per CHANGES (see
+    TestProgramsLog.changes), a line each after VERB -- "broken by"; none
+    when the changes report does not name it."""
+    let key: str = component + "/" + script.removeprefix("./")
+    return [] if key not in changes
+    ["      " + verb + " " + line for line in changes[key]]
+
+def script_of(line: str) -> str:
+    """The script a script line of a summary names: its first word, without
+    its colour."""
+    var plain: str = line
+    plain = s/\x1b\[[0-9;]*m//g
+    plain.strip().split(" ")[0]
 
 def keyed(lines: []str) -> []str:
     """LINES of a summary, each after what it is under and a newline: a
@@ -123,11 +147,12 @@ def keyed(lines: []str) -> []str:
             keys.append(line)
     keys
 
-def marked(lines: []str, other: []str, mark: str) -> []str:
+def marked(lines: []str, other: []str, mark: str, changes: {str}[]str) -> []str:
     """LINES that OTHER has not, each after MARK. A line under another --
     a script under its style difference, who changed it under the script
     -- comes after what it is under, unmarked when OTHER has that too, so
-    as to say which one it is."""
+    as to say which one it is. Under a script, who broke or fixed it per
+    CHANGES: a script "- ", gone from the summary, was fixed."""
     let others: []str = keyed(other)
     var out: []str = []
     for key in keyed(lines):
@@ -137,7 +162,13 @@ def marked(lines: []str, other: []str, mark: str) -> []str:
             let above: str = "\n".join(parts[0 .. i])
             if above in others and ("  " + parts[i]) not in out:
                 out.append("  " + parts[i])
-        out.append(mark + parts[len(parts) - 1])
+        let line: str = parts[len(parts) - 1]
+        out.append(mark + line)
+        if len(parts) == 2:
+            let broke: bool = "  new " in line or "; new " in line
+            let fixed: bool = "  gone " in line or "; gone " in line
+            let verb: str = "fixed by" if mark == "- " else verdict(broke, fixed)
+            out = out + [mark + a for a in attribution(changes, parts[0].strip().split(" ")[0], script_of(line), verb)]
     out
 
 # the SEVERE messages of one of the test programs: how many, and the first
@@ -233,9 +264,8 @@ const SCRIPT_COLOR: ColorSpec_T = "SY"
 
 def script_lines(diff: StyleDiff, changes: {str}[]str) -> []str:
     """The scripts DIFF is in, a line each, its path highlighted: its new
-    findings, its gone ones; under it, who changed it per CHANGES (see
-    TestProgramsLog.changes), or that nobody did, when CHANGES knows of any
-    change. None if its two files are not there to read."""
+    findings, its gone ones; under it, who broke or fixed it per CHANGES
+    (see attribution). None if its two files are not there to read."""
     let files: []Path = ediff_files(diff.ediff)
     return [] if len(files) != 2 or not -f files[0] or not -f files[1]
     var lines: []str = []
@@ -243,12 +273,8 @@ def script_lines(diff: StyleDiff, changes: {str}[]str) -> []str:
         let new: []str = ["new " + k for k in change.new]
         let gone: []str = ["gone " + k for k in change.gone]
         lines.append("    " + colored(SCRIPT_COLOR, change.script) + "  " + "; ".join(new + gone))
-        let key: str = diff.component + "/" + change.script.removeprefix("./")
-        if key in changes:
-            for line in changes[key]:
-                lines.append("      " + line)
-        elif len(changes) > 0:
-            lines.append("      not in the changes report")
+        let verb: str = verdict(len(change.new) > 0, len(change.gone) > 0)
+        lines = lines + attribution(changes, diff.component, change.script, verb)
     lines
 
 # ---------------------------------------------------------------------------
@@ -484,30 +510,23 @@ class Baseline:
         or not it is there."""
         Build("build_" + build_env_id($CM_ENV_ID, btype), btype, self.nr, self.dir)
 
-    def compare_test_programs(self, older: Baseline, changes: {str}[]str, no_changes: str):
+    def compare_test_programs(self, older: Baseline, changes: {str}[]str):
         """The summary of its IP build's check_run_test_programs.log, diffed
         with OLDER's: without the ediff links, whose files are named after
         a pid, and with the baseline numbers masked, so that only a change
-        in what fails shows. Both say who changed the scripts per CHANGES,
-        this baseline's, or NO_CHANGES why nothing does: a script new here
-        comes with who changed it."""
+        in what fails shows; under a script new or gone, who broke or fixed
+        it, per CHANGES, this baseline's."""
         puts("SWr", f"Compare the check_run_test_programs.log summary with {older.nr}'s:", NEWLINE=True)
         let mine: ?Path = self.build(IP).test_programs_log()
         let theirs: ?Path = older.build(IP).test_programs_log()
         if mine is not None and theirs is not None:
             print "  " + emacs_link(theirs)
-            var old_log: TestProgramsLog = TestProgramsLog(theirs)
-            var new_log: TestProgramsLog = TestProgramsLog(mine)
-            old_log.changes = changes
-            old_log.no_changes = no_changes
-            new_log.changes = changes
-            new_log.no_changes = no_changes
-            let before: []str = [masked(line) for line in old_log.summary(1000, links=False)]
-            let after: []str = [masked(line) for line in new_log.summary(1000, links=False)]
-            let changes: []str = diff_summaries(before, after)
-            if len(changes) == 0:
+            let before: []str = [masked(line) for line in TestProgramsLog(theirs).summary(1000, links=False)]
+            let after: []str = [masked(line) for line in TestProgramsLog(mine).summary(1000, links=False)]
+            let diffed: []str = diff_summaries(before, after, changes)
+            if len(diffed) == 0:
                 print "  the same summary"
-            for line in changes:
+            for line in diffed:
                 print "  " + line
         elif mine is None:
             print f"  none in {self.build(IP).dir}"
@@ -707,23 +726,34 @@ if __name__ == "__main__":
     let summed_after: []str = ["2 ksh style differences with the previous baseline:",
         "  COMMON_CONFIG VAR_CHECK", "    ./a.ksh  new used not defined: X", "    ./c.ksh  new used not defined: Z",
         "  TACT_CONFIG VAR_CHECK", "    ./d.ksh  new used not defined: W"]
-    assert diff_summaries(summed_before, summed_before) == []
-    # who changed a script: under it; the same line under another script is
-    # another line
-    let attributed_before: []str = ["  A", "    ./a.ksh", "      not in the changes report"]
-    let attributed_after: []str = ["  A", "    ./a.ksh", "      not in the changes report",
-        "    ./b.ksh", "      not in the changes report", "    ./c.ksh", "      changed by x.y: 1a SC-1"]
-    assert diff_summaries(attributed_before, attributed_after) == [
-        "  " + "  A", "+     ./b.ksh", "+       not in the changes report",
-        "+     ./c.ksh", "+       changed by x.y: 1a SC-1"]
+    let no_one: {str}[]str = {:}
+    assert diff_summaries(summed_before, summed_before, no_one) == []
     # the same script line, under another style difference: a change
-    assert diff_summaries(["  A", "    ./a.ksh"], ["  A", "  B", "    ./a.ksh"]) == ["+   B", "+     ./a.ksh", "  " + "  A", "-     ./a.ksh"]
+    assert diff_summaries(["  A", "    ./a.ksh"], ["  A", "  B", "    ./a.ksh"], no_one) == ["+   B", "+     ./a.ksh", "  " + "  A", "-     ./a.ksh"]
     # a new script under a style difference both have: that one, unmarked, above it
-    assert diff_summaries(summed_before, summed_after) == [
+    assert diff_summaries(summed_before, summed_after, no_one) == [
         "  " + "  COMMON_CONFIG VAR_CHECK", "+     ./c.ksh  new used not defined: Z",
         "+   TACT_CONFIG VAR_CHECK", "+     ./d.ksh  new used not defined: W",
         "-   ELD_CONFIG VAR_CHECK", "-     ./b.ksh  new used not defined: Y",
         "-   1 SEVERE from p: gone since"]
+    # who broke a script new in the summary, who fixed one gone from it --
+    # per the changes report; nothing of the others, nor of one unchanged
+    var who: {str}[]str = {:}
+    who["A/a.ksh"] = ["al.w: 1a"]
+    who["A/b.ksh"] = ["bob.x: 1b SC-2"]
+    who["A/c.ksh"] = ["carol.y: 1c"]
+    who["A/g.ksh"] = ["gil.z: 1g"]
+    assert diff_summaries(["  A VAR_CHECK", "    ./a.ksh  new used not defined: X", "    ./g.ksh  new used not defined: G"],
+                          ["  A VAR_CHECK", "    ./a.ksh  new used not defined: X", "    \x1b[1;33m./b.ksh\x1b[0m  new used not defined: Y",
+                           "    ./c.ksh  gone defined not used: Z", "    ./d.ksh  new used not defined: D"], who) == [
+        "  " + "  A VAR_CHECK",
+        "+     \x1b[1;33m./b.ksh\x1b[0m  new used not defined: Y", "+       broken by bob.x: 1b SC-2",
+        "+     ./c.ksh  gone defined not used: Z", "+       fixed by carol.y: 1c",
+        "+     ./d.ksh  new used not defined: D",
+        "  " + "  A VAR_CHECK",
+        "-     ./g.ksh  new used not defined: G", "-       fixed by gil.z: 1g"]
+    assert script_of("    \x1b[1;33m./b.ksh\x1b[0m  new used not defined: Y") == "./b.ksh"
+    assert verdict(True, True) == "changed by" and verdict(True, False) == "broken by" and verdict(False, True) == "fixed by"
 
     # --- the scripts a style difference is in: a real result, and a baseline
     # made from it by hand --------------------------------------------------
@@ -751,11 +781,11 @@ if __name__ == "__main__":
     assert lines == [
         "    \x1b[1;33m./sources/find_current_ops.ksh\x1b[0m  new used not defined: CFMU_REGRESS_TEST_FTPS_DIR",
         "    \x1b[1;33m./sources/regression_testing.ksh\x1b[0m  new used not defined: CM_HOST PERL_VERSION; gone defined not used: OLD_WORK_DIR"]
-    # under each, who changed it, per the changes report; that nobody did
+    # under each the changes report names, who changed it: new findings
+    # and gone ones, both
     var changed: {str}[]str = {:}
-    changed["COMMON_CONFIG/sources/regression_testing.ksh"] = ["changed by abc.fix_env: 1a2b3c SC-1"]
-    assert script_lines(style_diff, changed) == [lines[0], "      not in the changes report",
-        lines[1], "      changed by abc.fix_env: 1a2b3c SC-1"]
+    changed["COMMON_CONFIG/sources/regression_testing.ksh"] = ["abc.fix_env: 1a2b3c SC-1"]
+    assert script_lines(style_diff, changed) == [lines[0], lines[1], "      changed by abc.fix_env: 1a2b3c SC-1"]
 
     # --- a build's type, from its directory's name ----------------------------
     def build_type(name: BuildName_T) -> str:

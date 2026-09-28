@@ -72,24 +72,25 @@ yellow to stand out from its findings:
 The findings (`./<script>:XXX:<name>` under the heading of their kind) are
 compared as sets, so a finding that only moved in the file is no change.
 
-Under each script, who changed it, per the baseline's CFMUTEST changes
-report (the one `-focus changes` lists): the report's
+Under a script the baseline's CFMUTEST changes report names (the one
+`-focus changes` lists), who broke it -- its findings are new -- or fixed
+it -- they are gone -- or changed it, both: the report's
 `TOOL/COMMON_CONFIG/sources/regression_testing.ksh` is COMMON_CONFIG's
-`./sources/regression_testing.ksh`. A change is credited to a branch as
-`-focus changes` credits it; a script the report does not name says so --
-its findings then come from elsewhere than this baseline's changes:
+`./sources/regression_testing.ksh`, and the change is credited to a branch
+as `-focus changes` credits it. Under a script the report does not name,
+nothing: its findings come from elsewhere than this baseline's changes.
 
 ```
-    ./sources/regression_testing.ksh  new used not defined: CM_HOST
-      changed by alice.fix_env: 5678ef01 SC-1, reviewed by bob on 260925.101010
     ./sources/find_current_ops.ksh  new used not defined: CFMU_REGRESS_TEST_FTPS_DIR
-      not in the changes report
+      broken by carol.new_ops: 9abc0123 SC-2
+    ./sources/make_dom_escinfra_per_file.ksh  gone defined not used: MODE
+      fixed by arodrigu.fix_eld_op_reg: 7c4f6d8 SC-133596, reviewed by abernal on 260925.094727
 ```
 
 Without a changes report, the line under the count of style differences
-says why. The comparison with the previous baseline's summary (below) says
-it the same way, both summaries by this baseline's report, so that a
-script new here comes with who changed it.
+says why. In the comparison with the previous baseline's summary (below),
+a script new there is said who broke it, and one gone from it who fixed
+it -- a script gone since was fixed.
 Then the other programs' SEVERE messages, how many and the first (`3 SEVERE from
 param_shared_cleanup_ftok: dbspy -D ...`); docgen's errors, five of them
 (all with `-v`); and the files missing.
@@ -108,9 +109,13 @@ Compare the check_run_test_programs.log summary with 30.0.0.134's:
   + 7 ksh style differences with the previous baseline:
   +   TACT_CONFIG VAR_CHECK
   +     ./sources/find_current_ops.ksh  new used not defined: CFMU_REGRESS_TEST_FTPS_DIR
+  +       broken by carol.new_ops: 9abc0123 SC-2
     COMMON_CONFIG VAR_CHECK
   +     ./sources/regression_testing.ksh  new used not defined: CM_HOST
   - 6 ksh style differences with the previous baseline:
+    DOM STABLE_CHECKS
+  -     ./sources/make_dom_escinfra_per_file.ksh  new defined not used: MODE
+  -       fixed by arodrigu.fix_eld_op_reg: 7c4f6d8 SC-133596
   -   1 SEVERE from old_program: something fixed since
 ```
 
