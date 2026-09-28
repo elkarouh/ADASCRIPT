@@ -203,5 +203,18 @@ check "build_info: an older baseline's log, where it keeps it" \
   the same summary" \
     "$("$TCHECK" -no-color -f -focus build_info 30.0.0.121 2>/dev/null | sed -n '/^Compare the check_run_test_programs/,/^Compare Csystem/p' | grep -v '^Compare Csystem')"
 
+# the "(style)" lines of the build's tacot logs: in its summary, so in
+# the comparison with the previous one's too
+STYLED="$LATER/build_G!31.IP.L8/saved_logs/tacot_corico.LATEST/work/logging-in/LOGS_others"
+mkdir -p "$STYLED"
+printf '%s\n' 'compiling ...' \
+    'flightplanfiling_routeservices_hash.adb:11:04: (style) bad indentation [-gnaty0]' \
+    'flightplanfiling_routeservices_hash.ads:2:04: (style) bad indentation [-gnaty0]' > "$STYLED/tacot1_out_01"
+check "build_info: the Ada style errors, in the summary diffed" \
+    "  + 2 Ada style errors in the tacot logs:
+  +   flightplanfiling_routeservices_hash.adb:11:04: (style) bad indentation [-gnaty0]
+  +   flightplanfiling_routeservices_hash.ads:2:04: (style) bad indentation [-gnaty0]" \
+    "$("$TCHECK" -no-color -f -focus build_info 30.0.0.121 2>/dev/null | sed -n '/^Compare the check_run_test_programs/,/^Compare Csystem/p' | grep '^  [+-]')"
+
 echo
 if [ $fails -eq 0 ]; then echo "All checks passed."; else echo "$fails check(s) FAILED."; exit 1; fi

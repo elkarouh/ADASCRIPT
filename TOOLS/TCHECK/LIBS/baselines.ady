@@ -193,6 +193,8 @@ class TestProgramsLog:
     # difference; or why there is no report to say
     changes    : {str}[]str
     no_changes : str
+    # the "(style)" lines of the build's tacot logs (Build.ada_style_errors)
+    ada_style  : []str
 
     def __init__(self, file: Path):
         self.file = file
@@ -235,7 +237,7 @@ class TestProgramsLog:
         the scripts it is in; each program's SEVERE messages, how many and
         the first; LIMIT of docgen's; the files missing."""
         var lines: []str = []
-        if len(self.verdict) + len(self.style_diffs) + len(self.errors) + len(self.docgen) + len(self.missing) == 0:
+        if len(self.verdict) + len(self.style_diffs) + len(self.errors) + len(self.docgen) + len(self.missing) + len(self.ada_style) == 0:
             return ["no SEVERE message"]
         lines = lines + self.verdict
         if len(self.style_diffs) > 0:
@@ -257,6 +259,12 @@ class TestProgramsLog:
                 lines.append(f"  ... and {len(self.docgen) - limit} more")
         for line in self.missing:
             lines.append("missing: " + line)
+        if len(self.ada_style) > 0:
+            lines.append(f"{len(self.ada_style)} Ada style errors in the tacot logs:")
+            for line in self.ada_style[0 ..< min(limit, len(self.ada_style))]:
+                lines.append("  " + line)
+            if len(self.ada_style) > limit:
+                lines.append(f"  ... and {len(self.ada_style) - limit} more")
         lines
 
 # a script's path, bold yellow, to stand out from its findings
@@ -426,6 +434,30 @@ class Build:
             return Path(found[0]) if found'Length > 0 and found[0] != ""
         return None
 
+    def tacot_work(self) -> ?Path:
+        """The work directory of its latest tacot_corico run:
+        tacot_corico.LATEST's, else -- the symlink may be gone -- the
+        newest tacot_corico_<date>'s; none if it has none."""
+        let latest: Path = self.tacot_dir(normal) / "work"
+        return latest if -d latest
+        let run: ?Path = newest(self.saved_logs(), "tacot_corico_[0-9]*")
+        if run is not None:
+            return run / "work"
+        return None
+
+    def ada_style_errors(self) -> []str:
+        """The "(style)" lines -- GNAT's -gnaty -- of its latest
+        tacot_corico run's logs, each once."""
+        var errors: []str = []
+        let work: ?Path = self.tacot_work()
+        if work is not None:
+            let logs: Path = work
+            for line in shellIter: grep -rh '(style)' {logs} 2>/dev/null
+                let error: str = line.strip()
+                if error not in errors:
+                    errors.append(error)
+        errors
+
     def check_test_programs(self, fast_mode: bool, verbose: bool, changes: {str}[]str, no_changes: str):
         """Find or run check_run_test_programs_log from the IP self; what
         its log says failed, summed up -- VERBOSE lists all docgen's --
@@ -450,6 +482,7 @@ class Build:
             var log: TestProgramsLog = TestProgramsLog(logfile)
             log.changes = changes
             log.no_changes = no_changes
+            log.ada_style = self.ada_style_errors()
             print emacs_link(logfile)
             for line in log.summary(1000 if verbose else 5):
                 print "  " + line
@@ -564,8 +597,12 @@ class Baseline:
         puts("SWr", f"Compare the check_run_test_programs.log summary with {compared}:", NEWLINE=True)
         if mine is not None and theirs is not None:
             print "  " + emacs_link(theirs)
-            let before: []str = [masked(line) for line in TestProgramsLog(theirs).summary(1000, links=False)]
-            let after: []str = [masked(line) for line in TestProgramsLog(mine).summary(1000, links=False)]
+            var old_log: TestProgramsLog = TestProgramsLog(theirs)
+            var new_log: TestProgramsLog = TestProgramsLog(mine)
+            old_log.ada_style = older.build(IP).ada_style_errors()
+            new_log.ada_style = self.build(IP).ada_style_errors()
+            let before: []str = [masked(line) for line in old_log.summary(1000, links=False)]
+            let after: []str = [masked(line) for line in new_log.summary(1000, links=False)]
             let diffed: []str = diff_summaries(before, after, changes)
             if len(diffed) == 0:
                 print "  the same summary"
@@ -874,6 +911,19 @@ if __name__ == "__main__":
     assert earlier.saved_logs_dir(IP) == earlier.dir / dotted / "saved_logs"
     let older_log: ?Path = earlier.build(IP).test_programs_log()
     assert older_log is not None and older_log == dotted_logs / "check_run_test_programs.log"
+
+    # the "(style)" lines of its latest tacot_corico run -- no .LATEST
+    # here: the newest run's -- each once
+    let ip_build: Build = here.build(IP)
+    let run_logs: Path = ip_build.saved_logs() / "tacot_corico_2026.09.10_04.49.14" / "work" / "logging-in" / "LOGS_others"
+    run_logs.mkdir()
+    writeFile(run_logs / "tacot1_out_01", "compiling ...\n" +
+        "flightplanfiling_routeservices_hash.adb:11:04: (style) bad indentation [-gnaty0]\n" +
+        "flightplanfiling_routeservices_hash.ads:2:04: (style) bad indentation [-gnaty0]\n")
+    writeFile(run_logs / "tacot2_out_01", "flightplanfiling_routeservices_hash.adb:11:04: (style) bad indentation [-gnaty0]\n")
+    assert sorted(ip_build.ada_style_errors()) == [
+        "flightplanfiling_routeservices_hash.adb:11:04: (style) bad indentation [-gnaty0]",
+        "flightplanfiling_routeservices_hash.ads:2:04: (style) bad indentation [-gnaty0]"]
     # the IP build has a Tlog, of 'in' for the normal pass
     let ip_tlog: Path = here.dir / "build_G!31.IP.L8" / "saved_logs" / "tacot_corico.LATEST" / "TACT_REGRESS_LOGS" / "LATEST" / "Tlog-in.log"
     ip_tlog.parent.mkdir()

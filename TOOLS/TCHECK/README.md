@@ -93,7 +93,9 @@ a script new there is said who broke it, and one gone from it who fixed
 it -- a script gone since was fixed.
 Then the other programs' SEVERE messages, how many and the first (`3 SEVERE from
 param_shared_cleanup_ftok: dbspy -D ...`); docgen's errors, five of them
-(all with `-v`); and the files missing.
+(all with `-v`); the files missing; and the Ada style errors (the
+"(style)" lines, GNAT's -gnaty) of the build's latest tacot_corico run's
+logs, five of them (all with `-v`).
 
 Without `-short`, `-focus build_info` then diffs that summary with the
 previous baseline's -- `+` a line only this baseline's has, `-` one only
