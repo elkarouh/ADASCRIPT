@@ -52,5 +52,27 @@ PROCESSING build_G!31.IP.L8 ...
 \"IP lo\" build not ready yet
   no Tlog at $BL/build_G!31.IP.L8/saved_logs/tacot_corico.LATEST/TACT_REGRESS_LOGS/LATEST/Tlog-lo.log" "$(tests -focus IP lo -short 30.0.0.135)"
 
+# -focus replay: the replay's log in the baseline, and its replay dir,
+# looked for in the OP build's saved_logs -- of the build $CM_ENV_ID names
+CM_ENV_ID='G!31.OP.L8'
+export CM_ENV_ID
+replays() { "$TCHECK" -no-color "$@" 2>/dev/null | sed -n '/^REPLAYS/,$p'; }
+check "no replay log" "REPLAYS
+WARNING: no performance replay log in $BL
+  looked for build_*OP*/saved_logs/Treplay_*.log" "$(replays -focus replay performance -short 30.0.0.135)"
+
+SAMPLES=$(cd "$(dirname "$0")" && pwd)/samples
+cp "$SAMPLES"/Treplay_*run_prequal*.log "$BL/build_G!31.OP.L8/saved_logs/"
+check "another replay's log only" "REPLAYS
+WARNING: no performance replay log in $BL
+  looked for build_*OP*/saved_logs/Treplay_*.log
+  its replays: run_prequal" "$(replays -focus replay performance -short 30.0.0.135)"
+
+check "no replay dir: what, where, how far back" \
+    "no performance replay dir: no $BL/build_G!31.OP.L8/saved_logs/replay_dir*TAC_LO3*/work/logging/LOGS, nor in the baselines before, back to 30.0.0.116" \
+    "$("$TCHECK" -no-color -focus replay performance 30.0.0.135 2>/dev/null | grep "^no performance replay dir: no $BL/")"
+check "and no line per baseline tried" "" \
+    "$("$TCHECK" -no-color -focus replay performance 30.0.0.135 2>&1 >/dev/null | grep 'trying' || true)"
+
 echo
 if [ $fails -eq 0 ]; then echo "All checks passed."; else echo "$fails check(s) FAILED."; exit 1; fi

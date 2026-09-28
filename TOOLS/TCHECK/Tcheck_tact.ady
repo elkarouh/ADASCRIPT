@@ -295,11 +295,19 @@ class Report:
     def show_replays(self):
         hr('#')
         puts("SWr", "REPLAYS", NEWLINE=True)
-        if self.cur.replays'Length == 0:
-            puts("SWb", "WARNING: NO REPLAYS FOUND", NEWLINE=True)
+        let focused: bool = self.opt.focus_domain == focus_replay
+        var shown: int = 0
         for replay in self.cur.replays:
-            continue if self.opt.focus_domain == focus_replay and replay.rtype != self.opt.focus_rtype
+            continue if focused and replay.rtype != self.opt.focus_rtype
             process_replay(replay, self.opt.verbose)
+            shown += 1
+        if shown == 0:
+            # none, or not the one -focus asked for: say where it was looked for
+            let which: str = f"{self.opt.focus_rtype} replay" if focused else "replay"
+            puts("SWb", f"WARNING: no {which} log in {self.cur.dir}", NEWLINE=True)
+            print f"  looked for {REPLAY_LOGS}"
+            if len(self.cur.replays) > 0:
+                print "  its replays: " + ", ".join([f"{r.rtype}" for r in self.cur.replays])
 
     def show_build_info(self):
         for b in self.cur.builds:

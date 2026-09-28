@@ -56,7 +56,12 @@ When the build or the Tlog asked for is not there, Tcheck_tact says so and
 where it looked: `No OP build in <baseline dir>` with the builds it has and
 those it sets aside (the 92, 94, 95, 98 and 30 variants), or `"OP in" build
 not ready yet` with the Tlog it looked for -- also for a subtype a build
-type is not expected to have, when -focus asks for it.
+type is not expected to have, when -focus asks for it. The same for a
+replay: `WARNING: no performance replay log in <baseline dir>`, with where
+it looked (build_*OP*/saved_logs/Treplay_*.log) and the replays the
+baseline has; and, for its details, `no performance replay dir: no
+<saved_logs>/replay_dir*TAC_LO3*/work/logging/LOGS, nor in the baselines
+before, back to <nr>`.
 
 Each focus shows its overview first, then the details -- the detailed test
 comparison, the replay diffs, the build logs side by side, each file's

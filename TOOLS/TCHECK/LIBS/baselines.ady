@@ -190,6 +190,9 @@ def grep_force_trace_in_dir(dir: Path):
 # Baselines
 # ---------------------------------------------------------------------------
 
+# where a baseline's replays leave their logs: in its OP build's saved_logs
+let REPLAY_LOGS: Glob_T = "build_*OP*/saved_logs/Treplay_*.log"
+
 class Baseline:
     """One TACT baseline: its number and the directory holding its builds.
 
@@ -250,7 +253,7 @@ class Baseline:
         """List the replays' logs into replays, one per replay type, in
         canonical order."""
         let basedir: Path = self.dir
-        let listing: []str = shellLines: ls -d {basedir}/build_*OP*/saved_logs/Treplay_*.log
+        let listing: []str = shellLines: ls -d {basedir}/{REPLAY_LOGS}
 
         var type_to_file: [ReplayType]Path
         for found in listing:
@@ -270,19 +273,18 @@ class Baseline:
 
         Replays run on the OP build, so that is the saved_logs searched.
         """
-        let dir_pat: Glob_T = replay_dir_pattern(rtype)
+        let wanted: Glob_T = f"replay_dir*{replay_dir_pattern(rtype)}*/work/logging/LOGS"
         var bl: Baseline = self
-        var dir: Path = bl.saved_logs_dir(OP)
-        var attempts: int = 0
-        while attempts < 20:
-            let listing: []str = shellLines: ls -d {dir}/replay_dir*{dir_pat}*/work/logging/LOGS
+        for attempt in range(20):
+            if attempt > 0:
+                bl = bl.previous()
+            let dir: Path = bl.saved_logs_dir(OP)
+            let listing: []str = shellLines: ls -d {dir}/{wanted}
             if listing'Length > 0 and listing[0] != "":
                 return Path(listing[0])
-            bl = bl.previous()
-            dir = bl.saved_logs_dir(OP)
-            stderr.writeLine(PROG + ": trying " + dir)
-            attempts += 1
-        return Failure_T(message="no replay log dir found")
+        # what was looked for, and how far back: it said "trying <dir>"
+        # for each of the twenty, and then only that none was found
+        return Failure_T(message=f"no {rtype} replay dir: no {self.saved_logs_dir(OP)}/{wanted}, nor in the baselines before, back to {bl.nr}")
 
     def scan_regression_tests(self, btype: BuildType, subtype: BuildSubtype) -> Path | !Failure_T:
         """Scan the logs of the BTYPE build's SUBTYPE regression tests for errors
@@ -434,7 +436,7 @@ if __name__ == "__main__":
     # machine that has them. Asked of a baseline no CM tree holds.
     let nowhere: Baseline = Baseline("0.0.0.20")
     let replay_dir: Path | !Failure_T = nowhere.replay_log_dir(performance)
-    assert replay_dir is Failure_T and replay_dir.message == "no replay log dir found"
+    assert replay_dir is Failure_T and replay_dir.message.startswith("no performance replay dir: no ") and replay_dir.message.endswith("/replay_dir*TAC_LO3*/work/logging/LOGS, nor in the baselines before, back to 0.0.0.1")
 
     run(["rm", "-rf", str(tmp)])
     print "baselines: all tests passed"
