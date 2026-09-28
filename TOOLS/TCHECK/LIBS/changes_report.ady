@@ -343,6 +343,43 @@ class ChangesReport:
         self.committers = [user] if user in self.committers else []
         self.unattributed = []
 
+def component_path(file: NmFile_T) -> str:
+    """FILE, <system>/<subsystem>/<rest> as the report names it, without its
+    system: <subsystem>/<rest>, as a component's ksh style scanner names it
+    too -- COMMON_CONFIG/sources/regression_testing.ksh."""
+    "/".join(file.split("/")[1:])
+
+def change_line(fc: FileChange, branch: BranchName) -> str:
+    """FC, one line: its kind, the branch it is credited to, its commits,
+    its tickets and its reviews."""
+    let kind: str = f"{fc.kind}"
+    let by: str = branch if branch != "" else "no user branch"
+    var line: str = kind.lower() + " by " + by + ": " + " ".join(fc.commits)
+    if len(fc.tickets) > 0:
+        line = line + " " + " ".join(fc.tickets)
+    for r in fc.reviews:
+        line = line + ", reviewed by " + r
+    line
+
+def changes_by_file(report: Path) -> {str}[]str:
+    """Who changed each file REPORT's changes touch, a line each (see
+    change_line), by its path in its component (see component_path)."""
+    let changes: ChangesReport = ChangesReport(report)
+    var by_file: {str}[]str = {:}
+    for who in changes.committers:
+        for branch in changes.branches[who]:
+            for fc in changes.files[branch]:
+                let key: str = component_path(fc.file)
+                if key not in by_file:
+                    by_file[key] = []
+                by_file[key].append(change_line(fc, branch))
+    for fc in changes.unattributed:
+        let key: str = component_path(fc.file)
+        if key not in by_file:
+            by_file[key] = []
+        by_file[key].append(change_line(fc, ""))
+    by_file
+
 def echo_ediff(a: Path, b: Path):
     print f"(ediff-files \"{a}\" \"{b}\")"
 
@@ -596,6 +633,14 @@ if __name__ == "__main__":
     assert direct[0].tickets == ["SC-134249"]
     assert direct[0].reviews == ["dpt, gru, wao on 260922.151702"]
     assert direct[0].from_baseline == "30.0.0.129" and direct[0].to_baseline == "30.0.0.130"
+
+    # who changed a file, by its path in its component: as the ksh style
+    # scanner of SVISION names it, ./sources/show_query_handlers.ksh
+    assert component_path("TACT/SVISION/sources/show_query_handlers.ksh") == "SVISION/sources/show_query_handlers.ksh"
+    let by_file: {str}[]str = changes_by_file(samples / "CFMUTEST.CFMUTEST_CONFIG.30.0.0.105.changes_report")
+    assert by_file["SVISION/sources/show_query_handlers.ksh"] == [
+        "changed by mea.qh_report: 3d172a4a 9c8ef28d ebbf02e5 SC-134294, reviewed by bss on 260922.075248"]
+    assert "COMMON_CONFIG/sources/regression_testing.ksh" not in by_file
 
     # removed, and added again: two entries
     assert [fc.kind for fc in report.files["acicek.transmit_esb"] if fc.file == "IFPS/OPIF_LIB/sources/Pmake.out"] == [DELETED, ADDED]

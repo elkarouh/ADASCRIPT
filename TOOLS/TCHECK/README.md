@@ -71,6 +71,23 @@ yellow to stand out from its findings:
 
 The findings (`./<script>:XXX:<name>` under the heading of their kind) are
 compared as sets, so a finding that only moved in the file is no change.
+
+Under each script, who changed it, per the baseline's CFMUTEST changes
+report (the one `-focus changes` lists): the report's
+`TOOL/COMMON_CONFIG/sources/regression_testing.ksh` is COMMON_CONFIG's
+`./sources/regression_testing.ksh`. A change is credited to a branch as
+`-focus changes` credits it; a script the report does not name says so --
+its findings then come from elsewhere than this baseline's changes:
+
+```
+    ./sources/regression_testing.ksh  new used not defined: CM_HOST
+      changed by alice.fix_env: 5678ef01 SC-1, reviewed by bob on 260925.101010
+    ./sources/find_current_ops.ksh  new used not defined: CFMU_REGRESS_TEST_FTPS_DIR
+      not in the changes report
+```
+
+Without a changes report, the line under the count of style differences
+says why.
 Then the other programs' SEVERE messages, how many and the first (`3 SEVERE from
 param_shared_cleanup_ftok: dbspy -D ...`); docgen's errors, five of them
 (all with `-v`); and the files missing.

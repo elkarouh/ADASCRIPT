@@ -120,5 +120,37 @@ check "build_info: the Csystem_build.log command, printed" \
     "  meld /tmp/reports/30.0.0.134_Csystem_build.log /tmp/reports/30.0.0.135_Csystem_build.log" \
     "$(echo "$info" | sed -n '/^Compare Csystem_build.log:/{n;p;}')"
 
+# -focus build_info: who changed the scripts of a style difference, per the
+# baseline's changes report -- none at first, and it says why; then one in
+# which alice changed regression_testing.ksh, and nobody find_current_ops.ksh
+style() { echo "$info" | sed -n '/^  7 ksh style differences/,/SEVERE from/p' | grep -v 'SEVERE\|#emacs:'; }
+check "build_info: no changes report, said so" \
+    "  7 ksh style differences with the previous baseline:
+    who changed their scripts: WARNING: Psort -b names no CFMUTEST baseline for TACT_CONFIG.30.0.0.135
+      ./sources/find_current_ops.ksh  new used not defined: CFMU_REGRESS_TEST_FTPS_DIR
+      ./sources/regression_testing.ksh  new used not defined: CM_HOST PERL_VERSION; gone defined not used: OLD_WORK_DIR" \
+    "$(style)"
+mkdir -p "$WORK/bin" "$OT/CFMUTEST/baseline_reports"
+cat > "$WORK/bin/Psort" <<'PSORT'
+#!/bin/sh
+read -r tact
+[ "$1" = "-b" ] && [ "$tact" = "/cm/ot/TACT/TACT_CONFIG.30.0.0.135" ] || exit 1
+echo "/cm/ot/CFMUTEST/CFMUTEST_CONFIG!30.0.0.105"
+PSORT
+chmod +x "$WORK/bin/Psort"
+cat > "$OT/CFMUTEST/baseline_reports/CFMUTEST.CFMUTEST_CONFIG.30.0.0.105.changes_report" <<'REPORT'
+===== Differences between TACT.TACT_CONFIG.30.0.0.134 and TACT.TACT_CONFIG.30.0.0.135
+      Merge from <- 1234abcd alice.fix_env RELATED_CHANGES="SC-1 "
+      changed 5678ef01:TACT/TACT_CONFIG/sources/regression_testing.ksh RELATED_CHANGES="SC-1 " review-ok: yes; reviewed-by: bob; review-date: 260925.101010;
+REPORT
+info=$(PATH=$WORK/bin:$PATH "$TCHECK" -no-color -f -focus build_info 30.0.0.135 2>/dev/null)
+check "build_info: who changed each script, per the report" \
+    "  7 ksh style differences with the previous baseline:
+      ./sources/find_current_ops.ksh  new used not defined: CFMU_REGRESS_TEST_FTPS_DIR
+        not in the changes report
+      ./sources/regression_testing.ksh  new used not defined: CM_HOST PERL_VERSION; gone defined not used: OLD_WORK_DIR
+        changed by alice.fix_env: 5678ef01 SC-1, reviewed by bob on 260925.101010" \
+    "$(style)"
+
 echo
 if [ $fails -eq 0 ]; then echo "All checks passed."; else echo "$fails check(s) FAILED."; exit 1; fi

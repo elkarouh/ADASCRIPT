@@ -310,10 +310,20 @@ class Report:
                 print "  its replays: " + ", ".join([f"{r.rtype}" for r in self.cur.replays])
 
     def show_build_info(self):
+        """Padactl, and what check_run_test_programs.log says failed, with
+        who changed the scripts of a style difference, per the baseline's
+        changes report."""
+        var changes: {str}[]str = {:}
+        var no_changes: str = ""
+        let report: Path | !Failure_T = changes_report(self.cur.nr)
+        if report is Path:
+            changes = changes_by_file(report)
+        else:
+            no_changes = report.message
         for b in self.cur.builds:
             if b.btype == IP:
                 b.show_padactl()
-                b.check_test_programs(self.opt.fast_mode, self.opt.verbose)
+                b.check_test_programs(self.opt.fast_mode, self.opt.verbose, changes, no_changes)
                 break
 
     def show_summary(self):
