@@ -75,5 +75,32 @@ check "no replay dir: what, where, how far back" \
 check "and no line per baseline tried" "" \
     "$("$TCHECK" -no-color -focus replay performance 30.0.0.135 2>&1 >/dev/null | grep 'trying' || true)"
 
+# -focus build_info: check_run_test_programs.log compared with the previous
+# baseline's -- which had no TACT_CONFIG style difference, and a SEVERE
+# message fixed since; and the Csystem_build.log comparison, a command
+# printed rather than meld opened
+PREV=$OT/TACT/TACT_CONFIG.30.0.0.134
+for bl in "$BL" "$PREV"; do
+    mkdir -p "$bl/build_G!31.IP.L8/saved_logs/tacot_corico.LATEST/work"
+done
+cp "$SAMPLES/check_run_test_programs.log" "$BL/build_G!31.IP.L8/saved_logs/tacot_corico.LATEST/work/"
+{ grep -v 'check of TACT_CONFIG scripts' "$SAMPLES/check_run_test_programs.log"
+  echo '260923.225938: old_program: SEVERE: something fixed since'
+} > "$PREV/build_G!31.IP.L8/saved_logs/tacot_corico.LATEST/work/check_run_test_programs.log"
+info=$("$TCHECK" -no-color -f -focus build_info 30.0.0.135 2>/dev/null)
+check "build_info: no Csystem_build.log, said so" \
+    "  no $PREV/build_G!31.IP.L8/Csystem_build.log
+  no $BL/build_G!31.IP.L8/Csystem_build.log" \
+    "$(echo "$info" | sed -n '/^Compare Csystem_build.log:/,$p' | grep '^  no ')"
+for bl in "$BL" "$PREV"; do echo 'Csystem ...' > "$bl/build_G!31.IP.L8/Csystem_build.log"; done
+info=$("$TCHECK" -no-color -f -focus build_info 30.0.0.135 2>/dev/null)
+check "build_info: the log compared with the previous one's" "Compare check_run_test_programs.log with 30.0.0.134's:
+  new:  ksh style difference: TACT_CONFIG VAR_CHECK
+  gone: SEVERE from old_program: something fixed since" \
+    "$(echo "$info" | sed -n '/^Compare check_run_test_programs/,/^Compare Csystem/p' | grep -v '^Compare Csystem' | grep -v '#emacs:')"
+check "build_info: the Csystem_build.log command, printed" \
+    "  meld /tmp/reports/30.0.0.134_Csystem_build.log /tmp/reports/30.0.0.135_Csystem_build.log" \
+    "$(echo "$info" | sed -n '/^Compare Csystem_build.log:/{n;p;}')"
+
 echo
 if [ $fails -eq 0 ]; then echo "All checks passed."; else echo "$fails check(s) FAILED."; exit 1; fi

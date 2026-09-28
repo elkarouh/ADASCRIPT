@@ -75,6 +75,23 @@ Then the other programs' SEVERE messages, how many and the first (`3 SEVERE from
 param_shared_cleanup_ftok: dbspy -D ...`); docgen's errors, five of them
 (all with `-v`); and the files missing.
 
+Without `-short`, `-focus build_info` then compares that summary with the
+previous baseline's -- what fails now that did not, and what no longer
+does, the baseline numbers in either masked so that only a real change
+shows:
+
+```
+Compare check_run_test_programs.log with 30.0.0.134's:
+  #emacs:(progn(find-file ".../TACT_CONFIG.30.0.0.134/.../check_run_test_programs.log"))
+  new:  ksh style difference: TACT_CONFIG VAR_CHECK
+  gone: SEVERE from old_program: something fixed since
+```
+
+and prints the command comparing the two baselines' Csystem_build.log,
+normalized, in the diff tool (`meld` unless `-tool` names another) rather
+than opening it: the two differ in too much for that to be worth doing
+every time. It says which Csystem_build.log is missing, if one is.
+
 It reads a build's logs in the build of the type it wants, whichever of
 `$CM_ENV_ID`'s it was launched with -- `G!31.IP.L8` or `G!31.OP.L8`: a
 replay's are always the OP build's, a Csystem log the IP build's, mono

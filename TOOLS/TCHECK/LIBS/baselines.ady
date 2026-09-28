@@ -83,6 +83,18 @@ def changed_scripts(baseline: Path, current: Path) -> []ScriptChange:
             scripts.append(f.script)
     [ScriptChange(s, by_kind(new, s), by_kind(gone, s)) for s in scripts]
 
+def masked(line: str) -> str:
+    """LINE with the baseline numbers in it -- 30.0.0.132 -- as <nr>, to be
+    compared with the same line of another baseline's."""
+    var out: str = line
+    out = s/\d+\.\d+\.\d+\.\d+/<nr>/g
+    out
+
+def compared_facts(before: []str, after: []str) -> []str:
+    """The facts AFTER has and BEFORE has not, "new: ...", then those
+    BEFORE has and AFTER has not, "gone: ..."."""
+    ["new:  " + f for f in after if f not in before] + ["gone: " + f for f in before if f not in after]
+
 # the SEVERE messages of one of the test programs: how many, and the first
 type ProgramErrors is record:
     program: str      # param_shared_cleanup_ftok
@@ -133,6 +145,17 @@ class TestProgramsLog:
                 self.errors[i].count += 1
                 return
         self.errors.append(ProgramErrors(program, 1, message))
+
+    def facts(self) -> []str:
+        """What failed, a line each, as another baseline's log would say it
+        too: the baseline numbers in it masked, docgen's all, and each
+        program's SEVERE messages by their first, without how many."""
+        var facts: []str = [masked(v) for v in self.verdict]
+        facts = facts + [f"ksh style difference: {d.component} {d.check}" for d in self.style_diffs]
+        facts = facts + [f"SEVERE from {e.program}: " + masked(e.first) for e in self.errors]
+        facts = facts + ["docgen: " + masked(m) for m in self.docgen]
+        facts = facts + ["missing: " + masked(m) for m in self.missing]
+        facts
 
     def summary(self, limit: int = 5, read_results: bool = True) -> []str:
         """What failed, a line each: the verdict; each style difference,
@@ -312,21 +335,24 @@ class Build:
         else:
             puts("SWb", "WARNING: No CRC summary file found!", NEWLINE=True)
 
+    def test_programs_log(self) -> ?Path:
+        """The build's check_run_test_programs.log; none before
+        check_run_test_programs_log has run."""
+        let work: Path = self.tacot_dir(normal) / "work"
+        let found: []str = shellLines: find {work} -type f -name 'check_run_test_programs.log' -print -quit
+        return None if found'Length == 0 or found[0] == ""
+        return Path(found[0])
+
     def check_test_programs(self, fast_mode: bool, verbose: bool = False):
         """Find or run check_run_test_programs_log from the IP self; what
         its log says failed, summed up -- VERBOSE lists all docgen's."""
         let baseline: BaselineNr_T = self.baseline_nr
-        let work: Path = self.tacot_dir(normal) / "work"
         print
         hr('#')
         puts("SWr", "Check build closure and test programs.", NEWLINE=True)
         puts("USBy", "CHECK RUN TEST PROGRAMS LOG FOR " + str(self.dir) + " ...", NEWLINE=True)
-        let find_lines: []str = shellLines: find {work} -type f -name 'check_run_test_programs.log' -print -quit
-        var logfile: Path = Path("")
-        if find_lines'Length > 0:
-            logfile = Path(find_lines[0])
-
-        if logfile == "":
+        let logfile: ?Path = self.test_programs_log()
+        if logfile is None:
             if fast_mode:
                 puts("SWb", "check_run_test_programs_log not yet complete and we are in fast mode -> skip this check.", NEWLINE=True)
             else:
@@ -396,6 +422,29 @@ class Baseline:
     def previous(self) -> Baseline:
         let (head, tail) = self.nr.rsplit(".", 1)
         return Baseline(f"{head}.{int(tail) - 1}")
+
+    def build(self, btype: BuildType) -> Build:
+        """Its build of BTYPE, whichever build $CM_ENV_ID names, whether
+        or not it is there."""
+        Build("build_" + build_env_id($CM_ENV_ID, btype), btype, self.nr, self.dir)
+
+    def compare_test_programs(self, older: Baseline):
+        """What its IP build's check_run_test_programs.log says failed that
+        OLDER's did not, and what no longer fails: a line each."""
+        puts("SWr", f"Compare check_run_test_programs.log with {older.nr}'s:", NEWLINE=True)
+        let mine: ?Path = self.build(IP).test_programs_log()
+        let theirs: ?Path = older.build(IP).test_programs_log()
+        if mine is not None and theirs is not None:
+            print "  " + emacs_link(theirs)
+            let changes: []str = compared_facts(TestProgramsLog(theirs).facts(), TestProgramsLog(mine).facts())
+            if len(changes) == 0:
+                print "  the same failures"
+            for line in changes:
+                print "  " + line
+        elif mine is None:
+            print f"  none in {self.build(IP).dir}"
+        else:
+            print f"  none in {older.build(IP).dir}"
 
     def saved_logs_dir(self, btype: BuildType) -> Path:
         """The saved_logs directory of this baseline's build of BTYPE,
@@ -579,6 +628,18 @@ if __name__ == "__main__":
     assert summed[13] == "  3 SEVERE from param_shared_cleanup_ftok: dbspy -D ./env_imp_regress/1.545.cpg/NUM_MESSAGES.ftok failed with exit code 42 : dbspy: file ./env_imp_regress/1.545.cpg/NUM_MESSAGES.ftok cannot be opened"
     assert summed[16] == "10 docgen errors:" and summed[19] == "  ... and 8 more"
     assert len(summed) == 21
+
+    # --- the same log, compared with another baseline's -------------------
+    assert masked("Ccheck_build_closure -s -t -b ELD.ELD_CONFIG.30.0.0.132 failed") == "Ccheck_build_closure -s -t -b ELD.ELD_CONFIG.<nr> failed"
+    let said: []str = programs.facts()
+    assert said[0] == "Ccheck_build_closure -s -t -b ELD.ELD_CONFIG.<nr> failed with exit code 1"
+    assert "ksh style difference: COMMON_CONFIG VAR_CHECK" in said
+    assert "SEVERE from param_shared_cleanup_ftok: dbspy -D ./env_imp_regress/1.545.cpg/NUM_MESSAGES.ftok failed with exit code 42 : dbspy: file ./env_imp_regress/1.545.cpg/NUM_MESSAGES.ftok cannot be opened" in said
+    assert len(said) == 5 + 7 + 3 + 10 + 1
+    assert compared_facts(said, said) == []
+    # the baseline before had no TACT_CONFIG style difference, and a docgen error fixed since
+    let older: []str = [f for f in said if f != "ksh style difference: TACT_CONFIG VAR_CHECK"] + ["docgen: block not included: x"]
+    assert compared_facts(older, said) == ["new:  ksh style difference: TACT_CONFIG VAR_CHECK", "gone: docgen: block not included: x"]
 
     # --- the scripts a style difference is in: a real result, and a baseline
     # made from it by hand --------------------------------------------------

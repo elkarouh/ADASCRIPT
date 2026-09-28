@@ -39,16 +39,13 @@ class CsystemLog:
         """A normalized copy of the log, under /tmp/reports."""
         make_comparable(self.file, self.baseline)
 
-    def compare_with(self, older: CsystemLog):
-        """How this log differs from OLDER's: in the troubleshoot tool, or
-        as a diff in batch mode."""
+    def compare_command(self, older: CsystemLog) -> Command_T:
+        """The command that shows how this log differs from OLDER's, in the
+        troubleshoot tool: printed, not run -- the logs differ in too much
+        for that to be worth opening each time."""
         let before: Path = older.comparable()
         let after: Path = self.comparable()
-        if BATCH:
-            let rc: int = shell: diff {!before} {!after}
-        else:
-            let tool: Tool_T = troubleshoot_tool()
-            let rc: int = shell: {!tool} {!before} {!after} &
+        f"{troubleshoot_tool()} {before} {after}"
 
 # ---------------------------------------------------------------------------
 # Tests: ady2nim c LIBS/csystem_log.ady && LIBS/csystem_log

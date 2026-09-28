@@ -408,12 +408,17 @@ class Report:
         let rc: int = shell: echo {!line} >> {!history_file}
 
     def show_detailed_build_info(self):
-        let prev: CsystemLog = CsystemLog(self.cur.previous())
-        let cur: CsystemLog = CsystemLog(self.cur)
+        """What check_run_test_programs.log says failed, compared with the
+        previous baseline's; the command comparing their Csystem_build.log."""
+        let prev: Baseline = self.cur.previous()
+        self.cur.compare_test_programs(prev)
         puts("SWr", "Compare Csystem_build.log:", NEWLINE=True)
-        print f"  prev: {prev.file}"
-        print f"  cur:  {cur.file}"
-        cur.compare_with(prev)
+        let logs: []CsystemLog = [CsystemLog(prev), CsystemLog(self.cur)]
+        let missing: []Path = [log.file for log in logs if not -f log.file]
+        for file in missing:
+            print f"  no {file}"
+        if len(missing) == 0:
+            print "  " + logs[1].compare_command(logs[0])
 
     def show_detailed_regression_tests(self):
         var btype: BuildType = IP
