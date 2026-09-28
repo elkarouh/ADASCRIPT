@@ -13,6 +13,13 @@ USER=cmadm
 USER_UUID=415
 USE_REAL_FTPS=-use_real_ftps
 USE_VNC=true
+/cm/build32/cm/ot/TACT/TACT_CONFIG!30.0.0.132/build_G!31.OP.L8/saved_logs"
+260925.135628: Tprequal_analyzer: INFORMATION: TARGET_LOGS_DIR="/cm/ot/TACT/TACT_CONFIG.30.0.0.133/build_G!31.OP.L8/saved_logs"
+ln: invalid option -- 'p'
+Try 'ln --help' for more information.
+260925.135628: Tprequal_analyzer: INFORMATION: Replay date: 20251201
+ls: cannot access 'old_saved_logs/prequal_results_20251201.summary.txt*': No such file or directory
+260925.135628: Tprequal_analyzer: SEVERE: No prequal summary found for baseline/reference
 260925.135636: Treplay.locked: INFORMATION:   Save valgrind callgrind/massif output to /cm/build32/cm/ot/TACT/TACT_CONFIG!30.0.0.133/build_G!31.OP.L8/saved_logs/replay_dir-run_prequal.JpAfK/tmp/cmadm.ite4Po
 260925.135636: Treplay.locked: INFORMATION:   Save sar output to /cm/build32/cm/ot/TACT/TACT_CONFIG!30.0.0.133/build_G!31.OP.L8/saved_logs/replay_dir-run_prequal.JpAfK/tmp/cmadm.ite4Po
 260925.135639: Treplay.locked: INFORMATION:   Save callgrind out and perf files to /cm/build32/cm/ot/TACT/TACT_CONFIG!30.0.0.133/build_G!31.OP.L8/saved_logs/replay_dir-run_prequal.JpAfK/tmp/cmadm.ite4Po

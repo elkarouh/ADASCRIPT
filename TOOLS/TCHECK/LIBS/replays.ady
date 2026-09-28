@@ -38,6 +38,117 @@ def replay_dir_pattern(rtype: ReplayType) -> Glob_T:
         when others:      return rtype'Image
 
 # ---------------------------------------------------------------------------
+# What went wrong in a replay, counted
+# ---------------------------------------------------------------------------
+
+# a kind of thing that went wrong in a replay, how often, and where first
+type Tally is record:
+    what : str
+    count: int
+    first: str    # where it happened first: "20251129.09.el:50622"; "" when not told
+
+class Tallies:
+    """How often each kind of thing went wrong, kinds in the order first seen."""
+    items: []Tally
+
+    def add(self, what: str, first: str = "", count: int = 1):
+        """COUNT more of WHAT, which happened first at FIRST if it is new."""
+        for i in range(len(self.items)):
+            if self.items[i].what == what:
+                self.items[i].count += count
+                return
+        self.items.append(Tally(what, count, first))
+
+    def total(self) -> int:
+        var sum: int = 0
+        for t in self.items:
+            sum += t.count
+        sum
+
+    def top(self, n: int) -> []Tally:
+        """The N most frequent kinds, most frequent first; of equal counts,
+        the first seen first."""
+        var left: []Tally = [t for t in self.items]    # a copy, to take from
+        var picked: []Tally = []
+        while len(picked) < n and len(left) > 0:
+            var best: int = 0
+            for i in range(1, len(left)):
+                if left[i].count > left[best].count:
+                    best = i
+            picked.append(left[best])
+            left.delete(best)
+        picked
+
+def tally_lines(tallies: Tallies, limit: int, label: str = "") -> []str:
+    """The LIMIT most frequent of TALLIES, a line each -- its count, LABEL,
+    what, and where first when told -- and how many kinds are left out."""
+    var lines: []str = []
+    for t in tallies.top(limit):
+        let first: str = f", first at {t.first}" if t.first != "" else ""
+        lines.append(f"{t.count:>6}  {label}{t.what}{first}")
+    let more: int = len(tallies.items) - limit
+    if more > 0:
+        lines.append(f"        ... and {more} more")
+    lines
+
+class CheckLogsReport:
+    """A check_logs.result.svlog -- the errors check_logs found in a
+    replay's logs and did not suppress, which fail the replay -- counted
+    rather than listed: a prequal replay's was 6 MB.
+
+    An error is quoted from its log, and again from a core's .logs when a
+    core was dumped for it; a TACOT failure is reported twice, as
+    "evaluate ... raised" and as "exception raised". Each is counted once."""
+    file         : Path
+    call_failures: Tallies   # replay script calls TACOT could not evaluate, by call and exception
+    test_failures: []str     # "receive_an1.el ok:9 nok:442"
+    severe       : Tallies   # ERROR_REPORT.SEVERE, by message
+    warnings     : Tallies   # ERROR_REPORT.WARNING, by message
+
+    def __init__(self, file: Path):
+        self.file = file
+        var seen: {}str = {}
+        for line in file.lines:
+            if line == /\[ TACOT :  evaluate (?P<call>\S+) file (?P<script>\S+), line (?P<at>\d+): col \d+\s+raised (?P<raised>.+)$/:
+                let call: str = $+{call}
+                let raised: str = $+{raised}
+                let at: str = $+{script} + ":" + $+{at}
+                let key: str = call + " " + at
+                continue if key in seen
+                seen.add(key)
+                self.call_failures.add(call + " raised " + raised, at)
+            # the log it is from ends the quote -- "tacot1_out_01:", or
+            # "tacot1_out_01-561411-" when a core's .logs quotes it again
+            elif line == /(?P<log>[^\/:]+?)(?:-\d+-|:)\.\.ERROR_REPORT\.(?P<severity>SEVERE|WARNING) : Error +: Severity:\S+ (?:\(\S+\) )?(?P<when>\S+ \S+) \(\S+\), REAL : (?P<real>\S+ \S+) \(UTC\) (?P<message>.*)$/:
+                let severity: str = $+{severity}
+                let when: str = $+{when}
+                let message: str = $+{message}.strip()
+                let key: str = $+{log} + " " + severity + " " + $+{real} + " " + message
+                continue if key in seen
+                seen.add(key)
+                case severity:
+                    when "SEVERE": self.severe.add(message, when)
+                    when others:   self.warnings.add(message, when)
+            elif line == /Description +: FAILED FILE:(?P<test>\S+) .*ok:(?P<ok>\d+) nok:(?P<nok>\d+)/:
+                let failure: str = $+{test} + " ok:" + $+{ok} + " nok:" + $+{nok}
+                if failure not in self.test_failures:
+                    self.test_failures.append(failure)
+
+    def summary(self, limit: int = 5) -> []str:
+        """What it holds, a line each: how much of each kind, then the
+        calls that failed, the tests that failed, and the error reports by
+        severity -- the LIMIT most frequent of each."""
+        var lines: []str = [
+            f"{self.call_failures.total()} replayed calls failed, {len(self.test_failures)} tests failed, " +
+            f"{self.severe.total()} SEVERE and {self.warnings.total()} WARNING error reports"]
+        lines = lines + tally_lines(self.call_failures, limit)
+        if len(self.test_failures) > 0:
+            lines.append("        tests failed: " + ", ".join(self.test_failures))
+        lines = lines + tally_lines(self.severe, limit, "SEVERE   ")
+        lines = lines + tally_lines(self.warnings, limit, "WARNING  ")
+        lines
+
+# ---------------------------------------------------------------------------
 # Replay logs
 # ---------------------------------------------------------------------------
 
@@ -45,21 +156,35 @@ class ReplayLog:
     """What a Treplay log says of its replay, read in one pass."""
     file         : Path
     status       : ReplayStatus
-    severe_errors: []str   # its ERROR_REPORT.SEVERE lines
     terminated   : bool    # whether it says "Replay terminated"
     # what replay_day returned -- "return_code of replay_day : 1" -- which
     # fails the replay when not 0; None before the log says
     replay_rc    : ?int
+    # "REPLAY_FINISHED_COUNT: 1 (expected: 1)": how many of the replays
+    # ran to their end, of how many; None before the log says
+    replays_finished: ?int
+    replays_expected: ?int
     # the report of check_logs, when it found errors in the replay's logs:
     # "check_logs reported errors, see: #emacs:(find-file "...")", where it
     # is now -- the replay directory is moved once the replay is over;
-    # None when check_logs found none
+    # None when the log does not name one
     check_logs_report: ?Path
+    # where the replay ran, its tact/, work/, ...: the directory it was
+    # moved to, or else the one Treplay saves the replay's output from
+    replay_dir   : ?Path
     # the cores its processes dumped: "Debug_Exception dumped core file to
     # ...". Not NR_COREDUMPS, which counts the lines about cores, among
     # them one "A core dump not created because the previous core dump was
     # created ..." each time a process that has dumped one would again
     core_dumps   : []Path
+    # replay_day's own count of the error reports of Severity:SEVERE, by
+    # message: "Frequence of error reports of Severity:SEVERE"
+    severe_counts: Tallies
+    # a prequal replay's: how many prequal runs succeeded and failed, and
+    # what Tprequal_analyzer, comparing with the reference, said went wrong
+    prequal_successful: ?int
+    prequal_failing   : ?int
+    analyzer_errors   : []str
 
     def __init__(self, file: Path):
         """The verdict is that of the last UNINSTALL step when it has one;
@@ -71,22 +196,42 @@ class ReplayLog:
         var moved_from: str = ""     # where the replay directory was, and is
         var moved_to: str = ""
         var report: str = ""         # the check_logs report, as the log names it
+        var saved_from: str = ""     # the replay directory Treplay saves output from
+        var in_severe_table: bool = False
         for line in file.lines:
             if "Executed UNINSTALL:" in line:
                 let (_, after) = line.rsplit("Executed UNINSTALL:", 1)
                 verdict = after
             if "Waiting for this replay to be finished" in line:
                 waiting = True
-            if "ERROR_REPORT.SEVERE" in line:
-                self.severe_errors.append(line)
             if "Replay terminated" in line:
                 self.terminated = True
             if line == /return_code of replay_day\s*:\s*(?P<rc>-?\d+)/:
                 self.replay_rc = int($+{rc})
+            if line == /REPLAY_FINISHED_COUNT:\s*(?P<finished>\d+)\s*\(expected:\s*(?P<expected>\d+)\)/:
+                self.replays_finished = int($+{finished})
+                self.replays_expected = int($+{expected})
+            if line == /NR_SUCCESSFUL_PREQUAL_TACOTIFY:\s*(?P<n>\d+)/:
+                self.prequal_successful = int($+{n})
+            if line == /NR_FAILING_PREQUAL_TACOTIFY:\s*(?P<n>\d+)/:
+                self.prequal_failing = int($+{n})
+            if line == /Tprequal_analyzer: SEVERE: (?P<error>.*)$/:
+                self.analyzer_errors.append($+{error})
             if "check_logs reported errors" in line and line == /find-file "(?P<report>[^"]+)"/:
                 report = $+{report}
             if line == /dumped core file to (?P<core>\S+)/:
                 self.core_dumps.append(Path($+{core}))
+            if saved_from == "" and "Treplay.locked:" in line and line == /(?P<dir>\S*\/saved_logs\/replay_dir[^\/\s]*)\//:
+                saved_from = $+{dir}
+            # "Frequence of error reports of Severity:SEVERE", a row of
+            # "=", then "    399  TACOT variable not of type ..." up to the
+            # next line of replay_day's
+            if "Frequence of error reports of Severity:SEVERE" in line:
+                in_severe_table = True
+            elif in_severe_table and line == /^\s+(?P<count>\d+)\s+(?P<message>\S.*)$/:
+                self.severe_counts.add($+{message}.strip(), count=int($+{count}))
+            elif in_severe_table and not line.endswith("========="):
+                in_severe_table = False
             # "Moving TAC_LO3 replay LOGS directory.", then on the next line
             # "  '/cm/local_build/TACTDEV_HOME/replay_dir' to '.../saved_logs/replay_dir.TAC_LO3...'"
             if moving and line == /'(?P<from>[^']+)' to '(?P<to>[^']+)'/:
@@ -97,6 +242,10 @@ class ReplayLog:
             if moved_from != "" and report.startswith(moved_from + "/"):
                 report = moved_to + report[len(moved_from):]
             self.check_logs_report = Path(report)
+        if moved_to != "":
+            self.replay_dir = Path(moved_to)
+        elif saved_from != "":
+            self.replay_dir = Path(saved_from)
         if "YES" in verdict:
             self.status = succeeded
         elif "NO" in verdict:
@@ -106,38 +255,68 @@ class ReplayLog:
         else:
             self.status = not_started
 
+    def check_logs(self) -> ?CheckLogsReport:
+        """The check_logs report, read, when it is on disk: the one the log
+        names, or else the newest in the replay directory's logs -- a
+        prequal replay's log may not name it, but keeps its directory."""
+        var found: ?Path = self.check_logs_report
+        let replay_dir: ?Path = self.replay_dir
+        if found is None and replay_dir is not None:
+            found = newest(replay_dir / "work" / "logging" / "LOGS", "*.check_logs.result.svlog")
+        let report: ?Path = found
+        if report is not None and -f report:
+            return CheckLogsReport(report)
+        return None
+
     def show(self, verbose: bool):
-        """The verdict, with a link to the log when the replay failed, and
-        with VERBOSE its severe errors, each from its file's name on."""
+        """The verdict, with a link to the log when the replay failed and
+        what went wrong: VERBOSE lists more of each kind."""
         case self.status:
             when succeeded:
                 puts("SWb", "==> WAS SUCCESSFUL", NEWLINE=True)
             when failed:
                 puts("SWr", "==> FAILED", NEWLINE=True)
                 echo_emacs(self.file)
-                self.show_why()
+                self.show_why(20 if verbose else 5)
                 print
-                if verbose:
-                    for line in self.severe_errors:
-                        let basename_at: int = line.rfind("/")
-                        if basename_at >= 0:
-                            print line[basename_at + 1:]
-                        else:
-                            print line
             when not_started:
                 puts("SWb", "---> WARNING: it looks like the replay hasn't started", NEWLINE=True)
             when busy:
                 puts("SWb", "IS STILL BUSY", NEWLINE=True)
 
-    def show_why(self):
-        """What the log says of why the replay failed: what replay_day
-        returned, the check_logs report, and the cores dumped."""
+    def show_why(self, limit: int = 5):
+        """What the log says of why the replay failed -- what replay_day
+        returned, how many replays finished, the prequal runs and their
+        comparison with the reference -- what the check_logs report holds,
+        or else replay_day's count of SEVERE reports, and the cores dumped.
+        LIMIT of each kind of error, the most frequent."""
         if self.replay_rc is not None and self.replay_rc != 0:
             print f"    replay_day returned {self.replay_rc}"
-        let report: ?Path = self.check_logs_report
+        let finished: ?int = self.replays_finished
+        let expected: ?int = self.replays_expected
+        if finished is not None and expected is not None and finished < expected:
+            print f"    only {finished} of {expected} replays finished"
+        let successful: ?int = self.prequal_successful
+        let failing: ?int = self.prequal_failing
+        if successful is not None and failing is not None:
+            print f"    prequal runs: {successful} successful, {failing} failing"
+        for error in self.analyzer_errors:
+            print f"    prequal analyzer: {error}"
+        let report: ?CheckLogsReport = self.check_logs()
+        let named: ?Path = self.check_logs_report
         if report is not None:
             print "    check_logs reported errors:"
-            print f"    #emacs:(progn(find-file \"{report}\"))"
+            print "    " + emacs_link(report.file)
+            for line in report.summary(limit):
+                print "    " + line
+        else:
+            if named is not None:
+                print "    check_logs reported errors (the report is not at hand):"
+                print "    " + emacs_link(named)
+            if len(self.severe_counts.items) > 0:
+                print f"    {self.severe_counts.total()} SEVERE error reports, as replay_day counted them:"
+                for line in tally_lines(self.severe_counts, limit):
+                    print "    " + line
         let cores: int = len(self.core_dumps)
         case cores:
             when 0: pass
@@ -151,7 +330,9 @@ def process_replay(replay: Replay, verbose: bool):
     """Check the status of a single replay (successful / failed / running)."""
     let label: str = f"\"{replay.rtype}\""
     puts("SWb", f"{label:<14} replay ")
-    ReplayLog(replay.file).show(verbose)
+    # a var: the transpiler takes show() for one that may change its log
+    var log: ReplayLog = ReplayLog(replay.file)
+    log.show(verbose)
     hr('-')
 
 def check_replay_dirs_size():
@@ -211,21 +392,20 @@ def scan_replay_dir_detailed(log_dir: Path | !Failure_T, bl: BaselineNr_T, rtype
     puts("USBy", "REPLAY DIR: " + replay_log_dir, NEWLINE=True)
     let replay_root: Path = replay_log_dir.parent.parent.parent
     find_core_dumps(replay_root)
+    # The check_logs report, summarized: it was printed whole, with the
+    # verbose run of check_logs after it -- 6 MB each for a prequal
+    # replay. The summary is the report compared with the baseline before.
     var report: str = ""
-    let check_result: []str = shellLines: ls {replay_log_dir}/*check_logs.result.svlog
-    for f in check_result:
-        continue if f == ""
-        puts("SWb", "check_logs.result.svlog:", NEWLINE=True)
-        let content: str = readFile(Path(f))
-        print content
-        report = report + content + "\n"
-    let check_run: []str = shellLines: ls {replay_log_dir}/*check_logs.run.svlog
-    for f in check_run:
-        continue if f == ""
-        puts("SWb", "check_logs.run.svlog:", NEWLINE=True)
-        let content: str = readFile(Path(f))
-        print content
-        report = report + content + "\n"
+    let found: ?Path = newest(replay_log_dir, "*.check_logs.result.svlog")
+    if found is not None:
+        let check_logs: CheckLogsReport = CheckLogsReport(found)
+        puts("SWb", "check_logs reported:", NEWLINE=True)
+        echo_emacs(check_logs.file)
+        for line in check_logs.summary(20):
+            print "  " + line
+            report = report + line + "\n"
+    else:
+        puts("SWb", "no check_logs report: check_logs found no errors", NEWLINE=True)
     return make_report(report, bl, f"replay-{rtype}")
 
 # ---------------------------------------------------------------------------
@@ -238,6 +418,7 @@ if __name__ == "__main__":
     let tmp: Path = Path(run(["mktemp", "-d", "-t", "replays.XXXXXX"]).output.strip())
     let PREQUAL: str = "Treplay_G31.OP.L8_30.0.0.133_2026.09.23_213300-run_prequal.NJrqM.log"
     let PERFORMANCE: str = "Treplay_G31.OP.L8_30.0.0.133_2026.09.23_213146-performance.MOJ0V.log"
+    let CHECK_LOGS: str = "260925.134324.dhdevd28.check_logs.result.svlog"
 
     # --- a replay's type, from its log's name ---------------------------------
     def replay_type(name: str) -> str:
@@ -255,8 +436,15 @@ if __name__ == "__main__":
     let perf: ReplayLog = ReplayLog(samples / PERFORMANCE)
     assert perf.status == failed               # waited for, and terminated, but NO
     assert perf.terminated
-    assert len(perf.severe_errors) == 4
-    assert "TACOT variable not of type STRING_TYPE" in perf.severe_errors[0]
+    assert perf.replays_finished is not None and perf.replays_finished == 3
+    # replay_day's own count of the SEVERE reports, the most frequent first
+    let counted: []Tally = perf.severe_counts.top(2)
+    assert counted[0].what == "UNKNOWN ASSERTION FAILURES" and counted[0].count == 483
+    assert counted[1].what == "TACOT variable not of type STRING_TYPE, operation aborted" and counted[1].count == 399
+    assert perf.severe_counts.total() == 1323 and len(perf.severe_counts.items) == 21   # the WARNING table left out
+    # where the replay ran: the directory it was moved to
+    let perf_dir: ?Path = perf.replay_dir
+    assert perf_dir is not None and perf_dir == Path("/cm/ot/TACT/TACT_CONFIG!30.0.0.133/build_G!31.OP.L8/saved_logs/replay_dir.TAC_LO3.2026.09.25_04:05:56")
     # why: replay_day returned 1, check_logs found errors, and one process
     # dumped one core -- NR_COREDUMPS says 8875, the lines about it
     assert perf.replay_rc is not None and perf.replay_rc == 1
@@ -266,6 +454,39 @@ if __name__ == "__main__":
     # the prequal log starts after check_logs ran: no report, no core named
     assert prequal.replay_rc is not None and prequal.replay_rc == 1
     assert prequal.check_logs_report is None and len(prequal.core_dumps) == 0
+    # its prequal runs, and the analyzer's comparison with the reference
+    assert prequal.prequal_successful is not None and prequal.prequal_successful == 1
+    assert prequal.prequal_failing is not None and prequal.prequal_failing == 0
+    assert prequal.analyzer_errors == ["No prequal summary found for baseline/reference"]
+    # where the replay ran: kept, where Treplay saves its output from
+    let prequal_dir: ?Path = prequal.replay_dir
+    assert prequal_dir is not None and prequal_dir == Path("/cm/build32/cm/ot/TACT/TACT_CONFIG!30.0.0.133/build_G!31.OP.L8/saved_logs/replay_dir-run_prequal.JpAfK")
+
+    # --- the check_logs report: the real prequal one, trimmed -----------------
+    let prequal_report: CheckLogsReport = CheckLogsReport(samples / CHECK_LOGS)
+    # PROCESS_FLIGHT failed at two script lines -- the second quoted again
+    # from the core's .logs -- and TRANSMIT_FPD at one; each reported as
+    # "evaluate ... raised" and as "exception raised", counted once
+    let calls: []Tally = prequal_report.call_failures.top(5)
+    assert len(calls) == 2
+    assert calls[0].what == "IFPS_CORBA_SERVICES.PROCESS_FLIGHT raised BUFFER.MARK_MISMATCH_ERROR : buffer.adb:266"
+    assert calls[0].count == 2 and calls[0].first == "20251129.09.el:50622"
+    assert calls[1].what.startswith("IFPS_CORBA_SERVICES.TRANSMIT_FPD raised TACOT.READ_UTILITIES.ARGS_ERROR")
+    assert prequal_report.test_failures == ["receive_an1.el ok:9 nok:442", "receive_an3.el ok:8 nok:442"]
+    assert prequal_report.severe.total() == 2 and prequal_report.severe.items[0].what.startswith("TEST failure")
+    let warned_of: []Tally = prequal_report.warnings.top(5)
+    assert warned_of[0].what == "FPD_Id_From_Access_Keys cannot determine FPD_ID" and warned_of[0].count == 2
+    assert warned_of[1].what == "Not all count periods covered" and warned_of[1].count == 1
+    let summed_up: []str = prequal_report.summary(1)
+    assert summed_up[0] == "3 replayed calls failed, 2 tests failed, 2 SEVERE and 3 WARNING error reports"
+    assert summed_up[1] == "     2  IFPS_CORBA_SERVICES.PROCESS_FLIGHT raised BUFFER.MARK_MISMATCH_ERROR : buffer.adb:266, first at 20251129.09.el:50622"
+    assert summed_up[2] == "        ... and 1 more"
+
+    # tallies: most frequent first, the first seen first of equal counts
+    var tallies: Tallies = Tallies()
+    for what in ["a", "b", "b", "c", "c"]:
+        tallies.add(what)
+    assert [t.what for t in tallies.top(3)] == ["b", "c", "a"] and tallies.total() == 5
 
     # the verdicts the samples do not show
     def replay_log(lines: []str) -> ReplayLog:
@@ -282,6 +503,13 @@ if __name__ == "__main__":
     let unmoved: ReplayLog = replay_log(["x: replay_day: SEVERE: ERROR: check_logs reported errors, see: #emacs:(find-file \"/r/LOGS/c.svlog\")"])
     let unmoved_report: ?Path = unmoved.check_logs_report
     assert unmoved_report is not None and unmoved_report == Path("/r/LOGS/c.svlog")
+    # found in the replay directory when the log does not name it
+    let kept: Path = tmp / "saved_logs" / "replay_dir-run_prequal.X"
+    (kept / "work" / "logging" / "LOGS").mkdir()
+    run(["cp", str(samples / CHECK_LOGS), str(kept / "work" / "logging" / "LOGS")])
+    let unnamed: ReplayLog = replay_log([f"x: Treplay.locked: INFORMATION:   Save TRT output to {kept}/tmp/cmadm.x"])
+    let found_report: ?CheckLogsReport = unnamed.check_logs()
+    assert found_report is not None and found_report.test_failures'Length == 2
 
     run(["rm", "-rf", str(tmp)])
     print "replays: all tests passed"

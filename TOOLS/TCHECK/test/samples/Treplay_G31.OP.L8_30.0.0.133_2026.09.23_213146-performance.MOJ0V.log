@@ -51,6 +51,70 @@ tacot1_out_01:A core dump not created because the previous core dump was created
 /cm/local_build/TACTDEV_HOME/replay_dir/work/logging/LOGS_260924_125044/core.45186.26_09_24-00:42:52.19.logs:..ERROR_REPORT.SEVERE : Description      : Variable the_efpm_group_id_AUA763 has type UNDEFINED_TYPE
 /cm/local_build/TACTDEV_HOME/replay_dir/work/logging/LOGS_260924_125044/core.45186.26_09_24-00:42:52.19.logs:..ERROR_REPORT.SEVERE : Error            : Severity:SEVERE 25/11/26 00:00:32 (FROZEN_SHARED), REAL : 26/09/24 00:42:51 (UTC) UNKNOWN ASSERTION FAILURES
 /cm/local_build/TACTDEV_HOME/replay_dir/work/logging/LOGS_260924_125044/core.45186.26_09_24-00:42:52.19.logs:..ERROR_REPORT.SEVERE : Description      : CHECK FAILED :  1 assertion failures happened during the above service. Result without considering assertions:FALSE
+260925.035919: replay_day: INFORMATION: Frequence of error reports of Severity:SEVERE
+260925.035919: replay_day: INFORMATION: =========
+      1  Auto_Load is not properly defined
+      1  Curtain Query Validation
+      1  PROTON_REPORTING
+      2  Error executing tacot script
+      2  Oracle Lob management error
+      2  SET_ERROR 0 byte read after select read => assume closed
+      2  TEST failure, locate this error in *error_logs.log to find errors in other processes
+      3  AUA Occupancy Error at distance :  124 km
+      3  TACOT variable not of type String, operation aborted
+      4  QUERY_SLAVE_NO_ANCESTOR
+      5  CONNECTION_ERROR
+      5  Monitored Operation Failed
+      5  SET_ERROR Timeout error
+      6  Read array of LOB's failed (Oracle_Oci.OCILobArrayRead)
+     21  AUA Occupancy Error at distance :  0 km
+     21  AUA Occupancy Error at distance :  23 km
+     21  AUA Occupancy Error at distance :  31 km
+     94  No ARU Version file
+    242  More than one active FRA border crossing possible at a given time
+    399  TACOT variable not of type STRING_TYPE, operation aborted
+    483  UNKNOWN ASSERTION FAILURES
+260925.035919: replay_day: INFORMATION: Frequence of error reports of Severity:WARNING
+260925.035919: replay_day: INFORMATION: =========
+      1  Create_DEP_Message: failed to process generated DEP message
+      1  Potential CASA race condition
+      1  Race condition: Ignored old version in Set_Flight_Data
+      1  SYNTAX_ERROR
+      1  TACOT_FAILURE
+      1  TCPIP_ERROR
+      1  Track speed is greater than twice the maximum
+      1  Unable to use First Fixed_Info NTFM Minor for Flight BCS360  2025/11/27 02:10:00 EDDP with Tact_Id: 67814
+      1  Unable to use First Fixed_Info NTFM Minor for Flight EPC12JH 2025/11/27 14:05:00 EBKT with Tact_Id: 86035
+      1  Unable to use First Fixed_Info NTFM Minor for Flight UAL952  2025/11/27 13:00:00 EDDM with Tact_Id: 70363
+      2  DEACTIVATION_ERROR
+      2  DISABLE RUNWAY UPDATES TO FLIGHTS
+      2  RACE_CONDITION: IGNORED CASA REPLY : CASA_SIT_TIME_OUT
+      4  RACE_CONDITION: IGNORED CASA REPLY : CASA_SLOT_CANCELLATION
+      5  EOBT updated
+      9  Unexisting Airspace
+     12  Psal_Display.Echo_Area.Show -- TACOT
+     14  RACE_CONDITION: IGNORED CASA REPLY : CASA_NEW_CTOT
+     15  Curtain Validation
+     16  Read - Msg
+     18  PARAMETER_INCONSISTENCY_ERROR
+     18  Removing scheduled IDEP and IACH after deactivation
+     32  Generated DLA processing failed
+     71  Path Finder unusual lowest cost path
+     98  DATA_SEMANTIC_ERROR
+    149  Expensive query warning
+    154  Max number of rerouting alternatives reached when source_kind MIXER
+    156  Invalid airspace slice flight levels
+    197  No external IFPS_Id provided when creating an FPD, during a replay.
+    229  Not all count periods covered
+   1213  Ignored reply from CCAMS counter (race condition)
+   1435  NO_DATA_ERROR
+   3011  No longer considering old invalid due to Disregard_Invalids_Older_Than
+   4104  FPD_Id_From_Access_Keys cannot determine FPD_ID
+   6303  FRA BALCONY ISSUE
+   7806  Flight identifier not found
+  10540  Climb/descent report discarded due to wrong level.
+ 293670  Request adaptation for CF unavailability would push request below FL10
+260925.035919: replay_day: INFORMATION: SAR data:
 260925.040550: Treplay.locked: INFORMATION:   Dump: ora_loh.envb.oradp.tar.xz
 260925.040550: Treplay.locked: INFORMATION:   Dump: ora_loh.envdyn.oradp.tar.xz
 260925.040551: Treplay.locked: INFORMATION:   Dump: shared_area.tar.gz

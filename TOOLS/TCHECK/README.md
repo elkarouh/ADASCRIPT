@@ -57,24 +57,47 @@ comparison, the replay diffs, the build logs side by side, each file's
 changes. `-short` leaves the details out: `-focus changes -short` is just
 the files per committer by type.
 
-**A failed replay** is shown with what its Treplay log says of why: what
-`replay_day` returned, a link to the `check_logs` report when it found
-errors in the replay's logs -- where it is now, the replay directory being
-moved to `saved_logs/` once the replay is over -- and the cores its
-processes dumped. That is the cores themselves, one "dumped core file to"
-line each: the log's `NR_COREDUMPS` counts every line about a core, and a
-process that has dumped one says "A core dump not created" each time it
-would again, 8875 times in one replay for one core. `-v` adds the
-ERROR_REPORT.SEVERE lines.
+**A failed replay** is shown with what happened in it, counted rather than
+listed -- a prequal replay's check_logs report was 6 MB:
+
+- from its Treplay log: what `replay_day` returned, how many of the
+  replays finished, a prequal replay's successful and failing runs and what
+  `Tprequal_analyzer` said went wrong comparing with the reference, and the
+  cores dumped -- the cores themselves, one "dumped core file to" line each,
+  not `NR_COREDUMPS`, which counts every line about a core ("A core dump
+  not created ...", 2699 times in one replay for one core);
+- from the check_logs report, which fails the replay -- the one the log
+  names, where it is now (the replay directory is moved to `saved_logs/`
+  once the replay is over), or else the newest in the replay directory's
+  logs: the replay script calls TACOT could not evaluate, by call and
+  exception, with where the first was; the tests that failed; the error
+  reports by severity and message. Each is counted once, though check_logs
+  quotes one again from a core's .logs, and TACOT reports a failed call
+  twice;
+- when the report is not at hand, `replay_day`'s own count of the SEVERE
+  error reports, from the log.
+
+Five of each kind, the most frequent; twenty with `-v`. `-focus replay`
+without `-short` shows twenty, for this baseline and the one before, and
+compares the two summaries.
 
 ```
-"performance"  replay ==> FAILED
+"run_prequal"  replay ==> FAILED
 Look for details in:
-#emacs:(progn(find-file ".../Treplay_G!31.OP.L8_30.0.0.133_...-performance.MOJ0V.log"))
+#emacs:(progn(find-file ".../Treplay_G!31.OP.L8_30.0.0.133_...-run_prequal.NJrqM.log"))
     replay_day returned 1
+    prequal runs: 1 successful, 0 failing
+    prequal analyzer: No prequal summary found for baseline/reference
     check_logs reported errors:
-    #emacs:(progn(find-file ".../replay_dir.TAC_LO3.2026.09.25_04:05:56/work/logging/LOGS/260925.034144.dhtacd04.check_logs.result.svlog"))
-    1 core dumped: core.45186.26_09_24-00:42:52.19
+    #emacs:(progn(find-file ".../replay_dir-run_prequal.JpAfK/work/logging/LOGS/260925.134324.dhdevd28.check_logs.result.svlog"))
+    997 replayed calls failed, 2 tests failed, 2 SEVERE and 228 WARNING error reports
+       977  IFPS_CORBA_SERVICES.PROCESS_FLIGHT raised BUFFER.MARK_MISMATCH_ERROR : buffer.adb:266, first at 20251129.09.el:50622
+        18  IFPS_CORBA_SERVICES.TRANSMIT_FPD raised TACOT.READ_UTILITIES.ARGS_ERROR : ..., first at 20251130.11.el:91904
+         2  IFPS_CORBA_SERVICES.TRANSMIT_EFPM raised TACOT.READ_UTILITIES.ARGS_ERROR : ..., first at 20251201.10.el:376795
+            tests failed: receive_an1.el ok:9 nok:442, receive_an3.el ok:8 nok:442
+         2  SEVERE   TEST failure, locate this error in *error_logs.log ..., first at 25/12/03 00:05:00
+       227  WARNING  FPD_Id_From_Access_Keys cannot determine FPD_ID, first at 25/11/30 09:59:53
+         1  WARNING  Not all count periods covered, first at 25/12/01 14:20:37
 ```
 
 **The list of changes.** The CFMUTEST baseline built on the TACT baseline

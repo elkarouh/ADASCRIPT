@@ -120,10 +120,16 @@ def troubleshoot_tool() -> Tool_T:
     or meld."""
     DIFF_TOOL if DIFF_TOOL != "" else "meld"
 
+def emacs_link(filepath: Path) -> Link_T:
+    """An #emacs: link that opens FILEPATH."""
+    # Not an f-string: Emacs's adascript-mode loses track of the strings
+    # after f"...#...\"...\"" once a # has been in a string or char before.
+    "#emacs:(progn(find-file \"" + str(filepath) + "\"))"
+
 def echo_emacs(filepath: Path):
     """Print an #emacs: link for FILEPATH."""
     puts("SBw", "Look for details in:", NEWLINE=True)
-    print f"#emacs:(progn(find-file \"{filepath}\"))"
+    print emacs_link(filepath)
 
 def find_core_dumps(dir: Path):
     # find core files bigger than 600MB
