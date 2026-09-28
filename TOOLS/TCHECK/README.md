@@ -61,7 +61,7 @@ each ksh style difference with the previous baseline, its component and
 check, with the `ediff-files` link that shows it and, when its two files
 are there to read, the scripts whose findings are not the previous
 baseline's, so as to know whose change it was, each script's path in bold
-cyan to stand out from its findings:
+yellow to stand out from its findings:
 
 ```
   COMMON_CONFIG VAR_CHECK  #emacs:(ediff-files "..." "...")

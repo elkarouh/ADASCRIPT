@@ -209,8 +209,8 @@ class TestProgramsLog:
             lines.append("missing: " + line)
         lines
 
-# a script's path, bold cyan, to stand out from its findings
-const SCRIPT_COLOR: ColorSpec_T = "SC"
+# a script's path, bold yellow, to stand out from its findings
+const SCRIPT_COLOR: ColorSpec_T = "SY"
 
 def script_lines(diff: StyleDiff) -> []str:
     """The scripts DIFF is in, a line each, its path highlighted: its new
@@ -700,8 +700,8 @@ if __name__ == "__main__":
     assert changed_scripts(result_file, result_file) == []
     let lines: []str = script_lines(StyleDiff("COMMON_CONFIG", "VAR_CHECK", "(ediff-files \"" + baseline_file + "\" \"" + result_file + "\")"))
     assert lines == [
-        "    \x1b[1;36m./sources/find_current_ops.ksh\x1b[0m  new used not defined: CFMU_REGRESS_TEST_FTPS_DIR",
-        "    \x1b[1;36m./sources/regression_testing.ksh\x1b[0m  new used not defined: CM_HOST PERL_VERSION; gone defined not used: OLD_WORK_DIR"]
+        "    \x1b[1;33m./sources/find_current_ops.ksh\x1b[0m  new used not defined: CFMU_REGRESS_TEST_FTPS_DIR",
+        "    \x1b[1;33m./sources/regression_testing.ksh\x1b[0m  new used not defined: CM_HOST PERL_VERSION; gone defined not used: OLD_WORK_DIR"]
 
     # --- a build's type, from its directory's name ----------------------------
     def build_type(name: BuildName_T) -> str:
