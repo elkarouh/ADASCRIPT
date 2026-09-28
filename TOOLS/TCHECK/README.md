@@ -62,10 +62,7 @@ listed -- a prequal replay's check_logs report was 6 MB:
 
 - from its Treplay log: what `replay_day` returned, how many of the
   replays finished, a prequal replay's successful and failing runs and what
-  `Tprequal_analyzer` said went wrong comparing with the reference, and the
-  cores dumped -- the cores themselves, one "dumped core file to" line each,
-  not `NR_COREDUMPS`, which counts every line about a core ("A core dump
-  not created ...", 2699 times in one replay for one core);
+  `Tprequal_analyzer` said went wrong comparing with the reference;
 - from the check_logs report, which fails the replay -- the one the log
   names, where it is now (the replay directory is moved to `saved_logs/`
   once the replay is over), or else the newest in the replay directory's
@@ -75,7 +72,14 @@ listed -- a prequal replay's check_logs report was 6 MB:
   quotes one again from a core's .logs, and TACOT reports a failed call
   twice;
 - when the report is not at hand, `replay_day`'s own count of the SEVERE
-  error reports, from the log.
+  error reports, from the log;
+- the cores dumped, from the log and the report: which process dumped each,
+  and the command that opens gdb on it where it is now -- where it was
+  dumped, or in the replay's logs, where tacot moves one it did not expect
+  -- as a command and as an `#emacs:` link, the two places the replay's own
+  gdb link looks. The cores themselves, one "dumped core file to" line
+  each: not `NR_COREDUMPS`, which counts every line about a core ("A core
+  dump not created ...", 2699 times in one replay for one core).
 
 Five of each kind, the most frequent; twenty with `-v`. `-focus replay`
 without `-short` shows twenty, for this baseline and the one before, and
@@ -98,6 +102,10 @@ Look for details in:
          2  SEVERE   TEST failure, locate this error in *error_logs.log ..., first at 25/12/03 00:05:00
        227  WARNING  FPD_Id_From_Access_Keys cannot determine FPD_ID, first at 25/11/30 09:59:53
          1  WARNING  Not all count periods covered, first at 25/12/01 14:20:37
+    1 core dumped:
+      core.5742.26_09_24-06:46:51.97, by tacot1 (pid 5742)
+        lgdb --fullname -analyze_core .../UIF!30.0.0.131/build_G!31.OP.L8/ada/exe/tact_uif_shared_exe .../replay_dir-run_prequal.JpAfK/work/logging/LOGS/core.5742.26_09_24-06:46:51.97
+        #emacs:(progn(gud-gdb "lgdb --fullname -analyze_core .../tact_uif_shared_exe .../core.5742.26_09_24-06:46:51.97"))
 ```
 
 **The list of changes.** The CFMUTEST baseline built on the TACT baseline

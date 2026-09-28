@@ -91,6 +91,31 @@ def tally_lines(tallies: Tallies, limit: int, label: str = "") -> []str:
         lines.append(f"        ... and {more} more")
     lines
 
+# a core one of a replay's processes dumped: "Debug_Exception dumped core
+# file to <file> ] (from: <executable> - <pid> - ... - <process>)"
+type CoreDump is record:
+    file      : Path   # where it was dumped: .../tact/30.0.0.133/data_files/core.5742.26_09_24-06:46:51.97
+    executable: Path   # what dumped it: .../ada/exe/tact_uif_shared_exe; Path("") when the line does not say
+    pid       : str    # 5742
+    process   : str    # the replay's process it ran as: tacot1
+
+def core_dump_in(line: str) -> ?CoreDump:
+    """The core LINE says was dumped, if it says so."""
+    if line == /dumped core file to (?P<core>\S+) \] \(from: (?P<exe>\S+) - (?P<pid>\d+) - .* - (?P<process>[^ )]+)\)/:
+        return CoreDump(Path($+{core}), Path($+{exe}), $+{pid}, $+{process})
+    if line == /dumped core file to (?P<core>\S+)/:
+        return CoreDump(Path($+{core}), Path(""), "", "")
+    return None
+
+def analyze_command(core: CoreDump, file: Path) -> Command_T:
+    """The command that opens gdb on FILE, CORE where it is now, with the
+    executable that dumped it -- as the replay's own logs give it."""
+    f"lgdb --fullname -analyze_core {core.executable} {file}"
+
+def gdb_link(command: Command_T) -> Link_T:
+    """An #emacs: link that runs COMMAND in Emacs's gdb."""
+    "#emacs:(progn(gud-gdb \"" + command + "\"))"
+
 class CheckLogsReport:
     """A check_logs.result.svlog -- the errors check_logs found in a
     replay's logs and did not suppress, which fail the replay -- counted
@@ -104,12 +129,17 @@ class CheckLogsReport:
     test_failures: []str     # "receive_an1.el ok:9 nok:442"
     severe       : Tallies   # ERROR_REPORT.SEVERE, by message
     warnings     : Tallies   # ERROR_REPORT.WARNING, by message
+    cores        : []CoreDump  # the cores dumped, each once
 
     def __init__(self, file: Path):
         self.file = file
         var seen: {}str = {}
         for line in file.lines:
-            if line == /\[ TACOT :  evaluate (?P<call>\S+) file (?P<script>\S+), line (?P<at>\d+): col \d+\s+raised (?P<raised>.+)$/:
+            if "dumped core file to" in line:
+                let core: ?CoreDump = core_dump_in(line)
+                if core is not None and core.file.name not in [c.file.name for c in self.cores]:
+                    self.cores.append(core)
+            elif line == /\[ TACOT :  evaluate (?P<call>\S+) file (?P<script>\S+), line (?P<at>\d+): col \d+\s+raised (?P<raised>.+)$/:
                 let call: str = $+{call}
                 let raised: str = $+{raised}
                 let at: str = $+{script} + ":" + $+{at}
@@ -176,7 +206,7 @@ class ReplayLog:
     # ...". Not NR_COREDUMPS, which counts the lines about cores, among
     # them one "A core dump not created because the previous core dump was
     # created ..." each time a process that has dumped one would again
-    core_dumps   : []Path
+    core_dumps   : []CoreDump
     # replay_day's own count of the error reports of Severity:SEVERE, by
     # message: "Frequence of error reports of Severity:SEVERE"
     severe_counts: Tallies
@@ -219,8 +249,10 @@ class ReplayLog:
                 self.analyzer_errors.append($+{error})
             if "check_logs reported errors" in line and line == /find-file "(?P<report>[^"]+)"/:
                 report = $+{report}
-            if line == /dumped core file to (?P<core>\S+)/:
-                self.core_dumps.append(Path($+{core}))
+            if "dumped core file to" in line:
+                let core: ?CoreDump = core_dump_in(line)
+                if core is not None:
+                    self.core_dumps.append(core)
             if saved_from == "" and "Treplay.locked:" in line and line == /(?P<dir>\S*\/saved_logs\/replay_dir[^\/\s]*)\//:
                 saved_from = $+{dir}
             # "Frequence of error reports of Severity:SEVERE", a row of
@@ -244,6 +276,16 @@ class ReplayLog:
             self.check_logs_report = Path(report)
         if moved_to != "":
             self.replay_dir = Path(moved_to)
+            # a core was dumped in the replay directory, which is moved,
+            # named as the host names it: /auto/local_build/<host>/disk1/
+            # TACTDEV_HOME/replay_dir/... for /cm/local_build/TACTDEV_HOME/
+            # replay_dir -- what follows the directory's name is the same
+            let inside: str = "/" + Path(moved_from).name + "/"
+            for i in range(len(self.core_dumps)):
+                let dumped: str = str(self.core_dumps[i].file)
+                let at: int = dumped.find(inside)
+                if at >= 0:
+                    self.core_dumps[i].file = Path(moved_to + dumped[at + len(inside) - 1:])
         elif saved_from != "":
             self.replay_dir = Path(saved_from)
         if "YES" in verdict:
@@ -266,6 +308,18 @@ class ReplayLog:
         let report: ?Path = found
         if report is not None and -f report:
             return CheckLogsReport(report)
+        return None
+
+    def core_at(self, core: CoreDump) -> ?Path:
+        """Where CORE is now, if it is anywhere: where it was dumped, or in
+        the replay's logs, where tacot moves one it did not expect -- the
+        two places the replay's own gdb link looks."""
+        var places: []Path = [core.file]
+        let replay_dir: ?Path = self.replay_dir
+        if replay_dir is not None:
+            places.append(replay_dir / "work" / "logging" / "LOGS" / core.file.name)
+        for place in places:
+            return place if -e place
         return None
 
     def show(self, verbose: bool):
@@ -317,14 +371,30 @@ class ReplayLog:
                 print f"    {self.severe_counts.total()} SEVERE error reports, as replay_day counted them:"
                 for line in tally_lines(self.severe_counts, limit):
                     print "    " + line
-        let cores: int = len(self.core_dumps)
-        case cores:
+        # the cores the log names, and those only the report does -- a
+        # prequal replay's log may start after replay_day listed them
+        var cores: []CoreDump = self.core_dumps
+        if report is not None:
+            for core in report.cores:
+                if core.file.name not in [c.file.name for c in cores]:
+                    cores.append(core)
+        case len(cores):
             when 0: pass
-            when 1: print f"    1 core dumped: {self.core_dumps[0].name}"
-            when others:
-                print f"    {cores} cores dumped:"
-                for core in self.core_dumps:
-                    print f"      {core.name}"
+            when 1: print "    1 core dumped:"
+            when others: print f"    {len(cores)} cores dumped:"
+        for core in cores[0 ..< min(limit, len(cores))]:
+            let by: str = f", by {core.process} (pid {core.pid})" if core.process != "" else ""
+            print f"      {core.file.name}{by}"
+            continue if core.executable == ""
+            let place: ?Path = self.core_at(core)
+            if place is not None:
+                let command: Command_T = analyze_command(core, place)
+                print "        " + command
+                print "        " + gdb_link(command)
+            else:
+                print f"        not found at {core.file}, nor in the replay's logs"
+        if len(cores) > limit:
+            print f"      ... and {len(cores) - limit} more"
 
 def process_replay(replay: Replay, verbose: bool):
     """Check the status of a single replay (successful / failed / running)."""
@@ -450,7 +520,14 @@ if __name__ == "__main__":
     assert perf.replay_rc is not None and perf.replay_rc == 1
     let perf_report: ?Path = perf.check_logs_report
     assert perf_report is not None and perf_report == Path("/cm/ot/TACT/TACT_CONFIG!30.0.0.133/build_G!31.OP.L8/saved_logs/replay_dir.TAC_LO3.2026.09.25_04:05:56/work/logging/LOGS/260925.034144.dhtacd04.check_logs.result.svlog")
-    assert [core.name for core in perf.core_dumps] == ["core.45186.26_09_24-00:42:52.19"]
+    # its core: what dumped it, and where it is now, the replay directory moved
+    assert len(perf.core_dumps) == 1
+    let perf_core: CoreDump = perf.core_dumps[0]
+    assert perf_core.file == Path("/cm/ot/TACT/TACT_CONFIG!30.0.0.133/build_G!31.OP.L8/saved_logs/replay_dir.TAC_LO3.2026.09.25_04:05:56/tact/30.0.0.133/data_files/core.45186.26_09_24-00:42:52.19")
+    assert perf_core.executable == Path("/cm/build32/cm/ot/TACT/UIF!30.0.0.131/build_G!31.OP.L8/ada/exe/tact_uif_shared_exe")
+    assert perf_core.pid == "45186" and perf_core.process == "tacot1"
+    assert analyze_command(perf_core, perf_core.file) == "lgdb --fullname -analyze_core " + str(perf_core.executable) + " " + str(perf_core.file)
+    assert gdb_link("lgdb x y") == "#emacs:(progn(gud-gdb \"lgdb x y\"))"
     # the prequal log starts after check_logs ran: no report, no core named
     assert prequal.replay_rc is not None and prequal.replay_rc == 1
     assert prequal.check_logs_report is None and len(prequal.core_dumps) == 0
@@ -477,6 +554,8 @@ if __name__ == "__main__":
     let warned_of: []Tally = prequal_report.warnings.top(5)
     assert warned_of[0].what == "FPD_Id_From_Access_Keys cannot determine FPD_ID" and warned_of[0].count == 2
     assert warned_of[1].what == "Not all count periods covered" and warned_of[1].count == 1
+    # the core, named once though quoted from its log and from its .logs
+    assert len(prequal_report.cores) == 1 and prequal_report.cores[0].pid == "5742" and prequal_report.cores[0].process == "tacot1"
     let summed_up: []str = prequal_report.summary(1)
     assert summed_up[0] == "3 replayed calls failed, 2 tests failed, 2 SEVERE and 3 WARNING error reports"
     assert summed_up[1] == "     2  IFPS_CORBA_SERVICES.PROCESS_FLIGHT raised BUFFER.MARK_MISMATCH_ERROR : buffer.adb:266, first at 20251129.09.el:50622"
@@ -510,6 +589,12 @@ if __name__ == "__main__":
     let unnamed: ReplayLog = replay_log([f"x: Treplay.locked: INFORMATION:   Save TRT output to {kept}/tmp/cmadm.x"])
     let found_report: ?CheckLogsReport = unnamed.check_logs()
     assert found_report is not None and found_report.test_failures'Length == 2
+    # its core: gone from where it was dumped, found where tacot moves one
+    let core: CoreDump = prequal_report.cores[0]
+    assert unnamed.core_at(core) is None
+    run(["touch", str(kept / "work" / "logging" / "LOGS" / core.file.name)])
+    let core_now: ?Path = unnamed.core_at(core)
+    assert core_now is not None and core_now == kept / "work" / "logging" / "LOGS" / "core.5742.26_09_24-06:46:51.97"
 
     run(["rm", "-rf", str(tmp)])
     print "replays: all tests passed"
