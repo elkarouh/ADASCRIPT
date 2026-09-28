@@ -78,8 +78,9 @@ class Build:
         """Where the Tlog of SUBTYPE for PASS_ is, whether or not it exists yet."""
         self.tacot_dir(pass_) / "TACT_REGRESS_LOGS" / "LATEST" / tlog_filename(subtype, pass_)
 
-    def process_subtype(self, subtype: BuildSubtype):
-        """Process one subtype of the build, for both normal and mrun passes."""
+    def process_subtype(self, subtype: BuildSubtype, asked: bool = False):
+        """Process one subtype of the build, for both normal and mrun passes;
+        ASKED when -focus asked for it, so that its Tlog missing is said."""
         def lo_build_checks(tacot_corico_latest: Path):
             """Check for FORCE_TRACE errors in LO build logs."""
             let lo_logdir: Path = tacot_corico_latest / "work" / "logging-lo"
@@ -90,13 +91,14 @@ class Build:
         for pass_ in BuildPass:
             if pass_ == mrun and (self.btype != IP or subtype != in_test):
                 continue # we are only interested in "IP in" for the mrun pass
-            self.show_tlog(subtype, pass_)
+            self.show_tlog(subtype, pass_, asked)
             if subtype == lo and pass_ == normal:
                 lo_build_checks(self.tacot_dir(pass_))
 
-    def show_tlog(self, subtype: BuildSubtype, pass_: BuildPass):
-        """Show the Tlog of SUBTYPE for PASS_ if there is one, or a 'not
-        ready' message."""
+    def show_tlog(self, subtype: BuildSubtype, pass_: BuildPass, asked: bool = False):
+        """Show the Tlog of SUBTYPE for PASS_ if there is one, or say that
+        it is not there, and where it was looked for: for the subtypes each
+        build type is expected to have, or for any when ASKED for it."""
         let sl: str = subtype_label(subtype)
 
         let found: ?Tlog = self.tlog(subtype, pass_)
@@ -113,16 +115,18 @@ class Build:
             print
             return
 
-        case self.btype:
-            when IP:
-                return if subtype not in (in_test, mono)
-            when OP:
-                return if subtype not in (in_test, assert_test)
-            when others:
-                return
+        if not asked:
+            case self.btype:
+                when IP:
+                    return if subtype not in (in_test, mono)
+                when OP:
+                    return if subtype not in (in_test, assert_test)
+                when others:
+                    return
         case pass_:
             when normal: puts("SWb", f"\"{self.btype} {sl}\" build not ready yet", NEWLINE=True)
             when mrun:   puts("SWb", f"\"{self.btype} {sl} mrun\" build not ready yet", NEWLINE=True)
+        print "  no Tlog at " + self.tlog_path(subtype, pass_)
 
     def show_padactl(self):
         """Show the Padactl/CRC summary from the IP self."""
@@ -201,6 +205,9 @@ class Baseline:
     nr     : BaselineNr_T = "" # e.g. 30.0.0.121
     dir    : Path         = Path("")
     builds : []Build            # its build_G!* builds, once find_builds() has run
+    # the build_G!* directories find_builds() set aside: a variant it skips
+    # (92, 94, 95, 98, 30) or a name that says no IP, OP or SIP
+    set_aside: []BuildName_T
     replays: []Replay           # its replays' logs, once find_replays() has run
 
     def __init__(self, nr: BaselineNr_T):
@@ -227,12 +234,16 @@ class Baseline:
         let basedir: Path = self.dir
         let listing: []str = shellLines: ls -1d {basedir}/build_G!*
         self.builds = []
+        self.set_aside = []
         for line in listing:
             continue if line == ""
             let basename: str = Path(line).name # e.g. build_G!31.IP.L8
-            continue if any(pat in basename for pat in SKIP_BUILD_PATTERNS)
             let bt: ?BuildType = build_type_from(basename)
+            let skipped: bool = bt is None or any(pat in basename for pat in SKIP_BUILD_PATTERNS)
+            if skipped:
+                self.set_aside.append(basename)
             continue if bt is None
+            continue if skipped
             self.builds.append(Build(basename, bt, self.nr, self.dir))
 
     def find_replays(self):
@@ -401,6 +412,7 @@ if __name__ == "__main__":
     run(["cp", str(samples / "Tlog-in.log"), str(ip_tlog)])
     here.find_builds()
     assert [b.name for b in here.builds] == ["build_G!31.IP.L8", "build_G!31.OP.L8"]
+    assert here.set_aside == ["build_G!92.IP.L8"]    # build_default_Linux is no build_G!*
     assert here.builds[1].btype == OP and here.builds[1].baseline_nr == "30.0.0.133"
     assert here.builds[0].tlog_path(in_test, normal) == ip_tlog
     # read when the build is found, and asked of it after

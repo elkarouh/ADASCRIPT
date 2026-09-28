@@ -52,6 +52,12 @@ Tcheck_tact [-no-color] [-s] [-f] [-v] [-l] [-batch] [-only-new] [-exit-code]
   of the summary, her branches, her files; the newly failed tests stay, the
   whole baseline's. A name nobody committed under says so, and who did.
 
+When the build or the Tlog asked for is not there, Tcheck_tact says so and
+where it looked: `No OP build in <baseline dir>` with the builds it has and
+those it sets aside (the 92, 94, 95, 98 and 30 variants), or `"OP in" build
+not ready yet` with the Tlog it looked for -- also for a subtype a build
+type is not expected to have, when -focus asks for it.
+
 Each focus shows its overview first, then the details -- the detailed test
 comparison, the replay diffs, the build logs side by side, each file's
 changes. `-short` leaves the details out: `-focus changes -short` is just

@@ -752,6 +752,8 @@ test: compile
 	@# backend cannot follow a nimport.
 	@echo "=== Tcheck_tact -focus changes: the tests the Tlogs report failing ==="
 	@$(TCDIR)/test/run_new_failures_tests.sh $(TCDIR)/Tcheck_tact
+	@echo "=== Tcheck_tact -focus IP/OP/SIP: what it looked for and did not find ==="
+	@$(TCDIR)/test/run_missing_tests.sh $(TCDIR)/Tcheck_tact
 	@# Each of Tcheck_tact's modules carries its own tests, under
 	@# `if __name__ == "__main__"`: built alone, the module runs them.
 	@echo "=== Tcheck_tact's modules, their own tests ==="
