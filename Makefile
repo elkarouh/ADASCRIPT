@@ -760,7 +760,7 @@ test: compile
 	@for m in tcheck_common tlog replays baselines csystem_log changes_report; do \
 	    printf '  %-42s' "LIBS/$$m.ady"; \
 	    $(ADY2NIM) c $(TCDIR)/LIBS/$$m.ady >/dev/null 2>&1 \
-	        && $(TCDIR)/LIBS/$$m >/dev/null 2>&1 && echo OK || { echo FAIL; exit 1; }; \
+	        && CM_ENV_ID='G!31.IP.L8' $(TCDIR)/LIBS/$$m >/dev/null 2>&1 && echo OK || { echo FAIL; exit 1; }; \
 	done
 	@# make_comparable, which Tcheck_tact runs on the logs it compares:
 	@# the volatile parts replaced, in place.

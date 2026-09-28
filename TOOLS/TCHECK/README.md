@@ -101,7 +101,12 @@ the previous one's had. The ediff links are left out and the baseline
 numbers masked, so that only a change in what fails shows; a script line
 comes under its style difference, so as to say which one it is. The log
 read is a build's newest check_run_test_programs.log: a test's LOGS
-directory may hold an older one of its own.
+directory may hold an older one of its own. It is looked for in the work
+directory of tacot_corico.LATEST, else anywhere in the build's saved_logs
+-- an older baseline's is in tacot_corico_<date>/tact/<nr>/data_files, and
+its tacot_corico.LATEST symlink may be gone. An older baseline's build may
+be named with a dot for the bang, build_G.31.IP.L8: it is taken when the
+build_G!31.IP.L8 is not there.
 
 What a baseline is compared with is the nearest before it to have what is
 compared, back 20 numbers: the summary, with the nearest whose IP build

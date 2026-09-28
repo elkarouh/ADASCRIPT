@@ -189,5 +189,19 @@ check "build_info: none to compare with, how far back" \
     "  none in $OT/TACT/TACT_CONFIG.30.0.0.159/build_G!31.IP.L8, nor in the baselines before it, back to 30.0.0.140" \
     "$("$TCHECK" -no-color -f -focus build_info 30.0.0.160 2>/dev/null | sed -n '/^Compare the check_run_test_programs/{n;p;}')"
 
+# an older baseline's build, as 30.0.0.120's: build_G.31.IP.L8, with a dot
+# for the bang, no tacot_corico.LATEST, and its check_run_test_programs.log
+# in tacot_corico_<date>/tact/<nr>/data_files
+LATER=$OT/TACT/TACT_CONFIG.30.0.0.121
+OLDER=$OT/TACT/TACT_CONFIG.30.0.0.120/build_G.31.IP.L8/saved_logs/tacot_corico_2026.09.07_20.19.23/tact/30.0.0.120/data_files
+mkdir -p "$LATER/build_G!31.IP.L8/saved_logs/tacot_corico.LATEST/work" "$OLDER"
+cp "$SAMPLES/check_run_test_programs.log" "$LATER/build_G!31.IP.L8/saved_logs/tacot_corico.LATEST/work/"
+cp "$SAMPLES/check_run_test_programs.log" "$OLDER/"
+check "build_info: an older baseline's log, where it keeps it" \
+    "Compare the check_run_test_programs.log summary with 30.0.0.120's:
+  #emacs:(progn(find-file \"$OLDER/check_run_test_programs.log\"))
+  the same summary" \
+    "$("$TCHECK" -no-color -f -focus build_info 30.0.0.121 2>/dev/null | sed -n '/^Compare the check_run_test_programs/,/^Compare Csystem/p' | grep -v '^Compare Csystem')"
+
 echo
 if [ $fails -eq 0 ]; then echo "All checks passed."; else echo "$fails check(s) FAILED."; exit 1; fi

@@ -414,12 +414,17 @@ class Build:
 
     def test_programs_log(self) -> ?Path:
         """The build's check_run_test_programs.log, the newest if there
-        are several -- a test's LOGS directory may hold one of its own;
-        none before check_run_test_programs_log has run."""
-        let work: Path = self.tacot_dir(normal) / "work"
-        let found: []str = shellLines: find {work} -type f -name 'check_run_test_programs.log' -printf '%T@ %p\n' | sort -n | tail -1 | cut -d' ' -f2-
-        return None if found'Length == 0 or found[0] == ""
-        return Path(found[0])
+        are several -- a test's LOGS directory may hold one of its own:
+        in the work directory of its tacot_corico.LATEST, else anywhere in
+        its saved_logs -- an older baseline's is in
+        tacot_corico_<date>/tact/<nr>/data_files; none before
+        check_run_test_programs_log has run."""
+        let latest_work: Path = self.tacot_dir(normal) / "work"
+        let saved_logs: Path = self.saved_logs()
+        for place in [latest_work, saved_logs]:
+            let found: []str = shellLines: find {place} -type f -name 'check_run_test_programs.log' -printf '%T@ %p\n' 2>/dev/null | sort -n | tail -1 | cut -d' ' -f2-
+            return Path(found[0]) if found'Length > 0 and found[0] != ""
+        return None
 
     def check_test_programs(self, fast_mode: bool, verbose: bool, changes: {str}[]str, no_changes: str):
         """Find or run check_run_test_programs_log from the IP self; what
@@ -524,10 +529,19 @@ class Baseline:
         other.dir = self.dir.parent / ("TACT_CONFIG." + nr)
         other
 
+    def build_name(self, btype: BuildType) -> BuildName_T:
+        """The directory of its build of BTYPE, whichever build $CM_ENV_ID
+        names: build_G!31.IP.L8, or, in an older baseline, with a dot for
+        the bang -- build_G.31.IP.L8 -- when only that one is there."""
+        let name: BuildName_T = "build_" + build_env_id($CM_ENV_ID, btype)
+        let dotted: BuildName_T = name.replace("!", ".")
+        return dotted if not -d (self.dir / name) and -d (self.dir / dotted)
+        return name
+
     def build(self, btype: BuildType) -> Build:
         """Its build of BTYPE, whichever build $CM_ENV_ID names, whether
-        or not it is there."""
-        Build("build_" + build_env_id($CM_ENV_ID, btype), btype, self.nr, self.dir)
+        or not it is there (see build_name)."""
+        Build(self.build_name(btype), btype, self.nr, self.dir)
 
     def compare_test_programs(self, changes: {str}[]str):
         """The summary of its IP build's check_run_test_programs.log, diffed
@@ -565,7 +579,7 @@ class Baseline:
     def saved_logs_dir(self, btype: BuildType) -> Path:
         """The saved_logs directory of this baseline's build of BTYPE,
         whichever build $CM_ENV_ID names."""
-        self.dir / ("build_" + build_env_id($CM_ENV_ID, btype)) / "saved_logs"
+        self.dir / self.build_name(btype) / "saved_logs"
 
     def find_builds(self):
         """List the baseline's build_G!* directories into builds, as the
@@ -847,6 +861,19 @@ if __name__ == "__main__":
     assert earlier.nr == "30.0.0.131" and earlier.dir == tmp / "TACT_CONFIG.30.0.0.131"
     assert earlier.previous().nr == "30.0.0.130"
     assert here.before(3).nr == "30.0.0.130" and here.before(3).dir == tmp / "TACT_CONFIG.30.0.0.130"
+    # an older baseline's build, with a dot for the bang, and its
+    # check_run_test_programs.log elsewhere than in tacot_corico.LATEST --
+    # a symlink, and not there at all here
+    # (make test runs this with CM_ENV_ID=G!31.IP.L8)
+    let bang: BuildName_T = "build_" + build_env_id($CM_ENV_ID, IP)
+    let dotted: BuildName_T = bang.replace("!", ".")
+    let dotted_logs: Path = earlier.dir / dotted / "saved_logs" / "tacot_corico_2026.09.07_20.19.23" / "tact" / "30.0.0.131" / "data_files"
+    dotted_logs.mkdir()
+    run(["cp", str(samples / "check_run_test_programs.log"), str(dotted_logs)])
+    assert earlier.build_name(IP) == dotted and here.build_name(IP) == bang
+    assert earlier.saved_logs_dir(IP) == earlier.dir / dotted / "saved_logs"
+    let older_log: ?Path = earlier.build(IP).test_programs_log()
+    assert older_log is not None and older_log == dotted_logs / "check_run_test_programs.log"
     # the IP build has a Tlog, of 'in' for the normal pass
     let ip_tlog: Path = here.dir / "build_G!31.IP.L8" / "saved_logs" / "tacot_corico.LATEST" / "TACT_REGRESS_LOGS" / "LATEST" / "Tlog-in.log"
     ip_tlog.parent.mkdir()
