@@ -103,6 +103,10 @@ comes under its style difference, so as to say which one it is. The log
 read is a build's newest check_run_test_programs.log: a test's LOGS
 directory may hold an older one of its own.
 
+The previous baseline, here and wherever Tcheck_tact compares with one, is
+the nearest before it whose directory is there -- a number may have been
+skipped, or its baseline removed -- back 20 numbers.
+
 ```
 Compare the check_run_test_programs.log summary with 30.0.0.134's:
   #emacs:(progn(find-file ".../TACT_CONFIG.30.0.0.134/.../check_run_test_programs.log"))

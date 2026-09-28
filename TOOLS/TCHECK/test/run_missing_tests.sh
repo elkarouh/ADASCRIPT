@@ -169,5 +169,13 @@ check "build_info: and in the summary diffed with the previous one's" "  + 7 ksh
   -   1 SEVERE from old_program: something fixed since" \
     "$(echo "$info" | sed -n '/^Compare the check_run_test_programs/,/^Compare Csystem/p' | grep '^  [+-]')"
 
+# the previous baseline is the nearest there: 136 was never made
+NEXT=$OT/TACT/TACT_CONFIG.30.0.0.137
+mkdir -p "$NEXT/build_G!31.IP.L8/saved_logs/tacot_corico.LATEST/work"
+cp "$SAMPLES/check_run_test_programs.log" "$NEXT/build_G!31.IP.L8/saved_logs/tacot_corico.LATEST/work/"
+check "build_info: compared with the nearest baseline there" \
+    "Compare the check_run_test_programs.log summary with 30.0.0.135's:" \
+    "$("$TCHECK" -no-color -f -focus build_info 30.0.0.137 2>/dev/null | grep '^Compare the check_run_test_programs')"
+
 echo
 if [ $fails -eq 0 ]; then echo "All checks passed."; else echo "$fails check(s) FAILED."; exit 1; fi
