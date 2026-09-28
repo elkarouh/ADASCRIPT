@@ -75,16 +75,24 @@ Then the other programs' SEVERE messages, how many and the first (`3 SEVERE from
 param_shared_cleanup_ftok: dbspy -D ...`); docgen's errors, five of them
 (all with `-v`); and the files missing.
 
-Without `-short`, `-focus build_info` then compares that summary with the
-previous baseline's -- what fails now that did not, and what no longer
-does, the baseline numbers in either masked so that only a real change
-shows:
+Without `-short`, `-focus build_info` then diffs that summary with the
+previous baseline's -- `+` a line only this baseline's has, `-` one only
+the previous one's had. The ediff links are left out and the baseline
+numbers masked, so that only a change in what fails shows; a script line
+comes under its style difference, so as to say which one it is. The log
+read is a build's newest check_run_test_programs.log: a test's LOGS
+directory may hold an older one of its own.
 
 ```
-Compare check_run_test_programs.log with 30.0.0.134's:
+Compare the check_run_test_programs.log summary with 30.0.0.134's:
   #emacs:(progn(find-file ".../TACT_CONFIG.30.0.0.134/.../check_run_test_programs.log"))
-  new:  ksh style difference: TACT_CONFIG VAR_CHECK
-  gone: SEVERE from old_program: something fixed since
+  + 7 ksh style differences with the previous baseline:
+  +   TACT_CONFIG VAR_CHECK
+  +     ./sources/find_current_ops.ksh  new used not defined: CFMU_REGRESS_TEST_FTPS_DIR
+    COMMON_CONFIG VAR_CHECK
+  +     ./sources/regression_testing.ksh  new used not defined: CM_HOST
+  - 6 ksh style differences with the previous baseline:
+  -   1 SEVERE from old_program: something fixed since
 ```
 
 and prints the command comparing the two baselines' Csystem_build.log,

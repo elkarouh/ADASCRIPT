@@ -57,9 +57,16 @@ def style_findings(file: Path) -> []StyleFinding:
     findings
 
 def ediff_files(ediff: str) -> []Path:
-    """The two files an ediff link compares; none if EDIFF is not one."""
+    """The two files an ediff link compares, in CM_OT; none if EDIFF is not
+    one."""
     return [] if ediff != /^\(ediff-files "(?P<a>[^"]+)" "(?P<b>[^"]+)"\)$/
-    [Path($+{a}), Path($+{b})]
+    [in_cm_ot($+{a}), in_cm_ot($+{b})]
+
+def in_cm_ot(file: str) -> Path:
+    """FILE, a /cm/ot/... path as a log names it, in CM_OT: the same unless
+    TCHECK_CM_OT says otherwise."""
+    return CM_OT / file.removeprefix("/cm/ot/") if file.startswith("/cm/ot/")
+    return Path(file)
 
 def by_kind(findings: []StyleFinding, script: str) -> []str:
     """SCRIPT's FINDINGS, a "<kind>: <names>" for each kind."""
@@ -90,10 +97,38 @@ def masked(line: str) -> str:
     out = s/\d+\.\d+\.\d+\.\d+/<nr>/g
     out
 
-def compared_facts(before: []str, after: []str) -> []str:
-    """The facts AFTER has and BEFORE has not, "new: ...", then those
-    BEFORE has and AFTER has not, "gone: ..."."""
-    ["new:  " + f for f in after if f not in before] + ["gone: " + f for f in before if f not in after]
+def diff_summaries(before: []str, after: []str) -> []str:
+    """How summary AFTER differs from BEFORE: its lines BEFORE has not,
+    "+ ", then BEFORE's lines it has not, "- "."""
+    let added: []str = marked(after, before, "+ ")
+    let removed: []str = marked(before, after, "- ")
+    added + removed
+
+def keyed(lines: []str) -> []str:
+    """LINES of a summary, a script line (indented four) after the style
+    difference it is of and a newline: the same script line under another
+    is another line."""
+    var keys: []str = []
+    var heading: str = ""
+    for line in lines:
+        if not line.startswith("    "):
+            heading = line
+        keys.append(heading + "\n" + line if line.startswith("    ") else line)
+    keys
+
+def marked(lines: []str, other: []str, mark: str) -> []str:
+    """LINES that OTHER has not, each after MARK. A script line comes under
+    the style difference it is of, unmarked when that is in OTHER too, so
+    as to say which one it is."""
+    let others: []str = keyed(other)
+    var out: []str = []
+    for key in keyed(lines):
+        continue if key in others
+        let parts: []str = key.split("\n")
+        if len(parts) == 2 and parts[0] in others and ("  " + parts[0]) not in out:
+            out.append("  " + parts[0])
+        out.append(mark + parts[len(parts) - 1])
+    out
 
 # the SEVERE messages of one of the test programs: how many, and the first
 type ProgramErrors is record:
@@ -146,22 +181,11 @@ class TestProgramsLog:
                 return
         self.errors.append(ProgramErrors(program, 1, message))
 
-    def facts(self) -> []str:
-        """What failed, a line each, as another baseline's log would say it
-        too: the baseline numbers in it masked, docgen's all, and each
-        program's SEVERE messages by their first, without how many."""
-        var facts: []str = [masked(v) for v in self.verdict]
-        facts = facts + [f"ksh style difference: {d.component} {d.check}" for d in self.style_diffs]
-        facts = facts + [f"SEVERE from {e.program}: " + masked(e.first) for e in self.errors]
-        facts = facts + ["docgen: " + masked(m) for m in self.docgen]
-        facts = facts + ["missing: " + masked(m) for m in self.missing]
-        facts
-
-    def summary(self, limit: int = 5, read_results: bool = True) -> []str:
+    def summary(self, limit: int = 5, read_results: bool = True, links: bool = True) -> []str:
         """What failed, a line each: the verdict; each style difference,
-        with its ediff and, READ_RESULTS and its two files there, the
-        scripts it is in; each program's SEVERE messages, how many and the
-        first; LIMIT of docgen's; the files missing."""
+        with its ediff if LINKS and, READ_RESULTS and its two files there,
+        the scripts it is in; each program's SEVERE messages, how many and
+        the first; LIMIT of docgen's; the files missing."""
         var lines: []str = []
         if len(self.verdict) + len(self.style_diffs) + len(self.errors) + len(self.docgen) + len(self.missing) == 0:
             return ["no SEVERE message"]
@@ -169,7 +193,7 @@ class TestProgramsLog:
         if len(self.style_diffs) > 0:
             lines.append(f"{len(self.style_diffs)} ksh style differences with the previous baseline:")
             for diff in self.style_diffs:
-                let link: str = "  #emacs:" + diff.ediff if diff.ediff != "" else ""
+                let link: str = "  #emacs:" + diff.ediff if links and diff.ediff != "" else ""
                 lines.append(f"  {diff.component} {diff.check}" + link)
                 if read_results:
                     lines = lines + script_lines(diff)
@@ -336,10 +360,11 @@ class Build:
             puts("SWb", "WARNING: No CRC summary file found!", NEWLINE=True)
 
     def test_programs_log(self) -> ?Path:
-        """The build's check_run_test_programs.log; none before
-        check_run_test_programs_log has run."""
+        """The build's check_run_test_programs.log, the newest if there
+        are several -- a test's LOGS directory may hold one of its own;
+        none before check_run_test_programs_log has run."""
         let work: Path = self.tacot_dir(normal) / "work"
-        let found: []str = shellLines: find {work} -type f -name 'check_run_test_programs.log' -print -quit
+        let found: []str = shellLines: find {work} -type f -name 'check_run_test_programs.log' -printf '%T@ %p\n' | sort -n | tail -1 | cut -d' ' -f2-
         return None if found'Length == 0 or found[0] == ""
         return Path(found[0])
 
@@ -429,16 +454,20 @@ class Baseline:
         Build("build_" + build_env_id($CM_ENV_ID, btype), btype, self.nr, self.dir)
 
     def compare_test_programs(self, older: Baseline):
-        """What its IP build's check_run_test_programs.log says failed that
-        OLDER's did not, and what no longer fails: a line each."""
-        puts("SWr", f"Compare check_run_test_programs.log with {older.nr}'s:", NEWLINE=True)
+        """The summary of its IP build's check_run_test_programs.log, diffed
+        with OLDER's: without the ediff links, whose files are named after
+        a pid, and with the baseline numbers masked, so that only a change
+        in what fails shows."""
+        puts("SWr", f"Compare the check_run_test_programs.log summary with {older.nr}'s:", NEWLINE=True)
         let mine: ?Path = self.build(IP).test_programs_log()
         let theirs: ?Path = older.build(IP).test_programs_log()
         if mine is not None and theirs is not None:
             print "  " + emacs_link(theirs)
-            let changes: []str = compared_facts(TestProgramsLog(theirs).facts(), TestProgramsLog(mine).facts())
+            let before: []str = [masked(line) for line in TestProgramsLog(theirs).summary(1000, links=False)]
+            let after: []str = [masked(line) for line in TestProgramsLog(mine).summary(1000, links=False)]
+            let changes: []str = diff_summaries(before, after)
             if len(changes) == 0:
-                print "  the same failures"
+                print "  the same summary"
             for line in changes:
                 print "  " + line
         elif mine is None:
@@ -629,17 +658,25 @@ if __name__ == "__main__":
     assert summed[16] == "10 docgen errors:" and summed[19] == "  ... and 8 more"
     assert len(summed) == 21
 
-    # --- the same log, compared with another baseline's -------------------
+    # --- the summary, diffed with another baseline's ----------------------
     assert masked("Ccheck_build_closure -s -t -b ELD.ELD_CONFIG.30.0.0.132 failed") == "Ccheck_build_closure -s -t -b ELD.ELD_CONFIG.<nr> failed"
-    let said: []str = programs.facts()
-    assert said[0] == "Ccheck_build_closure -s -t -b ELD.ELD_CONFIG.<nr> failed with exit code 1"
-    assert "ksh style difference: COMMON_CONFIG VAR_CHECK" in said
-    assert "SEVERE from param_shared_cleanup_ftok: dbspy -D ./env_imp_regress/1.545.cpg/NUM_MESSAGES.ftok failed with exit code 42 : dbspy: file ./env_imp_regress/1.545.cpg/NUM_MESSAGES.ftok cannot be opened" in said
-    assert len(said) == 5 + 7 + 3 + 10 + 1
-    assert compared_facts(said, said) == []
-    # the baseline before had no TACT_CONFIG style difference, and a docgen error fixed since
-    let older: []str = [f for f in said if f != "ksh style difference: TACT_CONFIG VAR_CHECK"] + ["docgen: block not included: x"]
-    assert compared_facts(older, said) == ["new:  ksh style difference: TACT_CONFIG VAR_CHECK", "gone: docgen: block not included: x"]
+    assert programs.summary(2, read_results=False, links=False)[6] == "  COMMON_CONFIG VAR_CHECK"
+    let summed_before: []str = ["2 ksh style differences with the previous baseline:",
+        "  COMMON_CONFIG VAR_CHECK", "    ./a.ksh  new used not defined: X",
+        "  ELD_CONFIG VAR_CHECK", "    ./b.ksh  new used not defined: Y",
+        "  1 SEVERE from p: gone since"]
+    let summed_after: []str = ["2 ksh style differences with the previous baseline:",
+        "  COMMON_CONFIG VAR_CHECK", "    ./a.ksh  new used not defined: X", "    ./c.ksh  new used not defined: Z",
+        "  TACT_CONFIG VAR_CHECK", "    ./d.ksh  new used not defined: W"]
+    assert diff_summaries(summed_before, summed_before) == []
+    # the same script line, under another style difference: a change
+    assert diff_summaries(["  A", "    ./a.ksh"], ["  A", "  B", "    ./a.ksh"]) == ["+   B", "+     ./a.ksh", "  " + "  A", "-     ./a.ksh"]
+    # a new script under a style difference both have: that one, unmarked, above it
+    assert diff_summaries(summed_before, summed_after) == [
+        "  " + "  COMMON_CONFIG VAR_CHECK", "+     ./c.ksh  new used not defined: Z",
+        "+   TACT_CONFIG VAR_CHECK", "+     ./d.ksh  new used not defined: W",
+        "-   ELD_CONFIG VAR_CHECK", "-     ./b.ksh  new used not defined: Y",
+        "-   1 SEVERE from p: gone since"]
 
     # --- the scripts a style difference is in: a real result, and a baseline
     # made from it by hand --------------------------------------------------

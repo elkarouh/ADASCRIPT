@@ -75,18 +75,29 @@ check "no replay dir: what, where, how far back" \
 check "and no line per baseline tried" "" \
     "$("$TCHECK" -no-color -focus replay performance 30.0.0.135 2>&1 >/dev/null | grep 'trying' || true)"
 
-# -focus build_info: check_run_test_programs.log compared with the previous
-# baseline's -- which had no TACT_CONFIG style difference, and a SEVERE
-# message fixed since; and the Csystem_build.log comparison, a command
+# -focus build_info: the summary of check_run_test_programs.log diffed with
+# the previous baseline's -- which had no TACT_CONFIG style difference, and
+# a SEVERE message fixed since; and the Csystem_build.log comparison, a command
 # printed rather than meld opened
 PREV=$OT/TACT/TACT_CONFIG.30.0.0.134
 for bl in "$BL" "$PREV"; do
     mkdir -p "$bl/build_G!31.IP.L8/saved_logs/tacot_corico.LATEST/work"
 done
 cp "$SAMPLES/check_run_test_programs.log" "$BL/build_G!31.IP.L8/saved_logs/tacot_corico.LATEST/work/"
-{ grep -v 'check of TACT_CONFIG scripts' "$SAMPLES/check_run_test_programs.log"
+{ grep -v 'check of TACT_CONFIG scripts\|TACT_CONFIG_style_errors_test\|/TACT_CONFIG\.RESULT' "$SAMPLES/check_run_test_programs.log"
   echo '260923.225938: old_program: SEVERE: something fixed since'
 } > "$PREV/build_G!31.IP.L8/saved_logs/tacot_corico.LATEST/work/check_run_test_programs.log"
+# an older one in a test's LOGS directory, which is not the build's
+STRAY="$PREV/build_G!31.IP.L8/saved_logs/tacot_corico.LATEST/work/logging-in/LOGS_a_test"
+mkdir -p "$STRAY"
+echo '260101.000000: check_run_test_programs_log: SEVERE: a stray log' > "$STRAY/check_run_test_programs.log"
+touch -d '2020-01-01' "$STRAY/check_run_test_programs.log"
+# the two files TACT_CONFIG VAR_CHECK's ediff compares, where it says, in
+# the CM tree
+KSH=$OT/TACT/TACT_CONFIG.30.0.0.134/build_G.31.IP.L8/sources/test
+mkdir -p "$KSH" "$OT/TACT/TACT_CONFIG!30.0.0.134/build_G!31.IP.L8/user_output/KSH_STYLE_SCANNER"
+cp "$SAMPLES/COMMON_CONFIG.BASELINE.RESULT.VAR_CHECK.txt" "$KSH/new_TACT_CONFIG_style_errors_test.BASELINE.RESULT.VAR_CHECK.txt"
+cp "$SAMPLES/COMMON_CONFIG.RESULT.VAR_CHECK" "$OT/TACT/TACT_CONFIG!30.0.0.134/build_G!31.IP.L8/user_output/KSH_STYLE_SCANNER/TACT_CONFIG.RESULT.VAR_CHECK.30489"
 info=$("$TCHECK" -no-color -f -focus build_info 30.0.0.135 2>/dev/null)
 check "build_info: no Csystem_build.log, said so" \
     "  no $PREV/build_G!31.IP.L8/Csystem_build.log
@@ -94,10 +105,17 @@ check "build_info: no Csystem_build.log, said so" \
     "$(echo "$info" | sed -n '/^Compare Csystem_build.log:/,$p' | grep '^  no ')"
 for bl in "$BL" "$PREV"; do echo 'Csystem ...' > "$bl/build_G!31.IP.L8/Csystem_build.log"; done
 info=$("$TCHECK" -no-color -f -focus build_info 30.0.0.135 2>/dev/null)
-check "build_info: the log compared with the previous one's" "Compare check_run_test_programs.log with 30.0.0.134's:
-  new:  ksh style difference: TACT_CONFIG VAR_CHECK
-  gone: SEVERE from old_program: something fixed since" \
-    "$(echo "$info" | sed -n '/^Compare check_run_test_programs/,/^Compare Csystem/p' | grep -v '^Compare Csystem' | grep -v '#emacs:')"
+check "build_info: the summary diffed with the previous one's" "Compare the check_run_test_programs.log summary with 30.0.0.134's:
+  + 7 ksh style differences with the previous baseline:
+  +   TACT_CONFIG VAR_CHECK
+  +     ./sources/find_current_ops.ksh  new used not defined: CFMU_REGRESS_TEST_FTPS_DIR
+  +     ./sources/regression_testing.ksh  new used not defined: CM_HOST PERL_VERSION; gone defined not used: OLD_WORK_DIR
+  - 6 ksh style differences with the previous baseline:
+  -   1 SEVERE from old_program: something fixed since" \
+    "$(echo "$info" | sed -n '/^Compare the check_run_test_programs/,/^Compare Csystem/p' | grep -v '^Compare Csystem' | grep -v '#emacs:')"
+check "build_info: the newest log, not a test's older one" \
+    "  #emacs:(progn(find-file \"$PREV/build_G!31.IP.L8/saved_logs/tacot_corico.LATEST/work/check_run_test_programs.log\"))" \
+    "$(echo "$info" | sed -n '/^Compare the check_run_test_programs/{n;p;}')"
 check "build_info: the Csystem_build.log command, printed" \
     "  meld /tmp/reports/30.0.0.134_Csystem_build.log /tmp/reports/30.0.0.135_Csystem_build.log" \
     "$(echo "$info" | sed -n '/^Compare Csystem_build.log:/{n;p;}')"
