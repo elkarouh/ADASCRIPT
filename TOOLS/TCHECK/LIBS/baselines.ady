@@ -137,12 +137,53 @@ def changes_to(changes: {str}[]str, name: str) -> []str:
             lines = lines + who
     lines
 
-def script_of(line: str) -> str:
-    """The script a script line of a summary names: its first word, without
-    its colour."""
+# a script's path, or an Ada file's,, bold yellow, to stand out from its findings
+const SCRIPT_COLOR: ColorSpec_T = "SY"
+
+def uncoloured(line: str) -> str:
+    """LINE without its colours."""
     var plain: str = line
     plain = s/\x1b\[[0-9;]*m//g
-    plain.strip().split(" ")[0]
+    plain
+
+def script_of(line: str) -> str:
+    """The script a script line of a summary names -- or the file an Ada
+    style errors line does: its first word, without its colour."""
+    uncoloured(line).strip().split(" ")[0]
+
+def style_files(errors: []str) -> []str:
+    """ERRORS -- Ada style errors, "<file>:<line>:<col>: (style) <message>
+    [<switch>]" -- a line per file, as each first appears, its name
+    highlighted: how many, and their switches."""
+    var files: []str = []
+    var counts: {str}int = {:}
+    var switches: {str}[]str = {:}
+    for error in errors:
+        let file: str = error.split(":")[0]
+        if file not in counts:
+            files.append(file)
+            counts[file] = 0
+            switches[file] = []
+        counts[file] += 1
+        if error == /(?P<switch>\[-gnaty\w*\])\s*$/:
+            let switch: str = $+{switch}
+            if switch not in switches[file]:
+                switches[file].append(switch)
+    var lines: []str = []
+    for file in files:
+        let n: int = counts[file]
+        let plural: str = "s" if n > 1 else ""
+        lines.append(colored(SCRIPT_COLOR, file) + f"  {n} style error{plural} " + " ".join(switches[file]))
+    lines
+
+def style_count(lines: []str, file: str) -> int:
+    """How many Ada style errors FILE has, per a summary's LINES (see
+    style_files); 0 when they do not name it."""
+    for line in lines:
+        continue if not line.startswith("  ") or script_of(line) != file
+        if uncoloured(line) == /^\s*\S+  (?P<n>\d+) style errors? /:
+            return int($+{n})
+    return 0
 
 def keyed(lines: []str) -> []str:
     """LINES of a summary, each after what it is under and a newline: a
@@ -189,10 +230,19 @@ def marked(lines: []str, other: []str, mark: str, changes: {str}[]str) -> []str:
             let fixed: bool = "  gone " in line or "; gone " in line
             let verb: str = "fixed by" if mark == "- " else verdict(broke, fixed)
             out = out + [mark + a for a in attribution(changes, texts[0].strip().split(" ")[0], script_of(line), verb)]
-        elif line == /^  (?P<file>[^\s:<>]+):\d+:\d+: \(style\) /:
-            let file: str = $+{file}
-            let verb: str = "fixed by" if mark == "- " else "broken by"
-            out = out + [mark + "    " + verb + " " + who for who in changes_to(changes, Path(file).name)]
+        elif line.startswith("  ") and style_count([line], script_of(line)) > 0:
+            # an Ada style errors line: its file had more of them, broken;
+            # fewer, fixed -- said once, where the file is still named
+            let file: str = script_of(line)
+            let here: int = style_count(lines, file)
+            let there: int = style_count(other, file)
+            var verb: str = ""
+            if mark == "+ ":
+                verb = "broken by" if here > there else ("fixed by" if here < there else "changed by")
+            elif there == 0:
+                verb = "fixed by"
+            if verb != "":
+                out = out + [mark + "    " + verb + " " + who for who in changes_to(changes, file)]
     out
 
 # the SEVERE messages of one of the test programs: how many, and the first
@@ -275,15 +325,12 @@ class TestProgramsLog:
         for line in self.missing:
             lines.append("missing: " + line)
         if len(self.ada_style) > 0:
-            lines.append(f"{len(self.ada_style)} Ada style errors in the tacot logs:")
-            for line in self.ada_style[0 ..< min(limit, len(self.ada_style))]:
+            # a line per file, all: so that each that got worse shows
+            let files: []str = style_files(self.ada_style)
+            lines.append(f"{len(self.ada_style)} Ada style errors in {len(files)} files of the tacot logs:")
+            for line in files:
                 lines.append("  " + line)
-            if len(self.ada_style) > limit:
-                lines.append(f"  ... and {len(self.ada_style) - limit} more")
         lines
-
-# a script's path, bold yellow, to stand out from its findings
-const SCRIPT_COLOR: ColorSpec_T = "SY"
 
 def script_lines(diff: StyleDiff) -> []str:
     """The scripts DIFF is in, a line each, its path highlighted: its new
@@ -853,23 +900,37 @@ if __name__ == "__main__":
         "  " + "  A VAR_CHECK",
         "-     ./g.ksh  new used not defined: G", "-       fixed by gil.z: 1g"]
     assert script_of("    \x1b[1;33m./b.ksh\x1b[0m  new used not defined: Y") == "./b.ksh"
-    # compared masked, shown as they are: a baseline number that changed,
-    # an Ada style error a line added above moved, are no change; a new
-    # style error, who broke it, per its file's name; a gone one, who fixed it
+    # an Ada style errors line per file: how many, and their switches
+    COLORED = False
+    let errors_before: []str = [
+        "fpl-test-extract.adb:960:39: (style) bad casing of \"x\" declared at fpl.ads:3440 [-gnatyr]",
+        "fpl-test.ads:117:06: (style) bad column [-gnaty0]",
+        "other.adb:1:04: (style) bad indentation [-gnaty0]", "other.adb:2:04: (style) bad indentation [-gnaty0]"]
+    let errors_after: []str = [
+        "fpl-test-extract.adb:963:39: (style) bad casing of \"x\" declared at fpl.ads:3448 [-gnatyr]",
+        "fpl-test-extract.adb:964:39: (style) bad casing of \"y\" declared at fpl.ads:3449 [-gnatyr]",
+        "other.adb:3:04: (style) bad indentation [-gnaty0]", "other.adb:4:04: (style) bad indentation [-gnaty0]",
+        "new.adb:5:01: (style) bad column [-gnaty0]"]
+    assert style_files(errors_after) == ["fpl-test-extract.adb  2 style errors [-gnatyr]",
+        "other.adb  2 style errors [-gnaty0]", "new.adb  1 style error [-gnaty0]"]
+    # compared masked, shown as they are: a baseline number that changed is
+    # no change, nor a file with as many errors; one with more, who broke
+    # it, per its name; one with none left, who fixed it -- said once
     var fpl: {str}[]str = {:}
     fpl["FLIGHTPLAN/sources/fpl-test-extract.adb"] = ["ann.casing: 1f2e SC-9"]
     fpl["FLIGHTPLAN/sources/fpl-test.ads"] = ["bob.column: 3c4d SC-8"]
+    fpl["FLIGHTPLAN/sources/other.adb"] = ["cid.other: 5e6f SC-7"]
     assert diff_summaries(
-        ["Ccheck_build_closure -s -t -b ELD.ELD_CONFIG.30.0.0.118 failed", "2 Ada style errors in the tacot logs:",
-         "  fpl-test-extract.adb:960:39: (style) bad casing of \"x\" declared at fpl.ads:3440 [-gnatyr]",
-         "  fpl-test.ads:117:06: (style) bad column [-gnaty0]"],
-        ["Ccheck_build_closure -s -t -b ELD.ELD_CONFIG.30.0.0.119 failed", "2 Ada style errors in the tacot logs:",
-         "  fpl-test-extract.adb:963:39: (style) bad casing of \"x\" declared at fpl.ads:3448 [-gnatyr]",
-         "  fpl-test-extract.adb:964:39: (style) bad casing of \"y\" declared at fpl.ads:3449 [-gnatyr]"], fpl) == [
-        "+   fpl-test-extract.adb:964:39: (style) bad casing of \"y\" declared at fpl.ads:3449 [-gnatyr]",
-        "+     broken by ann.casing: 1f2e SC-9",
-        "-   fpl-test.ads:117:06: (style) bad column [-gnaty0]",
-        "-     fixed by bob.column: 3c4d SC-8"]
+        ["Ccheck_build_closure -s -t -b ELD.ELD_CONFIG.30.0.0.118 failed", "4 Ada style errors in 3 files of the tacot logs:"] + ["  " + f for f in style_files(errors_before)],
+        ["Ccheck_build_closure -s -t -b ELD.ELD_CONFIG.30.0.0.119 failed", "5 Ada style errors in 3 files of the tacot logs:"] + ["  " + f for f in style_files(errors_after)],
+        fpl) == [
+        "+ 5 Ada style errors in 3 files of the tacot logs:",
+        "+   fpl-test-extract.adb  2 style errors [-gnatyr]", "+     broken by ann.casing: 1f2e SC-9",
+        "+   new.adb  1 style error [-gnaty0]",
+        "- 4 Ada style errors in 3 files of the tacot logs:",
+        "-   fpl-test-extract.adb  1 style error [-gnatyr]",
+        "-   fpl-test.ads  1 style error [-gnaty0]", "-     fixed by bob.column: 3c4d SC-8"]
+    COLORED = True
     assert changes_to(fpl, "fpl-test.ads") == ["bob.column: 3c4d SC-8"] and changes_to(fpl, "fpl.ads") == []
     assert verdict(True, True) == "changed by" and verdict(True, False) == "broken by" and verdict(False, True) == "fixed by"
 

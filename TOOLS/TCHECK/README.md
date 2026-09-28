@@ -75,9 +75,11 @@ compared as sets, so a finding that only moved in the file is no change.
 Then the other programs' SEVERE messages, how many and the first (`3 SEVERE from
 param_shared_cleanup_ftok: dbspy -D ...`); docgen's errors, five of them
 (all with `-v`); the files missing; and the Ada style errors (GNAT's
--gnaty) of the build's latest tacot_corico run, five of them (all with
-`-v`): the `<file>:<line>:<col>: (style) ...` lines of its compilers' logs,
-`logging-*/LOGS_*/*_out_*`. Only those logs are read -- the tree is large
+-gnaty) of the build's latest tacot_corico run -- the `<file>:<line>:<col>:
+(style) ...` lines of its compilers' logs, `logging-*/LOGS_*/*_out_*` --
+a line per file, all of them, so that each file that got worse shows in
+the comparison: how many, and their switches
+(`fpl-test-extract.adb  2 style errors [-gnatyr]`). Only those logs are read -- the tree is large
 -- and they are read once, for the summary and its comparison both.
 
 Without `-short`, `-focus build_info` then diffs that summary with the
@@ -91,7 +93,8 @@ difference, so as to say which one it is.
 Under a ksh script or an Ada style error new in the comparison, who broke
 it, and under one gone, who fixed it, per the baseline's CFMUTEST changes
 report (the one `-focus changes` lists), credited to a branch as `-focus
-changes` credits it: the report's
+changes` credits it -- a file with more style errors, broken, with fewer
+or none, fixed, said once: the report's
 `TOOL/COMMON_CONFIG/sources/regression_testing.ksh` is COMMON_CONFIG's
 `./sources/regression_testing.ksh`, and an Ada style error's file is
 matched by its name, all the compiler gives. Nothing under one the report
@@ -125,9 +128,9 @@ Compare the check_run_test_programs.log summary with 30.0.0.134's:
   +       broken by carol.new_ops: 9abc0123 SC-2
     COMMON_CONFIG VAR_CHECK
   +     ./sources/regression_testing.ksh  new used not defined: CM_HOST
-  + 27 Ada style errors in the tacot logs:
-  +   fpl-test-extract.adb:964:39: (style) bad casing of "selfManagedClient" declared at fpl.ads:3449 [-gnatyr]
-  +     broken by ann.casing: 1f2e SC-9
+  + 27 Ada style errors in 7 files of the tacot logs:
+  +   fpl-test-extract.adb  2 style errors [-gnatyr]
+  +     broken by zmoubari.idl_smc_aro: 45018faa 9094e8d0 SC-134100
   - 6 ksh style differences with the previous baseline:
     DOM STABLE_CHECKS
   -     ./sources/make_dom_escinfra_per_file.ksh  new defined not used: MODE
