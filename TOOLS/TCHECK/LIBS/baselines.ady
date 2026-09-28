@@ -510,16 +510,16 @@ class Baseline:
         baseline removed -- back PREVIOUS_SEARCHED numbers; the one just
         before, when none is, so that what is looked for in it is said to
         be missing, and where."""
-        let (head, tail) = self.nr.rsplit(".", 1)
-        let nr: int = int(tail)
         for back in range(1, PREVIOUS_SEARCHED + 1):
-            continue if nr - back < 0
-            let earlier: Baseline = self.sibling(f"{head}.{nr - back}")
+            let earlier: Baseline = self.before(back)
             return earlier if -d earlier.dir
-        return self.sibling(f"{head}.{nr - 1}")
+        return self.before(1)
 
-    def sibling(self, nr: BaselineNr_T) -> Baseline:
-        """Baseline NR, its directory beside this one's."""
+    def before(self, back: int) -> Baseline:
+        """The baseline BACK numbers before this one, there or not, its
+        directory beside this one's."""
+        let (head, tail) = self.nr.rsplit(".", 1)
+        let nr: BaselineNr_T = f"{head}.{int(tail) - back}"
         var other: Baseline = Baseline(nr)
         other.dir = self.dir.parent / ("TACT_CONFIG." + nr)
         other
@@ -529,15 +529,25 @@ class Baseline:
         or not it is there."""
         Build("build_" + build_env_id($CM_ENV_ID, btype), btype, self.nr, self.dir)
 
-    def compare_test_programs(self, older: Baseline, changes: {str}[]str):
+    def compare_test_programs(self, changes: {str}[]str):
         """The summary of its IP build's check_run_test_programs.log, diffed
-        with OLDER's: without the ediff links, whose files are named after
-        a pid, and with the baseline numbers masked, so that only a change
-        in what fails shows; under a script new or gone, who broke or fixed
-        it, per CHANGES, this baseline's."""
-        puts("SWr", f"Compare the check_run_test_programs.log summary with {older.nr}'s:", NEWLINE=True)
+        with that of the nearest baseline before it to have one -- the one
+        before may have none, its tests not run -- back PREVIOUS_SEARCHED:
+        without the ediff links, whose files are named after a pid, and
+        with the baseline numbers masked, so that only a change in what
+        fails shows; under a script new or gone, who broke or fixed it, per
+        CHANGES, this baseline's."""
         let mine: ?Path = self.build(IP).test_programs_log()
-        let theirs: ?Path = older.build(IP).test_programs_log()
+        var older: Baseline = self
+        var found: ?Path = None
+        for back in range(1, PREVIOUS_SEARCHED + 1):
+            older = self.before(back)
+            found = older.build(IP).test_programs_log()
+            if found is not None:
+                break
+        let theirs: ?Path = found
+        let compared: str = f"{older.nr}'s" if theirs is not None else "the previous baseline's"
+        puts("SWr", f"Compare the check_run_test_programs.log summary with {compared}:", NEWLINE=True)
         if mine is not None and theirs is not None:
             print "  " + emacs_link(theirs)
             let before: []str = [masked(line) for line in TestProgramsLog(theirs).summary(1000, links=False)]
@@ -550,7 +560,7 @@ class Baseline:
         elif mine is None:
             print f"  none in {self.build(IP).dir}"
         else:
-            print f"  none in {older.build(IP).dir}"
+            print f"  none in {self.previous().build(IP).dir}, nor in the baselines before it, back to {older.nr}"
 
     def saved_logs_dir(self, btype: BuildType) -> Path:
         """The saved_logs directory of this baseline's build of BTYPE,
@@ -833,9 +843,10 @@ if __name__ == "__main__":
     # the baseline before it: the nearest there, 132 never made; the one
     # just before when none is
     (tmp / "TACT_CONFIG.30.0.0.131").mkdir()
-    let before: Baseline = here.previous()
-    assert before.nr == "30.0.0.131" and before.dir == tmp / "TACT_CONFIG.30.0.0.131"
-    assert before.previous().nr == "30.0.0.130"
+    let earlier: Baseline = here.previous()
+    assert earlier.nr == "30.0.0.131" and earlier.dir == tmp / "TACT_CONFIG.30.0.0.131"
+    assert earlier.previous().nr == "30.0.0.130"
+    assert here.before(3).nr == "30.0.0.130" and here.before(3).dir == tmp / "TACT_CONFIG.30.0.0.130"
     # the IP build has a Tlog, of 'in' for the normal pass
     let ip_tlog: Path = here.dir / "build_G!31.IP.L8" / "saved_logs" / "tacot_corico.LATEST" / "TACT_REGRESS_LOGS" / "LATEST" / "Tlog-in.log"
     ip_tlog.parent.mkdir()

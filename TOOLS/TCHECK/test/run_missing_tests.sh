@@ -108,7 +108,7 @@ info=$("$TCHECK" -no-color -f -focus build_info 30.0.0.135 2>/dev/null)
 check "build_info: no Csystem_build.log, said so" \
     "  no $PREV/build_G!31.IP.L8/Csystem_build.log
   no $BL/build_G!31.IP.L8/Csystem_build.log" \
-    "$(echo "$info" | sed -n '/^Compare Csystem_build.log:/,$p' | grep '^  no ')"
+    "$(echo "$info" | sed -n '/^Compare Csystem_build.log/,$p' | grep '^  no ')"
 for bl in "$BL" "$PREV"; do echo 'Csystem ...' > "$bl/build_G!31.IP.L8/Csystem_build.log"; done
 info=$("$TCHECK" -no-color -f -focus build_info 30.0.0.135 2>/dev/null)
 check "build_info: the summary diffed with the previous one's" "Compare the check_run_test_programs.log summary with 30.0.0.134's:
@@ -124,7 +124,7 @@ check "build_info: the newest log, not a test's older one" \
     "$(echo "$info" | sed -n '/^Compare the check_run_test_programs/{n;p;}')"
 check "build_info: the Csystem_build.log command, printed" \
     "  meld /tmp/reports/30.0.0.134_Csystem_build.log /tmp/reports/30.0.0.135_Csystem_build.log" \
-    "$(echo "$info" | sed -n '/^Compare Csystem_build.log:/{n;p;}')"
+    "$(echo "$info" | sed -n '/^Compare Csystem_build.log/{n;p;}')"
 
 # -focus build_info: who changed the scripts of a style difference, per the
 # baseline's changes report -- none at first, and it says why; then one in
@@ -169,13 +169,25 @@ check "build_info: and in the summary diffed with the previous one's" "  + 7 ksh
   -   1 SEVERE from old_program: something fixed since" \
     "$(echo "$info" | sed -n '/^Compare the check_run_test_programs/,/^Compare Csystem/p' | grep '^  [+-]')"
 
-# the previous baseline is the nearest there: 136 was never made
+# compared with the nearest baseline before to have what is compared: 136
+# is there, but not built -- no check_run_test_programs.log, no
+# Csystem_build.log -- and 135 has both
 NEXT=$OT/TACT/TACT_CONFIG.30.0.0.137
-mkdir -p "$NEXT/build_G!31.IP.L8/saved_logs/tacot_corico.LATEST/work"
+mkdir -p "$NEXT/build_G!31.IP.L8/saved_logs/tacot_corico.LATEST/work" "$OT/TACT/TACT_CONFIG.30.0.0.136/build_G!31.IP.L8/saved_logs"
 cp "$SAMPLES/check_run_test_programs.log" "$NEXT/build_G!31.IP.L8/saved_logs/tacot_corico.LATEST/work/"
-check "build_info: compared with the nearest baseline there" \
-    "Compare the check_run_test_programs.log summary with 30.0.0.135's:" \
-    "$("$TCHECK" -no-color -f -focus build_info 30.0.0.137 2>/dev/null | grep '^Compare the check_run_test_programs')"
+echo 'Csystem ...' > "$NEXT/build_G!31.IP.L8/Csystem_build.log"
+check "build_info: compared with the nearest baseline to have it" \
+    "Compare the check_run_test_programs.log summary with 30.0.0.135's:
+Compare Csystem_build.log with 30.0.0.135's:" \
+    "$("$TCHECK" -no-color -f -focus build_info 30.0.0.137 2>/dev/null | grep '^Compare ')"
+
+# and when none before has one: where, and how far back
+FAR=$OT/TACT/TACT_CONFIG.30.0.0.160
+mkdir -p "$FAR/build_G!31.IP.L8/saved_logs/tacot_corico.LATEST/work"
+cp "$SAMPLES/check_run_test_programs.log" "$FAR/build_G!31.IP.L8/saved_logs/tacot_corico.LATEST/work/"
+check "build_info: none to compare with, how far back" \
+    "  none in $OT/TACT/TACT_CONFIG.30.0.0.159/build_G!31.IP.L8, nor in the baselines before it, back to 30.0.0.140" \
+    "$("$TCHECK" -no-color -f -focus build_info 30.0.0.160 2>/dev/null | sed -n '/^Compare the check_run_test_programs/{n;p;}')"
 
 echo
 if [ $fails -eq 0 ]; then echo "All checks passed."; else echo "$fails check(s) FAILED."; exit 1; fi

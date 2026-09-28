@@ -421,13 +421,12 @@ class Report:
 
     def show_detailed_build_info(self):
         """What check_run_test_programs.log says failed, compared with the
-        previous baseline's -- who broke or fixed a script, per the changes
-        report show_build_info read; the command comparing their
-        Csystem_build.log."""
-        let prev: Baseline = self.cur.previous()
-        self.cur.compare_test_programs(prev, self.changes)
-        puts("SWr", "Compare Csystem_build.log:", NEWLINE=True)
-        let logs: []CsystemLog = [CsystemLog(prev), CsystemLog(self.cur)]
+        nearest baseline before to have one -- who broke or fixed a script,
+        per the changes report show_build_info read; the command comparing
+        Csystem_build.log with the nearest baseline's before to have one."""
+        self.cur.compare_test_programs(self.changes)
+        let logs: []CsystemLog = [earlier_log(self.cur), CsystemLog(self.cur)]
+        puts("SWr", f"Compare Csystem_build.log with {logs[0].baseline}'s:", NEWLINE=True)
         let missing: []Path = [log.file for log in logs if not -f log.file]
         for file in missing:
             print f"  no {file}"

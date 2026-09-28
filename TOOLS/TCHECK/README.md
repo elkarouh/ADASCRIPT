@@ -103,9 +103,13 @@ comes under its style difference, so as to say which one it is. The log
 read is a build's newest check_run_test_programs.log: a test's LOGS
 directory may hold an older one of its own.
 
-The previous baseline, here and wherever Tcheck_tact compares with one, is
-the nearest before it whose directory is there -- a number may have been
-skipped, or its baseline removed -- back 20 numbers.
+What a baseline is compared with is the nearest before it to have what is
+compared, back 20 numbers: the summary, with the nearest whose IP build
+has a check_run_test_programs.log -- the one before may be there without
+it, not built or its tests not run; Csystem_build.log, with the nearest
+to have one. When none has, it says where it looked, and how far back.
+Elsewhere, the previous baseline is the nearest before whose directory is
+there -- a number may have been skipped, or its baseline removed.
 
 ```
 Compare the check_run_test_programs.log summary with 30.0.0.134's:

@@ -47,6 +47,15 @@ class CsystemLog:
         let after: Path = self.comparable()
         f"{troubleshoot_tool()} {before} {after}"
 
+def earlier_log(baseline: Baseline) -> CsystemLog:
+    """The Csystem_build.log of the nearest baseline before BASELINE to
+    have one, back PREVIOUS_SEARCHED -- the one before may have none, not
+    built; when none has, the previous baseline's, missing."""
+    for back in range(1, PREVIOUS_SEARCHED + 1):
+        let log: CsystemLog = CsystemLog(baseline.before(back))
+        return log if -f log.file
+    CsystemLog(baseline.previous())
+
 # ---------------------------------------------------------------------------
 # Tests: ady2nim c LIBS/csystem_log.ady && LIBS/csystem_log
 # ---------------------------------------------------------------------------
