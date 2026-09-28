@@ -67,10 +67,16 @@ def ansi_escape(spec: ColorSpec_T) -> str:
     let codes: []str = [ANSI_CODES[ch] for ch in spec if ch in ANSI_CODES]
     return "\x1b[" + ";".join(codes) + "m" if codes else ""
 
+def colored(spec: ColorSpec_T, text: str) -> str:
+    """TEXT in the color given by SPEC, to stand out in a line; as it is
+    when not COLORED."""
+    const RESET: str = "\x1b[0m"
+    return text if not COLORED
+    ansi_escape(spec) + text + RESET
+
 def puts(spec: ColorSpec_T, text: str, NEWLINE: bool = False):
     """Print TEXT in the color given by SPEC, without a trailing newline."""
-    const RESET: str = "\x1b[0m"
-    stdout.write(ansi_escape(spec) + text + RESET if COLORED else text)
+    stdout.write(colored(spec, text))
     if NEWLINE:
         print
 
@@ -154,6 +160,7 @@ if __name__ == "__main__":
     assert ansi_escape("SWr") == "\x1b[1;37;41m"
     assert ansi_escape("Kx") == "\x1b[30m"
     assert ansi_escape("") == ""
+    assert colored("SC", "./a.ksh") == "\x1b[1;36m./a.ksh\x1b[0m"
 
     # a subtype by its name on disk and on the command line: 'in', not 'in_test'
     assert subtype_label(in_test) == "in"

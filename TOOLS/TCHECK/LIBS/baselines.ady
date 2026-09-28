@@ -162,16 +162,19 @@ class TestProgramsLog:
             lines.append("missing: " + line)
         lines
 
+# a script's path, bold cyan, to stand out from its findings
+const SCRIPT_COLOR: ColorSpec_T = "SC"
+
 def script_lines(diff: StyleDiff) -> []str:
-    """The scripts DIFF is in, a line each: its new findings, its gone ones.
-    None if its two files are not there to read."""
+    """The scripts DIFF is in, a line each, its path highlighted: its new
+    findings, its gone ones. None if its two files are not there to read."""
     let files: []Path = ediff_files(diff.ediff)
     return [] if len(files) != 2 or not -f files[0] or not -f files[1]
     var lines: []str = []
     for change in changed_scripts(files[0], files[1]):
         let new: []str = ["new " + k for k in change.new]
         let gone: []str = ["gone " + k for k in change.gone]
-        lines.append(f"    {change.script}  " + "; ".join(new + gone))
+        lines.append("    " + colored(SCRIPT_COLOR, change.script) + "  " + "; ".join(new + gone))
     lines
 
 # ---------------------------------------------------------------------------
@@ -599,8 +602,8 @@ if __name__ == "__main__":
     assert changed_scripts(result_file, result_file) == []
     let lines: []str = script_lines(StyleDiff("COMMON_CONFIG", "VAR_CHECK", "(ediff-files \"" + baseline_file + "\" \"" + result_file + "\")"))
     assert lines == [
-        "    ./sources/find_current_ops.ksh  new used not defined: CFMU_REGRESS_TEST_FTPS_DIR",
-        "    ./sources/regression_testing.ksh  new used not defined: CM_HOST PERL_VERSION; gone defined not used: OLD_WORK_DIR"]
+        "    \x1b[1;36m./sources/find_current_ops.ksh\x1b[0m  new used not defined: CFMU_REGRESS_TEST_FTPS_DIR",
+        "    \x1b[1;36m./sources/regression_testing.ksh\x1b[0m  new used not defined: CM_HOST PERL_VERSION; gone defined not used: OLD_WORK_DIR"]
 
     # --- a build's type, from its directory's name ----------------------------
     def build_type(name: BuildName_T) -> str:
