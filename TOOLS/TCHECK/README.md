@@ -93,9 +93,13 @@ a script new there is said who broke it, and one gone from it who fixed
 it -- a script gone since was fixed.
 Then the other programs' SEVERE messages, how many and the first (`3 SEVERE from
 param_shared_cleanup_ftok: dbspy -D ...`); docgen's errors, five of them
-(all with `-v`); the files missing; and the Ada style errors (the
-"(style)" lines, GNAT's -gnaty) of the build's latest tacot_corico run's
-logs, five of them (all with `-v`).
+(all with `-v`); the files missing; and the Ada style errors (GNAT's
+-gnaty) of the build's latest tacot_corico run, five of them (all with
+`-v`): the `<file>:<line>:<col>: (style) ...` lines of its compilers' logs,
+`logging-*/LOGS_*/*_out_*`. Only those logs are read -- the tree is large
+-- and they are read once, for the summary and its comparison both; in
+the comparison, the line and column numbers are masked, so that an error
+a line added above moved is no change.
 
 Without `-short`, `-focus build_info` then diffs that summary with the
 previous baseline's -- `+` a line only this baseline's has, `-` one only

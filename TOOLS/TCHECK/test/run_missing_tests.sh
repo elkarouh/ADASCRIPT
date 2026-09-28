@@ -212,8 +212,8 @@ printf '%s\n' 'compiling ...' \
     'flightplanfiling_routeservices_hash.ads:2:04: (style) bad indentation [-gnaty0]' > "$STYLED/tacot1_out_01"
 check "build_info: the Ada style errors, in the summary diffed" \
     "  + 2 Ada style errors in the tacot logs:
-  +   flightplanfiling_routeservices_hash.adb:11:04: (style) bad indentation [-gnaty0]
-  +   flightplanfiling_routeservices_hash.ads:2:04: (style) bad indentation [-gnaty0]" \
+  +   flightplanfiling_routeservices_hash.adb:<line>:<col>: (style) bad indentation [-gnaty0]
+  +   flightplanfiling_routeservices_hash.ads:<line>:<col>: (style) bad indentation [-gnaty0]" \
     "$("$TCHECK" -no-color -f -focus build_info 30.0.0.121 2>/dev/null | sed -n '/^Compare the check_run_test_programs/,/^Compare Csystem/p' | grep '^  [+-]')"
 
 echo

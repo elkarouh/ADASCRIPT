@@ -91,10 +91,15 @@ def changed_scripts(baseline: Path, current: Path) -> []ScriptChange:
     [ScriptChange(s, by_kind(new, s), by_kind(gone, s)) for s in scripts]
 
 def masked(line: str) -> str:
-    """LINE with the baseline numbers in it -- 30.0.0.132 -- as <nr>, to be
-    compared with the same line of another baseline's."""
+    """LINE with the baseline numbers in it -- 30.0.0.132 -- as <nr>, and
+    the line and column numbers of an Ada style error as <line> and <col>,
+    to be compared with the same line of another baseline's: a line added
+    above the error moves it."""
     var out: str = line
     out = s/\d+\.\d+\.\d+\.\d+/<nr>/g
+    if "(style)" in out:
+        out = s/:\d+:\d+: \(style\)/:<line>:<col>: (style)/
+        out = s/(\.ad[bs]):\d+/$+1:<line>/g
     out
 
 def diff_summaries(before: []str, after: []str, changes: {str}[]str) -> []str:
@@ -422,17 +427,17 @@ class Build:
 
     def test_programs_log(self) -> ?Path:
         """The build's check_run_test_programs.log, the newest if there
-        are several -- a test's LOGS directory may hold one of its own:
-        in the work directory of its tacot_corico.LATEST, else anywhere in
-        its saved_logs -- an older baseline's is in
-        tacot_corico_<date>/tact/<nr>/data_files; none before
+        are several: in the work directory of its tacot_corico.LATEST, or
+        a test's LOGS directory there (logging-*/LOGS_*); else, an older
+        baseline's, in tacot_corico_<date>/tact/<nr>/data_files -- its
+        tacot_corico.LATEST symlink may be gone. Looked for where it can
+        be, not in the whole tree, which is large. None before
         check_run_test_programs_log has run."""
-        let latest_work: Path = self.tacot_dir(normal) / "work"
-        let saved_logs: Path = self.saved_logs()
-        for place in [latest_work, saved_logs]:
-            let found: []str = shellLines: find {place} -type f -name 'check_run_test_programs.log' -printf '%T@ %p\n' 2>/dev/null | sort -n | tail -1 | cut -d' ' -f2-
-            return Path(found[0]) if found'Length > 0 and found[0] != ""
-        return None
+        let work: Path = self.tacot_dir(normal) / "work"
+        let saved: Path = self.saved_logs()
+        let found: []str = shellLines: ls -t {work}/check_run_test_programs.log {work}/logging-*/LOGS_*/check_run_test_programs.log {saved}/tacot_corico_*/tact/*/data_files/check_run_test_programs.log 2>/dev/null | head -n 1
+        return None if found'Length == 0 or found[0] == ""
+        return Path(found[0])
 
     def tacot_work(self) -> ?Path:
         """The work directory of its latest tacot_corico run:
@@ -446,23 +451,29 @@ class Build:
         return None
 
     def ada_style_errors(self) -> []str:
-        """The "(style)" lines -- GNAT's -gnaty -- of its latest
-        tacot_corico run's logs, each once."""
+        """The Ada style errors -- GNAT's -gnaty -- of its latest
+        tacot_corico run: the "<file>:<line>:<column>: (style) ..." lines
+        of its compilers' logs (logging-*/LOGS_*/*_out_*), each once. Only
+        those logs are read, the tree is large; and only lines that start
+        with the file, not a diff's "> ..." of them."""
         var errors: []str = []
         let work: ?Path = self.tacot_work()
         if work is not None:
             let logs: Path = work
-            for line in shellIter: grep -rh '(style)' {logs} 2>/dev/null
+            for line in shellIter: printf '%s\0' {logs}/logging-*/LOGS_*/*_out_* | xargs -0 -r grep -h '(style)' 2>/dev/null
                 let error: str = line.strip()
+                continue if error != /^[^\s:<>]+:\d+:\d+: \(style\) /
                 if error not in errors:
                     errors.append(error)
         errors
 
-    def check_test_programs(self, fast_mode: bool, verbose: bool, changes: {str}[]str, no_changes: str):
+    def check_test_programs(self, fast_mode: bool, verbose: bool, changes: {str}[]str, no_changes: str, ada_style: []str):
         """Find or run check_run_test_programs_log from the IP self; what
         its log says failed, summed up -- VERBOSE lists all docgen's --
         with who changed the scripts of a style difference, per CHANGES,
-        or NO_CHANGES, why nothing says (see TestProgramsLog.changes)."""
+        or NO_CHANGES, why nothing says (see TestProgramsLog.changes); and
+        ADA_STYLE, its Ada style errors (see ada_style_errors), read once
+        by the caller, who compares them too."""
         let baseline: BaselineNr_T = self.baseline_nr
         print
         hr('#')
@@ -482,7 +493,7 @@ class Build:
             var log: TestProgramsLog = TestProgramsLog(logfile)
             log.changes = changes
             log.no_changes = no_changes
-            log.ada_style = self.ada_style_errors()
+            log.ada_style = ada_style
             print emacs_link(logfile)
             for line in log.summary(1000 if verbose else 5):
                 print "  " + line
@@ -576,14 +587,15 @@ class Baseline:
         or not it is there (see build_name)."""
         Build(self.build_name(btype), btype, self.nr, self.dir)
 
-    def compare_test_programs(self, changes: {str}[]str):
+    def compare_test_programs(self, changes: {str}[]str, ada_style: []str):
         """The summary of its IP build's check_run_test_programs.log, diffed
         with that of the nearest baseline before it to have one -- the one
         before may have none, its tests not run -- back PREVIOUS_SEARCHED:
         without the ediff links, whose files are named after a pid, and
         with the baseline numbers masked, so that only a change in what
         fails shows; under a script new or gone, who broke or fixed it, per
-        CHANGES, this baseline's."""
+        CHANGES, this baseline's. ADA_STYLE is this baseline's Ada style
+        errors, read already (see Build.ada_style_errors)."""
         let mine: ?Path = self.build(IP).test_programs_log()
         var older: Baseline = self
         var found: ?Path = None
@@ -600,7 +612,7 @@ class Baseline:
             var old_log: TestProgramsLog = TestProgramsLog(theirs)
             var new_log: TestProgramsLog = TestProgramsLog(mine)
             old_log.ada_style = older.build(IP).ada_style_errors()
-            new_log.ada_style = self.build(IP).ada_style_errors()
+            new_log.ada_style = ada_style
             let before: []str = [masked(line) for line in old_log.summary(1000, links=False)]
             let after: []str = [masked(line) for line in new_log.summary(1000, links=False)]
             let diffed: []str = diff_summaries(before, after, changes)
@@ -798,6 +810,8 @@ if __name__ == "__main__":
 
     # --- the summary, diffed with another baseline's ----------------------
     assert masked("Ccheck_build_closure -s -t -b ELD.ELD_CONFIG.30.0.0.132 failed") == "Ccheck_build_closure -s -t -b ELD.ELD_CONFIG.<nr> failed"
+    # an Ada style error, wherever a line added above moved it
+    assert masked("  fpl-test-extract.adb:963:39: (style) bad casing of \"x\" declared at fpl.ads:3448 [-gnatyr]") == "  fpl-test-extract.adb:<line>:<col>: (style) bad casing of \"x\" declared at fpl.ads:<line> [-gnatyr]"
     assert programs.summary(2, read_results=False, links=False)[6] == "  COMMON_CONFIG VAR_CHECK"
     let summed_before: []str = ["2 ksh style differences with the previous baseline:",
         "  COMMON_CONFIG VAR_CHECK", "    ./a.ksh  new used not defined: X",
@@ -920,7 +934,10 @@ if __name__ == "__main__":
     writeFile(run_logs / "tacot1_out_01", "compiling ...\n" +
         "flightplanfiling_routeservices_hash.adb:11:04: (style) bad indentation [-gnaty0]\n" +
         "flightplanfiling_routeservices_hash.ads:2:04: (style) bad indentation [-gnaty0]\n")
-    writeFile(run_logs / "tacot2_out_01", "flightplanfiling_routeservices_hash.adb:11:04: (style) bad indentation [-gnaty0]\n")
+    writeFile(run_logs / "tacot2_out_01", "flightplanfiling_routeservices_hash.adb:11:04: (style) bad indentation [-gnaty0]\n" +
+        "> flightplanfiling_routeservices_hash.adb:XXX:YYY: (style) bad indentation [<gnat_switch>]\n")
+    # not a compiler's log: not read
+    writeFile(run_logs / "tacot1_err_01", "other.adb:1:01: (style) bad indentation [-gnaty0]\n")
     assert sorted(ip_build.ada_style_errors()) == [
         "flightplanfiling_routeservices_hash.adb:11:04: (style) bad indentation [-gnaty0]",
         "flightplanfiling_routeservices_hash.ads:2:04: (style) bad indentation [-gnaty0]"]
