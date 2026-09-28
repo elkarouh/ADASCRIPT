@@ -57,6 +57,26 @@ comparison, the replay diffs, the build logs side by side, each file's
 changes. `-short` leaves the details out: `-focus changes -short` is just
 the files per committer by type.
 
+**A failed replay** is shown with what its Treplay log says of why: what
+`replay_day` returned, a link to the `check_logs` report when it found
+errors in the replay's logs -- where it is now, the replay directory being
+moved to `saved_logs/` once the replay is over -- and the cores its
+processes dumped. That is the cores themselves, one "dumped core file to"
+line each: the log's `NR_COREDUMPS` counts every line about a core, and a
+process that has dumped one says "A core dump not created" each time it
+would again, 8875 times in one replay for one core. `-v` adds the
+ERROR_REPORT.SEVERE lines.
+
+```
+"performance"  replay ==> FAILED
+Look for details in:
+#emacs:(progn(find-file ".../Treplay_G!31.OP.L8_30.0.0.133_...-performance.MOJ0V.log"))
+    replay_day returned 1
+    check_logs reported errors:
+    #emacs:(progn(find-file ".../replay_dir.TAC_LO3.2026.09.25_04:05:56/work/logging/LOGS/260925.034144.dhtacd04.check_logs.result.svlog"))
+    1 core dumped: core.45186.26_09_24-00:42:52.19
+```
+
 **The list of changes.** The CFMUTEST baseline built on the TACT baseline
 (the `CFMUTEST_CONFIG!<nr>` line among the builds `Psort -b` lists) has a changes
 report, `/cm/ot/CFMUTEST/baseline_reports/CFMUTEST.CFMUTEST_CONFIG.<nr>.changes_report`:

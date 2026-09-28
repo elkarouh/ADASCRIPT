@@ -47,13 +47,30 @@ class ReplayLog:
     status       : ReplayStatus
     severe_errors: []str   # its ERROR_REPORT.SEVERE lines
     terminated   : bool    # whether it says "Replay terminated"
+    # what replay_day returned -- "return_code of replay_day : 1" -- which
+    # fails the replay when not 0; None before the log says
+    replay_rc    : ?int
+    # the report of check_logs, when it found errors in the replay's logs:
+    # "check_logs reported errors, see: #emacs:(find-file "...")", where it
+    # is now -- the replay directory is moved once the replay is over;
+    # Path("") when check_logs found none
+    check_logs_report: Path
+    # the cores its processes dumped: "Debug_Exception dumped core file to
+    # ...". Not NR_COREDUMPS, which counts the lines about cores, among
+    # them one "A core dump not created because the previous core dump was
+    # created ..." each time a process that has dumped one would again
+    core_dumps   : []Path
 
     def __init__(self, file: Path):
         """The verdict is that of the last UNINSTALL step when it has one;
         else the log is waiting for the replay to end, or has not started."""
         self.file = file
+        self.check_logs_report = Path("")
         var verdict: str = ""        # the rest of the last UNINSTALL line
         var waiting: bool = False
+        var moving: bool = False     # the last line said the replay dir is moved
+        var moved_from: str = ""     # where the replay directory was, and is
+        var moved_to: str = ""
         for line in file.lines:
             if "Executed UNINSTALL:" in line:
                 let (_, after) = line.rsplit("Executed UNINSTALL:", 1)
@@ -64,6 +81,21 @@ class ReplayLog:
                 self.severe_errors.append(line)
             if "Replay terminated" in line:
                 self.terminated = True
+            if line == /return_code of replay_day\s*:\s*(?P<rc>-?\d+)/:
+                self.replay_rc = int($+{rc})
+            if "check_logs reported errors" in line and line == /find-file "(?P<report>[^"]+)"/:
+                self.check_logs_report = Path($+{report})
+            if line == /dumped core file to (?P<core>\S+)/:
+                self.core_dumps.append(Path($+{core}))
+            # "Moving TAC_LO3 replay LOGS directory.", then on the next line
+            # "  '/cm/local_build/TACTDEV_HOME/replay_dir' to '.../saved_logs/replay_dir.TAC_LO3...'"
+            if moving and line == /'(?P<from>[^']+)' to '(?P<to>[^']+)'/:
+                moved_from = $+{from}
+                moved_to = $+{to}
+            moving = "replay LOGS directory" in line
+        let report: str = str(self.check_logs_report)
+        if moved_from != "" and report.startswith(moved_from + "/"):
+            self.check_logs_report = Path(moved_to + report[len(moved_from):])
         if "YES" in verdict:
             self.status = succeeded
         elif "NO" in verdict:
@@ -82,6 +114,7 @@ class ReplayLog:
             when failed:
                 puts("SWr", "==> FAILED", NEWLINE=True)
                 echo_emacs(self.file)
+                self.show_why()
                 print
                 if verbose:
                     for line in self.severe_errors:
@@ -94,6 +127,23 @@ class ReplayLog:
                 puts("SWb", "---> WARNING: it looks like the replay hasn't started", NEWLINE=True)
             when busy:
                 puts("SWb", "IS STILL BUSY", NEWLINE=True)
+
+    def show_why(self):
+        """What the log says of why the replay failed: what replay_day
+        returned, the check_logs report, and the cores dumped."""
+        if self.replay_rc is not None and self.replay_rc != 0:
+            print f"    replay_day returned {self.replay_rc}"
+        if self.check_logs_report != "":
+            print "    check_logs reported errors:"
+            print f"    #emacs:(progn(find-file \"{self.check_logs_report}\"))"
+        let cores: int = len(self.core_dumps)
+        case cores:
+            when 0: pass
+            when 1: print f"    1 core dumped: {self.core_dumps[0].name}"
+            when others:
+                print f"    {cores} cores dumped:"
+                for core in self.core_dumps:
+                    print f"      {core.name}"
 
 def process_replay(replay: Replay, verbose: bool):
     """Check the status of a single replay (successful / failed / running)."""
@@ -205,6 +255,14 @@ if __name__ == "__main__":
     assert perf.terminated
     assert len(perf.severe_errors) == 4
     assert "TACOT variable not of type STRING_TYPE" in perf.severe_errors[0]
+    # why: replay_day returned 1, check_logs found errors, and one process
+    # dumped one core -- NR_COREDUMPS says 8875, the lines about it
+    assert perf.replay_rc is not None and perf.replay_rc == 1
+    assert perf.check_logs_report == Path("/cm/ot/TACT/TACT_CONFIG!30.0.0.133/build_G!31.OP.L8/saved_logs/replay_dir.TAC_LO3.2026.09.25_04:05:56/work/logging/LOGS/260925.034144.dhtacd04.check_logs.result.svlog")
+    assert [core.name for core in perf.core_dumps] == ["core.45186.26_09_24-00:42:52.19"]
+    # the prequal log starts after check_logs ran: no report, no core named
+    assert prequal.replay_rc is not None and prequal.replay_rc == 1
+    assert prequal.check_logs_report == Path("") and len(prequal.core_dumps) == 0
 
     # the verdicts the samples do not show
     def replay_log(lines: []str) -> ReplayLog:
@@ -215,6 +273,11 @@ if __name__ == "__main__":
     assert replay_log(["Executed UNINSTALL:        NO", "Executed UNINSTALL:        YES"]).status == succeeded
     assert replay_log(["replay_day: INFORMATION: Waiting for this replay to be finished ..."]).status == busy
     assert replay_log(["nothing yet"]).status == not_started
+    # before replay_day has returned; a report left where it was, not moved
+    let early: ReplayLog = replay_log(["nothing yet"])
+    assert early.replay_rc is None
+    let unmoved: ReplayLog = replay_log(["x: replay_day: SEVERE: ERROR: check_logs reported errors, see: #emacs:(find-file \"/r/LOGS/c.svlog\")"])
+    assert unmoved.check_logs_report == Path("/r/LOGS/c.svlog")
 
     run(["rm", "-rf", str(tmp)])
     print "replays: all tests passed"

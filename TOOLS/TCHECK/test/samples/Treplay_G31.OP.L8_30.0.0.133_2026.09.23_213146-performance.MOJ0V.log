@@ -32,6 +32,19 @@ REPLAY_HOME=/cm/local_build/TACTDEV_HOME/replay_dir
   called from emacs:(progn (find-file "/cm/build32/cm/ot/TACT/SVISION!30.0.0.83/sources/sources/replay_day.ksh") (goto-line 7946))
 260924.125118: replay_day: INFORMATION: Waiting for this replay to be finished ...
   called from emacs:(progn (find-file "/cm/build32/cm/ot/TACT/SVISION!30.0.0.83/sources/sources/replay_day.ksh") (goto-line 5416))
+260925.034135: replay_day: INFORMATION: CORE DUMPS:
+260925.034135: replay_day: INFORMATION: ===========
+tacot1_out_01:Debug_Exception dumped core file to /auto/local_build/dhtacd04/disk1/TACTDEV_HOME/replay_dir/tact/30.0.0.133/data_files/core.45186.26_09_24-00:42:52.19 ] (from: /cm/build32/cm/ot/TACT/UIF!30.0.0.131/build_G!31.OP.L8/ada/exe/tact_uif_shared_exe - 45186 - tact_uif_shared_exe - UIF!30.0.0.131 - G!31.OP.L8 - dhtacd04 - cmadm - tacot1)
+tacot1_out_01:A core dump not created because the previous core dump was created with the same value of the NR_CORE_DUMP shared memory variable (from: /cm/build32/cm/ot/TACT/UIF!30.0.0.131/build_G!31.OP.L8/ada/exe/tact_uif_shared_exe - 45186 - tact_uif_shared_exe - UIF!30.0.0.131 - G!31.OP.L8 - dhtacd04 - cmadm - tacot1)
+tacot1_out_01:A core dump not created because the previous core dump was created with the same value of the NR_CORE_DUMP shared memory variable (from: /cm/build32/cm/ot/TACT/UIF!30.0.0.131/build_G!31.OP.L8/ada/exe/tact_uif_shared_exe - 45186 - tact_uif_shared_exe - UIF!30.0.0.131 - G!31.OP.L8 - dhtacd04 - cmadm - tacot1)
+tacot1_out_01:A core dump not created because the previous core dump was created with the same value of the NR_CORE_DUMP shared memory variable (from: /cm/build32/cm/ot/TACT/UIF!30.0.0.131/build_G!31.OP.L8/ada/exe/tact_uif_shared_exe - 45186 - tact_uif_shared_exe - UIF!30.0.0.131 - G!31.OP.L8 - dhtacd04 - cmadm - tacot1)
+260925.034144: replay_day: INFORMATION: Checking LOGS for errors:
+  called from emacs:(progn (find-file "/cm/build32/cm/ot/TACT/SVISION!30.0.0.83/sources/sources/replay_day.ksh") (goto-line 6024))
+  called from emacs:(progn (find-file "/cm/build32/cm/ot/TACT/SVISION!30.0.0.83/sources/sources/replay_day.ksh") (goto-line 8003))
+260925.035918: replay_day: SEVERE: ERROR: check_logs reported errors, see: #emacs:(find-file "/cm/local_build/TACTDEV_HOME/replay_dir/work/logging/LOGS/260925.034144.dhtacd04.check_logs.result.svlog")
+  called from emacs:(progn (find-file "/cm/build32/cm/ot/TACT/SVISION!30.0.0.83/sources/sources/replay_day.ksh") (goto-line 6045))
+  called from emacs:(progn (find-file "/cm/build32/cm/ot/TACT/SVISION!30.0.0.83/sources/sources/replay_day.ksh") (goto-line 8003))
+260925.035918: replay_day: INFORMATION: For more details about the check_logs execution (verbose), see : #emacs:(find-file "/cm/local_build/TACTDEV_HOME/replay_dir/work/logging/LOGS/260925.034144.dhtacd04.check_logs.run.svlog")
 /cm/local_build/TACTDEV_HOME/replay_dir/work/logging/LOGS_260924_125044/tacot1_out_01:..ERROR_REPORT.WARNING : Error            : Severity:WARNING 25/11/25 23:47:25 (FROZEN_SHARED), REAL : 26/09/24 00:40:09 (UTC) FPD_Id_From_Access_Keys cannot determine FPD_ID
 /cm/local_build/TACTDEV_HOME/replay_dir/work/logging/LOGS_260924_125044/tacot1_out_01:..ERROR_REPORT.WARNING : Description      : Expecting length 1 for matching FPDs, found: 0 list:(Length => 0, Elements => ())
 /cm/local_build/TACTDEV_HOME/replay_dir/work/logging/LOGS_260924_125044/core.45186.26_09_24-00:42:52.19.logs:..ERROR_REPORT.SEVERE : Error            : Severity:SEVERE (ASSERTION_FAILURE) 25/11/26 00:00:32 (FROZEN_SHARED), REAL : 26/09/24 00:42:51 (UTC) TACOT variable not of type STRING_TYPE, operation aborted
