@@ -22,6 +22,67 @@ type StyleDiff is record:
     check    : str    # VAR_CHECK
     ediff    : str    # (ediff-files "<the baseline's result>" "<this build's>"); "" if not given
 
+# one finding of the ksh style scanner's: the script, what kind, and the
+# variable (or whatever the check names), from a "./<script>:XXX:<name>"
+# under the heading of its kind
+type StyleFinding is record:
+    script: str    # ./sources/regression_testing.ksh
+    kind  : str    # used not defined
+    name  : str    # CM_HOST
+
+# a script whose findings are not the previous baseline's: its new findings
+# and its gone ones, a "<kind>: <names>" each
+type ScriptChange is record:
+    script: str
+    new   : []str  # used not defined: CM_HOST PERL_VERSION
+    gone  : []str  # defined not used: OLD_WORK_DIR
+
+def style_kind(heading: str) -> str:
+    """The kind of findings a heading of the scanner's is of.
+
+    style_kind("The following variables seem to be used not defined:") -> "used not defined"
+    style_kind("default define_configuration var assigned, it is likely a bug:") -> "default define_configuration var assigned"
+    """
+    heading.rstrip(":").split(",")[0].replace("The following variables seem to be ", "")
+
+def style_findings(file: Path) -> []StyleFinding:
+    """The findings in FILE, a result of the ksh style scanner's."""
+    var findings: []StyleFinding = []
+    var kind: str = ""
+    for line in file.lines:
+        if line == /^(?P<script>\.\/[^:]+):[^:]*:(?P<name>.+)$/:
+            findings.append(StyleFinding($+{script}, kind, $+{name}))
+        elif line.endswith(":") and not line.startswith(" "):
+            kind = style_kind(line)
+    findings
+
+def ediff_files(ediff: str) -> []Path:
+    """The two files an ediff link compares; none if EDIFF is not one."""
+    return [] if ediff != /^\(ediff-files "(?P<a>[^"]+)" "(?P<b>[^"]+)"\)$/
+    [Path($+{a}), Path($+{b})]
+
+def by_kind(findings: []StyleFinding, script: str) -> []str:
+    """SCRIPT's FINDINGS, a "<kind>: <names>" for each kind."""
+    var kinds: []str = []
+    for f in findings:
+        if f.script == script and f.kind not in kinds:
+            kinds.append(f.kind)
+    [k + ": " + " ".join([f.name for f in findings if f.script == script and f.kind == k]) for k in kinds]
+
+def changed_scripts(baseline: Path, current: Path) -> []ScriptChange:
+    """The scripts whose findings in CURRENT are not the same as in BASELINE,
+    two results of the ksh style scanner's. Compared as sets: a finding
+    that only moved in the file is no change."""
+    let before: []StyleFinding = style_findings(baseline)
+    let after: []StyleFinding = style_findings(current)
+    let new: []StyleFinding = [f for f in after if f not in before]
+    let gone: []StyleFinding = [f for f in before if f not in after]
+    var scripts: []str = []
+    for f in new + gone:
+        if f.script not in scripts:
+            scripts.append(f.script)
+    [ScriptChange(s, by_kind(new, s), by_kind(gone, s)) for s in scripts]
+
 # the SEVERE messages of one of the test programs: how many, and the first
 type ProgramErrors is record:
     program: str      # param_shared_cleanup_ftok
@@ -73,9 +134,10 @@ class TestProgramsLog:
                 return
         self.errors.append(ProgramErrors(program, 1, message))
 
-    def summary(self, limit: int = 5) -> []str:
+    def summary(self, limit: int = 5, read_results: bool = True) -> []str:
         """What failed, a line each: the verdict; each style difference,
-        with its ediff; each program's SEVERE messages, how many and the
+        with its ediff and, READ_RESULTS and its two files there, the
+        scripts it is in; each program's SEVERE messages, how many and the
         first; LIMIT of docgen's; the files missing."""
         var lines: []str = []
         if len(self.verdict) + len(self.style_diffs) + len(self.errors) + len(self.docgen) + len(self.missing) == 0:
@@ -86,6 +148,8 @@ class TestProgramsLog:
             for diff in self.style_diffs:
                 let link: str = "  #emacs:" + diff.ediff if diff.ediff != "" else ""
                 lines.append(f"  {diff.component} {diff.check}" + link)
+                if read_results:
+                    lines = lines + script_lines(diff)
         for e in self.errors:
             lines.append(f"{e.count:>3} SEVERE from {e.program}: {e.first}")
         if len(self.docgen) > 0:
@@ -97,6 +161,18 @@ class TestProgramsLog:
         for line in self.missing:
             lines.append("missing: " + line)
         lines
+
+def script_lines(diff: StyleDiff) -> []str:
+    """The scripts DIFF is in, a line each: its new findings, its gone ones.
+    None if its two files are not there to read."""
+    let files: []Path = ediff_files(diff.ediff)
+    return [] if len(files) != 2 or not -f files[0] or not -f files[1]
+    var lines: []str = []
+    for change in changed_scripts(files[0], files[1]):
+        let new: []str = ["new " + k for k in change.new]
+        let gone: []str = ["gone " + k for k in change.gone]
+        lines.append(f"    {change.script}  " + "; ".join(new + gone))
+    lines
 
 # ---------------------------------------------------------------------------
 # Builds
@@ -495,11 +571,36 @@ if __name__ == "__main__":
     # the %see line is in twice, and counted once
     assert len(programs.docgen) == 10 and programs.docgen[0].startswith("block not included: tacot.tact.flight")
     assert len(programs.missing) == 1 and programs.missing[0].startswith("ldd: /cm/ot/TOOL/PERL.30.0.0.14/")
-    let summed: []str = programs.summary(2)
+    let summed: []str = programs.summary(2, read_results=False)
     assert summed[5] == "7 ksh style differences with the previous baseline:"
     assert summed[13] == "  3 SEVERE from param_shared_cleanup_ftok: dbspy -D ./env_imp_regress/1.545.cpg/NUM_MESSAGES.ftok failed with exit code 42 : dbspy: file ./env_imp_regress/1.545.cpg/NUM_MESSAGES.ftok cannot be opened"
     assert summed[16] == "10 docgen errors:" and summed[19] == "  ... and 8 more"
     assert len(summed) == 21
+
+    # --- the scripts a style difference is in: a real result, and a baseline
+    # made from it by hand --------------------------------------------------
+    assert style_kind("The following variables seem to be used not defined:") == "used not defined"
+    assert style_kind("default define_configuration var assigned, it is likely a bug:") == "default define_configuration var assigned"
+    let result_file: Path = samples / "COMMON_CONFIG.RESULT.VAR_CHECK"
+    let baseline_file: Path = samples / "COMMON_CONFIG.BASELINE.RESULT.VAR_CHECK.txt"
+    let findings: []StyleFinding = style_findings(result_file)
+    assert len(findings) == 25
+    assert findings[0] == StyleFinding("./generated/application_profile.ksh", "used not defined", "NEW_PATH")
+    assert findings[9] == StyleFinding("./sources/find_current_ops_testing.ksh", "default define_configuration var assigned", "CONFIGURATION_TYPE")
+    assert ediff_files(programs.style_diffs[0].ediff) == [
+        Path("/cm/ot/TOOL/COMMON_CONFIG.30.0.0.105/build_G.31.IP.L8/sources/test/new_COMMON_CONFIG_style_errors_test.BASELINE.RESULT.VAR_CHECK.txt"),
+        Path("/cm/ot/TOOL/COMMON_CONFIG!30.0.0.105/build_G!31.IP.L8/user_output/KSH_STYLE_SCANNER/COMMON_CONFIG.RESULT.VAR_CHECK.25367")]
+    assert ediff_files("(ediff-files \"a\")") == []
+    # cfmu_ops_branch_setup.ksh's two findings are the other way round: no change
+    let changes: []ScriptChange = changed_scripts(baseline_file, result_file)
+    assert changes == [
+        ScriptChange("./sources/find_current_ops.ksh", ["used not defined: CFMU_REGRESS_TEST_FTPS_DIR"], []),
+        ScriptChange("./sources/regression_testing.ksh", ["used not defined: CM_HOST PERL_VERSION"], ["defined not used: OLD_WORK_DIR"])]
+    assert changed_scripts(result_file, result_file) == []
+    let lines: []str = script_lines(StyleDiff("COMMON_CONFIG", "VAR_CHECK", "(ediff-files \"" + baseline_file + "\" \"" + result_file + "\")"))
+    assert lines == [
+        "    ./sources/find_current_ops.ksh  new used not defined: CFMU_REGRESS_TEST_FTPS_DIR",
+        "    ./sources/regression_testing.ksh  new used not defined: CM_HOST PERL_VERSION; gone defined not used: OLD_WORK_DIR"]
 
     # --- a build's type, from its directory's name ----------------------------
     def build_type(name: BuildName_T) -> str:

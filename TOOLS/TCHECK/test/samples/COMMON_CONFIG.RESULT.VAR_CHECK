@@ -1,0 +1,67 @@
+The following variables seem to be used not defined:
+
+There can be false positive if for example
+  the var is defined in a file that is sourced
+  the var is defined in a caller file that exported it
+
+./generated/application_profile.ksh:XXX:NEW_PATH
+./generated/application_profile.ksh:XXX:TRACE_APP_PROFILE
+
+defined not used:
+
+There can be false positive, so this shall be double checked
+./generated/application_profile.ksh:XXX:CUA_SHARED_ROOT
+./generated/application_profile.ksh:XXX:DATA_ROOT
+./generated/application_profile.ksh:XXX:FILE_ROOT
+
+defined not used:
+
+There can be false positive, so this shall be double checked
+./sources/cfmu_ops_branch_setup.ksh:XXX:OPS_CHAIN_FOR_THAT_BRANCH
+./sources/cfmu_ops_branch_setup.ksh:XXX:PREVIOUS_OPS_CHAIN_FOR_THAT_BRANCH
+
+The following variables seem to be used not defined:
+
+There can be false positive if for example
+  the var is defined in a file that is sourced
+  the var is defined in a caller file that exported it
+
+./sources/find_current_ops.ksh:XXX:CFMU_REGRESS_TEST_FTPS_DIR
+
+defined not used:
+
+There can be false positive, so this shall be double checked
+./sources/find_current_ops_testing.ksh:XXX:CONFIGURATION_TYPE
+
+default define_configuration var assigned, it is likely a bug:
+./sources/find_current_ops_testing.ksh:XXX:CONFIGURATION_TYPE
+
+The following variables seem to be used not defined:
+
+There can be false positive if for example
+  the var is defined in a file that is sourced
+  the var is defined in a caller file that exported it
+
+./sources/regression_testing.ksh:XXX:CM_HOST
+./sources/regression_testing.ksh:XXX:CM_INSTANCE
+./sources/regression_testing.ksh:XXX:COMMON_UTILS_VERSION
+./sources/regression_testing.ksh:XXX:PERL_VERSION
+./sources/regression_testing.ksh:XXX:PHYLOS_VERSION
+./sources/regression_testing.ksh:XXX:PREVIOUS_OPS_CHAIN_FOR_THAT_BRANCH
+./sources/regression_testing.ksh:XXX:PROFILE_STATUS
+
+defined not used:
+
+There can be false positive, so this shall be double checked
+./sources/regression_testing.ksh:XXX:APPLICATION_VERSION
+./sources/regression_testing.ksh:XXX:BASELINE_CLOSURE
+./sources/regression_testing.ksh:XXX:BUILD_AREA
+./sources/regression_testing.ksh:XXX:HOME
+./sources/regression_testing.ksh:XXX:WORK_ROOT
+
+defined not used:
+
+There can be false positive, so this shall be double checked
+./sql/common.dbt.populate.ksh:XXX:DATA_ONLY
+./sql/common.dbt.populate.ksh:XXX:USER_IDENTITY
+./sql/common.dbt.populate.ksh:XXX:ZIMP_CHECK_IDENTIFICATION_FILE

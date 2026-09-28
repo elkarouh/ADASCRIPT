@@ -58,8 +58,19 @@ linked above them, rather than printed: the log repeats the messages of
 each sub-build that ran a check, and gives a ksh style difference in six
 lines. Shown, each once: what `check_run_test_programs_log` says failed;
 each ksh style difference with the previous baseline, its component and
-check, with the `ediff-files` link that shows it; the other programs'
-SEVERE messages, how many and the first (`3 SEVERE from
+check, with the `ediff-files` link that shows it and, when its two files
+are there to read, the scripts whose findings are not the previous
+baseline's, so as to know whose change it was:
+
+```
+  COMMON_CONFIG VAR_CHECK  #emacs:(ediff-files "..." "...")
+    ./sources/find_current_ops.ksh  new used not defined: CFMU_REGRESS_TEST_FTPS_DIR
+    ./sources/regression_testing.ksh  new used not defined: CM_HOST PERL_VERSION; gone defined not used: OLD_WORK_DIR
+```
+
+The findings (`./<script>:XXX:<name>` under the heading of their kind) are
+compared as sets, so a finding that only moved in the file is no change.
+Then the other programs' SEVERE messages, how many and the first (`3 SEVERE from
 param_shared_cleanup_ftok: dbspy -D ...`); docgen's errors, five of them
 (all with `-v`); and the files missing.
 
