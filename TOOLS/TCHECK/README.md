@@ -52,6 +52,17 @@ Tcheck_tact [-no-color] [-s] [-f] [-v] [-l] [-batch] [-only-new] [-exit-code]
   of the summary, her branches, her files; the newly failed tests stay, the
   whole baseline's. A name nobody committed under says so, and who did.
 
+**Build closure and test programs** (`-focus build_info`, and the full
+report) are summed up from the IP build's `check_run_test_programs.log`,
+linked above them, rather than printed: the log repeats the messages of
+each sub-build that ran a check, and gives a ksh style difference in six
+lines. Shown, each once: what `check_run_test_programs_log` says failed;
+each ksh style difference with the previous baseline, its component and
+check, with the `ediff-files` link that shows it; the other programs'
+SEVERE messages, how many and the first (`3 SEVERE from
+param_shared_cleanup_ftok: dbspy -D ...`); docgen's errors, five of them
+(all with `-v`); and the files missing.
+
 It reads a build's logs in the build of the type it wants, whichever of
 `$CM_ENV_ID`'s it was launched with -- `G!31.IP.L8` or `G!31.OP.L8`: a
 replay's are always the OP build's, a Csystem log the IP build's, mono

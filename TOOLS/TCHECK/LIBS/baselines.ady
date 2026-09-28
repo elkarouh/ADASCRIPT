@@ -12,6 +12,93 @@ nimport tlog
 nimport replays
 
 # ---------------------------------------------------------------------------
+# A build's test programs: its check_run_test_programs.log
+# ---------------------------------------------------------------------------
+
+# a difference the ksh style scanner sees with the previous baseline: the
+# component and the check it is of, and the ediff the log gives to see it
+type StyleDiff is record:
+    component: str    # COMMON_CONFIG
+    check    : str    # VAR_CHECK
+    ediff    : str    # (ediff-files "<the baseline's result>" "<this build's>"); "" if not given
+
+# the SEVERE messages of one of the test programs: how many, and the first
+type ProgramErrors is record:
+    program: str      # param_shared_cleanup_ftok
+    count  : int
+    first  : str      # dbspy -D ./env_imp_regress/... failed with exit code 42 : ...
+
+class TestProgramsLog:
+    """A build's check_run_test_programs.log -- its build closure and test
+    programs checked -- read for what failed, each once. The log repeats
+    the messages of each sub-build that ran a check, and gives a ksh style
+    difference in six lines, of which the ediff is the one to act on."""
+    file       : Path
+    verdict    : []str            # check_run_test_programs_log's own: what failed
+    style_diffs: []StyleDiff
+    errors     : []ProgramErrors  # the other programs' SEVERE messages, by program
+    docgen     : []str            # docgen's: "block not included: ..."
+    missing    : []str            # "... No such file or directory"
+
+    def __init__(self, file: Path):
+        self.file = file
+        var seen: {}str = {}
+        for line in file.lines:
+            continue if line in seen     # a sub-build's messages again
+            seen.add(line)
+            if line == /^\d{6}\.\d{6}: (?P<program>\S+): SEVERE: (?P<message>.*)$/:
+                let program: str = $+{program}
+                let message: str = $+{message}.strip()
+                continue if message == ""
+                case program:
+                    when "check_run_test_programs_log":
+                        self.verdict.append(message)
+                    when "check_new_ksh_style_errors":
+                        if message == /previous baseline check of (?P<component>\S+) scripts .*\.DIFF\.(?P<check>\w+)"/:
+                            self.style_diffs.append(StyleDiff($+{component}, $+{check}, ""))
+                        elif message.startswith("(ediff-files ") and len(self.style_diffs) > 0:
+                            self.style_diffs[len(self.style_diffs) - 1].ediff = message
+                    when others:
+                        self.add_error(program, message)
+            elif line == /^SEVERE: (?P<message>.*)$/:
+                self.docgen.append($+{message})
+            elif "No such file or directory" in line:
+                self.missing.append(line)
+
+    def add_error(self, program: str, message: str):
+        """MESSAGE, one more SEVERE of PROGRAM's."""
+        for i in range(len(self.errors)):
+            if self.errors[i].program == program:
+                self.errors[i].count += 1
+                return
+        self.errors.append(ProgramErrors(program, 1, message))
+
+    def summary(self, limit: int = 5) -> []str:
+        """What failed, a line each: the verdict; each style difference,
+        with its ediff; each program's SEVERE messages, how many and the
+        first; LIMIT of docgen's; the files missing."""
+        var lines: []str = []
+        if len(self.verdict) + len(self.style_diffs) + len(self.errors) + len(self.docgen) + len(self.missing) == 0:
+            return ["no SEVERE message"]
+        lines = lines + self.verdict
+        if len(self.style_diffs) > 0:
+            lines.append(f"{len(self.style_diffs)} ksh style differences with the previous baseline:")
+            for diff in self.style_diffs:
+                let link: str = "  #emacs:" + diff.ediff if diff.ediff != "" else ""
+                lines.append(f"  {diff.component} {diff.check}" + link)
+        for e in self.errors:
+            lines.append(f"{e.count:>3} SEVERE from {e.program}: {e.first}")
+        if len(self.docgen) > 0:
+            lines.append(f"{len(self.docgen)} docgen errors:")
+            for message in self.docgen[0 ..< min(limit, len(self.docgen))]:
+                lines.append("  " + message)
+            if len(self.docgen) > limit:
+                lines.append(f"  ... and {len(self.docgen) - limit} more")
+        for line in self.missing:
+            lines.append("missing: " + line)
+        lines
+
+# ---------------------------------------------------------------------------
 # Builds
 # ---------------------------------------------------------------------------
 
@@ -146,8 +233,9 @@ class Build:
         else:
             puts("SWb", "WARNING: No CRC summary file found!", NEWLINE=True)
 
-    def check_test_programs(self, fast_mode: bool):
-        """Find or run check_run_test_programs_log from the IP self."""
+    def check_test_programs(self, fast_mode: bool, verbose: bool = False):
+        """Find or run check_run_test_programs_log from the IP self; what
+        its log says failed, summed up -- VERBOSE lists all docgen's."""
         let baseline: BaselineNr_T = self.baseline_nr
         let work: Path = self.tacot_dir(normal) / "work"
         print
@@ -167,14 +255,12 @@ class Build:
                 let build_subtype: str = self.name.replace("build_", "")
                 let rc: int = shell: cd /tmp && echo check_run_test_programs_log | Ccontext -b "TACT.TACT_CONFIG.{baseline}" -e "{build_subtype}" 2>&1
         else:
-            let mktemp_lines: []str = shellLines: cfmu_mktemp
-            let full_report: Path = Path(mktemp_lines[0]) if mktemp_lines'Length > 0 else Path("/tmp/tcheck_report.txt")
-            print "Full report is found in " + full_report + "."
-            print
-            let cp_rc: int = shell: cp {logfile} {full_report}
-            let filtered = shell: grep -v 'Running.*setup' {full_report} | grep -v 'Checking for errors' | grep -v 'No errors found in' | grep -v -E '^[0-9.]+:\s+\S+\s+INFORMATION:' | grep -E '\S'
-            if filtered.output.strip() != "":
-                print filtered.output.rstrip("\n")
+            # what failed, each once: the log itself was printed, all but
+            # its INFORMATION lines -- the same messages once per sub-build
+            let log: TestProgramsLog = TestProgramsLog(logfile)
+            print emacs_link(logfile)
+            for line in log.summary(1000 if verbose else 5):
+                print "  " + line
 
 def grep_force_trace_in_dir(dir: Path):
     """Grep for missing 'if Debug.Trace' guards in LO build logs."""
@@ -389,6 +475,31 @@ if __name__ == "__main__":
     let tmp: Path = Path(run(["mktemp", "-d", "-t", "baselines.XXXXXX"]).output.strip())
     let PREQUAL: str = "Treplay_G31.OP.L8_30.0.0.133_2026.09.23_213300-run_prequal.NJrqM.log"
     let PERFORMANCE: str = "Treplay_G31.OP.L8_30.0.0.133_2026.09.23_213146-performance.MOJ0V.log"
+
+    # --- a build's test programs: the real log, as build_info printed it -------
+    let programs: TestProgramsLog = TestProgramsLog(samples / "check_run_test_programs.log")
+    assert programs.verdict == [
+        "Ccheck_build_closure -s -t -b ELD.ELD_CONFIG.30.0.0.132 failed with exit code 1",
+        "Ccheck_build_closure -s -t -b TACT.UIF.30.0.0.132 failed with exit code 1",
+        "Test failed because one or more Ccheck_build_closure calls failed (last failure was Ccheck_build_closure -s -t -b TACT.UIF.30.0.0.132 failed with exit code 1",
+        "There are KSH-style errors reported.",
+        "There are docgen errors reported."]
+    # each once, though COMMON_CONFIG's is in the log twice
+    assert [d.component + " " + d.check for d in programs.style_diffs] == [
+        "COMMON_CONFIG VAR_CHECK", "ELD_CONFIG STABLE_CHECKS", "ELD_CONFIG VAR_CHECK", "ADA_PRIM VAR_CHECK",
+        "TACOT_SCR STABLE_CHECKS", "TACOT_SCR VAR_CHECK", "TACT_CONFIG VAR_CHECK"]
+    assert programs.style_diffs[0].ediff.startswith("(ediff-files \"/cm/ot/TOOL/COMMON_CONFIG.30.0.0.105/")
+    assert [e.program + " " + str(e.count) for e in programs.errors] == [
+        "param_shared_cleanup_ftok 3", "check_result_equal_template 2", "check_oracle_and_perl 2"]
+    assert programs.errors[0].first.startswith("dbspy -D ./env_imp_regress/1.545.cpg/NUM_MESSAGES.ftok failed")
+    # the %see line is in twice, and counted once
+    assert len(programs.docgen) == 10 and programs.docgen[0].startswith("block not included: tacot.tact.flight")
+    assert len(programs.missing) == 1 and programs.missing[0].startswith("ldd: /cm/ot/TOOL/PERL.30.0.0.14/")
+    let summed: []str = programs.summary(2)
+    assert summed[5] == "7 ksh style differences with the previous baseline:"
+    assert summed[13] == "  3 SEVERE from param_shared_cleanup_ftok: dbspy -D ./env_imp_regress/1.545.cpg/NUM_MESSAGES.ftok failed with exit code 42 : dbspy: file ./env_imp_regress/1.545.cpg/NUM_MESSAGES.ftok cannot be opened"
+    assert summed[16] == "10 docgen errors:" and summed[19] == "  ... and 8 more"
+    assert len(summed) == 21
 
     # --- a build's type, from its directory's name ----------------------------
     def build_type(name: BuildName_T) -> str:

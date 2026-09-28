@@ -1,0 +1,82 @@
+260924.225938: check_new_ksh_style_errors: SEVERE: The ksh style scanner sees differences with the previous baseline check of COMMON_CONFIG scripts see (find-file "/cm/ot/TOOL/COMMON_CONFIG!30.0.0.105/build_G!31.IP.L8/user_output/KSH_STYLE_SCANNER/COMMON_CONFIG.DIFF.VAR_CHECK")
+260924.225938: check_new_ksh_style_errors: SEVERE: To view emacs diff use C-x C-e after the first closing parenthesis
+260924.225938: check_new_ksh_style_errors: SEVERE: (ediff-files "/cm/ot/TOOL/COMMON_CONFIG.30.0.0.105/build_G.31.IP.L8/sources/test/new_COMMON_CONFIG_style_errors_test.BASELINE.RESULT.VAR_CHECK.txt" "/cm/ot/TOOL/COMMON_CONFIG!30.0.0.105/build_G!31.IP.L8/user_output/KSH_STYLE_SCANNER/COMMON_CONFIG.RESULT.VAR_CHECK.25367")
+260924.225938: check_new_ksh_style_errors: SEVERE:
+260924.225938: check_new_ksh_style_errors: SEVERE: To confirm this difference in the VOB execute : (shell-command "TARGET=$(where_workspace -c /cm/ot/TOOL/COMMON_CONFIG.30.0.0.105/build_G.31.IP.L8/sources/test/new_COMMON_CONFIG_style_errors_test.BASELINE.RESULT.VAR_CHECK.txt);cp /cm/ot/TOOL/COMMON_CONFIG!30.0.0.105/build_G!31.IP.L8/user_output/KSH_STYLE_SCANNER/COMMON_CONFIG.RESULT.VAR_CHECK.25367 ${TARGET};")
+260924.225938: check_new_ksh_style_errors: SEVERE: To view the style scanner output with line numbers : (find-file "/cm/ot/TOOL/COMMON_CONFIG!30.0.0.105/build_G!31.IP.L8/user_output/KSH_STYLE_SCANNER/COMMON_CONFIG.RESULT.VAR_CHECK.ORIG.25367")
+260925.005725: param_shared_cleanup_ftok: SEVERE: dbspy -D ./env_imp_regress/1.545.cpg/NUM_MESSAGES.ftok failed with exit code 42 : dbspy: file ./env_imp_regress/1.545.cpg/NUM_MESSAGES.ftok cannot be opened
+260925.005726: param_shared_cleanup_ftok: SEVERE: dbspy -D ./env_imp_regress/1.545.cpg/OPSTAT.ftok failed with exit code 42 : dbspy: file ./env_imp_regress/1.545.cpg/OPSTAT.ftok cannot be opened
+260925.005726: param_shared_cleanup_ftok: SEVERE: dbspy -D ./env_imp_regress/OPSTAT.ftok failed with exit code 42 : dbspy: file ./env_imp_regress/OPSTAT.ftok cannot be opened
+run_test_programs.log contains severe messages.
+==========================================
+260924.225942: check_new_ksh_style_errors: SEVERE: The ksh style scanner sees differences with the previous baseline check of ELD_CONFIG scripts see (find-file "/cm/ot/ELD/ELD_CONFIG!30.0.0.132/build_G!31.IP.L8/user_output/KSH_STYLE_SCANNER/ELD_CONFIG.DIFF.STABLE_CHECKS")
+260924.225942: check_new_ksh_style_errors: SEVERE: To view emacs diff use C-x C-e after the first closing parenthesis
+260924.225942: check_new_ksh_style_errors: SEVERE: (ediff-files "/cm/ot/ELD/ELD_CONFIG.30.0.0.132/build_G.31.IP.L8/sources/test/new_ELD_CONFIG_style_errors_test.BASELINE.RESULT.STABLE_CHECKS.txt" "/cm/ot/ELD/ELD_CONFIG!30.0.0.132/build_G!31.IP.L8/user_output/KSH_STYLE_SCANNER/ELD_CONFIG.RESULT.STABLE_CHECKS.32758")
+260924.225942: check_new_ksh_style_errors: SEVERE:
+260924.225942: check_new_ksh_style_errors: SEVERE: To confirm this difference in the VOB execute : (shell-command "TARGET=$(where_workspace -c /cm/ot/ELD/ELD_CONFIG.30.0.0.132/build_G.31.IP.L8/sources/test/new_ELD_CONFIG_style_errors_test.BASELINE.RESULT.STABLE_CHECKS.txt);cp /cm/ot/ELD/ELD_CONFIG!30.0.0.132/build_G!31.IP.L8/user_output/KSH_STYLE_SCANNER/ELD_CONFIG.RESULT.STABLE_CHECKS.32758 ${TARGET};")
+260924.225942: check_new_ksh_style_errors: SEVERE: To view the style scanner output with line numbers : (find-file "/cm/ot/ELD/ELD_CONFIG!30.0.0.132/build_G!31.IP.L8/user_output/KSH_STYLE_SCANNER/ELD_CONFIG.RESULT.STABLE_CHECKS.ORIG.32758")
+260924.225942: check_new_ksh_style_errors: SEVERE: The ksh style scanner sees differences with the previous baseline check of ELD_CONFIG scripts see (find-file "/cm/ot/ELD/ELD_CONFIG!30.0.0.132/build_G!31.IP.L8/user_output/KSH_STYLE_SCANNER/ELD_CONFIG.DIFF.VAR_CHECK")
+260924.225942: check_new_ksh_style_errors: SEVERE: To view emacs diff use C-x C-e after the first closing parenthesis
+260924.225942: check_new_ksh_style_errors: SEVERE: (ediff-files "/cm/ot/ELD/ELD_CONFIG.30.0.0.132/build_G.31.IP.L8/sources/test/new_ELD_CONFIG_style_errors_test.BASELINE.RESULT.VAR_CHECK.txt" "/cm/ot/ELD/ELD_CONFIG!30.0.0.132/build_G!31.IP.L8/user_output/KSH_STYLE_SCANNER/ELD_CONFIG.RESULT.VAR_CHECK.32758")
+260924.225942: check_new_ksh_style_errors: SEVERE:
+260924.225942: check_new_ksh_style_errors: SEVERE: To confirm this difference in the VOB execute : (shell-command "TARGET=$(where_workspace -c /cm/ot/ELD/ELD_CONFIG.30.0.0.132/build_G.31.IP.L8/sources/test/new_ELD_CONFIG_style_errors_test.BASELINE.RESULT.VAR_CHECK.txt);cp /cm/ot/ELD/ELD_CONFIG!30.0.0.132/build_G!31.IP.L8/user_output/KSH_STYLE_SCANNER/ELD_CONFIG.RESULT.VAR_CHECK.32758 ${TARGET};")
+260924.225942: check_new_ksh_style_errors: SEVERE: To view the style scanner output with line numbers : (find-file "/cm/ot/ELD/ELD_CONFIG!30.0.0.132/build_G!31.IP.L8/user_output/KSH_STYLE_SCANNER/ELD_CONFIG.RESULT.VAR_CHECK.ORIG.32758")
+260924.230016: check_new_ksh_style_errors: SEVERE: The ksh style scanner sees differences with the previous baseline check of ADA_PRIM scripts see (find-file "/cm/ot/ELD/ELD_CONFIG!30.0.0.132/build_G!31.IP.L8/user_output/KSH_STYLE_SCANNER/ADA_PRIM.DIFF.VAR_CHECK")
+260924.230016: check_new_ksh_style_errors: SEVERE: To view emacs diff use C-x C-e after the first closing parenthesis
+260924.230016: check_new_ksh_style_errors: SEVERE: (ediff-files "/cm/ot/TOOL/ADA_PRIM.30.0.0.81/build_G.31.IP.L8/sources/test/new_ADA_PRIM_style_errors_test.BASELINE.RESULT.VAR_CHECK.txt" "/cm/ot/ELD/ELD_CONFIG!30.0.0.132/build_G!31.IP.L8/user_output/KSH_STYLE_SCANNER/ADA_PRIM.RESULT.VAR_CHECK.8235")
+260924.230016: check_new_ksh_style_errors: SEVERE:
+260924.230016: check_new_ksh_style_errors: SEVERE: To confirm this difference in the VOB execute : (shell-command "TARGET=$(where_workspace -c /cm/ot/TOOL/ADA_PRIM.30.0.0.81/build_G.31.IP.L8/sources/test/new_ADA_PRIM_style_errors_test.BASELINE.RESULT.VAR_CHECK.txt);cp /cm/ot/ELD/ELD_CONFIG!30.0.0.132/build_G!31.IP.L8/user_output/KSH_STYLE_SCANNER/ADA_PRIM.RESULT.VAR_CHECK.8235 ${TARGET};")
+260924.230016: check_new_ksh_style_errors: SEVERE: To view the style scanner output with line numbers : (find-file "/cm/ot/ELD/ELD_CONFIG!30.0.0.132/build_G!31.IP.L8/user_output/KSH_STYLE_SCANNER/ADA_PRIM.RESULT.VAR_CHECK.ORIG.8235")
+260924.230323: check_result_equal_template: SEVERE: Differences between TEMPLATE_FILE=/cm/ot/ELD/ELD_CONFIG!30.0.0.132/sources/sources/test/mini/cache.text/VOLUME_IN_VOLUME and RESULT_FILE=/cm/build31/cm/ot/ELD/ELD_CONFIG!30.0.0.132/build_G!31.IP.L8/test/mini/cache.text/VOLUME_IN_VOLUME (see below).
+260924.230631: check_result_equal_template: SEVERE: Differences between TEMPLATE_FILE=/cm/ot/ELD/ELD_CONFIG!30.0.0.132/sources/sources/test/mini/db_debug/VOLUME_IN_VOLUME and RESULT_FILE=/cm/build31/cm/ot/ELD/ELD_CONFIG!30.0.0.132/build_G!31.IP.L8/test/mini/db_debug/VOLUME_IN_VOLUME (see below).
+260924.235353: check_oracle_and_perl: SEVERE: Oracle.so in /cm/ot/TOOL/PERL.30.0.0.14/build_G.31.IP.L8 has not been linked to the libraries in /opt/oracle/product/12.2.0.3.L8.550/lib of the current ${ORACLE_HOME}
+260924.235353: check_oracle_and_perl: SEVERE: Linking info:
+run_test_programs.log contains severe messages.
+ldd: /cm/ot/TOOL/PERL.30.0.0.14/build_G.31.IP.L8/pm/x86_64-linux-thread-multi/auto/DBD/Oracle/Oracle.so: No such file or directory
+run_test_programs.log contains 'missing files/directories' error messages.
+==========================================
+260925.134751: check_run_test_programs_log: SEVERE: Ccheck_build_closure -s -t -b ELD.ELD_CONFIG.30.0.0.132 failed with exit code 1
+260924.225938: check_new_ksh_style_errors: SEVERE: The ksh style scanner sees differences with the previous baseline check of COMMON_CONFIG scripts see (find-file "/cm/ot/TOOL/COMMON_CONFIG!30.0.0.105/build_G!31.IP.L8/user_output/KSH_STYLE_SCANNER/COMMON_CONFIG.DIFF.VAR_CHECK")
+260924.225938: check_new_ksh_style_errors: SEVERE: To view emacs diff use C-x C-e after the first closing parenthesis
+260924.225938: check_new_ksh_style_errors: SEVERE: (ediff-files "/cm/ot/TOOL/COMMON_CONFIG.30.0.0.105/build_G.31.IP.L8/sources/test/new_COMMON_CONFIG_style_errors_test.BASELINE.RESULT.VAR_CHECK.txt" "/cm/ot/TOOL/COMMON_CONFIG!30.0.0.105/build_G!31.IP.L8/user_output/KSH_STYLE_SCANNER/COMMON_CONFIG.RESULT.VAR_CHECK.25367")
+260924.225938: check_new_ksh_style_errors: SEVERE:
+260924.225938: check_new_ksh_style_errors: SEVERE: To confirm this difference in the VOB execute : (shell-command "TARGET=$(where_workspace -c /cm/ot/TOOL/COMMON_CONFIG.30.0.0.105/build_G.31.IP.L8/sources/test/new_COMMON_CONFIG_style_errors_test.BASELINE.RESULT.VAR_CHECK.txt);cp /cm/ot/TOOL/COMMON_CONFIG!30.0.0.105/build_G!31.IP.L8/user_output/KSH_STYLE_SCANNER/COMMON_CONFIG.RESULT.VAR_CHECK.25367 ${TARGET};")
+260924.225938: check_new_ksh_style_errors: SEVERE: To view the style scanner output with line numbers : (find-file "/cm/ot/TOOL/COMMON_CONFIG!30.0.0.105/build_G!31.IP.L8/user_output/KSH_STYLE_SCANNER/COMMON_CONFIG.RESULT.VAR_CHECK.ORIG.25367")
+260925.005725: param_shared_cleanup_ftok: SEVERE: dbspy -D ./env_imp_regress/1.545.cpg/NUM_MESSAGES.ftok failed with exit code 42 : dbspy: file ./env_imp_regress/1.545.cpg/NUM_MESSAGES.ftok cannot be opened
+260925.005726: param_shared_cleanup_ftok: SEVERE: dbspy -D ./env_imp_regress/1.545.cpg/OPSTAT.ftok failed with exit code 42 : dbspy: file ./env_imp_regress/1.545.cpg/OPSTAT.ftok cannot be opened
+260925.005726: param_shared_cleanup_ftok: SEVERE: dbspy -D ./env_imp_regress/OPSTAT.ftok failed with exit code 42 : dbspy: file ./env_imp_regress/OPSTAT.ftok cannot be opened
+run_test_programs.log contains severe messages.
+==========================================
+260925.134820: check_run_test_programs_log: SEVERE: Ccheck_build_closure -s -t -b TACT.UIF.30.0.0.132 failed with exit code 1
+260925.134826: check_run_test_programs_log: SEVERE: Test failed because one or more Ccheck_build_closure calls failed (last failure was Ccheck_build_closure -s -t -b TACT.UIF.30.0.0.132 failed with exit code 1
+260925.134826: check_run_test_programs_log: SEVERE: There are KSH-style errors reported.
+260924.230714: check_new_ksh_style_errors: SEVERE: The ksh style scanner sees differences with the previous baseline check of TACOT_SCR scripts see (find-file "/cm/ot/TACT/TACT_CONFIG!30.0.0.134/build_G!31.IP.L8/user_output/KSH_STYLE_SCANNER/TACOT_SCR.DIFF.STABLE_CHECKS")
+260924.230714: check_new_ksh_style_errors: SEVERE: To view emacs diff use C-x C-e after the first closing parenthesis
+260924.230714: check_new_ksh_style_errors: SEVERE: (ediff-files "/cm/ot/TACT/TACOT_SCR.30.0.0.120/build_G.31.IP.L8/sources/test/new_TACOT_SCR_style_errors_test.BASELINE.RESULT.STABLE_CHECKS.txt" "/cm/ot/TACT/TACT_CONFIG!30.0.0.134/build_G!31.IP.L8/user_output/KSH_STYLE_SCANNER/TACOT_SCR.RESULT.STABLE_CHECKS.51044")
+260924.230714: check_new_ksh_style_errors: SEVERE:
+260924.230714: check_new_ksh_style_errors: SEVERE: To confirm this difference in the VOB execute : (shell-command "TARGET=$(where_workspace -c /cm/ot/TACT/TACOT_SCR.30.0.0.120/build_G.31.IP.L8/sources/test/new_TACOT_SCR_style_errors_test.BASELINE.RESULT.STABLE_CHECKS.txt);cp /cm/ot/TACT/TACT_CONFIG!30.0.0.134/build_G!31.IP.L8/user_output/KSH_STYLE_SCANNER/TACOT_SCR.RESULT.STABLE_CHECKS.51044 ${TARGET};")
+260924.230714: check_new_ksh_style_errors: SEVERE: To view the style scanner output with line numbers : (find-file "/cm/ot/TACT/TACT_CONFIG!30.0.0.134/build_G!31.IP.L8/user_output/KSH_STYLE_SCANNER/TACOT_SCR.RESULT.STABLE_CHECKS.ORIG.51044")
+260924.230714: check_new_ksh_style_errors: SEVERE: The ksh style scanner sees differences with the previous baseline check of TACOT_SCR scripts see (find-file "/cm/ot/TACT/TACT_CONFIG!30.0.0.134/build_G!31.IP.L8/user_output/KSH_STYLE_SCANNER/TACOT_SCR.DIFF.VAR_CHECK")
+260924.230714: check_new_ksh_style_errors: SEVERE: To view emacs diff use C-x C-e after the first closing parenthesis
+260924.230714: check_new_ksh_style_errors: SEVERE: (ediff-files "/cm/ot/TACT/TACOT_SCR.30.0.0.120/build_G.31.IP.L8/sources/test/new_TACOT_SCR_style_errors_test.BASELINE.RESULT.VAR_CHECK.txt" "/cm/ot/TACT/TACT_CONFIG!30.0.0.134/build_G!31.IP.L8/user_output/KSH_STYLE_SCANNER/TACOT_SCR.RESULT.VAR_CHECK.51044")
+260924.230714: check_new_ksh_style_errors: SEVERE:
+260924.230714: check_new_ksh_style_errors: SEVERE: To confirm this difference in the VOB execute : (shell-command "TARGET=$(where_workspace -c /cm/ot/TACT/TACOT_SCR.30.0.0.120/build_G.31.IP.L8/sources/test/new_TACOT_SCR_style_errors_test.BASELINE.RESULT.VAR_CHECK.txt);cp /cm/ot/TACT/TACT_CONFIG!30.0.0.134/build_G!31.IP.L8/user_output/KSH_STYLE_SCANNER/TACOT_SCR.RESULT.VAR_CHECK.51044 ${TARGET};")
+260924.230714: check_new_ksh_style_errors: SEVERE: To view the style scanner output with line numbers : (find-file "/cm/ot/TACT/TACT_CONFIG!30.0.0.134/build_G!31.IP.L8/user_output/KSH_STYLE_SCANNER/TACOT_SCR.RESULT.VAR_CHECK.ORIG.51044")
+260924.230858: check_new_ksh_style_errors: SEVERE: The ksh style scanner sees differences with the previous baseline check of TACT_CONFIG scripts see (find-file "/cm/ot/TACT/TACT_CONFIG!30.0.0.134/build_G!31.IP.L8/user_output/KSH_STYLE_SCANNER/TACT_CONFIG.DIFF.VAR_CHECK")
+260924.230858: check_new_ksh_style_errors: SEVERE: To view emacs diff use C-x C-e after the first closing parenthesis
+260924.230858: check_new_ksh_style_errors: SEVERE: (ediff-files "/cm/ot/TACT/TACT_CONFIG.30.0.0.134/build_G.31.IP.L8/sources/test/new_TACT_CONFIG_style_errors_test.BASELINE.RESULT.VAR_CHECK.txt" "/cm/ot/TACT/TACT_CONFIG!30.0.0.134/build_G!31.IP.L8/user_output/KSH_STYLE_SCANNER/TACT_CONFIG.RESULT.VAR_CHECK.30489")
+260924.230858: check_new_ksh_style_errors: SEVERE:
+260924.230858: check_new_ksh_style_errors: SEVERE: To confirm this difference in the VOB execute : (shell-command "TARGET=$(where_workspace -c /cm/ot/TACT/TACT_CONFIG.30.0.0.134/build_G.31.IP.L8/sources/test/new_TACT_CONFIG_style_errors_test.BASELINE.RESULT.VAR_CHECK.txt);cp /cm/ot/TACT/TACT_CONFIG!30.0.0.134/build_G!31.IP.L8/user_output/KSH_STYLE_SCANNER/TACT_CONFIG.RESULT.VAR_CHECK.30489 ${TARGET};")
+260924.230858: check_new_ksh_style_errors: SEVERE: To view the style scanner output with line numbers : (find-file "/cm/ot/TACT/TACT_CONFIG!30.0.0.134/build_G!31.IP.L8/user_output/KSH_STYLE_SCANNER/TACT_CONFIG.RESULT.VAR_CHECK.ORIG.30489")
+260925.134826: check_run_test_programs_log: SEVERE: There are docgen errors reported.
+SEVERE: block not included: tacot.tact.flight.test.check_flight.concerned_aros (/cm/ot/TACT/UIF!30.0.0.132/build_G!31.IP.L8/sources/tacot_flight-test_services.adb:757)
+SEVERE: block tacot.tact.flight.test.check_flight fails to include block tacot.tact.flight.test.check_flight.concerned_aros (/cm/ot/TACT/UIF!30.0.0.132/build_G!31.IP.L8/sources/tacot_flight-test_services.adb:370)
+SEVERE: block lvd.emacs.Xref has child(ren), but is found nowhere in documentation
+SEVERE: block lvd.emacs.view_rendered has child(ren), but is found nowhere in documentation
+SEVERE: node lvd.emacs not found (/cm/ot/TOOL/COMMON_UTILS!30.0.0.95/build_G!31.IP.L8/sources/lvd.lvd:1)
+SEVERE: block not included: lvd.emacs.Xref.doc_xref (/cm/ot/TOOL/COMMON_UTILS!30.0.0.95/build_G!31.IP.L8/sources/ksh/doc_xref.ksh:3)
+SEVERE: block lvd fails to include block lvd.emacs.Xref.doc_xref (/cm/ot/TOOL/COMMON_UTILS!30.0.0.95/build_G!31.IP.L8/sources/lvd.lvd:1)
+SEVERE: block not included: lvd.emacs.view_rendered.open_doc_at (/cm/ot/TOOL/COMMON_UTILS!30.0.0.95/build_G!31.IP.L8/sources/ksh/open_doc_at.ksh:3)
+SEVERE: block lvd fails to include block lvd.emacs.view_rendered.open_doc_at (/cm/ot/TOOL/COMMON_UTILS!30.0.0.95/build_G!31.IP.L8/sources/lvd.lvd:1)
+SEVERE: can't find target of %see: lvd.emacs (/cm/ot/TOOL/PERL!30.0.0.14/build_G!31.IP.L8/sources/extract_doc.ksh:3){in node: "%begin: lvd.extract_doc /cm/ot/TOOL/PERL!30.0.0.14/build_G!31.IP.L8/sources/extract_doc.ksh:3 extract_doc}
+SEVERE: can't find target of %see: lvd.emacs (/cm/ot/TOOL/PERL!30.0.0.14/build_G!31.IP.L8/sources/extract_doc.ksh:3){in node: "%begin: lvd.extract_doc /cm/ot/TOOL/PERL!30.0.0.14/build_G!31.IP.L8/sources/extract_doc.ksh:3 extract_doc}
