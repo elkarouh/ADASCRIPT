@@ -105,28 +105,38 @@ def diff_summaries(before: []str, after: []str) -> []str:
     added + removed
 
 def keyed(lines: []str) -> []str:
-    """LINES of a summary, a script line (indented four) after the style
-    difference it is of and a newline: the same script line under another
-    is another line."""
+    """LINES of a summary, each after what it is under and a newline: a
+    script line (indented four) after its style difference, a line on who
+    changed it (indented six) after both -- the same line under another is
+    another line."""
     var keys: []str = []
     var heading: str = ""
+    var script: str = ""
     for line in lines:
-        if not line.startswith("    "):
+        if line.startswith("      "):
+            keys.append(heading + "\n" + script + "\n" + line)
+        elif line.startswith("    "):
+            script = line
+            keys.append(heading + "\n" + line)
+        else:
             heading = line
-        keys.append(heading + "\n" + line if line.startswith("    ") else line)
+            keys.append(line)
     keys
 
 def marked(lines: []str, other: []str, mark: str) -> []str:
-    """LINES that OTHER has not, each after MARK. A script line comes under
-    the style difference it is of, unmarked when that is in OTHER too, so
+    """LINES that OTHER has not, each after MARK. A line under another --
+    a script under its style difference, who changed it under the script
+    -- comes after what it is under, unmarked when OTHER has that too, so
     as to say which one it is."""
     let others: []str = keyed(other)
     var out: []str = []
     for key in keyed(lines):
         continue if key in others
         let parts: []str = key.split("\n")
-        if len(parts) == 2 and parts[0] in others and ("  " + parts[0]) not in out:
-            out.append("  " + parts[0])
+        for i in range(len(parts) - 1):
+            let above: str = "\n".join(parts[0 .. i])
+            if above in others and ("  " + parts[i]) not in out:
+                out.append("  " + parts[i])
         out.append(mark + parts[len(parts) - 1])
     out
 
@@ -474,18 +484,26 @@ class Baseline:
         or not it is there."""
         Build("build_" + build_env_id($CM_ENV_ID, btype), btype, self.nr, self.dir)
 
-    def compare_test_programs(self, older: Baseline):
+    def compare_test_programs(self, older: Baseline, changes: {str}[]str, no_changes: str):
         """The summary of its IP build's check_run_test_programs.log, diffed
         with OLDER's: without the ediff links, whose files are named after
         a pid, and with the baseline numbers masked, so that only a change
-        in what fails shows."""
+        in what fails shows. Both say who changed the scripts per CHANGES,
+        this baseline's, or NO_CHANGES why nothing does: a script new here
+        comes with who changed it."""
         puts("SWr", f"Compare the check_run_test_programs.log summary with {older.nr}'s:", NEWLINE=True)
         let mine: ?Path = self.build(IP).test_programs_log()
         let theirs: ?Path = older.build(IP).test_programs_log()
         if mine is not None and theirs is not None:
             print "  " + emacs_link(theirs)
-            let before: []str = [masked(line) for line in TestProgramsLog(theirs).summary(1000, links=False)]
-            let after: []str = [masked(line) for line in TestProgramsLog(mine).summary(1000, links=False)]
+            var old_log: TestProgramsLog = TestProgramsLog(theirs)
+            var new_log: TestProgramsLog = TestProgramsLog(mine)
+            old_log.changes = changes
+            old_log.no_changes = no_changes
+            new_log.changes = changes
+            new_log.no_changes = no_changes
+            let before: []str = [masked(line) for line in old_log.summary(1000, links=False)]
+            let after: []str = [masked(line) for line in new_log.summary(1000, links=False)]
             let changes: []str = diff_summaries(before, after)
             if len(changes) == 0:
                 print "  the same summary"
@@ -690,6 +708,14 @@ if __name__ == "__main__":
         "  COMMON_CONFIG VAR_CHECK", "    ./a.ksh  new used not defined: X", "    ./c.ksh  new used not defined: Z",
         "  TACT_CONFIG VAR_CHECK", "    ./d.ksh  new used not defined: W"]
     assert diff_summaries(summed_before, summed_before) == []
+    # who changed a script: under it; the same line under another script is
+    # another line
+    let attributed_before: []str = ["  A", "    ./a.ksh", "      not in the changes report"]
+    let attributed_after: []str = ["  A", "    ./a.ksh", "      not in the changes report",
+        "    ./b.ksh", "      not in the changes report", "    ./c.ksh", "      changed by x.y: 1a SC-1"]
+    assert diff_summaries(attributed_before, attributed_after) == [
+        "  " + "  A", "+     ./b.ksh", "+       not in the changes report",
+        "+     ./c.ksh", "+       changed by x.y: 1a SC-1"]
     # the same script line, under another style difference: a change
     assert diff_summaries(["  A", "    ./a.ksh"], ["  A", "  B", "    ./a.ksh"]) == ["+   B", "+     ./a.ksh", "  " + "  A", "-     ./a.ksh"]
     # a new script under a style difference both have: that one, unmarked, above it

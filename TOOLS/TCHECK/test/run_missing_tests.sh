@@ -157,6 +157,15 @@ check "build_info: who changed each script, per the report" \
       ./sources/regression_testing.ksh  new used not defined: CM_HOST PERL_VERSION; gone defined not used: OLD_WORK_DIR
         changed by alice.fix_env: 5678ef01 SC-1, reviewed by bob on 260925.101010" \
     "$(style)"
+check "build_info: and in the summary diffed with the previous one's" "  + 7 ksh style differences with the previous baseline:
+  +   TACT_CONFIG VAR_CHECK
+  +     ./sources/find_current_ops.ksh  new used not defined: CFMU_REGRESS_TEST_FTPS_DIR
+  +       not in the changes report
+  +     ./sources/regression_testing.ksh  new used not defined: CM_HOST PERL_VERSION; gone defined not used: OLD_WORK_DIR
+  +       changed by alice.fix_env: 5678ef01 SC-1, reviewed by bob on 260925.101010
+  - 6 ksh style differences with the previous baseline:
+  -   1 SEVERE from old_program: something fixed since" \
+    "$(echo "$info" | sed -n '/^Compare the check_run_test_programs/,/^Compare Csystem/p' | grep '^  [+-]')"
 
 echo
 if [ $fails -eq 0 ]; then echo "All checks passed."; else echo "$fails check(s) FAILED."; exit 1; fi

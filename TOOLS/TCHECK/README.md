@@ -87,7 +87,9 @@ its findings then come from elsewhere than this baseline's changes:
 ```
 
 Without a changes report, the line under the count of style differences
-says why.
+says why. The comparison with the previous baseline's summary (below) says
+it the same way, both summaries by this baseline's report, so that a
+script new here comes with who changed it.
 Then the other programs' SEVERE messages, how many and the first (`3 SEVERE from
 param_shared_cleanup_ftok: dbspy -D ...`); docgen's errors, five of them
 (all with `-v`); and the files missing.
