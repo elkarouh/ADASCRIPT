@@ -72,40 +72,34 @@ yellow to stand out from its findings:
 The findings (`./<script>:XXX:<name>` under the heading of their kind) are
 compared as sets, so a finding that only moved in the file is no change.
 
-Under a script the baseline's CFMUTEST changes report names (the one
-`-focus changes` lists), who broke it -- its findings are new -- or fixed
-it -- they are gone -- or changed it, both: the report's
-`TOOL/COMMON_CONFIG/sources/regression_testing.ksh` is COMMON_CONFIG's
-`./sources/regression_testing.ksh`, and the change is credited to a branch
-as `-focus changes` credits it. Under a script the report does not name,
-nothing: its findings come from elsewhere than this baseline's changes.
-
-```
-    ./sources/find_current_ops.ksh  new used not defined: CFMU_REGRESS_TEST_FTPS_DIR
-      broken by carol.new_ops: 9abc0123 SC-2
-    ./sources/make_dom_escinfra_per_file.ksh  gone defined not used: MODE
-      fixed by arodrigu.fix_eld_op_reg: 7c4f6d8 SC-133596, reviewed by abernal on 260925.094727
-```
-
-Without a changes report, the line under the count of style differences
-says why. In the comparison with the previous baseline's summary (below),
-a script new there is said who broke it, and one gone from it who fixed
-it -- a script gone since was fixed.
 Then the other programs' SEVERE messages, how many and the first (`3 SEVERE from
 param_shared_cleanup_ftok: dbspy -D ...`); docgen's errors, five of them
 (all with `-v`); the files missing; and the Ada style errors (GNAT's
 -gnaty) of the build's latest tacot_corico run, five of them (all with
 `-v`): the `<file>:<line>:<col>: (style) ...` lines of its compilers' logs,
 `logging-*/LOGS_*/*_out_*`. Only those logs are read -- the tree is large
--- and they are read once, for the summary and its comparison both; in
-the comparison, the line and column numbers are masked, so that an error
-a line added above moved is no change.
+-- and they are read once, for the summary and its comparison both.
 
 Without `-short`, `-focus build_info` then diffs that summary with the
 previous baseline's -- `+` a line only this baseline's has, `-` one only
-the previous one's had. The ediff links are left out and the baseline
-numbers masked, so that only a change in what fails shows; a script line
-comes under its style difference, so as to say which one it is. The log
+the previous one's had. The ediff links are left out, and the lines are
+compared with the baseline numbers masked, and the line and column
+numbers of an Ada style error -- an error a line added above moved is no
+change -- but shown as they are. A script line comes under its style
+difference, so as to say which one it is.
+
+Under a ksh script or an Ada style error new in the comparison, who broke
+it, and under one gone, who fixed it, per the baseline's CFMUTEST changes
+report (the one `-focus changes` lists), credited to a branch as `-focus
+changes` credits it: the report's
+`TOOL/COMMON_CONFIG/sources/regression_testing.ksh` is COMMON_CONFIG's
+`./sources/regression_testing.ksh`, and an Ada style error's file is
+matched by its name, all the compiler gives. Nothing under one the report
+does not name: it comes from elsewhere than this baseline's changes.
+Without a changes report, the line under the link says why. The summary
+itself says nobody.
+
+The log
 read is a build's newest check_run_test_programs.log: a test's LOGS
 directory may hold an older one of its own. It is looked for in the work
 directory of tacot_corico.LATEST, else anywhere in the build's saved_logs
@@ -131,6 +125,9 @@ Compare the check_run_test_programs.log summary with 30.0.0.134's:
   +       broken by carol.new_ops: 9abc0123 SC-2
     COMMON_CONFIG VAR_CHECK
   +     ./sources/regression_testing.ksh  new used not defined: CM_HOST
+  + 27 Ada style errors in the tacot logs:
+  +   fpl-test-extract.adb:964:39: (style) bad casing of "selfManagedClient" declared at fpl.ads:3449 [-gnatyr]
+  +     broken by ann.casing: 1f2e SC-9
   - 6 ksh style differences with the previous baseline:
     DOM STABLE_CHECKS
   -     ./sources/make_dom_escinfra_per_file.ksh  new defined not used: MODE

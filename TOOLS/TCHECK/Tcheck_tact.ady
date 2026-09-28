@@ -231,10 +231,6 @@ class Report:
     summaries      : []BuildSummary # a line per build for the summary
     new_failures   : []NewFailure   # the tests they report newly failing or crashed
     tlog_references: str            # the baselines they compared with
-    # who changed each file, per the baseline's changes report, once
-    # show_build_info has read it -- or why there is no report to say
-    changes        : {str}[]str
-    no_changes     : str
     # the Ada style errors of its IP build's tacot logs, read once by
     # show_build_info -- the logs are large -- and compared after
     ada_style      : []str
@@ -317,19 +313,12 @@ class Report:
                 print "  its replays: " + ", ".join([f"{r.rtype}" for r in self.cur.replays])
 
     def show_build_info(self):
-        """Padactl, and what check_run_test_programs.log says failed, with
-        who changed the scripts of a style difference, per the baseline's
-        changes report."""
-        let report: Path | !Failure_T = changes_report(self.cur.nr)
-        if report is Path:
-            self.changes = changes_by_file(report)
-        else:
-            self.no_changes = report.message
+        """Padactl, and what check_run_test_programs.log says failed."""
         for b in self.cur.builds:
             if b.btype == IP:
                 b.show_padactl()
                 self.ada_style = b.ada_style_errors()
-                b.check_test_programs(self.opt.fast_mode, self.opt.verbose, self.changes, self.no_changes, self.ada_style)
+                b.check_test_programs(self.opt.fast_mode, self.opt.verbose, self.ada_style)
                 break
 
     def show_summary(self):
@@ -425,10 +414,18 @@ class Report:
 
     def show_detailed_build_info(self):
         """What check_run_test_programs.log says failed, compared with the
-        nearest baseline before to have one -- who broke or fixed a script,
-        per the changes report show_build_info read; the command comparing
-        Csystem_build.log with the nearest baseline's before to have one."""
-        self.cur.compare_test_programs(self.changes, self.ada_style)
+        nearest baseline before to have one -- who broke or fixed a ksh
+        script or an Ada style error, per the baseline's changes report;
+        the command comparing Csystem_build.log with the nearest baseline's
+        before to have one."""
+        var changes: {str}[]str = {:}
+        var no_changes: str = ""
+        let report: Path | !Failure_T = changes_report(self.cur.nr)
+        if report is Path:
+            changes = changes_by_file(report)
+        else:
+            no_changes = report.message
+        self.cur.compare_test_programs(changes, no_changes, self.ada_style)
         let logs: []CsystemLog = [earlier_log(self.cur), CsystemLog(self.cur)]
         puts("SWr", f"Compare Csystem_build.log with {logs[0].baseline}'s:", NEWLINE=True)
         let missing: []Path = [log.file for log in logs if not -f log.file]

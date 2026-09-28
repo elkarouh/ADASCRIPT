@@ -104,9 +104,10 @@ def masked(line: str) -> str:
 
 def diff_summaries(before: []str, after: []str, changes: {str}[]str) -> []str:
     """How summary AFTER differs from BEFORE: its lines BEFORE has not,
-    "+ ", then BEFORE's lines it has not, "- "; under a script, who broke
-    or fixed it, per CHANGES, AFTER's baseline's (see attribution): a
-    script gone from the summary since was fixed."""
+    "+ ", then BEFORE's lines it has not, "- " -- compared masked (see
+    masked), shown as they are; under a ksh script or an Ada style error,
+    who broke or fixed it, per CHANGES, AFTER's baseline's changes report
+    (see changes_by_file): one gone from the summary since was fixed."""
     let added: []str = marked(after, before, "+ ", changes)
     let removed: []str = marked(before, after, "- ", changes)
     added + removed
@@ -119,12 +120,22 @@ def verdict(broke: bool, fixed: bool) -> str:
     "fixed by"
 
 def attribution(changes: {str}[]str, component: str, script: str, verb: str) -> []str:
-    """Who changed SCRIPT of COMPONENT, per CHANGES (see
-    TestProgramsLog.changes), a line each after VERB -- "broken by"; none
-    when the changes report does not name it."""
+    """Who changed SCRIPT of COMPONENT, per CHANGES -- who changed each
+    file, by its path in its component (see changes_by_file) -- a line each
+    after VERB, "broken by"; none when the changes report does not name
+    it."""
     let key: str = component + "/" + script.removeprefix("./")
     return [] if key not in changes
     ["      " + verb + " " + line for line in changes[key]]
+
+def changes_to(changes: {str}[]str, name: str) -> []str:
+    """Who changed a file named NAME, per CHANGES (see attribution),
+    whatever its directory: a compiler names only the file."""
+    var lines: []str = []
+    for path, who in changes.items():
+        if Path(path).name == name:
+            lines = lines + who
+    lines
 
 def script_of(line: str) -> str:
     """The script a script line of a summary names: its first word, without
@@ -153,27 +164,35 @@ def keyed(lines: []str) -> []str:
     keys
 
 def marked(lines: []str, other: []str, mark: str, changes: {str}[]str) -> []str:
-    """LINES that OTHER has not, each after MARK. A line under another --
-    a script under its style difference, who changed it under the script
-    -- comes after what it is under, unmarked when OTHER has that too, so
-    as to say which one it is. Under a script, who broke or fixed it per
-    CHANGES: a script "- ", gone from the summary, was fixed."""
-    let others: []str = keyed(other)
+    """LINES that OTHER has not, compared masked (see masked), each as it
+    is after MARK. A line under another -- a script under its style
+    difference -- comes after what it is under, unmarked when OTHER has
+    that too, so as to say which one it is. Under a script or an Ada
+    style error, who broke or fixed it per CHANGES: one "- ", gone from
+    the summary, was fixed."""
+    let others: []str = keyed([masked(line) for line in other])
+    let keys: []str = keyed([masked(line) for line in lines])
+    let shown: []str = keyed(lines)
     var out: []str = []
-    for key in keyed(lines):
-        continue if key in others
-        let parts: []str = key.split("\n")
+    for k in range(len(keys)):
+        continue if keys[k] in others
+        let parts: []str = keys[k].split("\n")
+        let texts: []str = shown[k].split("\n")
         for i in range(len(parts) - 1):
             let above: str = "\n".join(parts[0 .. i])
-            if above in others and ("  " + parts[i]) not in out:
-                out.append("  " + parts[i])
-        let line: str = parts[len(parts) - 1]
+            if above in others and ("  " + texts[i]) not in out:
+                out.append("  " + texts[i])
+        let line: str = texts[len(texts) - 1]
         out.append(mark + line)
         if len(parts) == 2:
             let broke: bool = "  new " in line or "; new " in line
             let fixed: bool = "  gone " in line or "; gone " in line
             let verb: str = "fixed by" if mark == "- " else verdict(broke, fixed)
-            out = out + [mark + a for a in attribution(changes, parts[0].strip().split(" ")[0], script_of(line), verb)]
+            out = out + [mark + a for a in attribution(changes, texts[0].strip().split(" ")[0], script_of(line), verb)]
+        elif line == /^  (?P<file>[^\s:<>]+):\d+:\d+: \(style\) /:
+            let file: str = $+{file}
+            let verb: str = "fixed by" if mark == "- " else "broken by"
+            out = out + [mark + "    " + verb + " " + who for who in changes_to(changes, Path(file).name)]
     out
 
 # the SEVERE messages of one of the test programs: how many, and the first
@@ -193,18 +212,11 @@ class TestProgramsLog:
     errors     : []ProgramErrors  # the other programs' SEVERE messages, by program
     docgen     : []str            # docgen's: "block not included: ..."
     missing    : []str            # "... No such file or directory"
-    # who changed each file, by its path in its component, per the
-    # baseline's changes report: shown under the scripts of a style
-    # difference; or why there is no report to say
-    changes    : {str}[]str
-    no_changes : str
     # the "(style)" lines of the build's tacot logs (Build.ada_style_errors)
     ada_style  : []str
 
     def __init__(self, file: Path):
         self.file = file
-        self.changes = {:}
-        self.no_changes = ""
         var seen: {}str = {}
         for line in file.lines:
             continue if line in seen     # a sub-build's messages again
@@ -247,13 +259,11 @@ class TestProgramsLog:
         lines = lines + self.verdict
         if len(self.style_diffs) > 0:
             lines.append(f"{len(self.style_diffs)} ksh style differences with the previous baseline:")
-            if read_results and self.no_changes != "":
-                lines.append("  who changed their scripts: " + self.no_changes)
             for diff in self.style_diffs:
                 let link: str = "  #emacs:" + diff.ediff if links and diff.ediff != "" else ""
                 lines.append(f"  {diff.component} {diff.check}" + link)
                 if read_results:
-                    lines = lines + script_lines(diff, self.changes)
+                    lines = lines + script_lines(diff)
         for e in self.errors:
             lines.append(f"{e.count:>3} SEVERE from {e.program}: {e.first}")
         if len(self.docgen) > 0:
@@ -275,10 +285,9 @@ class TestProgramsLog:
 # a script's path, bold yellow, to stand out from its findings
 const SCRIPT_COLOR: ColorSpec_T = "SY"
 
-def script_lines(diff: StyleDiff, changes: {str}[]str) -> []str:
+def script_lines(diff: StyleDiff) -> []str:
     """The scripts DIFF is in, a line each, its path highlighted: its new
-    findings, its gone ones; under it, who broke or fixed it per CHANGES
-    (see attribution). None if its two files are not there to read."""
+    findings, its gone ones. None if its two files are not there to read."""
     let files: []Path = ediff_files(diff.ediff)
     return [] if len(files) != 2 or not -f files[0] or not -f files[1]
     var lines: []str = []
@@ -286,8 +295,6 @@ def script_lines(diff: StyleDiff, changes: {str}[]str) -> []str:
         let new: []str = ["new " + k for k in change.new]
         let gone: []str = ["gone " + k for k in change.gone]
         lines.append("    " + colored(SCRIPT_COLOR, change.script) + "  " + "; ".join(new + gone))
-        let verb: str = verdict(len(change.new) > 0, len(change.gone) > 0)
-        lines = lines + attribution(changes, diff.component, change.script, verb)
     lines
 
 # ---------------------------------------------------------------------------
@@ -467,13 +474,11 @@ class Build:
                     errors.append(error)
         errors
 
-    def check_test_programs(self, fast_mode: bool, verbose: bool, changes: {str}[]str, no_changes: str, ada_style: []str):
+    def check_test_programs(self, fast_mode: bool, verbose: bool, ada_style: []str):
         """Find or run check_run_test_programs_log from the IP self; what
         its log says failed, summed up -- VERBOSE lists all docgen's --
-        with who changed the scripts of a style difference, per CHANGES,
-        or NO_CHANGES, why nothing says (see TestProgramsLog.changes); and
-        ADA_STYLE, its Ada style errors (see ada_style_errors), read once
-        by the caller, who compares them too."""
+        and ADA_STYLE, its Ada style errors (see ada_style_errors), read
+        once by the caller, who compares them too."""
         let baseline: BaselineNr_T = self.baseline_nr
         print
         hr('#')
@@ -491,8 +496,6 @@ class Build:
             # what failed, each once: the log itself was printed, all but
             # its INFORMATION lines -- the same messages once per sub-build
             var log: TestProgramsLog = TestProgramsLog(logfile)
-            log.changes = changes
-            log.no_changes = no_changes
             log.ada_style = ada_style
             print emacs_link(logfile)
             for line in log.summary(1000 if verbose else 5):
@@ -587,15 +590,16 @@ class Baseline:
         or not it is there (see build_name)."""
         Build(self.build_name(btype), btype, self.nr, self.dir)
 
-    def compare_test_programs(self, changes: {str}[]str, ada_style: []str):
+    def compare_test_programs(self, changes: {str}[]str, no_changes: str, ada_style: []str):
         """The summary of its IP build's check_run_test_programs.log, diffed
         with that of the nearest baseline before it to have one -- the one
         before may have none, its tests not run -- back PREVIOUS_SEARCHED:
         without the ediff links, whose files are named after a pid, and
-        with the baseline numbers masked, so that only a change in what
-        fails shows; under a script new or gone, who broke or fixed it, per
-        CHANGES, this baseline's. ADA_STYLE is this baseline's Ada style
-        errors, read already (see Build.ada_style_errors)."""
+        compared masked, so that only a change in what fails shows (see
+        diff_summaries); under a ksh script or an Ada style error new or
+        gone, who broke or fixed it, per CHANGES, this baseline's -- or
+        NO_CHANGES, why nobody is said to. ADA_STYLE is this baseline's
+        Ada style errors, read already (see Build.ada_style_errors)."""
         let mine: ?Path = self.build(IP).test_programs_log()
         var older: Baseline = self
         var found: ?Path = None
@@ -609,12 +613,14 @@ class Baseline:
         puts("SWr", f"Compare the check_run_test_programs.log summary with {compared}:", NEWLINE=True)
         if mine is not None and theirs is not None:
             print "  " + emacs_link(theirs)
+            if no_changes != "":
+                print "  who broke or fixed what: " + no_changes
             var old_log: TestProgramsLog = TestProgramsLog(theirs)
             var new_log: TestProgramsLog = TestProgramsLog(mine)
             old_log.ada_style = older.build(IP).ada_style_errors()
             new_log.ada_style = ada_style
-            let before: []str = [masked(line) for line in old_log.summary(1000, links=False)]
-            let after: []str = [masked(line) for line in new_log.summary(1000, links=False)]
+            let before: []str = old_log.summary(1000, links=False)
+            let after: []str = new_log.summary(1000, links=False)
             let diffed: []str = diff_summaries(before, after, changes)
             if len(diffed) == 0:
                 print "  the same summary"
@@ -847,6 +853,24 @@ if __name__ == "__main__":
         "  " + "  A VAR_CHECK",
         "-     ./g.ksh  new used not defined: G", "-       fixed by gil.z: 1g"]
     assert script_of("    \x1b[1;33m./b.ksh\x1b[0m  new used not defined: Y") == "./b.ksh"
+    # compared masked, shown as they are: a baseline number that changed,
+    # an Ada style error a line added above moved, are no change; a new
+    # style error, who broke it, per its file's name; a gone one, who fixed it
+    var fpl: {str}[]str = {:}
+    fpl["FLIGHTPLAN/sources/fpl-test-extract.adb"] = ["ann.casing: 1f2e SC-9"]
+    fpl["FLIGHTPLAN/sources/fpl-test.ads"] = ["bob.column: 3c4d SC-8"]
+    assert diff_summaries(
+        ["Ccheck_build_closure -s -t -b ELD.ELD_CONFIG.30.0.0.118 failed", "2 Ada style errors in the tacot logs:",
+         "  fpl-test-extract.adb:960:39: (style) bad casing of \"x\" declared at fpl.ads:3440 [-gnatyr]",
+         "  fpl-test.ads:117:06: (style) bad column [-gnaty0]"],
+        ["Ccheck_build_closure -s -t -b ELD.ELD_CONFIG.30.0.0.119 failed", "2 Ada style errors in the tacot logs:",
+         "  fpl-test-extract.adb:963:39: (style) bad casing of \"x\" declared at fpl.ads:3448 [-gnatyr]",
+         "  fpl-test-extract.adb:964:39: (style) bad casing of \"y\" declared at fpl.ads:3449 [-gnatyr]"], fpl) == [
+        "+   fpl-test-extract.adb:964:39: (style) bad casing of \"y\" declared at fpl.ads:3449 [-gnatyr]",
+        "+     broken by ann.casing: 1f2e SC-9",
+        "-   fpl-test.ads:117:06: (style) bad column [-gnaty0]",
+        "-     fixed by bob.column: 3c4d SC-8"]
+    assert changes_to(fpl, "fpl-test.ads") == ["bob.column: 3c4d SC-8"] and changes_to(fpl, "fpl.ads") == []
     assert verdict(True, True) == "changed by" and verdict(True, False) == "broken by" and verdict(False, True) == "fixed by"
 
     # --- the scripts a style difference is in: a real result, and a baseline
@@ -870,16 +894,10 @@ if __name__ == "__main__":
         ScriptChange("./sources/regression_testing.ksh", ["used not defined: CM_HOST PERL_VERSION"], ["defined not used: OLD_WORK_DIR"])]
     assert changed_scripts(result_file, result_file) == []
     let style_diff: StyleDiff = StyleDiff("COMMON_CONFIG", "VAR_CHECK", "(ediff-files \"" + baseline_file + "\" \"" + result_file + "\")")
-    let nobody: {str}[]str = {:}
-    let lines: []str = script_lines(style_diff, nobody)
+    let lines: []str = script_lines(style_diff)
     assert lines == [
         "    \x1b[1;33m./sources/find_current_ops.ksh\x1b[0m  new used not defined: CFMU_REGRESS_TEST_FTPS_DIR",
         "    \x1b[1;33m./sources/regression_testing.ksh\x1b[0m  new used not defined: CM_HOST PERL_VERSION; gone defined not used: OLD_WORK_DIR"]
-    # under each the changes report names, who changed it: new findings
-    # and gone ones, both
-    var changed: {str}[]str = {:}
-    changed["COMMON_CONFIG/sources/regression_testing.ksh"] = ["abc.fix_env: 1a2b3c SC-1"]
-    assert script_lines(style_diff, changed) == [lines[0], lines[1], "      changed by abc.fix_env: 1a2b3c SC-1"]
 
     # --- a build's type, from its directory's name ----------------------------
     def build_type(name: BuildName_T) -> str:

@@ -112,6 +112,7 @@ check "build_info: no Csystem_build.log, said so" \
 for bl in "$BL" "$PREV"; do echo 'Csystem ...' > "$bl/build_G!31.IP.L8/Csystem_build.log"; done
 info=$("$TCHECK" -no-color -f -focus build_info 30.0.0.135 2>/dev/null)
 check "build_info: the summary diffed with the previous one's" "Compare the check_run_test_programs.log summary with 30.0.0.134's:
+  who broke or fixed what: WARNING: Psort -b names no CFMUTEST baseline for TACT_CONFIG.30.0.0.135
   + 7 ksh style differences with the previous baseline:
   +   TACT_CONFIG VAR_CHECK
   +     ./sources/find_current_ops.ksh  new used not defined: CFMU_REGRESS_TEST_FTPS_DIR
@@ -130,12 +131,9 @@ check "build_info: the Csystem_build.log command, printed" \
 # baseline's changes report -- none at first, and it says why; then one in
 # which alice changed regression_testing.ksh, and nobody find_current_ops.ksh
 style() { echo "$info" | sed -n '/^  7 ksh style differences/,/SEVERE from/p' | grep -v 'SEVERE\|#emacs:'; }
-check "build_info: no changes report, said so" \
-    "  7 ksh style differences with the previous baseline:
-    who changed their scripts: WARNING: Psort -b names no CFMUTEST baseline for TACT_CONFIG.30.0.0.135
-      ./sources/find_current_ops.ksh  new used not defined: CFMU_REGRESS_TEST_FTPS_DIR
-      ./sources/regression_testing.ksh  new used not defined: CM_HOST PERL_VERSION; gone defined not used: OLD_WORK_DIR" \
-    "$(style)"
+check "build_info: no changes report, said so in the comparison" \
+    "  who broke or fixed what: WARNING: Psort -b names no CFMUTEST baseline for TACT_CONFIG.30.0.0.135" \
+    "$(echo "$info" | grep '^  who broke or fixed what: ')"
 mkdir -p "$OT/CFMUTEST/baseline_reports"
 cat > "$WORK/bin/Psort" <<'PSORT'
 #!/bin/sh
@@ -152,12 +150,10 @@ cat > "$OT/CFMUTEST/baseline_reports/CFMUTEST.CFMUTEST_CONFIG.30.0.0.105.changes
       changed 9abc0123:TACT/TACT_CONFIG/sources/find_current_ops.ksh RELATED_CHANGES="SC-2 "
 REPORT
 info=$("$TCHECK" -no-color -f -focus build_info 30.0.0.135 2>/dev/null)
-check "build_info: who broke or fixed each script, per the report" \
+check "build_info: nobody said in the summary, only in the comparison" \
     "  7 ksh style differences with the previous baseline:
       ./sources/find_current_ops.ksh  new used not defined: CFMU_REGRESS_TEST_FTPS_DIR
-        broken by carol.new_ops: 9abc0123 SC-2
-      ./sources/regression_testing.ksh  new used not defined: CM_HOST PERL_VERSION; gone defined not used: OLD_WORK_DIR
-        changed by alice.fix_env: 5678ef01 SC-1, reviewed by bob on 260925.101010" \
+      ./sources/regression_testing.ksh  new used not defined: CM_HOST PERL_VERSION; gone defined not used: OLD_WORK_DIR" \
     "$(style)"
 check "build_info: and in the summary diffed with the previous one's" "  + 7 ksh style differences with the previous baseline:
   +   TACT_CONFIG VAR_CHECK
@@ -200,6 +196,7 @@ cp "$SAMPLES/check_run_test_programs.log" "$OLDER/"
 check "build_info: an older baseline's log, where it keeps it" \
     "Compare the check_run_test_programs.log summary with 30.0.0.120's:
   #emacs:(progn(find-file \"$OLDER/check_run_test_programs.log\"))
+  who broke or fixed what: WARNING: Psort -b names no CFMUTEST baseline for TACT_CONFIG.30.0.0.121
   the same summary" \
     "$("$TCHECK" -no-color -f -focus build_info 30.0.0.121 2>/dev/null | sed -n '/^Compare the check_run_test_programs/,/^Compare Csystem/p' | grep -v '^Compare Csystem')"
 
@@ -212,8 +209,8 @@ printf '%s\n' 'compiling ...' \
     'flightplanfiling_routeservices_hash.ads:2:04: (style) bad indentation [-gnaty0]' > "$STYLED/tacot1_out_01"
 check "build_info: the Ada style errors, in the summary diffed" \
     "  + 2 Ada style errors in the tacot logs:
-  +   flightplanfiling_routeservices_hash.adb:<line>:<col>: (style) bad indentation [-gnaty0]
-  +   flightplanfiling_routeservices_hash.ads:<line>:<col>: (style) bad indentation [-gnaty0]" \
+  +   flightplanfiling_routeservices_hash.adb:11:04: (style) bad indentation [-gnaty0]
+  +   flightplanfiling_routeservices_hash.ads:2:04: (style) bad indentation [-gnaty0]" \
     "$("$TCHECK" -no-color -f -focus build_info 30.0.0.121 2>/dev/null | sed -n '/^Compare the check_run_test_programs/,/^Compare Csystem/p' | grep '^  [+-]')"
 
 echo
