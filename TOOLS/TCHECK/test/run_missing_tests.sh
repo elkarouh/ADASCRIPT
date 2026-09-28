@@ -16,7 +16,13 @@ OT=$WORK/cm/ot
 BL=$OT/TACT/TACT_CONFIG.30.0.0.135
 TCHECK_CM_OT=$OT
 HOME=$WORK            # Tcheck_tact appends to ~/.tcheck_history
-export TCHECK_CM_OT HOME
+# a Psort of our own, never the CM machine's: at first, one that names no
+# CFMUTEST baseline for any -- so no changes report
+mkdir -p "$WORK/bin"
+printf '#!/bin/sh\nexit 1\n' > "$WORK/bin/Psort"
+chmod +x "$WORK/bin/Psort"
+PATH=$WORK/bin:$PATH
+export TCHECK_CM_OT HOME PATH
 
 fails=0
 check() {
@@ -130,7 +136,7 @@ check "build_info: no changes report, said so" \
       ./sources/find_current_ops.ksh  new used not defined: CFMU_REGRESS_TEST_FTPS_DIR
       ./sources/regression_testing.ksh  new used not defined: CM_HOST PERL_VERSION; gone defined not used: OLD_WORK_DIR" \
     "$(style)"
-mkdir -p "$WORK/bin" "$OT/CFMUTEST/baseline_reports"
+mkdir -p "$OT/CFMUTEST/baseline_reports"
 cat > "$WORK/bin/Psort" <<'PSORT'
 #!/bin/sh
 read -r tact
@@ -143,7 +149,7 @@ cat > "$OT/CFMUTEST/baseline_reports/CFMUTEST.CFMUTEST_CONFIG.30.0.0.105.changes
       Merge from <- 1234abcd alice.fix_env RELATED_CHANGES="SC-1 "
       changed 5678ef01:TACT/TACT_CONFIG/sources/regression_testing.ksh RELATED_CHANGES="SC-1 " review-ok: yes; reviewed-by: bob; review-date: 260925.101010;
 REPORT
-info=$(PATH=$WORK/bin:$PATH "$TCHECK" -no-color -f -focus build_info 30.0.0.135 2>/dev/null)
+info=$("$TCHECK" -no-color -f -focus build_info 30.0.0.135 2>/dev/null)
 check "build_info: who changed each script, per the report" \
     "  7 ksh style differences with the previous baseline:
       ./sources/find_current_ops.ksh  new used not defined: CFMU_REGRESS_TEST_FTPS_DIR
