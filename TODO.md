@@ -16,6 +16,14 @@ history of this file if the reasoning behind one of them is ever wanted.
       Python-only, and keep their refusal. Open questions: a decorator on a
       method (self), one taking arguments (`@retry(3)`), and several
       stacked. Test on both backends, as test_union does.
+- [ ] `+` of two calls returning lists does not build on Nim. `evens(4) +
+      odds(4)`, each `-> []int`, is emitted as it is, and nim has no `+`
+      for seqs ("type mismatch ... seq[int]"); the same on two typed
+      locals, `a + b`, becomes `a & b` and builds. Python takes both. The
+      list concatenation is recognised from a name's declared type but not
+      from a call's result type. Worked around in
+      TOOLS/TCHECK/LIBS/baselines.ady (`diff_summaries`) with two typed
+      locals.
 - [ ] a class named after a Nim keyword does not build on Nim: `class Out:`
       emits `proc new`Out`*()`, the constructor's name pasted onto the
       backticked type name, which nim rejects ("invalid indentation"). The
