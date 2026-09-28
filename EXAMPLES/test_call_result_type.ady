@@ -1,0 +1,56 @@
+#!/usr/bin/env ady2nim
+"""Test: the type of what a call returns, when a field or a method is read
+off it.
+
+`make(0).rc is None` -- an Optional field of a call's result -- became
+`== nil` in Nim, which does not take it on an Option: only a field of a
+name was known to be one. And `Log(0).found(0)`, a `T | !F` method of a
+call's result, was wrapped in ok() a second time: the routine was read
+from the front of the expression, `newLog` with `0).found(0` for its
+arguments, rather than from the call the expression ends in. A method
+returning `?T` whose last line is its value -- `first` below -- did not
+have it wrapped in some(), as a routine outside a class did.
+"""
+
+type Failure_T is record:
+    message: str
+
+class Log:
+    var rc: ?int      # None until the log says
+
+    def __init__(self, n: int):
+        if n > 0:
+            self.rc = n
+
+    def found(self, n: int) -> int | !Failure_T:
+        return Failure_T("none found") if n == 0
+        n
+
+    def first(self, n: int) -> ?int:
+        return None if n == 0
+        n
+
+def make(n: int) -> Log:
+    Log(n)
+
+let logs: []Log = [Log(0), Log(2)]
+
+# an Optional field: of a name, of a call's result, of an element
+let named: Log = Log(0)
+assert named.rc is None
+assert make(0).rc is None and make(3).rc is not None
+assert Log(0).rc is None and Log(4).rc is not None
+assert logs[0].rc is None and logs[1].rc is not None
+
+# a `T | !F` method of a name, of a constructor's result, of a call's result
+let r1: int | !Failure_T = named.found(1)
+let r2: int | !Failure_T = Log(0).found(0)
+let r3: int | !Failure_T = make(0).found(2)
+assert r1 is not Failure_T and r3 is not Failure_T
+assert r2 is Failure_T and r2.message == "none found"
+
+# a `?T` method of a call's result
+let f1: ?int = make(0).first(0)
+let f2: ?int = logs[1].first(5)
+assert f1 is None and f2 is not None
+print "test_call_result_type: ok"

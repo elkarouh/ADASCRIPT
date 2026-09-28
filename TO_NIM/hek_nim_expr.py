@@ -681,6 +681,35 @@ def _union_info(t):
             "multi": False, "type": t}
 
 
+def _outer_call_name(expr_str):
+    """The routine EXPR_STR ends in a call of -- `f` of `f(x)`, `found` of
+    `newLog(0).found(0)` and of `logs[1].found(0)` -- or "" when it does
+    not end in one. The call is the one whose `)` ends the expression,
+    matched back to its `(`: reading from the front took `newLog` for the
+    routine of `newLog(0).found(0)`, with `0).found(0` its arguments."""
+    import re as _re
+    s = expr_str.rstrip()
+    if not s.endswith(")"):
+        return ""
+    depth, quote = 0, None
+    for i in range(len(s) - 1, -1, -1):
+        ch = s[i]
+        if quote:
+            if ch == quote and (i == 0 or s[i - 1] != "\\"):
+                quote = None
+            continue
+        if ch in "\"'":
+            quote = ch
+        elif ch in ")]}":
+            depth += 1
+        elif ch in "([{":
+            depth -= 1
+            if depth == 0:
+                m = _re.search(r"([A-Za-z_]\w*)$", s[:i])
+                return m.group(1) if m else ""
+    return ""
+
+
 def _union_type_of(expr_str):
     """The Nim union type -- OneOfN or Result -- of EXPR_STR, a name or a
     call, or ""."""
@@ -692,10 +721,9 @@ def _union_type_of(expr_str):
     _t = (sym.get("type") or "") if sym else ""
     if _t.startswith(("Result[", "OneOf")):
         return _t
-    _mc = (_re.match(r'^([A-Za-z_]\w*)\((.*)\)$', expr_str, _re.S)
-           or _re.match(r'^.+\.([A-Za-z_]\w*)\((.*)\)$', expr_str, _re.S))
-    if _mc and _balanced(_mc.group(2)):
-        _rt = _proc_ret_nim(_mc.group(1))
+    _called = _outer_call_name(expr_str)
+    if _called:
+        _rt = _proc_ret_nim(_called)
         if _rt.startswith(("Result[", "OneOf")):
             return _rt
     return ""
@@ -4525,13 +4553,11 @@ def _expr_is_option(expr_str):
     # A call to a proc declared `-> ?T` already yields an Option, so passing
     # it straight to a `?T` parameter must not wrap it a second time --
     # some(f(x)) on an optional f is Option[Option[T]], which Nim rejects.
-    if expr_str.rstrip().endswith(")"):
-        _mc = (_re.match(r'^([A-Za-z_]\w*)\(', expr_str)
-               or _re.match(r'^.+\.([A-Za-z_]\w*)\(', expr_str))
-        if _mc:
-            _rt = getattr(ParserState, "proc_return_types", {}).get(_mc.group(1), "")
-            if _rt.startswith("Option["):
-                return True
+    _called = _outer_call_name(expr_str)
+    if _called:
+        _rt = getattr(ParserState, "proc_return_types", {}).get(_called, "")
+        if _rt.startswith("Option["):
+            return True
     # Indexing a tuple whose element at that position is an Option:
     # `let b: (int, ?S_T) = f()` then `b[1] is not None`. Without this the
     # comparison fell through to `b[1] != nil`, which Nim rejects -- the
@@ -4563,8 +4589,11 @@ def _expr_is_option(expr_str):
     # the two-component form meant a nested Optional field was not
     # recognised as one, so `let got: ?str = o.inner.key` wrapped it a
     # second time into Option[Option[string]].
-    m = _re.match(r"(?:\w+\.)*(\w+)\.(\w+)$", expr_str)
-    if m:
+    # The object may be any expression -- a call, `make(0).rc`, or an
+    # element, `logs[0].rc` -- whose field it is; matching names only made
+    # `make(0).rc is None` a `== nil`, which Nim rejects on an Option.
+    m = _re.match(r"^(.+)\.([A-Za-z_]\w*)$", expr_str.strip())
+    if m and not _re.fullmatch(r"-?\d+", m.group(1)):
         field_name = m.group(2)
         class_name = getattr(ParserState, "_current_class_name", None)
         if class_name:

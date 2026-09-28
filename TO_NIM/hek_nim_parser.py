@@ -2773,6 +2773,47 @@ def _narrow_shell_expr(expr):
     return _re_ns.sub(r'(?<![\w.])([A-Za-z_]\w*)(?![\w(])', _one, expr)
 
 
+def _wrap_option_tail(body, ret_ann):
+    """BODY with its implicit return wrapped in some() when RET_ANN is an
+    Option and the last bare expression is not one already: a name or a
+    field typed ?T, a call of a routine returning one -- here, nimported,
+    or a method of what a call returns -- or some()/none() itself. Shared
+    by procs and methods: a method's tail went unwrapped, and Nim refused
+    `n` where the method returns Option[int]."""
+    import re as _re_opt
+    _nim_ret = ret_ann.lstrip(": ").strip()
+    if not _re_opt.search(r"Option\[(.+)\]", _nim_ret):
+        return body
+    _blines_o = body.rstrip().splitlines()
+    # Find last non-comment, non-empty line
+    _idx_o = len(_blines_o) - 1
+    while _idx_o >= 0 and (_blines_o[_idx_o].lstrip().startswith("#") or _blines_o[_idx_o].strip() == ""):
+        _idx_o -= 1
+    if _idx_o < 0:
+        return body
+    _last_o = _blines_o[_idx_o]
+    _last_o_s = _last_o.lstrip()
+    _is_stmt = _re_opt.match(
+        r'^(var|let|const|result|return|if|elif|else|for|while|case|of|discard|raise|try|except|finally|block|when)\b',
+        _last_o_s)
+    if _is_stmt or _last_o_s.startswith(("some(", "none(")):
+        return body
+    _sym_o = ParserState.symbol_table.lookup(_last_o_s.split("(")[0].split(".")[0].split("[")[0].strip())
+    _sym_type_o = (_sym_o.get("type", "") if isinstance(_sym_o, dict) else "") if _sym_o else ""
+    # a call to a routine that already returns an Option, here or in a
+    # nimported module, is the value itself; so is an Optional field
+    _called_o = hek_nim_expr._outer_call_name(_last_o_s)
+    if _called_o and (hek_nim_expr._proc_ret_nim(_called_o) or "").startswith("Option["):
+        _sym_type_o = "Option["
+    if hek_nim_expr._expr_is_option(_last_o_s):
+        _sym_type_o = "Option["
+    if _sym_type_o.startswith("Option["):
+        return body
+    _indent_o = _last_o[:len(_last_o) - len(_last_o_s)]
+    _blines_o[_idx_o] = f"{_indent_o}some({_last_o_s})"
+    return chr(10).join(_blines_o) + chr(10)
+
+
 def _wrap_union_tail(body, ret_ann):
     """BODY, a routine's Nim body returning the union RET_ANN, with its
     trailing value made the member it is, as `return v` does. Only a
@@ -2988,33 +3029,7 @@ def _func_def_to_nim_inner(self, indent=0):
                         body = chr(10).join(_blines2) + chr(10)
     # Implicit return in Option-typed function: wrap last bare expression in some()
     if ret_ann and body:
-        import re as _re_opt
-        _nim_ret = ret_ann.lstrip(": ").strip()
-        _opt_m = _re_opt.search(r"Option\[(.+)\]", _nim_ret)
-        if _opt_m:
-            _blines_o = body.rstrip().splitlines()
-            # Find last non-comment, non-empty line
-            _idx_o = len(_blines_o) - 1
-            while _idx_o >= 0 and (_blines_o[_idx_o].lstrip().startswith("#") or _blines_o[_idx_o].strip() == ""):
-                _idx_o -= 1
-            if _idx_o >= 0:
-                _last_o = _blines_o[_idx_o]
-                _last_o_s = _last_o.lstrip()
-                _is_stmt = _re_opt.match(
-                    r'^(var|let|const|result|return|if|elif|else|for|while|case|of|discard|raise|try|except|finally|block|when)\b',
-                    _last_o_s)
-                if not _is_stmt and not _last_o_s.startswith("some(") and not _last_o_s.startswith("none("):
-                    _sym_o = ParserState.symbol_table.lookup(_last_o_s.split("(")[0].split(".")[0].split("[")[0].strip())
-                    _sym_type_o = (_sym_o.get("type", "") if isinstance(_sym_o, dict) else "") if _sym_o else ""
-                    # a call to a routine that already returns an Option,
-                    # here or in a nimported module, is the value itself
-                    _call_o = _re_opt.match(r'^([A-Za-z_]\w*)\(', _last_o_s)
-                    if _call_o and (hek_nim_expr._proc_ret_nim(_call_o.group(1)) or "").startswith("Option["):
-                        _sym_type_o = "Option["
-                    if not _sym_type_o.startswith("Option["):
-                        _indent_o = _last_o[:len(_last_o) - len(_last_o_s)]
-                        _blines_o[_idx_o] = f"{_indent_o}some({_last_o_s})"
-                        body = chr(10).join(_blines_o) + chr(10)
+        body = _wrap_option_tail(body, ret_ann)
     # Implicit return in a union-typed function: the trailing value becomes
     # its member, as `return v` does.
     if ret_ann and body:
@@ -5652,7 +5667,7 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
                 _m_pad = _m_last[:len(_m_last) - len(_m_stripped)]
                 _mbody[_m_idx] = _m_pad + _m_stripped[len("discard "):]
         _m_text = "\n".join(_mbody)
-        _m_wrapped = _wrap_union_tail(_m_text, ret_ann)
+        _m_wrapped = _wrap_option_tail(_wrap_union_tail(_m_text, ret_ann), ret_ann)
         if _m_wrapped.rstrip("\n") != _m_text.rstrip("\n"):
             _mbody = _m_wrapped.rstrip("\n").split("\n")
     lines.extend(_mbody)

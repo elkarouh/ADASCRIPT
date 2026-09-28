@@ -142,7 +142,8 @@ STANDALONE := \
     test_definition_order.ady \
     test_ctor_trailing_underscore.ady \
     test_indexed_table_items.ady \
-    test_case_trailing_comment.ady
+    test_case_trailing_comment.ady \
+    test_call_result_type.ady
 
 # -----------------------------------------------------------------------
 # Stdin tests — piped from a sample file
