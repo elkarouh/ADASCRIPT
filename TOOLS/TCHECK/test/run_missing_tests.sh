@@ -53,8 +53,9 @@ PROCESSING build_G!31.IP.L8 ...
   no Tlog at $BL/build_G!31.IP.L8/saved_logs/tacot_corico.LATEST/TACT_REGRESS_LOGS/LATEST/Tlog-lo.log" "$(tests -focus IP lo -short 30.0.0.135)"
 
 # -focus replay: the replay's log in the baseline, and its replay dir,
-# looked for in the OP build's saved_logs -- of the build $CM_ENV_ID names
-CM_ENV_ID='G!31.OP.L8'
+# looked for in the OP build's saved_logs -- replays run on the OP build,
+# so launched in the IP build's environment too
+CM_ENV_ID='G!31.IP.L8'
 export CM_ENV_ID
 replays() { "$TCHECK" -no-color "$@" 2>/dev/null | sed -n '/^REPLAYS/,$p'; }
 check "no replay log" "REPLAYS

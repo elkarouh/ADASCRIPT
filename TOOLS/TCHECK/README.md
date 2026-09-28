@@ -52,6 +52,11 @@ Tcheck_tact [-no-color] [-s] [-f] [-v] [-l] [-batch] [-only-new] [-exit-code]
   of the summary, her branches, her files; the newly failed tests stay, the
   whole baseline's. A name nobody committed under says so, and who did.
 
+It reads a build's logs in the build of the type it wants, whichever of
+`$CM_ENV_ID`'s it was launched with -- `G!31.IP.L8` or `G!31.OP.L8`: a
+replay's are always the OP build's, a Csystem log the IP build's, mono
+results IP and assert results OP.
+
 When the build or the Tlog asked for is not there, Tcheck_tact says so and
 where it looked: `No OP build in <baseline dir>` with the builds it has and
 those it sets aside (the 92, 94, 95, 98 and 30 variants), or `"OP in" build

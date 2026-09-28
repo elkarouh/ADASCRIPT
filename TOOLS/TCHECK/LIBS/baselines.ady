@@ -190,6 +190,17 @@ def grep_force_trace_in_dir(dir: Path):
 # Baselines
 # ---------------------------------------------------------------------------
 
+def build_env_id(env_id: str, btype: BuildType) -> str:
+    """ENV_ID -- $CM_ENV_ID, G!31.IP.L8 or G!31.OP.L8, whichever the tool
+    was launched with -- made that of the build of BTYPE: G!31.OP.L8 for
+    OP. The build type says which build's logs are read -- a replay's are
+    always the OP build's, a Csystem log the IP build's -- not the
+    environment it was launched in."""
+    var built: str = env_id
+    for other in BuildType:
+        built = built.replace(f".{other}.", f".{btype}.")
+    built
+
 # where a baseline's replays leave their logs: in its OP build's saved_logs
 let REPLAY_LOGS: Glob_T = "build_*OP*/saved_logs/Treplay_*.log"
 
@@ -222,13 +233,9 @@ class Baseline:
         return Baseline(f"{head}.{int(tail) - 1}")
 
     def saved_logs_dir(self, btype: BuildType) -> Path:
-        """The saved_logs directory of this baseline's build of BTYPE."""
-        var env_id: str = $CM_ENV_ID
-        case btype:
-            when IP:  env_id = env_id.replace(".OP.", ".IP.")
-            when OP:  env_id = env_id.replace(".IP.", ".OP.")
-            when SIP: env_id = env_id.replace(".IP.", ".SIP.")
-        self.dir / ("build_" + env_id) / "saved_logs"
+        """The saved_logs directory of this baseline's build of BTYPE,
+        whichever build $CM_ENV_ID names."""
+        self.dir / ("build_" + build_env_id($CM_ENV_ID, btype)) / "saved_logs"
 
     def find_builds(self):
         """List the baseline's build_G!* directories into builds, as the
@@ -329,9 +336,6 @@ class Baseline:
         before it, printed and returned."""
         var baseline: Baseline = self
         let sl: str = subtype_label(subtype)
-        var ip_env: str = $CM_ENV_ID
-        var op_env: str = ip_env.replace(".IP.", ".OP.")
-        ip_env = ip_env.replace(".OP.", ".IP.")
         var result: str = ""
         for iteration in range(n_baselines):
             let bl: BaselineNr_T = baseline.nr
@@ -339,22 +343,19 @@ class Baseline:
             hr('-')
             puts("SWr", header, NEWLINE=True)
             result = result + header + "\n"
-            var env: str = ip_env
+            # the build the results are of: mono runs in IP, assert in OP,
+            # in in the build asked for
+            var build: BuildType = btype
             var suffix: str = "failed-in"
             case subtype:
                 when mono:
-                    env = ip_env
+                    build = IP
                     suffix = "failed-mono"
-                when in_test:
-                    case btype:
-                        when IP:  env = ip_env
-                        when OP:  env = op_env
-                        when others: pass
-                    suffix = "failed-in"
                 when assert_test:
-                    env = op_env
+                    build = OP
                     suffix = "failed-assert"
                 when others: pass
+            let env: str = build_env_id($CM_ENV_ID, build)
             let r = shell: nl {TACT_ROOT}/test_reports/TACT.TACT_CONFIG.{bl}-{env}*/general.results.{suffix}
             if r.output.strip() != "":
                 print r.output.rstrip("\n")
@@ -397,6 +398,12 @@ if __name__ == "__main__":
     assert build_type("build_G!31.IP.L8") == "IP"
     assert build_type("build_G!31.OP.L8") == "OP"
     assert build_type("build_default_Linux") == "none"
+
+    # --- the build of a type, whichever $CM_ENV_ID names ----------------------
+    for launched in ["G!31.IP.L8", "G!31.OP.L8", "G!31.SIP.L8"]:
+        assert build_env_id(launched, IP) == "G!31.IP.L8"
+        assert build_env_id(launched, OP) == "G!31.OP.L8"
+        assert build_env_id(launched, SIP) == "G!31.SIP.L8"
 
     # --- a baseline, and what it holds --------------------------------------
     let bl: Baseline = Baseline("30.0.0.133")
