@@ -1062,7 +1062,9 @@ def to_nim(self, indent=0):
     # Table iteration: for k in table -> for k in table.keys
     from hek_nim_expr import _nim_expr_type
     _iter_type = _nim_expr_type(iterable) or ""
-    if _iter_type.startswith("Table["):
+    # The same for an OrderedTable -- a [str]V, whose keys, like a {K}V's,
+    # are what is not known in advance.
+    if _iter_type.startswith(("Table[", "OrderedTable[")):
         if "," in target and target.startswith("("):
             iterable = f"{iterable}.pairs"
         else:

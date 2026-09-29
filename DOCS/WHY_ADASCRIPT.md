@@ -487,6 +487,21 @@ positions to its elements, and a set maps its elements to in-or-out. That is
 why `xs[i]` and `x in s` are both lookups, and why a set cannot hold the
 same element twice — a key is present or absent, there is no third state.
 
+The same question — were the keys known before the program ran? — decides
+what a loop gives you. `for x in c`, and `x in c` with it, give the half of
+the mapping you did *not* already know. The ceiling per phase has its keys
+fixed by `Flight_Phase_T`; listing them tells you nothing, so a loop over
+`ceiling` gives the ceilings, and `x in ceiling` asks whether any phase has
+that one. The fleet's keys are whichever callsigns happen to be in the
+air, and which ones is exactly the question, so a loop over `fleet` gives
+callsigns and `cs in fleet` asks whether that aircraft is here; the
+aircraft is reached through its callsign. `landed` is the same, in the
+order the aircraft landed. A set is the limiting case: its value half —
+present or absent — says nothing, so its elements, which are its keys, are
+all there is. One rule, stated once, and every loop in the language follows
+from it: the brackets say whether there is an order, the key says what you
+iterate.
+
 So is a function. A pure function maps its arguments to a result, and
 `rule(phase)` is a lookup like `ceiling[phase]` — the difference is that
 one is *computed* and the other *stored*. Adascript writes a function type

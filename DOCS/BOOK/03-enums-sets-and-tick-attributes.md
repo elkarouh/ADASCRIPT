@@ -119,8 +119,10 @@ earns its keep when the bounds themselves matter.
 
 An `[E]T` iterates its values, in enum order, whatever order its literal
 was written in — the same as every other `[O]T`, and the same as the
-`array[E, T]` it becomes on Nim. Walking the domain instead gives you the
-member alongside its value:
+`array[E, T]` it becomes on Nim. Its keys are the enum, known before the
+program runs, so the values are what a loop is for, and `x in score` asks
+about them too (§2.2 has the rule). Walking the domain instead gives you
+the member alongside its value:
 
 ```python
 type Color is enum RED, GREEN, BLUE, AMBER

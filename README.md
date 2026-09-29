@@ -329,17 +329,50 @@ time, and `[O]T` is an array: one slot per value of `O`, in the order of
 `O`. With any other key — `str`, `int`, a class, a tuple named by a type —
 the keys are not known until they arrive, so they are held **in insertion
 order**: `[str]float` is an `OrderedTable` on Nim and a dict on Python.
-Either way `[…]` keeps its meaning, an ordered collection, and iterating it
-yields the values in that order. `{K}V` makes no such promise.
+Either way `[…]` keeps its meaning, an ordered collection. `{K}V` makes no
+such promise.
+
+**What a loop gives you** — `for x in c`, and `x in c` with it — is the
+half of the mapping that is *not known in advance*. That is the
+information; the other half you already had.
+
+- **Keys known in advance → the values.** `[Color]int` has exactly the keys
+  `RED, GREEN, BLUE`, in that order, fixed by its type; listing them would
+  say nothing the declaration did not. So `for x in score` gives the
+  values, and `x in score` asks whether some colour has that score. A list
+  and a fixed array are the same case: their keys are positions `0 .. n-1`,
+  known from the length.
+- **Keys not known in advance → the keys.** A `{str}int` holds whichever
+  words happened to arrive, and *which* ones is exactly what you do not
+  know. So `for w in counts` gives the words and `w in counts` asks "did
+  this word occur?"; the value is reached through the key, `counts[w]`. A
+  `[str]float` is the same, and gives its keys in the order they arrived.
+- **A set is the limiting case.** `{}str` maps each element to present or
+  absent; that half says nothing, so the keys — the elements — are all
+  there is. Iterating a set gives them, and `x in s` tests them.
+
+| | keys known in advance? | order | `for x in c`, `x in c` |
+|---|---|---|---|
+| `[]T`, `[N]T`, `[E]T`, `[lo..hi]T` | yes — positions, or the domain | positions / domain | the values |
+| `[str]V`, `[(int, int)]V` | no | insertion | the keys |
+| `{K}V` | no | none | the keys |
+| `{}T` | no — the elements *are* the keys | none | the elements |
+
+`.keys()`, `.values()` and `.items()` ask for the other half, or both.
+`enumerate(c)` pairs each item with where it sits: `(position, element)`
+for a list, `(key, value)` for every mapping — `(RED, 10)` for an `[E]T`,
+`("zeta", 3.0)` for a `[str]float` or a `{str}float`. So the brackets say
+whether there is an order; the key type says what a loop gives you.
 
 ```python
 var totals: [str]float = {:}      # OrderedTable[string, float] / dict
 totals["zeta"] = 3.0
 totals["alpha"] = 1.0
-for v in totals:
-    print v                       # 3.0, then 1.0 -- on both backends
+for k in totals:
+    print k                       # zeta, then alpha -- on both backends
 for k, v in totals.items():
     print f"{k}={v}"              # zeta=3.0, alpha=1.0
+assert "zeta" in totals           # a key: did "zeta" arrive?
 ```
 
 Its literal is a dict's, `{"zeta": 3.0}` or `{:}`, or the keyed form
@@ -467,13 +500,14 @@ the *function* optional. A union of functions needs a name.
 >
 > `[]T`, `[N]T` and `[*]T` carry no such caveat: iterating them yields the
 > values in position order on both backends. Nor does `[K]V` with any other
-> key, `[str]float` say: it yields its values in insertion order on both.
+> key, `[str]float` say: it yields its keys in insertion order on both.
 >
 > `[E]T` included: it yields its values in enum order, whatever order the
-> literal was written in, and `score[RED]` indexes it. On the Python backend
-> it is a dict keyed by the members, so it would otherwise have been the one
-> member of the family to yield its keys; it iterates its values instead, to
-> agree with the other three and with the `array[E, T]` Nim compiles it to.
+> literal was written in, and `score[RED]` indexes it — its keys are the
+> domain, known in advance, so the values are what a loop is for. On the
+> Python backend it is a dict keyed by the members, which would otherwise
+> have yielded, and tested with `in`, its keys; it gives its values
+> instead, as the `array[E, T]` Nim compiles it to does.
 >
 > ```python
 > type Color is enum RED, GREEN, BLUE, AMBER

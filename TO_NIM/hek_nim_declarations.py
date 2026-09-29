@@ -233,16 +233,21 @@ def to_nim(self, prec=None):
     return f"array[{idx}, {elem}]"
 
 
+# Iteration goes to the half of a mapping that is not known in advance. A
+# [Color_T]V's keys are the domain, so it yields values; a [str]V's keys are
+# whatever arrived, so it yields those, in the order they arrived -- as a
+# {K}V yields its keys. The for-loop rewrite turns `for k in m` into
+# `m.keys` when it knows m's type; this is the same thing for when it does
+# not.
 _ORDERED_TABLE_ITEMS = """\
-iterator items[K, V](t: OrderedTable[K, V]): V =
-  ## `for v in m` over a `[K]V`: its values, in insertion order -- as a
-  ## `[Color_T]V` yields its values in the order of the domain.
-  for v in t.values: yield v"""
+iterator items[K, V](t: OrderedTable[K, V]): K =
+  ## `for k in m` over a `[K]V` with no finite K: its keys, in insertion order.
+  for k in t.keys: yield k"""
 
 
 def _ensure_ordered_table_items():
     """Define `items` on OrderedTable the first time a [K]V map is named:
-    a [K]V iterates its values, whatever K is."""
+    a [K]V whose keys are not known in advance iterates them."""
     decls = getattr(ParserState, "nim_top_decls", None)
     if decls is None:
         decls = ParserState.nim_top_decls = []

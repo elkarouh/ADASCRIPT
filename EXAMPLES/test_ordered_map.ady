@@ -8,7 +8,12 @@
 # between the brackets -- `[Temp_T]float` -- every key and its place are
 # known at compile time and the mapping is an array. With any other key --
 # `[str]float` -- the keys are ordered by insertion: an OrderedTable on Nim,
-# a dict on Python. Either way a [K]V iterates its values, in its order.
+# a dict on Python.
+#
+# What a loop and `in` give is the half that is not known in advance. An
+# array's keys are its domain, so it yields values; a [str]V's keys are
+# whatever arrived, so it yields those -- in the order they arrived -- and
+# `k in m` asks whether k arrived, as over a {K}V.
 #
 # Run on both backends and the outputs compared, so the order is checked
 # too, not only the values.
@@ -22,39 +27,48 @@ var y: [str]float = {:}
 y["zeta"] = 3.0
 y["alpha"] = 1.0
 y["mid"] = 2.0
-for v in y:
+for k in y:
+    print k                              # zeta alpha mid: the keys, in order
+for v in y.values():
     print v                              # 3.0 1.0 2.0
 for k, v in y.items():
     print f"{k}={v}"
 print len(y)
 assert "alpha" in y and not ("beta" in y)
 
+# --- same key and value type: the loop still gives the keys -----------------
+var alias_of: [str]str = {"nyc": "New York", "sfo": "San Francisco"}
+for code in alias_of:
+    print code                           # nyc sfo
+assert "nyc" in alias_of and not ("New York" in alias_of)
+
 # --- the literals: `{k: v}` and `[k: v]` both keep the order written --------
 var z: [Node_T]int = {"q": 1, "b": 2, "a": 3}
 var keys: []str = []
-for k in z.keys():
+for k in z:
     keys.append(k)
 assert keys == ["q", "b", "a"]
 var w: [str]int = ["q": 1, "b": 2, "a": 3]
 for k, v in enumerate(w):
-    print f"{k} {v}"                     # the key, as over a [Color_T]T
+    print f"{k} {v}"                     # (key, value), as over any mapping
 
 # --- an int key: a sparse map, still in insertion order ---------------------
 var e: [int]str
 e[10] = "ten"
 e[2] = "two"
-for s in e:
-    print s
+for i in e:
+    print i, e[i]                        # 10 ten, then 2 two
 
-# --- a finite ordinal key stays an array ------------------------------------
+# --- a finite ordinal key stays an array: values, and `in` asks of them -----
 var t: [Temp_T]float
 t[3] = 1.5
 print t[3]
+assert 1.5 in t and not (2.5 in t)
 
 # --- a comprehension, a function's result, a field, a reassignment ----------
 var c: [str]int = {s: len(s) for s in ["ccc", "a", "bb"]}
-for n in c:
-    print n                              # 3 1 2
+for s in c:
+    print s, c[s]                        # ccc 3, a 1, bb 2
 
 def make() -> Scores_T:
     var r: Scores_T = {:}
@@ -73,7 +87,7 @@ class Box:
 
 let m: Scores_T = make()
 var total: float = 0.0
-for v in m:
+for v in m.values():
     total += v
 print total
 assert len(empty()) == 0
@@ -81,8 +95,13 @@ let b: Box = Box()
 for k, v in b.tally.items():
     print f"{k}:{v}"
 y = {"new": 9.0, "first": 8.0}
-for v in y:
-    print v                              # 9.0 8.0
+for k in y:
+    print k                              # new first
 y = {:}
 assert len(y) == 0
+
+# --- a {K}V has no positions to count: enumerate gives (key, value) ---------
+var one: {str}int = {"only": 7}
+for k, v in enumerate(one):
+    print f"{k} {v}"                     # only 7
 print "test_ordered_map: ok"

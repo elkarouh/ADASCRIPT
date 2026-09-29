@@ -912,12 +912,19 @@ def _file_helper_call(name, call_trailer):
 # Asking for the method by name rather than isinstance keeps this helper
 # independent of _EnumArray, which is only defined when an [O]T is named.
 # The start parameter is spelled as the builtin's, so `start = 1` works.
+#
+# A dict -- a {K}V, or a [K]V whose keys are not known in advance -- has no
+# positions to count, so its enumerate() is its (key, value) pairs, as Nim's
+# pairs gives them. The builtin gave (0, key), (1, key) ...
 _ENUMERATE_HELPER = '''\
 def _enumerate(_seq, start = 0):
-    """enumerate(), except that an [O]T yields its domain the way Nim does."""
+    """enumerate(), except that a mapping yields (key, value) the way Nim
+    does: an [O]T over its domain, a dict over its keys."""
     _pairs = getattr(_seq, "_adascript_pairs", None)
     if _pairs is not None and start == 0:
         return _pairs()
+    if isinstance(_seq, dict) and start == 0:
+        return iter(_seq.items())
     return enumerate(_seq, start)\
 '''
 

@@ -311,20 +311,18 @@ def _reject_distinct_operands(left, op, right):
 
 
 def _wrap_for_ordered_array(value, annotation):
-    """A mapping value for an `_OrderedArray[K, V]` -- a [K]V whose K is no
-    finite ordinal -- built as one. A dict literal, `{:}`, a dict
-    comprehension or the `[k: v]` literal would otherwise be a plain dict,
-    which iterates its keys where a [K]V iterates its values."""
+    """A mapping value for a `dict[K, V]` -- a {K}V, or a [K]V whose K is no
+    finite ordinal -- built as a plain dict. The `[k: v]` literal renders as
+    an _EnumArray, which iterates its values: right for a [Color_T]V, whose
+    keys are known in advance, wrong for a map whose keys are the news."""
     from hek_parsec import ParserState
     ann = (annotation or "").strip()
     ann = getattr(ParserState, "py_type_aliases", {}).get(ann, ann)
-    if not ann.startswith("_OrderedArray["):
+    if not ann.startswith("dict["):
         return value
     v = (value or "").strip()
-    if v.startswith("_EnumArray("):
-        return "_OrderedArray(" + v[len("_EnumArray("):]
-    if v.startswith("{"):
-        return f"_OrderedArray({v})"
+    if v.startswith("_EnumArray(") and v.endswith(")"):
+        return v[len("_EnumArray("):-1]
     return value
 
 
@@ -456,7 +454,6 @@ def _zero_value(annotation, _depth=0):
                 break
         return "_EnumArray()"
     for prefix, empty in (("_EnumArray[", "_EnumArray()"),
-                          ("_OrderedArray[", "_OrderedArray()"),
                           ("list[", "[]"), ("dict[", "{}"), ("set[", "set()"),
                           ("frozenset[", "frozenset()"), ("tuple[", "()"),
                           ("Counter[", "Counter()")):

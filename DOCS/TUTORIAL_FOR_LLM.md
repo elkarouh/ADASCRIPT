@@ -69,11 +69,18 @@ Nim `array[10,int] is array[0..9,int]` is `true`), so the fixed array is not
 a special form. `{:}` has the colon of `key: value`, so it is the empty
 dict; bare `{}` is the empty set.
 
+**What `for x in c` and `x in c` give: the half NOT known in advance.**
+- keys known in advance (`[]T`, `[N]T`, `[E]T`, `[lo..hi]T`: positions or the domain) → the **values**; `x in c` tests values;
+- keys not known in advance (`[str]V`, `{K}V`) → the **keys**; `k in m` asks whether k arrived;
+- a set `{}T` → its elements (they are its keys).
+
+`.keys()` / `.values()` / `.items()` for the other half. `enumerate(c)` = `(position, element)` for a list, `(key, value)` for every mapping. So `for k in totals` over a `[str]float` gives keys, in insertion order.
+
 **Portability:** `{…}` types iterate in insertion order on Python and hash
 order on Nim — never depend on it; sort the keys (sort the *keys*, not the
 table: `sorted(d)` compiles only on Python). `[O]T` is fine: all four forms
 yield values in domain order on both backends, `[E]T` included. So is a
-`[K]V` over any other key: values in insertion order on both. Need a dict
+`[K]V` over any other key: keys in insertion order on both. Need a dict
 whose order matters? Declare it `[str]V`, not `{str}V`.
 
 | Adascript | Python | Nim |
@@ -82,7 +89,7 @@ whose order matters? Declare it `[str]V`, not `{str}V`.
 | `[N]T` | `tuple[T, ...]` (fixed-size) | `array[N, T]` |
 | `[*]T` | `Sequence[T]` | `openArray[T]` |
 | `[E]T` | `dict[E, T]` | `array[E, T]` (enum-indexed) |
-| `[K]V` | `dict[K, V]` (a subclass iterating values) | `OrderedTable[K, V]` (K not a finite ordinal) |
+| `[K]V` | `dict[K, V]` | `OrderedTable[K, V]` (K not a finite ordinal) |
 | `{K}V` | `dict[K, V]` | `Table[K, V]` |
 | `{}T` | `set[T]` | `HashSet[T]` or `set[T]` (ordinal) |
 | `?T` | `T \| None` | `Option[T]` |
@@ -982,7 +989,8 @@ var transition: [Hidden_State_T][Hidden_State_T]float = [
 
 An enum is one ordinal key among several; `[10]T`, `[0..9]T`, `[Off]T`,
 `[bool]T` and `[char]T` are the same construct. All of them iterate their
-values in domain order on both backends.
+values in domain order on both backends, and `x in arr` tests values: the
+keys are the domain, known in advance.
 
 A comprehension fills one as readily as it fills a list — the annotation
 picks which. Iterate the key type, not an integer range of the same length:
@@ -1007,13 +1015,16 @@ happens to be the right length. There is no keyed comprehension
 var totals: [str]float = {:}          # or {"a": 1.0}, ["a": 1.0], {k: v for ...}
 totals["zeta"] = 3.0
 totals["alpha"] = 1.0
-for v in totals: print v              # values, insertion order: 3.0 1.0
+for k in totals: print k              # KEYS, insertion order: zeta alpha
+for v in totals.values(): print v     # 3.0 1.0
 for k, v in totals.items(): ...       # (key, value), insertion order
-for k, v in enumerate(totals): ...    # (key, value), as over any [K]V
+for k, v in enumerate(totals): ...    # (key, value), as over any mapping
+assert "zeta" in totals               # tests keys
 ```
 
-Iterates **values** (like every `[K]V`), not keys — use `.keys()`. Tuple
-keys work directly: `[(int, int)]float`.
+Iterates and tests **keys** (they are not known in advance), like `{K}V`
+and unlike `[E]T` (whose keys are its domain, so it gives values). Use
+`.values()` for the values. Tuple keys work directly: `[(int, int)]float`.
 
 ---
 

@@ -78,9 +78,8 @@ depends on its key. With a **finite ordinal type** — an enum, `bool`,
 time, and `[O]T` is an array indexed by `O`. With any other key — `str`,
 `int`, a class — the keys cannot be known in advance, so they are held in
 the order they are **inserted**: `[str]float` is an `OrderedTable` on Nim
-and a dict on Python. Either way `[…]` means an ordered collection, and
-iterating one yields its values in its order. Between `{…}` any hashable
-type will do, and no order is promised.
+and a dict on Python. Either way `[…]` means an ordered collection. Between
+`{…}` any hashable type will do, and no order is promised.
 
 The row above the line is not really a separate kind, which is why the four
 line up so neatly: a collection is a mapping whose key it supplies itself. A
@@ -90,6 +89,34 @@ both lookups, and why a set cannot hold the same element twice — a key is
 present or absent, with no third state for "present twice". The four names
 in the table are the level to think at day to day; this is why they hold
 together.
+
+It also settles what a loop gives you. A mapping has two halves, and
+`for x in c` — and `x in c`, which asks the same question — gives the half
+that is **not known in advance**, because that half is the information.
+
+- When the keys are known in advance, the values are the news. `[Color]int`
+  has exactly the keys `RED, GREEN, BLUE`, fixed by its type; listing them
+  would tell you nothing. So `for x in score` gives the scores, and
+  `x in score` asks whether some colour has that score. A list and a fixed
+  array are the same case: their keys are positions, known from the length.
+- When the keys are not known in advance, the keys are the news. A
+  `{str}int` holds whichever words happened to arrive: `for w in counts`
+  gives the words, `w in counts` asks whether a word occurred, and its
+  count is reached through it, `counts[w]`. A `[str]float` is the same, and
+  gives its keys in the order they arrived.
+- A set is the limiting case. Its value half — present or absent — says
+  nothing, so its elements, which are its keys, are all there is to give.
+
+| | keys known in advance? | `for x in c`, `x in c` |
+|---|---|---|
+| `[]T`, `[N]T`, `[E]T`, `[lo..hi]T` | yes: positions, or the domain | the values |
+| `[str]V`, `[(int, int)]V`, `{K}V` | no | the keys |
+| `{}T` | no: the elements are the keys | the elements |
+
+The brackets say whether there is an order; the key type says what a loop
+gives. `.keys()`, `.values()` and `.items()` ask for the other half, or
+both, and `enumerate(c)` gives `(position, element)` for a list and
+`(key, value)` for every mapping.
 
 One consequence is worth drawing out, because it removes a form from the
 list rather than adding one: the fixed-size array is not special. `[10]int`

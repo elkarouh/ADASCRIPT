@@ -406,8 +406,11 @@ class _EnumArray(dict):
     four because they are all `array[O, T]` there. A plain dict would make
     this one alone yield its keys, in whatever order the literal was written.
 
-    `{E}V` is unaffected: that is a real dict and iterating it gives keys,
-    which is what both Python and Nim's Table do.
+    Its keys are the domain, known before the program runs, so the values
+    are what there is to find out: it iterates them, and `x in arr` asks
+    whether x is one of them -- as Nim's array does. `{E}V` is unaffected:
+    a real dict, whose keys are what arrived, and which iterates and tests
+    them.
     """
     __slots__ = ()
 
@@ -418,6 +421,9 @@ class _EnumArray(dict):
 
     def __iter__(self):
         return iter(v for _, v in sorted(self.items(), key=_EnumArray._ordinal))
+
+    def __contains__(self, x):
+        return any(v == x for v in self.values())
 
     def _adascript_pairs(self):
         """(key, value) over the domain, in order -- what Nim's pairs gives.
@@ -440,36 +446,6 @@ def _ensure_enum_array_alias():
         ParserState.py_top_decls = decls
 
 
-_ORDERED_ARRAY_ALIAS = '''\
-class _OrderedArray(dict):
-    """[K]V where K has no finite domain -- `[str]float`: keyed in insertion
-    order, which a dict already is.
-
-    Like every other [K]V it iterates its values -- here in the order their
-    keys arrived, as Nim's OrderedTable does -- where a plain dict, and
-    `{K}V`, iterate keys.
-    """
-    __slots__ = ()
-
-    def __iter__(self):
-        return iter(self.values())
-
-    def _adascript_pairs(self):
-        """(key, value) in insertion order: what Nim's pairs gives, and what
-        enumerate() yields over a [K]V."""
-        return iter(self.items())\
-'''
-
-
-def _ensure_ordered_array_alias():
-    """Define _OrderedArray the first time a [K]V map is named or built."""
-    from hek_parsec import ParserState
-    decls = getattr(ParserState, 'py_top_decls', [])
-    if not any("class _OrderedArray(dict)" in d for d in decls):
-        decls.append(_ORDERED_ARRAY_ALIAS)
-        ParserState.py_top_decls = decls
-
-
 @method(enum_array_type)
 def to_py(self, prec=None):
     """enum_array_type: '[' IDENTIFIER ']' type_annotation (enum-indexed array) -> Nim: array[EnumType, T]"""
@@ -477,11 +453,13 @@ def to_py(self, prec=None):
     idx = self.nodes[0].to_py()
     elem = self.nodes[1].to_py()
     # `[str]float`: a key with no finite domain orders its keys by
-    # insertion. See ordered_map_key.
+    # insertion, which a dict already does -- and, its keys being what is
+    # not known in advance, iterates and tests them, as a dict does too. So
+    # it is exactly a dict here; Nim needs an OrderedTable. See
+    # ordered_map_key.
     from ady_declarations import ordered_map_key
     if ordered_map_key(self.nodes[0]):
-        _ensure_ordered_array_alias()
-        return f"_OrderedArray[{idx}, {elem}]"
+        return f"dict[{idx}, {elem}]"
     # `[E]T` and `[N]T` are the same shape once N is a named constant --
     # both are '[' IDENTIFIER ']' T -- so the grammar cannot separate them
     # and the identifier has to be looked up. An enum (or char/bool, the

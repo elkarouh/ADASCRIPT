@@ -5486,7 +5486,7 @@ def to_nim(self, prec=None):
     # If target is a single variable and iterable is a Table, use .keys
     # If target is a tuple (k, v) and iterable is a Table, use .pairs
     iterable_type = _nim_expr_type(iterable)
-    if iterable_type and iterable_type.startswith("Table["):
+    if iterable_type and iterable_type.startswith(("Table[", "OrderedTable[")):
         if "," in tgt and tgt.startswith("("):
             # Tuple target (k, v) -> use .pairs
             iterable = iterable + ".pairs"

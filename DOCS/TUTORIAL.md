@@ -161,6 +161,30 @@ Underneath, a collection is a mapping that supplies its own key: a list maps
 positions to elements, a set maps elements to in-or-out. That is why `xs[i]`
 and `x in s` are both lookups, and why a set cannot hold anything twice.
 
+**What a loop gives you.** `for x in c`, and `x in c` with it, give the half
+of the mapping that is *not known in advance* — that is the information.
+
+- Keys known in advance → **the values**. `[Color]int`'s keys are `RED,
+  GREEN, BLUE`, fixed by its type, so `for x in score` gives the scores and
+  `x in score` asks whether some colour has that score. A list and a fixed
+  array are the same: their keys are positions, known from the length.
+- Keys not known in advance → **the keys**. A `{str}int` holds whichever
+  words arrived, and which ones is what you want to know: `for w in counts`
+  gives the words, `w in counts` asks whether one occurred. A `[str]float`
+  is the same, in the order the keys arrived.
+- A set is the limiting case: `{}str` maps each element to present or
+  absent, so its elements — its keys — are all there is to give.
+
+| | keys known in advance? | `for x in c`, `x in c` |
+|---|---|---|
+| `[]T`, `[N]T`, `[E]T`, `[lo..hi]T` | yes | the values |
+| `[str]V`, `{K}V` | no | the keys |
+| `{}T` | no — the elements are the keys | the elements |
+
+`.keys()`, `.values()` and `.items()` give the other half, or both;
+`enumerate(c)` gives `(position, element)` for a list and `(key, value)`
+for every mapping.
+
 "Unordered" is a portability rule, not a mnemonic: the same `{str}int`
 iterates in insertion order on Python and hash order on Nim. Sort the keys
 if the output has to match.
@@ -656,7 +680,9 @@ An enum is just one ordinal key; `[10]T`, `[0..9]T` and `[bool]T` are the
 same construct with a different one in the brackets.
 
 It iterates its values in enum order, whatever order the literal used, like
-every other `[O]T`. Walk the domain when you want the member too:
+every other `[O]T` — its keys are the domain, known in advance, so the
+values are what a loop is for — and `x in score` asks whether some member
+has the value x. Walk the domain when you want the member too:
 
 ```python
 type Color is enum RED, GREEN, BLUE, AMBER
@@ -701,22 +727,26 @@ totals["zeta"] = 3.0
 totals["alpha"] = 1.0
 totals["mid"] = 2.0
 
-for v in totals:
-    print v                          # 3.0 1.0 2.0 -- its values, like any [K]V
-for k, v in totals.items():
-    print f"{k}={v}"                 # zeta=3.0 alpha=1.0 mid=2.0
+for k in totals:
+    print k                          # zeta alpha mid -- the keys, in order
+for v in totals.values():
+    print v                          # 3.0 1.0 2.0
 for k, v in enumerate(totals):
-    print k, v                       # the key, as over a [Color]int
+    print k, v                       # (key, value), as over any mapping
+assert "zeta" in totals              # a key: did "zeta" arrive?
 
 var lens: [str]int = {s: len(s) for s in ["ccc", "a", "bb"]}   # in that order
 var ages: [str]int = ["bob": 41, "amy": 37]                    # likewise
 ```
 
 A dict literal, `{:}` and a dict comprehension all build one: the
-declaration decides. Like every `[K]V` it iterates its **values**; use
-`.keys()` or `.items()` for the keys. Keys can be any hashable type, a
-tuple included: `[(int, int)]float` holds a value per coordinate, in the
-order the coordinates were first set.
+declaration decides. Its keys are not known in advance — they are whatever
+arrived — so, like a `{K}V`, a loop and `in` give the **keys**, here in the
+order they arrived; `.values()` and `.items()` give the rest. An
+`[Color]int` is the opposite case: its keys are fixed by its type, so it
+gives its values. Keys can be any hashable type, a tuple included:
+`[(int, int)]float` holds a value per coordinate, in the order the
+coordinates were first set.
 
 Pick `[K]V` when the order matters — output that follows the input, a
 report in the order things were first seen — and `{K}V` when it does not.
