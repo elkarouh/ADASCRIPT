@@ -57,12 +57,6 @@ history of this file if the reasoning behind one of them is ever wanted.
       where the bounds are read, so both `tick_types` and the rendered alias
       get it wrong. Loud on both sides rather than divergent, and a
       non-negative subrange is unaffected.
-- [ ] `[str]T` is accepted on Python and rejected by Nim, which wants an
-      ordinal domain and says "ordinal type expected; given: string" for
-      `array[char, T]`. The Python side builds an `_EnumArray` that is never
-      filled (there is no finite domain to fill it from), so it behaves like
-      a plain dict. Either give it the 256 char slots Nim would have had the
-      domain been `char`, or reject it at transpile time with that message.
 - [ ] `p / ".."` is not the same path on the two backends. Nim's `joinPath`
       collapses the `..` as it joins, so `Path("/a/b") / ".." / "c"` is
       `/a/c`; pathlib keeps it, giving `/a/b/../c`. Both name the same
@@ -294,28 +288,44 @@ history of this file if the reasoning behind one of them is ever wanted.
       so it is the implicit return rather than the construct around it.
       `TOOLS/TCHECK/Tcheck_tact.ady`'s `build_type_from` says so where it
       spells out the returns it would otherwise leave implicit.
-- [x] `type Velocity_T is distinct float` (EXAMPLES/test_distinct.ady): a
-      type with its base's operations, closed over itself, that mixes with
-      nothing else; `Velocity_T(x)` in, `float(v)` out, a literal takes its
-      context's type. Nim checks every use (`distinct` + borrowed procs);
-      the Python backend refuses a typed name given to a declaration or
-      assignment, and an operator between two typed names.
-- [x] units (EXAMPLES/test_units.ady): `*` and `/` on a distinct type scale
-      by a plain number, `V / V` is a plain ratio and `V * V` is refused; a
-      derived unit, `type Velocity_T is Distance_T / Duration_T` (or
-      `A * B`), defines the operators between units and gives them a name.
-      ady_declarations.expr_unit works out the unit of an emitted
-      expression for both backends, so Python checks `v * 2.0 + d` too.
-- [ ] distinct types, what is left: the Python backend does not check an
-      argument's type (it records no parameter types) -- building for Nim
-      catches it. A literal whose context Nim cannot see (an argument to
-      something that is not a known routine, an element of a table
-      literal) needs `V(x)` written. Derived units are float (or int for a
-      product) only, and a unit cannot be raised to a power: `Area_T` is
-      `Length_T * Length_T`, and there is no `Length_T ** 2`. `unchained`,
-      the Nim library, does full dimensional analysis; this is
-      deliberately smaller, and a unit library's `5.m` literal is not
-      needed because a literal already takes its context's type.
+- [ ] distinct types and units, what is left (the feature itself --
+      `distinct`, scaling, derived units -- is done: book 2.7,
+      EXAMPLES/test_distinct.ady, test_units.ady, test_money.ady):
+      - the Python backend does not check an argument's type (it records
+        no parameter types); building for Nim catches it.
+      - a literal whose context Nim cannot see (an argument to something
+        that is not a known routine, an element of a table literal) needs
+        `V(x)` written.
+      - a derived unit is float, or int for a product, and a unit cannot be
+        raised to a power: `Area_T` is `Length_T * Length_T`, and there is
+        no `Length_T ** 2`. Nim's `unchained` does full dimensional
+        analysis; this is deliberately smaller.
+      - exact money is `distinct int` in cents, and converting int cents
+        to and from a float rate is written out by hand. `round` would be
+        the tool, and it is not portable (next item).
+- [ ] `round(x)` differs between the backends. Python's returns an int and
+      rounds half to even (`round(2.5)` is 2); Nim's `round` is in `math`,
+      which Adascript does not import for it ("undeclared identifier"),
+      returns a float, and rounds half away from zero. Give it one
+      meaning -- an int, and say which way halves go -- and emit the import.
+- [ ] a `?T` compared with a plain value compiles on Python and not on Nim.
+      `let x: ?int = f(...)` then `x == 7` is True on Python; Nim has no
+      `==` between `Option[int]` and an int ("type mismatch"). The same
+      through a function-typed variable, `p("7") == 7` for `p: (str) ->
+      ?int`. `x is not None and x == 7` is the spelling that works on both,
+      or the emitter could unwrap for the comparison.
+- [ ] a `def` returning a `lambda` does not build on Nim. `def twice(f: (int)
+      -> int) -> (int) -> int: return lambda x: f(f(x))` is emitted as a
+      nested `proc(x: auto): auto`, which Nim rejects ("a nested proc can
+      have generic parameters only when it is used as an operand"). The
+      lambda's parameter and result types are known from the declared
+      return type and should be written out; Python takes it.
+- [ ] **For discussion:** let `m(k)` look up a `{K}V` or `[K]V` as `m[k]`
+      does, and let a table be passed where a `(K) -> V` is expected (a
+      small adapter on each backend). A pure function is a mapping, and Ada
+      writes both the same way, so a computed function could become a
+      precomputed table without touching a call site. Every declaration
+      would still name one concrete type; only the call syntax is shared.
 - [ ] `[E]{}T` cannot infer the element type of an empty set literal in its
       initialiser: `var seen: [Phase_T]{}str = [CLIMB: {}, ...]` gives Nim
       "cannot instantiate: 'A'" from initHashSet. `{}` is ambiguous on its
