@@ -110,6 +110,7 @@ STANDALONE := \
     test_enum_array_enumerate.ady \
     test_enum_array_zero_fill.ady \
     test_ordered_map.ady \
+    test_function_type.ady \
     test_case_guard_or.ady \
     test_method_param_names.ady \
     test_pure_method_self.ady \
@@ -241,7 +242,7 @@ COMPILE_ONLY := \
 # is the one they get, so the self-contained loop leaves them out.
 BOTH_BACKENDS_COMPARED := test_do_block test_result test_optional_spelling \
     test_union test_case_ranges test_contextmanager_fstring \
-    test_ordered_map
+    test_ordered_map test_function_type
 
 ALL_COMPILE := \
     $(LIBS) \

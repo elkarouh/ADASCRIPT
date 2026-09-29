@@ -441,14 +441,36 @@ Two questions, four answers, and each is a structure you already know:
 |                | ordered `[…]`                        | unordered `{…}`            |
 |----------------|--------------------------------------|----------------------------|
 | **collection** | `[]T` — a list of T                  | `{}T` — a set of T         |
-| **mapping**    | `[E]T` — one T for each member of E  | `{K}V` — a mapping from K to V |
+| **mapping**    | `[K]T` — a T per key, keys in order  | `{K}V` — a mapping from K to V |
 
-An ordered mapping needs a key with an order to index by — an enumeration,
-`bool`, a character, an integer range — so `[E]T` has a slot for every
-member of `E`, in declaration order, and cannot lack one. An unordered
-mapping takes any hashable key and holds only the keys put in it. That is the whole
-difference between `ceiling` and `fleet` above, and the notation makes you
-choose.
+What order an ordered mapping has depends on its key. When the key is an
+enumeration, `bool`, a character or an integer range, every key and its
+place are known before the program runs: `[E]T` has a slot for every member
+of `E`, in declaration order, and cannot lack one. When the key is anything
+else — a callsign, a tuple of coordinates — the keys cannot be known in
+advance, so the order is the order they **arrived** in, and that is kept.
+An unordered mapping takes any hashable key, holds only the keys put in it,
+and promises no order at all. That is the whole difference between
+`ceiling` and `fleet` above, and the notation makes you choose.
+
+The arrival order is worth keeping because it is so often the fact you
+wanted. Landings, in the order they happened:
+
+<!-- from: EXAMPLES/DOC/why_snippets.ady -->
+```python
+type Minutes_T is Natural
+var landed: [Callsign_T]Minutes_T = {:}    # in the order they landed
+
+landed["AFR22"]  = 12
+landed["BAW117"] = 3
+```
+
+Written `{Callsign_T}Minutes_T`, the order is simply not part of the type:
+`{…}` promises none, so each backend is free to use whatever it has — Python
+happens to keep insertion order, Nim uses hash order — and a program that
+reads the landings back in order is relying on something it was never
+given. `[Callsign_T]` makes the order part of the contract. The brackets
+are the difference.
 
 Mappings are the heart of it, because a model is its concepts *and the
 relations between them*, and nearly every relation is a mapping: callsign to
@@ -463,6 +485,31 @@ The collections are mappings too, seen from the side: a list maps its
 positions to its elements, and a set maps its elements to in-or-out. That is
 why `xs[i]` and `x in s` are both lookups, and why a set cannot hold the
 same element twice — a key is present or absent, there is no third state.
+
+So is a function. A pure function maps its arguments to a result, and
+`rule(phase)` is a lookup like `ceiling[phase]` — the difference is that
+one is *computed* and the other *stored*. Adascript writes a function type
+the way a `def` writes its signature, parameters, an arrow, the result:
+
+<!-- from: EXAMPLES/DOC/why_snippets.ady -->
+```python
+type Ceiling_Rule_T is (Flight_Phase_T) -> Altitude_T   # computed, not stored
+
+def published(phase: Flight_Phase_T) -> Altitude_T:
+    return ceiling[phase]
+
+def over_ceiling(a: Aircraft_T, rule: Ceiling_Rule_T) -> bool:
+    return a.altitude > rule(a.phase)
+```
+
+It is tempting to go further and spell it `{Flight_Phase_T}Altitude_T`, and
+let the compiler decide from context whether that is a table or a function.
+I decided against it. The two share only the lookup: a table can be
+iterated, counted, tested with `in` and written to; a function can only be
+called, but it can answer for a domain no table could hold. A parameter, a
+field, a return type carry no value to guess from, and a reader who cannot
+tell which one they have cannot tell what they may do with it. The type
+says it, and the arrow is how every signature already says it.
 
 Two more forms sit outside the grid, as neither holds many of anything:
 
@@ -511,6 +558,8 @@ costs elsewhere:
 | `[Phase_T]Altitude_T` | `Dict[Phase_T, Altitude_T]` | `array[Phase_T, Altitude_T]` |
 | `{}Callsign_T` | `Set[Callsign_T]` | `HashSet[Callsign_T]` |
 | `?Altitude_T` | `Optional[Altitude_T]` | `Option[Altitude_T]` |
+| `[Callsign_T]Minutes_T` | `dict[Callsign_T, Minutes_T]` | `OrderedTable[Callsign_T, Minutes_T]` |
+| `(Flight_Phase_T) -> Altitude_T` | `Callable[[Flight_Phase_T], Altitude_T]` | `proc(a0: Flight_Phase_T): Altitude_T` |
 
 The others all put the container's *name* first and its contents inside
 brackets, so the reader opens a bracket, holds it, and closes it. At one level
@@ -520,7 +569,7 @@ all — and a type annotation nobody writes is worth nothing.
 I make no claim that every sigil here is unprecedented; Go writes a slice
 `[]T` and a map `map[K]V`, and anyone designing in this space will land near
 `[]T` eventually. What is Adascript's own is the *family*: that the list, the set, the
-enum-indexed array and the mapping are the four answers to two questions,
+ordered mapping and the unordered one are the four answers to two questions,
 that the optional joins them under the same rule — "container first,
 element after, no brackets to balance" — and that they stack. I did not take it from another language,
 because I could not find one that had it.

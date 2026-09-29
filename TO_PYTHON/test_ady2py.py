@@ -707,13 +707,13 @@ def first(items: list[int]) -> int | None:
 test(
     "adascript: callable parameters",
     """\
-def apply(f: [(int,)]int, values: []int) -> []int:
+def apply(f: (int) -> int, values: []int) -> []int:
     result: []int = []
     for v in values:
         result.append(f(v))
     return result
 
-def compose(f: [(int,)]int, g: [(int,)]int) -> [(int,)]int:
+def compose(f: (int) -> int, g: (int) -> int) -> (int) -> int:
     def combined(x: int) -> int:
         return f(g(x))
     return combined
@@ -781,7 +781,7 @@ def minmax(values: []int) -> (int, int):
             hi = v
     return (lo, hi)
 
-def zip_with(f: [(int, int)]int, xs: []int, ys: []int) -> []int:
+def zip_with(f: (int, int) -> int, xs: []int, ys: []int) -> []int:
     result: []int = []
     for i in range(len(xs)):
         result.append(f(xs[i], ys[i]))

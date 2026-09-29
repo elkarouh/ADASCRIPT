@@ -176,7 +176,7 @@ if the output has to match.
 | `{}T`          | `set[T]`             | `HashSet[T]` or `set[T]`      |
 | `?T`           | `T \| None`          | `Option[T]`                    |
 | `(T, U)`       | `tuple[T, U]`        | `(T, U)`                       |
-| `[(T, U)]R`    | `Callable[[T,U], R]` | `proc(a0: T, a1: U): R`       |
+| `(T, U) -> R`  | `Callable[[T,U], R]` | `proc(a0: T, a1: U): R`       |
 
 Types compose freely — a graph as an adjacency list is a `{…}` mapping
 whose values are a `[…]` collection:
@@ -190,6 +190,38 @@ graph: Graph_T = {'A': ['B', 'C'], 'B': ['C', 'D']}
 
 Add weights by making the element a named tuple, which is what
 `dijkstra.ady` does — `{Node_T}[]Neighbour_T`, three levels in one line.
+
+### Function types `(T, U) -> R`
+
+A function type is written like a `def`'s signature: the parameter types in
+parentheses, an arrow, the result.
+
+```python
+type Op_T is (int, int) -> int
+
+def fold(op: Op_T, xs: []int, init: int) -> int:
+    var acc: int = init
+    for x in xs:
+        acc = op(acc, x)
+    return acc
+
+def run(cb: () -> None):                  # no parameters, no result
+    cb()
+
+let p: (str) -> int | None = parse_digit  # returns an optional int
+var steps: [](int) -> int = [inc, inc]    # a list of functions
+var check: ?(Point) -> bool = None        # an optional function
+```
+
+`(int) -> int` and `(int,) -> int` are one type; so are `() -> R` and
+`(,) -> R`. The result is a whole type, as after a `def`'s `->`: `?` in
+front of the parameters makes the function optional, `?` after the arrow
+makes its result optional. Python gets `Callable[[int, int], int]`, Nim
+`proc(a0: int, a1: int): int`.
+
+A pure function is a mapping, but it is not written `{(int, int)}int`: that
+is a dict keyed by a tuple, which can be iterated, counted and written to.
+A function can only be called. The declaration says which one you have.
 
 ### Empty collection literals
 
@@ -629,9 +661,9 @@ var ages: [str]int = ["bob": 41, "amy": 37]                    # likewise
 
 A dict literal, `{:}` and a dict comprehension all build one: the
 declaration decides. Like every `[K]V` it iterates its **values**; use
-`.keys()` or `.items()` for the keys. Keys can be any hashable type, but a
-tuple key needs a name, `type Pos_T is (int, int)` then `[Pos_T]float`:
-`[(int, int)]R` is already the callable type.
+`.keys()` or `.items()` for the keys. Keys can be any hashable type, a
+tuple included: `[(int, int)]float` holds a value per coordinate, in the
+order the coordinates were first set.
 
 Pick `[K]V` when the order matters — output that follows the input, a
 report in the order things were first seen — and `{K}V` when it does not.

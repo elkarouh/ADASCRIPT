@@ -681,7 +681,7 @@ def digits_to_int(s: str) -> ?int:
             return None
     return int(s)
 
-def fmap_int(m: ?int, f: [(int,)]int) -> ?int:
+def fmap_int(m: ?int, f: (int) -> int) -> ?int:
     if m is not None:
         return f(m)
     return None

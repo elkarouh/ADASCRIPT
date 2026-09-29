@@ -112,11 +112,14 @@ spelling assigns to the other. The key can equally be written out, named
 | `{}T` | `set[T]` | `HashSet[T]` or `set[T]` |
 | `?T` | `T \| None` | `Option[T]` |
 | `(T, U)` | `tuple[T, U]` | `(T, U)` |
-| `[(T, U)]R` | `Callable[[T, U], R]` | `proc(a0: T, a1: U): R` |
+| `(T, U) -> R` | `Callable[[T, U], R]` | `proc(a0: T, a1: U): R` |
 
-`?T` and `(T, U)` are not containers and sit outside the scheme; the
-function type `[(T, U)]R` reuses the bracket for a different job — an
-ordered list of parameter types on the left, the result on the right.
+`?T` and `(T, U)` are not containers and sit outside the scheme. Nor does
+the function type, which is written the way a `def` writes its signature:
+the parameter types in parentheses, an arrow, the result. A pure function is
+a mapping too, but not one a `{…}` could spell: `{(int, int)}float` is a
+dict keyed by a tuple — iterable, countable, writable — where a function can
+only be called. The declaration has to say which it is, and the arrow does.
 
 "Unordered" is a portability rule rather than a mnemonic, because the two
 backends really do disagree. Iterating the same `{str}int` gives insertion
@@ -159,11 +162,13 @@ geometric region is defined by an optional predicate from `Point` to `bool`:
 
 ```python
 class Region:
-    var _predicate: ?[(Point,)]bool
+    var _predicate: ?(Point) -> bool
 ```
 
-Read it inside-out: `[(Point,)]bool` is "callable taking a `Point`, returning
-`bool`", and the leading `?` makes it optional.
+`(Point) -> bool` is "a function taking a `Point`, returning `bool`", and
+the leading `?` makes the function optional. The result after the arrow is
+a whole type, as in a `def`, so `(Point) -> ?bool` would instead be a
+function whose *result* is optional.
 
 ## 2.3 Empty collection literals
 

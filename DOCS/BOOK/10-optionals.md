@@ -151,9 +151,9 @@ composed regions:
 
 ```python
 class Region:
-    var _predicate: ?[(Point,)]bool
+    var _predicate: ?(Point) -> bool
 
-    def __init__(self, predicate: ?[(Point,)]bool = None) -> None:
+    def __init__(self, predicate: ?(Point) -> bool = None) -> None:
         self._predicate = predicate
 
     def __contains__(self, point: Point) -> bool:
@@ -406,7 +406,7 @@ propagating absence without running the step. The guard forms of 10.3 are
 bind written out:
 
 ```python
-def bind_int(m: ?int, f: [(int,)]?int) -> ?int:
+def bind_int(m: ?int, f: (int) -> ?int) -> ?int:
     if m is not None:
         return f(m)      # f applied to the unwrapped value
     return None          # absence propagated
@@ -415,7 +415,7 @@ def bind_int(m: ?int, f: [(int,)]?int) -> ?int:
 **Fmap** — apply a step that cannot fail (`T -> U`), preserving presence:
 
 ```python
-def fmap_int(m: ?int, f: [(int,)]int) -> ?int:
+def fmap_int(m: ?int, f: (int) -> int) -> ?int:
     if m is not None:
         return f(m)
     return None

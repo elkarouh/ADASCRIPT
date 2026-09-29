@@ -58,6 +58,7 @@ Ordered mappings
 
     [Color_T]int                    array[Color_T, int]
     [str]float                      OrderedTable[string, float]
+    [(int, int)]float               OrderedTable[(int, int), float]
 
 Dictionaries
 ------------
@@ -96,12 +97,13 @@ Union types
     int | str                       int | str
     ?int | str                      int | None | str
 
-Callable (function signature)
------------------------------
-    [(<param_types>)]<return_type>  Callable[[<param_types>], <return_type>]
+Function types
+--------------
+    (<param_types>) -> <return_type>  Callable[[<param_types>], <return_type>]
 
-    [(int, str)]bool                Callable[[int, str], bool]
-    [(int,)]int                     Callable[[int], int]
+    (int, str) -> bool              Callable[[int, str], bool]
+    (int) -> int                    Callable[[int], int]
+    () -> None                      Callable[[], None]
 
 Grammar
 =======
@@ -111,16 +113,18 @@ Grammar
     union_type           = maybe_optional ('|' maybe_optional)+
     maybe_optional       = optional_type | basic_type
     optional_type        = '?' basic_type
-    basic_type           = seq_type | callable_type | openarray_type
+    basic_type           = seq_type | openarray_type
                          | array_type | enum_array_type
-                         | dict_type | set_type | tuple_type
+                         | dict_type | set_type | callable_type | tuple_type
                          | primitive_type | type_name
     seq_type             = '[]' type_annotation
     array_type           = '[' INTEGER ']' type_annotation
     openarray_type       = '[*]' type_annotation
     dict_type            = '{' type_annotation '}' type_annotation
     set_type             = '{}' type_annotation
-    callable_type        = '[' tuple_type ']' type_annotation
+    callable_type        = params '->' type_annotation
+    params               = '(' ')' | '(' ',' ')' | '(' type_annotation ')'
+                         | tuple_type
     tuple_type           = empty_tuple_type | singleton_tuple_type | multi_tuple_type
     multi_tuple_type     = '(' type_annotation (',' type_annotation)+ [','] ')'
     singleton_tuple_type = '(' type_annotation ',' ')'
@@ -144,7 +148,7 @@ Nim code generation is in ``hek_nim_declarations.py`` (``to_nim()`` methods)::
     Sets:         {}int -> HashSet[int]
     Optionals:    ?int -> Option[int]
     Tuples:       (int, str) -> (int, string)
-    Callables:    [(int, str)]bool -> proc(a0: int, a1: string): bool
+    Functions:    (int, str) -> bool -> proc(a0: int, a1: string): bool
 
 Initialisation via comprehension
 ================================
@@ -298,6 +302,7 @@ from ady_expr import expression, ikw
 
 QUESTION = ignore(expect(tkn.OP, "?"))
 EXCLAIM = ignore(expect(tkn.OP, "!"))
+ARROW = ignore(expect(tkn.OP, "->"))
 
 ###############################################################################
 # Forward declarations
@@ -315,6 +320,8 @@ enum_array_type = fw("enum_array_type")
 dict_type = fw("dict_type")
 set_type = fw("set_type")
 callable_type = fw("callable_type")
+single_param_type = fw("single_param_type")
+no_param_type = fw("no_param_type")
 tuple_type = fw("tuple_type")
 multi_tuple_type = fw("multi_tuple_type")
 singleton_tuple_type = fw("singleton_tuple_type")
@@ -372,11 +379,12 @@ array_type = LBRACKET + INTEGER + RBRACKET + elem_type
 openarray_type = LBRACKET + SSTAR + RBRACKET + elem_type
 
 # [EnumType]int      -> array[EnumType, int]  (enum-indexed array)
+# [(int, int)]float  -> an insertion-ordered mapping keyed by the tuple
 # Also accepts primitive ordinal types like char as array index.
 # [str]float         -> OrderedTable[string, float] / an insertion-ordered dict:
 # `[...]` is an ordered mapping whatever the key; only a finite ordinal key
 # fixes the keys and their order at compile time. See ordered_map_key().
-enum_array_type = LBRACKET + (type_name | primitive_type) + RBRACKET + elem_type
+enum_array_type = LBRACKET + (tuple_type | type_name | primitive_type) + RBRACKET + elem_type
 
 # {str}int          -> dict[str, int]
 dict_type = LBRACE + type_annotation + RBRACE + elem_type
@@ -384,8 +392,17 @@ dict_type = LBRACE + type_annotation + RBRACE + elem_type
 # {}int             -> set[int]
 set_type = LBRACE + RBRACE + elem_type
 
-# [(int, str)]bool  -> Callable[[int, str], bool]
-callable_type = LBRACKET + tuple_type + RBRACKET + elem_type
+# (int, str) -> bool -> Callable[[int, str], bool]
+# (int) -> int, (int,) -> int, () -> None, (,) -> None
+# The function type is written the way a `def` writes its signature. The
+# return type is a whole type_annotation, as after a def's `->`, so
+# `(str) -> int | None` returns an optional int; the arrow reaches as far
+# right as it can, and a union *of* functions needs a name.
+single_param_type = LPAREN + type_annotation + RPAREN
+no_param_type = LPAREN + RPAREN
+callable_type = ((empty_tuple_type | no_param_type | single_param_type
+                  | singleton_tuple_type | multi_tuple_type)
+                 + ARROW + type_annotation)
 
 # --- Ownership type modifiers ---
 # lent T  — borrow annotation (caller keeps ownership); maps to Nim's 'lent T'
@@ -397,19 +414,20 @@ own_param_type = ikw("own") + elem_type
 
 # --- basic_type: a non-union, non-optional type ---
 # Order matters: try container/callable before primitive/name (both start differently)
-# callable_type before array_type (both start with '[', but callable has '(' after '[')
+# callable_type before tuple_type: both start with '(', and only the arrow
+# after the parameters tells a function type from a tuple.
 # lent_type and own_param_type first so 'lent T' / 'own T' are never confused with
 # the standalone identifiers 'lent' or 'own'.
 basic_type = (
     lent_type
     | own_param_type
     | seq_type
-    | callable_type
     | openarray_type
     | array_type
     | enum_array_type
     | dict_type
     | set_type
+    | callable_type
     | tuple_type
     | primitive_type
     | type_name
@@ -532,6 +550,12 @@ def ordered_map_key(idx_node):
     a tuple or container named by an alias. The declarations come from
     scan_type_decls, so a type declared further down the file counts.
     """
+    if type(idx_node).__name__ in ("singleton_tuple_type", "multi_tuple_type"):
+        return True
+    if type(idx_node).__name__ == "empty_tuple_type":
+        raise SyntaxError(
+            "'[(,)]T' keys a mapping by the empty tuple, which has one value: "
+            "a function type is written '(,) -> T' (or '() -> T')")
     name = _index_name(idx_node)
     if name is None:
         return False

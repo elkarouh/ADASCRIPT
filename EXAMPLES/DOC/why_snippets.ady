@@ -95,6 +95,28 @@ assert routes["BA117"]'Length == 2 and routes'Length == 2
 assert bysector[CENTRE][0] == "BA117" and bysector[NORTH]'Length == 0
 assert nested["a"]["b"] == 1
 
+# --- a mapping ordered by arrival; a mapping computed rather than stored ---
+type Minutes_T is Natural
+var landed: [Callsign_T]Minutes_T = {:}    # in the order they landed
+
+landed["AFR22"]  = 12
+landed["BAW117"] = 3
+
+type Ceiling_Rule_T is (Flight_Phase_T) -> Altitude_T   # computed, not stored
+
+def published(phase: Flight_Phase_T) -> Altitude_T:
+    return ceiling[phase]
+
+def over_ceiling(a: Aircraft_T, rule: Ceiling_Rule_T) -> bool:
+    return a.altitude > rule(a.phase)
+
+var order: []Callsign_T = []
+for cs in landed.keys():
+    order.append(cs)
+assert order == ["AFR22", "BAW117"]
+assert over_ceiling(fleet["AFR22"], published)
+assert not over_ceiling(fleet["BAW117"], published)
+
 # --- the signatures the document argues from -------------------------------
 type Distance_T is float
 type Duration_T is float

@@ -87,9 +87,20 @@ whose order matters? Declare it `[str]V`, not `{str}V`.
 | `{}T` | `set[T]` | `HashSet[T]` or `set[T]` (ordinal) |
 | `?T` | `T \| None` | `Option[T]` |
 | `(T, U)` | `tuple[T, U]` | `(T, U)` |
-| `[(T, U)]R` | `Callable[[T,U], R]` | `proc(a0: T, a1: U): R` |
+| `(T, U) -> R` | `Callable[[T,U], R]` | `proc(a0: T, a1: U): R` |
 
 Types compose: `{Node_T}[]Node_T` = dict mapping node to list of nodes.
+
+**Function types** — written like a `def` signature, `(T, U) -> R`:
+```adascript
+type Op_T is (int, int) -> int
+def run(cb: () -> None): ...             # () and (,) are the same; (T) = (T,)
+let p: (str) -> int | None = parse_digit # result is a whole type: optional int
+var check: ?(Point) -> bool = None       # leading ? = the function is optional
+var steps: [](int) -> int = [inc]
+```
+NOT `[(T, U)]R` — that is now an insertion-ordered map keyed by a tuple
+(`[(,)]R` is refused with a hint). NOT `{(T, U)}R` — a dict keyed by a tuple.
 
 **Empty literals** — resolves Python's `{}` ambiguity:
 ```adascript
@@ -996,7 +1007,7 @@ for k, v in enumerate(totals): ...    # (key, value), as over any [K]V
 ```
 
 Iterates **values** (like every `[K]V`), not keys — use `.keys()`. Tuple
-keys need a named type (`[(int, int)]R` is the callable type).
+keys work directly: `[(int, int)]float`.
 
 ---
 

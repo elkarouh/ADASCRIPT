@@ -72,12 +72,12 @@ Union types
     int | str                       int | str
     ?int | str                      int | None | str
 
-Callable (function signature)
------------------------------
-    [(<param_types>)]<return_type>  Callable[[<param_types>], <return_type>]
+Function types
+--------------
+    (<param_types>) -> <return_type>  Callable[[<param_types>], <return_type>]
 
-    [(int, str)]bool                Callable[[int, str], bool]
-    [(int,)]int                     Callable[[int], int]
+    (int, str) -> bool              Callable[[int, str], bool]
+    (int) -> int                    Callable[[int], int]
 
 Grammar
 =======
@@ -94,7 +94,7 @@ Grammar
     array_type           = '[' INTEGER ']' type_annotation
     dict_type            = '{' type_annotation '}' type_annotation
     set_type             = '{}' type_annotation
-    callable_type        = '[' tuple_type ']' type_annotation
+    callable_type        = params '->' type_annotation
     tuple_type           = empty_tuple_type | singleton_tuple_type | multi_tuple_type
     multi_tuple_type     = '(' type_annotation (',' type_annotation)+ [','] ')'
     singleton_tuple_type = '(' type_annotation ',' ')'
@@ -117,7 +117,7 @@ Nim code generation is in ``hek_nim_declarations.py`` (``to_nim()`` methods)::
     Sets:        {}int -> HashSet[int]
     Optionals:   ?int -> Option[int]
     Tuples:      (int, str) -> (int, string)
-    Callables:   [(int, str)]bool -> proc(a0: int, a1: string): bool
+    Functions:   (int, str) -> bool -> proc(a0: int, a1: string): bool
 
 Usage
 =====
@@ -526,7 +526,7 @@ def to_py(self, prec=None):
 
 @method(callable_type)
 def to_py(self, prec=None):
-    """callable_type: '[' tuple_type ']' type_annotation -> Nim: proc(a0: T, ...): R"""
+    """callable_type: params '->' type_annotation -> Nim: proc(a0: T, ...): R"""
     # nodes[0] is the tuple_type (params), nodes[1] is the return type
     tup = self.nodes[0]
     ret = self.nodes[1].to_py()
@@ -539,6 +539,20 @@ def to_py(self, prec=None):
     from hek_parsec import ParserState
     ParserState.nim_imports.add("from typing import Callable")
     return f"Callable[[{param_str}], {ret}]"
+
+
+@method(single_param_type)
+def to_py(self, prec=None):
+    """single_param_type: '(' type_annotation ')' -- the one parameter of a
+    function type, `(int) -> int`; rendered by callable_type."""
+    return self.nodes[0].to_py()
+
+
+@method(no_param_type)
+def to_py(self, prec=None):
+    """no_param_type: '(' ')' -- a function type taking nothing, `() -> R`;
+    rendered by callable_type."""
+    return ""
 
 
 @method(empty_tuple_type)
@@ -561,9 +575,12 @@ def to_py(self, prec=None):
 
 
 def _tuple_elements(tup):
-    """Extract type strings from a tuple_type AST node."""
-    if type(tup).__name__ == "empty_tuple_type":
+    """Extract type strings from a tuple_type AST node, or from
+    the parameters of a function type: `()` and `(T)` are those too."""
+    if type(tup).__name__ in ("empty_tuple_type", "no_param_type"):
         return []
+    if type(tup).__name__ == "single_param_type":
+        return [tup.nodes[0].to_py()]
     if type(tup).__name__ == "singleton_tuple_type":
         return [tup.nodes[0].to_py()]
     # multi_tuple_type: first + Several_Times of (COMMA + type_annotation)
@@ -680,8 +697,10 @@ if __name__ == "__main__":
         ("int | str | float", "int | str | float"),
         ("?int | str", "int | None | str"),
         # --- Callable ---
-        ("[(int, str)]bool", "Callable[[int, str], bool]"),
-        ("[(int,)]int", "Callable[[int], int]"),
+        ("(int, str) -> bool", "Callable[[int, str], bool]"),
+        ("(int,) -> int", "Callable[[int], int]"),
+        ("(int) -> int", "Callable[[int], int]"),
+        ("() -> None", "Callable[[], None]"),
     ]
 
     passed = failed = 0

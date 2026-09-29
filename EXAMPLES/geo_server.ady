@@ -51,9 +51,9 @@ class Region:
     Concrete subclasses override __contains__ directly.
     Composed regions hold a lambda built by __and__, __or__, __invert__.
     """
-    var _predicate: ?[(Point,)]bool
+    var _predicate: ?(Point) -> bool
 
-    def __init__(self, predicate: ?[(Point,)]bool = None) -> None:
+    def __init__(self, predicate: ?(Point) -> bool = None) -> None:
         self._predicate = predicate
 
     def __contains__(self, point: Point) -> bool:

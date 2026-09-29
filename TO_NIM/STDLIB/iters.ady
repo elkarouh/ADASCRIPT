@@ -50,7 +50,7 @@ def enumerate_seq[Elem_T](s: []Elem_T, start: int = 0) -> (int, Elem_T):
 # takewhile(pred, s) — yield elements while predicate holds
 # ---------------------------------------------------------------------------
 
-def takewhile[Elem_T](pred: [(Elem_T,)]bool, s: []Elem_T) -> Elem_T:
+def takewhile[Elem_T](pred: (Elem_T) -> bool, s: []Elem_T) -> Elem_T:
     for x in s:
         if not pred(x):
             break
@@ -61,7 +61,7 @@ def takewhile[Elem_T](pred: [(Elem_T,)]bool, s: []Elem_T) -> Elem_T:
 # dropwhile(pred, s) — skip elements while predicate holds, yield the rest
 # ---------------------------------------------------------------------------
 
-def dropwhile[Elem_T](pred: [(Elem_T,)]bool, s: []Elem_T) -> Elem_T:
+def dropwhile[Elem_T](pred: (Elem_T) -> bool, s: []Elem_T) -> Elem_T:
     var dropping: bool = True
     for x in s:
         if dropping and pred(x):
@@ -125,7 +125,7 @@ def batched[Elem_T](s: []Elem_T, n: int) -> []Elem_T:
 #   accumulate(["a","b"], cat, "")  -> "a" "ab"
 # ---------------------------------------------------------------------------
 
-def accumulate[Elem_T](s: []Elem_T, op: [(Elem_T, Elem_T)]Elem_T, init: Elem_T) -> Elem_T:
+def accumulate[Elem_T](s: []Elem_T, op: (Elem_T, Elem_T) -> Elem_T, init: Elem_T) -> Elem_T:
     var total: Elem_T = init
     for x in s:
         total = op(total, x)

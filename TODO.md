@@ -9,7 +9,7 @@ history of this file if the reasoning behind one of them is ever wanted.
       `@used`) and refuses any other decorator, while Python passes every
       one through. `@d` on `def f` means `f = d(f)`, which Nim can express:
       emit the proc under a hidden name and bind `let f = d(fHidden)` -- a
-      closure, so `d` must take and return a proc type (`[(int,)]int`).
+      closure, so `d` must take and return a proc type (`(int) -> int`).
       That covers wrappers written in Adascript (`@twice`, timing,
       memoizing). Not covered, having no Nim counterpart: `@property`,
       `@staticmethod`, `@classmethod`, `@functools.*` -- those stay

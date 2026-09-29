@@ -17,13 +17,13 @@
 | List / fixed array / open array | `[]T` / `[N]T` / `[*]T` (params only) |
 | Fixed array is a subrange key | `[10]T` ≡ `[0..9]T` |
 | Ordinal-keyed mapping | `[O]T` — `O` an enum, `bool`, `char`, or a subrange |
-| Insertion-ordered mapping | `[K]V` — any other `K`: `[str]float` is an `OrderedTable` |
+| Insertion-ordered mapping | `[K]V` — any other `K`: `[str]float`, `[(int, int)]float` |
 | Dict / set / enum-indexed array | `{K}V` / `{}T` / `[E]T` |
 | Optional | `?T` |
 | Failure type | an ordinary record, `type F is record:`, marked `!F` in a union |
 | Value or failure | `T \| !F` — test with `r is F`, chain with `do:` |
 | A command's output or its failure | `let o: str \| !ShellFailure_T = shell: cmd` |
-| Function type | `[(T, U)]R` |
+| Function type | `(T, U) -> R` — `() -> R` takes nothing; `?(T) -> R` is an optional function |
 | Empty dict / empty set | `{:}` / `{}` |
 | Inclusive / exclusive range | `lo .. hi` / `lo ..< hi` |
 | Enum bounds / full set | `E'First`, `E'Last` / `E'Range` |

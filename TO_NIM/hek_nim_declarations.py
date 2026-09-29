@@ -282,7 +282,7 @@ def to_nim(self, prec=None):
 
 @method(callable_type)
 def to_nim(self, prec=None):
-    """callable_type: '[' tuple_type ']' type_annotation -> Nim: proc(a0: T, ...): R"""
+    """callable_type: params '->' type_annotation -> Nim: proc(a0: T, ...): R"""
     tup = self.nodes[0]
     ret = self.nodes[1].to_nim()
     params = _tuple_elements_nim(tup)
@@ -293,6 +293,20 @@ def to_nim(self, prec=None):
     if ret == "void":
         return f"proc({param_str})"
     return f"proc({param_str}): {ret}"
+
+
+@method(single_param_type)
+def to_nim(self, prec=None):
+    """single_param_type: '(' type_annotation ')' -- the one parameter of a
+    function type, `(int) -> int`; rendered by callable_type."""
+    return self.nodes[0].to_nim()
+
+
+@method(no_param_type)
+def to_nim(self, prec=None):
+    """no_param_type: '(' ')' -- a function type taking nothing, `() -> R`;
+    rendered by callable_type."""
+    return ""
 
 
 @method(empty_tuple_type)
@@ -315,9 +329,12 @@ def to_nim(self, prec=None):
 
 
 def _tuple_elements_nim(tup):
-    """Extract Nim type strings from a tuple_type AST node."""
-    if type(tup).__name__ == "empty_tuple_type":
+    """Extract Nim type strings from a tuple_type AST node, or from
+    the parameters of a function type: `()` and `(T)` are those too."""
+    if type(tup).__name__ in ("empty_tuple_type", "no_param_type"):
         return []
+    if type(tup).__name__ == "single_param_type":
+        return [tup.nodes[0].to_nim()]
     if type(tup).__name__ == "singleton_tuple_type":
         return [tup.nodes[0].to_nim()]
     # multi_tuple_type: first + Several_Times of (COMMA + type_annotation)
@@ -452,8 +469,10 @@ if __name__ == "__main__":
         ("int | str | float", "int | string | float"),
         ("?int | str", "Option[int] | string"),
         # --- Callable ---
-        ("[(int, str)]bool", "proc(a0: int, a1: string): bool"),
-        ("[(int,)]int", "proc(a0: int): int"),
+        ("(int, str) -> bool", "proc(a0: int, a1: string): bool"),
+        ("(int,) -> int", "proc(a0: int): int"),
+        ("(int) -> int", "proc(a0: int): int"),
+        ("() -> None", "proc()"),
     ]
 
     passed = failed = 0

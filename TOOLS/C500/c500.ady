@@ -576,10 +576,10 @@ def expression(lexer: Lexer, frame: StackFrame) -> ExprMeta_T:
                 return accessor()
 
     def makeop(
-        higher: [(,)]ExprMeta_T,
+        higher: () -> ExprMeta_T,
         ops:    {TokKind_T}str,
         rtype:  ?CType = None,
-    ) -> [(,)]ExprMeta_T:
+    ) -> () -> ExprMeta_T:
         def op() -> ExprMeta_T:
             lhs: ExprMeta_T = higher()
             if lexer.peek().kind in ops:
@@ -592,7 +592,7 @@ def expression(lexer: Lexer, frame: StackFrame) -> ExprMeta_T:
             return lhs
         return op
 
-    muldiv: [(,)]ExprMeta_T = makeop(
+    muldiv: () -> ExprMeta_T = makeop(
         prefix, {TK_STAR: "i32.mul", TK_SLASH: "i32.div_s", TK_PERCENT: "i32.rem_s"}
     )
 
@@ -631,15 +631,15 @@ def expression(lexer: Lexer, frame: StackFrame) -> ExprMeta_T:
         mask_to_sizeof(res_t)
         return ExprMeta_T(is_place=False, ctype=res_t)
 
-    shlr:   [(,)]ExprMeta_T = makeop(plusminus, {TK_LSHIFT: "i32.shl", TK_RSHIFT: "i32.shr_s"})
-    cmplg:  [(,)]ExprMeta_T = makeop(
+    shlr:   () -> ExprMeta_T = makeop(plusminus, {TK_LSHIFT: "i32.shl", TK_RSHIFT: "i32.shr_s"})
+    cmplg:  () -> ExprMeta_T = makeop(
         shlr, {TK_LT: "i32.lt_s", TK_GT: "i32.gt_s", TK_LE: "i32.le_s", TK_GE: "i32.ge_s"},
         CType("int"),
     )
-    cmpe:   [(,)]ExprMeta_T = makeop(cmplg, {TK_EQEQ: "i32.eq", TK_NE: "i32.ne"}, CType("int"))
-    bitand: [(,)]ExprMeta_T = makeop(cmpe,   {TK_AMP: "i32.and"})
-    bitor:  [(,)]ExprMeta_T = makeop(bitand, {TK_PIPE: "i32.or"})
-    bitxor: [(,)]ExprMeta_T = makeop(bitor,  {TK_CARET: "i32.xor"})
+    cmpe:   () -> ExprMeta_T = makeop(cmplg, {TK_EQEQ: "i32.eq", TK_NE: "i32.ne"}, CType("int"))
+    bitand: () -> ExprMeta_T = makeop(cmpe,   {TK_AMP: "i32.and"})
+    bitor:  () -> ExprMeta_T = makeop(bitand, {TK_PIPE: "i32.or"})
+    bitxor: () -> ExprMeta_T = makeop(bitor,  {TK_CARET: "i32.xor"})
 
     def assign() -> ExprMeta_T:
         lhs: ExprMeta_T = bitxor()

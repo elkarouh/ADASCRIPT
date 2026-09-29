@@ -343,9 +343,9 @@ for k, v in totals.items():
 ```
 
 Its literal is a dict's, `{"zeta": 3.0}` or `{:}`, or the keyed form
-`["zeta": 3.0]`; the declaration makes it ordered. A tuple key has to be
-named first (`type Pos_T is (int, int)`, then `[Pos_T]float`), since
-`[(int, int)]R` is already the callable type.
+`["zeta": 3.0]`; the declaration makes it ordered. A tuple works as a key
+like any other type: `[(int, int)]float` is a grid of floats, keyed by
+coordinates in the order they were first set.
 
 So the fixed array is not a special form: it is `[O]T` where the ordinal
 type happens to be a subrange. The key may equally be written out
@@ -391,12 +391,10 @@ A pure function is the same idea taken one step further: `f(x)` is a lookup
 too, mapping the argument to a result, and nothing about that mapping is
 ordered — call it twice with the same argument and it owes you the same
 answer both times, in whatever order you like. It is an **unordered
-mapping**, kin to `{K}V` in spirit even though the callable type below is
-spelled with `[…]`, not `{…}` — the square brackets there are borrowed for a
-different reason (an ordered parameter *list*, not an ordered *domain*; see
-below). It sits outside the four-way grid only because its "key" is a whole
-parameter list rather than the single hashable or ordinal type the grid's
-shape assumes — not because it fails to be a mapping.
+mapping**, kin to `{K}V` in spirit. It is still written with its own arrow,
+`(T, U) -> R`, rather than inside the grid, because a declaration has to say
+whether the mapping is *stored* — a table you can iterate, count and write
+to — or *computed*, which you can only call; see below.
 
 | Adascript        | Python                    | Nim                            |
 |----------------|---------------------------|--------------------------------|
@@ -412,32 +410,46 @@ shape assumes — not because it fails to be a mapping.
 | `A \| B`        | `A \| B`                  | `OneOf2[A, B]` (a union)       |
 | `T \| !F`       | `T \| F`                  | `Result[T, F]` (F a failure)   |
 | `(T, U)`       | `tuple[T, U]`             | `(T, U)`                       |
-| `[(T, U)]R`    | `Callable[[T, U], R]`     | `proc(a0: T, a1: U): R`        |
+| `(T, U) -> R`  | `Callable[[T, U], R]`     | `proc(a0: T, a1: U): R`        |
 
 `?T` is shorthand for `T | None`: one type, spelled either way (or `None | T`).
 `T | !F`, with F a record marked `!` in place of `None`, is a value or a failure
 -- see [Failures as Values](#failures-as-values-t--f).
 
-`?T` and `(T, U)` are not containers and stand outside the scheme. `[(T, U)]R`
-stands outside it too, but not for the same reason — it is a mapping, as
-above, just not one the grid's shape can index. `[*]T` is `[]T` with the
-length left to the caller — see below. The function type
-`[(T, U)]R` reuses the bracket for a different job: an ordered list of
-parameter types on the left, the result on the right.
+`?T` and `(T, U)` are not containers and stand outside the scheme. `[*]T`
+is `[]T` with the length left to the caller — see below.
 
-> **Note.** By the language's own ordered/unordered convention, this looks
-> like the one inconsistent spelling: an unordered mapping ought to take
-> `{…}`, not `[…]`. In practice, `{…}` is unavailable here for a sharper
-> reason than consistency: `{(int, str)}bool` is genuinely ambiguous — it
-> reads equally well as *the function type from `(int, str)` to `bool`* and
-> as *a dict keyed on the tuple type `(int, str)`, valued in `bool`*, and
-> both are real, constructible types. `[…]` reuses the ordered-list bracket
-> instead, which is available because no dict is ever spelled with a
-> parameter list on the left. This is squarely a *this-abstraction-needs-
-> one-spelling-per-concrete-transpile-target* problem: Nim and Python each
-> need one unambiguous form to emit, so the underlying kinship between
-> "callable" and "unordered mapping" has to be set aside for now in favor of
-> a spelling that parses without lookahead.
+The function type is written the way a `def` writes its signature: the
+parameter types in parentheses, an arrow, the result.
+
+```python
+type Op_T is (int, int) -> int             # two ints in, one out
+def fold(op: Op_T, xs: []int, init: int) -> int: ...
+var steps: [](int) -> int = [inc, inc]      # a list of functions
+let parse: (str) -> int | None = parse_digit
+def run(cb: () -> None): ...                # takes nothing, returns nothing
+var check: ?(Point) -> bool = None          # an optional function
+```
+
+`(int) -> int` and `(int,) -> int` are the same type, as are `() -> R` and
+`(,) -> R`. The result is a whole type, as after a `def`'s `->`, so
+`(str) -> int | None` returns an optional int, while a `?` in front makes
+the *function* optional. A union of functions needs a name.
+
+> **Why not `{(int, str)}bool`?** A pure function *is* an unordered mapping,
+> so `{…}` would be the consistent spelling — but it is taken, and not by
+> accident: `{(int, str)}bool` is also a dict keyed by a tuple, a real type
+> with real uses (`var poisson_cache: {(int, int)}float = {:}` in
+> `EXAMPLES/dp/jacks.ady` is a memo table). The transpiler cannot pick one
+> from context: a parameter, a field or a return type carries no value to
+> look at, and the two admit different operations — a table can be
+> iterated, counted, tested with `in` and written to; a function can only be
+> called, but over a domain no table could hold. A declaration has to say
+> which it is. The arrow says it the way every signature already does.
+>
+> `[(int, str)]bool` meant the function type until this change. It is now
+> what the ordered scheme says it is: a mapping keyed by `(int, str)`, in
+> insertion order.
 
 > **`{…}` means unordered on purpose, and the backends prove it.** Iterating
 > the same `{str}int` gives insertion order on the Python backend and hash
@@ -477,7 +489,7 @@ var words:    []str        = ["hello", "world"]
 var counts:   {str}int     = {"hello": 1}
 var maybe:    ?int         = None
 var grid:     [][]float    = [[1.0, 2.0], [3.0, 4.0]]
-var callback: [(int,)]bool = my_predicate
+var callback: (int) -> bool = my_predicate
 ```
 
 ### Open arrays `[*]T`

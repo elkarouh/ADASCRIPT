@@ -3666,7 +3666,7 @@ def _wrap_option_args(expr):
                     changed = True
                 else:
                     new_args.append(kw_prefix + arg)
-            elif not arg.startswith("some(") and not arg.startswith("none("):
+            elif not arg.startswith(("some(", "some[", "none(")):
                 # Don't double-wrap if the arg is already an Option[T] type
                 _arg_m = _re_woa.match(r'^([A-Za-z_]\w*)$', arg.strip())
                 _arg_sym = ParserState.symbol_table.lookup(_arg_m.group(1)) if _arg_m else None
@@ -3675,7 +3675,14 @@ def _wrap_option_args(expr):
                     new_args.append(kw_prefix + arg)
                 else:
                     ParserState.nim_imports.add("options")
-                    new_args.append(kw_prefix + f"some({arg})")
+                    # A routine passed as a `?(T) -> R`: some() would infer
+                    # the routine's own type -- nimcall, noSideEffect -- and
+                    # Option[that] is not the closure type of the parameter.
+                    _m_proc = _re_woa.match(r"^Option\[(proc\(.*)\]$", ptype.strip())
+                    if _m_proc:
+                        new_args.append(kw_prefix + f"some[{_m_proc.group(1)}]({arg})")
+                    else:
+                        new_args.append(kw_prefix + f"some({arg})")
                     changed = True
             else:
                 new_args.append(kw_prefix + arg)
@@ -4542,6 +4549,31 @@ def to_nim(self, prec=None):
     return result
 
 
+def _proc_value_return_type(name):
+    """The result type of calling NAME when it is a variable or parameter of
+    a function type -- `let p: (str) -> int | None` is `proc(a0: string):
+    Option[int]` here, so `p(s)` is an Option[int]. "" when NAME is no such
+    value, or its function returns nothing."""
+    sym = ParserState.symbol_table.lookup(name)
+    t = (sym.get("type") or "") if isinstance(sym, dict) else ""
+    if sym and sym.get("kind") in ("type", "class", "ref_class"):
+        return ""
+    # a function type named by an alias, `type Op_T is (int, int) -> int`
+    alias = ParserState.symbol_table.lookup(t) if t else None
+    if isinstance(alias, dict) and alias.get("kind") == "type":
+        t = alias.get("type") or t
+    if not t.startswith("proc("):
+        return ""
+    depth = 0
+    for i, ch in enumerate(t):
+        depth += ch in "([{"
+        depth -= ch in ")]}"
+        if depth == 0 and ch == ")":
+            rest = t[i + 1:].strip()
+            return rest[1:].strip() if rest.startswith(":") else ""
+    return ""
+
+
 def _expr_is_option(expr_str):
     """Return True if expr_str refers to an Option[...]-typed variable or attribute.
 
@@ -4567,6 +4599,10 @@ def _expr_is_option(expr_str):
     if _called:
         _rt = getattr(ParserState, "proc_return_types", {}).get(_called, "")
         if _rt.startswith("Option["):
+            return True
+        # ...and a call through a variable of function type, `(str) -> ?int`:
+        # its return type is in the proc type the variable was declared with.
+        if _proc_value_return_type(_called).startswith("Option["):
             return True
     # Indexing a tuple whose element at that position is an Option:
     # `let b: (int, ?S_T) = f()` then `b[1] is not None`. Without this the

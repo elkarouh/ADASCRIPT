@@ -52,7 +52,7 @@ def is_space_ch(c: char) -> bool:
 # Scanners — each takes the index to start at and returns the one to go on at
 # ---------------------------------------------------------------------------
 
-def skip_while(s: str, i: Natural, pred: [(char,)]bool) -> Natural:
+def skip_while(s: str, i: Natural, pred: (char) -> bool) -> Natural:
     """The first index at or after i whose character fails pred."""
     var j: Natural = i
     let n: Natural = len(s)
