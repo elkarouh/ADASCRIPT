@@ -3866,6 +3866,9 @@ def to_nim(self, indent=0):
                     else:
                         result += f"{_ind(indent + 1)}of {pat}:\n"
                     fields = _extract_variant_fields_nim(fields_node.nodes, indent + 2)
+                    if not fields:
+                        # `when B: pass` -- a kind that carries nothing
+                        result += f"{_ind(indent + 2)}discard\n"
                     for fld in fields:
                         result += fld + "\n"
                         _fm = re.match(r'\s*(\w+)\*?\s*:\s*(.+)', fld)

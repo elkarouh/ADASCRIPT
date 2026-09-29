@@ -46,8 +46,8 @@ lambdas, `apply` and `map`. The language features it stresses:
   (§8.3);
 - free functions taking `self: Val_T` (`is_true`), called method-style via
   UFCS — a variant record has no methods of its own;
-- one-line constructors (`mk_num`, `mk_list`, ...) so that a value reads as
-  what it is.
+- **bare variant literals** (§4.3): `VNum(3.0)` builds a number and
+  `VSym("if")` matches the symbol `if`, with no constructor functions.
 
 If you want to internalise Adascript's pattern matching, reimplementing one
 special form of lispy is the exercise.

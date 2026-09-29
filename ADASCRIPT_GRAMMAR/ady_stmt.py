@@ -933,3 +933,183 @@ def refuse_overlapping_labels(branches):
                     f"{alt2}` and `when {alt}`; each value belongs to one "
                     f"branch, so that their order does not matter")
             seen.append((dom, lo, hi, alt))
+
+
+# ---------------------------------------------------------------------------
+# Bare variant literals
+# ---------------------------------------------------------------------------
+# A variant record says by its kind which fields a value has, so the kind is
+# named twice when a value is built: `Val_T(kind=VNum, num=3.0)`. The kind
+# alone is enough -- `VNum(3.0)` -- and the same spelling matches in a
+# pattern: `when [VSym("if"), test, *rest]:`. The call is rewritten, before
+# the parse and so for both backends alike, into the full constructor; the
+# arguments fill the fields of that kind in the order they are declared, or
+# name them (`VLambda(lam=f)`). Only a kind followed at once by `(` is
+# rewritten: a bare `VNil` stays the enum member it is.
+
+_VARIANT_HEAD = _re_dup.compile(
+    r"^type[ \t]+(\w+)[ \t]*\([ \t]*(\w+)[ \t]*:[ \t]*\w+[ \t]*\)[ \t]+is[ \t]+record[ \t]*:",
+    _re_dup.MULTILINE)
+
+
+def scan_variant_kinds(code):
+    """The kinds of every variant record CODE declares, as {kind: (record,
+    discriminant, [its fields, in order])}. A kind that two records share, or
+    that CODE also defines as a routine, class or type, is left out: a call of
+    it is then not a literal."""
+    lines = code.split("\n")
+    seen, out = {}, {}
+    for m in _VARIANT_HEAD.finditer(code):
+        rec, disc = m.group(1), m.group(2)
+        n = code.count("\n", 0, m.start())
+        head_indent = len(lines[n]) - len(lines[n].lstrip())
+        kind = None
+        for ln in lines[n + 1:]:
+            body = ln.split("#", 1)[0].rstrip()
+            if not body.strip():
+                continue
+            ind = len(body) - len(body.lstrip())
+            if ind <= head_indent:
+                break
+            w = _re_dup.match(r"\s*when[ \t]+(\w+)[ \t]*:\s*$", body)
+            if w:
+                kind = w.group(1)
+                if kind != "others":
+                    seen[kind] = seen.get(kind, 0) + 1
+                    out[kind] = (rec, disc, [])
+                else:
+                    kind = None
+                continue
+            f = _re_dup.match(r"\s*(\w+)[ \t]*:", body)
+            if f and kind and f.group(1) not in ("case", "when"):
+                out[kind][2].append(f.group(1))
+    taken = set(_re_dup.findall(
+        r"^[ \t]*(?:def|class|type)[ \t]+(\w+)", code, _re_dup.MULTILINE))
+    return {k: v for k, v in out.items() if seen[k] == 1 and k not in taken}
+
+
+def _is_tick(s, i):
+    """Is the `'` at s[i] a tick attribute (`x'Image`, `xs[0]'Image`) rather
+    than the start of a string? It follows a name or a closing bracket and is
+    followed by a letter; a string prefix (`f'...'`) is not one."""
+    if s[i] != "'" or i == 0 or not s[i + 1:i + 2].isalpha():
+        return False
+    prev = s[i - 1]
+    if prev in "])":
+        return True
+    if not (prev.isalnum() or prev == "_"):
+        return False
+    if prev in "rRbBfFuU" and (i == 1 or not (s[i - 2].isalnum() or s[i - 2] == "_")):
+        return False
+    return True
+
+
+def _skip_string(s, i):
+    """Index just past the string literal that starts at s[i] (a quote, or a
+    prefix letter run then a quote)."""
+    while s[i] not in "\"'":
+        i += 1
+    q = s[i]
+    if s.startswith(q * 3, i):
+        j = s.find(q * 3, i + 3)
+        return len(s) if j < 0 else j + 3
+    j = i + 1
+    while j < len(s) and s[j] != q and s[j] != "\n":
+        j += 2 if s[j] == "\\" else 1
+    return min(j + 1, len(s))
+
+
+def _split_args(text):
+    """TEXT, the inside of a call, cut at its top-level commas."""
+    parts, depth, start, i = [], 0, 0, 0
+    while i < len(text):
+        c = text[i]
+        if c in "\"'" and not _is_tick(text, i):
+            i = _skip_string(text, i)
+            continue
+        if c in "([{":
+            depth += 1
+        elif c in ")]}":
+            depth -= 1
+        elif c == "," and depth == 0:
+            parts.append(text[start:i])
+            start = i + 1
+        i += 1
+    parts.append(text[start:])
+    return [p for p in parts if p.strip()]
+
+
+def expand_variant_literals(code):
+    """CODE with every bare variant literal written out in full; CODE itself
+    when it declares no variant record or uses no such literal."""
+    kinds = scan_variant_kinds(code)
+    if not kinds:
+        return code
+    return _expand_kinds(code, kinds)
+
+
+def _expand_kinds(s, kinds):
+    out, i, n = [], 0, len(s)
+    while i < n:
+        c = s[i]
+        if c == "#":
+            j = s.find("\n", i)
+            j = n if j < 0 else j
+            out.append(s[i:j])
+            i = j
+        elif (c in "\"'" and not _is_tick(s, i)) or (c.isalpha() and _re_dup.match(r"[rRbBfFuU]{1,2}[\"']", s[i:i + 3])
+                            and (i == 0 or not (s[i - 1].isalnum() or s[i - 1] == "_"))):
+            j = _skip_string(s, i)
+            out.append(s[i:j])
+            i = j
+        elif (c.isalpha() or c == "_") and (i == 0 or not (s[i - 1].isalnum() or s[i - 1] in "_.")):
+            j = i
+            while j < n and (s[j].isalnum() or s[j] == "_"):
+                j += 1
+            word = s[i:j]
+            if word in kinds and j < n and s[j] == "(":
+                close, depth, k = None, 0, j
+                while k < n:
+                    ch = s[k]
+                    if ch in "\"'" and not _is_tick(s, k):
+                        k = _skip_string(s, k)
+                        continue
+                    if ch in "([{":
+                        depth += 1
+                    elif ch in ")]}":
+                        depth -= 1
+                        if depth == 0:
+                            close = k
+                            break
+                    k += 1
+                if close is None:
+                    out.append(word)
+                    i = j
+                    continue
+                rec, disc, fields = kinds[word]
+                args = _split_args(_expand_kinds(s[j + 1:close], kinds))
+                given, pos, keyword_seen = [], 0, False
+                for a in args:
+                    km = _re_dup.match(r"\s*(\w+)[ \t]*=(?!=)", a)
+                    if km:
+                        keyword_seen = True
+                        given.append(a.strip())
+                        continue
+                    if keyword_seen:
+                        raise SyntaxError(
+                            f"{word}(...): a field given by position follows one given by name")
+                    if pos >= len(fields):
+                        raise SyntaxError(
+                            f"{word}(...) takes {len(fields)} field(s) "
+                            f"({', '.join(fields) or 'none'}), got more")
+                    given.append(f"{fields[pos]}={a.strip()}")
+                    pos += 1
+                out.append(f"{rec}({', '.join([f'{disc}={word}'] + given)})")
+                i = close + 1
+                continue
+            out.append(word)
+            i = j
+        else:
+            out.append(c)
+            i += 1
+    return "".join(out)

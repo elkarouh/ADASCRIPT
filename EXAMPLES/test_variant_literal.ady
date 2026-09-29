@@ -1,0 +1,49 @@
+#!/usr/bin/env ady2nim
+"""Test: bare variant literals.
+
+A variant record's kind says which fields a value has, so `VNum(3.0)` is
+enough where `Val_T(kind=VNum, num=3.0)` was needed -- in an expression and
+in a pattern alike. Arguments fill the fields of that kind in the order they
+are declared, or name them; a kind that carries nothing is `B()`. A bare
+`B`, with no parentheses, is still the enum member. The output is compared
+between the backends.
+"""
+type K_T is enum A, B, C
+
+type V_T (kind: K_T) is record:
+    case kind is
+        when A:
+            n: int
+        when B:
+            pass
+        when C:
+            xs: []int
+            s:  str
+
+def describe(v: V_T) -> str:
+    case v.kind:
+        when A:
+            return f"A {v.n}"
+        when B:
+            return "B"
+        when others:
+            return f"C {len(v.xs)} {v.s}"
+
+def shape(items: []V_T) -> str:
+    case items:
+        when [A(n), *rest]:
+            return f"starts with A {n}, {len(rest)} more"
+        when [B(), x]:
+            return f"B then {describe(x)}"
+        when others:
+            return "other"
+
+print describe(A(3))
+print describe(B())
+print describe(C([1, 2], "z"))
+print describe(C(s="named", xs=[]))
+print shape([A(7), B()])
+print shape([B(), A(2)])
+print shape([])
+print "kinds ok" if A(1).kind == A and B().kind == B else "kinds wrong"
+print "test OK"

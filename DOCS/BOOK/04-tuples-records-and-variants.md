@@ -179,7 +179,16 @@ body) that would in turn hold the closure, is a class marked `@virtual`;
 that makes it a reference, and the cycle is broken.
 
 Everything downstream dispatches on `kind` — with `case`/`when` (next
-chapter) or with structural patterns like `Val_T(kind=VSym, sym=name)`.
+chapter) or with structural patterns.
+
+Naming the kind twice, in `Val_T(kind=VSym, sym=name)`, says nothing the
+second time, so the kind alone is a *bare literal*: `VSym(name)` builds a
+symbol and matches one, `VNum(3.0)` a number, and `VNil()` a kind that
+carries nothing (declared `when VNil: pass`). The arguments fill the fields
+of that kind in the order they were declared, or name them. Without
+parentheses `VNil` is still the enum member, so `x.kind == VNil` reads as
+it always did. `lispy.ady` is written this way, and its special-form
+patterns read `when [VSym("if"), test, consequence, alternative]:`.
 
 Truthiness, Scheme-style, becomes a three-line method:
 

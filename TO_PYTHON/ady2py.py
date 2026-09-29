@@ -290,6 +290,8 @@ def translate(code):
     if not code.strip():
         return code
 
+    from ady_stmt import expand_variant_literals
+    code = expand_variant_literals(code)   # `VNum(3.0)`: see ady_stmt
     from ady_stmt import scan_failure_types, scan_return_types, either_procs
     _failures = scan_failure_types(code)   # before the parse: see ady2nim
     stmts, leading, trailing = parse_module(code)

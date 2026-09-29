@@ -115,6 +115,7 @@ STANDALONE := \
     test_units.ady \
     test_money.ady \
     test_subrange_array.ady \
+    test_variant_literal.ady \
     test_case_guard_or.ady \
     test_method_param_names.ady \
     test_pure_method_self.ady \
@@ -246,7 +247,7 @@ COMPILE_ONLY := \
 BOTH_BACKENDS_COMPARED := test_do_block test_result test_optional_spelling \
     test_union test_case_ranges test_contextmanager_fstring \
     test_ordered_map test_function_type test_distinct test_units test_money \
-    test_subrange_array
+    test_subrange_array test_variant_literal
 
 ALL_COMPILE := \
     $(LIBS) \
@@ -560,6 +561,11 @@ test: compile
 	    > $(TMPDIR)/ady_refuse_11.ady
 	@printf 'let a: int = 1\nlet y: int = (a b)\nprint a\n' \
 	    > $(TMPDIR)/ady_refuse_12.ady
+	@# A bare variant literal fills the fields of its kind, in order.
+	@printf 'type K_T is enum A, B\n\ntype V_T (kind: K_T) is record:\n    case kind is\n        when A:\n            n: int\n        when B:\n            pass\n\nprint A(1, 2).kind\n' \
+	    > $(TMPDIR)/ady_refuse_13.ady
+	@printf 'type K_T is enum A, B\n\ntype V_T (kind: K_T) is record:\n    case kind is\n        when A:\n            n: int\n            m: int\n        when B:\n            pass\n\nprint A(n=1, 2).kind\n' \
+	    > $(TMPDIR)/ady_refuse_14.ady
 	@for tr in TO_NIM/ady2nim.py TO_PYTHON/ady2py.py; do \
 	    for c in "1:members no one can tell apart:cannot be told apart" \
 	             "2:a dropped failure:drops a failure" \
@@ -572,7 +578,9 @@ test: compile
 	             "9:a generic call that infers its types:does not infer type arguments" \
 	             "10:a type parameter nobody declared:not declared" \
 	             "11:a unit made of three factors:has no name" \
-	             "12:a syntax error is a failure:Parse error"; do \
+	             "12:a syntax error is a failure:Parse error" \
+	             "13:too many fields in a literal:takes 1 field" \
+	             "14:a positional field after a named one:follows one given by name"; do \
 	        n=$${c%%:*}; rest=$${c#*:}; what=$${rest%%:*}; want=$${rest#*:}; \
 	        printf '  %-42s' "$$what ($$(basename $$tr .py))"; \
 	        if $(PYTHON) $(CURDIR)/$$tr $(TMPDIR)/ady_refuse_$$n.ady > $(TMPDIR)/ady_refuse.out 2>&1; then \

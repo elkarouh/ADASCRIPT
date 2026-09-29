@@ -522,3 +522,10 @@ Also: a variant record is a value type on Nim, so a variant that holds
 itself through a field (a closure holding its body) needs the holder to be a
 class marked `@virtual` -- correct, but `@virtual` is documented as being for
 cross-module subclasses only.
+
+## `n'Image` on an int or a str emits `.name` in Python
+
+`def f(n: int) -> str: return n'Image` (a `str` likewise) becomes `return (n).name` on the
+Python backend, which raises at run time; Nim's `$(n)` is right. The image of
+an enum member is `.name`, and the emitter takes any name it cannot type for
+one. It went unseen because the shared tests print enums and strings.

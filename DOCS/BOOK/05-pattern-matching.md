@@ -397,15 +397,18 @@ forms with one `when` per grammar rule:
 
 ```python
 case x.items:
-    when [Val_T(kind=VSym, sym="if"), test, consequence, alternative]:
+    when [VSym("if"), test, consequence, alternative]:
         ...                                   # (if test conseq alt)
-    when [Val_T(kind=VSym, sym="define"), Val_T(kind=VSym, sym=name), expr]:
+    when [VSym("define"), VSym(name), expr]:
         ...                                   # (define name expr)
-    when [Val_T(kind=VSym, sym=op), *args]:
+    when [VSym(op), *args]:
         ...                                   # (op arg...)
     when others:
         ...
 ```
+
+(`VSym("if")` is the bare literal of §4.3, short for
+`Val_T(kind=VSym, sym="if")`; either spelling matches.)
 
 The generated Nim is exactly what you would write by hand — length checks,
 field comparisons, and `let` bindings for the captures:

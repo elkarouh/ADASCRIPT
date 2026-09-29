@@ -660,6 +660,8 @@ def translate(code, export_symbols=False):
         return code
 
     from hek_parsec import ParserState
+    from ady_stmt import expand_variant_literals
+    code = expand_variant_literals(code)       # `VNum(3.0)`: see ady_stmt
     # Before the parse, so that `failure` on anything but a record is
     # reported as that rather than as the parse error it also is.
     from ady_stmt import scan_failure_types, scan_return_types, either_procs

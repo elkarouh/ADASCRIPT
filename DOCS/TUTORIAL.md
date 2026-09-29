@@ -742,6 +742,33 @@ type Shape = object
 
 **Python output** — flattened dataclass with `None` defaults for the unused fields.
 
+**Bare literals** — the kind alone builds a value, and matches in a pattern:
+
+```python
+type Val_T (kind: Val_Kind_T) is record:
+    case kind is
+        when VNum:
+            num: float
+        when VNil:
+            pass                       # a kind that carries nothing
+        ...
+
+let a: Val_T = VNum(3.0)               # Val_T(kind=VNum, num=3.0)
+let b: Val_T = VNil()                  # Val_T(kind=VNil)
+case items:
+    when [VSym("if"), test, *rest]:    # Val_T(kind=VSym, sym="if")
+        ...
+```
+
+Arguments fill the fields of that kind in the order declared, or name them
+(`VLambda(lam=f)`); too many, or a positional one after a named one, is
+refused. A bare `VNil` (no parentheses) is still the enum member, so
+`x.kind == VNil` reads as before. A kind that two variant records share, or
+that the file also defines as a function, class or type, is not rewritten.
+The rewrite is textual and runs before the parse, in both backends; it does
+not see a variant declared in another module.
+
+
 ---
 
 ## 7. Collections
