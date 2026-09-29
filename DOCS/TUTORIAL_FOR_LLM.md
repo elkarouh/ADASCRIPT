@@ -99,6 +99,10 @@ let p: (str) -> int | None = parse_digit # result is a whole type: optional int
 var check: ?(Point) -> bool = None       # leading ? = the function is optional
 var steps: [](int) -> int = [inc]
 ```
+Nesting: `->` groups right; `(…)` before `->` is always a parameter list.
+`(int) -> (int) -> int` returns a function; `((int) -> int) -> int` takes one;
+`?(int) -> int` = optional function; `(int) -> int | None` = `(int) -> ?int`.
+In a `def`, the first `->` is the def's: `def pick() -> (int) -> int:`.
 NOT `[(T, U)]R` — that is now an insertion-ordered map keyed by a tuple
 (`[(,)]R` is refused with a hint). NOT `{(T, U)}R` — a dict keyed by a tuple.
 

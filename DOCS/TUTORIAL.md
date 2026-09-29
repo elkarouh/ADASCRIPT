@@ -223,6 +223,37 @@ A pure function is a mapping, but it is not written `{(int, int)}int`: that
 is a dict keyed by a tuple, which can be iterated, counted and written to.
 A function can only be called. The declaration says which one you have.
 
+#### Reading nested arrows
+
+A function type can take or return another function, and three rules keep
+that unambiguous:
+
+- **The arrow groups to the right.** `(int) -> (int) -> int` takes an int
+  and returns a function from int to int.
+- **Parentheses before an arrow are always a parameter list.** There is no
+  parenthesized type on its own, so a function that *takes* a function puts
+  it inside the parameter list: `((int) -> int) -> int`. Without an arrow,
+  `(int, int)` is a tuple, so `(int, int) -> (int, int)` returns a pair.
+- **In a `def`, the first `->` is the `def`'s.** Its parameters have names,
+  so `def pick(name: str) -> (int, int) -> int:` returns a function.
+
+| Written | Means | Nim |
+|---|---|---|
+| `(int) -> (int) -> int` | returns a function | `proc(a0: int): proc(a0: int): int` |
+| `((int) -> int) -> int` | takes a function | `proc(a0: proc(a0: int): int): int` |
+| `(int) -> int \| None` | returns an optional int | `proc(a0: int): Option[int]` |
+| `?(int) -> int` | an optional function | `Option[proc(a0: int): int]` |
+| `(int) -> ?int` | returns an optional int | `proc(a0: int): Option[int]` |
+
+The last three are where a reader slows down: the arrow reaches as far
+right as it can, so a `|` after it belongs to the result, and a `?` in front
+covers the whole function. Past one level of nesting, name the inner type:
+
+```python
+type Op_T is (int, int) -> int
+def pick(name: str) -> Op_T:
+```
+
 ### Empty collection literals
 
 Python's `{}` is ambiguous (empty dict or empty set). Adascript resolves this:
