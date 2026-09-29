@@ -178,14 +178,16 @@ w *= 2.0                                     # * and / by a plain number SCALE
 type Dollar_T is distinct float
 type Euro_T   is distinct float
 type Rate_T   is Euro_T / Dollar_T           # euros per dollar
-let total: Dollar_T = unit_price * quantity  # quantity: int variable -- scales
+const Max_Allowed_Quantity: int = 100
+type Quantity_T is 0 .. Max_Allowed_Quantity # a count: Natural or a range, never bare int
+let total: Dollar_T = unit_price * quantity  # quantity: Quantity_T -- scales
 let tax: Dollar_T = total * 0.08             # plain float factor -- scales
 def to_euro(amount: Dollar_T, rate: Rate_T) -> Euro_T:
     return amount * rate                     # Dollar * Rate is Euro
 def to_dollar(amount: Euro_T, rate: Rate_T) -> Dollar_T:
     return amount / rate                     # Euro / Rate is Dollar
 ```
-Refused: `usd + eur`, `usd * usd`, `eur * rate` and `usd / rate` (rate the wrong way round), `let d: Dollar_T = plain_float`. Print with `f"{x:.2f}"`. Exact sums: `distinct int` cents; converting int cents <-> float rate is written out (`Cents_T(...)`, `float(c)`), not derived. `x * n` with `n` an `int` variable scales a float-based unit.
+Refused: `usd + eur`, `usd * usd`, `eur * rate` and `usd / rate` (rate the wrong way round), `let d: Dollar_T = plain_float`. Print with `f"{x:.2f}"`. Exact sums: `distinct int` cents; converting int cents <-> float rate is written out (`Cents_T(...)`, `float(c)`), not derived. `x * n` with `n` an int, `Natural` or range variable scales a float-based unit. Counts and quantities are `Natural` or a range type (`type Quantity_T is 0 .. Max_Allowed_Quantity`), not a bare `int`: on Nim a literal outside the range does not compile and a computed one stops at its line; Python keeps a plain int and does not check.
 
 Use it for units and for IDs of different entities that share a representation. Keep aliases for values meant to mix with their base.
 
@@ -1501,7 +1503,7 @@ for s in Stage_T'First .. Stage_T'Last:
 ## Known Limitations
 
 - **Comments on a `case` header** — blank lines and inline comments survive into the output, inside `def`, `class`, `for`, `while`, `if`, fields and method bodies alike. Two placements do not, on both backends: a comment on the `case` line itself is dropped, and one on a `type ... is enum` line is relocated to the last generated member.
-- **No `distinct` types yet**: `type X is distinct T` is a parse error. A named type is an alias, so two aliases of `float` mix freely. Only `Path`, enums, records and `?T` are enforced as distinct; subranges are bounds-checked on Nim only.
+- **A plain named type is an alias**: `type Velocity_T is float` and `type Distance_T is float` mix freely. Write `type Velocity_T is distinct float` where mixing would be a bug. Subranges are bounds-checked on Nim only; on Python a range is a plain `int`.
 - **Ticks do not chain** — `Stage_T'First'Image` is a parse error; bind the intermediate value first. Ticks on field accesses and subscripts are fine.
 - **Case subject must be structural** — `case state:` where `state` is a tuple variable emits Nim's native `case`, which rejects non-ordinal selectors. Destructure with `let (a, b) = state` first, then `case (a, b):`.
 - **Global parser state** — `ParserState` is a class-level singleton; call `ParserState.reset()` between independent parse runs. Thread-unsafe for concurrent parses.

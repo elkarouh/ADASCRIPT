@@ -701,8 +701,11 @@ type Dollar_T is distinct float
 type Euro_T   is distinct float
 type Rate_T   is Euro_T / Dollar_T        # euros per dollar
 
+const Max_Allowed_Quantity: int = 100
+type Quantity_T is 0 .. Max_Allowed_Quantity   # never negative, never absurd
+
 let unit_price: Dollar_T = 19.99
-let quantity: int = 3
+let quantity: Quantity_T = 3
 let subtotal: Dollar_T = unit_price * quantity   # a count scales a price
 let tax: Dollar_T = subtotal * 0.08              # so does a tax rate
 let total: Dollar_T = subtotal + tax
@@ -717,6 +720,13 @@ def to_dollar(amount: Euro_T, rate: Rate_T) -> Dollar_T:
 let rate: Rate_T = 0.92
 print f"{to_euro(total, rate):.2f} EUR"           # 59.59
 ```
+
+A count is not a bare `int` either. `quantity` above is a `Quantity_T`, a
+range of its own -- or a `Natural` where there is no top -- so a negative or
+absurd quantity is a bug the program stops at, not a total that quietly
+comes out wrong. On Nim `let q: Quantity_T = 101` does not compile and a
+computed one, `q -= 5` below zero, stops at that line; the Python backend
+keeps a plain `int` for a range and does not check it.
 
 The mistakes it catches are the ones that reach production. `total +
 to_euro(total, rate)` adds dollars to euros; `total * total` is dollars

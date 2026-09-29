@@ -50,6 +50,17 @@ history of this file if the reasoning behind one of them is ever wanted.
       before the body, or have the late check regenerate the constructor.
       `hek_nim_parser.py`, the `needs_ref` line and the `_has_self_ref`
       pre-check above it.
+- [ ] a subrange is bounds-checked on Nim only, so the same source behaves
+      differently. With `type Quantity_T is 0 .. Max_Allowed_Quantity`, on
+      Nim `let q: Quantity_T = 101` does not compile and a computed value
+      outside the range (`q -= 2` from 1, `q += 20` from 90) stops at its
+      line; on Python the same program runs on with -1 or 110, because a
+      range is a plain `int` there. The examples now lean on ranges for
+      counts, so the gap matters more than it did. Check on assignment: a
+      literal at transpile time, a computed value with a small `_check(x,
+      lo, hi)` at each assignment and augmented assignment of a variable of
+      the type, as Ada's constraint model does. The tutorial says "Nim only"
+      meanwhile.
 - [ ] a subrange with a negative bound does not declare on either backend.
       `type Off_T is range -2 .. 1` emits `Off_T = range(<Filter object>,
       1 + 1)` on Python -- a parser node reaches the output -- and a type

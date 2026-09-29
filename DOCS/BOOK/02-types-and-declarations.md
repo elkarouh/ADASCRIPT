@@ -450,8 +450,11 @@ type Dollar_T is distinct float
 type Euro_T   is distinct float
 type Rate_T   is Euro_T / Dollar_T        # euros per dollar
 
+const Max_Allowed_Quantity: int = 100
+type Quantity_T is 0 .. Max_Allowed_Quantity   # never negative, never absurd
+
 let unit_price: Dollar_T = 19.99
-let quantity: int = 3
+let quantity: Quantity_T = 3
 let total: Dollar_T = unit_price * quantity * 1.08   # a count, a tax factor
 
 def to_euro(amount: Dollar_T, rate: Rate_T) -> Euro_T:
@@ -460,6 +463,12 @@ def to_euro(amount: Dollar_T, rate: Rate_T) -> Euro_T:
 def to_dollar(amount: Euro_T, rate: Rate_T) -> Dollar_T:
     return amount / rate          # Euro / (Euro / Dollar) is Dollar
 ```
+
+The quantity is a range too, as §2.4 describes — never negative,
+never above `Max_Allowed_Quantity` — and on Nim the compiler and the run
+time hold it to that: a literal outside the range does not compile, and a
+computed one stops the program at its line. (The Python backend keeps a
+plain `int` there.)
 
 `total + to_euro(total, rate)` adds dollars to euros, `total * total` is
 dollars squared, and `total / rate` applies the rate the wrong way round:

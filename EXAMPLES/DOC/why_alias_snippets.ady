@@ -39,9 +39,13 @@ type Rate_T   is Euro_T / Dollar_T   # euros per dollar
 def to_euro(amount: Dollar_T, rate: Rate_T) -> Euro_T:
     return amount * rate             # dollars x (euros per dollar) is euros
 
+const Max_Allowed_Quantity: int = 100
+type Quantity_T is 0 .. Max_Allowed_Quantity   # never negative, never absurd
+
 let price: Dollar_T = 19.99
+let quantity: Quantity_T = 3
 let rate: Rate_T = 0.92
-let euros: Euro_T = to_euro(price * 3, rate)   # a count scales a price
+let euros: Euro_T = to_euro(price * quantity, rate)   # a count scales a price
 # let bad: Dollar_T = price + euros  -- refused: dollars plus euros
 # let sq: Dollar_T = price * price   -- refused: dollars squared
 assert euros > 55.0 and euros < 55.2

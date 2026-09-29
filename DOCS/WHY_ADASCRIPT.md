@@ -692,12 +692,24 @@ type Rate_T   is Euro_T / Dollar_T   # euros per dollar
 def to_euro(amount: Dollar_T, rate: Rate_T) -> Euro_T:
     return amount * rate             # dollars x (euros per dollar) is euros
 
+const Max_Allowed_Quantity: int = 100
+type Quantity_T is 0 .. Max_Allowed_Quantity   # never negative, never absurd
+
 let price: Dollar_T = 19.99
+let quantity: Quantity_T = 3
 let rate: Rate_T = 0.92
-let euros: Euro_T = to_euro(price * 3, rate)   # a count scales a price
+let euros: Euro_T = to_euro(price * quantity, rate)   # a count scales a price
 # let bad: Dollar_T = price + euros  -- refused: dollars plus euros
 # let sq: Dollar_T = price * price   -- refused: dollars squared
 ```
+
+The quantity is a type too, and for the same reason: a bare `int` says how a
+count is stored, `Quantity_T` says it is never negative and never above
+`Max_Allowed_Quantity`. Nim holds it to that — a literal outside the range
+does not compile, and a computed one stops the program at its line — so a
+refund entered as a quantity of minus three is a crash on the line that made
+it, not a negative total in a ledger. (The Python backend keeps a plain
+`int` for a range, so there the check is Nim's.)
 
 The mistakes this catches are the ones that reach production: a total that
 adds a dollar figure to a euro figure, a conversion applied twice, or applied
