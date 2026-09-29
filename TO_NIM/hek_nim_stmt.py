@@ -410,7 +410,9 @@ def to_nim(self):
     from hek_nim_expr import _distinct_type_of
     _dt = _distinct_type_of(target)
     if _dt is not None:
-        value = _wrap_distinct_literal(value, _dt)
+        # `v += 10.0` is a Velocity_T's; `v *= 2.0` scales, and stays a number
+        if nim_op in ("+=", "-=", "mod"):
+            value = _wrap_distinct_literal(value, _dt)
         from ady_declarations import distinct_kind
         if nim_op == "+=" and distinct_kind(_dt) == "str":
             return f"{target} = {target} & {value}"
@@ -2272,6 +2274,8 @@ def to_nim(self, indent=0):
         ParserState.tick_types[name] = {"First": lo, "Last": hi}
     elif rhs_type == "distinct_def":
         return _distinct_type_nim(name, params, rhs, indent)
+    elif rhs_type == "derived_def":
+        return _derived_type_nim(name, params, indent)
     elif rhs_type == "float_range_def":
         lo = str(rhs.nodes[2].node)
         hi = str(rhs.nodes[4].node)  # [float, range, lo, range_op, hi]
@@ -2309,10 +2313,23 @@ def to_nim(self, prec=None):
     return f"distinct {self.nodes[0].to_nim()}"
 
 
-# The operations a distinct type keeps, by what it is made of: those of its
-# base, closed over the new type -- a Velocity_T plus a Velocity_T is a
-# Velocity_T -- and borrowed, so Nim compiles each to the base's own. Nothing
-# takes the base type or another distinct one: that is the point.
+@method(derived_def)
+def to_nim(self, prec=None):
+    """derived_def: IDENTIFIER ('*' | '/') IDENTIFIER -- a unit made from two
+    others; type_stmt renders it, from the declaration scan."""
+    return ""
+
+
+# The operations a distinct type keeps, by what it is made of. Between two
+# values of the type they are the base's own, borrowed, and closed over the
+# type: a Velocity_T plus a Velocity_T is a Velocity_T. Nothing takes the base
+# type or another distinct one: that is the point.
+#
+# Multiplying and dividing are different, because a product is not in the unit
+# of its factors -- knots times knots is not knots. So `*` and `/` *scale*: a
+# Velocity_T times, or over, a plain number is a Velocity_T; two of them
+# divided are a plain ratio; two of them multiplied are refused, unless a
+# derived unit says what they make (`type Area_T is Length_T * Length_T`).
 _DISTINCT_ORDERED = ["proc `<`{e}(a, b: {t}): bool {{.borrow.}}",
                      "proc `<=`{e}(a, b: {t}): bool {{.borrow.}}",
                      "proc `==`{e}(a, b: {t}): bool {{.borrow.}}",
@@ -2320,22 +2337,30 @@ _DISTINCT_ORDERED = ["proc `<`{e}(a, b: {t}): bool {{.borrow.}}",
                      "proc hash{e}(a: {t}): Hash {{.borrow.}}",
                      "proc min{e}(a, b: {t}): {t} {{.borrow.}}",
                      "proc max{e}(a, b: {t}): {t} {{.borrow.}}"]
-_DISTINCT_NUMERIC = ["proc `+`{e}(a, b: {t}): {t} {{.borrow.}}",
-                     "proc `-`{e}(a, b: {t}): {t} {{.borrow.}}",
-                     "proc `*`{e}(a, b: {t}): {t} {{.borrow.}}",
-                     "proc `-`{e}(a: {t}): {t} {{.borrow.}}",
-                     "proc `+`{e}(a: {t}): {t} {{.borrow.}}",
-                     "proc abs{e}(a: {t}): {t} {{.borrow.}}",
-                     "proc `+=`{e}(a: var {t}, b: {t}) {{.borrow.}}",
-                     "proc `-=`{e}(a: var {t}, b: {t}) {{.borrow.}}",
-                     "proc `*=`{e}(a: var {t}, b: {t}) {{.borrow.}}"]
+_DISTINCT_ADDITIVE = ["proc `+`{e}(a, b: {t}): {t} {{.borrow.}}",
+                      "proc `-`{e}(a, b: {t}): {t} {{.borrow.}}",
+                      "proc `-`{e}(a: {t}): {t} {{.borrow.}}",
+                      "proc `+`{e}(a: {t}): {t} {{.borrow.}}",
+                      "proc abs{e}(a: {t}): {t} {{.borrow.}}",
+                      "proc `+=`{e}(a: var {t}, b: {t}) {{.borrow.}}",
+                      "proc `-=`{e}(a: var {t}, b: {t}) {{.borrow.}}"]
+_DISTINCT_SCALE_FLOAT = [
+    "proc `*`{e}(a: {t}, b: float): {t} = {t}(float(a) * b)",
+    "proc `*`{e}(a: float, b: {t}): {t} = {t}(a * float(b))",
+    "proc `/`{e}(a: {t}, b: float): {t} = {t}(float(a) / b)",
+    "proc `/`{e}(a, b: {t}): float = float(a) / float(b)",
+    "proc `*=`{e}(a: var {t}, b: float) = a = {t}(float(a) * b)",
+    "proc `/=`{e}(a: var {t}, b: float) = a = {t}(float(a) / b)"]
+_DISTINCT_SCALE_INT = [
+    "proc `*`{e}(a: {t}, b: int): {t} = {t}(int(a) * b)",
+    "proc `*`{e}(a: int, b: {t}): {t} = {t}(a * int(b))",
+    "proc `div`{e}(a: {t}, b: int): {t} = {t}(int(a) div b)",
+    "proc `div`{e}(a, b: {t}): int = int(a) div int(b)",
+    "proc `mod`{e}(a, b: {t}): {t} {{.borrow.}}",
+    "proc `*=`{e}(a: var {t}, b: int) = a = {t}(int(a) * b)"]
 _DISTINCT_BY_KIND = {
-    "float": _DISTINCT_ORDERED + _DISTINCT_NUMERIC + [
-        "proc `/`{e}(a, b: {t}): {t} {{.borrow.}}",
-        "proc `/=`{e}(a: var {t}, b: {t}) {{.borrow.}}"],
-    "int": _DISTINCT_ORDERED + _DISTINCT_NUMERIC + [
-        "proc `div`{e}(a, b: {t}): {t} {{.borrow.}}",
-        "proc `mod`{e}(a, b: {t}): {t} {{.borrow.}}"],
+    "float": _DISTINCT_ORDERED + _DISTINCT_ADDITIVE + _DISTINCT_SCALE_FLOAT,
+    "int": _DISTINCT_ORDERED + _DISTINCT_ADDITIVE + _DISTINCT_SCALE_INT,
     "str": _DISTINCT_ORDERED + [
         "proc len{e}(a: {t}): int {{.borrow.}}",
         "proc `&`{e}(a, b: {t}): {t} {{.borrow.}}"],
@@ -2351,16 +2376,11 @@ _DISTINCT_BASE_NIM = {"float": "float", "int": "int", "str": "string",
                       "char": "char", "bool": "bool"}
 
 
-def _distinct_type_nim(name, params, rhs, indent):
-    """`type X is distinct T` -> Nim's `type X = distinct T`, and the
-    operations of T that X keeps, borrowed. A `{x:.2f}` in an f-string goes
-    through formatValue, which Nim would otherwise look up as a string's."""
-    from ady_declarations import distinct_kind
-    base = rhs.nodes[0].to_nim()
-    # registered as itself, so a variable of it resolves to its name and not
-    # to its base: that is what tells `v * 2.0` to convert the 2.0
+def _distinct_lines(name, params, base, kind, indent):
+    """The Nim for a distinct type NAME over BASE: the type, then the
+    operations of its kind, and a formatValue so an f-string's `{x:.2f}`
+    formats as the base does, where Nim would look up a string's."""
     ParserState.symbol_table.add(name, name, "type")
-    kind = distinct_kind(name)
     _top = ParserState.symbol_table.depth() <= 2
     _exp = "*" if getattr(ParserState, 'export_symbols', False) and _top else ""
     ind = _ind(indent)
@@ -2372,6 +2392,34 @@ def _distinct_type_nim(name, params, rhs, indent):
             lines.append(f"{ind}proc formatValue{_exp}(result: var string; value: {name}; "
                          f"specifier: string) = formatValue(result, "
                          f"{_DISTINCT_BASE_NIM[kind]}(value), specifier)")
+    return lines, _exp
+
+
+def _distinct_type_nim(name, params, rhs, indent):
+    """`type X is distinct T` -> Nim's `type X = distinct T`, and the
+    operations of T that X keeps."""
+    from ady_declarations import distinct_kind
+    # registered as itself, so a variable of it resolves to its name and not
+    # to its base: that is what tells `v + 2.0` to convert the 2.0
+    lines, _ = _distinct_lines(name, params, rhs.nodes[0].to_nim(),
+                               distinct_kind(name), indent)
+    return "\n".join(lines)
+
+
+def _derived_type_nim(name, params, indent):
+    """`type C is A / B` (or `A * B`) -> a distinct type of the operands' kind
+    and, between the units, the operators the declaration defines:
+    `/`(A, B) is a C, `*`(C, B) and `*`(B, C) an A, `/`(A, C) a B."""
+    from ady_declarations import derived_ops, distinct_kind, parse_derived
+    a, op, b = parse_derived(ParserState.ady_type_decls[name])
+    kind = distinct_kind(name)
+    base = _DISTINCT_BASE_NIM[kind]
+    lines, _exp = _distinct_lines(name, params, base, kind, indent)
+    ind = _ind(indent)
+    for o, l, r, res in derived_ops(name, a, op, b):
+        nim_op = "div" if (o == "/" and kind == "int") else o
+        lines.append(f"{ind}proc `{nim_op}`{_exp}(a: {l}, b: {r}): {res} = "
+                     f"{res}({base}(a) {nim_op} {base}(b))")
     return "\n".join(lines)
 
 

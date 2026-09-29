@@ -1,0 +1,92 @@
+#!/usr/bin/env ady2nim
+# test_units.ady — a distinct type scales; units made from units are declared
+#
+#   ady2nim EXAMPLES/test_units.ady -r
+#   ady2py  EXAMPLES/test_units.ady -c
+#
+# `distinct` keeps a type from mixing with its base or another distinct type.
+# Two rules say what arithmetic then means:
+#
+#   * `*` and `/` SCALE. A Velocity_T times, or over, a plain number is a
+#     Velocity_T -- `v * 2.0`, `v / 4.0` -- and a Velocity_T over a Velocity_T
+#     is a plain ratio. Knots times knots is not knots, so `v * v` is refused.
+#   * A unit made from two others is DECLARED, and the declaration defines the
+#     operators between them: `type Velocity_T is Distance_T / Duration_T`
+#     says a Distance_T over a Duration_T is a Velocity_T -- and so a
+#     Velocity_T times a Duration_T is a Distance_T, and a Distance_T over a
+#     Velocity_T a Duration_T. Anything else between units has no unit, and
+#     is refused.
+#
+# Run on both backends and the outputs compared. The Makefile checks what is
+# refused, one line at a time.
+
+type Distance_T is distinct float     # nautical miles
+type Duration_T is distinct float     # hours
+type Velocity_T is Distance_T / Duration_T   # knots
+type Accel_T    is Velocity_T / Duration_T   # knots per hour
+
+type Length_T is distinct float       # metres
+type Area_T   is Length_T * Length_T  # square metres
+
+type Cents_T is distinct int          # money is whole cents
+type Qty_T   is distinct int
+type Total_T is Cents_T * Qty_T
+
+# --- the units meet in the types, not in float() conversions ----------------
+def travelled(v: Velocity_T, t: Duration_T) -> Distance_T:
+    return v * t
+
+def eta(d: Distance_T, v: Velocity_T) -> Duration_T:
+    return d / v
+
+let d: Distance_T = 600.0
+let t: Duration_T = 2.0
+let v: Velocity_T = d / t
+print v                                  # 300.0
+print travelled(v, t)                    # 600.0
+print eta(d, v)                          # 2.0
+let a: Accel_T = v / t                   # a unit made from a unit made from two
+print a                                  # 150.0
+print a * t                              # 300.0: an Accel_T times a Duration_T
+
+# --- scaling: a plain number, on either side --------------------------------
+var w: Velocity_T = 100.0
+w *= 2.0
+w += 5.0                                 # a literal beside `+` is a Velocity_T
+print w                                  # 205.0
+print w * 2.0 + v                        # 710.0: (w * 2.0) is a Velocity_T
+print 2.0 * w                            # 410.0
+print w / 4.0                            # 51.25
+let ratio: float = v / w                 # a ratio has no unit
+print f"{ratio:.3f}"                     # 1.463
+let f: float = 1.5
+print v * f                              # 450.0: a plain float scales too
+
+# --- inside larger expressions, and around a call ---------------------------
+let far: Distance_T = (d + 10.0) / t * t
+print far                                # 610.0
+let legs: []Distance_T = [100.0, 250.0, 250.0]
+var flown: Distance_T = 0.0
+for leg in legs:
+    flown += leg
+print flown / 3.0                        # 200.0
+print travelled(w, 0.5)                  # 102.5: a literal argument
+
+# --- a product unit ----------------------------------------------------------
+let side: Length_T = 3.0
+let area: Area_T = side * side
+print area                               # 9.0
+print area / side                        # 3.0
+
+# --- money: whole cents, exactly -------------------------------------------
+let price: Cents_T = 250
+let n: Qty_T = 4
+let total: Total_T = price * n
+print total                              # 1000
+print total // n                         # 250: Total_T over a Qty_T is Cents_T
+print price * 3                          # 750: scaled by a plain int
+var bill: Cents_T = 0
+for i in 1..3:
+    bill += price * i
+print bill                               # 1500
+print "test_units: ok"

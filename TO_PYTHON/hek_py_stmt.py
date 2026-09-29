@@ -249,6 +249,13 @@ def _wrap_seq_for_enum_array(value, annotation):
     return f"_EnumArray(zip({domain}, {v}))"
 
 
+@method(derived_def)
+def to_py(self, prec=None):
+    """derived_def: IDENTIFIER ('*' | '/') IDENTIFIER -- a unit made from two
+    others; type_stmt renders it, from the declaration scan."""
+    return ""
+
+
 @method(distinct_def)
 def to_py(self, prec=None):
     """distinct_def: 'distinct' type_annotation -> the base type; the class
@@ -268,6 +275,63 @@ def _py_type_of_name(value):
     return (sym.get("type") or None) if isinstance(sym, dict) else None
 
 
+_PY_NUMBER = _re_mod_p2s.compile(r"^-?\d[\d_]*(\.\d+)?([eE][-+]?\d+)?$")
+_PY_PLAIN_TYPES = ("float", "int", "Natural", "Positive")
+
+
+def _py_resolve_alias(t):
+    """T through plain aliases -- `type Speed_T is Velocity_T` is the same
+    type on Nim -- but not through a distinct one, which is its own."""
+    from ady_declarations import is_distinct
+    aliases = getattr(ParserState, "py_type_aliases", {})
+    seen = set()
+    while t in aliases and aliases[t] != t and t not in seen and not is_distinct(t):
+        seen.add(t)
+        t = aliases[t]
+    return t
+
+
+def _py_call_name(e):
+    """The name F of `F(...)` when E is exactly one such call, else None."""
+    m = _re_mod_p2s.match(r"^([A-Za-z_]\w*)\(", e)
+    if not m or not e.endswith(")"):
+        return None
+    depth = 0
+    for i, ch in enumerate(e):
+        depth += ch in "(["
+        depth -= ch in ")]"
+        if depth == 0 and i < len(e) - 1:
+            return None
+    return m.group(1)
+
+
+def _py_atom_unit(e):
+    """The unit of E, emitted Python that is no arithmetic: a distinct
+    type's name for a name of one, `Velocity_T(x)` or a call declared to
+    return one; UNIT_LIT for a number; UNIT_PLAIN for a name or call of a
+    plain number type, `float(v)` too; None where it cannot be told."""
+    from ady_declarations import is_distinct, UNIT_LIT, UNIT_PLAIN
+    e = (e or "").strip()
+    if _PY_NUMBER.match(e):
+        return UNIT_LIT
+    t = None
+    called = _py_call_name(e)
+    if called:
+        if is_distinct(called):
+            return called
+        if called in ("float", "int"):
+            return UNIT_PLAIN
+        t = getattr(ParserState, "ady_return_types", {}).get(called)
+    else:
+        t = _py_type_of_name(e)
+    if not t:
+        return None
+    t = _py_resolve_alias(t.strip())
+    if is_distinct(t):
+        return t
+    return UNIT_PLAIN if t in _PY_PLAIN_TYPES else None
+
+
 def _reject_distinct_mix(name, annotation, value):
     """Refuse a value of one type where a distinct type is declared, or a
     distinct value where another type is: `let d: Distance_T = v` over a
@@ -275,29 +339,24 @@ def _reject_distinct_mix(name, annotation, value):
     The Nim backend refuses all three, and so does this one, at the same
     place: `Distance_T(f)` gets a float in and `float(d)` gets it out.
 
-    Deliberately narrow, as the Path check is: the value must be a name
-    whose type the symbol table knows. A literal takes the declared type,
-    as it does on Nim; an arbitrary expression's type is not known here,
-    and Nim still refuses what this lets through."""
-    from ady_declarations import is_distinct
-
-    def _resolve(t):
-        # through plain aliases -- `type Speed_T is Velocity_T` is the same
-        # type on Nim -- but not through a distinct one, which is its own
-        aliases = getattr(ParserState, "py_type_aliases", {})
-        seen = set()
-        while t in aliases and aliases[t] != t and t not in seen and not is_distinct(t):
-            seen.add(t)
-            t = aliases[t]
-        return t
-    target = _resolve((annotation or "").strip())
-    source = _py_type_of_name(value)
-    source = _resolve(source) if source else source
+    The value may be arithmetic -- `let d: Distance_T = v * t` -- whose unit
+    is worked out as the Nim backend's operators would. A literal takes the
+    declared type, as it does on Nim; what cannot be told is left to Nim,
+    which still refuses everything this lets through."""
+    from ady_declarations import expr_unit, is_distinct, UNIT_PLAIN
+    target = _py_resolve_alias((annotation or "").strip())
+    source = expr_unit(value, _py_atom_unit)
     if not source or source == target:
+        return
+    v = value.strip()
+    if is_distinct(source):
+        pass
+    elif source == UNIT_PLAIN and is_distinct(target):
+        source = _py_type_of_name(v) or "plain number"
+    else:
         return
     if not (is_distinct(target) or is_distinct(source)):
         return
-    v = value.strip()
     if is_distinct(target):
         fix = f"write {target}({v})"
     else:
@@ -307,24 +366,18 @@ def _reject_distinct_mix(name, annotation, value):
         f"does not mix with any other -- {fix}")
 
 
-_DISTINCT_OPS = {"+", "-", "*", "/", "//", "%", "<", ">", "<=", ">=", "==", "!="}
-
-
 def _reject_distinct_operands(left, op, right):
-    """Refuse `v + d` and `v < d` over two names whose declared types differ
-    when one of them is distinct -- the operator mix the Nim backend
-    refuses. Only names the symbol table types; a literal takes the other
-    side's type, and anything else is left to Nim."""
-    if op.strip() not in _DISTINCT_OPS:
-        return
-    from ady_declarations import is_distinct
-    lt, rt = _py_type_of_name(left), _py_type_of_name(right)
-    if not (lt and rt) or lt == rt or not (is_distinct(lt) or is_distinct(rt)):
-        return
-    raise ValueError(
-        f"'{left.strip()} {op.strip()} {right.strip()}' mixes a {lt} with a "
-        f"{rt}: a distinct type does not mix with any other -- convert one "
-        f"side explicitly")
+    """Refuse `v + d`, `v < d`, `v * v` and `d / v` where the units of the
+    two sides do not allow it -- what the Nim backend refuses because it has
+    no such operator. Sides are worked out with ady_declarations.expr_unit,
+    so `v * 2.0 + d` is a Velocity_T plus a Distance_T; a side of unknown
+    unit is left to Nim."""
+    from ady_declarations import expr_unit, unit_mix_error
+    op = op.strip()
+    lu, ru = expr_unit(left, _py_atom_unit), expr_unit(right, _py_atom_unit)
+    why = unit_mix_error(lu, op, ru)
+    if why:
+        raise ValueError(f"'{left.strip()} {op} {right.strip()}' {why}")
 
 
 def _wrap_for_ordered_array(value, annotation):
@@ -1192,6 +1245,16 @@ def to_py(self, indent=0):
         ParserState.py_type_names = getattr(ParserState, "py_type_names", set()) | {name}
         ind = _ind(indent)
         return f"{ind}class {name}({base}): __slots__ = ()"
+    if rhs_type == 'derived_def':
+        # `type Velocity_T is Distance_T / Duration_T`: a class of the
+        # operands' base, like any distinct type. What the operators between
+        # the units make is checked at transpile time -- see
+        # _reject_distinct_operands -- and by the Nim compiler.
+        from ady_declarations import distinct_kind
+        base = _DISTINCT_BASES.get(distinct_kind(name), "float")
+        _note_alias(name, name)
+        ParserState.py_type_names = getattr(ParserState, "py_type_names", set()) | {name}
+        return f"{_ind(indent)}class {name}({base}): __slots__ = ()"
     if rhs_type == 'float_range_def':
         lo = str(rhs.nodes[2].node)
         hi = str(rhs.nodes[4].node)  # [float, range, lo, range_op, hi]

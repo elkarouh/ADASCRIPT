@@ -112,6 +112,7 @@ STANDALONE := \
     test_ordered_map.ady \
     test_function_type.ady \
     test_distinct.ady \
+    test_units.ady \
     test_subrange_array.ady \
     test_case_guard_or.ady \
     test_method_param_names.ady \
@@ -244,7 +245,7 @@ COMPILE_ONLY := \
 # is the one they get, so the self-contained loop leaves them out.
 BOTH_BACKENDS_COMPARED := test_do_block test_result test_optional_spelling \
     test_union test_case_ranges test_contextmanager_fstring \
-    test_ordered_map test_function_type test_distinct \
+    test_ordered_map test_function_type test_distinct test_units \
     test_subrange_array
 
 ALL_COMPILE := \
@@ -570,15 +571,24 @@ test: compile
 	@# an operator between two typed names -- and leaves a wrong argument to
 	@# Nim, whose signature it does not record.
 	@echo "=== distinct types do not mix, both backends ==="
-	@printf 'type Velocity_T is distinct float\ntype Distance_T is distinct float\ndef fly(v: Velocity_T) -> Velocity_T:\n    return v\nvar v: Velocity_T = 1.0\nvar d: Distance_T = 2.0\nvar f: float = 3.0\n' \
+	@printf 'type Velocity_T is distinct float\ntype Distance_T is distinct float\ntype Duration_T is distinct float\ntype Rate_T is Distance_T / Duration_T\ndef fly(v: Velocity_T) -> Velocity_T:\n    return v\nvar v: Velocity_T = 1.0\nvar d: Distance_T = 2.0\nvar t: Duration_T = 1.0\nvar f: float = 3.0\n' \
 	    > $(TMPDIR)/ady_distinct_hdr.ady
+	@# `*` and `/` scale, so the product of two units is refused unless a
+	@# derived unit says what it makes; a unit made of two others gives its
+	@# result the right unit, and only that one.
 	@for c in "1:py:another distinct type given:let e: Distance_T = v" \
 	          "2:py:its base type given:let e: Distance_T = f" \
 	          "3:py:given to its base type:let g: float = d" \
 	          "4:py:assigned another distinct type:d = v" \
 	          "5:py:added to another distinct type:let e: Distance_T = v + d" \
 	          "6:py:compared with another distinct:let b: bool = v < d" \
-	          "7:nim:passed for another distinct:let w: Velocity_T = fly(d)"; do \
+	          "7:nim:passed for another distinct:let w: Velocity_T = fly(d)" \
+	          "8:py:a unit times itself:let e: Velocity_T = v * v" \
+	          "9:py:two units with no relation:let e: Distance_T = d * t" \
+	          "10:py:a quotient in the wrong unit:let e: Duration_T = d / t" \
+	          "11:py:a plain number over a unit:let e: Rate_T = 1.0 / t" \
+	          "12:py:a scaled unit in the wrong type:let e: Distance_T = v * 2.0" \
+	          "13:py:a derived unit and its neighbour:let e: Distance_T = d / t + v"; do \
 	    n=$${c%%:*}; rest=$${c#*:}; who=$${rest%%:*}; rest=$${rest#*:}; \
 	    what=$${rest%%:*}; line=$${rest#*:}; \
 	    { cat $(TMPDIR)/ady_distinct_hdr.ady; echo "$$line"; } > $(TMPDIR)/ady_distinct_$$n.ady; \
@@ -591,12 +601,12 @@ test: compile
 	        printf '  %-42s' "$$what (ady2py)"; \
 	        if $(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(TMPDIR)/ady_distinct_$$n.ady \
 	                > $(TMPDIR)/ady_distinct.out 2>&1; then echo "FAIL (accepted)"; exit 1; fi; \
-	        grep -q "a distinct type does not mix" $(TMPDIR)/ady_distinct.out \
+	        grep -q "does not mix\|has no unit" $(TMPDIR)/ady_distinct.out \
 	            && echo OK || { echo FAIL; cat $(TMPDIR)/ady_distinct.out; exit 1; }; \
 	    fi; \
 	done
-	@printf '  %-42s' "Distance_T(f) and float(d) get in and out"; \
-	    { cat $(TMPDIR)/ady_distinct_hdr.ady; printf 'let e: Distance_T = Distance_T(f)\nlet g: float = float(d)\nprint e, g\n'; } \
+	@printf '  %-42s' "conversions, scaling and derived units"; \
+	    { cat $(TMPDIR)/ady_distinct_hdr.ady; printf 'let e: Distance_T = Distance_T(f)\nlet g: float = float(d)\nlet r: Rate_T = d / t\nlet back: Distance_T = r * t\nlet eta: Duration_T = d / r\nlet s: Velocity_T = v * 2.0 + v / 4.0\nlet q: float = v / v\nprint e, g, back, eta, s, q\n'; } \
 	        > $(TMPDIR)/ady_distinct_ok.ady; \
 	    (cd $(TMPDIR) && XDG_CACHE_HOME=$(TMPDIR)/ady_distinct_cache $(ADY2NIM) c ady_distinct_ok.ady >/dev/null 2>&1) \
 	    && $(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(TMPDIR)/ady_distinct_ok.ady >/dev/null 2>&1 \

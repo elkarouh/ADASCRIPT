@@ -20,6 +20,7 @@
 | Insertion-ordered mapping | `[K]V` — any other `K`: `[str]float`, `[(int, int)]float` |
 | Dict / set / enum-indexed array | `{K}V` / `{}T` / `[E]T` |
 | Distinct type | `type V is distinct float` — `V(x)` in, `float(v)` out; literals take the context's type |
+| Derived unit | `type V is D / T` or `A * B` — defines the operators between units; `*` and `/` by a plain number scale |
 | Optional | `?T` |
 | Failure type | an ordinary record, `type F is record:`, marked `!F` in a union |
 | Value or failure | `T \| !F` — test with `r is F`, chain with `do:` |

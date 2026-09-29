@@ -1362,26 +1362,50 @@ def _is_pipe_not_bitor(operands):
     return False
 
 
-def _distinct_type_of(expr):
-    """The distinct type EXPR, emitted Nim, has -- `v`, `self.speed`,
-    `Velocity_T(x)` -- or None."""
-    from ady_declarations import is_distinct
-    e = (expr or "").strip()
-    import re as _re_dt
-    m = _re_dt.match(r"^([A-Za-z_]\w*)\(", e)
-    if m and is_distinct(m.group(1)) and e.endswith(")"):
-        return m.group(1)
+import re as _re_nn
+_NIM_NUMBER = _re_nn.compile(r"^-?\d[\d_]*(\.\d+)?([eE][-+]?\d+)?$")
+
+
+def _nim_atom_unit(e):
+    """The unit of E, emitted Nim that is no arithmetic: a distinct type's
+    name for `v`, `self.speed`, `Velocity_T(x)`, a call declared to return
+    one; UNIT_LIT for a literal; UNIT_PLAIN for a value of a plain number
+    type -- `float(v)` too; None when it cannot be told."""
+    from ady_declarations import is_distinct, UNIT_LIT, UNIT_PLAIN
+    e = (e or "").strip()
+    if _NIM_NUMBER.match(e):
+        return UNIT_LIT
+    called = _outer_call_name(e) if e.endswith(")") else None
+    if called and is_distinct(called):
+        return called
+    if called in ("float", "int"):
+        return UNIT_PLAIN
     t = (_nim_expr_type(e) or "").strip()
     if not is_distinct(t):
         t = _field_type(e).strip() or t      # a field: `self.flown`
-    if not is_distinct(t):
+    if not is_distinct(t) and called:
         # a call of a routine declared to return one: `cruise() + 100.0`
-        _called = _outer_call_name(e)
-        if _called:
-            t = getattr(ParserState, "proc_return_types", {}).get(_called, "") or t
+        t = getattr(ParserState, "proc_return_types", {}).get(called, "") or t
     if t.startswith("var "):
         t = t[4:].strip()
-    return t if is_distinct(t) else None
+    if is_distinct(t):
+        return t
+    return UNIT_PLAIN if t in ("float", "int", "float64", "Natural", "Positive") else None
+
+
+def _unit_of(expr):
+    """The unit of the emitted Nim expression EXPR -- `v * t`, `d / t + w`:
+    a distinct type's name, UNIT_LIT, UNIT_PLAIN, or None. See
+    ady_declarations.expr_unit for the rules."""
+    from ady_declarations import expr_unit
+    return expr_unit(expr, _nim_atom_unit)
+
+
+def _distinct_type_of(expr):
+    """The distinct type EXPR, emitted Nim, is a quantity of, or None."""
+    from ady_declarations import is_distinct
+    u = _unit_of(expr)
+    return u if u and is_distinct(u) else None
 
 
 def _is_distinct_param(ptype):
@@ -1426,26 +1450,28 @@ def binop_to_nim(self, prec=None, my_prec=None):
 
     right_prec = my_prec + 1 if my_prec is not None else None
     st = self.nodes[last_st_idx]
-    # The distinct type this chain of operators computes in, once one operand
-    # is known to be of one: a literal beside it is converted to it, as a
-    # literal given to a `let v: Velocity_T` is. `v * 2.0` is Velocity_T(2.0).
-    _chain_distinct = _distinct_type_of(result)
     for seq in st.nodes:
         if hasattr(seq, "nodes") and len(seq.nodes) >= 2:
             py_op = _op_string(seq.nodes[0])
             nim_op = _PY_OP_TO_NIM.get(py_op, py_op)
             right = seq.nodes[1].to_nim(right_prec)
-            if _chain_distinct is None:
-                _chain_distinct = _distinct_type_of(right)
-                if _chain_distinct is not None:
-                    from hek_nim_stmt import _wrap_distinct_literal
-                    result = _wrap_distinct_literal(result, _chain_distinct)
-            if _chain_distinct is not None:
+            # `+`, `-` and `mod` stay in the unit of their operands, and a
+            # literal beside one is of it, as a literal given to a `let v:
+            # Velocity_T` is: `v + 2.0` is `v + Velocity_T(2.0)`. `*` and `/`
+            # do not: they scale by a plain number, so `v * 2.0` keeps its
+            # 2.0 as it is, and two units multiplied or divided are what a
+            # derived unit says they are, or refused.
+            if nim_op in ("+", "-", "mod"):
                 from hek_nim_stmt import _wrap_distinct_literal
                 from ady_declarations import distinct_kind
-                right = _wrap_distinct_literal(right, _chain_distinct)
+                _lu = _distinct_type_of(result)
+                _ru = None if _lu else _distinct_type_of(right)
+                if _lu is not None:
+                    right = _wrap_distinct_literal(right, _lu)
+                elif _ru is not None:
+                    result = _wrap_distinct_literal(result, _ru)
                 # a distinct string joins with `&`, as a string does
-                if nim_op == "+" and distinct_kind(_chain_distinct) == "str":
+                if nim_op == "+" and distinct_kind(_lu or _ru) == "str":
                     result = f"{result} & {right}"
                     continue
             # seq/string concatenation: + -> & when operand is seq or string
@@ -4396,14 +4422,15 @@ def to_nim(self, prec=None):
                         op_str = getattr(first.nodes[0], 'node', str(first.nodes[0]))
                     nim_op = _PY_OP_TO_NIM.get(str(op_str), str(op_str)) if op_str else ""
                     right = seq.nodes[1].to_nim(prec) if len(seq.nodes) > 1 else ""
-                    # a literal beside a distinct operand is of its type, as
-                    # in binop_to_nim, whose operators land here when the
-                    # expression is the right side of a comparison
-                    from hek_nim_stmt import _wrap_distinct_literal
-                    _dt = _distinct_type_of(result) or _distinct_type_of(right)
-                    if _dt is not None:
-                        result = _wrap_distinct_literal(result, _dt)
-                        right = _wrap_distinct_literal(right, _dt)
+                    # a literal beside a distinct operand of `+`, `-` or `mod` is
+                    # of its type, as in binop_to_nim, whose operators land here
+                    # when the expression is the right side of a comparison
+                    if nim_op in ("+", "-", "mod"):
+                        from hek_nim_stmt import _wrap_distinct_literal
+                        _dt = _distinct_type_of(result) or _distinct_type_of(right)
+                        if _dt is not None:
+                            result = _wrap_distinct_literal(result, _dt)
+                            right = _wrap_distinct_literal(right, _dt)
                     # seq/string concat: + -> &. This path has its own
                     # arithmetic handling because bitor_expr's operators
                     # flatten into range_expr, and it knew only about seq

@@ -151,21 +151,27 @@ var owners: {TargetKey}{LineNo}[]HitIndex = {:}   # not {str}[]int keyed by "<ta
 
 Both naming styles exist in the examples, `Velocity_T` and `Epoch`; be consistent within one program. A class NEVER ends in `_T`, in either style: name it for the thing it is (`Report`, `Flight`). The snippets are in `EXAMPLES/DOC/type_snippets.ady`.
 
-### `distinct`
+### `distinct` and units
 
-A named type is an alias: it documents, it does not enforce. `type Velocity_T is distinct float` makes a real type:
+A named type is an alias: it documents, it does not enforce. `type Distance_T is distinct float` makes a real type; derived units say what `*` and `/` between units make:
 ```adascript
-type Velocity_T is distinct float     # knots
-type Distance_T is distinct float     # nautical miles
+type Distance_T is distinct float            # nautical miles
+type Duration_T is distinct float            # hours
+type Velocity_T is Distance_T / Duration_T   # derived: knots
 def travelled(v: Velocity_T, t: Duration_T) -> Distance_T:
-    return Distance_T(float(v) * float(t))   # convert explicitly, in and out
-var v: Velocity_T = 250.0                    # literal: takes the context's type
-v = v * 2.0                                  # literal beside a Velocity_T is one
+    return v * t                             # V * Dur is a Distance: no float() needed
+let v: Velocity_T = d / t                    # Dist / Dur is a Velocity
+var w: Velocity_T = 100.0                    # literal: takes the context's type
+w += 5.0                                     # literal beside + - < is a Velocity_T
+w *= 2.0                                     # * and / by a plain number SCALE
 ```
-- keeps the base type's operations, closed over itself (V+V->V, V<V, max, abs, +=, f"{v:.1f}"); distinct str: `+`, `len`; distinct int: `//`, `%`;
-- does NOT mix with its base or another distinct type: `let d: Distance_T = v` and `v + d` are errors; `let f: float = d` too -- write `float(d)`;
-- a literal converts implicitly where the type is visible (declaration, assignment, return, argument, record field, other operand); a base-typed *variable* never does -- write `Velocity_T(f)`;
-- Nim: `distinct float` + `{.borrow.}` procs; Python: `class Velocity_T(float)`. Nim checks everything; Python checks declarations, assignments and operators between typed names.
+- keeps the base's operations closed over itself (`+`, `-`, comparisons, `min`, `max`, `abs`, `+=`, `f"{v:.1f}"`); distinct str: `+`, `len`; distinct int: `//`, `%`;
+- **`*` and `/` scale**: `V * n`, `n * V`, `V / n` are V and the number stays a number; `V / V` is a plain float; **`V * V` is refused** (knots times knots is not knots). Two different units multiplied or divided are refused unless a derived unit defines it;
+- `type C is A / B` defines A/B -> C, C*B -> A, B*C -> A, A/C -> B; `type C is A * B` defines A*B -> C (either order), C/A -> B, C/B -> A. Operands must be distinct types of one kind: float (quotient or product) or int (product only). `1.0 / t` (plain number over a unit) has no unit: refused;
+- does NOT mix with its base or another distinct type: `let d: Distance_T = v` and `v + d` are errors; `let f: float = d` too -- write `float(d)` / `Distance_T(f)`;
+- a literal converts implicitly where the type is visible (declaration, assignment, return, argument, record field, beside `+ - <`); a base-typed *variable* never does;
+- money: `distinct int` in cents. `price * 3` scales; `price * qty` needs `type Total_T is Cents_T * Qty_T`;
+- Nim: `distinct float` + borrowed procs + one small proc per relation; Python: `class Velocity_T(float)`. Nim checks everything; Python works out the unit of arithmetic over typed names and refuses declarations, assignments and operators it can see.
 
 Use it for units and for IDs of different entities that share a representation. Keep aliases for values meant to mix with their base.
 

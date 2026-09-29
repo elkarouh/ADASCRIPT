@@ -126,6 +126,7 @@ def _py_reset():
     ParserState.tick_types = {}
     ParserState.ady_type_decls = {}
     ParserState.distinct_types = {}
+    ParserState.unit_relations = {}
     ParserState.record_types = set()
     ParserState.py_type_aliases = {}
     ParserState.py_top_decls = []
@@ -300,8 +301,9 @@ def translate(code):
     from ady_stmt import scan_union_aliases, scan_type_decls
     _PS_rp.union_aliases = scan_union_aliases(code)
     _PS_rp.ady_type_decls = scan_type_decls(code)
-    from ady_declarations import distinct_types
+    from ady_declarations import distinct_types, unit_relations
     _PS_rp.distinct_types = distinct_types(_PS_rp.ady_type_decls)
+    _PS_rp.unit_relations = unit_relations(_PS_rp.ady_type_decls)
     _PS_rp.union_aliases_py = {}
     _PS_rp.result_procs = either_procs(_PS_rp.ady_return_types,
                                        _PS_rp.failure_types)

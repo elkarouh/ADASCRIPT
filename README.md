@@ -622,56 +622,97 @@ type SmallInt is 0 .. 255    # inclusive on both ends
 type Index    is 0 ..< 10    # exclusive upper bound (0–9)
 ```
 
-### Distinct types
+### Distinct types and units
 
 A named type is an alias: `type Velocity_T is float` documents a unit and
 enforces nothing, so a `Distance_T` given a `Velocity_T` compiles. Add
 `distinct` and it is a type of its own:
 
 ```python
-type Velocity_T is distinct float     # knots
-type Duration_T is distinct float     # hours
 type Distance_T is distinct float     # nautical miles
+type Duration_T is distinct float     # hours
 
-def travelled(v: Velocity_T, t: Duration_T) -> Distance_T:
-    return Distance_T(float(v) * float(t))    # the one place the units meet
-
-var v: Velocity_T = 250.0     # a literal takes the type it is given to
-v = v * 2.0                   # ...here too: Velocity_T(2.0)
-let d: Distance_T = v         # refused, on both backends
+var d: Distance_T = 600.0     # a literal takes the type it is given to
+d += 10.0                     # ...and the type of what it is added to
+let wrong: Duration_T = d     # refused, on both backends
+let t: Duration_T = Duration_T(2.0)   # `Duration_T(x)` gets a value in,
+let n: float = float(t)               # `float(t)` gets it out
 ```
 
-- It keeps its base type's operations, closed over itself: a `Velocity_T`
-  plus a `Velocity_T` is a `Velocity_T`, two of them compare, `max`, `abs`
-  and `+=` work, and it prints and formats (`f"{v:.1f}"`) as a float does.
+- It keeps its base type's operations, closed over itself: a `Distance_T`
+  plus a `Distance_T` is a `Distance_T`, two of them compare, `max`, `abs`
+  and `+=` work, and it prints and formats (`f"{d:.1f}"`) as a float does.
   A distinct `str` joins with `+` and has `len`; a distinct `int` has `//`
   and `%`.
 - It mixes with nothing else -- not its base type, not another distinct
-  type made from the same base. `Distance_T(x)` gets a value in,
-  `float(d)` gets it out.
+  type made from the same base.
 - A **literal** has no type of its own until its context gives it one, as
-  in Ada: `250.0` given to a `Velocity_T` declaration, assignment, return,
-  argument or record field, or written beside one in `v * 2.0` or
-  `v < 400.0`, is a `Velocity_T`. A variable is not a literal: a plain
-  `float` variable still needs `Velocity_T(f)`.
+  in Ada: `600.0` given to a `Distance_T` declaration, assignment, return,
+  argument or record field, or written beside one with `+`, `-` or a
+  comparison, is a `Distance_T`. A variable is not a literal: a plain
+  `float` variable still needs `Distance_T(f)`.
 
-**Nim output:** `type Velocity_T = distinct float`, with the operations
-borrowed (`proc `+`(a, b: Velocity_T): Velocity_T {.borrow.}` ...) and each
-literal converted where its context is known.
-**Python output:** `class Velocity_T(float): __slots__ = ()`.
+**`*` and `/` scale.** A product is not in the unit of its factors -- knots
+times knots is not knots -- so multiplying and dividing do not mean what
+`+` means:
 
-Nim's compiler checks every use. The Python backend refuses what it can
-see without a type checker of its own: a typed name given to a declaration
-or an assignment, and an operator between two typed names. A wrong-typed
-argument, or a mix inside a larger expression, is caught when the same
-source is built for Nim. A literal where Nim cannot see the type it should
-take -- as an argument to something that is not a known routine, say --
-needs the conversion written: `Velocity_T(2.0)`.
+| Written | Is | |
+|---|---|---|
+| `d * 2.0`, `2.0 * d`, `d / 4.0` | `Distance_T` | scaled by a plain number, which stays a number |
+| `d / d2` | a plain `float` | a ratio has no unit |
+| `d * d2` | refused | knots times knots is not knots |
+| `d * t` | refused | unless a derived unit says what it is |
+
+So money is `distinct int` in cents, and `price * 3` scales it, while
+`price * quantity` needs a unit to be a total.
+
+**Derived units** say what the operators between two units make, by
+declaring the unit that results:
+
+```python
+type Distance_T is distinct float     # nautical miles
+type Duration_T is distinct float     # hours
+type Velocity_T is Distance_T / Duration_T    # knots
+
+def travelled(v: Velocity_T, t: Duration_T) -> Distance_T:
+    return v * t                      # no float() conversions
+
+let v: Velocity_T = d / t             # Distance / Duration
+let when: Duration_T = d / v          # Distance / Velocity
+```
+
+`type C is A / B` says an A over a B is a C, and so a C times a B, or a B
+times a C, is an A, and an A over a C is a B. `type C is A * B` says the
+opposite way round: an A times a B is a C, and a C over an A is a B. Nothing
+else between the units exists, so the compiler refuses `d * t` (there is no
+"nautical mile hours") and `v + d`. A derived unit can be made from another
+(`type Accel_T is Velocity_T / Duration_T`), and is a `distinct` type of the
+same kind as its operands: `float` for a quotient, `float` or `int` for a
+product. `type Area_T is Length_T * Length_T` and `type Total_T is Cents_T *
+Qty_T` work the same way.
+
+**Nim output:** `type Velocity_T = distinct float`, the operations of `float`
+borrowed for `+`, `-` and comparisons, and a small proc for each thing the
+declarations define (`proc `/`(a: Distance_T, b: Duration_T): Velocity_T`),
+so a unit costs nothing at run time. **Python output:** `class Velocity_T(float):
+__slots__ = ()`.
+
+Nim's compiler checks every use. The Python backend checks what it can see
+without a type checker of its own: a typed name, or arithmetic over typed
+names, given to a declaration or assignment of another type, and an operator
+between two of them -- the unit of `v * 2.0 + d` is worked out the way Nim's
+operators would. A wrong-typed argument is caught when the same source is
+built for Nim. A literal where Nim cannot see the type it should take -- as
+an argument to something that is not a known routine, say -- needs the
+conversion written: `Duration_T(2.0)`.
 
 Use `distinct` where a mix-up would be a bug the compiler should catch:
 units, and identifiers of different things that share a representation (a
 user id and an order id, both `int`). Keep an alias where the value is meant
-to mix with its base -- an `Epoch` plus a number of seconds.
+to mix with its base -- an `Epoch` plus a number of seconds. A unit library
+tracks every base unit's exponent for you; this asks you to name the
+combinations you use, which is what a program has to do anyway, and every
+one of them has a name a reader can search for.
 
 ### Named Tuples
 

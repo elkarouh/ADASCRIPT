@@ -601,15 +601,104 @@ def _decl_kind(rhs, decls, seen):
     return None
 
 
-def distinct_types(decls):
-    """{name: kind} for every `type X is distinct T` in DECLS (the output of
-    scan_type_decls), kind being the scalar T is made of -- "int", "float",
-    "str", "char", "bool" or "enum" -- or None for anything else."""
-    out = {}
+import re as _re_du
+
+_DERIVED = _re_du.compile(r"^([A-Za-z_]\w*)[ \t]*([*/])[ \t]*([A-Za-z_]\w*)$")
+
+
+def parse_derived(rhs):
+    """(A, op, B) for a declaration `type C is A / B` or `A * B`, else None."""
+    m = _DERIVED.match((rhs or "").strip())
+    return (m.group(1), m.group(2), m.group(3)) if m else None
+
+
+def distinct_types(decls, known=None):
+    """{name: kind} for every `type X is distinct T` and every derived unit
+    `type C is A / B` in DECLS (the output of scan_type_decls), kind being
+    the scalar the type is made of -- "int", "float", "str", "char", "bool"
+    or "enum" -- or None for anything else. A derived unit is made of what
+    its operands are; a declaration that cannot be one raises SyntaxError.
+    KNOWN is what an imported module already declared, which a derived unit
+    here may be made from."""
+    out = dict(known or {})
     for name, rhs in decls.items():
         if rhs is not None and rhs.strip().startswith("distinct "):
             out[name] = _decl_kind(rhs, decls, frozenset({name}))
+    derived = {n: parse_derived(r) for n, r in decls.items()
+               if r is not None and parse_derived(r) is not None}
+    # a derived unit may be made from another: resolve until nothing moves
+    pending = dict(derived)
+    while pending:
+        moved = False
+        for name, (a, op, b) in list(pending.items()):
+            if a in out and b in out and a not in pending and b not in pending:
+                out[name] = _check_derived(name, a, op, b, out)
+                del pending[name]
+                moved = True
+        if not moved:
+            name, (a, op, b) = next(iter(pending.items()))
+            bad = next((x for x in (a, b) if x not in out), a)
+            raise SyntaxError(
+                f"type {name} is {a} {op} {b}: {bad} is not a distinct "
+                f"numeric type -- a derived unit is made from two of them, "
+                f"declared `type {bad} is distinct float`")
     return out
+
+
+def _check_derived(name, a, op, b, kinds):
+    """The kind of `type NAME is A op B`, or SyntaxError if it cannot be."""
+    ka, kb = kinds[a], kinds[b]
+    if ka not in ("float", "int") or ka != kb:
+        raise SyntaxError(
+            f"type {name} is {a} {op} {b}: both must be distinct float, or "
+            f"both distinct int -- {a} is made of {ka}, {b} of {kb}")
+    if ka == "int" and op == "/":
+        raise SyntaxError(
+            f"type {name} is {a} / {b}: a quotient of ints is not an int -- "
+            f"make the operands distinct float")
+    if op == "/" and a == b:
+        raise SyntaxError(
+            f"type {name} is {a} / {a}: a ratio of one unit is a plain "
+            f"number, and `{a} / {a}` already gives one")
+    return ka
+
+
+def derived_ops(name, a, op, b):
+    """The operators `type NAME is A op B` defines, as (op, left, right,
+    result): A / B is a NAME, so NAME * B and B * NAME are an A and A / NAME
+    is a B; or A * B is a NAME, so NAME / A is a B and NAME / B an A. Where
+    A and B are one type there is one of each."""
+    if op == "/":
+        return [("/", a, b, name), ("*", name, b, a),
+                ("*", b, name, a), ("/", a, name, b)]
+    if a == b:
+        return [("*", a, a, name), ("/", name, a, a)]
+    return [("*", a, b, name), ("*", b, a, name),
+            ("/", name, a, b), ("/", name, b, a)]
+
+
+def unit_relations(decls):
+    """{(op, left, right): result} for what every derived unit in DECLS says
+    about the operators between its units. Anything between two distinct
+    types that is not here has no unit, and is refused."""
+    rel = {}
+    for name, rhs in decls.items():
+        d = parse_derived(rhs) if rhs is not None else None
+        if d is None:
+            continue
+        for op, l, r, res in derived_ops(name, *d):
+            if rel.setdefault((op, l, r), res) != res:
+                raise SyntaxError(
+                    f"type {name} is derived from the same units as "
+                    f"{rel[(op, l, r)]}: `{l} {op} {r}` cannot be both")
+    return rel
+
+
+def unit_relation(op, left, right):
+    """The unit of `left op right` where a derived unit says one, else None."""
+    from hek_parsec import ParserState
+    op = {"div": "/", "//": "/"}.get(op, op)
+    return (getattr(ParserState, "unit_relations", None) or {}).get((op, left, right))
 
 
 def is_distinct(name):
@@ -622,3 +711,167 @@ def distinct_kind(name):
     """What a distinct type NAME is made of ("float", "int", ...), or None."""
     from hek_parsec import ParserState
     return (getattr(ParserState, "distinct_types", None) or {}).get(name)
+
+
+# --- the unit of an expression -----------------------------------------------
+# What an arithmetic expression is a quantity *of*, worked out from the
+# emitted text of the backend -- `v * 2.0`, `d / t + w` -- so the same rules
+# serve both. An operand is a distinct type's name, UNIT_LIT for a literal,
+# UNIT_PLAIN for a value of a plain type, or None when the backend cannot
+# tell. The rules are Ada's derived types with one change: `*` and `/`
+# scale by a plain number, and between two units they mean what a derived
+# unit says they mean, or nothing at all.
+#
+#   V + V, V - V, V mod V   -> V       (a literal beside a V is a V)
+#   V * n, n * V, V / n     -> V       (n a plain number: a scale, not a V)
+#   V / V                   -> plain   (a ratio has no unit)
+#   A * B, A / B            -> as `type C is A * B` / `A / B` says, else none
+
+UNIT_LIT = "<lit>"
+UNIT_PLAIN = "<plain>"
+
+_SAME_UNIT_OPS = ("+", "-", "mod", "%")
+_SCALE_OPS = ("*", "/", "div", "//")
+_COMPARE_OPS = ("<", ">", "<=", ">=", "==", "!=")
+_LOW_OPS = {"and", "or", "not", "&", "|", "^", "in", "notin", "is", "isnot",
+            "if", "else", "elif", "xor", "shl", "shr", "..", "..<", "&&",
+            "==", "!=", "<", ">", "<=", ">=", "lambda", "for"}
+
+
+def _top_tokens(expr):
+    """EXPR split on the spaces outside any bracket or string, or None if
+    its brackets or quotes do not balance."""
+    toks, cur, depth, quote, esc = [], [], 0, "", False
+    for ch in expr:
+        if quote:
+            cur.append(ch)
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == quote:
+                quote = ""
+            continue
+        if ch in "\"'":
+            quote = ch
+            cur.append(ch)
+        elif ch in "([{":
+            depth += 1
+            cur.append(ch)
+        elif ch in ")]}":
+            depth -= 1
+            if depth < 0:
+                return None
+            cur.append(ch)
+        elif ch == " " and depth == 0:
+            if cur:
+                toks.append("".join(cur))
+                cur = []
+        else:
+            cur.append(ch)
+    if cur:
+        toks.append("".join(cur))
+    return toks if depth == 0 and not quote else None
+
+
+def _strip_parens(expr):
+    """EXPR without a pair of brackets that wraps all of it."""
+    e = expr.strip()
+    while e.startswith("(") and e.endswith(")"):
+        depth, ok = 0, True
+        for i, ch in enumerate(e):
+            depth += ch in "(["
+            depth -= ch in ")]"
+            if depth == 0 and i < len(e) - 1:
+                ok = False
+                break
+        if not ok:
+            break
+        e = e[1:-1].strip()
+    return e
+
+
+def split_arith(expr):
+    """(left, op, right) at the operator of EXPR that binds last -- the
+    rightmost `+` or `-`, else the rightmost `*`, `/`, `//`, `%`, `div` or
+    `mod` -- or None when EXPR is no arithmetic expression: an atom, or
+    something with a comparison, `and`, `if` ... at its top."""
+    toks = _top_tokens(expr)
+    if not toks or len(toks) < 3 or any(t in _LOW_OPS for t in toks):
+        return None
+    for group in (("+", "-"), ("*", "/", "//", "%", "div", "mod")):
+        for i in range(len(toks) - 2, 0, -1):
+            if toks[i] in group:
+                return " ".join(toks[:i]), toks[i], " ".join(toks[i + 1:])
+    return None
+
+
+def expr_unit(expr, atom):
+    """The unit of the emitted expression EXPR: a distinct type's name,
+    UNIT_LIT, UNIT_PLAIN, or None. ATOM(text) says the same for anything
+    that is not itself arithmetic -- a name, a call, a literal."""
+    e = _strip_parens(expr)
+    parts = split_arith(e)
+    if parts is None:
+        return atom(e)
+    left, op, right = parts
+    return unit_result(expr_unit(left, atom), op, expr_unit(right, atom))
+
+
+def unit_result(lu, op, ru):
+    """The unit of `l op r` given the units of l and r, or None if it has
+    none (or the backend cannot tell)."""
+    ld = bool(lu) and is_distinct(lu)
+    rd = bool(ru) and is_distinct(ru)
+    if not (ld or rd):
+        if lu in (UNIT_LIT, UNIT_PLAIN) and ru in (UNIT_LIT, UNIT_PLAIN):
+            return UNIT_LIT if lu == ru == UNIT_LIT else UNIT_PLAIN
+        return None
+    if op in _SAME_UNIT_OPS:
+        if ld and rd:
+            return lu if lu == ru else None
+        return lu if ld else ru
+    if op in _SCALE_OPS:
+        if ld and rd:
+            rel = unit_relation(op, lu, ru)
+            if rel:
+                return rel
+            return UNIT_PLAIN if op != "*" and lu == ru else None
+        if ld:
+            return lu
+        return ru if op == "*" else None
+    return None
+
+
+def unit_mix_error(lu, op, ru):
+    """None, or why `l op r` is refused, given the units of l and r. What
+    it cannot judge -- a side of unknown unit -- it leaves to the Nim
+    compiler, which refuses every one of these itself."""
+    ld = bool(lu) and is_distinct(lu)
+    rd = bool(ru) and is_distinct(ru)
+    if not (ld or rd):
+        return None
+    if op in _SAME_UNIT_OPS or op in _COMPARE_OPS:
+        if ld and rd:
+            if lu == ru:
+                return None
+            return (f"mixes a {lu} with a {ru}: a distinct type does not mix "
+                    f"with any other -- convert one side explicitly")
+        other, mine = (ru, lu) if ld else (lu, ru)
+        if other == UNIT_PLAIN:
+            return (f"mixes a {mine} with a plain number: a distinct type "
+                    f"does not mix with any other -- convert one side "
+                    f"explicitly")
+        return None
+    if op in _SCALE_OPS:
+        if ld and rd:
+            if unit_relation(op, lu, ru) or (op != "*" and lu == ru):
+                return None
+            verb = "multiplying" if op == "*" else "dividing"
+            sign = "*" if op == "*" else "/"
+            return (f"{verb} a {lu} by a {ru} has no unit: name the result "
+                    f"with `type X is {lu} {sign} {ru}`")
+        if rd and op != "*" and lu in (UNIT_LIT, UNIT_PLAIN):
+            return (f"a plain number divided by a {ru} has no unit: name "
+                    f"the result, `type X is A / {ru}`, with A a distinct type")
+    return None

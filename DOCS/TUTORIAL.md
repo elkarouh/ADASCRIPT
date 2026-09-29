@@ -409,34 +409,68 @@ let d: Distance_T = v        # compiles on both backends: an alias, not a type
 operations, and mixes with nothing else:
 
 ```python
-type Velocity_T is distinct float     # knots
-type Duration_T is distinct float     # hours
 type Distance_T is distinct float     # nautical miles
+type Duration_T is distinct float     # hours
 
-def travelled(v: Velocity_T, t: Duration_T) -> Distance_T:
-    return Distance_T(float(v) * float(t))
-
-var v: Velocity_T = 250.0        # a literal takes the declared type
-v += 10.0                        # and the type of what it is added to
-let d: Distance_T = travelled(v, 2.0)
-print f"{d:.1f} nm"              # 520.0 nm
-let wrong: Distance_T = v        # refused, on both backends
+var d: Distance_T = 600.0        # a literal takes the declared type
+d += 10.0                        # and the type of what it is added to
+let t: Duration_T = Duration_T(2.0)   # in with Duration_T(x), out with float(t)
+print f"{d:.1f} nm"              # 610.0 nm
+let wrong: Duration_T = d        # refused, on both backends
 ```
 
 - **Operations** are the base type's, closed over the new one:
-  `Velocity_T + Velocity_T` is a `Velocity_T`, comparisons, `max`, `abs`
+  `Distance_T + Distance_T` is a `Distance_T`, comparisons, `max`, `abs`
   and `+=` work. A distinct `str` has `+` and `len`; a distinct `int` has
   `//` and `%`.
-- **Conversions** are explicit: `Velocity_T(x)` in, `float(v)` out.
+- **Conversions** are explicit: `Distance_T(x)` in, `float(d)` out.
 - **Literals** take the type of their context: a declaration, assignment,
-  return, argument or record field of the type, or the other operand of an
-  operator. A *variable* of the base type does not -- write `Velocity_T(f)`.
+  return, argument or record field of the type, or the other operand of `+`,
+  `-` or a comparison. A *variable* of the base type does not -- write
+  `Distance_T(f)`.
+
+**`*` and `/` scale.** Knots times knots is not knots, so they do not mean
+what `+` means:
+
+- a distinct value times, or over, a plain number is that unit --
+  `d * 2.0`, `2.0 * d`, `d / 4.0` -- and the number stays a number;
+- two of the same unit divided are a plain `float`: a ratio has no unit;
+- two of them multiplied are refused: there is no "miles squared" unless you
+  declare one; and a unit times another unit has no meaning until you say.
+
+That makes money a natural `distinct int` in cents: `price * 3` scales it,
+and `price * quantity` needs a unit to be a total, below.
+
+**Units made from units** are declared, and the declaration defines the
+operators between them:
+
+```python
+type Distance_T is distinct float     # nautical miles
+type Duration_T is distinct float     # hours
+type Velocity_T is Distance_T / Duration_T    # knots
+
+def travelled(v: Velocity_T, t: Duration_T) -> Distance_T:
+    return v * t                      # Velocity x Duration is a Distance
+
+def eta(d: Distance_T, v: Velocity_T) -> Duration_T:
+    return d / v                      # Distance / Velocity is a Duration
+
+let v: Velocity_T = d / t             # Distance / Duration is a Velocity
+```
+
+`type C is A / B` says A / B is a C, so C * B and B * C are an A, and A / C
+is a B. `type C is A * B` says A * B and B * A are a C, so C / A is a B and
+C / B an A -- `type Area_T is Length_T * Length_T`, `type Total_T is
+Cents_T * Qty_T`. Everything else between the units is refused: `d * t`,
+`v + d`, `1.0 / t`. A derived unit can be made from another (`type Accel_T
+is Velocity_T / Duration_T`) and has the kind of its operands: `float`, or
+`int` for a product. Nim gets a small proc per relation, so it costs nothing
+at run time.
 
 Where it is checked: the Nim compiler checks every use. The Python backend
-refuses a typed name given to a declaration or assignment of another type,
-and an operator between two typed names of different types; a wrong
-argument, or a mix inside a larger expression, is caught by building for
-Nim.
+works out the unit of arithmetic over typed names -- `v * 2.0 + d` is a
+`Velocity_T` plus a `Distance_T` -- and refuses it, or a declaration or
+assignment of another type; a wrong argument is caught by building for Nim.
 
 Use `distinct` where a mix-up would be a bug the compiler should catch:
 units (metres vs feet, knots vs km/h), and IDs of different things that

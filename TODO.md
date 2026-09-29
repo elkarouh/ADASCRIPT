@@ -300,11 +300,22 @@ history of this file if the reasoning behind one of them is ever wanted.
       context's type. Nim checks every use (`distinct` + borrowed procs);
       the Python backend refuses a typed name given to a declaration or
       assignment, and an operator between two typed names.
+- [x] units (EXAMPLES/test_units.ady): `*` and `/` on a distinct type scale
+      by a plain number, `V / V` is a plain ratio and `V * V` is refused; a
+      derived unit, `type Velocity_T is Distance_T / Duration_T` (or
+      `A * B`), defines the operators between units and gives them a name.
+      ady_declarations.expr_unit works out the unit of an emitted
+      expression for both backends, so Python checks `v * 2.0 + d` too.
 - [ ] distinct types, what is left: the Python backend does not check an
-      argument's type (it records no parameter types), nor a mix inside a
-      larger expression -- building for Nim catches both. A literal whose
-      context Nim cannot see (an argument to something that is not a known
-      routine, an element of a table literal) needs `V(x)` written.
+      argument's type (it records no parameter types) -- building for Nim
+      catches it. A literal whose context Nim cannot see (an argument to
+      something that is not a known routine, an element of a table
+      literal) needs `V(x)` written. Derived units are float (or int for a
+      product) only, and a unit cannot be raised to a power: `Area_T` is
+      `Length_T * Length_T`, and there is no `Length_T ** 2`. `unchained`,
+      the Nim library, does full dimensional analysis; this is
+      deliberately smaller, and a unit library's `5.m` literal is not
+      needed because a literal already takes its context's type.
 - [ ] `[E]{}T` cannot infer the element type of an empty set literal in its
       initialiser: `var seen: [Phase_T]{}str = [CLIMB: {}, ...]` gives Nim
       "cannot instantiate: 'A'" from initHashSet. `{}` is ambiguous on its

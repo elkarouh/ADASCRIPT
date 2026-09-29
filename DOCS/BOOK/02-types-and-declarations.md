@@ -370,42 +370,83 @@ def align(length: Positive, s: str) -> str:
     return s.alignLeft(length)
 ```
 
-## 2.7 Distinct types
+## 2.7 Distinct types and units
 
 A named scalar type is an alias. `type Velocity_T is float` puts the unit in
 the signature, but a `Distance_T` given a `Velocity_T` still compiles. Ada's
 answer is a *derived* type, and Adascript spells it `distinct`:
 
 ```python
-type Velocity_T is distinct float     # knots
-type Duration_T is distinct float     # hours
 type Distance_T is distinct float     # nautical miles
+type Duration_T is distinct float     # hours
 
-def travelled(v: Velocity_T, t: Duration_T) -> Distance_T:
-    return Distance_T(float(v) * float(t))    # the one place the units meet
-
-var v: Velocity_T = 250.0
-v = v * 2.0
-let d: Distance_T = travelled(v, 1.5)
-let wrong: Distance_T = v             # refused, on both backends
+var d: Distance_T = 600.0
+d += 10.0
+let t: Duration_T = Duration_T(2.0)   # Duration_T(x) in, float(t) out
+let wrong: Duration_T = d             # refused, on both backends
 ```
 
 A distinct type keeps its base type's operations, closed over itself —
-`Velocity_T + Velocity_T` is a `Velocity_T` — and mixes with nothing else.
-`Distance_T(x)` gets a value in, `float(d)` gets it out.
+`Distance_T + Distance_T` is a `Distance_T` — and mixes with nothing else.
 
 A literal is the exception, as it is in Ada, where a literal belongs to a
-*universal* type until its context gives it one. `250.0` given to a
-`Velocity_T` declaration, assignment, return, argument or record field, or
-written beside a `Velocity_T` in `v * 2.0` or `v < 400.0`, is a
-`Velocity_T`. A `float` *variable* is not a literal, and needs the
-conversion.
+*universal* type until its context gives it one. `600.0` given to a
+`Distance_T` declaration, assignment, return, argument or record field, or
+written beside one with `+`, `-` or a comparison, is a `Distance_T`. A
+`float` *variable* is not a literal, and needs the conversion.
 
-On Nim the type is `distinct float` with the operations borrowed, so the
-compiler checks every use. The Python backend makes it a subclass of
-`float` and refuses what it can see — a typed name given to a declaration
-or assignment of another type, an operator between two typed names; the
-rest is caught by building for Nim. Chapter 12 has the general rule.
+### Scaling, and units made from units
+
+Multiplying is where quantities part company with types. A product is not in
+the unit of its factors — knots times knots is not knots — so `*` and `/`
+mean something different from `+`:
+
+- a unit times or over a **plain number** is that unit: `d * 2.0`,
+  `2.0 * d`, `d / 4.0`. The number stays a number;
+- two of one unit **divided** are a plain `float`, a ratio;
+- two of one unit **multiplied**, or two different units multiplied or
+  divided, are refused — unless you have said what they make.
+
+Saying so is a declaration. `type C is A / B` defines the operators between
+A, B and C:
+
+```python
+type Velocity_T is Distance_T / Duration_T    # knots
+
+def travelled(v: Velocity_T, t: Duration_T) -> Distance_T:
+    return v * t                      # Velocity x Duration is a Distance
+
+def eta(d: Distance_T, v: Velocity_T) -> Duration_T:
+    return d / v                      # Distance / Velocity is a Duration
+
+let v: Velocity_T = d / t             # Distance / Duration is a Velocity
+```
+
+A Distance over a Duration is a Velocity, and from that follow the other
+three: Velocity times Duration, in either order, is a Distance, and Distance
+over Velocity is a Duration. `type C is A * B` runs the other way —
+`type Area_T is Length_T * Length_T`, `type Total_T is Cents_T * Qty_T` — and
+a derived unit can be an operand of the next, `type Accel_T is Velocity_T /
+Duration_T`. Everything else between the units does not exist, so `d * t`,
+`v + d` and `1.0 / t` do not compile: there is no "mile-hour" until you
+declare one.
+
+The operands must be distinct, and of one kind: `float` for a quotient,
+`float` or `int` for a product, since a quotient of ints is not an int. Money
+is naturally `distinct int` in cents, so `price * 3` scales it, and
+`price * qty` needs a total unit to say what it is.
+
+On Nim each unit is `distinct float` with the operations borrowed and one
+small proc per relation, so the compiler checks every use at no run-time
+cost. The Python backend makes it a subclass of `float` and works out the
+unit of arithmetic over typed names, refusing what it can see — `v * 2.0 +
+d` is a Velocity plus a Distance — while a wrong argument is caught by
+building for Nim. Chapter 12 has the general rule.
+
+This is deliberately less than a units library, which tracks the exponent of
+every base unit for you. Here every combination you use has a name — a
+reader can search for it, and it appears in the signature — and the
+compiler's messages talk about `Velocity_T`, not about exponents.
 
 Use `distinct` for units and for identifiers of different things that share
 a representation. Keep an alias where the value should mix with its base.

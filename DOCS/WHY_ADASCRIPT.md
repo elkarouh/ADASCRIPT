@@ -647,24 +647,43 @@ does:
 
 <!-- from: EXAMPLES/DOC/why_alias_snippets.ady -->
 ```python
-type Knots_T is distinct float    # knots
-type Hours_T is distinct float    # hours
 type Miles_T is distinct float    # nautical miles
+type Hours_T is distinct float    # hours
+type Knots_T is Miles_T / Hours_T # knots: a unit made from two others
 
 def flown(speed: Knots_T, time: Hours_T) -> Miles_T:
-    return Miles_T(float(speed) * float(time))   # the one place units meet
+    return speed * time           # Knots x Hours is Miles: the type says so
 
 let speed: Knots_T = 250.0        # a literal takes the type it is given to
 let far: Miles_T = flown(speed, 2.0)
 # let wrong: Miles_T = speed      -- refused, on both backends
+# let bad: Miles_T = speed * speed  -- refused: knots times knots is not miles
 ```
 
-A `Knots_T` keeps everything a `float` can do — with another `Knots_T`. It
-mixes with nothing else: not a `float` variable, not a `Miles_T`, not a
-`Hours_T`. The conversion is written where the units really do meet, which
-is the one line a reviewer wants to see. It is Ada's derived type, and like
-Ada it lets a literal take whatever type its context asks for, so `250.0`
-and `v * 2.0` need no ceremony.
+A `Miles_T` keeps everything a `float` can do — with another `Miles_T`. It
+mixes with nothing else: not a `float` variable, not a `Knots_T`, not an
+`Hours_T`. It is Ada's derived type, and like Ada it lets a literal take
+whatever type its context asks for, so `250.0` needs no ceremony.
+
+The third line is the one that matters. A unit is not only a name that
+refuses to mix; it is a *relation*, and most of what goes wrong with
+quantities goes wrong when they meet. `type Knots_T is Miles_T / Hours_T`
+says what dividing miles by hours makes, and everything else follows from it:
+knots times hours is miles, in either order, and miles over knots is hours.
+`flown` needs no `float()` on the way in and no conversion on the way out,
+and the compiler checks the one line where the units meet, which is the line
+a reviewer would read anyway. What it does not say does not exist: `speed *
+speed` is refused, because knots times knots is not knots, and `miles *
+hours` because nobody declared a mile-hour. Multiplying by a plain number
+scales, so `speed * 2.0` is still knots.
+
+Nim's ecosystem has libraries that do this for every combination
+automatically, tracking the exponent of each base unit. I chose the other
+end deliberately. Here every combination a program uses has a name, and the
+name is in the signature, in the grep and in the compiler's message —
+`Velocity_T`, not an exponent vector. The price is writing down the
+combinations, which a program has to name to be read anyway, and the gain is
+that there is nothing to learn beyond `type C is A / B`.
 
 Not every name should be distinct. Conversions are work, and a value that
 is meant to mix with its base — an epoch plus a number of seconds — is
@@ -674,11 +693,11 @@ representation.
 
 What is checked where is not symmetric, and it is worth saying so. On the
 Nim backend the compiler checks every use. The Python backend has no type
-checker of its own, so it refuses what it can see: a typed name given to a
-declaration or an assignment of another type, and an operator between two
-typed names. A wrong argument, or a mix buried in a larger expression, is
-caught when the same source is built for Nim — which is one more reason
-`make test` builds everything for both.
+checker of its own, so it works out the unit of arithmetic over typed names
+— `v * 2.0 + d` is a speed plus a distance — and refuses what it can see: a
+declaration or an assignment of another type, and an operator between units
+that does not exist. A wrong argument is caught when the same source is built
+for Nim — which is one more reason `make test` builds everything for both.
 
 Where else Adascript enforces a distinction: an enumeration is a real
 type (index an `[E]T` with a string and it will not compile), `Natural` and
