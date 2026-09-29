@@ -978,7 +978,7 @@ def _nim_expr_type(expr):
         if t == "string":
             return "string"
         # Table[K, V][k] -> V  (value type of table subscript)
-        tm = _re.match(r"Table\[[^,]+,\s*(.+)\]$", t)
+        tm = _re.match(r"(?:Ordered)?Table\[[^,]+,\s*(.+)\]$", t)
         if tm:
             return tm.group(1).strip()
         # array[E, T][e] -> T: an enum-indexed array, `[Pass]{Sub}Log`
@@ -2315,6 +2315,12 @@ def to_nim(self, prec=None):
             nm = f"ekarr{_ekarr_counter}"
             return f"(let {nm}: array[{tname}, typeof({first_val_nim})] = {lit}; {nm})"
         return lit
+    # `[K: v, ...]` for a [K]V whose K has no finite domain -- `[str]float`:
+    # an OrderedTable, in the order written.
+    if getattr(ParserState, "_current_lhs_type", "").startswith("OrderedTable["):
+        ParserState.nim_imports.add("tables")
+        pairs = ", ".join(f"{k}: {v.to_nim().strip()}" for k, v in kv_pairs)
+        return "{" + pairs + "}.toOrderedTable"
     # Fallback: emit values in order given
     vals = [v.to_nim().strip() for _, v in kv_pairs]
     return "[" + ", ".join(vals) + "]"
@@ -2376,6 +2382,7 @@ _PY_METHOD_TO_NIM = {
     "set": {"add": "incl", "remove": "excl"},
     "HashSet": {"add": "incl", "remove": "excl"},
     "Table": {"items": "pairs"},
+    "OrderedTable": {"items": "pairs"},
     "string": {"lower": "toLowerAscii", "upper": "toUpperAscii",
                "strip": "strip", "split": "split", "join": "join",
                "startswith": "startsWith", "endswith": "endsWith",
@@ -2448,7 +2455,7 @@ def _translate_method(obj_name, method_name):
             # Table[K, V][key] -> V; seq[T][i] -> T
             import re as _re_tm
             _seq_m = _re_tm.match(r'^seq\[(.+)\]$', base_type)
-            _tbl_m = _re_tm.match(r'^Table\[.+,\s*(.+)\]$', base_type)
+            _tbl_m = _re_tm.match(r'^(?:Ordered)?Table\[.+,\s*(.+)\]$', base_type)
             if _seq_m:
                 elem_type = _seq_m.group(1)
                 # Subscript of seq[T] returns element type T
@@ -2731,6 +2738,9 @@ def to_nim(self, prec=None):
                             # Fix bare initTable() when field type is known
                             if fv == "initTable()" and ftype.startswith("Table["):
                                 fv = f"initTable[{ftype[6:-1]}]()"
+                            elif ftype.startswith("OrderedTable["):
+                                from hek_nim_stmt import _to_ordered_table
+                                fv = _to_ordered_table(fv, ftype)
                             # A char field given a literal: 'z' is a
                             # one-character string until something narrows it.
                             if ftype.strip() == "char":

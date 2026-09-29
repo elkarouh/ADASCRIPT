@@ -61,7 +61,7 @@ that order. `{…}` is unordered: there is no order at all.
 
 The second is *is it keyed?*, which is whether anything sits inside them.
 Nothing inside — `[]T`, `{}T` — is a **collection** of `T`. A type inside —
-`[O]T`, `{K}V` — is a **mapping**, from the type in the brackets to the one
+`[K]T`, `{K}V` — is a **mapping**, from the type in the brackets to the one
 that follows.
 
 Four combinations, four forms, and each corner is the everyday name of the
@@ -70,12 +70,17 @@ thing:
 |                | ordered `[…]`                    | unordered `{…}` |
 |----------------|----------------------------------|-----------------|
 | **collection** | `[]T` — a list                   | `{}T` — a set   |
-| **mapping**    | `[O]T` — an array indexed by `O` | `{K}V` — a dict |
+| **mapping**    | `[K]T` — keys in order           | `{K}V` — a dict |
 
-The two questions meet in one place: a mapping's key type is constrained by
-the ordering. Between `[…]` it must be an **ordinal type** — an enum,
-`bool`, `char`, an integer subrange — since an order to index by is exactly
-what an ordinal has. Between `{…}` any hashable type will do.
+The two questions meet in one place: which order a `[…]` mapping has
+depends on its key. With a **finite ordinal type** — an enum, `bool`,
+`char`, an integer subrange — every key and its place are known at compile
+time, and `[O]T` is an array indexed by `O`. With any other key — `str`,
+`int`, a class — the keys cannot be known in advance, so they are held in
+the order they are **inserted**: `[str]float` is an `OrderedTable` on Nim
+and a dict on Python. Either way `[…]` means an ordered collection, and
+iterating one yields its values in its order. Between `{…}` any hashable
+type will do, and no order is promised.
 
 The row above the line is not really a separate kind, which is why the four
 line up so neatly: a collection is a mapping whose key it supplies itself. A
@@ -102,6 +107,7 @@ spelling assigns to the other. The key can equally be written out, named
 | `[N]T` | `tuple[T, ...]` | `array[N, T]` |
 | `[*]T` | `Sequence[T]` | `openArray[T]` |
 | `[E]T` | `dict[E, T]` | `array[E, T]` (enum-indexed) |
+| `[K]V` | `dict[K, V]` | `OrderedTable[K, V]` (K not a finite ordinal) |
 | `{K}V` | `dict[K, V]` | `Table[K, V]` |
 | `{}T` | `set[T]` | `HashSet[T]` or `set[T]` |
 | `?T` | `T \| None` | `Option[T]` |

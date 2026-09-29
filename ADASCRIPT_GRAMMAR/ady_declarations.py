@@ -47,6 +47,18 @@ Open arrays (read-only, accepts seq or array)
     at the call site.  Not valid as a variable type — only in parameter
     and return annotations.
 
+Ordered mappings
+----------------
+    [<K>]<type>                     K a finite ordinal (enum, subrange,
+                                    bool, char): an array indexed by K.
+                                    Any other K (str, int, a class, an
+                                    alias of one...): keyed in insertion
+                                    order -- OrderedTable on Nim, a dict
+                                    on Python. See ordered_map_key().
+
+    [Color_T]int                    array[Color_T, int]
+    [str]float                      OrderedTable[string, float]
+
 Dictionaries
 ------------
     {<key_type>}<value_type>        dict[<key_type>, <value_type>]
@@ -360,7 +372,10 @@ array_type = LBRACKET + INTEGER + RBRACKET + elem_type
 openarray_type = LBRACKET + SSTAR + RBRACKET + elem_type
 
 # [EnumType]int      -> array[EnumType, int]  (enum-indexed array)
-# Also accepts primitive ordinal types like char as array index
+# Also accepts primitive ordinal types like char as array index.
+# [str]float         -> OrderedTable[string, float] / an insertion-ordered dict:
+# `[...]` is an ordered mapping whatever the key; only a finite ordinal key
+# fixes the keys and their order at compile time. See ordered_map_key().
 enum_array_type = LBRACKET + (type_name | primitive_type) + RBRACKET + elem_type
 
 # {str}int          -> dict[str, int]
@@ -431,3 +446,95 @@ def parse_type(source_code):
         return None
     return result[0]
 
+
+
+# --- [K]V: an array, or a mapping in insertion order -------------------------
+# `[...]` is the ordered side of the type table. With a finite ordinal between
+# the brackets -- an enum, a subrange, bool, char -- every key and its place
+# are known at compile time, and [K]V is an array. With any other key type the
+# keys are not known until they arrive, so they are ordered by arrival:
+# [str]float is an insertion-ordered mapping on both backends.
+
+_ORDINAL_PRIMITIVES = {"bool", "char"}
+_KEYED_PRIMITIVES = {"int", "str", "float", "bytes"}
+# Builtin names that are types but no finite domain: Natural and Positive are
+# subranges of int, far too large to be an array's index.
+_KEYED_BUILTINS = {"Natural", "Positive", "Path", "Job", "RunResult",
+                   "ShellFailure_T"}
+
+
+def _index_name(idx_node):
+    """The identifier between the brackets of an enum_array_type, or None."""
+    node = idx_node
+    while hasattr(node, "nodes") and node.nodes:
+        head = node.nodes[0]
+        if isinstance(head, str):
+            return head if len(node.nodes) == 1 else None
+        if len(node.nodes) != 1:
+            return None
+        node = head
+    return node if isinstance(node, str) else None
+
+
+def _decl_is_ordered_map_key(rhs, decls, seen):
+    """Whether a type declared as RHS (its text) keys an ordered mapping."""
+    rhs = rhs.strip()
+    if rhs.startswith("enum"):
+        return False
+    if rhs.startswith("float"):
+        return True                       # float range: not ordinal
+    if rhs[:1] in "[{(?" or "|" in rhs:
+        return True                       # a container, tuple, optional, union
+    if ".." in rhs:
+        return False                      # an integer subrange
+    if rhs.isidentifier():
+        return _name_is_ordered_map_key(rhs, decls, seen)
+    return True
+
+
+def _name_is_ordered_map_key(name, decls, seen):
+    """True: a type with no finite domain. False: a finite ordinal type.
+    None: not a type at all -- a constant giving the length, `[N]T`."""
+    from hek_parsec import ParserState
+    if name in _ORDINAL_PRIMITIVES:
+        return False
+    if name in _KEYED_PRIMITIVES or name in _KEYED_BUILTINS:
+        return True
+    if name in seen:
+        return None
+    seen = seen | {name}
+    if name in decls:
+        rhs = decls[name]
+        if rhs is None:                   # a class
+            return True
+        return _decl_is_ordered_map_key(rhs, decls, seen)
+    # Not declared in this module: a type a nimported one declared, or a
+    # constant. An ordinal type carries its bounds in tick_types.
+    info = getattr(ParserState, "tick_types", {}).get(name)
+    if info is not None:
+        return bool(info.get("is_float_range"))
+    sym = ParserState.symbol_table.lookup(name) if getattr(
+        ParserState, "symbol_table", None) is not None else None
+    if isinstance(sym, dict) and sym.get("kind") in ("type", "class",
+                                                     "ref_class"):
+        return True
+    if name in getattr(ParserState, "py_type_names", ()):
+        return True
+    return None
+
+
+def ordered_map_key(idx_node):
+    """Whether `[K]V` with K = IDX_NODE is an insertion-ordered mapping.
+
+    False for a finite ordinal K -- an enum, an integer subrange, bool or
+    char, or a name for one -- and for a constant naming a length, `[N]T`:
+    those are arrays. True for every other type: str, int, float, a class,
+    a tuple or container named by an alias. The declarations come from
+    scan_type_decls, so a type declared further down the file counts.
+    """
+    name = _index_name(idx_node)
+    if name is None:
+        return False
+    from hek_parsec import ParserState
+    decls = getattr(ParserState, "ady_type_decls", None) or {}
+    return bool(_name_is_ordered_map_key(name, decls, frozenset()))

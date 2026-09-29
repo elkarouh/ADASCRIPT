@@ -47,16 +47,18 @@ Adascript uses prefix notation for containers. `[]int` = "list of int".
 
 - **Ordered?** = bracket shape. `[…]` ordered, `{…}` unordered.
 - **Keyed?** = whether a type sits inside. Empty (`[]T`, `{}T`) = a
-  **collection** of T; a type inside (`[O]T`, `{K}V`) = a **mapping** from
+  **collection** of T; a type inside (`[K]T`, `{K}V`) = a **mapping** from
   the bracketed type to the one that follows.
-- A mapping's key is constrained by the ordering: inside `[…]` it must be an
-  **ordinal type** (enum, `bool`, `char`, integer subrange); inside `{…}`,
-  any hashable type.
+- Inside `[…]` the key's kind picks the order. A **finite ordinal** (enum,
+  `bool`, `char`, integer subrange) = an array: keys and order fixed at
+  compile time. **Any other** key (`str`, `int`, class, named tuple) =
+  **insertion order**: `[str]float` is `OrderedTable` on Nim, a dict on
+  Python. Inside `{…}`, any hashable type, no order promised.
 
 |                | ordered `[…]`          | unordered `{…}` |
 |----------------|------------------------|-----------------|
 | **collection** | `[]T` list             | `{}T` set       |
-| **mapping**    | `[O]T` ordinal-indexed | `{K}V` dict     |
+| **mapping**    | `[K]T` ordered         | `{K}V` dict     |
 
 Underneath, a collection is a mapping that supplies its own key: a list maps
 positions to elements, a set maps elements to in-or-out. Hence `xs[i]` and
@@ -70,7 +72,9 @@ dict; bare `{}` is the empty set.
 **Portability:** `{…}` types iterate in insertion order on Python and hash
 order on Nim — never depend on it; sort the keys (sort the *keys*, not the
 table: `sorted(d)` compiles only on Python). `[O]T` is fine: all four forms
-yield values in domain order on both backends, `[E]T` included.
+yield values in domain order on both backends, `[E]T` included. So is a
+`[K]V` over any other key: values in insertion order on both. Need a dict
+whose order matters? Declare it `[str]V`, not `{str}V`.
 
 | Adascript | Python | Nim |
 |-----------|--------|-----|
@@ -78,6 +82,7 @@ yield values in domain order on both backends, `[E]T` included.
 | `[N]T` | `tuple[T, ...]` (fixed-size) | `array[N, T]` |
 | `[*]T` | `Sequence[T]` | `openArray[T]` |
 | `[E]T` | `dict[E, T]` | `array[E, T]` (enum-indexed) |
+| `[K]V` | `dict[K, V]` (a subclass iterating values) | `OrderedTable[K, V]` (K not a finite ordinal) |
 | `{K}V` | `dict[K, V]` | `Table[K, V]` |
 | `{}T` | `set[T]` | `HashSet[T]` or `set[T]` (ordinal) |
 | `?T` | `T \| None` | `Option[T]` |
@@ -978,6 +983,20 @@ var asArr:  [5]int = [i*i for i in 0..4]   # a length has no type to name
 so adding a member cannot leave the two out of step; `for i in 0..2` only
 happens to be the right length. There is no keyed comprehension
 (`[LOW: 1 for ...]`) — values are positional.
+
+**Insertion-ordered `[K]V`** — K not a finite ordinal:
+
+```adascript
+var totals: [str]float = {:}          # or {"a": 1.0}, ["a": 1.0], {k: v for ...}
+totals["zeta"] = 3.0
+totals["alpha"] = 1.0
+for v in totals: print v              # values, insertion order: 3.0 1.0
+for k, v in totals.items(): ...       # (key, value), insertion order
+for k, v in enumerate(totals): ...    # (key, value), as over any [K]V
+```
+
+Iterates **values** (like every `[K]V`), not keys — use `.keys()`. Tuple
+keys need a named type (`[(int, int)]R` is the callable type).
 
 ---
 

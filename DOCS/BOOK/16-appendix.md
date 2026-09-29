@@ -17,6 +17,7 @@
 | List / fixed array / open array | `[]T` / `[N]T` / `[*]T` (params only) |
 | Fixed array is a subrange key | `[10]T` ≡ `[0..9]T` |
 | Ordinal-keyed mapping | `[O]T` — `O` an enum, `bool`, `char`, or a subrange |
+| Insertion-ordered mapping | `[K]V` — any other `K`: `[str]float` is an `OrderedTable` |
 | Dict / set / enum-indexed array | `{K}V` / `{}T` / `[E]T` |
 | Optional | `?T` |
 | Failure type | an ordinary record, `type F is record:`, marked `!F` in a union |

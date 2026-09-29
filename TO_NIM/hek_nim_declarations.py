@@ -223,7 +223,31 @@ def to_nim(self, prec=None):
     """enum_array_type: '[' IDENTIFIER ']' type_annotation (enum-indexed array) -> Nim: array[EnumType, T]"""
     idx = self.nodes[0].to_nim()
     elem = self.nodes[1].to_nim()
+    # `[str]float`: a key with no finite domain orders its keys by
+    # insertion, which is what OrderedTable is. See ordered_map_key.
+    from ady_declarations import ordered_map_key
+    if ordered_map_key(self.nodes[0]):
+        ParserState.nim_imports.add("tables")
+        _ensure_ordered_table_items()
+        return f"OrderedTable[{idx}, {elem}]"
     return f"array[{idx}, {elem}]"
+
+
+_ORDERED_TABLE_ITEMS = """\
+iterator items[K, V](t: OrderedTable[K, V]): V =
+  ## `for v in m` over a `[K]V`: its values, in insertion order -- as a
+  ## `[Color_T]V` yields its values in the order of the domain.
+  for v in t.values: yield v"""
+
+
+def _ensure_ordered_table_items():
+    """Define `items` on OrderedTable the first time a [K]V map is named:
+    a [K]V iterates its values, whatever K is."""
+    decls = getattr(ParserState, "nim_top_decls", None)
+    if decls is None:
+        decls = ParserState.nim_top_decls = []
+    if _ORDERED_TABLE_ITEMS not in decls:
+        decls.append(_ORDERED_TABLE_ITEMS)
 
 
 @method(subrange_array_type)

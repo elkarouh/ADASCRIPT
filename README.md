@@ -295,7 +295,7 @@ settle which form you want.
 **Is it keyed?** — that is whether anything sits *inside* the brackets.
 
 - Nothing inside — `[]T`, `{}T` — a **collection** of `T`.
-- A type inside — `[O]T`, `{K}V` — a **mapping**, from the type in the
+- A type inside — `[K]T`, `{K}V` — a **mapping**, from the type in the
   brackets to the one that follows them.
 
 Four combinations, four forms, and each corner is just the everyday name of
@@ -304,7 +304,7 @@ the thing:
 |                | ordered `[…]`                    | unordered `{…}`   |
 |----------------|----------------------------------|-------------------|
 | **collection** | `[]T` — a list                   | `{}T` — a set     |
-| **mapping**    | `[O]T` — an array indexed by `O` | `{K}V` — a dict   |
+| **mapping**    | `[K]T` — keys in order           | `{K}V` — a dict   |
 
 Read them aloud and they say what they are:
 
@@ -314,16 +314,38 @@ Read them aloud and they say what they are:
 - `[Color]int` — an ordered mapping from `Color` to `int`. One slot per enum
   member, held in enum order.
 - `[0..9]int` — an ordered mapping from `0 .. 9` to `int`. A fixed array.
+- `[str]float` — an ordered mapping from `str` to `float`, its keys held in
+  the order they were inserted.
 - `[10]int` — **the same type**, spelled by size instead of by bound. A
   length `N` is shorthand for the subrange `0 .. N-1`, so `[10]int` and
   `[0..9]int` are one type, not two — on the Nim backend
   `array[10, int] is array[0..9, int]` is literally `true`, and a value of
   one is assignable to the other.
 
-A mapping's key type is constrained by the ordering, which is the one place
-the two questions meet. Between `[…]` it must be an **ordinal type** — an
-enum, `bool`, `char`, an integer subrange — since an order to index by is
-exactly what an ordinal has. Between `{…}` any hashable type will do.
+Between either pair of brackets the key may be any type; what the ordering
+depends on is the key. With a **finite ordinal type** — an enum, `bool`,
+`char`, an integer subrange — every key and its place are known at compile
+time, and `[O]T` is an array: one slot per value of `O`, in the order of
+`O`. With any other key — `str`, `int`, a class, a tuple named by a type —
+the keys are not known until they arrive, so they are held **in insertion
+order**: `[str]float` is an `OrderedTable` on Nim and a dict on Python.
+Either way `[…]` keeps its meaning, an ordered collection, and iterating it
+yields the values in that order. `{K}V` makes no such promise.
+
+```python
+var totals: [str]float = {:}      # OrderedTable[string, float] / dict
+totals["zeta"] = 3.0
+totals["alpha"] = 1.0
+for v in totals:
+    print v                       # 3.0, then 1.0 -- on both backends
+for k, v in totals.items():
+    print f"{k}={v}"              # zeta=3.0, alpha=1.0
+```
+
+Its literal is a dict's, `{"zeta": 3.0}` or `{:}`, or the keyed form
+`["zeta": 3.0]`; the declaration makes it ordered. A tuple key has to be
+named first (`type Pos_T is (int, int)`, then `[Pos_T]float`), since
+`[(int, int)]R` is already the callable type.
 
 So the fixed array is not a special form: it is `[O]T` where the ordinal
 type happens to be a subrange. The key may equally be written out
@@ -382,6 +404,7 @@ shape assumes — not because it fails to be a mapping.
 | `[N]T`         | `tuple[T, ...]`           | `array[N, T]`                  |
 | `[*]T`         | `Sequence[T]`             | `openArray[T]`                 |
 | `[E]T`         | `dict[E, T]`              | `array[E, T]` (enum-indexed)   |
+| `[K]V`         | `dict[K, V]` (insertion order) | `OrderedTable[K, V]` (K not a finite ordinal) |
 | `{K}V`         | `dict[K, V]`              | `Table[K, V]`                  |
 | `{}T`          | `set[T]`                  | `HashSet[T]` or `set[T]`       |
 | `?T`           | `T \| None`               | `Option[T]`                    |
@@ -431,7 +454,8 @@ parameter types on the left, the result on the right.
 > sort the keys, or use an ordered form.
 >
 > `[]T`, `[N]T` and `[*]T` carry no such caveat: iterating them yields the
-> values in position order on both backends.
+> values in position order on both backends. Nor does `[K]V` with any other
+> key, `[str]float` say: it yields its values in insertion order on both.
 >
 > `[E]T` included: it yields its values in enum order, whatever order the
 > literal was written in, and `score[RED]` indexes it. On the Python backend

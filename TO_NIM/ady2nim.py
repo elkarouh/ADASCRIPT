@@ -101,6 +101,7 @@ def _nim_reset():
     if _py_stmt_reset is not None:
         _py_stmt_reset.RETURN_NODES.clear()
     ParserState.tick_types = {}
+    ParserState.ady_type_decls = {}
     ParserState.class_field_types = {}
     ParserState.proc_param_types = {}
     ParserState.proc_param_types_full = {}
@@ -673,8 +674,9 @@ def translate(code, export_symbols=False):
     ParserState.failure_types = (_failures | {"ShellFailure_T"}
                                  | _nimport_carried.get("failure_types", set()))
     ParserState.ady_return_types = scan_return_types(code)
-    from ady_stmt import scan_union_aliases
+    from ady_stmt import scan_union_aliases, scan_type_decls
     ParserState.union_aliases = scan_union_aliases(code)
+    ParserState.ady_type_decls = scan_type_decls(code)
     ParserState.union_aliases_nim = {}
     ParserState.ady_return_types_nim = {}
     ParserState.result_procs = either_procs(ParserState.ady_return_types,

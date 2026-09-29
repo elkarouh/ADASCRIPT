@@ -1,0 +1,88 @@
+#!/usr/bin/env ady2nim
+# test_ordered_map.ady — [K]V over a key with no finite domain
+#
+#   ady2nim EXAMPLES/test_ordered_map.ady -r
+#   ady2py  EXAMPLES/test_ordered_map.ady -c
+#
+# `[...]` is the ordered side of the type table. With a finite ordinal
+# between the brackets -- `[Temp_T]float` -- every key and its place are
+# known at compile time and the mapping is an array. With any other key --
+# `[str]float` -- the keys are ordered by insertion: an OrderedTable on Nim,
+# a dict on Python. Either way a [K]V iterates its values, in its order.
+#
+# Run on both backends and the outputs compared, so the order is checked
+# too, not only the values.
+
+type Temp_T is 1 .. 30
+type Node_T is str
+type Scores_T is [Node_T]float
+
+# --- filled one key at a time: insertion order, not sorted, not hashed ------
+var y: [str]float = {:}
+y["zeta"] = 3.0
+y["alpha"] = 1.0
+y["mid"] = 2.0
+for v in y:
+    print v                              # 3.0 1.0 2.0
+for k, v in y.items():
+    print f"{k}={v}"
+print len(y)
+assert "alpha" in y and not ("beta" in y)
+
+# --- the literals: `{k: v}` and `[k: v]` both keep the order written --------
+var z: [Node_T]int = {"q": 1, "b": 2, "a": 3}
+var keys: []str = []
+for k in z.keys():
+    keys.append(k)
+assert keys == ["q", "b", "a"]
+var w: [str]int = ["q": 1, "b": 2, "a": 3]
+for k, v in enumerate(w):
+    print f"{k} {v}"                     # the key, as over a [Color_T]T
+
+# --- an int key: a sparse map, still in insertion order ---------------------
+var e: [int]str
+e[10] = "ten"
+e[2] = "two"
+for s in e:
+    print s
+
+# --- a finite ordinal key stays an array ------------------------------------
+var t: [Temp_T]float
+t[3] = 1.5
+print t[3]
+
+# --- a comprehension, a function's result, a field, a reassignment ----------
+var c: [str]int = {s: len(s) for s in ["ccc", "a", "bb"]}
+for n in c:
+    print n                              # 3 1 2
+
+def make() -> Scores_T:
+    var r: Scores_T = {:}
+    r["x"] = 1.0
+    r["a"] = 2.0
+    return r
+
+def empty() -> [str]int:
+    return {:}
+
+class Box:
+    var tally: [str]int
+    def __init__(self):
+        self.tally["z"] = 1
+        self.tally["y"] = 2
+
+let m: Scores_T = make()
+var total: float = 0.0
+for v in m:
+    total += v
+print total
+assert len(empty()) == 0
+let b: Box = Box()
+for k, v in b.tally.items():
+    print f"{k}:{v}"
+y = {"new": 9.0, "first": 8.0}
+for v in y:
+    print v                              # 9.0 8.0
+y = {:}
+assert len(y) == 0
+print "test_ordered_map: ok"

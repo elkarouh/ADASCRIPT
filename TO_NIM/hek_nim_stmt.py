@@ -288,7 +288,7 @@ def to_nim(self):
                 _base_sym = ParserState.symbol_table.lookup(_base_m.group(1))
                 if _base_sym:
                     _btype = _base_sym.get("type") or ""
-                    _vm = _re_tb.match(r"Table\[[^,]+,\s*(.+)\]$", _btype)
+                    _vm = _re_tb.match(r"(?:Ordered)?Table\[[^,]+,\s*(.+)\]$", _btype)
                     if _vm:
                         sym = {"type": _vm.group(1).strip()}
         # ...and a field's: self.owners[k] = {:}. The base is no bare name,
@@ -299,7 +299,7 @@ def to_nim(self):
             if _field_m:
                 from hek_nim_expr import _nim_expr_type
                 _btype = _nim_expr_type(_field_m.group(1)) or ""
-                _vm = _re_tb.match(r"Table\[[^,]+,\s*(.+)\]$", _btype)
+                _vm = _re_tb.match(r"(?:Ordered)?Table\[[^,]+,\s*(.+)\]$", _btype)
                 if _vm:
                     sym = {"type": _vm.group(1).strip()}
         if sym:
@@ -307,6 +307,16 @@ def to_nim(self):
             m = _re_tb.match(r"Table\[([^,]+),\s*(.+)\]$", stype)
             if m:
                 parts[1] = f"initTable[{m.group(1)}, {m.group(2)}]()"
+    # A [K]V map over a non-ordinal K is an OrderedTable: `m = {...}` and
+    # `m = {:}` rebuild one of those, not a Table.
+    if len(parts) == 2 and prefix == "":
+        _osym = ParserState.symbol_table.lookup(lhs)
+        _otype = (_osym.get("type") or "") if isinstance(_osym, dict) else ""
+        if not _otype:
+            from hek_nim_expr import _nim_expr_type
+            _otype = _nim_expr_type(lhs) or ""
+        if _otype:
+            parts[1] = _to_ordered_table(parts[1], _otype)
     # Result[T, E] assignment: `r = Err(e)`, `r = v` -> typed constructors
     if len(parts) == 2 and prefix == "":
         _rsym = ParserState.symbol_table.lookup(lhs)
@@ -878,6 +888,37 @@ def _specialize_init_table(value, annotation):
     return value
 
 
+def _to_ordered_table(value, annotation):
+    """A table value for an `OrderedTable[K, V]` -- a `[K]V` whose K is no
+    finite ordinal -- built as one: `{...}.toTable` becomes
+    `{...}.toOrderedTable`, `initTable[...]()` `initOrderedTable[...]()`, and a
+    dict comprehension collects into an OrderedTable. Only the outermost
+    value: a `[str]{str}int` still holds plain tables."""
+    _ann = annotation
+    _ann_sym = ParserState.symbol_table.lookup(_ann)
+    if _ann_sym and _ann_sym.get("kind") == "type":
+        _ann = _ann_sym.get("type", _ann) or _ann
+    if not _ann.startswith("OrderedTable["):
+        return value
+    v = value.strip()
+    if v == "initTable()":
+        return f"initOrderedTable[{_ann[len('OrderedTable['):-1]}]()"
+    if v.startswith("initTable[") and v.endswith("]()"):
+        return "initOrderedTable" + v[len("initTable"):]
+    if v.startswith("collect(initTable,"):
+        return "collect(initOrderedTable," + v[len("collect(initTable,"):]
+    if v.startswith("{") and v.endswith("}.toTable"):
+        depth = 0
+        for i, ch in enumerate(v):
+            depth += ch in "([{"
+            depth -= ch in ")]}"
+            if depth == 0:
+                break
+        if i == len(v) - len(".toTable") - 1:
+            return v[:-len(".toTable")] + ".toOrderedTable"
+    return value
+
+
 # --- annotated assignment ---
 # Non-zero while a record, tuple or class body is being rendered. There, a
 # `name: T` with no initialiser is a *field* and does declare one -- it is
@@ -950,6 +991,8 @@ def to_nim(self):
                 value = _coerce_scalar_value(value, annotation)
                 value = _coerce_char_to_string(value, annotation)
                 value = _coerce_string_to_char(value, annotation)
+                # [K]V over a non-ordinal K: the table literal is an ordered one
+                value = _to_ordered_table(value, annotation)
                 # array types: {} is unnecessary — arrays are zero-initialized
                 if value == "initTable()" and annotation.startswith("array["):
                     value = ""
@@ -1209,6 +1252,8 @@ def to_nim(self):
                 value = _coerce_scalar_value(value, annotation)
                 value = _coerce_char_to_string(value, annotation)
                 value = _coerce_string_to_char(value, annotation)
+                # [K]V over a non-ordinal K: the table literal is an ordered one
+                value = _to_ordered_table(value, annotation)
                 # array types: {} is unnecessary — arrays are zero-initialized
                 if value == "initTable()" and annotation.startswith("array["):
                     value = ""
@@ -1442,6 +1487,8 @@ def to_nim(self):
                 return f"return some({val})"
     if val == "nil" and ret_type and "seq[" in ret_type:
         return "return @[]"
+    if _rt_bare:
+        val = _to_ordered_table(val, _rt_bare)
     if val == "initTable()" and ret_type:
         import re as _re2
         _tm = _re2.search(r"Table\[([^,]+),\s*(.+)\]$", ret_type)

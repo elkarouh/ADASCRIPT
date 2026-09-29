@@ -396,6 +396,20 @@ def scan_union_aliases(code):
     return out
 
 
+_CLASS_DECL = _re_dup.compile(r"^[ \t]*class[ \t]+([A-Za-z_]\w*)", _re_dup.MULTILINE)
+
+
+def scan_type_decls(code):
+    """Every type CODE declares, as {name: its definition, as written}; a
+    class maps to None. Read by ordered_map_key to tell `[Color_T]int`, an
+    array, from `[Node_T]int`, a mapping in insertion order, wherever in the
+    file the key type is declared."""
+    out = {m.group(1): None for m in _CLASS_DECL.finditer(code)}
+    for m in _ALIAS_DECL.finditer(code):
+        out[m.group(1)] = m.group(2).strip()
+    return out
+
+
 def either_procs(return_types, failure_types):
     """The routines among RETURN_TYPES that return `T | !F`, F a failure."""
     out = set()

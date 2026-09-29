@@ -134,18 +134,21 @@ two independent questions settle which form you want.
 - **Is it ordered?** — the *shape* of the brackets. `[…]` is ordered, `{…}`
   is not.
 - **Is it keyed?** — whether anything sits *inside* them. Nothing inside
-  (`[]T`, `{}T`) is a **collection** of `T`; a type inside (`[O]T`, `{K}V`)
+  (`[]T`, `{}T`) is a **collection** of `T`; a type inside (`[K]T`, `{K}V`)
   is a **mapping**, from the bracketed type to the one that follows.
 
 |                | ordered `[…]`                    | unordered `{…}` |
 |----------------|----------------------------------|-----------------|
 | **collection** | `[]T` — a list                   | `{}T` — a set   |
-| **mapping**    | `[O]T` — an array indexed by `O` | `{K}V` — a dict |
+| **mapping**    | `[K]T` — keys in order           | `{K}V` — a dict |
 
-The two questions meet in one place: a mapping's key type is constrained by
-the ordering. Between `[…]` it must be an **ordinal type** — an enum,
-`bool`, `char`, or an integer subrange — because an order to index by is
-what an ordinal has. Between `{…}` any hashable type works.
+The two questions meet in one place: what order a `[…]` mapping has depends
+on its key. With a **finite ordinal** key — an enum, `bool`, `char`, or an
+integer subrange — all the keys and their order are known at compile time,
+and `[O]T` is an array indexed by `O`. With any other key — `str`, `int`, a
+class — the keys are ordered by **insertion**: `[str]float` is an
+`OrderedTable` on Nim and a dict on Python. Between `{…}` any hashable type
+works, in no promised order.
 
 That makes the fixed-size array unremarkable rather than a special case: a
 length is shorthand for a subrange, so `[10]int` and `[0..9]int` are one
@@ -168,6 +171,7 @@ if the output has to match.
 | `[N]T`         | `tuple[T, ...]`      | `array[N, T]`                  |
 | `[*]T`         | `Sequence[T]`        | `openArray[T]`                 |
 | `[E]T`         | `dict[E, T]`         | `array[E, T]` (enum-indexed)  |
+| `[K]V`         | `dict[K, V]`         | `OrderedTable[K, V]` (K not a finite ordinal) |
 | `{K}V`         | `dict[K, V]`         | `Table[K, V]`                  |
 | `{}T`          | `set[T]`             | `HashSet[T]` or `set[T]`      |
 | `?T`           | `T \| None`          | `Option[T]`                    |
@@ -598,6 +602,39 @@ with no type to name, so `[5]int` still takes a `0..4`.
 There is no keyed comprehension (`[RED: 1 for ...]`); the values are
 positional, which is why iterating the domain is the spelling that keeps
 them honest.
+
+### Insertion-ordered maps `[K]V`
+
+When the key is not a finite ordinal — a string, an int, a class — `[K]V`
+is still an ordered mapping, and the order is the order the keys arrived
+in. It is an `OrderedTable` on Nim and a dict on Python, so the two backends
+agree on the order, which a `{K}V` does not promise:
+
+```python
+var totals: [str]float = {:}
+totals["zeta"] = 3.0
+totals["alpha"] = 1.0
+totals["mid"] = 2.0
+
+for v in totals:
+    print v                          # 3.0 1.0 2.0 -- its values, like any [K]V
+for k, v in totals.items():
+    print f"{k}={v}"                 # zeta=3.0 alpha=1.0 mid=2.0
+for k, v in enumerate(totals):
+    print k, v                       # the key, as over a [Color]int
+
+var lens: [str]int = {s: len(s) for s in ["ccc", "a", "bb"]}   # in that order
+var ages: [str]int = ["bob": 41, "amy": 37]                    # likewise
+```
+
+A dict literal, `{:}` and a dict comprehension all build one: the
+declaration decides. Like every `[K]V` it iterates its **values**; use
+`.keys()` or `.items()` for the keys. Keys can be any hashable type, but a
+tuple key needs a name, `type Pos_T is (int, int)` then `[Pos_T]float`:
+`[(int, int)]R` is already the callable type.
+
+Pick `[K]V` when the order matters — output that follows the input, a
+report in the order things were first seen — and `{K}V` when it does not.
 
 Nested enum arrays work too (2-D lookup table):
 

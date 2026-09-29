@@ -81,6 +81,9 @@ def to_py(self):
         _t = ParserState.symbol_table.lookup(parts[0])
         if isinstance(_t, dict) and (_t.get("type") or "") == "Path":
             _reject_str_to_path(parts[0], "Path", parts[-1])
+        # `m = {...}` on a [K]V map keeps it one
+        if isinstance(_t, dict) and _t.get("type"):
+            parts[-1] = _wrap_for_ordered_array(parts[-1], _t["type"])
     return " = ".join(parts)
 
 
@@ -120,6 +123,7 @@ def to_py(self):
                 value = seq.nodes[1].to_py()
                 _reject_str_to_path(name, annotation, value)
                 value = _wrap_seq_for_enum_array(value, annotation)
+                value = _wrap_for_ordered_array(value, annotation)
                 value = _wrap_list_for_queue(value, annotation)
                 result += f" = {value}"
                 has_value = True
@@ -223,6 +227,24 @@ def _wrap_seq_for_enum_array(value, annotation):
     else:
         return value
     return f"_EnumArray(zip({domain}, {v}))"
+
+
+def _wrap_for_ordered_array(value, annotation):
+    """A mapping value for an `_OrderedArray[K, V]` -- a [K]V whose K is no
+    finite ordinal -- built as one. A dict literal, `{:}`, a dict
+    comprehension or the `[k: v]` literal would otherwise be a plain dict,
+    which iterates its keys where a [K]V iterates its values."""
+    from hek_parsec import ParserState
+    ann = (annotation or "").strip()
+    ann = getattr(ParserState, "py_type_aliases", {}).get(ann, ann)
+    if not ann.startswith("_OrderedArray["):
+        return value
+    v = (value or "").strip()
+    if v.startswith("_EnumArray("):
+        return "_OrderedArray(" + v[len("_EnumArray("):]
+    if v.startswith("{"):
+        return f"_OrderedArray({v})"
+    return value
 
 
 _re_p2s = _re_mod_p2s.compile(r'^[A-Za-z_]\w*$')
@@ -349,6 +371,7 @@ def _zero_value(annotation, _depth=0):
                 break
         return "_EnumArray()"
     for prefix, empty in (("_EnumArray[", "_EnumArray()"),
+                          ("_OrderedArray[", "_OrderedArray()"),
                           ("list[", "[]"), ("dict[", "{}"), ("set[", "set()"),
                           ("frozenset[", "frozenset()"), ("tuple[", "()"),
                           ("Counter[", "Counter()")):
@@ -397,6 +420,7 @@ def to_py(self):
                 value = seq.nodes[1].to_py()
                 _reject_str_to_path(name, annotation, value)
                 value = _wrap_seq_for_enum_array(value, annotation)
+                value = _wrap_for_ordered_array(value, annotation)
                 value = _wrap_list_for_queue(value, annotation)
                 result += f" = {value}"
                 has_value = True
@@ -438,7 +462,8 @@ def to_py(self):
 def to_py(self):
     """return_val: 'return' expressions. A `T | E` needs nothing here: the
     value returned is the T or the E itself."""
-    return f"return {self.nodes[0].to_py()}"
+    val = self.nodes[0].to_py()
+    return f"return {_wrap_for_ordered_array(val, getattr(ParserState, '_py_return_type', ''))}"
 
 
 @method(return_bare)

@@ -1672,6 +1672,8 @@ def to_py(self, indent=0):
         _t = ret_ann.strip().lstrip("->").strip()
         _zeros = {"str": '""', "int": "0", "float": "0.0", "bool": "False"}
         _zero = (_zeros.get(_t) or
+                 (_stmt._zero_value(_t) if _stmt._zero_value(_t).startswith(
+                     ("_OrderedArray", "_EnumArray")) else None) or
                  ("[]" if _t.startswith("[") else
                   "{}" if _t.startswith("{") else "None"))
         _init = f"{_ind(indent + 1)}result = {_zero}\n"
@@ -1924,7 +1926,7 @@ def _dataclass_defaults(field_lines):
         if zero in factories:
             ParserState.nim_imports.add("from dataclasses import dataclass, field")
             out.append(f"{pad}{fname}: {ann} = field(default_factory={factories[zero]})")
-        elif zero.startswith("_EnumArray"):
+        elif zero.startswith(("_EnumArray", "_OrderedArray")):
             # An [O]T field's zero value is an _EnumArray -- itself a dict
             # under the hood, and mutable-shared exactly like a bare list or
             # dict zero above, just not spelled "[]"/"{}" so `factories`
