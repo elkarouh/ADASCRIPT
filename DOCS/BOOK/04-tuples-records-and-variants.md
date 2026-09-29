@@ -103,13 +103,14 @@ you *could* not do this, because tuples are immutable values; records are the
 right tool the moment fields are assigned piecemeal.
 
 Records nest happily with the collection notations. The Scheme interpreter
-`EXAMPLES/INTERACTIVE/lispy.ady` represents environments as a record
-containing a dict and a reference to the enclosing scope:
+`TOOLS/LISPY/lispy.ady` represents an environment as a *class*
+(chapter 9) holding a dict and a reference to the enclosing scope, with
+`define`, `assign` and `lookup` as its methods:
 
 ```python
-type Env_T is record:
-    bindings: {str}Val_T
-    outer:    Env_T
+class Env:
+    var bindings: {str}Val_T
+    var outer:    ?Env
 ```
 
 An ordinary record can also be the failure side of a function's return
@@ -139,10 +140,8 @@ runtime error); Python output is a flattened dataclass with `None` defaults
 for the fields of inactive branches.
 
 The heavyweight real-world use is `lispy.ady`, whose entire value
-representation is one tagged record. Here the author chose the *flat* record
-style — every field present, the `kind` enum saying which ones are
-meaningful — because the interpreter targets both backends and manipulates
-values generically:
+representation is one variant record. Each kind carries only the fields it
+has, so reading the number of a symbol is not something a program can say:
 
 ```python
 type Val_Kind_T is enum:
@@ -155,17 +154,29 @@ type Val_Kind_T is enum:
     VLambda     # user-defined closure
     VBuiltin    # built-in primitive proc
 
-type Val_T is record:
-    kind:      Val_Kind_T
-    num:       float
-    sym:       str
-    flag:      bool
-    items:     []Val_T
-    parms:     []str
-    rest_parm: str       # non-empty -> variadic: extra args bound here
-    body:      Val_T
-    env:       Env_T
+type Val_T (kind: Val_Kind_T) is record:
+    case kind is
+        when VNum:
+            num:   float
+        when VSym:
+            sym:   str
+        when VStr:
+            text:  str
+        when VBool:
+            flag:  bool
+        when VNil:
+            unit:  bool       # carries nothing; a variant needs a field
+        when VList:
+            items: []Val_T
+        when VLambda:
+            lam:   Lambda     # a class: a record cannot hold itself
+        when VBuiltin:
+            name:  str
 ```
+
+On Nim a variant is a value type, so a closure, which holds a `Val_T` (its
+body) that would in turn hold the closure, is a class marked `@virtual`;
+that makes it a reference, and the cycle is broken.
 
 Everything downstream dispatches on `kind` — with `case`/`when` (next
 chapter) or with structural patterns like `Val_T(kind=VSym, sym=name)`.

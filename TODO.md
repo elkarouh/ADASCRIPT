@@ -493,3 +493,28 @@ let rc: int = shell(join = ";"):
 let rc: int = shell(join = ";"):
     sd 'a' 'b' {out_file}
 ```
+
+## Union returns: four Nim-side slips found rewriting lispy.ady
+
+`T | !F` works in free functions and most methods, but on Nim:
+
+- A string holding a `)` inside a call's argument list --
+  `return reject("missing )")` -- makes the analysis of what is returned lose
+  its place: the failure is wrapped as `.ok(...)` instead of `.err(...)` and
+  Nim refuses it. Naming the string first (`let MISSING: str = "missing )"`)
+  avoids it. The same for `return Failure_T(message="missing )")`.
+- `if r is F: return r` narrows `r` for the rest of a *free function*, but
+  not at the top level of a *class method* (deeper blocks are fine): a later
+  `use(r)` still sees the Result. `case r: when F: ... when T: ...` narrows
+  in both.
+- The return type of a method is looked up by its bare name, so a method
+  `run` returning `str | !F` is taken for the free function `run` returning
+  `str` when the two share a file.
+- A method named `get` is taken for a dict's `get`, and `bind` is a Nim
+  keyword: a Nim-reserved or stdlib-shadowing method name fails late, inside
+  Nim, rather than with a message from Adascript.
+
+Also: a variant record is a value type on Nim, so a variant that holds
+itself through a field (a closure holding its body) needs the holder to be a
+class marked `@virtual` -- correct, but `@virtual` is documented as being for
+cross-module subclasses only.

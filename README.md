@@ -3099,6 +3099,7 @@ is for.
 | [`TOOLS/ADA_INDENT/`](TOOLS/ADA_INDENT) | re-indents **Ada** source. Not a parser: indentation needs only the keywords that open, close or split a block, and [its README](TOOLS/ADA_INDENT/README.md) specifies that simplified grammar |
 | [`TOOLS/GIT1/`](TOOLS/GIT1) | version control for **one file at a time**: every tracked file gets its own private git repository, so many of them share a directory without seeing each other |
 | [`TOOLS/PGREP/`](TOOLS/PGREP) | greps the sources of a **CM build closure**, or of every subsystem's LATEST build, one process per subsystem. A translation of a ~480-line ksh script, and [its README](TOOLS/PGREP/README.md) says where it deliberately differs from it |
+| [`TOOLS/LISPY/`](TOOLS/LISPY) | a **Scheme interpreter** after Norvig's `lis.py` (kept beside it): a variant record for values, classes for environments and the reader, `Val_T \| !Failure_T` from the reader, special forms as `case` patterns |
 
 They build the same way any `.ady` file does, and `make test` builds and
 exercises all three:

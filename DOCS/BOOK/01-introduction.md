@@ -339,7 +339,7 @@ this book:
 | Simulations | `monty_hall.ady`, `prisoners.ady` |
 | Frameworks | `shortest_path.ady` (+ `test_shortest_path.ady`), `state_search.ady` (+ tests) |
 | Operations research / RL | `dp/jacks.ady`, `td_learning/qlearning.ady`, `td_learning/sarsa.ady`, `timetable_*.ady` |
-| An interpreter | `INTERACTIVE/lispy.ady` — a full Scheme interpreter |
+| An interpreter | `TOOLS/LISPY/lispy.ady` — a full Scheme interpreter |
 | Text processing | `awk_example.ady`, `test_awk.ady`, `test_regex.ady`, `average_line.ady` |
 | System tools | `geo_server.ady`; the full-size ones live under `TOOLS/`: `rsync_time_machine.ady`, `lolcate.ady`, `git1.ady`, `lv.ady`, and `c500.ady`, a C to WebAssembly compiler |
 | Interactive shell tools | `INTERACTIVE/fsel.ady`, `INTERACTIVE/sv.ady`, `INTERACTIVE/show_status.ady` |

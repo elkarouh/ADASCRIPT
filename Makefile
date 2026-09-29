@@ -227,7 +227,6 @@ ADA_INDENT_TESTS := \
 COMPILE_ONLY := \
     tsp.ady \
     dp/jacks.ady \
-    INTERACTIVE/lispy.ady \
     awk_logscan.ady \
     sh_janitor.ady \
     config_check.ady \
@@ -319,7 +318,8 @@ TOOL_PROGRAMS := \
     TOOLS/RSYNC_TIME_MACHINE/rsync_time_machine.ady \
     TOOLS/LOLCATE/lolcate.ady \
     TOOLS/C500/c500.ady \
-    TOOLS/LV/lv.ady
+    TOOLS/LV/lv.ady \
+    TOOLS/LISPY/lispy.ady
 
 # -----------------------------------------------------------------------
 # compile — transpile + build everything
@@ -749,14 +749,13 @@ test: compile
 	    $(EXDIR)/DOC/awk_paragraph < $(EXDIR)/DOC/awk_paragraph_sample.txt 2>&1 \
 	        | grep -q "record 3: NF=4" && echo OK || { echo FAIL; exit 1; }
 
-	@# The INTERACTIVE programs want a terminal; lispy is the one that can be
-	@# run without one.
-	@echo "=== INTERACTIVE examples ==="
+	@# lispy wants a terminal for its prompt, but it can be run without one.
+	@echo "=== lispy ==="
 	@# lispy checks itself before it offers a prompt, so an empty stdin runs
 	@# the whole suite and then leaves at EOF. It went unbuilt for a long
 	@# while without anyone noticing, which is the argument for it being here.
-	@printf '  %-42s' "INTERACTIVE/lispy.ady (self-test)"; \
-	    $(EXDIR)/INTERACTIVE/lispy < /dev/null 2>&1 \
+	@printf '  %-42s' "TOOLS/LISPY/lispy.ady (self-test)"; \
+	    $(TOOLDIR)/LISPY/lispy < /dev/null 2>&1 \
 	        | grep -q "lispy: all tests passed" && echo OK || { echo FAIL; exit 1; }
 
 	@echo "=== Arg examples ==="

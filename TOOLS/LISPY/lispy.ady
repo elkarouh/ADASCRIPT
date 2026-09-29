@@ -1,0 +1,1009 @@
+#!/usr/bin/env ady2nim
+"""Norvig's lis.py — a Scheme interpreter — in AdaScript.
+
+Supports: numbers, symbols, booleans, if, define, set!, lambda, quote,
+begin, and, or, cond, let, quasiquote, apply, map, and all standard
+arithmetic/comparison procedures.
+
+How the pieces are typed:
+
+  * a Scheme value is a *variant record* (Val_T): each kind carries only the
+    fields it has, so reading the number of a symbol cannot be written;
+  * an environment is a class (Env), a Reader is a class, and the
+    interpreter is a class (Interpreter) that owns the global environment;
+  * the reader returns `Val_T | !Failure_T` -- a value, or the reason there
+    is none -- and `is Failure_T` tells the two apart;
+  * special forms are `case` patterns over the shape of the expression.
+
+Reference: https://norvig.com/lispy.html -- the original, lispy.py, is
+beside this file.
+"""
+
+nimport math
+nimport strscan          # character classification and the atom scan
+# ============================================================
+# Value representation
+# ============================================================
+
+type Val_Kind_T is enum:
+    VNum        # number literal
+    VSym        # symbol / identifier
+    VStr        # string literal
+    VBool       # boolean
+    VNil        # the empty value
+    VList       # cons list
+    VLambda     # user-defined closure
+    VBuiltin    # built-in primitive proc
+
+type Val_T (kind: Val_Kind_T) is record:
+    case kind is
+        when VNum:
+            num:       float
+        when VSym:
+            sym:       str
+        when VStr:
+            text:      str
+        when VBool:
+            flag:      bool
+        when VNil:
+            unit:      bool       # carries nothing; a variant needs a field
+        when VList:
+            items:     []Val_T
+        when VLambda:
+            lam:       Lambda
+        when VBuiltin:
+            name:      str
+
+@virtual
+class Lambda:
+    """A closure: parameters, body, and the environment it closes over.
+    A class, because a record cannot hold a Val_T that holds it; @virtual
+    makes it a reference on Nim, which is what breaks that cycle."""
+    var parms:     []str
+    var rest_parm: str            # non-empty -> variadic: extra args bound here
+    var body:      Val_T
+    var env:       Env
+
+    def __init__(self, parms: []str, rest_parm: str, body: Val_T, env: Env):
+        self.parms = parms
+        self.rest_parm = rest_parm
+        self.body = body
+        self.env = env
+
+    def call_env(self, args: []Val_T) -> Env:
+        """A fresh frame, inside the closure's, with the arguments bound."""
+        var frame: Env = Env(self.env)
+        frame.bind_args(self.parms, self.rest_parm, args)
+        frame
+
+# The reason a read or an evaluation has no value.
+type Failure_T is record:
+    message: str
+
+# --------------------------------------------------------
+# Constructors -- one per kind, so a value reads as what it is
+# --------------------------------------------------------
+
+def mk_num(x: float) -> Val_T:
+    Val_T(kind=VNum, num=x)
+
+def mk_sym(s: str) -> Val_T:
+    Val_T(kind=VSym, sym=s)
+
+def mk_str(s: str) -> Val_T:
+    Val_T(kind=VStr, text=s)
+
+def mk_bool(b: bool) -> Val_T:
+    Val_T(kind=VBool, flag=b)
+
+def mk_nil() -> Val_T:
+    Val_T(kind=VNil, unit=True)
+
+def mk_list(items: []Val_T) -> Val_T:
+    Val_T(kind=VList, items=items)
+
+def mk_lambda(parms: []str, rest_parm: str, body: Val_T, env: Env) -> Val_T:
+    Val_T(kind=VLambda, lam=Lambda(parms, rest_parm, body, env))
+
+def mk_builtin(name: str) -> Val_T:
+    Val_T(kind=VBuiltin, name=name)
+
+def reject(message: str) -> Failure_T:
+    Failure_T(message=message)
+
+def stop(message: str) -> str:
+    """Report a Scheme error and stop. The str is never returned; it lets
+    a branch say `return stop(...)` and keep its type."""
+    print(f"Error: {message}")
+    quit(1)
+
+def fail(message: str) -> Val_T:
+    """`stop`, for a branch that is meant to give a Val_T."""
+    print(f"Error: {message}")
+    quit(1)
+
+# --------------------------------------------------------
+# Val_T methods (free procs; dot-call works via Nim UFCS)
+# --------------------------------------------------------
+
+def is_true(self: Val_T) -> bool:
+    case self.kind:
+        when VBool:
+            self.flag
+        when VNil:
+            False
+        when others:
+            True
+
+def __eq__(a: Val_T, b: Val_T) -> bool:
+    if a.kind != b.kind:
+        return False
+    case a.kind:
+        when VNum:
+            a.num == b.num
+        when VSym:
+            a.sym == b.sym
+        when VStr:
+            a.text == b.text
+        when VBool:
+            a.flag == b.flag
+        when VNil:
+            True
+        when VList:
+            if len(a.items) != len(b.items):
+                return False
+            for i in 0..<len(a.items):
+                if not (a.items[i] == b.items[i]):
+                    return False
+            True
+        when others:
+            False
+
+def __str__(self: Val_T) -> str:
+    case self.kind:
+        when VNum:
+            var s: str = self.num'Image
+            if s.endswith(".0"):
+                s = s[0..len(s)-3]
+            return s
+        when VSym:
+            return self.sym
+        when VStr:
+            return self.text
+        when VBool:
+            return "#t" if self.flag else "#f"
+        when VNil:
+            return "()"
+        when VBuiltin:
+            return "#<builtin:" + self.name + ">"
+        when VLambda:
+            return "#<lambda>"
+        when VList:
+            var parts: []str
+            for item in self.items:
+                parts.append(item'Image)
+            return "(" + " ".join(parts) + ")"
+
+# ============================================================
+# Environment
+# ============================================================
+
+class Env:
+    """A frame of bindings and the frame it is nested in."""
+    var bindings: {str}Val_T
+    var outer:    ?Env
+
+    def __init__(self, outer: ?Env):
+        self.bindings = {:}
+        self.outer = outer
+
+    def find(self, name: str) -> ?Env:
+        """The frame that binds `name`, searching outward; None if none."""
+        if name in self.bindings:
+            return self
+        if self.outer is None:
+            return None
+        return self.outer.find(name)
+
+    def lookup(self, name: str) -> Val_T:
+        let found: ?Env = self.find(name)
+        if found is None:
+            return fail(f"unbound variable: {name}")
+        return found.bindings[name]
+
+    def define(self, name: str, val: Val_T) -> None:
+        self.bindings[name] = val
+
+    def assign(self, name: str, val: Val_T) -> None:
+        let found: ?Env = self.find(name)
+        if found is None:
+            print(f"Error: unbound variable in set!: {name}")
+            quit(1)
+        found.bindings[name] = val
+
+    def bind_args(self, parms: []str, rest_parm: str, args: []Val_T) -> None:
+        """Bind a call's arguments; `rest_parm` collects the extras."""
+        if len(rest_parm) > 0:
+            if len(args) < len(parms):
+                print(f"Error: expected at least {len(parms)} args, got {len(args)}")
+                quit(1)
+        elif len(args) != len(parms):
+            print(f"Error: expected {len(parms)} args, got {len(args)}")
+            quit(1)
+        for i in 0..len(parms)-1:
+            self.bindings[parms[i]] = args[i]
+        if len(rest_parm) > 0:
+            var rest_items: []Val_T
+            for i in len(parms)..len(args)-1:
+                rest_items.append(args[i])
+            self.bindings[rest_parm] = mk_list(rest_items)
+
+# ============================================================
+# Tokenizer / Reader
+# ============================================================
+
+def is_atom_ch(c: char) -> bool:
+    """A character that continues an atom: anything that does not end one.
+
+    Scheme's delimiter set, which is Scheme's business and stays here — the
+    library supplies the whitespace test it is written against."""
+    not (is_space_ch(c) or c == '(' or c == ')' or c == '"' or c == ';')
+
+
+def tokenize(s: str) -> []str:
+    var tokens: []str
+    var i: Natural = 0
+    let n: int = len(s)
+    while i < n:
+        let c: char = s[i]
+        if c == ';':
+            break                      # comment to end of line
+        elif is_space_ch(c):
+            i += 1
+        elif c == '(' or c == ')' or c == '\'' or c == '`':
+            tokens.append(str(c))
+            i += 1
+        elif c == ',':
+            if i + 1 < n and s[i + 1] == '@':
+                tokens.append(",@")
+                i += 2
+            else:
+                tokens.append(",")
+                i += 1
+        elif c == '"':
+            # A backslash escapes the next character, so an escaped quote does
+            # not end the literal. An unterminated one lands past the end,
+            # hence the clamp — slicing past the end raises on Nim, where the
+            # hand-rolled scan this replaces used to walk straight off it.
+            let e: Natural = skip_quoted_esc(s, i, '"', '\\')
+            tokens.append(s[i .. min(e, n) - 1])
+            i = e
+        else:
+            let e: Natural = skip_while(s, i, is_atom_ch)
+            tokens.append(s[i .. e - 1])
+            i = e
+    tokens
+
+def parse_atom(token: str) -> Val_T:
+    if token == "#t" or token == "true":
+        return mk_bool(True)
+    if token == "#f" or token == "false":
+        return mk_bool(False)
+    if token.startswith("\""):
+        return mk_str(token[1..len(token)-2])
+    if token == ".":
+        return mk_sym(".")
+    try:
+        return mk_num(float(token))
+    except ValueError:
+        pass
+    mk_sym(token)
+
+# Named, not written inline: a string holding a `)` inside a call's argument
+# list confuses the union-return analysis (see TODO.md).
+let MISSING_CLOSE: str = "missing )"
+let STRAY_CLOSE:   str = "unexpected )"
+
+# The prefix characters and the form each one abbreviates: 'x is (quote x).
+let ABBREVIATIONS: {str}str = {
+    "'":  "quote",
+    "`":  "quasiquote",
+    ",":  "unquote",
+    ",@": "unquote-splicing",
+}
+
+class Reader:
+    """Reads one expression from a token list, tracking where it is."""
+    var tokens: []str
+    var pos:    Natural = 0
+
+    def __init__(self, tokens: []str):
+        self.tokens = tokens
+
+    def read_form(self) -> Val_T | !Failure_T:
+        if self.pos >= len(self.tokens):
+            return reject("unexpected EOF")
+        let tok: str = self.tokens[self.pos]
+        self.pos += 1
+        case tok:
+            when "(":
+                var items: []Val_T
+                while self.pos < len(self.tokens) and self.tokens[self.pos] != ")":
+                    let item: Val_T | !Failure_T = self.read_form()
+                    if item is Failure_T:
+                        return item
+                    items.append(item)
+                if self.pos >= len(self.tokens):
+                    return reject(MISSING_CLOSE)
+                self.pos += 1
+                return mk_list(items)
+            when "'" | "`" | "," | ",@":
+                let quoted: Val_T | !Failure_T = self.read_form()
+                if quoted is Failure_T:
+                    return quoted
+                return mk_list([mk_sym(ABBREVIATIONS[tok]), quoted])
+            when ")":
+                return reject(STRAY_CLOSE)
+            when others:
+                return parse_atom(tok)
+
+def parse(program: str) -> Val_T | !Failure_T:
+    var reader: Reader = Reader(tokenize(program))
+    reader.read_form()
+
+# ============================================================
+# Interpreter
+# ============================================================
+
+let BUILTINS: []str = [
+    "+", "-", "*", "/", "<", ">", "<=", ">=", "=",
+    "abs", "max", "min", "round", "floor", "ceil", "sqrt", "expt",
+    "sin", "cos", "tan", "atan", "log",
+    "truncate", "modulo", "remainder", "quotient", "gcd", "lcm",
+    "exact->inexact", "inexact->exact",
+    "not", "eq?", "equal?", "null?", "list?", "number?", "symbol?",
+    "procedure?", "pair?", "boolean?",
+    "car", "cdr", "cons", "list", "length", "append", "reverse",
+    "list-tail", "list-ref", "assoc", "assv", "assq",
+    "member", "memv", "memq", "filter",
+    "display", "newline",
+    "even?", "odd?", "zero?", "positive?", "negative?",
+    "number->string", "string->number",
+    "string?", "string-length", "string-append",
+    "string=?", "string<?", "string>?", "string<=?", "string>=?",
+    "substring", "string-copy", "string-upcase", "string-downcase",
+    "string->list", "list->string",
+]
+
+def compare_nums(op: str, a: float, b: float) -> bool:
+    case op:
+        when "<":
+            a < b
+        when ">":
+            a > b
+        when "<=":
+            a <= b
+        when ">=":
+            a >= b
+        when others:
+            a == b
+
+def compare_strs(op: str, a: str, b: str) -> bool:
+    case op:
+        when "string=?":
+            a == b
+        when "string<?":
+            a < b
+        when "string>?":
+            a > b
+        when "string<=?":
+            a <= b
+        when others:
+            a >= b
+
+def parse_lambda_params(param_list: []Val_T) -> ([]str, str):
+    # Returns (fixed_parms, rest_parm). Handles (a b . rest) dot-notation.
+    var parms: []str
+    var rest_parm: str = ""
+    var i: int = 0
+    while i < len(param_list):
+        if param_list[i].sym == ".":
+            if i + 1 < len(param_list):
+                rest_parm = param_list[i+1].sym
+            break
+        parms.append(param_list[i].sym)
+        i += 1
+    return (parms, rest_parm)
+
+def wrap_body(body: []Val_T) -> Val_T:
+    """A body of several forms is one (begin ...) form."""
+    if len(body) == 1:
+        return body[0]
+    mk_list([mk_sym("begin")] + body)
+
+class Interpreter:
+    """Owns the global environment; evaluates and applies."""
+    var global_env: Env
+
+    def __init__(self):
+        self.global_env = Env(None)
+        for b in BUILTINS:
+            self.global_env.define(b, mk_builtin(b))
+        self.global_env.define("#t",   mk_bool(True))
+        self.global_env.define("#f",   mk_bool(False))
+        self.global_env.define("else", mk_bool(True))
+        self.global_env.define("pi",   mk_num(PI))
+        self.global_env.define("e",    mk_num(E))
+
+    # ----------------------------------------------------------
+    # Built-in procedures
+    # ----------------------------------------------------------
+
+    def builtin(self, name: str, args: []Val_T) -> Val_T:
+        case name:
+            when "+":
+                var acc: float = 0.0
+                for a in args:
+                    acc += a.num
+                return mk_num(acc)
+            when "-":
+                if len(args) == 1:
+                    return mk_num(-args[0].num)
+                var acc: float = args[0].num
+                for i in 1..len(args)-1:
+                    acc -= args[i].num
+                return mk_num(acc)
+            when "*":
+                var acc: float = 1.0
+                for a in args:
+                    acc *= a.num
+                return mk_num(acc)
+            when "/":
+                if len(args) == 1:
+                    return mk_num(1.0 / args[0].num)
+                var acc: float = args[0].num
+                for i in 1..len(args)-1:
+                    acc /= args[i].num
+                return mk_num(acc)
+            when "<" | ">" | "<=" | ">=" | "=":
+                for i in 0..len(args)-2:
+                    if not compare_nums(name, args[i].num, args[i+1].num):
+                        return mk_bool(False)
+                return mk_bool(True)
+            when "abs":
+                return mk_num(abs(args[0].num))
+            when "max":
+                var m: float = args[0].num
+                for i in 1..len(args)-1:
+                    if args[i].num > m:
+                        m = args[i].num
+                return mk_num(m)
+            when "min":
+                var m: float = args[0].num
+                for i in 1..len(args)-1:
+                    if args[i].num < m:
+                        m = args[i].num
+                return mk_num(m)
+            when "round":
+                return mk_num(round(args[0].num))
+            when "floor":
+                return mk_num(floor(args[0].num))
+            when "ceil":
+                return mk_num(ceil(args[0].num))
+            when "sqrt":
+                return mk_num(sqrt(args[0].num))
+            when "expt":
+                return mk_num(pow(args[0].num, args[1].num))
+            when "sin":
+                return mk_num(sin(args[0].num))
+            when "cos":
+                return mk_num(cos(args[0].num))
+            when "tan":
+                return mk_num(tan(args[0].num))
+            when "atan":
+                if len(args) == 2:
+                    return mk_num(arctan2(args[0].num, args[1].num))
+                return mk_num(arctan(args[0].num))
+            when "log":
+                if len(args) == 2:
+                    return mk_num(ln(args[0].num) / ln(args[1].num))
+                return mk_num(ln(args[0].num))
+            when "truncate":
+                return mk_num(float(int(args[0].num)))
+            when "modulo":
+                var a: int = int(args[0].num)
+                var b: int = int(args[1].num)
+                var r: int = a % b
+                if r != 0 and (r < 0) != (b < 0):
+                    r += b
+                return mk_num(float(r))
+            when "remainder":
+                var a: int = int(args[0].num)
+                var b: int = int(args[1].num)
+                return mk_num(float(a % b))
+            when "quotient":
+                return mk_num(float(int(args[0].num) // int(args[1].num)))
+            when "gcd":
+                var a: int = int(abs(args[0].num))
+                var b: int = int(abs(args[1].num))
+                while b != 0:
+                    var t: int = b
+                    b = a % b
+                    a = t
+                return mk_num(float(a))
+            when "lcm":
+                var a: int = int(abs(args[0].num))
+                var b: int = int(abs(args[1].num))
+                var g: int = a
+                var r: int = b
+                while r != 0:
+                    var t: int = r
+                    r = g % r
+                    g = t
+                return mk_num(float(a // g * b))
+            when "exact->inexact" | "inexact->exact":
+                return mk_num(args[0].num)
+            when "not":
+                return mk_bool(not args[0].is_true())
+            when "eq?" | "equal?":
+                return mk_bool(args[0] == args[1])
+            when "null?":
+                return mk_bool(args[0].kind == VNil or (args[0].kind == VList and len(args[0].items) == 0))
+            when "list?":
+                return mk_bool(args[0].kind == VList)
+            when "number?":
+                return mk_bool(args[0].kind == VNum)
+            when "symbol?":
+                return mk_bool(args[0].kind == VSym)
+            when "string?":
+                return mk_bool(args[0].kind == VStr)
+            when "procedure?":
+                return mk_bool(args[0].kind == VLambda or args[0].kind == VBuiltin)
+            when "pair?":
+                return mk_bool(args[0].kind == VList and len(args[0].items) > 0)
+            when "boolean?":
+                return mk_bool(args[0].kind == VBool)
+            when "car":
+                if args[0].kind == VList and len(args[0].items) > 0:
+                    return args[0].items[0]
+                return fail("car of non-pair")
+            when "cdr":
+                if args[0].kind == VList and len(args[0].items) > 0:
+                    return mk_list(args[0].items[1..len(args[0].items)-1])
+                return fail("cdr of non-pair")
+            when "cons":
+                if args[1].kind == VList:
+                    var new_items: []Val_T = [args[0]]
+                    for x in args[1].items:
+                        new_items.append(x)
+                    return mk_list(new_items)
+                return mk_list([args[0], args[1]])
+            when "list":
+                return mk_list(args)
+            when "length":
+                if args[0].kind == VList:
+                    return mk_num(float(len(args[0].items)))
+                return mk_num(0.0)
+            when "append":
+                var result: []Val_T
+                for a in args:
+                    if a.kind == VList:
+                        for x in a.items:
+                            result.append(x)
+                return mk_list(result)
+            when "reverse":
+                var rev: []Val_T
+                for i in 0..len(args[0].items)-1:
+                    rev.append(args[0].items[len(args[0].items)-1-i])
+                return mk_list(rev)
+            when "display":
+                print args[0]'Image
+                return mk_nil()
+            when "newline":
+                print("")
+                return mk_nil()
+            when "even?":
+                return mk_bool(int(args[0].num) % 2 == 0)
+            when "odd?":
+                return mk_bool(int(args[0].num) % 2 != 0)
+            when "zero?":
+                return mk_bool(args[0].num == 0.0)
+            when "positive?":
+                return mk_bool(args[0].num > 0.0)
+            when "negative?":
+                return mk_bool(args[0].num < 0.0)
+            when "number->string":
+                return mk_str(args[0]'Image)
+            when "string->number":
+                var parsed: Val_T = parse_atom(args[0].text)
+                if parsed.kind == VNum:
+                    return parsed
+                return mk_bool(False)
+            when "string-length":
+                return mk_num(float(len(args[0].text)))
+            when "string-append":
+                var s: str = ""
+                for a in args:
+                    s += a.text
+                return mk_str(s)
+            when "string=?" | "string<?" | "string>?" | "string<=?" | "string>=?":
+                return mk_bool(compare_strs(name, args[0].text, args[1].text))
+            when "substring":
+                var s: str = args[0].text
+                var start: int = int(args[1].num)
+                var stop: int = int(args[2].num) if len(args) > 2 else len(s)
+                return mk_str(s[start..stop-1])
+            when "string-copy":
+                return mk_str(args[0].text)
+            when "string-upcase":
+                return mk_str(args[0].text.toUpper())
+            when "string-downcase":
+                return mk_str(args[0].text.toLower())
+            when "string->list":
+                var items: []Val_T
+                for c in args[0].text:
+                    items.append(mk_str(c'Image))
+                return mk_list(items)
+            when "list->string":
+                var s: str = ""
+                for item in args[0].items:
+                    s += item.text
+                return mk_str(s)
+            when "list-tail":
+                var lst: []Val_T = args[0].items
+                var k: int = int(args[1].num)
+                return mk_list(lst[k..len(lst)-1])
+            when "list-ref":
+                return args[0].items[int(args[1].num)]
+            when "assoc" | "assv" | "assq":
+                let key: Val_T = args[0]
+                for pair in args[1].items:
+                    if pair.kind == VList and len(pair.items) > 0 and pair.items[0] == key:
+                        return pair
+                return mk_bool(False)
+            when "member" | "memv" | "memq":
+                for i in 0..len(args[1].items)-1:
+                    if args[1].items[i] == args[0]:
+                        return mk_list(args[1].items[i..len(args[1].items)-1])
+                return mk_bool(False)
+            when "filter":
+                var result: []Val_T
+                for item in args[1].items:
+                    if self.apply(args[0], [item]).is_true():
+                        result.append(item)
+                return mk_list(result)
+            when others:
+                return fail(f"unknown builtin: {name}")
+
+    # ----------------------------------------------------------
+    # Evaluator
+    # ----------------------------------------------------------
+
+    def apply(self, proc_val: Val_T, args: []Val_T) -> Val_T:
+        case proc_val.kind:
+            when VBuiltin:
+                return self.builtin(proc_val.name, args)
+            when VLambda:
+                return self.evaluate(proc_val.lam.body, proc_val.lam.call_env(args))
+            when others:
+                return fail(f"not a procedure: {proc_val}")
+
+    def expand_qq(self, x: Val_T, e: Env) -> Val_T:
+        if x.kind != VList:
+            return x
+        if len(x.items) == 2 and x.items[0].kind == VSym and x.items[0].sym == "unquote":
+            return self.evaluate(x.items[1], e)
+        var result: []Val_T
+        for item in x.items:
+            if item.kind != VList:
+                result.append(item)
+                continue
+            case item.items:
+                when [Val_T(kind=VSym, sym="unquote"), form]:
+                    result.append(self.evaluate(form, e))
+                when [Val_T(kind=VSym, sym="unquote-splicing"), form]:
+                    for sv in self.evaluate(form, e).items:
+                        result.append(sv)
+                when others:
+                    result.append(self.expand_qq(item, e))
+        mk_list(result)
+
+    def eval_prefix(self, forms: []Val_T, e: Env) -> Val_T:
+        """Evaluate all but the last of `forms` and return the last one
+        unevaluated: it is a tail position, and the caller loops on it."""
+        if len(forms) == 0:
+            return mk_nil()
+        for i in 0..len(forms)-2:
+            var ignored: Val_T = self.evaluate(forms[i], e)
+        forms[len(forms)-1]
+
+    def evaluate(self, x_in: Val_T, e_in: Env) -> Val_T:
+        # TCO trampoline: tail positions assign x/e and continue the loop.
+        var x: Val_T = x_in
+        var e: Env = e_in
+        while True:
+            case x.kind:
+                when VSym:
+                    return e.lookup(x.sym)
+                when VList:
+                    pass
+                when others:
+                    return x
+            if len(x.items) == 0:
+                return mk_nil()
+
+            case x.items:
+                when [Val_T(kind=VSym, sym="quote"), quoted]:
+                    return quoted
+                when [Val_T(kind=VSym, sym="quasiquote"), form]:
+                    return self.expand_qq(form, e)
+                when [Val_T(kind=VSym, sym="if"), test, consequence, alternative]:
+                    if self.evaluate(test, e).is_true():
+                        x = consequence
+                    else:
+                        x = alternative
+                when [Val_T(kind=VSym, sym="if"), test, consequence]:
+                    if self.evaluate(test, e).is_true():
+                        x = consequence
+                    else:
+                        return mk_nil()
+                when [Val_T(kind=VSym, sym="define"), Val_T(kind=VSym, sym=var_name), expr]:
+                    e.define(var_name, self.evaluate(expr, e))
+                    return mk_nil()
+                when [Val_T(kind=VSym, sym="define"), Val_T(kind=VList, items=sig), *body]:
+                    let (parms, rest_parm) = parse_lambda_params(sig[1..len(sig)-1])
+                    e.define(sig[0].sym, mk_lambda(parms, rest_parm, wrap_body(body), e))
+                    return mk_nil()
+                when [Val_T(kind=VSym, sym="set!"), Val_T(kind=VSym, sym=var_name), expr]:
+                    e.assign(var_name, self.evaluate(expr, e))
+                    return mk_nil()
+                when [Val_T(kind=VSym, sym="lambda"), Val_T(kind=VList, items=param_list), *body]:
+                    let (parms, rest_parm) = parse_lambda_params(param_list)
+                    return mk_lambda(parms, rest_parm, wrap_body(body), e)
+                when [Val_T(kind=VSym, sym="lambda"), Val_T(kind=VSym, sym=rest_name), *body]:
+                    # (lambda args body) — rest_name gets all args as a list
+                    return mk_lambda([], rest_name, wrap_body(body), e)
+                when [Val_T(kind=VSym, sym="begin"), *stmts]:
+                    x = self.eval_prefix(stmts, e)
+                when [Val_T(kind=VSym, sym="and"), *operands]:
+                    if len(operands) == 0:
+                        return mk_bool(True)
+                    for i in 0..len(operands)-2:
+                        if not self.evaluate(operands[i], e).is_true():
+                            return mk_bool(False)
+                    x = operands[len(operands)-1]
+                when [Val_T(kind=VSym, sym="or"), *operands]:
+                    if len(operands) == 0:
+                        return mk_bool(False)
+                    for i in 0..len(operands)-2:
+                        let v: Val_T = self.evaluate(operands[i], e)
+                        if v.is_true():
+                            return v
+                    x = operands[len(operands)-1]
+                when [Val_T(kind=VSym, sym="cond"), *clauses]:
+                    var found: bool = False
+                    for clause in clauses:
+                        let test_val: Val_T = self.evaluate(clause.items[0], e)
+                        if test_val.is_true():
+                            if len(clause.items) == 1:
+                                return test_val
+                            x = self.eval_prefix(clause.items[1..len(clause.items)-1], e)
+                            found = True
+                            break
+                    if not found:
+                        return mk_nil()
+                when [Val_T(kind=VSym, sym="let"), Val_T(kind=VSym, sym=loop_name), Val_T(kind=VList, items=bind_list), *body]:
+                    # named let: (let loop ((x init) ...) body)
+                    var parms: []str
+                    var inits: []Val_T
+                    for bnd in bind_list:
+                        parms.append(bnd.items[0].sym)
+                        inits.append(self.evaluate(bnd.items[1], e))
+                    let lam_body: Val_T = wrap_body(body)
+                    var loop_env: Env = Env(e)
+                    loop_env.define(loop_name, mk_lambda(parms, "", lam_body, loop_env))
+                    var call_env: Env = Env(loop_env)
+                    call_env.bind_args(parms, "", inits)
+                    e = call_env
+                    x = lam_body
+                when [Val_T(kind=VSym, sym="let"), Val_T(kind=VList, items=bind_list), *body]:
+                    var let_env: Env = Env(e)
+                    for bnd in bind_list:
+                        let_env.define(bnd.items[0].sym, self.evaluate(bnd.items[1], e))
+                    x = self.eval_prefix(body, let_env)
+                    e = let_env
+                when [Val_T(kind=VSym, sym="let*"), Val_T(kind=VList, items=bind_list), *body]:
+                    var cur_env: Env = e
+                    for bnd in bind_list:
+                        var next_env: Env = Env(cur_env)
+                        next_env.define(bnd.items[0].sym, self.evaluate(bnd.items[1], cur_env))
+                        cur_env = next_env
+                    x = self.eval_prefix(body, cur_env)
+                    e = cur_env
+                when [Val_T(kind=VSym, sym="letrec"), Val_T(kind=VList, items=bind_list), *body]:
+                    var rec_env: Env = Env(e)
+                    for bnd in bind_list:
+                        rec_env.define(bnd.items[0].sym, mk_nil())
+                    for bnd in bind_list:
+                        rec_env.define(bnd.items[0].sym, self.evaluate(bnd.items[1], rec_env))
+                    x = self.eval_prefix(body, rec_env)
+                    e = rec_env
+                when [Val_T(kind=VSym, sym="when"), test, *stmts]:
+                    if self.evaluate(test, e).is_true():
+                        x = self.eval_prefix(stmts, e)
+                    else:
+                        return mk_nil()
+                when [Val_T(kind=VSym, sym="unless"), test, *stmts]:
+                    if not self.evaluate(test, e).is_true():
+                        x = self.eval_prefix(stmts, e)
+                    else:
+                        return mk_nil()
+                when [Val_T(kind=VSym, sym="do"), Val_T(kind=VList, items=var_specs), Val_T(kind=VList, items=term_clause), *do_body]:
+                    # (do ((var init step) ...) (test result...) body...)
+                    var do_env: Env = Env(e)
+                    var do_vars: []str
+                    var do_steps: []Val_T
+                    for spec in var_specs:
+                        let vname: str = spec.items[0].sym
+                        do_env.define(vname, self.evaluate(spec.items[1], e))
+                        do_vars.append(vname)
+                        if len(spec.items) > 2:
+                            do_steps.append(spec.items[2])
+                        else:
+                            do_steps.append(spec.items[0])
+                    while not self.evaluate(term_clause[0], do_env).is_true():
+                        for stmt in do_body:
+                            var ignored: Val_T = self.evaluate(stmt, do_env)
+                        var new_vals: []Val_T
+                        for step in do_steps:
+                            new_vals.append(self.evaluate(step, do_env))
+                        for i in 0..len(do_vars)-1:
+                            do_env.define(do_vars[i], new_vals[i])
+                    if len(term_clause) == 1:
+                        return mk_nil()
+                    x = self.eval_prefix(term_clause[1..len(term_clause)-1], do_env)
+                    e = do_env
+                when [Val_T(kind=VSym, sym="apply"), proc_expr, args_expr]:
+                    let pv: Val_T = self.evaluate(proc_expr, e)
+                    let arg_list: Val_T = self.evaluate(args_expr, e)
+                    if pv.kind == VLambda:
+                        e = pv.lam.call_env(arg_list.items)
+                        x = pv.lam.body
+                    else:
+                        return self.apply(pv, arg_list.items)
+                when [Val_T(kind=VSym, sym="map"), proc_expr, list_expr]:
+                    let pv: Val_T = self.evaluate(proc_expr, e)
+                    var result: []Val_T
+                    for item in self.evaluate(list_expr, e).items:
+                        result.append(self.apply(pv, [item]))
+                    return mk_list(result)
+                when [Val_T(kind=VSym, sym="for-each"), proc_expr, list_expr]:
+                    let pv: Val_T = self.evaluate(proc_expr, e)
+                    for item in self.evaluate(list_expr, e).items:
+                        var ignored: Val_T = self.apply(pv, [item])
+                    return mk_nil()
+                when [head, *tail]:
+                    let pv: Val_T = self.evaluate(head, e)
+                    var args: []Val_T
+                    for arg in tail:
+                        args.append(self.evaluate(arg, e))
+                    if pv.kind == VLambda:
+                        e = pv.lam.call_env(args)
+                        x = pv.lam.body
+                    else:
+                        return self.apply(pv, args)
+            # TCO: loop continues with new x, e
+        mk_nil()
+
+    def interpret(self, program: str) -> str | !Failure_T:
+        let form: Val_T | !Failure_T = parse(program)
+        case form:
+            when Failure_T:
+                return form
+            when Val_T:
+                let v: Val_T = self.evaluate(form, self.global_env)
+                if v.kind == VNil:
+                    return ""
+                return v'Image
+
+# ============================================================
+# REPL / runner
+# ============================================================
+
+var lispy: Interpreter = Interpreter()
+
+def run(program: str) -> str:
+    """Run a program; a read failure is reported and ends the process."""
+    let out: str | !Failure_T = lispy.interpret(program)
+    if out is Failure_T:
+        return stop(out.message)
+    out
+
+if $# == 1:
+    var src: str = readFile($1)
+    var result: str = run(src)
+    if result:
+        print result
+else:
+    assert run("(+ 1 2)") == "3"
+    assert run("(* 3 4)") == "12"
+    assert run("(if #t 1 2)") == "1"
+    assert run("(if #f 1 2)") == "2"
+    assert run("(car (list 1 2 3))") == "1"
+    assert run("(cdr (list 1 2 3))") == "(2 3)"
+    assert run("(null? (list))") == "#t"
+    assert run("(null? (list 1))") == "#f"
+    var _r1: str = run("(define (square x) (* x x))")
+    assert run("(square 5)") == "25"
+    var _r2: str = run("(define (fact n) (if (= n 0) 1 (* n (fact (- n 1)))))")
+    assert run("(fact 10)") == "3628800"
+    var _r3: str = run("(define (fib n) (if (< n 2) n (+ (fib (- n 1)) (fib (- n 2)))))")
+    assert run("(fib 10)") == "55"
+    assert run("(map (lambda (x) (* x x)) (list 1 2 3 4 5))") == "(1 4 9 16 25)"
+    assert run("(let ((x 3) (y 4)) (+ (* x x) (* y y)))") == "25"
+    assert run("(and 1 2 3)") == "3"
+    assert run("(or #f #f 42)") == "42"
+    # variadic arithmetic
+    assert run("(+)") == "0"
+    assert run("(*)") == "1"
+    assert run("(- 10)") == "-10"
+    assert run("(- 10 3 2)") == "5"
+    assert run("(/ 2)") == "0.5"
+    assert run("(+ 1 2 3 4)") == "10"
+    # chained comparison
+    assert run("(< 1 2 3)") == "#t"
+    assert run("(< 1 3 2)") == "#f"
+    assert run("(= 2 2 2)") == "#t"
+    # math
+    assert run("(modulo 13 4)") == "1"
+    assert run("(modulo -13 4)") == "3"
+    assert run("(remainder -13 4)") == "-1"
+    assert run("(gcd 32 24)") == "8"
+    assert run("(max 1 3 2)") == "3"
+    assert run("(min 3 1 2)") == "1"
+    # strings
+    assert run("(string-length \"hello\")") == "5"
+    assert run("(string-append \"foo\" \"bar\")") == "foobar"
+    assert run("(substring \"hello\" 1 3)") == "el"
+    # filter
+    assert run("(filter odd? (list 1 2 3 4 5))") == "(1 3 5)"
+    # list ops
+    assert run("(list-ref (list 10 20 30) 1)") == "20"
+    assert run("(list-tail (list 1 2 3 4) 2)") == "(3 4)"
+    assert run("(member 2 (list 1 2 3))") == "(2 3)"
+    assert run("(assoc 2 (list (list 1 10) (list 2 20)))") == "(2 20)"
+    # TCO: tail-recursive factorial should not stack-overflow
+    # TCO
+    # TCO
+    var _r4: str = run("(define (fact-iter n acc) (if (= n 0) acc (fact-iter (- n 1) (* n acc))))")
+    assert run("(fact-iter 10 1)") == "3628800"
+    assert run("(fact-iter 1000 1)") != ""
+    # named let
+    assert run("(let loop ((i 0) (acc 0)) (if (= i 5) acc (loop (+ i 1) (+ acc i))))") == "10"
+    # variadic lambda: (lambda args body)
+    var _r5: str = run("(define my-list (lambda args args))")
+    assert run("(my-list 1 2 3)") == "(1 2 3)"
+    # variadic lambda: (define (f . rest) body)
+    var _r5b: str = run("(define (sum-list . args) (if (null? args) 0 (+ (car args) (apply sum-list (cdr args)))))")
+    assert run("(sum-list)") == "0"
+    assert run("(sum-list 1)") == "1"
+    assert run("(sum-list 1 2 3 4)") == "10"
+    # unquote-splicing
+    assert run("(let ((xs (list 2 3))) `(1 ,@xs 4))") == "(1 2 3 4)"
+    # do loop
+    assert run("(do ((i 0 (+ i 1)) (s 0 (+ s i))) ((= i 5) s))") == "10"
+
+    print "lispy: all tests passed"
+    print "lispy REPL — :q to quit"
+    while True:
+        try:
+            var line: str = input("lispy> ")
+            if line == ":q":
+                break
+            if len(line) == 0:
+                continue
+            var result: str = run(line)
+            if result:
+                print result
+        except EOFError:
+            break

@@ -25,19 +25,29 @@ What it teaches:
   patterns from Chapter 6.
 - Documentation culture: findings live next to the code that produced them.
 
-## 13.2 `INTERACTIVE/lispy.ady` — a Scheme interpreter (~1,200 lines)
+## 13.2 `TOOLS/LISPY/lispy.ady` — a Scheme interpreter (~1,000 lines)
 
-Norvig's `lis.py` (the original is beside it, `INTERACTIVE/lispy.py`), grown to cover `quasiquote`, `cond`, `let`, variadic
+Norvig's `lis.py` (the original is beside it, `TOOLS/LISPY/lispy.py`), grown to cover `quasiquote`, `cond`, `let`, variadic
 lambdas, `apply` and `map`. The language features it stresses:
 
-- the flat **variant record** `Val_T` with a `Val_Kind_T` discriminant
-  (§4.3) — the single type through which every interpreter value flows;
+- the **variant record** `Val_T` with a `Val_Kind_T` discriminant (§4.3) —
+  the single type through which every interpreter value flows, each kind
+  carrying only its own fields;
+- **classes** for what has behaviour: `Env` (a frame of bindings and the
+  frame around it), `Lambda` (a closure), `Reader` (a token cursor) and
+  `Interpreter` (the global environment, `evaluate`, `apply`, and the
+  built-in procedures);
+- a **value-or-failure union**: the reader returns `Val_T | !Failure_T`,
+  and `case form:` with `when Failure_T:` / `when Val_T:` takes the two
+  apart (§10.12);
 - **sequence patterns** to recognise special forms (§5.6) — the eval loop is
   essentially one big `case x.items:`;
 - the mutually recursive eval/apply pair, written in either order
   (§8.3);
-- free functions taking `self: Val_T`, called method-style via UFCS —
-  the trick that keeps a Nim-compatible design Pythonic to read.
+- free functions taking `self: Val_T` (`is_true`), called method-style via
+  UFCS — a variant record has no methods of its own;
+- one-line constructors (`mk_num`, `mk_list`, ...) so that a value reads as
+  what it is.
 
 If you want to internalise Adascript's pattern matching, reimplementing one
 special form of lispy is the exercise.
