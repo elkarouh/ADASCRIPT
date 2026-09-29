@@ -173,6 +173,20 @@ w *= 2.0                                     # * and / by a plain number SCALE
 - money: `distinct int` in cents. `price * 3` scales; `price * qty` needs `type Total_T is Cents_T * Qty_T`;
 - Nim: `distinct float` + borrowed procs + one small proc per relation; Python: `class Velocity_T(float)`. Nim checks everything; Python works out the unit of arithmetic over typed names and refuses declarations, assignments and operators it can see.
 
+**Money** (the commonest case): `Dollar_T` scales by a count, a tax rate or a discount; a currency conversion needs the rate as a derived unit:
+```adascript
+type Dollar_T is distinct float
+type Euro_T   is distinct float
+type Rate_T   is Euro_T / Dollar_T           # euros per dollar
+let total: Dollar_T = unit_price * quantity  # quantity: int variable -- scales
+let tax: Dollar_T = total * 0.08             # plain float factor -- scales
+def to_euro(amount: Dollar_T, rate: Rate_T) -> Euro_T:
+    return amount * rate                     # Dollar * Rate is Euro
+def to_dollar(amount: Euro_T, rate: Rate_T) -> Dollar_T:
+    return amount / rate                     # Euro / Rate is Dollar
+```
+Refused: `usd + eur`, `usd * usd`, `eur * rate` and `usd / rate` (rate the wrong way round), `let d: Dollar_T = plain_float`. Print with `f"{x:.2f}"`. Exact sums: `distinct int` cents; converting int cents <-> float rate is written out (`Cents_T(...)`, `float(c)`), not derived. `x * n` with `n` an `int` variable scales a float-based unit.
+
 Use it for units and for IDs of different entities that share a representation. Keep aliases for values meant to mix with their base.
 
 Other enforcement: enums are their own types; subranges are bounds-checked, on Nim only; records are nominal; `?T` is not `T`; `Path` is a distinct string, so `let p: Path = s` is an error; write `Path(s)`.

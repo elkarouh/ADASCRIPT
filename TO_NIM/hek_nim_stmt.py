@@ -2350,7 +2350,13 @@ _DISTINCT_SCALE_FLOAT = [
     "proc `/`{e}(a: {t}, b: float): {t} = {t}(float(a) / b)",
     "proc `/`{e}(a, b: {t}): float = float(a) / float(b)",
     "proc `*=`{e}(a: var {t}, b: float) = a = {t}(float(a) * b)",
-    "proc `/=`{e}(a: var {t}, b: float) = a = {t}(float(a) / b)"]
+    "proc `/=`{e}(a: var {t}, b: float) = a = {t}(float(a) / b)",
+    # a count is an int, and Nim will not turn an int variable into a float:
+    # `price * quantity` is the commonest money expression there is
+    "proc `*`{e}(a: {t}, b: int): {t} = {t}(float(a) * float(b))",
+    "proc `*`{e}(a: int, b: {t}): {t} = {t}(float(a) * float(b))",
+    "proc `/`{e}(a: {t}, b: int): {t} = {t}(float(a) / float(b))",
+    "proc `*=`{e}(a: var {t}, b: int) = a = {t}(float(a) * float(b))"]
 _DISTINCT_SCALE_INT = [
     "proc `*`{e}(a: {t}, b: int): {t} = {t}(int(a) * b)",
     "proc `*`{e}(a: int, b: {t}): {t} = {t}(a * int(b))",

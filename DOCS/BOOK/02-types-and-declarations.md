@@ -402,7 +402,8 @@ the unit of its factors — knots times knots is not knots — so `*` and `/`
 mean something different from `+`:
 
 - a unit times or over a **plain number** is that unit: `d * 2.0`,
-  `2.0 * d`, `d / 4.0`. The number stays a number;
+  `2.0 * d`, `d / 4.0`, and `d * n` for an `int` count `n`. The number stays
+  a number;
 - two of one unit **divided** are a plain `float`, a ratio;
 - two of one unit **multiplied**, or two different units multiplied or
   divided, are refused — unless you have said what they make.
@@ -435,6 +436,39 @@ The operands must be distinct, and of one kind: `float` for a quotient,
 `float` or `int` for a product, since a quotient of ints is not an int. Money
 is naturally `distinct int` in cents, so `price * 3` scales it, and
 `price * qty` needs a total unit to say what it is.
+
+### Money
+
+The commonest quantity of all is money, and it takes nothing new. An amount
+of dollars is not a number: it cannot be added to euros or squared, but it
+scales by a quantity, a tax rate or a discount. An exchange rate is a unit of
+its own, euros per dollar, and declaring it makes the conversion routines
+type-check:
+
+```python
+type Dollar_T is distinct float
+type Euro_T   is distinct float
+type Rate_T   is Euro_T / Dollar_T        # euros per dollar
+
+let unit_price: Dollar_T = 19.99
+let quantity: int = 3
+let total: Dollar_T = unit_price * quantity * 1.08   # a count, a tax factor
+
+def to_euro(amount: Dollar_T, rate: Rate_T) -> Euro_T:
+    return amount * rate          # Dollar x (Euro / Dollar) is Euro
+
+def to_dollar(amount: Euro_T, rate: Rate_T) -> Dollar_T:
+    return amount / rate          # Euro / (Euro / Dollar) is Dollar
+```
+
+`total + to_euro(total, rate)` adds dollars to euros, `total * total` is
+dollars squared, and `total / rate` applies the rate the wrong way round:
+none compiles, and each is a bug that otherwise reaches the ledger.
+`EXAMPLES/test_money.ady` is a whole order — lines, tax, a discount, a
+budget and a conversion of each line — that the compiler holds to every
+step. Amounts to be added up exactly are better as a `distinct int` in
+cents; a rate is a float, so converting between them is written out, where
+you decide how to round.
 
 On Nim each unit is `distinct float` with the operations borrowed and one
 small proc per relation, so the compiler checks every use at no run-time

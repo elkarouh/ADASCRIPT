@@ -433,7 +433,8 @@ let wrong: Duration_T = d        # refused, on both backends
 what `+` means:
 
 - a distinct value times, or over, a plain number is that unit --
-  `d * 2.0`, `2.0 * d`, `d / 4.0` -- and the number stays a number;
+  `d * 2.0`, `2.0 * d`, `d / 4.0`, `d * n` for an `int` count `n` -- and the
+  number stays a number;
 - two of the same unit divided are a plain `float`: a ratio has no unit;
 - two of them multiplied are refused: there is no "miles squared" unless you
   declare one; and a unit times another unit has no meaning until you say.
@@ -466,6 +467,52 @@ Cents_T * Qty_T`. Everything else between the units is refused: `d * t`,
 is Velocity_T / Duration_T`) and has the kind of its operands: `float`, or
 `int` for a product. Nim gets a small proc per relation, so it costs nothing
 at run time.
+
+### Money: `Dollar_T`, and converting to `Euro_T`
+
+Money is the commonest use of `distinct`, and needs nothing beyond what is
+above. A dollar amount is not a number: it cannot be added to euros or
+squared, but it scales by a quantity, a tax rate or a discount, all plain
+numbers. An exchange rate is a unit of its own, euros per dollar, and
+declaring it is what lets the conversion routines type-check:
+
+```python
+type Dollar_T is distinct float
+type Euro_T   is distinct float
+type Rate_T   is Euro_T / Dollar_T        # euros per dollar
+
+let unit_price: Dollar_T = 19.99
+let quantity: int = 3
+let subtotal: Dollar_T = unit_price * quantity   # a count scales a price
+let tax: Dollar_T = subtotal * 0.08              # so does a tax rate
+let total: Dollar_T = subtotal + tax
+print f"{total:.2f}"                             # 64.77
+
+def to_euro(amount: Dollar_T, rate: Rate_T) -> Euro_T:
+    return amount * rate          # Dollar x (Euro / Dollar) is Euro
+
+def to_dollar(amount: Euro_T, rate: Rate_T) -> Dollar_T:
+    return amount / rate          # Euro / (Euro / Dollar) is Dollar
+
+let rate: Rate_T = 0.92
+print f"{to_euro(total, rate):.2f} EUR"           # 59.59
+print f"{to_dollar(to_euro(total, rate), rate):.2f}"   # 64.77, and back
+```
+
+What it refuses is what goes wrong in real code:
+
+```python
+total + to_euro(total, rate)      # dollars plus euros
+total * total                     # dollars squared
+let e: Euro_T = total / rate      # the rate applied the wrong way round
+let fee: Dollar_T = tax_rate      # a plain number is not money
+```
+
+Format money with `:.2f`. Amounts you must add up exactly are better held
+as a `distinct int` in cents (`Cents_T`); a rate is a float, so a conversion
+between the two is written out, where you decide how to round.
+`EXAMPLES/test_money.ady` is a whole order: lines, tax, a discount, a
+budget, and each line converted.
 
 Where it is checked: the Nim compiler checks every use. The Python backend
 works out the unit of arithmetic over typed names -- `v * 2.0 + d` is a

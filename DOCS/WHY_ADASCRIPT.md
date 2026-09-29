@@ -677,6 +677,35 @@ speed` is refused, because knots times knots is not knots, and `miles *
 hours` because nobody declared a mile-hour. Multiplying by a plain number
 scales, so `speed * 2.0` is still knots.
 
+The commoner case is money, and it is the same idea. An amount of dollars is
+not a number: it cannot be added to euros, or squared, or passed where euros
+are wanted — but it can be scaled by a quantity, a tax rate or a discount,
+which are plain numbers. The exchange rate is a unit of its own, euros per
+dollar, and once it is declared the conversion routine type-checks itself:
+
+<!-- from: EXAMPLES/DOC/why_alias_snippets.ady -->
+```python
+type Dollar_T is distinct float
+type Euro_T   is distinct float
+type Rate_T   is Euro_T / Dollar_T   # euros per dollar
+
+def to_euro(amount: Dollar_T, rate: Rate_T) -> Euro_T:
+    return amount * rate             # dollars x (euros per dollar) is euros
+
+let price: Dollar_T = 19.99
+let rate: Rate_T = 0.92
+let euros: Euro_T = to_euro(price * 3, rate)   # a count scales a price
+# let bad: Dollar_T = price + euros  -- refused: dollars plus euros
+# let sq: Dollar_T = price * price   -- refused: dollars squared
+```
+
+The mistakes this catches are the ones that reach production: a total that
+adds a dollar figure to a euro figure, a conversion applied twice, or applied
+the wrong way round. `usd / rate` does not compile, because dividing dollars
+by euros-per-dollar is not a currency. `EXAMPLES/test_money.ady` is a whole
+order — lines, tax, a discount, a budget, and a conversion of each line — and
+the compiler holds every step to it.
+
 Nim's ecosystem has libraries that do this for every combination
 automatically, tracking the exponent of each base unit. I chose the other
 end deliberately. Here every combination a program uses has a name, and the

@@ -658,7 +658,7 @@ times knots is not knots -- so multiplying and dividing do not mean what
 
 | Written | Is | |
 |---|---|---|
-| `d * 2.0`, `2.0 * d`, `d / 4.0` | `Distance_T` | scaled by a plain number, which stays a number |
+| `d * 2.0`, `2.0 * d`, `d / 4.0`, `d * n` | `Distance_T` | scaled by a plain number, or an `int` count `n`, which stays a number |
 | `d / d2` | a plain `float` | a ratio has no unit |
 | `d * d2` | refused | knots times knots is not knots |
 | `d * t` | refused | unless a derived unit says what it is |
@@ -690,6 +690,42 @@ else between the units exists, so the compiler refuses `d * t` (there is no
 same kind as its operands: `float` for a quotient, `float` or `int` for a
 product. `type Area_T is Length_T * Length_T` and `type Total_T is Cents_T *
 Qty_T` work the same way.
+
+**Money** is the commonest use, and needs no new ideas. An amount of dollars
+is not a number: it cannot be added to euros or squared, but it scales by a
+quantity, a tax rate or a discount. An exchange rate is a unit of its own,
+euros per dollar, and declaring it makes the conversion routines type-check:
+
+```python
+type Dollar_T is distinct float
+type Euro_T   is distinct float
+type Rate_T   is Euro_T / Dollar_T        # euros per dollar
+
+let unit_price: Dollar_T = 19.99
+let quantity: int = 3
+let subtotal: Dollar_T = unit_price * quantity   # a count scales a price
+let tax: Dollar_T = subtotal * 0.08              # so does a tax rate
+let total: Dollar_T = subtotal + tax
+print f"{total:.2f}"                             # 64.77
+
+def to_euro(amount: Dollar_T, rate: Rate_T) -> Euro_T:
+    return amount * rate          # Dollar x (Euro / Dollar) is Euro
+
+def to_dollar(amount: Euro_T, rate: Rate_T) -> Dollar_T:
+    return amount / rate          # Euro / (Euro / Dollar) is Dollar
+
+let rate: Rate_T = 0.92
+print f"{to_euro(total, rate):.2f} EUR"           # 59.59
+```
+
+The mistakes it catches are the ones that reach production. `total +
+to_euro(total, rate)` adds dollars to euros; `total * total` is dollars
+squared; `let e: Euro_T = usd / rate` applies the rate the wrong way round --
+each refused, on both backends, at the line that made it. `EXAMPLES/
+test_money.ady` is a whole order (lines, tax, a discount, a budget, each line
+converted). Amounts you must add up exactly are better held as a `distinct
+int` in cents; a rate is a float, so a conversion between the two is written
+out, where you decide how to round.
 
 **Nim output:** `type Velocity_T = distinct float`, the operations of `float`
 borrowed for `+`, `-` and comparisons, and a small proc for each thing the
