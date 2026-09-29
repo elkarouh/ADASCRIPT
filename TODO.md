@@ -341,7 +341,11 @@ history of this file if the reasoning behind one of them is ever wanted.
       nested `proc(x: auto): auto`, which Nim rejects ("a nested proc can
       have generic parameters only when it is used as an operand"). The
       lambda's parameter and result types are known from the declared
-      return type and should be written out; Python takes it.
+      return type and should be written out; Python takes it. The same
+      goes for a lambda in a `{str}(float) -> float` table literal
+      (`{"sqrt": lambda x: sqrt(x)}`): the declared type of the table
+      gives the lambda's types, and they are not written out. It stopped
+      lispy's built-ins from being a table of one-line procedures.
 - [ ] **For discussion:** let `m(k)` look up a `{K}V` or `[K]V` as `m[k]`
       does, and let a table be passed where a `(K) -> V` is expected (a
       small adapter on each backend). A pure function is a mapping, and Ada
