@@ -57,6 +57,14 @@ history of this file if the reasoning behind one of them is ever wanted.
       types, naming a list type first is the only spelling; accept
       `[]T`, `{K}V` and the like in the brackets, or keep it a deliberate
       rule and say so in the error.
+- [ ] a generic method does not build on Nim. `def echo[T](self, x: T) ->
+      T` inside a class is emitted without `T` among the proc's generic
+      parameters ("undeclared identifier: 'T'"); Python takes it (PEP 695).
+      Generic functions and generic classes are fine. It also means the rule
+      that a generic call names its types is checked for module-level
+      functions only: a generic method called as `h.echo(5)` is not, since
+      no such call can build on Nim anyway. Emit the method's own `[T]`, and
+      extend `check_generic_calls` to `obj.method(...)` once it does.
 - [ ] directly constructing a generic class does not build on Nim.
       `class Box[T]` with `let a: Box[int] = Box[int](3)` is emitted as
       `Box[int](3)` -- a conversion of the literal -- instead of the
@@ -121,16 +129,6 @@ history of this file if the reasoning behind one of them is ever wanted.
       "type mismatch ... expected Table". Iteration and indexing agree now;
       these two do not. Nim's `pairs`/`keys` iterators over an array are the
       shape to map onto.
-- [ ] ady2py generates annotations whose names are not in scope at import
-      time. `Callable` is fixed (the emitter now adds the typing import),
-      but a class that names itself -- `def __and__(self, other: Region)`
-      inside `class Region` -- is still a NameError, because Python
-      evaluates annotations eagerly while Adascript writes them the way Nim
-      does, as compile-time types. `from __future__ import annotations` is
-      the right answer and is a one-line change, but every expected output
-      in `ady2py --test` and `test_ady2py.py` is a literal string that would
-      gain the import line: 43 and 122 cases respectively fail on it. Worth
-      doing together with a pass over those fixtures.
 - [ ] `&` as string concatenation is Nim-only: `a & b` over two strings
       works there (Nim spells concat `&`) and raises `unsupported operand
       type(s) for &: 'str' and 'str'` on Python, where `&` is bitwise-and.
