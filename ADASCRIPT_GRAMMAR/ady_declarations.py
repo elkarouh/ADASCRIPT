@@ -497,6 +497,8 @@ def _index_name(idx_node):
 def _decl_is_ordered_map_key(rhs, decls, seen):
     """Whether a type declared as RHS (its text) keys an ordered mapping."""
     rhs = rhs.strip()
+    if rhs.startswith("distinct "):       # as its base does
+        rhs = rhs[len("distinct "):].strip()
     if rhs.startswith("enum"):
         return False
     if rhs.startswith("float"):
@@ -562,3 +564,61 @@ def ordered_map_key(idx_node):
     from hek_parsec import ParserState
     decls = getattr(ParserState, "ady_type_decls", None) or {}
     return bool(_name_is_ordered_map_key(name, decls, frozenset()))
+
+
+# --- distinct types ----------------------------------------------------------
+# `type Velocity_T is distinct float` makes a type with float's values and
+# operations that mixes with neither float nor any other distinct float: a
+# Velocity_T plus a Distance_T is refused, and so is a Velocity_T given a
+# plain float variable. `Velocity_T(x)` gets in, `float(v)` gets out. A
+# literal takes the type its context asks for, as in Ada -- `let v:
+# Velocity_T = 250.0`, `v * 2.0` -- which is why each backend needs to know,
+# for a name, whether it is one and what it is made of.
+
+_KIND_OF_PRIMITIVE = {"int": "int", "float": "float", "str": "str",
+                      "char": "char", "bool": "bool",
+                      "Natural": "int", "Positive": "int"}
+
+
+def _decl_kind(rhs, decls, seen):
+    """The kind of scalar a declared type's values are, or None."""
+    rhs = rhs.strip()
+    if rhs.startswith("distinct "):
+        rhs = rhs[len("distinct "):].strip()
+    if rhs in _KIND_OF_PRIMITIVE:
+        return _KIND_OF_PRIMITIVE[rhs]
+    if rhs.startswith("float"):
+        return "float"                    # float range lo .. hi
+    if rhs.startswith("enum"):
+        return "enum"
+    if rhs[:1] in "[{(?" or "|" in rhs:
+        return None
+    if ".." in rhs:
+        return "int"                      # an integer subrange
+    if rhs.isidentifier() and rhs not in seen and rhs in decls:
+        inner = decls[rhs]
+        return None if inner is None else _decl_kind(inner, decls, seen | {rhs})
+    return None
+
+
+def distinct_types(decls):
+    """{name: kind} for every `type X is distinct T` in DECLS (the output of
+    scan_type_decls), kind being the scalar T is made of -- "int", "float",
+    "str", "char", "bool" or "enum" -- or None for anything else."""
+    out = {}
+    for name, rhs in decls.items():
+        if rhs is not None and rhs.strip().startswith("distinct "):
+            out[name] = _decl_kind(rhs, decls, frozenset({name}))
+    return out
+
+
+def is_distinct(name):
+    """Whether NAME is a distinct type this module declares or imports."""
+    from hek_parsec import ParserState
+    return name in (getattr(ParserState, "distinct_types", None) or {})
+
+
+def distinct_kind(name):
+    """What a distinct type NAME is made of ("float", "int", ...), or None."""
+    from hek_parsec import ParserState
+    return (getattr(ParserState, "distinct_types", None) or {}).get(name)

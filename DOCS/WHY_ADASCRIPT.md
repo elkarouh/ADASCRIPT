@@ -188,9 +188,10 @@ without it being visible on the page. And the day somebody asks "is this in
 knots or metres per second?", there is one place to look and one place to
 change.
 
-That is the argument, and it holds even when the type is only a name — which
-brings me to what in this document is not yet finished, and which I will
-come back to at the end.
+That is the argument, and it holds even when the type is only a name. When
+putting one of them where the other belongs would be a bug, a type can be
+more than a name: `distinct` makes the compiler hold you to it, and the end
+of this document says exactly how far that reaches.
 
 ### A failure belongs in the signature
 
@@ -609,10 +610,11 @@ step 2 were done first.
 
 ---
 
-## What is not yet true
+## What the compiler holds you to
 
-An advocacy document that overclaims is worth less than no document, so:
-**a scalar type alias is documentation, not enforcement.**
+An advocacy document that overclaims is worth less than no document, so,
+precisely: **a scalar type alias is documentation; a distinct type is
+enforcement.**
 
 <!-- from: EXAMPLES/DOC/why_alias_snippets.ady -->
 ```python
@@ -620,23 +622,56 @@ type Velocity_T is float
 type Distance_T is float
 
 let v: Velocity_T = 250.0
-let d: Distance_T = v        # compiles today, on both backends
+let d: Distance_T = v        # an alias: compiles, on both backends
 ```
 
 `Velocity_T` gives you the name in the signature, in the review and in the
-grep, and by the argument above that is most of the benefit. What it does not
-yet give you is the compiler refusing to put knots where metres belong.
+grep, and by the argument above that is most of the benefit. It does not
+give you the compiler refusing to put knots where miles belong. `distinct`
+does:
 
-Where Adascript *does* enforce a distinction today: an enumeration is a real
+<!-- from: EXAMPLES/DOC/why_alias_snippets.ady -->
+```python
+type Knots_T is distinct float    # knots
+type Hours_T is distinct float    # hours
+type Miles_T is distinct float    # nautical miles
+
+def flown(speed: Knots_T, time: Hours_T) -> Miles_T:
+    return Miles_T(float(speed) * float(time))   # the one place units meet
+
+let speed: Knots_T = 250.0        # a literal takes the type it is given to
+let far: Miles_T = flown(speed, 2.0)
+# let wrong: Miles_T = speed      -- refused, on both backends
+```
+
+A `Knots_T` keeps everything a `float` can do — with another `Knots_T`. It
+mixes with nothing else: not a `float` variable, not a `Miles_T`, not a
+`Hours_T`. The conversion is written where the units really do meet, which
+is the one line a reviewer wants to see. It is Ada's derived type, and like
+Ada it lets a literal take whatever type its context asks for, so `250.0`
+and `v * 2.0` need no ceremony.
+
+Not every name should be distinct. Conversions are work, and a value that
+is meant to mix with its base — an epoch plus a number of seconds — is
+better as an alias. Make distinct the quantities whose mixing would be a
+bug: units, and the identifiers of different things that happen to share a
+representation.
+
+What is checked where is not symmetric, and it is worth saying so. On the
+Nim backend the compiler checks every use. The Python backend has no type
+checker of its own, so it refuses what it can see: a typed name given to a
+declaration or an assignment of another type, and an operator between two
+typed names. A wrong argument, or a mix buried in a larger expression, is
+caught when the same source is built for Nim — which is one more reason
+`make test` builds everything for both.
+
+Where else Adascript enforces a distinction: an enumeration is a real
 type (index an `[E]T` with a string and it will not compile), `Natural` and
 `Positive` are range-checked at run time, a record is nominal, `?T` is not
 `T`, and `Path` is a distinct string — `p = s` is an error on both backends
 and `Path(s)` is how you mean it.
 
-That last one is the proof that the machinery exists. `Path` is a distinct
-type because it was built as one. Letting a user-defined scalar say the same
-thing — `type Velocity_T is distinct float` — is the next thing on the list,
-and it is in `TODO.md`.
+## What is not yet true
 
 Failures as values (`T | !Failure_T`) are enforced in both directions: a
 failure cannot be dropped — a bare call whose result nobody takes is

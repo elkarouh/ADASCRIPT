@@ -294,15 +294,17 @@ history of this file if the reasoning behind one of them is ever wanted.
       so it is the implicit return rather than the construct around it.
       `TOOLS/TCHECK/Tcheck_tact.ady`'s `build_type_from` says so where it
       spells out the returns it would otherwise leave implicit.
-- [ ] a user-defined scalar type is an alias, not a distinct type, so
-      `type Velocity_T is float` documents a unit without enforcing it:
-      `let d: Distance_T = v` over two float aliases compiles on both
-      backends. `Path` proves the machinery is there -- it is a distinct
-      string on Nim and a str subclass on Python, and `p = s` is refused on
-      both -- so the shape of the feature is `type Velocity_T is distinct
-      float`, with an explicit `Velocity_T(x)` to get in and `float(v)` to
-      get out. DOCS/WHY_ADASCRIPT.md rests its central argument on the name
-      alone and says so; this is what would let it rest on the compiler.
+- [x] `type Velocity_T is distinct float` (EXAMPLES/test_distinct.ady): a
+      type with its base's operations, closed over itself, that mixes with
+      nothing else; `Velocity_T(x)` in, `float(v)` out, a literal takes its
+      context's type. Nim checks every use (`distinct` + borrowed procs);
+      the Python backend refuses a typed name given to a declaration or
+      assignment, and an operator between two typed names.
+- [ ] distinct types, what is left: the Python backend does not check an
+      argument's type (it records no parameter types), nor a mix inside a
+      larger expression -- building for Nim catches both. A literal whose
+      context Nim cannot see (an argument to something that is not a known
+      routine, an element of a table literal) needs `V(x)` written.
 - [ ] `[E]{}T` cannot infer the element type of an empty set literal in its
       initialiser: `var seen: [Phase_T]{}str = [CLIMB: {}, ...]` gives Nim
       "cannot instantiate: 'A'" from initHashSet. `{}` is ambiguous on its

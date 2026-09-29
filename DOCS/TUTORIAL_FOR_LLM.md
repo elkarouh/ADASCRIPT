@@ -138,29 +138,31 @@ var owners: {TargetKey}{LineNo}[]HitIndex = {:}   # not {str}[]int keyed by "<ta
 - Nested containers become readable, and often better shaped. Glued string keys give way to a nested mapping.
 - The unit or format is written once, on the type.
 - The representation can change in one place.
-- There is no cost: a named scalar type is a plain alias on both backends (Nim `type Epoch = int`, Python `Epoch = int`), so `let n: int = e + 1` needs no conversion.
+- There is no cost: a named scalar type is a plain alias on both backends (Nim `type Epoch = int`, Python `Epoch = int`), so `let n: int = e + 1` needs no conversion. (`distinct`, below, is the opt-in when mixing should be refused.)
 
 **Keep bare types for** values that only count or index: lengths, widths, string offsets, loop indices, and text that is just text. Rule of thumb: if the declaration would need a comment saying what the `int` holds, name the type instead.
 
 Both naming styles exist in the examples, `Velocity_T` and `Epoch`; be consistent within one program. A class NEVER ends in `_T`, in either style: name it for the thing it is (`Report`, `Flight`). The snippets are in `EXAMPLES/DOC/type_snippets.ady`.
 
-### `distinct` (planned, NOT yet available)
+### `distinct`
 
-A named type is an alias: it documents, it does not enforce. `let d: Distance_T = v` with `v: Velocity_T` compiles when both are `float` aliases.
+A named type is an alias: it documents, it does not enforce. `type Velocity_T is distinct float` makes a real type:
+```adascript
+type Velocity_T is distinct float     # knots
+type Distance_T is distinct float     # nautical miles
+def travelled(v: Velocity_T, t: Duration_T) -> Distance_T:
+    return Distance_T(float(v) * float(t))   # convert explicitly, in and out
+var v: Velocity_T = 250.0                    # literal: takes the context's type
+v = v * 2.0                                  # literal beside a Velocity_T is one
+```
+- keeps the base type's operations, closed over itself (V+V->V, V<V, max, abs, +=, f"{v:.1f}"); distinct str: `+`, `len`; distinct int: `//`, `%`;
+- does NOT mix with its base or another distinct type: `let d: Distance_T = v` and `v + d` are errors; `let f: float = d` too -- write `float(d)`;
+- a literal converts implicitly where the type is visible (declaration, assignment, return, argument, record field, other operand); a base-typed *variable* never does -- write `Velocity_T(f)`;
+- Nim: `distinct float` + `{.borrow.}` procs; Python: `class Velocity_T(float)`. Nim checks everything; Python checks declarations, assignments and operators between typed names.
 
-`type Velocity_T is distinct float` is **a parse error today**; don't emit it. The planned design is in `TODO.md`:
-- the type is not interchangeable with its base or with another distinct type;
-- `Velocity_T(x)` converts in and `float(v)` converts out, explicitly;
-- mixing is an error on both backends.
+Use it for units and for IDs of different entities that share a representation. Keep aliases for values meant to mix with their base.
 
-When it lands, use it for units and for IDs of different entities that share a representation. Keep aliases for values meant to mix with their base.
-
-Enforcement available today:
-- enums are their own types;
-- subranges are bounds-checked, on Nim only;
-- records are nominal;
-- `?T` is not `T`;
-- `Path` is a distinct string, so `let p: Path = s` is an error; write `Path(s)`.
+Other enforcement: enums are their own types; subranges are bounds-checked, on Nim only; records are nominal; `?T` is not `T`; `Path` is a distinct string, so `let p: Path = s` is an error; write `Path(s)`.
 
 Style: every place on disk is a `Path`, joined with `/` (`Path(root) / sub / ".git"`), never a `str` joined with `"/"`; parameters that are directories or files are typed `Path`. Keep `str` for what is not a place on this disk (a URL, a path as another tool reports it, a git config value); convert with `str(p)` where an API takes strings, e.g. `run(["rmdir", str(work)])`. Go up with `.parent`, not `/ ".."`.
 

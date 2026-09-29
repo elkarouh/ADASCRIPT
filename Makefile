@@ -111,6 +111,7 @@ STANDALONE := \
     test_enum_array_zero_fill.ady \
     test_ordered_map.ady \
     test_function_type.ady \
+    test_distinct.ady \
     test_case_guard_or.ady \
     test_method_param_names.ady \
     test_pure_method_self.ady \
@@ -242,7 +243,7 @@ COMPILE_ONLY := \
 # is the one they get, so the self-contained loop leaves them out.
 BOTH_BACKENDS_COMPARED := test_do_block test_result test_optional_spelling \
     test_union test_case_ranges test_contextmanager_fstring \
-    test_ordered_map test_function_type
+    test_ordered_map test_function_type test_distinct
 
 ALL_COMPILE := \
     $(LIBS) \
@@ -561,6 +562,44 @@ test: compile
 	    done; \
 	done
 	@rm -f $(TMPDIR)/ady_refuse_[1-8].ady $(TMPDIR)/ady_refuse.out
+	@# A distinct type mixes with nothing else: not its base, not another
+	@# distinct type on the same base. Nim's compiler refuses each of these;
+	@# the Python backend refuses those it can see -- a typed name given, or
+	@# an operator between two typed names -- and leaves a wrong argument to
+	@# Nim, whose signature it does not record.
+	@echo "=== distinct types do not mix, both backends ==="
+	@printf 'type Velocity_T is distinct float\ntype Distance_T is distinct float\ndef fly(v: Velocity_T) -> Velocity_T:\n    return v\nvar v: Velocity_T = 1.0\nvar d: Distance_T = 2.0\nvar f: float = 3.0\n' \
+	    > $(TMPDIR)/ady_distinct_hdr.ady
+	@for c in "1:py:another distinct type given:let e: Distance_T = v" \
+	          "2:py:its base type given:let e: Distance_T = f" \
+	          "3:py:given to its base type:let g: float = d" \
+	          "4:py:assigned another distinct type:d = v" \
+	          "5:py:added to another distinct type:let e: Distance_T = v + d" \
+	          "6:py:compared with another distinct:let b: bool = v < d" \
+	          "7:nim:passed for another distinct:let w: Velocity_T = fly(d)"; do \
+	    n=$${c%%:*}; rest=$${c#*:}; who=$${rest%%:*}; rest=$${rest#*:}; \
+	    what=$${rest%%:*}; line=$${rest#*:}; \
+	    { cat $(TMPDIR)/ady_distinct_hdr.ady; echo "$$line"; } > $(TMPDIR)/ady_distinct_$$n.ady; \
+	    printf '  %-42s' "$$what (ady2nim)"; \
+	    if (cd $(TMPDIR) && XDG_CACHE_HOME=$(TMPDIR)/ady_distinct_cache $(ADY2NIM) c ady_distinct_$$n.ady) \
+	            > $(TMPDIR)/ady_distinct.out 2>&1; then echo "FAIL (accepted)"; exit 1; fi; \
+	    grep -q "type mismatch" $(TMPDIR)/ady_distinct.out \
+	        && echo OK || { echo FAIL; cat $(TMPDIR)/ady_distinct.out; exit 1; }; \
+	    if [ "$$who" = py ]; then \
+	        printf '  %-42s' "$$what (ady2py)"; \
+	        if $(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(TMPDIR)/ady_distinct_$$n.ady \
+	                > $(TMPDIR)/ady_distinct.out 2>&1; then echo "FAIL (accepted)"; exit 1; fi; \
+	        grep -q "a distinct type does not mix" $(TMPDIR)/ady_distinct.out \
+	            && echo OK || { echo FAIL; cat $(TMPDIR)/ady_distinct.out; exit 1; }; \
+	    fi; \
+	done
+	@printf '  %-42s' "Distance_T(f) and float(d) get in and out"; \
+	    { cat $(TMPDIR)/ady_distinct_hdr.ady; printf 'let e: Distance_T = Distance_T(f)\nlet g: float = float(d)\nprint e, g\n'; } \
+	        > $(TMPDIR)/ady_distinct_ok.ady; \
+	    (cd $(TMPDIR) && XDG_CACHE_HOME=$(TMPDIR)/ady_distinct_cache $(ADY2NIM) c ady_distinct_ok.ady >/dev/null 2>&1) \
+	    && $(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(TMPDIR)/ady_distinct_ok.ady >/dev/null 2>&1 \
+	    && echo OK || { echo FAIL; exit 1; }
+	@rm -rf $(TMPDIR)/ady_distinct_* $(TMPDIR)/ady_distinct.out
 	@for t in $(BOTH_BACKENDS_COMPARED); do \
 	    printf '  %-42s' "$$t.ady (python = nim)"; \
 	    $(EXDIR)/$$t > $(TMPDIR)/ady_$$t.nim.out 2>&1 || { echo "FAIL (nim)"; exit 1; }; \

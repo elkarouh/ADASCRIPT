@@ -317,6 +317,11 @@ def to_nim(self):
             _otype = _nim_expr_type(lhs) or ""
         if _otype:
             parts[1] = _to_ordered_table(parts[1], _otype)
+        # `self.flown = 0.0`: the literal is of the target's distinct type
+        from hek_nim_expr import _distinct_type_of
+        _dt = _distinct_type_of(lhs)
+        if _dt is not None:
+            parts[1] = _wrap_distinct_literal(parts[1], _dt)
     # Result[T, E] assignment: `r = Err(e)`, `r = v` -> typed constructors
     if len(parts) == 2 and prefix == "":
         _rsym = ParserState.symbol_table.lookup(lhs)
@@ -401,6 +406,14 @@ def to_nim(self):
     )
     value = self.nodes[2].to_nim()
     nim_op, expand = _AUGOP_TO_NIM.get(py_op, (py_op, False))
+    # `v += 10.0` on a distinct v: the literal is of v's type
+    from hek_nim_expr import _distinct_type_of
+    _dt = _distinct_type_of(target)
+    if _dt is not None:
+        value = _wrap_distinct_literal(value, _dt)
+        from ady_declarations import distinct_kind
+        if nim_op == "+=" and distinct_kind(_dt) == "str":
+            return f"{target} = {target} & {value}"
     # String += -> &= in Nim; string += char -> target.add(char)
     if nim_op == "+=" and not expand:
         rhs_sym = ParserState.symbol_table.lookup(value)
@@ -993,6 +1006,8 @@ def to_nim(self):
                 value = _coerce_string_to_char(value, annotation)
                 # [K]V over a non-ordinal K: the table literal is an ordered one
                 value = _to_ordered_table(value, annotation)
+                # a literal takes the distinct type it is given to
+                value = _wrap_distinct_literal(value, annotation)
                 # array types: {} is unnecessary — arrays are zero-initialized
                 if value == "initTable()" and annotation.startswith("array["):
                     value = ""
@@ -1254,6 +1269,8 @@ def to_nim(self):
                 value = _coerce_string_to_char(value, annotation)
                 # [K]V over a non-ordinal K: the table literal is an ordered one
                 value = _to_ordered_table(value, annotation)
+                # a literal takes the distinct type it is given to
+                value = _wrap_distinct_literal(value, annotation)
                 # array types: {} is unnecessary — arrays are zero-initialized
                 if value == "initTable()" and annotation.startswith("array["):
                     value = ""
@@ -1489,6 +1506,7 @@ def to_nim(self):
         return "return @[]"
     if _rt_bare:
         val = _to_ordered_table(val, _rt_bare)
+        val = _wrap_distinct_literal(val, _rt_bare)
     if val == "initTable()" and ret_type:
         import re as _re2
         _tm = _re2.search(r"Table\[([^,]+),\s*(.+)\]$", ret_type)
@@ -2248,6 +2266,8 @@ def to_nim(self, indent=0):
         lo = str(sr.nodes[0].node)
         hi = str(sr.nodes[2].node)   # [lo, range_op, hi]
         ParserState.tick_types[name] = {"First": lo, "Last": hi}
+    elif rhs_type == "distinct_def":
+        return _distinct_type_nim(name, params, rhs, indent)
     elif rhs_type == "float_range_def":
         lo = str(rhs.nodes[2].node)
         hi = str(rhs.nodes[4].node)  # [float, range, lo, range_op, hi]
@@ -2277,6 +2297,111 @@ def to_nim(self, indent=0):
         ParserState.symbol_table.add(name, value, "type")
     _exp = "*" if getattr(ParserState, 'export_symbols', False) and ParserState.symbol_table.depth() <= 2 else ""
     return f"{_ind(indent)}type {name}{_exp}{params} = {value}"
+
+
+@method(distinct_def)
+def to_nim(self, prec=None):
+    """distinct_def: 'distinct' type_annotation -> Nim: distinct T"""
+    return f"distinct {self.nodes[0].to_nim()}"
+
+
+# The operations a distinct type keeps, by what it is made of: those of its
+# base, closed over the new type -- a Velocity_T plus a Velocity_T is a
+# Velocity_T -- and borrowed, so Nim compiles each to the base's own. Nothing
+# takes the base type or another distinct one: that is the point.
+_DISTINCT_ORDERED = ["proc `<`{e}(a, b: {t}): bool {{.borrow.}}",
+                     "proc `<=`{e}(a, b: {t}): bool {{.borrow.}}",
+                     "proc `==`{e}(a, b: {t}): bool {{.borrow.}}",
+                     "proc `$`{e}(a: {t}): string {{.borrow.}}",
+                     "proc hash{e}(a: {t}): Hash {{.borrow.}}",
+                     "proc min{e}(a, b: {t}): {t} {{.borrow.}}",
+                     "proc max{e}(a, b: {t}): {t} {{.borrow.}}"]
+_DISTINCT_NUMERIC = ["proc `+`{e}(a, b: {t}): {t} {{.borrow.}}",
+                     "proc `-`{e}(a, b: {t}): {t} {{.borrow.}}",
+                     "proc `*`{e}(a, b: {t}): {t} {{.borrow.}}",
+                     "proc `-`{e}(a: {t}): {t} {{.borrow.}}",
+                     "proc `+`{e}(a: {t}): {t} {{.borrow.}}",
+                     "proc abs{e}(a: {t}): {t} {{.borrow.}}",
+                     "proc `+=`{e}(a: var {t}, b: {t}) {{.borrow.}}",
+                     "proc `-=`{e}(a: var {t}, b: {t}) {{.borrow.}}",
+                     "proc `*=`{e}(a: var {t}, b: {t}) {{.borrow.}}"]
+_DISTINCT_BY_KIND = {
+    "float": _DISTINCT_ORDERED + _DISTINCT_NUMERIC + [
+        "proc `/`{e}(a, b: {t}): {t} {{.borrow.}}",
+        "proc `/=`{e}(a: var {t}, b: {t}) {{.borrow.}}"],
+    "int": _DISTINCT_ORDERED + _DISTINCT_NUMERIC + [
+        "proc `div`{e}(a, b: {t}): {t} {{.borrow.}}",
+        "proc `mod`{e}(a, b: {t}): {t} {{.borrow.}}"],
+    "str": _DISTINCT_ORDERED + [
+        "proc len{e}(a: {t}): int {{.borrow.}}",
+        "proc `&`{e}(a, b: {t}): {t} {{.borrow.}}"],
+    "char": _DISTINCT_ORDERED,
+    "enum": _DISTINCT_ORDERED,
+    "bool": ["proc `==`{e}(a, b: {t}): bool {{.borrow.}}",
+             "proc `$`{e}(a: {t}): string {{.borrow.}}",
+             "proc `not`{e}(a: {t}): {t} {{.borrow.}}",
+             "proc `and`{e}(a, b: {t}): {t} {{.borrow.}}",
+             "proc `or`{e}(a, b: {t}): {t} {{.borrow.}}"],
+}
+_DISTINCT_BASE_NIM = {"float": "float", "int": "int", "str": "string",
+                      "char": "char", "bool": "bool"}
+
+
+def _distinct_type_nim(name, params, rhs, indent):
+    """`type X is distinct T` -> Nim's `type X = distinct T`, and the
+    operations of T that X keeps, borrowed. A `{x:.2f}` in an f-string goes
+    through formatValue, which Nim would otherwise look up as a string's."""
+    from ady_declarations import distinct_kind
+    base = rhs.nodes[0].to_nim()
+    # registered as itself, so a variable of it resolves to its name and not
+    # to its base: that is what tells `v * 2.0` to convert the 2.0
+    ParserState.symbol_table.add(name, name, "type")
+    kind = distinct_kind(name)
+    _top = ParserState.symbol_table.depth() <= 2
+    _exp = "*" if getattr(ParserState, 'export_symbols', False) and _top else ""
+    ind = _ind(indent)
+    lines = [f"{ind}type {name}{_exp}{params} = distinct {base}"]
+    if kind in _DISTINCT_BY_KIND and not params:
+        ParserState.nim_imports.update(("hashes", "strformat"))
+        lines += [ind + p.format(e=_exp, t=name) for p in _DISTINCT_BY_KIND[kind]]
+        if kind in _DISTINCT_BASE_NIM:
+            lines.append(f"{ind}proc formatValue{_exp}(result: var string; value: {name}; "
+                         f"specifier: string) = formatValue(result, "
+                         f"{_DISTINCT_BASE_NIM[kind]}(value), specifier)")
+    return "\n".join(lines)
+
+
+def _is_nim_literal(value):
+    """VALUE, emitted Nim, is a bare literal: a number (signed or not), a
+    string, a character, true or false."""
+    import re as _re_lit
+    v = (value or "").strip()
+    return bool(_re_lit.match(
+        r'^(-?\d[\d_]*(\.\d+)?([eE][-+]?\d+)?|"([^"\\]|\\.)*"'
+        r"|'([^'\\]|\\.)'|true|false)$", v))
+
+
+def _wrap_distinct_literal(value, nim_type):
+    """A literal given where a distinct type is expected -- `let v:
+    Velocity_T = 250.0`, `return 0.0`, `f(12.0)` -- converted to it. A
+    literal has no type of its own until its context gives it one, as in
+    Ada; a variable does, and is left alone, so Nim refuses a plain float or
+    another distinct type there. `[]X` literals convert element by element."""
+    import re as _re_dl
+    from ady_declarations import is_distinct
+    t = (nim_type or "").strip()
+    if t.startswith("var "):
+        t = t[4:].strip()
+    v = (value or "").strip()
+    if is_distinct(t):
+        return f"{t}({v})" if _is_nim_literal(v) else value
+    m = (_re_dl.match(r"^seq\[([A-Za-z_]\w*)\]$", t)
+         or _re_dl.match(r"^array\[[^\[\]]+,\s*([A-Za-z_]\w*)\]$", t))
+    if m and is_distinct(m.group(1)) and v[:2] in ("@[", "[") and v.endswith("]"):
+        head = "@[" if v.startswith("@[") else "["
+        items = _split_top_level(v[len(head):-1]) if v[len(head):-1].strip() else []
+        return head + ", ".join(_wrap_distinct_literal(x, m.group(1)) for x in items) + "]"
+    return value
 
 
 # --- simple_stmt ---

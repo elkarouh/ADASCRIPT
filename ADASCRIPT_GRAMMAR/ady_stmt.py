@@ -584,6 +584,11 @@ constrained_subrange_def = IDENTIFIER + subrange_def
 # float_range_def: float range LO .. HI  (e.g. float range 0.0 .. 100.0)
 float_range_def = fw("float_range_def")
 float_range_def = literal("float") + literal("range") + NUMBER + (RANGE_EXCL_OP | RANGE_OP) + NUMBER
+# distinct_def: distinct T -- a new type with T's values and operations,
+# which does not mix with T or with any other type made from it
+# (`type Velocity_T is distinct float`). See distinct_types().
+distinct_def = fw("distinct_def")
+distinct_def = ikw("distinct") + type_annotation
 # int_range_def: int range LO .. HI  (synonym for constrained_subrange_def)
 int_range_def = fw("int_range_def")
 int_range_def = literal("int") + literal("range") + subrange_def
@@ -598,7 +603,7 @@ elem_type.parsers.insert(0, subrange_def)
 from ady_declarations import basic_type as _basic_type
 _basic_type.parsers.insert(2, subrange_array_type)
 # type_stmt for simple (inline) forms only; block forms (tuple/record) are in ady_compound_stmt
-type_stmt = ikw("type") + IDENTIFIER + type_alias_params[:] + (V_EQUAL | ikw("is")) + (enum_def | float_range_def | int_range_def | constrained_subrange_def | subrange_def | type_annotation)
+type_stmt = ikw("type") + IDENTIFIER + type_alias_params[:] + (V_EQUAL | ikw("is")) + (enum_def | distinct_def | float_range_def | int_range_def | constrained_subrange_def | subrange_def | type_annotation)
 
 # --- simple_stmt: choice of all statement types ---
 # Ordering matters: try more specific forms before general expression.

@@ -81,6 +81,8 @@ def to_py(self):
         _t = ParserState.symbol_table.lookup(parts[0])
         if isinstance(_t, dict) and (_t.get("type") or "") == "Path":
             _reject_str_to_path(parts[0], "Path", parts[-1])
+        if isinstance(_t, dict) and _t.get("type"):
+            _reject_distinct_mix(parts[0], _t["type"], parts[-1])
         # `m = {...}` on a [K]V map keeps it one
         if isinstance(_t, dict) and _t.get("type"):
             parts[-1] = _wrap_for_ordered_array(parts[-1], _t["type"])
@@ -122,6 +124,7 @@ def to_py(self):
             if hasattr(seq, "nodes") and len(seq.nodes) >= 2:
                 value = seq.nodes[1].to_py()
                 _reject_str_to_path(name, annotation, value)
+                _reject_distinct_mix(name, annotation, value)
                 value = _wrap_seq_for_enum_array(value, annotation)
                 value = _wrap_for_ordered_array(value, annotation)
                 value = _wrap_list_for_queue(value, annotation)
@@ -227,6 +230,84 @@ def _wrap_seq_for_enum_array(value, annotation):
     else:
         return value
     return f"_EnumArray(zip({domain}, {v}))"
+
+
+@method(distinct_def)
+def to_py(self, prec=None):
+    """distinct_def: 'distinct' type_annotation -> the base type; the class
+    is built by type_stmt"""
+    return self.nodes[0].to_py()
+
+
+_DISTINCT_BASES = {"float": "float", "int": "int", "str": "str", "bool": "bool"}
+
+
+def _py_type_of_name(value):
+    """The annotation a bare name VALUE was declared with, or None."""
+    v = (value or "").strip()
+    if not _re_p2s.match(v):
+        return None
+    sym = ParserState.symbol_table.lookup(v)
+    return (sym.get("type") or None) if isinstance(sym, dict) else None
+
+
+def _reject_distinct_mix(name, annotation, value):
+    """Refuse a value of one type where a distinct type is declared, or a
+    distinct value where another type is: `let d: Distance_T = v` over a
+    Velocity_T, `let d: Distance_T = f` over a float, `let f: float = d`.
+    The Nim backend refuses all three, and so does this one, at the same
+    place: `Distance_T(f)` gets a float in and `float(d)` gets it out.
+
+    Deliberately narrow, as the Path check is: the value must be a name
+    whose type the symbol table knows. A literal takes the declared type,
+    as it does on Nim; an arbitrary expression's type is not known here,
+    and Nim still refuses what this lets through."""
+    from ady_declarations import is_distinct
+
+    def _resolve(t):
+        # through plain aliases -- `type Speed_T is Velocity_T` is the same
+        # type on Nim -- but not through a distinct one, which is its own
+        aliases = getattr(ParserState, "py_type_aliases", {})
+        seen = set()
+        while t in aliases and aliases[t] != t and t not in seen and not is_distinct(t):
+            seen.add(t)
+            t = aliases[t]
+        return t
+    target = _resolve((annotation or "").strip())
+    source = _py_type_of_name(value)
+    source = _resolve(source) if source else source
+    if not source or source == target:
+        return
+    if not (is_distinct(target) or is_distinct(source)):
+        return
+    v = value.strip()
+    if is_distinct(target):
+        fix = f"write {target}({v})"
+    else:
+        fix = f"write {target}({v})" if target in _DISTINCT_BASES else "convert it explicitly"
+    raise ValueError(
+        f"cannot give {v}, a {source}, to {name}, a {target}: a distinct type "
+        f"does not mix with any other -- {fix}")
+
+
+_DISTINCT_OPS = {"+", "-", "*", "/", "//", "%", "<", ">", "<=", ">=", "==", "!="}
+
+
+def _reject_distinct_operands(left, op, right):
+    """Refuse `v + d` and `v < d` over two names whose declared types differ
+    when one of them is distinct -- the operator mix the Nim backend
+    refuses. Only names the symbol table types; a literal takes the other
+    side's type, and anything else is left to Nim."""
+    if op.strip() not in _DISTINCT_OPS:
+        return
+    from ady_declarations import is_distinct
+    lt, rt = _py_type_of_name(left), _py_type_of_name(right)
+    if not (lt and rt) or lt == rt or not (is_distinct(lt) or is_distinct(rt)):
+        return
+    raise ValueError(
+        f"'{left.strip()} {op.strip()} {right.strip()}' mixes a {lt} with a "
+        f"{rt}: a distinct type does not mix with any other -- convert one "
+        f"side explicitly")
 
 
 def _wrap_for_ordered_array(value, annotation):
@@ -336,6 +417,10 @@ def _zero_value(annotation, _depth=0):
                "Path": 'Path("")'}
     if ann in scalars:
         return scalars[ann]
+    # a distinct type zeroes as its base does: Velocity_T() is 0.0
+    from ady_declarations import is_distinct
+    if is_distinct(ann):
+        return f"{ann}()"
     # another name for a type -- `type Reward_T is float` -- zeroes as it
     _target = getattr(ParserState, "py_type_aliases", {}).get(ann)
     if _target and _target != ann:
@@ -419,6 +504,7 @@ def to_py(self):
             if hasattr(seq, "nodes") and len(seq.nodes) >= 2:
                 value = seq.nodes[1].to_py()
                 _reject_str_to_path(name, annotation, value)
+                _reject_distinct_mix(name, annotation, value)
                 value = _wrap_seq_for_enum_array(value, annotation)
                 value = _wrap_for_ordered_array(value, annotation)
                 value = _wrap_list_for_queue(value, annotation)
@@ -1079,6 +1165,17 @@ def to_py(self, indent=0):
     # RHS is the last node — works whether V_EQUAL is present ('=') or absent ('is')
     rhs = self.nodes[-1]
     rhs_type = type(rhs).__name__
+    if rhs_type == 'distinct_def':
+        # A class of its own, so `Velocity_T(x)` makes one and `float(v)`
+        # takes it back out; the values are the base type's, and print and
+        # format as they do. That a Velocity_T does not mix with a float or
+        # a Distance_T is checked where it is given one: see
+        # _reject_distinct_mix, and the Nim compiler for everything else.
+        base = rhs.nodes[0].to_py()
+        _note_alias(name, name)
+        ParserState.py_type_names = getattr(ParserState, "py_type_names", set()) | {name}
+        ind = _ind(indent)
+        return f"{ind}class {name}({base}): __slots__ = ()"
     if rhs_type == 'float_range_def':
         lo = str(rhs.nodes[2].node)
         hi = str(rhs.nodes[4].node)  # [float, range, lo, range_op, hi]

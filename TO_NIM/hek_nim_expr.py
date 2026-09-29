@@ -1362,6 +1362,39 @@ def _is_pipe_not_bitor(operands):
     return False
 
 
+def _distinct_type_of(expr):
+    """The distinct type EXPR, emitted Nim, has -- `v`, `self.speed`,
+    `Velocity_T(x)` -- or None."""
+    from ady_declarations import is_distinct
+    e = (expr or "").strip()
+    import re as _re_dt
+    m = _re_dt.match(r"^([A-Za-z_]\w*)\(", e)
+    if m and is_distinct(m.group(1)) and e.endswith(")"):
+        return m.group(1)
+    t = (_nim_expr_type(e) or "").strip()
+    if not is_distinct(t):
+        t = _field_type(e).strip() or t      # a field: `self.flown`
+    if not is_distinct(t):
+        # a call of a routine declared to return one: `cruise() + 100.0`
+        _called = _outer_call_name(e)
+        if _called:
+            t = getattr(ParserState, "proc_return_types", {}).get(_called, "") or t
+    if t.startswith("var "):
+        t = t[4:].strip()
+    return t if is_distinct(t) else None
+
+
+def _is_distinct_param(ptype):
+    from ady_declarations import is_distinct
+    t = (ptype or "").strip()
+    return is_distinct(t[4:].strip() if t.startswith("var ") else t)
+
+
+def _is_literal_arg(arg):
+    from hek_nim_stmt import _is_nim_literal
+    return _is_nim_literal(arg)
+
+
 def binop_to_nim(self, prec=None, my_prec=None):
     """Generic to_nim for left-associative binary operators.
     Parallel to binop_to_py but calls to_nim() recursively and translates operators."""
@@ -1393,11 +1426,28 @@ def binop_to_nim(self, prec=None, my_prec=None):
 
     right_prec = my_prec + 1 if my_prec is not None else None
     st = self.nodes[last_st_idx]
+    # The distinct type this chain of operators computes in, once one operand
+    # is known to be of one: a literal beside it is converted to it, as a
+    # literal given to a `let v: Velocity_T` is. `v * 2.0` is Velocity_T(2.0).
+    _chain_distinct = _distinct_type_of(result)
     for seq in st.nodes:
         if hasattr(seq, "nodes") and len(seq.nodes) >= 2:
             py_op = _op_string(seq.nodes[0])
             nim_op = _PY_OP_TO_NIM.get(py_op, py_op)
             right = seq.nodes[1].to_nim(right_prec)
+            if _chain_distinct is None:
+                _chain_distinct = _distinct_type_of(right)
+                if _chain_distinct is not None:
+                    from hek_nim_stmt import _wrap_distinct_literal
+                    result = _wrap_distinct_literal(result, _chain_distinct)
+            if _chain_distinct is not None:
+                from hek_nim_stmt import _wrap_distinct_literal
+                from ady_declarations import distinct_kind
+                right = _wrap_distinct_literal(right, _chain_distinct)
+                # a distinct string joins with `&`, as a string does
+                if nim_op == "+" and distinct_kind(_chain_distinct) == "str":
+                    result = f"{result} & {right}"
+                    continue
             # seq/string concatenation: + -> & when operand is seq or string
             if nim_op == "+":
                 # `collect(...)` / `toSeq(...)` is what a comprehension
@@ -2741,6 +2791,9 @@ def to_nim(self, prec=None):
                             elif ftype.startswith("OrderedTable["):
                                 from hek_nim_stmt import _to_ordered_table
                                 fv = _to_ordered_table(fv, ftype)
+                            else:
+                                from hek_nim_stmt import _wrap_distinct_literal
+                                fv = _wrap_distinct_literal(fv, ftype)
                             # A char field given a literal: 'z' is a
                             # one-character string until something narrows it.
                             if ftype.strip() == "char":
@@ -3686,6 +3739,11 @@ def _wrap_option_args(expr):
                     changed = True
             else:
                 new_args.append(kw_prefix + arg)
+        elif _is_distinct_param(ptype) and _is_literal_arg(arg):
+            # a literal passed where a distinct type is expected is of it
+            from hek_nim_stmt import _wrap_distinct_literal
+            new_args.append(kw_prefix + _wrap_distinct_literal(arg, ptype))
+            changed = True
         elif ptype == "char" and _char_literal_arg(arg) is not None:
             # The mirror of the rule below. Adascript has no character type --
             # 'a' is a one-character *string* -- so a literal argument reached
@@ -4338,6 +4396,14 @@ def to_nim(self, prec=None):
                         op_str = getattr(first.nodes[0], 'node', str(first.nodes[0]))
                     nim_op = _PY_OP_TO_NIM.get(str(op_str), str(op_str)) if op_str else ""
                     right = seq.nodes[1].to_nim(prec) if len(seq.nodes) > 1 else ""
+                    # a literal beside a distinct operand is of its type, as
+                    # in binop_to_nim, whose operators land here when the
+                    # expression is the right side of a comparison
+                    from hek_nim_stmt import _wrap_distinct_literal
+                    _dt = _distinct_type_of(result) or _distinct_type_of(right)
+                    if _dt is not None:
+                        result = _wrap_distinct_literal(result, _dt)
+                        right = _wrap_distinct_literal(right, _dt)
                     # seq/string concat: + -> &. This path has its own
                     # arithmetic handling because bitor_expr's operators
                     # flatten into range_expr, and it knew only about seq
@@ -4753,6 +4819,17 @@ def to_nim(self, prec=None):
                             chain = f"not {chain}"
                     continue
             right = seq.nodes[1].to_nim(operand_prec)
+            # a literal compared with a distinct value is of its type:
+            # `v < 4.0` is `v < Velocity_T(4.0)`
+            if nim_op in ("<", ">", "<=", ">=", "==", "!="):
+                from hek_nim_stmt import _wrap_distinct_literal
+                _cd = _distinct_type_of(chain)
+                if _cd is not None:
+                    right = _wrap_distinct_literal(right, _cd)
+                else:
+                    _rd = _distinct_type_of(right)
+                    if _rd is not None:
+                        chain = _wrap_distinct_literal(chain, _rd)
             # char comparisons: coerce single-char string literals to char literals
             if nim_op in ("<", ">", "<=", ">=", "==", "!="):
                 if _is_nim_char_expr(chain):

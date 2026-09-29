@@ -588,6 +588,57 @@ type SmallInt is 0 .. 255    # inclusive on both ends
 type Index    is 0 ..< 10    # exclusive upper bound (0–9)
 ```
 
+### Distinct types
+
+A named type is an alias: `type Velocity_T is float` documents a unit and
+enforces nothing, so a `Distance_T` given a `Velocity_T` compiles. Add
+`distinct` and it is a type of its own:
+
+```python
+type Velocity_T is distinct float     # knots
+type Duration_T is distinct float     # hours
+type Distance_T is distinct float     # nautical miles
+
+def travelled(v: Velocity_T, t: Duration_T) -> Distance_T:
+    return Distance_T(float(v) * float(t))    # the one place the units meet
+
+var v: Velocity_T = 250.0     # a literal takes the type it is given to
+v = v * 2.0                   # ...here too: Velocity_T(2.0)
+let d: Distance_T = v         # refused, on both backends
+```
+
+- It keeps its base type's operations, closed over itself: a `Velocity_T`
+  plus a `Velocity_T` is a `Velocity_T`, two of them compare, `max`, `abs`
+  and `+=` work, and it prints and formats (`f"{v:.1f}"`) as a float does.
+  A distinct `str` joins with `+` and has `len`; a distinct `int` has `//`
+  and `%`.
+- It mixes with nothing else -- not its base type, not another distinct
+  type made from the same base. `Distance_T(x)` gets a value in,
+  `float(d)` gets it out.
+- A **literal** has no type of its own until its context gives it one, as
+  in Ada: `250.0` given to a `Velocity_T` declaration, assignment, return,
+  argument or record field, or written beside one in `v * 2.0` or
+  `v < 400.0`, is a `Velocity_T`. A variable is not a literal: a plain
+  `float` variable still needs `Velocity_T(f)`.
+
+**Nim output:** `type Velocity_T = distinct float`, with the operations
+borrowed (`proc `+`(a, b: Velocity_T): Velocity_T {.borrow.}` ...) and each
+literal converted where its context is known.
+**Python output:** `class Velocity_T(float): __slots__ = ()`.
+
+Nim's compiler checks every use. The Python backend refuses what it can
+see without a type checker of its own: a typed name given to a declaration
+or an assignment, and an operator between two typed names. A wrong-typed
+argument, or a mix inside a larger expression, is caught when the same
+source is built for Nim. A literal where Nim cannot see the type it should
+take -- as an argument to something that is not a known routine, say --
+needs the conversion written: `Velocity_T(2.0)`.
+
+Use `distinct` where a mix-up would be a bug the compiler should catch:
+units, and identifiers of different things that share a representation (a
+user id and an order id, both `int`). Keep an alias where the value is meant
+to mix with its base -- an `Epoch` plus a number of seconds.
+
 ### Named Tuples
 
 ```python

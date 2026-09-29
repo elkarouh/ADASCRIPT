@@ -343,7 +343,47 @@ def align(length: Positive, s: str) -> str:
     return s.alignLeft(length)
 ```
 
-## 2.7 String literals
+## 2.7 Distinct types
+
+A named scalar type is an alias. `type Velocity_T is float` puts the unit in
+the signature, but a `Distance_T` given a `Velocity_T` still compiles. Ada's
+answer is a *derived* type, and Adascript spells it `distinct`:
+
+```python
+type Velocity_T is distinct float     # knots
+type Duration_T is distinct float     # hours
+type Distance_T is distinct float     # nautical miles
+
+def travelled(v: Velocity_T, t: Duration_T) -> Distance_T:
+    return Distance_T(float(v) * float(t))    # the one place the units meet
+
+var v: Velocity_T = 250.0
+v = v * 2.0
+let d: Distance_T = travelled(v, 1.5)
+let wrong: Distance_T = v             # refused, on both backends
+```
+
+A distinct type keeps its base type's operations, closed over itself —
+`Velocity_T + Velocity_T` is a `Velocity_T` — and mixes with nothing else.
+`Distance_T(x)` gets a value in, `float(d)` gets it out.
+
+A literal is the exception, as it is in Ada, where a literal belongs to a
+*universal* type until its context gives it one. `250.0` given to a
+`Velocity_T` declaration, assignment, return, argument or record field, or
+written beside a `Velocity_T` in `v * 2.0` or `v < 400.0`, is a
+`Velocity_T`. A `float` *variable* is not a literal, and needs the
+conversion.
+
+On Nim the type is `distinct float` with the operations borrowed, so the
+compiler checks every use. The Python backend makes it a subclass of
+`float` and refuses what it can see — a typed name given to a declaration
+or assignment of another type, an operator between two typed names; the
+rest is caught by building for Nim. Chapter 12 has the general rule.
+
+Use `distinct` for units and for identifiers of different things that share
+a representation. Keep an alias where the value should mix with its base.
+
+## 2.8 String literals
 
 The literal forms are Python's, and they mean what they do in Python. The
 quote character is not part of the type: `"..."` and `'...'` both make a

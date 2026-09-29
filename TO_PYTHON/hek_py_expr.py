@@ -118,6 +118,8 @@ def binop_to_py(self, prec=None, my_prec=None, combine=None):
         if hasattr(seq, "nodes") and len(seq.nodes) >= 2:
             op = seq.nodes[0].to_py()
             right = seq.nodes[1].to_py(right_prec)
+            from hek_py_stmt import _reject_distinct_operands
+            _reject_distinct_operands(result, op, right)
             result = combine(result, op, right)
 
     # Only wrap in parens if parent context requires higher precedence
@@ -1936,6 +1938,8 @@ def to_py(self, prec=None):
                 _test = f"_is_a({chain}, {right})"
                 chain = f"not {_test}" if op == "is not" else _test
                 continue
+            from hek_py_stmt import _reject_distinct_operands
+            _reject_distinct_operands(chain, op, right)
             chain += f" {op} {right}"
     if prec is not None and PREC_CMP < prec:
         return f"({chain})"

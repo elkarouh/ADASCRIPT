@@ -368,7 +368,7 @@ Go up with `.parent` rather than `/ ".."`, which the two backends print
 differently (see `TODO.md`). The README's "Paths: `Path` and `/`" has the
 operations.
 
-### `distinct` types (planned)
+### `distinct` types
 
 A named type is an alias. It documents the meaning but does not enforce it,
 so mixing up two of them still compiles:
@@ -381,24 +381,46 @@ let v: Velocity_T = 250.0
 let d: Distance_T = v        # compiles on both backends: an alias, not a type
 ```
 
-A `distinct` type would close that gap. It is **not available yet**:
-`type Velocity_T is distinct float` is a parse error today. The planned
-design, tracked in `TODO.md`, is:
+`distinct` closes that gap. A distinct type has its base type's values and
+operations, and mixes with nothing else:
 
-- `type Velocity_T is distinct float` declares a new type with `float`'s
-  representation that is not interchangeable with `float` or with any other
-  distinct type.
-- `Velocity_T(x)` converts into it and `float(v)` converts out, both
-  explicitly. Assigning a bare `float`, or a `Distance_T`, is an error on
-  both backends.
+```python
+type Velocity_T is distinct float     # knots
+type Duration_T is distinct float     # hours
+type Distance_T is distinct float     # nautical miles
 
-Once it exists, use `distinct` where a mix-up would be a bug the compiler
-should catch: units (metres vs feet, knots vs km/h), and IDs of different
-things that share a representation (a user ID vs an order ID, both `int`).
-Keep a plain alias where the point is readability, and the value is meant
-to mix freely with its base type (an `Epoch` added to a number of seconds).
+def travelled(v: Velocity_T, t: Duration_T) -> Distance_T:
+    return Distance_T(float(v) * float(t))
 
-Until then, these already enforce a distinction:
+var v: Velocity_T = 250.0        # a literal takes the declared type
+v += 10.0                        # and the type of what it is added to
+let d: Distance_T = travelled(v, 2.0)
+print f"{d:.1f} nm"              # 520.0 nm
+let wrong: Distance_T = v        # refused, on both backends
+```
+
+- **Operations** are the base type's, closed over the new one:
+  `Velocity_T + Velocity_T` is a `Velocity_T`, comparisons, `max`, `abs`
+  and `+=` work. A distinct `str` has `+` and `len`; a distinct `int` has
+  `//` and `%`.
+- **Conversions** are explicit: `Velocity_T(x)` in, `float(v)` out.
+- **Literals** take the type of their context: a declaration, assignment,
+  return, argument or record field of the type, or the other operand of an
+  operator. A *variable* of the base type does not -- write `Velocity_T(f)`.
+
+Where it is checked: the Nim compiler checks every use. The Python backend
+refuses a typed name given to a declaration or assignment of another type,
+and an operator between two typed names of different types; a wrong
+argument, or a mix inside a larger expression, is caught by building for
+Nim.
+
+Use `distinct` where a mix-up would be a bug the compiler should catch:
+units (metres vs feet, knots vs km/h), and IDs of different things that
+share a representation (a user ID vs an order ID, both `int`). Keep a
+plain alias where the point is readability, and the value is meant to mix
+freely with its base type (an `Epoch` added to a number of seconds).
+
+Other types that enforce a distinction:
 
 - An **enum** is its own type.
 - A **subrange** (`type Age is 0 .. 150`) is checked against its bounds, on

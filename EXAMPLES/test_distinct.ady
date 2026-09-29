@@ -1,0 +1,86 @@
+#!/usr/bin/env ady2nim
+# test_distinct.ady — `type X is distinct T`: T's values, a type of its own
+#
+#   ady2nim EXAMPLES/test_distinct.ady -r
+#   ady2py  EXAMPLES/test_distinct.ady -c
+#
+# A distinct type has its base type's values and operations, closed over
+# itself -- a Velocity_T plus a Velocity_T is a Velocity_T -- and mixes with
+# nothing else: not with the base type, not with another distinct type made
+# from the same base. `Velocity_T(x)` gets a value in, `float(v)` gets it out.
+# A literal takes the type its context asks for, as in Ada: `250.0` given to
+# a Velocity_T, compared with one, added to one, returned as one, passed as
+# one, is one.
+#
+# Run on both backends and the outputs compared. What is refused is checked
+# in the Makefile, one line at a time, on both backends.
+
+type Velocity_T is distinct float     # knots
+type Distance_T is distinct float     # nautical miles
+type Duration_T is distinct float     # hours
+type Callsign_T is distinct str
+type Count_T    is distinct int
+
+# --- in, out, and the operations the base type has --------------------------
+def travelled(v: Velocity_T, t: Duration_T) -> Distance_T:
+    return Distance_T(float(v) * float(t))    # the one place the units meet
+
+def cruise() -> Velocity_T:
+    return 450.0                              # a literal takes the result type
+
+var v: Velocity_T = 250.0
+let t: Duration_T = 2.0
+v += 10.0
+v = v * 2.0
+print v                                       # 520.0
+print travelled(v, t)                         # 1040.0
+print f"{travelled(v, t):.1f} nm"             # 1040.0 nm
+assert v > 400.0 and v < cruise() + 100.0
+assert v != cruise()
+print travelled(300.0, 0.5)                   # arguments too: 150.0
+print float(v) + 1.0                          # out, and a float again: 521.0
+
+# --- the other bases ---------------------------------------------------------
+let cs: Callsign_T = "BAW117"
+let tag: Callsign_T = cs + Callsign_T("/H")
+print tag, len(tag)                           # BAW117/H 8
+var n: Count_T = 0
+n += 1
+n = n + 2
+print n, n // 2, n % 2                        # 3 1 1
+
+# --- in containers, records and classes --------------------------------------
+var speeds: []Velocity_T = [100.0, 200.0]
+speeds.append(v)
+var top: Velocity_T = 0.0
+for s in speeds:
+    top = max(top, s)
+print top                                     # 520.0
+
+var seen: {Callsign_T}Count_T = {:}
+seen[cs] = n
+print seen[cs]                                # 3
+
+type Leg_T is record:
+    speed: Velocity_T = 0.0
+    time:  Duration_T = 0.0
+
+let leg: Leg_T = Leg_T(speed=480.0, time=1.5)
+print travelled(leg.speed, leg.time)          # 720.0
+
+class Flight:
+    var callsign: Callsign_T
+    var flown:    Distance_T
+
+    def __init__(self, callsign: Callsign_T):
+        self.callsign = callsign
+        self.flown = 0.0
+
+    def fly(self, leg: Leg_T):
+        self.flown += travelled(leg.speed, leg.time)
+
+var f: Flight = Flight(cs)
+f.fly(leg)
+f.fly(leg)
+print f.callsign, f.flown                     # BAW117 1440.0
+print "test_distinct: ok"

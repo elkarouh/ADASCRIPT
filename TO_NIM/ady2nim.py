@@ -65,7 +65,7 @@ _nimport_tuple_field_order: dict = {}
 # iterators and context managers, the procs taking nothing as `var` -- and
 # its module-level names with their types: globals and type aliases. Each is
 # (ParserState attribute, merged into the importer's at its reset).
-_NIMPORT_CARRIED = ("tick_types", "class_field_types", "noreturn_procs",
+_NIMPORT_CARRIED = ("tick_types", "distinct_types", "class_field_types", "noreturn_procs",
                     "iterator_names", "contextmanager_funcs",
                     "by_value_procs", "var_param_procs", "failure_types")
 _nimport_carried: dict = {}
@@ -102,6 +102,7 @@ def _nim_reset():
         _py_stmt_reset.RETURN_NODES.clear()
     ParserState.tick_types = {}
     ParserState.ady_type_decls = {}
+    ParserState.distinct_types = {}
     ParserState.class_field_types = {}
     ParserState.proc_param_types = {}
     ParserState.proc_param_types_full = {}
@@ -677,6 +678,8 @@ def translate(code, export_symbols=False):
     from ady_stmt import scan_union_aliases, scan_type_decls
     ParserState.union_aliases = scan_union_aliases(code)
     ParserState.ady_type_decls = scan_type_decls(code)
+    from ady_declarations import distinct_types
+    ParserState.distinct_types.update(distinct_types(ParserState.ady_type_decls))
     ParserState.union_aliases_nim = {}
     ParserState.ady_return_types_nim = {}
     ParserState.result_procs = either_procs(ParserState.ady_return_types,

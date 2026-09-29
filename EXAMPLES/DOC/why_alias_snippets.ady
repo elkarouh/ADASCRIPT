@@ -1,18 +1,32 @@
 #!/usr/bin/env ady2nim
-"""The "What is not yet true" snippet of DOCS/WHY_ADASCRIPT.md: a scalar
-type alias is documentation, not enforcement.
+"""The "What the compiler holds you to" snippets of DOCS/WHY_ADASCRIPT.md:
+a scalar type alias is documentation, a distinct type is enforcement.
 
 Apart from why_snippets.ady because it declares Velocity_T as the
 document shows it here, which that file already declares for its record,
 and a module declares each type once. `make test` runs it, and
-DOCS/check_quotes.py checks the document against it.
+DOCS/check_quotes.py checks the document against it. The line a distinct
+type refuses is here as a comment; the Makefile's distinct-type checks refuse
+the same mix, on both backends.
 """
 
 type Velocity_T is float
 type Distance_T is float
 
 let v: Velocity_T = 250.0
-let d: Distance_T = v        # compiles today, on both backends
+let d: Distance_T = v        # an alias: compiles, on both backends
 assert d == 250.0
+
+type Knots_T is distinct float    # knots
+type Hours_T is distinct float    # hours
+type Miles_T is distinct float    # nautical miles
+
+def flown(speed: Knots_T, time: Hours_T) -> Miles_T:
+    return Miles_T(float(speed) * float(time))   # the one place units meet
+
+let speed: Knots_T = 250.0        # a literal takes the type it is given to
+let far: Miles_T = flown(speed, 2.0)
+# let wrong: Miles_T = speed      -- refused, on both backends
+assert far == 500.0
 
 print "why alias snippets ok"
