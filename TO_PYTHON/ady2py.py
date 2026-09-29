@@ -140,8 +140,13 @@ def parse_module(code):
     """Parse a full module. Comments are embedded in the parse tree via RichNL."""
     from hek_parsec import ParserState
     check_duplicate_types(code)
+    check_chained_units(code)
     ParserState.reset()
     _py_reset()
+    # Set when a statement fails to parse. translate() goes on with the ones
+    # before it -- the language server wants their symbols beside the error --
+    # so the command line reads this to know the run failed.
+    ParserState.parse_error = None
     stream = Input(code)
     stmts = []
     leading = []
@@ -203,7 +208,8 @@ def parse_module(code):
         result = statement.parse(stream)
         if not result:
             import sys
-            print(stream.format_error(), file=sys.stderr)
+            ParserState.parse_error = stream.format_error()
+            print(ParserState.parse_error, file=sys.stderr)
             break
 
         node = result[0]
@@ -428,6 +434,12 @@ def main(args=None):
         output = translate(code)
     except SyntaxError as exc:
         print(str(exc), file=sys.stderr)
+        sys.exit(1)
+    # A parse error was printed, and what came before it translated -- for the
+    # language server's sake. A command must not pass that off as success: the
+    # partial output would build, and exit 0 says nothing was wrong.
+    from hek_parsec import ParserState as _PS_main
+    if getattr(_PS_main, "parse_error", None):
         sys.exit(1)
     if args.c and args.file:
         base = os.path.splitext(args.file)[0]

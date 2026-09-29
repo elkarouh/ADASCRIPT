@@ -437,6 +437,35 @@ The operands must be distinct, and of one kind: `float` for a quotient,
 is naturally `distinct int` in cents, so `price * 3` scales it, and
 `price * qty` needs a total unit to say what it is.
 
+### A unit made from a unit: momentum and energy
+
+Energy is mass times velocity times velocity, and it is worth seeing why it
+takes two declarations. A derived unit combines two units, because the
+product evaluated first — mass times velocity — has to be *something*, and
+Adascript gives every combination a name. Momentum is a real quantity, and
+naming it is the honest declaration:
+
+```python
+type Mass_T     is distinct float          # kg
+type Speed_T    is distinct float          # m/s
+type Momentum_T is Mass_T * Speed_T        # kg m/s
+type Energy_T   is Momentum_T * Speed_T    # kg m^2/s^2, joules
+
+def kinetic(m: Mass_T, v: Speed_T) -> Energy_T:
+    return 0.5 * m * v * v        # ((0.5 * m) * v) * v
+```
+
+`0.5 * m * v * v` reads left to right: the `0.5` scales a `Mass_T`, times a
+`Speed_T` is a `Momentum_T`, times a `Speed_T` again is an `Energy_T`. The
+relations run the other way too — `kinetic(m, v) / v` is a `Momentum_T`, and
+`p / m` a `Speed_T` — so a value can be taken apart as well as built.
+
+Writing `type Energy_T is Mass_T * Speed_T * Speed_T` is refused, with a message
+that says to name the middle. So is `m * (v * v)`: `Speed_T * Speed_T` has no
+unit unless you declare one, such as `type SpeedSq_T is Speed_T * Speed_T`,
+and then `Energy_T` would be `Mass_T * SpeedSq_T` instead. Pick the
+decomposition that names quantities you actually use.
+
 ### Money
 
 The commonest quantity of all is money, and it takes nothing new. An amount

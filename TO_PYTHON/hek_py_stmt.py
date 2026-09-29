@@ -361,7 +361,7 @@ def _reject_distinct_mix(name, annotation, value):
         fix = f"write {target}({v})"
     else:
         fix = f"write {target}({v})" if target in _DISTINCT_BASES else "convert it explicitly"
-    raise ValueError(
+    raise SyntaxError(
         f"cannot give {v}, a {source}, to {name}, a {target}: a distinct type "
         f"does not mix with any other -- {fix}")
 
@@ -377,7 +377,7 @@ def _reject_distinct_operands(left, op, right):
     lu, ru = expr_unit(left, _py_atom_unit), expr_unit(right, _py_atom_unit)
     why = unit_mix_error(lu, op, ru)
     if why:
-        raise ValueError(f"'{left.strip()} {op} {right.strip()}' {why}")
+        raise SyntaxError(f"'{left.strip()} {op} {right.strip()}' {why}")
 
 
 def _wrap_for_ordered_array(value, annotation):
@@ -426,7 +426,7 @@ def _reject_str_to_path(name, annotation, value):
         sym = ParserState.symbol_table.lookup(v)
         if not (isinstance(sym, dict) and (sym.get('type') or '') == 'str'):
             return
-    raise ValueError(
+    raise SyntaxError(
         f'cannot assign a str to {name}, which is a Path: write Path({v}). '
         'Path is a distinct type on the Nim backend, so the conversion is '
         'explicit on both.')

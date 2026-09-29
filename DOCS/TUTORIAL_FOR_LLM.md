@@ -173,6 +173,15 @@ w *= 2.0                                     # * and / by a plain number SCALE
 - money: `distinct int` in cents. `price * 3` scales; `price * qty` needs `type Total_T is Cents_T * Qty_T`;
 - Nim: `distinct float` + borrowed procs + one small proc per relation; Python: `class Velocity_T(float)`. Nim checks everything; Python works out the unit of arithmetic over typed names and refuses declarations, assignments and operators it can see.
 
+**A derived unit combines exactly TWO units**; a chain is built by naming the middle:
+```adascript
+type Momentum_T is Mass_T * Speed_T          # kg m/s
+type Energy_T   is Momentum_T * Speed_T      # NOT: Mass_T * Speed_T * Speed_T (refused)
+def kinetic(m: Mass_T, v: Speed_T) -> Energy_T:
+    return 0.5 * m * v * v                   # (0.5*m)*v is a Momentum, *v an Energy
+```
+`m * (v * v)` is refused (Speed*Speed has no unit) unless `type SpeedSq_T is Speed_T * Speed_T` exists. Relations run both ways: `e / v` is a Momentum, `p / m` a Speed.
+
 **Money** (the commonest case): `Dollar_T` scales by a count, a tax rate or a discount; a currency conversion needs the rate as a derived unit:
 ```adascript
 type Dollar_T is distinct float

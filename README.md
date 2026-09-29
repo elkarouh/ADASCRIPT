@@ -691,6 +691,32 @@ same kind as its operands: `float` for a quotient, `float` or `int` for a
 product. `type Area_T is Length_T * Length_T` and `type Total_T is Cents_T *
 Qty_T` work the same way.
 
+**A unit made from a unit.** Energy is mass times velocity times velocity,
+but a declaration combines two units, and the product evaluated first --
+mass times velocity -- would have no name. So name it: momentum is a real
+quantity, and the two-step form reads better.
+
+```python
+type Mass_T     is distinct float          # kg
+type Speed_T    is distinct float          # m/s
+type Momentum_T is Mass_T * Speed_T        # kg m/s
+type Energy_T   is Momentum_T * Speed_T    # kg m^2/s^2, joules
+
+def kinetic(m: Mass_T, v: Speed_T) -> Energy_T:
+    return 0.5 * m * v * v        # ((0.5 * m) * v) * v: a scale, then two units
+
+let p: Momentum_T = m * v         # Mass x Speed is a Momentum
+print p / m                       # a Momentum over a Mass is a Speed
+print kinetic(m, v) / v           # an Energy over a Speed is a Momentum
+```
+
+`type Energy_T is Mass_T * Speed_T * Speed_T` is refused, and the message says
+what to write: `a derived unit combines two units, and `Mass_T * Speed_T` in
+the middle of it has no name. Name it -- `type X is Mass_T * Speed_T`, then
+`type Energy_T is X * Speed_T``. The ½ is a plain factor and scales for free.
+Only the order the expression is evaluated in is available: `m * (v * v)` is
+refused, because `Speed_T * Speed_T` has no unit unless you declare one.
+
 **Money** is the commonest use, and needs no new ideas. An amount of dollars
 is not a number: it cannot be added to euros or squared, but it scales by a
 quantity, a tax rate or a discount. An exchange rate is a unit of its own,

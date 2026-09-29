@@ -553,6 +553,13 @@ test: compile
 	    > $(TMPDIR)/ady_refuse_9.ady
 	@printf 'def first_of(xs: []T) -> T:\n    return xs[0]\n\nprint first_of[int]([7, 8])\n' \
 	    > $(TMPDIR)/ady_refuse_10.ady
+	@# A derived unit combines two units, and says how to name the middle of
+	@# a chain; and a syntax error is a failure -- ady2py used to print it,
+	@# translate what came before it, and exit 0.
+	@printf 'type Mass_T is distinct float\ntype Speed_T is distinct float\ntype Energy_T is Mass_T * Speed_T * Speed_T\n' \
+	    > $(TMPDIR)/ady_refuse_11.ady
+	@printf 'let a: int = 1\nlet y: int = (a b)\nprint a\n' \
+	    > $(TMPDIR)/ady_refuse_12.ady
 	@for tr in TO_NIM/ady2nim.py TO_PYTHON/ady2py.py; do \
 	    for c in "1:members no one can tell apart:cannot be told apart" \
 	             "2:a dropped failure:drops a failure" \
@@ -563,7 +570,9 @@ test: compile
 	             "7:a do step on a union with no !:if one member is, mark it" \
 	             "8:overlapping case labels:34 is covered by two branches" \
 	             "9:a generic call that infers its types:does not infer type arguments" \
-	             "10:a type parameter nobody declared:not declared"; do \
+	             "10:a type parameter nobody declared:not declared" \
+	             "11:a unit made of three factors:has no name" \
+	             "12:a syntax error is a failure:Parse error"; do \
 	        n=$${c%%:*}; rest=$${c#*:}; what=$${rest%%:*}; want=$${rest#*:}; \
 	        printf '  %-42s' "$$what ($$(basename $$tr .py))"; \
 	        if $(PYTHON) $(CURDIR)/$$tr $(TMPDIR)/ady_refuse_$$n.ady > $(TMPDIR)/ady_refuse.out 2>&1; then \

@@ -468,6 +468,32 @@ is Velocity_T / Duration_T`) and has the kind of its operands: `float`, or
 `int` for a product. Nim gets a small proc per relation, so it costs nothing
 at run time.
 
+### A unit made from a unit: momentum and energy
+
+Energy is mass times velocity times velocity, but a derived unit combines
+two units, and the product evaluated first, mass times velocity, would have no
+name. So name it; momentum is a real quantity and the two-step form reads
+better:
+
+```python
+type Mass_T     is distinct float          # kg
+type Speed_T    is distinct float          # m/s
+type Momentum_T is Mass_T * Speed_T        # kg m/s
+type Energy_T   is Momentum_T * Speed_T    # joules
+
+def kinetic(m: Mass_T, v: Speed_T) -> Energy_T:
+    return 0.5 * m * v * v        # a scale, then two units
+
+let p: Momentum_T = m * v
+print p / m                       # a Momentum over a Mass is a Speed
+print kinetic(m, v) / v           # an Energy over a Speed is a Momentum
+```
+
+`type Energy_T is Mass_T * Speed_T * Speed_T` is refused, and the message
+says how to split it. The ½ scales for free. `m * (v * v)` is refused too,
+because `Speed_T * Speed_T` has no unit unless one is declared. It is all in
+`EXAMPLES/test_units.ady`.
+
 ### Money: `Dollar_T`, and converting to `Euro_T`
 
 Money is the commonest use of `distinct`, and needs nothing beyond what is

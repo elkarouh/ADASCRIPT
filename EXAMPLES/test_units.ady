@@ -78,6 +78,32 @@ let area: Area_T = side * side
 print area                               # 9.0
 print area / side                        # 3.0
 
+# --- a unit made from a unit: momentum, then energy -------------------------
+# Energy is mass times velocity times velocity, but a declaration combines
+# two units, and `Mass_T * Speed_T` in the middle has to be something -- so
+# name it. Momentum is a real quantity, and the two-step form reads better:
+#     type Energy_T is Mass_T * Speed_T * Speed_T      -- refused, with a hint
+type Mass_T     is distinct float     # kg
+type Speed_T    is distinct float     # m/s
+type Momentum_T is Mass_T * Speed_T   # kg m/s
+type Energy_T   is Momentum_T * Speed_T   # kg m^2/s^2, joules
+
+def kinetic(m: Mass_T, v: Speed_T) -> Energy_T:
+    return 0.5 * m * v * v            # ((0.5 * m) * v) * v: a scale, then two units
+
+let m1: Mass_T = 2.0
+let v1: Speed_T = 3.0
+let p1: Momentum_T = m1 * v1
+print p1                                 # 6.0
+print kinetic(m1, v1)                    # 9.0
+let e1: Energy_T = p1 * v1               # momentum times speed is twice the energy
+print e1                                 # 18.0
+print e1 / v1                            # 6.0: an Energy_T over a Speed_T is a Momentum_T
+print p1 / m1                            # 3.0: a Momentum_T over a Mass_T is a Speed_T
+let total_p: Momentum_T = p1 + 4.0 * Mass_T(1.5) * Speed_T(1.0)   # scaled, then added
+print total_p                            # 12.0
+# m1 * (v1 * v1) is refused: Speed_T * Speed_T has no unit unless one is declared.
+
 # --- money: whole cents, exactly -------------------------------------------
 let price: Cents_T = 250
 let n: Qty_T = 4

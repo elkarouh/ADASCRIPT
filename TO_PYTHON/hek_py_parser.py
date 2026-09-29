@@ -2755,7 +2755,7 @@ def _run_argv(_argv, cwd=None, env=None, stdin=None, timeout=0, check=False,
     """
     _argv = [str(_a) for _a in _argv]
     if not _argv:
-        raise ValueError("run(): the argument list is empty")
+        raise SyntaxError("run(): the argument list is empty")
     _kw = {"capture_output": True, "text": True, "cwd": cwd}
     if env is not None:
         _kw["env"] = {**os.environ, **env}

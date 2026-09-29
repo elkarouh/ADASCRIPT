@@ -145,6 +145,7 @@ def parse_module(code):
     """Parse a full module. Comments are embedded in the parse tree via RichNL."""
     from hek_parsec import ParserState
     check_duplicate_types(code)
+    check_chained_units(code)
     ParserState.reset()
     _nim_reset()
     ParserState.proc_param_types_full.update(_nimport_param_types_full)

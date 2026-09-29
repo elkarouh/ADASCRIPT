@@ -533,6 +533,58 @@ def check_duplicate_types(code):
                     break
                 in_string, i = None, k + 3
 
+_CHAIN_UNIT = _re_dup.compile(
+    r"^[ \t]*type[ \t]+([A-Za-z_]\w*)[ \t]+(?:is|=)[ \t]+"
+    r"([A-Za-z_]\w*(?:[ \t]*[*/][ \t]*[A-Za-z_]\w*){2,})[ \t]*(?:#.*)?$")
+
+
+def _code_lines(code):
+    """(line number, line) for each line of CODE outside a triple-quoted
+    string -- a docstring is not code."""
+    in_string = None
+    for n, line in enumerate(code.splitlines(), 1):
+        if in_string is None:
+            yield n, line
+        i = 0
+        while True:
+            if in_string is None:
+                hits = [(line.find(q, i), q) for q in ('"""', "'''")]
+                hits = [(k, q) for k, q in hits if k >= 0]
+                if not hits:
+                    break
+                k, q = min(hits)
+                in_string, i = q, k + 3
+            else:
+                k = line.find(in_string, i)
+                if k < 0:
+                    break
+                in_string, i = None, k + 3
+
+
+def check_chained_units(code):
+    """Refuse a derived unit made from three or more factors, and say what to
+    write instead.
+
+    `type Energy_T is Mass_T * Velocity_T * Velocity_T` would have to invent
+    a unit for `Mass_T * Velocity_T`, the product evaluated first, and
+    Adascript gives every combination a name. Naming it -- momentum -- is
+    the honest declaration, and reads better: `type Momentum_T is Mass_T *
+    Velocity_T`, then `type Energy_T is Momentum_T * Velocity_T`."""
+    for n, line in _code_lines(code):
+        m = _CHAIN_UNIT.match(line)
+        if not m:
+            continue
+        name, expr = m.group(1), m.group(2)
+        toks = _re_dup.findall(r"[A-Za-z_]\w*|[*/]", expr)
+        a, op1, b, op2, c = toks[:5]
+        more = " and so on" if len(toks) > 5 else ""
+        raise SyntaxError(
+            f"line {n}: type {name} is {expr}: a derived unit combines two "
+            f"units, and `{a} {op1} {b}` in the middle of it has no name. "
+            f"Name it -- `type X is {a} {op1} {b}`, then `type {name} is X "
+            f"{op2} {c}`{more} -- so that every combination has a name")
+
+
 # --- own declaration: own IDENTIFIER ':' type_annotation ['=' expression] ---
 # Unique owner; auto-freed at scope end (Nim ARC; Python GC)
 own_stmt = literal("own") + IDENTIFIER + V_COLON + type_annotation + (V_EQUAL + expression)[:]

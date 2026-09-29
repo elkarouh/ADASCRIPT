@@ -785,7 +785,7 @@ def _tick_to_py(expr, attr):
                 # (`E'Range - {x}`) works and the order is not promised.
                 return f"set({expr})"
             if info.get("is_float_range"):
-                raise ValueError(
+                raise SyntaxError(
                     f"'Range is not defined for the float subrange {expr!r}: "
                     "a float interval has no enumerable domain")
             return f"range({info['First']}, {info['Last']} + 1)"
@@ -816,7 +816,7 @@ def _tick_to_py(expr, attr):
     if attr == "Shuffle":
         _ensure_shuffle_helper()
         return f"_adascript_shuffle({expr})"
-    raise ValueError(
+    raise SyntaxError(
         f"unknown tick attribute {attr!r} in {expr}'{attr}. Known: "
         "First, Last, Range, Next, Prev, choose, Shuffle, Image, Length")
 
