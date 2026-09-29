@@ -858,6 +858,10 @@ def _wrap_comprehension_for_array(value, annotation):
     if _info is not None or _size in ("char", "bool"):
         _copy = (f"    for adai in low({_size}) .. high({_size}): "
                  f"adaarr[adai] = adasq[ord(adai) - ord(low({_size}))]\n")
+    elif ".." in _size:
+        # an inline subrange, `[1..3]int`: its bounds are the array's own
+        _copy = ("    for adai in low(adaarr) .. high(adaarr): "
+                 "adaarr[adai] = adasq[adai - low(adaarr)]\n")
     else:
         _copy = f"    for adai in 0 ..< {_size}: adaarr[adai] = adasq[adai]\n"
     # Wrap the comprehension. Names are prefixed `ada` (no leading underscore

@@ -197,6 +197,21 @@ def _wrap_list_for_queue(value, annotation):
     return f"{base}({item})"
 
 
+def _enum_array_key(ann):
+    """The key of an `_EnumArray[K, T]` annotation, K taken whole: an
+    inline subrange's key is `range(2, 4 + 1)`, commas and all."""
+    inner = ann[len("_EnumArray["):]
+    depth = 0
+    for i, ch in enumerate(inner):
+        if ch in "[(":
+            depth += 1
+        elif ch in "])":
+            depth -= 1
+        elif ch == "," and depth == 0:
+            return inner[:i].strip()
+    return inner.strip()
+
+
 def _wrap_seq_for_enum_array(value, annotation):
     """`[O]T = [ ... ]` -> keyed by the domain rather than by position.
 
@@ -217,9 +232,11 @@ def _wrap_seq_for_enum_array(value, annotation):
     # sequence at all: leave it alone.
     if v.startswith("_EnumArray(") or not v.startswith("["):
         return value
-    key = ann[len("_EnumArray["):].split(",")[0].strip()
+    key = _enum_array_key(ann)
     info = getattr(ParserState, "tick_types", {}).get(key)
-    if info is not None and "members" in info:
+    if key.startswith("range("):         # [lo..hi]T, written inline
+        domain = key
+    elif info is not None and "members" in info:
         domain = key                     # an Enum class iterates its members
     elif info is not None:
         domain = f"range({info['First']}, {info['Last']} + 1)"
@@ -375,6 +392,8 @@ def _domain_expr(key, dom):
     is no Nim behaviour for a fill to match. A float range is not ordinal
     either and cannot index an array on either backend.
     """
+    if key.startswith("range("):
+        return key                       # [lo..hi]T written inline
     if "members" in dom:
         return key                       # an Enum class, iterable in order
     if key == "bool":

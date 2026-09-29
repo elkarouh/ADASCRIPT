@@ -1,0 +1,52 @@
+#!/usr/bin/env ady2nim
+# test_subrange_array.ady — `[lo..hi]T` is indexed lo .. hi, on both backends
+#
+#   ady2nim EXAMPLES/test_subrange_array.ady -r
+#   ady2py  EXAMPLES/test_subrange_array.ady -c
+#
+# An array whose index is a subrange written inline is the same as one over a
+# named subrange -- `type Off is 2 .. 4` then `[Off]int` -- and Nim compiles
+# both to `array[2..4, int]`. The Python backend made the inline form a plain
+# list, indexed from 0: `a[2]` was the first slot, `a[4]` an IndexError, an
+# undeclared value had no slots at all, and enumerate() counted 0, 1, 2 where
+# Nim gives 2, 3, 4.
+#
+# Run on both backends and the outputs compared.
+
+type Off is 2 .. 4
+
+# --- indexed by its own bounds ----------------------------------------------
+var a: [2..4]int = [20, 30, 40]
+print a[2], a[3], a[4]                   # 20 30 40
+
+# --- zero-filled when declared without a value, as Nim does -----------------
+var z: [2..4]int
+z[4] = 1
+print z[2], z[3], z[4]                   # 0 0 1
+
+# --- enumerate gives the index, the same as over the named form -------------
+var named: [Off]int = [o * 10 for o in Off]
+for k, v in enumerate(a):
+    print k, v                           # 2 20, 3 30, 4 40
+for k, v in enumerate(named):
+    print k, v                           # 2 20, 3 30, 4 40
+
+# --- the values, as any array whose keys are known in advance ---------------
+var total: int = 0
+for v in a:
+    total += v
+print total                              # 90
+assert 30 in a and not (3 in a)
+
+# --- `..<` excludes the top, and a comprehension fills by position ----------
+var ex: [0..<3]str = ["a", "b", "c"]
+for k, v in enumerate(ex):
+    print k, v                           # 0 a, 1 b, 2 c
+var sq: [1..3]int = [i * i for i in 1..3]
+print sq[1], sq[3]                       # 1 9
+
+# --- nested -------------------------------------------------------------------
+var grid: [1..2][1..3]int
+grid[2][3] = 9
+print grid[2][3], grid[1][1]             # 9 0
+print "test_subrange_array: ok"

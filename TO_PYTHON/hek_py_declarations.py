@@ -483,9 +483,18 @@ def to_py(self, prec=None):
 
 @method(subrange_array_type)
 def to_py(self, prec=None):
-    """subrange_array_type: '[' subrange_def ']' type_annotation -> Python: list[T]"""
+    """subrange_array_type: '[' subrange_def ']' type_annotation -> Python:
+    _EnumArray[range(lo, hi + 1), T]
+
+    `[2..4]int` is indexed 2, 3, 4 -- on Nim, `array[2..4, int]` -- so it is
+    the same keyed array a named subrange gets, `type Off is 2 .. 4` then
+    `[Off]int`, with the range standing in for the name. A list indexed it
+    from 0: `a[2]` was the first slot, `a[4]` an IndexError, and enumerate
+    counted 0, 1, 2 where Nim gives 2, 3, 4."""
+    domain = self.nodes[0].to_py()     # range(lo, hi + 1)
     elem = self.nodes[1].to_py()
-    return f"list[{elem}]"
+    _ensure_enum_array_alias()
+    return f"_EnumArray[{domain}, {elem}]"
 
 
 @method(dict_type)
