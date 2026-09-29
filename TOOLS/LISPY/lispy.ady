@@ -256,32 +256,33 @@ def tokenize(s: str) -> []str:
     let n: int = len(s)
     while i < n:
         let c: char = s[i]
-        if c == ';':
-            break                      # comment to end of line
-        elif is_space_ch(c):
-            i += 1
-        elif c == '(' or c == ')' or c == '\'' or c == '`':
-            tokens.append(str(c))
-            i += 1
-        elif c == ',':
-            if i + 1 < n and s[i + 1] == '@':
-                tokens.append(",@")
-                i += 2
-            else:
-                tokens.append(",")
+        case c:
+            when ';':
+                break                      # comment to end of line
+            when '(' | ')' | '\'' | '`':
+                tokens.append(str(c))
                 i += 1
-        elif c == '"':
-            # A backslash escapes the next character, so an escaped quote does
-            # not end the literal. An unterminated one lands past the end,
-            # hence the clamp — slicing past the end raises on Nim, where the
-            # hand-rolled scan this replaces used to walk straight off it.
-            let e: Natural = skip_quoted_esc(s, i, '"', '\\')
-            tokens.append(s[i .. min(e, n) - 1])
-            i = e
-        else:
-            let e: Natural = skip_while(s, i, is_atom_ch)
-            tokens.append(s[i .. e - 1])
-            i = e
+            when ',':
+                if i + 1 < n and s[i + 1] == '@':
+                    tokens.append(",@")
+                    i += 2
+                else:
+                    tokens.append(",")
+                    i += 1
+            when '"':
+                # A backslash escapes the next character, so an escaped quote does
+                # not end the literal. An unterminated one lands past the end,
+                # hence the clamp — slicing past the end raises on Nim, where the
+                # hand-rolled scan this replaces used to walk straight off it.
+                let e: Natural = skip_quoted_esc(s, i, '"', '\\')
+                tokens.append(s[i .. min(e, n) - 1])
+                i = e
+            when _ if is_space_ch(c):
+                i += 1
+            when others:
+                let e: Natural = skip_while(s, i, is_atom_ch)
+                tokens.append(s[i .. e - 1])
+                i = e
     tokens
 
 def parse_atom(token: str) -> Val_T:
