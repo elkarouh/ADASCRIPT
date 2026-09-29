@@ -4,9 +4,10 @@ iters.ady — most useful itertools equivalents, generic over element type Elem_
 
 Each function declares its type parameters in brackets after the name:
 `def pairwise[Elem_T](s: []Elem_T)`.  Every function parameterised by
-element type uses Elem_T, and product a second one, Elem2_T.  The compiler
-instantiates a concrete version for each call-site type automatically, so
-one definition covers every element type.
+element type uses Elem_T, and product a second one, Elem2_T.  A call names
+the types it instantiates -- `pairwise[int](...)`, `product[int, str](...)`
+-- because Adascript does not infer type arguments; the compiler then builds
+a concrete version for each, so one definition covers every element type.
 
 accumulate takes an explicit binary operator and identity element so it works
 for any type with an associative operation, not just numeric addition.
@@ -15,9 +16,9 @@ default for an arbitrary type Elem_T.
 """
 
 # ---------------------------------------------------------------------------
-# pairwise(s) — consecutive overlapping pairs
-#   pairwise([1,2,3,4])     -> (1,2) (2,3) (3,4)
-#   pairwise(["a","b","c"]) -> ("a","b") ("b","c")
+# pairwise[Elem_T](s) — consecutive overlapping pairs
+#   pairwise[int]([1,2,3,4])     -> (1,2) (2,3) (3,4)
+#   pairwise[str](["a","b","c"]) -> ("a","b") ("b","c")
 # ---------------------------------------------------------------------------
 
 def pairwise[Elem_T](s: []Elem_T) -> (Elem_T, Elem_T):
@@ -26,8 +27,8 @@ def pairwise[Elem_T](s: []Elem_T) -> (Elem_T, Elem_T):
 
 
 # ---------------------------------------------------------------------------
-# sliding_window(s, n) — generalisation of pairwise; yields each window
-#   sliding_window([1,2,3,4,5], 3) -> [1,2,3] [2,3,4] [3,4,5]
+# sliding_window[Elem_T](s, n) — generalisation of pairwise; yields each window
+#   sliding_window[int]([1,2,3,4,5], 3) -> [1,2,3] [2,3,4] [3,4,5]
 # ---------------------------------------------------------------------------
 
 def sliding_window[Elem_T](s: []Elem_T, n: int) -> []Elem_T:
@@ -37,8 +38,8 @@ def sliding_window[Elem_T](s: []Elem_T, n: int) -> []Elem_T:
 
 
 # ---------------------------------------------------------------------------
-# enumerate_seq(s, start) — (index, value) pairs
-#   enumerate_seq(["x","y","z"]) -> (0,"x") (1,"y") (2,"z")
+# enumerate_seq[Elem_T](s, start) — (index, value) pairs
+#   enumerate_seq[str](["x","y","z"]) -> (0,"x") (1,"y") (2,"z")
 # ---------------------------------------------------------------------------
 
 def enumerate_seq[Elem_T](s: []Elem_T, start: int = 0) -> (int, Elem_T):
@@ -47,7 +48,7 @@ def enumerate_seq[Elem_T](s: []Elem_T, start: int = 0) -> (int, Elem_T):
 
 
 # ---------------------------------------------------------------------------
-# takewhile(pred, s) — yield elements while predicate holds
+# takewhile[Elem_T](pred, s) — yield elements while predicate holds
 # ---------------------------------------------------------------------------
 
 def takewhile[Elem_T](pred: (Elem_T) -> bool, s: []Elem_T) -> Elem_T:
@@ -58,7 +59,7 @@ def takewhile[Elem_T](pred: (Elem_T) -> bool, s: []Elem_T) -> Elem_T:
 
 
 # ---------------------------------------------------------------------------
-# dropwhile(pred, s) — skip elements while predicate holds, yield the rest
+# dropwhile[Elem_T](pred, s) — skip elements while predicate holds, yield the rest
 # ---------------------------------------------------------------------------
 
 def dropwhile[Elem_T](pred: (Elem_T) -> bool, s: []Elem_T) -> Elem_T:
@@ -71,8 +72,8 @@ def dropwhile[Elem_T](pred: (Elem_T) -> bool, s: []Elem_T) -> Elem_T:
 
 
 # ---------------------------------------------------------------------------
-# compress(s, selectors) — keep elements where the selector is True
-#   compress(["a","b","c"], [True,False,True]) -> "a" "c"
+# compress[Elem_T](s, selectors) — keep elements where the selector is True
+#   compress[str](["a","b","c"], [True,False,True]) -> "a" "c"
 # ---------------------------------------------------------------------------
 
 def compress[Elem_T](s: []Elem_T, selectors: []bool) -> Elem_T:
@@ -83,8 +84,8 @@ def compress[Elem_T](s: []Elem_T, selectors: []bool) -> Elem_T:
 
 
 # ---------------------------------------------------------------------------
-# chain(a, b) — concatenate two sequences element by element
-#   chain(["x","y"], ["z"]) -> "x" "y" "z"
+# chain[Elem_T](a, b) — concatenate two sequences element by element
+#   chain[str](["x","y"], ["z"]) -> "x" "y" "z"
 # ---------------------------------------------------------------------------
 
 def chain[Elem_T](a: []Elem_T, b: []Elem_T) -> Elem_T:
@@ -95,8 +96,8 @@ def chain[Elem_T](a: []Elem_T, b: []Elem_T) -> Elem_T:
 
 
 # ---------------------------------------------------------------------------
-# flatten(s) — chain.from_iterable: one level of nesting removed
-#   flatten([[1,2],[3],[4,5]]) -> 1 2 3 4 5
+# flatten[Elem_T](s) — chain.from_iterable: one level of nesting removed
+#   flatten[int]([[1,2],[3],[4,5]]) -> 1 2 3 4 5
 # ---------------------------------------------------------------------------
 
 def flatten[Elem_T](s: [][]Elem_T) -> Elem_T:
@@ -106,8 +107,8 @@ def flatten[Elem_T](s: [][]Elem_T) -> Elem_T:
 
 
 # ---------------------------------------------------------------------------
-# batched(s, n) — non-overlapping chunks of exactly n (last may be shorter)
-#   batched([1,2,3,4,5], 2) -> [1,2] [3,4] [5]
+# batched[Elem_T](s, n) — non-overlapping chunks of exactly n (last may be shorter)
+#   batched[int]([1,2,3,4,5], 2) -> [1,2] [3,4] [5]
 # ---------------------------------------------------------------------------
 
 def batched[Elem_T](s: []Elem_T, n: int) -> []Elem_T:
@@ -119,10 +120,10 @@ def batched[Elem_T](s: []Elem_T, n: int) -> []Elem_T:
 
 
 # ---------------------------------------------------------------------------
-# accumulate(s, op, init) — running reduction with a binary operator
-#   accumulate([1,2,3,4], add, 0)   -> 1 3 6 10
-#   accumulate([2,3,4],   mul, 1)   -> 2 6 24
-#   accumulate(["a","b"], cat, "")  -> "a" "ab"
+# accumulate[Elem_T](s, op, init) — running reduction with a binary operator
+#   accumulate[int]([1,2,3,4], add, 0)   -> 1 3 6 10
+#   accumulate[int]([2,3,4],   mul, 1)   -> 2 6 24
+#   accumulate[str](["a","b"], cat, "")  -> "a" "ab"
 # ---------------------------------------------------------------------------
 
 def accumulate[Elem_T](s: []Elem_T, op: (Elem_T, Elem_T) -> Elem_T, init: Elem_T) -> Elem_T:
@@ -133,8 +134,8 @@ def accumulate[Elem_T](s: []Elem_T, op: (Elem_T, Elem_T) -> Elem_T, init: Elem_T
 
 
 # ---------------------------------------------------------------------------
-# zip_longest(a, b, fill) — zip, padding the shorter side with fill
-#   zip_longest([1,2,3], [10,20], 0) -> (1,10) (2,20) (3,0)
+# zip_longest[Elem_T](a, b, fill) — zip, padding the shorter side with fill
+#   zip_longest[int]([1,2,3], [10,20], 0) -> (1,10) (2,20) (3,0)
 # fill must be provided explicitly; there is no sensible default for Elem_T.
 # ---------------------------------------------------------------------------
 
@@ -147,8 +148,8 @@ def zip_longest[Elem_T](a: []Elem_T, b: []Elem_T, fill: Elem_T) -> (Elem_T, Elem
 
 
 # ---------------------------------------------------------------------------
-# product(a, b) — Cartesian product; a and b may have different element types
-#   product([1,2], ["x","y"]) -> (1,"x") (1,"y") (2,"x") (2,"y")
+# product[Elem_T, Elem2_T](a, b) — Cartesian product; a and b may have different element types
+#   product[int, str]([1,2], ["x","y"]) -> (1,"x") (1,"y") (2,"x") (2,"y")
 # ---------------------------------------------------------------------------
 
 def product[Elem_T, Elem2_T](a: []Elem_T, b: []Elem2_T) -> (Elem_T, Elem2_T):
@@ -158,8 +159,8 @@ def product[Elem_T, Elem2_T](a: []Elem_T, b: []Elem2_T) -> (Elem_T, Elem2_T):
 
 
 # ---------------------------------------------------------------------------
-# combinations(s, r) — r-length subsequences, order-preserving, no repeats
-#   combinations([1,2,3,4], 2) -> [1,2] [1,3] [1,4] [2,3] [2,4] [3,4]
+# combinations[Elem_T](s, r) — r-length subsequences, order-preserving, no repeats
+#   combinations[int]([1,2,3,4], 2) -> [1,2] [1,3] [1,4] [2,3] [2,4] [3,4]
 # ---------------------------------------------------------------------------
 
 def combinations[Elem_T](s: []Elem_T, r: int) -> []Elem_T:
@@ -188,9 +189,9 @@ def combinations[Elem_T](s: []Elem_T, r: int) -> []Elem_T:
 
 
 # ---------------------------------------------------------------------------
-# permutations(s) — all orderings in lexicographic order (Narayana Pandita)
+# permutations[Elem_T](s) — all orderings in lexicographic order (Narayana Pandita)
 # Elem_T must support < so the algorithm can find the next permutation.
-#   permutations([1,2,3]) -> [1,2,3] [1,3,2] [2,1,3] [2,3,1] [3,1,2] [3,2,1]
+#   permutations[int]([1,2,3]) -> [1,2,3] [1,3,2] [2,1,3] [2,3,1] [3,1,2] [3,2,1]
 # Assumes input is sorted.
 # ---------------------------------------------------------------------------
 
@@ -230,8 +231,8 @@ def permutations[Elem_T](s: []Elem_T) -> []Elem_T:
 
 
 # ---------------------------------------------------------------------------
-# repeat_elem(x, n) — yield x exactly n times
-#   repeat_elem("ha", 3) -> "ha" "ha" "ha"
+# repeat_elem[Elem_T](x, n) — yield x exactly n times
+#   repeat_elem[str]("ha", 3) -> "ha" "ha" "ha"
 # ---------------------------------------------------------------------------
 
 def repeat_elem[Elem_T](x: Elem_T, n: int) -> Elem_T:

@@ -621,22 +621,18 @@ def first_of[T](xs: []T) -> T:
 def head_of[Elem](xs: []Elem) -> Elem:   # any name, not just one letter
     xs[0]
 
-print(first_of([7, 8]))          # inferred from the argument
-print(first_of[int]([7, 8]))     # ... or named explicitly
+print(first_of[int]([7, 8]))     # ALWAYS name the type at the call
+print(first_of[str](["x"]))
 ```
 
-**Nim output:** `proc first_of[T](xs: seq[T]): T`; an explicit `[int]` at the
-call site is passed through.
-**Python output:** `def first_of[T](xs: list[T]) -> T` (PEP 695, 3.12+); an
-explicit type application is dropped, since Python infers it and a function
-object is not subscriptable.
+**Adascript never infers type parameters.** Both are errors, on both backends:
+- `first_of([7, 8])` -- a bare call of a generic function: write `first_of[int](...)`;
+- `def first_of(xs: []T) -> T` -- a type parameter nobody declared: write `def first_of[T](...)`.
 
-A single uppercase letter in a signature is still treated as a type
-parameter without being declared — the older convention — but the declared
-form is the one to use. It is the only one that admits a name worth reading:
-the bundled libraries declare `[Node_T]` and `[Elem_T]` rather than `[N]`
-and `[T]`. A declared parameter is scoped to the function, so it may share a
-name with a real type the caller has.
+A type argument is a name or a tuple (`first_of[Row_T]`, `first_of[(int, str)]`); an inline `[]int` is not parsed there, so name the composite first (`type Row_T is []int`). A definition nested in a generic function uses the function's `T` without declaring it; methods use their generic class's parameters. Prefer names worth reading (`Node_T`, `Elem_T`) over `[T]`. A declared parameter is scoped to the function, so it may share a name with a real type the caller has.
+
+**Nim output:** `proc first_of[T](xs: seq[T]): T`; `first_of[int](...)` is passed through.
+**Python output:** `def first_of[T](xs: list[T]) -> T` (PEP 695, 3.12+); the type application is dropped at the call, since a function object is not subscriptable.
 
 ---
 

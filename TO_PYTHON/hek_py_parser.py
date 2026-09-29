@@ -1654,9 +1654,13 @@ def to_py(self, indent=0):
     _ret_bare = ret_ann.strip()
     ParserState._py_return_type = (_ret_bare[2:].strip()
                                    if _ret_bare.startswith("->") else _ret_bare)
+    # what this function declares is visible to the definitions nested in it
+    from ady_declarations import declared_param_names, type_scope_push, type_scope_pop
+    type_scope_push(declared_param_names(declared_type_params))
     try:
         body = block_node.to_py(indent + 1) if block_node else ""
     finally:
+        type_scope_pop()
         _stmt.CLASS_BODY_DEPTH = _outer_class_depth
         ParserState._py_return_type = _outer_ret
     # Implicit return: mark the statements that carry the function's value, so
@@ -1699,7 +1703,7 @@ def to_py(self, indent=0):
     # TypeVar needed, and the parameter is scoped to the function rather
     # than shared module-wide. Only the inferred form falls back to one.
     if not declared_type_params:
-        _declare_type_vars(params + " " + ret_ann)
+        _refuse_undeclared_type_vars(name, params, ret_ann)
     # Remembered so an explicit type application at the call site --
     # `first_of[int](xs)`, which Nim accepts -- can be dropped: Python
     # infers the parameter and a function object is not subscriptable.
@@ -1711,31 +1715,27 @@ def to_py(self, indent=0):
             f"({params}){ret_ann}:{hc}\n{body}")
 
 
-def _declare_type_vars(signature):
-    """Declare a TypeVar for each implicit generic parameter in SIGNATURE.
+def _refuse_undeclared_type_vars(func_name, params, ret_ann):
+    """Refuse a signature that uses a lone capital that is no type, constant,
+    parameter or declared type parameter -- `def first_of(xs: list[T]) -> T`.
 
-    A single uppercase-letter identifier in an annotation is a type
-    variable by Adascript convention -- the same rule ady2nim uses to build
-    its `[T, U]` proc parameters. Python evaluates annotations eagerly, so
-    without a binding `def first_of(xs: list[T]) -> T` is a NameError at
-    definition time and the whole module dies.
-    """
+    It used to be taken for a type variable and bound to a TypeVar without a
+    word said, so that the reader had to know the convention to know `T` was
+    not a type of the program. A type parameter is declared -- `def
+    first_of[T](...)`, or by the class it is written in -- and the error
+    shows the declaration to write. The same rule ady2nim applies."""
     import re as _re_tv
     from hek_parsec import ParserState
-    names = set(_re_tv.findall(r'\b([A-Z])\b', signature or ""))
+    from ady_declarations import refuse_undeclared_type_params, type_scope_has
+    names = set(_re_tv.findall(r'\b([A-Z])\b', (params or "") + " " + (ret_ann or "")))
     if not names:
         return
-    decls = getattr(ParserState, "py_top_decls", [])
-    for n in sorted(names):
-        # A name that is a real type here -- an enum, a record -- is not a
-        # type variable, whatever its length.
-        if ParserState.symbol_table.lookup(n) or n in getattr(ParserState, "tick_types", {}):
-            continue
-        decl = f'{n} = _typing.TypeVar("{n}")'
-        if decl not in decls:
-            ParserState.nim_imports.add("import typing as _typing")
-            decls.append(decl)
-    ParserState.py_top_decls = decls
+    param_names = set(_re_tv.findall(r'(?:^|,)\s*\*{0,2}(\w+)\s*:', params or ""))
+    undeclared = {n for n in names
+                  if not ParserState.symbol_table.lookup(n)
+                  and n not in getattr(ParserState, "tick_types", {})
+                  and n not in param_names and not type_scope_has(n)}
+    refuse_undeclared_type_params(func_name or "<function>", undeclared)
 
 
 @method(async_func_def)
@@ -2236,9 +2236,13 @@ def to_py(self, indent=0):
     # annotation inside it that names it has to be a forward reference.
     _outer_defining = _pyexpr.DEFINING_CLASS
     _pyexpr.DEFINING_CLASS = name
+    # a generic class's parameters are visible to everything written in it
+    from ady_declarations import declared_param_names, type_scope_push, type_scope_pop
+    type_scope_push(declared_param_names(type_params))
     try:
         body = block_node.to_py(indent + 1) if block_node else ""
     finally:
+        type_scope_pop()
         _stmt.CLASS_BODY_DEPTH = _outer_class_depth
         _pyexpr.DEFINING_CLASS = _outer_defining
     if "dataclass" not in decos:        # a dataclass makes its own __init__

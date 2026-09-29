@@ -35,7 +35,7 @@ from stdlib nimport PriorityQueue
 
 
 # ---------------------------------------------------------------------------
-# dijkstra(graph, start) — distance from start to every reachable node
+# dijkstra[Node_T](graph, start) — distance from start to every reachable node
 #   Unreachable nodes come back as Inf, which compares and adds like any
 #   other float; nothing has to be unwrapped in the loop.
 # ---------------------------------------------------------------------------
@@ -60,7 +60,7 @@ def dijkstra[Node_T](graph: {Node_T}[](float, Node_T), start: Node_T) -> {Node_T
 
 
 # ---------------------------------------------------------------------------
-# shortest_path(graph, start, goal) — the route itself, start..goal inclusive
+# shortest_path[Node_T](graph, start, goal) — the route itself, start..goal inclusive
 #   Empty when there is no route, or when either end is not in the graph.
 #   A single-node path is [start], so an empty result is never ambiguous.
 # ---------------------------------------------------------------------------

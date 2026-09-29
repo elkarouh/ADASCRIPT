@@ -385,9 +385,14 @@ for c in combinations([1, 2, 3, 4], 2):
     ...
 for p in product([1, 2], ["x", "y"]):   # mixed element types
     ...
-for b in batched([1, 2, 3, 4, 5], 2):   # [1,2] [3,4] [5]
+for b in batched[int]([1, 2, 3, 4, 5], 2):   # [1,2] [3,4] [5]
     ...
 ```
+
+Every call names the element type, `batched[int]` here: Adascript does not
+infer type arguments, so the reader never has to work one out from the
+arguments. `test_iters.ady` writes `takewhile[int]`, `chain[str]` and
+`product[int, str]` the same way.
 
 The full menu in the test file: `pairwise`, `sliding_window`,
 `enumerate_seq`, `takewhile`, `dropwhile`, `compress`, `chain`, `flatten`,
@@ -419,9 +424,10 @@ node type as a parameter — `def dijkstra[Node_T](graph: {Node_T}[](float,
 Node_T), start: Node_T)` — so one definition serves enum, string and integer
 nodes; the test file runs every case against all three. A parameter is not
 restricted to a single letter, and is worth naming for what it is.
-`[City_T]` at the call site says which type is wanted, and both backends
-infer it from the argument if left off — the caller's own type may even be
-called `Node_T` too, since the parameter is scoped to the proc.
+`[City_T]` at the call site says which type is wanted, and it is required:
+`dijkstra(g, PAR)` is an error, and the message says to write
+`dijkstra[City_T]`. The caller's own type may even be called `Node_T` too,
+since the parameter is scoped to the proc.
 
 Two details are worth the space. The edge is `(weight, node)` rather than
 `(node, weight)` because the priority queue orders on a tuple's first
@@ -429,12 +435,13 @@ element, so an edge is already in the shape the queue wants. And an
 unreached node's distance is `Inf`, not an optional — it compares and adds
 like any other float, so nothing is unwrapped inside the loop (§10.5).
 
-A single uppercase letter in a signature is still taken as a type parameter
-without being declared — the older convention, which `iters.ady` uses — but
-the declared form is what to reach for: it is the only one that admits a
-multi-letter name like `[Elem]`, and it says what is a parameter rather
-than leaving it to spelling. On Nim the brackets become the proc's own
-generic parameters; on Python they become PEP 695 type parameters.
+A type parameter is what the brackets declare and nothing else. A lone
+capital in a signature that nobody declared — `def first_of(xs: []T) -> T` —
+is an error that shows the declaration to write, where it was once guessed
+to be a type parameter. Declaring is also the only form that admits a
+multi-letter name like `[Elem]`, and it says what is a parameter rather than
+leaving it to spelling. On Nim the brackets become the proc's own generic
+parameters; on Python they become PEP 695 type parameters.
 
 ## 6.8 Iteration odds and ends
 

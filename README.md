@@ -1333,13 +1333,28 @@ Nim gets `proc first_of[Elem_T](xs: seq[Elem_T]): Elem_T` and instantiates
 one version per call site; Python gets the same brackets as PEP 695 type
 parameters, `def first_of[Elem_T](xs: list[Elem_T]) -> Elem_T`.
 
-A call may name the types explicitly or leave them to be inferred from the
-arguments — both forms work on both backends:
+A call names the types it instantiates. Adascript never infers them, so the
+reader never has to work out from the arguments what a generic call was made
+with:
 
 ```python
-print first_of[int]([4, 5, 6])       # explicit
-print first_of([7, 8])               # inferred
+print first_of[int]([4, 5, 6])
+print first_of[str](["a", "b"])
 ```
+
+A bare call, `first_of([7, 8])`, is an error on both backends, and the message
+says what to write: `'first_of' is generic in Elem_T: name the types at the
+call, first_of[<Elem_T>](...)`. The declaration is held to the same rule: a
+type parameter is what the brackets after a function's name, or a generic
+class's, declare, and nothing else. A lone capital in a signature that nobody
+declared -- `def first_of(xs: []T) -> T` -- is refused with the declaration
+to write, and is not guessed to be a type parameter as it once was. A nested
+definition uses its enclosing function's parameter without declaring it
+again.
+
+A type argument is a name, or a tuple: `first_of[Row_T]`, `first_of[(int,
+str)]`. A composite type such as `[]int` is named first -- `type Row_T is
+[]int` -- as it is anywhere else it is worth writing down twice.
 
 Any identifier may be a type parameter once it is declared in the brackets,
 so prefer a name that says what it stands for — `Node_T`, `Elem_T` — over a

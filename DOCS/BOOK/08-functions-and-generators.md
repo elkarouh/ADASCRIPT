@@ -202,7 +202,7 @@ Design notes worth stealing from this file:
 ## 8.5 Callable values
 
 Functions are values. You have seen `max(..., key=P)`; predicates passed to
-the iterator library (`takewhile(less_than_4, ...)` in `test_iters.ady`)
+the iterator library (`takewhile[int](less_than_4, ...)` in `test_iters.ady`)
 work the same way, and the `(T) -> R` annotation from §2.2 lets you *store*
 callables in fields — `geo_server.ady`'s `Region` holds its predicate that
 way. For user-defined callable *objects* (`__call__`, `__ror__`), see

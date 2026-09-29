@@ -1956,8 +1956,8 @@ shared on Python"); a `@virtual` one is shared on both.
 ## 14. Generic Classes
 
 Generic type parameters go in square brackets after the class name. The
-transpiler infers the parameter list from context and threads it through all
-generated Nim procs:
+transpiler carries the declared list through all generated Nim procs; nothing
+about it is inferred:
 
 ```python
 class Optimizer[S, D, C]:

@@ -4,7 +4,7 @@ Adascript classes are Python classes with `var`-declared fields. The
 transpiler does substantial work behind the scenes so that one class
 definition produces idiomatic code on both targets: Python gets a normal
 class; Nim gets an `object` (or `ref object`) plus free `proc`s, with
-mutability, constructors and generic parameters inferred.
+mutability and constructors inferred, and generic parameters carried through.
 
 ## 9.1 Fields with `var`, and inline defaults
 

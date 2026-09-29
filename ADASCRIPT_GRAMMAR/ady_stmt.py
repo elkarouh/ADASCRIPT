@@ -410,6 +410,62 @@ def scan_type_decls(code):
     return out
 
 
+_GENERIC_DEF = _re_dup.compile(
+    r"^def[ \t]+([A-Za-z_]\w*)[ \t]*\[([^\]\n]*)\][ \t]*\(", _re_dup.MULTILINE)
+_PLAIN_DEF = _re_dup.compile(
+    r"^(?:def|class)[ \t]+([A-Za-z_]\w*)[ \t]*[(:]", _re_dup.MULTILINE)
+
+
+def scan_generic_funcs(code):
+    """The generic functions CODE defines at its top level -- `def first_of[
+    Elem_T](xs: []Elem_T)` -- as {name: [its type parameters]}."""
+    return {m.group(1): [p.strip() for p in m.group(2).split(",") if p.strip()]
+            for m in _GENERIC_DEF.finditer(code)}
+
+
+def scan_plain_defs(code):
+    """The names CODE defines at its top level *without* type parameters: a
+    routine or class of that name is not the generic one an import brought."""
+    return {m.group(1) for m in _PLAIN_DEF.finditer(code)}
+
+
+def check_generic_calls(tree, generics, plain=frozenset()):
+    """Refuse a call of a generic function that leaves its type arguments to
+    be inferred.
+
+    `first_of[int]([4, 5, 6])` says what it instantiates; `first_of([7, 8])`
+    asks the reader to work it out from the argument, and Adascript is about
+    explicit typing -- the reader should never have to guess. GENERICS is
+    {name: type parameters}; PLAIN names a routine or class of the module
+    that has the same name without parameters, which then is not generic.
+    Only a bare call is refused: a `name[...]` before the parentheses names
+    the types, and a mention that is no call -- passing the function on --
+    instantiates nothing here."""
+    if not generics:
+        return
+    stack = list(tree) if isinstance(tree, (list, tuple)) else [tree]
+    while stack:
+        node = stack.pop()
+        nodes = getattr(node, "nodes", None)
+        if not nodes:
+            continue
+        if type(node).__name__ == "primary" and len(nodes) >= 2:
+            atom = nodes[0]
+            name = None
+            if type(atom).__name__ == "IDENTIFIER" and atom.nodes \
+                    and isinstance(atom.nodes[0], str):
+                name = atom.nodes[0]
+            trailers = getattr(nodes[1], "nodes", None)
+            if (name in generics and name not in plain and trailers
+                    and type(trailers[0]).__name__ == "call_trailer"):
+                params = ", ".join(generics[name])
+                raise SyntaxError(
+                    f"'{name}' is generic in {params}: name the types at the "
+                    f"call, {name}[<{params}>](...) -- Adascript does not "
+                    f"infer type arguments, so the reader never has to guess")
+        stack.extend(n for n in nodes if not isinstance(n, str))
+
+
 def either_procs(return_types, failure_types):
     """The routines among RETURN_TYPES that return `T | !F`, F a failure."""
     out = set()

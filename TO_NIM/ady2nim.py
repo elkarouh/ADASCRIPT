@@ -66,6 +66,7 @@ _nimport_tuple_field_order: dict = {}
 # its module-level names with their types: globals and type aliases. Each is
 # (ParserState attribute, merged into the importer's at its reset).
 _NIMPORT_CARRIED = ("tick_types", "distinct_types", "unit_relations",
+                    "generic_funcs",
                     "class_field_types", "noreturn_procs",
                     "iterator_names", "contextmanager_funcs",
                     "by_value_procs", "var_param_procs", "failure_types")
@@ -105,6 +106,7 @@ def _nim_reset():
     ParserState.ady_type_decls = {}
     ParserState.distinct_types = {}
     ParserState.unit_relations = {}
+    ParserState.generic_funcs = {}      # generic function -> its type parameters
     ParserState.class_field_types = {}
     ParserState.proc_param_types = {}
     ParserState.proc_param_types_full = {}
@@ -684,6 +686,11 @@ def translate(code, export_symbols=False):
     ParserState.distinct_types.update(
         distinct_types(ParserState.ady_type_decls, ParserState.distinct_types))
     ParserState.unit_relations.update(unit_relations(ParserState.ady_type_decls))
+    # Generic functions, this module's and those it nimports, must be called
+    # with their type arguments written out: see check_generic_calls.
+    from ady_stmt import scan_generic_funcs, scan_plain_defs, check_generic_calls
+    ParserState.generic_funcs.update(scan_generic_funcs(code))
+    check_generic_calls(stmts, ParserState.generic_funcs, scan_plain_defs(code))
     ParserState.union_aliases_nim = {}
     ParserState.ady_return_types_nim = {}
     ParserState.result_procs = either_procs(ParserState.ady_return_types,

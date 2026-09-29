@@ -563,23 +563,30 @@ def hoist_check() -> int:
     A2
 assert hoist_check() == 6
 
-# Explicit generic parameters: `def f[T](...)` declares T rather than
-# leaving it to be inferred from the single-capital convention, which is
-# what a multi-letter name needs -- [Elem] was dropped and Nim then had an
-# undeclared identifier. Nim takes the brackets as its own generic proc
-# params; Python takes them as PEP 695.
+# Generic parameters are declared, and named at the call. `def f[T](...)`
+# declares T -- a multi-letter [Elem] as readily as a lone capital -- and a
+# call writes what it instantiates, `f[int](...)`. Nothing is inferred: a lone
+# capital in a signature is not taken for a type parameter, and a bare call
+# `f(xs)` is refused (the Makefile checks both), so the reader never has to
+# guess. Nim takes the brackets as its own generic proc params; Python takes
+# them as PEP 695, and drops the type application at the call, since a
+# function object is not subscriptable.
 def first_of[T](xs: []T) -> T:
     xs[0]
 def head_of[Elem](xs: []Elem) -> Elem:
     xs[0]
-assert first_of([7, 8]) == 7
-assert first_of(["x", "y"]) == "x"
-assert head_of([1.5, 2.5]) == 1.5
-# An explicit type application at the call site is accepted too. Nim uses
-# it; Python infers instead and a function object is not subscriptable, so
-# the emitter drops it there.
 assert first_of[int]([7, 8]) == 7
+assert first_of[str](["x", "y"]) == "x"
+assert head_of[float]([1.5, 2.5]) == 1.5
 assert head_of[str](["a"]) == "a"
+# A definition nested in a generic function uses the function's own T, which
+# it need not -- and may not -- declare again.
+def last_of[T](xs: []T) -> T:
+    def at(i: int) -> T:
+        return xs[i]
+    return at(len(xs) - 1)
+assert last_of[int]([1, 2, 3]) == 3
+assert last_of[str](["a", "b"]) == "b"
 
 # --- patterns and optionals, the cases the book documents ----------------
 

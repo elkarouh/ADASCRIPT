@@ -2947,9 +2947,15 @@ def _func_def_to_nim_inner(self, indent=0):
     # parameters or the locals: hek_nim_expr._fmt_in_template
     _was_tpl = getattr(ParserState, "_nim_in_template", False)
     ParserState._nim_in_template = _is_fn_cm
+    # what this function declares is visible to the definitions nested in it
+    from ady_declarations import (declared_param_names, type_scope_push,
+                                  type_scope_pop, type_scope_has,
+                                  refuse_undeclared_type_params)
+    type_scope_push(declared_param_names(declared_type_params))
     try:
         body = block_node.to_nim(indent + 1) if block_node else ""
     finally:
+        type_scope_pop()
         ParserState._nim_in_template = _was_tpl
     ParserState.symbol_table.pop_scope()
     body = _bind_user_result(body, ret_ann)
@@ -3409,7 +3415,16 @@ def _func_def_to_nim_inner(self, indent=0):
         _gp_candidates -= set(getattr(ParserState, "class_field_types", {}))
         _gp_candidates = {_g for _g in _gp_candidates
                           if not ((ParserState.symbol_table.lookup(_g) or {}).get("kind") == "type")}
-        _generic_params = "[" + ", ".join(sorted(_gp_candidates)) + "]" if _gp_candidates else ""
+        # ...nor is a constant, a parameter's name, or a type parameter that
+        # an enclosing class or function declared.
+        _param_names = set(_re_gp.findall(r'(?:^|,)\s*(?:var\s+)?(\w+)\s*:', params))
+        _gp_candidates = {_g for _g in _gp_candidates
+                          if ParserState.symbol_table.lookup(_g) is None
+                          and _g not in _param_names and not type_scope_has(_g)}
+        # A type parameter is declared -- `def f[T](...)` -- never guessed
+        # from a lone capital in the signature, as it once was.
+        refuse_undeclared_type_params(name or "<function>", _gp_candidates)
+        _generic_params = ""
     # Escape Nim keywords that aren't already backtick-wrapped (dunders get their own escaping)
     if not nim_name.startswith("`"):
         nim_name = _nim_ident(nim_name)
@@ -3595,10 +3610,14 @@ def to_nim(self, indent=0):
     # annotations -- func_def clears the flag again so a method body is an
     # ordinary scope, the same split ady2py makes with CLASS_BODY_DEPTH.
     import hek_nim_stmt as _hns_cls
+    from ady_declarations import declared_param_names, type_scope_push, type_scope_pop
     _hns_cls.FIELD_BODY_DEPTH += 1
+    # a generic class's parameters are visible to everything written in it
+    type_scope_push(declared_param_names(type_params))
     try:
         body = block_node.to_nim(indent + 1, is_virtual=True, class_name=name, parent_name=parent_name, type_params=type_params) if block_node else ""
     finally:
+        type_scope_pop()
         _hns_cls.FIELD_BODY_DEPTH -= 1
 
     parent = f" of {parent_name}" if parent_name else " of RootObj"

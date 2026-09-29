@@ -17,15 +17,15 @@ let ge: {City_T}[](float, City_T) = {
     LON: [(2.0, BER)],
     BER: [],
     ROM: []}
-let de: {City_T}float = dijkstra(ge, PAR)
+let de: {City_T}float = dijkstra[City_T](ge, PAR)
 assert de[PAR] == 0.0
 assert de[LON] == 3.0
 assert de[BER] == 5.0            # 3 + 2, not the direct 9
 assert de[ROM] == Inf            # no edge into it
-assert shortest_path(ge, PAR, BER) == [PAR, LON, BER]
-assert shortest_path(ge, PAR, PAR) == [PAR]        # a node reaches itself
-assert shortest_path(ge, PAR, ROM) == []           # unreachable
-assert shortest_path(ge, BER, PAR) == []           # edges are directed
+assert shortest_path[City_T](ge, PAR, BER) == [PAR, LON, BER]
+assert shortest_path[City_T](ge, PAR, PAR) == [PAR]        # a node reaches itself
+assert shortest_path[City_T](ge, PAR, ROM) == []           # unreachable
+assert shortest_path[City_T](ge, BER, PAR) == []           # edges are directed
 
 # --- string nodes ----------------------------------------------------------
 let gs: {str}[](float, str) = {
@@ -33,30 +33,30 @@ let gs: {str}[](float, str) = {
     "b": [(2.5, "c")],
     "c": [(1.0, "d")],
     "d": []}
-let ds: {str}float = dijkstra(gs, "a")
+let ds: {str}float = dijkstra[str](gs, "a")
 assert ds["a"] == 0.0
 assert ds["b"] == 1.5
 assert ds["c"] == 4.0
 assert ds["d"] == 5.0            # 1.5+2.5+1, beating the direct 10
-assert shortest_path(gs, "a", "d") == ["a", "b", "c", "d"]
-assert shortest_path(gs, "a", "zz") == []          # goal not in the graph
-assert shortest_path(gs, "zz", "a") == []          # start not in the graph
+assert shortest_path[str](gs, "a", "d") == ["a", "b", "c", "d"]
+assert shortest_path[str](gs, "a", "zz") == []          # goal not in the graph
+assert shortest_path[str](gs, "zz", "a") == []          # start not in the graph
 
 # --- int nodes -------------------------------------------------------------
 let gi: {int}[](float, int) = {1: [(7.0, 2)], 2: [(1.0, 3)], 3: []}
-let di: {int}float = dijkstra(gi, 1)
+let di: {int}float = dijkstra[int](gi, 1)
 assert di[1] == 0.0
 assert di[2] == 7.0
 assert di[3] == 8.0
-assert shortest_path(gi, 1, 3) == [1, 2, 3]
+assert shortest_path[int](gi, 1, 3) == [1, 2, 3]
 
 # --- a single node with no edges at all ------------------------------------
 # The empty edge list is named: in a one-entry table literal Nim has no
 # sibling entry to infer `@[]`'s element type from, and rejects the literal.
 let no_edges: [](float, int) = []
 let g1: {int}[](float, int) = {42: no_edges}
-assert dijkstra(g1, 42)[42] == 0.0
-assert shortest_path(g1, 42, 42) == [42]
+assert dijkstra[int](g1, 42)[42] == 0.0
+assert shortest_path[int](g1, 42, 42) == [42]
 
 # --- a sink: a node that is only ever a destination -------------------------
 # It has no adjacency entry of its own, so reading the graph's keys alone
@@ -65,11 +65,11 @@ assert shortest_path(g1, 42, 42) == [42]
 type Sink_T is enum P, Q
 let one_way: [](float, Sink_T) = [(2.0, Q)]
 let gsink: {Sink_T}[](float, Sink_T) = {P: one_way}      # Q is never a key
-let dsink: {Sink_T}float = dijkstra(gsink, P)
+let dsink: {Sink_T}float = dijkstra[Sink_T](gsink, P)
 assert dsink[P] == 0.0
 assert dsink[Q] == 2.0
-assert shortest_path(gsink, P, Q) == [P, Q]
-assert shortest_path(gsink, Q, P) == []        # nothing leaves the sink
+assert shortest_path[Sink_T](gsink, P, Q) == [P, Q]
+assert shortest_path[Sink_T](gsink, Q, P) == []        # nothing leaves the sink
 
 # --- unreachable nodes ------------------------------------------------------
 # A graph names every one of its nodes as a key, the edgeless ones included,
@@ -77,12 +77,12 @@ assert shortest_path(gsink, Q, P) == []        # nothing leaves the sink
 # nothing reaches answer Inf.
 type Far_T is enum W, X, Y, Z
 let gfar: {Far_T}[](float, Far_T) = {W: [(1.0, X)], X: [], Y: [(1.0, Z)], Z: []}
-let dfar: {Far_T}float = dijkstra(gfar, W)
+let dfar: {Far_T}float = dijkstra[Far_T](gfar, W)
 assert dfar[W] == 0.0
 assert dfar[X] == 1.0
 assert dfar[Y] == Inf          # a key, but nothing reaches it
 assert dfar[Z] == Inf          # a key, reachable only from the stranded Y
-assert shortest_path(gfar, W, Z) == []
+assert shortest_path[Far_T](gfar, W, Z) == []
 
 # Break the convention and the table stops being exhaustive, which is the
 # whole reason the convention is written down. Z below is neither a key nor
@@ -90,12 +90,12 @@ assert shortest_path(gfar, W, Z) == []
 # it is absent rather than Inf. X is not a key either, but it is reached,
 # and the relax step puts it in.
 let gpartial: {Far_T}[](float, Far_T) = {W: [(1.0, X)], Y: [(1.0, Z)]}
-let dpartial: {Far_T}float = dijkstra(gpartial, W)
+let dpartial: {Far_T}float = dijkstra[Far_T](gpartial, W)
 assert dpartial[W] == 0.0
 assert dpartial[X] == 1.0             # not a key, but reached
 assert dpartial[Y] == Inf             # a key, so present, and unreached
 assert Z not in dpartial              # neither a key nor reached
 assert dpartial.get(Z, Inf) == Inf    # ask this way if you cannot be sure
-assert shortest_path(gpartial, W, Z) == []
+assert shortest_path[Far_T](gpartial, W, Z) == []
 
 print "all graphs tests passed"

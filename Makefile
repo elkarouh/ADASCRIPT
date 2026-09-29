@@ -547,6 +547,12 @@ test: compile
 	    > $(TMPDIR)/ady_refuse_7.ady
 	@printf 'def f(n: int) -> str:\n    case n:\n        when 34 | 92: return "esc"\n        when 32..126: return "lit"\n        when others: return "esc"\n' \
 	    > $(TMPDIR)/ady_refuse_8.ady
+	@# Type parameters are declared and named, never inferred: a bare call of a
+	@# generic function, and a lone capital in a signature nobody declared.
+	@printf 'def first_of[T](xs: []T) -> T:\n    return xs[0]\n\nprint first_of([7, 8])\n' \
+	    > $(TMPDIR)/ady_refuse_9.ady
+	@printf 'def first_of(xs: []T) -> T:\n    return xs[0]\n\nprint first_of[int]([7, 8])\n' \
+	    > $(TMPDIR)/ady_refuse_10.ady
 	@for tr in TO_NIM/ady2nim.py TO_PYTHON/ady2py.py; do \
 	    for c in "1:members no one can tell apart:cannot be told apart" \
 	             "2:a dropped failure:drops a failure" \
@@ -555,7 +561,9 @@ test: compile
 	             "5:a failure left unmarked:mark it \`!Bad_T\`" \
 	             "6:the old failure record:an ordinary record now" \
 	             "7:a do step on a union with no !:if one member is, mark it" \
-	             "8:overlapping case labels:34 is covered by two branches"; do \
+	             "8:overlapping case labels:34 is covered by two branches" \
+	             "9:a generic call that infers its types:does not infer type arguments" \
+	             "10:a type parameter nobody declared:not declared"; do \
 	        n=$${c%%:*}; rest=$${c#*:}; what=$${rest%%:*}; want=$${rest#*:}; \
 	        printf '  %-42s' "$$what ($$(basename $$tr .py))"; \
 	        if $(PYTHON) $(CURDIR)/$$tr $(TMPDIR)/ady_refuse_$$n.ady > $(TMPDIR)/ady_refuse.out 2>&1; then \
@@ -565,7 +573,7 @@ test: compile
 	            && echo OK || { echo FAIL; cat $(TMPDIR)/ady_refuse.out; exit 1; }; \
 	    done; \
 	done
-	@rm -f $(TMPDIR)/ady_refuse_[1-8].ady $(TMPDIR)/ady_refuse.out
+	@rm -f $(TMPDIR)/ady_refuse_[0-9]*.ady $(TMPDIR)/ady_refuse.out
 	@# A distinct type mixes with nothing else: not its base, not another
 	@# distinct type on the same base. Nim's compiler refuses each of these;
 	@# the Python backend refuses those it can see -- a typed name given, or

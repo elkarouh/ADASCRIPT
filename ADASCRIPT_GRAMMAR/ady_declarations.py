@@ -875,3 +875,54 @@ def unit_mix_error(lu, op, ru):
             return (f"a plain number divided by a {ru} has no unit: name "
                     f"the result, `type X is A / {ru}`, with A a distinct type")
     return None
+
+
+# --- type parameters are declared, never guessed ------------------------------
+# `def first_of[Elem_T](xs: []Elem_T) -> Elem_T` declares its type parameter,
+# and a generic class declares its own (`class Box[T]`). Nothing else is one.
+# An older convention took any single capital in a signature -- `def f(xs:
+# []T) -> T` -- as a type parameter without a word said; the reader had to
+# know the rule to know that `T` was not a type of the program. Adascript is
+# explicit: an undeclared name is an error, and the error shows the
+# declaration to write.
+
+def type_scope_push(names):
+    """Enter a generic class or function: NAMES are its declared parameters,
+    visible to every signature written inside it."""
+    from hek_parsec import ParserState
+    stack = getattr(ParserState, "_type_param_scope", None)
+    if stack is None:
+        stack = ParserState._type_param_scope = []
+    stack.append(set(names))
+
+
+def type_scope_pop():
+    from hek_parsec import ParserState
+    stack = getattr(ParserState, "_type_param_scope", None)
+    if stack:
+        stack.pop()
+
+
+def type_scope_has(name):
+    """Whether NAME is a type parameter declared by an enclosing class or
+    function."""
+    from hek_parsec import ParserState
+    return any(name in scope for scope in getattr(ParserState, "_type_param_scope", ()))
+
+
+def declared_param_names(text):
+    """The names in a rendered `[T, U]` (or `T, U`) type-parameter list."""
+    return {n.strip() for n in (text or "").strip("[] ").split(",") if n.strip()}
+
+
+def refuse_undeclared_type_params(func_name, names):
+    """SyntaxError if NAMES -- single capitals a signature uses that are no
+    type, constant or declared parameter -- is not empty."""
+    if not names:
+        return
+    ns = ", ".join(sorted(names))
+    many = len(names) > 1
+    raise SyntaxError(
+        f"def {func_name}: {ns} in its signature {'are' if many else 'is'} "
+        f"not declared -- write `def {func_name}[{ns}](...)`; Adascript does "
+        f"not guess which names are type parameters")

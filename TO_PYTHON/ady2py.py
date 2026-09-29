@@ -304,6 +304,9 @@ def translate(code):
     from ady_declarations import distinct_types, unit_relations
     _PS_rp.distinct_types = distinct_types(_PS_rp.ady_type_decls)
     _PS_rp.unit_relations = unit_relations(_PS_rp.ady_type_decls)
+    # a generic function must be called with its type arguments written out
+    from ady_stmt import scan_generic_funcs, scan_plain_defs, check_generic_calls
+    check_generic_calls(stmts, scan_generic_funcs(code), scan_plain_defs(code))
     _PS_rp.union_aliases_py = {}
     _PS_rp.result_procs = either_procs(_PS_rp.ady_return_types,
                                        _PS_rp.failure_types)

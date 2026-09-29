@@ -50,6 +50,19 @@ history of this file if the reasoning behind one of them is ever wanted.
       before the body, or have the late check regenerate the constructor.
       `hek_nim_parser.py`, the `needs_ref` line and the `_has_self_ref`
       pre-check above it.
+- [ ] a type argument written inline as a list type is not parsed:
+      `first_of[[]int](rows)` is a syntax error on both backends, where a
+      name (`first_of[Row_T]`, with `type Row_T is []int`) or a tuple
+      (`first_of[(int, str)]`) works. Now that a generic call must name its
+      types, naming a list type first is the only spelling; accept
+      `[]T`, `{K}V` and the like in the brackets, or keep it a deliberate
+      rule and say so in the error.
+- [ ] directly constructing a generic class does not build on Nim.
+      `class Box[T]` with `let a: Box[int] = Box[int](3)` is emitted as
+      `Box[int](3)` -- a conversion of the literal -- instead of the
+      constructor call `newBox[int](3)`; Python takes it. Generic classes are
+      used by subclassing with named arguments (`class X(Maximizer[S, D,
+      R])`), which works, so nothing in the repo constructs one.
 - [ ] a subrange is bounds-checked on Nim only, so the same source behaves
       differently. With `type Quantity_T is 0 .. Max_Allowed_Quantity`, on
       Nim `let q: Quantity_T = 101` does not compile and a computed value
