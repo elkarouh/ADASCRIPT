@@ -286,18 +286,20 @@ def tokenize(s: str) -> []str:
     tokens
 
 def parse_atom(token: str) -> Val_T:
-    if token == "#t" or token == "true":
-        return mk_bool(True)
-    if token == "#f" or token == "false":
-        return mk_bool(False)
-    if token.startswith("\""):
-        return mk_str(token[1..len(token)-2])
-    if token == ".":
-        return mk_sym(".")
-    try:
-        return mk_num(float(token))
-    except ValueError:
-        pass
+    case token:
+        when "#t" | "true":
+            return mk_bool(True)
+        when "#f" | "false":
+            return mk_bool(False)
+        when ".":
+            return mk_sym(".")
+        when _ if token.startswith("\""):
+            return mk_str(token[1..len(token)-2])
+        when others:
+            try:
+                return mk_num(float(token))
+            except ValueError:
+                pass
     mk_sym(token)
 
 # Named, not written inline: a string holding a `)` inside a call's argument
