@@ -775,9 +775,9 @@ def check_value(s: Spec_T, value: str) -> str:
                 return ""
             return f"'{value}' is not a yes/no word"
         when NUMBER:
-            if value != /^-?\d+$/:
+            let n: int | !ParseFailure_T = parse_int(value)
+            if n is ParseFailure_T:
                 return f"'{value}' is not a whole number"
-            let n: int = int(value)
             if n < s.lo or n > s.hi:
                 return f"{n} is outside {s.lo} .. {s.hi}"
             return ""
