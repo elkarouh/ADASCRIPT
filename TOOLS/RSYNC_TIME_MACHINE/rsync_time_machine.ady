@@ -161,6 +161,11 @@ def run_checked(cmd: str, ssh: ?SSH = None) -> str | !Failure_T:
         return failure(CMD_FAILED, cmd, r.stderr.strip())
     return r.stdout
 
+def bad_number(f: ParseFailure_T) -> Failure_T:
+    """A piece of an expiration strategy that is not a whole number, as this
+    program's failure: the `else` of the step below."""
+    return failure(BAD_ARGUMENTS, f"'{f.text}' is not a whole number")
+
 def cmd_failed(f: ShellFailure_T) -> Failure_T:
     """A local command's failure -- the built-in ShellFailure_T a shell:
     step fails with -- as this program's: the `else` of the steps below."""
@@ -463,8 +468,8 @@ def expire_backups(
         for strategy_token in strategy_tokens:
             var t: []int = []
             for piece in strategy_token.split(":"):
-                let piece_str: str = piece
-                let n: int = int(piece_str)
+                do:
+                    n <- parse_int(piece) else bad_number(n)
                 t.append(n)
             let cut_off_timestamp: int = current_timestamp - t[0] * 86400
             let cut_off_interval_days: int = t[1]

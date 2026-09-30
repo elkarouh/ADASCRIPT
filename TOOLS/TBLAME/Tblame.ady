@@ -593,7 +593,9 @@ class Options:
                 when "-since":
                     i += 1
                     die("-since requires an argument") if i >= len(argv)
-                    self.since_epoch = int(argv[i])
+                    let since: int | !ParseFailure_T = parse_int(argv[i])
+                    die(f"-since needs a whole number, not '{since.text}'") if since is ParseFailure_T
+                    self.since_epoch = since
                 when "-source":
                     quit(0)
                 when "-":

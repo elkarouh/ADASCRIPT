@@ -47,7 +47,11 @@ def process_args(args: []str) -> Command_Line_Arguments_T:
                                 res.outputFile = arg
                                 state = expecting_option_or_argument
                             when "-n" | "--count":
-                                res.count = Natural(int(arg))
+                                let count: int | !ParseFailure_T = parse_int(arg)
+                                if count is ParseFailure_T:
+                                    print f"{current_option} needs a whole number, not '{count.text}'"
+                                    quit(1)
+                                res.count = Natural(count)
                                 state = expecting_option_or_argument
                             when others:
                                 print "Unknown option: -", current_option

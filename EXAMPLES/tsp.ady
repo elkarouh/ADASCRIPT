@@ -777,7 +777,12 @@ def plot_tour(tour: Tour_T, title: str = "") -> None:
     plt.tight_layout()
     plt.savefig("tsp_tour.png", dpi=150)
 
-let n: int = (int($1) if $# >= 1 else 8)
+var n: int = 8
+if $# >= 1:
+    let given: int | !ParseFailure_T = parse_int($1)
+    if given is ParseFailure_T:
+        die(f"usage: {PROG} [cities]: '{given.text}' is not a whole number", code = 2)
+    n = given
 let cities: Tour_T = random_cities(n)
 
 let t0: float = cpuTime()
