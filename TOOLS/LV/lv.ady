@@ -59,35 +59,35 @@ def colored_viewname(view_name: str) -> str:
     let login_name: str = parts[0]
     let view: str = parts[1]
     if view.startswith("I2_"):
-        return align(64, f"{login_name}.{view | inverted | bold | blue | bg_white}")
+        return f"{login_name}.{view | inverted | bold | blue | bg_white}"
     else:
-        return align(64, f"{login_name}.{view | dim | bold | black | bg_white}")
+        return f"{login_name}.{view | dim | bold | black | bg_white}"
 
 def colored_baseline(baseline: str) -> str:
     let parts: []str = baseline.split('.')
     if len(parts) > 5:
-        return align(98, f"{parts[0] | bold | yellow | bg_black}.{parts[1]}.{parts[2]}.{parts[3] | bold | yellow}.{parts[4]}.{parts[5] | bold | bg_blue | white}")
+        return f"{parts[0] | bold | yellow | bg_black}.{parts[1]}.{parts[2]}.{parts[3] | bold | yellow}.{parts[4]}.{parts[5] | bold | bg_blue | white}"
     else:
-        return align(98, f"{parts[0] | bold | yellow | bg_black}.{parts[1]}.{parts[2]}.{parts[3] | bold | yellow}.{parts[4] | bold | bg_blue | white}")
+        return f"{parts[0] | bold | yellow | bg_black}.{parts[1]}.{parts[2]}.{parts[3] | bold | yellow}.{parts[4] | bold | bg_blue | white}"
 
 def colored_env_id(env_id: str) -> str:
     let parts: []str = env_id.split('.')
     if parts[1] == "OP":
-        return align(40, f"{parts[0]}.{parts[1] | bold | yellow | bg_black}.{parts[2]}")
+        return f"{parts[0]}.{parts[1] | bold | yellow | bg_black}.{parts[2]}"
     else:
-        return align(40, f"{parts[0]}.{parts[1] | bold | blue | bg_white}.{parts[2]}")
+        return f"{parts[0]}.{parts[1] | bold | blue | bg_white}.{parts[2]}"
 
 def colored_status(state: State) -> str:
     case state:
         when OPS_BUG:
-            return align(36, str(state) | bold | blink | black | bg_white)
+            return str(state) | bold | blink | black | bg_white
         when BUSY:
-            return align(36, str(state) | bold | black | bg_yellow)
+            return str(state) | bold | black | bg_yellow
         when others:
-            return align(36, str(state) | bold | yellow | bg_green)
+            return str(state) | bold | yellow | bg_green
 
 def colored_comment(comment: str) -> str:
-    return align(35, comment | bold | black | bg_white)
+    return comment | bold | black | bg_white
 
 class Cls_View_Line:
     var view: str
@@ -160,9 +160,11 @@ if __name__ == "__main__":
     for R in view_lines:
         if not first and R.state != previous_state:
             print("-" * 120)
-        var colored_line: str = f"{colored_viewname(R.view)} {colored_baseline(R.baseline)} {colored_env_id(R.env_id)} {colored_status(R.state)}"
+        var colored_line: str = (
+            f"{align(64, colored_viewname(R.view))} {align(98, colored_baseline(R.baseline))} "
+            f"{align(40, colored_env_id(R.env_id))} {align(36, colored_status(R.state))}")
         if R.state != MERGED:
-            colored_line += f" {colored_comment(R.comment)}"
+            colored_line += f" {align(35, colored_comment(R.comment))}"
         print(colored_line)
         previous_state = R.state
         first = False
