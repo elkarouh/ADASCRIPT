@@ -12,6 +12,10 @@ walk over the sorted lists), which is what C or Java would do. The input is
 prepared before the clock starts, so each line times the search alone.
 
 Adascript reads no bytes: a file is text here, and a word is a `str`.
+
+The program is a translation of tests/perf/bench.py of
+https://github.com/Anode1/ais, run against that benchmark's data; RESULTS.md
+has the numbers, the caveats and how to reproduce them.
 """
 nimport time
 

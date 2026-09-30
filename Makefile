@@ -225,12 +225,12 @@ ADA_INDENT_TESTS := \
 # -----------------------------------------------------------------------
 # Skipped at runtime (compiled only):
 #   tsp.ady         — matplotlib not installed by default (pyimport)
-#   bench_search.ady — a timing program: its output is the clock
+#   BENCH_SEARCH/bench_search.ady — a timing program: its output is the clock
 # -----------------------------------------------------------------------
 COMPILE_ONLY := \
     tsp.ady \
     dp/jacks.ady \
-    bench_search.ady \
+    BENCH_SEARCH/bench_search.ady \
     awk_logscan.ady \
     sh_janitor.ady \
     config_check.ady \
