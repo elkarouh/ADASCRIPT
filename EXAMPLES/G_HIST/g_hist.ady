@@ -53,63 +53,74 @@ class Repo:
     def __init__(self, root: Path):
         self.root = root
 
-    def output(self, *args: str) -> str:
-        let (text, _) = shell(cwd = self.root): git {*args}
+    def output(self, *args: str) -> str | !ShellFailure_T:
+        """What git printed, or why it failed: bash's `set -e` ended the script
+        on a failing git, here the failure is handed to the caller."""
+        do:
+            text <- shell(cwd = self.root): git {*args}
         return text.strip()
 
     def succeeds(self, *args: str) -> bool:
         let r: None | !ShellFailure_T = shell(cwd = self.root): git {*args} 2>/dev/null
         return not (r is ShellFailure_T)
 
-    def history(self, rel: Path) -> []Rev_T:
+    def history(self, rel: Path) -> []Rev_T | !ShellFailure_T:
         """Commits touching REL, newest first. --follow tracks renames, so the
         path the file had at each commit is recorded with it."""
+        do:
+            text <- self.output("log", "--follow", "--name-only", "--format=@%H", "--", str(rel))
         var revs: []Rev_T = []
         var current: str = ""
-        let lines = shellLines(cwd = self.root): git log --follow --name-only --format=@%H -- {!rel}
-        for line in lines:
+        for line in text.split("\n"):
             if line.startswith("@"):
                 current = line[1:]
             elif line != "":
                 revs.append(Rev_T(hash=current, path=Path(line)))
         return revs
 
-    def save_at(self, rev: Rev_T, dest: Path) -> None:
+    def save_at(self, rev: Rev_T, dest: Path) -> None | !ShellFailure_T:
         """The file as it was at REV, into DEST: empty if it did not exist
         there, before creation or after deletion."""
         let spec: str = f"{rev.hash}:{rev.path}"
-        if self.succeeds("cat-file", "-e", spec):
-            shell(cwd = self.root): git show {!spec} > {!dest}
-        else:
+        if not self.succeeds("cat-file", "-e", spec):
             writeFile(dest, "")
+            return
+        do:
+            shell(cwd = self.root): git show {!spec} > {!dest}
 
-    def describe(self, hash: str) -> str:
+    def describe(self, hash: str) -> str | !ShellFailure_T:
         return self.output("log", "-1", "--format=%h %ad %cn: %s", "--date=short", hash)
 
-    def tmpname(self, hash: str, side: str, tmp: Path, base: str) -> Path:
+    def tmpname(self, hash: str, side: str, tmp: Path, base: str) -> Path | !ShellFailure_T:
         """Where the file at HASH goes, and so what meld's pane header shows:
         <date>-<committer>-<filename>. SIDE ("new" or "old") is a directory of
         its own, so the two can never collide, even when two commits share a
         date and a committer. The committer keeps its letters and digits,
         `.`, `_` and `-`, and non-ASCII letters as they are (`Zoë`); any other
         ASCII character, a space or `/` or `'`, becomes `_`."""
-        var who: str = self.output("log", "-1", "--format=%cn", hash)
+        do:
+            committer <- self.output("log", "-1", "--format=%cn", hash)
+            when <- self.output("log", "-1", "--format=%cd", "--date=format:%Y-%m-%d", hash)
+        var who: str = committer
         who = s/[\x00-\x2C\x2F\x3A-\x40\x5B-\x5E\x60\x7B-\x7F]/_/g
-        let when: str = self.output("log", "-1", "--format=%cd", "--date=format:%Y-%m-%d", hash)
         (tmp / side).mkdir()
         return tmp / side / f"{when}-{who}-{base}"
 
-def review(repo: Repo, abs: Path, rel: Path, tmp: Path) -> int:
-    """Open the comparisons one after another; the exit status."""
-    let revs: []Rev_T = repo.history(rel)
+def review(repo: Repo, abs: Path, rel: Path, tmp: Path) -> int | !ShellFailure_T:
+    """Open the comparisons one after another; the exit status, or the git
+    command that failed."""
+    do:
+        revs <- repo.history(rel)
     let base: str = rel.name
 
     # 1) Uncommitted changes vs HEAD, if any.
-    if repo.succeeds("rev-parse", "--verify", "-q", "HEAD") and not repo.succeeds("diff", "--quiet", "HEAD", "--", rel):
+    if repo.succeeds("rev-parse", "--verify", "-q", "HEAD") and not repo.succeeds("diff", "--quiet", "HEAD", "--", str(rel)):
         let head: Rev_T = Rev_T(hash="HEAD", path=rel)
         let head_file: Path = tmp / f"head-{base}"
-        repo.save_at(head, head_file)
-        let head_label: str = "HEAD " + repo.output("rev-parse", "--short", "HEAD")
+        do:
+            repo.save_at(head, head_file)
+            short <- repo.output("rev-parse", "--short", "HEAD")
+        let head_label: str = "HEAD " + short
         print "Uncommitted changes: opening working copy vs HEAD"
         shell: meld --label "working copy" --label {!head_label} {!abs} {!head_file}
         if not ask("Continue?", "Continue to committed history?"):
@@ -125,18 +136,20 @@ def review(repo: Repo, abs: Path, rel: Path, tmp: Path) -> int:
     for i in 0..<total:
         let new: Rev_T = revs[i]
         let old: Rev_T = revs[i + 1]
-        let new_desc: str = repo.describe(new.hash)
-        let old_desc: str = repo.describe(old.hash)
+        do:
+            new_desc <- repo.describe(new.hash)
+            old_desc <- repo.describe(old.hash)
 
         if i > 0:
             if not ask("Continue?", f"Comparison {i + 1} of {total}\n\nnew: {new_desc}\nold: {old_desc}"):
                 print f"Stopped by user after {i} comparison(s)."
                 return 0
 
-        let new_file: Path = repo.tmpname(new.hash, "new", tmp, base)
-        let old_file: Path = repo.tmpname(old.hash, "old", tmp, base)
-        repo.save_at(new, new_file)
-        repo.save_at(old, old_file)
+        do:
+            new_file <- repo.tmpname(new.hash, "new", tmp, base)
+            old_file <- repo.tmpname(old.hash, "old", tmp, base)
+            repo.save_at(new, new_file)
+            repo.save_at(old, old_file)
 
         if new.path != old.path:
             print f"  (renamed: {old.path} -> {new.path})"
@@ -178,7 +191,12 @@ let (tmp_text, _) = shell: mktemp -d
 let tmp: Path = Path(tmp_text.strip())
 var status: int = 1
 try:
-    status = review(Repo(root), abs, rel, tmp)
+    let outcome: int | !ShellFailure_T = review(Repo(root), abs, rel, tmp)
+    case outcome:
+        when ShellFailure_T:
+            msg_error(f"`{outcome.command}` exited {outcome.code}: {outcome.stderr.strip()}")
+        when int:
+            status = outcome
 finally:
     shell: rm -rf {!tmp}
 quit(status)
