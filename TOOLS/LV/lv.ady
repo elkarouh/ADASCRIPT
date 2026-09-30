@@ -107,7 +107,7 @@ def main():
             f"{colored_viewname(R.view).alignLeft(64)} {colored_baseline(R.baseline).alignLeft(105)} "
             f"{colored_env_id(R.env_id).alignLeft(40)} {colored_status(R.state).alignLeft(36)}")
         if R.state != "MERGED":
-            colored_line += f" {(R.comment | bold | fg_black | bg_white).alignLeft(35)}"
+            colored_line += f" {(R.comment.strip() | bold | fg_black | bg_white).alignLeft(35)}"
         print(colored_line)
         previous_state = R.state
         first = False
