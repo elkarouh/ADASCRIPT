@@ -49,7 +49,7 @@ def main() -> int:
         """A deterministic work directory, spaces in the names included."""
         let d: Path = Path(${TMPDIR:-"/tmp"}) / "ady_janitor"
         shell: rm -rf {!d}
-        d.mkdir()
+        assert d.mkdir() is None
         writeFile(str(d / "app.log"),            "x" * 200)
         writeFile(str(d / "quiet service.log"),  "x" * 300)   # a space, on purpose
         writeFile(str(d / "tiny.log"),           "x" * 3)
