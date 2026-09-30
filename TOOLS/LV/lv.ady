@@ -1,18 +1,17 @@
 #! /usr/bin/env ady2nim
 nimport algorithm, sequtils
 nimport ansi                 # Style, and the colours and effects to pipe a string through
-type State = enum:
-    ACTIVE        # being worked on
-    OPS_BUG       # blocked by an ops/infra bug
-    BUSY          # build/test running
-    DONE          # work finished, awaiting review
-    BLOCKED       # blocked by a dependency
-    ON_HOLD       # paused
-    IDLE          # no activity
-    BACKGROUND    # low-priority background task
-    INTEGRATED    # merged into the integration branch
-    MERGED        # merged to mainline
-    REJECTED      # change rejected
+# The order rows are grouped in. A state not listed here -- BUSY, which only
+# the status column carries, a typo, none at all -- sorts after every listed
+# one, and is shown as it was written.
+let STATES: []str = ["ACTIVE", "READY", "OPS-BUG", "DONE", "BLOCKED", "ON-HOLD", "IDLE",
+                     "BACKGROUND", "INTEGRATED", "MERGED", "REJECTED"]
+
+def state_rank(state: str) -> int:
+    for i in 0..<len(STATES):
+        if STATES[i] == state:
+            return i
+    return len(STATES)
 
 def colored_viewname(view_name: str) -> str:
     let parts: []str = view_name.split('.')
@@ -38,19 +37,19 @@ def colored_env_id(env_id: str) -> str:
     else:
         return f"{parts[0]}.{parts[1] | bold | fg_blue | bg_white}.{parts[2]}"
 
-def colored_status(state: State) -> str:
+def colored_status(state: str) -> str:
     case state:
-        when OPS_BUG: state'Image | bold | blink | fg_black | bg_white
-        when BUSY:    state'Image | bold | fg_black | bg_yellow
-        when others:  state'Image | bold | fg_yellow | bg_green
+        when "OPS-BUG": state | bold | blink | fg_black | bg_white
+        when "BUSY":    state | bold | fg_black | bg_yellow
+        when others:    state | bold | fg_yellow | bg_green
 
 class Cls_View_Line:
     var view: str
     var baseline: str
     var env_id: str
-    var state: State
+    var state: str
     var comment: str
-    def __init__(self, view: str, baseline: str, env_id: str, state: State, comment: str):
+    def __init__(self, view: str, baseline: str, env_id: str, state: str, comment: str):
         self.view = view
         self.baseline = baseline
         self.env_id = env_id
@@ -59,12 +58,6 @@ class Cls_View_Line:
 
 def get_lines() -> []str:
     shellLines: Clsworkspace -user $USER
-
-def parse_state(s: str) -> State:
-    try:
-        State(s.replace("-", "_"))
-    except:
-        ACTIVE
 
 def main():
     let lines: []str = get_lines()
@@ -85,27 +78,27 @@ def main():
         let env_id: str = fields[2]
         let status: str = fields[4]
 
-        var state: State = ACTIVE
+        var state: str = ""
         var comment: str = ""
 
         var comment_path: Path = Path("/auto/local_build/dhws149/disk1/ekhassan/cm") / view_name / "NM/README.txt"
         if -f comment_path:
             let (comment_line, _) = shell: head -1 {comment_path}
             let cparts: []str = comment_line.strip().split(" ", 1)
-            state = parse_state(cparts[0])
+            state = cparts[0]
             if len(cparts) > 1:
                 comment = cparts[1]
 
         if status != "---":
-            state = parse_state(status)
+            state = status
         if view_name.endswith("build_eld_only_t"):
             continue
 
         view_lines.append(Cls_View_Line(view=view_name, baseline=baseline, env_id=env_id, state=state, comment=comment))
 
-    view_lines = view_lines.sortedByIt((ord(it.state), it.view))
+    view_lines = view_lines.sortedByIt((state_rank(it.state), it.view))
 
-    var previous_state: State = ACTIVE
+    var previous_state: str = ""
     var first: bool = True
     for R in view_lines:
         if not first and R.state != previous_state:
@@ -113,7 +106,7 @@ def main():
         var colored_line: str = (
             f"{colored_viewname(R.view).alignLeft(64)} {colored_baseline(R.baseline).alignLeft(105)} "
             f"{colored_env_id(R.env_id).alignLeft(40)} {colored_status(R.state).alignLeft(36)}")
-        if R.state != MERGED:
+        if R.state != "MERGED":
             colored_line += f" {(R.comment | bold | fg_black | bg_white).alignLeft(35)}"
         print(colored_line)
         previous_state = R.state
