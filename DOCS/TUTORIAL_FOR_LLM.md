@@ -1135,6 +1135,13 @@ if "node_A" in visited:
 
 The Nim backend uses bitset (`set[T]`) for ordinal types (bool, char, byte, small int, enum) and `HashSet` otherwise.
 
+Python's operators work on both kinds: `a & b` (intersection), `a | b`
+(union), `a ^ b` (symmetric difference), `a - b` (difference), and the
+augmented forms `seen |= more`. Nim spells them `*`, `+`, `-+-` and `-`; the
+emitter picks from the operand types, so the same source builds on both
+backends. On integers the same signs stay bitwise. The snippets are in
+`EXAMPLES/test_set_operators.ady`.
+
 ---
 
 ## Comprehensions

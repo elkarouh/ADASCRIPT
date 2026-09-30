@@ -406,6 +406,16 @@ def to_nim(self):
     )
     value = self.nodes[2].to_nim()
     nim_op, expand = _AUGOP_TO_NIM.get(py_op, (py_op, False))
+    # `seen |= more`, `&=`, `^=` and `-=` on a set: Nim spells the operators
+    # `+`, `*`, `-+-` and `-` (see binop_to_nim), and has no `or=` for them
+    if py_op in ("&=", "|=", "^=", "-="):
+        from hek_nim_expr import _set_kind, _SET_OPS
+        _sk = _set_kind(target)
+        if _sk:
+            _o = py_op[0]
+            if _o == "^" and _sk == "ordinal":
+                return f"{target} = (({target} + {value}) - ({target} * {value}))"
+            return f"{target} = {target} {_SET_OPS[_o]} {value}"
     # `v += 10.0` on a distinct v: the literal is of v's type
     from hek_nim_expr import _distinct_type_of
     _dt = _distinct_type_of(target)

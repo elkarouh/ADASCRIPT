@@ -536,11 +536,9 @@ one. It went unseen because the shared tests print enums and strings.
   `if if paramCount() >= 1: paramStr(1) else: "" == "find":`, which Nim does
   not parse; bind it first, `let mode: str = $1`. The `$n` expansion needs
   parentheses wherever it is an operand.
-- `a & b` on two `{}str` hash sets becomes Nim's `and`; `a.intersection(b)`
-  is right on both backends. Set union and difference have the same trouble
-  (`|`, `-`), which the docs show only for ordinal sets.
 - `f"{x:7.0f}"` prints `5.` on Nim -- its format spec keeps the dot at zero
   precision -- and `5` on Python. `{int(x):7}` is the same on both.
 - `for w in f(path): ... int(w)` on Nim leaves `w` untyped, so `int(w)` on a
-  `str` is emitted as-is and fails; a typed `let words: []str = f(path)`
-  first avoids it.
+  `str` is emitted as-is and fails -- in a comprehension too,
+  `[int(w) for w in f(path)]`; a typed `let words: []str = f(path)` first
+  avoids it, and the routine's declared return type is all the emitter needs.

@@ -25,11 +25,8 @@ def words_of(path: str) -> []str:
     return readFile(path).split()
 
 def ints_of(path: str) -> []int:
-    var out: []int = []
     let words: []str = words_of(path)
-    for w in words:
-        out.append(int(w))
-    return out
+    return [int(w) for w in words]
 
 def find(path: str, word: str) -> None:
     let data:  str   = readFile(path)
@@ -53,7 +50,7 @@ def common(path_a: str, path_b: str) -> None:
     let ys: []int = ints_of(path_b)
     for it in 0..<REPEATS:                  # the set intersection
         let start: float = time.time()
-        let n: int = len(a.intersection(b))
+        let n: int = len(a & b)
         print f"and.set   iter{it} {ms_since(start):7.1f} ms  common={n} |A|={len(a)} |B|={len(b)}"
     for it in 0..<LOOP_REPEATS:             # the explicit two-pointer walk
         let start: float = time.time()

@@ -1,0 +1,91 @@
+#!/usr/bin/env ady2nim
+"""Test: set operators -- Python's `&`, `|`, `^` and `-`, on both kinds of set.
+
+A `{}T` over strings, ints or other non-ordinal types is a hash set; over
+an enum it is an ordinal bitset. Adascript keeps Python's notation for both:
+`a & b` intersection, `a | b` union, `a ^ b` symmetric difference, `a - b`
+difference, and the augmented forms. Nim spells them `*`, `+`, `-+-` and
+`-`, and its `and`/`or`/`xor` are not defined on a set: the emitter chooses
+from the operand types, so a program does not change between backends. On
+integers the same signs stay bitwise. The output is compared between the
+backends.
+"""
+
+type Color_T is enum RED, GREEN, BLUE
+
+def show(s: {}str) -> str:
+    var items: []str = []
+    for w in s:
+        items.append(w)
+    return " ".join(sorted(items))
+
+def show_colors(s: {}Color_T) -> str:
+    var out: []str = []
+    for col in [RED, GREEN, BLUE]:      # in declaration order, not a set's
+        if col in s:
+            out.append(col'Image)
+    return " ".join(out)
+
+def evens(limit: int) -> {}int:
+    return {n for n in 0..<limit if n % 2 == 0}
+
+class Seen:
+    var words: {}str
+
+    def __init__(self):
+        self.words = {"a"}
+
+    def merged(self, more: {}str) -> {}str:
+        return self.words | more
+
+# ─── test 1: hash sets ──────────────────────────────────────────────────────
+
+let a: {}str = {"x", "y", "z"}
+let b: {}str = {"y", "z", "w"}
+let c: {}str = {"z", "q"}
+print show(a & b)
+print show(a | b)
+print show(a - b)
+print show(a ^ b)
+print show(a | b & c)                # & binds tighter than |
+print show((a | b) & c)
+print show(a - b | c)
+print show(a ^ b | c)
+print show(a | b ^ c)
+print "test1 OK"
+
+# ─── test 2: ordinal sets ───────────────────────────────────────────────────
+
+let e1: {}Color_T = {RED, GREEN}
+let e2: {}Color_T = {GREEN, BLUE}
+print show_colors(e1 & e2)
+print show_colors(e1 | e2)
+print show_colors(e1 - e2)
+print show_colors(e1 ^ e2)
+print "test2 OK"
+
+# ─── test 3: augmented forms ────────────────────────────────────────────────
+
+var seen: {}str = {"q"}
+seen |= a
+print show(seen)
+seen &= b
+print show(seen)
+seen -= c
+print show(seen)
+seen ^= c
+print show(seen)
+var picks: {}Color_T = {RED}
+picks |= e2
+picks ^= e1
+print show_colors(picks)
+print "test3 OK"
+
+# ─── test 4: sets from calls and fields, ints ───────────────────────────────
+
+print len(evens(10) & evens(6))
+print len(evens(10) - evens(6))
+let s: Seen = Seen()
+print show(s.merged({"b"}))
+print 12 & 10, 12 | 10, 12 ^ 10
+print "test4 OK"

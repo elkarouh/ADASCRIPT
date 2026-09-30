@@ -1419,6 +1419,41 @@ def _is_literal_arg(arg):
     return _is_nim_literal(arg)
 
 
+_SET_OPS = {"&": "*", "|": "+", "^": "-+-", "-": "-"}
+
+
+def _set_kind(expr):
+    """`"hash"` if EXPR, emitted Nim, is a `HashSet[T]`, `"ordinal"` if it is
+    a `set[T]`, else None. Read from what the symbol table and the
+    expression's own spelling say; None when it cannot be told, so that only
+    what is known to be a set is given a set's operators."""
+    e = expr.strip()
+    while e.startswith("(") and e.endswith(")") and _balanced(e[1:-1]):
+        e = e[1:-1].strip()
+    if (e.startswith("toHashSet(") or e.startswith("initHashSet")
+            or e.endswith(".toHashSet") or e.endswith(".toHashSet()")):
+        return "hash"
+    if e.startswith("{") and e.endswith("}"):
+        return "ordinal"
+    t = _nim_expr_type(e) or ""
+    if not t:
+        # a call of a routine with a declared return type: `evens(10)`
+        import re as _re_sk
+        _cm = _re_sk.match(r"^([A-Za-z_]\w*)\(.*\)$", e)
+        if _cm and _balanced(e[len(_cm.group(1)) + 1:-1]):
+            t = _proc_ret_nim(_cm.group(1)) or ""
+    alias = ParserState.symbol_table.lookup(t) if t else None
+    if isinstance(alias, dict) and alias.get("kind") == "type":
+        t = alias.get("type") or t
+    if t.startswith("HashSet["):
+        return "hash"
+    return "ordinal" if t.startswith("set[") else None
+
+
+def _is_set_expr(expr):
+    return _set_kind(expr) is not None
+
+
 def binop_to_nim(self, prec=None, my_prec=None):
     """Generic to_nim for left-associative binary operators.
     Parallel to binop_to_py but calls to_nim() recursively and translates operators."""
@@ -1455,6 +1490,21 @@ def binop_to_nim(self, prec=None, my_prec=None):
             py_op = _op_string(seq.nodes[0])
             nim_op = _PY_OP_TO_NIM.get(py_op, py_op)
             right = seq.nodes[1].to_nim(right_prec)
+            # Python's set operators, which Adascript keeps: `a & b`, `a | b`,
+            # `a ^ b` and `a - b`. Nim spells them `*`, `+`, `-+-` and `-`,
+            # and its `and`/`or`/`xor` are not defined on a set at all --
+            # `&` used to come out as `and`, then as `a.len > 0 and ...`.
+            # Each result is parenthesised: Nim orders the operators
+            # differently, and a set operation is an operand of the next.
+            if py_op in _SET_OPS:
+                _sk = _set_kind(result) or _set_kind(right)
+                if _sk:
+                    if py_op == "^" and _sk == "ordinal":
+                        # `set[T]` has no `-+-`: the union less the common part
+                        result = f"(({result} + {right}) - ({result} * {right}))"
+                    else:
+                        result = f"({result} {_SET_OPS[py_op]} {right})"
+                    continue
             # `+`, `-` and `mod` stay in the unit of their operands, and a
             # literal beside one is of it, as a literal given to a `let v:
             # Velocity_T` is: `v + 2.0` is `v + Velocity_T(2.0)`. `*` and `/`

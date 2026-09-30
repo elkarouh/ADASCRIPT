@@ -108,6 +108,13 @@ if node in visited:
 visited.add(node)
 ```
 
+Python's operators are the set algebra, for hash sets and ordinal sets
+alike: `a & b` intersection, `a | b` union, `a ^ b` symmetric difference,
+`a - b` difference, and `seen |= more` and its kin. Nim spells them `*`,
+`+`, `-+-` and `-` and has no `and` on a set; the emitter chooses from the
+operand types, and on integers the same signs stay bitwise. See
+`EXAMPLES/test_set_operators.ady`.
+
 `spell.ady` (Norvig's corrector) is set-driven end to end. Set
 comprehensions filter candidate corrections against the corpus:
 
