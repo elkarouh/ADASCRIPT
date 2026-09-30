@@ -284,7 +284,7 @@ let MISSING_CLOSE: str = "missing )"
 let STRAY_CLOSE:   str = "unexpected )"
 
 # The prefix characters and the form each one abbreviates: 'x is (quote x).
-let ABBREVIATIONS: {str}str = {
+let ABBREVIATIONS: {Token_T}str = {
     "'":  "quote",
     "`":  "quasiquote",
     ",":  "unquote",
