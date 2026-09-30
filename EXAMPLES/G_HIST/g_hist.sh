@@ -86,16 +86,22 @@ show_at() {
 
 describe() { git_ log -1 --format='%h %ad %cn: %s' --date=short "$1"; }
 
-# Temp file name shown in meld's pane headers: <date>-<committer>-<filename>
+# Temp file name shown in meld's pane headers: [<tags>-]<date>-<committer>-<filename>
+# (the commit's tags, if any, joined by +).
 # $2 is a subdirectory ("new"/"old") so both files can never collide, even if
 # two commits share the same date and committer.
 tmpname() {
-  local rev=$1 side=$2 who when
+  local rev=$1 side=$2 who when tag prefix=
   who=$(git_ log -1 --format='%cn' "$rev")
   who=${who//[^[:alnum:]._-]/_}
+  while IFS= read -r tag; do
+    [[ -n $tag ]] || continue
+    prefix+="${prefix:+"+"}${tag//[^[:alnum:]._-]/_}"
+  done < <(git_ tag --points-at "$rev")
+  [[ -z $prefix ]] || prefix+=-
   when=$(git_ log -1 --format='%cd' --date=format:%Y-%m-%d "$rev")
   mkdir -p "$tmpdir/$side"
-  echo "$tmpdir/$side/${when}-${who}-$base"
+  echo "$tmpdir/$side/${prefix}${when}-${who}-$base"
 }
 
 # 1) Uncommitted changes vs HEAD, if any.
