@@ -51,9 +51,6 @@ let bg_cyan: Style = Style(46)
 let bg_white: Style = Style(47)
 let bg_default: Style = Style(49)
 
-def align(length: Positive, s: str) -> str:
-    return s.alignLeft(length)
-
 def colored_viewname(view_name: str) -> str:
     let parts: []str = view_name.split('.')
     let login_name: str = parts[0]
@@ -161,10 +158,10 @@ if __name__ == "__main__":
         if not first and R.state != previous_state:
             print("-" * 120)
         var colored_line: str = (
-            f"{align(64, colored_viewname(R.view))} {align(98, colored_baseline(R.baseline))} "
-            f"{align(40, colored_env_id(R.env_id))} {align(36, colored_status(R.state))}")
+            f"{colored_viewname(R.view).alignLeft(64)} {colored_baseline(R.baseline).alignLeft(98)} "
+            f"{colored_env_id(R.env_id).alignLeft(40)} {colored_status(R.state).alignLeft(36)}")
         if R.state != MERGED:
-            colored_line += f" {align(35, colored_comment(R.comment))}"
+            colored_line += f" {colored_comment(R.comment).alignLeft(35)}"
         print(colored_line)
         previous_state = R.state
         first = False
