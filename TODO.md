@@ -16,6 +16,38 @@ history of this file if the reasoning behind one of them is ever wanted.
       Python-only, and keep their refusal. Open questions: a decorator on a
       method (self), one taking arguments (`@retry(3)`), and several
       stacked. Test on both backends, as test_union does.
+- [ ] stateless decorators, by rewrite -- the narrow, closure-free way to the
+      entry above, and enough for `TOOLS/LV/lv.py`, whose `@align(64)` puts a
+      column's width next to the function that produces it (`lv.ady` has
+      to pad at the call site instead: `colored_viewname(v).alignLeft(64)`).
+      A wrapper is an ordinary function handed the function it wraps:
+
+          @decorator
+          def aligned(width: Positive, f: (str) -> str, s: str) -> str:
+              return f(s).alignLeft(width)
+
+          @aligned(64)
+          def colored_viewname(view_name: str) -> str: ...
+
+      Before the parse, in both backends (as `expand_variant_literals`
+      does, in `ady_stmt.py`), the decorated `def` becomes the original under
+      a hidden name, `colored_viewname__body`, plus a forwarding `def` that
+      returns `aligned(64, colored_viewname__body, view_name)`. Stacked
+      decorators apply bottom-up; a recursive call inside the body goes
+      through the decorated name, as in Python. Checked at transpile time,
+      each a one-line `SyntaxError`: the wrapper's `f` parameter has the
+      decorated function's type; the parameters after `f` are the decorated
+      function's, in order; the leading ones are the decorator's arguments;
+      a decorator not marked `@decorator` keeps today's refusal. No
+      closures, so nothing waits on `def` returning a `lambda`.
+      Limits, by design: no per-function state (`@cached`, a call counter
+      need a class or a global), one signature per wrapper (a wrapper for
+      any signature needs generics, which are explicit), top-level `def`s
+      only to begin with. Line numbers in errors shift by the added lines,
+      as with variant literals. About a day, mostly tests: one file compared
+      between the backends, three or four refusals, docs. Worth building
+      when a second wrapper is reused across several functions; `lv.py`
+      alone is one use, and the call-site form is as short.
 - [ ] `+` of two calls returning lists does not build on Nim. `evens(4) +
       odds(4)`, each `-> []int`, is emitted as it is, and nim has no `+`
       for seqs ("type mismatch ... seq[int]"); the same on two typed
