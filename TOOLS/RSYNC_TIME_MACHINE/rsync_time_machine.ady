@@ -811,7 +811,8 @@ def backup(
 
     if not -d log_dir:
         log(f"Creating log folder in '{log_dir}'...", INFO)
-        log_dir.mkdir()   # native mkdir -p, log_dir is always local
+        do:
+            mkdir_p(log_dir)     # log_dir is always local
 
     do:
         handle_still_running_or_failed_or_interrupted_backup(

@@ -326,7 +326,7 @@ let log:  Path = root / "ady_shell_doc" / "app.log"
 assert str(log) == "/tmp/ady_shell_doc/app.log"
 assert log.name == "app.log"
 assert str(log.parent) == "/tmp/ady_shell_doc"
-log.parent.mkdir()                  # mkdir -p: parents made, existing is fine
+assert log.parent.mkdir() is None   # mkdir -p: parents made, existing is fine
 ```
 
 `Path` is a string that also joins, so it goes wherever a `str` goes — a file
@@ -751,7 +751,7 @@ that have to be updated in step by hand.
 | `timeout 30 cmd` | `run(argv, timeout = 30000)` |
 | `cmd <<EOF … EOF` | `shell(stdin = text): cmd` |
 | `"$dir/$name"` | `dir / name`, with `dir: Path` |
-| `mkdir -p "$d"` | `d.mkdir()` |
+| `mkdir -p "$d"` | `d.mkdir()` -- a `None \| !PathFailure_T`: take it (`assert d.mkdir() is None`, `if r is PathFailure_T:`, a `do:` step) |
 | `dirname`, `basename` | `p.parent`, `p.name` |
 | `${p#"$root"/}`, `realpath --relative-to` | `p.relative_to(root)` -- a `Path \| !PathFailure_T`: the failure when p is not below root |
 | `[ -f "$p" ]`, `[ -d "$p" ]` | `-f p`, `-d p` — unchanged |

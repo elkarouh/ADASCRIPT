@@ -154,7 +154,7 @@ def main() -> int:
     def build_fixture() -> Path:
         let d: Path = Path(${TMPDIR:-"/tmp"}) / "ady_config_check"
         shell: rm -rf {!d}
-        (d / "logs").mkdir()
+        assert (d / "logs").mkdir() is None
         writeFile(str(d / "app.conf"), f"""# a configuration with one of everything
 verbose = yes
 workers = 200

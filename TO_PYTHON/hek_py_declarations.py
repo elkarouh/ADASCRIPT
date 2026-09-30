@@ -216,8 +216,12 @@ class Path(str):
         return _pathlib.PurePath(self).name
 
     def mkdir(self):
-        \"\"\"Create this directory and any missing parents (mkdir -p).\"\"\"
-        os.makedirs(self, exist_ok=True)
+        \"\"\"Create this directory and any missing parents (mkdir -p); None,
+        or a PathFailure_T when the system refuses.\"\"\"
+        try:
+            os.makedirs(self, exist_ok=True)
+        except OSError as e:
+            return PathFailure_T(op="mkdir", path=str(self), reason=e.strerror or str(e))
 
     def resolve(self):
         \"\"\"The absolute path, with every symlink along it expanded.\"\"\"
@@ -229,15 +233,17 @@ class Path(str):
         try:
             return Path(_pathlib.PurePath(self).relative_to(str(base)))
         except ValueError:
-            return PathFailure_T(path=str(self), base=str(base))
+            return PathFailure_T(op="relative_to", path=str(self), base=str(base))
 
 
 @_dataclass
 class PathFailure_T:
-    \"\"\"The built-in failure of a Path operation: the path asked about and
-    the base it is not below.\"\"\"
+    \"\"\"The built-in failure of a Path operation: which (`op`), on which
+    path, with which base (relative_to only), and why (`reason`, a mkdir's).\"\"\"
+    op: str = ""
     path: str = ""
-    base: str = ""\
+    base: str = ""
+    reason: str = ""\
 """
 # `parent` and `name` go through PurePath rather than os.path.dirname /
 # os.path.basename because those two disagree with Nim on a trailing slash:

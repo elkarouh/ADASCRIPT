@@ -983,10 +983,10 @@ if __name__ == "__main__":
     var here: Baseline = Baseline("30.0.0.133")
     here.dir = tmp / "TACT_CONFIG.30.0.0.133"
     for name in ["build_G!31.IP.L8", "build_G!31.OP.L8", "build_G!92.IP.L8", "build_default_Linux"]:
-        (here.dir / name / "saved_logs").mkdir()
+        assert (here.dir / name / "saved_logs").mkdir() is None
     # the baseline before it: the nearest there, 132 never made; the one
     # just before when none is
-    (tmp / "TACT_CONFIG.30.0.0.131").mkdir()
+    assert (tmp / "TACT_CONFIG.30.0.0.131").mkdir() is None
     let earlier: Baseline = here.previous()
     assert earlier.nr == "30.0.0.131" and earlier.dir == tmp / "TACT_CONFIG.30.0.0.131"
     assert earlier.previous().nr == "30.0.0.130"
@@ -998,7 +998,7 @@ if __name__ == "__main__":
     let bang: BuildName_T = "build_" + build_env_id($CM_ENV_ID, IP)
     let dotted: BuildName_T = bang.replace("!", ".")
     let dotted_logs: Path = earlier.dir / dotted / "saved_logs" / "tacot_corico_2026.09.07_20.19.23" / "tact" / "30.0.0.131" / "data_files"
-    dotted_logs.mkdir()
+    assert dotted_logs.mkdir() is None
     run(["cp", str(samples / "check_run_test_programs.log"), str(dotted_logs)])
     assert earlier.build_name(IP) == dotted and here.build_name(IP) == bang
     assert earlier.saved_logs_dir(IP) == earlier.dir / dotted / "saved_logs"
@@ -1009,7 +1009,7 @@ if __name__ == "__main__":
     # here: the newest run's -- each once
     let ip_build: Build = here.build(IP)
     let run_logs: Path = ip_build.saved_logs() / "tacot_corico_2026.09.10_04.49.14" / "work" / "logging-in" / "LOGS_others"
-    run_logs.mkdir()
+    assert run_logs.mkdir() is None
     writeFile(run_logs / "tacot1_out_01", "compiling ...\n" +
         "flightplanfiling_routeservices_hash.adb:11:04: (style) bad indentation [-gnaty0]\n" +
         "flightplanfiling_routeservices_hash.ads:2:04: (style) bad indentation [-gnaty0]\n")
@@ -1022,7 +1022,7 @@ if __name__ == "__main__":
         "flightplanfiling_routeservices_hash.ads:2:04: (style) bad indentation [-gnaty0]"]
     # the IP build has a Tlog, of 'in' for the normal pass
     let ip_tlog: Path = here.dir / "build_G!31.IP.L8" / "saved_logs" / "tacot_corico.LATEST" / "TACT_REGRESS_LOGS" / "LATEST" / "Tlog-in.log"
-    ip_tlog.parent.mkdir()
+    assert ip_tlog.parent.mkdir() is None
     run(["cp", str(samples / "Tlog-in.log"), str(ip_tlog)])
     here.find_builds()
     assert [b.name for b in here.builds] == ["build_G!31.IP.L8", "build_G!31.OP.L8"]

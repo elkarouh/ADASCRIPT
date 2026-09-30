@@ -103,12 +103,6 @@ proc name*(p: Path): string =
   if result == ".":
     result = ""
 
-proc mkdir*(p: Path) =
-  ## Create this directory and any missing parents (mkdir -p). createDir is
-  ## already both recursive and idempotent, which is the contract the Python
-  ## backend gets from os.makedirs(exist_ok = True).
-  createDir(p)
-
 proc resolve*(p: Path): Path =
   ## The absolute path, with every symlink along it expanded.
   ## expandFilename does this in one call but raises when the path does not
@@ -163,9 +157,37 @@ proc relative_to*(p: Path, base: Path): Result[Path, PathFailure_T] =
   let a = parts(p.string)
   let b = parts(base.string)
   if p.isAbsolute != base.isAbsolute or b.len > a.len or a[0 ..< b.len] != b:
-    return Result[Path, PathFailure_T].err(PathFailure_T(path: p.string, base: base.string))
+    return Result[Path, PathFailure_T].err(PathFailure_T(op: "relative_to", path: p.string, base: base.string))
   Result[Path, PathFailure_T].ok(Path(if a.len == b.len: "." else: a[b.len .. ^1].join("/")))\
 """
+
+
+_PATH_MKDIR = """\
+proc mkdir*(p: Path): Result[void, PathFailure_T] =
+  ## Create this directory and any missing parents (mkdir -p). createDir is
+  ## already both recursive and idempotent, which is the contract the Python
+  ## backend gets from os.makedirs(exist_ok = True). What the system refuses
+  ## -- a permission, a file where the directory should be -- is a
+  ## PathFailure_T, not an exception.
+  try:
+    createDir(p)
+    Result[void, PathFailure_T].ok()
+  except CatchableError as e:   # OSError for one refusal, IOError for another
+    Result[void, PathFailure_T].err(PathFailure_T(op: "mkdir", path: p.string, reason: e.msg))\
+"""
+
+
+def _ensure_path_mkdir():
+    """Add Path.mkdir the first time it is called: a proc returning a
+    Result, so it needs stdlib.nim, and createDir, which is in std/dirs."""
+    from hek_parsec import ParserState
+    _ensure_path_helper()
+    ParserState.nim_imports.add("stdlib")
+    ParserState.nim_imports.add("std/dirs")
+    decls = getattr(ParserState, "nim_top_decls", [])
+    if not any("proc mkdir*" in d for d in decls):
+        decls.append(_PATH_MKDIR)
+        ParserState.nim_top_decls = decls
 
 
 def _ensure_path_relative_to():

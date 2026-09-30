@@ -279,7 +279,7 @@ the moment it enters the program, and is joined with the `/` operator:
 
 ```python
 let work: Path = Path(root) / sub
-work.mkdir()
+assert work.mkdir() is None
 if -e (work / ".git"):
     print f"{work.name} under {work.parent}"
 

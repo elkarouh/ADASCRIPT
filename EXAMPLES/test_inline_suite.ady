@@ -127,8 +127,8 @@ assert Path("..").name == ".."
 let made = shell: mktemp -d -t adascript_path_test.XXXXXX
 let sandbox: Path = Path(made.output.strip())
 let deep: Path = sandbox / "x" / "y"
-deep.mkdir()
-deep.mkdir()
+assert deep.mkdir() is None
+assert deep.mkdir() is None
 assert (-d deep)
 
 # resolve() expands every symlink along the path. It follows Python's

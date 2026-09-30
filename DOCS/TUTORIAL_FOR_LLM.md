@@ -1506,7 +1506,7 @@ for s in Stage_T'First .. Stage_T'Last:
 | A file's lines, by its `Path` | `for line in p.lines:` -- opens, reads and closes the file; prefer it to `readFile(p).split("\n")` |
 | Character literal | `let c: char = '\t'`; narrowed in every position a char is declared (let/var, assignment, return, implicit return, `[]char` element, `{char}V` key, `{K}char` value, record field, argument) |
 | Path split | `p.parent` -> Path, `p.name` -> str (pathlib rules, not os.path) |
-| Path mkdir | `p.mkdir()` = mkdir -p (parents, exist_ok) |
+| Path mkdir | `p.mkdir()` = mkdir -p (parents, exist_ok) -> `None \| !PathFailure_T` (`.op`, `.path`, `.reason`): take it -- `assert p.mkdir() is None`, `if r is PathFailure_T:`, or a `do:` step; a bare `p.mkdir()` is refused like any dropped failure |
 | Path resolve | `p.resolve()` = realpath (absolute, symlinks expanded) |
 | Path below a directory | `let r: Path \| !PathFailure_T = p.relative_to(base)` -- the Path (`"."` for the same path), or the built-in `PathFailure_T` (`.path`, `.base`) when p is not below base; pathlib's rules, `..` not resolved. `r is PathFailure_T`, `case r:`, or a `do:` step, as with `ShellFailure_T` |
 | Wait for one / many jobs | `j.wait()` / `waitAll(jobs)` |

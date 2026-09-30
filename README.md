@@ -2354,7 +2354,7 @@ Taking one apart is the other half:
 let p: Path = Path("/etc/nginx/nginx.conf")
 p.parent        # Path("/etc/nginx") — the directory holding it
 p.name          # "nginx.conf" — the last component, a plain str
-(p.parent / "sites").mkdir()   # mkdir -p: parents made, already-there is fine
+assert (p.parent / "sites").mkdir() is None   # mkdir -p; a None | !PathFailure_T
 ```
 
 `parent` and `name` follow `pathlib`'s splitting rules, which is what Nim's
@@ -2373,7 +2373,10 @@ Python does.
 `mkdir()` is `mkdir -p` on both backends — it creates missing parents and
 succeeds on a directory that already exists. That is Nim's `createDir` and
 Python's `os.makedirs(..., exist_ok = true)`, not `pathlib.mkdir()`'s
-stricter default.
+stricter default. It can still fail — a permission, a file where the
+directory should be — and says so as a `None | !PathFailure_T` rather than
+raising: take it with `assert p.mkdir() is None`, `if r is PathFailure_T:`
+(`r.op`, `r.path`, `r.reason`), or a `do:` step.
 
 One wrinkle: a file test takes a primary, so a join inside one needs
 parentheses — `-f (gitdir / "HEAD")`.

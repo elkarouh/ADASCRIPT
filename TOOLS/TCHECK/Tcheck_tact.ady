@@ -449,7 +449,9 @@ class Report:
             let tool_rc: int = shell: {!tool} {!prev_report} {!cur_report} &
         # made here as well: the scans only make it when they find logs
         let reports: Path = Path("/tmp/reports")
-        reports.mkdir()
+        let made: None | !PathFailure_T = reports.mkdir()
+        if made is PathFailure_T:
+            die(f"could not create {made.path}: {made.reason}")
         let failed_file: Path = reports / "failed_tests"
         let failed_output: str = self.cur.show_failed_tests(btype, subtype)
         writeFile(failed_file, failed_output)

@@ -66,7 +66,7 @@
 | Path join | `let p: Path = root / "sub" / name` — a str that also joins |
 | Path ↔ str | `Path(s)` to make one, `str(p)` where a plain str is needed |
 | Path split | `p.parent` → Path, `p.name` → str (pathlib's rules, not `os.path`'s) |
-| Path mkdir | `p.mkdir()` — `mkdir -p`: parents made, already-there is fine |
+| Path mkdir | `p.mkdir()` — `mkdir -p`: parents made, already-there is fine; a `None \| !PathFailure_T` |
 | Path resolve | `p.resolve()` — absolute, every symlink expanded |
 | Job handle | `j.wait([check])`, `j.running()`, `j.kill()`, `j.pid` |
 | Wait for many at once | `waitAll(jobs)` → `[]RunResult` (drains every pipe) |

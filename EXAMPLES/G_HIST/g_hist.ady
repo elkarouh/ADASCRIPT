@@ -94,8 +94,8 @@ class Repo:
     def tmpname(self, hash: str, side: str, tmp: Path, base: str) -> Path | !ShellFailure_T:
         """Where the file at HASH goes, and so what meld's pane header shows:
         <date>-<committer>-<filename>. SIDE ("new" or "old") is a directory of
-        its own, so the two can never collide, even when two commits share a
-        date and a committer. The committer keeps its letters and digits,
+        its own (made by `review`), so the two can never collide, even when two
+        commits share a date and a committer. The committer keeps its letters and digits,
         `.`, `_` and `-`, and non-ASCII letters as they are (`Zoë`); any other
         ASCII character, a space or `/` or `'`, becomes `_`."""
         do:
@@ -103,12 +103,16 @@ class Repo:
             when <- self.output("log", "-1", "--format=%cd", "--date=format:%Y-%m-%d", hash)
         var who: str = committer
         who = s/[\x00-\x2C\x2F\x3A-\x40\x5B-\x5E\x60\x7B-\x7F]/_/g
-        (tmp / side).mkdir()
         return tmp / side / f"{when}-{who}-{base}"
 
 def review(repo: Repo, abs: Path, rel: Path, tmp: Path) -> int | !ShellFailure_T:
     """Open the comparisons one after another; the exit status, or the git
     command that failed."""
+    for side in ["new", "old"]:            # the two directories tmpname puts files in
+        let made: None | !PathFailure_T = (tmp / side).mkdir()
+        if made is PathFailure_T:
+            msg_error(f"could not create {made.path}: {made.reason}")
+            return 1
     do:
         revs <- repo.history(rel)
     let base: str = rel.name
@@ -179,13 +183,9 @@ let (root_text, root_code) = shell(cwd = abs.parent): git rev-parse --show-tople
 if root_code != 0:
     fatal(f"{file} is not inside a git repository")
 let root: Path = Path(root_text.strip())
-var rel: Path = Path(".")
-let below: Path | !PathFailure_T = abs.relative_to(root)
-case below:
-    when PathFailure_T:
-        fatal(f"{file} is not inside the git repo at {root}")
-    when Path:
-        rel = below
+let rel: Path | !PathFailure_T = abs.relative_to(root)
+if rel is PathFailure_T:
+    fatal(f"{file} is not inside the git repo at {root}")
 print f"Repo root:     {root}"
 print f"Repo-rel path: {rel}"
 

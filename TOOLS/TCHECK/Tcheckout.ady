@@ -233,7 +233,8 @@ class Workspace(Checkouts):
         return Failure_T(message=f"no URL for submodule {name}") if url == ""
         let gitdir: Path = Path(git_out(self.root, ["rev-parse", "--absolute-git-dir"])) / "modules" / name
 
-        work.mkdir()
+        do:
+            work.mkdir() else Failure_T(message=f"could not create {work}")
         # nothing of anyone's in it to lose: the forced checkout is safe
         return Failure_T(message=f"{work} is not empty: not checking out into it") if not empty_dir(work)
         if -d gitdir:
@@ -242,7 +243,8 @@ class Workspace(Checkouts):
         else:
             print f"{PROG}: cloning {f.sub} from {url} (no contents until needed)"
             run(["rmdir", str(work)])
-            gitdir.parent.mkdir()
+            do:
+                gitdir.parent.mkdir() else Failure_T(message=f"could not create {gitdir.parent}")
             let rc: int = shell: git clone --filter=blob:none --no-checkout --separate-git-dir={!gitdir} {!url} {!work}
             return Failure_T(message=f"could not clone {url}") if rc != 0
         # the work tree, from the repository -- relative, as git submodule
@@ -290,7 +292,8 @@ class Cache(Checkouts):
         let url: Url_T = base + "/" + f.sub.replace("/", ".").lower() + ".git"
         let fresh: bool = not -e (work / ".git")
         if fresh:
-            work.mkdir()
+            do:
+                work.mkdir() else Failure_T(message=f"could not create {work}")
             return Failure_T(message=f"{work} is not empty: not cloning into it") if not empty_dir(work)
             print f"{PROG}: cloning {url} into {work} (no contents until needed)"
             let rc: int = shell: git clone -q --filter=blob:none --no-checkout {!url} {!work}

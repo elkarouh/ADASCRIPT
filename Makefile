@@ -576,6 +576,8 @@ test: compile
 	@# relative_to can fail, so its result is taken, not dropped.
 	@printf 'let b: Path = Path("/a")\nlet p: Path = Path("/a/b")\np.relative_to(b)\n' \
 	    > $(TMPDIR)/ady_refuse_15.ady
+	@# mkdir can fail too: its result is taken, not dropped.
+	@printf 'let d: Path = Path("/tmp")\nd.mkdir()\n' > $(TMPDIR)/ady_refuse_16.ady
 	@for tr in TO_NIM/ady2nim.py TO_PYTHON/ady2py.py; do \
 	    for c in "1:members no one can tell apart:cannot be told apart" \
 	             "2:a dropped failure:drops a failure" \
@@ -591,7 +593,8 @@ test: compile
 	             "12:a syntax error is a failure:Parse error" \
 	             "13:too many fields in a literal:takes 1 field" \
 	             "14:a positional field after a named one:follows one given by name" \
-	             "15:a dropped Path.relative_to:drops a failure"; do \
+	             "15:a dropped Path.relative_to:drops a failure" \
+	             "16:a dropped Path.mkdir:drops a failure"; do \
 	        n=$${c%%:*}; rest=$${c#*:}; what=$${rest%%:*}; want=$${rest#*:}; \
 	        printf '  %-42s' "$$what ($$(basename $$tr .py))"; \
 	        if $(PYTHON) $(CURDIR)/$$tr $(TMPDIR)/ady_refuse_$$n.ady > $(TMPDIR)/ady_refuse.out 2>&1; then \

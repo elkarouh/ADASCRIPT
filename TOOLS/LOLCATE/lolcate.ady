@@ -212,7 +212,9 @@ class Database:
         if self.exists():
             print(f"Database '{self.name}' already exists at {self.db_dir()}")
             return
-        self.db_dir().mkdir()
+        let made: None | !PathFailure_T = self.db_dir().mkdir()
+        if made is PathFailure_T:
+            die(f"could not create {made.path}: {made.reason}")
         self.reset_to_defaults()
         self.save()
         let home_dir: Path = Path($HOME)   # it's a filesystem path, not just text

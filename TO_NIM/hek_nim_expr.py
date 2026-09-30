@@ -3393,7 +3393,8 @@ def to_nim(self, prec=None):
                 if (method_name == "mkdir"
                         and next_tr is not None
                         and type(next_tr).__name__ == "call_trailer"):
-                    ParserState.nim_imports.add("std/dirs")
+                    from hek_nim_declarations import _ensure_path_mkdir
+                    _ensure_path_mkdir()
                 # Path.relative_to returns a Result, so it is its own helper,
                 # added when the call is seen.
                 if (method_name == "relative_to"

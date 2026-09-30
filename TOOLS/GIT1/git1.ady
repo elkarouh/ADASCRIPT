@@ -19,6 +19,12 @@ def confirm(question: str) -> bool:
         reply = "n"
     return reply.lower().startswith("y")
 
+def make_dir(d: Path):
+    """mkdir -p, or the program's own error when the system refuses."""
+    let made: None | !PathFailure_T = d.mkdir()
+    if made is PathFailure_T:
+        die(f"could not create {made.path}: {made.reason}")
+
 def ignore_escape(name: str) -> str:
     """Escape a file name for a .gitignore line."""
     var s: str = name.replace("\\", "\\\\")
@@ -135,7 +141,7 @@ class Target:
     def write_exclude(self, repo: Path):
         """Make the repo ignore every path except its own file."""
         let exclude: Path = repo / "info" / "exclude"
-        exclude.parent.mkdir()
+        make_dir(exclude.parent)
         writeFile(exclude, "/*\n!/" + ignore_escape(self.base) + "\n")
 
     def track(self):
@@ -146,7 +152,7 @@ class Target:
         let repo: Path = self.repo
         if -e repo: die(f"already tracked: {self.name}")
 
-        repo.parent.mkdir()
+        make_dir(repo.parent)
         let r = shell: git init --quiet --bare -- {!repo} 2>&1
         if r.code != 0: die(f"could not create {repo}")
 
@@ -226,7 +232,7 @@ class Target:
         if -e new_repo: die(f"already tracked: {new}")
 
         shell: mv -- {!self.name} {!new}
-        new_repo.parent.mkdir()
+        make_dir(new_repo.parent)
         shell: mv -- {!self.repo} {!new_repo}
         var nt: Target = Target(new)
         nt.write_exclude(new_repo)

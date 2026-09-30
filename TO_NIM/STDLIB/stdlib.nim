@@ -200,12 +200,16 @@ type ShellFailure_T* = object
 
 # ---------------------------------------------------------------------------
 # PathFailure_T -- the built-in failure of a Path operation that can fail:
-# `p.relative_to(base)` is a `Path | !PathFailure_T`, the path, or this: the
-# path asked about and the base it is not below.
+# `p.relative_to(base)` is a `Path | !PathFailure_T` and `p.mkdir()` a
+# `None | !PathFailure_T`. It says which operation (`op`), on which path, with
+# which base (`relative_to` only, else ""), and why (`reason`: the system's
+# words for a mkdir, "" for relative_to, whose reason is the base).
 # ---------------------------------------------------------------------------
 type PathFailure_T* = object
+  op*: string
   path*: string
   base*: string
+  reason*: string
 
 # ---------------------------------------------------------------------------
 # OneOf2..OneOf6 -- Adascript's plain union, `int | float | str`: one of its

@@ -584,7 +584,7 @@ if __name__ == "__main__":
     assert unmoved_report is not None and unmoved_report == Path("/r/LOGS/c.svlog")
     # found in the replay directory when the log does not name it
     let kept: Path = tmp / "saved_logs" / "replay_dir-run_prequal.X"
-    (kept / "work" / "logging" / "LOGS").mkdir()
+    assert (kept / "work" / "logging" / "LOGS").mkdir() is None
     run(["cp", str(samples / CHECK_LOGS), str(kept / "work" / "logging" / "LOGS")])
     let unnamed: ReplayLog = replay_log([f"x: Treplay.locked: INFORMATION:   Save TRT output to {kept}/tmp/cmadm.x"])
     let found_report: ?CheckLogsReport = unnamed.check_logs()

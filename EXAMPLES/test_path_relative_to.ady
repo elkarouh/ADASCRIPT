@@ -1,12 +1,17 @@
 #!/usr/bin/env ady2nim
-"""Test: Path.relative_to -- a path seen from a directory above it.
+"""Test: Path.relative_to and Path.mkdir -- the two Path operations that can fail.
 
 `p.relative_to(base)` is what is left of p below base: `b/c` for `/a/b/c`
 below `/a`, and "." for a path below itself. It is a `Path | !PathFailure_T`:
 when p is not below base the result is the built-in PathFailure_T, which
 names the path and the base, and no exception is raised. "Below" is pathlib's:
 a leading "/" has to match, repeated slashes, "." parts and a trailing slash
-do not count, and ".." is not resolved. The output is compared between the
+do not count, and ".." is not resolved.
+
+`p.mkdir()` is `mkdir -p`, a `None | !PathFailure_T`: None when the directory
+is there afterwards (made, or already), else the failure, naming the
+operation, the path and the system's reason -- which is worded differently on
+the two backends, so it is not compared. The output is compared between the
 backends.
 """
 
@@ -73,3 +78,28 @@ else:
 let nope: Path | !PathFailure_T = under("/etc", "/srv/repo")
 assert nope is PathFailure_T
 print "test5 OK"
+
+# ─── test 6: mkdir -- made, already there, refused ──────────────────────────
+
+let scratch: Path = Path(${TMPDIR:-"/tmp"}) / "ady_test_path_mkdir"
+let gone: None | !PathFailure_T = Path("/bin/sh").parent.parent.mkdir()   # a directory that exists
+assert gone is None
+assert scratch.mkdir() is None
+assert (scratch / "a" / "b").mkdir() is None
+assert (scratch / "a" / "b").mkdir() is None       # already there is fine
+assert (-d (scratch / "a" / "b"))
+writeFile(scratch / "file", "x")
+let blocked: None | !PathFailure_T = (scratch / "file" / "sub").mkdir()
+if blocked is PathFailure_T:
+    assert blocked.op == "mkdir"
+    assert blocked.path == str(scratch / "file" / "sub")
+    assert blocked.reason != ""
+else:
+    assert False
+def make_all(d: Path) -> None | !PathFailure_T:
+    do:
+        (d / "x").mkdir()
+        (d / "x" / "y").mkdir()
+assert make_all(scratch) is None
+assert make_all(scratch / "file") is PathFailure_T
+print "test6 OK"

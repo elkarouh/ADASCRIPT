@@ -378,7 +378,7 @@ Why:
 - **A string cannot slip in by mistake.** `Path` is a distinct type, so
   `let p: Path = s` does not compile; `Path(s)` is how you mean it.
 - **There is no slash to get wrong.** No doubled or missing `/`, and
-  `.parent`, `.name`, `.resolve()`, `.relative_to(base)` (a `Path | !PathFailure_T`), `.mkdir()` and the file tests are there
+  `.parent`, `.name`, `.resolve()`, `.relative_to(base)` (a `Path | !PathFailure_T`), `.mkdir()` (a `None | !PathFailure_T`) and the file tests are there
   when you need them.
 - **It reads itself.** `for line in p.lines:` opens the file, yields its
   lines without their newlines and closes it -- no `open()`, no
@@ -3393,7 +3393,7 @@ through the same ground in more detail.
 | A file's lines, by its `Path`     | `for line in p.lines:` -- opened, read and closed for you |
 | Character literal                 | `let c: char = '\t'`; narrowed wherever a char is declared |
 | Path split                        | `p.parent` -> Path, `p.name` -> str     |
-| Path mkdir                        | `p.mkdir()` -- mkdir -p                 |
+| Path mkdir                        | `p.mkdir()` -- mkdir -p; a `None \| !PathFailure_T` |
 | Path resolve                      | `p.resolve()` -- abs, symlinks expanded |
 | Wait for one / many jobs          | `j.wait()` / `waitAll(jobs)`            |
 | Run a program, no shell           | `run(["git", "log"])` -> RunResult      |
