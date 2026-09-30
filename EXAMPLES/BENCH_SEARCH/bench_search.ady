@@ -28,14 +28,14 @@ def find(path: str, word: str) -> None:
     for it in 0..<REPEATS:                  # the library's substring count
         let start: float = time.time()
         let hits: int = data.count(word)
-        print f"find.count iter{it} {(time.time() - start) * 1000:7} ms  hits={hits}"
+        print f"find.count iter{it} {(time.time() - start) * 1000.0:7.1f} ms  hits={hits}"
     for it in 0..<LOOP_REPEATS:             # the explicit loop over lines
         let start: float = time.time()
         var hits: int = 0
         for line in lines:
             if word in line:
                 hits += 1
-        print f"find.loop  iter{it} {(time.time() - start) * 1000:7} ms  hits={hits}"
+        print f"find.loop  iter{it} {(time.time() - start) * 1000.0:7.1f} ms  hits={hits}"
 
 def common(path_a: str, path_b: str) -> None:
     let words_a: []str = readFile(path_a).split()   # each file is read once, and the
@@ -44,11 +44,11 @@ def common(path_a: str, path_b: str) -> None:
     let b: {}str = set(words_b)
     let xs: []int = [int(w) for w in words_a]
     let ys: []int = [int(w) for w in words_b]
-    for it in 1..REPEATS:                  # the set intersection
+    for it in 0..<REPEATS:                  # the set intersection
         let start: float = time.time()
         let n: Natural = len(a & b)
         print f"and.set   iter{it} {(time.time() - start) * 1000.0:7.1f} ms  common={n} |A|={len(a)} |B|={len(b)}"
-    for it in 1..LOOP_REPEATS:             # the explicit two-pointer walk
+    for it in 0..<LOOP_REPEATS:             # the explicit two-pointer walk
         let start: float = time.time()
         var i: Natural = 0
         var j: Natural = 0
@@ -62,7 +62,7 @@ def common(path_a: str, path_b: str) -> None:
                 i += 1
             else:
                 j += 1
-        print f"and.2ptr  iter{it} {(time.time() - start) * 1000:7} ms  common={n}"
+        print f"and.2ptr  iter{it} {(time.time() - start) * 1000.0:7.1f} ms  common={n}"
 
 let mode: str = $1
 case mode:
