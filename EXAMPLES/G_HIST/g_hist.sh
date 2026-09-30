@@ -107,10 +107,10 @@ tmpname() {
 # 1) Uncommitted changes vs HEAD, if any.
 if git_ rev-parse --verify -q HEAD >/dev/null \
    && ! git_ diff --quiet HEAD -- "$rel" 2>/dev/null; then
-  show_at HEAD "$rel" "$tmpdir/head-$base"
+  head_file=$(tmpname HEAD head)   # named like the others: with HEAD's tags
+  show_at HEAD "$rel" "$head_file"
   echo "Uncommitted changes: opening working copy vs HEAD"
-  meld --label "working copy" --label "HEAD $(git_ rev-parse --short HEAD)" \
-    "$abs" "$tmpdir/head-$base" || true
+  meld --label "working copy" "$abs" "$head_file" || true
   ask "Continue?" "Continue to committed history?" || exit 0
 fi
 

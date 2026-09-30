@@ -132,7 +132,7 @@ class Repo:
 def review(repo: Repo, abs: Path, rel: Path, tmp: Path) -> int | !Failure_T:
     """Open the comparisons one after another; the exit status, or what
     failed."""
-    for side in ["new", "old"]:            # the two directories tmpname puts files in
+    for side in ["new", "old", "head"]:    # the directories tmpname puts files in
         do:
             made <- (tmp / side).mkdir() else path_failed(made)
     do:
@@ -142,13 +142,11 @@ def review(repo: Repo, abs: Path, rel: Path, tmp: Path) -> int | !Failure_T:
     # 1) Uncommitted changes vs HEAD, if any.
     if repo.succeeds("rev-parse", "--verify", "-q", "HEAD") and not repo.succeeds("diff", "--quiet", "HEAD", "--", str(rel)):
         let head: Rev_T = Rev_T(hash="HEAD", path=rel)
-        let head_file: Path = tmp / f"head-{base}"
         do:
+            head_file <- repo.tmpname("HEAD", "head", tmp, base)     # named like the others: with HEAD's tags
             repo.save_at(head, head_file)
-            short <- repo.output("rev-parse", "--short", "HEAD")
-        let head_label: str = "HEAD " + short
         print "Uncommitted changes: opening working copy vs HEAD"
-        shell: meld --label "working copy" --label {!head_label} {!abs} {!head_file}
+        shell: meld --label "working copy" {!abs} {!head_file}
         if not ask("Continue?", "Continue to committed history?"):
             return 0
 
