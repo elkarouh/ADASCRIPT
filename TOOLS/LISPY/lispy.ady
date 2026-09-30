@@ -215,6 +215,10 @@ class Env:
 # Tokenizer / Reader
 # ============================================================
 
+# A token of the program text: a parenthesis, a quote prefix, a string literal
+# (quotes included) or an atom.
+type Token_T is str
+
 def is_atom_ch(c: char) -> bool:
     """A character that continues an atom: anything that does not end one.
 
@@ -223,8 +227,8 @@ def is_atom_ch(c: char) -> bool:
     not (is_space_ch(c) or c == '(' or c == ')' or c == '"' or c == ';')
 
 
-def tokenize(s: str) -> []str:
-    var tokens: []str
+def tokenize(s: str) -> []Token_T:
+    var tokens: []Token_T
     var i: Natural = 0
     let n: int = len(s)
     while i < n:
@@ -258,7 +262,7 @@ def tokenize(s: str) -> []str:
                 i = e
     tokens
 
-def parse_atom(token: str) -> Val_T:
+def parse_atom(token: Token_T) -> Val_T:
     case token:
         when "#t" | "true":
             return VBool(True)
@@ -289,16 +293,16 @@ let ABBREVIATIONS: {str}str = {
 
 class Reader:
     """Reads one expression from a token list, tracking where it is."""
-    var tokens: []str
+    var tokens: []Token_T
     var pos:    Natural = 0
 
-    def __init__(self, tokens: []str):
+    def __init__(self, tokens: []Token_T):
         self.tokens = tokens
 
     def read_form(self) -> Val_T | !Failure_T:
         if self.pos >= len(self.tokens):
             return reject("unexpected EOF")
-        let tok: str = self.tokens[self.pos]
+        let tok: Token_T = self.tokens[self.pos]
         self.pos += 1
         case tok:
             when "(":
