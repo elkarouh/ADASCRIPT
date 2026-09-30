@@ -1,0 +1,82 @@
+#!/usr/bin/env ady2nim
+"""
+bench_search -- time two things a program does all day: look for a word in a
+file, and find what two files of numbers have in common.
+
+    bench_search find FILE WORD
+    bench_search and  FILE_A FILE_B        (sorted integers, one per token)
+
+Each is done twice: the library's way (`count`, the set `&`), which is what
+you would write, and the explicit loop (a scan of the lines, a two-pointer
+walk over the sorted lists), which is what C or Java would do. The input is
+prepared before the clock starts, so each line times the search alone.
+
+Adascript reads no bytes: a file is text here, and a word is a `str`.
+"""
+nimport time
+
+const REPEATS: Positive = 5
+const LOOP_REPEATS: Positive = 3
+
+def ms_since(start: float) -> float:
+    return (time.time() - start) * 1000.0
+
+def words_of(path: str) -> []str:
+    return readFile(path).split()
+
+def ints_of(path: str) -> []int:
+    var out: []int = []
+    let words: []str = words_of(path)
+    for w in words:
+        out.append(int(w))
+    return out
+
+def find(path: str, word: str) -> None:
+    let data:  str   = readFile(path)
+    let lines: []str = data.split("\n")     # the "parse", outside the timing
+    for it in 0..<REPEATS:                  # the library's substring count
+        let start: float = time.time()
+        let hits: int = data.count(word)
+        print f"find.count iter{it} {int(ms_since(start)):7} ms  hits={hits}"
+    for it in 0..<LOOP_REPEATS:             # the explicit loop over lines
+        let start: float = time.time()
+        var hits: int = 0
+        for line in lines:
+            if word in line:
+                hits += 1
+        print f"find.loop  iter{it} {int(ms_since(start)):7} ms  hits={hits}"
+
+def common(path_a: str, path_b: str) -> None:
+    let a: {}str = set(words_of(path_a))    # sets and sorted lists, prepared
+    let b: {}str = set(words_of(path_b))    # before the clock starts
+    let xs: []int = ints_of(path_a)
+    let ys: []int = ints_of(path_b)
+    for it in 0..<REPEATS:                  # the set intersection
+        let start: float = time.time()
+        let n: int = len(a.intersection(b))
+        print f"and.set   iter{it} {ms_since(start):7.1f} ms  common={n} |A|={len(a)} |B|={len(b)}"
+    for it in 0..<LOOP_REPEATS:             # the explicit two-pointer walk
+        let start: float = time.time()
+        var i: int = 0
+        var j: int = 0
+        var n: int = 0
+        while i < len(xs) and j < len(ys):
+            if xs[i] == ys[j]:
+                n += 1
+                i += 1
+                j += 1
+            elif xs[i] < ys[j]:
+                i += 1
+            else:
+                j += 1
+        print f"and.2ptr  iter{it} {int(ms_since(start)):7} ms  common={n}"
+
+let mode: str = $1
+case mode:
+    when "find":
+        find($2, $3)
+    when "and":
+        common($2, $3)
+    when others:
+        print f"usage: {$0} find FILE WORD | and FILE_A FILE_B"
+        quit(1)
