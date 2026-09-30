@@ -180,10 +180,12 @@ if root_code != 0:
     fatal(f"{file} is not inside a git repository")
 let root: Path = Path(root_text.strip())
 var rel: Path = Path(".")
-try:
-    rel = abs.relative_to(root)
-except ValueError:
-    fatal(f"{file} is not inside the git repo at {root}")
+let below: Path | !PathFailure_T = abs.relative_to(root)
+case below:
+    when PathFailure_T:
+        fatal(f"{file} is not inside the git repo at {root}")
+    when Path:
+        rel = below
 print f"Repo root:     {root}"
 print f"Repo-rel path: {rel}"
 

@@ -1508,7 +1508,7 @@ for s in Stage_T'First .. Stage_T'Last:
 | Path split | `p.parent` -> Path, `p.name` -> str (pathlib rules, not os.path) |
 | Path mkdir | `p.mkdir()` = mkdir -p (parents, exist_ok) |
 | Path resolve | `p.resolve()` = realpath (absolute, symlinks expanded) |
-| Path below a directory | `p.relative_to(base)` -> Path (`"."` for the same path); `ValueError` when p is not below base -- pathlib's rules, `..` not resolved |
+| Path below a directory | `let r: Path \| !PathFailure_T = p.relative_to(base)` -- the Path (`"."` for the same path), or the built-in `PathFailure_T` (`.path`, `.base`) when p is not below base; pathlib's rules, `..` not resolved. `r is PathFailure_T`, `case r:`, or a `do:` step, as with `ShellFailure_T` |
 | Wait for one / many jobs | `j.wait()` / `waitAll(jobs)` |
 | Run a program, no shell | `run(["git", "log"])` -> RunResult |
 | Run a program, output lines | `runLines(["ls", d])` -> `[]str` |

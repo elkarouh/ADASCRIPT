@@ -199,6 +199,15 @@ type ShellFailure_T* = object
   stderr*: string
 
 # ---------------------------------------------------------------------------
+# PathFailure_T -- the built-in failure of a Path operation that can fail:
+# `p.relative_to(base)` is a `Path | !PathFailure_T`, the path, or this: the
+# path asked about and the base it is not below.
+# ---------------------------------------------------------------------------
+type PathFailure_T* = object
+  path*: string
+  base*: string
+
+# ---------------------------------------------------------------------------
 # OneOf2..OneOf6 -- Adascript's plain union, `int | float | str`: one of its
 # members, which member told by `which`. The transpiler writes the
 # constructors with their type -- `OneOf2[int, float].of1(2.5)` -- tests a

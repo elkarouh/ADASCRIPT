@@ -578,3 +578,12 @@ one. It went unseen because the shared tests print enums and strings.
   `str` is emitted as-is and fails -- in a comprehension too,
   `[int(w) for w in f(path)]`; a typed `let words: []str = f(path)` first
   avoids it, and the routine's declared return type is all the emitter needs.
+
+## A dropped `T | !F` is only refused after a name
+
+`p.relative_to(base)` as a statement is refused ("drops a failure"), but
+`Path("/a/b").relative_to(base)` -- the receiver a call -- is not, on either
+backend: the check reads `name.name(...)` and gives up on anything before the
+last dot that is not a bare name. The same is true of any routine returning a
+`T | !F`, `f(x).g(y)` included. On Nim the unused Result then fails to
+compile; on Python the failure is dropped silently.

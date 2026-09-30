@@ -3394,6 +3394,13 @@ def to_nim(self, prec=None):
                         and next_tr is not None
                         and type(next_tr).__name__ == "call_trailer"):
                     ParserState.nim_imports.add("std/dirs")
+                # Path.relative_to returns a Result, so it is its own helper,
+                # added when the call is seen.
+                if (method_name == "relative_to"
+                        and next_tr is not None
+                        and type(next_tr).__name__ == "call_trailer"):
+                    from hek_nim_declarations import _ensure_path_relative_to
+                    _ensure_path_relative_to()
                 # Option-typed field called as proc: insert .get() before call trailer
                 if (next_tr is not None
                         and type(next_tr).__name__ == "call_trailer"

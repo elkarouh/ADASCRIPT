@@ -466,6 +466,14 @@ def check_generic_calls(tree, generics, plain=frozenset()):
         stack.extend(n for n in nodes if not isinstance(n, str))
 
 
+# The failure types every program has, and the built-in routines that return
+# one: `p.relative_to(base)` is a `Path | !PathFailure_T`. Read by the
+# backends where they collect a module's own `-> T | !F` routines, and a
+# routine of the module's own with the same name takes precedence.
+BUILTIN_FAILURE_TYPES = {"ShellFailure_T", "PathFailure_T"}
+BUILTIN_RETURN_TYPES = {"relative_to": "Path | !PathFailure_T"}
+
+
 def either_procs(return_types, failure_types):
     """The routines among RETURN_TYPES that return `T | !F`, F a failure."""
     out = set()

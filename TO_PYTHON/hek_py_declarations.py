@@ -224,8 +224,20 @@ class Path(str):
         return Path(os.path.realpath(self))
 
     def relative_to(self, base):
-        \"\"\"This path seen from BASE; ValueError when it is not below it.\"\"\"
-        return Path(_pathlib.PurePath(self).relative_to(str(base)))\
+        \"\"\"This path seen from BASE, or a PathFailure_T when it is not
+        below it.\"\"\"
+        try:
+            return Path(_pathlib.PurePath(self).relative_to(str(base)))
+        except ValueError:
+            return PathFailure_T(path=str(self), base=str(base))
+
+
+@_dataclass
+class PathFailure_T:
+    \"\"\"The built-in failure of a Path operation: the path asked about and
+    the base it is not below.\"\"\"
+    path: str = ""
+    base: str = ""\
 """
 # `parent` and `name` go through PurePath rather than os.path.dirname /
 # os.path.basename because those two disagree with Nim on a trailing slash:
@@ -303,6 +315,7 @@ def _ensure_path_alias():
     from hek_parsec import ParserState
     ParserState.nim_imports.add("import os")
     ParserState.nim_imports.add("import pathlib as _pathlib")
+    ParserState.nim_imports.add("from dataclasses import dataclass as _dataclass")
     decls = getattr(ParserState, 'py_top_decls', [])
     if not any("class Path(str)" in d for d in decls):
         decls.append(_PATH_ALIAS)
@@ -362,6 +375,8 @@ def to_py(self, prec=None):
         _ensure_path_alias()
     elif name == "ShellFailure_T":
         _ensure_shell_failure()
+    elif name == "PathFailure_T":
+        _ensure_path_alias()
     elif name == "File":
         # Nim's File is what open() returns and what stdin/stdout/stderr are,
         # so one variable can hold either -- `(open(p) if p else stdin)` is

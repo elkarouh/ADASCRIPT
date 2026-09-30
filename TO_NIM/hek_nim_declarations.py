@@ -124,22 +124,7 @@ proc resolve*(p: Path): Path =
   let up = p.parent
   if up.string == p.string:
     return Path(absolutePath(p.string))
-  up.resolve / Path(p.name)
-
-proc relative_to*(p: Path, base: Path): Path =
-  ## p seen from base: `Path("/a/b/c").relative_to(Path("/a"))` is `b/c`, and
-  ## a path relative to itself is ".". Raises ValueError when p is not below
-  ## base, as pathlib does -- and by pathlib's reading of "below": a leading
-  ## "/" has to match, and repeated slashes, "." parts and a trailing slash
-  ## do not count. ".." is not resolved, as there.
-  proc parts(s: string): seq[string] =
-    for c in s.split('/'):
-      if c.len > 0 and c != ".": result.add(c)
-  let a = parts(p.string)
-  let b = parts(base.string)
-  if p.isAbsolute != base.isAbsolute or b.len > a.len or a[0 ..< b.len] != b:
-    raise newException(ValueError, p.string & " is not in the subpath of " & base.string)
-  result = Path(if a.len == b.len: "." else: a[b.len .. ^1].join("/"))\
+  up.resolve / Path(p.name)\
 """
 
 
@@ -159,10 +144,40 @@ def _ensure_path_helper():
     # friends take a Path already.
     ParserState.nim_imports.add("std/paths")
     ParserState.nim_imports.add("os")
-    ParserState.nim_imports.add("strutils")     # relative_to splits and joins
     decls = getattr(ParserState, "nim_top_decls", [])
     if not any("adascriptPathToString" in d for d in decls):
         decls.append(_PATH_HELPER)
+        ParserState.nim_top_decls = decls
+
+
+_PATH_RELATIVE_TO = """\
+proc relative_to*(p: Path, base: Path): Result[Path, PathFailure_T] =
+  ## p seen from base: `Path("/a/b/c").relative_to(Path("/a"))` is `b/c`, and
+  ## a path relative to itself is ".". Not below base is a PathFailure_T, not
+  ## an exception -- by pathlib's reading of "below": a leading "/" has to
+  ## match, and repeated slashes, "." parts and a trailing slash do not
+  ## count. ".." is not resolved, as there.
+  proc parts(s: string): seq[string] =
+    for c in s.split('/'):
+      if c.len > 0 and c != ".": result.add(c)
+  let a = parts(p.string)
+  let b = parts(base.string)
+  if p.isAbsolute != base.isAbsolute or b.len > a.len or a[0 ..< b.len] != b:
+    return Result[Path, PathFailure_T].err(PathFailure_T(path: p.string, base: base.string))
+  Result[Path, PathFailure_T].ok(Path(if a.len == b.len: "." else: a[b.len .. ^1].join("/")))\
+"""
+
+
+def _ensure_path_relative_to():
+    """Add Path.relative_to the first time it is called: a proc returning a
+    Result, so it needs stdlib.nim, and strutils to split and join."""
+    from hek_parsec import ParserState
+    _ensure_path_helper()
+    ParserState.nim_imports.add("stdlib")
+    ParserState.nim_imports.add("strutils")
+    decls = getattr(ParserState, "nim_top_decls", [])
+    if not any("proc relative_to*" in d for d in decls):
+        decls.append(_PATH_RELATIVE_TO)
         ParserState.nim_top_decls = decls
 
 
@@ -195,8 +210,8 @@ def to_nim(self, prec=None):
             if node.nodes[0] == "Path":
                 _ensure_path_helper()
             return mapped
-        if node.nodes[0] == "ShellFailure_T":
-            ParserState.nim_imports.add("stdlib")   # it lives in stdlib.nim
+        if node.nodes[0] in ("ShellFailure_T", "PathFailure_T"):
+            ParserState.nim_imports.add("stdlib")   # they live in stdlib.nim
         _alias = _union_alias_nim(node.nodes[0])
         if _alias and len(self.nodes) == 1:
             return _alias

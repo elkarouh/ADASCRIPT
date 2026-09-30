@@ -303,9 +303,10 @@ def translate(code):
     from hek_parsec import ParserState as _PS_rp
     _PS_rp.py_type_names = set(_re_rp.findall(
         r"^[ \t]*(?:type|class)[ \t]+([A-Za-z_]\w*)", code, _re_rp.MULTILINE))
-    _PS_rp.failure_types = _failures | {"ShellFailure_T"}
-    _PS_rp.py_type_names.add("ShellFailure_T")
-    _PS_rp.ady_return_types = scan_return_types(code)
+    from ady_stmt import BUILTIN_FAILURE_TYPES, BUILTIN_RETURN_TYPES
+    _PS_rp.failure_types = _failures | BUILTIN_FAILURE_TYPES
+    _PS_rp.py_type_names |= BUILTIN_FAILURE_TYPES
+    _PS_rp.ady_return_types = {**BUILTIN_RETURN_TYPES, **scan_return_types(code)}
     from ady_stmt import scan_union_aliases, scan_type_decls
     _PS_rp.union_aliases = scan_union_aliases(code)
     _PS_rp.ady_type_decls = scan_type_decls(code)

@@ -2,21 +2,25 @@
 """Test: Path.relative_to -- a path seen from a directory above it.
 
 `p.relative_to(base)` is what is left of p below base: `b/c` for `/a/b/c`
-below `/a`, and "." for a path below itself. It raises ValueError when p is
-not below base, and "below" is pathlib's: a leading "/" has to match,
-repeated slashes, "." parts and a trailing slash do not count, and ".." is
-not resolved. The output is compared between the backends.
+below `/a`, and "." for a path below itself. It is a `Path | !PathFailure_T`:
+when p is not below base the result is the built-in PathFailure_T, which
+names the path and the base, and no exception is raised. "Below" is pathlib's:
+a leading "/" has to match, repeated slashes, "." parts and a trailing slash
+do not count, and ".." is not resolved. The output is compared between the
+backends.
 """
 
 def rel(p: str, base: str) -> str:
-    return str(Path(p).relative_to(Path(base)))
+    let r: Path | !PathFailure_T = Path(p).relative_to(Path(base))
+    case r:
+        when PathFailure_T:
+            return "not below"
+        when Path:
+            return str(r)
 
 def below(p: str, base: str) -> bool:
-    try:
-        let r: Path = Path(p).relative_to(Path(base))
-        return True
-    except ValueError:
-        return False
+    let r: Path | !PathFailure_T = Path(p).relative_to(Path(base))
+    return not (r is PathFailure_T)
 
 # ─── test 1: the plain cases ────────────────────────────────────────────────
 
@@ -43,11 +47,29 @@ assert not below("/a/b", "a")
 assert not below("/a/../b", "/a/b")       # ".." is not resolved
 print "test3 OK"
 
-# ─── test 4: the result is a Path ───────────────────────────────────────────
+# ─── test 4: the failure says what it was asked ─────────────────────────────
 
-let base: Path = Path("/srv/repo")
-let sub: Path = Path("/srv/repo/src/x.ady").relative_to(base)
-assert str(sub / "y") == "src/x.ady/y"
-assert sub.name == "x.ady"
-assert str(sub.parent) == "src"
+let miss: Path | !PathFailure_T = Path("/etc/hosts").relative_to(Path("/srv/repo"))
+if miss is PathFailure_T:
+    assert miss.path == "/etc/hosts"
+    assert miss.base == "/srv/repo"
+else:
+    assert False
 print "test4 OK"
+
+# ─── test 5: the Path is a Path; a do: step passes the failure on ───────────
+
+def under(p: str, base: str) -> Path | !PathFailure_T:
+    do:
+        r <- Path(p).relative_to(Path(base))
+    return r / "x"
+
+let ok: Path | !PathFailure_T = under("/srv/repo/src", "/srv/repo")
+if ok is Path:
+    assert str(ok) == "src/x"
+    assert ok.name == "x"
+else:
+    assert False
+let nope: Path | !PathFailure_T = under("/etc", "/srv/repo")
+assert nope is PathFailure_T
+print "test5 OK"

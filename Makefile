@@ -573,6 +573,9 @@ test: compile
 	    > $(TMPDIR)/ady_refuse_13.ady
 	@printf 'type K_T is enum A, B\n\ntype V_T (kind: K_T) is record:\n    case kind is\n        when A:\n            n: int\n            m: int\n        when B:\n            pass\n\nprint A(n=1, 2).kind\n' \
 	    > $(TMPDIR)/ady_refuse_14.ady
+	@# relative_to can fail, so its result is taken, not dropped.
+	@printf 'let b: Path = Path("/a")\nlet p: Path = Path("/a/b")\np.relative_to(b)\n' \
+	    > $(TMPDIR)/ady_refuse_15.ady
 	@for tr in TO_NIM/ady2nim.py TO_PYTHON/ady2py.py; do \
 	    for c in "1:members no one can tell apart:cannot be told apart" \
 	             "2:a dropped failure:drops a failure" \
@@ -587,7 +590,8 @@ test: compile
 	             "11:a unit made of three factors:has no name" \
 	             "12:a syntax error is a failure:Parse error" \
 	             "13:too many fields in a literal:takes 1 field" \
-	             "14:a positional field after a named one:follows one given by name"; do \
+	             "14:a positional field after a named one:follows one given by name" \
+	             "15:a dropped Path.relative_to:drops a failure"; do \
 	        n=$${c%%:*}; rest=$${c#*:}; what=$${rest%%:*}; want=$${rest#*:}; \
 	        printf '  %-42s' "$$what ($$(basename $$tr .py))"; \
 	        if $(PYTHON) $(CURDIR)/$$tr $(TMPDIR)/ady_refuse_$$n.ady > $(TMPDIR)/ady_refuse.out 2>&1; then \

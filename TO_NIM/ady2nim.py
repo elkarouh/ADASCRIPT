@@ -679,9 +679,10 @@ def translate(code, export_symbols=False):
     # already, has to be known for routines defined further down. And the
     # failure types -- this module's and those of the modules it nimports --
     # which say which side of a `|` is the failure.
-    ParserState.failure_types = (_failures | {"ShellFailure_T"}
+    from ady_stmt import BUILTIN_FAILURE_TYPES, BUILTIN_RETURN_TYPES
+    ParserState.failure_types = (_failures | BUILTIN_FAILURE_TYPES
                                  | _nimport_carried.get("failure_types", set()))
-    ParserState.ady_return_types = scan_return_types(code)
+    ParserState.ady_return_types = {**BUILTIN_RETURN_TYPES, **scan_return_types(code)}
     from ady_stmt import scan_union_aliases, scan_type_decls
     ParserState.union_aliases = scan_union_aliases(code)
     ParserState.ady_type_decls = scan_type_decls(code)
