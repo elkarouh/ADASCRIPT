@@ -141,7 +141,7 @@ old: $old_desc" || { echo "Stopped by user after $i comparison(s)."; exit 0; }
 
   [[ $new_path == "$old_path" ]] || echo "  (renamed: $old_path -> $new_path)"
   echo "[$((i + 1))/$total] $new_desc  <-  $old_desc"
-  meld --label "$new_desc" --label "$old_desc" "$nf" "$of" || true
+  meld "$nf" "$of" || true
 
   rm -f "$nf" "$of"
 done

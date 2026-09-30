@@ -180,7 +180,7 @@ def review(repo: Repo, abs: Path, rel: Path, tmp: Path) -> int | !Failure_T:
         if new.path != old.path:
             print f"  (renamed: {old.path} -> {new.path})"
         print f"[{i + 1}/{total}] {new_desc}  <-  {old_desc}"
-        shell: meld --label {!new_desc} --label {!old_desc} {!new_file} {!old_file}
+        shell: meld {!new_file} {!old_file}
 
         shell: rm -f {!new_file} {!old_file}
 
