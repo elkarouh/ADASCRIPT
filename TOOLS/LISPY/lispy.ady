@@ -971,15 +971,14 @@ else:
 
     print "lispy: all tests passed"
     print "lispy REPL — :q to quit"
-    while True:
-        try:
-            var line: str = input("lispy> ")
-            if line == ":q":
-                break
-            if len(line) == 0:
-                continue
+    stdout.write("lispy> ")
+    stdout.flushFile()
+    for line in stdin.lines:           # ends at end of input
+        if line == ":q":
+            break
+        if len(line) > 0:
             var result: str = run(line)
             if result:
                 print result
-        except EOFError:
-            break
+        stdout.write("lispy> ")
+        stdout.flushFile()

@@ -10,14 +10,11 @@ const VERSION:   str = "3.0"
 const CONTAINER: str = ".git1"
 
 def confirm(question: str) -> bool:
-    var reply: str = ""
     stdout.write(question + " [y/N] ")
     stdout.flushFile()
-    try:
-        reply = input("")
-    except EOFError:
-        reply = "n"
-    return reply.lower().startswith("y")
+    for reply in stdin.lines:          # the first line typed
+        return reply.lower().startswith("y")
+    return False                       # end of input is "no"
 
 def make_dir(d: Path):
     """mkdir -p, or the program's own error when the system refuses."""

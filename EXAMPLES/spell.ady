@@ -76,14 +76,15 @@ if $# >= 2:
     print correction($2)
 elif $# >= 1:
     print f"Loaded {len(WORDS)} words ({N} total) from {corpus_file}"
-    while True:
-        try:
-            var word: str = input("spell> ").strip().lower()
-            if word == ":q" or word == "":
-                break
-            print correction(word)
-        except EOFError:
+    stdout.write("spell> ")
+    stdout.flushFile()
+    for entry in stdin.lines:          # ends at end of input
+        let word: str = entry.strip().lower()
+        if word == ":q" or word == "":
             break
+        print correction(word)
+        stdout.write("spell> ")
+        stdout.flushFile()
 else:
     print "Usage: spell.ady big.txt [word]"
     quit(1)
