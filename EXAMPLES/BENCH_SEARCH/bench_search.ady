@@ -22,46 +22,37 @@ nimport time
 const REPEATS: Positive = 5
 const LOOP_REPEATS: Positive = 3
 
-def ms_since(start: float) -> float:
-    return (time.time() - start) * 1000.0
-
-def words_of(path: str) -> []str:
-    return readFile(path).split()
-
-def ints_of(words: []str) -> []int:
-    return [int(w) for w in words]
-
 def find(path: str, word: str) -> None:
     let data:  str   = readFile(path)
     let lines: []str = data.split("\n")     # the "parse", outside the timing
     for it in 0..<REPEATS:                  # the library's substring count
         let start: float = time.time()
         let hits: int = data.count(word)
-        print f"find.count iter{it} {int(ms_since(start)):7} ms  hits={hits}"
+        print f"find.count iter{it} {(time.time() - start) * 1000:7} ms  hits={hits}"
     for it in 0..<LOOP_REPEATS:             # the explicit loop over lines
         let start: float = time.time()
         var hits: int = 0
         for line in lines:
             if word in line:
                 hits += 1
-        print f"find.loop  iter{it} {int(ms_since(start)):7} ms  hits={hits}"
+        print f"find.loop  iter{it} {(time.time() - start) * 1000:7} ms  hits={hits}"
 
 def common(path_a: str, path_b: str) -> None:
-    let words_a: []str = words_of(path_a)   # each file is read once, and the
-    let words_b: []str = words_of(path_b)   # sets and lists made from it are
+    let words_a: []str = readFile(path_a).split()   # each file is read once, and the
+    let words_b: []str = readFile(path_b).split()   # sets and lists made from it are
     let a: {}str = set(words_a)             # prepared before the clock starts
     let b: {}str = set(words_b)
-    let xs: []int = ints_of(words_a)
-    let ys: []int = ints_of(words_b)
-    for it in 0..<REPEATS:                  # the set intersection
+    let xs: []int = [int(w) for w in words_a]
+    let ys: []int = [int(w) for w in words_b]
+    for it in 1..REPEATS:                  # the set intersection
         let start: float = time.time()
-        let n: int = len(a & b)
-        print f"and.set   iter{it} {ms_since(start):7.1f} ms  common={n} |A|={len(a)} |B|={len(b)}"
-    for it in 0..<LOOP_REPEATS:             # the explicit two-pointer walk
+        let n: Natural = len(a & b)
+        print f"and.set   iter{it} {(time.time() - start) * 1000.0:7.1f} ms  common={n} |A|={len(a)} |B|={len(b)}"
+    for it in 1..LOOP_REPEATS:             # the explicit two-pointer walk
         let start: float = time.time()
-        var i: int = 0
-        var j: int = 0
-        var n: int = 0
+        var i: Natural = 0
+        var j: Natural = 0
+        var n: Natural = 0
         while i < len(xs) and j < len(ys):
             if xs[i] == ys[j]:
                 n += 1
@@ -71,7 +62,7 @@ def common(path_a: str, path_b: str) -> None:
                 i += 1
             else:
                 j += 1
-        print f"and.2ptr  iter{it} {int(ms_since(start)):7} ms  common={n}"
+        print f"and.2ptr  iter{it} {(time.time() - start) * 1000:7} ms  common={n}"
 
 let mode: str = $1
 case mode:
