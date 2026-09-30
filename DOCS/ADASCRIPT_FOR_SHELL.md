@@ -751,6 +751,7 @@ that have to be updated in step by hand.
 | `timeout 30 cmd` | `run(argv, timeout = 30000)` |
 | `cmd <<EOF … EOF` | `shell(stdin = text): cmd` |
 | `"$dir/$name"` | `dir / name`, with `dir: Path` |
+| `cat "$f"`, `printf %s "$s" > "$f"` | `f.read_text()`, `f.write_text(s)` -- a `str \| !PathFailure_T`, a `None \| !PathFailure_T`; `f.read_lines()` for the lines |
 | `mkdir -p "$d"` | `d.mkdir()` -- a `None \| !PathFailure_T`: take it (`assert d.mkdir() is None`, `if r is PathFailure_T:`, a `do:` step) |
 | `dirname`, `basename` | `p.parent`, `p.name` |
 | `${p#"$root"/}`, `realpath --relative-to` | `p.relative_to(root)` -- a `Path \| !PathFailure_T`: the failure when p is not below root |

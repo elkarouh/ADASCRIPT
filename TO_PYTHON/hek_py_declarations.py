@@ -227,6 +227,32 @@ class Path(str):
         \"\"\"The absolute path, with every symlink along it expanded.\"\"\"
         return Path(os.path.realpath(self))
 
+    def read_text(self):
+        \"\"\"The whole file, as text; a PathFailure_T when it cannot be read.\"\"\"
+        try:
+            with open(self, encoding="utf-8", errors="surrogateescape") as f:
+                return f.read()
+        except OSError as e:
+            return PathFailure_T(op="read_text", path=str(self), reason=e.strerror or str(e))
+
+    def read_lines(self):
+        \"\"\"The lines of the file without their newlines; a PathFailure_T when
+        it cannot be read.\"\"\"
+        try:
+            with open(self, encoding="utf-8", errors="surrogateescape") as f:
+                return [l[:-1] if l.endswith("\\n") else l for l in f]
+        except OSError as e:
+            return PathFailure_T(op="read_lines", path=str(self), reason=e.strerror or str(e))
+
+    def write_text(self, text):
+        \"\"\"Replace the file's contents; None, or a PathFailure_T when the
+        system refuses.\"\"\"
+        try:
+            with open(self, "w", encoding="utf-8", errors="surrogateescape") as f:
+                f.write(text)
+        except OSError as e:
+            return PathFailure_T(op="write_text", path=str(self), reason=e.strerror or str(e))
+
     def relative_to(self, base):
         \"\"\"This path seen from BASE, or a PathFailure_T when it is not
         below it.\"\"\"

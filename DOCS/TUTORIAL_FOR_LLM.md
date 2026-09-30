@@ -1508,6 +1508,7 @@ for s in Stage_T'First .. Stage_T'Last:
 | Path split | `p.parent` -> Path, `p.name` -> str (pathlib rules, not os.path) |
 | Path mkdir | `p.mkdir()` = mkdir -p (parents, exist_ok) -> `None \| !PathFailure_T` (`.op`, `.path`, `.reason`): take it -- `assert p.mkdir() is None`, `if r is PathFailure_T:`, or a `do:` step; a bare `p.mkdir()` is refused like any dropped failure |
 | Path resolve | `p.resolve()` = realpath (absolute, symlinks expanded) |
+| Read / write a file, by its `Path` | `p.read_text()` -> `str \| !PathFailure_T`, `p.read_lines()` -> `[]str \| !PathFailure_T` (no newlines), `p.write_text(s)` -> `None \| !PathFailure_T`: the failure names the `op`, the `path` and the `reason`; take it as `mkdir`'s. Nothing raises; `readFile`, `writeFile` and `for line in p.lines:` still do, and stay the way to stream or to not care |
 | Path below a directory | `let r: Path \| !PathFailure_T = p.relative_to(base)` -- the Path (`"."` for the same path), or the built-in `PathFailure_T` (`.path`, `.base`) when p is not below base; pathlib's rules, `..` not resolved. `r is PathFailure_T`, `case r:`, or a `do:` step, as with `ShellFailure_T` |
 | Wait for one / many jobs | `j.wait()` / `waitAll(jobs)` |
 | Run a program, no shell | `run(["git", "log"])` -> RunResult |

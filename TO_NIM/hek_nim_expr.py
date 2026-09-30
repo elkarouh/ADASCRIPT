@@ -3395,6 +3395,13 @@ def to_nim(self, prec=None):
                         and type(next_tr).__name__ == "call_trailer"):
                     from hek_nim_declarations import _ensure_path_mkdir
                     _ensure_path_mkdir()
+                # The Path operations that read and write a file return a
+                # Result, and are helpers added when the call is seen.
+                if (method_name in ("read_text", "read_lines", "write_text")
+                        and next_tr is not None
+                        and type(next_tr).__name__ == "call_trailer"):
+                    from hek_nim_declarations import _ensure_path_io
+                    _ensure_path_io()
                 # Path.relative_to returns a Result, so it is its own helper,
                 # added when the call is seen.
                 if (method_name == "relative_to"

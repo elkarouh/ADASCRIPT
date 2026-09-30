@@ -177,6 +177,47 @@ proc mkdir*(p: Path): Result[void, PathFailure_T] =
 """
 
 
+_PATH_IO = """\
+proc read_text*(p: Path): Result[string, PathFailure_T] =
+  ## The whole file, as text: what readFile gives, or why it could not.
+  try:
+    Result[string, PathFailure_T].ok(readFile(p.string))
+  except CatchableError as e:
+    Result[string, PathFailure_T].err(PathFailure_T(op: "read_text", path: p.string, reason: e.msg))
+
+proc read_lines*(p: Path): Result[seq[string], PathFailure_T] =
+  ## The lines of the file, without their newlines -- what `for line in
+  ## p.lines:` yields, as a list, or why the file could not be read.
+  try:
+    var got: seq[string]
+    for line in lines(p.string):
+      got.add(line)
+    Result[seq[string], PathFailure_T].ok(got)
+  except CatchableError as e:
+    Result[seq[string], PathFailure_T].err(PathFailure_T(op: "read_lines", path: p.string, reason: e.msg))
+
+proc write_text*(p: Path, text: string): Result[void, PathFailure_T] =
+  ## Replace the file's contents: what writeFile does, or why it could not.
+  try:
+    writeFile(p.string, text)
+    Result[void, PathFailure_T].ok()
+  except CatchableError as e:
+    Result[void, PathFailure_T].err(PathFailure_T(op: "write_text", path: p.string, reason: e.msg))\
+"""
+
+
+def _ensure_path_io():
+    """Add Path.read_text / read_lines / write_text the first time one is
+    called: procs returning a Result, so they need stdlib.nim."""
+    from hek_parsec import ParserState
+    _ensure_path_helper()
+    ParserState.nim_imports.add("stdlib")
+    decls = getattr(ParserState, "nim_top_decls", [])
+    if not any("proc read_text*" in d for d in decls):
+        decls.append(_PATH_IO)
+        ParserState.nim_top_decls = decls
+
+
 def _ensure_path_mkdir():
     """Add Path.mkdir the first time it is called: a proc returning a
     Result, so it needs stdlib.nim, and createDir, which is in std/dirs."""

@@ -467,13 +467,17 @@ def check_generic_calls(tree, generics, plain=frozenset()):
 
 
 # The failure types every program has, and the built-in routines that return
-# one: `p.relative_to(base)` is a `Path | !PathFailure_T` and `p.mkdir()` a
-# `None | !PathFailure_T`. Read by the
+# one: `p.relative_to(base)` is a `Path | !PathFailure_T`, `p.mkdir()` and
+# `p.write_text(s)` a `None | !PathFailure_T`, `p.read_text()` a `str | !...`
+# and `p.read_lines()` a `[]str | !...`. Read by the
 # backends where they collect a module's own `-> T | !F` routines, and a
 # routine of the module's own with the same name takes precedence.
 BUILTIN_FAILURE_TYPES = {"ShellFailure_T", "PathFailure_T"}
 BUILTIN_RETURN_TYPES = {"relative_to": "Path | !PathFailure_T",
-                        "mkdir": "None | !PathFailure_T"}
+                        "mkdir": "None | !PathFailure_T",
+                        "read_text": "str | !PathFailure_T",
+                        "read_lines": "[]str | !PathFailure_T",
+                        "write_text": "None | !PathFailure_T"}
 
 
 def either_procs(return_types, failure_types):

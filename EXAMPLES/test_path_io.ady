@@ -1,0 +1,87 @@
+#!/usr/bin/env ady2nim
+"""Test: Path.write_text, read_text and read_lines -- a file, without exceptions.
+
+The three are the Path spellings of writeFile, readFile and `for line in
+p.lines:`, each saying what went wrong as a PathFailure_T instead of raising:
+`p.write_text(s)` is a `None | !PathFailure_T`, `p.read_text()` a `str | !...`
+and `p.read_lines()` a `[]str | !...`. The failure names the operation and the
+path; its reason is the system's own words, which differ between the backends
+and are not compared. `read_lines` gives the lines `p.lines` yields: no
+newlines, and no empty line after a last newline. The output is compared
+between the backends.
+"""
+
+let dir: Path = Path(${TMPDIR:-"/tmp"}) / "ady_test_path_io"
+assert dir.mkdir() is None
+let f: Path = dir / "notes.txt"
+
+# ─── test 1: write, read back ───────────────────────────────────────────────
+
+assert f.write_text("one\ntwo\nthree\n") is None
+let text: str | !PathFailure_T = f.read_text()
+if text is PathFailure_T:
+    assert False
+else:
+    assert text == "one\ntwo\nthree\n"
+print "test1 OK"
+
+# ─── test 2: the lines ──────────────────────────────────────────────────────
+
+let lines: []str | !PathFailure_T = f.read_lines()
+if lines is PathFailure_T:
+    assert False
+else:
+    assert lines == ["one", "two", "three"]
+assert f.write_text("no newline at the end") is None
+let last: []str | !PathFailure_T = f.read_lines()
+if last is PathFailure_T:
+    assert False
+else:
+    assert last == ["no newline at the end"]
+assert f.write_text("") is None
+let none: []str | !PathFailure_T = f.read_lines()
+if none is PathFailure_T:
+    assert False
+else:
+    assert len(none) == 0
+print "test2 OK"
+
+# ─── test 3: what fails, and how it says so ─────────────────────────────────
+
+let missing: Path = dir / "not_here.txt"
+let r1: str | !PathFailure_T = missing.read_text()
+if r1 is PathFailure_T:
+    assert r1.op == "read_text"
+    assert r1.path == str(missing)
+    assert r1.reason != ""
+else:
+    assert False
+let r2: []str | !PathFailure_T = missing.read_lines()
+if r2 is PathFailure_T:
+    assert r2.op == "read_lines"
+else:
+    assert False
+let r3: None | !PathFailure_T = (dir / "no_such_dir" / "x.txt").write_text("x")
+if r3 is PathFailure_T:
+    assert r3.op == "write_text"
+    assert r3.path == str(dir / "no_such_dir" / "x.txt")
+else:
+    assert False
+print "test3 OK"
+
+# ─── test 4: a do: chain passes the first failure on ────────────────────────
+
+def copy(src: Path, dst: Path) -> None | !PathFailure_T:
+    do:
+        body <- src.read_text()
+        dst.write_text(body)
+
+assert f.write_text("copied\n") is None
+assert copy(f, dir / "copy.txt") is None
+let copied: str | !PathFailure_T = (dir / "copy.txt").read_text()
+if copied is PathFailure_T:
+    assert False
+else:
+    assert copied == "copied\n"
+assert copy(missing, dir / "copy2.txt") is PathFailure_T
+print "test4 OK"
