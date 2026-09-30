@@ -229,7 +229,9 @@ def review(repo: Repo, abs: Path, rel: Path, tmp: Path) -> int | !Failure_T:
             head_file <- repo.tmpname("HEAD", "head", tmp, base)     # named like the others: with HEAD's tags
             repo.save_at(head, head_file)
         print "Uncommitted changes: opening working copy vs HEAD"
-        shell: meld --label "working copy" {!abs} {!head_file}
+        # meld's label replaces the name in the header, so the name is said again
+        let head_label: str = head_file.name
+        shell: meld --label {!head_label} --label "working copy" {!head_file} {!abs}
         if not ask("Continue?", "Continue to committed history?"):
             return 0
 
@@ -261,7 +263,8 @@ def review(repo: Repo, abs: Path, rel: Path, tmp: Path) -> int | !Failure_T:
         if new.path != old.path:
             print f"  (renamed: {old.path} -> {new.path})"
         print f"[{i + 1}/{total}] {new_desc}  <-  {old_desc}"
-        shell: meld {!new_file} {!old_file}
+        # oldest on the left, newest on the right
+        shell: meld {!old_file} {!new_file}
 
         shell: rm -f {!new_file} {!old_file}
 

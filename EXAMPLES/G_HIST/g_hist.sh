@@ -153,7 +153,7 @@ if git_ rev-parse --verify -q HEAD >/dev/null \
   head_file=$(tmpname HEAD head)   # named like the others: with HEAD's tags
   show_at HEAD "$rel" "$head_file"
   echo "Uncommitted changes: opening working copy vs HEAD"
-  meld --label "working copy" "$abs" "$head_file" || true
+  meld --label "$(basename -- "$head_file")" --label "working copy" "$head_file" "$abs" || true
   ask "Continue?" "Continue to committed history?" || exit 0
 fi
 
@@ -184,7 +184,7 @@ old: $old_desc" || { echo "Stopped by user after $i comparison(s)."; exit 0; }
 
   [[ $new_path == "$old_path" ]] || echo "  (renamed: $old_path -> $new_path)"
   echo "[$((i + 1))/$total] $new_desc  <-  $old_desc"
-  meld "$nf" "$of" || true
+  meld "$of" "$nf" || true   # oldest on the left, newest on the right
 
   rm -f "$nf" "$of"
 done
