@@ -623,7 +623,7 @@ exception climbs through functions whose signatures say nothing, to a handler
 somewhere else. The built-in operations follow the rule -- `shell:` returns a
 `str | !ShellFailure_T`, `Path.mkdir`/`relative_to`/`read_text`/`read_lines`/
 `write_text` a `... | !PathFailure_T`, `parse_float`/`parse_int`/`parse_enum`
-a `... | !ParseFailure_T` and `input()` a `str | !InputFailure_T` -- and the older ones that still raise
+a `... | !ParseFailure_T` and `input()` and `stdin.readLine()` a `str | !InputFailure_T` -- and the older ones that still raise
 (`readFile`, `writeFile`, `for line in p.lines:`) are for when a raise is what
 you want. Exceptions are for what nobody expected.
 
@@ -639,7 +639,7 @@ The standard failures, and what returns them:
 | `parse_float(s)` | `float \| !ParseFailure_T` | `what`, `text` |
 | `parse_int(s)` | `int \| !ParseFailure_T` | `what`, `text` |
 | `parse_enum(E, s)` | `E \| !ParseFailure_T` | `what`, `text` |
-| `input(prompt)` | `str \| !InputFailure_T` | `reason` |
+| `input(prompt)`, `stdin.readLine()` | `str \| !InputFailure_T` | `reason` |
 
 Your own routines join the same tracks with a `Failure_T` of their own, and a
 `do:` step can turn one of these into it (`else handler(x)`).

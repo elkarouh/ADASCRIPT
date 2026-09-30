@@ -282,7 +282,7 @@ The built-in operations that can fail are on these tracks already:
 | `parse_float(s)` | `float \| !ParseFailure_T` | `what`, `text` |
 | `parse_int(s)` | `int \| !ParseFailure_T` | `what`, `text` |
 | `parse_enum(E, s)` | `E \| !ParseFailure_T` | `what`, `text` |
-| `input(prompt)` | `str \| !InputFailure_T` | `reason` |
+| `input(prompt)`, `stdin.readLine()` | `str \| !InputFailure_T` | `reason` |
 
 This is railway-oriented programming — Scott Wlaschin's name for it — and it
 is not new: F#'s and Rust's `Result` and Zig's error unions all do it. What the notation adds is

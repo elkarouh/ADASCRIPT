@@ -206,10 +206,11 @@ for arg in $@:
 # ── stdin mode ────────────────────────────────────────────────────────────────
 if stdin_mode:
     var input_lines: []str = []
-    var line: str = ""
-    while not endOfFile(stdin):
-        line = readLine(stdin)
-        input_lines.append(line)
+    while True:
+        let got: str | !InputFailure_T = stdin.readLine()
+        if got is InputFailure_T:
+            break
+        input_lines.append(got)
     let input_json: str = join(input_lines, "\n")
     let data: JsonNode = parseJson(input_json)
     print(solve_to_json(data))

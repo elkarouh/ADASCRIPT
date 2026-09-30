@@ -2790,6 +2790,14 @@ def to_nim(self, prec=None):
         _spaced = _spaced_echo(self)
         if _spaced is not None:
             return _spaced
+    # stdin.readLine() is input() without a prompt: a `str | !InputFailure_T`
+    if (raw_name == "stdin" and len(self.nodes) > 1 and hasattr(self.nodes[1], "nodes")
+            and "stdin" not in getattr(ParserState, "user_top_level_procs", ())):
+        _tr = [t.to_nim() for t in self.nodes[1].nodes]
+        if _tr[:2] == [".readLine", "()"]:
+            from hek_nim_declarations import _ensure_input_helper
+            _ensure_input_helper()
+            return "adascriptInput()" + "".join(_tr[2:])
     # Auto-unwrap Option vars proven non-None by an enclosing if x.isSome guard.
     # Only applies when used as a bare name (no trailers that already dereference it).
     _unwrap_vars = getattr(ParserState, '_option_unwrap_vars', set())

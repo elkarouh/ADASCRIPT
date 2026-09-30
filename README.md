@@ -1962,7 +1962,7 @@ caught, if it is, somewhere else. The built-ins are written this way --
 `read_text`, `read_lines`, `write_text`) return a `T | !ShellFailure_T` or
 `T | !PathFailure_T` -- as are `parse_float(s)`, `parse_int(s)` and
 `parse_enum(E, s)` (`... | !ParseFailure_T`), for a number or an enum member read from text,
-and `input(prompt)`, a `str | !InputFailure_T` (the input ended) --
+and `input(prompt)` and `stdin.readLine()`, a `str | !InputFailure_T` (the input ended) --
 and a failure that is dropped is refused. Exceptions
 are for what nobody expected; `readFile`, `writeFile` and `for line in
 p.lines:` are the older forms that still raise.

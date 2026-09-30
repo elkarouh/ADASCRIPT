@@ -851,7 +851,7 @@ _STREAM_CALLS = (
     ("stdout", "write",     lambda a: f"sys.stdout.write({a})"),
     ("stderr", "flushFile", lambda a: "sys.stderr.flush()"),
     ("stdout", "flushFile", lambda a: "sys.stdout.flush()"),
-    ("stdin",  "readLine",  lambda a: "input()"),
+    ("stdin",  "readLine",  lambda a: "adascriptInput()"),
 )
 
 
@@ -1348,9 +1348,12 @@ def _translate_stream_call(stream, expr):
     for name, meth, build in _STREAM_CALLS:
         if name != stream:
             continue
-        m = _re_s.match(rf'^{name}\.{meth}\((.*)\)$', expr, _re_s.DOTALL)
+        m = _re_s.match(rf'^(?:sys\.)?{name}\.{meth}\((.*)\)$', expr, _re_s.DOTALL)
         if m:
             ParserState.nim_imports.add("import sys")
+            if meth == "readLine":      # a `str | !InputFailure_T`, as input() is
+                from hek_py_declarations import _ensure_input_helper
+                _ensure_input_helper()
             return build(m.group(1))
     return None
 
@@ -1495,8 +1498,8 @@ def to_py(self, prec=None):
                 result = _tick_to_py(result, tr._tick_attr)
             i += 1
     atom_name = self.nodes[0].to_py()
-    if atom_name in ("stderr", "stdout", "stdin"):
-        translated = _translate_stream_call(atom_name, result)
+    if atom_name in ("stderr", "stdout", "stdin", "sys.stdin"):
+        translated = _translate_stream_call(atom_name.replace("sys.", ""), result)
         if translated is not None:
             return translated
     if atom_name == "os":

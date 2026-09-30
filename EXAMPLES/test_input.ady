@@ -1,6 +1,6 @@
 #!/usr/bin/env ady2nim
-"""Test: input(prompt) is a `str | !InputFailure_T` -- a line, or the end of
-the input as a value, not an EOFError. Fed two lines on standard input, the
+"""Test: input(prompt) and stdin.readLine() are a `str | !InputFailure_T` -- a
+line, or the end of the input as a value, not an EOFError. Fed two lines on standard input, the
 third call finds the input ended. The output is compared between the
 backends (see the Makefile).
 """
@@ -11,7 +11,7 @@ def ask(prompt: str) -> str | !InputFailure_T:
 def full_name() -> str | !InputFailure_T:
     do:
         first <- input("first: ")
-        last <- input()
+        last <- stdin.readLine()
     return f"{first} {last}"
 
 let name: str | !InputFailure_T = full_name()
@@ -27,7 +27,7 @@ if more is InputFailure_T:
 else:
     assert False
 
-let again: str | !InputFailure_T = input()
+let again: str | !InputFailure_T = stdin.readLine()
 if again is InputFailure_T:
     print "still none"
 else:

@@ -587,6 +587,7 @@ test: compile
 	@printf 'let t: str = "1"\nparse_float(t)\n' > $(TMPDIR)/ady_refuse_18.ady
 	@printf 'let t: str = "1"\nparse_int(t)\n' > $(TMPDIR)/ady_refuse_19.ady
 	@printf 'input("name: ")\n' > $(TMPDIR)/ady_refuse_20.ady
+	@printf 'stdin.readLine()\n' > $(TMPDIR)/ady_refuse_21.ady
 	@for tr in TO_NIM/ady2nim.py TO_PYTHON/ady2py.py; do \
 	    for c in "1:members no one can tell apart:cannot be told apart" \
 	             "2:a dropped failure:drops a failure" \
@@ -607,7 +608,8 @@ test: compile
 	             "17:a dropped Path.write_text:drops a failure" \
 	             "18:a dropped parse_float:drops a failure" \
 	             "19:a dropped parse_int:drops a failure" \
-	             "20:a dropped input():drops a failure"; do \
+	             "20:a dropped input():drops a failure" \
+	             "21:a dropped stdin.readLine():drops a failure"; do \
 	        n=$${c%%:*}; rest=$${c#*:}; what=$${rest%%:*}; want=$${rest#*:}; \
 	        printf '  %-42s' "$$what ($$(basename $$tr .py))"; \
 	        if $(PYTHON) $(CURDIR)/$$tr $(TMPDIR)/ady_refuse_$$n.ady > $(TMPDIR)/ady_refuse.out 2>&1; then \
