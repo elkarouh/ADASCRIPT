@@ -549,6 +549,10 @@ let rc: int = shell(join = ";"):
 - A method named `get` is taken for a dict's `get`, and `bind` is a Nim
   keyword: a Nim-reserved or stdlib-shadowing method name fails late, inside
   Nim, rather than with a message from Adascript.
+  `out` is the same as a parameter name (`def f(out: Path)` gives "typedesc[var]"
+  in the generated `quoteShell(out)`).
+- An f-string inside a shell interpolation, `{!f"HEAD {short}"}`, breaks the
+  emitted Nim ("closing \" expected"); bind it to a `let` first.
 
 Also: a variant record is a value type on Nim, so a variant that holds
 itself through a field (a closure holding its body) needs the holder to be a

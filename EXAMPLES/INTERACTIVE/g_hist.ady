@@ -1,0 +1,170 @@
+#!/usr/bin/env ady2nim
+"""g_hist: step through a file's git history in meld, newest change first.
+
+    g_hist path/to/file
+
+Follows renames, handles revisions where the file does not exist (before it
+was created, after it was deleted), and works from any directory: git is
+asked from the file's own directory. With a display and zenity it asks in
+dialogs, otherwise at the terminal.
+
+A translation of the bash script of the same name. What the shell needed
+`set -euo pipefail`, `trap`, parallel arrays and `IFS= read -r` for is a
+`Repo` class, a list of records, and `shellLines`.
+"""
+nimport os
+
+type Rev_T is record:
+    hash: str
+    path: str                  # the file's path at that commit: renames change it
+
+# Use zenity when a display is available, otherwise fall back to the terminal.
+let GUI: bool = which("zenity") is not None and ($DISPLAY != "" or $WAYLAND_DISPLAY != "")
+
+def msg_error(text: str) -> None:
+    stderr.writeLine(f"error: {text}")
+    if GUI:
+        shell: zenity --error --no-markup --text={!text}
+
+def msg_info(text: str) -> None:
+    print text
+    if GUI:
+        shell: zenity --info --no-markup --text={!text}
+
+def fatal(text: str) -> None:
+    msg_error(text)
+    quit(1)
+
+def ask(title: str, text: str) -> bool:
+    """True to continue, False to stop."""
+    if GUI:
+        let code: int = shell: zenity --question --no-markup --title={!title} --text={!text} --ok-label=Continue --cancel-label=Stop
+        return code == 0
+    try:
+        let answer: str = input(f"{text} [Y/n] ")
+        return not (answer == /^[Nn]/)
+    except EOFError:
+        return False
+
+class Repo:
+    """The git repository a file is in; every command runs from its root."""
+    var root: Path
+
+    def __init__(self, root: Path):
+        self.root = root
+
+    def output(self, *args: str) -> str:
+        let (text, _) = shell(cwd = self.root): git {*args}
+        return text.strip()
+
+    def succeeds(self, *args: str) -> bool:
+        let (_, code) = shell(cwd = self.root): git {*args} 2>/dev/null
+        return code == 0
+
+    def history(self, rel: str) -> []Rev_T:
+        """Commits touching REL, newest first. --follow tracks renames, so the
+        path the file had at each commit is recorded with it."""
+        var revs: []Rev_T = []
+        var current: str = ""
+        let lines = shellLines(cwd = self.root): git log --follow --name-only --format=@%H -- {!rel}
+        for line in lines:
+            if line.startswith("@"):
+                current = line[1:]
+            elif line != "":
+                revs.append(Rev_T(hash=current, path=line))
+        return revs
+
+    def save_at(self, rev: Rev_T, dest: Path) -> None:
+        """The file as it was at REV, into DEST: empty if it did not exist
+        there, before creation or after deletion."""
+        let spec: str = f"{rev.hash}:{rev.path}"
+        if self.succeeds("cat-file", "-e", spec):
+            shell(cwd = self.root): git show {!spec} > {!dest}
+        else:
+            writeFile(dest, "")
+
+    def describe(self, hash: str) -> str:
+        return self.output("log", "-1", "--format=%h %ad %an: %s", "--date=short", hash)
+
+def review(repo: Repo, abs: str, rel: str, tmp: Path) -> int:
+    """Open the comparisons one after another; the exit status."""
+    let revs: []Rev_T = repo.history(rel)
+    let base: str = Path(rel).name
+
+    # 1) Uncommitted changes vs HEAD, if any.
+    if repo.succeeds("rev-parse", "--verify", "-q", "HEAD") and not repo.succeeds("diff", "--quiet", "HEAD", "--", rel):
+        let head: Rev_T = Rev_T(hash="HEAD", path=rel)
+        let head_file: Path = tmp / f"head-{base}"
+        repo.save_at(head, head_file)
+        let head_label: str = "HEAD " + repo.output("rev-parse", "--short", "HEAD")
+        print "Uncommitted changes: opening working copy vs HEAD"
+        shell: meld --label "working copy" --label {!head_label} {!abs} {!head_file}
+        if not ask("Continue?", "Continue to committed history?"):
+            return 0
+
+    if len(revs) < 2:
+        msg_error(f"Need at least 2 committed revisions of {rel} (found {len(revs)})")
+        return 1
+
+    let total: int = len(revs) - 1
+    print f"Found {len(revs)} revisions; {total} comparisons."
+
+    for i in 0..<total:
+        let new: Rev_T = revs[i]
+        let old: Rev_T = revs[i + 1]
+        let new_desc: str = repo.describe(new.hash)
+        let old_desc: str = repo.describe(old.hash)
+
+        if i > 0:
+            if not ask("Continue?", f"Comparison {i + 1} of {total}\n\nnew: {new_desc}\nold: {old_desc}"):
+                print f"Stopped by user after {i} comparison(s)."
+                return 0
+
+        let new_file: Path = tmp / f"{new.hash[:8]}-{base}"
+        let old_file: Path = tmp / f"{old.hash[:8]}-{base}"
+        repo.save_at(new, new_file)
+        repo.save_at(old, old_file)
+
+        if new.path != old.path:
+            print f"  (renamed: {old.path} -> {new.path})"
+        print f"[{i + 1}/{total}] {new_desc}  <-  {old_desc}"
+        shell: meld --label {!new_desc} --label {!old_desc} {!new_file} {!old_file}
+
+        shell: rm -f {!new_file} {!old_file}
+
+    msg_info(f"Done. Reviewed {total} comparison(s).")
+    return 0
+
+if $# != 1:
+    die(f"usage: {PROG} path/to/file", code = 2)
+let file: str = $1
+
+if which("git") is None:
+    fatal("git is not installed")
+if which("meld") is None:
+    fatal("meld is not installed")
+if not -e file:
+    fatal(f"File not found: {file}")
+
+let (abs_text, _) = shell: realpath -- {!file}
+let abs: str = abs_text.strip()
+
+# Ask git from the file's own directory, so this works from any cwd.
+let (root_text, root_code) = shell(cwd = Path(abs).parent): git rev-parse --show-toplevel 2>/dev/null
+if root_code != 0:
+    fatal(f"{file} is not inside a git repository")
+let root: str = root_text.strip()
+if not abs.startswith(root + "/"):
+    fatal(f"{file} is not inside the git repo at {root}")
+let rel: str = abs[len(root) + 1:]
+print f"Repo root:     {root}"
+print f"Repo-rel path: {rel}"
+
+let (tmp_text, _) = shell: mktemp -d
+let tmp: Path = Path(tmp_text.strip())
+var status: int = 1
+try:
+    status = review(Repo(Path(root)), abs, rel, tmp)
+finally:
+    shell: rm -rf {!tmp}
+quit(status)
