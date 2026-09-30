@@ -42,11 +42,13 @@ clock starts and times one pass over data in memory.
   compiler (`gnatmake` is absent, so the Ada rows are missing). Each row is
   the **median of 10 process launches**, each pinned to one core with
   `taskset`, over the warm in-process iterations (the first of each launch is
-  dropped). C here scans 40 MB in 63–66 ms where their i7 scans 81 MB in
+  dropped). C here scans 40 MB in 59–65 ms where their i7 scans 81 MB in
   50 ms, so compare ratios, not absolute times.
-- **Adascript prints whole milliseconds** for the scan and the merge, so a
-  `1` on the merge means somewhere in 0.6–1.4 ms. The set intersection is
-  printed to a tenth.
+- **Adascript prints every timing to a tenth of a millisecond** (`{:7.1f}`,
+  the same on both backends). An earlier draft of this page printed whole
+  milliseconds by truncating, which turned the Nim merge's 1.7 ms into "1"
+  and made it look faster than C; the numbers below are from the tenth-ms
+  output.
 
 Files are text in Adascript (a `str`), not bytes as in their Python; that is
 the one difference in what is being searched.
@@ -59,14 +61,14 @@ languages use (a scan of the lines, a two-pointer merge).
 
 | | scan, library way | scan, hand loop | merge, hand loop | set intersection |
 |---|---:|---:|---:|---:|
-| C `-O2` | | 66 | 1.7 | |
-| C `-O3` | | 63 | 1.6 | |
-| Rust `-O2` | | 60.5 | 1.8 | |
-| Java (warm) | | 84 | 1.8 | |
-| Python (their `bench.py`) | 34 | 193 | 103 | 11.9 |
-| **Adascript → Python** | 32.5 | 62.5 | 63.5 | 10.8 |
-| **Adascript → Nim, default build** (`ady2nim c`) | 35 | 87 | 4 | 76.5 |
-| **Adascript → Nim, `-d:release`** | **29** | **52** | **1** | 17.4 |
+| C `-O2` | | 64.5 | 1.6 | |
+| C `-O3` | | 65.0 | 1.7 | |
+| Rust `-O2` | | 59.0 | 1.8 | |
+| Java (warm) | | 82.0 | 1.8 | |
+| Python (their `bench.py`) | 33.0 | 191.5 | 96.5 | 11.5 |
+| **Adascript → Python** | 32.8 | 61.5 | 64.8 | 10.7 |
+| **Adascript → Nim, default build** (`ady2nim c`) | 35.7 | 87.9 | 4.0 | 80.3 |
+| **Adascript → Nim, `-d:release`** | **29.4** | **54.1** | **1.7** | 18.8 |
 
 C, Rust and Java have one loop each, so one column: their "scan" row is the
 hand loop and their "merge" row is the merge. Their Python has both, as
@@ -75,27 +77,43 @@ Adascript's does.
 ## Reading it
 
 - **Build for release.** `ady2nim c` alone gives an unoptimised Nim build,
-  with checks on: 4 ms on the merge and 76 ms on the hash-set intersection.
-  `ady2nim c -d:release` gives **1 ms** and 17 ms, and `-d:danger` (checks
-  off) is no different. Before timing anything, rebuild with `-f`: the
-  up-to-date check does not notice a change of compiler flags, so the first
-  `-d:release` build here was silently a stale default one.
-- **The release build is in C's class on the merge.** 1 ms against 1.6–1.7
-  for C and Rust.
+  with checks on: 4.0 ms on the merge and 80 ms on the hash-set
+  intersection. `ady2nim c -d:release` gives **1.7 ms** and 19 ms, and
+  `-d:danger` (checks off) is no different. Before timing anything, delete
+  the built binary and rebuild: the up-to-date check does not notice a
+  change of compiler flags, and even `-f` did not force it, so a
+  `-d:release` build here was more than once silently a stale default one.
+- **The release build matches C on the merge**: 1.7 ms against 1.6–1.8 for
+  C and Rust. It is not faster; range-checked `Natural` counters cost
+  nothing measurable (1.6–1.8 ms with `Natural` or `int`).
 - **The scan is faster than the C and Rust loops**, but for a different
   algorithm: the store is split into lines before the clock starts, and the
-  timed loop is `word in line` over them (52 ms), or a single `count` over
+  timed loop is `word in line` over them (54 ms), or a single `count` over
   the whole text (29 ms). The C and Rust loops walk the bytes once and split
   as they go. Same answer, not the same work.
 - **On the Python backend, Adascript's hand loops are 2–3× faster than their
-  Python's** (scan 62.5 against 193 ms, merge 63.5 against 103 ms). Both
+  Python's** (scan 61.5 against 192 ms, merge 65 against 97 ms). Both
   are CPython; theirs counts with a generator expression per line and
   compares bytes, ours is a loop with `+=` over text. This was not chased
   further.
-- **The hash-set intersection is the weak spot on Nim**: 17 ms release, 76 ms
-  default, against CPython's 11–12 ms, whose `set` keeps each string's hash
-  and probes with it. It is the one row where the native build loses to the
-  interpreter.
+- **The hash-set intersection is the weak spot on Nim**: 19 ms release, 80 ms
+  default, against CPython's 11–12 ms. It is the one row where the native
+  build loses to the interpreter. The emitted code is Nim's own `a * b`
+  (Adascript adds nothing), and a stand-alone profile of it, release build,
+  on the same two lists says where the time goes:
+
+  | | ms |
+  |---|---:|
+  | `a * b` on string sets | 18.9 |
+  | iterate the smaller set, probe the larger, count only | 16.2 |
+  | hash the smaller set's 132,570 strings, nothing else | 4.3 |
+  | `a * b` on **integer** sets, the same ids | **5.7** (CPython's: 6.4) |
+
+  Nim already iterates the smaller set, and hashing is about a fifth of the
+  time (CPython hashes a string once, when it is put in a set). The cost is
+  the string keys, which are separate heap objects to fetch and compare on
+  every probe: the same table on integers is faster than CPython's. The
+  fix, if it matters, is integer sets, not a different hash function.
 
 ## Reproducing it
 
