@@ -1084,6 +1084,29 @@ else:
 `when Failure_T:` / `when int:` gives a branch per side. Book chapter 10.12
 has the whole of it.
 
+**Prefer a failure to an exception.** Where an operation can go wrong in a
+way you expect -- a missing file, a command that fails, a path not below its
+base, a number that is not one -- it returns `T | !Failure_T`; it does not
+raise, and you do not wrap the call in `try/except`. The intent is then
+explicit, in the signature and again at the call, and what is done about it
+is written right there, next to the call:
+
+```python
+let res: int | !Failure_T = read_number(text)
+if res is Failure_T:
+    die(res.detail)              # handled here, where the call is
+print res + 1                    # res is the int from here on
+```
+
+An exception is caught (or not) at some distance from the call, and nothing
+on the page says it can happen; a failure value cannot be dropped unseen --
+a bare call that ignores one is refused. The built-in operations follow this:
+`shell:` gives a `str | !ShellFailure_T`, and `Path.mkdir`, `.relative_to`,
+`.read_text`, `.read_lines` and `.write_text` give a `... | !PathFailure_T`.
+What still raises -- `readFile`, `writeFile`, `for line in p.lines:`,
+`input()` -- is the older spelling: use the failure-typed one where there is
+one, and keep exceptions for what nobody expected.
+
 Do not forget the `!`: without it, nothing says Failure_T is a failure.
 Marked in another union, the type is refused unmarked, so that slip does
 not build; marked nowhere, `int | Failure_T` is an ordinary union of two

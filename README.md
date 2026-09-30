@@ -1935,9 +1935,27 @@ the whole of it; `EXAMPLES/test_union.ady` is the spec.
 
 ## Failures as Values: `T | !F`
 
-A function that can fail says so in its return type: `-> int | !Failure_T`
-returns an int, or a failure saying why there is none. A failure is an
-ordinary record; the `!` in front of it, not the order of the sides, says
+**Adascript prefers a failure value to an exception.** A function that can
+fail says so in its return type: `-> int | !Failure_T` returns an int, or a
+failure saying why there is none. The caller takes the result and handles it
+right there, so the intent is explicit and the handling is local:
+
+```python
+let res: int | !Failure_T = read_number(text)
+if res is Failure_T:
+    die(res.detail)       # handled where the call is
+print res + 1             # res is the int from here on
+```
+
+An exception is caught, if it is, somewhere else, and the signature does
+not say it can happen. The built-ins are written this way -- `shell:` and
+the `Path` operations that can fail (`mkdir`, `relative_to`, `read_text`,
+`read_lines`, `write_text`) return a `T | !ShellFailure_T` or `T |
+!PathFailure_T` -- and a failure that is dropped is refused. Exceptions are
+for what nobody expected; `readFile`, `writeFile` and `for line in
+p.lines:` are the older forms that still raise.
+
+A failure is an ordinary record; the `!` in front of it, not the order of the sides, says
 which side is the failure -- the one a `do:` block passes on.
 
 ```python

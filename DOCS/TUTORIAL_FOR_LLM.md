@@ -204,6 +204,17 @@ Other enforcement: enums are their own types; subranges are bounds-checked, on N
 
 Style: every place on disk is a `Path`, joined with `/` (`Path(root) / sub / ".git"`), never a `str` joined with `"/"`; parameters that are directories or files are typed `Path`. Keep `str` for what is not a place on this disk (a URL, a path as another tool reports it, a git config value); convert with `str(p)` where an API takes strings, e.g. `run(["rmdir", str(work)])`. Go up with `.parent`, not `/ ".."`.
 
+Failures: **an operation that can fail returns `T | !Failure_T`; it does not raise.** Do not write `try/except` around what you expect to go wrong -- a missing file, a failed command, a path not below its base, a bad number. Take the result where you call it, so the intent is explicit and the handling is right there:
+
+```adascript
+let res: int | !Failure_T = read_number(text)
+if res is Failure_T:
+    fatal(res.detail)          # handled here, next to the call
+print res + 1                  # res is the int from here on
+```
+
+The built-in operations are written this way: `shell:` (`str | !ShellFailure_T`), and `Path.mkdir`, `.relative_to`, `.read_text`, `.read_lines`, `.write_text` (`... | !PathFailure_T`). A failure that is dropped is refused, and `do:` chains the steps (`x <- step()`), passing the first failure on. Exceptions stay for what is not expected -- a bug, and the older forms that still raise (`readFile`, `writeFile`, `for line in p.lines:`, `input()`): prefer the failure-typed spelling where there is one. An exception is caught (or not) somewhere else, and nothing in the signature says it can happen; a failure value is handled at the call and is in the type.
+
 ---
 
 ## Variable Declarations

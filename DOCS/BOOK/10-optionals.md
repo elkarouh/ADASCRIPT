@@ -596,6 +596,27 @@ there is none:
 def read_number(s: str) -> int | !Failure_T:
 ```
 
+**The rule: an operation that can fail in an expected way returns a failure;
+it does not raise.** No `try/except` around a missing file, a failed command
+or a bad number. The caller takes the result where it makes the call:
+
+```python
+let res: int | !Failure_T = read_number(text)
+if res is Failure_T:
+    die(res.detail)          # handled here, next to the call
+print res + 1                # res is the int from here on
+```
+
+That is what makes the intent explicit: the signature says the call can fail,
+and the code that deals with it sits beside the call, not in a `try` some
+distance above it or in a handler nobody wrote. An exception says neither, and
+the failure it carries is caught wherever it happens to be caught. The
+built-in operations follow the rule -- `shell:` returns a `str |
+!ShellFailure_T`, `Path.mkdir`/`relative_to`/`read_text`/`read_lines`/
+`write_text` a `... | !PathFailure_T` -- and the older ones that still raise
+(`readFile`, `writeFile`, `for line in p.lines:`) are for when a raise is
+what you want. Exceptions are for what nobody expected.
+
 This is railway-oriented programming. Every step runs on the value track,
 and the first failure switches to the failure track and rides it, unchanged,
 to the one place that decides what to tell the user. Code in this style has
