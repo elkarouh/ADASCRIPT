@@ -213,9 +213,9 @@ type PathFailure_T* = object
 
 # ---------------------------------------------------------------------------
 # ParseFailure_T -- the built-in failure of a conversion from text:
-# `parse_float(s)` is a `float | !ParseFailure_T` and `parse_enum(E, s)` an
-# `E | !ParseFailure_T`. It says what was being read (`what`: "float", or the
-# enum's name) and the text that was not one (`text`).
+# `parse_float(s)` is a `float | !ParseFailure_T`, `parse_int(s)` an
+# `int | !ParseFailure_T` and `parse_enum(E, s)` an `E | !ParseFailure_T`. It
+# says what was being read (`what`: "float", "int", or the enum's name) and the text that was not one (`text`).
 # ---------------------------------------------------------------------------
 type ParseFailure_T* = object
   what*: string

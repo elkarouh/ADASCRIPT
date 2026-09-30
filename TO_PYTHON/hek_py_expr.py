@@ -1412,7 +1412,7 @@ def to_py(self, prec=None):
                     result = helper
                     i += 1
                     continue
-            if i == 0 and result in ("parse_float", "parse_enum") and result not in _own:
+            if i == 0 and result in ("parse_float", "parse_int", "parse_enum") and result not in _own:
                 from hek_py_declarations import _ensure_parse_helpers
                 _ensure_parse_helpers()
             if i == 0 and result == "which" and "which" not in _own:

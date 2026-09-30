@@ -360,6 +360,14 @@ def parse_float(_s):
     return ParseFailure_T(what="float", text=_s)
 
 
+def parse_int(_s):
+    """A decimal integer: an optional sign and digits, nothing else, and one
+    that fits a 64-bit int, as on Nim. Not one is a ParseFailure_T."""
+    if _re_fullmatch(r"[+-]?\\d+", _s, _re_ASCII) and -2**63 <= int(_s) < 2**63:
+        return int(_s)
+    return ParseFailure_T(what="int", text=_s)
+
+
 def parse_enum(_e, _s):
     """The member of enum _e named exactly _s; a ParseFailure_T otherwise."""
     try:

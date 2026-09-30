@@ -1,13 +1,15 @@
 #!/usr/bin/env ady2nim
-"""Test: parse_float and parse_enum -- text to a value, without exceptions.
+"""Test: parse_float, parse_int and parse_enum -- text to a value, without
+exceptions.
 
-`parse_float(s)` is a `float | !ParseFailure_T` and `parse_enum(E, s)` an
-`E | !ParseFailure_T`: the value, or the built-in failure saying what was
-being read (`what`: "float", or the enum's name) and the text that was not
+`parse_float(s)` is a `float | !ParseFailure_T`, `parse_int(s)` an
+`int | !ParseFailure_T` and `parse_enum(E, s)` an `E | !ParseFailure_T`: the value, or the built-in failure saying what was
+being read (`what`: "float", "int", or the enum's name) and the text that was not
 one (`text`). A float is a decimal number and nothing else: an optional sign,
 digits with at most one `.`, an optional exponent -- no spaces, no `_`, no
 `inf`, `nan` or hex, which Python's float() and Nim's parseFloat each take a
-different set of. An enum member is named exactly: `beta` is not `BETA`. The
+different set of. An int is an optional sign and digits, and has to fit
+a 64-bit `int`. An enum member is named exactly: `beta` is not `BETA`. The
 output is compared between the backends.
 """
 
@@ -30,6 +32,20 @@ print "test1 OK"
 for t in ["", "abc", "1.2.3", "1e", "e5", " 1", "1 ", "1_000", "inf", "nan", "0x10", "-", ".", "+-1", "1,5"]:
     print show(t)
 print "test2 OK"
+
+# ─── test 2b: ints ──────────────────────────────────────────────────────────
+
+def show_int(text: str) -> str:
+    let r: int | !ParseFailure_T = parse_int(text)
+    if r is ParseFailure_T:
+        return f"[{text}] not an int ({r.what})"
+    return f"[{text}] {r}"
+
+for t in ["0", "42", "-7", "+7", "007", "9223372036854775807", "-9223372036854775808",
+          "9223372036854775808", "-9223372036854775809", "99999999999999999999",
+          "", "-", "+", "1.5", "1e3", " 1", "1 ", "1_000", "0x10", "abc", "--1", "\u0663"]:
+    print show_int(t)
+print "test2b OK"
 
 # ─── test 3: enum members, by exact name ────────────────────────────────────
 
@@ -68,3 +84,21 @@ if first is ParseFailure_T:
 else:
     assert False
 print "test4 OK"
+
+def total(a: str, b: str) -> int | !ParseFailure_T:
+    do:
+        x <- parse_int(a)
+        y <- parse_int(b)
+    return x + y
+
+let sum: int | !ParseFailure_T = total("40", "2")
+if sum is ParseFailure_T:
+    assert False
+else:
+    assert sum == 42
+let sum_bad: int | !ParseFailure_T = total("40", "2.5")
+if sum_bad is ParseFailure_T:
+    assert sum_bad.what == "int" and sum_bad.text == "2.5"
+else:
+    assert False
+print "test5 OK"

@@ -2818,10 +2818,10 @@ def to_nim(self, prec=None):
             "sorted": "algorithm", "toHashSet": "sets", "initHashSet": "sets",
             "initTable": "tables", "newTable": "tables",
         }
-        if raw_name in ("parse_float", "parse_enum") and raw_name not in getattr(ParserState, "user_top_level_procs", ()):
+        if raw_name in ("parse_float", "parse_int", "parse_enum") and raw_name not in getattr(ParserState, "user_top_level_procs", ()):
             from hek_nim_declarations import _ensure_parse_helpers
             _ensure_parse_helpers()
-            result = {"parse_float": "adascriptParseFloat", "parse_enum": "adascriptParseEnum"}[raw_name]
+            result = {"parse_float": "adascriptParseFloat", "parse_int": "adascriptParseInt", "parse_enum": "adascriptParseEnum"}[raw_name]
         if raw_name in _NIM_CALL_IMPORTS:
             ParserState.nim_imports.add(_NIM_CALL_IMPORTS[raw_name])
 

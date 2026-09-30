@@ -584,6 +584,7 @@ test: compile
 	@printf 'let f: Path = Path("/tmp/x")\nf.write_text("x")\n' > $(TMPDIR)/ady_refuse_17.ady
 	@# a conversion can fail, so its result is taken, not dropped.
 	@printf 'let t: str = "1"\nparse_float(t)\n' > $(TMPDIR)/ady_refuse_18.ady
+	@printf 'let t: str = "1"\nparse_int(t)\n' > $(TMPDIR)/ady_refuse_19.ady
 	@for tr in TO_NIM/ady2nim.py TO_PYTHON/ady2py.py; do \
 	    for c in "1:members no one can tell apart:cannot be told apart" \
 	             "2:a dropped failure:drops a failure" \
@@ -602,7 +603,8 @@ test: compile
 	             "15:a dropped Path.relative_to:drops a failure" \
 	             "16:a dropped Path.mkdir:drops a failure" \
 	             "17:a dropped Path.write_text:drops a failure" \
-	             "18:a dropped parse_float:drops a failure"; do \
+	             "18:a dropped parse_float:drops a failure" \
+	             "19:a dropped parse_int:drops a failure"; do \
 	        n=$${c%%:*}; rest=$${c#*:}; what=$${rest%%:*}; want=$${rest#*:}; \
 	        printf '  %-42s' "$$what ($$(basename $$tr .py))"; \
 	        if $(PYTHON) $(CURDIR)/$$tr $(TMPDIR)/ady_refuse_$$n.ady > $(TMPDIR)/ady_refuse.out 2>&1; then \

@@ -240,6 +240,22 @@ proc adascriptParseFloat*(s: string): Result[float, ParseFailure_T] =
   else:
     Result[float, ParseFailure_T].err(ParseFailure_T(what: "float", text: s))
 
+proc adascriptParseInt*(s: string): Result[int, ParseFailure_T] =
+  ## parse_int. A decimal integer: an optional sign and digits, nothing else
+  ## (no spaces, no `_`, no `0x`), and one that fits an `int`: the same on
+  ## both backends. Not one is a ParseFailure_T, not an exception.
+  var i = 0
+  let n = s.len
+  if i < n and s[i] in {'+', '-'}: inc i
+  let start = i
+  while i < n and s[i] in {'0'..'9'}: inc i
+  if i == n and i > start:
+    try:
+      return Result[int, ParseFailure_T].ok(strutils.parseInt(s))
+    except ValueError:
+      discard                       # too big for an int
+  Result[int, ParseFailure_T].err(ParseFailure_T(what: "int", text: s))
+
 proc adascriptParseEnum*[T: enum](U: typedesc[T], s: string): Result[T, ParseFailure_T] =
   ## parse_enum. The member of the enum named exactly S -- Nim's `parseEnum` would also
   ## take `a` for `A` and ignore underscores. Not a member is a
@@ -252,7 +268,7 @@ proc adascriptParseEnum*[T: enum](U: typedesc[T], s: string): Result[T, ParseFai
 
 
 def _ensure_parse_helpers():
-    """Add parse_float and parse_enum the first time one is called: procs
+    """Add parse_float, parse_int and parse_enum the first time one is called: procs
     returning a Result, so they need stdlib.nim."""
     from hek_parsec import ParserState
     ParserState.nim_imports.add("stdlib")

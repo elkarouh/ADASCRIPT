@@ -1113,8 +1113,9 @@ failure value cannot be dropped unseen -- a bare call that ignores one is
 refused. The built-in operations follow this: `shell:` gives a `str |
 !ShellFailure_T`, and `Path.mkdir`, `.relative_to`, `.read_text`,
 `.read_lines` and `.write_text` give a `... | !PathFailure_T`, and reading a
-number or an enum member from text is `parse_float(s)` and `parse_enum(E, s)`,
-a `float | !ParseFailure_T` and an `E | !ParseFailure_T`. What still
+number or an enum member from text is `parse_float(s)`, `parse_int(s)` and
+`parse_enum(E, s)`, a `float | !ParseFailure_T`, an `int | !ParseFailure_T`
+and an `E | !ParseFailure_T`. What still
 raises -- `readFile`, `writeFile`, `for line in p.lines:`, `input()`,
 `float(s)`, `int(s)` -- is the
 older spelling: use the failure-typed one where there is one, and keep
