@@ -10,13 +10,27 @@ dialogs, otherwise at the terminal.
 
 A translation of the bash script beside it, g_hist.sh. What the shell needed
 `set -euo pipefail`, `trap`, parallel arrays and `IFS= read -r` for is a
-`Repo` class, a list of records, and `shellLines`.
+`Repo` class, a list of records, and failures that are values: every command
+that can fail says so in its type (`str | !ShellFailure_T`, `None |
+!PathFailure_T`), nothing here checks a status code, and no exception is
+raised or caught.
 """
 nimport os
 
 type Rev_T is record:
     hash: str
     path: Path                 # the file's path at that commit: renames change it
+
+# What goes wrong, in this program's words: a git command or a Path operation
+# that failed, turned into one message by `else` in the do: steps below.
+type Failure_T is record:
+    message: str
+
+def shell_failed(f: ShellFailure_T) -> Failure_T:
+    return Failure_T(message=f"`{f.command}` exited {f.code}: {f.stderr.strip()}")
+
+def path_failed(f: PathFailure_T) -> Failure_T:
+    return Failure_T(message=f"{f.op} {f.path}: {f.reason}")
 
 # Use zenity when a display is available, otherwise fall back to the terminal.
 let GUI: bool = which("zenity") is not None and ($DISPLAY != "" or $WAYLAND_DISPLAY != "")
@@ -38,13 +52,13 @@ def fatal(text: str) -> None:
 def ask(title: str, text: str) -> bool:
     """True to continue, False to stop."""
     if GUI:
-        let code: int = shell: zenity --question --no-markup --title={!title} --text={!text} --ok-label=Continue --cancel-label=Stop
-        return code == 0
-    try:
-        let answer: str = input(f"{text} [Y/n] ")
-        return not (answer == /^[Nn]/)
-    except EOFError:
-        return False
+        let answer: None | !ShellFailure_T = shell: zenity --question --no-markup --title={!title} --text={!text} --ok-label=Continue --cancel-label=Stop
+        return answer is None
+    stdout.write(f"{text} [Y/n] ")
+    stdout.flushFile()
+    for reply in stdin.lines:              # the first line typed; none at end of input
+        return not (reply == /^[Nn]/)
+    return False
 
 class Repo:
     """The git repository a file is in; every command runs from its root."""
@@ -53,18 +67,18 @@ class Repo:
     def __init__(self, root: Path):
         self.root = root
 
-    def output(self, *args: str) -> str | !ShellFailure_T:
+    def output(self, *args: str) -> str | !Failure_T:
         """What git printed, or why it failed: bash's `set -e` ended the script
         on a failing git, here the failure is handed to the caller."""
         do:
-            text <- shell(cwd = self.root): git {*args}
+            text <- shell(cwd = self.root): git {*args} else shell_failed(text)
         return text.strip()
 
     def succeeds(self, *args: str) -> bool:
         let r: None | !ShellFailure_T = shell(cwd = self.root): git {*args} 2>/dev/null
         return not (r is ShellFailure_T)
 
-    def history(self, rel: Path) -> []Rev_T | !ShellFailure_T:
+    def history(self, rel: Path) -> []Rev_T | !Failure_T:
         """Commits touching REL, newest first. --follow tracks renames, so the
         path the file had at each commit is recorded with it."""
         do:
@@ -78,26 +92,27 @@ class Repo:
                 revs.append(Rev_T(hash=current, path=Path(line)))
         return revs
 
-    def save_at(self, rev: Rev_T, dest: Path) -> None | !ShellFailure_T:
+    def save_at(self, rev: Rev_T, dest: Path) -> None | !Failure_T:
         """The file as it was at REV, into DEST: empty if it did not exist
         there, before creation or after deletion."""
         let spec: str = f"{rev.hash}:{rev.path}"
         if not self.succeeds("cat-file", "-e", spec):
-            writeFile(dest, "")
+            do:
+                empty <- dest.write_text("") else path_failed(empty)
             return
         do:
-            shell(cwd = self.root): git show {!spec} > {!dest}
+            shown <- shell(cwd = self.root): git show {!spec} > {!dest} else shell_failed(shown)
 
-    def describe(self, hash: str) -> str | !ShellFailure_T:
+    def describe(self, hash: str) -> str | !Failure_T:
         return self.output("log", "-1", "--format=%h %ad %cn: %s", "--date=short", hash)
 
-    def tmpname(self, hash: str, side: str, tmp: Path, base: str) -> Path | !ShellFailure_T:
+    def tmpname(self, hash: str, side: str, tmp: Path, base: str) -> Path | !Failure_T:
         """Where the file at HASH goes, and so what meld's pane header shows:
         <date>-<committer>-<filename>. SIDE ("new" or "old") is a directory of
         its own (made by `review`), so the two can never collide, even when two
-        commits share a date and a committer. The committer keeps its letters and digits,
-        `.`, `_` and `-`, and non-ASCII letters as they are (`Zoë`); any other
-        ASCII character, a space or `/` or `'`, becomes `_`."""
+        commits share a date and a committer. The committer keeps its letters
+        and digits, `.`, `_` and `-`, and non-ASCII letters as they are (`Zoë`);
+        any other ASCII character, a space or `/` or `'`, becomes `_`."""
         do:
             committer <- self.output("log", "-1", "--format=%cn", hash)
             when <- self.output("log", "-1", "--format=%cd", "--date=format:%Y-%m-%d", hash)
@@ -105,14 +120,12 @@ class Repo:
         who = s/[\x00-\x2C\x2F\x3A-\x40\x5B-\x5E\x60\x7B-\x7F]/_/g
         return tmp / side / f"{when}-{who}-{base}"
 
-def review(repo: Repo, abs: Path, rel: Path, tmp: Path) -> int | !ShellFailure_T:
-    """Open the comparisons one after another; the exit status, or the git
-    command that failed."""
+def review(repo: Repo, abs: Path, rel: Path, tmp: Path) -> int | !Failure_T:
+    """Open the comparisons one after another; the exit status, or what
+    failed."""
     for side in ["new", "old"]:            # the two directories tmpname puts files in
-        let made: None | !PathFailure_T = (tmp / side).mkdir()
-        if made is PathFailure_T:
-            msg_error(f"could not create {made.path}: {made.reason}")
-            return 1
+        do:
+            made <- (tmp / side).mkdir() else path_failed(made)
     do:
         revs <- repo.history(rel)
     let base: str = rel.name
@@ -179,26 +192,26 @@ if not -e file:
 let abs: Path = file.resolve()
 
 # Ask git from the file's own directory, so this works from any cwd.
-let (root_text, root_code) = shell(cwd = abs.parent): git rev-parse --show-toplevel 2>/dev/null
-if root_code != 0:
+let top: str | !ShellFailure_T = shell(cwd = abs.parent): git rev-parse --show-toplevel 2>/dev/null
+if top is ShellFailure_T:
     fatal(f"{file} is not inside a git repository")
-let root: Path = Path(root_text.strip())
+let root: Path = Path(top.strip())
 let rel: Path | !PathFailure_T = abs.relative_to(root)
 if rel is PathFailure_T:
     fatal(f"{file} is not inside the git repo at {root}")
 print f"Repo root:     {root}"
 print f"Repo-rel path: {rel}"
 
-let (tmp_text, _) = shell: mktemp -d
-let tmp: Path = Path(tmp_text.strip())
-var status: int = 1
-try:
-    let outcome: int | !ShellFailure_T = review(Repo(root), abs, rel, tmp)
-    case outcome:
-        when ShellFailure_T:
-            msg_error(f"`{outcome.command}` exited {outcome.code}: {outcome.stderr.strip()}")
-        when int:
-            status = outcome
-finally:
-    shell: rm -rf {!tmp}
-quit(status)
+let scratch: str | !ShellFailure_T = shell: mktemp -d
+if scratch is ShellFailure_T:
+    fatal("could not make a temporary directory")
+let tmp: Path = Path(scratch.strip())
+# review reports what goes wrong as a value, so the directory is removed
+# whichever way it ends
+let outcome: int | !Failure_T = review(Repo(root), abs, rel, tmp)
+shell: rm -rf {!tmp}
+case outcome:
+    when Failure_T:
+        fatal(outcome.message)
+    when int:
+        quit(outcome)
