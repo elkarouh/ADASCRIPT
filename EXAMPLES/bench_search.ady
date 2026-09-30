@@ -24,8 +24,7 @@ def ms_since(start: float) -> float:
 def words_of(path: str) -> []str:
     return readFile(path).split()
 
-def ints_of(path: str) -> []int:
-    let words: []str = words_of(path)
+def ints_of(words: []str) -> []int:
     return [int(w) for w in words]
 
 def find(path: str, word: str) -> None:
@@ -44,10 +43,12 @@ def find(path: str, word: str) -> None:
         print f"find.loop  iter{it} {int(ms_since(start)):7} ms  hits={hits}"
 
 def common(path_a: str, path_b: str) -> None:
-    let a: {}str = set(words_of(path_a))    # sets and sorted lists, prepared
-    let b: {}str = set(words_of(path_b))    # before the clock starts
-    let xs: []int = ints_of(path_a)
-    let ys: []int = ints_of(path_b)
+    let words_a: []str = words_of(path_a)   # each file is read once, and the
+    let words_b: []str = words_of(path_b)   # sets and lists made from it are
+    let a: {}str = set(words_a)             # prepared before the clock starts
+    let b: {}str = set(words_b)
+    let xs: []int = ints_of(words_a)
+    let ys: []int = ints_of(words_b)
     for it in 0..<REPEATS:                  # the set intersection
         let start: float = time.time()
         let n: int = len(a & b)
