@@ -124,7 +124,22 @@ proc resolve*(p: Path): Path =
   let up = p.parent
   if up.string == p.string:
     return Path(absolutePath(p.string))
-  up.resolve / Path(p.name)\
+  up.resolve / Path(p.name)
+
+proc relative_to*(p: Path, base: Path): Path =
+  ## p seen from base: `Path("/a/b/c").relative_to(Path("/a"))` is `b/c`, and
+  ## a path relative to itself is ".". Raises ValueError when p is not below
+  ## base, as pathlib does -- and by pathlib's reading of "below": a leading
+  ## "/" has to match, and repeated slashes, "." parts and a trailing slash
+  ## do not count. ".." is not resolved, as there.
+  proc parts(s: string): seq[string] =
+    for c in s.split('/'):
+      if c.len > 0 and c != ".": result.add(c)
+  let a = parts(p.string)
+  let b = parts(base.string)
+  if p.isAbsolute != base.isAbsolute or b.len > a.len or a[0 ..< b.len] != b:
+    raise newException(ValueError, p.string & " is not in the subpath of " & base.string)
+  result = Path(if a.len == b.len: "." else: a[b.len .. ^1].join("/"))\
 """
 
 
@@ -144,6 +159,7 @@ def _ensure_path_helper():
     # friends take a Path already.
     ParserState.nim_imports.add("std/paths")
     ParserState.nim_imports.add("os")
+    ParserState.nim_imports.add("strutils")     # relative_to splits and joins
     decls = getattr(ParserState, "nim_top_decls", [])
     if not any("adascriptPathToString" in d for d in decls):
         decls.append(_PATH_HELPER)

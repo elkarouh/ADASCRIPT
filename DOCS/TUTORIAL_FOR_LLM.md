@@ -1508,6 +1508,7 @@ for s in Stage_T'First .. Stage_T'Last:
 | Path split | `p.parent` -> Path, `p.name` -> str (pathlib rules, not os.path) |
 | Path mkdir | `p.mkdir()` = mkdir -p (parents, exist_ok) |
 | Path resolve | `p.resolve()` = realpath (absolute, symlinks expanded) |
+| Path below a directory | `p.relative_to(base)` -> Path (`"."` for the same path); `ValueError` when p is not below base -- pathlib's rules, `..` not resolved |
 | Wait for one / many jobs | `j.wait()` / `waitAll(jobs)` |
 | Run a program, no shell | `run(["git", "log"])` -> RunResult |
 | Run a program, output lines | `runLines(["ls", d])` -> `[]str` |

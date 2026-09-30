@@ -378,7 +378,7 @@ Why:
 - **A string cannot slip in by mistake.** `Path` is a distinct type, so
   `let p: Path = s` does not compile; `Path(s)` is how you mean it.
 - **There is no slash to get wrong.** No doubled or missing `/`, and
-  `.parent`, `.name`, `.resolve()`, `.mkdir()` and the file tests are there
+  `.parent`, `.name`, `.resolve()`, `.relative_to(base)`, `.mkdir()` and the file tests are there
   when you need them.
 - **It reads itself.** `for line in p.lines:` opens the file, yields its
   lines without their newlines and closes it -- no `open()`, no

@@ -1,0 +1,53 @@
+#!/usr/bin/env ady2nim
+"""Test: Path.relative_to -- a path seen from a directory above it.
+
+`p.relative_to(base)` is what is left of p below base: `b/c` for `/a/b/c`
+below `/a`, and "." for a path below itself. It raises ValueError when p is
+not below base, and "below" is pathlib's: a leading "/" has to match,
+repeated slashes, "." parts and a trailing slash do not count, and ".." is
+not resolved. The output is compared between the backends.
+"""
+
+def rel(p: str, base: str) -> str:
+    return str(Path(p).relative_to(Path(base)))
+
+def below(p: str, base: str) -> bool:
+    try:
+        let r: Path = Path(p).relative_to(Path(base))
+        return True
+    except ValueError:
+        return False
+
+# ─── test 1: the plain cases ────────────────────────────────────────────────
+
+assert rel("/a/b/c", "/a") == "b/c"
+assert rel("/a/b/c", "/a/b") == "c"
+assert rel("a/b/c", "a") == "b/c"
+assert rel("/a/b", "/a/b") == "."
+assert rel("/a/b", "/") == "a/b"
+print "test1 OK"
+
+# ─── test 2: what does not count ────────────────────────────────────────────
+
+assert rel("/a//b/./c/", "/a/") == "b/c"
+assert rel("/a/b/c", "/a/./b") == "c"
+print "test2 OK"
+
+# ─── test 3: not below ──────────────────────────────────────────────────────
+
+assert not below("/a/b", "/a/c")
+assert not below("/a", "/a/b")
+assert not below("/ab/c", "/a")           # a component, not a prefix of the text
+assert not below("a/b", "/a")             # one absolute, one not
+assert not below("/a/b", "a")
+assert not below("/a/../b", "/a/b")       # ".." is not resolved
+print "test3 OK"
+
+# ─── test 4: the result is a Path ───────────────────────────────────────────
+
+let base: Path = Path("/srv/repo")
+let sub: Path = Path("/srv/repo/src/x.ady").relative_to(base)
+assert str(sub / "y") == "src/x.ady/y"
+assert sub.name == "x.ady"
+assert str(sub.parent) == "src"
+print "test4 OK"

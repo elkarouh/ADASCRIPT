@@ -221,7 +221,11 @@ class Path(str):
 
     def resolve(self):
         \"\"\"The absolute path, with every symlink along it expanded.\"\"\"
-        return Path(os.path.realpath(self))\
+        return Path(os.path.realpath(self))
+
+    def relative_to(self, base):
+        \"\"\"This path seen from BASE; ValueError when it is not below it.\"\"\"
+        return Path(_pathlib.PurePath(self).relative_to(str(base)))\
 """
 # `parent` and `name` go through PurePath rather than os.path.dirname /
 # os.path.basename because those two disagree with Nim on a trailing slash:

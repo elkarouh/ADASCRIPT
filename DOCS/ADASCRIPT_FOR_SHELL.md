@@ -753,6 +753,7 @@ that have to be updated in step by hand.
 | `"$dir/$name"` | `dir / name`, with `dir: Path` |
 | `mkdir -p "$d"` | `d.mkdir()` |
 | `dirname`, `basename` | `p.parent`, `p.name` |
+| `${p#"$root"/}`, `realpath --relative-to` | `p.relative_to(root)` -- `ValueError` when p is not below root |
 | `[ -f "$p" ]`, `[ -d "$p" ]` | `-f p`, `-d p` — unchanged |
 | `command -v foo >/dev/null` | `which("foo") is not None` |
 | `p=$(command -v foo)` | `which("foo")`, a `?Path` |
