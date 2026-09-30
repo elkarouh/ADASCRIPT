@@ -1,14 +1,14 @@
 #!/usr/bin/env ady2nim
 # https://github.com/vroby65/fsel/tree/main ported to adascript
 nimport os
+nimport ansi
 
 let editor: str = $EDITOR if $EDITOR else "nano"
 let tmpfile: str = "/tmp/fsel_entries"
 const TAB: str = "\t"
 const NL: str = "\n"
-const BOLD_MAGENTA: str = "\x1b[1;35m"
-const BOLD_BLUE: str = "\x1b[1;34m"
-const RESET: str = "\x1b[0m"
+let bold_magenta: Style = bold + fg_magenta
+let bold_blue:    Style = bold + fg_blue
 
 if $# > 0:
     setCurrentDir($1)
@@ -16,12 +16,12 @@ if $# > 0:
 while True:
     let cwd: str = getCurrentDir()
     let listing = shellLines: find {cwd} -maxdepth 1 -mindepth 1 -printf '%P\n' | sort
-    var entries: str = BOLD_MAGENTA + "/" + RESET + TAB + "/" + NL + BOLD_MAGENTA + ".." + RESET + TAB + ".." + NL
+    var entries: str = bold_magenta("/") + TAB + "/" + NL + bold_magenta("..") + TAB + ".." + NL
     for item in listing:
         if len(item) == 0:
             continue
         if -d (f"{cwd}/{item}"):
-            entries += BOLD_BLUE + item + "/" + RESET + TAB + item + NL
+            entries += bold_blue(item + "/") + TAB + item + NL
         else:
             entries += item + TAB + item + NL
 

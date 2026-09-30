@@ -1683,7 +1683,7 @@ The `.ady` files in `TO_NIM/STDLIB/` are installed into the build cache, so
 | `nimport awk`     | `AwkBase` — generic stdin record-processor base class      |
 | `nimport iters`   | itertools equivalents (`take`, `chunks`, `pairwise`, …), generic over the element type |
 | `nimport strscan` | character classification and the small scanners a hand-written lexer needs (`is_digit_ch`, `skip_quoted`, `lead_ident`, `strip_line_comment`, …) |
-| `nimport ansi`    | terminal colours and effects as values a pipe applies: `"x" \| bold \| fg_white \| bg_red` (`fg_*`, `bg_*`, `bold`, `dim`, `blink`, `inverted`, `reset`) |
+| `nimport ansi`    | terminal colours and effects as values a pipe applies: `"x" \| bold \| fg_white \| bg_red` (`fg_*`, `fg_bright_*`, `bg_*`, `bold`, `dim`, `blink`, `inverted`, `reset`); `bold + fg_red` is one style with both codes |
 | `nimport graphs`  | `dijkstra` and `shortest_path` over a weighted digraph, generic in the node type |
 | `nimport db`      | thin SQLite wrapper                                        |
 | `nimport jointjs` | `JsElem` base class and helpers for JointJS applications   |

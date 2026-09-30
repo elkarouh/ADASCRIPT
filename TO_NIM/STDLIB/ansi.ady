@@ -9,7 +9,11 @@
 A `Style` wraps a string in one ANSI SGR escape and resets afterwards, and
 `text | style` applies it, left to right, so `text | bold | fg_white |
 bg_red` reads as the order the styles are laid on. Called, a Style takes
-several strings: `bold("a", "b")` styles each of them.
+several strings: `bold("a", "b")` styles each of them. Styles add:
+`bold + fg_magenta` is one style with both codes in one escape (`ESC[1;35m`),
+where piping through the two would nest two escapes and two resets. A Style
+with no codes, `plain`, changes nothing; `Style([1, 35])` builds one from
+codes directly.
 
 Naming: the foreground colours are `fg_black` .. `fg_white`, the background
 ones `bg_black` .. `bg_white`, and the effects keep the terminal's own words
@@ -24,12 +28,18 @@ constants, so that importing this file adds nothing but the styles below.
 """
 
 class Style:
+    var codes: []int
     var on: str
     var off: str
 
-    def __init__(self, code: Natural):
-        self.on = f"\x1b[{code}m"
-        self.off = "\x1b[0m"
+    def __init__(self, codes: []int):
+        self.codes = codes
+        if len(codes) > 0:
+            self.on = "\x1b[" + ";".join([str(c) for c in codes]) + "m"
+            self.off = "\x1b[0m"
+        else:
+            self.on = ""                 # no codes: the text passes through
+            self.off = ""
 
     def __call__(self, *args: str) -> str:
         return "".join([f"{self.on}{arg}" for arg in args]) + self.off
@@ -37,31 +47,46 @@ class Style:
     def __ror__(self, other: str) -> str:
         return self(other)
 
+    def __add__(self, other: Style) -> Style:
+        """Both styles in one escape: `bold + fg_magenta` is `ESC[1;35m`."""
+        return Style(self.codes + other.codes)
+
 # effects
-let reset:      Style = Style(0)
-let bold:       Style = Style(1)
-let dim:        Style = Style(2)
-let underscore: Style = Style(4)
-let blink:      Style = Style(5)
-let inverted:   Style = Style(7)
+let plain:      Style = Style([])
+let reset:      Style = Style([0])
+let bold:       Style = Style([1])
+let dim:        Style = Style([2])
+let underscore: Style = Style([4])
+let blink:      Style = Style([5])
+let inverted:   Style = Style([7])
 
 # foreground colours
-let fg_black:   Style = Style(30)
-let fg_red:     Style = Style(31)
-let fg_green:   Style = Style(32)
-let fg_yellow:  Style = Style(33)
-let fg_blue:    Style = Style(34)
-let fg_magenta: Style = Style(35)
-let fg_cyan:    Style = Style(36)
-let fg_white:   Style = Style(37)
+let fg_black:   Style = Style([30])
+let fg_red:     Style = Style([31])
+let fg_green:   Style = Style([32])
+let fg_yellow:  Style = Style([33])
+let fg_blue:    Style = Style([34])
+let fg_magenta: Style = Style([35])
+let fg_cyan:    Style = Style([36])
+let fg_white:   Style = Style([37])
+
+# bright foreground colours
+let fg_bright_black:   Style = Style([90])
+let fg_bright_red:     Style = Style([91])
+let fg_bright_green:   Style = Style([92])
+let fg_bright_yellow:  Style = Style([93])
+let fg_bright_blue:    Style = Style([94])
+let fg_bright_magenta: Style = Style([95])
+let fg_bright_cyan:    Style = Style([96])
+let fg_bright_white:   Style = Style([97])
 
 # background colours
-let bg_black:   Style = Style(40)
-let bg_red:     Style = Style(41)
-let bg_green:   Style = Style(42)
-let bg_yellow:  Style = Style(43)
-let bg_blue:    Style = Style(44)
-let bg_magenta: Style = Style(45)
-let bg_cyan:    Style = Style(46)
-let bg_white:   Style = Style(47)
-let bg_default: Style = Style(49)
+let bg_black:   Style = Style([40])
+let bg_red:     Style = Style([41])
+let bg_green:   Style = Style([42])
+let bg_yellow:  Style = Style([43])
+let bg_blue:    Style = Style([44])
+let bg_magenta: Style = Style([45])
+let bg_cyan:    Style = Style([46])
+let bg_white:   Style = Style([47])
+let bg_default: Style = Style([49])

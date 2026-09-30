@@ -6,6 +6,7 @@ nimports nothing of Tcheck_tact's.
 """
 
 nimport os
+nimport ansi
 
 # Why something the report looks for is not there: a log directory, a
 # changes report. The report goes on without it, having said so.
@@ -62,17 +63,20 @@ var HAS_NEW_FAILURES: bool = False
 let CM_OT: Path = Path(${TCHECK_CM_OT:-"/cm/ot"})
 let TACT_ROOT: Path = CM_OT / "TACT"
 
+def style_of(spec: ColorSpec_T) -> Style:
+    """The Style a color spec like 'sWr' names: its letters' codes in one
+    escape, an unknown letter skipped."""
+    return Style([int(ANSI_CODES[ch]) for ch in spec if ch in ANSI_CODES])
+
 def ansi_escape(spec: ColorSpec_T) -> str:
     """Turn a color spec like 'sWr' into an ANSI escape sequence."""
-    let codes: []str = [ANSI_CODES[ch] for ch in spec if ch in ANSI_CODES]
-    return "\x1b[" + ";".join(codes) + "m" if codes else ""
+    return style_of(spec).on
 
 def colored(spec: ColorSpec_T, text: str) -> str:
     """TEXT in the color given by SPEC, to stand out in a line; as it is
     when not COLORED."""
-    const RESET: str = "\x1b[0m"
     return text if not COLORED
-    ansi_escape(spec) + text + RESET
+    style_of(spec)(text)
 
 def puts(spec: ColorSpec_T, text: str, NEWLINE: bool = False):
     """Print TEXT in the color given by SPEC, without a trailing newline."""

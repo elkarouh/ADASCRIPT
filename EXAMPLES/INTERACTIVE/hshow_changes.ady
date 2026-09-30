@@ -11,24 +11,16 @@ Usage:
 """
 
 nimport re
+nimport ansi
 
 
 # ---------------------------------------------------------------------------
 # ANSI colour helpers
 # ---------------------------------------------------------------------------
-const RESET: str = "\x1b[0m"
-
-def bold_white(s: str) -> str:
-    f"\x1b[1;37m{s}{RESET}"
-
-def bold_yellow(s: str) -> str:
-    f"\x1b[1;33m{s}{RESET}"
-
-def bold_cyan(s: str) -> str:
-    f"\x1b[1;36m{s}{RESET}"
-
-def bold_red(s: str) -> str:
-    f"\x1b[1;31m{s}{RESET}"
+let bold_white:  Style = bold + fg_white
+let bold_yellow: Style = bold + fg_yellow
+let bold_cyan:   Style = bold + fg_cyan
+let bold_red:    Style = bold + fg_red
 
 
 # ---------------------------------------------------------------------------

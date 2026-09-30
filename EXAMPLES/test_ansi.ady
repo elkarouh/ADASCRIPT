@@ -37,3 +37,21 @@ assert blue == 7
 let red_text: str = "x" | fg_blue
 assert red_text == ESC + "34mx" + ESC + "0m"
 print "test4 OK"
+
+# ─── test 5: styles add, into one escape ────────────────────────────────────
+
+let heading: Style = bold + fg_magenta
+assert heading("x") == ESC + "1;35mx" + ESC + "0m"
+assert ("x" | heading) == heading("x")
+let three: Style = bold + fg_white + bg_red
+assert three("x") == ESC + "1;37;41mx" + ESC + "0m"
+assert (plain + bold)("x") == bold("x")
+print "test5 OK"
+
+# ─── test 6: no codes, no escape; bright colours; codes given directly ──────
+
+assert plain("x") == "x"
+assert ("x" | plain) == "x"
+assert fg_bright_green("x") == ESC + "92mx" + ESC + "0m"
+assert Style([1, 4])("x") == ESC + "1;4mx" + ESC + "0m"
+print "test6 OK"
