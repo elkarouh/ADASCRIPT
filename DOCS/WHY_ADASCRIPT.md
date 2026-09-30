@@ -270,6 +270,20 @@ new kind of failure nobody reports does not compile:
         quit(1)
 ```
 
+The built-in operations that can fail are on these tracks already:
+
+| The call | Its result | The failure's fields |
+|---|---|---|
+| `shell: cmd` | `str \| !ShellFailure_T` | `command`, `code`, `stderr` |
+| `p.mkdir()`, `p.write_text(s)` | `None \| !PathFailure_T` | `op`, `path`, `base`, `reason` |
+| `p.relative_to(base)` | `Path \| !PathFailure_T` | `op`, `path`, `base`, `reason` |
+| `p.read_text()` | `str \| !PathFailure_T` | `op`, `path`, `base`, `reason` |
+| `p.read_lines()` | `[]str \| !PathFailure_T` | `op`, `path`, `base`, `reason` |
+| `parse_float(s)` | `float \| !ParseFailure_T` | `what`, `text` |
+| `parse_int(s)` | `int \| !ParseFailure_T` | `what`, `text` |
+| `parse_enum(E, s)` | `E \| !ParseFailure_T` | `what`, `text` |
+| `input(prompt)` | `str \| !InputFailure_T` | `reason` |
+
 This is railway-oriented programming — Scott Wlaschin's name for it — and it
 is not new: F#'s and Rust's `Result` and Zig's error unions all do it. What the notation adds is
 that it costs nothing to write. The test narrows the name — past
