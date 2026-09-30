@@ -895,7 +895,9 @@ def run(program: str) -> str:
     out
 
 if $# == 1:
-    var src: str = readFile($1)
+    let src: str | !PathFailure_T = Path($1).read_text()
+    if src is PathFailure_T:
+        die(f"{src.op} {src.path}: {src.reason}")
     var result: str = run(src)
     if result:
         print result

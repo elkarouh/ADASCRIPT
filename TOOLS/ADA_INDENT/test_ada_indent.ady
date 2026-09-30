@@ -66,7 +66,10 @@ def fixpoint(name: str) -> int:
         # running, which is how the regression above went unnoticed.
         print f"FAIL: {name} not found from this directory"
         return 1
-    let text: str = readFile(sp)
+    let text: str | !PathFailure_T = sp.read_text()
+    if text is PathFailure_T:
+        print f"FAIL: {text.op} {text.path}: {text.reason}"
+        return 1
     let want: []str = text.split("\n")
     var failed: int = 0
     for flatten in [False, True]:

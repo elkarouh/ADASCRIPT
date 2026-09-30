@@ -621,6 +621,15 @@ def header_for(subsys: Path) -> str:
     """
     return "!===== " + str(subsys) + " " + PADDING
 
+def captured(file: Path) -> str:
+    """What a search job left in FILE; a file that cannot be read ends the run,
+    saying which."""
+    let text: str | !PathFailure_T = file.read_text()
+    if text is PathFailure_T:
+        die(f"{text.op} {text.path}: {text.reason}")
+    return text
+
+
 def report(what: str, seconds: float, verbose: bool):
     """Where the time went, for -verbose. On stderr: it is not a result."""
     note(what + " " + str(seconds) + "s", verbose)
@@ -656,10 +665,10 @@ def search(subsystems: []Path, opt: Options):
         # the pipeline put that in a file rather than letting it reach the
         # terminal out of order. Unprinted it is an empty result and a zero
         # status, which is what a mistyped grep argument looked like.
-        let complaints: str = readFile(str(running_job.err)).strip()
+        let complaints: str = captured(running_job.err).strip()
         if complaints != "":
             stderr.writeLine(complaints)
-        let text: str = readFile(str(running_job.out))
+        let text: str = captured(running_job.out)
         continue if text.strip() == ""
         print text.rstrip("\n")
 

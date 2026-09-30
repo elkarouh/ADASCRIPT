@@ -116,14 +116,14 @@ async def handler(req: Request):
 
     # GET /
     if meth == "GET" and path_part == "/":
-        try:
-            let html: string = readFile(viewer_path)
-            let hdrs: HttpHeaders = newHttpHeaders([
-                ("Content-Type", "text/html; charset=utf-8"),
-            ])
-            await req.respond(Http200, html, hdrs)
-        except:
+        let html: str | !PathFailure_T = Path(viewer_path).read_text()
+        if html is PathFailure_T:
             await req.respond(Http404, "Viewer not found")
+            return
+        let hdrs: HttpHeaders = newHttpHeaders([
+            ("Content-Type", "text/html; charset=utf-8"),
+        ])
+        await req.respond(Http200, html, hdrs)
         return
 
     # GET /list
