@@ -9,6 +9,15 @@
 # If no arguments are given, prompts interactively.
 
 
+# One line typed after PROMPT; no line (the input ended) is a usage error.
+def ask(prompt: str) -> str:
+  stdout.write(prompt)
+  stdout.flushFile()
+  for reply in stdin.lines:
+    return reply.strip()
+  print "\nNo answer: usage: cfmu_list_ftp_server <ftp_instance> <level> <pattern>"
+  sys.exit(1)
+
 var remote_instance : str
 var level           : str
 var pattern         : str
@@ -18,9 +27,9 @@ if $# == 3:
   level           = $2
   pattern         = $3
 elif $# == 0:
-  remote_instance = input("Enter FTP instance : ").strip()
-  level           = input("Enter directory level : ").strip()
-  pattern         = input("Enter file pattern i.e. YYYYMMDD : ").strip()
+  remote_instance = ask("Enter FTP instance : ")
+  level           = ask("Enter directory level : ")
+  pattern         = ask("Enter file pattern i.e. YYYYMMDD : ")
 else:
   print "Usage: cfmu_list_ftp_server <ftp_instance> <level> <pattern>"
   sys.exit(1)
