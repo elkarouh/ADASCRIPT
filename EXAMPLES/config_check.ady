@@ -51,11 +51,11 @@ def where(f: Finding_T) -> str:
 # say "workers comes after verbose", and a report that changes order between
 # runs is a diff nobody can read.
 let SCHEMA: {str}Spec_T = {
-    "verbose":  Spec_T(kind=FLAG,     on_by_default=False),
-    "workers":  Spec_T(kind=NUMBER,   lo=1, hi=64),
-    "mode":     Spec_T(kind=CHOICE,   allowed=["fast", "safe", "paranoid"]),
-    "log_dir":  Spec_T(kind=PATHNAME, must_exist=True),
-    "cache_dir":Spec_T(kind=PATHNAME, must_exist=False),
+    "verbose":  FLAG(on_by_default=False),
+    "workers":  NUMBER(lo=1, hi=64),
+    "mode":     CHOICE(allowed=["fast", "safe", "paranoid"]),
+    "log_dir":  PATHNAME(must_exist=True),
+    "cache_dir":PATHNAME(must_exist=False),
 }
 let KEYS:     []str = ["verbose", "workers", "mode", "log_dir", "cache_dir"]
 let REQUIRED: []str = ["workers", "mode", "log_dir"]

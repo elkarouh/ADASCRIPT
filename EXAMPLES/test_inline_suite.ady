@@ -739,10 +739,10 @@ type Res_T (tag: ResultTag_T) is record:
             message: str
 
 def res_ok(value: int) -> Res_T:
-    return Res_T(tag=RTOk, value=value)
+    return RTOk(value)
 
 def res_err(msg: str) -> Res_T:
-    return Res_T(tag=RTErr, message=msg)
+    return RTErr(msg)
 
 def parse_positive(s: str) -> Res_T:
     let n: ?int = digits_to_int(s)
