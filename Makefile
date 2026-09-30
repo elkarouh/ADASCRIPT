@@ -232,7 +232,7 @@ COMPILE_ONLY := \
     tsp.ady \
     dp/jacks.ady \
     BENCH_SEARCH/bench_search.ady \
-    INTERACTIVE/g_hist.ady \
+    G_HIST/g_hist.ady \
     awk_logscan.ady \
     sh_janitor.ady \
     config_check.ady \

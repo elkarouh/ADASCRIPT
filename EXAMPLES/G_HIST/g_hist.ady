@@ -8,7 +8,7 @@ was created, after it was deleted), and works from any directory: git is
 asked from the file's own directory. With a display and zenity it asks in
 dialogs, otherwise at the terminal.
 
-A translation of the bash script of the same name. What the shell needed
+A translation of the bash script beside it, g_hist.sh. What the shell needed
 `set -euo pipefail`, `trap`, parallel arrays and `IFS= read -r` for is a
 `Repo` class, a list of records, and `shellLines`.
 """
