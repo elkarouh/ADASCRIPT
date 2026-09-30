@@ -55,6 +55,36 @@ echo "Repo-rel path: $rel"
 
 git_() { git -C "$root" "$@"; }
 
+# G_HIST_DEBUG=1 g_hist FILE   says on stderr what git answered for every
+# commit and how the names were made.
+dbg() { [[ -z ${G_HIST_DEBUG:-} ]] || echo "g_hist debug: $*" >&2; }
+raw() { local out; out=$(git_ "$@" 2>&1) && echo "${out//$'\n'/ | }" || echo "<exit $?> ${out//$'\n'/ | }"; }
+probe_repo() {
+  [[ -n ${G_HIST_DEBUG:-} ]] || return 0
+  local all
+  all=$(git_ tag --list)
+  dbg "git                  : [$(raw --version)]"
+  dbg "file                 : $abs"
+  dbg "repo root, rel path  : $root, $rel"
+  dbg "git dir              : [$(raw rev-parse --git-dir)]"
+  dbg "superproject         : [$(raw rev-parse --show-superproject-working-tree)]"
+  dbg "shallow              : [$(raw rev-parse --is-shallow-repository)]"
+  dbg "GIT_DIR, GIT_WORK_TREE : [${GIT_DIR:-}], [${GIT_WORK_TREE:-}]"
+  dbg "tag.sort, log.decorate : [$(raw config --get tag.sort)], [$(raw config --get log.decorate)]"
+  dbg "HEAD                 : $(raw rev-parse HEAD)"
+  dbg "tags at HEAD         : [$(raw tag --points-at HEAD)]"
+  dbg "tags in the repo     : $(grep -c . <<<"$all" || true)"
+}
+probe() {
+  [[ -n ${G_HIST_DEBUG:-} ]] || return 0
+  dbg "commit $1"
+  dbg "  rev-parse --verify   : [$(raw rev-parse --verify "$1^{commit}")]"
+  dbg "  tag --points-at      : [$(raw tag --points-at "$1")]"
+  dbg "  log -1 --format=%D   : [$(raw log -1 --format=%D "$1")]"
+  dbg "  describe exact-match : [$(raw describe --tags --exact-match "$1")]"
+  dbg "  name-rev --tags      : [$(raw name-rev --tags --name-only "$1")]"
+}
+
 # Commits touching the file, newest first. --follow tracks renames, so we
 # record the path the file had at each commit.
 revs=()
@@ -68,6 +98,9 @@ while IFS= read -r line; do
     paths+=("$line")
   fi
 done < <(git_ log --follow --name-only --format='@%H' -- "$rel")
+probe_repo
+dbg "${#revs[@]} commits touch $rel, newest first:"
+for i in "${!revs[@]}"; do dbg "  ${revs[i]}  ${paths[i]}"; done
 
 tmpdir=$(mktemp -d)
 trap 'rm -rf "$tmpdir"' EXIT
@@ -99,6 +132,8 @@ tmpname() {
     prefix+="${prefix:+"+"}${tag//[^[:alnum:]._-]/_}"
   done < <(git_ tag --points-at "$rev")
   [[ -z $prefix ]] || prefix+=-
+  probe "$rev"
+  dbg "  named $side: prefix [$prefix] -> $base"
   when=$(git_ log -1 --format='%cd' --date=format:%Y-%m-%d "$rev")
   mkdir -p "$tmpdir/$side"
   echo "$tmpdir/$side/${prefix}${when}-${who}-$base"

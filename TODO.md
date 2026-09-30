@@ -587,3 +587,16 @@ backend: the check reads `name.name(...)` and gives up on anything before the
 last dot that is not a bare name. The same is true of any routine returning a
 `T | !F`, `f(x).g(y)` included. On Nim the unused Result then fails to
 compile; on Python the failure is dropped silently.
+
+## `case r:` over a built-in failure and `str`
+
+`case r: when ShellFailure_T: ... when str: ...` (r a `str | !ShellFailure_T`)
+emits `case ShellFailure_T:` on Python, a capture pattern that makes the next
+one unreachable: a SyntaxError. A user's own record type works. Use
+`if r is ShellFailure_T: ... else: ...` for now.
+
+## `x.strip().replace(...)` on a `T | !F` that a test narrowed
+
+After `if r is ShellFailure_T: return ...`, `r.strip()` is unwrapped on Nim but
+`r.strip().replace(...)` is not (`strip(r)` mismatch), nor is `let text: str = r`.
+Split the chain into a `let` of the first call.

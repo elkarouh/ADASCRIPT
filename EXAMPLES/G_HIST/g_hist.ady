@@ -6,7 +6,9 @@
 Follows renames, handles revisions where the file does not exist (before it
 was created, after it was deleted), and works from any directory: git is
 asked from the file's own directory. A commit that has tags shows them first in
-its pane's file name, before the date. With a display and zenity it asks in
+its pane's file name, before the date. `G_HIST_DEBUG=1 g_hist FILE` also says,
+on stderr, what git answered for each commit, to see why a name has no tag.
+With a display and zenity it asks in
 dialogs, otherwise at the terminal.
 
 A translation of the bash script beside it, g_hist.sh. What the shell needed
@@ -35,6 +37,15 @@ def path_failed(f: PathFailure_T) -> Failure_T:
 
 # Use zenity when a display is available, otherwise fall back to the terminal.
 let GUI: bool = which("zenity") is not None and ($DISPLAY != "" or $WAYLAND_DISPLAY != "")
+
+# G_HIST_DEBUG=1 g_hist FILE   says on stderr what git answered for every
+# commit and how the names were made: for finding out what a checkout looks
+# like from here.
+let DEBUG: bool = $G_HIST_DEBUG != ""
+
+def dbg(text: str) -> None:
+    if DEBUG:
+        stderr.writeLine(f"g_hist debug: {text}")
 
 def msg_error(text: str) -> None:
     stderr.writeLine(f"error: {text}")
@@ -80,6 +91,60 @@ class Repo:
         do:
             text <- shell(cwd = self.root): git {*args} else shell_failed(text)
         return text.strip()
+
+    def raw(self, *args: str) -> str:
+        """What `git ARGS` printed on one line, or how it failed: for the
+        debug lines."""
+        let r: str | !ShellFailure_T = shell(cwd = self.root): git {*args} 2>&1
+        if r is ShellFailure_T:
+            return f"<exit {r.code}> {r.stderr.strip()}"
+        else:
+            let text: str = r.strip()
+            return text.replace("\n", " | ")
+
+    def probe(self, hash: str) -> None:
+        """The debug lines for one commit: every way git can say it is tagged."""
+        if not DEBUG:
+            return
+        let points: str = self.raw("tag", "--points-at", hash)
+        let decorated: str = self.raw("log", "-1", "--format=%D", hash)
+        let exact: str = self.raw("describe", "--tags", "--exact-match", hash)
+        let named: str = self.raw("name-rev", "--tags", "--name-only", hash)
+        let known: str = self.raw("rev-parse", "--verify", hash + "^{commit}")
+        dbg(f"commit {hash}")
+        dbg(f"  rev-parse --verify   : [{known}]")
+        dbg(f"  tag --points-at      : [{points}]")
+        dbg(f"  log -1 --format=%D   : [{decorated}]")
+        dbg(f"  describe exact-match : [{exact}]")
+        dbg(f"  name-rev --tags      : [{named}]")
+
+    def probe_repo(self, abs: Path, rel: Path) -> None:
+        """The debug lines about the checkout itself, once."""
+        if not DEBUG:
+            return
+        let version: str = self.raw("--version")
+        let gitdir: str = self.raw("rev-parse", "--git-dir")
+        let sup: str = self.raw("rev-parse", "--show-superproject-working-tree")
+        let shallow: str = self.raw("rev-parse", "--is-shallow-repository")
+        let head: str = self.raw("rev-parse", "HEAD")
+        let head_tags: str = self.raw("tag", "--points-at", "HEAD")
+        let all_tags: str = self.raw("tag", "--list")
+        let tag_sort: str = self.raw("config", "--get", "tag.sort")
+        let decorate: str = self.raw("config", "--get", "log.decorate")
+        let env_dir: str = $GIT_DIR
+        let env_tree: str = $GIT_WORK_TREE
+        let count: int = len([t for t in all_tags.split(" | ") if t != ""])
+        dbg(f"git                  : [{version}]")
+        dbg(f"file                 : {abs}")
+        dbg(f"repo root, rel path  : {self.root}, {rel}")
+        dbg(f"git dir              : [{gitdir}]")
+        dbg(f"superproject         : [{sup}]")
+        dbg(f"shallow              : [{shallow}]")
+        dbg(f"GIT_DIR, GIT_WORK_TREE : [{env_dir}], [{env_tree}]")
+        dbg(f"tag.sort, log.decorate : [{tag_sort}], [{decorate}]")
+        dbg(f"HEAD                 : {head}")
+        dbg(f"tags at HEAD         : [{head_tags}]")
+        dbg(f"tags in the repo     : {count}")
 
     def succeeds(self, *args: str) -> bool:
         let r: None | !ShellFailure_T = shell(cwd = self.root): git {*args} 2>/dev/null
@@ -127,6 +192,8 @@ class Repo:
             tagged <- self.output("tag", "--points-at", hash)
         let tags: []str = [clean(t) for t in tagged.split("\n") if t != ""]
         let prefix: str = "+".join(tags) + "-" if len(tags) > 0 else ""
+        self.probe(hash)
+        dbg(f"  named {side}: prefix [{prefix}] -> {base}")
         return tmp / side / f"{prefix}{when}-{clean(committer)}-{base}"
 
 def review(repo: Repo, abs: Path, rel: Path, tmp: Path) -> int | !Failure_T:
@@ -138,6 +205,10 @@ def review(repo: Repo, abs: Path, rel: Path, tmp: Path) -> int | !Failure_T:
     do:
         revs <- repo.history(rel)
     let base: str = rel.name
+    repo.probe_repo(abs, rel)
+    dbg(f"{len(revs)} commits touch {rel}, newest first:")
+    for rev in revs:
+        dbg(f"  {rev.hash}  {rev.path}")
 
     # 1) Uncommitted changes vs HEAD, if any.
     if repo.succeeds("rev-parse", "--verify", "-q", "HEAD") and not repo.succeeds("diff", "--quiet", "HEAD", "--", str(rel)):
