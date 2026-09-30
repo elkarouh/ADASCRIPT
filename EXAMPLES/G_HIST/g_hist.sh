@@ -120,17 +120,25 @@ show_at() {
 describe() { git_ log -1 --format='%h %ad %cn: %s' --date=short "$1"; }
 
 # Temp file name shown in meld's pane headers: [<tags>-]<date>-<committer>-<filename>
-# (the commit's tags, if any, joined by +).
+# (the commit's tags, if any, joined by +; else ~<nearest tag it is in>).
 # $2 is a subdirectory ("new"/"old") so both files can never collide, even if
 # two commits share the same date and committer.
 tmpname() {
-  local rev=$1 side=$2 who when tag prefix=
+  local rev=$1 side=$2 who when tag near prefix=
   who=$(git_ log -1 --format='%cn' "$rev")
   who=${who//[^[:alnum:]._-]/_}
   while IFS= read -r tag; do
     [[ -n $tag ]] || continue
     prefix+="${prefix:+"+"}${tag//[^[:alnum:]._-]/_}"
   done < <(git_ tag --points-at "$rev")
+  if [[ -z $prefix ]]; then
+    # Release tags are usually on a later commit (a merge), not on the ones
+    # that changed the file: name the nearest tag the commit is in, marked ~
+    # as not exact. name-rev says "undefined" for none.
+    near=$(git_ name-rev --tags --name-only "$rev")
+    near=${near%%[~^]*}
+    [[ -z $near || $near == undefined ]] || prefix="~${near//[^[:alnum:]._-]/_}"
+  fi
   [[ -z $prefix ]] || prefix+=-
   probe "$rev"
   dbg "  named $side: prefix [$prefix] -> $base"

@@ -6,7 +6,8 @@
 Follows renames, handles revisions where the file does not exist (before it
 was created, after it was deleted), and works from any directory: git is
 asked from the file's own directory. A commit that has tags shows them first in
-its pane's file name, before the date. `G_HIST_DEBUG=1 g_hist FILE` also says,
+its pane's file name, before the date; one that has none shows the nearest tag
+it is in, as `~<tag>` (release tags are usually on a later merge commit). `G_HIST_DEBUG=1 g_hist FILE` also says,
 on stderr, what git answered for each commit, to see why a name has no tag.
 With a display and zenity it asks in
 dialogs, otherwise at the terminal.
@@ -181,7 +182,8 @@ class Repo:
     def tmpname(self, hash: str, side: str, tmp: Path, base: str) -> Path | !Failure_T:
         """Where the file at HASH goes, and so what meld's pane header shows:
         [<tags>-]<date>-<committer>-<filename>. The tags are the commit's, if
-        it has any, joined by `+`. SIDE ("new" or "old") is a directory of its
+        it has any, joined by `+`; if it has none, the nearest tag that has the
+        commit in it, as `~<tag>` (the release it went out in). SIDE ("new" or "old") is a directory of its
         own (made by `review`), so the two can never collide, even when two
         commits share a date and a committer. Committer and tags keep their
         letters and digits, `.`, `_` and `-`, and non-ASCII letters as they are
@@ -191,7 +193,17 @@ class Repo:
             when <- self.output("log", "-1", "--format=%cd", "--date=format:%Y-%m-%d", hash)
             tagged <- self.output("tag", "--points-at", hash)
         let tags: []str = [clean(t) for t in tagged.split("\n") if t != ""]
-        let prefix: str = "+".join(tags) + "-" if len(tags) > 0 else ""
+        var prefix: str = "+".join(tags) + "-" if len(tags) > 0 else ""
+        if prefix == "":
+            # Release tags are usually on a later commit (a merge), not on the
+            # ones that changed the file: name the nearest tag the commit is
+            # in, marked `~` as not exact. name-rev says `undefined` for none.
+            do:
+                near <- self.output("name-rev", "--tags", "--name-only", hash)
+            if near == /^(?P<tag>[^~^]+)/:
+                let found: str = $+{tag}
+                if found != "undefined":
+                    prefix = "~" + clean(found) + "-"
         self.probe(hash)
         dbg(f"  named {side}: prefix [{prefix}] -> {base}")
         return tmp / side / f"{prefix}{when}-{clean(committer)}-{base}"
