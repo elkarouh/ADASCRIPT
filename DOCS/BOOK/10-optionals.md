@@ -598,24 +598,33 @@ def read_number(s: str) -> int | !Failure_T:
 
 **The rule: an operation that can fail in an expected way returns a failure;
 it does not raise.** No `try/except` around a missing file, a failed command
-or a bad number. The caller takes the result where it makes the call:
+or a bad number. The caller takes the result where it makes the call, and
+either handles it there or passes it up:
 
 ```python
 let res: int | !Failure_T = read_number(text)
 if res is Failure_T:
     die(res.detail)          # handled here, next to the call
 print res + 1                # res is the int from here on
+
+def total(a: str, b: str) -> int | !Failure_T:
+    do:
+        x <- read_number(a)  # a failure ends total and is passed up,
+        y <- read_number(b)  # unchanged, to its caller
+    return x + y
 ```
 
 That is what makes the intent explicit: the signature says the call can fail,
-and the code that deals with it sits beside the call, not in a `try` some
-distance above it or in a handler nobody wrote. An exception says neither, and
-the failure it carries is caught wherever it happens to be caught. The
-built-in operations follow the rule -- `shell:` returns a `str |
-!ShellFailure_T`, `Path.mkdir`/`relative_to`/`read_text`/`read_lines`/
+and the code that deals with it -- or hands it on -- sits at the call. Passing
+a failure up is as easy as letting an exception through, and unlike an
+exception it is written down: `total` says `| !Failure_T`, each `do:` step is
+where it happens, and the caller decides where it is finally handled. An
+exception climbs through functions whose signatures say nothing, to a handler
+somewhere else. The built-in operations follow the rule -- `shell:` returns a
+`str | !ShellFailure_T`, `Path.mkdir`/`relative_to`/`read_text`/`read_lines`/
 `write_text` a `... | !PathFailure_T` -- and the older ones that still raise
-(`readFile`, `writeFile`, `for line in p.lines:`) are for when a raise is
-what you want. Exceptions are for what nobody expected.
+(`readFile`, `writeFile`, `for line in p.lines:`) are for when a raise is what
+you want. Exceptions are for what nobody expected.
 
 This is railway-oriented programming. Every step runs on the value track,
 and the first failure switches to the failure track and rides it, unchanged,

@@ -201,14 +201,16 @@ moves on. Python and Ada raise an exception that appears nowhere in the
 signature, so the reader has to know the body to know the contract. In
 every case the failure is real and the page does not show it.
 
-Adascript prefers that to an exception, and the reason is locality. With
-an exception, what is done about a failure is written wherever the handler
-happens to be -- a `try` some distance up the call stack, or none at all --
-and the call itself shows nothing. With a failure value the call takes its
-result, tests it and deals with it on the next line, so the intent is
-explicit and the handling is next to what caused it. The built-in shell and
-`Path` operations are written this way too, and a failure that is dropped is
-refused.
+Adascript prefers that to an exception, and the reason is that the
+handling is where you can see it. With an exception, what is done about a
+failure is written wherever the handler happens to be -- a `try` some
+distance up the call stack, or none at all -- and neither the call nor the
+functions it passes through show anything. With a failure value the call
+takes its result and either deals with it on the next line, next to what
+caused it, or passes it up to its own caller -- which is one `do:` step, and
+is in that function's signature too, so every caller can see it can fail and
+decides where it is handled. The built-in shell and `Path` operations are
+written this way too, and a failure that is dropped is refused.
 
 Adascript lets the return type say both halves: `-> Path | !Failure_T`,
 *either* a path *or* the failure that says why there is none; the `!`

@@ -1088,24 +1088,34 @@ has the whole of it.
 way you expect -- a missing file, a command that fails, a path not below its
 base, a number that is not one -- it returns `T | !Failure_T`; it does not
 raise, and you do not wrap the call in `try/except`. The intent is then
-explicit, in the signature and again at the call, and what is done about it
-is written right there, next to the call:
+explicit, in the signature and again at the call. You either handle the
+failure right there, next to the call, or pass it up to the caller:
 
 ```python
 let res: int | !Failure_T = read_number(text)
 if res is Failure_T:
     die(res.detail)              # handled here, where the call is
 print res + 1                    # res is the int from here on
+
+def total(a: str, b: str) -> int | !Failure_T:
+    do:
+        x <- read_number(a)      # a failure ends total and goes to its
+        y <- read_number(b)      # caller as it is
+    return x + y
 ```
 
-An exception is caught (or not) at some distance from the call, and nothing
-on the page says it can happen; a failure value cannot be dropped unseen --
-a bare call that ignores one is refused. The built-in operations follow this:
-`shell:` gives a `str | !ShellFailure_T`, and `Path.mkdir`, `.relative_to`,
-`.read_text`, `.read_lines` and `.write_text` give a `... | !PathFailure_T`.
-What still raises -- `readFile`, `writeFile`, `for line in p.lines:`,
-`input()` -- is the older spelling: use the failure-typed one where there is
-one, and keep exceptions for what nobody expected.
+Passing a failure up is as easy as letting an exception through, and it is
+written down: `total` says `| !Failure_T` in its signature, and each `do:`
+step is where it happens, so the caller can see the call can fail and
+decides where it is dealt with. An exception goes up through functions whose
+signatures say nothing about it, and is caught (or not) at some distance; a
+failure value cannot be dropped unseen -- a bare call that ignores one is
+refused. The built-in operations follow this: `shell:` gives a `str |
+!ShellFailure_T`, and `Path.mkdir`, `.relative_to`, `.read_text`,
+`.read_lines` and `.write_text` give a `... | !PathFailure_T`. What still
+raises -- `readFile`, `writeFile`, `for line in p.lines:`, `input()` -- is the
+older spelling: use the failure-typed one where there is one, and keep
+exceptions for what nobody expected.
 
 Do not forget the `!`: without it, nothing says Failure_T is a failure.
 Marked in another union, the type is refused unmarked, so that slip does
