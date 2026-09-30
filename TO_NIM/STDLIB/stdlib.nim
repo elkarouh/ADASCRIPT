@@ -222,6 +222,13 @@ type ParseFailure_T* = object
   text*: string
 
 # ---------------------------------------------------------------------------
+# InputFailure_T -- the built-in failure of `input(prompt)`, a
+# `str | !InputFailure_T`: the input ended before a line was read.
+# ---------------------------------------------------------------------------
+type InputFailure_T* = object
+  reason*: string
+
+# ---------------------------------------------------------------------------
 # OneOf2..OneOf6 -- Adascript's plain union, `int | float | str`: one of its
 # members, which member told by `which`. The transpiler writes the
 # constructors with their type -- `OneOf2[int, float].of1(2.5)` -- tests a

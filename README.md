@@ -1961,7 +1961,8 @@ caught, if it is, somewhere else. The built-ins are written this way --
 `shell:` and the `Path` operations that can fail (`mkdir`, `relative_to`,
 `read_text`, `read_lines`, `write_text`) return a `T | !ShellFailure_T` or
 `T | !PathFailure_T` -- as are `parse_float(s)`, `parse_int(s)` and
-`parse_enum(E, s)` (`... | !ParseFailure_T`), for a number or an enum member read from text --
+`parse_enum(E, s)` (`... | !ParseFailure_T`), for a number or an enum member read from text,
+and `input(prompt)`, a `str | !InputFailure_T` (the input ended) --
 and a failure that is dropped is refused. Exceptions
 are for what nobody expected; `readFile`, `writeFile` and `for line in
 p.lines:` are the older forms that still raise.
@@ -2867,27 +2868,33 @@ types (not plain integers), it emits Nim `|`; otherwise it emits `or`.
 
 ## Enum constructors
 
-Calling an enum type with a string argument emits `parseEnum`:
+Reading an enum member from text is `parse_enum(E, s)`, an `E |
+!ParseFailure_T`: the member named exactly `s`, or the failure, handled where
+it is called and no `try` involved:
 
 ```python
 type State = enum ACTIVE, ON_HOLD, DONE
 
 def parse_state(s: str) -> State:
-    try:
-        State(s.replace("-", "_"))
-    except:
-        ACTIVE
+    let state: State | !ParseFailure_T = parse_enum(State, s.replace("-", "_").upper())
+    if state is ParseFailure_T:
+        return ACTIVE
+    return state
 ```
 
 Transpiles to:
 
 ```nim
 proc parse_state(s: string): State =
-    try:
-        parseEnum[State](s.replace("-", "_"))
-    except:
-        ACTIVE
+    let state: Result[State, ParseFailure_T] = adascriptParseEnum(State, s.replace("-", "_").toUpperAscii())
+    if state.is_err:
+        return ACTIVE
+    return state.value
 ```
+
+Calling the enum type itself with a string, `State(s)`, is the older form: it
+emits `parseEnum` and raises when `s` names no member (Nim's `parseEnum` also
+ignores case and underscores, which `parse_enum` does not).
 
 ---
 

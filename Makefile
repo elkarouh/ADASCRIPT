@@ -233,6 +233,7 @@ ADA_INDENT_TESTS := \
 # -----------------------------------------------------------------------
 COMPILE_ONLY := \
     tsp.ady \
+    test_input.ady \
     dp/jacks.ady \
     BENCH_SEARCH/bench_search.ady \
     G_HIST/g_hist.ady \
@@ -585,6 +586,7 @@ test: compile
 	@# a conversion can fail, so its result is taken, not dropped.
 	@printf 'let t: str = "1"\nparse_float(t)\n' > $(TMPDIR)/ady_refuse_18.ady
 	@printf 'let t: str = "1"\nparse_int(t)\n' > $(TMPDIR)/ady_refuse_19.ady
+	@printf 'input("name: ")\n' > $(TMPDIR)/ady_refuse_20.ady
 	@for tr in TO_NIM/ady2nim.py TO_PYTHON/ady2py.py; do \
 	    for c in "1:members no one can tell apart:cannot be told apart" \
 	             "2:a dropped failure:drops a failure" \
@@ -604,7 +606,8 @@ test: compile
 	             "16:a dropped Path.mkdir:drops a failure" \
 	             "17:a dropped Path.write_text:drops a failure" \
 	             "18:a dropped parse_float:drops a failure" \
-	             "19:a dropped parse_int:drops a failure"; do \
+	             "19:a dropped parse_int:drops a failure" \
+	             "20:a dropped input():drops a failure"; do \
 	        n=$${c%%:*}; rest=$${c#*:}; what=$${rest%%:*}; want=$${rest#*:}; \
 	        printf '  %-42s' "$$what ($$(basename $$tr .py))"; \
 	        if $(PYTHON) $(CURDIR)/$$tr $(TMPDIR)/ady_refuse_$$n.ady > $(TMPDIR)/ady_refuse.out 2>&1; then \
@@ -684,6 +687,14 @@ test: compile
 	    $(EXDIR)/$$name < $(EXDIR)/test_awk_sample.txt >/dev/null 2>&1 \
 	        && echo OK || { echo FAIL; exit 1; }; \
 	done
+
+	@echo "=== input() is a failure-typed result (two lines piped in, on both backends) ==="
+	@printf '  %-42s' "test_input.ady (python = nim)"; \
+	    printf 'ann\nlee\n' | $(EXDIR)/test_input > $(TMPDIR)/ady_input_nim.out 2>&1; \
+	    $(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(EXDIR)/test_input.ady > $(TMPDIR)/ady_input.py; \
+	    printf 'ann\nlee\n' | $(PYTHON) $(TMPDIR)/ady_input.py > $(TMPDIR)/ady_input_py.out 2>&1; \
+	    if grep -q 'test_input OK' $(TMPDIR)/ady_input_nim.out && cmp -s $(TMPDIR)/ady_input_nim.out $(TMPDIR)/ady_input_py.out; then \
+	        echo OK; else echo FAIL; diff $(TMPDIR)/ady_input_nim.out $(TMPDIR)/ady_input_py.out; exit 1; fi
 
 	@echo "=== CFMU examples (fed their own samples) ==="
 	@printf '  %-42s' "CFMU/Tstatus_monitor.ady"; \

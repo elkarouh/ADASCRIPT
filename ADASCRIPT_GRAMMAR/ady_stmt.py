@@ -473,7 +473,8 @@ def check_generic_calls(tree, generics, plain=frozenset()):
 # !ParseFailure_T` and `parse_int(s)` an `int | !ParseFailure_T`. Read by the
 # backends where they collect a module's own `-> T | !F` routines, and a
 # routine of the module's own with the same name takes precedence.
-BUILTIN_FAILURE_TYPES = {"ShellFailure_T", "PathFailure_T", "ParseFailure_T"}
+BUILTIN_FAILURE_TYPES = {"ShellFailure_T", "PathFailure_T", "ParseFailure_T",
+                         "InputFailure_T"}
 BUILTIN_RETURN_TYPES = {"relative_to": "Path | !PathFailure_T",
                         "mkdir": "None | !PathFailure_T",
                         "read_text": "str | !PathFailure_T",
@@ -485,7 +486,10 @@ BUILTIN_RETURN_TYPES = {"relative_to": "Path | !PathFailure_T",
                         # strutils.parseFloat)
                         "adascriptParseFloat": "float | !ParseFailure_T",
                         "parse_int": "int | !ParseFailure_T",
-                        "adascriptParseInt": "int | !ParseFailure_T"}
+                        "adascriptParseInt": "int | !ParseFailure_T",
+                        # input(prompt): one line, or the end of the input
+                        "input": "str | !InputFailure_T",
+                        "adascriptInput": "str | !InputFailure_T"}
 # `parse_enum(E, s)` is an `E | !ParseFailure_T` for whichever enum E names, so
 # there is no one type to put in the table above -- only that it is a result.
 BUILTIN_RESULT_PROCS = {"parse_enum", "adascriptParseEnum"}
@@ -523,6 +527,7 @@ def refuse_dropped_failure(stmt_text, is_either_call):
         # the Nim backend's names for parse_float and parse_enum, as written
         shown = text.replace("adascriptParseFloat", "parse_float") \
                     .replace("adascriptParseInt", "parse_int") \
+                    .replace("adascriptInput", "input") \
                     .replace("adascriptParseEnum", "parse_enum")
         raise SyntaxError(
             f"'{shown}' drops a failure: take its result -- a do: step, a "

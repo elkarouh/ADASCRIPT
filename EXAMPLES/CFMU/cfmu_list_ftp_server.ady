@@ -9,14 +9,13 @@
 # If no arguments are given, prompts interactively.
 
 
-# One line typed after PROMPT; no line (the input ended) is a usage error.
-def ask(prompt: str) -> str:
-  stdout.write(prompt)
-  stdout.flushFile()
-  for reply in stdin.lines:
-    return reply.strip()
-  print "\nNo answer: usage: cfmu_list_ftp_server <ftp_instance> <level> <pattern>"
-  sys.exit(1)
+# The three answers, or the end of the input before the last of them.
+def ask_all() -> []str | !InputFailure_T:
+  do:
+    instance <- input("Enter FTP instance : ")
+    level    <- input("Enter directory level : ")
+    pattern  <- input("Enter file pattern i.e. YYYYMMDD : ")
+  return [instance.strip(), level.strip(), pattern.strip()]
 
 var remote_instance : str
 var level           : str
@@ -27,9 +26,13 @@ if $# == 3:
   level           = $2
   pattern         = $3
 elif $# == 0:
-  remote_instance = ask("Enter FTP instance : ")
-  level           = ask("Enter directory level : ")
-  pattern         = ask("Enter file pattern i.e. YYYYMMDD : ")
+  let answers : []str | !InputFailure_T = ask_all()
+  if answers is InputFailure_T:
+    print "\nNo answer: usage: cfmu_list_ftp_server <ftp_instance> <level> <pattern>"
+    sys.exit(1)
+  remote_instance = answers[0]
+  level           = answers[1]
+  pattern         = answers[2]
 else:
   print "Usage: cfmu_list_ftp_server <ftp_instance> <level> <pattern>"
   sys.exit(1)

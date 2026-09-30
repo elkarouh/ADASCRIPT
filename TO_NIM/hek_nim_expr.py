@@ -2822,6 +2822,10 @@ def to_nim(self, prec=None):
             from hek_nim_declarations import _ensure_parse_helpers
             _ensure_parse_helpers()
             result = {"parse_float": "adascriptParseFloat", "parse_int": "adascriptParseInt", "parse_enum": "adascriptParseEnum"}[raw_name]
+        if raw_name == "input" and raw_name not in getattr(ParserState, "user_top_level_procs", ()):
+            from hek_nim_declarations import _ensure_input_helper
+            _ensure_input_helper()
+            result = "adascriptInput"
         if raw_name in _NIM_CALL_IMPORTS:
             ParserState.nim_imports.add(_NIM_CALL_IMPORTS[raw_name])
 
@@ -3076,12 +3080,6 @@ def to_nim(self, prec=None):
                     return f"enumerate({start}, {arg})"
                 return f"enumerate({arg})"
             return f"{_paren_if_compound(arg)}.pairs"
-        if raw_name == "input":
-            call_node = self.nodes[1].nodes[0]
-            prompt = _extract_call_arg(call_node) if call_node and hasattr(call_node, 'nodes') and call_node.nodes else ""
-            if prompt:
-                return f"(stdout.write({prompt}); stdin.readLine())"
-            return "stdin.readLine()"
         if raw_name == "ord":
             call_node = self.nodes[1].nodes[0]
             arg = _extract_call_arg(call_node)

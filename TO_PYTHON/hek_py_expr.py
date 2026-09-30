@@ -1415,6 +1415,10 @@ def to_py(self, prec=None):
             if i == 0 and result in ("parse_float", "parse_int", "parse_enum") and result not in _own:
                 from hek_py_declarations import _ensure_parse_helpers
                 _ensure_parse_helpers()
+            if i == 0 and result == "input" and "input" not in _own:
+                from hek_py_declarations import _ensure_input_helper
+                _ensure_input_helper()
+                result = "adascriptInput"
             if i == 0 and result == "which" and "which" not in _own:
                 helper = _which_call(tr_str)
                 if helper is not None:

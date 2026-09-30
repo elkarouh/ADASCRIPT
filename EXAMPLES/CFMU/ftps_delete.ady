@@ -157,10 +157,10 @@ if len(files_to_delete) > 1 and not in_regression:
   for f in sorted(files_to_delete):
     print f
   print "Do you confirm the deletion, YES/NO (NO=default):"
-  var answer : str = ""                  # NO, if nothing is typed before the input ends
-  for reply in stdin.lines:
+  var answer : str = ""                  # NO, if the input ends before anything is typed
+  let reply : str | !InputFailure_T = input()
+  if reply is not InputFailure_T:
     answer = reply.strip()
-    break
   if answer != "YES":
     print "Not deleting the files"
     sys.exit(RC_OK)

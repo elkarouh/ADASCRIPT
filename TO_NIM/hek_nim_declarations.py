@@ -267,6 +267,33 @@ proc adascriptParseEnum*[T: enum](U: typedesc[T], s: string): Result[T, ParseFai
 """
 
 
+_INPUT_HELPER = """\
+proc adascriptInput*(prompt: string = ""): Result[string, InputFailure_T] =
+  ## input. One line from standard input, without its newline; the end of the
+  ## input is an InputFailure_T, not an exception. The prompt is shown first
+  ## and flushed, as Python's input() does.
+  if prompt.len > 0:
+    stdout.write(prompt)
+    stdout.flushFile()
+  var line: string
+  if stdin.readLine(line):
+    Result[string, InputFailure_T].ok(line)
+  else:
+    Result[string, InputFailure_T].err(InputFailure_T(reason: "end of input"))\
+"""
+
+
+def _ensure_input_helper():
+    """Add input the first time it is called: a proc returning a Result, so
+    it needs stdlib.nim."""
+    from hek_parsec import ParserState
+    ParserState.nim_imports.add("stdlib")
+    decls = getattr(ParserState, "nim_top_decls", [])
+    if not any("proc adascriptInput*" in d for d in decls):
+        decls.append(_INPUT_HELPER)
+        ParserState.nim_top_decls = decls
+
+
 def _ensure_parse_helpers():
     """Add parse_float, parse_int and parse_enum the first time one is called: procs
     returning a Result, so they need stdlib.nim."""

@@ -219,7 +219,7 @@ def total(a: str, b: str) -> int | !Failure_T:
     return x + y
 ```
 
-Passing up is as easy as with an exception, and explicit: the function says `| !Failure_T` in its signature and each `do:` step (or `return`) is where it happens, so the caller sees that it can fail and decides where it is handled. The built-in operations are written this way: `shell:` (`str | !ShellFailure_T`), and `Path.mkdir`, `.relative_to`, `.read_text`, `.read_lines`, `.write_text` (`... | !PathFailure_T`), `parse_float`, `parse_int` and `parse_enum` (`... | !ParseFailure_T`). A failure that is dropped is refused. Exceptions stay for what is not expected -- a bug, and the older forms that still raise (`readFile`, `writeFile`, `for line in p.lines:`, `input()`): prefer the failure-typed spelling where there is one. An exception travels up through functions whose signatures say nothing about it and is caught (or not) somewhere else; a failure value is in the type of every function it passes through.
+Passing up is as easy as with an exception, and explicit: the function says `| !Failure_T` in its signature and each `do:` step (or `return`) is where it happens, so the caller sees that it can fail and decides where it is handled. The built-in operations are written this way: `shell:` (`str | !ShellFailure_T`), and `Path.mkdir`, `.relative_to`, `.read_text`, `.read_lines`, `.write_text` (`... | !PathFailure_T`), `parse_float`, `parse_int` and `parse_enum` (`... | !ParseFailure_T`), and `input(prompt)` (`str | !InputFailure_T`, `.reason`: the input ended). A failure that is dropped is refused. Exceptions stay for what is not expected -- a bug, and the older forms that still raise (`readFile`, `writeFile`, `for line in p.lines:`): prefer the failure-typed spelling where there is one. An exception travels up through functions whose signatures say nothing about it and is caught (or not) somewhere else; a failure value is in the type of every function it passes through.
 
 ---
 
@@ -265,13 +265,13 @@ enum values still differs: Python formats elements with `repr`, so
 `print xs` over a `[]Door_T` gives `[<Door_T.Door1: 0>, ...]` against Nim's
 `@[Door1, ...]`. Known, and in `TODO.md`.
 
-Calling an enum type with a string argument emits `parseEnum` in Nim:
+Reading an enum member from text is `parse_enum(E, s)` -> `E | !ParseFailure_T` (exact name); `State(s)` is the older form and raises:
 ```adascript
 def parse_state(s: str) -> State:
-    try:
-        State(s.replace("-", "_"))
-    except:
-        ACTIVE
+    let state: State | !ParseFailure_T = parse_enum(State, s.replace("-", "_").upper())
+    if state is ParseFailure_T:
+        return ACTIVE
+    return state
 ```
 
 ---

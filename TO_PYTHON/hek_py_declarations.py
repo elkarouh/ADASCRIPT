@@ -377,6 +377,34 @@ def parse_enum(_e, _s):
 '''
 
 
+_INPUT_HELPER = '''\
+@_dataclass
+class InputFailure_T:
+    """The built-in failure of input(): the input ended before a line."""
+    reason: str = ""
+
+
+def adascriptInput(_prompt=""):
+    """One line from standard input, or an InputFailure_T at the end of the
+    input -- input() without the EOFError."""
+    try:
+        return input(_prompt)
+    except EOFError:
+        return InputFailure_T(reason="end of input")\
+'''
+
+
+def _ensure_input_helper():
+    """Define input's helper and InputFailure_T the first time a program
+    calls input() or names the type."""
+    from hek_parsec import ParserState
+    ParserState.nim_imports.add("from dataclasses import dataclass as _dataclass")
+    decls = getattr(ParserState, 'py_top_decls', [])
+    if not any("def adascriptInput(" in d for d in decls):
+        decls.append(_INPUT_HELPER)
+        ParserState.py_top_decls = decls
+
+
 def _ensure_parse_helpers():
     """Define parse_float, parse_enum and ParseFailure_T the first time a
     program calls one."""
@@ -458,6 +486,8 @@ def to_py(self, prec=None):
         _ensure_path_alias()
     elif name == "ParseFailure_T":
         _ensure_parse_helpers()
+    elif name == "InputFailure_T":
+        _ensure_input_helper()
     elif name == "File":
         # Nim's File is what open() returns and what stdin/stdout/stderr are,
         # so one variable can hold either -- `(open(p) if p else stdin)` is

@@ -35,20 +35,21 @@ The Python backend emits `class State(Enum)` with `auto()` members; the Nim
 backend emits a native `enum`. Members are referenced *bare* (`ACTIVE`, not
 `State.ACTIVE`) and the transpiler qualifies them where the target needs it.
 
-Calling an enum type with a string parses the string into a member — useful
-for reading states from files, as `lv.ady` does:
+Reading a member from a string is `parse_enum(E, s)`, an `E | !ParseFailure_T`
+(§10.12): the member named exactly `s`, or a failure the caller looks at where
+it asked. Useful for reading states from files:
 
 ```python
 def parse_state(s: str) -> State:
-    try:
-        State(s.replace("-", "_"))
-    except:
-        ACTIVE
+    let state: State | !ParseFailure_T = parse_enum(State, s.replace("-", "_").upper())
+    if state is ParseFailure_T:
+        return ACTIVE
+    return state
 ```
 
-(In Nim this becomes `parseEnum[State](...)`, in Python a lookup by member
-name; note also the implicit return of the last expression in each branch —
-Chapter 8.) An *integer* argument is read as a position instead —
+(Calling the type with a string, `State(s)`, is the older spelling: in Nim it
+becomes `parseEnum[State](...)`, in Python a lookup by member name, and it
+raises when `s` names no member.) An *integer* argument is read as a position instead —
 `State(0)` is the first member, the same numbering on both backends — so the
 call covers both of the conversions an enum has.
 
