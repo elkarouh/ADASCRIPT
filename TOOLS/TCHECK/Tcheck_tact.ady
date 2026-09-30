@@ -158,11 +158,10 @@ class Options:
                                 self.focus_subtype = parse_subtype(detail_arg)
                         when "replay":
                             die("-focus replay requires a replay type") if detail_arg == ""
-                            try:
-                                self.focus_domain = focus_replay
-                                self.focus_rtype = ReplayType(detail_arg)
-                            except:
-                                die("invalid replay type: " + detail_arg)
+                            let rtype: ReplayType | !ParseFailure_T = parse_enum(ReplayType, detail_arg)
+                            die("invalid replay type: " + detail_arg) if rtype is ParseFailure_T
+                            self.focus_domain = focus_replay
+                            self.focus_rtype = rtype
                         when "build_info":
                             die("-focus build_info takes no detail") if detail_arg != ""
                             self.focus_domain = focus_build_info

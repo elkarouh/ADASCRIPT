@@ -342,6 +342,45 @@ def split_either(annotation):
     return " | ".join(u["values"]), u["failure"]
 
 
+_PARSE_HELPERS = '''\
+@_dataclass
+class ParseFailure_T:
+    """The built-in failure of a conversion from text: what was being read
+    (`what`: "float", or the enum's name) and the text that was not one."""
+    what: str = ""
+    text: str = ""
+
+
+def parse_float(_s):
+    """A decimal number: an optional sign, digits with at most one `.`, an
+    optional exponent -- and nothing else (no spaces, no `_`, no inf or nan,
+    no hex), as on Nim. Not a number is a ParseFailure_T."""
+    if _re_fullmatch(r"[+-]?(\\d+\\.?\\d*|\\.\\d+)([eE][+-]?\\d+)?", _s, _re_ASCII):
+        return float(_s)
+    return ParseFailure_T(what="float", text=_s)
+
+
+def parse_enum(_e, _s):
+    """The member of enum _e named exactly _s; a ParseFailure_T otherwise."""
+    try:
+        return _e[_s]
+    except KeyError:
+        return ParseFailure_T(what=_e.__name__, text=_s)\
+'''
+
+
+def _ensure_parse_helpers():
+    """Define parse_float, parse_enum and ParseFailure_T the first time a
+    program calls one."""
+    from hek_parsec import ParserState
+    ParserState.nim_imports.add("from dataclasses import dataclass as _dataclass")
+    ParserState.nim_imports.add("from re import fullmatch as _re_fullmatch, ASCII as _re_ASCII")
+    decls = getattr(ParserState, 'py_top_decls', [])
+    if not any("def parse_float(" in d for d in decls):
+        decls.append(_PARSE_HELPERS)
+        ParserState.py_top_decls = decls
+
+
 def _ensure_path_alias():
     """Define Path the first time an annotation names it."""
     from hek_parsec import ParserState
@@ -409,6 +448,8 @@ def to_py(self, prec=None):
         _ensure_shell_failure()
     elif name == "PathFailure_T":
         _ensure_path_alias()
+    elif name == "ParseFailure_T":
+        _ensure_parse_helpers()
     elif name == "File":
         # Nim's File is what open() returns and what stdin/stdout/stderr are,
         # so one variable can hold either -- `(open(p) if p else stdin)` is

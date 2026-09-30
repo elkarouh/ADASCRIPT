@@ -478,7 +478,7 @@ _KEYED_PRIMITIVES = {"int", "str", "float", "bytes"}
 # Builtin names that are types but no finite domain: Natural and Positive are
 # subranges of int, far too large to be an array's index.
 _KEYED_BUILTINS = {"Natural", "Positive", "Path", "Job", "RunResult",
-                   "ShellFailure_T", "PathFailure_T"}
+                   "ShellFailure_T", "PathFailure_T", "ParseFailure_T"}
 
 
 def _index_name(idx_node):

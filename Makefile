@@ -102,6 +102,7 @@ STANDALONE := \
     test_path_call.ady \
     test_path_relative_to.ady \
     test_path_io.ady \
+    test_parse.ady \
     test_shell_throughput.ady \
     test_shell_braces.ady \
     test_param_mutation.ady \
@@ -255,7 +256,7 @@ BOTH_BACKENDS_COMPARED := test_do_block test_result test_optional_spelling \
     test_union test_case_ranges test_contextmanager_fstring \
     test_ordered_map test_function_type test_distinct test_units test_money \
     test_subrange_array test_variant_literal test_set_operators \
-    test_path_relative_to test_path_io
+    test_path_relative_to test_path_io test_parse
 
 ALL_COMPILE := \
     $(LIBS) \
@@ -581,6 +582,8 @@ test: compile
 	@printf 'let d: Path = Path("/tmp")\nd.mkdir()\n' > $(TMPDIR)/ady_refuse_16.ady
 	@# writing a file can fail too: its result is taken, not dropped.
 	@printf 'let f: Path = Path("/tmp/x")\nf.write_text("x")\n' > $(TMPDIR)/ady_refuse_17.ady
+	@# a conversion can fail, so its result is taken, not dropped.
+	@printf 'let t: str = "1"\nparse_float(t)\n' > $(TMPDIR)/ady_refuse_18.ady
 	@for tr in TO_NIM/ady2nim.py TO_PYTHON/ady2py.py; do \
 	    for c in "1:members no one can tell apart:cannot be told apart" \
 	             "2:a dropped failure:drops a failure" \
@@ -598,7 +601,8 @@ test: compile
 	             "14:a positional field after a named one:follows one given by name" \
 	             "15:a dropped Path.relative_to:drops a failure" \
 	             "16:a dropped Path.mkdir:drops a failure" \
-	             "17:a dropped Path.write_text:drops a failure"; do \
+	             "17:a dropped Path.write_text:drops a failure" \
+	             "18:a dropped parse_float:drops a failure"; do \
 	        n=$${c%%:*}; rest=$${c#*:}; what=$${rest%%:*}; want=$${rest#*:}; \
 	        printf '  %-42s' "$$what ($$(basename $$tr .py))"; \
 	        if $(PYTHON) $(CURDIR)/$$tr $(TMPDIR)/ady_refuse_$$n.ady > $(TMPDIR)/ady_refuse.out 2>&1; then \

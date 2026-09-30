@@ -469,15 +469,24 @@ def check_generic_calls(tree, generics, plain=frozenset()):
 # The failure types every program has, and the built-in routines that return
 # one: `p.relative_to(base)` is a `Path | !PathFailure_T`, `p.mkdir()` and
 # `p.write_text(s)` a `None | !PathFailure_T`, `p.read_text()` a `str | !...`
-# and `p.read_lines()` a `[]str | !...`. Read by the
+# and `p.read_lines()` a `[]str | !...`; `parse_float(s)` is a `float |
+# !ParseFailure_T`. Read by the
 # backends where they collect a module's own `-> T | !F` routines, and a
 # routine of the module's own with the same name takes precedence.
-BUILTIN_FAILURE_TYPES = {"ShellFailure_T", "PathFailure_T"}
+BUILTIN_FAILURE_TYPES = {"ShellFailure_T", "PathFailure_T", "ParseFailure_T"}
 BUILTIN_RETURN_TYPES = {"relative_to": "Path | !PathFailure_T",
                         "mkdir": "None | !PathFailure_T",
                         "read_text": "str | !PathFailure_T",
                         "read_lines": "[]str | !PathFailure_T",
-                        "write_text": "None | !PathFailure_T"}
+                        "write_text": "None | !PathFailure_T",
+                        "parse_float": "float | !ParseFailure_T",
+                        # what the Nim backend calls it (Nim ignores case and
+                        # underscores, so `parse_float` there would be
+                        # strutils.parseFloat)
+                        "adascriptParseFloat": "float | !ParseFailure_T"}
+# `parse_enum(E, s)` is an `E | !ParseFailure_T` for whichever enum E names, so
+# there is no one type to put in the table above -- only that it is a result.
+BUILTIN_RESULT_PROCS = {"parse_enum", "adascriptParseEnum"}
 
 
 def either_procs(return_types, failure_types):
@@ -509,8 +518,11 @@ def refuse_dropped_failure(stmt_text, is_either_call):
         if depth == 0 and i != len(text) - m.end():
             return          # the call is only part of the statement
     if is_either_call(text):
+        # the Nim backend's names for parse_float and parse_enum, as written
+        shown = text.replace("adascriptParseFloat", "parse_float") \
+                    .replace("adascriptParseEnum", "parse_enum")
         raise SyntaxError(
-            f"'{text}' drops a failure: take its result -- a do: step, a "
+            f"'{shown}' drops a failure: take its result -- a do: step, a "
             f"`let` and a test, or `return` it -- or it goes unseen")
 
 

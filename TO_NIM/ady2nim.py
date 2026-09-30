@@ -679,7 +679,7 @@ def translate(code, export_symbols=False):
     # already, has to be known for routines defined further down. And the
     # failure types -- this module's and those of the modules it nimports --
     # which say which side of a `|` is the failure.
-    from ady_stmt import BUILTIN_FAILURE_TYPES, BUILTIN_RETURN_TYPES
+    from ady_stmt import BUILTIN_FAILURE_TYPES, BUILTIN_RETURN_TYPES, BUILTIN_RESULT_PROCS
     ParserState.failure_types = (_failures | BUILTIN_FAILURE_TYPES
                                  | _nimport_carried.get("failure_types", set()))
     ParserState.ady_return_types = {**BUILTIN_RETURN_TYPES, **scan_return_types(code)}
@@ -697,8 +697,9 @@ def translate(code, export_symbols=False):
     check_generic_calls(stmts, ParserState.generic_funcs, scan_plain_defs(code))
     ParserState.union_aliases_nim = {}
     ParserState.ady_return_types_nim = {}
-    ParserState.result_procs = either_procs(ParserState.ady_return_types,
-                                            ParserState.failure_types)
+    ParserState.result_procs = (either_procs(ParserState.ady_return_types,
+                                             ParserState.failure_types)
+                                | BUILTIN_RESULT_PROCS)
     # Merge ref classes from nimport'd deps so subclasses of cross-file base
     # classes are also emitted as ref object.
     ParserState._ref_classes.update(_nimport_ref_classes)

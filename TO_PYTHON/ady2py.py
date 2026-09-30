@@ -303,7 +303,7 @@ def translate(code):
     from hek_parsec import ParserState as _PS_rp
     _PS_rp.py_type_names = set(_re_rp.findall(
         r"^[ \t]*(?:type|class)[ \t]+([A-Za-z_]\w*)", code, _re_rp.MULTILINE))
-    from ady_stmt import BUILTIN_FAILURE_TYPES, BUILTIN_RETURN_TYPES
+    from ady_stmt import BUILTIN_FAILURE_TYPES, BUILTIN_RETURN_TYPES, BUILTIN_RESULT_PROCS
     _PS_rp.failure_types = _failures | BUILTIN_FAILURE_TYPES
     _PS_rp.py_type_names |= BUILTIN_FAILURE_TYPES
     _PS_rp.ady_return_types = {**BUILTIN_RETURN_TYPES, **scan_return_types(code)}
@@ -317,8 +317,9 @@ def translate(code):
     from ady_stmt import scan_generic_funcs, scan_plain_defs, check_generic_calls
     check_generic_calls(stmts, scan_generic_funcs(code), scan_plain_defs(code))
     _PS_rp.union_aliases_py = {}
-    _PS_rp.result_procs = either_procs(_PS_rp.ady_return_types,
-                                       _PS_rp.failure_types)
+    _PS_rp.result_procs = (either_procs(_PS_rp.ady_return_types,
+                                        _PS_rp.failure_types)
+                           | BUILTIN_RESULT_PROCS)
 
     # Which names live at module level has to be known before the first
     # function is emitted, since a function may assign one declared below it.

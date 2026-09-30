@@ -1960,7 +1960,9 @@ also travels up, but through functions that say nothing about it, and is
 caught, if it is, somewhere else. The built-ins are written this way --
 `shell:` and the `Path` operations that can fail (`mkdir`, `relative_to`,
 `read_text`, `read_lines`, `write_text`) return a `T | !ShellFailure_T` or
-`T | !PathFailure_T` -- and a failure that is dropped is refused. Exceptions
+`T | !PathFailure_T` -- as are `parse_float(s)` and `parse_enum(E, s)`
+(`... | !ParseFailure_T`), for a number or an enum member read from text --
+and a failure that is dropped is refused. Exceptions
 are for what nobody expected; `readFile`, `writeFile` and `for line in
 p.lines:` are the older forms that still raise.
 

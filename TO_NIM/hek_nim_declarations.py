@@ -206,6 +206,63 @@ proc write_text*(p: Path, text: string): Result[void, PathFailure_T] =
 """
 
 
+_PARSE_HELPERS = """\
+proc adascriptParseFloat*(s: string): Result[float, ParseFailure_T] =
+  ## parse_float. A decimal number: an optional sign, digits with at most one
+  ## `.`, an optional exponent -- and nothing else. No spaces, no `_`, no
+  ## `inf` or `nan`, no hex: the same on both backends, where Python's
+  ## `float()` and Nim's `parseFloat` each take a different set. Not a number
+  ## is a ParseFailure_T, not an exception. (Named adascript... because Nim
+  ## ignores case and underscores: `parse_float` there IS strutils.parseFloat.)
+  var i = 0
+  let n = s.len
+  if i < n and s[i] in {'+', '-'}: inc i
+  var digits = 0
+  while i < n and s[i] in {'0'..'9'}:
+    inc i
+    inc digits
+  if i < n and s[i] == '.':
+    inc i
+    while i < n and s[i] in {'0'..'9'}:
+      inc i
+      inc digits
+  var valid = digits > 0
+  if valid and i < n and s[i] in {'e', 'E'}:
+    inc i
+    if i < n and s[i] in {'+', '-'}: inc i
+    var exp_digits = 0
+    while i < n and s[i] in {'0'..'9'}:
+      inc i
+      inc exp_digits
+    valid = exp_digits > 0
+  if valid and i == n:
+    Result[float, ParseFailure_T].ok(strutils.parseFloat(s))
+  else:
+    Result[float, ParseFailure_T].err(ParseFailure_T(what: "float", text: s))
+
+proc adascriptParseEnum*[T: enum](U: typedesc[T], s: string): Result[T, ParseFailure_T] =
+  ## parse_enum. The member of the enum named exactly S -- Nim's `parseEnum` would also
+  ## take `a` for `A` and ignore underscores. Not a member is a
+  ## ParseFailure_T, not an exception.
+  for e in T:
+    if $e == s:
+      return Result[T, ParseFailure_T].ok(e)
+  Result[T, ParseFailure_T].err(ParseFailure_T(what: $U, text: s))\
+"""
+
+
+def _ensure_parse_helpers():
+    """Add parse_float and parse_enum the first time one is called: procs
+    returning a Result, so they need stdlib.nim."""
+    from hek_parsec import ParserState
+    ParserState.nim_imports.add("stdlib")
+    ParserState.nim_imports.add("strutils")
+    decls = getattr(ParserState, "nim_top_decls", [])
+    if not any("proc adascriptParseFloat*" in d for d in decls):
+        decls.append(_PARSE_HELPERS)
+        ParserState.nim_top_decls = decls
+
+
 def _ensure_path_io():
     """Add Path.read_text / read_lines / write_text the first time one is
     called: procs returning a Result, so they need stdlib.nim."""
@@ -273,7 +330,7 @@ def to_nim(self, prec=None):
             if node.nodes[0] == "Path":
                 _ensure_path_helper()
             return mapped
-        if node.nodes[0] in ("ShellFailure_T", "PathFailure_T"):
+        if node.nodes[0] in ("ShellFailure_T", "PathFailure_T", "ParseFailure_T"):
             ParserState.nim_imports.add("stdlib")   # they live in stdlib.nim
         _alias = _union_alias_nim(node.nodes[0])
         if _alias and len(self.nodes) == 1:

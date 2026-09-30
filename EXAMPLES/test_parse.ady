@@ -1,0 +1,70 @@
+#!/usr/bin/env ady2nim
+"""Test: parse_float and parse_enum -- text to a value, without exceptions.
+
+`parse_float(s)` is a `float | !ParseFailure_T` and `parse_enum(E, s)` an
+`E | !ParseFailure_T`: the value, or the built-in failure saying what was
+being read (`what`: "float", or the enum's name) and the text that was not
+one (`text`). A float is a decimal number and nothing else: an optional sign,
+digits with at most one `.`, an optional exponent -- no spaces, no `_`, no
+`inf`, `nan` or hex, which Python's float() and Nim's parseFloat each take a
+different set of. An enum member is named exactly: `beta` is not `BETA`. The
+output is compared between the backends.
+"""
+
+type Kind_T is enum ALPHA, BETA, GAMMA
+
+def show(text: str) -> str:
+    let r: float | !ParseFailure_T = parse_float(text)
+    if r is ParseFailure_T:
+        return f"[{text}] not a float ({r.what})"
+    return f"[{text}] {r}"
+
+# ─── test 1: what is a float ────────────────────────────────────────────────
+
+for t in ["3", "-2.5", "1e3", "1E-2", ".5", "5.", "+7", "007", "1.5e+2"]:
+    print show(t)
+print "test1 OK"
+
+# ─── test 2: what is not ────────────────────────────────────────────────────
+
+for t in ["", "abc", "1.2.3", "1e", "e5", " 1", "1 ", "1_000", "inf", "nan", "0x10", "-", ".", "+-1", "1,5"]:
+    print show(t)
+print "test2 OK"
+
+# ─── test 3: enum members, by exact name ────────────────────────────────────
+
+def kind(text: str) -> Kind_T | !ParseFailure_T:
+    return parse_enum(Kind_T, text)
+
+for t in ["ALPHA", "BETA", "GAMMA", "beta", "Beta", "", "DELTA", "BETA "]:
+    let k: Kind_T | !ParseFailure_T = kind(t)
+    if k is ParseFailure_T:
+        print f"[{t}] not a {k.what}: {k.text}"
+    else:
+        print f"[{t}] {k}"
+print "test3 OK"
+
+# ─── test 4: do: passes the first failure on ────────────────────────────────
+
+def area(width: str, height: str) -> float | !ParseFailure_T:
+    do:
+        w <- parse_float(width)
+        h <- parse_float(height)
+    return w * h
+
+let ok: float | !ParseFailure_T = area("3", "2.5")
+if ok is ParseFailure_T:
+    assert False
+else:
+    assert ok == 7.5
+let bad: float | !ParseFailure_T = area("3", "x")
+if bad is ParseFailure_T:
+    assert bad.text == "x"
+else:
+    assert False
+let first: float | !ParseFailure_T = area("y", "x")
+if first is ParseFailure_T:
+    assert first.text == "y"            # the first failure, not the last
+else:
+    assert False
+print "test4 OK"

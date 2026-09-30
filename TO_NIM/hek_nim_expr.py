@@ -722,6 +722,12 @@ def _union_type_of(expr_str):
     if _t.startswith(("Result[", "OneOf")):
         return _t
     _called = _outer_call_name(expr_str)
+    if _called == "adascriptParseEnum":
+        # parse_enum(E, s) is an `E | !ParseFailure_T`, whichever enum E is:
+        # its type is in the first argument
+        _m = _re.match(r"^adascriptParseEnum\(\s*([A-Za-z_]\w*)\s*,", expr_str)
+        if _m:
+            return f"Result[{_m.group(1)}, ParseFailure_T]"
     if _called:
         _rt = _proc_ret_nim(_called)
         if _rt.startswith(("Result[", "OneOf")):
@@ -2812,6 +2818,10 @@ def to_nim(self, prec=None):
             "sorted": "algorithm", "toHashSet": "sets", "initHashSet": "sets",
             "initTable": "tables", "newTable": "tables",
         }
+        if raw_name in ("parse_float", "parse_enum") and raw_name not in getattr(ParserState, "user_top_level_procs", ()):
+            from hek_nim_declarations import _ensure_parse_helpers
+            _ensure_parse_helpers()
+            result = {"parse_float": "adascriptParseFloat", "parse_enum": "adascriptParseEnum"}[raw_name]
         if raw_name in _NIM_CALL_IMPORTS:
             ParserState.nim_imports.add(_NIM_CALL_IMPORTS[raw_name])
 

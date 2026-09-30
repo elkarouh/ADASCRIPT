@@ -269,11 +269,10 @@ def parse_atom(token: str) -> Val_T:
         when _ if token.startswith("\""):
             return VStr(token[1..len(token)-2])
         when others:
-            try:
-                return VNum(float(token))
-            except ValueError:
-                pass
-    VSym(token)
+            let num: float | !ParseFailure_T = parse_float(token)
+            if num is ParseFailure_T:
+                return VSym(token)
+            return VNum(num)
 
 # Named, not written inline: a string holding a `)` inside a call's argument
 # list confuses the union-return analysis (see TODO.md).
