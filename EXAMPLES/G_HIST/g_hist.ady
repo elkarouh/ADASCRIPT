@@ -58,8 +58,8 @@ class Repo:
         return text.strip()
 
     def succeeds(self, *args: str) -> bool:
-        let (_, code) = shell(cwd = self.root): git {*args} 2>/dev/null
-        return code == 0
+        let r: None | !ShellFailure_T = shell(cwd = self.root): git {*args} 2>/dev/null
+        return not (r is ShellFailure_T)
 
     def history(self, rel: Path) -> []Rev_T:
         """Commits touching REL, newest first. --follow tracks renames, so the
