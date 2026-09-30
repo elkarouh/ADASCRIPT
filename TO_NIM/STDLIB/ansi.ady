@@ -1,0 +1,67 @@
+#!/usr/bin/env ady2nim
+"""ansi.ady -- terminal colours and text effects, as values a pipe applies.
+
+    nimport ansi
+
+    print "ERROR" | bold | fg_white | bg_red
+    print "ok" | fg_green
+
+A `Style` wraps a string in one ANSI SGR escape and resets afterwards, and
+`text | style` applies it, left to right, so `text | bold | fg_white |
+bg_red` reads as the order the styles are laid on. Called, a Style takes
+several strings: `bold("a", "b")` styles each of them.
+
+Naming: the foreground colours are `fg_black` .. `fg_white`, the background
+ones `bg_black` .. `bg_white`, and the effects keep the terminal's own words
+(`bold`, `dim`, `underscore`, `blink`, `inverted`, `reset`). The colour
+names carry a prefix because a bare `red` or `white` is what a program
+already calls its own variables. A name of your own that is also a name here
+does not clash on Nim: yours wins in your module, and `ansi.bold` still
+reaches this one.
+
+The escape codes are written out in `__init__` rather than held in exported
+constants, so that importing this file adds nothing but the styles below.
+"""
+
+class Style:
+    var on: str
+    var off: str
+
+    def __init__(self, code: Natural):
+        self.on = f"\x1b[{code}m"
+        self.off = "\x1b[0m"
+
+    def __call__(self, *args: str) -> str:
+        return "".join([f"{self.on}{arg}" for arg in args]) + self.off
+
+    def __ror__(self, other: str) -> str:
+        return self(other)
+
+# effects
+let reset:      Style = Style(0)
+let bold:       Style = Style(1)
+let dim:        Style = Style(2)
+let underscore: Style = Style(4)
+let blink:      Style = Style(5)
+let inverted:   Style = Style(7)
+
+# foreground colours
+let fg_black:   Style = Style(30)
+let fg_red:     Style = Style(31)
+let fg_green:   Style = Style(32)
+let fg_yellow:  Style = Style(33)
+let fg_blue:    Style = Style(34)
+let fg_magenta: Style = Style(35)
+let fg_cyan:    Style = Style(36)
+let fg_white:   Style = Style(37)
+
+# background colours
+let bg_black:   Style = Style(40)
+let bg_red:     Style = Style(41)
+let bg_green:   Style = Style(42)
+let bg_yellow:  Style = Style(43)
+let bg_blue:    Style = Style(44)
+let bg_magenta: Style = Style(45)
+let bg_cyan:    Style = Style(46)
+let bg_white:   Style = Style(47)
+let bg_default: Style = Style(49)

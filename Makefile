@@ -74,6 +74,7 @@ STANDALONE := \
     ownership_tour.ady \
     test_iters.ady \
     test_graphs.ady \
+    test_ansi.ady \
     test_queues.ady \
     test_regex.ady \
     test_regex_g.ady \

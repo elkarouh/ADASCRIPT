@@ -1,5 +1,6 @@
 #! /usr/bin/env ady2nim
 nimport algorithm, sequtils
+nimport ansi                 # Style, and the colours and effects to pipe a string through
 type State = enum:
     ACTIVE        # being worked on
     OPS_BUG       # blocked by an ops/infra bug
@@ -13,78 +14,40 @@ type State = enum:
     MERGED        # merged to mainline
     REJECTED      # change rejected
 
-const prefix: str = "\x1b["
-const suffix: str = "m"
-
-class Style:
-    var on: str
-    var off: str
-    def __init__(self, code: Natural):
-        self.on = f"{prefix}{code}{suffix}"
-        self.off = f"{prefix}0{suffix}"
-    def __call__(self, *args: str) -> str:
-        return "".join([f"{self.on}{arg}" for arg in args]) + self.off
-    def __ror__(self, other: str) -> str:
-        return self(other)
-
-let reset: Style = Style(0)
-let bold: Style = Style(1)
-let dim: Style = Style(2)
-let underscore: Style = Style(4)
-let blink: Style = Style(5)
-let inverted: Style = Style(7)
-let black: Style = Style(30)
-let red: Style = Style(31)
-let green: Style = Style(32)
-let yellow: Style = Style(33)
-let blue: Style = Style(34)
-let magenta: Style = Style(35)
-let cyan: Style = Style(36)
-let white: Style = Style(37)
-let bg_black: Style = Style(40)
-let bg_red: Style = Style(41)
-let bg_green: Style = Style(42)
-let bg_yellow: Style = Style(43)
-let bg_blue: Style = Style(44)
-let bg_magenta: Style = Style(45)
-let bg_cyan: Style = Style(46)
-let bg_white: Style = Style(47)
-let bg_default: Style = Style(49)
-
 def colored_viewname(view_name: str) -> str:
     let parts: []str = view_name.split('.')
     let login_name: str = parts[0]
     let view: str = parts[1]
     if view.startswith("I2_"):
-        return f"{login_name}.{view | inverted | bold | blue | bg_white}"
+        return f"{login_name}.{view | inverted | bold | fg_blue | bg_white}"
     else:
-        return f"{login_name}.{view | dim | bold | black | bg_white}"
+        return f"{login_name}.{view | dim | bold | fg_black | bg_white}"
 
 def colored_baseline(baseline: str) -> str:
     let parts: []str = baseline.split('.')
     if len(parts) > 5:
-        return f"{parts[0] | bold | yellow | bg_black}.{parts[1]}.{parts[2]}.{parts[3] | bold | yellow}.{parts[4]}.{parts[5] | bold | bg_blue | white}"
+        return f"{parts[0] | bold | fg_yellow | bg_black}.{parts[1]}.{parts[2]}.{parts[3] | bold | fg_yellow}.{parts[4]}.{parts[5] | bold | bg_blue | fg_white}"
     else:
-        return f"{parts[0] | bold | yellow | bg_black}.{parts[1]}.{parts[2]}.{parts[3] | bold | yellow}.{parts[4] | bold | bg_blue | white}"
+        return f"{parts[0] | bold | fg_yellow | bg_black}.{parts[1]}.{parts[2]}.{parts[3] | bold | fg_yellow}.{parts[4] | bold | bg_blue | fg_white}"
 
 def colored_env_id(env_id: str) -> str:
     let parts: []str = env_id.split('.')
     if parts[1] == "OP":
-        return f"{parts[0]}.{parts[1] | bold | yellow | bg_black}.{parts[2]}"
+        return f"{parts[0]}.{parts[1] | bold | fg_yellow | bg_black}.{parts[2]}"
     else:
-        return f"{parts[0]}.{parts[1] | bold | blue | bg_white}.{parts[2]}"
+        return f"{parts[0]}.{parts[1] | bold | fg_blue | bg_white}.{parts[2]}"
 
 def colored_status(state: State) -> str:
     case state:
         when OPS_BUG:
-            return str(state) | bold | blink | black | bg_white
+            return str(state) | bold | blink | fg_black | bg_white
         when BUSY:
-            return str(state) | bold | black | bg_yellow
+            return str(state) | bold | fg_black | bg_yellow
         when others:
-            return str(state) | bold | yellow | bg_green
+            return str(state) | bold | fg_yellow | bg_green
 
 def colored_comment(comment: str) -> str:
-    return comment | bold | black | bg_white
+    return comment | bold | fg_black | bg_white
 
 class Cls_View_Line:
     var view: str

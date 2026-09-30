@@ -2401,6 +2401,7 @@ without a local copy next to your source file:
 | `nimport stdlib` | `PriorityQueue`, `FifoQueue`, `LifoQueue`, `ANY`    |
 | `nimport awk`  | `AwkBase` — subclass and override `process_record()`, `begin()`, `finish()` |
 | `nimport strscan` | character classification (`is_digit_ch`, `is_space_ch`, …) and the small scanners a hand-written lexer needs (`skip_space`, `skip_quoted`, `lead_ident`, `strip_line_comment`) |
+| `nimport ansi` | terminal colours and effects as values a pipe applies: `"x" \| bold \| fg_white \| bg_red` |
 
 Example — a custom awk processor in any directory:
 

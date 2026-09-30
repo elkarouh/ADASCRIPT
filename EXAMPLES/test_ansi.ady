@@ -1,0 +1,39 @@
+#!/usr/bin/env ady2nim
+"""Test: ansi.ady, the terminal styles of the standard library.
+
+A style wraps a string in an SGR escape and a reset; `text | style` applies
+it, and the pipe chains left to right. Nim only, as the other `nimport`ed
+libraries are.
+"""
+nimport ansi
+
+let ESC: str = "\x1b["
+
+# ─── test 1: one style, called and piped ────────────────────────────────────
+
+assert bold("x") == ESC + "1mx" + ESC + "0m"
+let piped: str = "x" | bold
+assert piped == bold("x")
+assert fg_red("x") == ESC + "31mx" + ESC + "0m"
+assert bg_white("x") == ESC + "47mx" + ESC + "0m"
+print "test1 OK"
+
+# ─── test 2: chained, the last style is the outer one ───────────────────────
+
+let both: str = "x" | bold | fg_red
+assert both == fg_red(bold("x"))
+assert both == ESC + "31m" + ESC + "1mx" + ESC + "0m" + ESC + "0m"
+print "test2 OK"
+
+# ─── test 3: several arguments are each styled ──────────────────────────────
+
+assert dim("a", "b") == ESC + "2ma" + ESC + "2mb" + ESC + "0m"
+print "test3 OK"
+
+# ─── test 4: a name of the importer's own does not clash ────────────────────
+
+let blue: int = 7                    # a colour variable of the program's own
+assert blue == 7
+let red_text: str = "x" | fg_blue
+assert red_text == ESC + "34mx" + ESC + "0m"
+print "test4 OK"
