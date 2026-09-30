@@ -16,7 +16,7 @@ nimport os
 
 type Rev_T is record:
     hash: str
-    path: str                  # the file's path at that commit: renames change it
+    path: Path                 # the file's path at that commit: renames change it
 
 # Use zenity when a display is available, otherwise fall back to the terminal.
 let GUI: bool = which("zenity") is not None and ($DISPLAY != "" or $WAYLAND_DISPLAY != "")
@@ -61,7 +61,7 @@ class Repo:
         let (_, code) = shell(cwd = self.root): git {*args} 2>/dev/null
         return code == 0
 
-    def history(self, rel: str) -> []Rev_T:
+    def history(self, rel: Path) -> []Rev_T:
         """Commits touching REL, newest first. --follow tracks renames, so the
         path the file had at each commit is recorded with it."""
         var revs: []Rev_T = []
@@ -71,7 +71,7 @@ class Repo:
             if line.startswith("@"):
                 current = line[1:]
             elif line != "":
-                revs.append(Rev_T(hash=current, path=line))
+                revs.append(Rev_T(hash=current, path=Path(line)))
         return revs
 
     def save_at(self, rev: Rev_T, dest: Path) -> None:
@@ -84,12 +84,25 @@ class Repo:
             writeFile(dest, "")
 
     def describe(self, hash: str) -> str:
-        return self.output("log", "-1", "--format=%h %ad %an: %s", "--date=short", hash)
+        return self.output("log", "-1", "--format=%h %ad %cn: %s", "--date=short", hash)
 
-def review(repo: Repo, abs: str, rel: str, tmp: Path) -> int:
+    def tmpname(self, hash: str, side: str, tmp: Path, base: str) -> Path:
+        """Where the file at HASH goes, and so what meld's pane header shows:
+        <date>-<committer>-<filename>. SIDE ("new" or "old") is a directory of
+        its own, so the two can never collide, even when two commits share a
+        date and a committer. The committer keeps its letters and digits,
+        `.`, `_` and `-`, and non-ASCII letters as they are (`Zoë`); any other
+        ASCII character, a space or `/` or `'`, becomes `_`."""
+        var who: str = self.output("log", "-1", "--format=%cn", hash)
+        who = s/[\x00-\x2C\x2F\x3A-\x40\x5B-\x5E\x60\x7B-\x7F]/_/g
+        let when: str = self.output("log", "-1", "--format=%cd", "--date=format:%Y-%m-%d", hash)
+        (tmp / side).mkdir()
+        return tmp / side / f"{when}-{who}-{base}"
+
+def review(repo: Repo, abs: Path, rel: Path, tmp: Path) -> int:
     """Open the comparisons one after another; the exit status."""
     let revs: []Rev_T = repo.history(rel)
-    let base: str = Path(rel).name
+    let base: str = rel.name
 
     # 1) Uncommitted changes vs HEAD, if any.
     if repo.succeeds("rev-parse", "--verify", "-q", "HEAD") and not repo.succeeds("diff", "--quiet", "HEAD", "--", rel):
@@ -120,8 +133,8 @@ def review(repo: Repo, abs: str, rel: str, tmp: Path) -> int:
                 print f"Stopped by user after {i} comparison(s)."
                 return 0
 
-        let new_file: Path = tmp / f"{new.hash[:8]}-{base}"
-        let old_file: Path = tmp / f"{old.hash[:8]}-{base}"
+        let new_file: Path = repo.tmpname(new.hash, "new", tmp, base)
+        let old_file: Path = repo.tmpname(old.hash, "old", tmp, base)
         repo.save_at(new, new_file)
         repo.save_at(old, old_file)
 
@@ -137,7 +150,7 @@ def review(repo: Repo, abs: str, rel: str, tmp: Path) -> int:
 
 if $# != 1:
     die(f"usage: {PROG} path/to/file", code = 2)
-let file: str = $1
+let file: Path = Path($1)
 
 if which("git") is None:
     fatal("git is not installed")
@@ -146,17 +159,16 @@ if which("meld") is None:
 if not -e file:
     fatal(f"File not found: {file}")
 
-let (abs_text, _) = shell: realpath -- {!file}
-let abs: str = abs_text.strip()
+let abs: Path = file.resolve()
 
 # Ask git from the file's own directory, so this works from any cwd.
-let (root_text, root_code) = shell(cwd = Path(abs).parent): git rev-parse --show-toplevel 2>/dev/null
+let (root_text, root_code) = shell(cwd = abs.parent): git rev-parse --show-toplevel 2>/dev/null
 if root_code != 0:
     fatal(f"{file} is not inside a git repository")
-let root: str = root_text.strip()
-if not abs.startswith(root + "/"):
+let root: Path = Path(root_text.strip())
+if not str(abs).startswith(str(root) + "/"):
     fatal(f"{file} is not inside the git repo at {root}")
-let rel: str = abs[len(root) + 1:]
+let rel: Path = Path(str(abs)[len(str(root)) + 1:])
 print f"Repo root:     {root}"
 print f"Repo-rel path: {rel}"
 
@@ -164,7 +176,7 @@ let (tmp_text, _) = shell: mktemp -d
 let tmp: Path = Path(tmp_text.strip())
 var status: int = 1
 try:
-    status = review(Repo(Path(root)), abs, rel, tmp)
+    status = review(Repo(root), abs, rel, tmp)
 finally:
     shell: rm -rf {!tmp}
 quit(status)

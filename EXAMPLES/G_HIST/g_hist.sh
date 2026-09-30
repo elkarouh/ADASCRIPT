@@ -84,7 +84,19 @@ show_at() {
   fi
 }
 
-describe() { git_ log -1 --format='%h %ad %an: %s' --date=short "$1"; }
+describe() { git_ log -1 --format='%h %ad %cn: %s' --date=short "$1"; }
+
+# Temp file name shown in meld's pane headers: <date>-<committer>-<filename>
+# $2 is a subdirectory ("new"/"old") so both files can never collide, even if
+# two commits share the same date and committer.
+tmpname() {
+  local rev=$1 side=$2 who when
+  who=$(git_ log -1 --format='%cn' "$rev")
+  who=${who//[^[:alnum:]._-]/_}
+  when=$(git_ log -1 --format='%cd' --date=format:%Y-%m-%d "$rev")
+  mkdir -p "$tmpdir/$side"
+  echo "$tmpdir/$side/${when}-${who}-$base"
+}
 
 # 1) Uncommitted changes vs HEAD, if any.
 if git_ rev-parse --verify -q HEAD >/dev/null \
@@ -116,8 +128,8 @@ new: $new_desc
 old: $old_desc" || { echo "Stopped by user after $i comparison(s)."; exit 0; }
   fi
 
-  nf="$tmpdir/${new:0:8}-$base"
-  of="$tmpdir/${old:0:8}-$base"
+  nf=$(tmpname "$new" new)
+  of=$(tmpname "$old" old)
   show_at "$new" "$new_path" "$nf"
   show_at "$old" "$old_path" "$of"
 
