@@ -301,14 +301,16 @@ def nm_root() -> Path:
         return Path($TCHECK_NM_CACHE)
     return Path($HOME) / "Downloads" / ".cache" / "tcheck" / "NM"
 
-def nm_target(arg: str, root: str) -> str:
-    """The <system>/<subsystem>/<path> that ARG names, or "": that form itself
-    (relative, three parts at least) or a path below ROOT."""
-    if arg.startswith(root + "/"):
-        return arg[len(root) + 1:]
-    if not arg.startswith("/") and not arg.startswith(".") and len(arg.split("/")) >= 3:
+def nm_target(arg: Path, root: Path) -> Path:
+    """The <system>/<subsystem>/<path> that ARG names, or "": a path below ROOT,
+    or that form itself (relative, three parts at least)."""
+    let below: Path | !PathFailure_T = arg.relative_to(root)
+    if below is not PathFailure_T and below != ".":
+        return below
+    let text: str = str(arg)
+    if not text.startswith("/") and not text.startswith(".") and len(text.split("/")) >= 3:
         return arg
-    return ""
+    return Path("")
 
 def inside_git(file: Path) -> bool:
     let dir: Path = file.resolve().parent
@@ -325,7 +327,7 @@ def find_file(arg: Path) -> Path | !Failure_T:
     if -e arg and inside_git(arg):
         return arg
     let root: Path = nm_root()
-    let target: str = nm_target(str(arg), str(root))
+    let target: Path = nm_target(arg, root)
     if target == "":
         if not -e arg:
             return Failure_T(f"File not found: {arg}")
