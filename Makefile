@@ -237,7 +237,6 @@ COMPILE_ONLY := \
     test_input.ady \
     dp/jacks.ady \
     BENCH_SEARCH/bench_search.ady \
-    G_HIST/g_hist.ady \
     awk_logscan.ady \
     sh_janitor.ady \
     config_check.ady \
@@ -331,6 +330,7 @@ TOOL_PROGRAMS := \
     TOOLS/LOLCATE/lolcate.ady \
     TOOLS/C500/c500.ady \
     TOOLS/LV/lv.ady \
+    TOOLS/THIST/Thist.ady \
     TOOLS/LISPY/lispy.ady
 
 # -----------------------------------------------------------------------

@@ -50,6 +50,10 @@ TOOLS/LISPY/lispy
 TOOLS/LV/lv
 TOOLS/LV/*_gen.py
 
+# Thist, the same again.
+TOOLS/THIST/Thist
+TOOLS/THIST/*_gen.py
+
 # ady2nim drops a symlink to the built binary next to each source, so the
 # bundled libraries leave one behind whenever they are compiled. They point
 # into ~/.cache/adascript, which is per-machine.

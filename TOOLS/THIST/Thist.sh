@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# g_hist: step through a file's git history in meld, newest change first.
+# Thist: step through a file's git history in meld, newest change first.
 # Follows renames, handles deleted revisions, and works from any directory.
 set -euo pipefail
 
@@ -84,12 +84,12 @@ echo "Repo-rel path: $rel"
 
 git_() { git -C "$root" "$@"; }
 
-# G_HIST_DEBUG=1 g_hist FILE   says on stderr what git answered for every
+# THIST_DEBUG=1 Thist FILE   says on stderr what git answered for every
 # commit and how the names were made.
-dbg() { [[ -z ${G_HIST_DEBUG:-} ]] || echo "g_hist debug: $*" >&2; }
+dbg() { [[ -z ${THIST_DEBUG:-} ]] || echo "Thist debug: $*" >&2; }
 raw() { local out; out=$(git_ "$@" 2>&1) && echo "${out//$'\n'/ | }" || echo "<exit $?> ${out//$'\n'/ | }"; }
 probe_repo() {
-  [[ -n ${G_HIST_DEBUG:-} ]] || return 0
+  [[ -n ${THIST_DEBUG:-} ]] || return 0
   local all
   all=$(git_ tag --list)
   dbg "git                  : [$(raw --version)]"
@@ -105,7 +105,7 @@ probe_repo() {
   dbg "tags in the repo     : $(grep -c . <<<"$all" || true)"
 }
 probe() {
-  [[ -n ${G_HIST_DEBUG:-} ]] || return 0
+  [[ -n ${THIST_DEBUG:-} ]] || return 0
   dbg "commit $1"
   dbg "  rev-parse --verify   : [$(raw rev-parse --verify "$1^{commit}")]"
   dbg "  tag --points-at      : [$(raw tag --points-at "$1")]"
