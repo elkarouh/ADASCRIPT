@@ -188,29 +188,29 @@ class Editor:
         let rest: []str = self.lines[hi:]
         self.lines = head + rest
 
-    def begin_insert(self, command: str):
+    def begin_insert(self, command: char):
         """i a A o O: where the cursor goes, then insert mode."""
         case command:
-            when "a": self.col += 1
-            when "A": self.col = len(self.lines[self.row])
-            when "o":
+            when 'a': self.col += 1
+            when 'A': self.col = len(self.lines[self.row])
+            when 'o':
                 self.row += 1
                 self.insert_line(self.row, "")
-            when "O": self.insert_line(self.row, "")
+            when 'O': self.insert_line(self.row, "")
             when others: pass
         self.mode = INSERT
 
-    def move(self, command: str):
+    def move(self, command: char):
         case command:
-            when "h": self.col -= 1
-            when "l": self.col += 1
-            when "k": self.row -= 1
-            when "j": self.row += 1
-            when "0": self.col = 0
-            when "$":
+            when 'h': self.col -= 1
+            when 'l': self.col += 1
+            when 'k': self.row -= 1
+            when 'j': self.row += 1
+            when '0': self.col = 0
+            when '$':
                 self.row += self.times() - 1
                 self.col = len(self.lines[min(self.row, len(self.lines) - 1)])
-            when "G": self.row = (self.times() - 1 if self.count != "" else len(self.lines) - 1)
+            when 'G': self.row = (self.times() - 1 if self.count != "" else len(self.lines) - 1)
             when others: pass
 
     def put(self):
@@ -227,8 +227,8 @@ class Editor:
             when REDO: self.redo()
             when CHAR:
                 case press.text:
-                    when "i" | "a" | "A" | "o" | "O": self.begin_insert(press.text)
-                    when "h" | "j" | "k" | "l" | "0" | "$" | "G": self.move(press.text)
+                    when "i" | "a" | "A" | "o" | "O": self.begin_insert(press.text[0])
+                    when "h" | "j" | "k" | "l" | "0" | "$" | "G": self.move(press.text[0])
                     when "r": self.mode = REPLACE_ONE
                     when "R": self.mode = REPLACE
                     when "g": self.mode = GOTO
