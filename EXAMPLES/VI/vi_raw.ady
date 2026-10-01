@@ -1,0 +1,118 @@
+#!/usr/bin/env ady2nim
+"""vi_raw -- a tiny vi-like text editor, after vip (github.com/maksimKorzh/vip), on
+the Nim backend, on the raw terminal.
+
+    vi_raw [file]
+
+The editor is vi_core.ady; this file shows it on a terminal. Nim has no curses,
+so the terminal is Nim's own `terminal` module plus a raw mode set up with
+`termios`: no echo, no line editing, no signals, and ^S and ^Q reach the program
+instead of stopping the terminal. What a terminal has to do is here: reading a key
+(an escape sequence such as an arrow key is swallowed, a lone ESC is told from one
+by waiting 25 ms), drawing the screen (one frame per key, written in one go), and
+the window size (read again at every key; there is no resize event).
+"""
+nimport terminal, termios, posix, os
+from vi_core import Editor, Press_T, Key_T, decode, CTRL_Q, ESC
+
+const NOTHING: int = -1                  # a key with no meaning here: an arrow, a function key
+
+# ---- the terminal ---------------------------------------------------
+
+var original: Termios                    # the terminal as it was, to give back
+
+def raw_mode(on: bool) -> None:
+    """No echo, no line editing, no signals, no flow control: every key, ^S and
+    ^Q included, comes straight to the program."""
+    if not on:
+        let back: cint = tcsetattr(0, TCSAFLUSH, addr(original))
+        return
+    let got: cint = tcgetattr(0, addr(original))
+    var t: Termios = original
+    t.c_iflag = t.c_iflag and not (BRKINT or ICRNL or INPCK or ISTRIP or IXON)
+    t.c_oflag = t.c_oflag and not OPOST
+    t.c_lflag = t.c_lflag and not (ECHO or ICANON or IEXTEN or ISIG)
+    t.c_cc[VMIN] = chr(1)
+    t.c_cc[VTIME] = chr(0)
+    let set: cint = tcsetattr(0, TCSAFLUSH, addr(t))
+
+def key_waiting(ms: int) -> bool:
+    """Is there a byte to read, within MS milliseconds?"""
+    var fds: TPollfd
+    fds.fd = cint(0)
+    fds.events = POLLIN
+    poll(addr(fds), 1, cint(ms)) > 0
+
+def read_byte() -> int:
+    """The next byte from the keyboard, read straight from the descriptor: getch
+    reads through C's buffer, which swallows the rest of an escape sequence
+    where key_waiting cannot see it. The end of the input is ^Q."""
+    var b: char
+    let n: int = read(cint(0), addr(b), 1)
+    ord(b) if n == 1 else CTRL_Q
+
+var pushed: int = NOTHING                # a byte read ahead, to be the next key
+
+def read_code() -> int:
+    """The next key, as a code. A lone ESC is told from the start of an escape
+    sequence (an arrow key: ESC [ A) by whether more bytes follow within 25 ms;
+    a sequence is swallowed and read as NOTHING. ESC and a character (Alt-x) is
+    an ESC, the character kept for the next call."""
+    if pushed != NOTHING:
+        let ahead: int = pushed
+        pushed = NOTHING
+        return ahead
+    let first: int = read_byte()
+    if first != ESC or not key_waiting(25):
+        return first
+    let second: int = read_byte()
+    if second != ord('[') and second != ord('O'):
+        pushed = second
+        return ESC
+    var last: int = read_byte()
+    if second == ord('['):
+        while last < 64 or last > 126:                       # up to the final byte
+            last = read_byte()
+    NOTHING
+
+def clip(text: str, start: int, width: int) -> str:
+    """WIDTH characters of TEXT from START, fewer where it ends: a slice past
+    the end raises on Nim."""
+    if start >= len(text) or width <= 0: return ""
+    text[start:min(len(text), start + width)]
+
+def draw(ed: Editor):
+    ed.scroll()
+    var frame: str = "\x1b[?25l\x1b[H"                  # hide the cursor, go home
+    for i in 0 ..< ed.rows:
+        frame += clip(ed.row_text(i), 0, ed.cols - 1) + "\x1b[K\r\n"     # to the end of the line, then down
+    frame += clip(ed.status(), 0, ed.cols - 1) + "\x1b[K"
+    frame += f"\x1b[{ed.row - ed.top + 1};{ed.col - ed.left + 1}H\x1b[?25h"
+    stdout.write(frame)
+    stdout.flushFile()
+
+def flash(ed: Editor, message: str):
+    stdout.write(f"\x1b[{ed.rows + 1};1H\x1b[K" + clip(message, 0, ed.cols - 1))
+    stdout.flushFile()
+    sleep(1000)
+
+def run(ed: Editor):
+    while True:
+        let (w, h) = terminalSize()          # the window may have changed since the last key
+        ed.fit(w, h)
+        ed.clamp()
+        draw(ed)
+        let press: Press_T = decode(read_code())
+        case press.key:
+            when QUIT: return
+            when SAVE: flash(ed, ed.save())
+            when others: ed.handle(press)
+
+let path: Path = Path($1 if $# >= 1 else "noname.txt")
+raw_mode(True)
+stdout.write("\x1b[?1049h")                  # the alternate screen, so the shell's stays as it was
+var editor: Editor = Editor(path)
+run(editor)
+stdout.write("\x1b[?1049l\x1b[?25h")
+stdout.flushFile()
+raw_mode(False)

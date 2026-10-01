@@ -8,7 +8,8 @@ library (built with `ady2nim`). Both `import` `vi_core`: ady2nim compiles it as 
 brings it into the file it writes.
 
     ady2py vi_py.ady > vi_py.py && python3 vi_py.py file.txt
-    ady2nim c vi_nim.ady && ./vi_nim file.txt
+    ady2nim c vi_nim.ady && ./vi_nim file.txt        # on illwill
+    ady2nim c vi_raw.ady && ./vi_raw file.txt        # on the raw terminal
 
 Normal mode: `h j k l`, `0 $`, `gg G`, `x`, `r R`, `i a A o O`, `dd yy p`, `u ^R`,
 with counts (`3dd`, `12G`). `^S` saves, `^Q` quits.
@@ -53,6 +54,23 @@ copy has one change from illwill 0.4.1: a modified arrow (`ESC [ 1 ; 5 D`) is re
 whole, where illwill left `5D` behind to be typed. There is no resize event: the window
 size is read again at every key. At the end of the input (stdin not a terminal) illwill
 reports no key, so the editor waits; run it on a terminal.
+
+## vi_raw.ady: the same editor without a terminal library
+
+`vi_raw.ady` is the earlier Nim front end, kept because it shows what a terminal has to
+do when nothing does it for you, with only Nim's `terminal` module and `termios`:
+
+- **Raw mode.** No echo, no line editing, no signals, and `^S` and `^Q` reach the
+  program instead of stopping the terminal.
+- **A lone ESC against an arrow key.** An arrow key is an escape sequence
+  (`ESC O A`, or `ESC [ A`); `read_code` tells it from an ESC by whether more bytes
+  follow within 25 ms (curses' `ESCDELAY`), and swallows it. The keys are read with
+  `read(2)` rather than `getch`, which reads through C's buffer and would hide the
+  rest of the sequence from the 25 ms wait.
+- **Drawing.** One frame per key, built as a string and written in one go; the window
+  size is read again at every key, as there is no resize event.
+
+It is 118 lines against `vi_nim.ady`'s 60, and passes the same 27 key scripts.
 
 Slices and list edits in `vi_core` are written so that they mean the same on both
 backends: a slice past the end raises on Nim, so `tail` and `splice` are the only way
