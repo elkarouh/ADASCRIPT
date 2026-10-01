@@ -179,6 +179,15 @@ class Repo:
         do:
             shown <- shell(cwd = self.root): git show {!spec} > {!dest} else shell_failed(shown)
 
+    def named_like(self, base: str) -> []str | !Failure_T:
+        """The files at HEAD called BASE, in any directory (eight at most):
+        where a path that matches no history was probably meant."""
+        do:
+            listed <- self.output("ls-tree", "-r", "--name-only", "HEAD")
+        let paths: []str = listed.split("\n")
+        let hits: []str = [p for p in paths if p == base or p.endswith("/" + base)]
+        return hits[0:min(8, len(hits))]      # a slice past the end raises on Nim
+
     def describe(self, hash: str) -> str | !Failure_T:
         return self.output("log", "-1", "--format=%h %ad %cn: %s", "--date=short", hash)
 
@@ -237,6 +246,14 @@ def review(repo: Repo, abs: Path, rel: Path, tmp: Path) -> int | !Failure_T:
         shell: meld --label {!head_label} --label "working copy" {!head_file} {!abs}
         if not ask("Continue?", "Continue to committed history?"):
             return 0
+
+    if len(revs) == 0:
+        # a path no commit touches: usually a path that is not the file's
+        do:
+            like <- repo.named_like(base)
+        let hint: str = ", ".join(like) if len(like) > 0 else f"none: no file called {base} at HEAD either"
+        msg_error(f"No commit of {repo.root} touches {rel}; files called {base} at HEAD: {hint}")
+        return 1
 
     if len(revs) < 2:
         msg_error(f"Need at least 2 committed revisions of {rel} (found {len(revs)})")

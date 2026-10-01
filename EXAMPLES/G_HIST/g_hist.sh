@@ -186,6 +186,15 @@ if git_ rev-parse --verify -q HEAD >/dev/null \
   ask "Continue?" "Continue to committed history?" || exit 0
 fi
 
+if (( ${#revs[@]} == 0 )); then
+  # a path no commit touches: usually a path that is not the file's
+  like=$(git_ ls-tree -r --name-only HEAD 2>/dev/null \
+    | awk -v b="$base" '$0 == b || substr($0, length($0) - length(b)) == "/" b' \
+    | head -8 | paste -sd, - | sed 's/,/, /g' || true)
+  [[ -n $like ]] || like="none: no file called $base at HEAD either"
+  die "No commit of $root touches $rel; files called $base at HEAD: $like"
+fi
+
 if (( ${#revs[@]} < 2 )); then
   die "Need at least 2 committed revisions of $rel (found ${#revs[@]})"
 fi
