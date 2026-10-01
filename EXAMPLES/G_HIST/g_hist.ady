@@ -5,7 +5,10 @@
 
 Follows renames, handles revisions where the file does not exist (before it
 was created, after it was deleted), and works from any directory: git is
-asked from the file's own directory. A commit that has tags shows them first in
+asked from the file's own directory. A file that is not in a git repository but
+names one of NM's -- <system>/<subsystem>/<path>, or a path below the NM
+workspace (CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY), or the cache of Tcheck_tact's
+diff links -- is checked out alone first, by Tcheckout. A commit that has tags shows them first in
 its pane's file name, before the date; one that has none shows the nearest tag
 it is in, as `~<tag>` (release tags are usually on a later merge commit). `G_HIST_DEBUG=1 g_hist FILE` also says,
 on stderr, what git answered for each commit, to see why a name has no tag.
@@ -271,17 +274,64 @@ def review(repo: Repo, abs: Path, rel: Path, tmp: Path) -> int | !Failure_T:
     msg_info(f"Done. Reviewed {total} comparison(s).")
     return 0
 
+def nm_root() -> Path:
+    """Where NM's files are checked out: the workspace, else the cache of
+    Tcheck_tact's diff links -- the places Tcheckout itself uses."""
+    if $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY != "":
+        return Path($CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY)
+    if $TCHECK_NM_CACHE != "":
+        return Path($TCHECK_NM_CACHE)
+    return Path($HOME) / "Downloads" / ".cache" / "tcheck" / "NM"
+
+def nm_target(arg: str, root: str) -> str:
+    """The <system>/<subsystem>/<path> that ARG names, or "": that form itself
+    (relative, three parts at least) or a path below ROOT."""
+    if arg.startswith(root + "/"):
+        return arg[len(root) + 1:]
+    if not arg.startswith("/") and not arg.startswith(".") and len(arg.split("/")) >= 3:
+        return arg
+    return ""
+
+def inside_git(file: Path) -> bool:
+    let dir: Path = file.resolve().parent
+    if not -d dir:
+        return False
+    let r: None | !ShellFailure_T = shell(cwd = dir): git rev-parse --is-inside-work-tree 2>/dev/null
+    return r is None
+
+def find_file(arg: Path) -> Path | !Failure_T:
+    """ARG itself when it is a file in a git work tree. Otherwise, a file of
+    NM -- <system>/<subsystem>/<path>, or a path below the NM workspace, whose
+    submodule is not checked out -- checked out alone by Tcheckout, as
+    Treport's diff links do; where that put it."""
+    if -e arg and inside_git(arg):
+        return arg
+    let root: Path = nm_root()
+    let target: str = nm_target(str(arg), str(root))
+    if target == "":
+        if not -e arg:
+            return Failure_T(f"File not found: {arg}")
+        return Failure_T(f"{arg} is not inside a git repository")
+    if which("Tcheckout") is None:
+        return Failure_T(f"{arg} is not in a git repository; it names the NM file {target}, which Tcheckout would check out, and Tcheckout is not installed")
+    print f"Checking out {target}, alone (Tcheckout), in {root}"
+    let got: None | !ShellFailure_T = shell: Tcheckout {!target}
+    if got is ShellFailure_T:
+        return Failure_T(f"Tcheckout {target} exited {got.code}: {got.stderr.strip()}")
+    return root / target
+
 if $# != 1:
     die(f"usage: {PROG} path/to/file", code = 2)
-let file: Path = Path($1)
 
 if which("git") is None:
     fatal("git is not installed")
 if which("meld") is None:
     fatal("meld is not installed")
-if not -e file:
-    fatal(f"File not found: {file}")
 
+let found: Path | !Failure_T = find_file(Path($1))
+if found is Failure_T:
+    fatal(found.message)
+let file: Path = found
 let abs: Path = file.resolve()
 
 # Ask git from the file's own directory, so this works from any cwd.

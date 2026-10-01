@@ -39,7 +39,36 @@ ask() {
 command -v git   >/dev/null || die "git is not installed"
 command -v meld  >/dev/null || die "meld is not installed"
 
-[[ -e $FILE ]] || die "File not found: $FILE"
+# A file in a git work tree is used as it is. Otherwise a file of NM -- <system>/
+# <subsystem>/<path>, or a path below the NM workspace, whose submodule is not
+# checked out -- is checked out alone first, by Tcheckout, as Treport's diff links
+# do. The places Tcheckout uses: the workspace, else the cache of the diff links.
+nm_root() {
+  echo "${CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY:-${TCHECK_NM_CACHE:-$HOME/Downloads/.cache/tcheck/NM}}"
+}
+inside_git() {
+  local d
+  d=$(dirname -- "$(realpath -m -- "$1")")
+  [[ -d $d ]] && git -C "$d" rev-parse --is-inside-work-tree >/dev/null 2>&1
+}
+if ! { [[ -e $FILE ]] && inside_git "$FILE"; }; then
+  nmroot=$(nm_root)
+  target=
+  if [[ $FILE == "$nmroot"/* ]]; then
+    target=${FILE#"$nmroot"/}
+  elif [[ $FILE != /* && $FILE != .* && $FILE == */*/* ]]; then
+    target=$FILE
+  fi
+  if [[ -z $target ]]; then
+    [[ -e $FILE ]] || die "File not found: $FILE"
+    die "$FILE is not inside a git repository"
+  fi
+  command -v Tcheckout >/dev/null \
+    || die "$FILE is not in a git repository; it names the NM file $target, which Tcheckout would check out, and Tcheckout is not installed"
+  echo "Checking out $target, alone (Tcheckout), in $nmroot"
+  out=$(Tcheckout "$target" 2>&1) || die "Tcheckout $target: $out"
+  FILE=$nmroot/$target
+fi
 
 abs=$(realpath -- "$FILE")
 

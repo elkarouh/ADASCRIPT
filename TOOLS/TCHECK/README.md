@@ -397,7 +397,9 @@ that file -- what the list of changes' `DIFF` and `NET DIFF` links run
 first, where the file's submodule is not checked out. `Tcheckout.ady` is
 built to `Tcheckout`, the name the links run; `Tcheckout.ksh` is the same
 program in shell, for where the Adascript build is not at hand -- link it
-as `Tcheckout` there. The two take the same options and print the same
+as `Tcheckout` there. `EXAMPLES/G_HIST/g_hist` runs it by name too, for a file
+that is not in a git repository (`g_hist TACT/UIF/sources/b.adb`, or a path
+below the workspace). The two take the same options and print the same
 messages, and `make test` runs `test/run_checkout_tests.sh` against both
 (the Adascript one on both backends):
 
