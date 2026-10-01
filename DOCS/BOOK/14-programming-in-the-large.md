@@ -68,7 +68,9 @@ pyimport numpy             # a Python package, through nimpy on the Nim backend
 
 `import` is for `.ady` files only: yours, or the libraries bundled in
 `TO_NIM/STDLIB/` (`import graphs`, `import ansi`). A plain `import os` is refused,
-and so is a `nimport` of an `.ady` file; each message names the word to use. The
+and so is a `nimport` of an `.ady` file, each with a message naming the word to use.
+`import geometry as geo` and `from geometry import distance as dist` rename, as in
+Python. The
 one exception is `from stdlib import PriorityQueue`: `stdlib` is a shim with a Nim
 and a Python implementation, so it belongs to none of the three.
 

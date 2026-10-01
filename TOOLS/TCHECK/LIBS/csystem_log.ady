@@ -7,7 +7,7 @@ imported by their bare names.
 """
 
 nimport os
-from tcheck_common import BaselineNr_T, BuildType, Command_T, TACT_ROOT
+from tcheck_common import BaselineNr_T, BuildType, Command_T, TACT_ROOT, troubleshoot_tool
 from baselines import Baseline, PREVIOUS_SEARCHED
 
 def make_comparable(logfile: Path, bl: BaselineNr_T) -> Path:

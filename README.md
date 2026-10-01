@@ -1574,8 +1574,8 @@ line 3: 'import os' is not allowed: os is not an .ady module. Use 'nimport os' f
 line 2: 'geometry' is an .ady module: write `import geometry`, `nimport` is for Nim modules
 ```
 
-`import M as N` is not supported for `.ady` modules: write `M.name`, or `from M
-import name`. `from stdlib import PriorityQueue` is the one exception to all this:
+`import M as N` and `from M import A as B` rename, as in Python: `N.name`, and `B`
+for `A`. `from stdlib import PriorityQueue` is the one exception to all this:
 `stdlib` is a bundled shim with a Nim and a Python implementation.
 
 ### How a name is resolved

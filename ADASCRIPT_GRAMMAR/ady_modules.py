@@ -41,7 +41,7 @@ def normalize_imports(code, is_ady):
     Nim modules, `pyimport` for Python ones; `from stdlib import X` stays), and
     `nimport X` of an .ady module (it is `import X`)."""
     text = _blank(code)
-    edits = []
+    edits, renames = [], []
 
     def line(pos):
         return text.count("\n", 0, pos) + 1
@@ -58,15 +58,19 @@ def normalize_imports(code, is_ady):
             mod = mod.strip()
             if not is_ady(mod):
                 refuse_plain(mod, m.start(), f"import {mod}")
-            if alias:
-                raise SyntaxError(f"line {line(m.start())}: 'import {mod} as {alias.strip()}' is not supported: "
-                                  f"write {mod}.name, or `from {mod} import name`")
+            if alias and alias.strip() != mod.rsplit("/", 1)[-1]:
+                renames.append(("qualifier", alias.strip(), mod.rsplit("/", 1)[-1], m.start()))
             adys.append(mod)
         edits.append((m.start("kw"), m.end("names"), f"nimport {', '.join(adys)}"))
     for m in _FROM_IMPORT.finditer(text):
         mod = m.group("mod")
         if is_ady(mod):
             edits.append((m.start("kw"), m.end("kw"), "nimport"))
+            rest = code[m.start("rest"):m.end("rest")]
+            for old, new in re.findall(r"(\w+)[ \t]+as[ \t]+(\w+)", rest):
+                if old != new:
+                    renames.append(("name", new, old, m.start()))
+            edits.append((m.start("rest"), m.end("rest"), re.sub(r"[ \t]+as[ \t]+\w+", "", rest)))
         elif mod != _SHIM:
             refuse_plain(mod, m.start(), f"from {mod} import")
     for m in _NIM_IMPORT.finditer(text):
@@ -80,7 +84,26 @@ def normalize_imports(code, is_ady):
                               f"`from {m.group('mod')} import ...`, `nimport` is for Nim modules")
     for a, b, new in sorted(edits, reverse=True):
         code = code[:a] + new + code[b:]
+    # a rename is a rewrite of the new name to the old one, where the file means the import
+    for kind, new, old, pos in renames:
+        text = _blank(code)
+        if kind == "name" and _binds(text, new):
+            raise SyntaxError(f"line {line(pos)}: '{new}' is renamed from {old} but the file gives "
+                              f"'{new}' a meaning of its own")
+        pattern = rf'(?<![\w.$]){re.escape(new)}(?=\.\w)' if kind == "qualifier" else rf'(?<![\w.$]){re.escape(new)}\b'
+        code = "".join(old if i % 2 else part for i, part in enumerate(
+            _split_matches(code, [(m.start(), m.end()) for m in re.finditer(pattern, text)])))
     return code
+
+
+def _split_matches(code, spans):
+    """CODE cut at SPANS: the parts between them and the parts they cover,
+    alternating, so that the covered parts can be replaced."""
+    out, last = [], 0
+    for a, b in spans:
+        out += [code[last:a], code[a:b]]
+        last = b
+    return out + [code[last:]]
 
 # `from M nimport A, B`, `from M nimport *`, and the parenthesised form that may
 # run over lines, with comments among the names
@@ -117,12 +140,21 @@ def import_map(code):
 
 def _blank(code):
     """CODE with its comments and the insides of its strings and chars blanked,
-    keeping the lines, so that what is left is what the program names."""
+    keeping the lines, so that what is left is what the program names. The
+    `{...}` of an f-string is code, and stays."""
     def keep_newlines(m):
         return re.sub(r"[^\n]", " ", m.group(0))
-    code = re.sub(r'"""[\s\S]*?"""', keep_newlines, code)
-    code = re.sub(r'"(?:\\.|[^"\\\n])*"', keep_newlines, code)
-    code = re.sub(r"'(?:\\.|[^'\\\n])*'", keep_newlines, code)
+
+    def string(m):
+        if not re.search(r"(?<![\w])(?:[rR][fF]|[fF][rR]|[fF])$", code[max(0, m.start() - 3):m.start()]):
+            return keep_newlines(m)
+        # a format string: the literal parts go, the `{...}` expressions stay
+        return re.sub(r"\{\{|\}\}|\{[^{}\n]*\}|[^\n]",
+                      lambda t: t.group(0) if t.group(0)[0] == "{" and len(t.group(0)) > 2 else " " * len(t.group(0)),
+                      m.group(0))
+    code = re.sub(r'"""[\s\S]*?"""', string, code)
+    code = re.sub(r'"(?:\\.|[^"\\\n])*"', string, code)
+    code = re.sub(r"'(?:\\.|[^'\\\n])*'", string, code)
     return re.sub(r"#[^\n]*", keep_newlines, code)
 
 
@@ -144,6 +176,15 @@ def exported(source):
     return out
 
 
+def _binds(text, name):
+    """Does the (blanked) TEXT give NAME a meaning of its own: declared, a loop
+    variable, a parameter or field, an assignment target, a keyword argument --
+    not `x: Name = ...`, which uses it."""
+    return re.search(
+        rf'(?:\b(?:let|var|const|def|class|type|for)[ \t]+(?:\w+[ \t]*,[ \t]*)*{re.escape(name)}\b)'
+        rf'|(?:^|[(,])[ \t]*{re.escape(name)}[ \t]*(?::|=(?!=))', text, re.MULTILINE)
+
+
 def resolve_imports(code, module, listed, module_source):
     """CODE with `M.name` written `name`, after refusing a use of a name of
     MODULE's that is neither qualified nor in LISTED (STAR: nothing to refuse)."""
@@ -157,18 +198,11 @@ def resolve_imports(code, module, listed, module_source):
             allowed.add(n)
     text = _blank(code)
 
-    def binds(name):
-        # a name of its own: declared, a loop variable, a parameter or field, an
-        # assignment target, a keyword argument -- not `x: Name = ...`, which uses it
-        return re.search(
-            rf'(?:\b(?:let|var|const|def|class|type|for)[ \t]+(?:\w+[ \t]*,[ \t]*)*{re.escape(name)}\b)'
-            rf'|(?:^|[(,])[ \t]*{re.escape(name)}[ \t]*(?::|=(?!=))', text, re.MULTILINE)
-
     for name, owner in sorted(names.items()):
         if name in allowed:
             continue
         use = re.search(rf'(?<![\w.$]){re.escape(name)}\b', text)
-        if not use or binds(name):
+        if not use or _binds(text, name):
             continue                   # unused, or a name of the file's own
         line = text.count("\n", 0, use.start()) + 1
         what = f"'{name}'" if owner == name else f"'{name}' (a member of {owner})"
@@ -180,7 +214,7 @@ def resolve_imports(code, module, listed, module_source):
         name = m.group(1)
         if name not in names:
             continue
-        if binds(name):
+        if _binds(text, name):
             line = text.count("\n", 0, m.start()) + 1
             raise SyntaxError(
                 f"line {line}: '{qual}.{name}' cannot be told from this file's own '{name}': "

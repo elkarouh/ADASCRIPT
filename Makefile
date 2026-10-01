@@ -630,6 +630,8 @@ test: compile
 	@# M.name cannot be used beside a name of the file's own that M also declares.
 	@printf 'import ady_refuse_mod\nprint helper()\n' > $(TMPDIR)/ady_refuse_23.ady
 	@printf 'import ady_refuse_mod\ndef helper() -> int:\n    return 3\nprint ady_refuse_mod.helper()\n' > $(TMPDIR)/ady_refuse_24.ady
+	@# a rename onto a name the file already gives a meaning of its own
+	@printf 'from ady_refuse_mod import helper as h\nlet h: int = 2\nprint h\n' > $(TMPDIR)/ady_refuse_25.ady
 	@for tr in TO_NIM/ady2nim.py TO_PYTHON/ady2py.py; do \
 	    for c in "1:members no one can tell apart:cannot be told apart" \
 	             "2:a dropped failure:drops a failure" \
@@ -654,7 +656,8 @@ test: compile
 	             "21:a dropped stdin.readLine():drops a failure" \
 	             "22:a name left out of a from-list:is not imported from" \
 	             "23:a bare name after import M:write ady_refuse_mod.helper" \
-	             "24:M.name beside the file's own name:cannot be told from"; do \
+	             "24:M.name beside the file's own name:cannot be told from" \
+	             "25:a rename onto the file's own name:gives 'h' a meaning of its own"; do \
 	        n=$${c%%:*}; rest=$${c#*:}; what=$${rest%%:*}; want=$${rest#*:}; \
 	        printf '  %-42s' "$$what ($$(basename $$tr .py))"; \
 	        if $(PYTHON) $(CURDIR)/$$tr $(TMPDIR)/ady_refuse_$$n.ady > $(TMPDIR)/ady_refuse.out 2>&1; then \

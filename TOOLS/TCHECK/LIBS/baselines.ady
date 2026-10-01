@@ -13,7 +13,7 @@ from tcheck_common import (
     find_core_dumps, hr, make_report, newest, puts, subtype_label,
 )
 from tlog import Tlog, tlog_filename
-from replays import Replay, ReplayType, replay_type_from
+from replays import Replay, ReplayType, replay_dir_pattern, replay_type_from
 
 # ---------------------------------------------------------------------------
 # A build's test programs: its check_run_test_programs.log
