@@ -32,7 +32,7 @@ C5DIR  := $(TOOLDIR)/C500
 # Prepend choosenim's bin dir so Nim 2.x is used instead of any system Nim 1.x.
 export PATH := /root/.nimble/bin:$(HOME)/.nimble/bin:$(HOME)/Downloads:$(PATH)
 
-.PHONY: test compile clean install uninstall
+.PHONY: test test-vi compile clean install uninstall
 
 # Where 'make install' puts the ady2nim / ady2py launchers.
 # Override with: make install PREFIX=$HOME/.local
@@ -383,6 +383,36 @@ compile: lint-emitters check-quotes
 	@$(foreach t,$(TOOL_PROGRAMS),$(call compile_one_tool,$(t));)
 	@printf '  %-42s%s\n' "all $(words $(TOOL_PROGRAMS))" OK
 	@echo "=== Compile step complete ==="
+
+# -----------------------------------------------------------------------
+# The vi tests: key scripts typed into vi.ady (curses, the Python backend)
+# and vi_nim.ady (Nim) in a pty of their own, and the files they save
+# compared. Shared by `test` and by `test-vi`, which runs them alone.
+# -----------------------------------------------------------------------
+define vi_tests
+	@echo "=== vi, typed keys in a pty of its own: vi.ady (curses, Python) and vi_nim.ady (Nim) ==="
+	@printf '  %-42s' "EXAMPLES/VI/vi.ady (26 key scripts)"; \
+	    if ! $(PYTHON) -c 'import curses, pty' 2>/dev/null; then echo "SKIP (no curses or pty)"; else \
+	    $(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(EXDIR)/VI/vi.ady > $(TMPDIR)/ady_vi.py || { echo FAIL; exit 1; }; \
+	    $(PYTHON) $(EXDIR)/VI/test_vi.py $(TMPDIR)/ady_vi.py > $(TMPDIR)/ady_vi.out 2>&1 \
+	        && echo OK || { echo FAIL; grep -A2 FAIL $(TMPDIR)/ady_vi.out | head -20; exit 1; }; fi
+	@printf '  %-42s' "EXAMPLES/VI/vi_nim.ady (27 key scripts)"; \
+	    if ! $(PYTHON) -c 'import pty' 2>/dev/null; then echo "SKIP (no pty)"; else \
+	    $(PYTHON) $(EXDIR)/VI/test_vi.py $(EXDIR)/VI/vi_nim > $(TMPDIR)/ady_vi_nim.out 2>&1 \
+	        && echo OK || { echo FAIL; grep -A2 FAIL $(TMPDIR)/ady_vi_nim.out | head -20; exit 1; }; fi
+endef
+
+# -----------------------------------------------------------------------
+# test-vi — the vi tests alone: build vi_nim.ady, then run them (about 10 s)
+# -----------------------------------------------------------------------
+.PHONY: test-vi
+test-vi:
+	@mkdir -p $(TMPDIR)
+	@if ! $(ADY2NIM) c $(EXDIR)/VI/vi_nim.ady >/dev/null 2>&1; then \
+	    echo "  EXAMPLES/VI/vi_nim.ady                    FAIL (does not build)"; \
+	    $(ADY2NIM) c $(EXDIR)/VI/vi_nim.ady 2>&1 | grep -E 'Error:' | head -5; exit 1; \
+	fi
+	$(vi_tests)
 
 # -----------------------------------------------------------------------
 # test — compile everything, then run the runnable subset
@@ -796,16 +826,7 @@ test: compile
 	    $(EXDIR)/DOC/awk_paragraph < $(EXDIR)/DOC/awk_paragraph_sample.txt 2>&1 \
 	        | grep -q "record 3: NF=4" && echo OK || { echo FAIL; exit 1; }
 
-	@echo "=== vi, typed keys in a pty of its own: vi.ady (curses, Python) and vi_nim.ady (Nim) ==="
-	@printf '  %-42s' "EXAMPLES/VI/vi.ady (26 key scripts)"; \
-	    if ! $(PYTHON) -c 'import curses, pty' 2>/dev/null; then echo "SKIP (no curses or pty)"; else \
-	    $(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(EXDIR)/VI/vi.ady > $(TMPDIR)/ady_vi.py || { echo FAIL; exit 1; }; \
-	    $(PYTHON) $(EXDIR)/VI/test_vi.py $(TMPDIR)/ady_vi.py > $(TMPDIR)/ady_vi.out 2>&1 \
-	        && echo OK || { echo FAIL; grep -A2 FAIL $(TMPDIR)/ady_vi.out | head -20; exit 1; }; fi
-	@printf '  %-42s' "EXAMPLES/VI/vi_nim.ady (27 key scripts)"; \
-	    if ! $(PYTHON) -c 'import pty' 2>/dev/null; then echo "SKIP (no pty)"; else \
-	    $(PYTHON) $(EXDIR)/VI/test_vi.py $(EXDIR)/VI/vi_nim > $(TMPDIR)/ady_vi_nim.out 2>&1 \
-	        && echo OK || { echo FAIL; grep -A2 FAIL $(TMPDIR)/ady_vi_nim.out | head -20; exit 1; }; fi
+	$(vi_tests)
 
 	@# lispy wants a terminal for its prompt, but it can be run without one.
 	@echo "=== lispy ==="

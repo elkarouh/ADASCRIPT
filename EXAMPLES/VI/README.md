@@ -64,3 +64,4 @@ only by accident; the Nim editor is held to both escape-sequence forms, and curs
 to the one it knows.
 
     python3 test_vi.py vi.py        # or ./vi_nim
+    make test-vi                    # from the top: builds vi_nim, runs both (about 10 s)
