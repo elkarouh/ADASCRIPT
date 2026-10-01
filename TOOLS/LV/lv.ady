@@ -1,7 +1,10 @@
 #! /usr/bin/env ady2nim
 nimport algorithm, sequtils
 # the colours and effects to pipe a string through
-from ansi import bg_black, bg_green, bg_white, bg_yellow, blink, bold, fg_black, fg_yellow
+from ansi import (
+    bg_black, bg_blue, bg_green, bg_white, bg_yellow, blink, bold, dim, fg_black, fg_blue,
+    fg_white, fg_yellow, inverted,
+)
 # The order rows are grouped in. A state not listed here -- BUSY, which only
 # the status column carries, a typo, none at all -- sorts after every listed
 # one, and is shown as it was written.

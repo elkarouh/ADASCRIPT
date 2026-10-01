@@ -238,6 +238,7 @@ COMPILE_ONLY := \
     tsp.ady \
     test_input.ady \
     VI/vi_nim.ady \
+    VI/vi_raw.ady \
     dp/jacks.ady \
     BENCH_SEARCH/bench_search.ady \
     awk_logscan.ady \
@@ -389,11 +390,11 @@ compile: lint-emitters check-quotes
 
 # -----------------------------------------------------------------------
 # The vi tests: key scripts typed into vi_py.ady (curses, the Python backend)
-# and vi_nim.ady (Nim) in a pty of their own, and the files they save
+# and vi_nim.ady and vi_raw.ady (Nim) in a pty of their own, and the files they save
 # compared. Shared by `test` and by `test-vi`, which runs them alone.
 # -----------------------------------------------------------------------
 define vi_tests
-	@echo "=== vi, typed keys in a pty of its own: vi_py.ady (curses, Python) and vi_nim.ady (Nim) ==="
+	@echo "=== vi, typed keys in a pty of its own: vi_py.ady (curses, Python), vi_nim.ady (illwill) and vi_raw.ady (Nim) ==="
 	@printf '  %-42s' "EXAMPLES/VI/vi_py.ady (26 key scripts)"; \
 	    if ! $(PYTHON) -c 'import curses, pty' 2>/dev/null; then echo "SKIP (no curses or pty)"; else \
 	    $(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(EXDIR)/VI/vi_py.ady > $(TMPDIR)/ady_vi.py || { echo FAIL; exit 1; }; \
@@ -403,18 +404,24 @@ define vi_tests
 	    if ! $(PYTHON) -c 'import pty' 2>/dev/null; then echo "SKIP (no pty)"; else \
 	    $(PYTHON) $(EXDIR)/VI/test_vi.py $(EXDIR)/VI/vi_nim > $(TMPDIR)/ady_vi_nim.out 2>&1 \
 	        && echo OK || { echo FAIL; grep -A2 FAIL $(TMPDIR)/ady_vi_nim.out | head -20; exit 1; }; fi
+	@printf '  %-42s' "EXAMPLES/VI/vi_raw.ady (27 key scripts)"; \
+	    if ! $(PYTHON) -c 'import pty' 2>/dev/null; then echo "SKIP (no pty)"; else \
+	    $(PYTHON) $(EXDIR)/VI/test_vi.py $(EXDIR)/VI/vi_raw > $(TMPDIR)/ady_vi_raw.out 2>&1 \
+	        && echo OK || { echo FAIL; grep -A2 FAIL $(TMPDIR)/ady_vi_raw.out | head -20; exit 1; }; fi
 endef
 
 # -----------------------------------------------------------------------
-# test-vi — the vi tests alone: build vi_nim.ady, then run them (about 10 s)
+# test-vi — the vi tests alone: build vi_nim.ady and vi_raw.ady, then run them (about 15 s)
 # -----------------------------------------------------------------------
 .PHONY: test-vi
 test-vi:
 	@mkdir -p $(TMPDIR)
-	@if ! $(ADY2NIM) c $(EXDIR)/VI/vi_nim.ady >/dev/null 2>&1; then \
-	    echo "  EXAMPLES/VI/vi_nim.ady                    FAIL (does not build)"; \
-	    $(ADY2NIM) c $(EXDIR)/VI/vi_nim.ady 2>&1 | grep -E 'Error:' | head -5; exit 1; \
-	fi
+	@for v in vi_nim vi_raw; do \
+	    if ! $(ADY2NIM) c $(EXDIR)/VI/$$v.ady >/dev/null 2>&1; then \
+	        echo "  EXAMPLES/VI/$$v.ady                    FAIL (does not build)"; \
+	        $(ADY2NIM) c $(EXDIR)/VI/$$v.ady 2>&1 | grep -E 'Error:' | head -5; exit 1; \
+	    fi; \
+	done
 	$(vi_tests)
 
 # -----------------------------------------------------------------------
