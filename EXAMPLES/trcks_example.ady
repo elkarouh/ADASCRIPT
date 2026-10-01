@@ -1,0 +1,56 @@
+#!/usr/bin/env ady2nim
+"""The example from the README of trcks (https://github.com/christophgietl/trcks),
+a Python library for railway-oriented programming, in Adascript.
+
+trcks needs a `Result` type, a `Wrapper` class to chain with method calls (its
+object-oriented style) or `pipe` and the `map_*` helpers (its functional
+style), and ("success", x) / ("failure", e) tuples to carry the two tracks.
+Here the same program is the language itself:
+
+  - a function that can fail says so in its type: `int | !Failure_T`;
+  - the `do:` block is the chain. Each `x <- step(...)` runs on the value
+    track, binds the value, and the first failure leaves the function with
+    that failure, unchanged;
+  - a plain function (get_subscription_fee) needs no `map_success` -- it is
+    just called with the value;
+  - nothing is wrapped and nothing is unwrapped: after the `do:`, `subscription_id`
+    is an int;
+  - a call whose failure is dropped is refused when the program is compiled.
+
+trcks's two Literal failure descriptions become one failure record: Adascript
+refuses a `T | !A | !B` whose failures cannot be told apart by type, so a
+program has one failure type and says which failure it is in a field.
+"""
+
+type Failure_T is record:
+    description: str
+
+def get_user_id(user_email: str) -> int | !Failure_T:
+    case user_email:
+        when "erika.mustermann@domain.org":
+            return 1
+        when "john_doe@provider.com":
+            return 2
+        when others:
+            return Failure_T("User does not exist")
+
+def get_subscription_id(user_id: int) -> int | !Failure_T:
+    if user_id == 1:
+        return 42
+    return Failure_T("User does not have a subscription")
+
+def get_subscription_fee(subscription_id: int) -> float:
+    return float(subscription_id) * 0.1
+
+def get_subscription_fee_by_email(user_email: str) -> float | !Failure_T:
+    do:
+        user_id         <- get_user_id(user_email)
+        subscription_id <- get_subscription_id(user_id)
+    return get_subscription_fee(subscription_id)
+
+for email in ["erika.mustermann@domain.org", "john_doe@provider.com", "jane_doe@provider.com"]:
+    let fee: float | !Failure_T = get_subscription_fee_by_email(email)
+    if fee is Failure_T:
+        print f"{email}: failure: {fee.description}"
+    else:
+        print f"{email}: success: {fee}"
