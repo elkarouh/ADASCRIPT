@@ -600,3 +600,11 @@ one unreachable: a SyntaxError. A user's own record type works. Use
 After `if r is ShellFailure_T: return ...`, `r.strip()` is unwrapped on Nim but
 `r.strip().replace(...)` is not (`strip(r)` mismatch), nor is `let text: str = r`.
 Split the chain into a `let` of the first call.
+
+## A record literal with fewer positional arguments than fields, on Nim
+
+`Press_T(ESCAPE)` for `record: key: Key_T; text: str = ""` works on Python but on
+Nim is emitted as the conversion `Press_T(ESCAPE)`: "type mismatch: got 'Key_T'
+but expected 'Press_T = object'". `Press_T(CHAR, "x")` and `Press_T(key=ESCAPE)`
+are fine. EXAMPLES/VI/vi.ady is Python-only (curses) so it does not meet it, but
+a program built for both would.
