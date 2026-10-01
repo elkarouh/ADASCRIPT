@@ -132,15 +132,15 @@ def clip(text: str, start: int, width: int) -> str:
         return ""
     text[start:min(len(text), start + width)]
 
-def load(path: str) -> []str:
+def load(path: Path) -> []str:
     """The lines of PATH; an empty buffer when it cannot be read -- a new file."""
-    let read: []str | !PathFailure_T = Path(path).read_lines()
+    let read: []str | !PathFailure_T = path.read_lines()
     if read is PathFailure_T:
         return [""]
     read if len(read) > 0 else [""]
 
 class Editor:
-    var path: str
+    var path: Path
     var lines: []str
     var yanked: []str = []
     var history: []Snapshot_T = []
@@ -154,7 +154,7 @@ class Editor:
     var rows: int = 0
     var cols: int = 0
 
-    def __init__(self, path: str):
+    def __init__(self, path: Path):
         self.path = path
         self.lines = load(path)
         self.history = [self.snapshot()]
@@ -226,7 +226,7 @@ class Editor:
         sleep(1000)
 
     def save(self):
-        let saved: None | !PathFailure_T = Path(self.path).write_text("\n".join(self.lines) + "\n")
+        let saved: None | !PathFailure_T = self.path.write_text("\n".join(self.lines) + "\n")
         if saved is PathFailure_T:
             self.flash(f"Not saved: {saved.reason}")
         else:
@@ -390,7 +390,7 @@ class Editor:
             self.clamp()
             self.record()
 
-let path: str = ($1 if $# >= 1 else "noname.txt")
+let path: Path = Path($1 if $# >= 1 else "noname.txt")
 raw_mode(True)
 stdout.write("\x1b[?1049h")                  # the alternate screen, so the shell's stays as it was
 var editor: Editor = Editor(path)
