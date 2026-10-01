@@ -315,6 +315,99 @@ look at. `TOOLS/RSYNC_TIME_MACHINE/test/rsync_time_machine_test.sh` now runs
 the tool against real folders, with a disk that fills up; the old version
 fails six of its fifteen checks.
 
+### The same chain in other notations
+
+[trcks](https://github.com/christophgietl/trcks) is a Python library for
+railway-oriented programming, and its README has one small example: look up a
+user by e-mail, then the user's subscription, then compute the fee, where each
+of the first two can fail. Here is the function that chains the three, in
+trcks's object-oriented style (the helpers return `("success", value)` or
+`("failure", description)` tuples, typed as `Result[...]`, and the chain
+needs `Wrapper` and the `map_*` methods):
+
+```py
+def get_subscription_fee_by_email(user_email: str) -> Result[FailureDescription, float]:
+    return (
+        Wrapper(core=user_email)
+        .map_to_result(get_user_id)
+        .map_success_to_result(get_subscription_id)
+        .map_success(get_subscription_fee)
+        .core
+    )
+```
+
+Its functional style swaps the `Wrapper` for `pipe(user_email, get_user_id,
+r.map_success_to_result(get_subscription_id), r.map_success(get_subscription_fee))`.
+In Haskell the `Either` monad does it, with `do` notation, and in Rust it is
+`Result` and the `?` operator:
+
+```haskell
+getSubscriptionFeeByEmail :: String -> Either Failure Double
+getSubscriptionFeeByEmail email = do
+  userId         <- getUserId email
+  subscriptionId <- getSubscriptionId userId
+  pure (getSubscriptionFee subscriptionId)
+```
+
+```rust
+fn get_subscription_fee_by_email(email: &str) -> Result<f64, Failure> {
+    let user_id = get_user_id(email)?;
+    let subscription_id = get_subscription_id(user_id)?;
+    Ok(get_subscription_fee(subscription_id))
+}
+```
+
+In Adascript it is the `do:` block, and it is the whole chain; the full
+program, which `make test` runs on both backends and compares, is
+`EXAMPLES/trcks_example.ady`:
+
+<!-- from: EXAMPLES/trcks_example.ady -->
+```python
+type Failure_T is record:
+    description: str
+
+def get_user_id(user_email: str) -> int | !Failure_T:
+    case user_email:
+        when "erika.mustermann@domain.org":
+            return 1
+        when "john_doe@provider.com":
+            return 2
+        when others:
+            return Failure_T("User does not exist")
+
+def get_subscription_id(user_id: int) -> int | !Failure_T:
+    if user_id == 1:
+        return 42
+    return Failure_T("User does not have a subscription")
+
+def get_subscription_fee(subscription_id: int) -> float:
+    return float(subscription_id) * 0.1
+
+def get_subscription_fee_by_email(user_email: str) -> float | !Failure_T:
+    do:
+        user_id         <- get_user_id(user_email)
+        subscription_id <- get_subscription_id(user_id)
+    return get_subscription_fee(subscription_id)
+```
+
+What differs is what each one asks the reader to know:
+
+| | trcks (Python) | Haskell | Rust | Adascript |
+|---|---|---|---|---|
+| The two tracks | `Result`, `("success", x)` / `("failure", e)` tuples | `Either`, `Left` / `Right` | `Result`, `Ok` / `Err` | `T \| !Failure_T`; a plain `return` of a value or of the failure |
+| The chain | `Wrapper` and `map_to_result`, `map_success_to_result`, `map_success`, or `pipe` with `r.map_*` | the `Either` monad, `do` and `pure` | `?` after each call | `x <- step()` in a `do:` block |
+| A plain function in the chain | wrapped by `map_success` | `pure`, or `fmap` | called on the unwrapped value | called on the value |
+| Where the failure types come in | a `Literal` per failure, joined with `\|` | a data type | an enum | one record, marked `!` |
+| A dropped failure | a type checker may notice | a warning for an unused result | `#[must_use]` warns | refused by the compiler |
+| Library to learn | `trcks` | the standard `Either` and `Monad` | the standard `Result` | none |
+
+The Haskell and Rust versions are as short as the Adascript one, because
+their languages were built around the idea, and an Adascript reader who knows
+either will read the `do:` block as the same thing. The difference is for
+everyone else: the chain is a block of two lines that reads top to bottom,
+the types say what can fail, and there is no vocabulary to learn first.
+Python gets there only by a library whose function names carry the meaning.
+
 ---
 
 ## The method
