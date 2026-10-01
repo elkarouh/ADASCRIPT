@@ -5592,7 +5592,8 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
                 f"self: var {class_name}{type_params}" if p.startswith(f"self: {class_name}") else p
                 for p in params
             ]
-            if name:
+            # not while the purity probe is still guessing which methods mutate
+            if name and getattr(ParserState, "_mutation_probe", None) is None:
                 ParserState.var_self_methods.add(name)
         new_params = []
         for p in params:
