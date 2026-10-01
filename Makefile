@@ -387,15 +387,15 @@ compile: lint-emitters check-quotes
 	@echo "=== Compile step complete ==="
 
 # -----------------------------------------------------------------------
-# The vi tests: key scripts typed into vi.ady (curses, the Python backend)
+# The vi tests: key scripts typed into vi_py.ady (curses, the Python backend)
 # and vi_nim.ady (Nim) in a pty of their own, and the files they save
 # compared. Shared by `test` and by `test-vi`, which runs them alone.
 # -----------------------------------------------------------------------
 define vi_tests
-	@echo "=== vi, typed keys in a pty of its own: vi.ady (curses, Python) and vi_nim.ady (Nim) ==="
-	@printf '  %-42s' "EXAMPLES/VI/vi.ady (26 key scripts)"; \
+	@echo "=== vi, typed keys in a pty of its own: vi_py.ady (curses, Python) and vi_nim.ady (Nim) ==="
+	@printf '  %-42s' "EXAMPLES/VI/vi_py.ady (26 key scripts)"; \
 	    if ! $(PYTHON) -c 'import curses, pty' 2>/dev/null; then echo "SKIP (no curses or pty)"; else \
-	    $(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(EXDIR)/VI/vi.ady > $(TMPDIR)/ady_vi.py || { echo FAIL; exit 1; }; \
+	    $(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(EXDIR)/VI/vi_py.ady > $(TMPDIR)/ady_vi.py || { echo FAIL; exit 1; }; \
 	    $(PYTHON) $(EXDIR)/VI/test_vi.py $(TMPDIR)/ady_vi.py > $(TMPDIR)/ady_vi.out 2>&1 \
 	        && echo OK || { echo FAIL; grep -A2 FAIL $(TMPDIR)/ady_vi.out | head -20; exit 1; }; fi
 	@printf '  %-42s' "EXAMPLES/VI/vi_nim.ady (27 key scripts)"; \

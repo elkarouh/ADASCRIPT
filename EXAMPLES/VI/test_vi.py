@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Tests for vi.ady, the Adascript translation of vip: the editor is run in a
-terminal of its own (a pty), is typed a script of keys, saves with ^S and quits
-with ^Q, and the file it saved is compared with what is wanted.
+"""Tests for vi_py.ady and vi_nim.ady, the Adascript translations of vip: the
+editor is run in a terminal of its own (a pty), is typed a script of keys, saves
+with ^S and quits with ^Q, and the file it saved is compared with what is wanted.
 
-    python3 test_vi.py PROGRAM        (vi.ady built with ady2py, as vi.py,
+    python3 test_vi.py PROGRAM        (vi_py.ady built with ady2py, as vi_py.py,
                                        or vi_nim.ady built with ady2nim)
 
 The wanted files are what vip (github.com/maksimKorzh/vip) writes for the same

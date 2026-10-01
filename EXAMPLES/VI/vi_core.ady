@@ -1,5 +1,5 @@
 """vi_core -- the editor, with no terminal in it: a tiny vi-like text editor, after
-vip (github.com/maksimKorzh/vip). vi.ady (curses, Python) and vi_nim.ady (Nim) are
+vip (github.com/maksimKorzh/vip). vi_py.ady (curses, Python) and vi_nim.ady (Nim) are
 the two ways of showing it.
 
   Normal    h j k l   0 $   gg G   x   r R   i a A o O   dd yy p   u ^R

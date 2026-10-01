@@ -1,7 +1,7 @@
 #!/usr/bin/env ady2py
-"""vi -- a tiny vi-like text editor, after vip (github.com/maksimKorzh/vip), on curses.
+"""vi_py -- a tiny vi-like text editor, after vip (github.com/maksimKorzh/vip), on curses.
 
-    vi [file]
+    vi_py [file]
 
 The editor is vi_core.ady; this file shows it on a curses window. curses is
 Python's, so this one is built for the Python backend (ady2py), which brings

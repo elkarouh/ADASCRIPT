@@ -1,13 +1,13 @@
-# vi.ady, vi_nim.ady, vi_core.ady
+# vi_py.ady, vi_nim.ady, vi_core.ady
 
 A tiny vi-like editor in Adascript: a translation of
 [vip](https://github.com/maksimKorzh/vip), the 125-line Python editor, to idiomatic
-Adascript. The editor is `vi_core.ady`, with no terminal in it; `vi.ady` shows it on
+Adascript. The editor is `vi_core.ady`, with no terminal in it; `vi_py.ady` shows it on
 curses (Python, built with `ady2py`) and `vi_nim.ady` on Nim's own terminal (built
 with `ady2nim`). Both nimport `vi_core`: ady2nim compiles it as a module, ady2py
 brings it into the file it writes.
 
-    ady2py vi.ady > vi.py && python3 vi.py file.txt
+    ady2py vi_py.ady > vi_py.py && python3 vi_py.py file.txt
     ady2nim c vi_nim.ady && ./vi_nim file.txt
 
 Normal mode: `h j k l`, `0 $`, `gg G`, `x`, `r R`, `i a A o O`, `dd yy p`, `u ^R`,
@@ -35,7 +35,7 @@ with counts (`3dd`, `12G`). `^S` saves, `^Q` quits.
 `vi_core` knows nothing of any terminal's key codes or of drawing. A terminal tells it the
 window size (`fit`), asks what to show (`scroll`, `row_text`, `status`, and `row` and
 `col` for the cursor), decodes what was typed (`decode`) and hands it over
-(`handle`), and shows what `save` answers. `vi.ady` does that with curses in 51
+(`handle`), and shows what `save` answers. `vi_py.ady` does that with curses in 51
 lines (the editor is 312), `vi_nim.ady` in 118, because Nim has no curses and
 `std/terminal` and `termios` leave two things to do by hand:
 
@@ -68,5 +68,5 @@ redo ones) are marked. It also types arrow keys, which vip ignores in insert mod
 only by accident; the Nim editor is held to both escape-sequence forms, and curses
 to the one it knows.
 
-    python3 test_vi.py vi.py        # or ./vi_nim
+    python3 test_vi.py vi_py.py     # or ./vi_nim
     make test-vi                    # from the top: builds vi_nim, runs both (about 10 s)
