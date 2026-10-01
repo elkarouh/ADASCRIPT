@@ -36,7 +36,7 @@ generated constructor. `__init__` then only sets what varies per instance —
 or disappears entirely. `EXAMPLES/test_awk.ady`:
 
 ```python
-nimport awk
+from awk nimport AwkBase
 
 class AwkProcessor(AwkBase):
     var counts : [Severity_T]int = [INFO : 0, WARN : 0, ERROR : 0, OTHER: 0]

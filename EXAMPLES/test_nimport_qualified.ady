@@ -1,0 +1,25 @@
+#!/usr/bin/env ady2nim
+"""Test: `nimport M` binds M, as Python's `import M` does, so M's names are
+reached as `M.name`, on both backends. A module nimported by a path is
+qualified by its last part, as in Nim: `NIMPORT_TEST/shapes` is `shapes`.
+`from M nimport A` still gives A unqualified, and both forms meet in one file:
+`shapes.Shape_T` and `names.SQUARE` below are qualified, `label` is from the
+from-list.
+The output is compared between the backends (see the Makefile).
+"""
+nimport NIMPORT_TEST/shapes, NIMPORT_TEST/names
+from NIMPORT_TEST/names nimport label
+
+def describe(text: str) -> str:
+    let parsed: shapes.Shape_T | !names.Failure_T = shapes.parse(text)
+    if parsed is names.Failure_T:
+        return parsed.description
+    return f"{label(parsed.kind)}, size {parsed.size}"
+
+for text in ["circle", "square", "hexagon"]:
+    print describe(text)
+
+var canvas: shapes.Canvas = shapes.Canvas()
+canvas.add(shapes.Shape_T(names.SQUARE, 2.5))
+print f"total {canvas.total()}"
+print "test_nimport_qualified OK"

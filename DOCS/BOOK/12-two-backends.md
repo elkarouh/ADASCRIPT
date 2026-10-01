@@ -39,7 +39,7 @@ splits library from tests:
 ```python
 # test_shortest_path.ady
 nimport stdlib
-nimport shortest_path  # provides Minimizer and Maximizer — auto-transpiled
+from shortest_path nimport Maximizer, Minimizer   # auto-transpiled
 ```
 
 ## 12.2 Python libraries with no Nim equivalent: the nimpy bridge

@@ -652,6 +652,28 @@ def _declare_before_use(lines):
     return out
 
 
+def _resolved_imports(code, search_dir):
+    """CODE with the imports of .ady modules checked and `M.name` written `name`.
+
+    Where to look is the module search rule: the importing file's directory,
+    its parent, then the bundled STDLIB. A refusal is printed and ends the run.
+    """
+    from ady_modules import import_map, resolve_imports
+    try:
+        for mod, listed in import_map(code).items():
+            for base in (search_dir, os.path.dirname(search_dir),
+                         os.path.join(os.path.dirname(os.path.abspath(__file__)), "STDLIB")):
+                path = os.path.join(base, mod + ".ady")
+                if os.path.isfile(path):
+                    with open(path, encoding="utf-8") as f:
+                        code = resolve_imports(code, mod, listed, f.read())
+                    break
+    except SyntaxError as e:
+        print(str(e), file=sys.stderr)
+        sys.exit(1)
+    return code
+
+
 def translate(code, export_symbols=False):
     """Parse Python source and translate to Nim via to_nim().
 
@@ -1900,6 +1922,7 @@ def main(argv=None):
             code = f.read()
     else:
         code = sys.stdin.read()
+    code = _resolved_imports(code, os.path.dirname(os.path.abspath(ady_file or ".")))
 
     # ------------------------------------------------------------------ #
     # 3b. Parse optional #ady2nim-args directive (nimbang-style)          #
@@ -2132,17 +2155,9 @@ def main(argv=None):
         _prepass_seen = set()
         _prepass_worklist = []
 
-        from ady_modules import selective_imports as _selective_imports
-        from ady_modules import check_from_imports as _check_from_imports
-
         def _enqueue_prepass(src_code, search_dir):
-            _selective = _selective_imports(src_code)
             for _dn in _dep_names(src_code):
                 _path = _find_dep_ady_pre(_dn, search_dir)
-                if _path and _dn in _selective:
-                    # `from M nimport A, B`: only A, B and what they carry
-                    with open(_path, encoding="utf-8") as _mf:
-                        _check_from_imports(src_code, _dn, _selective[_dn], _mf.read())
                 if _dn not in _prepass_seen:
                     if _path:
                         _prepass_seen.add(_dn)
@@ -2159,9 +2174,9 @@ def main(argv=None):
 
         while _prepass_worklist:
             _ppname, _ppady, _ppdir = _prepass_worklist.pop(0)
+            with open(_ppady, encoding="utf-8") as _f:
+                _ppcode = _resolved_imports(_f.read(), _ppdir)
             try:
-                with open(_ppady, encoding="utf-8") as _f:
-                    _ppcode = _f.read()
                 from hek_parsec import ParserState as _PS_pre
                 _PS_pre.reset()
                 translate(_ppcode, export_symbols=True)
@@ -2279,7 +2294,7 @@ def main(argv=None):
             _dep_nim_mtime = os.path.getmtime(_dep_nim) if os.path.exists(_dep_nim) else 0
             if _dep_nim_mtime < max(_dep_mtime, _eff_transpiler_mtime):
                 with open(_dep_ady, encoding="utf-8") as _f:
-                    _dep_code = _f.read()
+                    _dep_code = _resolved_imports(_f.read(), _dep_dir)
                 try:
                     from hek_parsec import ParserState as _ParserState
                     _ParserState.reset()

@@ -631,8 +631,8 @@ Each is worked around there, and none is needed for Python:
 `ady2py` replaces `nimport X` by X.ady's text (see `include_ady_modules`).
 Known, and not done:
 
-- `geometry.distance(a, b)` (the qualified spelling ady2nim accepts) is not
-  understood: the name `geometry` does not exist in the merged file.
+- `geometry.distance(a, b)` is rewritten to `distance(a, b)` (ady_modules.resolve_imports),
+  so it works, but not beside a `distance` of the importing file's own.
 - One namespace: a name defined in two modules is the later definition.
 - A parse error's line number is a line of the merged text.
 - The libraries bundled with ady2nim (`TO_NIM/STDLIB/*.ady`) are not merged.

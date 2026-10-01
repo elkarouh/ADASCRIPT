@@ -73,23 +73,21 @@ program; if not, the name is handed to Nim untouched. That is why
 `nimport os` and `nimport lib/fleet` can sit in the same file without
 ceremony.
 
-Names arrive **unqualified**. After `nimport geometry`, `distance(a, b)` is
-just in scope:
+The rule is Python's. `nimport geometry` binds `geometry`, as `import geometry`
+does, and its names are reached through it:
 
 ```python
 nimport geometry
 
-let km: float = distance(ORIGIN, here)          # no prefix needed
-let m2: float = geometry.distance(ORIGIN, here) # also fine — same call
+let km: float = geometry.distance(geometry.ORIGIN, here)
 ```
 
-The qualified spelling is accepted and compiles to the identical Nim call, so
-use it wherever it reads better. What you cannot do is rely on qualification
-to keep two `distance` procs apart: see 13.9.
+A bare `distance` after `nimport geometry` is refused, with the line and what to
+write. For a path the qualifier is the last part: `nimport lib/fleet` is `fleet`.
+What qualification cannot do is keep two `distance` procs apart: see 13.9.
 
-`nimport geometry` is the whole module: every name it declares, as `from geometry
-import *` is in Python. The selective form says which names a file takes, which is
-what a reader wants to know:
+The selective form, `from geometry import distance` in Python, says which names a
+file takes unqualified, which is what a reader wants to know:
 
 ```python
 from geometry nimport distance, Point_T   # only these, and what they carry
@@ -97,11 +95,11 @@ from geometry nimport distance, Point_T   # only these, and what they carry
 
 The file may use `distance`, `Point_T` and what `Point_T` carries -- an enum's
 members come with the enum, and a record's fields and a class's methods are reached
-through a value. A use of any other name of `geometry`'s is refused, on both
+through a value. A bare use of any other name of `geometry`'s is refused, on both
 backends, with the line and what to add:
 
 ```
-line 12: 'bearing' is not imported from geometry: add bearing to `from geometry nimport Point_T, bearing, distance`
+line 12: 'bearing' is not imported from geometry: write geometry.bearing, or add bearing to `from geometry nimport Point_T, bearing, distance`
 ```
 
 (The module is still compiled and linked whole; the rule is checked from the text,
@@ -171,7 +169,7 @@ CFMU/
 
 ```python
 # ftps_get.ady
-nimport ftps_common
+from ftps_common nimport RC_ARG_ERROR
 import os
 
 if $# < 3:
@@ -363,7 +361,7 @@ cycle is still hypothetical.
 ## 13.9 Naming rules to respect
 
 The module's **basename becomes a Nim module name**, and its exported symbols
-land unqualified in every importer. Three rules follow:
+reach every importer, in the Nim output unqualified. Three rules follow:
 
 1. **Basenames must be unique across the project.** Dependencies are
    transpiled into one cache directory keyed by the name you nimported them
@@ -393,7 +391,7 @@ modules import it, after the modules *it* imports. Where it looks is ady2nim's
 rule: beside the importing file, then one directory up.
 
 ```python
-nimport lib/geometry
+from lib/geometry nimport ORIGIN, dist
 print dist(ORIGIN, p)
 ```
 
@@ -414,9 +412,10 @@ What the merge costs:
 
 - **One namespace.** Two modules that each define `helper` are two modules on
   Nim and one clobbered function on Python.
-- **Imported names are unqualified.** After `nimport geometry`, `distance(a, b)`
-  is right on both; `geometry.distance(a, b)`, which ady2nim also accepts, is not
-  understood by ady2py.
+- **Qualified names are rewritten.** `geometry.distance(a, b)` becomes
+  `distance(a, b)` before either backend sees it, so it is right on both -- and
+  refused when the file has a `distance` of its own, which the one namespace
+  cannot tell from geometry's.
 - **Line numbers.** A parse error is reported at its line in the merged text.
 - **The bundled libraries stay Nim-only.** `nimport ansi` and the others in
   `TO_NIM/STDLIB` are written for Nim, and ady2py leaves them as it did.
@@ -447,7 +446,7 @@ imports the module under test and asserts.
 ```python
 #!/usr/bin/env ady2nim
 # EXAMPLES/PROJECT/test_geometry.ady
-nimport lib/geometry
+from lib/geometry nimport ORIGIN, bearing, distance
 
 assert distance(ORIGIN, (x: 3.0, y: 4.0)) == 5.0
 assert bearing(ORIGIN, (x: 0.0, y: 1.0)) == 0.0

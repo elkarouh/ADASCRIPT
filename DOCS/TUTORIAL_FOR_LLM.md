@@ -903,18 +903,18 @@ def matches(text: str, pattern: str) -> bool:     # a pattern you cannot
 ```adascript
 nimport strutils, sequtils, algorithm
 nimport stdlib          # PriorityQueue, FifoQueue, LifoQueue, ANY
-nimport awk             # AwkBase record-processor base class
-nimport shortest_path   # another .ady file as a library (auto-transpiled)
+from awk nimport AwkBase                          # record-processor base class
+from shortest_path nimport Minimizer, Maximizer   # another .ady file as a library (auto-transpiled)
 ```
 
 **Modules (Nim backend only)** — a module is a `.ady` file; `nimport` links a whole project:
 
 ```adascript
 # EXAMPLES/PROJECT/dispatch.ady — the program
-nimport lib/geometry    # lib/geometry.ady, path written with '/'
-nimport lib/fleet
+from lib/geometry nimport Point_T       # lib/geometry.ady, path written with '/'
+from lib/fleet nimport Depot, Energy_T, Vehicle_T
 # EXAMPLES/PROJECT/lib/fleet.ady — a module
-nimport geometry        # a sibling is imported by its bare name
+from geometry nimport Point_T, distance   # a sibling is imported by its bare name
 ```
 
 Resolution order for each nimported name: the importing file's directory, its
@@ -923,14 +923,14 @@ libraries live). No match -> the name goes to Nim untouched, which is why
 `nimport strutils` works. No `..` syntax; the parent rule covers `bin/` +
 `lib/` layouts.
 
-- Imported names arrive unqualified (`distance(a, b)`); `geometry.distance(a, b)` is the same call.
+- Python's rule: `nimport geometry` binds `geometry` (write `geometry.distance(a, b)`, a bare `distance` is refused); `from geometry nimport distance` gives `distance(a, b)`; `from geometry nimport *` gives everything. For `nimport lib/fleet` the qualifier is `fleet`.
 - Every top-level declaration of a dependency is exported automatically.
 - Types, constructor signatures and record field order cross the boundary, so `Vehicle_T("van-9", p, 6.0)` and `Depot("Central", base)` work in an importer.
 - A dependency's top-level statements run at import time — modules declare, programs act.
 - Basenames must be unique project-wide and must not be Nim keywords (`mod.ady` fails).
 - Keep the import graph acyclic: put shared types in a leaf module.
 - Build the whole graph with `ady2nim c -r <entry>.ady`; `ady2nim -t` transpiles it and stops.
-- **ady2py merges modules, it does not link them**: a `nimport` of a `.ady` found beside the file (or one directory up) is replaced by that module's text, once, so types and classes cross the boundary and a program split across modules runs on both backends. One namespace on Python (a name defined in two modules clashes), imported names unqualified (`geometry.f()` is not understood), the libraries in `TO_NIM/STDLIB` stay Nim-only.
+- **ady2py merges modules, it does not link them**: a `nimport` of a `.ady` found beside the file (or one directory up) is replaced by that module's text, once, so types and classes cross the boundary and a program split across modules runs on both backends. One namespace on Python (a name defined in two modules clashes), `geometry.f()` is rewritten to `f()` (refused where the file has its own `f`), the libraries in `TO_NIM/STDLIB` stay Nim-only.
 
 **`# nimraw: <code>`** — raw Nim line verbatim, stripped from Python, for Nim with no Adascript spelling (a pragma: `# nimraw: {.push overflowChecks: off.}`). NOT needed for forward declarations: mutually recursive functions are written as in Python.
 
@@ -1498,7 +1498,7 @@ for s in Stage_T'First .. Stage_T'Last:
 | Cross-module base class | `@virtual class C: ...` |
 | Generic class | `class C[S, D, C]: ...` |
 | Nim-only import | `nimport module` |
-| Import only some names of a module | `from module nimport A, B` -- the whole module is `nimport module`; a use of a name of the module's that is not listed is refused on both backends |
+| Import only some names of a module | `from module nimport A, B` -- `nimport module` binds the module (`module.name`); a bare use of a name of the module's that is not listed is refused on both backends |
 | Raw Nim injection | `# nimraw: <code>` |
 | Shell capture | `let r = shell: cmd` |
 | Shell exit code, terminal kept | `let code: int = shell: cmd` |

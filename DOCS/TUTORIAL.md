@@ -2420,8 +2420,8 @@ dependencies between Adascript files:
 ```python
 nimport strutils, sequtils, algorithm
 nimport stdlib                      # PriorityQueue, FifoQueue, ANY shims
-nimport awk                         # AwkBase — bundled record-processor stdlib
-nimport shortest_path             # another .ady file compiled as a library
+from awk nimport AwkBase            # the bundled record-processor stdlib
+from shortest_path nimport Minimizer, Maximizer   # another .ady file compiled as a library
 ```
 
 When `nimport`-ing another `.ady` file, `ady2nim` automatically transpiles
@@ -2483,7 +2483,7 @@ class Optimizer[S, D, C]:
 #ady2nim-args c --cc:clang --clang.exe:zigcc --clang.linkerexe:zigcc
 
 nimport stdlib
-nimport shortest_path      # triggers auto-transpilation of shortest_path.ady
+from shortest_path nimport Optimizer   # triggers auto-transpilation of shortest_path.ady
 
 class MyOptimizer(Optimizer[str, str, float]):
     ...
@@ -2738,7 +2738,7 @@ def longest_path(self: Optimizer[S, D, C], start_state: S, end_state: S,
 
 ```python
 # test_shortest_path.ady — consumer
-nimport shortest_path
+from shortest_path nimport Optimizer
 
 def example7():   # Romania map, A* with heuristic
     type State_T    is str
@@ -3312,8 +3312,8 @@ print format_leg("truck-1", base, d.vehicles[0].position)
 
 Every top-level declaration of a nimported file is exported automatically —
 `def distance(...)` becomes `proc distance*(...)` in the generated Nim. Names
-arrive unqualified, so `distance(a, b)` just works; `geometry.distance(a, b)`
-is accepted and means the same thing.
+are reached as in Python: `nimport geometry` gives `geometry.distance(a, b)`,
+and `from geometry nimport distance` gives `distance(a, b)`.
 
 ### 21.2 How a name is found
 
@@ -3360,8 +3360,8 @@ depth triggers a rebuild; `ady2nim -t` transpiles the graph and stops.
   (`EXAMPLES/PROJECT/test_geometry.ady`).
 - ady2py replaces a `nimport` of an `.ady` module by the module's text (once),
   so a program split across modules runs on both backends. On Python it is one
-  namespace -- two modules defining the same name clash -- and imported names
-  are unqualified (`geometry.distance` is not understood); the libraries bundled
+  namespace -- two modules defining the same name clash, and `geometry.distance`
+  is refused where the file has a `distance` of its own; the libraries bundled
   with ady2nim stay Nim-only.
 
 Chapter 14 of the book (`DOCS/BOOK/14-programming-in-the-large.md`) works

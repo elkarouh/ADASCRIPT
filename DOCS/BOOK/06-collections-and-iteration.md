@@ -376,7 +376,7 @@ program to one backend, which is why `sudoku.ady` writes its own `cross()`
 rather than building on `product()`.
 
 ```python
-nimport iters
+from iters nimport batched, chain, combinations, flatten, pairwise, product, sliding_window, takewhile
 
 for p in pairwise([1, 2, 3, 4]):        # (1,2) (2,3) (3,4)
     ...
@@ -414,7 +414,7 @@ algorithm generalised over the node type is in the bundled library, and
 `EXAMPLES/test_graphs.ady` exercises it:
 
 ```python
-nimport graphs
+from graphs nimport dijkstra, shortest_path
 
 type City_T is enum PAR, LON, BER
 let g: {City_T}[](float, City_T) = {PAR: [(3.0, LON), (9.0, BER)],

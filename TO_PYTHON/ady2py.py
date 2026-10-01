@@ -439,8 +439,7 @@ def include_ady_modules(code, search_dir, _seen=None):
     the output as before; so do the libraries bundled with ady2nim.
     """
     seen = set() if _seen is None else _seen
-    from ady_modules import selective_imports, check_from_imports
-    selective = selective_imports(code)
+    from ady_modules import import_map, resolve_imports
 
     def find(name, here):
         for base in (here, os.path.dirname(here)):
@@ -448,6 +447,15 @@ def include_ady_modules(code, search_dir, _seen=None):
             if os.path.isfile(path):
                 return path
         return None
+
+    # the rule of what the file may use of its modules, bundled libraries too
+    stdlib = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "TO_NIM", "STDLIB")
+    for mod, listed in import_map(code).items():
+        path = find(mod, search_dir) or (os.path.join(stdlib, mod + ".ady")
+                                         if os.path.isfile(os.path.join(stdlib, mod + ".ady")) else None)
+        if path:
+            with open(path, encoding="utf-8") as f:
+                code = resolve_imports(code, mod, listed, f.read())
 
     def expand(match):
         names = match.group("names")
@@ -461,8 +469,6 @@ def include_ady_modules(code, search_dir, _seen=None):
             path = os.path.realpath(path)
             with open(path, encoding="utf-8") as f:
                 text = f.read()
-            if name in selective:        # `from M nimport A, B`: only A, B and what they carry
-                check_from_imports(code, name, selective[name], text)
             if path in seen:
                 continue
             seen.add(path)

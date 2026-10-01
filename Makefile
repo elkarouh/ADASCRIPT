@@ -105,6 +105,7 @@ STANDALONE := \
     test_parse.ady \
     trcks_example.ady \
     test_nimport_modules.ady \
+    test_nimport_qualified.ady \
     test_shell_throughput.ady \
     test_shell_braces.ady \
     test_param_mutation.ady \
@@ -260,7 +261,7 @@ BOTH_BACKENDS_COMPARED := test_do_block test_result test_optional_spelling \
     test_ordered_map test_function_type test_distinct test_units test_money \
     test_subrange_array test_variant_literal test_set_operators \
     test_path_relative_to test_path_io test_parse trcks_example \
-    test_nimport_modules
+    test_nimport_modules test_nimport_qualified
 
 ALL_COMPILE := \
     $(LIBS) \
@@ -625,6 +626,10 @@ test: compile
 	@# from M nimport A: the file may use A and what it carries, not M's other names.
 	@printf 'def helper() -> int:\n    return 1\n\ndef other() -> int:\n    return 2\n' > $(TMPDIR)/ady_refuse_mod.ady
 	@printf 'from ady_refuse_mod nimport helper\nprint other()\n' > $(TMPDIR)/ady_refuse_22.ady
+	@# nimport M binds M, as Python's import M: M's names are M.name, not bare; and
+	@# M.name cannot be used beside a name of the file's own that M also declares.
+	@printf 'nimport ady_refuse_mod\nprint helper()\n' > $(TMPDIR)/ady_refuse_23.ady
+	@printf 'nimport ady_refuse_mod\ndef helper() -> int:\n    return 3\nprint ady_refuse_mod.helper()\n' > $(TMPDIR)/ady_refuse_24.ady
 	@for tr in TO_NIM/ady2nim.py TO_PYTHON/ady2py.py; do \
 	    for c in "1:members no one can tell apart:cannot be told apart" \
 	             "2:a dropped failure:drops a failure" \
@@ -647,7 +652,9 @@ test: compile
 	             "19:a dropped parse_int:drops a failure" \
 	             "20:a dropped input():drops a failure" \
 	             "21:a dropped stdin.readLine():drops a failure" \
-	             "22:a name left out of a from-list:is not imported from"; do \
+	             "22:a name left out of a from-list:is not imported from" \
+	             "23:a bare name after nimport M:write ady_refuse_mod.helper" \
+	             "24:M.name beside the file's own name:cannot be told from"; do \
 	        n=$${c%%:*}; rest=$${c#*:}; what=$${rest%%:*}; want=$${rest#*:}; \
 	        printf '  %-42s' "$$what ($$(basename $$tr .py))"; \
 	        if $(PYTHON) $(CURDIR)/$$tr $(TMPDIR)/ady_refuse_$$n.ady > $(TMPDIR)/ady_refuse.out 2>&1; then \
