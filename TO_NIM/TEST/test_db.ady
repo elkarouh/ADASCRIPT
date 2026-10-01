@@ -2,7 +2,7 @@
 # insert rows, query them back, and verify values.
 # Run with: python3 TO_NIM/ady2nim.py TO_NIM/TEST/test_db.ady
 
-nimport db
+from db nimport DB
 
 var conn: DB = DB(":memory:")
 

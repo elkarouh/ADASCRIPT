@@ -23,7 +23,11 @@
 # Optional flags:
 #   --sym    symlink source file into recovery dir instead of copying
 
-nimport ftps_common
+from ftps_common nimport (
+    RC_ARG_ERROR, RC_COMPRESS_ERROR, RC_CONFIG_ERROR, RC_MAX_VER_EXIST_ERROR,
+    RC_NO_FTP_SERVER_ERROR, RC_NO_SRCE_FILE_ERROR, RC_OK, RC_RECOVERY_DIR_ERROR,
+    get_server_info, lftp_run,
+)
 nimport os
 
 let source_dir      : str  = $1

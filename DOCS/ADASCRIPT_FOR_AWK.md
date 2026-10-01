@@ -109,7 +109,7 @@ the records before it — subclass `AwkBase` from the bundled library
 
 <!-- illustrative: the shape of an AwkBase program, with every method body elided -->
 ```python
-nimport awk
+from awk nimport AwkBase
 
 class LogScan(AwkBase):
     def start(self):           # awk's BEGIN

@@ -5,8 +5,8 @@
 nimport math
 
 nimport stdlib
-nimport shortest_path  # provides Minimizer and Maximizer
-nimport graphs         # provides dijkstra, shortest_path
+from shortest_path nimport Maximizer, Minimizer
+from graphs nimport dijkstra, shortest_path
 
 
 def example1():

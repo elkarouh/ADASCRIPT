@@ -7,7 +7,7 @@ Imported by timetable_sa.ady, timetable_backtrack.ady, timetable_server.ady.
 No main block -- pure library.
 """
 
-nimport db
+from db nimport DB
 nimport json
 nimport math
 nimport random

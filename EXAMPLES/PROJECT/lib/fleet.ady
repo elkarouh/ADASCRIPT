@@ -5,7 +5,7 @@ Depends on `geometry`, a sibling inside lib/.  A sibling is nimported by its
 bare name: dependency resolution looks beside the importing file first.
 """
 
-nimport geometry
+from geometry nimport Point_T, distance
 
 type Vehicle_T is record:
     name:     str

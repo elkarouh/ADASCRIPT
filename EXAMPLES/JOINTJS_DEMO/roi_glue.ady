@@ -6,8 +6,11 @@ Compile:  ady2nim roi_glue.ady   (or: make)
 """
 
 nimport js/jsffi
-nimport jointjs
-nimport roi_model
+from jointjs nimport JsElem, bodyAttr, foAttr, jsElemOf, resetCells
+from roi_model nimport (
+    LINKS, NODE_BITCOIN, NODE_BTC_PERF, NODE_GOLD, NODE_GOLD_PERF, NODE_INVESTMENT,
+    NODE_OVERALL, NODE_SP500, NODE_SP500_PERF, NodeSpec, PortfolioCalc, calculateAll,
+)
 
 # ==============================================================================
 # JointJS globals

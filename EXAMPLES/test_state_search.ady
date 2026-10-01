@@ -2,7 +2,7 @@
 #ady2nim-args c --cc:clang --clang.exe:zigcc --clang.linkerexe:zigcc
 """Tests for state_search.StateSearcher."""
 
-nimport state_search
+from state_search nimport StateSearcher, Step_T
 
 
 # ===========================================================================

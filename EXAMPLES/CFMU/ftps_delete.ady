@@ -6,7 +6,11 @@
 # Usage:
 #   ftps_delete <ftps_service> [options]
 
-nimport ftps_common
+from ftps_common nimport (
+    RC_ARG_ERROR, RC_NOT_ALLOWED_ERROR, RC_NO_FILE_ERROR, RC_NO_FTP_SERVER_ERROR, RC_OK,
+    check_date, check_period, check_sequence, construct_filename_pattern, filter_output,
+    get_server_info, lftp_run,
+)
 
 if $# < 1:
   print "Usage: ftps_delete <ftps_service> [options]"

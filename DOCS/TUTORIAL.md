@@ -2445,7 +2445,7 @@ Example — a custom awk processor in any directory:
 
 ```python
 #!/usr/bin/env ady2nim
-nimport awk
+from awk nimport AwkBase
 
 class WordCounter(AwkBase):
     var word_count: int = 0
@@ -3298,9 +3298,9 @@ ady2nim c -r EXAMPLES/PROJECT/dispatch.ady
 
 ```python
 # dispatch.ady
-nimport lib/geometry
-nimport lib/fleet
-nimport lib/report
+from lib/geometry nimport Point_T
+from lib/fleet nimport Depot, Energy_T, Vehicle_T
+from lib/report nimport format_leg
 
 let base: Point_T = (x: 0.0, y: 0.0)
 

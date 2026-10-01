@@ -17,9 +17,9 @@ API (same as before):
   POST /validate       <- {"schedule":[...], "original":[...], "data":{...}} -> {"ok":true}
 """
 
-nimport timetable_engine
-nimport timetable_sa
-nimport db
+from timetable_engine nimport db_delete, db_init, db_list, db_load, db_save, validate_to_json
+from timetable_sa nimport solve_to_json
+from db nimport DB
 nimport asynchttpserver
 nimport asyncdispatch
 nimport json

@@ -5,7 +5,11 @@
 # Run with:
 #   ady2nim EXAMPLES/test_iters.ady -r
 
-nimport iters
+from iters nimport (
+    accumulate, batched, chain, combinations, compress, count_from, dropwhile,
+    enumerate_seq, flatten, pairwise, permutations, product, repeat_elem,
+    sliding_window, takewhile, zip_longest,
+)
 
 def less_than_4(x: int) -> bool:
     return x < 4

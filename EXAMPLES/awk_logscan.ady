@@ -13,7 +13,7 @@ So: a state machine decides which kind of record this is, each kind is
 gathered into its own list of its own record type, some work is done on the
 way past and the rest once both lists are complete.
 """
-nimport awk
+from awk nimport AwkBase
 
 
 type Severity_T   is enum DEBUG, INFO, WARN, ERROR

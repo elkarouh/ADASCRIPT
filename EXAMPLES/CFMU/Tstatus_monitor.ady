@@ -8,7 +8,7 @@ Usage:
     tacot_corico ... | ./Tstatus_monitor
 """
 nimport time
-nimport awk
+from awk nimport AwkBase
 
 
 # A row is filled in over several records, and it is in the table from the
