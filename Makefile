@@ -797,12 +797,12 @@ test: compile
 	        | grep -q "record 3: NF=4" && echo OK || { echo FAIL; exit 1; }
 
 	@echo "=== vi, typed keys in a pty of its own: vi.ady (curses, Python) and vi_nim.ady (Nim) ==="
-	@printf '  %-42s' "EXAMPLES/VI/vi.ady (ady2py, 26 key scripts)"; \
+	@printf '  %-42s' "EXAMPLES/VI/vi.ady (26 key scripts)"; \
 	    if ! $(PYTHON) -c 'import curses, pty' 2>/dev/null; then echo "SKIP (no curses or pty)"; else \
 	    $(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(EXDIR)/VI/vi.ady > $(TMPDIR)/ady_vi.py || { echo FAIL; exit 1; }; \
 	    $(PYTHON) $(EXDIR)/VI/test_vi.py $(TMPDIR)/ady_vi.py > $(TMPDIR)/ady_vi.out 2>&1 \
 	        && echo OK || { echo FAIL; grep -A2 FAIL $(TMPDIR)/ady_vi.out | head -20; exit 1; }; fi
-	@printf '  %-42s' "EXAMPLES/VI/vi_nim.ady (ady2nim, 27 key scripts)"; \
+	@printf '  %-42s' "EXAMPLES/VI/vi_nim.ady (27 key scripts)"; \
 	    if ! $(PYTHON) -c 'import pty' 2>/dev/null; then echo "SKIP (no pty)"; else \
 	    $(PYTHON) $(EXDIR)/VI/test_vi.py $(EXDIR)/VI/vi_nim > $(TMPDIR)/ady_vi_nim.out 2>&1 \
 	        && echo OK || { echo FAIL; grep -A2 FAIL $(TMPDIR)/ady_vi_nim.out | head -20; exit 1; }; fi
