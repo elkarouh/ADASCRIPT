@@ -6,7 +6,7 @@
 # lexical elements. Run with:
 #   ady2nim TOOLS/ADA_INDENT/test_ada_lexer.ady -r
 
-nimport ada_lexer
+from ada_lexer nimport Lexer, Token_T
 
 # --- helpers ---------------------------------------------------------------
 

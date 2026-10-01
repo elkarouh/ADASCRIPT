@@ -44,7 +44,7 @@ type Token_T is tuple:
 # Character classification comes from the standard library: the predicates
 # are the same in every lexer, and defining them by ASCII range rather than
 # by a library call is what keeps the two backends agreeing.
-nimport strscan
+from strscan nimport is_alnum_ch, is_alpha_ch, is_digit_ch, is_newline_ch, is_space_ch
 
 
 # ---------------------------------------------------------------------------

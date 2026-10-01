@@ -11,7 +11,7 @@
 # Each case is independent: a fresh Indenter re-indents the input line by line
 # and the result is compared to the expected output.
 
-nimport ada_indent
+from ada_indent nimport Indenter
 
 
 # Files the indenter must reproduce exactly. The golden sample holds one block

@@ -14,8 +14,8 @@
 # Only inter-token spacing is changed; leading indentation is preserved.
 # The source must not contain tab characters (spaces only, per the standard).
 
-nimport ada_lexer
-nimport strscan          # is_newline_ch — nimport does not re-export
+from ada_lexer nimport Lexer, Token_Kind_T, Token_T
+from strscan nimport is_newline_ch          # not re-exported by ada_lexer, so listed here too
 
 # ---------------------------------------------------------------------------
 # Binary-operator delimiter set (rule 2)
