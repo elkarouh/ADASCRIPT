@@ -6,7 +6,7 @@
 # The point of the library is that one definition serves any node type, so
 # every case here runs against three of them: an enum, a string and an int.
 
-from graphs nimport dijkstra, shortest_path
+from graphs import dijkstra, shortest_path
 
 type City_T is enum PAR, LON, BER, ROM
 

@@ -2,18 +2,18 @@
 changes_report — who changed what in a baseline, per the CFMUTEST changes
 report, and the tests its Tlogs report newly failing.
 
-Depends on `tcheck_common` and `baselines`, siblings inside LIBS/, nimported
+Depends on `tcheck_common` and `baselines`, siblings inside LIBS/, imported
 by their bare names.
 """
 
 nimport os
-from tcheck_common nimport (
+from tcheck_common import (
     BaselineName_T, BaselineNr_T, CM_OT, Command_T, DIFF_TOOL, Extension_T, Failure_T,
     InSub_T, Link_T, NmFile_T, Rev_T, Review_T, TACT_ROOT, Ticket_T, echo_emacs, hr,
     newest, puts, warned,
 )
-from tlog nimport NewFailure, list_new_failures
-from baselines nimport Baseline
+from tlog import NewFailure, list_new_failures
+from baselines import Baseline
 
 # ---------------------------------------------------------------------------
 # List all changes: who committed what, per the CFMUTEST changes report

@@ -16,26 +16,26 @@ Translated from the ksh original in TOOL/COMMON_UTILS.
         LIBS/csystem_log.ady      <- a baseline's Csystem_build.log, compared
         LIBS/changes_report.ady   <- who changed what: the CFMUTEST changes report
 
-The modules are nimported by their path relative to this file (LIBS/...),
+The modules are imported by their path relative to this file (LIBS/...),
 and each other by bare name. A nimport is Nim-only, so Tcheck_tact is a Nim
 program: the Python backend cannot follow one.
 """
 
 nimport os
 nimport time
-from LIBS/tcheck_common nimport (
+from LIBS/tcheck_common import (
     BaselineNr_T, BuildLabel_T, BuildName_T, BuildPass, BuildSubtype, BuildType,
     Failure_T, HAS_NEW_FAILURES, Tool_T, hr, parse_subtype, puts, subtype_label,
     troubleshoot_tool, warned,
 )
-from LIBS/tlog nimport NewFailure
-from LIBS/replays nimport (
+from LIBS/tlog import NewFailure
+from LIBS/replays import (
     ReplayLog, ReplayStatus, ReplayType, check_replay_dirs_size, process_replay,
     scan_replay_dir_detailed,
 )
-from LIBS/baselines nimport Baseline, Build
-from LIBS/csystem_log nimport CsystemLog, earlier_log
-from LIBS/changes_report nimport (
+from LIBS/baselines import Baseline, Build
+from LIBS/csystem_log import CsystemLog, earlier_log
+from LIBS/changes_report import (
     Committer, changes_by_file, changes_report, list_changes, list_detailed_changes,
 )
 

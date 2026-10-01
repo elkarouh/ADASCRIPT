@@ -6,8 +6,9 @@ subranges), **Nim** (compile target and type system), **Perl** and **AWK**
 (first-class regex literals `/pat/flags`, `$+N` captures, substitution), and
 **Bash** (`$1`/`$#`/`$@`, file-test operators, `shell:` blocks). Most Python 3
 code is valid Adascript as it stands; the exception is `import`, which has to
-say where a module comes from — `pyimport os` for a Python package, `nimport
-os` for a Nim module — as the Nim backend rejects a plain `import os`.
+say where a module comes from — `import` for an Adascript (`.ady`) module,
+`nimport os` for a Nim module, `pyimport numpy` for a Python package — and a plain
+`import os` is refused on both backends.
 You write one source file; both ecosystems get idiomatic, efficient output.
 
 ```
@@ -2041,7 +2042,7 @@ class Optimizer[S, D, C]:
         self.decision_path = []
 ```
 
-When used with `nimport` (see §17), the base class's `.nim` is compiled as a
+When used with `import` (see §17), the base class's `.nim` is compiled as a
 library and subclasses in the importing file dispatch dynamically at runtime.
 
 `@virtual` also changes what assignment does on Nim: a `ref object` is shared
@@ -2411,41 +2412,42 @@ programs that use them.
 
 ---
 
-## 17. Nim-Only Imports
+## 17. Nim-Only Imports and Adascript Modules
 
-`nimport` marks imports that appear **only** in Nim output and are stripped
-from Python output. Use it for Nim standard-library modules and for
-dependencies between Adascript files:
+`nimport` marks imports of Nim modules, which appear **only** in Nim output and are
+stripped from Python output. Use it for Nim standard-library modules. Dependencies
+between Adascript files are `import`s:
 
 ```python
 nimport strutils, sequtils, algorithm
 nimport stdlib                      # PriorityQueue, FifoQueue, ANY shims
-from awk nimport AwkBase            # the bundled record-processor stdlib
-from shortest_path nimport Minimizer, Maximizer   # another .ady file compiled as a library
+from awk import AwkBase            # the bundled record-processor stdlib
+from shortest_path import Minimizer, Maximizer   # another .ady file compiled as a library
 ```
 
-When `nimport`-ing another `.ady` file, `ady2nim` automatically transpiles
+When `import`-ing another `.ady` file, `ady2nim` automatically transpiles
 that dependency (if not already cached and up to date) and places both `.nim`
 files in the same cache directory, wiring up `--path` for the Nim compiler.
 
 ### Bundled Adascript standard libraries
 
 `.ady` files shipped in `TO_NIM/` are automatically installed into the build
-cache at compile time, so they can be used via `nimport` from **any directory**
+cache at compile time, so they can be used via `import` from **any directory**
 without a local copy next to your source file:
 
-| `nimport`      | Provides                                              |
+| Import         | Provides                                              |
 |----------------|-------------------------------------------------------|
 | `nimport stdlib` | `PriorityQueue`, `FifoQueue`, `LifoQueue`, `ANY`    |
-| `nimport awk`  | `AwkBase` — subclass and override `process_record()`, `begin()`, `finish()` |
-| `nimport strscan` | character classification (`is_digit_ch`, `is_space_ch`, …) and the small scanners a hand-written lexer needs (`skip_space`, `skip_quoted`, `lead_ident`, `strip_line_comment`) |
-| `nimport ansi` | terminal colours and effects as values a pipe applies: `"x" \| bold \| fg_white \| bg_red`; styles add, `bold + fg_red`, into one escape |
+| `import awk`  | `AwkBase` — subclass and override `process_record()`, `begin()`, `finish()` |
+| `import strscan` | character classification (`is_digit_ch`, `is_space_ch`, …) and the small scanners a hand-written lexer needs (`skip_space`, `skip_quoted`, `lead_ident`, `strip_line_comment`) |
+| `import ansi` | terminal colours and effects as values a pipe applies: `"x" \| bold \| fg_white \| bg_red`; styles add, `bold + fg_red`, into one escape |
+| `nimport illwill` | a curses-like terminal library in pure Nim, one file (`EXAMPLES/VI/vi_nim.ady`) |
 
 Example — a custom awk processor in any directory:
 
 ```python
 #!/usr/bin/env ady2nim
-from awk nimport AwkBase
+from awk import AwkBase
 
 class WordCounter(AwkBase):
     var word_count: int = 0
@@ -2483,7 +2485,7 @@ class Optimizer[S, D, C]:
 #ady2nim-args c --cc:clang --clang.exe:zigcc --clang.linkerexe:zigcc
 
 nimport stdlib
-from shortest_path nimport Optimizer   # triggers auto-transpilation of shortest_path.ady
+from shortest_path import Optimizer   # triggers auto-transpilation of shortest_path.ady
 
 class MyOptimizer(Optimizer[str, str, float]):
     ...
@@ -2609,7 +2611,7 @@ on enum values, inclusive range `1 .. trials`.
 
 ---
 
-### dijkstra.ady — Priority queue, enum-keyed dicts, nimport
+### dijkstra.ady — Priority queue, enum-keyed dicts, from-import
 
 The algorithm entire — 27 lines (`dijkstra.ady` closes with a comment
 about the generic version in the bundled `graphs` library, not shown here):
@@ -2712,7 +2714,7 @@ def main():
 
 A 160-line generic optimiser that becomes 10+ complete algorithm examples
 in `test_shortest_path.ady`. The key architectural pattern is **generic
-class + `nimport` + subclassing**:
+class + `import` + subclassing**:
 
 ```python
 # shortest_path.ady — library
@@ -2738,7 +2740,7 @@ def longest_path(self: Optimizer[S, D, C], start_state: S, end_state: S,
 
 ```python
 # test_shortest_path.ady — consumer
-from shortest_path nimport Optimizer
+from shortest_path import Optimizer
 
 def example7():   # Romania map, A* with heuristic
     type State_T    is str
@@ -3274,7 +3276,7 @@ advanced scenarios are not yet supported:
 ## 21. Programming in the Large
 
 Up to here every program has been one file. Past a few hundred lines a
-program wants modules, and `nimport` is how they find each other. ady2nim builds
+program wants modules, and `import` is how they find each other. ady2nim builds
 a whole dependency graph and links it; ady2py merges each module into the one
 file it writes, where the module is first imported.
 
@@ -3287,8 +3289,8 @@ complete example:
 EXAMPLES/PROJECT/
     dispatch.ady          # the program
     lib/geometry.ady      # leaf module: Point_T, distance(), bearing()
-    lib/fleet.ady         # domain model — nimport geometry
-    lib/report.ady        # formatting   — nimport geometry
+    lib/fleet.ady         # domain model — import geometry
+    lib/report.ady        # formatting   — import geometry
     test_geometry.ady     # a second entry point: the unit test
 ```
 
@@ -3298,9 +3300,9 @@ ady2nim c -r EXAMPLES/PROJECT/dispatch.ady
 
 ```python
 # dispatch.ady
-from lib/geometry nimport Point_T
-from lib/fleet nimport Depot, Energy_T, Vehicle_T
-from lib/report nimport format_leg
+from lib/geometry import Point_T
+from lib/fleet import Depot, Energy_T, Vehicle_T
+from lib/report import format_leg
 
 let base: Point_T = (x: 0.0, y: 0.0)
 
@@ -3310,23 +3312,23 @@ d.add("truck-1", (x: 12.0, y: 5.0), 4.0)
 print format_leg("truck-1", base, d.vehicles[0].position)
 ```
 
-Every top-level declaration of a nimported file is exported automatically —
+Every top-level declaration of an imported file is exported automatically —
 `def distance(...)` becomes `proc distance*(...)` in the generated Nim. Names
-are reached as in Python: `nimport geometry` gives `geometry.distance(a, b)`,
-and `from geometry nimport distance` gives `distance(a, b)`.
+are reached as in Python: `import geometry` gives `geometry.distance(a, b)`,
+and `from geometry import distance` gives `distance(a, b)`.
 
 ### 21.2 How a name is found
 
-For each `nimport`, ady2nim looks for the `.ady` file in three places, in
+For each `import`, ady2nim looks for the `.ady` file in three places, in
 order: the importing file's own directory, that directory's parent, then the
 build cache (where the bundled `TO_NIM/STDLIB/*.ady` libraries are
 installed). The first hit wins; if nothing matches, the name is passed to Nim
 untouched, which is what makes `nimport strutils` work.
 
-So a sibling is imported by its bare name (`nimport geometry` inside
+So a sibling is imported by its bare name (`import geometry` inside
 `lib/fleet.ady`), and the program addresses modules by their path from the
-project root (`nimport lib/geometry`). There is no `..` — the parent rule is
-what lets an entry point in `bin/` write `nimport lib/util`.
+project root (`import lib/geometry`). There is no `..` — the parent rule is
+what lets an entry point in `bin/` write `import lib/util`.
 
 ### 21.3 Layouts
 
@@ -3338,7 +3340,7 @@ what lets an entry point in `bin/` write `nimport lib/util`.
 
 ### 21.4 The build
 
-`ady2nim c -r dispatch.ady` walks the `nimport` graph breadth-first,
+`ady2nim c -r dispatch.ady` walks the `import` graph breadth-first,
 pre-parses each dependency (collecting class names, constructor signatures,
 return types, and the field order of records and named tuples), transpiles
 each into a per-program cache directory under `~/.cache/adascript/`, and then
@@ -3356,9 +3358,9 @@ depth triggers a rebuild; `ady2nim -t` transpiles the graph and stops.
 - Basenames must be unique project-wide, and must not be Nim keywords
   (`mod.ady` fails with `invalid module name`).
 - Exported names share one namespace; Nim overloading absorbs most clashes.
-- A module's test is another entry point that nimports it and asserts
+- A module's test is another entry point that imports it and asserts
   (`EXAMPLES/PROJECT/test_geometry.ady`).
-- ady2py replaces a `nimport` of an `.ady` module by the module's text (once),
+- ady2py replaces an `import` of an `.ady` module by the module's text (once),
   so a program split across modules runs on both backends. On Python it is one
   namespace -- two modules defining the same name clash, and `geometry.distance`
   is refused where the file has a `distance` of its own; the libraries bundled
@@ -3405,8 +3407,9 @@ through the same ground in more detail.
 | Mutable self (auto-detected)      | `self.field =`, or a call reaching one   |
 | Cross-module inheritable class    | `@virtual class C: ...`                  |
 | Generic class                     | `class C[S, D, C]: ...`                  |
-| Nim-only import                   | `nimport module`                         |
-| Import only some names of a module | `from module nimport A, B` (the file may use A, B and what they carry) |
+| An `.ady` module                  | `import module` (names are `module.name`) |
+| Import only some names of a module | `from module import A, B` (the file may use A, B and what they carry) |
+| Nim-only / Python-only import     | `nimport module` / `pyimport module`     |
 | Shell command capture             | `let r = shell: cmd`                     |
 | Shell lines capture               | `let ls = shellLines: cmd`               |
 | Shell lines (typed)               | `let ls: []str = shellLines: cmd`        |

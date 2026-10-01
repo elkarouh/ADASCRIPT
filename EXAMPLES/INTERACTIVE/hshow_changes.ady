@@ -11,7 +11,7 @@ Usage:
 """
 
 nimport re
-from ansi nimport Style, bold, fg_cyan, fg_red, fg_white, fg_yellow
+from ansi import Style, bold, fg_cyan, fg_red, fg_white, fg_yellow
 
 
 # ---------------------------------------------------------------------------

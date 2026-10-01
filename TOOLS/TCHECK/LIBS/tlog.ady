@@ -2,12 +2,12 @@
 tlog — a Tlog, the log of a build's regression tests: the sections it
 reports, and the tests it names newly failing.
 
-Depends on `tcheck_common`, a sibling inside LIBS/, nimported by its bare
+Depends on `tcheck_common`, a sibling inside LIBS/, imported by its bare
 name.
 """
 
 nimport os
-from tcheck_common nimport (
+from tcheck_common import (
     BaselineNr_T, BuildLabel_T, BuildPass, BuildSubtype, TestName_T, puts,
     subtype_label,
 )

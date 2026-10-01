@@ -2,11 +2,11 @@
 tcheck_common — what every part of Tcheck_tact uses: the domain's named
 types, colored output, the settings the command line gives, the CM tree,
 the build enums, and the helpers several modules share. A leaf: it
-nimports nothing of Tcheck_tact's.
+imports nothing of Tcheck_tact's.
 """
 
 nimport os
-from ansi nimport Style
+from ansi import Style
 
 # Why something the report looks for is not there: a log directory, a
 # changes report. The report goes on without it, having said so.

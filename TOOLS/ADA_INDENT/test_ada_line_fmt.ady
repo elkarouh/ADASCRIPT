@@ -4,7 +4,7 @@
 # Run with:
 #   ady2nim TOOLS/ADA_INDENT/test_ada_line_fmt.ady -r
 
-from ada_line_fmt nimport format_line, format_source
+from ada_line_fmt import format_line, format_source
 
 def fmt(src: str) -> str:
     return format_line(src)

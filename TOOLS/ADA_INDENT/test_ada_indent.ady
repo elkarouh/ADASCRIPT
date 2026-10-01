@@ -3,7 +3,7 @@
 # test_ada_indent.ady — self-tests for the ada_indent re-indenter.
 #
 # The indenter itself lives in ada_indent.ady; this file imports it as a
-# library (nimport auto-transpiles the sibling .ady) and exercises it against a
+# library (import auto-transpiles the sibling .ady) and exercises it against a
 # table of messy-input -> canonical-output cases. Run it with:
 #
 #   ady2nim TOOLS/ADA_INDENT/test_ada_indent.ady -r        # compile if stale, run tests
@@ -11,7 +11,7 @@
 # Each case is independent: a fresh Indenter re-indents the input line by line
 # and the result is compared to the expected output.
 
-from ada_indent nimport Indenter
+from ada_indent import Indenter
 
 
 # Files the indenter must reproduce exactly. The golden sample holds one block

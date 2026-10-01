@@ -11,8 +11,8 @@ NIMPORT_TEST/names, which this file nimports as well: once is enough. A name
 with no .ady (`math` here) stays a Nim-only import.
 """
 nimport math
-from NIMPORT_TEST/shapes nimport Shape_T, Canvas, parse
-from NIMPORT_TEST/names nimport Kind_T, Failure_T, label
+from NIMPORT_TEST/shapes import Shape_T, Canvas, parse
+from NIMPORT_TEST/names import Kind_T, Failure_T, label
 
 def describe(text: str) -> str:
     let parsed: Shape_T | !Failure_T = parse(text)

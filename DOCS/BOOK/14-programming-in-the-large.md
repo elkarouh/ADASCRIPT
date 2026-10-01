@@ -6,7 +6,7 @@ hundred lines. Past that, a program wants seams: a types module everything
 agrees on, a domain model, an output layer, and one file at the top that is
 the program itself.
 
-This chapter is about that scale. `nimport` is the module mechanism. The Nim
+This chapter is about that scale. `import` is the module mechanism. The Nim
 backend resolves, transpiles and links a dependency graph; the Python backend
 merges each module into the one file it writes. Section 13.10 says what that
 changes.
@@ -24,10 +24,10 @@ ady2nim c -r EXAMPLES/PROJECT/dispatch.ady
 
 A module is a `.ady` file. There is no manifest, no package file, no
 `__init__`, and nothing to register — a file becomes a module the moment
-another file nimports it:
+another file imports it:
 
 ```python
-nimport geometry        # geometry.ady, beside the importing file
+import geometry        # geometry.ady, beside the importing file
 ```
 
 Two roles, one file format:
@@ -56,41 +56,45 @@ privacy is the module you choose not to import.
 
 ---
 
-## 13.2 `nimport`: one keyword, three kinds of module
+## 13.2 Three words, three kinds of module
 
-`nimport` is the same keyword you already met in Chapter 12 for Nim standard
-library modules. It resolves three kinds of name, in this order of surprise:
+Three keywords say which world a module comes from, the same on both backends:
 
 ```python
-nimport strutils, math      # 1. Nim's own standard library
-nimport stdlib, graphs      # 2. Adascript's bundled libraries (TO_NIM/STDLIB/)
-nimport geometry            # 3. your own geometry.ady
+import geometry            # an Adascript module: your own geometry.ady, or a bundled one
+nimport strutils, math     # a Nim module: Nim's own standard library
+pyimport numpy             # a Python package, through nimpy on the Nim backend
 ```
 
-The difference is only whether a `.ady` file with that name is found next to
-your source. If one is, ady2nim transpiles it and compiles it into your
-program; if not, the name is handed to Nim untouched. That is why
-`nimport os` and `nimport lib/fleet` can sit in the same file without
-ceremony.
+`import` is for `.ady` files only: yours, or the libraries bundled in
+`TO_NIM/STDLIB/` (`import graphs`, `import ansi`). A plain `import os` is refused,
+and so is a `nimport` of an `.ady` file; each message names the word to use. The
+one exception is `from stdlib import PriorityQueue`: `stdlib` is a shim with a Nim
+and a Python implementation, so it belongs to none of the three.
 
-The rule is Python's. `nimport geometry` binds `geometry`, as `import geometry`
+An `import` names a file ady2nim can find next to your source (section 13.3), and
+transpiles and compiles it into your program. A `nimport` is handed to Nim
+untouched, which is why `nimport os` and `import lib/fleet` can sit in the same
+file without ceremony.
+
+The rule is Python's. `import geometry` binds `geometry`, as `import geometry`
 does, and its names are reached through it:
 
 ```python
-nimport geometry
+import geometry
 
 let km: float = geometry.distance(geometry.ORIGIN, here)
 ```
 
-A bare `distance` after `nimport geometry` is refused, with the line and what to
-write. For a path the qualifier is the last part: `nimport lib/fleet` is `fleet`.
+A bare `distance` after `import geometry` is refused, with the line and what to
+write. For a path the qualifier is the last part: `import lib/fleet` is `fleet`.
 What qualification cannot do is keep two `distance` procs apart: see 13.9.
 
 The selective form, `from geometry import distance` in Python, says which names a
 file takes unqualified, which is what a reader wants to know:
 
 ```python
-from geometry nimport distance, Point_T   # only these, and what they carry
+from geometry import distance, Point_T   # only these, and what they carry
 ```
 
 The file may use `distance`, `Point_T` and what `Point_T` carries -- an enum's
@@ -99,7 +103,7 @@ through a value. A bare use of any other name of `geometry`'s is refused, on bot
 backends, with the line and what to add:
 
 ```
-line 12: 'bearing' is not imported from geometry: write geometry.bearing, or add bearing to `from geometry nimport Point_T, bearing, distance`
+line 12: 'bearing' is not imported from geometry: write geometry.bearing, or add bearing to `from geometry import Point_T, bearing, distance`
 ```
 
 (The module is still compiled and linked whole; the rule is checked from the text,
@@ -109,7 +113,7 @@ Plain `import geometry` is **rejected** on the Nim backend — `import` is
 reserved for Python modules (Chapter 12). The error message says so:
 
 ```
-Error: 'import geometry' is not allowed. Use 'nimport geometry' for
+Error: 'import geometry' is not allowed. Use 'import geometry' for
 Nim/stdlib modules or 'pyimport geometry' for Python packages.
 ```
 
@@ -117,7 +121,7 @@ Nim/stdlib modules or 'pyimport geometry' for Python packages.
 
 ## 13.3 How a module name is resolved
 
-For each name it nimports, ady2nim looks for a `.ady` file in three places, in
+For each name it imports, ady2nim looks for a `.ady` file in three places, in
 order:
 
 1. **the directory of the file doing the importing**
@@ -131,22 +135,22 @@ makes `nimport strutils` work.
 A name may carry a path, and the path is written with `/`:
 
 ```python
-nimport lib/fleet          # <dir>/lib/fleet.ady, or <parent>/lib/fleet.ady
+import lib/fleet          # <dir>/lib/fleet.ady, or <parent>/lib/fleet.ady
 ```
 
 Two consequences worth internalising:
 
 - **A sibling is imported by its bare name.** Inside `lib/fleet.ady`,
-  `nimport geometry` finds `lib/geometry.ady` by rule 1.
+  `import geometry` finds `lib/geometry.ady` by rule 1.
 - **The parent rule is what makes `bin/` + `lib/` layouts work.** From
-  `bin/tool.ady`, `nimport lib/util` misses `bin/lib/util.ady` and then hits
+  `bin/tool.ady`, `import lib/util` misses `bin/lib/util.ady` and then hits
   `<project>/lib/util.ady` by rule 2. `EXAMPLES/TIMETABLE/timetable_server.ady`
-  lives on this rule: its `nimport timetable_engine` and `nimport timetable_sa`
+  lives on this rule: its `import timetable_engine` and `import timetable_sa`
   resolve to `EXAMPLES/timetable_engine.ady` and `EXAMPLES/timetable_sa.ady`,
   one directory up.
 
 There is no `..` syntax: a module name starts with a letter, so
-`nimport ../lib/util` is not a name ady2nim will resolve. The parent rule
+`import ../lib/util` is not a name ady2nim will resolve. The parent rule
 covers the one level of escape you actually need.
 
 ---
@@ -162,14 +166,14 @@ shared `ftps_common.ady`:
 ```
 CFMU/
     ftps_common.ady     # constants, helpers, server lookup
-    ftps_get.ady        # nimport ftps_common
-    ftps_put.ady        # nimport ftps_common
+    ftps_get.ady        # import ftps_common
+    ftps_put.ady        # import ftps_common
     ...
 ```
 
 ```python
 # ftps_get.ady
-from ftps_common nimport RC_ARG_ERROR
+from ftps_common import RC_ARG_ERROR
 import os
 
 if $# < 3:
@@ -187,11 +191,11 @@ have their own relationships:
 
 ```
 PROJECT/
-    dispatch.ady        # nimport lib/geometry, lib/fleet, lib/report
+    dispatch.ady        # import lib/geometry, lib/fleet, lib/report
     lib/
-        geometry.ady    # leaf: nimports nothing of its own
-        fleet.ady       # nimport geometry   (sibling, bare name)
-        report.ady      # nimport geometry   (sibling, bare name)
+        geometry.ady    # leaf: imports nothing of its own
+        fleet.ady       # import geometry   (sibling, bare name)
+        report.ady      # import geometry   (sibling, bare name)
 ```
 
 Note the asymmetry, and that it is not an accident: the program addresses
@@ -205,8 +209,8 @@ Several programs, one library directory:
 ```
 project/
     bin/
-        dispatch.ady    # nimport lib/geometry
-        report_only.ady # nimport lib/report
+        dispatch.ady    # import lib/geometry
+        report_only.ady # import lib/report
     lib/
         geometry.ady
         report.ady
@@ -233,7 +237,7 @@ written the same way.
 
 Step by step:
 
-1. **Pre-pass.** Before anything is written, ady2nim walks the `nimport` graph
+1. **Pre-pass.** Before anything is written, ady2nim walks the `import` graph
    breadth-first and parses each dependency to collect what the *importers*
    need to know about it: class names, constructor signatures, which classes
    are `ref`/virtual, proc return types, and the field order of records and
@@ -364,11 +368,11 @@ The module's **basename becomes a Nim module name**, and its exported symbols
 reach every importer, in the Nim output unqualified. Three rules follow:
 
 1. **Basenames must be unique across the project.** Dependencies are
-   transpiled into one cache directory keyed by the name you nimported them
+   transpiled into one cache directory keyed by the name you imported them
    by, and each name is resolved once per build. Two different `util.ady`
    files in two directories, both imported as `util`, are one module as far as
    the build is concerned. If you want both, import at least one by path
-   (`nimport lib/util`) — the path form keeps its own place in the cache — or,
+   (`import lib/util`) — the path form keeps its own place in the cache — or,
    better, give them names that say what they are.
 2. **Don't use a Nim keyword as a filename.** `mod.ady` fails with
    ``Error: invalid module name: `mod` `` — from Nim, about a file you did not
@@ -385,19 +389,19 @@ reach every importer, in the Nim output unqualified. Three rules follow:
 ## 13.10 The Python backend merges the modules
 
 ady2nim compiles each module on its own and links them. ady2py writes one file,
-so it brings the modules into it: a `nimport` of an `.ady` is replaced by that
+so it brings the modules into it: an `import` of an `.ady` is replaced by that
 module's text, at the place it is first imported and once however many
 modules import it, after the modules *it* imports. Where it looks is ady2nim's
 rule: beside the importing file, then one directory up.
 
 ```python
-from lib/geometry nimport ORIGIN, dist
+from lib/geometry import ORIGIN, dist
 print dist(ORIGIN, p)
 ```
 
 ```python
 # Python output
-# ---- lib/geometry.ady, nimported ----
+# ---- lib/geometry.ady, imported ----
 ...                              # Point_T, ORIGIN, dist, as geometry.ady wrote them
 # ---- end of lib/geometry.ady ----
 print(dist(ORIGIN, p))
@@ -417,7 +421,7 @@ What the merge costs:
   refused when the file has a `distance` of its own, which the one namespace
   cannot tell from geometry's.
 - **Line numbers.** A parse error is reported at its line in the merged text.
-- **The bundled libraries stay Nim-only.** `nimport ansi` and the others in
+- **The bundled libraries stay Nim-only.** `import ansi` and the others in
   `TO_NIM/STDLIB` are written for Nim, and ady2py leaves them as it did.
 - **A `nimport` with no `.ady` behind it** (`nimport strutils`, `nimport math`)
   is a Nim-only import and is dropped from the Python output.
@@ -446,7 +450,7 @@ imports the module under test and asserts.
 ```python
 #!/usr/bin/env ady2nim
 # EXAMPLES/PROJECT/test_geometry.ady
-from lib/geometry nimport ORIGIN, bearing, distance
+from lib/geometry import ORIGIN, bearing, distance
 
 assert distance(ORIGIN, (x: 3.0, y: 4.0)) == 5.0
 assert bearing(ORIGIN, (x: 0.0, y: 1.0)) == 0.0
@@ -491,7 +495,7 @@ Two build knobs matter at this size:
 Splitting a program that outgrew one file:
 
 - [ ] One entry point at the project root, or one level below it in `bin/`.
-- [ ] A leaf module for the types everyone shares — no `nimport` of your own
+- [ ] A leaf module for the types everyone shares — no `import` of your own
       code in it.
 - [ ] Modules under `lib/`, importing each other by bare name and imported by
       the program as `lib/<name>`.

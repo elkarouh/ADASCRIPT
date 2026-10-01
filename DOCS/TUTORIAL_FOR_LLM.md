@@ -2,7 +2,7 @@
 
 ## What is Adascript?
 
-Adascript (`.ady` files) is a statically-typed language built on Python 3. Most Python 3 code is valid Adascript as it stands; the exception is `import`: write `pyimport X` for a Python package and `nimport X` for a Nim module — the Nim backend rejects a plain `import X`. It transpiles to both **Python 3** and **Nim** — you write one source file and target either ecosystem.
+Adascript (`.ady` files) is a statically-typed language built on Python 3. Most Python 3 code is valid Adascript as it stands; the exception is `import`: write `import X` for an Adascript (`.ady`) module, `nimport X` for a Nim module and `pyimport X` for a Python package — a plain `import X` of anything else is refused on both backends. It transpiles to both **Python 3** and **Nim** — you write one source file and target either ecosystem.
 
 ```
 source.ady  ──▶  python3 TO_PYTHON/ady2py.py source.ady  ──▶  Python 3
@@ -903,34 +903,34 @@ def matches(text: str, pattern: str) -> bool:     # a pattern you cannot
 ```adascript
 nimport strutils, sequtils, algorithm
 nimport stdlib          # PriorityQueue, FifoQueue, LifoQueue, ANY
-from awk nimport AwkBase                          # record-processor base class
-from shortest_path nimport Minimizer, Maximizer   # another .ady file as a library (auto-transpiled)
+from awk import AwkBase                          # record-processor base class
+from shortest_path import Minimizer, Maximizer   # another .ady file as a library (auto-transpiled)
 ```
 
-**Modules (Nim backend only)** — a module is a `.ady` file; `nimport` links a whole project:
+**Modules** — a module is a `.ady` file; `import` links a whole project:
 
 ```adascript
 # EXAMPLES/PROJECT/dispatch.ady — the program
-from lib/geometry nimport Point_T       # lib/geometry.ady, path written with '/'
-from lib/fleet nimport Depot, Energy_T, Vehicle_T
+from lib/geometry import Point_T       # lib/geometry.ady, path written with '/'
+from lib/fleet import Depot, Energy_T, Vehicle_T
 # EXAMPLES/PROJECT/lib/fleet.ady — a module
-from geometry nimport Point_T, distance   # a sibling is imported by its bare name
+from geometry import Point_T, distance   # a sibling is imported by its bare name
 ```
 
-Resolution order for each nimported name: the importing file's directory, its
+Resolution order for each imported name: the importing file's directory, its
 parent, then the build cache (where the bundled `TO_NIM/STDLIB/*.ady`
 libraries live). No match -> the name goes to Nim untouched, which is why
 `nimport strutils` works. No `..` syntax; the parent rule covers `bin/` +
 `lib/` layouts.
 
-- Python's rule: `nimport geometry` binds `geometry` (write `geometry.distance(a, b)`, a bare `distance` is refused); `from geometry nimport distance` gives `distance(a, b)`; `from geometry nimport *` gives everything. For `nimport lib/fleet` the qualifier is `fleet`.
+- Python's rule: `import geometry` binds `geometry` (write `geometry.distance(a, b)`, a bare `distance` is refused); `from geometry import distance` gives `distance(a, b)`; `from geometry import *` gives everything. For `import lib/fleet` the qualifier is `fleet`.
 - Every top-level declaration of a dependency is exported automatically.
 - Types, constructor signatures and record field order cross the boundary, so `Vehicle_T("van-9", p, 6.0)` and `Depot("Central", base)` work in an importer.
 - A dependency's top-level statements run at import time — modules declare, programs act.
 - Basenames must be unique project-wide and must not be Nim keywords (`mod.ady` fails).
 - Keep the import graph acyclic: put shared types in a leaf module.
 - Build the whole graph with `ady2nim c -r <entry>.ady`; `ady2nim -t` transpiles it and stops.
-- **ady2py merges modules, it does not link them**: a `nimport` of a `.ady` found beside the file (or one directory up) is replaced by that module's text, once, so types and classes cross the boundary and a program split across modules runs on both backends. One namespace on Python (a name defined in two modules clashes), `geometry.f()` is rewritten to `f()` (refused where the file has its own `f`), the libraries in `TO_NIM/STDLIB` stay Nim-only.
+- **ady2py merges modules, it does not link them**: an `import` of a `.ady` found beside the file (or one directory up) is replaced by that module's text, once, so types and classes cross the boundary and a program split across modules runs on both backends. One namespace on Python (a name defined in two modules clashes), `geometry.f()` is rewritten to `f()` (refused where the file has its own `f`), the libraries in `TO_NIM/STDLIB` stay Nim-only.
 
 **`# nimraw: <code>`** — raw Nim line verbatim, stripped from Python, for Nim with no Adascript spelling (a pragma: `# nimraw: {.push overflowChecks: off.}`). NOT needed for forward declarations: mutually recursive functions are written as in Python.
 
@@ -1497,8 +1497,9 @@ for s in Stage_T'First .. Stage_T'Last:
 | Mutable self (auto) | `self.field =`, or a call reaching one |
 | Cross-module base class | `@virtual class C: ...` |
 | Generic class | `class C[S, D, C]: ...` |
-| Nim-only import | `nimport module` |
-| Import only some names of a module | `from module nimport A, B` -- `nimport module` binds the module (`module.name`); a bare use of a name of the module's that is not listed is refused on both backends |
+| An `.ady` module | `import module` binds the module (`module.name`); a bare use of a name of the module's that is not listed is refused on both backends |
+| Import only some names of a module | `from module import A, B` |
+| Nim-only / Python-only import | `nimport module` / `pyimport module` |
 | Raw Nim injection | `# nimraw: <code>` |
 | Shell capture | `let r = shell: cmd` |
 | Shell exit code, terminal kept | `let code: int = shell: cmd` |

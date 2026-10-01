@@ -5,7 +5,7 @@ A style wraps a string in an SGR escape and a reset; `text | style` applies
 it, and the pipe chains left to right. Nim only, as the other `nimport`ed
 libraries are.
 """
-from ansi nimport (
+from ansi import (
     Style, bg_red, bg_white, bold, dim, fg_blue, fg_bright_green, fg_magenta, fg_red,
     fg_white, plain,
 )

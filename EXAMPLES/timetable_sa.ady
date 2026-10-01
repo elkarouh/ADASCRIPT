@@ -11,12 +11,12 @@ Usage:
   ./timetable_sa.ady --stdin             # read JSON problem from stdin, write JSON to stdout
 """
 
-from timetable_engine nimport (
+from timetable_engine import (
     DAYS, DEFAULT_PROBLEM, MAX_SLOTS, SAContext_T, SAProblem_T, Value_T, build_context,
     db_init, db_load, delta_hard, get_cpu_secs, hard_count, load_problem_from_json,
     print_timetable, sa_phase2, soft_score,
 )
-from db nimport DB
+from db import DB
 nimport json
 nimport strutils
 nimport os

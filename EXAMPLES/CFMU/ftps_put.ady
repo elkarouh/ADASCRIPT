@@ -23,7 +23,7 @@
 # Optional flags:
 #   --sym    symlink source file into recovery dir instead of copying
 
-from ftps_common nimport (
+from ftps_common import (
     RC_ARG_ERROR, RC_COMPRESS_ERROR, RC_CONFIG_ERROR, RC_MAX_VER_EXIST_ERROR,
     RC_NO_FTP_SERVER_ERROR, RC_NO_SRCE_FILE_ERROR, RC_OK, RC_RECOVERY_DIR_ERROR,
     get_server_info, lftp_run,

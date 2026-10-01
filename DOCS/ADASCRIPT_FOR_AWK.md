@@ -109,7 +109,7 @@ the records before it — subclass `AwkBase` from the bundled library
 
 <!-- illustrative: the shape of an AwkBase program, with every method body elided -->
 ```python
-from awk nimport AwkBase
+from awk import AwkBase
 
 class LogScan(AwkBase):
     def start(self):           # awk's BEGIN
@@ -128,7 +128,7 @@ whole record, exactly as in AWK), and `self.NR`, `self.NF`, `self.FS`,
 `self.OFS`, `self.RS`, `self.ORS` are what you expect. `run_file(path)` is
 the same loop over a named file.
 
-One caveat: `nimport` means "a module the Nim backend provides", so the
+One caveat: ady2py does not merge the bundled libraries, so the
 `AwkBase` form is Nim-only. The flat form runs on both backends.
 
 ### 2.1 When a record is not a line

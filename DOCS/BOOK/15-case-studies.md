@@ -461,7 +461,7 @@ family of FTPS transfer tools (`ftps_get`, `ftps_put`, `ftps_list`,
 `ftps_common.ady`; `TIMETABLE/` mixes `.ady` solvers (`timetable_engine`,
 `timetable_backtrack`, `timetable_sa` at the EXAMPLES root) with a Python
 web server and a JSX viewer. Neither is polished for teaching — which is
-exactly why they are worth skimming: multi-file organisation, `nimport`ed
+exactly why they are worth skimming: multi-file organisation, `import`ed
 shared modules, and the boundary between Adascript and the surrounding
 Python/JS world.
 

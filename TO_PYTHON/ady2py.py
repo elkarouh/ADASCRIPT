@@ -439,7 +439,7 @@ def include_ady_modules(code, search_dir, _seen=None):
     the output as before; so do the libraries bundled with ady2nim.
     """
     seen = set() if _seen is None else _seen
-    from ady_modules import import_map, resolve_imports
+    from ady_modules import import_map, resolve_imports, normalize_imports
 
     def find(name, here):
         for base in (here, os.path.dirname(here)):
@@ -450,9 +450,15 @@ def include_ady_modules(code, search_dir, _seen=None):
 
     # the rule of what the file may use of its modules, bundled libraries too
     stdlib = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "TO_NIM", "STDLIB")
+
+    def find_checked(name):
+        path = find(name, search_dir)
+        bundled = os.path.join(stdlib, name + ".ady")
+        return path or (bundled if os.path.isfile(bundled) else None)
+    # `import M` of an .ady module, `nimport` of a Nim one, `pyimport` of a Python one
+    code = normalize_imports(code, lambda name: find_checked(name) is not None)
     for mod, listed in import_map(code).items():
-        path = find(mod, search_dir) or (os.path.join(stdlib, mod + ".ady")
-                                         if os.path.isfile(os.path.join(stdlib, mod + ".ady")) else None)
+        path = find_checked(mod)
         if path:
             with open(path, encoding="utf-8") as f:
                 code = resolve_imports(code, mod, listed, f.read())
@@ -475,7 +481,7 @@ def include_ady_modules(code, search_dir, _seen=None):
             if text.startswith("#!"):
                 text = text.split("\n", 1)[1] if "\n" in text else ""
             text = include_ady_modules(text, os.path.dirname(path), seen)
-            pieces.append(f"# ---- {name}.ady, nimported ----\n{text.rstrip()}\n# ---- end of {name}.ady ----")
+            pieces.append(f"# ---- {name}.ady, imported ----\n{text.rstrip()}\n# ---- end of {name}.ady ----")
         head = [f"nimport {', '.join(kept)}"] if kept and names else ([match.group(0)] if kept else [])
         return "\n".join(head + pieces)
 

@@ -6,7 +6,7 @@ under test and asserts.  Build and run it like any other program:
     ady2nim c -r EXAMPLES/PROJECT/test_geometry.ady
 """
 
-from lib/geometry nimport ORIGIN, bearing, distance
+from lib/geometry import ORIGIN, bearing, distance
 
 assert distance(ORIGIN, (x: 3.0, y: 4.0)) == 5.0
 assert distance(ORIGIN, ORIGIN) == 0.0

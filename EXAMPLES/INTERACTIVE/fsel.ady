@@ -1,7 +1,7 @@
 #!/usr/bin/env ady2nim
 # https://github.com/vroby65/fsel/tree/main ported to adascript
 nimport os
-from ansi nimport Style, bold, fg_blue, fg_magenta
+from ansi import Style, bold, fg_blue, fg_magenta
 
 let editor: str = $EDITOR if $EDITOR else "nano"
 let tmpfile: str = "/tmp/fsel_entries"

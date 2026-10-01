@@ -8,38 +8,41 @@ management while remaining no-ops in Python.
 
 ## 12.1 Import mapping: `import`, `pyimport`, `nimport`
 
-Ordinary Python imports are *mapped*: the transpiler knows which stdlib
-modules have native Nim equivalents and rewrites both module and call sites.
+Three keywords say which world a module comes from; a plain `import os` is
+refused on both backends, and the message names the right word:
+
+- **`import x`** — an Adascript module: another `.ady` file of yours, compiled
+  as a library, or one of the bundled libraries (`import awk`, `import iters`,
+  `import graphs`).
+- **`nimport x`** — a Nim module, in Nim output only. Use it for Nim stdlib modules
+  (`nimport strutils, sequtils, algorithm`) and for the bundled Nim files
+  (`nimport stdlib`, `nimport expect`, `nimport illwill`).
+- **`pyimport x`** — a Python package: it appears in Python output, and the Nim
+  backend routes it through nimpy. Read §12.2 before reaching for it, because it
+  costs more than it looks like it does.
+
+The Nim modules the transpiler knows are *mapped*: it rewrites both module and
+call sites.
 
 ```python
-import math, time, re, random
+nimport math, time, random
 
-x = math.sqrt(4.0)        # Nim: sqrt(4.0)         (import math)
-t = time.time()           # Nim: epochTime()        (import times)
-n = random.randint(1, 100)# Nim: rand(1..100)       (import random)
+x = math.sqrt(4.0)        # Nim: sqrt(4.0)
+t = time.time()           # Nim: epochTime()
+n = random.randint(1, 100)# Nim: rand(1..100)
 ```
 
 `os`/`sys` calls map too: `os.path.exists(p)` → `fileExists(p)`,
 `os.makedirs(p)` → `createDir(p)`, `sys.exit(1)` → `quit(1)`.
 
-Two prefixed forms give per-backend control:
-
-- **`nimport x`** — import that appears *only* in Nim output. Use it for Nim
-  stdlib modules (`nimport strutils, sequtils, algorithm`), for the bundled
-  shims (`nimport stdlib`, `nimport awk`, `nimport iters`, `nimport graphs`,
-  `nimport expect`), and for other `.ady` files compiled as libraries.
-- **`pyimport x`** — the reverse emphasis: an import that appears only in
-  Python output, and that the Nim backend routes through nimpy. Read §12.2
-  before reaching for it, because it costs more than it looks like it does.
-
-`nimport`-ing another `.ady` file triggers automatic transpilation of the
+`import`-ing another `.ady` file triggers automatic transpilation of the
 dependency into the same build cache. That is how the optimiser framework
 splits library from tests:
 
 ```python
 # test_shortest_path.ady
 nimport stdlib
-from shortest_path nimport Maximizer, Minimizer   # auto-transpiled
+from shortest_path import Maximizer, Minimizer   # auto-transpiled
 ```
 
 ## 12.2 Python libraries with no Nim equivalent: the nimpy bridge

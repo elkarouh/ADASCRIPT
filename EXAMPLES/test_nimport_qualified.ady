@@ -7,8 +7,8 @@ qualified by its last part, as in Nim: `NIMPORT_TEST/shapes` is `shapes`.
 from-list.
 The output is compared between the backends (see the Makefile).
 """
-nimport NIMPORT_TEST/shapes, NIMPORT_TEST/names
-from NIMPORT_TEST/names nimport label
+import NIMPORT_TEST/shapes, NIMPORT_TEST/names
+from NIMPORT_TEST/names import label
 
 def describe(text: str) -> str:
     let parsed: shapes.Shape_T | !names.Failure_T = shapes.parse(text)

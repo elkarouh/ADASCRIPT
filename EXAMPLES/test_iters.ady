@@ -5,7 +5,7 @@
 # Run with:
 #   ady2nim EXAMPLES/test_iters.ady -r
 
-from iters nimport (
+from iters import (
     accumulate, batched, chain, combinations, compress, count_from, dropwhile,
     enumerate_seq, flatten, pairwise, permutations, product, repeat_elem,
     sliding_window, takewhile, zip_longest,

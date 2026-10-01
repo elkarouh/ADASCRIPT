@@ -7,7 +7,7 @@ Usage:
     cat FILE | ./awk_OO ,             # FS = comma
     cat FILE | ./awk_OO '\t'          # FS = tab
 """
-from awk nimport AwkBase
+from awk import AwkBase
 
 type Severity_T is enum INFO, WARN, ERROR, OTHER
 

@@ -13,7 +13,7 @@ the test-report directory.
 E.g.:
     Vcheck_coded_flight 30.0.0.6 VVL.TACT_PHASERND2
 """
-from awk nimport AwkBase
+from awk import AwkBase
 
 
 type State_T is enum OUT_OF_HIST, IN_HIST

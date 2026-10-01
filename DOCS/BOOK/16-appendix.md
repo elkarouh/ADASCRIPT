@@ -43,7 +43,7 @@
 | Class field | `var x: T = default` in class body |
 | Cross-module base class | `@virtual class C:` |
 | Generic class | `class C[S, D, C]:` |
-| Nim-only / Python-only import | `nimport m` / `pyimport m` |
+| Adascript / Nim-only / Python-only import | `import m` / `nimport m` / `pyimport m` |
 | Raw Nim line | `# nimraw: <code>` |
 | Per-file Nim flags | `#ady2nim-args c -d:release` (line 2) |
 | Shell capture | `let r = shell: cmd` → `.output`, `.stderr`, `.code` |
@@ -150,7 +150,7 @@ incremental check did not catch — it is also what you want before timing
 anything, since an up-to-date binary is simply re-run rather than rebuilt.
 
 Nim dependencies, when used: `nimble install nimpy` (for `pyimport`-bridged
-libraries), `nimble install db_connector` (for `nimport db`).
+libraries), `nimble install db_connector` (for `import db`).
 
 A file may pin its C compiler on the `#ady2nim-args` line
 (`--cc:clang --clang.exe:zigcc`). That is a preference: when the named
@@ -163,11 +163,12 @@ in order to build.
 | Import | Provides | Exercised by |
 |--------|----------|--------------|
 | `nimport stdlib` | `PriorityQueue`, `FifoQueue`, `LifoQueue`, `Counter_T`, `ANY` | `dijkstra.ady`, `shortest_path.ady`, `state_search.ady`, `spell.ady` |
-| `nimport awk` | `AwkBase` record-processor base class | `test_awk.ady` |
-| `nimport iters` | itertools analogues (`pairwise`, `chain`, `combinations`, …) | `test_iters.ady` |
-| `nimport graphs` | `dijkstra[Node_T]`, `shortest_path[Node_T]` over `{Node_T}[](float, Node_T)` | `test_graphs.ady` |
+| `import awk` | `AwkBase` record-processor base class | `test_awk.ady` |
+| `import iters` | itertools analogues (`pairwise`, `chain`, `combinations`, …) | `test_iters.ady` |
+| `import graphs` | `dijkstra[Node_T]`, `shortest_path[Node_T]` over `{Node_T}[](float, Node_T)` | `test_graphs.ady` |
 | `nimport expect` | `Spawn`, `send`, `expect` PTY automation | `test_expect.ady` |
-| `nimport <file>` | any other `.ady` compiled as a library | `test_shortest_path.ady` |
+| `nimport illwill` | curses-like terminal library in pure Nim, one file | `EXAMPLES/VI/vi_nim.ady` |
+| `import <file>` | any other `.ady` compiled as a library | `test_shortest_path.ady` |
 
 ## A.4 Known limitations (as of this writing)
 

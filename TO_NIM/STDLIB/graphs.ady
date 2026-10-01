@@ -19,7 +19,7 @@ A destination that is never a key still works if something reaches it, but
 one that is neither a key nor reachable is a node the graph never mentions,
 and it is simply absent from the result.
 
-    nimport graphs
+    from graphs import dijkstra
 
     type City_T is enum PAR, LON, BER
     let g: {City_T}[](float, City_T) = {PAR: [(3.0, LON)], LON: [(2.0, BER)], BER: []}

@@ -2,12 +2,12 @@
 replays — a baseline's replays: their types, what their Treplay logs say,
 and the replay directories they leave on disk.
 
-Depends on `tcheck_common`, a sibling inside LIBS/, nimported by its bare
+Depends on `tcheck_common`, a sibling inside LIBS/, imported by its bare
 name.
 """
 
 nimport os
-from tcheck_common nimport (
+from tcheck_common import (
     BaselineNr_T, BuildType, Command_T, Failure_T, Glob_T, Link_T, TACT_ROOT,
     echo_emacs, emacs_link, find_core_dumps, hr, make_report, newest, puts,
 )

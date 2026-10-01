@@ -3,7 +3,7 @@
 db — thin SQLite wrapper for AdaScript programs.
 
 Usage:
-    nimport db
+    from db import DB
 
     var conn: DB = DB("myfile.db")
 

@@ -51,7 +51,7 @@ const PAREN_KIND: {str}Paren_Kind_T = {
 # ---------------------------------------------------------------------------
 # Lexical helpers - all work on a single physical line.
 # ---------------------------------------------------------------------------
-from strscan nimport is_ident_ch, lead_ident, skip_ch, skip_quoted, skip_space, strip_line_comment
+from strscan import is_ident_ch, lead_ident, skip_ch, skip_quoted, skip_space, strip_line_comment
 
 def code_positions(s: str) -> (Natural, char):
     """Yield (index, character) for each character of s that is outside a string

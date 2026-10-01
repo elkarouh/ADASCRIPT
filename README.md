@@ -188,7 +188,7 @@ which earlier versions do not emit). Nothing beyond the standard library.
 | Package | Install | Required for |
 |---------|---------|--------------|
 | `nimpy` | `nimble install nimpy` | Any `.ady` file that uses `pyimport` to call Python libraries from Nim |
-| `db_connector` | `nimble install db_connector` | Any `.ady` file that uses `nimport db` (SQLite support; removed from Nim 2.x stdlib) |
+| `db_connector` | `nimble install db_connector` | Any `.ady` file that uses `import db` (SQLite support; removed from Nim 2.x stdlib) |
 | `zig` / `zigcc` | *optional* — download from [ziglang.org](https://ziglang.org/download/), then `printf '#!/bin/sh\nexec zig cc "$@"\n' > /usr/local/bin/zigcc && chmod +x /usr/local/bin/zigcc` | Preferred by files pinning `#ady2nim-args c --cc:clang --clang.exe:zigcc` — `state_search.ady`, `shortest_path.ady`, their tests, and the timetable examples |
 
 Standard library Nim modules (`std/deques`, `tables`, `hashes`, `math`, `re`, `posix`, …) are bundled with Nim and need no separate install.
@@ -1518,7 +1518,7 @@ class AwkProcessor(AwkBase):
 ## Modules and Project Layout
 
 Everything above describes one file. A program that outgrows one file splits
-into modules, and `nimport` is how they find each other. ady2nim resolves,
+into modules, and `import` is how they find each other. ady2nim resolves,
 transpiles and compiles a whole dependency graph; ady2py brings each module
 into the one file it writes (see [Known Limitations](#known-limitations) for
 what that costs).
@@ -1528,10 +1528,10 @@ A module is just a `.ady` file; there is no manifest and nothing to register.
 
 ```
 EXAMPLES/PROJECT/
-    dispatch.ady          # the program — nimport lib/geometry, lib/fleet, lib/report
+    dispatch.ady          # the program — import lib/geometry, lib/fleet, lib/report
     lib/geometry.ady      # leaf module: Point_T, distance(), bearing()
-    lib/fleet.ady         # domain model — nimport geometry  (sibling, bare name)
-    lib/report.ady        # formatting   — nimport geometry
+    lib/fleet.ady         # domain model — import geometry  (sibling, bare name)
+    lib/report.ady        # formatting   — import geometry
     test_geometry.ady     # a second entry point: the unit test for lib/geometry
 ```
 
@@ -1542,35 +1542,45 @@ ady2nim c -r EXAMPLES/PROJECT/dispatch.ady
 ### Importing your own modules
 
 ```python
-nimport geometry           # geometry.ady beside this file, or one directory up; use geometry.distance
-nimport lib/fleet          # lib/fleet.ady — path form, written with '/'; use fleet.Depot
-from geometry nimport distance, Point_T   # only these, unqualified, and what they carry
+import geometry           # geometry.ady beside this file, or one directory up; use geometry.distance
+import lib/fleet          # lib/fleet.ady — path form, written with '/'; use fleet.Depot
+from geometry import distance, Point_T   # only these, unqualified, and what they carry
 ```
 
-The rule is Python's. `nimport geometry` binds `geometry`, as `import geometry`
+The rule is Python's. `import geometry` binds `geometry`, as `import geometry`
 does, so the file writes `geometry.distance(a, b)`; for a path it is the last part,
-`lib/fleet` is `fleet`. `from geometry nimport distance, Point_T` is `from geometry
+`lib/fleet` is `fleet`. `from geometry import distance, Point_T` is `from geometry
 import distance, Point_T`: the file may use `distance`, `Point_T` and what `Point_T`
 carries (an enum's members; a record's fields and a class's methods are reached
-through a value) without the prefix. `from geometry nimport *` is `from geometry
+through a value) without the prefix. `from geometry import *` is `from geometry
 import *`. A bare use of any other name of `geometry`'s is refused, on both
 backends, with the line and what to do:
 
 ```
-line 12: 'bearing' is not imported from geometry: write geometry.bearing, or add bearing to `from geometry nimport Point_T, bearing, distance`
+line 12: 'bearing' is not imported from geometry: write geometry.bearing, or add bearing to `from geometry import Point_T, bearing, distance`
 ```
 
 A name the file declares itself is not checked, so it cannot clash by accident;
 but the file cannot then write `geometry.name` for a `name` of its own, since the
 two are one namespace after the merge, and is told so.
 
-Plain `import geometry` is rejected on the Nim side, as an error naming both
-alternatives: `nimport` for Nim modules and `.ady` files, `pyimport` for
-Python packages via nimpy.
+Three words name three worlds, on both backends: `import` an `.ady` module,
+`nimport` a Nim module, `pyimport` a Python package (via nimpy on the Nim
+backend). A plain `import` of anything but an `.ady` module is refused, naming
+the other two, and so is a `nimport` of an `.ady` module, naming `import`:
+
+```
+line 3: 'import os' is not allowed: os is not an .ady module. Use 'nimport os' for Nim/stdlib modules or 'pyimport os' for Python packages.
+line 2: 'geometry' is an .ady module: write `import geometry`, `nimport` is for Nim modules
+```
+
+`import M as N` is not supported for `.ady` modules: write `M.name`, or `from M
+import name`. `from stdlib import PriorityQueue` is the one exception to all this:
+`stdlib` is a bundled shim with a Nim and a Python implementation.
 
 ### How a name is resolved
 
-For every `nimport`, ady2nim looks for a matching `.ady` file in three places,
+For every `import`, ady2nim looks for a matching `.ady` file in three places,
 in order:
 
 1. the directory of the file doing the importing,
@@ -1578,9 +1588,9 @@ in order:
 3. the build cache, where the bundled `TO_NIM/STDLIB/*.ady` libraries live.
 
 The first hit wins; if nothing matches, the name is handed to Nim untouched —
-which is exactly what makes `nimport strutils` work. There is no `..`
+which is how `nimport strutils` reaches Nim's own module. There is no `..`
 syntax; the parent rule covers the one level of escape a layout needs, and
-it is what lets an entry point in `bin/` say `nimport lib/util`.
+it is what lets an entry point in `bin/` say `import lib/util`.
 
 ### Layouts that work
 
@@ -1605,7 +1615,7 @@ ady2nim c -r EXAMPLES/PROJECT/dispatch.ady
 # nim c --nimcache:… --out:…/.dispatch --path:…/cache-<HASH> …/dispatch.nim
 ```
 
-1. ady2nim walks the `nimport` graph breadth-first and pre-parses every
+1. ady2nim walks the `import` graph breadth-first and pre-parses every
    dependency, collecting what importers need: class names, constructor
    signatures, `ref`/virtual classes, return types, and the field order of
    records and named tuples.
@@ -1668,7 +1678,7 @@ and a subclass in another (that is `EXAMPLES/test_awk.ady` over the bundled
   ``Error: invalid module name: `mod` ``.
 - **Exported names share one namespace.** Nim overloading absorbs most of it;
   rename the rest.
-- **A module test is just another entry point** that nimports the module and
+- **A module test is just another entry point** that imports the module and
   asserts — see `EXAMPLES/PROJECT/test_geometry.ady`.
 
 Full treatment, with the layouts and failure modes worked through:
@@ -1678,9 +1688,9 @@ Full treatment, with the layouts and failure modes worked through:
 
 ## Nim-Only Imports
 
-`nimport` marks imports that appear only in Nim output and are stripped
-from Python output. Use it for Nim standard-library modules that have no
-Python equivalent:
+`nimport` marks imports of *Nim* modules: they appear only in Nim output and are
+stripped from Python output. Use it for Nim standard-library modules that have no
+Python equivalent (an `.ady` module is `import`ed, a Python package `pyimport`ed):
 
 ```python
 nimport strutils, sequtils, algorithm, stdlib
@@ -1688,18 +1698,21 @@ nimport strutils, sequtils, algorithm, stdlib
 
 ### Bundled libraries
 
-The `.ady` files in `TO_NIM/STDLIB/` are installed into the build cache, so
-`nimport` reaches them from any directory without a local copy:
+The files in `TO_NIM/STDLIB/` are installed into the build cache, so they are
+reached from any directory without a local copy. The `.ady` ones are imported with
+`import`, the `.nim` ones with `nimport`:
 
-| `nimport` name    | Provides                                                  |
+| Name              | Provides                                                  |
 |-------------------|-----------------------------------------------------------|
-| `nimport awk`     | `AwkBase` — generic stdin record-processor base class      |
-| `nimport iters`   | itertools equivalents (`take`, `chunks`, `pairwise`, …), generic over the element type |
-| `nimport strscan` | character classification and the small scanners a hand-written lexer needs (`is_digit_ch`, `skip_quoted`, `lead_ident`, `strip_line_comment`, …) |
-| `nimport ansi`    | terminal colours and effects as values a pipe applies: `"x" \| bold \| fg_white \| bg_red` (`fg_*`, `fg_bright_*`, `bg_*`, `bold`, `dim`, `blink`, `inverted`, `reset`); `bold + fg_red` is one style with both codes |
-| `nimport graphs`  | `dijkstra` and `shortest_path` over a weighted digraph, generic in the node type |
-| `nimport db`      | thin SQLite wrapper                                        |
-| `nimport jointjs` | `JsElem` base class and helpers for JointJS applications   |
+| `import awk`      | `AwkBase` — generic stdin record-processor base class      |
+| `import iters`    | itertools equivalents (`take`, `chunks`, `pairwise`, …), generic over the element type |
+| `import strscan`  | character classification and the small scanners a hand-written lexer needs (`is_digit_ch`, `skip_quoted`, `lead_ident`, `strip_line_comment`, …) |
+| `import ansi`     | terminal colours and effects as values a pipe applies: `"x" \| bold \| fg_white \| bg_red` (`fg_*`, `fg_bright_*`, `bg_*`, `bold`, `dim`, `blink`, `inverted`, `reset`); `bold + fg_red` is one style with both codes |
+| `import graphs`   | `dijkstra` and `shortest_path` over a weighted digraph, generic in the node type |
+| `import db`       | thin SQLite wrapper                                        |
+| `import jointjs`  | `JsElem` base class and helpers for JointJS applications   |
+| `nimport illwill` | [illwill](https://github.com/johnnovak/illwill), a curses-like terminal library in pure Nim (one file, WTFPL): non-blocking keys, a screen buffer that writes what changed; `EXAMPLES/VI/vi_nim.ady` uses it |
+| `nimport expect`  | `Spawn`, `send`, `expect` PTY automation                   |
 
 `stdlib.nim` in the same directory is a Nim shim for a few Python builtins
 (`PriorityQueue`, `FifoQueue`, `ANY`) that generated code relies on.
@@ -1735,9 +1748,10 @@ output. For most Nim-specific needs, prefer `nimport` or `#ady2nim-args`.
 
 ## Python Interoperability
 
-Adascript knows whether each Python `import` has a direct Nim equivalent or
-needs the [nimpy](https://github.com/yglukhov/nimpy) bridge. You write
-ordinary Python imports; the transpiler decides how to map them.
+A Python package is `pyimport`ed, through the
+[nimpy](https://github.com/yglukhov/nimpy) bridge on the Nim backend; a Python
+module the Nim backend maps natively is `nimport`ed (`nimport os`), and the table
+below shows what each of those becomes. (`import` is for `.ady` modules.)
 
 > **Before reaching for `pyimport`:** it is for libraries with no
 > equivalent here — `numpy`, `requests`, a vendor SDK. Try things in this
@@ -1764,7 +1778,7 @@ ordinary Python imports; the transpiler decides how to map them.
 These modules translate directly to their Nim counterparts with no runtime
 overhead:
 
-| Python import    | Nim module         | Notes                            |
+| Python module    | Nim module         | Notes                            |
 |------------------|--------------------|----------------------------------|
 | `import os`      | `import os`        | `os.path.*` → Nim path procs     |
 | `import math`    | `import math`      | All standard functions mapped    |
@@ -3290,6 +3304,7 @@ ADASCRIPT/
 │       ├── awk.ady            AwkBase record processor
 │       ├── graphs.ady         Shortest paths, generic in the node type
 │       ├── iters.ady          Iterator toolkit (take, chunks, pairwise, …)
+│       ├── illwill.nim        Curses-like terminal library, pure Nim (one file)
 │       └── db.ady, jointjs.ady, expect.nim
 │
 ├── EXAMPLES/                  End-to-end example programs (`*.ady`)
@@ -3398,13 +3413,12 @@ structural patterns inside an alternation (`case Point_T(x=0) | Circle_T(radius=
 — bind in the body).
 
 **Modules on the Python backend are merged, not linked.** ady2nim compiles each
-`nimport`ed `.ady` as a module of its own; ady2py replaces the `nimport` by the
+`import`ed `.ady` as a module of its own; ady2py replaces the `import` by the
 module's text, where it is first imported and once, so what the module declares
 -- an enum, a record, a failure type, a class -- is known to the program and
 `case`, `is` and positional construction work across the boundary. The merge has
 costs: the program is one namespace (two modules that each define `helper` clash
-on Python and not on Nim), `geometry.distance(a, b)` is not understood there
-(`geometry.distance` is rewritten to `distance`, and refused where the file has a `distance` of its own), a parse error is reported at its line in the
+on Python and not on Nim), `geometry.distance` is rewritten to `distance` there, and refused where the file has a `distance` of its own, a parse error is reported at its line in the
 merged text, and the libraries bundled with ady2nim (`TO_NIM/STDLIB/*.ady`) stay
 Nim-only. A `nimport` with no `.ady` behind it (`nimport strutils`) is a Nim-only
 import and is dropped from the Python output as before. `from geometry import *`

@@ -6,7 +6,7 @@
 # Usage:
 #   ftps_get <dest_dir> <ftps_service> <decompress:true|false> [options]
 
-from ftps_common nimport (
+from ftps_common import (
     RC_ARG_ERROR, RC_NO_FILE_ERROR, RC_NO_FTP_SERVER_ERROR, RC_OK, check_date,
     check_period, check_sequence, construct_filename_pattern, filter_output,
     get_server_info, lftp_run,

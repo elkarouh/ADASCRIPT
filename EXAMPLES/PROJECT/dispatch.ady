@@ -15,9 +15,9 @@ bare name (`geometry`, from inside lib/).  Build it like any other program:
     ady2nim c -r EXAMPLES/PROJECT/dispatch.ady
 """
 
-from lib/geometry nimport Point_T
-from lib/fleet nimport Depot, Energy_T, Vehicle_T
-from lib/report nimport format_leg
+from lib/geometry import Point_T
+from lib/fleet import Depot, Energy_T, Vehicle_T
+from lib/report import format_leg
 
 let base: Point_T = (x: 0.0, y: 0.0)
 

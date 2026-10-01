@@ -168,7 +168,7 @@ neither the source nor the generated `.nim` have changed.
 ## Tests
 
 The self-tests live in `test_ada_indent.ady`, which imports the indenter as a
-library (`nimport ada_indent` auto-transpiles the sibling `.ady`) and runs it
+library (`import ada_indent` auto-transpiles the sibling `.ady`) and runs it
 against a table of messy-input → canonical-output cases:
 
 ```bash

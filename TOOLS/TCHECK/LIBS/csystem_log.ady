@@ -3,12 +3,12 @@ csystem_log — a baseline's Csystem_build.log, the log of its IP build, and
 comparing it with another's.
 
 Depends on `tcheck_common` and `baselines`, siblings inside LIBS/,
-nimported by their bare names.
+imported by their bare names.
 """
 
 nimport os
-from tcheck_common nimport BaselineNr_T, BuildType, Command_T, TACT_ROOT
-from baselines nimport Baseline, PREVIOUS_SEARCHED
+from tcheck_common import BaselineNr_T, BuildType, Command_T, TACT_ROOT
+from baselines import Baseline, PREVIOUS_SEARCHED
 
 def make_comparable(logfile: Path, bl: BaselineNr_T) -> Path:
     """Normalize a log file for diffing: make_executable_output_comparable + make_comparable + test name normalization."""

@@ -5,10 +5,10 @@
 
 The editor is vi_core.ady; this file shows it on a curses window. curses is
 Python's, so this one is built for the Python backend (ady2py), which brings
-vi_core in where it is nimported.
+vi_core in where it is imported.
 """
-import curses, os, time
-from vi_core nimport Editor, Press_T, Key_T, decode
+pyimport curses, os, time
+from vi_core import Editor, Press_T, Key_T, decode
 
 def draw(scr: curses.window, ed: Editor):
     ed.scroll()

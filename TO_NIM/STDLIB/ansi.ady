@@ -1,7 +1,7 @@
 #!/usr/bin/env ady2nim
 """ansi.ady -- terminal colours and text effects, as values a pipe applies.
 
-    nimport ansi
+    from ansi import bold, fg_green, fg_white, bg_red
 
     print "ERROR" | bold | fg_white | bg_red
     print "ok" | fg_green

@@ -366,17 +366,17 @@ differently:
 - **`ANY`** — a wildcard sentinel used by `shortest_path.ady` for "no
   explicit end state; use `is_end_state()` instead".
 
-## 6.6 The iterator library: `nimport iters`
+## 6.6 The iterator library: `import iters`
 
 `EXAMPLES/test_iters.ady` exercises a bundled itertools-alike, generic over
-element type, usable directly in `for` loops. It is a `nimport`, so it is
+element type, usable directly in `for` loops. It is a bundled library, so it is
 Nim-only by construction (§12.2): on the Python backend the line becomes a
 comment and the names are simply undefined. Reaching for it pins the
 program to one backend, which is why `sudoku.ady` writes its own `cross()`
 rather than building on `product()`.
 
 ```python
-from iters nimport batched, chain, combinations, flatten, pairwise, product, sliding_window, takewhile
+from iters import batched, chain, combinations, flatten, pairwise, product, sliding_window, takewhile
 
 for p in pairwise([1, 2, 3, 4]):        # (1,2) (2,3) (3,4)
     ...
@@ -407,14 +407,14 @@ The full menu in the test file: `pairwise`, `sliding_window`,
 `count_from`, `product`, `batched`. Each is tested with both `int` and `str`
 instantiations — a reminder that these are true generics in the Nim build.
 
-## 6.7 The graph library: `nimport graphs`
+## 6.7 The graph library: `import graphs`
 
 `§1.4`'s Dijkstra is written out in full because it reads well; the same
 algorithm generalised over the node type is in the bundled library, and
 `EXAMPLES/test_graphs.ady` exercises it:
 
 ```python
-from graphs nimport dijkstra, shortest_path
+from graphs import dijkstra, shortest_path
 
 type City_T is enum PAR, LON, BER
 let g: {City_T}[](float, City_T) = {PAR: [(3.0, LON), (9.0, BER)],

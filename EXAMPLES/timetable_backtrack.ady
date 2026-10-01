@@ -23,13 +23,13 @@ on the first DFS path (22 placements, 0 backtracks), matching the Python
 reference's runtime profile.
 """
 
-from timetable_engine nimport (
+from timetable_engine import (
     DAYS, DEFAULT_PROBLEM, MAX_SLOTS, SAContext_T, SAProblem_T, Value_T, build_context,
     db_init, db_load, get_cpu_secs, load_problem_from_json, print_timetable, sa_phase2,
     soft_score,
 )
-from state_search nimport StateSearcher, Step_T
-from db nimport DB
+from state_search import StateSearcher, Step_T
+from db import DB
 nimport json
 nimport math
 nimport random

@@ -8,7 +8,7 @@
 #
 # At least one of: --free_text, --from_appl, --file_type, --seq_number, --period, --date
 
-from ftps_common nimport (
+from ftps_common import (
     RC_ARG_ERROR, RC_MAX_VER_EXIST_ERROR, RC_NOT_ALLOWED_ERROR, RC_NO_FTP_SERVER_ERROR,
     get_server_info, lftp_run,
 )

@@ -5,8 +5,8 @@
 nimport math
 
 nimport stdlib
-from shortest_path nimport Maximizer, Minimizer
-from graphs nimport dijkstra, shortest_path
+from shortest_path import Maximizer, Minimizer
+from graphs import dijkstra, shortest_path
 
 
 def example1():
@@ -504,7 +504,7 @@ def example10():
     # -----------------------------------------------------------------------
     # Example 10 -- Hidden Markov Model (Viterbi via shortest_path)
     # -----------------------------------------------------------------------
-    from math import log
+    from math nimport log
     type Hidden_State_T is enum HEALTHY, FEVER, NONE
     type Symptom_T is enum NORMAL, COLD, DIZZY
     type Prob_T is float range 0..1

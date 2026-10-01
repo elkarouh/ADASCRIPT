@@ -1,12 +1,12 @@
 #!/usr/bin/env ady2nim
 # test_ada_lexer.ady — tests for ada_lexer.ady
 #
-# Imports the lexer as a library (nimport auto-transpiles the sibling .ady)
+# Imports the lexer as a library (import auto-transpiles the sibling .ady)
 # and checks the token kind and exact spelling produced for a range of Ada
 # lexical elements. Run with:
 #   ady2nim TOOLS/ADA_INDENT/test_ada_lexer.ady -r
 
-from ada_lexer nimport Lexer, Token_T
+from ada_lexer import Lexer, Token_T
 
 # --- helpers ---------------------------------------------------------------
 

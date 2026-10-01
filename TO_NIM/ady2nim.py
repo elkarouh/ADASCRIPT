@@ -653,21 +653,26 @@ def _declare_before_use(lines):
 
 
 def _resolved_imports(code, search_dir):
-    """CODE with the imports of .ady modules checked and `M.name` written `name`.
+    """CODE with its imports held to `import` .ady / `nimport` Nim / `pyimport`
+    Python, the .ady ones checked, and `M.name` written `name`.
 
     Where to look is the module search rule: the importing file's directory,
     its parent, then the bundled STDLIB. A refusal is printed and ends the run.
     """
-    from ady_modules import import_map, resolve_imports
+    from ady_modules import import_map, resolve_imports, normalize_imports
+    bases = (search_dir, os.path.dirname(search_dir),
+             os.path.join(os.path.dirname(os.path.abspath(__file__)), "STDLIB"))
+
+    def find(mod):
+        return next((p for p in (os.path.join(b, mod + ".ady") for b in bases)
+                     if os.path.isfile(p)), None)
     try:
+        code = normalize_imports(code, lambda mod: find(mod) is not None)
         for mod, listed in import_map(code).items():
-            for base in (search_dir, os.path.dirname(search_dir),
-                         os.path.join(os.path.dirname(os.path.abspath(__file__)), "STDLIB")):
-                path = os.path.join(base, mod + ".ady")
-                if os.path.isfile(path):
-                    with open(path, encoding="utf-8") as f:
-                        code = resolve_imports(code, mod, listed, f.read())
-                    break
+            path = find(mod)
+            if path:
+                with open(path, encoding="utf-8") as f:
+                    code = resolve_imports(code, mod, listed, f.read())
     except SyntaxError as e:
         print(str(e), file=sys.stderr)
         sys.exit(1)
@@ -2317,7 +2322,7 @@ def main(argv=None):
                 print(f"# up to date dependency: {_dep_nim}", file=sys.stderr)
             # Scan this dep for its own nimports regardless of whether we re-transpiled.
             with open(_dep_ady, encoding="utf-8") as _f:
-                _enqueue_nimports(_f.read(), _dep_dir)
+                _enqueue_nimports(_resolved_imports(_f.read(), _dep_dir), _dep_dir)
 
         # -t stops here: the .nim and every dependency it needs are written,
         # which is all it was asked for.  Tier 1 has already printed the path.

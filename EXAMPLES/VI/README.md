@@ -3,8 +3,8 @@
 A tiny vi-like editor in Adascript: a translation of
 [vip](https://github.com/maksimKorzh/vip), the 125-line Python editor, to idiomatic
 Adascript. The editor is `vi_core.ady`, with no terminal in it; `vi_py.ady` shows it on
-curses (Python, built with `ady2py`) and `vi_nim.ady` on Nim's own terminal (built
-with `ady2nim`). Both nimport `vi_core`: ady2nim compiles it as a module, ady2py
+curses (Python, built with `ady2py`) and `vi_nim.ady` on illwill, a pure-Nim terminal
+library (built with `ady2nim`). Both `import` `vi_core`: ady2nim compiles it as a module, ady2py
 brings it into the file it writes.
 
     ady2py vi_py.ady > vi_py.py && python3 vi_py.py file.txt
@@ -36,17 +36,23 @@ with counts (`3dd`, `12G`). `^S` saves, `^Q` quits.
 window size (`fit`), asks what to show (`scroll`, `row_text`, `status`, and `row` and
 `col` for the cursor), decodes what was typed (`decode`) and hands it over
 (`handle`), and shows what `save` answers. `vi_py.ady` does that with curses in 51
-lines (the editor is 312), `vi_nim.ady` in 118, because Nim has no curses and
-`std/terminal` and `termios` leave two things to do by hand:
+lines (the editor is 312). Nim has no curses, so `vi_nim.ady` uses
+[illwill](https://github.com/johnnovak/illwill) (`TO_NIM/STDLIB/illwill.nim`, one file in
+pure Nim, `nimport illwill`), which does the two hard parts:
 
-- **Raw mode.** No echo, no line editing, no signals, and `^S` and `^Q` reach the
-  program instead of stopping the terminal.
-- **A lone ESC against an arrow key.** An arrow key is an escape sequence
-  (`ESC O A`, or `ESC [ A`); `read_code` tells it from an ESC by whether more bytes
-  follow within 25 ms (curses' `ESCDELAY`), and swallows it. The keys are read with
-  `read(2)` rather than `getch`, which reads through C's buffer and would hide the
-  rest of the sequence from the 25 ms wait. And there is no resize event: the window
-  size is read again at every key.
+- **Keys.** `getKeyWithTimeout` reads a key without blocking, tells a lone ESC from an
+  arrow key's escape sequence, and returns an enum whose ordinal is the ASCII code for
+  the printable keys, so `decode(ord(key))` is all the editor needs; arrows and function
+  keys have ordinals of their own, which `decode` takes as `OTHER`.
+- **The screen.** The rows are written into a `TerminalBuffer` and `display` sends only
+  what changed since the last frame.
+
+What is left in `vi_nim.ady` is small: illwill leaves flow control on, so the terminal
+would take `^S` and `^Q`; a three-line `termios` call turns `IXON` off. The bundled
+copy has one change from illwill 0.4.1: a modified arrow (`ESC [ 1 ; 5 D`) is read
+whole, where illwill left `5D` behind to be typed. There is no resize event: the window
+size is read again at every key. At the end of the input (stdin not a terminal) illwill
+reports no key, so the editor waits; run it on a terminal.
 
 Slices and list edits in `vi_core` are written so that they mean the same on both
 backends: a slice past the end raises on Nim, so `tail` and `splice` are the only way

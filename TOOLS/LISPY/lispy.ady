@@ -22,7 +22,7 @@ beside this file.
 
 nimport math
 # character classification and the atom scan
-from strscan nimport is_space_ch, skip_quoted_esc, skip_while
+from strscan import is_space_ch, skip_quoted_esc, skip_while
 # ============================================================
 # Value representation
 # ============================================================

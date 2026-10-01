@@ -36,7 +36,7 @@ generated constructor. `__init__` then only sets what varies per instance —
 or disappears entirely. `EXAMPLES/test_awk.ady`:
 
 ```python
-from awk nimport AwkBase
+from awk import AwkBase
 
 class AwkProcessor(AwkBase):
     var counts : [Severity_T]int = [INFO : 0, WARN : 0, ERROR : 0, OTHER: 0]
@@ -113,7 +113,7 @@ one purpose: **cross-module dispatch**. It makes the Nim backend emit
 
 The `awk` stdlib base class is the working illustration. `TO_NIM/awk.ady`
 ships a `@virtual class AwkBase` implementing the AWK machinery (`FS`,
-`OFS`, `NR`, `NF`, `read_record`, `run`); user programs `nimport awk` and
+`OFS`, `NR`, `NF`, `read_record`, `run`); user programs `import awk` and
 override the hooks. `EXAMPLES/test_awk.ady`:
 
 ```python

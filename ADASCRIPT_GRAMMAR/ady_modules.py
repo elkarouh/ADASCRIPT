@@ -1,4 +1,11 @@
-"""What a file may use of the modules it nimports -- Python's rule.
+"""What a file may use of the modules it imports -- Python's rule.
+
+Three words name three worlds: `import` an .ady module, `nimport` a Nim one,
+`pyimport` a Python one. `normalize_imports` holds the first to that -- a plain
+`import` of anything but an .ady module, and a `nimport` of an .ady module, are
+refused -- and writes the .ady imports in the `nimport` form the rest of the
+pipeline reads. The rest of this file is written in that form: `nimport M` is
+what `import M` becomes.
 
 `nimport M` binds M, as Python's `import M` does: the file reaches M's names as
 `M.name`, and a bare `name` is refused. `from M nimport A, B` is the selective
@@ -16,6 +23,64 @@ is `geom`, the last part, as in Nim. A file that declares a name of its own that
 M also declares cannot use `M.name` -- the merge has one namespace -- and is told.
 """
 import re
+
+_PLAIN_IMPORT = re.compile(r'^(?P<ind>[ \t]*)(?P<kw>import)[ \t]+(?P<names>[^\n]+?)[ \t]*$', re.MULTILINE)
+_FROM_IMPORT = re.compile(
+    r'^(?P<ind>[ \t]*)from[ \t]+(?P<mod>\w[\w./]*)[ \t]+(?P<kw>import)\b[ \t]*(?P<rest>\([^)]*\)|[^\n]*?)[ \t]*$',
+    re.MULTILINE)
+_NIM_IMPORT = re.compile(r'^(?P<ind>[ \t]*)nimport[ \t]+(?P<names>[^\n]+?)[ \t]*$', re.MULTILINE)
+_FROM_NIMPORT = re.compile(r'^(?P<ind>[ \t]*)from[ \t]+(?P<mod>\w[\w./]*)[ \t]+nimport\b', re.MULTILINE)
+_SHIM = "stdlib"      # the bundled shim: one library, a Nim and a Python implementation
+
+
+def normalize_imports(code, is_ady):
+    """CODE with `import M` / `from M import A` of an .ady module written
+    `nimport M` / `from M nimport A`; IS_ADY(name) says whether a name is one.
+
+    Refused: `import X` or `from X import A` of anything else (`nimport` is for
+    Nim modules, `pyimport` for Python ones; `from stdlib import X` stays), and
+    `nimport X` of an .ady module (it is `import X`)."""
+    text = _blank(code)
+    edits = []
+
+    def line(pos):
+        return text.count("\n", 0, pos) + 1
+
+    def refuse_plain(mod, pos, form):
+        raise SyntaxError(
+            f"line {line(pos)}: '{form}' is not allowed: {mod} is not an .ady module. "
+            f"Use 'nimport {mod}' for Nim/stdlib modules or 'pyimport {mod}' for Python packages.")
+
+    for m in _PLAIN_IMPORT.finditer(text):
+        adys = []
+        for item in (i.strip() for i in code[m.start("names"):m.end("names")].split(",")):
+            mod, _, alias = item.partition(" as ")
+            mod = mod.strip()
+            if not is_ady(mod):
+                refuse_plain(mod, m.start(), f"import {mod}")
+            if alias:
+                raise SyntaxError(f"line {line(m.start())}: 'import {mod} as {alias.strip()}' is not supported: "
+                                  f"write {mod}.name, or `from {mod} import name`")
+            adys.append(mod)
+        edits.append((m.start("kw"), m.end("names"), f"nimport {', '.join(adys)}"))
+    for m in _FROM_IMPORT.finditer(text):
+        mod = m.group("mod")
+        if is_ady(mod):
+            edits.append((m.start("kw"), m.end("kw"), "nimport"))
+        elif mod != _SHIM:
+            refuse_plain(mod, m.start(), f"from {mod} import")
+    for m in _NIM_IMPORT.finditer(text):
+        for item in (i.strip() for i in code[m.start("names"):m.end("names")].split(",")):
+            if is_ady(item):
+                raise SyntaxError(f"line {line(m.start())}: '{item}' is an .ady module: write `import {item}`, "
+                                  f"`nimport` is for Nim modules")
+    for m in _FROM_NIMPORT.finditer(text):
+        if is_ady(m.group("mod")):
+            raise SyntaxError(f"line {line(m.start())}: '{m.group('mod')}' is an .ady module: write "
+                              f"`from {m.group('mod')} import ...`, `nimport` is for Nim modules")
+    for a, b, new in sorted(edits, reverse=True):
+        code = code[:a] + new + code[b:]
+    return code
 
 # `from M nimport A, B`, `from M nimport *`, and the parenthesised form that may
 # run over lines, with comments among the names

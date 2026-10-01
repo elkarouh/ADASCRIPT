@@ -31,7 +31,7 @@ A translation of EXAMPLES/process_html.awk, kept next to this file so the
 two can be read side by side. The awk needs gawk: `gensub` is a GNU
 extension and the mawk that is /usr/bin/awk on many machines refuses it.
 """
-from awk nimport AwkBase
+from awk import AwkBase
 
 
 # Where in the page we are. The record on its own does not say: </div>
