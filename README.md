@@ -1544,12 +1544,25 @@ ady2nim c -r EXAMPLES/PROJECT/dispatch.ady
 ```python
 nimport geometry           # geometry.ady beside this file, or one directory up
 nimport lib/fleet          # lib/fleet.ady — path form, written with '/'
-from geometry nimport distance   # selective form; imports the whole module
+from geometry nimport distance, Point_T   # only these, and what they carry
 ```
+
+`nimport geometry` brings in everything the module declares, as `from geometry
+import *` does. `from geometry nimport distance, Point_T` is the form that tells
+the reader where each name comes from: the file may use `distance`, `Point_T` and
+what `Point_T` carries (an enum's members; a record's fields and a class's methods
+are reached through a value), and a use of any other name of `geometry`'s is
+refused, on both backends, with the line and what to add:
+
+```
+line 12: 'bearing' is not imported from geometry: add bearing to `from geometry nimport Point_T, bearing, distance`
+```
+
+A name the file declares itself is not checked, so it cannot clash by accident.
 
 Imported names arrive **unqualified** — after `nimport geometry`,
 `distance(a, b)` is in scope. `geometry.distance(a, b)` is accepted too and
-compiles to the same call.
+compiles to the same call (on the Nim backend; ady2py does not understand it).
 
 Plain `import geometry` is rejected on the Nim side, as an error naming both
 alternatives: `nimport` for Nim modules and `.ady` files, `pyimport` for

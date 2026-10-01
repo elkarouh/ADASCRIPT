@@ -1498,6 +1498,7 @@ for s in Stage_T'First .. Stage_T'Last:
 | Cross-module base class | `@virtual class C: ...` |
 | Generic class | `class C[S, D, C]: ...` |
 | Nim-only import | `nimport module` |
+| Import only some names of a module | `from module nimport A, B` -- the whole module is `nimport module`; a use of a name of the module's that is not listed is refused on both backends |
 | Raw Nim injection | `# nimraw: <code>` |
 | Shell capture | `let r = shell: cmd` |
 | Shell exit code, terminal kept | `let code: int = shell: cmd` |

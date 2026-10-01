@@ -2132,15 +2132,30 @@ def main(argv=None):
         _prepass_seen = set()
         _prepass_worklist = []
 
+        from ady_modules import selective_imports as _selective_imports
+        from ady_modules import check_from_imports as _check_from_imports
+
         def _enqueue_prepass(src_code, search_dir):
+            _selective = _selective_imports(src_code)
             for _dn in _dep_names(src_code):
+                _path = _find_dep_ady_pre(_dn, search_dir)
+                if _path and _dn in _selective:
+                    # `from M nimport A, B`: only A, B and what they carry
+                    with open(_path, encoding="utf-8") as _mf:
+                        _check_from_imports(src_code, _dn, _selective[_dn], _mf.read())
                 if _dn not in _prepass_seen:
-                    _path = _find_dep_ady_pre(_dn, search_dir)
                     if _path:
                         _prepass_seen.add(_dn)
                         _prepass_worklist.append((_dn, _path, os.path.dirname(_path)))
 
-        _enqueue_prepass(code, _ady_dir_pre)
+        def _enqueue_checked(src_code, search_dir):
+            try:
+                _enqueue_prepass(src_code, search_dir)
+            except SyntaxError as _e:
+                print(str(_e), file=sys.stderr)
+                sys.exit(1)
+
+        _enqueue_checked(code, _ady_dir_pre)
 
         while _prepass_worklist:
             _ppname, _ppady, _ppdir = _prepass_worklist.pop(0)
@@ -2166,9 +2181,9 @@ def main(argv=None):
                 _nimport_module_symbols.update(getattr(_PS_pre, "module_symbols", {}))
                 _nimport_std_imports.update(
                     getattr(_PS_pre, "nim_imports", set()) & _CARRIED_STD_IMPORTS)
-                _enqueue_prepass(_ppcode, _ppdir)
             except Exception:
                 pass  # errors will surface properly during the full dep transpile
+            _enqueue_checked(_ppcode, _ppdir)
 
         # Set JS_BACKEND before any transpilation (main file or deps).
         import hek_nim_expr as _hne

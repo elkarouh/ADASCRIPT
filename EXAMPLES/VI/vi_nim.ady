@@ -13,7 +13,7 @@ by waiting 25 ms), drawing the screen (one frame per key, written in one go), an
 the window size (read again at every key; there is no resize event).
 """
 nimport terminal, termios, posix, os
-nimport vi_core
+from vi_core nimport Editor, Press_T, Key_T, decode, CTRL_Q, ESC
 
 const NOTHING: int = -1                  # a key with no meaning here: an arrow, a function key
 

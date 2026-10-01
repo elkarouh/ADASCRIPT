@@ -439,6 +439,8 @@ def include_ady_modules(code, search_dir, _seen=None):
     the output as before; so do the libraries bundled with ady2nim.
     """
     seen = set() if _seen is None else _seen
+    from ady_modules import selective_imports, check_from_imports
+    selective = selective_imports(code)
 
     def find(name, here):
         for base in (here, os.path.dirname(here)):
@@ -457,11 +459,13 @@ def include_ady_modules(code, search_dir, _seen=None):
                 kept.append(name)
                 continue
             path = os.path.realpath(path)
+            with open(path, encoding="utf-8") as f:
+                text = f.read()
+            if name in selective:        # `from M nimport A, B`: only A, B and what they carry
+                check_from_imports(code, name, selective[name], text)
             if path in seen:
                 continue
             seen.add(path)
-            with open(path, encoding="utf-8") as f:
-                text = f.read()
             if text.startswith("#!"):
                 text = text.split("\n", 1)[1] if "\n" in text else ""
             text = include_ady_modules(text, os.path.dirname(path), seen)
@@ -486,8 +490,12 @@ def main(args=None):
             code = f.read()
     else:
         code = sys.stdin.read()
-    code = include_ady_modules(
-        code, os.path.dirname(os.path.abspath(args.file)) if args.file else os.getcwd())
+    try:
+        code = include_ady_modules(
+            code, os.path.dirname(os.path.abspath(args.file)) if args.file else os.getcwd())
+    except SyntaxError as exc:
+        print(str(exc), file=sys.stderr)
+        sys.exit(1)
     # A refusal from an emitter is an answer, not a crash: ady2nim prints it
     # and exits 1, and this printed a traceback with the message at the
     # bottom of it.

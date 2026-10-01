@@ -3406,6 +3406,7 @@ through the same ground in more detail.
 | Cross-module inheritable class    | `@virtual class C: ...`                  |
 | Generic class                     | `class C[S, D, C]: ...`                  |
 | Nim-only import                   | `nimport module`                         |
+| Import only some names of a module | `from module nimport A, B` (the file may use A, B and what they carry) |
 | Shell command capture             | `let r = shell: cmd`                     |
 | Shell lines capture               | `let ls = shellLines: cmd`               |
 | Shell lines (typed)               | `let ls: []str = shellLines: cmd`        |

@@ -1,6 +1,6 @@
 """A module that nimports a sibling (`names`, by its bare name) and is itself
 nimported: a record, a class and a function returning `T | !Failure_T`."""
-nimport names
+from names nimport Kind_T, Failure_T
 
 type Shape_T is record:
     kind: Kind_T

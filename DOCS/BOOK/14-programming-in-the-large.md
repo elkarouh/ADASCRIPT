@@ -87,12 +87,25 @@ The qualified spelling is accepted and compiles to the identical Nim call, so
 use it wherever it reads better. What you cannot do is rely on qualification
 to keep two `distance` procs apart: see 13.9.
 
-The selective form works too, and imports the whole module anyway (Nim has no
-partial import of a module's symbols):
+`nimport geometry` is the whole module: every name it declares, as `from geometry
+import *` is in Python. The selective form says which names a file takes, which is
+what a reader wants to know:
 
 ```python
-from geometry nimport distance, Point_T   # pulls in geometry, all of it
+from geometry nimport distance, Point_T   # only these, and what they carry
 ```
+
+The file may use `distance`, `Point_T` and what `Point_T` carries -- an enum's
+members come with the enum, and a record's fields and a class's methods are reached
+through a value. A use of any other name of `geometry`'s is refused, on both
+backends, with the line and what to add:
+
+```
+line 12: 'bearing' is not imported from geometry: add bearing to `from geometry nimport Point_T, bearing, distance`
+```
+
+(The module is still compiled and linked whole; the rule is checked from the text,
+so Nim and Python say the same. A name the file declares itself is left alone.)
 
 Plain `import geometry` is **rejected** on the Nim backend — `import` is
 reserved for Python modules (Chapter 12). The error message says so:
