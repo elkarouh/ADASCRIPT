@@ -608,3 +608,20 @@ Nim is emitted as the conversion `Press_T(ESCAPE)`: "type mismatch: got 'Key_T'
 but expected 'Press_T = object'". `Press_T(CHAR, "x")` and `Press_T(key=ESCAPE)`
 are fine. EXAMPLES/VI/vi.ady is Python-only (curses) so it does not meet it, but
 a program built for both would.
+
+## Found writing EXAMPLES/VI/vi_nim.ady (Adascript on Nim)
+
+Each is worked around there, and none is needed for Python:
+
+- `a[:i] + b[j:]` over two list slices, `line[:i] + tail(...)` over string slices
+  and `self.lines[i] + self.lines[j]` are emitted with Nim's `+` (a set or number
+  operator), not `&`: the operand types are not inferred from a slice or an index
+  of a field. With a typed `let` for each operand it is `&`.
+- `self.count += press.text` on a `str` field is emitted `+=`, not `&=`.
+- `xs.insert(i, x)` is Python's order on both backends; on Nim the call is Nim's
+  `insert(xs, x, i)`. `xs.insert("b", 1)` works on Nim and fails on Python.
+- `Editor(path).run()` on a temporary: Nim wants a `var` receiver.
+- `return n` for an `n` narrowed by `if n is Failure_T: return ...` is not
+  unwrapped on Nim (a method call on it is): `case n: when int: return n` is.
+- `T(fd = 0, events = POLLIN)` on a Nim object type (not an Adascript record) is
+  emitted as a call with `=` arguments; fields have to be assigned.

@@ -1,26 +1,28 @@
-#!/usr/bin/env ady2py
-"""vi -- a tiny vi-like text editor, after vip (github.com/maksimKorzh/vip).
+#!/usr/bin/env ady2nim
+"""vi_nim -- vi.ady for the Nim backend: a tiny vi-like text editor, after vip
+(github.com/maksimKorzh/vip).
 
-    vi [file]
+    vi_nim [file]
 
   Normal    h j k l   0 $   gg G   x   r R   i a A o O   dd yy p   u ^R
             counts: 3dd  12G  2yy
   Anywhere  ^S saves, ^Q quits
 
-curses is Python's, so this one is built for the Python backend (ady2py).
-
-The keyboard is read once and decoded into a Press_T; every mode is then a
-`case` over what was pressed, and the editor never looks at a key code. Where
-the original reaches for an exception -- opening a file that is not there,
-counting with a number that is not one -- this asks for a `T | !Failure_T` and
-looks at it where it asked.
+Nim has no curses, so the terminal is Nim's own `terminal` module plus a raw
+mode set up with `termios`: no echo, no line editing, no signals, and ^S and
+^Q reach the program instead of stopping the terminal. The editing is vi.ady's,
+line for line: the keyboard is decoded once into a Press_T and every mode is a
+`case` over it. What differs is only the terminal: reading a key (an escape
+sequence such as an arrow key is swallowed, a lone ESC is told from one by
+waiting 25 ms), drawing the screen (one frame per key, written in one go), and
+the window size (read again at every key; there is no resize event).
 """
-import curses, os, time
+nimport terminal, termios, posix, os
 
 type Mode_T is enum NORMAL, INSERT, REPLACE_ONE, REPLACE, GOTO, DELETE, YANK
 
 # What a key press means, whatever code the terminal sent for it.
-type Key_T is enum CHAR, ESCAPE, ENTER, BACKSPACE, SAVE, QUIT, REDO, RESIZE, OTHER
+type Key_T is enum CHAR, ESCAPE, ENTER, BACKSPACE, SAVE, QUIT, REDO, OTHER
 
 type Press_T is record:
     key:  Key_T
@@ -41,18 +43,16 @@ const CTRL_S: int = 19
 const ESC: int = 27
 const DEL: int = 127
 const BACKSPACE_KEY: int = 8
-const KEY_BACKSPACE: int = 263           # curses.KEY_BACKSPACE
-const KEY_ENTER: int = 343               # curses.KEY_ENTER
-const KEY_RESIZE: int = 410              # curses.KEY_RESIZE
+const NOTHING: int = -1                  # a key with no meaning here: an arrow, a function key
 
 def decode(ch: int) -> Press_T:
-    """A code curses delivers, as what it means."""
+    """A key code, as what it means."""
     case ch:
         when ESC:
             return Press_T(ESCAPE, "")
-        when 10 | 13 | KEY_ENTER:
+        when 10 | 13:
             return Press_T(ENTER, "")
-        when BACKSPACE_KEY | DEL | KEY_BACKSPACE:
+        when BACKSPACE_KEY | DEL:
             return Press_T(BACKSPACE, "")
         when CTRL_S:
             return Press_T(SAVE, "")
@@ -60,12 +60,68 @@ def decode(ch: int) -> Press_T:
             return Press_T(QUIT, "")
         when CTRL_R:
             return Press_T(REDO, "")
-        when KEY_RESIZE:
-            return Press_T(RESIZE, "")
         when 32..126:
             return Press_T(CHAR, str(chr(ch)))
         when others:
             return Press_T(OTHER, "")
+
+# ---- the terminal ---------------------------------------------------
+
+var original: Termios                    # the terminal as it was, to give back
+
+def raw_mode(on: bool) -> None:
+    """No echo, no line editing, no signals, no flow control: every key, ^S and
+    ^Q included, comes straight to the program."""
+    if not on:
+        let back: cint = tcsetattr(0, TCSAFLUSH, addr(original))
+        return
+    let got: cint = tcgetattr(0, addr(original))
+    var t: Termios = original
+    t.c_iflag = t.c_iflag and not (BRKINT or ICRNL or INPCK or ISTRIP or IXON)
+    t.c_oflag = t.c_oflag and not OPOST
+    t.c_lflag = t.c_lflag and not (ECHO or ICANON or IEXTEN or ISIG)
+    t.c_cc[VMIN] = chr(1)
+    t.c_cc[VTIME] = chr(0)
+    let set: cint = tcsetattr(0, TCSAFLUSH, addr(t))
+
+def key_waiting(ms: int) -> bool:
+    """Is there a byte to read, within MS milliseconds?"""
+    var fds: TPollfd
+    fds.fd = cint(0)
+    fds.events = POLLIN
+    return poll(addr(fds), 1, cint(ms)) > 0
+
+def read_byte() -> int:
+    """The next byte from the keyboard, read straight from the descriptor: getch
+    reads through C's buffer, which swallows the rest of an escape sequence
+    where key_waiting cannot see it. The end of the input is ^Q."""
+    var b: char
+    let n: int = read(cint(0), addr(b), 1)
+    return ord(b) if n == 1 else CTRL_Q
+
+var pushed: int = NOTHING                # a byte read ahead, to be the next key
+
+def read_code() -> int:
+    """The next key, as a code. A lone ESC is told from the start of an escape
+    sequence (an arrow key: ESC [ A) by whether more bytes follow within 25 ms;
+    a sequence is swallowed and read as NOTHING. ESC and a character (Alt-x) is
+    an ESC, the character kept for the next call."""
+    if pushed != NOTHING:
+        let ahead: int = pushed
+        pushed = NOTHING
+        return ahead
+    let first: int = read_byte()
+    if first != ESC or not key_waiting(25):
+        return first
+    let second: int = read_byte()
+    if second != ord('[') and second != ord('O'):
+        pushed = second
+        return ESC
+    var last: int = read_byte()
+    if second == ord('['):
+        while last < 64 or last > 126:                       # up to the final byte
+            last = read_byte()
+    return NOTHING
 
 def tail(text: str, start: int) -> str:
     """TEXT from START on; empty past the end, where a Nim slice would raise."""
@@ -77,6 +133,13 @@ def splice(line: str, start: int, stop: int, text: str) -> str:
     let after: str = tail(line, stop)
     return before + text + after
 
+def clip(text: str, start: int, width: int) -> str:
+    """WIDTH characters of TEXT from START, fewer where it ends: a slice past
+    the end raises on Nim."""
+    if start >= len(text) or width <= 0:
+        return ""
+    return text[start:min(len(text), start + width)]
+
 def load(path: str) -> []str:
     """The lines of PATH; an empty buffer when it cannot be read -- a new file."""
     let read: []str | !PathFailure_T = Path(path).read_lines()
@@ -85,7 +148,6 @@ def load(path: str) -> []str:
     return read if len(read) > 0 else [""]
 
 class Editor:
-    var scr: curses.window
     var path: str
     var lines: []str
     var yanked: []str = []
@@ -100,8 +162,7 @@ class Editor:
     var rows: int = 0
     var cols: int = 0
 
-    def __init__(self, scr: curses.window, path: str):
-        self.scr = scr
+    def __init__(self, path: str):
         self.path = path
         self.lines = load(path)
         self.history = [self.snapshot()]
@@ -135,13 +196,16 @@ class Editor:
     def times(self) -> int:
         """The count typed before the command; 1 when there is none."""
         let n: int | !ParseFailure_T = parse_int(self.count)
-        if n is ParseFailure_T:
-            return 1
-        return n
+        case n:                              # Nim does not unwrap n in a bare `return n` after an `if`
+            when ParseFailure_T:
+                return 1
+            when int:
+                return n
 
     def resize(self):
-        self.rows, self.cols = self.scr.getmaxyx()
-        self.rows -= 1                       # the last line is the status bar
+        let (w, h) = terminalSize()
+        self.cols = w
+        self.rows = h - 1                    # the last line is the status bar
 
     def clamp(self):
         self.row = max(0, min(self.row, len(self.lines) - 1))
@@ -153,29 +217,23 @@ class Editor:
     def draw(self):
         self.top = max(min(self.top, self.row), self.row - self.rows + 1)
         self.left = max(min(self.left, self.col), self.col - self.cols + 1)
+        var frame: str = "\x1b[?25l\x1b[H"                  # hide the cursor, go home
         for i in 0 ..< self.rows:
             let n: int = self.top + i
-            self.scr.move(i, 0)
-            self.scr.clrtoeol()
-            if n < len(self.lines):
-                self.scr.addnstr(i, 0, tail(self.lines[n], self.left), self.cols - 1)
-            else:
-                self.scr.addstr(i, 0, "~")
+            let shown: str = clip(self.lines[n], self.left, self.cols - 1) if n < len(self.lines) else "~"
+            frame += shown + "\x1b[K\r\n"                  # to the end of the line, then down
         let total: int = len(self.lines)
         let pct: int = (self.row + 1) * 100 // total
         let status: str = f'{TAG[self.mode]} "{self.path}" line {self.row + 1} of {total} --{pct}%-- col {self.col}'
-        self.scr.move(self.rows, 0)
-        self.scr.clrtoeol()
-        self.scr.addnstr(self.rows, 0, status, self.cols - 1)
-        self.scr.move(self.row - self.top, self.col - self.left)
-        self.scr.refresh()
+        frame += clip(status, 0, self.cols - 1) + "\x1b[K"
+        frame += f"\x1b[{self.row - self.top + 1};{self.col - self.left + 1}H\x1b[?25h"
+        stdout.write(frame)
+        stdout.flushFile()
 
     def flash(self, message: str):
-        self.scr.move(self.rows, 0)
-        self.scr.clrtoeol()
-        self.scr.addnstr(self.rows, 0, message, self.cols - 1)
-        self.scr.refresh()
-        time.sleep(1)
+        stdout.write(f"\x1b[{self.rows + 1};1H\x1b[K" + clip(message, 0, self.cols - 1))
+        stdout.flushFile()
+        sleep(1000)
 
     def save(self):
         let saved: None | !PathFailure_T = Path(self.path).write_text("\n".join(self.lines) + "\n")
@@ -347,19 +405,16 @@ class Editor:
 
     # ---- main loop --------------------------------------------------
     def run(self):
-        curses.raw()
         while True:
+            self.resize()                    # the window may have changed since the last key
             self.clamp()
             self.draw()
-            let press: Press_T = decode(self.scr.getch())
+            let press: Press_T = decode(read_code())
             case press.key:
                 when QUIT:
                     return
                 when SAVE:
                     self.save()
-                    continue
-                when RESIZE:
-                    self.resize()
                     continue
                 when others:
                     pass
@@ -382,8 +437,11 @@ class Editor:
             self.clamp()
             self.record()
 
-def main(scr: curses.window):
-    Editor(scr, ($1 if $# >= 1 else "noname.txt")).run()
-
-os.environ.setdefault("ESCDELAY", "25")
-curses.wrapper(main)
+let path: str = ($1 if $# >= 1 else "noname.txt")
+raw_mode(True)
+stdout.write("\x1b[?1049h")                  # the alternate screen, so the shell's stays as it was
+var editor: Editor = Editor(path)
+editor.run()
+stdout.write("\x1b[?1049l\x1b[?25h")
+stdout.flushFile()
+raw_mode(False)

@@ -3,7 +3,8 @@
 terminal of its own (a pty), is typed a script of keys, saves with ^S and quits
 with ^Q, and the file it saved is compared with what is wanted.
 
-    python3 test_vi.py PROGRAM.py     (vi.ady, built with ady2py)
+    python3 test_vi.py PROGRAM        (vi.ady built with ady2py, as vi.py,
+                                       or vi_nim.ady built with ady2nim)
 
 The wanted files are what vip (github.com/maksimKorzh/vip) writes for the same
 keys, except where vip differs: its undo bookkeeping records a snapshot before
@@ -70,13 +71,45 @@ CASES = [
 ]
 VIP_DIFFERS = {"replaceR", "undo,redo", "undo3", "dd,u,redo"}
 
+# An arrow key arrives as one escape sequence, ESC O A on a terminal in
+# application keypad mode (which curses puts it in) or ESC [ A in the other:
+# neither is an ESC followed by typing. The Nim editor reads the terminal
+# itself, so it is held to both; curses only knows the first.
+ARROWS = [
+    ("arrows (SS3)", "ia" + ESC + "OA" + "b" + ESC + "OC" + "c" + ESC,
+     "abcone\ntwo\nthree\nfour\nfive\n"),
+]
+ARROWS_CSI = [
+    ("arrows (CSI)", "ia" + ESC + "[A" + "b" + ESC + "[C" + "c" + ESC + "[1;5D" + "d" + ESC,
+     "abcdone\ntwo\nthree\nfour\nfive\n"),
+]
+
+
+def chunks(keys):
+    """KEYS one at a time, an arrow key's escape sequence (ESC O A, ESC [ A and
+    ESC [ 1 ; 5 D) all at once, as a terminal sends it."""
+    i = 0
+    while i < len(keys):
+        for width in (6, 3):
+            part = keys[i:i + width]
+            if part[:1] == ESC and (part[1:2] == "[" or part[1:2] == "O") and part[-1:] in "ABCD" \
+                    and all(c in "0123456789;" for c in part[2:-1]) and len(part) == width \
+                    and not (part[1:2] == "O" and width == 6):
+                break
+        else:
+            width = 1
+        yield keys[i:i + width]
+        i += width
+
 
 def drive(program, path, keys):
     """Run PROGRAM on PATH in a pty, type KEYS, then ^S and ^Q."""
     pid, fd = pty.fork()
     if pid == 0:
         os.environ["TERM"] = "xterm"
-        os.execvp(sys.executable, [sys.executable, program, path])
+        if program.endswith(".py"):
+            os.execvp(sys.executable, [sys.executable, program, path])
+        os.execv(program, [program, path])
     fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 80, 0, 0))
 
     def drain(wait):
@@ -88,7 +121,7 @@ def drive(program, path, keys):
                 return
 
     drain(0.6)
-    for key in keys:
+    for key in chunks(keys):
         os.write(fd, key.encode())
         drain(0.03)
     os.write(fd, b"\x13")
@@ -101,7 +134,8 @@ def drive(program, path, keys):
 def main(program):
     work = pathlib.Path(tempfile.mkdtemp())
     jobs = []
-    for name, keys, want in CASES:
+    cases = CASES + ARROWS + (ARROWS_CSI if not program.endswith(".py") else [])
+    for name, keys, want in cases:
         path = work / (name.replace(",", "_") + ".txt")
         path.write_text(BASE)
         child = subprocess.Popen([sys.executable, __file__, "--drive", program, str(path), keys])
