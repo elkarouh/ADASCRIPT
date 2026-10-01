@@ -10,9 +10,11 @@ file uses without having listed it is refused, and the message says what to add.
 """
 import re
 
-# `from M nimport A, B` and `from M nimport *`; a name may carry a comment after it
+# `from M nimport A, B`, `from M nimport *`, and the parenthesised form that may
+# run over lines, with comments among the names
 _FROM_RE = re.compile(
-    r'^from[ \t]+(?P<module>\w[\w./]*)[ \t]+nimport[ \t]+(?P<names>[^#\n]+?)[ \t]*(?:#[^\n]*)?$',
+    r'^from[ \t]+(?P<module>\w[\w./]*)[ \t]+nimport[ \t]+'
+    r'(?:\((?P<paren>[^)]*)\)|(?P<names>[^#\n]+?))[ \t]*(?:#[^\n]*)?$',
     re.MULTILINE)
 _BARE_RE = re.compile(
     r'^nimport[ \t]+(?P<names>\w[\w./]*(?:[ \t]*,[ \t]*\w[\w./]*)*)', re.MULTILINE)
@@ -27,7 +29,9 @@ def selective_imports(code):
     for m in _BARE_RE.finditer(code):
         whole.update(n.strip() for n in m.group("names").split(","))
     for m in _FROM_RE.finditer(code):
-        names = [n.strip() for n in m.group("names").split(",") if n.strip()]
+        text = m.group("paren") if m.group("paren") is not None else m.group("names")
+        text = re.sub(r"#[^\n]*", "", text)
+        names = [n.strip() for n in text.split(",") if n.strip()]
         if names == ["*"]:
             whole.add(m.group("module"))
         else:

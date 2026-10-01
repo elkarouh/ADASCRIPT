@@ -7,7 +7,10 @@ name.
 """
 
 nimport os
-nimport tcheck_common
+from tcheck_common nimport (
+    BaselineNr_T, BuildType, Command_T, Failure_T, Glob_T, Link_T, TACT_ROOT,
+    echo_emacs, emacs_link, find_core_dumps, hr, make_report, newest, puts,
+)
 
 type ReplayType is enum run_prequal, performance, simca, full_simca, oldest_date, all_autolink
 # what a replay's log says of it

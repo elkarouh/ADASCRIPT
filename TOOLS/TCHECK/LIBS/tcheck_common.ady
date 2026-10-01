@@ -6,7 +6,7 @@ nimports nothing of Tcheck_tact's.
 """
 
 nimport os
-nimport ansi
+from ansi nimport Style
 
 # Why something the report looks for is not there: a log directory, a
 # changes report. The report goes on without it, having said so.

@@ -422,7 +422,7 @@ def translate(code):
 # imports as Nim modules. ady2nim's own pre-pass reads the same two spellings.
 _NIMPORT_LINE = re.compile(
     r'^(?:nimport[ \t]+(?P<names>\w[\w./]*(?:[ \t]*,[ \t]*\w[\w./]*)*)'
-    r'|from[ \t]+(?P<from>\w[\w./]*)[ \t]+nimport\b[^\n]*)[ \t]*(?:#[^\n]*)?$',
+    r'|from[ \t]+(?P<from>\w[\w./]*)[ \t]+nimport\b(?:[ \t]*\([^)]*\)|[^\n]*))[ \t]*(?:#[^\n]*)?$',
     re.MULTILINE)
 
 

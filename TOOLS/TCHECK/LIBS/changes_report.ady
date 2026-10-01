@@ -7,9 +7,13 @@ by their bare names.
 """
 
 nimport os
-nimport tcheck_common
-nimport tlog
-nimport baselines
+from tcheck_common nimport (
+    BaselineName_T, BaselineNr_T, CM_OT, Command_T, DIFF_TOOL, Extension_T, Failure_T,
+    InSub_T, Link_T, NmFile_T, Rev_T, Review_T, TACT_ROOT, Ticket_T, echo_emacs, hr,
+    newest, puts, warned,
+)
+from tlog nimport NewFailure, list_new_failures
+from baselines nimport Baseline
 
 # ---------------------------------------------------------------------------
 # List all changes: who committed what, per the CFMUTEST changes report

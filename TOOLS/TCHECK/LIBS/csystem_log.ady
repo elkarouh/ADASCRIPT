@@ -7,8 +7,8 @@ nimported by their bare names.
 """
 
 nimport os
-nimport tcheck_common
-nimport baselines
+from tcheck_common nimport BaselineNr_T, BuildType, Command_T, TACT_ROOT
+from baselines nimport Baseline, PREVIOUS_SEARCHED
 
 def make_comparable(logfile: Path, bl: BaselineNr_T) -> Path:
     """Normalize a log file for diffing: make_executable_output_comparable + make_comparable + test name normalization."""

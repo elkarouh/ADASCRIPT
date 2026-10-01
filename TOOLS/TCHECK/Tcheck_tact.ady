@@ -23,12 +23,21 @@ program: the Python backend cannot follow one.
 
 nimport os
 nimport time
-nimport LIBS/tcheck_common
-nimport LIBS/tlog
-nimport LIBS/replays
-nimport LIBS/baselines
-nimport LIBS/csystem_log
-nimport LIBS/changes_report
+from LIBS/tcheck_common nimport (
+    BaselineNr_T, BuildLabel_T, BuildName_T, BuildPass, BuildSubtype, BuildType,
+    Failure_T, HAS_NEW_FAILURES, Tool_T, hr, parse_subtype, puts, subtype_label,
+    troubleshoot_tool, warned,
+)
+from LIBS/tlog nimport NewFailure
+from LIBS/replays nimport (
+    ReplayLog, ReplayStatus, ReplayType, check_replay_dirs_size, process_replay,
+    scan_replay_dir_detailed,
+)
+from LIBS/baselines nimport Baseline, Build
+from LIBS/csystem_log nimport CsystemLog, earlier_log
+from LIBS/changes_report nimport (
+    Committer, changes_by_file, changes_report, list_changes, list_detailed_changes,
+)
 
 # ---------------------------------------------------------------------------
 # Options

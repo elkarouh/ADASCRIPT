@@ -7,7 +7,10 @@ name.
 """
 
 nimport os
-nimport tcheck_common
+from tcheck_common nimport (
+    BaselineNr_T, BuildLabel_T, BuildPass, BuildSubtype, TestName_T, puts,
+    subtype_label,
+)
 
 # ---------------------------------------------------------------------------
 # Tlog section parsing

@@ -7,9 +7,13 @@ nimported by their bare names.
 """
 
 nimport os
-nimport tcheck_common
-nimport tlog
-nimport replays
+from tcheck_common nimport (
+    BaselineNr_T, BuildName_T, BuildPass, BuildSubtype, BuildType, CM_OT, ColorSpec_T,
+    Failure_T, Glob_T, ONLY_NEW, TACT_ROOT, colored, echo_emacs, emacs_link,
+    find_core_dumps, hr, make_report, newest, puts, subtype_label,
+)
+from tlog nimport Tlog, tlog_filename
+from replays nimport Replay, ReplayType, replay_type_from
 
 # ---------------------------------------------------------------------------
 # A build's test programs: its check_run_test_programs.log
