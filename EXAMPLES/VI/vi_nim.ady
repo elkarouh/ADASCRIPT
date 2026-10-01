@@ -48,22 +48,14 @@ const NOTHING: int = -1                  # a key with no meaning here: an arrow,
 def decode(ch: int) -> Press_T:
     """A key code, as what it means."""
     case ch:
-        when ESC:
-            return Press_T(ESCAPE, "")
-        when 10 | 13:
-            return Press_T(ENTER, "")
-        when BACKSPACE_KEY | DEL:
-            return Press_T(BACKSPACE, "")
-        when CTRL_S:
-            return Press_T(SAVE, "")
-        when CTRL_Q:
-            return Press_T(QUIT, "")
-        when CTRL_R:
-            return Press_T(REDO, "")
-        when 32..126:
-            return Press_T(CHAR, str(chr(ch)))
-        when others:
-            return Press_T(OTHER, "")
+        when ESC: Press_T(ESCAPE, "")
+        when 10 | 13: Press_T(ENTER, "")
+        when BACKSPACE_KEY | DEL: Press_T(BACKSPACE, "")
+        when CTRL_S: Press_T(SAVE, "")
+        when CTRL_Q: Press_T(QUIT, "")
+        when CTRL_R: Press_T(REDO, "")
+        when 32..126: Press_T(CHAR, str(chr(ch)))
+        when others: Press_T(OTHER, "")
 
 # ---- the terminal ---------------------------------------------------
 
@@ -89,7 +81,7 @@ def key_waiting(ms: int) -> bool:
     var fds: TPollfd
     fds.fd = cint(0)
     fds.events = POLLIN
-    return poll(addr(fds), 1, cint(ms)) > 0
+    poll(addr(fds), 1, cint(ms)) > 0
 
 def read_byte() -> int:
     """The next byte from the keyboard, read straight from the descriptor: getch
@@ -97,7 +89,7 @@ def read_byte() -> int:
     where key_waiting cannot see it. The end of the input is ^Q."""
     var b: char
     let n: int = read(cint(0), addr(b), 1)
-    return ord(b) if n == 1 else CTRL_Q
+    ord(b) if n == 1 else CTRL_Q
 
 var pushed: int = NOTHING                # a byte read ahead, to be the next key
 
@@ -121,31 +113,31 @@ def read_code() -> int:
     if second == ord('['):
         while last < 64 or last > 126:                       # up to the final byte
             last = read_byte()
-    return NOTHING
+    NOTHING
 
 def tail(text: str, start: int) -> str:
     """TEXT from START on; empty past the end, where a Nim slice would raise."""
-    return text[start:] if start < len(text) else ""
+    text[start:] if start < len(text) else ""
 
 def splice(line: str, start: int, stop: int, text: str) -> str:
     """LINE with START up to STOP replaced by TEXT."""
     let before: str = line[:start]
     let after: str = tail(line, stop)
-    return before + text + after
+    before + text + after
 
 def clip(text: str, start: int, width: int) -> str:
     """WIDTH characters of TEXT from START, fewer where it ends: a slice past
     the end raises on Nim."""
     if start >= len(text) or width <= 0:
         return ""
-    return text[start:min(len(text), start + width)]
+    text[start:min(len(text), start + width)]
 
 def load(path: str) -> []str:
     """The lines of PATH; an empty buffer when it cannot be read -- a new file."""
     let read: []str | !PathFailure_T = Path(path).read_lines()
     if read is PathFailure_T:
         return [""]
-    return read if len(read) > 0 else [""]
+    read if len(read) > 0 else [""]
 
 class Editor:
     var path: str
@@ -197,10 +189,8 @@ class Editor:
         """The count typed before the command; 1 when there is none."""
         let n: int | !ParseFailure_T = parse_int(self.count)
         case n:                              # Nim does not unwrap n in a bare `return n` after an `if`
-            when ParseFailure_T:
-                return 1
-            when int:
-                return n
+            when ParseFailure_T: return 1
+            when int: return n
 
     def resize(self):
         let (w, h) = terminalSize()
@@ -259,38 +249,27 @@ class Editor:
     def begin_insert(self, command: str):
         """i a A o O: where the cursor goes, then insert mode."""
         case command:
-            when "a":
-                self.col += 1
-            when "A":
-                self.col = len(self.lines[self.row])
+            when "a": self.col += 1
+            when "A": self.col = len(self.lines[self.row])
             when "o":
                 self.row += 1
                 self.insert_line(self.row, "")
-            when "O":
-                self.insert_line(self.row, "")
-            when others:
-                pass
+            when "O": self.insert_line(self.row, "")
+            when others: pass
         self.mode = INSERT
 
     def move(self, command: str):
         case command:
-            when "h":
-                self.col -= 1
-            when "l":
-                self.col += 1
-            when "k":
-                self.row -= 1
-            when "j":
-                self.row += 1
-            when "0":
-                self.col = 0
+            when "h": self.col -= 1
+            when "l": self.col += 1
+            when "k": self.row -= 1
+            when "j": self.row += 1
+            when "0": self.col = 0
             when "$":
                 self.row += self.times() - 1
                 self.col = len(self.lines[min(self.row, len(self.lines) - 1)])
-            when "G":
-                self.row = (self.times() - 1 if self.count != "" else len(self.lines) - 1)
-            when others:
-                pass
+            when "G": self.row = (self.times() - 1 if self.count != "" else len(self.lines) - 1)
+            when others: pass
 
     def put(self):
         let head: []str = self.lines[:self.row + 1]
@@ -303,34 +282,21 @@ class Editor:
     def normal(self, press: Press_T):
         let line: str = self.lines[self.row]
         case press.key:
-            when REDO:
-                self.redo()
+            when REDO: self.redo()
             when CHAR:
                 case press.text:
-                    when "i" | "a" | "A" | "o" | "O":
-                        self.begin_insert(press.text)
-                    when "h" | "j" | "k" | "l" | "0" | "$" | "G":
-                        self.move(press.text)
-                    when "r":
-                        self.mode = REPLACE_ONE
-                    when "R":
-                        self.mode = REPLACE
-                    when "g":
-                        self.mode = GOTO
-                    when "d":
-                        self.mode = DELETE
-                    when "y":
-                        self.mode = YANK
-                    when "x":
-                        self.put_line(splice(line, self.col, self.col + 1, ""))
-                    when "p":
-                        self.put()
-                    when "u":
-                        self.undo()
-                    when others:
-                        pass
-            when others:
-                pass
+                    when "i" | "a" | "A" | "o" | "O": self.begin_insert(press.text)
+                    when "h" | "j" | "k" | "l" | "0" | "$" | "G": self.move(press.text)
+                    when "r": self.mode = REPLACE_ONE
+                    when "R": self.mode = REPLACE
+                    when "g": self.mode = GOTO
+                    when "d": self.mode = DELETE
+                    when "y": self.mode = YANK
+                    when "x": self.put_line(splice(line, self.col, self.col + 1, ""))
+                    when "p": self.put()
+                    when "u": self.undo()
+                    when others: pass
+            when others: pass
         if self.mode not in {DELETE, YANK, GOTO}:
             self.count = ""
 
@@ -359,8 +325,7 @@ class Editor:
             when CHAR:
                 self.put_line(splice(line, self.col, self.col, press.text))
                 self.col += 1
-            when others:
-                pass
+            when others: pass
 
     def overwrite(self, press: Press_T):
         let line: str = self.lines[self.row]
@@ -368,13 +333,11 @@ class Editor:
             when ESCAPE:
                 self.mode = NORMAL
                 self.col -= 1
-            when BACKSPACE:
-                self.col -= 1
+            when BACKSPACE: self.col -= 1
             when CHAR:
                 self.put_line(splice(line, self.col, self.col + 1, press.text))
                 self.col += 1
-            when others:
-                pass
+            when others: pass
 
     def replace_one(self, press: Press_T):
         """r: the next character replaces the one under the cursor, once."""
@@ -394,12 +357,9 @@ class Editor:
                 if not self.lines:
                     self.lines = [""]
                 self.col = 0
-            when (YANK, "y"):
-                self.yanked = self.lines[lo:hi]
-            when (GOTO, "g"):
-                self.row = 0
-            when others:
-                pass
+            when (YANK, "y"): self.yanked = self.lines[lo:hi]
+            when (GOTO, "g"): self.row = 0
+            when others: pass
         self.mode = NORMAL
         self.count = ""
 
@@ -411,29 +371,22 @@ class Editor:
             self.draw()
             let press: Press_T = decode(read_code())
             case press.key:
-                when QUIT:
-                    return
+                when QUIT: return
                 when SAVE:
                     self.save()
                     continue
-                when others:
-                    pass
+                when others: pass
             # digits make a count -- a leading 0 is the motion, not a digit
             let counting: bool = self.mode in {NORMAL, DELETE, YANK, GOTO}
             if counting and press.text.isdigit() and (press.text != "0" or self.count != ""):
                 self.count = f"{self.count}{press.text}"
                 continue
             case self.mode:
-                when NORMAL:
-                    self.normal(press)
-                when INSERT:
-                    self.insert(press)
-                when REPLACE:
-                    self.overwrite(press)
-                when REPLACE_ONE:
-                    self.replace_one(press)
-                when DELETE | YANK | GOTO:
-                    self.operator(press)
+                when NORMAL: self.normal(press)
+                when INSERT: self.insert(press)
+                when REPLACE: self.overwrite(press)
+                when REPLACE_ONE: self.replace_one(press)
+                when DELETE | YANK | GOTO: self.operator(press)
             self.clamp()
             self.record()
 
