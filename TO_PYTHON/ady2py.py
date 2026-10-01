@@ -99,6 +99,7 @@ sys.path.insert(0, os.path.join(_dir, ".."))
 sys.path.insert(0, os.path.join(_dir, "..", "HPARSEC"))
 sys.path.insert(0, os.path.join(_dir, "..", "ADASCRIPT_GRAMMAR"))
 
+import re
 import sys
 import token as token_mod
 
@@ -417,6 +418,60 @@ def translate(code):
     if not result.endswith(chr(10)):
         result += chr(10)
     return result
+# `nimport geom, util` and `from geom nimport dist`: the names a source file
+# imports as Nim modules. ady2nim's own pre-pass reads the same two spellings.
+_NIMPORT_LINE = re.compile(
+    r'^(?:nimport[ \t]+(?P<names>\w[\w./]*(?:[ \t]*,[ \t]*\w[\w./]*)*)'
+    r'|from[ \t]+(?P<from>\w[\w./]*)[ \t]+nimport\b[^\n]*)[ \t]*(?:#[^\n]*)?$',
+    re.MULTILINE)
+
+
+def include_ady_modules(code, search_dir, _seen=None):
+    """CODE with each `nimport` of an .ady module replaced by that module.
+
+    ady2nim compiles a program's modules one by one and links them; ady2py
+    translates one file, so the modules are brought into it: a module's text
+    stands where it is first nimported (its own nimports first), once, and the
+    parser then sees the types it declares, which is what `case` and `is` need
+    to tell a name from a pattern. Where to look is ady2nim's rule: the
+    importing file's directory, then its parent. A name with no .ady there
+    (`nimport os`, `nimport strutils`) stays a Nim-only import, dropped from
+    the output as before; so do the libraries bundled with ady2nim.
+    """
+    seen = set() if _seen is None else _seen
+
+    def find(name, here):
+        for base in (here, os.path.dirname(here)):
+            path = os.path.join(base, name + ".ady")
+            if os.path.isfile(path):
+                return path
+        return None
+
+    def expand(match):
+        names = match.group("names")
+        wanted = [n.strip() for n in names.split(",")] if names else [match.group("from")]
+        kept, pieces = [], []
+        for name in wanted:
+            path = find(name, search_dir)
+            if path is None:
+                kept.append(name)
+                continue
+            path = os.path.realpath(path)
+            if path in seen:
+                continue
+            seen.add(path)
+            with open(path, encoding="utf-8") as f:
+                text = f.read()
+            if text.startswith("#!"):
+                text = text.split("\n", 1)[1] if "\n" in text else ""
+            text = include_ady_modules(text, os.path.dirname(path), seen)
+            pieces.append(f"# ---- {name}.ady, nimported ----\n{text.rstrip()}\n# ---- end of {name}.ady ----")
+        head = [f"nimport {', '.join(kept)}"] if kept and names else ([match.group(0)] if kept else [])
+        return "\n".join(head + pieces)
+
+    return _NIMPORT_LINE.sub(expand, code)
+
+
 def main(args=None):
     import subprocess
     if args is None:
@@ -431,6 +486,8 @@ def main(args=None):
             code = f.read()
     else:
         code = sys.stdin.read()
+    code = include_ady_modules(
+        code, os.path.dirname(os.path.abspath(args.file)) if args.file else os.getcwd())
     # A refusal from an emitter is an answer, not a crash: ady2nim prints it
     # and exits 1, and this printed a traceback with the message at the
     # bottom of it.

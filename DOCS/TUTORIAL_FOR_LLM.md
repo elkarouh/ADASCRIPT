@@ -930,7 +930,7 @@ libraries live). No match -> the name goes to Nim untouched, which is why
 - Basenames must be unique project-wide and must not be Nim keywords (`mod.ady` fails).
 - Keep the import graph acyclic: put shared types in a leaf module.
 - Build the whole graph with `ady2nim c -r <entry>.ady`; `ady2nim -t` transpiles it and stops.
-- **ady2py has no module resolution**: `nimport` is stripped to a comment and each file is translated alone, so a multi-module program is a Nim program. Dual-backend code stays in one file.
+- **ady2py merges modules, it does not link them**: a `nimport` of a `.ady` found beside the file (or one directory up) is replaced by that module's text, once, so types and classes cross the boundary and a program split across modules runs on both backends. One namespace on Python (a name defined in two modules clashes), imported names unqualified (`geometry.f()` is not understood), the libraries in `TO_NIM/STDLIB` stay Nim-only.
 
 **`# nimraw: <code>`** — raw Nim line verbatim, stripped from Python, for Nim with no Adascript spelling (a pragma: `# nimraw: {.push overflowChecks: off.}`). NOT needed for forward declarations: mutually recursive functions are written as in Python.
 

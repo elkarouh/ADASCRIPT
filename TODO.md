@@ -625,3 +625,23 @@ Each is worked around there, and none is needed for Python:
   unwrapped on Nim (a method call on it is): `case n: when int: return n` is.
 - `T(fd = 0, events = POLLIN)` on a Nim object type (not an Adascript record) is
   emitted as a call with `=` arguments; fields have to be assigned.
+
+## Modules on the Python backend (ady2py merges what ady2nim links)
+
+`ady2py` replaces `nimport X` by X.ady's text (see `include_ady_modules`).
+Known, and not done:
+
+- `geometry.distance(a, b)` (the qualified spelling ady2nim accepts) is not
+  understood: the name `geometry` does not exist in the merged file.
+- One namespace: a name defined in two modules is the later definition.
+- A parse error's line number is a line of the merged text.
+- The libraries bundled with ady2nim (`TO_NIM/STDLIB/*.ady`) are not merged.
+- `nimport math` then an unqualified `sqrt` is Nim's `math`; on Python it is a
+  NameError (EXAMPLES/PROJECT is that program).
+
+## `return n` of a narrowed result, in a method, on Nim
+
+In a plain function `if n is Failure_T: return 1` then `return n` works (it is
+emitted `n.value`). In a method it is emitted `is_err(n)` and `return n`,
+and Nim refuses the Result. EXAMPLES/VI/vi_core.ady keeps that code in a function
+(`count_of`) for this.

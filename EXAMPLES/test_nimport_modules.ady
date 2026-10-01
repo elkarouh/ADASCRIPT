@@ -1,0 +1,34 @@
+#!/usr/bin/env ady2nim
+"""Test: `nimport` of .ady modules, on both backends. ady2nim compiles the
+modules and links them; ady2py brings each one into the program where it is
+first nimported, once, so the types they declare are known to the program:
+an enum from a module in a `case`, a failure type from one in an `is`, a
+record built positionally, a class from one. The output is compared between
+the backends (see the Makefile).
+
+The modules are NIMPORT_TEST/shapes, which nimports `names` beside it, and
+NIMPORT_TEST/names, which this file nimports as well: once is enough. A name
+with no .ady (`math` here) stays a Nim-only import.
+"""
+nimport math
+nimport NIMPORT_TEST/shapes, NIMPORT_TEST/names
+from NIMPORT_TEST/names nimport label
+
+def describe(text: str) -> str:
+    let parsed: Shape_T | !Failure_T = parse(text)
+    if parsed is Failure_T:
+        return parsed.description
+    case parsed.kind:
+        when CIRCLE: f"{label(parsed.kind)}, size {parsed.size}"
+        when SQUARE: f"{label(parsed.kind)} of size {parsed.size}"
+        when TRIANGLE: f"{label(parsed.kind)} of size {parsed.size}"
+
+for text in ["circle", "square", "triangle", "hexagon"]:
+    print describe(text)
+
+var canvas: Canvas = Canvas()
+canvas.add(Shape_T(SQUARE, 2.5))
+canvas.add(Shape_T(CIRCLE, 0.5))
+print f"total {canvas.total()}"
+assert canvas.total() == 3.0
+print "test_nimport_modules OK"

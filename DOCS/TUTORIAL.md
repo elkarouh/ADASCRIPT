@@ -3274,9 +3274,9 @@ advanced scenarios are not yet supported:
 ## 21. Programming in the Large
 
 Up to here every program has been one file. Past a few hundred lines a
-program wants modules, and `nimport` is how they find each other. This is a
-Nim-backend feature: ady2nim builds a whole dependency graph, ady2py translates
-one file at a time.
+program wants modules, and `nimport` is how they find each other. ady2nim builds
+a whole dependency graph and links it; ady2py merges each module into the one
+file it writes, where the module is first imported.
 
 ### 21.1 A module is a file
 
@@ -3358,9 +3358,11 @@ depth triggers a rebuild; `ady2nim -t` transpiles the graph and stops.
 - Exported names share one namespace; Nim overloading absorbs most clashes.
 - A module's test is another entry point that nimports it and asserts
   (`EXAMPLES/PROJECT/test_geometry.ady`).
-- `nimport` is Nim-only. ady2py comments it out and translates one file at a
-  time, so a program split across modules is a Nim program; dual-backend code
-  stays in one file.
+- ady2py replaces a `nimport` of an `.ady` module by the module's text (once),
+  so a program split across modules runs on both backends. On Python it is one
+  namespace -- two modules defining the same name clash -- and imported names
+  are unqualified (`geometry.distance` is not understood); the libraries bundled
+  with ady2nim stay Nim-only.
 
 Chapter 14 of the book (`DOCS/BOOK/14-programming-in-the-large.md`) works
 through the same ground in more detail.

@@ -1518,10 +1518,10 @@ class AwkProcessor(AwkBase):
 ## Modules and Project Layout
 
 Everything above describes one file. A program that outgrows one file splits
-into modules, and `nimport` is how they find each other. This is a
-**Nim-backend feature**: ady2nim resolves, transpiles and compiles a whole
-dependency graph, while ady2py translates one file at a time (see
-[Known Limitations](#known-limitations)).
+into modules, and `nimport` is how they find each other. ady2nim resolves,
+transpiles and compiles a whole dependency graph; ady2py brings each module
+into the one file it writes (see [Known Limitations](#known-limitations) for
+what that costs).
 
 A module is just a `.ady` file; there is no manifest and nothing to register.
 `EXAMPLES/PROJECT/` is a complete four-file program:
@@ -3384,15 +3384,19 @@ structural patterns inside an alternation (`case Point_T(x=0) | Circle_T(radius=
 — split the branches), and `as` over an alternation (`case 400 | 401 as code:`
 — bind in the body).
 
-**Multi-module programs are Nim-only** — `nimport` is the module mechanism,
-and ady2nim is the only side of the toolchain that resolves a dependency
-graph: it finds each `nimport`ed `.ady`, transpiles it with export markers and
-compiles the lot. ady2py strips `nimport` to a comment, translates exactly one
-file (to `<name>_gen.py`), and carries no type knowledge across files, so a
-record built in one file and used in another degrades to a bare tuple.
-`from geometry import *` is not a way round it — it survives into the Nim
-output as invalid Nim. Code that has to run on both backends stays in one
-file; see [Modules and Project Layout](#modules-and-project-layout).
+**Modules on the Python backend are merged, not linked.** ady2nim compiles each
+`nimport`ed `.ady` as a module of its own; ady2py replaces the `nimport` by the
+module's text, where it is first imported and once, so what the module declares
+-- an enum, a record, a failure type, a class -- is known to the program and
+`case`, `is` and positional construction work across the boundary. The merge has
+costs: the program is one namespace (two modules that each define `helper` clash
+on Python and not on Nim), `geometry.distance(a, b)` is not understood there
+(imported names are unqualified), a parse error is reported at its line in the
+merged text, and the libraries bundled with ady2nim (`TO_NIM/STDLIB/*.ady`) stay
+Nim-only. A `nimport` with no `.ady` behind it (`nimport strutils`) is a Nim-only
+import and is dropped from the Python output as before. `from geometry import *`
+is not a way to import a module; see
+[Modules and Project Layout](#modules-and-project-layout).
 
 **Nim stdlib coverage** — a few Python builtins reach Nim through the
 `stdlib.nim` shim rather than natively; see [Bundled

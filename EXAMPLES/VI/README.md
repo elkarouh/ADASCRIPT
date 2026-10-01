@@ -1,9 +1,11 @@
-# vi.ady, vi_nim.ady
+# vi.ady, vi_nim.ady, vi_core.ady
 
 A tiny vi-like editor in Adascript: a translation of
 [vip](https://github.com/maksimKorzh/vip), the 125-line Python editor, to idiomatic
-Adascript, twice. `vi.ady` uses curses, which is Python's, so it is built with
-`ady2py`; `vi_nim.ady` is the same editor for `ady2nim`.
+Adascript. The editor is `vi_core.ady`, with no terminal in it; `vi.ady` shows it on
+curses (Python, built with `ady2py`) and `vi_nim.ady` on Nim's own terminal (built
+with `ady2nim`). Both nimport `vi_core`: ady2nim compiles it as a module, ady2py
+brings it into the file it writes.
 
     ady2py vi.ady > vi.py && python3 vi.py file.txt
     ady2nim c vi_nim.ady && ./vi_nim file.txt
@@ -28,26 +30,29 @@ with counts (`3dd`, `12G`). `^S` saves, `^Q` quits.
 - **Lines are strings**, not lists of character codes, so an edit is a slice and
   there is no `deepcopy`: the undo history is a list of `Snapshot_T` records.
 
-## vi_nim.ady
+## What a terminal does
 
-Nim has no curses. `vi_nim.ady` has the same editing, line for line, and replaces
-only the terminal: `std/terminal` for the window size, `termios` for raw mode (no
-echo, no line editing, no signals, and `^S` and `^Q` reach the program instead of
-stopping the terminal), and the terminal's own escape codes to draw one frame per
-key. Two things curses did that it does by hand:
+`vi_core` knows nothing of any terminal's key codes or of drawing. A terminal tells it the
+window size (`fit`), asks what to show (`scroll`, `row_text`, `status`, and `row` and
+`col` for the cursor), decodes what was typed (`decode`) and hands it over
+(`handle`), and shows what `save` answers. `vi.ady` does that with curses in 51
+lines (the editor is 312), `vi_nim.ady` in 118, because Nim has no curses and
+`std/terminal` and `termios` leave two things to do by hand:
 
+- **Raw mode.** No echo, no line editing, no signals, and `^S` and `^Q` reach the
+  program instead of stopping the terminal.
 - **A lone ESC against an arrow key.** An arrow key is an escape sequence
   (`ESC O A`, or `ESC [ A`); `read_code` tells it from an ESC by whether more bytes
   follow within 25 ms (curses' `ESCDELAY`), and swallows it. The keys are read with
   `read(2)` rather than `getch`, which reads through C's buffer and would hide the
-  rest of the sequence from the 25 ms wait.
-- **Resizing.** There is no resize event; the window size is read again at every key.
+  rest of the sequence from the 25 ms wait. And there is no resize event: the window
+  size is read again at every key.
 
-Slices and list edits are written so that they mean the same on both backends: a
-slice past the end raises on Nim, so `tail`, `clip` and `splice` are the only way
+Slices and list edits in `vi_core` are written so that they mean the same on both
+backends: a slice past the end raises on Nim, so `tail` and `splice` are the only way
 the editor takes part of a string, and the list edits (`insert_line`, `delete_lines`)
 build the new list instead of calling `insert` (whose arguments Nim takes the other
-way round) or assigning to a slice. `diff vi.ady vi_nim.ady` shows only the terminal.
+way round) or assigning to a slice.
 
 ## Differences from vip
 

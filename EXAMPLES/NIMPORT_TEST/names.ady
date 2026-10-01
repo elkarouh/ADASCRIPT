@@ -1,0 +1,13 @@
+"""A leaf module of test_nimport_modules: an enum, a failure type and a function
+over the enum, for the modules that nimport it and for the program."""
+
+type Kind_T is enum CIRCLE, SQUARE, TRIANGLE
+
+type Failure_T is record:
+    description: str
+
+def label(kind: Kind_T) -> str:
+    case kind:
+        when CIRCLE: "circle"
+        when SQUARE: "square"
+        when TRIANGLE: "triangle"

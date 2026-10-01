@@ -69,7 +69,8 @@ _NIMPORT_CARRIED = ("tick_types", "distinct_types", "unit_relations",
                     "generic_funcs",
                     "class_field_types", "noreturn_procs",
                     "iterator_names", "contextmanager_funcs",
-                    "by_value_procs", "var_param_procs", "failure_types")
+                    "by_value_procs", "var_param_procs", "var_self_methods",
+                    "failure_types")
 _nimport_carried: dict = {}
 _nimport_module_symbols: dict = {}
 # The Nim standard modules a dependency's translation imported. An importer
@@ -117,6 +118,7 @@ def _nim_reset():
     # and not the second takes every argument by value (see _purity_evidence)
     ParserState.by_value_procs = set()
     ParserState.var_param_procs = set()
+    ParserState.var_self_methods = set()   # methods that take self by var
     ParserState.class_names = set()     # all class names defined in this translation unit
     ParserState._current_lhs_type = ""  # annotation of current assignment LHS (set by stmt handlers)
     ParserState.proc_return_types = {}  # method/proc name -> return type string

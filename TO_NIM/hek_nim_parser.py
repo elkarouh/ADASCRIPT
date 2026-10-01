@@ -3093,8 +3093,12 @@ def _func_def_to_nim_inner(self, indent=0):
                 # `param.field += x` and `param[i] += x` are in-place mutations
                 # too, and read the same as `= x` here: an optional compound
                 # operator before the `=`, ruled out from matching `==`.
+                # A method that takes self by var changes what it is called on:
+                # `c.bump()` on a parameter c makes c a var parameter.
+                _mutators = "|".join(_re.escape(m) for m in sorted(ParserState.var_self_methods))
+                _mutator_calls = rf"|\.(?:{_mutators})\(" if _mutators else ""
                 _inplace = _re.search(
-                    _anchor + r"(\.add\(|\.append\(|\.extend\(|\.pop\(|\.clear\(|\.remove\(|\.sort\(|\.next\(|\.\w+\s*[+\-*/]?=(?!=)|\[.*\]\s*[+\-*/]?=(?!=)|[+\-*/]=)",
+                    _anchor + r"(\.add\(|\.append\(|\.extend\(|\.pop\(|\.clear\(|\.remove\(|\.sort\(|\.next\(|\.\w+\s*[+\-*/]?=(?!=)|\[.*\]\s*[+\-*/]?=(?!=)|[+\-*/]=" + _mutator_calls + ")",
                     _scan)
                 # ...and so is mutating what a field or an element holds, as
                 # the `self` check below allows: `p.items.add(x)`,
@@ -5588,6 +5592,8 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
                 f"self: var {class_name}{type_params}" if p.startswith(f"self: {class_name}") else p
                 for p in params
             ]
+            if name:
+                ParserState.var_self_methods.add(name)
         new_params = []
         for p in params:
             pname = p.split(":")[0].strip()

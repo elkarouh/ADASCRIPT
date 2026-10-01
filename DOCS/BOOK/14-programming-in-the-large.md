@@ -6,10 +6,10 @@ hundred lines. Past that, a program wants seams: a types module everything
 agrees on, a domain model, an output layer, and one file at the top that is
 the program itself.
 
-This chapter is about that scale. It is a **Nim-backend chapter**: `nimport`
-is the module mechanism, and the Nim backend is the one that resolves,
-transpiles and links a dependency graph. Section 13.10 says exactly what the
-Python backend does and does not do with a multi-module program.
+This chapter is about that scale. `nimport` is the module mechanism. The Nim
+backend resolves, transpiles and links a dependency graph; the Python backend
+merges each module into the one file it writes. Section 13.10 says what that
+changes.
 
 The worked example is `EXAMPLES/PROJECT/`, a four-file program you can build
 and run:
@@ -371,38 +371,58 @@ land unqualified in every importer. Three rules follow:
 
 ---
 
-## 13.10 The Python backend has no module system
+## 13.10 The Python backend merges the modules
 
-`nimport` is Nim-only by design: the Python backend comments the line out.
+ady2nim compiles each module on its own and links them. ady2py writes one file,
+so it brings the modules into it: a `nimport` of an `.ady` is replaced by that
+module's text, at the place it is first imported and once however many
+modules import it, after the modules *it* imports. Where it looks is ady2nim's
+rule: beside the importing file, then one directory up.
 
 ```python
-nimport geometry
+nimport lib/geometry
 print dist(ORIGIN, p)
 ```
 
 ```python
 # Python output
-# nimport geometry
-print(dist(ORIGIN, p))          # NameError: dist is not defined
+# ---- lib/geometry.ady, nimported ----
+...                              # Point_T, ORIGIN, dist, as geometry.ady wrote them
+# ---- end of lib/geometry.ady ----
+print(dist(ORIGIN, p))
 ```
 
-And `ady2py` translates exactly one file — it has no dependency resolution, it
-writes `<name>_gen.py` next to the source, and type knowledge does not cross
-files, so even after transpiling each module by hand a `Point_T` built in one
-file and used in another comes out as a bare tuple. `from geometry import *`
-is not a way around it either: it survives into the Nim output as invalid
-Nim.
+Because the parser sees the module's declarations, the types work across the
+boundary: an enum from a module in a `case`, a failure type in an `is`, a
+record built positionally, a class. `EXAMPLES/test_nimport_modules.ady` does all
+of that and `make test` compares its output between the backends.
 
-So the rule is blunt, and it is the reason this chapter privileges Nim:
+What the merge costs:
 
-> **A program split across modules is a Nim-backend program.** Code that must
-> run on both backends stays in one file.
+- **One namespace.** Two modules that each define `helper` are two modules on
+  Nim and one clobbered function on Python.
+- **Imported names are unqualified.** After `nimport geometry`, `distance(a, b)`
+  is right on both; `geometry.distance(a, b)`, which ady2nim also accepts, is not
+  understood by ady2py.
+- **Line numbers.** A parse error is reported at its line in the merged text.
+- **The bundled libraries stay Nim-only.** `nimport ansi` and the others in
+  `TO_NIM/STDLIB` are written for Nim, and ady2py leaves them as it did.
+- **A `nimport` with no `.ady` behind it** (`nimport strutils`, `nimport math`)
+  is a Nim-only import and is dropped from the Python output.
 
-That is less restrictive than it sounds. The single-file programs —
-`TOOLS/LISPY/lispy.ady` and `tsp.ady` in `EXAMPLES/`, `c500.ady` in `TOOLS/` — run on both backends
-because they are single files; the multi-module projects (`CFMU/`,
-`TIMETABLE/`, `JOINTJS_DEMO/`, `PROJECT/`) are Nim programs, and the Python
-backend is where you check a *module's* semantics one file at a time.
+`from geometry import *` is still not a way to import a module: it survives into
+the Nim output as invalid Nim.
+
+So the rule is softer than it was:
+
+> **A program split across modules builds on both backends**, with the
+> differences above. Where a name must not clash, give it a name of its own.
+
+The multi-module projects (`CFMU/`, `TIMETABLE/`, `JOINTJS_DEMO/`, `PROJECT/`)
+were written for Nim and use what Nim gives them -- `PROJECT/` calls `sqrt`
+unqualified after `nimport math`, which is Nim's `math` and not Python's -- so
+not every one of them runs on Python. A module written to be shared says what
+it needs: `EXAMPLES/NIMPORT_TEST/` is two modules that do.
 
 ---
 
