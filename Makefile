@@ -795,6 +795,13 @@ test: compile
 	    $(EXDIR)/DOC/awk_paragraph < $(EXDIR)/DOC/awk_paragraph_sample.txt 2>&1 \
 	        | grep -q "record 3: NF=4" && echo OK || { echo FAIL; exit 1; }
 
+	@echo "=== vi (curses, so the Python backend; typed keys in a pty of its own) ==="
+	@printf '  %-42s' "EXAMPLES/VI/vi.ady (25 key scripts)"; \
+	    if ! $(PYTHON) -c 'import curses, pty' 2>/dev/null; then echo "SKIP (no curses or pty)"; else \
+	    $(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(EXDIR)/VI/vi.ady > $(TMPDIR)/ady_vi.py || { echo FAIL; exit 1; }; \
+	    $(PYTHON) $(EXDIR)/VI/test_vi.py $(TMPDIR)/ady_vi.py > $(TMPDIR)/ady_vi.out 2>&1 \
+	        && echo OK || { echo FAIL; grep -A2 FAIL $(TMPDIR)/ady_vi.out | head -20; exit 1; }; fi
+
 	@# lispy wants a terminal for its prompt, but it can be run without one.
 	@echo "=== lispy ==="
 	@# lispy checks itself before it offers a prompt, so an empty stdin runs

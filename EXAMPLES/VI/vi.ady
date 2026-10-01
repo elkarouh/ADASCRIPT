@@ -1,0 +1,364 @@
+#!/usr/bin/env ady2py
+"""vi -- a tiny vi-like text editor, after vip (github.com/maksimKorzh/vip).
+
+    vi [file]
+
+  Normal    h j k l   0 $   gg G   x   r R   i a A o O   dd yy p   u ^R
+            counts: 3dd  12G  2yy
+  Anywhere  ^S saves, ^Q quits
+
+curses is Python's, so this one is built for the Python backend (ady2py).
+
+The keyboard is read once and decoded into a Press_T; every mode is then a
+`case` over what was pressed, and the editor never looks at a key code. Where
+the original reaches for an exception -- opening a file that is not there,
+counting with a number that is not one -- this asks for a `T | !Failure_T` and
+looks at it where it asked.
+"""
+import curses, os, time
+
+type Mode_T is enum NORMAL, INSERT, REPLACE_ONE, REPLACE, GOTO, DELETE, YANK
+
+# What a key press means, whatever code the terminal sent for it.
+type Key_T is enum CHAR, ESCAPE, ENTER, BACKSPACE, SAVE, QUIT, REDO, RESIZE, OTHER
+
+type Press_T is record:
+    key:  Key_T
+    text: str = ""              # the character, for a CHAR; "" for the rest
+
+type Snapshot_T is record:
+    lines: []str
+    row: int
+    col: int
+
+const TAG: [Mode_T]str = [NORMAL: "n", INSERT: "i", REPLACE_ONE: "r",
+                          REPLACE: "R", GOTO: "g", DELETE: "d", YANK: "y"]
+
+# The codes decode() recognises. The control keys are the letter & 0x1f.
+const CTRL_Q: int = 17
+const CTRL_R: int = 18
+const CTRL_S: int = 19
+const ESC: int = 27
+const DEL: int = 127
+const BACKSPACE_KEY: int = 8
+const KEY_BACKSPACE: int = 263           # curses.KEY_BACKSPACE
+const KEY_ENTER: int = 343               # curses.KEY_ENTER
+const KEY_RESIZE: int = 410              # curses.KEY_RESIZE
+
+def decode(ch: int) -> Press_T:
+    """A code curses delivers, as what it means."""
+    case ch:
+        when ESC:
+            return Press_T(ESCAPE)
+        when 10 | 13 | KEY_ENTER:
+            return Press_T(ENTER)
+        when BACKSPACE_KEY | DEL | KEY_BACKSPACE:
+            return Press_T(BACKSPACE)
+        when CTRL_S:
+            return Press_T(SAVE)
+        when CTRL_Q:
+            return Press_T(QUIT)
+        when CTRL_R:
+            return Press_T(REDO)
+        when KEY_RESIZE:
+            return Press_T(RESIZE)
+        when 32..126:
+            return Press_T(CHAR, chr(ch))
+        when others:
+            return Press_T(OTHER)
+
+def load(path: str) -> []str:
+    """The lines of PATH; an empty buffer when it cannot be read -- a new file."""
+    let read: []str | !PathFailure_T = Path(path).read_lines()
+    if read is PathFailure_T:
+        return [""]
+    return read if len(read) > 0 else [""]
+
+class Editor:
+    var scr: curses.window
+    var path: str
+    var lines: []str
+    var yanked: []str = []
+    var history: []Snapshot_T = []
+    var hpos: int = 0
+    var mode: Mode_T = NORMAL
+    var count: str = ""
+    var row: int = 0
+    var col: int = 0
+    var top: int = 0
+    var left: int = 0
+    var rows: int = 0
+    var cols: int = 0
+
+    def __init__(self, scr: curses.window, path: str):
+        self.scr = scr
+        self.path = path
+        self.lines = load(path)
+        self.history = [self.snapshot()]
+        self.resize()
+
+    # ---- state ------------------------------------------------------
+    def snapshot(self) -> Snapshot_T:
+        Snapshot_T(list(self.lines), self.row, self.col)
+
+    def restore(self, snap: Snapshot_T):
+        self.lines = list(snap.lines)
+        self.row = snap.row
+        self.col = snap.col
+
+    def record(self):
+        # a snapshot only when the text really changed; any redo tail goes
+        if self.lines != self.history[self.hpos].lines:
+            self.history = self.history[:self.hpos + 1] + [self.snapshot()]
+            self.hpos = len(self.history) - 1
+
+    def undo(self):
+        if self.hpos > 0:
+            self.hpos -= 1
+            self.restore(self.history[self.hpos])
+
+    def redo(self):
+        if self.hpos < len(self.history) - 1:
+            self.hpos += 1
+            self.restore(self.history[self.hpos])
+
+    def times(self) -> int:
+        """The count typed before the command; 1 when there is none."""
+        let n: int | !ParseFailure_T = parse_int(self.count)
+        if n is ParseFailure_T:
+            return 1
+        return n
+
+    def resize(self):
+        self.rows, self.cols = self.scr.getmaxyx()
+        self.rows -= 1                       # the last line is the status bar
+
+    def clamp(self):
+        self.row = max(0, min(self.row, len(self.lines) - 1))
+        let width: int = len(self.lines[self.row])
+        let limit: int = (width if self.mode in {INSERT, REPLACE} else max(width - 1, 0))
+        self.col = max(0, min(self.col, limit))
+
+    # ---- screen -----------------------------------------------------
+    def draw(self):
+        self.top = max(min(self.top, self.row), self.row - self.rows + 1)
+        self.left = max(min(self.left, self.col), self.col - self.cols + 1)
+        for i in 0 ..< self.rows:
+            let n: int = self.top + i
+            self.scr.move(i, 0)
+            self.scr.clrtoeol()
+            if n < len(self.lines):
+                self.scr.addnstr(i, 0, self.lines[n][self.left:], self.cols - 1)
+            else:
+                self.scr.addstr(i, 0, "~")
+        let total: int = len(self.lines)
+        let pct: int = (self.row + 1) * 100 // total
+        let status: str = f'{TAG[self.mode]} "{self.path}" line {self.row + 1} of {total} --{pct}%-- col {self.col}'
+        self.scr.move(self.rows, 0)
+        self.scr.clrtoeol()
+        self.scr.addnstr(self.rows, 0, status, self.cols - 1)
+        self.scr.move(self.row - self.top, self.col - self.left)
+        self.scr.refresh()
+
+    def flash(self, message: str):
+        self.scr.move(self.rows, 0)
+        self.scr.clrtoeol()
+        self.scr.addnstr(self.rows, 0, message, self.cols - 1)
+        self.scr.refresh()
+        time.sleep(1)
+
+    def save(self):
+        let saved: None | !PathFailure_T = Path(self.path).write_text("\n".join(self.lines) + "\n")
+        if saved is PathFailure_T:
+            self.flash(f"Not saved: {saved.reason}")
+        else:
+            self.flash("Saved")
+
+    # ---- editing ----------------------------------------------------
+    def put_line(self, text: str):
+        self.lines[self.row] = text
+
+    def begin_insert(self, command: str):
+        """i a A o O: where the cursor goes, then insert mode."""
+        case command:
+            when "a":
+                self.col += 1
+            when "A":
+                self.col = len(self.lines[self.row])
+            when "o":
+                self.row += 1
+                self.lines.insert(self.row, "")
+            when "O":
+                self.lines.insert(self.row, "")
+            when others:
+                pass
+        self.mode = INSERT
+
+    def move(self, command: str):
+        case command:
+            when "h":
+                self.col -= 1
+            when "l":
+                self.col += 1
+            when "k":
+                self.row -= 1
+            when "j":
+                self.row += 1
+            when "0":
+                self.col = 0
+            when "$":
+                self.row += self.times() - 1
+                self.col = len(self.lines[min(self.row, len(self.lines) - 1)])
+            when "G":
+                self.row = (self.times() - 1 if self.count != "" else len(self.lines) - 1)
+            when others:
+                pass
+
+    def put(self):
+        self.lines[self.row + 1:self.row + 1] = list(self.yanked)
+        if self.yanked:
+            self.row += 1
+
+    # ---- modes ------------------------------------------------------
+    def normal(self, press: Press_T):
+        let line: str = self.lines[self.row]
+        case press.key:
+            when REDO:
+                self.redo()
+            when CHAR:
+                case press.text:
+                    when "i" | "a" | "A" | "o" | "O":
+                        self.begin_insert(press.text)
+                    when "h" | "j" | "k" | "l" | "0" | "$" | "G":
+                        self.move(press.text)
+                    when "r":
+                        self.mode = REPLACE_ONE
+                    when "R":
+                        self.mode = REPLACE
+                    when "g":
+                        self.mode = GOTO
+                    when "d":
+                        self.mode = DELETE
+                    when "y":
+                        self.mode = YANK
+                    when "x":
+                        self.put_line(line[:self.col] + line[self.col + 1:])
+                    when "p":
+                        self.put()
+                    when "u":
+                        self.undo()
+                    when others:
+                        pass
+            when others:
+                pass
+        if self.mode not in {DELETE, YANK, GOTO}:
+            self.count = ""
+
+    def insert(self, press: Press_T):
+        let line: str = self.lines[self.row]
+        case press.key:
+            when ESCAPE:
+                self.mode = NORMAL
+                self.col -= 1
+            when ENTER:
+                self.put_line(line[:self.col])
+                self.row += 1
+                self.lines.insert(self.row, line[self.col:])
+                self.col = 0
+            when BACKSPACE:
+                if self.col > 0:
+                    self.put_line(line[:self.col - 1] + line[self.col:])
+                    self.col -= 1
+                elif self.row > 0:
+                    self.row -= 1
+                    self.col = len(self.lines[self.row])
+                    self.lines[self.row] += self.lines.pop(self.row + 1)
+            when CHAR:
+                self.put_line(line[:self.col] + press.text + line[self.col:])
+                self.col += 1
+            when others:
+                pass
+
+    def overwrite(self, press: Press_T):
+        let line: str = self.lines[self.row]
+        case press.key:
+            when ESCAPE:
+                self.mode = NORMAL
+                self.col -= 1
+            when BACKSPACE:
+                self.col -= 1
+            when CHAR:
+                self.put_line(line[:self.col] + press.text + line[self.col + 1:])
+                self.col += 1
+            when others:
+                pass
+
+    def replace_one(self, press: Press_T):
+        """r: the next character replaces the one under the cursor, once."""
+        let line: str = self.lines[self.row]
+        if press.key == CHAR and self.col < len(line):
+            self.put_line(line[:self.col] + press.text + line[self.col + 1:])
+        self.mode = NORMAL
+
+    def operator(self, press: Press_T):
+        """The second key of dd, yy and gg; anything else cancels."""
+        let lo: int = self.row
+        let hi: int = min(self.row + self.times(), len(self.lines))
+        case (self.mode, press.text):
+            when (DELETE, "d"):
+                self.yanked = self.lines[lo:hi]
+                del self.lines[lo:hi]
+                if not self.lines:
+                    self.lines = [""]
+                self.col = 0
+            when (YANK, "y"):
+                self.yanked = self.lines[lo:hi]
+            when (GOTO, "g"):
+                self.row = 0
+            when others:
+                pass
+        self.mode = NORMAL
+        self.count = ""
+
+    # ---- main loop --------------------------------------------------
+    def run(self):
+        curses.raw()
+        while True:
+            self.clamp()
+            self.draw()
+            let press: Press_T = decode(self.scr.getch())
+            case press.key:
+                when QUIT:
+                    return
+                when SAVE:
+                    self.save()
+                    continue
+                when RESIZE:
+                    self.resize()
+                    continue
+                when others:
+                    pass
+            # digits make a count -- a leading 0 is the motion, not a digit
+            let counting: bool = self.mode in {NORMAL, DELETE, YANK, GOTO}
+            if counting and press.text.isdigit() and (press.text != "0" or self.count != ""):
+                self.count += press.text
+                continue
+            case self.mode:
+                when NORMAL:
+                    self.normal(press)
+                when INSERT:
+                    self.insert(press)
+                when REPLACE:
+                    self.overwrite(press)
+                when REPLACE_ONE:
+                    self.replace_one(press)
+                when DELETE | YANK | GOTO:
+                    self.operator(press)
+            self.clamp()
+            self.record()
+
+def main(scr: curses.window):
+    Editor(scr, ($1 if $# >= 1 else "noname.txt")).run()
+
+os.environ.setdefault("ESCDELAY", "25")
+curses.wrapper(main)
