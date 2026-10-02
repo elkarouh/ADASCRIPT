@@ -74,10 +74,10 @@ var exec_env   : str = ""
 var secure_dom : str = ""
 var sec_level  : str = ""
 for part in loc_out.split(";"):
-  let kv : []str = part.strip().split("=", 1)
-  if len(kv) == 2:
-    let k : str = kv[0].strip()
-    let v : str = kv[1].strip().strip('"')
+  let (key, eq, value) = part.partition("=")
+  if eq != "":
+    let k : str = key.strip()
+    let v : str = value.strip().strip('"')
     if k == "EXEC_ENV":
       exec_env = v
     elif k == "SECURE_DOMAIN":

@@ -119,10 +119,9 @@ def parse_dbt_hdr(text: str) -> {str}str:
   # The group is non-capturing because nothing needs it to capture.
   let pairs : []str = text == /\w+="(?:[^"\\]|\\.)*"/g
   for pair in pairs:
-    let eq  : int = pair.find("=")
-    let key : str = pair[0:eq]
-    # +2 and -1 drop the `="` that opens the value and the `"` that ends it.
-    var val : str = pair[eq + 2:len(pair) - 1]
+    let (key, _, quoted) = pair.partition("=")
+    # the value is in quotes: drop the `"` that opens it and the `"` that ends it.
+    var val : str = quoted[1:len(quoted) - 1]
     val = val.replace("\\\"", "\"").replace("\\\\", "\\")
     d[key] = val
   return d

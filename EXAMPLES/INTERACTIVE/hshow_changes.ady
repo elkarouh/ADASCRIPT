@@ -65,8 +65,7 @@ def parse_changes_report(path: str) -> {str}[]FileChange:
             let stripped: str = line.lstrip()
 
             if RE_CHANGED.match(line):
-                let sep:       str = "#emacs:"
-                let diff_part: str = line[line.index(sep) + len(sep):]
+                let (_, _, diff_part) = line.partition("#emacs:")
                 current_diff_cmd = diff_part.strip()
                 current_filepath = _extract_filepath_from_ediff(current_diff_cmd)
                 current_kind     = "CHANGED"

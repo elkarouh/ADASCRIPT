@@ -45,10 +45,10 @@ if loc_rc != 0 or loc_out.strip() == "":
 var pkg_name : str = ""
 var exec_env : str = ""
 for part in loc_out.split(";"):
-  let kv : []str = part.strip().split("=", 1)
-  if len(kv) == 2:
-    let k : str = kv[0].strip()
-    let v : str = kv[1].strip().strip('"')
+  let (key, eq, value) = part.partition("=")
+  if eq != "":
+    let k : str = key.strip()
+    let v : str = value.strip().strip('"')
     if k == "PACKAGE_NAME":
       pkg_name = v
     elif k == "EXEC_ENV":
@@ -73,10 +73,10 @@ if len(users) == 1:
 elif len(users) == 0:
   let (conn_out, _) = shell: connection.info.query USERNAME PASSWORD -where REMOTE_INSTANCE {remote_instance} -where INTERNAL_NAME {group_name}
   for part in conn_out.split(";"):
-    let kv : []str = part.strip().split("=", 1)
-    if len(kv) == 2:
-      let k : str = kv[0].strip()
-      let v : str = kv[1].strip().strip('"')
+    let (key, eq, value) = part.partition("=")
+    if eq != "":
+      let k : str = key.strip()
+      let v : str = value.strip().strip('"')
       if k == "USERNAME":
         username = v
       elif k == "PASSWORD":
