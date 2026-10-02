@@ -300,6 +300,13 @@ def dms2dec(pos_in_dms: str, axis: Axis_T) -> Degrees_T | !GeoFailure_T:
     let dd: float = float(deg) + float(mins) / 60.0 + secs / 3600.0
     return Degrees_T(-dd if direction in "SW-" else dd)
 
+def human2dec_degree(text: str) -> Degrees_T | !GeoFailure_T:
+    """An angle written DDDMMSS[.ss] -- a bearing, with no direction letter -- as decimal degrees.
+
+        human2dec_degree("3065205.37")     ->  306.868...    (306 degrees 52' 05.37")
+    """
+    return dms2dec(text + "E", LONGITUDE)          # three digits of degrees, like a longitude
+
 def dms2lat(text: str) -> Latitude_T | !GeoFailure_T:
     """A DMS latitude, which has to be on the globe."""
     do:

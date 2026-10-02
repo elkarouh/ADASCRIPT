@@ -14,7 +14,15 @@ original that did not work are fixed (`normal()`, `projection()`, and the docstr
 example of `dms2dec`).
 
 `test_map_utils.ady` checks the translation against numbers printed by the original.
+`test_hek_map_utils.py` is the original's pytest file (it imports `hek_map_utils`,
+the module's older name here), and `test_hek_map_utils.ady` is its cases in
+Adascript, class for class; its header lists the few that do not carry over.
+Against `map_utils.py` the pytest file passes 52 of 55: `construct_from_name`
+needs the author's `my_aerodromes` module, and two `str()` tests look for the word
+"degrees" where the module prints the degree sign. It also imports
+`human2dec_degree`, which `map_utils.py` does not have; `map_utils.ady` does.
 Running `map_utils` prints the original's demo, without its folium map.
 
     ady2nim c map_utils.ady && ./map_utils
     ady2nim c -r test_map_utils.ady
+    ady2nim c -r test_hek_map_utils.ady

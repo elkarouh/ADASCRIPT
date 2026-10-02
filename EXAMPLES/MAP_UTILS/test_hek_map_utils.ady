@@ -1,0 +1,206 @@
+#!/usr/bin/env ady2nim
+"""Test: map_utils.ady, the cases of test_hek_map_utils.py (the pytest file beside it)
+-- the same checks, in the same order, one section for each of its test classes.
+
+What does not carry over, and why:
+  * test_is_tuple (Position, GeoPoint): a Position is a class here, not a tuple;
+    p.x and p.latitude are the way in.
+  * isinstance(...) and `is not None` checks: the types say so; a Position plus a
+    Vector cannot be anything else than a Position.
+  * the capsys checks that + and - print nothing: nothing in map_utils.ady prints
+    except the demo.
+  * test_construct_from_name: it looks an aerodrome up in my_aerodromes, which is
+    not translated.
+  * f"{p:h}" and f"{p:d}": `p.human()` and `p.decimal()`.
+  * "degrees" in str(v): the module prints the degree sign, as map_utils.py does,
+    so those two checks look for the sign.
+"""
+nimport math
+from map_utils import Axis_T, LATITUDE, LONGITUDE
+from map_utils import Meters_T, Kilometers_T, Degrees_T, Latitude_T, Longitude_T, SquareMeters_T
+from map_utils import GeoFailure_T, LatLong_T, GeoVector, GeoPoint, Vector, Position
+from map_utils import dms2dec, dd2dms, human2dec_degree, human_latlong2dec, dec2human_latlong
+
+def near(actual: float, expected: float, tol: float) -> bool:
+    abs(actual - expected) <= tol
+
+def decimal(text: str, axis: Axis_T) -> float:
+    let r: Degrees_T | !GeoFailure_T = dms2dec(text, axis)
+    if r is GeoFailure_T:
+        return -999.0
+    return float(r)
+
+def bearing_of(text: str) -> float:
+    let r: Degrees_T | !GeoFailure_T = human2dec_degree(text)
+    if r is GeoFailure_T:
+        return -999.0
+    return float(r)
+
+def latlong(text: str) -> LatLong_T:
+    let r: LatLong_T | !GeoFailure_T = human_latlong2dec(text)
+    if r is GeoFailure_T:
+        print f"cannot read {text}: {r.detail}"
+        quit(1)
+    return r
+
+def from_dms(text: str) -> GeoPoint:
+    let ll: LatLong_T = latlong(text)
+    return GeoPoint(ll.latitude, ll.longitude)
+
+# ---- TestDms2Dec ---------------------------------------------------------------
+
+assert near(decimal("505405N", LATITUDE), 50.90138, 0.001)               # 50 54' 05" N
+assert decimal("505405S", LATITUDE) < 0
+assert near(decimal("505405S", LATITUDE), -50.90138, 0.001)
+assert decimal("0042904E", LONGITUDE) > 0
+assert near(decimal("0042904E", LONGITUDE), 4.4844, 0.001)               # 004 29' 04" E
+assert decimal("0042904W", LONGITUDE) < 0
+assert decimal("08415400S", LATITUDE) < 0                                # extra digits, no point
+
+# ---- TestDd2Dms ----------------------------------------------------------------
+
+let north: str = dd2dms(50.9014, LATITUDE)
+assert north.endswith("N") and north.startswith("50")
+assert dd2dms(-33.86, LATITUDE).endswith("S")
+let east: str = dd2dms(4.484, LONGITUDE)
+assert east.endswith("E")
+assert len(east) - 1 >= 7                                                # three digits of degrees
+assert dd2dms(-12.034, LONGITUDE).endswith("W")
+
+# ---- TestHuman2DecDegree -------------------------------------------------------
+
+assert near(bearing_of("3065205.37"), 306.868, 0.01)                     # 306 52' 05.37"
+
+# ---- TestHumanLatlongRoundtrip -------------------------------------------------
+
+let original: LatLong_T = latlong("505405N 0042904E")
+let back: str = dec2human_latlong(original.latitude, original.longitude)
+let again: LatLong_T = latlong(back)
+assert near(float(original.latitude), float(again.latitude), 0.01)
+assert near(float(original.longitude), float(again.longitude), 0.01)
+
+# ---- TestVector ----------------------------------------------------------------
+
+let along: Vector = Vector(10.0, 0.0)
+assert near(float(along.length()), 10.0, 1e-9) and near(float(along.angle()), 0.0, 1e-9)
+assert near(float(along.x), 10.0, 1e-9) and near(float(along.y), 0.0, 1e-6)
+
+let unit_x: Vector = Vector(1.0, 0.0)
+let quarter: Vector = unit_x.rotated_by(90.0)
+assert near(float(quarter.angle()), 90.0, 1e-9) and near(float(quarter.length()), 1.0, 1e-9)
+
+let ten: Vector = Vector(10.0, 45.0)
+let shorter: Vector = ten.shortened_by(3.0)
+assert near(float(shorter.length()), 7.0, 1e-9) and near(float(shorter.angle()), 45.0, 1e-9)
+
+let east_1: Vector = Vector(1.0, 0.0)
+let north_1: Vector = Vector(1.0, 90.0)
+assert near(float(east_1.dot_product(north_1)), 0.0, 1e-9)               # perpendicular
+assert near(float(Vector(3.0, 0.0).dot_product(Vector(4.0, 0.0))), 12.0, 1e-9)
+assert near(float(east_1.cross(north_1)), 1.0, 1e-9)
+
+assert near(Vector(5.0, 30.0).cos_theta(Vector(3.0, 30.0)), 1.0, 1e-9)   # same direction
+assert near(east_1.cos_theta(north_1), 0.0, 1e-9)
+assert near(east_1.cos_theta(Vector(1.0, 180.0)), -1.0, 1e-9)            # opposite
+
+let five: Vector = Vector(5.0, 30.0)
+assert near(float(five.unit().length()), 1.0, 1e-9)
+
+let slanted: Vector = Vector(5.0, 45.0)
+let shadow: Vector = slanted.projection(east_1)                          # onto the x axis
+assert near(float(shadow.length()), 5.0 * cos(degToRad(45.0)), 1e-6)
+
+let sum_3_4: Vector = Vector(3.0, 0.0) + Vector(4.0, 0.0)
+assert near(float(sum_3_4.length()), 7.0, 1e-6)
+let diff_7_3: Vector = Vector(7.0, 0.0) - Vector(3.0, 0.0)
+assert near(float(diff_7_3.length()), 4.0, 1e-6)
+
+let scaled: Vector = Vector(3.0, 45.0) * 2.0
+assert near(float(scaled.length()), 6.0, 1e-9) and near(float(scaled.angle()), 45.0, 1e-9)
+
+let shown: str = f"{Vector(10.0, 45.0)}"
+assert "m" in shown and "°" in shown
+
+assert near(float(Vector(3.0, 0.0).triangle_area(Vector(4.0, 90.0))), 6.0, 1e-9)
+
+# ---- TestPosition --------------------------------------------------------------
+
+let at_3_4: Position = Position(3.0, 4.0)
+assert float(at_3_4.x) == 3.0 and float(at_3_4.y) == 4.0
+
+let one_on: Position = Position(1.0, 0.0) + Vector(1.0, 0.0)             # 1 unit along x
+assert near(float(one_on.x), 2.0, 1e-6) and near(float(one_on.y), 0.0, 1e-6)
+
+let gap: Vector = Position(5.0, 5.0) - Position(2.0, 1.0)
+assert near(float(gap.x), 3.0, 1e-9) and near(float(gap.y), 4.0, 1e-9)
+
+let out: Position = Position(2.0, 0.0)
+let origin: Position = Position(0.0, 0.0)
+let spun: Position = out.rotate_around_point(origin, 90.0)
+assert near(float(spun.x), 0.0, 1e-6) and near(float(spun.y), 2.0, 1e-6)
+
+# ---- TestGeoVector -------------------------------------------------------------
+
+let hundred: GeoVector = GeoVector(100.0, 45.0)
+assert near(float(hundred.magnitude()), 100.0, 1e-6) and near(float(hundred.phase()), 45.0, 1e-6)
+
+let fifty: GeoVector = GeoVector(50.0, 90.0)
+let turned: GeoVector = fifty.turn(45.0)
+assert near(float(turned.magnitude()), 50.0, 1e-6) and near(float(turned.phase()), 135.0, 1e-6)
+
+let gnorth: GeoVector = GeoVector(1.0, 0.0)
+let geast: GeoVector = GeoVector(1.0, 90.0)
+assert near(float(gnorth.dot_product(geast)), 0.0, 1.0)                  # square metres: 1 km vectors
+assert near(float(gnorth.cross_product(geast)), 1000000.0, 1e-3)         # 1 km x 1 km, in m2
+
+let gshown: str = f"{GeoVector(100.0, 45.0)}"
+assert "km" in gshown and "°" in gshown
+
+# ---- TestGeoPoint --------------------------------------------------------------
+
+let made: GeoPoint = GeoPoint(50.9, 4.48)
+assert near(float(made.latitude), 50.9, 1e-9) and near(float(made.longitude), 4.48, 1e-9)
+
+let brussels: GeoPoint = from_dms("505405N 0042904E")
+assert near(float(brussels.latitude), 50.9014, 0.01) and near(float(brussels.longitude), 4.4844, 0.01)
+
+let start: GeoPoint = GeoPoint(50.0, 4.0)
+let hundred_north: GeoVector = GeoVector(100.0, 0.0)
+let further_north: GeoPoint = start + hundred_north
+assert further_north.latitude > start.latitude                           # further north
+
+let p51: GeoPoint = GeoPoint(51.0, 4.0)
+let p50: GeoPoint = GeoPoint(50.0, 4.0)
+let degree_of_latitude: GeoVector = p51 - p50
+assert 110.0 < float(degree_of_latitude.magnitude()) < 112.0             # about 111 km
+
+let here: GeoPoint = GeoPoint(50.9014, 4.4844)
+assert "N" in here.human() and "E" in here.human()
+assert "[" in here.decimal() and "]" in here.decimal()
+let default_shown: str = f"{here}"
+assert "N" in default_shown and "[" in default_shown                     # DMS and decimal
+
+let centre: GeoPoint = GeoPoint(50.0, 4.0)
+let above: GeoPoint = GeoPoint(51.0, 4.0)
+let flipped: GeoPoint = above.rotate_around_point(centre, 180.0)
+assert flipped.latitude < centre.latitude                                # roughly south of it
+
+let ta: GeoPoint = GeoPoint(50.0, 3.0)
+let tb: GeoPoint = GeoPoint(51.0, 3.0)
+let tc: GeoPoint = GeoPoint(50.5, 5.0)
+assert GeoPoint(50.5, 3.5).is_point_inside_triangle(ta, tb, tc)
+assert not GeoPoint(52.0, 6.0).is_point_inside_triangle(ta, tb, tc)
+# three vertices on one line: a degenerate triangle, False and no division by zero
+let line_a: GeoPoint = GeoPoint(50.0, 3.0)
+let line_b: GeoPoint = GeoPoint(51.0, 3.0)
+let line_c: GeoPoint = GeoPoint(52.0, 3.0)
+assert not GeoPoint(50.5, 3.0).is_point_inside_triangle(line_a, line_b, line_c)
+
+let square: []GeoPoint = [GeoPoint(50.0, 3.0), GeoPoint(51.0, 3.0), GeoPoint(51.0, 5.0), GeoPoint(50.0, 5.0)]
+assert GeoPoint(50.5, 4.0).is_point_inside_polygon(square)
+assert not GeoPoint(52.0, 6.0).is_point_inside_polygon(square)
+# a point on an edge: either answer is right; what is tested is that the edge that runs
+# along the ray (equal longitudes) is not divided by
+let on_edge: bool = GeoPoint(50.5, 3.0).is_point_inside_polygon(square)
+
+print "test_hek_map_utils OK"
