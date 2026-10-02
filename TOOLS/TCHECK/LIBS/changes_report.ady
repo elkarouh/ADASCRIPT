@@ -167,12 +167,12 @@ class FileChange:
         color; then the commits that made the change and their tickets."""
         let p: Path = Path(self.file)
         let name: str = p.name
-        let dot: int = name.rfind(".")
+        let (base, _, extension) = name.rpartition(".")
         stdout.write(f"FILE {self.kind}: {p.parent}/")
-        if dot > 0:
-            puts("Ky", name[:dot])
+        if base != "":
+            puts("Ky", base)
             stdout.write(".")
-            puts("Wb", name[dot + 1:], NEWLINE=True)
+            puts("Wb", extension, NEWLINE=True)
         else:
             puts("Ky", name, NEWLINE=True)
         print "COMMITS     : " + " ".join(self.commits)
@@ -463,8 +463,8 @@ def extension_of(file: NmFile_T) -> Extension_T:
     """FILE's extension, as FileChange.display splits it: after the last dot of
     its name, when that dot does not start it; "" when there is none."""
     let name: str = Path(file).name
-    let dot: int = name.rfind(".")
-    name[dot + 1:] if dot > 0 else ""
+    let (base, _, extension) = name.rpartition(".")
+    extension if base != "" else ""
 
 def extension_label(ext: Extension_T) -> str:
     ext if ext != "" else "(no extension)"

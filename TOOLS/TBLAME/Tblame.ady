@@ -287,7 +287,8 @@ class Resolver:
         var hit: Hit
         hit.raw = raw
         hit.kind = HK_Blame
-        hit.file = Path(raw[:raw.find(":")])
+        let (file_part, _, _) = raw.partition(":")
+        hit.file = Path(file_part)
         hit.orig = hit.file
         hit.nmroot = self.workspace
         hit.repo = self.workspace / system / subsystem
@@ -300,7 +301,7 @@ class Resolver:
         """A /cm/ot/... line: blamed in the alternate when there is one,
         else in the workspace -- at the revision its baseline names.
         FILEPATH is the subdir+file part, relative to the subsystem."""
-        let written: str = raw[:raw.find(":")]
+        let (written, _, _) = raw.partition(":")
         var hit: Hit
         hit.raw = raw
         hit.orig = Path(written)
