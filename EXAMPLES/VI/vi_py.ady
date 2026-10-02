@@ -37,6 +37,8 @@ def run(scr: curses.window, ed: Editor):
         ed.clamp()
         draw(scr, ed)
         let press: Press_T = decode(scr.getch())
+        let (rows2, cols2) = scr.getmaxyx()    # a page is the window less a line: the size now
+        ed.fit(cols2, rows2)
         case press.key:
             when QUIT: return
             when SAVE: flash(scr, ed, ed.save())

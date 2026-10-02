@@ -12,7 +12,10 @@ illwill for a key, drawing the rows into its buffer, and giving ^S and ^Q to the
 program -- illwill leaves flow control on, so the terminal would take them.
 """
 nimport illwill, termios
-from vi_core import Editor, Press_T, Key_T, decode, KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT
+from vi_core import (
+    Editor, Press_T, Key_T, decode, KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_HOME, KEY_END,
+    KEY_PPAGE, KEY_NPAGE,
+)
 
 def keep_flow_control_keys():
     """^S and ^Q are saved and quit here, not the terminal's stop and go."""
@@ -22,9 +25,9 @@ def keep_flow_control_keys():
     let set: cint = tcsetattr(0, TCSANOW, addr(t))
 
 def read_code() -> int:
-    """The next key, as a code decode() knows. illwill reads an arrow key as one key
-    of its own, with an ordinal that is no ASCII code: it becomes curses' code for the
-    arrow, which decode() knows; the other function keys stay as they are, and
+    """The next key, as a code decode() knows. illwill reads an arrow, Home, End or Page
+    key as one key of its own, with an ordinal that is no ASCII code: it becomes curses'
+    code for it, which decode() knows; the other function keys stay as they are, and
     decode() takes them as OTHER."""
     while True:
         let key: Key = getKeyWithTimeout(200)
@@ -32,6 +35,10 @@ def read_code() -> int:
         if key == Key.Down: return KEY_DOWN
         if key == Key.Left: return KEY_LEFT
         if key == Key.Right: return KEY_RIGHT
+        if key == Key.Home: return KEY_HOME
+        if key == Key.End: return KEY_END
+        if key == Key.PageUp: return KEY_PPAGE
+        if key == Key.PageDown: return KEY_NPAGE
         if key != Key.None:
             return ord(key)
 
@@ -51,13 +58,17 @@ def flash(ed: Editor, message: str):
     line.display()
     sleep(1000)
 
+def fit_window(ed: Editor):
+    """Tell the editor how big the window is now; a terminal that says 0 x 0 is not up yet."""
+    ed.fit(max(terminalWidth(), 1), max(terminalHeight(), 2))
+
 def run(ed: Editor):
     while True:
-        # the window may have changed since the last key; a terminal that says 0 x 0 is not up yet
-        ed.fit(max(terminalWidth(), 1), max(terminalHeight(), 2))
+        fit_window(ed)                       # the window may have changed since the last key
         ed.clamp()
         draw(ed)
         let press: Press_T = decode(read_code())
+        fit_window(ed)                       # ... or while it waited: a page is the window less a line
         case press.key:
             when QUIT: return
             when SAVE: flash(ed, ed.save())

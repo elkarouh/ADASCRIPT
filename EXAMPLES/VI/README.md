@@ -12,13 +12,21 @@ brings it into the file it writes.
     ady2nim c vi_nim.ady && ./vi_nim file.txt        # on illwill
     ady2nim c vi_raw.ady && ./vi_raw file.txt        # on the raw terminal
 
-Normal mode: `h j k l` or the arrow keys, `0 $`, `gg G`, `x`, `r R`, `i a A o O`,
-`dd yy p`, `u ^R`, with counts (`3dd`, `12G`). `^S` saves, `^Q` quits.
+Normal mode: `h j k l` or the arrow keys, `0 $` or Home and End, `gg G`, PageUp and
+PageDown, `x`, `r R`, `i a A o O`, `dd yy p`, `u ^R`, `/` with `n` and `N`, and counts
+(`3dd`, `12G`). `^S` saves, `^Q` quits.
 
-The arrow keys move the cursor in normal, insert and replace mode (a modified arrow,
-as in `ESC [ 1 ; 5 D`, is a plain one); in the middle of `d`, `y`, `g` or `r` they
-cancel, as any other key does. `:` opens a command line on the status row, where `ESC`
-drops it and backspace edits it, then leaves it when it is empty:
+The arrow, Home, End and Page keys move the cursor in normal, insert and replace mode
+(a modified arrow, as in `ESC [ 1 ; 5 D`, is a plain one); in the middle of `d`, `y`,
+`g` or `r` they cancel, as any other key does. Home and End are the start and the end
+of the line, and a page is the window less a line.
+
+`/` opens a line on the status row for the text to search for; ENTER searches forward
+from the cursor, wrapping round the end of the file, and moves to the match. `n` goes
+to the next match and `N` to the one before; ENTER on an empty `/` line searches for the
+last text again. The text is matched as it is typed, not as a pattern. Nothing found, or
+no text yet, says so on the status row. `:` opens a command line on the status row, as `/` does:
+`ESC` drops it, and backspace edits it, then leaves it when it is empty:
 
 | Command | Does |
 |---------|------|
@@ -99,8 +107,8 @@ way round) or assigning to a slice.
 
 ## Tests
 
-`test_vi.py` runs key scripts in a pty -- 47 on curses, 48 on the Nim editors, which are
-also held to the `ESC [ 1 ; 5 D` form of an arrow -- and compares the file each
+`test_vi.py` runs key scripts in a pty -- 69 on curses, 72 on the Nim editors, which are
+also held to the `ESC [` forms of the arrows, Home and End -- and compares the file each
 leaves. Undo is one step per change, as in vi; typing in replace mode past the end of a
 line makes the line grow.
 

@@ -3,9 +3,10 @@ vip (github.com/maksimKorzh/vip) and has outgrown it. vi_py.ady (curses, Python)
 vi_nim.ady (illwill, Nim) and vi_raw.ady (Nim, by hand) are three ways of showing it.
 
   Normal    h j k l or the arrow keys   0 $   gg G   x   r R   i a A o O   dd yy p   u ^R
+            Home End PageUp PageDown   /text then n and N (search, wrapping)
             counts: 3dd  12G  2yy
             :w  :w NAME  :q  :q!  :wq  :x  :N (line N)  :$ (the last line)
-  Insert    the arrow keys move; ESC leaves
+  Insert    the arrow, Home, End and Page keys move; ESC leaves
   Anywhere  ^S saves, ^Q quits
 
 A key is decoded once into a Press_T, and every mode is a `case` over what was
@@ -19,10 +20,10 @@ what was typed (`decode`) and hand it over (`handle`), and show what `save`
 answers.
 """
 
-type Mode_T is enum NORMAL, INSERT, REPLACE_ONE, REPLACE, GOTO, DELETE, YANK, COMMAND
+type Mode_T is enum NORMAL, INSERT, REPLACE_ONE, REPLACE, GOTO, DELETE, YANK, COMMAND  # COMMAND: a line typed after : or /
 
 # What a key press means, whatever code the terminal sent for it.
-type Key_T is enum CHAR, ESCAPE, ENTER, BACKSPACE, SAVE, QUIT, REDO, RESIZE, UP, DOWN, LEFT, RIGHT, OTHER
+type Key_T is enum CHAR, ESCAPE, ENTER, BACKSPACE, SAVE, QUIT, REDO, RESIZE, UP, DOWN, LEFT, RIGHT, HOME, END, PAGEUP, PAGEDOWN, OTHER
 
 type Press_T is record:
     key:  Key_T
@@ -48,6 +49,10 @@ const KEY_DOWN: int = 258                # curses.KEY_DOWN, UP, LEFT, RIGHT: a t
 const KEY_UP: int = 259                  # that reads bytes (vi_raw, vi_nim) sends these
 const KEY_LEFT: int = 260                # codes for the arrow keys too
 const KEY_RIGHT: int = 261
+const KEY_HOME: int = 262                # curses.KEY_HOME, END, NPAGE (page down), PPAGE
+const KEY_NPAGE: int = 338
+const KEY_PPAGE: int = 339
+const KEY_END: int = 360
 const KEY_BACKSPACE: int = 263           # curses.KEY_BACKSPACE
 const KEY_ENTER: int = 343               # curses.KEY_ENTER
 const KEY_RESIZE: int = 410              # curses.KEY_RESIZE
@@ -66,6 +71,10 @@ def decode(ch: int) -> Press_T:
         when KEY_DOWN: Press_T(DOWN, "")
         when KEY_LEFT: Press_T(LEFT, "")
         when KEY_RIGHT: Press_T(RIGHT, "")
+        when KEY_HOME: Press_T(HOME, "")
+        when KEY_END: Press_T(END, "")
+        when KEY_PPAGE: Press_T(PAGEUP, "")
+        when KEY_NPAGE: Press_T(PAGEDOWN, "")
         when 32..126: Press_T(CHAR, str(chr(ch)))
         when others: Press_T(OTHER, "")
 
@@ -106,7 +115,9 @@ class Editor:
     var left: int = 0
     var rows: int = 0
     var cols: int = 0
-    var cmd: str = ""                    # typed after the colon, in COMMAND mode
+    var cmd: str = ""                    # typed after the colon or slash, in COMMAND mode
+    var prompt: str = ":"                # which of the two it was
+    var pattern: str = ""                # what was last searched for, for n and N
     var saved: []str = []                # the text as last written, to tell a change from none
     var message: str = ""                # what to tell the user; the terminal shows it, then clears it
     var quitting: bool = False           # a command asked to quit
@@ -177,7 +188,7 @@ class Editor:
 
     def status(self) -> str:
         if self.mode == COMMAND:
-            return f":{self.cmd}"
+            return f"{self.prompt}{self.cmd}"
         let total: int = len(self.lines)
         let pct: int = (self.row + 1) * 100 // total
         f'{TAG[self.mode]} "{self.path}" line {self.row + 1} of {total} --{pct}%-- col {self.col}'
@@ -237,13 +248,52 @@ class Editor:
             when 'G': self.row = (self.times() - 1 if self.count != "" else len(self.lines) - 1)
             when others: pass
 
-    def arrow(self, key: Key_T):
+    def navigate(self, key: Key_T):
+        """The arrow, Home, End and Page keys. A page is the window less a line."""
+        let page: int = max(self.rows - 1, 1)
         case key:
             when UP: self.row -= 1
             when DOWN: self.row += 1
             when LEFT: self.col -= 1
             when RIGHT: self.col += 1
+            when HOME: self.col = 0
+            when END: self.col = len(self.lines[self.row])
+            when PAGEUP: self.row -= page
+            when PAGEDOWN: self.row += page
             when others: pass
+
+    def last_match(self, line: str, before: int) -> int:
+        """Where the last match of the pattern in LINE starts before BEFORE; -1 if none."""
+        var best: int = -1
+        var at: int = line.find(self.pattern)
+        while at >= 0 and at < before:
+            best = at
+            at = line.find(self.pattern, at + 1)
+        best
+
+    def search(self, backward: bool):
+        """Move to the next match of the pattern after the cursor (before it, if BACKWARD),
+        wrapping round the end of the text; the cursor's own line is visited twice, the
+        second time for what lies on the other side of the cursor."""
+        if self.pattern == "":
+            self.message = "No previous search pattern"
+            return
+        let total: int = len(self.lines)
+        for step in 0 .. total:
+            let r: int = (self.row + step) % total if not backward else (self.row - step + total) % total
+            let line: str = self.lines[r]
+            var at: int = -1
+            if backward:
+                at = self.last_match(line, (self.col if step == 0 else len(line) + 1))
+                if step == total and at < self.col: at = -1
+            else:
+                at = line.find(self.pattern, (self.col + 1 if step == 0 else 0))
+                if step == total and at > self.col: at = -1
+            if at >= 0:
+                self.row = r
+                self.col = at
+                return
+        self.message = f"Pattern not found: {self.pattern}"
 
     def put(self):
         let head: []str = self.lines[:self.row + 1]
@@ -257,12 +307,15 @@ class Editor:
         let line: str = self.lines[self.row]
         case press.key:
             when REDO: self.redo()
-            when UP | DOWN | LEFT | RIGHT: self.arrow(press.key)
+            when UP | DOWN | LEFT | RIGHT | HOME | END | PAGEUP | PAGEDOWN: self.navigate(press.key)
             when CHAR:
                 case press.text:
-                    when ":":
+                    when ":" | "/":
                         self.mode = COMMAND
+                        self.prompt = press.text
                         self.cmd = ""
+                    when "n": self.search(False)
+                    when "N": self.search(True)
                     when "i" | "a" | "A" | "o" | "O": self.begin_insert(press.text[0])
                     when "h" | "j" | "k" | "l" | "0" | "$" | "G": self.move(press.text[0])
                     when "r": self.mode = REPLACE_ONE
@@ -284,7 +337,7 @@ class Editor:
             when ESCAPE:
                 self.mode = NORMAL
                 self.col -= 1
-            when UP | DOWN | LEFT | RIGHT: self.arrow(press.key)
+            when UP | DOWN | LEFT | RIGHT | HOME | END | PAGEUP | PAGEDOWN: self.navigate(press.key)
             when ENTER:
                 self.put_line(line[:self.col])
                 self.row += 1
@@ -312,7 +365,7 @@ class Editor:
             when ESCAPE:
                 self.mode = NORMAL
                 self.col -= 1
-            when UP | DOWN | LEFT | RIGHT: self.arrow(press.key)
+            when UP | DOWN | LEFT | RIGHT | HOME | END | PAGEUP | PAGEDOWN: self.navigate(press.key)
             when BACKSPACE: self.col -= 1
             when CHAR:
                 self.put_line(splice(line, self.col, self.col + 1, press.text))
@@ -344,7 +397,7 @@ class Editor:
         self.count = ""
 
     def command(self, press: Press_T):
-        """A key typed after the colon: the line builds up; ENTER runs it, ESC drops it."""
+        """A key typed after the colon or slash: the line builds up; ENTER runs it, ESC drops it."""
         case press.key:
             when ESCAPE:
                 self.mode = NORMAL
@@ -359,10 +412,17 @@ class Editor:
             when others: pass
 
     def execute(self):
-        """Run the command line: a line number, or a word and what it takes."""
-        let text: str = self.cmd.strip()
+        """Run the line typed after the colon -- a line number, or a word and what it takes --
+        or search for what was typed after the slash (nothing typed: the last pattern)."""
+        let typed: str = self.cmd
+        let text: str = typed.strip()
+        let slash: bool = self.prompt == "/"
         self.mode = NORMAL
         self.cmd = ""
+        if slash:
+            if typed != "": self.pattern = typed
+            self.search(False)
+            return
         if text == "": return
         let line: int | !ParseFailure_T = parse_int(text)
         if line is ParseFailure_T:

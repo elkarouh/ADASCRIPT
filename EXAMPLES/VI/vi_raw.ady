@@ -13,7 +13,10 @@ by waiting 25 ms), drawing the screen (one frame per key, written in one go), an
 the window size (read again at every key; there is no resize event).
 """
 nimport terminal, termios, posix, os
-from vi_core import Editor, Press_T, Key_T, decode, CTRL_Q, ESC, KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT
+from vi_core import (
+    Editor, Press_T, Key_T, decode, CTRL_Q, ESC, KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_HOME,
+    KEY_END, KEY_PPAGE, KEY_NPAGE,
+)
 
 const NOTHING: int = -1                  # a key with no meaning here: a function key
 
@@ -57,8 +60,9 @@ def read_code() -> int:
     """The next key, as a code. A lone ESC is told from the start of an escape
     sequence (an arrow key: ESC [ A) by whether more bytes follow within 25 ms.
     A sequence ending in A, B, C or D is an arrow -- with a modifier too, as in
-    ESC [ 1 ; 5 D -- and is read as curses' code for it; any other is swallowed and
-    read as NOTHING. ESC and a character (Alt-x) is an ESC, the character kept for
+    ESC [ 1 ; 5 D -- one ending in H or F is Home or End, and ESC [ n ~ is Home (1, 7),
+    End (4, 8), PageUp (5) or PageDown (6); each is read as curses' code for it, and any
+    other sequence is swallowed and read as NOTHING. ESC and a character (Alt-x) is an ESC, the character kept for
     the next call."""
     if pushed != NOTHING:
         let ahead: int = pushed
@@ -72,13 +76,26 @@ def read_code() -> int:
         pushed = second
         return ESC
     var last: int = read_byte()
+    var number: int = 0                                      # the first number of ESC [ n ... ~
+    var counted: bool = False
     if second == ord('['):
         while last < 64 or last > 126:                       # up to the final byte
+            if last == ord(';'):
+                counted = True
+            elif not counted:
+                number = number * 10 + (last - ord('0'))
             last = read_byte()
     if last == ord('A'): return KEY_UP
     if last == ord('B'): return KEY_DOWN
     if last == ord('C'): return KEY_RIGHT
     if last == ord('D'): return KEY_LEFT
+    if last == ord('H'): return KEY_HOME
+    if last == ord('F'): return KEY_END
+    if last == ord('~') and second == ord('['):
+        if number == 1 or number == 7: return KEY_HOME
+        if number == 4 or number == 8: return KEY_END
+        if number == 5: return KEY_PPAGE
+        if number == 6: return KEY_NPAGE
     NOTHING
 
 def clip(text: str, start: int, width: int) -> str:
@@ -102,13 +119,18 @@ def flash(ed: Editor, message: str):
     stdout.flushFile()
     sleep(1000)
 
+def fit_window(ed: Editor):
+    """Tell the editor how big the window is now; a terminal that says 0 x 0 is not up yet."""
+    let (w, h) = terminalSize()
+    ed.fit(max(w, 1), max(h, 2))
+
 def run(ed: Editor):
     while True:
-        let (w, h) = terminalSize()          # the window may have changed since the last key
-        ed.fit(w, h)
+        fit_window(ed)                       # the window may have changed since the last key
         ed.clamp()
         draw(ed)
         let press: Press_T = decode(read_code())
+        fit_window(ed)                       # ... or while it waited: a page is the window less a line
         case press.key:
             when QUIT: return
             when SAVE: flash(ed, ed.save())
