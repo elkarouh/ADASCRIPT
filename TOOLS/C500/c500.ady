@@ -13,7 +13,6 @@ const SIMPLE_ESCAPES : {char}str = {
     'a': "\a", 'b': "\b", 'f': "\f", 'n': "\n", 'r': "\r", 't': "\t",
     'v': "\v", '\\': "\\", '\'': "'", '"': "\"", '?': "?"}
 const HEX_DIGITS   : str = "0123456789abcdef"
-const OCTAL_DIGITS : str = "01234567"
 
 
 type Escape_T is record:
@@ -42,8 +41,8 @@ def decode_escape(s: str, i: int) -> ?Escape_T:
         when '0'..'7':                            # \N, \NN, \NNN
             var v: int = 0
             var j: int = i + 1
-            while j < min(len(s), i + 4) and s[j:j+1] in OCTAL_DIGITS:
-                v = v * 8 + OCTAL_DIGITS.find(s[j:j+1])
+            while j < min(len(s), i + 4) and '0' <= s[j] <= '7':
+                v = v * 8 + (ord(s[j]) - ord('0'))
                 j = j + 1
             return Escape_T(str(chr(v)), j - i)
         when _ if c in SIMPLE_ESCAPES:            # \n, \t, \\, ...
