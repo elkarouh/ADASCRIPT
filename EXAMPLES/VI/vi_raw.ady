@@ -85,17 +85,23 @@ def read_code() -> int:
             elif not counted:
                 number = number * 10 + (last - ord('0'))
             last = read_byte()
-    if last == ord('A'): return KEY_UP
-    if last == ord('B'): return KEY_DOWN
-    if last == ord('C'): return KEY_RIGHT
-    if last == ord('D'): return KEY_LEFT
-    if last == ord('H'): return KEY_HOME
-    if last == ord('F'): return KEY_END
-    if last == ord('~') and second == ord('['):
-        if number == 1 or number == 7: return KEY_HOME
-        if number == 4 or number == 8: return KEY_END
-        if number == 5: return KEY_PPAGE
-        if number == 6: return KEY_NPAGE
+    let final: char = chr(last)
+    case final:
+        when 'A': return KEY_UP
+        when 'B': return KEY_DOWN
+        when 'C': return KEY_RIGHT
+        when 'D': return KEY_LEFT
+        when 'H': return KEY_HOME
+        when 'F': return KEY_END
+        when '~':
+            if second == ord('['):
+                case number:
+                    when 1 | 7: return KEY_HOME
+                    when 4 | 8: return KEY_END
+                    when 5: return KEY_PPAGE
+                    when 6: return KEY_NPAGE
+                    when others: pass
+        when others: pass
     NOTHING
 
 def clip(text: str, start: int, width: int) -> str:
