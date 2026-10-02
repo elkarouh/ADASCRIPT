@@ -64,7 +64,7 @@ STANDALONE := \
     graph.ady \
     floyd.ady \
     dijkstra.ady \
-    geo_server.ady \
+    GEO_SERVER/geo_server.ady \
     openarray_demo.ady \
     test_inline_suite.ady \
     test_state_search.ady \

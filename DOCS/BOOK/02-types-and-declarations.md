@@ -184,7 +184,7 @@ graph : Graph_T = {A: [(1.0, B), (4.0, C)], B: [(2.0, C), (5.0, D)], C: [(1.0, D
 Three levels of the notation compose in that one declaration: a `{…}`
 mapping, whose values are a `[…]` collection, of a named tuple.
 
-Even function types follow the pattern. In `EXAMPLES/geo_server.ady`, a
+Even function types follow the pattern. In `EXAMPLES/GEO_SERVER/geo_server.ady`, a
 geometric region is defined by an optional predicate from `Point` to `bool`:
 
 ```python
