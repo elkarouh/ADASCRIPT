@@ -65,7 +65,7 @@ type Side_T is enum LEFT, RIGHT, ON_TRACK
 def side_of_track(cross_track: Meters_T) -> Side_T:
     """Which side a cross-track distance is on; within half a metre of the track is on it."""
     return ON_TRACK if -0.5 <= cross_track <= 0.5
-    return RIGHT if cross_track < 0.0
+    return RIGHT if cross_track < -0.5
     return LEFT
 
 def position_of(airport: Airport_T) -> GeoPoint:
