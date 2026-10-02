@@ -1,0 +1,50 @@
+#!/usr/bin/env ady2nim
+"""Test: the callsigns of geo_server.ady.  `Callsign_T` is a distinct string, which keeps
+a callsign from being taken for other text but cannot say which strings are callsigns;
+`callsign` does, and returns a failure for what is not one.
+"""
+from geo_server import Callsign_T, CallsignFailure_T, callsign
+
+def accepted(text: str) -> bool:
+    let made: Callsign_T | !CallsignFailure_T = callsign(text)
+    return made is not CallsignFailure_T
+
+def kept(text: str) -> bool:
+    """Whether TEXT comes back from `callsign` as it went in."""
+    let made: Callsign_T | !CallsignFailure_T = callsign(text)
+    if made is CallsignFailure_T:
+        return False
+    return str(made) == text
+
+def reason(text: str) -> str:
+    let made: Callsign_T | !CallsignFailure_T = callsign(text)
+    if made is CallsignFailure_T:
+        return made.reason
+    return ""
+
+# what the radio calls ships and aircraft
+assert accepted("SENTINEL") and accepted("HAVEN")
+assert accepted("CA-1") and accepted("HC-1")
+assert kept("SENTINEL") and kept("CA-1")
+
+# the length: a capital, then 1 to 11 more
+assert accepted("AB")                          # the shortest
+assert accepted("ABCDEFGHIJKL")                # a capital and 11: the longest
+assert not accepted("A")
+assert not accepted("")
+assert not accepted("ABCDEFGHIJKLM")           # 13
+
+# what the characters may be
+assert not accepted("sentinel") and not accepted("Sentinel")      # capitals only
+assert not accepted("1ABC") and not accepted("-ABC")              # it starts with a capital
+assert not accepted("CA 1") and not accepted("CA_1") and not accepted("CA.1")
+assert accepted("A1") and accepted("A-") and accepted("A--1-2")   # digits and hyphens after it
+assert not accepted("CA-1\n")                  # nothing after the end, a newline included
+assert not accepted(" CA-1") and not accepted("CA-1 ")
+
+# the refusal says what was offered
+assert "'sentinel'" in reason("sentinel")
+assert "callsign" in reason("")
+assert reason("SENTINEL") == ""
+
+print "test_geo_server OK"

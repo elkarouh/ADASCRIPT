@@ -200,6 +200,18 @@ Refused: `usd + eur`, `usd * usd`, `eur * rate` and `usd / rate` (rate the wrong
 
 Use it for units and for IDs of different entities that share a representation. Keep aliases for values meant to mix with their base.
 
+**`distinct` separates a type; it does not say which values are valid.** `Callsign_T("")` and `let c: Callsign_T = "not a callsign !!"` both compile and run. A subrange bounds a number and an enum is exactly its members, but nothing does that for a string. State the rule in a function that returns the type or a failure, and make every value through it; only it (and the literals of a test) calls the conversion:
+```adascript
+type Callsign_T is distinct str
+type CallsignFailure_T is record:
+    reason: str
+def callsign(text: str) -> Callsign_T | !CallsignFailure_T:
+    if text == /^[A-Z][A-Z0-9-]{1,11}\z/:       # \z, not $: `$` also matches before a final newline
+        return Callsign_T(text)
+    return CallsignFailure_T(f"'{text}' is not a callsign")
+```
+It is a convention the compiler does not check. For a rule that has to hold wherever a value is made, make it a class that asserts in `__init__` (`GeoPoint` in `EXAMPLES/MAP_UTILS/map_utils.ady` does); a class cannot inherit from `str` on Nim, so a validated string cannot also be accepted where a `str` is -- pass it on with `str(c)`. See `callsign` and `test_geo_server.ady` in `EXAMPLES/GEO_SERVER/`.
+
 **No bare `float` for a quantity that has a meaning.** A distance, a time, an angle each get a type (`EXAMPLES/GEO_SERVER/geo_server.ady`). What a quantity cannot be goes in a subrange, which an alias does not mix up but does bound; what it cannot be mixed with goes in `distinct`:
 ```adascript
 type Distance_T is distinct float            # not addable to an angle: refused at compile time

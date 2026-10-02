@@ -65,6 +65,7 @@ STANDALONE := \
     floyd.ady \
     dijkstra.ady \
     GEO_SERVER/geo_server.ady \
+    GEO_SERVER/test_geo_server.ady \
     MAP_UTILS/map_utils.ady \
     MAP_UTILS/test_map_utils.ady \
     MAP_UTILS/test_hek_map_utils.ady \

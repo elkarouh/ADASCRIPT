@@ -47,8 +47,28 @@ type Area_T     is Distance_T * Distance_T   # what two distances multiply to
 type Time_T     is distinct float
 
 # What a ship or an aircraft is called on the radio: not a plain string, so that a
-# callsign cannot be taken for a zone's name or for any other text.
+# callsign cannot be taken for a zone's name or for any other text.  A type cannot
+# say which strings are callsigns, so `callsign` does: make one with it.
 type Callsign_T is distinct str
+
+type CallsignFailure_T is record:
+    text:   str      # what was offered
+    reason: str      # why it is not a callsign
+
+def callsign(text: str) -> Callsign_T | !CallsignFailure_T:
+    """TEXT as a callsign: an upper-case letter, then 1 to 11 more upper-case
+    letters, digits or hyphens -- SENTINEL, HAVEN, CA-1."""
+    if text == /^[A-Z][A-Z0-9-]{1,11}\z/:           # \z, not $: a newline at the end is not a callsign
+        return Callsign_T(text)
+    return CallsignFailure_T(text, f"'{text}' is not a callsign: a capital, then 1 to 11 capitals, digits or hyphens")
+
+def known(text: str) -> Callsign_T:
+    """The callsign TEXT; the program stops, saying why, when it is not one."""
+    let made: Callsign_T | !CallsignFailure_T = callsign(text)
+    if made is CallsignFailure_T:
+        print f"error: {made.reason}"
+        quit(1)
+    return made
 
 # An angle on the compass: clockwise from North, so 0 is up and 90 is East. 360 is
 # the same direction as 0 and is allowed, so that rounding at the seam cannot fail.
@@ -264,7 +284,7 @@ def build_scenario() -> ([]Ship, []NamedZone, []TimeStep):
       - Two tight zones (polygons)
     """
     let aegis: Ship = Ship(
-        "SENTINEL",
+        known("SENTINEL"),
         Point(150.0, 100.0),
         30.0,    # inner_radius
         120.0,   # outer_radius
@@ -275,7 +295,7 @@ def build_scenario() -> ([]Ship, []NamedZone, []TimeStep):
     )
 
     let carrier: Ship = Ship(
-        "HAVEN",
+        known("HAVEN"),
         Point(230.0, 80.0),
         10.0,    # inner_radius
         60.0,    # outer_radius
@@ -305,27 +325,31 @@ def build_scenario() -> ([]Ship, []NamedZone, []TimeStep):
 
     let all_zones: []NamedZone = ship_zones + tight_zones
 
+    # The two aircraft, named once: the same callsign at every time step
+    let ca1: Callsign_T = known("CA-1")
+    let hc1: Callsign_T = known("HC-1")
+
     # Five time-steps, positions evolve over time as objects move
     let time_steps: []TimeStep = [
         TimeStep(0.0, [
-            Aircraft("CA-1", Point(38.0,  25.0),  AircraftKind.FRIENDLY),
-            Aircraft("HC-1", Point(258.0, 183.0), AircraftKind.HOSTILE),
+            Aircraft(ca1, Point(38.0,  25.0),  AircraftKind.FRIENDLY),
+            Aircraft(hc1, Point(258.0, 183.0), AircraftKind.HOSTILE),
         ]),
         TimeStep(20.0, [
-            Aircraft("CA-1", Point(58.0,  30.0),  AircraftKind.FRIENDLY),
-            Aircraft("HC-1", Point(239.0, 164.0), AircraftKind.HOSTILE),
+            Aircraft(ca1, Point(58.0,  30.0),  AircraftKind.FRIENDLY),
+            Aircraft(hc1, Point(239.0, 164.0), AircraftKind.HOSTILE),
         ]),
         TimeStep(40.0, [
-            Aircraft("CA-1", Point(100.0, 43.0),  AircraftKind.FRIENDLY),
-            Aircraft("HC-1", Point(210.0, 136.0), AircraftKind.HOSTILE),
+            Aircraft(ca1, Point(100.0, 43.0),  AircraftKind.FRIENDLY),
+            Aircraft(hc1, Point(210.0, 136.0), AircraftKind.HOSTILE),
         ]),
         TimeStep(60.0, [
-            Aircraft("CA-1", Point(159.0, 36.0),  AircraftKind.FRIENDLY),
-            Aircraft("HC-1", Point(148.0, 73.0),  AircraftKind.HOSTILE),
+            Aircraft(ca1, Point(159.0, 36.0),  AircraftKind.FRIENDLY),
+            Aircraft(hc1, Point(148.0, 73.0),  AircraftKind.HOSTILE),
         ]),
         TimeStep(80.0, [
-            Aircraft("CA-1", Point(198.0, 27.0),  AircraftKind.FRIENDLY),
-            Aircraft("HC-1", Point(110.0, 37.0),  AircraftKind.HOSTILE),
+            Aircraft(ca1, Point(198.0, 27.0),  AircraftKind.FRIENDLY),
+            Aircraft(hc1, Point(110.0, 37.0),  AircraftKind.HOSTILE),
         ]),
     ]
 
