@@ -2,6 +2,86 @@
 # c500.ady — Single-pass C→WebAssembly compiler in Adascript
 # Port of https://github.com/vgel/c500 by Theia Vogel
 # Original blog post: https://vgel.me/posts/c500/
+#
+# HOW IT WORKS
+#
+# One pass, no syntax tree: each parsing function reads tokens and prints the
+# WebAssembly text for what it just read.
+#
+#   C source        Lexer               parsers                     Emitter
+#   (stdin)  --->  peek() / next()  --> global_declaration()  --->  print()
+#                  a token at a time    statement()                 indented
+#                  (regex per shape)    expression()                wasm text
+#                                       |                           (stdout)
+#                                       +-- CType, StackFrame:
+#                                           what a name is, where it lives
+#
+# The WebAssembly module it prints:
+#
+#   (module
+#     (memory 3)                      3 pages of 64 KiB
+#     (global $__stack_pointer ...)   starts at the top of memory
+#     (func $__dup_i32 ...)           helpers: copy / swap the stack's top
+#     (func $__swap_i32 ...)
+#     (func $f ...)                   one per C function, in source order
+#     (export "main" ...)
+#     (data ... "string literals"))   the StringPool, at PAGE_SIZE
+#
+# Memory, low addresses first (PAGE_SIZE = 65536):
+#
+#   0              PAGE_SIZE          2*PAGE_SIZE         3*PAGE_SIZE
+#   +--------------+------------------+-------------------+
+#   | (unused)     | string pool      | stack             |
+#   |              | "abc",0,"def",0  |  <-- grows down   |
+#   +--------------+------------------+-------------------+
+#                                     $__stack_pointer starts at the right edge
+#
+# A C variable lives in memory, in its function's frame; its address is
+#   $__stack_pointer + frame_offset + local_offset
+# and a value is only ever on the wasm stack while an expression is evaluated.
+# Every expression parser returns an ExprMeta_T: is_place says whether the wasm
+# stack holds an ADDRESS (it can be assigned to, or loaded from) or a bare VALUE.
+#
+# Expressions, loosest binding first; each level calls the one below it:
+#
+#   assign      a = b
+#   bitxor      ^
+#   bitor       |
+#   bitand      &
+#   cmpe        ==  !=
+#   cmplg       <  >  <=  >=
+#   shlr        <<  >>
+#   plusminus   +  -                (pointer arithmetic is scaled here)
+#   muldiv      *  /  %
+#   prefix      &  *  -  +  !  ~
+#   accessor    a[i]
+#   value       constant, "string", (expr), name, call(args)
+#
+# Statements, as the control flow they emit. A branch `br N` goes to the N-th
+# enclosing label, counting from 0 at the innermost: to a block's label it
+# leaves the block, to a loop's label it starts the loop again.
+#
+#   if (c) A else B       while (c) A          for (I; C; N) A
+#
+#   block                 block                block
+#     block                 loop                 I ; drop
+#       c ; eqz               c ; eqz            loop
+#       br_if 0               br_if 1              C ; eqz
+#       A                     A                    br_if 1
+#       br 1                  br 0                 A
+#     end                   end                    N
+#     B                   end                      br 0
+#   end                                          end
+#                                              end
+#
+#   if:    br_if 0 (c was false) leaves the inner block and runs B;
+#          br 1 (A is done) leaves both and skips B.
+#   while: br_if 1 (c was false) leaves the outer block; br 0 loops again.
+#   for:   as while, with the initialiser I before the loop and N after A.
+#
+# The for loop's N comes before A in the source but must run after it. So the
+# lexer is cloned at N, N is parsed once with output off (no_emit) just to skip
+# it, and the clone parses it again after A, with output on.
 
 
 const PAGE_SIZE : int = 65536
