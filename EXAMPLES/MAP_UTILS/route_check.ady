@@ -146,7 +146,7 @@ def main():
         legs.append(leg)
         starts.append(previous)
         previous = here
-    print f"  total {total_km:.1f} km, {hours_minutes(total_h)} at {int(float(CRUISE))} km/h"
+    print f"  total {total_km:.1f} km, {hours_minutes(total_h)} at {CRUISE:.0f} km/h"
 
     print ""
     print "RESTRICTED AREA"
@@ -154,7 +154,7 @@ def main():
     for i in 0 ..< len(crossings):
         let c: Crossing_T = crossings[i]
         if c.inside:
-            print f"  {airports[i]} -> {airports[i + 1]}: inside from km {int(float(c.entering))} to km {int(float(c.leaving))}"
+            print f"  {airports[i]} -> {airports[i + 1]}: inside from km {c.entering:.0f} to km {c.leaving:.0f}"
         else:
             print f"  {airports[i]} -> {airports[i + 1]}: clear"
 
@@ -203,11 +203,9 @@ def main():
     assert fix_left.side == LEFT
     for spot in pattern:
         let radius: GeoVector = spot - beacon
-        let km: float = float(radius.magnitude())
-        assert abs(km - 20.0) < 0.01                                  # all on the circle
+        assert abs(float(radius.magnitude()) - 20.0) < 0.01          # all on the circle
     let across_the_circle: GeoVector = pattern[0] - pattern[3]
-    let diameter: float = float(across_the_circle.magnitude())
-    assert abs(diameter - 40.0) < 0.1                                 # points 1 and 4 opposite
+    assert abs(float(across_the_circle.magnitude()) - 40.0) < 0.1     # points 1 and 4 opposite
 
     print ""
     print "BAD INPUT"

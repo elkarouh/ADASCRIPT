@@ -420,6 +420,23 @@ def _ensure_zfill_helper():
         ParserState.nim_top_decls = decls
 
 
+_FIXED0_HELPER = """\
+proc adascriptFixed0(x: float): string =
+  ## Python's f"{x:.0f}": formatFloat with no decimals keeps the point (`780.`).
+  result = formatFloat(x, ffDecimal, 0)
+  if result.endsWith("."): result.setLen(result.len - 1)
+"""
+
+
+def _ensure_fixed0_helper():
+    """Add the .0f helper to nim_top_decls the first time a {x:.0f} is used."""
+    ParserState.nim_imports.add("strutils")
+    decls = getattr(ParserState, 'nim_top_decls', [])
+    if not any("adascriptFixed0" in d for d in decls):
+        decls.append(_FIXED0_HELPER)
+        ParserState.nim_top_decls = decls
+
+
 _AFFIX_HELPER = """\
 proc adascriptRemovePrefix(s: string, prefix: string): string =
   ## Python's str.removeprefix: S without PREFIX when it starts with it, else
@@ -1386,6 +1403,18 @@ def _nim_atom_unit(e):
         return called
     if called in ("float", "int"):
         return UNIT_PLAIN
+    if called in ("abs", "min", "max"):
+        # closed over its arguments' unit: `abs(float(v.length()) - 20.0)` is a plain
+        # number, not the distinct type a call inside it returns
+        import re as _re_am
+        _am = _re_am.match(r"^" + called + r"\((.*)\)$", e, _re_am.S)
+        if _am and _balanced(_am.group(1)):
+            _units = [_unit_of(a) for a in _split_args(_am.group(1)) if a]
+            _dist = [u for u in _units if u and is_distinct(u)]
+            if _dist:
+                return _dist[0]
+            if _units and all(u in (UNIT_LIT, UNIT_PLAIN) for u in _units):
+                return UNIT_PLAIN if UNIT_PLAIN in _units else UNIT_LIT
     t = (_nim_expr_type(e) or "").strip()
     if not is_distinct(t):
         t = _field_type(e).strip() or t      # a field: `self.flown`
@@ -2131,6 +2160,16 @@ def to_nim(self, prec=None):
         if stripped.endswith('!s'):
             # fmt already stringifies with $, so !s just drops away.
             return stripped[:-2].rstrip() + spec
+        # `{x:.0f}`, `{x:7.0f}`: Nim's formatFloat keeps the point of a float
+        # printed with no decimals (`780.`), Python's does not (`780`). A number
+        # aligns right where a string aligns left, so a width asks for `>`.
+        import re as _re_f0
+        _m0 = _re_f0.fullmatch(r":([<>^]?)(\d*)\.0f", spec)
+        if _m0:
+            _ensure_fixed0_helper()
+            _align = _m0.group(1) or (">" if _m0.group(2) else "")
+            _tail = (":" + _align + _m0.group(2)) if (_align or _m0.group(2)) else ""
+            return "adascriptFixed0(float(" + stripped + "))" + _tail
         return field
 
     def _apply_conversions(s):

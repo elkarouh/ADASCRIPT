@@ -96,4 +96,20 @@ let fix: Fix_T = Fix_T(1.5, 2.5)
 let leg2: Leg2_T = Leg2_T("a", Fix_T(0.0, 1.0), 4.0, 0.5)
 assert fix.along + leg2.length == 5.5
 assert leg2.start.across == 1.0 and leg2.share == 0.5
+# a distinct-returning method inside float(), abs() or max(): a comparison with a literal
+# is on what is left, a plain number -- the literal is not made a Distance_T
+class Gauge:
+    var reading: Distance_T
+
+    def __init__(self, reading: Distance_T) -> None:
+        self.reading = reading
+
+    def level(self) -> Distance_T:
+        return self.reading
+
+let gauge: Gauge = Gauge(20.0)
+assert abs(float(gauge.level()) - 20.0) < 0.01
+assert max(float(gauge.level()), 1.0) > 19.0
+assert min(float(gauge.level()), 99.0) < 21.0
+assert abs(gauge.level() - 18.0) > 1.5               # still a Distance_T either side: the 1.5 is one too
 print "test_distinct: ok"

@@ -1,0 +1,19 @@
+#!/usr/bin/env ady2nim
+"""Test: `{x:.0f}` in an f-string, on both backends.  Nim's formatFloat keeps the point
+of a float printed with no decimals (`780.`); Python's does not (`780`).  The output is
+compared between the backends (see the Makefile), so each line reads the same on both.
+"""
+type Km_T is distinct float
+
+let x: float = 780.0
+let y: float = 191.6
+let n: int = 7
+let k: Km_T = 12.4
+let negative: float = -0.4
+
+print f"[{x:.0f}] [{y:.0f}] [{n:.0f}] [{k:.0f}] [{negative:.0f}]"        # no point left over
+print f"[{x:7.0f}] [{y:<7.0f}] [{y:^9.0f}] [{y:>7.0f}]"                   # a width: numbers align right
+print f"[{x:.1f}] [{x:7.1f}] [{y:.2f}]"                                   # other precisions are as ever
+print f"{x:.0f} km and {y:.0f} km"                                         # in the middle of text
+assert f"{x:.0f}" == "780" and f"{y:.0f}" == "192" and f"{negative:.0f}" == "-0"
+print "test_format_zero_decimals ok"
