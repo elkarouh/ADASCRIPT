@@ -1,0 +1,33 @@
+#!/usr/bin/env ady2nim
+"""Test: VI/vi_core when a write fails -- the directory is not there. What the user is
+told, that the text still counts as modified, and that :wq does not quit on it, on
+both backends. (The key scripts of test_vi.py cover the writes that work.)
+"""
+from VI/vi_core import Editor
+
+let nowhere: Path = Path("/no_such_dir_for_test_vi_save")
+
+var ed: Editor = Editor(nowhere / "a.txt")
+ed.insert_line(0, "hello")
+assert ed.modified()
+
+assert ed.save().startswith("Not saved: ")
+assert ed.modified()                       # not written: still a change
+
+ed.run("wq")
+assert not ed.quitting
+assert ed.message.startswith("Not saved: ")
+
+ed.message = ""
+ed.run(f"w {nowhere / 'b.txt'}")           # another name, the same trouble
+assert ed.message.startswith("Not saved: ")
+assert ed.modified()
+
+ed.message = ""
+ed.run("q")                                # refused while there is a change
+assert not ed.quitting
+assert ed.message.startswith("No write")
+
+ed.run("q!")
+assert ed.quitting
+print "test_vi_save OK"
