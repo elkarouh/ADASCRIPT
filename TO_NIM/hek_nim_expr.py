@@ -4891,7 +4891,21 @@ def to_nim(self, prec=None):
         ops = [_PY_OP_TO_NIM.get(_op_string(seq.nodes[0]), _op_string(seq.nodes[0])) for seq in pairs]
         if any(_is_nim_char_expr(o) for o in operands):
             operands = [_str_to_char_lit(o) for o in operands]
-        parts = [f"{operands[i]} {ops[i]} {operands[i+1]}" for i in range(len(ops))]
+        parts = []
+        for i in range(len(ops)):
+            left, right = operands[i], operands[i + 1]
+            # a literal beside a distinct value is of its type, as in a plain
+            # comparison: `55.0 < euros < 55.2` is `Euro_T(55.0) < euros ...`
+            if ops[i] in ("<", ">", "<=", ">="):
+                from hek_nim_stmt import _wrap_distinct_literal
+                _cd = _distinct_type_of(left)
+                if _cd is not None:
+                    right = _wrap_distinct_literal(right, _cd)
+                else:
+                    _rd = _distinct_type_of(right)
+                    if _rd is not None:
+                        left = _wrap_distinct_literal(left, _rd)
+            parts.append(f"{left} {ops[i]} {right}")
         result = " and ".join(parts)
         if prec is not None and PREC_CMP < prec:
             return f"({result})"

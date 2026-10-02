@@ -161,10 +161,8 @@ def is_letter(o: int) -> bool:
 
 def is_type_name(word: str) -> bool:
     """Capitalised, with a lower-case letter in it: Editor, Press_T; not NORMAL or TAG."""
-    if not 65 <= ord(word[0]) <= 90: return False
-    for k in 0 ..< len(word):
-        if 97 <= ord(word[k]) <= 122: return True
-    False
+    return False if not 65 <= ord(word[0]) <= 90
+    any(97 <= ord(c) <= 122 for c in word)
 
 class Scanner:
     var looks: []Look_T = []
