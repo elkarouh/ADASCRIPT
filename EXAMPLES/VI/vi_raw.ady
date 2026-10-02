@@ -76,7 +76,7 @@ def read_code() -> int:
     var number: int = 0                                      # the first number of ESC [ n ... ~
     var counted: bool = False
     if second == ord('['):
-        while last < 64 or last > 126:                       # up to the final byte
+        while not 64 <= last <= 126:                       # up to the final byte
             if last == ord(';'):
                 counted = True
             elif not counted:

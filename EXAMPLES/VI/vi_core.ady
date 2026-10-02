@@ -88,25 +88,26 @@ def decode(ch: int) -> Press_T:
     """A code a terminal delivers, as what it means: a key it has a name for (Code_T), a
     printable character, or nothing the editor knows. parse_enum says which of the first."""
     let code: Code_T | !ParseFailure_T = parse_enum(Code_T, ch)
-    if code is ParseFailure_T:
-        if 32 <= ch <= 126: return Press_T(CHAR, str(chr(ch)))
-        return Press_T(OTHER, "")
     case code:
-        when ESC: Press_T(ESCAPE, "")
-        when LINE_FEED | CARRIAGE_RETURN | KEY_ENTER: Press_T(ENTER, "")
-        when BACKSPACE_KEY | DEL | KEY_BACKSPACE: Press_T(BACKSPACE, "")
-        when CTRL_S: Press_T(SAVE, "")
-        when CTRL_Q: Press_T(QUIT, "")
-        when CTRL_R: Press_T(REDO, "")
-        when KEY_RESIZE: Press_T(RESIZE, "")
-        when KEY_UP: Press_T(UP, "")
-        when KEY_DOWN: Press_T(DOWN, "")
-        when KEY_LEFT: Press_T(LEFT, "")
-        when KEY_RIGHT: Press_T(RIGHT, "")
-        when KEY_HOME: Press_T(HOME, "")
-        when KEY_END: Press_T(END, "")
-        when KEY_PPAGE: Press_T(PAGEUP, "")
-        when KEY_NPAGE: Press_T(PAGEDOWN, "")
+        when ParseFailure_T:
+            return Press_T(CHAR, str(chr(ch))) if 32 <= ch <= 126 else Press_T(OTHER, "")
+        when Code_T:
+            case code:
+                when ESC: Press_T(ESCAPE, "")
+                when LINE_FEED | CARRIAGE_RETURN | KEY_ENTER: Press_T(ENTER, "")
+                when BACKSPACE_KEY | DEL | KEY_BACKSPACE: Press_T(BACKSPACE, "")
+                when CTRL_S: Press_T(SAVE, "")
+                when CTRL_Q: Press_T(QUIT, "")
+                when CTRL_R: Press_T(REDO, "")
+                when KEY_RESIZE: Press_T(RESIZE, "")
+                when KEY_UP: Press_T(UP, "")
+                when KEY_DOWN: Press_T(DOWN, "")
+                when KEY_LEFT: Press_T(LEFT, "")
+                when KEY_RIGHT: Press_T(RIGHT, "")
+                when KEY_HOME: Press_T(HOME, "")
+                when KEY_END: Press_T(END, "")
+                when KEY_PPAGE: Press_T(PAGEUP, "")
+                when KEY_NPAGE: Press_T(PAGEDOWN, "")
 
 def tail(text: str, start: int) -> str:
     """TEXT from START on; empty past the end, where a Nim slice would raise."""
@@ -127,45 +128,42 @@ def language_of(name: str) -> Lang_T:
         when /\.sh$/: SHELL
         when others: NO_LANG
 
+let PYTHON_KEYWORDS: {}str = {"def", "class", "if", "elif", "else", "for", "while", "return", "import", "from",
+    "nimport", "pyimport", "let", "var", "const", "type", "is", "enum", "record",
+    "case", "when", "others", "in", "not", "and", "or", "pass", "break", "continue",
+    "True", "False", "None", "assert", "die", "do", "lambda", "yield", "await",
+    "async", "global", "del", "try", "except", "finally", "raise", "with", "as",
+    "tuple", "distinct", "shell", "quit"}
+
+let NIM_KEYWORDS: {}str = {"proc", "func", "method", "iterator", "template", "macro", "let", "var", "const",
+    "type", "object", "enum", "tuple", "if", "elif", "else", "when", "case", "of",
+    "for", "while", "break", "continue", "return", "yield", "import", "from", "export",
+    "include", "block", "try", "except", "finally", "raise", "defer", "discard",
+    "and", "or", "not", "xor", "in", "notin", "is", "isnot", "div", "mod", "shl",
+    "shr", "nil", "true", "false", "ref", "ptr", "distinct", "using", "static"}
+
+let SHELL_KEYWORDS: {}str = {"if", "then", "else", "elif", "fi", "for", "while", "until", "do", "done",
+    "case", "esac", "function", "in", "return", "exit", "export", "local", "set",
+    "unset", "shift", "break", "continue", "trap", "source", "eval", "exec"}
+
 def is_keyword(lang: Lang_T, word: str) -> bool:
     case lang:
-        when PYTHON:
-            case word:
-                when "def" | "class" | "if" | "elif" | "else" | "for" | "while" | "return" | "import" | "from": True
-                when "nimport" | "pyimport" | "let" | "var" | "const" | "type" | "is" | "enum" | "record": True
-                when "case" | "when" | "others" | "in" | "not" | "and" | "or" | "pass" | "break" | "continue": True
-                when "True" | "False" | "None" | "assert" | "die" | "do" | "lambda" | "yield" | "await": True
-                when "async" | "global" | "del" | "try" | "except" | "finally" | "raise" | "with" | "as": True
-                when "tuple" | "distinct" | "shell" | "quit": True
-                when others: False
-        when NIM:
-            case word:
-                when "proc" | "func" | "method" | "iterator" | "template" | "macro" | "let" | "var" | "const": True
-                when "type" | "object" | "enum" | "tuple" | "if" | "elif" | "else" | "when" | "case" | "of": True
-                when "for" | "while" | "break" | "continue" | "return" | "yield" | "import" | "from" | "export": True
-                when "include" | "block" | "try" | "except" | "finally" | "raise" | "defer" | "discard": True
-                when "and" | "or" | "not" | "xor" | "in" | "notin" | "is" | "isnot" | "div" | "mod" | "shl": True
-                when "shr" | "nil" | "true" | "false" | "ref" | "ptr" | "distinct" | "using" | "static": True
-                when others: False
-        when SHELL:
-            case word:
-                when "if" | "then" | "else" | "elif" | "fi" | "for" | "while" | "until" | "do" | "done": True
-                when "case" | "esac" | "function" | "in" | "return" | "exit" | "export" | "local" | "set": True
-                when "unset" | "shift" | "break" | "continue" | "trap" | "source" | "eval" | "exec": True
-                when others: False
+        when PYTHON: word in PYTHON_KEYWORDS
+        when NIM: word in NIM_KEYWORDS
+        when SHELL: word in SHELL_KEYWORDS
         when others: False
 
 def is_digit(o: int) -> bool:
-    o >= 48 and o <= 57
+    48 <= o <= 57
 
 def is_letter(o: int) -> bool:
-    (o >= 65 and o <= 90) or (o >= 97 and o <= 122)
+    65 <= o <= 90 or 97 <= o <= 122
 
 def is_type_name(word: str) -> bool:
     """Capitalised, with a lower-case letter in it: Editor, Press_T; not NORMAL or TAG."""
-    if ord(word[0]) < 65 or ord(word[0]) > 90: return False
+    if not 65 <= ord(word[0]) <= 90: return False
     for k in 0 ..< len(word):
-        if ord(word[k]) >= 97 and ord(word[k]) <= 122: return True
+        if 97 <= ord(word[k]) <= 122: return True
     False
 
 class Scanner:
@@ -462,7 +460,7 @@ class Editor:
         """Where the last match of the pattern in LINE starts before BEFORE; -1 if none."""
         var best: int = -1
         var at: int = line.find(self.pattern)
-        while at >= 0 and at < before:
+        while 0 <= at < before:
             best = at
             at = line.find(self.pattern, at + 1)
         best
