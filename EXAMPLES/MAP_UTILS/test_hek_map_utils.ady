@@ -12,8 +12,6 @@ What does not carry over, and why:
   * test_construct_from_name: it looks an aerodrome up in my_aerodromes, which is
     not translated.
   * f"{p:h}" and f"{p:d}": `p.human()` and `p.decimal()`.
-  * "degrees" in str(v): the module prints the degree sign, as map_utils.py does,
-    so those two checks look for the sign.
 """
 nimport math
 from map_utils import Axis_T, LATITUDE, LONGITUDE
@@ -119,7 +117,7 @@ let scaled: Vector = Vector(3.0, 45.0) * 2.0
 assert near(float(scaled.length()), 6.0, 1e-9) and near(float(scaled.angle()), 45.0, 1e-9)
 
 let shown: str = f"{Vector(10.0, 45.0)}"
-assert "m" in shown and "°" in shown
+assert "m" in shown and "degrees" in shown
 
 assert near(float(Vector(3.0, 0.0).triangle_area(Vector(4.0, 90.0))), 6.0, 1e-9)
 
@@ -154,7 +152,7 @@ assert near(float(gnorth.dot_product(geast)), 0.0, 1.0)                  # squar
 assert near(float(gnorth.cross_product(geast)), 1000000.0, 1e-3)         # 1 km x 1 km, in m2
 
 let gshown: str = f"{GeoVector(100.0, 45.0)}"
-assert "km" in gshown and "°" in gshown
+assert "km" in gshown and "degrees" in gshown
 
 # ---- TestGeoPoint --------------------------------------------------------------
 

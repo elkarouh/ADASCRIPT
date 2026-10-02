@@ -143,7 +143,7 @@ let pivot: Position = Position(1.0, 1.0)
 let spun: Position = corner.rotate_around_point(pivot, 90.0)
 assert close(float(spun.x), -3.0) and close(float(spun.y), 5.0)
 
-assert f"{v1}" == "5.00 m, 30.00°"
+assert f"{v1}" == "5.00 m, 30.00 degrees"
 
 # ---- geodetic geometry --------------------------------------------------------
 
@@ -157,7 +157,7 @@ assert close(float(vec.magnitude()), 252.14232393441256, 1e-6)
 assert close(float(vec.phase()), 214.19083294597394, 1e-6)
 assert close(float(vec.east_km()), -141.69164158508192, 1e-6)
 assert close(float(vec.north_km()), -208.56469074119644, 1e-6)
-assert f"{vec}" == "252.14 km @ 214.19°"
+assert f"{vec}" == "252.14 km @ 214.19 degrees"
 
 let middle: GeoPoint = p1 + (p2 - p1) / 2.0
 assert close(float(middle.latitude), 49.959673202327686, 1e-7)

@@ -32,6 +32,9 @@ What changed in the translation
   ValueError.
 * `Vector` and `GeoVector` keep their parts as two numbers; the original kept a
   Python complex number.
+* `str()` spells the unit out -- "5.00 m, 30.00 degrees", "252.14 km @ 214.19
+  degrees" -- where the original printed the degree sign; the pytest file that
+  goes with it looks for the word.
 * The original's `normal()` raised TypeError (`unit() * 1j`); this one rotates
   the unit vector 90 degrees counter-clockwise, which is what it says it does.
   `projection()` returned a plain complex; this one returns a Vector.
@@ -455,7 +458,7 @@ class Vector:
         Vector(self.length() / scale, self.angle())
 
     def __str__(self) -> str:
-        f"{self.length():.2f} m, {self.angle():.2f}°"
+        f"{self.length():.2f} m, {self.angle():.2f} degrees"
 
 
 def vector_xy(x: Meters_T, y: Meters_T) -> Vector:
@@ -570,7 +573,7 @@ class GeoVector:
     def __str__(self) -> str:
         let km: Kilometers_T = self.magnitude()
         let bearing: Bearing_T = self.phase()
-        f"{km:.2f} km @ {bearing:.2f}°"
+        f"{km:.2f} km @ {bearing:.2f} degrees"
 
 
 def geo_vector_from_components(east: Kilometers_T, north: Kilometers_T) -> GeoVector:
