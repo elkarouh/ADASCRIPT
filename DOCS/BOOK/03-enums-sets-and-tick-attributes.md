@@ -70,9 +70,23 @@ def parse_state(s: str) -> State:
 
 (Calling the type with a string, `State(s)`, is the older spelling: in Nim it
 becomes `parseEnum[State](...)`, in Python a lookup by member name, and it
-raises when `s` names no member.) An *integer* argument is read as a position instead —
-`State(0)` is the first member, the same numbering on both backends — so the
-call covers both of the conversions an enum has.
+raises when `s` names no member.) An *integer* argument is read as a value instead —
+`State(0)` is the first member of a plain enum, the number it was declared with for one
+with values, the same on both backends -- and `State(n)` raises when no member has that
+value.
+
+`parse_enum` takes an integer as well, and then it reads a value, and a value that no member
+has is a failure, not an exception -- the way to turn a number from outside (a key code, an
+exit status, a field of a file) into a member:
+
+```python
+type Key_T is enum DOWN = 258, UP = 259, END = 360
+
+let key: Key_T | !ParseFailure_T = parse_enum(Key_T, code)   # 259 is UP; 260 is a failure
+```
+
+The failure's `text` is the number, as written. It works for an enum whose values skip a
+number (258, 259, 360) as it does for any other.
 
 The other direction is `'Image`, or `str()` where the value is not a bare
 name (§3.5), and the two together are all an enum needs to survive a round

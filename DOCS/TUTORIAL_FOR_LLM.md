@@ -265,7 +265,7 @@ enum values still differs: Python formats elements with `repr`, so
 `print xs` over a `[]Door_T` gives `[<Door_T.Door1: 0>, ...]` against Nim's
 `@[Door1, ...]`. Known, and in `TODO.md`.
 
-Reading an enum member from text is `parse_enum(E, s)` -> `E | !ParseFailure_T` (exact name); `State(s)` is the older form and raises:
+Reading an enum member from text is `parse_enum(E, s)` -> `E | !ParseFailure_T` (exact name; an integer `s` is read as the member's value, `.text` its digits); `State(s)` is the older form and raises:
 ```adascript
 def parse_state(s: str) -> State:
     let state: State | !ParseFailure_T = parse_enum(State, s.replace("-", "_").upper())

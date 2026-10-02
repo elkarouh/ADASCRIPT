@@ -1137,7 +1137,7 @@ refused. The built-in operations follow this: `shell:` gives a `str |
 `.read_lines` and `.write_text` give a `... | !PathFailure_T`, and reading a
 number or an enum member from text is `parse_float(s)`, `parse_int(s)` and
 `parse_enum(E, s)`, a `float | !ParseFailure_T`, an `int | !ParseFailure_T`
-and an `E | !ParseFailure_T`; `input(prompt)` and `stdin.readLine()` give a line or, when the input
+and an `E | !ParseFailure_T` (`s` a name, or an integer read as the member's value); `input(prompt)` and `stdin.readLine()` give a line or, when the input
 has ended, an `InputFailure_T` (`str | !InputFailure_T`). What still
 raises -- `readFile`, `writeFile`, `for line in p.lines:`,
 `float(s)`, `int(s)` -- is the

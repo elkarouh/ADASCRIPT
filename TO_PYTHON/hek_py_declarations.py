@@ -369,11 +369,14 @@ def parse_int(_s):
 
 
 def parse_enum(_e, _s):
-    """The member of enum _e named exactly _s; a ParseFailure_T otherwise."""
+    """The member of enum _e named exactly _s -- or, _s being an integer, the member
+    with that value; a ParseFailure_T otherwise."""
     try:
+        if isinstance(_s, int):
+            return _e(_s)
         return _e[_s]
-    except KeyError:
-        return ParseFailure_T(what=_e.__name__, text=_s)\
+    except (KeyError, ValueError):
+        return ParseFailure_T(what=_e.__name__, text=str(_s))\
 '''
 
 

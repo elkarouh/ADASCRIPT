@@ -263,7 +263,15 @@ proc adascriptParseEnum*[T: enum](U: typedesc[T], s: string): Result[T, ParseFai
   for e in T:
     if $e == s:
       return Result[T, ParseFailure_T].ok(e)
-  Result[T, ParseFailure_T].err(ParseFailure_T(what: $U, text: s))\
+  Result[T, ParseFailure_T].err(ParseFailure_T(what: $U, text: s))
+
+proc adascriptParseEnum*[T: enum](U: typedesc[T], v: int): Result[T, ParseFailure_T] =
+  ## parse_enum with an integer. The member whose value is V, as `ord` gives it -- the
+  ## position, or the number the member was declared with. Not one is a ParseFailure_T.
+  for e in T:
+    if ord(e) == v:
+      return Result[T, ParseFailure_T].ok(e)
+  Result[T, ParseFailure_T].err(ParseFailure_T(what: $U, text: $v))\
 """
 
 
@@ -300,6 +308,7 @@ def _ensure_parse_helpers():
     from hek_parsec import ParserState
     ParserState.nim_imports.add("stdlib")
     ParserState.nim_imports.add("strutils")
+    ParserState.nim_imports.add("std/enumutils")      # `for e in T` over an enum whose values skip a number
     decls = getattr(ParserState, "nim_top_decls", [])
     if not any("proc adascriptParseFloat*" in d for d in decls):
         decls.append(_PARSE_HELPERS)

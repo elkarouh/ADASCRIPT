@@ -60,6 +60,34 @@ for t in ["ALPHA", "BETA", "GAMMA", "beta", "Beta", "", "DELTA", "BETA "]:
         print f"[{t}] {k}"
 print "test3 OK"
 
+# ─── test 3b: enum members, by value ────────────────────────────────────────
+# An integer is read as a value: the position, for a plain enum, or the number the member
+# was declared with. A gapped enum (258, 259, 360) is read by value and by name alike.
+
+type Code_T is enum DOWN = 258, UP = 259, END = 360
+
+def code(value: int) -> Code_T | !ParseFailure_T:
+    return parse_enum(Code_T, value)
+
+for v in [258, 259, 360, 260, 0, -1, 361]:
+    let c: Code_T | !ParseFailure_T = code(v)
+    if c is ParseFailure_T:
+        print f"[{v}] not a {c.what}: {c.text}"
+    else:
+        print f"[{v}] {c}"
+for v in [0, 1, 2, 3]:
+    let k: Kind_T | !ParseFailure_T = parse_enum(Kind_T, v)
+    if k is ParseFailure_T:
+        print f"[{v}] not a {k.what}: {k.text}"
+    else:
+        print f"[{v}] {k}"
+let named: Code_T | !ParseFailure_T = parse_enum(Code_T, "END")
+if named is ParseFailure_T:
+    assert False
+else:
+    assert ord(named) == 360
+print "test3b OK"
+
 # ─── test 4: do: passes the first failure on ────────────────────────────────
 
 def area(width: str, height: str) -> float | !ParseFailure_T:
