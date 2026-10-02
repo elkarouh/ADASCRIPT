@@ -64,11 +64,9 @@ type Side_T is enum LEFT, RIGHT, ON_TRACK
 
 def side_of_track(cross_track: Meters_T) -> Side_T:
     """Which side a cross-track distance is on; within half a metre of the track is on it."""
-    if cross_track > 0.5:
-        return LEFT
-    if cross_track < -0.5:
-        return RIGHT
-    return ON_TRACK
+    return ON_TRACK if -0.5 <= cross_track <= 0.5
+    return RIGHT if cross_track < 0.0
+    return LEFT
 
 def position_of(airport: Airport_T) -> GeoPoint:
     must(geo_point_from_dms(POSITION[airport]))
@@ -246,6 +244,8 @@ def main():
     assert abs(float(fix_left.along) - 0.25 * float(leg_km[2])) < 1.0
     assert abs(float(fix_left.across) - 7.0) < 0.1
     assert fix_left.side == LEFT
+    assert side_of_track(0.5) == ON_TRACK and side_of_track(-0.5) == ON_TRACK    # the band is closed
+    assert side_of_track(0.6) == LEFT and side_of_track(-0.6) == RIGHT and side_of_track(0.0) == ON_TRACK
     for spot in pattern:
         let radius: GeoVector = spot - beacon
         assert abs(float(radius.magnitude()) - 20.0) < 0.01          # all on the circle
