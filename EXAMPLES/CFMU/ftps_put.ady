@@ -60,7 +60,7 @@ if month_str not in month_days:
   print "ERROR: invalid month in date"
   sys.exit(ord(RC_ARG_ERROR))
 let day_int : int = int(day_str)
-if day_int < 1 or day_int > month_days[month_str]:
+if not 1 <= day_int <= month_days[month_str]:
   print "ERROR: invalid day in date"
   sys.exit(ord(RC_ARG_ERROR))
 

@@ -124,7 +124,7 @@ if date_set:
     sys.exit(ord(RC_ARG_ERROR))
   let mo : int = int($+2)
   let dy : int = int($+3)
-  if mo < 1 or mo > 12 or dy < 1 or dy > 31:
+  if not (1 <= mo <= 12 and 1 <= dy <= 31):
     print f"ERROR: Invalid date: '{eff_date}'"
     sys.exit(ord(RC_ARG_ERROR))
 

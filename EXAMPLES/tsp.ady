@@ -494,7 +494,7 @@ def tabu_tsp(tour: Tour_T) -> Tour_T:
         for i in 1..sz-2:
             for ni in 0..<k:
                 let nb: int = neighbors[i][ni]
-                if nb <= i or nb >= sz:
+                if not i < nb < sz:
                     continue
                 let j: int = nb
                 let next_j: int = (0 if j + 1 == sz else j + 1)
