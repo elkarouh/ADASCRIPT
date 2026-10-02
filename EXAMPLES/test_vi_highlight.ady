@@ -4,7 +4,7 @@ letter -- P plain, K keyword, S string, C comment, N number, T type name -- so t
 line and what it looks like can be read side by side. The output is compared between
 the backends (see the Makefile).
 """
-from VI/vi_core import Editor, Look_T, Lang_T, Mode_T, Scan_T, Seg_T, scan, language_of, is_type_name
+from VI/vi_core import Editor, Look_T, Lang_T, Mode_T, Quote_T, Scan_T, Seg_T, scan, language_of, is_type_name
 
 def letters(looks: []Look_T) -> str:
     var out: str = ""
@@ -21,7 +21,7 @@ def letters(looks: []Look_T) -> str:
     out
 
 def show(line: str, lang: Lang_T) -> str:
-    let found: Scan_T = scan(line, lang, "")
+    let found: Scan_T = scan(line, lang, NO_QUOTE)
     letters(found.looks)
 
 def check(line: str, lang: Lang_T, want: str):
@@ -47,15 +47,20 @@ check("x = \"\"\"", PYTHON, "PPPPSSS")
 check("f(\"a\", \"\")", PYTHON, "PPSSSPPSSP")
 check("echo ''", SHELL, "PPPPPSS")
 # a triple-quoted string runs over lines, carrying its quotes
-let first: Scan_T = scan("x = \"\"\"doc", PYTHON, "")
+let first: Scan_T = scan("x = \"\"\"doc", PYTHON, NO_QUOTE)
 assert letters(first.looks) == "PPPPSSSSSS"
-assert first.state == "\"\"\""
+assert first.state == TRIPLE_DOUBLE
 let middle: Scan_T = scan("more # not a comment", PYTHON, first.state)
 assert letters(middle.looks) == "SSSSSSSSSSSSSSSSSSSS"
-assert middle.state == "\"\"\""
+assert middle.state == TRIPLE_DOUBLE
 let last: Scan_T = scan("end\"\"\" + 1", PYTHON, middle.state)
 assert letters(last.looks) == "SSSSSSPPPN"
-assert last.state == ""
+assert last.state == NO_QUOTE
+# the quotes that close it are the quotes that opened it
+let single: Scan_T = scan("x = '''doc", PYTHON, NO_QUOTE)
+assert single.state == TRIPLE_SINGLE
+assert scan("end\"\"\" + 1", PYTHON, TRIPLE_SINGLE).state == TRIPLE_SINGLE
+assert scan("end''' + 1", PYTHON, TRIPLE_SINGLE).state == NO_QUOTE
 # other languages
 check("proc f() = discard  # c", NIM, "KKKKPPPPPPPKKKKKKKPPCCC")
 check("echo $# # c", SHELL, "PPPPPPPPCCC")

@@ -51,11 +51,17 @@ type Seg_T is record:
     text: str
     look: Look_T
 
-# What scanning a line finds: how each character looks, and the quotes of a triple-quoted
-# string left open at the end of the line ("" when none), which the next line starts in.
+# A triple-quoted string runs over lines: which quotes a line ends inside of, if any, and so
+# the line that follows starts inside of.
+type Quote_T is enum NO_QUOTE, TRIPLE_DOUBLE, TRIPLE_SINGLE
+
+const DELIMITER: [Quote_T]str = [NO_QUOTE: "", TRIPLE_DOUBLE: "\"\"\"", TRIPLE_SINGLE: "'''"]
+
+# What scanning a line finds: how each character looks, and the string left open at the end
+# of the line, which the next line starts in.
 type Scan_T is record:
     looks: []Look_T
-    state: str
+    state: Quote_T
 
 const TAG: [Mode_T]str = [NORMAL: "n", INSERT: "i", REPLACE_ONE: "r",
                           REPLACE: "R", GOTO: "g", DELETE: "d", YANK: "y", COMMAND: ":"]
@@ -175,24 +181,24 @@ class Scanner:
         while len(self.looks) < upto:
             self.looks.append(look)
 
-def scan(line: str, lang: Lang_T, state: str) -> Scan_T:
-    """How each character of LINE looks, given the quotes (STATE) of a triple-quoted
-    string the line starts inside."""
+def scan(line: str, lang: Lang_T, state: Quote_T) -> Scan_T:
+    """How each character of LINE looks, given the triple-quoted string (STATE) the line
+    starts inside, if any."""
     var sc: Scanner = Scanner()
     let n: int = len(line)
     var i: int = 0
-    var open: str = state
+    var open: Quote_T = state
     if lang == NO_LANG:
         sc.put(PLAIN, n)
-        return Scan_T(sc.looks, "")
-    if open != "":
-        let close: int = line.find(open)
+        return Scan_T(sc.looks, NO_QUOTE)
+    if open != NO_QUOTE:
+        let close: int = line.find(DELIMITER[open])
         if close < 0:
             sc.put(STRING, n)
             return Scan_T(sc.looks, open)
         sc.put(STRING, close + 3)
         i = close + 3
-        open = ""
+        open = NO_QUOTE
     while i < n:
         let o: int = ord(line[i])
         let before: int = (ord(line[i - 1]) if i > 0 else 0)
@@ -208,7 +214,7 @@ def scan(line: str, lang: Lang_T, state: str) -> Scan_T:
                 let close: int = line.find(triple, i + 3)
                 if close < 0:
                     sc.put(STRING, n)
-                    open = triple
+                    open = TRIPLE_DOUBLE if quote == "\"" else TRIPLE_SINGLE
                     i = n
                 else:
                     sc.put(STRING, close + 3)
@@ -341,7 +347,7 @@ class Editor:
         it has changed since they were made: a triple-quoted string runs over lines."""
         if self.hl_lines != self.lines:
             var all: [][]Look_T = []
-            var state: str = ""
+            var state: Quote_T = NO_QUOTE
             for line in self.lines:
                 let found: Scan_T = scan(line, self.lang, state)
                 all.append(found.looks)
