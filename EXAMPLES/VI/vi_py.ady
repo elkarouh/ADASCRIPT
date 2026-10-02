@@ -10,8 +10,9 @@ vi_core in where it is imported.
 pyimport curses, os, time
 from vi_core import Editor, Press_T, Key_T, Look_T, decode
 
-# The colour pair of each look; the pair 10 more is the same on the line the cursor is on.
-const PAIR: [Look_T]int = [PLAIN: 0, KEYWORD: 1, STRING: 2, COMMENT: 3, NUMBER: 4, TYPE: 5, CURSOR: 0, BAR: 0]
+# A look's colour pair is its position in Look_T, from KEYWORD (1) to TYPE (5); the pair
+# 10 more is the same on the line the cursor is on. PLAIN (0) has none, and CURSOR and
+# BAR are drawn by attribute alone.
 
 def setup_colors():
     """Colours on the terminal's own background; on 256 colours, the line the cursor is on
@@ -32,7 +33,7 @@ def attr_of(look: Look_T, current: bool) -> int:
     if look == BAR: return curses.A_UNDERLINE | curses.A_BOLD    # ... in insert mode
     var attr: int = 0
     if curses.has_colors():
-        let pair: int = PAIR[look] + (10 if current and curses.COLORS >= 256 else 0)
+        let pair: int = ord(look) + (10 if current and curses.COLORS >= 256 else 0)
         attr = curses.color_pair(pair)
     if look == COMMENT: attr = attr | curses.A_BOLD              # blue is bright blue
     if current and curses.COLORS < 256: attr = attr | curses.A_UNDERLINE
