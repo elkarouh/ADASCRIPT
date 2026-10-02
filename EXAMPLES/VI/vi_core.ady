@@ -428,14 +428,10 @@ class Editor:
         self.lines[self.row] = text
 
     def insert_line(self, at: int, text: str):
-        let head: []str = self.lines[:at]
-        let rest: []str = self.lines[at:]
-        self.lines = head + [text] + rest
+        self.lines[at:at] = [text]
 
     def delete_lines(self, lo: int, hi: int):
-        let head: []str = self.lines[:lo]
-        let rest: []str = self.lines[hi:]
-        self.lines = head + rest
+        self.lines[lo:hi] = []
 
     def begin_insert(self, command: char):
         """i a A o O: where the cursor goes, then insert mode."""
@@ -510,11 +506,9 @@ class Editor:
         self.message = f"Pattern not found: {self.pattern}"
 
     def put(self):
-        let head: []str = self.lines[:self.row + 1]
-        let rest: []str = self.lines[self.row + 1:]
-        self.lines = head + self.yanked + rest
-        if self.yanked:
-            self.row += 1
+        return if not self.yanked              # nothing yanked: nothing to put
+        self.lines[self.row + 1:self.row + 1] = self.yanked
+        self.row += 1
 
     # ---- modes ------------------------------------------------------
     def begin_command(self, prompt: Prompt_T):
