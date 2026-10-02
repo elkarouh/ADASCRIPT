@@ -7,14 +7,13 @@
 #   ftps_delete <ftps_service> [options]
 
 from ftps_common import (
-    RC_ARG_ERROR, RC_NOT_ALLOWED_ERROR, RC_NO_FILE_ERROR, RC_NO_FTP_SERVER_ERROR, RC_OK,
-    check_date, check_period, check_sequence, construct_filename_pattern, filter_output,
-    get_server_info, lftp_run,
+    Rc_T, check_date, check_period, check_sequence, construct_filename_pattern,
+    filter_output, get_server_info, lftp_run,
 )
 
 if $# < 1:
   print "Usage: ftps_delete <ftps_service> [options]"
-  sys.exit(RC_ARG_ERROR)
+  sys.exit(ord(RC_ARG_ERROR))
 
 let ftps_service : str = $1
 let app_key      : str = $APPLICATION_INSTANCE_KEY
@@ -50,17 +49,17 @@ for arg in $@[1:]:
 
 if date_arg != "" and (start_date != "00000000" or end_date != "99999999"):
   print "ERROR: --date is mutually exclusive with --start_date and --end_date"
-  sys.exit(RC_ARG_ERROR)
+  sys.exit(ord(RC_ARG_ERROR))
 
 let (date_val, date_rc) = check_date(date_arg, "date")
 if date_rc != RC_OK:
-  sys.exit(date_rc)
+  sys.exit(ord(date_rc))
 let (sd_val, sd_rc) = check_date(start_date, "start_date")
 if sd_rc != RC_OK:
-  sys.exit(sd_rc)
+  sys.exit(ord(sd_rc))
 let (ed_val, ed_rc) = check_date(end_date, "end_date")
 if ed_rc != RC_OK:
-  sys.exit(ed_rc)
+  sys.exit(ord(ed_rc))
 if sd_val != "":
   start_date = sd_val
 if ed_val != "":
@@ -68,20 +67,20 @@ if ed_val != "":
 
 let (seq_val, seq_rc) = check_sequence(sequence_arg)
 if seq_rc != RC_OK:
-  sys.exit(seq_rc)
+  sys.exit(ord(seq_rc))
 let (per_val, per_rc) = check_period(period_arg)
 if per_rc != RC_OK:
-  sys.exit(per_rc)
+  sys.exit(ord(per_rc))
 
 let eff_app_key : str = override_key if override_key != "" else app_key
 if eff_app_key == "":
   print "ERROR: APPLICATION_INSTANCE_KEY is not set and --app_key not provided"
-  sys.exit(RC_ARG_ERROR)
+  sys.exit(ord(RC_ARG_ERROR))
 
 let server : {str}str = get_server_info(eff_app_key, ftps_service, "WRITE", "")
 if len(server) == 0:
   print f"ERROR: No FTP server found for APP_KEY={eff_app_key} INTERNAL_NAME={ftps_service}"
-  sys.exit(RC_NO_FTP_SERVER_ERROR)
+  sys.exit(ord(RC_NO_FTP_SERVER_ERROR))
 
 let secure  : str = server["secure"]
 var src_dir : str = server["dir"]
@@ -103,12 +102,12 @@ elif date_arg != "" or sequence_arg != "" or period_arg != "" or free_text_arg !
     let (sk_out, sk_rc) = shell: oracle_server_location.hdr.query APP_KEY -where APP_KEY {source_key_arg} -list
     if sk_rc != 0 or sk_out.strip() == "":
       print f"ERROR: Invalid --source_key: {source_key_arg}"
-      sys.exit(RC_ARG_ERROR)
+      sys.exit(ord(RC_ARG_ERROR))
     src_key = source_key_arg.lower().replace("_", "")
   patterns = [construct_filename_pattern(date_val, seq_val, per_val, src_key, file_type, free_text_arg if free_text_arg != "" else "*")]
 else:
   print "ERROR: no file pattern provided"
-  sys.exit(RC_ARG_ERROR)
+  sys.exit(ord(RC_ARG_ERROR))
 
 var remote_list : []str = []
 var seen_r      : {str}bool = {:}
@@ -139,7 +138,7 @@ for pattern in patterns:
 if len(remote_list) == 0:
   let srv_host : str = server["host"]
   print f"ERROR: No file with name {patterns[0]} exists on the FTP server {srv_host}"
-  sys.exit(RC_NO_FILE_ERROR)
+  sys.exit(ord(RC_NO_FILE_ERROR))
 
 var files_per_key : {str}int = {:}
 for f in remote_list:
@@ -152,7 +151,7 @@ if len(files_per_key) > 1 and not in_regression:
   print "ERROR: Cannot delete files from different originating instances at the same time."
   for f in sorted(remote_list):
     print f
-  sys.exit(RC_NOT_ALLOWED_ERROR)
+  sys.exit(ord(RC_NOT_ALLOWED_ERROR))
 
 var files_to_delete : []str = [f for f in remote_list if filter_output(f, start_date, end_date)]
 
@@ -167,7 +166,7 @@ if len(files_to_delete) > 1 and not in_regression:
     answer = reply.strip()
   if answer != "YES":
     print "Not deleting the files"
-    sys.exit(RC_OK)
+    sys.exit(ord(RC_OK))
 
 for remote_file in files_to_delete:
   var target_dir : str = src_dir
@@ -181,6 +180,6 @@ for remote_file in files_to_delete:
     print f"Remote file {remote_file} successfully removed"
   else:
     print f"ERROR: Cannot remove remote file {remote_file}"
-    sys.exit(RC_NOT_ALLOWED_ERROR)
+    sys.exit(ord(RC_NOT_ALLOWED_ERROR))
 
-sys.exit(RC_OK)
+sys.exit(ord(RC_OK))

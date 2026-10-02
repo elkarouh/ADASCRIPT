@@ -24,9 +24,7 @@
 #   --sym    symlink source file into recovery dir instead of copying
 
 from ftps_common import (
-    RC_ARG_ERROR, RC_COMPRESS_ERROR, RC_CONFIG_ERROR, RC_MAX_VER_EXIST_ERROR,
-    RC_NO_FTP_SERVER_ERROR, RC_NO_SRCE_FILE_ERROR, RC_OK, RC_RECOVERY_DIR_ERROR,
-    get_server_info, lftp_run,
+    Rc_T, get_server_info, lftp_run,
 )
 nimport os
 
@@ -51,7 +49,7 @@ for arg in $@[10:]:
 
 if app_key == "":
   print "ERROR: APPLICATION_INSTANCE_KEY is not set"
-  sys.exit(RC_ARG_ERROR)
+  sys.exit(ord(RC_ARG_ERROR))
 
 # --- validate date ---
 var month_days : {str}int = {"01":31,"02":29,"03":31,"04":30,"05":31,"06":30,
@@ -60,11 +58,11 @@ let month_str : str = date_arg[4:6]
 let day_str   : str = date_arg[6:8]
 if month_str not in month_days:
   print "ERROR: invalid month in date"
-  sys.exit(RC_ARG_ERROR)
+  sys.exit(ord(RC_ARG_ERROR))
 let day_int : int = int(day_str)
 if day_int < 1 or day_int > month_days[month_str]:
   print "ERROR: invalid day in date"
-  sys.exit(RC_ARG_ERROR)
+  sys.exit(ord(RC_ARG_ERROR))
 
 # derive 6-char app identifier from instance key
 let appl_part : str = app_key.lower().replace("_", "")[:6]
@@ -77,13 +75,13 @@ let src_path : str = source_dir + "/" + source_file
 let (_, src_r_rc) = shell: test -r {src_path}
 if not -f src_path or src_r_rc != 0:
   print f"ERROR: Source file {src_path} does not exist or is not readable"
-  sys.exit(RC_NO_SRCE_FILE_ERROR)
+  sys.exit(ord(RC_NO_SRCE_FILE_ERROR))
 
 # --- resolve server ---
 let server : {str}str = get_server_info(app_key, ftps_service, "WRITE", "")
 if len(server) == 0:
   print f"ERROR: No FTP server found for APP_KEY={app_key} INTERNAL_NAME={ftps_service}"
-  sys.exit(RC_NO_FTP_SERVER_ERROR)
+  sys.exit(ord(RC_NO_FTP_SERVER_ERROR))
 
 let secure      : str = server["secure"]
 let base_dir    : str = server["dir"]
@@ -91,7 +89,7 @@ let ftp_server  : str = server["host"]
 
 # check CFMU_FTP_DISABLE
 if $CFMU_FTP_DISABLE != "":
-  sys.exit(RC_OK)
+  sys.exit(ord(RC_OK))
 
 # --- resolve recovery directory ---
 var recovery_dir : str = ""
@@ -119,7 +117,7 @@ if not do_not_compress:
   if gz_rc != 0:
     print f"ERROR: Could not compress {src_path}"
     os.unlink(tmp)
-    sys.exit(RC_COMPRESS_ERROR)
+    sys.exit(ord(RC_COMPRESS_ERROR))
   local_file = tmp
   compressed_tmp = tmp
 
@@ -147,7 +145,7 @@ if in_regress:
   shell: mkdir -p {reg_dir}/{dest_dir}
   shell: mkdir -p {reg_dir}/{upload_area}
 
-var rc : int = RC_OK
+var rc : Rc_T = RC_OK
 
 # --- check overwrite policy ---
 if overwrite == 0 or overwrite == 2:
@@ -225,7 +223,7 @@ if rc != RC_OK:
   if bad_recovery_dir:
     if compressed_tmp != "":
       os.unlink(compressed_tmp)
-    sys.exit(RC_RECOVERY_DIR_ERROR)
+    sys.exit(ord(RC_RECOVERY_DIR_ERROR))
 
   let recover_file : str = recovery_dir + "/" + dest_file
   let (scripts_out, _) = shell: grep -l {dest_file} {recovery_dir}/ftps_recover.* 2>/dev/null
@@ -264,20 +262,20 @@ if rc != RC_OK:
     let script_path : str = f"{recovery_dir}/ftps_recover.{os.getpid()}_0_{now}"
     with open(script_path, "w") as sf:
       sf.write("#!/usr/bin/ksh\n")
-      sf.write(f"RC_RECOVER={RC_OK}\n\n")
+      sf.write(f"RC_RECOVER={ord(RC_OK)}\n\n")
       sf.write("function cfmu_ftps_recover_file\n{\n")
       sf.write("  if [[ -r $1 ]]\n  then\n")
       sf.write("    FTPS_MUTEX=/tmp/$(basename $1).mutex\n")
       sf.write("    locked -verbose -nowait ${FTPS_MUTEX} cfmu_ftps_recover $*\n")
       sf.write("    RC_FILE_RECOVER=$?\n\n")
-      sf.write("    if [[ ${RC_FILE_RECOVER} -eq 254 ]]\n    then\n      RC_RECOVER=" + str(RC_OK) + "\n    fi\n")
+      sf.write("    if [[ ${RC_FILE_RECOVER} -eq 254 ]]\n    then\n      RC_RECOVER=" + str(ord(RC_OK)) + "\n    fi\n")
       sf.write("  else\n")
-      sf.write("    RC_FILE_RECOVER=" + str(RC_OK) + "\n  fi\n\n")
-      sf.write("  if [[ ${RC_RECOVER} -eq " + str(RC_OK) + " ]]\n  then\n    RC_RECOVER=${RC_FILE_RECOVER}\n  fi\n}\n\n")
+      sf.write("    RC_FILE_RECOVER=" + str(ord(RC_OK)) + "\n  fi\n\n")
+      sf.write("  if [[ ${RC_RECOVER} -eq " + str(ord(RC_OK)) + " ]]\n  then\n    RC_RECOVER=${RC_FILE_RECOVER}\n  fi\n}\n\n")
       let srv_user : str = server["user"]
       let srv_pass : str = server["pass"]
       sf.write(f"cfmu_ftps_recover_file {recover_file} {ftp_server} {base_dir} {srv_user} '{srv_pass}'\n")
-      sf.write("\nif [[ ${RC_RECOVER} -eq " + str(RC_OK) + " ]]\nthen\n")
+      sf.write("\nif [[ ${RC_RECOVER} -eq " + str(ord(RC_OK)) + " ]]\nthen\n")
       let exit_line : str = "  rm -Rf " + recover_file + "\n  nohup rm -f $0 1>/dev/null 2>&1 </dev/null &\nfi\n\nexit ${RC_RECOVER}\n"
       sf.write(exit_line)
     shell: chmod 755 {script_path}
@@ -288,4 +286,4 @@ if rc != RC_OK:
 if compressed_tmp != "":
   os.unlink(compressed_tmp)
 
-sys.exit(rc)
+sys.exit(ord(rc))

@@ -9,13 +9,12 @@
 # At least one of: --free_text, --from_appl, --file_type, --seq_number, --period, --date
 
 from ftps_common import (
-    RC_ARG_ERROR, RC_MAX_VER_EXIST_ERROR, RC_NOT_ALLOWED_ERROR, RC_NO_FTP_SERVER_ERROR,
-    get_server_info, lftp_run,
+    Rc_T, get_server_info, lftp_run,
 )
 
 if $# < 2:
   print "Usage: ftps_rename <ftps_service> <old_file_name> [options]"
-  sys.exit(RC_ARG_ERROR)
+  sys.exit(ord(RC_ARG_ERROR))
 
 let ftps_service  : str = $1
 let old_file_name : str = $2
@@ -65,7 +64,7 @@ for arg in $@[2:]:
 
 if not (free_text_set or appl_set or ft_set or seq_set or period_set or date_set):
   print "ERROR: at least one of --free_text, --from_appl, --file_type, --seq_number, --period, --date must be specified"
-  sys.exit(RC_ARG_ERROR)
+  sys.exit(ord(RC_ARG_ERROR))
 
 # The FTPS naming convention: an optional "1." version prefix, then the
 # date, the sequence number, the period, the application key, the file type
@@ -78,7 +77,7 @@ if old_file_name != /^(1\.){0,1}(\d{8})(\d{1})(\d{3})(\w{6})(\d{2})(.{0,100})$/:
 
 if remote_file != /^(1\.){0,1}(\d{8})(\d{1})(\d{3})(\w{6})(\d{2})(.{0,100})$/:
   print f"ERROR: '{old_file_name}' does not match FTPS naming convention"
-  sys.exit(RC_ARG_ERROR)
+  sys.exit(ord(RC_ARG_ERROR))
 
 # Straight off the match above -- nothing may run another regex in between.
 let version_prefix : str = $+1
@@ -91,7 +90,7 @@ let old_free_text  : str = $+7
 
 if not appl_set and old_appl != appl_part:
   print f"ERROR: Not allowed to rename file {old_file_name} (owned by '{old_appl}', you are '{appl_part}')"
-  sys.exit(RC_NOT_ALLOWED_ERROR)
+  sys.exit(ord(RC_NOT_ALLOWED_ERROR))
 
 let eff_free_text : str = new_free_text if free_text_set else old_free_text
 let eff_appl      : str = new_appl.lower().replace("_", "") if appl_set else old_appl
@@ -102,39 +101,39 @@ let eff_date      : str = new_date if date_set else old_date
 
 if free_text_set and eff_free_text == old_free_text:
   print f"ERROR: --free_text value is the same as existing: '{old_free_text}'"
-  sys.exit(RC_ARG_ERROR)
+  sys.exit(ord(RC_ARG_ERROR))
 if appl_set and eff_appl == old_appl:
   print f"ERROR: --from_appl value is the same as existing: '{old_appl}'"
-  sys.exit(RC_ARG_ERROR)
+  sys.exit(ord(RC_ARG_ERROR))
 if ft_set and eff_ft == old_ft:
   print f"ERROR: --file_type value is the same as existing: '{old_ft}'"
-  sys.exit(RC_ARG_ERROR)
+  sys.exit(ord(RC_ARG_ERROR))
 if seq_set and eff_seq == old_seq:
   print f"ERROR: --seq_number value is the same as existing: '{old_seq}'"
-  sys.exit(RC_ARG_ERROR)
+  sys.exit(ord(RC_ARG_ERROR))
 if period_set and eff_period == old_period:
   print f"ERROR: --period value is the same as existing: '{old_period}'"
-  sys.exit(RC_ARG_ERROR)
+  sys.exit(ord(RC_ARG_ERROR))
 if date_set and eff_date == old_date:
   print f"ERROR: --date value is the same as existing: '{old_date}'"
-  sys.exit(RC_ARG_ERROR)
+  sys.exit(ord(RC_ARG_ERROR))
 
 if date_set:
   if eff_date != /^(\d{4})(\d{2})(\d{2})$/:
     print f"ERROR: --date must be exactly 8 digits (YYYYMMDD), got: '{eff_date}'"
-    sys.exit(RC_ARG_ERROR)
+    sys.exit(ord(RC_ARG_ERROR))
   let mo : int = int($+2)
   let dy : int = int($+3)
   if mo < 1 or mo > 12 or dy < 1 or dy > 31:
     print f"ERROR: Invalid date: '{eff_date}'"
-    sys.exit(RC_ARG_ERROR)
+    sys.exit(ord(RC_ARG_ERROR))
 
 var new_remote_file : str = version_prefix + eff_date + eff_seq + eff_period + eff_appl + eff_ft + eff_free_text
 
 let server  : {str}str = get_server_info(app_key, ftps_service, "WRITE", "")
 if len(server) == 0:
   print f"ERROR: No FTP server found for APP_KEY={app_key} INTERNAL_NAME={ftps_service}"
-  sys.exit(RC_NO_FTP_SERVER_ERROR)
+  sys.exit(ord(RC_NO_FTP_SERVER_ERROR))
 
 let secure  : str = server["secure"]
 let src_dir : str = server["dir"]
@@ -163,10 +162,10 @@ if check_out.strip() != "":
         break
     if not found_slot:
       print f"ERROR: 9 versions already exist for {new_remote_file}"
-      sys.exit(RC_MAX_VER_EXIST_ERROR)
+      sys.exit(ord(RC_MAX_VER_EXIST_ERROR))
   else:
     print f"ERROR: Target filename already exists on server: {new_remote_file}"
-    sys.exit(RC_NOT_ALLOWED_ERROR)
+    sys.exit(ord(RC_NOT_ALLOWED_ERROR))
 
 var from_path : str = remote_file
 var to_path   : str = new_remote_file
@@ -181,11 +180,11 @@ if file_src_dir != file_dest_dir:
   let (_, mv_rc) = lftp_run(server, f"cd {base}\nmv {from_path} {to_path}")
   if mv_rc != 0:
     print f"ERROR: Failed to rename {remote_file} to {new_remote_file}"
-    sys.exit(RC_NOT_ALLOWED_ERROR)
+    sys.exit(ord(RC_NOT_ALLOWED_ERROR))
 else:
   let (_, mv_rc) = lftp_run(server, f"cd {file_src_dir}\nmv {from_path} {to_path}")
   if mv_rc != 0:
     print f"ERROR: Failed to rename {remote_file} to {new_remote_file}"
-    sys.exit(RC_NOT_ALLOWED_ERROR)
+    sys.exit(ord(RC_NOT_ALLOWED_ERROR))
 
 print f"Remote file {remote_file} successfully renamed to {new_remote_file}"

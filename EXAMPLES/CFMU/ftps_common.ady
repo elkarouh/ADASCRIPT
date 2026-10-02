@@ -7,24 +7,29 @@ nimport os
 
 # ---------------------------------------------------------------------------
 # Return codes
+#
+# The scripts' exit codes, each with its number: the values skip some (2 and 3 are not
+# used, 18 to 254 neither), which is what an enum with values is for. A script exits with
+# sys.exit(ord(code)).
 # ---------------------------------------------------------------------------
-let RC_OK                       : int = 0
-let RC_NO_MATCH                 : int = 1
-let RC_NO_FILE_ERROR            : int = 4
-let RC_ARG_ERROR                : int = 5
-let RC_NOT_ALLOWED_ERROR        : int = 6
-let RC_COMPRESS_ERROR           : int = 7
-let RC_CONFIG_ERROR             : int = 8
-let RC_RECOVERY_DIR_ERROR       : int = 9
-let RC_NO_FTP_SERVER_ERROR      : int = 10
-let RC_NO_SRCE_FILE_ERROR       : int = 11
-let RC_FTP_DIR_ERROR            : int = 12
-let RC_FTP_UPLOAD_DIR_ERROR     : int = 13
-let RC_REG_TEST_DIR_ERROR       : int = 14
-let RC_MAX_VER_EXIST_ERROR      : int = 15
-let RC_FTP_SYMLINK_CREATE_ERROR : int = 16
-let RC_FTP_SYMLINK_DELETE_ERROR : int = 17
-let RC_RECOVERY_ERROR           : int = 255
+type Rc_T is enum:
+    RC_OK = 0
+    RC_NO_MATCH = 1
+    RC_NO_FILE_ERROR = 4
+    RC_ARG_ERROR = 5
+    RC_NOT_ALLOWED_ERROR = 6
+    RC_COMPRESS_ERROR = 7
+    RC_CONFIG_ERROR = 8
+    RC_RECOVERY_DIR_ERROR = 9
+    RC_NO_FTP_SERVER_ERROR = 10
+    RC_NO_SRCE_FILE_ERROR = 11
+    RC_FTP_DIR_ERROR = 12
+    RC_FTP_UPLOAD_DIR_ERROR = 13
+    RC_REG_TEST_DIR_ERROR = 14
+    RC_MAX_VER_EXIST_ERROR = 15
+    RC_FTP_SYMLINK_CREATE_ERROR = 16
+    RC_FTP_SYMLINK_DELETE_ERROR = 17
+    RC_RECOVERY_ERROR = 255
 
 # ---------------------------------------------------------------------------
 # Filename naming convention regex parts
@@ -77,7 +82,7 @@ def filter_output(filename: str, start_date: str, end_date: str) -> bool:
 # ---------------------------------------------------------------------------
 # Validators — return (value, rc)
 # ---------------------------------------------------------------------------
-def check_period(period: str) -> (str, int):
+def check_period(period: str) -> (str, Rc_T):
   if period == "":
     return ("", RC_OK)
   if period == /^\d{3}$/:
@@ -85,7 +90,7 @@ def check_period(period: str) -> (str, int):
   print "ERROR: -period must be 3 digits, got: ", period
   return ("", RC_ARG_ERROR)
 
-def check_sequence(sequence: str) -> (str, int):
+def check_sequence(sequence: str) -> (str, Rc_T):
   if sequence == "":
     return ("", RC_OK)
   if sequence == "ALL":
@@ -95,7 +100,7 @@ def check_sequence(sequence: str) -> (str, int):
   print "ERROR: -sequence must be a single digit or ALL, got: ", sequence
   return ("", RC_ARG_ERROR)
 
-def check_date(date: str, option_name: str) -> (str, int):
+def check_date(date: str, option_name: str) -> (str, Rc_T):
   if date == "":
     return ("", RC_OK)
   if date == /^\d+$/:

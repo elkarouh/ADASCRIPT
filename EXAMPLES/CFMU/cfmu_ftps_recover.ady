@@ -15,10 +15,7 @@
 
 nimport os
 
-let RC_OK            : int = 0
-let RC_ARG_ERROR     : int = 5
-let RC_FTP_ERROR     : int = 8
-let RC_SYMLINK_ERROR : int = 16
+type Rc_T is enum RC_OK = 0, RC_ARG_ERROR = 5, RC_FTP_ERROR = 8, RC_SYMLINK_ERROR = 16
 
 # Helper: run an lftp script with explicit user/pass credentials
 def lftp_cmd(srv: str, uid: str, pwd: str, cmds: str) -> (str, int):
@@ -33,7 +30,7 @@ def lftp_cmd(srv: str, uid: str, pwd: str, cmds: str) -> (str, int):
 
 if $# < 5:
   print "Usage: cfmu_ftps_recover <local_file> <ftp_server> <destination_dir> <user_id> <user_pwd>"
-  sys.exit(RC_ARG_ERROR)
+  sys.exit(ord(RC_ARG_ERROR))
 
 let local_file  : str = $1
 let ftp_server  : str = $2
@@ -44,11 +41,11 @@ let user_pwd    : str = $5
 let app_key : str = $APPLICATION_INSTANCE_KEY
 if app_key == "":
   print "ERROR: APPLICATION_INSTANCE_KEY is not set"
-  sys.exit(RC_ARG_ERROR)
+  sys.exit(ord(RC_ARG_ERROR))
 
 if not -f local_file:
   print f"ERROR: Local file {local_file} does not exist or is not readable"
-  sys.exit(RC_ARG_ERROR)
+  sys.exit(ord(RC_ARG_ERROR))
 
 let local_path : Path = Path(local_file)
 let local_size : int  = os.path.getsize(local_file)
@@ -78,7 +75,7 @@ let tmp_name   : str = "ftp." + hostname_out.strip() + "." + str(os.getpid())
 let upload_cmd : str = "mkdir -p " + upload_area + "\ncd " + upload_area + "\nput " + local_file + " -o " + tmp_name
 let (_, put_rc) = lftp_cmd(ftp_server, user_id, user_pwd, upload_cmd)
 
-var rc : int = RC_OK
+var rc : Rc_T = RC_OK
 if put_rc != 0:
   print f"ERROR: Failed to upload {base_name} to {ftp_server}"
   rc = RC_FTP_ERROR
@@ -122,4 +119,4 @@ else:
       rc = RC_FTP_ERROR
 
 print f"*** End '{local_file}' file upload on {ftp_server} server"
-sys.exit(rc)
+sys.exit(ord(rc))

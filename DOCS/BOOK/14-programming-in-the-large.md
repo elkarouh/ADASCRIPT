@@ -167,7 +167,7 @@ shared `ftps_common.ady`:
 
 ```
 CFMU/
-    ftps_common.ady     # constants, helpers, server lookup
+    ftps_common.ady     # the return codes (Rc_T), helpers, server lookup
     ftps_get.ady        # import ftps_common
     ftps_put.ady        # import ftps_common
     ...
@@ -175,12 +175,12 @@ CFMU/
 
 ```python
 # ftps_get.ady
-from ftps_common import RC_ARG_ERROR
-import os
+from ftps_common import Rc_T
+nimport os
 
 if $# < 3:
     print "Usage: ftps_get <dest_dir> <ftps_service> <decompress>"
-    sys.exit(RC_ARG_ERROR)          # RC_ARG_ERROR came from ftps_common
+    sys.exit(ord(RC_ARG_ERROR))     # RC_ARG_ERROR is a member of Rc_T, from ftps_common
 ```
 
 Flat is right up to about a dozen modules, and it is the layout with the
