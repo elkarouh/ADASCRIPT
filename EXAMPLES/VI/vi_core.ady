@@ -170,7 +170,10 @@ class Scanner:
     var looks: []Look_T = []
 
     def put(self, look: Look_T, upto: int):
-        """Give the characters from the next one up to UPTO this look."""
+        """Give the characters from the next one up to UPTO this look. The next
+        character is the one at index len(looks): the length of the list is the scan
+        position, so the loop ends once the list has grown to UPTO, and a call with
+        an UPTO already reached adds nothing."""
         while len(self.looks) < upto:
             self.looks.append(look)
 
