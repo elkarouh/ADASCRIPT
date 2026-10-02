@@ -21,4 +21,10 @@ let (head2, sep2, tail2) = "a=b=c".rpartition("=")
 assert head2 == "a=b" and sep2 == "=" and tail2 == "c"
 let (head3, sep3, tail3) = "abc".rpartition("=")
 assert head3 == "" and sep3 == "" and tail3 == "abc"      # as Python: the text goes last
+# the parts are strings: converted, and joined
+let (stem, _, number) = "baseline.41".rpartition(".")
+assert int(number) + 1 == 42
+let (_, mark, after) = "x #emacs: diff".partition("#emacs")
+assert mark + after == "#emacs: diff"
+assert stem + number == "baseline41"
 print "test_str_partition OK"

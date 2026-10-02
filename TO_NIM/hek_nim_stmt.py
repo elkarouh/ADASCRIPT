@@ -1422,10 +1422,11 @@ def to_nim(self):
 
 # --- return ---
 def _note_split_parts(value, names):
-    """NAMES, unpacked from VALUE: strings, when it is a split -- so that
-    `int(tail)` parses one rather than converting it."""
+    """NAMES, unpacked from VALUE: strings, when it is a split or a partition -- so
+    that `int(tail)` parses one rather than converting it, and `head + tail`
+    joins two."""
     import re as _re_np
-    if _re_np.search(r"\.(?:r?split|splitWhitespace)\(", value):
+    if _re_np.search(r"\.(?:r?split|splitWhitespace|r?partition)\(", value):
         for _n in names:
             _n = _n.strip()
             if _re_np.fullmatch(r"[A-Za-z]\w*", _n):
