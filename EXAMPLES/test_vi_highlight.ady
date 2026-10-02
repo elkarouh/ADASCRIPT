@@ -1,0 +1,88 @@
+#!/usr/bin/env ady2nim
+"""Test: how VI/vi_core colours text, on both backends. Each character of a line is one
+letter -- P plain, K keyword, S string, C comment, N number, T type name -- so that a
+line and what it looks like can be read side by side. The output is compared between
+the backends (see the Makefile).
+"""
+from VI/vi_core import Editor, Look_T, Lang_T, Mode_T, Scan_T, Seg_T, scan, language_of, is_type_name
+
+def letters(looks: []Look_T) -> str:
+    var out: str = ""
+    for look in looks:
+        case look:
+            when KEYWORD: out = out + "K"
+            when STRING: out = out + "S"
+            when COMMENT: out = out + "C"
+            when NUMBER: out = out + "N"
+            when TYPE: out = out + "T"
+            when CURSOR: out = out + "["
+            when BAR: out = out + "|"
+            when others: out = out + "P"
+    out
+
+def show(line: str, lang: Lang_T) -> str:
+    let found: Scan_T = scan(line, lang, "")
+    letters(found.looks)
+
+def check(line: str, lang: Lang_T, want: str):
+    let got: str = show(line, lang)
+    print f"{line}\n{got}"
+    assert got == want
+
+# keywords, type names, numbers, comments
+check("def f(x): return Foo(1)  # c", PYTHON, "KKKPPPPPPPKKKKKKPTTTPNPPPCCC")
+check("let n: int = 42", PYTHON, "KKKPPPPPPPPPPNN")
+check("MAX = 3.14e2 if TAG else None", PYTHON, "PPPPPPNNNNNNPKKPPPPPKKKKPKKKK")
+check("x = Press_T(KEY)", PYTHON, "PPPPTTTTTTTPPPPP")
+# strings: quotes inside, a # inside, a backslash, an unfinished one
+check("a = 'x' + \"y#z\"  # w", PYTHON, "PPPPSSSPPPSSSSSPPCCC")
+check("s = \"a\\\"b\" + 1", PYTHON, "PPPPSSSSSSPPPN")
+check("s = \"open", PYTHON, "PPPPSSSSS")
+# a triple-quoted string runs over lines, carrying its quotes
+let first: Scan_T = scan("x = \"\"\"doc", PYTHON, "")
+assert letters(first.looks) == "PPPPSSSSSS"
+assert first.state == "\"\"\""
+let middle: Scan_T = scan("more # not a comment", PYTHON, first.state)
+assert letters(middle.looks) == "SSSSSSSSSSSSSSSSSSSS"
+assert middle.state == "\"\"\""
+let last: Scan_T = scan("end\"\"\" + 1", PYTHON, middle.state)
+assert letters(last.looks) == "SSSSSSPPPN"
+assert last.state == ""
+# other languages
+check("proc f() = discard  # c", NIM, "KKKKPPPPPPPKKKKKKKPPCCC")
+check("echo $# # c", SHELL, "PPPPPPPPCCC")
+check("if [ -f x ]; then", SHELL, "KKPPPPPPPPPPPKKKK")
+check("def f(): return 1", NO_LANG, "PPPPPPPPPPPPPPPPP")
+# the language comes from the name
+assert language_of("a.ady") == PYTHON
+assert language_of("dir/b.py") == PYTHON
+assert language_of("c.nim") == NIM
+assert language_of("d.sh") == SHELL
+assert language_of("README.md") == NO_LANG
+assert is_type_name("Editor") and is_type_name("Press_T")
+assert not is_type_name("NORMAL") and not is_type_name("editor")
+
+# what a row shows: the cursor's character apart, and what lies left of the window
+let file: Path = Path("/tmp/ady_test_highlight.ady")
+let wrote: None | !PathFailure_T = file.write_text("if x:\n    return 1  # one\n\n")
+var ed: Editor = Editor(file)
+ed.fit(80, 24)
+def row(ed: Editor, i: int) -> str:
+    var out: str = ""
+    for seg in ed.row_segments(i):
+        out = out + f"{seg.text}/{letters([seg.look])} "
+    out
+print row(ed, 0)
+assert row(ed, 0) == "i/[ f/K  x:/P "
+assert row(ed, 1) == "    /P return/K  /P 1/N   /P # one/C "
+assert row(ed, 3) == "~/P "
+assert ed.is_current(0) and not ed.is_current(1)
+ed.row = 2
+print row(ed, 2)
+assert row(ed, 2) == " /[ "
+ed.row = 1
+ed.col = 4
+ed.mode = INSERT
+print row(ed, 1)
+assert row(ed, 1) == "    /P r/| eturn/K  /P 1/N   /P # one/C "
+print "test_vi_highlight OK"

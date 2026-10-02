@@ -9,6 +9,10 @@ vi_nim.ady (illwill, Nim) and vi_raw.ady (Nim, by hand) are three ways of showin
   Insert    the arrow, Home, End and Page keys move; ESC leaves
   Anywhere  ^S saves, ^Q quits
 
+What is shown: the text in colour by language (keywords, strings, comments, numbers
+and type names, for .ady and .py, .nim and .sh files), the line the cursor is on, and
+the cursor itself, a block in normal mode and a bar in insert and replace mode.
+
 A key is decoded once into a Press_T, and every mode is a `case` over what was
 pressed: the editor never looks at a key code. Where the original reaches for an
 exception -- opening a file that is not there, counting with a number that is
@@ -33,6 +37,24 @@ type Snapshot_T is record:
     lines: []str
     row: int
     col: int
+
+# How a character is shown. The first six are what the text is made of; CURSOR and BAR
+# are the character the cursor is on, in normal mode and in insert or replace mode.
+type Look_T is enum PLAIN, KEYWORD, STRING, COMMENT, NUMBER, TYPE, CURSOR, BAR
+
+# The languages the text can be coloured as, by the file's name.
+type Lang_T is enum NO_LANG, PYTHON, NIM, SHELL
+
+# A stretch of a row that is shown the same way.
+type Seg_T is record:
+    text: str
+    look: Look_T
+
+# What scanning a line finds: how each character looks, and the quotes of a triple-quoted
+# string left open at the end of the line ("" when none), which the next line starts in.
+type Scan_T is record:
+    looks: []Look_T
+    state: str
 
 const TAG: [Mode_T]str = [NORMAL: "n", INSERT: "i", REPLACE_ONE: "r",
                           REPLACE: "R", GOTO: "g", DELETE: "d", YANK: "y", COMMAND: ":"]
@@ -88,6 +110,131 @@ def splice(line: str, start: int, stop: int, text: str) -> str:
     let after: str = tail(line, stop)
     before + text + after
 
+# ---- colouring --------------------------------------------------------
+def language_of(name: str) -> Lang_T:
+    """The language a file is coloured as, from the end of its name."""
+    if name.endswith(".ady") or name.endswith(".py"): return PYTHON
+    if name.endswith(".nim"): return NIM
+    if name.endswith(".sh"): return SHELL
+    NO_LANG
+
+def is_keyword(lang: Lang_T, word: str) -> bool:
+    case lang:
+        when PYTHON:
+            case word:
+                when "def" | "class" | "if" | "elif" | "else" | "for" | "while" | "return" | "import" | "from": True
+                when "nimport" | "pyimport" | "let" | "var" | "const" | "type" | "is" | "enum" | "record": True
+                when "case" | "when" | "others" | "in" | "not" | "and" | "or" | "pass" | "break" | "continue": True
+                when "True" | "False" | "None" | "assert" | "die" | "do" | "lambda" | "yield" | "await": True
+                when "async" | "global" | "del" | "try" | "except" | "finally" | "raise" | "with" | "as": True
+                when "tuple" | "distinct" | "shell" | "quit": True
+                when others: False
+        when NIM:
+            case word:
+                when "proc" | "func" | "method" | "iterator" | "template" | "macro" | "let" | "var" | "const": True
+                when "type" | "object" | "enum" | "tuple" | "if" | "elif" | "else" | "when" | "case" | "of": True
+                when "for" | "while" | "break" | "continue" | "return" | "yield" | "import" | "from" | "export": True
+                when "include" | "block" | "try" | "except" | "finally" | "raise" | "defer" | "discard": True
+                when "and" | "or" | "not" | "xor" | "in" | "notin" | "is" | "isnot" | "div" | "mod" | "shl": True
+                when "shr" | "nil" | "true" | "false" | "ref" | "ptr" | "distinct" | "using" | "static": True
+                when others: False
+        when SHELL:
+            case word:
+                when "if" | "then" | "else" | "elif" | "fi" | "for" | "while" | "until" | "do" | "done": True
+                when "case" | "esac" | "function" | "in" | "return" | "exit" | "export" | "local" | "set": True
+                when "unset" | "shift" | "break" | "continue" | "trap" | "source" | "eval" | "exec": True
+                when others: False
+        when others: False
+
+def is_digit(o: int) -> bool:
+    o >= 48 and o <= 57
+
+def is_letter(o: int) -> bool:
+    (o >= 65 and o <= 90) or (o >= 97 and o <= 122)
+
+def is_type_name(word: str) -> bool:
+    """Capitalised, with a lower-case letter in it: Editor, Press_T; not NORMAL or TAG."""
+    if ord(word[0]) < 65 or ord(word[0]) > 90: return False
+    for k in 0 ..< len(word):
+        if ord(word[k]) >= 97 and ord(word[k]) <= 122: return True
+    False
+
+class Scanner:
+    var looks: []Look_T = []
+
+    def put(self, look: Look_T, upto: int):
+        """Give the characters from the next one up to UPTO this look."""
+        while len(self.looks) < upto:
+            self.looks.append(look)
+
+def scan(line: str, lang: Lang_T, state: str) -> Scan_T:
+    """How each character of LINE looks, given the quotes (STATE) of a triple-quoted
+    string the line starts inside."""
+    var sc: Scanner = Scanner()
+    let n: int = len(line)
+    var i: int = 0
+    var open: str = state
+    if lang == NO_LANG:
+        sc.put(PLAIN, n)
+        return Scan_T(sc.looks, "")
+    if open != "":
+        let close: int = line.find(open)
+        if close < 0:
+            sc.put(STRING, n)
+            return Scan_T(sc.looks, open)
+        sc.put(STRING, close + 3)
+        i = close + 3
+        open = ""
+    while i < n:
+        let o: int = ord(line[i])
+        let before: int = (ord(line[i - 1]) if i > 0 else 0)
+        if o == 35 and not (lang == SHELL and before == 36):          # a # starts a comment, but $# is not one
+            sc.put(PLAIN, i)
+            sc.put(COMMENT, n)
+            i = n
+        elif o == 34 or o == 39:                                      # a quote: a string
+            sc.put(PLAIN, i)
+            let quote: str = line[i:i + 1]
+            let triple: str = quote + quote + quote
+            if lang != SHELL and line[i:i + 3] == triple:
+                let close: int = line.find(triple, i + 3)
+                if close < 0:
+                    sc.put(STRING, n)
+                    open = triple
+                    i = n
+                else:
+                    sc.put(STRING, close + 3)
+                    i = close + 3
+            else:
+                var j: int = i + 1
+                while j < n and ord(line[j]) != o:
+                    if ord(line[j]) == 92: j += 1                      # a backslash takes the next character
+                    j += 1
+                sc.put(STRING, min(j + 1, n))
+                i = j + 1
+        elif is_digit(o):                                             # a digit: a number, 3.14e2 and 0xFF too
+            sc.put(PLAIN, i)
+            var j: int = i
+            while j < n and (is_digit(ord(line[j])) or is_letter(ord(line[j])) or ord(line[j]) == 46 or ord(line[j]) == 95):
+                j += 1
+            sc.put(NUMBER, j)
+            i = j
+        elif is_letter(o) or o == 95:                                 # a letter: a word
+            sc.put(PLAIN, i)
+            var j: int = i
+            while j < n and (is_letter(ord(line[j])) or is_digit(ord(line[j])) or ord(line[j]) == 95):
+                j += 1
+            let word: str = line[i:j]
+            if is_keyword(lang, word):
+                sc.put(KEYWORD, j)
+            elif lang != SHELL and is_type_name(word):
+                sc.put(TYPE, j)
+            i = j
+        else:
+            i += 1
+    sc.put(PLAIN, n)
+    Scan_T(sc.looks, open)
+
 def count_of(text: str) -> int:
     """The count typed before a command; 1 when there is none."""
     let n: int | !ParseFailure_T = parse_int(text)
@@ -117,6 +264,9 @@ class Editor:
     var cols: int = 0
     var cmd: str = ""                    # typed after the colon or slash, in COMMAND mode
     var prompt: str = ":"                # which of the two it was
+    var lang: Lang_T = NO_LANG           # what the text is coloured as
+    var hl_lines: []str = []             # the text the colours in hl were made from
+    var hl: [][]Look_T = []              # how each character of each line looks
     var pattern: str = ""                # what was last searched for, for n and N
     var saved: []str = []                # the text as last written, to tell a change from none
     var message: str = ""                # what to tell the user; the terminal shows it, then clears it
@@ -126,6 +276,7 @@ class Editor:
         self.path = path
         self.lines = load(path)
         self.saved = list(self.lines)
+        self.lang = language_of(f"{path}")
         self.history = [self.snapshot()]
 
     # ---- state ------------------------------------------------------
@@ -173,10 +324,46 @@ class Editor:
         self.top = max(min(self.top, self.row), self.row - self.rows + 1)
         self.left = max(min(self.left, self.col), self.col - self.cols + 1)
 
-    def row_text(self, i: int) -> str:
-        """What screen row I shows, from the left edge on: a line, or ~ past the end."""
+    def is_current(self, i: int) -> bool:
+        """Is screen row I the line the cursor is on?"""
+        self.top + i == self.row
+
+    def looks_of(self, n: int) -> []Look_T:
+        """How each character of line N looks. Colours are made for the whole text again when
+        it has changed since they were made: a triple-quoted string runs over lines."""
+        if self.hl_lines != self.lines:
+            var all: [][]Look_T = []
+            var state: str = ""
+            for line in self.lines:
+                let found: Scan_T = scan(line, self.lang, state)
+                all.append(found.looks)
+                state = found.state
+            self.hl = all
+            self.hl_lines = list(self.lines)
+        self.hl[n]
+
+    def row_segments(self, i: int) -> []Seg_T:
+        """What screen row I shows, from the left edge on, in stretches that look alike:
+        a line, with the character under the cursor of its own look, or ~ past the end."""
         let n: int = self.top + i
-        tail(self.lines[n], self.left) if n < len(self.lines) else "~"
+        if n >= len(self.lines): return [Seg_T("~", PLAIN)]
+        let line: str = self.lines[n]
+        var looks: []Look_T = list(self.looks_of(n))
+        let here: bool = n == self.row and self.mode != COMMAND
+        let cursor: Look_T = (BAR if self.mode in {INSERT, REPLACE} else CURSOR)
+        if here and self.col < len(looks):
+            looks[self.col] = cursor
+        var out: []Seg_T = []
+        var a: int = self.left
+        while a < len(line):
+            var b: int = a + 1
+            while b < len(line) and looks[b] == looks[a]:
+                b += 1
+            out.append(Seg_T(line[a:b], looks[a]))
+            a = b
+        if here and self.col >= len(line):
+            out.append(Seg_T(" ", cursor))
+        out
 
     def cursor_y(self) -> int:
         """The cursor's screen row: in the text, or on the status line while a command is typed."""

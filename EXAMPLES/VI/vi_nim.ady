@@ -13,9 +13,14 @@ program -- illwill leaves flow control on, so the terminal would take them.
 """
 nimport illwill, termios
 from vi_core import (
-    Editor, Press_T, Key_T, decode, KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_HOME, KEY_END,
+    Editor, Press_T, Key_T, Look_T, decode, KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_HOME, KEY_END,
     KEY_PPAGE, KEY_NPAGE,
 )
+
+# illwill takes a style as a Nim set, which Adascript's set literal is not: three of them.
+# nimraw: const STYLE_REVERSE = {styleReverse}
+# nimraw: const STYLE_BAR = {styleUnderscore, styleBright}
+# nimraw: const STYLE_LINE = {styleUnderscore}
 
 def keep_flow_control_keys():
     """^S and ^Q are saved and quit here, not the terminal's stop and go."""
@@ -46,7 +51,23 @@ def draw(ed: Editor):
     ed.scroll()
     var screen: TerminalBuffer = newTerminalBuffer(ed.cols, ed.rows + 1)
     for i in 0 ..< ed.rows:
-        screen.write(0, i, ed.row_text(i))
+        var x: int = 0
+        for seg in ed.row_segments(i):
+            screen.resetAttributes()
+            case seg.look:
+                when KEYWORD: screen.setForegroundColor(fgYellow)
+                when STRING: screen.setForegroundColor(fgGreen)
+                when COMMENT: screen.setForegroundColor(fgBlue, True)
+                when NUMBER: screen.setForegroundColor(fgMagenta)
+                when TYPE: screen.setForegroundColor(fgCyan)
+                when others: pass
+            # the cursor's character is reversed, or underlined in insert mode; the line it is on is underlined
+            if seg.look == CURSOR: screen.setStyle(STYLE_REVERSE)
+            elif seg.look == BAR: screen.setStyle(STYLE_BAR)
+            elif ed.is_current(i): screen.setStyle(STYLE_LINE)
+            screen.write(x, i, seg.text)
+            x += len(seg.text)
+    screen.resetAttributes()
     screen.write(0, ed.rows, ed.status())
     screen.setCursorPos(ed.cursor_x(), ed.cursor_y())
     screen.display()

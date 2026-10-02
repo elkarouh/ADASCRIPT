@@ -9,7 +9,7 @@ script of keys, and the file it wrote is compared with what is wanted.
 The script ends with ^S and ^Q unless the program has quit by itself (`:wq`, `:q`).
 The wanted files are what a vi writes for the same keys.
 """
-import fcntl, os, pathlib, pty, select, struct, subprocess, sys, tempfile, termios
+import fcntl, os, pathlib, pty, re, select, struct, subprocess, sys, tempfile, termios
 
 ESC = "\x1b"
 BASE = "one\ntwo\nthree\nfour\nfive\n"
@@ -243,6 +243,73 @@ def drive(program, path, keys):
     os.waitpid(pid, 0)
 
 
+SOURCE = '# first\ndef f(): return "s" + 12\nclass Foo:\n'
+
+
+def screen(program, name, term="xterm"):
+    """What the program writes to its terminal: started on the file NAME (SOURCE), moved
+    down a line with j, and quit -- the raw bytes, as text."""
+    program = os.path.abspath(program)
+    path = pathlib.Path(tempfile.mkdtemp()) / name
+    path.write_text(SOURCE)
+    pid, fd = pty.fork()
+    if pid == 0:
+        os.environ["TERM"] = term
+        if program.endswith(".py"):
+            os.execvp(sys.executable, [sys.executable, program, str(path)])
+        os.execv(program, [program, str(path)])
+    fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 80, 0, 0))
+    out = b""
+
+    def drain(wait):
+        nonlocal out
+        while select.select([fd], [], [], wait)[0]:
+            try:
+                got = os.read(fd, 65536)
+            except OSError:
+                return
+            if not got:
+                return
+            out += got
+
+    drain(1.0)
+    os.write(fd, b"j")              # the cursor to the second line: the third is not the current one
+    drain(0.5)
+    os.write(fd, b"\x11")
+    drain(0.3)
+    os.waitpid(pid, 0)
+    return out.decode("latin-1")
+
+
+# anything a terminal may put between a colour and the text it is for: other attributes,
+# a move of the cursor, a change of character set
+SKIP = r"(?:\x1b\[[0-9;?]*[A-Za-z]|\x1b\(B)*"
+
+
+def screen_checks(program):
+    """How the text looks on the screen: coloured by language, the cursor's character
+    reversed, the line it is on marked, and plain text left alone. Returns the failures."""
+    kind = "curses" if program.endswith(".py") else "raw" if os.path.basename(program) == "vi_raw" else "illwill"
+    coloured = screen(program, "hl.ady", "xterm-256color")
+    plain = screen(program, "hl.txt", "xterm-256color")
+    checks = [
+        ("keyword colour", re.search(r"\x1b\[(?:[0-9;]*;)?33m" + SKIP + "class", coloured)),
+        ("string colour", re.search(r"\x1b\[(?:[0-9;]*;)?32m" + SKIP + '"s"', coloured)),
+        ("number colour", re.search(r"\x1b\[(?:[0-9;]*;)?35m" + SKIP + "12", coloured)),
+        ("type colour", re.search(r"\x1b\[(?:[0-9;]*;)?36m" + SKIP + "Foo", coloured)),
+        ("comment colour", re.search(r"\x1b\[(?:[0-9;]*;)?34m" + SKIP + "# first", coloured)),
+        ("cursor reversed", re.search(r"\x1b\[(?:[0-9;]*;)?7m" + SKIP + "d", coloured)),
+        ("current line", re.search(r"48;5;236m", coloured) if kind != "illwill"
+         else re.search(r"\x1b\[(?:[0-9;]*;)?4m" + SKIP + "ef", coloured)),
+        ("no language, no colour", not re.search(r"\x1b\[(?:[0-9;]*;)?3[2-6]m", plain)),
+    ]
+    failed = 0
+    for name, ok in checks:
+        print(f"  screen: {name:24s} {'OK' if ok else 'FAIL'}")
+        failed += 0 if ok else 1
+    return failed
+
+
 def main(program):
     work = pathlib.Path(tempfile.mkdtemp())
     jobs = []
@@ -265,7 +332,7 @@ def main(program):
             print(f"    want: {want!r}\n    got:  {got!r}")
             if other:
                 print(f"    {other[0]} want: {other[1]!r}\n    {other[0]} got:  {got_other!r}")
-    return failed
+    return failed + screen_checks(program)
 
 
 if __name__ == "__main__":

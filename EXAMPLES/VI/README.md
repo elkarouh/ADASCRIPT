@@ -41,6 +41,36 @@ no text yet, says so on the status row. `:` opens a command line on the status r
 Anything else says `Not an editor command`. A command leaves what to tell the user in
 `message` and may set `quitting`, which the terminal looks at after each key.
 
+## What is shown
+
+The text is coloured by language, picked from the file's name: `.ady` and `.py`, `.nim`
+and `.sh`; any other file is plain. A scan of each line finds keywords, strings (with
+their backslashes, and triple-quoted ones that run over lines), comments (not a `#`
+inside a string, nor `$#` in a shell script), numbers (`3.14e2`, `0xFF`) and type names
+(`Editor`, `Press_T`: capitalised, with a lower-case letter in them).
+
+| Look | Colour | |
+|------|--------|-|
+| keyword | yellow | `def`, `let`, `if` |
+| string | green | `"s"`, `'c'` |
+| comment | bright blue | `# note` |
+| number | magenta | `12` |
+| type name | cyan | `Editor` |
+
+The line the cursor is on is marked, and so is the cursor's character: a reversed block
+in normal mode, an underlined bar in insert and replace mode. `vi_core` does the
+looking -- `row_segments(i)` is a screen row cut into stretches that look alike, the
+cursor's character a stretch of its own, and `is_current(i)` says whether it is the
+cursor's row -- and each terminal says what a look is made of:
+
+- **curses** gives each look a colour pair on the terminal's own background. On 256
+  colours the cursor's line gets a dark grey ground to the right edge; on 8 colours it
+  is underlined.
+- **illwill** sets a colour and a style on its screen buffer before each stretch is
+  written; the cursor's line is underlined (illwill has the 8 colours only).
+- **raw** writes the escape sequences itself: SGR for the colours, reverse and
+  underline, and a 256-colour ground for the cursor's line.
+
 ## What the translation does with the Python
 
 - **The keyboard is decoded once.** `decode(ch)` turns a curses code into a
@@ -110,7 +140,11 @@ way round) or assigning to a slice.
 `test_vi.py` runs key scripts in a pty -- 69 on curses, 72 on the Nim editors, which are
 also held to the `ESC [` forms of the arrows, Home and End -- and compares the file each
 leaves. Undo is one step per change, as in vi; typing in replace mode past the end of a
-line makes the line grow.
+line makes the line grow. Eight screen checks per terminal read what it writes to its
+pty: colour before a keyword, a string, a number, a type name and a comment, the
+cursor's character reversed, the cursor's line marked, and no colour in a `.txt`.
+`EXAMPLES/test_vi_highlight.ady` tests the scan itself, on both backends: one letter for
+each character, so a line and its colours read side by side.
 
     python3 test_vi.py vi_py.py     # or ./vi_nim
     make test-vi                    # from the top: builds vi_nim and vi_raw, runs all three (about 20 s)

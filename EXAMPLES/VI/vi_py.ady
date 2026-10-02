@@ -8,14 +8,49 @@ Python's, so this one is built for the Python backend (ady2py), which brings
 vi_core in where it is imported.
 """
 pyimport curses, os, time
-from vi_core import Editor, Press_T, Key_T, decode
+from vi_core import Editor, Press_T, Key_T, Look_T, decode
+
+# The colour pair of each look; the pair 10 more is the same on the line the cursor is on.
+const PAIR: [Look_T]int = [PLAIN: 0, KEYWORD: 1, STRING: 2, COMMENT: 3, NUMBER: 4, TYPE: 5, CURSOR: 0, BAR: 0]
+
+def setup_colors():
+    """Colours on the terminal's own background; on 256 colours, the line the cursor is on
+    gets a dark grey one, where 8 colours can only underline it."""
+    if not curses.has_colors(): return
+    curses.start_color()
+    curses.use_default_colors()
+    let ground: int = (236 if curses.COLORS >= 256 else -1)
+    let colours: []int = [curses.COLOR_YELLOW, curses.COLOR_GREEN, curses.COLOR_BLUE, curses.COLOR_MAGENTA, curses.COLOR_CYAN]
+    for k in 0 ..< 5:
+        curses.init_pair(k + 1, colours[k], -1)
+        curses.init_pair(k + 11, colours[k], ground)
+    curses.init_pair(10, -1, ground)
+
+def attr_of(look: Look_T, current: bool) -> int:
+    """How a character of this LOOK is drawn; CURRENT: on the line the cursor is on."""
+    if look == CURSOR: return curses.A_REVERSE                   # the character under the cursor
+    if look == BAR: return curses.A_UNDERLINE | curses.A_BOLD    # ... in insert mode
+    var attr: int = 0
+    if curses.has_colors():
+        let pair: int = PAIR[look] + (10 if current and curses.COLORS >= 256 else 0)
+        attr = curses.color_pair(pair)
+    if look == COMMENT: attr = attr | curses.A_BOLD              # blue is bright blue
+    if current and curses.COLORS < 256: attr = attr | curses.A_UNDERLINE
+    attr
 
 def draw(scr: curses.window, ed: Editor):
     ed.scroll()
     for i in 0 ..< ed.rows:
+        let current: bool = ed.is_current(i)
         scr.move(i, 0)
         scr.clrtoeol()
-        scr.addnstr(i, 0, ed.row_text(i), ed.cols - 1)
+        if current and curses.has_colors() and curses.COLORS >= 256:
+            scr.chgat(i, 0, ed.cols, curses.color_pair(10))         # the ground, to the right edge
+        var x: int = 0
+        for seg in ed.row_segments(i):
+            if x < ed.cols - 1:
+                scr.addnstr(i, x, seg.text, ed.cols - 1 - x, attr_of(seg.look, current))
+            x += len(seg.text)
     scr.move(ed.rows, 0)
     scr.clrtoeol()
     scr.addnstr(ed.rows, 0, ed.status(), ed.cols - 1)
@@ -51,6 +86,7 @@ def run(scr: curses.window, ed: Editor):
                     ed.message = ""
 
 def main(scr: curses.window):
+    setup_colors()
     var ed: Editor = Editor(Path($1 if $# >= 1 else "noname.txt"))
     run(scr, ed)
 

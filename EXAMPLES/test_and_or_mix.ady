@@ -1,0 +1,51 @@
+#!/usr/bin/env ady2nim
+"""Test: `and` and `or` mixed in one expression, on both backends. The Nim backend
+emitted only the first `and` run of `a and b or c` and dropped the `or c`, so a range
+check with an alternative -- `x >= 97 and x <= 122 or x == 95` -- was false for the
+alternative. Every combination of four operands is compared with the same thing spelt
+out with `if`, and the range check at its edges.
+"""
+def mix1(a: bool, b: bool, c: bool) -> bool:
+    a and b or c
+
+def mix2(a: bool, b: bool, c: bool, d: bool) -> bool:
+    a and b or c and d
+
+def mix3(a: bool, b: bool, c: bool, d: bool) -> bool:
+    a or b and c or d
+
+def mix4(a: bool, b: bool, c: bool, d: bool) -> bool:
+    a and b and c or d
+
+def word_char(x: int) -> bool:
+    x >= 97 and x <= 122 or x >= 65 and x <= 90 or x == 95
+
+def spelt(a: bool, b: bool, c: bool, d: bool, which: int) -> bool:
+    if which == 1:
+        if a and b: return True
+        return c
+    if which == 2:
+        if a and b: return True
+        return c and d
+    if which == 3:
+        if a: return True
+        if b and c: return True
+        return d
+    if a and b and c: return True
+    d
+
+var n: int = 0
+for bits in 0 ..< 16:
+    let a: bool = bits % 2 == 1
+    let b: bool = bits // 2 % 2 == 1
+    let c: bool = bits // 4 % 2 == 1
+    let d: bool = bits // 8 % 2 == 1
+    assert mix1(a, b, c) == spelt(a, b, c, d, 1)
+    assert mix2(a, b, c, d) == spelt(a, b, c, d, 2)
+    assert mix3(a, b, c, d) == spelt(a, b, c, d, 3)
+    assert mix4(a, b, c, d) == spelt(a, b, c, d, 4)
+    n += 1
+assert n == 16
+assert word_char(95) and word_char(97) and word_char(122) and word_char(65) and word_char(90)
+assert not word_char(96) and not word_char(123) and not word_char(64) and not word_char(91) and not word_char(48)
+print "test_and_or_mix OK"

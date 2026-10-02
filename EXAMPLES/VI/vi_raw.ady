@@ -14,7 +14,7 @@ the window size (read again at every key; there is no resize event).
 """
 nimport terminal, termios, posix, os
 from vi_core import (
-    Editor, Press_T, Key_T, decode, CTRL_Q, ESC, KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_HOME,
+    Editor, Press_T, Key_T, decode, Look_T, CTRL_Q, ESC, KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_HOME,
     KEY_END, KEY_PPAGE, KEY_NPAGE,
 )
 
@@ -104,11 +104,30 @@ def clip(text: str, start: int, width: int) -> str:
     if start >= len(text) or width <= 0: return ""
     text[start:min(len(text), start + width)]
 
+def sgr(look: Look_T) -> str:
+    """The escape sequence that sets how a character looks, sent after one that cleared it."""
+    case look:
+        when KEYWORD: "\x1b[33m"
+        when STRING: "\x1b[32m"
+        when COMMENT: "\x1b[1;34m"
+        when NUMBER: "\x1b[35m"
+        when TYPE: "\x1b[36m"
+        when CURSOR: "\x1b[7m"                        # the character under the cursor: reversed
+        when BAR: "\x1b[4m"                           # in insert mode: underlined
+        when others: ""
+
 def draw(ed: Editor):
     ed.scroll()
     var frame: str = "\x1b[?25l\x1b[H"                  # hide the cursor, go home
     for i in 0 ..< ed.rows:
-        frame += clip(ed.row_text(i), 0, ed.cols - 1) + "\x1b[K\r\n"     # to the end of the line, then down
+        # the line the cursor is on has a dark grey ground (256 colours), to the right edge
+        let ground: str = ("\x1b[48;5;236m" if ed.is_current(i) else "")
+        var room: int = ed.cols - 1
+        for seg in ed.row_segments(i):
+            if room > 0:
+                frame += "\x1b[0m" + ground + sgr(seg.look) + clip(seg.text, 0, room)
+            room -= len(seg.text)
+        frame += "\x1b[0m" + ground + "\x1b[K\x1b[0m\r\n"     # to the end of the line, then down
     frame += clip(ed.status(), 0, ed.cols - 1) + "\x1b[K"
     frame += f"\x1b[{ed.cursor_y() + 1};{ed.cursor_x() + 1}H\x1b[?25h"
     stdout.write(frame)

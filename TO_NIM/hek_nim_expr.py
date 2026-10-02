@@ -5078,7 +5078,9 @@ def to_nim(self, prec=None):
         if type(_node).__name__ == "Several_Times" and getattr(_node, "nodes", None):
             _st_idx = _i
             break
-    if _st_idx != 1:
+    # Exactly [first, repetition]: `a and b or c` is flattened to [a, (and b), (or c)], and
+    # emitting only the first repetition lost the `or c`.
+    if _st_idx != 1 or len(self.nodes) != 2:
         return binop_to_nim(self, prec, PREC_OR)
 
     _seqs = [s for s in self.nodes[1].nodes
