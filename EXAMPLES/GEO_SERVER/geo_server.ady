@@ -198,7 +198,6 @@ type NamedZone is tuple:
     region: Region
 
 type Ship is record:
-    name:               str
     callsign:           Callsign_T
     position:           Point
     inner_radius:       Distance_T   # engageability zone inner edge
@@ -210,15 +209,15 @@ type Ship is record:
 def get_zones_for_ship(self: Ship) -> []NamedZone:
     """Pre-build all zones associated with a ship."""
     var zones: []NamedZone = [
-        NamedZone(f"{self.name} engageability zone",
+        NamedZone(f"{self.callsign} engageability zone",
                   Annulus(self.position, self.inner_radius, self.outer_radius)),
-        NamedZone(f"{self.name} weapon doctrine",
+        NamedZone(f"{self.callsign} weapon doctrine",
                   Sector(self.position, self.weapon_heading,
                           self.weapon_half_angle, self.weapon_range)),
     ]
     if self.slave_radius > 0:
         zones.append(NamedZone(
-            f"{self.name} slave doctrine",
+            f"{self.callsign} slave doctrine",
             Circle(self.position, self.slave_radius),
         ))
     return zones
@@ -265,7 +264,6 @@ def build_scenario() -> ([]Ship, []NamedZone, []TimeStep):
       - Two tight zones (polygons)
     """
     let aegis: Ship = Ship(
-        "Aegis",
         "SENTINEL",
         Point(150.0, 100.0),
         30.0,    # inner_radius
@@ -277,7 +275,6 @@ def build_scenario() -> ([]Ship, []NamedZone, []TimeStep):
     )
 
     let carrier: Ship = Ship(
-        "carrier",
         "HAVEN",
         Point(230.0, 80.0),
         10.0,    # inner_radius
@@ -350,7 +347,7 @@ def main():
 
     print "Ships:"
     for s in ships:
-        print f"  {s.name} ({s.callsign}) at ({s.position.x}, {s.position.y})"
+        print f"  {s.callsign} at ({s.position.x}, {s.position.y})"
     print ""
     print "Zones:"
     for zone in all_zones:
