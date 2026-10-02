@@ -55,6 +55,12 @@ type Seg_T is record:
 # the line that follows starts inside of.
 type Quote_T is enum NO_QUOTE, TRIPLE_DOUBLE, TRIPLE_SINGLE
 
+# What a line typed in COMMAND mode is for: an editor command after the colon, or a search
+# after the slash. The character is what the status line shows in front of it.
+type Prompt_T is enum COLON, SLASH
+
+const PROMPT: [Prompt_T]str = [COLON: ":", SLASH: "/"]
+
 const DELIMITER: [Quote_T]str = [NO_QUOTE: "", TRIPLE_DOUBLE: "\"\"\"", TRIPLE_SINGLE: "'''"]
 
 # What scanning a line finds: how each character looks, and the string left open at the end
@@ -277,7 +283,7 @@ class Editor:
     var rows: int = 0
     var cols: int = 0
     var cmd: str = ""                    # typed after the colon or slash, in COMMAND mode
-    var prompt: str = ":"                # which of the two it was
+    var prompt: Prompt_T = COLON         # which of the two it was
     var lang: Lang_T = NO_LANG           # what the text is coloured as
     var hl_lines: []str = []             # the text the colours in hl were made from
     var hl: [][]Look_T = []              # how each character of each line looks
@@ -389,7 +395,7 @@ class Editor:
 
     def status(self) -> str:
         if self.mode == COMMAND:
-            return f"{self.prompt}{self.cmd}"
+            return f"{PROMPT[self.prompt]}{self.cmd}"
         let total: int = len(self.lines)
         let pct: int = (self.row + 1) * 100 // total
         f'{TAG[self.mode]} "{self.path}" line {self.row + 1} of {total} --{pct}%-- col {self.col}'
@@ -504,6 +510,12 @@ class Editor:
             self.row += 1
 
     # ---- modes ------------------------------------------------------
+    def begin_command(self, prompt: Prompt_T):
+        """Start a line typed after the colon or the slash."""
+        self.mode = COMMAND
+        self.prompt = prompt
+        self.cmd = ""
+
     def normal(self, press: Press_T):
         let line: str = self.lines[self.row]
         case press.key:
@@ -511,10 +523,8 @@ class Editor:
             when UP | DOWN | LEFT | RIGHT | HOME | END | PAGEUP | PAGEDOWN: self.navigate(press.key)
             when CHAR:
                 case press.text:
-                    when ":" | "/":
-                        self.mode = COMMAND
-                        self.prompt = press.text
-                        self.cmd = ""
+                    when ":": self.begin_command(COLON)
+                    when "/": self.begin_command(SLASH)
                     when "n": self.search(False)
                     when "N": self.search(True)
                     when "i" | "a" | "A" | "o" | "O": self.begin_insert(press.text[0])
@@ -617,10 +627,9 @@ class Editor:
         or search for what was typed after the slash (nothing typed: the last pattern)."""
         let typed: str = self.cmd
         let text: str = typed.strip()
-        let slash: bool = self.prompt == "/"
         self.mode = NORMAL
         self.cmd = ""
-        if slash:
+        if self.prompt == SLASH:
             if typed != "": self.pattern = typed
             self.search(False)
             return

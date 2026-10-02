@@ -579,7 +579,7 @@ case x.items:
 
 Rules: `TypeName(field=Value)` with uppercase → equality check; lowercase → `let` binding. `*rest` captures tail. `[]` matches empty. `_` or `others` → catch-all.
 
-### Style: `case` over `if` chains, expressions over loops
+### Style: `case` over `if` chains, enums over strings, expressions over loops
 Write the shorter form the language has. The examples are written this way, and
 the transpiler is tested on it.
 
@@ -617,6 +617,38 @@ if day < 1 or day > days_in_month: ...
 if 32 <= ch <= 126: ...
 if not 1 <= day <= days_in_month: ...
 ```
+
+**A string that is always one of a few values is an `enum`.** A mode, a state, which
+of two prompts, which quotes a string was opened with: a `str` for these lets any
+text in, and `""` or `"/"` has to be remembered to mean something. An `enum` lists
+the values, `case` over it is checked for completeness, and a typo is a compile
+error. Where a value also has a text to show or to look for, put it in a constant
+array indexed by the enum, rather than turning the enum back into a string.
+```adascript
+# discouraged
+var prompt: str = ":"                 # ":" or "/"
+var open: str = ""                    # the quotes of an unfinished string, "" when none
+...
+if self.prompt == "/": ...
+if open != "": close = line.find(open)
+
+# preferred
+type Prompt_T is enum COLON, SLASH
+const PROMPT: [Prompt_T]str = [COLON: ":", SLASH: "/"]
+
+type Quote_T is enum NO_QUOTE, TRIPLE_DOUBLE, TRIPLE_SINGLE
+const DELIMITER: [Quote_T]str = [NO_QUOTE: "", TRIPLE_DOUBLE: "\"\"\"", TRIPLE_SINGLE: "'''"]
+
+var prompt: Prompt_T = COLON
+var open: Quote_T = NO_QUOTE
+...
+if self.prompt == SLASH: ...
+if open != NO_QUOTE: close = line.find(DELIMITER[open])
+```
+Member names are global, so give them names that do not collide with another enum's
+(`NO_QUOTE`, not `NONE`). Not every string is a state: text the user typed, a
+file's lines, a message to show stay `str`. A `""` that means "nothing" is a smell
+of another kind: use `?str`, or a `| !Failure_T` result.
 
 **A loop that only accumulates or searches is a comprehension**: `sum(...)`,
 `any(...)`, `all(...)` over a generator, or a list comprehension for a new list.
