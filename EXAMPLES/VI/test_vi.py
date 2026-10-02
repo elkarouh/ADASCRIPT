@@ -316,7 +316,7 @@ def main(program):
     jobs = []
     cases = CASES + ARROWS + KEYS + SEARCH + COMMANDS + (ARROWS_CSI if not program.endswith(".py") else [])
     for name, keys, want in cases:
-        path = work / (name.replace(",", "_") + ".txt")
+        path = work / (name.replace(",", "_").replace("/", "_") + ".txt")
         path.write_text(BASES.get(name, BASE))
         child = subprocess.Popen([sys.executable, __file__, "--drive", program, str(path), keys])
         jobs.append((name, want, path, child))
