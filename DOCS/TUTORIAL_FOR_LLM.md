@@ -169,7 +169,7 @@ w *= 2.0                                     # * and / by a plain number SCALE
 - **`*` and `/` scale**: `V * n`, `n * V`, `V / n` are V and the number stays a number; `V / V` is a plain float; **`V * V` is refused** (knots times knots is not knots). Two different units multiplied or divided are refused unless a derived unit defines it;
 - `type C is A / B` defines A/B -> C, C*B -> A, B*C -> A, A/C -> B; `type C is A * B` defines A*B -> C (either order), C/A -> B, C/B -> A. Operands must be distinct types of one kind: float (quotient or product) or int (product only). `1.0 / t` (plain number over a unit) has no unit: refused;
 - does NOT mix with its base or another distinct type: `let d: Distance_T = v` and `v + d` are errors; `let f: float = d` too -- write `float(d)` / `Distance_T(f)`;
-- a literal converts implicitly where the type is visible (declaration, assignment, return, argument, record field, beside `+ - <`); a base-typed *variable* never does;
+- a literal converts implicitly where the type is visible (declaration, assignment, return, argument, record field -- named or positional, `Point(1.0, 2.0)` -- beside `+ - <`); a base-typed *variable* never does;
 - money: `distinct int` in cents. `price * 3` scales; `price * qty` needs `type Total_T is Cents_T * Qty_T`;
 - Nim: `distinct float` + borrowed procs + one small proc per relation; Python: `class Velocity_T(float)`. Nim checks everything; Python works out the unit of arithmetic over typed names and refuses declarations, assignments and operators it can see.
 
@@ -199,6 +199,18 @@ def to_dollar(amount: Euro_T, rate: Rate_T) -> Dollar_T:
 Refused: `usd + eur`, `usd * usd`, `eur * rate` and `usd / rate` (rate the wrong way round), `let d: Dollar_T = plain_float`. Print with `f"{x:.2f}"`. Exact sums: `distinct int` cents; converting int cents <-> float rate is written out (`Cents_T(...)`, `float(c)`), not derived. `x * n` with `n` an int, `Natural` or range variable scales a float-based unit. Counts and quantities are `Natural` or a range type (`type Quantity_T is 0 .. Max_Allowed_Quantity`), not a bare `int`: on Nim a literal outside the range does not compile and a computed one stops at its line; Python keeps a plain int and does not check.
 
 Use it for units and for IDs of different entities that share a representation. Keep aliases for values meant to mix with their base.
+
+**No bare `float` for a quantity that has a meaning.** A distance, a time, an angle each get a type (`EXAMPLES/GEO_SERVER/geo_server.ady`). What a quantity cannot be goes in a subrange, which an alias does not mix up but does bound; what it cannot be mixed with goes in `distinct`:
+```adascript
+type Distance_T is distinct float            # not addable to an angle: refused at compile time
+type Area_T     is Distance_T * Distance_T   # a squared distance, so `dx * dx + dy * dy <= r_sq` types
+type Bearing_T   is float range 0.0 .. 360.0     # clockwise from North; 360 allowed, for rounding at the seam
+type HalfAngle_T is float range 0.0 .. 180.0     # a wedge's reach to one side: at most half a circle
+def angular_gap(a: Bearing_T, b: Bearing_T) -> HalfAngle_T:   # the smaller angle between two bearings
+    let around: float = abs(a - b) % 360
+    around if around <= 180 else 360 - around
+```
+A float subrange is checked at RUN time, on Nim (an assert after an assignment, naming the type and the value); a range type is an alias, so a `Bearing_T` and a `HalfAngle_T` still mix. A `distinct` type is the one the compiler keeps apart. Take the quantity out for `math` with `float(d)`, put the result back with the named type.
 
 Other enforcement: enums are their own types; subranges are bounds-checked, on Nim only; records are nominal; `?T` is not `T`; `Path` is a distinct string, so `let p: Path = s` is an error; write `Path(s)`.
 

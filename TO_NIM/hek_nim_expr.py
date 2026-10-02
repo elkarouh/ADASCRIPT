@@ -2955,7 +2955,10 @@ def to_nim(self, prec=None):
                         if ftype and sym and sym.get("kind") in ("class", "ref_class"):
                             pairs_parts.append(f"{fn}: {ftype}({av})")
                         else:
-                            pairs_parts.append(f"{fn}: {av}")
+                            # a literal given for a distinct field is of its type, as
+                            # it is when the field is named: `Point(1.0, 2.0)`
+                            from hek_nim_stmt import _wrap_distinct_literal
+                            pairs_parts.append(f"{fn}: {_wrap_distinct_literal(av, ftype)}")
                     pairs = ", ".join(pairs_parts)
                     rest = "".join(tr.to_nim() for tr in self.nodes[1].nodes[1:])
                     if obj_fields:

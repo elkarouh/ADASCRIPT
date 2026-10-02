@@ -39,10 +39,34 @@ nimport math
 # ---------------------------------------------------------------------------
 # Core Types
 # ---------------------------------------------------------------------------
+# No bare floats: a distance, a bearing and a time are not interchangeable, and
+# `heading + radius` is a mistake the compiler can see.
+
+type Distance_T is distinct float            # in the map's own units
+type Area_T     is Distance_T * Distance_T   # what two distances multiply to
+type Time_T     is distinct float
+
+# An angle on the compass: clockwise from North, so 0 is up and 90 is East. 360 is
+# the same direction as 0 and is allowed, so that rounding at the seam cannot fail.
+type Bearing_T   is float range 0.0 .. 360.0
+# How far a wedge reaches to each side of the bearing it is aimed along: at most
+# half a circle.
+type HalfAngle_T is float range 0.0 .. 180.0
 
 type Point is tuple:
-    x: float
-    y: float
+    x: Distance_T
+    y: Distance_T
+
+
+def bearing_to(dx: Distance_T, dy: Distance_T) -> Bearing_T:
+    """The bearing of the offset (dx east, dy north) from the origin."""
+    radToDeg(arctan2(float(dx), float(dy))) % 360
+
+
+def angular_gap(a: Bearing_T, b: Bearing_T) -> HalfAngle_T:
+    """The smaller angle between two bearings: never more than half a circle."""
+    let around: float = abs(a - b) % 360
+    around if around <= 180 else 360 - around
 
 
 class Region:
@@ -88,45 +112,43 @@ class Region:
 class Circle(Region):
     """Filled circle: all points within `radius` of `center`."""
     var center: Point
-    var r_sq:   float
+    var r_sq:   Area_T
 
-    def __init__(self, center: Point, radius: float) -> None:
+    def __init__(self, center: Point, radius: Distance_T) -> None:
         self.center = center
-        self.r_sq   = radius ** 2
+        self.r_sq   = radius * radius
 
     def __contains__(self, pt: Point) -> bool:
-        (pt.x - self.center.x) ** 2 + (pt.y - self.center.y) ** 2 <= self.r_sq
+        let dx: Distance_T = pt.x - self.center.x
+        let dy: Distance_T = pt.y - self.center.y
+        dx * dx + dy * dy <= self.r_sq
 
 
 class Sector(Region):
     """
     Pie-shaped region centred on `center`.
-    heading_deg    : direction clockwise from North (0 = up)
-    half_angle_deg : half the opening angle
-    radius         : maximum range
+    heading    : direction the wedge is aimed along
+    half_angle : how far it reaches to either side of the heading
+    radius     : maximum range
     """
-    var center:         Point
-    var heading_deg:    float
-    var half_angle_deg: float
-    var r_sq:           float
+    var center:     Point
+    var heading:    Bearing_T
+    var half_angle: HalfAngle_T
+    var r_sq:       Area_T
 
-    def __init__(self, center: Point, heading_deg: float,
-                 half_angle_deg: float, radius: float) -> None:
-        self.center         = center
-        self.heading_deg    = heading_deg
-        self.half_angle_deg = half_angle_deg
-        self.r_sq           = radius ** 2
+    def __init__(self, center: Point, heading: Bearing_T,
+                 half_angle: HalfAngle_T, radius: Distance_T) -> None:
+        self.center     = center
+        self.heading    = heading
+        self.half_angle = half_angle
+        self.r_sq       = radius * radius
 
     def __contains__(self, pt: Point) -> bool:
-        let dx: float = pt.x - self.center.x
-        let dy: float = pt.y - self.center.y
+        let dx: Distance_T = pt.x - self.center.x
+        let dy: Distance_T = pt.y - self.center.y
         if dx * dx + dy * dy > self.r_sq:
             return False
-        let angle: float = radToDeg(arctan2(dx, dy)) % 360
-        var diff: float = abs(angle - self.heading_deg) % 360
-        if diff > 180:
-            diff = 360 - diff
-        return diff <= self.half_angle_deg
+        return angular_gap(bearing_to(dx, dy), self.heading) <= self.half_angle
 
 
 class Polygon(Region):
@@ -155,7 +177,7 @@ class Polygon(Region):
 # Compound Region constructor
 # ---------------------------------------------------------------------------
 
-def Annulus(center: Point, inner_radius: float, outer_radius: float) -> Region:
+def Annulus(center: Point, inner_radius: Distance_T, outer_radius: Distance_T) -> Region:
     """Ring region: outside inner circle AND inside outer circle."""
     ~Circle(center, inner_radius) & Circle(center, outer_radius)
 
@@ -173,12 +195,12 @@ type NamedZone is tuple:
 type Ship is record:
     name:               str
     position:           Point
-    inner_radius:       float   # engageability zone inner edge
-    outer_radius:       float   # engageability zone outer edge
-    weapon_heading:     float   # weapon doctrine facing direction (degrees from N)
-    weapon_half_angle:  float
-    weapon_range:       float
-    slave_radius:       float   # slave doctrine radius (0 if not a carrier)
+    inner_radius:       Distance_T   # engageability zone inner edge
+    outer_radius:       Distance_T   # engageability zone outer edge
+    weapon_heading:     Bearing_T    # weapon doctrine facing direction
+    weapon_half_angle:  HalfAngle_T
+    weapon_range:       Distance_T
+    slave_radius:       Distance_T   # slave doctrine radius (0 if not a carrier)
 def get_zones_for_ship(self: Ship) -> []NamedZone:
     """Pre-build all zones associated with a ship."""
     var zones: []NamedZone = [
@@ -203,7 +225,7 @@ type Aircraft is tuple:
 
 
 type TimeStep is tuple:
-    time:     float
+    time:     Time_T
     aircraft: []Aircraft
 
 

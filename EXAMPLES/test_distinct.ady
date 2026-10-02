@@ -83,4 +83,17 @@ var f: Flight = Flight(cs)
 f.fly(leg)
 f.fly(leg)
 print f.callsign, f.flown                     # BAW117 1440.0
+# positional constructors: a literal for a distinct field is of its type, as it is by name
+type Fix_T is tuple:
+    along: Distance_T
+    across: Distance_T
+type Leg2_T is record:
+    name: str
+    start: Fix_T
+    length: Distance_T
+    share: float
+let fix: Fix_T = Fix_T(1.5, 2.5)
+let leg2: Leg2_T = Leg2_T("a", Fix_T(0.0, 1.0), 4.0, 0.5)
+assert fix.along + leg2.length == 5.5
+assert leg2.start.across == 1.0 and leg2.share == 0.5
 print "test_distinct: ok"
