@@ -1,0 +1,137 @@
+#!/usr/bin/env ady2nim
+"""
+regions -- the Region algebra of geo_server.ady, on the Earth's surface
+=======================================================================
+geo_server.ady describes zones as first-class `Region` objects that are composed
+with Python's own operators:
+
+    Annulus = ~Circle(center, inner) & Circle(center, outer)
+    p in region
+
+This is the same algebra over map_utils' `GeoPoint`, so that a zone can be given in
+latitudes and longitudes and a point tested against it is anywhere on the globe:
+
+  * `Circle`   every point within a distance (kilometres, along the geodesic) of a centre;
+  * `Sector`   a wedge: within a distance of a centre and within an angle of a bearing;
+  * `Polygon`  inside a closed outline of GeoPoints (map_utils' ray casting: the edges
+               are straight in latitude and longitude, not great circles, so it is for
+               outlines of tens or a few hundred kilometres);
+  * `Annulus`  a ring, made of two circles;
+  * `a & b`, `a | b`, `~a`   what is in both, in either, in neither.
+
+What changed from geo_server.ady: a point is a `GeoPoint`, a distance is
+`Kilometers_T`, and the distance and the bearing of a point from a centre are those
+of `GeoPoint - GeoPoint`, the Vincenty inverse formula, where geo_server's flat plane
+used Pythagoras and `arctan2`.
+"""
+from map_utils import GeoPoint, GeoVector, Kilometers_T, Bearing_T, modulo
+
+# How far a wedge reaches to each side of the bearing it is aimed along: at most half
+# a circle.
+type HalfAngle_T is float range 0.0 .. 180.0
+
+def angular_gap(a: Bearing_T, b: Bearing_T) -> HalfAngle_T:
+    """The smaller angle between two bearings: never more than half a circle."""
+    let around: float = modulo(abs(a - b), 360.0)
+    around if around <= 180 else 360 - around
+
+
+class Region:
+    """
+    A region is defined by a predicate (GeoPoint -> bool).
+    The concrete regions override __contains__ directly.
+    A composed region holds a closure built by __and__, __or__ or __invert__.
+    """
+    var _predicate: ?(GeoPoint) -> bool
+
+    def __init__(self, predicate: ?(GeoPoint) -> bool = None) -> None:
+        self._predicate = predicate
+
+    def __contains__(self, point: GeoPoint) -> bool:
+        if self._predicate is None:
+            raise NotImplementedError("Region subclass must implement __contains__")
+        return self._predicate(point)
+
+    # -----------------------------------------------------------------------
+    # Region algebra -- operators build composed regions via closures
+    # -----------------------------------------------------------------------
+
+    def __and__(self, other: Region) -> Region:
+        def both(p: GeoPoint) -> bool:
+            p in self and p in other
+        Region(both)
+
+    def __or__(self, other: Region) -> Region:
+        def either(p: GeoPoint) -> bool:
+            p in self or p in other
+        Region(either)
+
+    def __invert__(self) -> Region:
+        def outside(p: GeoPoint) -> bool:
+            p not in self
+        Region(outside)
+
+
+# ---------------------------------------------------------------------------
+# The regions
+# ---------------------------------------------------------------------------
+
+class Circle(Region):
+    """Filled circle: every point within RADIUS of CENTER, along the surface."""
+    var center: GeoPoint
+    var radius: Kilometers_T
+
+    def __init__(self, center: GeoPoint, radius: Kilometers_T) -> None:
+        self.center = center
+        self.radius = radius
+
+    def __contains__(self, point: GeoPoint) -> bool:
+        let way: GeoVector = point - self.center           # from the centre to the point
+        way.magnitude() <= self.radius
+
+
+class Sector(Region):
+    """
+    A wedge centred on CENTER.
+    heading    : the bearing it is aimed along
+    half_angle : how far it reaches to either side of the heading
+    radius     : the farthest it goes
+    """
+    var center:     GeoPoint
+    var heading:    Bearing_T
+    var half_angle: HalfAngle_T
+    var radius:     Kilometers_T
+
+    def __init__(self, center: GeoPoint, heading: Bearing_T,
+                 half_angle: HalfAngle_T, radius: Kilometers_T) -> None:
+        self.center     = center
+        self.heading    = heading
+        self.half_angle = half_angle
+        self.radius     = radius
+
+    def __contains__(self, point: GeoPoint) -> bool:
+        let way: GeoVector = point - self.center
+        if way.magnitude() > self.radius:
+            return False
+        let toward: Bearing_T = way.phase()
+        return angular_gap(toward, self.heading) <= self.half_angle
+
+
+class Polygon(Region):
+    """Inside the closed outline of VERTICES, in order (ray casting; see the module's note)."""
+    var vertices: []GeoPoint
+
+    def __init__(self, vertices: []GeoPoint) -> None:
+        self.vertices = vertices
+
+    def __contains__(self, point: GeoPoint) -> bool:
+        point.is_point_inside_polygon(self.vertices)
+
+
+# ---------------------------------------------------------------------------
+# A compound region
+# ---------------------------------------------------------------------------
+
+def Annulus(center: GeoPoint, inner: Kilometers_T, outer: Kilometers_T) -> Region:
+    """A ring: outside the inner circle and inside the outer."""
+    ~Circle(center, inner) & Circle(center, outer)

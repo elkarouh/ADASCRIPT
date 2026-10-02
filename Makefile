@@ -70,6 +70,7 @@ STANDALONE := \
     MAP_UTILS/test_map_utils.ady \
     MAP_UTILS/test_hek_map_utils.ady \
     MAP_UTILS/route_check.ady \
+    MAP_UTILS/test_regions.ady \
     openarray_demo.ady \
     test_inline_suite.ady \
     test_state_search.ady \

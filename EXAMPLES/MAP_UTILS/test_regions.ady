@@ -1,0 +1,95 @@
+#!/usr/bin/env ady2nim
+"""Test: regions.ady -- circles, sectors, polygons and rings on the Earth's surface, and
+the algebra of `&`, `|`, `~` and `in` that composes them.
+"""
+from map_utils import GeoPoint, GeoVector, Kilometers_T, Degrees_T
+from regions import Region, Circle, Sector, Polygon, Annulus
+
+let centre: GeoPoint = GeoPoint(50.0, 4.0)
+
+def at(distance: float, bearing: float) -> GeoPoint:
+    """The point DISTANCE km from the centre along BEARING."""
+    centre + GeoVector(Kilometers_T(distance), Degrees_T(bearing))
+
+def east_of_centre(distance: float) -> GeoPoint:
+    at(distance, 90.0)
+
+# ---- Circle -------------------------------------------------------------------------
+
+let disc: Region = Circle(centre, 100.0)
+assert centre in disc
+assert at(50.0, 0.0) in disc and at(50.0, 137.0) in disc and at(99.0, 45.0) in disc
+assert at(101.0, 45.0) not in disc and at(150.0, 270.0) not in disc
+
+# ---- Sector: a wedge aimed east, 30 degrees to either side, 200 km deep --------------
+
+let wedge: Region = Sector(centre, 90.0, 30.0, 200.0)
+assert at(100.0, 90.0) in wedge                          # straight ahead
+assert at(100.0, 100.0) in wedge and at(100.0, 70.0) in wedge     # 10 degrees off, either side
+assert at(100.0, 118.0) in wedge                         # 28 degrees off, inside
+assert at(100.0, 125.0) not in wedge                     # 35 degrees off: outside
+assert at(100.0, 270.0) not in wedge                     # behind
+assert at(250.0, 90.0) not in wedge                      # ahead, but out of range
+assert at(199.0, 90.0) in wedge
+
+# a wedge aimed across the north seam: bearings 325 .. 15
+let northern: Region = Sector(centre, 350.0, 25.0, 150.0)
+assert at(80.0, 10.0) in northern and at(80.0, 330.0) in northern and at(80.0, 0.0) in northern
+assert at(80.0, 20.0) not in northern and at(80.0, 320.0) not in northern     # 30 off: out
+assert at(80.0, 180.0) not in northern
+
+# ---- Polygon ------------------------------------------------------------------------
+
+let square: Region = Polygon([GeoPoint(49.0, 3.0), GeoPoint(49.0, 5.0), GeoPoint(51.0, 5.0), GeoPoint(51.0, 3.0)])
+assert centre in square
+assert GeoPoint(49.5, 4.5) in square and GeoPoint(50.5, 3.2) in square
+assert GeoPoint(52.0, 4.0) not in square and GeoPoint(50.0, 6.0) not in square
+assert GeoPoint(48.5, 4.0) not in square
+
+# ---- Annulus: a ring between 20 and 60 km --------------------------------------------
+
+let ring: Region = Annulus(centre, 20.0, 60.0)
+assert at(10.0, 200.0) not in ring                       # inside the hole
+assert at(40.0, 200.0) in ring and at(21.0, 0.0) in ring and at(59.0, 300.0) in ring
+assert at(80.0, 200.0) not in ring                       # beyond the outer edge
+assert centre not in ring
+
+# ---- the algebra ---------------------------------------------------------------------
+
+let a: Region = Circle(centre, 100.0)
+let b: Region = Circle(east_of_centre(50.0), 100.0)
+let only_a: GeoPoint = at(80.0, 270.0)                  # 80 km west: in a, 130 km from b's centre
+let only_b: GeoPoint = east_of_centre(120.0)            # 120 km east: out of a, 70 km from b's centre
+let both: GeoPoint = at(20.0, 270.0)
+let neither: GeoPoint = at(300.0, 0.0)
+
+assert only_a in a and only_a not in b
+assert only_b in b and only_b not in a
+
+assert only_a in (a | b) and only_b in (a | b) and both in (a | b) and neither not in (a | b)
+assert both in (a & b) and only_a not in (a & b) and only_b not in (a & b)
+assert neither in ~a and only_a not in ~a
+assert only_a in (a & ~b) and only_b not in (a & ~b)
+assert only_b in (b & ~a) and only_a not in (b & ~a)
+assert neither in ~(a | b) and both not in ~(a | b)
+
+# De Morgan's laws, and double negation, over a ring of sample points round and beyond the circles
+var checked: int = 0
+for distance in [10.0, 50.0, 90.0, 120.0, 180.0, 250.0, 400.0]:
+    for turn in range(12):
+        let p: GeoPoint = at(distance, 30.0 * float(turn))
+        assert (p in ~(a | b)) == (p in (~a & ~b))
+        assert (p in ~(a & b)) == (p in (~a | ~b))
+        assert (p in ~~a) == (p in a)
+        assert (p in (a & b)) == ((p in a) and (p in b))
+        checked += 1
+assert checked == 84
+
+# regions of different kinds compose: the wedge minus the circle, the square or the ring
+let beyond: Region = wedge & ~disc                       # the wedge, past the 100 km circle
+assert at(150.0, 90.0) in beyond and at(60.0, 90.0) not in beyond and at(150.0, 270.0) not in beyond
+let either_zone: Region = square | ring
+assert GeoPoint(50.5, 3.2) in either_zone and at(40.0, 200.0) in either_zone
+assert at(300.0, 0.0) not in either_zone
+
+print "test_regions OK"

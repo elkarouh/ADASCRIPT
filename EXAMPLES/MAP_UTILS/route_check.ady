@@ -10,8 +10,10 @@ A route through four airports is flown over a restricted area.  The program:
   2. measures each leg with `GeoPoint - GeoPoint` (a GeoVector: a distance and a
      bearing) and works out how long it takes at the cruising speed: a
      Kilometers_T over a Speed_T is Hours_T, and the compiler knows it;
-  3. walks along each leg with `GeoPoint + GeoVector * fraction`, and asks
-     `is_point_inside_polygon` whether it is in the restricted area;
+  3. describes the airspace as regions -- a polygon, a circle, a wedge -- composed with
+     `&`, `|` and `~` (regions.ady, the algebra of geo_server.ady on the Earth's
+     surface), walks along each leg with `GeoPoint + GeoVector * fraction`, and asks
+     `point in region` where the leg is inside what;
   4. takes a plane that has strayed from a leg and finds how far to the side it is
      and how far along: on the flat plane, with Vector and Position, where a dot
      product and a cross product do it;
@@ -24,6 +26,7 @@ the distance to the side it was put at.
 from map_utils import GeoPoint, GeoVector, Vector, Position, GeoFailure_T, LatLong_T
 from map_utils import Kilometers_T, Meters_T, Degrees_T, Bearing_T, SquareMeters_T
 from map_utils import geo_point_from_dms, human_latlong2dec, vector_xy, must
+from regions import Region, Circle, Sector, Polygon
 
 # ---- the data ------------------------------------------------------------------
 
@@ -37,10 +40,19 @@ const POSITION: [Airport_T]str = [
 ]
 const ROUTE: []Airport_T = [EBBR, LFPG, LFLL, LFML]
 
-# A restricted area, as the corners of its outline, in order.
+# R-1, a restricted area, as the corners of its outline, in order.
 const RESTRICTED: []str = [
     "473000N 0034000E", "473000N 0044500E", "463000N 0044500E", "463000N 0034000E",
 ]
+
+# R-2, a restricted circle of 20 km, and the approach to Marseille: a wedge of 25 degrees
+# either side of north, 150 km deep.
+const R2_CENTRE: str = "443600N 0050900E"
+const FUNNEL_HEADING: Bearing_T = 355.0
+
+# The kinds of airspace the route is checked against; the last is made of the others.
+type Zone_T is enum R1, R2, FUNNEL, OPEN_FUNNEL
+const ZONE_LABEL: [Zone_T]str = [R1: "R-1", R2: "R-2", FUNNEL: "approach funnel", OPEN_FUNNEL: "funnel, unrestricted"]
 
 type Hours_T is distinct float
 type Speed_T is Kilometers_T / Hours_T                      # kilometres an hour
@@ -78,26 +90,41 @@ def refusal(text: str) -> str:
 
 # ---- 3. a leg against the restricted area -----------------------------------------
 
-type Crossing_T is record:
-    inside:   bool             # whether the leg goes through it at all
-    entering: Kilometers_T     # how far along it goes in
-    leaving:  Kilometers_T     # and how far along it comes out
+type Run_T is record:
+    first: int                 # the kilometre along the leg it goes in
+    last:  int                 # the kilometre it is last in
 
-def crossing(start: GeoPoint, leg: GeoVector, area: []GeoPoint) -> Crossing_T:
-    """Where a leg goes through AREA, sampled every kilometre along it."""
-    let total: Kilometers_T = leg.magnitude()
-    let steps: int = int(float(total))
-    var entering: float = -1.0
-    var leaving: float = -1.0
-    for k in 0 .. steps:
-        let along: float = float(k)
-        let fraction: float = along / float(total) if float(total) > 0.0 else 0.0
+def runs(start: GeoPoint, leg: GeoVector, region: Region) -> []Run_T:
+    """The stretches of a leg that are inside REGION, tested at every kilometre along it."""
+    let total: float = float(leg.magnitude())
+    var found: []Run_T = []
+    var open_at: int = -1
+    for k in 0 .. int(total):
+        let fraction: float = float(k) / total if total > 0.0 else 0.0
         let here: GeoPoint = start + leg * fraction
-        if here.is_point_inside_polygon(area):
-            if entering < 0.0:
-                entering = along
-            leaving = along
-    return Crossing_T(entering >= 0.0, Kilometers_T(entering), Kilometers_T(leaving))
+        if here in region:
+            if open_at < 0:
+                open_at = k
+        elif open_at >= 0:
+            found.append(Run_T(open_at, k - 1))
+            open_at = -1
+    if open_at >= 0:
+        found.append(Run_T(open_at, int(total)))
+    return found
+
+def describe(stretches: []Run_T) -> str:
+    if len(stretches) == 0:
+        return "clear"
+    var parts: []str = []
+    for r in stretches:
+        parts.append(f"km {r.first}-{r.last}")
+    return ", ".join(parts)
+
+def kilometres(stretches: []Run_T) -> int:
+    var total: int = 0
+    for r in stretches:
+        total += r.last - r.first + 1
+    return total
 
 # ---- 4. a plane off its track ------------------------------------------------------
 
@@ -122,7 +149,14 @@ def fix_on_leg(start: GeoPoint, leg: GeoVector, plane: GeoPoint) -> Fix_T:
 
 def main():
     let airports: []Airport_T = ROUTE
-    let area: []GeoPoint = outline()
+    # The airspace: R-1 and R-2 are restricted, the funnel is the approach to Marseille,
+    # and what may be used of the funnel is what is not restricted.
+    let r1: Region = Polygon(outline())
+    let r2: Region = Circle(must(geo_point_from_dms(R2_CENTRE)), 20.0)
+    let funnel: Region = Sector(position_of(LFML), FUNNEL_HEADING, 25.0, 150.0)
+    let restricted: Region = r1 | r2
+    let open_funnel: Region = funnel & ~restricted
+    let zones: []Region = [r1, r2, funnel, open_funnel]            # in the order of Zone_T
 
     print "ROUTE"
     print "-----"
@@ -131,7 +165,6 @@ def main():
     var total_km: Kilometers_T = 0.0
     var total_h: Hours_T = 0.0
     var leg_km: []Kilometers_T = []
-    var crossings: []Crossing_T = []
     var legs: []GeoVector = []
     var starts: []GeoPoint = []
     for i in 1 ..< len(airports):
@@ -142,21 +175,22 @@ def main():
         total_km += leg.magnitude()
         total_h += hours
         leg_km.append(leg.magnitude())
-        crossings.append(crossing(previous, leg, area))
         legs.append(leg)
         starts.append(previous)
         previous = here
     print f"  total {total_km:.1f} km, {hours_minutes(total_h)} at {CRUISE:.0f} km/h"
 
     print ""
-    print "RESTRICTED AREA"
-    print "---------------"
-    for i in 0 ..< len(crossings):
-        let c: Crossing_T = crossings[i]
-        if c.inside:
-            print f"  {airports[i]} -> {airports[i + 1]}: inside from km {c.entering:.0f} to km {c.leaving:.0f}"
-        else:
-            print f"  {airports[i]} -> {airports[i + 1]}: clear"
+    print "AIRSPACE"
+    print "--------"
+    var restricted_km: int = 0
+    for i in 0 ..< len(legs):
+        print f"  {airports[i]} -> {airports[i + 1]}"
+        for zone in Zone_T:
+            let stretches: []Run_T = runs(starts[i], legs[i], zones[ord(zone)])
+            print f"    {ZONE_LABEL[zone]:<22} {describe(stretches)}"
+        restricted_km += kilometres(runs(starts[i], legs[i], restricted))
+    print f"  {restricted_km} of the {total_km:.0f} km are restricted"
 
     print ""
     print "OFF TRACK"
@@ -193,8 +227,19 @@ def main():
     for km in leg_km:
         summed += km
     assert abs(float(summed - total_km)) < 1e-9
-    assert not crossings[0].inside and crossings[1].inside and not crossings[2].inside
-    assert crossings[1].entering < crossings[1].leaving
+    assert len(runs(starts[0], legs[0], restricted)) == 0               # Brussels - Paris: clear
+    assert len(runs(starts[1], legs[1], r1)) == 1 and len(runs(starts[1], legs[1], r2)) == 0
+    assert len(runs(starts[2], legs[2], r2)) == 1 and len(runs(starts[2], legs[2], r1)) == 0
+    assert len(runs(starts[2], legs[2], funnel)) == 1                   # the last leg is the approach
+    assert kilometres(runs(starts[2], legs[2], open_funnel)) < kilometres(runs(starts[2], legs[2], funnel))
+    for i in 0 ..< len(legs):                                           # the algebra, on every kilometre
+        for k in 0 .. int(float(legs[i].magnitude())):
+            let fraction: float = float(k) / float(legs[i].magnitude())
+            let p: GeoPoint = starts[i] + legs[i] * fraction
+            assert (p in restricted) == ((p in r1) or (p in r2))
+            assert (p in ~restricted) == (p in (~r1 & ~r2))              # De Morgan
+            assert (p in open_funnel) == ((p in funnel) and not (p in restricted))
+            assert not ((p in open_funnel) and (p in restricted))
     assert abs(float(fix_right.along) - 0.5 * float(leg_km[1])) < 1.0     # halfway, to the km
     assert abs(float(fix_right.across) - 12.0) < 0.1
     assert fix_right.side == RIGHT

@@ -26,12 +26,18 @@ out, and passes them). It also imports `human2dec_degree`, which `map_utils.py`
 does not have; `map_utils.ady` does.
 Running `map_utils` prints the original's demo, without its folium map.
 
-`route_check.ady` is a program that uses the module: a flight route over four
-airports, checked against a restricted area, with a plane's distance off its track
-and a holding pattern. It checks its own results.
+`regions.ady` is the Region algebra of `GEO_SERVER/geo_server.ady` -- circles, wedges,
+polygons and rings, composed with `&`, `|` and `~` and tested with `in` -- on the
+Earth's surface, with `GeoPoint` for a point and the Vincenty distance and bearing for
+how far and which way. `test_regions.ady` checks it.
 
-    ady2nim c route_check.ady && ./route_check
+`route_check.ady` is a program that uses the module and the regions: a flight route over
+four airports, checked against restricted airspace and an approach funnel built from
+regions, with a plane's distance off its track and a holding pattern. It checks its own
+results.
 
     ady2nim c map_utils.ady && ./map_utils
     ady2nim c -r test_map_utils.ady
     ady2nim c -r test_hek_map_utils.ady
+    ady2nim c -r test_regions.ady
+    ady2nim c route_check.ady && ./route_check
