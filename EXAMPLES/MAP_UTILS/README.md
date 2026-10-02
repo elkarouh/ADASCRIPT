@@ -8,8 +8,10 @@ the Vincenty direct and inverse formulae, so that `GeoPoint + GeoVector` and
 `map_utils.ady` is the same module in Adascript (Nim backend: it uses `math`).
 What it changes is listed at the top of the file: no bare floats (`Meters_T`,
 `Kilometers_T`, `Degrees_T`, `Bearing_T`, distinct `Latitude_T` and `Longitude_T`),
-an `Axis_T` enum where the original had `"NS"` / `"EW"` strings and a flag, a
-DMS string that does not parse is a failure value, and three things in the
+enums where the original had strings and a flag (`Axis_T` for latitude or
+longitude, `Hemisphere_T` for the letter a DMS string ends in, `DmsPart_T` for
+which field did not parse), a DMS string that does not parse -- or ends in a letter
+that is not a side of its axis -- is a failure value, and three things in the
 original that did not work are fixed (`normal()`, `projection()`, and the docstring
 example of `dms2dec`).
 

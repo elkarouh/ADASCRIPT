@@ -29,7 +29,11 @@ What changed in the translation
   (two types, so that the two cannot be swapped).
   `Meters_T * Meters_T` is a `SquareMeters_T`, which is what a dot product is.
 * A DMS string that does not parse is a failure value (`!GeoFailure_T`), not a
-  ValueError.
+  ValueError.  So is one whose last letter is not a side of its axis (the original
+  took any letter for north or east, and `E` on a latitude for a good one).
+* What was a string for a fixed set of values is an enum: `Axis_T` (the original's
+  "NS" / "EW" and a flag), `Hemisphere_T` (the letter a DMS string ends in) and
+  `DmsPart_T` (which field of one did not parse).
 * `Vector` and `GeoVector` keep their parts as two numbers; the original kept a
   Python complex number.
 * `str()` spells the unit out -- "5.00 m, 30.00 degrees", "252.14 km @ 214.19
@@ -71,8 +75,16 @@ type Longitude_T is distinct float
 # Which of the two a coordinate is: it decides the width of a DMS string.
 type Axis_T is enum LATITUDE, LONGITUDE
 
-const DIRECTIONS: [Axis_T]str = [LATITUDE: "NS", LONGITUDE: "EW"]   # positive, negative
 const DEGREE_DIGITS: [Axis_T]int = [LATITUDE: 2, LONGITUDE: 3]
+
+# The side of the equator or of the prime meridian a coordinate is on: the letter
+# a DMS string ends in.
+type Hemisphere_T is enum NORTH, SOUTH, EAST, WEST
+const LETTER: [Hemisphere_T]str = [NORTH: "N", SOUTH: "S", EAST: "E", WEST: "W"]
+
+# The parts of a DMS string, for saying which of them did not parse.
+type DmsPart_T is enum DEGREES, MINUTES, SECONDS
+const PART_NAME: [DmsPart_T]str = [DEGREES: "degrees", MINUTES: "minutes", SECONDS: "seconds"]
 
 # Why a coordinate was refused.
 type GeoErr_T is enum BAD_DMS, BAD_COORDINATE_PAIR, OUT_OF_RANGE
@@ -258,22 +270,50 @@ def vincenty_inverse(lat1: Latitude_T, lon1: Longitude_T, lat2: Latitude_T, lon2
 # Coordinate conversion helpers
 # ---------------------------------------------------------------------------
 
-def digits_of(text: str, what: str, whole: str) -> int | !GeoFailure_T:
+def digits_of(text: str, part: DmsPart_T, whole: str) -> int | !GeoFailure_T:
     let n: int | !ParseFailure_T = parse_int(text)
     if n is ParseFailure_T:
-        return geo_fail(BAD_DMS, f"{what} '{text}' in '{whole}'")
+        return geo_fail(BAD_DMS, f"{PART_NAME[part]} '{text}' in '{whole}'")
     return n
 
 def seconds_of(text: str, whole: str) -> float | !GeoFailure_T:
     let s: float | !ParseFailure_T = parse_float(text)
     if s is ParseFailure_T:
-        return geo_fail(BAD_DMS, f"seconds '{text}' in '{whole}'")
+        return geo_fail(BAD_DMS, f"{PART_NAME[SECONDS]} '{text}' in '{whole}'")
     return s
+
+def hemisphere_of(letter: str, axis: Axis_T) -> Hemisphere_T | !GeoFailure_T:
+    """The side a DMS string's last character names: N or S on a latitude, E or W
+    on a longitude.  A trailing '-' is the negative side, S or W, as in the original."""
+    case axis:
+        when LATITUDE:
+            case letter:
+                when "N": return NORTH
+                when "S" | "-": return SOUTH
+                when others: return geo_fail(BAD_DMS, f"'{letter}' is not N or S")
+        when LONGITUDE:
+            case letter:
+                when "E": return EAST
+                when "W" | "-": return WEST
+                when others: return geo_fail(BAD_DMS, f"'{letter}' is not E or W")
+
+def is_negative(side: Hemisphere_T) -> bool:
+    """South and west are negative."""
+    case side:
+        when SOUTH | WEST: True
+        when others: False
+
+def side_of(value: float, axis: Axis_T) -> Hemisphere_T:
+    """The side of the equator (LATITUDE) or the prime meridian (LONGITUDE) a signed value is on."""
+    case axis:
+        when LATITUDE: NORTH if value >= 0 else SOUTH
+        when LONGITUDE: EAST if value >= 0 else WEST
 
 def dms2dec(pos_in_dms: str, axis: Axis_T) -> Degrees_T | !GeoFailure_T:
     """A DMS string as decimal degrees.
 
-    The direction letter (N/S/E/W) must be the *last* character.  A latitude has
+    The direction letter must be the *last* character: N or S on a latitude, E or W on
+    a longitude (a letter of the other axis, or any other, is refused).  A latitude has
     2 digits of degrees, a longitude 3, then 2 of minutes, then the seconds, with
     or without a decimal point:
 
@@ -283,7 +323,7 @@ def dms2dec(pos_in_dms: str, axis: Axis_T) -> Degrees_T | !GeoFailure_T:
     if len(pos_in_dms) == 0:
         return geo_fail(BAD_DMS, "empty")
     let pos: str = pos_in_dms[:len(pos_in_dms) - 1]
-    let direction: str = pos_in_dms[len(pos_in_dms) - 1:]
+    let letter: str = pos_in_dms[len(pos_in_dms) - 1:]
     let width: int = DEGREE_DIGITS[axis]
     let degrees_part: str = slice_of(pos, 0, width)
     let minutes_part: str = slice_of(pos, width, width + 2)
@@ -297,11 +337,12 @@ def dms2dec(pos_in_dms: str, axis: Axis_T) -> Degrees_T | !GeoFailure_T:
         seconds_part = whole_s + "." + frac_s
 
     do:
-        deg <- digits_of(degrees_part, "degrees", pos_in_dms)
-        mins <- digits_of(minutes_part, "minutes", pos_in_dms)
+        side <- hemisphere_of(letter, axis)
+        deg <- digits_of(degrees_part, DEGREES, pos_in_dms)
+        mins <- digits_of(minutes_part, MINUTES, pos_in_dms)
         secs <- seconds_of(seconds_part, pos_in_dms)
     let dd: float = float(deg) + float(mins) / 60.0 + secs / 3600.0
-    return Degrees_T(-dd if direction in "SW-" else dd)
+    return Degrees_T(-dd if is_negative(side) else dd)
 
 def human2dec_degree(text: str) -> Degrees_T | !GeoFailure_T:
     """An angle written DDDMMSS[.ss] -- a bearing, with no direction letter -- as decimal degrees.
@@ -348,8 +389,7 @@ def dd2dms(deg: Degrees_T, axis: Axis_T) -> str:
             m = 0
             d += 1
 
-    let pair: str = DIRECTIONS[axis]
-    let suffix: str = pair[0:1] if value >= 0 else pair[1:2]
+    let suffix: str = LETTER[side_of(value, axis)]
     case axis:
         when LATITUDE: f"{abs(d):02d}{m:02d}{sd:02d}{suffix}"
         when LONGITUDE: f"{abs(d):03d}{m:02d}{sd:02d}{suffix}"

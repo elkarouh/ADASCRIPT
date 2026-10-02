@@ -69,30 +69,46 @@ assert dec2human_latlong(50.9013889, 4.4844444) == "505405N 0042904E"
 
 # ---- a string that does not parse is a failure, not a crash -------------------
 
-def dms_outcome(text: str, axis: Axis_T) -> str:
-    """Why dms2dec refused TEXT, or "ok"."""
+def dms_refused(text: str, axis: Axis_T, why: GeoErr_T) -> bool:
+    """Whether dms2dec refused TEXT, and for the reason WHY."""
     let r: Degrees_T | !GeoFailure_T = dms2dec(text, axis)
     if r is GeoFailure_T:
-        return f"{r.kind}"
-    return "ok"
+        return r.kind == why
+    return False
 
-def pair_outcome(text: str) -> str:
-    """Why human_latlong2dec refused TEXT, or "ok"."""
+def dms_accepted(text: str, axis: Axis_T) -> bool:
+    let r: Degrees_T | !GeoFailure_T = dms2dec(text, axis)
+    return r is not GeoFailure_T
+
+def pair_refused(text: str, why: GeoErr_T) -> bool:
+    """Whether human_latlong2dec refused TEXT, and for the reason WHY."""
     let r: LatLong_T | !GeoFailure_T = human_latlong2dec(text)
     if r is GeoFailure_T:
-        return f"{r.kind}"
-    return "ok"
+        return r.kind == why
+    return False
 
-assert dms_outcome("043304N", LATITUDE) == "ok"
-assert dms_outcome("", LATITUDE) == "BAD_DMS"
-assert dms_outcome("04x304N", LATITUDE) == "BAD_DMS"
-assert dms_outcome("50N", LATITUDE) == "BAD_DMS"                         # no minutes
-assert pair_outcome("505405N 0042904E") == "ok"
-assert pair_outcome("505405N") == "BAD_COORDINATE_PAIR"                  # one half
-assert pair_outcome("505405N 0042904E 7") == "BAD_COORDINATE_PAIR"       # one too many
-assert pair_outcome("950000N 0042904E") == "OUT_OF_RANGE"                # north of the pole
-assert pair_outcome("505405N 1800001E") == "OUT_OF_RANGE"                # past the antimeridian
-assert pair_outcome("90x000N 0042904E") == "BAD_DMS"
+def pair_accepted(text: str) -> bool:
+    let r: LatLong_T | !GeoFailure_T = human_latlong2dec(text)
+    return r is not GeoFailure_T
+
+assert dms_accepted("043304N", LATITUDE)
+assert dms_refused("", LATITUDE, BAD_DMS)
+assert dms_refused("04x304N", LATITUDE, BAD_DMS)
+assert dms_refused("50N", LATITUDE, BAD_DMS)                             # no minutes
+assert pair_accepted("505405N 0042904E")
+assert pair_refused("505405N", BAD_COORDINATE_PAIR)                      # one half
+assert pair_refused("505405N 0042904E 7", BAD_COORDINATE_PAIR)           # one too many
+assert pair_refused("950000N 0042904E", OUT_OF_RANGE)                    # north of the pole
+assert pair_refused("505405N 1800001E", OUT_OF_RANGE)                    # past the antimeridian
+assert pair_refused("90x000N 0042904E", BAD_DMS)
+
+# the letter a DMS string ends in is a side of its own axis
+assert dms_refused("505405X", LATITUDE, BAD_DMS)                         # not a letter of either
+assert dms_refused("505405E", LATITUDE, BAD_DMS)                         # east is not a latitude
+assert dms_refused("0042904N", LONGITUDE, BAD_DMS)                       # north is not a longitude
+assert dms_refused("505405", LATITUDE, BAD_DMS)                          # the last digit is not a letter
+assert decimal("505405-", LATITUDE) < 0                                  # a trailing '-' is S or W, as before
+assert decimal("0042904-", LONGITUDE) < 0
 
 # ---- flat-plane geometry ------------------------------------------------------
 
