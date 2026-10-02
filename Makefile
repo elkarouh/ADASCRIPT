@@ -110,6 +110,7 @@ STANDALONE := \
     test_vi_highlight.ady \
     test_and_or_mix.ady \
     test_enum_values.ady \
+    test_case_narrowed.ady \
     test_shell_throughput.ady \
     test_shell_braces.ady \
     test_param_mutation.ady \
@@ -266,7 +267,7 @@ BOTH_BACKENDS_COMPARED := test_do_block test_result test_optional_spelling \
     test_ordered_map test_function_type test_distinct test_units test_money \
     test_subrange_array test_variant_literal test_set_operators \
     test_path_relative_to test_path_io test_parse trcks_example \
-    test_nimport_modules test_nimport_qualified test_vi_highlight test_and_or_mix test_enum_values
+    test_nimport_modules test_nimport_qualified test_vi_highlight test_and_or_mix test_enum_values test_case_narrowed
 
 ALL_COMPILE := \
     $(LIBS) \

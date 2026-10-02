@@ -38,6 +38,31 @@ def to_py(self, indent=0):
     statement) are preserved with correct indentation.
     """
     lines = []
+    guards = []                      # what early-exit guards proved, until the block ends
+    try:
+        return _block_lines_py(self, indent, lines, guards)
+    finally:
+        _pop_facts(guards)
+
+
+def _guard_fact_of_chunk(chunk, indent):
+    """What the statement CHUNK (emitted Python) proves for what follows it: an
+    `if COND:` with no elif or else whose body ends by leaving the block proves the
+    opposite of COND. None when it proves nothing."""
+    rows = [r for r in chunk.split("\n") if r.strip() and not r.lstrip().startswith("#")]
+    pad = _ind(indent)
+    if len(rows) < 2 or not rows[0].startswith(pad + "if ") or not rows[0].rstrip().endswith(":"):
+        return None
+    if any(r.startswith(pad) and not r.startswith(pad + " ") for r in rows[1:]):
+        return None                  # an elif or else at the guard's own indent: a branch
+    last = rows[-1].strip()
+    if not last.split(" ", 1)[0] in ("return", "raise", "continue", "break"):
+        return None
+    fact = _fact_of(rows[0].strip()[len("if "):-1])
+    return _opposite(fact) if fact else None
+
+
+def _block_lines_py(self, indent, lines, guards):
     for node in self.nodes:
         tname = type(node).__name__
         if tname == "Fmap":
@@ -58,6 +83,9 @@ def to_py(self, indent=0):
                     if stmt_node is not None and hasattr(stmt_node, "to_py"):
                         try:
                             lines.append(stmt_node.to_py(indent))
+                            fact = _guard_fact_of_chunk(lines[-1], indent)
+                            if fact:
+                                guards.extend(_push_facts([fact]))
                         except TypeError:
                             raw = stmt_node.to_py()
                             if '\n' in raw:
@@ -162,22 +190,31 @@ def to_py(self, indent=0):
     """if_stmt: 'if' named_expression ':' suite ('elif' ...)* ('else' ...)?"""
     cond = _py_presence_cond(self.nodes[0].to_py())
     hc = _block_inline_header_comment(self.nodes[1])
-    body = _suite_to_py(self.nodes[1], indent + 1)
+    fact = _fact_of(cond)
+    held = _push_facts([fact] if fact else [])
+    try:
+        body = _suite_to_py(self.nodes[1], indent + 1)
+    finally:
+        _pop_facts(held)
     result = f"{_ind(indent)}if {cond}:{hc}\n{body}"
-    # Process remaining nodes (elif/else clauses from Several_Times)
-    for node in self.nodes[2:]:
-        if not hasattr(node, "nodes") or not node.nodes:
-            continue
-        for seq in node.nodes:
-            if hasattr(seq, "nodes") and seq.nodes:
-                clause = seq.nodes[0] if hasattr(seq.nodes[0], "to_py") else seq
-            else:
-                clause = seq
-            if hasattr(clause, "to_py"):
-                try:
-                    result += "\n" + clause.to_py(indent)
-                except TypeError:
-                    result += "\n" + _ind(indent) + clause.to_py()
+    # Process remaining nodes (elif/else clauses from Several_Times); the test did not hold there
+    held = _push_facts([_opposite(fact)] if fact else [])
+    try:
+        for node in self.nodes[2:]:
+            if not hasattr(node, "nodes") or not node.nodes:
+                continue
+            for seq in node.nodes:
+                if hasattr(seq, "nodes") and seq.nodes:
+                    clause = seq.nodes[0] if hasattr(seq.nodes[0], "to_py") else seq
+                else:
+                    clause = seq
+                if hasattr(clause, "to_py"):
+                    try:
+                        result += "\n" + clause.to_py(indent)
+                    except TypeError:
+                        result += "\n" + _ind(indent) + clause.to_py()
+    finally:
+        _pop_facts(held)
     return result
 
 
@@ -1076,14 +1113,73 @@ def _pattern_chain_to_py(case_node, subject, indent):
     return result.lstrip("\n")
 
 
+# What a test has proved about a variable that was declared a union: `if x is T:` leaves it
+# a T in the body, `if x is not T:` leaves it anything but a T -- in the body, and for the
+# rest of the block when the body leaves it (return, raise, continue, break). A `case x:`
+# over what is left is a case over a T, not over the union x was declared as: the Nim
+# backend gets this by reading x as one of its members, and here a fact says so.
+# Each fact is (name, "only" | "without", member).
+import re as _re_nr
+_IS_A_COND = _re_nr.compile(r"^(not )?_is_a\(([\w.]+), (\w+)\)$")
+_IS_NONE_COND = _re_nr.compile(r"^([\w.]+) is (not )?None$")
+
+
+def _fact_of(cond):
+    """The fact `if COND:` proves in its body, or None."""
+    c = (cond or "").strip()
+    m = _IS_A_COND.match(c)
+    if m:
+        return (m.group(2), "without" if m.group(1) else "only", m.group(3))
+    m = _IS_NONE_COND.match(c)
+    if m:
+        return (m.group(1), "without" if m.group(2) else "only", "None")
+    return None
+
+
+def _opposite(fact):
+    name, kind, member = fact
+    return (name, "only" if kind == "without" else "without", member)
+
+
+def _push_facts(facts):
+    """Take FACTS for as long as the caller holds them; returns what to hand to _pop_facts."""
+    held = getattr(ParserState, "py_narrowing", None)
+    if held is None:
+        held = ParserState.py_narrowing = {}
+    for name, kind, member in facts:
+        held.setdefault(name, []).append((kind, member))
+    return list(facts)
+
+
+def _pop_facts(facts):
+    held = getattr(ParserState, "py_narrowing", {})
+    for name, kind, member in facts:
+        if held.get(name):
+            held[name].pop()
+
+
 def _union_of_py(subject):
     """The union (hek_py_declarations.union_of) SUBJECT, a name, is declared
-    as -- plain, or with a failure member -- else None."""
+    as -- plain, or with a failure member -- else None; narrowed by what the
+    enclosing tests have proved, and None when that leaves a single member."""
     from hek_py_declarations import union_of
     sym = ParserState.symbol_table.lookup(subject.strip())
     ann = (sym.get("type") or "") if isinstance(sym, dict) else ""
     u = union_of(ann) if ann else None
-    return u if u is not None and u["kind"] in ("plain", "either") else None
+    if u is None or u["kind"] not in ("plain", "either"):
+        return None
+    facts = getattr(ParserState, "py_narrowing", {}).get(subject.strip())
+    if facts:
+        failure = u["failure"]
+        left = list(u["values"]) + ([failure] if failure else [])
+        for kind, member in facts:
+            left = [m for m in left if (m == member) == (kind == "only")]
+        if len(left) <= 1:
+            return None
+        u = dict(u)
+        u["values"] = [m for m in u["values"] if m in left]
+        u["failure"] = failure if failure in left else None
+    return u
 
 
 def _either_case_to_py(case_node, subject, u, indent):

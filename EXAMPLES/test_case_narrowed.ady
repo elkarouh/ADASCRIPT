@@ -1,0 +1,64 @@
+#!/usr/bin/env ady2nim
+"""Test: a `case` over a variable that was declared a union, once a test has proved what it
+holds, on both backends. After `if c is ParseFailure_T: return ...` -- or in the `else` of it,
+or in the body of `if c is Color_T:` -- c is a Color_T, and a `case c:` is a case over the
+enum, with the enum's members as patterns; it is not a case over the union c was declared as.
+The Nim backend always read c as its member; the Python one took it for the union and refused
+the patterns. The output is compared between the backends.
+"""
+type Color_T is enum RED = 1, GREEN = 5, BLUE = 9
+
+def after_guard(code: int) -> str:
+    let c: Color_T | !ParseFailure_T = parse_enum(Color_T, code)
+    if c is ParseFailure_T:
+        return "none"
+    case c:
+        when RED: "red"
+        when GREEN: "green"
+        when BLUE: "blue"
+
+def in_else(code: int) -> str:
+    let c: Color_T | !ParseFailure_T = parse_enum(Color_T, code)
+    if c is ParseFailure_T:
+        return "none"
+    else:
+        case c:
+            when RED: return "red"
+            when GREEN: return "green"
+            when BLUE: return "blue"
+
+def in_body(code: int) -> str:
+    let c: Color_T | !ParseFailure_T = parse_enum(Color_T, code)
+    if c is Color_T:
+        case c:
+            when RED: return "red"
+            when GREEN: return "green"
+            when BLUE: return "blue"
+    return "none"
+
+def after_not(code: int) -> str:
+    let c: Color_T | !ParseFailure_T = parse_enum(Color_T, code)
+    if c is not Color_T:
+        return "none"
+    case c:
+        when RED: "red"
+        when GREEN: "green"
+        when BLUE: "blue"
+
+for code in [1, 5, 9, 2]:
+    print code, after_guard(code), in_else(code), in_body(code), after_not(code)
+    assert after_guard(code) == in_else(code) and in_else(code) == in_body(code) and in_body(code) == after_not(code)
+
+# a guard that continues, in a loop
+var names: str = ""
+for code in [9, 3, 1]:
+    let c: Color_T | !ParseFailure_T = parse_enum(Color_T, code)
+    if c is ParseFailure_T:
+        continue
+    case c:
+        when RED: names = names + "r"
+        when GREEN: names = names + "g"
+        when BLUE: names = names + "b"
+print names
+assert names == "br"
+print "test_case_narrowed OK"

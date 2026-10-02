@@ -84,8 +84,13 @@ type Code_T is enum:
     KEY_END = 360
     KEY_RESIZE = 410
 
-def press_of(code: Code_T) -> Press_T:
-    """What a key the terminal has a name for means."""
+def decode(ch: int) -> Press_T:
+    """A code a terminal delivers, as what it means: a key it has a name for (Code_T), a
+    printable character, or nothing the editor knows. parse_enum says which of the first."""
+    let code: Code_T | !ParseFailure_T = parse_enum(Code_T, ch)
+    if code is ParseFailure_T:
+        if 32 <= ch <= 126: return Press_T(CHAR, str(chr(ch)))
+        return Press_T(OTHER, "")
     case code:
         when ESC: Press_T(ESCAPE, "")
         when LINE_FEED | CARRIAGE_RETURN | KEY_ENTER: Press_T(ENTER, "")
@@ -102,15 +107,6 @@ def press_of(code: Code_T) -> Press_T:
         when KEY_END: Press_T(END, "")
         when KEY_PPAGE: Press_T(PAGEUP, "")
         when KEY_NPAGE: Press_T(PAGEDOWN, "")
-
-def decode(ch: int) -> Press_T:
-    """A code a terminal delivers, as what it means: a key it has a name for (Code_T), a
-    printable character, or nothing the editor knows. parse_enum says which of the first."""
-    let code: Code_T | !ParseFailure_T = parse_enum(Code_T, ch)
-    if code is ParseFailure_T:
-        if ch >= 32 and ch <= 126: return Press_T(CHAR, str(chr(ch)))
-        return Press_T(OTHER, "")
-    press_of(code)
 
 def tail(text: str, start: int) -> str:
     """TEXT from START on; empty past the end, where a Nim slice would raise."""
