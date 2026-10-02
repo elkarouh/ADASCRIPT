@@ -141,8 +141,8 @@ type Target is record:
 
 def strip_after(s: str, marker: str) -> str:
     """Everything before the first occurrence of MARKER, or S unchanged."""
-    let at: int = s.find(marker)
-    return s[:at] if at >= 0 else s
+    let (head, _, _) = s.partition(marker)
+    return head
 
 def baseline_key(system: str, subsystem: str, baseline: Baseline) -> BaselineKey:
     """What a baseline's Revision is cached under. Built here and only here,

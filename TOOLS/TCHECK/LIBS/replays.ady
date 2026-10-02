@@ -230,7 +230,7 @@ class ReplayLog:
         var in_severe_table: bool = False
         for line in file.lines:
             if "Executed UNINSTALL:" in line:
-                let (_, after) = line.rsplit("Executed UNINSTALL:", 1)
+                let (_, _, after) = line.rpartition("Executed UNINSTALL:")
                 verdict = after
             if "Waiting for this replay to be finished" in line:
                 waiting = True
@@ -283,9 +283,9 @@ class ReplayLog:
             let inside: str = "/" + Path(moved_from).name + "/"
             for i in range(len(self.core_dumps)):
                 let dumped: str = str(self.core_dumps[i].file)
-                let at: int = dumped.find(inside)
-                if at >= 0:
-                    self.core_dumps[i].file = Path(moved_to + dumped[at + len(inside) - 1:])
+                let (_, found, after) = dumped.partition(inside)
+                if found != "":
+                    self.core_dumps[i].file = Path(moved_to + "/" + after)
         elif saved_from != "":
             self.replay_dir = Path(saved_from)
         if "YES" in verdict:

@@ -135,11 +135,8 @@ class Tlog:
             for line in self.new_failing:
                 stdout.write("\t")
                 puts("SKy", extract_test_name(line), NEWLINE=True)
-                let emacs_at: int = line.find("#emacs")
-                if emacs_at >= 0:
-                    print line[emacs_at:]
-                else:
-                    print
+                let (_, found, rest) = line.partition("#emacs")
+                print found + rest
                 print
 
         # Crashed Tests.
@@ -165,11 +162,8 @@ class Tlog:
                 else:
                     stdout.write("\t")
                     puts("SKy", extract_test_name(line), NEWLINE=True)
-                    let emacs_at: int = line.find("#emacs")
-                    if emacs_at >= 0:
-                        print line[emacs_at:]
-                    else:
-                        print
+                    let (_, found, rest) = line.partition("#emacs")
+                    print found + rest
                 print
 
         # Tests that did not run.

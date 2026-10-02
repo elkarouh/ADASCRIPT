@@ -621,7 +621,7 @@ class Baseline:
     def before(self, back: int) -> Baseline:
         """The baseline BACK numbers before this one, there or not, its
         directory beside this one's."""
-        let (head, tail) = self.nr.rsplit(".", 1)
+        let (head, _, tail) = self.nr.rpartition(".")
         let nr: BaselineNr_T = f"{head}.{int(tail) - back}"
         var other: Baseline = Baseline(nr)
         other.dir = self.dir.parent / ("TACT_CONFIG." + nr)

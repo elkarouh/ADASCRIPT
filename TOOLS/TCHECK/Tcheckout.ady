@@ -175,7 +175,7 @@ class Workspace(Checkouts):
         let listing: str = git_out(self.root, ["config", "-f", ".gitmodules", "--get-regexp", "^submodule\\..*\\.path$"])
         var found: [](Name_T, Sub_T) = []
         for line in listing.splitlines():     # submodule.TACT.UIF.path TACT/UIF
-            let (key, path) = line.split(" ", 1)
+            let (key, _, path) = line.partition(" ")
             found.append((key.removeprefix("submodule.").removesuffix(".path"), path))
         return found
 

@@ -88,10 +88,9 @@ def main():
         var comment_path: Path = Path("/auto/local_build/dhws149/disk1/ekhassan/cm") / view_name / "NM/README.txt"
         if -f comment_path:
             let (comment_line, _) = shell: head -1 {comment_path}
-            let cparts: []str = comment_line.strip().split(" ", 1)
-            state = cparts[0]
-            if len(cparts) > 1:
-                comment = cparts[1]
+            let (first, _, rest) = comment_line.strip().partition(" ")
+            state = first
+            comment = rest
 
         if status != "---":
             state = status
