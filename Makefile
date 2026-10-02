@@ -405,15 +405,15 @@ define vi_tests
 	    if ! $(PYTHON) -c 'import curses, pty' 2>/dev/null; then echo "SKIP (no curses or pty)"; else \
 	    $(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(EXDIR)/VI/vi_py.ady > $(TMPDIR)/ady_vi.py || { echo FAIL; exit 1; }; \
 	    $(PYTHON) $(EXDIR)/VI/test_vi.py $(TMPDIR)/ady_vi.py > $(TMPDIR)/ady_vi.out 2>&1 \
-	        && echo OK || { echo FAIL; grep -A2 FAIL $(TMPDIR)/ady_vi.out | head -20; exit 1; }; fi
+	        && echo OK || { echo FAIL; grep -A2 FAIL $(TMPDIR)/ady_vi.out | head -20; grep -q FAIL $(TMPDIR)/ady_vi.out || tail -n 8 $(TMPDIR)/ady_vi.out; exit 1; }; fi
 	@printf '  %-62s' "EXAMPLES/VI/vi_nim.ady (72 key scripts, 9 screen checks)"; \
 	    if ! $(PYTHON) -c 'import pty' 2>/dev/null; then echo "SKIP (no pty)"; else \
 	    $(PYTHON) $(EXDIR)/VI/test_vi.py $(EXDIR)/VI/vi_nim > $(TMPDIR)/ady_vi_nim.out 2>&1 \
-	        && echo OK || { echo FAIL; grep -A2 FAIL $(TMPDIR)/ady_vi_nim.out | head -20; exit 1; }; fi
+	        && echo OK || { echo FAIL; grep -A2 FAIL $(TMPDIR)/ady_vi_nim.out | head -20; grep -q FAIL $(TMPDIR)/ady_vi_nim.out || tail -n 8 $(TMPDIR)/ady_vi_nim.out; exit 1; }; fi
 	@printf '  %-62s' "EXAMPLES/VI/vi_raw.ady (72 key scripts, 9 screen checks)"; \
 	    if ! $(PYTHON) -c 'import pty' 2>/dev/null; then echo "SKIP (no pty)"; else \
 	    $(PYTHON) $(EXDIR)/VI/test_vi.py $(EXDIR)/VI/vi_raw > $(TMPDIR)/ady_vi_raw.out 2>&1 \
-	        && echo OK || { echo FAIL; grep -A2 FAIL $(TMPDIR)/ady_vi_raw.out | head -20; exit 1; }; fi
+	        && echo OK || { echo FAIL; grep -A2 FAIL $(TMPDIR)/ady_vi_raw.out | head -20; grep -q FAIL $(TMPDIR)/ady_vi_raw.out || tail -n 8 $(TMPDIR)/ady_vi_raw.out; exit 1; }; fi
 endef
 
 # -----------------------------------------------------------------------
