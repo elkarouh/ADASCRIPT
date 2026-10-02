@@ -1844,7 +1844,7 @@ A library with no Nim equivalent is a `pyimport`, and comes in through nimpy:
 pyimport requests
 pyimport pandas as pd
 
-r  = requests.request("GET", "https://example.com")
+r  = requests.get("https://example.com")
 df = pd.read_csv("data.csv")
 ```
 
@@ -1856,7 +1856,7 @@ import nimpy
 let requests = pyImport("requests")
 let pd       = pyImport("pandas")
 
-var r  = requests.request("GET", "https://example.com")
+var r  = requests.get("https://example.com")
 var df = pd.read_csv("data.csv")
 ```
 
@@ -1868,7 +1868,7 @@ comes from a `PyObject` call chain, `.to(T)` is injected automatically:
 ```python
 pyimport requests
 
-r     = requests.request("GET", "https://api.example.com/data")
+r     = requests.get("https://api.example.com/data")
 count: int   = r.json()["total"]
 score: float = r.json()["score"]
 name:  str   = r.json()["name"]

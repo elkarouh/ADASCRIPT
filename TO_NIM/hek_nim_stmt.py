@@ -90,6 +90,18 @@ _PY_MODULE_FUNC_TO_NIM = {}
 
 # --- visible tokens ---
 
+def _is_pyobject_value(value):
+    """Does the Nim expression VALUE come from a PyObject: a pyImport module or a
+    PyObject variable, or a call of one (`callObject(f, 1.5)`, which is what a call
+    of a callable PyObject becomes, so its origin is the first argument)?"""
+    import re as _re_co
+    _lead_m = _re_co.match(r'^[\(\s]*(?:callObject\(\s*)?([A-Za-z_]\w*)', value)
+    _lead = _lead_m.group(1) if _lead_m else None
+    _lead_sym = ParserState.symbol_table.lookup(_lead) if _lead else None
+    _lead_type = (_lead_sym.get("type") or "") if _lead_sym else ""
+    return _lead_type.startswith("_py_module:") or _lead_type == "PyObject"
+
+
 def _split_top_level_commas(text):
     """TEXT split on the commas that are not inside (), [], {} or a string
     literal: the elements of a tuple, not the arguments of a call in one."""
@@ -1069,15 +1081,7 @@ def to_nim(self):
                     # Only wrap with .to(T) if the value originates from a PyObject.
                     # Check the leading identifier: if it's a pyImport module or PyObject var,
                     # or if the value is a dotted call on one, coerce. Otherwise skip.
-                    import re as _re_co
-                    _lead_m = _re_co.match(r'^[\(\s]*([A-Za-z_]\w*)', value)
-                    _lead = _lead_m.group(1) if _lead_m else None
-                    _lead_sym = ParserState.symbol_table.lookup(_lead) if _lead else None
-                    _lead_type = (_lead_sym.get("type") or "") if _lead_sym else ""
-                    _is_pyobj_base = bool(
-                        _lead_type.startswith("_py_module:") or _lead_type == "PyObject"
-                    )
-                    if _is_pyobj_base:
+                    if _is_pyobject_value(value):
                         value = f"{value}.to({annotation})"
                 # Result[T, E] = Ok(v) / Err(e) / a plain value
                 if value and annotation.startswith(("Result[", "OneOf")):
@@ -1332,15 +1336,7 @@ def to_nim(self):
                     # Only wrap with .to(T) if the value originates from a PyObject.
                     # Check the leading identifier: if it's a pyImport module or PyObject var,
                     # or if the value is a dotted call on one, coerce. Otherwise skip.
-                    import re as _re_co
-                    _lead_m = _re_co.match(r'^[\(\s]*([A-Za-z_]\w*)', value)
-                    _lead = _lead_m.group(1) if _lead_m else None
-                    _lead_sym = ParserState.symbol_table.lookup(_lead) if _lead else None
-                    _lead_type = (_lead_sym.get("type") or "") if _lead_sym else ""
-                    _is_pyobj_base = bool(
-                        _lead_type.startswith("_py_module:") or _lead_type == "PyObject"
-                    )
-                    if _is_pyobj_base:
+                    if _is_pyobject_value(value):
                         value = f"{value}.to({annotation})"
                 # Result[T, E] = Ok(v) / Err(e) / a plain value
                 if value and annotation.startswith(("Result[", "OneOf")):

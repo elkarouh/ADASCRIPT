@@ -2619,6 +2619,15 @@ def _translate_method(obj_name, method_name):
         _chain_type = _nim_expr_type(obj_name)
         if _chain_type:
             sym = {"type": _chain_type}
+    # A chain that starts at a PyObject (`r.json().get("k")`) is still Python's:
+    # its methods keep their names, `.get` is not a table lookup.
+    if sym is None:
+        import re as _re_py
+        _root = _re_py.match(r'[A-Za-z_]\w*', obj_name)
+        _root_sym = ParserState.symbol_table.lookup(_root.group(0)) if _root else None
+        _root_type = ((_root_sym.get("type") or "") if _root_sym else "")
+        if _root_type.startswith("_py_module:") or _root_type == "PyObject":
+            return method_name
     if sym:
         type_str = sym.get("type", "") or ""
         for prefix, mappings in _PY_METHOD_TO_NIM.items():
@@ -2642,7 +2651,7 @@ def _translate_method(obj_name, method_name):
                         return nim_method
                     break
         # For PyObject / pyImport module vars, and JsObject, don't apply universal mappings
-        if type_str.startswith("_py_module:") or type_str.startswith("_nim_module:"):
+        if type_str.startswith("_py_module:") or type_str.startswith("_nim_module:") or type_str == "PyObject":
             return method_name
         if type_str in ("JsObject", "JsAssoc") or type_str.startswith("JsAssoc["):
             return method_name
@@ -4251,7 +4260,13 @@ def _translate_stdlib_patterns(expr):
         # If obj contains unbalanced '(' (e.g. it's an argument inside a call),
         # this is a false match — the .get() belongs to an inner expression.
         _open = obj.count("(") - obj.count(")")
-        if not args.startswith(")") and _open == 0 and not _expr_is_option(_obj_stripped):
+        # A PyObject (a pyImport module, or what a call of one returned) has its own
+        # .get: requests.get(url) is the library's, not a table lookup.
+        _py_lead = _re.match(r'^[\(\s]*([A-Za-z_]\w*)', obj)
+        _py_sym = ParserState.symbol_table.lookup(_py_lead.group(1)) if _py_lead else None
+        _py_type = ((_py_sym.get("type") or "") if _py_sym else "")
+        _is_pyobj = _py_type.startswith("_py_module:") or _py_type == "PyObject"
+        if not args.startswith(")") and _open == 0 and not _is_pyobj and not _expr_is_option(_obj_stripped):
             ParserState.nim_imports.add("tables")
             return f"{obj}.getOrDefault({args})"
 

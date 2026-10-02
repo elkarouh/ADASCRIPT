@@ -84,6 +84,7 @@ STANDALONE := \
     test_self_ref.ady \
     test_char_slice.ady \
     pyimport_similar.ady \
+    test_pyobject_calls.ady \
     td_learning/sarsa.ady \
     td_learning/qlearning.ady \
     PROJECT/dispatch.ady \

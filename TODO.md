@@ -407,18 +407,6 @@ history of this file if the reasoning behind one of them is ever wanted.
 
 ---
 
-## pyimport: two calls that do not come out as documented
-
-Found checking the README's nimpy examples against the transpiler (both predate the
-import changes):
-
-- `requests.get(url)` on a `pyimport`ed module is written `requests.getOrDefault(url)`:
-  `.get` is taken for a table lookup. `requests.request("GET", url)` is what the README
-  uses instead.
-- A call of a callable `PyObject` into a typed variable (`val: float = f(1.5)`) is
-  written `callObject(f, 1.5)` without the `.to(float)` the README promises, and Nim
-  refuses it: "got 'PyObject' but expected 'float'".
-
 ## Monad support improvements (high ROI)
 
 ### `T | !F` (value or failure) -- what is left

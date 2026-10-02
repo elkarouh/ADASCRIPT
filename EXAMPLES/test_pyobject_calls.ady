@@ -1,0 +1,27 @@
+#!/usr/bin/env ady2nim
+"""Test: two calls on a `pyimport`ed object that the Nim backend used to get wrong.
+
+`.get` on a Python object is the object's own method, not a table lookup:
+`mimetypes.types_map.get(k, default)` and `.get` on a chain that starts at one stayed
+`getOrDefault` and failed to compile. And a call of a callable Python object
+into a typed variable needs `.to(T)` like any other value that comes from Python:
+`n: int = double(6, 7)` was `callObject(double, 6, 7)`, a PyObject where an int
+was wanted. Only Python's standard library is used, so this runs anywhere nimpy does.
+"""
+pyimport mimetypes
+pyimport operator
+pyimport json
+
+let kind: str = mimetypes.types_map.get(".no-such-suffix", "default")
+assert kind == "default"
+
+let double: PyObject = operator.mul
+let n: int = double(6, 7)
+assert n == 42
+var x: float = double(1.5, 2.0)
+assert x == 3.0
+
+let parsed: PyObject = json.loads("{\"name\": \"ady\"}")
+let name: str = parsed.get("name")
+assert name == "ady"
+print "test_pyobject_calls OK"
