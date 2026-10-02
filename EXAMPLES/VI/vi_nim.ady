@@ -1,5 +1,5 @@
 #!/usr/bin/env ady2nim
-"""vi_nim -- a tiny vi-like text editor, after vip (github.com/maksimKorzh/vip), on
+"""vi_nim -- a tiny vi-like text editor (it began as vip, github.com/maksimKorzh/vip), on
 the Nim backend.
 
     vi_nim [file]
@@ -12,7 +12,7 @@ illwill for a key, drawing the rows into its buffer, and giving ^S and ^Q to the
 program -- illwill leaves flow control on, so the terminal would take them.
 """
 nimport illwill, termios
-from vi_core import Editor, Press_T, Key_T, decode
+from vi_core import Editor, Press_T, Key_T, decode, KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT
 
 def keep_flow_control_keys():
     """^S and ^Q are saved and quit here, not the terminal's stop and go."""
@@ -22,10 +22,16 @@ def keep_flow_control_keys():
     let set: cint = tcsetattr(0, TCSANOW, addr(t))
 
 def read_code() -> int:
-    """The next key, as a code decode() knows. illwill reads arrow and function
-    keys as one key of their own, which decode() takes as OTHER."""
+    """The next key, as a code decode() knows. illwill reads an arrow key as one key
+    of its own, with an ordinal that is no ASCII code: it becomes curses' code for the
+    arrow, which decode() knows; the other function keys stay as they are, and
+    decode() takes them as OTHER."""
     while True:
         let key: Key = getKeyWithTimeout(200)
+        if key == Key.Up: return KEY_UP
+        if key == Key.Down: return KEY_DOWN
+        if key == Key.Left: return KEY_LEFT
+        if key == Key.Right: return KEY_RIGHT
         if key != Key.None:
             return ord(key)
 
@@ -35,7 +41,7 @@ def draw(ed: Editor):
     for i in 0 ..< ed.rows:
         screen.write(0, i, ed.row_text(i))
     screen.write(0, ed.rows, ed.status())
-    screen.setCursorPos(ed.col - ed.left, ed.row - ed.top)
+    screen.setCursorPos(ed.cursor_x(), ed.cursor_y())
     screen.display()
     showCursor()
 
@@ -55,7 +61,12 @@ def run(ed: Editor):
         case press.key:
             when QUIT: return
             when SAVE: flash(ed, ed.save())
-            when others: ed.handle(press)
+            when others:
+                ed.handle(press)
+                if ed.quitting: return
+                if ed.message != "":
+                    flash(ed, ed.message)
+                    ed.message = ""
 
 let path: Path = Path($1 if $# >= 1 else "noname.txt")
 illwillInit(fullScreen=True)

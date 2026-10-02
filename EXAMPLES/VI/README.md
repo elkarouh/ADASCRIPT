@@ -1,8 +1,9 @@
 # vi_py.ady, vi_nim.ady, vi_core.ady
 
-A tiny vi-like editor in Adascript: a translation of
+A tiny vi-like editor in Adascript. It began as a translation of
 [vip](https://github.com/maksimKorzh/vip), the 125-line Python editor, to idiomatic
-Adascript. The editor is `vi_core.ady`, with no terminal in it; `vi_py.ady` shows it on
+Adascript, and has gone its own way since: it is held to what a vi does, not to what
+vip does. The editor is `vi_core.ady`, with no terminal in it; `vi_py.ady` shows it on
 curses (Python, built with `ady2py`) and `vi_nim.ady` on illwill, a pure-Nim terminal
 library (built with `ady2nim`). Both `import` `vi_core`: ady2nim compiles it as a module, ady2py
 brings it into the file it writes.
@@ -11,8 +12,26 @@ brings it into the file it writes.
     ady2nim c vi_nim.ady && ./vi_nim file.txt        # on illwill
     ady2nim c vi_raw.ady && ./vi_raw file.txt        # on the raw terminal
 
-Normal mode: `h j k l`, `0 $`, `gg G`, `x`, `r R`, `i a A o O`, `dd yy p`, `u ^R`,
-with counts (`3dd`, `12G`). `^S` saves, `^Q` quits.
+Normal mode: `h j k l` or the arrow keys, `0 $`, `gg G`, `x`, `r R`, `i a A o O`,
+`dd yy p`, `u ^R`, with counts (`3dd`, `12G`). `^S` saves, `^Q` quits.
+
+The arrow keys move the cursor in normal, insert and replace mode (a modified arrow,
+as in `ESC [ 1 ; 5 D`, is a plain one); in the middle of `d`, `y`, `g` or `r` they
+cancel, as any other key does. `:` opens a command line on the status row, where `ESC`
+drops it and backspace edits it, then leaves it when it is empty:
+
+| Command | Does |
+|---------|------|
+| `:w` | write the file |
+| `:w NAME` | write the text to NAME, and go on editing the same file |
+| `:q` | quit; refused while there are changes not written (the message says so) |
+| `:q!` | quit, whatever there is |
+| `:wq`, `:x` | write, then quit (not if the write failed) |
+| `:N` | go to line N (the last line, for a number past the end) |
+| `:$` | go to the last line |
+
+Anything else says `Not an editor command`. A command leaves what to tell the user in
+`message` and may set `quitting`, which the terminal looks at after each key.
 
 ## What the translation does with the Python
 
@@ -39,7 +58,7 @@ window size (`fit`), asks what to show (`scroll`, `row_text`, `status`, and `row
 (`handle`), and shows what `save` answers. `vi_py.ady` does that with curses in 51
 lines (the editor is 312). Nim has no curses, so `vi_nim.ady` uses
 [illwill](https://github.com/johnnovak/illwill) (`TO_NIM/STDLIB/illwill.nim`, one file in
-pure Nim, `nimport illwill`), which does the two hard parts:
+pure Nim, `nimport illwill`), which does the two hard parts (reading the arrow keys is one of them):
 
 - **Keys.** `getKeyWithTimeout` reads a key without blocking, tells a lone ESC from an
   arrow key's escape sequence, and returns an enum whose ordinal is the ASCII code for
@@ -70,7 +89,7 @@ do when nothing does it for you, with only Nim's `terminal` module and `termios`
 - **Drawing.** One frame per key, built as a string and written in one go; the window
   size is read again at every key, as there is no resize event.
 
-It is 118 lines against `vi_nim.ady`'s 60, and passes the same 27 key scripts.
+It is longer than `vi_nim.ady` and passes the same key scripts; it reads an arrow key's escape sequence itself, as it does a lone ESC.
 
 Slices and list edits in `vi_core` are written so that they mean the same on both
 backends: a slice past the end raises on Nim, so `tail` and `splice` are the only way
@@ -78,19 +97,12 @@ the editor takes part of a string, and the list edits (`insert_line`, `delete_li
 build the new list instead of calling `insert` (whose arguments Nim takes the other
 way round) or assigning to a slice.
 
-## Differences from vip
+## Tests
 
-- vip records its undo snapshot before a `dd`, `yy` or `R` takes effect, so one `u`
-  undoes nothing and `xxxuu` undoes all three `x`. Here every change is one step, as
-  in vi.
-- Typing in replace mode (`R`) past the end of the line makes vip raise an
-  `IndexError` and exit without saving; here the line grows.
-
-`test_vi.py` runs key scripts in a pty; 21 of its 25 cases give byte-identical files
-to vip, and the four that differ (one `R` past the end of a line, and three undo and
-redo ones) are marked. It also types arrow keys, which vip ignores in insert mode
-only by accident; the Nim editor is held to both escape-sequence forms, and curses
-to the one it knows.
+`test_vi.py` runs key scripts in a pty -- 47 on curses, 48 on the Nim editors, which are
+also held to the `ESC [ 1 ; 5 D` form of an arrow -- and compares the file each
+leaves. Undo is one step per change, as in vi; typing in replace mode past the end of a
+line makes the line grow.
 
     python3 test_vi.py vi_py.py     # or ./vi_nim
-    make test-vi                    # from the top: builds vi_nim, runs both (about 10 s)
+    make test-vi                    # from the top: builds vi_nim and vi_raw, runs all three (about 20 s)

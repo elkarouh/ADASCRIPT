@@ -1,9 +1,11 @@
-"""vi_core -- the editor, with no terminal in it: a tiny vi-like text editor, after
-vip (github.com/maksimKorzh/vip). vi_py.ady (curses, Python) and vi_nim.ady (Nim) are
-the two ways of showing it.
+"""vi_core -- the editor, with no terminal in it: a tiny vi-like text editor. It began as
+vip (github.com/maksimKorzh/vip) and has outgrown it. vi_py.ady (curses, Python),
+vi_nim.ady (illwill, Nim) and vi_raw.ady (Nim, by hand) are three ways of showing it.
 
-  Normal    h j k l   0 $   gg G   x   r R   i a A o O   dd yy p   u ^R
+  Normal    h j k l or the arrow keys   0 $   gg G   x   r R   i a A o O   dd yy p   u ^R
             counts: 3dd  12G  2yy
+            :w  :w NAME  :q  :q!  :wq  :x  :N (line N)  :$ (the last line)
+  Insert    the arrow keys move; ESC leaves
   Anywhere  ^S saves, ^Q quits
 
 A key is decoded once into a Press_T, and every mode is a `case` over what was
@@ -17,10 +19,10 @@ what was typed (`decode`) and hand it over (`handle`), and show what `save`
 answers.
 """
 
-type Mode_T is enum NORMAL, INSERT, REPLACE_ONE, REPLACE, GOTO, DELETE, YANK
+type Mode_T is enum NORMAL, INSERT, REPLACE_ONE, REPLACE, GOTO, DELETE, YANK, COMMAND
 
 # What a key press means, whatever code the terminal sent for it.
-type Key_T is enum CHAR, ESCAPE, ENTER, BACKSPACE, SAVE, QUIT, REDO, RESIZE, OTHER
+type Key_T is enum CHAR, ESCAPE, ENTER, BACKSPACE, SAVE, QUIT, REDO, RESIZE, UP, DOWN, LEFT, RIGHT, OTHER
 
 type Press_T is record:
     key:  Key_T
@@ -32,7 +34,7 @@ type Snapshot_T is record:
     col: int
 
 const TAG: [Mode_T]str = [NORMAL: "n", INSERT: "i", REPLACE_ONE: "r",
-                          REPLACE: "R", GOTO: "g", DELETE: "d", YANK: "y"]
+                          REPLACE: "R", GOTO: "g", DELETE: "d", YANK: "y", COMMAND: ":"]
 
 # The codes decode() recognises. The control keys are the letter & 0x1f, and the
 # KEY_ ones are curses'; a terminal that reads bytes never sees them.
@@ -42,6 +44,10 @@ const CTRL_S: int = 19
 const ESC: int = 27
 const DEL: int = 127
 const BACKSPACE_KEY: int = 8
+const KEY_DOWN: int = 258                # curses.KEY_DOWN, UP, LEFT, RIGHT: a terminal
+const KEY_UP: int = 259                  # that reads bytes (vi_raw, vi_nim) sends these
+const KEY_LEFT: int = 260                # codes for the arrow keys too
+const KEY_RIGHT: int = 261
 const KEY_BACKSPACE: int = 263           # curses.KEY_BACKSPACE
 const KEY_ENTER: int = 343               # curses.KEY_ENTER
 const KEY_RESIZE: int = 410              # curses.KEY_RESIZE
@@ -56,6 +62,10 @@ def decode(ch: int) -> Press_T:
         when CTRL_Q: Press_T(QUIT, "")
         when CTRL_R: Press_T(REDO, "")
         when KEY_RESIZE: Press_T(RESIZE, "")
+        when KEY_UP: Press_T(UP, "")
+        when KEY_DOWN: Press_T(DOWN, "")
+        when KEY_LEFT: Press_T(LEFT, "")
+        when KEY_RIGHT: Press_T(RIGHT, "")
         when 32..126: Press_T(CHAR, str(chr(ch)))
         when others: Press_T(OTHER, "")
 
@@ -96,10 +106,15 @@ class Editor:
     var left: int = 0
     var rows: int = 0
     var cols: int = 0
+    var cmd: str = ""                    # typed after the colon, in COMMAND mode
+    var saved: []str = []                # the text as last written, to tell a change from none
+    var message: str = ""                # what to tell the user; the terminal shows it, then clears it
+    var quitting: bool = False           # a command asked to quit
 
     def __init__(self, path: Path):
         self.path = path
         self.lines = load(path)
+        self.saved = list(self.lines)
         self.history = [self.snapshot()]
 
     # ---- state ------------------------------------------------------
@@ -152,16 +167,36 @@ class Editor:
         let n: int = self.top + i
         tail(self.lines[n], self.left) if n < len(self.lines) else "~"
 
+    def cursor_y(self) -> int:
+        """The cursor's screen row: in the text, or on the status line while a command is typed."""
+        self.rows if self.mode == COMMAND else self.row - self.top
+
+    def cursor_x(self) -> int:
+        """The cursor's screen column, likewise."""
+        len(self.cmd) + 1 if self.mode == COMMAND else self.col - self.left
+
     def status(self) -> str:
+        if self.mode == COMMAND:
+            return f":{self.cmd}"
         let total: int = len(self.lines)
         let pct: int = (self.row + 1) * 100 // total
         f'{TAG[self.mode]} "{self.path}" line {self.row + 1} of {total} --{pct}%-- col {self.col}'
 
+    def write_to(self, target: Path) -> str:
+        """Write the text to TARGET; "" when it worked, else what went wrong."""
+        let written: None | !PathFailure_T = target.write_text("\n".join(self.lines) + "\n")
+        if written is PathFailure_T: return f"Not saved: {written.reason}"
+        ""
+
     def save(self) -> str:
         """Write the file; what to tell the user."""
-        let saved: None | !PathFailure_T = self.path.write_text("\n".join(self.lines) + "\n")
-        if saved is PathFailure_T: return f"Not saved: {saved.reason}"
+        let problem: str = self.write_to(self.path)
+        if problem != "": return problem
+        self.saved = list(self.lines)
         "Saved"
+
+    def modified(self) -> bool:
+        self.lines != self.saved
 
     # ---- editing ----------------------------------------------------
     def put_line(self, text: str):
@@ -202,6 +237,14 @@ class Editor:
             when 'G': self.row = (self.times() - 1 if self.count != "" else len(self.lines) - 1)
             when others: pass
 
+    def arrow(self, key: Key_T):
+        case key:
+            when UP: self.row -= 1
+            when DOWN: self.row += 1
+            when LEFT: self.col -= 1
+            when RIGHT: self.col += 1
+            when others: pass
+
     def put(self):
         let head: []str = self.lines[:self.row + 1]
         let rest: []str = self.lines[self.row + 1:]
@@ -214,8 +257,12 @@ class Editor:
         let line: str = self.lines[self.row]
         case press.key:
             when REDO: self.redo()
+            when UP | DOWN | LEFT | RIGHT: self.arrow(press.key)
             when CHAR:
                 case press.text:
+                    when ":":
+                        self.mode = COMMAND
+                        self.cmd = ""
                     when "i" | "a" | "A" | "o" | "O": self.begin_insert(press.text[0])
                     when "h" | "j" | "k" | "l" | "0" | "$" | "G": self.move(press.text[0])
                     when "r": self.mode = REPLACE_ONE
@@ -237,6 +284,7 @@ class Editor:
             when ESCAPE:
                 self.mode = NORMAL
                 self.col -= 1
+            when UP | DOWN | LEFT | RIGHT: self.arrow(press.key)
             when ENTER:
                 self.put_line(line[:self.col])
                 self.row += 1
@@ -264,6 +312,7 @@ class Editor:
             when ESCAPE:
                 self.mode = NORMAL
                 self.col -= 1
+            when UP | DOWN | LEFT | RIGHT: self.arrow(press.key)
             when BACKSPACE: self.col -= 1
             when CHAR:
                 self.put_line(splice(line, self.col, self.col + 1, press.text))
@@ -294,9 +343,63 @@ class Editor:
         self.mode = NORMAL
         self.count = ""
 
+    def command(self, press: Press_T):
+        """A key typed after the colon: the line builds up; ENTER runs it, ESC drops it."""
+        case press.key:
+            when ESCAPE:
+                self.mode = NORMAL
+                self.cmd = ""
+            when ENTER: self.execute()
+            when BACKSPACE:
+                if self.cmd == "":
+                    self.mode = NORMAL
+                else:
+                    self.cmd = self.cmd[:len(self.cmd) - 1]
+            when CHAR: self.cmd = f"{self.cmd}{press.text}"
+            when others: pass
+
+    def execute(self):
+        """Run the command line: a line number, or a word and what it takes."""
+        let text: str = self.cmd.strip()
+        self.mode = NORMAL
+        self.cmd = ""
+        if text == "": return
+        let line: int | !ParseFailure_T = parse_int(text)
+        if line is ParseFailure_T:
+            self.run(text)
+        else:
+            self.row = line - 1
+
+    def run(self, text: str):
+        let space: int = text.find(" ")
+        let word: str = (text if space < 0 else text[:space])
+        let rest: str = (tail(text, space + 1).strip() if space >= 0 else "")
+        case word:
+            when "w":
+                if rest == "":
+                    self.message = self.save()
+                else:
+                    let problem: str = self.write_to(Path(rest))
+                    self.message = (f"Wrote {rest}" if problem == "" else problem)
+            when "q":
+                if self.modified():
+                    self.message = "No write since last change (add ! to override)"
+                else:
+                    self.quitting = True
+            when "q!": self.quitting = True
+            when "wq" | "x":
+                let result: str = self.save()
+                if result == "Saved":
+                    self.quitting = True
+                else:
+                    self.message = result
+            when "$": self.row = len(self.lines) - 1
+            when others: self.message = f"Not an editor command: {text}"
+
     # ---- one key -------------------------------------------------------
     def handle(self, press: Press_T):
-        """What the editor does with a key; QUIT and SAVE are the terminal's."""
+        """What the editor does with a key; QUIT and SAVE are the terminal's. A command
+        can ask to quit (`quitting`) and leave something to tell the user (`message`)."""
         # digits make a count -- a leading 0 is the motion, not a digit
         let counting: bool = self.mode in {NORMAL, DELETE, YANK, GOTO}
         if counting and press.text.isdigit() and (press.text != "0" or self.count != ""):
@@ -308,5 +411,6 @@ class Editor:
             when REPLACE: self.overwrite(press)
             when REPLACE_ONE: self.replace_one(press)
             when DELETE | YANK | GOTO: self.operator(press)
+            when COMMAND: self.command(press)
         self.clamp()
         self.record()

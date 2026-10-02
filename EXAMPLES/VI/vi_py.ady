@@ -1,5 +1,5 @@
 #!/usr/bin/env ady2py
-"""vi_py -- a tiny vi-like text editor, after vip (github.com/maksimKorzh/vip), on curses.
+"""vi_py -- a tiny vi-like text editor (it began as vip, github.com/maksimKorzh/vip), on curses.
 
     vi_py [file]
 
@@ -19,7 +19,7 @@ def draw(scr: curses.window, ed: Editor):
     scr.move(ed.rows, 0)
     scr.clrtoeol()
     scr.addnstr(ed.rows, 0, ed.status(), ed.cols - 1)
-    scr.move(ed.row - ed.top, ed.col - ed.left)
+    scr.move(ed.cursor_y(), ed.cursor_x())
     scr.refresh()
 
 def flash(scr: curses.window, ed: Editor, message: str):
@@ -41,7 +41,12 @@ def run(scr: curses.window, ed: Editor):
             when QUIT: return
             when SAVE: flash(scr, ed, ed.save())
             when RESIZE: pass
-            when others: ed.handle(press)
+            when others:
+                ed.handle(press)
+                if ed.quitting: return
+                if ed.message != "":
+                    flash(scr, ed, ed.message)
+                    ed.message = ""
 
 def main(scr: curses.window):
     var ed: Editor = Editor(Path($1 if $# >= 1 else "noname.txt"))

@@ -1,16 +1,13 @@
 #!/usr/bin/env python3
-"""Tests for vi_py.ady and vi_nim.ady, the Adascript translations of vip: the
-editor is run in a terminal of its own (a pty), is typed a script of keys, saves
-with ^S and quits with ^Q, and the file it saved is compared with what is wanted.
+"""Tests for the vi editor (vi_core.ady) on each of its terminals -- vi_py.ady (curses,
+built with ady2py as vi_py.py), vi_nim.ady (illwill) and vi_raw.ady (Nim's terminal
+module and termios): the editor is run in a terminal of its own (a pty), is typed a
+script of keys, and the file it wrote is compared with what is wanted.
 
-    python3 test_vi.py PROGRAM        (vi_py.ady built with ady2py, as vi_py.py,
-                                       or vi_nim.ady built with ady2nim)
+    python3 test_vi.py PROGRAM
 
-The wanted files are what vip (github.com/maksimKorzh/vip) writes for the same
-keys, except where vip differs: its undo bookkeeping records a snapshot before
-a dd/yy/R takes effect, so one `u` undoes nothing and `xxxuu` undoes all
-three, and typing in R mode past the end of a line raises IndexError and exits
-without saving. Those cases (marked VIP DIFFERS) want what a vi does.
+The script ends with ^S and ^Q unless the program has quit by itself (`:wq`, `:q`).
+The wanted files are what a vi writes for the same keys.
 """
 import fcntl, os, pathlib, pty, select, struct, subprocess, sys, tempfile, termios
 
@@ -69,20 +66,69 @@ CASES = [
     ('ctrl-keys', 'i\x01\x02abc\x1b',
      'abcone\ntwo\nthree\nfour\nfive\n'),
 ]
-VIP_DIFFERS = {"replaceR", "undo,redo", "undo3", "dd,u,redo"}
 
 # An arrow key arrives as one escape sequence, ESC O A on a terminal in
 # application keypad mode (which curses puts it in) or ESC [ A in the other:
-# neither is an ESC followed by typing. The Nim editor reads the terminal
-# itself, so it is held to both; curses only knows the first.
+# neither is an ESC followed by typing. The Nim editors read the terminal
+# themselves, so they are held to both; curses only knows the first.
+UP, DOWN, RIGHT, LEFT = ESC + "OA", ESC + "OB", ESC + "OC", ESC + "OD"
 ARROWS = [
-    ("arrows (SS3)", "ia" + ESC + "OA" + "b" + ESC + "OC" + "c" + ESC,
-     "abcone\ntwo\nthree\nfour\nfive\n"),
+    ("arrow down", DOWN + "x",
+     "one\nwo\nthree\nfour\nfive\n"),
+    ("arrow up at top", UP + "x",
+     "ne\ntwo\nthree\nfour\nfive\n"),
+    ("arrow down at end", "G" + DOWN + "x",
+     "one\ntwo\nthree\nfour\nive\n"),
+    ("arrow right,left", RIGHT + RIGHT + LEFT + "x",
+     "oe\ntwo\nthree\nfour\nfive\n"),
+    ("arrows in insert", "ia" + UP + "b" + RIGHT + "c" + ESC,
+     "abocne\ntwo\nthree\nfour\nfive\n"),
+    ("arrows in R", "R" + RIGHT + "X" + ESC,
+     "oXe\ntwo\nthree\nfour\nfive\n"),
+    ("arrow cancels d", "d" + UP + "x",
+     "ne\ntwo\nthree\nfour\nfive\n"),
+    ("arrow, 3dd", DOWN + "3dd",
+     "one\nfive\n"),
 ]
 ARROWS_CSI = [
     ("arrows (CSI)", "ia" + ESC + "[A" + "b" + ESC + "[C" + "c" + ESC + "[1;5D" + "d" + ESC,
-     "abcdone\ntwo\nthree\nfour\nfive\n"),
+     "abodcne\ntwo\nthree\nfour\nfive\n"),
 ]
+
+# The colon commands. :wq and :x and :q! end the program, so the keys typed after
+# them are lost, which is checked: the last x of ":wq\rx" must not reach the file.
+COMMANDS = [
+    (":3", ":3\rx",
+     "one\ntwo\nhree\nfour\nfive\n"),
+    (":$", ":$\rx",
+     "one\ntwo\nthree\nfour\nive\n"),
+    (":99 clamps", ":99\rx",
+     "one\ntwo\nthree\nfour\nive\n"),
+    (":wq", "x:wq\rx",
+     "ne\ntwo\nthree\nfour\nfive\n"),
+    (":x", "jx:x\rx",
+     "one\nwo\nthree\nfour\nfive\n"),
+    (":w", "x:w\rjx",
+     "ne\nwo\nthree\nfour\nfive\n"),
+    (":q unchanged", ":q\rx",
+     BASE),
+    (":q changed", "x:q\r",
+     "ne\ntwo\nthree\nfour\nfive\n"),
+    (":q!", "x:q!\rx",
+     BASE),
+    (":esc", ":3" + ESC + "x",
+     "ne\ntwo\nthree\nfour\nfive\n"),
+    (":backspace", ":3\x7f2\rx",
+     "one\nwo\nthree\nfour\nfive\n"),
+    (":backspace out", ":\x7fx",
+     "ne\ntwo\nthree\nfour\nfive\n"),
+    (":unknown", ":zzz\rx",
+     "ne\ntwo\nthree\nfour\nfive\n"),
+    (":w name", "x:w copy.txt\rjx:q!\r",
+     BASE),
+]
+# a file a command wrote, beside the one being edited: case name -> (name, what it holds)
+WRITTEN = {":w name": ("copy.txt", "ne\ntwo\nthree\nfour\nfive\n")}
 
 
 def chunks(keys):
@@ -104,8 +150,10 @@ def chunks(keys):
 
 def drive(program, path, keys):
     """Run PROGRAM on PATH in a pty, type KEYS, then ^S and ^Q."""
+    program = os.path.abspath(program)
     pid, fd = pty.fork()
     if pid == 0:
+        os.chdir(os.path.dirname(path))           # where `:w NAME` writes
         os.environ["TERM"] = "xterm"
         if program.endswith(".py"):
             os.execvp(sys.executable, [sys.executable, program, path])
@@ -120,13 +168,19 @@ def drive(program, path, keys):
             except OSError:
                 return
 
+    def type_(data):
+        try:
+            os.write(fd, data)
+        except OSError:             # the program has quit, as a command can ask
+            pass
+
     drain(0.6)
     for key in chunks(keys):
-        os.write(fd, key.encode())
+        type_(key.encode())
         drain(0.03)
-    os.write(fd, b"\x13")
+    type_(b"\x13")
     drain(1.4)                      # saving flashes "Saved" for a second
-    os.write(fd, b"\x11")
+    type_(b"\x11")
     drain(0.3)
     os.waitpid(pid, 0)
 
@@ -134,7 +188,7 @@ def drive(program, path, keys):
 def main(program):
     work = pathlib.Path(tempfile.mkdtemp())
     jobs = []
-    cases = CASES + ARROWS + (ARROWS_CSI if not program.endswith(".py") else [])
+    cases = CASES + ARROWS + COMMANDS + (ARROWS_CSI if not program.endswith(".py") else [])
     for name, keys, want in cases:
         path = work / (name.replace(",", "_") + ".txt")
         path.write_text(BASE)
@@ -144,11 +198,15 @@ def main(program):
     for name, want, path, child in jobs:
         child.wait()
         got = path.read_text()
-        note = "  (VIP DIFFERS)" if name in VIP_DIFFERS else ""
-        print(f"  {name:12s} {'OK' if got == want else 'FAIL'}{note}")
-        if got != want:
+        other = WRITTEN.get(name)
+        got_other = (path.parent / other[0]).read_text() if other and (path.parent / other[0]).exists() else None
+        ok = got == want and (other is None or got_other == other[1])
+        print(f"  {name:17s} {'OK' if ok else 'FAIL'}")
+        if not ok:
             failed += 1
             print(f"    want: {want!r}\n    got:  {got!r}")
+            if other:
+                print(f"    {other[0]} want: {other[1]!r}\n    {other[0]} got:  {got_other!r}")
     return failed
 
 

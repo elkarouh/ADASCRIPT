@@ -1,5 +1,5 @@
 #!/usr/bin/env ady2nim
-"""vi_raw -- a tiny vi-like text editor, after vip (github.com/maksimKorzh/vip), on
+"""vi_raw -- a tiny vi-like text editor (it began as vip, github.com/maksimKorzh/vip), on
 the Nim backend, on the raw terminal.
 
     vi_raw [file]
@@ -13,9 +13,9 @@ by waiting 25 ms), drawing the screen (one frame per key, written in one go), an
 the window size (read again at every key; there is no resize event).
 """
 nimport terminal, termios, posix, os
-from vi_core import Editor, Press_T, Key_T, decode, CTRL_Q, ESC
+from vi_core import Editor, Press_T, Key_T, decode, CTRL_Q, ESC, KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT
 
-const NOTHING: int = -1                  # a key with no meaning here: an arrow, a function key
+const NOTHING: int = -1                  # a key with no meaning here: a function key
 
 # ---- the terminal ---------------------------------------------------
 
@@ -55,9 +55,11 @@ var pushed: int = NOTHING                # a byte read ahead, to be the next key
 
 def read_code() -> int:
     """The next key, as a code. A lone ESC is told from the start of an escape
-    sequence (an arrow key: ESC [ A) by whether more bytes follow within 25 ms;
-    a sequence is swallowed and read as NOTHING. ESC and a character (Alt-x) is
-    an ESC, the character kept for the next call."""
+    sequence (an arrow key: ESC [ A) by whether more bytes follow within 25 ms.
+    A sequence ending in A, B, C or D is an arrow -- with a modifier too, as in
+    ESC [ 1 ; 5 D -- and is read as curses' code for it; any other is swallowed and
+    read as NOTHING. ESC and a character (Alt-x) is an ESC, the character kept for
+    the next call."""
     if pushed != NOTHING:
         let ahead: int = pushed
         pushed = NOTHING
@@ -73,6 +75,10 @@ def read_code() -> int:
     if second == ord('['):
         while last < 64 or last > 126:                       # up to the final byte
             last = read_byte()
+    if last == ord('A'): return KEY_UP
+    if last == ord('B'): return KEY_DOWN
+    if last == ord('C'): return KEY_RIGHT
+    if last == ord('D'): return KEY_LEFT
     NOTHING
 
 def clip(text: str, start: int, width: int) -> str:
@@ -87,7 +93,7 @@ def draw(ed: Editor):
     for i in 0 ..< ed.rows:
         frame += clip(ed.row_text(i), 0, ed.cols - 1) + "\x1b[K\r\n"     # to the end of the line, then down
     frame += clip(ed.status(), 0, ed.cols - 1) + "\x1b[K"
-    frame += f"\x1b[{ed.row - ed.top + 1};{ed.col - ed.left + 1}H\x1b[?25h"
+    frame += f"\x1b[{ed.cursor_y() + 1};{ed.cursor_x() + 1}H\x1b[?25h"
     stdout.write(frame)
     stdout.flushFile()
 
@@ -106,7 +112,12 @@ def run(ed: Editor):
         case press.key:
             when QUIT: return
             when SAVE: flash(ed, ed.save())
-            when others: ed.handle(press)
+            when others:
+                ed.handle(press)
+                if ed.quitting: return
+                if ed.message != "":
+                    flash(ed, ed.message)
+                    ed.message = ""
 
 let path: Path = Path($1 if $# >= 1 else "noname.txt")
 raw_mode(True)
