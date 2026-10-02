@@ -1775,46 +1775,47 @@ below shows what each of those becomes. (`import` is for `.ady` modules.)
 
 ### Natively mapped stdlib modules
 
-These modules translate directly to their Nim counterparts with no runtime
-overhead:
+A Nim module is `nimport`ed. These are written with the name Python gives them
+and translate directly to their Nim counterparts with no runtime overhead:
 
-| Python module    | Nim module         | Notes                            |
-|------------------|--------------------|----------------------------------|
-| `import os`      | `import os`        | `os.path.*` → Nim path procs     |
-| `import math`    | `import math`      | All standard functions mapped    |
-| `import time`    | `import times`     |                                  |
-| `import re`      | `import re`        | Superseded by native `/pat/` literals |
-| `import random`  | `import random`    |                                  |
-| `import json`    | `import std/json`  |                                  |
-| `import itertools`| `import sequtils` |                                  |
-| `import asyncio` | `import asyncdispatch` |                              |
+| You write            | Nim imports           | Notes                            |
+|----------------------|-----------------------|----------------------------------|
+| `nimport os`         | `import os`           | `os.path.*` → Nim path procs     |
+| `nimport math`       | `import math`         | All standard functions mapped    |
+| `nimport time`       | `import times`        | `time.time()` → `epochTime()`    |
+| `nimport random`     | `import random`       | `random.rand(n)`                 |
+| `nimport json`       | `import std/json`     |                                  |
+| `nimport itertools`  | `import sequtils`     |                                  |
+| `nimport asyncio`    | `import asyncdispatch`|                                  |
+
+`nimport re` is not on the list: there is no Nim `re` here, so it reaches Python's
+through nimpy, and the native `/pat/` literals replace it. `sys.exit` needs no import
+at all.
 
 ### Function call translation
 
 ```python
-import math, time, re, random
+nimport math, time, random
 
-x      = math.sqrt(4.0)
-t      = time.time()
-result = re.sub(r'\s+', ' ', text)
-n      = random.randint(1, 100)
+x = math.sqrt(4.0)
+t = time.time()
+n = random.rand(100)
 ```
 
 **Nim output:**
 
 ```nim
-import math, re, random, times
+import math, random, times
 
-var x      = sqrt(4.0)
-var t      = epochTime()
-var result = replace(text, re("\\s+"), " ")
-var n      = rand(1..100)
+var x = sqrt(4.0)
+var t = epochTime()
+var n = rand(100)
 ```
 
 ### `os` and `sys` utilities
 
 ```python
-import os, sys
+nimport os
 
 if os.path.exists('/tmp/data'):
     p = os.path.join('/tmp', 'data', 'out.txt')
@@ -1826,9 +1827,9 @@ sys.exit(1)
 **Nim output:**
 
 ```nim
-import os
+import os, strutils
 
-if fileExists("/tmp/data"):
+if adascriptExists("/tmp/data"):   # fileExists or dirExists, a helper the output defines
     var p = joinPath("/tmp", "data", "out.txt")
     createDir("/tmp/data")
 
@@ -1837,14 +1838,14 @@ quit(1)
 
 ### Non-native Python libraries (nimpy bridge)
 
-Libraries with no direct Nim equivalent are imported via nimpy automatically:
+A library with no Nim equivalent is a `pyimport`, and comes in through nimpy:
 
 ```python
-import requests
-import pandas as pd
+pyimport requests
+pyimport pandas as pd
 
-r  = requests.get('https://example.com')
-df = pd.read_csv('data.csv')
+r  = requests.request("GET", "https://example.com")
+df = pd.read_csv("data.csv")
 ```
 
 **Nim output:**
@@ -1855,7 +1856,7 @@ import nimpy
 let requests = pyImport("requests")
 let pd       = pyImport("pandas")
 
-var r  = requests.get("https://example.com")
+var r  = requests.request("GET", "https://example.com")
 var df = pd.read_csv("data.csv")
 ```
 
@@ -1865,12 +1866,12 @@ When a variable has a primitive type annotation and its right-hand side
 comes from a `PyObject` call chain, `.to(T)` is injected automatically:
 
 ```python
-import requests
+pyimport requests
 
-r     = requests.get('https://api.example.com/data')
-count: int   = r.json()['total']
-score: float = r.json()['score']
-name:  str   = r.json()['name']
+r     = requests.request("GET", "https://api.example.com/data")
+count: int   = r.json()["total"]
+score: float = r.json()["score"]
+name:  str   = r.json()["name"]
 ```
 
 **Nim output:**
@@ -1890,7 +1891,7 @@ When a variable holds a callable `PyObject` (e.g. a fitted model, compiled
 regex, scipy interpolator), calling it emits `callObject()` automatically:
 
 ```python
-import scipy.interpolate as interp
+pyimport scipy.interpolate as interp
 
 f   = interp.interp1d(x_points, y_points, 'linear')
 val: float = f(1.5)
@@ -3422,7 +3423,7 @@ on Python and not on Nim), `geometry.distance` is rewritten to `distance` there,
 merged text, and the libraries bundled with ady2nim (`TO_NIM/STDLIB/*.ady`) stay
 Nim-only. A `nimport` with no `.ady` behind it (`nimport strutils`) is a Nim-only
 import and is dropped from the Python output as before. `from geometry import *`
-is not a way to import a module; see
+brings in everything, unqualified, as in Python; see
 [Modules and Project Layout](#modules-and-project-layout).
 
 **Nim stdlib coverage** — a few Python builtins reach Nim through the

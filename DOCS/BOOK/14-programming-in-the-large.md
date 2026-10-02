@@ -428,8 +428,8 @@ What the merge costs:
 - **A `nimport` with no `.ady` behind it** (`nimport strutils`, `nimport math`)
   is a Nim-only import and is dropped from the Python output.
 
-`from geometry import *` is still not a way to import a module: it survives into
-the Nim output as invalid Nim.
+`from geometry import *` brings in everything geometry declares, unqualified, as in
+Python; it is the one form the unlisted-name check lets alone.
 
 So the rule is softer than it was:
 
