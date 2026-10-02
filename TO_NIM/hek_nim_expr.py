@@ -2666,6 +2666,9 @@ def _translate_method(obj_name, method_name):
     nim_method = _PY_UNIVERSAL_METHOD_TO_NIM.get(method_name, method_name)
     if nim_method in _STRUTILS_METHODS:
         ParserState.nim_imports.add("strutils")
+    # partition and rpartition are not in strutils but in strmisc.
+    if nim_method in ("partition", "rpartition"):
+        ParserState.nim_imports.add("strmisc")
     if nim_method == "adascriptZfill":
         _ensure_zfill_helper()
     if nim_method in ("adascriptRemovePrefix", "adascriptRemoveSuffix"):

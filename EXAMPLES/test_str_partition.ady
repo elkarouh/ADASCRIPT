@@ -1,0 +1,24 @@
+#!/usr/bin/env ady2nim
+"""Test: str.partition and str.rpartition, on both backends -- the text before the first
+(last) separator, the separator, and the rest; the text and two empty strings when the
+separator is not there. (Nim has them in strmisc, not strutils.)
+"""
+
+def command(text: str) -> (str, str):
+    let (word, _, rest) = text.partition(" ")
+    return word, rest.strip()
+
+let (a, b) = command("w   name.txt")
+assert a == "w" and b == "name.txt"
+let (c, d) = command("wq")
+assert c == "wq" and d == ""
+let (e, f) = command("q! ")
+assert e == "q!" and f == ""
+
+let (head, sep, tail) = "a=b=c".partition("=")
+assert head == "a" and sep == "=" and tail == "b=c"
+let (head2, sep2, tail2) = "a=b=c".rpartition("=")
+assert head2 == "a=b" and sep2 == "=" and tail2 == "c"
+let (head3, sep3, tail3) = "abc".rpartition("=")
+assert head3 == "" and sep3 == "" and tail3 == "abc"      # as Python: the text goes last
+print "test_str_partition OK"

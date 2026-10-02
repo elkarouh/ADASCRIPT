@@ -648,9 +648,8 @@ class Editor:
             self.row = line - 1
 
     def run(self, text: str):
-        let space: int = text.find(" ")
-        let word: str = (text if space < 0 else text[:space])
-        let rest: str = (tail(text, space + 1).strip() if space >= 0 else "")
+        let (word, _, tail_text) = text.partition(" ")
+        let rest: str = tail_text.strip()
         case word:
             when "w":
                 if rest == "":
