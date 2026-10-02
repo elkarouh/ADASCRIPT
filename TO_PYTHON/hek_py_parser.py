@@ -1199,6 +1199,8 @@ def _either_case_to_py(case_node, subject, u, indent):
                 f"test inside the branch")
         if pat in ("others", "_"):
             head = f"{_ind(indent)}else:"
+            # what is left: anything the branches above did not take
+            facts = [(subject.strip(), "without", m) for m in sorted(covered)]
             covered.update(members)
         else:
             if pat not in members:
@@ -1208,9 +1210,15 @@ def _either_case_to_py(case_node, subject, u, indent):
                     else f"_is_a({subject}, {pat})")
             _ensure_is_a_helper()
             covered.add(pat)
+            facts = [(subject.strip(), "only", pat)]
             head = f"{_ind(indent)}{keyword} {cond}:"
             keyword = "elif"
-        body = block_node.to_py(indent + 1) if block_node else _ind(indent + 1) + "pass"
+        # in its branch the subject is that member, to a case nested in it as to a test
+        held = _push_facts(facts)
+        try:
+            body = block_node.to_py(indent + 1) if block_node else _ind(indent + 1) + "pass"
+        finally:
+            _pop_facts(held)
         out.append(f"{head}\n{body}")
     missing = [m for m in members if m not in covered]
     if missing:

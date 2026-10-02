@@ -2330,6 +2330,12 @@ def _either_case_to_nim(case_node, subject, rtype, indent):
             f"member -- {', '.join('None' if m == 'void' else m for m in missing)} "
             f"is missing -- or say `when others:`")
     ParserState.nim_imports.add("stdlib")
+    # Every member has a branch, so the last test is redundant: the last branch is `else`,
+    # which makes the whole an expression Nim can take as a value -- a case that ends a
+    # function, or is the value of a branch of another. An `if` with only `elif`s is not one.
+    if len(out) >= 2 and "else:" not in (o.split("\n", 1)[0] for o in out):
+        head, _, rest = out[-1].partition("\n")
+        out[-1] = re.sub(r"^(\s*)elif [^:]*:", r"\1else:", head, count=1) + "\n" + rest
     return "\n".join(out)
 
 

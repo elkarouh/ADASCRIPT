@@ -45,9 +45,35 @@ def after_not(code: int) -> str:
         when GREEN: "green"
         when BLUE: "blue"
 
+# a case over the union itself, and in its branch a case over the enum
+def in_union_case(code: int) -> str:
+    let c: Color_T | !ParseFailure_T = parse_enum(Color_T, code)
+    case c:
+        when ParseFailure_T:
+            return "none"
+        when Color_T:
+            case c:
+                when RED: return "red"
+                when GREEN: return "green"
+                when BLUE: return "blue"
+
+def with_others(code: int) -> str:
+    let c: Color_T | !ParseFailure_T = parse_enum(Color_T, code)
+    case c:
+        when Color_T:
+            case c:
+                when RED: "red"
+                when GREEN: "green"
+                when BLUE: "blue"
+        when others: "none"
+
+def agree(code: int) -> bool:
+    let first: str = after_guard(code)
+    first == in_else(code) and first == in_body(code) and first == after_not(code) and first == in_union_case(code) and first == with_others(code)
+
 for code in [1, 5, 9, 2]:
-    print code, after_guard(code), in_else(code), in_body(code), after_not(code)
-    assert after_guard(code) == in_else(code) and in_else(code) == in_body(code) and in_body(code) == after_not(code)
+    print code, after_guard(code), in_else(code), in_body(code), after_not(code), in_union_case(code), with_others(code)
+    assert agree(code)
 
 # a guard that continues, in a loop
 var names: str = ""
