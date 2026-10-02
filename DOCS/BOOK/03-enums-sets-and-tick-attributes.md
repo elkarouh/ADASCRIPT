@@ -100,7 +100,8 @@ let back: State = State(blob)       # ACTIVE
 ## 3.2 Enums as array indexes: `[E]T`
 
 An array indexed by an enum is declared `[E]T` and initialised with the
-`[KEY: value, ...]` literal:
+`[KEY: value, ...]` literal. The enum must have no gaps in its values (§3.1a): one whose
+values skip a number is refused as an index:
 
 ```python
 type Priority is enum LOW, MED, HIGH
@@ -265,8 +266,8 @@ the apostrophe never confuses the Python-shaped grammar.
 | `E'First` | first member of enum `E` |
 | `E'Last` | last member |
 | `E'Range` | the set (or iteration range) of all members |
-| `expr'Next` | successor |
-| `expr'Prev` | predecessor |
+| `expr'Next` | successor (refused for an enum whose values skip a number) |
+| `expr'Prev` | predecessor (likewise) |
 | `expr'choose` | uniformly random element of an enum, set, or range |
 | `expr'Image` | string representation |
 | `s'Length` | length of a string/sequence |

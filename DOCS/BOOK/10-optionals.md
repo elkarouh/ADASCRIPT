@@ -638,7 +638,7 @@ The standard failures, and what returns them:
 | `p.read_lines()` | `[]str \| !PathFailure_T` | `op`, `path`, `base`, `reason` |
 | `parse_float(s)` | `float \| !ParseFailure_T` | `what`, `text` |
 | `parse_int(s)` | `int \| !ParseFailure_T` | `what`, `text` |
-| `parse_enum(E, s)` | `E \| !ParseFailure_T` | `what`, `text` |
+| `parse_enum(E, s)`, `parse_enum(E, n)` | `E \| !ParseFailure_T` | `what`, `text` |
 | `input(prompt)`, `stdin.readLine()` | `str \| !InputFailure_T` | `reason` |
 
 Your own routines join the same tracks with a `Failure_T` of their own, and a

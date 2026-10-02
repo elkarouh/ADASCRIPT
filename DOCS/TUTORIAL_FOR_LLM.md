@@ -255,8 +255,10 @@ type Digit_T  is enum D0, D1, D2, D3, D4, D5, D6, D7, D8, D9
 
 Both `is` and `=` are valid assignment keywords.
 
-**Python output:** `class Door_T(Enum): Door1 = auto(); ...`
+**Python output:** `class Door_T(Enum): Door1 = 0; ...` (members compare, by value)
 **Nim output:** `type Door_T = enum Door1, Door2, Door3`
+
+**Members with values** -- `type Key_T is enum DOWN = 258, UP = 259, END = 360`, or one `NAME = value` per line in the block form (`enum:`). Every member has a value or none does (a mix is refused); the values must strictly ascend and give the order: `ord`, `<`, `case` and sets follow them. Consecutive values (`1, 2, 3`) leave the enum as good as any other; values that skip a number can still order, compare and `case`, but cannot index an array (`[E]T`), be iterated (`for x in E`) or be stepped (`'Next`, `'Prev`), on both backends. `parse_enum(E, n)` turns an integer into the member with that value (`E | !ParseFailure_T`), and `E(n)` raises where no member has it.
 
 A member stringifies as its bare name on both backends — `str(d)`,
 `print d`, `f"{d}"` and `d'Image` all give `Door1`, matching Nim's `$`.
@@ -430,7 +432,7 @@ one-character string Python's builtin accepts:
 | Expression | Value |
 |------------|-------|
 | `ord("a")` | 97 |
-| `ord(GREEN)` | 1 (position in the enum) |
+| `ord(GREEN)` | 1 (position in the enum, or the value it was declared with) |
 | `ord(True)` | 1 |
 | `ord(4)` | 4 |
 
@@ -1059,7 +1061,7 @@ var transition: [Hidden_State_T][Hidden_State_T]float = [
 **Nim output:** `array[Hidden_State_T, array[Hidden_State_T, float]]` — stack-allocated, O(1) lookup.
 
 An enum is one ordinal key among several; `[10]T`, `[0..9]T`, `[Off]T`,
-`[bool]T` and `[char]T` are the same construct. All of them iterate their
+`[bool]T` and `[char]T` are the same construct (an enum whose values skip a number is the exception: it cannot index an array). All of them iterate their
 values in domain order on both backends, and `x in arr` tests values: the
 keys are the domain, known in advance.
 

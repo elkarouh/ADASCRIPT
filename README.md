@@ -612,8 +612,25 @@ type Digit_T is enum D0, D1, D2, D3, D4, D5, D6, D7, D8, D9
 
 Both `is` and `=` are accepted as the assignment keyword.
 
-**Python output:** `class Color(Enum): RED = auto(); GREEN = auto(); BLUE = auto()`
+**Python output:** `class Color(Enum): RED = 0; GREEN = 1; BLUE = 2` (members compare, by value)
 **Nim output:** `type Color = enum RED, GREEN, BLUE`
+
+A member can be given its value -- key codes, exit codes, protocol numbers:
+
+```python
+type Key_T   is enum DOWN = 258, UP = 259, LEFT = 260, RIGHT = 261
+type Level_T is enum:           # or one NAME = value to a line
+    LOW  = 1
+    MID  = 2
+    HIGH = 3
+```
+
+Either every member has a value or none does -- a mix is refused -- and the values must
+ascend: they give the order, so `ord(UP)` is `259`, `DOWN < UP`, and `case` and sets follow
+them. Values that follow one another (`1, 2, 3`) leave the enum as good as any other; values
+that skip a number still order, compare and `case`, but cannot index an array (`[E]T`), be
+iterated or be stepped with `'Next` and `'Prev`, which Nim refuses for them too, and
+Adascript says so on both backends. `parse_enum(Key_T, 259)` is `UP`, and 260 a failure.
 
 ### Subranges
 
@@ -1989,7 +2006,8 @@ caught, if it is, somewhere else. The built-ins are written this way --
 `shell:` and the `Path` operations that can fail (`mkdir`, `relative_to`,
 `read_text`, `read_lines`, `write_text`) return a `T | !ShellFailure_T` or
 `T | !PathFailure_T` -- as are `parse_float(s)`, `parse_int(s)` and
-`parse_enum(E, s)` (`... | !ParseFailure_T`), for a number or an enum member read from text,
+`parse_enum(E, s)` (`... | !ParseFailure_T`), for a number or an enum member read from text
+(`s` a name, or an integer read as the member's value),
 and `input(prompt)` and `stdin.readLine()`, a `str | !InputFailure_T` (the input ended) --
 and a failure that is dropped is refused. Exceptions
 are for what nobody expected; `readFile`, `writeFile` and `for line in
@@ -2897,7 +2915,8 @@ types (not plain integers), it emits Nim `|`; otherwise it emits `or`.
 ## Enum constructors
 
 Reading an enum member from text is `parse_enum(E, s)`, an `E |
-!ParseFailure_T`: the member named exactly `s`, or the failure, handled where
+!ParseFailure_T`: the member named exactly `s` -- or, given an integer, the member with
+that value -- or the failure, handled where
 it is called and no `try` involved:
 
 ```python

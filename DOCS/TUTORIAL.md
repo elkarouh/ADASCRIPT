@@ -840,7 +840,8 @@ backends. On integers the same signs stay bitwise. The snippets are in
 ### Enum-indexed arrays `[E]T`
 
 When all keys are enum members, use `[E]T` — this maps to a fixed-size array
-in Nim (no heap allocation, O(1) lookup):
+in Nim (no heap allocation, O(1) lookup). An enum whose values skip a number
+(`enum A = 0, B = 5`, §4) cannot be a key, and is refused:
 
 ```python
 type Priority is enum LOW, MED, HIGH
@@ -1301,7 +1302,7 @@ t = (1..i)'choose    # random int in 1..i
 
 ### Enum successor/predecessor
 
-`'Next` and `'Prev` step through enum members:
+`'Next` and `'Prev` step through enum members (not for an enum whose values skip a number, §4):
 
 ```python
 type Stage_T is enum STAGE1, STAGE2, STAGE3, END
