@@ -60,31 +60,35 @@ type Scan_T is record:
 const TAG: [Mode_T]str = [NORMAL: "n", INSERT: "i", REPLACE_ONE: "r",
                           REPLACE: "R", GOTO: "g", DELETE: "d", YANK: "y", COMMAND: ":"]
 
-# The codes decode() recognises. The control keys are the letter & 0x1f, and the
-# KEY_ ones are curses'; a terminal that reads bytes never sees them.
-const CTRL_Q: int = 17
-const CTRL_R: int = 18
-const CTRL_S: int = 19
-const ESC: int = 27
-const DEL: int = 127
-const BACKSPACE_KEY: int = 8
-const KEY_DOWN: int = 258                # curses.KEY_DOWN, UP, LEFT, RIGHT: a terminal
-const KEY_UP: int = 259                  # that reads bytes (vi_raw, vi_nim) sends these
-const KEY_LEFT: int = 260                # codes for the arrow keys too
-const KEY_RIGHT: int = 261
-const KEY_HOME: int = 262                # curses.KEY_HOME, END, NPAGE (page down), PPAGE
-const KEY_NPAGE: int = 338
-const KEY_PPAGE: int = 339
-const KEY_END: int = 360
-const KEY_BACKSPACE: int = 263           # curses.KEY_BACKSPACE
-const KEY_ENTER: int = 343               # curses.KEY_ENTER
-const KEY_RESIZE: int = 410              # curses.KEY_RESIZE
+# The codes a terminal sends for the keys decode() knows, each with its number: the control
+# keys are the letter & 0x1f, and the KEY_ ones are curses'. A terminal that reads bytes
+# (vi_raw, vi_nim) sends curses' codes too, for the keys curses would have given a name.
+type Code_T is enum:
+    BACKSPACE_KEY = 8          # ^H
+    LINE_FEED = 10
+    CARRIAGE_RETURN = 13
+    CTRL_Q = 17
+    CTRL_R = 18
+    CTRL_S = 19
+    ESC = 27
+    DEL = 127
+    KEY_DOWN = 258             # curses.KEY_DOWN, UP, LEFT, RIGHT
+    KEY_UP = 259
+    KEY_LEFT = 260
+    KEY_RIGHT = 261
+    KEY_HOME = 262
+    KEY_BACKSPACE = 263
+    KEY_NPAGE = 338            # page down
+    KEY_PPAGE = 339            # page up
+    KEY_ENTER = 343
+    KEY_END = 360
+    KEY_RESIZE = 410
 
-def decode(ch: int) -> Press_T:
-    """A code curses delivers, as what it means."""
-    case ch:
+def press_of(code: Code_T) -> Press_T:
+    """What a key the terminal has a name for means."""
+    case code:
         when ESC: Press_T(ESCAPE, "")
-        when 10 | 13 | KEY_ENTER: Press_T(ENTER, "")
+        when LINE_FEED | CARRIAGE_RETURN | KEY_ENTER: Press_T(ENTER, "")
         when BACKSPACE_KEY | DEL | KEY_BACKSPACE: Press_T(BACKSPACE, "")
         when CTRL_S: Press_T(SAVE, "")
         when CTRL_Q: Press_T(QUIT, "")
@@ -98,8 +102,15 @@ def decode(ch: int) -> Press_T:
         when KEY_END: Press_T(END, "")
         when KEY_PPAGE: Press_T(PAGEUP, "")
         when KEY_NPAGE: Press_T(PAGEDOWN, "")
-        when 32..126: Press_T(CHAR, str(chr(ch)))
-        when others: Press_T(OTHER, "")
+
+def decode(ch: int) -> Press_T:
+    """A code a terminal delivers, as what it means: a key it has a name for (Code_T), a
+    printable character, or nothing the editor knows. parse_enum says which of the first."""
+    let code: Code_T | !ParseFailure_T = parse_enum(Code_T, ch)
+    if code is ParseFailure_T:
+        if ch >= 32 and ch <= 126: return Press_T(CHAR, str(chr(ch)))
+        return Press_T(OTHER, "")
+    press_of(code)
 
 def tail(text: str, start: int) -> str:
     """TEXT from START on; empty past the end, where a Nim slice would raise."""

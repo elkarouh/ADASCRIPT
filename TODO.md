@@ -407,6 +407,14 @@ history of this file if the reasoning behind one of them is ever wanted.
 
 ---
 
+## ady2py: `case` on a variable that was a union
+
+After `if code is ParseFailure_T: return ...` the Nim backend knows `code` is the enum and
+`case code: when ESC:` compiles; ady2py still takes `code` for its declared
+`Code_T | !ParseFailure_T` and refuses the patterns ("`when Code_T.ESC` is no member of ...").
+The same in an `else:`. Passing `code` to a function that takes a `Code_T`, which both
+accept, is what vi_core does (`press_of`).
+
 ## Monad support improvements (high ROI)
 
 ### `T | !F` (value or failure) -- what is left

@@ -13,10 +13,7 @@ by waiting 25 ms), drawing the screen (one frame per key, written in one go), an
 the window size (read again at every key; there is no resize event).
 """
 nimport terminal, termios, posix, os
-from vi_core import (
-    Editor, Press_T, Key_T, decode, Look_T, CTRL_Q, ESC, KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_HOME,
-    KEY_END, KEY_PPAGE, KEY_NPAGE,
-)
+from vi_core import Editor, Press_T, Key_T, Look_T, Code_T, decode
 
 const NOTHING: int = -1                  # a key with no meaning here: a function key
 
@@ -52,7 +49,7 @@ def read_byte() -> int:
     where key_waiting cannot see it. The end of the input is ^Q."""
     var b: char
     let n: int = read(cint(0), addr(b), 1)
-    ord(b) if n == 1 else CTRL_Q
+    ord(b) if n == 1 else ord(CTRL_Q)
 
 var pushed: int = NOTHING                # a byte read ahead, to be the next key
 
@@ -69,12 +66,12 @@ def read_code() -> int:
         pushed = NOTHING
         return ahead
     let first: int = read_byte()
-    if first != ESC or not key_waiting(25):
+    if first != ord(ESC) or not key_waiting(25):
         return first
     let second: int = read_byte()
     if second != ord('[') and second != ord('O'):
         pushed = second
-        return ESC
+        return ord(ESC)
     var last: int = read_byte()
     var number: int = 0                                      # the first number of ESC [ n ... ~
     var counted: bool = False
@@ -87,22 +84,21 @@ def read_code() -> int:
             last = read_byte()
     let final: char = chr(last)
     case final:
-        when 'A': return KEY_UP
-        when 'B': return KEY_DOWN
-        when 'C': return KEY_RIGHT
-        when 'D': return KEY_LEFT
-        when 'H': return KEY_HOME
-        when 'F': return KEY_END
+        when 'A': ord(KEY_UP)
+        when 'B': ord(KEY_DOWN)
+        when 'C': ord(KEY_RIGHT)
+        when 'D': ord(KEY_LEFT)
+        when 'H': ord(KEY_HOME)
+        when 'F': ord(KEY_END)
+        when '~' if second != ord('['): NOTHING
         when '~':
-            if second == ord('['):
-                case number:
-                    when 1 | 7: return KEY_HOME
-                    when 4 | 8: return KEY_END
-                    when 5: return KEY_PPAGE
-                    when 6: return KEY_NPAGE
-                    when others: pass
-        when others: pass
-    NOTHING
+            case number:
+                when 1 | 7: ord(KEY_HOME)
+                when 4 | 8: ord(KEY_END)
+                when 5: ord(KEY_PPAGE)
+                when 6: ord(KEY_NPAGE)
+                when others: NOTHING
+        when others: NOTHING
 
 def clip(text: str, start: int, width: int) -> str:
     """WIDTH characters of TEXT from START, fewer where it ends: a slice past

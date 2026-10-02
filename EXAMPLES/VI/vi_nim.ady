@@ -12,10 +12,7 @@ illwill for a key, drawing the rows into its buffer, and giving ^S and ^Q to the
 program -- illwill leaves flow control on, so the terminal would take them.
 """
 nimport illwill, termios
-from vi_core import (
-    Editor, Press_T, Key_T, Look_T, decode, KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_HOME, KEY_END,
-    KEY_PPAGE, KEY_NPAGE,
-)
+from vi_core import Editor, Press_T, Key_T, Look_T, Code_T, decode
 
 # illwill takes a style as a Nim set, which Adascript's set literal is not: three of them.
 # nimraw: const STYLE_REVERSE = {styleReverse}
@@ -37,14 +34,14 @@ def read_code() -> int:
     while True:
         let key: Key = getKeyWithTimeout(200)
         case key:
-            when Key.Up: return KEY_UP
-            when Key.Down: return KEY_DOWN
-            when Key.Left: return KEY_LEFT
-            when Key.Right: return KEY_RIGHT
-            when Key.Home: return KEY_HOME
-            when Key.End: return KEY_END
-            when Key.PageUp: return KEY_PPAGE
-            when Key.PageDown: return KEY_NPAGE
+            when Key.Up: return ord(KEY_UP)
+            when Key.Down: return ord(KEY_DOWN)
+            when Key.Left: return ord(KEY_LEFT)
+            when Key.Right: return ord(KEY_RIGHT)
+            when Key.Home: return ord(KEY_HOME)
+            when Key.End: return ord(KEY_END)
+            when Key.PageUp: return ord(KEY_PPAGE)
+            when Key.PageDown: return ord(KEY_NPAGE)
             when Key.None: pass
             when others: return ord(key)
 

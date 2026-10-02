@@ -73,8 +73,12 @@ cursor's row -- and each terminal says what a look is made of:
 
 ## What the translation does with the Python
 
-- **The keyboard is decoded once.** `decode(ch)` turns a curses code into a
-  `Press_T` (a `Key_T` enum and the character), with a `case` over the codes. Every
+- **The keyboard is decoded once.** `decode(ch)` turns a code into a
+  `Press_T` (a `Key_T` enum and the character). The codes the terminals name -- the control
+  keys and curses' `KEY_*` -- are `Code_T`, an enum with their numbers (8, 10, 13, 27, 127,
+  258, ...), and `parse_enum(Code_T, ch)` says whether `ch` is one: if it is, `press_of`
+  is a `case` over every member (so a member left out is refused); if not, `ch` is a
+  printable character or nothing the editor knows. Every
   mode is then a `case` over what was pressed; the editor never compares a code.
   vip has one `elif ch == ord('i')` chain, and modes as one-letter strings
   (`mod in 'irRdoOyd'`).
