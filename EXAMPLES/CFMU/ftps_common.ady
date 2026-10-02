@@ -73,7 +73,7 @@ def filter_output(filename: str, start_date: str, end_date: str) -> bool:
   let base      : str = Path(filename).name
   let file_date : str = base[2:10]
   if file_date == /^\d+$/:
-    return start_date <= file_date and file_date <= end_date
+    return start_date <= file_date <= end_date
   elif start_date == "00000000" and end_date == "99999999":
     return True
   else:

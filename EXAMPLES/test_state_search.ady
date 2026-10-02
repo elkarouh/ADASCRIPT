@@ -144,9 +144,9 @@ def demo_missionaries():
             let (M_left, C_left, _) = next_state
             M_right: Missionary_Count_T = Missionary_Count_T'Last - M_left
             C_right: Cannibal_Count_T = Cannibal_Count_T'Last - C_left
-            if M_left > 0 and C_left > M_left:
+            if 0 < M_left < C_left:
                 return False
-            if M_right > 0 and C_right > M_right:
+            if 0 < M_right < C_right:
                 return False
             return True
 

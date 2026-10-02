@@ -17,7 +17,7 @@ type Plain_T is enum RED, GREEN, BLUE
 let k: Key_T = LEFT
 assert ord(k) == 260
 assert ord(DOWN) == 258 and ord(RIGHT) == 261
-assert DOWN < UP and UP < LEFT and LEFT <= LEFT and RIGHT > LEFT and RIGHT >= UP
+assert DOWN < UP < LEFT <= LEFT and RIGHT > LEFT and RIGHT >= UP
 assert not (UP < DOWN)
 assert Key_T'First == DOWN and Key_T'Last == RIGHT
 print k, ord(k), ("ordered" if DOWN < RIGHT else "unordered")
@@ -46,7 +46,7 @@ print total, low'Next
 # values with gaps still order, compare and case
 let g: Gap_T = SOME
 assert ord(g) == 5 and ord(MANY) == 6 and ord(NONE) == 0
-assert NONE < SOME and SOME < MANY
+assert NONE < SOME < MANY
 case g:
     when NONE: print "none"
     when SOME: print "some"
@@ -54,6 +54,6 @@ case g:
 
 # the same as before for a plain enum: members compare, in the order they are written
 let c: Plain_T = GREEN
-assert RED < c and c < BLUE and ord(BLUE) == 2
+assert RED < c < BLUE and ord(BLUE) == 2
 print c, ord(c)
 print "test_enum_values OK"

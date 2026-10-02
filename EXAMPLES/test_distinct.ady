@@ -35,7 +35,7 @@ v = v * 2.0
 print v                                       # 520.0
 print travelled(v, t)                         # 1040.0
 print f"{travelled(v, t):.1f} nm"             # 1040.0 nm
-assert v > 400.0 and v < cruise() + 100.0
+assert 400.0 < v < cruise() + 100.0
 assert v != cruise()
 print travelled(300.0, 0.5)                   # arguments too: 150.0
 print float(v) + 1.0                          # out, and a float again: 521.0

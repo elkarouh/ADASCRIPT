@@ -487,7 +487,7 @@ class Report:
         self.pending.append(raw)
 
     def add(self, hit: Hit, b: Blame):
-        if b.author_time > 0 and b.author_time < self.since:
+        if 0 < b.author_time < self.since:
             debug_log(f"Skipped {hit.file} (too old).")
             return
         let tickets: []str = b.summary == /SC-\d+/g

@@ -306,7 +306,7 @@ type Discount_T is float range 0.0..1.0
 ```
 
 In Nim output an assignment to a `Prob_T` variable is followed by an
-`assert p >= 0.0 and p <= 1.0` — probability bugs fail at the assignment
+`assert 0.0 <= p <= 1.0` — probability bugs fail at the assignment
 site, not three functions later. In Python output subranges are plain
 aliases; the checking costs you nothing on the prototyping target.
 

@@ -147,7 +147,7 @@ def search(values: {str}str) -> {str}str:
     var chosen: str = ""
     for s in squares:
         var n: int = len(values[s])
-        if n > 1 and n < min_len:
+        if 1 < n < min_len:
             min_len = n
             chosen = s
 

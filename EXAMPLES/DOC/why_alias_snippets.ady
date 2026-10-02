@@ -48,6 +48,6 @@ let rate: Rate_T = 0.92
 let euros: Euro_T = to_euro(price * quantity, rate)   # a count scales a price
 # let bad: Dollar_T = price + euros  -- refused: dollars plus euros
 # let sq: Dollar_T = price * price   -- refused: dollars squared
-assert euros > 55.0 and euros < 55.2
+assert 55.0 < euros < 55.2
 
 print "why alias snippets ok"
