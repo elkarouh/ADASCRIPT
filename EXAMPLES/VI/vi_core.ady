@@ -196,7 +196,7 @@ def scan(line: str, lang: Lang_T, state: str) -> Scan_T:
             sc.put(PLAIN, i)
             let quote: str = line[i:i + 1]
             let triple: str = quote + quote + quote
-            if lang != SHELL and line[i:i + 3] == triple:
+            if lang != SHELL and i + 3 <= n and line[i:i + 3] == triple:      # a slice past the end raises on Nim
                 let close: int = line.find(triple, i + 3)
                 if close < 0:
                     sc.put(STRING, n)

@@ -398,16 +398,16 @@ compile: lint-emitters check-quotes
 # -----------------------------------------------------------------------
 define vi_tests
 	@echo "=== vi, typed keys in a pty of its own: vi_py.ady (curses, Python), vi_nim.ady (illwill) and vi_raw.ady (Nim) ==="
-	@printf '  %-62s' "EXAMPLES/VI/vi_py.ady (69 key scripts, 8 screen checks)"; \
+	@printf '  %-62s' "EXAMPLES/VI/vi_py.ady (69 key scripts, 9 screen checks)"; \
 	    if ! $(PYTHON) -c 'import curses, pty' 2>/dev/null; then echo "SKIP (no curses or pty)"; else \
 	    $(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(EXDIR)/VI/vi_py.ady > $(TMPDIR)/ady_vi.py || { echo FAIL; exit 1; }; \
 	    $(PYTHON) $(EXDIR)/VI/test_vi.py $(TMPDIR)/ady_vi.py > $(TMPDIR)/ady_vi.out 2>&1 \
 	        && echo OK || { echo FAIL; grep -A2 FAIL $(TMPDIR)/ady_vi.out | head -20; exit 1; }; fi
-	@printf '  %-62s' "EXAMPLES/VI/vi_nim.ady (72 key scripts, 8 screen checks)"; \
+	@printf '  %-62s' "EXAMPLES/VI/vi_nim.ady (72 key scripts, 9 screen checks)"; \
 	    if ! $(PYTHON) -c 'import pty' 2>/dev/null; then echo "SKIP (no pty)"; else \
 	    $(PYTHON) $(EXDIR)/VI/test_vi.py $(EXDIR)/VI/vi_nim > $(TMPDIR)/ady_vi_nim.out 2>&1 \
 	        && echo OK || { echo FAIL; grep -A2 FAIL $(TMPDIR)/ady_vi_nim.out | head -20; exit 1; }; fi
-	@printf '  %-62s' "EXAMPLES/VI/vi_raw.ady (72 key scripts, 8 screen checks)"; \
+	@printf '  %-62s' "EXAMPLES/VI/vi_raw.ady (72 key scripts, 9 screen checks)"; \
 	    if ! $(PYTHON) -c 'import pty' 2>/dev/null; then echo "SKIP (no pty)"; else \
 	    $(PYTHON) $(EXDIR)/VI/test_vi.py $(EXDIR)/VI/vi_raw > $(TMPDIR)/ady_vi_raw.out 2>&1 \
 	        && echo OK || { echo FAIL; grep -A2 FAIL $(TMPDIR)/ady_vi_raw.out | head -20; exit 1; }; fi

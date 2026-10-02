@@ -38,6 +38,14 @@ check("x = Press_T(KEY)", PYTHON, "PPPPTTTTTTTPPPPP")
 check("a = 'x' + \"y#z\"  # w", PYTHON, "PPPPSSSPPPSSSSSPPCCC")
 check("s = \"a\\\"b\" + 1", PYTHON, "PPPPSSSSSSPPPN")
 check("s = \"open", PYTHON, "PPPPSSSSS")
+# a quote within the last two characters of a line: a slice past the end raises on Nim
+check("x = \"\"", PYTHON, "PPPPSS")
+check("x = ''", PYTHON, "PPPPSS")
+check("x = \"", PYTHON, "PPPPS")
+check("\"", PYTHON, "S")
+check("x = \"\"\"", PYTHON, "PPPPSSS")
+check("f(\"a\", \"\")", PYTHON, "PPSSSPPSSP")
+check("echo ''", SHELL, "PPPPPSS")
 # a triple-quoted string runs over lines, carrying its quotes
 let first: Scan_T = scan("x = \"\"\"doc", PYTHON, "")
 assert letters(first.looks) == "PPPPSSSSSS"

@@ -243,7 +243,7 @@ def drive(program, path, keys):
     os.waitpid(pid, 0)
 
 
-SOURCE = '# first\ndef f(): return "s" + 12\nclass Foo:\n'
+SOURCE = '# first\ndef f(): return "s" + 12\nclass Foo:\nz = ""\n'
 
 
 def screen(program, name, term="xterm"):
@@ -301,6 +301,7 @@ def screen_checks(program):
         ("cursor reversed", re.search(r"\x1b\[(?:[0-9;]*;)?7m" + SKIP + "d", coloured)),
         ("current line", re.search(r"48;5;236m", coloured) if kind != "illwill"
          else re.search(r"\x1b\[(?:[0-9;]*;)?4m" + SKIP + "ef", coloured)),
+        ("quote ends a line", "z = " in coloured and "z = " in plain),
         ("no language, no colour", not re.search(r"\x1b\[(?:[0-9;]*;)?3[2-6]m", plain)),
     ]
     failed = 0

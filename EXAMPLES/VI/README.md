@@ -140,7 +140,7 @@ way round) or assigning to a slice.
 `test_vi.py` runs key scripts in a pty -- 69 on curses, 72 on the Nim editors, which are
 also held to the `ESC [` forms of the arrows, Home and End -- and compares the file each
 leaves. Undo is one step per change, as in vi; typing in replace mode past the end of a
-line makes the line grow. Eight screen checks per terminal read what it writes to its
+line makes the line grow. Nine screen checks per terminal read what it writes to its
 pty: colour before a keyword, a string, a number, a type name and a comment, the
 cursor's character reversed, the cursor's line marked, and no colour in a `.txt`.
 `EXAMPLES/test_vi_highlight.ady` tests the scan itself, on both backends: one letter for
