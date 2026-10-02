@@ -389,10 +389,7 @@ class Interpreter:
     def builtin(self, name: str, args: []Val_T) -> Val_T:
         case name:
             when "+":
-                var acc: float = 0.0
-                for a in args:
-                    acc += a.num
-                VNum(acc)
+                VNum(sum(a.num for a in args))
             when "-":
                 if len(args) == 1:
                     return VNum(-args[0].num)

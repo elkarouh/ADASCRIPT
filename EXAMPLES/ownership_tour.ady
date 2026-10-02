@@ -30,10 +30,7 @@ def load(id: Natural, n: Natural) -> Frame_T:
 # The caller keeps ownership. The promise is not to store the value
 # anywhere, not to hand it on to something that will, and not to mutate it.
 def energy(f: lent Frame_T) -> Natural:
-    var total: Natural = 0
-    for v in f.samples:
-        total += v
-    total
+    sum(v for v in f.samples)
 
 
 def describe(f: lent Frame_T) -> str:

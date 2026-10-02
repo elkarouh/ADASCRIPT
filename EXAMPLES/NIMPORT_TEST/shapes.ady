@@ -20,7 +20,4 @@ class Canvas:
         self.shapes.append(shape)
 
     def total(self) -> float:
-        var sum: float = 0.0
-        for s in self.shapes:
-            sum += s.size
-        sum
+        sum(s.size for s in self.shapes)

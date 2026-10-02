@@ -63,10 +63,7 @@ class Tallies:
         self.items.append(Tally(what, count, first))
 
     def total(self) -> int:
-        var sum: int = 0
-        for t in self.items:
-            sum += t.count
-        sum
+        sum(t.count for t in self.items)
 
     def top(self, n: int) -> []Tally:
         """The N most frequent kinds, most frequent first; of equal counts,

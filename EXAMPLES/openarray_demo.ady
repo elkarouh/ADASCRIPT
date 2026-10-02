@@ -18,10 +18,7 @@ not in variable declarations.
 # ── basic statistics ──────────────────────────────────────────────
 
 def sum_f(xs: [*]float) -> float:
-    var s: float = 0.0
-    for x in xs:
-        s = s + x
-    return s
+    return sum(x for x in xs)
 
 def mean(xs: [*]float) -> float:
     return sum_f(xs) / float(len(xs))
@@ -42,10 +39,7 @@ def max_val(xs: [*]float) -> float:
 
 def dot(a: [*]float, b: [*]float) -> float:
     """Dot product — both arguments may be seq or fixed array, independently."""
-    var s: float = 0.0
-    for i in 0..<len(a):
-        s = s + a[i] * b[i]
-    return s
+    return sum(a[i] * b[i] for i in 0 ..< len(a))
 
 
 # ── call with a seq ([]float) ─────────────────────────────────────
