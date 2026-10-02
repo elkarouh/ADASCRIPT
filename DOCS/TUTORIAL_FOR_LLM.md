@@ -579,6 +579,71 @@ case x.items:
 
 Rules: `TypeName(field=Value)` with uppercase → equality check; lowercase → `let` binding. `*rest` captures tail. `[]` matches empty. `_` or `others` → catch-all.
 
+### Style: `case` over `if` chains, expressions over loops
+Write the shorter form the language has. The examples are written this way, and
+the transpiler is tested on it.
+
+**A chain of `if`/`elif` on one value is a `case`.** A `case` branch with a value
+is the function's result when it is the last statement (no `return`), a `when`
+takes a regex, a guard (`when X if cond:`) or an enum, and an enum `case` with no
+`when others` is checked for completeness.
+```adascript
+# discouraged
+if name.endswith(".ady") or name.endswith(".py"):
+    return PYTHON
+elif name.endswith(".nim"):
+    return NIM
+else:
+    return PLAIN
+
+# preferred
+case name:
+    when /\.(ady|py)$/: PYTHON
+    when /\.nim$/:      NIM
+    when others:        PLAIN
+```
+The same goes for a long run of `==` tests on one name, for a `word == "a" or
+word == "b" or ...` (use `word in KEYWORDS` against a named constant set) and for
+key codes (an `enum` with values, then `case` over it).
+
+**A range test is one chained comparison**, not two joined by `and`, and its
+negation is `not` over the chain:
+```adascript
+# discouraged
+if ch >= 32 and ch <= 126: ...
+if day < 1 or day > days_in_month: ...
+
+# preferred
+if 32 <= ch <= 126: ...
+if not 1 <= day <= days_in_month: ...
+```
+
+**A loop that only accumulates or searches is a comprehension**: `sum(...)`,
+`any(...)`, `all(...)` over a generator, or a list comprehension for a new list.
+A variable that is only there to be added to is a sign.
+```adascript
+# discouraged
+var total: float = 0.0
+for i in 0 ..< len(a):
+    total = total + a[i] * b[i]
+return total
+
+var found: bool = False
+for c in word:
+    if 97 <= ord(c) <= 122:
+        found = True
+
+# preferred
+return sum(a[i] * b[i] for i in 0 ..< len(a))
+return any(97 <= ord(c) <= 122 for c in word)
+```
+Index with the wrap-around in the expression (`tour[(i + 1) % n]`) instead of
+special-casing the last element after the loop.
+
+Keep the loop where the body does more than produce one value (it changes
+something, prints, or stops early for a reason that is not a plain `any`/`all`),
+and where the loop is what an example is showing.
+
 ---
 
 ## Functions
