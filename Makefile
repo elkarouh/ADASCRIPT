@@ -640,6 +640,9 @@ test: compile
 	@printf 'import ady_refuse_mod\ndef helper() -> int:\n    return 3\nprint ady_refuse_mod.helper()\n' > $(TMPDIR)/ady_refuse_24.ady
 	@# a rename onto a name the file already gives a meaning of its own
 	@printf 'from ady_refuse_mod import helper as h\nlet h: int = 2\nprint h\n' > $(TMPDIR)/ady_refuse_25.ady
+	@# a rename takes the old name away, as in Python
+	@printf 'from ady_refuse_mod import helper as h\nprint helper()\n' > $(TMPDIR)/ady_refuse_26.ady
+	@printf 'import ady_refuse_mod as m\nprint ady_refuse_mod.helper()\n' > $(TMPDIR)/ady_refuse_27.ady
 	@for tr in TO_NIM/ady2nim.py TO_PYTHON/ady2py.py; do \
 	    for c in "1:members no one can tell apart:cannot be told apart" \
 	             "2:a dropped failure:drops a failure" \
@@ -665,7 +668,9 @@ test: compile
 	             "22:a name left out of a from-list:is not imported from" \
 	             "23:a bare name after import M:write ady_refuse_mod.helper" \
 	             "24:M.name beside the file's own name:cannot be told from" \
-	             "25:a rename onto the file's own name:gives 'h' a meaning of its own"; do \
+	             "25:a rename onto the file's own name:gives 'h' a meaning of its own" \
+	             "26:the old name after from M import A as B:is imported from ady_refuse_mod as" \
+	             "27:the module after import M as N:is imported as 'm'"; do \
 	        n=$${c%%:*}; rest=$${c#*:}; what=$${rest%%:*}; want=$${rest#*:}; \
 	        printf '  %-42s' "$$what ($$(basename $$tr .py))"; \
 	        if $(PYTHON) $(CURDIR)/$$tr $(TMPDIR)/ady_refuse_$$n.ady > $(TMPDIR)/ady_refuse.out 2>&1; then \

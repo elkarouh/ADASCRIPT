@@ -42,6 +42,7 @@ def normalize_imports(code, is_ady):
     `nimport X` of an .ady module (it is `import X`)."""
     text = _blank(code)
     edits, renames = [], []
+    plain_mods, plain_names, import_spans = set(), {}, []
 
     def line(pos):
         return text.count("\n", 0, pos) + 1
@@ -60,16 +61,22 @@ def normalize_imports(code, is_ady):
                 refuse_plain(mod, m.start(), f"import {mod}")
             if alias and alias.strip() != mod.rsplit("/", 1)[-1]:
                 renames.append(("qualifier", alias.strip(), mod.rsplit("/", 1)[-1], m.start()))
+            else:
+                plain_mods.add(mod)
             adys.append(mod)
+        import_spans.append((m.start(), m.end()))
         edits.append((m.start("kw"), m.end("names"), f"nimport {', '.join(adys)}"))
     for m in _FROM_IMPORT.finditer(text):
         mod = m.group("mod")
         if is_ady(mod):
             edits.append((m.start("kw"), m.end("kw"), "nimport"))
             rest = code[m.start("rest"):m.end("rest")]
-            for old, new in re.findall(r"(\w+)[ \t]+as[ \t]+(\w+)", rest):
-                if old != new:
-                    renames.append(("name", new, old, m.start()))
+            import_spans.append((m.start(), m.end()))
+            for old, new in re.findall(r"(\w+)(?:[ \t]+as[ \t]+(\w+))?", text[m.start("rest"):m.end("rest")]):
+                if new and new != old:
+                    renames.append(("name", new, old, m.start(), mod))
+                elif old != "as":
+                    plain_names.setdefault(mod, set()).add(old)
             edits.append((m.start("rest"), m.end("rest"), re.sub(r"[ \t]+as[ \t]+\w+", "", rest)))
         elif mod != _SHIM:
             refuse_plain(mod, m.start(), f"from {mod} import")
@@ -82,10 +89,29 @@ def normalize_imports(code, is_ady):
         if is_ady(m.group("mod")):
             raise SyntaxError(f"line {line(m.start())}: '{m.group('mod')}' is an .ady module: write "
                               f"`from {m.group('mod')} import ...`, `nimport` is for Nim modules")
+    # what a rename takes away, Python does not give: `from M import A as B` binds B and
+    # not A, `import M as N` binds N and not M
+    def outside_imports(pattern):
+        return next((u for u in re.finditer(pattern, text)
+                     if not any(a <= u.start() < b for a, b in import_spans)), None)
+
+    for r in renames:
+        kind, new, old, pos = r[:4]
+        if kind == "name":
+            if old in plain_names.get(r[4], ()) or _binds(text, old):
+                continue
+            use = outside_imports(rf'(?<![\w.$]){re.escape(old)}\b')
+            if use:
+                raise SyntaxError(f"line {line(use.start())}: '{old}' is imported from {r[4]} as '{new}': "
+                                  f"write {new}")
+        elif old not in {m.rsplit("/", 1)[-1] for m in plain_mods} and not _binds(text, old):
+            use = outside_imports(rf'(?<![\w.$]){re.escape(old)}(?=\.\w)')
+            if use:
+                raise SyntaxError(f"line {line(use.start())}: '{old}' is imported as '{new}': write {new}.name")
     for a, b, new in sorted(edits, reverse=True):
         code = code[:a] + new + code[b:]
     # a rename is a rewrite of the new name to the old one, where the file means the import
-    for kind, new, old, pos in renames:
+    for kind, new, old, pos, *_ in renames:
         text = _blank(code)
         if kind == "name" and _binds(text, new):
             raise SyntaxError(f"line {line(pos)}: '{new}' is renamed from {old} but the file gives "

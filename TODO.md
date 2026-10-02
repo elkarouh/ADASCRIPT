@@ -636,7 +636,6 @@ Known, and not done:
 - One namespace: a name defined in two modules is the later definition.
 - A parse error's line number is a line of the merged text.
 - The libraries bundled with ady2nim (`TO_NIM/STDLIB/*.ady`) are not merged.
-- A renamed import (`from M import A as B`) is written back to `A` before the backends see it, so a bare `A` is still accepted next to it (Python would not know it).
 - `nimport math` then an unqualified `sqrt` is Nim's `math`; on Python it is a
   NameError (EXAMPLES/PROJECT is that program).
 
