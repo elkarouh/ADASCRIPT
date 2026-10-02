@@ -564,7 +564,30 @@ def ordered_map_key(idx_node):
         return False
     from hek_parsec import ParserState
     decls = getattr(ParserState, "ady_type_decls", None) or {}
+    if _is_gapped_enum(name, decls):
+        from ady_enums import refuse
+        refuse(name, "used as an array index")
     return bool(_name_is_ordered_map_key(name, decls, frozenset()))
+
+
+def _is_gapped_enum(name, decls):
+    """Is NAME an enum -- or another name for one -- whose values skip a number?"""
+    from hek_parsec import ParserState
+    from ady_enums import gaps_in_text
+    for _ in range(8):
+        rhs = decls.get(name)
+        if not isinstance(rhs, str):
+            info = getattr(ParserState, "tick_types", {}).get(name)
+            return bool(info and info.get("gapped"))
+        rhs = rhs.strip()
+        if rhs.startswith("distinct "):
+            rhs = rhs[len("distinct "):].strip()
+        if rhs.startswith("enum"):
+            return gaps_in_text(rhs)
+        if not rhs.isidentifier():
+            return False
+        name = rhs
+    return False
 
 
 # --- distinct types ----------------------------------------------------------

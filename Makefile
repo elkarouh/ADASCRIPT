@@ -109,6 +109,7 @@ STANDALONE := \
     test_nimport_qualified.ady \
     test_vi_highlight.ady \
     test_and_or_mix.ady \
+    test_enum_values.ady \
     test_shell_throughput.ady \
     test_shell_braces.ady \
     test_param_mutation.ady \
@@ -265,7 +266,7 @@ BOTH_BACKENDS_COMPARED := test_do_block test_result test_optional_spelling \
     test_ordered_map test_function_type test_distinct test_units test_money \
     test_subrange_array test_variant_literal test_set_operators \
     test_path_relative_to test_path_io test_parse trcks_example \
-    test_nimport_modules test_nimport_qualified test_vi_highlight test_and_or_mix
+    test_nimport_modules test_nimport_qualified test_vi_highlight test_and_or_mix test_enum_values
 
 ALL_COMPILE := \
     $(LIBS) \
@@ -645,6 +646,14 @@ test: compile
 	@# a rename takes the old name away, as in Python
 	@printf 'from ady_refuse_mod import helper as h\nprint helper()\n' > $(TMPDIR)/ady_refuse_26.ady
 	@printf 'import ady_refuse_mod as m\nprint ady_refuse_mod.helper()\n' > $(TMPDIR)/ady_refuse_27.ady
+	@# enum values: all or none, ascending; gaps cannot index, iterate or step
+	@printf 'type K is enum A = 1, B, C = 3\nprint 1\n' > $(TMPDIR)/ady_refuse_28.ady
+	@printf 'type K is enum A = 5, B = 1\nprint 1\n' > $(TMPDIR)/ady_refuse_29.ady
+	@printf 'type K is enum A = 1, B = 1\nprint 1\n' > $(TMPDIR)/ady_refuse_30.ady
+	@printf 'type K is enum:\n    A = 0\n    B\nprint 1\n' > $(TMPDIR)/ady_refuse_31.ady
+	@printf 'type K is enum A = 0, B = 2\nvar t: [K]int\nprint 1\n' > $(TMPDIR)/ady_refuse_32.ady
+	@printf 'type K is enum A = 0, B = 2\nfor x in K:\n    print x\n' > $(TMPDIR)/ady_refuse_33.ady
+	@printf "type K is enum A = 0, B = 2\nlet v: K = A\nprint v'Next\n" > $(TMPDIR)/ady_refuse_34.ady
 	@for tr in TO_NIM/ady2nim.py TO_PYTHON/ady2py.py; do \
 	    for c in "1:members no one can tell apart:cannot be told apart" \
 	             "2:a dropped failure:drops a failure" \
@@ -672,7 +681,14 @@ test: compile
 	             "24:M.name beside the file's own name:cannot be told from" \
 	             "25:a rename onto the file's own name:gives 'h' a meaning of its own" \
 	             "26:the old name after from M import A as B:is imported from ady_refuse_mod as" \
-	             "27:the module after import M as N:is imported as 'm'"; do \
+	             "27:the module after import M as N:is imported as 'm'" \
+	             "28:a mix of valued and bare members:either every member has a value or none does" \
+	             "29:values that descend:they must ascend" \
+	             "30:a repeated value:they must ascend" \
+	             "31:a mix, in the block form:either every member has a value or none does" \
+	             "32:a gapped enum as an array index:cannot be used as an array index" \
+	             "33:a gapped enum iterated:cannot be iterated" \
+	             "34:'Next of a gapped enum:cannot be stepped"; do \
 	        n=$${c%%:*}; rest=$${c#*:}; what=$${rest%%:*}; want=$${rest#*:}; \
 	        printf '  %-42s' "$$what ($$(basename $$tr .py))"; \
 	        if $(PYTHON) $(CURDIR)/$$tr $(TMPDIR)/ady_refuse_$$n.ady > $(TMPDIR)/ady_refuse.out 2>&1; then \

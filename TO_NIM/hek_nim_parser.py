@@ -3771,15 +3771,16 @@ def _nim_safe_ident(name):
     return name
 
 def _enum_block_members_nim(rhs):
-    """Extract member names from an enum_block_def node (block enum form),
-    prefixing bare integer members with 'v' as plain enum_def does."""
+    """[(name, value-or-None)] of an enum_block_def node (block enum form), prefixing
+    bare integer members with 'v' as plain enum_def does."""
+    from ady_enums import member
     members = []
     for child in getattr(rhs, "nodes", []) or []:
         if type(child).__name__ == "Several_Times":
             for seq in child.nodes:
                 if getattr(seq, "nodes", None):
-                    m = str(seq.nodes[0].node)
-                    members.append(f"v{m}" if m.isdigit() else _nim_safe_ident(m))
+                    m, value = member(seq.nodes[0])
+                    members.append((f"v{m}" if m.isdigit() else _nim_safe_ident(m), value))
     return members
 
 
@@ -3826,13 +3827,16 @@ def to_nim(self, indent=0):
     _exp = "*" if getattr(ParserState, 'export_symbols', False) and indent == 0 else ""
     if keyword == "enum":
         # Block enum form: 'type T is enum:' with one member per line.
-        members = _enum_block_members_nim(rhs)
+        from ady_enums import checked, has_gaps
+        pairs = checked(name, _enum_block_members_nim(rhs))
+        members = [n for n, _ in pairs]
         ParserState.symbol_table.add(name, "enum", "type")
         if members:
-            ParserState.tick_types[name] = {"First": members[0], "Last": members[-1], "members": members}
+            ParserState.tick_types[name] = {"First": members[0], "Last": members[-1], "members": members,
+                                            "gapped": has_gaps(pairs)}
             for m in members:
                 ParserState.symbol_table.add(m, name, "let")
-        body = "enum " + ", ".join(members)
+        body = "enum " + ", ".join(n if v is None else f"{n} = {v}" for n, v in pairs)
         return f"{_ind(indent)}type {name}{_exp}{params} = {body}"
     if variant_case_node and discrim_name:
         # Discriminated record -> Nim object with case

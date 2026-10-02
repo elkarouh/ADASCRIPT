@@ -625,6 +625,27 @@ A *container* of enum values is the exception: Python formats elements with
 `repr`, so printing a `[]Door_T` still shows `[<Door_T.Door1: 0>, …]`
 against Nim's `@[Door1, …]`. That one is in `TODO.md`.
 
+### Members with values
+
+A member can be given its value, for the numbers a program has to match -- key codes,
+exit codes, protocol numbers:
+
+```python
+type Key_T   is enum DOWN = 258, UP = 259, LEFT = 260, RIGHT = 261
+type Level_T is enum:
+    LOW  = 1
+    MID  = 2
+    HIGH = 3
+```
+
+Either every member has a value or none does; a mix is refused, so a reader never has to
+work out what an unwritten one is. The values give the order and must ascend: `ord(UP)` is
+`259`, `DOWN < UP`, and a `case` or a set follows them. `Key_T(259)` is `UP`, the integer read
+as the value. Values that follow one another (`1, 2, 3`) leave the enum as good as any
+other. Values that skip a number (`0, 5, 6`) still order, compare and `case`, but cannot
+index an array (`[E]T`), be iterated (`for x in E`) or be stepped with `'Next` and `'Prev`,
+which Nim refuses for them too; Adascript says so on both backends.
+
 Enums integrate tightly with arrays, case statements, and tick attributes —
 see those sections below.
 

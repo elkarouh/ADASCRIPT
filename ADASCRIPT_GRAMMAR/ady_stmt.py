@@ -136,6 +136,7 @@ pyimport_stmt = fw("pyimport_stmt")
 print_stmt = fw("print_stmt")
 print_bare = fw("print_bare")
 enum_def = fw("enum_def")
+enum_valued = fw("enum_valued")
 subrange_def = fw("subrange_def")
 subrange_array_type = fw("subrange_array_type")
 tuple_def = fw("tuple_def")
@@ -715,7 +716,10 @@ print_bare = ikw("print") + ~~(NEWLINE | SEMICOLON)
 # type_alias_params: [T] or [T, U] etc. (generic type parameters)
 type_alias_params = LBRACKET + IDENTIFIER + (COMMA + IDENTIFIER)[:] + RBRACKET
 # enum_def: enum IDENT, IDENT, ...
-enum_member = IDENTIFIER | INTEGER
+# enum_valued: NAME = INTEGER, a member with its value. Every member has one or none
+# does; ady_enums.checked says so where the enum is emitted.
+enum_valued = IDENTIFIER + V_EQUAL + INTEGER
+enum_member = enum_valued | IDENTIFIER | INTEGER
 enum_def = ikw("enum") + enum_member + (COMMA + enum_member)[:] + COMMA[:]
 # subrange_def: INT '..' INT  or  INT '..<' INT  or  IDENT±INT '..' IDENT±INT
 subrange_bound = (IDENTIFIER + (V_PLUS | V_MINUS) + INTEGER) | INTEGER | IDENTIFIER

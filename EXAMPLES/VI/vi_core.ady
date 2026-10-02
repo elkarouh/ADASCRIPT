@@ -39,9 +39,9 @@ type Snapshot_T is record:
     col: int
 
 # How a character is shown. The first six are what the text is made of; CURSOR and BAR
-# are the character the cursor is on, in normal mode and in insert or replace mode.
-# The order matters to vi_py, which takes the position of KEYWORD to TYPE as a colour pair.
-type Look_T is enum PLAIN, KEYWORD, STRING, COMMENT, NUMBER, TYPE, CURSOR, BAR
+# are the character the cursor is on, in normal mode and in insert or replace mode. The
+# value of KEYWORD to TYPE is the colour pair vi_py draws it in (PLAIN has none).
+type Look_T is enum PLAIN = 0, KEYWORD = 1, STRING = 2, COMMENT = 3, NUMBER = 4, TYPE = 5, CURSOR = 6, BAR = 7
 
 # The languages the text can be coloured as, by the file's name.
 type Lang_T is enum NO_LANG, PYTHON, NIM, SHELL

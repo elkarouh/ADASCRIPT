@@ -1,0 +1,59 @@
+#!/usr/bin/env ady2nim
+"""Test: enum members with values, on both backends. Either every member has a value or
+none does, and the values give the order: `ord`, `<` and `case` follow them. Values that
+follow one another (1, 2, 3) leave the enum as good as any other; values that skip a number
+(0, 5, 6) cannot index an array, be iterated or be stepped, and are refused (see the
+Makefile). The output is compared between the backends.
+"""
+type Key_T is enum DOWN = 258, UP = 259, LEFT = 260, RIGHT = 261
+type Level_T is enum LOW = 1, MID = 2, HIGH = 3
+type Gap_T is enum:
+    NONE = 0
+    SOME = 5
+    MANY = 6
+type Plain_T is enum RED, GREEN, BLUE
+
+# ord is the value, and the values give the order
+let k: Key_T = LEFT
+assert ord(k) == 260
+assert ord(DOWN) == 258 and ord(RIGHT) == 261
+assert DOWN < UP and UP < LEFT and LEFT <= LEFT and RIGHT > LEFT and RIGHT >= UP
+assert not (UP < DOWN)
+assert Key_T'First == DOWN and Key_T'Last == RIGHT
+print k, ord(k), ("ordered" if DOWN < RIGHT else "unordered")
+
+# case over a valued enum covers every member
+def name_of(key: Key_T) -> str:
+    case key:
+        when DOWN: "down"
+        when UP: "up"
+        when LEFT: "left"
+        when RIGHT: "right"
+assert name_of(UP) == "up" and name_of(RIGHT) == "right"
+
+# consecutive values: an array indexed by it, iteration, Next and Prev
+var seen: [Level_T]int
+seen[MID] = 7
+assert seen[LOW] == 0 and seen[MID] == 7 and seen[HIGH] == 0
+var total: int = 0
+for level in Level_T:
+    total += ord(level)
+assert total == 6
+let low: Level_T = LOW
+assert low'Next == MID and HIGH'Prev == MID
+print total, low'Next
+
+# values with gaps still order, compare and case
+let g: Gap_T = SOME
+assert ord(g) == 5 and ord(MANY) == 6 and ord(NONE) == 0
+assert NONE < SOME and SOME < MANY
+case g:
+    when NONE: print "none"
+    when SOME: print "some"
+    when MANY: print "many"
+
+# the same as before for a plain enum: members compare, in the order they are written
+let c: Plain_T = GREEN
+assert RED < c and c < BLUE and ord(BLUE) == 2
+print c, ord(c)
+print "test_enum_values OK"

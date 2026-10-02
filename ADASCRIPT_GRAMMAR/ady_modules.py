@@ -194,9 +194,11 @@ def exported(source):
     for m in re.finditer(r'^type[ \t]+(\w+)', text, re.MULTILINE):
         out[m.group(1)] = m.group(1)
     # an enum's members: `type K is enum A, B, C` or the block form
-    for m in re.finditer(r'^type[ \t]+(\w+)[^\n]*?\bis[ \t]+enum[ \t]*:?[ \t]*(?P<rest>[^\n]*)((?:\n[ \t]+\w+[ \t]*(?:,[ \t]*\w+)*[ \t]*(?=\n|$))*)',
+    for m in re.finditer(r'^type[ \t]+(\w+)[^\n]*?\bis[ \t]+enum[ \t]*:?[ \t]*(?P<rest>[^\n]*)((?:\n[ \t]+\w+(?:[ \t]*=[ \t]*\d+)?[ \t]*(?:,[ \t]*\w+(?:[ \t]*=[ \t]*\d+)?)*[ \t]*(?=\n|$))*)',
                          text, re.MULTILINE):
-        names = re.findall(r"\w+", m.group("rest")) + re.findall(r"\w+", m.group(3) or "")
+        # a member's value (`A = 1`) is not a member
+        listed = re.sub(r"=[ \t]*\d+", " ", m.group("rest") + " " + (m.group(3) or ""))
+        names = re.findall(r"\w+", listed)
         for member in names:
             out.setdefault(member, m.group(1))
     return out

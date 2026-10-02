@@ -2735,6 +2735,9 @@ def _emit_tick_attr(base, field, attr):
     expr = base + ("." + field if field else "")
     if attr == "Image":
         return f"$({expr})"
+    if attr in ("Next", "Prev"):
+        from ady_enums import refuse_if_gapped_value
+        refuse_if_gapped_value(expr, "stepped with 'Next and 'Prev")
     if attr == "Next":
         return expr + ".succ"
     if attr == "Prev":
@@ -5475,6 +5478,8 @@ def ordinal_domain_nim(iterable):
     range they are.  An enum is left alone -- Nim already iterates it.
     """
     _tick = getattr(ParserState, 'tick_types', {}).get(iterable, {})
+    from ady_enums import refuse_if_gapped_type
+    refuse_if_gapped_type(iterable, _tick, "iterated")
     if _tick and 'First' in _tick and 'members' not in _tick and not _tick.get('is_float_range'):
         return f"{iterable}.low..{iterable}.high"
     if iterable in ("bool", "char") and not ParserState.symbol_table.lookup(iterable):

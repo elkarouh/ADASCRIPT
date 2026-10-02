@@ -2070,19 +2070,29 @@ def to_nim(self):
 
 
 # --- type alias ---
-@method(enum_def)
-def to_nim(self):
-    """enum_def: 'enum' enum_member (',' enum_member)*"""
-    raw = str(self.nodes[0].node)
-    parts = [f"v{raw}" if raw.isdigit() else raw]
-    for node in self.nodes[1:]:
+def _enum_members_nim(rhs):
+    """[(name, value-or-None)] of an enum_def node, in order; a bare integer member is
+    written vN, as Nim wants an identifier."""
+    from ady_enums import member
+    found = [member(rhs.nodes[0])]
+    for node in rhs.nodes[1:]:
         if not hasattr(node, 'nodes') or not node.nodes:
             continue
         for seq in node.nodes:
             if hasattr(seq, 'nodes') and len(seq.nodes) >= 1:
-                m = str(seq.nodes[0].node)
-                parts.append(f"v{m}" if m.isdigit() else m)
-    return "enum " + ", ".join(parts)
+                found.append(member(seq.nodes[0]))
+    return [(f"v{n}" if n.isdigit() else n, v) for n, v in found]
+
+
+def _enum_body_nim(members):
+    """`enum A, B` or `enum A = 1, B = 5` for MEMBERS."""
+    return "enum " + ", ".join(n if v is None else f"{n} = {v}" for n, v in members)
+
+
+@method(enum_def)
+def to_nim(self):
+    """enum_def: 'enum' enum_member (',' enum_member)*"""
+    return _enum_body_nim(_enum_members_nim(self))
 
 
 def _subrange_bound_str(node):
@@ -2250,16 +2260,12 @@ def to_nim(self, indent=0):
         ParserState.symbol_table.add(name, "enum", "type")
         # Register First/Last for tick attributes
         # Extract members: first node is first member, rest are in Several_Times groups
-        raw0 = str(rhs.nodes[0].node)
-        members = [f"v{raw0}" if raw0.isdigit() else raw0]
-        for node in rhs.nodes[1:]:
-            if hasattr(node, "nodes") and node.nodes:
-                for seq in node.nodes:
-                    if hasattr(seq, "nodes") and len(seq.nodes) >= 1:
-                        m = str(seq.nodes[0].node)
-                        members.append(f"v{m}" if m.isdigit() else m)
+        from ady_enums import checked, has_gaps
+        pairs = checked(name, _enum_members_nim(rhs))
+        members = [n for n, _ in pairs]
         if members:
-            ParserState.tick_types[name] = {"First": members[0], "Last": members[-1], "members": members}
+            ParserState.tick_types[name] = {"First": members[0], "Last": members[-1], "members": members,
+                                            "gapped": has_gaps(pairs)}
             # Register each member in the symbol table so set literals like
             # {member1, member2} can infer the ordinal element type.
             for m in members:
@@ -2721,4 +2727,5 @@ if __name__ == "__main__":
     print("=" * 60)
     print(f"Results: {nim_passed} passed, {nim_failed} failed")
     print()
+
 

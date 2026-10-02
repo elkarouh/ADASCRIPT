@@ -805,6 +805,9 @@ def _tick_to_py(expr, attr):
         return f"range(len({expr}))"
     if attr == "Image":
         return f"({expr}).name"
+    if attr in ("Next", "Prev"):
+        from ady_enums import refuse_if_gapped_value
+        refuse_if_gapped_value(expr, "stepped with 'Next and 'Prev")
     if attr == "Next":
         return f"type({expr})({expr}.value + 1)"
     if attr == "Prev":

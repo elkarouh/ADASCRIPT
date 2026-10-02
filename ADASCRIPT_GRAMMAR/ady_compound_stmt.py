@@ -366,7 +366,7 @@ record_def = literal("record") + COLON + block
 #       RED      # warm
 #       GREEN
 #       BLUE
-enum_block_member = (IDENTIFIER | INTEGER) + NEWLINE
+enum_block_member = (enum_valued | IDENTIFIER | INTEGER) + NEWLINE
 enum_block_def = literal("enum") + COLON + NEWLINE + INDENT + NL[:] + (enum_block_member + NL[:])[1:] + DEDENT
 # --- Discriminated (variant) records ---
 # Discriminant parameter: (Kind : Shape_Kind)

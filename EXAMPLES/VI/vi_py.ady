@@ -10,7 +10,7 @@ vi_core in where it is imported.
 pyimport curses, os, time
 from vi_core import Editor, Press_T, Key_T, Look_T, decode
 
-# A look's colour pair is its position in Look_T, from KEYWORD (1) to TYPE (5); the pair
+# A look's colour pair is its value in Look_T, from KEYWORD (1) to TYPE (5); the pair
 # 10 more is the same on the line the cursor is on. PLAIN (0) has none, and CURSOR and
 # BAR are drawn by attribute alone.
 

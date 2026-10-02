@@ -1110,29 +1110,43 @@ def to_py(self):
 @method(enum_def)
 def to_py(self):
     """enum_def: 'enum' enum_member (',' enum_member)* ','?"""
-    parts = [str(self.nodes[0].node)]
+    from ady_enums import member
+    found = [member(self.nodes[0])]
     for node in self.nodes[1:]:
         if not hasattr(node, 'nodes') or not node.nodes:
             continue
         for seq in node.nodes:
             if hasattr(seq, 'nodes') and len(seq.nodes) >= 1:
-                parts.append(str(seq.nodes[0].node))
-    return "enum " + ", ".join(parts)
+                found.append(member(seq.nodes[0]))
+    # a valued member is written NAME=VALUE; _emit_enum_py reads it back
+    return "enum " + ", ".join(n if v is None else f"{n}={v}" for n, v in found)
 
 
 def _emit_enum_py(name, member_names, indent=0):
     """Emit a Python Enum class body for a type name and its members.
 
     Shared by the inline 'type T is enum A, B' form (type_stmt) and the
-    indented 'type T is enum:' block form (type_block_stmt)."""
+    indented 'type T is enum:' block form (type_block_stmt). A member may be
+    written NAME=VALUE: then every member is, and the values are the order."""
+    from ady_enums import checked, has_gaps
+    pairs = []
+    for text in member_names:
+        n, _, v = text.partition("=")
+        pairs.append((n.strip(), int(v) if v.strip() else None))
+    checked(name, pairs)
+    member_names = [n for n, _ in pairs]
     ParserState.nim_imports.add("from enum import Enum")
-    ParserState.tick_types[name] = {"First": member_names[0], "Last": member_names[-1], "members": member_names}
+    ParserState.tick_types[name] = {"First": member_names[0], "Last": member_names[-1], "members": member_names,
+                                    "gapped": has_gaps(pairs)}
     lines = [f"{_ind(indent)}class {name}(Enum):"]
     py_members = []
-    for i, m in enumerate(member_names):
+    for i, (m, value) in enumerate(pairs):
         py_m = f"_{m}" if m.isdigit() else m
-        lines.append(f"{_ind(indent + 1)}{py_m} = {i}")
+        lines.append(f"{_ind(indent + 1)}{py_m} = {i if value is None else value}")
         py_members.append((m, py_m))
+    # Nim orders members by their values; Python's Enum does not order at all.
+    for op, dunder in (("<", "lt"), ("<=", "le"), (">", "gt"), (">=", "ge")):
+        lines.append(f"{_ind(indent + 1)}def __{dunder}__(self, other): return self.value {op} other.value")
     # Nim's `$` on an enum is the bare member name, and so is 'Image here.
     # Python's default is "Stage_T.STAGE2", so the same f-string printed two
     # different things depending on the backend.
